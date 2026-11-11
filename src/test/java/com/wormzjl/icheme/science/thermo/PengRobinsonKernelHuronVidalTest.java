@@ -15,7 +15,9 @@ import org.junit.jupiter.api.Test;
  * mixtures with NRTL pairs {@code ln phi_i} matches an oracle written from the rule and the composition derivative of
  * an independent {@code n g^R/(R T)}; every temperature and composition derivative matches central differences of the
  * kernel's own values; Gibbs-Duhem, symmetry and {@code sum x_i h_i = H^R} hold; a compound without coefficients keeps
- * today's arithmetic bit for bit, and water's Mathias-Copeman alpha gives its 100 C vapour pressure.
+ * today's arithmetic bit for bit, and water's Mathias-Copeman alpha gives its 100 C vapour pressure. Classical pairs
+ * whose {@code k_ij} depends on temperature (a line, or a {@link PairInteractions} model) match central differences, and
+ * a list of E-PPR78 model pairs only is the {@link PengRobinsonKernel.Mixing#TEMPERATURE_DEPENDENT_PAIRS} plan.
  */
 class PengRobinsonKernelHuronVidalTest {
     private static final double R = PengRobinsonKernel.GAS_CONSTANT;
@@ -77,14 +79,18 @@ class PengRobinsonKernelHuronVidalTest {
         var quadratic = new PengRobinsonKernel(tc, pc, omega, k, 1.0, 3000.0, 1.0, 1.0e9);
         var rule = PengRobinsonKernel.huronVidal(tc, pc, omega, model, null, 1.0, 3000.0, 1.0, 1.0e9);
         assertEquals(PengRobinsonKernel.Mixing.HURON_VIDAL, rule.mixing());
-        int n = tc.length;
+        return compareKernels(quadratic, rule, compositions, 1.0e-11);
+    }
+
+    /** Every value and derivative of {@code rule} against {@code quadratic}, relative to {@code tolerance}. */
+    private static int compareKernels(PengRobinsonKernel quadratic, PengRobinsonKernel rule, double[][] compositions, double tolerance) {
+        int n = quadratic.componentCount();
         var quadraticWorkspace = quadratic.newWorkspace();
         var ruleWorkspace = rule.newWorkspace();
         var expected = quadratic.newDerivatives();
         var actual = rule.newDerivatives();
         double[][] scratch = new double[6][n];
         int compared = 0;
-        double tolerance = 1.0e-11;
         for (double t : new double[] {200.0, 260.0, 320.0, 400.0, 480.0}) {
             for (double p : new double[] {1.0e5, 1.0e6, 4.0e6}) {
                 for (double[] x : compositions) {
@@ -242,23 +248,42 @@ class PengRobinsonKernelHuronVidalTest {
     @Test void nrtlDerivativesMatchCentralDifferencesAndIdentities() {
         var worst = new LinkedHashMap<String, Worst>();
         int evaluations = 0;
-        for (Mixture mixture : polarMixtures()) {
-            var kernel = mixture.kernel();
+        for (Mixture mixture : polarMixtures()) evaluations += differences(mixture.kernel(), mixture.name, mixture.compositions, worst);
+        System.out.printf(Locale.ROOT, "HURON_VIDAL derivatives vs central differences: %d phase evaluations%n", evaluations);
+        assertDifferences(worst, evaluations);
+    }
+
+    private static void assertDifferences(Map<String, Worst> worst, int evaluations) {
+        worst.forEach((quantity, value) -> System.out.println("    " + String.format(Locale.ROOT, "%-22s", quantity) + value));
+        assertTrue(evaluations >= 60, "too few evaluations: " + evaluations);
+        for (String quantity : List.of("da_mix/dT", "d2a_mix/dT2", "dh^R/dT", "d ln phi_i/dT", "d ln phi_i/dn_j")) {
+            assertTrue(worst.containsKey(quantity) && worst.get(quantity).count >= 40, quantity + " barely compared");
+            assertTrue(worst.get(quantity).deviation <= DIFFERENCE_TOLERANCE, quantity + ": " + worst.get(quantity));
+        }
+        for (String identity : List.of("sum x_i h^R_i = h^R", "Gibbs-Duhem", "symmetry")) {
+            assertTrue(worst.get(identity).deviation <= 1.0e-10, identity + ": " + worst.get(identity));
+        }
+    }
+
+    /** Every analytic derivative of {@code kernel} on {@link #POLAR_STATES} against central differences and identities. */
+    private static int differences(PengRobinsonKernel kernel, String name, List<double[]> compositions, Map<String, Worst> worst) {
+        int evaluations = 0;
+        {
             var workspace = kernel.newWorkspace();
             var derivatives = kernel.newDerivatives();
-            int n = mixture.size();
+            int n = kernel.componentCount();
             double[] rootDt = new double[n], rootDt2 = new double[n], crossDt = new double[n];
             for (double[] state : POLAR_STATES) {
                 double t = state[0];
                 double p = state[1];
-                for (double[] raw : mixture.compositions) {
+                for (double[] raw : compositions) {
                     double[] x = Oracle.normalized(raw);
                     for (PengRobinsonKernel.Root root : PengRobinsonKernel.Root.values()) {
                         try {
                             kernel.evaluateDerivatives(t, p, x, root, workspace, derivatives);
                         } catch (IllegalStateException coalescing) { continue; }
                         evaluations++;
-                        String at = mixture.name + " T=" + t + " P=" + p + " " + root;
+                        String at = name + " T=" + t + " P=" + p + " " + root;
                         var base = derivatives.evaluation();
                         double z = base.compressibility();
                         double hR = base.residualEnthalpyJoulesPerMol();
@@ -318,16 +343,100 @@ class PengRobinsonKernelHuronVidalTest {
                 }
             }
         }
-        System.out.printf(Locale.ROOT, "HURON_VIDAL derivatives vs central differences: %d phase evaluations%n", evaluations);
-        worst.forEach((quantity, value) -> System.out.println("    " + String.format(Locale.ROOT, "%-22s", quantity) + value));
-        assertTrue(evaluations >= 60, "too few evaluations: " + evaluations);
-        for (String quantity : List.of("da_mix/dT", "d2a_mix/dT2", "dh^R/dT", "d ln phi_i/dT", "d ln phi_i/dn_j")) {
-            assertTrue(worst.containsKey(quantity) && worst.get(quantity).count >= 40, quantity + " barely compared");
-            assertTrue(worst.get(quantity).deviation <= DIFFERENCE_TOLERANCE, quantity + ": " + worst.get(quantity));
+        return evaluations;
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------
+    // Classical pairs whose k_ij depends on temperature
+    // ---------------------------------------------------------------------------------------------------------------
+
+    /** E-PPR78 group pairs used below, A and B in MPa (the bundled table's values). */
+    private static final Map<String, double[]> GROUP_PAIRS = Map.ofEntries(
+            Map.entry("CH4/CO2", new double[] {136.6, 214.8}), Map.entry("C2H6/CO2", new double[] {136.2, 235.7}),
+            Map.entry("CH3/CO2", new double[] {144.8, 401.5}), Map.entry("CH2/CO2", new double[] {141.4, 237.1}),
+            Map.entry("C2H6/CH4", new double[] {9.951, 13.73}), Map.entry("CH3/CH4", new double[] {28.48, 20.25}),
+            Map.entry("CH2/CH4", new double[] {37.75, 74.81}), Map.entry("C2H6/CH3", new double[] {3.775, 8.922}),
+            Map.entry("C2H6/CH2", new double[] {29.85, 65.88}), Map.entry("CH2/CH3", new double[] {65.54, 105.7}),
+            Map.entry("CHaro/CO2", new double[] {98.48, 253.6}));
+
+    /** Declares the E-PPR78 pair of two group decompositions on {@code builder}: weights from the group fractions. */
+    private static void groupPair(PairInteractions.Builder builder, int i, int j, Map<String, Integer> first, Map<String, Integer> second) {
+        var groups = new java.util.TreeSet<String>();
+        groups.addAll(first.keySet());
+        groups.addAll(second.keySet());
+        var names = new ArrayList<>(groups);
+        double totalFirst = first.values().stream().mapToInt(Integer::intValue).sum();
+        double totalSecond = second.values().stream().mapToInt(Integer::intValue).sum();
+        var weights = new ArrayList<Double>();
+        var a = new ArrayList<Double>();
+        var exponents = new ArrayList<Double>();
+        for (int k = 0; k < names.size(); k++) {
+            for (int l = k + 1; l < names.size(); l++) {
+                String gk = names.get(k), gl = names.get(l);
+                double dk = first.getOrDefault(gk, 0) / totalFirst - second.getOrDefault(gk, 0) / totalSecond;
+                double dl = first.getOrDefault(gl, 0) / totalFirst - second.getOrDefault(gl, 0) / totalSecond;
+                if (dk * dl == 0.0) continue;
+                double[] parameters = GROUP_PAIRS.get(gk.compareTo(gl) < 0 ? gk + "/" + gl : gl + "/" + gk);
+                weights.add(-(dk * dl));
+                a.add(parameters[0] * 1.0e6);
+                exponents.add(parameters[1] / parameters[0] - 1.0);
+            }
         }
-        for (String identity : List.of("sum x_i h^R_i = h^R", "Gibbs-Duhem", "symmetry")) {
-            assertTrue(worst.get(identity).deviation <= 1.0e-10, identity + ": " + worst.get(identity));
-        }
+        builder.groupTerms(i, j, weights.stream().mapToDouble(Double::doubleValue).toArray(),
+                a.stream().mapToDouble(Double::doubleValue).toArray(), exponents.stream().mapToDouble(Double::doubleValue).toArray());
+    }
+
+    @Test void interactionModelPairsEqualTheTemperatureDependentPlan() {
+        List<Map<String, Integer>> groups = List.of(Map.of("CH4", 1), Map.of("C2H6", 1), Map.of("CH3", 2, "CH2", 1),
+                Map.of("CH3", 2, "CH2", 8), Map.of("CO2", 1));
+        var builder = PairInteractions.builder(5);
+        for (int i = 0; i < 5; i++) for (int j = i + 1; j < 5; j++) groupPair(builder, i, j, groups.get(i), groups.get(j));
+        var model = builder.build();
+        assertTrue(model.temperatureDependent());
+        var plan = new PengRobinsonKernel(HC_TC, HC_PC, HC_OMEGA, model, 1.0, 3000.0, 1.0, 1.0e9);
+        var excess = HuronVidalExcess.builder(5).interactions(model).build();
+        assertFalse(excess.rankOne());
+        assertTrue(excess.interactionPair(1, 3) >= 0 && excess.interactionPair(3, 1) == excess.interactionPair(1, 3));
+        var rule = PengRobinsonKernel.huronVidal(HC_TC, HC_PC, HC_OMEGA, excess, null, 1.0, 3000.0, 1.0, 1.0e9);
+        int compared = compareKernels(plan, rule, new double[][] {
+                {0.5, 0.2, 0.1, 0.05, 0.15}, {0.05, 0.1, 0.2, 0.6, 0.05}, {0.2, 0.2, 0.2, 0.2, 0.2}}, 1.0e-10);
+        System.out.println("HURON_VIDAL with E-PPR78 model pairs vs TEMPERATURE_DEPENDENT_PAIRS: " + compared + " values within 1e-10");
+        assertTrue(compared > 1500, "too few comparisons: " + compared);
+    }
+
+    @Test void temperatureDependentClassicalPairsMatchCentralDifferences() {
+        // Ethanol, water (Mathias-Copeman), benzene, CO2: the three NRTL pairs; CO2-water linear in T; CO2 with ethanol
+        // (as its alkyl groups) and with benzene from an E-PPR78 model.
+        var builder = PairInteractions.builder(4);
+        groupPair(builder, 0, 3, Map.of("CH3", 1, "CH2", 1), Map.of("CO2", 1));
+        groupPair(builder, 2, 3, Map.of("CHaro", 6), Map.of("CO2", 1));
+        var model = builder.build();
+        var excess = HuronVidalExcess.builder(4);
+        for (Nrtl pair : POLAR_PAIRS) excess.nrtl(pair.i, pair.j, pair.alpha, pair.t1, pair.gij1, pair.gji1, pair.t2, pair.gij2, pair.gji2);
+        var built = excess.classicalLinear(1, 3, 298.15, 0.05, 373.15, 0.15).interactions(model).build();
+        assertEquals(0.05 - (0.10 / 75.0) * 298.15, built.interaction(3, 1), 1e-15);
+        assertEquals(0.10 / 75.0, built.interactionSlope(1, 3), 1e-15);
+        var kernel = PengRobinsonKernel.huronVidal(POLAR_TC, POLAR_PC, POLAR_OMEGA, built, POLAR_ALPHA, 1.0, 3000.0, 1.0, 1.0e9);
+        var worst = new LinkedHashMap<String, Worst>();
+        int evaluations = differences(kernel, "k(T) pairs", List.of(new double[] {0.3, 0.45, 0.2, 0.05},
+                new double[] {0.05, 0.1, 0.05, 0.8}, new double[] {0.25, 0.25, 0.25, 0.25}, new double[] {0.1, 0.7, 0.1, 0.1},
+                new double[] {0.6, 0.1, 0.2, 0.1}), worst);
+        System.out.printf(Locale.ROOT, "HURON_VIDAL with linear and model k(T) vs central differences: %d phase evaluations%n", evaluations);
+        assertDifferences(worst, evaluations);
+        // A line through equal values is the constant pair, bit for bit.
+        var constant = PengRobinsonKernel.huronVidal(slice(POLAR_TC, 2), slice(POLAR_PC, 2), slice(POLAR_OMEGA, 2),
+                HuronVidalExcess.builder(2).classical(0, 1, 0.07).build(), null, 1.0, 3000.0, 1.0, 1.0e9);
+        var line = PengRobinsonKernel.huronVidal(slice(POLAR_TC, 2), slice(POLAR_PC, 2), slice(POLAR_OMEGA, 2),
+                HuronVidalExcess.builder(2).classicalLinear(0, 1, 300.0, 0.07, 400.0, 0.07).build(), null, 1.0, 3000.0, 1.0, 1.0e9);
+        var expected = constant.newDerivatives();
+        var actual = line.newDerivatives();
+        constant.evaluateDerivatives(350.0, 1.0e5, new double[] {0.4, 0.6}, PengRobinsonKernel.Root.LIQUID, constant.newWorkspace(), expected);
+        line.evaluateDerivatives(350.0, 1.0e5, new double[] {0.4, 0.6}, PengRobinsonKernel.Root.LIQUID, line.newWorkspace(), actual);
+        same(expected.evaluation().logFugacityCoefficientsView(), actual.evaluation().logFugacityCoefficientsView(), "ln phi");
+        same(expected.dLogPhiDtView(), actual.dLogPhiDtView(), "d ln phi/dT");
+        assertThrows(IllegalArgumentException.class, () -> HuronVidalExcess.builder(2).classicalLinear(0, 1, 300, 0.1, 300, 0.2));
+        assertThrows(IllegalArgumentException.class, () -> HuronVidalExcess.builder(4).classical(0, 3, 0.1).interactions(model));
+        assertThrows(IllegalArgumentException.class, () -> HuronVidalExcess.builder(3).interactions(model));
     }
 
     @Test void reusedWorkspaceMatchesFreshWorkspacesBitForBit() {

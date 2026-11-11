@@ -19,11 +19,12 @@ import java.util.Arrays;
  * <ul>
  *   <li>an NRTL pair: {@code alpha_ij} in {@code [0, 1)} and the two energies {@code dg_ij}, {@code dg_ji} (J/mol),
  *   each linear in temperature through its values at two temperatures;</li>
- *   <li>a classical pair with a constant {@code k_ij}: {@code alpha_ij = 0} and
- *   {@code dg_ji(T) = g_ji - g_ii}, {@code g_ii = -Lambda a_i(T)/b_i},
- *   {@code g_ji = -2 sqrt(b_i b_j)/(b_i + b_j) sqrt(g_ii g_jj)(1 - k_ij)}, which the kernel evaluates on its own
- *   {@code a_i(T)} and {@code b_i}. With every pair classical the rule is exactly the quadratic rule
- *   {@code a_ij = sqrt(a_i a_j)(1 - k_ij)}.</li>
+ *   <li>a classical pair: {@code alpha_ij = 0} and {@code dg_ji(T) = g_ji - g_ii}, {@code g_ii = -Lambda a_i(T)/b_i},
+ *   {@code g_ji = -2 sqrt(b_i b_j)/(b_i + b_j) sqrt(g_ii g_jj)(1 - k_ij(T))}, which the kernel evaluates on its own
+ *   {@code a_i(T)} and {@code b_i}. Its {@code k_ij(T)} is a constant, a line {@code k0 + k1 T} through its values at
+ *   two temperatures, or a pair of a {@link PairInteractions} model over the same basis (E-PPR78's {@code k_ij(T)},
+ *   evaluated by the kernel with its two temperature derivatives). With every pair classical the rule is exactly the
+ *   quadratic rule {@code a_ij = sqrt(a_i a_j)(1 - k_ij(T))}.</li>
  * </ul>
  *
  * <p>A pair not declared is classical with {@code k_ij = 0}. The object is immutable; the kernel copies its values into
@@ -39,8 +40,14 @@ public final class HuronVidalExcess {
     private final boolean[] classical;
     /** Symmetric; zero for a classical pair. */
     private final double[] alpha;
-    /** Symmetric {@code k_ij}; zero for an NRTL pair. */
+    /** Symmetric {@code k0} of a classical pair's {@code k_ij(T) = k0 + k1 T}; zero for an NRTL pair and a model pair. */
     private final double[] interaction;
+    /** Symmetric {@code k1}; zero for a constant pair, an NRTL pair and a model pair. */
+    private final double[] interactionSlope;
+    /** The model of the classical pairs whose {@code k_ij(T)} it gives; null when there are none. */
+    private final PairInteractions interactions;
+    /** Symmetric: the pair of {@link #interactions} that gives {@code (i, j)}, or -1. */
+    private final int[] modelPair;
     /** {@code dg_ji(T) = intercept + slope T} stored at {@code [i * n + j]} (energy of {@code j} around a centre {@code i}). */
     private final double[] energyIntercept;
     private final double[] energySlope;
@@ -48,11 +55,15 @@ public final class HuronVidalExcess {
     private final boolean rankOne;
 
     private HuronVidalExcess(int componentCount, boolean[] classical, double[] alpha, double[] interaction,
+                             double[] interactionSlope, PairInteractions interactions, int[] modelPair,
                              double[] energyIntercept, double[] energySlope) {
         this.componentCount = componentCount;
         this.classical = classical;
         this.alpha = alpha;
         this.interaction = interaction;
+        this.interactionSlope = interactionSlope;
+        this.interactions = interactions;
+        this.modelPair = modelPair;
         this.energyIntercept = energyIntercept;
         this.energySlope = energySlope;
         int pairs = 0;
@@ -61,7 +72,7 @@ public final class HuronVidalExcess {
             for (int j = i + 1; j < componentCount; j++) {
                 int at = i * componentCount + j;
                 if (!classical[at]) pairs++;
-                zero &= classical[at] && interaction[at] == 0.0;
+                zero &= classical[at] && interaction[at] == 0.0 && interactionSlope[at] == 0.0 && modelPair[at] < 0;
             }
         }
         this.nrtlPairs = pairs;
@@ -75,13 +86,22 @@ public final class HuronVidalExcess {
     public int componentCount() { return componentCount; }
     /** Unordered pairs declared with NRTL energies. */
     public int nrtlPairCount() { return nrtlPairs; }
-    /** True when every pair is classical with {@code k_ij = 0}: the rule is then the rank-one product. */
+    /** True when every pair is classical with {@code k_ij = 0} at every temperature: the rule is then the rank-one product. */
     public boolean rankOne() { return rankOne; }
     /** True for a classical pair, declared or not; the diagonal counts as classical. */
     public boolean classical(int i, int j) { return classical[index(i, j)]; }
     public double alpha(int i, int j) { return alpha[index(i, j)]; }
-    /** {@code k_ij} of a classical pair; zero for an NRTL pair. */
+    /**
+     * {@code k0} of a classical pair's {@code k_ij(T) = k0 + k1 T}: its {@code k_ij} when constant; zero for an NRTL pair
+     * and for a pair of {@link #interactions()}.
+     */
     public double interaction(int i, int j) { return interaction[index(i, j)]; }
+    /** {@code k1 = dk_ij/dT} of a classical pair's line; zero for a constant, an NRTL and a model pair. */
+    public double interactionSlope(int i, int j) { return interactionSlope[index(i, j)]; }
+    /** The model that gives the {@code k_ij(T)} of {@link #interactionPair} pairs; null when no pair is declared from one. */
+    public PairInteractions interactions() { return interactions; }
+    /** The pair of {@link #interactions()} that gives {@code (i, j)}, or -1. */
+    public int interactionPair(int i, int j) { return modelPair[index(i, j)]; }
     /** {@code dg_ji} at zero kelvin of the line {@code dg_ji(T) = intercept + slope T}; zero for a classical pair. */
     public double energyIntercept(int j, int i) { return energyIntercept[index(i, j)]; }
     /** {@code d(dg_ji)/dT}; zero for a classical pair. */
@@ -99,8 +119,11 @@ public final class HuronVidalExcess {
         private final boolean[] classical;
         private final double[] alpha;
         private final double[] interaction;
+        private final double[] interactionSlope;
+        private final int[] modelPair;
         private final double[] energyIntercept;
         private final double[] energySlope;
+        private PairInteractions interactions;
 
         private Builder(int componentCount) {
             if (componentCount <= 0) throw new IllegalArgumentException("At least one component is required");
@@ -111,6 +134,9 @@ public final class HuronVidalExcess {
             Arrays.fill(classical, true);
             this.alpha = new double[cells];
             this.interaction = new double[cells];
+            this.interactionSlope = new double[cells];
+            this.modelPair = new int[cells];
+            Arrays.fill(modelPair, -1);
             this.energyIntercept = new double[cells];
             this.energySlope = new double[cells];
         }
@@ -125,10 +151,7 @@ public final class HuronVidalExcess {
             if (!Double.isFinite(alphaIj) || alphaIj < 0.0 || alphaIj >= 1.0) {
                 throw new IllegalArgumentException("NRTL alpha must lie in [0, 1)");
             }
-            if (!Double.isFinite(firstKelvin) || !Double.isFinite(secondKelvin) || !(firstKelvin > 0.0)
-                    || !(secondKelvin > 0.0) || firstKelvin == secondKelvin) {
-                throw new IllegalArgumentException("NRTL energies need two distinct positive finite temperatures");
-            }
+            requireTemperatures(firstKelvin, secondKelvin, "NRTL energies");
             if (!Double.isFinite(dgIjAtFirst) || !Double.isFinite(dgJiAtFirst) || !Double.isFinite(dgIjAtSecond)
                     || !Double.isFinite(dgJiAtSecond)) {
                 throw new IllegalArgumentException("NRTL energies must be finite");
@@ -165,9 +188,53 @@ public final class HuronVidalExcess {
             return this;
         }
 
+        /**
+         * A classical pair whose {@code k_ij} is linear in temperature through its values at two temperatures (and
+         * beyond them): {@code k_ij(T) = k0 + k1 T}.
+         */
+        public Builder classicalLinear(int i, int j, double firstKelvin, double kAtFirst, double secondKelvin, double kAtSecond) {
+            requireTemperatures(firstKelvin, secondKelvin, "A linear classical interaction");
+            if (!Double.isFinite(kAtFirst) || !Double.isFinite(kAtSecond)) throw new IllegalArgumentException("Classical interaction must be finite");
+            double slope = (kAtSecond - kAtFirst) / (secondKelvin - firstKelvin);
+            double intercept = kAtFirst - slope * firstKelvin;
+            if (!Double.isFinite(slope) || !Double.isFinite(intercept)) throw new IllegalArgumentException("Classical interaction line is not finite");
+            claim(i, j);
+            interaction[i * componentCount + j] = intercept;
+            interaction[j * componentCount + i] = intercept;
+            interactionSlope[i * componentCount + j] = slope;
+            interactionSlope[j * componentCount + i] = slope;
+            return this;
+        }
+
+        /**
+         * Every pair of {@code model} (over the same basis) as a classical pair whose {@code k_ij(T)} the kernel takes from
+         * the model at each temperature, with its first and second temperature derivatives. At most one model.
+         */
+        public Builder interactions(PairInteractions model) {
+            if (model == null) throw new IllegalArgumentException("Interaction model is required");
+            if (interactions != null) throw new IllegalArgumentException("At most one interaction model");
+            if (model.componentCount() != componentCount) throw new IllegalArgumentException("Interaction model basis does not match the components");
+            for (int pair = 0; pair < model.pairCount(); pair++) {
+                int i = model.first(pair);
+                int j = model.second(pair);
+                claim(i, j);
+                modelPair[i * componentCount + j] = pair;
+                modelPair[j * componentCount + i] = pair;
+            }
+            interactions = model;
+            return this;
+        }
+
         public HuronVidalExcess build() {
             return new HuronVidalExcess(componentCount, classical.clone(), alpha.clone(), interaction.clone(),
-                    energyIntercept.clone(), energySlope.clone());
+                    interactionSlope.clone(), interactions, modelPair.clone(), energyIntercept.clone(), energySlope.clone());
+        }
+
+        private static void requireTemperatures(double firstKelvin, double secondKelvin, String what) {
+            if (!Double.isFinite(firstKelvin) || !Double.isFinite(secondKelvin) || !(firstKelvin > 0.0)
+                    || !(secondKelvin > 0.0) || firstKelvin == secondKelvin) {
+                throw new IllegalArgumentException(what + " need two distinct positive finite temperatures");
+            }
         }
 
         private void claim(int i, int j) {
@@ -180,6 +247,7 @@ public final class HuronVidalExcess {
     }
 
     @Override public String toString() {
-        return "HuronVidalExcess[components=" + componentCount + ", nrtlPairs=" + nrtlPairs + "]";
+        return "HuronVidalExcess[components=" + componentCount + ", nrtlPairs=" + nrtlPairs
+                + (interactions == null ? "" : ", modelPairs=" + interactions.pairCount()) + "]";
     }
 }

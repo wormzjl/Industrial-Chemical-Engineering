@@ -59,12 +59,15 @@ public final class PengRobinsonKernel {
     private final HuronVidalExcess excess;
     /**
      * The excess model's pairs, ordered, at {@code [i * n + j]} for the energy {@code dg_ji} of {@code j} around a centre
-     * {@code i}: classical or NRTL, {@code alpha_ij}, {@code 1 - k_ij} of a classical pair, and the line
-     * {@code dg_ji = intercept + slope T} of an NRTL pair. Empty for the quadratic plans.
+     * {@code i}: classical or NRTL, {@code alpha_ij}, a classical pair's {@code k_ij(T)} as the line
+     * {@code k0 + k1 T} or the pair of the model {@link HuronVidalExcess#interactions()} that gives it (-1 for none), and
+     * the line {@code dg_ji = intercept + slope T} of an NRTL pair. Empty for the quadratic plans.
      */
     private final boolean[] excessClassical;
     private final double[] excessAlpha;
-    private final double[] excessAttraction;
+    private final double[] excessInteraction;
+    private final double[] excessInteractionSlope;
+    private final int[] excessModelPair;
     private final double[] excessIntercept;
     private final double[] excessSlope;
     private final double minimumTemperatureKelvin;
@@ -108,7 +111,9 @@ public final class PengRobinsonKernel {
          * The Huron-Vidal rule of a {@link HuronVidalExcess} model: {@code a/b = sum_i x_i a_i/b_i - gE/Lambda} with
          * the co-volume-weighted NRTL {@code gE}, written as {@code n^2 a = (n b)(n Q)}, {@code Q = a/b}. Its
          * temperature-only part ({@code tau_ji}, {@code G_ji} and their two temperature derivatives, the classical
-         * pairs' energies converted from their {@code k_ij}) is filled by {@link #prepareTemperature}; the composition
+         * pairs' energies converted from their {@code k_ij(T)}: constant, linear in T, or a {@link PairInteractions}
+         * model's, evaluated per temperature as {@link #TEMPERATURE_DEPENDENT_PAIRS} does) is filled by
+         * {@link #prepareTemperature}; the composition
          * sums are dense {@code O(n^2)} (and {@code O(n^3)} for {@code d ln phi/dn}). With every pair classical it is the
          * quadratic rule, to roundoff. Only {@link #huronVidal} selects it.
          */
@@ -254,10 +259,13 @@ public final class PengRobinsonKernel {
         int cells = excess == null ? 0 : count * count;
         this.excessClassical = new boolean[cells];
         this.excessAlpha = new double[cells];
-        this.excessAttraction = new double[cells];
+        this.excessInteraction = new double[cells];
+        this.excessInteractionSlope = new double[cells];
+        this.excessModelPair = new int[cells];
         this.excessIntercept = new double[cells];
         this.excessSlope = new double[cells];
-        this.interactions = interactions;
+        // The excess plan's classical pairs from a model evaluate it in the workspace like TEMPERATURE_DEPENDENT_PAIRS.
+        this.interactions = excess != null ? excess.interactions() : interactions;
         if (excess != null) {
             // The excess path: the matrix above is the zero placeholder, so only the critical constants were read from
             // the loop; the pairs are the model's own, copied ordered so the composition sums read one row per centre.
@@ -267,7 +275,9 @@ public final class PengRobinsonKernel {
                     int at = i * count + j;
                     excessClassical[at] = excess.classical(i, j);
                     excessAlpha[at] = excess.alpha(i, j);
-                    excessAttraction[at] = 1.0 - excess.interaction(i, j);
+                    excessInteraction[at] = excess.interaction(i, j);
+                    excessInteractionSlope[at] = excess.interactionSlope(i, j);
+                    excessModelPair[at] = excess.interactionPair(i, j);
                     excessIntercept[at] = excess.energyIntercept(j, i);
                     excessSlope[at] = excess.energySlope(j, i);
                 }
@@ -325,7 +335,7 @@ public final class PengRobinsonKernel {
     /** {@code 0.07780 R Tc / Pc} for one component; the co-volume the mixture rule sums. */
     public double coVolume(int component) { return coVolumes[component]; }
     public Workspace newWorkspace() {
-        if (excess != null) return new Workspace(count, 0, count);
+        if (excess != null) return new Workspace(count, interactions == null ? 0 : interactions.pairCount(), count);
         return interactions == null ? new Workspace(count) : new Workspace(count, interactions.pairCount(), 0);
     }
 
@@ -379,8 +389,8 @@ public final class PengRobinsonKernel {
             workspace.sqrtA[i] = Math.sqrt(workspace.a[i]);
             if (excess != null) workspace.d2aDt2[i] = soaveSecondDerivative(i, temperatureKelvin);
         }
-        if (interactions != null) prepareInteractions(temperatureKelvin, workspace);
         if (excess != null) prepareExcess(temperatureKelvin, workspace);
+        else if (interactions != null) prepareInteractions(temperatureKelvin, workspace);
         workspace.preparedTemperature = Double.doubleToLongBits(temperatureKelvin);
     }
 
@@ -420,16 +430,24 @@ public final class PengRobinsonKernel {
      * {@code dg_ji} and its two temperature derivatives, then {@code tau = dg/(R T)},
      * {@code tau' = dg'/(R T) - tau/T}, {@code tau'' = dg''/(R T) - 2 tau'/T}, {@code G = exp(-alpha tau)},
      * {@code G' = -alpha tau' G}, {@code G'' = alpha (alpha tau'^2 - tau'') G}. An NRTL pair's energy is its line
-     * ({@code dg'' = 0}); a classical pair's is {@code dg_ji = Lambda a_i/b_i - 2 Lambda (1 - k_ij) s_i s_j/(b_i + b_j)},
-     * {@code s = sqrt(a)}, differentiated on {@code ds/dT} and {@code d^2s/dT^2}. The diagonal is exactly
-     * {@code tau = 0}, {@code G = 1}. A value that is not finite (a classical pair where {@code sqrt(a_i)} vanishes) is
-     * refused before the temperature is recorded as prepared.
+     * ({@code dg'' = 0}); a classical pair's is {@code dg_ji = Lambda a_i/b_i - c (1 - k_ij) P}, with
+     * {@code c = 2 Lambda/(b_i + b_j)}, {@code P = s_i s_j}, {@code s = sqrt(a)}:
+     * {@code dg' = Lambda a_i'/b_i - c [(1 - k) P' - k' P]}, {@code dg'' = Lambda a_i''/b_i - c [(1 - k) P'' - 2 k' P' - k'' P]},
+     * on {@code ds/dT} and {@code d^2s/dT^2}. Its {@code k_ij(T)} is the line {@code k0 + k1 T} ({@code k'' = 0}; a
+     * constant pair has {@code k1 = 0}, so its added terms are exact zeros) or the interaction model's value with its two
+     * derivatives, filled per model pair into the workspace first. The diagonal is exactly {@code tau = 0}, {@code G = 1}.
+     * A value that is not finite (a classical pair where {@code sqrt(a_i)} vanishes) is refused before the temperature is
+     * recorded as prepared.
      */
     private void prepareExcess(double temperatureKelvin, Workspace workspace) {
         workspace.preparedTemperature = Long.MIN_VALUE;
         double[] rootDt = workspace.interactionRootDt;
         double[] rootDt2 = workspace.interactionRootDt2;
         prepareRootDerivatives(temperatureKelvin, workspace, rootDt, rootDt2);
+        if (interactions != null) {
+            interactions.evaluate(temperatureKelvin, workspace.sqrtA, rootDt, rootDt2, coVolumes,
+                    workspace.pairK, workspace.pairKDt, workspace.pairKDt2);
+        }
         double lambda = HuronVidalExcess.LAMBDA;
         double rt = GAS_CONSTANT * temperatureKelvin;
         for (int i = 0; i < count; i++) {
@@ -448,14 +466,31 @@ public final class PengRobinsonKernel {
                 double energyDt;
                 double energyDt2;
                 if (excessClassical[at]) {
-                    double share = 2.0 * lambda * excessAttraction[at] / (coVolumes[i] + coVolumes[j]);
+                    int pair = excessModelPair[at];
+                    double k;
+                    double kDt;
+                    double kDt2;
+                    if (pair >= 0) {
+                        k = workspace.pairK[pair];
+                        kDt = workspace.pairKDt[pair];
+                        kDt2 = workspace.pairKDt2[pair];
+                    } else {
+                        k = excessInteraction[at] + excessInteractionSlope[at] * temperatureKelvin;
+                        kDt = excessInteractionSlope[at];
+                        kDt2 = 0.0;
+                    }
+                    double weight = 2.0 * lambda / (coVolumes[i] + coVolumes[j]);
+                    double share = 2.0 * lambda * (1.0 - k) / (coVolumes[i] + coVolumes[j]);
                     double si = workspace.sqrtA[i];
                     double sj = workspace.sqrtA[j];
+                    double product = si * sj;
+                    double productDt = rootDt[i] * sj + si * rootDt[j];
+                    double productDt2 = rootDt2[i] * sj + 2.0 * rootDt[i] * rootDt[j] + si * rootDt2[j];
                     energy = lambda * workspace.a[i] / coVolumes[i] - share * si * sj;
-                    energyDt = lambda * workspace.daDt[i] / coVolumes[i]
-                            - share * (rootDt[i] * sj + si * rootDt[j]);
-                    energyDt2 = lambda * workspace.d2aDt2[i] / coVolumes[i]
-                            - share * (rootDt2[i] * sj + 2.0 * rootDt[i] * rootDt[j] + si * rootDt2[j]);
+                    energyDt = lambda * workspace.daDt[i] / coVolumes[i] - share * productDt
+                            + weight * kDt * product;
+                    energyDt2 = lambda * workspace.d2aDt2[i] / coVolumes[i] - share * productDt2
+                            + weight * (kDt2 * product + 2.0 * kDt * productDt);
                 } else {
                     energy = excessIntercept[at] + excessSlope[at] * temperatureKelvin;
                     energyDt = excessSlope[at];
