@@ -20,6 +20,8 @@ Batch: `2026-11-11-minecraft-time-delta`. Status: In progress since 2026-11-11. 
 | `worlds/worlds.init.gradle`, `worlds/src/.../TimeScaleWorldsTest.java` | W6's headless worlds: `ColumnRunTest`'s running column and `ExchangerCouplingTest`'s water pair for 1 h of process time at 4 and 72 (the pair also at 1), through `EventPathWorld.time`; prints `COLUMN`, `HEAT` and the `TRACE` of the unequal-cadence pair at 72. |
 | `level-loop/run.sh`, `level-loop/level-loop.init.gradle`, `level-loop/src/.../LevelLoopFactorRun.java`, `level-loop/src/.../LevelLoopStepProbe.java` | `bash tools/minecraft-time-delta/level-loop/run.sh <factor> [cycles]`: the GameTest `LevelLoopGameTests` (drum level loop) at another factor, alone on the review server (`-PreviewBatch=level-loop`): sets `fluid.timeScale` in `run/review-world/config/icheme-common.toml` for the run and restores the file; `cycles` goes in as `-Dicheme.levelLoop.cycles`. Log `tmp/time-scale/level-loop-<factor>x<cycles>.txt`. The same run also runs `LevelLoopStepProbe`: the plant without its ramp (an empty drum on the full feed, and one feed step at 25 %), at the rule feed and at the factor-4 feed; it logs `level_loop probe result` (held or clean, the setup's unbooked moles) and never fails. Switches: `-Dicheme.levelLoop.generatorVent=true` (the vent a 1 atm nitrogen generator), `-Dicheme.levelLoop.gasOutlet=true` (the outlet void charged as 1 atm nitrogen); it logs `level_loop probe nodes` (each node's pressure in the drum's first 12 accepted slices). |
 | `results/summary.txt` | The `SUMMARY`, `COUNTERS` and `CLASS` lines and the held seeds of every run, then the study runs. |
+| `results/feed-step-hold.txt` | The probed level-loop run at 4 behind FEED_STEP_HOLD_REVIEW.md: the `level_loop probe` result lines and the `PROBE_DUMP` rings. |
+| `results/worlds.txt` | The `COLUMN`, `HEAT` and `TRACE` lines of the W6 headless worlds (TIME_SCALE_BUILD_REVIEW.md section 4). |
 | `results/study/` | Study outputs of the 5 s budget run, seed 47 and seed 164 (attempt lists cut to 60 lines), and the `PROBE_FAILURE` / `PROBE_NONFINITE` lines of the probe runs. |
 
 ## How to run
@@ -50,3 +52,17 @@ THREADS=1 bash tools/minecraft-time-delta/factor.sh replay4 47,118,678 bundled 4
 
 Forms A and B of the review are `-PprobeTimeScale=72` alone and with `-PprobeMaximumStep=1440`. Run alone on the machine
 (the wall-deadline holds are what the run measures), with no dev client.
+
+## Entry points
+
+- `run.sh` and `study.sh` (with `patches/probe-time-scale.patch` applied), `factor.sh`, `level-loop/run.sh`; the JUnit rigs under `worlds/` through `worlds/worlds.init.gradle`.
+- In `src/`: the gates these runs reuse are `LevelLoopGameTests` (fluid GameTests; its `run(helper)` reads the switches `icheme.levelLoop.cycles`, `.blanket` and `.direct`, which only `level-loop/run.sh` sets) and the hold-fuzz harnesses of `tools/unified-thermo-port-forms/` (`-PholdFuzzTimeScale`). Nothing of this folder is in a gate.
+
+## History
+
+- 2026-11-11: evaluation on `ff6f6892f` with `patches/probe-time-scale.patch` (applied and reverted), `run.sh`, `study.sh`; TIME_SCALE_REVIEW.md, HOLD_STUDY_REVIEW.md, OPTION_A_REVIEW.md.
+- 2026-11-11, W6: `factor.sh` on the built factor, the campaign at 4, `worlds/` (`TimeScaleWorldsTest`, then `DrumDrainTest`), `level-loop/` (`LevelLoopFactorRun` at 72, `LevelLoopStepProbe` at 1 and 4); TIME_SCALE_BUILD_REVIEW.md.
+- 2026-11-11: `patches/probe-feed-step.patch` for FEED_STEP_HOLD_REVIEW.md; `results/feed-step-hold.txt`.
+- 2026-11-11 (batch `2026-11-11-drum-operation-holds`): `LevelLoopStepProbe` switches `generatorVent` and `gasOutlet` for the gas-vent hold (GAS_VENT_HOLD_REVIEW.md, GAS_VENT_REVIEW.md).
+- 2026-11-11 (batch `2026-11-11-gas-blanketing`): `level-loop/run.sh` takes `LEVEL_LOOP_TAG` and the rig's switches `-Dicheme.levelLoop.blanket=true` and `-Dicheme.levelLoop.direct=true` (GAS_BLANKET_REVIEW.md).
+- 2026-11-11, merge preparation: checked; no code left `src/`. Run reports stay in the worktree's git-ignored `tmp/time-scale/`; their summary lines are in `results/`.

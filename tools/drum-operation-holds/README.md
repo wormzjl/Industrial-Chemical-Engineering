@@ -1,6 +1,10 @@
 # Drum operation holds: headless rigs
 
+Purpose: headless JUnit rigs for defect 1, the gas-vent setup hold (an empty drum between a 1 atm nitrogen vent and a void, GAS_VENT_REVIEW.md), without a game server.
+
 Batch: `2026-11-11-drum-operation-holds` ([README](../../documentation/2026-11-11-drum-operation-holds/README.md)). Status: in use since 2026-11-11.
+
+Entry points: the two test classes below, attached by `rigs.init.gradle`. The level loop's own rig (`LevelLoopStepProbe`, switches `-Dicheme.levelLoop.generatorVent` and `gasOutlet`) is in `tools/minecraft-time-delta/level-loop/`.
 
 | File | What |
 |---|---|
@@ -20,3 +24,4 @@ The failure probe (`tools/minecraft-time-delta/patches/probe-feed-step.patch`, a
 
 - 2026-11-11: written for defect 1. All three cases ran clean on `9af97a3e6`: the level loop's hold needs its setup sequence.
 - 2026-11-11: `GasVentSequenceTest`. Clean in all three cases; its drum holds no water at the charge, unlike the dump's.
+- 2026-11-11, merge preparation: checked; the rigs were never in `src/`, nothing moved. Defect 1 stays open.
