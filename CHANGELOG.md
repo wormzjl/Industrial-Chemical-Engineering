@@ -15,6 +15,14 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+### Fixed
+
+- Valve follow-ups of 0.27.0 (`2026-11-11-valve-followups`): the blanketing valve's vent takes the same forecast as its pad, one law for both (a fast fill peaks at its vent pressure, 157.5 kPa, not 264 kPa; the level loop stays at 121 to 127 kPa), `dc1d80f2b`; a safety valve's relief run into a firebox's fuel valve, a blanketed vessel or a set-flow compressor runs without a hold, the lower flow winning one active-set change at a time, `8a3d2927b`; a relief run straight into a flare closes while solids arrive, as the flare's own tip valve does (X5), `504f5100b`; the direct blanketed start, which no longer holds, is a gate, `a095caa25`.
+
+### Changed
+
+- The hold-fuzz campaign runs at the game's time factor, 4, from one constant (`SimulationTime.DEFAULT_FACTOR`, also the `fluid.timeScale` default); `compare.mjs` takes a campaign baseline folder and checks both factors (`2026-11-11-valve-followups`, item 5), `ea8c63ef6`.
+
 ## [0.27.0] - 2026-11-11
 
 ### Added

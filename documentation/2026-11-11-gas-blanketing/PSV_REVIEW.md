@@ -39,7 +39,7 @@ A spring valve holds the guarded pressure at or below its set pressure: shut bel
 
 Step 5 → 7 bar (0.15 m tip): 2.568 → 3.610 kg/s, drum 300000 → 311538 Pa (wide open), no hold. Ramp 5 → 7 → 5 bar: back to 300000 Pa and 2.568 kg/s, no hold. GameTest (5 bar methane, 0.15 m discharge): 0.3 m tip 401325 Pa (= set), 0.612 kg/s, FLARING (unchanged); 0.1 m tip at set, 0.593 kg/s, FLAME OUT (blown off; before D6 the cap held it at 0.40); nitrogen 0.1 m at set, 0.936 kg/s, FLAME OUT.
 **Moved expectations.** `FlareRuntimeTest`: a 10 bar supply into a 0.1 m tip passes 5.15 kg/s and blows the flame off (was held at its 0.47 limit, OVER CAPACITY); propane at 103 kPa burns on over its rating (62 MW of 23.6); the lean 1 : 4 mix runs 95 Pa over the atmosphere (at 101.8 kPa it now drives 29 m/s and blows off).
-**Open.** A relief run into a firebox's fuel valve, a blanketed vessel or a set-flow mover keeps two regulators around a junction (no fix). A relief run straight into a flare has no X5 block.
+**Open.** A relief run into a firebox's fuel valve, a blanketed vessel or a set-flow mover keeps two regulators around a junction (no fix). A relief run straight into a flare has no X5 block. **Both closed 2026-11-11** ([valve follow-ups](../2026-11-11-valve-followups/VALVE_FOLLOWUPS_REVIEW.md), items 3 and 4): the lower flow wins in the pass order; the flare's plan closes the line while solids arrive.
 
 ## 5. Other open items
 
