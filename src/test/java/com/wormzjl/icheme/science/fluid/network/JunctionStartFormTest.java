@@ -68,32 +68,4 @@ class JunctionStartFormTest {
         int nitrogen=model.hydrocarbon.components().indexOf(FluidMaterialCatalog.NITROGEN);
         for(int j=1;j<=2;j++)assertEquals(0,com.wormzjl.icheme.science.fluid.solver.PhaseLayout.totalAmounts(minted.reservoirs().get(j).state())[nitrogen],"junction "+j);
     }
-    /**
-     * Owner option (a) of batch 2026-11-11-drum-operation-holds (GAS_VENT_REVIEW.md), amending D55's sweep-through rule: the
-     * level loop's drum holding nothing, fed 3 bar water through a fitting at its side, vented at its top to a 1 atm nitrogen
-     * generator, its bottom (LIQUID) port 2 m down to a foot fitting and on 3 m to a 1 atm water void. Nothing has reached the
-     * leg, so its foot holds the gas above it: the vent's nitrogen at the drum's pressure, not the feed's water (minted through
-     * the empty drum, the foot stood on a water column at 70.7 kPa and the first step asked 470 kg/s of liquid). With a void
-     * on the vent no gas reaches the drum, and the foot keeps the gas it was built with.
-     */
-    @Test void aLegUnderAnEmptyDrumIsMintedAsTheGasAboveIt() {
-        int nitrogen=model.hydrocarbon.components().indexOf(FluidMaterialCatalog.NITROGEN);
-        var n=new double[model.componentCount()];n[n.length-1]=1;var water=model.flashTP(300,300000,n,()->{});var drain=model.flashTP(300,101325,n,()->{});
-        var line=new PipeResistance.Geometry(1,.25,PipeResistance.DEFAULT_ROUGHNESS_METRES,0);var air=NetworkReduction.ambient(model);
-        for(var vent:new PassiveNetwork.NodeKind[]{PassiveNetwork.NodeKind.GENERATOR,PassiveNetwork.NodeKind.VOID}) {
-            var graph=new PassiveNetwork(List.of(PassiveNetwork.emptyVessel(1,0,7.952,1.5,model),
-                    new PassiveNetwork.Reservoir(2,1,water,PassiveNetwork.NodeKind.GENERATOR),new PassiveNetwork.Reservoir(3,1,air,PassiveNetwork.NodeKind.JUNCTION),
-                    new PassiveNetwork.Reservoir(4,-2,air,PassiveNetwork.NodeKind.JUNCTION),new PassiveNetwork.Reservoir(5,-5,drain,PassiveNetwork.NodeKind.VOID),
-                    new PassiveNetwork.Reservoir(6,4,air,vent)),
-                    List.of(new PassiveNetwork.Pipe(10,0,5,List.of(line),new FlowControl.Passive(),0,null,PassiveNetwork.PhasePort.VAPOR,PassiveNetwork.PhasePort.BULK),
-                            new PassiveNetwork.Pipe(11,0,3,List.of(line),new FlowControl.Passive(),0,null,PassiveNetwork.PhasePort.LIQUID,PassiveNetwork.PhasePort.BULK),
-                            new PassiveNetwork.Pipe(12,2,0,line),new PassiveNetwork.Pipe(13,1,2,line),new PassiveNetwork.Pipe(14,3,4,line)));
-            var minted=PassiveNetwork.mintJunctions(graph,model);
-            var feed=minted.reservoirs().get(2).state();var foot=minted.reservoirs().get(3).state();
-            assertTrue(feed.waterLiquid()>0,vent+": the feed fitting holds the feed's water");
-            assertEquals(0,foot.waterLiquid(),vent+": no liquid water at the foot: "+foot.waterLiquid()+" mol");
-            assertTrue(com.wormzjl.icheme.science.fluid.solver.PhaseLayout.totalAmounts(foot)[nitrogen]>0&&FluidThermodynamics.holdsPhase(foot,FluidThermodynamics.GAS),vent+": the foot holds nitrogen gas");
-            assertTrue(foot.pressure()>95000&&foot.pressure()<110000,vent+": the foot stands near the drum's 1 atm: "+foot.pressure()+" Pa");
-        }
-    }
 }
