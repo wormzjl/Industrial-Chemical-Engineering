@@ -376,3 +376,10 @@ Owner: "Remove cooling tower composition requirement, allow evaporation of non-w
   - A liquid that boils at the atmosphere has no air contact (status word); its vapour leaves by the basin's flash and vent. Near boiling the saturated content is continued, not divided by zero.
   - Water alone goes through the same path: references move by the difference between the cubic's water curve and today's (about 0.15 % in saturation pressure at 25 C).
 - Composition along the fill is the inlet's (evaporation is a small share of the flow); the cap above keeps a trace solute from going negative.
+
+**Air into the water (owner, 2026-11-11: "make cooling water saturated with air as well").** The exchange runs both ways: each compound moves towards equilibrium between the liquid and the air.
+
+- The air's own gases that the package holds (nitrogen 0.7808 and oxygen 0.2095 of the dry air, less the humidity) dissolve: the liquid leaves the fill saturated with them at its leaving temperature, `x_i = p_i,air / (phi_i P)`. For water at 25 C that is about 9e-6 of nitrogen and 5e-6 of oxygen by moles (hand estimate from Henry's law).
+- A component's rate is then signed: a loss for water and the volatile compounds, a gain for nitrogen and oxygen where the stream arrives with less than saturation, a loss where it arrives with more. A gas the air does not hold (dissolved methane) strips whole, which is the same statement with a partial pressure of zero.
+- The gain carries its enthalpy at the air's temperature on the model's datum; the ledger books it as a negative removal per component.
+- A basin with no spray keeps what it holds: only the fill exchanges mass, as now.
