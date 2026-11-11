@@ -1,7 +1,6 @@
 [
   "data/icheme/materials/components/ethanol.json",
   "data/icheme/materials/properties/pilot_ethanol.json",
-  "data/icheme/materials/properties/pilot_water.json",
   "data/icheme/materials/methods/pilot_aqueous_pr78.json",
   "data/icheme/materials/packages/pilot_aqueous.json"
 ]

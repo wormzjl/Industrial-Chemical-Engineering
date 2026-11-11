@@ -626,6 +626,11 @@ if (selection.cubic_water) {
     models: { pr78: { critical_temperature_kelvin: w.constants.tc, critical_pressure_pascal: w.constants.pc, acentric_factor: w.constants.omega,
       alpha: { type: 'mathias_copeman', coefficients: w.alpha } } },
   };
+  // With a crystal record, the crystal's anchor is the freezing data (as an imported compound's from_crystal).
+  if (w.from_crystal) {
+    property.freezing = crystalFreezing('Water', w.from_crystal, w.freezing_note);
+    crystalGap('Water', w.from_crystal, property.freezing);
+  }
   const groups = groupCounts(null, 'Water', w.authored_counts);
   if (groups) property.group_counts = groups;
   write(`properties/${w.file}.json`, property);

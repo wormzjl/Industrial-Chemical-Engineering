@@ -376,7 +376,7 @@ class AqueousEquilibriumTest {
         var derivation = ENGINE.evaluator().derivation();
         assertTrue(identity.packageRevision().endsWith(";" + derivation.identity()), identity.packageRevision());
         assertEquals(CubicPhaseEvaluator.DERIVED_FAMILY, identity.evaluatorFamily());
-        assertEquals(ThermoIdentity.WATER_IN_EOS_FORMULATION + ":icheme:pilot_water@cubic-water-r1:" + WaterShare.REVISION,
+        assertEquals(ThermoIdentity.WATER_IN_EOS_FORMULATION + ":icheme:cubic_water@cubic-water-r1:" + WaterShare.REVISION,
                 identity.waterModelRevision());
         assertEquals(WaterParticipation.IN_EQUATION_OF_STATE, ENGINE.contract().water());
         assertEquals(EquilibriumResult.CoverageGrade.ESTIMATED_DECLARED_ERROR, ENGINE.contract().fluidCoverage().grade());

@@ -15,6 +15,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class AqueousSolventDataTest {
     private static final String ROOT="data/icheme/materials/";
     private static final String WORLD="icheme:refinery";
+    private static final String CUBIC_WATER="icheme:cubic_water";
     private static final String HEXANE="properties/chemsep_n_hexane.json";
     private static final String CO2="properties/chemsep_carbon_dioxide.json";
     private static final String TABLE="group_interactions/modified_unifac_dortmund.json";
@@ -85,6 +86,33 @@ class AqueousSolventDataTest {
     }
 
     /**
+     * W3b step 2 (design N9, the owner's option 2): water as a compound of the cubic is main data,
+     * {@code icheme:cubic_water}, and the pilot reads it (its own copy is gone). No main package names it yet: the
+     * network's {@code icheme:refinery} keeps its records, its crystals and its revision until W3b step 3 moves the
+     * network onto the derived contract.
+     */
+    @Test void theCubicWaterIsMainDataAndThePilotReadsIt() {
+        var catalog=MaterialCatalog.bundled();
+        assertEquals("cubic-water-r1",catalog.propertyRevision(CUBIC_WATER));
+        var world=catalog.requirePackage(WORLD);
+        assertFalse(world.components().contains("Water"),"the network package keeps water separate");
+        assertEquals(List.of("icheme:crystal_carbon_dioxide_i"),world.crystals());
+        assertEquals("refinery-tier1-r3",world.revision(),"the network package record is unchanged");
+        for(var p:catalog.packages().values())for(var property:p.properties())assertNotEquals(CUBIC_WATER,property.id(),p.id());
+        var pilotCatalog=PilotAqueousTestCatalog.catalog();
+        var pilot=pilotCatalog.requirePackage(PilotAqueousTestCatalog.PACKAGE_ID);
+        assertEquals("pilot-aqueous-r3",pilot.revision());
+        var property=pilot.properties().get(pilot.components().indexOf("Water"));
+        assertEquals(CUBIC_WATER,property.id());
+        assertEquals(List.of(0.91976,-0.33844,0.33431),property.pr().alpha().coefficients());
+        assertEquals(647.096,property.pr().criticalTemperature());
+        assertEquals(0.3443,property.pr().acentricFactor());
+        assertEquals(WATER,pilotCatalog.groupCounts(PilotAqueousTestCatalog.PACKAGE_ID,"Water").get(ModifiedUnifac.SCHEME).counts());
+        assertEquals(WATER,pilotCatalog.groupCounts(PilotAqueousTestCatalog.PACKAGE_ID,"Water").get(Eppr78Groups.SCHEME).counts());
+        assertTrue(pilot.crystals().contains("icheme:crystal_ice_ih"));
+    }
+
+    /**
      * The new fields are in no identity: every package's column, fluid and spine identity and its physics content are the
      * same with and without them, and so with the E-PPR78 matrix and the Dortmund table taken away.
      */
@@ -95,7 +123,7 @@ class AqueousSolventDataTest {
             boolean g=o.remove("group_counts")!=null,h=o.remove("henry_in_water")!=null;
             if(g)counts++;if(h)henry++;if(g||h)entry.setValue(o.toString());
         }
-        assertEquals(33,counts,"the 33 defined compounds of the world list");assertEquals(8,henry);
+        assertEquals(34,counts,"the 33 defined compounds of the world list and the cubic water");assertEquals(8,henry);
         resources.remove(ROOT+TABLE);resources.remove(ROOT+"group_interactions/eppr78_2022.json");
         var without=MaterialCatalog.parse(resources);
         var edited=MaterialCatalog.parse(changed(HEXANE,o->{var d=o.getAsJsonObject("group_counts").getAsJsonObject(ModifiedUnifac.SCHEME);

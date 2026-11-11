@@ -173,7 +173,7 @@ class MaterialCatalogTest {
             var o=JsonParser.parseString(entry.getValue()).getAsJsonObject();
             assertTrue(o.has("freezing"),entry.getKey());o.remove("freezing");entry.setValue(o.toString());stripped++;
         }
-        assertEquals(49,stripped,"20 bundled datasets and the pilot's 4, the 24 Tier 1 imports (W6) and the crude_pr78 CO2 (O11 of batch 2026-11-04-open-thermo-data)");
+        assertEquals(50,stripped,"20 bundled datasets and the pilot's 4, the 24 Tier 1 imports (W6), the crude_pr78 CO2 (O11 of batch 2026-11-04-open-thermo-data) and the cubic water (W3b step 2, the ice anchor)");
         var without=MaterialCatalog.parse(resources);
         for(var p:bundled.packages().values()) {
             assertEquals(p.scientificRevision(),without.requirePackage(p.id()).scientificRevision(),p.id());

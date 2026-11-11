@@ -1,12 +1,12 @@
 {
   "schema_version": 1,
   "id": "icheme:pilot_aqueous",
-  "revision": "pilot-aqueous-r2",
+  "revision": "pilot-aqueous-r3",
   "method": "icheme:pilot_aqueous_pr78",
   "components": [
     {
       "id": "Water",
-      "properties": "icheme:pilot_water"
+      "properties": "icheme:cubic_water"
     },
     "Ethanol",
     "N-hexane",

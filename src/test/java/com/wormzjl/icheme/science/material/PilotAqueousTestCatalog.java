@@ -9,12 +9,12 @@ import java.util.function.Consumer;
 /**
  * The pilot aqueous package {@code icheme:pilot_aqueous} (batch 2026-11-11-aqueous-solvents, W2b) over the bundled
  * material resources, from the test overlay {@code /materials/pilot-aqueous/index.json}: water as a compound of the
- * cubic ({@code icheme:pilot_water}: IAPWS-95 critical point, acentric factor 0.3443, a Mathias-Copeman alpha, the water
- * model's steam Cp, Dortmund and E-PPR78 counts H2O 1), ethanol from ChemSep with its homomorph propane
+ * cubic (the main record {@code icheme:cubic_water} since W3b step 2: IAPWS-95 critical point, acentric factor 0.3443, a
+ * Mathias-Copeman alpha, the water model's steam Cp, Dortmund and E-PPR78 counts H2O 1), ethanol from ChemSep with its homomorph propane
  * ({@code icheme:pilot_ethanol}, compound record {@code Ethanol}), the method {@code icheme:pilot_aqueous_pr78} (the
  * crude_pr78 pair libraries) and the package with n-hexane, benzene, propane, methane, nitrogen, CO2, hydrogen and the
  * cut crude_pc03. Written by {@code tools/compound-import} ({@code selection-aqueous-pilot.json}). Main data holds
- * neither ethanol nor a water dataset; the overlay lives outside {@code data/}, so every other test sees the game's catalog.
+ * no ethanol (W6); the overlay lives outside {@code data/}, so every other test sees the game's catalog.
  */
 public final class PilotAqueousTestCatalog {
     public static final String PACKAGE_ID = "icheme:pilot_aqueous";

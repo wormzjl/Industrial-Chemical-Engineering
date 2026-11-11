@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "id": "icheme:pilot_water",
+  "id": "icheme:cubic_water",
   "component": "Water",
   "revision": "cubic-water-r1",
-  "source": "Water as a compound of the PR78 cubic (batch 2026-11-11-aqueous-solvents, plan M2), a test pilot: IAPWS-95 critical point (Tc 647.096 K, Pc 22.064 MPa), acentric factor 0.3443, normal boiling point 373.124 K, standard liquid density 999.0 kg/m3 at 60 F (IAPWS-95, rounded); Mathias-Copeman alpha c1 0.91976, c2 -0.33844, c3 0.33431 matched to the Wagner-Pruss saturation line from 0 to 370 C (tools/aqueous-solvents/cubic-water.mjs). Molar mass 0.01801528 kg/mol and the vapour Shomate Cp of the water model icheme:water (water-iapws95-shomate-r3), fitted by least squares as shifted_polynomial_5 over 273.16..900 K (27 points), largest deviation 0.016 % at 307.8 K. Imported by tools/compound-import (cubic_water).",
+  "source": "Water as a compound of the PR78 cubic (batch 2026-11-11-aqueous-solvents, plan M2): IAPWS-95 critical point (Tc 647.096 K, Pc 22.064 MPa), acentric factor 0.3443, normal boiling point 373.124 K, standard liquid density 999.0 kg/m3 at 60 F (IAPWS-95, rounded); Mathias-Copeman alpha c1 0.91976, c2 -0.33844, c3 0.33431 matched to the Wagner-Pruss saturation line from 0 to 370 C (tools/aqueous-solvents/cubic-water.mjs). Molar mass 0.01801528 kg/mol and the vapour Shomate Cp of the water model icheme:water (water-iapws95-shomate-r3), fitted by least squares as shifted_polynomial_5 over 273.16..900 K (27 points), largest deviation 0.016 % at 307.8 K. Imported by tools/compound-import (cubic_water).",
   "molecular_weight_kg_per_mol": 0.01801528,
   "normal_boiling_point_kelvin": 373.124,
   "standard_liquid_density_kg_per_m3": 999,
@@ -45,6 +45,15 @@
         ]
       }
     }
+  },
+  "freezing": {
+    "normal_melting_kelvin": 273.16,
+    "triple_point_kelvin": 273.16,
+    "triple_point_pascal": 611.657,
+    "fusion_enthalpy_j_per_mol": 6007,
+    "estimated": false,
+    "source": "The anchor of icheme:crystal_ice_ih (revision crystal-ice-ih-r1), its values and estimated flag. Water melts at 273.1525 K at 1 atm, 0.0075 K below its triple point: normal_melting_kelvin holds the triple point, as the anchor does. Data only: never a validity floor or a range end.",
+    "revision": "crystal-anchor-r1"
   },
   "group_counts": {
     "modified-unifac-dortmund": {

@@ -228,7 +228,10 @@ class PilotCryogenicCatalogTest {
         refused(METHANE, o -> o.addProperty("molar_mass_kg_per_mol", 0.01605), "above 1e-4");
         refused(PACKAGE, o -> o.getAsJsonArray("crystals").add("icheme:crystal_carbon_dioxide_i"), "crystals: duplicate crystal record");
         refused(PACKAGE, o -> o.getAsJsonArray("crystals").set(0, new JsonPrimitive("icheme:crystal_water_ih")), "crystals: unresolved");
-        refused(CRYSTAL, o -> o.addProperty("component", "Water"), "is for Water, outside the package components");
+        // Water has a dataset since W3b step 2 (icheme:cubic_water): the relabelled crystal takes its triple point too, so
+        // the dataset agrees with the anchor and the refusal is the package's.
+        refused(CRYSTAL, o -> { o.addProperty("component", "Water"); o.getAsJsonObject("anchor").addProperty("temperature_kelvin", 273.16); },
+                "is for Water, outside the package components");
     }
 
     /** D6: one ideal-gas source per species; ideal_gas_cp is optional only under a method that takes the reference spines. */
