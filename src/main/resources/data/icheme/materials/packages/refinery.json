@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "id": "icheme:refinery",
-  "revision": "refinery-tier1-r4",
+  "revision": "refinery-tier1-r3",
   "method": "icheme:crude_pr78",
   "extends": "icheme:tjl20_methane_nitrogen",
   "components": [
@@ -32,15 +32,10 @@
     {
       "id": "CarbonDioxide",
       "properties": "icheme:chemsep_carbon_dioxide"
-    },
-    {
-      "id": "Water",
-      "properties": "icheme:cubic_water"
     }
   ],
   "crystals": [
-    "icheme:crystal_carbon_dioxide_i",
-    "icheme:crystal_ice_ih"
+    "icheme:crystal_carbon_dioxide_i"
   ],
   "advisory_evidence": [
     "RECONSTRUCTED_PETROLEUM_PROPERTIES: shared cuts from the project's DWSIM characterisation of Tia Juana Light (Ledezma-Martinez 2019), not original HYSYS properties; 60 F standard-liquid basis assumed",

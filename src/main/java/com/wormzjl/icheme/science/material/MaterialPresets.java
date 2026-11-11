@@ -101,8 +101,7 @@ public final class MaterialPresets {
         if(networks.size()>1)throw new IllegalArgumentException("Only one global network configuration is supported");
         for(var row:networks.values())try {
             String pkg=text(row,"package"),defaultId=text(row,"default_column_preset");var p=packages.get(pkg);
-            // W3b: a package with Water in its cubic serves wet islands; one without (a test pilot whose method takes its ideal gas from spines) only dry ones.
-            if(p==null||!p.components().contains("Nitrogen")||!p.model().equals("pr78"))throw new IllegalArgumentException("package: PR78 network requires Nitrogen");
+            if(p==null||!p.components().contains("Nitrogen")||p.components().contains("Water")||!p.model().equals("pr78"))throw new IllegalArgumentException("package: PR78 network requires Nitrogen and separate water");
             if(!columns.containsKey(defaultId)||!columns.get(defaultId).visible())throw new IllegalArgumentException("default_column_preset: unknown or hidden preset");
             var ids=new ArrayList<String>();for(var value:row.getAsJsonArray("fluid_presets")){String id=value.getAsString();if(!fluids.containsKey(id)||ids.contains(id))throw new IllegalArgumentException("fluid_presets: unknown or duplicate "+id);ids.add(id);}
             network=new Network(pkg,defaultId,ids);
