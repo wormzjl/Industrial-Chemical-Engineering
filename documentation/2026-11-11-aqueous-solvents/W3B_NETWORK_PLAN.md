@@ -539,3 +539,29 @@ Timing runs alone, 60 s warm-up and 60 s measured, ms per accepted step. Bounds 
 | 4 | Water share's pure-water evaluation in closed form, bit for bit | removes 933 of wet's 11554 kernel evaluations (8.1 %) | | | | built, not yet measured |
 
 The dry column's 0.794 against 0.888 is machine noise (the dry kernel has no excess term; about 22 % background load during item 2's run). Wet's remaining excess over dry, about 6200 kernel evaluations, sits in the three-slot states, not in the share. Asked of the sub-thread for its next report: each scenario's ratio to main beside its bound, and wet's kernel evaluations split by caller. If wet or polar is still over its bound after item 5, the decision goes to the owner.
+
+## 30. Stage B result: wet and polar over their bounds (2026-11-12; owner decision)
+
+Items 4 and 5 committed (6ef50c8cd: the share's pure water in closed form, wet kernel evaluations 11554 to 10621, no measurable time; 4d07122fe: the share continued linearly in P below p_sat with its exact temperature derivative, the Maxwell mismatch at 350 K and 10 kPa 9 % to 2.1e-5 of v). Steps, Newton iterations and end states are unchanged by every item.
+
+| ms per accepted step | dry | wet | polar |
+|---|---|---|---|
+| main (48b4fb298) | 0.777 | 0.923 | 1.021 |
+| before stage B (ab6b90d42) | 0.837 | 2.467 | 1.702 |
+| after items 1, 4, 5 | 0.807 | 2.016 | 1.449 |
+| ratio to main | 1.04 | 2.18 | 1.42 |
+| bound | 1.1 | 1.5 | 1.1 |
+
+Timing noise on this machine is about 10 % (a reverted item moved dry by 12 % without touching its path).
+
+Where the time is. Kernel evaluations per accepted step, dry against wet: `PhaseLayout.decode` 429 against 861 (the Newton residual and one decode per finite-difference Jacobian column, every slot each time); repartition 12 against 18; flash, stability and deposition onset 2.8 against 6.1. Wet doubles because a wet node has more unknowns (state calls 220 to 293 per step) and three slots instead of two: 1.33 x 1.5. The stability tests are not the cause. Wet profile: decode 47 % inclusive, the kernel 33 % (the excess correction 20.7 % self, all of it water's cells), the sparse LU about 17 %.
+
+Remaining ideas (the sub-thread's estimates, none built):
+
+- A. A Jacobian column that moves one slot's ratio re-evaluates that slot and the reference slot only. Wet about -10 %; small and local.
+- B. The node's Jacobian from the kernel's derivatives (one derivative evaluation per slot instead of one decode per column). Wet about -30 %, dry and polar a similar share; the only idea that reaches wet's bound alone. A plan-size build in the Newton's core; results move in the last digits, so every reference and the campaign follow it.
+- C. A cheaper excess correction: none found that leaves the physics alone.
+- D. Reuse of the sparse LU's symbolic step: at most 7 %.
+- E. Fewer compounds with activity fits against hydrocarbons: lowers polar's cost and its accuracy (alcohol with hydrocarbon mixtures are strongly non-ideal).
+
+Orchestrator's recommendation to the owner: B in this batch, before steps 6 and 7, with its design written first (`ANALYTIC_JACOBIAN_PLAN.md`), because step 7's campaign and the final lane should be taken once, on the final solver. A only if B is not built. Not E.
