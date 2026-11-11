@@ -163,12 +163,14 @@ public final class IChemE {
         builder.pop();
         // Electricity (batch 2026-11-03-rotating-machinery W5, reading A66).
         builder.push("energy");
-        ENERGY_JOULES_PER_FE = builder.comment("Joules per forge energy unit (FE). Motors, fans and generators convert their watts at this rate; stores keep joules, so a change keeps the energy they hold. Default 2.5, Mekanism's joule.")
+        ENERGY_JOULES_PER_FE = builder.comment("Joules per forge energy unit (FE) at play time. Motors, fans and generators convert their watts at this rate; stores keep joules, so a change keeps the energy they hold. Default 2.5, Mekanism's joule.",
+                        "At a fluid.timeScale above 1 an FE carries joulesPerFE x timeScale of process energy, so a machine draws the same FE per tick at any factor (a 1 MW motor 20000 FE/t at the defaults).")
                 .defineInRange("joulesPerFE", 2.5, 0.01, 1e6);
         ENERGY_MACHINES_NEED_POWER = builder.comment("Whether motors, air cooler fans and cooling tower fans need FE at their terminal box. False: nothing is drawn, nothing stops for want of power, and the ports still accept FE (a pack without energy mods).")
                 .define("machinesNeedPower", true);
         // Solid fuel without a fuel record (batch 2026-11-09-batch-distiller, owner B1 B).
-        ENERGY_JOULES_PER_BURN_TICK = builder.comment("Joules of heat per burn tick for a firebox item without a fuel record (materials/fuels): its furnace burn time times this. Default 1.45e6, the coal anchor: a coal item of 92.6 kg at 25 MJ/kg over its 1600 ticks. Items with a record burn at their mass times their heating value.")
+        ENERGY_JOULES_PER_BURN_TICK = builder.comment("Joules of heat per burn tick for a firebox item without a fuel record (materials/fuels): its furnace burn time times this. Default 1.45e6, the coal anchor: a coal item of 92.6 kg at 25 MJ/kg over its 1600 ticks. Items with a record burn at their mass times their heating value.",
+                        "An item's heat is conserved: it burns over process time, so a still takes fluid.timeScale times the items per play minute.")
                 .defineInRange("joulesPerBurnTick", com.wormzjl.icheme.science.fluid.network.BatchStill.JOULES_PER_BURN_TICK, 1.0, 1e12);
         builder.pop();
         // The Create coupling (batch 2026-11-03-rotating-machinery W6b, decision D7): read only with Create installed.
@@ -181,10 +183,13 @@ public final class IChemE {
         builder.push("wear");
         WEAR_ENABLED = builder.comment("Whether pumps wear from cavitation and from running dry, and fail at 0 % health until a repair kit restores them. False: nothing wears and no pump stands failed.")
                 .define("enabled", true);
-        WEAR_CAVITATION_HOURS = builder.comment("A pump's life in online hours at the worst cavitation (its NPSH available about twice its NPSH3). Longer elsewhere: 5.1 h at NPSH3, 18.9 h at 3.5 times it, none from 4 times it up.")
-                .defineInRange("cavitationHours", 2.0, 0.001, 1e6);
-        WEAR_DRY_MINUTES = builder.comment("A pump's life in online minutes running dry: its driver on while it is gas- or vapour-locked or its suction holds no liquid.")
-                .defineInRange("dryMinutes", 10.0, 0.01, 1e6);
+        // In process time (batch 2026-11-11-minecraft-time-delta, owner T3): new keys, so a stored online life does not carry over as a shorter one.
+        WEAR_CAVITATION_HOURS = builder.comment("A pump's life in process hours at the worst cavitation (its NPSH available about twice its NPSH3). Longer elsewhere: 20.4 h at NPSH3, 75.6 h at 3.5 times it, none from 4 times it up.",
+                        "Process time runs fluid.timeScale times faster than play: the default 8 h is 2 h of play at the default factor 4.")
+                .defineInRange("cavitationProcessHours", com.wormzjl.icheme.science.machine.Wear.CAVITATION_PROCESS_HOURS, 0.001, 1e6);
+        WEAR_DRY_MINUTES = builder.comment("A pump's life in process minutes running dry: its driver on while it is gas- or vapour-locked or its suction holds no liquid.",
+                        "The default 40 min is 10 min of play at the default factor 4.")
+                .defineInRange("dryProcessMinutes", com.wormzjl.icheme.science.machine.Wear.DRY_PROCESS_MINUTES, 0.01, 1e6);
         builder.pop();
         builder.pop();
         CONFIG_SPEC = builder.build();

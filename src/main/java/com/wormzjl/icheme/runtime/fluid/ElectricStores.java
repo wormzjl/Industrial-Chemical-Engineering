@@ -128,8 +128,18 @@ public final class ElectricStores {
         return settings.get();
     }
 
+    /** The config's joules per FE: the play-time rate a power (W) is turned into FE per tick at, whatever the time factor. */
     public double joulesPerFE() {
         return settings.get().joulesPerFE();
+    }
+
+    /**
+     * The process energy one FE carries, J: {@link #joulesPerFE} times the time factor (batch 2026-11-11-minecraft-time-delta,
+     * W4, owner T2). A machine's FE per tick then stays at its play-time rate (a 1 MW motor 20 000 FE/tick at the defaults)
+     * at any factor, while the store books the process energy a tick carries.
+     */
+    private double feJoules() {
+        return joulesPerFE() * coordinator.time().factor();
     }
 
     /** Installs the listener told when a unit lost or regained its power. */
@@ -277,7 +287,7 @@ public final class ElectricStores {
     public List<Long> charged() {
         List<Long> out = null;
         for (var e : stores.entrySet())
-            if (e.getValue().kind.generator() && e.getValue().joules >= joulesPerFE()) {
+            if (e.getValue().kind.generator() && e.getValue().joules >= feJoules()) {
                 if (out == null) out = new ArrayList<>();
                 out.add(e.getKey());
             }
@@ -309,7 +319,7 @@ public final class ElectricStores {
         if (s == null || s.kind.generator() || fe <= 0) return 0;
         // Push-only FE sources also prove their live feed when a full buffer accepts nothing. Preflight stays read-only.
         if(!simulate)s.offeredTick = coordinator.now();
-        double jpf = joulesPerFE();
+        double jpf = feJoules();
         double taken = Math.min(ElectricStore.accepted(s.joules, s.capacity(), fe * jpf), room(s));
         int whole = (int) Math.min(fe, Math.floor(taken / jpf + 1e-9));
         if (!simulate && whole > 0) {
@@ -326,7 +336,7 @@ public final class ElectricStores {
     public int extract(long id, int fe, boolean simulate) {
         var s = store(id);
         if (s == null || !s.kind.generator() || fe <= 0) return 0;
-        double jpf = joulesPerFE();
+        double jpf = feJoules();
         int whole = (int) Math.min(fe, Math.floor(Math.min(s.joules, room(s)) / jpf + 1e-9));
         if (!simulate && whole > 0) {
             double joules = whole * jpf;
@@ -340,13 +350,13 @@ public final class ElectricStores {
     /** Unit {@code id}'s content in whole FE, at most {@link Integer#MAX_VALUE}. */
     public int stored(long id) {
         var s = stores.get(id);
-        return s == null ? 0 : (int) Math.min(Integer.MAX_VALUE, Math.floor(s.joules / joulesPerFE()));
+        return s == null ? 0 : (int) Math.min(Integer.MAX_VALUE, Math.floor(s.joules / feJoules()));
     }
 
     /** Unit {@code id}'s capacity in whole FE, at most {@link Integer#MAX_VALUE}. */
     public int capacity(long id) {
         var s = stores.get(id);
-        return s == null ? 0 : (int) Math.min(Integer.MAX_VALUE, Math.floor(s.capacity() / joulesPerFE()));
+        return s == null ? 0 : (int) Math.min(Integer.MAX_VALUE, Math.floor(s.capacity() / feJoules()));
     }
 
     // ---------------- booking ----------------
@@ -572,7 +582,7 @@ public final class ElectricStores {
     public View view(long id) {
         var s = stores.get(id);
         if (s == null) return null;
-        double jpf = joulesPerFE();
+        double jpf = feJoules();
         boolean stopped = s.unpowered && needPower();
         String status = stopped ? "NO POWER" : !s.metered && !s.kind.generator() ? "UNMETERED" : "";
         return new View(s.kind, s.joules, s.capacity(), s.power, s.inRate / jpf, s.outRate / jpf, s.metered, stopped, status);
