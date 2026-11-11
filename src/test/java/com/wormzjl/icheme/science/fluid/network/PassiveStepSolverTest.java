@@ -83,7 +83,8 @@ class PassiveStepSolverTest {
         var graph=new PassiveNetwork(reservoirs,List.of(new PassiveNetwork.Pipe(4,0,1,new PipeResistance.Geometry(10,.05,.000045,0))));
         var result=new PassiveStepSolver(model).solve(graph,.01,()->{});assertTrue(result.massFlows()[0]>0);
         var oldReceiver=PhaseLayout.totalAmounts(reservoirs.get(1).state());var newReceiver=PhaseLayout.totalAmounts(result.states().get(1));
-        for(int i=0;i<oldReceiver.length;i++)assertTrue(newReceiver[i]>oldReceiver[i],"component "+i);
+        // Every component of the feed (the refinery basis holds 26 the feed does not name; they stay zero).
+        for(int i=0;i<oldReceiver.length;i++)if(composition[i]>0)assertTrue(newReceiver[i]>oldReceiver[i],"component "+i);else assertEquals(0,newReceiver[i],0.0,"component "+i);
         for(var state:result.states()){assertTrue(TestPhases.liquidVolume(state)>0);assertTrue(TestPhases.waterVolume(state)>0);assertTrue(state.vaporVolume()>0);}
     }
     @Test void aPreviouslyAbsentGasComponentCanEnterAReceivingReservoir() {

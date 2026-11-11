@@ -4531,8 +4531,8 @@ public final class PassiveStepSolver {
                     if(available==0)order=new int[]{FluidThermodynamics.OIL,FluidThermodynamics.GAS};
                 }
                 result[edge][end]=port==PassiveNetwork.PhasePort.LIQUID?
-                        PhaseDraw.Segment.mixed(capacity,seedHeld[node],outflow,FluidThermodynamics.holdsPhase(seeds.get(node),FluidThermodynamics.OIL)?phaseDensity(model,seeds.get(node),FluidThermodynamics.OIL):0,FluidThermodynamics.holdsPhase(seeds.get(node),FluidThermodynamics.AQUEOUS)?phaseDensity(model,seeds.get(node),FluidThermodynamics.AQUEOUS):0):
-                        PhaseDraw.Segment.decide(order,capacity,seedHeld[node],outflow);
+                        PhaseDraw.Segment.mixed(capacity,seedHeld[node],PhaseDraw.held(start),outflow,FluidThermodynamics.holdsPhase(seeds.get(node),FluidThermodynamics.OIL)?phaseDensity(model,seeds.get(node),FluidThermodynamics.OIL):0,FluidThermodynamics.holdsPhase(seeds.get(node),FluidThermodynamics.AQUEOUS)?phaseDensity(model,seeds.get(node),FluidThermodynamics.AQUEOUS):0):
+                        PhaseDraw.Segment.decide(order,capacity,seedHeld[node],PhaseDraw.held(start),outflow);
             }
             return result;
         }

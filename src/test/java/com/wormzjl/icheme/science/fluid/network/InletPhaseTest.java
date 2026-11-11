@@ -58,8 +58,10 @@ class InletPhaseTest extends PortFixture {
             for(var transfer:result.boundaries()){var n=transfer.moles();for(int c=0;c<n.length;c++)external[c]+=n[c];externalEnergy+=transfer.totalEnergyJoule();}
             externalEnergy+=result.pumpWorkJoule();
             var now=owned(graph);
-            for(int c=0;c<now.length;c++){double error=Math.abs(now[c]-initial[c]-external[c])/Math.max(1,initial[c]);
-                assertTrue(error<COMPONENT_LEDGER,label+" slice "+slice+": component "+c+" ledger "+error);}
+            // Relative to what the ledger books: a component the island starts without (the generator's water, 3360 mol after
+            // four 5 s slices) rounds on its booked amount, 3 ulp of it being 1.4e-12 mol.
+            for(int c=0;c<now.length;c++){double error=Math.abs(now[c]-initial[c]-external[c])/Math.max(1,Math.max(initial[c],Math.abs(external[c])));
+                assertTrue(error<COMPONENT_LEDGER,label+" slice "+slice+": component "+c+" ledger "+error+" (initial "+initial[c]+", now "+now[c]+", external "+external[c]+")");}
             double error=Math.abs(ownedEnergy(graph)-initialEnergy-externalEnergy)/Math.max(1,Math.abs(initialEnergy));
             assertTrue(error<ENERGY_LEDGER,label+" slice "+slice+": energy ledger "+error);
             accepted+=result.acceptedSubsteps();rejected+=result.rejectedSubsteps();result.rejectionReasons().forEach((k,v)->reasons.merge(k,v,Integer::sum));

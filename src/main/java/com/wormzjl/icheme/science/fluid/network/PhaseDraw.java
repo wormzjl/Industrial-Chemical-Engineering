@@ -126,14 +126,14 @@ final class PhaseDraw {
     record Segment(int[] order,double[] capacity,int[] pinned,int marginal,boolean mixed) {
         Segment(int[] order,double[] capacity,int[] pinned,int marginal){this(order,capacity,pinned,marginal,false);}
         /** Equal volume-rate draw; one depleted liquid becomes pinned and the other takes the remainder. */
-        static Segment mixed(double[] capacity,boolean[] held,double outflow,double oilDensity,double waterDensity) {
+        static Segment mixed(double[] capacity,boolean[] held,boolean[] startHeld,double outflow,double oilDensity,double waterDensity) {
             int[] order={OIL,AQUEOUS,GAS};
-            if(!held[OIL]||!held[AQUEOUS])return decide(order,capacity,held,outflow);
+            if(!held[OIL]||!held[AQUEOUS])return decide(order,capacity,held,startHeld,outflow);
             double sum=oilDensity+waterDensity,oilShare=oilDensity/sum,waterShare=waterDensity/sum;
             if(outflow*oilShare<=capacity[OIL]&&outflow*waterShare<=capacity[AQUEOUS])
                 return new Segment(order,capacity,new int[0],OIL,true);
             int first=capacity[OIL]/oilShare<=capacity[AQUEOUS]/waterShare?OIL:AQUEOUS,second=first==OIL?AQUEOUS:OIL;
-            return decide(new int[]{first,second,GAS},capacity,held,outflow);
+            return decide(new int[]{first,second,GAS},capacity,held,startHeld,outflow);
         }
         double[] rates(int marginal,double outflow,double oilDensity,double waterDensity) {
             if(!mixed||oilDensity<=0||waterDensity<=0)return rates(marginal,outflow);
@@ -144,16 +144,20 @@ final class PhaseDraw {
          * The segment an outflow {@code outflow} (kg/s; zero or negative is no outflow) lands in. Walk the order over the
          * phases with a positive capacity: a phase whose capacity the remaining flow exceeds is pinned, provided a later
          * phase of the order the seed holds can take the rest; the first phase the seed holds that covers the remainder
-         * (or that nothing after it could relieve) is marginal; a phase with capacity the seed no longer holds and the
-         * remainder does not exceed is not drawn. With no such phase, the first phase after the pinned ones the seed holds
-         * is marginal (a capacity of zero: a phase that appeared within the step), then any the seed holds; none, -1.
+         * (or that nothing after it could relieve) is marginal. A phase the step's start holds ({@code startHeld}) and the
+         * seed no longer holds is pinned whatever the remainder, provided a later phase can take the rest: the port draws it
+         * first, so it is gone from the seed because the port drew it whole (W3b stage A: a bottom port's last 6.8 g of
+         * water, skipped while its pump ran on the gas, stood as vapour supersaturated at 282 K). A phase with capacity the
+         * start does not hold (a rate solve's, a kettle's boil-up) and the seed does not hold, which the remainder does not
+         * exceed, is not drawn. With no such phase, the first phase after the pinned ones the seed holds is marginal (a
+         * capacity of zero: a phase that appeared within the step), then any the seed holds; none, -1.
          */
-        static Segment decide(int[] order,double[] capacity,boolean[] seedHeld,double outflow) {
+        static Segment decide(int[] order,double[] capacity,boolean[] seedHeld,boolean[] startHeld,double outflow) {
             double remaining=Math.max(outflow,0);int[] pinned=new int[3];int count=0,marginal=-1,after=0;
             for(int i=0;i<order.length;i++) {
                 int phase=order[i];if(!(capacity[phase]>0))continue;
                 boolean relieved=false;for(int j=i+1;j<order.length;j++)relieved|=seedHeld[order[j]];
-                if(remaining>capacity[phase]&&relieved){pinned[count++]=phase;remaining-=capacity[phase];after=i+1;continue;}
+                if((remaining>capacity[phase]||!seedHeld[phase]&&startHeld[phase]&&Double.isFinite(capacity[phase]))&&relieved){pinned[count++]=phase;remaining=Math.max(0,remaining-capacity[phase]);after=i+1;continue;}
                 if(seedHeld[phase]){marginal=phase;break;}
             }
             if(marginal<0)for(int i=after;i<order.length;i++)if(seedHeld[order[i]]){marginal=order[i];break;}
