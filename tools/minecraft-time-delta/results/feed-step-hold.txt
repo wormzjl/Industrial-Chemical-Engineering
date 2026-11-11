@@ -128,3 +128,44 @@ SUMMARY seeds=200 clean=198 threads=8 slices=120 wallMs=17230 seedMsSum=79727
 CLASS e:new seeds=2 smallest=47 list=[47, 145]
 == o4 defaults factor=4 exit=0 seconds=5
 SUMMARY seeds=200 clean=200 threads=8 slices=120 wallMs=2115 seedMsSum=16129
+
+== option 2 timing (LevelLoopStepProbe 'probe timing' lines; run.sh 4, run.sh 1): decide = control cadence tick and the drum view's committed tick it reads; slice = the first accepted slice that carries a new level-valve target
+-- factor 4, step rule feed
+slice start=91596 end=91686 dispatched=91686 levelTarget=0.002724 m3/s
+decide tick=91700 readingTick=91686 level=29.02 %
+slice start=91686 end=91776 dispatched=91776 levelTarget=0.02260 m3/s
+decide tick=91800 readingTick=91776 level=60.53 %
+slice start=91776 end=91866 dispatched=91866 levelTarget=0.2960 m3/s
+decide tick=91900 readingTick=91866 level=43.48 %
+slice start=91866 end=91956 dispatched=91956 levelTarget=0.2880 m3/s
+decide tick=92000 readingTick=91956 level=27.00 %
+slice start=91956 end=92046 dispatched=92046 levelTarget=0.2077 m3/s
+-- factor 4, empty factor-4 feed
+slice start=92319 end=92320 dispatched=92320 levelTarget=0.01000 m3/s
+decide tick=92400 readingTick=92382 level=NaN %
+decide tick=92500 readingTick=92446 level=4.384 %
+slice start=92446 end=92546 dispatched=92546 levelTarget=0.6670 m3/s
+decide tick=92600 readingTick=92546 level=6.916 %
+slice start=92546 end=92646 dispatched=92646 levelTarget=0.000 m3/s
+decide tick=92700 readingTick=92646 level=52.18 %
+slice start=92646 end=92746 dispatched=92746 levelTarget=0.3329 m3/s
+decide tick=92800 readingTick=92746 level=25.00 %
+slice start=92746 end=92836 dispatched=92836 levelTarget=0.1988 m3/s
+-- factor 1, step factor-4 feed
+slice start=99869 end=99950 dispatched=99950 levelTarget=0.3343 m3/s
+decide tick=100000 readingTick=99950 level=26.45 %
+slice start=99950 end=100031 dispatched=100031 levelTarget=0.2245 m3/s
+decide tick=100100 readingTick=100031 level=25.28 %
+slice start=100031 end=100112 dispatched=100112 levelTarget=0.2037 m3/s
+decide tick=100200 readingTick=100193 level=24.83 %
+slice start=100193 end=100274 dispatched=100274 levelTarget=0.1958 m3/s
+decide tick=100300 readingTick=100274 level=24.97 %
+-- factor 4, empty cases, with the outlet reading the law adds (second run)
+slice start=112319 end=112320 dispatched=112320 levelTarget=0.01000 m3/s
+decide tick=112400 readingTick=112382 level=NaN % liquid=none m3 outletReading=0.3976 m3/s 396.2 kg/s
+decide tick=112500 readingTick=112446 level=4.384 % liquid=0.1136 m3 outletReading=0.7373 m3/s 734.8 kg/s
+slice start=112446 end=112546 dispatched=112546 levelTarget=0.6670 m3/s
+decide tick=112600 readingTick=112546 level=6.916 % liquid=0.2257 m3 outletReading=0.000 m3/s 0.000 kg/s
+slice start=112546 end=112646 dispatched=112646 levelTarget=0.000 m3/s
+decide tick=112700 readingTick=112646 level=52.18 % liquid=4.201 m3 outletReading=0.000 m3/s 0.000 kg/s
+slice start=112646 end=112746 dispatched=112746 levelTarget=0.3329 m3/s

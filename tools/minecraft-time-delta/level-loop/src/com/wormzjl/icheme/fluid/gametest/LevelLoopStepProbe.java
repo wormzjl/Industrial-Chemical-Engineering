@@ -91,8 +91,34 @@ public final class LevelLoopStepProbe {
         TankCharge.run(world, outletId, new FluidDeviceSpec(1, 300, 101_325, water));
         TankCharge.run(world, ventId, new FluidDeviceSpec(1, 300, 101_325, FluidDeviceSpec.nitrogen(MaterialRuntime.active()).composition()));
         long feedValveId = id(plant, feedValve), levelValveId = id(plant, levelValve);
-        world.observe(state::published);
         long cadence = ControlService.CADENCE;
+        // Option 2's timing (owner "Options 1 and 2"): the level valve's target in each accepted slice of the drum's island, with
+        // the slice's start, end and dispatch ticks, logged when it changes; and at each control cadence the online tick and the
+        // drum view's committed tick, the reading the level law decides on.
+        double[] lastTarget = {Double.NaN};long[] lastDecision = {-1};int[] lines = {0};
+        world.observe((changed, timings) -> {
+            state.published(changed, timings);
+            if (state.drum == 0 || lines[0] > 120) return;
+            for (var island : changed) {
+                if (island.graph().reservoirs().stream().noneMatch(r -> r.id() == state.drum)) continue;
+                var m = timings.get(island.id());
+                if (m == null || !m.accepted()) continue;
+                var g = island.graph();
+                for (var pipe : g.pipes())
+                    if (pipe.control() instanceof FlowControl.ControlValve law && g.reservoirs().get(pipe.first()).id() == levelValveId && law.volumeTarget() != lastTarget[0]) {
+                        lastTarget[0] = law.volumeTarget();lines[0]++;
+                        log("probe timing {} slice start={} end={} dispatched={} levelTarget={} m3/s", label, m.startTick(), m.endTick(), m.dispatchedAtTick(), fmt(law.volumeTarget()));
+                    }
+            }
+        });
+        Runnable decisions = () -> {
+            long t = world.onlineTick();
+            if (state.drum == 0 || t % cadence != 0 || t == lastDecision[0] || lines[0] > 120) return;
+            lastDecision[0] = t;lines[0]++;
+            var out = world.instrumentPipeReading(levelValveId);var view = world.view(state.drum);
+            log("probe timing {} decide tick={} readingTick={} level={} % liquid={} m3 outletReading={} m3/s {} kg/s", label, t, committed(world, state), fmt(state.level(world)),
+                    view.state() == null ? "none" : fmt(view.state().phaseVolumes()[0] + view.state().phaseVolumes()[1]), out == null || out.volumeFlow() == null ? "none" : fmt(out.volumeFlow()), out == null ? "none" : fmt(out.massFlow()));
+        };
         double[] residual = {Double.NaN, Double.NaN};
         long[] stepAt = {-1};
         boolean empty = mode.equals("empty");
@@ -141,6 +167,7 @@ public final class LevelLoopStepProbe {
                 }))
                 // The book's residual once the setup's edits have compiled (two cadences of the island).
                 .thenWaitUntil(until(helper, world, state, 2400, "waiting two cadences", () -> {
+                    decisions.run();
                     if (state.settled < 0) state.settled = committed(world, state);
                     if (committed(world, state) < state.settled + 2 * cadence) return false;
                     residual[0] = state.massResidual;
@@ -149,6 +176,7 @@ public final class LevelLoopStepProbe {
                 }))
                 // STEP: filled to 25 % at a tenth of the feed, then the full feed in one step.
                 .thenWaitUntil(until(helper, world, state, 6000, "waiting for 25 %", () -> {
+                    decisions.run();
                     if (empty) return true;
                     pace(world, state);
                     if (!(Math.abs(state.level(world) - FILLED) < 2)) return false;
@@ -157,6 +185,7 @@ public final class LevelLoopStepProbe {
                     return true;
                 }))
                 .thenWaitUntil(until(helper, world, state, 6000, "six cycles after the step", () -> {
+                    decisions.run();
                     pace(world, state);
                     double l = state.level(world);
                     if (!Double.isNaN(l)) {state.low = Math.min(state.low, l);state.high = Math.max(state.high, l);}
