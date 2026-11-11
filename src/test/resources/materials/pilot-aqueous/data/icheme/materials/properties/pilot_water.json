@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "id": "icheme:pilot_water",
+  "component": "Water",
+  "revision": "cubic-water-r1",
+  "source": "Water as a compound of the PR78 cubic (batch 2026-11-11-aqueous-solvents, plan M2), a test pilot: IAPWS-95 critical point (Tc 647.096 K, Pc 22.064 MPa), acentric factor 0.3443, normal boiling point 373.124 K, standard liquid density 999.0 kg/m3 at 60 F (IAPWS-95, rounded); Mathias-Copeman alpha c1 0.91976, c2 -0.33844, c3 0.33431 matched to the Wagner-Pruss saturation line from 0 to 370 C (tools/aqueous-solvents/cubic-water.mjs). Molar mass 0.01801528 kg/mol and the vapour Shomate Cp of the water model icheme:water (water-iapws95-shomate-r3), fitted by least squares as shifted_polynomial_5 over 273.16..900 K (27 points), largest deviation 0.016 % at 307.8 K. Imported by tools/compound-import (cubic_water).",
+  "molecular_weight_kg_per_mol": 0.01801528,
+  "normal_boiling_point_kelvin": 373.124,
+  "standard_liquid_density_kg_per_m3": 999,
+  "standard_temperature_kelvin": 288.7055555556,
+  "standard_pressure_pascal": 101325,
+  "temperature_min_kelvin": 298.15,
+  "temperature_max_kelvin": 900,
+  "fluid_domain": {
+    "temperature_min_kelvin": 273.16,
+    "temperature_max_kelvin": 900,
+    "pressure_min_pascal": 100,
+    "pressure_max_pascal": 2000000,
+    "evidence": "Fluid network only: the water model Cp fit range, from its triple point."
+  },
+  "estimated_heavy_residue": false,
+  "ideal_gas_cp": {
+    "type": "shifted_polynomial_5",
+    "reference_kelvin": 298.15,
+    "coefficients": [
+      33.588669281020806,
+      0.00414053424333764,
+      0.0000307250650375853,
+      -7.147742317367964e-8,
+      9.345811195879373e-11,
+      -4.9490270579759963e-14
+    ]
+  },
+  "models": {
+    "pr78": {
+      "critical_temperature_kelvin": 647.096,
+      "critical_pressure_pascal": 22064000,
+      "acentric_factor": 0.3443,
+      "alpha": {
+        "type": "mathias_copeman",
+        "coefficients": [
+          0.91976,
+          -0.33844,
+          0.33431
+        ]
+      }
+    }
+  },
+  "group_counts": {
+    "modified-unifac-dortmund": {
+      "counts": {
+        "H2O": 1
+      },
+      "estimated": false,
+      "source": "Water is the one subgroup H2O (subgroup 16, main group 7) of modified UNIFAC (Dortmund). (table dwsim-10.2.5-modfac-r1)",
+      "revision": "dortmund-group-definitions-r1"
+    },
+    "eppr78-2022": {
+      "counts": {
+        "H2O": 1
+      },
+      "estimated": false,
+      "source": "Water is the one group H2O (G16) of E-PPR78 (Jaubert et al. 2022). (table eppr78-2022-si-table-s4-r2)",
+      "revision": "eppr78-group-definitions-r1"
+    }
+  }
+}

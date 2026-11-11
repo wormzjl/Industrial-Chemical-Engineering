@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "icheme:pilot_aqueous_pr78",
+  "revision": "pilot-aqueous-pr78-r1",
+  "model": "pr78",
+  "ideal_gas": "fit",
+  "interactions": [
+    "icheme:tjl20",
+    "icheme:dwsim_refinery_pr78",
+    "icheme:dwsim_refinery_pr78_co2"
+  ],
+  "missing_interactions": "zero",
+  "water_model": "icheme:water",
+  "pressure_min_pascal": 1000,
+  "pressure_max_pascal": 10000000,
+  "advisory_evidence": [
+    "PILOT_AQUEOUS: test pilot of batch 2026-11-11-aqueous-solvents (W2b): the crude_pr78 pair libraries; every other pair is derived (DerivedPairs)"
+  ]
+}

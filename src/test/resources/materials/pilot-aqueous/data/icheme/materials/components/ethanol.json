@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "Ethanol",
+  "kind": "chemical",
+  "translation_key": "material.icheme.ethanol",
+  "fallback": "Ethanol",
+  "properties": "icheme:pilot_ethanol",
+  "appearance": {
+    "color": "#F2F4F0",
+    "transparency": 0.9,
+    "estimated": true
+  },
+  "identifiers": {
+    "cas": "64-17-5",
+    "chemsep_id": "1102",
+    "smiles": "CCO",
+    "formula": "CH3CH2OH"
+  }
+}

@@ -46,6 +46,17 @@ public final class MaterialCatalog {
             if (counts.isEmpty()) throw new IllegalArgumentException("counts: at least one group required");
         }
     }
+    /**
+     * A polar compound's hydrocarbon homomorph, a dataset's optional {@code homomorph} sub-record (batch
+     * 2026-11-11-aqueous-solvents, plan M4, W2b): {@code {"component", "source", "revision"}}, the bundled compound read
+     * with each polar group as CH3 (ethanol: propane). A compound without modified UNIFAC groups takes, against the polar
+     * compound, the E-PPR78 {@code k_ij(T)} it has with the homomorph's default dataset (its own Tc, Pc and acentric
+     * factor and its E-PPR78 counts) ({@link DerivedPairs}). The component must be known and have a default dataset. Data
+     * for the derived pairs: its own revision, in no package identity; {@link DerivedPairs.Result#identity()} names it.
+     */
+    public record Homomorph(String component, String source, String revision) {
+        public Homomorph { Objects.requireNonNull(component); Objects.requireNonNull(source); Objects.requireNonNull(revision); }
+    }
     public record NrtlPair(String first, String second, double a12, double b12, double a21,
             double b21, double alpha, double minimumTemperature, double maximumTemperature) {}
     /**
@@ -268,19 +279,23 @@ public final class MaterialCatalog {
      */
     private final GroupData groupData;
     /** See {@link #groupData}. */
-    private record GroupData(Map<String, Map<String, GroupCounts>> counts, Map<String, HenryConstant> henry, Map<String, ModifiedUnifac> tables) {
+    private record GroupData(Map<String, Map<String, GroupCounts>> counts, Map<String, HenryConstant> henry, Map<String, ModifiedUnifac> tables,
+            Map<String, Homomorph> homomorphs) {
         GroupData {
             var copy = new HashMap<String, Map<String, GroupCounts>>(); counts.forEach((k, v) -> copy.put(k, Map.copyOf(v)));
-            counts = Map.copyOf(copy); henry = Map.copyOf(henry); tables = Map.copyOf(tables);
+            counts = Map.copyOf(copy); henry = Map.copyOf(henry); tables = Map.copyOf(tables); homomorphs = Map.copyOf(homomorphs);
         }
     }
+    /** The pairs derived for compound lists of this catalog ({@link DerivedPairs}), kept for its life and shared by its views. */
+    private final DerivedPairs.Cache derivedPairs;
     private MaterialCatalog(Map<String, MaterialName> names, Map<String, Package> packages, Map<String, String> resources,
             Map<String, Map<ViscosityCorrelation.Phase, ViscosityCorrelation>> viscosities, Map<String, String> waterModels,
             Map<String, FluidAppearance> assayAppearances, Map<String, FluidAppearance> componentAppearances, Map<String, LiquidMixtureCorrection> liquidMixtures, MaterialPresets presets, FluidData fluidData,
             Map<String, Validity> propertyValidity, Map<String, Validity> packageValidity,
             Map<String, ReferenceSpine> spines, Map<String, CrystalReference> crystals, Map<String, Combustion> combustion, Map<String, Map<String, Double>> formulas, SolidMaterialCatalog solids,
-            SolidFuelCatalog fuels, Records records, Map<String, Definition> definitions, GroupData groupData) {
+            SolidFuelCatalog fuels, Records records, Map<String, Definition> definitions, GroupData groupData, DerivedPairs.Cache derivedPairs) {
         this.groupData = Objects.requireNonNull(groupData);
+        this.derivedPairs = Objects.requireNonNull(derivedPairs);
         this.propertyValidity = Map.copyOf(propertyValidity); this.packageValidity = Map.copyOf(packageValidity);
         this.spines = Map.copyOf(spines); this.crystals = Map.copyOf(crystals); this.combustion = Map.copyOf(combustion); this.formulas = Map.copyOf(formulas);
         this.records=Objects.requireNonNull(records); this.definitions=Map.copyOf(definitions);
@@ -300,7 +315,7 @@ public final class MaterialCatalog {
     /** This catalog with its packages, liquid-mixture corrections and definitions replaced; a view, never published. */
     private MaterialCatalog derived(Map<String, Package> packages, Map<String, LiquidMixtureCorrection> liquidMixtures, Map<String, Definition> definitions) {
         return new MaterialCatalog(names,packages,resources,viscosities,waterModels,assayAppearances,componentAppearances,liquidMixtures,presets,
-                fluidData,propertyValidity,packageValidity,spines,crystals,combustion,formulas,solids,fuels,records,definitions,groupData);
+                fluidData,propertyValidity,packageValidity,spines,crystals,combustion,formulas,solids,fuels,records,definitions,groupData,derivedPairs);
     }
     public Package requirePackage(String id) {
         Package p = packages.get(id);
@@ -597,6 +612,7 @@ public final class MaterialCatalog {
         });
         var groupCounts = new HashMap<String, Map<String, GroupCounts>>();
         var henry = new HashMap<String, HenryConstant>();
+        var homomorphs = new HashMap<String, Homomorph>();
         for (var o : group(groups,"properties").values()) checked(origins,o,() -> {
             String id=text(o,"id"), component=text(o,"component"); require(names,component,"component");
             viscosities.put("properties/" + id, readViscosities(o));
@@ -645,6 +661,7 @@ public final class MaterialCatalog {
             // Data for the derived pairs (batch 2026-11-11-aqueous-solvents), kept apart from the Property: in no identity.
             if (o.has("group_counts")) groupCounts.put("properties/"+id,readGroupCounts(object(o,"group_counts"),activityTables));
             if (o.has("henry_in_water")) henry.put("properties/"+id,HenryConstant.read(object(o,"henry_in_water")));
+            if (o.has("homomorph")) homomorphs.put("properties/"+id,readHomomorph(object(o,"homomorph"),component,names,defaults));
         });
         for (var o : group(groups,"water").values()) checked(origins,o,() -> {
             viscosities.put("water/" + text(o,"id"), readViscosities(o));
@@ -717,7 +734,7 @@ public final class MaterialCatalog {
         if(packages.isEmpty()) throw new IllegalArgumentException("Material catalog has no packages");
         var result=new MaterialCatalog(names,packages,resources,viscosities,waterModels,assayAppearances,componentAppearances,liquidMixtures,MaterialPresets.read(group(groups,"presets"),group(groups,"networks"),origins,packages,names.keySet()),fluidData,
                 propertyValidity,packageValidity,spines,crystals,combustion,formulas,SolidMaterialCatalog.parse(resources),SolidFuelCatalog.parse(resources),records,definitions,
-                new GroupData(groupCounts,henry,activityTables));
+                new GroupData(groupCounts,henry,activityTables,homomorphs),new DerivedPairs.Cache());
         for(var row:group(groups,"presets").values())if(text(row,"kind").equals("column"))checked(origins,row,()->
                 MaterialRuntime.with(result,text(row,"package"),()->{com.wormzjl.icheme.science.column.v3.V3ColumnProblemResolver.validateInput(result.presets().column(text(row,"id")).input(result));return null;}));
         for(var row:group(groups,"networks").values())checked(origins,row,()->{
@@ -902,6 +919,69 @@ public final class MaterialCatalog {
     }
     /** The modified UNIFAC (Dortmund) tables by record id ({@code group_interactions} records of that scheme). */
     public Map<String,ModifiedUnifac> modifiedUnifacTables() { return groupData.tables(); }
+    /** A polar compound's homomorph in a package: the {@code homomorph} of the dataset the package takes for it. */
+    public Optional<Homomorph> homomorph(String packageId,String componentId) {
+        return Optional.ofNullable(groupData.homomorphs().get(recordKey(packageId,componentId)));
+    }
+    /** A dataset's {@code homomorph} sub-record ({@link Homomorph}); a refusal names the field. */
+    static Homomorph readHomomorph(JsonObject o,String owner,Map<String,MaterialName> names,Map<String,String> defaults) {
+        try {
+            var h=new Homomorph(text(o,"component"),text(o,"source"),revision(o,"revision"));
+            require(names,h.component(),"component");
+            if(h.component().equals(owner))throw new IllegalArgumentException("component: a compound is not its own homomorph");
+            if(!defaults.containsKey(h.component()))throw new IllegalArgumentException("component: "+h.component()+" has no default dataset");
+            return h;
+        } catch (RuntimeException invalid) { throw new IllegalArgumentException("homomorph."+invalid.getMessage(),invalid); }
+    }
+    /** The cache of {@link DerivedPairs} for this catalog and its views. */
+    DerivedPairs.Cache derivedPairCache() { return derivedPairs; }
+    /** The default dataset of a compound (the property record its component record names), empty when it names none. */
+    Optional<Property> defaultProperty(String componentId) {
+        String id=records.defaults().get(componentId);
+        return Optional.ofNullable(id==null?null:records.properties().get(id));
+    }
+    /** The group counts of a dataset by scheme, by its record id; empty where it has none. */
+    Map<String,GroupCounts> propertyGroupCounts(String propertyId) { return groupData.counts().getOrDefault("properties/"+propertyId,Map.of()); }
+    /** The declared revision of a property record (dataset). */
+    String propertyRevision(String propertyId) {
+        String revision=records.propertyRevisions().get(propertyId);
+        if(revision==null)throw new IllegalArgumentException("Unknown property record: "+propertyId);
+        return revision;
+    }
+    /** The group-contribution k_ij(T) matrices ({@code group_interactions} records other than activity tables) by record id. */
+    Map<String,GroupInteractionMatrix> groupInteractionMatrices() { return records.matrices(); }
+    /**
+     * An authored pair of a package: the first of its method's pair libraries that names it, with that library's
+     * {@code id@revision}, and its constant {@code kij}; or a pair the package's group-contribution rule resolves
+     * ({@code rule} non-null, {@code kij} 0), whose token also names the rule's group matrix.
+     */
+    record AuthoredPair(double kij,GroupContributionInteractions.Pair rule,List<String> tokens) {
+        AuthoredPair { tokens=List.copyOf(tokens); }
+    }
+    /**
+     * The authored pairs among a package's compounds, keyed {@code i * n + j} ({@code i < j}, package order), as
+     * {@link #build} resolves them: the method's pair libraries in order, the first that names a pair giving it, then the
+     * pairs of a group-contribution rule. Refused for a lens of one inference, which has no definition.
+     */
+    Map<Integer,AuthoredPair> authoredPairs(String packageId) {
+        var p=requirePackage(packageId);var definition=definitions.get(packageId);
+        if(definition==null)throw new IllegalArgumentException("Package "+packageId+" is a lens of one inference; it has no pair libraries");
+        var ids=p.components();int n=ids.size();var result=new TreeMap<Integer,AuthoredPair>();
+        for(String library:definition.method().interactions()) {
+            JsonObject interaction=records.libraries().get(library);String token=library+"@"+text(interaction,"revision");
+            for(var value:array(interaction,"pairs")) {
+                JsonObject pair=value.getAsJsonObject();int i=ids.indexOf(text(pair,"first")),j=ids.indexOf(text(pair,"second"));
+                if(i<0||j<0||!definition.method().model().equals("pr78"))continue;
+                result.putIfAbsent(Math.min(i,j)*n+Math.max(i,j),new AuthoredPair(number(pair,"kij"),null,List.of(token)));
+            }
+            if(interaction.has("rule")&&p.groupContributions()!=null) {
+                var matrix=records.matrices().get(text(object(interaction,"rule"),"group_interactions"));
+                for(var pair:p.groupContributions().pairs())result.putIfAbsent(pair.first()*n+pair.second(),
+                        new AuthoredPair(0.0,pair,List.of(token,matrix.id()+"@"+matrix.revision())));
+            }
+        }
+        return result;
+    }
     /** The record key of a compound of a package: {@code properties/<dataset id>}, or {@code water/<id>} for the water. */
     private String recordKey(String packageId,String componentId) {
         var p=requirePackage(packageId);String id=p.canonicalId(Objects.requireNonNull(componentId,"componentId"));

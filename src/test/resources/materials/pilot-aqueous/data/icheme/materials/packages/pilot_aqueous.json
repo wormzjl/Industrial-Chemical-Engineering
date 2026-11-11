@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "id": "icheme:pilot_aqueous",
+  "revision": "pilot-aqueous-r1",
+  "method": "icheme:pilot_aqueous_pr78",
+  "components": [
+    {
+      "id": "Water",
+      "properties": "icheme:pilot_water"
+    },
+    "Ethanol",
+    "N-hexane",
+    "Benzene",
+    "Propane",
+    "Methane",
+    "Nitrogen",
+    {
+      "id": "CarbonDioxide",
+      "properties": "icheme:chemsep_carbon_dioxide"
+    },
+    "Hydrogen",
+    "crude_pc03"
+  ],
+  "advisory_evidence": [
+    "PILOT_AQUEOUS: water as a compound of the cubic and ethanol with derived pairs, a test reference only (not a world package)"
+  ]
+}
