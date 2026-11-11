@@ -10,14 +10,14 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 /**
- * {@link PengRobinsonKernel.Mixing#HURON_VIDAL} and the Mathias-Copeman alpha: with every pair classical the rule is the
- * quadratic {@link PengRobinsonKernel.Mixing#CLASSICAL} plan to roundoff, in every value and derivative; on polar
+ * {@link PengRobinsonKernel#huronVidal} and the Mathias-Copeman alpha: with every pair classical the rule is the
+ * quadratic rule of a constant matrix to roundoff, in every value and derivative; on polar
  * mixtures with NRTL pairs {@code ln phi_i} matches an oracle written from the rule and the composition derivative of
  * an independent {@code n g^R/(R T)}; every temperature and composition derivative matches central differences of the
  * kernel's own values; Gibbs-Duhem, symmetry and {@code sum x_i h_i = H^R} hold; a compound without coefficients keeps
  * today's arithmetic bit for bit, and water's Mathias-Copeman alpha gives its 100 C vapour pressure. Classical pairs
  * whose {@code k_ij} depends on temperature (a line, or a {@link PairInteractions} model) match central differences, and
- * a list of E-PPR78 model pairs only is the {@link PengRobinsonKernel.Mixing#TEMPERATURE_DEPENDENT_PAIRS} plan.
+ * a list of E-PPR78 model pairs only is the kernel on that model.
  */
 class PengRobinsonKernelHuronVidalTest {
     private static final double R = PengRobinsonKernel.GAS_CONSTANT;
@@ -78,7 +78,7 @@ class PengRobinsonKernelHuronVidalTest {
                                             double[][] compositions) {
         var quadratic = new PengRobinsonKernel(tc, pc, omega, k, 1.0, 3000.0, 1.0, 1.0e9);
         var rule = PengRobinsonKernel.huronVidal(tc, pc, omega, model, null, 1.0, 3000.0, 1.0, 1.0e9);
-        assertEquals(PengRobinsonKernel.Mixing.HURON_VIDAL, rule.mixing());
+        assertFalse(rule.hasExcessPairs());
         return compareKernels(quadratic, rule, compositions, 1.0e-11);
     }
 
@@ -177,6 +177,81 @@ class PengRobinsonKernelHuronVidalTest {
         mixtures.add(new Mixture("ethanol-water-benzene-CO2", POLAR_TC, POLAR_PC, POLAR_OMEGA, POLAR_ALPHA, POLAR_PAIRS, k,
                 List.of(new double[] {0.3, 0.45, 0.2, 0.05}, new double[] {0.05, 0.1, 0.05, 0.8})));
         return mixtures;
+    }
+
+    /**
+     * W3b N8: a binary whose pair is classical is the quadratic rule under the kernel's conversion and under the
+     * literature one alike (the oracle written both ways, the kernel against each); and on a kernel with NRTL pairs, a
+     * phase where no NRTL partner of a present compound has an amount (benzene and CO2 beside absent ethanol and water)
+     * gives the present compounds the quadratic values of the same pairs: value, compressibility and residual enthalpy
+     * bit for bit, every derivative to roundoff.
+     */
+    @Test void aClassicalPairAndAPhaseWithoutAnActiveNrtlPairAreTheQuadraticRule() {
+        double[][] k = new double[2][2];
+        set(k, 0, 1, 0.08);
+        var binary = new Mixture("benzene-CO2", new double[] {POLAR_TC[2], POLAR_TC[3]}, new double[] {POLAR_PC[2], POLAR_PC[3]},
+                new double[] {POLAR_OMEGA[2], POLAR_OMEGA[3]}, null, List.of(), k,
+                List.of(new double[] {0.3, 0.7}, new double[] {0.9, 0.1}));
+        var kernel = binary.kernel();
+        var workspace = kernel.newWorkspace();
+        var output = kernel.newEvaluation();
+        int compared = 0;
+        for (double[] state : POLAR_STATES) {
+            for (double[] x : binary.compositions) {
+                for (PengRobinsonKernel.Root root : PengRobinsonKernel.Root.values()) {
+                    kernel.evaluate(state[0], state[1], x, root, workspace, output);
+                    for (boolean literature : new boolean[] {false, true}) {
+                        var oracle = new Oracle(binary, state[0], x, literature);
+                        assertEquals(oracle.a, output.aMix(), 1.0e-12 * oracle.a, "a, literature " + literature);
+                        double[] expected = oracle.logPhi(state[1], output.compressibility());
+                        for (int i = 0; i < 2; i++) {
+                            assertEquals(expected[i], output.logFugacityCoefficient(i), 1.0e-11 * Math.max(1.0, Math.abs(expected[i])));
+                            compared++;
+                        }
+                    }
+                }
+            }
+        }
+        double[][] matrix = new double[4][4];
+        set(matrix, 1, 3, CO2_WATER_K);
+        var wet = polarMixtures().get(2).kernel();
+        var quadratic = new PengRobinsonKernel(POLAR_TC, POLAR_PC, POLAR_OMEGA, matrix, 1.0, 3000.0, 1.0, 1.0e9);
+        assertTrue(wet.hasExcessPairs());
+        var wetWorkspace = wet.newWorkspace();
+        var quadraticWorkspace = quadratic.newWorkspace();
+        var wetOutput = wet.newDerivatives();
+        var quadraticOutput = quadratic.newDerivatives();
+        double worst = 0.0;
+        for (double[] state : POLAR_STATES) {
+            for (double[] x : List.of(new double[] {0.0, 0.0, 0.6, 0.4}, new double[] {0.0, 0.0, 0.05, 0.95})) {
+                for (PengRobinsonKernel.Root root : PengRobinsonKernel.Root.values()) {
+                    wet.evaluateDerivatives(state[0], state[1], x, root, wetWorkspace, wetOutput);
+                    quadratic.evaluateDerivatives(state[0], state[1], x, root, quadraticWorkspace, quadraticOutput);
+                    var a = wetOutput.evaluation();
+                    var b = quadraticOutput.evaluation();
+                    assertEquals(b.aMix(), a.aMix(), 0.0);
+                    assertEquals(b.daMixDt(), a.daMixDt(), 0.0);
+                    assertEquals(b.compressibility(), a.compressibility(), 0.0);
+                    assertEquals(b.residualEnthalpyJoulesPerMol(), a.residualEnthalpyJoulesPerMol(), 0.0);
+                    for (int i = 2; i < 4; i++) {
+                        assertEquals(b.logFugacityCoefficient(i), a.logFugacityCoefficient(i), 0.0);
+                        worst = Math.max(worst, relative(quadraticOutput.dLogPhiDtView()[i], wetOutput.dLogPhiDtView()[i]));
+                        for (int j = 2; j < 4; j++) {
+                            worst = Math.max(worst, relative(quadraticOutput.dLogPhiDnRowView(i)[j], wetOutput.dLogPhiDnRowView(i)[j]));
+                        }
+                        compared += 4;
+                    }
+                    worst = Math.max(worst, relative(quadraticOutput.dResidualEnthalpyDt(), wetOutput.dResidualEnthalpyDt()));
+                }
+            }
+        }
+        System.out.printf(Locale.ROOT, "N8 reduction: %d values; derivatives of the dry phase within %.1e%n", compared, worst);
+        assertTrue(worst < 1.0e-12, "dry-phase derivatives off by " + worst);
+        assertTrue(compared > 100, "too few comparisons: " + compared);
+    }
+
+    private static double relative(double expected, double actual) {
+        return Math.abs(expected - actual) / Math.max(1.0e-300, Math.max(1.0e-6, Math.abs(expected)));
     }
 
     private static final double[][] POLAR_STATES = {{300.0, 1.0e5}, {340.0, 1.0e5}, {373.15, 1.0e5}, {420.0, 5.0e5},
@@ -607,8 +682,6 @@ class PengRobinsonKernelHuronVidalTest {
                 HuronVidalExcess.builder(2).build(), new double[][] {{1.0, 0.0}, null}, 1, 3000, 1, 1e9));
         assertThrows(IllegalArgumentException.class, () -> PengRobinsonKernel.huronVidal(tc, pc, omega,
                 HuronVidalExcess.builder(2).build(), new double[][] {null}, 1, 3000, 1, 1e9));
-        assertThrows(IllegalArgumentException.class, () -> new PengRobinsonKernel(tc, pc, omega, new double[2][2],
-                1, 3000, 1, 1e9, PengRobinsonKernel.Mixing.HURON_VIDAL));
         // The stored model reads back what was declared.
         var model = HuronVidalExcess.builder(2).nrtl(0, 1, 0.3, 300, 1000, 2000, 400, 1500, 1000).build();
         assertEquals(0.3, model.alpha(1, 0));
@@ -634,8 +707,17 @@ class PengRobinsonKernelHuronVidalTest {
         final double a;
         final double b;
         final double excess;
+        /**
+         * Whether a classical pair takes the literature conversion {@code g_ji = -2 sqrt(b_i b_j)/(b_i + b_j)
+         * sqrt(g_ii g_jj)(1 - k_ij)} instead of the kernel's {@code dg_ji = Lambda [a_i/b_i - (1 - k_ij) s_i s_j/b_j]}
+         * (W3b N8, option B). Both are the quadratic rule where every pair is classical.
+         */
+        final boolean literature;
 
-        Oracle(Mixture mixture, double t, double[] raw) {
+        Oracle(Mixture mixture, double t, double[] raw) { this(mixture, t, raw, false); }
+
+        Oracle(Mixture mixture, double t, double[] raw, boolean literature) {
+            this.literature = literature;
             this.mixture = mixture;
             this.t = t;
             this.x = normalized(raw);
@@ -683,6 +765,7 @@ class PengRobinsonKernelHuronVidalTest {
                 if (pair.i == j && pair.j == i) return line(pair.t1, pair.gij1, pair.t2, pair.gij2);
                 if (pair.i == i && pair.j == j) return line(pair.t1, pair.gji1, pair.t2, pair.gji2);
             }
+            if (!literature) return LAMBDA * (ai[i] / bi[i] - (1.0 - mixture.k[i][j]) * Math.sqrt(ai[i] * ai[j]) / bi[j]);
             double gii = -LAMBDA * ai[i] / bi[i];
             double gjj = -LAMBDA * ai[j] / bi[j];
             double gji = -2.0 * Math.sqrt(bi[i] * bi[j]) / (bi[i] + bi[j]) * Math.sqrt(gii * gjj) * (1.0 - mixture.k[i][j]);

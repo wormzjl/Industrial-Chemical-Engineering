@@ -13,7 +13,7 @@ import java.util.Objects;
 
 /**
  * Constant volume-translated PR78 with analytic fixed-composition volumetric and caloric derivatives. The equation of
- * state itself is the shared {@link PengRobinsonKernel} with {@link PengRobinsonKernel.Mixing#SPARSE_PAIRS} (the
+ * state itself is the shared {@link PengRobinsonKernel} on its pair list (the
  * network's package has 11 nonzero binary interactions among 21 components); what stays here is what the kernel does
  * not model: the ideal-gas caloric functions, the constant volume translation, and the volumetric block (dv/dT, dv/dP,
  * d2v/dT2, cp, dh/dP, the isothermal compressibility and the partial molar volumes), explicit algebra in
@@ -72,8 +72,8 @@ public final class TranslatedPengRobinson {
     }
 
     /**
-     * {@link #residualOnly(List, double[][], double[])} on a pair-interaction model: the kernel runs
-     * {@link PengRobinsonKernel.Mixing#TEMPERATURE_DEPENDENT_PAIRS}, so a group-contribution (E-PPR78) pair's
+     * {@link #residualOnly(List, double[][], double[])} on a pair-interaction model: the kernel reads
+     * the model's pairs, so a group-contribution (E-PPR78) pair's
      * {@code k_ij(T)} and its temperature derivatives enter every value. On a model of constant pairs it is the matrix
      * factory's model bit for bit.
      */
@@ -119,7 +119,7 @@ public final class TranslatedPengRobinson {
      * The spine variant: the ideal-gas heat capacity and enthalpy of component {@code i} are
      * {@code idealGas.get(i).heatCapacity(T)} and {@code idealGas.get(i).enthalpy(T) - datumOffsets[i]}; the residual
      * parts, the translation and the volumetric block are the coefficient path's expressions on the same kernel
-     * ({@link PengRobinsonKernel.Mixing#TEMPERATURE_DEPENDENT_PAIRS} on {@code interactions}).
+     * (the kernel on {@code interactions}).
      *
      * @param datumOffsets subtracted from each function's enthalpy, J/mol (the formation enthalpy for the network's
      *        sensible datum; zeros keep the functions' own formation datum)
@@ -187,8 +187,7 @@ public final class TranslatedPengRobinson {
         // always produced, and a property package's validity range is the caller's business, not the EOS's.
         kernel=pairModel == null
                 ? new PengRobinsonKernel(criticalTemperatures,criticalPressures,acentricFactors,interactions,
-                        Double.MIN_VALUE,Double.MAX_VALUE,Double.MIN_VALUE,Double.MAX_VALUE,
-                        PengRobinsonKernel.Mixing.SPARSE_PAIRS)
+                        Double.MIN_VALUE,Double.MAX_VALUE,Double.MIN_VALUE,Double.MAX_VALUE)
                 : new PengRobinsonKernel(criticalTemperatures,criticalPressures,acentricFactors,pairModel,
                         Double.MIN_VALUE,Double.MAX_VALUE,Double.MIN_VALUE,Double.MAX_VALUE);
     }

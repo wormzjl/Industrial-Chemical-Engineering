@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 
 /**
  * The E-PPR78 group-contribution {@code k_ij(T)} of {@link PairInteractions}, read through the kernel that evaluates it
- * ({@link PengRobinsonKernel.Mixing#TEMPERATURE_DEPENDENT_PAIRS}), against three independent references: the textbook
+ * ({@link PengRobinsonKernel} on a pair model), against three independent references: the textbook
  * formula evaluated directly here (to 1e-12), central differences of its own values (first and second derivative, 1e-6
  * of scale), and the table of appendix A of {@code P3_PILOT_ENGINE_PLAN.md} (four decimals).
  *

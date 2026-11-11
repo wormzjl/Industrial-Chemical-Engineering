@@ -253,7 +253,7 @@ final class PhaseTestSupport {
             for (int b = 0; b < n; b++) interactions[a][b] = pkg.interactions().get(i).get(pkg.components().indexOf(names[b]));
         }
         return new PengRobinsonKernel(tc, pc, omega, interactions, Double.MIN_VALUE, Double.MAX_VALUE,
-                Double.MIN_VALUE, Double.MAX_VALUE, PengRobinsonKernel.Mixing.CLASSICAL);
+                Double.MIN_VALUE, Double.MAX_VALUE);
     }
 
     static double sum(double[] values) {

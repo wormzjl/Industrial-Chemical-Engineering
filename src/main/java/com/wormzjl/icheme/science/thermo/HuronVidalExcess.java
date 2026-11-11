@@ -6,7 +6,7 @@ import java.util.Arrays;
 
 /**
  * Excess Gibbs energy model of the PR78 kernel's Huron-Vidal mixing rule
- * ({@link PengRobinsonKernel.Mixing#HURON_VIDAL}), at infinite pressure for PR:
+ * ({@link PengRobinsonKernel#huronVidal}), at infinite pressure for PR:
  *
  * <pre>
  *   a_mix / b_mix = sum_i x_i a_i/b_i - gE/Lambda,   b_mix = sum_i x_i b_i,

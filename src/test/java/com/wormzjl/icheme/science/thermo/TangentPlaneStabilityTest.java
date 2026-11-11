@@ -27,7 +27,7 @@ class TangentPlaneStabilityTest {
     private static final double EPSILON = TangentPlaneStability.Settings.DEFAULT.instabilityTolerance();
 
     /** A kernel over the named components of the network package, in the given order, with its interactions. */
-    static PengRobinsonKernel kernel(PengRobinsonKernel.Mixing mixing, String... names) {
+    static PengRobinsonKernel kernel(String... names) {
         var pkg = MaterialCatalog.bundled().requirePackage(NETWORK);
         List<String> components = names.length == 0 ? pkg.components() : List.of(names);
         int n = components.size();
@@ -47,7 +47,7 @@ class TangentPlaneStabilityTest {
         }
         // An open domain, as the translated evaluator builds it: the package's range is the caller's business.
         return new PengRobinsonKernel(tc, pc, omega, interactions,
-                Double.MIN_VALUE, Double.MAX_VALUE, Double.MIN_VALUE, Double.MAX_VALUE, mixing);
+                Double.MIN_VALUE, Double.MAX_VALUE, Double.MIN_VALUE, Double.MAX_VALUE);
     }
 
     /** The Tia Juana light assay of the network package plus 5 mol% nitrogen: every component present. */
@@ -66,7 +66,7 @@ class TangentPlaneStabilityTest {
 
     @Test
     void pureNitrogenSwitchesFromVapourToLiquidAtTheKernelsEqualFugacityPressure() {
-        var kernel = kernel(PengRobinsonKernel.Mixing.CLASSICAL, "Nitrogen");
+        var kernel = kernel("Nitrogen");
         var test = new TangentPlaneStability(kernel, TangentPlaneStability.Settings.DEFAULT);
         double t = 77.355;
         double[] pure = {1.0};
@@ -122,7 +122,7 @@ class TangentPlaneStabilityTest {
 
     @Test
     void methaneNitrogenVerdictsMatchABruteForceTangentPlaneMinimum() {
-        var kernel = kernel(PengRobinsonKernel.Mixing.CLASSICAL, "Methane", "Nitrogen");
+        var kernel = kernel("Methane", "Nitrogen");
         var test = new TangentPlaneStability(kernel, TangentPlaneStability.Settings.DEFAULT);
         var workspace = test.newWorkspace();
         int states = 0;
@@ -156,14 +156,14 @@ class TangentPlaneStabilityTest {
 
     @Test
     void supercriticalAndDenseSinglePhaseStatesAreStable() {
-        var nitrogen = new TangentPlaneStability(kernel(PengRobinsonKernel.Mixing.CLASSICAL, "Nitrogen"), TangentPlaneStability.Settings.DEFAULT);
-        var methane = new TangentPlaneStability(kernel(PengRobinsonKernel.Mixing.CLASSICAL, "Methane"), TangentPlaneStability.Settings.DEFAULT);
+        var nitrogen = new TangentPlaneStability(kernel("Nitrogen"), TangentPlaneStability.Settings.DEFAULT);
+        var methane = new TangentPlaneStability(kernel("Methane"), TangentPlaneStability.Settings.DEFAULT);
         assertEquals(Verdict.STABLE, nitrogen.test(130.0, 6.0e6, new double[] {1.0}).verdict());
         assertEquals(Verdict.STABLE, nitrogen.test(150.0, 10.0e6, new double[] {1.0}).verdict());
         assertEquals(Verdict.STABLE, methane.test(250.0, 10.0e6, new double[] {1.0}).verdict());
 
         // The same states for equimolar methane/nitrogen run the full trial machinery; brute force agrees.
-        var binaryKernel = kernel(PengRobinsonKernel.Mixing.CLASSICAL, "Methane", "Nitrogen");
+        var binaryKernel = kernel("Methane", "Nitrogen");
         var binary = new TangentPlaneStability(binaryKernel, TangentPlaneStability.Settings.DEFAULT);
         double[] z = {0.5, 0.5};
         for (double[] state : new double[][] {{130.0, 6.0e6}, {150.0, 10.0e6}, {250.0, 10.0e6}}) {
@@ -186,7 +186,7 @@ class TangentPlaneStabilityTest {
      */
     @Test
     void networkPackageVerdictsMatchTheNetworkFlashPhaseCount() {
-        var kernel = kernel(PengRobinsonKernel.Mixing.SPARSE_PAIRS);
+        var kernel = kernel();
         var test = new TangentPlaneStability(kernel, TangentPlaneStability.Settings.DEFAULT);
         // The network model on the kernel's compounds, as an island holding only them runs (batch 2026-11-04-refinery-compounds, V2).
         var fluid = FluidTestSupport.networkModel().on(MaterialCatalog.bundled().requirePackage(NETWORK).components());
@@ -214,9 +214,9 @@ class TangentPlaneStabilityTest {
 
     @Test
     void repeatedCallsAreBitwiseIdentical() {
-        var binaryKernel = kernel(PengRobinsonKernel.Mixing.CLASSICAL, "Methane", "Nitrogen");
-        var networkKernel = kernel(PengRobinsonKernel.Mixing.SPARSE_PAIRS);
-        var nitrogenKernel = kernel(PengRobinsonKernel.Mixing.CLASSICAL, "Nitrogen");
+        var binaryKernel = kernel("Methane", "Nitrogen");
+        var networkKernel = kernel();
+        var nitrogenKernel = kernel("Nitrogen");
         record Case(TangentPlaneStability test, double t, double p, double[] z) {}
         var binary = new TangentPlaneStability(binaryKernel, TangentPlaneStability.Settings.DEFAULT);
         var network = new TangentPlaneStability(networkKernel, TangentPlaneStability.Settings.DEFAULT);
@@ -248,7 +248,7 @@ class TangentPlaneStabilityTest {
 
     @Test
     void refusesACompositionWithANegativeOrNoAmount() {
-        var test = new TangentPlaneStability(kernel(PengRobinsonKernel.Mixing.CLASSICAL, "Methane", "Nitrogen"), TangentPlaneStability.Settings.DEFAULT);
+        var test = new TangentPlaneStability(kernel("Methane", "Nitrogen"), TangentPlaneStability.Settings.DEFAULT);
         assertThrows(IllegalArgumentException.class, () -> test.test(120.0, 1.0e6, new double[] {1.0, -1.0e-12}));
         assertThrows(IllegalArgumentException.class, () -> test.test(120.0, 1.0e6, new double[] {0.0, 0.0}));
         assertThrows(IllegalArgumentException.class, () -> test.test(120.0, 1.0e6, new double[] {Double.NaN, 1.0}));
@@ -261,8 +261,8 @@ class TangentPlaneStabilityTest {
     /** A component the feed lacks takes no part: the verdict is the one of the reduced feed. */
     @Test
     void absentComponentsStayAbsentFromEveryTrial() {
-        var three = new TangentPlaneStability(kernel(PengRobinsonKernel.Mixing.CLASSICAL, "Methane", "Ethane", "Nitrogen"), TangentPlaneStability.Settings.DEFAULT);
-        var two = new TangentPlaneStability(kernel(PengRobinsonKernel.Mixing.CLASSICAL, "Methane", "Nitrogen"), TangentPlaneStability.Settings.DEFAULT);
+        var three = new TangentPlaneStability(kernel("Methane", "Ethane", "Nitrogen"), TangentPlaneStability.Settings.DEFAULT);
+        var two = new TangentPlaneStability(kernel("Methane", "Nitrogen"), TangentPlaneStability.Settings.DEFAULT);
         Result full = three.test(110.0, 0.5e6, new double[] {0.5, 0.0, 0.5});
         Result reduced = two.test(110.0, 0.5e6, new double[] {0.5, 0.5});
         assertEquals(reduced.verdict(), full.verdict());
@@ -277,9 +277,9 @@ class TangentPlaneStabilityTest {
     /** With the vapour pressure equal to the liquid's, the per-branch call is the one-pressure test, bit for bit. */
     @Test
     void equalBranchPressuresAreTheOnePressureTestBitwise() {
-        var binary = new TangentPlaneStability(kernel(PengRobinsonKernel.Mixing.CLASSICAL, "Methane", "Nitrogen"), TangentPlaneStability.Settings.DEFAULT);
-        var network = new TangentPlaneStability(kernel(PengRobinsonKernel.Mixing.SPARSE_PAIRS), TangentPlaneStability.Settings.DEFAULT);
-        var nitrogen = new TangentPlaneStability(kernel(PengRobinsonKernel.Mixing.CLASSICAL, "Nitrogen"), TangentPlaneStability.Settings.DEFAULT);
+        var binary = new TangentPlaneStability(kernel("Methane", "Nitrogen"), TangentPlaneStability.Settings.DEFAULT);
+        var network = new TangentPlaneStability(kernel(), TangentPlaneStability.Settings.DEFAULT);
+        var nitrogen = new TangentPlaneStability(kernel("Nitrogen"), TangentPlaneStability.Settings.DEFAULT);
         record Case(TangentPlaneStability test, double t, double p, double[] z) {}
         List<Case> cases = List.of(
                 new Case(binary, 110.0, 0.5e6, new double[] {0.5, 0.5}),
@@ -309,7 +309,7 @@ class TangentPlaneStabilityTest {
      */
     @Test
     void perBranchVerdictsMatchABruteForceMinimum() {
-        var kernel = kernel(PengRobinsonKernel.Mixing.CLASSICAL, "Methane", "Nitrogen");
+        var kernel = kernel("Methane", "Nitrogen");
         var test = new TangentPlaneStability(kernel, TangentPlaneStability.Settings.DEFAULT);
         var workspace = test.newWorkspace();
         double[] translations = {-3.389e-6, -3.519e-6};
@@ -340,7 +340,7 @@ class TangentPlaneStabilityTest {
      */
     @Test
     void aDenseLiquidIsNoVapourAtTheLowerPressure() {
-        var kernel = kernel(PengRobinsonKernel.Mixing.CLASSICAL, "Methane", "Nitrogen");
+        var kernel = kernel("Methane", "Nitrogen");
         var test = new TangentPlaneStability(kernel, TangentPlaneStability.Settings.DEFAULT);
         double[] z = {0.5, 0.5};
         Result dense = test.test(120.0, 3.0e6, 2.9e6, z, test.newWorkspace());
