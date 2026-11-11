@@ -1,0 +1,91 @@
+== feed-step hold at factor 4, owner "Diagnose first" (2026-11-11): LEVEL_LOOP_OPTS=-Dicheme.probe.failures=true bash tools/minecraft-time-delta/level-loop/run.sh 4, probe patch tools/minecraft-time-delta/patches/probe-feed-step.patch (applied for the run, reverted). One review-server run.
+level_loop probe step factor-4 feed factor=4 capacity=7.952 m3 cycle=20.00 s feed=198.1 kg/s first=19.81 kg/s
+level_loop probe result case="step factor-4 feed" factor=4 feed=198.1 kg/s held=clean failure=null level=25.00 to 57.65 % setupResidual=9.639 mol -2.177e+05 J
+level_loop probe step rule feed factor=4 capacity=7.952 m3 cycle=20.00 s feed=198.1 kg/s first=19.81 kg/s
+level_loop probe result case="step rule feed" factor=4 feed=198.1 kg/s held=clean failure=null level=24.65 to 57.40 % setupResidual=3.638e-12 mol -5.960e-07 J
+level_loop probe empty factor-4 feed factor=4 capacity=7.952 m3 cycle=20.00 s feed=198.1 kg/s first=198.1 kg/s
+PROBE_DUMP HOLD duration=20.0 elapsed=0.3518305223985648 accepted=9 rejected=44 reasons={Newton line search stalled at residual #; active-set pass=#=44}
+fluid_island=1853 committed_tick=76125 status=HELD: Substep refinement exhausted: Newton line search stalled at residual 592.5571346305662; active-set pass=0; reasons={Newton line search stalled at residual #; active-set pass=#=44}
+level_loop probe result case="empty factor-4 feed" factor=4 feed=198.1 kg/s held=HELD: Substep refinement exhausted: Newton line search stalled at residual 592.5571346305662; active-set pass=0; reasons={Newton line search stalled at residual #; active-set pass=#=44} failure=the drum's island held: HELD: Substep refinement exhausted: Newton line search stalled at residual 592.5571346305662; active-
+PROBE_DUMP HOLD duration=10.0 elapsed=0.30260275107848106 accepted=7 rejected=43 reasons={Newton line search stalled at residual #; active-set pass=#=43}
+fluid_island=1853 committed_tick=76125 status=HELD: Substep refinement exhausted: Newton line search stalled at residual 656.9096775014176; active-set pass=0; reasons={Newton line search stalled at residual #; active-set pass=#=43}
+level_loop result factor=4 cycles=2 low=24.84 % high=62.47 % levelAtStep=50.00 % levelAtEnd=50.00 % held=null failure=null molesResidual=-6.621e-10 mol of 1.599e+07 mol energyResidual=-6.032e-05 J of 7.105e+11 J intervals=222 ticks=4670 unread=0 setupResidual=-2.910e-11 mol -3.815e-06 J
+level_loop probe empty rule feed factor=4 capacity=7.952 m3 cycle=20.00 s feed=198.1 kg/s first=198.1 kg/s
+PROBE_DUMP HOLD duration=20.0 elapsed=0.28473175014059376 accepted=7 rejected=43 reasons={Newton line search stalled at residual #; active-set pass=#=43}
+fluid_island=1899 committed_tick=81456 status=HELD: Substep refinement exhausted: Newton line search stalled at residual 594.2649345590322; active-set pass=0; reasons={Newton line search stalled at residual #; active-set pass=#=43}
+level_loop probe result case="empty rule feed" factor=4 feed=198.1 kg/s held=HELD: Substep refinement exhausted: Newton line search stalled at residual 594.2649345590322; active-set pass=0; reasons={Newton line search stalled at residual #; active-set pass=#=43} failure=the drum's island held: HELD: Substep refinement exhausted: Newton line search stalled at residual 594.2649345590322; active-set 
+All 9 required tests passed :)
+fluid_island=1899 committed_tick=81456 status=HELD: round deadline or worker failure
+
+== first hold (empty drum, factor-4 feed): the steps of its interval the ring kept, then its first and last failed Newtons
+  | REJECT elapsed=0.3437238295522487 step=0.013389118507464097 Newton line search stalled at residual 155.22071224161152; active-set pass=1
+  | ACCEPT elapsed=0.3437238295522487 step=0.0066945592537320485 change=3.692436054878413E-4
+  | REJECT elapsed=0.35041838880598075 step=0.013389118507464097 Newton line search stalled at residual 352.57371112343833; active-set pass=1
+  | REJECT elapsed=0.35041838880598075 step=0.0066945592537320485 Newton line search stalled at residual 310.59342539613635; active-set pass=1
+  | REJECT elapsed=0.35041838880598075 step=0.0033472796268660242 Newton line search stalled at residual 226.52285945194177; active-set pass=1
+  | REJECT elapsed=0.35041838880598075 step=0.0016736398134330121 Newton line search stalled at residual 58.51249494016736; active-set pass=1
+  | ACCEPT elapsed=0.35041838880598075 step=8.368199067165061E-4 change=4.615545037845438E-5
+  | REJECT elapsed=0.3512552087126973 step=0.0016736398134330121 Newton line search stalled at residual 255.8651542657749; active-set pass=1
+  | REJECT elapsed=0.3512552087126973 step=8.368199067165061E-4 Newton line search stalled at residual 117.25445937381494; active-set pass=1
+  | ACCEPT elapsed=0.3512552087126973 step=4.1840995335825303E-4 change=2.3077725082125464E-5
+  | REJECT elapsed=0.3516736186660555 step=8.368199067165061E-4 Newton line search stalled at residual 314.70318515791286; active-set pass=1
+  | REJECT elapsed=0.3516736186660555 step=4.1840995335825303E-4 Newton line search stalled at residual 234.73837587024389; active-set pass=1
+  | REJECT elapsed=0.3516736186660555 step=2.0920497667912652E-4 Newton line search stalled at residual 75.04192172226476; active-set pass=1
+  | ACCEPT elapsed=0.3516736186660555 step=1.0460248833956326E-4 change=5.769431260774492E-6
+  | REJECT elapsed=0.35177822115439505 step=2.0920497667912652E-4 Newton line search stalled at residual 272.2961922721787; active-set pass=1
+  | REJECT elapsed=0.35177822115439505 step=1.0460248833956326E-4 Newton line search stalled at residual 150.2309817310451; active-set pass=1
+  | ACCEPT elapsed=0.35177822115439505 step=5.230124416978163E-5 change=2.8847156267780512E-6
+  | REJECT elapsed=0.3518305223985648 step=1.0460248833956326E-4 Newton line search stalled at residual 592.6444572194713; active-set pass=0
+  | REJECT elapsed=0.3518305223985648 step=5.230124416978163E-5 Newton line search stalled at residual 592.6704876123116; active-set pass=0
+  | REJECT elapsed=0.3518305223985648 step=2.6150622084890814E-5 Newton line search stalled at residual 592.633087193412; active-set pass=0
+  | REJECT elapsed=0.3518305223985648 step=1.3075311042445407E-5 Newton line search stalled at residual 592.5571346305662; active-set pass=0
+  | REJECT elapsed=0.3518305223985648 step=6.537655521222704E-6 Newton line search stalled at residual 592.5571346305662; active-set pass=0
+  | REJECT elapsed=0.3518305223985648 step=3.268827760611352E-6 Newton line search stalled at residual 592.5571346305662; active-set pass=0
+  | REJECT elapsed=0.3518305223985648 step=1.634413880305676E-6 Newton line search stalled at residual 592.5571346305662; active-set pass=0
+  | REJECT elapsed=0.3518305223985648 step=8.17206940152838E-7 Newton line search stalled at residual 592.5571346305662; active-set pass=0
+  | REJECT elapsed=0.3518305223985648 step=4.08603470076419E-7 Newton line search stalled at residual 592.5571346305662; active-set pass=0
+  | REJECT elapsed=0.3518305223985648 step=2.043017350382095E-7 Newton line search stalled at residual 592.5571346305662; active-set pass=0
+  | REJECT elapsed=0.3518305223985648 step=1.0215086751910474E-7 Newton line search stalled at residual 592.5571346305662; active-set pass=0
+  | REJECT elapsed=0.3518305223985648 step=5.107543375955237E-8 Newton line search stalled at residual 592.5571346305662; active-set pass=0
+  | REJECT elapsed=0.3518305223985648 step=2.5537716879776186E-8 Newton line search stalled at residual 592.5571346305662; active-set pass=0
+  | REJECT elapsed=0.3518305223985648 step=1.2768858439888093E-8 Newton line search stalled at residual 592.5571346305662; active-set pass=0
+  | REJECT elapsed=0.3518305223985648 step=6.3844292199440465E-9 Newton line search stalled at residual 592.5571346305662; active-set pass=0
+  | REJECT elapsed=0.3518305223985648 step=3.1922146099720232E-9 Newton line search stalled at residual 592.5571346305662; active-set pass=0
+  | REJECT elapsed=0.3518305223985648 step=1.5961073049860116E-9 Newton line search stalled at residual 592.5571346305662; active-set pass=0
+  | REJECT elapsed=0.3518305223985648 step=7.980536524930058E-10 Newton line search stalled at residual 592.5571346305662; active-set pass=0
+  | REJECT elapsed=0.3518305223985648 step=3.990268262465029E-10 Newton line search stalled at residual 592.5571346305662; active-set pass=0
+  | REJECT elapsed=0.3518305223985648 step=1.9951341312325145E-10 Newton line search stalled at residual 592.5571346305662; active-set pass=0
+  | PROBE_FAILURE #82 dt=0.013389118507464097 pass=1 rate=false nodes=6 pipes=5 phases=[4, 4, 4, 4, 2, 2] Newton line search stalled at residual 155.22071224161152
+  |   norm at start=155.37273949436315 at failure=155.22071224161152 size=16
+  |   row 0 f=-155.22071224161152 f0=-155.37273949436315 weight=1.0 node 0 JUNCTION local 0/3 P=101325.0 T=300.04375343290576 m=3.2050053774259246 liq=0.0 vap=0.0 V=7.9521564043991635
+  |   row 13 f=4.118159698552911 f0=2.7753622403247487E-11 weight=1.0 pipe 4 3->4 mode=VALVE_REGULATING control=ControlValve q=592.6946019906799
+  |   row 11 f=-1.1902752917564563 f0=-3.773311817129302E-17 weight=1.0 pipe 2 2->0 mode=VALVE_REGULATING control=ControlValve q=198.1
+  |   row 10 f=-0.1545804264999679 f0=-5.962756510063395E-4 weight=1.0 pipe 1 0->3 mode=PASSIVE control=Passive q=592.6946054322301
+  |   row 1 f=2.740984498630148E-4 f0=1.0508948914592137E-11 weight=1.0 node 0 JUNCTION local 1/3 P=101325.0 T=300.04375343290576 m=3.2050053774259246 liq=0.0 vap=0.0 V=7.9521564043991635
+  |   pipe 0 0->5 mode=PASSIVE q0=0.0 q=0.0
+  |   pipe 1 0->3 mode=PASSIVE q0=592.8466326908418 q=592.6946054322301
+  |   pipe 2 2->0 mode=VALVE_REGULATING q0=198.1 q=198.1
+  |   pipe 3 1->2 mode=PASSIVE q0=198.10000000017897 q=198.10000000017897
+  |   pipe 4 3->4 mode=VALVE_REGULATING q0=592.8466292421621 q=592.6946019906799
+  | REJECT elapsed=0.3437238295522487 step=0.013389118507464097 Newton line search stalled at residual 155.22071224161152; active-set pass=1
+  | ACCEPT elapsed=0.3437238295522487 step=0.0066945592537320485 change=3.692436054878413E-4
+  | PROBE_FAILURE #83 dt=0.013389118507464097 pass=0 rate=false nodes=6 pipes=5 phases=[4, 4, 4, 4, 2, 2] Newton line search stalled at residual 8.398598625238623
+  |   norm at start=9.398598789841179 at failure=8.398598625238623 size=16
+  |   row 0 f=8.398598625238623 f0=9.398598789841179 weight=1.0 node 0 RESERVOIR local 0/3 P=101325.0 T=300.04375343096194 m=0.5623507654787069 liq=0.0 vap=0.0 V=7.9521564043991635
+  | PROBE_FAILURE #124 dt=1.9951341312325145E-10 pass=0 rate=false nodes=6 pipes=5 phases=[32, 4, 4, 4, 2, 2] Newton line search stalled at residual 592.5571346305662
+  |   norm at start=592.8466105146058 at failure=592.5571346305662 size=13
+  |   row 3 f=-592.5571346305662 f0=-592.8466105146058 weight=1.0 node 3 JUNCTION local 0/3 P=85481.21531300474 T=300.0463631911948 m=1.0 liq=0.0 vap=0.0 V=0.0010034596519595729
+  |   row 10 f=8.605166151900955 f0=5.425631147693285E-11 weight=1.0 pipe 4 3->4 mode=VALVE_REGULATING control=ControlValve q=592.5571346305662
+  |   row 12 f=-3.9175477735746547E-4 f0=-1.150586027197823E-15 weight=1.0 edge-extra 6
+  |   row 4 f=3.2561163271421973E-4 f0=2.0767172723081794E-15 weight=1.0 node 3 JUNCTION local 1/3 P=85481.21531300474 T=300.0463631911948 m=1.0 liq=0.0 vap=0.0 V=0.0010034596519595729
+  |   row 1 f=3.7754682602626442E-16 f0=3.7754682602626442E-16 weight=1.0 node 2 JUNCTION local 1/3 P=337446.95487446035 T=299.9917526769634 m=1.0000000000000002 liq=0.0 vap=0.0 V=0.0010034297540815517
+  |   vessel 0 id=1831 P=101325.0 T=300.0437535059765 m=0.004915813169724116 liq=0.0 water=4.932850724325299E-6 vap=0.0 V=7.9521564043991635 phase=32
+  |   pipe 0 0->5 mode=PASSIVE q0=0.0 q=0.0
+  |   pipe 1 0->3 mode=PASSIVE q0=0.0 q=0.0
+  |   pipe 2 2->0 mode=VALVE_REGULATING q0=198.1 q=198.1
+  |   pipe 3 1->2 mode=PASSIVE q0=198.10000000017897 q=198.10000000017897
+  |   pipe 4 3->4 mode=VALVE_REGULATING q0=592.8466105146058 q=592.5571346305662
+  | REJECT elapsed=0.3518305223985648 step=1.9951341312325145E-10 Newton line search stalled at residual 592.5571346305662; active-set pass=0
+[13:06:13] [Server thread/WARN] [co.wo.ic.IChemE/]: fluid_island=1853 committed_tick=76125 status=HELD: Substep refinement exhausted: Newton line search stalled at residual 592.5571346305662; active-set pass=0; reasons={Newton line search stalled at residual #; active-set pass=#=44}
+[13:06:13] [Server thread/INFO] [co.wo.ic.IChemE/]: level_loop probe result case="empty factor-4 feed" factor=4 feed=198.1 kg/s held=HELD: Substep refinement exhausted: Newton line search stalled at residual 592.5571346305662; active-set pass=0; reasons={Newton line search stalled at residual #; active-set pass=#=44} failure=the drum's island held: HELD: Substep refinement exhausted: Newton line search stalled at residual 592.5571346305662; active-set pass=0; reasons={Newton line search stalled at residual #; active-set pass=#=44} level=Infinity to -Infinity % setupResidual=NaN mol NaN J
+[13:06:13] [Server thread/INFO] [minecraft/GameTestRunner]: Running test batch 'review-heat:0' (1 tests)...

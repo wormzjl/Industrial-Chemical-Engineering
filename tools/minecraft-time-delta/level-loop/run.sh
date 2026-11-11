@@ -14,9 +14,9 @@ if grep -q '^\s*timeScale\s*=' "$CONFIG"; then sed -i "s/^\(\s*timeScale\s*=\s*\
 else sed -i "s/^\[fluid\]\r\?$/&\n\ttimeScale = $factor/" "$CONFIG"; fi
 grep -q "^\s*timeScale\s*=\s*$factor\b" "$CONFIG" || { echo "could not set timeScale in $CONFIG"; cp "$OUT/icheme-common.toml.saved" "$CONFIG"; exit 2; }
 log=$OUT/level-loop-${factor}x$cycles.txt
-JAVA_TOOL_OPTIONS="-Dicheme.levelLoop.cycles=$cycles" ./gradlew --offline --console=plain --init-script tools/minecraft-time-delta/level-loop/level-loop.init.gradle \
+JAVA_TOOL_OPTIONS="-Dicheme.levelLoop.cycles=$cycles $LEVEL_LOOP_OPTS" ./gradlew --offline --console=plain --init-script tools/minecraft-time-delta/level-loop/level-loop.init.gradle \
   runReviewWorldServer -PreviewBatch=level-loop > "$log" 2>&1
 status=$?
 cp "$OUT/icheme-common.toml.saved" "$CONFIG"
 echo "== level loop factor=$factor cycles=$cycles exit=$status"
-grep -E "level_loop (start|fill|feed|hold|step|result|cycle|probe)|required tests" "$log" | cut -c60-300
+grep -E "level_loop (start|fill|feed|hold|step|result|cycle|probe)|required tests|PROBE_DUMP|fluid_island" "$log" | cut -c60-300

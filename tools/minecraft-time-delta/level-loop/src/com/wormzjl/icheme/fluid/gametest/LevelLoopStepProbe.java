@@ -136,7 +136,7 @@ public final class LevelLoopStepProbe {
                     TankCharge.run(world, generatorId, new FluidDeviceSpec(1, 300, 300_000, water));
                     edit(helper, world, state, state.fic, state.ficBox, new ControlSettings("FIC-1", true, state.flowSensor, feedValveId, Sensor.Unit.KILOGRAM_PER_SECOND, first, ControlSettings.Action.OUTLET));
                     edit(helper, world, state, state.lic, state.licBox, new ControlSettings("LIC-1", true, state.levelSensor, levelValveId, Sensor.Unit.HEIGHT_PERCENT, FILLED, ControlSettings.Action.OUTLET));
-                    if (empty) stepAt[0] = 0;
+                    if (empty) stepAt[0] = committed(world, state);
                     log("probe {} factor={} capacity={} m3 cycle={} s feed={} kg/s first={} kg/s", label, time.factor(), fmt(state.capacity), fmt(state.cycle), fmt(state.feed), fmt(first));
                 }))
                 // The book's residual once the setup's edits have compiled (two cadences of the island).
