@@ -140,10 +140,11 @@ public final class OpenVessel {
      * is not an open vessel or gives nothing. Each component's release is at most what the vessel holds of it, so roundoff
      * between a state's phase split and its inventory never books out more than it holds.
      */
-    static Releases releases(FluidThermodynamics model,PassiveNetwork.Reservoir node,double dt) {
+    static Releases releases(FluidThermodynamics model,PassiveNetwork.Reservoir node,double dt,double inflow) {
         if(node.kind()!=PassiveNetwork.NodeKind.RESERVOIR||node.empty()||PassiveStepSolver.holdsNoFluid(node))return null;
-        // A closed vessel releases only through its gas blanketing valve's vent (batch 2026-11-11-gas-blanketing).
-        if(!node.inventory().open())return GasBlanket.releases(model,node,dt);
+        // A closed vessel releases only through its gas blanketing valve's vent (batch 2026-11-11-gas-blanketing), which also
+        // reads the condensed volume its liquid is forecast to gain over the step (GasBlanket.inflows).
+        if(!node.inventory().open())return GasBlanket.releases(model,node,dt,inflow);
         var state=node.state();var held=node.inventory().moles();
         double top=topVolume(node.inventory()),liquid=condensedVolume(state);
         double ventShare=FluidThermodynamics.holdsPhase(state,GAS)?ventShare(node.inventory(),state.vaporVolume(),dt):0,spillShare=liquid>top?releaseShare(dt):0;

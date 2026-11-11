@@ -108,6 +108,10 @@ public final class PassiveStepSolver {
     /** Exempts these connections from the start-of-solve closures ({@link #closeDeadHeads}, {@link #closeIllegalStarts})
      * of the next step solve only; the pass loop may still close them on a converged point. */
     void reopenNext(Set<PassiveNetwork.Pipe.Identity> identities){keepOpen=Set.copyOf(identities);}
+    /** Each blanketed vessel's forecast condensed inflow over the step solves that follow, m3/s by vessel identity ({@link
+     * GasBlanket#inflows}), what its vent reads ({@link GasBlanket#releases}); set by the interval solver's per-step plan. */
+    private Map<Long,Double> blanketInflows=Map.of();
+    void blanketInflows(Map<Long,Double> rates){blanketInflows=Map.copyOf(rates);}
     /** The driving pressure (Pa) a closed run's end states must exceed in an allowed direction to be reopened. */
     static double reopenBand(double pa,double pb){return Math.max(1,1e-6*Math.max(Math.abs(pa),Math.abs(pb)));}
     /** The runs of a graph: a run is a maximal chain of connections through degree-two junctions no actuator touches.
@@ -4506,7 +4510,8 @@ public final class PassiveStepSolver {
         private OpenVessel.Releases[] releases(PassiveNetwork graph,double dt) {
             OpenVessel.Releases[] result=null;
             for(int node=0;node<graph.reservoirs().size();node++) {
-                var released=OpenVessel.releases(model,graph.reservoirs().get(node),dt);if(released==null)continue;
+                var vessel=graph.reservoirs().get(node);
+                var released=OpenVessel.releases(model,vessel,dt,blanketInflows.getOrDefault(vessel.id(),0.0)*dt);if(released==null)continue;
                 if(result==null)result=new OpenVessel.Releases[graph.reservoirs().size()];
                 result[node]=released;
             }
