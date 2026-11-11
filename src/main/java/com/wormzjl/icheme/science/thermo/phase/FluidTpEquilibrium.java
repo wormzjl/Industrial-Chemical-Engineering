@@ -317,6 +317,8 @@ public final class FluidTpEquilibrium {
     /** Newton steps of the slots' Rachford-Rice, and its tolerance on the gradient {@code 1 - sum_i x_ik}. */
     private static final int RACHFORD_RICE_SLOTS_ITERATIONS = 100;
     private static final double SLOT_FRACTION_TOLERANCE = 1.0e-13;
+    /** Two ends' phases of one kind are the same phase across a closed bracket's step where their compositions differ by less (mole fraction). */
+    private static final double LEVER_MATCH = 1.0e-4;
     /** The water-rich seed's share of every other compound, relative to the feed's. */
     private static final double SEED_TRACE = 1.0e-6;
 
@@ -1708,6 +1710,8 @@ public final class FluidTpEquilibrium {
         }
         // Not closed yet: the search goes on (the step is not where the enthalpy lies).
         if (!closed) return null;
+        EquilibriumResult lever = leverStep(Specification.PH, s, target, competition, w);
+        if (lever != null) return outerAnswer(Specification.PH, lever, target, Double.NaN, true, null, w);
         return searchFailure(Specification.PH, competition, crystalStepType(crystalStep) + "the specified enthalpy " + target
                 + " J lies in a step of H(T) at " + p + " Pa between " + s.lower + " and " + s.upper + " K (from "
                 + (target + s.lowerResidual) + " to " + (target + s.upperResidual) + " J): no state of the model has it",
@@ -2126,6 +2130,8 @@ public final class FluidTpEquilibrium {
                     previousResidual = Double.NaN;
                     continue;
                 }
+                EquilibriumResult lever = leverStep(Specification.UV, s, u, competition, w);
+                if (lever != null) return outerAnswer(Specification.UV, lever, u, v, true, null, w);
                 // A target inside a one-major feed's triple-point triangle was answered before the search (solveUv).
                 boolean crystalStep = !w.wet && pureCrystal(w) != null && s.endHoldsSolid();
                 return searchFailure(Specification.UV, competition, crystalStepType(crystalStep) + "the specified internal energy "
@@ -4634,6 +4640,99 @@ public final class FluidTpEquilibrium {
                 diagnostics(w, null, false), null, deposition);
     }
 
+    /**
+     * A closed bracket's step answered by the lever rule (section 12 of the W3b plan, the binary's three-phase step
+     * generalised): where the two ends of a closed PH or UV bracket differ by one fluid phase leaving and one entering, as
+     * water's boiling under a heavy cut does (a step 3e-9 K wide), the answer is the ends' mixture {@code (1 - lambda) low +
+     * lambda high} whose enthalpy (PH) or internal energy (UV, both ends at the specified volume) is the specification: the
+     * phases the ends share are merged, the leaving phase comes from the lower end and the entering one from the upper.
+     * Every component is conserved, as at both ends. Null where the ends do not differ so, hold a crystal, or the
+     * specification lies outside them.
+     */
+    private EquilibriumResult leverStep(Specification specification, Search s, double target, PhaseCompetition competition, Workspace w) {
+        EquilibriumResult low = s.lowerResult, high = s.upperResult;
+        if (low == null || high == null || !low.converged() || !high.converged()) return null;
+        boolean energy = specification == Specification.PH;
+        double lowValue = energy ? low.enthalpy() : low.internalEnergy(), highValue = energy ? high.enthalpy() : high.internalEnergy();
+        double lambda = (target - lowValue) / (highValue - lowValue);
+        if (!(lambda >= 0.0 && lambda <= 1.0)) return null;
+        List<PhaseAmounts> lows = low.phases(), highs = high.phases();
+        for (PhaseAmounts phase : lows) if (phase.kind() == PhaseKind.SOLID) return null;
+        for (PhaseAmounts phase : highs) if (phase.kind() == PhaseKind.SOLID) return null;
+        int[] partner = new int[highs.size()];
+        boolean[] taken = new boolean[lows.size()];
+        int entering = -1, leaving = -1;
+        for (int h = 0; h < highs.size(); h++) {
+            partner[h] = -1;
+            double nearest = LEVER_MATCH;
+            for (int l = 0; l < lows.size(); l++) {
+                if (taken[l] || lows.get(l).kind() != highs.get(h).kind()) continue;
+                double distance = compositionDistance(lows.get(l).amounts(), highs.get(h).amounts());
+                if (distance < nearest) {
+                    nearest = distance;
+                    partner[h] = l;
+                }
+            }
+            if (partner[h] >= 0) taken[partner[h]] = true;
+            else if (entering < 0) entering = h;
+            else return null;
+        }
+        for (int l = 0; l < lows.size(); l++) {
+            if (taken[l]) continue;
+            if (leaving >= 0) return null;
+            leaving = l;
+        }
+        if (entering < 0 || leaving < 0) return null;
+        List<PhaseAmounts> phases = new ArrayList<>(highs.size() + 1);
+        for (int h = 0; h < highs.size(); h++) {
+            PhaseAmounts up = highs.get(h);
+            if (h == entering) {
+                if (lambda > 0.0) phases.add(scaled(up, lambda, null));
+                continue;
+            }
+            PhaseAmounts down = lows.get(partner[h]);
+            double[] merged = down.amounts(), upper = up.amounts();
+            for (int i = 0; i < merged.length; i++) merged[i] = (1.0 - lambda) * merged[i] + lambda * upper[i];
+            phases.add(scaled(lambda < 0.5 ? down : up, 1.0, merged));
+        }
+        if (lambda < 1.0) phases.add(scaled(lows.get(leaving), 1.0 - lambda, null));
+        // The vapour first, then the liquids lighter first.
+        phases.sort((a, b) -> a.kind() == b.kind() ? Double.compare(b.state().molarVolume(), a.state().molarVolume())
+                : a.kind() == PhaseKind.LIQUID ? 1 : b.kind() == PhaseKind.LIQUID ? -1 : 0);
+        int liquids = 0;
+        boolean vapour = false;
+        for (PhaseAmounts phase : phases) {
+            if (phase.kind() == PhaseKind.LIQUID) liquids++;
+            else vapour = true;
+        }
+        Classification classification = vapour ? liquids == 2 ? Classification.VAPOR_LIQUID_LIQUID
+                : liquids == 1 ? Classification.VAPOR_LIQUID : null
+                : liquids == 2 ? Classification.LIQUID_LIQUID : null;
+        if (classification == null || phases.size() > 3) return null;
+        String note = "on the step between " + s.lower + " and " + s.upper + (energy ? " K" : " K at the specified volume")
+                + " by the lever rule (" + lambda + " of the upper end)";
+        return new EquilibriumResult(Specification.TP, EquilibriumResult.Status.CONVERGED, null, CONVERGED + "; " + note,
+                contract.identity(), competition, classification, phases, List.of(), solidCoverage(convergedCoverage, w),
+                diagnostics(w, null, false), null, null);
+    }
+
+    /** The largest mole-fraction difference of two phases' amounts. */
+    private static double compositionDistance(double[] a, double[] b) {
+        double ta = 0.0, tb = 0.0, distance = 0.0;
+        for (double x : a) ta += x;
+        for (double x : b) tb += x;
+        if (!(ta > 0.0) || !(tb > 0.0)) return Double.POSITIVE_INFINITY;
+        for (int i = 0; i < a.length; i++) distance = Math.max(distance, Math.abs(a[i] / ta - b[i] / tb));
+        return distance;
+    }
+
+    /** {@code phase} with its amounts times {@code factor}, or {@code amounts} where given; its state and conditions kept. */
+    private static PhaseAmounts scaled(PhaseAmounts phase, double factor, double[] amounts) {
+        double[] n = amounts != null ? amounts : phase.amounts();
+        if (amounts == null) for (int i = 0; i < n.length; i++) n[i] *= factor;
+        return new PhaseAmounts(phase.kind(), phase.crystal(), phase.temperature(), phase.pressure(), n, phase.state());
+    }
+
     private double[] pair(int first, double a, int second, double b) {
         double[] amounts = new double[basis];
         amounts[first] = a;
@@ -6619,20 +6718,32 @@ public final class FluidTpEquilibrium {
                 s.fractionsConverged = true;
                 break;
             }
-            for (int a = 0; a < free; a++) {
-                for (int b = 0; b <= a; b++) {
-                    int k = s.freeSlots[a], l = s.freeSlots[b];
-                    s.rrMatrix[a * free + b] = k >= l ? s.rrHessian[k * SLOT_COUNT + l] : s.rrHessian[l * SLOT_COUNT + k];
-                }
-                s.rrStep[a] = -s.rrGradient[s.freeSlots[a]];
-            }
+            // The Newton step on the free set. A slot at zero whose own row of the step points below zero is absent for
+            // this step (section 12 of the W3b plan): it leaves the free set and the step is solved again on the rest. A
+            // zero-length step blocked by such a slot would leave every fraction where it is (the wet crude at 393 K, 5 bar
+            // held 1000 substitution iterations so).
             boolean factored = false;
-            for (int attempt = 0; attempt < 14 && !factored; attempt++) {
-                double mu = attempt == 0 ? 0.0 : DeterministicMath.pow(10.0, attempt - 14);
-                factored = factorShifted(s.rrMatrix, free, mu, s.rrFactor);
+            while (true) {
+                for (int a = 0; a < free; a++) {
+                    for (int b = 0; b <= a; b++) {
+                        int k = s.freeSlots[a], l = s.freeSlots[b];
+                        s.rrMatrix[a * free + b] = k >= l ? s.rrHessian[k * SLOT_COUNT + l] : s.rrHessian[l * SLOT_COUNT + k];
+                    }
+                    s.rrStep[a] = -s.rrGradient[s.freeSlots[a]];
+                }
+                factored = false;
+                for (int attempt = 0; attempt < 14 && !factored; attempt++) {
+                    double mu = attempt == 0 ? 0.0 : DeterministicMath.pow(10.0, attempt - 14);
+                    factored = factorShifted(s.rrMatrix, free, mu, s.rrFactor);
+                }
+                if (!factored) break;
+                TangentPlaneStability.solveCholesky(s.rrFactor, free, s.rrStep);
+                int kept = 0;
+                for (int a = 0; a < free; a++) if (s.beta[s.freeSlots[a]] > 0.0 || s.rrStep[a] >= 0.0) s.freeSlots[kept++] = s.freeSlots[a];
+                if (kept == free || kept == 0) break;
+                free = kept;
             }
             if (!factored) break;
-            TangentPlaneStability.solveCholesky(s.rrFactor, free, s.rrStep);
             double length = 1.0, slope = 0.0;
             int blocking = -1;
             for (int a = 0; a < free; a++) {
