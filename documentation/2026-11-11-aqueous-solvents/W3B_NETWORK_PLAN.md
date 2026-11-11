@@ -513,3 +513,13 @@ In order, for the stream of one spray inlet:
 One signed rate per component covers 1 to 3 (gas removed, flash vapour, evaporation, less the air dissolved), with one energy rate; the ledger books them per component and the basin's balances close on them. No stream is refused and no status word names a composition: `WATER_ONLY` goes, and section 20's word for a boiling liquid is not added. The exhaust the plume reads keeps water's humidity; the other compounds' share in it is not drawn.
 
 Consequence for the basin: water leaving the fill saturated with the air's nitrogen and oxygen stands just under its bubble pressure at the atmosphere (the air's 1 % of other gases is the margin), so the basin holds no gas phase from the spray and its vent has nothing to take from it.
+
+## 28. The clean zone's edge reads the stream at the suction now (2026-11-12)
+
+Expected: E is the pressure where the liquid at the pump's suction releases more gas than the pump passes cleanly. It belongs to what stands at the suction now. Gas that reaches the suction later in the step lowers the head (the head share), not E.
+
+What the follow-up to 69db75057 did first (uncommitted, the four review points built): E read on the stream the step's slice draws. `InletPhaseTest.aPumpOnABottomPortRunsThenMeetsGasAndMovesNextToNothing` (water under nitrogen at 120 kPa, a 2 L/s pump on the liquid port, 2.99 slices of water) then failed: the last slice's stream is 0.99 slice of water with about 1 % of free nitrogen, the gas that follows the water. The clean share at 120 kPa is 1.27 %, so E came out near 95 kPa and the pump sat on its limit for the whole slice: drawn 9.96 / 9.96 / 6.28 / 3.61 kg instead of 9.96 / 9.96 / 9.88 kg, 45 steps with 22 rejected instead of 24 with none.
+
+Decided (orchestrator, owner: "auto proceed"): E is read on the stream the end draws with no slice (the leading phase of a phase port, the bulk of a BULK end); the head share keeps the slice's stream. Where that stream holds no condensed phase E is none, as before: the dry-suction refusal owns a pump whose port stands in gas. A junction's mixture is unchanged (E = P past the edge: cold 181, bundled 6). Not chosen: E on the slice's liquid phases only (a junction's mixture would lose its gas again); keeping the slice and re-deriving the test (22 rejected steps).
+
+Stage B item 1 (uncommitted, counters only so far): the heat capacity and the second temperature derivative of the volume are formed when read. Excess second-derivative sums: wet 10842 to 0, polar 6738 to 0; all second sums on dry 5475 to 114; end states bit-identical on the three scenarios. Timings not yet run.
