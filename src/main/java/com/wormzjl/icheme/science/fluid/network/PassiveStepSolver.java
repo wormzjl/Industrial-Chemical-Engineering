@@ -63,6 +63,12 @@ public final class PassiveStepSolver {
      * term ({@link #checkConservation}). A numerical regularisation sized to the flow: its mixing lag at full flow is tau.
      */
     static final double HOLDUP_TAU=.05;
+    /**
+     * {@link #HOLDUP_TAU} under the time factor (batch 2026-11-11-minecraft-time-delta, W2; owner "Holdup only"): a time
+     * constant of the numerics, so a step carries the same number of buffers through a junction at any factor (5 s over 0.05 s
+     * at 1, 360 s over 3.6 s at 72) and its mixing lag stays 1 % of a slice. Exactly {@link #HOLDUP_TAU} at factor 1.
+     */
+    static double holdupTau(com.wormzjl.icheme.science.fluid.SimulationTime time){return HOLDUP_TAU*time.factor();}
     /** The Newton's relative tolerance on its scaled rows (a taut vessel's weighted by the pressure they imply,
      * {@link Equations#rowWeights}); the solid
      * events read a flow within it of the island's largest as roundoff ({@code SolidEventIntegrator.still}). */

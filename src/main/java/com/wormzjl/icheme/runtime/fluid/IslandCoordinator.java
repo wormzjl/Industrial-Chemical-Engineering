@@ -602,7 +602,7 @@ public final class IslandCoordinator {
                 // The shaft trains' slice inputs (W3), read here as a heat side's partner is.
                 var controlled=controls.apply(island.graph);
                 var dispatched=ports.dispatch(island.id,com.wormzjl.icheme.science.fluid.network.ShaftPlan.apply(controlled,shafts.plans(island.id,controlled)),slice);
-                var command=new ProcessSolveServices.FluidIslandCommand(island.model,dispatched,slice.seconds(settings.time),PassiveIntervalSolver.Settings.defaults(),settings.hardBudgetNanos,island.retained,reads,ports.plans(island.id,dispatched,slice));
+                var command=new ProcessSolveServices.FluidIslandCommand(island.model,dispatched,slice.seconds(settings.time),PassiveIntervalSolver.Settings.defaults(settings.time),settings.hardBudgetNanos,island.retained,reads,ports.plans(island.id,dispatched,slice));
                 if(!dispatcher.submit(attempt,command)) {island.status="WAITING: shared worker capacity";island.touch();break;}
                 island.clock.admitted(slice);island.status="SOLVING";island.touch();FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.solvesDispatched);
                 var entry=new Pending(attempt,island.clock.snapshot().onlineTick(),nanoClock.getAsLong());entry.dispatched=dispatched;entry.reads=reads;pending.put(request,entry);island.pendingEntries++;admitted.add(entry);dispatchedThisTick++;

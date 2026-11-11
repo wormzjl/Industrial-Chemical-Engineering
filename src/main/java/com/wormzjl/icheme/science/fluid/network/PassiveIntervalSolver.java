@@ -41,7 +41,16 @@ public final class PassiveIntervalSolver {
             if(!Double.isFinite(initialStep)||initialStep<=0||!Double.isFinite(maximumStep)||maximumStep<initialStep
                     ||maximumAttempts<1)throw new IllegalArgumentException("Invalid interval settings");
         }
+        /** The engine's own default, factor 1: a first step of 1 s, steps of at most 20 s. */
         public static Settings defaults(){return new Settings(1,20,1024);}
+        /**
+         * The world's settings under {@code time} (batch 2026-11-11-minecraft-time-delta, W2): the first step and the step cap
+         * scale with the factor, so a slice crosses its rest in the same number of steps as at factor 1 (4 s and 80 s at 4,
+         * 72 s and 1440 s at 72); the attempt cap stays. Factor 1 is {@link #defaults()}.
+         */
+        public static Settings defaults(com.wormzjl.icheme.science.fluid.SimulationTime time) {
+            return time.factor()==1?defaults():new Settings(time.perPlaySecond(),20*time.perPlaySecond(),1024);
+        }
     }
     public record Result(PassiveNetwork graph,double advancedSeconds,double[] averageMassFlows,int acceptedSubsteps,int rejectedSubsteps,
                          double pumpWorkJoule,List<ConservativeTransport.BoundaryTransfer> boundaries,Map<String,Integer> rejectionReasons,

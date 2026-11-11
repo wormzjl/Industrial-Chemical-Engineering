@@ -434,6 +434,12 @@ public final class FluidThermodynamics {
     public double maximumVelocityMetresPerSecond(){return maximumVelocity;}
     /** The time factor this model integrates under: process seconds per online tick ({@link SimulationTime}). */
     public SimulationTime time(){return time;}
+    /** This model under another time factor, every other setting the same (a view stays the same compound list); itself on its own. */
+    public FluidThermodynamics withTime(SimulationTime value) {
+        if(time.equals(value))return this;
+        var timed=new FluidThermodynamics(whole.catalog,whole.domain.packageId(),maximumVelocity,tracePolicy,solidSettings,value,null);
+        return whole==this?timed:timed.on(compounds());
+    }
     /** The per-node phase support the step solver freezes its Newton unknowns with. */
     public TraceTruncationPolicy traceTruncation(){return tracePolicy;}
     /** A hydraulic rate bound only; temperature and phase allocation still come from the EOS/energy equations. */
