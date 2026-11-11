@@ -295,7 +295,7 @@ public final class ElectricStores {
             s.tick = now;
             s.tickJoules = 0;
         }
-        return Math.max(0, ElectricStore.perTick(s.ratedDraw) - s.tickJoules);
+        return Math.max(0, ElectricStore.perTick(s.ratedDraw, coordinator.time()) - s.tickJoules);
     }
 
     /**
@@ -377,7 +377,7 @@ public final class ElectricStores {
         from = Math.max(from, s.bookedTick);
         s.bookedTick = to;
         if (free(s)) return false;
-        var d = ElectricStore.draw(s.joules, power, (to - from) * ElectricStore.TICK_SECONDS);
+        var d = ElectricStore.draw(s.joules, power, (to - from) * coordinator.time().tickSeconds());
         s.joules = d.content();
         s.outJoules += d.booked();
         if (d.shortfall() && !s.unpowered) {
@@ -407,7 +407,7 @@ public final class ElectricStores {
     public void give(long id, double power, long to) {
         var s = stores.get(id);
         if (s == null || !s.kind.generator() || to <= s.bookedTick) return;
-        double joules = Math.max(0, power) * (to - s.bookedTick) * ElectricStore.TICK_SECONDS;
+        double joules = Math.max(0, power) * (to - s.bookedTick) * coordinator.time().tickSeconds();
         s.bookedTick = to;
         s.power = power;
         double taken = ElectricStore.accepted(s.joules, s.capacity(), joules);

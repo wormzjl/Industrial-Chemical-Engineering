@@ -409,6 +409,42 @@ class FluidFactsCompatTest {
     }
 
     /**
+     * Another time factor (batch 2026-11-11-minecraft-time-delta, W1): a world solved at factor 1 and opened at 4 rebuilds
+     * its islands from their facts, nothing restated: every vessel's contents and filter's cake, the ledger and the online
+     * tick as saved; its solved intervals and certificates are state and go. A save at 4 names its factor, so a load at 1
+     * rebuilds the same way.
+     */
+    @Test void anotherTimeFactorRebuildsTheIslandsFromTheirFactsKeepingContentsLedgerAndOnlineTick() {
+        var world=world();var image=image(world);var saved=world.ledger.snapshot();
+        var fourfold=FluidThermodynamics.forNetwork(CATALOG,PACKAGE,FluidThermodynamics.DEFAULT_MAXIMUM_VELOCITY,model.traceTruncation().cutoffMoleFraction(),model.solidSettings,com.wormzjl.icheme.science.fluid.SimulationTime.of(4));
+        assertNotEquals(model.revision(),fourfold.revision(),"the factor is part of the model's revision");
+        assertEquals(model.thermodynamicRevision(),fourfold.thermodynamicRevision(),"but not of the property reference the contents are read against");
+        var exact=load(image,key->key.on(model),CATALOG);assertEquals(FluidCheckpointStore.Route.EXACT,exact.route());
+        var opened=load(image,key->key.on(fourfold),CATALOG);
+        assertEquals(FluidCheckpointStore.Route.FACTS,opened.route());assertTrue(opened.reason().contains("time factor changed from 1 to 4"),opened.reason());
+        assertEquals(contents(exact.checkpoint()),contents(opened.checkpoint()),"every vessel's inventory and every filter's cake, bit for bit");
+        var ledger=opened.world().orElseThrow();
+        assertEquals(saved.active(),ledger.active(),"the registry: devices, settings, specs and revisions");
+        assertArrayEquals(saved.constructed().moles(),ledger.constructed().moles());assertEquals(saved.constructed().totalEnergy(),ledger.constructed().totalEnergy());
+        assertArrayEquals(saved.destroyed().moles(),ledger.destroyed().moles());assertEquals(saved.basis(),ledger.basis());
+        assertEquals(WorldTopologyLedger.Restated.NONE,ledger.restated(),"nothing restated: the property data did not change");
+        long epoch=FluidCheckpointCodec.epoch(image.core());assertEquals(epoch,ledger.onlineTick(),"the online tick as saved");
+        for(var entry:opened.checkpoint().islands()) {
+            var s=entry.snapshot();assertTrue(s.status().startsWith("WAITING: rebuilt from saved facts (the time factor"),s.status());
+            assertTrue(s.certificate().isEmpty()&&s.lastResult().isEmpty(),"solved intervals and certificates are state");
+        }
+        // A save under the factor names it; the other way round rebuilds too.
+        var checkpoint=new FluidCheckpointCodec.Checkpoint(world.entries());
+        var store=FluidCheckpointStore.memory();store.commit(store.prepare(checkpoint,Optional.of(world.ledger.snapshot()),world.ledger.onlineTick(),key->key.on(fourfold)));
+        var four=store.image();
+        assertEquals(4,four.core().getList("Packages",Tag.TAG_COMPOUND).getCompound(0).getInt("TimeScale"));
+        assertFalse(image.core().getList("Packages",Tag.TAG_COMPOUND).getCompound(0).contains("TimeScale"),"factor 1 writes no field: its core record is as before");
+        var back=load(four,key->key.on(model),CATALOG);
+        assertEquals(FluidCheckpointStore.Route.FACTS,back.route());assertTrue(back.reason().contains("time factor changed from 4 to 1"),back.reason());
+        assertEquals(contents(exact.checkpoint()),contents(back.checkpoint()));
+    }
+
+    /**
      * A changed property basis (here the energy reference's revision) restates every vessel: its moles, volume and
      * temperature are kept, the current data gives its energy and pressure, and the ledger books the energy difference.
      */

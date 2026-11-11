@@ -129,7 +129,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         com.wormzjl.icheme.world.level.block.LinePieces.watch(server,controlFacts);
         controlFacts.requireSensorIds(accessories.allSensors());
         // The world model (the network package's whole list) first: every island's model is a view of it (V2).
-        model=FluidThermodynamics.forNetwork(catalog,com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(catalog),options.maximumVelocity(),options.traceCutoffMoleFraction(),options.solids());
+        model=FluidThermodynamics.forNetwork(catalog,com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(catalog),options.maximumVelocity(),options.traceCutoffMoleFraction(),options.solids(),options.time());
         data=FluidSavedData.open(server,this::model,catalog);
         propertyReload=new FluidPropertyReloadGuard(catalog,com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(catalog),model);
         presetCache=FluidPresetCatalog.resolve(catalog);componentNames=model.components();
@@ -138,7 +138,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         topology=new WorldTopologyLedger(savedTopology);
         topology.builds().structures().forEach((origin,structure)->indexStructure(origin,structure,true));
         presentation=new FluidPresentation<>(new PresentationHost(),topology.onlineTick());
-        var settings=new IslandCoordinator.Settings(options.wallBudgetNanos(),options.wallBudgetNanos()*3/4,64,options.adaptiveCadence(),options.initialCadenceTicks(),options.certificates());
+        var settings=new IslandCoordinator.Settings(options.wallBudgetNanos(),options.wallBudgetNanos()*3/4,64,options.adaptiveCadence(),options.initialCadenceTicks(),options.certificates()).withTime(options.time());
         // Island clocks read the world's online tick: one epoch increment per tick advances every island.
         runtime=new MinecraftFluidRuntime(server,this::published,settings,topology::onlineTick);
         runtime.coordinator().onReplayed(this::replayed);
@@ -263,6 +263,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public List<String> components(){owned();return componentNames;}
     /** The world's network property model; its {@code domain()} is where a state may be evaluated. */
     public FluidThermodynamics model(){owned();return model;}
+    /** The server's time factor ({@code fluid.timeScale}), captured at server start: the world model's. */
+    public com.wormzjl.icheme.science.fluid.SimulationTime time(){return model.time();}
     public Map<String,MaterialName> materialNames(){owned();var result=new LinkedHashMap<String,MaterialName>();for(String id:componentNames)result.put(id,catalog.name(id));return Map.copyOf(result);}
     public long onlineTick(){owned();return topology.onlineTick();}
     /** Optional read-only diagnostics; all values are immutable and callbacks run on the server thread. */

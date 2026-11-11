@@ -337,6 +337,9 @@ public final class FluidCheckpointStore {
             if(!p.propertyRevision().equals(model.thermodynamicRevision())||!p.energyRevision().equals(reference.revision())||!p.energyComponents().equals(reference.components())) {
                 restate=true;moved.add(p);why="the property data of package "+p.packageId()+" changed";
             }
+            // Another time factor (batch 2026-11-11-minecraft-time-delta): the solved intervals, certificates and junction buffers
+            // describe another number of process seconds per tick, so the islands rebuild from their facts; nothing restates.
+            else if(p.timeFactor()!=model.time().factor()&&why==null)why="the time factor changed from "+p.timeFactor()+" to "+model.time().factor();
         }
         var rowsByPack=new HashMap<Long,List<Integer>>();
         for(int i=0;i<core.islands().size();i++)rowsByPack.computeIfAbsent(core.islands().get(i).unit().pack(),ignored->new ArrayList<>()).add(i);

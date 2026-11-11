@@ -605,7 +605,7 @@ public final class FluidCheckpointCodec {
         if(row.start<0||row.start>=row.base)throw new IllegalArgumentException("Certified island "+id+": interval ["+row.start+", "+row.base+"] is empty or negative");
         var persisted=new IslandCertificate.Saved(row.since,row.horizon,new IslandCertificate.Interval(row.start,row.base,certifiedFrom,result.orElseThrow()),signature);
         // The island at its saved committed tick: its base inventory plus the replayed fraction, never a solve.
-        var rebuilt=IslandCertificate.rebuild(persisted,model.molecularWeights());
+        var rebuilt=IslandCertificate.rebuild(persisted,model.molecularWeights(),model.time());
         var certified=new IslandCoordinator.Certified(rebuilt.drift(),row.since,row.base,row.horizon,rebuilt.largestFlow(),Optional.of(persisted));
         return new IslandEntry(dimension,packageId,compounds,new IslandCoordinator.Snapshot(id,row.revision,rebuilt.graphAt(row.committed),clock,result,status,fences,Optional.of(certified),generation));
     }
@@ -701,12 +701,15 @@ public final class FluidCheckpointCodec {
      * keyed by both, batch 2026-11-04-refinery-compounds, V3): its thermodynamic revision and energy reference. A null list is
      * the package's whole list.
      */
-    record PackageRecord(String packageId,List<String> compounds,String propertyRevision,String energyRevision,List<String> energyComponents) {
+    /** {@code timeFactor} is the time factor the units were solved under (batch 2026-11-11-minecraft-time-delta, {@code "TimeScale"},
+     * written only when it is not 1, so a record without it is factor 1): a load on another factor reads the facts alone. */
+    record PackageRecord(String packageId,List<String> compounds,String propertyRevision,String energyRevision,List<String> energyComponents,int timeFactor) {
+        PackageRecord(String packageId,List<String> compounds,String propertyRevision,String energyRevision,List<String> energyComponents){this(packageId,compounds,propertyRevision,energyRevision,energyComponents,1);}
         PackageRecord{compounds=PackageKey.list(compounds);}
         PackageKey key(){return new PackageKey(packageId,compounds);}
         static PackageRecord of(PackageKey key,FluidThermodynamics model) {
             var reference=EnergyReference.sensible(model.components());
-            return new PackageRecord(key.packageId(),key.compounds(),model.thermodynamicRevision(),reference.revision(),List.copyOf(reference.components()));
+            return new PackageRecord(key.packageId(),key.compounds(),model.thermodynamicRevision(),reference.revision(),List.copyOf(reference.components()),model.time().factor());
         }
     }
     record CoreRecord(int stateFormat,int factsSchema,long epoch,Strings strings,List<PackageRecord> packages,long[] packs,long[] packBytes,long nextPack,long nextGeneration,
@@ -722,6 +725,7 @@ public final class FluidCheckpointCodec {
             var entry=new CompoundTag();entry.putString("Package",p.packageId);entry.putString("PropertyRevision",p.propertyRevision);
             entry.putString("EnergyRevision",p.energyRevision);var components=new ListTag();for(var c:p.energyComponents)components.add(StringTag.valueOf(c));entry.put("EnergyComponents",components);
             if(p.compounds!=null){var compounds=new ListTag();for(var c:p.compounds)compounds.add(StringTag.valueOf(c));entry.put("Compounds",compounds);}
+            if(p.timeFactor!=1)entry.putInt("TimeScale",p.timeFactor);
             packages.add(entry);
         }
         tag.put("Packages",packages);
@@ -790,8 +794,10 @@ public final class FluidCheckpointCodec {
             if(!(p.get("EnergyComponents") instanceof ListTag components)||!components.isEmpty()&&components.getElementType()!=Tag.TAG_STRING)throw new IllegalArgumentException("Missing or mistyped fluid package field EnergyComponents");
             List<String> compounds=null;
             if(p.contains("Compounds")){if(!(p.get("Compounds") instanceof ListTag list)||!list.isEmpty()&&list.getElementType()!=Tag.TAG_STRING)throw new IllegalArgumentException("Mistyped fluid package field Compounds");compounds=list.stream().map(Tag::getAsString).toList();}
+            int time=p.contains("TimeScale")?requireInt(p,"TimeScale","package"):1;
+            if(time<com.wormzjl.icheme.science.fluid.SimulationTime.MINIMUM_FACTOR||time>com.wormzjl.icheme.science.fluid.SimulationTime.MAXIMUM_FACTOR)throw new IllegalArgumentException("Invalid fluid package time factor "+time);
             var record=new PackageRecord(requireString(p,"Package","package"),compounds,requireString(p,"PropertyRevision","package"),requireString(p,"EnergyRevision","package"),
-                    components.stream().map(Tag::getAsString).toList());
+                    components.stream().map(Tag::getAsString).toList(),time);
             if(!keys.add(record.key()))throw new IllegalArgumentException("Duplicate saved package "+record.packageId+(compounds==null?"":" on "+compounds));
             packages.add(record);
         }
@@ -850,6 +856,7 @@ public final class FluidCheckpointCodec {
             d.number(components.size());for(int c=0;c<components.size();c++)d.text(components.getString(c));
             if(p.get("Compounds") instanceof ListTag compounds){d.text("compounds");d.number(compounds.size());for(int c=0;c<compounds.size();c++)d.text(compounds.getString(c));}
             else if(p.contains("Compounds"))throw new IllegalArgumentException("Mistyped fluid package field Compounds");
+            if(p.contains("TimeScale")){d.text("time");d.number(requireInt(p,"TimeScale","package"));}
         }
         d.longs(requireLongs(tag,"Packs","checkpoint"));d.longs(requireLongs(tag,"PackBytes","checkpoint"));d.number(requireLong(tag,"NextPack","checkpoint"));d.number(requireLong(tag,"NextGeneration","checkpoint"));
         if(tag.get("Topology") instanceof CompoundTag topology) {

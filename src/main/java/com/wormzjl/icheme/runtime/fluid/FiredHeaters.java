@@ -129,7 +129,7 @@ public final class FiredHeaters {
     /** A committed or replayed span of {@code island}: each radiant coil's demand and each burners' fired heat in it, the fans' draw. */
     void booked(long island,long start,long end,PassiveIntervalSolver.Result result) {
         if(end<=start)return;
-        double seconds=(end-start)/20.0;var solved=result.graph();var average=result.averageMassFlows();
+        double seconds=coordinator.time().seconds(end-start);var solved=result.graph();var average=result.averageMassFlows();
         Map<Long,Double> heat=null;
         var wake=new TreeSet<Long>();
         for(int e=0;e<solved.pipes().size();e++) {

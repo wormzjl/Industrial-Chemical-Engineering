@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.runtime.fluid;
 
+import com.wormzjl.icheme.science.fluid.SimulationTime;
 import com.wormzjl.icheme.runtime.ProcessSolveServices;
 import com.wormzjl.icheme.science.fluid.network.*;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
@@ -41,16 +42,19 @@ public final class IslandCoordinator {
      * under a quarter of it shorten it, {@link IslandClock#performanceSample}): no job is cut at it since owner
      * decision D37 (S2) removed the approximate fallback it used to start.
      */
-    public record Settings(long hardBudgetNanos, long softBudgetNanos, int maximumDispatchesPerTick, boolean adaptive,int initialCadenceTicks,CertificatePolicy certificates) {
+    /** {@code time} is the server's time factor ({@link SimulationTime}): every island's model carries the same one. */
+    public record Settings(long hardBudgetNanos, long softBudgetNanos, int maximumDispatchesPerTick, boolean adaptive,int initialCadenceTicks,CertificatePolicy certificates,SimulationTime time) {
+        public Settings(long hardBudgetNanos,long softBudgetNanos,int maximumDispatchesPerTick,boolean adaptive,int initialCadenceTicks,CertificatePolicy certificates){this(hardBudgetNanos,softBudgetNanos,maximumDispatchesPerTick,adaptive,initialCadenceTicks,certificates,SimulationTime.ONLINE);}
         public Settings(long hardBudgetNanos,long softBudgetNanos,int maximumDispatchesPerTick,boolean adaptive){this(hardBudgetNanos,softBudgetNanos,maximumDispatchesPerTick,adaptive,100);}
         public Settings(long hardBudgetNanos,long softBudgetNanos,int maximumDispatchesPerTick,boolean adaptive,int initialCadenceTicks){this(hardBudgetNanos,softBudgetNanos,maximumDispatchesPerTick,adaptive,initialCadenceTicks,CertificatePolicy.disabled());}
         public Settings {
             if(hardBudgetNanos<=0||softBudgetNanos<=0||softBudgetNanos>=hardBudgetNanos||maximumDispatchesPerTick<1||initialCadenceTicks<20||initialCadenceTicks>400)
                 throw new IllegalArgumentException("Invalid coordinator settings");
-            Objects.requireNonNull(certificates);
+            Objects.requireNonNull(certificates);Objects.requireNonNull(time);
         }
         public static Settings defaults(){return new Settings(2_000_000_000L,1_500_000_000L,64,true,100,CertificatePolicy.defaults());}
-        public Settings withCertificates(CertificatePolicy policy){return new Settings(hardBudgetNanos,softBudgetNanos,maximumDispatchesPerTick,adaptive,initialCadenceTicks,policy);}
+        public Settings withCertificates(CertificatePolicy policy){return new Settings(hardBudgetNanos,softBudgetNanos,maximumDispatchesPerTick,adaptive,initialCadenceTicks,policy,time);}
+        public Settings withTime(SimulationTime value){return new Settings(hardBudgetNanos,softBudgetNanos,maximumDispatchesPerTick,adaptive,initialCadenceTicks,certificates,value);}
     }
     public record Attempt(long islandId,long revision,IslandClock.Slice slice) {
         public Attempt {if(islandId<=0||revision<0)throw new IllegalArgumentException("Invalid attempt identity");Objects.requireNonNull(slice);}
@@ -343,8 +347,11 @@ public final class IslandCoordinator {
         ownsEpoch=epoch==null;this.epoch=ownsEpoch?()->ownEpoch:epoch;
     }
     private void owned(){if(Thread.currentThread()!=owner)throw new IllegalStateException("Island coordinator belongs to its server thread");}
+    /** Process time against online time: the factor every island here integrates under, and the ports and shafts book by. */
+    public SimulationTime time(){return settings.time;}
+    private void timed(FluidThermodynamics model){if(!model.time().equals(settings.time))throw new IllegalArgumentException("An island model on time factor "+model.time().factor()+" in a coordinator on "+settings.time.factor());}
     public void register(Snapshot saved,FluidThermodynamics model) {
-        owned();if(stopped||islands.containsKey(saved.id))throw new IllegalStateException("Stopped/duplicate island");
+        owned();timed(model);if(stopped||islands.containsKey(saved.id))throw new IllegalStateException("Stopped/duplicate island");
         if(saved.graph.reservoirs().stream().anyMatch(n->n.kind()==PassiveNetwork.NodeKind.PORT))throw new IllegalArgumentException("Internal ports cannot own world state");
         var island=new Island(saved,model,epoch);
         // A loaded island past the compound cap holds as it held when it was formed (V2, a capability limit).
@@ -595,7 +602,7 @@ public final class IslandCoordinator {
                 // The shaft trains' slice inputs (W3), read here as a heat side's partner is.
                 var controlled=controls.apply(island.graph);
                 var dispatched=ports.dispatch(island.id,com.wormzjl.icheme.science.fluid.network.ShaftPlan.apply(controlled,shafts.plans(island.id,controlled)),slice);
-                var command=new ProcessSolveServices.FluidIslandCommand(island.model,dispatched,slice.seconds(),PassiveIntervalSolver.Settings.defaults(),settings.hardBudgetNanos,island.retained,reads,ports.plans(island.id,dispatched,slice));
+                var command=new ProcessSolveServices.FluidIslandCommand(island.model,dispatched,slice.seconds(settings.time),PassiveIntervalSolver.Settings.defaults(),settings.hardBudgetNanos,island.retained,reads,ports.plans(island.id,dispatched,slice));
                 if(!dispatcher.submit(attempt,command)) {island.status="WAITING: shared worker capacity";island.touch();break;}
                 island.clock.admitted(slice);island.status="SOLVING";island.touch();FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.solvesDispatched);
                 var entry=new Pending(attempt,island.clock.snapshot().onlineTick(),nanoClock.getAsLong());entry.dispatched=dispatched;entry.reads=reads;pending.put(request,entry);island.pendingEntries++;admitted.add(entry);dispatchedThisTick++;
@@ -764,7 +771,7 @@ public final class IslandCoordinator {
                 &&x.targetPressure()==y.targetPressure()&&x.volumeTarget()==y.volumeTarget()&&java.util.Objects.equals(x.sensor(),y.sensor())&&x.revision()==y.revision();
     }
     private static boolean validCandidate(Island island,Attempt attempt,PassiveIntervalSolver.Result result,PassiveNetwork dispatched) {
-        if(result.advancedSeconds()!=attempt.slice.seconds()||!sameConnections(dispatched.pipes(),result.graph().pipes())||!result.graph().scheduledTransfers().isEmpty())return false;
+        if(result.advancedSeconds()!=attempt.slice.seconds(island.model.time())||!sameConnections(dispatched.pipes(),result.graph().pipes())||!result.graph().scheduledTransfers().isEmpty())return false;
         var old=island.graph.reservoirs();var next=result.graph().reservoirs();if(old.size()!=next.size())return false;
         for(int i=0;i<old.size();i++) {
             var a=old.get(i);var b=next.get(i);
@@ -840,7 +847,7 @@ public final class IslandCoordinator {
      * placement, destruction and material delivery need their own explicitly balanced transactions.
      */
     public void topology(Set<UUID> events,Set<Long> affected,List<Replacement> replacements,FluidThermodynamics model,long committed,long online,Map<Long,PassiveNetwork.Reservoir> additions,Set<Long> removals,Map<Long,com.wormzjl.icheme.science.fluid.network.InlineFilter> releasedFilters,Runnable metadataCommit) {
-        owned();Objects.requireNonNull(model);Objects.requireNonNull(metadataCommit);if(events.isEmpty())throw new IllegalArgumentException("A topology change needs its events");
+        owned();timed(model);Objects.requireNonNull(metadataCommit);if(events.isEmpty())throw new IllegalArgumentException("A topology change needs its events");
         if(stopped||committed<0||online<committed||!aligned(events,affected))throw new IllegalStateException("Topology event is not ready");
         var originals=affected.stream().map(this::require).toList();
         long revision=0;int cadence=originals.isEmpty()?settings.initialCadenceTicks:20;
@@ -1111,7 +1118,7 @@ public final class IslandCoordinator {
         var reads=new HashMap<Long,ExchangerRelay.Read>();long start=slice.startTick(),end=slice.endTick();
         for(long pipe:island.sides) {
             var side=coupled.get(pipe);if(side==null||side.kind==SideKind.RADIANT)continue;
-            var held=ports.heatRead(pipe,side.partner,start,slice.seconds(),transits.getOrDefault(side.pair(),0.));
+            var held=ports.heatRead(pipe,side.partner,start,slice.seconds(settings.time),transits.getOrDefault(side.pair(),0.));
             // A column's condenser read by its water side carries the valve the column sets, where its lines are complete (U2).
             if(held!=null){reads.put(pipe,held.ceiling()>0&&held.operation()==null?held.withOperation(operations.get(pipe)):held);continue;}
             var other=other(side);var otherSide=coupled.get(side.partner);
@@ -1120,7 +1127,7 @@ public final class IslandCoordinator {
             if(side.kind==SideKind.CONVECTION){reads.put(pipe,ExchangerRelay.Read.radiant(otherSide==null||other==null?0:otherSide.rateAsOf(start)));continue;}
             boolean stoppedOther=other==null||other!=island&&stoppedSide(other);
             double due=transits.getOrDefault(side.pair(),0.)+(otherSide==null?0:otherSide.bookedPast(start));
-            double seconds=other==null?0:other==island?slice.seconds():Math.min(other.clock.snapshot().cadenceTicks(),other.maximumSliceTicks)/20.0;
+            double seconds=other==null?0:other==island?slice.seconds(settings.time):settings.time.seconds(Math.min(other.clock.snapshot().cadenceTicks(),other.maximumSliceTicks));
             reads.put(pipe,new ExchangerRelay.Read(otherSide==null?null:otherSide.asOf(start),stoppedOther,due,seconds,otherSide==null?0:otherSide.stoppedWithin(start,end),operations.get(pipe)));
         }
         return reads;
@@ -1140,8 +1147,8 @@ public final class IslandCoordinator {
             if(joule!=0&&side.kind==SideKind.EXCHANGER)transits.merge(side.pair(),-joule,Double::sum);
             var other=other(side);side.prune(other==null?end-KEEP_UNREAD_TICKS:other.clock.committedTick());side.book(start,end,joule);
             var read=reads==null?null:reads.get(pipe);
-            if(read!=null){if(read.stopped())side.stopped(start,end);side.read=true;side.readUsed=read.partner();side.rateUsed=read.heatRate();side.heatRate=joule/((end-start)/20.0);}
-            side.record(new SideRecord(end,stream(island.graph,result.endpointFlows(),pipe,island.model),joule/((end-start)/20.0)));
+            if(read!=null){if(read.stopped())side.stopped(start,end);side.read=true;side.readUsed=read.partner();side.rateUsed=read.heatRate();side.heatRate=joule/settings.time.seconds(end-start);}
+            side.record(new SideRecord(end,stream(island.graph,result.endpointFlows(),pipe,island.model),joule/settings.time.seconds(end-start)));
             if(other!=null&&other!=island&&other.certificate!=null&&moved(side,coupled.get(side.partner),other))toWake.add(other.id);
         }
     }
@@ -1163,7 +1170,7 @@ public final class IslandCoordinator {
         var now=side.current.stream();
         if(!otherSide.read){otherSide.read=true;otherSide.readUsed=now;return false;}
         var used=otherSide.readUsed;if(used==null)return true;
-        double slice=Math.min(other.clock.snapshot().cadenceTicks(),other.maximumSliceTicks)/20.0;
+        double slice=settings.time.seconds(Math.min(other.clock.snapshot().cadenceTicks(),other.maximumSliceTicks));
         return Math.abs(now.donor().temperature()-used.donor().temperature())>WAKE_TEMPERATURE
                 ||Math.abs(now.massFlow()-used.massFlow())>WAKE_FLOW*Math.abs(used.massFlow())
                 // A controller's bypass moves the flow through the cells as a flow change does (W4).
@@ -1280,7 +1287,7 @@ public final class IslandCoordinator {
     private void revalidate(Island island,IslandCertificate certificate) {
         island.certificate=null;island.revalidating=certificate;island.retained=new RetainedSolver();
         island.lastInterval=null;island.streak=0;
-        island.status="REVALIDATING: certificate horizon at "+certificate.horizonTick()/20.0+" s";island.signature=null;island.touch();FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.certificateWakes);
+        island.status="REVALIDATING: certificate horizon at "+SimulationTime.playSeconds(certificate.horizonTick())+" s";island.signature=null;island.touch();FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.certificateWakes);
         reconsider(island);
     }
     /**
@@ -1298,7 +1305,7 @@ public final class IslandCoordinator {
             island.lastInterval=null;island.streak=0;island.evidence=null;if(revalidation!=null)island.certifiedSince=-1;
             island.refusal=!policy.enabled()?null:accepted==null?"no accepted interval":"stopped or suspended";return;
         }
-        var summary=new IslandCertificate.Summary(new IslandCertificate.Interval(attempt.slice.startTick(),attempt.slice.endTick(),before,accepted.candidate().orElseThrow()),island.model.molecularWeights());
+        var summary=new IslandCertificate.Summary(new IslandCertificate.Interval(attempt.slice.startTick(),attempt.slice.endTick(),before,accepted.candidate().orElseThrow()),island.model.molecularWeights(),island.model.time());
         if(revalidation!=null) {
             var measured=IslandCertificate.stationarity(revalidation.summary(),summary);
             island.evidence=new Evidence(summary.endTick,measured,summary.drift());
@@ -1340,10 +1347,10 @@ public final class IslandCoordinator {
         return line.toString();
     }
     private static String certifiedStatus(Island island) {
-        var certificate=island.certificate;double since=island.certifiedSince/20.0;
+        var certificate=island.certificate;double since=SimulationTime.playSeconds(island.certifiedSince);
         // One certificate kind (BE_INTEGRATOR_PLAN.md section 4): the line names what it replays, and its recheck if it has one.
         String what=certificate.largestFlow()==0?"no flow":String.format(Locale.ROOT,"replaying %.4g kg/s",certificate.largestFlow());
-        String next=certificate.horizonTick()==Long.MAX_VALUE?"":String.format(Locale.ROOT,", next check at %.1f s",certificate.horizonTick()/20.0);
+        String next=certificate.horizonTick()==Long.MAX_VALUE?"":String.format(Locale.ROOT,", next check at %.1f s",SimulationTime.playSeconds(certificate.horizonTick()));
         return String.format(Locale.ROOT,"STEADY: %s since %.1f s%s",what,since,next)+island.notice;
     }
     private void schedule(long tick,IslandScheduler.Kind kind,long id,long generation) {
@@ -1385,7 +1392,7 @@ public final class IslandCoordinator {
                 side.record(new SideRecord(island.clock.committedTick(),stream(island.graph,island.lastResult.map(PassiveIntervalSolver.Result::endpointFlows).orElse(null),pipe,island.model),rate));
                 // Its last span from its last interval (a loaded island's; a certified one replays that interval's rate up to its committed
                 // tick): behind the fence the only span its other side may still read past its own start.
-                island.lastResult.ifPresent(last->{long end=island.clock.committedTick(),start=Math.max(0,end-Math.round(last.advancedSeconds()*20));if(end>start)side.book(start,end,heat(last,pipe));});
+                island.lastResult.ifPresent(last->{long end=island.clock.committedTick(),start=Math.max(0,end-Math.round(settings.time.ticks(last.advancedSeconds())));if(end>start)side.book(start,end,heat(last,pipe));});
             }
         }
     }

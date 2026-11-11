@@ -21,7 +21,7 @@ class ElectricStoreTest {
         assertEquals(32.15e3, rated, .01e3, "30 kW over the IE3 93.3 %");
         assertEquals(1.286e6, ElectricStore.capacity(rated), .001e6, "40 s of rated draw");
         assertEquals(514_000, ElectricStore.fe(ElectricStore.capacity(rated), JPF), 1000, "about 515,000 FE");
-        assertEquals(1286, ElectricStore.fe(ElectricStore.perTick(rated), JPF), 2, "twice the rated draw per tick: about 1,288 FE/t");
+        assertEquals(1286, ElectricStore.fe(ElectricStore.perTick(rated, com.wormzjl.icheme.science.fluid.SimulationTime.ONLINE), JPF), 2, "twice the rated draw per tick: about 1,288 FE/t");
         assertEquals(ElectricStore.capacity(rated) / 2, ElectricStore.restart(rated), 1e-6, "one slice of rated draw: half the buffer");
         assertTrue(ElectricStore.motorDraw(30e3, 2, true) > rated, "a variable-speed drive costs 3 %");
     }

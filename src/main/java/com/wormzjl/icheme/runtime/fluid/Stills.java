@@ -154,7 +154,7 @@ public final class Stills implements IslandCoordinator.Ports {
             var u=topology.still(node.id());var r=runs.get(node.id());if(u==null||r==null)continue;
             r.potIsland=island;
             promote(r,slice.startTick());
-            double heat=heat(u,r,node,slice.seconds());
+            double heat=heat(u,r,node,slice.seconds(coordinator.time()));
             var head=pool.head()==null?null:head(u,r,pool.head().components());
             var planned=pool.withFiring(heat).withHead(head);
             if(planned.equals(pool))continue;
@@ -244,7 +244,7 @@ public final class Stills implements IslandCoordinator.Ports {
         if(!(total>0)||mine==null)return new PortPlan(node.id(),node.id(),0,node.state().temperature(),com.wormzjl.icheme.science.fluid.solver.PhaseLayout.totalAmounts(node.state()));
         double temperature=r.solved==null?r.potTemperature:distillate?r.solved.condensateTemperature():r.solved.headTemperature();
         if(!(temperature>0))temperature=node.state().temperature();
-        double mass=mass(available),target=mass/Math.max(slice.seconds(),HOLD_SECONDS);
+        double mass=mass(available),target=mass/Math.max(slice.seconds(coordinator.time()),HOLD_SECONDS);
         return new PortPlan(node.id(),node.id(),target,temperature,mine);
     }
     /** The compounds outlet {@code device} may deliver: those its account holds (water not named), for its island's list. */
@@ -257,7 +257,7 @@ public final class Stills implements IslandCoordinator.Ports {
 
     @Override public void booked(long island,PassiveNetwork graph,long start,long end,PassiveIntervalSolver.Result result) {
         sync();if(runs.isEmpty()||end<=start)return;
-        double seconds=(end-start)/20.0;
+        double seconds=coordinator.time().seconds(end-start);
         Map<Long,double[]> arrived=null;Map<Long,Double> arrivedEnergy=null,potHeat=null,given=null;Map<Long,double[]> gifts=null;
         for(var b:result.boundaries()) {
             var kind=b.kind();
@@ -371,7 +371,7 @@ public final class Stills implements IslandCoordinator.Ports {
         if(r.transit<=HOLD_SECONDS*need){r.condensed=1;return;}
         double owed=0,first=Double.NaN;long from=now;
         for(var p:r.paid){if(p.tick()<now-FENCE_TICKS)continue;owed+=p.owed();if(Double.isNaN(first)&&!Double.isNaN(p.transit())){first=p.transit();from=p.tick();}}
-        double span=Math.max(1,(now-from)/20.0),took=Double.isNaN(first)?0:Math.max(0,owed-(r.transit-first));
+        double span=Math.max(1,coordinator.time().seconds(now-from)),took=Double.isNaN(first)?0:Math.max(0,owed-(r.transit-first));
         r.condensed=Math.max(0,Math.min(1,took/span/need));
         while(r.paid.size()>1&&r.paid.peekFirst().tick()<now-2*FENCE_TICKS)r.paid.removeFirst();
     }

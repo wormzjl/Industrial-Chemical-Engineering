@@ -19,8 +19,6 @@ public final class ElectricStore {
     public static final double RATE = 2;
     /** A generator delivers within this share of its rated speed either way (reading A64). */
     public static final double SPEED_WINDOW = .05;
-    /** Seconds per tick at the nominal 20 TPS. */
-    public static final double TICK_SECONDS = .05;
     /** Fan motors are 4-pole, one per fan (reading A70). */
     public static final int FAN_POLES = 4;
 
@@ -47,9 +45,9 @@ public final class ElectricStore {
         return BUFFER_SECONDS * Math.max(0, ratedDraw);
     }
 
-    /** The most its port takes or gives per tick, J: twice its rated draw over one tick. */
-    public static double perTick(double ratedDraw) {
-        return RATE * Math.max(0, ratedDraw) * TICK_SECONDS;
+    /** The most its port takes or gives per tick, J: twice its rated draw over the process seconds of one tick under {@code time}. */
+    public static double perTick(double ratedDraw, com.wormzjl.icheme.science.fluid.SimulationTime time) {
+        return RATE * Math.max(0, ratedDraw) * time.tickSeconds();
     }
 
     /** What its store must hold for a stopped unit to restart, J: one slice of its rated draw (reading A62). */
