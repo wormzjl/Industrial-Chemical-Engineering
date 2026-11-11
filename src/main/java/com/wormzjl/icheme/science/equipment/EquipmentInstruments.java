@@ -212,19 +212,40 @@ public final class EquipmentInstruments {
                 } else {
                     double length = shape.tangentLength();
                     boolean boot = shape.boot();
-                    // The two top flanges at the rear of the crown, beside each other as on a standing drum's roof (owner,
-                    // 2026-11-11: "these 2 should be placed on top of drums").
-                    for (int i = 0; i < 2; i++) {
-                        double pad = .16 * d, half = Math.min(.5, .175 * d), x = cx + (i == 0 ? -pad : pad);
-                        var tap = surface.ray(1, new double[] {x, 0, cz + .5 * length - half - .05}, 1, BODY);
-                        var lo = plus(tap, new double[] {-half, .08, -half});
-                        reserved.add(new Reservation(i == 0 ? "F1" : "F2", i == 0 ? "Gas blanketing valve" : "PSV", lo, plus(lo, new double[] {2 * half, 1.5, 2 * half})));
-                    }
                     double[] positions = {
                         cz + (boot ? .03 : -.2) * length,
                         cz + (boot ? .16 : 0) * length,
                         cz + (boot ? .28 : .2) * length
                     };
+                    // The two top flanges on the crown, beside each other as on a standing drum's roof (owner, 2026-11-11: "these 2
+                    // should be placed on top of drums"): at the rearmost cell centre along the shell that stands clear of the
+                    // top nozzles and, where the crown has room, of the probe stations (a valve's riser stands at a cell
+                    // centre, so its inlet's centre line runs through cell centres; behind the tangent line it would miss the drum).
+                    double pad = .16 * d, half = Math.min(.5, .175 * d), clear = half + .35;
+                    var busy = new ArrayList<double[]>();
+                    for (var nozzle : north.nozzles()) {
+                        var at = north.transform().point(nozzle.base());
+                        if (at[1] > (b[1] + b[4]) / 2) busy.add(new double[] {at[0], at[2]});
+                    }
+                    int nozzles = busy.size();
+                    for (double z : positions) busy.add(new double[] {cx, z});
+                    double last = Math.floor(cz + .5 * length - half - .55) + .5, station = Double.NaN;
+                    // First clear of nozzles and probes, then of the nozzles alone (a short drum's crown).
+                    for (int pass = 0; pass < 2 && Double.isNaN(station); pass++) {
+                        search:
+                        for (double z = last; z >= cz - .5 * length + half + .05; z--) {
+                            for (var o : busy.subList(0, pass == 0 ? busy.size() : nozzles))
+                                for (int i = 0; i < 2; i++) if (Math.hypot(o[0] - (cx + (i == 0 ? -pad : pad)), o[1] - z) < clear) continue search;
+                            station = z;
+                            break;
+                        }
+                    }
+                    if (Double.isNaN(station)) station = last;
+                    for (int i = 0; i < 2; i++) {
+                        var tap = surface.ray(1, new double[] {cx + (i == 0 ? -pad : pad), 0, station}, 1, BODY);
+                        var lo = plus(tap, new double[] {-half, .08, -half});
+                        reserved.add(new Reservation(i == 0 ? "F1" : "F2", i == 0 ? "Gas blanketing valve" : "PSV", lo, plus(lo, new double[] {2 * half, 1.5, 2 * half})));
+                    }
                     for (int i = 0; i < 3; i++)
                         points.add(
                                 top(

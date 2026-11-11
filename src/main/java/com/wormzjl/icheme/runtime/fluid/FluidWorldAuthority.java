@@ -947,8 +947,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
     }
     /**
      * Fits a closed vessel's gas blanketing valve, its gas inlet {@code port} (role {@code BLANKET}), or removes it
-     * ({@code port} null), as one queued ledger event (batch 2026-11-11-gas-blanketing). A fitted valve starts at the set
-     * pressure the vessel last had, or {@link FluidDeviceSpec#DEFAULT_BLANKET}. False for a device that takes no valve: one
+     * ({@code port} null), as one queued ledger event (batch 2026-11-11-gas-blanketing). A fitted valve starts at
+     * {@link FluidDeviceSpec#DEFAULT_BLANKET}; a removed one leaves no set pressure. False for a device that takes no valve: one
      * that is not a closed vessel, or whose inlet meets another of its ports.
      */
     public boolean blanketValve(long id,PhysicalFluidTopology.Port port) {

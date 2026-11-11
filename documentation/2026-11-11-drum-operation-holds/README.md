@@ -38,6 +38,7 @@ Owner, 2026-11-11: the drum-operation defects the time-factor batch (`2026-11-11
 
 ## Open items
 
+- 2026-11-11: defect 4 is answered by the gas blanketing valve (batch 2026-11-11-gas-blanketing): a blanketed drum passes the level loop on the standard start. Its direct start (from empty on the design feed) holds once the pad keeps the drum at pressure, the same drain as defect 1; it reproduces at factor 4 in three minutes (GAS_BLANKET_REVIEW.md, item 1).
 - Defect 1 open: the gas-vent setup hold (GAS_VENT_REVIEW.md, rows). Lead, not verified: the foot's BULK column fills the whole 6 m line to the void whatever the 1 L foot holds.
 - Close-out: the 200-seed quick check at factor 1 on the final code stands (`dh2`, on `9af97a3e6`; `src/` is unchanged since). Then the owner's merge steps.
 - Not explained: the held cases' 1.357e4 mol residual under (a) (reverted).

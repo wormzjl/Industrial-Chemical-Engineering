@@ -29,6 +29,10 @@ public class EngineeringExport {
   }
   var horizontal=ConstructorDefaults.sizes(VesselPlacement.Form.LENGTHWISE);double bd=horizontal.diameter(),bl=horizontal.length();int bs=EquipmentShape.minimumBootSupport(bd,bl);
   emit("LENGTHWISE_BOOT",EquipmentShape.drum(bd,bl,EquipmentShape.Orientation.HORIZONTAL,heading,bs,EquipmentShape.defaultConnections(bd,bl,EquipmentShape.Orientation.HORIZONTAL,bs,true),true));
+  // A standing and a lying drum with the gas blanketing valve on its first top flange (batch 2026-11-11-gas-blanketing).
+  for(var form:new VesselPlacement.Form[]{VesselPlacement.Form.VERTICAL,VesselPlacement.Form.LENGTHWISE}){var z=ConstructorDefaults.sizes(form);emit(form.name()+"_BLANKET",EquipmentShape.drum(z.diameter(),z.length(),form.orientation(),heading,EquipmentShape.defaultSupport(z.diameter(),form.orientation())));}
+  var small=EquipmentShape.drum(1.5,4,EquipmentShape.Orientation.HORIZONTAL,heading,EquipmentShape.defaultSupport(1.5,EquipmentShape.Orientation.HORIZONTAL));emit("LENGTHWISE_BLANKET_SMALL",small);
+  extra("GAS_BLANKETING_VALVE",ShapeRasterizer.blanketValve(small),false,false);
   var line=new LineGeometry.Key(com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.PIPE,5,48,PipeSizes.code(PipeSizes.outside(.15)),0,0,false);
   extra("INLINE_PUMP",InlineMoverGeometry.polygons(line,false,false),true,true);
   extra("INLINE_COMPRESSOR",InlineMoverGeometry.polygons(line,true,false),true,true);
@@ -57,6 +61,7 @@ public class EngineeringExport {
   if(!selected.isEmpty()&&!selected.contains(id)&&!selected.contains(s.kind().name()))return;
   var polygons=raw(s);var probePlan=EquipmentInstruments.of(s);var active=new HashSet<String>();for(var p:probePlan.probes())if(p.manual())active.add(p.id());var wiring=ShapeRasterizer.instrumentWiring(s,active,RenderDetail.NORMAL);polygons.addAll(wiring.polygons());
   for(var p:probePlan.probes())if(p.manual()||p.display())polygons.addAll(InstrumentGeometry.previewHead(p));
+  if(id.contains("_BLANKET"))polygons.addAll(ShapeRasterizer.blanketValve(s));
   if(!wiring.unresolved().isEmpty())throw new IllegalStateException(id+" has unresolved native instrument wiring: "+wiring.unresolved());
   System.out.println(id+" wiring "+wiring.runs().size()+" runs; unresolved="+wiring.unresolved());var data=base(id,polygons);data.put("instrumentPlan",probePlan);data.put("instrumentWiring",Map.of("runs",wiring.runs(),"unresolved",wiring.unresolved()));data.put("serviceEnclosures",ShapeRasterizer.services(s).enclosures());data.put("kind",s.kind().name());data.put("parameters",Map.of("size",s.diameter(),"length",s.tangentLength(),"support",s.support(),"orientation",s.orientation().name(),"heading",s.front().name(),"power_kw",s.duty().power()));
   data.put("axis",s.axis());if(s.kind()==EquipmentShape.Kind.TANK)data.put("planAxis",TankDesign.Plan.of(s.diameter(),(int)s.tangentLength()).a());if(s.kind()==EquipmentShape.Kind.SPHERE)data.put("planAxis",SphereDesign.Plan.of(s.diameter(),s.support()).a());

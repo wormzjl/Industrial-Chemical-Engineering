@@ -327,7 +327,7 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
     enum ValveSource { NONE, PRESSURE, MASS_FLOW, VOLUME_FLOW, SHAFT_SPEED, BURNER, FLARE, STILL, EJECTOR,
         /** A prime mover's fuel valve (batch 2026-11-10-prime-movers): on the run into its fuel void; the engine sets its mass target once per slice from its governor. */
         ENGINE,
-        /** A vessel's gas blanketing valve (batch 2026-11-11-gas-blanketing): on the run into its blanket gas port; the engine sets its mass target once per slice to the gas its vessel lacks at its set pressure ({@link GasBlanket#plan}). */
+        /** A vessel's gas blanketing valve (batch 2026-11-11-gas-blanketing): on the run into its blanket gas port; the interval solver sets its mass target at each step to the gas its vessel lacks at its set pressure ({@link GasBlanket#plan}). */
         BLANKET;
         /** Whether a valve of this source regulates its mass flow. */
         public boolean mass(){return this==MASS_FLOW||this==SHAFT_SPEED||this==BURNER||this==FLARE||this==STILL||this==EJECTOR||this==ENGINE||this==BLANKET;}
