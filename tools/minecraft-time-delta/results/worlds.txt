@@ -90,3 +90,7 @@ TRACE play=144s hotOut=340.130 K transit=5.071e+06 J hot=[FULL] cold=[FULL]
 TRACE play=146s hotOut=340.130 K transit=5.071e+06 J hot=[FULL] cold=[FULL]
 TRACE play=148s hotOut=340.130 K transit=5.071e+06 J hot=[FULL] cold=[FULL]
 TRACE play=150s hotOut=340.130 K transit=5.071e+06 J hot=[FULL] cold=[FULL]
+level_loop start level=24.82 % at tick 15093
+level_loop result factor=4 cycles=2 low=24.82 % high=62.47 % levelAtStep=50.00 % levelAtEnd=50.00 % held=null failure=null molesResidual=-2.619e-10 mol of 1.583e+07 mol energyResidual=-9.537e-07 J of 7.034e+11 J intervals=73 ticks=4658 unread=0 setupResidual=9
+level_loop start level=25.05 % at tick 59576
+level_loop result factor=72 cycles=2 low=25.05 % high=62.47 % levelAtStep=50.00 % levelAtEnd=50.00 % held=null failure=null molesResidual=-3.056e-10 mol of 1.621e+07 mol energyResidual=-0.0002186 J of 7.204e+11 J intervals=121 ticks=4750 unread=0 setupResidual

@@ -31,6 +31,7 @@ Owner, 2026-11-11: evaluate running the simulation on Minecraft time (72 process
 - 2026-11-11, W5 (`93985cfa5`): status lines say "s of play", the pump page shows its life left, the store's "Lasts" is play time. 155 tests.
 - 2026-11-11, W6: the quick checks at 1, 4 and 72, the campaign at 4 (clean equal to the 0.26.0 lane in every distribution; three new wall-deadline holds, clean alone), the column and heat-pair worlds for 1 h of process time at 4 and 72, the fluid GameTests at 4 (88 pass, after `FluidCheckpointGameTests`' restarted coordinator took the factor). Written up in TIME_SCALE_BUILD_REVIEW.md. Test-rig hooks: `EventPathWorld.time` and `ExchangerCouplingTest` on the model's factor (factor 1 unchanged; `ExchangerCouplingTest` passes).
 - 2026-11-11: owner "Keep both": the column's outlet buffer stays 24 cycles at every factor, and the heat sides' startup lag on unequal cadences stays as built. No code change.
+- 2026-11-11, W6 level loop (owner "Level-loop test first"): GameTest `LevelLoopGameTests` (a lying 1.5 m by 4 m drum holding two control cycles of its feed, LIC-1 on the cadence, 30 cycles with a +50 % feed step) passes at 4 in the fluid GameTests (89 pass, run `levelloopfinal4`) and at 72 as the tool run `tools/minecraft-time-delta/level-loop/run.sh 72` (2 of 2 on the final code): level 25 to 65 %, closure to round-off. Two cycles suffice. Four engine findings recorded in TIME_SCALE_BUILD_REVIEW.md section 4.
 
 ## Code areas
 
@@ -41,7 +42,7 @@ Changed in W1-W5: `science/fluid/SimulationTime` (new), `FluidThermodynamics`, `
 - Decided: T1-T6 of TIME_SCALE_PLAN.md section 3. Built: W1-W6. Open: W7 and the merge.
 - Decided (owner "Keep both", 2026-11-11; TIME_SCALE_BUILD_REVIEW.md section 6, option a of 1 and 2): the column's outlet buffer keeps its cycle counts (2.4 h of production at 72); the heat-coupling startup lag on unequal cadences is accepted.
 - Open before a merge: whether the checkpoint's optional package field `TimeScale` (absent = 1) needs a corpus image under `src/test/resources/compat/`.
-- Not built: the level loop on a drum (needs a server; no GameTest builds one).
+- Level loop on a drum: passes at 4 and 72 with two cycles. Open, for their own batches (TIME_SCALE_BUILD_REVIEW.md section 4): the line-search hold of a large feed step into a near-empty drum at 4; the vertical drum's level mount blocked by its own vapour nozzle; a liquid-full drum that cannot drain (its vent void gives no gas back); the setup's unbooked 10 to 65 mol in the island's book.
 - Decided: `HOLDUP_TAU` scales with the factor, alone (owner "Holdup only"). Option A is dropped; the tolerance change stays an option in OPTION_A_REVIEW.md.
 - Not traced: bundled 15's last cause under the larger buffer; cold 6 and 183, new under it.
 - Hold classes the longer process time reaches, for their own batches: bundled 47 (liquid drying out in a gas tank), 164 (gas vanishing in a water junction), cold 72 (non-finite fugacity derivative at 111 K).
