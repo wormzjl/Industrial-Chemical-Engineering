@@ -639,12 +639,39 @@ public final class FluidThermodynamics {
         double h=com.wormzjl.icheme.science.column.v3.thermo.V3WaterProperties.vaporMolarEnthalpy(water,at);
         return at==t?h:h+com.wormzjl.icheme.science.column.v3.thermo.V3WaterProperties.dVaporMolarEnthalpyDT(water,at)*(t-at);
     }
-    /** Utility water's saturation pressure at {@code t} (Pa), the package's water record: steam services and ejectors. Not a
-     * network phase rule since W3b. */
+    /**
+     * Pure water's saturation pressure at {@code t} (Pa): steam services, ejectors, the cooling tower's air and the
+     * condensate a kettle leaves. On a model with water it is the model's own curve ({@link WaterSaturation}, built once
+     * for the whole model on the first read), so a state built at saturation is the phase the flash calls it (W3b, G2a:
+     * Wagner-Pruss stood up to 0.43 K off the cubic's between 100 and 220 bar); on a dry model the package's water
+     * record's Wagner-Pruss, continued past its ends. Infinite at and above the critical temperature.
+     */
     public double saturationPressure(double t) {
-        // Wagner-Pruss continued past its ends (a data range never refuses), infinite above the critical temperature.
         if(!Double.isFinite(t))throw new IllegalArgumentException("Non-finite water temperature");
+        var curve=whole.waterSaturation();
+        if(curve!=null)return curve.pressure(t);
         return t>=water.criticalTemperature()?Double.POSITIVE_INFINITY:com.wormzjl.icheme.science.column.v3.thermo.V3WaterProperties.wagnerPruss(water,t);
+    }
+    /** The temperature whose {@link #saturationPressure} is {@code p} (Pa), K: the saturation a state at {@code p} is built at. */
+    public double saturationTemperature(double p) {
+        var curve=whole.waterSaturation();
+        if(curve!=null)return curve.temperature(p);
+        if(!(p>0))throw new IllegalArgumentException("Positive pressure required");
+        double low=1,high=water.criticalTemperature();
+        while(high-low>1e-9){double middle=0.5*(low+high);if(saturationPressure(middle)>=p)high=middle;else low=middle;}
+        return high;
+    }
+    /** The whole model's water saturation curve, built on first use; null on a dry model. */
+    private volatile WaterSaturation waterSaturation;
+    private WaterSaturation waterSaturation() {
+        if(!hydrocarbon.wet())return null;
+        var curve=waterSaturation;
+        if(curve!=null)return curve;
+        synchronized(this) {
+            if(waterSaturation==null)waterSaturation=new WaterSaturation(hydrocarbon,hydrocarbon.componentCount(),water.triplePoint(),water.criticalTemperature(),
+                    t->com.wormzjl.icheme.science.column.v3.thermo.V3WaterProperties.wagnerPruss(water,t));
+            return waterSaturation;
+        }
     }
 
     /**
