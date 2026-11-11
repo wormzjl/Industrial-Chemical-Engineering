@@ -344,3 +344,35 @@ Suction head available at 10 L/s under 1 m of liquid (NPSH3 1.68 m), by section 
 - What the code does: once the vent's hydraulic flow exceeds the gas capacity of the step (start gas plus boil-up), the gas is pinned and the liquid carries the rest; the space then flashes and the gas regrows, so about 21 kg/s of liquid leaves through the top port with 0.48 m3 of vapour above the pool (8.14 kg/s reported).
 - Decided (orchestrator; no owner rule moves): a phase the end state still holds is the marginal phase; a phase drawn whole is pinned at what the step could supply, its start holdup plus what forms or arrives within the step. The boil-up was already in that capacity (heat exchanger batch); the feed joins it. Without the feed (measured) a fed tank drains its water only every few slices (86 and 676 boundary reopens). A special case for top ports was rejected.
 - Pass conditions: the kettle at 0.443 kg/s; the two fed-drain tests steady; port ledgers closed at 1e-12; no new failure.
+
+**Fed water under the port rule (2026-11-11).** Built without "remaining > capacity": the kettle passes and the port ledgers close (2e-15 to 8e-14), but the two fed-drain tests fail (24 and 104 boundary reopens against 1 and 1). Once a step draws the start's water whole, the next step starts with no liquid water; the 0.002 kg/s fed within the step could be neither pinned (the start gives no composition to draw it at) nor added as a liquid, and the accepted end states held it as vapour about 2,000 times over saturation (12.9 kPa of water at 194 K against 0.15 Pa) while the tank cooled from 298 to 187 K. Decided: a phase that arrives within the step counts as one the step started with. Pin condition: the seed no longer holds the phase, its capacity (start holdup plus arrivals and boil-up) is finite and positive, and a later phase can take the rest. A pinned phase's stream is the total the step could supply, the start's phase and the arrival's together; the arrival's alone where the start holds none. The supersaturated accepted states are a second defect, to be traced in the phase check whatever the port does.
+
+## 19. Section 17's six cases, and the vapour pressure definition (2026-11-11)
+
+Section 17's removals 1 and 2, the clean zone and the form switch are committed (`e3238449d`); groups 6 and 7 as `db3f14d3c` and `754732f66`. Measured by the sub-thread (10 L/s, 1 m of liquid over the pump, NPSH3 1.68 m; limit under forms 0 / G / T):
+
+| Case | p_v, condensables | p at vapour share 1/2 | Zone edge E | Limit 0 / G / T |
+|---|---|---|---|---|
+| Water under nitrogen, 1 atm, 298 K | 3.18 kPa | 4.72 kPa | 69.9 kPa | 17.1 / 69.9 / 17.1 kPa |
+| Water under carbon dioxide, 1 atm, 298 K | 101.3 kPa | 47.5 kPa | 100.1 kPa | 115.3 kPa, all forms (starved) |
+| Dead oil under nitrogen, 1 atm | 1.7 Pa | 11.8 kPa | 94.1 kPa | 113.5 / 94.1 / 12.1 kPa |
+| Separator liquid, 10 bar, 310 K | 203 kPa | 632 kPa | 940 kPa | 1008 / 940 / 212 kPa |
+| LNG at its bubble point, 111.8 K | 93.7 kPa | 89.7 kPa | 93.7 kPa | 100.2 kPa, all forms (starved) |
+| Propane drum, 298 K | 952 kPa | 850 kPa | 941 kPa | 959 kPa, all forms (starved) |
+
+Sigma at the limit under form G: 4.06 (water under nitrogen), 6.59 (dead oil), 73.7 (separator liquid), so a pump starved by released gas does not wear. Vapour pressure: the condensables definition is kept (orchestrator's default, open to the owner). The half-share definition puts a boiling liquid 4 to 11 % under its bubble pressure (propane 850 against 952 kPa), which gives a boiling-liquid pump 21 m of suction head it does not have. The condensables definition treats a gas dissolved below its critical temperature (carbon dioxide in water at 25 C) as vapour pressure, so that liquid counts as at its bubble point, as a rich solvent is treated in design; it jumps at the critical temperature (carbon dioxide at 304 K).
+
+## 20. Cooling tower: any liquid, every compound evaporates (owner, 2026-11-11; proposed, not built)
+
+Owner: "Remove cooling tower composition requirement, allow evaporation of non-water compounds".
+
+- Expected: air passing a warm liquid takes up every volatile compound in proportion to its partial pressure over the liquid, and the latent heat cools the liquid. Water with 10 mol % ethanol at 35 C stands at about 4.6 kPa of ethanol beside 5.2 kPa of water (rough, activity coefficient 3 to 3.5): ethanol leaves about as fast as water by moles, 2.3 times by mass.
+- What the code does: a spray inlet takes a stream only if its liquid is water alone (`TowerExchange.liquidWater`); anything else closes the inlet with `WATER_ONLY`. The fill is Merkel's rating on water's saturation curve, a constant water heat capacity, and one loss, water (`Rates.waterLoss`).
+- Proposal:
+  - No stream is refused. Gas and carried solids pass to the basin as the gas does now; every liquid feeds the fill.
+  - "Saturated air at the liquid" holds every compound at its partial pressure `x_i phi_i P` from the equation of state. Per fill call the engine is read at two temperatures (the inlet and the wet bulb); between them `ln p_i` is linear in `1/T` and the liquid's heat capacity constant, so the searches inside the fill cost what they cost today.
+  - The air moves straight towards that saturated state (Lewis number one, as now), for each compound; a compound's loss is at most what the stream brings (dissolved nitrogen strips whole).
+  - The loss becomes one rate per component, booked by the ledger per component; the energy each carries is its vapour enthalpy on the model's own datum, so the basin's balance closes.
+  - A liquid that boils at the atmosphere has no air contact (status word); its vapour leaves by the basin's flash and vent. Near boiling the saturated content is continued, not divided by zero.
+  - Water alone goes through the same path: references move by the difference between the cubic's water curve and today's (about 0.15 % in saturation pressure at 25 C).
+- Composition along the fill is the inlet's (evaporation is a small share of the flow); the cap above keeps a trace solute from going negative.
