@@ -349,3 +349,44 @@ PROBE_DUMP ATTEMPTS duration=0.1 elapsed=0.03685770034790034 accepted=503 reject
   |   pipe 1 0->3 mode=PASSIVE q0=0.0 q=469.7199810022359
   |   pipe 2 2->0 mode=VALVE_REGULATING q0=79.24323856983767 q=79.24323856983767
   |   pipe 3 1->2 mode=PASSIVE q0=79.24323856983771 q=79.24323856983771
+
+== gas-vent hold without the starved-valve rule (2026-11-11, owner "Yes, run it"): LEVEL_LOOP_OPTS="-Dicheme.levelLoop.generatorVent=true -Dicheme.probe.failures=true" run.sh 1, fresh world, probe on, InletPhase.starved returning false (both reverted)
+level_loop probe setup step factor-4 feed placed, sized, valves queued, charged tick=37
+level_loop probe setup step factor-4 feed feed law and 3 bar charge tick=38
+level_loop probe step factor-4 feed factor=1 capacity=7.952 m3 cycle=5.000 s feed=198.1 kg/s first=19.81 kg/s
+level_loop probe timing step factor-4 feed slice start=37 end=38 dispatched=38 levelTarget=0.01000 m3/s
+level_loop probe result case="step factor-4 feed" factor=1 feed=198.1 kg/s held=clean failure=timed out waiting two cadences level=Infinity to -Infinity % setupResidual=NaN mol NaN J endResidual=7.346 mol -3.197e+05 J of 1896 mol through endLevel=0.1190 %
+level_loop probe setup step rule feed placed, sized, valves queued, charged tick=2460
+level_loop probe setup step rule feed feed law and 3 bar charge tick=2461
+level_loop probe step rule feed factor=1 capacity=7.952 m3 cycle=5.000 s feed=792.4 kg/s first=79.24 kg/s
+level_loop probe timing step rule feed slice start=2460 end=2461 dispatched=2461 levelTarget=0.01000 m3/s
+fluid_island=23 committed_tick=39 status=HELD: round deadline or worker failure
+level_loop probe result case="step rule feed" factor=1 feed=792.4 kg/s held=clean failure=timed out waiting two cadences level=Infinity to -Infinity % setupResidual=NaN mol NaN J endResidual=7.346 mol -3.197e+05 J of 2198 mol through endLevel=0.1888 %
+level_loop probe setup empty factor-4 feed placed, sized, valves queued, charged tick=4946
+level_loop probe setup empty factor-4 feed feed law and 3 bar charge tick=4947
+level_loop probe empty factor-4 feed factor=1 capacity=7.952 m3 cycle=5.000 s feed=198.1 kg/s first=198.1 kg/s
+level_loop probe timing empty factor-4 feed slice start=4947 end=4948 dispatched=4948 levelTarget=0.01000 m3/s
+fluid_island=46 committed_tick=2462 status=HELD: round deadline or worker failure
+level_loop probe result case="empty factor-4 feed" factor=1 feed=198.1 kg/s held=clean failure=timed out waiting two cadences level=Infinity to -Infinity % setupResidual=NaN mol NaN J endResidual=0.000 mol 0.000 J of 0.000 mol through endLevel=0.3948 %
+fluid_island=69 committed_tick=4948 status=HELD: round deadline or worker failure
+level_loop result factor=1 cycles=2 low=Infinity % high=-Infinity % levelAtStep=NaN % levelAtEnd=NaN % held=null failure=timed out waiting for the drum to hold 25.0 % on the design feed molesResidual=-3.260e-09 mol of 2.789e+07 mol energyResidual=-5.722e-06 J of 1.239e+12 J intervals=153 ticks=7158 unread=0 setupResidual=0.000 mol 0.000 J
+level_loop probe setup empty rule feed placed, sized, valves queued, charged tick=14570
+level_loop probe setup empty rule feed feed law and 3 bar charge tick=14571
+level_loop probe empty rule feed factor=1 capacity=7.952 m3 cycle=5.000 s feed=792.4 kg/s first=792.4 kg/s
+level_loop probe timing empty rule feed slice start=14570 end=14571 dispatched=14571 levelTarget=0.01000 m3/s
+level_loop probe timing empty rule feed slice start=14578 end=14586 dispatched=14615 levelTarget=0.000 m3/s
+level_loop probe timing empty rule feed slice start=14602 end=14634 dispatched=14700 levelTarget=0.4253 m3/s
+level_loop probe timing empty rule feed slice start=14634 end=14698 dispatched=14800 levelTarget=0.7030 m3/s
+level_loop probe timing empty rule feed slice start=14898 end=14998 dispatched=14998 levelTarget=1.042 m3/s
+level_loop probe timing empty rule feed slice start=14998 end=15088 dispatched=15088 levelTarget=1.081 m3/s
+level_loop probe timing empty rule feed slice start=15088 end=15178 dispatched=15178 levelTarget=0.9419 m3/s
+level_loop probe result case="empty rule feed" factor=1 feed=792.4 kg/s held=clean failure=null level=33.19 to 39.96 % setupResidual=7.346 mol -3.197e+05 J endResidual=7.346 mol -3.197e+05 J of 2.546e+06 mol through endLevel=33.19 %
+last outlet readings before the holds (the same with the rule):
+     24 empty factor-4 readingTick=4948 level=0.3948 liquid=0.003014 m3 outletReading=0.8006
+      1 empty rule readingTick=14574 level=2.049 liquid=0.03607 m3 outletReading=0.7714
+      2 empty rule readingTick=14602 level=19.51 liquid=1.059 m3 outletReading=0.000
+      1 empty rule readingTick=14798 level=35.33 liquid=2.486 m3 outletReading=0.7029
+      1 empty rule readingTick=14898 level=39.96 liquid=2.947 m3 outletReading=0.7029
+      1 empty rule readingTick=15088 level=34.27 liquid=2.383 m3 outletReading=0.8288
+     24 step factor-4 readingTick=39 level=0.1190 liquid=0.0004962 m3 outletReading=1.500
+     24 step rule readingTick=2462 level=0.1888 liquid=0.0009935 m3 outletReading=2.018
