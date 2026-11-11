@@ -9,13 +9,18 @@ package com.wormzjl.icheme.science.fluid;
  * wall budget, "since" and "next check at". Process time is what the physics integrates: a solved interval's seconds,
  * a flow over a slice, a duty's joules, a pump's wear, a fuel's burn. Only process durations pass through
  * {@link #seconds}; a schedule quantity stays in ticks. {@link #ONLINE} (factor 1) is the engine's own default (tests,
- * harnesses, a model built without the setting), and at it every conversion is bit-identical to {@code ticks / 20.0}.
+ * a model built without the setting), and at it every conversion is bit-identical to {@code ticks / 20.0}.
  */
 public record SimulationTime(int factor) {
     /** Online ticks per play second at the nominal 20 TPS. */
     public static final int TICKS_PER_SECOND = 20;
     /** The factor range the setting accepts: 1 (process time is play time) to 72 (a Minecraft day is 24 h). */
     public static final int MINIMUM_FACTOR = 1, MAXIMUM_FACTOR = 72;
+    /**
+     * The server setting's default ({@code fluid.timeScale}), and so the factor a player's world runs at: the hold-fuzz
+     * harnesses default to it too (batch 2026-11-11-valve-followups, item 5).
+     */
+    public static final int DEFAULT_FACTOR = 4;
     /** The engine's own default: process time is play time. */
     public static final SimulationTime ONLINE = new SimulationTime(1);
 

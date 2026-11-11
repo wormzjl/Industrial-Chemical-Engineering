@@ -18,7 +18,8 @@ gradle.projectsEvaluated {
         systemProperty 'holdFuzz.strict', root.findProperty('holdFuzzStrict') ?: 'false'
         systemProperty 'holdFuzz.defaults', root.findProperty('holdFuzzDefaults') ?: 'false'
         systemProperty 'holdFuzz.counters', root.findProperty('holdFuzzCounters') ?: 'false'
-        systemProperty 'holdFuzz.timeScale', root.findProperty('holdFuzzTimeScale') ?: '1'
+        // -PholdFuzzTimeScale=<1..72>: the time factor; unset, HoldFuzzTest takes the game's default (SimulationTime.DEFAULT_FACTOR, 4).
+        if (root.findProperty('holdFuzzTimeScale')) systemProperty 'holdFuzz.timeScale', root.findProperty('holdFuzzTimeScale')
         systemProperty 'holdFuzz.pipeBetween', root.findProperty('holdFuzzPipeBetween') ?: 'true'
         systemProperty 'holdFuzz.out', root.findProperty('holdFuzzOut') ?: new File(here, 'logs/report.txt').absolutePath
         testLogging { showStandardStreams = true }
