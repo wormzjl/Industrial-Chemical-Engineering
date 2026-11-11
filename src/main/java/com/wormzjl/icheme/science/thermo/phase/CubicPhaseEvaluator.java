@@ -237,7 +237,7 @@ public final class CubicPhaseEvaluator {
             this.owner = owner;
             terms = owner.eos.newWorkspace();
             mixture = owner.eos.kernel().newWorkspace();
-            mixtureDerivatives = owner.eos.kernel().newDerivatives();
+            mixtureDerivatives = owner.eos.kernel().newDerivativesWithoutHeatCapacity();
             composition = new double[owner.names.size()];
             idealGibbs = new double[owner.names.size()];
             shareScratch = owner.waterShare == null ? null : owner.waterShare.newWorkspace();

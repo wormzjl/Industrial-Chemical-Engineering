@@ -238,6 +238,8 @@ public final class TranslatedPengRobinson {
         private final double[] heatCapacity,enthalpy;
         private final double[] rootDt,rootDt2,crossDt;
         private double temperature=Double.NaN;
+        /** Bumped by every preparation and evaluation: the values' second-derivative terms read the mixture it stamps. */
+        private long generation;
         private Workspace(TranslatedPengRobinson owner) {
             this.owner=owner;int count=owner.components.size();
             mixture=owner.kernel.newWorkspace();evaluation=owner.kernel.newEvaluation();values=new Values(count);
@@ -262,18 +264,40 @@ public final class TranslatedPengRobinson {
         /** The phase identification inputs of the evaluated root: its untranslated volume and the mixture a, b, da/dT. */
         private double temperature,untranslatedVolume,attraction,coVolume,attractionTemperatureDerivative;
         private int physicalRootCount;
+        /**
+         * The terms c_p and d2v/dT2 add to on d2a/dT2, which only they read: formed on the first read from the mixture
+         * the evaluation left in its workspace ({@link #secondOrder}), so an evaluation that reads neither skips it.
+         */
+        private Workspace source;
+        private long generation;
+        private boolean secondFormed;
+        private double heatCapacityBase,heatCapacityTail,logTerm,dpdv,denominator,dpdtv,dpdvv;
         private Values(int count) {
             logFugacityCoefficients=new double[count];partialMolarVolumes=new double[count];
+        }
+        private void secondOrder() {
+            if(secondFormed)return;
+            if(source.generation!=generation)throw new IllegalStateException("The workspace was evaluated again since these values");
+            Workspace w=source;
+            double dda=w.owner.kernel.mixtureSecondTemperatureDerivative(w.mixture,w.rootDt,w.rootDt2,w.crossDt);
+            double dvdt=volumeTemperatureDerivative;
+            // The operations of the closed form, in its order: the same double as forming it at once.
+            double t=temperature,b=coVolume;
+            double cp=heatCapacityBase+t*dda/(2*SQRT_TWO*b)*logTerm+heatCapacityTail;
+            if(!(w.owner.residualOnly||cp>0)||!Double.isFinite(cp))throw new IllegalArgumentException("Invalid translated phase properties");
+            heatCapacity=cp;
+            volumeSecondTemperatureDerivative=-(-dda/denominator+2*dpdtv*dvdt+dpdvv*dvdt*dvdt)/dpdv;
+            secondFormed=true;
         }
         public double molarVolume(){return molarVolume;}
         public double molarEnthalpy(){return molarEnthalpy;}
         public double molarInternalEnergy(){return molarInternalEnergy;}
         public double volumeTemperatureDerivative(){return volumeTemperatureDerivative;}
         public double volumePressureDerivative(){return volumePressureDerivative;}
-        public double heatCapacity(){return heatCapacity;}
+        public double heatCapacity(){secondOrder();return heatCapacity;}
         public double enthalpyPressureDerivative(){return enthalpyPressureDerivative;}
         public double isothermalCompressibility(){return isothermalCompressibility;}
-        public double volumeSecondTemperatureDerivative(){return volumeSecondTemperatureDerivative;}
+        public double volumeSecondTemperatureDerivative(){secondOrder();return volumeSecondTemperatureDerivative;}
         public double compressibility(){return compressibility;}
         /** The ideal-gas half of {@link #heatCapacity()}; the residual half is the kernel's dH^R/dT. */
         public double idealGasHeatCapacity(){return idealGasHeatCapacity;}
@@ -296,6 +320,7 @@ public final class TranslatedPengRobinson {
         public double untranslatedVolume(){return untranslatedVolume;}
         public double coVolume(){return coVolume;}
         private Phase phase() {
+            secondOrder();
             return new Phase(molarVolume,molarEnthalpy,molarInternalEnergy,volumeTemperatureDerivative,
                     volumePressureDerivative,heatCapacity,enthalpyPressureDerivative,isothermalCompressibility,
                     logFugacityCoefficients.clone(),volumeSecondTemperatureDerivative,
@@ -338,6 +363,7 @@ public final class TranslatedPengRobinson {
         // three matrices did; only the composition-weighted sums below are per evaluation.
         kernel.prepareRootDerivatives(temperature,workspace.mixture,workspace.rootDt,workspace.rootDt2);
         workspace.temperature=temperature;
+        workspace.generation++;
     }
 
     /** {@link #evaluate} without the record and its two
@@ -368,7 +394,6 @@ public final class TranslatedPengRobinson {
                       PengRobinsonKernel.Evaluation evaluation,Values out) {
         double[] x=workspace.mixture.compositionView(),attractionRows=workspace.mixture.attractionRowsView();
         double a=evaluation.aMix(),b=evaluation.bMix(),da=evaluation.daMixDt();
-        double dda=kernel.mixtureSecondTemperatureDerivative(workspace.mixture,workspace.rootDt,workspace.rootDt2,workspace.crossDt);
         double shift = 0, idealH = 0, idealCp = 0;
         for (int i = 0; i < x.length; i++) {
             shift += x[i] * translations[i];
@@ -384,13 +409,12 @@ public final class TranslatedPengRobinson {
         double dpdvv = 2*R*temperature/((v-b)*(v-b)*(v-b)) + 2*a/(denominator*denominator)
                 - 8*a*(v+b)*(v+b)/(denominator*denominator*denominator);
         double dpdtv = -R/((v-b)*(v-b)) + 2*da*(v+b)/(denominator*denominator);
-        double dvdtt = -(-dda/denominator + 2*dpdtv*dvdt + dpdvv*dvdt*dvdt)/dpdv;
         double physicalV = v + shift;
         double log = DeterministicMath.log((v+(1+SQRT_TWO)*b)/(v+(1-SQRT_TWO)*b));
         double h=idealH+evaluation.residualEnthalpyJoulesPerMol()+pressure*shift;
         double dlogdv = 1/(v+(1+SQRT_TWO)*b) - 1/(v+(1-SQRT_TWO)*b);
-        double cp = idealCp + pressure*dvdt - R + temperature*dda/(2*SQRT_TWO*b)*log
-                + (temperature*da-a)/(2*SQRT_TWO*b)*dlogdv*dvdt;
+        // c_p = (the terms below) + T log/(2 sqrt2 b) d2a/dT2; the last term is formed when read (Values.secondOrder).
+        double cpBase = idealCp + pressure*dvdt - R, cpTail = (temperature*da-a)/(2*SQRT_TWO*b)*dlogdv*dvdt;
         double dhdp = physicalV - temperature*dvdt;
         double[] logPhi = out.logFugacityCoefficients;
         double[] partialVolumes = out.partialMolarVolumes;
@@ -403,14 +427,17 @@ public final class TranslatedPengRobinson {
             partialVolumes[i]=v-pressureCompositionDerivative/dpdv+translations[i];
             if(!Double.isFinite(logPhi[i])||!Double.isFinite(partialVolumes[i]))throw new IllegalArgumentException("Nonfinite chemical-potential derivative");
         }
-        if (!(physicalV > 0) || !(residualOnly || cp > 0) || !Double.isFinite(h) || !Double.isFinite(cp)
+        if (!(physicalV > 0) || !Double.isFinite(h) || !Double.isFinite(cpBase + cpTail)
                 || !Double.isFinite(dvdp) || !Double.isFinite(dvdt) || !Double.isFinite(dhdp)) {
             throw new IllegalArgumentException("Invalid translated phase properties");
         }
         out.molarVolume=physicalV;out.molarEnthalpy=h;out.molarInternalEnergy=h-pressure*physicalV;
-        out.volumeTemperatureDerivative=dvdt;out.volumePressureDerivative=dvdp;out.heatCapacity=cp;
+        out.volumeTemperatureDerivative=dvdt;out.volumePressureDerivative=dvdp;
         out.enthalpyPressureDerivative=dhdp;out.isothermalCompressibility=-dvdp/physicalV;
-        out.volumeSecondTemperatureDerivative=dvdtt;out.compressibility=z;out.idealGasHeatCapacity=idealCp;
+        out.compressibility=z;out.idealGasHeatCapacity=idealCp;
+        out.source=workspace;out.generation=++workspace.generation;out.secondFormed=false;
+        out.heatCapacityBase=cpBase;out.heatCapacityTail=cpTail;out.logTerm=log;
+        out.dpdv=dpdv;out.denominator=denominator;out.dpdtv=dpdtv;out.dpdvv=dpdvv;
         out.temperature=temperature;out.untranslatedVolume=v;out.attraction=a;out.coVolume=b;out.attractionTemperatureDerivative=da;
         out.physicalRootCount=evaluation.physicalRootCount();
     }

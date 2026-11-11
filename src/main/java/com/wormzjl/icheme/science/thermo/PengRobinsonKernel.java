@@ -375,7 +375,13 @@ public final class PengRobinsonKernel {
                 cellPartner.length);
     }
     public Evaluation newEvaluation() { return new Evaluation(count); }
-    public Derivatives newDerivatives() { return new Derivatives(count); }
+    /** A derivative output that carries {@code dh^R/dT} (and so forms the second temperature derivative it reads). */
+    public Derivatives newDerivatives() { return new Derivatives(count, true); }
+    /**
+     * A derivative output without {@code dh^R/dT}: an evaluation skips the second temperature derivative, which nothing
+     * else reads (on a kernel with NRTL pairs, all of it; otherwise only the scalar sum), and reading it throws.
+     */
+    public Derivatives newDerivativesWithoutHeatCapacity() { return new Derivatives(count, false); }
 
     /** Wilson K initialisation only; accepted states use rigorous fugacity refreshes. */
     public void wilsonK(double temperatureKelvin, double pressurePascal, double[] output) {
@@ -740,9 +746,11 @@ public final class PengRobinsonKernel {
         double upper = z + (1.0 - SQRT_TWO) * reducedB;
         double logRatio = DeterministicMath.log(lower / upper);
         double attraction = reducedA / (2.0 * SQRT_TWO * Math.max(reducedB, 1.0e-300));
-        double secondDaDt = secondTemperatureDerivative(
-                temperatureKelvin, workspace, output.rootDt, output.rootDt2, output.crossDt);
         boolean exponential = excess;
+        // d^2a/dT^2 is read only by dh^R/dT; the root and cross vectors it fills only by the quadratic rows' dS_i/dT.
+        double secondDaDt = output.heatCapacity || !exponential
+                ? secondTemperatureDerivative(temperatureKelvin, workspace, output.rootDt, output.rootDt2, output.crossDt)
+                : Double.NaN;
         if (exponential) differentiateExcess(temperatureKelvin, workspace);
         double reducedADt = reducedA * (daDt / a - 2.0 / temperatureKelvin);
         double reducedBDt = -reducedB / temperatureKelvin;
@@ -786,7 +794,8 @@ public final class PengRobinsonKernel {
                         + attraction * output.attractionRatio[i] * logRatioDn);
             }
         }
-        output.dResidualEnthalpyDt = GAS_CONSTANT * (z - 1.0) + GAS_CONSTANT * temperatureKelvin * zDt
+        output.dResidualEnthalpyDt = !output.heatCapacity ? Double.NaN
+                : GAS_CONSTANT * (z - 1.0) + GAS_CONSTANT * temperatureKelvin * zDt
                 + temperatureKelvin * secondDaDt / (2.0 * SQRT_TWO * b) * logRatio
                 + (temperatureKelvin * daDt - a) / (2.0 * SQRT_TWO * b) * logRatioDt;
         for (int i = 0; i < count; i++) {
@@ -1668,9 +1677,11 @@ public final class PengRobinsonKernel {
         private final double[] crossDt;
         private final double[] coVolumeRatio;
         private final double[] attractionRatio;
+        private final boolean heatCapacity;
         private double dResidualEnthalpyDt;
 
-        private Derivatives(int count) {
+        private Derivatives(int count, boolean heatCapacity) {
+            this.heatCapacity = heatCapacity;
             evaluation = new Evaluation(count);
             dLogPhiDt = new double[count];
             dLogPhiDn = new double[count][count];
@@ -1694,7 +1705,10 @@ public final class PengRobinsonKernel {
         public double[] dLogPhiDtView() { return dLogPhiDt; }
         public double[] partialMolarResidualEnthalpy() { return partialMolarResidualEnthalpy.clone(); }
         public double[] partialMolarResidualEnthalpyView() { return partialMolarResidualEnthalpy; }
-        public double dResidualEnthalpyDt() { return dResidualEnthalpyDt; }
+        public double dResidualEnthalpyDt() {
+            if (!heatCapacity) throw new IllegalStateException("This derivative output does not carry dh^R/dT");
+            return dResidualEnthalpyDt;
+        }
     }
 
     public record RootSelection(double selectedCompressibility, int physicalRootCount, double rootSeparation) {}

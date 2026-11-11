@@ -874,8 +874,8 @@ public final class FluidTpEquilibrium {
             hessian = new double[n * n];
             factor = new double[n * n];
             direction = new double[n];
-            vaporDerivatives = owner.kernel.newDerivatives();
-            liquidDerivatives = owner.kernel.newDerivatives();
+            vaporDerivatives = owner.kernel.newDerivativesWithoutHeatCapacity();
+            liquidDerivatives = owner.kernel.newDerivativesWithoutHeatCapacity();
             gasState = new PhaseState(owner.basis);
             waterState = new PhaseState(1);
             gasComposition = new double[owner.basis];
@@ -7142,7 +7142,7 @@ public final class FluidTpEquilibrium {
             newtonStep = new double[dimension];
             newtonScale = new double[dimension];
             for (int k = 0; k < SLOT_COUNT; k++) {
-                derivatives[k] = owner.kernel.newDerivatives();
+                derivatives[k] = owner.kernel.newDerivativesWithoutHeatCapacity();
                 states[k] = owner.evaluator.newState();
             }
         }

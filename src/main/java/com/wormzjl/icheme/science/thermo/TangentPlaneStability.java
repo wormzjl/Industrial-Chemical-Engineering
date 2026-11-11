@@ -746,7 +746,7 @@ public final class TangentPlaneStability {
             gradient = new double[count];
             first = kernel.newEvaluation();
             second = kernel.newEvaluation();
-            derivatives = kernel.newDerivatives();
+            derivatives = kernel.newDerivativesWithoutHeatCapacity();
         }
     }
 
@@ -801,7 +801,7 @@ public final class TangentPlaneStability {
             mixture = kernel.newWorkspace();
             feedVapor = kernel.newEvaluation();
             feedLiquid = kernel.newEvaluation();
-            feedDerivatives = kernel.newDerivatives();
+            feedDerivatives = kernel.newDerivativesWithoutHeatCapacity();
             feed = new double[count];
             logFeed = new double[count];
             reference = new double[count];
