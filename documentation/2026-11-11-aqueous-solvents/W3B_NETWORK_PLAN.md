@@ -143,3 +143,29 @@ Kernel time per evaluation (ns; each run alone, 60 s warm-up, 60 s measured):
 - Runs: 1b 185 classes, 1244 tests; `columnGates` 62 classes, 397 tests; `holdGates` 12 classes, 131 tests; all pass but `MaterialPresetsTest` (the override example's methane record lacked W2a's two sub-records; fixed after, 5 tests pass). One whole quick `test` run by a filter mistake (2381 tests, on data since dropped). The fluid GameTests and the final lane have not run.
 
 For step 3 on: a derived kernel on the 45-compound list costs 5 to 12 times the refinery's constant-pair kernel today (1531 to 3963 ns against 324). The 2 % and 10 % dry bounds of section 5 cannot hold on a derived list as measured; step 3 starts with this cost (which pairs must be temperature-dependent, what a prepared temperature can hold) before the network moves. Also open: the derived contract flags no water chemistry (ammonia with water); the bubble point's cost is now mostly the three-product audit (297 of 515); four probes under `tools/` still name `PengRobinsonKernel.Mixing`.
+
+## 8. Kernel cost on island-size lists, and the size of the derived pairs (2026-11-11)
+
+Owner: "Measure first". Probes: `tools/aqueous-solvents/probes/` (`IslandTime`, `PairSizes`). Each timing run alone, 60 s warm-up, 60 s measured, 330 K and 2 bar; the sublists are evenly spaced over the refinery list's order.
+
+| Sublist | Pairs the library gives | Today's kernel | Derived, water-free phase | Derived, wet phase |
+|---|---|---|---|---|
+| 12 compounds | 7 of 66 | 128 ns | 414 ns (3.2 times) | 566 ns (4.4 times) |
+| 24 compounds | 38 of 276 | 284 ns | 1720 ns (6.1 times) | 1749 ns (6.2 times) |
+
+The refinery list's 990 pairs by source: library 76, hydrogen (zero) 44, activity 20, E-PPR78 713, missing 137.
+
+**Expected.** An interaction coefficient between two non-polar compounds is of order 0.01 to 0.2 and changes slowly with temperature. A dry island should cost what it costs today.
+
+**What the code does.**
+- Cost follows the number of pairs with a value. Today most pairs are zero and cost nothing; derived, every pair has one. The dry bounds of section 5 (2 % and 10 %) do not hold.
+- The derived pairs are not small: the median of the largest |k| over 250 to 600 K is 0.029; 550 of 713 are at or above 0.01, 436 at or above 0.02. Dropping small ones removes a fifth of the work.
+- The E-PPR78 temperature law (a power of 298.15/T per group pair) leaves its fitted range inside the network's. |k| is above 0.3 in 20 pairs at 150 K, none at 298 K, 4 at 450 K and 48 at 700 K; above 1 in 10 pairs at 150 K and 7 at 700 K. Ethylene with isobutene: -0.19 at 298 K, -77 at 450 K, -5.9e4 at 700 K. Oxygen with p-xylene: 0.22 at 298 K, 0.80 at 250 K, 500 at 150 K. The network runs from about 90 K to 800 K. W2b's gates read 298 to 373 K and did not see it.
+
+**Proposal: options for the pairs between two non-polar compounds** (the owner's choice; the polar pairs, Henry pairs and homomorph pairs stay derived in all three).
+
+- **A. Library only.** A non-polar pair the library does not give is zero, as today. Dry islands keep today's numbers and cost; no dry reference moves. Gases in hydrocarbons stay at today's accuracy (in n-hexane 1.02 to 1.20 times measured where the library has the pair, 1.17 to 2.07 where it has not).
+- **B. Gas pairs as constants (recommended).** Where the library is silent, a pair of a gas (a compound with a Henry constant in water: 8 of them) with a non-polar compound takes its E-PPR78 value at 298.15 K, constant in temperature. Every other non-polar pair is zero. This keeps the gain where it was measured (gases in n-hexane 1.05 to 1.32 times measured), bounds every value, and adds about g (n - g) pairs for g gases among n compounds: about 25 on a 12-compound island with 3 gases, an estimated 1.7 times today's kernel time there from the per-pair cost above (not measured). Dry references move.
+- **C. Every pair, temperature held outside a window.** All 713 pairs with the E-PPR78 law inside a window and held outside it. 3 to 6 times today's kernel time unless the kernel gets a dense-row path; the window is a new rule per table, and oxygen with the xylenes is already 0.8 at 250 K.
+
+With A or B the E-PPR78 temperature law leaves `DerivedPairs` (the unbounded form is not used anywhere), and the plan's M4 is restated. With B or C the kernel's pair loops (ten passes over the pair list per evaluation, about 4 to 5.5 ns a pair) are worth one pass over row sums first.
