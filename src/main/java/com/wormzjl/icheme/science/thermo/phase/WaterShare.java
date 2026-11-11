@@ -85,8 +85,7 @@ public final class WaterShare {
     public static final class Workspace {
         private final WaterShare owner;
         private final PengRobinsonKernel.Workspace mixture;
-        private final PengRobinsonKernel.Evaluation evaluation;
-        private final double[] pure = {1.0}, rootDt = new double[1], rootDt2 = new double[1];
+        private final double[] rootDt = new double[1], rootDt2 = new double[1];
         private final double[] xp = new double[HIGHEST_X + 1], yp = new double[HIGHEST_Y - LOWEST_Y + 1];
         private double powersTemperature = Double.NaN, kernelTemperature = Double.NaN;
         // Region 1 (molar): v, h, s, cp, vT, vP, vTT, vTP, dh/dP, ds/dP; the cubic's pure liquid: v, hR, sR, cpR, vT, vP,
@@ -104,7 +103,6 @@ public final class WaterShare {
         private Workspace(WaterShare owner) {
             this.owner = owner;
             mixture = owner.water.newWorkspace();
-            evaluation = owner.water.newEvaluation();
         }
     }
 
@@ -294,10 +292,16 @@ public final class WaterShare {
             water.prepareRootDerivatives(t, w.mixture, w.rootDt, w.rootDt2);
             w.kernelTemperature = t;
         }
-        water.evaluate(t, p, w.pure, Root.LIQUID, w.mixture, w.evaluation);
+        // One compound: the cubic's liquid root and ln phi in closed form on the prepared temperature, the same doubles
+        // as the kernel's one-component evaluation (x = 1, a_mix = s s, b_mix = b, no excess cells), with no mixture work.
+        if (!Double.isFinite(p) || !(p > 0.0)) throw new IllegalArgumentException("Invalid pressure of the water share");
         double root = w.mixture.attractionRootsView()[0], r1 = w.rootDt[0], r2 = w.rootDt2[0];
         double a = root * root, a1 = 2.0 * root * r1, a2 = 2.0 * (r1 * r1 + root * r2), b = coVolume;
-        double rt = R * t, z = w.evaluation.compressibility(), v = z * rt / p;
+        double reducedA = a * p / (R * R * t * t), reducedB = b * p / (R * t);
+        double z = PengRobinsonKernel.selectRoot(reducedA, reducedB, Root.LIQUID).selectedCompressibility();
+        double logPhi = (z - 1.0) - DeterministicMath.log(z - reducedB) - reducedA / (2.0 * SQRT_TWO * Math.max(reducedB, 1.0e-300))
+                * DeterministicMath.log((z + (1.0 + SQRT_TWO) * reducedB) / (z + (1.0 - SQRT_TWO) * reducedB));
+        double rt = R * t, v = z * rt / p;
         double den = v * v + 2.0 * b * v - b * b;
         double dpdv = -rt / ((v - b) * (v - b)) + 2.0 * a * (v + b) / (den * den);
         double dpdt = R / (v - b) - a1 / den;
@@ -311,7 +315,7 @@ public final class WaterShare {
         double dlogdv = 1.0 / (v + (1.0 + SQRT_TWO) * b) - 1.0 / (v + (1.0 - SQRT_TWO) * b);
         double hR = rt * (z - 1.0) + (t * a1 - a) / (2.0 * SQRT_TWO * b) * log;
         double cpR = p * vT - R + t * a2 / (2.0 * SQRT_TWO * b) * log + (t * a1 - a) / (2.0 * SQRT_TWO * b) * dlogdv * vT;
-        double sR = (hR - rt * w.evaluation.logFugacityCoefficient(0)) / t;
+        double sR = (hR - rt * logPhi) / t;
         double[] c = w.cubic;
         c[0] = v; c[1] = hR; c[2] = sR; c[3] = cpR; c[4] = vT; c[5] = vP; c[6] = vTT; c[7] = vTP;
     }
