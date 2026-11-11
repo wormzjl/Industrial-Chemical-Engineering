@@ -494,3 +494,22 @@ Decided, as the owner asked ("All four, measured"): the vapour lock (D15) stays.
 So of section 17's four rules: water's own saturation curve, the no-limit rule for a pump at its tank and D16 C's gas-beside-the-liquid rule are gone (form G); the vapour lock is kept. Forms 0 and T leave the code.
 
 **Open under form G: cold 6**, a wall-deadline hold (tick 2028 to 2084) that form 0 does not have; replayed alone once, not traced (the two-trace allowance went to 181 and bundled 6). Reading from the code: under G a supplier state costs up to three bisections of about 24 PH equilibria each (p_v, the liquid's E, the mixture's E) where form 0 costs one, and a junction supplier changes state every step. Ordered: nothing worked out that the edge does not read (now); a counter of those equilibria per accepted step and cheaper searches in stage B. Step 7's campaign is its next run.
+
+## 27. The cooling tower as one atmospheric contact (owner, 2026-11-11; replaces section 20's bullets where they differ)
+
+Owner: "The cooling tower is performing heat and mass exchange with air, and any gas phase in the inlet stream gets removed, it should be coherent in design".
+
+Section 20 had three different routes for what is not liquid water: gas in the stream went on to the basin for its vent, a liquid that boils at the atmosphere got "no air contact" and a status word, and only the rest met the air. One statement replaces them.
+
+**The tower brings what its spray delivers to atmospheric pressure in the air stream. What is gas there leaves with the air; what is liquid exchanges heat and every compound with the air; the liquid that remains falls to the basin.**
+
+In order, for the stream of one spray inlet:
+
+1. Gas that arrives as gas leaves with the air: every component of the stream's gas phase, with its enthalpy. None of it reaches the basin.
+2. A liquid above its bubble temperature at the atmosphere flashes on leaving the nozzle: it cools to the temperature at which its partial pressures sum to the atmosphere, and the vapour that forms (each compound in proportion to its partial pressure there) leaves with the air. This uses the same table as the fill, `ln p_i` linear in `1/T` between two engine readings, so it costs no engine call; a liquid below that temperature skips this step with nothing lost.
+3. The liquid then meets the air in the fill as section 20 states: each compound moves towards equilibrium with the air (water and volatile compounds leave, limited by the fill's transfer units; a compound's loss is at most what the liquid holds; the air's own nitrogen and oxygen dissolve to saturation at the leaving temperature; a dissolved gas the air does not hold strips whole). Near the bubble temperature the saturated content is continued with value and slope.
+4. The liquid, and any carried solids, reach the basin. The basin's surface exchanges sensible heat only, as now.
+
+One signed rate per component covers 1 to 3 (gas removed, flash vapour, evaporation, less the air dissolved), with one energy rate; the ledger books them per component and the basin's balances close on them. No stream is refused and no status word names a composition: `WATER_ONLY` goes, and section 20's word for a boiling liquid is not added. The exhaust the plume reads keeps water's humidity; the other compounds' share in it is not drawn.
+
+Consequence for the basin: water leaving the fill saturated with the air's nitrogen and oxygen stands just under its bubble pressure at the atmosphere (the air's 1 % of other gases is the margin), so the basin holds no gas phase from the spray and its vent has nothing to take from it.
