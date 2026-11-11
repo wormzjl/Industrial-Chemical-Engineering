@@ -12,16 +12,9 @@ Run: `LevelLoopStepProbe` at 4: both empty-drum cases held (2 of 2). One was "Ne
 
 ## 2. What the code did
 
-- **The demand.** The level valve was REGULATING at 592.8 kg/s, 3.0 times the feed. Its slice started with the drum about 0.14 m3 full (1.7 %): it was dry 0.35 s into the 20 s slice.
-  - The LIC would not ask for 0.59 m3/s from a 1.7 % drum on a current volume. The decision was made on an earlier, fuller drum.
-  - Arithmetic: with each decision acting one cadence late, dead-beat with a one-sample delay overshoots. From empty: 50 % full at 20 s, 100 % at 40 s, then 75 %, then 0 % at 80 s, while the valve still holds a demand of about 2 times the feed. This also explains finding 3 (the liquid-full drum).
-  - The one-cadence delay is inferred from the order of `ControlService.tick` (readings of the last publication, a law that the next dispatched slice takes). It is not timed in this run.
-- **The solver at each step.**
-  - Pass 0 lays out the drum as a vessel, and the step empties it, so pass 0 fails.
-  - Pass 1 lays it out as a junction: inflow 198 against the valve's 593 out. The junction's continuity row carries the residual (155 to 352), and the line search stalls.
-  - Steps are accepted only while 395 kg/s × step < the drum's mass. The mass halves with each accept: 0.56 kg, then 4.9 g.
-  - At 4.9 g the drum is DRY (phase 32) and its outlet closed. The valve's upstream junction then has 0 in and 593 out: continuity residual = the valve's flow, 592.56, at pass 0.
-  - Halving runs from 1e-4 s to 2e-10 s at a constant residual. It ends at the 20-consecutive-rejection limit, not the wall budget.
+- **The demand.** The level valve was REGULATING at 592.8 kg/s, 3.0 times the feed. Its slice started with the drum about 0.14 m3 full (1.7 %): it was dry 0.35 s into the 20 s slice. The LIC would not ask for 0.59 m3/s from a 1.7 % drum on a current volume. The decision was made on an earlier, fuller drum. Arithmetic: with each decision acting one cadence late, dead-beat with a one-sample delay overshoots. From empty: 50 % full at 20 s, 100 % at 40 s, then 75 %, then 0 % at 80 s, while the valve still holds a demand of about 2 times the feed. This also explains finding 3 (the liquid-full drum). The one-cadence delay is inferred from the order of `ControlService.tick` (readings of the last publication, a law that the next dispatched slice takes). It is not timed in this run.
+- **The solver at each step.** Pass 0 lays out the drum as a vessel, and the step empties it, so pass 0 fails. Pass 1 lays it out as a junction: inflow 198 against the valve's 593 out. The junction's continuity row carries the residual (155 to 352), and the line search stalls.
+  - Steps are accepted only while 395 kg/s × step < the drum's mass. The mass halves with each accept: 0.56 kg, then 4.9 g. At 4.9 g the drum is DRY (phase 32) and its outlet closed. The valve's upstream junction then has 0 in and 593 out: continuity residual = the valve's flow, 592.56, at pass 0. Halving runs from 1e-4 s to 2e-10 s at a constant residual. It ends at the 20-consecutive-rejection limit, not the wall budget.
 - **The defect.** No active-set pass releases a REGULATING valve whose supply has run dry. The infeasible row is the valve's own target.
 - The earlier holds fit: residual 376 (run w) and 542 to 567 (runs g, l) are the level valve's regulated flows in kg/s at those holds.
 
@@ -32,6 +25,15 @@ Run: `LevelLoopStepProbe` at 4: both empty-drum cases held (2 of 2). One was "Ne
 - Phase appearance: not gas to two-phase. The drum is liquid with no vapour volume (finding 3: the vent gives no gas back). The change is liquid to DRY.
 - Step controller: no recovery. It hits the 20-rejection limit within one slice.
 - Control edit mid-slice: one slice was 10 s, so an edit split it. The mechanism does not need the split.
+- Parent's H1 (the port-throttle band; check 1, this run): refuted.
+  - At the failed steps the drum held 7.1e-5 of its capacity, then 6.2e-7: far below the band (0.005 to 0.01).
+  - The band (`InletPhase.Supply.dry`) is read only for a mover's suction, once per slice on the committed state. This line has no mover, so no throttle acts on it.
+  - The level valve is REGULATING at pass 0. The rows: pass 0 carries the drum's balance rows, pass 1 the drum-as-junction continuity, the last the outlet junction's continuity with the drum DRY.
+  - 592.8 kg/s is above the line's frictionless gravity flow (0.533 m3/s, 531 kg/s for 6 m), so it is the valve's target, not a free flow.
+- Check 2 (`tools/minecraft-time-delta/worlds/DrumDrainTest`: factor 1, no server, no control, the same drum, feed and outlet line):
+  - Open outlet: clean from empty and from 1 %. From 1 %, the drum settles at 0.40 % of capacity with outflow equal to the 198.1 kg/s feed.
+  - The same outlet with a flow valve regulating 592.8 kg/s: held in its first tick ("line search stalled at residual 5.59; active-set pass=0", 20 rejections).
+  - So the cause is a regulating valve on a dry supply, at any factor. The factor only sets how long one cycle's demand stands.
 
 ## 4. Why factor 1 ran clean
 

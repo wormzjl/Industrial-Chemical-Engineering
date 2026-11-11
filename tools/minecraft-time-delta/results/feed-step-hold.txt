@@ -89,3 +89,14 @@ fluid_island=1899 committed_tick=81456 status=HELD: round deadline or worker fai
 [13:06:13] [Server thread/WARN] [co.wo.ic.IChemE/]: fluid_island=1853 committed_tick=76125 status=HELD: Substep refinement exhausted: Newton line search stalled at residual 592.5571346305662; active-set pass=0; reasons={Newton line search stalled at residual #; active-set pass=#=44}
 [13:06:13] [Server thread/INFO] [co.wo.ic.IChemE/]: level_loop probe result case="empty factor-4 feed" factor=4 feed=198.1 kg/s held=HELD: Substep refinement exhausted: Newton line search stalled at residual 592.5571346305662; active-set pass=0; reasons={Newton line search stalled at residual #; active-set pass=#=44} failure=the drum's island held: HELD: Substep refinement exhausted: Newton line search stalled at residual 592.5571346305662; active-set pass=0; reasons={Newton line search stalled at residual #; active-set pass=#=44} level=Infinity to -Infinity % setupResidual=NaN mol NaN J
 [13:06:13] [Server thread/INFO] [minecraft/GameTestRunner]: Running test batch 'review-heat:0' (1 tests)...
+
+== check 2 (parent's H1), factor 1, no server, no control: ./gradlew --offline --no-configuration-cache --init-script tools/minecraft-time-delta/worlds/worlds.init.gradle test --tests '*DrumDrainTest'
+DRUM_DRAIN_RESULT case="empty" factor=1 outletPlacedAtTick=100 ticks=1200 share=0.0 to 0.019998650729034666 held=clean
+DRUM_DRAIN_RESULT case="1 %" factor=1 outletPlacedAtTick=115 ticks=1215 share=0.0 to 0.03613389434234281 held=clean
+DRUM_DRAIN_RESULT case="empty, outlet valve at 592.8 kg/s" factor=1 outletPlacedAtTick=100 ticks=1 share=0.0 to 0.0 held=HELD: Substep refinement exhausted: Newton line search stalled at residual 5.5874665995300425; active-set pass=0; reasons={Newton line search stalled at residual #; active-set pass=#=20}
+DRUM_DRAIN 1 % tick=200 share=0.0 FULL
+DRUM_DRAIN 1 % tick=300 share=0.02475812517482807 FULL
+DRUM_DRAIN 1 % tick=400 share=0.03613389434234281 FULL
+DRUM_DRAIN 1 % tick=500 share=0.005286017916850033 FULL
+DRUM_DRAIN 1 % tick=600 share=0.003977111431783486 FULL
+DRUM_DRAIN 1 % tick=800 share=0.0039771114317835015 STEADY: replaying 198.1 kg/s since 37.1 s of play, next check at 86437.1 s of play
