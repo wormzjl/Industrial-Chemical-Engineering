@@ -49,7 +49,7 @@ Changed so far: `science/thermo/PengRobinsonKernel`, `HuronVidalExcess`; `scienc
 - W3b steps 1 and 2 built; steps 3 to 7 (the network) not started; W4 to W6 not started.
 - Owner: which compounds take activity fits with hydrocarbons (W3B_NETWORK_PLAN.md section 9): every compound with a polar group, as now, or only those that name a homomorph. A 24-compound dry list with sulfur dioxide, a mercaptan and hydrogen sulfide costs 5.4 times today's kernel time.
 - After step 5: the kernel path that skips absent compounds' cells, decided from the three-scenario baseline.
-Owner option from it: a standpipe rule for a boot drum's hydrocarbon outlet (section 6); dry islands move through the derived hydrocarbon pairs unless the owner defers that. The code guide's equilibrium-engine chapter is not yet updated for W3a (merge preparation).
+- Owner option from the W3b design: a standpipe rule for a boot drum's hydrocarbon outlet (section 6). The code guide's equilibrium-engine chapter is not yet updated for W3a (merge preparation).
 - Cost: the ternary at its bubble point takes 783 kernel evaluations per TP answer (W3A_ENGINE_PLAN.md section 6). `columnGates` and `equipmentGates` load the changed material data and have not run; they are the final lane's.
 - Kernel: one rule for every list (the owner needs no backward compatibility): collapse the classical plans into the Huron-Vidal form once its sums run over polar compounds only and W3a can count the cost.
 - Kernel: a large positive excess energy can make the mixture attraction negative (the root selection then throws); W3a's rejected-trial handling.
