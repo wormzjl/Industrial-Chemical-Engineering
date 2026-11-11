@@ -75,7 +75,7 @@ Continuity of the share (0 isolated jumps in every scan, the same count as the c
   The prototype (`water-share.mjs`) replaced the form first written here, a Gibbs energy difference per phase label: that form jumps wherever a one-root state changes label, and a vapour term in T and P alone scales with the total pressure (water in a gas at 10 MPa and 25 C: its fugacity about 30 times off, from the two second virial coefficients, -1214 and -372 cm3/mol). Saturated steam above 250 C stays the second virial's limit (heat of vaporization 2 to 13 % off; today 3 to 33 %); Region 2 in full at water's partial pressure would close it and is not in this batch.
 - **M3. A compound carries its own data only** (a polar compound also names its homomorph). Modified UNIFAC (Dortmund) group counts and E-PPR78 group counts (ChemSep's records hold both; the import writes them); a crude cut is paraffinic groups by its molar mass; a gas carries its Henry constant in water (IAPWS G7-04: H2, N2, O2, CO, CO2, H2S, CH4, C2H6).
 - **M4. Pairs are derived, never authored.** When a list first needs a pair, the catalog derives it through the equation of state from one source:
-  - two compounds without polar groups (gases and hydrocarbons): k_ij(T) from E-PPR78, the code and table the repository already has;
+  - two compounds without polar groups: where the library is silent, a gas (a compound with a Henry constant in water) with a non-polar compound takes its E-PPR78 value at 298.15 K, constant in temperature; every other such pair is zero (owner, 2026-11-11, option B of W3B_NETWORK_PLAN.md section 8; first form: k_ij(T) from E-PPR78 for every pair, which is 3 to 6 times slower in the network and unbounded outside about 250 to 450 K);
   - a polar compound with anything: the Dortmund group model's activity coefficients across the composition range, at 25 and 100 C, into two energies and α;
   - a gas with a polar organic: E-PPR78 on the liquid's homomorph, a bundled compound the polar compound's dataset names (ethanol: propane), with the homomorph's own critical constants (with ethanol's own, N2 and CH4 come out 2.7 and 2.1 times too soluble);
   - water with a hydrocarbon: the group model on a water-hydrocarbon block fitted once to measured mutual solubility;
@@ -93,7 +93,7 @@ Continuity of the share (0 isolated jumps in every scan, the same count as the c
 
 ## 5. Gas solubility
 
-With M2 and M4 it needs no mechanism: a dissolved gas is a compound of a liquid. In water: from the gas's Henry constant. In hydrocarbons: E-PPR78 instead of today's zeros. In polar organics: the homomorph rule. All in this batch, in every list, because no list keeps the free-water rule. Limit measured: CO2 in water at 5 MPa is 40 % high; a second per-gas number (its partial volume in water) would close it, to be evaluated in W2.
+With M2 and M4 it needs no mechanism: a dissolved gas is a compound of a liquid. In water: from the gas's Henry constant. In hydrocarbons: the gas's E-PPR78 value at 298.15 K instead of today's zeros. In polar organics: the homomorph rule. All in this batch, in every list, because no list keeps the free-water rule. Limit measured: CO2 in water at 5 MPa is 40 % high; a second per-gas number (its partial volume in water) would close it, to be evaluated in W2.
 
 ## 6. Speed
 

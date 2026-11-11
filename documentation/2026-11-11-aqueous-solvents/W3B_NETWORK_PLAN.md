@@ -11,7 +11,7 @@ A vessel holds up to three fluid phases: a gas and two liquids. Every compound, 
 - A gas over water dissolves by its Henry constant (CO2 at 25 C and 1 atm: 6e-4 mole fraction, 1.5 g/L). Today it does not dissolve.
 - Ethanol with water is one liquid at every ratio, with the azeotrope at 0.896 ethanol; with n-hexane added it splits in two liquids, and the three boil at 56.8 C.
 - Ice forms from the water-rich liquid at the temperature its composition sets: 0 C for water, -4.0 C at 10 % ethanol by mass. Ice may lie under oil and beside water.
-- A dry node behaves as today, except that a hydrocarbon pair the authored library does not give takes its E-PPR78 value instead of zero (plan M4; the library gives 76 of the refinery list's 990 pairs).
+- A dry node behaves as today, except that a gas with a non-polar compound, where the authored library gives no pair, takes its E-PPR78 value at 298.15 K instead of zero (plan M4 as restated in section 8; the library gives 76 of the refinery list's 990 pairs).
 
 Steady state and conservation are unchanged: amounts and energy are booked exactly; a phase that empties leaves its components in the phases that remain.
 
@@ -101,13 +101,13 @@ Each step ends in a commit and a filtered test run of the classes it can reach. 
 - New, on `pilot_aqueous`: a closed tank of water, n-hexane and nitrogen at 25 C holds the section 1 solubilities and conserves amounts and energy to the ledger's tolerance; an ethanol-water tank heated through its bubble point stays one liquid; ethanol added to water under hexane moves between the liquids without a hold; CO2 over water dissolves to its Henry value; ice under oil over water freezes and melts at a refresh; a single liquid crossing half water relabels without a phase event.
 - Existing: `NetworkPhaseEngineTest`, the fluid GameTests (fresh `fluidGameTestRunId`), chain-100, the 33 junction lines and `MIXED_GAS_COST`. Every reference that moves is re-recorded once, in the final lane, with its old and new value in the result.
 - Holds: one full campaign (1000 seeds, 8 workers) on the final code is the new baseline; new holds are listed by class, at most the two smallest traced.
-- Cost, by counters from the campaign and one timing run alone: a dry island's kernel evaluations within 2 % of the baseline lane and its time per evaluation within 10 %; a wet three-phase island's time per accepted step at most 1.5 times today's. A miss comes back as a decision with the counters, not as an accepted result.
+- Cost, by counters from the campaign and one timing run alone: a dry island's kernel evaluations within 2 % of the baseline lane; its time per evaluation within 10 % where the library gives every gas pair, and measured against section 8's estimate (1.7 times at 12 compounds with 3 gases) where it does not; a wet three-phase island's time per accepted step at most 1.5 times today's. A miss comes back as a decision with the counters, not as an accepted result.
 - Saves: every corpus image under `src/test/resources/compat/` loads; a format-46 state is dropped and rebuilt; the restate books an energy difference and removes no component.
 
 ## 6. Risks and what is left out
 
 - Size: `PassiveStepSolver` is 5,465 lines and 168 test files touch the model. The steps are ordered so that the engine and kernel (1, 2) land and are measured before the network changes.
-- Dry references move through the derived hydrocarbon pairs. If the owner prefers dry islands unchanged for now, the derivation can keep zero where the library is silent; that defers the gas-solubility gain of plan section 5.
+- Dry references move only through the gas pairs of section 8's option B.
 - The single-liquid label (half water) switches a boot drum's hydrocarbon outlet between "any level" and "above the weir" for a water-miscible liquid. A standpipe rule on the level, for any liquid, would remove the label from the physics; it changes how an oil-only boot drum drains today, so it is an owner option, not part of W3b.
 - A fourth fluid phase, electrolytes and hydrates stay capability holds.
 - Saturated steam above 250 C keeps its 2 to 13 % latent-heat error (plan M2).
@@ -167,5 +167,7 @@ The refinery list's 990 pairs by source: library 76, hydrogen (zero) 44, activit
 - **A. Library only.** A non-polar pair the library does not give is zero, as today. Dry islands keep today's numbers and cost; no dry reference moves. Gases in hydrocarbons stay at today's accuracy (in n-hexane 1.02 to 1.20 times measured where the library has the pair, 1.17 to 2.07 where it has not).
 - **B. Gas pairs as constants (recommended).** Where the library is silent, a pair of a gas (a compound with a Henry constant in water: 8 of them) with a non-polar compound takes its E-PPR78 value at 298.15 K, constant in temperature. Every other non-polar pair is zero. This keeps the gain where it was measured (gases in n-hexane 1.05 to 1.32 times measured), bounds every value, and adds about g (n - g) pairs for g gases among n compounds: about 25 on a 12-compound island with 3 gases, an estimated 1.7 times today's kernel time there from the per-pair cost above (not measured). Dry references move.
 - **C. Every pair, temperature held outside a window.** All 713 pairs with the E-PPR78 law inside a window and held outside it. 3 to 6 times today's kernel time unless the kernel gets a dense-row path; the window is a new rule per table, and oxygen with the xylenes is already 0.8 at 250 K.
+
+**Owner, 2026-11-11: B.** The gases are the 8 compounds with a Henry constant (carbon dioxide, carbon monoxide, hydrogen, hydrogen sulfide, oxygen, nitrogen, methane, ethane); hydrogen's pairs stay zero by the rule of 2026-11-04. It is built first in the network work (step 2b): `DerivedPairs` writes these pairs as constants, the `EPPR78` source no longer carries a temperature law, the gates of W2b and W3a that move are listed old and new, and the timing of section 8 is repeated on the same sublists.
 
 With A or B the E-PPR78 temperature law leaves `DerivedPairs` (the unbounded form is not used anywhere), and the plan's M4 is restated. With B or C the kernel's pair loops (ten passes over the pair list per evaluation, about 4 to 5.5 ns a pair) are worth one pass over row sums first.
