@@ -107,7 +107,7 @@ The sub-thread built sections 3 to 7; the orchestrator read both commits against
 | Case | Result | Section 1's hand estimate |
 |---|---|---|
 | Water references | within 0.04 K and 1.8 % of main's; the calibration point exact | 0.15 % |
-| 10 mol % ethanol at 35 C | ethanol leaves 1.50 times water by moles | 0.9 (4.6 against 5.2 kPa: the estimate's ethanol activity was low) |
+| 10 mol % ethanol at 35 C | ethanol leaves 1.50 times water by moles | 0.9 (4.6 against 5.2 kPa; the estimate left out the ambient air's 1.6 kPa of water, which lowers water's drive, and the cooling along the fill) |
 | Air-free water | leaves with 9.57e-6 nitrogen and 5.08e-6 oxygen, within 1 % of the model's own Henry values; no gas phase in the basin | 8.8e-6, 4.7e-6 |
 | Two-phase stream | all its gas leaves; none through a liquid port | as planned |
 | Water at 380 K | nozzle at 373.63 K, 1.13 % vapour (engine: 373.10 K, 1.29 %) | 1.3 % |
