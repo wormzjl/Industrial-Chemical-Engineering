@@ -3,7 +3,7 @@ Branch `claude/valve-followups-build-e04fd4` from `178d7e2f4`. One commit per it
 
 ## 1. Direct blanketed start (`a095caa25`)
 - **Expected.** An empty drum on its design feed fills to its level setpoint; the pad holds the gas at set while the drum fills or drains.
-- **Code.** Not reproduced. The level loop's direct start on `178d7e2f4` at factor 4 (`level-loop/run.sh 4`, blanket and direct switches) runs clean: 121.3 to 159.6 kPa, 50.00 % at the step and the end. The held run predates two valve and supply-line moves (`4c3130472`, `9777378a4`) and the relief compile commits.
+- **Code.** Not reproduced. The level loop's direct start on `178d7e2f4` at factor 4 (`level-loop/run.sh 4`, blanket and direct switches) runs clean: 121.3 to 159.6 kPa, 50.00 % at the step and the end. The hold of the gas blanketing batch's 16:51 run (`tmp/gas-blanket/level-loop-4x2-blanket-direct-held.txt`) does not reproduce: since that run the valve and its supply line moved twice (`4c3130472`, `9777378a4`) and the relief commits changed the compile. Not searched for (orchestrator: keep option A).
 - **Fix.** Gates only (the orchestrator chose option A): GameTest batch `level-loop-blanket-direct`; `BlanketDrainWorldTest` (factor 4), where the drum fills shut to 309.8 kPa and then drains wide open to 0.2 % with no hold.
 - **Ran.** `BlanketDrainWorldTest`, `compileFluidGameTestJava`. The GameTest runs in the final lane.
 
