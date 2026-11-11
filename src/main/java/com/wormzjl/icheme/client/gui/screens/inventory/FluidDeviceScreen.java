@@ -878,7 +878,9 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             text(g,tr("accessory.blanket.pad",pressureValue(set),unit),x,y+18,TEXT,w-4);g.hLine(x,x+w,y+30,LINE);
             text(g,tr("accessory.blanket.vent",pressureValue(com.wormzjl.icheme.science.fluid.network.GasBlanket.ventPressure(set)),unit),x,y+36,TEXT,w-4);g.hLine(x,x+w,y+48,LINE);
             y+=54;for(var line:font.split(Component.literal(tr("accessory.blanket.supply")),w-4)){g.drawString(font,line,x,y,MUTED,false);y+=10;}
-            y+=12;
+            // Two valves, two sections: an accent rule between them.
+            if(relief()){g.hLine(x,x+w,y+5,ACCENT);g.hLine(x,x+w,y+6,ACCENT);}
+            y+=14;
         }
         if(relief()){
             var reading=menu.clientData().view().relief();
@@ -892,10 +894,11 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private List<com.wormzjl.icheme.client.gui.common.kit.Column.Row> accessoryRows(){
         var data=menu.clientData();var state=data.view().state();var rows=new ArrayList<com.wormzjl.icheme.client.gui.common.kit.Column.Row>();
         String pressure=pressureValue(state==null?null:state.pressure());
-        if(blanket())rows.addAll(DeviceColumn.blanketValve(canEdit(),pressureUnit.symbol(),pressureValue(data.controls().blanket()),pressure,FluidDeviceScreen::tr));
+        List<com.wormzjl.icheme.client.gui.common.kit.Column.Row> blanket=blanket()?DeviceColumn.blanketValve(canEdit(),pressureUnit.symbol(),pressureValue(data.controls().blanket()),pressure,FluidDeviceScreen::tr):List.of(),relief=List.of();
         if(relief()){var reading=data.view().relief();
-            rows.addAll(DeviceColumn.reliefValve(canEdit(),pressureUnit.symbol(),pressureValue(data.controls().relief()),blanket()?null:pressure,
-                    reading==null?"—":value(flowRateUnit.display(reading.massFlow())),flowRateUnit.unit("kg"),reading==null||reading.open(),FluidDeviceScreen::tr));}
+            relief=DeviceColumn.reliefValve(canEdit(),pressureUnit.symbol(),pressureValue(data.controls().relief()),blanket()?null:pressure,
+                    reading==null?"—":value(flowRateUnit.display(reading.massFlow())),flowRateUnit.unit("kg"),reading==null||reading.open(),FluidDeviceScreen::tr);}
+        rows.addAll(DeviceColumn.accessories(blanket,relief));
         return rows;
     }
     private void renderOutlets(GuiGraphics g,int mx,int my){

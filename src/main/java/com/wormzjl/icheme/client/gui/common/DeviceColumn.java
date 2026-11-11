@@ -188,15 +188,25 @@ public final class DeviceColumn {
     /** What the player sets on the device: its set points, a mover's limit, a valve's target, a pipe's bore. */
     /**
      * A drum's gas blanketing valve's page (batch 2026-11-11-gas-blanketing, owner: "a dedicated accessory page so you can
-     * configure it"): its set pressure, an entry for an editor and a meter for a reader, then the drum's pressure.
+     * configure it"): one group under the valve's own plate (owner: "Blanketing valve and PSV should be in obvious different
+     * groups"), its set pressure, an entry for an editor and a meter for a reader, then the drum's pressure.
      */
     public static List<Column.Row> blanketValve(boolean canEdit, String pressureUnit, String set, String pressure, HeatControlColumn.Texts t) {
-        var rows = new ArrayList<Column.Row>();
-        rows.add(group(t.get("heat_group.set_point"), canEdit ? field("blanket", t, "blanket", pressureUnit)
-                : new Column.Reading("meter:blanket_set", t.get("device_field.blanket"), set, pressureUnit, t.get("device_field.blanket.hint"))));
-        rows.add(group(t.get("device_group.readings"), new Column.Reading("meter:blanket_pressure", t.get("blanket_pressure"), pressure, pressureUnit, t.get("blanket_pressure.hint"))));
+        return List.of(group(t.get("accessory.blanket.group"), canEdit ? field("blanket", t, "blanket", pressureUnit)
+                : new Column.Reading("meter:blanket_set", t.get("device_field.blanket"), set, pressureUnit, t.get("device_field.blanket.hint")),
+                new Column.Reading("meter:blanket_pressure", t.get("blanket_pressure"), pressure, pressureUnit, t.get("blanket_pressure.hint"))));
+    }
+
+    /** A drum's accessory page: the blanketing valve's group and the safety valve's, either empty, apart by a gap. */
+    public static List<Column.Row> accessories(List<Column.Row> blanket, List<Column.Row> relief) {
+        var rows = new ArrayList<Column.Row>(blanket);
+        if (!blanket.isEmpty() && !relief.isEmpty()) rows.add(new Column.Gap(ACCESSORY_GAP));
+        rows.addAll(relief);
         return rows;
     }
+
+    /** The gap between two valves' groups on a drum's accessory page, px. */
+    public static final int ACCESSORY_GAP = 8;
 
     /**
      * A pressure safety valve's group (batch 2026-11-11-gas-blanketing, owner: "PSV set pressure is set in its GUI"), on a
@@ -210,7 +220,7 @@ public final class DeviceColumn {
         if (pressure != null) rows.add(new Column.Reading("meter:relief_pressure", t.get("relief_pressure"), pressure, pressureUnit, t.get("relief_pressure.hint")));
         rows.add(new Column.Reading("meter:relief_flow", t.get("relief_flow"), flow, flowUnit, t.get("relief_flow.hint")));
         rows.add(new Column.Reading("meter:relief_discharge", t.get("relief_discharge"), t.get(open ? "relief_discharge.open" : "relief_discharge.piped"), "", t.get("relief_discharge.hint")));
-        return List.of(new Column.Group(t.get("accessory.relief"), null, rows));
+        return List.of(new Column.Group(t.get("accessory.relief.group"), null, rows));
     }
 
     /** A fan tower's control: manual speed or a leaving-water target. A natural tower has none. */

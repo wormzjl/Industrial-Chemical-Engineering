@@ -1292,8 +1292,8 @@ public final class GuiPrototypes {
                 null, null, List.of(), phases("volume", 0, 1, 0, 0), List.of());
         var out = new ArrayList<Prototype>();
         // Both valves on one drum, an editor.
-        var both = new ArrayList<Column.Row>(DeviceColumn.blanketValve(true, "bar", "1.213", "4.012", TEXTS));
-        both.addAll(DeviceColumn.reliefValve(true, "bar", "4.013", null, "1.111", "kg/s", true, TEXTS));
+        var both = DeviceColumn.accessories(DeviceColumn.blanketValve(true, "bar", "1.213", "4.012", TEXTS),
+                DeviceColumn.reliefValve(true, "bar", "4.013", null, "1.111", "kg/s", true, TEXTS));
         out.add(devicePage("fluid-drum-accessory-psv", WINDOW[0], WINDOW[1], both, (d, s) -> {
             d.title("Horizontal drum");
             d.name("V-101", false);
@@ -1301,7 +1301,10 @@ public final class GuiPrototypes {
             d.status(Door.tr("gui.icheme.fluid.flowing"), Palette.MUTED);
             var box = device(d, drum, both, Map.of("blanket", "1.213", "relief", "4.013"));
             int y = blanketGlass(d, box, 82, "1.213", "1.274");
-            reliefGlass(d, box, y + 12, "4.013", true);
+            int x = box.x() + 9, w = box.w() - 16;
+            d.c.hLine(x, x + w, y + 5, Palette.ACCENT);
+            d.c.hLine(x, x + w, y + 6, Palette.ACCENT);
+            reliefGlass(d, box, y + 14, "4.013", true);
             d.footer(2, "Close", "Apply", "Mass", "°C", "bar", "/s");
         }));
         // The safety valve alone, a reader.

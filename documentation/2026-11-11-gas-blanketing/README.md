@@ -19,6 +19,7 @@ Purpose: a gas blanketing valve as an optional accessory on vertical and horizon
 - 2026-11-11 (`aae56cf0a`): PSV tests. Fluid GameTest to a flare (`tools/psv-flare`); ten drums on one header (D5: 4.2 substeps per commit).
 - 2026-11-11: owner: "connection should point to side", "outlet should face the user when placed". The outlet leaves the body sideways toward the fitting player, its face kept as a fact; drawing scenes `*_VALVES`; [PSV_REVIEW.md](PSV_REVIEW.md). Found: an undersized flare holds the island (D6).
 - 2026-11-11 (`d9d0898ec` and the commit after): D6, owner chose A2 ("Yes, keep it"): `ReliefValves.plan` lifts a PSV wide open while its flare tip's limit binds, reseats below set; checkpoint state format 48. A 0.1 m flare (methane, nitrogen) no longer holds: the drum rises to 4.9 bar, relieving the tip's limit. Open: a load ramping down across the limit holds (test disabled).
+- 2026-11-11: owner: "Blanketing valve and PSV should be in obvious different groups in GUI". The Accessory page has one framed group per valve ("Blanketing valve": set pressure, drum; "Safety valve"), a gap between them (`DeviceColumn.accessories`), and an accent rule between their sections on the glass; DeviceColumn gate.
 
 ## Documents
 
