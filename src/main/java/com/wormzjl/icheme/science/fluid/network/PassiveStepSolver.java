@@ -391,11 +391,13 @@ public final class PassiveStepSolver {
                 // Owner decision D11 (A1): one whose target lies above what a set-flow mover in its series moves starts open, the
                 // mover setting the flow, as an open valve's first pass would find; the pass loop regulates again where the open line
                 // passes more. Regulating there asked the mover for its target: 50 kg/s of a 10 kg/s pump stood a thousand relief
-                // rises below its suction, where the thermo failed.
+                // rises below its suction, where the thermo failed. Owner option 1 of FEED_STEP_HOLD_REVIEW.md: one whose supply holds
+                // nothing ({@link InletPhase#starved}, a drained drum) starts open too, as {@link #openStarved} opens it in a pass.
                 else if(accepted==FlowControl.Mode.VALVE_REGULATING&&!valve.pressureControl()) {
                     if(bound==null)bound=moverBounds(graph);
                     var pipe=graph.pipes().get(edge);
-                    if(valve.targetMassFlow(endDensity(graph.reservoirs().get(pipe.first()).state(),pipe.firstPort(),pipe.volume()))>bound[edge])start=FlowControl.Mode.VALVE_OPEN;
+                    if(valve.targetMassFlow(endDensity(graph.reservoirs().get(pipe.first()).state(),pipe.firstPort(),pipe.volume()))>bound[edge]
+                            ||InletPhase.starved(graph,edge,node->false))start=FlowControl.Mode.VALVE_OPEN;
                 }
                 modes.set(edge,start);
             }
@@ -537,6 +539,11 @@ public final class PassiveStepSolver {
                 // again with the vessel as a junction holding its stock, which ends the step empty (emptyingGraph).
                 var drained=equations.runsDry(failure.lastVariables(),emptying);
                 if(drained!=null){emptying=drained;continue;}
+                // Owner option 1 of FEED_STEP_HOLD_REVIEW.md: a regulating flow valve fed only by vessels that hold nothing or that
+                // this pass runs dry cannot hold a target above what reaches it; its regulation row has no root at any step size
+                // (a drained level-loop drum held its island at residual = the valve's flow). It is solved again open, passing
+                // what reaches it; the converged open point regulates again where it passes more than the target.
+                if(openStarved(original,modes,emptying))continue;
                 // A point the Newton never reached is not read as evidence about this pass's frozen junction donors or the
                 // junction basis they state (unlike the converged tests below): a diverged trial's flow sign handed a
                 // junction the tank's nitrogen as a seeded trace nothing delivers, and every swept pressure lost an interval
@@ -1739,6 +1746,15 @@ public final class PassiveStepSolver {
     private double[] moverBounds(PassiveNetwork graph) {
         return ControlConstraints.moverBounds(graph,e->{var pipe=graph.pipes().get(e);
             return ((FlowControl.Mover)pipe.control()).targetVolumeFlow()*endDensity(graph.reservoirs().get(pipe.first()).state(),pipe.firstPort(),pipe.volume());});
+    }
+    /** Sets every regulating flow valve that {@link InletPhase#starved} finds without stock on {@code graph} (the solve's
+     * input graph; {@code emptying} the vessels this pass runs dry, or null) to open; whether any was. */
+    private static boolean openStarved(PassiveNetwork graph,List<FlowControl.Mode> modes,boolean[] emptying) {
+        boolean changed=false;
+        for(int edge=0;edge<modes.size();edge++)
+            if(modes.get(edge)==FlowControl.Mode.VALVE_REGULATING&&graph.pipes().get(edge).control() instanceof FlowControl.Valve valve&&!valve.pressureControl()
+                    &&InletPhase.starved(graph,edge,node->emptying!=null&&emptying[node])){modes.set(edge,FlowControl.Mode.VALVE_OPEN);changed=true;}
+        return changed;
     }
     /** The rise (Pa) of the mover on connection {@code edge} at suction volume flow {@code flow} on its own law
      * ({@code MOVER_LAW}), as this solve reads it ({@link #mover}). */

@@ -146,6 +146,19 @@ public final class InletPhase {
         double[] best={0};feeders(graph,device.first(),edge,(node,port)->best[0]=Math.max(best[0],heldShare(node,port)));
         return best[0];
     }
+    /**
+     * Whether nothing that can feed connection {@code edge} ({@link #held}'s nodes) holds stock past this pass: each is a
+     * dry end, a void or a junction ({@link #heldShare} zero), or a vessel {@code draining} names (one the pass runs dry
+     * within its step, decision D54). A generator never is. What reaches the device then is only what passes through those
+     * nodes within the step (feedback FEED_STEP_HOLD_REVIEW.md, owner option 1).
+     */
+    static boolean starved(PassiveNetwork graph,int edge,java.util.function.IntPredicate draining) {
+        var device=graph.pipes().get(edge);var first=graph.reservoirs().get(device.first());
+        if(!first.junction())return heldShare(first,device.firstPort())==0||draining.test(device.first());
+        boolean[] fed={false};
+        feeders(graph,device.first(),edge,(node,port)->{if(!(heldShare(node,port)==0||node.kind()==PassiveNetwork.NodeKind.RESERVOIR&&draining.test(graph.reservoirs().indexOf(node))))fed[0]=true;});
+        return !fed[0];
+    }
     /** Every node reached from junction {@code start} through junctions by a connection that may carry flow towards it, with its port; connection {@code edge} apart. */
     private static void feeders(PassiveNetwork graph,int start,int edge,BiConsumer<PassiveNetwork.Reservoir,PassiveNetwork.PhasePort> visit) {
         boolean[] seen=new boolean[graph.reservoirs().size()];var queue=new ArrayDeque<Integer>();

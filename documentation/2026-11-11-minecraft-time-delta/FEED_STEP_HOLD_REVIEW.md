@@ -1,8 +1,6 @@
 # Feed-step hold of the drum level loop (2026-11-11, owner "Diagnose first")
 
-Diagnosis only; nothing fixed. One review-server run at factor 4: `LEVEL_LOOP_OPTS=-Dicheme.probe.failures=true bash tools/minecraft-time-delta/level-loop/run.sh 4`, with the row and failure probe `tools/minecraft-time-delta/patches/probe-feed-step.patch` applied for the run and reverted. Lines: `tools/minecraft-time-delta/results/feed-step-hold.txt`.
-
-Run: `LevelLoopStepProbe` at 4: both empty-drum cases held (2 of 2). One was "Newton line search stalled at residual 592.56; active-set pass=0", 44 rejections; the other 594.26, 43 rejections. Both one-step cases ran clean (level 25 to 58 %). The suite body (ramped) passed. At 4 the rule feed and the factor-4 feed are the same 198.1 kg/s, so the four cases are two pairs.
+Diagnosis, then the owner's fix (section 6). One review-server run at factor 4: `LEVEL_LOOP_OPTS=-Dicheme.probe.failures=true bash tools/minecraft-time-delta/level-loop/run.sh 4`, with the row and failure probe `tools/minecraft-time-delta/patches/probe-feed-step.patch` applied for the run and reverted. Lines: `tools/minecraft-time-delta/results/feed-step-hold.txt`. Run: `LevelLoopStepProbe` at 4: both empty-drum cases held (2 of 2). One was "Newton line search stalled at residual 592.56; active-set pass=0", 44 rejections; the other 594.26, 43 rejections. Both one-step cases ran clean (level 25 to 58 %). The suite body (ramped) passed. At 4 the rule feed and the factor-4 feed are the same 198.1 kg/s, so the four cases are two pairs.
 
 ## 1. Expected behaviour
 
@@ -20,26 +18,22 @@ Run: `LevelLoopStepProbe` at 4: both empty-drum cases held (2 of 2). One was "Ne
 
 ## 3. Candidates, in numbers
 
-- First step (4 s at 4, 1 s at 1) against holdup: ruled out. The hold is 0.35 s into a slice, at steps of 1e-2 s and below. Under the sizing rule a cadence carries half the drum at every factor.
-- Junction buffer (0.2 s at 4): ruled out. The row is a mass balance with zero supply, which has no solution for any buffer, and the residual is the same at all step sizes.
-- Phase appearance: not gas to two-phase. The drum is liquid with no vapour volume (finding 3: the vent gives no gas back). The change is liquid to DRY.
-- Step controller: no recovery. It hits the 20-rejection limit within one slice.
-- Control edit mid-slice: one slice was 10 s, so an edit split it. The mechanism does not need the split.
-- Parent's H1 (the port-throttle band; check 1, this run): refuted.
-  - At the failed steps the drum held 7.1e-5 of its capacity, then 6.2e-7: far below the band (0.005 to 0.01).
-  - The band (`InletPhase.Supply.dry`) is read only for a mover's suction, once per slice on the committed state. This line has no mover, so no throttle acts on it.
-  - The level valve is REGULATING at pass 0. The rows: pass 0 carries the drum's balance rows, pass 1 the drum-as-junction continuity, the last the outlet junction's continuity with the drum DRY.
-  - 592.8 kg/s is above the line's frictionless gravity flow (0.533 m3/s, 531 kg/s for 6 m), so it is the valve's target, not a free flow.
-- Check 2 (`tools/minecraft-time-delta/worlds/DrumDrainTest`: factor 1, no server, no control, the same drum, feed and outlet line):
-  - Open outlet: clean from empty and from 1 %. From 1 %, the drum settles at 0.40 % of capacity with outflow equal to the 198.1 kg/s feed.
-  - The same outlet with a flow valve regulating 592.8 kg/s: held in its first tick ("line search stalled at residual 5.59; active-set pass=0", 20 rejections).
-  - So the cause is a regulating valve on a dry supply, at any factor. The factor only sets how long one cycle's demand stands.
+- Ruled out:
+  - the first step against the holdup: the hold comes 0.35 s into a slice, at steps of 1e-2 s and below;
+  - the 0.2 s junction buffer: the row is a mass balance with zero supply;
+  - gas becoming two-phase: the change is liquid to DRY;
+  - the control edit mid-slice: one slice was 10 s, but the mechanism does not need the split.
+- The step controller does not recover: it hits the 20-rejection limit.
+- Parent's H1 (the port-throttle band), refuted by check 1:
+  - the drum held 7.1e-5, then 6.2e-7, of its capacity, far below the band (0.005 to 0.01);
+  - the band acts only on a mover's suction (`InletPhase.Supply.dry`), and this line has no mover;
+  - the valve is REGULATING at pass 0, at 592.8 kg/s, above the line's frictionless gravity flow (531 kg/s).
+- Check 2 (`worlds/DrumDrainTest`, factor 1, no control): an open outlet drains clean from empty and from 1 %; from 1 % it settles at 0.40 % with outflow = feed.
+- Correction (2026-11-11): its regulated case held for another reason. Its first solve leaves the outlet junction at 300 Pa of gas with the open valve running in reverse, and the valve not REGULATING (an open question, below).
 
 ## 4. Why factor 1 ran clean
 
-By structure, not by chance. **Rule feed (792 kg/s):** the same overshoot would ask for about 1.6 to 2.4 m3/s. The 0.25 m outlet passes about 0.8 m3/s (the factor-1 suite case stands at 58 % with the valve 87 % open). So the valve is limited by pressure, not REGULATING, and it drains the drum on its head. **Factor-4 feed at 1 (198 kg/s, cycle 5 s):** one cadence fills 12.5 %, below the 25 % setpoint, so there is no overshoot.
-
-The cause depends on the feed per cadence against the drum (50 % at the rule, at any factor) and on whether the overshoot demand is within the outlet valve's capacity. It does not depend on the factor itself. A wider outlet at factor 1 should hold the same way; this is not run.
+By structure, not by chance. **Rule feed (792 kg/s):** the same overshoot would ask for about 1.6 to 2.4 m3/s. The 0.25 m outlet passes about 0.8 m3/s (the factor-1 suite case stands at 58 % with the valve 87 % open). So the valve is limited by pressure, not REGULATING, and it drains the drum on its head. **Factor-4 feed at 1 (198 kg/s, cycle 5 s):** one cadence fills 12.5 %, below the 25 % setpoint, so there is no overshoot. The cause depends on the feed per cadence against the drum (50 % at the rule, at any factor) and on whether the overshoot demand is within the outlet valve's capacity. It does not depend on the factor itself. A wider outlet at factor 1 should hold the same way; this is not run.
 
 ## 5. Proposal (for the owner)
 
@@ -47,4 +41,11 @@ The cause depends on the feed per cadence against the drum (50 % at the rule, at
 2. **Control lag (owner option; rests on the delay being exactly one cadence).** `InventoryControl.target` predicts the volume at the time its decision acts: `volume + (inflow - outflow) × cadence`. This removes the overshoot to full (finding 3) and to dry. Risk: it changes the loop at every factor. The 30-cycle level loop is the gate.
 3. **Cap the demand (game-level option).** The asked outflow is at most `inflow + volume / cadence`. Cheap, but it hides the solver defect for other starved valves.
 
-Recommendation: 1, then 2 if the owner accepts the one-cadence delay as the law's design point.
+## 6. Fix (owner "Options 1 and 2")
+
+- Option 1 (`InletPhase.starved`, `PassiveStepSolver.openStarved` and the carried start mode):
+  - Nothing that feeds a regulating flow valve holds stock past the pass when each feeder is a dry end or a vessel the pass runs dry (D54).
+  - Such a valve starts its step open, or, in a failed pass, is solved again open and passes what reaches it. The converged open point regulates again where it passes more than the target.
+  - `StarvedRegulatingValveTest`: the drum fills to 5 %, then its outlet is set to 592.8 kg/s. With the rule it runs clean, and over 12 slices the outlet averages 198.1 kg/s. Without it, it holds (line search stalled, 23 times).
+  - Over those 12 slices the drum cycles between 2.2 and 3.5 % (outflow 180 to 218 kg/s), draining at the target within a slice, then going open on a dry supply. No pass cycle.
+- Open: the cold start of a regulating valve under a gas-filled drop leg holds in its first tick (check 2's case; not fixed).

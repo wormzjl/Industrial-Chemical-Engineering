@@ -100,3 +100,31 @@ DRUM_DRAIN 1 % tick=400 share=0.03613389434234281 FULL
 DRUM_DRAIN 1 % tick=500 share=0.005286017916850033 FULL
 DRUM_DRAIN 1 % tick=600 share=0.003977111431783486 FULL
 DRUM_DRAIN 1 % tick=800 share=0.0039771114317835015 STEADY: replaying 198.1 kg/s since 37.1 s of play, next check at 86437.1 s of play
+
+== option 1 (2026-11-11, owner "Options 1 and 2")
+StarvedRegulatingValveTest: passes; with InletPhase.starved disabled: held (line search stalled 23, then a singular Jacobian)
+LevelLoopStepProbe at 4 (run.sh 4):
+level_loop probe result case="step factor-4 feed" factor=4 feed=198.1 kg/s held=clean failure=null level=2.854 to 57.40 % setupResidual=3.638e-12 mol -1.073e-06 J
+level_loop probe result case="step rule feed" factor=4 feed=198.1 kg/s held=clean failure=null level=24.65 to 100.0 % setupResidual=3.638e-12 mol -5.960e-07 J
+level_loop probe result case="empty factor-4 feed" factor=4 feed=198.1 kg/s held=clean failure=null level=6.916 to 52.18 % setupResidual=-4.002e-11 mol -1.490e-06 J
+level_loop result factor=4 cycles=2 low=24.99 % high=76.01 % levelAtStep=50.00 % levelAtEnd=50.00 % held=null failure=null molesResidual=2.212e-09 mol of 1.589e+07 mol energyResidual=-0.0001078 J of 7.059e+11 J intervals=188 ticks=4732 unread=0 setupResidual=-
+level_loop probe result case="empty rule feed" factor=4 feed=198.1 kg/s held=clean failure=null level=25.00 to 39.09 % setupResidual=9.639 mol -2.177e+05 J
+chain-100 exact: max deviation: state/moles 0.000e+00 relative (-), temperature 0.000e+00 K (-), phase fraction 0.000e+00 (-), flow 0.000e+00 relative (-)
+junction lines: 33, equal to W2's apart from the bytes counter
+quick checks, seeds 1-200, 8 workers (factor.sh o1, o4):
+== o1 cold factor=1 exit=0 seconds=61
+SUMMARY seeds=200 clean=197 threads=8 slices=120 wallMs=56658 seedMsSum=199695 cold=icheme:pilot_cryogenic
+CLASS e:new seeds=3 smallest=85 list=[85, 101, 118]
+== o1 bundled factor=1 exit=0 seconds=25
+SUMMARY seeds=200 clean=199 threads=8 slices=120 wallMs=21763 seedMsSum=99134
+CLASS e:new seeds=1 smallest=200 list=[200]
+== o1 defaults factor=1 exit=0 seconds=6
+SUMMARY seeds=200 clean=200 threads=8 slices=120 wallMs=2316 seedMsSum=17484
+== o4 cold factor=4 exit=0 seconds=70
+SUMMARY seeds=200 clean=196 threads=8 slices=120 wallMs=65812 seedMsSum=218165 cold=icheme:pilot_cryogenic
+CLASS e:new seeds=4 smallest=85 list=[85, 101, 118, 181]
+== o4 bundled factor=4 exit=0 seconds=21
+SUMMARY seeds=200 clean=198 threads=8 slices=120 wallMs=17230 seedMsSum=79727
+CLASS e:new seeds=2 smallest=47 list=[47, 145]
+== o4 defaults factor=4 exit=0 seconds=5
+SUMMARY seeds=200 clean=200 threads=8 slices=120 wallMs=2115 seedMsSum=16129
