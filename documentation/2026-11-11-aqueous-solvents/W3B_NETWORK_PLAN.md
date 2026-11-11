@@ -171,3 +171,23 @@ The refinery list's 990 pairs by source: library 76, hydrogen (zero) 44, activit
 **Owner, 2026-11-11: B.** The gases are the 8 compounds with a Henry constant (carbon dioxide, carbon monoxide, hydrogen, hydrogen sulfide, oxygen, nitrogen, methane, ethane); hydrogen's pairs stay zero by the rule of 2026-11-04. It is built first in the network work (step 2b): `DerivedPairs` writes these pairs as constants, the `EPPR78` source no longer carries a temperature law, the gates of W2b and W3a that move are listed old and new, and the timing of section 8 is repeated on the same sublists.
 
 With A or B the E-PPR78 temperature law leaves `DerivedPairs` (the unbounded form is not used anywhere), and the plan's M4 is restated. With B or C the kernel's pair loops (ten passes over the pair list per evaluation, about 4 to 5.5 ns a pair) are worth one pass over row sums first.
+
+## 9. Result of step 2b, and what it decided (2026-11-11)
+
+Commit `aaa87375c`; 40 test classes, 199 tests pass. `DerivedPairs` is `derived-pairs-r2`: library first; else a pair with a gas or a polar compound that falls through to E-PPR78 takes its value at 298.15 K as a constant; two non-polar non-gases are zero. No W2b or W3a gate value moved to its printed digits. The kernel forms its pair sums in one pass.
+
+Kernel time per evaluation after it (ns; each run alone, 60 s and 60 s):
+
+| Sublist | Today | Derived, no water in the list | Derived, water-free phase of a wet list | Derived, wet phase |
+|---|---|---|---|---|
+| 12 compounds | 130 | 139 (1.07 times) | 355 (2.7 times) | 399 |
+| 24 compounds | 164 | 884 (5.4 times) | 939 | 993 |
+
+- A list without a polar compound costs today's. The cost is in the local-composition cells: a phase of a list that holds water forms water's cells even when it holds no water, and the 24-compound sublist holds sulfur dioxide, methyl mercaptan and hydrogen sulfide, which take activity fits with every hydrocarbon the library does not give (32 such pairs).
+- The two-temperature lines leave the physical range at the network's ends: at 1 atm the kernel refuses a root (negative mixture attraction) for water with n-hexane from 750 K, water with nitrogen from 700 K, water with a crude cut at 800 K; water and ethanol's energy changes sign below about 230 K.
+
+Decided by the orchestrator (owner: "auto proceed if nothing major breaks"):
+- **The lines are held past their fitted ends**, the slope fading to zero over 50 K, value and slope continuous (step 2c). With it none of the nine pairs tested refuses from 90 to 800 K, and nothing moves between 298.15 and 373.15 K.
+- **An island's phase model holds water only when water can be in the island** (its mask). The conserved basis and the saved forms keep water last. N1 is read this way.
+- **A baseline is recorded before the network changes**: three fixed scenarios (dry, wet three-phase, dry with a polar refinery compound), counters and time per accepted step, run again after step 5. A wet island above 1.5 times or a dry one above 1.1 comes back as a decision. Skipping the cells of absent compounds in the kernel (estimated 200 ns at 12 compounds, about a day) is decided from those numbers.
+- **Open, the owner's:** which compounds take activity fits with hydrocarbons. Today every compound with a polar group does. Limiting them to compounds that name a homomorph (the water-miscible organics, ethanol first) would give hydrogen sulfide, sulfur dioxide, the mercaptans and ammonia constant pairs with hydrocarbons (library, else E-PPR78 at 298.15 K) and today's cost on sour dry islands; their pairs with water would stay as they are.
