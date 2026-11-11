@@ -14,7 +14,7 @@ gradle.projectsEvaluated {
          'holdFuzz.wallNanos': 'probeWallNanos', 'holdFuzz.softNanos': 'probeSoftNanos',
          'icheme.probe.failures': 'probeFailures', 'icheme.probe.failures.every': 'probeFailuresEvery',
          'icheme.probe.newtonTolerance': 'probeNewtonTolerance', 'icheme.probe.gate': 'probeGate', 'icheme.probe.failureCeiling': 'probeFailureCeiling',
-         'icheme.probe.junctionRelative': 'probeJunctionRelative',
+         'icheme.probe.junctionRelative': 'probeJunctionRelative', 'icheme.probe.gateDecides': 'probeGateDecides', 'icheme.probe.countsOut': 'probeCountsOut', 'icheme.probe.nearGate': 'probeNearGate', 'icheme.probe.holdupTau': 'probeHoldupTau',
          'study.seeds': 'studySeeds', 'study.out': 'studyOut', 'study.sampleMs': 'studySampleMs'].each { key, name ->
             def value = root.findProperty(name)
             if (value) systemProperty key, value

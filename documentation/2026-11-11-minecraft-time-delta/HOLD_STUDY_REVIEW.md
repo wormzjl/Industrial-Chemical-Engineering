@@ -45,4 +45,4 @@ The tolerance switch on all 200 seeds at 72x: bundled 197 clean (47, 164; 118 un
    - C. Keep both, and stop the controller's ping-pong only. Measured: it clears none of the five.
 2. **Wall budget**: raise the default to the slice (5 s) only together with item 1; alone it clears one seed of five.
 3. **47, 164, cold 72** are hold classes the campaign already knows (budget, E6, B). They belong to their own batches, with or without a time factor; a longer process time per world finds them sooner.
-4. Recommendation: A, measured on the 200-seed quick check at 1x and 72x before a campaign. The time-factor decision does not wait on it, but 72x without it holds the two near-miss worlds.
+4. Measured since ([OPTION_A_REVIEW.md](OPTION_A_REVIEW.md)): A clears nothing at 72x; the stuck row is the junction's enthalpy row, and scaling the junction holdup with the time factor clears 123, 77 and 164. Recommendation as first written: A, measured on the 200-seed quick check at 1x and 72x before a campaign. The time-factor decision does not wait on it, but 72x without it holds the two near-miss worlds.

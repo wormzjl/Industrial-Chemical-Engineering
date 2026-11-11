@@ -106,16 +106,48 @@ index 4731d4fb8..60f7fa2a3 100644
              }
          }
 diff --git a/src/main/java/com/wormzjl/icheme/science/fluid/network/PassiveStepSolver.java b/src/main/java/com/wormzjl/icheme/science/fluid/network/PassiveStepSolver.java
-index 62932b743..bda8815b6 100644
+index 62932b743..c8df6f705 100644
 --- a/src/main/java/com/wormzjl/icheme/science/fluid/network/PassiveStepSolver.java
 +++ b/src/main/java/com/wormzjl/icheme/science/fluid/network/PassiveStepSolver.java
-@@ -325,6 +325,31 @@ public final class PassiveStepSolver {
+@@ -62,7 +62,7 @@ public final class PassiveStepSolver {
+      * inventory (owner decision D46): nothing is booked at a mint, and the ledger reports the buffers' change as its own
+      * term ({@link #checkConservation}). A numerical regularisation sized to the flow: its mixing lag at full flow is tau.
+      */
+-    static final double HOLDUP_TAU=.05;
++    static final double HOLDUP_TAU=Double.parseDouble(System.getProperty("icheme.probe.holdupTau",".05")); // PROBE (tools/minecraft-time-delta)
+     /** The Newton's relative tolerance on its scaled rows (a taut vessel's weighted by the pressure they imply,
+      * {@link Equations#rowWeights}); the solid
+      * events read a flow within it of the island's largest as roundoff ({@code SolidEventIntegrator.still}). */
+@@ -325,6 +325,54 @@ public final class PassiveStepSolver {
          @Override public double[] externalMoles(){return externalMoles.clone();}
      }
      public Result solve(PassiveNetwork graph,double dt,Runnable checkpoint){return solve(graph,dt,checkpoint,false,null);}
 +    /** PROBE (tools/minecraft-time-delta): a failed pass Newton, with the rows its last iterate is largest on. */
 +    private static final java.util.concurrent.atomic.AtomicInteger PROBE_FAILURES=new java.util.concurrent.atomic.AtomicInteger();
 +    static final boolean PROBE_JUNCTION_RELATIVE=Boolean.getBoolean("icheme.probe.junctionRelative");
++    /** PROBE option A (HOLD_STUDY_REVIEW.md): a Newton that ends within the equation gate hands its last iterate on, and the
++     * reconstruction's gate decides. Off: the Newton's own failure stands. */
++    static final boolean PROBE_GATE_DECIDES=Boolean.getBoolean("icheme.probe.gateDecides");
++    public static final java.util.concurrent.atomic.AtomicLong PROBE_NEAR_MISSES=new java.util.concurrent.atomic.AtomicLong(),PROBE_NEWTON_FAILURES=new java.util.concurrent.atomic.AtomicLong();
++    static {
++        String out=System.getProperty("icheme.probe.countsOut");
++        if(out!=null)Runtime.getRuntime().addShutdownHook(new Thread(()->{
++            try{java.nio.file.Files.writeString(java.nio.file.Path.of(out),"newtonFailures="+PROBE_NEWTON_FAILURES.get()+" nearMissesAccepted="+PROBE_NEAR_MISSES.get()+"\n");}catch(java.io.IOException ignored){}
++        }));
++    }
++    private static SparseNewton.Result probeGateDecides(Equations equations,double[] start,SparseNewton.Settings settings,Runnable checkpoint,SparseNewton.Workspace workspace) {
++        try{return SparseNewton.solve(equations,start,settings,checkpoint,workspace);}
++        catch(SparseNewton.Nonconvergence failure) {
++            PROBE_NEWTON_FAILURES.incrementAndGet();
++            double[] last=failure.lastVariables();
++            if(!PROBE_GATE_DECIDES||last==null||failure.phaseHold()!=null)throw failure;
++            double norm;
++            try{norm=equations.residualNorm(equations.residual(last));}catch(IllegalArgumentException outside){throw failure;}
++            if(!(norm<=Double.parseDouble(System.getProperty("icheme.probe.nearGate","1e-8"))))throw failure;
++            PROBE_NEAR_MISSES.incrementAndGet();
++            return new SparseNewton.Result(last,norm,SparseNewton.ITERATIONS,0,0,0);
++        }
++    }
 +    private void probeFailure(Equations e,PassiveNetwork graph,double dt,boolean rateOnly,List<FlowControl.Mode> modes,SparseNewton.Nonconvergence failure) {
 +        int k=PROBE_FAILURES.incrementAndGet();if(k>10&&k%Integer.getInteger("icheme.probe.failures.every",50)!=0)return;
 +        var b=new StringBuilder("PROBE_FAILURE #"+k+" dt="+dt+" rate="+rateOnly+" nodes="+graph.reservoirs().size()+" pipes="+graph.pipes().size()+" "+failure.getMessage()+"\n");
@@ -135,19 +167,20 @@ index 62932b743..bda8815b6 100644
 +    private static String probeWhere(Equations e,PassiveNetwork graph,List<FlowControl.Mode> modes,int row,double[] x) {
 +        if(row>=e.edgeOffset){int idx=row-e.edgeOffset;return idx<graph.pipes().size()?"pipe "+idx+" "+graph.pipes().get(idx).first()+"->"+graph.pipes().get(idx).second()+" mode="+modes.get(idx)+" control="+graph.pipes().get(idx).control().getClass().getSimpleName()+" ports="+graph.pipes().get(idx).firstPort()+"/"+graph.pipes().get(idx).secondPort()+" q="+x[row]:"edge-extra "+idx;}
 +        for(int n=0;n<e.layout.length;n++)if(e.layout[n]!=null&&row>=e.offsets[n]&&row<e.offsets[n]+e.layout[n].size()){var node=graph.reservoirs().get(n);var s=node.state();
-+            return "node "+n+" "+node.kind()+" local "+(row-e.offsets[n])+"/"+e.layout[n].size()+" P="+s.pressure()+" T="+s.temperature()+" m="+s.mass()+" liq="+s.liquidVolume()+" water="+s.waterVolume()+" vap="+s.vaporVolume()+" V="+node.inventory().volume()+" solids="+node.inventory().solids().empty();}
++            return "node "+n+" "+node.kind()+" local "+(row-e.offsets[n])+"/"+e.layout[n].size()+" P="+s.pressure()+" T="+s.temperature()+" m="+s.mass()+" liq="+s.liquidVolume()+" water="+s.waterVolume()+" vap="+s.vaporVolume()+" V="+node.inventory().volume()+" solids="+node.inventory().solids().empty()+(node.junction()?" ROW "+e.layout[n].probeJunctionRow(row-e.offsets[n],s):"");}
 +        return "?";
 +    }
      /** The interval controller supplies only modes of its matching accepted endpoint, never a rejected attempt. */
      Result solve(PassiveNetwork graph,double dt,Runnable checkpoint,List<FlowControl.Mode> acceptedEndpointModes){return solve(graph,dt,checkpoint,false,acceptedEndpointModes);}
      public Result solveRate(PassiveNetwork graph,Runnable checkpoint){return solve(graph,1,checkpoint,true,null);}
-@@ -514,9 +539,17 @@ public final class PassiveStepSolver {
+@@ -514,9 +562,17 @@ public final class PassiveStepSolver {
              // One tolerance for every island: a taut vessel's rows carry the precision its pressure needs as weights in the
              // norm the Newton converges on (owner decision D12, {@link Equations#rowWeights}), in place of the tenth of
              // the tolerance a small headspace used to impose on the whole island.
 -            double tolerance=NEWTON_TOLERANCE;
+-            try{numerical=SparseNewton.solve(equations,equations.initial(),new SparseNewton.Settings(SparseNewton.ITERATIONS,tolerance,1e-6,24),checkpoint,workspace);}
 +            double tolerance=Double.parseDouble(System.getProperty("icheme.probe.newtonTolerance","1e-9"));
-             try{numerical=SparseNewton.solve(equations,equations.initial(),new SparseNewton.Settings(SparseNewton.ITERATIONS,tolerance,1e-6,24),checkpoint,workspace);}
++            try{numerical=probeGateDecides(equations,equations.initial(),new SparseNewton.Settings(SparseNewton.ITERATIONS,tolerance,1e-6,24),checkpoint,workspace);}
 +            catch(IllegalArgumentException probed) {
 +                if(Boolean.getBoolean("icheme.probe.failures")&&String.valueOf(probed.getMessage()).contains("Matrix values")){
 +                    var at=com.wormzjl.icheme.science.fluid.linalg.SparseMatrix.PROBE_NONFINITE;double[] x0=equations.initial();
@@ -160,7 +193,7 @@ index 62932b743..bda8815b6 100644
                  if(failure.lastVariables()==null)throw failure;
                  double[] trialFlows=Arrays.copyOfRange(failure.lastVariables(),equations.edgeOffset,equations.edgeOffset+graph.pipes().size());
                  // Owner decisions D59 (4) and D14: a pump whose law pulled its suction below the vapour pressure of the liquid
-@@ -667,7 +700,7 @@ public final class PassiveStepSolver {
+@@ -667,7 +723,7 @@ public final class PassiveStepSolver {
              for(int node=0;node<projection.states().size();node++)if(equations.layout[node]!=null){var encoded=equations.layout[node].encode(projection.states().get(node));System.arraycopy(encoded,0,reconstructed,equations.offsets[node],encoded.length);}
              SolverDiagnostics.count(SolverDiagnostics.verificationResiduals);
              double maximumResidual=0;for(double residual:equations.residual(reconstructed))maximumResidual=Math.max(maximumResidual,Math.abs(residual));
@@ -169,7 +202,27 @@ index 62932b743..bda8815b6 100644
              if(maximumResidual>gate) {
                  // Decision D13: a refused point gets one polish on a fresh Jacobian before the step is refused; see
                  // {@link #polishRefusedPoint}. Reached only after the gate has refused, so every point it accepts is untouched.
-@@ -5398,7 +5431,8 @@ public final class PassiveStepSolver {
+@@ -683,6 +739,10 @@ public final class PassiveStepSolver {
+                     System.arraycopy(polished.heads(),0,heads,0,heads.length);draws=polished.draws();
+                     projection=polished.projection();reconstructed=polished.reconstructed();maximumResidual=polished.residual();}
+             }
++            if(maximumResidual>gate&&Boolean.getBoolean("icheme.probe.failures")&&PROBE_FAILURES.incrementAndGet()%Integer.getInteger("icheme.probe.failures.every",50)<3) {
++                double[] gf=equations.residual(reconstructed);int worst=0;for(int r=1;r<gf.length;r++)if(Math.abs(gf[r])>Math.abs(gf[worst]))worst=r;
++                System.out.println("PROBE_GATE dt="+dt+" residual="+gf[worst]+" row "+worst+": "+probeWhere(equations,graph,modes,worst,reconstructed));
++            }
+             if(maximumResidual>gate){SolverDiagnostics.count(SolverDiagnostics.equationGateRejections);throw new SparseNewton.Nonconvergence("Conservative reconstruction fails equation gate: "+maximumResidual);}
+             // The ledger reads the island as it is: an emptying vessel is a vessel that ends empty, not the junction it stood
+             // as in this pass.
+@@ -764,7 +824,7 @@ public final class PassiveStepSolver {
+                                         boolean[] boundaryClosed,boolean[][] promoted,int[] foldedPhases,double tolerance,double gate,Runnable checkpoint) {
+         SolverDiagnostics.count(SolverDiagnostics.equationGatePolishes);
+         SparseNewton.Result numerical;
+-        try{numerical=SparseNewton.solve(equations,x,new SparseNewton.Settings(SparseNewton.ITERATIONS,tolerance*1e-2,1e-6,24),checkpoint,new SparseNewton.Workspace(ownership));}
++        try{numerical=probeGateDecides(equations,x,new SparseNewton.Settings(SparseNewton.ITERATIONS,tolerance*1e-2,1e-6,24),checkpoint,new SparseNewton.Workspace(ownership));}
+         catch(SparseNewton.Nonconvergence failure){return null;}
+         double[] variables=numerical.variables();var states=equations.states(variables);
+         // A trace the polished point would reactivate is an active-set change the pass loop would take (reactivate), not an
+@@ -5398,7 +5458,8 @@ public final class PassiveStepSolver {
                  for(int c=0;c<fractions.length;c++)fractions[c]=held[c]*model.molecularWeight(c)/heldMass;
                  return inventory.internalEnergy()/heldMass;
              }
@@ -179,3 +232,21 @@ index 62932b743..bda8815b6 100644
              // Owner decision D61: what the junction's own stock melts joins its fluid, with the crystal's offset.
              var melt=heldMelt[node];
              for(int c=0;c<fractions.length;c++)
+diff --git a/src/main/java/com/wormzjl/icheme/science/fluid/solver/PhaseLayout.java b/src/main/java/com/wormzjl/icheme/science/fluid/solver/PhaseLayout.java
+index e37bcefc3..ab57ad9f3 100644
+--- a/src/main/java/com/wormzjl/icheme/science/fluid/solver/PhaseLayout.java
++++ b/src/main/java/com/wormzjl/icheme/science/fluid/solver/PhaseLayout.java
+@@ -128,6 +128,13 @@ public final class PhaseLayout {
+      */
+     public double steamLogReadScale(double value){return traceDifferenceScale(Math.max(Math.abs(value),logReadFloor(differenceScales[waterVaporIndex])));}
+     public int size(){return size;}
++    /** PROBE (tools/minecraft-time-delta): what a junction's local row states. */
++    public String probeJunctionRow(int local,FluidThermodynamics.State state) {
++        int m=junctionBasis.length;
++        if(local<m-1){int i=junctionBasis[local];double[] l=state.liquidView(),v=state.vaporView();double moles=i==l.length?state.waterLiquid()+state.waterVapor():l[i]+v[i],total=state.waterLiquid()+state.waterVapor();for(int c=0;c<l.length;c++)total+=l[c]+v[c];
++            return "mixing component "+i+" mole fraction "+moles/total+" (basis "+m+", bulk "+junctionBasis[m-1]+")";}
++        return local==m-1?"continuity (basis "+m+")":local==m?"enthalpy (basis "+m+")":local==m+1?"normalization":"equilibrium/solid "+(local-m-2);
++    }
+     /** The local column of the pressure unknown, {@code ln(P / 1e5)}; every layout has one. */
+     public int pressureVariable(){return pressureIndex;}
+     public int componentBalanceCount(){return components.length+(waterLiquidIndex>=0||waterVaporIndex>=0?1:0);}

@@ -16,8 +16,8 @@ for dist in $dists; do
   report=$OUT/$label-$dist-report.txt; log=$OUT/$label-$dist.gradle.txt; start=$(date +%s)
   ./gradlew --offline --console=plain --no-configuration-cache --init-script "$harness/hold-fuzz.init.gradle" \
     --init-script "$WT/tools/minecraft-time-delta/probe.init.gradle" test --tests '*HoldFuzzTest' \
-    -PholdFuzzSeeds=$seeds -PholdFuzzThreads=${THREADS:-8} -PholdFuzzCounters=true -PholdFuzzOut="$report" $extra "$@" > "$log" 2>&1
-  echo "== $label $dist exit=$? seconds=$(( $(date +%s) - start ))"
+    -PholdFuzzSeeds=$seeds -PholdFuzzThreads=${THREADS:-8} -PholdFuzzCounters=true -PholdFuzzOut="$report" -PprobeCountsOut="$OUT/$label-$dist-counts.txt" $extra "$@" > "$log" 2>&1
+  echo "== $label $dist exit=$? seconds=$(( $(date +%s) - start )) $(cat "$OUT/$label-$dist-counts.txt" 2>/dev/null)"
   bash "$CLASSIFY" "$report" > /dev/null 2>&1
   grep -E '^(SUMMARY|CLASS)' "$report" | cut -c1-300
 done
