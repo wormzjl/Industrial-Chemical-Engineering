@@ -425,3 +425,22 @@ One last form, measured (no further port-rule forms in this batch): the outflow 
 **Result of the last form (2026-11-11).** With the outflow test not pinning a gas the seed holds: the kettle passes (1 MW: 0.4427 kg/s against 0.4430; OFF: 1.2333 against 1.2339; the largest vent after t = 5 s is 3.27 kg/s of vapour flashing as the pressure fell 4.5 kPa, no liquid through the nozzle), `TracePhaseFoldTest`, `PhasePortPriorityTest` and `InletPhaseTest` pass, and two classes fail as they did with the pin removed for every phase: `LiquidCo2LetDownTest` (5 cm let-down, slice 4 held at the substep limit: 3.29 of 5 s, 726 accepted steps, 298 state-change rejects) and `PressureValveContinuationTest` (equalSetpoint ends `VALVE_OPEN` for `VALVE_REGULATING`). The port rule is back at main's; the form is kept as `tmp/w3b-network/gas-pin-form.patch`. The kettle (two tests) stays failing and is the owner's open item: the two failures are untraced, so it is not known whether they need the gas pin for a physical reason or lean on it.
 
 Also in the tree: form T reads a pump's head share from its suction junction's own vapour share on the start states (small, so T stays in the comparison); the hold-fuzz harnesses' trace line ported to `phaseVolume`.
+
+## 23. The suction forms' quick check and the two traces (2026-11-11)
+
+**Quick check** (200 seeds, 4 threads beside another worktree's test run; holds by class and seed):
+
+| Form | Cold random | Bundled random | Defaults | Newton iterations, cold / bundled |
+|---|---|---|---|---|
+| 0 (section 16's provisional rule) | 2: E6 101, F 118 | 0 | 0 | 329,694 / 124,843 |
+| G (clean-zone edge in the limit) | 4: E6 101 and 181, F 6 and 118 | 1: F 6 | 0 | 325,285 / 123,806 |
+| T (vapour pressure alone, head share read at the suction junction) | 2: E6 101, F 118 | 1: F 6 | 0 | 346,180 / 123,810 |
+
+Not chosen yet. The budget holds (F 6) are not replayed alone; cold 181 under G is a new hold of an existing class. Ordered before the choice: the batched replay alone of the budget holds; 181 diagnosed from the run's trace; a starved pump on nitrogen-saturated water over 30 steps under G and T (a steady point against a swing is what the hold count does not show).
+
+**The two tests that fail when a gas the seed holds is not pinned by the outflow test** (owner: "Trace the two failures").
+
+- `LiquidCo2LetDownTest`, 5 cm: liquid carbon dioxide enters the tank at about 89 kg/s (0.08 m3/s) and flashes about 5 % at 1.35 MPa and 241 K; the 0.16 m3 vapour space fills in about 2 s and the tank floods, the vent then passing the inflow, liquid with the flash vapour. Main's rule pins the gas at the vent (27.9 kg/s against a capacity of 27.5) and settles with 0.115 m3 of vapour standing while the vent passes 89.2 kg/s, mostly liquid: the kettle fault, here close to the truth. With the patch the step that removes the last vapour leaves the tank liquid-full, the vent passes 126 to 148 kg/s of liquid against 92 in, the pressure falls 93 kPa (a state change of 0.054 to 0.069, above the cap), the step shrinks to 1.2 ms and the node alternates between liquid with vapour and liquid alone (298 rejects, the substep limit at 3.29 s). Reading: the liquid does displace the gas there, so the patch's condition is too wide; and the flooded regime cannot be stepped, which main's standing vapour hides.
+- `PressureValveContinuationTest`, equalSetpoint: a drum with 11.4 of 11.5 m3 as vapour, fed 106.5 kg/s. Nothing displaces the gas. Main's rule pins the gas at the top port and passes drum liquid through it in 84 of 171 passes, which unloads the bottom line so its valve ends regulating at 200.0 kPa. With the patch the top draws vapour only, the bottom line runs on its velocity cap and its valve stays open at 201.8 kPa; ledgers hold and all 12 intervals commit. Reading: the test's endpoint mode leans on liquid through the top port.
+
+The physical statement that covers all three cases: a gas runs out at a port when the liquid entering within the step fills the vapour space (the kettle: none enters; the drum: far less than 11.4 m3; the let-down: 0.08 m3/s into 0.16 m3). The complete form is implicit: the flooded state is "all the gas that forms leaves, the liquid carries the rest, no vapour space", closed by the vapour volume, not by a guessed capacity.
