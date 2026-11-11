@@ -23,6 +23,7 @@ Owner, 2026-11-11: add ethanol to the compound matrix, identify what it affects 
 - 2026-11-11: owner approved the W1 and W2 subagents (Opus medium). W2 split: W2a (data, group tables, activity model, import; started with W1) and W2b (the derivation, after W1, because it runs through the kernel's new rule).
 - 2026-11-11: W1 (kernel): `PengRobinsonKernel` gains a Mathias-Copeman alpha per compound and the `HURON_VIDAL` plan (`HuronVidalExcess`), analytic derivatives, dense sums; the existing plans untouched. W2a (catalog data): `group_counts`, `henry_in_water` and `models.pr78.alpha` on datasets, in no identity; the Dortmund table with the water-hydrocarbon block and `ModifiedUnifac`; `HenryConstant`; the E-PPR78 table moved from the pilot overlay to main; 33 datasets got counts, 8 gases Henry coefficients (checked against Table 2 of IAPWS G7-04). Gate: 14 test classes, 92 tests, pass (`test --tests`, 4 workers, second lane). Owner on the kernel's kept constructors and plans: "no need for backward compat".
 - 2026-11-11: owner approved the W2b subagent (Opus medium). Measured for its brief: the homomorph rule needs the homomorph's own critical constants (with its groups but ethanol's constants: N2 2.66, CH4 2.08, CO2 1.16 times measured), so a polar compound's dataset names a bundled homomorph.
+- 2026-11-11: W2b (derivation): `DerivedPairs.derive(catalog, package)` builds a list's Huron-Vidal kernel with one source per pair (library, hydrogen zero, Henry, Dortmund activity fit, homomorph, E-PPR78, missing = zero and listed); the kernel's classical pairs take k(T) (a `PairInteractions` model, or linear between two temperatures); `homomorph` on datasets; counts authored for cyclohexane, propylene, butene-1, isobutene, butadiene (E-PPR78) and ethylene (Dortmund); a pilot list in the test overlay `pilot-aqueous` (cubic water, ethanol). Through the Java kernel: ethanol and water mean |dT| 0.233 K, |dy| 0.0038, azeotrope 0.896; ethanol and n-hexane one liquid, azeotrope 0.314; water and n-hexane 2.10e-6 and 9.46e-4; CO2 and N2 in water within 0.1 % of their Henry constants; N2, CH4, CO2 in ethanol within 5 % of the offline values. Deriving the refinery list with water (46 compounds, 1035 pairs): 0.93 s, 58 fits; 138 pairs have no source (E-PPR78 has no value for CO, O2, NH3, COS, SO2 and SH against some groups) and stay zero as today. Gate: 16 test classes, 109 tests, pass (`test --tests`, 4 workers, second lane).
 
 ## Tools
 
@@ -34,10 +35,11 @@ Changed so far: `science/thermo/PengRobinsonKernel`, `HuronVidalExcess`; `scienc
 
 ## Open items
 
-- W2b to W6 not started. `columnGates` and `equipmentGates` load the changed material data and have not run; they are the final lane's.
+- W3a to W6 not started. `columnGates` and `equipmentGates` load the changed material data and have not run; they are the final lane's.
 - Kernel: one rule for every list (the owner needs no backward compatibility): collapse the classical plans into the Huron-Vidal form once its sums run over polar compounds only and W3a can count the cost.
 - Kernel: a large positive excess energy can make the mixture attraction negative (the root selection then throws); W3a's rejected-trial handling.
-- ChemSep's PPR78 counts put ring and alkenic carbons in plain CH2 for cyclohexane, propylene, butene-1, isobutene, butadiene (refused, so those five have no E-PPR78 counts) and its Dortmund counts give ethylene as 2 CH2 (refused): author the counts from the group definitions in W2b.
+- Derivation: a pair with one liquid where the group model has two is kept with a notice (methyl mercaptan with three crude cuts); 138 refinery pairs have no E-PPR78 value and stay zero; ethanol and water's mean |dT| 0.233 K is close to its 0.25 K bound (offline 0.12 K with the earlier water alpha).
+- Ethanol and the cubic water dataset are in the test overlay only; they move to main data with W3a and W6.
 - Ethanol's and methanol's PPR78 group 41 has no E-PPR78 name: as planned, a polar compound takes the homomorph rule.
 - The block's anchor solubilities are still from memory (the record says so).
 - Licence: the E-PPR78 table now ships in the jar; its supporting-information file states no licence (DATA_LICENSE_REVIEW.md item for a release).

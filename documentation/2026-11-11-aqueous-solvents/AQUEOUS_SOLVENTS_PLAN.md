@@ -116,7 +116,7 @@ With M2 and M4 it needs no mechanism: a dissolved gas is a compound of a liquid.
 | W5 | V3 column with water on its axis: package, feed flash, classical seed, the simulator's unit and sizing, the running column; a tray with two liquids warns | An ethanol and water rectifier against an offline McCabe-Thiele on the same model |
 | W6 | Ethanol: records with groups, preset, names, heating value | Section 3 of the first review |
 
-Order: W1 and W2a first (disjoint files; done 2026-11-11, see the README), then W2b, which needs both. Saves: contents are facts and keep their amounts and temperature; the engine restates energy and pressure and books the difference (AGENTS.md); no facts field changes.
+Order: W1 and W2a first (disjoint files), then W2b, which needs both. All three are done (2026-11-11, see the README); W3a is next. Saves: contents are facts and keep their amounts and temperature; the engine restates energy and pressure and books the difference (AGENTS.md); no facts field changes.
 
 Risks: W3 rewrites the wet side of the engine and the vessel layout, so the hold-fuzz campaign starts from a new baseline; water's share is proven offline for pure water and one mixture path only (its derivatives, entropy, ice below 0 C and cost are W3a's), and pure water's saturation pressure moves from Wagner-Pruss by up to 0.54 %; the derivation is a small fit at load (deterministic, bounded; a pair it cannot fit is refused by name); E-PPR78 instead of zero pairs moves every result with a gas beside a crude cut, so the column's references and its start networks move once.
 
