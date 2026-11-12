@@ -64,6 +64,8 @@ public final class Converters implements IslandCoordinator.Ports {
         long fill(String fluid,long mB,boolean simulate);
         /** Takes up to {@code mB} out, inside {@code stored}; returns what it gave. */
         long drain(long mB,boolean simulate);
+        /** Whether it takes {@code fluid}: the fluid it holds, or, empty, a fluid some rule in force names for it. */
+        boolean valid(String fluid);
     }
 
     private record Reserved(double litres,long until) {}
@@ -123,13 +125,30 @@ public final class Converters implements IslandCoordinator.Ports {
     /** The Forge litres reserved for converter {@code id}'s slice in flight (0 once lapsed). */
     public double reserved(long id){var r=reserved.get(id);return r==null||r.until()<now.getAsLong()?0:r.litres();}
     /** Returns converter {@code id}'s account to its Forge tank in whole mB and drops its reservation: its island restated or held. */
-    public void release(long id) {
-        reserved.remove(id);planned.remove(id);
+    public void release(long id){reserved.remove(id);planned.remove(id);giveBack(id);}
+    /**
+     * At the engine's decision points: an account whose slice ended {@link #RESERVATION_TICKS} ago and never booked (its island
+     * held, restated or fenced) goes back to its Forge tank, whole mB. Its last plan stays: a replayed span still books on it.
+     */
+    @Override public void decide() {
+        if(byPort.isEmpty())return;long tick=now.getAsLong();
+        for(var u:topology.converters().values()) {
+            if(u.account()<1)continue;var p=planned.get(u.id());
+            if(p==null||p.end()+RESERVATION_TICKS<tick){reserved.remove(u.id());giveBack(u.id());}
+        }
+    }
+    private void giveBack(long id) {
         var u=topology.converter(id);if(u==null||u.account()<1)return;
         long whole=(long)Math.floor(u.account());
         if(!u.fluid().isEmpty()&&!u.fluid().equals(u.accountFluid()))return;
         long room=u.capacity()-u.stored();long back=Math.min(whole,room);if(back<=0)return;
         topology.converter(u.withTank(u.accountFluid(),u.stored()+back,u.remainder()).withAccount(u.accountFluid(),u.account()-back));
+    }
+    /** Whether a rule in force names Forge fluid {@code fluid} for a converter, closed or open: forward, or reverse to it. */
+    private boolean named(String fluid,boolean closed) {
+        var set=rules.get();if(set.forward(fluid,tags.apply(fluid),closed)!=null)return true;
+        for(var r:set.rules())if(r.toForge()!=null&&r.fluid().equals(fluid)&&(closed||r.phase()==ConversionRule.Phase.LIQUID))return true;
+        return false;
     }
     /** Converter {@code id}'s Forge tank. */
     public Tank tank(long id) {
@@ -139,7 +158,7 @@ public final class Converters implements IslandCoordinator.Ports {
             public long stored(){var u=topology.converter(id);return u==null?0:u.stored();}
             public long fill(String fluid,long mB,boolean simulate) {
                 var u=topology.converter(id);if(u==null||mB<=0||fluid.isEmpty())return 0;
-                if(!u.fluid().isEmpty()&&!u.fluid().equals(fluid))return 0;
+                if(!u.fluid().isEmpty()&&!u.fluid().equals(fluid)||u.fluid().isEmpty()&&!named(fluid,u.closed()))return 0;
                 long free=(long)Math.floor(u.capacity()-u.stored()-reserved(id)-u.remainder());
                 long taken=Math.max(0,Math.min(mB,free));
                 if(taken>0&&!simulate){topology.converter(u.withTank(fluid,u.stored()+taken,u.remainder()));moved.accept(id);}
@@ -151,12 +170,40 @@ public final class Converters implements IslandCoordinator.Ports {
                 if(given>0&&!simulate){topology.converter(u.withTank(u.fluid(),u.stored()-given,u.remainder()));moved.accept(id);}
                 return given;
             }
+            public boolean valid(String fluid) {
+                var u=topology.converter(id);if(u==null||fluid.isEmpty())return false;
+                return u.fluid().isEmpty()?named(fluid,u.closed()):u.fluid().equals(fluid);
+            }
         };
     }
 
     // ---------------- the islands' ports (IslandCoordinator.Ports) ----------------
 
     @Override public boolean ready(long island,PassiveNetwork graph,long start){return true;}
+
+    /** The fill ports whose islands must grow before they give their rule's stream (W3): queued edits, applied on the engine's tick. */
+    private final Set<Long> growth=new LinkedHashSet<>();
+    /**
+     * Queues, through {@code submit}, an edit of every fill port whose forward rule names a compound its island does not carry
+     * (its registration at its next revision, which recompiles its island with {@link #compounds}), as
+     * {@link ColumnOperation#grow} does; a port with an event already queued waits for it.
+     */
+    public void grow(java.util.function.Consumer<List<WorldTopologyLedger.Edit>> submit) {
+        if(growth.isEmpty())return;
+        var waiting=List.copyOf(growth);growth.clear();
+        for(long device:waiting) {
+            var r=topology.latest().get(device);if(r==null||topology.pending(device))continue;
+            submit.accept(List.of(new WorldTopologyLedger.Edit(device,new WorldTopologyLedger.Registration(r.device(),r.spec(),Math.addExact(r.revision(),1)))));
+        }
+    }
+    /** The compounds fill port {@code device} may give: its forward rule's for the Forge tank's fluid, for its island's list. */
+    public Set<String> compounds(long device) {
+        Long id=byPort.get(device);var u=id==null?null:topology.converter(id);
+        if(u==null||u.fill()!=device||u.mode()==ConverterUnit.Mode.OFF||u.mode()==ConverterUnit.Mode.TO_FORGE)return Set.of();
+        var fluid=u.account()>0?u.accountFluid():u.fluid();if(fluid.isEmpty())return Set.of();
+        var rule=rules.get().forward(fluid,tags.apply(fluid),u.closed());
+        return rule==null?Set.of():new TreeSet<>(rule.toIChemE().composition().keySet());
+    }
 
     @Override public Map<Long,PortPlan> plans(long island,PassiveNetwork graph,IslandClock.Slice slice) {
         if(byPort.isEmpty())return Map.of();
@@ -234,7 +281,7 @@ public final class Converters implements IslandCoordinator.Ports {
         if(rule==null)return new Outcome(null,Status.NO_RULE);
         var per=perLitre(rule,model);
         // A rule naming a compound the island does not carry waits for its island to grow (W3), as a column outlet's does.
-        if(per==null)return new Outcome(null,Status.NO_RULE);
+        if(per==null){growth.add(u.fill());return new Outcome(null,Status.NO_RULE);}
         var tank=graph.reservoirs().get(vessel);
         double free=(tank.inventory().volume()-FluidThermodynamics.liquidStreamVolume(tank.state()))*ConversionLaws.LITRES_PER_M3;
         double want=Math.min(u.maxRate()*dt,free);

@@ -146,6 +146,15 @@ final class ConverterDesign extends UnitDesign {
     /** The level gauge's column off the shell, m. */
     static final double GAUGE_OUT = .5;
 
+    /**
+     * The rows from the process tank's node (its lowest inside cell) to the cell of its hidden high contact (batch
+     * 2026-11-12-fluid-conversion, W3): the top row inside its shell, at least one row up.
+     */
+    static int rise(double diameter, double shell, boolean gas) {
+        double base = gas ? SLAB + skirt(diameter) : SLAB;
+        return Math.max(1, (int) Math.floor(base + shell - .5) - (int) Math.floor(base + .01));
+    }
+
     /** The skirt under a gas converter's vessels, m. */
     static double skirt(double diameter) {
         return ProcessUnit.clamp(.25 * diameter, .4, 1.5);
@@ -162,6 +171,8 @@ final class ConverterDesign extends UnitDesign {
         double base = gas ? SLAB + skirt(d) : SLAB, top = base + h;
         panelTank(u, xl, zc, r, top);
         vessel(u, xr, zc, r, n, base, top);
+        // The process tank's node (W3): its lowest inside point; the hidden ports meet it from there and from {@link #rise} rows up.
+        u.fluidPoint = new double[]{xr, base + .01, zc};
 
         // The transfer line (owner 2026-11-12: "in the middle"): straight from the Forge tank's side to the process tank's
         // through the middle of the bay, the flow meter half way.
@@ -218,6 +229,8 @@ final class ConverterDesign extends UnitDesign {
         // front of the wall (flush with it on a tank an odd number of metres across).
         double port = Math.min(.4, .45 * r), face = Math.floor(zc - r + 1e-9), py = SLAB + .1;
         u.box(new double[]{xl - port, py, face}, new double[]{xl + port, py + 2 * port, zc - r + .1}, Material.FLANGE, true);
+        // Its capability answers on this face only (W3).
+        u.forgePort = new double[]{xl, py + port, face, 0, 0, -1};
         u.mesh.box(new double[]{xl - .7 * port, py + .3 * port, face - .02}, new double[]{xl + .7 * port, py + 1.7 * port, face}, Mesh.ALL_FACES, Material.MACHINE);
         for (int sx = -1; sx <= 1; sx += 2)
             for (int sy = -1; sy <= 1; sy += 2)

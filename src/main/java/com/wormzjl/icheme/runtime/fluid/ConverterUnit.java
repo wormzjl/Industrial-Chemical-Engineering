@@ -10,7 +10,9 @@ import java.util.Objects;
  * <ul>
  * <li>The devices it registered: its vessel, its drain port (a void, reverse: IChemE to Forge) with the boundary valve in
  * front of it, and its fill port (a generator, forward) with its valve. A port node has one kind, so each direction has its
- * own port (one void, one generator) behind its own valve.</li>
+ * own port (one void, one generator) behind its own valve. A placed converter's ports (W3) carry their own valves
+ * ({@code FlowControl.ValveSource.CONVERTER}) in their vessel's port lane: there {@code drainValve == drain} and
+ * {@code fillValve == fill}.</li>
  * <li>Whether it is the closed, blanketed variant (gas rules run only there, owner D4).</li>
  * <li>Its settings: the mode, the most it converts (L per process second), the balance deadband (a fill fraction) and four
  * level thresholds (fill fractions; NaN for none): IChemE high and low, Forge high and low.</li>

@@ -187,6 +187,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
         ejectors=new Ejectors(runtime.coordinator()::model);
         converters=new Converters(topology,runtime.coordinator()::model,model.time(),topology::onlineTick,
                 id->{var island=registry.owner(id);if(island!=null)runtime.coordinator().portsMoved(island);},com.wormzjl.icheme.science.fluid.conversion.ConversionRuntime::active);
+        // A tag rule names the fluid registry's tags (W3), read without the hash.
+        converters.tags(FluidWorldAuthority::fluidTags);
         stills.refresh();runtime.coordinator().ports(IslandCoordinator.Ports.both(columns,IslandCoordinator.Ports.both(stills,IslandCoordinator.Ports.both(ejectors,converters))));
         stills.solves((pot,island,job,done)->{
             var at=registrations().get(pot);if(at==null)return false;
@@ -724,6 +726,86 @@ public final class FluidWorldAuthority implements AutoCloseable {
     }
     /** The pressure a still's DISTILLATE and VENT generators stand at, Pa: a short liquid head over the atmosphere (an owner option, BATCH_STILL_ENGINE.md). */
     public static final double STILL_OUTLET_PRESSURE=150000;
+    /**
+     * A fluid converter's devices (batch 2026-11-12-fluid-conversion, W3): its process vessel at {@code node} with its nozzles
+     * {@code ports}, its volume, level height, opening and geometry, and the two inside contacts its hidden ports meet it
+     * through (vessel port cells and faces, each of its phase class): {@code drain} (reverse) and {@code fill} (forward).
+     * {@code rate} is its rated flow (L per process second), {@code capacity} its Forge tank's (mB).
+     */
+    public record ConverterDevices(PhysicalFluidTopology.Position node,List<PhysicalFluidTopology.Port> ports,double volume,double levelHeight,boolean closed,
+                                   com.wormzjl.icheme.science.fluid.network.VesselGeometry geometry,PhysicalFluidTopology.Port drain,PhysicalFluidTopology.Port fill,
+                                   double rate,long capacity,double blanket,double relief,PhysicalFluidTopology.Direction reliefFace) {
+        /** The vessel's ports: its nozzles, then its drain's and its fill's inside contacts. */
+        public List<PhysicalFluidTopology.Port> all(){var all=new ArrayList<>(ports);all.add(drain);all.add(fill);return List.copyOf(all);}
+    }
+    /** The pressure behind a converter's drain void, Pa: under the vessel it draws from, so its valve regulates the draw. */
+    public static final double CONVERTER_DRAIN_PRESSURE=80000;
+    /** The pressure of a liquid and of a gas converter's fill generator, Pa: its valve regulates what it gives. */
+    public static final double CONVERTER_FILL_LIQUID=500000,CONVERTER_FILL_GAS=1000000;
+    /** A converter port's line velocity at its rated flow, m/s: its bore. */
+    static final double CONVERTER_LINE_VELOCITY=2;
+    /**
+     * Registers a fluid converter as one ledger event (W3): its vessel (open, or closed for the gas variant), its drain (a
+     * void) and its fill (a generator), each in the port lane of the cell its contact faces, its valve its converter's
+     * ({@link FlowControl.ValveSource#CONVERTER}); then its facts, off, rated at {@code rate}. With {@code former} a registered
+     * converter's vessel, the refresh of that converter onto {@code d} (decision D7): each device keeps its identity, its
+     * controls and what it holds and moves to its new cell; its facts stay. Returns vessel, drain and fill.
+     */
+    public List<WorldTopologyLedger.Registration> placeConverter(ConverterDevices d,long former) {
+        owned();var formerVessel=former>0?registrations().get(former):null;var u=formerVessel==null?null:topology.converter(former);
+        var nitrogen=FluidDeviceSpec.nitrogen(catalog).composition();
+        if(formerVessel!=null&&formerVessel.device().kind()==TopologyCompiler.Kind.RESERVOIR) {
+            // The vessel keeps its identity and what it holds; a port the converter has moves, one it lacks (or a vessel
+            // registered without its converter's facts) registers afresh, and the facts follow.
+            var edits=new ArrayList<WorldTopologyLedger.Edit>();var placed=new ArrayList<WorldTopologyLedger.Registration>();
+            var s=formerVessel.spec();long next=topology.nextIdentity();
+            var vessel=new WorldTopologyLedger.Registration(formerVessel.device().withPlacement(d.node(),d.all()),
+                    new FluidDeviceSpec(d.volume(),s.temperature(),s.pressure(),s.composition(),s.solids(),d.levelHeight(),!d.closed(),d.geometry(),null,d.blanket(),d.relief(),d.reliefFace()),Math.addExact(formerVessel.revision(),1));
+            placed.add(vessel);edits.add(new WorldTopologyLedger.Edit(former,vessel));
+            long[] ids={u==null?0:u.drain(),u==null?0:u.fill()};
+            for(int k=0;k<2;k++) {
+                var kind=k==0?TopologyCompiler.Kind.VOID:TopologyCompiler.Kind.GENERATOR;var contact=k==0?d.drain():d.fill();
+                var r=ids[k]>0?registrations().get(ids[k]):null;
+                if(r==null){ids[k]=next++;var fresh=converterPort(ids[k],contact,kind,d.rate(),d.closed(),nitrogen);placed.add(fresh);edits.add(new WorldTopologyLedger.Edit(ids[k],fresh));continue;}
+                var fresh=converterPort(ids[k],contact,kind,d.rate(),d.closed(),nitrogen);
+                var moved=new WorldTopologyLedger.Registration(r.device().withPlacement(fresh.device().position(),fresh.device().ports()).withGeometry(fresh.device().geometry()),r.spec(),Math.addExact(r.revision(),1));
+                placed.add(moved);edits.add(new WorldTopologyLedger.Edit(ids[k],moved));
+            }
+            submit(edits,next);
+            if(u==null)converters.register(ConverterUnit.built(former,ids[0],ids[0],ids[1],ids[1],d.closed(),d.capacity()).withSettings(ConverterUnit.Mode.OFF,d.rate(),ConverterUnit.DEFAULT_DEADBAND));
+            else if(u.drain()!=ids[0]||u.fill()!=ids[1]){converters.remove(former);converters.register(new ConverterUnit(former,ids[0],ids[0],ids[1],ids[1],d.closed(),u.mode(),u.maxRate(),u.deadband(),u.thresholds(),u.capacity(),u.fluid(),u.stored(),u.remainder(),u.accountFluid(),u.account()));}
+            return placed;
+        }
+        long next=topology.nextIdentity();long vessel=next++,drain=next++,fill=next++;
+        var device=new PhysicalFluidTopology.Device(vessel,d.node(),TopologyCompiler.Kind.RESERVOIR,PhysicalFluidTopology.Direction.NORTH,
+                new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive(),d.all());
+        var spec=new FluidDeviceSpec(d.volume(),298.15,com.wormzjl.icheme.science.fluid.solver.PhaseLayout.AMBIENT_PRESSURE,nitrogen,SlurryFeed.NONE,d.levelHeight(),!d.closed(),d.geometry(),null,d.blanket(),d.relief(),d.reliefFace());
+        var placed=List.of(new WorldTopologyLedger.Registration(device,spec,0),converterPort(drain,d.drain(),TopologyCompiler.Kind.VOID,d.rate(),d.closed(),nitrogen),
+                converterPort(fill,d.fill(),TopologyCompiler.Kind.GENERATOR,d.rate(),d.closed(),nitrogen));
+        submit(placed.stream().map(r->new WorldTopologyLedger.Edit(r.device().id(),r)).toList(),next);
+        converters.register(ConverterUnit.built(vessel,drain,drain,fill,fill,d.closed(),d.capacity()).withSettings(ConverterUnit.Mode.OFF,d.rate(),ConverterUnit.DEFAULT_DEADBAND));
+        return placed;
+    }
+    /** A converter's hidden port {@code id} meeting its vessel through {@code contact}: in the port lane of the next cell, facing back. */
+    private static WorldTopologyLedger.Registration converterPort(long id,PhysicalFluidTopology.Port contact,TopologyCompiler.Kind kind,double rate,boolean closed,double[] nitrogen) {
+        var back=PhysicalFluidTopology.opposite(contact.face());var cell=contact.cell().offset(contact.face()).withLane(PhysicalFluidTopology.PORT_LANE);
+        double bore=Math.max(.05,Math.sqrt(4*rate/1000/(Math.PI*CONVERTER_LINE_VELOCITY)));
+        var device=new PhysicalFluidTopology.Device(id,cell,kind,back,new PipeResistance.Geometry(1,bore,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),FlowControl.ControlValve.converter(),
+                List.of(new PhysicalFluidTopology.Port(cell,back,com.wormzjl.icheme.science.fluid.network.PassiveNetwork.PhasePort.BULK)),true,
+                PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,null,0);
+        double pressure=kind==TopologyCompiler.Kind.VOID?CONVERTER_DRAIN_PRESSURE:closed?CONVERTER_FILL_GAS:CONVERTER_FILL_LIQUID;
+        return new WorldTopologyLedger.Registration(device,new FluidDeviceSpec(1,298.15,pressure,nitrogen),0);
+    }
+    /** The identities of the converter whose vessel is {@code vessel}: its vessel, drain and fill that are registered. */
+    public java.util.Set<Long> converterDevices(long vessel) {
+        owned();var u=topology.converter(vessel);if(u==null)return java.util.Set.of();
+        var ids=new java.util.HashSet<Long>();for(long id:new long[]{u.id(),u.drain(),u.fill()})if(id>0&&registrations().containsKey(id))ids.add(id);return ids;
+    }
+    /** A Forge fluid's tags in the fluid registry, without the hash; none for an id that names no fluid. */
+    static Set<String> fluidTags(String fluid) {
+        var id=net.minecraft.resources.ResourceLocation.tryParse(fluid);if(id==null)return Set.of();
+        return net.minecraft.core.registries.BuiltInRegistries.FLUID.getHolder(id).map(h->h.tags().map(t->t.location().toString()).collect(java.util.stream.Collectors.toUnmodifiableSet())).orElse(Set.of());
+    }
     /**
      * A batch still's devices to place (batch 2026-11-09-batch-distiller, W3): its pot (a vessel at its node with its phase
      * ports, volume, level height, geometry and heat unit: its heated area), its condenser's water side (null without the
@@ -1350,6 +1432,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
         if(topology.onlineTick()%ElectricStores.CADENCE==0&&propertyHold==null){electric.cadence();shafts.cadence();}
         // A running column's port whose account holds a compound its island lacks grows that island (V2): one queued edit.
         columns.grow(edits->submit(edits,topology.nextIdentity()));
+        // So does a converter's fill whose forward rule names a compound its island lacks (W3).
+        converters.grow(edits->submit(edits,topology.nextIdentity()));
         runtime.tick();
         if(topology.hasPendingEvents()){applyPending();runtime.coordinator().pumpIfUseful();}
         // Shaft events apply after the devices they name (W3), then their trains recompile and wake what moved.
@@ -2646,7 +2730,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
         public boolean acceptsRecovery(UUID player){var online=server.getPlayerList().getPlayer(player);return online!=null&&online.getInventory().getFreeSlot()>=0;}
         @Override public Set<String> portCompounds(long port){
             var column=columns==null?Set.<String>of():columns.compounds(port);var still=stills==null?Set.<String>of():stills.compounds(port);
-            if(still.isEmpty())return column;if(column.isEmpty())return still;var all=new java.util.TreeSet<>(column);all.addAll(still);return all;
+            var converter=converters==null?Set.<String>of():converters.compounds(port);
+            if(still.isEmpty()&&converter.isEmpty())return column;if(column.isEmpty()&&converter.isEmpty())return still;if(column.isEmpty()&&still.isEmpty())return converter;
+            var all=new java.util.TreeSet<>(column);all.addAll(still);all.addAll(converter);return all;
         }
         public void refused(UUID event,String reason){refuseEvent(event,reason);}
         public void committed(Set<Long> removed,Set<Long> recompiled) {
@@ -2656,6 +2742,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
             columns.committed();
             // A batch still whose pot left takes its head's accounts along, booked as destroyed (batch 2026-11-09-batch-distiller).
             for(long device:removed)if(topology.still(device)!=null){topology.removeStill(device);stills.removed(device);}
+            // A converter whose vessel left leaves with it (W3); its Forge tank goes with the block. Swept against the registry,
+            // not the batch's removals: a converter placed and broken before its registration applied never had an active vessel.
+            if(!topology.converters().isEmpty())for(long id:List.copyOf(topology.converters().keySet()))if(!registrations().containsKey(id))converters.remove(id);
             // Every recompiled device's cached snapshot predates the change, and one left in no island (a pipe whose only
             // tank was broken) gets no publication that would mark it: each is marked for its next bucket, which presents
             // its new view (its replacement island, or "no hydraulic boundary"); an opening menu waits for that bucket.

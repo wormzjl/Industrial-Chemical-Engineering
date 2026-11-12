@@ -523,6 +523,14 @@ public final class ShapeRasterizer {
         return geometry(shape).shafts;
     }
 
+    /** A fluid converter's Forge fluid port (batch 2026-11-12-fluid-conversion, W3): the cell behind its face and the face's outward step. */
+    public record ForgePort(Cell cell, int dx, int dy, int dz) {}
+
+    /** A fluid converter's Forge fluid port, or null for any other shape. */
+    public static @Nullable ForgePort forgePort(EquipmentShape shape) {
+        return geometry(shape).forgePort;
+    }
+
     /** The cell of an electric machine's terminal box (its RF port, batch 2026-11-03-rotating-machinery W5), or null. */
     public static @Nullable Cell terminal(EquipmentShape shape) {
         return geometry(shape).terminal;
@@ -726,6 +734,8 @@ public final class ShapeRasterizer {
         private final List<Shaft> shafts = new ArrayList<>();
         /** An electric machine's terminal box cell, its RF port; null without one. */
         private final Cell terminal;
+        /** A fluid converter's Forge fluid port; null without one. */
+        private final ForgePort forgePort;
         private final Layout layout;
         private final Cell fluidCell;
         /** One node cell per registration: the fluid cell, or each heat side's first inlet cell (batch 2026-10-27-heat-exchanger-design). */
@@ -841,6 +851,7 @@ public final class ShapeRasterizer {
                 ports.addAll(physical.ports);
                 shafts.addAll(physical.shafts);
                 terminal = physical.terminal;
+                forgePort = physical.forgePort;
                 layout = physical.layout;
                 fluidCell = physical.fluidCell;
                 fluidCells = physical.fluidCells;
@@ -886,6 +897,14 @@ public final class ShapeRasterizer {
                 box = new Cell(floor(p.x() - .1 * n[0]), floor(p.y() - .1 * n[1]), floor(p.z() - .1 * n[2]));
             }
             terminal = box;
+            ForgePort forge = null;
+            if (unit != null && unit.forgePort != null) {
+                var p = unit.forgePort;
+                var inner = transform.point(new double[]{p[0] - p[3] * .01, p[1] - p[4] * .01, p[2] - p[5] * .01});
+                var out = transform.direction(new double[]{p[3], p[4], p[5]});
+                forge = new ForgePort(new Cell(floor(inner[0]), floor(inner[1]), floor(inner[2])), (int) Math.round(out[0]), (int) Math.round(out[1]), (int) Math.round(out[2]));
+            }
+            forgePort = forge;
             for (var entry : byCell.entrySet()) {
                 if (entry.getValue().size() > KEYED_NOZZLES)
                     throw new IllegalStateException(entry.getValue().size() + " nozzles reach cell " + entry.getKey() + " of " + shape + ": a key carries " + KEYED_NOZZLES);

@@ -861,7 +861,7 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
 
     /** Registers with the fluid engine when the whole structure has been built: a steam turbine too (W3, reading A37), a batch still (batch 2026-11-09-batch-distiller, W3), a steam ejector (batch 2026-11-10-steam-ejector-flow). */
     public boolean fluidDevice() {
-        return reservoir() || kind.mover() || kind == Kind.STEAM_TURBINE || kind.primeMover() || kind == Kind.EJECTOR || kind == Kind.FLARE_STACK || kind == Kind.BATCH_STILL || kind.chimney() || HeatSides.unit(kind) != null;
+        return reservoir() || kind.mover() || kind == Kind.STEAM_TURBINE || kind.primeMover() || kind == Kind.EJECTOR || kind == Kind.FLARE_STACK || kind == Kind.BATCH_STILL || kind.chimney() || kind.converter() || HeatSides.unit(kind) != null;
     }
 
     /** A vessel's skirt; a designed shape's supports are its own parts. */
@@ -927,6 +927,8 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
     public com.wormzjl.icheme.science.fluid.network.VesselGeometry fluidGeometry() {
         if(kind.coolingTower())return com.wormzjl.icheme.science.fluid.network.VesselGeometry.prism(coolingTower().basinVolume(),com.wormzjl.icheme.science.fluid.network.CoolingTower.BASIN_DEPTH);
         if(kind==Kind.KETTLE)return HeatSides.kettleShell(diameter,tangentLength);
+        // A fluid converter's process vessel (batch 2026-11-12-fluid-conversion): an upright cylinder of its shell's height.
+        if(kind.converter())return com.wormzjl.icheme.science.fluid.network.VesselGeometry.round(com.wormzjl.icheme.science.fluid.network.VesselGeometry.Form.CYLINDER,diameter,tangentLength,0,0);
         var form=kind==Kind.TANK?com.wormzjl.icheme.science.fluid.network.VesselGeometry.Form.CYLINDER:kind==Kind.SPHERE?com.wormzjl.icheme.science.fluid.network.VesselGeometry.Form.SPHERE:orientation.horizontal()?com.wormzjl.icheme.science.fluid.network.VesselGeometry.Form.HORIZONTAL_DRUM:com.wormzjl.icheme.science.fluid.network.VesselGeometry.Form.VERTICAL_DRUM;
         var b=bootPlace();return com.wormzjl.icheme.science.fluid.network.VesselGeometry.round(form,diameter,kind==Kind.TANK?fillHeight():kind==Kind.SPHERE?0:tangentLength,b==null?0:b.diameter(),b==null?0:b.length());
     }
@@ -934,6 +936,7 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
     public double volume() {
         if (kind.coolingTower()) return coolingTower().basinVolume();
         if (kind == Kind.KETTLE) return fluidGeometry().capacity();
+        if (kind.converter()) return ConverterDesign.volume(diameter, tangentLength);
         if (kind == Kind.TANK) return Math.PI * diameter * diameter / 4 * fillHeight();
         if (kind == Kind.SPHERE) return Math.PI * diameter * diameter * diameter / 6;
         // A batch still's main size is its pot's volume, litres.
@@ -959,9 +962,20 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
      * {@code ρ g h} is then exact at every level, plan section 1), a sphere's diameter (exact at half full, as a lying
      * drum's).
      */
+    /** A fluid converter's rated flow, L per process second (batch 2026-11-12-fluid-conversion): the default and the most of its rate setting. */
+    public double converterRate() {
+        return ConverterDesign.rate(diameter, tangentLength);
+    }
+
+    /** A fluid converter's hidden high contact, in rows over its node (its process tank's top row inside the shell, at least one). */
+    public int converterRise() {
+        return ConverterDesign.rise(diameter, tangentLength, kind == Kind.GAS_CONVERTER);
+    }
+
     public double levelHeight() {
         if (kind.coolingTower()) return com.wormzjl.icheme.science.fluid.network.CoolingTower.BASIN_DEPTH;
         if (kind == Kind.KETTLE) return fluidGeometry().height();
+        if (kind.converter()) return tangentLength;
         if (kind == Kind.TANK) return fillHeight();
         if (kind == Kind.SPHERE) return diameter;
         return orientation.horizontal() ? diameter : overallLength();
