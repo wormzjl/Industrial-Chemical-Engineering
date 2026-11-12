@@ -7,6 +7,7 @@ Batch `2026-11-12-tutorial-system`, 2026-11-12. Commits: recorder 66ed0baa4, cha
 | pot still | 75.2 %, 232.7 °C, 16.3 | 39.1 %, 20.9 | none |
 | 4 trays, reflux 1 | 84.9 % (+9.7), 249.7 °C, 19.1 | 55.1 %, 24.6 | 99 % solved (dry 33 steps at 30-112 °C, fallback 5 at 114-138 °C) |
 | 4 trays, reflux 2 | 88.1 % (+12.9), 254.5 °C, 21.5 | 64.4 %, 28.0 | 91 % solved (dry 39 at 30-124 °C, fallback 11 at 124-148 °C) |
+
 500 L still, medium crude, full firing, 4 trays (`StillColumn.MAX_STAGES` 8; the constructor offers 0 or 2 to 8).
 The claim holds at reflux 2 (+12.9 points, 91 % solved, 21.5 minutes). All three runs end at the law's 350 °C cut.
 Failed premise, reported: a cut takes 1.17 to 1.32 times the pot still's time, not R + 1 times, because the charge's
