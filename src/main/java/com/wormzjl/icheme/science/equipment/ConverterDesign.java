@@ -143,6 +143,16 @@ final class ConverterDesign extends UnitDesign {
         return new double[]{a + Math.ceil(diameter) + bay(diameter) + o, a - Math.sqrt(rho * rho - o * o)};
     }
 
+    /**
+     * The optional level gauge's place on a liquid converter's process tank (W3, plan D11), kind-neutral: at {@link #gauge},
+     * facing the front, its chamber from 0.3 m over the slab to 0.2 m under the shell's top, ticked over the tank's floor.
+     */
+    static GaugePlace gaugePlace(double diameter, double shell) {
+        double r = diameter / 2, a = ProcessUnit.centre(r + MARGIN);
+        var g = gauge(diameter);
+        return new GaugePlace(g[0], g[1], new double[]{0, 0, -1}, a + Math.ceil(diameter) + bay(diameter), a, r, SLAB, SLAB + .3, SLAB + shell - .2, SLAB, shell - .5);
+    }
+
     /** The level gauge's column off the shell, m. */
     static final double GAUGE_OUT = .5;
 

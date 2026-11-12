@@ -209,7 +209,8 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
         CLIENT_NAMED.remove(this);
         leaveStructure();
         if (shape == null || level == null || !level.isClientSide) return;
-        if ((shape.kind() == EquipmentShape.Kind.TANK || shape.kind().coolingTower()) && cell().equals(ShapeRasterizer.fluidCell(shape))) CLIENT_TANKS.add(this);
+        // A liquid converter's level gauge reads the open tanks' display too (batch 2026-11-12-fluid-conversion, W3).
+        if ((shape.kind() == EquipmentShape.Kind.TANK || shape.kind().coolingTower() || shape.kind() == EquipmentShape.Kind.FLUID_CONVERTER) && cell().equals(ShapeRasterizer.fluidCell(shape))) CLIENT_TANKS.add(this);
         if (!name.isEmpty() && cell().equals(ShapeRasterizer.layout(shape).controller())) CLIENT_NAMED.add(this);
         {
             structures = CLIENT_STRUCTURES.computeIfAbsent(level, k -> new LoadedEquipment());

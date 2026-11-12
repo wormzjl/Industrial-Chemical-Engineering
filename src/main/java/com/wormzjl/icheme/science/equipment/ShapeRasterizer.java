@@ -343,7 +343,22 @@ public final class ShapeRasterizer {
             return List.copyOf(polygons);
         });
     }
-    public static List<Polygon> tankGauge(EquipmentShape shape){if(!drawing)throw new IllegalStateException("A dedicated server keeps no accessory surfaces");return shape.kind()==EquipmentShape.Kind.TANK?geometry(shape).tankGauge():List.of();}
+    public static List<Polygon> tankGauge(EquipmentShape shape){if(!drawing)throw new IllegalStateException("A dedicated server keeps no accessory surfaces");return GaugePlace.of(shape)!=null?geometry(shape).tankGauge():List.of();}
+
+    /**
+     * A level gauge's sight glass in the box (batch 2026-11-12-fluid-conversion: a floating-roof tank's or a liquid
+     * converter's): its column's axis {@code at} (x, z), its chamber from {@code low} to {@code high} and the floor its liquid's
+     * depth stands over, box y; null for a shape that takes no gauge.
+     */
+    public record Glass(double[] at, double low, double high, double floor) {}
+
+    public static @Nullable Glass glass(EquipmentShape shape) {
+        var place = GaugePlace.of(shape);
+        if (place == null) return null;
+        var t = shape.transform();var at = t.point(new double[]{place.x(), 0, place.z()});
+        double lift = t.point(new double[]{0, 0, 0})[1];
+        return new Glass(new double[]{at[0], at[2]}, place.low() + lift, place.high() + lift, place.floor() + lift);
+    }
 
     /** A floating-roof tank's client-drawn parts in the box, or null for any other shape. */
     public static @Nullable Floating floating(EquipmentShape shape) { return floating(shape, RenderDetail.NORMAL); }
@@ -1670,7 +1685,7 @@ public final class ShapeRasterizer {
         private List<Polygon> tankGauge(){
             var result=tankGauge;if(result!=null)return result;
             var accessory=new Mesh(detail);accessory.transform(transform);
-            TankDesign.gauge(accessory,TankDesign.Plan.of(shape.diameter(),(int)shape.tangentLength()));
+            TankGaugeGeometry.draw(accessory,GaugePlace.of(shape));
             var polygons=new ArrayList<Polygon>();cut(accessory,accessory.facets(),new double[3],polygons);
             return tankGauge=List.copyOf(polygons);
         }
