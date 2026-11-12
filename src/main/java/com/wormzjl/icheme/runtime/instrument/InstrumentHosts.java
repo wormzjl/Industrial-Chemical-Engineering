@@ -210,7 +210,8 @@ public final class InstrumentHosts {
         private static final Map<EquipmentShape,AABB> BOUNDS=new ConcurrentHashMap<>();
         @Override public String id(){return "tank_level";}
         public static LevelGauge of(Host host){
-            if(!(host.entity() instanceof EquipmentShellBlockEntity shell)||shell.shape()==null||shell.shape().kind()!=EquipmentShape.Kind.TANK)return null;
+            // A floating-roof tank's, or a liquid converter's (batch 2026-11-12-fluid-conversion, plan D11): every shape with a gauge place.
+            if(!(host.entity() instanceof EquipmentShellBlockEntity shell)||shell.shape()==null||com.wormzjl.icheme.science.equipment.GaugePlace.of(shell.shape())==null)return null;
             if(BOUNDS.size()>64)BOUNDS.clear();
             var box=BOUNDS.computeIfAbsent(shell.shape(),LevelGauge::selectionBounds);
             return new LevelGauge(box.move(shell.origin()));

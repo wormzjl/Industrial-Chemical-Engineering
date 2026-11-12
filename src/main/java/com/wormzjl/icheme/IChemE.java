@@ -220,6 +220,8 @@ public final class IChemE {
         // ProcessSolveServices is thread-confined to the logical server. Pin every lifecycle edge to the GAME bus.
         IEventBus gameEventBus = NeoForge.EVENT_BUS;
         gameEventBus.addListener(com.wormzjl.icheme.material.MaterialReloadListener::register);
+        // After the materials: the conversion rules resolve their compounds on the catalog that reload publishes.
+        gameEventBus.addListener(com.wormzjl.icheme.material.ConversionReloadListener::register);
         gameEventBus.addListener(IChemE::onServerStarting);
         com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.listen(com.wormzjl.icheme.runtime.assembly.AssemblyService::edited);
         gameEventBus.addListener(IChemE::onServerTickPost);
@@ -251,6 +253,8 @@ public final class IChemE {
         event.registerBlockEntity(net.neoforged.neoforge.capabilities.Capabilities.EnergyStorage.BLOCK, ModBlockEntities.EQUIPMENT_SHELL.get(), (shell, side) -> shell.energy());
         // A solid-fired batch still's fuel slot on every cell (batch 2026-11-09-batch-distiller, W4): hoppers feed its fire.
         event.registerBlockEntity(net.neoforged.neoforge.capabilities.Capabilities.ItemHandler.BLOCK, ModBlockEntities.EQUIPMENT_SHELL.get(), (shell, side) -> shell.fuel());
+        // A fluid converter's Forge tank on its port cell's port face (batch 2026-11-12-fluid-conversion, W3): passive, whole mB.
+        event.registerBlockEntity(net.neoforged.neoforge.capabilities.Capabilities.FluidHandler.BLOCK, ModBlockEntities.EQUIPMENT_SHELL.get(), (shell, side) -> shell.forgeTank(side));
     }
     /**
      * The floating roofs that rise this tick lift what stands on them (a read of each tank's glide; nothing solves), and the

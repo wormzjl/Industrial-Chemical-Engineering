@@ -37,7 +37,9 @@ public record VesselPlacement(int forward, int right, int up) {
         STEEL_STACK(EquipmentShape.Kind.STEEL_STACK), BRICK_CHIMNEY(EquipmentShape.Kind.BRICK_CHIMNEY),
         LIQUID_RING_PUMP(EquipmentShape.Kind.LIQUID_RING_PUMP), DRY_SCREW_PUMP(EquipmentShape.Kind.DRY_SCREW_PUMP),
         // The prime movers (batch 2026-11-10-prime-movers).
-        COMBUSTION_ENGINE(EquipmentShape.Kind.COMBUSTION_ENGINE), GAS_TURBINE(EquipmentShape.Kind.GAS_TURBINE);
+        COMBUSTION_ENGINE(EquipmentShape.Kind.COMBUSTION_ENGINE), GAS_TURBINE(EquipmentShape.Kind.GAS_TURBINE),
+        // The fluid converters (batch 2026-11-12-fluid-conversion).
+        FLUID_CONVERTER(EquipmentShape.Kind.FLUID_CONVERTER), GAS_CONVERTER(EquipmentShape.Kind.GAS_CONVERTER);
 
         private final EquipmentShape.Kind kind;
 

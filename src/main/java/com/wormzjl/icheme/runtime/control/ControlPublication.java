@@ -325,7 +325,10 @@ final class ControlPublication {
         }
         root.put("controllers", controllers);
         root.put("alarms", alarms(owner, sensors, readings));
-        if (station.dcs()) columns(root, menu, owner);
+        if (station.dcs()) {
+            columns(root, menu, owner);
+            converters(root, owner);
+        }
         return root;
     }
 
@@ -351,5 +354,50 @@ final class ControlPublication {
             }
         }
         root.put("columns", list);
+    }
+
+    /**
+     * A DCS's converter page (batch 2026-11-12-fluid-conversion, W4): every converter whose data socket its bus reaches,
+     * with its next settings (those queued, else its facts), its rated flow, status, direction, booked rate, both tanks'
+     * fills and its alarms. A read of facts and of the engine's cached views.
+     */
+    private void converters(CompoundTag root, UUID owner) {
+        var list = new ListTag();
+        for (long host : hosts.converters(owner)) {
+            var u = world.converters().unit(host);
+            var r = world.registrations().get(host);
+            var next = world.converters().next(host);
+            if (u == null || r == null || next == null) continue;
+            var tag = new CompoundTag();
+            tag.putLong("id", host);
+            tag.putString("label", String.format(Locale.ROOT, "FC-%04d", host));
+            tag.putBoolean("closed", u.closed());
+            tag.putString("mode", next.mode().name());
+            tag.putDouble("rate", next.rate());
+            tag.putDouble("rated", com.wormzjl.icheme.science.equipment.EquipmentShape.converterRate(r.spec().volume()));
+            tag.putDouble("deadband", next.deadband());
+            var t = new ListTag();
+            for (double v : next.thresholds()) t.add(net.minecraft.nbt.DoubleTag.valueOf(Double.isNaN(v) ? -1 : v));
+            tag.put("thresholds", t);
+            tag.putBoolean("pending", world.converters().queued(host));
+            var status = world.converters().status(host);
+            tag.putString("status", status == null ? "" : status.name());
+            tag.putString("direction", world.converters().direction(host).name());
+            var rate = world.converters().rate(host);
+            tag.putDouble("booked", rate.litres());
+            double fill = world.converterFill(host);
+            tag.putDouble("icheme", Double.isNaN(fill) ? -1 : fill);
+            tag.putDouble("forge", u.forgeFill());
+            tag.putString("fluid", u.fluid());
+            var rule = world.converters().matched(host);
+            tag.putString("rule", rule == null ? "" : rule.id());
+            tag.putLong("stored", u.stored());
+            tag.putLong("capacity", u.capacity());
+            var alarms = new ListTag();
+            for (var a : world.converterAlarms(host)) alarms.add(net.minecraft.nbt.StringTag.valueOf(a.name()));
+            tag.put("alarms", alarms);
+            list.add(tag);
+        }
+        root.put("converters", list);
     }
 }

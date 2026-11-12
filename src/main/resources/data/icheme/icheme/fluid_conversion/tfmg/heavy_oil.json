@@ -1,0 +1,52 @@
+{
+  "revision": "1",
+  "priority": 10,
+  "fluid": "tfmg:heavy_oil",
+  "phase": "liquid",
+  "to_forge": {
+    "basis": "mass",
+    "components": {
+      "crude_pc07": {
+        "min": 0,
+        "max": 1
+      },
+      "crude_pc08": {
+        "min": 0,
+        "max": 1
+      },
+      "crude_pc09": {
+        "min": 0,
+        "max": 1
+      },
+      "crude_pc10": {
+        "min": 0,
+        "max": 1
+      },
+      "crude_pc11": {
+        "min": 0,
+        "max": 1
+      },
+      "crude_pc12": {
+        "min": 0,
+        "max": 1
+      },
+      "crude_pc05": {
+        "min": 0,
+        "max": 0.05
+      },
+      "crude_pc06": {
+        "min": 0,
+        "max": 0.15
+      }
+    },
+    "others_max": 0.01,
+    "temperature": {
+      "min": 273.15,
+      "max": 423.15
+    },
+    "pressure": {
+      "min": 80000,
+      "max": 500000
+    }
+  }
+}

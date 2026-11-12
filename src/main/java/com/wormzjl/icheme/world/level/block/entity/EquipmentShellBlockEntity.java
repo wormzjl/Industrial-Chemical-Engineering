@@ -209,7 +209,8 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
         CLIENT_NAMED.remove(this);
         leaveStructure();
         if (shape == null || level == null || !level.isClientSide) return;
-        if ((shape.kind() == EquipmentShape.Kind.TANK || shape.kind().coolingTower()) && cell().equals(ShapeRasterizer.fluidCell(shape))) CLIENT_TANKS.add(this);
+        // A liquid converter's level gauge reads the open tanks' display too (batch 2026-11-12-fluid-conversion, W3).
+        if ((shape.kind() == EquipmentShape.Kind.TANK || shape.kind().coolingTower() || shape.kind() == EquipmentShape.Kind.FLUID_CONVERTER) && cell().equals(ShapeRasterizer.fluidCell(shape))) CLIENT_TANKS.add(this);
         if (!name.isEmpty() && cell().equals(ShapeRasterizer.layout(shape).controller())) CLIENT_NAMED.add(this);
         {
             structures = CLIENT_STRUCTURES.computeIfAbsent(level, k -> new LoadedEquipment());
@@ -351,6 +352,24 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
         var terminal = ShapeRasterizer.terminal(shape);
         if (terminal == null || !terminal.equals(cell())) return null;
         return new TerminalEnergy(server, this);
+    }
+
+    /**
+     * A fluid converter's Forge fluid port (batch 2026-11-12-fluid-conversion, W3): its Forge tank, on its port cell and only
+     * through that cell's port face; null on every other cell, face and shape, on a client and before the converter registers.
+     */
+    public net.neoforged.neoforge.fluids.capability.@Nullable IFluidHandler forgeTank(@Nullable net.minecraft.core.Direction side) {
+        if (shape == null || !shape.kind().converter() || side == null || !(level instanceof ServerLevel server)) return null;
+        var port = ShapeRasterizer.forgePort(shape);
+        if (port == null || !port.cell().equals(cell()) || side.getStepX() != port.dx() || side.getStepY() != port.dy() || side.getStepZ() != port.dz()) return null;
+        var at = origin();var node = ShapeRasterizer.fluidCell(shape);
+        if (at == null || node == null) return null;
+        var world = com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.find(server.getServer()).orElse(null);
+        if (world == null) return null;
+        var p = at.offset(node.x(), node.y(), node.z());
+        var vessel = world.at(new com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Position(server.dimension().location().toString(), p.getX(), p.getY(), p.getZ())).orElse(null);
+        if (vessel == null || world.converters().unit(vessel.device().id()) == null) return null;
+        return new ConverterPort(world.converters().tank(vessel.device().id()));
     }
 
     /** Server: the vessel's paint as the registry holds it (registry first, batch 2026-11-03-save-corruption); redraws on a change. */

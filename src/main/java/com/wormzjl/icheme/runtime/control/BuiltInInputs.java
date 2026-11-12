@@ -135,6 +135,15 @@ final class BuiltInInputs {
             out.add(ControlInput.builtIn(host, binding.node(0), "flow_rate", Sensor.Kind.FLOW, "CHIMNEY:FLOW"));
             out.add(ControlInput.builtIn(host, binding.node(0), "solids_rate", Sensor.Kind.FLOW, "CHIMNEY:SOLIDS"));
             out.add(ControlInput.builtIn(host, binding.node(0), "venting", Sensor.Kind.ALARM, "CHIMNEY:VENTING"));
+        } else if (kind.converter()) {
+            // A fluid converter (batch 2026-11-12-fluid-conversion, W4): its two tanks' levels (the process vessel's from its
+            // published state, the Forge tank's from its facts), its booked rate (kg/s, and L/s as its volume flow, positive to
+            // IChemE) and its direction (0 none, 1 to IChemE, 2 to Forge).
+            long vessel = binding.node(0);
+            out.add(ControlInput.builtIn(host, vessel, "level_icheme", Sensor.Kind.LEVEL, "CONVERTER:LEVEL_ICHEME"));
+            out.add(ControlInput.builtIn(host, vessel, "level_forge", Sensor.Kind.LEVEL, "CONVERTER:LEVEL_FORGE"));
+            out.add(ControlInput.builtIn(host, vessel, "rate", Sensor.Kind.FLOW, "CONVERTER:RATE"));
+            out.add(ControlInput.builtIn(host, vessel, "direction", Sensor.Kind.ALARM, "CONVERTER:DIRECTION"));
         }
         if (kind.mover()
                 || kind == EquipmentShape.Kind.STEAM_TURBINE
@@ -168,6 +177,9 @@ final class BuiltInInputs {
         else if (kind == EquipmentShape.Kind.FLARE_STACK)
             for (var alarm : com.wormzjl.icheme.runtime.fluid.EquipmentAlarm.FLARE)
                 out.add(ControlInput.builtIn(binding.host(), binding.node(0), "alarm_" + alarm.name().toLowerCase(Locale.ROOT), Sensor.Kind.ALARM, "ALARM:" + alarm.name()));
+        else if (kind.converter())
+            for (var alarm : com.wormzjl.icheme.runtime.fluid.EquipmentAlarm.CONVERTER)
+                out.add(ControlInput.builtIn(binding.host(), binding.node(0), "alarm_" + alarm.name().toLowerCase(Locale.ROOT), Sensor.Kind.ALARM, "ALARM:" + alarm.name()));
         else if (kind.chimney())
             for (var alarm : com.wormzjl.icheme.runtime.fluid.EquipmentAlarm.CHIMNEY)
                 out.add(ControlInput.builtIn(binding.host(), binding.node(0), "alarm_" + alarm.name().toLowerCase(Locale.ROOT), Sensor.Kind.ALARM, "ALARM:" + alarm.name()));
@@ -190,6 +202,7 @@ final class BuiltInInputs {
         if (world.registrations().containsKey(unit) && world.registrations().get(unit).device().flare()) return world.flares().alarms(unit).contains(alarm);
         if (world.registrations().containsKey(unit) && world.registrations().get(unit).device().stillPot()) return world.stills().alarms(unit).contains(alarm);
         if (world.registrations().containsKey(unit) && world.registrations().get(unit).device().chimney()) return world.chimneys().alarms(unit).contains(alarm);
+        if (world.converters().unit(unit) != null) return world.converterAlarms(unit).contains(alarm);
         if (alarm != com.wormzjl.icheme.runtime.fluid.EquipmentAlarm.NO_POWER) return false;
         var view = world.electric().view(unit);
         return view != null && view.unpowered();
@@ -240,6 +253,7 @@ final class BuiltInInputs {
                 && !input.role().startsWith("ALARM:")
                 && !input.role().startsWith("FLARE:")
                 && !input.role().startsWith("CHIMNEY:")
+                && !input.role().startsWith("CONVERTER:")
                 && !input.role().startsWith("STILL:")
                 && !input.role().equals("REFLUX")
                 && !input.role().startsWith("AIR:")
@@ -303,6 +317,34 @@ final class BuiltInInputs {
                         : flare.status() == com.wormzjl.icheme.runtime.fluid.Flares.Status.FLARING || flare.status() == com.wormzjl.icheme.runtime.fluid.Flares.Status.OVER_CAPACITY ? 1 : 0;
                 tick = world.onlineTick();
                 quality = Instrument.Availability.AVAILABLE;
+            }
+        } else if (input.role().startsWith("CONVERTER:")) {
+            var converter = world.converters().unit(input.source());
+            if (converter != null) {
+                double height = binding != null ? binding.shape().levelHeight() : 0;
+                switch (input.role()) {
+                    case "CONVERTER:LEVEL_ICHEME", "CONVERTER:LEVEL_FORGE" -> {
+                        // A level in metres over the tank's height, its fill in % beside it (the tanks are one size).
+                        double fill = input.role().endsWith("FORGE") ? converter.forgeFill() : world.converterFill(input.source());
+                        if (!Double.isNaN(fill)) {
+                            value = fill * height;
+                            secondary = 100 * fill;
+                            span = height;
+                            quality = Instrument.Availability.AVAILABLE;
+                        }
+                    }
+                    case "CONVERTER:RATE" -> {
+                        var rate = world.converters().rate(input.source());
+                        value = rate.mass();
+                        secondary = rate.litres() / 1000;
+                        quality = Instrument.Availability.AVAILABLE;
+                    }
+                    default -> {
+                        value = world.converters().direction(input.source()).ordinal();
+                        quality = Instrument.Availability.AVAILABLE;
+                    }
+                }
+                tick = world.onlineTick();
             }
         } else if (input.role().startsWith("CHIMNEY:")) {
             var chimney = world.chimneys().view(input.source());

@@ -330,11 +330,13 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
         /** A prime mover's fuel valve (batch 2026-11-10-prime-movers): on the run into its fuel void; the engine sets its mass target once per slice from its governor. */
         ENGINE,
         /** A vessel's gas blanketing valve (batch 2026-11-11-gas-blanketing): on the run into its blanket gas port; the interval solver sets its mass target at each step to the gas its vessel lacks at its set pressure ({@link GasBlanket#plan}). */
-        BLANKET;
+        BLANKET,
+        /** A fluid converter's port valve (batch 2026-11-12-fluid-conversion): carried by its drain void or fill generator; the converter sets its mass target once per slice. */
+        CONVERTER;
         /** Whether a valve of this source regulates its mass flow. */
-        public boolean mass(){return this==MASS_FLOW||this==SHAFT_SPEED||this==BURNER||this==FLARE||this==STILL||this==EJECTOR||this==ENGINE||this==BLANKET;}
+        public boolean mass(){return this==MASS_FLOW||this==SHAFT_SPEED||this==BURNER||this==FLARE||this==STILL||this==EJECTOR||this==ENGINE||this==BLANKET||this==CONVERTER;}
         /** Whether the engine sets this valve's mass target each slice (a governor or a fuel valve), not the player. */
-        public boolean planned(){return this==SHAFT_SPEED||this==BURNER||this==FLARE||this==STILL||this==EJECTOR||this==ENGINE||this==BLANKET;}
+        public boolean planned(){return this==SHAFT_SPEED||this==BURNER||this==FLARE||this==STILL||this==EJECTOR||this==ENGINE||this==BLANKET||this==CONVERTER;}
         /** Whether this is a valve the engine builds into a sink (a firebox or a flare tip), on the run into it. */
         public boolean sink(){return this==BURNER||this==FLARE||this==ENGINE;}
     }
@@ -359,6 +361,10 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
         public static final java.util.UUID STILL_SENSOR=new java.util.UUID(0x7374696c6c000000L,1);
         /** A batch still's outlet valve, shut until its first slice plan. */
         public static ControlValve still(){return new ControlValve(ValveSource.STILL,200000,0,.01,STILL_SENSOR,0);}
+        /** A fluid converter's port valve's source identity. */
+        public static final java.util.UUID CONVERTER_SENSOR=new java.util.UUID(0x636f6e7665727400L,1);
+        /** A fluid converter's port valve, shut until its first slice plan. */
+        public static ControlValve converter(){return new ControlValve(ValveSource.CONVERTER,200000,0,.01,CONVERTER_SENSOR,0);}
         /** A steam ejector's motive valve's source identity. */
         public static final java.util.UUID EJECTOR_SENSOR=new java.util.UUID(0x656a6563746f7200L,1);
         /** A steam ejector's motive valve, shut until its first slice plan. */
@@ -375,7 +381,7 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
         @Override public boolean massControl(){return source.mass();}
         /** No sensor, or an open flare tip (owner D6): the line's own law, no regulation. */
         @Override public boolean bare(){return sensor==null||source==ValveSource.FLARE&&massTarget>0;}
-        public double target(){return switch(source){case NONE,PRESSURE->targetPressure;case MASS_FLOW,SHAFT_SPEED,BURNER,FLARE,STILL,EJECTOR,ENGINE,BLANKET->massTarget;case VOLUME_FLOW->volumeTarget;};}
+        public double target(){return switch(source){case NONE,PRESSURE->targetPressure;case MASS_FLOW,SHAFT_SPEED,BURNER,FLARE,STILL,EJECTOR,ENGINE,BLANKET,CONVERTER->massTarget;case VOLUME_FLOW->volumeTarget;};}
         @Override public double targetMassFlow(double density){return source.mass()?massTarget:volumeTarget*density;}
         public ControlValve withTarget(double value){return new ControlValve(source,source==ValveSource.PRESSURE?value:targetPressure,source.mass()?value:massTarget,source==ValveSource.VOLUME_FLOW?value:volumeTarget,sensor,Math.addExact(revision,1));}
         /** A governor valve's mass target for one slice (W3): a slice input, its revision kept, as a column's port plan is. */

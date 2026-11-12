@@ -108,6 +108,66 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
         return rows;
     }
 
+    // A DCS's converter page (batch 2026-11-12-fluid-conversion, W4/W5): the converters its bus reaches, the one chosen and
+    // its entries' drafts. A mode key sends SET_MODE at once; Apply sends the rate, the deadband in Balance and the thresholds.
+    private List<CompoundTag> converters = List.of();
+    private long converter;
+    private final Map<String, String> converterDrafts = new HashMap<>();
+
+    private CompoundTag converterTag() {
+        return converters.stream().filter(c -> c.getLong("id") == converter).findFirst().orElse(null);
+    }
+
+    /** The converters' group in a DCS's list: one choice per converter its bus reaches. */
+    private List<Column.Row> converterRows() {
+        var rows = new ArrayList<Column.Row>();
+        for (var c : converters)
+            rows.add(new Column.Choice(c.getString("label"), tr("control.converter.hint"), page.equals("converter") && c.getLong("id") == converter, "converter:" + c.getLong("id")));
+        if (rows.isEmpty()) rows.add(new Column.Paragraph(tr("control.no_converters"), Palette.TEXT));
+        return List.of(new Column.Group(tr("control.converters"), tr("control.converters.hint"), rows));
+    }
+
+    /** A converter's draft values as shown, from its published settings: the rate in L per the player's time basis, the deadband and thresholds in %. */
+    private static Map<String, String> converterValues(CompoundTag c) {
+        var out = new HashMap<String, String>();
+        out.put("converterRate", ProcessUi.number(ClientConfig.flowTime().display(c.getDouble("rate"))));
+        out.put("converterDeadband", ProcessUi.number(100 * c.getDouble("deadband")));
+        var t = c.getList("thresholds", 6);
+        for (int i = 0; i < ConverterDoor.THRESHOLDS.size(); i++) {
+            double v = i < t.size() ? t.getDouble(i) : -1;
+            out.put(ConverterDoor.THRESHOLDS.get(i), v < 0 ? "" : ProcessUi.number(100 * v));
+        }
+        return out;
+    }
+
+    /** The converter page: its status (or the console's answer), then the converter's own groups as its page shows them. */
+    private List<Column.Row> converterPage() {
+        var c = converterTag();
+        if (c == null) return List.of(new Column.Paragraph(tr("control.waiting"), Palette.TEXT));
+        var words = new ArrayList<String>();
+        if (!c.getString("status").isEmpty()) words.add(c.getString("status").replace('_', ' '));
+        for (var a : c.getList("alarms", 8)) words.add(tr("control.alarm." + a.getAsString().toLowerCase(Locale.ROOT)));
+        boolean alarm = !c.getList("alarms", 8).isEmpty();
+        var rows = new ArrayList<Column.Row>();
+        rows.add(new Column.Group(c.getString("label"), null, List.of(new Column.Paragraph(pending || c.getBoolean("pending") ? tr("control.pending") : !reply.isBlank() ? reply : String.join(" / ", words),
+                alarm && reply.isBlank() && !pending ? Palette.RED : Palette.TEXT, null))));
+        var flow = ClientConfig.flowTime();
+        java.util.function.DoubleFunction<String> shown = v -> ProcessUi.number(flow.display(v));
+        double forge = c.getDouble("forge"), fill = c.getDouble("icheme");
+        var t = c.getList("thresholds", 6);
+        var thresholds = new ArrayList<String>();
+        for (int i = 0; i < ConverterDoor.THRESHOLDS.size(); i++) thresholds.add(i < t.size() && t.getDouble(i) >= 0 ? ProcessUi.number(100 * t.getDouble(i)) : "—");
+        String rule = c.getString("rule");
+        var in = new ConverterDoor.Input(!pending, ConverterDoor.Mode.valueOf(c.getString("mode")), flow.unit("L"), shown.apply(c.getDouble("rated")), shown.apply(c.getDouble("rate")),
+                ProcessUi.number(100 * c.getDouble("deadband")), thresholds,
+                new ConverterDoor.Tank(forge, ProcessUi.number(100 * forge), tr("fluid.converter_tank.forge_amount", ProcessUi.number(c.getLong("stored")), ProcessUi.number(c.getLong("capacity")))),
+                c.getString("fluid").isEmpty() ? null : c.getString("fluid"),
+                new ConverterDoor.Tank(fill < 0 ? Double.NaN : fill, fill < 0 ? "—" : ProcessUi.number(100 * fill), c.getBoolean("closed") ? tr("control.converter.closed") : tr("control.converter.open")),
+                rule.isEmpty() ? null : rule, false, List.of(), shown.apply(c.getDouble("booked")), c.getString("direction").toLowerCase(Locale.ROOT));
+        rows.addAll(ConverterDoor.rows(in, (key, args) -> tr("fluid." + key, args)));
+        return rows;
+    }
+
     private CompoundTag selected() {
         return controllers.stream()
                 .filter(c -> c.getUUID("id").equals(selected))
@@ -154,6 +214,7 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
 
     private List<Column.Row> right() {
         if (page.equals("column")) return columnPage();
+        if (page.equals("converter")) return converterPage();
         var row = selected();
         var d = draft();
         if (row == null || d == null)
@@ -302,6 +363,7 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
         }
         var list = new ArrayList<>(controllerRows());
         list.addAll(columnRows());
+        list.addAll(converterRows());
         list.addAll(alarmRows());
         return layout.split()
                 ? List.of(list, r)
@@ -321,6 +383,11 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
             if (page.equals("column")) page = "loop";
         } else if (view.contains("operation") && view.getLong("column") == column)
             operation = com.wormzjl.icheme.network.AssemblyNetwork.decodeOperation(view.getByteArray("operation"));
+        converters = tags(view, "converters");
+        if (converters.stream().noneMatch(c -> c.getLong("id") == converter)) {
+            converter = 0;
+            if (page.equals("converter")) page = "loop";
+        }
         controllerPage = view.getInt("controllerPage");
         controllerPages = Math.max(1, view.getInt("controllerPages"));
         if (view.getLong("ack") != ack) {
@@ -328,6 +395,7 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
             pending = false;
             reply = view.getString("reply").equals("APPLIED") ? "" : view.getString("reply");
             if (page.equals("column") && reply.isEmpty()) columnDrafts.clear();
+            if (page.equals("converter") && reply.isEmpty()) converterDrafts.clear();
             if (view.hasUUID("ackPanel") && view.getString("reply").equals("APPLIED")) {
                 var d = drafts.get(view.getUUID("ackPanel"));
                 if (d != null)
@@ -351,7 +419,7 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
         }
         if (controllers.stream().noneMatch(t -> t.getUUID("id").equals(selected))) {
             selected = controllers.isEmpty() ? null : controllers.getFirst().getUUID("id");
-            if (!page.equals("column")) page = "loop";
+            if (!page.equals("column") && !page.equals("converter")) page = "loop";
         }
     }
 
@@ -409,7 +477,8 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
                                 b -> apply(),
                                 ControlPanelScreen::skin)
                         .primary(true);
-        apply.active = page.equals("column")
+        apply.active = page.equals("converter") ? converterTag() != null && !pending
+                : page.equals("column")
                 ? operation != null && operation.editable() && !pending
                 : draft() != null && !pending && !page.equals("controllers");
         addRenderableWidget(apply);
@@ -458,10 +527,21 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
                 + ":"
                 + (operation == null ? "" : operation.running() + ":" + operation.editable() + ":" + OperationColumn.fields(operation.setpoints()))
                 + "/"
+                + converter
+                + ":"
+                + converters.stream().map(c -> c.getLong("id") + c.getString("mode") + c.getBoolean("pending") + c.getString("rule") + c.getString("fluid").isEmpty()).toList()
+                + "/"
                 + pending;
     }
 
     private AbstractWidget field(Column.Field f, Rect r) {
+        if (page.equals("converter") && converterTag() != null) {
+            var box = new SkinField(font, r.x(), r.y(), r.w(), r.h(), Component.literal(f.label()), ControlPanelScreen::skin);
+            box.setMaxLength(32);
+            box.setValue(converterDrafts.getOrDefault(f.key(), converterValues(converterTag()).getOrDefault(f.key(), "")));
+            box.setResponder(v -> converterDrafts.put(f.key(), v));
+            return addRenderableWidget(box);
+        }
         if (page.equals("column") && operation != null) {
             var box = new SkinField(font, r.x(), r.y(), r.w(), r.h(), Component.literal(f.label()), ControlPanelScreen::skin);
             box.setMaxLength(32);
@@ -507,7 +587,18 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
             }
             return;
         }
-        if (key.startsWith("column:")) {
+        if (key.startsWith("converter:")) {
+            converter = Long.parseLong(key.substring(10));
+            converterDrafts.clear();
+            reply = "";
+            page = "converter";
+        } else if (page.equals("converter") && key.startsWith("converter_mode:")) {
+            if (converterTag() != null && !pending) {
+                var mode = com.wormzjl.icheme.runtime.fluid.ConverterUnit.Mode.valueOf(key.substring(15).toUpperCase(Locale.ROOT));
+                ControlNetwork.converter(menu.containerId, new ConverterCommands.Command(converter, ConverterCommands.Action.SET_MODE, mode, List.of()));
+                pending = true;
+            }
+        } else if (key.startsWith("column:")) {
             column = Long.parseLong(key.substring(7));
             operation = null;
             columnDrafts.clear();
@@ -591,6 +682,31 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
     }
 
     private void apply() {
+        if (page.equals("converter")) {
+            var c = converterTag();
+            if (c == null || pending) return;
+            var values = converterValues(c);
+            values.putAll(converterDrafts);
+            try {
+                double rate = ClientConfig.flowTime().perSecond(Double.parseDouble(values.get("converterRate").replace(",", "")));
+                ControlNetwork.converter(menu.containerId, new ConverterCommands.Command(converter, ConverterCommands.Action.SET_RATE, null, List.of(rate)));
+                if (c.getString("mode").equals("BALANCE"))
+                    ControlNetwork.converter(menu.containerId, new ConverterCommands.Command(converter, ConverterCommands.Action.SET_DEADBAND, null, List.of(Double.parseDouble(values.get("converterDeadband").replace(",", "")) / 100)));
+                var t = new ArrayList<Double>();
+                for (var k : ConverterDoor.THRESHOLDS) {
+                    var v = values.get(k).replace(",", "").strip();
+                    t.add(v.isEmpty() ? -1 : Double.parseDouble(v) / 100);
+                }
+                ControlNetwork.converter(menu.containerId, new ConverterCommands.Command(converter, ConverterCommands.Action.SET_THRESHOLDS, null, t));
+            } catch (NumberFormatException e) {
+                reply = tr("control.invalid");
+                rebuildWidgets();
+                return;
+            }
+            pending = true;
+            rebuildWidgets();
+            return;
+        }
         if (page.equals("column")) {
             if (operation == null || pending) return;
             var values = OperationColumn.parse(operation.setpoints(), columnDrafts, units());

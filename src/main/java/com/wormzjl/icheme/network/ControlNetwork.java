@@ -2,6 +2,7 @@ package com.wormzjl.icheme.network;
 
 import com.wormzjl.icheme.IChemE;
 import com.wormzjl.icheme.runtime.control.ColumnCommands;
+import com.wormzjl.icheme.runtime.control.ConverterCommands;
 import com.wormzjl.icheme.runtime.control.ControlSettings;
 import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
 import com.wormzjl.icheme.world.inventory.ControlPanelMenu;
@@ -140,8 +141,37 @@ public final class ControlNetwork {
         }
     }
 
+    /** A DCS's converter command (batch 2026-11-12-fluid-conversion, W4): a mode, a rate, a deadband or the thresholds, queued like a controller edit. */
+    public record ConverterCommand(int menu, ConverterCommands.Command command) implements CustomPacketPayload {
+        public static final Type<ConverterCommand> TYPE = ControlNetwork.type("control_converter_command");
+        public static final StreamCodec<RegistryFriendlyByteBuf, ConverterCommand> CODEC =
+                StreamCodec.of(
+                        (b, p) -> {
+                            b.writeVarInt(p.menu);
+                            b.writeVarLong(p.command.host());
+                            b.writeEnum(p.command.action());
+                            b.writeEnum(p.command.mode() == null ? com.wormzjl.icheme.runtime.fluid.ConverterUnit.Mode.OFF : p.command.mode());
+                            for (double v : p.command.values()) b.writeDouble(v);
+                        },
+                        b -> {
+                            int menu = b.readVarInt();
+                            long host = b.readVarLong();
+                            var action = b.readEnum(ConverterCommands.Action.class);
+                            var mode = b.readEnum(com.wormzjl.icheme.runtime.fluid.ConverterUnit.Mode.class);
+                            var values = new ArrayList<Double>();
+                            for (int i = 0; i < ConverterCommands.Command.count(action); i++) values.add(b.readDouble());
+                            return new ConverterCommand(menu, new ConverterCommands.Command(host, action, mode, values));
+                        });
+
+        @Override
+        public Type<ConverterCommand> type() {
+            return TYPE;
+        }
+    }
+
     public static void register(RegisterPayloadHandlersEvent event) {
-        var r = event.registrar("control-4").executesOn(HandlerThread.MAIN);
+        // control-5: the converter command (batch 2026-11-12-fluid-conversion, W4).
+        var r = event.registrar("control-5").executesOn(HandlerThread.MAIN);
         r.playToServer(
                 Edit.TYPE,
                 Edit.CODEC,
@@ -190,6 +220,16 @@ public final class ControlNetwork {
                             && menu.stillValid(player))
                         FluidWorldAuthority.find(player.server).ifPresent(w -> w.controls().column(menu, p.command));
                 });
+        r.playToServer(
+                ConverterCommand.TYPE,
+                ConverterCommand.CODEC,
+                (p, c) -> {
+                    if (c.player() instanceof ServerPlayer player
+                            && player.containerMenu instanceof ControlPanelMenu menu
+                            && menu.containerId == p.menu
+                            && menu.stillValid(player))
+                        FluidWorldAuthority.find(player.server).ifPresent(w -> w.controls().converter(menu, p.command));
+                });
         r.playToClient(
                 View.TYPE,
                 View.CODEC,
@@ -215,6 +255,10 @@ public final class ControlNetwork {
 
     public static void column(int menu, ColumnCommands.Command command) {
         PacketDistributor.sendToServer(new ColumnCommand(menu, command));
+    }
+
+    public static void converter(int menu, ConverterCommands.Command command) {
+        PacketDistributor.sendToServer(new ConverterCommand(menu, command));
     }
 
     public static void browse(int menu, int controllers, int devices) {

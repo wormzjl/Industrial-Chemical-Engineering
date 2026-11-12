@@ -139,7 +139,7 @@ class FluidPacketCodecTest {
      * menu's axis is refused. fluid-14 adds a tank's capacity and paired pressures; fluid-16 a heat unit's ports, lines and
      * actuator and a pipe's line reading (the heat GUI). */
     @Test void theProtocolIsFluidNineteenWithDistinctStaticAndLivePayloads() {
-        assertEquals("fluid-23",FluidNetwork.PROTOCOL);
+        assertEquals("fluid-24",FluidNetwork.PROTOCOL);
         var ids=java.util.Set.of(FluidNetwork.EditPayload.TYPE.id(),FluidNetwork.RecoverPayload.TYPE.id(),FluidNetwork.StaticPayload.TYPE.id(),FluidNetwork.LivePayload.TYPE.id());
         assertEquals(4,ids.size());
         var base=generatorMenu("");int count=base.components().size();
@@ -496,5 +496,33 @@ class FluidPacketCodecTest {
         assertThrows(IllegalArgumentException.class,()->new FluidNetwork.ChimneyState(target,-1,450,0,0,0,10));
         assertNotEquals(FluidNetwork.Watch.CHIMNEYS.id(),FluidNetwork.ChimneyState.TYPE.id());
         assertNotEquals(FluidNetwork.Watch.FLARES.id(),FluidNetwork.Watch.CHIMNEYS.id());
+    }
+
+    /**
+     * fluid-24 (batch 2026-11-12-fluid-conversion, W5): a converter's page view rides the live payload and comes back as sent,
+     * open bounds and unknown values as null (no NaN on the JSON wire); its page's settings cross as their own edit.
+     */
+    @Test void aConvertersPageViewAndItsEditRoundTrip() {
+        var base=generatorMenu("");
+        var ranges=List.of(new FluidView.Range("Water","MOLE",.99,null,.998),new FluidView.Range("others","OTHERS",null,.01,.002),
+                new FluidView.Range("temperature","TEMPERATURE",278.15,333.15,298.0),new FluidView.Range("pressure","PRESSURE",90000.0,150000.0,null));
+        var converter=new FluidView.Converter(false,"TO_FORGE",.8,1.57,.05,java.util.Arrays.asList(.9,null,null,.1),true,"CONVERTING","TO_FORGE",-.8,List.of("LEVEL HIGH"),
+                "minecraft:water",1500,1570,1500/1570.0,.4,628,0,640,"icheme:water_out",true,ranges);
+        var data=new FluidNetwork.MenuData(TopologyCompiler.Kind.RESERVOIR,base.view().withConverter(converter),base.controls(),base.components(),base.presets(),"",base.materialNames(),base.molecularWeights());
+        var copy=FluidNetwork.decodeLive(new Gson().toJson(live(data)));
+        assertEquals(converter,copy.view().converter());
+        assertTrue(copy.view().converter().ranges().get(0).outside()==false&&new FluidView.Range("Water","MOLE",.99,null,.9).outside());
+        assertNull(FluidNetwork.decodeLive(new Gson().toJson(live(base))).view().converter());
+        assertThrows(IllegalArgumentException.class,()->new FluidView.Converter(false,"OFF",0,1,.05,java.util.Arrays.asList(1.5,null,null,null),false,"OFF","NONE",0,List.of(),"",0,0,0,null,0,0,0,"",false,List.of()));
+        assertThrows(IllegalArgumentException.class,()->new FluidView.Range("x","MOLE",Double.NaN,null,null));
+        var edit=new FluidNetwork.ConverterEditPayload(3,new BlockPos(1,64,2),42,ConverterUnit.Mode.BALANCE,2.5,.1,new double[]{.9,-1,-1,.05});
+        var buffer=new RegistryFriendlyByteBuf(Unpooled.buffer(),RegistryAccess.EMPTY);
+        try{
+            FluidNetwork.ConverterEditPayload.STREAM_CODEC.encode(buffer,edit);var back=FluidNetwork.ConverterEditPayload.STREAM_CODEC.decode(buffer);
+            assertEquals(0,buffer.readableBytes());
+            assertEquals(edit.mode(),back.mode());assertEquals(edit.rate(),back.rate());assertEquals(edit.deadband(),back.deadband());assertArrayEquals(edit.thresholds(),back.thresholds());
+            assertEquals(edit.identity(),back.identity());assertEquals(edit.position(),back.position());assertEquals(edit.menuId(),back.menuId());
+        }finally{buffer.release();}
+        assertThrows(IllegalArgumentException.class,()->new FluidNetwork.ConverterEditPayload(3,BlockPos.ZERO,42,ConverterUnit.Mode.OFF,0,.05,new double[3]));
     }
 }

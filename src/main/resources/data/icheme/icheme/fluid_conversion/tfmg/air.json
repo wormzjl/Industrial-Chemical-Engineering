@@ -1,0 +1,28 @@
+{
+  "revision": "1",
+  "priority": 50,
+  "fluid": "tfmg:air",
+  "phase": "gas",
+  "to_forge": {
+    "basis": "mole",
+    "components": {
+      "Nitrogen": {
+        "min": 0.76,
+        "max": 0.8
+      },
+      "Oxygen": {
+        "min": 0.19,
+        "max": 0.23
+      }
+    },
+    "others_max": 0.02,
+    "temperature": {
+      "min": 200,
+      "max": 400
+    },
+    "pressure": {
+      "min": 50000,
+      "max": 1000000
+    }
+  }
+}

@@ -55,13 +55,25 @@ public record ReliefValveGeometry(double[] foot, int up, int upSign, int side, i
      */
     public static ReliefValveGeometry of(EquipmentShape shape, int axis, int sign) {
         if (axis == 1) throw new IllegalArgumentException("A safety valve's outlet points to the side");
+        if (shape.kind() == EquipmentShape.Kind.GAS_CONVERTER) {
+            // A gas converter's valve stands on its process vessel's apex stub (batch 2026-11-12-fluid-conversion, plan D9).
+            var foot = shape.transform().point(ConverterDesign.reliefFoot(shape.diameter(), shape.tangentLength()));
+            return placed(shape, foot, Math.ceil(foot[1] + LEAST * HEIGHT), 1, axis, sign);
+        }
         if (shape.kind() != EquipmentShape.Kind.DRUM) return null;
         EquipmentInstruments.Reservation own = null;
         for (var r : EquipmentInstruments.of(shape).reserved()) if (r.id().equals("F2")) own = r;
         if (own == null) return null;
         double[] lo = own.low(), hi = own.high();
         double[] foot = {Math.floor((lo[0] + hi[0]) / 2) + .5, lo[1], Math.floor((lo[2] + hi[2]) / 2) + .5};
-        double top = Math.ceil(foot[1] + LEAST * HEIGHT);
+        return placed(shape, foot, Math.ceil(foot[1] + LEAST * HEIGHT), Math.clamp(hi[0] - lo[0], LEAST, 1), axis, sign);
+    }
+
+    /**
+     * The valve with its inlet's foot at {@code foot} (the box frame), below {@code top}, at most {@code widest} of its size:
+     * in the cell under {@code top}, its outlet into the first free cell beside it (or toward {@code axis}, {@code sign}).
+     */
+    private static ReliefValveGeometry placed(EquipmentShape shape, double[] foot, double top, double widest, int axis, int sign) {
         int[] cell = {(int) Math.floor(foot[0]), (int) top - 1, (int) Math.floor(foot[2])};
         // The cell of a top nozzle is that nozzle's; the blanketing valve's is its own.
         var taken = new HashSet<List<Integer>>();
@@ -83,7 +95,7 @@ public record ReliefValveGeometry(double[] foot, int up, int upSign, int side, i
         // Where the drum's crown fills every cell beside the valve's, the valve stands a cell higher on a longer inlet nozzle.
         for (int lift = 0; lift <= 1; lift++) {
             int[] at = {cell[0], cell[1] + lift, cell[2]};
-            double scale = Math.min(Math.clamp(hi[0] - lo[0], LEAST, 1), (top + lift - foot[1]) / HEIGHT);
+            double scale = Math.min(widest, (top + lift - foot[1]) / HEIGHT);
             for (var way : ways) {
                 int[] next = at.clone();
                 next[way[0]] += way[1];
