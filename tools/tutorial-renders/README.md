@@ -47,3 +47,6 @@ texture: `java tools/tutorial-renders/FieldGuideIcon.java src/main/resources/ass
 - 2026-11-12, P0: the tool, for the film `still_inside`.
 - 2026-11-12, P1: GuideRender (guide, tours, card) and FieldGuideIcon.
 - 2026-11-12, P2a: card sheets for chain, barrel, products and road; the crude chapter.
+- 2026-11-12, P2b: TutorialRender draws the whole film screen in the game font (overlays, fires, liquids) and prints
+  "LABELS NOT PLACED" when a label has no room; films still_build and still_run; `card-pot_temperature.png` (start,
+  early, before and past the cut, end) and `guide-still.png` (chapter 2 at both sizes).

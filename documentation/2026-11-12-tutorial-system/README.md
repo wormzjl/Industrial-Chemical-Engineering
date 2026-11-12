@@ -23,6 +23,8 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
   its tours, the card view: classes, decisions, tests, renders, what the in-game check looks at.
 - [P2A_CRUDE_CHAPTER.md](P2A_CRUDE_CHAPTER.md): phase P2a, chapter 1 "Crude oil": the card interface, the cards chain,
   barrel, products and road, the crude barrel recording, decisions, band shares, tests, renders.
+- [P2B_STILL_CHAPTER.md](P2B_STILL_CHAPTER.md): phase P2b, chapter 2 "The still": the recorded run, the film tracks,
+  the films still_build and still_run, the card pot_temperature, the still criteria, decisions, derived lines, tests.
 
 ## History
 
@@ -44,6 +46,9 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
 - 2026-11-12: P2a built (07ae749e5, 849cf20ef, aa9120b0d, 3450240c6, 923f39d53, 207577d1f, 5aa24fd86): three_parts mixed
   at heat 0, the card interface (options, hits, steps, temperature format), cards chain, barrel, products, road, the
   crude barrel recording (`tools/tutorial-recordings`), chapter 1 and its advancements. 17 filtered test classes pass.
+- 2026-11-12: P2b built (5e5d3e25a, 8922ffd73, 05c2e81da, a90748849, 7d1cbd1f1): the recorded still run, film tracks,
+  films still_build and still_run, still_inside reworked, card pot_temperature, chapter 2 with criteria still_state,
+  still_stopped and diverter_switched. 21 tutorial test classes (93 tests) pass; renders in `tmp/tutorial-renders/p2b/`.
 
 ## Code areas (proposed)
 
@@ -62,3 +67,5 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
   Guide's final icon.
 - P2a: the owner's review of chapter 1's text, the four marks and the renders; decisions 1 and 2 of
   P2A_CRUDE_CHAPTER.md (the road's marks from a test-code catalog, the lightest cut's lower edge).
+- P2b: the still law's refusal at 521 K and the world still's cooling water (asked of the parent session); the owner's
+  review of chapter 2's text and renders; the in-game check named in P2B_STILL_CHAPTER.md.

@@ -22,3 +22,18 @@ Run after a change to an assay, a component's cut or colour, or a light end's bo
 ```
 
 It prints the band shares and writes the asset; commit the asset.
+
+## StillRun (P2b)
+
+Writes `src/main/resources/assets/icheme/tutorial/recordings/still_run.json` for the film `still_run` and the card
+`pot_temperature`. It runs the still law (`StillRunRecorder`, test source) on 500 L of medium crude, 60 % full and
+flashed at 25 °C, with a solid fire at full firing and design cooling water at 25 °C. The run goes until the law
+stops it: boiled dry, overheated with no heat, or refused. The file holds at most 240 points: time, pot and head K,
+level, distilled and vented shares, the rate to the spout, the part coming over and the status. It also holds the lines
+first drop, end of naphtha, end of kerosene (when reached) and end, each with process s, pot K and minutes of play at
+the time factor 4, and the charge's part shares. `StillRunRecordingTest` reruns the law and holds the file equal
+within 1e-9.
+
+```
+./gradlew --offline --init-script tools/tutorial-recordings/record.init.gradle recordStillRun
+```
