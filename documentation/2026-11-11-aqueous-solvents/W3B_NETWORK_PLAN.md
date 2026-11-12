@@ -711,3 +711,26 @@ lane's campaign. Refused 0 everywhere. Sub-thread report: `tmp/w3b-network/repor
   judged from 358's cause, with no replay. Cold 446 E6 (LNG and CO2, crystals, iteration limit), 698 F, 6 F, 514,
   555 and 988 are recorded as the batch's holds.
 - To the owner: the result, and the three holds new to their distribution.
+
+## 40. Seed 358: an empty tank laid out with a rounding residue (2026-11-12)
+
+358's one traced replay (sub-thread report `tmp/w3b-network/reports/w3b-seed358-report.md`). Step 6's items were
+committed before it (c57a79360, c889eb74c, be53b66d2, 6e8b16746, e04b1755c; 206 tests pass; H-101 is not
+re-pinned: no water passes it).
+
+1. Expected. An empty tank on a line with no driving head stays dry, with no unknowns (D54), until a millilitre
+   has arrived (D59 (2), `HOLDS_NOTHING`, 1e-6 of its capacity).
+2. What the code did. The island has 23 unknowns, every node water only. The tank (1 m3, inventory 0) was laid
+   out on pass 1 with 1.4e-30 mol of water: a flow of 2.8e-29 mol/s between two nodes both at 101325 Pa, times the
+   step. Its energy (6e-26 J) moves by 3e-32 J over the temperature step, under one ulp of the row's other terms,
+   so the tank's lnT column is exactly zero and the LU has no pivot, at every step size. No nonfinite entry, no
+   empty row: my candidates a and b are out; it is c's kind, on lnT. Not the tangents.
+3. The path, read from the code (mine; the replay did not print it). The tank is a slack bag (it turns rigid only
+   once filled taut), so the arrival test (`arrivingPhases`, line 1537) and `filled` both keep it dry at the bag's
+   resolution. `phaseAppeared` (hold class E3) then lays it out: on main it counted hydrocarbon phases only and
+   skipped an omitted trace; on the branch it counts any fluid, and the booked water is 100 % of the tank's
+   total, so any amount passes. Two rules judged one event.
+4. Fix (decided, to be confirmed by a gate test that fails on HEAD): `phaseAppeared` skips a vessel the pass laid
+   out dry; `filled` is the one rule for those. No amount threshold is added. Gate cases: a slack tank on water
+   (358), a mixture (575), and an emptied rigid tank as a test only: a rigid wall's bag is its capacity, so a
+   rigid vessel with any residue never "holds nothing"; whether that is a defect is a rule, kept apart.
