@@ -269,3 +269,20 @@ Open from W6:
   initialiser that reaches `derive` while a fit thread needs that class.
 - Gates: a dump of every pair's parameters in hexadecimal, before and after, with no difference; a test that
   the whole list's pairs equal each pair derived alone; `LoadFits` at or under 0.5 s, run alone.
+
+## 16. The parallel activity fits built (2026-11-12)
+
+Sub-thread `w5-column`, commit `ef4ed4e04`. Report: `tmp/w6-ethanol/reports/W6_PARALLEL_FITS.md`. The main thread
+read the diff: `fitActivitiesInParallel` before the pair loop, the record `ActivityJob` shared by both passes,
+`Cache.holds`; the loop and every fit unchanged.
+
+| Gate | Section 15 | Measured |
+|---|---|---|
+| Pair dump before and after | no difference | 1081 pairs, 2162 excess cells in hexadecimal, 291 fits: the diff is empty |
+| Whole list equals each pair alone | exact doubles | `DerivedPairsTest.theParallelFitsEqualEachPairFittedAlone` passes; 291 fits on both |
+| Whole-list model, alone | at or under 0.5 s | 377 ms cold, 254 and 229 ms warm (was 1745, 1543, 1521) |
+| Derivation alone | | 245 to 288 ms with ethanol; 82 to 172 ms without (was 348 to 428) |
+| No hang, no moved number | | `DerivedPairsTest` 13, `AqueousSolventDataTest` 7, `EthanolMainDataTest` 5, `FluidFactsCompatTest` 21, `FlowsheetUnitsTest` 45, `IslandSchedulerTest` 9; G8's counters identical |
+
+G9 of section 6 is met: the load with ethanol is shorter than it was before W6. 16 processors, the common pool;
+a machine with fewer runs the same fits on fewer threads. The rest of `DerivedPairs`' reach is the final lane's.
