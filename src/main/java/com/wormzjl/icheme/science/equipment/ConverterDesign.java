@@ -49,7 +49,12 @@ final class ConverterDesign extends UnitDesign {
 
     /** The converter's rated flow, L per second of process time: one tank in {@link #TURNOVER}. */
     static double rate(double diameter, double shell) {
-        return 1000 * volume(diameter, shell) / TURNOVER;
+        return rated(volume(diameter, shell));
+    }
+
+    /** The rated flow of a process tank of {@code volume} m³, L per second of process time. */
+    static double rated(double volume) {
+        return 1000 * volume / TURNOVER;
     }
 
     @Override
@@ -220,6 +225,8 @@ final class ConverterDesign extends UnitDesign {
         for (int s = -1; s <= 1; s += 2)
             u.box(new double[]{xm + s * (cab - .08 * k) - .04 * k, SLAB, z0 + .1 * k}, new double[]{xm + s * (cab - .08 * k) + .04 * k, y0, z1 - .1 * k}, Material.STEELWORK, true);
         u.box(new double[]{xm - cab, y0, z0}, new double[]{xm + cab, y1, z1}, Material.MACHINE, true);
+        // The cabinet is the converter's service enclosure (W4): its data socket on its side toward the process tank.
+        u.serviceHousing = new double[]{xm - cab, y0, z0, xm + cab, y1, z1};
         u.box(new double[]{xm - cab - .1 * k, y1, z0 - .25 * k}, new double[]{xm + cab + .1 * k, y1 + .05, z1 + .05 * k}, Material.STEELWORK, false);
         double[] out = {0, 0, -1};
         for (int s = -1; s <= 1; s += 2) {

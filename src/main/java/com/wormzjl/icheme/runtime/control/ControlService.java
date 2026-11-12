@@ -30,6 +30,9 @@ public final class ControlService {
     private final ArrayDeque<ColumnRequest> columnCommands = new ArrayDeque<>();
 
     private record ColumnRequest(ControlPanelMenu menu, ColumnCommands.Command command) {}
+    private final ArrayDeque<ConverterRequest> converterCommands = new ArrayDeque<>();
+
+    private record ConverterRequest(ControlPanelMenu menu, ConverterCommands.Command command) {}
 
     public ControlService(FluidWorldAuthority world, ControlFacts facts) {
         this.world = world;
@@ -245,6 +248,12 @@ public final class ControlService {
         else menu.answer(menu.panel(), "BUSY: APPLY AGAIN");
     }
 
+    /** A DCS's converter command (batch 2026-11-12-fluid-conversion, W4): queued like a controller edit, run on the next cadence. */
+    public void converter(ControlPanelMenu menu, ConverterCommands.Command command) {
+        if (converterCommands.size() < 256) converterCommands.addLast(new ConverterRequest(menu, command));
+        else menu.answer(menu.panel(), "BUSY: APPLY AGAIN");
+    }
+
     /** A DCS menu's choice of column page (W6.2): the publication sends that column's Operation view. */
     public void selectColumn(ControlPanelMenu menu, long host) {
         menu.selectColumn(host);
@@ -263,7 +272,7 @@ public final class ControlService {
      */
     public void tick(long tick) {
         if (tick % CADENCE != 0) return;
-        if (facts.panels().isEmpty() && publication.idle() && edits.isEmpty() && columnCommands.isEmpty() && plans.isEmpty())
+        if (facts.panels().isEmpty() && publication.idle() && edits.isEmpty() && columnCommands.isEmpty() && converterCommands.isEmpty() && plans.isEmpty())
             return;
         long busRevision = hosts.busRevision();
         if (driveRevision != busRevision) {
@@ -274,6 +283,7 @@ public final class ControlService {
         var sensors = hosts.inputs();
         applyEdits(sensors);
         applyColumnCommands();
+        applyConverterCommands();
         var readings = readings(sensors);
         runControllers(sensors, readings);
         publication.publish(sensors, readings);
@@ -324,6 +334,32 @@ public final class ControlService {
             boolean allowed = menu.stillValid(menu.player()) && menu.player().mayBuild();
             boolean wired = console != null && cell != null && hosts.wired(console.id(), request.command().host());
             menu.answer(menu.panel(), ColumnCommands.run(console != null && console.dcs(), allowed, wired, request.command(), door(cell)));
+        }
+    }
+
+    /**
+     * The queued converter commands (W4), each for its console: refused with NO DATA LINK where its bus no longer reaches the
+     * converter; else its next settings, changed in the command's field, queued for the engine's next tick.
+     */
+    private void applyConverterCommands() {
+        while (!converterCommands.isEmpty()) {
+            var request = converterCommands.removeFirst();
+            var menu = request.menu();
+            var console = facts.panel(menu.panel());
+            long host = request.command().host();
+            boolean allowed = menu.stillValid(menu.player()) && menu.player().mayBuild();
+            boolean wired = console != null && hosts.converter(host) && hosts.wired(console.id(), host);
+            menu.answer(menu.panel(), ConverterCommands.run(console != null && console.dcs(), allowed, wired, request.command(), new ConverterCommands.Door() {
+                @Override
+                public Converters.Settings settings(long id) {
+                    return world.converters().next(id);
+                }
+
+                @Override
+                public String apply(long id, Converters.Settings settings) {
+                    return world.converterSettings(id, settings);
+                }
+            }));
         }
     }
 

@@ -85,6 +85,13 @@ public final class Converters implements IslandCoordinator.Ports {
     private final Map<Long,String> lastRule=new HashMap<>();
     private final Map<Long,Status> status=new HashMap<>();
     private final Map<Long,Totals> totals=new HashMap<>();
+    private final Map<Long,Direction> direction=new HashMap<>();
+    private final Map<Long,Rate> rate=new HashMap<>();
+    /** A converter's booked rate over its island's last span (state): kg and Forge litres per process second, positive to IChemE. */
+    public record Rate(double mass,double litres) {
+        public static final Rate NONE=new Rate(0,0);
+        Rate plus(Rate o){return new Rate(mass+o.mass,litres+o.litres);}
+    }
     private final Map<String,ConversionLaws.PerLitre> perLitre=new HashMap<>();
 
     /**
@@ -113,15 +120,89 @@ public final class Converters implements IslandCoordinator.Ports {
     /** Removes converter {@code id}; its Forge tank leaves with the block (nothing of the fluid world is in it). */
     public ConverterUnit remove(long id) {
         var u=topology.removeConverter(id);if(u==null)return null;
-        byPort.values().removeIf(v->v==id);reserved.remove(id);planned.remove(id);lastRule.remove(id);status.remove(id);totals.remove(id);return u;
+        byPort.values().removeIf(v->v==id);reserved.remove(id);planned.remove(id);lastRule.remove(id);status.remove(id);totals.remove(id);direction.remove(id);rate.remove(id);queued.remove(id);return u;
     }
-    /** Sets converter {@code id}'s mode, rate (L per process second) and deadband (a queued engine event's apply). */
+    /**
+     * A converter's settings as a queued engine event carries them (W4, plan 3.4): its mode, its rate (L per process second),
+     * its balance deadband (a fill fraction) and its four level thresholds ({@link ConverterUnit#ICHEME_HIGH} order, fill
+     * fractions, NaN for none).
+     */
+    public record Settings(ConverterUnit.Mode mode,double rate,double deadband,double[] thresholds) {
+        /** The deadband's bounds, a fill fraction. */
+        public static final double MIN_DEADBAND=.01,MAX_DEADBAND=.5;
+        public Settings {
+            Objects.requireNonNull(mode);thresholds=thresholds.clone();
+            if(thresholds.length!=ConverterUnit.THRESHOLDS)throw new IllegalArgumentException("A converter has four level thresholds");
+        }
+        @Override public double[] thresholds(){return thresholds.clone();}
+        public static Settings of(ConverterUnit u){return new Settings(u.mode(),u.maxRate(),u.deadband(),u.thresholds());}
+        /**
+         * These settings inside a converter's bounds: the rate 0 to {@code rated} (its shape's rated flow, L/s), the deadband
+         * {@link #MIN_DEADBAND} to {@link #MAX_DEADBAND}, a threshold clamped to 0 to 1, or none where it is negative or not a number.
+         */
+        public Settings clamped(double rated) {
+            var t=thresholds();for(int i=0;i<t.length;i++)t[i]=!(t[i]>=0)?Double.NaN:Math.min(1,t[i]);
+            double r=Double.isFinite(rate)?Math.clamp(rate,0,Math.max(0,rated)):Math.max(0,rated);
+            double band=Double.isFinite(deadband)?Math.clamp(deadband,MIN_DEADBAND,MAX_DEADBAND):ConverterUnit.DEFAULT_DEADBAND;
+            return new Settings(mode,r,band,t);
+        }
+    }
+    /** The settings queued for the engine's next tick (state: a restart drops what never applied), by converter, the last one winning. */
+    private final Map<Long,Settings> queued=new LinkedHashMap<>();
+    /** Queues {@code settings} for converter {@code id} (a page edit or a DCS command): applied at the engine's next tick. */
+    public void queue(long id,Settings settings){if(topology.converter(id)!=null)queued.put(id,Objects.requireNonNull(settings));}
+    /** Whether converter {@code id} has settings waiting for the engine's tick. */
+    public boolean queued(long id){return queued.containsKey(id);}
+    /** Converter {@code id}'s next settings: those queued, else its facts'; null for no converter. */
+    public Settings next(long id){var q=queued.get(id);if(q!=null)return q;var u=topology.converter(id);return u==null?null:Settings.of(u);}
+    /** The engine's tick: applies every queued setting, each a fact its island reads at its next slice. */
+    public void applyQueued() {
+        if(queued.isEmpty())return;
+        var due=new ArrayList<>(queued.entrySet());queued.clear();
+        for(var e:due)settings(e.getKey(),e.getValue());
+    }
+    /** Sets converter {@code id}'s settings (a queued engine event's apply). */
+    public void settings(long id,Settings s) {
+        var u=topology.converter(id);if(u==null)return;topology.converter(u.withSettings(s.mode(),s.rate(),s.deadband()).withThresholds(s.thresholds()));moved.accept(id);
+    }
+    /** Sets converter {@code id}'s mode, rate (L per process second) and deadband, keeping its thresholds. */
     public void settings(long id,ConverterUnit.Mode mode,double rate,double deadband) {
-        var u=topology.converter(id);if(u==null)return;topology.converter(u.withSettings(mode,rate,deadband));moved.accept(id);
+        var u=topology.converter(id);if(u!=null)settings(id,new Settings(mode,rate,deadband,u.thresholds()));
     }
     public ConverterUnit unit(long id){return topology.converter(id);}
     public Status status(long id){var u=topology.converter(id);if(u==null)return null;return u.mode()==ConverterUnit.Mode.OFF?Status.OFF:status.getOrDefault(id,Status.IDLE);}
     public Totals totals(long id){return totals.getOrDefault(id,Totals.NONE);}
+    /** The direction converter {@code id}'s last plan converted in (state): NONE while it does not convert. */
+    public Direction direction(long id){var u=topology.converter(id);return u==null||u.mode()==ConverterUnit.Mode.OFF?Direction.NONE:direction.getOrDefault(id,Direction.NONE);}
+    /** What converter {@code id} booked over its island's last span (state), per process second, positive to IChemE. */
+    public Rate rate(long id){return rate.getOrDefault(id,Rate.NONE);}
+
+    /**
+     * A process vessel's fill fraction as Balance and the level channel read it (W4): an open vessel's condensed volume over
+     * its volume; a closed one's gas moles over the moles it holds at the blanket band's upper pressure at its temperature
+     * ({@code blanket} its blanketing valve's set pressure, the default band without one), each clamped to 0 to 1.
+     */
+    public static double fill(boolean closed,double volume,double condensed,double gasMoles,double temperature,double blanket) {
+        if(!(volume>0))return 0;
+        if(!closed)return Math.clamp(condensed/volume,0,1);
+        double upper=com.wormzjl.icheme.science.fluid.network.GasBlanket.ventPressure(blanket>0?blanket:FluidDeviceSpec.DEFAULT_BLANKET);
+        double full=temperature>0?upper*volume/(GAS_CONSTANT*temperature):0;
+        return full>0?Math.clamp(gasMoles/full,0,1):0;
+    }
+    static final double GAS_CONSTANT=8.314462618;
+    /**
+     * A converter's alarms (W4, plan 3.4): its status's (NO RULE, OFF SPEC, SOURCE EMPTY, DESTINATION FULL), and LEVEL HIGH or
+     * LEVEL LOW while either tank's fill stands at or over its high threshold, or at or under its low one ({@code icheme}
+     * NaN while its vessel has no published state: its two thresholds then raise nothing).
+     */
+    public static Set<EquipmentAlarm> alarms(Status status,double[] thresholds,double icheme,double forge) {
+        var out=EnumSet.noneOf(EquipmentAlarm.class);
+        var a=status==null?null:EquipmentAlarm.of(status);if(a!=null)out.add(a);
+        if(at(icheme,thresholds[ConverterUnit.ICHEME_HIGH],true)||at(forge,thresholds[ConverterUnit.FORGE_HIGH],true))out.add(EquipmentAlarm.LEVEL_HIGH);
+        if(at(icheme,thresholds[ConverterUnit.ICHEME_LOW],false)||at(forge,thresholds[ConverterUnit.FORGE_LOW],false))out.add(EquipmentAlarm.LEVEL_LOW);
+        return out;
+    }
+    private static boolean at(double fill,double threshold,boolean high){return !Double.isNaN(fill)&&!Double.isNaN(threshold)&&(high?fill>=threshold:fill<=threshold);}
     /** The Forge litres reserved for converter {@code id}'s slice in flight (0 once lapsed). */
     public double reserved(long id){var r=reserved.get(id);return r==null||r.until()<now.getAsLong()?0:r.litres();}
     /** Returns converter {@code id}'s account to its Forge tank in whole mB and drops its reservation: its island restated or held. */
@@ -232,7 +313,7 @@ public final class Converters implements IslandCoordinator.Ports {
                 case TO_FORGE->direction=Direction.TO_FORGE;
                 case TO_ICHEME->direction=Direction.TO_ICHEME;
                 case BALANCE->{
-                    double gap=fill(tank)-u.forgeFill();
+                    double gap=fill(tank,u.closed())-u.forgeFill();
                     if(Math.abs(gap)<=u.deadband())s=Status.BALANCED;else direction=gap>0?Direction.TO_FORGE:Direction.TO_ICHEME;
                 }
             }
@@ -242,6 +323,7 @@ public final class Converters implements IslandCoordinator.Ports {
         if(u.drain()!=0)plans.put(u.drain(),drain!=null?drain:new PortPlan(u.drain(),u.drainValve(),0,0,null));
         if(u.fill()!=0)plans.put(u.fill(),fill!=null?fill:new PortPlan(u.fill(),u.fillValve(),0,0,null));
         status.put(u.id(),s);
+        this.direction.put(u.id(),s==Status.CONVERTING?direction:Direction.NONE);
     }
     private record Outcome(PortPlan plan,Status status) {}
     /** Step 2: the drain port's void, on the rule that holds for the phase at its nozzle. */
@@ -313,13 +395,20 @@ public final class Converters implements IslandCoordinator.Ports {
         if(port==PassiveNetwork.PhasePort.VAPOR||!FluidThermodynamics.holdsLiquid(state))return FluidThermodynamics.GAS;
         return model.heavierLiquid(state);
     }
-    /** A vessel's fill fraction: its condensed volume over its volume. */
-    private static double fill(PassiveNetwork.Reservoir tank){return tank.inventory().volume()>0?FluidThermodynamics.liquidStreamVolume(tank.state())/tank.inventory().volume():0;}
+    /** A vessel node's fill fraction ({@link #fill(boolean,double,double,double,double,double)}). */
+    private static double fill(PassiveNetwork.Reservoir tank,boolean closed) {
+        var state=tank.state();double gas=0;for(double n:FluidThermodynamics.phaseMoles(state,FluidThermodynamics.GAS))gas+=n;
+        return fill(closed,tank.inventory().volume(),FluidThermodynamics.liquidStreamVolume(state),gas,state.temperature(),tank.inventory().blanket());
+    }
     private static int index(PassiveNetwork graph,long id){for(int i=0;i<graph.reservoirs().size();i++)if(graph.reservoirs().get(i).id()==id)return i;return -1;}
 
     /** What the island's converter ports gave and took over {@code start} to {@code end} (a solved or replayed span). */
     @Override public void booked(long island,PassiveNetwork graph,long start,long end,PassiveIntervalSolver.Result result) {
         if(byPort.isEmpty()||end<=start)return;
+        // The span's booked rate per converter of the island, 0 where its ports moved nothing.
+        Map<Long,Rate> span=null;
+        for(var node:graph.reservoirs()){Long id=byPort.get(node.id());if(id!=null){if(span==null)span=new HashMap<>();span.putIfAbsent(id,Rate.NONE);}}
+        double seconds=time.seconds(end-start);
         double[] weights=null;
         for(var b:result.boundaries()) {
             if(b.kind()!=ConservativeTransport.BoundaryTransfer.Kind.EXCHANGE)continue;
@@ -327,29 +416,31 @@ public final class Converters implements IslandCoordinator.Ports {
             var u=topology.converter(id);if(u==null)continue;
             if(weights==null)weights=models.apply(island).molecularWeights();
             var n=b.moles();double mass=0;for(int i=0;i<n.length;i++)mass+=n[i]*weights[i];
-            if(b.nodeId()==u.drain())drained(u,-mass,-b.totalEnergyJoule());
-            else givenIn(u,mass,b.totalEnergyJoule());
+            double litres=b.nodeId()==u.drain()?drained(u,-mass,-b.totalEnergyJoule()):givenIn(u,mass,b.totalEnergyJoule());
+            if(span!=null)span.merge(id,b.nodeId()==u.drain()?new Rate(mass,-litres):new Rate(mass,litres),Rate::plus);
         }
+        if(span!=null&&seconds>0)for(var e:span.entrySet())rate.put(e.getKey(),new Rate(e.getValue().mass()/seconds,e.getValue().litres()/seconds));
     }
     /** Reverse: {@code mass} kg left through the drain port; its litres join the remainder, whole mB go into the tank. */
-    private void drained(ConverterUnit u,double mass,double energy) {
+    private double drained(ConverterUnit u,double mass,double energy) {
         reserved.remove(u.id());
-        if(!(mass>0))return;
+        if(!(mass>0))return 0;
         var p=planned.get(u.id());
-        if(p==null||p.direction()!=Direction.TO_FORGE){IChemE.LOGGER.error("converter status=UNPLANNED unit={} drained_kg={}",u.id(),mass);return;}
+        if(p==null||p.direction()!=Direction.TO_FORGE){IChemE.LOGGER.error("converter status=UNPLANNED unit={} drained_kg={}",u.id(),mass);return 0;}
         double litres=ConversionLaws.litres(mass,p.density()),remainder=u.remainder()+litres;
         var fluid=u.fluid().isEmpty()?p.fluid():u.fluid();long stored=u.stored();
         if(fluid.equals(p.fluid())){long whole=Math.min((long)Math.floor(remainder),u.capacity()-stored);if(whole>0){stored+=whole;remainder-=whole;}}
         topology.converter(u.withTank(fluid,stored,remainder));
         totals.merge(u.id(),new Totals(mass,energy,litres,0,0,0),Totals::plus);
         moved.accept(u.id());
+        return litres;
     }
     /** Forward: {@code mass} kg came in through the fill port; its litres leave the account, the rest goes back in whole mB. */
-    private void givenIn(ConverterUnit u,double mass,double energy) {
+    private double givenIn(ConverterUnit u,double mass,double energy) {
         var p=planned.get(u.id());
         double litres=0;
         if(mass>0) {
-            if(p==null||p.direction()!=Direction.TO_ICHEME){IChemE.LOGGER.error("converter status=UNPLANNED unit={} given_kg={}",u.id(),mass);return;}
+            if(p==null||p.direction()!=Direction.TO_ICHEME){IChemE.LOGGER.error("converter status=UNPLANNED unit={} given_kg={}",u.id(),mass);return 0;}
             litres=ConversionLaws.litres(mass,p.density());
         }
         double account=u.account()-litres;
@@ -366,5 +457,6 @@ public final class Converters implements IslandCoordinator.Ports {
         if(back>0&&(u.fluid().isEmpty()||u.fluid().equals(fluid)))u=u.withTank(fluid,u.stored()+back,u.remainder()).withAccount(fluid,u.account()-back);
         topology.converter(u);
         if(litres>0){totals.merge(u.id(),new Totals(0,0,0,mass,energy,litres),Totals::plus);moved.accept(u.id());}
+        return litres;
     }
 }

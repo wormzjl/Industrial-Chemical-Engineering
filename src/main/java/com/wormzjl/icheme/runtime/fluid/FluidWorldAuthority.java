@@ -714,6 +714,31 @@ public final class FluidWorldAuthority implements AutoCloseable {
     /** The fluid converters (W3 registers them from the equipment structure). */
     public Converters converters(){owned();return converters;}
     /**
+     * Queues converter {@code id}'s settings (W4: a page edit, a DCS command), clamped to its rated flow (its vessel's
+     * volume through {@code EquipmentShape.converterRate}) and its deadband's bounds; applied at the engine's next tick, its
+     * acknowledgement with the next bucket. Returns null, or why not.
+     */
+    public @org.jetbrains.annotations.Nullable String converterSettings(long id,Converters.Settings settings) {
+        owned();if(closed)return "the fluid world is closed";var r=registrations().get(id);
+        if(r==null||converters.unit(id)==null)return "no converter";
+        converters.queue(id,settings.clamped(com.wormzjl.icheme.science.equipment.EquipmentShape.converterRate(r.spec().volume())));return null;
+    }
+    /**
+     * Converter {@code id}'s process vessel's fill fraction from its last published view ({@link Converters#fill}), NaN
+     * while it has none. A read of cached data: no solve.
+     */
+    public double converterFill(long id) {
+        owned();var u=converters.unit(id);var r=registrations().get(id);if(u==null||r==null)return Double.NaN;
+        var view=view(id);var s=view.state();if(s==null||view.committedTick()<=0)return Double.NaN;
+        var v=s.phaseVolumes();double gas=0;for(double n:s.phaseMoles()[2])gas+=n;
+        return Converters.fill(u.closed(),s.capacity(),v[0]+v[1]+s.solids().volume(),gas,s.temperature(),r.spec().blanket());
+    }
+    /** Converter {@code id}'s active alarms (W4): its status's and its level thresholds', on its published fill. */
+    public java.util.Set<EquipmentAlarm> converterAlarms(long id) {
+        owned();var u=converters.unit(id);if(u==null)return java.util.Set.of();
+        return Converters.alarms(converters.status(id),u.thresholds(),converterFill(id),u.forgeFill());
+    }
+    /**
      * A solid still's next item (W4): one taken from the fuel slot its pot's cell holds, its heat (J); 0 when the slot is
      * empty or the pot's chunk is not loaded (the fire then burns out: NO FUEL).
      */
@@ -1434,6 +1459,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
         columns.grow(edits->submit(edits,topology.nextIdentity()));
         // So does a converter's fill whose forward rule names a compound its island lacks (W3).
         converters.grow(edits->submit(edits,topology.nextIdentity()));
+        // A converter's queued settings (W4), each a fact its island reads at its next slice.
+        converters.applyQueued();
         runtime.tick();
         if(topology.hasPendingEvents()){applyPending();runtime.coordinator().pumpIfUseful();}
         // Shaft events apply after the devices they name (W3), then their trains recompile and wake what moved.

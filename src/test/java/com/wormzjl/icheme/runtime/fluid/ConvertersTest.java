@@ -214,4 +214,32 @@ class ConvertersTest {
         // A world before schema 24 has none.
         assertTrue(new FluidFacts.World(saved.nextIdentity(),saved.basis(),List.copyOf(saved.active().values()),saved.constructed(),saved.destroyed(),List.of(),saved.restated(),List.of(),List.of(),List.of(),Map.of(),Map.of(),saved.builds(),List.of()).converters().isEmpty());
     }
+
+    /**
+     * Settings as a queued engine event (W4, plan 3.4): a queued setting changes nothing until the engine's tick applies it,
+     * the next command reads it, and the facts then carry the mode and the four thresholds; a converting island publishes its
+     * booked rate and direction, and a Forge fill over its high threshold raises LEVEL HIGH.
+     */
+    @Test void queuedSettingsApplyOnTheEnginesTickAndCarryTheThresholds() throws IOException {
+        var rig=rig(2000);var c=rig.converters;long id=rig.vessel;
+        assertEquals(1500,rig.tank().fill(WATER,1500,false));
+        var settings=new Converters.Settings(ConverterUnit.Mode.TO_ICHEME,.8,.05,new double[]{.9,.1,.7,Double.NaN});
+        c.queue(id,settings);
+        assertEquals(ConverterUnit.Mode.OFF,rig.unit().mode(),"queued, not applied");
+        assertTrue(c.queued(id));assertEquals(ConverterUnit.Mode.TO_ICHEME,c.next(id).mode(),"the next command reads the queued settings");
+        c.applyQueued();
+        assertFalse(c.queued(id));
+        var u=rig.unit();
+        assertEquals(ConverterUnit.Mode.TO_ICHEME,u.mode());assertEquals(.8,u.maxRate(),0);
+        assertArrayEquals(new double[]{.9,.1,.7,Double.NaN},u.thresholds(),0);
+        assertEquals(java.util.Set.of(EquipmentAlarm.LEVEL_HIGH),Converters.alarms(c.status(id),u.thresholds(),Double.NaN,u.forgeFill()),"the Forge tank at 75 % is over its 70 % threshold");
+        rig.slices(5,false);
+        assertEquals(Converters.Direction.TO_ICHEME,c.direction(id));
+        var rate=c.rate(id);
+        assertTrue(rate.litres()>0&&rate.litres()<=.8+1e-9&&rate.mass()>0,"booked to IChemE inside the set rate: "+rate);
+        // The old four-value call keeps the thresholds.
+        c.settings(id,ConverterUnit.Mode.OFF,.8,.05);
+        assertArrayEquals(new double[]{.9,.1,.7,Double.NaN},rig.unit().thresholds(),0);
+        assertEquals(Converters.Direction.NONE,c.direction(id),"off converts in no direction");
+    }
 }

@@ -2,6 +2,9 @@ package com.wormzjl.icheme.runtime.control;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import com.wormzjl.icheme.runtime.fluid.ConverterUnit;
+import com.wormzjl.icheme.runtime.fluid.Converters;
+import com.wormzjl.icheme.runtime.fluid.EquipmentAlarm;
 import com.wormzjl.icheme.science.equipment.ConduitGeometry;
 
 import net.minecraft.core.*;
@@ -498,5 +501,57 @@ class ControlSystemTest {
         assertEquals(800, ControlLaw.feedDensity(8, .01), 1e-9);
         assertEquals(800, ControlLaw.feedDensity(-8, -.01), 1e-9, "a run compiled against the flow");
         assertTrue(Double.isNaN(ControlLaw.feedDensity(0, 0)), "nothing flowing: no density");
+    }
+
+    /**
+     * A DCS's converter page (batch 2026-11-12-fluid-conversion, W4): a console whose bus reaches the converter changes one
+     * setting of its next settings and queues them; one with no data link, a controller box or a closed menu is refused and
+     * the converter sees nothing.
+     */
+    @Test
+    void aDcsConverterCommandReachesTheConverterOnlyOverItsDataLink() {
+        var queued = new ArrayList<String>();
+        var next = new Converters.Settings[] {new Converters.Settings(ConverterUnit.Mode.OFF, 5, .05, new double[] {Double.NaN, Double.NaN, Double.NaN, Double.NaN})};
+        var door = new ConverterCommands.Door() {
+            @Override public Converters.Settings settings(long host) { return host == 12 ? next[0] : null; }
+            @Override public String apply(long host, Converters.Settings s) { queued.add(host + " " + s.mode() + " " + s.rate() + " " + s.deadband() + " " + Arrays.toString(s.thresholds())); next[0] = s; return null; }
+        };
+        var balance = new ConverterCommands.Command(12, ConverterCommands.Action.SET_MODE, ConverterUnit.Mode.BALANCE, List.of());
+        assertEquals(ColumnCommands.NO_DATA_LINK, ConverterCommands.run(true, true, false, balance, door));
+        assertEquals(ColumnCommands.NOT_A_DCS, ConverterCommands.run(false, true, true, balance, door));
+        assertEquals(ColumnCommands.CHANGED, ConverterCommands.run(true, false, true, balance, door));
+        assertEquals(List.of(), queued, "a refused command reaches no converter");
+        assertEquals(ConverterCommands.NO_CONVERTER, ConverterCommands.run(true, true, true, new ConverterCommands.Command(13, ConverterCommands.Action.SET_MODE, ConverterUnit.Mode.OFF, List.of()), door));
+        assertEquals(ColumnCommands.APPLIED, ConverterCommands.run(true, true, true, balance, door));
+        assertEquals(ColumnCommands.APPLIED, ConverterCommands.run(true, true, true, new ConverterCommands.Command(12, ConverterCommands.Action.SET_RATE, null, List.of(2.5)), door));
+        assertEquals(ColumnCommands.APPLIED, ConverterCommands.run(true, true, true, new ConverterCommands.Command(12, ConverterCommands.Action.SET_DEADBAND, null, List.of(.1)), door));
+        assertEquals(ColumnCommands.APPLIED, ConverterCommands.run(true, true, true, new ConverterCommands.Command(12, ConverterCommands.Action.SET_THRESHOLDS, null, List.of(.9, .1, -1.0, -1.0)), door));
+        assertEquals(List.of("12 BALANCE 5.0 0.05 [NaN, NaN, NaN, NaN]", "12 BALANCE 2.5 0.05 [NaN, NaN, NaN, NaN]", "12 BALANCE 2.5 0.1 [NaN, NaN, NaN, NaN]",
+                "12 BALANCE 2.5 0.1 [0.9, 0.1, -1.0, -1.0]"), queued, "each command changes its own field of the settings already queued");
+        var clamped = next[0].clamped(2);
+        assertEquals(2, clamped.rate(), 0, "the rate is clamped to the rated flow");
+        assertTrue(Double.isNaN(clamped.thresholds()[ConverterUnit.FORGE_HIGH]), "a negative threshold is none");
+        assertEquals(Converters.Settings.MIN_DEADBAND, new Converters.Settings(ConverterUnit.Mode.OFF, 1, 0, new double[4]).clamped(2).deadband(), 0);
+        assertEquals(Converters.Settings.MAX_DEADBAND, new Converters.Settings(ConverterUnit.Mode.OFF, 1, 2, new double[4]).clamped(2).deadband(), 0);
+        assertThrows(IllegalArgumentException.class, () -> new ConverterCommands.Command(12, ConverterCommands.Action.SET_THRESHOLDS, null, List.of(.5)));
+        assertThrows(NullPointerException.class, () -> new ConverterCommands.Command(12, ConverterCommands.Action.SET_MODE, null, List.of()));
+    }
+
+    /**
+     * A converter's level thresholds (W4): either tank at or over its high threshold raises LEVEL HIGH, at or under its low one
+     * LEVEL LOW; each clears when the fill crosses back; a threshold of none and an unpublished vessel raise nothing.
+     */
+    @Test
+    void aConverterThresholdRaisesAndClearsItsAlarm() {
+        double none = Double.NaN;
+        var t = new double[] {.8, .2, none, .1};
+        assertEquals(Set.of(), Converters.alarms(Converters.Status.CONVERTING, t, .5, .5));
+        assertEquals(Set.of(EquipmentAlarm.LEVEL_HIGH), Converters.alarms(Converters.Status.CONVERTING, t, .8, .5), "the process tank reaches its high threshold");
+        assertEquals(Set.of(), Converters.alarms(Converters.Status.CONVERTING, t, .79, .5), "and the alarm clears below it");
+        assertEquals(Set.of(EquipmentAlarm.LEVEL_LOW), Converters.alarms(Converters.Status.CONVERTING, t, .5, .1), "the Forge tank reaches its low threshold");
+        assertEquals(Set.of(), Converters.alarms(Converters.Status.CONVERTING, t, .5, 1), "the Forge tank has no high threshold");
+        assertEquals(Set.of(EquipmentAlarm.LEVEL_LOW, EquipmentAlarm.SOURCE_EMPTY), Converters.alarms(Converters.Status.SOURCE_EMPTY, t, .2, .5));
+        assertEquals(Set.of(), Converters.alarms(Converters.Status.IDLE, t, Double.NaN, .5), "no published state raises nothing");
+        assertEquals(Set.of(), Converters.alarms(Converters.Status.IDLE, new double[] {none, none, none, none}, 0, 1), "no thresholds raise nothing");
     }
 }

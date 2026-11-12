@@ -967,6 +967,11 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
         return ConverterDesign.rate(diameter, tangentLength);
     }
 
+    /** A fluid converter's rated flow from its process tank's volume (m³), L per process second: the most of its rate setting (W4). */
+    public static double converterRate(double volume) {
+        return ConverterDesign.rated(volume);
+    }
+
     /** A fluid converter's hidden high contact, in rows over its node (its process tank's top row inside the shell, at least one). */
     public int converterRise() {
         return ConverterDesign.rise(diameter, tangentLength, kind == Kind.GAS_CONVERTER);
