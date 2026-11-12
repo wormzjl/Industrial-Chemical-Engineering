@@ -793,3 +793,48 @@ appearance counter is dropped. 575 (pass 0, crude with light ends) is not this p
     amount that is not zero. A slot the vessel does not hold costs about 6 bytes at 40 components; a full liquid
     about 330.
   - load: two arrays per vessel row and one copy for the gas slot, dropped once the island is rebuilt.
+
+## 44. Cause B: the sheet's sizing of saturated drum liquids, measured; options for the owner (2026-11-12)
+
+Measured, no source changed (`tmp/w3b-network/reports/w3b-sheet-sizing-numbers-report.md`): the two streams of
+`SheetSizingTest.separator()` (340 K, 3 bar) and two sense checks. Pressures in bar.
+
+| Stream | full bubble (sheet now) | p_v (world) | E (world) | gas on letdown to 1 atm |
+|---|---|---|---|---|
+| drum water | 2.99 | 0.89 | 1.56 | 0.0028 % mol, 4.0 % of the volume |
+| drum oil | 3.00 | 0.89 | 2.68 | 1.05 % mol, 53 % of the volume |
+| propane, 300 K | 9.98 | 9.98 | 9.86 | - |
+| water saturated with N2, 1 atm, 298 K | 1.005 | 0.032 | 0.699 | - |
+
+1. Expected. A pump on a liquid saturated with a permanent gas pulls through its clean zone, as the world's rule
+   (form G) states. Water carrying a trace of dissolved gas goes to an atmospheric tank, where the trace vents.
+2. What the sheet does. Both rules read the full bubble pressure, which a trace of gas sets. The oil pump reads
+   -0.18 m of NPSH available against 1.53 m (red); the water takes a sphere. The pump's row is labelled as the
+   world's rule and no longer states it.
+3. Findings that change the option I had in mind.
+   - Pump: the world's two pressures bring the yellow pump back: 25.2 m over p_v; the world limit is E, with
+     30.3 kPa (3.65 m) to spare (main: 3.4 m).
+   - Tank: p_v does not bring the floating roof back. The water holds propane and butanes at parts per million,
+     at their partial pressures in the drum's gas (0.62 bar); they are below their critical temperature, so p_v
+     keeps them: 0.89 bar against the roof's 0.766. A bubble pressure, with or without the permanent gases, states
+     how hard the first bubble pushes, not how much there is to release.
+   - Cost: the world's own functions read at constant enthalpy, 26 PH equilibria each: 0.2 s a pump, 0.1 s a
+     tank, against 10 ms now. Owner constraint: "performance friendly (CPU/RAM)".
+4. Options.
+   - Pump (recommended): the definitions of p_v and E lifted out of `PassiveStepSolver` to one holder that takes
+     the trial's evaluator. The world keeps its constant-enthalpy trial; the sheet passes a TP flash at the
+     stream's temperature. About 26 TP flashes of 0.7 ms a reading: 40 ms a pump. The two evaluators differ by the
+     cooling of a liquid releasing under 0.1 % of its moles, my estimate under 0.1 K and 1 % of pressure; a gate
+     on the four streams above measures it. NPSH available reads p_v; the world row reads the greater of E and
+     p_v + 0.85 NPSH3. `Service` (boiling service at 0.3 bar over the bubble pressure) keeps the full bubble
+     pressure: a drum liquid is a saturated liquid.
+   - Tank, three choices:
+     a. (recommended) the roof rule and the storage tile read the vapour pressure at equal vapour and liquid
+        volumes (V/L = 1; the oil industry measures crude's vapour pressure at a set V/L for this reason), at the
+        stream's temperature, limit 0.766 bar unchanged. From the letdown numbers: drum water about 0.30 bar (my
+        arithmetic: 2.3e-4 mol/s of gas against 2.1e-4 m3/s of liquid): floating roof. Drum oil above 1 atm (53 %
+        vapour at 1 atm): sphere, as on main. Propane a sphere; nitrogen water a roof. About 20 ms a tank.
+     b. the pump's p_v: the water keeps its sphere (0.89 bar); the test is re-pinned.
+     c. the full bubble pressure as now: sphere at 2.99 bar; the test is re-pinned; no code.
+   - Not proposed here: the world's p_v by the same V/L measure (section 17 named the half-share pressure as a
+     candidate). It moves the pump limit and needs its own campaign: a later batch.
