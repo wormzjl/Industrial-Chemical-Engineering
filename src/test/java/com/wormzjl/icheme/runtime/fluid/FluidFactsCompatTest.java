@@ -137,7 +137,9 @@ class FluidFactsCompatTest {
         blanketed(world);
         world.runTo(920);
         relieved(world);
-        world.runTo(930);return world;
+        world.runTo(930);
+        converted(world);
+        world.runTo(940);return world;
     }
     /**
      * Facts schema 20 (batch 2026-11-10-prime-movers): a 300 MW heavy-duty gas turbine's fuel void at its combustor's
@@ -241,6 +243,27 @@ class FluidFactsCompatTest {
         var spec=new FluidDeviceSpec(g.capacity(),298.15,101325,FluidDeviceSpec.nitrogen(CATALOG).composition(),SlurryFeed.NONE,g.height(),false,g,null,135000).withRelief(450000,null);
         world.registry.submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,spec,0))),id+1,null);
         world.place(100,64,8,Kind.PIPE,Direction.EAST,FluidDeviceSpec.nitrogen(CATALOG).withRelief(250000,Direction.UP),.05);
+    }
+    /**
+     * Facts schema 24 (batch 2026-11-12-fluid-conversion): a fluid converter on an open tank, every field away from its
+     * default, its Forge tank holding a fluid no mod registers (kept as its string). Its ports and valves are identities the
+     * facts name; this world places no structure, so they are not registered.
+     */
+    private static void converted(EventPathWorld world) {
+        var node=new PhysicalFluidTopology.Position(EventPathWorld.DIM,104,64,8);
+        long vessel=world.placeVessel(node,List.of(new PhysicalFluidTopology.Port(node,Direction.EAST,PassiveNetwork.PhasePort.LIQUID)),4,2,true);
+        long ports=world.ledger.reserve(4);
+        world.ledger.converter(new ConverterUnit(vessel,ports,ports+1,ports+2,ports+3,false,ConverterUnit.Mode.BALANCE,4,.1,new double[]{.9,Double.NaN,.8,.1},
+                64000,"gone:fluid",1200,.375,"gone:fluid",2.5));
+    }
+    /** Each fluid converter: its devices, settings, Forge tank, remainder and account. */
+    private static String converted(WorldTopologyLedger.Snapshot world) {
+        var text=new StringBuilder();
+        for(var u:new TreeMap<>(world.converters()).values()){if(!text.isEmpty())text.append(";");
+            text.append(u.id()).append("=").append(u.drain()).append("/").append(u.drainValve()).append("/").append(u.fill()).append("/").append(u.fillValve()).append("/").append(u.closed())
+                .append("/").append(u.mode()).append("/").append(u.maxRate()).append("/").append(u.deadband()).append("/").append(Arrays.toString(u.thresholds()))
+                .append("/").append(u.capacity()).append("/").append(u.fluid()).append("/").append(u.stored()).append("/").append(u.remainder()).append("/").append(u.accountFluid()).append("/").append(u.account());}
+        return text.toString();
     }
     /** Each pressure safety valve: its set pressure and its outlet (a vessel's relief port, or a pipe's face). */
     private static String relieved(WorldTopologyLedger.Snapshot world) {
@@ -931,6 +954,8 @@ class FluidFactsCompatTest {
                 assertEquals(expected.getProperty("blanketed",""),blanketed(ledger),folder+": gas blanketing valves");
                 // Schema 23 wrote the pressure safety valves; an older image has none.
                 assertEquals(expected.getProperty("relieved",""),relieved(ledger),folder+": pressure safety valves");
+                // Schema 24 wrote the fluid converters; an older image has none.
+                assertEquals(expected.getProperty("converters",""),converted(ledger),folder+": fluid converters");
                 long vessels=rebuilt.checkpoint().islands().stream().flatMap(e->e.snapshot().graph().reservoirs().stream()).filter(n->n.kind()==PassiveNetwork.NodeKind.RESERVOIR).count();
                 // Schema 18 wrote whether a vessel's wall is rigid; an older image reads every vessel a bag.
                 assertEquals(Long.parseLong(expected.getProperty("rigid","0")),rigid(rebuilt.checkpoint()),folder+": rigid vessels");
@@ -1077,6 +1102,7 @@ class FluidFactsCompatTest {
         props.setProperty("ejectors",ejectors(loaded.world().orElseThrow()));
         props.setProperty("blanketed",blanketed(loaded.world().orElseThrow()));
         props.setProperty("relieved",relieved(loaded.world().orElseThrow()));
+        props.setProperty("converters",converted(loaded.world().orElseThrow()));
         props.setProperty("vessels",Long.toString(contents(loaded.checkpoint()).values().stream().filter(v->v instanceof PassiveNetwork.Inventory).count()));
         props.setProperty("rigid",Long.toString(rigid(loaded.checkpoint())));
         props.setProperty("vacuumPumps",vacuumPumps(loaded.world().orElseThrow()));

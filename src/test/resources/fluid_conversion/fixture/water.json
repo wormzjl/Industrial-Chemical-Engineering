@@ -1,0 +1,7 @@
+{
+  "revision": "1",
+  "fluid": "minecraft:water",
+  "phase": "liquid",
+  "to_icheme": {"composition": {"Water": 1.0}, "temperature": "ambient", "pressure": "ambient"},
+  "to_forge": {"components": {"Water": {"min": 0.99, "max": 1.0}}, "temperature": {"min": 273.15, "max": 373.15}}
+}

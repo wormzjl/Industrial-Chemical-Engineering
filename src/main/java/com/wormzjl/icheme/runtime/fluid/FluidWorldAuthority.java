@@ -57,6 +57,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
     private final Stills stills;
     /** The steam ejectors' motive slice inputs (batch 2026-11-10-steam-ejector-flow). */
     private final Ejectors ejectors;
+    /** The fluid converters (batch 2026-11-12-fluid-conversion, W2): their ports share the port hooks with the columns. */
+    private final Converters converters;
     /** The pumps' health (W10b). */
     private final PumpHealth health;
     /**
@@ -183,7 +185,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
         // The batch stills (batch 2026-11-09-batch-distiller): their pots, heads and outlets share the port hooks with the columns.
         stills=new Stills(topology,registry::owner,runtime.coordinator(),runtime.coordinator()::model,electric,model.components(),model.molecularWeights(),heatingValues(catalog,model));
         ejectors=new Ejectors(runtime.coordinator()::model);
-        stills.refresh();runtime.coordinator().ports(IslandCoordinator.Ports.both(columns,IslandCoordinator.Ports.both(stills,ejectors)));
+        converters=new Converters(topology,runtime.coordinator()::model,model.time(),topology::onlineTick,
+                id->{var island=registry.owner(id);if(island!=null)runtime.coordinator().portsMoved(island);},com.wormzjl.icheme.science.fluid.conversion.ConversionRuntime::active);
+        stills.refresh();runtime.coordinator().ports(IslandCoordinator.Ports.both(columns,IslandCoordinator.Ports.both(stills,IslandCoordinator.Ports.both(ejectors,converters))));
         stills.solves((pot,island,job,done)->{
             var at=registrations().get(pot);if(at==null)return false;
             var dimension=net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION,net.minecraft.resources.ResourceLocation.parse(at.device().position().dimension()));
@@ -705,6 +709,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public Chimneys chimneys(){owned();return chimneys;}
     /** The batch stills (batch 2026-11-09-batch-distiller). */
     public Stills stills(){owned();return stills;}
+    /** The fluid converters (W3 registers them from the equipment structure). */
+    public Converters converters(){owned();return converters;}
     /**
      * A solid still's next item (W4): one taken from the fuel slot its pot's cell holds, its heat (J); 0 when the slot is
      * empty or the pot's chunk is not loaded (the fire then burns out: NO FUEL).

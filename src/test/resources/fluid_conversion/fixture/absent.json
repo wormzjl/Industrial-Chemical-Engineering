@@ -1,0 +1,6 @@
+{
+  "revision": "1",
+  "fluid": "absentmod:thing",
+  "phase": "liquid",
+  "to_icheme": {"composition": {"Water": 1.0}}
+}
