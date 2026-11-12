@@ -255,3 +255,32 @@ Report `tmp/w4-still/reports/W4A_TWO_LIQUID_TOP.md`; nothing committed yet. Thre
   same open pot, pentane charged cold.
 - Meanwhile the sub-thread committed W4c `bc51003fb` (the sheet's still takes water that stays in one liquid) and
   the code guide `73fbe584d`; neither is reviewed by the orchestrator yet.
+
+## 14. The third form measured (2026-11-12)
+
+Report `tmp/w4-still/reports/W4A_THIRD_FORM.md`; built, not committed yet.
+
+- As expected: dry pots 0 of 4410 values moved; the wash unmoved, 8 trays at R = 3 back at 33 iterations (4 trays
+  at R = 3: 21, was 34); water with n-hexane, 4 trays, R = 3: 7 iterations, every tray 61.14 C, top vapour 0.7936,
+  distillate 0.179 hexane (section 12: 61.14, 0.7936, about 0.18); at R = 5 the pot still with its notice; the
+  hexane trace rectified to 3e-8 and a pot still from 1e-7 to 3e-6 (the distillate steps 0.7214 to 0.2547).
+- Not as section 12 said:
+  1. From 1e-5 to 1e-2 of hexane the column converges again: a rising profile, every tray reported as settling,
+     the top trays at 36 to 45 C under a condensate near 56 C, the reflux returning the hexane (distillate 1e-4).
+     A tray that would settle, read as one liquid, boils too cold; the wet naphtha shows the same by 0.78 K (head
+     24.32 C under its condensate's 25.10 C).
+  2. Flashes: 21 for water with hexane and 38 for the wet naphtha (ordered 20 and 34).
+  3. The wet 46-compound crude fails in its first iteration, "no bubble point on stage 2", 11 flashes at about
+     18 ms a flash.
+- Decided:
+  1. Point 1 is D4's notice, not a failure: the owner's rule for the V3 column (a tray below the water dew point
+     is a warning, not a rejection). No new trigger. A test of the head against its condensate's bubble point
+     would sit 0.2 K from the wet naphtha at 1 K, and the gap grows with the steam in the pot's vapour, so wet oils
+     would lose their column on a threshold the physics does not give. A split of every settling tray costs about
+     8 flashes a tray. Known error, the owner's to veto: where trays would settle their temperatures read low, by
+     about 1 K on the wet naphtha and 10 to 20 K under an entrainer top; the notice says so.
+  2. The fallback's trigger is widened, same form: any failure of the iteration in a solve where a liquid of the
+     still settles answers the pot still with its notice. Expected cause of the crude's failure (to confirm): a
+     hot pot's vapour is mostly steam, the oil layer is under the reflux, tray 1 receives free water.
+  3. The flash counts are accepted as measured.
+- Cost to record: one wet solve's time on the wet naphtha and the crude, and when the world submits one.
