@@ -252,3 +252,20 @@ Open from W6:
 - Two `en_us.json` keys for the translation commit: `material.icheme.ethanol`,
   `gui.icheme.flowsheet.example.ethanol_rectifier`.
 - Not run: `LanguageFilesTest`, `UnitTextTest` (the translation commit), the final lane, `crude_unit`'s re-record.
+
+## 15. Owner decision: the activity fits in parallel (2026-11-12)
+
+"Approve": proposal a of section 13, built by the live sub-thread `w5-column` (Opus high).
+
+- What changes: `DerivedPairs.derive` gains a first pass over the list's pairs. It finds the activity pairs
+  whose fit the catalog's `Cache` does not hold and runs those fits on several threads. The loop that assembles
+  the pairs is unchanged and finds every fit kept. One fit alone runs in the loop as before.
+- Why no number moves: a fit is a function of its two compounds' records and the group table alone. Each fit
+  builds its own `Binary` (kernel, workspace) and its own group mixture. The cache is keyed by pair.
+- Expected on this machine (16 processors): the whole list 1.52 to 1.75 s to about 0.3 s; without ethanol it was
+  0.35 to 0.45 s. Fits run stay 291. No revision of the derivation, no re-pin.
+- Pitfalls named in the brief: a fit that throws must throw from the same place as now (the first pass leaves
+  it to the loop); the first pass adds no notice; a shared mutable field on the fit's path; a class
+  initialiser that reaches `derive` while a fit thread needs that class.
+- Gates: a dump of every pair's parameters in hexadecimal, before and after, with no difference; a test that
+  the whole list's pairs equal each pair derived alone; `LoadFits` at or under 0.5 s, run alone.
