@@ -55,15 +55,21 @@ public final class StillRunRecorder {
     public static Run run() {
         var catalog = MaterialCatalog.bundled();
         var thermo = FluidThermodynamics.forNetwork(catalog, PACKAGE);
-        var column = new StillColumn(thermo.hydrocarbon, BatchStill.ATMOSPHERIC);
+        var column = new StillColumn(thermo, BatchStill.ATMOSPHERIC);
         int n = column.componentCount();
         var preset = FluidPresetCatalog.resolve(catalog).stream().filter(p -> p.id().equals(CRUDE)).findFirst().orElseThrow();
         double[] axis = preset.moleFractions();
+        // The preset is on the conserved basis, water last; the column's basis is the same where the model carries water (W4 D1).
+        if (axis.length != thermo.hydrocarbon.componentCount() + 1 || n > axis.length) throw new IllegalStateException("The preset is not on the network's basis");
         if (axis[axis.length - 1] != 0) throw new IllegalStateException("The still's charge holds no water");
         // The crude as it comes boils at 1 atm below 25 °C: it flashes as it enters the open pot. The pot holds the flash's liquid; its gas leaves by the vent.
         var flash = thermo.flashTP(CHARGE_KELVIN, BatchStill.ATMOSPHERIC, axis, () -> {
         });
-        double[] liquid = flash.liquid(), gas = flash.vapor();
+        double[] liquid = new double[n], gas = new double[n];
+        for (int i = 0; i < n; i++) {
+            liquid[i] = flash.labelAmountsView(FluidThermodynamics.OIL)[i] + flash.labelAmountsView(FluidThermodynamics.AQUEOUS)[i];
+            gas[i] = flash.labelAmountsView(FluidThermodynamics.GAS)[i];
+        }
         double liquidMoles = 0, gasKg = 0, liquidKg = 0;
         for (int i = 0; i < n; i++) {
             liquidMoles += liquid[i];
@@ -112,7 +118,7 @@ public final class StillRunRecorder {
             } catch (IllegalArgumentException | IllegalStateException e) {
                 // The law refuses the next step: the run ends at the last step it took, with the column's reason.
                 finish = "REFUSED";
-                var split = column.solve(pot.moles(), 0, 0, null);
+                var split = column.solve(pot.moles(), 0, 0, BatchStill.outlet(cooling), null);
                 refusal = split.converged() ? e.getMessage() : split.failure();
                 break;
             }
