@@ -31,6 +31,24 @@ public final class IChemEClient {
         com.wormzjl.icheme.client.gui.tutorial.FilmCommand.register(event);
     }
 
+    /** The field guide's key (batch 2026-11-12-tutorial-system, P1): default H. */
+    @SubscribeEvent
+    public static void registerKeys(net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent event) {
+        event.register(com.wormzjl.icheme.client.gui.tutorial.GuideClient.KEY);
+    }
+
+    /** The field guide's one-line tracker, at the top left. */
+    @SubscribeEvent
+    public static void registerLayers(net.neoforged.neoforge.client.event.RegisterGuiLayersEvent event) {
+        event.registerAboveAll(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID, "guide_hud"), com.wormzjl.icheme.client.gui.tutorial.GuideHud::render);
+    }
+
+    /** The guide key opens the field guide while no screen is open. */
+    @SubscribeEvent
+    public static void key(net.neoforged.neoforge.client.event.InputEvent.Key event) {
+        com.wormzjl.icheme.client.gui.tutorial.GuideClient.key(event);
+    }
+
     /** The field guide asks the server for this player's tutorial progress (batch 2026-11-12-tutorial-system, P1). */
     @SubscribeEvent
     public static void loggingIn(ClientPlayerNetworkEvent.LoggingIn event) {

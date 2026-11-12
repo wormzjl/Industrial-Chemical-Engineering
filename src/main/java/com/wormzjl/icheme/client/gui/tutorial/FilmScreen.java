@@ -36,9 +36,26 @@ public final class FilmScreen extends Screen {
     private Rect glass;
     private SkinButton back, replay, next;
 
+    /** The screen a close returns to (null: none), and what runs once when the last stop is first reached (null: nothing). */
+    private final Screen parent;
+    private Runnable onFinished;
+
     public FilmScreen(Scene scene) {
+        this(scene, null, null);
+    }
+
+    /** A film opened from {@code parent} (the field guide), which it returns to on close; {@code onFinished} runs once, at the last stop. */
+    public FilmScreen(Scene scene, Screen parent, Runnable onFinished) {
         super(Component.translatable(scene.title()));
         this.scene = scene;
+        this.parent = parent;
+        this.onFinished = onFinished;
+    }
+
+    @Override
+    public void onClose() {
+        if (parent != null && minecraft != null) minecraft.setScreen(parent);
+        else super.onClose();
     }
 
     private static Skin skin() {
@@ -109,6 +126,11 @@ public final class FilmScreen extends Screen {
         back.active = target > 0;
         boolean end = target == scene.stops().size() - 1 && waiting();
         next.setMessage(Component.literal(tr(KEY + (end ? "close" : "next"))));
+        if (end && onFinished != null) {
+            var finished = onFinished;
+            onFinished = null;
+            finished.run();
+        }
     }
 
     @Override

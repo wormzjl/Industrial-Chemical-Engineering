@@ -49,8 +49,21 @@ public final class GuideClient {
         PacketDistributor.sendToServer(new TutorialNetwork.Hello());
     }
 
+    /** The guide key (default H). */
+    public static final net.minecraft.client.KeyMapping KEY = new net.minecraft.client.KeyMapping("key.icheme.guide", com.mojang.blaze3d.platform.InputConstants.Type.KEYSYM,
+            org.lwjgl.glfw.GLFW.GLFW_KEY_H, "key.categories.icheme");
+
     /** Opens the guide (the Field Guide item and the guide key). */
     public static void open() {
-        // The guide screen comes with part C of P1.
+        var mc = net.minecraft.client.Minecraft.getInstance();
+        mc.tell(() -> mc.setScreen(new GuideScreen()));
+    }
+
+    /** A key press: the guide key opens the guide while no screen is open. */
+    public static void key(net.neoforged.neoforge.client.event.InputEvent.Key event) {
+        boolean pressed = false;
+        while (KEY.consumeClick()) pressed = true;
+        var mc = net.minecraft.client.Minecraft.getInstance();
+        if (pressed && mc.screen == null && mc.player != null) mc.setScreen(new GuideScreen());
     }
 }

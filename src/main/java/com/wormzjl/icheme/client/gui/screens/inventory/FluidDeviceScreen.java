@@ -65,7 +65,37 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     public FluidDeviceScreen(FluidDeviceMenu menu,Inventory inventory,Component title){super(menu,inventory,title);}
     private static String tr(String key,Object...args){return Component.translatable("gui.icheme.fluid."+key,args).getString();}
     /** The title strip (N1, the owner 2026-11-03: "You can put the equipment name here"): the kind's plate, the name after it, the theme key. */
-    private TitleStrip.Strip strip(){return TitleStrip.place(imageWidth,themeWidth(),title.getString(),GuiCanvas.measure(font));}
+    private TitleStrip.Strip strip(){return TitleStrip.placeKeys(imageWidth,FluidGuiLayout.titleKeys(imageWidth,tourPage()!=null).size(),title.getString(),GuiCanvas.measure(font));}
+    // The help tour (batch 2026-11-12-tutorial-system, P1): a ? key beside the theme key on a page that has a tour. The tour
+    // changes no widget and is not in the signature, so a rebuild under it keeps it at its stop.
+    private final com.wormzjl.icheme.client.gui.tutorial.HelpTour tour=new com.wormzjl.icheme.client.gui.tutorial.HelpTour();
+    private List<String> tabIds=List.of();
+    /** This page's tour's name, or null where it has none: the still's Overview. */
+    private String tourPage(){String name=still()!=null&&page==0?"fluid_device.still":null;return name!=null&&com.wormzjl.icheme.client.gui.tutorial.HelpTour.of(name)!=null?name:null;}
+    private void openTour(){var t=tourPage()==null?null:com.wormzjl.icheme.client.gui.tutorial.HelpTour.of(tourPage());if(t!=null)tour.open(t,this::anchor,null);}
+    /** A tour's anchor on the screen (Tour): a door widget's or meter's slot, scrolled into view where {@code reveal}; the status; the title; a tab; a group. */
+    private Rect anchor(String key,boolean reveal){
+        Rect r=null;boolean door=false;
+        if(key.equals("status"))r=new Rect(8,56,imageWidth-16,14);
+        else if(key.equals("title"))r=strip().plate();
+        else if(key.startsWith("tab:")){int i=tabIds.indexOf(key.substring(4));if(i>=0){var s=FluidGuiLayout.tabs(imageWidth,tabIds.size()).get(i);r=new Rect(s.x(),29,s.width(),18);}}
+        else{
+            String slot=key;
+            if(key.startsWith("reading:")){slot=null;var readings=deviceInput().readings();for(int i=0;i<readings.size();i++)if(readings.get(i).key().equals(key.substring(8)))slot="meter:"+i;}
+            int group=key.startsWith("group:")?Integer.parseInt(key.substring(6)):0,seen=0;
+            for(var column:doorColumns)for(var p:column.rows()){
+                if(group>0&&p.row() instanceof Column.Group&&++seen==group)r=p.rect();
+                if(slot!=null&&p.slots().containsKey(slot))r=p.slots().get(slot);
+            }
+            door=r!=null;
+        }
+        if(r==null)return null;
+        if(door){
+            for(int i=0;reveal&&i<64&&!doorView.visible(r);i++){var v=doorView.viewport();int before=doorView.offset();doorView.wheel(v.x()+2,v.y()+2,doorView.onScreen(r).y()<v.y()?1:-1);if(doorView.offset()==before)break;}
+            r=doorView.onScreen(r);
+        }
+        return r.moved(leftPos,topPos);
+    }
     /** The device's name as the client's block holds it (N1): a structure's on its cells, a one-block device's on itself. */
     private String currentName(){var level=minecraft==null?null:minecraft.level;return level==null?"":com.wormzjl.icheme.world.level.block.EquipmentStructure.name(level,menu.position());}
     /** Whether this device takes a name (N1): a structure, or a one-block device with a screen of its own (FluidDeviceBlockEntity.nameable). */
@@ -329,11 +359,15 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         if(valveOnly()){tabs.clear();pages.clear();tabs.add("safety_valve");pages.add(ACCESSORY);}
         var tabSlots=FluidGuiLayout.tabs(imageWidth,tabs.size());
         for(int i=0;i<tabs.size();i++){int target=pages.get(i);var slot=tabSlots.get(i);doorAction(tabs.get(i),slot.x(),29,slot.width(),()->changePage(target)).latched(true).active=page!=target;}
-        int themeWidth=themeWidth();
+        tabIds=List.copyOf(tabs);
         // The theme key shows the contrast sign; its hover names the panel shown, its message stays for narration.
         String theme=tr(ClientConfig.theme()==ClientConfig.Theme.DARK?"theme.dark":"theme.light");
-        doorButton(theme,imageWidth-10-themeWidth,5,themeWidth,()->{ClientConfig.toggleTheme();rebuild();}).icon(Skin.Icon.THEME)
+        var titleKeys=FluidGuiLayout.titleKeys(imageWidth,tourPage()!=null);var themeKey=titleKeys.get(0);
+        doorButton(theme,themeKey.x(),themeKey.y(),themeKey.w(),()->{ClientConfig.toggleTheme();rebuild();}).icon(Skin.Icon.THEME)
             .setTooltip(Tooltip.create(Component.literal(theme+"\n").append(Component.translatable("gui.icheme.fluid.theme.hint"))));
+        // The help key left of it, where the page has a tour: a sign, not a word (panel rule 7).
+        if(titleKeys.size()>1){var help=titleKeys.get(1);String hint=Component.translatable("tutorial.icheme.guide.help").getString();
+            doorButton(hint,help.x(),help.y(),help.w(),this::openTour).icon(Skin.Icon.HELP);}
         // The name's entry in the title strip, for an editor of a device that takes a name, sent with Apply; a reader sees its text (renderLabels).
         var namePlace=strip().name();if(names()&&namePlace!=null)nameBox(namePlace);
         var footer=FluidGuiLayout.footer(imageWidth);int by=imageHeight-27;
@@ -579,6 +613,8 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         ProcessUi.restoreCursor(minecraft,this);refresh();if(rebuildNext)rebuild();hovered=null;
         // The door column's widgets follow its scroll before they draw.
         doorWidgets.place(doorView,leftPos,topPos);
+        // An open tour takes the pointer: the page under it shows no hover.
+        if(tour.isOpen()){super.render(g,-1,-1,partialTick);tour.render(g,font,width,height,mouseX,mouseY);return;}
         super.render(g,mouseX,mouseY,partialTick);
         if(hovered!=null&&(componentDropdown==null||!componentDropdown.popupContains(mouseX,mouseY))){
             var lines=new ArrayList<net.minecraft.util.FormattedCharSequence>();
@@ -1347,10 +1383,12 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         drawDoor(canvas,skin);
     }
     @Override public boolean keyPressed(int key,int scan,int modifiers){
+        if(tour.isOpen())return tour.keyPressed(key);
         if(ProcessUi.textKeyPressed(this,key,scan,modifiers))return true;
         return super.keyPressed(key,scan,modifiers);
     }
     @Override public boolean mouseClicked(double x,double y,int button){
+        if(tour.isOpen()&&tour.mouseClicked(font,width,height,x,y))return true;
         if(componentDropdown!=null&&componentDropdown.popupClick(x,y,button))return true;
         SkinField.clickOutside(this,x,y);
         // The door column's view on every page: its bar, then a choice it places (a mode, a valve's target); then the table's scroll.
@@ -1368,6 +1406,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     }
     @Override public boolean mouseReleased(double x,double y,int button){if(componentDropdown!=null)componentDropdown.popupRelease();scroll.release();doorView.release();return super.mouseReleased(x,y,button);}
     @Override public boolean mouseScrolled(double x,double y,double horizontal,double vertical){
+        if(tour.isOpen())return true;
         if(componentDropdown!=null&&componentDropdown.popupScroll(x,y,vertical))return true;
         if(doorView.wheel(x-leftPos,y-topPos,vertical))return true;
         if(page!=CONTROL&&x>=leftPos+tableX()&&scroll.wheel(vertical)){rebuildNext=true;return true;}
@@ -1380,6 +1419,8 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         /** The screen's image at the player's scale: 8 px round it, 300 to 790 px wide; short doors scroll. */
         public static int imageWidth(int width){return Math.max(300,Math.min(790,width-16));}
         public static int imageHeight(int height){return Math.max(180,height-16);}
+        /** The title strip's keys (TitleStrip.keys): the theme key, and left of it the help key where the page has a tour; the theme key stands where it always did. */
+        public static List<Rect> titleKeys(int width,boolean help){return TitleStrip.keys(width,help?2:1);}
         /** The door columns' view on every page: from y {@code DOOR_TOP} to {@code DOOR_FOOT} px above the image's foot. */
         public static final int DOOR_TOP=74,DOOR_FOOT=52;
         public static final int HEIGHT=480;

@@ -121,10 +121,23 @@ public interface Skin {
         });
     }
 
-    /** A sign a key shows instead of a word or before it: the theme's contrast sign, a ring half filled; Run's ▶. */
+    /** A sign a key shows instead of a word or before it: the theme's contrast sign, a ring half filled; Run's ▶; help's question mark. */
     enum Icon {
-        THEME, RUN
+        THEME, RUN, HELP
     }
+
+    /** The help key's question mark, 10 by 10 px, row by row (batch 2026-11-12-tutorial-system). */
+    String[] QUESTION = {
+            "..XXXXX...",
+            ".XX...XX..",
+            ".XX...XX..",
+            "......XX..",
+            ".....XX...",
+            "....XX....",
+            "....XX....",
+            "..........",
+            "....XX....",
+            "....XX...."};
 
     /** A sign before a word ({@link #signButton}), its top left at ({@code x}, {@code y}), the text's top: RUN, the only sign, is a ▶ 4 px wide and 7 tall. */
     static void sign(Canvas c, int x, int y, Icon icon, int argb) {
@@ -142,7 +155,15 @@ public interface Skin {
     /** {@code icon} centred in {@code r}, 10 by 10 px, in {@code argb}. */
     static void icon(Canvas c, Rect r, Icon icon, int argb) {
         int x0 = r.x() + (r.w() - 10) / 2, y0 = r.y() + (r.h() - 10) / 2;
-        // THEME, the only key face: a ring of radius 5 round pixel centres, its left half filled.
+        if (icon == Icon.HELP) {
+            c.batch(() -> {
+                for (int y = 0; y < 10; y++)
+                    for (int x = 0; x < 10; x++)
+                        if (QUESTION[y].charAt(x) == 'X') c.fill(x0 + x, y0 + y, x0 + x + 1, y0 + y + 1, argb);
+            });
+            return;
+        }
+        // THEME: a ring of radius 5 round pixel centres, its left half filled.
         c.batch(() -> {
             for (int y = 0; y < 10; y++)
                 for (int x = 0; x < 10; x++) {
