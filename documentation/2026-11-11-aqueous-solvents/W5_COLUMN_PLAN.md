@@ -173,3 +173,14 @@ run; `columnGates` holds the column classes.
 - Context: fresh, this plan.
 - It waits on: Gradle runs, about 3 to 6 hours in all. Updates every 50 minutes, at once on a decision, a final
   report.
+
+## 10. Owner approval (2026-11-12)
+
+"Approve both": the design with section 5's recommended choices, and section 9's sub-thread.
+
+- Choice 1 a: water goes on the axis where the feed carries a compound that names a homomorph above 1e-3 of the
+  feed's moles.
+- Choice 2 a: a steam row with water on the axis is refused with its reason; the reboiler heats.
+- Choice 3 a: water's enthalpy on the axis is the cubic's alone.
+- A new sub-thread `w5-column` on Opus high builds steps W5-0 to W5d in this worktree with this document as its
+  brief; the orchestrator records its reports here and in the README. Not built yet.
