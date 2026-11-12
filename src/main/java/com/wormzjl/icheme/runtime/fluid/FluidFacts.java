@@ -72,8 +72,11 @@ final class FluidFacts {
      *  22 (batch 2026-11-11-gas-blanketing): a device spec's gas blanket set pressure, after its cooling tower (absent: 0,
      *  no valve); the port role {@code BLANKET}, a vessel's blanket gas port.
      *  23 (same batch, the pressure safety valve): a device spec's relief set pressure and a pipe's relief outlet face, after
-     *  its blanket (absent: 0 and none, no valve); the port role {@code RELIEF}, a vessel's relief port. */
-    static final int SCHEMA=23;
+     *  its blanket (absent: 0 and none, no valve); the port role {@code RELIEF}, a vessel's relief port.
+     *  24 (batch 2026-11-12-fluid-conversion, W2): the world's fluid converters (after the batch stills): each one's devices,
+     *  its mode by name, rate, deadband and level thresholds, its Forge tank (capacity, fluid id as its string, mB), its
+     *  remainder and its account (absent: no converter). */
+    static final int SCHEMA=24;
     /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 21. */
     private static final Map<Class<?>,Map<String,String>> ALIASES=Map.of();
     private static final int MAXIMUM_FIELDS=256,MAXIMUM_ITEMS=1<<22,MAXIMUM_TEXTS=1<<20,MAXIMUM_ARRAY=4096,MAXIMUM_CHANNELS=1<<20;
@@ -197,7 +200,13 @@ final class FluidFacts {
      */
     record World(long nextIdentity,WorldTopologyLedger.FluidBasis basis,List<WorldTopologyLedger.Registration> registrations,
                  WorldTopologyLedger.MaterialTotal constructed,WorldTopologyLedger.MaterialTotal destroyed,List<Recovery> recoveries,WorldTopologyLedger.Restated restated,
-                 List<String> removedMovers,List<ColumnUnit> columns,List<ShaftUnit> shafts,Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores,Map<Long,Double> health,WorldTopologyLedger.Builds builds,List<StillUnit> stills) {
+                 List<String> removedMovers,List<ColumnUnit> columns,List<ShaftUnit> shafts,Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores,Map<Long,Double> health,WorldTopologyLedger.Builds builds,List<StillUnit> stills,List<ConverterUnit> converters) {
+        /** Facts without fluid converters (a world before schema 24). */
+        World(long nextIdentity,WorldTopologyLedger.FluidBasis basis,List<WorldTopologyLedger.Registration> registrations,WorldTopologyLedger.MaterialTotal constructed,
+              WorldTopologyLedger.MaterialTotal destroyed,List<Recovery> recoveries,WorldTopologyLedger.Restated restated,List<String> removedMovers,List<ColumnUnit> columns,
+              List<ShaftUnit> shafts,Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores,Map<Long,Double> health,WorldTopologyLedger.Builds builds,List<StillUnit> stills) {
+            this(nextIdentity,basis,registrations,constructed,destroyed,recoveries,restated,removedMovers,columns,shafts,stores,health,builds,stills,List.of());
+        }
         /** Facts without batch stills (a world before schema 16). */
         World(long nextIdentity,WorldTopologyLedger.FluidBasis basis,List<WorldTopologyLedger.Registration> registrations,WorldTopologyLedger.MaterialTotal constructed,
               WorldTopologyLedger.MaterialTotal destroyed,List<Recovery> recoveries,WorldTopologyLedger.Restated restated,List<String> removedMovers,List<ColumnUnit> columns,
@@ -216,7 +225,7 @@ final class FluidFacts {
               List<ShaftUnit> shafts,Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores) {
             this(nextIdentity,basis,registrations,constructed,destroyed,recoveries,restated,removedMovers,columns,shafts,stores,Map.of());
         }
-        World {health=Map.copyOf(health);stills=List.copyOf(stills);}
+        World {health=Map.copyOf(health);stills=List.copyOf(stills);converters=List.copyOf(converters);}
         /** Facts without shaft units (a world before schema 10). */
         World(long nextIdentity,WorldTopologyLedger.FluidBasis basis,List<WorldTopologyLedger.Registration> registrations,WorldTopologyLedger.MaterialTotal constructed,
               WorldTopologyLedger.MaterialTotal destroyed,List<Recovery> recoveries,WorldTopologyLedger.Restated restated,List<String> removedMovers,List<ColumnUnit> columns) {
@@ -242,7 +251,8 @@ final class FluidFacts {
             var units=new HashMap<Long,ColumnUnit>();for(var u:columns)if(units.put(u.id(),u)!=null)throw new IllegalArgumentException("Invalid saved topology: duplicate column unit "+u.id());
             var parts=new HashMap<Long,ShaftUnit>();for(var u:shafts)if(parts.put(u.id(),u)!=null)throw new IllegalArgumentException("Invalid saved topology: duplicate shaft unit "+u.id());
             var batch=new HashMap<Long,StillUnit>();for(var u:stills)if(batch.put(u.id(),u)!=null)throw new IllegalArgumentException("Invalid saved topology: duplicate batch still "+u.id());
-            var snapshot=new WorldTopologyLedger.Snapshot(onlineTick,nextIdentity,active,events,constructed,destroyed,basis,pending,restated,units,parts,electricStores(),health,builds,batch);
+            var converting=new HashMap<Long,ConverterUnit>();for(var u:converters)if(converting.put(u.id(),u)!=null)throw new IllegalArgumentException("Invalid saved topology: duplicate fluid converter "+u.id());
+            var snapshot=new WorldTopologyLedger.Snapshot(onlineTick,nextIdentity,active,events,constructed,destroyed,basis,pending,restated,units,parts,electricStores(),health,builds,batch,converting);
             new WorldTopologyLedger(snapshot);return snapshot;
         }
     }
@@ -276,8 +286,10 @@ final class FluidFacts {
             f.list(new TreeMap<>(builds.racks()).entrySet(),(q,e)->q.count(e.getKey()).name(e.getValue().facing()).name(e.getValue().shape()));
             // Schema 15: each named one-block device's name (N1), by identity.
             f.list(new TreeMap<>(builds.names()).entrySet(),(q,e)->q.count(e.getKey()).text(e.getValue()));
-            // Schema 16, last: the batch stills, by their pots' identities.
+            // Schema 16: the batch stills, by their pots' identities.
             f.list(new TreeMap<>(s.stills()).values(),FluidFacts::still);
+            // Schema 24, last: the fluid converters, by their vessels' identities.
+            f.list(new TreeMap<>(s.converters()).values(),FluidFacts::converter);
         });
     }
     private static final Comparator<PhysicalFluidTopology.Position> ORIGIN_ORDER=Comparator.comparing(PhysicalFluidTopology.Position::dimension)
@@ -355,9 +367,11 @@ final class FluidFacts {
                 if(names.put(e.getKey(),e.getValue())!=null)throw f.invalid("duplicate device name "+e.getKey());
             // Schema 16: the batch stills. A world written before schema 16 has none.
             var stills=f.list(List.<StillUnit>of(),FluidFacts::still);
+            // Schema 24: the fluid converters. A world written before schema 24 has none.
+            var converters=f.list(List.<ConverterUnit>of(),FluidFacts::converter);
             required(basis,f,"basis");required(constructed,f,"constructed total");required(destroyed,f,"destroyed total");
             return new World(next,basis,registrations,constructed,destroyed,recoveries,restated,List.copyOf(removedMovers),columns,shafts,stores,health,
-                    new WorldTopologyLedger.Builds(paints,structures,racks,names),stills);
+                    new WorldTopologyLedger.Builds(paints,structures,racks,names),stills,converters);
         });
     }
     private static void total(Fields f,WorldTopologyLedger.MaterialTotal t) {
@@ -513,6 +527,27 @@ final class FluidFacts {
         required(heater,f,"still heater");required(head,f,"still head account");required(venting,f,"still vent account");
         if(stages>com.wormzjl.icheme.science.fluid.network.StillColumn.MAX_STAGES)throw f.invalid("still trays "+stages);
         return valid(f,"batch still "+id,()->new StillUnit(id,water,distillate,vent,burners,volume,heater,condenser,(int)stages,head,venting,burning,firing,reflux,heated,condensed));
+    }
+    /**
+     * A fluid converter (schema 24, batch 2026-11-12-fluid-conversion): its vessel's identity, its drain port and valve, its
+     * fill port and valve (0 for none), whether it is the closed variant, its mode by name, its rate (L per process second),
+     * deadband and four level thresholds (fill fractions; a facts number is finite, so none is written -1), its Forge tank's capacity, fluid id and contents
+     * (mB), its remainder (L), and its account's fluid id and litres. Every field absent reads as a converter built empty and off.
+     */
+    private static void converter(Fields f,ConverterUnit u) {
+        f.count(u.id()).count(u.drain()).count(u.drainValve()).count(u.fill()).count(u.fillValve()).bool(u.closed())
+                .name(u.mode()).f64(u.maxRate()).f64(u.deadband()).list(Arrays.stream(u.thresholds()).boxed().toList(),(q,t)->q.f64(Double.isNaN(t)?-1:t))
+                .count(u.capacity()).text(u.fluid()).count(u.stored()).f64(u.remainder()).text(u.accountFluid()).f64(u.account());
+    }
+    private static ConverterUnit converter(Record f) {
+        long id=f.count(0),drain=f.count(0),drainValve=f.count(0),fill=f.count(0),fillValve=f.count(0);boolean closed=f.bool(false);
+        var mode=f.name(ConverterUnit.Mode.class,ConverterUnit.Mode.OFF);double rate=f.f64(0),deadband=f.f64(ConverterUnit.DEFAULT_DEADBAND);
+        var none=new double[ConverterUnit.THRESHOLDS];Arrays.fill(none,Double.NaN);
+        var saved=f.list(Arrays.stream(none).boxed().toList(),q->{double t=q.f64(-1);return t<0?Double.NaN:t;});
+        if(saved.size()!=ConverterUnit.THRESHOLDS)throw f.invalid("fluid converter "+id+": "+saved.size()+" level thresholds");
+        var thresholds=saved.stream().mapToDouble(Double::doubleValue).toArray();
+        long capacity=f.count(0);var fluid=f.text("");long stored=f.count(0);double remainder=f.f64(0);var accountFluid=f.text("");double account=f.f64(0);
+        return valid(f,"fluid converter "+id,()->new ConverterUnit(id,drain,drainValve,fill,fillValve,closed,mode,rate,deadband,thresholds,capacity,fluid,stored,remainder,accountFluid,account));
     }
     private static void account(Fields f,com.wormzjl.icheme.science.column.operation.ColumnCycle.Account a){f.doubles(a.moles()).f64(a.energy());}
     private static com.wormzjl.icheme.science.column.operation.ColumnCycle.Account account(Record f) {
@@ -918,6 +953,8 @@ final class FluidFacts {
         }
         var ports=new HashSet<Long>();
         for(var u:columns.values())for(var s:u.stations())if(s.device()!=0)ports.add(s.device());
+        // A fluid converter's ports stay with it (schema 24).
+        var converters=new HashMap<Long,ConverterUnit>();for(var u:world.converters){converters.put(u.id(),u);if(u.drain()!=0)ports.add(u.drain());if(u.fill()!=0)ports.add(u.fill());}
         registrations.values().removeIf(r->r.device().port()&&!ports.contains(r.device().id()));
         // Vessel contents and filter cakes, by device identity.
         var stock=new HashMap<Long,PassiveNetwork.Reservoir>();var cakes=new HashMap<Long,InlineFilter>();int restated=0,vessels=0;
@@ -985,7 +1022,7 @@ final class FluidFacts {
         // The build facts are kept whole: a paint of a device this rebuild left out goes with it.
         var shafts=new HashMap<Long,ShaftUnit>();for(var u:world.shafts)shafts.put(u.id(),u);
         var snapshot=new WorldTopologyLedger.Snapshot(epoch,next,registrations,List.of(),axis.total(world.constructed),axis.total(world.destroyed),basis,recoveries,restatedTotal,columns,shafts,world.electricStores(),world.health(),
-                world.builds.keeping(registrations.keySet()),stills);
+                world.builds.keeping(registrations.keySet()),stills,converters);
         var ledger=new WorldTopologyLedger(snapshot);
         // A dismantled column whose release was still queued leaves now, its accounts booked as destroyed.
         for(var u:columns.values())if(u.leaving())ledger.removeColumn(u.id());
