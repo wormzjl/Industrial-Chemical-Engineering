@@ -1,0 +1,25 @@
+// Tutorial recordings (batch 2026-11-12-tutorial-system, tools/tutorial-recordings). No production or test source set
+// changes, no client, no test suite. Usage, from the worktree root:
+//   ./gradlew --offline --init-script tools/tutorial-recordings/record.init.gradle recordCrudeBarrel
+// recordCrudeBarrel writes src/main/resources/assets/icheme/tutorial/recordings/crude_barrel.json from the material data.
+gradle.projectsEvaluated {
+    def p = gradle.rootProject
+    def sources = p.sourceSets.create('tutorialRecordingTools') {
+        java.srcDir p.file('tools/tutorial-recordings')
+        compileClasspath += p.sourceSets.main.output + p.sourceSets.main.compileClasspath
+        runtimeClasspath += output + p.sourceSets.main.runtimeClasspath
+    }
+    p.tasks.named(sources.compileJavaTaskName) {
+        dependsOn p.tasks.named('classes')
+        options.compilerArgs.add('-proc:none')
+    }
+    p.tasks.register('recordCrudeBarrel', JavaExec) {
+        group = 'documentation'
+        description = 'Records the crude barrels of the tutorial cards barrel and products from the material data (CrudeBarrel).'
+        dependsOn p.tasks.named(sources.classesTaskName)
+        classpath = sources.runtimeClasspath
+        mainClass = 'CrudeBarrel'
+        workingDir = p.projectDir
+        args(p.projectDir.absolutePath)
+    }
+}
