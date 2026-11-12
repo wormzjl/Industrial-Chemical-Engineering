@@ -217,3 +217,23 @@ Reports `tmp/w5-column/reports/W5-0_BASELINE.md` and `W5a_SOUR_COST_DECISION.md`
        move once, by about the 0.3 to 0.4 % above.
      - b, a column-only rule, is refused: two kernels again.
   Until the owner decides, a stands and W5b and W5c go on.
+
+## 12. W5a and W5b committed (2026-11-12)
+
+The sub-thread's update; the diffs are not reviewed by the orchestrator yet.
+
+- W5a `22cb2f96d`: `columnGates` after D1 failed 13 tests, all W5's: 5 label pins, the synthetic learned-model
+  fixtures on the full label, and 12 draw-volume targets moved by 2e-6 to 1.5e-4. Re-pinned with causes; the
+  reruns pass. The literature preset's condenser duty moved 6e-6.
+- W5b `213b1b1e2`, beside section 1:
+
+  | Gate | Expected | Measured |
+  |---|---|---|
+  | E1 distillate, against McCabe-Thiele | 0.80 to 0.86, within 0.01 | 0.8075 against 0.8069 |
+  | E1 distillate rate, top tray | about 10.7 mol/s, 78.2 to 78.6 C | 10.49 mol/s, 78.55 C |
+  | E2 | 0.88 to 0.8965 | 0.8836 |
+  | E3 bottoms ethanol | about 1e-4, under 1e-3 | 5.5e-6 |
+  | A steam row with water on the axis | refused | refused |
+
+  V3 needed no other change for water on its axis.
+- Next: W5c, then W5d. The sour column's choice (section 11) is open; option a stands meanwhile.
