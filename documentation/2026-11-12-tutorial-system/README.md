@@ -29,6 +29,8 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
   Equipment guide tab, the JEI pages, the shape-only kinds, the gate.
 - [P4B_TOWER_AND_SIMULATOR.md](P4B_TOWER_AND_SIMULATOR.md): phase P4b, the still with a column measured and recorded,
   chapter 3 "Pot to tower", chapter 4 "The simulator", the small unit's recording, the simulator's tours, gates, renders.
+- [P5_UNIT_AND_BUILD.md](P5_UNIT_AND_BUILD.md): phase P5, the equipment pages (41), the unit chain, chapter 5 "Crude
+  unit" (film crude_unit, card unit_map, the column's page), gates, renders; part 2, the build facts for chapter 6.
 - [SMALL_COLUMN_CANDIDATES_REVIEW.md](SMALL_COLUMN_CANDIDATES_REVIEW.md): P4, the three small crude tower candidates
   solved and sized on the crude unit at 1/64, the acceptance rules, the steam source, the recommendation (D4).
 
@@ -96,6 +98,12 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
   small_tower; cards reflux, compare, balance; criteria sheet_run, design_sent; tours on the still with a column and the
   simulator's four tabs. Commits 66ed0baa4, 3a7bb0d1c, 7cbd240e0, 402e1b4a9, 8295a579e. 35 test classes
   (265 tests) and SimulatorRunTest (6) pass, run once with `--tests`.
+
+- 2026-11-13: P5 part 1 (P5_UNIT_AND_BUILD.md). Equipment pages for the 40 kinds and the control valve (`pages.json`),
+  opened by the item and the map, Back to where the player came from; the unit chain of nine pages; seven page films
+  and the film `crude_unit`; card `unit_map` on the simulator's painter; chapter 5 "Crude unit" (whole, map, tower,
+  next). `--tests` run once, 4 workers: 135 tests in the tutorial packages, DrawCallTest and SimulatorTourTest; three
+  failures fixed and their classes rerun once each.
 
 ## Code areas (proposed)
 

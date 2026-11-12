@@ -193,6 +193,12 @@ The unit page comes first: a film that follows the crude (tank, pump, fired heat
 cooler, reflux drum, side products, residue) and a flowsheet picture whose symbols open the pages. Each equipment page
 has a film, a card, the `?` tour of its screen, its JEI lines, and "next in the unit".
 
+- As built (P5_UNIT_AND_BUILD.md, part 1): chapter `unit`, "Crude unit": `whole` film `crude_unit` (5 stops, the
+  example's streams), `map` card `unit_map` (the simulator's own drawing; a symbol opens its kind's page), `tower` the
+  column's page read to its end, `next`. Terms preheat, pumparound. A page is data (`pages.json`): icon, name, the JEI
+  lines, a film or a tour key, "Next in the unit", Back. No card on a page: the films carry the teaching. The bottom
+  steam is in the sheet and the column's film, not a page of its own (its supply is chapter 6's, part 2).
+
 ### The first crude (D6)
 
 The owner: a converter from a Forge fluid, and later a crude extraction system. The Fluid converter is on main since
