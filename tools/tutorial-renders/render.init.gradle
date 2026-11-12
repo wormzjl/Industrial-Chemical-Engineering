@@ -1,0 +1,31 @@
+// Offline tutorial film renders (batch 2026-11-12-tutorial-system, tools/tutorial-renders). No production or test source
+// set changes, no client, no test suite. Usage, from the worktree root:
+//   ./gradlew --offline --init-script tools/tutorial-renders/render.init.gradle renderTutorial -PtutorialRenderOut=tmp/tutorial-renders
+// Optional: -PtutorialFilms=still_inside (a comma list; default every film), -PtutorialFrames=n (n frames between stops).
+gradle.projectsEvaluated {
+    def p = gradle.rootProject
+    def out = p.providers.gradleProperty('tutorialRenderOut')
+    def films = p.providers.gradleProperty('tutorialFilms')
+    def frames = p.providers.gradleProperty('tutorialFrames')
+    def sources = p.sourceSets.create('tutorialRenderTools') {
+        java.srcDir p.file('tools/tutorial-renders')
+        java.include 'TutorialRender.java'
+        compileClasspath += p.sourceSets.main.output + p.sourceSets.main.compileClasspath
+        runtimeClasspath += output + p.sourceSets.main.runtimeClasspath
+    }
+    p.tasks.named(sources.compileJavaTaskName) {
+        dependsOn p.tasks.named('classes')
+        options.compilerArgs.add('-proc:none')
+    }
+    p.tasks.register('renderTutorial', JavaExec) {
+        group = 'documentation'
+        description = 'Software renders of every tutorial film stop with the mod sprites (TutorialRender).'
+        dependsOn p.tasks.named(sources.classesTaskName)
+        classpath = sources.runtimeClasspath
+        mainClass = 'com.wormzjl.icheme.science.tutorial.TutorialRender'
+        workingDir = p.projectDir
+        def target = p.file(out.getOrElse('tmp/tutorial-renders')).absolutePath
+        args(films.isPresent() ? [target, films.get()] : [target])
+        jvmArgs '-Djava.awt.headless=true', '-Duser.language=en', '-Dframes=' + frames.getOrElse('0')
+    }
+}
