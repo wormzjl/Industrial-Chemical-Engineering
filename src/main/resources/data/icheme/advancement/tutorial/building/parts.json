@@ -1,0 +1,32 @@
+{
+  "parent": "icheme:tutorial/building/lines",
+  "display": {
+    "icon": {
+      "id": "icheme:field_guide",
+      "count": 1
+    },
+    "title": {
+      "translate": "tutorial.icheme.advancement.building.parts"
+    },
+    "description": {
+      "translate": "tutorial.icheme.advancement.building.parts.description"
+    },
+    "show_toast": false,
+    "announce_to_chat": false
+  },
+  "criteria": {
+    "complete": {
+      "trigger": "icheme:assembly_state",
+      "conditions": {
+        "status": [
+          "COMPLETE"
+        ]
+      }
+    }
+  },
+  "requirements": [
+    [
+      "complete"
+    ]
+  ]
+}

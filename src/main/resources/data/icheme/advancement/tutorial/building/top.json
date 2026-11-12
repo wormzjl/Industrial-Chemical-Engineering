@@ -1,0 +1,30 @@
+{
+  "parent": "icheme:tutorial/building/tower",
+  "display": {
+    "icon": {
+      "id": "icheme:field_guide",
+      "count": 1
+    },
+    "title": {
+      "translate": "tutorial.icheme.advancement.building.top"
+    },
+    "description": {
+      "translate": "tutorial.icheme.advancement.building.top.description"
+    },
+    "show_toast": false,
+    "announce_to_chat": false
+  },
+  "criteria": {
+    "receiver": {
+      "trigger": "icheme:equipment_built",
+      "conditions": {
+        "kind": "DRUM"
+      }
+    }
+  },
+  "requirements": [
+    [
+      "receiver"
+    ]
+  ]
+}

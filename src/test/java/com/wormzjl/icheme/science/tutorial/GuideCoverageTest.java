@@ -38,7 +38,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class GuideCoverageTest {
     private static final Path DATA = Path.of("src/main/resources/data/icheme"), ADVANCEMENTS = DATA.resolve("advancement/tutorial");
     private static final Set<String> TRIGGERS = Set.of("minecraft:tick", "icheme:guide_step", "icheme:equipment_built", "icheme:still_state", "icheme:still_stopped",
-            "icheme:diverter_switched", "icheme:sheet_run", "icheme:design_sent");
+            "icheme:diverter_switched", "icheme:sheet_run", "icheme:design_sent", "icheme:assembly_state", "icheme:column_state");
 
     private static JsonObject read(Path file) throws IOException {
         return JsonParser.parseString(Files.readString(file)).getAsJsonObject();
@@ -88,6 +88,21 @@ class GuideCoverageTest {
             }
     }
 
+    /**
+     * A client step with no media has only a screen to report it: each is one a screen names (P5 stage B: the start-up
+     * chapter's feed, fire and water steps had none, and would never have completed). The constants are compile-time, so
+     * no screen class loads.
+     */
+    @Test
+    void everyClientStepWithNoMediaIsOneAScreenReports() {
+        var reported = Set.of(com.wormzjl.icheme.client.gui.tutorial.GuideScreen.OPENED, com.wormzjl.icheme.client.gui.tutorial.GuideScreen.TOURED,
+                com.wormzjl.icheme.client.gui.flowsheet.SimulatorTour.OPEN_STEP, com.wormzjl.icheme.client.gui.flowsheet.SimulatorTour.SIZE_STEP);
+        for (var chapter : GuideFile.load().chapters())
+            for (var step : chapter.steps())
+                if (step.check() == Guide.Check.CLIENT && step.media() instanceof Guide.None)
+                    assertTrue(reported.contains(chapter.id(step)), chapter.id(step) + ": a client step no screen reports never completes");
+    }
+
     @Test
     void theStepsChainInGuideOrderAndTheStillFollowsTheLastCrudeStep() throws IOException {
         var guide = GuideFile.load();
@@ -98,7 +113,8 @@ class GuideCoverageTest {
             parent = "icheme:tutorial/" + id;
             files.add(ADVANCEMENTS.resolve(id + ".json"));
         }
-        assertEquals("icheme:tutorial/unit/next", parent);
+        assertEquals("icheme:tutorial/start/end", parent);
+        assertEquals("icheme:tutorial/unit/next", read(ADVANCEMENTS.resolve("building/site.json")).get("parent").getAsString(), "chapter 6 after chapter 5");
         assertEquals("icheme:tutorial/simulator/send", read(ADVANCEMENTS.resolve("unit/whole.json")).get("parent").getAsString(), "chapter 5 after chapter 4");
         assertEquals("icheme:tutorial/crude/first", read(ADVANCEMENTS.resolve("still/build.json")).get("parent").getAsString(), "the still's build after chapter 1");
         assertEquals("icheme:tutorial/still/stop", read(ADVANCEMENTS.resolve("tower/tray.json")).get("parent").getAsString(), "chapter 3 after the still");
@@ -132,7 +148,7 @@ class GuideCoverageTest {
     @Test
     void everyCriterionIsRegisteredAndEveryKindIsAStructureKind() throws IOException {
         var source = Files.readString(Path.of("src/main/java/com/wormzjl/icheme/runtime/tutorial/TutorialTriggers.java"));
-        for (var name : List.of("guide_step", "equipment_built", "still_state", "still_stopped", "diverter_switched", "sheet_run", "design_sent"))
+        for (var name : List.of("guide_step", "equipment_built", "still_state", "still_stopped", "diverter_switched", "sheet_run", "design_sent", "assembly_state", "column_state"))
             assertTrue(source.contains("register(\"" + name + "\""), name + " registered");
         var kinds = new HashSet<String>();
         for (var kind : EquipmentShape.Kind.values()) kinds.add(kind.name());

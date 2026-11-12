@@ -1,0 +1,35 @@
+{
+  "parent": "icheme:tutorial/start/water",
+  "display": {
+    "icon": {
+      "id": "icheme:field_guide",
+      "count": 1
+    },
+    "title": {
+      "translate": "tutorial.icheme.advancement.start.go"
+    },
+    "description": {
+      "translate": "tutorial.icheme.advancement.start.go.description"
+    },
+    "show_toast": false,
+    "announce_to_chat": false
+  },
+  "criteria": {
+    "started": {
+      "trigger": "icheme:column_state",
+      "conditions": {
+        "phase": [
+          "STARTING",
+          "RUNNING",
+          "LIMITED",
+          "UPSET"
+        ]
+      }
+    }
+  },
+  "requirements": [
+    [
+      "started"
+    ]
+  ]
+}

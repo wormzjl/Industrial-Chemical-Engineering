@@ -43,7 +43,7 @@ class GuidePageTest {
         }
     }
 
-    static final List<String> CHAPTERS = List.of("welcome", "crude", "still", "tower", "simulator", "unit");
+    static final List<String> CHAPTERS = List.of("welcome", "crude", "still", "tower", "simulator", "unit", "building", "start");
 
     /** The three states the renders show: new, step 3 current, every step done. */
     static List<Progress> states() {

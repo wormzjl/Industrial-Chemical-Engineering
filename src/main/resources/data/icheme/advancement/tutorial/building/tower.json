@@ -1,0 +1,30 @@
+{
+  "parent": "icheme:tutorial/building/site",
+  "display": {
+    "icon": {
+      "id": "icheme:field_guide",
+      "count": 1
+    },
+    "title": {
+      "translate": "tutorial.icheme.advancement.building.tower"
+    },
+    "description": {
+      "translate": "tutorial.icheme.advancement.building.tower.description"
+    },
+    "show_toast": false,
+    "announce_to_chat": false
+  },
+  "criteria": {
+    "column": {
+      "trigger": "icheme:equipment_built",
+      "conditions": {
+        "kind": "COLUMN"
+      }
+    }
+  },
+  "requirements": [
+    [
+      "column"
+    ]
+  ]
+}

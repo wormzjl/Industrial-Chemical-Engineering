@@ -85,6 +85,28 @@
         { "id": "tower", "media": "page:equipment_column" },
         { "id": "next", "media": "read" }
       ]
+    },
+    {
+      "id": "building",
+      "steps": [
+        { "id": "site", "media": "film:unit_build", "check": "server", "criterion": "design_sent" },
+        { "id": "tower", "check": "server", "criterion": "equipment_built" },
+        { "id": "top", "check": "server", "criterion": "equipment_built" },
+        { "id": "lines", "media": "read" },
+        { "id": "parts", "check": "server", "criterion": "assembly_state" }
+      ]
+    },
+    {
+      "id": "start",
+      "steps": [
+        { "id": "feed", "media": "read" },
+        { "id": "fire", "media": "read" },
+        { "id": "water", "media": "read" },
+        { "id": "go", "check": "server", "criterion": "column_state" },
+        { "id": "limit", "media": "card:limit", "check": "server", "criterion": "column_state" },
+        { "id": "products", "check": "server", "criterion": "column_state" },
+        { "id": "end", "media": "read" }
+      ]
     }
   ]
 }

@@ -1,0 +1,30 @@
+{
+  "parent": "icheme:tutorial/start/limit",
+  "display": {
+    "icon": {
+      "id": "icheme:field_guide",
+      "count": 1
+    },
+    "title": {
+      "translate": "tutorial.icheme.advancement.start.products"
+    },
+    "description": {
+      "translate": "tutorial.icheme.advancement.start.products.description"
+    },
+    "show_toast": false,
+    "announce_to_chat": false
+  },
+  "criteria": {
+    "leaving": {
+      "trigger": "icheme:column_state",
+      "conditions": {
+        "product": true
+      }
+    }
+  },
+  "requirements": [
+    [
+      "leaving"
+    ]
+  ]
+}

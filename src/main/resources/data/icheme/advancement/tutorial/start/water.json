@@ -1,0 +1,30 @@
+{
+  "parent": "icheme:tutorial/start/fire",
+  "display": {
+    "icon": {
+      "id": "icheme:field_guide",
+      "count": 1
+    },
+    "title": {
+      "translate": "tutorial.icheme.advancement.start.water"
+    },
+    "description": {
+      "translate": "tutorial.icheme.advancement.start.water.description"
+    },
+    "show_toast": false,
+    "announce_to_chat": false
+  },
+  "criteria": {
+    "done": {
+      "trigger": "icheme:guide_step",
+      "conditions": {
+        "step": "start/water"
+      }
+    }
+  },
+  "requirements": [
+    [
+      "done"
+    ]
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "parent": "icheme:tutorial/building/top",
+  "display": {
+    "icon": {
+      "id": "icheme:field_guide",
+      "count": 1
+    },
+    "title": {
+      "translate": "tutorial.icheme.advancement.building.lines"
+    },
+    "description": {
+      "translate": "tutorial.icheme.advancement.building.lines.description"
+    },
+    "show_toast": false,
+    "announce_to_chat": false
+  },
+  "criteria": {
+    "done": {
+      "trigger": "icheme:guide_step",
+      "conditions": {
+        "step": "building/lines"
+      }
+    }
+  },
+  "requirements": [
+    [
+      "done"
+    ]
+  ]
+}
