@@ -1,6 +1,6 @@
 # 2026-11-12 fluid conversion
 
-Status: In progress since 2026-11-12. W1 (rules), W2 (`Converters`, fluid facts schema 24), the model (kinds `FLUID_CONVERTER`, `GAS_CONVERTER`) and W3 (the converter in the world: registration, Forge port, gas valves, liquid gauge) are built; the model on branch `claude/fluid-conversion-plan-review-786fbc`, cut from `main` at `ccde84295` (0.27.1), W1 to W3 on `claude/fluid-conversion-build-656f98`. W4 (control and alarms), W5 (the page) and W6 (the bundled rules) are built on the same branch. W7 (merge preparation) is done (MERGE_REVIEW.md), the final lane in FINAL_LANE_REVIEW.md; proposed version 0.28.0, the owner's choice. Formats: fluid facts schema 24 (was 23); the state format is unchanged (47).
+Status: Implemented 2026-11-12, merged to `main` as 0.28.0 (owner: "Merge as 0.28.0"; not pushed). W1 to W7 and the model are built; the batch came from `claude/fluid-conversion-plan-review-786fbc` (planning, model) and `claude/fluid-conversion-build-656f98` (W1 to W7), cut from `main` at `ccde84295` (0.27.1). Final lane: FINAL_LANE_REVIEW.md, the baseline of the next merge. Formats: fluid facts schema 24 (was 23), fluid-24, control-5; the state format is unchanged (47). Not checked in game; the open items are below and in MERGE_REVIEW.md.
 
 Purpose: a converter between standard Forge (NeoForge) fluids and IChemE fluids.
 
@@ -39,6 +39,7 @@ Add a fluid conversion system between standard forge fluid and IChemE fluid:
 - 2026-11-12, merge preparation 5, the translation commit (`b0ce9d773`): 89 keys in zh_cn, fr_fr, es_es, ja_jp; alarm words in English. `check.js` OK; `LanguageFilesTest` 2 pass; `UnitTextTest` failed on the fr and es held line (over 180 px), shortened, then pass.
 - 2026-11-12, merge preparation 6, the documents: MERGE_REVIEW.md, this README, `tools/INDEX.md`.
 - 2026-11-12, the final lane (`693576129`, FINAL_LANE_REVIEW.md), once on `9435b480a`: references identical to the 0.27.1 lane, GameTests 96 pass, campaign clean 991/990/1000 with no new, fixed or moved holds; 3,096 tests, 1 failure: `ConstructorColumnTest`'s Vessels key list predated the converter kinds (the model commit `4d72a0cba` did not run this class). Fixed by appending the two keys (test only), then `ConstructorColumnTest` alone: 12 pass. No second lane.
+- 2026-11-12, the merge: the planning branch fast-forwarded to `7c7093bc2`; `mod_version` 0.28.0, the CHANGELOG entry under `[0.28.0]`, the index row Implemented; merged to `main` on the owner's word, not pushed. No test run: version and documents only.
 
 ## Documents
 
