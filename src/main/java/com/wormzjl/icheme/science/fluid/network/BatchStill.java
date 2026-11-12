@@ -403,10 +403,11 @@ public final class BatchStill {
             String failure = null;
             var split = column.solve(n0, design.stages(), reflux, outlet, warm != null ? warm.profile() : null);
             if (!split.converged()) {
-                // A refused solve keeps the column's last answer at the same setting (state), else one equilibrium stage.
+                // A refused solve keeps the column's last answer at the same setting (state), else one equilibrium stage, its
+                // condenser returning the reflux asked (all of its liquid where short: the trays run dry).
                 failure = split.failure();
                 split = last != null && last.stages() == split.stages() && last.refluxRatio() == split.refluxRatio() && last.closed() == split.closed()
-                        ? last : column.solve(n0, 0, 0, outlet, null);
+                        ? last : column.solve(n0, 0, design.refluxes() ? reflux : 0, outlet, null);
             }
             if (!split.converged()) {
                 boil = new Boil();

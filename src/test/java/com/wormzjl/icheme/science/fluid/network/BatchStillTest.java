@@ -562,6 +562,73 @@ class BatchStillTest {
                 run.steps().size(), firstLiquid - 273.15, run.vented());
     }
 
+    /**
+     * A closed valve on the crude's light ends (CONDENSER_LIGHT_ENDS_REVIEW.md section 5): the probe's 500 L pot still with 4
+     * trays, its reflux valve closed, on design water at 25 °C, stepped from the charge's bubble point to a 110 °C pot. The
+     * condenser returns all of its liquid; what it cannot condense at its 30 °C outlet leaves by the vent. Every solve
+     * converges (where the reflux the liquid gives cannot wet the trays they run dry: the pot's single stage, its condenser
+     * returning all of its liquid); no liquid reaches the spout; every step's ledger closes and so does every component over
+     * the run; the still is BOILING. A solve that reads the valve as closed ignores at most a gas share 1 / (1e4 + 1) of the top vapour:
+     * every open answer vents at least that share, and a closed one vents nothing.
+     */
+    @Test
+    void aClosedValveOnTheCrudesLightEndsVentsTheGasAndReturnsTheLiquid() {
+        var column = new StillColumn(REFINERY, P);
+        int n = column.componentCount();
+        double[] overall = on(column, preset("medium_crude", REFINERY.compounds()));
+        var flashed = REFINERY.flashTP(298.15, P, java.util.Arrays.copyOf(overall, REFINERY.hydrocarbon.componentCount() + 1), () -> {
+        });
+        double[] liquid = new double[n];
+        for (int i = 0; i < n; i++)
+            liquid[i] = flashed.labelAmountsView(FluidThermodynamics.OIL)[i] + flashed.labelAmountsView(FluidThermodynamics.AQUEOUS)[i];
+        var design = new Design(.5, Heater.SOLID, true, 4);
+        double total = .6 * design.volume() / column.liquidVolume(298.15, liquid), held = sum(liquid);
+        for (int i = 0; i < n; i++) liquid[i] *= total / held;
+        var inputs = new Inputs(1, 1, Double.POSITIVE_INFINITY, designWater(design));
+        var pot = new Pot(liquid, column.bubble(liquid, Double.NaN).temperature(), null);
+        double[] charged = pot.moles(), out = new double[n];
+        double threshold = 1 / (StillColumn.CLOSED_REFLUX + 1), least = Double.POSITIVE_INFINITY, vented = 0;
+        var iterations = new ArrayList<Integer>();
+        int closed = 0, open = 0, dry = 0;
+        double dt = 5;
+        for (int k = 0; k < 2000 && pot.temperature() < 383.15; k++) {
+            var step = BatchStill.step(column, design, pot, inputs, dt);
+            assertLedger(column, pot, step);
+            var split = step.split();
+            double removed = sum(step.liquid()) + sum(step.vapour());
+            for (int i = 0; i < n; i++) out[i] += step.liquid()[i] + step.vapour()[i];
+            vented += sum(step.vapour());
+            if (split != null) {
+                assertTrue(split.converged(), "the solve converges at " + (step.pot().temperature() - 273.15) + " C: " + split.failure());
+                assertNull(step.columnFailure(), "no refused solve at " + (step.pot().temperature() - 273.15) + " C");
+                iterations.add(split.iterations());
+                if (split.stages() == 0) dry++;
+                if (split.closed()) {
+                    closed++;
+                    assertEquals(0, removed, 0, "a closed answer vents nothing");
+                } else if (removed > 0) {
+                    open++;
+                    // The open answer's gas share of the top vapour: its net product over the top vapour.
+                    double share = 1 / split.topVapourRate();
+                    least = Math.min(least, share);
+                    assertTrue(share >= threshold * (1 - 1e-9), "an open answer vents at least the threshold's share: " + share);
+                }
+            }
+            assertEquals(0, sum(step.liquid()), 0, "no liquid reaches the spout at " + (step.pot().temperature() - 273.15) + " C");
+            assertFalse(step.alarm(Status.COOLING_LIMITED), "no COOLING LIMITED at " + (step.pot().temperature() - 273.15) + " C");
+            if (removed > 0) assertEquals(Status.BOILING, step.status(), "the gas alone leaves: boiling");
+            dt = removed > 0 ? Math.clamp(dt * .01 * total / removed, dt / 3, dt * 1.3) : Math.min(dt * 1.3, 600);
+            pot = step.pot();
+            if (step.alarm(Status.OVERHEAT) || step.alarm(Status.BOIL_DRY)) break;
+        }
+        assertTrue(pot.temperature() >= 383.15, "the pot reached 110 C: " + (pot.temperature() - 273.15));
+        double[] end = pot.moles();
+        for (int i = 0; i < n; i++) assertEquals(charged[i], end[i] + out[i], 1e-9 * total, "component " + i + " over the run");
+        iterations.sort(java.util.Comparator.reverseOrder());
+        System.out.printf(java.util.Locale.ROOT, "CLOSED VALVE crude, 4 trays: %d solves (%d open, %d closed, %d on dry trays), vented %.4f of the moles, least gas share %.3e (threshold %.3e), iterations largest first %s%n",
+                iterations.size(), open, closed, dry, vented / total, least, threshold, iterations.subList(0, Math.min(12, iterations.size())));
+    }
+
     /** The vented share of the crude charge does not depend on the step size (today's was 2.56 against 3.67 % of the moles). */
     @Test
     void theCrudesVentedShareDoesNotDependOnTheStep() {
