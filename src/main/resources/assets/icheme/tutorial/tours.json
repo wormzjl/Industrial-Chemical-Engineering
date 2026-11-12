@@ -17,5 +17,54 @@
       { "anchor": "reading:still_distillate" },
       { "anchor": "status" }
     ]
+  },
+  "fluid_device.still_column": {
+    "film": "still_tray",
+    "stops": [
+      { "anchor": "still_firing:on" },
+      { "anchor": "stillFiring" },
+      { "anchor": "still_fuel:load" },
+      { "anchor": "still_reflux:open" },
+      { "anchor": "reading:still_pot_temperature" },
+      { "anchor": "reading:still_distillate" },
+      { "anchor": "status" }
+    ]
+  },
+  "simulator.sheet": {
+    "show": "simulator/balance",
+    "stops": [
+      { "anchor": "file/open" },
+      { "anchor": "palette" },
+      { "anchor": "canvas" },
+      { "anchor": "run" },
+      { "anchor": "status" },
+      { "anchor": "tab/1" },
+      { "anchor": "tab/2" }
+    ]
+  },
+  "simulator.results": {
+    "stops": [
+      { "anchor": "view/0" },
+      { "anchor": "view/1" },
+      { "anchor": "view/2" },
+      { "anchor": "glass" },
+      { "anchor": "export" }
+    ]
+  },
+  "simulator.sizing": {
+    "stops": [
+      { "anchor": "size_all" },
+      { "anchor": "glass" },
+      { "anchor": "send" },
+      { "anchor": "status" }
+    ]
+  },
+  "simulator.basis": {
+    "stops": [
+      { "anchor": "package" },
+      { "anchor": "tolerance" },
+      { "anchor": "passes" },
+      { "anchor": "glass" }
+    ]
   }
 }

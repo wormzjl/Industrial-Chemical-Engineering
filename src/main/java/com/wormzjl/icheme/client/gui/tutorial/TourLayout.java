@@ -90,7 +90,10 @@ public record TourLayout(Rect screen, Rect lit, List<Rect> dim, Rect bubble, Lis
         return null;
     }
 
-    /** Draws the dim, the frame and the bubble in {@code skin}; {@code hover} the key under the pointer. The fills go in one batch. */
+    /**
+     * Draws the dim, the frame and the bubble in {@code skin}; {@code hover} the key under the pointer. All in one batch (P4b):
+     * the fills go in runs and the bubble's texts wait for them, so a stop costs a few draw calls ({@code DrawCallTest}).
+     */
     public void draw(Canvas c, Skin skin, @Nullable String hover) {
         c.batch(() -> {
             for (var r : dim) if (r.w() > 0 && r.h() > 0) c.fill(r.x(), r.y(), r.right(), r.bottom(), DIM);
@@ -98,8 +101,8 @@ public record TourLayout(Rect screen, Rect lit, List<Rect> dim, Rect bubble, Lis
             c.outline(lit.x() + 1, lit.y() + 1, lit.w() - 2, lit.h() - 2, Palette.WARN);
             c.fill(bubble.x(), bubble.y(), bubble.right(), bubble.bottom(), Palette.WARN);
             c.fill(bubble.x() + 1, bubble.y() + 1, bubble.right() - 1, bubble.bottom() - 1, Palette.BG);
+            for (int i = 0; i < lines.size(); i++) c.text(lines.get(i), textX, textY + i * Measure.LINE, Palette.TEXT);
+            for (var key : keys) skin.button(c, key.rect(), key.text(), key.key().equals("next") ? Skin.Press.PRIMARY : Skin.Press.REST, key.key().equals(hover));
         });
-        for (int i = 0; i < lines.size(); i++) c.text(lines.get(i), textX, textY + i * Measure.LINE, Palette.TEXT);
-        for (var key : keys) skin.button(c, key.rect(), key.text(), key.key().equals("next") ? Skin.Press.PRIMARY : Skin.Press.REST, key.key().equals(hover));
     }
 }

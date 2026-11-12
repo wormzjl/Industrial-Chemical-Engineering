@@ -106,7 +106,7 @@ public final class HelpTour {
         if (tour == null || control == null) return null;
         boolean last = last();
         var words = new TourLayout.Words(tr(Tour.KEY + "back"), tr(Tour.KEY + "next"), tr(Tour.KEY + "done"), tr(Tour.KEY + "close"), tr(Tour.KEY + "show_me"));
-        return TourLayout.of(width, height, control, tr(tour.key(stop)), first(), last, last && tour.film() != null, words, GuiCanvas.measure(font));
+        return TourLayout.of(width, height, control, tr(tour.key(stop)), first(), last, last && tour.shows(), words, GuiCanvas.measure(font));
     }
 
     /** Draws the open stop over the whole screen. */
@@ -152,14 +152,16 @@ public final class HelpTour {
         return true;
     }
 
-    /** The last stop's "Show me": the page's film, which returns to this screen when it closes. */
+    /** The last stop's "Show me": the page's film, or a guide step's card or film in the guide; either returns to this screen when it closes. */
     private void show() {
         var film = tour == null ? null : tour.film();
+        var step = tour == null ? null : tour.show();
         var mc = Minecraft.getInstance();
         Screen here = mc.screen;
         var scene = film == null ? null : Films.build(film);
         close();
         if (scene != null) mc.setScreen(new FilmScreen(scene, here, null));
+        else if (step != null) mc.setScreen(GuideScreen.showing(step, here));
     }
 
     /** A key while open: Left back, Right or Enter on, Escape closes; every other key is taken too. */

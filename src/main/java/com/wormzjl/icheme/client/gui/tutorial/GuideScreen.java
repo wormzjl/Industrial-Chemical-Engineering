@@ -39,8 +39,34 @@ public class GuideScreen extends Screen {
     /** The step the guide's own tour completes. */
     public static final String TOURED = "welcome/help";
 
+    /** The screen a tour's "Show me" came from, which a close returns to (null: none, the guide closes to the world). */
+    private net.minecraft.client.gui.screens.@org.jetbrains.annotations.Nullable Screen parent;
+    /** The step to show once the screen is laid out (P4b: a tour's "Show me"), or null. */
+    private @org.jetbrains.annotations.Nullable String showing;
+
     public GuideScreen() {
         super(Component.translatable(GuidePage.KEY + "title"));
+    }
+
+    /**
+     * The guide open at {@code step}'s chapter with its card shown (a film's step opens its film), returning to {@code parent}
+     * when it closes (batch 2026-11-12-tutorial-system, P4b: the simulator sheet tour's last stop). A step that is not in the
+     * guide opens the guide as it stands.
+     */
+    public static GuideScreen showing(String step, net.minecraft.client.gui.screens.@org.jetbrains.annotations.Nullable Screen parent) {
+        var screen = new GuideScreen();
+        screen.parent = parent;
+        if (guide().step(step) != null) {
+            screen.open = step.substring(0, step.indexOf('/'));
+            screen.showing = step;
+        }
+        return screen;
+    }
+
+    @Override
+    public void onClose() {
+        if (parent != null && minecraft != null) minecraft.setScreen(parent);
+        else super.onClose();
     }
 
     protected static String tr(String key) {
@@ -63,6 +89,11 @@ public class GuideScreen extends Screen {
             open = current == null ? guide().chapters().getFirst().id() : current.substring(0, current.indexOf('/'));
         }
         place();
+        if (showing != null) {
+            String step = showing;
+            showing = null;
+            show(step);
+        }
         if (!revealed) {
             revealed = true;
             var step = page.anchors().get("step");
@@ -184,6 +215,11 @@ public class GuideScreen extends Screen {
             GuideClient.report(step);
             return;
         }
+        show(step);
+    }
+
+    /** Shows {@code step}'s film or card, as its key does. */
+    private void show(String step) {
         var media = guide().step(step).media();
         switch (media) {
             case Guide.Film film -> {

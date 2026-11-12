@@ -70,8 +70,8 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     // changes no widget and is not in the signature, so a rebuild under it keeps it at its stop.
     private final com.wormzjl.icheme.client.gui.tutorial.HelpTour tour=new com.wormzjl.icheme.client.gui.tutorial.HelpTour();
     private List<String> tabIds=List.of();
-    /** This page's tour's name, or null where it has none: the still's Overview. */
-    private String tourPage(){String name=still()!=null&&page==0?"fluid_device.still":null;return name!=null&&com.wormzjl.icheme.client.gui.tutorial.HelpTour.of(name)!=null?name:null;}
+    /** This page's tour's name, or null where it has none: the still's Overview (P4b: a still with a column and its condenser has its own, with the reflux valve). */
+    private String tourPage(){var s=still();String name=s!=null&&page==0?(s.stages()>0&&s.condenser()?"fluid_device.still_column":"fluid_device.still"):null;return name!=null&&com.wormzjl.icheme.client.gui.tutorial.HelpTour.of(name)!=null?name:null;}
     private void openTour(){var t=tourPage()==null?null:com.wormzjl.icheme.client.gui.tutorial.HelpTour.of(tourPage());if(t!=null)tour.open(t,this::anchor,null);}
     /** A tour's anchor on the screen (Tour): a door widget's or meter's slot, scrolled into view where {@code reveal}; the status; the title; a tab; a group. */
     private Rect anchor(String key,boolean reveal){
