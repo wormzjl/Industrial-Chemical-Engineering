@@ -41,7 +41,7 @@ class V3ClientPresetsTest {
     @Test void bundledLibrariesAreIndependentAndPreserveAuthoredOperatingData(){
         var l=library();var columns=l.refresh(V3ClientPresets.Kind.COLUMN);var mixtures=l.refresh(V3ClientPresets.Kind.MIXTURE);
         assertTrue(columns.problems().isEmpty(),()->columns.problems().toString());assertTrue(mixtures.problems().isEmpty());
-        assertEquals(5,columns.entries().size());assertEquals(6,mixtures.entries().size());
+        assertEquals(6,columns.entries().size());assertEquals(7,mixtures.entries().size());
         for(var entry:columns.entries()){
             if(entry.file().equals("pot.json"))continue;
             // A crude is two files now: the stream, then the tower on it, as the calculator's Templates load them.
@@ -80,7 +80,7 @@ class V3ClientPresetsTest {
         Files.writeString(l.directory(V3ClientPresets.Kind.COLUMN).resolve("old.json"),column);Files.writeString(l.directory(V3ClientPresets.Kind.MIXTURE).resolve("old.json"),mixture);
         var columns=l.refresh(V3ClientPresets.Kind.COLUMN);var mixtures=l.refresh(V3ClientPresets.Kind.MIXTURE);
         assertTrue(columns.problems().isEmpty()&&mixtures.problems().isEmpty(),()->columns.problems()+" "+mixtures.problems());
-        assertEquals(6,columns.entries().size());assertEquals(7,mixtures.entries().size());
+        assertEquals(7,columns.entries().size());assertEquals(8,mixtures.entries().size());
         // On the default feed: the feed and its temperature stay, the mixture changes, and the tower's flows scale to the feed they meet.
         var on=sourceFor(m.amounts().keySet());assertEquals(reference().packageId(),on.packageId());
         var d=draft();load(d,m,on);d.loadColumn(c.template());var loaded=d.assemble();
@@ -134,7 +134,7 @@ class V3ClientPresetsTest {
         String json=V3ClientPresets.streamJson("custom",d.composition().relativeAmounts(),300,1.01,10);
         Path file=l.save(V3ClientPresets.Kind.MIXTURE,"custom",json);
         assertEquals(game.resolve("IChemE/mixturepreset/custom.json"),file);
-        assertEquals(6,first.entries().size());assertEquals(7,l.refresh(V3ClientPresets.Kind.MIXTURE).entries().size());
+        assertEquals(7,first.entries().size());assertEquals(8,l.refresh(V3ClientPresets.Kind.MIXTURE).entries().size());
         assertNotEquals(file,l.save(V3ClientPresets.Kind.MIXTURE,"custom",json));assertEquals(json,Files.readString(file));
         assertThrows(IllegalArgumentException.class,()->l.save(V3ClientPresets.Kind.MIXTURE,"../escape",json));
     }
@@ -179,7 +179,7 @@ class V3ClientPresetsTest {
         var l=library();Files.createDirectories(l.directory(V3ClientPresets.Kind.COLUMN));
         Files.writeString(l.directory(V3ClientPresets.Kind.COLUMN).resolve("broken.json"),"{broken");
         Files.writeString(l.directory(V3ClientPresets.Kind.COLUMN).resolve("large.json")," ".repeat(V3ClientPresets.MAX_BYTES+1));
-        var result=l.refresh(V3ClientPresets.Kind.COLUMN);assertEquals(5,result.entries().size());assertEquals(2,result.problems().size());
+        var result=l.refresh(V3ClientPresets.Kind.COLUMN);assertEquals(6,result.entries().size());assertEquals(2,result.problems().size());
         var o=JsonParser.parseString(V3ClientPresets.columnJson("case",reference())).getAsJsonObject();o.addProperty("tray_count",1);
         assertThrows(IllegalArgumentException.class,()->V3ClientPresets.decode(o.toString(),V3ClientPresets.Kind.COLUMN));
         // A schema 1 or a newer file is refused by its version; a schema 2 file that still carries the stage drop reads, the drop ignored.

@@ -359,6 +359,7 @@
   "gui.icheme.column_preset.oil_sand_dilbit": "Oil sand dilbit",
   "gui.icheme.column_preset.medium_crude_nitrogen": "Medium crude + 2 % nitrogen",
   "gui.icheme.column_preset.medium_crude_residue": "Medium crude atmospheric residue (VDU feed)",
+  "gui.icheme.column_preset.small_crude": "Small crude (Medium crude)",
   "gui.icheme.column_template.medium_crude": "Crude tower (Medium crude)",
   "gui.icheme.column_template.small_crude": "Small crude tower (Medium crude)",
   "gui.icheme.column_template.light_crude": "Crude tower (Light crude)",

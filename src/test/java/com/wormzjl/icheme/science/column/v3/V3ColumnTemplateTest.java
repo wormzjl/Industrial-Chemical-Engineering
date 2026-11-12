@@ -87,7 +87,7 @@ class V3ColumnTemplateTest {
     @Test
     void everyBundledTowerHoldsNoFeedAndSaysItsDesignFeed() throws Exception {
         var index = JsonParser.parseString(new String(V3ColumnTemplateTest.class.getClassLoader().getResourceAsStream("assets/icheme/columnpreset/index.json").readAllBytes(), StandardCharsets.UTF_8)).getAsJsonArray();
-        assertEquals(5, index.size());
+        assertEquals(6, index.size());
         for (var name : index) {
             var o = file("assets/icheme/columnpreset/" + name.getAsString());
             assertEquals(3, o.get("schema_version").getAsInt(), name.getAsString());
