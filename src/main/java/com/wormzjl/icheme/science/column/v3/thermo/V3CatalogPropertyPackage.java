@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.science.column.v3.thermo;
 
 import com.wormzjl.icheme.science.material.CrystalPhasesUnavailable;
+import com.wormzjl.icheme.science.material.DerivedPairs;
 import com.wormzjl.icheme.science.material.IdealGasFitUnavailable;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.material.MaterialRuntime;
@@ -12,6 +13,8 @@ final class V3CatalogPropertyPackage implements V3PropertyPackage {
     private final MaterialCatalog.Package data;
     private final V3ComponentBasis basis;
     private final List<V3PropertyComponent> components;
+    /** The pairs of the network's model over this package's components (W5 D1); the catalog keeps each fit. */
+    private final DerivedPairs.Result pairs;
     /** Resolves immutable package data from the current calculation's catalog snapshot. */
     static V3PropertyPackage require(String packageId) {
         return new V3CatalogPropertyPackage(MaterialRuntime.current(),packageId);
@@ -32,7 +35,11 @@ final class V3CatalogPropertyPackage implements V3PropertyPackage {
                     pr.criticalTemperature(),pr.criticalPressure(),pr.acentricFactor(),p.density(),
                     cp.get(0),cp.get(1),cp.get(2),cp.get(3),cp.get(4),cp.get(5),p.estimated());
         }).toList();
+        // A learned model's lens (MaterialCatalog.inferenceView) carries the physics the model was trained on, its own
+        // matrix: the model's anchor is computed on it as in training. Every other package takes the network's pairs.
+        pairs=catalog.lens(id)?null:DerivedPairs.derive(catalog,id,data.components());
     }
+    @Override public DerivedPairs.Result derivedPairs(){return pairs;}
     @Override public String packageId(){return data.id();}
     @Override public String datasetRevision(){return data.scientificRevision();}
     @Override public V3ComponentBasis componentBasis(){return basis;}

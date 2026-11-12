@@ -61,7 +61,7 @@ import java.util.function.ToDoubleFunction;
  * </ol>
  * <p>A crude cut (a {@code petroleum_fraction} without counts in a scheme) takes paraffinic counts from its molar mass M
  * (g/mol): {@code n = round((M - 2.01588)/14.02658)} carbons of a normal paraffin, rounded half up, as 2 CH3 and
- * {@code n - 2} CH2, in both schemes. A fit that does not converge (no root, a penalty left at the optimum, two liquids
+ * {@code n - 2} CH2, in each scheme whose table the catalog holds (none in a catalog without it). A fit that does not converge (no root, a penalty left at the optimum, two liquids
  * where the group model has one, a Henry k_ij outside its bracket) is refused with both compounds' names ({@link Refused}). Each fitted pair is kept for the life of
  * the catalog in its {@link Cache}, keyed by the source and the records it read with their revisions, so lists sharing a
  * pair fit it once. The fits are deterministic: fixed starting points, fixed iteration counts, every transcendental
@@ -413,15 +413,17 @@ public final class DerivedPairs {
                 alpha = new double[3];
                 for (int k = 0; k < pr.alpha().coefficients().size(); k++) alpha[k] = pr.alpha().coefficients().get(k);
             }
+            // A cut takes paraffinic counts in a scheme only where the catalog holds that scheme's table: a catalog without
+            // one (a literature fixture) leaves its cuts without counts, so their pairs fall to the next source, not a refusal.
             boolean cut = "petroleum_fraction".equals(catalog.name(property.component()).kind());
             Map<String, Integer> dortmund = null, eppr78 = null;
             String dortmundToken = null, eppr78Token = null;
             var d = counts.get(ModifiedUnifac.SCHEME);
             var e = counts.get(Eppr78Groups.SCHEME);
             if (d != null) { dortmund = d.counts(); dortmundToken = key + "/" + d.scheme() + "@" + d.revision(); }
-            else if (cut) { dortmund = paraffinic(property); dortmundToken = key + "/" + ModifiedUnifac.SCHEME + "@" + PARAFFINIC; }
+            else if (cut && table != null) { dortmund = paraffinic(property); dortmundToken = key + "/" + ModifiedUnifac.SCHEME + "@" + PARAFFINIC; }
             if (e != null) { eppr78 = e.counts(); eppr78Token = key + "/" + e.scheme() + "@" + e.revision(); }
-            else if (cut) { eppr78 = paraffinic(property); eppr78Token = key + "/" + Eppr78Groups.SCHEME + "@" + PARAFFINIC; }
+            else if (cut && matrix != null) { eppr78 = paraffinic(property); eppr78Token = key + "/" + Eppr78Groups.SCHEME + "@" + PARAFFINIC; }
             if (dortmund != null && table == null) throw new IllegalArgumentException("Derived pairs: no modified UNIFAC table for " + id);
             boolean polar = false;
             if (dortmund != null) for (String name : dortmund.keySet()) {

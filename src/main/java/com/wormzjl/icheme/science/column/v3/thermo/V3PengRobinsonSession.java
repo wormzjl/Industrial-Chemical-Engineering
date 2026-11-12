@@ -17,22 +17,30 @@ final class V3PengRobinsonSession {
     private final V3PropertyPackage propertyPackage;
     private final PengRobinsonKernel kernel;
     private final V3ComponentBasis componentBasis;
+    /** {@link #constantClassicalInteractions}, formed once; null where the kernel is not a constant classical one. */
+    private final double[][] constantMatrix;
 
     private V3PengRobinsonSession(V3PropertyPackage propertyPackage) {
         this.propertyPackage = Objects.requireNonNull(propertyPackage, "propertyPackage");
         this.kernel = kernelFor(propertyPackage);
         this.componentBasis = propertyPackage.componentBasis();
+        this.constantMatrix = constantMatrix(propertyPackage);
     }
 
     /**
-     * Reads a registered package's critical constants, interactions and validity domain into the shared
-     * {@link PengRobinsonKernel}. The kernel used to take {@code V3PropertyPackage} directly; it now lives in
-     * {@code science.thermo} so the fluid network evaluates on the same arithmetic, and this is the only place
-     * that knows how a V3 package presents that data. Every value handed over is the one the kernel read
-     * through the interface before, so the arithmetic is unchanged.
+     * The package's kernel over the numerical box. A catalog package takes the kernel of its derived pairs
+     * ({@link V3PropertyPackage#derivedPairs}, batch 2026-11-11-aqueous-solvents W5 D1): the network's pairs and
+     * critical constants, so a sheet flashes a column's feed and solves the column on one model. A list without an
+     * activity pair runs the kernel's classical branch. A package built outside a catalog (a test table) keeps the
+     * classical kernel of its authored matrix.
      */
     static PengRobinsonKernel kernelFor(V3PropertyPackage propertyPackage) {
         Objects.requireNonNull(propertyPackage, "propertyPackage");
+        var derived = propertyPackage.derivedPairs();
+        if (derived != null) {
+            return derived.kernel(NumericalBox.MINIMUM_TEMPERATURE, NumericalBox.MAXIMUM_TEMPERATURE,
+                    NumericalBox.MINIMUM_PRESSURE, NumericalBox.MAXIMUM_PRESSURE);
+        }
         int count = propertyPackage.componentBasis().componentCount();
         double[] criticalTemperatures = new double[count];
         double[] criticalPressures = new double[count];
@@ -87,6 +95,31 @@ final class V3PengRobinsonSession {
 
     double[][] binaryInteractions() {
         return propertyPackage.binaryInteractions();
+    }
+
+    /**
+     * The constant classical matrix the kernel evaluates, or null where the kernel is not one: an activity pair, a
+     * {@code k_ij(T)}, or a Mathias-Copeman alpha. The native outer pass computes PR78 on a constant matrix only.
+     */
+    double[][] constantClassicalInteractions() {
+        return constantMatrix;
+    }
+
+    private static double[][] constantMatrix(V3PropertyPackage propertyPackage) {
+        var derived = propertyPackage.derivedPairs();
+        if (derived == null) return propertyPackage.binaryInteractions();
+        var excess = derived.excess();
+        if (excess.nrtlPairCount() > 0) return null;
+        for (double[] alpha : derived.mathiasCopeman()) if (alpha != null) return null;
+        int n = excess.componentCount();
+        double[][] matrix = new double[n][n];
+        for (int i = 0; i < n; i++) {
+            for (int j = i + 1; j < n; j++) {
+                if (excess.interactionPair(i, j) >= 0 || excess.interactionSlope(i, j) != 0.0) return null;
+                matrix[i][j] = matrix[j][i] = excess.interaction(i, j);
+            }
+        }
+        return matrix;
     }
 
     private V3PropertyComponent requireComponent(int publicComponent) {

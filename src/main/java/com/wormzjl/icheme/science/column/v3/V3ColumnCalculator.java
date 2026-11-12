@@ -27,7 +27,14 @@ import java.util.concurrent.CancellationException;
  */
 public final class V3ColumnCalculator {
     /** Cutoff-enabled publication identity, including physical phase admission and dry upper sections. */
-    public static final String FORMULATION_REVISION = "v3-dry-mesh-r24-flash-trace-phase-r1";
+    public static final String FORMULATION_REVISION = "v3-dry-mesh-r24-flash-trace-phase-r1-derived-pairs-r1";
+    /**
+     * Every label's derived-pairs suffix (batch 2026-11-11-aqueous-solvents, W5 D1): the kernel takes the network's
+     * pairs ({@code DerivedPairs}) instead of the package's authored matrix, so an accepted state with a gas beside a
+     * cut moves. The learned starts are matched on the label without it: they are seeds, and their physics binding
+     * reads the authored pairs ({@code TrainedPhysics.matches}).
+     */
+    static final String DERIVED_PAIRS_SUFFIX = "-derived-pairs-r1";
     private static final String LEGACY_FORMULATION_REVISION = "v3-dry-mesh-r23";
     public static final String ASSUMPTIONS_REVISION = "v3-dry-assumptions-r4";
     /**
@@ -251,7 +258,7 @@ public final class V3ColumnCalculator {
         try {
             V3ColumnProblemResolver.validateInput(input);
         } catch (IllegalArgumentException invalid) {
-            return terminalFailure(V3SolverFailureCode.INVALID_INPUT, "Invalid requested input",
+            return terminalFailure(V3SolverFailureCode.INVALID_INPUT, invalid.getMessage(),
                     "initialization/admission", List.of());
         }
         // Request-only, so it must be answered the same way on both routes and before any candidate is built.
@@ -2597,13 +2604,19 @@ public final class V3ColumnCalculator {
      * The physical phase revision precedes this optional closure suffix.</p>
      */
     static String formulationRevision(V3ColumnInput input, double requestedCutoff, double closureTolerance) {
-        return formulationRevisionWithoutClosure(input, requestedCutoff) + "-phase-r1" + closureSuffix(closureTolerance);
+        return formulationRevisionWithoutClosure(input, requestedCutoff) + "-phase-r1" + DERIVED_PAIRS_SUFFIX
+                + closureSuffix(closureTolerance);
     }
 
     /** The trained wet-stage seed equations are unchanged; dry-stage layouts need a newly qualified model. */
     static String initializationFormulationRevision(V3ColumnInput input) {
         return specValue(input, V3ColumnSpecification.OrganicRefluxRatio.class) > 0.0
-                ? formulationRevisionWithoutClosure(input, 0.0) : formulationRevision(input, 0.0);
+                ? formulationRevisionWithoutClosure(input, 0.0) : seedFormulationRevision(input);
+    }
+
+    /** The label a learned start was trained on: {@link #formulationRevision} at no cutoff, without the derived-pairs suffix. */
+    static String seedFormulationRevision(V3ColumnInput input) {
+        return formulationRevisionWithoutClosure(input, 0.0) + "-phase-r1";
     }
 
     /** Canonical {@code -closureMeN} suffix, or the empty string at the frozen default closure. */

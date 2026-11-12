@@ -252,6 +252,11 @@ public final class MaterialCatalog {
     private final Records records;
     /** How each package of this catalog was built; absent for a lens ({@link #inferenceView}), which no view restricts. */
     private final Map<String, Definition> definitions;
+    /**
+     * Whether package {@code packageId} is a lens of one inference ({@link #inferenceView}): its pairs are its own
+     * matrix, the trained values, with no pair libraries for {@link DerivedPairs} to read.
+     */
+    public boolean lens(String packageId){requirePackage(packageId);return !definitions.containsKey(packageId);}
     private final SolidMaterialCatalog solids;
     public SolidMaterialCatalog solids(){return solids;}
     /** Solid fuel records (kind {@code fuels}, batch 2026-11-09-batch-distiller): a firebox item's heat. */
