@@ -644,3 +644,8 @@ Open from that work: `FreeWaterIceTest` fails twice since G2a (the ice line foll
 The sub-thread stopped on its account's weekly limit (resets 2026-11-15 17:00, Asia/Singapore) in the middle of N10. Its working tree holds N10 half done, uncommitted: `FreeWaterIce`, `FreeWaterModel` and `FreeWaterIceTest` staged as deleted, and edits in `FluidTpEquilibrium`, `NetworkPhaseEngine`, `CrystalFugacity`, `EquilibriumResult`, `PhaseContract`, `PhaseKind`, `SteamVirial`, `ThermoIdentity`, `WaterParticipation`. Left as it is; the tree may not compile.
 
 Owner, 2026-11-12, on ANALYTIC_JACOBIAN_PLAN.md: "Approve, use Fable now". The W3b sub-thread is moved to Fable (medium effort) for the rest of N10, the build of that plan in its four commits, and the code guide chapters.
+
+## 36. N10 committed; the Jacobian's first three steps (2026-11-12)
+
+- 274e06ac1 (N10): the separate free-water rule leaves the equilibrium engine. With it: `ColumnEjectorTest` passes; the polar scenario's counters are unchanged by 4c0290223 (6609 evaluations, 12 steps, 78 iterations); `NetworkCrystals`' water ice is anchored on the cubic's own pure liquid at the record's triple point and reads no saturation curve.
+- 22c0368a8, 57cd8b5f0, 64239496b: ANALYTIC_JACOBIAN_PLAN.md steps 1 to 3. Results and the `dv/dP` correction are in that plan's section 11: evaluations per step fell by three quarters, time by a seventh (ratios to main 1.09, 1.90, 1.20); the frozen `dv/dP` fails at a velocity cap and is being replaced; a profile comes before any further cost work.

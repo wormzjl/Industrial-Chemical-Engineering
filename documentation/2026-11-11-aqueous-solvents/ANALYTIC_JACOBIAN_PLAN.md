@@ -105,3 +105,27 @@ Every Jacobian entry differs from today's in about its sixth digit (a forward di
 - The share is evaluated exactly at the perturbed point, not linearised.
 - `dv/dP` stays at its base value inside a column.
 - The option of re-evaluating only the phases a column touches (section 30's idea A) is dropped: this form covers it.
+
+## 11. Built, steps 1 to 3 (22c0368a8, 57cd8b5f0, 64239496b; 2026-11-12), and what step 4 measured
+
+Counters (kernel value evaluations per accepted step; Newton iterations 81, 82, 78 and end states unchanged):
+
+| | dry | wet | polar |
+|---|---|---|---|
+| evaluations, before | 444 | 885 | 551 |
+| evaluations, tangents | 144 | 219 | 145 |
+| ms per step, before | 0.807 | 2.016 | 1.449 |
+| ms per step, tangents | 0.843 | 1.749 | 1.224 |
+| ratio to main | 1.09 | 1.90 | 1.20 |
+| bound | 1.1 | 1.5 | 1.1 |
+
+The evaluations fell by three quarters and the time by a seventh, so section 5's estimate was wrong: the value evaluations were not where the time was. Not profiled yet; one profile each of wet and dry decides the next item. The orchestrator's guess, to be confirmed or refuted: one derivative evaluation costs about as many value evaluations as the phase has components, because the excess term's composition derivatives are a full block.
+
+Test 3 on the six fixtures: tangents 5e-7, today's entries 1e-6 to 1.9e-6.
+
+**Section 3.1's `dv/dP` rule was wrong.** It kept `dv/dP` at its base value in a column, on the orchestrator's reading that the acoustic bound on velocity stands above 100 m/s nearly everywhere. In a node with gas beside liquid the bound is about 32 m/s (1.5 bar, half liquid), and it is low in dense near-critical fluid. A row that reads a flow at that cap needs the derivative of `dv/dP`:
+
+- a new fixture, a dry chain at its velocity cap: row-scaled error 1.55e-2 with the tangents, 1.05e-6 today;
+- the 200-seed quick check against today's form: cold 197 to 195 clean (new E5 on 65 and 101), random 200 to 198 (145 E9 "Invalid inventory volume", 47 F), defaults 200 and 200.
+
+Decision (orchestrator): `dv/dP` of a tangent phase to first order, from the cubic's closed form at the nearby point less the same form at the base (the base stays exact to the bit); the share's `V_P` exact with it. No kernel call. Then the capped fixture, the six fixtures and the quick check again, the third and last form compared. Not chosen: exact phases in every node whose limit is the acoustic one (it loses the saving in every two-phase node); reverting step 3.

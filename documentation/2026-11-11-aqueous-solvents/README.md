@@ -46,6 +46,7 @@ Owner, 2026-11-11: add ethanol to the compound matrix, identify what it affects 
 - 2026-11-12: stage B (step 5b) items 1, 4, 5 committed (2a780f8f6, 6ef50c8cd, 4d07122fe), item 2 reverted, item 3 skipped (W3B_NETWORK_PLAN.md sections 29, 30). Cost against main: dry 1.04, wet 2.18, polar 1.42 (bounds 1.1, 1.5, 1.1). Put to the owner: the node Jacobian from the kernel's derivatives.
 - 2026-11-12: gates run once on 4d07122fe: columnGates pass, 14 flowsheet tests of holdGates fail where water crosses to V3's own water (W3B_NETWORK_PLAN.md section 31; reports before any reference moves). Step 6 started: 1059ece75 (the "Water" label at 99 % water), 5c85000c8 (the spray riser's column); spine packages stay dry, a documented capability limit (section 32).
 - 2026-11-12: the 14 flowsheet failures fixed by the sub-thread (W3B_NETWORK_PLAN.md sections 33 to 35): e1b9a3dd0 (V3's liquid-water datum on IAPWS's latent heat, water.json r4), 530a051c8 (the network's own water saturation curve), 938283795 (the column block refuses an aqueous liquid only), 450ba8f0c (P-101 re-pinned), 4c0290223 (the stability test's liquid trial holds water at a trace: a wet flash no longer misses the hydrocarbon liquid above water's dew point). Owner on the cost: "Yes, design first"; ANALYTIC_JACOBIAN_PLAN.md written. The sub-thread stopped on its weekly limit in the middle of N10.
+- 2026-11-12: owner "Approve, use Fable now"; sub-thread on Fable: 274e06ac1 (N10), 22c0368a8, 57cd8b5f0, 64239496b (the Jacobian from phase tangents, steps 1 to 3; ANALYTIC_JACOBIAN_PLAN.md section 11).
 
 ## Tools
 
@@ -57,8 +58,8 @@ Changed so far: `science/thermo/PengRobinsonKernel`, `HuronVidalExcess`; `scienc
 
 ## Open items
 
-- Cost (W3B_NETWORK_PLAN.md section 30): wet 2.18 and polar 1.42 times main, over their bounds (1.5, 1.1). Owner: the analytic Jacobian in this batch, design first. Design approved (ANALYTIC_JACOBIAN_PLAN.md; owner: "Approve, use Fable now"); the build is with the sub-thread, after N10.
-- N10 (deleting the free-water rule) half done and uncommitted in the working tree; the sub-thread stopped on its Opus weekly limit and resumes on Fable (owner). `FreeWaterIceTest` fails twice until N10; `ColumnEjectorTest` and the polar counters after 4c0290223 are unreported.
+- Cost (W3B_NETWORK_PLAN.md section 30; ANALYTIC_JACOBIAN_PLAN.md section 11): the Jacobian from phase tangents is built in three commits (64239496b). Ratios to main 1.09, 1.90, 1.20 (bounds 1.1, 1.5, 1.1): evaluations fell by three quarters, time by a seventh. Open: `dv/dP` of a tangent phase to first order (the frozen form fails at a velocity cap; two new hold seeds on the quick check), then a profile, then the owner's bound if wet and polar stay over.
+- N10 done (274e06ac1). The code guide chapters are in progress (uncommitted).
 - W3b steps 1 to 5 built, with 21 open engine and network defects and the cost step 5b (W3B_NETWORK_PLAN.md sections 10 and 15); steps 6 and 7 not started; W4 to W6 not started.
 - Cooling tower (COOLING_TOWER_PLAN.md): built (faf419a4c, follow-up ab6b90d42: the second reading smooth, the bulk stream without its solids). Open: the spray riser's density with step 6, its cost in stage B, and the four choices of section 8 for the owner.
 - The flooded regime (W3B_NETWORK_PLAN.md section 25): the kettle is fixed (2aebdcd3c; owner: "Trace the two failures", "Build it, measured": a gas is pinned at a port only when the entering liquid fills the vapour space), but a flooded tank venting through its top saw-tooths between gas-only and liquid steps (`LiquidCo2LetDownTest` passes). The complete form closes a flooded vessel by its vapour volume, implicitly; its own batch.
