@@ -140,12 +140,14 @@ class FluidFactsCompatTest {
         world.runTo(930);
         phases(world);return world;
     }
-    /** The vessels {@link #phases} fills: nitrogen over water, oil over water under their gas, and boiling water. */
-    private long wetNitrogen,oilOverWater,boiling;
+    /** The vessels {@link #phases} fills: nitrogen over water, oil over water under their gas, boiling water, and oil over water in a blanketed drum with a pressure safety valve. */
+    private long wetNitrogen,oilOverWater,boiling,guardedOil;
     /**
      * Facts schema 24 (batch 2026-11-11-aqueous-solvents, W3b step 6; 22 before the merge of main 0.27.1): three slack 20 m3 vessels, each fed for 5 s by its
      * own generator, then cut off: wet nitrogen (a gas over an aqueous liquid that holds dissolved nitrogen), wet crude
      * (a gas, an oil and an aqueous liquid) and water from 380 K at 1.5 bar (one compound, boiling at the ambient pressure).
+     * A fourth, fed wet crude the same way, is a closed drum with a gas blanketing valve (1.35 bar) and a pressure safety
+     * valve (4.5 bar) on its gas ports (main's schemas 22 and 23): both liquids under a blanket and a relief set pressure.
      */
     private void phases(EventPathWorld world) {
         double[] nitrogen=FluidDeviceSpec.nitrogen(CATALOG).composition(),water=FluidDeviceSpec.water(CATALOG).composition(),wet=nitrogen.clone();
@@ -158,6 +160,20 @@ class FluidFactsCompatTest {
             generators.add(new WorldTopologyLedger.Edit(world.place(0,64,z,Kind.GENERATOR,Direction.EAST,feeds.get(k),.05),null));
             for(int x=1;x<=2;x++)world.place(x,64,z,Kind.PIPE,Direction.EAST,.05);
             tanks[k]=world.place(3,64,z,Kind.RESERVOIR,Direction.EAST,new FluidDeviceSpec(20,298.15,101325,nitrogen),.05);
+        }
+        {
+            int z=216;
+            generators.add(new WorldTopologyLedger.Edit(world.place(0,64,z,Kind.GENERATOR,Direction.EAST,feeds.get(1),.05),null));
+            for(int x=1;x<=2;x++)world.place(x,64,z,Kind.PIPE,Direction.EAST,.05);
+            long id=world.ledger.nextIdentity();var node=new PhysicalFluidTopology.Position(EventPathWorld.DIM,3,64,z);
+            var g=VesselGeometry.round(VesselGeometry.Form.HORIZONTAL_DRUM,2,6,2.0/3,.7);
+            var ports=List.of(new PhysicalFluidTopology.Port(node,Direction.WEST,PassiveNetwork.PhasePort.LIQUID),
+                    new PhysicalFluidTopology.Port(new PhysicalFluidTopology.Position(EventPathWorld.DIM,3,68,z),Direction.EAST,PassiveNetwork.PhasePort.VAPOR,PhysicalFluidTopology.ConnectionRole.BLANKET),
+                    new PhysicalFluidTopology.Port(new PhysicalFluidTopology.Position(EventPathWorld.DIM,3,68,z+3),Direction.UP,PassiveNetwork.PhasePort.VAPOR,PhysicalFluidTopology.ConnectionRole.RELIEF));
+            var device=new PhysicalFluidTopology.Device(id,node,Kind.RESERVOIR,Direction.EAST,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive(),ports);
+            var spec=new FluidDeviceSpec(g.capacity(),298.15,101325,nitrogen,SlurryFeed.NONE,g.height(),false,g,null,135000).withRelief(450000,null);
+            world.registry.submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,spec,0))),id+1,null);
+            guardedOil=id;
         }
         world.runTo(world.ledger.onlineTick()+100);
         world.registry.submit(generators,world.ledger.nextIdentity(),null);world.runTo(world.ledger.onlineTick()+40);
@@ -198,6 +214,8 @@ class FluidFactsCompatTest {
         assertTrue(gas.vaporAmountsView()[n2]>0&&wetLiquid[w]+wetAqueous[w]>0&&wetLiquid[n2]+wetAqueous[n2]>0,"a gas over water with dissolved nitrogen: "+gas);
         var three=saved.get(oilOverWater);
         assertTrue(Arrays.stream(three.vaporAmountsView()).sum()>0&&Arrays.stream(three.liquidAmountsView()).sum()>0&&Arrays.stream(three.aqueousAmountsView()).sum()>0,"three phases: "+three);
+        var guarded=saved.get(guardedOil);var guard=world.ledger.snapshot().active().get(guardedOil).spec();
+        assertTrue(Arrays.stream(guarded.liquidAmountsView()).sum()>0&&Arrays.stream(guarded.aqueousAmountsView()).sum()>0&&guard.blanket()==135000&&guard.relief()==450000,"both liquids under a blanket and a relief set pressure: "+guarded);
         var one=saved.get(boiling);double steam=one.vaporAmountsView()[w],liquid=one.liquidAmountsView()[w]+one.aqueousAmountsView()[w];
         assertTrue(steam>0&&liquid>0,"water in two phases: "+one);
         var stock=contents(exact.checkpoint());
