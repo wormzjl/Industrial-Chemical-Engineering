@@ -3276,6 +3276,7 @@
   "gui.icheme.flowsheet.still.cooling": "The condenser cannot take all the vapour: %s %% of it vents.",
   "gui.icheme.flowsheet.still.flooding": "The column floods for %s %% of the batch: the firing is held back there.",
   "gui.icheme.flowsheet.still.column": "The column fails: %s.",
+  "gui.icheme.flowsheet.still.pot_still": "Two liquids on the column's trays: the column does not rectify, and the still runs as a pot still there.",
   "gui.icheme.flowsheet.heater.cools": "A fired heater cannot cool this stream.",
   "gui.icheme.flowsheet.heater.limit": "The heater needs %s, over its limit of %s.",
   "gui.icheme.flowsheet.loop.fallback": "%s failed on a trial step on pass %s: plain passes from here.",

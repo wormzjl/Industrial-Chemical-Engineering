@@ -433,6 +433,21 @@ class BatchStillTest {
     private static void assertConserves(StillColumn.Split split) {
         double[] up = split.vapourFlows(), back = split.liquidFlows(), out = split.distillateFlows();
         for (int i = 0; i < up.length; i++) assertEquals(up[i], back[i] + out[i], 1e-12 * up[i] + 1e-15, "the column conserves " + i);
+        assertRising(split);
+    }
+
+    /** No converged answer has a tray colder than the stage above it by more than a kelvin (W4 plan section 12). */
+    private static void assertRising(StillColumn.Split split) {
+        if (!split.converged() || split.stages() < 2) return;
+        double[] t = split.profile().temperatures();
+        for (int j = 2; j <= split.stages(); j++) assertTrue(t[j] >= t[j - 1] - 1, "tray " + j + " " + t[j] + " under tray " + (j - 1) + " " + t[j - 1]);
+    }
+
+    private static String trays(StillColumn.Split split) {
+        if (split.profile() == null) return "[]";
+        var out = new StringBuilder("[");
+        for (double t : split.profile().temperatures()) out.append(String.format(java.util.Locale.ROOT, " %.2f", t - 273.15));
+        return out.append(" ]").toString();
     }
 
     /** The plan's W4 row: the wash starts to boil at 92.5 C, its first vapour 0.26 ethanol; one liquid, no layers. */
@@ -468,7 +483,7 @@ class BatchStillTest {
         }
         double azeotrope = (low + high) / 2;
         System.out.printf(java.util.Locale.ROOT, "W4 azeotrope on the model: %.4f%n", azeotrope);
-        assertEquals(.906, azeotrope, .01, "plan section 1: 0.906 on the derived model");
+        assertEquals(.8965, azeotrope, .002, "the engine's azeotrope (plan section 1's 0.906 was the offline prototype's)");
         int[][] rows = {{4, 1}, {4, 3}, {8, 1}, {8, 3}};
         double[] distillate = new double[rows.length];
         for (int r = 0; r < rows.length; r++) {
@@ -476,6 +491,7 @@ class BatchStillTest {
             double reflux = rows[r][1];
             var split = column.solve(z, stages, reflux, 1, null);
             assertTrue(split.converged(), split.failure());
+            assertNull(split.notice(), "a miscible wash rectifies");
             distillate[r] = split.distillate()[e];
             double mt = mcCabeThiele(column, z[e], stages, reflux, azeotrope);
             System.out.printf(java.util.Locale.ROOT, "W4 rectifier N %d R %.0f: distillate %.4f, McCabe-Thiele %.4f, head %.2f C, %d iterations, %d flashes%n",
@@ -483,6 +499,7 @@ class BatchStillTest {
             assertEquals(mt, distillate[r], .02, "N " + stages + ", R " + reflux);
             assertTrue(distillate[r] < azeotrope, "never past the azeotrope");
             assertTrue(split.flashes() <= StillColumn.LAYER_ROUNDS + split.iterations() + 1 + stages, "D7: " + split.flashes());
+            if (stages == 8 && reflux == 3) assertTrue(split.iterations() <= 40, "the wash pays nothing for the gap: " + split.iterations());
             assertConserves(split);
         }
         assertTrue(distillate[0] <= distillate[1] && distillate[1] <= distillate[3], "more reflux never lowers it");
@@ -546,9 +563,10 @@ class BatchStillTest {
 
     /**
      * Water under n-hexane boils below both boiling points (61.14 C, a vapour of 0.794 hexane on the engine, W3a; the plan's
-     * 61.4 C and 0.791); the condensate settles into two layers. The column over it has two liquids on its trays, which the
-     * method states as one (D4): it converges or fails with its reason (a notice, never a hold), and where it converges the
-     * reflux is the oil layer, under 1 % water (D3).
+     * 61.4 C and 0.791); the condensate settles into two layers. The column over it starts its trays on the pot's oil layer
+     * (W4 plan section 12): every tray stands at the pot's 61.14 C under the pot's vapour, its liquid the oil layer at
+     * saturation; the reflux is the oil layer (D3), the distillate what the reflux leaves (about 0.18 hexane). At R 5 the
+     * reflux draws on the water layer.
      */
     @Test
     void waterUnderHexaneBoilsBelowBothAndRefluxesItsOilLayer() {
@@ -562,38 +580,55 @@ class BatchStillTest {
         System.out.printf(java.util.Locale.ROOT, "W4 water and n-hexane: %.3f C, vapour %.4f hexane, condensate %.3f C, %d flashes%n",
                 single.potTemperature() - 273.15, single.distillate()[h], single.condensateTemperature() - 273.15, single.flashes());
         assertTrue(single.twoLiquidPot() && single.twoLiquidCondensate(), "two liquids in the pot and the condensate");
-        assertEquals(61.4 + 273.15, single.potTemperature(), .3, "the heteroazeotrope's temperature");
-        assertEquals(.791, single.distillate()[h], .01, "its vapour");
+        assertEquals(61.14 + 273.15, single.potTemperature(), .05, "the heteroazeotrope's temperature, the engine's (W3a)");
+        assertEquals(.7936, single.distillate()[h], .002, "its vapour");
         assertTrue(single.flashes() <= 2 * StillColumn.LAYER_ROUNDS, "D7: " + single.flashes());
         var column4 = column.solve(z, 4, 3, 1, null);
-        System.out.println("W4 water and n-hexane, 4 trays R 3: " + (column4.converged() ? "converged" : column4.failure()) + ", " + column4.flashes() + " flashes");
-        if (!column4.converged()) {
-            assertNotNull(column4.failure(), "a failed solve gives its reason");
-            return;
-        }
-        double[] reflux = column4.profile().liquids()[0];
-        System.out.printf(java.util.Locale.ROOT, "W4 water and n-hexane, 4 trays R 3: reflux %.2e water, distillate %.4f hexane, head %.3f C, trays settling %s, %d iterations, %d flashes%n",
-                reflux[w], column4.distillate()[h], column4.headTemperature() - 273.15, java.util.Arrays.toString(column4.settlingTrays()), column4.iterations(), column4.flashes());
+        double[] reflux = column4.converged() && column4.stages() > 0 ? column4.profile().liquids()[0] : new double[z.length];
+        double topVapour = (3 * reflux[h] + column4.distillate()[h]) / 4;
+        System.out.printf(java.util.Locale.ROOT, "W4 water and n-hexane, 4 trays R 3: %s, notice %s, reflux %.2e water, top vapour %.4f, distillate %.4f hexane, trays %s, settling %s, %d iterations, %d flashes%n",
+                column4.converged() ? "converged" : column4.failure(), column4.notice(), reflux[w], topVapour, column4.distillate()[h], trays(column4),
+                java.util.Arrays.toString(column4.settlingTrays()), column4.iterations(), column4.flashes());
+        assertTrue(column4.converged(), column4.failure());
+        assertNull(column4.notice(), "the column rectifies from the oil layer");
+        assertTrue(column4.iterations() <= 10, "iterations " + column4.iterations());
+        // 21 flashes (accepted as measured): the pot's and the condensate's search 10, the condensate one an iteration 7, the
+        // four trays split once at the end (D4's notice) 4.
+        assertTrue(column4.flashes() <= 21, "flashes " + column4.flashes());
+        for (int j = 1; j <= 4; j++) assertEquals(single.potTemperature(), column4.profile().temperatures()[j], .1, "tray " + j + " at the pot's temperature");
+        assertEquals(.7936, topVapour, .002, "the pot's vapour reaches the condenser");
+        assertEquals(.18, column4.distillate()[h], .03, "the distillate is what the reflux leaves");
         assertTrue(column4.twoLiquidCondensate(), "the condensate settles");
         assertTrue(reflux[w] < .01, "the reflux is the oil layer: " + reflux[w]);
-        assertTrue(column4.flashes() <= StillColumn.LAYER_ROUNDS * (column4.iterations() + 2) + 4, "D7: " + column4.flashes());
         assertEquals(column4.condensateEnthalpy() * 4, 3 * column4.refluxEnthalpy() + column4.distillateEnthalpy(),
                 1e-9 * Math.abs(column4.condensateEnthalpy()) * 4, "(R + 1) hC = R hR + hD");
         assertConserves(column4);
+        var column5 = column.solve(z, 4, 5, 1, null);
+        System.out.printf(java.util.Locale.ROOT, "W4 water and n-hexane, 4 trays R 5: %s, notice %s, stages %d, distillate %.4f hexane, trays %s, settling %s, %d iterations, %d flashes%n",
+                column5.converged() ? "converged" : column5.failure(), column5.notice(), column5.stages(), column5.distillate()[h], trays(column5),
+                java.util.Arrays.toString(column5.settlingTrays()), column5.iterations(), column5.flashes());
+        assertTrue(column5.converged(), "R 5 converges, with its notice or as the pot's single stage: " + column5.failure());
+        assertTrue(column5.notice() == null || column5.stages() == 0, "the marker comes with the single stage");
+        assertConserves(column5);
     }
 
     /**
      * The wash with n-hexane from 1e-9 to 1e-2 of the charge, across the condensate's second layer's onset (D3). In pot mode
      * all of the pot vapour's hexane leaves with the distillate, so the head fills with hexane as the trace grows and the
-     * condensate settles from about 1e-7. Every solve converges or fails with its reason, and the pot's single stage stands
-     * (the still's fallback); where two neighbours from 1e-6 (the plan's range) both converge, the distillate moves by less
-     * than 0.01 between them. Two liquids on the trays, stated as one (D4), are where the method can fail.
+     * condensate settles from about 1e-7. Under the onset the column rectifies. From 1e-7 to 3e-6 the trays would hold two
+     * liquids and the iteration stalls: the answer is the pot's single stage with its marker (W4 plan section 12), in 60
+     * iterations or fewer. From 1e-5 the pot settles too and the column converges on one-liquid trays that would settle: D4's
+     * notice (every tray reported), a profile rising downward, the reflux returning the hexane. The head stands under its
+     * condensate's bubble point there: the known error of one-liquid trays, printed. Every solve converges; the distillate
+     * moves by less than 0.01 between neighbours of one regime (the pot's own vapour aside, which follows the trace).
      */
     @Test
     void aTraceOfHexaneMovesTheDistillateContinuously() {
         var column = wet(PILOT, List.of("Ethanol", "N-hexane"));
         int e = index(column, "Ethanol"), h = index(column, "N-hexane");
         double[] last = null;
+        int lastRegime = 0;
+        var broken = new java.util.ArrayList<String>();
         StillColumn.Profile warm = null;
         for (double share : new double[]{1e-9, 1e-8, 3e-8, 1e-7, 3e-7, 1e-6, 3e-6, 1e-5, 3e-5, 1e-4, 3e-4, 1e-3, 3e-3, 1e-2}) {
             double[] z = new double[column.componentCount()];
@@ -601,28 +636,43 @@ class BatchStillTest {
             z[column.water()] = (1 - WASH) * (1 - share);
             z[h] = share;
             var split = column.solve(z, 4, 3, 1, warm);
-            assertTrue(column.solve(z, 0, 0, 1, null).converged(), "the single stage stands at " + share);
-            if (!split.converged()) {
-                System.out.printf(java.util.Locale.ROOT, "W4 wash with hexane %.0e: %s, %d flashes%n", share, split.failure(), split.flashes());
-                assertNotNull(split.failure(), "a failed solve gives its reason");
-                last = null;
-                continue;
-            }
-            warm = split.profile();
             double[] x = split.distillate();
-            System.out.printf(java.util.Locale.ROOT, "W4 wash with hexane %.0e: distillate ethanol %.4f hexane %.4f water %.4f, layers %b, pot two %b, trays settling %s, head %.2f C, %d iterations, %d flashes%n",
-                    share, x[e], x[h], x[column.water()], split.twoLiquidCondensate(), split.twoLiquidPot(), java.util.Arrays.toString(split.settlingTrays()),
-                    split.headTemperature() - 273.15, split.iterations(), split.flashes());
-            if (last != null && share > 1e-6) for (int i = 0; i < x.length; i++) assertEquals(last[i], x[i], .01, "between neighbours at " + share + ", component " + i);
+            System.out.printf(java.util.Locale.ROOT, "W4 wash with hexane %.0e: %s, notice %s, stages %d, distillate ethanol %.4f hexane %.4f water %.4f, layers %b, pot two %b, trays %s, settling %s, %d iterations, %d flashes%n",
+                    share, split.converged() ? "converged" : split.failure(), split.notice(), split.stages(), x[e], x[h], x[column.water()], split.twoLiquidCondensate(),
+                    split.twoLiquidPot(), trays(split), java.util.Arrays.toString(split.settlingTrays()), split.iterations(), split.flashes());
+            assertTrue(split.converged(), "at " + share + ": " + split.failure());
+            assertConserves(split);
+            boolean potStill = split.notice() != null;
+            if (potStill) {
+                assertEquals(StillColumn.POT_STILL, split.notice());
+                assertEquals(0, split.stages(), "the marker's answer is the pot's single stage");
+                assertTrue(split.iterations() <= 60, "a stall ends early: " + split.iterations());
+                assertArrayEquals(column.solve(z, 0, 0, 1, null).distillate(), x, 1e-12, "the pot's own single stage");
+            }
+            // 0 rectified, 1 the single stage with its marker (the pot's own vapour, pinned above), 2 one-liquid trays that would
+            // settle over a pot of one liquid, 3 the same over a pot that settles too (from 3e-5).
+            int regime = potStill ? 1 : split.twoLiquidPot() ? 3 : split.twoLiquidCondensate() ? 2 : 0;
+            assertEquals(share < 1e-7 ? 0 : share < 1e-5 ? 1 : 2, Math.min(regime, 2), "the regime at " + share);
+            if (regime >= 2) {
+                assertTrue(split.settlingTrays().length > 0, "the trays that would settle are reported");
+                assertTrue(x[h] <= 1e-3, "the reflux returns the hexane: " + x[h]);
+                System.out.printf(java.util.Locale.ROOT, "W4 wash with hexane %.0e: the head %.2f K under its condensate's bubble point%n", share,
+                        split.condensateTemperature() - split.headTemperature());
+            }
+            if (last != null && regime == lastRegime && regime != 1) for (int i = 0; i < x.length; i++) if (Math.abs(last[i] - x[i]) > .01) broken.add("moved at " + share + ", component " + i);
+            if (last != null && regime != lastRegime) System.out.printf(java.util.Locale.ROOT, "W4 wash with hexane: the step at %.0e, ethanol %.4f to %.4f%n", share, last[e], x[e]);
+            lastRegime = regime;
+            warm = split.profile();
             last = x;
         }
+        assertTrue(broken.isEmpty(), "the distillate moves by less than 0.01 within a regime: " + broken);
     }
 
     /**
      * A wet naphtha: the condensate's water layer leaves with the distillate and the reflux carries only the oil layer's
      * dissolved water; what water returns to the pot is the trays' (their one liquid holds it). A tray that would hold free
      * water is a notice, and the solve stands (D4). The plan's "water's share at the head 1 within 1e-6" holds only for
-     * trays without water: the trays here return 1.3 % of the steam.
+     * trays without water: the trays return a little of the steam with their oil, the share at least 0.98 (orchestrator).
      */
     @Test
     void aWetNaphthaSendsItsWaterOverheadAndFlagsAColdTray() {
@@ -631,17 +681,67 @@ class BatchStillTest {
         double[] z = on(column, NAPHTHA_Z);
         for (int i = 0; i < z.length; i++) z[i] *= .98;
         z[w] = .02;
+        long started = System.nanoTime();
         var split = column.solve(z, 4, 2, 1, null);
-        assertTrue(split.converged(), split.failure());
+        double ms = (System.nanoTime() - started) / 1e6;
         double share = split.distillateFlows()[w] / split.vapourFlows()[w];
-        System.out.printf(java.util.Locale.ROOT, "W4 wet naphtha: water's share at the head 1 - %.2e, pot two %b, layers %b, trays settling %s, head %.2f C, %d iterations, %d flashes%n",
-                1 - share, split.twoLiquidPot(), split.twoLiquidCondensate(), java.util.Arrays.toString(split.settlingTrays()), split.headTemperature() - 273.15,
-                split.iterations(), split.flashes());
+        System.out.printf(java.util.Locale.ROOT, "W4 wet naphtha: the head %.2f K under its condensate's bubble point, %.1f ms (cold, not a timing run)%n",
+                split.condensateTemperature() - split.headTemperature(), ms);
+        System.out.printf(java.util.Locale.ROOT, "W4 wet naphtha: %s, notice %s, water's share at the head 1 - %.2e, pot two %b, layers %b, trays %s, settling %s, %d iterations, %d flashes%n",
+                split.converged() ? "converged" : split.failure(), split.notice(), 1 - share, split.twoLiquidPot(), split.twoLiquidCondensate(), trays(split),
+                java.util.Arrays.toString(split.settlingTrays()), split.iterations(), split.flashes());
+        assertTrue(split.converged(), split.failure());
+        assertNull(split.notice(), "the wet naphtha rectifies");
         assertTrue(split.twoLiquidCondensate(), "the condensate settles a water layer");
         assertTrue(split.profile().liquids()[0][w] < .01, "the reflux is the oil layer: " + split.profile().liquids()[0][w]);
-        assertTrue(share > .95 && share < 1, "most of the steam leaves with the distillate: " + share);
-        assertEquals(split.vapourFlows()[w] - split.distillateFlows()[w], split.liquidFlows()[w], 1e-12 * split.vapourFlows()[w], "the rest returns with the trays' liquid");
-        assertTrue(split.settlingTrays().length > 0, "a cold tray would hold free water: the notice");
-        assertTrue(split.flashes() <= StillColumn.LAYER_ROUNDS * (split.iterations() + 2) + 4, "D7: " + split.flashes());
+        assertTrue(share >= .98 && share < 1, "most of the steam leaves with the distillate: " + share);
+        assertEquals(split.vapourFlows()[w] - split.distillateFlows()[w], split.liquidFlows()[w], 1e-9 * split.vapourFlows()[w], "the rest returns with the trays' liquid");
+        assertTrue(split.iterations() <= 11, "iterations " + split.iterations());
+        // 38 flashes (accepted as measured): the pot's two layers and the condensate's search from the oil-layer start, the
+        // condensate one an iteration, the four trays split once at the end (D4's notice).
+        assertTrue(split.flashes() <= 38, "flashes " + split.flashes());
+        assertConserves(split);
+    }
+
+    /**
+     * A wet crude on the refinery package's whole list (2 % water) at 8 trays, R 3: the hot pot's vapour is mostly steam, so the
+     * condensate's oil layer is under the reflux, which draws on the water layer: trays holding free water for real. The
+     * iteration fails, and the answer is the pot's single stage with the marker (W4 plan section 12). Solved cold, then again
+     * from the answer's own profile (two stages, so cold too: pitfall a). Within a few hundred flashes a solve.
+     */
+    @Test
+    void aWetCrudeOnTheWholeListCostsAFewHundredFlashes() {
+        var column = new StillColumn(REFINERY, P);
+        int w = column.water(), n = column.componentCount();
+        double[] z = new double[n];
+        // A crude falling off with its boiling cuts: each compound 0.85 of the last.
+        double total = 0;
+        double[] critical = StillHead.critical(REFINERY);
+        // The light gases (critical under 400 K) left out: a pot at 1 atm holds none.
+        for (int i = 0, k = 0; i < n - 1; i++) if (critical[i] >= 400) total += z[i] = Math.pow(.85, k++);
+        for (int i = 0; i < n - 1; i++) z[i] *= .98 / total;
+        z[w] = .02;
+        StillColumn.Profile warm = null;
+        for (int pass = 0; pass < 2; pass++) {
+            long start = System.nanoTime();
+            var split = column.solve(z, 8, 3, 1, warm);
+            double ms = (System.nanoTime() - start) / 1e6;
+            System.out.printf(java.util.Locale.ROOT, "W4 wet crude, %d components, 8 trays R 3, pass %d: %s, notice %s, stages %d, trays %s, %d iterations, %d flashes, %.0f ms%n",
+                    n, pass, split.converged() ? "converged" : split.failure(), split.notice(), split.stages(), trays(split), split.iterations(), split.flashes(), ms);
+            assertTrue(split.converged(), split.failure());
+            assertEquals(StillColumn.POT_STILL, split.notice());
+            assertEquals(0, split.stages());
+            assertTrue(split.flashes() <= 400, "flashes " + split.flashes());
+            if (pass == 0) {
+                // The first decanter's O against R: the pot vapour's condensate, its oil layer's share of R + 1 = 4 moles.
+                var model = column.thermo();
+                var condensate = model.flashTP(split.condensateTemperature() - .5, P, split.distillate(), () -> {
+                });
+                double oil = java.util.Arrays.stream(FluidThermodynamics.phaseMoles(condensate, FluidThermodynamics.OIL)).sum() / java.util.Arrays.stream(split.distillate()).sum();
+                System.out.printf(java.util.Locale.ROOT, "W4 wet crude: condensate's oil layer O = %.3f against R = 3 (water %.3f of the vapour)%n", 4 * oil, split.distillate()[w]);
+            }
+            assertConserves(split);
+            warm = split.profile();
+        }
     }
 }

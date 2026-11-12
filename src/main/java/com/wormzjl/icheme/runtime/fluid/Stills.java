@@ -453,6 +453,8 @@ public final class Stills implements IslandCoordinator.Ports {
         if(r!=null&&r.failure!=null)line.append(" · COLUMN: ").append(r.failure);
         // A tray that would hold free water (W4 D4): a notice, the column's answer stands.
         if(r!=null&&r.solved!=null&&r.solved.waterOnTrays())line.append(" · WATER ON THE TRAYS");
+        // Two liquids on the trays (W4 plan section 12): the column's answer is the pot's single stage.
+        if(r!=null&&r.solved!=null&&r.solved.potStill())line.append(" · COLUMN: ").append(r.solved.notice());
         return line.toString();
     }
     /**

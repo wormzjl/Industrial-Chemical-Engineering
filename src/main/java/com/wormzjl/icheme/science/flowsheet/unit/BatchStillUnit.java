@@ -245,6 +245,7 @@ public final class BatchStillUnit implements UnitModel {
         if (design.condenser() && batch.condensed() < 1 - 1e-6) report.note(Note.warning(id, "still.cooling", percent(1 - batch.condensed())));
         if (batch.flooded() > 0) report.note(Note.warning(id, "still.flooding", percent(batch.flooded() / batch.seconds())));
         if (batch.failure() != null) report.note(Note.warning(id, "still.column", batch.failure()));
+        if (batch.potStill()) report.note(Note.warning(id, "still.pot_still"));
     }
 
     /** The cut that was running when the batch ended early. */

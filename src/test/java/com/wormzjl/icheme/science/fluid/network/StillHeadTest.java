@@ -83,6 +83,28 @@ class StillHeadTest {
      */
     @Test
     void aWashsHeadReturnsItsWater() {
+        assertWashHead();
+    }
+
+    /**
+     * Water under n-hexane at reflux 5 draws its reflux on the water layer: two liquids on the trays, so the column's answer is
+     * the pot's single stage with its marker (W4 plan section 12), which the head carries.
+     */
+    @Test
+    void twoLiquidsOnTheTraysGiveThePotsSingleStage() {
+        var model = FluidThermodynamics.forNetwork(PilotAqueousTestCatalog.catalog(), PilotAqueousTestCatalog.PACKAGE_ID).on(List.of("N-hexane"));
+        int n = model.componentCount();
+        double[] pot = new double[n];
+        pot[model.components().indexOf("N-hexane")] = 5;
+        pot[n - 1] = 5;
+        var outcome = StillHead.run(new StillHead.Job(pot, 334, BatchStill.ATMOSPHERIC, 4, 5, null, .15), model, () -> {
+        });
+        var solved = assertInstanceOf(StillHead.Solved.class, outcome, () -> "the column answers: " + outcome);
+        assertTrue(solved.potStill(), "the marker");
+        assertEquals(StillColumn.POT_STILL, solved.notice());
+    }
+
+    private static void assertWashHead() {
         var model = FluidThermodynamics.forNetwork(PilotAqueousTestCatalog.catalog(), PilotAqueousTestCatalog.PACKAGE_ID).on(List.of("Ethanol"));
         int n = model.componentCount(), e = model.components().indexOf("Ethanol");
         double[] pot = new double[n];

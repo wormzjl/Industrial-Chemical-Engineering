@@ -63,6 +63,10 @@ public final class StillColumn {
     /** Converged once no stage moves this much in an energy-balance iteration, K. */
     public static final double TOLERANCE = 1e-4;
     public static final int MAX_ITERATIONS = 300;
+    /** Iterations with no new least change, since the flows last changed form, that end the iterating (W4 plan section 12). */
+    public static final int STALL_ITERATIONS = 20;
+    /** The notice of a wet column that fell back to the pot's single stage (W4 plan section 12). */
+    public static final String POT_STILL = "two liquids on the trays: the column does not rectify";
     /** The most trays. */
     public static final int MAX_STAGES = 8;
     /** The reflux ratio a closed valve's profile is solved at. */
@@ -180,6 +184,7 @@ public final class StillColumn {
      * @param twoLiquidCondensate   the condensate settles into two layers
      * @param settlingTrays         the trays (1..N) whose liquid would settle into two liquids (D4): a notice, not a failure
      * @param flashes               the engine splits the solve made (0 where no liquid holds water)
+     * @param notice                {@link #POT_STILL} where a wet column fell back to the pot's single stage, else null
      */
     public record Split(boolean converged, int iterations, String failure, int stages, double refluxRatio, boolean closed,
                         double[] distillate, double headTemperature, double condensateTemperature, double potTemperature,
@@ -187,7 +192,7 @@ public final class StillColumn {
                         double liquidRate, double[] liquid, double liquidEnthalpy,
                         double topVapourRate, double headEnthalpy, double condensateEnthalpy, double potEnthalpy,
                         double boilUpHeat, Profile profile, double refluxEnthalpy, double distillateEnthalpy,
-                        boolean twoLiquidPot, boolean twoLiquidCondensate, int[] settlingTrays, int flashes) {
+                        boolean twoLiquidPot, boolean twoLiquidCondensate, int[] settlingTrays, int flashes, String notice) {
         /** The energy that leaves the pot and the column per mole of distillate, J/mol: (R + 1) H1 - R hR. */
         public double energyPerDistillate() {
             return potEnthalpy + boilUpHeat;
@@ -253,20 +258,6 @@ public final class StillColumn {
      */
     private record Decanter(double temperature, double[] shares, double reflux, double whole, double distillate, double[] composition,
                             Boiling condensate) {
-        /** {@code weight} of this decanter and the rest of {@code last}: each share, enthalpy and the distillate's composition
-         * (the balance (R + 1) hC = R hR + hD is linear, so it holds); the temperature and the condensate's layers are this one's. */
-        Decanter towards(Decanter last, double weight) {
-            int n = shares.length;
-            double[] s = new double[n], x = new double[n];
-            double sum = 0, rest = 1 - weight;
-            for (int i = 0; i < n; i++) {
-                s[i] = weight * shares[i] + rest * last.shares[i];
-                sum += x[i] = weight * composition[i] + rest * last.composition[i];
-            }
-            for (int i = 0; i < n; i++) x[i] /= sum;
-            return new Decanter(temperature, s, weight * reflux + rest * last.reflux, weight * whole + rest * last.whole,
-                    weight * distillate + rest * last.distillate, x, condensate);
-        }
     }
 
     /**
@@ -287,6 +278,10 @@ public final class StillColumn {
         var potBoiling = boiling(fractions(z), seeded ? warm.potTemperature() : Double.NaN, null);
         if (potBoiling == null) return failed(stages, ratio, closed, "no bubble point of the pot liquid");
         var start = potBoiling.bubble();
+        // A pot that settles starts its stages on its oil layer (W4 plan section 12): at the answer each tray is the oil layer
+        // at saturation, where one liquid's K is smooth through the edge of the gap; the pot's whole liquid read as one is not.
+        double[] oil = potBoiling.two() ? fractions(potBoiling.oilLayer()) : null;
+        var oilStart = oil != null ? bubble(oil, start.temperature(), start.vapour()) : null;
         double[] t = new double[m];
         double[][] x = new double[m][], y = new double[m][], k = new double[m][];
         for (int j = 0; j < m; j++) {
@@ -295,6 +290,10 @@ public final class StillColumn {
                 x[j] = fractions(warm.liquids()[j]);
                 var e = eval(x[j], warm.temperatures()[j], start.vapour());
                 if (e != null) b = new Bubble(warm.temperatures()[j], e.y(), e.k());
+            }
+            if (b == null && oilStart != null) {
+                x[j] = oil.clone();
+                b = oilStart;
             }
             if (b == null) {
                 x[j] = z.clone();
@@ -312,16 +311,18 @@ public final class StillColumn {
         // vapour[j]: leaving stage j (1..r); liquid[j]: leaving stage j (0..N), liquid[0] the reflux; per mole of distillate.
         double[] vapour = new double[m], liquid = new double[m];
         boolean energy = false;
-        double weight = 1;
-        double lastChange = Double.POSITIVE_INFINITY;
+        // The stall rule: the least change since the flows last changed form; STALL_ITERATIONS with no new least end it.
+        double least = Double.POSITIVE_INFINITY;
+        int sinceLeast = 0, iteration = 0;
         // The condensate's layers on the top vapour (D2, D3): the shares of this iteration are the last one's.
         var decanter = decanter(y[1], t[0], ratio, null);
-        for (int iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
+        while (++iteration <= MAX_ITERATIONS) {
             if (energy) {
-                if (!energyFlows(ratio, t, x, y, vapour, liquid, decanter)) return failed(stages, ratio, closed, "no enthalpy on a stage");
+                if (!energyFlows(ratio, t, x, y, vapour, liquid, decanter))
+                    return failedOrPot(failed(stages, ratio, closed, "no enthalpy on a stage"), z, duty, potBoiling, decanter, t, x, stages, iteration);
                 for (int j = 0; j < m; j++)
                     if ((j > 0 && !(vapour[j] > 0)) || (j < r && !(liquid[j] > 0)))
-                        return failed(stages, ratio, closed, "no positive flow on stage " + j);
+                        return failedOrPot(failed(stages, ratio, closed, "no positive flow on stage " + j), z, duty, potBoiling, decanter, t, x, stages, iteration);
             } else {
                 for (int j = 0; j < m; j++) {
                     vapour[j] = ratio + 1;
@@ -353,33 +354,60 @@ public final class StillColumn {
             double change = 0;
             for (int j = 0; j < r; j++) {
                 double sum = sum(raw[j]);
-                if (!(sum > 0) || !Double.isFinite(sum)) return failed(stages, ratio, closed, "no liquid on stage " + j);
-                double[] next = fractions(raw[j]);
-                if (weight < 1) for (int i = 0; i < n; i++) next[i] = weight * next[i] + (1 - weight) * x[j][i];
-                x[j] = next;
+                if (!(sum > 0) || !Double.isFinite(sum))
+                    return failedOrPot(failed(stages, ratio, closed, "no liquid on stage " + j), z, duty, potBoiling, decanter, t, x, stages, iteration);
+                x[j] = fractions(raw[j]);
                 var bubble = bubble(x[j], t[j], y[j]);
-                if (bubble == null) return failed(stages, ratio, closed, "no bubble point on stage " + j);
+                if (bubble == null) return failedOrPot(failed(stages, ratio, closed, "no bubble point on stage " + j), z, duty, potBoiling, decanter, t, x, stages, iteration);
                 change = Math.max(change, Math.abs(bubble.temperature() - t[j]));
                 t[j] = bubble.temperature();
                 y[j] = bubble.vapour();
                 k[j] = bubble.k();
             }
-            var settled = decanter(y[1], t[0], ratio, decanter);
-            // Relaxed, a condensate of two layers in both iterations returns the weighted mean of their two decanters (W4 plan
-            // section 7: the shares of two iterations averaged).
-            decanter = weight < 1 && settled != null && decanter != null ? settled.towards(decanter, weight) : settled;
-            if (energy && change < TOLERANCE) return answer(stages, ratio, closed, iteration, t, x, y, duty, potBoiling, decanter);
-            // Direct substitution that stops contracting far from the answer (a stage's temperature moves more than a kelvin,
-            // and as much as in the last iteration of the same flows) is relaxed for the rest of the solve: each stage's new
-            // liquid is the weighted mean of the method's and its last, the weight halved at each such iteration (to 1/16).
-            if (change > SWITCH_KELVIN && change >= lastChange) weight = Math.max(weight / 2, 1. / 16);
-            lastChange = change;
+            decanter = decanter(y[1], t[0], ratio, decanter);
+            if (energy && change < TOLERANCE) {
+                // A wet tray colder than the tray above it is the miscibility gap's sign: where a liquid of the still settles,
+                // the column does not rectify (W4 plan section 12).
+                if (coldWetTray(t, x, stages) && settles(potBoiling, decanter, t, x, stages)) return single(z, duty, potBoiling, POT_STILL, iteration);
+                var answer = answer(stages, ratio, closed, iteration, t, x, y, duty, potBoiling, decanter);
+                return answer.converged() ? answer : failedOrPot(answer, z, duty, potBoiling, decanter, t, x, stages, iteration);
+            }
+            if (change < least) {
+                least = change;
+                sinceLeast = 0;
+            } else if (++sinceLeast >= STALL_ITERATIONS) break;
             if (!energy && change < SWITCH_KELVIN) {
                 energy = true;
-                lastChange = Double.POSITIVE_INFINITY;
+                least = Double.POSITIVE_INFINITY;
+                sinceLeast = 0;
             }
         }
-        return failed(stages, ratio, closed, "no convergence in " + MAX_ITERATIONS + " iterations");
+        int done = Math.min(iteration, MAX_ITERATIONS);
+        return failedOrPot(failed(stages, ratio, closed, "no convergence in " + done + " iterations"), z, duty, potBoiling, decanter, t, x, stages, done);
+    }
+
+    /**
+     * A failure of the iteration (W4 plan section 12): where a liquid of the still settles (the pot, the condensate or a wet
+     * tray), a tray holds free water the one-liquid trays cannot carry, and the answer is the pot's single stage with
+     * {@link #POT_STILL}; a dry solve fails as {@code failure} (no flash: {@link #settles} splits wet trays only).
+     */
+    private Split failedOrPot(Split failure, double[] z, double duty, Boiling pot, Decanter decanter, double[] t, double[][] x, int stages, int iterations) {
+        return settles(pot, decanter, t, x, stages) ? single(z, duty, pot, POT_STILL, iterations) : failure;
+    }
+
+    /** A tray j (2..N) whose liquid holds water and stands more than {@link #SWITCH_KELVIN} under tray j - 1. */
+    private boolean coldWetTray(double[] t, double[][] x, int stages) {
+        if (water < 0) return false;
+        for (int j = 2; j <= stages; j++) if (x[j][water] > 0 && t[j] < t[j - 1] - SWITCH_KELVIN) return true;
+        return false;
+    }
+
+    /** Whether a liquid of the still settles: the pot, the condensate, or a wet tray the engine splits (one split a tray). */
+    private boolean settles(Boiling pot, Decanter decanter, double[] t, double[][] x, int stages) {
+        if (pot.two() || decanter != null) return true;
+        if (water < 0) return false;
+        for (int j = 1; j <= stages; j++) if (x[j][water] > 0 && layers(x[j], t[j]) != null) return true;
+        return false;
     }
 
     /** The converged column's answer: its flows from the energy balance on the final profile, scaled to {@code duty}. */
@@ -414,13 +442,18 @@ public final class StillColumn {
         return new Split(true, iterations, null, stages, ratio, closed, distillate, t[1], condensing, t[r], closed ? 0 : d,
                 vapour[r] * d, y[r].clone(), hUp, closed ? vapour[r] * d : liquid[r - 1] * d, closed ? y[r].clone() : x[r - 1].clone(),
                 hBack, vapour[1] * d, headVapour, hC, hPot, closed ? Double.POSITIVE_INFINITY : perDistillate, profile, hR, hD,
-                pot.two(), decanter != null, settling, flashes);
+                pot.two(), decanter != null, settling, flashes, null);
     }
 
     /** One equilibrium stage: the pot's bubble vapour is the distillate. */
     private Split single(double[] z, double duty, Profile warm) {
         var potBoiling = boiling(fractions(z), warm != null ? warm.potTemperature() : Double.NaN, null);
         if (potBoiling == null) return failed(0, 0, false, "no bubble point of the pot liquid");
+        return single(z, duty, potBoiling, null, 0);
+    }
+
+    /** One equilibrium stage on the pot's {@code potBoiling}, with {@code notice} on its answer, after {@code iterations} of a column. */
+    private Split single(double[] z, double duty, Boiling potBoiling, String notice, int iterations) {
         var pot = potBoiling.bubble();
         double[] y = pot.vapour();
         var condensing = boiling(fractions(y), pot.temperature() - 1, null);
@@ -439,9 +472,9 @@ public final class StillColumn {
         double d = duty / perDistillate;
         var profile = new Profile(new double[]{condensate.temperature(), pot.temperature()}, new double[][]{y.clone(), z.clone()});
         // No reflux: the whole condensate, both layers, is the distillate.
-        return new Split(true, 0, null, 0, 0, false, y.clone(), pot.temperature(), condensate.temperature(), pot.temperature(), d, d, y.clone(),
+        return new Split(true, iterations, null, 0, 0, false, y.clone(), pot.temperature(), condensate.temperature(), pot.temperature(), d, d, y.clone(),
                 hVapour, 0, z.clone(), hPot, d, hVapour, h0, hPot, perDistillate, profile, h0, h0, potBoiling.two(), condensing.two(),
-                NO_TRAYS, flashes);
+                NO_TRAYS, flashes, notice);
     }
 
     private static final int[] NO_TRAYS = new int[0];
@@ -818,6 +851,6 @@ public final class StillColumn {
     private Split failed(int stages, double ratio, boolean closed, String why) {
         return new Split(false, 0, why, stages, ratio, closed, new double[n], Double.NaN, Double.NaN, Double.NaN, 0, 0, new double[n], Double.NaN,
                 0, new double[n], Double.NaN, 0, Double.NaN, Double.NaN, Double.NaN, Double.NaN, null, Double.NaN, Double.NaN, false, false,
-                NO_TRAYS, flashes);
+                NO_TRAYS, flashes, null);
     }
 }

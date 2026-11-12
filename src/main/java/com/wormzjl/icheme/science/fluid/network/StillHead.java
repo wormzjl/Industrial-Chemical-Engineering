@@ -48,12 +48,14 @@ public final class StillHead {
      * the trays whose liquid would settle into two liquids (the status line's notice) and the engine splits the solve made.
      */
     public record Solved(Pool.Head head,StillColumn.Profile profile,double headTemperature,double condensateTemperature,
-                         double[] critical,double needPerMole,double reflux,double fPerWatt,int[] settlingTrays,int flashes) implements Outcome {
+                         double[] critical,double needPerMole,double reflux,double fPerWatt,int[] settlingTrays,int flashes,String notice) implements Outcome {
         public Solved {Objects.requireNonNull(head);critical=critical.clone();settlingTrays=settlingTrays.clone();}
         @Override public double[] critical(){return critical.clone();}
         @Override public int[] settlingTrays(){return settlingTrays.clone();}
         /** Whether a tray would hold free water: the still's notice "water on the trays". */
         public boolean waterOnTrays(){return settlingTrays.length>0;}
+        /** Whether the column fell back to the pot's single stage ({@link StillColumn#POT_STILL}): two liquids on its trays. */
+        public boolean potStill(){return notice!=null;}
     }
     public record Failed(String reason) implements Outcome {}
 
@@ -79,7 +81,7 @@ public final class StillHead {
         var inPot=java.util.Arrays.copyOf(pot,carried);
         double total=0;for(double v:inPot)total+=v;
         var critical=critical(model);
-        if(!(total>0))return new Solved(Pool.Head.plain(n+1),null,job.temperature(),job.temperature(),critical,0,0,0,new int[0],0);
+        if(!(total>0))return new Solved(Pool.Head.plain(n+1),null,job.temperature(),job.temperature(),critical,0,0,0,new int[0],0,null);
         checkpoint.run();
         var split=column.solve(inPot,job.stages(),job.reflux(),1,job.warm());
         checkpoint.run();
@@ -106,7 +108,7 @@ public final class StillHead {
             if(molar>0&&volume>0)fPerWatt=BatchStill.fFactor(split.topVapourRate()*molar,molar/volume,job.columnDiameter());
         }
         return new Solved(new Pool.Head(recovery,returnEnthalpy),split.profile(),split.headTemperature(),split.condensateTemperature(),critical,need,split.refluxRatio(),fPerWatt,
-                split.settlingTrays(),split.flashes());
+                split.settlingTrays(),split.flashes(),split.notice());
     }
 
     /**
