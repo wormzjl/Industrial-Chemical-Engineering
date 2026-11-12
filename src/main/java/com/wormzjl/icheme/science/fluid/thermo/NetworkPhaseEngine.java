@@ -56,7 +56,7 @@ final class NetworkPhaseEngine {
                 throw new IllegalStateException("Package "+packageId+": the network's crystals "+crystals+" are not the contract's competition "+competition);
             for(String id:crystals)solids.add(CrystalPhaseEvaluator.forPackage(catalog,packageId,id));
         }
-        return new NetworkPhaseEngine(new FluidTpEquilibrium(contract,evaluator,settings,null,solids),fluid.wet(),packageId);
+        return new NetworkPhaseEngine(new FluidTpEquilibrium(contract,evaluator,settings,solids),fluid.wet(),packageId);
     }
 
     /** {@code overall} (the network's conserved basis, water last) on the engine's basis: itself with water, the compounds

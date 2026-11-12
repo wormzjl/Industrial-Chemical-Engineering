@@ -1,7 +1,5 @@
 package com.wormzjl.icheme.science.thermo.phase;
 
-import com.wormzjl.icheme.science.column.v3.thermo.V3WaterProperties;
-import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.thermo.IdealGasFunction;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel;
@@ -148,9 +146,17 @@ final class PhaseTestSupport {
         return CubicPhaseEvaluator.fromPackage(pkg, pkg.components(), new double[pkg.components().size()], gas);
     }
 
+    /** The bundled network package's own contract (its PR78 compounds, no water) on {@link #networkEvaluator}. */
     static FluidTpEquilibrium networkService() {
-        var contract = PhaseContract.forNetworkPackage(MaterialCatalog.bundled(), NETWORK, ThermoIdentity.NO_SPINE);
-        return new FluidTpEquilibrium(contract, networkEvaluator(), FluidTpEquilibrium.Settings.DEFAULT, null);
+        return new FluidTpEquilibrium(PhaseContract.forPackage(MaterialCatalog.bundled(), NETWORK), networkEvaluator(),
+                FluidTpEquilibrium.Settings.DEFAULT);
+    }
+
+    /** {@code contract} qualified for fluid-only competition alone. */
+    static PhaseContract fluidOnly(PhaseContract contract) {
+        return new PhaseContract(contract.packageId(), contract.identity(), contract.components(), contract.water(),
+                contract.waterComponent(), Set.of(PhaseCompetition.FLUID_ONLY), contract.waterChemistrySpecies(),
+                contract.domain(), contract.fluidCoverage());
     }
 
     /** {@code settings} with other PH/UV search limits (the outer search's evaluation budget and step tolerance). */
@@ -162,69 +168,8 @@ final class PhaseTestSupport {
                 s.mergeTieLine(), s.mergeVolumeGap(), maximumOuterIterations, outerTolerance);
     }
 
-    /** The network contract with the network's own free water ({@link #networkFreeWater}). */
-    static FluidTpEquilibrium networkService(FreeWaterModel water) {
-        var contract = PhaseContract.forNetworkPackage(MaterialCatalog.bundled(), NETWORK, ThermoIdentity.NO_SPINE);
-        return new FluidTpEquilibrium(contract, networkEvaluator(), FluidTpEquilibrium.Settings.DEFAULT, water);
-    }
-
     /**
-     * The fluid network's free water as a {@link FreeWaterModel}, over the very methods {@code FluidThermodynamics.flashTP}
-     * and {@code state} use: its saturation pressure, its liquid water at (T, P), its ideal-gas steam enthalpy and its
-     * steam partial-pressure limit. The steam's heat capacity is the same Shomate polynomial's derivative
-     * ({@code V3WaterProperties.dVaporMolarEnthalpyDT}); its entropy is that polynomial's Shomate entropy, anchored at the
-     * standard entropy of water vapour, 188.835 J/(mol K) at 298.15 K and 1e5 Pa (CODATA key value), minus {@code R ln(P/1e5)}. Past the
-     * record's range the heat capacity is held at the end value and the entropy integrates it, as the network's steam
-     * (owner rule of 2026-10-16). W3b: the fluid network's model holds water in its cubic and has no free water, so the
-     * free-water rule's ice (anchored at the triple point to this liquid water, with this steam) and its steam
-     * partial-pressure limit ({@link #VAPOR_LIMIT_PRESSURES}) are built here, as that model built them before.
-     */
-    static FreeWaterModel networkFreeWater(FluidThermodynamics fluid) {
-        MaterialCatalog.Water water = network().water();
-        IdealGasFunction steam = new IdealGasFunction() {
-            private final double offset = 188.835 - shomateEntropy(298.15);
-            private final double minimum = water.triplePoint(), maximum = water.maximumTemperature();
-
-            private double end(double t) { return Math.max(minimum, Math.min(maximum, t)); }
-
-            private double shomateEntropy(double t) {
-                double x = t / 1000.0;
-                List<Double> c = water.shomate();
-                return c.get(0) * Math.log(x) + c.get(1) * x + c.get(2) * x * x / 2.0 + c.get(3) * x * x * x / 3.0
-                        - c.get(4) / (2.0 * x * x);
-            }
-
-            @Override public double heatCapacity(double t) { return V3WaterProperties.dVaporMolarEnthalpyDT(water, end(t)); }
-            @Override public double enthalpy(double t) { return fluid.vaporWaterEnthalpy(t); }
-            @Override public double entropy(double t, double p) {
-                double e = end(t);
-                return shomateEntropy(e) + offset + heatCapacity(e) * Math.log(t / e) - R * Math.log(p / 1.0e5);
-            }
-            @Override public double minimumTemperature() { return minimum; }
-            @Override public double maximumTemperature() { return maximum; }
-            public String revision() { return water.revision(); }
-        };
-        var iceData = water.ice();
-        var iceRecord = MaterialCatalog.bundled().crystals().get(iceData.crystal());
-        var triple = fluid.waterLiquid(iceRecord.anchor().temperature(), iceRecord.anchor().pressure());
-        FreeWaterIce freeWaterIce = FreeWaterIce.of(iceRecord, iceData.coefficients(), iceData.exponents(), fluid::saturationPressure,
-                triple.molarVolume(), triple.molarEnthalpy(), steam);
-        return new FreeWaterModel() {
-            public String revision() { return water.revision(); }
-            @Override public double saturationPressure(double t) { return fluid.saturationPressure(t); }
-            @Override public double vaporPartialPressureLimit(double t) { return vaporLimit(t); }
-            @Override public void liquid(double t, double p, double[] out) {
-                var liquid = fluid.waterLiquid(t, p);
-                out[0] = liquid.molarVolume();
-                out[1] = liquid.molarEnthalpy();
-            }
-            @Override public IdealGasFunction vapor() { return steam; }
-            @Override public FreeWaterIce ice() { return freeWaterIce; }
-        };
-    }
-
-    /**
-     * The free water's qualified steam partial pressure, Pa (the network's rule until W3b): each band holds the pressure
+     * The second-virial steam's qualified partial pressure, Pa (the free water's rule until W3b): each band holds the pressure
      * where the second-virial steam's volume first leaves 2 % of IAPWS-IF97 Region 2 at the band's lower temperature,
      * rounded down to two digits (1.8 MPa below 500 K to 65 MPa from 875 K).
      */

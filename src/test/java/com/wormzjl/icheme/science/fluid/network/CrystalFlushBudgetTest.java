@@ -100,7 +100,7 @@ class CrystalFlushBudgetTest {
         var formation = model.hydrocarbon.spine().orElseThrow().formationReference();
         energy = EnergyReference.sensible(formation.components()).rebase(energy, Arrays.copyOf(totals, totals.length - 1), formation);
         var engine = FluidTpEquilibrium.forPackage(CATALOG, PILOT);
-        var request = EquilibriumRequest.uv(energy, inventory.volume(), engine.contract().components(), totals, PhaseCompetition.FLUID_AND_CRYSTALS);
+        var request = EquilibriumRequest.uv(energy, inventory.volume(), engine.contract().components(), Arrays.copyOf(totals, totals.length - 1), PhaseCompetition.FLUID_AND_CRYSTALS);
         var cold = engine.uv(request, engine.newWorkspace());
         var warm = engine.uv(request, engine.newWorkspace(), s.temperature(), s.pressure());
         System.out.printf(Locale.ROOT, "row E vessel UV: cold %s %.9f K %d kernel evaluations; warm %.9f K %d kernel evaluations%n", cold.classification(),

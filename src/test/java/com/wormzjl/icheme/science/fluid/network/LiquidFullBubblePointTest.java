@@ -75,7 +75,7 @@ class LiquidFullBubblePointTest {
         double[] totals=inventory.moles();double energy=inventory.internalEnergy();
         var formation=model.hydrocarbon.spine().orElseThrow().formationReference();
         for(int i=0;i<totals.length-1;i++)energy+=totals[i]*formation.offsetJoulesPerMole(i);
-        var uv=engine.uv(EquilibriumRequest.uv(energy,inventory.volume(),engine.contract().components(),totals,PhaseCompetition.FLUID_ONLY),engine.newWorkspace());
+        var uv=engine.uv(EquilibriumRequest.uv(energy,inventory.volume(),engine.contract().components(),java.util.Arrays.copyOf(totals,totals.length-1),PhaseCompetition.FLUID_ONLY),engine.newWorkspace());
         assertEquals(EquilibriumResult.Classification.VAPOR_LIQUID,uv.classification(),uv.toString());
         double t=uv.phases().getFirst().temperature(),p=uv.phases().getFirst().pressure();
         assertEquals(t,node.state().temperature(),1e-9*t,"temperature");

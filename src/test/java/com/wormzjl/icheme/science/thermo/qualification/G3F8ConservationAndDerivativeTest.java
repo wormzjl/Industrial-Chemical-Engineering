@@ -43,7 +43,7 @@ import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 class G3F8ConservationAndDerivativeTest {
     static FluidTpEquilibrium engine() {
         var catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
-        return new FluidTpEquilibrium(PhaseContract.forNetworkPackage(catalog, PILOT), CubicPhaseEvaluator.forPackage(catalog, PILOT), FluidTpEquilibrium.Settings.DEFAULT, null);
+        return new FluidTpEquilibrium(PhaseContract.forPackage(catalog, PILOT), CubicPhaseEvaluator.forPackage(catalog, PILOT), FluidTpEquilibrium.Settings.DEFAULT);
     }
 
     static EquilibriumRequest tp(FluidTpEquilibrium engine, double t, double p, double[] z) {
@@ -54,8 +54,8 @@ class G3F8ConservationAndDerivativeTest {
     void tpPhUvRoundTripsConserve() {
         var engine = engine();
         var ws = engine.newWorkspace();
-        double[][] feeds = {{0.5, 0.5, 0, 0, 0}, {0, 0.6, 0.4, 0, 0}, {0.2, 0, 0, 0.8, 0}, {0, 0.7, 0, 0.3, 0}, {0.05, 0.8, 0.1, 0.05, 0},
-                {0.25, 0.25, 0.25, 0.25, 0}};
+        double[][] feeds = {{0.5, 0.5, 0, 0}, {0, 0.6, 0.4, 0}, {0.2, 0, 0, 0.8}, {0, 0.7, 0, 0.3}, {0.05, 0.8, 0.1, 0.05},
+                {0.25, 0.25, 0.25, 0.25}};
         double worstDefect = 0, worstT = 0, worstP = 0;
         int tp = 0, twoPhase = 0, band = 0, phCalls = 0, uvCalls = 0;
         List<String> failures = new ArrayList<>();
@@ -181,7 +181,7 @@ class G3F8ConservationAndDerivativeTest {
     void closedMethaneEthaneVesselsHeatAcrossTheirBubbleAndDewPoints() {
         var engine = engine();
         var ws = engine.newWorkspace();
-        double[] z = {0, 0.5, 0.5, 0, 0};
+        double[] z = {0, 0.5, 0.5, 0};
         var table = new Table("G3 F8 vessel", "Vessel", "V m3/mol", "Steps", "T K start -> end", "P MPa start -> end", "Phase counts seen",
                 "Crossing (T K, P MPa)", "Worst defect", "Worst spec residual", "Next step beyond 10 MPa");
         for (double vapourFraction : new double[] {0.03, 0.9}) {
@@ -269,7 +269,7 @@ class G3F8ConservationAndDerivativeTest {
             assertEquals(volume, state.volume(), 1e-8 * volume, "volume closes");
             previousT = state.temperature();
             // The engine's UV at the same (U, V): N2's formation enthalpy is zero, so the two datums coincide.
-            var uv = engine.uv(EquilibriumRequest.uv(u, volume, engine.contract().components(), n, PhaseCompetition.FLUID_ONLY), ws);
+            var uv = engine.uv(EquilibriumRequest.uv(u, volume, engine.contract().components(), java.util.Arrays.copyOf(n, 4), PhaseCompetition.FLUID_ONLY), ws);
             assertTrue(uv.converged(), uv.detail());
             worstEngineT = Math.max(worstEngineT, Math.abs(uv.phases().get(0).temperature() / state.temperature() - 1));
         }

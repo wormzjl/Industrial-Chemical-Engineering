@@ -99,20 +99,23 @@ class G3F9DataRangeBoundaryTest {
         spine("CO2 spine 90 K (WP3 extension)", evaluator, new double[] {0, 0, 0, 1}, Root.LIQUID, 90.0, 89.9, 1e5);
         spine("N2 spine to 6000 K (envelope 1200 K)", evaluator, new double[] {1, 0, 0, 0}, Root.VAPOR, 1500, 1500.5, 2e5);
 
-        // The engine's contract: the CO2-I crystal is research-only, so no competition with it is qualified (D8).
-        var engine = new FluidTpEquilibrium(PhaseContract.forNetworkPackage(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PILOT), evaluator, FluidTpEquilibrium.Settings.DEFAULT, null);
+        // A fluid-only contract of the package: no competition with the CO2-I crystal is qualified on it.
+        var whole = PhaseContract.forPackage(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PILOT);
+        var engine = new FluidTpEquilibrium(new PhaseContract(whole.packageId(), whole.identity(), whole.components(), whole.water(),
+                whole.waterComponent(), java.util.Set.of(PhaseCompetition.FLUID_ONLY), whole.waterChemistrySpecies(), whole.domain(),
+                whole.fluidCoverage()), evaluator, FluidTpEquilibrium.Settings.DEFAULT);
         var ews = engine.newWorkspace();
         var components = engine.contract().components();
-        var crystal = engine.tp(EquilibriumRequest.tp(180, 1e5, components, new double[] {0.99, 0, 0, 0.01, 0},
+        var crystal = engine.tp(EquilibriumRequest.tp(180, 1e5, components, new double[] {0.99, 0, 0, 0.01},
                 PhaseCompetition.withCrystals("icheme:crystal_carbon_dioxide_i")), ews);
         assertEquals(EquilibriumResult.Status.UNSUPPORTED, crystal.status());
         assertEquals(EquilibriumResult.UnsupportedReason.PHASE_COMPETITION_NOT_QUALIFIED, crystal.reason());
         table.row("CO2-I crystal (research-only record)", "pilot engine contract", "-", "competition with CO2-I at 180 K", crystal.status() + ", "
                 + crystal.reason());
         // Past the envelope the contract's answer is graded extrapolated, the envelope named; just inside it is not.
-        var below = engine.tp(EquilibriumRequest.tp(300, 9.95e6, components, new double[] {1, 0, 0, 0, 0}, PhaseCompetition.FLUID_ONLY), ews);
+        var below = engine.tp(EquilibriumRequest.tp(300, 9.95e6, components, new double[] {1, 0, 0, 0}, PhaseCompetition.FLUID_ONLY), ews);
         assertTrue(below.converged() && below.coverage().grade() != CoverageGrade.EXTRAPOLATED, below.coverage().toString());
-        var pressure = engine.tp(EquilibriumRequest.tp(300, 1.005e7, components, new double[] {1, 0, 0, 0, 0}, PhaseCompetition.FLUID_ONLY), ews);
+        var pressure = engine.tp(EquilibriumRequest.tp(300, 1.005e7, components, new double[] {1, 0, 0, 0}, PhaseCompetition.FLUID_ONLY), ews);
         assertTrue(pressure.converged(), pressure.detail());
         assertEquals(CoverageGrade.EXTRAPOLATED, pressure.coverage().grade());
         assertTrue(pressure.coverage().evidence().contains("extrapolated past the package envelope"), pressure.coverage().evidence());
@@ -123,7 +126,7 @@ class G3F9DataRangeBoundaryTest {
         double[] vessel = {0, 0.5, 0.5, 0};
         var beyond = open.tp(EquilibriumRequest.tp(283, 1.005e7, open.contract().components(), vessel, PhaseCompetition.FLUID_ONLY));
         var within = open.tp(EquilibriumRequest.tp(283, 9.95e6, open.contract().components(), vessel, PhaseCompetition.FLUID_ONLY));
-        double[] closed = {0, 0.5, 0.5, 0, 0};
+        double[] closed = {0, 0.5, 0.5, 0};
         var uvIn = engine.uv(EquilibriumRequest.uv(within.internalEnergy(), within.volume(), components, closed, PhaseCompetition.FLUID_ONLY), ews);
         assertTrue(uvIn.converged() && uvIn.coverage().grade() != CoverageGrade.EXTRAPOLATED, uvIn.detail());
         var uvOut = engine.uv(EquilibriumRequest.uv(beyond.internalEnergy(), beyond.volume(), components, closed, PhaseCompetition.FLUID_ONLY), ews);
@@ -135,7 +138,7 @@ class G3F9DataRangeBoundaryTest {
                 f("(U, V) of 283 K, 10.05 MPa: %.4g MPa", uvOut.phases().get(0).pressure() / 1e6), uvOut.coverage().grade()
                         + " (" + uvOut.diagnostics().outerIterations() + " TP equilibria)");
         // CO2 below its triple point as a fluid: inside its spine and the envelope, so not even extrapolated.
-        var co2Contract = engine.tp(EquilibriumRequest.tp(216.5, 1e5, components, new double[] {0, 0, 0, 1, 0}, PhaseCompetition.FLUID_ONLY), ews);
+        var co2Contract = engine.tp(EquilibriumRequest.tp(216.5, 1e5, components, new double[] {0, 0, 0, 1}, PhaseCompetition.FLUID_ONLY), ews);
         assertTrue(co2Contract.converged(), co2Contract.detail());
         assertNotEquals(CoverageGrade.EXTRAPOLATED, co2Contract.coverage().grade(), co2Contract.coverage().evidence());
         table.row("216.592 K, CO2 (no floor)", "pilot engine contract", "-", "216.5 K, 0.1 MPa", co2Contract.classification() + ", "

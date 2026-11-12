@@ -49,7 +49,7 @@ final class G5Support {
         double co2() { return z[CO2]; }
     }
 
-    static double[] z(double n2, double ch4, double c2h6, double co2) { return new double[] {n2, ch4, c2h6, co2, 0.0}; }
+    static double[] z(double n2, double ch4, double c2h6, double co2) { return new double[] {n2, ch4, c2h6, co2}; }
 
     static double number(String cell) { return cell.isBlank() || cell.equals("-") ? Double.NaN : Double.parseDouble(cell); }
 
@@ -246,7 +246,7 @@ final class G5Support {
      * of CH4 (1) or N2 (0). Null when no change lies between 1 kPa and 10 MPa.
      */
     static double[] threePhase(FluidTpEquilibrium service, double t, int partner, FluidTpEquilibrium.Workspace ws) {
-        double[] feed = new double[5];
+        double[] feed = new double[4];
         feed[CO2] = 0.95;
         feed[partner] = 0.05;
         double lo = Math.log(1e3), hi = Math.log(0.9999e7);

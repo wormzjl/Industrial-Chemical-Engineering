@@ -35,10 +35,6 @@ public final class ThermoIdentity {
     public static final String NO_SPINE = "spine:none";
     /** The water model revision of a package without water. */
     public static final String NO_WATER = "water:none";
-    /** The formulation label of the separate free-water approximation; bumped when its equations change (v2: ice Ih below
-     * the melting line, WP4 of batch 2026-09-24-coolprop-low-temperature; v3: the steam a second-virial gas from
-     * IAPWS-IF97 Region 2, {@link SteamVirial}, batch 2026-10-27-heat-exchanger-design). */
-    public static final String SEPARATE_FREE_WATER_FORMULATION = "separate-free-water-v3";
     /**
      * The formulation label of water as a component of the cubic with its IF97 share (batch 2026-11-11-aqueous-solvents,
      * W3a decision D6); the water part is {@code water-in-eos-v1:<water dataset revision>:<share revision>}.
@@ -62,14 +58,13 @@ public final class ThermoIdentity {
                 + part(this.waterModelRevision);
     }
 
-    /** The identity of a catalog package evaluated by {@code evaluatorFamily} with {@code water} participation. */
-    public static ThermoIdentity of(MaterialCatalog catalog, String packageId, String evaluatorFamily,
-                                    String spineRevision, WaterParticipation water) {
-        Objects.requireNonNull(water, "water");
-        MaterialCatalog.Package propertyPackage = catalog.requirePackage(packageId);
-        String waterRevision = water == WaterParticipation.NONE ? NO_WATER
-                : SEPARATE_FREE_WATER_FORMULATION + ":" + propertyPackage.water().revision();
-        return new ThermoIdentity(catalog.fluidRevision(packageId), evaluatorFamily, spineRevision, waterRevision);
+    /**
+     * The identity of a catalog package without water evaluated by {@code evaluatorFamily}; a package with water in its
+     * cubic names its water part itself ({@link PhaseContract#forDerived}).
+     */
+    public static ThermoIdentity of(MaterialCatalog catalog, String packageId, String evaluatorFamily, String spineRevision) {
+        catalog.requirePackage(packageId);
+        return new ThermoIdentity(catalog.fluidRevision(packageId), evaluatorFamily, spineRevision, NO_WATER);
     }
 
     public String packageRevision() { return packageRevision; }

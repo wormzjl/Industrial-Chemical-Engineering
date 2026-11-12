@@ -78,7 +78,7 @@ class CrystalDepositionIslandTest {
         double[] totals=species(inventory);
         var formation=model.hydrocarbon.spine().orElseThrow().formationReference();
         double energy=EnergyReference.sensible(formation.components()).rebase(trueEnergy(inventory),Arrays.copyOf(totals,totals.length-1),formation);
-        return engine.uv(EquilibriumRequest.uv(energy,inventory.volume(),engine.contract().components(),totals,PhaseCompetition.FLUID_AND_CRYSTALS),engine.newWorkspace());
+        return engine.uv(EquilibriumRequest.uv(energy,inventory.volume(),engine.contract().components(),Arrays.copyOf(totals,totals.length-1),PhaseCompetition.FLUID_AND_CRYSTALS),engine.newWorkspace());
     }
     private static double solid(EquilibriumResult result) {
         double solid=0;for(var phase:result.phases())if(phase.kind()==PhaseKind.SOLID)solid+=phase.amount(CO2);return solid;

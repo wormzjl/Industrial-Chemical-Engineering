@@ -17,7 +17,7 @@ import java.util.Set;
  *
  * <p>Rules the constructor enforces:</p>
  * <ul>
- *   <li>Water: {@link WaterParticipation#NONE} names no water component; {@link WaterParticipation#SEPARATE_FREE_WATER}
+ *   <li>Water: {@link WaterParticipation#NONE} names no water component; {@link WaterParticipation#IN_EQUATION_OF_STATE}
  *   names one in the basis. {@link #waterChemistrySpecies()} lie in the basis and are not the water itself.</li>
  *   <li>Competitions: at least one.</li>
  *   <li>The domain names exactly the basis.</li>
@@ -29,7 +29,7 @@ import java.util.Set;
  * @param waterComponent the id of water in {@code components}, {@code null} for {@link WaterParticipation#NONE}
  * @param qualifiedCompetitions each competition the package is qualified for, as a whole
  * @param waterChemistrySpecies species whose presence together with water needs aqueous chemistry (ammonia and the
- *        like), refused under {@link WaterParticipation#SEPARATE_FREE_WATER}
+ *        like), refused where water is present
  * @param fluidCoverage the grade and evidence of a converged fluid-phase answer inside the envelope
  */
 public record PhaseContract(String packageId, ThermoIdentity identity, List<String> components,
@@ -46,7 +46,7 @@ public record PhaseContract(String packageId, ThermoIdentity identity, List<Stri
         Objects.requireNonNull(water, "water");
         if ((water == WaterParticipation.NONE) != (waterComponent == null)
                 || waterComponent != null && !components.contains(waterComponent)) {
-            throw new IllegalArgumentException("Separate free water names its basis component; no water names none");
+            throw new IllegalArgumentException("Water in the basis names its component; no water names none");
         }
         qualifiedCompetitions = Set.copyOf(qualifiedCompetitions);
         if (qualifiedCompetitions.isEmpty()) throw new IllegalArgumentException("A package qualifies at least one competition");
@@ -63,55 +63,29 @@ public record PhaseContract(String packageId, ThermoIdentity identity, List<Stri
     }
 
     /**
-     * The fluid network package: its PR78 components followed by {@code Water} as separate free water, qualified for
-     * fluid-only competition, the network's envelope ({@link FluidDomain}), no water-chemistry species (the bundled packages hold
-     * hydrocarbons and nitrogen only), graded estimated-with-declared-error.
+     * The package's contract for the equilibrium engine: a package with water in its cubic on its derived contract
+     * ({@link #forDerivedPackage}); any other its PR78 components without water, qualified for fluid-only competition and
+     * for the competition of the fluid phases with every crystal the package admits ({@link #admittedCrystals}), as one
+     * whole set, the package envelope ({@link FluidDomain}), graded estimated-with-declared-error, its identity with the
+     * package's spine ({@link ThermoIdentity#NO_SPINE} without one) and no water. A package that admits no crystal gets the
+     * fluid-only contract, so a crystal request on it is refused as not qualified.
      */
-    public static PhaseContract forNetworkPackage(MaterialCatalog catalog, String packageId, String spineRevision) {
+    public static PhaseContract forPackage(MaterialCatalog catalog, String packageId) {
         var propertyPackage = catalog.requirePackage(packageId);
-        // W3b: a package that carries Water in its cubic has no separate free water; its contract is the derived one.
-        if (propertyPackage.components().contains(CubicPhaseEvaluator.WATER))
-            throw new IllegalArgumentException("Package " + packageId + " carries Water in its cubic: its contract is forDerivedPackage");
-        List<String> basis = new ArrayList<>(propertyPackage.components());
-        basis.add("Water");
-        var identity = ThermoIdentity.of(catalog, packageId, CubicPhaseEvaluator.FAMILY, spineRevision,
-                WaterParticipation.SEPARATE_FREE_WATER);
+        if (propertyPackage.components().contains(CubicPhaseEvaluator.WATER)) return forDerivedPackage(catalog, packageId);
+        List<String> basis = List.copyOf(propertyPackage.components());
+        String spine = catalog.spineRevision(packageId);
+        var identity = ThermoIdentity.of(catalog, packageId, CubicPhaseEvaluator.FAMILY, spine.isEmpty() ? ThermoIdentity.NO_SPINE : spine);
         var domain = PhaseDomain.of(FluidDomain.of(catalog, packageId), basis);
         var coverage = new EquilibriumResult.Coverage(EquilibriumResult.CoverageGrade.ESTIMATED_DECLARED_ERROR,
                 "PR78 with constant volume translation, every phase at the state pressure (P1: liquid density within "
                         + "2.6 % mean per isobar to 10 MPa for N2, CH4, C2H6, CO2 outside the critical band); the "
                         + "declared critical band is graded research-only by the engine (P3); the package's advisory evidence applies");
-        return new PhaseContract(packageId, identity, basis, WaterParticipation.SEPARATE_FREE_WATER, "Water",
-                Set.of(PhaseCompetition.FLUID_ONLY), Set.of(), domain, coverage);
-    }
-
-    /**
-     * The fluid network package's contract with the package's own spine: {@link #forNetworkPackage(MaterialCatalog,
-     * String, String)} with the package's {@link MaterialCatalog#spineRevision}, or {@link ThermoIdentity#NO_SPINE} without one.
-     * The identity is the engine's ({@link CubicPhaseEvaluator#FAMILY}); the package's crystals, if any, are not
-     * qualified here (the network requests fluid-only competition until its crystal inventory exists; {@link #forPackage}
-     * is the contract with the package's crystal set).
-     */
-    public static PhaseContract forNetworkPackage(MaterialCatalog catalog, String packageId) {
-        String spine = catalog.spineRevision(packageId);
-        return forNetworkPackage(catalog, packageId, spine.isEmpty() ? ThermoIdentity.NO_SPINE : spine);
-    }
-
-    /**
-     * The package's contract for the equilibrium engine with its crystals: {@link #forNetworkPackage(MaterialCatalog, String)}
-     * qualified in addition for the competition of the fluid phases with every crystal the package admits
-     * ({@link #admittedCrystals}), as one whole set. A package that admits no crystal gets the fluid-only contract, so a
-     * crystal request on it is refused as not qualified.
-     */
-    public static PhaseContract forPackage(MaterialCatalog catalog, String packageId) {
-        if (catalog.requirePackage(packageId).components().contains(CubicPhaseEvaluator.WATER)) return forDerivedPackage(catalog, packageId);
-        PhaseContract fluid = forNetworkPackage(catalog, packageId);
+        var competitions = new HashSet<PhaseCompetition>();
+        competitions.add(PhaseCompetition.FLUID_ONLY);
         List<String> crystals = admittedCrystals(catalog, packageId);
-        if (crystals.isEmpty()) return fluid;
-        var competitions = new HashSet<>(fluid.qualifiedCompetitions());
-        competitions.add(PhaseCompetition.withCrystals(crystals.toArray(String[]::new)));
-        return new PhaseContract(fluid.packageId(), fluid.identity(), fluid.components(), fluid.water(), fluid.waterComponent(),
-                competitions, fluid.waterChemistrySpecies(), fluid.domain(), fluid.fluidCoverage());
+        if (!crystals.isEmpty()) competitions.add(PhaseCompetition.withCrystals(crystals.toArray(String[]::new)));
+        return new PhaseContract(packageId, identity, basis, WaterParticipation.NONE, null, competitions, Set.of(), domain, coverage);
     }
 
     /**

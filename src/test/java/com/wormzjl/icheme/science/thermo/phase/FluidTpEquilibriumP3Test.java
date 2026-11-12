@@ -8,7 +8,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.wormzjl.icheme.fluid.support.FluidTestSupport;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.thermo.IdealGasFunction;
@@ -72,7 +71,7 @@ class FluidTpEquilibriumP3Test {
 
     private static FluidTpEquilibrium binary() {
         var evaluator = PhaseTestSupport.methaneNitrogen();
-        return new FluidTpEquilibrium(PhaseTestSupport.openContract(evaluator), evaluator, FluidTpEquilibrium.Settings.DEFAULT, null);
+        return new FluidTpEquilibrium(PhaseTestSupport.openContract(evaluator), evaluator, FluidTpEquilibrium.Settings.DEFAULT);
     }
 
     private static EquilibriumRequest request(State s) {
@@ -154,7 +153,7 @@ class FluidTpEquilibriumP3Test {
     @Test
     void aFailureInsideTheBandIsTypedCriticalBand() {
         var evaluator = PhaseTestSupport.methaneNitrogen();
-        var service = new FluidTpEquilibrium(PhaseTestSupport.openContract(evaluator), evaluator, settings(1, 1, 1.0e-8, 1.0e-2), null);
+        var service = new FluidTpEquilibrium(PhaseTestSupport.openContract(evaluator), evaluator, settings(1, 1, 1.0e-8, 1.0e-2));
         var nearCritical = new State(150.0, 4.56e6, 0.67, 'b');
         var ordinary = new State(110.0, 0.5e6, 0.5, 'x');
         var inside = service.tp(request(nearCritical));
@@ -185,14 +184,6 @@ class FluidTpEquilibriumP3Test {
             requests.add(request(failures.get(k)));
             services.add(service);
         }
-        var wet = PhaseTestSupport.networkService(PhaseTestSupport.networkFreeWater(FluidTestSupport.networkModel()));
-        double[] crude = PhaseTestSupport.crudeWithNitrogen(wet.contract());
-        for (double[] state : new double[][] {{350.0, 1.0e6, 1.0}, {350.0, 1.0e6, 1.0e-3}, {700.0, 1.3e6, 1.0e-3}}) {
-            double[] feed = crude.clone();
-            feed[wet.contract().waterIndex()] = state[2];
-            requests.add(EquilibriumRequest.tp(state[0], state[1], wet.contract().components(), feed, PhaseCompetition.FLUID_ONLY));
-            services.add(wet);
-        }
         List<EquilibriumResult> fresh = new ArrayList<>();
         for (int k = 0; k < requests.size(); k++) fresh.add(services.get(k).tp(requests.get(k)));
         var reused = new java.util.IdentityHashMap<FluidTpEquilibrium, FluidTpEquilibrium.Workspace>();
@@ -218,7 +209,7 @@ class FluidTpEquilibriumP3Test {
         var contract = PhaseTestSupport.openContract(evaluator);
         var state = new State(150.0, 4.56e6, 0.67, 'b');
         double[] z = {1.0 - state.nitrogen(), state.nitrogen()};
-        var merged = new FluidTpEquilibrium(contract, evaluator, settings(50, 50, 1.0, 10.0), null).tp(request(state));
+        var merged = new FluidTpEquilibrium(contract, evaluator, settings(50, 50, 1.0, 10.0)).tp(request(state));
         assertEquals(Status.CONVERGED, merged.status(), merged.toString());
         assertEquals(Classification.SINGLE_FLUID, merged.classification());
         assertEquals(1, merged.phases().size());
@@ -228,9 +219,9 @@ class FluidTpEquilibriumP3Test {
         assertEquals(TangentPlaneStability.Verdict.UNSTABLE, merged.diagnostics().feedVerdict(), "the test's verdict is kept");
         assertEquals(CoverageGrade.RESEARCH_ONLY, merged.coverage().grade());
         assertEquals(0.0, merged.conservationDefect(z));
-        var noVolume = new FluidTpEquilibrium(contract, evaluator, settings(50, 50, 1.0, 1.0e-6), null).tp(request(state));
+        var noVolume = new FluidTpEquilibrium(contract, evaluator, settings(50, 50, 1.0, 1.0e-6)).tp(request(state));
         assertEquals(Classification.VAPOR_LIQUID, noVolume.classification());
-        var noTieLine = new FluidTpEquilibrium(contract, evaluator, settings(50, 50, 1.0e-8, 10.0), null).tp(request(state));
+        var noTieLine = new FluidTpEquilibrium(contract, evaluator, settings(50, 50, 1.0e-8, 10.0)).tp(request(state));
         assertEquals(Classification.VAPOR_LIQUID, noTieLine.classification());
     }
 
@@ -303,7 +294,7 @@ class FluidTpEquilibriumP3Test {
         var catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
         String pilotId = "icheme:pilot_cryogenic";
         var network = PhaseTestSupport.networkService();
-        var pilot = new FluidTpEquilibrium(PhaseContract.forNetworkPackage(catalog, pilotId), CubicPhaseEvaluator.forPackage(catalog, pilotId), FluidTpEquilibrium.Settings.DEFAULT, null);
+        var pilot = new FluidTpEquilibrium(PhaseContract.forPackage(catalog, pilotId), CubicPhaseEvaluator.forPackage(catalog, pilotId), FluidTpEquilibrium.Settings.DEFAULT);
         record Grid(String name, FluidTpEquilibrium service, String species, double from, double to) {}
         List<Grid> grids = List.of(
                 new Grid("network", network, "Nitrogen", 300.0, 900.0),
@@ -488,7 +479,7 @@ class FluidTpEquilibriumP3Test {
     /** The pilot package's engine on its network contract (the G3 families' engine). */
     private static FluidTpEquilibrium pilot() {
         var catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
-        return new FluidTpEquilibrium(PhaseContract.forNetworkPackage(catalog, PILOT), CubicPhaseEvaluator.forPackage(catalog, PILOT), FluidTpEquilibrium.Settings.DEFAULT, null);
+        return new FluidTpEquilibrium(PhaseContract.forPackage(catalog, PILOT), CubicPhaseEvaluator.forPackage(catalog, PILOT), FluidTpEquilibrium.Settings.DEFAULT);
     }
 
     /** A TP request on {@code engine}'s contract basis; {@code amounts} in basis order (missing trailing entries zero). */
@@ -532,7 +523,7 @@ class FluidTpEquilibriumP3Test {
                 "both tests counted: " + result.diagnostics().kernelEvaluations());
         assertFalse(result.diagnostics().criticalBand(), "no stationary point next to the feed: outside the band by its rules");
         assertEquals(CoverageGrade.ESTIMATED_DECLARED_ERROR, result.coverage().grade());
-        assertTrue(result.conservationDefect(new double[] {x, 1.0 - x, 0.0, 0.0, 0.0}) < 1.0e-15);
+        assertTrue(result.conservationDefect(new double[] {x, 1.0 - x, 0.0, 0.0}) < 1.0e-15);
 
         // Brute force: D(w) = sum_i w_i (ln w_i + ln phi_i(w) - d_i) on the lower of both roots at every trial composition.
         var ws = kernel.newWorkspace();
@@ -684,7 +675,7 @@ class FluidTpEquilibriumP3Test {
     void twoLiquidLikePhasesOutsideTheBandAreLiquidLiquid() {
         var catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
         var evaluator = CubicPhaseEvaluator.forPackage(catalog, PILOT);
-        var research = new FluidTpEquilibrium(PhaseTestSupport.openContract(evaluator), evaluator, FluidTpEquilibrium.Settings.DEFAULT, null);
+        var research = new FluidTpEquilibrium(PhaseTestSupport.openContract(evaluator), evaluator, FluidTpEquilibrium.Settings.DEFAULT);
         for (double[] s : new double[][] {{91.0, 2.0e6}, {95.0, 0.5e6}, {100.0, 2.0e6}}) {
             var q = request(research, s[0], s[1], 0.0, 0.99, 0.0, 0.01);
             var r = research.tp(q);
@@ -704,7 +695,7 @@ class FluidTpEquilibriumP3Test {
         for (double kij : new double[] {0.3, 0.0}) {
             var synthetic = new CubicPhaseEvaluator("test:synthetic-lle", components, new double[][] {{0.0, kij}, {kij, 0.0}},
                     new double[2], gas);
-            var service = new FluidTpEquilibrium(PhaseTestSupport.openContract(synthetic), synthetic, FluidTpEquilibrium.Settings.DEFAULT, null);
+            var service = new FluidTpEquilibrium(PhaseTestSupport.openContract(synthetic), synthetic, FluidTpEquilibrium.Settings.DEFAULT);
             var q = request(service, 110.0, 3.0e6, 0.5, 0.5);
             var r = service.tp(q);
             if (kij > 0.0) {
@@ -848,7 +839,6 @@ class FluidTpEquilibriumP3Test {
         assertEquals(d.derivativeEvaluations(), e.derivativeEvaluations());
         assertEquals(Double.doubleToRawLongBits(d.tieLine()), Double.doubleToRawLongBits(e.tieLine()));
         assertEquals(Double.doubleToRawLongBits(d.fugacityResidual()), Double.doubleToRawLongBits(e.fugacityResidual()));
-        if (expected.freeWater() != null) assertEquals(expected.freeWater(), actual.freeWater());
     }
 
     private static long[] bits(double[] values) {

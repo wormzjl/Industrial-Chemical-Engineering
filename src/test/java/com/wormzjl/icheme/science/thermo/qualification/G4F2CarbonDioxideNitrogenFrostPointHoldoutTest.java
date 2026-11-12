@@ -59,7 +59,7 @@ class G4F2CarbonDioxideNitrogenFrostPointHoldoutTest {
 
     /** One frost point: dataset, isotherm T (K), P (Pa), y_CO2 and the transcription's origin or flag. */
     record Point(String dataset, double temperature, double pressure, double y, String origin) {
-        double[] feed() { return new double[] {1 - y, 0, 0, y, 0}; }
+        double[] feed() { return new double[] {1 - y, 0, 0, y}; }
     }
 
     static List<Point> sonntag() {

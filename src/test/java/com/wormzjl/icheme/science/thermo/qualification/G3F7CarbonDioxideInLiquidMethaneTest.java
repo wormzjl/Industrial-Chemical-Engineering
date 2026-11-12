@@ -36,7 +36,7 @@ class G3F7CarbonDioxideInLiquidMethaneTest {
         var catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
         var evaluator = CubicPhaseEvaluator.forPackage(catalog, PILOT);
         FluidTpEquilibrium research = researchEngine(evaluator, "pilot-co2-in-liquid-methane");
-        var production = new FluidTpEquilibrium(PhaseContract.forNetworkPackage(catalog, PILOT), evaluator, FluidTpEquilibrium.Settings.DEFAULT, null);
+        var production = new FluidTpEquilibrium(PhaseContract.forPackage(catalog, PILOT), evaluator, FluidTpEquilibrium.Settings.DEFAULT);
         var ws = research.newWorkspace();
         var productionWs = production.newWorkspace();
         var spine = catalog.requireSpine(PILOT, "CarbonDioxide");
@@ -76,7 +76,7 @@ class G3F7CarbonDioxideInLiquidMethaneTest {
                     double lnPhi = state.logFugacityCoefficient(3);
                     // The engine on the fluid-only network contract answers the same phase (no freezing-point floor since the
                     // owner rule of 2026-10-16); the pilot network (its crystal competition) answers since P5 (checked below).
-                    var contract = production.tp(EquilibriumRequest.tp(t, p, production.contract().components(), new double[] {0, 1 - x, 0, x, 0},
+                    var contract = production.tp(EquilibriumRequest.tp(t, p, production.contract().components(), new double[] {0, 1 - x, 0, x},
                             PhaseCompetition.FLUID_ONLY), productionWs);
                     assertTrue(contract.converged(), contract.detail());
                     assertEquals(result.classification(), contract.classification());
@@ -111,10 +111,10 @@ class G3F7CarbonDioxideInLiquidMethaneTest {
         for (double t : new double[] {91, 95, 100, 110, 120}) {
             for (double p : new double[] {0.5e6, 2e6}) {
                 for (double x : new double[] {1e-4, 1e-3, 1e-2}) {
-                    double[] z = {0, 1 - x, 0, x, 0};
+                    double[] z = {0, 1 - x, 0, x};
                     var r = engine.tp(EquilibriumRequest.tp(t, p, basis, z, PhaseCompetition.FLUID_AND_CRYSTALS), ws);
                     assertTrue(r.converged(), t + " K " + p + " Pa x " + x + ": " + r.detail());
-                    var state = pilot().flashTP(t, p, z, () -> { });
+                    var state = pilot().flashTP(t, p, java.util.Arrays.copyOf(z, 5), () -> { });
                     assertTrue(TestPhases.liquidProperties(state) != null, "the pilot network adopts the liquid: " + t + " K " + p + " Pa x " + x);
                     answered++;
                     worstConservation = Math.max(worstConservation, r.conservationDefect(z));
@@ -124,7 +124,7 @@ class G3F7CarbonDioxideInLiquidMethaneTest {
                         var solid = r.phases().get(1);
                         double mu = Math.abs(liquid.state().chemicalPotential(3) - solid.state().molarGibbsEnergy()) / (8.31446261815324 * t);
                         worstMu = Math.max(worstMu, mu);
-                        double[] y = new double[5];
+                        double[] y = new double[4];
                         double n = liquid.total();
                         for (int i = 0; i < 4; i++) y[i] = liquid.amount(i) / n;
                         var onset = engine.freezingTemperature(null, p, basis, y, ws);
@@ -149,7 +149,7 @@ class G3F7CarbonDioxideInLiquidMethaneTest {
         // The solubility at the data's temperatures (the rows above are 110 and 120 K): the liquid beside the crystal.
         var solubility = new Table("G3 F7 solubility against Shen 2012 / Gao 2012", "T K", "P MPa", "x_CO2 engine", "x_CO2 data", "ratio");
         for (double[] data : SOLUBILITY) {
-            var r = engine.tp(EquilibriumRequest.tp(data[0], 1e6, basis, new double[] {0, 0.99, 0, 0.01, 0}, PhaseCompetition.FLUID_AND_CRYSTALS), ws);
+            var r = engine.tp(EquilibriumRequest.tp(data[0], 1e6, basis, new double[] {0, 0.99, 0, 0.01}, PhaseCompetition.FLUID_AND_CRYSTALS), ws);
             assertEquals(EquilibriumResult.Classification.LIQUID_SOLID, r.classification(), r.toString());
             double xs = r.phases().get(0).state().moleFraction(3);
             solubility.row(number(data[0]), "1.0", f("%.4g", xs), f("%.4g", data[1]), f("%.3f", xs / data[1]));

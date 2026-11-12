@@ -129,16 +129,15 @@ class SpinePackageEvaluatorTest {
     @Test
     void theContractCarriesThePackageSpineWaterAndCompetition() {
         var catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
-        var pilot = catalog.requirePackage(PILOT);
-        var contract = PhaseContract.forNetworkPackage(catalog, PILOT);
+        var contract = PhaseContract.forPackage(catalog, PILOT);
         assertEquals(catalog.spineRevision(PILOT), contract.identity().spineRevision());
         assertEquals(CubicPhaseEvaluator.FAMILY, contract.identity().evaluatorFamily());
         assertEquals(catalog.fluidRevision(PILOT), contract.identity().packageRevision());
-        assertEquals(WaterParticipation.SEPARATE_FREE_WATER, contract.water());
-        assertEquals(ThermoIdentity.SEPARATE_FREE_WATER_FORMULATION + ":" + pilot.water().revision(), contract.identity().waterModelRevision());
-        assertEquals(Set.of(PhaseCompetition.FLUID_ONLY), contract.qualifiedCompetitions(),
-                "the research-only CO2-I crystal qualifies no competition");
-        assertEquals(java.util.List.of("Nitrogen", "Methane", "Ethane", "CarbonDioxide", "Water"), contract.components());
+        assertEquals(WaterParticipation.NONE, contract.water());
+        assertEquals(ThermoIdentity.NO_WATER, contract.identity().waterModelRevision());
+        assertEquals(Set.of(PhaseCompetition.FLUID_ONLY, PhaseCompetition.withCrystals(PhaseContract.admittedCrystals(catalog, PILOT).toArray(String[]::new))),
+                contract.qualifiedCompetitions(), "fluid-only and the admitted crystals as one set");
+        assertEquals(java.util.List.of("Nitrogen", "Methane", "Ethane", "CarbonDioxide"), contract.components());
         // The network's own identity is the same package on the derived family (W3b): a different revision.
         var network = FluidTestSupport.model(catalog, PILOT).hydrocarbon;
         var networkIdentity = PhaseContract.forDerived(catalog, PILOT, network.evaluator()).identity();
@@ -147,13 +146,11 @@ class SpinePackageEvaluatorTest {
         assertTrue(networkIdentity.packageRevision().startsWith(contract.identity().packageRevision() + ";"), networkIdentity.packageRevision());
         assertEquals(contract.identity().spineRevision(), networkIdentity.spineRevision());
         assertNotEquals(contract.identity().revision(), networkIdentity.revision());
-        // A package without a spine: the overload is the P2 form with NO_SPINE.
-        // (W3b: the network package carries water in its cubic and takes the derived contract; a crude package stands in.)
-        var bundled = PhaseContract.forNetworkPackage(catalog, "icheme:tjl20_methane_nitrogen");
-        var explicit = PhaseContract.forNetworkPackage(catalog, "icheme:tjl20_methane_nitrogen", ThermoIdentity.NO_SPINE);
-        assertEquals(explicit.identity().revision(), bundled.identity().revision());
-        assertEquals(explicit.components(), bundled.components());
-        assertEquals(explicit.qualifiedCompetitions(), bundled.qualifiedCompetitions());
+        // A package without a spine names NO_SPINE (W3b: the network package carries water in its cubic and takes the
+        // derived contract; a crude package stands in).
+        var bundled = PhaseContract.forPackage(catalog, "icheme:tjl20_methane_nitrogen");
+        assertEquals(ThermoIdentity.of(catalog, "icheme:tjl20_methane_nitrogen", CubicPhaseEvaluator.FAMILY, ThermoIdentity.NO_SPINE),
+                bundled.identity());
         assertEquals(ThermoIdentity.NO_SPINE, bundled.identity().spineRevision());
     }
 
