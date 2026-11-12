@@ -3482,6 +3482,8 @@ public final class ProcessUnit {
         static final double POT_X = 1.5, POT_Z = 1.5, SPOUT_X = 3.5;
         /** The line (frame z) of the condenser's cold end: the reflux pot, the valve, the sight glass and the spout's drop. */
         static final double COLD_END = .75;
+        /** The condenser shell's front and back ends along the frame's z (its channels reach 0.2 m past them). */
+        static final double SHELL_FRONT = .6, SHELL_BACK = 1.85;
         static StillPlan of(EquipmentShape shape) {
             var o = shape.still();
             // The setting: 0.35 m of brick round the pot; the right column leaves the burner's line at least 0.46 m.
@@ -3525,6 +3527,11 @@ public final class ProcessUnit {
         /** The lowest cell centre at or over {@code y}, where a nozzle's centre line runs. */
         static double rowAtLeast(double y) {
             return Math.ceil(y - .5 - 1e-9) + .5;
+        }
+
+        /** The gooseneck's centre line height, from the helmet or the column's top over to the condenser: 0.25 m over its shell. */
+        double gooseneck() {
+            return condenser + shell + .25;
         }
 
         /** The pot's radius at height {@code y}: its shell's, its head's over the tangent line, 0 outside the pot. */
@@ -3711,7 +3718,7 @@ public final class ProcessUnit {
         double d = p.d(), x = StillPlan.POT_X, z = StillPlan.POT_Z;
         boolean column = p.options().column();
         double neck = column ? p.columnTop() + p.column() / 2 : p.helmetTop();
-        double yk = p.condenser(), rk = p.shell(), ra = p.arm(), cx = StillPlan.SPOUT_X, zc = StillPlan.COLD_END, sz0 = .6, sz1 = 1.85, ch0 = .4, ch1 = 2.25;
+        double yk = p.condenser(), rk = p.shell(), ra = p.arm(), cx = StillPlan.SPOUT_X, zc = StillPlan.COLD_END, sz0 = StillPlan.SHELL_FRONT, sz1 = StillPlan.SHELL_BACK, ch0 = .4, ch1 = 2.25;
         var along = Frame.of(new double[]{cx, yk, 0}, 2, 1);
         var shell = p.finish();
         mesh.prism(along, rk, sz0, sz1, sides(2 * rk), shell);
@@ -3722,7 +3729,7 @@ public final class ProcessUnit {
         for (double at : new double[]{sz0, sz1}) mesh.ring(along, .9 * rk, rk + .025, at - .02, at + .02, 12, 3, shell);
         solids.add(Solid.rod(new double[]{cx, yk, 0}, 2, ch0, ch1, rk + .025, 0));
         round(new double[]{cx, yk, 0}, 2, sz0, sz1, rk);
-        double yg = yk + rk + .25;
+        double yg = p.gooseneck();
         line(ra, 12, p.line(), new double[]{x, neck - .02, z}, new double[]{x, yg, z}, new double[]{cx, yg, z}, new double[]{cx, yk + rk - .02, z});
         // Cooling water in at the cold front end, from under its channel a row under the condenser (a free block from the
         // vent's flange a row over it), out at the back end.

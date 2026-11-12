@@ -3492,5 +3492,13 @@
   "gui.icheme.control.sensor_equipment": "Equipment: %s",
   "gui.icheme.control.location_unknown": "Location unavailable",
   "gui.icheme.equipment_constructor.rated_speed": "Rated speed",
-  "gui.icheme.equipment_constructor.rated_speed.hint": "Shaft speed at the rated design point, in rpm. The connected driver determines the running speed."
+  "gui.icheme.equipment_constructor.rated_speed.hint": "Shaft speed at the rated design point, in rpm. The connected driver determines the running speed.",
+  "tutorial.icheme.film.still_inside": "Inside the still",
+  "tutorial.icheme.film.still_inside.s1": "A still has three parts: a pot that holds the crude oil, a fire under the pot, and a cooler above them.",
+  "tutorial.icheme.film.still_inside.s2": "Crude oil is a mix of many liquids; here the colours stand for its light, middle and heavy parts.",
+  "tutorial.icheme.film.still_inside.s3": "With the fire on, the light part boils off first, rises as vapour and turns back to liquid in the cooler.",
+  "tutorial.icheme.film.back": "Back",
+  "tutorial.icheme.film.next": "Next",
+  "tutorial.icheme.film.close": "Close",
+  "tutorial.icheme.film.replay": "Replay"
 }
