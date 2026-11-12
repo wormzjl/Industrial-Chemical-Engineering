@@ -948,6 +948,154 @@ class PengRobinsonKernelHuronVidalTest {
         assertTrue(worst < 0.05, worstAt + ": " + worst);
     }
 
+    /**
+     * KERNEL_COST_PLAN.md Part A, the gate: on the refinery network's list, a workspace that carries a support (its
+     * feed's compounds) gives every output on the support bit for bit as the whole-list workspace does, at a liquid and a
+     * vapour root, for five supports; outside the support every output is zero (NaN under the test switch), an amount
+     * outside it is refused, and one workspace and one output reused across the supports, in both directions, agree too.
+     */
+    @Test void aCarriedSupportKeepsEveryOutputOnItBitForBit() {
+        var model = com.wormzjl.icheme.fluid.support.FluidTestSupport.networkModel().hydrocarbon;
+        PengRobinsonKernel kernel = model.evaluator().kernel();
+        List<String> species = model.species();
+        int n = kernel.componentCount();
+        assertEquals(species.size(), n);
+        assertTrue(kernel.hasExcessPairs(), "the network list has NRTL cells");
+        int water = species.indexOf("Water"), nitrogen = species.indexOf("Nitrogen");
+        int ethanol = species.indexOf("Ethanol"), ammonia = species.indexOf("Ammonia");
+        int cut = -1;
+        for (int i = 0; i < n && cut < 0; i++) if (species.get(i).startsWith("crude_")) cut = i;
+        assertTrue(water >= 0 && nitrogen >= 0 && ethanol >= 0 && ammonia >= 0 && cut >= 0, species.toString());
+        List<int[]> supports = new ArrayList<>();
+        supports.add(new int[] {water, nitrogen});
+        supports.add(new int[] {water, cut});
+        supports.add(new int[] {water, ethanol, ammonia});
+        List<Integer> half = new ArrayList<>();
+        for (int i = 0; i < n; i += 2) half.add(i);
+        if (!half.contains(water)) half.add(water);
+        if (!half.contains(ethanol)) half.add(ethanol);
+        supports.add(half.stream().mapToInt(Integer::intValue).toArray());
+        int[] all = new int[n];
+        for (int i = 0; i < n; i++) all[i] = i;
+        supports.add(all);
+        double[][] states = {{320.0, 2.0e5}, {420.0, 1.0e5}};
+        PengRobinsonKernel.Root[] roots = {PengRobinsonKernel.Root.LIQUID, PengRobinsonKernel.Root.VAPOR};
+        var reused = kernel.newWorkspace();
+        var reusedOutput = kernel.newDerivatives();
+        int compared = 0;
+        List<int[]> order = new ArrayList<>(supports);
+        // Per root (one temperature), the supports grow on the first pass and shrink on the second: the reused workspace
+        // prepares only what a grown support adds at the same temperature.
+        for (int pass = 0; pass < 2; pass++) {
+            for (int r = 0; r < roots.length; r++) {
+                for (int[] support : order) {
+                    double[] feed = new double[n];
+                    for (int at = 0; at < support.length; at++) feed[support[at]] = 1.0 + (support[at] * 37 % 11);
+                    feed[water] += 3.0 * support.length;
+                    double t = states[r][0], p = states[r][1];
+                    var whole = kernel.newWorkspace();
+                    var expected = kernel.newDerivatives();
+                    kernel.evaluateDerivatives(t, p, feed, roots[r], whole, expected);
+                    double[] wholeRootDt = new double[n], wholeRootDt2 = new double[n], wholeCrossDt = new double[n];
+                    double wholeSecond = kernel.secondTemperatureDerivative(t, whole, wholeRootDt, wholeRootDt2, wholeCrossDt);
+                    var wholeValue = kernel.newEvaluation();
+                    kernel.evaluate(t, p, feed, roots[r], kernel.newWorkspace(), wholeValue);
+
+                    var fresh = kernel.newWorkspace();
+                    fresh.carry(feed);
+                    var actual = kernel.newDerivatives();
+                    kernel.evaluateDerivatives(t, p, feed, roots[r], fresh, actual);
+                    double[] rootDt = new double[n], rootDt2 = new double[n], crossDt = new double[n];
+                    double second = kernel.secondTemperatureDerivative(t, fresh, rootDt, rootDt2, crossDt);
+                    reused.carry(feed);
+                    kernel.evaluateDerivatives(t, p, feed, roots[r], reused, reusedOutput);
+                    var value = kernel.newEvaluation();
+                    var valueSpace = kernel.newWorkspace();
+                    valueSpace.carry(feed);
+                    kernel.evaluate(t, p, feed, roots[r], valueSpace, value);
+                    String at = support.length + " compounds, " + roots[r];
+                    for (var got : List.of(actual, reusedOutput)) {
+                        compared += sameOn(support, expected, got, at);
+                        compared += sameOutside(support, got, n, 0.0, at);
+                        assertEquals(Double.doubleToLongBits(expected.dResidualEnthalpyDt()), Double.doubleToLongBits(got.dResidualEnthalpyDt()), at + ": dh/dT");
+                    }
+                    assertEquals(Double.doubleToLongBits(wholeSecond), Double.doubleToLongBits(second), at + ": d2a/dT2");
+                    for (int i : support) {
+                        assertEquals(Double.doubleToLongBits(wholeValue.logFugacityCoefficient(i)), Double.doubleToLongBits(value.logFugacityCoefficient(i)), at + ": evaluate ln phi");
+                        assertEquals(Double.doubleToLongBits(wholeCrossDt[i]), Double.doubleToLongBits(crossDt[i]), at + ": crossDt");
+                    }
+                    assertEquals(Double.doubleToLongBits(wholeValue.compressibility()), Double.doubleToLongBits(value.compressibility()), at + ": evaluate Z");
+                }
+            }
+            java.util.Collections.reverse(order);
+        }
+        // An amount outside the support is refused; the test switch marks the outputs outside it.
+        double[] pair = new double[n];
+        pair[water] = 1.0;
+        pair[nitrogen] = 1.0;
+        var narrow = kernel.newWorkspace();
+        narrow.carry(pair);
+        double[] wider = pair.clone();
+        wider[ethanol] = 0.5;
+        assertThrows(IllegalArgumentException.class,
+                () -> kernel.evaluate(320.0, 2.0e5, wider, PengRobinsonKernel.Root.LIQUID, narrow, kernel.newEvaluation()));
+        PengRobinsonKernel.fillOutsideSupportWithNaN(true);
+        try {
+            var marked = kernel.newDerivatives();
+            kernel.evaluateDerivatives(320.0, 2.0e5, pair, PengRobinsonKernel.Root.LIQUID, narrow, marked);
+            compared += sameOutside(new int[] {water, nitrogen}, marked, n, Double.NaN, "NaN switch");
+        } finally {
+            PengRobinsonKernel.fillOutsideSupportWithNaN(false);
+        }
+        var cleared = kernel.newDerivatives();
+        kernel.evaluateDerivatives(320.0, 2.0e5, pair, PengRobinsonKernel.Root.LIQUID, narrow, cleared);
+        compared += sameOutside(new int[] {water, nitrogen}, cleared, n, 0.0, "after the NaN switch");
+        System.out.printf(Locale.ROOT, "carried supports: %d outputs bit for bit on %d supports of %d compounds%n", compared, supports.size(), n);
+    }
+
+    private static int sameOn(int[] support, PengRobinsonKernel.Derivatives expected, PengRobinsonKernel.Derivatives actual, String at) {
+        var e = expected.evaluation();
+        var a = actual.evaluation();
+        assertEquals(Double.doubleToLongBits(e.compressibility()), Double.doubleToLongBits(a.compressibility()), at + ": Z");
+        assertEquals(Double.doubleToLongBits(e.residualEnthalpyJoulesPerMol()), Double.doubleToLongBits(a.residualEnthalpyJoulesPerMol()), at + ": h^R");
+        assertEquals(Double.doubleToLongBits(e.aMix()), Double.doubleToLongBits(a.aMix()), at + ": a");
+        assertEquals(Double.doubleToLongBits(e.bMix()), Double.doubleToLongBits(a.bMix()), at + ": b");
+        assertEquals(Double.doubleToLongBits(e.daMixDt()), Double.doubleToLongBits(a.daMixDt()), at + ": da/dT");
+        int count = 5;
+        for (int i : support) {
+            assertEquals(Double.doubleToLongBits(e.logFugacityCoefficient(i)), Double.doubleToLongBits(a.logFugacityCoefficient(i)), at + ": ln phi " + i);
+            assertEquals(Double.doubleToLongBits(expected.dLogPhiDtView()[i]), Double.doubleToLongBits(actual.dLogPhiDtView()[i]), at + ": d ln phi/dT " + i);
+            assertEquals(Double.doubleToLongBits(expected.partialMolarResidualEnthalpyView()[i]),
+                    Double.doubleToLongBits(actual.partialMolarResidualEnthalpyView()[i]), at + ": partial h " + i);
+            count += 3;
+            for (int j : support) {
+                assertEquals(Double.doubleToLongBits(expected.dLogPhiDnRowView(i)[j]), Double.doubleToLongBits(actual.dLogPhiDnRowView(i)[j]),
+                        at + ": d ln phi/dn " + i + "," + j);
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private static int sameOutside(int[] support, PengRobinsonKernel.Derivatives output, int n, double fill, String at) {
+        boolean[] carried = new boolean[n];
+        for (int i : support) carried[i] = true;
+        int count = 0;
+        for (int i = 0; i < n; i++) {
+            for (int j = 0; j < n; j++) {
+                if (carried[i] && carried[j]) continue;
+                assertEquals(Double.doubleToLongBits(fill), Double.doubleToLongBits(output.dLogPhiDnRowView(i)[j]), at + ": outside d ln phi/dn " + i + "," + j);
+                count++;
+            }
+            if (carried[i]) continue;
+            assertEquals(Double.doubleToLongBits(fill), Double.doubleToLongBits(output.evaluation().logFugacityCoefficient(i)), at + ": outside ln phi " + i);
+            assertEquals(Double.doubleToLongBits(fill), Double.doubleToLongBits(output.dLogPhiDtView()[i]), at + ": outside d ln phi/dT " + i);
+            assertEquals(Double.doubleToLongBits(fill), Double.doubleToLongBits(output.partialMolarResidualEnthalpyView()[i]), at + ": outside partial h " + i);
+            count += 3;
+        }
+        return count;
+    }
+
     private static double kappa(double omega) {
         return omega <= 0.491
                 ? 0.37464 + 1.54226 * omega - 0.26992 * omega * omega
