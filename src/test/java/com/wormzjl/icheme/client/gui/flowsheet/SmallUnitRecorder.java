@@ -82,10 +82,14 @@ public final class SmallUnitRecorder {
                 kg.put(e.getKey(), sum);
                 shares.put(e.getKey(), sum / crude);
             }
-            // Each unit's duty: its last step's, over the run's passes.
+            // Each unit's duty: its last step's, over the run's passes; a unit outside the loops (P5: H-102, the steam
+            // heater) its report's.
             for (var pass : run.passes())
                 for (var step : pass.steps())
                     if (!Double.isNaN(step.duty())) duties.put(step.unit(), step.duty());
+            run.reports().forEach((unit, report) -> {
+                if (!duties.containsKey(unit) && report.duty() != 0 && Double.isFinite(report.duty())) duties.put(unit, report.duty());
+            });
         }
         return new Run(kelvin, run.status(), crude, kg, shares, duties);
     }

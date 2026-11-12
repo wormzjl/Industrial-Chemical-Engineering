@@ -92,6 +92,26 @@ class SmallCrudeUnitTest {
         assertEquals(new TreeSet<>(LARGER), larger, "larger than needed: the catalogue's smallest size, yellow");
     }
 
+    /**
+     * P5 stage B (form A): the unit raises its own steam. BFW, water at 25 °C, leaves H-102 as the tower's steam at 260 °C, all
+     * vapour: about 2,875 kJ/kg (440 to warm, 2,170 to boil, 260 to superheat at the tower foot's 2.5 to 5 bar), 0.21 MW on
+     * 259 kg/h. Size all gives H-102 a vertical heater.
+     */
+    @Test
+    void theSteamHeaterRaisesTheTowersSteamFromWater() {
+        var water = run.streams().get("BFW");
+        var steam = run.streams().get("STEAM");
+        assertEquals(298.15, water.temperature(), 1e-9);
+        assertEquals(533.15, steam.temperature(), .01, "H-102's outlet");
+        assertEquals(water.mass(), steam.mass(), 1e-12);
+        assertEquals(259, 3600 * steam.mass(), 1, "the tower's 259 kg/h");
+        double perKilogram = (steam.enthalpy() - water.enthalpy()) / steam.mass();
+        assertEquals(2.875e6, perKilogram, .03 * 2.875e6, "warm, boil and superheat");
+        assertNotNull(all, "Size all ran on a steady sheet");
+        var size = assertInstanceOf(com.wormzjl.icheme.science.flowsheet.sizing.HeaterSizing.Size.class, all.sized().units().get("H-102").size());
+        assertEquals(com.wormzjl.icheme.science.flowsheet.sizing.UnitType.VERTICAL_HEATER, size.type());
+    }
+
     /** Each reading off green: "larger than needed" (a pump under its rated window, surplus surface) or short of its limit. */
     private static void sort(String item, Rating rating, Set<String> shortOf, Set<String> larger) {
         for (Reading r : rating.readings()) {

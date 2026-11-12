@@ -156,6 +156,22 @@
       }
     },
     {
+      "id": "H-102",
+      "type": "fired_heater",
+      "name": "H-102",
+      "x": 246,
+      "y": 378,
+      "params": {
+        "coils": "series",
+        "target": "outlet",
+        "temperature": 533.15,
+        "duty": 156250.0,
+        "limit": 4000000.0,
+        "radiant_drop": 1e5,
+        "convection_drop": 0.5e5
+      }
+    },
+    {
       "id": "E-102",
       "type": "cooler",
       "name": "E-102",
@@ -300,25 +316,31 @@
       }
     },
     {
-      "id": "STEAM",
-      "name": "STEAM",
+      "id": "BFW",
+      "name": "BFW",
       "to": {
-        "unit": "T-101",
-        "port": "steam/1"
+        "unit": "H-102",
+        "port": "a"
       },
       "feed": {
-        "temperature": 533.15,
-        "pressure": 350000.0,
+        "temperature": 298.15,
+        "pressure": 500000.0,
         "amounts": {
           "Water": 3.9916666666666663
         }
+      }
+    },
+    {
+      "id": "STEAM",
+      "name": "STEAM",
+      "from": {
+        "unit": "H-102",
+        "port": "b"
       },
-      "route": [
-        {
-          "x": 316,
-          "y": 319
-        }
-      ]
+      "to": {
+        "unit": "T-101",
+        "port": "steam/1"
+      }
     },
     {
       "id": "CWS",

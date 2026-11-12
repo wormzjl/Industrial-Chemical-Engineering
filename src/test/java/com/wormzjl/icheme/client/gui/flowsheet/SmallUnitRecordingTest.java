@@ -36,6 +36,9 @@ class SmallUnitRecordingTest {
         assertTrue(lowered.heaterKelvin() < bundled.heaterKelvin());
         assertTrue(lowered.duty(SmallUnitRecorder.HEATER) < bundled.duty(SmallUnitRecorder.HEATER), "less heat");
         assertTrue(bundled.share("overhead") - lowered.share("overhead") >= .02, "a clear change in the light product: " + lowered.share("overhead"));
+        // P5 stage B: H-102 raises the tower's steam from water, 0.21 MW whatever H-101 does, about a seventh of H-101's.
+        assertEquals(.21e6, bundled.duty("H-102"), .1 * .21e6, "the steam heater's duty");
+        assertEquals(bundled.duty("H-102"), lowered.duty("H-102"), 1e-6 * bundled.duty("H-102"));
     }
 
     @Test
