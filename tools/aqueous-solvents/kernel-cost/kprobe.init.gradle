@@ -1,1 +1,1 @@
-allprojects { tasks.withType(Test).configureEach { ['kprobe.dense','kprobe.dry'].each { k -> if (System.getProperty(k) != null) systemProperty k, '1' }; maxParallelForks = 1 } }
+allprojects { tasks.withType(Test).configureEach { ['kprobe.dense','kprobe.dry'].each { k -> if (System.getProperty(k) != null) systemProperty k, '1' }; if (System.getProperty('kprobe.seconds') != null) systemProperty 'kprobe.seconds', System.getProperty('kprobe.seconds'); maxParallelForks = 1 } }

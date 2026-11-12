@@ -597,11 +597,11 @@ public final class PengRobinsonKernel {
      * by {@code b_j x_j} and summed over {@code j} it is {@code Lambda [b a_i/b_i - s_i g_i]/(R T)} with the quadratic
      * row {@code g_i = sum_j (1 - k_ij) x_j s_j}, so with every pair classical the rule is the quadratic one exactly.
      * Every classical term below is this expression or one of its sums; the NRTL cells store their difference to it.
+     * The caller forms its parts in this order: {@code prefactor = Lambda * (1/(R T))}, {@code ratio = a_i/b_i},
+     * {@code product = (1 - k_ij) s_i s_j} (left to right) and {@code coVolumeJ = b_j}.
      */
-    private double classicalTau(int i, int j, double inverseRt, Workspace workspace) {
-        int pair = pairIndex[i][j];
-        return HuronVidalExcess.LAMBDA * inverseRt * (workspace.a[i] / coVolumes[i]
-                - (1.0 - workspace.interaction(pair)) * workspace.sqrtA[i] * workspace.sqrtA[j] / coVolumes[j]);
+    private static double classicalTau(double prefactor, double ratio, double product, double coVolumeJ) {
+        return prefactor * (ratio - product / coVolumeJ);
     }
 
     private void evaluatePrepared(
@@ -1360,14 +1360,21 @@ public final class PengRobinsonKernel {
                 if (presentOmega(i, workspace) != 0.0) y2[j] -= k * workspace.omegaDt[i] * s[i];
             }
         }
+        // dS_kl is read on its upper triangle (l >= k in support order) only: each element (min, max) takes the
+        // additions it took on the full matrix, in the same order, and the diagonal takes the cell term twice.
+        double[] classicalRow = workspace.excessClassicalRow;
+        for (int sl = 0; sl < n; sl++) {
+            int l = support[sl];
+            classicalRow[l] = activePresent ? share * (classicalLinear - s[l] / coVolumes[l] * y2[l]) - classicalTheta : 0.0;
+        }
         for (int sk = 0; sk < n; sk++) {
             int k = support[sk];
             int row = k * count;
-            double rowClassical = activePresent ? share * (classicalLinear - s[k] / coVolumes[k] * y2[k]) - classicalTheta : 0.0;
-            for (int sl = 0; sl < n; sl++) {
+            double rowClassical = classicalRow[k];
+            double vK = v[k];
+            for (int sl = sk; sl < n; sl++) {
                 int l = support[sl];
-                double columnClassical = activePresent ? share * (classicalLinear - s[l] / coVolumes[l] * y2[l]) - classicalTheta : 0.0;
-                curvature[row + l] = rowClassical + columnClassical + v[k] + v[l];
+                curvature[row + l] = rowClassical + classicalRow[l] + vK + v[l];
             }
         }
         for (int si = 0; si < n; si++) {
@@ -1377,44 +1384,85 @@ public final class PengRobinsonKernel {
             double weight = x[i] / (d * d);
             double theta = workspace.theta[i];
             double centreEnergy = share * workspace.a[i] / coVolumes[i] - theta;
+            boolean classicalFormed = false;
             for (int at = cellFrom[i]; at < cellTo[i]; at++) {
                 int c = cells[at];
                 int k = cellPartner[c];
+                int kRow = k * count;
                 double f = workspace.cellF[c];
                 double r = workspace.cellR[c] - f * theta;
                 if (f != 0.0) {
-                    // c_i F_ki eps^cl_li into (k, l) and (l, k), eps^cl_li = tau^cl_li - theta_i.
+                    // c_i F_ki eps^cl_li into (k, l) and (l, k), eps^cl_li = tau^cl_li - theta_i: the same for every
+                    // cell of the centre, formed once.
+                    if (!classicalFormed) {
+                        int[] pairsOfI = pairIndex[i];
+                        double sI = s[i];
+                        for (int sl = 0; sl < n; sl++) {
+                            int l = support[sl];
+                            classicalRow[l] = centreEnergy - share * (1.0 - workspace.interaction(pairsOfI[l])) * sI * s[l] / coVolumes[l];
+                        }
+                        classicalFormed = true;
+                    }
                     double scaled = weight * f;
-                    int[] pairsOfI = pairIndex[i];
-                    for (int sl = 0; sl < n; sl++) {
+                    int sl = 0;
+                    for (; sl < n && support[sl] < k; sl++) {
                         int l = support[sl];
-                        double classical = centreEnergy - share * (1.0 - workspace.interaction(pairsOfI[l])) * s[i] * s[l] / coVolumes[l];
-                        double term = scaled * classical;
-                        curvature[k * count + l] += term;
-                        curvature[l * count + k] += term;
+                        curvature[l * count + k] += scaled * classicalRow[l];
+                    }
+                    if (sl < n && support[sl] == k) {
+                        double term = scaled * classicalRow[k];
+                        curvature[kRow + k] += term;
+                        curvature[kRow + k] += term;
+                        sl++;
+                    }
+                    for (; sl < n; sl++) {
+                        int l = support[sl];
+                        curvature[kRow + l] += scaled * classicalRow[l];
                     }
                 }
                 for (int at2 = cellFrom[i]; at2 < cellTo[i]; at2++) {
                     int c2 = cells[at2];
                     int l = cellPartner[c2];
+                    if (l < k) continue;
                     double f2 = workspace.cellF[c2];
                     double r2 = workspace.cellR[c2] - f2 * theta;
-                    curvature[k * count + l] += weight * (f2 * r + f * r2);
+                    curvature[kRow + l] += weight * (f2 * r + f * r2);
                 }
             }
         }
         double half = GAS_CONSTANT * temperatureKelvin / (2.0 * lambda);
+        double prefactor = HuronVidalExcess.LAMBDA * (share / HuronVidalExcess.LAMBDA);
+        double[] ratio = workspace.excessEnergyRatio;
         for (int sk = 0; sk < n; sk++) {
             int k = support[sk];
+            ratio[k] = workspace.a[k] / coVolumes[k];
+        }
+        for (int sk = 0; sk < n; sk++) {
+            int k = support[sk];
+            int row = k * count;
+            int[] cellsOfK = cellIndex[k];
+            int[] pairsOfK = pairIndex[k];
+            boolean activeK = workspace.active[k];
+            double thetaK = workspace.theta[k];
+            double thetaBaseK = workspace.thetaBase[k];
+            double denominatorK = workspace.denominator[k];
+            double ratioK = ratio[k];
+            double coVolumeK = coVolumes[k];
+            double sK = s[k];
+            double logGammaK = logGamma[k];
             for (int sl = sk; sl < n; sl++) {
                 int l = support[sl];
-                double localKl = centreShift(k, l, share, bMix, workspace);
-                double localLk = centreShift(l, k, share, bMix, workspace);
-                double deltaN = coVolumes[l] * localKl + coVolumes[k] * localLk
-                        - coVolumes[k] * coVolumes[l] * curvature[k * count + l];
-                double quadratic = (1.0 - workspace.interaction(pairIndex[k][l])) * s[k] * s[l];
-                double cross = quadratic - half * (coVolumes[k] * logGamma[l] + coVolumes[l] * logGamma[k] + bMix * deltaN);
-                workspace.excessCross[k * count + l] = cross;
+                double coVolumeL = coVolumes[l];
+                double oneMinusK = 1.0 - workspace.interaction(pairsOfK[l]);
+                double quadratic = oneMinusK * sK * s[l];
+                double localKl = centreShift(workspace, cellsOfK[l], activeK, thetaK, thetaBaseK, denominatorK,
+                        prefactor, ratioK, quadratic, coVolumeL, bMix);
+                double localLk = centreShift(workspace, cellIndex[l][k], workspace.active[l], workspace.theta[l],
+                        workspace.thetaBase[l], workspace.denominator[l], prefactor, ratio[l], oneMinusK * s[l] * sK,
+                        coVolumeK, bMix);
+                double deltaN = coVolumeL * localKl + coVolumeK * localLk - coVolumeK * coVolumeL * curvature[row + l];
+                double cross = quadratic - half * (coVolumeK * logGamma[l] + coVolumeL * logGammaK + bMix * deltaN);
+                workspace.excessCross[row + l] = cross;
                 workspace.excessCross[l * count + k] = cross;
             }
         }
@@ -1426,17 +1474,18 @@ public final class PengRobinsonKernel {
      * {@code tau^cl_lk - theta_k} otherwise, with {@code eps^b_lk = tau^cl_lk - theta_k^b} (as differences of
      * {@code 1/D_k} and {@code 1/b} terms it cancels where {@code D_k} is small, the absent cut in water of
      * {@link #correctExcess}); otherwise {@code D_k = b}, {@code theta_k = theta_k^b} and it is the cell's
-     * {@code (R_lk - F_lk theta_k)/b}, or zero.
+     * {@code (R_lk - F_lk theta_k)/b}, or zero. The centre's values come in hoisted; {@code tau^cl_lk} is
+     * {@link #classicalTau} of {@code ratio = a_k/b_k}, {@code product = (1 - k_kl) s_k s_l} and {@code b_l}.
      */
-    private double centreShift(int k, int l, double share, double bMix, Workspace workspace) {
-        int cell = cellIndex[k][l];
-        if (workspace.active[k]) {
-            double theta = workspace.theta[k];
-            double classical = classicalTau(k, l, share / HuronVidalExcess.LAMBDA, workspace);
+    private static double centreShift(
+            Workspace workspace, int cell, boolean active, double theta, double thetaBase, double denominator,
+            double prefactor, double ratio, double product, double coVolumeL, double bMix) {
+        if (active) {
+            double classical = classicalTau(prefactor, ratio, product, coVolumeL);
             double h = cell >= 0 ? workspace.cellGTau[cell] - workspace.cellG[cell] * theta : classical - theta;
-            return h / workspace.denominator[k] - (classical - workspace.thetaBase[k]) / bMix;
+            return h / denominator - (classical - thetaBase) / bMix;
         }
-        return cell >= 0 ? (workspace.cellR[cell] - workspace.cellF[cell] * workspace.theta[k]) / workspace.denominator[k] : 0.0;
+        return cell >= 0 ? (workspace.cellR[cell] - workspace.cellF[cell] * theta) / denominator : 0.0;
     }
 
 
@@ -1701,6 +1750,9 @@ public final class PengRobinsonKernel {
         /** {@code [k * n + l]}: the cross terms, and the curvature sums they are formed from. */
         private final double[] excessCross;
         private final double[] excessCurvature;
+        /** Scratch rows of {@code differentiateExcess}: a centre's classical energies over {@code l}, and {@code a_i/b_i}. */
+        private final double[] excessClassicalRow;
+        private final double[] excessEnergyRatio;
         private double excessTemperature;
         private double excessCoVolume;
         private double excessEnergy;
@@ -1804,6 +1856,8 @@ public final class PengRobinsonKernel {
             active = new boolean[e];
             excessCross = new double[e * e];
             excessCurvature = new double[e * e];
+            excessClassicalRow = new double[e];
+            excessEnergyRatio = new double[e];
             filter();
         }
 

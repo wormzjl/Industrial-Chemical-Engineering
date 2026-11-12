@@ -38,7 +38,12 @@ class KernelCostProbeTest {
         var derivatives = kernel.newDerivatives();
         double sink = 0;
         double gasPressure = System.getProperty("kprobe.dense") != null ? 1000 : 130000;
-        for (int round = 0; round < 6; round++) {
+        // The long form (-Dkprobe.seconds=N): rounds for N s of warm-up, then rounds for N s measured, one mean per call.
+        long seconds = Long.getLong("kprobe.seconds", 0L);
+        long warmEnd = System.nanoTime() + seconds * 1_000_000_000L, measureEnd = warmEnd + seconds * 1_000_000_000L;
+        double evaluateNs = 0, derivativeNs = 0;
+        long measuredCalls = 0;
+        for (int round = 0; seconds > 0 ? System.nanoTime() < measureEnd : round < 6; round++) {
             int calls = 20000;
             long a = System.nanoTime();
             for (int i = 0; i < calls; i++) {
@@ -55,8 +60,14 @@ class KernelCostProbeTest {
                 sink += derivatives.dLogPhiDtView()[water];
             }
             long c = System.nanoTime();
+            if (seconds > 0) {
+                if (a >= warmEnd) { evaluateNs += b - a; derivativeNs += c - b; measuredCalls += 2L * calls; }
+                continue;
+            }
             System.out.println("KPROBE round " + round + " evaluate " + (b - a) / (2.0 * calls) + " ns, derivatives " + (c - b) / (2.0 * calls) + " ns");
         }
+        if (seconds > 0) System.out.println("KPROBE round long " + seconds + " s + " + seconds + " s: evaluate " + evaluateNs / measuredCalls
+                + " ns, derivatives " + derivativeNs / measuredCalls + " ns over " + measuredCalls + " calls each");
         System.out.println("KPROBE sink " + Double.toHexString(sink));
     }
     private static int length(Object kernel, String field) throws Exception {
