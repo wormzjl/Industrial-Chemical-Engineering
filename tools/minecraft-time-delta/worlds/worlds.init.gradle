@@ -1,0 +1,9 @@
+// Attaches this folder's src/ to the test source set for one Gradle invocation (W6's headless worlds at factors 4 and 72):
+//   ./gradlew --offline --no-configuration-cache --init-script tools/minecraft-time-delta/worlds/worlds.init.gradle test --tests '*TimeScaleWorldsTest'
+// Not part of any gate suite: without this init script the class is not compiled.
+gradle.projectsEvaluated {
+    def here = gradle.startParameter.initScripts.find { it.name == 'worlds.init.gradle' }.parentFile
+    def root = gradle.rootProject
+    root.sourceSets.test.java.srcDir(new File(here, 'src'))
+    root.tasks.withType(Test).configureEach { testLogging { showStandardStreams = true } }
+}

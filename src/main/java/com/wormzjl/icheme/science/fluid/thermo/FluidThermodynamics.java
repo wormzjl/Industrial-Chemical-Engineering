@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.science.fluid.thermo;
 
+import com.wormzjl.icheme.science.fluid.SimulationTime;
 import com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics;
 import com.wormzjl.icheme.science.fluid.solver.PhaseLayout;
 import com.wormzjl.icheme.science.fluid.solver.SparseNewton;
@@ -60,6 +61,9 @@ public final class FluidThermodynamics {
     private final MaterialCatalog.Water water;
     private final double waterEnthalpyOffset;
     private final double maximumVelocity;
+    /** Process time against online time ({@link SimulationTime}): carried on the model, like {@link #maximumVelocity}, so a
+     * changed factor reaches every island through a new model and {@link #revision}. */
+    private final SimulationTime time;
     /** Carried on the model, like {@link #maximumVelocity}, because every retained solver, workspace
      * and factorization is keyed on the model: replacing it is what makes a changed cutoff reach a
      * running island deterministically, and {@link #revision} carries it so a certificate issued
@@ -83,9 +87,13 @@ public final class FluidThermodynamics {
         return forNetwork(catalog,packageId,maximumVelocity,traceCutoffMoleFraction,com.wormzjl.icheme.science.fluid.transport.SlurryTransport.Settings.defaults());
     }
     public static FluidThermodynamics forNetwork(MaterialCatalog catalog,String packageId,double maximumVelocity,double traceCutoffMoleFraction,com.wormzjl.icheme.science.fluid.transport.SlurryTransport.Settings solidSettings) {
+        return forNetwork(catalog,packageId,maximumVelocity,traceCutoffMoleFraction,solidSettings,SimulationTime.ONLINE);
+    }
+    /** The world's model: {@code time} is the server's time factor ({@code fluid.timeScale}), captured at server start. */
+    public static FluidThermodynamics forNetwork(MaterialCatalog catalog,String packageId,double maximumVelocity,double traceCutoffMoleFraction,com.wormzjl.icheme.science.fluid.transport.SlurryTransport.Settings solidSettings,SimulationTime time) {
         TraceTruncationPolicy.requireCutoff(traceCutoffMoleFraction,MAX_TRACE_CUTOFF_MOLE_FRACTION);
         return new FluidThermodynamics(catalog,packageId,
-                maximumVelocity,TraceTruncationPolicy.of(traceCutoffMoleFraction),solidSettings);
+                maximumVelocity,TraceTruncationPolicy.of(traceCutoffMoleFraction),solidSettings,time,null);
     }
 
     /** Placement initializer only. Persistence must restore inventory instead of calling this again. */
@@ -98,15 +106,15 @@ public final class FluidThermodynamics {
     }
 
     public FluidThermodynamics(MaterialCatalog catalog,String packageId,double maximumVelocity,TraceTruncationPolicy tracePolicy,com.wormzjl.icheme.science.fluid.transport.SlurryTransport.Settings solidSettings) {
-        this(catalog,packageId,maximumVelocity,tracePolicy,solidSettings,null);
+        this(catalog,packageId,maximumVelocity,tracePolicy,solidSettings,SimulationTime.ONLINE,null);
     }
     /** The model of a compound list (batch 2026-11-04-refinery-compounds, V2): {@code whole}'s package restricted to it. */
-    private FluidThermodynamics(MaterialCatalog catalog,String packageId,double maximumVelocity,TraceTruncationPolicy tracePolicy,com.wormzjl.icheme.science.fluid.transport.SlurryTransport.Settings solidSettings,FluidThermodynamics whole) {
+    private FluidThermodynamics(MaterialCatalog catalog,String packageId,double maximumVelocity,TraceTruncationPolicy tracePolicy,com.wormzjl.icheme.science.fluid.transport.SlurryTransport.Settings solidSettings,SimulationTime time,FluidThermodynamics whole) {
         // A whole model gives its package water as a compound of the cubic where the package does not name it (W3b): the
         // network supplies water itself, no package record is edited for it. A view is restricted from that catalog.
         if(whole==null)catalog=catalog.withWater(packageId);
         this.whole=whole==null?this:whole;views=whole==null?new java.util.HashMap<>():null;
-        this.solidSettings=Objects.requireNonNull(solidSettings);
+        this.solidSettings=Objects.requireNonNull(solidSettings);this.time=Objects.requireNonNull(time,"time");
         if(!Double.isFinite(maximumVelocity)||maximumVelocity<=0)throw new IllegalArgumentException("Positive finite maximum velocity required");
         TraceTruncationPolicy.requireCutoff(Objects.requireNonNull(tracePolicy,"tracePolicy").cutoffMoleFraction(),MAX_TRACE_CUTOFF_MOLE_FRACTION);
         this.tracePolicy=tracePolicy;
@@ -150,7 +158,11 @@ public final class FluidThermodynamics {
         // line-cap-saturation-v1 names the cap law of every throttling line (PassiveStepSolver.saturated, 2026-10-18): the
         // smooth saturation of the law's flow at the stream's velocity limit, max= the configured limit it is built from.
         revision=thermodynamicRevision+":line-cap-saturation-v1:trace-relative-v1:max="+Double.toHexString(maximumVelocity)
-                +":trace="+Double.toHexString(tracePolicy.cutoffMoleFraction())+":solids-v1:"+solidSettings;
+                +":trace="+Double.toHexString(tracePolicy.cutoffMoleFraction())+":solids-v1:"+solidSettings
+                // time= the time factor (batch 2026-11-11-minecraft-time-delta): a solved interval, a certificate and a
+                // junction buffer describe process seconds per tick, so a changed factor drops them and the islands
+                // rebuild from the facts. Factor 1 carries no part: the revisions of worlds saved before the setting stand.
+                +(time.factor()==1?"":":time="+time.factor());
     }
     /**
      * The thermodynamic reference a saved island's inventory and energy are read against (the checkpoint's package
@@ -203,7 +215,7 @@ public final class FluidThermodynamics {
         synchronized(whole.views) {
             var known=whole.views.get(key);
             if(known!=null)return known;
-            var view=new FluidThermodynamics(whole.catalog.restrict(domain.packageId(),key),domain.packageId(),whole.maximumVelocity,whole.tracePolicy,whole.solidSettings,whole);
+            var view=new FluidThermodynamics(whole.catalog.restrict(domain.packageId(),key),domain.packageId(),whole.maximumVelocity,whole.tracePolicy,whole.solidSettings,whole.time,whole);
             whole.views.put(key,view);return view;
         }
     }
@@ -406,6 +418,15 @@ public final class FluidThermodynamics {
         return weights;
     }
     public double maximumVelocityMetresPerSecond(){return maximumVelocity;}
+    /** The time factor this model integrates under: process seconds per online tick ({@link SimulationTime}). */
+    public SimulationTime time(){return time;}
+    /** This model under another time factor, every other setting the same (a view stays the same compound list); itself on its own. */
+    public FluidThermodynamics withTime(SimulationTime value) {
+        if(time.equals(value))return this;
+        var timed=new FluidThermodynamics(whole.catalog,whole.domain.packageId(),maximumVelocity,tracePolicy,solidSettings,value,null);
+        // A view keeps its compound list and whether water is in its cubic (W3b option A).
+        return whole==this?timed:timed.on(compounds(),wet());
+    }
     /** The per-node phase support the step solver freezes its Newton unknowns with. */
     public TraceTruncationPolicy traceTruncation(){return tracePolicy;}
     /** A hydraulic rate bound only; temperature and phase allocation still come from the EOS/energy equations. */

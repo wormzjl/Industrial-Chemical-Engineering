@@ -13,11 +13,12 @@ public final class FluidPropertyReloadGuard {
     private final String packageId,qualifiedRevision;
     private final double maximumVelocity,traceCutoff;
     private final com.wormzjl.icheme.science.fluid.transport.SlurryTransport.Settings solids;
+    private final com.wormzjl.icheme.science.fluid.SimulationTime time;
     private MaterialCatalog observed;
     private String refusal;
     public FluidPropertyReloadGuard(MaterialCatalog initial,String packageId,FluidThermodynamics model) {
         solids=model.solidSettings;observed=Objects.requireNonNull(initial);this.packageId=Objects.requireNonNull(packageId);
-        maximumVelocity=model.maximumVelocityMetresPerSecond();
+        maximumVelocity=model.maximumVelocityMetresPerSecond();time=model.time();
         // Every numerical setting the qualified model was built with, so a reload of the same data
         // rebuilds the same model and the comparison isolates the property change it is looking for.
         traceCutoff=model.traceTruncation().cutoffMoleFraction();
@@ -27,7 +28,7 @@ public final class FluidPropertyReloadGuard {
         Objects.requireNonNull(current);if(current==observed)return Optional.ofNullable(refusal);
         observed=current;
         try {
-            var candidate=FluidThermodynamics.forNetwork(current,packageId,maximumVelocity,traceCutoff,solids);
+            var candidate=FluidThermodynamics.forNetwork(current,packageId,maximumVelocity,traceCutoff,solids,time);
             refusal=qualifiedRevision.equals(candidate.revision())?null:HOLD;
         } catch(IllegalArgumentException|IllegalStateException unavailable) {refusal=HOLD;}
         return Optional.ofNullable(refusal);

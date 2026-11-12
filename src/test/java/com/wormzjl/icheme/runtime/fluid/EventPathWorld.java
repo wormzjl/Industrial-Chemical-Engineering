@@ -42,6 +42,10 @@ class EventPathWorld {
     int lag;
     private final Map<Long,Long> submitted=new HashMap<>();
 
+    /** The time factor of a world built with no model: factor 1, which a tool's factor sweep sets (tools/minecraft-time-delta/worlds/). */
+    static com.wormzjl.icheme.science.fluid.SimulationTime time=com.wormzjl.icheme.science.fluid.SimulationTime.ONLINE;
+    /** {@code model} at that factor: itself at factor 1. */
+    static FluidThermodynamics timed(FluidThermodynamics model){return time==com.wormzjl.icheme.science.fluid.SimulationTime.ONLINE?model:model.withTime(time);}
     /** A world with one synchronous worker. */
     EventPathWorld(){this(1);}
     /** A world whose worker pool has {@code workers} slots: 0 (no solve) or 1 (a synchronous worker). */
@@ -61,7 +65,7 @@ class EventPathWorld {
     }
     /** That reload with the flowmeters the accessory store holds on {@code flowmeters}, given to the registry before it loads. */
     EventPathWorld(int workers,WorldTopologyLedger.Snapshot saved,List<FluidCheckpointCodec.IslandEntry> islands,Collection<Long> flowmeters) {
-        this(workers,saved,islands,CATALOG,FluidTestSupport.networkModel(),flowmeters);
+        this(workers,saved,islands,CATALOG,timed(FluidTestSupport.networkModel()),flowmeters);
     }
     /** A world with one synchronous worker on {@code catalog}, whose network model is {@code model}
      * ({@code FluidThermodynamics.forNetwork} of its network package): built and run inside that catalog's
@@ -76,7 +80,7 @@ class EventPathWorld {
             public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveServices.FluidIslandCommand command){attempts.put(attempt.slice().requestId(),attempt);submitted.put(attempt.slice().requestId(),ledger.onlineTick());commands.put(attempt.slice().requestId(),command);return true;}
             public void cancel(long request){}
         },changed->{for(var s:changed)if(s.status().startsWith("HELD"))held.add(new Held(ledger.onlineTick(),s.id(),s.clock().committedTick(),s.status()));},
-                ()->0L,new IslandCoordinator.Settings(2_000_000_000L,1_500_000_000L,64,false,100,CertificatePolicy.defaults()),ledger::onlineTick);
+                ()->0L,new IslandCoordinator.Settings(2_000_000_000L,1_500_000_000L,64,false,100,CertificatePolicy.defaults()).withTime(model.time()),ledger::onlineTick);
         registry=new PhysicalRegistry(ledger,model,InlineFilter.empty(),new PhysicalRegistry.Host() {
             public IslandCoordinator coordinator(){return coordinator;}
             public void topology(String dimension,Set<UUID> events,Set<Long> affected,List<IslandCoordinator.Replacement> replacements,long committed,long online,
@@ -97,6 +101,8 @@ class EventPathWorld {
 
     /** The islands whose jobs fail, as a worker's failure does: they hold. */
     final Set<Long> failing=new HashSet<>();
+    /** What a failing island's worker says of its failure (null: nothing, as before the worker's message reached the status). */
+    String failure;
     /** The running columns the events' commits report to, where a test runs one. */
     ColumnOperation columns;
     /** The world's default control of a device kind (FluidWorldAuthority.place). */
@@ -173,7 +179,7 @@ class EventPathWorld {
             if(ledger.onlineTick()-submitted.getOrDefault(request,0L)<lag+lags.getOrDefault(attempts.get(request).islandId(),0))continue;submitted.remove(request);
             var attempt=attempts.remove(request);var command=commands.remove(request);
 
-            if(failing.contains(attempt.islandId())){coordinator.completed(attempt,Optional.empty());continue;}
+            if(failing.contains(attempt.islandId())){coordinator.completed(attempt,Optional.empty(),failure);continue;}
             var result=(ProcessSolveServices.FluidIslandSolveResult)command.solve(FluidTestSupport.NEVER);
             coordinator.completed(attempt,Optional.of(result));
         }

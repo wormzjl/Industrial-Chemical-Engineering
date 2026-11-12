@@ -14,7 +14,8 @@ import static org.junit.jupiter.api.Assertions.*;
  * A flare stack in the engine (batch 2026-11-09-flare-stack, FLARE_STACK_PLAN.md W2-W3): a gas generator feeds two pipes into
  * the flare's tip, a void behind its gas inlet that {@code FluidWorldAuthority.placeFlare} places. Methane burns (FLARING), and
  * so does methane carried with nitrogen while its flame stays above 1700 K; methane drowned in nitrogen vents unburnt (FLAME
- * OUT); a supply that pushes more than the tip passes is held to its limit (OVER CAPACITY).
+ * OUT); the tip passes what its supply pushes through it (owner D6): faster than its stable velocity the flame lifts off
+ * (FLAME OUT), over its rating a richer gas burns on (OVER CAPACITY).
  */
 class FlareRuntimeTest {
     private final MaterialCatalog catalog = MaterialCatalog.bundled();
@@ -82,7 +83,7 @@ class FlareRuntimeTest {
                     valved = true;
                     assertEquals(FLARE, graph.reservoirs().get(pipe.second()).id(), "the tip's valve is stated toward the flare");
                 }
-            assertTrue(valved, "the run into the flare carries its tip limit");
+            assertTrue(valved, "the run into the flare carries its tip's valve");
         }
 
         Flares.View run(int slices) {
@@ -133,9 +134,9 @@ class FlareRuntimeTest {
     /** Nitrogen flares with methane while the flame holds (owner: as long as the combustion temperature is maintained). */
     @Test
     void anInertFlaresWithAFuelWhileTheFlameHolds() {
-        var lean = new Rig(.3, gas(Map.of("Methane", 1., "Nitrogen", 4.), 300, 101_800)).run(4);
+        var lean = new Rig(.3, gas(Map.of("Methane", 1., "Nitrogen", 4.), 300, 101_420)).run(4);
         print("1 CH4 : 4 N2", lean);
-        // A lean gas leaves the tip at 18.3 m/s at most: this supply meets that limit, and the flame holds.
+        // A lean gas holds its flame up to 18.3 m/s at the tip: this supply, 95 Pa over the atmosphere, stays under it (owner D6: 101.8 kPa drove 2.4 kg/s, 29 m/s, and blew it off).
         assertNotEquals(Flares.Status.FLAME_OUT, lean.status());
         assertTrue(lean.flameTemperature() > Flare.FLAME_LIMIT, "the flame holds: " + lean.flameTemperature());
         assertTrue(lean.heat() > 0 && !lean.alarms().contains(EquipmentAlarm.FLAME_OUT), "it burns");
@@ -147,14 +148,31 @@ class FlareRuntimeTest {
         assertEquals(List.of(EquipmentAlarm.FLAME_OUT), drowned.alarms());
     }
 
-    /** A stiff supply into a small tip is held to the tip's limit (owner X4). */
+    /**
+     * Owner D6: a stiff supply into a small tip is not held back; the tip passes what 10 bar drives through it, far faster than
+     * methane's stable velocity, so the flame lifts off and the gas leaves unburnt (FLAME OUT).
+     */
     @Test
-    void aFlowOverTheTipsLimitIsHeldBack() {
-        var v = new Rig(Flare.MIN_TIP, gas(Map.of("Methane", 1.), 300, 1_000_000)).run(6);
+    void aStiffSupplyBlowsTheFlameOffASmallTip() {
+        var rig = new Rig(Flare.MIN_TIP, gas(Map.of("Methane", 1.), 300, 1_000_000));
+        var v = rig.run(6);
         print("small tip", v);
+        System.out.println("FLARE_D6 blow-off velocity=" + rig.flares.flame(FLARE).exitVelocity());
+        assertEquals(Flares.Status.FLAME_OUT, v.status());
+        assertTrue(v.massFlow() > 1.5 * v.limit(), "the tip passes more than it burns: " + v.massFlow() + " of " + v.limit());
+        assertEquals(0, v.heat(), "unburnt: it releases nothing");
+        assertEquals(List.of(EquipmentAlarm.FLAME_OUT), v.alarms());
+    }
+
+    /** Owner D6: propane, richer than the rating's methane, leaves the tip slower than its stable velocity at more than the rated heat: it burns on (OVER CAPACITY). */
+    @Test
+    void aRichGasOverTheRatingBurnsOn() {
+        var rig = new Rig(Flare.MIN_TIP, gas(Map.of("Propane", 1.), 300, 103_000));
+        var v = rig.run(6);
+        print("propane", v);
+        System.out.println("FLARE_D6 propane velocity=" + rig.flares.flame(FLARE).exitVelocity());
         assertEquals(Flares.Status.OVER_CAPACITY, v.status());
-        assertEquals(v.limit(), v.massFlow(), .02 * v.limit(), "the tip passes its limit, not more");
-        assertTrue(v.heat() <= v.rated() * 1.02, "nor more than its rated heat");
+        assertTrue(v.heat() > v.rated(), "over the rating: " + v.heat());
         assertEquals(List.of(EquipmentAlarm.OVER_CAPACITY), v.alarms());
     }
 }

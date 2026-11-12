@@ -202,7 +202,7 @@ class ShaftCouplingTest {
         var trip=com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE;
         ledger.shaft(new ShaftUnit(id,kind,cell(0),0,List.of(new ShaftUnit.End(cell(0),1,0,0,true)),0,11e3,3000,2,
                 com.wormzjl.icheme.science.equipment.MachineDuty.Drive.VARIABLE,ShaftUnit.Settings.DEFAULT,trip,null));
-        double saved=com.wormzjl.icheme.science.machine.ElectricStore.capacity(com.wormzjl.icheme.science.machine.ElectricStore.motorDraw(11e3,2,true));
+        double saved=com.wormzjl.icheme.science.machine.ElectricStore.capacity(com.wormzjl.icheme.science.machine.ElectricStore.motorDraw(11e3,2,true),com.wormzjl.icheme.science.fluid.SimulationTime.ONLINE);
         ledger.stores(Map.of(id,new com.wormzjl.icheme.science.machine.ElectricStore.Facts(saved,true)));
         var stores=new ElectricStores(ledger,device->null,rig.coordinator,()->ElectricStores.Settings.DEFAULT);
         boolean[] live={false};stores.supply(motor->live[0]);

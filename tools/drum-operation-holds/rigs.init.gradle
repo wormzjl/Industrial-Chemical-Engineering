@@ -1,0 +1,6 @@
+// Attaches tools/drum-operation-holds/src to the test source set for one invocation (headless rigs of batch 2026-11-11-drum-operation-holds; not part of any gate).
+gradle.projectsEvaluated {
+    def here = gradle.startParameter.initScripts.find { it.name == 'rigs.init.gradle' }.parentFile
+    gradle.rootProject.sourceSets.test.java.srcDir(new File(here, 'src'))
+    gradle.rootProject.tasks.withType(Test).configureEach { testLogging { showStandardStreams = true } }
+}

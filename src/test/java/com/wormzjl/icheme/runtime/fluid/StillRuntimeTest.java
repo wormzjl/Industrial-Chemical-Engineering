@@ -141,7 +141,7 @@ class StillRuntimeTest {
                 public void cancel(long request) {
                     throw new AssertionError("no deadlines here");
                 }
-            }, this::book, () -> 0L, new IslandCoordinator.Settings(30_000_000_000L, 20_000_000_000L, 64, false, 100, CertificatePolicy.disabled()), () -> epoch[0]);
+            }, this::book, () -> 0L, new IslandCoordinator.Settings(30_000_000_000L, 20_000_000_000L, 64, false, 100, CertificatePolicy.disabled()).withTime(model.time()), () -> epoch[0]);
             coordinator.onReplayed(this::book);
             // The still's devices in the ledger (their specs are not read here: water, on the basis).
             double[] composition = new double[model.componentCount()];
@@ -189,7 +189,7 @@ class StillRuntimeTest {
                 committed.put(s.id(), to);
                 if (to == from || s.lastResult().isEmpty()) continue;
                 var result = s.lastResult().orElseThrow();
-                double scale = result.advancedSeconds() > 0 ? (to - from) / 20.0 / result.advancedSeconds() : 0;
+                double scale = result.advancedSeconds() > 0 ? model.time().seconds(to - from) / result.advancedSeconds() : 0;
                 if (Math.abs(scale - 1) < 1e-12) scale = 1;
                 for (var b : result.boundaries()) {
                     if (b.kind() == ConservativeTransport.BoundaryTransfer.Kind.HEAT) heat.merge(b.nodeId(), b.totalEnergyJoule() * scale, Double::sum);
@@ -255,7 +255,12 @@ class StillRuntimeTest {
 
     /** A closed still of {@code heater} on the network model, 90 % full of water at 372 K, its VAPOUR line into the air. */
     private static Rig waterStill(BatchStill.Heater heater) {
-        var model = FluidTestSupport.networkModel();
+        return waterStill(heater, 1);
+    }
+
+    /** That still under time factor {@code factor} (batch 2026-11-11-minecraft-time-delta). */
+    private static Rig waterStill(BatchStill.Heater heater, int factor) {
+        var model = FluidTestSupport.networkModel().withTime(com.wormzjl.icheme.science.fluid.SimulationTime.of(factor));
         var design = new BatchStill.Design(VOLUME, heater, false, 0);
         var devices = List.of(pot(design), plain(11, 1, 0, Kind.PIPE), plain(12, 2, 0, Kind.VOID));
         var states = new HashMap<Long, PassiveNetwork.Reservoir>();
@@ -298,6 +303,27 @@ class StillRuntimeTest {
                 "the pot took the items' heat at the heater's efficiency: " + rig.unit().heated() + " of " + budget);
         assertEquals(rig.unit().heated(), rig.heat.getOrDefault(PhysicalFluidTopology.sideIdentity(POT), 0.), 1e-3 * budget, "the facts' total is the solver's heat");
         assertTrue(rig.stills.statusLine(POT).contains("NO FUEL"), rig.stills.statusLine(POT));
+    }
+
+    /**
+     * Fuel on process time (batch 2026-11-11-minecraft-time-delta, W4, owner T4): an item's heat is conserved, so at factors 4
+     * and 72 the pot takes the same heat from its three items as at 1, burning through them in a factor's share of the play time.
+     */
+    @Test
+    void aSolidFuelsHeatIsConservedAndBurnsOverProcessTimeAtFactorsFourAndSeventyTwo() {
+        for (int factor : new int[]{4, 72}) {
+            var rig = waterStill(BatchStill.Heater.SOLID, factor);
+            rig.items = 3;
+            double rating = rig.unit().design().rating(), budget = 3 * ITEM * BatchStill.Heater.SOLID.efficiency();
+            // At factor 1 the three items last about budget / rating of play; here a factor's share of it, plus a few cycles.
+            double play = budget / rating / factor + 30;
+            rig.run(play);
+            assertEquals(3, rig.taken, "factor " + factor + ": every item burned");
+            assertEquals(0, rig.view().heat(), 0, "factor " + factor + ": the fire is out within " + play + " s of play");
+            assertTrue(rig.unit().heated() <= budget * (1 + 1e-9) && rig.unit().heated() > .98 * budget,
+                    "factor " + factor + ": the pot took the items' heat: " + rig.unit().heated() + " of " + budget);
+            assertEquals(rig.unit().heated(), rig.heat.getOrDefault(PhysicalFluidTopology.sideIdentity(POT), 0.), 1e-3 * budget, "the facts' total is the solver's heat");
+        }
     }
 
     /** W4: an electric pot waits for its store (NO POWER), then heats at its rating and draws its rating over its efficiency. */

@@ -134,12 +134,16 @@ class FluidFactsCompatTest {
         world.runTo(900);
         primeMovers(world);
         world.runTo(910);
+        blanketed(world);
+        world.runTo(920);
+        relieved(world);
+        world.runTo(930);
         phases(world);return world;
     }
     /** The vessels {@link #phases} fills: nitrogen over water, oil over water under their gas, and boiling water. */
     private long wetNitrogen,oilOverWater,boiling;
     /**
-     * Facts schema 22 (batch 2026-11-11-aqueous-solvents, W3b step 6): three slack 20 m3 vessels, each fed for 5 s by its
+     * Facts schema 24 (batch 2026-11-11-aqueous-solvents, W3b step 6; 22 before the merge of main 0.27.1): three slack 20 m3 vessels, each fed for 5 s by its
      * own generator, then cut off: wet nitrogen (a gas over an aqueous liquid that holds dissolved nitrogen), wet crude
      * (a gas, an oil and an aqueous liquid) and water from 380 K at 1.5 bar (one compound, boiling at the ambient pressure).
      */
@@ -169,7 +173,7 @@ class FluidFactsCompatTest {
         return out;
     }
     /**
-     * Facts schema 22: a vessel row carries its oil and aqueous slots, so a rebuild from the facts alone gives every vessel
+     * Facts schema 24: a vessel row carries its oil and aqueous slots, so a rebuild from the facts alone gives every vessel
      * the three slots of its saved state bit for bit: the gas over water with its dissolved nitrogen, the oil over water,
      * the one compound in two phases, the empty vessel and the rigid one. The exact load compares every row with the
      * live state (FluidFacts.disagreement), so its route proves they agree.
@@ -206,7 +210,7 @@ class FluidFactsCompatTest {
             for(var v:facts.vessels())assertTrue(v.oil()!=null&&v.aqueous()!=null&&v.oil().length==v.moles().length,"vessel "+v.id()+" carries its two liquid slots");
         }
     }
-    /** One vessel row of an island section, {@code slots} fields after its {@code rigid}: none as a build before schema 22 wrote it. */
+    /** One vessel row of an island section, {@code slots} fields after its {@code rigid}: none as a build before schema 24 wrote it. */
     private byte[] vesselRow(double[] moles,double[] liquid,double[] vapor,double waterLiquid,double waterVapor,double[]... slots) {
         return FluidFacts.section(f->f.text("minecraft:overworld").text(CORPUS_PACKAGE).list(model.components(),(c,id)->c.text(id.toString())).list(List.of(1L),(q,id)->{
             q.i64(id).f64(1).f64(1).bool(false).doubles(moles).f64(-5e4).list(List.of(),(s,none)->{});
@@ -215,10 +219,10 @@ class FluidFactsCompatTest {
     }
     /**
      * A row an older build wrote ends at its {@code rigid}: it reads with no slot fields and states its liquids as before
-     * schema 22, the compounds as the oil and the water as the aqueous liquid. A row with the fields states them as
+     * schema 24, the compounds as the oil and the water as the aqueous liquid. A row with the fields states them as
      * written, whatever the summed fields say. A row with one slot of two, a slot off the axis or a negative amount is damaged.
      */
-    @Test void aRowWithoutTheSlotFieldsReadsItsLiquidsAsBeforeSchema22() {
+    @Test void aRowWithoutTheSlotFieldsReadsItsLiquidsAsBeforeSchema24() {
         int w=model.componentCount()-1;
         var wet=FluidTestSupport.oneCubicMetreState(model,FluidTestSupport.Mixture.WET_CRUDE,300,101325);var split=FluidThermodynamics.legacySplit(wet);
         double[] moles=com.wormzjl.icheme.science.fluid.solver.PhaseLayout.totalAmounts(wet),liquid=split.liquid(),vapor=split.vapor(),oil=wet.liquidAmountsView().clone(),aqueous=wet.aqueousAmountsView().clone();
@@ -319,6 +323,44 @@ class FluidFactsCompatTest {
         world.registry.submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,FluidDeviceSpec.nitrogen(CATALOG),0))),id+1,null);
     }
     /** The steam ejectors, each its identity and rated load (kg/s), in identity order: what schema 17 carries. */
+    /** Facts schema 22: a drum with a gas blanketing valve, its set pressure and its blanket gas port beside its outlet. */
+    private static void blanketed(EventPathWorld world) {
+        long id=world.ledger.nextIdentity();var node=new PhysicalFluidTopology.Position(EventPathWorld.DIM,90,64,8);
+        var g=VesselGeometry.round(VesselGeometry.Form.HORIZONTAL_DRUM,2,6,2.0/3,.7);
+        var ports=List.of(new PhysicalFluidTopology.Port(node,Direction.NORTH,PassiveNetwork.PhasePort.LIQUID),
+                new PhysicalFluidTopology.Port(new PhysicalFluidTopology.Position(EventPathWorld.DIM,90,68,8),Direction.WEST,PassiveNetwork.PhasePort.VAPOR,PhysicalFluidTopology.ConnectionRole.BLANKET));
+        var device=new PhysicalFluidTopology.Device(id,node,Kind.RESERVOIR,Direction.NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive(),ports);
+        var spec=new FluidDeviceSpec(g.capacity(),298.15,101325,FluidDeviceSpec.nitrogen(CATALOG).composition(),SlurryFeed.NONE,g.height(),false,g,null,135000);
+        world.registry.submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,spec,0))),id+1,null);
+    }
+    /** Facts schema 23: a blanketed drum with a pressure safety valve on its relief port, and a pipe carrying one, its outlet up. */
+    private static void relieved(EventPathWorld world) {
+        long id=world.ledger.nextIdentity();var node=new PhysicalFluidTopology.Position(EventPathWorld.DIM,96,64,8);
+        var g=VesselGeometry.round(VesselGeometry.Form.HORIZONTAL_DRUM,2,6,2.0/3,.7);
+        var ports=List.of(new PhysicalFluidTopology.Port(node,Direction.NORTH,PassiveNetwork.PhasePort.LIQUID),
+                new PhysicalFluidTopology.Port(new PhysicalFluidTopology.Position(EventPathWorld.DIM,96,68,8),Direction.WEST,PassiveNetwork.PhasePort.VAPOR,PhysicalFluidTopology.ConnectionRole.BLANKET),
+                new PhysicalFluidTopology.Port(new PhysicalFluidTopology.Position(EventPathWorld.DIM,96,68,11),Direction.UP,PassiveNetwork.PhasePort.VAPOR,PhysicalFluidTopology.ConnectionRole.RELIEF));
+        var device=new PhysicalFluidTopology.Device(id,node,Kind.RESERVOIR,Direction.NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive(),ports);
+        var spec=new FluidDeviceSpec(g.capacity(),298.15,101325,FluidDeviceSpec.nitrogen(CATALOG).composition(),SlurryFeed.NONE,g.height(),false,g,null,135000).withRelief(450000,null);
+        world.registry.submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,spec,0))),id+1,null);
+        world.place(100,64,8,Kind.PIPE,Direction.EAST,FluidDeviceSpec.nitrogen(CATALOG).withRelief(250000,Direction.UP),.05);
+    }
+    /** Each pressure safety valve: its set pressure and its outlet (a vessel's relief port, or a pipe's face). */
+    private static String relieved(WorldTopologyLedger.Snapshot world) {
+        var text=new StringBuilder();
+        for(var r:new TreeMap<>(world.active()).values())if(r.spec().relief()>0){if(!text.isEmpty())text.append(";");
+            var port=r.device().reliefPort();
+            text.append(r.device().id()).append("=").append(r.spec().relief()).append("/").append(port!=null?port.cell().x()+","+port.cell().y()+","+port.cell().z()+" "+port.face()+" "+port.port():"face "+r.spec().reliefFace());}
+        return text.toString();
+    }
+    /** Each blanketed vessel: its set pressure and its blanket gas port. */
+    private static String blanketed(WorldTopologyLedger.Snapshot world) {
+        var text=new StringBuilder();
+        for(var r:new TreeMap<>(world.active()).values())if(r.spec().blanket()>0){if(!text.isEmpty())text.append(";");
+            var port=r.device().ports().stream().filter(p->p.role()==PhysicalFluidTopology.ConnectionRole.BLANKET).findFirst().orElse(null);
+            text.append(r.device().id()).append("=").append(r.spec().blanket()).append("/").append(port==null?"none":port.cell().x()+","+port.cell().y()+","+port.cell().z()+" "+port.face()+" "+port.port());}
+        return text.toString();
+    }
     private static String ejectors(WorldTopologyLedger.Snapshot world) {
         var text=new StringBuilder();
         for(var r:new TreeMap<>(world.active()).values())if(r.device().control() instanceof FlowControl.Ejector e){if(!text.isEmpty())text.append(";");text.append(r.device().id()).append("=").append(e.design().suction());}
@@ -509,6 +551,42 @@ class FluidFactsCompatTest {
         var before=moles(rebuilt.checkpoint(),model.componentCount());var after=moles(new FluidCheckpointCodec.Checkpoint(reloaded.entries()),model.componentCount());
         for(int c=0;c<before.length;c++)assertEquals(before[c],after[c],1e-9*Math.max(1,Math.abs(before[c])),"component "+c+" conserved by the rebuilt line");
         var again=image(reloaded);assertEquals(FluidCheckpointStore.Route.EXACT,load(again,key->key.on(model),CATALOG).route());
+    }
+
+    /**
+     * Another time factor (batch 2026-11-11-minecraft-time-delta, W1): a world solved at factor 1 and opened at 4 rebuilds
+     * its islands from their facts, nothing restated: every vessel's contents and filter's cake, the ledger and the online
+     * tick as saved; its solved intervals and certificates are state and go. A save at 4 names its factor, so a load at 1
+     * rebuilds the same way.
+     */
+    @Test void anotherTimeFactorRebuildsTheIslandsFromTheirFactsKeepingContentsLedgerAndOnlineTick() {
+        var world=world();var image=image(world);var saved=world.ledger.snapshot();
+        var fourfold=FluidThermodynamics.forNetwork(CATALOG,PACKAGE,FluidThermodynamics.DEFAULT_MAXIMUM_VELOCITY,model.traceTruncation().cutoffMoleFraction(),model.solidSettings,com.wormzjl.icheme.science.fluid.SimulationTime.of(4));
+        assertNotEquals(model.revision(),fourfold.revision(),"the factor is part of the model's revision");
+        assertEquals(model.thermodynamicRevision(),fourfold.thermodynamicRevision(),"but not of the property reference the contents are read against");
+        var exact=load(image,key->key.on(model),CATALOG);assertEquals(FluidCheckpointStore.Route.EXACT,exact.route());
+        var opened=load(image,key->key.on(fourfold),CATALOG);
+        assertEquals(FluidCheckpointStore.Route.FACTS,opened.route());assertTrue(opened.reason().contains("time factor changed from 1 to 4"),opened.reason());
+        assertEquals(contents(exact.checkpoint()),contents(opened.checkpoint()),"every vessel's inventory and every filter's cake, bit for bit");
+        var ledger=opened.world().orElseThrow();
+        assertEquals(saved.active(),ledger.active(),"the registry: devices, settings, specs and revisions");
+        assertArrayEquals(saved.constructed().moles(),ledger.constructed().moles());assertEquals(saved.constructed().totalEnergy(),ledger.constructed().totalEnergy());
+        assertArrayEquals(saved.destroyed().moles(),ledger.destroyed().moles());assertEquals(saved.basis(),ledger.basis());
+        assertEquals(WorldTopologyLedger.Restated.NONE,ledger.restated(),"nothing restated: the property data did not change");
+        long epoch=FluidCheckpointCodec.epoch(image.core());assertEquals(epoch,ledger.onlineTick(),"the online tick as saved");
+        for(var entry:opened.checkpoint().islands()) {
+            var s=entry.snapshot();assertTrue(s.status().startsWith("WAITING: rebuilt from saved facts (the time factor"),s.status());
+            assertTrue(s.certificate().isEmpty()&&s.lastResult().isEmpty(),"solved intervals and certificates are state");
+        }
+        // A save under the factor names it; the other way round rebuilds too.
+        var checkpoint=new FluidCheckpointCodec.Checkpoint(world.entries());
+        var store=FluidCheckpointStore.memory();store.commit(store.prepare(checkpoint,Optional.of(world.ledger.snapshot()),world.ledger.onlineTick(),key->key.on(fourfold)));
+        var four=store.image();
+        assertEquals(4,four.core().getList("Packages",Tag.TAG_COMPOUND).getCompound(0).getInt("TimeScale"));
+        assertFalse(image.core().getList("Packages",Tag.TAG_COMPOUND).getCompound(0).contains("TimeScale"),"factor 1 writes no field: its core record is as before");
+        var back=load(four,key->key.on(model),CATALOG);
+        assertEquals(FluidCheckpointStore.Route.FACTS,back.route());assertTrue(back.reason().contains("time factor changed from 4 to 1"),back.reason());
+        assertEquals(contents(exact.checkpoint()),contents(back.checkpoint()));
     }
 
     /**
@@ -958,6 +1036,10 @@ class FluidFactsCompatTest {
                 assertEquals(expected.getProperty("stills",""),stills(ledger,savedBasis(image)),folder+": batch stills");
                 // Schema 17 wrote the steam ejectors; an older image reads none.
                 assertEquals(expected.getProperty("ejectors",""),ejectors(ledger),folder+": steam ejectors");
+                // Schema 22 wrote the gas blanketing valves; an older image has none.
+                assertEquals(expected.getProperty("blanketed",""),blanketed(ledger),folder+": gas blanketing valves");
+                // Schema 23 wrote the pressure safety valves; an older image has none.
+                assertEquals(expected.getProperty("relieved",""),relieved(ledger),folder+": pressure safety valves");
                 long vessels=rebuilt.checkpoint().islands().stream().flatMap(e->e.snapshot().graph().reservoirs().stream()).filter(n->n.kind()==PassiveNetwork.NodeKind.RESERVOIR).count();
                 // Schema 18 wrote whether a vessel's wall is rigid; an older image reads every vessel a bag.
                 assertEquals(Long.parseLong(expected.getProperty("rigid","0")),rigid(rebuilt.checkpoint()),folder+": rigid vessels");
@@ -1100,6 +1182,8 @@ class FluidFactsCompatTest {
         props.setProperty("builds",builds(loaded.world().orElseThrow()));
         props.setProperty("stills",stills(loaded.world().orElseThrow()));
         props.setProperty("ejectors",ejectors(loaded.world().orElseThrow()));
+        props.setProperty("blanketed",blanketed(loaded.world().orElseThrow()));
+        props.setProperty("relieved",relieved(loaded.world().orElseThrow()));
         props.setProperty("vessels",Long.toString(contents(loaded.checkpoint()).values().stream().filter(v->v instanceof PassiveNetwork.Inventory).count()));
         props.setProperty("rigid",Long.toString(rigid(loaded.checkpoint())));
         props.setProperty("vacuumPumps",vacuumPumps(loaded.world().orElseThrow()));

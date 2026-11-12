@@ -8,26 +8,28 @@ import com.wormzjl.icheme.science.math.DeterministicMath;
  * <ul>
  * <li><b>Cavitation:</b> {@code I_c(σ) / τ_c}, with {@code σ = NPSHA / NPSH3} and Gülich's erosion intensity
  * {@code I_c = (σ/2.06)³ ((4 − σ)/1.94)^2.83} for {@code 0 < σ < 4}, else 0 (plan section 3.7 without the gas cushion):
- * one at its peak σ = 2.06, the measured maximum near twice NPSH3; τ_c = {@link #CAVITATION_HOURS} h. Lives in online
- * time: 2.0 h at σ 2.06, 5.1 h at NPSH3 (σ 1), 18.9 h at σ 3.5, none from σ 4 (inception) up.</li>
+ * one at its peak σ = 2.06, the measured maximum near twice NPSH3; τ_c = {@link #CAVITATION_PROCESS_HOURS} h. Lives in
+ * process time: 8.0 h at σ 2.06, 20.4 h at NPSH3 (σ 1), 75.6 h at σ 3.5, none from σ 4 (inception) up.</li>
  * <li><b>Running dry:</b> {@code 1 / τ_d} while its driver is on and it is gas- or vapour-locked, τ_d =
- * {@link #DRY_MINUTES} min.</li>
+ * {@link #DRY_PROCESS_MINUTES} min.</li>
  * </ul>
- * Pure: no state. The engine books {@code rate × Δt} over committed online time.
+ * Pure: no state. The engine books {@code rate × Δt} over committed process time (batch 2026-11-11-minecraft-time-delta, W4,
+ * owner T3: wear in line with the time factor; the default lives four times the old online ones, so at the default factor 4
+ * a pump lasts as long in play as before: 2 h at the peak and 10 min dry).
  */
 public final class Wear {
     private Wear() {}
 
-    /** The cavitation life at the erosion peak, h. */
-    public static final double CAVITATION_HOURS = 2;
-    /** The life running dry, min. */
-    public static final double DRY_MINUTES = 10;
+    /** The cavitation life at the erosion peak, h of process time. */
+    public static final double CAVITATION_PROCESS_HOURS = 8;
+    /** The life running dry, min of process time. */
+    public static final double DRY_PROCESS_MINUTES = 40;
     /** The σ of the erosion peak, and the inception σ above which nothing erodes. */
     public static final double PEAK = 2.06, INCEPTION = 4;
 
-    /** The config's three keys ({@code machines.wear.*}). */
+    /** The config's three keys ({@code machines.wear.*}); the lives in process time. */
     public record Settings(boolean enabled, double cavitationHours, double dryMinutes) {
-        public static final Settings DEFAULT = new Settings(true, CAVITATION_HOURS, DRY_MINUTES);
+        public static final Settings DEFAULT = new Settings(true, CAVITATION_PROCESS_HOURS, DRY_PROCESS_MINUTES);
 
         public Settings {
             if (!(cavitationHours > 0) || !Double.isFinite(cavitationHours) || !(dryMinutes > 0) || !Double.isFinite(dryMinutes))
@@ -42,7 +44,7 @@ public final class Wear {
         return a * a * a * DeterministicMath.pow(b, 2.83);
     }
 
-    /** The health a pump loses per second of online time at {@code sigma} (NaN: no cavitation read) and running dry or not. */
+    /** The health a pump loses per second of process time at {@code sigma} (NaN: no cavitation read) and running dry or not. */
     public static double rate(double sigma, boolean dry, Settings settings) {
         if (!settings.enabled()) return 0;
         return intensity(sigma) / (settings.cavitationHours() * 3600) + (dry ? 1 / (settings.dryMinutes() * 60) : 0);
@@ -53,7 +55,7 @@ public final class Wear {
         return rate(sigma, dry, Settings.DEFAULT);
     }
 
-    /** The online life, s, of a new pump at a steady {@code sigma} and dry state: infinite where nothing wears. */
+    /** The process life, s, of a new pump at a steady {@code sigma} and dry state: infinite where nothing wears. */
     public static double life(double sigma, boolean dry, Settings settings) {
         double r = rate(sigma, dry, settings);
         return r > 0 ? 1 / r : Double.POSITIVE_INFINITY;

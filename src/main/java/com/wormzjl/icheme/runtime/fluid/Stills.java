@@ -27,9 +27,9 @@ import java.util.function.LongFunction;
  * pot's own step. What the pot's vent and spill give the head (its VENT and SPILL boundaries) goes, at the pot's commit, into
  * the head's two accounts (facts): the distillate's (what the condenser condenses) and the vent's.</li>
  * <li><b>Outlets.</b> DISTILLATE and VENT are generators carrying the still's outlet valve ({@link FlowControl.ValveSource#STILL});
- * each slice gives what its account held as of {@link #FENCE_TICKS} before its start, over {@link #HOLD_SECONDS}. A gift's
+ * each slice gives what its account held as of {@link #FENCE_TICKS} before its start, over {@link #HOLD_CYCLES}. A gift's
  * energy short of what its account carried is the condenser's duty: owed to the water side, or to the air with none.</li>
- * <li><b>Condenser.</b> It condenses what its water takes: while the heat owed stays within {@link #HOLD_SECONDS} of the
+ * <li><b>Condenser.</b> It condenses what its water takes: while the heat owed stays within {@link #HOLD_CYCLES} of the
  * pot's heat it condenses all; past that, the share the water took over the last window (COOLING LIMITED), and the column
  * solves at the reflux that share leaves ({@link BatchStill#effectiveReflux}).</li>
  * <li><b>Column.</b> Solved every {@link #SOLVE_TICKS} of a boiling pot's commits, on the worker, warm from its last profile;
@@ -49,10 +49,15 @@ public final class Stills implements IslandCoordinator.Ports {
     public static final long SOLVE_TICKS=100;
     /** A solve's answer applies this many ticks after the commit that asked for it. */
     public static final long APPLY_TICKS=100;
-    /** An outlet gives its account over this long, s; and the condenser keeps up while it owes at most this many seconds of the pot's heat. */
-    public static final double HOLD_SECONDS=10;
-    /** A solid still takes its next item while its fire holds less than this many seconds of its firing. */
-    public static final double REFILL_SECONDS=30;
+    /** The engine's cycle, ticks (5 s of play): the still's windows are counted in it. */
+    public static final long CYCLE_TICKS=100;
+    /**
+     * An outlet gives its account over this many cycles, and the condenser keeps up while it owes at most this many cycles of
+     * the pot's heat (10 s at factor 1); a solid still takes its next item while its fire holds less than {@link #REFILL_CYCLES}
+     * cycles of its firing (30 s at 1). Counts of cycles (batch 2026-11-11-minecraft-time-delta, W3), so the still answers in
+     * the same play time at any time factor.
+     */
+    public static final int HOLD_CYCLES=2,REFILL_CYCLES=6;
     /** The water's outlet stays this far under the condensate, K. */
     public static final double APPROACH_KELVIN=com.wormzjl.icheme.science.equipment.HeatSides.WATER_APPROACH;
     /** Below this, W, the pot is not heated. */
@@ -61,9 +66,12 @@ public final class Stills implements IslandCoordinator.Ports {
     static final double LATENT_CEILING=2.257e6;
     /**
      * How long a new firing or reflux takes to show in the distillate's flow, ticks: the next column solve and its answer
-     * ({@link #SOLVE_TICKS}, {@link #APPLY_TICKS}), the outlet's fence ({@link #FENCE_TICKS}) and its hold ({@link #HOLD_SECONDS}).
+     * ({@link #SOLVE_TICKS}, {@link #APPLY_TICKS}), the outlet's fence ({@link #FENCE_TICKS}) and its hold ({@link #HOLD_CYCLES}).
      */
-    public static final long RESPONSE_TICKS=SOLVE_TICKS+APPLY_TICKS+FENCE_TICKS+(long)(HOLD_SECONDS*20);
+    public static final long RESPONSE_TICKS=SOLVE_TICKS+APPLY_TICKS+FENCE_TICKS+HOLD_CYCLES*CYCLE_TICKS;
+    /** {@link #HOLD_CYCLES} and {@link #REFILL_CYCLES} in process seconds under the coordinator's time factor. */
+    private double holdSeconds(){return HOLD_CYCLES*coordinator.time().seconds(CYCLE_TICKS);}
+    private double refillSeconds(){return REFILL_CYCLES*coordinator.time().seconds(CYCLE_TICKS);}
 
     /** A still's fuel: the heat (J) of one item taken from its slot, 0 when it is empty or its block is not loaded. */
     public interface Fuel {double take(long pot);}
@@ -153,7 +161,7 @@ public final class Stills implements IslandCoordinator.Ports {
             var u=topology.still(node.id());var r=runs.get(node.id());if(u==null||r==null)continue;
             r.potIsland=island;
             promote(r,slice.startTick());
-            double heat=heat(u,r,node,slice.seconds());
+            double heat=heat(u,r,node,slice.seconds(coordinator.time()));
             var head=pool.head()==null?null:head(u,r,pool.head().components());
             var planned=pool.withFiring(heat).withHead(head);
             if(planned.equals(pool))continue;
@@ -233,7 +241,7 @@ public final class Stills implements IslandCoordinator.Ports {
         }
         return plans==null?Map.of():plans;
     }
-    /** An outlet's generator and valve: its account as of the fence, at the condensate's or the head's temperature, over {@link #HOLD_SECONDS}. */
+    /** An outlet's generator and valve: its account as of the fence, at the condensate's or the head's temperature, over {@link #HOLD_CYCLES}. */
     private PortPlan outletPlan(long island,StillUnit u,Run r,PassiveNetwork.Reservoir node,IslandClock.Slice slice,boolean distillate) {
         long fence=slice.startTick()-FENCE_TICKS;
         var available=(distillate?u.head():u.venting()).moles();
@@ -243,7 +251,7 @@ public final class Stills implements IslandCoordinator.Ports {
         if(!(total>0)||mine==null)return new PortPlan(node.id(),node.id(),0,node.state().temperature(),com.wormzjl.icheme.science.fluid.solver.PhaseLayout.totalAmounts(node.state()));
         double temperature=r.solved==null?r.potTemperature:distillate?r.solved.condensateTemperature():r.solved.headTemperature();
         if(!(temperature>0))temperature=node.state().temperature();
-        double mass=mass(available),target=mass/Math.max(slice.seconds(),HOLD_SECONDS);
+        double mass=mass(available),target=mass/Math.max(slice.seconds(coordinator.time()),holdSeconds());
         return new PortPlan(node.id(),node.id(),target,temperature,mine);
     }
     /** The compounds outlet {@code device} may deliver, for its island's list: those its account holds, and Water whatever it
@@ -257,7 +265,7 @@ public final class Stills implements IslandCoordinator.Ports {
 
     @Override public void booked(long island,PassiveNetwork graph,long start,long end,PassiveIntervalSolver.Result result) {
         sync();if(runs.isEmpty()||end<=start)return;
-        double seconds=(end-start)/20.0;
+        double seconds=coordinator.time().seconds(end-start);
         Map<Long,double[]> arrived=null;Map<Long,Double> arrivedEnergy=null,potHeat=null,given=null;Map<Long,double[]> gifts=null;
         for(var b:result.boundaries()) {
             var kind=b.kind();
@@ -313,7 +321,7 @@ public final class Stills implements IslandCoordinator.Ports {
         switch(u.heater()) {
             case SOLID->{
                 double burning=Math.max(0,u.burning()-drawn);
-                double want=u.heater().drawn(firing(u)*u.design().rating())*REFILL_SECONDS;
+                double want=u.heater().drawn(firing(u)*u.design().rating())*refillSeconds();
                 for(int item=0;item<64&&burning<want;item++){double next=fuel.take(u.id());if(!(next>0))break;burning+=next;}
                 if(burning!=u.burning())u=u.withBurning(burning);
             }
@@ -363,15 +371,15 @@ public final class Stills implements IslandCoordinator.Ports {
         }
         return u.withTotals(u.heated(),u.condensed()+joule);
     }
-    /** The condenser's share for the next solve: all while what it owes stays within {@link #HOLD_SECONDS} of the pot's heat, else what the water took. */
+    /** The condenser's share for the next solve: all while what it owes stays within {@link #HOLD_CYCLES} of the pot's heat, else what the water took. */
     private void condensed(StillUnit u,Run r,long now) {
         if(!u.condenser()){r.condensed=0;return;}
         if(u.water()==0){r.condensed=0;return;}
         double need=Math.max(r.heat,NO_HEAT);
-        if(r.transit<=HOLD_SECONDS*need){r.condensed=1;return;}
+        if(r.transit<=holdSeconds()*need){r.condensed=1;return;}
         double owed=0,first=Double.NaN;long from=now;
         for(var p:r.paid){if(p.tick()<now-FENCE_TICKS)continue;owed+=p.owed();if(Double.isNaN(first)&&!Double.isNaN(p.transit())){first=p.transit();from=p.tick();}}
-        double span=Math.max(1,(now-from)/20.0),took=Double.isNaN(first)?0:Math.max(0,owed-(r.transit-first));
+        double span=Math.max(1,coordinator.time().seconds(now-from)),took=Double.isNaN(first)?0:Math.max(0,owed-(r.transit-first));
         r.condensed=Math.max(0,Math.min(1,took/span/need));
         while(r.paid.size()>1&&r.paid.peekFirst().tick()<now-2*FENCE_TICKS)r.paid.removeFirst();
     }
@@ -382,7 +390,7 @@ public final class Stills implements IslandCoordinator.Ports {
         while(r.paid.size()>1&&r.paid.peekFirst().tick()<start-2*FENCE_TICKS)r.paid.removeFirst();
         // Before the pot's first slice its temperature is unknown (NaN, which Math.max passes on): the water reads 300 K.
         double condensate=r.solved!=null&&r.solved.condensateTemperature()>0?r.solved.condensateTemperature():r.potTemperature>300?r.potTemperature:300;
-        double rate=r.heat+Math.max(0,transit-HOLD_SECONDS*r.heat)/(6*HOLD_SECONDS);
+        double rate=r.heat+Math.max(0,transit-holdSeconds()*r.heat)/(6*holdSeconds());
         return ExchangerRelay.Read.column(transit,seconds,Math.max(1,condensate-APPROACH_KELVIN),Math.max(0,rate));
     }
 

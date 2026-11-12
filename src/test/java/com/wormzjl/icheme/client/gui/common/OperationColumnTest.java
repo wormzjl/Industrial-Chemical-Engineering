@@ -280,7 +280,7 @@ public class OperationColumnTest {
         assertArrayEquals(new String[]{"Air fans, kW", "144.7", "361.2"}, OperationColumn.duties(fans, t).get(1));
         var solve = OperationColumn.solve(view, t);
         assertArrayEquals(new String[]{"Last solve", "Warm route"}, solve.get(0));
-        assertArrayEquals(new String[]{"Age", "72 min"}, solve.get(2));
+        assertArrayEquals(new String[]{"Age (play)", "72 min"}, solve.get(2));
         var none = OperationColumn.solve(OperationView.idle(Phase.STOPPED, "STOPPED", designs().get(1)), t);
         assertEquals(1, none.size());
         // The glass's tables lie under one another, inside its box.

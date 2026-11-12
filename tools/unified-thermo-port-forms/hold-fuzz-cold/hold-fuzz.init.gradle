@@ -18,6 +18,8 @@ gradle.projectsEvaluated {
         systemProperty 'holdFuzz.strict', root.findProperty('holdFuzzStrict') ?: 'false'
         systemProperty 'holdFuzz.defaults', root.findProperty('holdFuzzDefaults') ?: 'false'
         systemProperty 'holdFuzz.counters', root.findProperty('holdFuzzCounters') ?: 'false'
+        // -PholdFuzzTimeScale=<1..72>: the time factor; unset, HoldFuzzTest takes the game's default (SimulationTime.DEFAULT_FACTOR, 4).
+        if (root.findProperty('holdFuzzTimeScale')) systemProperty 'holdFuzz.timeScale', root.findProperty('holdFuzzTimeScale')
         // -Pm3Trace=true: the M3 trace prints (probes/specs/*-print.json, applied by hand and restored).
         systemProperty 'm3.trace', root.findProperty('m3Trace') ?: 'false'
         systemProperty 'holdFuzz.cold', root.findProperty('holdFuzzCold') ?: 'false'

@@ -96,6 +96,8 @@ public final class GuiPrototypes {
         out.addAll(firedHeater());
         out.addAll(flareStack());
         out.addAll(batchStill());
+        out.addAll(blanketValve());
+        out.addAll(reliefValve());
         return out;
     }
 
@@ -267,7 +269,7 @@ public final class GuiPrototypes {
         double rated = 100 / 3600.0;
         var pump = new com.wormzjl.icheme.science.machine.CentrifugalPump(rated, 80, 0.70, 2950);
         String required = com.wormzjl.icheme.client.gui.common.kit.Format.number(pump.npsh(1).required(rated));
-        var casing = casingInput().withSuction(new DeviceColumn.Suction("6.8", required, "0.4", "73.0"));
+        var casing = casingInput().withSuction(new DeviceColumn.Suction("6.8", required, "0.4", "73.0", "87.6"));
         var casingRows = DeviceColumn.rows(casing, TEXTS);
         double slow = .7, flow = .7 * rated, head = pump.head(flow, slow);
         String slowRequired = com.wormzjl.icheme.client.gui.common.kit.Format.number(pump.npsh(slow).required(flow));
@@ -1243,6 +1245,122 @@ public final class GuiPrototypes {
             contents(d, box, 0, List.of(new String[]{"Component", "Mass %", "kg/s"}, new String[]{"Toluene", "100.0", "2.5"}));
             d.footer(2, "Close", "Apply", "Mass", "°C", "bar", "/s");
         });
+    }
+
+    /**
+     * A drum's accessory page (batch 2026-11-11-gas-blanketing): its gas blanketing valve's set pressure as an editor's
+     * entry and as a reader's meter, the drum's pressure, and on the glass the pressures at which it pads and vents.
+     */
+    static List<Prototype> blanketValve() {
+        var in = new DeviceColumn.Input(Kind.RESERVOIR, true, false, true, "bar", "°C", "/s", DeviceColumn.Valve.NONE, null, false,
+                new DeviceColumn.Level(0.5, "3976.0", "7952.0"), null, List.of(), phases("volume", 0, 4, 4, 0), List.of());
+        var out = new ArrayList<Prototype>();
+        for (boolean editor : new boolean[]{true, false}) {
+            var rows = DeviceColumn.blanketValve(editor, "bar", "1.213", "1.209", TEXTS);
+            out.add(devicePage(editor ? "fluid-drum-accessory" : "fluid-drum-accessory-reader", WINDOW[0], WINDOW[1], rows, (d, s) -> {
+                d.title("Horizontal drum");
+                d.name("V-101", false);
+                d.tabs(3, "Overview", "Outlets", "Datasheet", Door.tr("gui.icheme.fluid.accessory"));
+                d.status(Door.tr("gui.icheme.fluid.flowing"), Palette.MUTED);
+                var box = device(d, in, rows, Map.of("blanket", "1.213"));
+                int x = box.x() + 9, w = box.w() - 16;
+                d.c.text(d.m.cut(Door.tr("gui.icheme.fluid.accessory.blanket"), w), x, 82, Palette.ACCENT);
+                d.c.text(d.m.cut(Door.tr("gui.icheme.fluid.accessory.blanket.pad", "1.213", "bar"), w - 4), x, 100, Palette.TEXT);
+                d.c.hLine(x, x + w, 112, Palette.LINE);
+                d.c.text(d.m.cut(Door.tr("gui.icheme.fluid.accessory.blanket.vent", "1.274", "bar"), w - 4), x, 118, Palette.TEXT);
+                d.c.hLine(x, x + w, 130, Palette.LINE);
+                int y = 136;
+                for (var line : d.m.wrap(Door.tr("gui.icheme.fluid.accessory.blanket.supply"), w - 4)) {
+                    d.c.text(line, x, y, Palette.MUTED);
+                    y += 10;
+                }
+                if (editor) d.footer(2, "Close", "Apply", "Mass", "°C", "bar", "/s");
+                else d.footer(1, "Close", "Mass", "°C", "bar", "/s");
+            }));
+        }
+        return out;
+    }
+
+    /**
+     * A pressure safety valve (same batch): on a drum's accessory page beside its blanketing valve (an editor), alone on a
+     * drum (a reader, relieving to the atmosphere), and on a pipe's own valve screen (an editor, piped).
+     */
+    static List<Prototype> reliefValve() {
+        var drum = new DeviceColumn.Input(Kind.RESERVOIR, true, false, true, "bar", "°C", "/s", DeviceColumn.Valve.NONE, null, false,
+                new DeviceColumn.Level(0.5, "3976.0", "7952.0"), null, List.of(), phases("volume", 0, 4, 4, 0), List.of());
+        var pipe = new DeviceColumn.Input(Kind.PIPE, true, false, true, "bar", "°C", "/s", DeviceColumn.Valve.NONE, null, false,
+                null, null, List.of(), phases("volume", 0, 1, 0, 0), List.of());
+        var out = new ArrayList<Prototype>();
+        // Both valves on one drum, an editor.
+        var both = DeviceColumn.accessories(DeviceColumn.blanketValve(true, "bar", "1.213", "4.012", TEXTS),
+                DeviceColumn.reliefValve(true, "bar", "4.013", null, "1.111", "kg/s", true, TEXTS));
+        out.add(devicePage("fluid-drum-accessory-psv", WINDOW[0], WINDOW[1], both, (d, s) -> {
+            d.title("Horizontal drum");
+            d.name("V-101", false);
+            d.tabs(3, "Overview", "Outlets", "Datasheet", Door.tr("gui.icheme.fluid.accessory"));
+            d.status(Door.tr("gui.icheme.fluid.flowing"), Palette.MUTED);
+            var box = device(d, drum, both, Map.of("blanket", "1.213", "relief", "4.013"));
+            int y = blanketGlass(d, box, 82, "1.213", "1.274");
+            int x = box.x() + 9, w = box.w() - 16;
+            d.c.hLine(x, x + w, y + 5, Palette.ACCENT);
+            d.c.hLine(x, x + w, y + 6, Palette.ACCENT);
+            reliefGlass(d, box, y + 14, "4.013", true);
+            d.footer(2, "Close", "Apply", "Mass", "°C", "bar", "/s");
+        }));
+        // The safety valve alone, a reader.
+        var alone = DeviceColumn.reliefValve(false, "bar", "4.013", "4.013", "1.111", "kg/s", true, TEXTS);
+        out.add(devicePage("fluid-drum-accessory-psv-reader", WINDOW[0], WINDOW[1], alone, (d, s) -> {
+            d.title("Vertical drum");
+            d.name("V-102", false);
+            d.tabs(3, "Overview", "Outlets", "Datasheet", Door.tr("gui.icheme.fluid.accessory"));
+            d.status(Door.tr("gui.icheme.fluid.flowing"), Palette.MUTED);
+            var box = device(d, drum, alone, Map.of());
+            reliefGlass(d, box, 82, "4.013", true);
+            d.footer(1, "Close", "Mass", "°C", "bar", "/s");
+        }));
+        // A pipe's safety valve, its own screen, piped to a flare header.
+        var onPipe = DeviceColumn.reliefValve(true, "bar", "3.000", "2.998", "0.000", "kg/s", false, TEXTS);
+        out.add(devicePage("fluid-pipe-psv", WINDOW[0], WINDOW[1], onPipe, (d, s) -> {
+            d.title("Pipe");
+            d.name("", false);
+            d.tabs(0, Door.tr("gui.icheme.fluid.safety_valve"));
+            d.status(Door.tr("gui.icheme.fluid.flowing"), Palette.MUTED);
+            var box = device(d, pipe, onPipe, Map.of("relief", "3.000"));
+            reliefGlass(d, box, 82, "3.000", false);
+            d.footer(2, "Close", "Apply", "Mass", "°C", "bar", "/s");
+        }));
+        return out;
+    }
+
+    /** The glass of a blanketing valve from {@code y}, as the screen draws it; returns the line below it. */
+    static int blanketGlass(Door d, Rect box, int y, String set, String vent) {
+        int x = box.x() + 9, w = box.w() - 16;
+        d.c.text(d.m.cut(Door.tr("gui.icheme.fluid.accessory.blanket"), w), x, y, Palette.ACCENT);
+        d.c.text(d.m.cut(Door.tr("gui.icheme.fluid.accessory.blanket.pad", set, "bar"), w - 4), x, y + 18, Palette.TEXT);
+        d.c.hLine(x, x + w, y + 30, Palette.LINE);
+        d.c.text(d.m.cut(Door.tr("gui.icheme.fluid.accessory.blanket.vent", vent, "bar"), w - 4), x, y + 36, Palette.TEXT);
+        d.c.hLine(x, x + w, y + 48, Palette.LINE);
+        y += 54;
+        for (var line : d.m.wrap(Door.tr("gui.icheme.fluid.accessory.blanket.supply"), w - 4)) {
+            d.c.text(line, x, y, Palette.MUTED);
+            y += 10;
+        }
+        return y;
+    }
+
+    /** The glass of a pressure safety valve from {@code y}, as the screen draws it. */
+    static void reliefGlass(Door d, Rect box, int y, String set, boolean open) {
+        int x = box.x() + 9, w = box.w() - 16;
+        d.c.text(d.m.cut(Door.tr("gui.icheme.fluid.accessory.relief"), w), x, y, Palette.ACCENT);
+        d.c.text(d.m.cut(Door.tr("gui.icheme.fluid.accessory.relief.opens", set, "bar"), w - 4), x, y + 18, Palette.TEXT);
+        d.c.hLine(x, x + w, y + 30, Palette.LINE);
+        d.c.text(d.m.cut(Door.tr(open ? "gui.icheme.fluid.accessory.relief.open" : "gui.icheme.fluid.accessory.relief.piped"), w - 4), x, y + 36, Palette.TEXT);
+        d.c.hLine(x, x + w, y + 48, Palette.LINE);
+        y += 54;
+        for (var line : d.m.wrap(Door.tr("gui.icheme.fluid.accessory.relief.note"), w - 4)) {
+            d.c.text(line, x, y, Palette.MUTED);
+            y += 10;
+        }
     }
 
     static Prototype tank() {

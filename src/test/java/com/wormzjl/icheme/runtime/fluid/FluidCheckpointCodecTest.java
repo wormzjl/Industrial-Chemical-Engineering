@@ -187,7 +187,9 @@ class FluidCheckpointCodecTest {
         // less its 21 ids (189 characters) and the two compositions' 21 entries (336 bytes): the same budget at that list.
         int basis=world.basis().revision().length();for(String id:world.basis().components())basis+=id.length();
         int perDevice=bytes.length-basis-2*Double.BYTES*count;
-        assertTrue(perDevice<1_975,"the facts and events of five devices: "+bytes.length+" bytes with the basis, "+perDevice+" without the basis and the two full compositions, "+count+" entries");
+        // Fluid facts schema 23 (batch 2026-11-11-gas-blanketing): a pressure safety valve's set pressure (8 bytes) and its outlet's
+        // face list (1 byte, empty) on each spec, 45 bytes for the five devices.
+        assertTrue(perDevice<2_020,"the facts and events of five devices: "+bytes.length+" bytes with the basis, "+perDevice+" without the basis and the two full compositions, "+count+" entries");
         assertTrue(assertThrows(IllegalArgumentException.class,()->FluidCheckpointCodec.decodeTopology(Arrays.copyOf(bytes,bytes.length+1),0,key->key.on(model))).getMessage().contains("trailing bytes"));
         assertThrows(IllegalArgumentException.class,()->FluidCheckpointCodec.decodeTopology(Arrays.copyOf(bytes,bytes.length/2),0,key->key.on(model)));
     }

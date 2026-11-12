@@ -180,7 +180,9 @@ class FluidPacketCodecTest {
         var base=generatorMenu("");
         var casing=new FluidView.Pump(6.8,3.3,.004,.73,new FluidView.Curve(100/3600.0,80,.70,2950));
         var inline=new FluidView.Pump(null,null,null,1,null);
-        for(var pump:List.of(casing,inline)) {
+        // A wearing pump's life in play seconds (batch 2026-11-11-minecraft-time-delta, W5).
+        var wearing=new FluidView.Pump(6.8,3.3,.004,.73,null,5256.0);
+        for(var pump:List.of(casing,inline,wearing)) {
             var data=new FluidNetwork.MenuData(TopologyCompiler.Kind.PUMP,base.view().withPump(pump),base.controls(),base.components(),base.presets(),"",base.materialNames(),base.molecularWeights());
             var copy=FluidNetwork.decodeLive(new Gson().toJson(live(data)));
             assertEquals(pump,copy.view().pump());
@@ -189,6 +191,7 @@ class FluidPacketCodecTest {
         assertThrows(IllegalArgumentException.class,()->new FluidView.Pump(1.0,-1.0,0.0,1,null));
         assertThrows(IllegalArgumentException.class,()->new FluidView.Pump(1.0,1.0,1.5,1,null));
         assertThrows(IllegalArgumentException.class,()->new FluidView.Pump(null,null,null,1.2,null));
+        assertThrows(IllegalArgumentException.class,()->new FluidView.Pump(null,null,null,.5,null,-1.0));
         assertThrows(IllegalArgumentException.class,()->new FluidView.Curve(0,80,.7,2950));
     }
     /** W10c: a mover's state round-trips with its crackle and churn bytes; a byte outside 0 to 255 is refused. */

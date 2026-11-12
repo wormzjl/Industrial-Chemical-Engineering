@@ -23,7 +23,7 @@ These rules apply to every agent working in this repository (Claude, Codex, suba
   - Do not send contents to clients with no active request.
 - Player inputs and network changes are queued engine events. Their acknowledgements and results arrive on the engine schedule. Packet handlers, block-entity loads and menu opens never force a process update.
 - Do not calculate process state on Minecraft's per-tick loop. Due simulation deadlines, dependency changes and worker completions drive the work. The tick hook only checks what is due, drains completions and flushes a presentation bucket.
-- Simulated time is online ticks at a nominal 20 TPS. There is no wall-clock or offline advancement.
+- Simulated time is online ticks at a nominal 20 TPS, times the time factor (`fluid.timeScale`, default 4). There is no wall-clock or offline advancement.
 - The process simulator's run is a client tool outside this schedule. It runs on the client and reads and writes no process state. The server only stores the sheet and its results, and the block opens them as a replay.
 
 ## Physics and defects
@@ -56,8 +56,8 @@ These rules apply to every agent working in this repository (Claude, Codex, suba
 
 ## Gradle, measurement and verification
 
-- Run at most two Gradle invocations at a time on the machine, each in its own worktree, and only if neither measures time. A run that measures time (benchmarks, wall-time cost gates) runs alone. Never run a test suite while a dev client is running.
-- When two runs overlap, judge cost by counters. Replay a wall-clock budget hold alone before you count it.
+- Run at most two Gradle invocations at a time on the machine, each in its own worktree. The final lane may be one of the two. Never run a test suite while a dev client is running.
+- Record time only in a performance optimization task; a run that measures time runs alone. In every other task judge cost by counters, in wall-time cost gates and campaigns too, and report no times. Replay a wall-clock budget hold alone before you count it.
 - Large solver campaigns use 8 to 10 worker threads and never overlap another campaign of that size. A run on the second Gradle lane uses at most 4 worker threads.
 - `./gradlew test` is the quick suite. `./gradlew test slowGates` (or `check`) runs everything. The final lane runs, once per batch, only the test classes that the batch's changes can reach: those whose recorded load set holds a change (`tools/merge-lane/affected.mjs`). `lane.sh head --all` runs everything; use it only when the owner asks.
 - `columnGates` and `equipmentGates` hold the column and equipment tests, which `test` leaves out. Each sees only what its tests load, so it runs only when one of those files changed. When a group fails with a class or resource missing, add it to the group's list in `build.gradle`.

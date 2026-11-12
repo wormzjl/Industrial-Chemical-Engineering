@@ -534,6 +534,11 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         }
     }
 
+    /** Process time against online time: the coordinator's ({@link IslandCoordinator#time}). */
+    public com.wormzjl.icheme.science.fluid.SimulationTime time() {
+        return coordinator.time();
+    }
+
     // ---------------- the coordinator's hook ----------------
 
     @Override
@@ -622,7 +627,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         // The burners' demand, fired heat and fans' draw.
         if (burners != null) burners.booked(island, start, end, result);
         // The prime movers' fired fuel: their trains step on it.
-        if (primeMovers != null) for (long unit : primeMovers.booked(start, end, result)) {
+        if (primeMovers != null) for (long unit : primeMovers.booked(start, end, result, coordinator.time())) {
             Long key = trainOf.get(unit);
             var run = key == null ? null : runs.get(key);
             if (run != null) {
@@ -848,7 +853,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
             boolean on = com.wormzjl.icheme.science.machine.ElectricStore.onSpeed(driverSpeed * m.ratio(), g.designSpeed());
             // W7: a generator switched off takes no load; its output limit (0: none) caps the load its store has room for.
             var s = g.settings();
-            double load = on && s.running() && electric != null ? electric.load(g.id(), ElectricStores.CADENCE * com.wormzjl.icheme.science.machine.ElectricStore.TICK_SECONDS) : 0;
+            double load = on && s.running() && electric != null ? electric.load(g.id(), ElectricStores.CADENCE * coordinator.time().tickSeconds()) : 0;
             if (s.powerLimit() > 0) load = Math.min(load, s.powerLimit());
             if (on) run.offSpeed.remove(g.id());
             else run.offSpeed.add(g.id());

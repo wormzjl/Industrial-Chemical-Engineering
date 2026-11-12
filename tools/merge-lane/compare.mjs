@@ -1,9 +1,12 @@
 // Compares a head merge lane with a baseline lane: campaign holds by class, counters, refusals, the 33 junction lines and
-// MIXED_GAS_COST. Usage (worktree root): node tools/merge-lane/compare.mjs <base lane folder> <head lane folder>
+// MIXED_GAS_COST. Usage (worktree root): node tools/merge-lane/compare.mjs <base lane folder> <head lane folder> [<campaign base folder>]
+// The campaign compares against the third folder when given (a campaign at the head's time factor, for example
+// tools/minecraft-time-delta/factor.sh's campaign4), else against the base lane's. A harness records its factor on the
+// SUMMARY line (factor=, since the valve follow-ups batch, item 5); a pair of differing factors is a warning.
 import fs from 'fs';
 import path from 'path';
 
-const [baseDir, headDir] = process.argv.slice(2);
+const [baseDir, headDir, campaignDir] = process.argv.slice(2);
 const read = (dir, name) => {
   const f = path.join(dir, name);
   return fs.existsSync(f) ? fs.readFileSync(f, 'utf8').replace(/\r/g, '') : null;
@@ -31,10 +34,13 @@ function campaign(dir, label) {
 }
 
 for (const label of ['cold-random', 'bundled-random', 'bundled-defaults']) {
-  const b = campaign(baseDir, label), h = campaign(headDir, label);
-  console.log(`== campaign ${label}`);
+  const b = campaign(campaignDir || baseDir, label), h = campaign(headDir, label);
+  console.log(`== campaign ${label}${campaignDir ? ' against ' + campaignDir : ''}`);
   if (!b || !h) { console.log('   missing report', !b ? 'base' : 'head'); continue; }
   const clean = s => (s.match(/clean=(\d+)/) || [])[1];
+  const factor = s => (s.match(/factor=(\d+)/) || [])[1] || 'not recorded';
+  console.log(`   time factor base ${factor(b.summary)} head ${factor(h.summary)}`);
+  if (factor(b.summary) !== factor(h.summary)) console.log('   WARNING: the time factors differ or one is not recorded; counts compare only at one factor');
   console.log(`   clean base ${clean(b.summary)} head ${clean(h.summary)}; refused base ${b.refused} head ${h.refused}`);
   for (const k of ['newtonSolves', 'newtonIterations', 'implicitSolves']) {
     console.log(`   ${k} base ${b.counters[k]} head ${h.counters[k]}`);

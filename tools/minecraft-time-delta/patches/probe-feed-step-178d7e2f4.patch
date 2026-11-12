@@ -1,0 +1,91 @@
+diff --git a/src/main/java/com/wormzjl/icheme/science/fluid/network/PassiveIntervalSolver.java b/src/main/java/com/wormzjl/icheme/science/fluid/network/PassiveIntervalSolver.java
+index 6fbc2dc14..11b7230db 100644
+--- a/src/main/java/com/wormzjl/icheme/science/fluid/network/PassiveIntervalSolver.java
++++ b/src/main/java/com/wormzjl/icheme/science/fluid/network/PassiveIntervalSolver.java
+@@ -234,6 +234,7 @@ public final class PassiveIntervalSolver {
+         com.wormzjl.icheme.science.fluid.thermo.ThermoHold lastHold=null;int holdRejections=0;boolean lastWasHold=false;
+         // The t0 flows of one rate solve, for a segment that starts with none known and plans heat actuators (below).
+         double[] rateFlows=null;
++        if(PassiveStepSolver.PROBE)PassiveStepSolver.probeStart("INTERVAL duration="+duration+" h="+h);
+         for(int attempt=0;attempt<settings.maximumAttempts&&elapsed<duration&&declared==null;attempt++) {
+             checkpoint.run();double step=Math.min(h,duration-elapsed);
+             try {
+@@ -289,7 +290,7 @@ public final class PassiveIntervalSolver {
+                 boolean ok=step<=transitionFloor||change<=STATE_CAP||jump;
+                 SolverDiagnostics.attempt(attempt,step,ok,ok&&jump&&step>transitionFloor?"be-jump":ok&&step<=transitionFloor&&change>STATE_CAP?"be-floor":"be-state",change);
+                 if(!ok){previousStateChange=change;previousStateStep=step;throw new StateChangeRejection("Backward-Euler state change "+change);}
+-                accepted=replace(accepted,result);last=result;lastStep=step;elapsed+=step;acceptedCount++;consecutiveRejects=0;previousStateChange=0;
++                if(PassiveStepSolver.PROBE)PassiveStepSolver.probeNote("ACCEPT elapsed="+elapsed+" step="+step+" change="+change+" "+PassiveStepSolver.probeGraph(start,result));accepted=replace(accepted,result);last=result;lastStep=step;elapsed+=step;acceptedCount++;consecutiveRejects=0;previousStateChange=0;
+                 var flush=flushTraces(accepted,checkpoint);if(flush!=null)accepted=flush.graph();
+                 declared=settled;
+                 implicit.markBackwardEulerAccepted(accepted,result);
+@@ -332,7 +333,9 @@ public final class PassiveIntervalSolver {
+                 if(hold!=null){rejectionReasons.merge(hold.reasonKey(),1,Integer::sum);lastHold=hold;holdRejections++;}
+                 else count(rejectionReasons,String.valueOf(rejected.getMessage()).replaceAll("[-+]?[0-9]+(?:\\.[0-9]+)?(?:[Ee][-+]?[0-9]+)?","#"));
+                 lastWasHold=hold!=null;
++                if(PassiveStepSolver.PROBE)PassiveStepSolver.probeNote("REJECT elapsed="+elapsed+" step="+step+" "+rejected.getMessage()+" "+PassiveStepSolver.probeGraph(accepted,null));
+                 rejectedCount++;consecutiveRejects++;h=step*.5;
++                if(PassiveStepSolver.PROBE&&(consecutiveRejects>=20||elapsed+h==elapsed))PassiveStepSolver.probeDump("HOLD duration="+duration+" elapsed="+elapsed+" accepted="+acceptedCount+" rejected="+rejectedCount+" reasons="+rejectionReasons);
+                 if(consecutiveRejects>=20||elapsed+h==elapsed)throw new SparseNewton.Nonconvergence("Substep refinement exhausted: "+rejected.getMessage()+"; reasons="+rejectionReasons,null,phaseHoldCause(lastWasHold,lastHold,holdRejections,rejectedCount));
+             }
+         }
+diff --git a/src/main/java/com/wormzjl/icheme/science/fluid/network/PassiveStepSolver.java b/src/main/java/com/wormzjl/icheme/science/fluid/network/PassiveStepSolver.java
+index 33daf5b78..581fb9496 100644
+--- a/src/main/java/com/wormzjl/icheme/science/fluid/network/PassiveStepSolver.java
++++ b/src/main/java/com/wormzjl/icheme/science/fluid/network/PassiveStepSolver.java
+@@ -331,6 +331,47 @@ public final class PassiveStepSolver {
+         @Override public double[] externalMoles(){return externalMoles.clone();}
+     }
+     public Result solve(PassiveNetwork graph,double dt,Runnable checkpoint){return solve(graph,dt,checkpoint,false,null);}
++    /** PROBE (tools/minecraft-time-delta, feed-step hold): a failed pass Newton, with the rows its last iterate is largest on. */
++    private static final java.util.concurrent.atomic.AtomicInteger PROBE_FAILURES=new java.util.concurrent.atomic.AtomicInteger();
++    static final boolean PROBE=Boolean.getBoolean("icheme.probe.failures");
++    private static final ThreadLocal<ArrayDeque<String>> PROBE_RING=ThreadLocal.withInitial(ArrayDeque::new);
++    static void probeStart(String line){PROBE_RING.get().clear();probeNote(line);}
++    static void probeNote(String line){var r=PROBE_RING.get();r.addLast(line);while(r.size()>80)r.removeFirst();}
++    static void probeDump(String line){var b=new StringBuilder("PROBE_DUMP "+line+"\n");for(var l:PROBE_RING.get())b.append("  | ").append(l.replace("\n","\n  | ")).append("\n");System.out.print(b);}
++    private void probeFailure(Equations e,PassiveNetwork graph,double dt,boolean rateOnly,List<FlowControl.Mode> modes,int[] phases,int pass,SparseNewton.Nonconvergence failure) {
++        int k=PROBE_FAILURES.incrementAndGet();
++        var b=new StringBuilder("PROBE_FAILURE #"+k+" dt="+dt+" pass="+pass+" rate="+rateOnly+" nodes="+graph.reservoirs().size()+" pipes="+graph.pipes().size()+" phases="+Arrays.toString(phases)+" "+failure.getMessage()+"\n");
++        try {
++            double[] x=failure.lastVariables();if(x==null){System.out.print(b);return;}
++            double[] f=e.residual(x),w=e.rowWeights,f0=e.residual(e.initial());
++            b.append("  norm at start=").append(e.residualNorm(f0)).append(" at failure=").append(e.residualNorm(f)).append(" size=").append(f.length).append('\n');
++            Integer[] order=new Integer[f.length];for(int i=0;i<f.length;i++)order[i]=i;
++            Arrays.sort(order,(p,q)->Double.compare((w==null?1:w[q])*Math.abs(f[q]),(w==null?1:w[p])*Math.abs(f[p])));
++            for(int i=0;i<Math.min(5,f.length);i++) {
++                int row=order[i];
++                b.append("  row ").append(row).append(" f=").append(f[row]).append(" f0=").append(f0[row]).append(" weight=").append(w==null?1:w[row]).append(' ').append(probeWhere(e,graph,modes,row,x)).append('\n');
++            }
++            for(int n=0;n<graph.reservoirs().size();n++){var node=graph.reservoirs().get(n);var s=node.state();if(node.kind()!=PassiveNetwork.NodeKind.RESERVOIR)continue;
++                b.append("  vessel ").append(n).append(" id=").append(node.id()).append(" P=").append(s.pressure()).append(" T=").append(s.temperature()).append(" m=").append(s.mass()).append(" liq=").append(s.liquidVolume()).append(" water=").append(s.waterVolume()).append(" vap=").append(s.vaporVolume()).append(" V=").append(node.inventory().volume()).append(" phase=").append(phases[n]).append('\n');}
++            for(int p=0;p<graph.pipes().size();p++)b.append("  pipe ").append(p).append(' ').append(graph.pipes().get(p).first()).append("->").append(graph.pipes().get(p).second()).append(" mode=").append(modes.get(p)).append(" q0=").append(e.initial()[e.edgeOffset+p]).append(" q=").append(x[e.edgeOffset+p]).append('\n');
++        } catch(RuntimeException ex){b.append("  (residual unavailable: ").append(ex).append(")\n");}
++        probeNote(b.toString().stripTrailing());
++    }
++    static String probeGraph(PassiveNetwork graph,Result result) {
++        var b=new StringBuilder();
++        for(int n=0;n<graph.reservoirs().size();n++){var node=graph.reservoirs().get(n);var st=result!=null?result.states().get(n):node.state();
++            b.append(" N").append(n).append(':').append(node.kind()).append(" P=").append(String.format("%.4g",st.pressure())).append(" liq=").append(String.format("%.4g",st.liquidVolume())).append(" vap=").append(String.format("%.4g",st.vaporVolume()));}
++        for(int p=0;p<graph.pipes().size();p++){var pipe=graph.pipes().get(p);b.append(" E").append(p).append(':').append(pipe.first()).append("->").append(pipe.second()).append(' ').append(pipe.control().getClass().getSimpleName());
++            if(pipe.control() instanceof FlowControl.ControlValve v)b.append('/').append(v.source()).append(" tgt=").append(String.format("%.4g",v.massTarget()));
++            if(result!=null)b.append(" q=").append(String.format("%.4g",result.massFlows()[p])).append(" m=").append(result.modes().get(p));}
++        return b.toString();
++    }
++    private static String probeWhere(Equations e,PassiveNetwork graph,List<FlowControl.Mode> modes,int row,double[] x) {
++        if(row>=e.edgeOffset){int idx=row-e.edgeOffset;return idx<graph.pipes().size()?"pipe "+idx+" "+graph.pipes().get(idx).first()+"->"+graph.pipes().get(idx).second()+" mode="+modes.get(idx)+" control="+graph.pipes().get(idx).control().getClass().getSimpleName()+" q="+x[row]:"edge-extra "+idx;}
++        for(int n=0;n<e.layout.length;n++)if(e.layout[n]!=null&&row>=e.offsets[n]&&row<e.offsets[n]+e.layout[n].size()){var node=graph.reservoirs().get(n);var s=node.state();
++            return "node "+n+" "+node.kind()+" local "+(row-e.offsets[n])+"/"+e.layout[n].size()+" P="+s.pressure()+" T="+s.temperature()+" m="+s.mass()+" liq="+s.liquidVolume()+" vap="+s.vaporVolume()+" V="+node.inventory().volume();}
++        return "?";
++    }
+     /** The interval controller supplies only modes of its matching accepted endpoint, never a rejected attempt. */
+     Result solve(PassiveNetwork graph,double dt,Runnable checkpoint,List<FlowControl.Mode> acceptedEndpointModes){return solve(graph,dt,checkpoint,false,acceptedEndpointModes);}
+     public Result solveRate(PassiveNetwork graph,Runnable checkpoint){return solve(graph,1,checkpoint,true,null);}
+@@ -525,6 +566,7 @@ public final class PassiveStepSolver {
+             double tolerance=NEWTON_TOLERANCE;
+             try{numerical=SparseNewton.solve(equations,equations.initial(),new SparseNewton.Settings(SparseNewton.ITERATIONS,tolerance,1e-6,24),checkpoint,workspace);}
+             catch(SparseNewton.Nonconvergence failure) {
++                if(PROBE)probeFailure(equations,graph,dt,rateOnly,modes,phases,pass,failure);
+                 if(failure.lastVariables()==null)throw failure;
+                 double[] trialFlows=Arrays.copyOfRange(failure.lastVariables(),equations.edgeOffset,equations.edgeOffset+graph.pipes().size());
+                 // Owner decisions D59 (4) and D14: a pump whose law pulled its suction below the vapour pressure of the liquid

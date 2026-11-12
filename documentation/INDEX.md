@@ -15,6 +15,10 @@ Status words:
 | Batch | Purpose | Status |
 |---|---|---|
 | [2026-11-11-aqueous-solvents](2026-11-11-aqueous-solvents/README.md) | Water-miscible solvents: a Huron-Vidal mixing rule in the PR78 kernel, pairs derived from group counts, one water in the equation of state, three fluid phases, gas solubility; ethanol first | In progress since 2026-11-11 |
+| [2026-11-11-drum-operation-holds/](2026-11-11-drum-operation-holds/README.md) | Drum operation defects at factor 1: column re-entry crash, worker-failure status, drop-leg cold start, gas-vent hold, liquid-full drum | Implemented 2026-11-11 |
+| [2026-11-11-gas-blanketing/](2026-11-11-gas-blanketing/README.md) | Gas blanketing valve on drums (pad from a gas line, vent to atmosphere); pressure safety valve on drums and pipes; flare flow by back pressure | Implemented 2026-11-11 |
+| [2026-11-11-valve-followups/](2026-11-11-valve-followups/README.md) | Open items of 0.27.0: blanketed direct start, vent lag, relief into a second regulator, flare solids block, campaign at the game's time factor | Implemented 2026-11-12 |
+| [2026-11-11-minecraft-time-delta/](2026-11-11-minecraft-time-delta/README.md) | Simulated time at a configurable factor (default 4, up to 72): evaluation, plan and build | Implemented 2026-11-11 |
 | [2026-11-10-column-failure-modes/](2026-11-10-column-failure-modes/README.md) | Running column: one failure-mode scheme, control system and DCS integration, adjustable parameters, a full-size test world | Implemented 2026-11-10 (0.26.0) |
 | [2026-11-10-prime-movers](2026-11-10-prime-movers/README.md) | Liquid-fuel combustion engines and gas turbines as shaft-train drivers, steam coil, generators to 400 MW, steam turbines to 300 MW | Merged into the custom-shader-system batch 2026-11-10 (6c597e7b3), sound and animation follow-up 3e123f51c |
 | [2026-11-10-chimney](2026-11-10-chimney/README.md) | Steel and brick chimneys releasing gas and particulates to the atmosphere | Merged into the custom-shader-system batch 2026-11-10 (44886656a); with it to main |

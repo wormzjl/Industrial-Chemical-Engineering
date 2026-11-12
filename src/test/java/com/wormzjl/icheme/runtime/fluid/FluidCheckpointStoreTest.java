@@ -294,7 +294,8 @@ class FluidCheckpointStoreTest extends CertifyingRig.Islands {
 
     /** A save larger than the pack size spans several packs (no save is bounded by one), all written before the core. */
     @Test void aSaveLargerThanOnePackSpansSeveralAndReadsBack() throws IOException {
-        // The limit is just above one tank's unit; W6 (ethanol joins icheme:refinery) made the 47-long unit pass 1,000 bytes.
+        // A tank's unit is about 1 kB on main's 46 list with its blanket pressure (state format 47); W6's 47-long list and the
+        // three slots of format 49 make it larger: a limit that holds one, not two.
         var folder=temporary.resolve("spanning");var store=directory(folder);store.packLimit(1_500);
         var snapshots=new ArrayList<IslandCoordinator.Snapshot>();for(long id=1;id<=12;id++)snapshots.add(tank(id,id,0));
         var data=new FluidSavedData(checkpoint(snapshots),key->key.on(model),store);data.save(new CompoundTag(),null);

@@ -71,7 +71,7 @@ public final class FluidCheckpointGameTests {
                     public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveServices.FluidIslandCommand command){submitted[0]++;return false;}
                     public void cancel(long requestId){}
                 };
-                restarted[0]=new IslandCoordinator(dispatcher,changed->{},System::nanoTime,new IslandCoordinator.Settings(options.wallBudgetNanos(),options.wallBudgetNanos()*3/4,64,false,options.initialCadenceTicks(),world.certificates()));
+                restarted[0]=new IslandCoordinator(dispatcher,changed->{},System::nanoTime,new IslandCoordinator.Settings(options.wallBudgetNanos(),options.wallBudgetNanos()*3/4,64,false,options.initialCadenceTicks(),world.certificates()).withTime(options.time()));
                 restarted[0].register(saved[0],models.apply(entry.key()));
                 var restored=restarted[0].observe(saved[0].id());
                 helper.assertTrue(restored.certificate().isPresent(),"The restarted tank was not restored certified: "+restored.status()+" / "+restarted[0].certificationRefusal(saved[0].id()));

@@ -41,7 +41,7 @@ public final class IChemE {
     private static final ModConfigSpec.IntValue SOLVER_DEADLINE_MILLISECONDS;
     private static final ModConfigSpec.IntValue SOLVER_GRACEFUL_SHUTDOWN_MILLISECONDS;
     private static final ModConfigSpec.IntValue SOLVER_FORCED_SHUTDOWN_MILLISECONDS;
-    private static final ModConfigSpec.IntValue FLUID_INITIAL_INTERVAL_SECONDS,FLUID_WALL_BUDGET_MILLISECONDS;
+    private static final ModConfigSpec.IntValue FLUID_INITIAL_INTERVAL_SECONDS,FLUID_WALL_BUDGET_MILLISECONDS,FLUID_TIME_SCALE;
     private static final ModConfigSpec.DoubleValue SOLID_IMMOBILE_VISCOSITY,SOLID_TRACE_FRACTION,SOLID_SUSPENSION_MULTIPLIER,FILTER_CAPACITY,FILTER_RESISTANCE;
     private static final ModConfigSpec.DoubleValue FLUID_INITIAL_VOLUME,FLUID_MAXIMUM_VELOCITY,FLUID_TRACE_CUTOFF;
     private static final ModConfigSpec.BooleanValue FLUID_DEBUG_CHAT,FLUID_ADAPTIVE_CADENCE;
@@ -90,9 +90,14 @@ public final class IChemE {
         SOLID_SUSPENSION_MULTIPLIER=builder.comment("Gameplay multiplier applied to particle settling speed for minimum liquid transport velocity.").defineInRange("solidSuspensionMultiplier",solidDefaults.suspensionMultiplier(),.01,10000.0);
         FILTER_CAPACITY=builder.comment("Retained solid volume capacity of an in-line filter (m3). Existing captured material is preserved when this changes.").defineInRange("filterSolidCapacityCubicMetres",solidDefaults.filterCapacity(),1e-9,1000.0);
         FILTER_RESISTANCE=builder.comment("Clean in-line filter resistance at 1 mPa.s, in Pa.s/m3.").defineInRange("filterCleanResistance",solidDefaults.filterResistance(),1.0,1e15);
-        FLUID_INITIAL_INTERVAL_SECONDS=builder.comment("Starting hydraulic cadence for newly created islands. Existing saved clocks retain their cadence; adaptation uses 1-20 s.").defineInRange("initialIntervalSeconds",5,1,20);
+        FLUID_TIME_SCALE=builder.comment("Process seconds per play second: simulated process time runs this many times faster than online time (one tick is timeScale / 20 s of process).",
+                        "The engine's schedule stays in play time: the cadence, the wall budget and every setting below stated in seconds are play seconds unless they say otherwise.",
+                        "Flows and rates on screen stay per process hour; a 1000 m3 tank on a 100 m3/h line fills in 10 h of process time, 2.5 h of play at 4. 72 makes a Minecraft day 24 h of process time.",
+                        "A change keeps every world's contents, ledger and online tick and rebuilds the islands' solved state once. Captured on server start.")
+                .defineInRange("timeScale",com.wormzjl.icheme.science.fluid.SimulationTime.DEFAULT_FACTOR,com.wormzjl.icheme.science.fluid.SimulationTime.MINIMUM_FACTOR,com.wormzjl.icheme.science.fluid.SimulationTime.MAXIMUM_FACTOR);
+        FLUID_INITIAL_INTERVAL_SECONDS=builder.comment("Starting hydraulic cadence for newly created islands, in play seconds. Existing saved clocks retain their cadence; adaptation uses 1-20 s.").defineInRange("initialIntervalSeconds",5,1,20);
         FLUID_ADAPTIVE_CADENCE=builder.comment("Adapt island cadence to measured CPU load. Disable for reproducible fixed-cadence qualification; saved simulation debt is retained.").define("adaptiveCadence",true);
-        FLUID_WALL_BUDGET_MILLISECONDS=builder.comment("Hard worker budget per island interval: a solve past it counts as failed, and the adaptive cadence reads 75% of it as its slow-solve threshold. Applied on server start.").defineInRange("wallBudgetMilliseconds",2000,100,60000);
+        FLUID_WALL_BUDGET_MILLISECONDS=builder.comment("Hard worker budget per island interval, in real milliseconds: a solve past it counts as failed, and the adaptive cadence reads 75% of it as its slow-solve threshold. Applied on server start.").defineInRange("wallBudgetMilliseconds",2000,100,60000);
         FLUID_MAXIMUM_VELOCITY=builder.comment("Maximum bulk pipe velocity in m/s, also limited by the current fluid's acoustic bound. Caps mass transfer inside the coupled equations; does not set temperature. Captured on server start.").defineInRange("maximumVelocityMetresPerSecond",100.0,.01,100000.0);
         FLUID_INITIAL_VOLUME=builder.comment("Volume of newly placed reservoirs in cubic metres. Applied on server start.").defineInRange("reservoirVolumeCubicMetres",1.0,.001,1000.0);
         FLUID_TRACE_CUTOFF=builder
@@ -117,11 +122,11 @@ public final class IChemE {
                 .defineInRange("certificateStationaryTolerance",1e-7,0,1e-6);
         FLUID_CERTIFICATE_BUDGET=builder.comment("Largest relative inventory change a certificate may extrapolate before one interval is solved again. Captured on server start.")
                 .defineInRange("certificateInventoryBudget",1e-6,1e-12,1e-3);
-        FLUID_CERTIFICATE_MAXIMUM_INTERVALS=builder.comment("Most intervals one certificate of an island on which something moves may replay; 17280 is one game day at a 5 s cadence. Captured on server start.")
+        FLUID_CERTIFICATE_MAXIMUM_INTERVALS=builder.comment("Most intervals one certificate of an island on which something moves may replay; 17280 is 24 h of play at a 5 s cadence. Captured on server start.")
                 .defineInRange("certificateMaximumIntervals",17_280,1,1_000_000);
         FLUID_REST_CONFIRM_INTERVALS=builder.comment("Consecutive stationary solved intervals before an island certifies, and again after a property hold. Captured on server start.")
                 .defineInRange("restConfirmIntervals",2,1,10);
-        FLUID_REST_RECHECK_SECONDS=builder.comment("Solve a certified island on which nothing moves (the identity map) again after this many simulated seconds; 0 means never. Captured on server start.")
+        FLUID_REST_RECHECK_SECONDS=builder.comment("Solve a certified island on which nothing moves (the identity map) again after this many play seconds; 0 means never. Captured on server start.")
                 .defineInRange("restRecheckSeconds",0,0,86_400);
         builder.pop();
         builder.push("columnV3");
@@ -158,12 +163,14 @@ public final class IChemE {
         builder.pop();
         // Electricity (batch 2026-11-03-rotating-machinery W5, reading A66).
         builder.push("energy");
-        ENERGY_JOULES_PER_FE = builder.comment("Joules per forge energy unit (FE). Motors, fans and generators convert their watts at this rate; stores keep joules, so a change keeps the energy they hold. Default 2.5, Mekanism's joule.")
+        ENERGY_JOULES_PER_FE = builder.comment("Joules per forge energy unit (FE) at play time. Motors, fans and generators convert their watts at this rate; stores keep joules, so a change keeps the energy they hold. Default 2.5, Mekanism's joule.",
+                        "At a fluid.timeScale above 1 an FE carries joulesPerFE x timeScale of process energy, so a machine draws the same FE per tick at any factor (a 1 MW motor 20000 FE/t at the defaults).")
                 .defineInRange("joulesPerFE", 2.5, 0.01, 1e6);
         ENERGY_MACHINES_NEED_POWER = builder.comment("Whether motors, air cooler fans and cooling tower fans need FE at their terminal box. False: nothing is drawn, nothing stops for want of power, and the ports still accept FE (a pack without energy mods).")
                 .define("machinesNeedPower", true);
         // Solid fuel without a fuel record (batch 2026-11-09-batch-distiller, owner B1 B).
-        ENERGY_JOULES_PER_BURN_TICK = builder.comment("Joules of heat per burn tick for a firebox item without a fuel record (materials/fuels): its furnace burn time times this. Default 1.45e6, the coal anchor: a coal item of 92.6 kg at 25 MJ/kg over its 1600 ticks. Items with a record burn at their mass times their heating value.")
+        ENERGY_JOULES_PER_BURN_TICK = builder.comment("Joules of heat per burn tick for a firebox item without a fuel record (materials/fuels): its furnace burn time times this. Default 1.45e6, the coal anchor: a coal item of 92.6 kg at 25 MJ/kg over its 1600 ticks. Items with a record burn at their mass times their heating value.",
+                        "An item's heat is conserved: it burns over process time, so a still takes fluid.timeScale times the items per play minute.")
                 .defineInRange("joulesPerBurnTick", com.wormzjl.icheme.science.fluid.network.BatchStill.JOULES_PER_BURN_TICK, 1.0, 1e12);
         builder.pop();
         // The Create coupling (batch 2026-11-03-rotating-machinery W6b, decision D7): read only with Create installed.
@@ -176,10 +183,13 @@ public final class IChemE {
         builder.push("wear");
         WEAR_ENABLED = builder.comment("Whether pumps wear from cavitation and from running dry, and fail at 0 % health until a repair kit restores them. False: nothing wears and no pump stands failed.")
                 .define("enabled", true);
-        WEAR_CAVITATION_HOURS = builder.comment("A pump's life in online hours at the worst cavitation (its NPSH available about twice its NPSH3). Longer elsewhere: 5.1 h at NPSH3, 18.9 h at 3.5 times it, none from 4 times it up.")
-                .defineInRange("cavitationHours", 2.0, 0.001, 1e6);
-        WEAR_DRY_MINUTES = builder.comment("A pump's life in online minutes running dry: its driver on while it is gas- or vapour-locked or its suction holds no liquid.")
-                .defineInRange("dryMinutes", 10.0, 0.01, 1e6);
+        // In process time (batch 2026-11-11-minecraft-time-delta, owner T3): new keys, so a stored online life does not carry over as a shorter one.
+        WEAR_CAVITATION_HOURS = builder.comment("A pump's life in process hours at the worst cavitation (its NPSH available about twice its NPSH3). Longer elsewhere: 20.4 h at NPSH3, 75.6 h at 3.5 times it, none from 4 times it up.",
+                        "Process time runs fluid.timeScale times faster than play: the default 8 h is 2 h of play at the default factor 4.")
+                .defineInRange("cavitationProcessHours", com.wormzjl.icheme.science.machine.Wear.CAVITATION_PROCESS_HOURS, 0.001, 1e6);
+        WEAR_DRY_MINUTES = builder.comment("A pump's life in process minutes running dry: its driver on while it is gas- or vapour-locked or its suction holds no liquid.",
+                        "The default 40 min is 10 min of play at the default factor 4.")
+                .defineInRange("dryProcessMinutes", com.wormzjl.icheme.science.machine.Wear.DRY_PROCESS_MINUTES, 0.01, 1e6);
         builder.pop();
         builder.pop();
         CONFIG_SPEC = builder.build();
@@ -306,12 +316,14 @@ public final class IChemE {
     public static boolean calculationLoggingEnabled() {
         return CALCULATION_LOGGING.getAsBoolean();
     }
-    public record FluidOptions(int initialCadenceTicks,long wallBudgetNanos,double volume,boolean debugChat,boolean adaptiveCadence,double maximumVelocity,double traceCutoffMoleFraction,com.wormzjl.icheme.science.fluid.transport.SlurryTransport.Settings solids,com.wormzjl.icheme.runtime.fluid.CertificatePolicy certificates) {
-        public FluidOptions {java.util.Objects.requireNonNull(solids);java.util.Objects.requireNonNull(certificates);}
+    /** {@code time} is {@code fluid.timeScale}: process seconds per play second (batch 2026-11-11-minecraft-time-delta). */
+    public record FluidOptions(int initialCadenceTicks,long wallBudgetNanos,double volume,boolean debugChat,boolean adaptiveCadence,double maximumVelocity,double traceCutoffMoleFraction,com.wormzjl.icheme.science.fluid.transport.SlurryTransport.Settings solids,com.wormzjl.icheme.runtime.fluid.CertificatePolicy certificates,com.wormzjl.icheme.science.fluid.SimulationTime time) {
+        public FluidOptions {java.util.Objects.requireNonNull(solids);java.util.Objects.requireNonNull(certificates);java.util.Objects.requireNonNull(time);}
     }
     public static FluidOptions fluidOptions() {
         return new FluidOptions(20*FLUID_INITIAL_INTERVAL_SECONDS.getAsInt(),1_000_000L*FLUID_WALL_BUDGET_MILLISECONDS.getAsInt(),FLUID_INITIAL_VOLUME.get(),FLUID_DEBUG_CHAT.getAsBoolean(),FLUID_ADAPTIVE_CADENCE.getAsBoolean(),FLUID_MAXIMUM_VELOCITY.get(),FLUID_TRACE_CUTOFF.get(),new com.wormzjl.icheme.science.fluid.transport.SlurryTransport.Settings(SOLID_IMMOBILE_VISCOSITY.get(),SOLID_TRACE_FRACTION.get(),SOLID_SUSPENSION_MULTIPLIER.get(),FILTER_CAPACITY.get(),FILTER_RESISTANCE.get()),
-                new com.wormzjl.icheme.runtime.fluid.CertificatePolicy(FLUID_REST_DETECTION.getAsBoolean(),FLUID_CERTIFICATE_TOLERANCE.get(),FLUID_CERTIFICATE_BUDGET.get(),FLUID_CERTIFICATE_MAXIMUM_INTERVALS.getAsInt(),FLUID_REST_CONFIRM_INTERVALS.getAsInt(),FLUID_REST_RECHECK_SECONDS.getAsInt()));
+                new com.wormzjl.icheme.runtime.fluid.CertificatePolicy(FLUID_REST_DETECTION.getAsBoolean(),FLUID_CERTIFICATE_TOLERANCE.get(),FLUID_CERTIFICATE_BUDGET.get(),FLUID_CERTIFICATE_MAXIMUM_INTERVALS.getAsInt(),FLUID_REST_CONFIRM_INTERVALS.getAsInt(),FLUID_REST_RECHECK_SECONDS.getAsInt()),
+                com.wormzjl.icheme.science.fluid.SimulationTime.of(FLUID_TIME_SCALE.getAsInt()));
     }
 
     /** Read on the server thread when admitting a V3 request, never from its worker. */

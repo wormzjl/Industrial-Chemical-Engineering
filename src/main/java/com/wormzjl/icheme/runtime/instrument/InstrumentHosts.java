@@ -21,7 +21,7 @@ public final class InstrumentHosts {
         public Host{mounts=List.copyOf(mounts);}
         public Instrument.Metadata metadata(){return ((Instrument.Holder)entity).instruments();}
         public Instrument.Mount mount(String id){return mounts.stream().filter(m->m.id().equals(id)).findFirst().orElse(null);}
-        public boolean occupied(Instrument.Mount mount){return pipe?legacy(entity.getBlockState())!=null||!metadata().installed().isEmpty()||!metadata().sensors().isEmpty():metadata().installed().stream().anyMatch(i->i.key().mount().equals(mount.id()))||metadata().sensors().stream().anyMatch(i->i.key().mount().equals(mount.id()));}
+        public boolean occupied(Instrument.Mount mount){return pipe?legacy(entity.getBlockState())!=null||metadata().safetyValve()||!metadata().installed().isEmpty()||!metadata().sensors().isEmpty():metadata().installed().stream().anyMatch(i->i.key().mount().equals(mount.id()))||metadata().sensors().stream().anyMatch(i->i.key().mount().equals(mount.id()));}
     }
     public record Selection(Host host,Instrument.Mount mount,double distance) {}
     private static final Object INDEX_LOCK=new Object();
@@ -34,7 +34,7 @@ public final class InstrumentHosts {
         synchronized(INDEX_LOCK){
             LOADED.computeIfAbsent(be.getLevel(),l->new HashMap<>()).put(be.getBlockPos().immutable(),extent);
             var equipped=INSTALLED.computeIfAbsent(be.getLevel(),l->new HashMap<>());
-            if(be instanceof Instrument.Holder h&&(!h.instruments().installed().isEmpty()||!h.instruments().sensors().isEmpty()||h.instruments().dataPort()!=null||h.instruments().powerPort()!=null||h.instruments().fitting()!=null))equipped.put(be.getBlockPos().immutable(),extent);else equipped.remove(be.getBlockPos());
+            if(be instanceof Instrument.Holder h&&(!h.instruments().installed().isEmpty()||!h.instruments().sensors().isEmpty()||h.instruments().dataPort()!=null||h.instruments().powerPort()!=null||h.instruments().fitting()!=null||h.instruments().safetyValve()))equipped.put(be.getBlockPos().immutable(),extent);else equipped.remove(be.getBlockPos());
         }
     }
     private static Map<BlockPos,Double> loaded(Level level,boolean installed){synchronized(INDEX_LOCK){return Map.copyOf((installed?INSTALLED:LOADED).getOrDefault(level,Map.of()));}}
@@ -61,7 +61,7 @@ public final class InstrumentHosts {
             if(pos.getCenter().distanceToSqr(centre)>reach*reach||!level.hasChunkAt(pos))continue;
             var h=at(level,pos);if(h==null)continue;
             var mounts=new ArrayList<>(h.mounts());mounts.addAll(Sensor.mounts(h,Sensor.Kind.LEVEL));mounts.addAll(Sensor.mounts(h,Sensor.Kind.FLOW));mounts.addAll(Sensor.mounts(h,Sensor.Kind.SPEED));
-            var gauge=LevelGauge.of(h);
+            var gauge=vesselFitting(h);if(gauge==null)gauge=ReliefValve.of(h);
             if(h.entity() instanceof EquipmentShellBlockEntity shell&&shell.cell().equals(ShapeRasterizer.fluidCell(shell.shape()))&&EquipmentInstruments.of(shell.shape()).probes().stream().anyMatch(p->{var q=p.centre();return centre.distanceToSqr(q[0]+shell.origin().getX(),q[1]+shell.origin().getY(),q[2]+shell.origin().getZ())<=radius*radius;})||mounts.stream().anyMatch(m->m.centre().distanceToSqr(centre)<=radius*radius)||gauge!=null&&gauge.bounds().distanceToSqr(centre)<=radius*radius)result.putIfAbsent(h.identity(),h);
         }
         return List.copyOf(result.values());
@@ -112,17 +112,98 @@ public final class InstrumentHosts {
     public static boolean reachable(net.minecraft.world.entity.player.Player player,Host host,Instrument.Selectable mount){var eye=player.getEyePosition();if(mount.bounds().distanceToSqr(eye)>player.blockInteractionRange()*player.blockInteractionRange())return false;var point=mount.bounds().clip(eye,mount.bounds().getCenter()).orElse(mount.bounds().getCenter());var hit=player.level().clip(new net.minecraft.world.level.ClipContext(eye,point,net.minecraft.world.level.ClipContext.Block.COLLIDER,net.minecraft.world.level.ClipContext.Fluid.NONE,player));return hit.getType()==HitResult.Type.MISS||hit.getLocation().distanceTo(eye)+.025>=point.distanceTo(eye);}
     public static boolean clear(Level level,Host host,Instrument.Selectable mount){for(var pos:BlockPos.betweenClosedStream(mount.bounds()).map(BlockPos::immutable).toList()){if(!level.hasChunkAt(pos))return false;if(pos.equals(host.entity().getBlockPos())||level.getBlockState(pos).canBeReplaced())continue;var owner=at(level,pos);if(owner==null||owner.identity()!=host.identity())return false;}return true;}
     public record FittingSelection(Host host,Instrument.Selectable mount,double distance){}
-    public static FittingSelection selectFitting(Collection<Host> hosts,Vec3 eye,Vec3 direction,double reach,boolean installedOnly){
+    public static FittingSelection selectFitting(Collection<Host> hosts,Vec3 eye,Vec3 direction,double reach,boolean installedOnly){return selectFitting(hosts,eye,direction,reach,installedOnly,null);}
+    /**
+     * The fitting place the player looks at: to remove ({@code installedOnly}), a fitted one; to fit one of {@code type}, a free
+     * place for it. A pipe's fittings other than the safety valve keep their own item path.
+     */
+    public static FittingSelection selectFitting(Collection<Host> hosts,Vec3 eye,Vec3 direction,double reach,boolean installedOnly,Instrument.Type type){
         FittingSelection best=null;var end=eye.add(direction.scale(reach));
         for(var host:hosts){
-            Instrument.Selectable mount=host.pipe()?host.entity() instanceof FluidDeviceBlockEntity pipe?PipeAccessory.of(pipe):null:LevelGauge.of(host);
-            if(mount==null||installedOnly&&(host.pipe()?legacy(host.entity().getBlockState())==null:!host.metadata().levelGauge()))continue;
-            // Installation only supports the reservoir gauge; pipe fittings keep their existing item path.
-            if(!installedOnly&&host.pipe())continue;
-            var hit=mount.bounds().clip(eye,end);if(hit.isEmpty())continue;double distance=hit.get().distanceTo(eye);
-            if(best==null||distance<best.distance())best=new FittingSelection(host,mount,distance);
+            var mounts=new ArrayList<Instrument.Selectable>();
+            if(installedOnly){
+                if(host.pipe()){if(host.entity() instanceof FluidDeviceBlockEntity pipe&&legacy(host.entity().getBlockState())!=null)mounts.add(PipeAccessory.of(pipe));}
+                else if(host.metadata().fitting()!=null)mounts.add(vesselFitting(host));
+                if(host.metadata().safetyValve())mounts.add(ReliefValve.of(host));
+            }else if(type!=null&&(!host.pipe()||type==Instrument.Type.SAFETY_VALVE))mounts.add(type==Instrument.Type.SAFETY_VALVE?ReliefValve.of(host,toward(direction)):vesselFitting(host,type));
+            for(var mount:mounts){
+                if(mount==null)continue;
+                var hit=mount.bounds().clip(eye,end);if(hit.isEmpty())continue;double distance=hit.get().distanceTo(eye);
+                if(best==null||distance<best.distance())best=new FittingSelection(host,mount,distance);
+            }
         }
         return best;
+    }
+    /** The place on {@code host} of its own fitting of {@code type}: a tank's level gauge, a drum's gas blanketing valve, a drum's or a pipe's safety valve; null where it takes none. */
+    public static Instrument.Selectable vesselFitting(Host host,Instrument.Type type){
+        return switch(type){case LEVEL_GAUGE->LevelGauge.of(host);case BLANKET_VALVE->BlanketValve.of(host);case SAFETY_VALVE->ReliefValve.of(host);default->null;};
+    }
+    /** The horizontal face toward a player who looks along {@code look}: a safety valve's outlet faces the player who fits it. */
+    public static Direction toward(Vec3 look){return Direction.getNearest(-look.x,0,-look.z);}
+    /** The fitting type a place of {@link #vesselFitting} takes. */
+    public static Instrument.Type typeOf(Instrument.Selectable mount){return mount instanceof LevelGauge?Instrument.Type.LEVEL_GAUGE:mount instanceof BlanketValve?Instrument.Type.BLANKET_VALVE:mount instanceof ReliefValve?Instrument.Type.SAFETY_VALVE:null;}
+    /**
+     * A pressure safety valve (batch 2026-11-11-gas-blanketing): its bounds, and its outlet: on a drum the relief port it gives
+     * the drum ({@code port}), on a pipe the face it leaves by ({@code face}).
+     */
+    public record ReliefValve(AABB bounds,com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Port port,com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Direction face) implements Instrument.Selectable {
+        @Override public String id(){return "safety_valve";}
+        /** A fitted valve, its outlet out of its registration's face; on a host without one, the valve as fitted with the default face. */
+        public static ReliefValve of(Host host){return of(host,null);}
+        /** The valve on {@code host}: a fitted one out of its own face, a valve still to fit with its outlet {@code toward} the player (null: the default); null where that face is taken. */
+        public static ReliefValve of(Host host,Direction toward){
+            var face=host.metadata().safetyValve()&&host.metadata().reliefFace()!=null?host.metadata().reliefFace():toward;
+            if(host.entity() instanceof FluidDeviceBlockEntity pipe)return host.pipe()?onPipe(pipe,face):null;
+            if(!(host.entity() instanceof EquipmentShellBlockEntity shell)||shell.shape()==null||shell.getLevel()==null)return null;
+            return of(shell.getLevel(),shell.origin(),shell.shape(),face);
+        }
+        public static ReliefValve of(Level level,BlockPos origin,EquipmentShape shape){return of(level,origin,shape,null);}
+        /** The valve on a drum, its outlet out of {@code face} (null: the default direction); null where that face is taken or not horizontal. */
+        public static ReliefValve of(Level level,BlockPos origin,EquipmentShape shape,Direction asked){
+            if(asked!=null&&asked.getAxis()==Direction.Axis.Y)return null;
+            var place=asked==null?ReliefValveGeometry.of(shape):ReliefValveGeometry.of(shape,asked.getAxis().ordinal(),asked.getAxisDirection().getStep());if(place==null)return null;
+            var b=place.bounds();var cell=place.cell();var face=place.face();
+            var position=new com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Position(level.dimension().location().toString(),origin.getX()+cell[0],origin.getY()+cell[1],origin.getZ()+cell[2]);
+            var direction=com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Direction.valueOf(Direction.fromDelta(face[0],face[1],face[2]).name());
+            return new ReliefValve(new AABB(b[0],b[1],b[2],b[3],b[4],b[5]).move(origin).inflate(.008),
+                    new com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Port(position,direction,com.wormzjl.icheme.science.fluid.network.PassiveNetwork.PhasePort.VAPOR,com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.ConnectionRole.RELIEF),direction);
+        }
+        /** The valve on {@code pipe}, its outlet out of {@code face} (null: {@link #outletFace}); null where that face is not a free side across the pipe. */
+        static ReliefValve onPipe(FluidDeviceBlockEntity pipe,Direction face){
+            var state=pipe.getBlockState();int mask=FluidDeviceBlock.connectionMask(state);
+            var axis=pipeAxis(mask,state.getValue(FluidDeviceBlock.FACING));
+            if(face==null)face=outletFace(mask,axis);if(face==null||face.getAxis()==axis||face.getAxis()==Direction.Axis.Y||(mask&1<<face.ordinal())!=0)return null;
+            var place=ReliefValveGeometry.onPipe(face.getAxis().ordinal(),face.getAxisDirection().getStep(),axis.ordinal(),PipeSizes.outside(pipe.bore()));
+            var b=place.bounds();
+            return new ReliefValve(new AABB(b[0],b[1],b[2],b[3],b[4],b[5]).move(pipe.getBlockPos()).inflate(.008),null,com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Direction.valueOf(face.name()));
+        }
+        /** A pipe's axis: that of its first connection, or its facing's on a pipe without one. */
+        public static Direction.Axis pipeAxis(int mask,Direction facing){for(var d:Direction.values())if((mask&1<<d.ordinal())!=0)return d.getAxis();return facing.getAxis();}
+        /** The default face a safety valve on a pipe leaves by: the first free side across the pipe; null where none is. */
+        public static Direction outletFace(int mask,Direction.Axis axis){
+            for(var d:new Direction[]{Direction.NORTH,Direction.SOUTH,Direction.WEST,Direction.EAST})if(d.getAxis()!=axis&&(mask&1<<d.ordinal())==0)return d;
+            return null;
+        }
+    }
+    /** The place of {@code host}'s own primary fitting: a tank's level gauge, a drum's gas blanketing valve; null for every other host. */
+    public static Instrument.Selectable vesselFitting(Host host){var gauge=LevelGauge.of(host);return gauge!=null?gauge:BlanketValve.of(host);}
+    /** The type of the fitting {@link #vesselFitting} places, or null. */
+    public static Instrument.Type vesselType(Host host){return LevelGauge.of(host)!=null?Instrument.Type.LEVEL_GAUGE:BlanketValve.of(host)!=null?Instrument.Type.BLANKET_VALVE:null;}
+    /** A drum's gas blanketing valve (batch 2026-11-11-gas-blanketing): its bounds, and the port its gas inlet gives the drum. */
+    public record BlanketValve(AABB bounds,com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Port port) implements Instrument.Selectable {
+        @Override public String id(){return "blanket_valve";}
+        public static BlanketValve of(Host host){
+            if(!(host.entity() instanceof EquipmentShellBlockEntity shell)||shell.shape()==null||shell.getLevel()==null)return null;
+            return of(shell.getLevel(),shell.origin(),shell.shape());
+        }
+        public static BlanketValve of(Level level,BlockPos origin,EquipmentShape shape){
+            var place=com.wormzjl.icheme.science.equipment.BlanketValveGeometry.of(shape);if(place==null)return null;
+            var b=place.bounds();var cell=place.cell();var face=place.face();
+            var position=new com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Position(level.dimension().location().toString(),origin.getX()+cell[0],origin.getY()+cell[1],origin.getZ()+cell[2]);
+            var direction=com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Direction.valueOf(Direction.fromDelta(face[0],face[1],face[2]).name());
+            return new BlanketValve(new AABB(b[0],b[1],b[2],b[3],b[4],b[5]).move(origin).inflate(.008),
+                    new com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Port(position,direction,com.wormzjl.icheme.science.fluid.network.PassiveNetwork.PhasePort.VAPOR,com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.ConnectionRole.BLANKET));
+        }
     }
     /** Full accessory bounds shared by install ghosts, clearance, hover and wrench validation. */
     public record LevelGauge(AABB bounds) implements Instrument.Selectable {

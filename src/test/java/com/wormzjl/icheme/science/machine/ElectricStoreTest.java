@@ -10,6 +10,23 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class ElectricStoreTest {
     private static final double JPF = 2.5;
+    private static final com.wormzjl.icheme.science.fluid.SimulationTime T1 = com.wormzjl.icheme.science.fluid.SimulationTime.ONLINE;
+
+    /** The windows are counts of the engine's cycles (batch 2026-11-11-minecraft-time-delta, W3): the same play time of rated draw at any factor. */
+    @org.junit.jupiter.api.Test void theStoreWindowsAreCountsOfCyclesAtAnyTimeFactor() {
+        double rated = 32.15e3;
+        assertEquals(40 * rated, ElectricStore.capacity(rated, T1), 0);assertEquals(20 * rated, ElectricStore.restart(rated, T1), 0);
+        assertEquals(10 * rated, ElectricStore.motorCapacity(rated, T1), 0);assertEquals(5 * rated, ElectricStore.motorRestart(rated, T1), 0);
+        for (int factor : new int[]{4, 72}) {
+            var time = com.wormzjl.icheme.science.fluid.SimulationTime.of(factor);
+            assertEquals(factor * 40 * rated, ElectricStore.capacity(rated, time), 1e-9 * factor * 40 * rated, "two slices of process time");
+            assertEquals(factor * 20 * rated, ElectricStore.restart(rated, time), 1e-9 * factor * 20 * rated);
+            assertEquals(factor * 10 * rated, ElectricStore.motorCapacity(rated, time), 1e-9 * factor * 10 * rated);
+            assertEquals(factor * 5 * rated, ElectricStore.motorRestart(rated, time), 1e-9 * factor * 5 * rated);
+            assertEquals(ElectricStore.fe(ElectricStore.capacity(rated, T1), JPF), ElectricStore.fe(ElectricStore.capacity(rated, time), JPF * factor), 1e-6,
+                    "in FE at the play-time rate (owner T2) the store is the same size at any factor");
+        }
+    }
 
     /** W3's case 1: a pump demanding 24.9 kW on a 30 kW 2-pole motor draws 26.7 kW, 534 FE/t; its buffer and rate. */
     @Test
@@ -19,10 +36,10 @@ class ElectricStoreTest {
         assertEquals(534, ElectricStore.fe(draw, JPF) / 20, 1, "FE per tick");
         double rated = ElectricStore.motorDraw(30e3, 2, false);
         assertEquals(32.15e3, rated, .01e3, "30 kW over the IE3 93.3 %");
-        assertEquals(1.286e6, ElectricStore.capacity(rated), .001e6, "40 s of rated draw");
-        assertEquals(514_000, ElectricStore.fe(ElectricStore.capacity(rated), JPF), 1000, "about 515,000 FE");
-        assertEquals(1286, ElectricStore.fe(ElectricStore.perTick(rated), JPF), 2, "twice the rated draw per tick: about 1,288 FE/t");
-        assertEquals(ElectricStore.capacity(rated) / 2, ElectricStore.restart(rated), 1e-6, "one slice of rated draw: half the buffer");
+        assertEquals(1.286e6, ElectricStore.capacity(rated, T1), .001e6, "40 s of rated draw");
+        assertEquals(514_000, ElectricStore.fe(ElectricStore.capacity(rated, T1), JPF), 1000, "about 515,000 FE");
+        assertEquals(1286, ElectricStore.fe(ElectricStore.perTick(rated, com.wormzjl.icheme.science.fluid.SimulationTime.ONLINE), JPF), 2, "twice the rated draw per tick: about 1,288 FE/t");
+        assertEquals(ElectricStore.capacity(rated, T1) / 2, ElectricStore.restart(rated, T1), 1e-6, "one slice of rated draw: half the buffer");
         assertTrue(ElectricStore.motorDraw(30e3, 2, true) > rated, "a variable-speed drive costs 3 %");
     }
 
@@ -55,7 +72,7 @@ class ElectricStoreTest {
     /** A generator's load is the room its store has left over the next span, its rating at most; full, it takes none. */
     @Test
     void aGeneratorsLoadIsItsStoresRoom() {
-        double rated = 100e3, capacity = ElectricStore.capacity(rated);
+        double rated = 100e3, capacity = ElectricStore.capacity(rated, T1);
         assertEquals(rated, ElectricStore.generatorLoad(0, capacity, rated, 5), "an empty store takes the rating");
         assertEquals(1e5 / 5, ElectricStore.generatorLoad(capacity - 1e5, capacity, rated, 5), 1e-9, "the room over 5 s");
         assertEquals(0, ElectricStore.generatorLoad(capacity, capacity, rated, 5), "a full store takes no load");

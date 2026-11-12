@@ -30,7 +30,7 @@ public final class PipelineFittingItem extends Item {
     public PipelineFittingItem(Properties properties,Instrument.Type type){
         super(properties.stacksTo(64));
         this.type=java.util.Objects.requireNonNull(type);
-        installed=switch(type){case SHUTOFF->PhysicalFluidTopology.Cutoff.OPEN;case CHECK->PhysicalFluidTopology.Cutoff.CHECK;case FILTER,PRESSURE_VALVE,PUMP,COMPRESSOR,SIGHT_GLASS->PhysicalFluidTopology.Cutoff.NONE;case PRESSURE,TEMPERATURE,LEVEL_GAUGE->throw new IllegalArgumentException("A gauge is not a pipe fitting");};
+        installed=switch(type){case SHUTOFF->PhysicalFluidTopology.Cutoff.OPEN;case CHECK->PhysicalFluidTopology.Cutoff.CHECK;case FILTER,PRESSURE_VALVE,PUMP,COMPRESSOR,SIGHT_GLASS->PhysicalFluidTopology.Cutoff.NONE;case PRESSURE,TEMPERATURE,LEVEL_GAUGE,BLANKET_VALVE,SAFETY_VALVE->throw new IllegalArgumentException("A gauge is not a pipe fitting");};
         translation=switch(type){case PUMP->"item.icheme.fluid_pump.";case COMPRESSOR->"item.icheme.fluid_compressor.";case FILTER->"item.icheme.inline_filter.";case PRESSURE_VALVE->"item.icheme.pressure_control_valve.";case SIGHT_GLASS->"item.icheme.pipeline_sight_glass.";case CHECK->"item.icheme.pipeline_check_valve.";default->"item.icheme.pipeline_shutoff_valve.";};
     }
 

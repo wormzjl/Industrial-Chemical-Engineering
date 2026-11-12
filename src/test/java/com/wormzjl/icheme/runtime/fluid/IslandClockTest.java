@@ -21,7 +21,7 @@ class IslandClockTest {
         assertThrows(IllegalStateException.class,()->clock.completed(first,true));
     }
     @Test void causalFencesAndRestartPreserveOnlineDebtWithoutAddingOfflineTime() {
-        var clock=at(500);var slice=clock.nextSlice(1,60).orElseThrow();assertEquals(3,slice.seconds());
+        var clock=at(500);var slice=clock.nextSlice(1,60).orElseThrow();assertEquals(3,slice.seconds(com.wormzjl.icheme.science.fluid.SimulationTime.ONLINE));assertEquals(12,slice.seconds(com.wormzjl.icheme.science.fluid.SimulationTime.of(4)));
         clock.admitted(slice);clock.completed(slice,true);assertTrue(clock.nextSlice(2,60).isEmpty());
         var restored=new IslandClock(clock.snapshot(),()->0);assertEquals(440,debt(restored));assertEquals(60,restored.nextSlice(2,Long.MAX_VALUE).orElseThrow().startTick());
     }

@@ -1,0 +1,23 @@
+// Forwards the time-scale probe's switches to the test JVMs (patches/probe-time-scale.patch must be applied):
+//   -PprobeTimeScale=72     simulated seconds per online tick, as a multiple of 1/20 s (72 = Minecraft day time)
+//   -PprobeInitialStep=1    PassiveIntervalSolver.Settings.defaults().initialStep, s
+//   -PprobeMaximumStep=20   PassiveIntervalSolver.Settings.defaults().maximumStep, s
+//   -PprobeWallNanos=, -PprobeSoftNanos=   the harness's hard and soft wall budgets (2e9, 1.5e9)
+//   -PstudySeeds=15,47 -PstudyOut=<file> [-PstudySampleMs=50]   TimeScaleStudyTest (probe/src), with --tests '*TimeScaleStudyTest'
+// Used after the hold-fuzz init script: see README.md.
+gradle.projectsEvaluated {
+    def here = gradle.startParameter.initScripts.find { it.name == 'probe.init.gradle' }.parentFile
+    def root = gradle.rootProject
+    root.sourceSets.test.java.srcDir(new File(here, 'probe/src'))
+    root.tasks.withType(Test).configureEach {
+        ['icheme.probe.timeScale': 'probeTimeScale', 'icheme.probe.initialStep': 'probeInitialStep', 'icheme.probe.maximumStep': 'probeMaximumStep',
+         'holdFuzz.wallNanos': 'probeWallNanos', 'holdFuzz.softNanos': 'probeSoftNanos',
+         'icheme.probe.failures': 'probeFailures', 'icheme.probe.failures.every': 'probeFailuresEvery',
+         'icheme.probe.newtonTolerance': 'probeNewtonTolerance', 'icheme.probe.gate': 'probeGate', 'icheme.probe.failureCeiling': 'probeFailureCeiling',
+         'icheme.probe.junctionRelative': 'probeJunctionRelative', 'icheme.probe.gateDecides': 'probeGateDecides', 'icheme.probe.countsOut': 'probeCountsOut', 'icheme.probe.nearGate': 'probeNearGate', 'icheme.probe.holdupTau': 'probeHoldupTau',
+         'study.seeds': 'studySeeds', 'study.out': 'studyOut', 'study.sampleMs': 'studySampleMs'].each { key, name ->
+            def value = root.findProperty(name)
+            if (value) systemProperty key, value
+        }
+    }
+}

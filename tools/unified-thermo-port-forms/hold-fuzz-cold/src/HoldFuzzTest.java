@@ -60,7 +60,9 @@ class HoldFuzzTest {
     static final int COMPONENTS=BASIS.size(),WATER=COMPONENTS-1,NITROGEN=BASIS.indexOf("Nitrogen");
     static final int METHANE=BASIS.indexOf("Methane"),ETHANE=BASIS.indexOf("Ethane"),CO2=BASIS.indexOf("CarbonDioxide");
     static final double[] CRUDE=Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo("icheme:tjl20_methane_nitrogen").crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(),MaterialTestBasis.NETWORK+1);
-    static final ThreadLocal<FluidThermodynamics> MODELS=ThreadLocal.withInitial(()->COLD?FluidThermodynamics.forNetwork(CATALOG,PACKAGE):FluidTestSupport.networkModel());
+    /** {@code holdFuzz.timeScale} (batch 2026-11-11-minecraft-time-delta, W2): the time factor, 1 to 72; unset, the game's default ({@link com.wormzjl.icheme.science.fluid.SimulationTime#DEFAULT_FACTOR}, valve follow-ups item 5). */
+    static final com.wormzjl.icheme.science.fluid.SimulationTime TIME=com.wormzjl.icheme.science.fluid.SimulationTime.of(Integer.getInteger("holdFuzz.timeScale",com.wormzjl.icheme.science.fluid.SimulationTime.DEFAULT_FACTOR));
+    static final ThreadLocal<FluidThermodynamics> MODELS=ThreadLocal.withInitial(()->(COLD?FluidThermodynamics.forNetwork(CATALOG,PACKAGE):FluidTestSupport.networkModel()).withTime(TIME));
     /** One seed's run, inside the cold catalog's context when {@link #COLD}. */
     static Outcome runSeed(long seed,int slices,boolean verbose){return COLD?MaterialRuntime.with(CATALOG,PACKAGE,()->run(seed,slices,verbose)):run(seed,slices,verbose);}
 
@@ -203,7 +205,7 @@ class HoldFuzzTest {
                 public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveServices.FluidIslandCommand command){attempts.put(attempt.slice().requestId(),attempt);commands.put(attempt.slice().requestId(),command);return true;}
                 public void cancel(long request){}
             },changed->{for(var s:changed)if(s.status().startsWith("HELD"))held.add(new Held(ledger.onlineTick(),s.id(),s.clock().committedTick(),s.status()));},
-                    ()->0L,new IslandCoordinator.Settings(Long.getLong("holdFuzz.wallNanos",2_000_000_000L),Long.getLong("holdFuzz.softNanos",1_500_000_000L),64,false,100,CertificatePolicy.defaults()),ledger::onlineTick);
+                    ()->0L,new IslandCoordinator.Settings(Long.getLong("holdFuzz.wallNanos",2_000_000_000L),Long.getLong("holdFuzz.softNanos",1_500_000_000L),64,false,100,CertificatePolicy.defaults()).withTime(TIME),ledger::onlineTick);
             registry=new PhysicalRegistry(ledger,model,InlineFilter.empty(),new PhysicalRegistry.Host() {
                 public IslandCoordinator coordinator(){return coordinator;}
                 public void topology(String dimension,Set<UUID> events,Set<Long> affected,List<IslandCoordinator.Replacement> replacements,long committed,long online,
@@ -352,7 +354,7 @@ class HoldFuzzTest {
             for(var e:o.exceptions)report.append("  EXCEPTION ").append(e).append('\n');
             for(var e:o.refused)report.append("  REFUSED ").append(e).append('\n');
         }
-        report.append("SUMMARY seeds=").append(outcomes.size()).append(" clean=").append(clean).append(" threads=").append(threads).append(" slices=").append(slices)
+        report.append("SUMMARY seeds=").append(outcomes.size()).append(" clean=").append(clean).append(" threads=").append(threads).append(" slices=").append(slices).append(" factor=").append(TIME.factor())
                 .append(" wallMs=").append(wall).append(" seedMsSum=").append(cpu).append(COLD?" cold="+PACKAGE:"").append('\n');
         if(counters) {
             com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics.ENABLED=false;

@@ -28,7 +28,8 @@ public final class IslandClock {
     }
     public record Slice(long startTick,long endTick,long requestId) {
         public Slice {if(startTick<0||endTick<=startTick||requestId<=0)throw new IllegalArgumentException("Invalid simulation slice");}
-        public double seconds(){return (endTick-startTick)/20.0;}
+        /** The process seconds the slice advances under {@code time}. */
+        public double seconds(com.wormzjl.icheme.science.fluid.SimulationTime time){return time.seconds(endTick-startTick);}
     }
     /** Restores the saved clock on a shared epoch: its online tick reads exactly the saved one now. */
     public IslandClock(Snapshot saved,LongSupplier epoch) {
