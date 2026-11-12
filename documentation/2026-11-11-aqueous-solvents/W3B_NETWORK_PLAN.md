@@ -659,3 +659,21 @@ Reason recorded: a wet node now solves three fluid phases with the compounds dis
 Next (sub-thread): the code guide chapters, the bounds where a gate holds them, a timing of the settled form, what is left of step 6, then the full campaign for the settled form. The final lane runs once at the end of the batch.
 
 Owner, 2026-11-12, on ANALYTIC_JACOBIAN_PLAN.md section 15: "Accept 1.45". The bounds for this batch: dry 1.1, wet 2.0, polar 1.45 times main (measured: dry equal to main under the same recorder, wet 1.95, polar 1.38 to 1.41). The cost work is closed. For a later cost batch: the linear solve for the node blocks, the kernel workspace's reuse across exact evaluations, the polar correction's cost per evaluation. Next: step 6's remainder (the 8 known `test` failures, the sizing re-pins, crude_unit), then the full campaign.
+
+## 38. Step 6: the 8 known `test` failures have four causes (2026-11-12)
+
+Diagnosed by the sub-thread from stored results, the code and two probes; nothing changed.
+
+**A. Saved contents come back as the wrong two liquids** (`FluidCheckpointCodecTest.portsACompressor`, `OpenTankRuntimeTest.aFedOpenTank`). Expected: a vessel saved as gas over water (water holding about 1e-5 of dissolved nitrogen) loads as the same phases. What the code does: the checkpoint (format 47) and the facts still write the record of before W3b: compounds in any liquid, compounds in the gas, water in any liquid, water in the gas. The reader rebuilds the compounds' liquid as one liquid and all liquid water as a second. The water's dissolved nitrogen becomes a liquid of nitrogen alone, which has no liquid root: the load is refused. With an oil present nothing is refused, but the oil's dissolved water and the water's solutes change places. The facts' reader is the same; read from the code, not run, a world with any vessel of water under gas would be refused on reload.
+- Decided (state, free): the checkpoint writes the three slots, format 48.
+- For the owner (a facts change): the orchestrator recommends one appended vessel field, the aqueous slot's amounts, default empty. With it empty the reader is today's, which is what a row of before W3b means; with it the three slots are exact. Not recommended: rebuilding the phases by a flash on load (a vessel of one compound in two phases has no answer at given T and P; a flash can hold; the facts are checked bit for bit against the live state at save).
+
+**B. Liquids leaving a three-phase drum are saturated** (`SheetSizingTest` twice). Expected by the tests: water at 340 K from a 3 bar drum takes a floating-roof tank; the oil pump is yellow. What the code does: the water carries its dissolved gas, so its bubble pressure is 2.98 bar and the sheet chooses a sphere; the oil carries dissolved water, its bubble pressure is the drum's, and the pump's available suction head is -0.18 m against 1.53 m required: red. On main the free water held no gas and gave the oil a margin of water's vapour pressure (27 kPa, 3.4 m). The new numbers are a saturated liquid's. A product choice: for the owner.
+
+**C. A stop counted in polls** (`SimulatorRunnerTest` twice): the tests stop at the seventh checkpoint poll; the water sheet now polls 116 times and nothing is solved at the seventh. Decided: the tests stop on progress. Test only.
+
+**D. Two pinned restate numbers** (`FluidFactsCompatTest` twice): a restate energy 615.41 to 782.36 J on nitrogen with methane and with ethane (the derived gas pairs); a test that expects the virial steam's pressure where the model's steam is now the cubic's. Decided: both tests derive their expectation from the model; no number re-pinned.
+
+Samples: the naphtha's bubble pressure 2.299 to 2.3186 bar is the derived pairs' (re-pinned with its cause); H-101's 73.06 to 73.0525 MW is checked against the water datum by arithmetic; `crude_unit` re-records with the final lane.
+
+The campaign for the settled form starts now: none of A to D is solver code and it loads no save.

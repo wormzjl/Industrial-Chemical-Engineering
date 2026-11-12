@@ -60,7 +60,9 @@ Changed so far: `science/thermo/PengRobinsonKernel`, `HuronVidalExcess`; `scienc
 ## Open items
 
 - Cost: closed for this batch (owner: "Accept the bounds", "Accept 1.45"; W3B_NETWORK_PLAN.md section 37, ANALYTIC_JACOBIAN_PLAN.md sections 14, 15): dry 1.1, wet 2.0, polar 1.45 times main; measured dry equal to main, wet 1.95, polar 1.38 to 1.41. Later cost batch: the linear solve for the node blocks, the kernel workspace's reuse, the polar correction's cost.
-- Next: the full campaign for the settled Jacobian form (1000 seeds); a hold class the baseline does not have goes to the owner.
+- Save defect, open (W3B_NETWORK_PLAN.md section 38 A): saved contents with two liquids, or water holding dissolved gas under a gas, come back wrong or are refused, in the checkpoint and in the facts. Checkpoint format 48 decided; the facts' fix is the owner's (recommended: one appended field, the aqueous slot's amounts).
+- Sizing of saturated liquids from a drum (section 38 B): the sheet now chooses a sphere for drum water and a red pump for drum oil; a product choice for the owner.
+- The full campaign for the settled Jacobian form is running; a hold class the baseline does not have goes to the owner.
 - Cold 65 (ANALYTIC_JACOBIAN_PLAN.md section 13): not the Jacobian's form; a near-singular solve at a junction with a trace liquid, reached by a trajectory that moved in its last digits. Left to step 7's campaign.
 - N10 done (274e06ac1). The code guide chapters are in progress (uncommitted).
 - W3b steps 1 to 5 built, with 21 open engine and network defects and the cost step 5b (W3B_NETWORK_PLAN.md sections 10 and 15); steps 6 and 7 not started; W4 to W6 not started.
