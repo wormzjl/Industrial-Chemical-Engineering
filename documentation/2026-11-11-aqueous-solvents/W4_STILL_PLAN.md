@@ -162,3 +162,30 @@ Owner, verbatim: "Approve both": the design, with section 5's choice 1 a (the oi
 written (free water refused on the sheet), and section 9's delegation. A new sub-thread `w4-still` on Opus high
 builds steps 1 to 4 in this worktree with this document as its brief; the orchestrator records its reports here
 and in the README. Not built yet.
+
+## 11. W4a measured; D4 corrected (2026-11-12)
+
+First report of the sub-thread, nothing committed. Measured: dry pots bit for bit against HEAD's column; the wash
+92.574 C and 0.2567 (expected 92.5 and 0.26); the rectifier within 0.004 of the in-test McCabe-Thiele (4 trays at
+R = 1: 0.4765 against 0.4800; 8 trays at R = 3: 0.7995 against 0.8009); the engine's azeotrope 0.8965 (section 1's
+0.906 was the offline prototype's; measured 0.894); the wash's batch closes energy to 1.6e-15; water with n-hexane
+61.139 C and 0.7936 (the engine's own values; section 1's 61.4 and 0.791 were the prototype's).
+
+Three statements of this plan did not hold:
+
+1. Section 6, wet naphtha: water's share at the head is 0.987, not 1. The oil liquid carries its dissolved water
+   back. Accepted as the physics; the gate is a share of at least 0.98 with the returned water equal to the water
+   dissolved in the liquid back to the pot.
+2. D7: a pot of two layers takes about 5 flashes, not 3. Accepted; the gate allows 6.
+3. D4 was wrong. I expected the oil layer's reflux to keep every tray one liquid. A water and hexane column stands
+   every tray on the edge of the gap, and a tray read as one liquid there ran away cold (18 C over a 61 C pot):
+   excess water raises the one liquid's pressure, its bubble point falls, it takes more water.
+   - Expected: a tray in the gap holds two liquids; its temperature is its oil layer's bubble point.
+   - Corrected D4: a tray that settles is stated like the pot (the engine's split, the oil layer's bubble point, K
+     against the tray's overall liquid, both layers flowing down). A tray is sent to the engine only while it is
+     known to settle, when it falls more than 0.1 K below the stage above it, and once at convergence; the solve
+     ends only when every tray with water passed in its final state. The notice stays, on physical numbers.
+   - Cost: the trays' flashes are those of the trays that settle, an iteration each, and one test a wet tray at
+     the end. No tray of a liquid without water is tested.
+   - Gates added: no tray colder than the stage above it by more than 0.1 K; the water and hexane profile flat
+     within 0.1 K at the pot's temperature and vapour.
