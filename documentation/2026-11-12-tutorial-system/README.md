@@ -19,6 +19,8 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
   column template, gates, phases P0 to P6, owner decisions D1 to D8 and open items O1, O2.
 - [P0_SCENE_PLAYER.md](P0_SCENE_PLAYER.md): phase P0, the scene player, its view, the render tool and the film "inside
   the still": classes, decisions, tests, renders, what the in-game check looks at.
+- [P1_GUIDE_AND_HELP.md](P1_GUIDE_AND_HELP.md): phase P1, the field guide, progress as advancements, the `?` key and
+  its tours, the card view: classes, decisions, tests, renders, what the in-game check looks at.
 
 ## History
 
@@ -33,6 +35,10 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
   `client/gui/tutorial` (`SceneView`, `FilmScreen`, `/icheme-film`), `tools/tutorial-renders`, `ShapeRasterizer.stillParts`.
   Filtered tests pass (tutorial 12, HeatDiagram, KitLayout, DeterministicMathSource, ProcessUnit, ShapeRasterizer);
   renders in `tmp/tutorial-renders/`. The owner's in-game check is open.
+- 2026-11-12: P1 built (a78faaed0, 4ae9e8371, 41e1e81ae, 31b5ba02a): guide data and chapter 0, progress as
+  advancements (`guide_step`, `equipment_built`, protocol `tutorial-1`), the Field Guide item (placeholder icon),
+  `GuideScreen`, HUD line, key H, the `?` key and tours on the guide and the still's page, the card `three_parts`.
+  21 filtered test classes pass; renders in `tmp/tutorial-renders/`. The fluid GameTests wait for the final lane.
 
 ## Code areas (proposed)
 
@@ -47,3 +53,5 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
 - O2: the Forge fluid converter is a prerequisite of chapter 2 in survival and is not in this plan.
 - D4: the small column, chosen by the owner after the three candidates are solved.
 - P0: the owner's one in-game check of the scene player (P0_SCENE_PLAYER.md, last section).
+- P1: the owner's review of the English text and the renders; the in-game rows of P1_GUIDE_AND_HELP.md; the Field
+  Guide's final icon.

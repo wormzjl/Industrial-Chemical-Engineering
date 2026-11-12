@@ -31,6 +31,16 @@ output; it changes no production or test source set and runs no test.
 
 Each image's footer line gives the film, the time and the stop.
 
+## Guide, tours and cards (P1)
+
+`GuideRender.java` (default package, compiled with `tools/heat-gui-renders` against the main and test outputs; task
+`renderTutorialGuide`, run after `renderTutorial`) draws the shipped `GuidePage` and `TourLayout` in the game's bitmap
+font: `guide-<state>.png` (new, step-3-current, chapter-done; light and dark at 464 by 254), `guide-small.png` (320 by
+240 window), `tour-guide.png`, `tour-fluid_device-still.png` (the still page built as GuiPrototypes builds it, with
+its `?` key), `card-three_parts.png` (heat 0, 0.5, 1). `FieldGuideIcon.java` writes the Field Guide's placeholder
+texture: `java tools/tutorial-renders/FieldGuideIcon.java src/main/resources/assets/icheme/textures/item/field_guide.png`.
+
 ## History
 
 - 2026-11-12, P0: the tool, for the film `still_inside`.
+- 2026-11-12, P1: GuideRender (guide, tours, card) and FieldGuideIcon.
