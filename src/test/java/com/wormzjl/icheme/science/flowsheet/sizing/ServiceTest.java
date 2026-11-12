@@ -19,7 +19,6 @@ import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.material.MaterialRuntime;
 import org.junit.jupiter.api.Test;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.function.Supplier;
 
@@ -41,7 +40,7 @@ final class ServiceTest {
     private static final double[] CRUDE = crude();
 
     private static double[] crude() {
-        var crude = Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo(PACKAGE).crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(), AXIS.size());
+        var crude = com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.worldCrude();
         crude[WATER] = 0;
         return crude;
     }

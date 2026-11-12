@@ -100,7 +100,7 @@ class AqueousSolventDataTest {
         // The record is unchanged; the network's view carries Water in its cubic and ice Ih among its crystals.
         assertFalse(world.components().contains("Water"),"the record does not name Water");
         assertEquals(List.of("icheme:crystal_carbon_dioxide_i"),world.crystals());
-        assertEquals("refinery-tier1-r3",world.revision(),"the network package record's revision is unchanged");
+        assertEquals("refinery-tier1-r4",world.revision(),"the network package record: r4 since W6 (ethanol joins icheme:refinery)");
         for(var p:catalog.packages().values())for(var property:p.properties())assertNotEquals(CUBIC_WATER,property.id(),p.id());
         var wet=catalog.withWater(WORLD).requirePackage(WORLD);
         assertEquals("Water",wet.components().getLast());

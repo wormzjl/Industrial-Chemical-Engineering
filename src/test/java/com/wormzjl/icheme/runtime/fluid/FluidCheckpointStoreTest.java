@@ -294,12 +294,13 @@ class FluidCheckpointStoreTest extends CertifyingRig.Islands {
 
     /** A save larger than the pack size spans several packs (no save is bounded by one), all written before the core. */
     @Test void aSaveLargerThanOnePackSpansSeveralAndReadsBack() throws IOException {
-        var folder=temporary.resolve("spanning");var store=directory(folder);store.packLimit(1_000);
+        // The limit is just above one tank's unit; W6 (ethanol joins icheme:refinery) made the 47-long unit pass 1,000 bytes.
+        var folder=temporary.resolve("spanning");var store=directory(folder);store.packLimit(1_500);
         var snapshots=new ArrayList<IslandCoordinator.Snapshot>();for(long id=1;id<=12;id++)snapshots.add(tank(id,id,0));
         var data=new FluidSavedData(checkpoint(snapshots),key->key.on(model),store);data.save(new CompoundTag(),null);
         var stats=data.lastSave().stats();
         assertTrue(stats.newPacks()>1,"several packs: "+stats.newPacks());assertEquals(stats.newPacks(),packs(folder).size());assertEquals(stats.newPacks(),stats.packs());
-        for(var name:packs(folder))assertTrue(Files.size(folder.resolve(FluidCheckpointStore.UNIT_DIRECTORY).resolve(name))<=1_000||name.equals("fluid-1.pack"),name);
+        for(var name:packs(folder))assertTrue(Files.size(folder.resolve(FluidCheckpointStore.UNIT_DIRECTORY).resolve(name))<=1_500||name.equals("fluid-1.pack"),name);
         var loaded=FluidSavedData.read(directory(folder),key->key.on(model)).orElseThrow();
         assertEquals(12,loaded.checkpoint().islands().size());
         for(int i=0;i<12;i++)assertInventories(snapshots.get(i).graph(),loaded.checkpoint().islands().get(i).snapshot().graph(),"island "+(i+1));

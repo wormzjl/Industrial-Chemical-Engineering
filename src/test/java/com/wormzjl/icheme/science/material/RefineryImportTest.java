@@ -29,15 +29,17 @@ class RefineryImportTest {
         resources.entrySet().removeIf(e->{
             String path=e.getKey();if(!path.startsWith(ROOT))return false;
             if(path.equals(ROOT+"transport/chemsep_liquid_reference.json")||path.equals(ROOT+"interactions/dwsim_refinery_pr78.json")||path.equals(ROOT+"packages/refinery.json"))return true;
+            // Ethanol (W6 of batch 2026-11-11-aqueous-solvents) is a later import: its records stay, as O11's do below.
+            if(path.equals(ROOT+"properties/chemsep_ethanol.json"))return false;
             if(path.startsWith(ROOT+"properties/chemsep_"))return true;
             if(!path.startsWith(ROOT+"components/"))return false;
             var o=JsonParser.parseString(e.getValue()).getAsJsonObject();
-            return o.has("properties")&&o.get("properties").getAsString().startsWith("icheme:chemsep_");
+            return o.has("properties")&&o.get("properties").getAsString().startsWith("icheme:chemsep_")&&!o.get("properties").getAsString().equals("icheme:chemsep_ethanol");
         });
         edit(resources,"methods/crude_pr78.json",o->{var libraries=new JsonArray();libraries.add("icheme:tjl20");o.add("interactions",libraries);o.addProperty("revision","crude-pr78-r1");});
         // O11 (batch 2026-11-04-open-thermo-data) is a later import: its records stay, and its CO2 preset leaves the old
-        // network's list, whose package does not hold CO2.
-        edit(resources,"networks/default.json",o->{o.addProperty("package",NETWORK);var presets=new JsonArray();for(var e:o.getAsJsonArray("fluid_presets"))if(!e.getAsString().equals("carbon_dioxide"))presets.add(e);o.add("fluid_presets",presets);});
+        // network's list, whose package does not hold CO2. So does ethanol's (W6), for the same reason.
+        edit(resources,"networks/default.json",o->{o.addProperty("package",NETWORK);var presets=new JsonArray();for(var e:o.getAsJsonArray("fluid_presets"))if(!e.getAsString().equals("carbon_dioxide")&&!e.getAsString().equals("ethanol"))presets.add(e);o.add("fluid_presets",presets);});
         for(String file:List.of("properties/tjl19_isobutane.json","properties/tjl19_isopentane.json"))
             edit(resources,file,o->{var liquid=o.getAsJsonObject("viscosity").getAsJsonObject("liquid");liquid.addProperty("revision","dwsim-viscosity-api-r1");liquid.addProperty("estimated",false);});
         return MaterialCatalog.parse(resources);
@@ -74,7 +76,7 @@ class RefineryImportTest {
         var axis=before.requirePackage(NETWORK).components();var refinery=after.requirePackage(REFINERY);
         assertEquals(axis,refinery.components().subList(0,axis.size()));
         assertEquals(before.physicsContent(NETWORK,axis),after.physicsContent(REFINERY,axis),"the refinery package on the old network's axis");
-        assertEquals(axis.size()+25,refinery.components().size(),"the 24 Tier 1 compounds and CO2 (O11 of batch 2026-11-04-open-thermo-data)");
+        assertEquals(axis.size()+26,refinery.components().size(),"the 24 Tier 1 compounds, CO2 (O11 of batch 2026-11-04-open-thermo-data) and ethanol (W6: ethanol joins icheme:refinery)");
         assertTrue(refinery.components().size()+1<=MaterialAxis.MAX_CONSERVED_COMPONENTS,"the world list stays under the cap");
     }
 
@@ -100,7 +102,7 @@ class RefineryImportTest {
     @Test void thePairLibraryAddsOnlyPairsWithANewCompound() {
         var after=after();var before=before();
         var added=new HashSet<>(after.requirePackage(REFINERY).components());added.removeAll(before.requirePackage(NETWORK).components());
-        assertEquals(25,added.size(),"the 24 Tier 1 compounds and CO2 (O11), whose pairs with the old compounds are their own library's");
+        assertEquals(26,added.size(),"the 24 Tier 1 compounds, CO2 (O11) and ethanol (W6: ethanol joins icheme:refinery; its pairs are derived, none in the library)");
         var library=JsonParser.parseString(after.resources().get(ROOT+"interactions/dwsim_refinery_pr78.json")).getAsJsonObject();
         assertEquals(LIBRARY,library.get("id").getAsString());
         double methaneSulfide=Double.NaN;

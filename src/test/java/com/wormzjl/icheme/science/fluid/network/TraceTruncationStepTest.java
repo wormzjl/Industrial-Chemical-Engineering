@@ -22,8 +22,7 @@ class TraceTruncationStepTest {
             FluidThermodynamics.forNetwork(MaterialCatalog.bundled(),PACKAGE,FluidThermodynamics.DEFAULT_MAXIMUM_VELOCITY,0);
 
     private double[] wetCrude() {
-        double[] n=Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo(PACKAGE)
-                .crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(),com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1);
+        double[] n=com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.worldCrude();
         n[com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN]=.1;n[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK]=.2;return n;
     }
     private FluidThermodynamics.State fill(FluidThermodynamics model,double pressure) {

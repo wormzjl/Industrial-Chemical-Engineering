@@ -12,7 +12,6 @@ import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
-import com.wormzjl.icheme.science.material.PilotSolventTestCatalog;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -21,11 +20,12 @@ import org.junit.jupiter.api.Test;
 
 /**
  * The sheet's column block with water where the shared rule puts it (batch 2026-11-11-aqueous-solvents, W5 D3 and D5, section 6
- * of {@code W5_COLUMN_PLAN.md}), on the test network {@link PilotSolventTestCatalog} (the refinery package with the pilot ethanol).
+ * of {@code W5_COLUMN_PLAN.md}), on the network package {@code icheme:refinery}, which holds ethanol since W6 (W5 ran it on a test
+ * package of the same compounds; its numbers stand).
  * The column is E1's rectifier: 10 trays, feed on tray 8, 1 atm, condenser 70 C, reflux ratio 3, reboiler 1.77 MW.
  */
 final class FlowsheetAqueousColumnTest {
-    private static final MaterialCatalog CATALOG = PilotSolventTestCatalog.catalog();
+    private static final MaterialCatalog CATALOG = MaterialCatalog.bundled();
     private static final String NETWORK = CATALOG.presets().network().packageId();
     private static final List<String> AXIS = FluidThermodynamics.forNetwork(CATALOG, NETWORK).components();
     private static final double ATM = 101_325;

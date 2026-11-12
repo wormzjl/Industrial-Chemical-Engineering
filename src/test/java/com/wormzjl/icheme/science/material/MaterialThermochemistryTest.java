@@ -37,7 +37,7 @@ class MaterialThermochemistryTest {
             Map.entry("Toluene",new double[]{50170,7,8,0,0,0}),Map.entry("Ethylbenzene",new double[]{29920,8,10,0,0,0}),
             Map.entry("O-xylene",new double[]{19080,8,10,0,0,0}),Map.entry("M-xylene",new double[]{17320,8,10,0,0,0}),
             Map.entry("P-xylene",new double[]{18030,8,10,0,0,0}),Map.entry("MethylMercaptan",new double[]{-22600,1,4,0,0,1}),
-            Map.entry("EthylMercaptan",new double[]{-46300,2,6,0,0,1}),
+            Map.entry("EthylMercaptan",new double[]{-46300,2,6,0,0,1}),Map.entry("Ethanol",new double[]{-234950,2,6,0,1,0}),
             Map.entry("Oxygen",new double[]{0,0,0,0,2,0}),Map.entry("Nitrogen",new double[]{0,0,0,2,0,0}),
             Map.entry("CarbonDioxide",new double[]{-393510,1,0,0,2,0}),Map.entry("SulfurDioxide",new double[]{-296840,0,0,0,2,1}),
             Map.entry("Water",new double[]{-241814,0,2,0,1,0}));
@@ -136,7 +136,7 @@ class MaterialThermochemistryTest {
      */
     @Test void theWorldListCarriesThermochemistryAndTheLimitsOfWhatBurns() {
         var catalog=MaterialCatalog.bundled();var world=catalog.requirePackage(WORLD);
-        assertEquals(45,world.components().size(),"7 light ends, 12 cuts, N2, the 24 Tier 1 compounds and CO2");
+        assertEquals(46,world.components().size(),"7 light ends, 12 cuts, N2, the 24 Tier 1 compounds, CO2 and ethanol (W6: ethanol joins icheme:refinery)");
         var water=SubRecords.thermochemistry(catalog,WORLD,"Water").orElseThrow();
         assertEquals(formula(FORMULA.get("Water")),water.elements());assertEquals(-241814,water.formationEnthalpy());
         assertEquals(.01801528,SubRecords.molarMass(water),.01801528*MOLAR_MASS_TOLERANCE,"the water's formula");
@@ -179,7 +179,8 @@ class MaterialThermochemistryTest {
                 assertTrue(limit.source().contains("NIOSH Pocket Guide"),component);assertNotNull(limit.upperLimit(),component);
             }
         }
-        assertEquals(33,compounds);assertEquals(12,cuts);assertEquals(40,limits);
+        // W6: ethanol joins icheme:refinery (one more compound with a formula and a NIOSH limit).
+        assertEquals(34,compounds);assertEquals(12,cuts);assertEquals(41,limits);
         // What the formula adds: oxygen demand and flue gas per mole of fuel (ammonia: 0.75 O2, 1.5 H2O, 0.5 N2).
         var ammonia=SubRecords.thermochemistry(catalog,WORLD,"Ammonia").orElseThrow();
         assertEquals(.75,atoms(ammonia,"C")+atoms(ammonia,"H")/4+atoms(ammonia,"S")-atoms(ammonia,"O")/2);

@@ -613,10 +613,7 @@ class IslandCertificateTest {
     /** The paced benchmark's composition: the Tia Juana light feed with 0.1 nitrogen and 0.2 water, not renormalised. */
     private static double[] benchmarkComposition() {
         var catalog=MaterialCatalog.bundled();
-        var z=Arrays.copyOf(com.wormzjl.icheme.science.material.MaterialRuntime.with(catalog,FluidPresetCatalog.NETWORK_PACKAGE,
-                ()->com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo(FluidPresetCatalog.NETWORK_PACKAGE)
-                        .crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions()),
-                com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.conservedCount());
+        var z=com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.worldCrude();
         z[com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.nitrogenIndex()]=.1;z[com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.waterIndex()]=.2;
         return z;
     }

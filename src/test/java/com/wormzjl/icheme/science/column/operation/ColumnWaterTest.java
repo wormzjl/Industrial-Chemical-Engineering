@@ -14,7 +14,6 @@ import com.wormzjl.icheme.science.column.v3.V3SteamFeedSpec;
 import com.wormzjl.icheme.science.equipment.ColumnOperatingPoint;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
-import com.wormzjl.icheme.science.material.PilotSolventTestCatalog;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
@@ -22,10 +21,11 @@ import org.junit.jupiter.api.Test;
 
 /**
  * The shared water rule and the running column with water on its axis (batch 2026-11-11-aqueous-solvents, W5 D3), on the test
- * network {@link PilotSolventTestCatalog}: E1's rectifier on a wash island.
+ * network, the bundled {@code icheme:refinery} with ethanol since W6 (W5 ran it on a test package of the same compounds):
+ * E1's rectifier on a wash island.
  */
 class ColumnWaterTest {
-    private static final MaterialCatalog CATALOG = PilotSolventTestCatalog.catalog();
+    private static final MaterialCatalog CATALOG = MaterialCatalog.bundled();
     private static final String NETWORK = CATALOG.presets().network().packageId();
     private static final FluidThermodynamics WHOLE = FluidThermodynamics.forNetwork(CATALOG, NETWORK);
 

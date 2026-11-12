@@ -39,7 +39,7 @@ final class ReleasePressureTest {
     /** The liquid slot ({@code oil}) or the aqueous slot of SheetSizingTest's drum: wet crude with nitrogen at 340 K and 3 bar. */
     private FluidThermodynamics.State drumLiquid(boolean oil) {
         int n=model.componentCount(),water=n-1;
-        double[] feed=Arrays.copyOf(TiaJuanaTestCatalog.thermo(FluidMaterialCatalog.NETWORK_PACKAGE).crudeFeed(TiaJuanaTestCatalog.ASSAY_ID).moleFractions(),n);
+        double[] feed=com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.worldCrude();
         feed[water]=0;double dry=Arrays.stream(feed).sum();
         for(int i=0;i<n;i++)feed[i]*=40/dry;
         feed[water]=12;feed[MaterialTestBasis.NITROGEN]=4;

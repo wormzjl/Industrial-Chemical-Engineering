@@ -954,7 +954,8 @@ class FluidFactsCompatTest {
                 // Schema 15 wrote the build facts; an older image reads none.
                 assertEquals(expected.getProperty("builds",""),builds(ledger),folder+": build facts");
                 // Schema 16 wrote the batch stills; an older image reads none.
-                assertEquals(expected.getProperty("stills",""),stills(ledger),folder+": batch stills");
+                // W6 of batch 2026-11-11-aqueous-solvents: the accounts on the image's own saved axis, by component id, as recorded.
+                assertEquals(expected.getProperty("stills",""),stills(ledger,savedBasis(image)),folder+": batch stills");
                 // Schema 17 wrote the steam ejectors; an older image reads none.
                 assertEquals(expected.getProperty("ejectors",""),ejectors(ledger),folder+": steam ejectors");
                 long vessels=rebuilt.checkpoint().islands().stream().flatMap(e->e.snapshot().graph().reservoirs().stream()).filter(n->n.kind()==PassiveNetwork.NodeKind.RESERVOIR).count();
@@ -1202,12 +1203,28 @@ class FluidFactsCompatTest {
     }
     /** What schema 16 carries: each batch still by its pot, its devices, design, accounts, fire, settings and totals. */
     private static String stills(WorldTopologyLedger.Snapshot world) {
+        return stills(world,world.basis().components());
+    }
+    /** The saved world basis's compound ids of {@code image}, as its facts wrote them. */
+    private static List<String> savedBasis(FluidCheckpointCodec.Image image) {
+        var core=FluidCheckpointCodec.readCore(image.core());var t=core.topology();var topologyPack=image.packs().get(t.pack());
+        return FluidCheckpointCodec.worldFacts(topologyPack,FluidCheckpointCodec.topologySections(topologyPack,(int)t.offset(),t.length(),core.topologyGeneration())).basis().components();
+    }
+    /** {@code amounts} on the current axis {@code from}, projected by id onto {@code axis}; an amount of an id off {@code axis} fails. */
+    private static double[] onto(double[] amounts,List<String> from,List<String> axis) {
+        var out=new double[axis.size()];
+        for(int i=0;i<amounts.length;i++){int at=axis.indexOf(from.get(i));if(at>=0)out[at]=amounts[i];else assertEquals(0.0,amounts[i],from.get(i)+" is not on the saved axis");}
+        return out;
+    }
+    /** The batch stills' facts with their accounts on {@code axis}, by component id. */
+    private static String stills(WorldTopologyLedger.Snapshot world,List<String> axis) {
+        var from=world.basis().components();
         var text=new StringBuilder();
         for(var u:new TreeMap<>(world.stills()).values()) {
             if(!text.isEmpty())text.append(";");
             text.append(u.id()).append("=").append(u.water()).append("/").append(u.distillate()).append("/").append(u.vent()).append("/").append(u.burners())
                     .append(",").append(u.volume()).append("/").append(u.heater()).append("/").append(u.condenser()).append("/").append(u.stages())
-                    .append(",").append(Arrays.toString(u.head().moles())).append("@").append(u.head().energy()).append(",").append(Arrays.toString(u.venting().moles())).append("@").append(u.venting().energy())
+                    .append(",").append(Arrays.toString(onto(u.head().moles(),from,axis))).append("@").append(u.head().energy()).append(",").append(Arrays.toString(onto(u.venting().moles(),from,axis))).append("@").append(u.venting().energy())
                     .append(",").append(u.burning()).append("/").append(u.firing()).append("/").append(u.reflux()).append("/").append(u.heated()).append("/").append(u.condensed());
         }
         return text.toString();

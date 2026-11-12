@@ -70,7 +70,7 @@ class CoolingTowerRuntimeTest {
     @Test void aPumpedVolatileHydrocarbonFlashesAndEvaporatesWithoutAHold(){
         var w=new EventPathWorld();w.runTo(20);
         long id=tower(w,CoolingTower.induced(8,2,1,1),new PhysicalFluidTopology.Port(at(1,7,0),NORTH,PassiveNetwork.PhasePort.SPRAY),new PhysicalFluidTopology.Port(at(1,0,4),SOUTH,PassiveNetwork.PhasePort.LIQUID));
-        double[] oil=new double[model.componentCount()];oil[oil.length-3]=1;
+        double[] oil=new double[model.componentCount()];oil[model.components().indexOf("EthylMercaptan")]=1;
         w.place(1,7,-1,Kind.PIPE,NORTH,.05);w.place(1,7,-2,Kind.PUMP,SOUTH,new FlowControl.Pump(.005,800000),null,.05);
         w.place(1,7,-3,Kind.PIPE,NORTH,.05);w.place(1,7,-4,Kind.GENERATOR,NORTH,new FluidDeviceSpec(1,330,300000,oil),.05);
         w.runTo(600);w.assertKeptUp("pumped hydrocarbon");
