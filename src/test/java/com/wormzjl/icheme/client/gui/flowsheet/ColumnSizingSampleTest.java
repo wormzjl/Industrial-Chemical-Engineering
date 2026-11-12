@@ -221,7 +221,8 @@ class ColumnSizingSampleTest {
     @Test
     void p102ReadsItsDrawTraysHeight() {
         var pump = sized.units().get("P-102").rating();
-        assertEquals(32.35, read(pump, Limit.PUMP_NPSH), TENTH, "32.3 before condenser carry-over (E31)");
+        // W5 D1 of batch 2026-11-11-aqueous-solvents: the column flashes on the network's derived pairs: the draw tray's liquid is no longer above its vapour pressure in the network's flash.
+        assertEquals(34.69, read(pump, Limit.PUMP_NPSH), TENTH, "32.35 with the column on the authored matrix (to W5a); 32.3 before condenser carry-over (E31)");
         // O3 of batch 2026-11-04-open-thermo-data: on the medium crude grade P-102 runs at 69 % of its rated flow, under the lamp's 70 %.
         assertEquals(Lamp.YELLOW, pump.lamp(), () -> text(pump));
         assertSame(Limit.PUMP_RATED, pump.closest().limit(), () -> text(pump));

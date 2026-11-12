@@ -166,9 +166,9 @@ class ColumnSolveTest {
         var a = reference.table();
         var b = solved.table();
         assertEquals(whole.components(), b.axis(), "the table is on the world list");
-        // W3b: the refinery lists Water, so V3's basis ends in it (at zero flow: the column's water is its own code's).
+        // W5 D3 (batch 2026-11-11-aqueous-solvents): a crude names no homomorph, so its water is off the axis and V3's basis is
+        // the list without water (W3b ended it in Water at zero flow); the column's water stays its own code's.
         var basis = new ArrayList<>(narrow.compounds());
-        basis.add(SplitTable.WATER);
         assertEquals(basis, solved.seed().input().componentBasis().componentIds(), "V3's public basis is the island's list");
         assertEquals(a.condenserPerFeed(), b.condenserPerFeed(), 0);
         assertEquals(a.reboilerPerFeed(), b.reboilerPerFeed(), 0);

@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.science.flowsheet.unit;
 
 import com.wormzjl.icheme.science.column.operation.ColumnSolve;
+import com.wormzjl.icheme.science.column.operation.ColumnWater;
 import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
 import com.wormzjl.icheme.science.column.v3.V3ColumnDisplayResult;
 import com.wormzjl.icheme.science.column.v3.V3ColumnOutcome;
@@ -62,7 +63,7 @@ final class ColumnBlockSolve implements Calculation.Law {
         components = u.thermo().axis().size();
         // Where the column's solve ended in the steady run this one starts from, while its package stands at that revision.
         var left = u.last() == null ? null : u.last().warm();
-        if (left != null && left.current(u.thermo().catalog())) {
+        if (left != null && left.current(ColumnUnit.catalogFor(u.thermo(), left.seed().input().componentBasis()))) {
             warm = left.seed();
             feedTray = left.feedTray();
             stages.putAll(left.stages());
@@ -135,7 +136,7 @@ final class ColumnBlockSolve implements Calculation.Law {
             valved = valves(supplies);
             var steam = new ArrayList<V3SteamFeedSpec>();
             for (int i = 0; i < valved.size(); i++) steam.add(new V3SteamFeedSpec(door.steam().get(i).stage(), valved.get(i).total(), valved.get(i).temperature()));
-            result = run(flashed, steam);
+            result = run(flashed, steam, report);
             warm = result.warmSeed().orElse(warm);
             var solved = result.inspection().orElseThrow().nodes();
             feedTray = solved.get(door.feedStage()).pressurePascal();
@@ -229,19 +230,35 @@ final class ColumnBlockSolve implements Calculation.Law {
     }
 
     /**
-     * V3 on the stream as flashed: its hydrocarbons are the feed, its water a steam feed. A feed holding an aqueous liquid is
-     * refused; water dissolved in the oil joins the steam feed with the vapour's, since V3 carries no water in its liquid
-     * (W3b; W5, which gives V3 that water, removes this).
+     * V3 on the stream as flashed, its water where the shared rule puts it ({@link ColumnWater#onAxis}, W5 D3 of batch
+     * 2026-11-11-aqueous-solvents). On the axis (the feed carries a water-miscible organic): every amount is the feed, an
+     * aqueous liquid included, on the list with water; a steam row with a flow is refused, since steam would model that water
+     * a second time; a solved liquid that would settle into two is a notice ({@link ColumnWater#settling}). Off the axis: its
+     * hydrocarbons are the feed on the list without water, its water a steam feed. A feed holding an aqueous liquid is
+     * refused there; water dissolved in the oil joins the steam feed with the vapour's, since V3's free water is immiscible by
+     * construction (this rule stays).
      */
-    private V3ColumnResult run(FlowStream flashed, List<V3SteamFeedSpec> rows) {
+    private V3ColumnResult run(FlowStream flashed, List<V3SteamFeedSpec> rows, Report report) {
+        var thermo = u.thermo();
+        double[] amounts = flashed.amounts();
+        if (ColumnWater.onAxis(thermo.catalog(), thermo.packageId(), thermo.axis(), amounts)) {
+            for (int i = 0; i < rows.size(); i++)
+                if (rows.get(i).molarFlowMolPerSecond() > 0) throw new FlowsheetFailure("column.steam_on_axis", door.steam().get(i).id());
+            var catalog = ColumnUnit.catalogFor(thermo, true);
+            var result = run(input(catalog, amounts, flashed.temperature(), List.of()), catalog);
+            var settling = ColumnWater.settling(catalog, thermo.model(), result, thermo.checkpoint());
+            if (!settling.trays().isEmpty()) report.note(Note.warning(u.id(), "column.two_liquids", settling.trayList()));
+            if (settling.distillate()) report.note(Note.warning(u.id(), "column.two_liquids_distillate"));
+            return result;
+        }
         var state = flashed.state();
         if (state.labelAmountsView(com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.AQUEOUS)[components - 1] > TRACE * flashed.total()) throw new FlowsheetFailure("column.liquid_water");
-        double[] amounts = flashed.amounts();
         double water = amounts[components - 1];
         amounts[components - 1] = 0;
         var steam = new ArrayList<>(rows);
         if (water > 0) join(steam, new V3SteamFeedSpec(door.feedStage(), water, flashed.temperature()));
-        return run(input(amounts, flashed.temperature(), steam));
+        var catalog = ColumnUnit.catalogFor(thermo, false);
+        return run(input(catalog, amounts, flashed.temperature(), steam), catalog);
     }
 
     /** A steam row's stream: what its wire brings, or the door's entries, which enter the sheet as a utility. */
@@ -318,22 +335,27 @@ final class ColumnBlockSolve implements Calculation.Law {
     }
 
     /**
-     * The column on the sheet's package, the network's view of the sheet's compounds ({@code SheetCompounds}): the sheet's axis is
-     * its compounds, then water, which the caller has moved to the steam. The learned start binds by the feed's own compounds.
+     * The column on {@code catalog}'s package, the network's view of the sheet's compounds ({@code SheetCompounds}), with water
+     * or without it ({@link ColumnUnit#catalogFor}): the sheet's axis is its compounds, then water, the last amount, which the
+     * caller has moved to the steam where the list has no water. The learned start binds by the feed's own compounds.
      */
-    private V3ColumnInput input(double[] amounts, double temperature, List<V3SteamFeedSpec> steam) {
+    private V3ColumnInput input(com.wormzjl.icheme.science.material.MaterialCatalog catalog, double[] amounts, double temperature, List<V3SteamFeedSpec> steam) {
         var thermo = u.thermo();
-        var pack = thermo.catalog().requirePackage(thermo.packageId());
+        var pack = catalog.requirePackage(thermo.packageId());
+        double[] feed = new double[pack.components().size()];
+        for (int c = 0; c < feed.length; c++) feed[c] = amounts[thermo.axis().indexOf(pack.components().get(c))];
         try {
-            return door.input(pack, java.util.Arrays.copyOf(amounts, pack.components().size()), temperature, steam);
+            return door.input(pack, feed, temperature, steam);
         } catch (IllegalArgumentException refused) {
             throw new FlowsheetFailure("column.failed", String.valueOf(refused.getMessage()));
         }
     }
 
-    private V3ColumnResult run(V3ColumnInput input) {
+    private V3ColumnResult run(V3ColumnInput input, com.wormzjl.icheme.science.material.MaterialCatalog catalog) {
+        // A warm state on the other list (the feed crossed the water rule's share) is state on another basis: dropped.
+        if (warm != null && !warm.input().componentBasis().equals(input.componentBasis())) warm = null;
         basis = input.componentBasis();
-        var outcome = ColumnUnit.solve(input, warm, u.thermo().catalog(), u.thermo().checkpoint());
+        var outcome = ColumnUnit.solve(input, warm, catalog, u.thermo().checkpoint());
         if (outcome instanceof V3ColumnOutcome.Success success) {
             display = V3ColumnDisplayResult.fromAccepted(success);
             return success.result();

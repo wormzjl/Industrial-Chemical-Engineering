@@ -238,7 +238,9 @@ class UnitSizingSampleTest {
     @Test
     void theUnstabilisedNaphthaTakesASphereAndTheResidueARoof() {
         var naphtha = tile("NAPHTHA");
-        assertEquals(2.3186, naphtha.bubble(), 2.3186 * .0005, "both bisect to a ratio of 1.0005, from other bounds; 2.299 before the derived pairs (W3b of batch 2026-11-11-aqueous-solvents)");
+        // W5 D1 of batch 2026-11-11-aqueous-solvents: the column flashes on the network's derived pairs, so the receiver's naphtha is again at the network's bubble point of its own drum (2.3186 while the column
+        // flashed on the authored matrix and the network on the derived pairs, W3b).
+        assertEquals(2.2989, naphtha.bubble(), 2.2989 * .0005, "both bisect to a ratio of 1.0005, from other bounds; 2.3186 with the column on the authored matrix (W3b to W5a)");
         assertEquals(new TankSizing.Size(UnitType.SPHERE, 1, 15, 1), TankSizing.auto(naphtha, null).size(), "17 m on Tia Juana; the medium grade makes less naphtha (O3); 14 m before condenser carry-over (E31)");
         var residue = tile("RESIDUE");
         assertTrue(residue.bubble() < .015);

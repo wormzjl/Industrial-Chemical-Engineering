@@ -62,7 +62,8 @@ final class BlockSizing {
         if (load == null) return new SizedUnit(null, new Rating(List.of(UnitSize.reading(null))));
         var warm = report.warm();
         // The trials solve on the package the run's own solve did: the sizing's, the network's view of the sheet's compounds.
-        var trials = new ColumnSizing.Trials(load, thermo.catalog(), thermo.checkpoint(), warm != null && warm.current(thermo.catalog()) ? warm.seed() : null);
+        var catalog = ColumnUnit.catalogFor(thermo, load.solved().componentBasis());
+        var trials = new ColumnSizing.Trials(load, catalog, thermo.checkpoint(), warm != null && warm.current(catalog) ? warm.seed() : null);
         // A kept column stands at its door's diameter, which reads the run's own trays: no trial solves.
         var sized = entry.kept() && !(entry.size() instanceof ColumnSizing.Size) ? new SizedUnit(load.size(load.diameter()), ColumnSizing.rate(load, load.size(load.diameter()), trials))
                 : sized(entry, ColumnSizing.Size.class, size -> ColumnSizing.rate(load, size, trials), () -> ColumnSizing.auto(load, trials));
