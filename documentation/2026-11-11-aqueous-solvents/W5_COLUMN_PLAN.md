@@ -254,3 +254,61 @@ The sub-thread's update; the diffs are not reviewed by the orchestrator yet.
   methyl mercaptan bit for bit; the network's dry polar cost scenario near its dry one.
 - Reach: the derivation's identity changes for every list (saved network state on r6 is dropped and rebuilt;
   facts are not touched). The campaign's numbers can move where a world holds methyl mercaptan: the final lane's.
+
+## 14. W5 built: the callers, the guide, the activity rule (2026-11-12)
+
+Sub-thread `w5-column` (Opus high). Commits: W5c `a7321ef64`, W5d `6e48203b7`, the activity rule `d513fa5bf`
+(`derived-pairs-r7`). Reports: `tmp/w5-column/reports/W5_FINAL.md`, `W5_ACTIVITY_RULE.md`, `W5a_REPORT.md`. The main
+thread read the diffs of the kernel, the lens, the native batch, `ColumnWater` and the two callers: as designed.
+
+W5c, the callers (D3, D5):
+- `ColumnWater.onAxis`: water goes on the axis where a compound that names a homomorph exceeds 1e-3 of the feed's
+  moles. The sheet's block (`ColumnBlockSolve.run`) and the running column (`ColumnSolve.run`) read it on the feed.
+- On the axis the whole feed enters V3 on the list with water; a steam row with a flow is refused
+  (`column.steam_on_axis`). Off the axis nothing changes: water is a steam feed, `column.liquid_water` stays.
+- `ColumnWater.settling`: one `flashTP` per tray liquid and the distillate after an accepted solve; a liquid that
+  would settle is a warning (`column.two_liquids`, `column.two_liquids_distillate`), never a failure.
+
+| Gate | Plan | Measured |
+|---|---|---|
+| Sheet wash | no `liquid_water`; mass to 1e-9 | STEADY; 2.082060 kg/s in = out; distillate 0.8075 |
+| Ethanol, water, hexane | converged or typed; names trays | STEADY; `column.two_liquids` [8] and the distillate |
+| Steam with water on the axis | refused | refused (V3, running column, sheet) |
+| Crude with 1e-6 ethanol | steam and free water kept | free water 381.3 mol/s; basis without water |
+| Running wash island | water in distillate and bottoms | 0.02245 / 0.97755 |
+
+Three more references moved by D1 in W5c's reach, re-pinned with that cause: naphtha bubble 2.3186 to 2.2989 bar
+(the receiver liquid is again at its own bubble point), P-102's NPSH 32.35 to 34.69 m, H-101's ask 98.04 to
+98.03 MW. Attributed to W5a by mechanism, not bisected.
+
+The activity rule (section 13), measured:
+- 20 pairs move, all methyl mercaptan with a hydrocarbon or a cut: activity fit to E-PPR78, k_ij -0.083 to 0.084.
+- Sour column kernel against the authored matrix: evaluate 3.63 to 1.10 times, derivatives 4.63 to 1.15 times.
+- Network polar cost scenario: polar/dry 1.80 after stage B, 1.34 now; main 1.31.
+- Lists without methyl mercaptan: identical, except the identity's revision token. `FluidFactsCompatTest` 21 of 21.
+
+Where the measurement contradicted this plan:
+- Section 13 said methyl mercaptan's pair with water stays an activity fit. It never was one: the Dortmund table
+  has no H2O/CH3SH pair, so it was E-PPR78 already (k 0.344). Methyl mercaptan now takes no activity pair.
+- Sour products against the authored-matrix column: overhead +0.54 %, distillate -0.40 %, bottoms -0.16 %. The
+  overhead is 0.14 points over section 13's 0.4 % bound. Cause: E-PPR78 pairs where the authored library has
+  none. Kept; no reference is pinned on it.
+
+Cost of W5 on a crude column (`medium_crude`): kernel evaluations -3.4 %; one evaluation 1.11 times and one
+derivative 1.46 times the authored matrix's (E-PPR78 pairs of the gases with the cuts); a warm solve about 1.07
+times. The native batch keeps crude lists (constant classical pairs).
+
+Open from W5:
+- The column's digest and label do not carry the derivation's identity (`DerivedPairs.Result.identity`): the label
+  says `-derived-pairs-r1`, so an edit to the derivation (r6 to r7), a Henry record or a group table does not
+  change a column result's digest. Nothing saved compares it (`ColumnWire` sends it for display); the network's
+  identity carries it (`PhaseContract.forDerived`). Left as it is; a later label bump at a derivation edit that
+  moves column results is by hand.
+- E2's margin is thin (0.88356 against a floor of 0.88).
+- A whole-list network model that holds methyl mercaptan at zero amount still changes kernel derivatives; the
+  campaign's reach of r7 is the final lane's.
+- `crude_unit` in `FlowsheetExamplesTest` records water r3 (data r4 since e1b9a3dd0): re-record in the final lane.
+- Six `en_us.json` keys to translate at the translation commit: `column.steam_on_axis`, `column.two_liquids`,
+  `column.two_liquids_distillate`, `still.water`, `still.settles`, `still.pot_still`.
+- Not built, as chosen: stripping steam on the axis (choice 2 b), water's enthalpy shared with the table
+  (choice 3 b), a three-phase column, a start network for ethanol and water columns.
