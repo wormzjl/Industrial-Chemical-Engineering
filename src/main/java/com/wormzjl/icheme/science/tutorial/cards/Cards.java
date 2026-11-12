@@ -13,6 +13,7 @@ public final class Cards {
 
     static {
         ALL.put(ThreeParts.NAME, ThreeParts::new);
+        ALL.put(Chain.NAME, Chain::new);
     }
 
     private Cards() {

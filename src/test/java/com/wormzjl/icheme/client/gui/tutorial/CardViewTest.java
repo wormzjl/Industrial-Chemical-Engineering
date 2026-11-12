@@ -22,7 +22,7 @@ class CardViewTest {
     /** A canvas that counts draws outside a batch and checks every fill lies in {@code area}. */
     static final class Counting implements Canvas {
         final Rect area;
-        int depth, loose, fills;
+        int depth, loose, looseFills, fills;
         Rect outside;
 
         Counting(Rect area) {
@@ -37,7 +37,10 @@ class CardViewTest {
         @Override
         public void fill(int x0, int y0, int x1, int y1, int argb) {
             fills++;
-            if (depth == 0) loose++;
+            if (depth == 0) {
+                loose++;
+                looseFills++;
+            }
             if (x1 > x0 && y1 > y0 && !new Rect(x0, y0, x1 - x0, y1 - y0).inside(area)) outside = new Rect(x0, y0, x1 - x0, y1 - y0);
         }
 
@@ -156,6 +159,24 @@ class CardViewTest {
         @Override
         public boolean done(double control, java.util.Set<Integer> visited) {
             return visited.size() == 3;
+        }
+    }
+
+    @Test
+    void everyCardDrawsInsideItsAreaWithItsFillsInBatches() {
+        for (var name : Cards.names()) {
+            var card = Cards.build(name);
+            int positions = card.steps() > 1 ? card.steps() : 11;
+            for (var area : new Rect[]{new Rect(100, 30, 330, 140), new Rect(70, 30, 176, 120)})
+                for (int option = 0; option < Math.max(1, card.options().size()); option++)
+                    for (int i = 0; i < positions; i++)
+                        for (double phase : new double[]{0, 7.7}) {
+                            var c = new Counting(area);
+                            var state = new Card.State(phase, card.stepped(i / (positions - 1.0)), option, -1, java.util.Set.of(), Card.CELSIUS);
+                            card.draw(c, area, state, PanelSkin.DARK, k -> "word word");
+                            assertNull(c.outside, name + " " + area + " option " + option + " at " + i + ": a fill outside " + c.outside);
+                            assertTrue(c.looseFills <= 8, name + ": " + c.looseFills + " fills outside a batch");
+                        }
         }
     }
 
