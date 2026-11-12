@@ -49,6 +49,17 @@ public class IconRender {
      */
     static final double CAP = Double.parseDouble(System.getProperty("iconCap", "3.5"));
 
+    /**
+     * The case drawn on the texture behind the body, so a reference item stands apart from a regular item in a slot
+     * (owner, 2026-11-12): none, plate (a navy plate in a gold frame), blueprint (a blue drawing sheet with its grid) or
+     * brackets (gold corner brackets on a clear background).
+     */
+    static final String CASE = System.getProperty("iconCase", "none");
+    /** The kinds of the case comparison sheet (-DiconCases=true). */
+    static final EquipmentShape.Kind[] SAMPLES = {EquipmentShape.Kind.DRUM, EquipmentShape.Kind.COLUMN, EquipmentShape.Kind.EXCHANGER, EquipmentShape.Kind.PUMP,
+            EquipmentShape.Kind.BATCH_STILL, EquipmentShape.Kind.FLARE_STACK, EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER, EquipmentShape.Kind.MOTOR};
+    static final String[] CASES = {"none", "plate", "blueprint", "brackets"};
+
     static {
         TURN.put(EquipmentShape.Kind.KETTLE, Double.parseDouble(System.getProperty("kettleTurn", "90")) * Math.PI / 180);
     }
@@ -61,12 +72,24 @@ public class IconRender {
         sheets.mkdirs();
         var sprites = TutorialRender.sprites();
         var lang = TutorialRender.lang();
+        if (Boolean.getBoolean("iconCases")) {
+            var rows = new ArrayList<BufferedImage[]>();
+            for (var kind : SAMPLES) {
+                var polygons = ShapeRasterizer.renderPreview(reference(kind), RenderDetail.NORMAL);
+                var row = new BufferedImage[CASES.length];
+                for (int c = 0; c < CASES.length; c++) row[c] = cased(render(polygons, TURN.getOrDefault(kind, 0.0), sprites, inset(CASES[c])), CASES[c]);
+                rows.add(row);
+            }
+            ImageIO.write(caseSheet(rows, textures), "png", new File(sheets, "icons-cases.png"));
+            System.out.println("wrote " + new File(sheets, "icons-cases.png").getPath());
+            return;
+        }
         var icons = new ArrayList<BufferedImage>();
         var names = new ArrayList<String>();
         for (var kind : EquipmentShape.Kind.values()) {
             var shape = reference(kind);
             var polygons = ShapeRasterizer.renderPreview(shape, RenderDetail.NORMAL);
-            var icon = render(polygons, TURN.getOrDefault(kind, 0.0), sprites);
+            var icon = cased(render(polygons, TURN.getOrDefault(kind, 0.0), sprites, inset(CASE)), CASE);
             if (write) ImageIO.write(icon, "png", new File(textures, EquipmentInfo.itemId(kind) + ".png"));
             icons.add(icon);
             names.add(lang.getOrDefault(EquipmentInfo.nameKey(kind), kind.name()));
@@ -96,8 +119,8 @@ public class IconRender {
         return EquipmentShape.unit(kind, d, size.length(), heading, design.minSupport(d, size.length()));
     }
 
-    /** One icon: the polygons from the fixed view turned by {@code turn}, filling a {@link #SIZE} px square. */
-    static BufferedImage render(List<Mesh.Polygon> polygons, double turn, Map<Mesh.Material, TutorialRender.Sprite> sprites) {
+    /** One icon: the polygons from the fixed view turned by {@code turn}, in a {@link #SIZE} px square less {@code inset} px on each side. */
+    static BufferedImage render(List<Mesh.Polygon> polygons, double turn, Map<Mesh.Material, TutorialRender.Sprite> sprites, int inset) {
         double yaw = YAW + turn;
         // Camera axes: right, up, and toward the camera.
         double[] back = {Math.sin(yaw) * Math.cos(PITCH), Math.sin(PITCH), Math.cos(yaw) * Math.cos(PITCH)};
@@ -116,7 +139,7 @@ public class IconRender {
             }
         }
         if (maxY - minY > CAP * (maxX - minX)) minY = maxY - CAP * (maxX - minX);
-        int n = SIZE * SUPER, margin = SUPER; // one icon px for the rim
+        int n = SIZE * SUPER, margin = SUPER * inset; // at least one icon px for the rim
         double scale = (n - 2.0 * margin) / Math.max(maxX - minX, maxY - minY);
         double cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
         var rgb = new int[n * n];
@@ -205,6 +228,118 @@ public class IconRender {
                 if (edge) out.setRGB(x, y, 0xFF1E2226);
             }
         return out;
+    }
+
+    /** The px a case keeps free on each side of the body (1: the rim only). */
+    static int inset(String style) {
+        double s = SIZE / 64.0;
+        return switch (style) {
+            case "plate" -> (int) Math.round(8 * s);
+            case "blueprint" -> (int) Math.round(7 * s);
+            case "brackets" -> (int) Math.round(6 * s);
+            default -> 1;
+        };
+    }
+
+    /** {@code body} on its case: the case's pixels wherever the body and its rim are clear. Cut-out pixels only (alpha 0 or 255). */
+    static BufferedImage cased(BufferedImage body, String style) {
+        if (style.equals("none")) return body;
+        double s = SIZE / 64.0;
+        var out = new BufferedImage(SIZE, SIZE, BufferedImage.TYPE_INT_ARGB);
+        for (int y = 0; y < SIZE; y++)
+            for (int x = 0; x < SIZE; x++) {
+                int over = body.getRGB(x, y);
+                if ((over >>> 24) != 0) {
+                    out.setRGB(x, y, over);
+                    continue;
+                }
+                int c = 0;
+                switch (style) {
+                    case "plate" -> {
+                        // A navy plate in a gold frame with a dark edge, corners rounded.
+                        if (round(x, y, 0, 9 * s)) c = round(x, y, 1 * s, 8 * s) ? round(x, y, 5 * s, 5 * s) ? 0xFF17263F : 0xFFD9A441 : 0xFF1E2226;
+                    }
+                    case "blueprint" -> {
+                        // A drawing sheet: blue, a grid every eighth of the side, a pale border.
+                        if (round(x, y, 0, 3 * s)) {
+                            boolean border = !round(x, y, 3 * s, 2 * s), edge = !round(x, y, 1 * s, 3 * s);
+                            int step = Math.max(2, (int) Math.round(8 * s));
+                            c = edge ? 0xFF14315C : border ? 0xFFE3ECF7 : (x % step == step / 2 || y % step == step / 2) ? 0xFF3A6FB5 : 0xFF1F4E8C;
+                        }
+                    }
+                    case "brackets" -> {
+                        // Gold corner brackets with a dark edge on a clear background.
+                        double arm = 16 * s, thick = 4 * s, fx = Math.min(x, SIZE - 1 - x), fy = Math.min(y, SIZE - 1 - y);
+                        boolean gold = fx < arm && fy < arm && (fx < thick || fy < thick);
+                        boolean dark = fx < arm + 1 && fy < arm + 1 && (fx < thick + 1 || fy < thick + 1);
+                        c = gold && fx >= 1 && fy >= 1 ? 0xFFD9A441 : dark ? 0xFF1E2226 : 0;
+                    }
+                    default -> throw new IllegalArgumentException("No icon case " + style);
+                }
+                out.setRGB(x, y, c);
+            }
+        return out;
+    }
+
+    /** Whether px (x, y) lies in the icon's square shrunk by {@code inset} px, its corners rounded by {@code radius} px. */
+    static boolean round(int x, int y, double inset, double radius) {
+        double px = x + .5, py = y + .5, lo = inset, hi = SIZE - inset;
+        if (px < lo || py < lo || px > hi || py > hi) return false;
+        double cx = Math.max(lo + radius, Math.min(hi - radius, px)), cy = Math.max(lo + radius, Math.min(hi - radius, py));
+        return (px - cx) * (px - cx) + (py - cy) * (py - cy) <= radius * radius;
+    }
+
+    /**
+     * The case comparison: for each case a row of inventory slots at three times the GUI's size, reference items between the
+     * mod's regular items, then every sample kind in every case at 2x.
+     */
+    static BufferedImage caseSheet(List<BufferedImage[]> rows, File textures) throws Exception {
+        var regular = new ArrayList<BufferedImage>();
+        for (var name : new String[]{"accessory_wrench", "pressure_gauge", "pipe_laying_tool", "repair_kit", "temperature_gauge"})
+            regular.add(ImageIO.read(new File(textures, name + ".png")));
+        int slot = 54, item = 48, label = 90, top = CASES.length * (slot + 22) + 16, cell = 2 * SIZE + 16;
+        var sheet = new BufferedImage(label + Math.max(CASES.length * cell, 12 * slot) + 16, top + rows.size() * cell + 24, BufferedImage.TYPE_INT_RGB);
+        var g = sheet.createGraphics();
+        g.setColor(new Color(0xC6C6C6));
+        g.fillRect(0, 0, sheet.getWidth(), sheet.getHeight());
+        g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+        g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 13));
+        for (int c = 0; c < CASES.length; c++) {
+            int y = 8 + c * (slot + 22);
+            g.setColor(Color.BLACK);
+            g.drawString(CASES[c], 8, y + slot / 2 + 4);
+            for (int i = 0; i < 12; i++) {
+                int x = label + i * slot;
+                g.setColor(new Color(0x373737));
+                g.fillRect(x, y, slot, slot);
+                g.setColor(new Color(0xFFFFFF));
+                g.fillRect(x + 3, y + 3, slot - 3, slot - 3);
+                g.setColor(new Color(0x8B8B8B));
+                g.fillRect(x + 3, y + 3, slot - 6, slot - 6);
+                boolean reference = i % 3 != 1;
+                g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, reference ? RenderingHints.VALUE_INTERPOLATION_BILINEAR : RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+                var image = reference ? rows.get((i - i / 3) % rows.size())[c] : regular.get((i / 3) % regular.size());
+                g.drawImage(image, x + 3, y + 3, item, item, null);
+            }
+        }
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+        for (int r = 0; r < rows.size(); r++)
+            for (int c = 0; c < CASES.length; c++) {
+                int x = label + c * cell, y = top + r * cell;
+                g.setColor(new Color(0x8B8B8B));
+                g.fillRect(x, y, 2 * SIZE + 8, 2 * SIZE + 8);
+                g.drawImage(rows.get(r)[c], x + 4, y + 4, 2 * SIZE, 2 * SIZE, null);
+                if (r == 0) {
+                    g.setColor(Color.BLACK);
+                    g.drawString(CASES[c], x + 4, y - 4);
+                }
+                if (c == 0) {
+                    g.setColor(Color.BLACK);
+                    g.drawString(SAMPLES[r].name().toLowerCase(Locale.ROOT).replace('_', ' '), 4, y + SIZE);
+                }
+            }
+        g.dispose();
+        return sheet;
     }
 
     /** Every icon at 1x and 4x with its name, ten a row, on an inventory slot's grey and a dark band. */
