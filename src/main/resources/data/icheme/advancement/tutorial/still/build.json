@@ -1,5 +1,5 @@
 {
-  "parent": "icheme:tutorial/root",
+  "parent": "icheme:tutorial/crude/first",
   "display": {
     "icon": {
       "id": "icheme:field_guide",

@@ -80,6 +80,25 @@ class GuideCoverageTest {
     }
 
     @Test
+    void theStepsChainInGuideOrderAndTheStillHangsOnTheLastCrudeStep() throws IOException {
+        var guide = GuideFile.load();
+        String parent = "icheme:tutorial/root";
+        var files = new HashSet<Path>();
+        for (var id : guide.stepIds()) {
+            assertEquals(parent, read(ADVANCEMENTS.resolve(id + ".json")).get("parent").getAsString(), id + ": after the step before it");
+            parent = "icheme:tutorial/" + id;
+            files.add(ADVANCEMENTS.resolve(id + ".json"));
+        }
+        assertEquals("icheme:tutorial/crude/first", parent);
+        assertEquals(parent, read(ADVANCEMENTS.resolve("still/build.json")).get("parent").getAsString(), "the still's build after chapter 1");
+        files.add(ADVANCEMENTS.resolve("root.json"));
+        files.add(ADVANCEMENTS.resolve("still/build.json"));
+        try (Stream<Path> all = Files.walk(ADVANCEMENTS)) {
+            for (var file : all.filter(p -> p.toString().endsWith(".json")).toList()) assertTrue(files.contains(file), file + ": no advancement without its step");
+        }
+    }
+
+    @Test
     void theRootGivesTheFieldGuideOnce() throws IOException {
         var root = read(ADVANCEMENTS.resolve("root.json"));
         assertFalse(root.has("parent"));

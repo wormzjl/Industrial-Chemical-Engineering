@@ -220,14 +220,26 @@ class CardViewTest {
 
     @Test
     void anOptionsCardPlacesItsKeysOverTheDrawing() {
-        var page = GuidePageTest.page(Progress.NONE, GuidePage.DESIGN_WIDTH, GuidePage.DESIGN_HEIGHT, "welcome/dots");
-        assertTrue(page.card().options().isEmpty(), "three_parts has no options");
-        assertEquals(0, Card.State.of(0, 0).option());
+        assertTrue(GuidePageTest.page(Progress.NONE, GuidePage.DESIGN_WIDTH, GuidePage.DESIGN_HEIGHT, "crude/parts").card().options().isEmpty(), "three_parts has none");
+        var place = GuidePageTest.page(Progress.NONE, GuidePage.DESIGN_WIDTH, GuidePage.DESIGN_HEIGHT, "crude/barrel").card();
+        assertEquals(4, place.options().size(), "the four grades");
+        assertEquals("Medium", place.options().getFirst().text(), "medium first");
+        var view = new CardView(place.card(), () -> {
+        });
+        view.option(2);
+        assertEquals(2, view.state(Card.CELSIUS).option());
+        var road = GuidePageTest.page(Progress.NONE, GuidePage.DESIGN_WIDTH, GuidePage.DESIGN_HEIGHT, "crude/road").card();
+        int[] ended = {0};
+        var pressing = new CardView(road.card(), () -> ended[0]++);
+        for (int i = 0; i < 9; i++) pressing.step(1, road);
+        assertEquals(8, pressing.hit());
+        assertEquals(1, ended[0], "Right through every box completes the road once");
+        assertFalse(pressing.press(road, road.slider().x() + 2, road.slider().y() + 4), "no slider on the road");
     }
 
     @Test
     void theSliderRunsToItsEndAndCompletesTheStepOnce() {
-        var page = GuidePageTest.page(Progress.NONE, GuidePage.DESIGN_WIDTH, GuidePage.DESIGN_HEIGHT, "welcome/dots");
+        var page = GuidePageTest.page(Progress.NONE, GuidePage.DESIGN_WIDTH, GuidePage.DESIGN_HEIGHT, "crude/parts");
         var place = page.card();
         int[] ended = {0};
         var view = new CardView(place.card(), () -> ended[0]++);

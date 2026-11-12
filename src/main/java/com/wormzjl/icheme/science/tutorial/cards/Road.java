@@ -23,7 +23,7 @@ public final class Road implements Card {
     public static final String NAME = "road";
     public static final String KEY = "tutorial.icheme.card." + NAME;
     /** A box's size and the room between two boxes (the arrow's). */
-    public static final int BOX_W = 52, BOX_H = 16, GAP = 10, ROW_GAP = 8;
+    public static final int BOX_W = 50, BOX_H = 16, GAP = 8, ROW_GAP = 8;
 
     public enum Mark {
         GUIDE, RUNS, SHAPE, NOT_YET;

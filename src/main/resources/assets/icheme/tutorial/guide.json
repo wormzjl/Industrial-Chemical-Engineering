@@ -1,6 +1,13 @@
 {
   "terms": {
-    "still": "welcome/film"
+    "hydrocarbon": "crude/what",
+    "gas": "crude/barrel",
+    "naphtha": "crude/barrel",
+    "kerosene": "crude/barrel",
+    "diesel": "crude/barrel",
+    "gas_oil": "crude/barrel",
+    "residue": "crude/barrel",
+    "still": "crude/first"
   },
   "chapters": [
     {
@@ -8,9 +15,18 @@
       "steps": [
         { "id": "guide" },
         { "id": "units", "media": "units" },
-        { "id": "dots", "media": "card:three_parts" },
-        { "id": "film", "media": "film:still_inside" },
         { "id": "help" }
+      ]
+    },
+    {
+      "id": "crude",
+      "steps": [
+        { "id": "what", "media": "card:chain" },
+        { "id": "barrel", "media": "card:barrel" },
+        { "id": "why", "media": "card:products" },
+        { "id": "road", "media": "card:road" },
+        { "id": "parts", "media": "card:three_parts" },
+        { "id": "first", "media": "film:still_inside" }
       ]
     }
   ]

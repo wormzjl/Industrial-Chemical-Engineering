@@ -418,17 +418,19 @@ public final class GuidePage {
         var slider = new Rect(sliderX, back.rect().y() + (KEY_H - 8) / 2, Math.max(20, back.rect().x() - 10 - sliderX), 8);
         var caption = m.wrap(tr.apply(card.captionKey()), view.w() - 8);
         int captionY = back.rect().y() - 4 - caption.size() * Measure.LINE;
-        // The options: one row of soft keys across the top, as wide as the widest word, shrunk to fit.
+        // The options: soft keys across the top, each as wide as the widest word, in as many rows as the glass needs.
         var options = new ArrayList<Key>();
         var words = card.options();
         int top = view.y();
         if (!words.isEmpty()) {
             int ow = 0;
             for (var word : words) ow = Math.max(ow, m.width(tr.apply(word)) + 12);
-            ow = Math.min(ow, (view.w() - 4 - (words.size() - 1) * KEY_GAP) / words.size());
+            ow = Math.min(ow, view.w() - 4);
+            int perRow = Math.clamp((view.w() - 4 + KEY_GAP) / (ow + KEY_GAP), 1, words.size());
             for (int i = 0; i < words.size(); i++)
-                options.add(new Key(CardPlace.OPTION + i, new Rect(view.x() + 2 + i * (ow + KEY_GAP), view.y() + 2, ow, KEY_H), tr.apply(words.get(i)), null, false));
-            top = view.y() + 2 + KEY_H + 2;
+                options.add(new Key(CardPlace.OPTION + i, new Rect(view.x() + 2 + (i % perRow) * (ow + KEY_GAP), view.y() + 2 + (i / perRow) * (KEY_H + KEY_GAP), ow, KEY_H),
+                        tr.apply(words.get(i)), null, false));
+            top = options.getLast().rect().bottom() + 2;
         }
         var drawing = new Rect(view.x(), top, view.w(), Math.max(10, captionY - 4 - top));
         return new CardPlace(step, card, options, drawing, caption, view.x() + 4, captionY, label, labelX, slider, back);

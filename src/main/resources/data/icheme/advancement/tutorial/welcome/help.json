@@ -1,5 +1,5 @@
 {
-  "parent": "icheme:tutorial/welcome/film",
+  "parent": "icheme:tutorial/welcome/units",
   "display": {
     "icon": {
       "id": "icheme:field_guide",

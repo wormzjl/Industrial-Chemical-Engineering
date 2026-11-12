@@ -17,7 +17,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Every guide, tour, card and film text (batch 2026-11-12-tutorial-system, P1; TUTORIAL_SYSTEM_PLAN.md section 4): its
+ * Every guide, tour, card (with its options) and film text (batch 2026-11-12-tutorial-system, P1, P2a; plan section 4): its
  * English line, at most two sentences and 25 words (a film caption and a tour stop one sentence), no professional word
  * unmarked, and every marked term in the glossary, defined on the step of its first use in guide order.
  */
@@ -41,6 +41,7 @@ class TutorialTextTest {
             texts.put(card.captionKey(), 1);
             if (card.controlKey() != null) texts.put(card.controlKey(), 1);
             for (var key : card.textKeys()) texts.put(key, 1);
+            for (var key : card.options()) texts.put(key, 1);
         }
         for (var name : Films.names())
             for (var key : Films.build(name).captionKeys()) texts.put(key, 1);

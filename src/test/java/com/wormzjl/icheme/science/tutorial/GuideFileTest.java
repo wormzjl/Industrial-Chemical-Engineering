@@ -25,15 +25,22 @@ class GuideFileTest {
         var guide = GuideFile.load();
         var welcome = guide.chapters().getFirst();
         assertEquals("welcome", welcome.id());
-        assertEquals(List.of("guide", "units", "dots", "film", "help"), welcome.steps().stream().map(Guide.Step::id).toList());
-        assertEquals(List.of(Guide.Media.NONE, Guide.Media.UNITS, new Guide.Card("three_parts"), new Guide.Film("still_inside"), Guide.Media.NONE),
-                welcome.steps().stream().map(Guide.Step::media).toList());
-        for (var step : welcome.steps()) assertEquals(Guide.Check.CLIENT, step.check(), step.id());
+        assertEquals(List.of("guide", "units", "help"), welcome.steps().stream().map(Guide.Step::id).toList());
+        assertEquals(List.of(Guide.Media.NONE, Guide.Media.UNITS, Guide.Media.NONE), welcome.steps().stream().map(Guide.Step::media).toList());
+        var crude = guide.chapters().get(1);
+        assertEquals("crude", crude.id());
+        assertEquals(List.of("what", "barrel", "why", "road", "parts", "first"), crude.steps().stream().map(Guide.Step::id).toList());
+        assertEquals(List.of(new Guide.Card("chain"), new Guide.Card("barrel"), new Guide.Card("products"), new Guide.Card("road"), new Guide.Card("three_parts"),
+                new Guide.Film("still_inside")), crude.steps().stream().map(Guide.Step::media).toList());
+        for (var chapter : guide.chapters()) for (var step : chapter.steps()) assertEquals(Guide.Check.CLIENT, step.check(), step.id());
         assertEquals("tutorial.icheme.guide.welcome", welcome.titleKey());
-        assertEquals("tutorial.icheme.guide.welcome.film", welcome.key(welcome.steps().get(3)));
-        assertEquals("welcome/film", guide.terms().get("still"));
+        assertEquals("tutorial.icheme.guide.crude.first", crude.key(crude.steps().get(5)));
+        assertEquals("crude/first", guide.terms().get("still"));
+        assertEquals("crude/what", guide.terms().get("hydrocarbon"));
+        for (var term : List.of("gas", "naphtha", "kerosene", "diesel", "gas_oil", "residue")) assertEquals("crude/barrel", guide.terms().get(term), term);
         assertEquals("tutorial/welcome/help", Guide.advancement("welcome/help"));
-        assertNotNull(guide.step("welcome/dots"));
+        assertNotNull(guide.step("crude/parts"));
+        assertNull(guide.step("welcome/dots"), "moved to crude/parts");
         assertNull(guide.step("welcome/none"));
         assertFalse(guide.stepIds().contains("still/build"), "the still's build step comes in P2");
     }

@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.function.Function;
 
 /**
- * The card "three parts" (guide step {@code welcome/dots}): a pot seen from the side holding dots in the films' three
+ * The card "three parts" (guide step {@code crude/parts}): a pot seen from the side holding dots in the films' three
  * colours ({@link Track.Kind}), a legend naming them light, middle and heavy, and a heat slider. As the heat rises the
  * light dots leave through the top first, then the middle ones; the heavy ones stay. The dots' places are fixed by their
  * index; the phase only makes them sway, so a frame is a pure function of phase and heat.
