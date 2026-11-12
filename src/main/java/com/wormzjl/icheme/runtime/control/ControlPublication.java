@@ -389,6 +389,8 @@ final class ControlPublication {
             tag.putDouble("icheme", Double.isNaN(fill) ? -1 : fill);
             tag.putDouble("forge", u.forgeFill());
             tag.putString("fluid", u.fluid());
+            var rule = world.converters().matched(host);
+            tag.putString("rule", rule == null ? "" : rule.id());
             tag.putLong("stored", u.stored());
             tag.putLong("capacity", u.capacity());
             var alarms = new ListTag();

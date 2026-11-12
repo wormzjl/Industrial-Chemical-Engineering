@@ -141,4 +141,26 @@ class ConverterDoorTest {
             assertFalse(a.isEmpty());
         }
     }
+
+    /** The DCS's converter page (ControlPanelScreen) places the same groups in a console's column, 210 to 226 px: they fit, boxes in line; its own texts have their lines. */
+    @Test
+    void theGroupsFitADcsColumnAndItsTextsHaveTheirLines() {
+        var texts = new HeatControlColumnTest.Recording();
+        for (var c : cases())
+            for (int width : new int[] {210, 214, 222, 226}) {
+                var column = Column.place(ConverterDoor.rows(c.in(), texts), 10, 30, width, M, Column.Metrics.COMPACT);
+                for (var p : column.rows()) {
+                    assertTrue(p.rect().x() >= column.bounds().x() && p.rect().right() <= column.bounds().right(), c.name() + " at " + width);
+                    for (var t : p.texts()) assertTrue(M.width(t) <= p.rect().w(), c.name() + " a text cut at " + width + ": " + t);
+                    for (var s : p.slots().values()) assertTrue(s.inside(p.rect()) && s.w() >= 40, c.name() + " a box at " + width + ": " + s);
+                }
+                column.slots();
+                DeviceColumnTest.assertInLine(column, c.name() + " at " + width);
+            }
+        var control = new HeatControlColumnTest.Recording("gui.icheme.");
+        for (var key : List.of("control.converters", "control.converters.hint", "control.converter.hint", "control.no_converters", "control.converter.open", "control.converter.closed",
+                "control.alarm.no_rule", "control.alarm.off_spec", "control.alarm.source_empty", "control.alarm.destination_full", "control.alarm.level_high", "control.alarm.level_low"))
+            control.get(key);
+        assertEquals(Set.of(), control.missing);
+    }
 }
