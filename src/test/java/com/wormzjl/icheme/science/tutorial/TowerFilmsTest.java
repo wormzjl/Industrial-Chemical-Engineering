@@ -37,6 +37,16 @@ class TowerFilmsTest {
         FilmChecks.everyStopReads(scene);
         var preset = SmallTower.preset();
         assertTrue(preset.trays().trays() > com.wormzjl.icheme.science.tutorial.cards.StillTraysData.trays(), "a tower is many trays");
+        // Stop 2, cut open: the feed and the middle draw named at their trays, the plates round and inside the shell.
+        assertEquals(List.of(SmallTower.FEED, SmallTower.MIDDLE), keys(scene.at(scene.stops().get(1))), "the feed and the draw at stop 2");
+        var shape = SmallTower.shape(preset);
+        double[] axis = SmallTower.axis(shape);
+        double outer = 0;
+        var trays = scene.actors().stream().filter(a -> a.id().equals("trays")).findFirst().orElseThrow();
+        for (var polygon : trays.polygons())
+            for (int i = 0; i < polygon.size(); i++)
+                outer = Math.max(outer, Math.hypot(polygon.positions()[3 * i] - axis[0], polygon.positions()[3 * i + 2] - axis[1]));
+        assertTrue(outer < preset.diameter() / 2, "every plate and downcomer inside the shell: " + outer);
         assertTrue(keys(scene.at(scene.stops().get(2))).containsAll(List.of(SmallTower.TOP, SmallTower.MIDDLE, SmallTower.BOTTOM)), "the products at stop 3");
         assertTrue(keys(scene.at(scene.stops().get(3))).containsAll(List.of(SmallTower.LOOP, SmallTower.STEAM)), "the pumparound and the steam at stop 4");
     }
