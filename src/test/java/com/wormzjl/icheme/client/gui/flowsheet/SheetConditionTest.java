@@ -19,8 +19,10 @@ class SheetConditionTest {
         var any = new SheetCondition(Optional.empty());
         assertTrue(any.matches(sheet, true));
         assertFalse(any.matches(sheet, false), "no results on the stored sheet: not run");
-        var heat = new SheetCondition(Optional.of(SmallUnitData.lowered().heaterKelvin()));
+        var heat = new SheetCondition(Optional.of(SmallUnitData.lowered().heaterKelvin()), Optional.of(SmallUnitRecorder.HEATER));
         assertFalse(heat.matches(sheet, true), "the bundled outlet is above the step's");
+        // P5 stage B: the steam heater H-102 stands at 533 K; only the named heater counts.
+        assertTrue(new SheetCondition(Optional.of(SmallUnitData.lowered().heaterKelvin())).matches(sheet, true), "any heater: H-102 is under it");
         assertTrue(heat.matches(SmallUnitRecorder.withHeater(sheet, SmallUnitData.lowered().heaterKelvin()), true), "lowered to the step's outlet");
         assertTrue(heat.matches(SmallUnitRecorder.withHeater(sheet, SmallUnitData.lowered().heaterKelvin() - 10), true), "or under it");
         assertFalse(heat.matches(SmallUnitRecorder.withHeater(sheet, SmallUnitData.lowered().heaterKelvin()), false), "but run");

@@ -18,7 +18,8 @@
     "lowered": {
       "trigger": "icheme:sheet_run",
       "conditions": {
-        "max_heater_outlet": 643.15
+        "max_heater_outlet": 643.15,
+        "heater": "H-101"
       }
     }
   },

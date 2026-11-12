@@ -124,7 +124,7 @@ public final class TutorialTriggers {
         }
     }
 
-    /** A sheet stored with the results of its own run: optionally a fired heater's outlet at most {@code max_heater_outlet} K. */
+    /** A sheet stored with the results of its own run: optionally a fired heater's outlet (the unit {@code heater} names, or any) at most {@code max_heater_outlet} K. */
     public static final class SheetRun extends SimpleCriterionTrigger<SheetRun.Instance> {
         @Override
         public Codec<Instance> codec() {
@@ -135,14 +135,15 @@ public final class TutorialTriggers {
             trigger(player, instance -> instance.condition().matches(sheet, true));
         }
 
-        public record Instance(Optional<ContextAwarePredicate> player, Optional<Double> maxHeaterOutlet) implements SimpleCriterionTrigger.SimpleInstance {
+        public record Instance(Optional<ContextAwarePredicate> player, Optional<Double> maxHeaterOutlet, Optional<String> heater) implements SimpleCriterionTrigger.SimpleInstance {
             public static final Codec<Instance> CODEC = RecordCodecBuilder.create(i -> i.group(
                     EntityPredicate.ADVANCEMENT_CODEC.optionalFieldOf("player").forGetter(Instance::player),
-                    Codec.doubleRange(1, 5000).optionalFieldOf("max_heater_outlet").forGetter(Instance::maxHeaterOutlet)
+                    Codec.doubleRange(1, 5000).optionalFieldOf("max_heater_outlet").forGetter(Instance::maxHeaterOutlet),
+                    Codec.STRING.optionalFieldOf("heater").forGetter(Instance::heater)
             ).apply(i, Instance::new));
 
             public SheetCondition condition() {
-                return new SheetCondition(maxHeaterOutlet);
+                return new SheetCondition(maxHeaterOutlet, heater);
             }
         }
     }

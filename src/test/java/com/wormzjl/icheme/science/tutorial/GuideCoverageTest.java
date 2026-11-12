@@ -251,6 +251,7 @@ class GuideCoverageTest {
         for (int i = 0; i < 3; i++)
             assertEquals(Math.round(100 * bundled.share(com.wormzjl.icheme.science.tutorial.cards.SmallUnitData.PRODUCTS.get(i))), Long.parseLong(shares.group(i + 1)), balance);
         assertEquals(lowered.heaterKelvin(), conditions("simulator", "heat").get("max_heater_outlet").getAsDouble(), 1e-9, "the heat step: the lowered outlet");
+        assertEquals("H-101", conditions("simulator", "heat").get("heater").getAsString(), "the heat step: H-101's outlet, not the steam heater's");
         String heat = lang.get("tutorial.icheme.guide.simulator.heat");
         var outlet = com.wormzjl.icheme.science.tutorial.guide.Guide.KELVIN.matcher(heat);
         assertTrue(outlet.find(), "the outlet in the player's unit: " + heat);
