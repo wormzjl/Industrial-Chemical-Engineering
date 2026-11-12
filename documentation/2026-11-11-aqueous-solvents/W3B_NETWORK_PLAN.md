@@ -860,3 +860,35 @@ Owner, verbatim: "Yes, both" (section 44's pump option and tank choice a). Order
 - Gates: the two `SheetSizingTest` cases pass as written, not re-pinned; the sheet's p_v and E within 1 % of the
   world's on the four measured streams; the world's suction numbers unmoved. Sample references that move are
   re-pinned only where a liquid holding dissolved gas explains it.
+
+## 46. Built: the shared release rule, the sheet's pump and tank (2026-11-12)
+
+6cb1f8e33 (report `tmp/w3b-network/reports/w3b-sheet-release-rule-report.md`); diff read against section 45.
+
+- `ReleasePressure` (science.fluid.network): `lowest` (the bisection, the trial a parameter), `vapourVolumeShare`,
+  `leaveOutGases`, `limit`. The solver's side is a move: the same arithmetic in the same order; its 18 probe
+  readings print the same to 0.1 Pa, and PumpCavitationTest, SuctionZoneEdgeTest, PumpRateWarmStartTest and
+  TwoPhaseMoverTest pass.
+- `FlowThermo.vapourPressure`, `zoneEdge`, `storagePressure`, `roofStores` on a TP flash. One limit constant
+  (`FlowThermo.ROOF_STORAGE`, which `Limit.ROOF_BUBBLE` reads).
+- Two premises of mine did not hold, decided by the sub-thread and accepted:
+  - a pure liquid at one temperature is all liquid or all vapour in a TP trial, so no trial states both and it read
+    no pressure; the sheet's trial reads an all-vapour state as share 1. The shared rule and the world are unchanged.
+  - the 1 % gate does not hold for propane's E: 998 166 Pa on the sheet (its p_v) against the world's 985 702 Pa
+    (1.27 %); the gate allows 1.5 % on that reading. The sheet's side is the higher: it errs towards starving.
+- Measured on the separator sheet (expected in brackets): oil pump NPSH available 25.27 m (25.24), world limit
+  21.63 m, it is E (21.59), lamp yellow; drum water storage reading 0.318 bar (about 0.30), a floating roof, the
+  tile at 1 atm with 3.137e-4 mol/s to its Gas outlet; drum oil 1.055 bar, a sphere designed on 3.00 bar; propane
+  9.982 bar; nitrogen water 0.047 bar. Sheet against world: p_v within 0.30 %, E within 0.04 % on the drum liquids.
+- Cost, in TP flashes (1.5 to 2 ms each on a 46-compound drum liquid): a pump 32 (before 15), only where its
+  height is known; a tank's sizing 32 (before 15); a storage tile 17 under a roof and 32 for a sphere, each
+  evaluation (before 15). No cache, nothing on the tick.
+- `SheetSizingTest`'s two cases pass unedited. SheetSizingTest 22, ReleasePressureTest 2 (new), UnitSizingTest 52,
+  LimitTest 12, FlowsheetUnitsTest 45, UnitSizingSampleTest 11: all pass.
+- Moved references, re-pinned with their cause: UnitSizingSample P-101 NPSH 78.65 to 87.39 m and P-102 32.35 to
+  34.69 m (NPSH counts over p_v, the liquid without its methane and ethane); FlowsheetUnitsTest's storage tile of
+  whole wet crude at 300 K, 1.413 bar unflashed to 1 atm with its light ends to Gas (storage reading 0.663 bar,
+  under the roof's limit); its sphere case now stands on propane with n-butane.
+- Still failing, for later: SizeAllSampleTest H-101 (73.06 against 73.0525 MW; the water datum does not explain
+  it, the cause is ordered), FlowsheetExamplesTest `crude_unit` (re-records with the final lane; a storage tile
+  that now degasses its feed must be named among its causes).
