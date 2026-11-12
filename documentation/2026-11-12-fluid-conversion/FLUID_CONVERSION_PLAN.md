@@ -13,6 +13,8 @@ Date: 2026-11-12. Base: `main` at `ccde84295` (0.27.1). Source: the owner's plan
 | D5 (E2) | The max conversion rate is in process time, L/s. |
 | D6 (B2) | Balance mode equalises fill fraction, with a deadband. |
 | D7 (Q1) | A new equipment constructor kind with size tiers. No FE. The Forge side is passive. |
+| D9 | The gas variant takes a pressure safety valve (owner, 2026-11-12: "for gas variant, a PSV needs to be installable"). W3: the gas converter's process vessel accepts the valve as a drum does (`FluidDeviceSpec.relief`, `reliefFace`); the model carries a flanged stub on its apex for it. |
+| D10 | The planning session builds the model (owner: "Do the model by yourself here"): the two kinds, `ConverterDesign`, constructor and catalog wiring are done there; W3 keeps registration, the Forge capability and the valve. Sizes: tank diameter 1 to 20 m, shell 2 to 24 m (7,540 m3 at most, the owner's "bigger" maximum); rated flow one tank in 1000 s. |
 | D8 (Q4) | Rules are datapack JSON only. KubeJS scripts generate that JSON; the mod names no KubeJS type. |
 
 ## 2. Physics
@@ -28,7 +30,7 @@ Date: 2026-11-12. Base: `main` at `ccde84295` (0.27.1). Source: the owner's plan
 ### 3.1 Equipment (D1, D4, D7)
 
 - `EquipmentShape.Kind`: append `FLUID_CONVERTER` (open, liquids) and `GAS_CONVERTER` (closed). Appended constants only; `ShapeRepair` reads kinds by name.
-- Each has a `*Design` under `science/equipment/` built with the `ProcessUnit` kit: an IChemE tank section, a controller cabinet, a Forge tank section. Tiers by the shape's size fields: nominal volume 1, 4, 16, 64, 256, 1024, 4096 m3 for each tank; rate limit 1, 4, 16, 64, 256, 1024, 4096 L/s (the tank turns over in about 17 min of process time at full rate). The owner asked for a bigger maximum than 64 m3 (2026-11-12); 4096 m3 is the planner's choice, open to the owner's change in W3. A Forge tank holds an `int` of mB, so 4096 m3 (4.096e9 mB) needs a `long` store behind the handler, which reports at most `Integer.MAX_VALUE` per call.
+- Both are drawn by `science/equipment/ConverterDesign` (built, D10): two tanks of one size on a slab, a transfer line with a flow meter across the front, the controller's cabinet behind it, a catwalk between the roofs from 4 m. Sizes: the shape's `diameter` is each tank's, 1 to 20 m; `tangentLength` each shell's height, 2 to 24 m; a tank holds `ConverterDesign.volume` (1.6 to 7,540 m3) and the rated flow is `ConverterDesign.rate`, one tank in 1000 s of process time (1.6 to 7,540 L/s). A Forge tank holds an `int` of mB, so the largest (7.5e9 mB) needs a `long` store behind the handler, which reports at most `Integer.MAX_VALUE` per call.
 - IChemE side: process nozzles as on a tank. Forge side: one or more shell cells expose `Capabilities.FluidHandler.BLOCK` (registered in the mod's capability event; the handler lives on the structure's controller cell).
 - Registration: `EquipmentStructure` calls `FluidWorldAuthority.placeVessel(node, ports, volume, levelHeight, open, geometry)` with `open = true` for `FLUID_CONVERTER`; for `GAS_CONVERTER` `open = false` and `FluidDeviceSpec.blanket` set (the existing `GasBlanket`). The hidden port is one extra `PhysicalFluidTopology.Port` at the tank's bottom (liquid) or top (gas), compiled as a `GENERATOR` or `VOID` node behind a boundary valve, as a column's port is.
 - Duties of a new kind (AGENTS.md "New equipment"): the simulator catalog case as DRAWING_ONLY (the class AGENTS.md names `FlowsheetCatalog`: to locate), `FlowsheetPaletteCoverageTest`, `EquipmentLayoutGoldenTest`, `tools/equipment-drawings/update.ps1`, the `models-and-sfx` skill.
@@ -99,7 +101,7 @@ Date: 2026-11-12. Base: `main` at `ccde84295` (0.27.1). Source: the owner's plan
 |---|---|---|
 | W1 | `ConversionRule`, the loader, validation, matching with hysteresis | `ConversionRuleTest` (new): refusals, priority, hysteresis, the litre-to-mole numbers of section 2 |
 | W2 | `Converters` with accounts, reservations, remainder; facts schema 24 and the corpus image | `ConvertersTest` (new): mass and energy across 100 slices each way equal the ledger's totals to rounding; a rejected slice releases its reservation; the corpus gates |
-| W3 | The two kinds, designs, registration, the Forge capability | `EquipmentLayoutGoldenTest`, `FlowsheetPaletteCoverageTest`, `equipmentGates` for the changed files; one GameTest: a Forge handler drains what a reverse rule produced |
+| W3 | Registration, the Forge capability, the gas variant's safety valve (the kinds and designs are built, D10) | `EquipmentLayoutGoldenTest`, `FlowsheetPaletteCoverageTest`, `equipmentGates` for the changed files; one GameTest: a Forge handler drains what a reverse rule produced |
 | W4 | Channels, alarms, DCS commands | `BuiltInInputsTest`, `ControlSystemTest` additions |
 | W5 | The page | compile, the GUI gates, software renders (`tools/heat-gui-renders/`) |
 | W6 | The fluid survey and the bundled rules; the KubeJS example | `ConversionRuleTest` loads every bundled rule |

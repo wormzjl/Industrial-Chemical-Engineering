@@ -250,6 +250,8 @@ public abstract class UnitDesign {
         DESIGNS.put(Kind.DRY_SCREW_PUMP, new VacuumPumpDesign(false));
         DESIGNS.put(Kind.COMBUSTION_ENGINE, new PrimeMoverDesign(com.wormzjl.icheme.science.machine.PrimeMover.Family.ENGINE));
         DESIGNS.put(Kind.GAS_TURBINE, new PrimeMoverDesign(com.wormzjl.icheme.science.machine.PrimeMover.Family.GAS_TURBINE));
+        DESIGNS.put(Kind.FLUID_CONVERTER, new ConverterDesign(false));
+        DESIGNS.put(Kind.GAS_CONVERTER, new ConverterDesign(true));
     }
 
     /** The design of a designed kind ({@link Kind#designed()}): a storage vessel's or a unit's. */

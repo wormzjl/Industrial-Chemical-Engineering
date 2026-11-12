@@ -99,7 +99,9 @@ public final class ConstructorColumn {
         DELAYED_COKER(Category.REACTORS),
         FLUIDIZED_BED_BOILER(Category.SOLID_FUEL), FLUIDIZED_BED_GASIFIER(Category.SOLID_FUEL), GRATE_BOILER(Category.SOLID_FUEL), FIXED_BED_GASIFIER(Category.SOLID_FUEL),
         LIQUID_RING_PUMP(Category.VACUUM), DRY_SCREW_PUMP(Category.VACUUM),
-        COMBUSTION_ENGINE(Category.POWER), GAS_TURBINE(Category.POWER);
+        COMBUSTION_ENGINE(Category.POWER), GAS_TURBINE(Category.POWER),
+        // The fluid converters (batch 2026-11-12-fluid-conversion).
+        FLUID_CONVERTER(Category.VESSELS), GAS_CONVERTER(Category.VESSELS);
 
         public final Category category;
 

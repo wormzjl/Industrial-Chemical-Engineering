@@ -344,6 +344,8 @@ class ProcessUnitTest {
                 Map.entry(Kind.STEEL_STACK, Map.of(Role.STACK_GAS, "2-")), Map.entry(Kind.BRICK_CHIMNEY, Map.of(Role.STACK_GAS, "2-")),
                 // A batch still's by its options (batch 2026-11-09-batch-distiller, stillSides); here the default still's.
                 Map.entry(Kind.BATCH_STILL, stillSides(BatchStillOptions.DEFAULT)),
+                // A converter's process nozzles on its process tank's back (batch 2026-11-12-fluid-conversion).
+                Map.entry(Kind.FLUID_CONVERTER, Map.of(Role.BOTTOM, "2+", Role.PROCESS_INLET, "2+")), Map.entry(Kind.GAS_CONVERTER, Map.of(Role.DRAIN, "2+", Role.VAPOUR_OUTLET, "2+")),
                 Map.entry(Kind.MOTOR, Map.of()), Map.entry(Kind.GENERATOR, Map.of()), Map.entry(Kind.GEARBOX, Map.of()),
                 Map.entry(Kind.CYCLONE, Map.of(Role.FEED, "2-", Role.VAPOUR_OUTLET, "2+", Role.SOLIDS_OUTLET, "1-")),
                 Map.entry(Kind.FCC_CONVERTER, Map.of(Role.FEED, "2-", Role.STEAM, "2+", Role.AIR, "2-", Role.FUEL, "2-", Role.FLUE_GAS, "0-", Role.VAPOUR_OUTLET, "0+",

@@ -169,7 +169,13 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
         // Vacuum pump casings on the shaft trains (batch 2026-11-10-vacuum-pump): a liquid ring of one or two stages, a dry screw.
         LIQUID_RING_PUMP, DRY_SCREW_PUMP,
         // Fuelled prime movers on the shaft trains (batch 2026-11-10-prime-movers): a liquid-fuel combustion engine, a gas turbine.
-        COMBUSTION_ENGINE, GAS_TURBINE;
+        COMBUSTION_ENGINE, GAS_TURBINE,
+        // Converters between Forge fluids and process fluids (batch 2026-11-12-fluid-conversion): two tanks and a controller;
+        // atmospheric for liquids, pressure vessels for gas.
+        FLUID_CONVERTER, GAS_CONVERTER;
+
+        /** A fluid converter (batch 2026-11-12-fluid-conversion): the liquid one or the gas one. */
+        public boolean converter() { return this == FLUID_CONVERTER || this == GAS_CONVERTER; }
 
         /** A fuelled prime mover (batch 2026-11-10-prime-movers): a combustion engine or a gas turbine, a shaft-train driver on its fuel. */
         public boolean primeMover() { return this == COMBUSTION_ENGINE || this == GAS_TURBINE; }
