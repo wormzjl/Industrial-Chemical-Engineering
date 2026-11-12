@@ -359,6 +359,73 @@ class BatchStillTest {
         assertLedger(vacuum, low, flooded);
     }
 
+    /** A mixture preset's mole fractions on {@code compounds}, the package's order. */
+    private static double[] preset(String name, List<String> compounds) {
+        try (var input = new java.io.InputStreamReader(java.util.Objects.requireNonNull(BatchStillTest.class.getResourceAsStream(
+                "/assets/icheme/mixturepreset/" + name + ".json")), java.nio.charset.StandardCharsets.UTF_8)) {
+            var json = com.google.gson.JsonParser.parseReader(input).getAsJsonObject();
+            assertEquals("mole", json.get("basis").getAsString());
+            double[] z = new double[compounds.size()];
+            for (var element : json.getAsJsonArray("components")) {
+                var row = element.getAsJsonObject();
+                int i = compounds.indexOf(row.get("id").getAsString());
+                assertTrue(i >= 0, row.get("id").getAsString() + " in the package");
+                z[i] += row.get("amount").getAsDouble();
+            }
+            double s = sum(z);
+            for (int i = 0; i < z.length; i++) z[i] /= s;
+            return z;
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
+    }
+
+    /**
+     * A wide-boiling charge distils to its limit (batch 2026-11-12-still-heat-per-distillate, STILL_REFUSAL_REVIEW.md): a 500 L
+     * solid-fired pot still with its built-in condenser and no column, 60 % full of medium crude at 25 °C, at full firing, run as
+     * the simulator runs a batch. About half of medium crude boils below 360 °C, so the batch ends at OVERHEAT or BOIL DRY, with
+     * every component and the energy ledger closed and the pot never cooling.
+     */
+    @Test
+    void aMediumCrudePotStillRunsToItsLimit() {
+        var column = new StillColumn(REFINERY.hydrocarbon, P);
+        double[] z = preset("medium_crude", REFINERY.compounds());
+        var design = new Design(.5, Heater.SOLID, true, 0);
+        double t0 = 298.15, total = .6 * design.volume() / column.liquidVolume(t0, z);
+        double[] charge = new double[z.length];
+        for (int i = 0; i < z.length; i++) charge[i] = z[i] * total;
+        double kilograms = total * column.molarMass(z);
+        assertEquals(259.5, kilograms, 1, "60 % of 500 L of medium crude");
+        var cooling = new Cooling(298.15, BatchStill.designWaterFlow(design.rating()) * BatchStill.WATER_HEAT_CAPACITY);
+        var settings = new com.wormzjl.icheme.science.flowsheet.unit.StillBatch.Settings(design, 1, 2, cooling,
+                List.of(new com.wormzjl.icheme.science.flowsheet.unit.StillBatch.Cut("1", com.wormzjl.icheme.science.flowsheet.unit.StillBatch.End.HEAD, 900)));
+        var batch = com.wormzjl.icheme.science.flowsheet.unit.StillBatch.run(column, settings, charge, t0, () -> {
+        });
+        var end = batch.end();
+        double[] distilled = batch.cuts().getFirst().moles(), vented = batch.vent(), left = end.moles();
+        for (int i = 0; i < z.length; i++)
+            assertEquals(charge[i], left[i] + distilled[i] + vented[i], 1e-6 * total, REFINERY.compounds().get(i) + " conserved");
+        double start = total * column.liquidEnthalpy(t0, charge);
+        double finish = end.total() > 0 ? end.total() * column.liquidEnthalpy(end.temperature(), left) : 0;
+        double out = finish - start + batch.cuts().getFirst().enthalpy() + batch.ventEnthalpy() + batch.condenser();
+        assertEquals(batch.heat(), out, 1e-6 * batch.heat(), "heat used = the pot's change + what left");
+        double hot = 0;
+        for (var point : batch.points()) {
+            assertTrue(point.pot() >= hot - 1e-9, "the pot never cools while it distils: " + point.pot() + " after " + hot);
+            assertTrue(point.rate() >= 0, "the distillate never runs back");
+            hot = point.pot();
+        }
+        assertEquals(0, batch.flooded(), "a pot still has no column to flood");
+        double share = sum(distilled) / total, ventShare = sum(vented) / total;
+        double mass = column.molarMass(distilled) * sum(distilled) / kilograms;
+        double ratio = batch.warming() / (batch.heat() - batch.warming());
+        System.out.printf("CRUDE RUN finish %s steps %d pot %.2f C distilled %.4f (mass %.4f) vented %.4f warming/vapour %.3f failure %s%n",
+                batch.finish(), batch.steps(), end.temperature() - 273.15, share, mass, ventShare, ratio, batch.failure());
+        assertTrue(batch.finish() == com.wormzjl.icheme.science.flowsheet.unit.StillBatch.Finish.OVERHEAT
+                || batch.finish() == com.wormzjl.icheme.science.flowsheet.unit.StillBatch.Finish.DRY, "ends at its limit: " + batch.finish());
+        assertNull(batch.failure(), batch.failure());
+    }
+
     /** A whole short run on the column: every step conserves each component and closes its energy ledger; the cut sharpens with reflux. */
     @Test
     void aColumnRunConservesAndRectifies() {
