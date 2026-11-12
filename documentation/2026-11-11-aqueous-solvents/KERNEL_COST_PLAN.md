@@ -99,12 +99,60 @@ Commits: `2b43a4427` (kernel), `6b9fa2ef5` (gate), `ce6d31ffc` (engine callers),
   before this run, and `src/main` had already changed, so there is no before on the same test. The plan's 82 s was the
   old 400-slice form.
 
-## Part B: the dense excess path (moves last digits; the owner's choice after Part A's numbers)
-- Rest sums of a centre whose only partner is water: one sum over the non-water compounds less its pairs' k terms
-  (no partner is ever subtracted, so the cancellation the code comment records does not arise). O(n + pairs) for O(n²).
-- `excessCurvature` is symmetric and read on its upper triangle only: one rank-two update per centre with cells.
-- Reciprocals of `D_i` and `b` formed once per centre; `centreShift` keeps its direct form.
-It changes results in the last digits: the printed references are read again in a final lane.
+## Part B: the dense excess path (owner, 2026-11-12: "Part B first", before the third final lane)
+Profile of the dense row on `45adfee06` (all 47 present, 903 samples): `differentiateExcess` 40 % (its cross loop with
+`centreShift` and `interaction` 27 %), `correctExcess` 21 %, `excessSecondTemperatureDerivative` 7.5 %, the dn loop of
+`evaluateDerivatives` 7 %, `prepareExcess` 7 %, `evaluatePrepared` 6 %. The rest sums are 2 to 4 %: the class-sum form
+this section first proposed is dropped (it moves digits for nothing).
+
+The cross loop is bound by its divisions: 1128 pairs (k <= l), about ten each (`share / LAMBDA` twice, `a_k / b_k`
+twice, `s_k s_l / b_l` twice, `h / D_k` twice, `/ b` twice), near 10 µs of the 35 µs.
+
+### B1: the same arithmetic, less of it (every output keeps its bits)
+In `differentiateExcess` and `centreShift` only; each value is formed by the expression it has today, once.
+1. Cross loop (the last loop): per `k`, hoist `cellIndex[k]`, `pairIndex[k]`, `a[k] / coVolumes[k]`, `theta[k]`,
+   `thetaBase[k]`, `denominator[k]`, `active[k]`; the scalar `HuronVidalExcess.LAMBDA * (share / HuronVidalExcess.LAMBDA)`
+   once per call (`classicalTau` forms `LAMBDA * inverseRt * (...)` left to right: keep that product, do not replace
+   it by `share`); one `pairIndex` lookup per pair for the two shifts and the quadratic term. `centreShift` and
+   `classicalTau` stay as methods for their other callers, or are inlined: the expressions do not change.
+2. `excessCurvature` on its upper triangle (`l >= k` in support order): the fill, the cell loop over `l` and the cell
+   pair loop write only there. Today the cell loop adds `term` to `(k, l)` and to `(l, k)`; on the triangle the element
+   `(min, max)` takes the same additions in the same order (centre ascending, then its cells, then `l`), and the
+   diagonal takes `term` twice as today. The cross loop is its only reader and reads `l >= k`. Check there is no other
+   reader (`excessCurvature` in the kernel, the gate, tests).
+3. The cell loop's `classical` (centre `i`, compound `l`) is the same for every cell of the centre: form the vector once
+   per centre into a workspace scratch row (water with 46 cells forms it 46 times today).
+4. Pair passes (`correctExcess` y, `differentiateExcess` yDt and y2): measure one; only if a pass is above 5 % of a
+   dense call, keep the two ends of each support pair in two workspace arrays filled in `filter()`.
+Proof: a dump of every output in hexadecimal (`ln phi`, `d ln phi/dT`, the dn block, `secondTemperatureDerivative`,
+enthalpy) for the gate's five supports and two roots, written before the first edit and after B1; the two files are
+equal. Add the dump to `tools/aqueous-solvents/kernel-cost/` (as `probes/PairDump.java` does for the pairs).
+
+### B2: reciprocals in the composition derivatives (moves the dn block's last digits only)
+After B1, the cross loop keeps six divisions per pair. Form once: `s_l / b_l` and `a_i / b_i` per prepared temperature
+(with the stamps of Part A), `1 / D_i` per composition in `correctExcess` (stored, not used there), `1 / b` per call.
+The cross loop and the cell loop multiply. `centreShift` keeps its direct form, `h * (1/D_k) - (tau - theta_k^b) * (1/b)`:
+no regrouping into `1/D - 1/b` (the code comment's cancellation). `correctExcess`, the temperature derivatives and
+`ln phi` are not touched, so they keep their bits; only `dLogPhiDn` moves, by rounding.
+Proof: the dump again: everything but the dn block equal; the dn block's largest relative difference reported (expect
+1e-15 to 1e-13; stop and report above 1e-12). Chain-100 exact stays 0 if its list has no cells (classical path); if it
+moves, stop and report: its reference is not captured again without the owner's word.
+
+Not in Part B: the dn loop of `evaluateDerivatives` (its `/ (a * a)` is shared with the classical path and would move
+chain-100); `prepareExcess` (126 exponentials per temperature are the cells' own); the rest sums.
+
+Pitfalls: `omegaDt[]` is reused as `c_i - c_i^b` in the second half of `differentiateExcess`; `rowY` is reused as `y2`;
+a support smaller than the list (positions stay `k * count + l`, loops stay in support order); `-0.0`; an inactive
+centre's branch of `centreShift` reads `theta[k]` and `denominator[k]` set by `correctExcess` for inactive centres
+(`bMix`, `base`); the NaN switch must still find nothing.
+
+Runs: the kernel classes and the callers as in Part A (`--tests`, 4 workers); chain-100 exact; the dump before, after B1,
+after B2. Timing, alone: the dense probe row with `-Dkprobe.seconds=60` (add it: 60 s warm-up, then 60 s measured) on
+`45adfee06` first, then after B1 and after B2; the other two rows once at the end with the short form.
+Expected (from the division counts, not measured): dense derivatives 35 µs to about 28 µs after B1 and about 20 µs
+after B2; evaluate unchanged near 6 µs.
+Done: both proofs hold, the three timings are in a "Result (Part B)" section here and in the two READMEs, one commit
+per step (B1, B2), no probe or dump left in `src`.
 
 ## Runs (the thread's; no final lane, no run with a change switched off)
 - `./gradlew test --tests "*PengRobinsonKernel*" --tests "*TangentPlaneStability*" --tests "*FluidTpEquilibrium*" --tests "*CubicPhaseEvaluator*" --tests "*HydrocarbonModel*" --offline --max-workers 4`: the callers and the gate.
