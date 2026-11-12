@@ -42,7 +42,8 @@ public final class StillHead {
      * The pot's head ({@link Pool.Head}, on the island's list), the column's profile for the next warm start, the head vapour's
      * and the condensate's temperatures (K), the critical temperature of each component (K, water last), the condenser's
      * need per mole that reached the head (J/mol: (R + 1)(H1 - h0) over the net top product), the reflux ratio solved and
-     * the column's F-factor per watt of boil-up (Pa^0.5 / W: the top vapour's, {@link BatchStill#fFactor}; 0 with no column).
+     * the column's F-factor per watt that goes up as vapour (Pa^0.5 / W: the top vapour's, {@link BatchStill#fFactor}, over
+     * the heat it gives the condenser, (R + 1)(H1 - h0) a mole of distillate; 0 with no column).
      */
     public record Solved(Pool.Head head,StillColumn.Profile profile,double headTemperature,double condensateTemperature,
                          double[] critical,double needPerMole,double reflux,double fPerWatt) implements Outcome {
@@ -65,7 +66,7 @@ public final class StillHead {
         var critical=new double[n+1];for(int i=0;i<n;i++)critical[i]=column.criticalTemperature(i);critical[n]=WATER_CRITICAL;
         if(!(total>0))return new Solved(Pool.Head.plain(n+1),null,job.temperature(),job.temperature(),critical,0,0,0);
         checkpoint.run();
-        var split=column.solve(hydrocarbons,job.stages(),job.reflux(),1,job.warm());
+        var split=column.solve(hydrocarbons,job.stages(),job.reflux(),job.warm());
         checkpoint.run();
         if(!split.converged())return new Failed(split.failure()==null?"no convergence":split.failure());
         var up=split.vapourFlows();var out=split.distillateFlows();var back=split.liquidFlows();
@@ -84,11 +85,12 @@ public final class StillHead {
         }
         double net=split.distillateRate();
         double need=net>0?split.condenserDuty()/net:0;
-        // The top vapour at 1 W of boil-up (every rate of the split is per watt), at the head's temperature and the distillate's composition.
+        // The top vapour that 1 W carries up to the condenser (the split's rates are per mole of its basis, its condenser duty the
+        // heat of that basis's top vapour), at the head's temperature and the distillate's composition.
         double fPerWatt=0;
-        if(job.columnDiameter()>0&&split.topVapourRate()>0) {
+        if(job.columnDiameter()>0&&split.topVapourRate()>0&&split.condenserDuty()>0) {
             var y=split.distillate();double molar=column.molarMass(y),volume=column.vapourVolume(split.headTemperature(),y);
-            if(molar>0&&volume>0)fPerWatt=BatchStill.fFactor(split.topVapourRate()*molar,molar/volume,job.columnDiameter());
+            if(molar>0&&volume>0)fPerWatt=BatchStill.fFactor(split.topVapourRate()*molar,molar/volume,job.columnDiameter())/split.condenserDuty();
         }
         return new Solved(new Pool.Head(recovery,returnEnthalpy),split.profile(),split.headTemperature(),split.condensateTemperature(),critical,need,split.refluxRatio(),fPerWatt);
     }

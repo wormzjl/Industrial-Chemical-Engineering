@@ -203,14 +203,15 @@ class BatchStillTest {
      */
     private static StillColumn.Split proxy(StillColumn column, double[] z, int stages, double reflux) {
         double feed = 20;
-        var one = column.solve(z, 0, 0, 1, null);
-        double duty = one.boilUpHeat(), hFeed = one.potEnthalpy();
+        // The proxy's reboiler duty and its distillate, per mole of its own vapour: V3's reboiler as the B3 proxy defined it.
+        var one = column.solve(z, 0, 0, null);
+        double duty = one.energyPerDistillate() - one.potEnthalpy(), hFeed = one.potEnthalpy();
         double[] xr = z.clone();
         StillColumn.Split split = null;
         for (int pass = 0; pass < 8; pass++) {
-            split = column.solve(xr, stages, reflux, 1, split == null ? null : split.profile());
+            split = column.solve(xr, stages, reflux, split == null ? null : split.profile());
             assertTrue(split.converged(), split.failure());
-            double d = (duty - feed * (split.potEnthalpy() - hFeed)) / split.boilUpHeat();
+            double d = (duty - feed * (split.potEnthalpy() - hFeed)) / (split.energyPerDistillate() - split.potEnthalpy());
             for (int i = 0; i < z.length; i++) xr[i] = (feed * z[i] - d * split.distillate()[i]) / (feed - d);
         }
         return split;
@@ -233,19 +234,26 @@ class BatchStillTest {
             }
         }
         // In the still's own mode the pot is held at the charge: a pentane-rich distillate, and D = V / (R + 1) near.
-        var split = refinery.solve(NAPHTHA_Z, 4, 2, 30e3, null);
+        var split = refinery.solve(NAPHTHA_Z, 4, 2, null);
         assertTrue(split.converged(), split.failure());
         assertTrue(split.distillate()[0] + split.distillate()[1] > .8, "pentanes at the head");
+        assertEquals(1, split.distillateRate(), "the rates are per mole of distillate");
+        assertEquals(3, split.topVapourRate(), 1e-12, "(R + 1) D into the condenser");
         assertEquals(split.vapourRate() / 3, split.distillateRate(), .15 * split.vapourRate() / 3, "the energy balance moves D off V / (R + 1)");
+        assertEquals(3 * split.headEnthalpy() - 2 * split.condensateEnthalpy(), split.energyPerDistillate(), 1e-9 * Math.abs(split.headEnthalpy()),
+                "e = (R + 1) H1 - R h0");
         assertTrue(split.headTemperature() < split.potTemperature() && split.condensateTemperature() <= split.headTemperature() + 1e-9);
         double[] up = split.vapourFlows(), back = split.liquidFlows(), out = split.distillateFlows();
         for (int k = 0; k < up.length; k++) assertEquals(up[k], back[k] + out[k], 1e-12 * up[k] + 1e-15, "the column conserves each component");
-        var warm = refinery.solve(NAPHTHA_Z, 4, 2, 30e3, split.profile());
+        var warm = refinery.solve(NAPHTHA_Z, 4, 2, split.profile());
         assertTrue(warm.converged(), warm.failure());
         assertEquals(split.distillate()[0], warm.distillate()[0], 1e-4);
-        var closed = refinery.solve(NAPHTHA_Z, 4, Double.POSITIVE_INFINITY, 30e3, split.profile());
+        var closed = refinery.solve(NAPHTHA_Z, 4, Double.POSITIVE_INFINITY, split.profile());
         assertTrue(closed.converged() && closed.closed());
         assertEquals(0, closed.distillateRate());
+        assertEquals(1, closed.topVapourRate(), 1e-12, "a closed valve's rates are per mole of top vapour");
+        assertEquals(closed.headEnthalpy() - closed.condensateEnthalpy(), closed.condenserDuty(), 0, "its heat: H1 - h0");
+        assertTrue(closed.condenserDuty() > 0);
         assertTrue(closed.distillate()[0] > split.distillate()[0], "total reflux: the sharpest head");
         assertEquals(closed.vapourRate(), closed.liquidRate(), 1e-12 * closed.vapourRate());
     }
@@ -271,9 +279,9 @@ class BatchStillTest {
         assertEquals(2.1, share, .5, "crude: warming over boil-up " + share);
         // The column converges on the wide crude in pot mode, cold and warm (plan section 7, B3).
         for (int stages : new int[]{2, 8}) {
-            var split = crude.solve(z, stages, .5, 1, null);
+            var split = crude.solve(z, stages, .5, null);
             assertTrue(split.converged(), split.failure());
-            assertTrue(crude.solve(z, stages, .5, 1, split.profile()).converged());
+            assertTrue(crude.solve(z, stages, .5, split.profile()).converged());
         }
         double naphtha = warming(column(NAPHTHA), NAPHTHA_Z, 245);
         assertTrue(naphtha > .07 && naphtha < .25, "naphtha at its start: " + naphtha);
@@ -286,9 +294,10 @@ class BatchStillTest {
         var design = new Design(.5, Heater.SOLID, true, 0);
         double[] n = moles(column, z, kilograms);
         var pot = new Pot(n, column.bubble(n, Double.NaN).temperature(), null);
-        var one = column.solve(n, 0, 0, 1, null);
-        // About 1 % of the charge: its latent heat, twice over for the warming, at full firing.
-        double dt = .01 * pot.total() * one.boilUpHeat() * 2 / design.rating();
+        var one = column.solve(n, 0, 0, null);
+        // About 1 % of the charge: its vapour's enthalpy over the pot liquid's, twice over for the warming, at full firing (a step
+        // size only: at these charges' bubble points that difference is positive).
+        double dt = .01 * pot.total() * (one.energyPerDistillate() - one.potEnthalpy()) * 2 / design.rating();
         var step = BatchStill.step(column, design, pot, new Inputs(1, 1, 0, new Cooling(288.15, Double.POSITIVE_INFINITY)), dt);
         double distilled = 1 - step.pot().total() / pot.total();
         assertTrue(distilled > .002 && distilled < .03, "a small step: " + distilled);
@@ -424,6 +433,8 @@ class BatchStillTest {
         assertTrue(batch.finish() == com.wormzjl.icheme.science.flowsheet.unit.StillBatch.Finish.OVERHEAT
                 || batch.finish() == com.wormzjl.icheme.science.flowsheet.unit.StillBatch.Finish.DRY, "ends at its limit: " + batch.finish());
         assertNull(batch.failure(), batch.failure());
+        assertTrue(mass > .3 && mass < .5, "about half of medium crude boils below 360 °C; the pot reaches 350 °C first: " + mass);
+        assertTrue(ratio > 2, "over a crude batch the pot's own warming takes most of the heat: " + ratio);
     }
 
     /** A whole short run on the column: every step conserves each component and closes its energy ledger; the cut sharpens with reflux. */
