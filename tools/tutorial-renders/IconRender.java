@@ -1,12 +1,8 @@
-import com.wormzjl.icheme.science.equipment.ColumnTrays;
-import com.wormzjl.icheme.science.equipment.ConstructorDefaults;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.Mesh;
 import com.wormzjl.icheme.science.equipment.Paint;
 import com.wormzjl.icheme.science.equipment.RenderDetail;
 import com.wormzjl.icheme.science.equipment.ShapeRasterizer;
-import com.wormzjl.icheme.science.equipment.UnitDesign;
-import com.wormzjl.icheme.science.equipment.VesselPlacement;
 import com.wormzjl.icheme.science.tutorial.equipment.EquipmentInfo;
 
 import javax.imageio.ImageIO;
@@ -102,22 +98,10 @@ public class IconRender {
 
     /** The kind at its native reference size: the constructor's default (EngineeringExport's first scene of the kind; a drum lying). */
     static EquipmentShape reference(EquipmentShape.Kind kind) {
-        var heading = EquipmentShape.Heading.NORTH;
-        VesselPlacement.Form form = null;
-        for (var f : VesselPlacement.Form.values())
-            if (f != VesselPlacement.Form.CROSSWISE && f.kind() == kind && (form == null || f == VesselPlacement.Form.LENGTHWISE)) form = f;
-        if (form == null) throw new IllegalStateException(kind + ": no constructor form");
-        var size = ConstructorDefaults.sizes(form);
-        double d = size.diameter();
-        if (kind == EquipmentShape.Kind.DRUM) return EquipmentShape.drum(d, size.length(), form.orientation(), heading, EquipmentShape.defaultSupport(d, form.orientation()));
-        if (kind == EquipmentShape.Kind.COLUMN)
-            return EquipmentShape.column(d, new ColumnTrays(32, 18, List.of(10, 24), List.of(33), List.of(new ColumnTrays.Pumparound(26, 20))), heading, EquipmentShape.minimumSkirt(d));
-        var design = UnitDesign.of(kind);
-        if (kind.storage())
-            return new EquipmentShape(kind, d, size.length(), design.orientation(), heading, design.minSupport(d, size.length()), null, List.of(),
-                    com.wormzjl.icheme.science.equipment.ProcessUnit.Bank.ONE, false, 0, com.wormzjl.icheme.science.equipment.TowerBank.ONE,
-                    com.wormzjl.icheme.science.equipment.MachineDuty.NONE);
-        return EquipmentShape.unit(kind, d, size.length(), heading, design.minSupport(d, size.length()));
+        // P5: the shape moved to the mod (ReferenceShapes), where the equipment pages' films draw it too.
+        var shape = com.wormzjl.icheme.science.tutorial.equipment.ReferenceShapes.of(kind);
+        if (shape == null) throw new IllegalStateException(kind + ": no constructor form");
+        return shape;
     }
 
     /** One icon: the polygons from the fixed view turned by {@code turn}, in a {@link #SIZE} px square less {@code inset} px on each side. */

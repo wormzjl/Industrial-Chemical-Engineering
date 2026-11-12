@@ -324,8 +324,14 @@ public final class HeatDiagramRender {
                 var out = new BufferedImage(s.w(), s.h(), BufferedImage.TYPE_INT_ARGB);
                 var atlas = atlas(s.texture());
                 int a = argb >>> 24;
+                // An item's texture (the tutorial's equipment pages, P5) is a picture, not a mask: drawn white, it keeps its colours.
+                boolean picture = s.texture().contains(":textures/item/") && argb == 0xFFFFFFFF;
                 for (int y = 0; y < s.h(); y++)
                     for (int x = 0; x < s.w(); x++) {
+                        if (picture) {
+                            out.setRGB(x, y, atlas.getRGB(s.u() + x, s.v() + y));
+                            continue;
+                        }
                         int mask = atlas.getRGB(s.u() + x, s.v() + y) >>> 24;
                         out.setRGB(x, y, (mask * a / 255) << 24 | argb & 0xFFFFFF);
                     }

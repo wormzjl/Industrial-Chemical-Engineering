@@ -77,3 +77,8 @@ owner's choice and the default), `-DiconCases=true` (only `icons-cases.png`, the
   `card-compare.png`, `card-balance.png` and `tour-fluid_device-still_column.png`. The simulator's tours are drawn by
   `tools/heat-gui-renders/SimulatorRender.java -Donly=tours` (its README's command, with `build/classes/java/test` on the
   class path): `tour-simulator-<page>.png` and `-dark`, each stop on the small crude unit after its run.
+- 2026-11-13, P5: `PageRender.java` (run by `renderTutorialGuide -PtutorialGuideOnly=p5`, which renders only its set):
+  `pages-1..6.png` (every equipment page, light, at 464 by 254 and in the 320 by 240 window), `pages-dark.png`,
+  `card-unit_map.png` and `guide-unit.png`; films `crude_unit` and `unit_*` through `-PtutorialFilms`. IconRender's
+  reference bodies now come from `ReferenceShapes` (main), which the page films share. HeatDiagramRender keeps an item
+  sprite's own colours under a white tint.

@@ -47,6 +47,11 @@ public final class GuideRender {
         tr = key -> HeatDiagramRender.tr(key);
         var out = Path.of(args[0]);
         Files.createDirectories(out);
+        // P5: "p5" as the second argument renders the equipment pages, the unit map and chapter 5 only.
+        if (args.length > 1 && args[1].equals("p5")) {
+            PageRender.render(out);
+            return;
+        }
         guide(out);
         guideTour(out);
         stillTour(out, "fluid_device.still");

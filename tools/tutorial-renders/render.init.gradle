@@ -2,6 +2,7 @@
 // set changes, no client, no test suite. Usage, from the worktree root:
 //   ./gradlew --offline --init-script tools/tutorial-renders/render.init.gradle renderTutorial -PtutorialRenderOut=tmp/tutorial-renders
 // Optional: -PtutorialFilms=still_inside (a comma list; default every film), -PtutorialFrames=n (n frames between stops).
+// renderTutorialGuide -PtutorialGuideOnly=p5 renders the equipment pages, the unit map and chapter 5 only (PageRender, P5).
 // renderTutorial draws the film stops (TutorialRender), then the guide, tours and cards (GuideRender, P1). Both are
 // compiled with tools/heat-gui-renders (its game font, canvas and page frame) against the main and test outputs.
 // renderTutorialIcons (P3) bakes the equipment reference items' icons into src/main/resources/assets/icheme/textures/item
@@ -11,6 +12,7 @@ gradle.projectsEvaluated {
     def out = p.providers.gradleProperty('tutorialRenderOut')
     def films = p.providers.gradleProperty('tutorialFilms')
     def frames = p.providers.gradleProperty('tutorialFrames')
+    def guideOnly = p.providers.gradleProperty('tutorialGuideOnly')
     def target = p.file(out.getOrElse('tmp/tutorial-renders')).absolutePath
     def guide = p.sourceSets.create('tutorialGuideRenderTools') {
         java.srcDir p.file('tools/heat-gui-renders')
@@ -30,7 +32,7 @@ gradle.projectsEvaluated {
         classpath = guide.runtimeClasspath
         mainClass = 'GuideRender'
         workingDir = p.projectDir
-        args(target)
+        args(guideOnly.isPresent() ? [target, guideOnly.get()] : [target])
         jvmArgs '-Djava.awt.headless=true', '-Duser.language=en'
     }
     p.tasks.register('renderTutorial', JavaExec) {
