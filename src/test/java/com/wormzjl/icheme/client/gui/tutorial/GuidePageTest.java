@@ -157,7 +157,7 @@ class GuidePageTest {
         assertEquals("Got it", water.keys().getFirst().text());
         var stillTerms = new java.util.ArrayList<String>();
         for (var row : still.rows()) for (var l : row.lines()) for (var u : l.underlines()) if (!stillTerms.contains(u.term())) stillTerms.add(u.term());
-        assertEquals(List.of("vapour", "condenser", "distillate", "cut", "boil_dry"), stillTerms);
+        assertEquals(List.of("vapour", "condenser", "distillate", "cut"), stillTerms);
         var charge = still.rows().get(1);
         String text = String.join(" ", charge.lines().stream().map(l -> l.text()).toList());
         assertTrue(text.contains("Fluid Generator") && !text.contains("%s"), text);

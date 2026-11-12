@@ -16,18 +16,19 @@ import java.util.function.Function;
  * run ({@link StillRunData}) as a curve of the pot's temperature against the share of the charge distilled. The slider
  * runs along the run; the area under the curve up to the mark is coloured by the part coming over (the barrel card's
  * colours), the readout gives the pot's temperature and the share, and two lines mark the run's cuts: the switch to the
- * second drum (the end of the naphtha) and the fire out (the run's end).
+ * second drum (the end of the naphtha) and the fire out (the end of the kerosene). Past the fire out the curve runs on,
+ * dimmed, to the run's end: what the pot does with the fire left on, until the law cuts its fire.
  */
 public final class PotTemperature implements Card {
     public static final String NAME = "pot_temperature";
     public static final String KEY = "tutorial.icheme.card." + NAME;
     /** The curve's samples along the share distilled. */
     static final int SAMPLES = 200;
-    /** The temperature axis, K: 0 to 300 °C. */
-    public static final double FLOOR = 273.15, CEILING = 573.15;
-    private static final int OUTLINE = 0xFFB3C0CA, MARK = 0xFFFFFFFF, CURVE = 0xFFE8EEF2, CUT = 0xFFF08C24, NONE = 0xFF59636B;
-    /** The share distilled at the run's end, at its first cut, and the pot's temperature and the part coming over at each sample. */
-    private final double end, cut;
+    /** The temperature axis, K: 0 to 400 °C (the run ends where the law cuts the fire, at 350 °C). */
+    public static final double FLOOR = 273.15, CEILING = 673.15;
+    private static final int OUTLINE = 0xFFB3C0CA, MARK = 0xFFFFFFFF, CURVE = 0xFFE8EEF2, LEFT_ON = 0xFF7A8794, CUT = 0xFFF08C24, NONE = 0xFF59636B;
+    /** The share distilled at the run's end, at its first cut and at the fire out, and the pot's temperature and the part coming over at each sample. */
+    private final double end, cut, fireOut;
     private final double[] kelvin;
     private final int[] part;
 
@@ -41,6 +42,7 @@ public final class PotTemperature implements Card {
         var parts = run.series("part");
         end = distilled.value(distilled.size() - 1);
         cut = distilled.at(run.line("naphtha", "time"));
+        fireOut = distilled.at(run.line("kerosene", "time"));
         kelvin = new double[SAMPLES + 1];
         part = new int[SAMPLES + 1];
         for (int i = 0; i <= SAMPLES; i++) {
@@ -73,7 +75,7 @@ public final class PotTemperature implements Card {
 
     @Override
     public List<String> textKeys() {
-        var out = new ArrayList<>(List.of(KEY + ".title", KEY + ".reading", KEY + ".share", KEY + ".cut_first", KEY + ".cut_end"));
+        var out = new ArrayList<>(List.of(KEY + ".title", KEY + ".reading", KEY + ".share", KEY + ".cut_first", KEY + ".cut_end", KEY + ".after"));
         for (var band : StillRunData.PARTS) out.add(Barrel.bandKey(band));
         return out;
     }
@@ -95,9 +97,9 @@ public final class PotTemperature implements Card {
         return part[(int) Math.round(Math.clamp(share / end, 0, 1) * SAMPLES)];
     }
 
-    /** The shares distilled at the two cuts: the switch to the second drum, and the fire out. */
+    /** The shares distilled at the two cuts: the switch to the second drum (the end of the naphtha), and the fire out (the end of the kerosene). */
     public double[] cuts() {
-        return new double[]{cut, end};
+        return new double[]{cut, fireOut};
     }
 
     /** The parts that come over in the run, in boiling order. */
@@ -110,6 +112,11 @@ public final class PotTemperature implements Card {
 
     static int colour(int part) {
         return part >= 0 && part < Barrel.BAND_COLOURS.length ? Barrel.BAND_COLOURS[part] : NONE;
+    }
+
+    /** {@code argb} at half its brightness: past the fire out, what the fire left on does. */
+    static int dimmed(int argb) {
+        return 0xFF000000 | (argb >> 1 & 0x7F7F7F);
     }
 
     @Override
@@ -146,10 +153,11 @@ public final class PotTemperature implements Card {
             for (int x = 0; x < pw; x++) {
                 double s = end * x / Math.max(1, pw - 1);
                 int cy = yOf(kelvin(s), plot);
-                // Under the mark: the area down to the axis, coloured by the part coming over.
-                if (px + x <= markX) c.fill(px + x, cy, px + x + 1, plot.bottom(), colour(part(s)));
+                boolean leftOn = s > fireOut;
+                // Under the mark: the area down to the axis, coloured by the part coming over; dimmed past the fire out.
+                if (px + x <= markX) c.fill(px + x, cy, px + x + 1, plot.bottom(), leftOn ? dimmed(colour(part(s))) : colour(part(s)));
                 int a = lastY < 0 ? cy : Math.min(lastY, cy), b = lastY < 0 ? cy : Math.max(lastY, cy);
-                c.fill(px + x, a, px + x + 1, b + 1, CURVE);
+                c.fill(px + x, a, px + x + 1, b + 1, leftOn ? LEFT_ON : CURVE);
                 lastY = cy;
             }
             for (double cutShare : cuts) {
@@ -168,11 +176,14 @@ public final class PotTemperature implements Card {
         c.text(bottom, x0, plot.bottom() - 9, Palette.MUTED);
         // The cuts' words at the plot's top, each just left of its line: the first on the top row, the second on the row under it.
         String first = tr.apply(KEY + ".cut_first"), last = tr.apply(KEY + ".cut_end");
-        int cx1 = px + (int) Math.round(cuts[0] / end * (pw - 1)), cx2 = plot.right() - 1;
+        int cx1 = px + (int) Math.round(cuts[0] / end * (pw - 1)), cx2 = Math.min(plot.right() - 1, px + (int) Math.round(cuts[1] / end * (pw - 1)));
         int lastX = cx2 - 2 - m.width(last), firstX = cx1 - 2 - m.width(first);
         if (firstX >= px + 2) c.text(first, firstX, plot.y() + 1, Palette.WARN);
-        // The second only where the curve stays under its row (the curve rises to its right end, so its end is its top).
-        if (lastX >= px + 2 && yOf(kelvin(end), plot) >= plot.y() + 21) c.text(last, lastX, plot.y() + 11, Palette.WARN);
+        // The second only where the curve stays under its row (the curve rises to the right, so it is highest at the fire out).
+        if (lastX >= px + 2 && yOf(kelvin(cuts[1]), plot) >= plot.y() + 21) c.text(last, lastX, plot.y() + 11, Palette.WARN);
+        // Past the fire out, where it fits over the curve: the fire left on.
+        String after = tr.apply(KEY + ".after");
+        if (cx2 + 3 + m.width(after) <= plot.right() - 1 && yOf(kelvin(end), plot) >= plot.y() + 11) c.text(after, cx2 + 3, plot.y() + 1, Palette.MUTED);
         String axis = tr.apply(KEY + ".share");
         c.text(m.cut(axis, pw), px + Math.max(0, (pw - m.width(axis)) / 2), plot.bottom() + 2, Palette.MUTED);
         for (int i = 0; i < entries.size(); i++) c.text(m.cut(entries.get(i), colW - 9), x0 + (i % columns) * colW + 9, legendY + (i / columns) * 10, Palette.TEXT);

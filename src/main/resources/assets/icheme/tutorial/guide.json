@@ -11,8 +11,7 @@
     "vapour": "still/build",
     "condenser": "still/build",
     "distillate": "still/watch",
-    "cut": "still/cut",
-    "boil_dry": "still/stop"
+    "cut": "still/cut"
   },
   "chapters": [
     {

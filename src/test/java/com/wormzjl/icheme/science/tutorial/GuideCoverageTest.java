@@ -168,6 +168,11 @@ class GuideCoverageTest {
         var minutes = java.util.regex.Pattern.compile("(\\d+) minutes? of play").matcher(first);
         assertTrue(minutes.find(), first);
         assertEquals(Math.max(1, Math.round(run.line("first", "play_minutes"))), Long.parseLong(minutes.group(1)), "the first drops' minutes of play, the recording's");
+        // The fire out: at the end of the kerosene, its minutes of play the recording's.
+        String stop = lang.get("tutorial.icheme.guide.still.stop");
+        var out = java.util.regex.Pattern.compile("(\\d+) minutes? of play").matcher(stop);
+        assertTrue(out.find(), stop);
+        assertEquals(Math.round(run.line("kerosene", "play_minutes")), Long.parseLong(out.group(1)), "the fire out's minutes of play: the end of the kerosene");
         assertNotNull(lang.get("tutorial.icheme.guide.still.source"));
         assertTrue(lang.get("tutorial.icheme.guide.still.charge").contains("%s"), "the charge step names its source through the source line");
     }

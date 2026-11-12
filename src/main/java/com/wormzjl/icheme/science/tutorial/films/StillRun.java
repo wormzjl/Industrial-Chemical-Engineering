@@ -28,11 +28,10 @@ import java.util.List;
 public final class StillRun {
     public static final String NAME = "still_run";
     public static final String TITLE = "tutorial.icheme.film.still_run";
-    /** The stops, seconds. */
-    static final double STOP_1 = 6, STOP_2 = 10, STOP_3 = 22, STOP_4 = 28, STOP_5 = 34;
-    /** The film's keys of its timeline: the stops and the fire's end inside stop 5. */
-    static final double FIRE_OUT = 31.5;
-    static final double[] FILM = {0, STOP_1, STOP_2, STOP_3, STOP_4, FIRE_OUT, STOP_5};
+    /** The stops, seconds: the first drop, the end of the naphtha (the switch), the end of the kerosene (the fire out), the run's end. */
+    static final double STOP_1 = 10, STOP_2 = 22, STOP_3 = 28, STOP_4 = 36;
+    /** The film's keys of its timeline: the start and the stops. */
+    static final double[] FILM = {0, STOP_1, STOP_2, STOP_3, STOP_4};
     /** The readouts' and labels' language keys. */
     public static final String POT = "tutorial.icheme.film.readout.pot", DISTILLED = "tutorial.icheme.film.readout.distilled",
             FIRST = "tutorial.icheme.film.part.drum_first", SECOND = "tutorial.icheme.film.part.drum_second", SPOUT = "tutorial.icheme.film.part.spout";
@@ -57,19 +56,18 @@ public final class StillRun {
         return EquipmentShape.drum(.5, 1, EquipmentShape.Orientation.VERTICAL, EquipmentShape.Heading.NORTH, 0);
     }
 
-    /** The recording's times the film's keys {@link #FILM} map onto: the start, just before the first drop, the first drop, the end of naphtha, two thirds on, the end (twice: the fire out, then held). */
+    /** The recording's times the film's keys {@link #FILM} map onto: the start, the first drop, the end of the naphtha, the end of the kerosene, the run's end (the law cuts the fire). */
     public static double[] recording(Series.Recording run) {
-        double first = run.line("first", "time"), naphtha = run.line("naphtha", "time"), end = run.line("end", "time");
-        return new double[]{0, .7 * first, first, naphtha, naphtha + (end - naphtha) * .6, end, end};
+        return new double[]{0, run.line("first", "time"), run.line("naphtha", "time"), run.line("kerosene", "time"), run.line("end", "time")};
     }
 
     public static Value.Timeline timeline(Series.Recording run) {
         return new Value.Timeline(FILM, recording(run));
     }
 
-    /** The share of the charge's gas and naphtha (the first cut) and of its kerosene, from the recording's set-up. */
+    /** The share of the charge's gas and naphtha (the first cut, from the recording's set-up), and the share taken overhead by the run's end. */
     static double[] cuts(Series.Recording run) {
-        return new double[]{StillRunData.share(run, "gas") + StillRunData.share(run, "naphtha"), StillRunData.share(run, "kerosene")};
+        return new double[]{StillRunData.share(run, "gas") + StillRunData.share(run, "naphtha"), StillRunData.overhead(run, run.time().end())};
     }
 
     public static Scene build() {
@@ -98,14 +96,14 @@ public final class StillRun {
         var branch2 = Actors.pipe("branch2", List.of(tee, new double[]{top2[0], tee[1], tee[2]}, top2), .05, Mesh.Material.PIPE);
 
         double[] cuts = cuts(run);
-        double firstCut = cuts[0], kerosene = cuts[1];
+        double firstCut = cuts[0], last = cuts[1];
         Value overhead = t -> StillRunData.overhead(run, t);
-        // The receivers fill with what the recording took overhead: the first up to the cut, the second after it.
+        // The receivers fill with what the recording took overhead: the first up to the cut, the second after it to the run's end.
         Value fill1 = timeline.replay(t -> DRUM_FULL * Math.min(1, overhead.at(t) / firstCut));
-        Value fill2 = timeline.replay(t -> DRUM_FULL * Math.clamp((overhead.at(t) - firstCut) / kerosene, 0, 1));
+        Value fill2 = timeline.replay(t -> DRUM_FULL * Math.clamp((overhead.at(t) - firstCut) / (last - firstCut), 0, 1));
         Value level = timeline.replay(t -> run.series("level").at(t));
-        // The fire: lit at once, out over the second after FIRE_OUT.
-        Value fire = t -> StillInside.FIRE * Math.clamp(t / .8, 0, 1) * Math.clamp(1 - (t - FIRE_OUT), 0, 1);
+        // The fire: lit at once, left on past the fire out of stop 3 (what if), cut by the still itself over the last second.
+        Value fire = t -> StillInside.FIRE * Math.clamp(t / .8, 0, 1) * Math.clamp(STOP_4 - t, 0, 1);
 
         // The pot's liquid as a body (its share of the pot from floor to apex), the dots inside its lowest level.
         double r = .95 * (pot[3] - pot[0]) / 2;
@@ -128,10 +126,10 @@ public final class StillRun {
         toSecond.add(new double[]{top2[0], tee[1], tee[2]});
         toSecond.add(top2);
         toSecond.add(new double[]{top2[0], top2[1] - .5, top2[2]});
-        // The first light dot reaches the spout at stop 2; the rest follow to the end of stop 3. The middle ones go to the second drum in stop 4.
+        // The first light dot reaches the spout at stop 1; the rest follow to the end of stop 2. The middle ones go to the second drum after it.
         double toSpout = length(way.subList(0, way.size() - 2)) + .3;
-        double lightFrom = STOP_2 - toSpout / SPEED, lightGap = (STOP_3 - 1.5 - lightFrom) / LIGHT;
-        double middleFrom = STOP_3 + .5, middleGap = (STOP_4 - 1 - middleFrom) / MIDDLE_LEAVING;
+        double lightFrom = STOP_1 - toSpout / SPEED, lightGap = (STOP_2 - 1.5 - lightFrom) / LIGHT;
+        double middleFrom = STOP_2 + .5, middleGap = (STOP_4 - 2 - middleFrom) / MIDDLE_LEAVING;
         double radius = .025;
         var drumBox1 = new Track.Box(add(DRUM_1, new double[]{DRUM_LO[0] + .05, DRUM_LO[1] + .05, DRUM_LO[2] + .05}),
                 add(DRUM_1, new double[]{DRUM_HI[0] - .05, DRUM_LO[1] + .4, DRUM_HI[2] - .05}));
@@ -146,11 +144,12 @@ public final class StillRun {
         return Scene.builder(TITLE)
                 .actor(still).actor(neck).actor(condenser).actor(line).actor(branch1).actor(branch2).actor(drum1).actor(drum2)
                 .track(new Track.Camera(List.of(
-                        key(0, yaw, pitch, POT_SCALE, atPot), key(STOP_1, yaw, pitch, POT_SCALE, atPot),
-                        key(STOP_1 + 1.5, yaw, pitch, COOLER_SCALE, atCooler), key(STOP_2, yaw, pitch, COOLER_SCALE, atCooler),
-                        key(STOP_2 + 2, yaw, pitch, WHOLE_SCALE, whole), key(STOP_3, yaw, pitch, WHOLE_SCALE, whole),
-                        key(STOP_3 + 1.5, yaw, pitch, DRUM_SCALE, atDrums), key(STOP_4, yaw, pitch, DRUM_SCALE, atDrums),
-                        key(STOP_4 + 1.5, yaw, pitch, POT_SCALE, atPot), key(STOP_5, yaw, pitch, POT_SCALE, atPot))))
+                        key(0, yaw, pitch, POT_SCALE, atPot), key(LIT, yaw, pitch, POT_SCALE, atPot),
+                        key(LIT + 1.5, yaw, pitch, COOLER_SCALE, atCooler), key(STOP_1, yaw, pitch, COOLER_SCALE, atCooler),
+                        key(STOP_1 + 2, yaw, pitch, WHOLE_SCALE, whole), key(STOP_2, yaw, pitch, WHOLE_SCALE, whole),
+                        key(STOP_2 + 1.5, yaw, pitch, DRUM_SCALE, atDrums), key(STOP_3 - 2.5, yaw, pitch, DRUM_SCALE, atDrums),
+                        key(STOP_3 - 1, yaw, pitch, WHOLE_SCALE, whole), key(STOP_3, yaw, pitch, WHOLE_SCALE, whole),
+                        key(STOP_3 + 2, yaw, pitch, POT_SCALE, atPot), key(STOP_4, yaw, pitch, POT_SCALE, atPot))))
                 .track(new Track.Cut("pot", new double[]{px, 0, pz}, toCamera, 0, 0))
                 .track(new Track.Cut("neck", new double[]{px, neckY, pz}, new double[]{0, 1, 0}, 0, 0))
                 .track(new Track.Cut("cooler", new double[]{cx, cy, 0}, new double[]{Math.signum(toCamera[0]), 0, 0}, 0, 0))
@@ -160,35 +159,36 @@ public final class StillRun {
                 .track(new Track.Caption("tutorial.icheme.film.still_run.s2", STOP_1, STOP_2))
                 .track(new Track.Caption("tutorial.icheme.film.still_run.s3", STOP_2, STOP_3))
                 .track(new Track.Caption("tutorial.icheme.film.still_run.s4", STOP_3, STOP_4))
-                .track(new Track.Caption("tutorial.icheme.film.still_run.s5", STOP_4, STOP_5))
-                .track(new Track.Readout(POT, timeline.replay(run.series("pot")), Track.Reading.TEMPERATURE, 0, STOP_5))
-                .track(new Track.Readout(DISTILLED, timeline.replay(run.series("distilled")), Track.Reading.SHARE, 0, STOP_5))
-                .track(new Track.Legend(0, STOP_5))
-                .track(new Track.Flame(StillInside.fireBed(shape), fire, 0, STOP_5))
-                .track(new Track.Level(body, level, StillInside.CRUDE, "pot", 0, STOP_5))
-                .track(new Track.Level(new Track.Box(add(DRUM_1, DRUM_LO), add(DRUM_1, DRUM_HI)), fill1, FIRST_LIQUID, "drum1", 0, STOP_5))
-                .track(new Track.Level(new Track.Box(add(DRUM_2, DRUM_LO), add(DRUM_2, DRUM_HI)), fill2, SECOND_LIQUID, "drum2", 0, STOP_5))
-                // The pointer lights the fire, switches the stream at the tee, and puts the fire out.
-                .track(new Track.Pointer(Track.Sign.RIGHT_CLICK, "", StillInside.door(shape), 0, STOP_1))
-                .track(new Track.Pointer(Track.Sign.RIGHT_CLICK, "", tee, STOP_3, STOP_4))
-                .track(new Track.Pointer(Track.Sign.RIGHT_CLICK, "", StillInside.door(shape), FIRE_OUT - 1.5, STOP_5))
-                .track(new Track.Label(top1, FIRST, 0, STOP_1))
-                .track(new Track.Label(top2, SECOND, 0, STOP_1))
-                .track(new Track.Label(outlet, SPOUT, STOP_1, STOP_2))
-                .track(new Track.Label(top2, SECOND, STOP_3, STOP_4))
+                .track(new Track.Readout(POT, timeline.replay(run.series("pot")), Track.Reading.TEMPERATURE, 0, STOP_4))
+                .track(new Track.Readout(DISTILLED, timeline.replay(run.series("distilled")), Track.Reading.SHARE, 0, STOP_4))
+                .track(new Track.Legend(0, STOP_4))
+                .track(new Track.Flame(StillInside.fireBed(shape), fire, 0, STOP_4))
+                .track(new Track.Level(body, level, StillInside.CRUDE, "pot", 0, STOP_4))
+                .track(new Track.Level(new Track.Box(add(DRUM_1, DRUM_LO), add(DRUM_1, DRUM_HI)), fill1, FIRST_LIQUID, "drum1", 0, STOP_4))
+                .track(new Track.Level(new Track.Box(add(DRUM_2, DRUM_LO), add(DRUM_2, DRUM_HI)), fill2, SECOND_LIQUID, "drum2", 0, STOP_4))
+                // The pointer lights the fire, switches the stream at the tee, and puts the fire out; stop 4 shows the fire left on.
+                .track(new Track.Pointer(Track.Sign.RIGHT_CLICK, "", StillInside.door(shape), 0, LIT))
+                .track(new Track.Pointer(Track.Sign.RIGHT_CLICK, "", tee, STOP_2 - 3, STOP_2))
+                .track(new Track.Pointer(Track.Sign.RIGHT_CLICK, "", StillInside.door(shape), STOP_3 - 2, STOP_3))
+                .track(new Track.Label(top1, FIRST, STOP_1 - 4, STOP_1))
+                .track(new Track.Label(outlet, SPOUT, STOP_1 - 4, STOP_1))
+                .track(new Track.Label(top2, SECOND, STOP_2 - 4, STOP_2))
+                .track(new Track.Label(new double[]{px + r * toCamera[0], (pot[1] + pot[4]) / 2, pz + r * toCamera[2]}, StillInside.POT, STOP_4 - 3, STOP_4))
                 // The dots: heavy ones stay in the pot; light ones leave to the first drum, middle ones to the second after the cut.
-                .track(new Track.Dots(Track.Kind.HEAVY, liquid, 0, STOP_5, HEAVY, .06))
-                .track(new Track.Dots(Track.Kind.LIGHT, new Track.Line(toFirst, radius, liquid, LIGHT, lightGap, .12), lightFrom, STOP_5, LIGHT, SPEED))
-                .track(new Track.Dots(Track.Kind.MIDDLE, new Track.Line(toSecond, radius, liquid, MIDDLE_LEAVING, middleGap, .09), middleFrom, STOP_5, MIDDLE, SPEED))
+                .track(new Track.Dots(Track.Kind.HEAVY, liquid, 0, STOP_4, HEAVY, .06))
+                .track(new Track.Dots(Track.Kind.LIGHT, new Track.Line(toFirst, radius, liquid, LIGHT, lightGap, .12), lightFrom, STOP_4, LIGHT, SPEED))
+                .track(new Track.Dots(Track.Kind.MIDDLE, new Track.Line(toSecond, radius, liquid, MIDDLE_LEAVING, middleGap, .09), middleFrom, STOP_4, MIDDLE, SPEED))
                 .track(new Track.Dots(Track.Kind.MIDDLE, liquid, 0, middleFrom, MIDDLE, .09))
                 .track(new Track.Dots(Track.Kind.LIGHT, liquid, 0, lightFrom, LIGHT, .12))
                 // What each drum has collected: as many dots as the share it holds.
-                .track(new Track.Dots(Track.Kind.LIGHT, drumBox1, STOP_2, STOP_5, LIGHT, .05, t -> fill1.at(t) / DRUM_FULL))
-                .track(new Track.Dots(Track.Kind.MIDDLE, drumBox2, STOP_3, STOP_5, MIDDLE_LEAVING, .05, t -> fill2.at(t) / DRUM_FULL))
-                .stop(STOP_1).stop(STOP_2).stop(STOP_3).stop(STOP_4).stop(STOP_5)
+                .track(new Track.Dots(Track.Kind.LIGHT, drumBox1, STOP_1, STOP_4, LIGHT, .05, t -> fill1.at(t) / DRUM_FULL))
+                .track(new Track.Dots(Track.Kind.MIDDLE, drumBox2, STOP_2, STOP_4, MIDDLE_LEAVING, .05, t -> fill2.at(t) / DRUM_FULL))
+                .stop(STOP_1).stop(STOP_2).stop(STOP_3).stop(STOP_4)
                 .build();
     }
 
+    /** When the fire is lit and the camera leaves the pot for the cooler, s. */
+    static final double LIT = 4;
     /** The camera's scales at the pot, the condenser, the whole still and the drums, px/m at the design size. */
     static final double POT_SCALE = 46, COOLER_SCALE = 38, WHOLE_SCALE = 30, DRUM_SCALE = 62;
 

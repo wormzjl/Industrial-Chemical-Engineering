@@ -59,7 +59,7 @@ class GuideFileTest {
         for (var term : List.of("vapour", "condenser")) assertEquals("still/build", guide.terms().get(term), term);
         assertEquals("still/watch", guide.terms().get("distillate"));
         assertEquals("still/cut", guide.terms().get("cut"));
-        assertEquals("still/stop", guide.terms().get("boil_dry"));
+        assertNull(guide.terms().get("boil_dry"), "the run ends at the still's overheat cut, not dry");
         assertEquals("tutorial.icheme.guide.still.source", still.sourceKey());
         var lang = TutorialText.english();
         var charge = still.text(still.steps().get(1), lang::get);

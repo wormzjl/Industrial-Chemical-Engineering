@@ -21,8 +21,10 @@ class PotTemperatureCardTest {
         assertEquals(end, card.share(1), 1e-12, "the slider reaches the run's end");
         assertEquals(run.line("end", "pot_kelvin"), card.kelvin(card.share(1)), 1e-6, "the end's pot temperature");
         assertEquals(run.series("distilled").at(run.line("naphtha", "time")), card.cuts()[0], 1e-12, "the first cut: the end of the naphtha");
-        assertEquals(end, card.cuts()[1], 1e-12, "the second: the fire out");
-        assertTrue(card.cuts()[0] > 0 && card.cuts()[0] < end);
+        assertEquals(run.series("distilled").at(run.line("kerosene", "time")), card.cuts()[1], 1e-12, "the second: the fire out at the end of the kerosene");
+        assertTrue(card.cuts()[0] > 0 && card.cuts()[0] < card.cuts()[1] && card.cuts()[1] < end, "the curve runs on past the fire out to the run's end");
+        assertEquals(run.line("kerosene", "pot_kelvin"), card.kelvin(card.cuts()[1]), 1, "the fire out's temperature, the recording's");
+        assertTrue(card.kelvin(card.share(1)) <= PotTemperature.CEILING, "the scale holds the run's end");
         // The first cut's temperature is the one the guide's cut step holds the player to, within a degree.
         assertEquals(run.line("naphtha", "pot_kelvin"), card.kelvin(card.cuts()[0]), 1);
     }
