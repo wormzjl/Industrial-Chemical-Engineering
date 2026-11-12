@@ -287,3 +287,37 @@ Report `tmp/w4-still/reports/W4A_THIRD_FORM.md`; built, not committed yet.
 - Owner, 2026-11-12: "Keep notice". Trays that would settle stay one liquid with the notice; their temperatures
   read low there (about 1 K on the wet naphtha, 10 to 20 K under an entrainer top). No pot-still trigger on the
   head's temperature.
+
+## 15. W4 built; the open vessel's crossing fixed (2026-11-12)
+
+Reports `tmp/w4-still/reports/W4A_THIRD_FORM.md` and `W4_WASH_NO_BOIL.md`. Both diffs read by the orchestrator.
+
+- The column's third form, `2cf813421`. As section 14, plus: any failure of the iteration where a liquid of the
+  still settles answers the pot still with its notice (`StillColumn.POT_STILL`, `Split.notice`); the world's
+  status line and the sheet (`still.pot_still`, en_us only) show it. Measured:
+  - the head under its condensate's bubble point, the known error of one-liquid trays: 0.77 K on the wet naphtha,
+    11.9 to 15.9 K on the wash with 1e-5 to 1e-2 of hexane;
+  - the wet 46-compound crude (light ends in it, pot 16.9 C, condensate -15.5 C, vapour 1.6 % water): a pot still
+    with the notice after 5 iterations and 12 flashes. My expected cause was wrong: the oil layer (3.89) covers the
+    reflux (3); the failure is a one-liquid tray in the gap on a cold top;
+  - cost: the world asks one head solve a boiling pot every 5 s (`SOLVE_TICKS` 100), warm from its last profile,
+    cold after a pot-still answer. One wet solve: 8 ms on the wet naphtha, 156 to 299 ms on the crude (13 to 25 ms
+    a flash at 46 components). A list without water makes no flash.
+- The wash that never boiled, `9b1fc2b1f` (owner approved the diagnosis, section 13).
+  1. Expected: the pot reaches its bubble point, then boils about 0.27 mol/s.
+  2. What the code did: `FluidThermodynamics.crossing` took its slack branch (the PH equilibrium) only at or under
+     the sea-level ambient. An open vessel stands at its own ambient, which since the chimney batch (0.25.0) is
+     above 101,325 Pa below y = 63 (the rig's pot: 102,050.7 Pa). So it crossed on the taut branch, at its liquid's
+     own volume, where a gas has no room. Water in the same pot boiled 0.6 K late, pentane charged cold not at
+     all, the wash never. The engine itself was right (gas from 366.5 K at 1 atm). `main` has the defect.
+  3. Fix: an open vessel crosses on the slack branch at any pressure (`crossing`, `phaseCheck`,
+     `PassiveStepSolver.phaseCorrection`, `InventoryEquilibrium.Closure.open`). No new threshold.
+  - After: the wash gains its gas at 365.926 K (bubble point 365.921 K at the pot's ambient), releases
+    0.253 mol/s, follows its bubble point within 0.006 K; energy closes. Water boils at 373.30 K, cold pentane at
+    299.66 K. The pentane still: 6,909 flash calls against 6,920.
+  - Tests, filtered: StillRuntimeTest 8 (two new), ChimneyRuntimeTest, ChimneyTest, CoolingTowerTest,
+    EmptyNetworkTest, FloatingRoofsTest, NetworkPhaseEngineTest, OpenTankRuntimeTest, OpenTankTest,
+    PrecipitatedSolidsTest, RigidVesselTest: pass. The phase check runs on every node: the campaign's numbers can
+    move for open vessels below y = 63; the batch's final lane measures it.
+- Open from W4: the final lane's campaign; the translation of three en_us keys; no sheet carries a wash until the
+  network package holds ethanol (W6); the code guide's line for the crossing.
