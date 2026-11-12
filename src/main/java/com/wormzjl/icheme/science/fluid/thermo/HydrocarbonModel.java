@@ -179,6 +179,9 @@ public final class HydrocarbonModel {
         // The kernel part: the translated cubic and the ideal gas, without water's share.
         double v=values.molarVolume(),h=values.molarEnthalpy(),dvdt=values.volumeTemperatureDerivative(),dvdp=values.volumePressureDerivative();
         double cp=values.heatCapacity(),dhdp=values.enthalpyPressureDerivative(),raw=values.untranslatedVolume(),b=values.coVolume();
+        double attraction=values.attraction(),attractionT=values.attractionTemperatureDerivative();
+        double[] attractionN=new double[n];
+        for(int i=0;i<n;i++)attractionN[i]=values.attractionAmountDerivative(i)/total;
         double[] partialVolume=values.partialMolarVolumesView().clone();
         double[] logPhi=java.util.Arrays.copyOf(values.logFugacityCoefficientsView(),n);
         TangentScratch scratch=tangentScratch.get();
@@ -200,7 +203,7 @@ public final class HydrocarbonModel {
             for(int j=0;j<n;j++)logPhiN[i][j]=row[j]/total;
             if(!Double.isFinite(logPhiT[i])||!Double.isFinite(logPhiP[i])||!Double.isFinite(partialEnthalpy[i]))throw new IllegalArgumentException("Nonfinite chemical-potential derivative");
         }
-        return new Tangent(this,base,t,p,kernel.clone(),total,v,h,raw,b,total*dvdt,total*dvdp,total*cp,total*dhdp,dvdt,dvdp,
+        return new Tangent(this,base,t,p,kernel.clone(),total,v,h,raw,b,total*dvdt,total*dvdp,total*cp,total*dhdp,dvdt,dvdp,attraction,attractionT,attractionN,
                 partialVolume,partialEnthalpy,rawPartialVolume,coVolumes,logPhi,logPhiT,logPhiP,logPhiN);
     }
 
@@ -216,21 +219,25 @@ public final class HydrocarbonModel {
      * ({@code V = N0 v0 + N0 v_T dT + N0 v_P dP + sum vbar_i dn_i}, the enthalpy the same with {@code c_p}, {@code h_P}
      * and {@code hbar_i}), {@code ln phi} from its three derivative blocks, and water's share, a closed form with no
      * kernel call, exactly at the nearby point's temperature, pressure, water fraction, untranslated volume and
-     * co-volume. {@code dv/dP} and the vapour-like flag are the base's. At the base point itself the phase is the base
-     * phase, bit for bit.
+     * co-volume. {@code dv/dP} is to first order too: the cubic's closed form {@code 1/(dP/dv)(T, v, a, b)} at the nearby
+     * point's temperature, untranslated volume, co-volume and an attraction parameter linear in the step, less its value
+     * at the base, added to the base's (a row at a velocity cap reads the acoustic bound, whose compliance is
+     * {@code -n dv/dP}: in a node holding gas beside liquid that bound stands near 30 m/s, under the 100 m/s cap). The
+     * vapour-like flag is the base's. At the base point itself the phase is the base phase, bit for bit.
      */
     public static final class Tangent {
         private final HydrocarbonModel model;
         private final Phase base;
-        private final double t0,p0,total,v0,h0,raw0,b0,volumeT,volumeP,enthalpyT,enthalpyP,dvdt,dvdp;
-        private final double[] n0,partialVolume,partialEnthalpy,rawPartialVolume,coVolumes,logPhi,logPhiT,logPhiP;
+        private final double t0,p0,total,v0,h0,raw0,b0,volumeT,volumeP,enthalpyT,enthalpyP,dvdt,dvdp,attraction,attractionT;
+        private final double[] n0,attractionN,partialVolume,partialEnthalpy,rawPartialVolume,coVolumes,logPhi,logPhiT,logPhiP;
         private final double[][] logPhiN;
         private Tangent(HydrocarbonModel model,Phase base,double t0,double p0,double[] n0,double total,double v0,double h0,double raw0,double b0,
                         double volumeT,double volumeP,double enthalpyT,double enthalpyP,double dvdt,double dvdp,
-                        double[] partialVolume,double[] partialEnthalpy,double[] rawPartialVolume,double[] coVolumes,
+                        double attraction,double attractionT,double[] attractionN,double[] partialVolume,double[] partialEnthalpy,double[] rawPartialVolume,double[] coVolumes,
                         double[] logPhi,double[] logPhiT,double[] logPhiP,double[][] logPhiN) {
             this.model=model;this.base=base;this.t0=t0;this.p0=p0;this.n0=n0;this.total=total;this.v0=v0;this.h0=h0;this.raw0=raw0;this.b0=b0;
             this.volumeT=volumeT;this.volumeP=volumeP;this.enthalpyT=enthalpyT;this.enthalpyP=enthalpyP;this.dvdt=dvdt;this.dvdp=dvdp;
+            this.attraction=attraction;this.attractionT=attractionT;this.attractionN=attractionN;
             this.partialVolume=partialVolume;this.partialEnthalpy=partialEnthalpy;this.rawPartialVolume=rawPartialVolume;this.coVolumes=coVolumes;
             this.logPhi=logPhi;this.logPhiT=logPhiT;this.logPhiP=logPhiP;this.logPhiN=logPhiN;
         }
@@ -240,6 +247,9 @@ public final class HydrocarbonModel {
         public double pressure() { return p0; }
         /** The kernel part of the base's molar volume and enthalpy (the translated cubic and the ideal gas, no share). */
         public double kernelVolume() { return v0; }
+        /** The kernel part of the base's {@code dv/dP}, and the closed form {@link #at} differences, at the base: the same number to rounding. */
+        public double kernelPressureSlope() { return dvdp; }
+        public double closedPressureSlope() { return 1/TranslatedPengRobinson.Values.pressureVolumeDerivative(t0,raw0,attraction,b0); }
         public double kernelEnthalpy() { return h0; }
         /** Partial molar volume and enthalpy of kernel component {@code i} (kernel part). */
         public double partialMolarVolume(int i) { return partialVolume[i]; }
@@ -266,22 +276,29 @@ public final class HydrocarbonModel {
             double[] out=new double[amounts.length];
             for(int i=0;i<n;i++)out[i]=logPhi[i]+logPhiT[i]*dT+logPhiP[i]*dP;
             // Extensive increments less the base's molar value times the amount's: exactly zero at the base point.
-            double dv=volumeT*dT+volumeP*dP,dh=enthalpyT*dT+enthalpyP*dP,draw=dv,db=0;
+            double dv=volumeT*dT+volumeP*dP,dh=enthalpyT*dT+enthalpyP*dP,draw=dv,db=0,da=attractionT*dT;
             for(int j=0;j<n;j++) {
                 double dn=amounts[j]-n0[j];
                 if(dn==0)continue;
                 dv+=(partialVolume[j]-v0)*dn;dh+=(partialEnthalpy[j]-h0)*dn;draw+=(rawPartialVolume[j]-raw0)*dn;db+=(coVolumes[j]-b0)*dn;
+                da+=attractionN[j]*dn;
                 for(int i=0;i<n;i++)out[i]+=logPhiN[i][j]*dn;
             }
-            double v=v0+dv/sum,h=h0+dh/sum;
+            double v=v0+dv/sum,h=h0+dh/sum,raw=raw0+draw/sum,b=b0+db/sum;
+            // dv/dP of the kernel part: the cubic's closed form at the nearby point, less its value at the base (zero there).
+            double slope=dvdp;
+            if(dT!=0||dP!=0||da!=0||raw!=raw0||b!=b0)slope+=1/TranslatedPengRobinson.Values.pressureVolumeDerivative(t,raw,attraction+da,b)
+                    -1/TranslatedPengRobinson.Values.pressureVolumeDerivative(t0,raw0,attraction,b0);
+            double phaseSlope=slope;
             if(model.water>=0&&amounts[model.water]>0) {
                 double[] share=new double[WaterShare.SIZE];
-                model.share.phase(t,p,amounts[model.water]/sum,raw0+draw/sum,b0+db/sum,dvdt,dvdp,model.shareScratch.get(),share);
-                v+=share[WaterShare.V];h+=share[WaterShare.H];
+                model.share.phase(t,p,amounts[model.water]/sum,raw,b,dvdt,slope,model.shareScratch.get(),share);
+                v+=share[WaterShare.V];h+=share[WaterShare.H];phaseSlope+=share[WaterShare.V_P];
             }
             if(n<amounts.length)out[n]=Double.NaN;
             if(!(v>0)||!Double.isFinite(h))throw new IllegalArgumentException("Invalid translated phase properties");
-            return new Phase(v,h,h-p*v,base.volumePressureDerivative(),out,base.vaporLike());
+            if(!(phaseSlope<0))throw new IllegalArgumentException("Invalid translated phase properties");
+            return new Phase(v,h,h-p*v,phaseSlope,out,base.vaporLike());
         }
     }
 

@@ -77,6 +77,8 @@ class HydrocarbonTangentTest {
                 for (int j = 0; j < n; j++) sum += c.amounts()[j] * tangent.logFugacityAmountDerivative(i, j);
                 assertEquals(0.0, sum, 1e-10, c.name() + ": sum_j n_j d ln phi_" + i + " / d n_j = 0");
             }
+            // The closed form whose difference carries dv/dP beside the base is the base's own dv/dP there.
+            assertEquals(tangent.kernelPressureSlope(), tangent.closedPressureSlope(), 1e-12 * Math.abs(tangent.kernelPressureSlope()), c.name() + ": dv/dP");
             // The base point: the exact phase, with water's share where the phase holds water.
             var same = tangent.at(c.t(), c.p(), c.amounts());
             for (var phase : List.of(tangent.base(), same)) {
@@ -167,6 +169,7 @@ class HydrocarbonTangentTest {
                     double error = Math.abs(near.molarVolume() - exact.molarVolume()) / exact.molarVolume();
                     error = Math.max(error, Math.abs(near.molarEnthalpy() - exact.molarEnthalpy()) / Math.max(Math.abs(exact.molarEnthalpy()), R * t));
                     for (int i = 0; i < n; i++) error = Math.max(error, Math.abs(near.logFugacityView()[i] - exact.logFugacityView()[i]));
+                    error = Math.max(error, Math.abs(near.volumePressureDerivative() - exact.volumePressureDerivative()) / Math.abs(exact.volumePressureDerivative()));
                     errors[s] = error;
                     worst[s] = Math.max(worst[s], error);
                 }

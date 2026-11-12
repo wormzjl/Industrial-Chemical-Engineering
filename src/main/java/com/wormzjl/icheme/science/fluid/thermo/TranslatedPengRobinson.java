@@ -321,6 +321,19 @@ public final class TranslatedPengRobinson {
         /** The root's untranslated molar volume, m3/mol, and the mixture's co-volume (water's share reads their ratio). */
         public double untranslatedVolume(){return untranslatedVolume;}
         public double coVolume(){return coVolume;}
+        /** The mixture's attraction parameter and its temperature derivative at the evaluated composition. */
+        public double attraction(){return attraction;}
+        public double attractionTemperatureDerivative(){return attractionTemperatureDerivative;}
+        /** {@code N da_mix/dn_i} of the evaluated mixture: {@code 2 (S_i - a_mix)}, the rows the partial molar volumes read. */
+        public double attractionAmountDerivative(int i) {
+            if(source.generation!=generation)throw new IllegalStateException("The workspace was evaluated again since these values");
+            return 2*(source.mixture.attractionRowsView()[i]-attraction);
+        }
+        /** {@code (dP/dv)_T} of the cubic at an untranslated volume, attraction and co-volume: the closed form of {@code fill}. */
+        public static double pressureVolumeDerivative(double temperature,double v,double a,double b) {
+            double denominator=v*v+2*b*v-b*b;
+            return -R*temperature/((v-b)*(v-b))+2*a*(v+b)/(denominator*denominator);
+        }
         private Phase phase() {
             secondOrder();
             return new Phase(molarVolume,molarEnthalpy,molarInternalEnergy,volumeTemperatureDerivative,

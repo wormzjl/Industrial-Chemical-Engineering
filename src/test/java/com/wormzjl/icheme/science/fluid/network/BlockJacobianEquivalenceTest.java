@@ -81,13 +81,17 @@ class BlockJacobianEquivalenceTest {
      * hydrogen sulfide and methyl mercaptan; {@code crystal} puts 5 kg of the model's ice in the first node.
      */
     private PassiveNetwork mixtureChain(FluidThermodynamics view,boolean water,boolean polar,boolean crystal) {
+        return mixtureChain(view,water,polar,crystal,false);
+    }
+    /** {@code capped}: 8 bar in the first node and 2 m pipes, so every flow stands at its velocity cap. */
+    private PassiveNetwork mixtureChain(FluidThermodynamics view,boolean water,boolean polar,boolean crystal,boolean capped) {
         var ids=new ArrayList<>(DRY);var amounts=new ArrayList<Double>();
         for(double m:DRY_MOLES)amounts.add(m);
         if(polar){ids.add("HydrogenSulfide");amounts.add(0.04);ids.add("MethylMercaptan");amounts.add(0.02);}
         if(water){ids.add("Water");amounts.add(0.33);}
         var nodes=new ArrayList<PassiveNetwork.Reservoir>();var pipes=new ArrayList<PassiveNetwork.Pipe>();
         for(int i=0;i<6;i++) {
-            double pressure=150000+3000*DeterministicMath.cos(i*0.9),temperature=320+6*DeterministicMath.cos(i*1.3);
+            double pressure=capped?(i==0?800000:150000-10000*i):150000+3000*DeterministicMath.cos(i*0.9),temperature=320+6*DeterministicMath.cos(i*1.3);
             double[] n=new double[view.componentCount()];
             for(int c=0;c<ids.size();c++)n[view.components().indexOf(ids.get(c))]=amounts.get(c);
             var unit=view.flashTP(temperature,pressure,n,()->{});
@@ -98,7 +102,7 @@ class BlockJacobianEquivalenceTest {
                 state=state.withSolids(new SolidInventory(List.of(new SolidInventory.Population(ice.material(),ParticleSize.micrometres("100"),5))));
             }
             nodes.add(new PassiveNetwork.Reservoir(i+1,0,state));
-            if(i>0)pipes.add(new PassiveNetwork.Pipe(i,i-1,i,new PipeResistance.Geometry(100,.05,.000045,0)));
+            if(i>0)pipes.add(new PassiveNetwork.Pipe(i,i-1,i,new PipeResistance.Geometry(capped?2:100,.05,.000045,0)));
         }
         return new PassiveNetwork(nodes,pipes);
     }
@@ -123,6 +127,11 @@ class BlockJacobianEquivalenceTest {
     @Test void theBlockSweepReproducesTheColumnDifferencesOfADryChain() {
         var view=model.on(list(false),false);
         assertTrue(compare(view,mixtureChain(view,false,false,false),.05,"dry chain").tangentPhases()>0);
+    }
+
+    @Test void theBlockSweepReproducesTheColumnDifferencesOfAChainAtItsVelocityCap() {
+        var view=model.on(list(false),false);
+        assertTrue(compare(view,mixtureChain(view,false,false,false,true),.05,"dry chain at its velocity cap").tangentPhases()>0);
     }
 
     @Test void theBlockSweepReproducesTheColumnDifferencesOfAWetChain() {
