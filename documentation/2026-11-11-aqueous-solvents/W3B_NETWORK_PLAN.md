@@ -677,3 +677,9 @@ Diagnosed by the sub-thread from stored results, the code and two probes; nothin
 Samples: the naphtha's bubble pressure 2.299 to 2.3186 bar is the derived pairs' (re-pinned with its cause); H-101's 73.06 to 73.0525 MW is checked against the water datum by arithmetic; `crude_unit` re-records with the final lane.
 
 The campaign for the settled form starts now: none of A to D is solver code and it loads no save.
+
+Correction to A's recommendation (sub-thread, from the code): one appended field is not exact. The old fields are sums over the two liquids, and a sum less one part is not the other part to the bit, so the oil slot would come back up to one unit in the last place off and the facts' bit-exact check would report the vessel. An empty field is also ambiguous (one oil-like liquid with dissolved water has no aqueous phase). The recommendation is now **two appended fields, the oil slot's and the aqueous slot's amounts**; the four old fields stay written as the sums they mean; the reader branches on the row's schema (below 22: the meaning of before W3b; 22 and later: the two fields are the slots). Facts schema 21 to 22, a corpus image `compat/fluid/schema-22`, and compat cases for water under nitrogen and for oil over water. Rows this branch wrote at 21 were never shipped and read with the old meaning.
+
+B, from the code: the sheet's pump and tank rules both read `FlowThermo.bubblePressure`, the pressure at which the stream's whole liquid first holds vapour, dissolved gas included. The network's suction rule (section 17) is not callable from the sheet as it stands.
+
+The campaign started at 11:21 on c5909be95, alone.
