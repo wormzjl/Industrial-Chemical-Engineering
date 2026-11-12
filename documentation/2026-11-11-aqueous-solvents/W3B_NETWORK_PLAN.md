@@ -734,3 +734,13 @@ re-pinned: no water passes it).
    out dry; `filled` is the one rule for those. No amount threshold is added. Gate cases: a slack tank on water
    (358), a mixture (575), and an emptied rigid tank as a test only: a rigid wall's bag is its capacity, so a
    rigid vessel with any residue never "holds nothing"; whether that is a defect is a rule, kept apart.
+
+Follow-up, the same day (`tmp/w3b-network/reports/w3b-seed358-gate-report.md`). The minimised world does not
+reproduce the hold: a head gives a flow of exactly zero (1 ulp to 1e-3 Pa) or at least 6e-22 mol/s, never the
+replay's 2.8e-29 mol/s, which needs the seed's junction buffers and history. The guard test
+(`EmptyNetworkTest.aDryVesselStaysDryUntilAMillilitreArrives`) passes on HEAD because it reads the step's end,
+where the tank is dry either way. Decision: the fix goes in on the code reading, proved at the pass instead of at
+the hold: a `SolverDiagnostics` counter where `phaseAppeared` answers yes (as `traceFoldPasses`), which the
+trickle case asserts stays 0. Predicted: at least 1 per trickle step on HEAD, 0 after. If it is 0 on HEAD the
+reading is wrong and nothing is fixed. 358 and 575 are measured by the final lane's campaign. The rigid vessel's
+"holds nothing" stays an open rule question.
