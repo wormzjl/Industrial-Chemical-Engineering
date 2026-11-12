@@ -220,6 +220,8 @@ public final class IChemE {
         // ProcessSolveServices is thread-confined to the logical server. Pin every lifecycle edge to the GAME bus.
         IEventBus gameEventBus = NeoForge.EVENT_BUS;
         gameEventBus.addListener(com.wormzjl.icheme.material.MaterialReloadListener::register);
+        // After the materials: the conversion rules resolve their compounds on the catalog that reload publishes.
+        gameEventBus.addListener(com.wormzjl.icheme.material.ConversionReloadListener::register);
         gameEventBus.addListener(IChemE::onServerStarting);
         com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.listen(com.wormzjl.icheme.runtime.assembly.AssemblyService::edited);
         gameEventBus.addListener(IChemE::onServerTickPost);

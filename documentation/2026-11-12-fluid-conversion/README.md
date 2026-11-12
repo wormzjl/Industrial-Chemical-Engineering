@@ -1,6 +1,6 @@
 # 2026-11-12 fluid conversion
 
-Status: Planned. The owner's plan is reviewed, the open points are decided and the build plan is written; no implementation has started. Branch `claude/fluid-conversion-plan-review-786fbc`, cut from `main` at `ccde84295` (0.27.1).
+Status: In progress since 2026-11-12. W1 (rules) is built on branch `claude/fluid-conversion-build-656f98`; W2 (`Converters`, facts schema 24) in progress; W3 to W7 not started.
 
 Purpose: a converter between standard Forge (NeoForge) fluids and IChemE fluids.
 
@@ -19,6 +19,7 @@ Add a fluid conversion system between standard forge fluid and IChemE fluid:
 
 - 2026-11-12: batch opened. The plan reviewed for what it lacks (FLUID_CONVERSION_PLAN_REVIEW.md): 25 gaps in six groups, seven of them owner decisions. Documents only, no test run.
 - 2026-11-12: the owner decided the seven points (plan section 1): open tank; forward rules few and limited, most use IChemE to Forge; liquids plus gas rules, gas on a closed variant only; rate in process L/s; balance by fill fraction with a deadband; a constructor kind without FE; datapack JSON only for KubeJS. FLUID_CONVERSION_PLAN.md written. Documents only, no test run.
+- 2026-11-12: W1, the rules: `science/fluid/conversion/` (`ConversionRule` with typed refusals, `ConversionRules` by priority then id with the 2 % hysteresis on the drawn phase, `ConversionLaws` for V = m / rho and the forward litre at the flash's liquid density, `ConversionRuntime`), `material/ConversionReloadListener` registered after the material listener; `JsonFields.object` and `revision` made public. A rule with `to_forge` must name one fluid, not a tag (refusal TAG_TO_FORGE). Ran `ConversionRuleTest` only: 5 of 5 pass.
 
 ## Documents
 
@@ -28,10 +29,12 @@ Add a fluid conversion system between standard forge fluid and IChemE fluid:
 
 ## Code areas
 
-None yet.
+- `src/main/java/com/wormzjl/icheme/science/fluid/conversion/`: rules, matching, volume laws.
+- `src/main/java/com/wormzjl/icheme/material/ConversionReloadListener.java`: `data/<namespace>/icheme/fluid_conversion/*.json`.
+- Fixture rules: `src/test/resources/fluid_conversion/fixture/`.
 
 ## Open items
 
 - The Forge fluid survey (review Q5, plan W6) and the bundled rule list, for the owner's check.
-- The build, W1 to W7; not started.
+- The build, W3 to W7; not started.
 - The simulator catalog class that AGENTS.md names `FlowsheetCatalog` was not found by that name in `src/main/java` at `ccde84295`; locate it in W3.

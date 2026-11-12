@@ -1,0 +1,7 @@
+{
+  "revision": "1",
+  "priority": 10,
+  "fluid": "test:hot_water",
+  "phase": "liquid",
+  "to_forge": {"basis": "mass", "components": {"Water": {"min": 0.99}}, "temperature": {"min": 350, "max": 400}}
+}

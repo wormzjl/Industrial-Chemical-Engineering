@@ -1,0 +1,6 @@
+{
+  "revision": "2",
+  "fluid": "#c:crude_oil",
+  "phase": "liquid",
+  "to_icheme": {"preset": "medium_crude"}
+}
