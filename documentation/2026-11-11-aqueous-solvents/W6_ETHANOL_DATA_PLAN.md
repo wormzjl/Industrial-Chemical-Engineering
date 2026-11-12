@@ -179,3 +179,45 @@ ethanol before CO2 would move CO2's index and fix only the helper. Conditions se
 - Named before the commit: what in production reads the package record's revision (`AqueousSolventDataTest`
   guarded it in W3b; `PilotCryogenicCatalogTest` pins an identity string with it). A saved identity that compares
   it must show no restatement for an image saved at r3 (G7).
+
+## 13. W6b committed; W6c's stop on the load time (2026-11-12)
+
+W6b `691552f3f`: ethanol is the last compound of `icheme:refinery` (r4), with its preset and name. The six
+conditions of section 12 are met: the 118 pass with no number re-pinned; the 20 failing classes pass (212 tests,
+34.2 s against 36.7 s on main); every corpus image loads, its still accounts read by id. The package record's
+revision is read only by a GUI label and a placeholder: no saved identity, no learned start. 96 test files still
+build networks on the whole list (production narrows each island); left, since their numbers did not move.
+Re-pins: counts and identity strings, with the cause "W6: ethanol joins icheme:refinery"; one stale water pin
+(r3, r4 since e1b9a3dd0).
+
+W6c's gates (uncommitted at the stop), measured:
+
+| Gate | Plan | Measured |
+|---|---|---|
+| G2 pure ethanol | 351.4 K within 0.5 K; 795.5 kg/m3 | 351.698 K; 795.459 kg/m3 |
+| G3 wash | equal to the pilot within 1e-9 | 92.574318 C, 0.256679: equal |
+| G4 heating value | 1277.5 kJ/mol within 0.5 % | 1277.512 kJ/mol; C2H6O 46.068 g/mol |
+| G5 burner | heat = rate x heating value | 6275 kW at 27.731 MJ/kg |
+| G6 preset | one compound at 1.0 | yes |
+| G8 no-ethanol cost | counters equal | identical (1725 kernel evaluations) |
+| G9 load | report; stop above +0.5 s | fits 249 to 291; 0.35 to 0.45 s before, 1.52 to 1.75 s after: +1.2 s |
+| G10 still, sheet | 92.57 C; 0.8075 | 365.9265 K, the pilot's exactly; example STEADY at 0.80747 |
+
+G9 is over its bound. What the code does: ethanol's 32 activity fits take 1.40 s (44 ms each; 58 to 80 ms with
+the aromatics, butadiene and water). Water's 31 take 0.34 s (11 ms each). The cause, from
+`DerivedPairs.Context.shape`: where the group model has one liquid, each trial of the fit also scans 99 points
+for a false liquid split (`falls`, `SCAN_POINTS`), on top of the 15 grid points: 114 evaluations a trial against
+15. Water with a hydrocarbon has two liquids in the group model and skips the scan. The cost is paid once per
+catalog: at world start, on `/reload`, and at the client's first simulator open (the render thread). A list
+without ethanol pays nothing.
+
+Decision (main thread): W6c is committed as it stands and W6d follows; W6 is data, and the fit and the load
+path stay. The plan's estimate (section 4, "about 45 more group fits", a fraction of a second) was wrong by the
+scan's cost. Each later solvent compound would add about as much, so the load needs its own change. Proposal
+for the owner, in this order:
+- a. Fit the activity pairs of a list in parallel before the assembly (`DerivedPairs.derive`: the fits are pure
+  and kept by pair in `Cache`). No number moves, no revision. Expected on this machine: 1.7 s to about 0.3 s.
+- b. Derive the whole list's pairs only when something flashes on it (production flashes on views). A larger
+  change to the load path; only if more solvents make a still too slow.
+- c. Cut the scan (fit without the penalty first, add it only where the optimum splits). It moves the fitted
+  numbers in the last digits: a revision of the derivation and re-pins. Not recommended now.
