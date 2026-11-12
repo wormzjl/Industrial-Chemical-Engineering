@@ -1,15 +1,15 @@
 {
-  "parent": "icheme:tutorial/building/parts",
+  "parent": "icheme:tutorial/start/steam",
   "display": {
     "icon": {
       "id": "icheme:field_guide",
       "count": 1
     },
     "title": {
-      "translate": "tutorial.icheme.advancement.start.feed"
+      "translate": "tutorial.icheme.advancement.start.tanks"
     },
     "description": {
-      "translate": "tutorial.icheme.advancement.start.feed.description"
+      "translate": "tutorial.icheme.advancement.start.tanks.description"
     },
     "show_toast": false,
     "announce_to_chat": false
@@ -18,7 +18,7 @@
     "done": {
       "trigger": "icheme:guide_step",
       "conditions": {
-        "step": "start/feed"
+        "step": "start/tanks"
       }
     }
   },

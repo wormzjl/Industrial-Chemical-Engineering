@@ -103,6 +103,20 @@ class GuideCoverageTest {
                     assertTrue(reported.contains(chapter.id(step)), chapter.id(step) + ": a client step no screen reports never completes");
     }
 
+    /**
+     * P5 stage B corrections: the start-up chapter asks for every supply before On, one thing a step, each step opening the
+     * page of the kind it builds; the tanks come before On, since a tower with no room for a product stands at 0 %.
+     */
+    @Test
+    void theStartUpChapterAsksForEverySupplyBeforeOn() {
+        var start = GuideFile.load().chapters().stream().filter(c -> c.id().equals("start")).findFirst().orElseThrow();
+        var ids = start.steps().stream().map(Guide.Step::id).toList();
+        assertEquals(List.of("crude", "fuel", "power", "cooling", "steam", "tanks"), ids.subList(0, ids.indexOf("go")), "the supplies, then On");
+        for (var step : start.steps().subList(0, ids.indexOf("go")))
+            assertInstanceOf(Guide.Page.class, step.media(), "start/" + step.id() + " opens the page of the kind it builds");
+        assertEquals("products", ids.get(ids.size() - 2), "the first product leaving is the last check");
+    }
+
     @Test
     void theStepsChainInGuideOrderAndTheStillFollowsTheLastCrudeStep() throws IOException {
         var guide = GuideFile.load();

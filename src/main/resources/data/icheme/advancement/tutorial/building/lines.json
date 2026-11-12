@@ -1,5 +1,5 @@
 {
-  "parent": "icheme:tutorial/building/top",
+  "parent": "icheme:tutorial/building/loop",
   "display": {
     "icon": {
       "id": "icheme:field_guide",

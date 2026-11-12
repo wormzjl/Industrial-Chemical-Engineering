@@ -117,6 +117,10 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
   `assembly_state` and `column_state`, the assembly screen's two tours; chapter 4's heat step names H-101. Proofs:
   SteamHeaterCoilTest, SmallCrudeUnitTest, SmallUnitRecordingTest pass; TutorialUnitGameTests compiled, its first run is
   the final lane's. Quick suite 18 classes, 85 tests pass after six gate fixes. Commits e5b1c6ac9 to the docs commit.
+- 2026-11-13: P5 stage B corrections: one thing to build a step (`building` adds pumps and loop; `start` crude, fuel,
+  power, cooling, steam, tanks, each opening its kind's page), the tanks before On, an end that names only what runs
+  (no vacuum tower). Gate: the supplies come before On. GuideFile, GuideCoverage (11), GuidePage, TutorialText, CardView,
+  DrawCall tests pass, run once with `--tests`.
 
 ## Code areas (proposed)
 

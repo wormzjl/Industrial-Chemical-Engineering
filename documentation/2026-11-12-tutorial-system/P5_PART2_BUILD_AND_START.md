@@ -22,11 +22,11 @@ leave; the line names any limit.
 
 ## What was built
 
-- **Chapters** (8 chapter keys fit the 320 by 240 window unscrolled, so two): `building` site (film `unit_build`,
-  `design_sent`), tower (`equipment_built` COLUMN), top (`equipment_built` DRUM: "loop" merged in, since a pump or a
-  cooler cannot be told from the crude's), lines (read; the Structure tour also reports it), parts (`assembly_state`
-  COMPLETE). `start` feed, fire, water (read: the server sends nothing checkable before Start), go (`column_state`
-  started), limit (card `limit`, `column_state` RUNNING), products (`column_state` a product leaving), end (read).
+- **Chapters** (8 keys fit the 320 by 240 window; one thing to build a step): `building` site (film `unit_build`,
+  `design_sent`), tower (COLUMN built), top (the condenser and drum; DRUM built), pumps (driver's page), loop (exchanger's
+  page), lines (read; the Structure tour reports it too), parts (`assembly_state` COMPLETE). `start` crude, fuel, power,
+  cooling, steam, tanks (each opens its kind's page; the server sends nothing checkable before On), go (`column_state`
+  started), limit (card, RUNNING), products (a product leaving), end (names templates and the controller box, not vacuum).
 - **Criteria** `assembly_state`, `column_state` (`AssemblyCondition`, `ColumnCondition`): fired where the assembly
   screen's view is sent (`AssemblyNetwork` host send, a read). No converter, heat-side or tank criteria were needed.
 - **Film** `unit_build` (5 stops: tower; drum and overhead line; the crude's way with the loop cooler; H-102 and its
