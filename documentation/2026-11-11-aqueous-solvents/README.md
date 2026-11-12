@@ -1,6 +1,6 @@
 # Aqueous solvents
 
-Status: **In progress since 2026-11-11**. Branch `claude/ethanol-compound-matrix-4b318d`, cut from main `ff6f6892f` (0.26.0).
+Status: **Implemented 2026-11-13 (0.29.0)**. Branch `claude/ethanol-compound-matrix-4b318d`, cut from main `ff6f6892f` (0.26.0).
 
 ## Scope
 
@@ -86,6 +86,7 @@ Owner, 2026-11-11: add ethanol to the compound matrix, identify what it affects 
 - 2026-11-12: kernel cost Part A, sub-thread (Opus high), on the owner's "optimize": a kernel evaluation carries the caller's support. Commits `2b43a4427` (kernel), `6b9fa2ef5` (gate: 98,880 outputs bit-equal on 5 supports), `ce6d31ffc` (engine callers), `d009783aa` (network callers). Owner option A: a node carries its amounts plus what can reach it. Probe: water and nitrogen of 47 0.18 / 0.29 µs (was 3.8 / 17.4); all 47 6.8 / 34.8 (was 6.2 / 35.8); without water 5.7 / 28.2 (was 4.8 / 24.6). NaN-switch audit: 60 engine tests and 79 network and engine tests, no reader outside the support. 121 tests 0 failed; chain-100 exact 0. Pump test (shortened in `e8a25bd2e`): 2.23 s. Part B not started ([KERNEL_COST_PLAN.md](KERNEL_COST_PLAN.md), Result).
 - 2026-11-12: kernel cost Part B, sub-thread (Opus high), owner "Part B first": B1 `59c3c8a34` (the excess cross terms form each value once, on the curvature's upper triangle; dump of every output byte-identical) and B2 `41c3b448e` (reciprocals in the composition derivatives; only the dn block moves, 8.1e-11 elementwise on absent-absent cross terms, 9.9e-15 of the row: owner "6% is a gain anyway" waived the 1e-12 rule). 121 tests 0 failed, NaN audit 79 tests 0 failed, chain-100 exact 0. Dense derivatives 43.15 -> 32.46 -> 30.43 µs (long form); water + nitrogen 0.18 / 0.30 µs, without water 5.9 / 25.3 µs ([KERNEL_COST_PLAN.md](KERNEL_COST_PLAN.md), Result (Part B)).
 - 2026-11-12/13: third final lane, sub-thread (Opus), on the owner's "run changed only then merge": `lane.sh head` on `1b784f1f2`, outputs `tmp/final-lane-3/head/`. 3037 tests, 1 failure: `HoldClassWorldsTest.aResidueIsBookedWithoutAClosure` held on the wall deadline; one replay alone (parent's word, AGENTS.md wall-clock rule) passes. chain-100 exact 0; GameTests 96 of 96; junction counters identical; campaign clean 991, 994, 1000, refusals 0, no new budget-class hold; cold 431 is F (wall deadline at tick 3085, past the old cycle). [FINAL_LANE_3_REVIEW.md](FINAL_LANE_3_REVIEW.md).
+- 2026-11-13: owner "run changed only then merge", "merge". Run results are format 4 (`94278e90a`); merge preparation for the kernel work (`1b784f1f2`, subagent); third final lane (`6c631a863`, [FINAL_LANE_3_REVIEW.md](FINAL_LANE_3_REVIEW.md)): 3037 tests, one wall-deadline hold under load that passes alone, chain-100 exact 0, GameTests 96 of 96, campaign clean 991, 994, 1000, no new budget-class hold. Version 0.29.0: the CHANGELOG entry under `[0.29.0] - 2026-11-13`, the index row Implemented. Merged to main, not pushed. Open after the merge: cold seed 431 holds on the wall budget past its old cycle (not replayed); the dense crude worlds cost more than on main (`HoldClassWorldsTest.aResidueIsBookedWithoutAClosure`); not checked in game.
 
 ## Tools
 
