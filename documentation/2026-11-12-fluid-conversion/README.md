@@ -38,6 +38,7 @@ Add a fluid conversion system between standard forge fluid and IChemE fluid:
 - 2026-11-12, merge preparation 4, CHANGELOG (`24e4ab345`): Added and Changed under [Unreleased].
 - 2026-11-12, merge preparation 5, the translation commit (`b0ce9d773`): 89 keys in zh_cn, fr_fr, es_es, ja_jp; alarm words in English. `check.js` OK; `LanguageFilesTest` 2 pass; `UnitTextTest` failed on the fr and es held line (over 180 px), shortened, then pass.
 - 2026-11-12, merge preparation 6, the documents: MERGE_REVIEW.md, this README, `tools/INDEX.md`.
+- 2026-11-12, the final lane (`693576129`, FINAL_LANE_REVIEW.md), once on `9435b480a`: references identical to the 0.27.1 lane, GameTests 96 pass, campaign clean 991/990/1000 with no new, fixed or moved holds; 3,096 tests, 1 failure: `ConstructorColumnTest`'s Vessels key list predated the converter kinds (the model commit `4d72a0cba` did not run this class). Fixed by appending the two keys (test only), then `ConstructorColumnTest` alone: 12 pass. No second lane.
 
 ## Documents
 

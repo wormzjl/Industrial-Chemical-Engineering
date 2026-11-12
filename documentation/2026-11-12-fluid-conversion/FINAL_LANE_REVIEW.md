@@ -43,6 +43,10 @@ All 96 required tests pass, `ConverterGameTests` among them. They were due becau
 - Every seed's line (end tick, holds, classes, island statuses) is identical to the base in both random distributions. One hold detail differs: seed 431's second HELD line reads "wall deadline" where the base read "Newton iteration limit", at the same tick and in the same class (e). It is a wall-clock budget hold of a seed that already held, not a new hold, so it is not replayed (AGENTS.md).
 - The Newton totals differ by 0.02 % (cold) and 0.08 % (bundled) while every seed's result is the same. They count work that the wall-clock budgets cut, for example seed 431's last attempt. The base lane against its own baseline, `campaign4`, moved by similar amounts (that batch also changed solver code, so this is no proof of noise alone).
 
+## Finding 1, fixed after the lane
+
+- The cause: the model commit `4d72a0cba` added the two kinds to the Vessels page and did not run `ConstructorColumnTest`. The fix, by the main thread's word: `kind:fluid_converter` and `kind:gas_converter` appended to the test's expected Vessels list after `kind:cyclone`, where the constructor shows them; no other assertion moved. `test --tests ConstructorColumnTest --max-workers 4`: 12 of 12 pass. No second lane.
+
 ## Verdict
 
-The references are identical to the 0.27.1 lane, and the campaign's results are the same. The one failure is a stale test expectation (finding 1), held for a decision before it is fixed.
+The references are identical to the 0.27.1 lane, and the campaign's results are the same. The one failure is a stale test expectation (finding 1), fixed after the lane by a test-only change and a one-class rerun.
