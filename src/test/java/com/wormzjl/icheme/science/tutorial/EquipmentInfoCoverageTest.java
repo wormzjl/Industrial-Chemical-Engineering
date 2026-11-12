@@ -136,9 +136,11 @@ class EquipmentInfoCoverageTest {
             assertEquals(drawn, marked, kind + ": the catalog's flag");
             assertFalse(EquipmentInfo.SHAPE_ONLY.contains(kind) && EquipmentInfo.SIMULATOR_SHAPE.contains(kind), kind + ": one fourth line");
         }
-        // The world models of the simulator-drawn kinds: the cooling towers are reservoirs, the drivers sit on shaft trains.
+        // The world models of the simulator-drawn kinds: the cooling towers are reservoirs, the drivers sit on shaft trains,
+        // the converters (0.28.0) are a vessel with two hidden ports.
         for (var kind : EquipmentInfo.SIMULATOR_SHAPE)
-            assertTrue(kind.coolingTower() || kind == EquipmentShape.Kind.MOTOR || kind == EquipmentShape.Kind.GENERATOR || kind == EquipmentShape.Kind.GEARBOX, kind.name());
+            assertTrue(kind.coolingTower() || kind == EquipmentShape.Kind.MOTOR || kind == EquipmentShape.Kind.GENERATOR || kind == EquipmentShape.Kind.GEARBOX
+                    || kind == EquipmentShape.Kind.FLUID_CONVERTER || kind == EquipmentShape.Kind.GAS_CONVERTER, kind.name());
         assertNotNull(lang.get(EquipmentInfo.SHAPE_ONLY_KEY));
         assertNotNull(lang.get(EquipmentInfo.SIMULATOR_SHAPE_KEY));
     }

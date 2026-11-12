@@ -37,10 +37,12 @@ public final class EquipmentInfo {
 
     /**
      * Kinds that work in the world (the cooling towers as reservoirs that cool their water, the drivers on the shaft
-     * trains) while the process simulator draws them only (its catalog's DRAWING_ONLY).
+     * trains, the converters as a vessel with two hidden ports) while the process simulator draws them only (its
+     * catalog's DRAWING_ONLY).
      */
     public static final Set<EquipmentShape.Kind> SIMULATOR_SHAPE = Set.copyOf(EnumSet.of(EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER,
-            EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER, EquipmentShape.Kind.MOTOR, EquipmentShape.Kind.GENERATOR, EquipmentShape.Kind.GEARBOX));
+            EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER, EquipmentShape.Kind.MOTOR, EquipmentShape.Kind.GENERATOR, EquipmentShape.Kind.GEARBOX,
+            EquipmentShape.Kind.FLUID_CONVERTER, EquipmentShape.Kind.GAS_CONVERTER));
 
     /** The ids of the mod's other items that need something to work (a {@code .needs} line beside their {@code .serves}). */
     public static final Set<String> ITEMS_THAT_NEED = Set.of("fluid_pump", "fluid_compressor", "local_controller", "dcs", "gas_blanketing_valve", "create_coupling");
