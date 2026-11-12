@@ -114,9 +114,20 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
 - D4: decided 2026-11-12, candidate C (variation 1): 14 trays, 1.0 m, one middle draw (kerosene and diesel together),
   one pumparound above it, reflux 1.5, heater outlet 390 °C, V-101 at 3.2 bar. Built 2026-11-12: column preset
   `small_crude`, its paired stream `small_crude` and the example "Small crude unit" (gate `SmallCrudeUnitTest`).
-  Still open for the owner: the yellow "larger than needed" pumps and exchangers (a tutorial note, a unit of about
-  195 kmol/h, or smaller catalogue sizes); the bottoms as fuel for the heater (the sheet draws no line for it); why Size
-  all keeps S-6 at 0.1 m (SMALL_COLUMN_CANDIDATES_REVIEW.md).
+  Still open for the owner: the yellow "larger than needed" pumps and exchangers (default: a tutorial sentence; else a
+  unit of about 195 kmol/h, or smaller catalogue sizes).
+- Found while building the small unit (sub-thread report, 2026-11-12), nothing changed:
+  - Fuel: the simulator's fired heater has no fuel port or setting (its code keeps the fuel off the sheet), so the sheet
+    cannot draw the bottoms slip (about 124 kg/h; the off-gas covers 27 % of the firing). Chapter 6 must say where the
+    world's heater gets its fuel.
+  - Line S-6 (H-101 to V-101): Size all picks line bores on its first pass, on the heater's typed drop (10.2 m/s; 0.075 m
+    would exceed the momentum limit). After its re-run on the sized drops the vapour share falls from 0.72 to 0.45 and
+    the speed to 2.7 m/s, under the 3 m/s minimum; it re-rates but does not re-size lines. At 0.075 m the line would be
+    green (4.8 m/s). Options: re-size lines after the re-run, or keep S-6 as the known fail the gate names.
+  - First run: a cold run of the small example costs 223,073 polls, a quarter of `crude_unit`'s 897,274; no warm start
+    needed.
+  - The grade streams stand at the heater outlet; the small stream stands at the tower's feed (384 °C), because the
+    sheet's valve changes the state between the two.
 - Chapter 3 adds a column to the still on crude: the still law answers a trayed still on crude light ends as a pot
   still (the still batch's option B is open). Measure a trayed run before the chapter is written.
 - P0: the owner's one in-game check of the scene player (P0_SCENE_PLAYER.md, last section).
