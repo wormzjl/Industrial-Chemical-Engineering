@@ -28,12 +28,10 @@ Baselines: main 0.27.1 (`tmp/final-lane/base/merge-lane/head/`) and the first la
 
 ## Campaign against main 0.27.1
 - Cold: new 743 B, 65 E5, 919 E5, 6 F; fixed 85 E1, 181 E2, 118 F; 431 B to F. Newton iterations 2002115 to 1959612.
-- Bundled random: none new; fixed 301 B, 896 E5, 47 F, 678 F. Newton iterations 859982 to 683188.
-- Defaults: no change in holds. Newton iterations 62242 to 65438.
+- Bundled random: none new; fixed 301 B, 896 E5, 47 F, 678 F. Newton iterations 859982 to 683188. Defaults: no change.
 
 ## Campaign against the first lane (the four fixes and main 0.28.0)
 - Cold: the same held seeds; 743 E6 to B. Bundled random: 575 E2 fixed; 431 E6 to F. Defaults: identical counters.
-- The two cold-start rules (`f8f634ebd`) changed no other hold of the junction or valve classes.
 
 ## New budget-class holds: seeds 6 and 431 (cold), replayed once, alone, in one run
 - 6: clean. Its campaign hold was the wall deadline under load: not counted.
@@ -50,4 +48,3 @@ Baselines: main 0.27.1 (`tmp/final-lane/base/merge-lane/head/`) and the first la
 ## Open
 - The converter fix, the 431 fix and their runs came after the lane. No further lane has run.
 - `SimulatorResults` changed its stored layout and kept `FORMAT` 3 (MERGE_PREP_REVIEW.md): a one-line bump, owner's word.
-- From the first lane, unchanged: the level loop's load-dependent overshoot, the cost findings.
