@@ -26,6 +26,20 @@ public final class GuideClient {
         return guide;
     }
 
+    private static com.wormzjl.icheme.science.tutorial.guide.Pages pages;
+
+    /** P5: the equipment pages, read once from the mod's assets. */
+    public static com.wormzjl.icheme.science.tutorial.guide.Pages pages() {
+        if (pages == null) pages = com.wormzjl.icheme.science.tutorial.guide.PageFile.load();
+        return pages;
+    }
+
+    /** P5: opens the guide at the equipment page {@code id} (an item id: the reference item's use); its Back closes the guide. */
+    public static void openPage(String id) {
+        var mc = net.minecraft.client.Minecraft.getInstance();
+        mc.tell(() -> mc.setScreen(GuideScreen.page(id)));
+    }
+
     public static Progress progress() {
         return progress;
     }

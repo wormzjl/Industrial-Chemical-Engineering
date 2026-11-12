@@ -28,7 +28,7 @@ public record Guide(List<Chapter> chapters, Map<String, String> terms) {
     }
 
     /** How a step is shown with it: nothing, a film, a card, the display units' offer, or a key that says the step was read. */
-    public sealed interface Media permits None, Film, Card, Units, Read {
+    public sealed interface Media permits None, Film, Card, Units, Read, Page {
         Media NONE = new None();
         Media UNITS = new Units();
         Media READ = new Read();
@@ -51,6 +51,10 @@ public record Guide(List<Chapter> chapters, Map<String, String> terms) {
 
     /** A step to read (P2b: the condenser's water): its key "Got it" reports it done. */
     public record Read() implements Media {
+    }
+
+    /** An equipment page to read (P5: the column's): its key opens the page {@code id} ({@code pages.json}); reading it to its end reports the step done. */
+    public record Page(String id) implements Media {
     }
 
     /** Who reports a step done: the client (a film to its last stop, a card worked, a tour finished, a choice made) or the server's engine criterion. */

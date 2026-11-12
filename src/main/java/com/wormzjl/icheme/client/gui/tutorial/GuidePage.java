@@ -15,6 +15,7 @@ import com.wormzjl.icheme.science.tutorial.cards.Cards;
 import com.wormzjl.icheme.science.tutorial.guide.Glossary;
 import com.wormzjl.icheme.science.tutorial.guide.Guide;
 import com.wormzjl.icheme.science.tutorial.guide.Marked;
+import com.wormzjl.icheme.science.tutorial.guide.Pages;
 import com.wormzjl.icheme.science.tutorial.guide.Progress;
 import org.jetbrains.annotations.Nullable;
 
@@ -49,11 +50,49 @@ public final class GuidePage {
      * What the page shows: the guide, the player's progress, the open chapter, and the step whose card is open (null: the
      * steps); P4b: the player's temperature format, for a step's {@code {<kelvin> K}}.
      */
-    public record Input(Guide guide, Progress progress, String open, @Nullable String card, java.util.function.DoubleFunction<String> temperature) {
+    public record Input(Guide guide, Progress progress, String open, @Nullable String card, java.util.function.DoubleFunction<String> temperature, @Nullable Pages pages,
+                        @Nullable String page) {
         /** In °C: the render tool's and the tests' page. */
         public Input(Guide guide, Progress progress, String open, @Nullable String card) {
             this(guide, progress, open, card, com.wormzjl.icheme.science.tutorial.cards.Card.CELSIUS);
         }
+
+        /** With no equipment page open. */
+        public Input(Guide guide, Progress progress, String open, @Nullable String card, java.util.function.DoubleFunction<String> temperature) {
+            this(guide, progress, open, card, temperature, null, null);
+        }
+
+        /** P5: the same, with the equipment page {@code page} of {@code pages} open in the glass (null: none). */
+        public Input withPage(Pages pages, @Nullable String page) {
+            return new Input(guide, progress, open, card, temperature, pages, page);
+        }
+    }
+
+    /** P5: an equipment page's keys' actions: its film, its screen's tour, the next page in the crude unit, back to where the player came from. */
+    public static final String PAGE_FILM = "page:film", PAGE_TOUR = "page:tour", PAGE_NEXT = "page:next", PAGE_BACK = "page:back";
+    /** An equipment page's icon side (the item's texture), and the room between its header and its lines and between two lines. */
+    public static final int ICON = 16, HEADER_GAP = 6, LINE_GAP = 4;
+
+    /**
+     * An open equipment page in the glass (batch 2026-11-12-tutorial-system, P5): the page; its icon's place (null for a page
+     * with no item texture: the control valve's header has its name only) and its name's lines beside it; its lines; each
+     * with its colour; all in content coordinates, scrolling in {@code text} (panel); its keys at the glass's foot (Watch,
+     * Tour and Next where it has them, Back always).
+     */
+    public record EquipmentPlace(Pages.Page page, @Nullable Rect icon, List<Text> texts, Rect text, List<Key> keys) {
+        public EquipmentPlace {
+            texts = List.copyOf(texts);
+            keys = List.copyOf(keys);
+        }
+
+        public @Nullable Key key(String action) {
+            for (var key : keys) if (key.key().equals(action)) return key;
+            return null;
+        }
+    }
+
+    /** A line of text placed at its top left, in its colour. */
+    public record Text(String text, int x, int y, int colour) {
     }
 
     public enum Mark {
@@ -111,7 +150,7 @@ public final class GuidePage {
     /** The page as placed. */
     public record Page(int width, int height, String title, TitleStrip.Strip strip, Rect help, Rect theme, String themeHint,
                        Column door, Map<String, Key> chapters, Map<String, Boolean> finished, Rect well, Rect view, int content, boolean bar,
-                       List<Row> rows, @Nullable CardPlace card, Function<String, String> tr) {
+                       List<Row> rows, @Nullable CardPlace card, @Nullable EquipmentPlace equipment, Function<String, String> tr) {
         public Page {
             chapters = java.util.Collections.unmodifiableMap(new LinkedHashMap<>(chapters));
             finished = Map.copyOf(finished);
@@ -162,6 +201,7 @@ public final class GuidePage {
                 for (var key : card.options()) out.put(key.key(), key.rect());
                 out.put("card:back", card.back().rect());
             }
+            if (equipment != null) for (var key : equipment.keys()) out.put(key.key(), key.rect());
             return out;
         }
 
@@ -194,6 +234,10 @@ public final class GuidePage {
                 for (var key : card.options()) if (key.rect().contains(x, y)) return key.key();
                 return card.back().rect().contains(x, y) ? card.back().key() : null;
             }
+            if (equipment != null) {
+                for (var key : equipment.keys()) if (key.rect().contains(x, y)) return key.key();
+                return null;
+            }
             if (!view.contains(x, y)) return null;
             for (var row : rows) for (var key : row.keys()) if (onPanel(key.rect(), offset).contains(x, y)) return key.key();
             return null;
@@ -204,6 +248,10 @@ public final class GuidePage {
             if (help.contains(x, y)) return tr.apply(KEY + "help");
             if (theme.contains(x, y)) return themeHint;
             for (var e : chapters.entrySet()) if (e.getValue().rect().contains(x, y)) return e.getValue().hint();
+            if (equipment != null) {
+                for (var key : equipment.keys()) if (key.rect().contains(x, y)) return key.hint();
+                return null;
+            }
             if (card != null || !view.contains(x, y)) return null;
             for (var row : rows) {
                 for (var key : row.keys()) if (onPanel(key.rect(), offset).contains(x, y)) return key.hint();
@@ -246,6 +294,17 @@ public final class GuidePage {
                 drawCard(c, skin, card, state, hover, tr);
                 return;
             }
+            if (equipment != null) drawEquipment(c, skin, equipment, offset, hover);
+            else drawRows(c, skin, offset, hover);
+            if (bar) {
+                var track = barTrack();
+                int thumb = Math.max(12, track.h() * view.h() / Math.max(1, content));
+                int y = track.y() + (track.h() - thumb) * offset / Math.max(1, maxOffset());
+                skin.scrollbar(c, track, new Rect(track.x(), y, track.w(), thumb), false);
+            }
+        }
+
+        private void drawRows(Canvas c, Skin skin, int offset, @Nullable String hover) {
             c.clip(view);
             c.batch(() -> {
                 for (var row : rows) {
@@ -262,13 +321,121 @@ public final class GuidePage {
                 for (var key : row.keys()) skin.button(c, onPanel(key.rect(), offset), key.text(), Skin.Press.REST, key.key().equals(hover));
             }
             c.unclip();
-            if (bar) {
-                var track = barTrack();
-                int thumb = Math.max(12, track.h() * view.h() / Math.max(1, content));
-                int y = track.y() + (track.h() - thumb) * offset / Math.max(1, maxOffset());
-                skin.scrollbar(c, track, new Rect(track.x(), y, track.w(), thumb), false);
-            }
         }
+    }
+
+    /** An equipment page's item icon: the reference item's texture, a {@value #ICON_TEXTURE_SIDE} px square. */
+    public static final int ICON_TEXTURE_SIDE = 64;
+
+    /** The item texture of an equipment page's icon. */
+    public static String iconTexture(Pages.Page page) {
+        return "icheme:textures/item/" + page.id() + ".png";
+    }
+
+    /** An open equipment page: its icon and texts scrolled by {@code offset} in its text area, its keys at the foot. */
+    private static void drawEquipment(Canvas c, Skin skin, EquipmentPlace p, int offset, @Nullable String hover) {
+        c.clip(p.text());
+        if (p.icon() != null) {
+            var r = p.icon().moved(0, -offset);
+            c.sprite(new com.wormzjl.icheme.client.gui.common.kit.Sprite(iconTexture(p.page()), 0, 0, ICON_TEXTURE_SIDE, ICON_TEXTURE_SIDE, ICON_TEXTURE_SIDE, ICON_TEXTURE_SIDE),
+                    r.x(), r.y(), r.right(), r.bottom(), 0xFFFFFFFF);
+        }
+        c.batch(() -> {
+            for (var t : p.texts()) c.text(t.text(), t.x(), t.y() - offset, t.colour());
+        });
+        c.unclip();
+        for (var key : p.keys()) skin.button(c, key.rect(), key.text(), Skin.Press.REST, key.key().equals(hover));
+    }
+
+    /**
+     * An equipment page in the glass {@code view}: its keys at the foot (one row where their words fit, else Watch and Tour
+     * over Next and Back, each row's keys sharing its width, a row whose words still do not fit stacked); above them its
+     * header (icon and name, the name wrapped beside the icon, never shortened) and its lines, wrapped, scrolling where taller.
+     */
+    private static EquipmentPlace equipment(Pages pages, Pages.Page page, Rect view, Measure m, Function<String, String> tr, int bar) {
+        var media = new ArrayList<String[]>();
+        if (page.film() != null) media.add(new String[]{PAGE_FILM, tr.apply(KEY + "watch"), null});
+        if (page.tour() != null) media.add(new String[]{PAGE_TOUR, tr.apply(Pages.KEY + "tour"), tr.apply(Pages.KEY + "tour.hint")});
+        var tail = new ArrayList<String[]>();
+        var next = pages.next(page.id());
+        if (next != null) tail.add(new String[]{PAGE_NEXT, tr.apply(Pages.KEY + "next"), tr.apply(next.nameKey())});
+        tail.add(new String[]{PAGE_BACK, tr.apply(KEY + "back"), null});
+        int x0 = view.x() + 2, w = view.w() - 4, bottom = view.bottom() - 2;
+        var keys = new ArrayList<Key>();
+        var all = new ArrayList<>(media);
+        all.addAll(tail);
+        int total = (all.size() - 1) * KEY_GAP;
+        for (var k : all) total += Math.max(48, m.width(k[1]) + 12);
+        int top;
+        if (total <= w) {
+            // One row: the media keys and Next from the left, Back at the right.
+            int x = x0;
+            for (int i = 0; i < all.size() - 1; i++) {
+                int bw = Math.max(48, m.width(all.get(i)[1]) + 12);
+                keys.add(new Key(all.get(i)[0], new Rect(x, bottom - KEY_H, bw, KEY_H), all.get(i)[1], all.get(i)[2], false));
+                x += bw + KEY_GAP;
+            }
+            var back = all.getLast();
+            int bw = Math.max(48, m.width(back[1]) + 12);
+            keys.add(new Key(back[0], new Rect(x0 + w - bw, bottom - KEY_H, bw, KEY_H), back[1], back[2], false));
+            top = bottom - KEY_H;
+        } else {
+            top = row(tail, x0, w, bottom, m, keys);
+            if (!media.isEmpty()) top = row(media, x0, w, top - KEY_GAP, m, keys);
+        }
+        var text = new Rect(view.x(), view.y(), view.w(), Math.max(10, top - 4 - view.y()));
+        var place = texts(page, text, view.w() - 8, m, tr);
+        if (textHeight(place, text) > text.h()) place = texts(page, text, view.w() - 10 - bar, m, tr);
+        return new EquipmentPlace(page, page.kind() == null ? null : new Rect(text.x() + 4, text.y() + 4, ICON, ICON), place, text, keys);
+    }
+
+    /**
+     * One row of keys, each as wide as its word, with its bottom at {@code bottom}: from the left, Back (the row's last where
+     * it is Back) at the right; stacked to the full width {@code w} where the words do not fit; its top.
+     */
+    private static int row(List<String[]> row, int x0, int w, int bottom, Measure m, List<Key> keys) {
+        int total = (row.size() - 1) * KEY_GAP;
+        for (var k : row) total += Math.max(48, m.width(k[1]) + 12);
+        if (total <= w) {
+            int x = x0;
+            for (int i = 0; i < row.size(); i++) {
+                int bw = Math.max(48, m.width(row.get(i)[1]) + 12);
+                boolean back = row.get(i)[0].equals(PAGE_BACK);
+                keys.add(new Key(row.get(i)[0], new Rect(back ? x0 + w - bw : x, bottom - KEY_H, bw, KEY_H), row.get(i)[1], row.get(i)[2], false));
+                x += bw + KEY_GAP;
+            }
+            return bottom - KEY_H;
+        }
+        int y = bottom - KEY_H;
+        for (int i = row.size() - 1; i >= 0; i--) {
+            keys.add(new Key(row.get(i)[0], new Rect(x0, y, w, KEY_H), row.get(i)[1], row.get(i)[2], false));
+            if (i > 0) y -= KEY_H + KEY_GAP;
+        }
+        return y;
+    }
+
+    /** The page's texts in content coordinates from {@code text}'s top: its name beside the icon, then its lines {@code w} wide. */
+    private static List<Text> texts(Pages.Page page, Rect text, int w, Measure m, Function<String, String> tr) {
+        var out = new ArrayList<Text>();
+        int x = text.x() + 4, y = text.y() + 4;
+        int nameX = page.kind() == null ? x : x + ICON + 6;
+        var name = m.wrap(tr.apply(page.nameKey()), w - (nameX - x));
+        int nameY = name.size() == 1 && page.kind() != null ? y + (ICON - 8) / 2 : y;
+        for (int i = 0; i < name.size(); i++) out.add(new Text(name.get(i), nameX, nameY + i * Measure.LINE, Palette.ACCENT));
+        y = Math.max(page.kind() == null ? y : y + ICON, nameY + name.size() * Measure.LINE) + HEADER_GAP;
+        var status = page.kind() == null ? null : com.wormzjl.icheme.science.tutorial.equipment.EquipmentInfo.statusKey(page.kind());
+        for (var key : page.lines()) {
+            for (var line : m.wrap(tr.apply(key), w)) {
+                out.add(new Text(line, x, y, key.equals(status) ? Palette.WARN : Palette.TEXT));
+                y += Measure.LINE;
+            }
+            y += LINE_GAP;
+        }
+        return out;
+    }
+
+    private static int textHeight(List<Text> texts, Rect text) {
+        return texts.isEmpty() ? 0 : texts.getLast().y() + Measure.LINE + 2 - text.y();
     }
 
     /** A step's mark on the glass: done a teal box with a tick, current an amber ring round an amber dot, open a grey ring. */
@@ -345,7 +512,15 @@ public final class GuidePage {
             var card = step != null && step.media() instanceof Guide.Card named ? Cards.build(named.name()) : null;
             if (card != null)
                 return new Page(width, height, title, strip, keys.get(1), keys.get(0), themeHint, door, chapters, finished, well, view, 0, false, List.of(),
-                        card(in.card(), card, view, m, tr), tr);
+                        card(in.card(), card, view, m, tr), null, tr);
+        }
+        // P5: an open equipment page in place of the steps, its texts scrolling over its keys.
+        var page = in.pages() == null || in.page() == null ? null : in.pages().page(in.page());
+        if (page != null) {
+            var e = equipment(in.pages(), page, view, m, tr, ScrollView.BAR);
+            int content = textHeight(e.texts(), e.text());
+            return new Page(width, height, title, strip, keys.get(1), keys.get(0), themeHint, door, chapters, finished, well, e.text(), content, content > e.text().h(),
+                    List.of(), null, e, tr);
         }
         var rows = rows(in, chapter, current, view.x() + 2, view.w() - 4, view.y() + 2, m, tr);
         int content = height(rows, view);
@@ -354,7 +529,7 @@ public final class GuidePage {
             rows = rows(in, chapter, current, view.x() + 2, view.w() - 6 - ScrollView.BAR, view.y() + 2, m, tr);
             content = height(rows, view);
         }
-        return new Page(width, height, title, strip, keys.get(1), keys.get(0), themeHint, door, chapters, finished, well, view, content, bar, rows, null, tr);
+        return new Page(width, height, title, strip, keys.get(1), keys.get(0), themeHint, door, chapters, finished, well, view, content, bar, rows, null, null, tr);
     }
 
     private static int height(List<Row> rows, Rect view) {
@@ -421,6 +596,7 @@ public final class GuidePage {
             case Guide.Card ignored -> List.<String[]>of(new String[]{"media:" + id, tr.apply(KEY + "open")});
             case Guide.Units ignored -> List.of(new String[]{"units:use", tr.apply(KEY + "units.use")}, new String[]{"units:keep", tr.apply(KEY + "units.keep")});
             case Guide.Read ignored -> List.<String[]>of(new String[]{"read:" + id, tr.apply(KEY + "read")});
+            case Guide.Page ignored -> List.<String[]>of(new String[]{"media:" + id, tr.apply(KEY + "open")});
             case Guide.None ignored -> List.of();
         };
     }

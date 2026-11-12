@@ -207,4 +207,41 @@ class DrawCallTest {
         System.out.println("a tour stop: at most " + most + " draw calls");
         assertTrue(most <= TOUR_DRAWS, most + " draw calls against " + TOUR_DRAWS);
     }
+
+    /**
+     * P5: an equipment page draws no more than the guide's busiest chapter page at the same size (its budget: the page shows in
+     * the chapter's place), and the unit map card no more than the sample sheet's budget.
+     */
+    @Test
+    void anEquipmentPageAndTheUnitMapStayInTheGuidesBudget() {
+        var guide = com.wormzjl.icheme.science.tutorial.guide.GuideFile.load();
+        var pages = com.wormzjl.icheme.science.tutorial.guide.PageFile.load();
+        java.util.function.Function<String, String> tr = key -> key;
+        var state = com.wormzjl.icheme.science.tutorial.cards.Card.State.of(0, 0);
+        for (int[] size : new int[][]{{464, 254}, {312, 232}}) {
+            int budget = 0, most = 0;
+            for (var chapter : guide.chapters()) {
+                var p = com.wormzjl.icheme.client.gui.tutorial.GuidePage.place(new com.wormzjl.icheme.client.gui.tutorial.GuidePage.Input(guide,
+                        com.wormzjl.icheme.science.tutorial.guide.Progress.NONE, chapter.id(), null), size[0], size[1], SheetFixture.M, tr, "theme");
+                var c = new Counting();
+                p.draw(c, PanelSkin.LIGHT, 0, null, state);
+                budget = Math.max(budget, c.draws());
+            }
+            for (var id : pages.pages().keySet()) {
+                var p = com.wormzjl.icheme.client.gui.tutorial.GuidePage.place(new com.wormzjl.icheme.client.gui.tutorial.GuidePage.Input(guide,
+                        com.wormzjl.icheme.science.tutorial.guide.Progress.NONE, "unit", null).withPage(pages, id), size[0], size[1], SheetFixture.M, tr, "theme");
+                var c = new Counting();
+                p.draw(c, PanelSkin.LIGHT, 0, null, state);
+                most = Math.max(most, c.draws());
+            }
+            System.out.println(size[0] + " by " + size[1] + ": an equipment page at most " + most + " draw calls, a chapter page " + budget);
+            assertTrue(most <= budget, most + " draw calls against the chapter pages' " + budget);
+            var map = com.wormzjl.icheme.client.gui.tutorial.GuidePage.place(new com.wormzjl.icheme.client.gui.tutorial.GuidePage.Input(guide,
+                    com.wormzjl.icheme.science.tutorial.guide.Progress.NONE, "unit", "unit/map"), size[0], size[1], SheetFixture.M, tr, "theme");
+            var c = new Counting();
+            map.draw(c, PanelSkin.LIGHT, 0, null, state);
+            System.out.println(size[0] + " by " + size[1] + ": the unit map card " + c.draws() + " draw calls");
+            assertTrue(c.draws() <= SAMPLE_BUDGET, c.draws() + " draw calls against " + SAMPLE_BUDGET);
+        }
+    }
 }

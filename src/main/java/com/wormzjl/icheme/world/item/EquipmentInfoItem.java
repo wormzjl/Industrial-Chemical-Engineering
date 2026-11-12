@@ -52,8 +52,8 @@ public final class EquipmentInfoItem extends Item {
         return InteractionResultHolder.sidedSuccess(stack, level.isClientSide());
     }
 
-    /** Client only. Opens the Field Guide; phase P5 opens the kind's own page here. */
+    /** Client only. Opens the Field Guide at the kind's own page (batch 2026-11-12-tutorial-system, P5). */
     private static void openGuide(EquipmentShape.Kind kind) {
-        com.wormzjl.icheme.client.gui.tutorial.GuideClient.open();
+        com.wormzjl.icheme.client.gui.tutorial.GuideClient.openPage(EquipmentInfo.itemId(kind));
     }
 }

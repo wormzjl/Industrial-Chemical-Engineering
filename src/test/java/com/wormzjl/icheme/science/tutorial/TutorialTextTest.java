@@ -131,6 +131,22 @@ class TutorialTextTest {
         assertEquals(List.of(), faults);
     }
 
+    /** P5: an equipment page's key words and every film's part and unit labels are short names: at most four words, no sentence. */
+    @Test
+    void thePageKeysAndFilmLabelsAreShortNames() {
+        int read = 0;
+        for (var e : LANG.entrySet()) {
+            var key = e.getKey();
+            boolean page = key.startsWith("tutorial.icheme.page.") && !key.endsWith(".hint");
+            boolean label = key.startsWith("tutorial.icheme.film.part.") || key.startsWith("tutorial.icheme.film.crude_unit.") && !key.matches(".*\\.s\\d");
+            if (!page && !label) continue;
+            read++;
+            assertTrue(TutorialText.words(e.getValue()) <= 4, key + ": at most four words");
+            assertFalse(e.getValue().endsWith("."), key + ": a name, not a sentence");
+        }
+        assertTrue(read >= 30, "the page keys and the labels are read: " + read);
+    }
+
     @Test
     void theCountsReadAsAPersonWould() {
         assertEquals(2, TutorialText.sentences("Every screen has a ? key at its top. Press it."));

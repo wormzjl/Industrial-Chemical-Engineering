@@ -52,11 +52,29 @@ class StillInsideFilmTest {
             var overlay = loader.loadClass(com.wormzjl.icheme.client.gui.tutorial.FilmOverlay.class.getName());
             assertEquals(3, ((List<?>) overlay.getMethod("legendKeys").invoke(null)).size());
             loader.loadClass(com.wormzjl.icheme.science.tutorial.films.StillRunData.class.getName()).getMethod("load").invoke(null);
+            // P5: the crude unit's map draws with the simulator's own sheet painter (client.gui.flowsheet), here on a canvas that keeps nothing.
+            var canvas = loader.loadClass(com.wormzjl.icheme.client.gui.common.kit.Canvas.class.getName());
+            var measure = loader.loadClass(com.wormzjl.icheme.client.gui.common.kit.Measure.class.getName()).getMethod("fixed", int.class).invoke(null, 6);
+            Object c = java.lang.reflect.Proxy.newProxyInstance(loader, new Class<?>[]{canvas}, (proxy, method, args) -> {
+                if (method.isDefault()) return java.lang.reflect.InvocationHandler.invokeDefault(proxy, method, args);
+                return method.getName().equals("measure") ? measure : null;
+            });
+            var rect = loader.loadClass(com.wormzjl.icheme.client.gui.common.kit.Rect.class.getName());
+            var area = rect.getConstructor(int.class, int.class, int.class, int.class).newInstance(20, 40, 300, 150);
+            var card = loader.loadClass(com.wormzjl.icheme.science.tutorial.cards.Cards.class.getName()).getMethod("build", String.class).invoke(null, "unit_map");
+            var cardType = loader.loadClass(com.wormzjl.icheme.science.tutorial.cards.Card.class.getName());
+            var stateType = loader.loadClass(com.wormzjl.icheme.science.tutorial.cards.Card.State.class.getName());
+            var skin = loader.loadClass(com.wormzjl.icheme.client.gui.common.kit.PanelSkin.class.getName());
+            var skinType = loader.loadClass(com.wormzjl.icheme.client.gui.common.kit.Skin.class.getName());
+            cardType.getMethod("draw", canvas, rect, stateType, skinType, java.util.function.Function.class).invoke(card, c, area,
+                    stateType.getMethod("of", double.class, double.class).invoke(null, 0.0, 0.0), skin.getField("DARK").get(null), (java.util.function.Function<String, String>) k -> "word");
+            assertFalse(((List<?>) cardType.getMethod("hits", rect, int.class).invoke(card, area, 0)).isEmpty(), "the map's places, apart from the game");
         }
         try (Stream<Path> files = Files.walk(Path.of("src/main/java/com/wormzjl/icheme/science/tutorial"))) {
             for (var file : files.filter(p -> p.toString().endsWith(".java")).toList()) {
                 // The cards draw on the kit's canvas (client.gui.common.kit: no Minecraft class); the loader check above stands.
-                var source = Files.readString(file).replace("icheme.client.gui.common.kit.", "");
+                // The crude unit's map (P5) draws with the simulator's sheet painter (client.gui.flowsheet), drawn above in that loader.
+                var source = Files.readString(file).replace("icheme.client.gui.common.kit.", "").replace("icheme.client.gui.flowsheet.", "");
                 for (var word : List.of("net.minecraft", "com.mojang", "net.neoforged", "icheme.client", "java.awt"))
                     assertFalse(source.contains(word), file + " names " + word);
             }

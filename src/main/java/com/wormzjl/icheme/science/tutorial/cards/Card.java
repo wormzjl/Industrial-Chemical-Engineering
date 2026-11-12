@@ -105,6 +105,11 @@ public interface Card {
         return List.of();
     }
 
+    /** P5: the equipment page place {@code hit} opens (an item id, {@code pages.json}); null for none, by default. */
+    default @org.jetbrains.annotations.Nullable String link(int hit) {
+        return null;
+    }
+
     /** The slider's positions (0: continuous); a stepped slider snaps to {@code steps} evenly spaced positions from 0 to 1. */
     default int steps() {
         return 0;

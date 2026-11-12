@@ -8,6 +8,14 @@ import com.wormzjl.icheme.science.tutorial.films.Films;
 import com.wormzjl.icheme.science.tutorial.guide.Guide;
 import com.wormzjl.icheme.science.tutorial.guide.GuideFile;
 import com.wormzjl.icheme.science.tutorial.guide.TourFile;
+import com.wormzjl.icheme.science.tutorial.guide.PageFile;
+import com.wormzjl.icheme.science.tutorial.cards.UnitMap;
+import com.wormzjl.icheme.science.tutorial.equipment.EquipmentInfo;
+import com.wormzjl.icheme.science.tutorial.films.SmallTower;
+import com.wormzjl.icheme.science.assembly.Blueprint;
+import com.wormzjl.icheme.science.assembly.ColumnBlueprint;
+import com.wormzjl.icheme.science.equipment.ColumnComponents;
+import java.util.Objects;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -90,7 +98,8 @@ class GuideCoverageTest {
             parent = "icheme:tutorial/" + id;
             files.add(ADVANCEMENTS.resolve(id + ".json"));
         }
-        assertEquals("icheme:tutorial/simulator/send", parent);
+        assertEquals("icheme:tutorial/unit/next", parent);
+        assertEquals("icheme:tutorial/simulator/send", read(ADVANCEMENTS.resolve("unit/whole.json")).get("parent").getAsString(), "chapter 5 after chapter 4");
         assertEquals("icheme:tutorial/crude/first", read(ADVANCEMENTS.resolve("still/build.json")).get("parent").getAsString(), "the still's build after chapter 1");
         assertEquals("icheme:tutorial/still/stop", read(ADVANCEMENTS.resolve("tower/tray.json")).get("parent").getAsString(), "chapter 3 after the still");
         assertEquals("icheme:tutorial/tower/many", read(ADVANCEMENTS.resolve("simulator/open.json")).get("parent").getAsString(), "chapter 4 after chapter 3");
@@ -275,5 +284,55 @@ class GuideCoverageTest {
             if (tour.film() != null) assertNotNull(Films.build(tour.film()), tour.page());
             if (tour.show() != null) assertNotNull(guide.step(tour.show()), tour.page() + " shows " + tour.show());
         }
+        for (var page : PageFile.load().pages().values()) if (page.film() != null) assertNotNull(Films.build(page.film()), page.id());
+    }
+
+    /**
+     * P5: every kind has its page, with the reference item's own name and lines (JEI's keys, no copy); the crude unit's chain
+     * holds exactly the kinds its sheet and its column's assembly ({@link ColumnBlueprint#of}) name, with the converter and the
+     * tanks, each once; every unit page with a body has its film, every one but the last its next link, and the chain from the
+     * first visits each once and ends. The chain is the file's {@code unit} list: the pages' key order does not move it.
+     */
+    @Test
+    void everyKindHasAPageAndTheUnitsChainVisitsEachOfItsKindsOnce() throws IOException {
+        var pages = PageFile.load();
+        for (var kind : EquipmentShape.Kind.values()) {
+            var page = pages.page(kind);
+            assertNotNull(page, kind + ": its page");
+            assertEquals(EquipmentInfo.nameKey(kind), page.nameKey(), kind + ": the item's name");
+            assertEquals(EquipmentInfo.pageKeys(kind), page.lines(), kind + ": JEI's lines");
+        }
+        // The unit's kinds: the sheet's units by the page each opens, the column's members as its design builds them, the crude's converter and the tanks.
+        var expected = new java.util.LinkedHashSet<String>();
+        expected.add(EquipmentInfo.itemId(EquipmentShape.Kind.FLUID_CONVERTER));
+        expected.add(EquipmentInfo.itemId(EquipmentShape.Kind.TANK));
+        for (var unit : UnitMap.sheet().units()) expected.add(Objects.requireNonNull(UnitMap.PAGES.get(unit.type()), unit.type()));
+        var column = UnitMap.sheet().units().stream().filter(u -> u.type().equals("column")).findFirst().orElseThrow();
+        var components = ColumnComponents.named(column.params().text("condenser", "AIR_COOLER"), "STANDARD", List.of("STANDARD"), false, false);
+        var blueprint = ColumnBlueprint.of(SmallTower.preset().trays().withComponents(components));
+        for (var link : blueprint.links())
+            for (var step : link.steps())
+                if (step.form() instanceof Blueprint.UnitForm form) expected.add(EquipmentInfo.itemId(form.kind()));
+        assertEquals(expected, Set.copyOf(pages.unit()), "the unit's pages are its sheet's and its column's kinds");
+        assertTrue(expected.contains(EquipmentInfo.itemId(EquipmentShape.Kind.DRUM)) && expected.contains("pressure_control_valve"), "the reflux drum and the valve");
+        var visited = new ArrayList<String>();
+        for (var page = pages.page(pages.unit().getFirst()); page != null; page = pages.next(page.id())) {
+            assertFalse(visited.contains(page.id()), page.id() + ": once");
+            visited.add(page.id());
+            if (page.kind() != null) assertNotNull(page.film(), page.id() + ": its film");
+        }
+        assertEquals(pages.unit(), visited, "the chain visits the unit in its order and ends");
+        assertNull(pages.page("pressure_control_valve").film(), "the control valve has no equipment body: its page is the header only");
+        // The pages' keys reversed: the same chain.
+        var json = JsonParser.parseString(Files.readString(Path.of("src/main/resources/assets/icheme/tutorial/pages.json"))).getAsJsonObject();
+        var reversed = new JsonObject();
+        var keys = new ArrayList<>(json.getAsJsonObject("pages").keySet());
+        java.util.Collections.reverse(keys);
+        var body = new JsonObject();
+        for (var k : keys) body.add(k, json.getAsJsonObject("pages").get(k));
+        reversed.add("pages", body);
+        reversed.add("unit", json.get("unit"));
+        var again = PageFile.read(reversed);
+        for (var id : pages.unit()) assertEquals(pages.next(id) == null ? null : pages.next(id).id(), again.next(id) == null ? null : again.next(id).id(), id);
     }
 }

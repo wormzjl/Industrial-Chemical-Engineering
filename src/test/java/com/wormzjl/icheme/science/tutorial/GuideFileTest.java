@@ -4,6 +4,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.wormzjl.icheme.science.tutorial.guide.Guide;
 import com.wormzjl.icheme.science.tutorial.guide.GuideFile;
+import com.wormzjl.icheme.science.tutorial.guide.PageFile;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -79,11 +80,17 @@ class GuideFileTest {
                     "com.wormzjl.icheme.science.tutorial.cards.BarrelData", "com.wormzjl.icheme.science.tutorial.cards.Barrel", "com.wormzjl.icheme.science.tutorial.cards.Products",
                     "com.wormzjl.icheme.science.tutorial.cards.Road", "com.wormzjl.icheme.science.tutorial.cards.PotTemperature",
                     "com.wormzjl.icheme.science.tutorial.guide.StillCondition",
-                    "com.wormzjl.icheme.science.tutorial.guide.SheetCondition", "com.wormzjl.icheme.science.tutorial.films.StillTray", "com.wormzjl.icheme.science.tutorial.films.SmallTower"))
+                    "com.wormzjl.icheme.science.tutorial.guide.SheetCondition", "com.wormzjl.icheme.science.tutorial.films.StillTray", "com.wormzjl.icheme.science.tutorial.films.SmallTower",
+                    "com.wormzjl.icheme.science.tutorial.guide.PageFile", "com.wormzjl.icheme.science.tutorial.films.EquipmentFilms", "com.wormzjl.icheme.science.tutorial.films.CrudeUnit",
+                    "com.wormzjl.icheme.science.tutorial.equipment.ReferenceShapes"))
                 Class.forName(name, true, loader);
             // Every card builds, its recording read, with no Minecraft class.
             var cards = loader.loadClass("com.wormzjl.icheme.science.tutorial.cards.Cards");
             for (var name : (List<?>) cards.getMethod("names").invoke(null)) assertNotNull(cards.getMethod("build", String.class).invoke(null, name), String.valueOf(name));
+            // P5: the pages read, and every film builds, with no Minecraft class.
+            assertNotNull(loader.loadClass("com.wormzjl.icheme.science.tutorial.guide.PageFile").getMethod("load").invoke(null));
+            var films = loader.loadClass("com.wormzjl.icheme.science.tutorial.films.Films");
+            for (var name : (Iterable<?>) films.getMethod("names").invoke(null)) assertNotNull(films.getMethod("build", String.class).invoke(null, name), String.valueOf(name));
         }
     }
 
@@ -113,6 +120,43 @@ class GuideFileTest {
         assertThrows(IllegalArgumentException.class, () -> read("{'chapters':[{'id':'a','steps':[{'id':'one','media':'film:none'}]}]}"));
         assertThrows(IllegalArgumentException.class, () -> read("{'chapters':[{'id':'a','steps':[{'id':'one','media':'card:none'}]}]}"));
         assertThrows(IllegalArgumentException.class, () -> read("{'chapters':[{'id':'a','steps':[{'id':'one','media':'picture:x'}]}]}"));
+    }
+
+    /** P5: a page step names its page by its item id: a kind's reference item or one of the other items' pages; anything else is refused. */
+    @Test
+    void aPageStepReadsAndAnUnknownPageIsRefused() {
+        var guide = read("{'chapters':[{'id':'a','steps':[{'id':'one','media':'page:equipment_column'},{'id':'two','media':'page:pressure_control_valve'}]}]}");
+        assertEquals(new Guide.Page("equipment_column"), guide.step("a/one").media());
+        assertThrows(IllegalArgumentException.class, () -> read("{'chapters':[{'id':'a','steps':[{'id':'one','media':'page:equipment_nothing'}]}]}"));
+        assertThrows(IllegalArgumentException.class, () -> read("{'chapters':[{'id':'a','steps':[{'id':'one','media':'page:fluid_pipe'}]}]}"));
+    }
+
+    /** P5: the pages' file refuses an unknown field, a page that is no kind or listed item, a missing kind, an unknown film or tour, and a unit naming a page twice or none. */
+    @Test
+    void thePagesFileRefusesWhatItCannotShow() {
+        var good = PageFile.load();
+        java.util.function.Function<String, com.google.gson.JsonObject> with = extra -> {
+            var json = new com.google.gson.JsonObject();
+            var pages = new com.google.gson.JsonObject();
+            for (var id : good.pages().keySet()) pages.add(id, new com.google.gson.JsonObject());
+            json.add("pages", pages);
+            json.add("unit", JsonParser.parseString("['equipment_pump','equipment_column']"));
+            var change = JsonParser.parseString(extra).getAsJsonObject();
+            for (var e : change.entrySet()) if (e.getKey().equals("unit")) json.add("unit", e.getValue());
+                else if (e.getKey().equals("extra")) json.add("extra", e.getValue());
+                else if (e.getValue().isJsonNull()) pages.remove(e.getKey());
+                else pages.add(e.getKey(), e.getValue());
+            return json;
+        };
+        assertEquals(List.of("equipment_pump", "equipment_column"), PageFile.read(with.apply("{}")).unit());
+        assertThrows(IllegalArgumentException.class, () -> PageFile.read(with.apply("{'extra':1}")));
+        assertThrows(IllegalArgumentException.class, () -> PageFile.read(with.apply("{'equipment_pump':{'picture':'x'}}")));
+        assertThrows(IllegalArgumentException.class, () -> PageFile.read(with.apply("{'fluid_pipe':{}}")), "an item with no page");
+        assertThrows(IllegalArgumentException.class, () -> PageFile.read(with.apply("{'equipment_pump':null}")), "a kind without its page");
+        assertThrows(IllegalArgumentException.class, () -> PageFile.read(with.apply("{'equipment_pump':{'film':'none'}}")));
+        assertThrows(IllegalArgumentException.class, () -> PageFile.read(with.apply("{'equipment_pump':{'tour':'none'}}")));
+        assertThrows(IllegalArgumentException.class, () -> PageFile.read(with.apply("{'unit':['equipment_pump','equipment_pump']}")));
+        assertThrows(IllegalArgumentException.class, () -> PageFile.read(with.apply("{'unit':['fluid_pipe']}")));
     }
 
     @Test

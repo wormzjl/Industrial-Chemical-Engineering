@@ -144,4 +144,19 @@ class EquipmentInfoCoverageTest {
         assertNotNull(lang.get(EquipmentInfo.SHAPE_ONLY_KEY));
         assertNotNull(lang.get(EquipmentInfo.SIMULATOR_SHAPE_KEY));
     }
+
+    /**
+     * P5: using a reference item opens its kind's page in the Field Guide, and every kind has a reference shape for its icon
+     * and film (a kind with none would show its page's header only, never crash the tool).
+     */
+    @Test
+    void everyItemOpensItsKindsPage() throws IOException {
+        var pages = com.wormzjl.icheme.science.tutorial.guide.PageFile.load();
+        for (var kind : EquipmentShape.Kind.values()) {
+            assertNotNull(pages.page(EquipmentInfo.itemId(kind)), kind + ": the item's page");
+            assertNotNull(com.wormzjl.icheme.science.tutorial.equipment.ReferenceShapes.of(kind), kind + ": its reference shape");
+        }
+        var source = Files.readString(Path.of("src/main/java/com/wormzjl/icheme/world/item/EquipmentInfoItem.java"));
+        assertTrue(source.contains("GuideClient.openPage(EquipmentInfo.itemId(kind))"), "the item's use opens its page");
+    }
 }

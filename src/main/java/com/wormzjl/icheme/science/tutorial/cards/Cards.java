@@ -21,6 +21,7 @@ public final class Cards {
         ALL.put(RefluxCut.NAME, RefluxCut::new);
         ALL.put(CompareCut.NAME, CompareCut::new);
         ALL.put(Balance.NAME, Balance::new);
+        ALL.put(UnitMap.NAME, UnitMap::new);
     }
 
     private Cards() {

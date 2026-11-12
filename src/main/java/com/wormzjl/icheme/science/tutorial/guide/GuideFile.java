@@ -27,6 +27,7 @@ import java.util.function.Predicate;
  *       { "id": "water", "media": "read" },
  *       { "id": "dots", "media": "card:three_parts" },
  *       { "id": "film", "media": "film:still_inside" },
+       { "id": "tower", "media": "page:equipment_column" },
  *       { "id": "build", "check": "server", "criterion": "equipment_built" } ] } ] }
  * </pre>
  *
@@ -93,6 +94,12 @@ public final class GuideFile {
         if (text == null) return Guide.Media.NONE;
         if (text.equals("units")) return Guide.Media.UNITS;
         if (text.equals("read")) return Guide.Media.READ;
+        if (text.startsWith("page:")) {
+            // A page by its id alone (pages.json is read after the guide: its tours name the guide's steps).
+            String id = text.substring(5);
+            if (com.wormzjl.icheme.science.tutorial.equipment.EquipmentInfo.kindOf(id) == null && !PageFile.ITEMS.contains(id)) throw new IllegalArgumentException("Unknown page: " + id);
+            return new Guide.Page(id);
+        }
         if (text.startsWith("film:")) {
             String name = text.substring(5);
             if (!films.test(name)) throw new IllegalArgumentException("Unknown film: " + name);

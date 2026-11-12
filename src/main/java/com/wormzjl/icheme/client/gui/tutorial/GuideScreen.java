@@ -31,7 +31,8 @@ public class GuideScreen extends Screen {
     protected String card;
     protected CardView cardView;
     protected int offset;
-    private boolean revealed, barDragging;
+    protected boolean revealed;
+    private boolean barDragging;
     protected int left, top;
     protected GuidePage.Page page;
     /** The page's tour, opened by the {@code ?} key. */
@@ -43,6 +44,50 @@ public class GuideScreen extends Screen {
     private net.minecraft.client.gui.screens.@org.jetbrains.annotations.Nullable Screen parent;
     /** The step to show once the screen is laid out (P4b: a tour's "Show me"), or null. */
     private @org.jetbrains.annotations.Nullable String showing;
+    /** P5: the open equipment page (an item id), or null; the page step that opened it, reported once it is read to its end. */
+    protected @org.jetbrains.annotations.Nullable String pageId;
+    private @org.jetbrains.annotations.Nullable String reading;
+    /** P5: where Back returns to from an equipment page: the chapter, card or page the player came from. Empty: Back closes the guide. */
+    private final java.util.ArrayDeque<Back> back = new java.util.ArrayDeque<>();
+
+    private record Back(String open, @org.jetbrains.annotations.Nullable String card, @org.jetbrains.annotations.Nullable CardView cardView,
+                        @org.jetbrains.annotations.Nullable String page, int offset) {
+    }
+
+    /** P5: the guide open at the equipment page {@code id} (the reference item's use, a map's symbol); its Back closes the guide. */
+    public static GuideScreen page(String id) {
+        var screen = new GuideScreen();
+        if (GuideClient.pages().page(id) != null) {
+            screen.pageId = id;
+            screen.revealed = true;
+        }
+        return screen;
+    }
+
+    /** Opens the page {@code id}, Back returning to what is open now. */
+    private void openPage(String id) {
+        if (GuideClient.pages().page(id) == null) return;
+        back.push(new Back(open, card, cardView, pageId, offset));
+        pageId = id;
+        card = null;
+        cardView = null;
+        offset = 0;
+    }
+
+    /** Back from a page: to where the player came from, or out of the guide where it opened on the page. */
+    private void back() {
+        reading = null;
+        if (back.isEmpty()) {
+            onClose();
+            return;
+        }
+        var b = back.pop();
+        open = b.open();
+        card = b.card();
+        cardView = b.cardView();
+        pageId = b.page();
+        offset = b.offset();
+    }
 
     public GuideScreen() {
         super(Component.translatable(GuidePage.KEY + "title"));
@@ -106,8 +151,14 @@ public class GuideScreen extends Screen {
         int w = Math.min(GuidePage.DESIGN_WIDTH, width - 8), h = Math.min(GuidePage.DESIGN_HEIGHT, height - 8);
         left = (width - w) / 2;
         top = (height - h) / 2;
-        page = GuidePage.place(new GuidePage.Input(guide(), GuideClient.progress(), open, card, com.wormzjl.icheme.science.tutorial.cards.Card.temperature(ClientConfig.temperature())), w, h, GuiCanvas.measure(font), GuideScreen::tr, themeHint());
+        page = GuidePage.place(new GuidePage.Input(guide(), GuideClient.progress(), open, card, com.wormzjl.icheme.science.tutorial.cards.Card.temperature(ClientConfig.temperature()))
+                .withPage(GuideClient.pages(), pageId), w, h, GuiCanvas.measure(font), GuideScreen::tr, themeHint());
         offset = Math.clamp(offset, 0, page.maxOffset());
+        // P5: a page step is done once its page was read to its end (at once where it needs no scrolling).
+        if (reading != null && page.equipment() != null && offset >= page.maxOffset()) {
+            GuideClient.report(reading);
+            reading = null;
+        }
     }
 
     @Override
@@ -158,7 +209,12 @@ public class GuideScreen extends Screen {
         if (tour.isOpen() && tour.mouseClicked(font, width, height, mouseX, mouseY)) return true;
         if (button != 0) return super.mouseClicked(mouseX, mouseY, button);
         double x = mouseX - left, y = mouseY - top;
-        if (page.card() != null && cardView != null && cardView.press(page.card(), x, y)) return true;
+        if (page.card() != null && cardView != null && cardView.press(page.card(), x, y)) {
+            // P5: a place on the card that names a page (the unit map's symbols) opens it.
+            String link = cardView.hit() < 0 ? null : cardView.card().link(cardView.hit());
+            if (link != null) openPage(link);
+            return true;
+        }
         if (page.bar() && page.barTrack().contains(x, y)) {
             barDragging = true;
             barTo(y);
@@ -185,6 +241,10 @@ public class GuideScreen extends Screen {
             ClientConfig.toggleTheme();
             return;
         }
+        if (page.equipment() != null && action.startsWith("page:")) {
+            pageAction(action, page.equipment().page());
+            return;
+        }
         if (action.equals("card:back")) {
             card = null;
             cardView = null;
@@ -198,6 +258,9 @@ public class GuideScreen extends Screen {
             open = action.substring("chapter:".length());
             card = null;
             cardView = null;
+            pageId = null;
+            reading = null;
+            back.clear();
             offset = 0;
             return;
         }
@@ -218,10 +281,39 @@ public class GuideScreen extends Screen {
         show(step);
     }
 
+    /** An open page's key: its film (returning here), its screen's tour's film, the next page in the unit, or Back. */
+    private void pageAction(String action, com.wormzjl.icheme.science.tutorial.guide.Pages.Page p) {
+        switch (action) {
+            case GuidePage.PAGE_BACK -> back();
+            case GuidePage.PAGE_NEXT -> {
+                var next = GuideClient.pages().next(p.id());
+                if (next != null) openPage(next.id());
+            }
+            case GuidePage.PAGE_FILM -> film(p.film());
+            case GuidePage.PAGE_TOUR -> {
+                var tour = p.tour() == null ? null : com.wormzjl.icheme.science.tutorial.guide.TourFile.load().get(p.tour());
+                if (tour != null && tour.film() != null) film(tour.film());
+            }
+            default -> {
+            }
+        }
+    }
+
+    /** Plays the film {@code name}, which returns here when it closes; its body is built now, not before. */
+    private void film(@org.jetbrains.annotations.Nullable String name) {
+        var scene = name == null ? null : Films.build(name);
+        if (scene != null && minecraft != null) minecraft.setScreen(new FilmScreen(scene, this, () -> {
+        }));
+    }
+
     /** Shows {@code step}'s film or card, as its key does. */
     private void show(String step) {
         var media = guide().step(step).media();
         switch (media) {
+            case Guide.Page named -> {
+                openPage(named.id());
+                reading = step;
+            }
             case Guide.Film film -> {
                 var scene = Films.build(film.name());
                 if (scene != null && minecraft != null) minecraft.setScreen(new FilmScreen(scene, this, () -> GuideClient.report(step)));

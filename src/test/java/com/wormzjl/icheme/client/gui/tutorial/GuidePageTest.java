@@ -43,7 +43,7 @@ class GuidePageTest {
         }
     }
 
-    static final List<String> CHAPTERS = List.of("welcome", "crude", "still", "tower", "simulator");
+    static final List<String> CHAPTERS = List.of("welcome", "crude", "still", "tower", "simulator", "unit");
 
     /** The three states the renders show: new, step 3 current, every step done. */
     static List<Progress> states() {
@@ -109,6 +109,45 @@ class GuidePageTest {
                     }
                 }
                 assertTrue(p.content() > 0);
+            }
+    }
+
+    /**
+     * P5: every equipment page at both sizes: its icon (a kind's) and its texts inside the glass, above its keys and never wider
+     * than its text area (a long name wraps, never shortened); Back always, Watch where it has a film, Tour where a tour,
+     * Next in the unit where the chain goes on; each key's word whole, the keys apart and inside the glass; and a page that
+     * scrolls ends with its last line in view.
+     */
+    @Test
+    void everyEquipmentPageStandsInsideTheGlassUncut() {
+        var pages = com.wormzjl.icheme.science.tutorial.guide.PageFile.load();
+        assertEquals(41, pages.pages().size(), "every kind's page and the control valve's");
+        for (var size : SIZES)
+            for (var id : pages.pages().keySet()) {
+                String at = size[0] + " by " + size[1] + ", " + id;
+                var p = GuidePage.place(new GuidePage.Input(GuideFile.load(), Progress.NONE, "unit", null).withPage(pages, id), size[0], size[1], M, english(), "Light panel");
+                var e = p.equipment();
+                assertNotNull(e, at);
+                assertTrue(p.rows().isEmpty() && p.card() == null, at + ": the page in place of the steps");
+                assertEquals(e.text(), p.view(), at + ": its texts scroll in the glass");
+                assertTrue(e.text().inside(p.well()), at + ": its text area in the glass");
+                int right = p.bar() ? p.barTrack().x() : e.text().right();
+                if (e.icon() != null) assertTrue(e.icon().inside(e.text()), at + ": its icon at the top");
+                assertEquals(e.page().kind() != null, e.icon() != null, at + ": a kind's page has its item's icon, the valve's none");
+                for (var t : e.texts()) assertTrue(t.x() >= e.text().x() && t.x() + M.width(t.text()) <= right, at + ": a line within its width: " + t.text());
+                var keys = e.keys().stream().map(GuidePage.Key::key).toList();
+                assertTrue(keys.contains(GuidePage.PAGE_BACK), at + ": Back");
+                assertEquals(e.page().film() != null, keys.contains(GuidePage.PAGE_FILM), at + ": Watch where it has a film");
+                assertEquals(e.page().tour() != null, keys.contains(GuidePage.PAGE_TOUR), at + ": Tour where it has one");
+                assertEquals(pages.next(id) != null, keys.contains(GuidePage.PAGE_NEXT), at + ": Next where the unit goes on");
+                for (var key : e.keys()) {
+                    assertTrue(key.rect().inside(p.well()) && key.rect().y() >= e.text().bottom(), at + ": " + key.key() + " under the texts, in the glass");
+                    assertTrue(M.width(key.text()) <= key.rect().w() - 6, at + ": its word whole: " + key.text());
+                    for (var other : e.keys()) if (other != key) assertFalse(key.rect().overlaps(other.rect()), at + ": keys apart");
+                    assertEquals(key.key(), p.action(key.rect().x() + 1, key.rect().y() + 1, 0), at + ": the key answers its press");
+                }
+                if (p.bar()) assertTrue(e.texts().getLast().y() + 9 - p.maxOffset() <= e.text().bottom(), at + ": its last line in view at its end");
+                else assertEquals(0, p.maxOffset(), at);
             }
     }
 

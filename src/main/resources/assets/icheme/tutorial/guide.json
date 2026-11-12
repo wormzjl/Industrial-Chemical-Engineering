@@ -18,7 +18,9 @@
     "flowsheet": "simulator/sheet",
     "stream": "simulator/sheet",
     "side_draw": "simulator/balance",
-    "heat_duty": "simulator/heat"
+    "heat_duty": "simulator/heat",
+    "preheat": "unit/whole",
+    "pumparound": "unit/whole"
   },
   "chapters": [
     {
@@ -74,6 +76,15 @@
         { "id": "heat", "check": "server", "criterion": "sheet_run" },
         { "id": "size" },
         { "id": "send", "check": "server", "criterion": "design_sent" }
+      ]
+    },
+    {
+      "id": "unit",
+      "steps": [
+        { "id": "whole", "media": "film:crude_unit" },
+        { "id": "map", "media": "card:unit_map" },
+        { "id": "tower", "media": "page:equipment_column" },
+        { "id": "next", "media": "read" }
       ]
     }
   ]
