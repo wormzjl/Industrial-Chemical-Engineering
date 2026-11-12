@@ -118,6 +118,8 @@ class StillRuntimeTest {
         final ElectricStores stores;
         final Stills stills;
         int items, taken, solves;
+        /** Each column job as it was queued: its tick and its condenser outlet floor, K. */
+        final List<double[]> jobs = new ArrayList<>();
         boolean feeding;
         long requests;
 
@@ -162,6 +164,7 @@ class StillRuntimeTest {
             });
             stills.solves((pot, island, job, done) -> {
                 solves++;
+                jobs.add(new double[]{epoch[0], job.outlet()});
                 solved.add(() -> done.accept(StillHead.run(job, model, () -> {
                 })));
                 return true;
@@ -230,6 +233,24 @@ class StillRuntimeTest {
 
         Stills.View view() {
             return stills.view(POT);
+        }
+
+        /**
+         * An inlet step: generator {@code node}'s island replaced at its committed tick, through a topology event, by its own
+         * graph with that generator delivering {@code state} (as {@code ExchangerCouplingTest}'s step).
+         */
+        void step(long node, FluidThermodynamics.State state) {
+            long id = owners.get(node);
+            var island = coordinator.snapshot(id);
+            var event = UUID.randomUUID();
+            long tick = island.clock().committedTick();
+            coordinator.fence(event, tick, Set.of(id));
+            var nodes = new ArrayList<>(island.graph().reservoirs());
+            for (int i = 0; i < nodes.size(); i++)
+                if (nodes.get(i).id() == node) nodes.set(i, new PassiveNetwork.Reservoir(node, nodes.get(i).elevation(), state, PassiveNetwork.NodeKind.GENERATOR));
+            var graph = new PassiveNetwork(nodes, island.graph().pipes(), island.graph().scheduledTransfers());
+            coordinator.topology(Set.of(event), Set.of(id), List.of(new IslandCoordinator.Replacement(id, graph)), model, tick, island.clock().onlineTick(), Map.of(), Set.of(), Map.of(), () -> {
+            });
         }
 
         StillUnit unit() {
@@ -423,6 +444,68 @@ class StillRuntimeTest {
             double total = now[c] + head[c] + vent[c] + dGave[c] + vGave[c];
             assertEquals(start[c], total, 1e-6 * start[c], "component " + c + " conserved");
         }
+    }
+
+    /**
+     * The condenser with light ends (CONDENSER_LIGHT_ENDS_REVIEW.md, option c): a pot still with its condenser on 15 °C water,
+     * charged with a light oil holding propane. The condenser's outlet stands at the water's inlet plus the approach; the
+     * propane it cannot hold there goes to the vent account, richer in it than the distillate; every mole stands in the pot,
+     * the head's accounts or what the outlets gave. A warmer water, stepped through a topology event, reaches the next queued
+     * job only: the step itself forces no solve, the jobs before it kept the old outlet and those after it take the new.
+     */
+    @Test
+    void aLightOilsGasGoesToTheVentAndTheNextJobTakesTheWatersStep() {
+        var model = FluidThermodynamics.forNetwork(CATALOG, "icheme:refinery").on(List.of("Propane", "N-pentane", "N-hexane", "Nitrogen"));
+        assertEquals(List.of("Propane", "N-pentane", "Nitrogen", "N-hexane", "Water"), model.components());
+        int n = model.componentCount();
+        var design = new BatchStill.Design(VOLUME, BatchStill.Heater.SOLID, true, 0);
+        var devices = List.of(pot(design),
+                plain(1, 0, 10, Kind.GENERATOR), plain(101, 1, 10, Kind.PIPE), water(design), plain(201, 5, 10, Kind.PIPE), plain(2, 6, 10, Kind.VOID),
+                outlet(DISTILLATE, 20), plain(301, 1, 20, Kind.PIPE), plain(3, 2, 20, Kind.VOID),
+                outlet(VENT, 30), plain(302, 1, 30, Kind.PIPE), plain(4, 2, 30, Kind.VOID));
+        var charge = per(model, new double[]{.05, .5, 0, .45, 0}, 300, 150_000);
+        var states = new HashMap<Long, PassiveNetwork.Reservoir>();
+        states.put(POT, contents(model, charge, .6, true));
+        states.put(1L, new PassiveNetwork.Reservoir(1, 0, water(model, 288.15, 300_000), PassiveNetwork.NodeKind.GENERATOR));
+        states.put(2L, new PassiveNetwork.Reservoir(2, 0, water(model, 300, 101_325), PassiveNetwork.NodeKind.VOID));
+        for (long id : new long[]{DISTILLATE, VENT})
+            states.put(id, new PassiveNetwork.Reservoir(id, 0, per(model, new double[]{0, 1, 0, 0, 0}, 298.15, 150_000), PassiveNetwork.NodeKind.GENERATOR));
+        for (long id : new long[]{3, 4})
+            states.put(id, new PassiveNetwork.Reservoir(id, 0, water(model, 300, 101_325), PassiveNetwork.NodeKind.VOID));
+        var basis = new WorldTopologyLedger.FluidBasis("icheme:refinery", model.components(), "still-test");
+        var unit = StillUnit.built(POT, WATER, DISTILLATE, VENT, 0, design, n).withFiring(1);
+        var rig = new Rig(model, basis, devices, states, unit);
+        rig.items = Integer.MAX_VALUE;
+        double[] start = rig.pot();
+        rig.run(240);
+        print("light oil", rig);
+        assertTrue(rig.solves > 0, "the column solved");
+        for (var job : rig.jobs)
+            assertTrue(job[1] == StillColumn.TOTAL_CONDENSER || Math.abs(job[1] - (288.15 + BatchStill.OUTLET_APPROACH)) < .1,
+                    "the outlet: the total condenser's before the water's first record, then the water's inlet (its pipe warms it a little) plus the approach: " + job[1]);
+        assertEquals(288.15 + BatchStill.OUTLET_APPROACH, rig.jobs.getLast()[1], .1, "the water's inlet plus the approach");
+        var dGave = rig.given.getOrDefault(DISTILLATE, new double[n]);
+        double[] vented = rig.unit().venting().moles().clone(), vGave = rig.given.getOrDefault(VENT, new double[n]);
+        for (int c = 0; c < n; c++) vented[c] += vGave[c];
+        double ventTotal = Arrays.stream(vented).sum(), distilled = Arrays.stream(dGave).sum() + Arrays.stream(rig.unit().head().moles()).sum();
+        System.out.printf(Locale.ROOT, "light oil: vented %s, distillate %s, status %s%n", Arrays.toString(vented), Arrays.toString(dGave), rig.view().status());
+        assertTrue(vented[0] > 0, "the propane the outlet cannot hold went to the vent account");
+        assertTrue(distilled > 0, "the condenser's liquid reached the spout's account");
+        assertTrue(vented[0] / ventTotal > dGave[0] / Arrays.stream(dGave).sum(), "the vent is richer in propane than the distillate");
+        double[] now = rig.pot(), head = rig.unit().head().moles(), vent = rig.unit().venting().moles();
+        for (int c : new int[]{0, 1, 3})
+            assertEquals(start[c], now[c] + head[c] + vent[c] + dGave[c] + vGave[c], 1e-6 * start[c], "component " + c + " conserved");
+        // The water's step: no solve forced, the next queued job takes it.
+        int solves = rig.solves, queued = rig.jobs.size();
+        long stepped = rig.epoch[0];
+        rig.step(1, water(model, 298.15, 300_000));
+        assertEquals(solves, rig.solves, "the step forces no solve");
+        rig.run(60);
+        assertTrue(rig.jobs.size() > queued, "jobs were queued after the step");
+        for (int k = 0; k < queued; k++) assertTrue(rig.jobs.get(k)[1] < 298.15, "a job before the step kept its outlet");
+        assertEquals(298.15 + BatchStill.OUTLET_APPROACH, rig.jobs.getLast()[1], .1, "a job after the step: the new water's inlet plus the approach");
+        for (var job : rig.jobs.subList(queued, rig.jobs.size()))
+            assertTrue(job[0] > stepped, "every later job was queued on the schedule, after the step");
     }
 
     /** An open still of {@code stages} trays at reflux {@code reflux} on the pilot's ethanol and water, charged with 60 L of a wash at 364 K. */
