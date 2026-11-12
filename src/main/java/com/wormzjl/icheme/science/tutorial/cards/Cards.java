@@ -18,6 +18,8 @@ public final class Cards {
         ALL.put(Products.NAME, Products::new);
         ALL.put(Road.NAME, Road::new);
         ALL.put(PotTemperature.NAME, PotTemperature::new);
+        ALL.put(RefluxCut.NAME, RefluxCut::new);
+        ALL.put(CompareCut.NAME, CompareCut::new);
     }
 
     private Cards() {

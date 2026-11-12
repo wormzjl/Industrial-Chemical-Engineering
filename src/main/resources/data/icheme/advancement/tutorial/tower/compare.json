@@ -1,0 +1,32 @@
+{
+  "parent": "icheme:tutorial/tower/reflux",
+  "display": {
+    "icon": {
+      "id": "icheme:field_guide",
+      "count": 1
+    },
+    "title": {
+      "translate": "tutorial.icheme.advancement.tower.compare"
+    },
+    "description": {
+      "translate": "tutorial.icheme.advancement.tower.compare.description"
+    },
+    "show_toast": false,
+    "announce_to_chat": false
+  },
+  "criteria": {
+    "cut": {
+      "trigger": "icheme:still_state",
+      "conditions": {
+        "column": true,
+        "liquid": true,
+        "min_pot_temperature": 528
+      }
+    }
+  },
+  "requirements": [
+    [
+      "cut"
+    ]
+  ]
+}

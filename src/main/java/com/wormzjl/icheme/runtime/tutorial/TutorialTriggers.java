@@ -82,21 +82,23 @@ public final class TutorialTriggers {
         }
 
         public void trigger(ServerPlayer player, FluidView.Still still) {
-            trigger(player, instance -> instance.condition().matches(still.status(), still.filled(), still.potTemperature(), still.distillate()));
+            trigger(player, instance -> instance.condition().matches(still.status(), still.filled(), still.potTemperature(), still.distillate(), still.stages(), still.reflux(), still.closed()));
         }
 
         public record Instance(Optional<ContextAwarePredicate> player, Optional<List<String>> status, Optional<Double> minFilled,
-                               Optional<Double> minPotTemperature, Optional<Boolean> liquid) implements SimpleCriterionTrigger.SimpleInstance {
+                               Optional<Double> minPotTemperature, Optional<Boolean> liquid, Optional<Boolean> column, Optional<Double> minReflux) implements SimpleCriterionTrigger.SimpleInstance {
             public static final Codec<Instance> CODEC = RecordCodecBuilder.create(i -> i.group(
                     EntityPredicate.ADVANCEMENT_CODEC.optionalFieldOf("player").forGetter(Instance::player),
                     Codec.STRING.listOf().optionalFieldOf("status").forGetter(Instance::status),
                     Codec.doubleRange(0, 1).optionalFieldOf("min_filled").forGetter(Instance::minFilled),
                     Codec.doubleRange(1, 5000).optionalFieldOf("min_pot_temperature").forGetter(Instance::minPotTemperature),
-                    Codec.BOOL.optionalFieldOf("liquid").forGetter(Instance::liquid)
+                    Codec.BOOL.optionalFieldOf("liquid").forGetter(Instance::liquid),
+                    Codec.BOOL.optionalFieldOf("column").forGetter(Instance::column),
+                    Codec.doubleRange(0, 1e4).optionalFieldOf("min_reflux").forGetter(Instance::minReflux)
             ).apply(i, Instance::new));
 
             public StillCondition condition() {
-                return new StillCondition(status, minFilled, minPotTemperature, liquid);
+                return new StillCondition(status, minFilled, minPotTemperature, liquid, column, minReflux);
             }
         }
     }
@@ -119,21 +121,26 @@ public final class TutorialTriggers {
         }
     }
 
-    /** A structure the player built from the constructor: any kind, or the instance's {@code kind} (an {@code EquipmentShape.Kind} name). */
+    /**
+     * A structure the player built from the constructor: any kind, or the instance's {@code kind} (an {@code EquipmentShape.Kind}
+     * name); P4b: with {@code column}, whether a still has its column (the structure's own still options).
+     */
     public static final class EquipmentBuilt extends SimpleCriterionTrigger<EquipmentBuilt.Instance> {
         @Override
         public Codec<Instance> codec() {
             return Instance.CODEC;
         }
 
-        public void trigger(ServerPlayer player, EquipmentShape.Kind kind) {
-            trigger(player, instance -> instance.kind().map(kind.name()::equals).orElse(true));
+        public void trigger(ServerPlayer player, EquipmentShape shape) {
+            boolean column = shape.still().column();
+            trigger(player, instance -> instance.kind().map(shape.kind().name()::equals).orElse(true) && instance.column().map(c -> c == column).orElse(true));
         }
 
-        public record Instance(Optional<ContextAwarePredicate> player, Optional<String> kind) implements SimpleCriterionTrigger.SimpleInstance {
+        public record Instance(Optional<ContextAwarePredicate> player, Optional<String> kind, Optional<Boolean> column) implements SimpleCriterionTrigger.SimpleInstance {
             public static final Codec<Instance> CODEC = RecordCodecBuilder.create(i -> i.group(
                     EntityPredicate.ADVANCEMENT_CODEC.optionalFieldOf("player").forGetter(Instance::player),
-                    Codec.STRING.optionalFieldOf("kind").forGetter(Instance::kind)
+                    Codec.STRING.optionalFieldOf("kind").forGetter(Instance::kind),
+                    Codec.BOOL.optionalFieldOf("column").forGetter(Instance::column)
             ).apply(i, Instance::new));
         }
     }

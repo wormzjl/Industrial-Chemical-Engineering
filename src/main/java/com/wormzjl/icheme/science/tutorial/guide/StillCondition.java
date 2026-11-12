@@ -10,10 +10,12 @@ import java.util.Set;
  * What a guide step asks of a still the player watches (batch 2026-11-12-tutorial-system, P2b; criterion
  * {@code icheme:still_state}): optional statuses (the still law's status names), a least filled share of the pot, a
  * least pot temperature (K), and liquid at the spout (the view's distillate flow above zero: a head that only vents its
- * gas gives none). A condition left out holds. The rule reads only what the published view carries; no
+ * gas gives none). P4b (chapter 3): whether the still has a column, and a least reflux ratio set on its open valve (a
+ * closed valve, or a still with no column, meets none). A condition left out holds. The rule reads only what the published view carries; no
  * Minecraft type, so it is tested on its own.
  */
-public record StillCondition(Optional<List<String>> status, Optional<Double> minFilled, Optional<Double> minPotTemperature, Optional<Boolean> liquid) {
+public record StillCondition(Optional<List<String>> status, Optional<Double> minFilled, Optional<Double> minPotTemperature, Optional<Boolean> liquid,
+                             Optional<Boolean> column, Optional<Double> minReflux) {
     /** The statuses of a still that is firing: heating, boiling, or taking product over (a limited condenser still distils). */
     public static final Set<String> FIRING = Set.of("HEATING", "BOILING", "DISTILLING", "COOLING_LIMITED");
 
@@ -21,6 +23,12 @@ public record StillCondition(Optional<List<String>> status, Optional<Double> min
         status = status.map(List::copyOf);
         if (minFilled.isPresent() && !(minFilled.get() >= 0 && minFilled.get() <= 1)) throw new IllegalArgumentException("A filled share lies between 0 and 1");
         if (minPotTemperature.isPresent() && !(minPotTemperature.get() > 0)) throw new IllegalArgumentException("A pot temperature is above 0 K");
+        if (minReflux.isPresent() && !(minReflux.get() >= 0)) throw new IllegalArgumentException("A reflux ratio is 0 or more");
+    }
+
+    /** The conditions of chapter 2: no column or reflux condition. */
+    public StillCondition(Optional<List<String>> status, Optional<Double> minFilled, Optional<Double> minPotTemperature, Optional<Boolean> liquid) {
+        this(status, minFilled, minPotTemperature, liquid, Optional.empty(), Optional.empty());
     }
 
     /**
@@ -29,6 +37,16 @@ public record StillCondition(Optional<List<String>> status, Optional<Double> min
      * distillate} flow to the spout (kg/s).
      */
     public boolean matches(String status, double filled, @Nullable Double potTemperature, double distillate) {
+        return matches(status, filled, potTemperature, distillate, 0, 0, true);
+    }
+
+    /**
+     * {@link #matches(String, double, Double, double)} with the still's column {@code stages} (0 for none) and its reflux
+     * valve as set: its {@code reflux} ratio, or {@code closed}.
+     */
+    public boolean matches(String status, double filled, @Nullable Double potTemperature, double distillate, int stages, double reflux, boolean closed) {
+        if (column.isPresent() && column.get() != stages > 0) return false;
+        if (minReflux.isPresent() && !(stages > 0 && !closed && reflux >= minReflux.get())) return false;
         if (this.status.isPresent() && !this.status.get().contains(status)) return false;
         if (minFilled.isPresent() && !(filled >= minFilled.get())) return false;
         if (liquid.isPresent() && liquid.get() != distillate > 0) return false;

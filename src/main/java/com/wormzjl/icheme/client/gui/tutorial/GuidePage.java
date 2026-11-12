@@ -224,8 +224,15 @@ public final class GuidePage {
             door.draw(c, 0, skin);
             for (var e : chapters.entrySet()) {
                 var key = e.getValue();
-                skin.button(c, key.rect(), key.text(), key.latched() ? Skin.Press.CURRENT : Skin.Press.REST, key.key().equals(hover));
-                if (finished.getOrDefault(e.getKey(), false)) mark(c, new Rect(key.rect().x() + 5, key.rect().y() + 5, MARK, MARK), Mark.DONE);
+                var press = key.latched() ? Skin.Press.CURRENT : Skin.Press.REST;
+                var r = key.rect();
+                if (!finished.getOrDefault(e.getKey(), false)) skin.button(c, r, key.text(), press, key.key().equals(hover));
+                else {
+                    // P4b: a finished chapter's title stands centred right of its done mark, not under it.
+                    skin.button(c, r, "", press, key.key().equals(hover));
+                    mark(c, new Rect(r.x() + 5, r.y() + 5, MARK, MARK), Mark.DONE);
+                    Skin.centred(c, new Rect(r.x() + 5 + MARK, r.y(), r.w() - 5 - MARK, r.h()), key.text(), skin.legend(press));
+                }
             }
             skin.well(c, well);
             if (card != null) {

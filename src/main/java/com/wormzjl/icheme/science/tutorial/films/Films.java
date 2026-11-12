@@ -14,6 +14,8 @@ public final class Films {
         ALL.put(StillInside.NAME, StillInside::build);
         ALL.put(StillBuild.NAME, StillBuild::build);
         ALL.put(StillRun.NAME, StillRun::build);
+        ALL.put(StillTray.NAME, StillTray::build);
+        ALL.put(SmallTower.NAME, SmallTower::build);
     }
 
     private Films() {

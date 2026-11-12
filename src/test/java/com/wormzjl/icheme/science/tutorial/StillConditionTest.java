@@ -44,6 +44,23 @@ class StillConditionTest {
         assertFalse(first.matches("DISTILLING", .6, 318.0, Double.NaN));
     }
 
+    /** P4b, chapter 3: a still with a column, and its valve open at a least reflux ratio; a closed valve or no column meets none. */
+    @Test
+    void theColumnAndTheRefluxAreReadFromTheView() {
+        var column = new StillCondition(Optional.empty(), NONE, NONE, ANY, Optional.of(true), NONE);
+        assertTrue(column.matches("HEATING", .6, 300.0, 0, 4, 0, true));
+        assertFalse(column.matches("HEATING", .6, 300.0, 0, 0, 0, true), "a pot still");
+        var reflux = new StillCondition(Optional.empty(), NONE, NONE, ANY, ANY, Optional.of(2.0));
+        assertTrue(reflux.matches("DISTILLING", .6, 400.0, 1e-3, 4, 2, false));
+        assertFalse(reflux.matches("DISTILLING", .6, 400.0, 1e-3, 4, 1.5, false), "under the ratio");
+        assertFalse(reflux.matches("BOILING", .6, 400.0, 0, 4, 2, true), "a closed valve");
+        assertFalse(reflux.matches("DISTILLING", .6, 400.0, 1e-3, 0, 2, false), "no column");
+        // Chapter 2's conditions hold for any still, with or without a column.
+        var first = new StillCondition(Optional.empty(), NONE, NONE, LIQUID);
+        assertTrue(first.matches("DISTILLING", .6, 318.0, 1e-7, 4, 2, false));
+        assertThrows(IllegalArgumentException.class, () -> new StillCondition(Optional.empty(), NONE, NONE, ANY, Optional.of(true), Optional.of(-1.0)));
+    }
+
     @Test
     void aStopCountsOnlyForAFiringStill() {
         for (var status : List.of("HEATING", "BOILING", "DISTILLING", "COOLING_LIMITED")) assertTrue(StillCondition.firing(status), status);

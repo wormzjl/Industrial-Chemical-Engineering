@@ -11,7 +11,10 @@
     "vapour": "still/build",
     "condenser": "still/build",
     "distillate": "still/watch",
-    "cut": "still/cut"
+    "cut": "still/cut",
+    "tray": "tower/tray",
+    "reflux": "tower/reflux",
+    "tower": "tower/many"
   },
   "chapters": [
     {
@@ -45,6 +48,16 @@
         { "id": "cut", "media": "card:pot_temperature", "check": "server", "criterion": "still_state" },
         { "id": "switch", "check": "server", "criterion": "diverter_switched" },
         { "id": "stop", "check": "server", "criterion": "still_stopped" }
+      ]
+    },
+    {
+      "id": "tower",
+      "steps": [
+        { "id": "tray", "media": "film:still_tray" },
+        { "id": "build", "check": "server", "criterion": "equipment_built" },
+        { "id": "reflux", "media": "card:reflux", "check": "server", "criterion": "still_state" },
+        { "id": "compare", "media": "card:compare", "check": "server", "criterion": "still_state" },
+        { "id": "many", "media": "film:small_tower" }
       ]
     }
   ]
