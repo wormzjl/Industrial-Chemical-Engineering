@@ -152,3 +152,30 @@ will have expired. It reports every 50 minutes, at once on a stop named in secti
   copied to the main data, as the pilot's was not.
 - Addition to D2: the overlay changes in the same commit as the records (W6a), since one catalog cannot hold
   two `Ethanol` components.
+
+## 12. W6a committed; W6b's stop on positional fixtures (2026-11-12)
+
+W6a `e1cc5ceca`: the main record, its heat data, the overlay on the main compound. G1: 0 differences from the
+pilot record. Heating value 1277.512 kJ/mol; NIOSH read: 3.3 % and 19 %. W6-0: an eighth preset fits (a
+scrolled list); before numbers 1725 kernel evaluations (dry scenario), 249 fits and 453 ms cold (whole list).
+
+W6b's run of the affected classes: 1729 tests, 131 failed. No production code and no physics moved.
+- 118 from one test helper, `TiaJuanaTestCatalog.thermo`: it builds its column view as the package's prefix
+  before the crystals' compounds and pads feeds by position.
+- `CoolingTowerRuntimeTest`: its fixture pumps `oil[length-3]`, ethyl mercaptan before, CO2 now.
+- `FluidFactsCompatTest`, "batch stills": the recorded string lists still accounts by position; by id the
+  amounts are equal.
+- `RefineryImportTest`: its catalog has no ethanol and refuses the new preset.
+- The rest are count and identity pins, expected.
+
+Decision (main thread, inside the approved task): keep D3 and address compounds by id in the fixtures. Putting
+ethanol before CO2 would move CO2's index and fix only the helper. Conditions sent to the sub-thread:
+- The helper's view is the list it was before W6: the package's compounds that are not a crystal's and do not
+  name a homomorph. A view ending in ethanol at zero amount would take the activity branch on about 44 pairs
+  (3.6 to 4.6 times a kernel call) on a list no world runs. The 118 must pass with no number re-pinned.
+- A fixture that runs an island on the whole list moves to the island's view, as production does.
+- The corpus expectations are projected by id onto each image's saved basis, not regenerated; images untouched.
+- `RefineryImportTest` keeps its guard (importer output equals the main records).
+- Named before the commit: what in production reads the package record's revision (`AqueousSolventDataTest`
+  guarded it in W3b; `PilotCryogenicCatalogTest` pins an identity string with it). A saved identity that compares
+  it must show no restatement for an image saved at r3 (G7).
