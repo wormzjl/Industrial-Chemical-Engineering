@@ -74,6 +74,12 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
   hits the draw wall and its variation 1 (pumparound above the draw) stands at 1.0 m. Every candidate is yellow on the
   smallest pump and exchanger at 10 m³/h and red on the V-101 path. Recommended: C variation 1. No preset registered, no
   production change, no test run. SMALL_COLUMN_CANDIDATES_REVIEW.md.
+- 2026-11-12: P4 on the parent's decisions: A kept as the scaled reference (refused at 1.0 m, Size all 1.5 m). B and C
+  aimed at the barrel with 14 recorded solves each (tools/tutorial-column/tuning.json): reflux 1.5, heater outlet 390 C;
+  B 17.5/11.1/23.6/47.8 %, C 18.2/34.9/46.9 %, both at 1.0 m. V-101 at 3.20 bar makes the path green on all three (no
+  pump head). Datasheets split the lamps: real fails (S-6 slow two-phase line on all three) and "larger than needed"
+  (catalogue's smallest pump and shell; C all green from about 195 kmol/h, 2.5 m). B and C need about 123 kg/h of bottoms
+  as fuel beside the off-gas. Recommended: C variation 1. Tool and documents only, no test run.
 
 ## Code areas (proposed)
 
@@ -98,8 +104,9 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
 - O2: the charge step names the Fluid converter (bundled rules: `#c:crude_oil` of TFMG and PneumaticCraft, `ad_astra:oil`).
   A survival player without one of those mods has no crude source until an extraction system exists.
 - D4: the small column. The datasheets are in `tmp/tutorial-renders/p4/` of this worktree. Open for the owner: which
-  candidate (recommended: C variation 1); the yellow pumps and exchangers at 10 m³/h (a smaller catalogue unit, or a
-  larger feed); V-101 at about 3.0 bar on the small sheet (SMALL_COLUMN_CANDIDATES_REVIEW.md).
+  candidate (recommended: C variation 1); the yellow "larger than needed" pumps and exchangers (0.025 and 0.04 m pumps and
+  a 0.25 m shell in the catalogue, a unit of about 195 kmol/h, or a tutorial note); the bottoms as fuel for B and C; why
+  Size all keeps S-6 at 0.1 m (SMALL_COLUMN_CANDIDATES_REVIEW.md).
 - P0: the owner's one in-game check of the scene player (P0_SCENE_PLAYER.md, last section).
 - P1: the owner's review of the English text and the renders; the in-game rows of P1_GUIDE_AND_HELP.md; the Field
   Guide's final icon.
