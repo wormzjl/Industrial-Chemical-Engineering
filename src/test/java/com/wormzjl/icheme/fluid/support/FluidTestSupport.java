@@ -7,7 +7,6 @@ import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.fluid.transport.SlurryTransport;
 import com.wormzjl.icheme.science.thermo.TraceTruncationPolicy;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 
@@ -61,8 +60,7 @@ public final class FluidTestSupport {
             case NITROGEN -> amounts[NITROGEN] = 1;
             case WATER -> amounts[WATER] = 1;
             case WET_CRUDE -> {
-                amounts = Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo(NETWORK_PACKAGE)
-                        .crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(), WATER+1);
+                amounts = com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.worldCrude();
                 amounts[NITROGEN] = .1;
                 amounts[WATER] = .2;
             }

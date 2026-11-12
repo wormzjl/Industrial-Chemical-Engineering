@@ -28,6 +28,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * S3's gate on a real steady run of the sample (batch 2026-11-02-process-simulator, {@code SIZING_PLAN.md} sections 3.4 to 3.6 and 4),
@@ -163,7 +164,7 @@ class ColumnSizingSampleTest {
         amounts[axis.size() - 1] += top.waterVaporMolPerSecond();
         double[] flash = MaterialRuntime.with(SheetFixture.CATALOG, SheetFixture.NETWORK, () -> {
             var state = thermo.atTemperature(top.temperatureKelvin(), top.pressurePascal(), amounts, com.wormzjl.icheme.science.fluid.state.SolidInventory.EMPTY);
-            return new double[]{state.mass(), thermo.model().vaporMass(state.state()), state.state().waterLiquid(), state.temperature()};
+            return new double[]{state.mass(), thermo.model().vaporMass(state.state()), TestPhases.waterLiquid(state.state()), state.temperature()};
         });
         var overhead = line("overhead");
         System.out.printf(Locale.ROOT, "TOP\t%.2f K\tvapour %.4f of %.3f kg/s\twater liquid %.4f mol/s\toverhead line %s at %.4g kg/m3%n", flash[3], flash[1], flash[0], flash[2], overhead.line().service(), overhead.line().density());
@@ -220,7 +221,8 @@ class ColumnSizingSampleTest {
     @Test
     void p102ReadsItsDrawTraysHeight() {
         var pump = sized.units().get("P-102").rating();
-        assertEquals(32.35, read(pump, Limit.PUMP_NPSH), TENTH, "32.3 before condenser carry-over (E31)");
+        // W5 D1 of batch 2026-11-11-aqueous-solvents: the column flashes on the network's derived pairs: the draw tray's liquid is no longer above its vapour pressure in the network's flash.
+        assertEquals(34.69, read(pump, Limit.PUMP_NPSH), TENTH, "32.35 with the column on the authored matrix (to W5a); 32.3 before condenser carry-over (E31)");
         // O3 of batch 2026-11-04-open-thermo-data: on the medium crude grade P-102 runs at 69 % of its rated flow, under the lamp's 70 %.
         assertEquals(Lamp.YELLOW, pump.lamp(), () -> text(pump));
         assertSame(Limit.PUMP_RATED, pump.closest().limit(), () -> text(pump));

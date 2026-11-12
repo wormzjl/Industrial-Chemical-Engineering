@@ -1,10 +1,73 @@
 # Shared thermodynamics, materials and deterministic math
 
+## Water in the cubic and derived pairs (batch 2026-11-11-aqueous-solvents, W2 to W3b, 2026-11-12)
+
+The fluid network's phase model holds water as a compound of the cubic. What the materials side gives it:
+
+| Class or record | Role | Read it for |
+|---|---|---|
+| [`DerivedPairs`](../../../src/main/java/com/wormzjl/icheme/science/material/DerivedPairs.java) | The PR78 kernel of a compound list with every pair derived from the compounds' own data: one source per unordered pair, the first that applies: `LIBRARY` (the package's interaction libraries, a classical pair), `HYDROGEN` (k_ij = 0), `HENRY` (water with a gas that carries `henry_in_water`: a classical k_ij at 298.15 and 373.15 K that gives the Henry constant), `ACTIVITY` (two liquids with modified UNIFAC counts, one a solvent: water, or a polar compound that names a homomorph; since `derived-pairs-r7` a polar compound without one, methyl mercaptan, takes E-PPR78 with a hydrocarbon (owner, section 13 of W5_COLUMN_PLAN.md): NRTL-form alpha and two energies fitted to the group model at 298.15 and 373.15 K), then the remaining sources of its class comment. `Result.identity` is part of the derived contract's package revision | Why a pair has the value it has; what a data edit moves |
+| [`HuronVidalExcess`](../../../src/main/java/com/wormzjl/icheme/science/thermo/HuronVidalExcess.java) | The kernel's one mixing rule (`PengRobinsonKernel.huronVidal`, N8): a_mix/b_mix = Σ x_i a_i/b_i - gE/Λ with an NRTL gE weighted by the co-volumes. A classical pair enters as dg_ji = Λ[a_i/b_i - (1 - k_ij) s_i s_j/b_j]; with every pair classical the rule is the quadratic one exactly. The exponential sums run only over polar compounds with an amount in the phase | Mixing-rule cost and form |
+| [`ModifiedUnifac`](../../../src/main/java/com/wormzjl/icheme/science/material/ModifiedUnifac.java) | The modified UNIFAC (Dortmund) table (`group_interactions/modified_unifac_dortmund.json`) and its activity coefficients from `group_counts`; the water-hydrocarbon block replaces the table's water parameters for hydrocarbons | Read once per data revision at load, never per tick |
+| [`HenryConstant`](../../../src/main/java/com/wormzjl/icheme/science/material/HenryConstant.java) | A gas's `henry_in_water` sub-record, the IAPWS G7-04 form on the water model's Wagner-Pruss line | Gas solubility in water |
+| `properties/cubic_water.json` (`icheme:cubic_water`, `cubic-water-r1`) | Water's record for the cubic: critical constants, a Mathias-Copeman alpha, group counts, no volume translation | `MaterialCatalog.CUBIC_WATER` |
+| `water/*.json` (`water-iapws95-shomate-r4`) | r4 adds `datum_vaporization_enthalpy` 43988.01 J/mol (IF97's latent heat at 298.15 K): saturated liquid water at 298.15 K lies that far below the saturated steam (`V3WaterProperties.liquidEnthalpyOffset`, G1). A record without the field keeps the Watson datum (`MaterialCatalog.Water.datumVaporizationEnthalpy` NaN) | The water datum both engines share |
+
+- `MaterialCatalog.withWater(packageId)` gives a network model its package with Water on `CUBIC_WATER` after the
+  package's own compounds and the water model's ice among its crystals. No package record names it, so the column, the
+  presets and the package's own identity are unchanged. It returns the package itself where it names Water already,
+  where it is a lens, or where its method takes its ideal gas from reference spines: there is no water spine, so such
+  a network stays dry and refuses water ([fluid-science.md](fluid-science.md)).
+- W5: the V3 column derives its kernel the same way ([column-v3.md](column-v3.md)). `MaterialCatalog.lens(packageId)` is true for a package with no definition (a lens, the learned start's `inferenceView`), which keeps its own matrix. A pseudo-cut takes paraffinic group counts only in a scheme whose table the catalog holds (Dortmund, E-PPR78), so a catalog without them derives a cut's pairs from the later sources.
+- Open data item: water's alpha function near 100 to 200 bar leaves the cubic's saturation temperature up to 0.43 K off
+  Wagner-Pruss; a refit is W2's.
+- The engine side (two books, `WaterShare`, the three-slot system, ice as a crystal) is in
+  [equilibrium-engine.md](equilibrium-engine.md). Tests: `DerivedPairsTest`, `AqueousSolventDataTest`,
+  `PengRobinsonKernelHuronVidalTest`, `V3WaterPropertyDerivativesTest` (the datum); test catalog
+  `PilotAqueousTestCatalog` (`pilot_aqueous`: water, ethanol, n-hexane and gases; its ethanol is the main record since W6).
+
+## Ethanol in the main data (batch 2026-11-11-aqueous-solvents, W6, 2026-11-12)
+
+- Records: `properties/chemsep_ethanol.json` (`icheme:chemsep_ethanol`, `chemsep-8.3-dwsim-10.2.5-r1`, imported by
+  `tools/compound-import/` from `selection-aqueous-ethanol.json`; the pilot record's values field for field) with the
+  sub-records `thermochemistry` (-234950 J/mol, C2H6O), `flammability` (3.3 to 19 %, NIOSH Pocket Guide) and
+  `combustion` (1277.5 kJ/mol, `tools/heating-values/`), and `components/ethanol.json`. The pilot overlay no longer
+  carries ethanol; `pilot_aqueous` names the main compound.
+- `packages/refinery.json` is `refinery-tier1-r4`: `Ethanol` after `CarbonDioxide`, so no existing compound's
+  index moves. No pair library and no method edit: its pairs are derived (`DerivedPairs`: 32 `ACTIVITY`,
+  10 `HOMOMORPH`, 1 `HYDROGEN`, 3 `MISSING` with methyl mercaptan, ammonia and carbonyl sulfide, which have no
+  group pair). The package record's revision is in no identity: a list without ethanol keeps its identity and its
+  numbers. A world saved before W6 rebuilds its state from facts by compound id (the grown list is another basis).
+- Preset `presets/fluid_7.json` (`ethanol`, one compound at 1.0), listed after `carbon_dioxide` in
+  `networks/default.json`. Fired heaters, stills, engines, turbines and the flare burn it from its record.
+- Load cost: `DerivedPairs.derive` fits a list's activity pairs on a parallel first pass (`fitActivitiesInParallel`,
+  owner approval of 2026-11-12, W6 plan sections 13 and 15): it walks the pairs in the loop's branch order
+  (`library`, `henry`, `activityCandidate`, `Context.groupModel`), collects each activity pair whose key the cache
+  does not hold (`ActivityJob`, the one helper both passes read their tokens, block and key from), and with two or
+  more fits them on a parallel stream, one task per key. Each fit builds its own kernel, workspace and group mixture,
+  so the doubles do not depend on the thread; the pair loop reads them from the cache. A fit that throws stays
+  uncached and the loop throws it as before; the pass adds no pair, token or notice. The whole wet list then derives
+  in 0.23 to 0.25 s warm and 0.38 s cold on 16 processors (291 fits; without ethanol 0.08 to 0.17 s), against
+  1.5 to 1.75 s sequentially. `DerivedPairsTest.theParallelFitsEqualEachPairFittedAlone` and the probe `PairDump`
+  (every pair and excess cell as hexadecimal doubles, before and after) hold the numbers. Sequentially, ethanol's
+  32 activity fits take 1.40 s, about 44 ms each against water's 11 ms. Cause: where the
+  group model gives one liquid (`DerivedPairs.Context.shape`, `oneLiquid`: every ethanol pair with a hydrocarbon
+  and with water), each Nelder-Mead trial also runs `falls()` on `SCAN_POINTS` = 99 points of `model.logPhi`, on
+  top of the 15 grid points: 114 evaluations a trial against 15. A water and hydrocarbon pair has two liquids and
+  skips the scan. The cost is paid once per catalog, when the whole-list model builds: at world start
+  (`FluidWorldAuthority`), on `/reload` (`FluidPropertyReloadGuard`) and at the client's first simulator open
+  (`ProcessSimulatorScreen`). A list without ethanol pays nothing: the dry island scenario's kernel counters are
+  identical (G8). Probes `tools/aqueous-solvents/probes/` `LoadFits`, `LoadSplit`, `PairCost` and `PairDump`.
+- Tests: `EthanolMainDataTest` (boiling point 351.70 K, standard density, the wash equal to the pilot, heat of
+  combustion, the preset), `FiredHeaterFuelTest` (ethanol vapour fires at 27.73 MJ/kg), `StillRuntimeTest` (the wash
+  pot on `icheme:refinery` equal to the pilot), `FlowsheetAqueousColumnTest` (the `ethanol_rectifier` example).
+  Test fixtures read the world list by compound id (`TiaJuanaTestCatalog.thermo`, `worldCrude`, `feed`).
+
 **Snapshot:** 7be61a4b9 (branch `claude/furnace-fuel-power-requirements-f7a46e`, main 0.23.6 merged in), 2026-11-10. Batches `2026-11-09-furnace-fuel-power`, `2026-11-09-flare-stack` and `2026-11-09-batch-distiller`, merged as 0.24.0 on 2026-11-10: heating values (`MaterialCatalog.Combustion`, `heatingValues`, `formulas`; prebuilt by `tools/heating-values/`) and solid fuel records (`SolidFuelCatalog`, kind `fuels`) · earlier: 5daeda5f3 (branch `claude/refinery-compounds-thermos-252973`), 2026-11-09 (`TrainedPhysics` through `DeterministicMath`; the example datapack carries O9's sub-records). Batches `2026-11-04-refinery-compounds` (a package is a method plus a compound list, restricted views, identities by physics fields, 25 refinery compounds in `icheme:refinery`, freezing points), `2026-11-04-open-thermo-data` (open data, four generated crude grades, the Twu cut viscosity and one cut-pair term, CO2 and its crystal on the fit family, Tia Juana and the pilot as test overlays, the sub-records only `SubRecords` reads) and `2026-11-05-neural-retrain` (the neural physics check by value, `TrainedPhysics`), merged as 0.23.0 on 2026-11-09 · earlier: 3f459c176 (branch `claude/in-game-process-simulator-93dd9a`), 2026-11-04 · **Updated:** 2026-11-04 (merge package: the catalog's readers after the calculator block left, W8: no viewer refresh, the simulator's `RevisionNotice`, a placed calculator reading only its design; no code of this chapter changed since 6bf2205bf) · 2026-11-03 (batch 2026-11-02-process-simulator, W5 `61fe9196`: the five crude packages and their five column presets are gone; the five crude assays stand on `tjl20_methane` at `crude-regrouped-r2`; three column presets, four packages, 84 indexed files) · earlier: 2026-10-28 at f20ceefa (batch 2026-10-27-heat-exchanger-design, owner choice (b): a column preset's `columnDiameterMetres` must be above 0; the id `holland_3_2` is no longer reserved, the Holland example having left the presets; the steam's second-virial gas is in [equilibrium-engine.md](equilibrium-engine.md)) · earlier: 2026-10-27 at ce71b45c (batch 2026-10-26-multi-machine-framework, owner decisions 2026-10-26: nothing is hashed; every record declares its revision (a token, `JsonFields.revision`), and a package's identities are composed from them: `scientificRevision`, `fluidRevision`, `spineRevision`; `samePhysics` compares content directly; the fingerprints are gone; interactions records need a `revision`; the eight crude packages' pressure floor 1 kPa) · earlier: 2026-10-25 (batch 2026-10-21-floating-roof-tanks: the crude fractions' appearance colours from their normal boiling points; appearances read by the open tank's display and the sight glass) · earlier: 2026-10-21 (0.11.1 test review; mod rename to IChemE, 0.11.0); 2026-10-20 (`DeterministicMath` gains `sin`, `asin`, `atan2`; the rest of the chapter is unchanged since a08c7134)
 
 ## Heating values and solid fuel (0.24.0)
 
-- `MaterialCatalog.Combustion`: a dataset's or water model's optional `combustion` sub-record, its lower heating value (J/mol; products CO2, water vapour, SO2 and N2), prebuilt from its `thermochemistry` by `tools/heating-values/` (45 records and the water). It is in no identity (owner O1). `heatingValues(packageId)` gives them in the network's conserved order (0: burns as an inert); `formulas` gives the atoms of C, H, N, O and S for the flare's flame.
+- `MaterialCatalog.Combustion`: a dataset's or water model's optional `combustion` sub-record, its lower heating value (J/mol; products CO2, water vapour, SO2 and N2), prebuilt from its `thermochemistry` by `tools/heating-values/` (46 records and the water). It is in no identity (owner O1). `heatingValues(packageId)` gives them in the network's conserved order (0: burns as an inert); `formulas` gives the atoms of C, H, N, O and S for the flare's flame.
 - `SolidFuelCatalog` (kind `fuels`, `data/icheme/materials/fuels/`): an item's heat in a firebox is its mass × its lower heating value, its mass the fuel's bulk density over the 9 items a cubic metre holds (a log is one block; owner B1 B). Each record names an item or a tag and declares its own `revision`. An item without a record burns at its burn ticks × `energy.joulesPerBurnTick` (1.45 MJ).
 Up: [code guide](README.md)
 
@@ -177,9 +240,9 @@ flowchart LR
      and `FluidTpEquilibrium` ([equilibrium-engine.md](equilibrium-engine.md)). `FluidDomain` refuses no state: it
      reports data ranges and checks device inputs (`requireInput`); `NumericalBox` is the only bound a trial meets. See
      [fluid-science.md](fluid-science.md).
-   - Water: both engines read `MaterialRuntime.water()` (`V3WaterProperties`, `WaterRegion1`). The fluid model also
-     builds `FreeWaterIce` from `Water.ice()` and `catalog.crystals()`. `FluidThermodynamics` still refuses a water model
-     without ice, but the catalog refuses the network's at loading (step 3), so a datapack no longer reaches that refusal.
+   - Water: the column reads `MaterialRuntime.water()` (`V3WaterProperties`). The fluid network holds water in its
+     cubic (`MaterialCatalog.withWater`, the section at the top): `WaterRegion1` gives water's share of enthalpy and
+     volume, and the water model's ice record is one of the package's crystals (`Water.ice()`).
    - Views: the fluid network runs each island on the network package restricted to the island's own compounds
      (`FluidThermodynamics.on`, built on `MaterialCatalog.restrict`); the process simulator runs a sheet on the
      network package restricted to the compounds its feeds hold (`SheetCompounds`); an in-world column solves under
@@ -202,17 +265,17 @@ group-interaction matrix, which keeps the published MPa.
 
 | Kind | Bundled files | Key fields (units) | Parsed into |
 |---|---|---|---|
-| `components` | 46 (12 `crude_pcNN`, 7 light ends, nitrogen, the 24 Tier 1 refinery compounds, carbon dioxide, water) | `kind` (`chemical`/`petroleum_fraction`/`lump`), `translation_key`, `fallback`, `cut` (K bounds), required `appearance`, optional `properties` (the default dataset), `aliases` (catalog-wide, never a component id), `identifiers` (text, in no identity) | `MaterialName`, `MaterialCatalog.FluidAppearance` |
-| `properties` | 45 (25 `chemsep_*`, 12 `crude_pcNN`, `nitrogen`, `tjl20_methane`, six `tjl19_*` light ends) | `molecular_weight_kg_per_mol`, `normal_boiling_point_kelvin`, `standard_liquid_density_kg_per_m3` at `standard_temperature_kelvin`/`standard_pressure_pascal`, `temperature_min/max_kelvin`, optional `ideal_gas_cp` (`shifted_polynomial_5`, ref 298.15 K, six coefficients, optional `temperature_min_kelvin` in (record min, 298.15]; absent in a spine package, required elsewhere), `models.pr78` (Tc K, Pc Pa, omega), optional `volume_translation` (`type` `saturated_liquid_reduced_temperature`, `reduced_temperature` in (0, 1), `temperature_kelvin` = Tr·Tc within 1e-9, `pressure_pascal`, `molar_volume_m3_per_mol`, texts `reference`, `oracle`, `source`; needs `pr78` and two physical roots there), optional `viscosity`, `fluid_domain`, and the sub-records `freezing` (`normal_melting_kelvin`, optional `triple_point_kelvin`, `triple_point_pascal`, `fusion_enthalpy_j_per_mol`; `estimated`, `source`, own `revision`), `thermochemistry` (`formation_enthalpy_j_per_mol`, `elements` of C, H, N, O, S; `estimated`, `source`, `revision`) and `flammability` (`lfl_volume_fraction`, optional `ufl_volume_fraction`; `estimated`, `source`, `revision`) | `Property`, `VolumeTranslation`, viscosities, property `Validity`; the sub-records validated only |
+| `components` | 47 (12 `crude_pcNN`, 7 light ends, nitrogen, the 24 Tier 1 refinery compounds, carbon dioxide, ethanol, water) | `kind` (`chemical`/`petroleum_fraction`/`lump`), `translation_key`, `fallback`, `cut` (K bounds), required `appearance`, optional `properties` (the default dataset), `aliases` (catalog-wide, never a component id), `identifiers` (text, in no identity) | `MaterialName`, `MaterialCatalog.FluidAppearance` |
+| `properties` | 47 (26 `chemsep_*` with `chemsep_ethanol`, 12 `crude_pcNN`, `nitrogen`, `tjl20_methane`, six `tjl19_*` light ends, `cubic_water`) | `molecular_weight_kg_per_mol`, `normal_boiling_point_kelvin`, `standard_liquid_density_kg_per_m3` at `standard_temperature_kelvin`/`standard_pressure_pascal`, `temperature_min/max_kelvin`, optional `ideal_gas_cp` (`shifted_polynomial_5`, ref 298.15 K, six coefficients, optional `temperature_min_kelvin` in (record min, 298.15]; absent in a spine package, required elsewhere), `models.pr78` (Tc K, Pc Pa, omega), optional `volume_translation` (`type` `saturated_liquid_reduced_temperature`, `reduced_temperature` in (0, 1), `temperature_kelvin` = Tr·Tc within 1e-9, `pressure_pascal`, `molar_volume_m3_per_mol`, texts `reference`, `oracle`, `source`; needs `pr78` and two physical roots there), optional `viscosity`, `fluid_domain`, and the sub-records `freezing` (`normal_melting_kelvin`, optional `triple_point_kelvin`, `triple_point_pascal`, `fusion_enthalpy_j_per_mol`; `estimated`, `source`, own `revision`), `thermochemistry` (`formation_enthalpy_j_per_mol`, `elements` of C, H, N, O, S; `estimated`, `source`, `revision`) and `flammability` (`lfl_volume_fraction`, optional `ufl_volume_fraction`; `estimated`, `source`, `revision`) | `Property`, `VolumeTranslation`, viscosities, property `Validity`; the sub-records validated only |
 | `interactions` | 3 (`tjl20`, `tjl20-frozen-kij-r1`, 11 pairs; `dwsim_refinery_pr78`, `dwsim-10.2.5-d3-r2`, 57 pairs, each with a refinery compound; `dwsim_refinery_pr78_co2`, `dwsim-10.2.5-d3-r1`, 8 CO2 pairs) | `revision`, `source`, `model` (`pr78` uses `kij`; `nrtl` uses a12, b12_kelvin, a21, b21_kelvin, alpha, T range), `pairs`, optional `rule` (`type` `eppr78`, `group_interactions` id; `pr78` only) | Symmetric k matrix, `NrtlPair` list, or `GroupContributionInteractions` in the package |
 | `methods` | 1 (`crude_pr78`, `crude-pr78-r3`: `pr78`, `ideal_gas` `fit`, the three libraries above, `missing_interactions` `zero`, water `icheme:water`, 1 kPa..2 MPa, the cut-pair term) | `model`, `ideal_gas` (`fit`/`spine`), `interactions` (libraries in priority order, each once), `missing_interactions` (`zero`/`error`; `nrtl` needs `error`), `water_model`, `pressure_min_pascal`/`pressure_max_pascal`, optional `liquid_mixture` (`type` `cut_pair_v1`, `coefficient`, `components`, `source`, `revision`), `advisory_evidence` | `MaterialCatalog.Method`, `LiquidMixtureCorrection.Rule` |
-| `group_interactions` | 0 (the pilot overlay holds `eppr78_2022`: 40 groups, revision `eppr78-2022-si-table-s4-r2`) | `revision`, `source`, `provenance`, `scheme`, `units` (`MPa`), `groups` (`number`, `name`), `pairs` (`first`, `second`, `a_mpa`, `b_mpa`) | `GroupInteractionMatrix`; per package `GroupContributionInteractions` |
+| `group_interactions` | 2 (`eppr78_2022`: 40 groups, revision `eppr78-2022-si-table-s4-r2`; `modified_unifac_dortmund`, `dwsim-10.2.5-modfac-r1`, 620 pairs) | `revision`, `source`, `provenance`, `scheme`, `units` (`MPa`), `groups` (`number`, `name`), `pairs` (`first`, `second`, `a_mpa`, `b_mpa`) | `GroupInteractionMatrix`; per package `GroupContributionInteractions` |
 | `spine` | 0 (the pilot overlay holds nitrogen, methane, ethane, carbon dioxide) | `component`, `revision`, `molar_mass_kg_per_mol`, `formation_enthalpy`, `standard_entropy`, `ideal_gas.segments` (`helmholtz_ideal_terms`, `nasa9`, `nasa7`), `groups` (`scheme`, `counts`), `coverage` | `ReferenceSpine` |
 | `crystals` | 2 (`crystal_carbon_dioxide_i`, `crystal-carbon_dioxide-i-r2`, a `gibbs_function` of type `jaeger_span_2012`; `crystal_ice_ih`, `crystal-ice-ih-r1`, heat-capacity segments and a linear `molar_volume`) | `component`, `crystal`, `revision`, `source`, `anchor` (`triple_point`: T, P, fusion enthalpy), one model, `coverage` | `CrystalReference`, `JaegerSpanGibbsFunction` |
-| `water` | 1 (revision `water-iapws95-shomate-r3`) | `iapws_shomate_watson`: molar mass, triple point, Tc, Pc, enthalpy limit, Watson data, 6 saturation + 7 Shomate coefficients, optional `viscosity`, optional `ice` (`crystal`, `sublimation_pressure`: `type` `iapws_r14_08`, 3 `coefficients`, 3 `exponents`, `source`), optional `thermochemistry` | `Water`, `Water.Ice` |
-| `packages` | 3 (`tjl20_methane` and `tjl20_methane_nitrogen`, `crude-regrouped-r3`; `refinery`, `refinery-tier1-r3`; all on `crude_pr78`) | `method`, optional `extends` (the parent's compounds first; cycles refused), `components` (an id, or `{id, properties, spine}`), optional `crystals`, `advisory_evidence` (with the method's, max 32 x 256 chars) | `Package` |
+| `water` | 1 (revision `water-iapws95-shomate-r4`) | `iapws_shomate_watson`: molar mass, triple point, Tc, Pc, enthalpy limit, Watson data, 6 saturation + 7 Shomate coefficients, optional `datum_vaporization_enthalpy`, optional `viscosity`, optional `ice` (`crystal`, `sublimation_pressure`: `type` `iapws_r14_08`, 3 `coefficients`, 3 `exponents`, `source`), optional `thermochemistry` | `Water`, `Water.Ice` |
+| `packages` | 3 (`tjl20_methane` and `tjl20_methane_nitrogen`, `crude-regrouped-r3`; `refinery`, `refinery-tier1-r4`; all on `crude_pr78`) | `method`, optional `extends` (the parent's compounds first; cycles refused), `components` (an id, or `{id, properties, spine}`), optional `crystals`, `advisory_evidence` (with the method's, max 32 x 256 chars) | `Package` |
 | `assays` | 4 (`light_crude`, `medium_crude`, `heavy_crude`, `oil_sand_dilbit`, revision `generated-r1`, from `tools/crude-grades/`) | `basis` (`mole`/`mass`/`standard_liquid_volume`), positional `components`+`amounts` or sparse `amounts_by_component`, required `appearance`; no `package` | `Assay` in every package that holds its non-zero compounds |
-| `presets` | 1 column (`medium_crude`, package `tjl20_methane`) + 7 fluid (water, nitrogen, the four grades, carbon dioxide) | column: `package`, `assay`, `order`, `visible`, `operating` (SI feed volume m3/s, K, Pa, W, mol/s, required `columnDiameterMetres` above 0 and at most 15 m); fluid: `component` or `assay` | `MaterialPresets.Column`/`Fluid` |
+| `presets` | 1 column (`medium_crude`, package `tjl20_methane`) + 8 fluid (water, nitrogen, the four grades, carbon dioxide, ethanol) | column: `package`, `assay`, `order`, `visible`, `operating` (SI feed volume m3/s, K, Pa, W, mol/s, required `columnDiameterMetres` above 0 and at most 15 m); fluid: `component` or `assay` | `MaterialPresets.Column`/`Fluid` |
 | `networks` | 1 (`default.json`, package `icheme:refinery`, `default_column_preset` `medium_crude`) | `package`, `default_column_preset`, ordered `fluid_presets` | `MaterialPresets.Network` |
 | `transport` | 4 (`liquid_calibration`, `chemsep_liquid_reference`, `chemsep_carbon_dioxide_liquid_reference`, `dissolved_viscosity`) | `type`, `revision`, `source`; `liquid_volume_reference_points` (K, Pa, m3/mol) or `conditional_solute_log_tables` (K, Pa*s) | `MaterialCatalog.FluidData` (`revision(held)`: `type@revision` of each record with an entry for a held compound or the water, sorted) |
 | `solids` | 1 (`demo_particle`, fictional) | `revision`, `density_kg_per_m3`, `heat_capacity_j_per_kg_kelvin` | `SolidMaterialCatalog.SolidMaterial` |
@@ -223,12 +286,12 @@ selected property. `V3CatalogPropertyPackage.crudeFeed` has its own copy of this
 
 Bundled packages (all `icheme:`, all on the method `crude_pr78`): `tjl20_methane` (methane, six light ends, the 12
 cuts; the column presets' package), `tjl20_methane_nitrogen` (extends it with Nitrogen) and the network package
-`refinery` (extends that with the 24 Tier 1 compounds and CarbonDioxide on `chemsep_carbon_dioxide`, and admits the
-CO2-I crystal: 45 compounds, the world list). The method's column range starts at 1 kPa, so a vacuum column can be
+`refinery` (extends that with the 24 Tier 1 compounds, CarbonDioxide on `chemsep_carbon_dioxide` and Ethanol on
+`chemsep_ethanol` (W6), and admits the CO2-I crystal: 46 compounds, the world list with water 47). The method's column range starts at 1 kPa, so a vacuum column can be
 designed. `FluidMaterialCatalog.NETWORK_PACKAGE` is `icheme:refinery`; the runtime reads the network record
 (`networkPackage(catalog)`). The column refuses `refinery` itself (its crystal) and runs on views without CO2. The four
 generated grades replace the ExxonMobil and Tia Juana assays (owner decision E1); no saved format stores a preset or
-assay id. The standalone index [`materials-index.json`](../../../src/main/resources/materials-index.json) lists all 119
+assay id. The standalone index [`materials-index.json`](../../../src/main/resources/materials-index.json) lists all 130
 bundled material files and is used only by `bundled()`; Minecraft discovers datapack files itself.
 
 Test overlays (outside `data/` on the test classpath, so every other test's bundled catalog is the game's):
@@ -288,6 +351,11 @@ data); the tjl20-family envelopes and the methane and nitrogen records' `fluid_d
   `NumericalBox` ([equilibrium-engine.md](equilibrium-engine.md)). `VolumeTranslation.shift` builds a one-component
   kernel over 0.5 to 2 times its anchor's T and P.
 - Wilson K (`wilsonK`) is for initialisation only, clamped to ln K in [-40, 40].
+- The fluid network's node Jacobian reads a phase's first-order neighbourhood (`HydrocarbonModel.tangent`, one
+  `PengRobinsonKernel.evaluateDerivatives` call; [fluid-science.md](fluid-science.md)). For it
+  `TranslatedPengRobinson.Values` gives the mixture's `attraction()`, `attractionTemperatureDerivative()` and
+  `attractionAmountDerivative(i)`, and the static `Values.pressureVolumeDerivative(T, v, a, b)` is the untranslated
+  cubic's `dP/dv` in closed form; `Workspace.idealGasEnthalpy(i)` is one component's ideal-gas enthalpy.
 - The fluid `HydrocarbonModel.pureLiquidCompressibility` (package-private; volume calibration of one pure component,
   also called by `SpinePackageData` for a component without `volume_translation`) differs from the kernel: it checks
   only finite and positive T and P, has no root refinement, a near-ideal shortcut (|A|, |B| < 1e-14 gives Z = 1), and
@@ -412,7 +480,7 @@ The numerical box (10..6000 K, 1 Pa..1 GPa) is in [equilibrium-engine.md](equili
   one is not a change to the other.
 - The fit's lower end (`idealGasMinimumTemperature`, nitrogen's 273.16 K) is read only by the fluid
   (`HydrocarbonModel.idealGasFitRange`), which holds Cp below it. `IdealGasFunction` is the shared ideal-gas interface
-  (`ReferenceSpine`, `science/fluid/thermo/CoefficientIdealGas`, `NetworkPhaseEngine.Steam`), but the
+  (`ReferenceSpine`, `science/fluid/thermo/CoefficientIdealGas`), but the
   `shifted_polynomial_5` polynomial is still evaluated in four places: `V3PropertyComponent` (column),
   `TranslatedPengRobinson.prepare` (fluid), `CoefficientIdealGas` (engine and crystals) and `TrainedPhysics` (the
   neural check, as the column evaluates it).

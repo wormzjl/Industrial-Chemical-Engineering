@@ -33,7 +33,7 @@ class FluidNitrogenCryogenicTest {
     /** Span et al. 2000 at 77.355 K (CoolProp 8.0.0): saturation 101,325.073 Pa, saturated liquid 806.0845 kg/m3. */
     private static final double NBP=77.355,REFERENCE_SATURATION=101325.0727426844,REFERENCE_LIQUID_DENSITY=806.0845073859737;
 
-    private double logFugacity(double t,double p,PengRobinsonKernel.Root root){return model.hydrocarbon.phase(t,p,pure,root).logFugacityView()[nitrogen];}
+    private double logFugacity(double t,double p,PengRobinsonKernel.Root root){return model.hydrocarbon.phase(t,p,TestPhases.conserved(model.hydrocarbon,pure),root).logFugacityView()[nitrogen];}
     /** The pressure where the network's liquid and vapour fugacities of pure nitrogen agree, by bisection in log P. */
     private double saturation(double t) {
         double low=2e4,high=4e5;
@@ -48,7 +48,7 @@ class FluidNitrogenCryogenicTest {
     }
 
     @Test void saturatedLiquidDensityAtTheNormalBoilingPointAgreesWithTheReference() {
-        double density=model.hydrocarbon.molecularWeight(nitrogen)/model.hydrocarbon.phase(NBP,REFERENCE_SATURATION,pure,PengRobinsonKernel.Root.LIQUID).molarVolume();
+        double density=model.hydrocarbon.molecularWeight(nitrogen)/model.hydrocarbon.phase(NBP,REFERENCE_SATURATION,TestPhases.conserved(model.hydrocarbon,pure),PengRobinsonKernel.Root.LIQUID).molarVolume();
         System.out.printf(Locale.ROOT,"nitrogen saturated liquid density (77.355 K): model %.4f kg/m3, reference %.4f, %+.3f %%%n",density,REFERENCE_LIQUID_DENSITY,100*(density/REFERENCE_LIQUID_DENSITY-1));
         assertEquals(1,density/REFERENCE_LIQUID_DENSITY,.005,"translated PR78 liquid density");
     }
@@ -65,7 +65,7 @@ class FluidNitrogenCryogenicTest {
     }
     private double vapourEnthalpy(double t,double p) {
         double[] none=new double[pure.length];
-        return model.state(t,p,none,pure,0,0,p).enthalpy();
+        return TestPhases.state(model,t,p,none,pure,0,0).enthalpy();
     }
 
     /**
@@ -79,7 +79,7 @@ class FluidNitrogenCryogenicTest {
         var eos=model.hydrocarbon.translated();
         double worst=0;
         for(double[] row:reference) {
-            double cp0=eos.evaluateValues(row[0],100,pure,PengRobinsonKernel.Root.VAPOR,eos.prepare(row[0])).idealGasHeatCapacity();
+            double cp0=eos.evaluateValues(row[0],100,TestPhases.conserved(model.hydrocarbon,pure),PengRobinsonKernel.Root.VAPOR,eos.prepare(row[0])).idealGasHeatCapacity();
             assertEquals(1,cp0/row[1],5e-4,"ideal-gas Cp at "+row[0]+" K: "+cp0);
             worst=Math.max(worst,Math.abs(cp0/row[1]-1));
         }
@@ -97,17 +97,17 @@ class FluidNitrogenCryogenicTest {
         double[] n=new double[model.componentCount()];n[nitrogen]=1;
         assertDoesNotThrow(()->model.flashTP(63.2,5000,n,()->{}));
         var below=assertDoesNotThrow(()->model.flashTP(63.1,5000,n,()->{}));
-        assertTrue(below.vaporVolume()>0&&below.liquidVolume()==0,"a gas below the triple point");
+        assertTrue(below.vaporVolume()>0&&TestPhases.liquidVolume(below)==0,"a gas below the triple point");
     }
 
     /** Liquid nitrogen at its normal boiling point is a whole network state, with a viscosity from the reference table. */
     @Test void liquidNitrogenIsAWholeNetworkState() {
         double[] n=new double[model.componentCount()];n[nitrogen]=1;
         var state=model.flashTP(NBP,2e5,n,()->{});
-        assertTrue(state.liquidVolume()>0&&state.vaporVolume()==0,"compressed liquid below its saturation temperature");
-        double mu=model.viscosity.liquid(NBP,state.liquid()).pascalSeconds();
+        assertTrue(TestPhases.liquidVolume(state)>0&&state.vaporVolume()==0,"compressed liquid below its saturation temperature");
+        double mu=model.viscosity.liquid(NBP,TestPhases.oil(state)).pascalSeconds();
         // Lemmon and Jacobsen 2004 saturated liquid at 77.355 K: 160.662 uPa.s (the table is the saturated liquid).
         assertEquals(1,mu/160.66150338022911e-6,.005,"liquid viscosity "+mu);
-        assertTrue(model.viscosity.vapor(100,pure,0)>0);
+        assertTrue(model.viscosity.vapor(100,TestPhases.conserved(model.hydrocarbon,pure))>0);
     }
 }

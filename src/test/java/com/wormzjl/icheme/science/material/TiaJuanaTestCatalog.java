@@ -43,24 +43,43 @@ public final class TiaJuanaTestCatalog {
 
     /**
      * The registered thermodynamics of {@code packageId} in this catalog: its {@code crudeFeed} knows Tia Juana. The column
-     * refuses a package that admits crystals (the world's package since O11 of batch 2026-11-04-open-thermo-data, CO2-I), so
-     * there it is the view without the crystals' compounds, which an assay does not hold. That view's axis is the package's
-     * less its tail (the crystals' compounds are the package's last), so a feed on it padded with zeros is the package's.
+     * refuses a package that admits crystals (the world's package since O11 of batch 2026-11-04-open-thermo-data, CO2-I), and a
+     * crude carries no water-miscible solvent, so on such a package it is the view of the compounds that are neither a
+     * crystal's compound nor a solvent that names a homomorph (ethanol since W6 of batch 2026-11-11-aqueous-solvents): by
+     * rule and by id, in the package's order, the list a crude feed holds. A solvent at zero amount would put the
+     * kernel's activity branch on every pair with it, on a list no world runs.
      */
     public static V3PengRobinsonThermo thermo(String packageId) {
         var pkg = CATALOG.requirePackage(packageId);
-        if (pkg.crystals().isEmpty()) return MaterialRuntime.with(CATALOG, packageId, () -> V3PengRobinsonThermo.fromRegisteredPackage(packageId));
         var crystalSpecies = pkg.crystals().stream().map(id -> CATALOG.crystals().get(id).component()).collect(java.util.stream.Collectors.toSet());
-        var kept = pkg.components().stream().filter(c -> !crystalSpecies.contains(c)).toList();
-        if (!pkg.components().subList(0, kept.size()).equals(kept))
-            throw new IllegalStateException(packageId + ": the crystals' compounds " + crystalSpecies + " are not the package's last");
+        var kept = pkg.components().stream().filter(c -> !crystalSpecies.contains(c) && CATALOG.homomorph(packageId, c).isEmpty()).toList();
+        if (kept.equals(pkg.components())) return MaterialRuntime.with(CATALOG, packageId, () -> V3PengRobinsonThermo.fromRegisteredPackage(packageId));
         var view = CATALOG.restrict(packageId, kept);
         return MaterialRuntime.with(view, packageId, () -> V3PengRobinsonThermo.fromRegisteredPackage(packageId));
     }
 
-    /** Tia Juana Light (TJL20) as mole fractions on {@code packageId}'s axis, through the column thermodynamics. */
+    /** Tia Juana Light (TJL20) as mole fractions on {@code axis}, by component id; a compound of the axis it lacks takes 0. */
+    public static double[] crude(String packageId, java.util.List<String> axis) {
+        var thermo = thermo(packageId);
+        double[] x = thermo.crudeFeed(ASSAY_ID).moleFractions(), out = new double[axis.size()];
+        var ids = thermo.componentBasis().componentIds();
+        for (int i = 0; i < x.length; i++) {
+            int at = axis.indexOf(ids.get(i));
+            if (at < 0) throw new IllegalArgumentException(ids.get(i) + " is not on the axis " + axis);
+            out[at] = x[i];
+        }
+        return out;
+    }
+
+    /** Tia Juana Light (TJL20) on the network package's conserved list (the world list, water last), by component id. */
+    public static double[] worldCrude() {
+        String network = CATALOG.presets().network().packageId();
+        return crude(network, CATALOG.conservedComponents(network));
+    }
+
+    /** Tia Juana Light (TJL20) as mole fractions on {@code packageId}'s axis, by component id. */
     public static double[] feed(String packageId) {
-        return java.util.Arrays.copyOf(thermo(packageId).crudeFeed(ASSAY_ID).moleFractions(), CATALOG.requirePackage(packageId).components().size());
+        return crude(packageId, CATALOG.requirePackage(packageId).components());
     }
 
     private static Map<String, String> load() {

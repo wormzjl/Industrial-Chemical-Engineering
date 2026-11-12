@@ -39,8 +39,30 @@ public final class DeviceColumn {
     public record Meter(String key, String value, String unit, @Nullable String hint) {
     }
 
-    /** The phases' split: its basis (volume, mole or mass), the four phases' amounts, whether custom solids are left out, its hover. */
-    public record Phases(String basis, double[] amounts, boolean customSolidsExcluded, String hint) {
+    /**
+     * The phases' split: its basis (volume, mole or mass), the four phases' amounts, whether custom solids are left out, its
+     * hover, and whether the aqueous liquid is named water ({@link #aqueousIsWater}).
+     */
+    public record Phases(String basis, double[] amounts, boolean customSolidsExcluded, String hint, boolean aqueousWater) {
+        public Phases(String basis, double[] amounts, boolean customSolidsExcluded, String hint) {
+            this(basis, amounts, customSolidsExcluded, hint, false);
+        }
+    }
+
+    /** The share of water, by moles, from which the aqueous liquid reads "Water" instead of "Aqueous". */
+    public static final double WATER_LABEL_SHARE = 0.99;
+
+    /** Whether the aqueous liquid of these amounts (one per component) is named water: water at least 99 % of it by moles. */
+    public static boolean aqueousIsWater(double[] aqueous, int water) {
+        if (aqueous == null || water < 0 || water >= aqueous.length) return false;
+        double total = 0;
+        for (double a : aqueous) total += Math.max(0, a);
+        return total > 0 && aqueous[water] >= WATER_LABEL_SHARE * total;
+    }
+
+    /** The key suffix of phase {@code phase}: the aqueous liquid's is "water" while it is named water. */
+    public static String phaseKey(int phase, boolean aqueousWater) {
+        return phase == 1 && aqueousWater ? "water" : Integer.toString(phase);
     }
 
     /** A valve's opening (0 to 1) and its controller's words. */
@@ -267,7 +289,7 @@ public final class DeviceColumn {
         for (double a : ph.amounts()) total += Math.max(0, a);
         var shares = new ArrayList<Column.Share>();
         for (int i = 0; i < 4; i++) {
-            String label = i == 3 && ph.basis().equals("mole") ? t.get("phase_ratio.crystals") : t.get("phase_short." + i);
+            String label = i == 3 && ph.basis().equals("mole") ? t.get("phase_ratio.crystals") : t.get("phase_short." + phaseKey(i, ph.aqueousWater()));
             shares.add(new Column.Share(label, total > 0 ? Format.number(100 * ph.amounts()[i] / total) + " %" : "—", ph.amounts()[i], PHASE_COLOURS[i]));
         }
         var rows = new ArrayList<Column.Row>();

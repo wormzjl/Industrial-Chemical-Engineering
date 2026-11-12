@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /** Physical initial-value data, not a Minecraft checkpoint: equal outlet setpoints with phase-selective draws. */
 class PressureValveContinuationTest extends PortFixture {
@@ -32,7 +33,7 @@ class PressureValveContinuationTest extends PortFixture {
         assertEquals(model.components(),fixture.components());
         var nodes=new ArrayList<PassiveNetwork.Reservoir>();
         for(var n:fixture.nodes()) {
-            var state=model.state(n.temperature(),n.pressure(),n.liquid(),n.vapor(),n.waterLiquid(),n.waterVapor(),n.hydrocarbonPressure());
+            var state=TestPhases.state(model,n.temperature(),n.pressure(),n.liquid(),n.vapor(),n.waterLiquid(),n.waterVapor());
             var inventory=new PassiveNetwork.Inventory(n.capacity(),n.moles(),n.energy(),SolidInventory.EMPTY,n.height(),n.open());
             nodes.add(new PassiveNetwork.Reservoir(n.id(),n.elevation(),state,n.kind(),inventory));
         }
@@ -69,8 +70,14 @@ class PressureValveContinuationTest extends PortFixture {
             assertTrue(Arrays.stream(bottom.phaseMoles()[2]).sum()>0,"bottom outlet also transports vapour");
             finalFlows=result.averageMassFlows();
         }
-        assertEquals(FlowControl.Mode.VALVE_REGULATING,previous.endpointModes().get(3));
+        // W3b stage A group 5: the drum (11.4 of its 11.5 m3 vapour) sends vapour through its top port and its liquid with
+        // vapour through its bottom port; no liquid fills its vapour space, so the top port draws no liquid. The bottom line
+        // then passes at its velocity cap, its junction stands above the set point and its valve is open; the top valve holds
+        // its junction at the set point.
+        assertEquals(FlowControl.Mode.VALVE_OPEN,previous.endpointModes().get(3),"the bottom line passes at its velocity cap");
+        assertTrue(graph.reservoirs().get(2).state().pressure()>200000,"the bottom junction stands above the set point: "+graph.reservoirs().get(2).state().pressure());
         assertEquals(FlowControl.Mode.VALVE_REGULATING,previous.endpointModes().get(4));
+        assertEquals(200000,graph.reservoirs().get(3).state().pressure(),1,"the top valve holds its junction at the set point");
         assertEquals(finalFlows[0],finalFlows[1]+finalFlows[2],1e-7,"settled average inlet equals both outlets");
     }
 

@@ -71,6 +71,28 @@ class SimulatorRunnerTest {
         }
     }
 
+    /**
+     * The engine's run of {@code sheet}, stopped at the first checkpoint after {@code unit}'s calculation begins: what
+     * came before it is solved, whatever number of polls the calculations take (a pure water stream polls more often since
+     * water is a compound of the equation of state, W3b of batch 2026-11-11-aqueous-solvents).
+     */
+    private static FlowsheetRun stoppedAt(String unit, Flowsheet sheet, MaterialCatalog catalog, Runnable checkpoint, FlowsheetRun last, FlowsheetSolver.Progress progress) {
+        boolean[] begun = {false};
+        return FlowsheetEngine.run(sheet, catalog, () -> {
+            if (begun[0]) throw new CancellationException();
+            checkpoint.run();
+        }, last, new FlowsheetSolver.Progress() {
+            @Override public void calculation(int pass, int passes, String name) {
+                if (name.equals(unit)) begun[0] = true;
+                progress.calculation(pass, passes, name);
+            }
+
+            @Override public void start(com.wormzjl.icheme.science.flowsheet.Report.Start start) {
+                progress.start(start);
+            }
+        });
+    }
+
     private static void ended() throws InterruptedException {
         for (var thread : Thread.getAllStackTraces().keySet())
             if (thread.getName().equals(SimulatorRunner.THREAD)) {
@@ -254,11 +276,7 @@ class SimulatorRunnerTest {
     void aStoppedRunKeepsWhatItHas() throws InterruptedException {
         var gate = new Gate() {
             @Override public FlowsheetRun run(Flowsheet sheet, MaterialCatalog catalog, Runnable checkpoint, FlowsheetRun last, FlowsheetSolver.Progress progress) {
-                int[] seen = {0};
-                return FlowsheetEngine.run(sheet, catalog, () -> {
-                    if (++seen[0] == 7) throw new CancellationException();
-                    checkpoint.run();
-                }, last, progress);
+                return stoppedAt("V-1", sheet, catalog, checkpoint, last, progress);
             }
         };
         var runner = runner(gate);
@@ -296,10 +314,7 @@ class SimulatorRunnerTest {
                 lasts.add(last);
                 if (++runs != 2) return FlowsheetEngine.run(sheet, catalog, checkpoint, last, progress);
                 // The second run stops partway, which leaves the steady one standing.
-                int[] seen = {0};
-                return FlowsheetEngine.run(sheet, catalog, () -> {
-                    if (++seen[0] == 7) throw new CancellationException();
-                }, last, progress);
+                return stoppedAt("V-1", sheet, catalog, checkpoint, last, progress);
             }
         };
         var runner = runner(gate);

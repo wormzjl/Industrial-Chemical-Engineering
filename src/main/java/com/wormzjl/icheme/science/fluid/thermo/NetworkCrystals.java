@@ -5,21 +5,19 @@ import com.wormzjl.icheme.science.material.SolidMaterialCatalog.SolidMaterial;
 import com.wormzjl.icheme.science.thermo.phase.CrystalFugacity;
 import com.wormzjl.icheme.science.thermo.phase.CrystalPhaseEvaluator;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult;
-import com.wormzjl.icheme.science.thermo.phase.FreeWaterIce;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
 /**
  * The crystals of a network package, as solids (owner decisions D22 (5) and D23; the plan
- * {@code documentation/2026-09-24-coolprop-low-temperature/PRECIPITATED_SOLIDS_PLAN.md}): the crystals the package admits
- * and, on every package, the free water's ice (WP4 of the range-extrapolation plan). A crystal is a second kind of
+ * {@code documentation/2026-09-24-coolprop-low-temperature/PRECIPITATED_SOLIDS_PLAN.md}): the crystals the package admits,
+ * ice Ih among them on a package with water in its cubic (W3b of batch 2026-11-11-aqueous-solvents). A crystal is a second kind of
  * population in the vessel's {@code SolidInventory}, beside the custom solids and under the same rules (key, transport,
  * filters, outlet checks, slurry viscosity, the slush), whose material record adds the fluid component it is made of and
  * its energy offset. Inside a step it is an inert population; only a vessel's refresh ({@code InventoryEquilibrium})
  * exchanges its mass with its component, with the crystal's chemical potential ({@link Crystal#logFugacityCoefficient}) equal
- * to the component's: an admitted crystal's anchored model, which the equilibrium engine competes, and the ice's fugacity
- * of the free-water rule ({@link FreeWaterIce}), the steam's partial pressure over it.
+ * to the component's: an admitted crystal's anchored model, which the equilibrium engine competes.
  *
  * <p>Constant properties. A population's moments are main's: a constant density and heat capacity, and the stored energy
  * {@code c (T - 298.15)} per kg. The crystal's own model varies: CO2-I (Jaeger and Span) from 1654 kg/m3 at 110 K to 1545
@@ -53,27 +51,25 @@ public final class NetworkCrystals {
         public Crystal{Objects.requireNonNull(material);Objects.requireNonNull(anchored);Objects.requireNonNull(fugacity);}
         /**
          * The pure crystal's melting temperature at {@code pressure}, K: above it no amount of this crystal is stable beside
-         * any fluid (a fluid's mixing only lowers its species' chemical potential below the pure liquid's). The ice's is the
-         * free-water rule's line ({@link FreeWaterIce#meltingTemperature}); an admitted crystal's is the straight line
+         * any fluid (a fluid's mixing only lowers its species' chemical potential below the pure liquid's). A crystal's is the straight line
          * through its record's triple point and the engine's own melting point of the pure species at
          * {@link #MELTING_PRESSURE} (CO2-I: 216.6 K at 0.518 MPa and about 218.6 K at 10 MPa, within 0.13 K of Span and Wagner
          * there). Below the triple-point pressure the line continues: a crystal between its sublimation point and that line
          * is kept, as before.
          */
         public double meltingTemperature(double pressure) {
-            if(fugacity instanceof FreeWaterIce ice)return ice.meltingTemperature(pressure);
             return meltingFootTemperature+meltingSlope*(pressure-meltingFootPressure);
         }
         /** {@code ln phi_s}: the crystal's chemical potential against its species' ideal gas at (T, P), the reference the
          * fluid's {@code ln (x phi P)} is stated on (continued past the record's range); for ice {@code ln(f_ice/P)}. */
         public double logFugacityCoefficient(double temperature,double pressure){return fugacity.logFugacityCoefficient(temperature,pressure);}
-        /** Whether this is the free water's ice (WP4), made of the free water rather than of a hydrocarbon component. */
-        public boolean water(){return fugacity instanceof FreeWaterIce;}
+        /** Whether this crystal is made of water (ice Ih, a package crystal since W3b). */
+        public boolean water(){return anchored.component().equals(com.wormzjl.icheme.science.thermo.phase.CubicPhaseEvaluator.WATER);}
         /** Moles of the component in {@code massKg} of this crystal. */
         public double moles(double massKg){return massKg/molarMass;}
     }
 
-    /** The crystals, the admitted ones in declaration order and the free water's ice last. */
+    /** The crystals the package admits, in declaration order (ice among them on a package with water, W3b). */
     public List<Crystal> all(){return crystals;}
     /** The crystal whose record is {@code material}, or null for a custom solid. */
     public Crystal of(SolidMaterial material) {
@@ -82,7 +78,7 @@ public final class NetworkCrystals {
         throw new IllegalArgumentException("Crystal "+material.id()+" ("+material.revision()+") is not a crystal of this package");
     }
 
-    /** The crystals of {@code model}'s package as solids: its engine's anchored crystals {@code ids}, then its free water's ice. */
+    /** The crystals of {@code model}'s package as solids: its engine's anchored crystals {@code ids}. */
     static NetworkCrystals of(FluidThermodynamics model,NetworkPhaseEngine engine,List<String> ids,String packageId) {
         var species=engine.species();var built=new ArrayList<Crystal>();
         // The anchored model's datum: a spine package's formation datum (D10), a fit package's network datum itself (E27).
@@ -90,7 +86,7 @@ public final class NetworkCrystals {
         for(String id:ids) {
             var anchored=engine.engine().anchoredCrystal(id);
             if(anchored==null)throw new IllegalStateException("The network's engine has no evaluator of crystal "+id);
-            int component=model.hydrocarbon.components().indexOf(anchored.component());
+            int component=model.components().indexOf(anchored.component());
             if(component<0)throw new IllegalStateException("Crystal "+id+" is made of "+anchored.component()+", which the network basis does not carry");
             double molarMass=model.molecularWeight(component);
             // The pure crystal's transition at the ambient pressure: its normal sublimation (or melting) point.
@@ -103,12 +99,8 @@ public final class NetworkCrystals {
             double footT=anchored.anchor().temperature(),footP=anchored.anchor().pressure(),slope=0;
             var melting=engine.engine().depositionTemperature(id,MELTING_PRESSURE,species,pure,engine.engine().newWorkspace());
             if(melting.converged()&&MELTING_PRESSURE>footP)slope=(melting.temperature()-footT)/(MELTING_PRESSURE-footP);
-            built.add(crystal(anchored,anchored,component,molarMass,onset.temperature(),formation==null?0:formation.offsetJoulesPerMole(component),packageId,footT,footP,slope));
+            built.add(crystal(anchored,anchored,component,molarMass,onset.temperature(),formation==null||component>=model.hydrocarbon.componentCount()?0:formation.offsetJoulesPerMole(component),packageId,footT,footP,slope));
         }
-        // The free water's ice, at its normal melting point; the free water is on the network's own datum (no formation).
-        var ice=model.freeWaterIce();int water=model.hydrocarbon.componentCount();
-        built.add(crystal(ice.anchored(),ice,water,model.molecularWeight(water),ice.meltingTemperature(PhaseLayout.AMBIENT_PRESSURE),0,packageId,
-                ice.tripleTemperature(),ice.triplePressure(),Double.NaN));
         return new NetworkCrystals(built);
     }
     /** The pressure at which an admitted crystal's melting line takes its second point, Pa: the top of the network's usual

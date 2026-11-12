@@ -4,28 +4,47 @@ import com.wormzjl.icheme.science.math.DeterministicMath;
 
 import com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
-import com.wormzjl.icheme.science.thermo.PhaseSupport;
 import com.wormzjl.icheme.science.thermo.TraceTruncationPolicy;
 import java.util.*;
 import com.wormzjl.icheme.science.fluid.state.SolidInventory;
 
-/** Fixed phase active set for one Newton pass. Evaluates properties directly; never runs a nested flash. */
+/**
+ * Fixed phase active set for one Newton pass. Evaluates properties directly; never runs a nested flash.
+ *
+ * <p>W3b of batch 2026-11-11-aqueous-solvents: a node has up to three fluid phases, the storage slots of its state (the
+ * vapour, a liquid and a second liquid, {@link FluidThermodynamics.State}), and water is a component like any other. A
+ * component's support is a mask of the slots it may occupy ({@link #LIQUID}, {@link #VAPOR}, {@link #AQUEOUS}, the bits
+ * of {@link FluidThermodynamics#phaseBits}); 0 is absent. Per present component the unknowns are its total amount and, for
+ * each further supported slot, {@code ln(n_ik/n_i,ref)}, the reference slot the first supported one in the order liquid,
+ * aqueous, vapour; the equilibrium row of a further slot is
+ * {@code ln(n_ik/n_k) + ln phi_ik = ln(n_i,ref/n_ref) + ln phi_i,ref}. A node of two slots keeps the unknowns and rows it
+ * had before W3b; the free water's unknowns, the hydrocarbon partial pressure, the Dalton closure and the saturation row
+ * are gone with the free water.</p>
+ */
 public final class PhaseLayout {
+    /** The support bits of the three slots ({@link FluidThermodynamics#phaseBits}). */
+    public static final byte LIQUID=1,VAPOR=2,AQUEOUS=4;
+    /** The slots in reference order (liquid, aqueous, vapour), with their storage slot and bit. */
+    private static final int[] ORDER_SLOT={FluidThermodynamics.State.LIQUID,FluidThermodynamics.State.AQUEOUS,FluidThermodynamics.State.VAPOR};
+    private static final byte[] ORDER_BIT={LIQUID,AQUEOUS,VAPOR};
     private final FluidThermodynamics model;
-    private final int[] components,liquidIndex,vaporIndex;
-    /** Where each present component's <em>total</em> amount lives: {@link #liquidIndex} when this
-     * layout carries a liquid amount for it, {@link #vaporIndex} otherwise. For a two-phase component
-     * the second slot is the phase split {@code ln(v/l)}; for a one-phase component there is no
-     * second slot and no equilibrium row. */
+    private final int[] components;
+    /** Per conserved component and storage slot, the local column of its unknown: the total for the reference slot, the
+     * log ratio for a further one; -1 where it has none. */
+    private final int[][] slotIndex;
+    /** Where each present component's total amount lives; -1 for an absent one. */
     private final int[] amountIndex;
-    private final PhaseSupport[] support;
-    /** The conserved components a junction writes mass fractions for, water last: the graph fixes
-     * it, so it is built with the layout instead of boxed into a list on every evaluation. */
+    /** Per component, its reference storage slot; -1 for an absent one. */
+    private final int[] referenceSlot;
+    private final byte[] support;
+    /** The bits of the slots the seed holds. */
+    private final int active;
+    /** The conserved components a junction writes mass fractions for: the graph fixes it, so it is built with the layout
+     * instead of boxed into a list on every evaluation. */
     private final int[] junctionBasis;
-    private final int waterLiquidIndex,waterVaporIndex,temperatureIndex,pressureIndex,partialPressureIndex,size;
-    private final double amountScale,energyScale,steamSeed;
-    private final double[] componentScales,differenceScales;
-    private final boolean liquidActive,vaporActive;
+    private final int temperatureIndex,pressureIndex,size;
+    private final double amountScale,energyScale;
+    private final double[] componentScales,differenceScales,seedValues;
     private final int solidIndex;
     private final SolidInventory solidBasis;
     private final double[] solidScale,solidReference;
@@ -48,102 +67,101 @@ public final class PhaseLayout {
      * active-set cycle guard on it, and it must be the same array the layout was built from.
      */
     public PhaseLayout(FluidThermodynamics model,FluidThermodynamics.State seed,boolean[] componentMask,double[] conservedReference,
-                       PhaseSupport[] support) {
+                       byte[] support) {
         this(model,seed,componentMask,conservedReference,support,seed.solidMoments().mass()>0);
     }
     public PhaseLayout(FluidThermodynamics model,FluidThermodynamics.State seed,boolean[] componentMask,double[] conservedReference,
-                       PhaseSupport[] support,boolean solidSupport) {
+                       byte[] support,boolean solidSupport) {
         this.model=Objects.requireNonNull(model);
-        double[] l=seed.liquidView(),v=seed.vaporView();var present=new ArrayList<Integer>();
-        if(componentMask!=null&&componentMask.length!=l.length)throw new IllegalArgumentException("Component mask mismatch");
-        if(support.length!=l.length)throw new IllegalArgumentException("Phase support basis mismatch");
+        int n=seed.componentCount();double[] totals=seed.totals();var present=new ArrayList<Integer>();
+        if(componentMask!=null&&componentMask.length!=n)throw new IllegalArgumentException("Component mask mismatch");
+        if(support.length!=n)throw new IllegalArgumentException("Phase support basis mismatch");
         this.support=support.clone();
-        // A masked component the support calls ABSENT is an omitted trace, not a member of this
-        // layout: it carries no unknown and no row, and the mask keeps it available to the phase
-        // appearance pass. That is how a node with no hydrocarbon phase at all - a zero-holdup
-        // junction mixing pure water - can sit in an island whose mask names a hydrocarbon.
-        for(int i=0;i<l.length;i++)if((l[i]+v[i]>0||componentMask!=null&&componentMask[i])&&support[i]!=PhaseSupport.ABSENT)present.add(i);
+        // A masked component the support calls absent is an omitted trace, not a member of this layout: it carries no
+        // unknown and no row, and the mask keeps it available to the phase appearance pass.
+        for(int i=0;i<n;i++)if((totals[i]>0||componentMask!=null&&componentMask[i])&&support[i]!=0)present.add(i);
         components=present.stream().mapToInt(Integer::intValue).toArray();
-        liquidActive=seed.liquidVolume()>0;vaporActive=sum(v)>0;
-        if(components.length>0&&!liquidActive&&!vaporActive)throw new IllegalArgumentException("A hydrocarbon-phase appearance pass is required");
-        for(int i:components)if(this.support[i]==PhaseSupport.ABSENT||this.support[i].liquid()&&!liquidActive||this.support[i].vapor()&&!vaporActive)
+        active=activeBits(seed);
+        if(components.length>0&&active==0)throw new IllegalArgumentException("A phase appearance pass is required");
+        for(int i:components)if((this.support[i]&~active)!=0)
             throw new IllegalArgumentException("Phase support does not match the seed's active phases at component "+i);
-        boolean water=seed.waterLiquid()>0||seed.waterVapor()>0;
-        junctionBasis=new int[components.length+(water?1:0)];
-        System.arraycopy(components,0,junctionBasis,0,components.length);
-        if(water)junctionBasis[components.length]=l.length;
+        junctionBasis=components.clone();
         // The last of this basis has no mixing row: the closure row alone states it. That row's sum stands near 1, where the
         // Newton's difference step of a share under 1.1e-10 rounds away and leaves its column empty, so the largest share takes
         // that place and every trace keeps a row of its own (a dry outlet line's old nitrogen, batch 2026-11-02-valve-hold).
         int bulk=junctionBasis.length-1;double most=-1;
-        for(int index=0;index<junctionBasis.length;index++){int held=junctionBasis[index];double amount=held==l.length?seed.waterLiquid()+seed.waterVapor():l[held]+v[held];if(amount>=most){most=amount;bulk=index;}}
+        for(int index=0;index<junctionBasis.length;index++){double amount=totals[junctionBasis[index]];if(amount>=most){most=amount;bulk=index;}}
         if(bulk>=0){int held=junctionBasis[bulk];junctionBasis[bulk]=junctionBasis[junctionBasis.length-1];junctionBasis[junctionBasis.length-1]=held;}
-        liquidIndex=new int[l.length];vaporIndex=new int[l.length];amountIndex=new int[l.length];
-        Arrays.fill(liquidIndex,-1);Arrays.fill(vaporIndex,-1);Arrays.fill(amountIndex,-1);
+        slotIndex=new int[n][3];amountIndex=new int[n];referenceSlot=new int[n];
+        for(int[] row:slotIndex)Arrays.fill(row,-1);
+        Arrays.fill(amountIndex,-1);Arrays.fill(referenceSlot,-1);
         int offset=0;
-        for(int i:components) {
-            if(this.support[i].liquid())liquidIndex[i]=offset++;
-            if(this.support[i].vapor())vaporIndex[i]=offset++;
-            amountIndex[i]=liquidIndex[i]>=0?liquidIndex[i]:vaporIndex[i];
+        for(int i:components)for(int k=0;k<3;k++)if((this.support[i]&ORDER_BIT[k])!=0) {
+            int slot=ORDER_SLOT[k];slotIndex[i][slot]=offset++;
+            if(referenceSlot[i]<0){referenceSlot[i]=slot;amountIndex[i]=slotIndex[i][slot];}
         }
-        waterLiquidIndex=seed.waterLiquid()>0?offset++:-1;waterVaporIndex=seed.waterVapor()>0?offset++:-1;
         temperatureIndex=offset++;pressureIndex=offset++;
-        partialPressureIndex=vaporActive&&waterVaporIndex>=0?offset++:-1;
         solidIndex=solidSupport?offset:-1;if(solidSupport)offset+=3;size=offset;
         solidBasis=seed.solids();solidReference=seed.solidMoments().values();
         solidScale=new double[]{Math.max(1e-12,seed.mass()),Math.max(1e-12,seed.volume()),Math.max(1e-9,seed.mass()*1000)};
-        amountScale=Math.max(1e-12,sum(l)+sum(v)+seed.waterLiquid()+seed.waterVapor());
+        amountScale=Math.max(1e-12,sum(totals));
         energyScale=Math.max(1,Math.max(Math.abs(seed.internalEnergy()),amountScale*FluidThermodynamics.R*seed.temperature()));
-        if(conservedReference!=null&&conservedReference.length!=l.length+1)throw new IllegalArgumentException("Balance reference basis mismatch");
+        if(conservedReference!=null&&conservedReference.length!=n)throw new IllegalArgumentException("Balance reference basis mismatch");
         boolean resolveTraces=seed.vaporVolume()/seed.volume()<.01;
-        componentScales=new double[l.length+1];for(int c=0;c<l.length;c++)componentScales[c]=!resolveTraces||conservedReference!=null&&conservedReference[c]==0?amountScale:Math.max(1e-30,l[c]+v[c]);
-        componentScales[l.length]=!resolveTraces||conservedReference!=null&&conservedReference[l.length]==0?amountScale:Math.max(1e-30,seed.waterLiquid()+seed.waterVapor());
-        differenceScales=encode(seed,l,v);
+        componentScales=new double[n];
+        for(int c=0;c<n;c++)componentScales[c]=!resolveTraces||conservedReference!=null&&conservedReference[c]==0?amountScale:Math.max(1e-30,totals[c]);
+        differenceScales=encode(seed);seedValues=differenceScales.clone();
         if(solidIndex>=0)for(int i=0;i<3;i++)differenceScales[solidIndex+i]=Math.max(1e-6,differenceScales[solidIndex+i]);
         if(!resolveTraces)for(int local=0;local<size;local++)if(totalAmountVariable(local))differenceScales[local]=Math.max(1e-4,differenceScales[local]);
-        if(conservedReference!=null) {
-            for(int c:components)if(conservedReference[c]==0){int at=amountIndex[c];differenceScales[at]=Math.max(1e-4,differenceScales[at]);}
-            if(conservedReference[l.length]==0){if(waterLiquidIndex>=0)differenceScales[waterLiquidIndex]=Math.max(1e-4,differenceScales[waterLiquidIndex]);if(waterVaporIndex>=0)differenceScales[waterVaporIndex]=Math.max(1e-4,differenceScales[waterVaporIndex]);}
-        }
-        // The steam beside its liquid water, which the saturation row reads through a logarithm: the floors above are capped
-        // at LOG_READ_SPAN of its own seed amount.
-        steamSeed=waterVaporIndex>=0?seed.waterVapor()/amountScale:0;
-        if(waterLiquidIndex>=0&&waterVaporIndex>=0)differenceScales[waterVaporIndex]=logReadFloor(differenceScales[waterVaporIndex]);
+        if(conservedReference!=null)for(int c:components)if(conservedReference[c]==0){int at=amountIndex[c];differenceScales[at]=Math.max(1e-4,differenceScales[at]);}
     }
+    /** The slot bits ({@link #LIQUID}, {@link #VAPOR}, {@link #AQUEOUS}) of the phases {@code state} holds. */
+    public static int activeBits(FluidThermodynamics.State state) {
+        int bits=0;
+        if(state.slotVolume(FluidThermodynamics.State.LIQUID)>0)bits|=LIQUID;
+        if(sum(state.vaporAmountsView())>0)bits|=VAPOR;
+        if(state.slotVolume(FluidThermodynamics.State.AQUEOUS)>0)bits|=AQUEOUS;
+        return bits;
+    }
+    private static byte bit(int slot){return slot==FluidThermodynamics.State.VAPOR?VAPOR:slot==FluidThermodynamics.State.LIQUID?LIQUID:AQUEOUS;}
+    public int size(){return size;}
+    /** The local column of a present component's total amount, -1 for one the layout does not carry. */
+    public int amountVariable(int component){return amountIndex[component];}
     /**
      * The span by which the bulk difference floor of an amount may exceed the amount where a row reads it through a
      * logarithm: 1e4, so its step (the Newton's 1e-6 of the scale) stays within 1 % of the amount and the logarithm's
      * secant within 0.5 % of its tangent. The bulk floor of a gas-rich vessel (1e-4 of its amount) is kept wherever such
-     * an amount is at least 1e-8 of its vessel; the stand-in of ice in a cold gas holds steam of about 1e-5 Pa at 150 K,
-     * 1e-11 of its vessel, where the floor's step was 8 times the steam and the Newton on the saturation row alternated.
+     * an amount is at least 1e-8 of its vessel; the fluid's water beside ice in a cold gas is steam of about 1e-5 Pa at
+     * 150 K, 1e-11 of its vessel, where the floor's step was 8 times the steam and the Newton on the ice's row alternated.
+     * W3b: the free water's saturation row is gone; a crystal's row of a vessel refresh reads its component's fluid total
+     * through a logarithm ({@code VesselCrystals}), every crystal alike.
      */
     public static final double LOG_READ_SPAN=1e4;
-    private double logReadFloor(double floored){return Math.min(floored,Math.max(steamSeed,LOG_READ_SPAN*steamSeed));}
-    /** The local column of the free water's steam, -1 where the layout carries none. */
-    public int waterVaporVariable(){return waterVaporIndex;}
-    /**
-     * {@link #differenceStepScale} of the steam column where a row reads the steam through a logarithm, with the floor
-     * capped at {@link #LOG_READ_SPAN} of the seed's steam: this layout's saturation row (the column carries the cap
-     * already), and a vessel refresh's ice row (WP4) beside a layout without liquid water.
-     */
-    public double steamLogReadScale(double value){return traceDifferenceScale(Math.max(Math.abs(value),logReadFloor(differenceScales[waterVaporIndex])));}
-    public int size(){return size;}
+    /** {@link #differenceStepScale} of amount column {@code local} where a row reads it through a logarithm: the floor
+     * capped at {@link #LOG_READ_SPAN} of the seed's own amount. */
+    public double logReadScale(int local,double value) {
+        double seed=Math.abs(seedValues[local]);
+        return traceDifferenceScale(Math.max(Math.abs(value),Math.min(Math.abs(differenceScales[local]),Math.max(seed,LOG_READ_SPAN*seed))));
+    }
     /** The local column of the pressure unknown, {@code ln(P / 1e5)}; every layout has one. */
     public int pressureVariable(){return pressureIndex;}
-    public int componentBalanceCount(){return components.length+(waterLiquidIndex>=0||waterVaporIndex>=0?1:0);}
-    /** Whether this layout carries free liquid water, and water vapour, as unknowns (the free water's phases). */
-    public boolean carriesWaterLiquid(){return waterLiquidIndex>=0;}
-    public boolean carriesWaterVapor(){return waterVaporIndex>=0;}
-    /** The water balance's row among {@link #balanceRows}' (from their offset), or -1 where the layout carries no water. */
-    public int waterBalanceRow(){return waterLiquidIndex>=0||waterVaporIndex>=0?components.length:-1;}
-    /** The amount a component's balance row is stated over ({@link #balanceRows}), mol; water's at the basis's last index. */
+    /** The number of component balance rows: one per present component, water among them. */
+    public int componentBalanceCount(){return components.length;}
+    /** The balance row of conserved component {@code component} among {@link #balanceRows}' (from their offset), or -1
+     * where the layout does not carry it. */
+    public int balanceRow(int component) {
+        for(int index=0;index<components.length;index++)if(components[index]==component)return index;
+        return -1;
+    }
+    /** The amount a component's balance row is stated over ({@link #balanceRows}), mol. */
     public double componentScale(int component){return componentScales[component];}
-    /** This layout's frozen per-component support, in the conserved hydrocarbon basis. */
-    public PhaseSupport support(int component){return support[component];}
-    /** Components whose omitted phase this layout holds at exactly zero, for the diagnostics counters. */
+    /** This layout's frozen support of a conserved component: its slot bits, 0 for an absent one. */
+    public byte support(int component){return support[component];}
+    /** Components that hold fewer of the seed's slots than it has, the rest at exactly zero, for the diagnostics counters
+     * and the reactivation test. */
     public int singlePhaseComponentCount() {
-        if(!liquidActive||!vaporActive)return 0;
-        int count=0;for(int i:components)if(support[i].singlePhase())count++;
+        if(Integer.bitCount(active)<2)return 0;
+        int count=0;for(int i:components)if(support[i]!=active)count++;
         return count;
     }
     /**
@@ -157,13 +175,12 @@ public final class PhaseLayout {
     /** Bulk component transport is independent of phase split, T and P at fixed total amounts and edge mass flow. */
     public boolean totalAmountVariable(int local) {
         if(solidVariable(local))return true;
-        if(local==waterLiquidIndex||local==waterVaporIndex)return true;
         for(int component:components)if(local==amountIndex[component])return true;
         return false;
     }
     public double amountScale(){return amountScale;}
     public double energyScale(){return energyScale;}
-    /** Resolve trace amounts relative to their own scale rather than the bulk water inventory. This is also the floor
+    /** Resolve trace amounts relative to their own scale rather than the bulk inventory. This is also the floor
      * {@code PassiveStepSolver} derives its trace clamp from; the finite-difference step itself is
      * {@link #differenceStepScale}. */
     public double differenceScale(int local,double value){return Math.max(Math.abs(value),totalAmountVariable(local)?Math.max(TRACE_DIFFERENCE_GUARD,Math.abs(differenceScales[local])):1);}
@@ -193,9 +210,6 @@ public final class PhaseLayout {
      * {@code max(guard, own)}, the scale it always was. */
     public static double traceDifferenceScale(double own){return own>0?own:TRACE_DIFFERENCE_GUARD;}
     public double temperature(double[] variables,int offset){return 350*DeterministicMath.exp(variables[offset+temperatureIndex]);}
-    public double[] encode(FluidThermodynamics.State state) {
-        return encode(state,state.liquidView(),state.vaporView());
-    }
     /**
      * {@link java.util.stream.DoubleStream#sum()} without the stream: the same Kahan compensation,
      * accumulated in the same order, so replacing a stream sum with this cannot move a result.
@@ -210,33 +224,30 @@ public final class PhaseLayout {
         double total=high-low;
         return Double.isNaN(total)&&Double.isInfinite(simple)?simple:total;
     }
-    private double[] encode(FluidThermodynamics.State state,double[] l,double[] v) {
-        double[] x=new double[size],fl=null,fv=null;double phaseAmountRatio=0;
-        for(int i:components){
-            if(support[i]==PhaseSupport.BOTH) {
-                x[liquidIndex[i]]=(l[i]+v[i])/amountScale;
-                if(l[i]>0&&v[i]>0)x[vaporIndex[i]]=DeterministicMath.log(v[i])-DeterministicMath.log(l[i]);
+    public double[] encode(FluidThermodynamics.State state) {
+        double[] x=new double[size];double[] slotTotal=null;
+        for(int i:components) {
+            int ref=referenceSlot[i];double total=0;
+            for(int slot=0;slot<3;slot++)if(slotIndex[i][slot]>=0)total+=state.amountsView(slot)[i];
+            // Any slot the frozen support omits holds the component at exactly zero, so the total of its supported slots is
+            // the component's total and an omitted trace is folded into the slots that are kept.
+            for(int slot=0;slot<3;slot++)if(slotIndex[i][slot]<0)total+=state.amountsView(slot)[i];
+            x[amountIndex[i]]=total/amountScale;
+            for(int slot=0;slot<3;slot++) {
+                if(slot==ref||slotIndex[i][slot]<0)continue;
+                double a=state.amountsView(slot)[i],r=state.amountsView(ref)[i];
+                if(a>0&&r>0)x[slotIndex[i][slot]]=DeterministicMath.log(a)-DeterministicMath.log(r);
                 else {
-                    if(fl==null) {
-                        phaseAmountRatio=DeterministicMath.log(sum(v)/sum(l));
-                        fl=state.liquidProperties().logFugacityView();fv=state.vaporProperties().logFugacityView();
-                    }
-                    // The equilibrium split this component would reach at the seed's fugacity
-                    // coefficients: ln(v_i/l_i) = ln(n_V/n_L) + ln phi_i^L - ln phi_i^V + ln(P/Pc).
-                    // It is the seed for a phase that has just appeared, and for a trace component
-                    // the active set has just reactivated, which is the same situation.
-                    x[vaporIndex[i]]=phaseAmountRatio+fl[i]-fv[i]+DeterministicMath.log(state.pressure()/state.hydrocarbonPartialPressure());
+                    // The equilibrium split this component would reach at the seed's fugacity coefficients:
+                    // ln(n_ik/n_i,ref) = ln(n_k/n_ref) + ln phi_i,ref - ln phi_ik. It is the seed for a phase that has just
+                    // appeared, and for a trace component the active set has just reactivated, which is the same situation.
+                    if(slotTotal==null)slotTotal=new double[]{sum(state.amountsView(0)),sum(state.amountsView(1)),sum(state.amountsView(2))};
+                    x[slotIndex[i][slot]]=DeterministicMath.log(slotTotal[slot]/slotTotal[ref])
+                            +state.phase(ref).logFugacityView()[i]-state.phase(slot).logFugacityView()[i];
                 }
             }
-            // One retained phase, whether because the node carries only that phase or because the
-            // frozen support omitted the other one. The unknown is the component total either way,
-            // so an omitted trace is folded into the phase that is kept and the material closes.
-            else x[amountIndex[i]]=(l[i]+v[i])/amountScale;
         }
-        if(waterLiquidIndex>=0)x[waterLiquidIndex]=state.waterLiquid()/amountScale;
-        if(waterVaporIndex>=0)x[waterVaporIndex]=state.waterVapor()/amountScale;
         x[temperatureIndex]=DeterministicMath.log(state.temperature()/350);x[pressureIndex]=DeterministicMath.log(state.pressure()/1e5);
-        if(partialPressureIndex>=0)x[partialPressureIndex]=DeterministicMath.log(state.hydrocarbonPartialPressure()/1e5);
         if(solidIndex>=0){var moments=state.solidMoments().values();for(int i=0;i<3;i++)x[solidIndex+i]=moments[i]/solidScale[i];}
         return x;
     }
@@ -246,23 +257,36 @@ public final class PhaseLayout {
     /** {@code prepared} carries this node's temperature-only properties; it must be for the exact
      * temperature the variables decode to, and {@code null} evaluates them here as before. */
     public FluidThermodynamics.State decode(double[] variables,int offset,FluidThermodynamics.Prepared prepared) {
-        double[] l=new double[liquidIndex.length],v=new double[l.length];
-        for(int i:components){
-            if(support[i]==PhaseSupport.BOTH) {
-                double amount=amountScale*variables[offset+liquidIndex[i]],ratio=variables[offset+vaporIndex[i]];
-                if(ratio>=0){l[i]=amount/(1+DeterministicMath.exp(ratio));v[i]=amount-l[i];}
-                else{v[i]=amount/(1+DeterministicMath.exp(-ratio));l[i]=amount-v[i];}
+        return decode(variables,offset,prepared,null);
+    }
+    /**
+     * The node at {@code variables} beside its base state, whose phase {@code tangents} these are
+     * ({@link FluidThermodynamics#tangents}): the split of the amounts is exact, each phase is its tangent's first-order
+     * phase where the step is small for it ({@link FluidThermodynamics#adoptingState(double, double, double[], double[],
+     * double[], FluidThermodynamics.Prepared, com.wormzjl.icheme.science.fluid.thermo.HydrocarbonModel.Tangent[])}). For
+     * the Jacobian's perturbed columns; {@code null} tangents decode on the equation of state.
+     */
+    public FluidThermodynamics.State decode(double[] variables,int offset,FluidThermodynamics.Prepared prepared,
+                                            com.wormzjl.icheme.science.fluid.thermo.HydrocarbonModel.Tangent[] tangents) {
+        int n=amountIndex.length;double[][] out=new double[3][n];
+        for(int i:components) {
+            double amount=amountScale*variables[offset+amountIndex[i]];
+            int ref=referenceSlot[i],last=ref;double largest=0;
+            for(int slot=0;slot<3;slot++){int at=slotIndex[i][slot];if(at<0||slot==ref)continue;double r=variables[offset+at];if(r>=largest){largest=r;last=slot;}}
+            if(last==ref&&!hasOther(i)){out[ref][i]=amount;continue;}
+            // Each slot but the largest is amount / sum_j exp(r_j - r_k), the largest takes the remainder: two slots give
+            // the split l = n/(1 + e^r), v = n - l (r >= 0) and v = n/(1 + e^-r), l = n - v of the layout before W3b, to the bit.
+            double rest=amount;
+            for(int slot=0;slot<3;slot++) {
+                if(slotIndex[i][slot]<0||slot==last)continue;
+                double rk=ratio(variables,offset,i,slot),denominator=0;
+                for(int j=0;j<3;j++)if(slotIndex[i][j]>=0)denominator+=j==slot?1:DeterministicMath.exp(ratio(variables,offset,i,j)-rk);
+                out[slot][i]=amount/denominator;rest-=out[slot][i];
             }
-            // The omitted phase is written as exactly zero, never as a small number, so every
-            // component total, every transport split and every conservation audit is exact.
-            else if(liquidIndex[i]>=0)l[i]=amountScale*variables[offset+liquidIndex[i]];
-            else v[i]=amountScale*variables[offset+vaporIndex[i]];
+            out[last][i]=rest;
         }
-        double wl=waterLiquidIndex<0?0:amountScale*variables[offset+waterLiquidIndex];
-        double wv=waterVaporIndex<0?0:amountScale*variables[offset+waterVaporIndex];
         double t=350*DeterministicMath.exp(variables[offset+temperatureIndex]),p=1e5*DeterministicMath.exp(variables[offset+pressureIndex]);
-        double pc=partialPressureIndex>=0?1e5*DeterministicMath.exp(variables[offset+partialPressureIndex]):vaporActive?p:0;
-        var state=model.adoptingState(t,p,l,v,wl,wv,pc,prepared);
+        var state=tangents==null?model.adoptingState(t,p,out[0],out[1],out[2],prepared):model.adoptingState(t,p,out[0],out[1],out[2],prepared,tangents);
         if(solidIndex<0)return state;
         // The three moments are hard-nonnegative in SolidInventory.Moments. Enforce that by
         // projection rather than by refusing the trial: a Newton candidate that overshoots one of
@@ -275,6 +299,9 @@ public final class PhaseLayout {
         if(mass<0||volume<0||capacity<0)SolverDiagnostics.count(SolverDiagnostics.solidMomentProjections);
         return state.withSolidState(solidBasis,new SolidInventory.Moments(Math.max(0,mass),Math.max(0,volume),Math.max(0,capacity)));
     }
+    private boolean hasOther(int i){for(int slot=0;slot<3;slot++)if(slot!=referenceSlot[i]&&slotIndex[i][slot]>=0)return true;return false;}
+    /** {@code ln(n_ik/n_i,ref)} of a supported slot: 0 for the reference, its unknown otherwise. */
+    private double ratio(double[] variables,int offset,int i,int slot){return slot==referenceSlot[i]?0:variables[offset+slotIndex[i][slot]];}
     /**
      * The game's ambient pressure (Pa): the outside of every vessel's wall, and the pressure of the air the network
      * reduction's ambient state holds.
@@ -372,16 +399,14 @@ public final class PhaseLayout {
     /** {@code branch}: the wall's branches the rows are stated on in a Jacobian sweep ({@link Wall}, decision A423); null, the state's own. */
     public void residual(FluidThermodynamics.State state,double[] targetAmounts,double targetEnergy,double capacity,double workFrom,double[] result,int offset,
                          double[] variables,FluidThermodynamics.Prepared prepared,Wall branch) {
-        double[] l=state.liquidView(),v=state.vaporView();
         int row=balanceRows(state,targetAmounts,targetEnergy,capacity,workFrom,result,offset,variables,branch);
-        equilibriumResidual(state,l,v,result,row,offset,variables,prepared);
+        equilibriumResidual(state,result,row,offset,variables);
     }
     /**
      * The rows a change of this node's accumulated targets can move, and no others: the component
-     * balances, the water balance, the energy balance and the wall row. The equilibrium and
-     * closure rows below them read the decoded state alone, so a Jacobian sweep that perturbs a
-     * <em>neighbour</em> leaves them at exactly the residual it already evaluated. Returns the
-     * first row after this block.
+     * balances, the energy balance and the wall row. The equilibrium rows below them read the decoded state alone, so a
+     * Jacobian sweep that perturbs a <em>neighbour</em> leaves them at exactly the residual it already evaluated. Returns
+     * the first row after this block.
      *
      * <p>The energy balance of a vessel whose wall moves is {@code dU = sum(h_in dm_in) - P_ambient dV_bag}
      * ({@link #bagVolume}): with {@code workFrom} the start's bag volume the row states
@@ -391,9 +416,8 @@ public final class PhaseLayout {
      */
     public int balanceRows(FluidThermodynamics.State state,double[] targetAmounts,double targetEnergy,double capacity,double workFrom,
                            double[] result,int offset,double[] variables,Wall branch) {
-        double[] l=state.liquidView(),v=state.vaporView();int row=offset;
-        for(int i:components)result[row++]=(l[i]+v[i]-targetAmounts[i])/componentScales[i];
-        if(waterLiquidIndex>=0||waterVaporIndex>=0)result[row++]=(state.waterLiquid()+state.waterVapor()-targetAmounts[l.length])/componentScales[l.length];
+        double[] v=state.vaporAmountsView(),l=state.liquidAmountsView(),a=state.aqueousAmountsView();int row=offset;
+        for(int i:components)result[row++]=(l[i]+v[i]+a[i]-targetAmounts[i])/componentScales[i];
         double energy=state.internalEnergy();
         if(!Double.isNaN(workFrom)){double moved=bagVolume(state,capacity,branch)-workFrom;if(moved!=0)energy+=ambient*moved;}
         result[row++]=(energy-targetEnergy)/energyScale;
@@ -410,7 +434,7 @@ public final class PhaseLayout {
     public void junctionResidual(FluidThermodynamics.State state,double[] incomingMassFractions,double incomingSpecificEnthalpy,
                                  double netMassFlow,double retainedPressure,double[] result,int offset,double[] variables,FluidThermodynamics.Prepared prepared,double weight) {
         int row=junctionRows(state,incomingMassFractions,incomingSpecificEnthalpy,netMassFlow,retainedPressure,result,offset,variables,weight);
-        equilibriumResidual(state,state.liquidView(),state.vaporView(),result,row,offset,variables,prepared);
+        equilibriumResidual(state,result,row,offset,variables);
     }
     /**
      * The mixing block of {@link #junctionResidual}: everything the inflow and the net flow move, and nothing the
@@ -423,11 +447,11 @@ public final class PhaseLayout {
      */
     public int junctionRows(FluidThermodynamics.State state,double[] incomingMassFractions,double incomingSpecificEnthalpy,
                             double netMassFlow,double retainedPressure,double[] result,int offset,double[] variables,double weight) {
-        var n=totalAmounts(state,state.liquidView(),state.vaporView());
+        var n=state.totals();
         int row=offset;
         for(int index=0;index<junctionBasis.length-1;index++) {
-            int i=junctionBasis[index];double mw=i==n.length-1?model.waterMolecularWeight:model.hydrocarbon.molecularWeight(i);
-            result[row++]=weight*(n[i]*mw/state.mass()-incomingMassFractions[i]);
+            int i=junctionBasis[index];
+            result[row++]=weight*(n[i]*model.molecularWeight(i)/state.mass()-incomingMassFractions[i]);
         }
         // 1 kg/s reference scale, or the retained pressure of an isolated junction, in the
         // logarithmic variable the pressure unknown already is.
@@ -452,129 +476,120 @@ public final class PhaseLayout {
             result[row+i]=junction?(moment/state.mass()-target[i])/(solidScale[i]/solidScale[0]):(moment-target[i])/solidScale[i];
         }
     }
-    private void equilibriumResidual(FluidThermodynamics.State state,double[] l,double[] v,double[] result,int row,int offset,double[] variables,
-                                     FluidThermodynamics.Prepared prepared) {
-        // A seed whose hydrocarbon is an omitted trace (FluidThermodynamics.omittedTrace) may hold it in two phases, but
-        // the layout lays out neither: it decodes no hydrocarbon, and has no split to state.
-        if(liquidActive&&vaporActive&&components.length>0) {
-            if(state.liquidProperties()==null||state.vaporProperties()==null)throw new IllegalArgumentException("A phase vanished inside a fixed-regime Newton trial");
-            double nl=sum(l),nv=sum(v);
-            double[] fl=state.liquidProperties().logFugacityView(),fv=state.vaporProperties().logFugacityView();
-            // The total amount cancels from the fugacity ratio, including at zero amount. A component
-            // the frozen support reduced to one phase has no split unknown and therefore no row here:
-            // its material balance is the whole of it, and this is the only equation it loses.
-            // Hoisted, not changed: both logarithms are the same doubles for every component.
-            double amountLog=DeterministicMath.log(nv/nl),pressureLog=DeterministicMath.log(state.pressure()/state.hydrocarbonPartialPressure());
-            for(int i:components)if(support[i]==PhaseSupport.BOTH)
-                result[row++]=-variables[offset+vaporIndex[i]]+amountLog+fl[i]-fv[i]+pressureLog;
+    /**
+     * The equilibrium rows: for each present component and each supported slot {@code k} past its reference,
+     * {@code -ln(n_ik/n_i,ref) + ln(n_k/n_ref) + ln phi_i,ref - ln phi_ik}. The total amount cancels from the fugacity
+     * ratio, including at zero amount; a component the frozen support reduced to one slot has no ratio unknown and no row.
+     */
+    private void equilibriumResidual(FluidThermodynamics.State state,double[] result,int row,int offset,double[] variables) {
+        if(Integer.bitCount(active)>=2&&components.length>0) {
+            double[] slotTotal=new double[3];double[][] f=new double[3][];
+            for(int slot=0;slot<3;slot++) {
+                if((active&bit(slot))==0)continue;
+                var phase=state.phase(slot);
+                if(phase==null)throw new IllegalArgumentException("A phase vanished inside a fixed-regime Newton trial");
+                slotTotal[slot]=sum(state.amountsView(slot));f[slot]=phase.logFugacityView();
+            }
+            // Hoisted, not changed: the slot logarithm is the same double for every component.
+            double[] amountLog=new double[3];int[] seen=new int[3];Arrays.fill(seen,-1);
+            for(int i:components) {
+                int ref=referenceSlot[i];
+                for(int slot=0;slot<3;slot++) {
+                    int at=slotIndex[i][slot];if(at<0||slot==ref)continue;
+                    if(seen[slot]!=ref){amountLog[slot]=DeterministicMath.log(slotTotal[slot]/slotTotal[ref]);seen[slot]=ref;}
+                    result[row++]=-variables[offset+at]+amountLog[slot]+f[ref][i]-f[slot][i];
+                }
+            }
         }
-        if(waterLiquidIndex>=0&&waterVaporIndex>=0)result[row++]=DeterministicMath.log(state.waterPartialPressure()
-                /(prepared==null?model.saturationPressure(state.temperature()):model.saturationPressure(prepared)));
-        if(partialPressureIndex>=0)result[row++]=(state.hydrocarbonPartialPressure()+state.waterPartialPressure()-state.pressure())/state.pressure();
         if(row!=offset+size)throw new IllegalStateException("Phase equation/unknown count mismatch");
     }
     /**
-     * Components whose omitted phase this converged state no longer supports omitting, marked in {@code promoted} for
+     * Components whose omitted slot this converged state no longer supports omitting, marked in {@code promoted} for
      * the next active-set pass; returns how many were newly marked. The test is V3's reinsertion inequality on this
-     * layout's own equilibrium relation: at a converged point the retained components satisfy
-     * {@code ln y_i = ln x_i + ln phi_i^L - ln phi_i^V + ln(P/Pc)}, and the equation of state fills {@code ln phi_i} of
-     * an absent component at infinite dilution, so the same expression says what mole fraction the omitted phase would
-     * hold; when that reaches {@link TraceTruncationPolicy#REINSERTION_FACTOR} times the cutoff the component gets both
-     * phases back (the factor is the hysteresis against alternation). {@link #encode} already seeds a component with an
-     * empty phase at exactly this ratio.
+     * layout's own equilibrium relation: at a converged point the retained slots satisfy
+     * {@code ln x_ik = ln x_i,ref + ln phi_i,ref - ln phi_ik}, and the equation of state fills {@code ln phi_ik} of an
+     * absent component at infinite dilution, so the same expression says what mole fraction the omitted slot would hold;
+     * when that reaches {@link TraceTruncationPolicy#REINSERTION_FACTOR} times the cutoff the component gets every slot
+     * back (the factor is the hysteresis against alternation). {@link #encode} already seeds a component with an empty
+     * slot at exactly this ratio.
      */
     public int reactivate(FluidThermodynamics.State state,TraceTruncationPolicy policy,boolean[] promoted) {
-        if(!policy.enabled()||!liquidActive||!vaporActive)return 0;
-        if(promoted.length!=liquidIndex.length)throw new IllegalArgumentException("Reactivation basis mismatch");
-        var lp=state.liquidProperties();var vp=state.vaporProperties();
-        if(lp==null||vp==null)return 0;
-        double[] l=state.liquidView(),v=state.vaporView(),fl=lp.logFugacityView(),fv=vp.logFugacityView();
-        double nl=sum(l),nv=sum(v);
-        if(!(nl>0&&nv>0))return 0;
-        double pressureRatio=DeterministicMath.log(state.pressure()/state.hydrocarbonPartialPressure());
+        if(!policy.enabled()||Integer.bitCount(active)<2)return 0;
+        if(promoted.length!=amountIndex.length)throw new IllegalArgumentException("Reactivation basis mismatch");
+        double[] slotTotal=new double[3];double[][] f=new double[3][];
+        for(int slot=0;slot<3;slot++) {
+            if((active&bit(slot))==0)continue;
+            var phase=state.phase(slot);if(phase==null)return 0;
+            slotTotal[slot]=sum(state.amountsView(slot));f[slot]=phase.logFugacityView();
+            if(!(slotTotal[slot]>0))return 0;
+        }
         double threshold=DeterministicMath.log(TraceTruncationPolicy.REINSERTION_FACTOR*policy.cutoffMoleFraction());
         int restored=0;
         for(int i:components) {
-            if(!support[i].singlePhase()||promoted[i])continue;
-            double implied=support[i]==PhaseSupport.LIQUID_ONLY
-                    ?DeterministicMath.log(l[i]/nl)+fl[i]-fv[i]+pressureRatio
-                    :DeterministicMath.log(v[i]/nv)-fl[i]+fv[i]-pressureRatio;
-            if(implied>=threshold){promoted[i]=true;restored++;}
+            if(support[i]==active||promoted[i])continue;
+            int ref=referenceSlot[i];
+            double held=DeterministicMath.log(state.amountsView(ref)[i]/slotTotal[ref])+f[ref][i];
+            for(int slot=0;slot<3;slot++) {
+                if((active&bit(slot))==0||(support[i]&bit(slot))!=0)continue;
+                if(held-f[slot][i]>=threshold){promoted[i]=true;restored++;break;}
+            }
         }
         return restored;
     }
     /**
-     * The per-component phase support of one node, derived from a full-basis reference state and then frozen: V3's
-     * rule, on the seed's own phase compositions. The reference is the seed the layout is built from and never a Newton
-     * iterate, so the unknown set of a pass is fixed before the pass starts, which lets the sparsity pattern, the
-     * colouring, the ordering and the retained factorization be keyed on it. A component is reduced to one phase when
-     * its mole fraction in the other phase is below the cutoff while this one's is not; when both are below it both are
-     * kept. {@code promoted} components are kept in both phases regardless (a reactivation may not be undone by a later
-     * pass of the same solve). A node with one active hydrocarbon phase gets that phase for every present component; at
+     * The per-component slot support of one node, derived from a full-basis reference state and then frozen: V3's rule, on
+     * the seed's own phase compositions, over every slot the seed holds. The reference is the seed the layout is built
+     * from and never a Newton iterate, so the unknown set of a pass is fixed before the pass starts, which lets the
+     * sparsity pattern, the colouring, the ordering and the retained factorization be keyed on it. A component is dropped
+     * from a slot where its mole fraction is below the cutoff while some other slot's is not; when every slot's is below
+     * it every slot is kept. {@code promoted} components keep every slot (a reactivation may not be undone by a later pass
+     * of the same solve). A node with one slot gets that slot for every present component; at
      * {@link TraceTruncationPolicy#OFF} the support is the unreduced layout's.
+     *
+     * <p>W3b deleted D41's omitted trace (a junction's carried dry gas beside free water, a vessel's hydrocarbon trace
+     * within its wall's volume resolution, every hydrocarbon component absent): its cause was the free water's
+     * saturation row reading the ratio of two such amounts, and every component now sits in an existing phase.</p>
      */
-    public static PhaseSupport[] support(FluidThermodynamics.State seed,boolean[] componentMask,TraceTruncationPolicy policy,boolean[] promoted) {
-        return support(seed,componentMask,policy,promoted,false);
-    }
-    /**
-     * {@link #support} for a node that is a pipe junction ({@code junction}) or a vessel. A node whose seed holds an
-     * omitted hydrocarbon trace ({@link FluidThermodynamics#omittedTrace}, decision D41: a junction's carried dry gas, a
-     * vessel's trace within its wall's volume resolution) has no phase of its own for it. Every hydrocarbon component is
-     * an omitted trace with no unknown and no row, below what the node's rows resolve. An amount unknown there has a
-     * difference step no row registers, or one that swamps the phase it is in (a tank's 1e-18 mol of crude liquid,
-     * differenced by 5.4e-6 mol of methane, had no liquid root). With a gas's water vapour, the saturation row read the
-     * ratio of two such amounts and never contracted. The transport reconstruction carries them exactly and books more
-     * when more arrives; a share at or above the trace is a phase appearance.
-     */
-    public static PhaseSupport[] support(FluidThermodynamics.State seed,boolean[] componentMask,TraceTruncationPolicy policy,boolean[] promoted,boolean junction) {
-        var support=supportOf(seed,componentMask,policy,promoted);
-        if(FluidThermodynamics.omittedTrace(seed,junction))Arrays.fill(support,PhaseSupport.ABSENT);
-        return support;
-    }
-    /**
-     * {@link #support(FluidThermodynamics.State, boolean[], TraceTruncationPolicy, boolean[], boolean)} of a node of
-     * {@code model}'s network, under its trace truncation policy, with the support read from the fluid phases of the
-     * answer the seed was adopted from (owner decision D29 A). Where the seed's liquid is a crystal's condensed share alone
-     * ({@link FluidThermodynamics#condensedShareOnly}), that liquid is no phase of the answer and its composition says
-     * nothing of what a liquid there holds: the answer's one fluid phase is the vapour, and every component the vapour
-     * holds is admitted to the liquid too ({@link PhaseSupport#BOTH} where the rule gives {@link PhaseSupport#VAPOR_ONLY}),
-     * so the supersaturated liquid takes up the species that arrive with it (methane held in the vapour only cooled an
-     * LNG-fed tank to methane's 90.69 K floor). Elsewhere the same support as without the model.
-     */
-    public static PhaseSupport[] support(FluidThermodynamics model,FluidThermodynamics.State seed,boolean[] componentMask,boolean[] promoted,boolean junction) {
-        var support=support(seed,componentMask,model.traceTruncation(),promoted,junction);
-        if(model.condensedShareOnly(seed))for(int i=0;i<support.length;i++)if(support[i]==PhaseSupport.VAPOR_ONLY)support[i]=PhaseSupport.BOTH;
-        return support;
-    }
-    private static PhaseSupport[] supportOf(FluidThermodynamics.State seed,boolean[] componentMask,TraceTruncationPolicy policy,boolean[] promoted) {
+    public static byte[] support(FluidThermodynamics.State seed,boolean[] componentMask,TraceTruncationPolicy policy,boolean[] promoted) {
         Objects.requireNonNull(seed);Objects.requireNonNull(policy);
-        double[] l=seed.liquidView(),v=seed.vaporView();
-        if(componentMask!=null&&componentMask.length!=l.length)throw new IllegalArgumentException("Component mask mismatch");
-        if(promoted!=null&&promoted.length!=l.length)throw new IllegalArgumentException("Reactivation basis mismatch");
-        var support=new PhaseSupport[l.length];
-        boolean liquidActive=seed.liquidVolume()>0,vaporActive=sum(v)>0;
-        double nl=liquidActive?sum(l):0,nv=vaporActive?sum(v):0;
-        for(int i=0;i<l.length;i++) {
-            if(!(l[i]+v[i]>0||componentMask!=null&&componentMask[i]))support[i]=PhaseSupport.ABSENT;
-            // A masked component this reference holds none of, on a point with no hydrocarbon phase to hold it in, is an
-            // omitted trace: inventing a phase for a species nothing delivers is the phantom-trace defect. It stays in the
-            // mask, so a pass whose seed does carry the component states it again. A component this reference does hold
-            // with no phase to hold it in is a real appearance problem and is left to the layout to refuse.
-            else if(l[i]+v[i]==0&&!liquidActive&&!vaporActive)support[i]=PhaseSupport.ABSENT;
-            else if(!vaporActive)support[i]=PhaseSupport.LIQUID_ONLY;
-            else if(!liquidActive)support[i]=PhaseSupport.VAPOR_ONLY;
-            else if(promoted!=null&&promoted[i])support[i]=PhaseSupport.BOTH;
-            else support[i]=PhaseSupport.of(l[i]/nl,v[i]/nv,policy.cutoffMoleFraction());
+        int n=seed.componentCount();double[] totals=seed.totals();
+        if(componentMask!=null&&componentMask.length!=n)throw new IllegalArgumentException("Component mask mismatch");
+        if(promoted!=null&&promoted.length!=n)throw new IllegalArgumentException("Reactivation basis mismatch");
+        var support=new byte[n];
+        int active=activeBits(seed);double cutoff=policy.cutoffMoleFraction();
+        double[] slotTotal={sum(seed.amountsView(0)),sum(seed.amountsView(1)),sum(seed.amountsView(2))};
+        for(int i=0;i<n;i++) {
+            // A masked component this reference holds none of, on a point with no phase to hold it in, is an omitted trace:
+            // inventing a phase for a species nothing delivers is the phantom-trace defect. It stays in the mask, so a pass
+            // whose seed does carry the component states it again.
+            if(!(totals[i]>0||componentMask!=null&&componentMask[i])||active==0)continue;
+            if(Integer.bitCount(active)==1||promoted!=null&&promoted[i]||!(cutoff>0)){support[i]=(byte)active;continue;}
+            int kept=0;boolean any=false;
+            for(int slot=0;slot<3;slot++) {
+                if((active&bit(slot))==0)continue;
+                boolean trace=seed.amountsView(slot)[i]/slotTotal[slot]<cutoff;
+                if(!trace){kept|=bit(slot);any=true;}
+            }
+            support[i]=(byte)(any?kept:active);
         }
         return support;
     }
-    public static double[] totalAmounts(FluidThermodynamics.State state) {
-        return totalAmounts(state,state.liquidView(),state.vaporView());
+    /**
+     * {@link #support(FluidThermodynamics.State, boolean[], TraceTruncationPolicy, boolean[])} of a node of {@code model}'s
+     * network, under its trace truncation policy, with the support read from the fluid phases of the answer the seed was
+     * adopted from (owner decision D29 A). A stand-in slot ({@link FluidThermodynamics#standIn}) is a crystal's condensed
+     * share alone, no phase of the answer, and its composition says nothing of what a liquid there holds: every component
+     * the node holds is admitted to it, so the supersaturated liquid takes up the species that arrive with it (methane held
+     * in the vapour only cooled an LNG-fed tank to methane's 90.69 K floor). Elsewhere the same support as without the model.
+     */
+    public static byte[] support(FluidThermodynamics model,FluidThermodynamics.State seed,boolean[] componentMask,boolean[] promoted) {
+        var support=support(seed,componentMask,model.traceTruncation(),promoted);
+        int standIn=model.standIn(seed);
+        if(standIn!=0)for(int i=0;i<support.length;i++)if(support[i]!=0)support[i]|=(byte)standIn;
+        return support;
     }
-    private static double[] totalAmounts(FluidThermodynamics.State state,double[] l,double[] v) {
-        double[] n=Arrays.copyOf(l,l.length+1);
-        for(int i=0;i<l.length;i++)n[i]+=v[i];n[l.length]=state.waterLiquid()+state.waterVapor();return n;
-    }
+    /** Each component's amount over the state's slots, water last ({@link FluidThermodynamics.State#totals}). */
+    public static double[] totalAmounts(FluidThermodynamics.State state){return state.totals();}
     /** Thrown by {@link #junctionClosure} at a point where a phase of its start is vanishing: the closure's verdict that its
      * rows empty that phase (owner decision D38 C), reached without crawling to the boundary. */
     public static final class Vanished extends RuntimeException {

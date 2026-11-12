@@ -13,6 +13,7 @@ import java.util.function.Supplier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * Engine-owned presentation (plan R2, section 3.4, section 5 item 2) on the synchronous rig: the coordinator with
@@ -284,7 +285,7 @@ class PresentationBucketTest {
         var b=new StringBuilder(island.clock().toString());java.util.function.DoubleConsumer bits=v->b.append(',').append(Long.toHexString(Double.doubleToLongBits(v)));
         for(var node:island.graph().reservoirs()) {
             b.append('|').append(node.id());for(double n:node.inventory().moles())bits.accept(n);bits.accept(node.inventory().internalEnergy());
-            var state=node.state();bits.accept(state.temperature());bits.accept(state.pressure());for(double v:state.liquid())bits.accept(v);for(double v:state.vapor())bits.accept(v);
+            var state=node.state();bits.accept(state.temperature());bits.accept(state.pressure());for(double v:TestPhases.liquid(state))bits.accept(v);for(double v:TestPhases.vapor(state))bits.accept(v);
         }
         return b.toString();
     }

@@ -311,9 +311,9 @@ public final class SimulatorResults {
         var state = stream.state();
         b.writeBoolean(state != null);
         if (state == null) return;
-        doubles(b, state.liquidView());
-        doubles(b, state.vaporView());
-        for (double value : new double[]{state.waterLiquid(), state.waterVapor(), state.hydrocarbonPartialPressure()}) b.writeDouble(value);
+        doubles(b, state.vaporAmountsView());
+        doubles(b, state.liquidAmountsView());
+        doubles(b, state.aqueousAmountsView());
         write(b, state.solids().populations(), (o, population) -> {
             var material = population.material();
             text(o, material.id());
@@ -341,10 +341,9 @@ public final class SimulatorResults {
         double temperature = b.readDouble(), pressure = b.readDouble(), enthalpy = b.readDouble(), mass = b.readDouble();
         var amounts = doubles(b);
         if (!b.readBoolean()) return new FlowStream(temperature, pressure, amounts, enthalpy, mass, null);
-        double[] liquid = doubles(b), vapor = doubles(b);
-        double waterLiquid = b.readDouble(), waterVapor = b.readDouble(), partial = b.readDouble();
+        double[] vapor = doubles(b), liquid = doubles(b), aqueous = doubles(b);
         var populations = list(b, o -> new SolidInventory.Population(material(o), new ParticleSize(text(o)), o.readDouble()));
-        var state = model.state(temperature, pressure, liquid, vapor, waterLiquid, waterVapor, partial);
+        var state = model.adoptingState(temperature, pressure, vapor, liquid, aqueous, null);
         return new FlowStream(temperature, pressure, amounts, enthalpy, mass, populations.isEmpty() ? state : state.withSolids(new SolidInventory(populations)));
     }
 }

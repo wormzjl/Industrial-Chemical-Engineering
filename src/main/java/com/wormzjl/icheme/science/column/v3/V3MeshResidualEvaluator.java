@@ -103,7 +103,9 @@ final class V3MeshResidualEvaluator {
             double[] criticalTemperatures = new double[components];
             double[] criticalPressures = new double[components];
             double[] acentricFactors = new double[components];
-            double[][] interactions = pr.binaryInteractions();
+            // The kernel's own pairs (W5 D1); a kernel the C++ PR78 cannot carry takes the Java snapshot.
+            double[][] interactions = pr.constantClassicalInteractions();
+            if (interactions == null) return null;
             double[] flattenedInteractions = new double[components * components];
             for (int component = 0; component < components; component++) {
                 criticalTemperatures[component] = pr.componentCriticalTemperatureKelvin(component);

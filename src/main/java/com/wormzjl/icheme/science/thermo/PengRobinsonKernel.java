@@ -6,10 +6,18 @@ import java.util.Arrays;
 import java.util.Objects;
 
 /**
- * Allocation-free PR78 hydrocarbon kernel. One {@link Workspace} belongs to one solve; liquid and vapor evaluations at
- * a common temperature share its temperature-dependent pure-component arithmetic. Promoted unchanged from the V3
- * column's package, the critical constants read into arrays by the constructor, so the column and the fluid network
- * evaluate their phases on the same arithmetic.
+ * Allocation-free PR78 kernel with one mixing rule (W3b step 1b, design N8). One {@link Workspace} belongs to one solve;
+ * liquid and vapor evaluations at a common temperature share its temperature-dependent pure-component arithmetic.
+ * Promoted from the V3 column's package, the critical constants read into arrays by the constructor, so the column, the
+ * fluid network and the equilibrium engine evaluate their phases on the same arithmetic.
+ *
+ * <p>The rule is Huron-Vidal's at infinite pressure for PR ({@link HuronVidalExcess}): a/b = sum_i x_i a_i/b_i - gE/Lambda,
+ * the co-volume-weighted NRTL gE. A classical pair (alpha = 0, energies from its {@code k_ij(T)}) is the quadratic rule
+ * {@code a_ij = sqrt(a_i a_j)(1 - k_ij)}; where no NRTL pair is active the whole rule is the quadratic one. So the
+ * kernel forms the quadratic part on its pair list, {@code O(n + pairs)} (the rank-one sum less the pairs whose
+ * {@code k_ij} is not zero), and the exponential sums only where the kernel has NRTL pairs. Every constructor reaches the
+ * same rule: a constant matrix, a {@link PairInteractions} model, or a {@link HuronVidalExcess} with a Mathias-Copeman
+ * alpha per compound.</p>
  */
 public final class PengRobinsonKernel {
     public static final double GAS_CONSTANT = 8.31446261815324;
@@ -32,61 +40,60 @@ public final class PengRobinsonKernel {
     private final double[] criticalA;
     private final double[] coVolumes;
     private final double[] kappas;
-    private final double[][] binaryInteractions;
+    /** True when the kernel has no pair at all: the quadratic part is then the rank-one product. */
     private final boolean rankOneMixing;
-    private final Mixing mixing;
     /**
-     * The {@code i < j} entries with {@code k_ij != 0}, for {@link Mixing#SPARSE_PAIRS}; for
-     * {@link Mixing#TEMPERATURE_DEPENDENT_PAIRS} the declared pairs of {@link #interactions}, whose values live in the
-     * workspace ({@link #pairInteraction} is then empty).
+     * True when every listed pair is a constant (no line, no model pair): each term a pair's {@code dk/dT} or
+     * {@code d^2k/dT^2} adds is then an exact zero, and the passes that form only such terms are skipped.
+     */
+    private final boolean constantPairs;
+    /**
+     * The classical pairs whose {@code k_ij(T)} may be nonzero, {@code i < j}: a constant or a line {@code k0 + k1 T}
+     * ({@link #pairModel} -1), or the pair {@link #pairModel} of {@link #interactions}. Their values per temperature live
+     * in the workspace.
      */
     private final int[] pairFirst;
     private final int[] pairSecond;
-    private final double[] pairInteraction;
-    /** The interaction model of {@link Mixing#TEMPERATURE_DEPENDENT_PAIRS}; null for the matrix plans. */
-    private final PairInteractions interactions;
-    /** {@code pairIndex[i][j]}: the pair of {@code (i, j)} in {@link #interactions}, or -1; null for the matrix plans. */
+    private final double[] pairConstant;
+    private final double[] pairSlope;
+    /** The fitted ends of each listed pair's line ({@link HuronVidalExcess#held}); infinite for a constant. */
+    private final double[] pairLow, pairHigh;
+    private final int[] pairModel;
+    /** {@code pairIndex[i][j]}: the pair of {@code (i, j)} in the list above, or -1. */
     private final int[][] pairIndex;
+    /** The interaction model whose pairs are on the list; null when none is. */
+    private final PairInteractions interactions;
+    /**
+     * Per compound, true when its alpha is Mathias-Copeman with the coefficients below; null when every compound uses
+     * the Soave form with PR78's kappa.
+     */
+    private final boolean[] mathiasCopeman;
+    private final double[] alphaFirst;
+    private final double[] alphaSecond;
+    private final double[] alphaThird;
+    /**
+     * Whether any pair is NRTL. Then the NRTL cells are listed per centre: cells {@code cellStart[i]} to
+     * {@code cellStart[i + 1] - 1} are the partners {@code j = cellPartner[c]} whose energy {@code dg_ji} of {@code j}
+     * around {@code i} is the NRTL line {@code dg_ji = intercept + slope T} with {@code alpha_ij}; {@code cellIndex[i][j]}
+     * is the cell of {@code (i, j)}, or -1 for a classical pair. Empty arrays without NRTL pairs.
+     */
+    private final boolean excess;
+    private final int[] cellStart;
+    private final int[] cellPartner;
+    private final int[][] cellIndex;
+    private final double[] cellAlpha;
+    private final double[] cellIntercept;
+    private final double[] cellSlope;
+    /** The fitted ends of each cell's energy line ({@link HuronVidalExcess#held}) and its fade temperature (infinite: none). */
+    private final double[] cellLow, cellHigh, cellFade;
     private final double minimumTemperatureKelvin;
     private final double maximumTemperatureKelvin;
     private final double minimumPressurePascal;
     private final double maximumPressurePascal;
 
     /**
-     * How the quadratic mixture sums are evaluated. Both plans compute the same classical rule
-     * {@code a_ij = sqrt(a_i a_j)(1 - k_ij)}; they differ only in the arithmetic that reaches it, and
-     * therefore only in roundoff.
-     */
-    public enum Mixing {
-        /**
-         * The column's plan: {@code O(n^2)} over the full interaction matrix, collapsing to a rank-one
-         * product when every {@code k_ij} is zero. Every V3 state has been evaluated this way and stays
-         * bitwise on it.
-         */
-        CLASSICAL,
-        /**
-         * {@code O(n + pairs)}: the row sums are the rank-one sum corrected by the few nonzero pairs,
-         * {@code S_i = sqrt(a_i) (sum_j q_j - sum_{j: k_ij != 0} k_ij q_j)} with {@code q_i = x_i sqrt(a_i)}.
-         * For a package whose interaction matrix is nearly empty - the fluid network's has 11 nonzero pairs
-         * among 21 components - this is the same rule at a fraction of the work. The mixture sums are then
-         * accumulated with the identical expressions {@link #CLASSICAL}'s dense branch uses, so the two
-         * differ only in how each {@code S_i} was summed.
-         */
-        SPARSE_PAIRS,
-        /**
-         * {@link #SPARSE_PAIRS}'s structure with pair values that depend on temperature: the pair list is the
-         * {@link PairInteractions} model's, fixed at construction, and {@link #prepareTemperature} fills
-         * {@code k_ij(T)}, {@code dk_ij/dT} and {@code d^2k_ij/dT^2} per pair into the workspace. The value sums are
-         * {@link #SPARSE_PAIRS}'s expressions on those values; every temperature derivative gains the interactions' own
-         * terms ({@code -2 sum_pairs q_i q_j dk_ij/dT} in {@code da_mix/dT}, and their counterparts in
-         * {@code d^2a_mix/dT^2} and {@code dS_i/dT}). On a model whose pairs are all constant those terms are exact
-         * zeros and the plan reproduces {@link #SPARSE_PAIRS} on the same matrix bit for bit. Only the constructor that
-         * takes a {@link PairInteractions} selects it.
-         */
-        TEMPERATURE_DEPENDENT_PAIRS
-    }
-
-    /**
+     * The kernel on a constant interaction matrix: each nonzero {@code k_ij} a classical pair.
+     *
      * @param criticalTemperaturesKelvin per component, in the caller's basis order
      * @param binaryInteractions square, symmetric, zero diagonal; copied
      */
@@ -95,22 +102,13 @@ public final class PengRobinsonKernel {
             double[][] binaryInteractions,
             double minimumTemperatureKelvin, double maximumTemperatureKelvin,
             double minimumPressurePascal, double maximumPressurePascal) {
-        this(criticalTemperaturesKelvin, criticalPressuresPascal, acentricFactors, binaryInteractions,
-                minimumTemperatureKelvin, maximumTemperatureKelvin,
-                minimumPressurePascal, maximumPressurePascal, Mixing.CLASSICAL);
-    }
-
-    public PengRobinsonKernel(
-            double[] criticalTemperaturesKelvin, double[] criticalPressuresPascal, double[] acentricFactors,
-            double[][] binaryInteractions,
-            double minimumTemperatureKelvin, double maximumTemperatureKelvin,
-            double minimumPressurePascal, double maximumPressurePascal, Mixing mixing) {
-        this(criticalTemperaturesKelvin, criticalPressuresPascal, acentricFactors, binaryInteractions, null,
-                minimumTemperatureKelvin, maximumTemperatureKelvin, minimumPressurePascal, maximumPressurePascal, mixing);
+        this(criticalTemperaturesKelvin, criticalPressuresPascal, acentricFactors, matrixPairs(criticalTemperaturesKelvin, binaryInteractions),
+                null, minimumTemperatureKelvin, maximumTemperatureKelvin, minimumPressurePascal, maximumPressurePascal);
     }
 
     /**
-     * The kernel on a pair-interaction model, with {@link Mixing#TEMPERATURE_DEPENDENT_PAIRS}.
+     * The kernel on a pair-interaction model: each of its pairs a classical pair whose {@code k_ij(T)} the model gives at
+     * each temperature, with its two temperature derivatives.
      *
      * @param interactions over the same basis, in the caller's order
      */
@@ -120,24 +118,153 @@ public final class PengRobinsonKernel {
             double minimumTemperatureKelvin, double maximumTemperatureKelvin,
             double minimumPressurePascal, double maximumPressurePascal) {
         this(criticalTemperaturesKelvin, criticalPressuresPascal, acentricFactors,
-                zeroMatrix(criticalTemperaturesKelvin), Objects.requireNonNull(interactions, "interactions"),
-                minimumTemperatureKelvin, maximumTemperatureKelvin, minimumPressurePascal, maximumPressurePascal,
-                Mixing.TEMPERATURE_DEPENDENT_PAIRS);
+                modelPairs(criticalTemperaturesKelvin, Objects.requireNonNull(interactions, "interactions")), null,
+                minimumTemperatureKelvin, maximumTemperatureKelvin, minimumPressurePascal, maximumPressurePascal);
+    }
+
+    /**
+     * The kernel on a Huron-Vidal excess model, and an optional Mathias-Copeman alpha per compound:
+     * {@code alpha = (1 + c1 u + c2 u^2 + c3 u^3)^2}, {@code u = 1 - sqrt(T/Tc)}, and above {@code Tc} only {@code c1}
+     * ({@code alpha = (1 + c1 u)^2}, so value and slope are continuous at {@code Tc}). A compound without coefficients
+     * keeps the Soave form with PR78's kappa of its acentric factor.
+     *
+     * @param excess over the same basis, in the caller's order
+     * @param mathiasCopeman null, or one entry per compound: null for the Soave form, or {@code {c1, c2, c3}}; copied
+     */
+    public static PengRobinsonKernel huronVidal(
+            double[] criticalTemperaturesKelvin, double[] criticalPressuresPascal, double[] acentricFactors,
+            HuronVidalExcess excess, double[][] mathiasCopeman,
+            double minimumTemperatureKelvin, double maximumTemperatureKelvin,
+            double minimumPressurePascal, double maximumPressurePascal) {
+        return new PengRobinsonKernel(criticalTemperaturesKelvin, criticalPressuresPascal, acentricFactors,
+                excessPairs(criticalTemperaturesKelvin, Objects.requireNonNull(excess, "excess")), mathiasCopeman,
+                minimumTemperatureKelvin, maximumTemperatureKelvin, minimumPressurePascal, maximumPressurePascal);
+    }
+
+    /** The pairs of one kernel before the constructor copies them. */
+    private record Pairs(int count, int[] first, int[] second, double[] constant, double[] slope, int[] model,
+                         PairInteractions interactions, boolean[] nrtl, double[] alpha, double[] intercept, double[] energySlope,
+                         double[] low, double[] high, double[] cellLow, double[] cellHigh, double[] cellFade) {
+        /** Pairs without lines: constants and model pairs (infinite ends). */
+        Pairs(int count, int[] first, int[] second, double[] constant, double[] slope, int[] model,
+              PairInteractions interactions, boolean[] nrtl, double[] alpha, double[] intercept, double[] energySlope) {
+            this(count, first, second, constant, slope, model, interactions, nrtl, alpha, intercept, energySlope,
+                    filled(first.length, Double.NEGATIVE_INFINITY), filled(first.length, Double.POSITIVE_INFINITY), null, null, null);
+        }
+
+        private static double[] filled(int length, double value) {
+            double[] values = new double[length];
+            Arrays.fill(values, value);
+            return values;
+        }
+    }
+
+    private static Pairs matrixPairs(double[] criticalTemperaturesKelvin, double[][] binaryInteractions) {
+        int n = Objects.requireNonNull(criticalTemperaturesKelvin, "criticalTemperaturesKelvin").length;
+        Objects.requireNonNull(binaryInteractions, "binaryInteractions");
+        if (binaryInteractions.length != n) throw new IllegalArgumentException("Invalid BIP matrix dimension");
+        int pairs = 0;
+        for (int i = 0; i < n; i++) {
+            if (binaryInteractions[i] == null || binaryInteractions[i].length != n) throw new IllegalArgumentException("Invalid BIP matrix row");
+            for (int j = 0; j < n; j++) {
+                double value = binaryInteractions[i][j];
+                if (!Double.isFinite(value) || Math.abs(value - binaryInteractions[j][i]) > 1.0e-14
+                        || (i == j && Math.abs(value) > 1.0e-14)) {
+                    throw new IllegalArgumentException("BIP matrix must be finite, symmetric, and zero diagonal");
+                }
+                if (j > i && value != 0.0) pairs++;
+            }
+        }
+        int[] first = new int[pairs], second = new int[pairs], model = new int[pairs];
+        double[] constant = new double[pairs];
+        Arrays.fill(model, -1);
+        int at = 0;
+        for (int i = 0; i < n; i++) for (int j = i + 1; j < n; j++) {
+            if (binaryInteractions[i][j] == 0.0) continue;
+            first[at] = i;
+            second[at] = j;
+            constant[at++] = binaryInteractions[i][j];
+        }
+        return new Pairs(n, first, second, constant, new double[pairs], model, null, null, null, null, null);
+    }
+
+    private static Pairs modelPairs(double[] criticalTemperaturesKelvin, PairInteractions interactions) {
+        int n = Objects.requireNonNull(criticalTemperaturesKelvin, "criticalTemperaturesKelvin").length;
+        if (interactions.componentCount() != n) throw new IllegalArgumentException("Interaction model basis does not match the components");
+        int pairs = interactions.pairCount();
+        int[] first = new int[pairs], second = new int[pairs], model = new int[pairs];
+        for (int pair = 0; pair < pairs; pair++) {
+            first[pair] = interactions.first(pair);
+            second[pair] = interactions.second(pair);
+            model[pair] = pair;
+        }
+        return new Pairs(n, first, second, new double[pairs], new double[pairs], model, interactions, null, null, null, null);
+    }
+
+    private static Pairs excessPairs(double[] criticalTemperaturesKelvin, HuronVidalExcess excess) {
+        int n = Objects.requireNonNull(criticalTemperaturesKelvin, "criticalTemperaturesKelvin").length;
+        if (excess.componentCount() != n) throw new IllegalArgumentException("Excess model basis does not match the components");
+        int pairs = 0;
+        boolean anyNrtl = false;
+        for (int i = 0; i < n; i++) for (int j = i + 1; j < n; j++) {
+            if (!excess.classical(i, j)) {
+                anyNrtl = true;
+            } else if (excess.interactionPair(i, j) >= 0 || excess.interaction(i, j) != 0.0 || excess.interactionSlope(i, j) != 0.0) {
+                pairs++;
+            }
+        }
+        int[] first = new int[pairs], second = new int[pairs], model = new int[pairs];
+        double[] constant = new double[pairs], slope = new double[pairs], low = new double[pairs], high = new double[pairs];
+        int at = 0;
+        for (int i = 0; i < n; i++) for (int j = i + 1; j < n; j++) {
+            if (!excess.classical(i, j)) continue;
+            int m = excess.interactionPair(i, j);
+            if (m < 0 && excess.interaction(i, j) == 0.0 && excess.interactionSlope(i, j) == 0.0) continue;
+            low[at] = excess.lineLow(i, j);
+            high[at] = excess.lineHigh(i, j);
+            first[at] = i;
+            second[at] = j;
+            model[at] = m;
+            constant[at] = excess.interaction(i, j);
+            slope[at++] = excess.interactionSlope(i, j);
+        }
+        boolean[] nrtl = null;
+        double[] alpha = null, intercept = null, energySlope = null, cellLow = null, cellHigh = null, cellFade = null;
+        if (anyNrtl) {
+            int cells = n * n;
+            nrtl = new boolean[cells];
+            alpha = new double[cells];
+            intercept = new double[cells];
+            energySlope = new double[cells];
+            cellLow = new double[cells];
+            cellHigh = new double[cells];
+            cellFade = new double[cells];
+            for (int i = 0; i < n; i++) {
+                for (int j = 0; j < n; j++) {
+                    if (i == j || excess.classical(i, j)) continue;
+                    int cell = i * n + j;
+                    nrtl[cell] = true;
+                    alpha[cell] = excess.alpha(i, j);
+                    intercept[cell] = excess.energyIntercept(j, i);
+                    energySlope[cell] = excess.energySlope(j, i);
+                    cellLow[cell] = excess.lineLow(i, j);
+                    cellHigh[cell] = excess.lineHigh(i, j);
+                    cellFade[cell] = excess.lineFade(i, j);
+                }
+            }
+        }
+        return new Pairs(n, first, second, constant, slope, model, excess.interactions(), nrtl, alpha, intercept, energySlope,
+                low, high, cellLow, cellHigh, cellFade);
     }
 
     private PengRobinsonKernel(
             double[] criticalTemperaturesKelvin, double[] criticalPressuresPascal, double[] acentricFactors,
-            double[][] binaryInteractions, PairInteractions interactions,
+            Pairs pairs, double[][] mathiasCopemanCoefficients,
             double minimumTemperatureKelvin, double maximumTemperatureKelvin,
-            double minimumPressurePascal, double maximumPressurePascal, Mixing mixing) {
-        this.mixing = Objects.requireNonNull(mixing, "mixing");
-        if ((mixing == Mixing.TEMPERATURE_DEPENDENT_PAIRS) != (interactions != null)) {
-            throw new IllegalArgumentException("TEMPERATURE_DEPENDENT_PAIRS is selected by, and only by, a PairInteractions model");
-        }
+            double minimumPressurePascal, double maximumPressurePascal) {
         Objects.requireNonNull(criticalTemperaturesKelvin, "criticalTemperaturesKelvin");
         Objects.requireNonNull(criticalPressuresPascal, "criticalPressuresPascal");
         Objects.requireNonNull(acentricFactors, "acentricFactors");
-        Objects.requireNonNull(binaryInteractions, "binaryInteractions");
         this.minimumTemperatureKelvin = minimumTemperatureKelvin;
         this.maximumTemperatureKelvin = maximumTemperatureKelvin;
         this.minimumPressurePascal = minimumPressurePascal;
@@ -152,83 +279,109 @@ public final class PengRobinsonKernel {
         this.criticalA = new double[count];
         this.coVolumes = new double[count];
         this.kappas = new double[count];
-        this.binaryInteractions = new double[binaryInteractions.length][];
-        for (int i = 0; i < binaryInteractions.length; i++) this.binaryInteractions[i] = binaryInteractions[i].clone();
-        if (this.binaryInteractions.length != count) throw new IllegalArgumentException("Invalid BIP matrix dimension");
-        boolean allZero = true;
         for (int i = 0; i < count; i++) {
-            if (this.binaryInteractions[i].length != count) throw new IllegalArgumentException("Invalid BIP matrix row");
             criticalA[i] = 0.45724 * GAS_CONSTANT * GAS_CONSTANT
                     * criticalTemperatures[i] * criticalTemperatures[i]
                     / criticalPressures[i];
             coVolumes[i] = 0.07780 * GAS_CONSTANT * criticalTemperatures[i]
                     / criticalPressures[i];
             kappas[i] = kappa(this.acentricFactors[i]);
-            for (int j = 0; j < count; j++) {
-                double value = this.binaryInteractions[i][j];
-                if (!Double.isFinite(value) || Math.abs(value - this.binaryInteractions[j][i]) > 1.0e-14
-                        || (i == j && Math.abs(value) > 1.0e-14)) {
-                    throw new IllegalArgumentException("BIP matrix must be finite, symmetric, and zero diagonal");
+        }
+        if (mathiasCopemanCoefficients == null) {
+            this.mathiasCopeman = null;
+            this.alphaFirst = null;
+            this.alphaSecond = null;
+            this.alphaThird = null;
+        } else {
+            if (mathiasCopemanCoefficients.length != count) throw new IllegalArgumentException("Invalid alpha coefficient dimension");
+            this.mathiasCopeman = new boolean[count];
+            this.alphaFirst = new double[count];
+            this.alphaSecond = new double[count];
+            this.alphaThird = new double[count];
+            for (int i = 0; i < count; i++) {
+                double[] coefficients = mathiasCopemanCoefficients[i];
+                if (coefficients == null) continue;
+                if (coefficients.length != 3 || !Double.isFinite(coefficients[0]) || !Double.isFinite(coefficients[1])
+                        || !Double.isFinite(coefficients[2])) {
+                    throw new IllegalArgumentException("Mathias-Copeman alpha needs three finite coefficients");
                 }
-                allZero &= value == 0.0;
+                mathiasCopeman[i] = true;
+                alphaFirst[i] = coefficients[0];
+                alphaSecond[i] = coefficients[1];
+                alphaThird[i] = coefficients[2];
             }
         }
-        this.interactions = interactions;
-        if (interactions != null) {
-            // The model path: the matrix above is the zero placeholder the delegating constructor passed, so only the
-            // critical constants were read from this loop; the pairs are the model's own, in its row-major order.
-            if (interactions.componentCount() != count) throw new IllegalArgumentException("Interaction model basis does not match the components");
-            int pairs = interactions.pairCount();
-            this.rankOneMixing = pairs == 0;
-            this.pairFirst = new int[pairs];
-            this.pairSecond = new int[pairs];
-            this.pairInteraction = new double[0];
-            this.pairIndex = new int[count][count];
-            for (int[] row : pairIndex) Arrays.fill(row, -1);
-            for (int pair = 0; pair < pairs; pair++) {
-                pairFirst[pair] = interactions.first(pair);
-                pairSecond[pair] = interactions.second(pair);
-                pairIndex[pairFirst[pair]][pairSecond[pair]] = pair;
-                pairIndex[pairSecond[pair]][pairFirst[pair]] = pair;
+        this.interactions = pairs.interactions();
+        this.pairFirst = pairs.first();
+        this.pairSecond = pairs.second();
+        this.pairConstant = pairs.constant();
+        this.pairSlope = pairs.slope();
+        this.pairLow = pairs.low();
+        this.pairHigh = pairs.high();
+        this.pairModel = pairs.model();
+        this.pairIndex = new int[count][count];
+        for (int[] row : pairIndex) Arrays.fill(row, -1);
+        for (int pair = 0; pair < pairFirst.length; pair++) {
+            pairIndex[pairFirst[pair]][pairSecond[pair]] = pair;
+            pairIndex[pairSecond[pair]][pairFirst[pair]] = pair;
+        }
+        this.excess = pairs.nrtl() != null;
+        int cells = 0;
+        if (excess) for (boolean cell : pairs.nrtl()) if (cell) cells++;
+        this.cellStart = new int[excess ? count + 1 : 0];
+        this.cellPartner = new int[cells];
+        this.cellAlpha = new double[cells];
+        this.cellIntercept = new double[cells];
+        this.cellSlope = new double[cells];
+        this.cellLow = new double[cells];
+        this.cellHigh = new double[cells];
+        this.cellFade = new double[cells];
+        this.cellIndex = excess ? new int[count][count] : new int[0][];
+        if (excess) {
+            int at = 0;
+            for (int i = 0; i < count; i++) {
+                cellStart[i] = at;
+                Arrays.fill(cellIndex[i], -1);
+                for (int j = 0; j < count; j++) {
+                    int source = i * count + j;
+                    if (!pairs.nrtl()[source]) continue;
+                    cellIndex[i][j] = at;
+                    cellPartner[at] = j;
+                    cellAlpha[at] = pairs.alpha()[source];
+                    cellIntercept[at] = pairs.intercept()[source];
+                    cellLow[at] = pairs.cellLow()[source];
+                    cellHigh[at] = pairs.cellHigh()[source];
+                    cellFade[at] = pairs.cellFade()[source];
+                    cellSlope[at++] = pairs.energySlope()[source];
+                }
             }
-            return;
+            cellStart[count] = at;
         }
-        this.pairIndex = null;
-        this.rankOneMixing = allZero;
-        int pairs = 0;
-        for (int i = 0; i < count; i++) for (int j = i + 1; j < count; j++) if (this.binaryInteractions[i][j] != 0.0) pairs++;
-        this.pairFirst = new int[pairs];
-        this.pairSecond = new int[pairs];
-        this.pairInteraction = new double[pairs];
-        int at = 0;
-        for (int i = 0; i < count; i++) for (int j = i + 1; j < count; j++) {
-            if (this.binaryInteractions[i][j] == 0.0) continue;
-            pairFirst[at] = i;
-            pairSecond[at] = j;
-            pairInteraction[at++] = this.binaryInteractions[i][j];
-        }
-    }
-
-    private static double[][] zeroMatrix(double[] criticalTemperaturesKelvin) {
-        int count = Objects.requireNonNull(criticalTemperaturesKelvin, "criticalTemperaturesKelvin").length;
-        return new double[count][count];
+        this.rankOneMixing = pairFirst.length == 0 && !excess;
+        boolean constant = interactions == null;
+        for (double slope : pairSlope) constant &= slope == 0.0;
+        this.constantPairs = constant;
     }
 
     public int componentCount() { return count; }
-    /** True when the package has no nonzero interaction at all, whatever plan is selected. */
+    /** True when the kernel has no interaction at all: the mixture attraction is the rank-one product. */
     public boolean usesRankOneMixing() { return rankOneMixing; }
+    /** True when the kernel has an NRTL pair (a polar compound of a derived list). */
+    public boolean hasExcessPairs() { return excess; }
     /** {@code 0.07780 R Tc / Pc} for one component; the co-volume the mixture rule sums. */
     public double coVolume(int component) { return coVolumes[component]; }
     public Workspace newWorkspace() {
-        return interactions == null ? new Workspace(count) : new Workspace(count, interactions.pairCount());
-    }
-
-    /** The pairs' {@code k_ij} of the sparse plans: the constants, or the workspace's prepared {@code k_ij(T)}. */
-    private double[] pairInteractions(Workspace workspace) {
-        return mixing == Mixing.SPARSE_PAIRS ? pairInteraction : workspace.pairK;
+        return new Workspace(count, pairFirst.length, interactions == null ? 0 : interactions.pairCount(), excess ? count : 0,
+                cellPartner.length);
     }
     public Evaluation newEvaluation() { return new Evaluation(count); }
-    public Derivatives newDerivatives() { return new Derivatives(count); }
+    /** A derivative output that carries {@code dh^R/dT} (and so forms the second temperature derivative it reads). */
+    public Derivatives newDerivatives() { return new Derivatives(count, true); }
+    /**
+     * A derivative output without {@code dh^R/dT}: an evaluation skips the second temperature derivative, which nothing
+     * else reads (on a kernel with NRTL pairs, all of it; otherwise only the scalar sum), and reading it throws.
+     */
+    public Derivatives newDerivativesWithoutHeatCapacity() { return new Derivatives(count, false); }
 
     /** Wilson K initialisation only; accepted states use rigorous fugacity refreshes. */
     public void wilsonK(double temperatureKelvin, double pressurePascal, double[] output) {
@@ -258,37 +411,170 @@ public final class PengRobinsonKernel {
         }
         if (workspace.preparedTemperature == Double.doubleToLongBits(temperatureKelvin)) return;
         for (int i = 0; i < count; i++) {
+            if (mathiasCopeman != null && mathiasCopeman[i]) {
+                prepareMathiasCopeman(i, temperatureKelvin, workspace);
+                continue;
+            }
             double sqrtTr = Math.sqrt(temperatureKelvin / criticalTemperatures[i]);
             double alphaTerm = 1.0 + kappas[i] * (1.0 - sqrtTr);
             workspace.a[i] = criticalA[i] * alphaTerm * alphaTerm;
             workspace.daDt[i] = -criticalA[i] * kappas[i] * alphaTerm
                     / Math.sqrt(temperatureKelvin * criticalTemperatures[i]);
             workspace.sqrtA[i] = Math.sqrt(workspace.a[i]);
+            if (excess) workspace.d2aDt2[i] = soaveSecondDerivative(i, temperatureKelvin);
         }
-        if (interactions != null) prepareInteractions(temperatureKelvin, workspace);
+        workspace.preparedTemperature = Long.MIN_VALUE;
+        if (excess) prepareRootDerivatives(temperatureKelvin, workspace, workspace.interactionRootDt, workspace.interactionRootDt2);
+        preparePairs(temperatureKelvin, workspace);
+        if (excess) prepareExcess(temperatureKelvin, workspace);
         workspace.preparedTemperature = Double.doubleToLongBits(temperatureKelvin);
     }
 
     /**
-     * {@code k_ij(T)} and its two temperature derivatives per pair of {@link #interactions}, on the pure-component
-     * values the loop above just filled: O(pairs) per temperature, one {@code pow} per group term. A value that is not
-     * finite (the Soave {@code sqrt(a_i)} vanishes at {@code Tr = (1 + 1/kappa)^2}) is refused before the temperature is
-     * recorded as prepared, so the workspace never caches it.
+     * {@code a_i = a_c s^2} with {@code s = 1 + c1 u + c2 u^2 + c3 u^3}, {@code u = 1 - sqrt(T/Tc)} (only {@code c1}
+     * above {@code Tc}), and its two temperature derivatives from {@code du/dT = -1/(2 sqrt(T Tc))},
+     * {@code d^2u/dT^2 = 1/(4 sqrt(T^3 Tc))}: {@code da/dT = 2 a_c s s'}, {@code d^2a/dT^2 = 2 a_c (s'^2 + s s'')}.
      */
-    private void prepareInteractions(double temperatureKelvin, Workspace workspace) {
-        workspace.preparedTemperature = Long.MIN_VALUE;
-        if (interactions.temperatureDependent()) {
-            prepareRootDerivatives(temperatureKelvin, workspace, workspace.interactionRootDt, workspace.interactionRootDt2);
+    private void prepareMathiasCopeman(int i, double temperatureKelvin, Workspace workspace) {
+        double criticalTemperature = criticalTemperatures[i];
+        double u = 1.0 - Math.sqrt(temperatureKelvin / criticalTemperature);
+        double uDt = -1.0 / (2.0 * Math.sqrt(temperatureKelvin * criticalTemperature));
+        double uDt2 = 1.0 / (4.0 * Math.sqrt(temperatureKelvin * temperatureKelvin * temperatureKelvin * criticalTemperature));
+        double c1 = alphaFirst[i];
+        double c2 = u < 0.0 ? 0.0 : alphaSecond[i];
+        double c3 = u < 0.0 ? 0.0 : alphaThird[i];
+        double s = 1.0 + u * (c1 + u * (c2 + u * c3));
+        double sDu = c1 + u * (2.0 * c2 + 3.0 * c3 * u);
+        double sDu2 = 2.0 * c2 + 6.0 * c3 * u;
+        double sDt = sDu * uDt;
+        double sDt2 = sDu2 * uDt * uDt + sDu * uDt2;
+        workspace.a[i] = criticalA[i] * s * s;
+        workspace.daDt[i] = 2.0 * criticalA[i] * s * sDt;
+        workspace.d2aDt2[i] = 2.0 * criticalA[i] * (sDt * sDt + s * sDt2);
+        workspace.sqrtA[i] = Math.sqrt(workspace.a[i]);
+    }
+
+    /** {@code d^2a_i/dT^2} of the Soave form: {@code a_c kappa (1 + kappa) / (2 sqrt(T^3 Tc))}. */
+    private double soaveSecondDerivative(int i, double temperatureKelvin) {
+        return criticalA[i] * kappas[i] * (1.0 + kappas[i])
+                / (2.0 * Math.sqrt(temperatureKelvin * temperatureKelvin * temperatureKelvin
+                * criticalTemperatures[i]));
+    }
+
+    /**
+     * {@code k_ij(T)} and its two temperature derivatives per pair of the list: a constant or a line (the second
+     * derivative zero, a constant's first too, so their added terms are exact zeros), or the model's value, O(pairs) per
+     * temperature on the pure-component values just filled. A value that is not finite (the Soave {@code sqrt(a_i)}
+     * vanishes at {@code Tr = (1 + 1/kappa)^2}) is refused before the temperature is recorded as prepared, so the
+     * workspace never caches it.
+     */
+    private void preparePairs(double temperatureKelvin, Workspace workspace) {
+        if (interactions != null) {
+            if (!excess && interactions.temperatureDependent()) {
+                prepareRootDerivatives(temperatureKelvin, workspace, workspace.interactionRootDt, workspace.interactionRootDt2);
+            }
+            interactions.evaluate(temperatureKelvin, workspace.sqrtA, workspace.interactionRootDt,
+                    workspace.interactionRootDt2, coVolumes, workspace.modelK, workspace.modelKDt, workspace.modelKDt2);
         }
-        interactions.evaluate(temperatureKelvin, workspace.sqrtA, workspace.interactionRootDt,
-                workspace.interactionRootDt2, coVolumes, workspace.pairK, workspace.pairKDt, workspace.pairKDt2);
         for (int pair = 0; pair < pairFirst.length; pair++) {
+            int m = pairModel[pair];
+            if (m >= 0) {
+                workspace.pairK[pair] = workspace.modelK[m];
+                workspace.pairKDt[pair] = workspace.modelKDt[m];
+                workspace.pairKDt2[pair] = workspace.modelKDt2[m];
+            } else if (pairSlope[pair] != 0.0) {
+                // A line, held past its fitted ends.
+                double[] held = workspace.held;
+                HuronVidalExcess.held(pairConstant[pair], pairSlope[pair], pairLow[pair], pairHigh[pair], temperatureKelvin, held);
+                workspace.pairK[pair] = held[0];
+                workspace.pairKDt[pair] = held[1];
+                workspace.pairKDt2[pair] = held[2];
+            } else {
+                workspace.pairK[pair] = pairConstant[pair];
+                workspace.pairKDt[pair] = 0.0;
+                workspace.pairKDt2[pair] = 0.0;
+            }
             if (!Double.isFinite(workspace.pairK[pair]) || !Double.isFinite(workspace.pairKDt[pair])
                     || !Double.isFinite(workspace.pairKDt2[pair])) {
                 throw new IllegalArgumentException("Pair interaction of components " + pairFirst[pair] + " and "
                         + pairSecond[pair] + " is not finite at " + temperatureKelvin + " K");
             }
         }
+    }
+
+    /**
+     * The temperature-only part of the NRTL cells, per cell (partner {@code j} around centre {@code i}): the line's
+     * energy (a line held past its fitted ends, {@link HuronVidalExcess#held}), {@code tau = dg/(R T)},
+     * {@code tau' = dg'/(R T) - tau/T}, {@code tau'' = dg''/(R T) - 2 tau'/T},
+     * {@code G = exp(-alpha tau)}, {@code G' = -alpha tau' G}, {@code G'' = alpha (alpha tau'^2 - tau'') G}; and the
+     * cell's classical energy, the one conversion of a classical pair into Huron-Vidal energies ({@link #classicalTau}
+     * with {@code k = 0}). The cell keeps its correction to the quadratic rule, {@code F = G - 1} and
+     * {@code R = G tau - tau_cl}, each with its two temperature derivatives, and {@code G} and {@code G tau} themselves
+     * with the derivatives of {@code G tau}, which an active centre's sums read directly ({@link #correctExcess}: near
+     * {@code G = 0}, {@code F + 1} and {@code R + tau_cl} have lost them). A value that is not finite is refused before
+     * the temperature is recorded as prepared.
+     */
+    private void prepareExcess(double temperatureKelvin, Workspace workspace) {
+        double[] s = workspace.sqrtA;
+        double[] sDt = workspace.interactionRootDt;
+        double[] sDt2 = workspace.interactionRootDt2;
+        double lambda = HuronVidalExcess.LAMBDA;
+        double rt = GAS_CONSTANT * temperatureKelvin;
+        for (int i = 0; i < count; i++) {
+            double bi = coVolumes[i];
+            for (int c = cellStart[i]; c < cellStart[i + 1]; c++) {
+                int j = cellPartner[c];
+                double bj = coVolumes[j];
+                double[] held = workspace.held;
+                HuronVidalExcess.held(cellIntercept[c], cellSlope[c], cellLow[c], cellHigh[c], cellFade[c], temperatureKelvin, held);
+                double tau = held[0] / rt;
+                double tauDt = held[1] / rt - tau / temperatureKelvin;
+                double tauDt2 = held[2] / rt - 2.0 * tauDt / temperatureKelvin;
+                double alpha = cellAlpha[c];
+                double g = DeterministicMath.exp(-alpha * tau);
+                double gDt = -alpha * tauDt * g;
+                double gDt2 = alpha * (alpha * tauDt * tauDt - tauDt2) * g;
+                // The classical energy of the cell, e = Lambda (a_i/b_i - s_i s_j/b_j), and its two derivatives.
+                double energy = lambda * (workspace.a[i] / bi - s[i] * s[j] / bj);
+                double energyDt = lambda * (workspace.daDt[i] / bi - (sDt[i] * s[j] + s[i] * sDt[j]) / bj);
+                double energyDt2 = lambda * (workspace.d2aDt2[i] / bi
+                        - (sDt2[i] * s[j] + 2.0 * sDt[i] * sDt[j] + s[i] * sDt2[j]) / bj);
+                double classical = energy / rt;
+                double classicalDt = energyDt / rt - classical / temperatureKelvin;
+                double classicalDt2 = energyDt2 / rt - 2.0 * classicalDt / temperatureKelvin;
+                double r = g * tau - classical;
+                double rDt = gDt * tau + g * tauDt - classicalDt;
+                double rDt2 = gDt2 * tau + 2.0 * gDt * tauDt + g * tauDt2 - classicalDt2;
+                if (!Double.isFinite(g) || !Double.isFinite(gDt) || !Double.isFinite(gDt2)
+                        || !Double.isFinite(r) || !Double.isFinite(rDt) || !Double.isFinite(rDt2)) {
+                    throw new IllegalArgumentException("Excess energy of component " + j + " around " + i
+                            + " is not finite at " + temperatureKelvin + " K");
+                }
+                workspace.cellF[c] = g - 1.0;
+                workspace.cellFDt[c] = gDt;
+                workspace.cellFDt2[c] = gDt2;
+                workspace.cellR[c] = r;
+                workspace.cellRDt[c] = rDt;
+                workspace.cellRDt2[c] = rDt2;
+                workspace.cellG[c] = g;
+                workspace.cellGTau[c] = g * tau;
+                workspace.cellGTauDt[c] = gDt * tau + g * tauDt;
+                workspace.cellGTauDt2[c] = gDt2 * tau + 2.0 * gDt * tauDt + g * tauDt2;
+            }
+        }
+    }
+
+    /**
+     * The conversion of a classical pair into the Huron-Vidal energy of {@code j} around a centre {@code i}, divided by
+     * {@code R T} (W3b design N8, option B): {@code tau_ji = Lambda [a_i/b_i - (1 - k_ij) s_i s_j/b_j]/(R T)}. Weighted
+     * by {@code b_j x_j} and summed over {@code j} it is {@code Lambda [b a_i/b_i - s_i g_i]/(R T)} with the quadratic
+     * row {@code g_i = sum_j (1 - k_ij) x_j s_j}, so with every pair classical the rule is the quadratic one exactly.
+     * Every classical term below is this expression or one of its sums; the NRTL cells store their difference to it.
+     */
+    private double classicalTau(int i, int j, double inverseRt, Workspace workspace) {
+        int pair = pairIndex[i][j];
+        return HuronVidalExcess.LAMBDA * inverseRt * (workspace.a[i] / coVolumes[i]
+                - (1.0 - workspace.interaction(pair)) * workspace.sqrtA[i] * workspace.sqrtA[j] / coVolumes[j]);
     }
 
     private void evaluatePrepared(
@@ -306,38 +592,7 @@ public final class PengRobinsonKernel {
         }
         double aMix;
         double daMixDt;
-        if (mixing == Mixing.SPARSE_PAIRS || mixing == Mixing.TEMPERATURE_DEPENDENT_PAIRS) {
-            // g_i = sum_j (1 - k_ij) q_j, reached as the rank-one sum minus the few pairs that are not zero; the
-            // temperature-dependent plan reads the prepared k_ij(T).
-            double[] k = pairInteractions(workspace);
-            double qSum = 0.0;
-            for (int i = 0; i < count; i++) qSum += workspace.q[i];
-            for (int i = 0; i < count; i++) workspace.g[i] = qSum;
-            for (int pair = 0; pair < pairFirst.length; pair++) {
-                int i = pairFirst[pair];
-                int j = pairSecond[pair];
-                double interaction = k[pair];
-                workspace.g[i] -= interaction * workspace.q[j];
-                workspace.g[j] -= interaction * workspace.q[i];
-            }
-            // From here the dense branch's own expressions, so the plans differ only in how g_i was summed.
-            aMix = 0.0;
-            daMixDt = 0.0;
-            for (int i = 0; i < count; i++) {
-                workspace.sumA[i] = workspace.sqrtA[i] * workspace.g[i];
-                aMix += workspace.q[i] * workspace.g[i];
-                double dq = workspace.composition[i] * workspace.daDt[i] / (2.0 * workspace.sqrtA[i]);
-                daMixDt += 2.0 * dq * workspace.g[i];
-            }
-            if (mixing == Mixing.TEMPERATURE_DEPENDENT_PAIRS) {
-                // d/dT of -sum_ij q_i q_j k_ij at fixed q: -2 sum_pairs q_i q_j dk_ij/dT.
-                double interactionDt = 0.0;
-                for (int pair = 0; pair < pairFirst.length; pair++) {
-                    interactionDt += workspace.pairKDt[pair] * workspace.q[pairFirst[pair]] * workspace.q[pairSecond[pair]];
-                }
-                daMixDt -= 2.0 * interactionDt;
-            }
-        } else if (rankOneMixing) {
+        if (rankOneMixing) {
             double qSum = 0.0;
             double dqSum = 0.0;
             for (int i = 0; i < count; i++) {
@@ -348,19 +603,85 @@ public final class PengRobinsonKernel {
             daMixDt = 2.0 * qSum * dqSum;
             for (int i = 0; i < count; i++) workspace.sumA[i] = workspace.sqrtA[i] * qSum;
         } else {
-            for (int i = 0; i < count; i++) {
-                double g = 0.0;
-                for (int j = 0; j < count; j++) g += (1.0 - binaryInteractions[i][j]) * workspace.q[j];
-                workspace.g[i] = g;
-                workspace.sumA[i] = workspace.sqrtA[i] * g;
+            // g_i = sum_j (1 - k_ij) q_j, reached as the rank-one sum minus the pairs that are not zero, on the
+            // prepared k_ij(T); with NRTL cells, in the same pass over the pairs, the row's temperature derivative
+            // g_i' = sum_j (1 - k_ij) x_j s_j' - sum_j k_ij' x_j s_j that correctExcess reads, and the interactions'
+            // own d/dT of -sum_ij q_i q_j k_ij at fixed q, -2 sum_pairs q_i q_j dk_ij/dT (exact zeros for constant
+            // pairs, so a constant list skips them). One pass, each sum in the order the separate passes took.
+            double[] k = workspace.pairK;
+            double[] kDt = workspace.pairKDt;
+            double[] q = workspace.q;
+            double[] g = workspace.g;
+            double qSum = 0.0;
+            for (int i = 0; i < count; i++) qSum += q[i];
+            for (int i = 0; i < count; i++) g[i] = qSum;
+            double interactionDt = 0.0;
+            if (excess) {
+                double[] x = workspace.composition;
+                double[] sDt = workspace.interactionRootDt;
+                double[] gDt = workspace.rowGDt;
+                double rootSum = 0.0;
+                for (int j = 0; j < count; j++) rootSum += x[j] * sDt[j];
+                for (int i = 0; i < count; i++) gDt[i] = rootSum;
+                if (constantPairs) {
+                    for (int pair = 0; pair < pairFirst.length; pair++) {
+                        int i = pairFirst[pair];
+                        int j = pairSecond[pair];
+                        double interaction = k[pair];
+                        g[i] -= interaction * q[j];
+                        g[j] -= interaction * q[i];
+                        gDt[i] -= interaction * x[j] * sDt[j];
+                        gDt[j] -= interaction * x[i] * sDt[i];
+                    }
+                } else {
+                    double[] s = workspace.sqrtA;
+                    for (int pair = 0; pair < pairFirst.length; pair++) {
+                        int i = pairFirst[pair];
+                        int j = pairSecond[pair];
+                        double interaction = k[pair];
+                        double slope = kDt[pair];
+                        g[i] -= interaction * q[j];
+                        g[j] -= interaction * q[i];
+                        gDt[i] -= interaction * x[j] * sDt[j] + slope * x[j] * s[j];
+                        gDt[j] -= interaction * x[i] * sDt[i] + slope * x[i] * s[i];
+                        interactionDt += slope * q[i] * q[j];
+                    }
+                }
+            } else if (constantPairs) {
+                for (int pair = 0; pair < pairFirst.length; pair++) {
+                    int i = pairFirst[pair];
+                    int j = pairSecond[pair];
+                    double interaction = k[pair];
+                    g[i] -= interaction * q[j];
+                    g[j] -= interaction * q[i];
+                }
+            } else {
+                for (int pair = 0; pair < pairFirst.length; pair++) {
+                    int i = pairFirst[pair];
+                    int j = pairSecond[pair];
+                    double interaction = k[pair];
+                    g[i] -= interaction * q[j];
+                    g[j] -= interaction * q[i];
+                    interactionDt += kDt[pair] * q[i] * q[j];
+                }
             }
             aMix = 0.0;
             daMixDt = 0.0;
             for (int i = 0; i < count; i++) {
+                workspace.sumA[i] = workspace.sqrtA[i] * workspace.g[i];
                 aMix += workspace.q[i] * workspace.g[i];
                 double dq = workspace.composition[i] * workspace.daDt[i] / (2.0 * workspace.sqrtA[i]);
                 daMixDt += 2.0 * dq * workspace.g[i];
             }
+            daMixDt -= 2.0 * interactionDt;
+        }
+        if (excess) {
+            // The NRTL cells' correction: a = a_quadratic - (R T/Lambda) b dE, sumA_i -= (R T/(2 Lambda))(b_i dE + b
+            // dln gamma_i); exact zeros where no NRTL partner has an amount, so such a phase keeps the quadratic values.
+            correctExcess(temperatureKelvin, workspace, bMix);
+            double scale = GAS_CONSTANT / HuronVidalExcess.LAMBDA;
+            aMix -= scale * temperatureKelvin * bMix * workspace.excessEnergy;
+            daMixDt -= scale * bMix * (workspace.excessEnergy + temperatureKelvin * workspace.excessEnergyDt);
         }
         double reducedA = aMix * pressurePascal / (GAS_CONSTANT * GAS_CONSTANT * temperatureKelvin * temperatureKelvin);
         double reducedB = bMix * pressurePascal / (GAS_CONSTANT * temperatureKelvin);
@@ -405,7 +726,6 @@ public final class PengRobinsonKernel {
         Objects.requireNonNull(output, "output");
         prepareTemperature(temperatureKelvin, workspace);
         evaluatePrepared(temperatureKelvin, pressurePascal, composition, root, workspace, output.evaluation);
-        double[] x = workspace.composition;
         double a = output.evaluation.aMix;
         double b = output.evaluation.bMix;
         double daDt = output.evaluation.daMixDt;
@@ -426,8 +746,12 @@ public final class PengRobinsonKernel {
         double upper = z + (1.0 - SQRT_TWO) * reducedB;
         double logRatio = DeterministicMath.log(lower / upper);
         double attraction = reducedA / (2.0 * SQRT_TWO * Math.max(reducedB, 1.0e-300));
-        double secondDaDt = secondTemperatureDerivative(
-                temperatureKelvin, workspace, output.rootDt, output.rootDt2, output.crossDt);
+        boolean exponential = excess;
+        // d^2a/dT^2 is read only by dh^R/dT; the root and cross vectors it fills only by the quadratic rows' dS_i/dT.
+        double secondDaDt = output.heatCapacity || !exponential
+                ? secondTemperatureDerivative(temperatureKelvin, workspace, output.rootDt, output.rootDt2, output.crossDt)
+                : Double.NaN;
+        if (exponential) differentiateExcess(temperatureKelvin, workspace);
         double reducedADt = reducedA * (daDt / a - 2.0 / temperatureKelvin);
         double reducedBDt = -reducedB / temperatureKelvin;
         double zDt = zByReducedA * reducedADt + zByReducedB * reducedBDt;
@@ -436,7 +760,8 @@ public final class PengRobinsonKernel {
         for (int i = 0; i < count; i++) {
             output.coVolumeRatio[i] = coVolumes[i] / b;
             output.attractionRatio[i] = 2.0 * workspace.sumA[i] / a - output.coVolumeRatio[i];
-            double sumADt = output.rootDt[i] * (workspace.sumA[i] / workspace.sqrtA[i])
+            double sumADt = exponential ? workspace.excessRowDt[i]
+                    : output.rootDt[i] * (workspace.sumA[i] / workspace.sqrtA[i])
                     + workspace.sqrtA[i] * output.crossDt[i];
             double attractionRatioDt = 2.0 * (sumADt * a - workspace.sumA[i] * daDt) / (a * a);
             output.dLogPhiDt[i] = output.coVolumeRatio[i] * zDt - (zDt - reducedBDt) / (z - reducedB)
@@ -454,12 +779,13 @@ public final class PengRobinsonKernel {
             double sharedTerms = -(zDn - reducedBdn) / (z - reducedB);
             double attractionShift = 2.0 * (workspace.sumA[j] - a);
             double rootAj = workspace.sqrtA[j];
+            int[] pairsOfJ = pairIndex[j];
             for (int i = 0; i < count; i++) {
                 double bRatioDn = -output.coVolumeRatio[i] * coVolumeShift;
-                // A composition derivative at fixed T: k_ij(T) enters by value only.
-                double crossA = (pairIndex != null ? 1.0 - workspace.interaction(pairIndex[i][j])
-                        : rankOneMixing ? 1.0 : 1.0 - binaryInteractions[i][j])
-                        * workspace.sqrtA[i] * rootAj;
+                // A composition derivative at fixed T: k_ij(T) enters by value only. crossA_ij is
+                // (1/2) d^2(n^2 a)/dn_i dn_j, which is a_ij = (1 - k_ij) sqrt(a_i a_j) for the quadratic part.
+                double crossA = exponential ? workspace.excessCross[i * count + j]
+                        : (1.0 - workspace.interaction(pairsOfJ[i])) * workspace.sqrtA[i] * rootAj;
                 double attractionRatioDn = 2.0 * ((crossA - workspace.sumA[i]) * a
                         - workspace.sumA[i] * attractionShift) / (a * a) - bRatioDn;
                 output.dLogPhiDn[i][j] = bRatioDn * (z - 1.0) + output.coVolumeRatio[i] * zDn + sharedTerms
@@ -468,7 +794,8 @@ public final class PengRobinsonKernel {
                         + attraction * output.attractionRatio[i] * logRatioDn);
             }
         }
-        output.dResidualEnthalpyDt = GAS_CONSTANT * (z - 1.0) + GAS_CONSTANT * temperatureKelvin * zDt
+        output.dResidualEnthalpyDt = !output.heatCapacity ? Double.NaN
+                : GAS_CONSTANT * (z - 1.0) + GAS_CONSTANT * temperatureKelvin * zDt
                 + temperatureKelvin * secondDaDt / (2.0 * SQRT_TWO * b) * logRatio
                 + (temperatureKelvin * daDt - a) / (2.0 * SQRT_TWO * b) * logRatioDt;
         for (int i = 0; i < count; i++) {
@@ -480,12 +807,15 @@ public final class PengRobinsonKernel {
     /**
      * {@code d^2 a_mix / dT^2} of the mixture the preceding evaluation left in {@code workspace}, filling the
      * three caller-owned scratch vectors it needs on the way: {@code d sqrt(a_i)/dT}, its own derivative, and
-     * the interaction-weighted composition sum {@code sum_j (1-k_ij) x_j d sqrt(a_j)/dT} (with
-     * {@link Mixing#TEMPERATURE_DEPENDENT_PAIRS} also {@code - sum_j q_j dk_ij/dT}, the whole {@code d(S_i/sqrt(a_i))/dT}).
+     * {@code d g_i/dT} of {@code g_i = S_i/sqrt(a_i) = sum_j (1-k_ij) x_j sqrt(a_j)}, with the pairs' own {@code dk_ij/dT}.
      *
      * <p>One expression, two callers: {@link #evaluateDerivatives} needs the two root vectors and the cross
      * sum again for {@code d ln phi_i/dT}, and the network's volumetric block needs only the scalar. Splitting
      * it would give the same number two arithmetic paths.</p>
+     *
+     * <p>On a kernel with NRTL pairs the quadratic part is formed the same way and the cells' correction is added
+     * ({@link #excessSecondTemperatureDerivative}); {@link #evaluateDerivatives} then reads the corrected rows'
+     * derivatives from the workspace.</p>
      */
     public double secondTemperatureDerivative(
             double temperatureKelvin, Workspace workspace, double[] rootDt, double[] rootDt2, double[] crossDt) {
@@ -502,9 +832,8 @@ public final class PengRobinsonKernel {
     public void prepareRootDerivatives(
             double temperatureKelvin, Workspace workspace, double[] rootDt, double[] rootDt2) {
         for (int i = 0; i < count; i++) {
-            double secondADt = criticalA[i] * kappas[i] * (1.0 + kappas[i])
-                    / (2.0 * Math.sqrt(temperatureKelvin * temperatureKelvin * temperatureKelvin
-                    * criticalTemperatures[i]));
+            double secondADt = mathiasCopeman != null && mathiasCopeman[i]
+                    ? workspace.d2aDt2[i] : soaveSecondDerivative(i, temperatureKelvin);
             rootDt[i] = workspace.daDt[i] / (2.0 * workspace.sqrtA[i]);
             rootDt2[i] = secondADt / (2.0 * workspace.sqrtA[i])
                     - workspace.daDt[i] * workspace.daDt[i]
@@ -512,46 +841,37 @@ public final class PengRobinsonKernel {
         }
     }
 
-    /** The composition-dependent half, on the root derivatives {@link #prepareRootDerivatives} filled. */
+    /**
+     * The composition-dependent half, on the root derivatives {@link #prepareRootDerivatives} filled. On a kernel with NRTL pairs
+     * the cells' correction of the last evaluation is added to the quadratic part.
+     */
     public double mixtureSecondTemperatureDerivative(
             Workspace workspace, double[] rootDt, double[] rootDt2, double[] crossDt) {
         double[] x = workspace.composition;
-        if (mixing == Mixing.SPARSE_PAIRS || mixing == Mixing.TEMPERATURE_DEPENDENT_PAIRS) {
-            double[] k = pairInteractions(workspace);
-            double interactionSum = 0.0;
-            for (int i = 0; i < count; i++) interactionSum += x[i] * rootDt[i];
-            for (int i = 0; i < count; i++) crossDt[i] = interactionSum;
-            for (int pair = 0; pair < pairFirst.length; pair++) {
-                int i = pairFirst[pair];
-                int j = pairSecond[pair];
-                double interaction = k[pair];
-                crossDt[i] -= interaction * x[j] * rootDt[j];
-                crossDt[j] -= interaction * x[i] * rootDt[i];
-            }
-        } else if (rankOneMixing) {
-            double interactionSum = 0.0;
-            for (int i = 0; i < count; i++) interactionSum += x[i] * rootDt[i];
-            for (int i = 0; i < count; i++) crossDt[i] = interactionSum;
-        } else {
-            for (int i = 0; i < count; i++) {
-                double sum = 0.0;
-                for (int j = 0; j < count; j++) sum += (1.0 - binaryInteractions[i][j]) * x[j] * rootDt[j];
-                crossDt[i] = sum;
-            }
+        double interactionSum = 0.0;
+        for (int i = 0; i < count; i++) interactionSum += x[i] * rootDt[i];
+        for (int i = 0; i < count; i++) crossDt[i] = interactionSum;
+        double[] k = workspace.pairK;
+        for (int pair = 0; pair < pairFirst.length; pair++) {
+            int i = pairFirst[pair];
+            int j = pairSecond[pair];
+            double interaction = k[pair];
+            crossDt[i] -= interaction * x[j] * rootDt[j];
+            crossDt[j] -= interaction * x[i] * rootDt[i];
         }
         double secondDaDt = 0.0;
         for (int i = 0; i < count; i++) {
-            secondDaDt += 2.0 * x[i] * (rootDt2[i] * (workspace.sumA[i] / workspace.sqrtA[i])
-                    + rootDt[i] * crossDt[i]);
+            // The quadratic row g_i; where the cells corrected the rows, sumA_i is no longer s_i g_i.
+            double row = excess ? workspace.g[i] : workspace.sumA[i] / workspace.sqrtA[i];
+            secondDaDt += 2.0 * x[i] * (rootDt2[i] * row + rootDt[i] * crossDt[i]);
         }
-        if (mixing == Mixing.TEMPERATURE_DEPENDENT_PAIRS) {
-            secondDaDt = addInteractionTemperatureTerms(workspace, rootDt, crossDt, secondDaDt);
-        }
+        if (pairFirst.length > 0 && !constantPairs) secondDaDt = addInteractionTemperatureTerms(workspace, rootDt, crossDt, secondDaDt);
+        if (excess) secondDaDt += excessSecondTemperatureDerivative(workspace);
         return secondDaDt;
     }
 
     /**
-     * The terms {@link Mixing#TEMPERATURE_DEPENDENT_PAIRS} adds once the constant-interaction sums above are formed,
+     * The terms the pairs' own temperature dependence adds once the constant-interaction sums above are formed,
      * with {@code q_i = x_i sqrt(a_i)} and {@code dq_i = x_i d sqrt(a_i)/dT}:
      * {@code d^2a_mix/dT^2 -= 4 sum_pairs (dq_i q_j + q_i dq_j) dk_ij/dT + 2 sum_pairs q_i q_j d^2k_ij/dT^2}, and
      * {@code crossDt_i -= sum_(j paired with i) q_j dk_ij/dT}, which makes {@code crossDt_i} the whole
@@ -576,6 +896,412 @@ public final class PengRobinsonKernel {
         }
         return secondDaDt - (4.0 * firstOrder + 2.0 * secondOrder);
     }
+
+
+    /**
+     * The NRTL cells' correction to the quadratic rule for the composition just normalised into the workspace, on its
+     * quadratic rows {@code g_i}. With {@code w_j = x_j b_j}, the classical baseline of a centre {@code i} is
+     * {@code D_i = b}, {@code theta_i^b = Lambda (a_i/b_i - s_i g_i/b)/(R T)} ({@link #classicalTau} summed). A centre
+     * whose cells have a partner with an amount (an active centre) has {@code D_i = B_i + sum_j w_j G_ji} and
+     * {@code theta_i = [Lambda (a_i/b_i B_i - s_i g^r_i)/(R T) + sum_j w_j G_ji tau_ji]/D_i}, its classical part
+     * {@code B_i = sum_j w_j} and {@code g^r_i = sum_j (1 - k_ij) x_j s_j} formed directly over the compounds that are
+     * not its partners ({@code O(n)} per active centre). As {@code b} plus the cells' {@code w_j (G_ji - 1)} the sums
+     * cancel where the partners hold nearly all of {@code b} and {@code G} is small: water around the heaviest crude cut,
+     * {@code G} 9e-16 at 298 K, left the cut's ln phi in pure water as rounding noise (W3B_NETWORK_PLAN.md section 11).
+     * A centre with no such partner keeps its baseline exactly. Then {@code dE = sum_i x_i (theta_i - theta_i^b)} and, per compound {@code k},
+     * {@code dln gamma_k = (theta_k - theta_k^b) + b_k sum_i x_i [tau_ki^cl w_i - (theta_i/D_i - theta_i^b/b)]
+     * + b_k sum_i x_i R'_ki/D_i}, with {@code w_i = 1/D_i - 1/b} and {@code R'_ki = R_ki - F_ki theta_i} on the cells
+     * of present centres. The middle sum is separable: {@code Lambda/(R T) [Z1 - (s_k/b_k) Y_k] - Z2}, with
+     * {@code Y_k = sum_i (1 - k_ik) x_i s_i w_i}, reached as the full sum minus the pairs. The cost is
+     * {@code O(n + pairs + cells)}.
+     */
+    private void correctExcess(double temperatureKelvin, Workspace workspace, double bMix) {
+        double[] x = workspace.composition;
+        double[] s = workspace.sqrtA;
+        double[] sDt = workspace.interactionRootDt;
+        double[] g = workspace.g;
+        double[] gDt = workspace.rowGDt;
+        double inverseRt = 1.0 / (GAS_CONSTANT * temperatureKelvin);
+        double lambda = HuronVidalExcess.LAMBDA;
+        double lambdaOverR = lambda / GAS_CONSTANT;
+        double share = lambda * inverseRt;
+        workspace.excessTemperature = temperatureKelvin;
+        workspace.excessCoVolume = bMix;
+        // gDt, d g_i/dT with the pairs' dk/dT, was formed in evaluatePrepared's pass over the pairs.
+        double excessEnergy = 0.0;
+        double excessEnergyDt = 0.0;
+        boolean activePresent = false;
+        for (int i = 0; i < count; i++) {
+            double u = workspace.a[i] / coVolumes[i] - s[i] * g[i] / bMix;
+            double uDt = workspace.daDt[i] / coVolumes[i] - (sDt[i] * g[i] + s[i] * gDt[i]) / bMix;
+            double base = share * u;
+            double baseDt = lambdaOverR * (uDt / temperatureKelvin - u / (temperatureKelvin * temperatureKelvin));
+            workspace.thetaBase[i] = base;
+            workspace.thetaBaseDt[i] = baseDt;
+            double cellD = 0.0, dDDt = 0.0, dDDt2 = 0.0, cellC = 0.0, cellCDt = 0.0, cellCDt2 = 0.0;
+            boolean active = false;
+            for (int c = cellStart[i]; c < cellStart[i + 1]; c++) {
+                int j = cellPartner[c];
+                double weight = x[j] * coVolumes[j];
+                if (weight == 0.0) continue;
+                active = true;
+                cellD += weight * workspace.cellG[c];
+                dDDt += weight * workspace.cellFDt[c];
+                dDDt2 += weight * workspace.cellFDt2[c];
+                cellC += weight * workspace.cellGTau[c];
+                cellCDt += weight * workspace.cellGTauDt[c];
+                cellCDt2 += weight * workspace.cellGTauDt2[c];
+            }
+            workspace.active[i] = active;
+            if (!active) {
+                workspace.denominator[i] = bMix;
+                workspace.denominatorDt[i] = 0.0;
+                workspace.denominatorDt2[i] = 0.0;
+                workspace.numeratorDt2[i] = 0.0;
+                workspace.theta[i] = base;
+                workspace.thetaDt[i] = baseDt;
+                workspace.omega[i] = 0.0;
+                continue;
+            }
+            // The classical part over the non-partners, directly: never b less the partners' weights.
+            double restB = 0.0, restG = 0.0, restGDt = 0.0;
+            int[] cellsOfI = cellIndex[i];
+            int[] pairsOfI = pairIndex[i];
+            for (int j = 0; j < count; j++) {
+                if (x[j] == 0.0 || cellsOfI[j] >= 0) continue;
+                int pair = pairsOfI[j];
+                double k = pair < 0 ? 0.0 : workspace.pairK[pair];
+                double kDt = pair < 0 ? 0.0 : workspace.pairKDt[pair];
+                restB += x[j] * coVolumes[j];
+                restG += (1.0 - k) * x[j] * s[j];
+                restGDt += (1.0 - k) * x[j] * sDt[j] - kDt * x[j] * s[j];
+            }
+            double rest = workspace.a[i] / coVolumes[i] * restB - s[i] * restG;
+            double restDt = workspace.daDt[i] / coVolumes[i] * restB - (sDt[i] * restG + s[i] * restGDt);
+            double denominator = restB + cellD;
+            double theta = (share * rest + cellC) / denominator;
+            double numeratorDt = lambdaOverR * (restDt / temperatureKelvin - rest / (temperatureKelvin * temperatureKelvin)) + cellCDt;
+            double thetaDt = (numeratorDt - theta * dDDt) / denominator;
+            workspace.restCoVolume[i] = restB;
+            workspace.restRow[i] = restG;
+            workspace.restRowDt[i] = restGDt;
+            workspace.denominator[i] = denominator;
+            workspace.denominatorDt[i] = dDDt;
+            workspace.denominatorDt2[i] = dDDt2;
+            workspace.numeratorDt2[i] = cellCDt2;
+            workspace.theta[i] = theta;
+            workspace.thetaDt[i] = thetaDt;
+            workspace.omega[i] = 1.0 / denominator - 1.0 / bMix;
+            if (x[i] > 0.0) {
+                activePresent = true;
+                excessEnergy += x[i] * (theta - base);
+                excessEnergyDt += x[i] * (thetaDt - baseDt);
+            }
+        }
+        workspace.excessEnergy = excessEnergy;
+        workspace.excessEnergyDt = excessEnergyDt;
+        workspace.activePresent = activePresent;
+        double[] logGamma = workspace.deltaLogGamma;
+        for (int k = 0; k < count; k++) logGamma[k] = workspace.active[k] ? workspace.theta[k] - workspace.thetaBase[k] : 0.0;
+        if (activePresent) {
+            double z1 = 0.0, z2 = 0.0, ySum = 0.0;
+            for (int i = 0; i < count; i++) {
+                if (!workspace.active[i] || x[i] == 0.0) continue;
+                double omega = workspace.omega[i];
+                z1 += x[i] * workspace.a[i] / coVolumes[i] * omega;
+                ySum += x[i] * s[i] * omega;
+                z2 += x[i] * (workspace.theta[i] / workspace.denominator[i] - workspace.thetaBase[i] / bMix);
+            }
+            double[] y = workspace.rowY;
+            for (int k = 0; k < count; k++) y[k] = ySum;
+            for (int pair = 0; pair < pairFirst.length; pair++) {
+                int i = pairFirst[pair];
+                int j = pairSecond[pair];
+                double k = workspace.pairK[pair];
+                y[i] -= k * x[j] * s[j] * presentOmega(j, workspace);
+                y[j] -= k * x[i] * s[i] * presentOmega(i, workspace);
+            }
+            workspace.excessZ1 = z1;
+            workspace.excessZ2 = z2;
+            for (int k = 0; k < count; k++) logGamma[k] += coVolumes[k] * share * z1 - share * s[k] * y[k] - coVolumes[k] * z2;
+        }
+        for (int i = 0; i < count; i++) {
+            if (x[i] == 0.0) continue;
+            double theta = workspace.theta[i];
+            double scale = x[i] / workspace.denominator[i];
+            for (int c = cellStart[i]; c < cellStart[i + 1]; c++) {
+                int k = cellPartner[c];
+                logGamma[k] += scale * coVolumes[k] * (workspace.cellR[c] - workspace.cellF[c] * theta);
+            }
+        }
+        double half = GAS_CONSTANT * temperatureKelvin / (2.0 * lambda);
+        for (int k = 0; k < count; k++) {
+            workspace.sumA[k] -= half * (coVolumes[k] * excessEnergy + bMix * logGamma[k]);
+        }
+    }
+
+    /** {@code w_i = 1/D_i - 1/b} of a centre that has an amount; zero otherwise (its classical sums are the baseline's). */
+    private static double presentOmega(int i, Workspace workspace) {
+        return workspace.composition[i] == 0.0 ? 0.0 : workspace.omega[i];
+    }
+
+    /**
+     * {@code d^2 a/dT^2} of the correction for the composition {@link #correctExcess} last formed:
+     * {@code -(R/Lambda) b (2 dE' + T dE'')}, {@code dE'' = sum_i x_i (theta_i'' - theta_i^b'')} over the present centres
+     * with a present NRTL partner; {@code theta'' = (C'' - 2 theta' D' - theta D'')/D}, {@code C''} the second derivative
+     * of the numerator as correctExcess formed it (the classical part over the non-partners, directly, and the cells'
+     * {@code w_j (G tau)''}),
+     * {@code theta^b'' = (Lambda/R)(u''/T - 2u'/T^2 + 2u/T^3)}, {@code u = a_i/b_i - s_i g_i/b}, on the quadratic row's
+     * {@code g_i''} with the pairs' {@code dk/dT} and {@code d^2k/dT^2}. Zero where no such centre is present.
+     */
+    private double excessSecondTemperatureDerivative(Workspace workspace) {
+        if (!workspace.activePresent) return 0.0;
+        double[] x = workspace.composition;
+        double[] s = workspace.sqrtA;
+        double[] sDt = workspace.interactionRootDt;
+        double[] sDt2 = workspace.interactionRootDt2;
+        double[] g = workspace.g;
+        double[] gDt = workspace.rowGDt;
+        double[] gDt2 = workspace.rowGDt2;
+        double temperature = workspace.excessTemperature;
+        double bMix = workspace.excessCoVolume;
+        double rootSum = 0.0;
+        for (int j = 0; j < count; j++) rootSum += x[j] * sDt2[j];
+        for (int i = 0; i < count; i++) gDt2[i] = rootSum;
+        for (int pair = 0; pair < pairFirst.length; pair++) {
+            int i = pairFirst[pair];
+            int j = pairSecond[pair];
+            double k = workspace.pairK[pair];
+            double kDt = workspace.pairKDt[pair];
+            double kDt2 = workspace.pairKDt2[pair];
+            gDt2[i] -= k * x[j] * sDt2[j] + 2.0 * kDt * x[j] * sDt[j] + kDt2 * x[j] * s[j];
+            gDt2[j] -= k * x[i] * sDt2[i] + 2.0 * kDt * x[i] * sDt[i] + kDt2 * x[i] * s[i];
+        }
+        double lambdaOverR = HuronVidalExcess.LAMBDA / GAS_CONSTANT;
+        double t2 = temperature * temperature;
+        double excessEnergyDt2 = 0.0;
+        for (int i = 0; i < count; i++) {
+            if (!workspace.active[i] || x[i] == 0.0) continue;
+            double bi = coVolumes[i];
+            double u = workspace.a[i] / bi - s[i] * g[i] / bMix;
+            double uDt = workspace.daDt[i] / bi - (sDt[i] * g[i] + s[i] * gDt[i]) / bMix;
+            double uDt2 = workspace.d2aDt2[i] / bi - (sDt2[i] * g[i] + 2.0 * sDt[i] * gDt[i] + s[i] * gDt2[i]) / bMix;
+            double baseDt2 = lambdaOverR * (uDt2 / temperature - 2.0 * uDt / t2 + 2.0 * u / (t2 * temperature));
+            double restGDt2 = 0.0;
+            int[] cellsOfI = cellIndex[i];
+            int[] pairsOfI = pairIndex[i];
+            for (int j = 0; j < count; j++) {
+                if (x[j] == 0.0 || cellsOfI[j] >= 0) continue;
+                int pair = pairsOfI[j];
+                double k = pair < 0 ? 0.0 : workspace.pairK[pair];
+                double kDt = pair < 0 ? 0.0 : workspace.pairKDt[pair];
+                double kDt2 = pair < 0 ? 0.0 : workspace.pairKDt2[pair];
+                restGDt2 += (1.0 - k) * x[j] * sDt2[j] - 2.0 * kDt * x[j] * sDt[j] - kDt2 * x[j] * s[j];
+            }
+            double restB = workspace.restCoVolume[i], restG = workspace.restRow[i], restGDt = workspace.restRowDt[i];
+            double rest = workspace.a[i] / bi * restB - s[i] * restG;
+            double restDt = workspace.daDt[i] / bi * restB - (sDt[i] * restG + s[i] * restGDt);
+            double restDt2 = workspace.d2aDt2[i] / bi * restB - (sDt2[i] * restG + 2.0 * sDt[i] * restGDt + s[i] * restGDt2);
+            double numeratorDt2 = lambdaOverR * (restDt2 / temperature - 2.0 * restDt / t2 + 2.0 * rest / (t2 * temperature))
+                    + workspace.numeratorDt2[i];
+            double thetaDt2 = (numeratorDt2 - 2.0 * workspace.thetaDt[i] * workspace.denominatorDt[i]
+                    - workspace.theta[i] * workspace.denominatorDt2[i]) / workspace.denominator[i];
+            excessEnergyDt2 += x[i] * (thetaDt2 - baseDt2);
+        }
+        double scale = GAS_CONSTANT / HuronVidalExcess.LAMBDA;
+        return -scale * bMix * (2.0 * workspace.excessEnergyDt + temperature * excessEnergyDt2);
+    }
+
+    /**
+     * The derivative terms of the correction that {@link #evaluateDerivatives} reads, for the composition
+     * {@link #correctExcess} last formed:
+     * <ul>
+     *   <li>the rows' temperature derivatives {@code S_k' = s_k' g_k + s_k g_k' - (R/(2 Lambda))[b_k (dE + T dE') +
+     *   b (dln gamma_k + T dln gamma_k')]}, each term of {@code dln gamma_k} differentiated as it was formed;</li>
+     *   <li>the cross terms {@code crossA_kl = (1 - k_kl) s_k s_l - (R T/(2 Lambda))[b_k dln gamma_l + b_l dln gamma_k
+     *   + b dN_kl]}, with {@code dN_kl = n d(dln gamma_k)/dn_l = b_l B_kl + b_k B_lk - b_k b_l dS_kl}:
+     *   {@code B_kl = H_lk/D_k - eps^b_lk/b} of {@code l} around centre {@code k} ({@code H = G (tau - theta)}) and
+     *   {@code dS_kl = sum_i [c_i G_ki G_li (eps_ki + eps_li) - c_i^b (eps^b_ki + eps^b_li)]},
+     *   {@code c_i = x_i/D_i^2}, split into its classical part (separable, {@code O(n + pairs)} per row) and the cells'
+     *   terms ({@code O(n)} per cell of a present centre).</li>
+     * </ul>
+     */
+    private void differentiateExcess(double temperatureKelvin, Workspace workspace) {
+        double[] x = workspace.composition;
+        double[] s = workspace.sqrtA;
+        double[] sDt = workspace.interactionRootDt;
+        double[] g = workspace.g;
+        double[] gDt = workspace.rowGDt;
+        double bMix = workspace.excessCoVolume;
+        double lambda = HuronVidalExcess.LAMBDA;
+        double inverseRt = 1.0 / (GAS_CONSTANT * temperatureKelvin);
+        double share = lambda * inverseRt;
+        double[] logGamma = workspace.deltaLogGamma;
+        double[] logGammaDt = workspace.deltaLogGammaDt;
+        boolean activePresent = workspace.activePresent;
+        for (int k = 0; k < count; k++) {
+            logGammaDt[k] = workspace.active[k] ? workspace.thetaDt[k] - workspace.thetaBaseDt[k] : 0.0;
+        }
+        if (activePresent) {
+            double z1Dt = 0.0, z2Dt = 0.0, ySumDt = 0.0;
+            for (int i = 0; i < count; i++) {
+                if (!workspace.active[i] || x[i] == 0.0) continue;
+                double d = workspace.denominator[i];
+                double omega = workspace.omega[i];
+                double omegaDt = -workspace.denominatorDt[i] / (d * d);
+                workspace.omegaDt[i] = omegaDt;
+                z1Dt += x[i] * (workspace.daDt[i] * omega + workspace.a[i] * omegaDt) / coVolumes[i];
+                ySumDt += x[i] * (sDt[i] * omega + s[i] * omegaDt);
+                z2Dt += x[i] * (workspace.thetaDt[i] / d - workspace.theta[i] * workspace.denominatorDt[i] / (d * d)
+                        - workspace.thetaBaseDt[i] / bMix);
+            }
+            double[] yDt = workspace.rowYDt;
+            for (int k = 0; k < count; k++) yDt[k] = ySumDt;
+            for (int pair = 0; pair < pairFirst.length; pair++) {
+                int i = pairFirst[pair];
+                int j = pairSecond[pair];
+                double k = workspace.pairK[pair];
+                double kDt = workspace.pairKDt[pair];
+                double omegaI = presentOmega(i, workspace), omegaJ = presentOmega(j, workspace);
+                double omegaIDt = omegaI == 0.0 ? 0.0 : workspace.omegaDt[i];
+                double omegaJDt = omegaJ == 0.0 ? 0.0 : workspace.omegaDt[j];
+                yDt[i] -= k * x[j] * (sDt[j] * omegaJ + s[j] * omegaJDt) + kDt * x[j] * s[j] * omegaJ;
+                yDt[j] -= k * x[i] * (sDt[i] * omegaI + s[i] * omegaIDt) + kDt * x[i] * s[i] * omegaI;
+            }
+            double[] y = workspace.rowY;
+            double z1 = workspace.excessZ1;
+            for (int k = 0; k < count; k++) {
+                logGammaDt[k] += coVolumes[k] * share * (z1Dt - z1 / temperatureKelvin)
+                        - share * (sDt[k] * y[k] + s[k] * yDt[k] - s[k] * y[k] / temperatureKelvin)
+                        - coVolumes[k] * z2Dt;
+            }
+        }
+        for (int i = 0; i < count; i++) {
+            if (x[i] == 0.0) continue;
+            double d = workspace.denominator[i];
+            double theta = workspace.theta[i];
+            double thetaDt = workspace.thetaDt[i];
+            double dDt = workspace.denominatorDt[i];
+            for (int c = cellStart[i]; c < cellStart[i + 1]; c++) {
+                int k = cellPartner[c];
+                double r = workspace.cellR[c] - workspace.cellF[c] * theta;
+                double rDt = workspace.cellRDt[c] - workspace.cellFDt[c] * theta - workspace.cellF[c] * thetaDt;
+                logGammaDt[k] += x[i] * coVolumes[k] * (rDt / d - r * dDt / (d * d));
+            }
+        }
+        double halfR = GAS_CONSTANT / (2.0 * lambda);
+        double energyTerm = workspace.excessEnergy + temperatureKelvin * workspace.excessEnergyDt;
+        for (int k = 0; k < count; k++) {
+            workspace.excessRowDt[k] = sDt[k] * g[k] + s[k] * gDt[k]
+                    - halfR * (coVolumes[k] * energyTerm + bMix * (logGamma[k] + temperatureKelvin * logGammaDt[k]));
+        }
+        // dS_kl: the classical part where a present centre has a present NRTL partner, then the cells' terms.
+        double[] curvature = workspace.excessCurvature;
+        double[] v = workspace.rowV;
+        Arrays.fill(v, 0.0);
+        for (int i = 0; i < count; i++) {
+            if (x[i] == 0.0) continue;
+            double d = workspace.denominator[i];
+            double weight = x[i] / (d * d);
+            double theta = workspace.theta[i];
+            for (int c = cellStart[i]; c < cellStart[i + 1]; c++) {
+                v[cellPartner[c]] += weight * (workspace.cellR[c] - workspace.cellF[c] * theta);
+            }
+        }
+        double[] y2 = workspace.rowY;
+        double classicalLinear = 0.0, classicalTheta = 0.0;
+        if (activePresent) {
+            double y2Sum = 0.0;
+            double inverseB2 = 1.0 / (bMix * bMix);
+            for (int i = 0; i < count; i++) {
+                if (!workspace.active[i] || x[i] == 0.0) continue;
+                double d = workspace.denominator[i];
+                double weightShift = x[i] / (d * d) - x[i] * inverseB2;
+                workspace.omegaDt[i] = weightShift; // reused: c_i - c_i^b of a present active centre
+                classicalLinear += weightShift * workspace.a[i] / coVolumes[i];
+                y2Sum += weightShift * s[i];
+                classicalTheta += x[i] / (d * d) * workspace.theta[i] - x[i] * inverseB2 * workspace.thetaBase[i];
+            }
+            for (int k = 0; k < count; k++) y2[k] = y2Sum;
+            for (int pair = 0; pair < pairFirst.length; pair++) {
+                int i = pairFirst[pair];
+                int j = pairSecond[pair];
+                double k = workspace.pairK[pair];
+                if (presentOmega(j, workspace) != 0.0) y2[i] -= k * workspace.omegaDt[j] * s[j];
+                if (presentOmega(i, workspace) != 0.0) y2[j] -= k * workspace.omegaDt[i] * s[i];
+            }
+        }
+        for (int k = 0; k < count; k++) {
+            int row = k * count;
+            double rowClassical = activePresent ? share * (classicalLinear - s[k] / coVolumes[k] * y2[k]) - classicalTheta : 0.0;
+            for (int l = 0; l < count; l++) {
+                double columnClassical = activePresent ? share * (classicalLinear - s[l] / coVolumes[l] * y2[l]) - classicalTheta : 0.0;
+                curvature[row + l] = rowClassical + columnClassical + v[k] + v[l];
+            }
+        }
+        for (int i = 0; i < count; i++) {
+            if (x[i] == 0.0 || cellStart[i] == cellStart[i + 1]) continue;
+            double d = workspace.denominator[i];
+            double weight = x[i] / (d * d);
+            double theta = workspace.theta[i];
+            double centreEnergy = share * workspace.a[i] / coVolumes[i] - theta;
+            for (int c = cellStart[i]; c < cellStart[i + 1]; c++) {
+                int k = cellPartner[c];
+                double f = workspace.cellF[c];
+                double r = workspace.cellR[c] - f * theta;
+                if (f != 0.0) {
+                    // c_i F_ki eps^cl_li into (k, l) and (l, k), eps^cl_li = tau^cl_li - theta_i.
+                    double scaled = weight * f;
+                    int[] pairsOfI = pairIndex[i];
+                    for (int l = 0; l < count; l++) {
+                        double classical = centreEnergy - share * (1.0 - workspace.interaction(pairsOfI[l])) * s[i] * s[l] / coVolumes[l];
+                        double term = scaled * classical;
+                        curvature[k * count + l] += term;
+                        curvature[l * count + k] += term;
+                    }
+                }
+                for (int c2 = cellStart[i]; c2 < cellStart[i + 1]; c2++) {
+                    int l = cellPartner[c2];
+                    double f2 = workspace.cellF[c2];
+                    double r2 = workspace.cellR[c2] - f2 * theta;
+                    curvature[k * count + l] += weight * (f2 * r + f * r2);
+                }
+            }
+        }
+        double half = GAS_CONSTANT * temperatureKelvin / (2.0 * lambda);
+        for (int k = 0; k < count; k++) {
+            for (int l = k; l < count; l++) {
+                double localKl = centreShift(k, l, share, bMix, workspace);
+                double localLk = centreShift(l, k, share, bMix, workspace);
+                double deltaN = coVolumes[l] * localKl + coVolumes[k] * localLk
+                        - coVolumes[k] * coVolumes[l] * curvature[k * count + l];
+                double quadratic = (1.0 - workspace.interaction(pairIndex[k][l])) * s[k] * s[l];
+                double cross = quadratic - half * (coVolumes[k] * logGamma[l] + coVolumes[l] * logGamma[k] + bMix * deltaN);
+                workspace.excessCross[k * count + l] = cross;
+                workspace.excessCross[l * count + k] = cross;
+            }
+        }
+    }
+
+    /**
+     * {@code B_kl = H_lk/D_k - eps^b_lk/b}: the shift of {@code l} around centre {@code k} from the baseline. Where the
+     * centre has a present NRTL partner it is formed directly, {@code H_lk = G_lk (tau_lk - theta_k)} on a cell and
+     * {@code tau^cl_lk - theta_k} otherwise, with {@code eps^b_lk = tau^cl_lk - theta_k^b} (as differences of
+     * {@code 1/D_k} and {@code 1/b} terms it cancels where {@code D_k} is small, the absent cut in water of
+     * {@link #correctExcess}); otherwise {@code D_k = b}, {@code theta_k = theta_k^b} and it is the cell's
+     * {@code (R_lk - F_lk theta_k)/b}, or zero.
+     */
+    private double centreShift(int k, int l, double share, double bMix, Workspace workspace) {
+        int cell = cellIndex[k][l];
+        if (workspace.active[k]) {
+            double theta = workspace.theta[k];
+            double classical = classicalTau(k, l, share / HuronVidalExcess.LAMBDA, workspace);
+            double h = cell >= 0 ? workspace.cellGTau[cell] - workspace.cellG[cell] * theta : classical - theta;
+            return h / workspace.denominator[k] - (classical - workspace.thetaBase[k]) / bMix;
+        }
+        return cell >= 0 ? (workspace.cellR[cell] - workspace.cellF[cell] * workspace.theta[k]) / workspace.denominator[k] : 0.0;
+    }
+
 
     /**
      * Precision qualifier; the EOS owns phase selection and its coalescence policy. Where floating point loses the
@@ -771,18 +1497,70 @@ public final class PengRobinsonKernel {
         private final double[] q;
         private final double[] g;
         private final double[] sumA;
-        /** Per pair of a {@link PairInteractions} model, filled by {@link #prepareTemperature}; empty otherwise. */
+        /** {@code k_ij(T)} and its two temperature derivatives per pair of the kernel's list. */
         private final double[] pairK;
         private final double[] pairKDt;
         private final double[] pairKDt2;
-        /** {@code d sqrt(a_i)/dT} and its derivative for the interaction model; empty unless it has group pairs. */
+        /** A held line's value and two derivatives ({@link HuronVidalExcess#held}). */
+        private final double[] held = new double[3];
+        /** The interaction model's own values per model pair, before they are placed on the list. */
+        private final double[] modelK;
+        private final double[] modelKDt;
+        private final double[] modelKDt2;
+        /** {@code d sqrt(a_i)/dT} and its derivative at the prepared temperature, for the model and the excess terms. */
         private final double[] interactionRootDt;
         private final double[] interactionRootDt2;
+        /** {@code d^2a_i/dT^2} at the prepared temperature; filled for kernels with NRTL pairs and Mathias-Copeman alpha. */
+        private final double[] d2aDt2;
+        /** Per NRTL cell at the prepared temperature: {@code F = G - 1}, {@code R = G tau - tau_cl} and their derivatives. */
+        private final double[] cellF;
+        private final double[] cellFDt;
+        private final double[] cellFDt2;
+        private final double[] cellR;
+        private final double[] cellRDt;
+        private final double[] cellRDt2;
+        /** Per NRTL cell: {@code G}, {@code G tau} and the derivatives of {@code G tau}. */
+        private final double[] cellG;
+        private final double[] cellGTau;
+        private final double[] cellGTauDt;
+        private final double[] cellGTauDt2;
+        /** Per active centre: the classical part over its non-partners, {@code B_i}, {@code g^r_i} and {@code g^r_i'}. */
+        private final double[] restCoVolume;
+        private final double[] restRow;
+        private final double[] restRowDt;
+        /** Per compound, the cells' correction of the last evaluation (correctExcess and its derivatives). */
+        private final double[] rowGDt;
+        private final double[] rowGDt2;
+        private final double[] thetaBase;
+        private final double[] thetaBaseDt;
+        private final double[] theta;
+        private final double[] thetaDt;
+        private final double[] denominator;
+        private final double[] denominatorDt;
+        private final double[] denominatorDt2;
+        private final double[] numeratorDt2;
+        private final double[] omega;
+        private final double[] omegaDt;
+        private final double[] deltaLogGamma;
+        private final double[] deltaLogGammaDt;
+        private final double[] rowY;
+        private final double[] rowYDt;
+        private final double[] rowV;
+        private final double[] excessRowDt;
+        private final boolean[] active;
+        /** {@code [k * n + l]}: the cross terms, and the curvature sums they are formed from. */
+        private final double[] excessCross;
+        private final double[] excessCurvature;
+        private double excessTemperature;
+        private double excessCoVolume;
+        private double excessEnergy;
+        private double excessEnergyDt;
+        private double excessZ1;
+        private double excessZ2;
+        private boolean activePresent;
         private long preparedTemperature = Long.MIN_VALUE;
 
-        private Workspace(int count) { this(count, 0); }
-
-        private Workspace(int count, int pairs) {
+        private Workspace(int count, int pairs, int modelPairs, int excessCount, int cells) {
             composition = new double[count];
             a = new double[count];
             daDt = new double[count];
@@ -793,8 +1571,47 @@ public final class PengRobinsonKernel {
             pairK = new double[pairs];
             pairKDt = new double[pairs];
             pairKDt2 = new double[pairs];
+            modelK = new double[modelPairs];
+            modelKDt = new double[modelPairs];
+            modelKDt2 = new double[modelPairs];
             interactionRootDt = new double[count];
             interactionRootDt2 = new double[count];
+            d2aDt2 = new double[count];
+            cellF = new double[cells];
+            cellFDt = new double[cells];
+            cellFDt2 = new double[cells];
+            cellR = new double[cells];
+            cellRDt = new double[cells];
+            cellRDt2 = new double[cells];
+            cellG = new double[cells];
+            cellGTau = new double[cells];
+            cellGTauDt = new double[cells];
+            cellGTauDt2 = new double[cells];
+            int e = excessCount;
+            restCoVolume = new double[e];
+            restRow = new double[e];
+            restRowDt = new double[e];
+            rowGDt = new double[e];
+            rowGDt2 = new double[e];
+            thetaBase = new double[e];
+            thetaBaseDt = new double[e];
+            theta = new double[e];
+            thetaDt = new double[e];
+            denominator = new double[e];
+            denominatorDt = new double[e];
+            denominatorDt2 = new double[e];
+            numeratorDt2 = new double[e];
+            omega = new double[e];
+            omegaDt = new double[e];
+            deltaLogGamma = new double[e];
+            deltaLogGammaDt = new double[e];
+            rowY = new double[e];
+            rowYDt = new double[e];
+            rowV = new double[e];
+            excessRowDt = new double[e];
+            active = new boolean[e];
+            excessCross = new double[e * e];
+            excessCurvature = new double[e * e];
         }
 
         private double interaction(int pair) { return pair < 0 ? 0.0 : pairK[pair]; }
@@ -803,7 +1620,10 @@ public final class PengRobinsonKernel {
         public double[] compositionView() { return composition; }
         /** {@code sqrt(a_i)} of the prepared temperature; zero exactly where the PR alpha term vanishes. */
         public double[] attractionRootsView() { return sqrtA; }
-        /** {@code S_i = sum_j x_j a_ij} of the last evaluation. The caller must not mutate it. */
+        /**
+         * {@code S_i = (1/2n) d(n^2 a)/dn_i} of the last evaluation: {@code sum_j x_j a_ij} for the quadratic part,
+         * less the NRTL cells' correction on a kernel with NRTL pairs. The caller must not mutate it.
+         */
         public double[] attractionRowsView() { return sumA; }
         public void clear() {
             preparedTemperature = Long.MIN_VALUE;
@@ -857,9 +1677,11 @@ public final class PengRobinsonKernel {
         private final double[] crossDt;
         private final double[] coVolumeRatio;
         private final double[] attractionRatio;
+        private final boolean heatCapacity;
         private double dResidualEnthalpyDt;
 
-        private Derivatives(int count) {
+        private Derivatives(int count, boolean heatCapacity) {
+            this.heatCapacity = heatCapacity;
             evaluation = new Evaluation(count);
             dLogPhiDt = new double[count];
             dLogPhiDn = new double[count][count];
@@ -883,7 +1705,10 @@ public final class PengRobinsonKernel {
         public double[] dLogPhiDtView() { return dLogPhiDt; }
         public double[] partialMolarResidualEnthalpy() { return partialMolarResidualEnthalpy.clone(); }
         public double[] partialMolarResidualEnthalpyView() { return partialMolarResidualEnthalpy; }
-        public double dResidualEnthalpyDt() { return dResidualEnthalpyDt; }
+        public double dResidualEnthalpyDt() {
+            if (!heatCapacity) throw new IllegalStateException("This derivative output does not carry dh^R/dT");
+            return dResidualEnthalpyDt;
+        }
     }
 
     public record RootSelection(double selectedCompressibility, int physicalRootCount, double rootSeparation) {}

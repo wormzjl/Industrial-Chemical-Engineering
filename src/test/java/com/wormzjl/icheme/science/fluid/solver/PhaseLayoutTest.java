@@ -6,21 +6,27 @@ import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo;
 import java.util.Arrays;
 import org.junit.jupiter.api.Test;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 class PhaseLayoutTest {
     @Test void sparseTwoPhaseEncodingKeepsPhasePropertySnapshotsIsolated() {
         var model=com.wormzjl.icheme.fluid.support.FluidTestSupport.model(MaterialCatalog.bundled(),"icheme:tjl20_methane");
         double[] liquid=new double[com.wormzjl.icheme.science.material.MaterialTestBasis.CRUDE],vapor=new double[com.wormzjl.icheme.science.material.MaterialTestBasis.CRUDE];liquid[6]=1;vapor[0]=1;
-        var state=model.state(350,101325,liquid,vapor,0,0,101325);var layout=new PhaseLayout(model,state);
+        var state=TestPhases.state(model,350,101325,liquid,vapor,0,0);var layout=new PhaseLayout(model,state);
         var expected=layout.encode(state);
-        state.liquidProperties().logFugacity()[0]=Double.NaN;state.vaporProperties().logFugacity()[0]=Double.NaN;
+        TestPhases.liquidProperties(state).logFugacity()[0]=Double.NaN;TestPhases.vaporProperties(state).logFugacity()[0]=Double.NaN;
         assertArrayEquals(expected,layout.encode(state),0);
         assertTrue(Arrays.stream(expected).allMatch(Double::isFinite));
     }
     @Test void coupledVolumeEnergyAndPhaseEquationsRecoverIndependentTpTargets() {
-        String id="icheme:tjl20_methane";var model=com.wormzjl.icheme.fluid.support.FluidTestSupport.model(MaterialCatalog.bundled(),id);
-        double[] crude=Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo(id).crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(),com.wormzjl.icheme.science.material.MaterialTestBasis.CRUDE+1);crude[com.wormzjl.icheme.science.material.MaterialTestBasis.CRUDE]=.2;
-        double[] water=new double[com.wormzjl.icheme.science.material.MaterialTestBasis.CRUDE+1];water[com.wormzjl.icheme.science.material.MaterialTestBasis.CRUDE]=1;double[] methane=new double[com.wormzjl.icheme.science.material.MaterialTestBasis.CRUDE+1];methane[0]=1;
+        // W3b: on the network model, whose cubic holds the water (a crude package without it holds none).
+        String id="icheme:tjl20_methane";var model=com.wormzjl.icheme.fluid.support.FluidTestSupport.networkModel();
+        var assay=com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo(id);
+        var feed=assay.crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions();
+        int size=model.componentCount();double[] crude=new double[size];
+        for(int c=0;c<feed.length;c++)crude[model.components().indexOf(assay.componentBasis().componentId(c))]+=feed[c];
+        crude[size-1]=.2;
+        double[] water=new double[size];water[size-1]=1;double[] methane=new double[size];methane[model.components().indexOf("Methane")]=1;
         for(double[] n:new double[][]{crude,water,methane}) {
             var seed=model.flashTP(350,101325,n,()->{});var target=model.flashTP(351,105000,n,()->{});
             var layout=new PhaseLayout(model,seed);

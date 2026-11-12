@@ -18,9 +18,10 @@ class V3StageTraceCalculatorTest {
         assertEquals(original.result().inputDigest(), zero.result().inputDigest());
         assertEquals(original.result().streams(), zero.result().streams());
         assertEquals(original.diagnostics(), zero.diagnostics());
-        assertEquals("v3-dry-mesh-r23-phase-r1", V3ColumnDisplayResult.fromAccepted(zero).formulationRevision());
+        // -derived-pairs-r1: the kernel takes the network's derived pairs (W5 D1 of batch 2026-11-11-aqueous-solvents).
+        assertEquals("v3-dry-mesh-r23-phase-r1-derived-pairs-r1", V3ColumnDisplayResult.fromAccepted(zero).formulationRevision());
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage(input.packageId());
-        assertEquals(V3InputDigest.of(zero.result().problem(), "v3-dry-mesh-r23-phase-r1", thermo.datasetRevision(),
+        assertEquals(V3InputDigest.of(zero.result().problem(), "v3-dry-mesh-r23-phase-r1-derived-pairs-r1", thermo.datasetRevision(),
                 V3ColumnCalculator.ASSUMPTIONS_REVISION), zero.result().inputDigest());
         assertTrue(zero.result().problem().truncationSupport().isIdentity());
         assertTrue(zero.diagnostics().events().stream().noneMatch(event -> event.startsWith("stage-trace")));

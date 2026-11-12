@@ -9,6 +9,7 @@ import java.util.*;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 import static com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Direction.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 class PhysicalFluidTopologyTest {
     private final FluidThermodynamics model=FluidTestSupport.networkModel();
@@ -314,7 +315,7 @@ class PhysicalFluidTopologyTest {
      */
     @Test void aTankOverAVoidDrainsOnItsLevelHeadAloneAndRests() {
         var water=waterUnderNitrogen(.3,101325);var start=new PassiveNetwork.Reservoir(1,2,water);
-        double rho=water.waterLiquid()*model.molecularWeights()[component("Water")]/water.waterVolume();
+        double rho=TestPhases.waterLiquid(water)*model.molecularWeights()[component("Water")]/TestPhases.waterVolume(water);
         double head=gravityHead(model,start),column=rho*PassiveStepSolver.GRAVITY*2,voidPressure=water.pressure()+column+head/2;
         var devices=List.of(at(1,0,2,0,Kind.RESERVOIR,N),at(2,0,1,0,Kind.PIPE,N),at(3,0,0,0,Kind.VOID,N));
         var compiled=PhysicalFluidTopology.compile(devices,Map.of(1L,start,3L,nitrogenAt(3,0,PassiveNetwork.NodeKind.VOID,voidPressure)));
@@ -326,7 +327,7 @@ class PhysicalFluidTopologyTest {
             drained+=(line.first()==tank?1:-1)*last.averageMassFlows()[edge]*5;
         }
         var out=first.pipeTransfers().getFirst();var drawn=line.first()==tank?out.forward():out.reverse();
-        var a=graph.reservoirs().get(tank);double restRho=a.state().waterLiquid()*model.molecularWeights()[component("Water")]/a.state().waterVolume();
+        var a=graph.reservoirs().get(tank);double restRho=TestPhases.waterLiquid(a.state())*model.molecularWeights()[component("Water")]/TestPhases.waterVolume(a.state());
         double restHead=gravityHead(model,a),imbalance=a.state().pressure()+restHead+restRho*PassiveStepSolver.GRAVITY*2-voidPressure;
         System.out.println("STACK_HEAD head="+head+" column="+column+" void="+voidPressure+" firstFlow="+(line.first()==tank?1:-1)*first.averageMassFlows()[edge]
                 +" drained="+drained+" kg restP="+a.state().pressure()+" restHead="+restHead+" imbalance="+imbalance+" lastFlow="+last.averageMassFlows()[edge]+" lastMode="+last.endpointModes().get(edge));

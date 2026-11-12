@@ -1,0 +1,42 @@
+dry: 14 compounds [Methane, Ethane, Propane, N-butane, N-pentane, crude_pc03, crude_pc06, crude_pc09, Nitrogen, N-hexane, Benzene, Toluene, CarbonDioxide, Water]
+  start node 1: T 326.00 P 153000 L 0.0161 W 0.0000 V 0.9839
+  start node 2: T 321.60 P 151865 L 0.0168 W 0.0000 V 0.9832
+  start node 3: T 314.86 P 149318 L 0.0178 W 0.0000 V 0.9822
+  start node 4: T 315.64 P 147288 L 0.0173 W 0.0000 V 0.9827
+  start node 5: T 322.81 P 147310 L 0.0160 W 0.0000 V 0.9840
+  start node 6: T 325.86 P 149368 L 0.0157 W 0.0000 V 0.9843
+  4 intervals: accepted 12 rejected 0 newtonIterations 82 newtonSolves 16 stateCalls 2652 flashCalls 0 residualEvaluations 98 kernelEvaluations 5337
+  end node 1: T 325.73 P 149733 L 0.0157 W 0.0000 V 0.9843
+  end node 2: T 321.53 P 149729 L 0.0165 W 0.0000 V 0.9835
+  end node 3: T 315.13 P 149708 L 0.0178 W 0.0000 V 0.9822
+  end node 4: T 315.80 P 149678 L 0.0177 W 0.0000 V 0.9823
+  end node 5: T 322.88 P 149656 L 0.0163 W 0.0000 V 0.9837
+  end node 6: T 325.86 P 149652 L 0.0157 W 0.0000 V 0.9843
+wet: 14 compounds [Methane, Ethane, Propane, N-butane, N-pentane, crude_pc03, crude_pc06, crude_pc09, Nitrogen, N-hexane, Benzene, Toluene, CarbonDioxide, Water]
+  start node 1: T 326.00 P 153000 L 0.0142 W 0.0006 V 0.9852
+  start node 2: T 321.60 P 151865 L 0.0152 W 0.0007 V 0.9841
+  start node 3: T 314.86 P 149318 L 0.0166 W 0.0008 V 0.9827
+  start node 4: T 315.64 P 147288 L 0.0161 W 0.0007 V 0.9832
+  start node 5: T 322.81 P 147310 L 0.0143 W 0.0006 V 0.9851
+  start node 6: T 325.86 P 149368 L 0.0137 W 0.0006 V 0.9857
+  4 intervals: accepted 12 rejected 0 newtonIterations 82 newtonSolves 16 stateCalls 2868 flashCalls 0 residualEvaluations 98 kernelEvaluations 5769
+  end node 1: T 325.67 P 149724 L 0.0138 W 0.0006 V 0.9856
+  end node 2: T 321.51 P 149720 L 0.0149 W 0.0007 V 0.9844
+  end node 3: T 315.14 P 149701 L 0.0166 W 0.0008 V 0.9827
+  end node 4: T 315.82 P 149673 L 0.0164 W 0.0007 V 0.9829
+  end node 5: T 322.91 P 149653 L 0.0145 W 0.0006 V 0.9848
+  end node 6: T 325.86 P 149649 L 0.0138 W 0.0006 V 0.9856
+polar: 16 compounds [Methane, Ethane, Propane, N-butane, N-pentane, crude_pc03, crude_pc06, crude_pc09, Nitrogen, HydrogenSulfide, N-hexane, Benzene, Toluene, MethylMercaptan, CarbonDioxide, Water]
+  start node 1: T 326.00 P 153000 L 0.0140 W 0.0000 V 0.9860
+  start node 2: T 321.60 P 151865 L 0.0146 W 0.0000 V 0.9854
+  start node 3: T 314.86 P 149318 L 0.0154 W 0.0000 V 0.9846
+  start node 4: T 315.64 P 147288 L 0.0150 W 0.0000 V 0.9850
+  start node 5: T 322.81 P 147310 L 0.0138 W 0.0000 V 0.9862
+  start node 6: T 325.86 P 149368 L 0.0136 W 0.0000 V 0.9864
+  4 intervals: accepted 12 rejected 0 newtonIterations 78 newtonSolves 16 stateCalls 3288 flashCalls 0 residualEvaluations 94 kernelEvaluations 6609
+  end node 1: T 325.70 P 149710 L 0.0136 W 0.0000 V 0.9864
+  end node 2: T 321.52 P 149707 L 0.0143 W 0.0000 V 0.9857
+  end node 3: T 315.13 P 149699 L 0.0154 W 0.0000 V 0.9846
+  end node 4: T 315.81 P 149685 L 0.0153 W 0.0000 V 0.9847
+  end node 5: T 322.89 P 149676 L 0.0141 W 0.0000 V 0.9859
+  end node 6: T 325.86 P 149673 L 0.0136 W 0.0000 V 0.9864

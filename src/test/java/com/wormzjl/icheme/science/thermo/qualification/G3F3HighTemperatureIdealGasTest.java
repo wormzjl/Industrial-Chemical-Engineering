@@ -10,6 +10,7 @@ import com.wormzjl.icheme.science.thermo.PengRobinsonKernel.Root;
 import com.wormzjl.icheme.science.thermo.reference.AlphaDerivatives;
 import com.wormzjl.icheme.science.thermo.reference.HelmholtzFluid;
 import org.junit.jupiter.api.Test;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * G3 fixture family F3 (plan {@code P3_PILOT_ENGINE_PLAN.md} sections 5 and 8.2; D7 ideal-gas row, D13): the pilot's
@@ -139,7 +140,7 @@ class G3F3HighTemperatureIdealGasTest {
         double[] feed = {0.1, 0.4, 0.5, 0, 0};
         var state = model.flashTP(1123, 2e5, feed, () -> { });
         double liquid = 0;
-        for (double amount : state.liquidView()) liquid += amount;
+        for (double amount : TestPhases.liquid(state)) liquid += amount;
         assertEquals(0, liquid, 0.0, "one gas phase");
         double[] x = {0.1, 0.4, 0.5, 0};
         var e = evaluate(model, 1123, 2e5, x, Root.VAPOR);
@@ -194,7 +195,7 @@ class G3F3HighTemperatureIdealGasTest {
                 for (double p : new double[] {1.5e5, 2e5, 2.5e5}) {
                     var state = model.flashTP(t, p, feeds[k], () -> { });
                     double liquid = 0;
-                    for (double amount : state.liquidView()) liquid += amount;
+                    for (double amount : TestPhases.liquid(state)) liquid += amount;
                     states++;
                     if (liquid != 0) wrong.add(f("%s %.0f K %.2f MPa", names[k], t, p / 1e6));
                 }

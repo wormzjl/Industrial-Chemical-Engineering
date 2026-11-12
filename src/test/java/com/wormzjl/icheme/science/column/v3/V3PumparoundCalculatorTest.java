@@ -27,10 +27,11 @@ class V3PumparoundCalculatorTest {
         V3ColumnInput heated = v1ScaleInput("icheme:cdu17_tjl_acs2018",
                 List.of(new V3PumparoundSpec(8, 12, -5.0e6, V3PumparoundSpec.Split.UNIFORM)));
 
-        assertEquals("v3-dry-mesh-r23-phase-r1", V3ColumnCalculator.formulationRevision(heatFree, 0.0));
-        assertEquals("v3-dry-mesh-r24-flash-trace-phase-r1", V3ColumnCalculator.formulationRevision(heatFree, 1.0e-6));
-        assertEquals("v3-dry-mesh-r27-stage-heat-phase-r1", V3ColumnCalculator.formulationRevision(heated, 0.0));
-        assertEquals("v3-dry-mesh-r27-flash-trace-stage-heat-phase-r1", V3ColumnCalculator.formulationRevision(heated, 1.0e-6));
+        // -derived-pairs-r1: the kernel takes the network's derived pairs (W5 D1 of batch 2026-11-11-aqueous-solvents).
+        assertEquals("v3-dry-mesh-r23-phase-r1-derived-pairs-r1", V3ColumnCalculator.formulationRevision(heatFree, 0.0));
+        assertEquals("v3-dry-mesh-r24-flash-trace-phase-r1-derived-pairs-r1", V3ColumnCalculator.formulationRevision(heatFree, 1.0e-6));
+        assertEquals("v3-dry-mesh-r27-stage-heat-phase-r1-derived-pairs-r1", V3ColumnCalculator.formulationRevision(heated, 0.0));
+        assertEquals("v3-dry-mesh-r27-flash-trace-stage-heat-phase-r1-derived-pairs-r1", V3ColumnCalculator.formulationRevision(heated, 1.0e-6));
         assertEquals(V3ColumnCalculator.ASSUMPTIONS_REVISION, V3ColumnCalculator.assumptionsRevision(heatFree));
         assertEquals(V3ColumnCalculator.ASSUMPTIONS_REVISION + "+" + V3ColumnCalculator.HEAT_ASSUMPTIONS_REVISION,
                 V3ColumnCalculator.assumptionsRevision(heated));

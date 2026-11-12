@@ -10,6 +10,7 @@ import com.wormzjl.icheme.science.material.MaterialCatalog;
 import java.util.Arrays;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /** The truncated unknown set inside a complete implicit step: what it removes, and what it restores. */
 class TraceTruncationStepTest {
@@ -21,8 +22,7 @@ class TraceTruncationStepTest {
             FluidThermodynamics.forNetwork(MaterialCatalog.bundled(),PACKAGE,FluidThermodynamics.DEFAULT_MAXIMUM_VELOCITY,0);
 
     private double[] wetCrude() {
-        double[] n=Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo(PACKAGE)
-                .crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(),com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1);
+        double[] n=com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.worldCrude();
         n[com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN]=.1;n[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK]=.2;return n;
     }
     private FluidThermodynamics.State fill(FluidThermodynamics model,double pressure) {
@@ -55,11 +55,17 @@ class TraceTruncationStepTest {
             assertEquals(a.temperature(),b.temperature(),1e-4);
             assertEquals(a.pressure(),b.pressure(),1);
             assertEquals(a.volume(),b.volume(),1e-9);
-            assertEquals(a.liquidVolume()/a.volume(),b.liquidVolume()/b.volume(),1e-6);
+            assertEquals(TestPhases.liquidVolume(a)/a.volume(),TestPhases.liquidVolume(b)/b.volume(),1e-6);
             assertEquals(a.vaporVolume()/a.volume(),b.vaporVolume()/b.volume(),1e-6);
-            assertEquals(a.waterVolume()/a.volume(),b.waterVolume()/b.volume(),1e-6);
+            assertEquals(TestPhases.waterVolume(a)/a.volume(),TestPhases.waterVolume(b)/b.volume(),1e-6);
         }
-        assertEquals(reference.massFlows()[0],reduced.massFlows()[0],1e-6*Math.abs(reference.massFlows()[0])+1e-9);
+        // The flow follows the phases' densities and viscosities. Each omitted trace (a mole fraction below the cutoff in
+        // its phase) moves at most about the cutoff of that phase, so n of them move the flow by at most about n times the
+        // cutoff (W3b: water's traces in the vapour and the oil are among them now; the old 1e-6 was one cutoff).
+        int traces=0;
+        for(var s:reference.states())for(int slot=0;slot<3;slot++){if(s.phase(slot)==null)continue;double[] x=s.amountsView(slot);double sum=Arrays.stream(x).sum();
+            for(double xi:x)if(xi>0&&xi<CUTOFF*sum)traces++;}
+        assertEquals(reference.massFlows()[0],reduced.massFlows()[0],Math.max(1,traces)*CUTOFF*Math.abs(reference.massFlows()[0])+1e-9,traces+" traces");
     }
 
     @Test void theStepSolverCountsTheUnknownsItOmitsAndNoneAtTheOffSwitch() {
@@ -84,10 +90,10 @@ class TraceTruncationStepTest {
         // is empty, so the frozen support drops it, and the converged fugacity coefficients then say
         // the vapour mole fraction it implies is far above ten times the cutoff.
         var equilibrium=fill(truncating,101325);
-        double[] l=equilibrium.liquid(),v=equilibrium.vapor();
+        double[] l=TestPhases.liquid(equilibrium),v=TestPhases.vapor(equilibrium);
         int methane=0;l[methane]+=v[methane];v[methane]=0;
-        var displaced=truncating.state(equilibrium.temperature(),equilibrium.pressure(),l,v,
-                equilibrium.waterLiquid(),equilibrium.waterVapor(),equilibrium.hydrocarbonPartialPressure());
+        var displaced=TestPhases.state(truncating,equilibrium.temperature(),equilibrium.pressure(),l,v,
+                TestPhases.waterLiquid(equilibrium),TestPhases.waterVapor(equilibrium));
         var graph=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,fill(truncating,200000)),
                 new PassiveNetwork.Reservoir(2,0,displaced)),
                 List.of(new PassiveNetwork.Pipe(3,0,1,new PipeResistance.Geometry(10,.05,.000045,0))));
@@ -100,7 +106,7 @@ class TraceTruncationStepTest {
         } finally {SolverDiagnostics.ENABLED=false;}
         assertTrue(reactivations>0,"the displaced methane must be put back into both phases");
         // And it came back with a real amount, not a zero the reduced layout would have kept.
-        assertTrue(result.states().get(1).vapor()[methane]>0);
+        assertTrue(TestPhases.vapor(result.states().get(1))[methane]>0);
         double before=0,after=0;
         for(int node=0;node<2;node++) {
             before+=PhaseLayout.totalAmounts(graph.reservoirs().get(node).state())[methane];

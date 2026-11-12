@@ -70,19 +70,19 @@ class RestrictedPackagePhysicsTest {
     private static void state(Pair m, FluidThermodynamics.State full, FluidThermodynamics.State view, String what) {
         assertEquals(full == null, view == null, what + ": answered on one model only");
         if (full == null) return;
-        double[] f = {full.temperature(), full.pressure(), full.waterLiquid(), full.waterVapor(), full.hydrocarbonPartialPressure(),
-                full.waterPartialPressure(), full.volume(), full.enthalpy(), full.internalEnergy(), full.mass(), full.liquidVolume(),
-                full.waterVolume(), full.vaporVolume(), full.waterCompressibility(), full.solidMoments().volume(), full.solidMoments().mass()};
-        double[] v = {view.temperature(), view.pressure(), view.waterLiquid(), view.waterVapor(), view.hydrocarbonPartialPressure(),
-                view.waterPartialPressure(), view.volume(), view.enthalpy(), view.internalEnergy(), view.mass(), view.liquidVolume(),
-                view.waterVolume(), view.vaporVolume(), view.waterCompressibility(), view.solidMoments().volume(), view.solidMoments().mass()};
+        double[] f = {full.temperature(), full.pressure(), TestPhases.waterLiquid(full), TestPhases.waterVapor(full), TestPhases.hydrocarbonPartialPressure(full),
+                TestPhases.waterPartialPressure(full), full.volume(), full.enthalpy(), full.internalEnergy(), full.mass(), TestPhases.liquidVolume(full),
+                TestPhases.waterVolume(full), full.vaporVolume(), TestPhases.waterCompressibility(full), full.solidMoments().volume(), full.solidMoments().mass()};
+        double[] v = {view.temperature(), view.pressure(), TestPhases.waterLiquid(view), TestPhases.waterVapor(view), TestPhases.hydrocarbonPartialPressure(view),
+                TestPhases.waterPartialPressure(view), view.volume(), view.enthalpy(), view.internalEnergy(), view.mass(), TestPhases.liquidVolume(view),
+                TestPhases.waterVolume(view), view.vaporVolume(), TestPhases.waterCompressibility(view), view.solidMoments().volume(), view.solidMoments().mass()};
         for (int i = 0; i < f.length; i++) bits(f[i], v[i], what + " field " + i);
         assertEquals(full.solids().populations().size(), view.solids().populations().size(), what + " solid populations");
-        vector(m, full.liquidView(), view.liquidView(), what + " liquid");
-        vector(m, full.vaporView(), view.vaporView(), what + " vapour");
-        phase(m, full.liquidProperties(), view.liquidProperties(), what + " liquid phase");
-        phase(m, full.vaporProperties(), view.vaporProperties(), what + " vapour phase");
-        for (int p : new int[]{FluidThermodynamics.GAS, FluidThermodynamics.OIL, FluidThermodynamics.WATER}) {
+        vector(m, TestPhases.liquid(full), TestPhases.liquid(view), what + " liquid");
+        vector(m, TestPhases.vapor(full), TestPhases.vapor(view), what + " vapour");
+        phase(m, TestPhases.liquidProperties(full), TestPhases.liquidProperties(view), what + " liquid phase");
+        phase(m, TestPhases.vaporProperties(full), TestPhases.vaporProperties(view), what + " vapour phase");
+        for (int p : new int[]{FluidThermodynamics.GAS, FluidThermodynamics.OIL, FluidThermodynamics.AQUEOUS}) {
             assertEquals(FluidThermodynamics.holdsPhase(full, p), FluidThermodynamics.holdsPhase(view, p), what + " phase " + p);
             if (!FluidThermodynamics.holdsPhase(full, p)) continue;
             bits(m.full().phaseViscosity(full, p, new MixtureViscosity.Workspace(), null),
@@ -124,8 +124,8 @@ class RestrictedPackagePhysicsTest {
             if (flashes.isEmpty()) continue;
             answered++;
             var f = flashes.get(0); var v = flashes.get(1);
-            both(() -> m.full().state(t, p, f.liquid(), f.vapor(), f.waterLiquid(), f.waterVapor(), f.hydrocarbonPartialPressure()),
-                    () -> m.view().state(t, p, v.liquid(), v.vapor(), v.waterLiquid(), v.waterVapor(), v.hydrocarbonPartialPressure()),
+            both(() -> TestPhases.state(m.full(),t, p, TestPhases.liquid(f), TestPhases.vapor(f), TestPhases.waterLiquid(f), TestPhases.waterVapor(f)),
+                    () -> TestPhases.state(m.view(),t, p, TestPhases.liquid(v), TestPhases.vapor(v), TestPhases.waterLiquid(v), TestPhases.waterVapor(v)),
                     (a, b) -> state(m, a, b, at + " direct state"), at + " direct state");
             double h = f.enthalpy();
             both(() -> m.full().equilibriumPH(t * 1.05, p, h, full, () -> {}), () -> m.view().equilibriumPH(t * 1.05, p, h, overall, () -> {}),
@@ -139,15 +139,18 @@ class RestrictedPackagePhysicsTest {
         var crude = Pair.of(catalog, NETWORK, CRUDE);
         double[] oil = new double[crude.view().componentCount()];
         for (int i = 0; i < oil.length - 1; i++) oil[i] = 0.2 + 0.07 * ((i * 7) % 11);
-        oil[0] = 0.02; oil[oil.length - 1] = 0.3;
-        // A crude liquid, a two-phase crude with water, the gas of its light end and a crude below its fits' data.
+        oil[0] = 0.02; oil[oil.length - 1] = 0;
+        // A crude liquid, a two-phase crude, the gas of its light end and a crude below its fits' data. W3b: this package
+        // holds no water in its cubic, so the island carries none (the refinery package carries water).
         assertTrue(check(crude, oil, new double[][]{{360, 2e5}, {520, 1.5e5}, {650, 1e5}, {250, 101325}, {900, 5e4}}, "crude") >= 3);
         var light = Pair.of(catalog, NETWORK, LIGHT);
-        double[] gas = {0.05, 0.6, 0.15, 0.1, 0.05, 0.05, 0.02};
+        double[] gas = {0.05, 0.6, 0.15, 0.1, 0.05, 0.05, 0}; // W3b: no water on this package (its last entry)
         assertTrue(check(light, gas, new double[][]{{300, 3e6}, {240, 2e6}, {180, 1e5}, {120, 5e5}}, "light ends") >= 3);
         var nitrogen = Pair.of(catalog, NETWORK, List.of("Nitrogen"));
         assertTrue(check(nitrogen, new double[]{1, 0}, new double[][]{{77, 101325}, {300, 101325}, {60, 1e5}, {500, 1e7}}, "nitrogen") >= 3);
-        assertTrue(check(nitrogen, new double[]{1, 0.4}, new double[][]{{300, 101325}, {380, 2e5}, {268, 101325}}, "nitrogen with water") >= 2);
+        // W3b: nitrogen with water on the refinery network package; its network model adds water to the cubic of every view.
+        var humid = Pair.of(catalog, "icheme:refinery", List.of("Nitrogen"));
+        assertTrue(check(humid, new double[]{1, 0.4}, new double[][]{{300, 101325}, {380, 2e5}, {268, 101325}}, "nitrogen with water") >= 2);
     }
 
     @Test void thePilotPackageOnItsCarbonDioxideWithNitrogenAndItsLightEnds() {

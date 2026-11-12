@@ -18,10 +18,5 @@ public enum PhaseKind {
     /** One physical root: dense, dilute or supercritical, not classified. */
     FLUID,
     /** A pure crystal; the state names the crystal. */
-    SOLID,
-    /**
-     * The separate free-water liquid of {@link WaterParticipation#SEPARATE_FREE_WATER}: pure liquid water, never mixing
-     * with the hydrocarbon phases (P3). Its state has the one-component basis {@code [Water]}.
-     */
-    FREE_WATER
+    SOLID
 }

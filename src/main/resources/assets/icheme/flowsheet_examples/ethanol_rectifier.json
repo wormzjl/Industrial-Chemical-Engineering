@@ -1,0 +1,188 @@
+{
+  "format": 2,
+  "basis": {
+    "package": "icheme:refinery",
+    "revision": "method=model:pr78,ideal-gas:fit,missing-interactions:zero,pressure-pascal:1000..2000000,liquid-mixture:eccc-cut-pair-r1;properties=icheme:chemsep_ethanol@chemsep-8.3-dwsim-10.2.5-r1;interactions=;water=icheme:water@water-iapws95-shomate-r4;viscosity=icheme:chemsep_ethanol/liquid@dwsim-viscosity-api-r1,icheme:chemsep_ethanol/vapor@dwsim-viscosity-api-r1,icheme:water/liquid@iapws-sr6-2011-viscosity-r1;ice=icheme:crystal_ice_ih@crystal-ice-ih-r1;fluid-data=",
+    "components": [
+      "Methane",
+      "Ethane",
+      "Propane",
+      "Isobutane",
+      "N-butane",
+      "Isopentane",
+      "N-pentane",
+      "crude_pc01",
+      "crude_pc02",
+      "crude_pc03",
+      "crude_pc04",
+      "crude_pc05",
+      "crude_pc06",
+      "crude_pc07",
+      "crude_pc08",
+      "crude_pc09",
+      "crude_pc10",
+      "crude_pc11",
+      "crude_pc12",
+      "Nitrogen",
+      "Hydrogen",
+      "HydrogenSulfide",
+      "CarbonMonoxide",
+      "Oxygen",
+      "Ammonia",
+      "SulfurDioxide",
+      "CarbonylSulfide",
+      "Ethylene",
+      "Propylene",
+      "Butene-1",
+      "Isobutene",
+      "Cis-2-butene",
+      "Trans-2-butene",
+      "Butadiene",
+      "N-hexane",
+      "Cyclohexane",
+      "Benzene",
+      "Toluene",
+      "Ethylbenzene",
+      "O-xylene",
+      "M-xylene",
+      "P-xylene",
+      "MethylMercaptan",
+      "EthylMercaptan",
+      "CarbonDioxide",
+      "Ethanol",
+      "Water"
+    ]
+  },
+  "units": [
+    {
+      "id": "E-1",
+      "type": "exchanger",
+      "name": "E-1",
+      "x": 90,
+      "y": 150,
+      "params": {
+        "target": "outlet",
+        "side": "tube",
+        "temperature": 359.84,
+        "duty": 3000000,
+        "area": 100,
+        "tube_drop": 50000,
+        "shell_drop": 30000
+      }
+    },
+    {
+      "id": "T-1",
+      "type": "column",
+      "name": "T-1",
+      "x": 260,
+      "y": 40,
+      "params": {
+        "assay": "icheme:none",
+        "stages": 10,
+        "feed_stage": 8,
+        "top_pressure": 101325.0,
+        "stage_drop": 0.0,
+        "diameter": 0.0,
+        "condenser": "EXCHANGER",
+        "condenser_temperature": 343.15,
+        "reflux": 3.0,
+        "reboiler_duty": 1770000.0,
+        "draws": [],
+        "steam": [],
+        "pumparounds": []
+      }
+    }
+  ],
+  "streams": [
+    {
+      "id": "WASH",
+      "name": "WASH",
+      "to": {
+        "unit": "E-1",
+        "port": "tube_a"
+      },
+      "feed": {
+        "temperature": 298.15,
+        "pressure": 200000.0,
+        "amounts": {
+          "Ethanol": 10.0,
+          "Water": 90.0
+        }
+      }
+    },
+    {
+      "id": "STEAM",
+      "name": "STEAM",
+      "to": {
+        "unit": "E-1",
+        "port": "shell_a"
+      },
+      "feed": {
+        "temperature": 420.0,
+        "pressure": 400000.0,
+        "amounts": {
+          "Water": 20.0
+        }
+      }
+    },
+    {
+      "id": "CONDENSATE",
+      "name": "CONDENSATE",
+      "from": {
+        "unit": "E-1",
+        "port": "shell_b"
+      }
+    },
+    {
+      "id": "S-1",
+      "name": "S-1",
+      "from": {
+        "unit": "E-1",
+        "port": "tube_b"
+      },
+      "to": {
+        "unit": "T-1",
+        "port": "feed"
+      }
+    },
+    {
+      "id": "VENT",
+      "name": "VENT",
+      "from": {
+        "unit": "T-1",
+        "port": "overhead"
+      }
+    },
+    {
+      "id": "SPIRIT",
+      "name": "SPIRIT",
+      "from": {
+        "unit": "T-1",
+        "port": "distillate"
+      }
+    },
+    {
+      "id": "WATER",
+      "name": "WATER",
+      "from": {
+        "unit": "T-1",
+        "port": "water"
+      }
+    },
+    {
+      "id": "STILLAGE",
+      "name": "STILLAGE",
+      "from": {
+        "unit": "T-1",
+        "port": "bottoms"
+      }
+    }
+  ],
+  "settings": {
+    "flow_tolerance": 1.0E-4,
+    "temperature_tolerance": 0.01,
+    "max_passes": 30,
+    "lowest_factor": -5.0,
+    "highest_factor": 0.0
+  }
+}

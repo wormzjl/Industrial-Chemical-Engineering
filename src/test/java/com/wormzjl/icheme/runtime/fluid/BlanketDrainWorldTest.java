@@ -87,6 +87,6 @@ class BlanketDrainWorldTest {
         assertTrue(low<.05,"the open valve drains it: "+low);
         assertTrue(lowP>.97*SET&&highP<GasBlanket.ventPressure(SET),"the pad holds it near its set pressure while it drains: "+lowP+" to "+highP);
     }
-    static double share(PassiveNetwork.Reservoir n){return (n.state().liquidVolume()+n.state().waterVolume())/n.inventory().volume();}
+    static double share(PassiveNetwork.Reservoir n){return n.state().condensedVolume()/n.inventory().volume();}
     static String status(EventPathWorld w,long drum){var island=w.registry.owner(drum);return island==null?"no island":w.coordinator.observe(island).status();}
 }

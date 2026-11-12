@@ -173,7 +173,8 @@ class MaterialCatalogTest {
             var o=JsonParser.parseString(entry.getValue()).getAsJsonObject();
             assertTrue(o.has("freezing"),entry.getKey());o.remove("freezing");entry.setValue(o.toString());stripped++;
         }
-        assertEquals(49,stripped,"20 bundled datasets and the pilot's 4, the 24 Tier 1 imports (W6) and the crude_pr78 CO2 (O11 of batch 2026-11-04-open-thermo-data)");
+        // W6: ethanol's main record (icheme:chemsep_ethanol) has its freezing sub-record: 50 before it.
+        assertEquals(51,stripped,"ethanol (W6), 20 bundled datasets and the pilot's 4, the 24 Tier 1 imports (W6), the crude_pr78 CO2 (O11 of batch 2026-11-04-open-thermo-data) and the cubic water (W3b step 2, the ice anchor)");
         var without=MaterialCatalog.parse(resources);
         for(var p:bundled.packages().values()) {
             assertEquals(p.scientificRevision(),without.requirePackage(p.id()).scientificRevision(),p.id());
@@ -181,10 +182,12 @@ class MaterialCatalogTest {
             assertEquals(bundled.spineRevision(p.id()),without.spineRevision(p.id()),p.id());
             assertEquals(bundled.physicsContent(p.id(),p.components()),without.physicsContent(p.id(),p.components()),p.id());
             for(String component:p.components()) {
+                if(component.equals("Water"))continue; // W3b: the water model holds the triple point and the ice of Water in a cubic.
                 assertTrue(SubRecords.freezingPoint(bundled,p.id(),component).isPresent(),p.id()+" "+component);
                 assertTrue(SubRecords.freezingPoint(without,p.id(),component).isEmpty(),p.id()+" "+component);
             }
-            assertTrue(SubRecords.freezingPoint(bundled,p.id(),"Water").isEmpty(),p.id());
+            // W3b: a package with Water in its cubic reads the cubic water's freezing record (the ice anchor); no other has one.
+            assertEquals(p.components().contains("Water"),SubRecords.freezingPoint(bundled,p.id(),"Water").isPresent(),p.id());
         }
         for(String id:List.of("icheme:pilot_cryogenic","icheme:refinery")) {
             var co2=SubRecords.freezingPoint(bundled,id,"CarbonDioxide").orElseThrow();

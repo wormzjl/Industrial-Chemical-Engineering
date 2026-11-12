@@ -15,9 +15,11 @@ import java.util.List;
 
 /**
  * A drum or a storage tank (batch 2026-11-02-process-simulator, plan section 3.2): a flash with one outlet per phase and heat
- * none, temperature or duty. A drum stands at its inlet's pressure less a drop, or at a set pressure. A storage tile holds its
- * liquid at the higher of ambient and its bubble pressure, which is what a floating roof does below ambient and a sphere above
- * it, so it needs no type to run; it cannot stand above what arrives, and what stays gas then leaves by the Gas outlet.
+ * none, temperature or duty. A drum stands at its inlet's pressure less a drop, or at a set pressure. A storage tile needs no
+ * type to run: a liquid a floating roof stores ({@link com.wormzjl.icheme.science.flowsheet.FlowThermo#roofStores}: its vapour
+ * pressure at equal vapour and liquid volumes at most 0.766 bar) stands at ambient, and the gas it held dissolved leaves by
+ * the Gas outlet; any other is a sphere's, held unflashed at the higher of ambient and its bubble pressure. It cannot stand
+ * above what arrives, and what stays gas then leaves by the Gas outlet.
  */
 public final class VesselUnit implements UnitModel {
     private static final double AMBIENT = 101325;
@@ -57,7 +59,12 @@ public final class VesselUnit implements UnitModel {
     }
 
     private double pressure(WiredUnit u, FlowStream in) {
-        if (storage) return Math.min(in.pressure(), Math.max(u.params().number("ambient", AMBIENT), u.thermo().bubblePressure(in.temperature(), in.amounts())));
+        if (storage) {
+            double ambient = u.params().number("ambient", AMBIENT);
+            double[] amounts = in.amounts();
+            // 17 flashes for a liquid under a roof, 15 more for a sphere's bubble pressure; no state kept between evaluations.
+            return Math.min(in.pressure(), u.thermo().roofStores(in.temperature(), amounts) ? ambient : Math.max(ambient, u.thermo().bubblePressure(in.temperature(), amounts)));
+        }
         return u.params().text("pressure_mode", "inlet").equals("set") ? u.params().number("pressure") : in.pressure() - u.params().number("drop", 0);
     }
 
@@ -68,6 +75,6 @@ public final class VesselUnit implements UnitModel {
         }
         u.write(board, report, GAS, u.thermo().phase(held, FluidThermodynamics.GAS));
         u.write(board, report, OIL, u.thermo().phase(held, FluidThermodynamics.OIL));
-        u.write(board, report, WATER, u.thermo().phase(held, FluidThermodynamics.WATER));
+        u.write(board, report, WATER, u.thermo().phase(held, FluidThermodynamics.AQUEOUS));
     }
 }

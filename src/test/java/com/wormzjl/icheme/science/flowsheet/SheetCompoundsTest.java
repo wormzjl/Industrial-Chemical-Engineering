@@ -17,6 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * A sheet runs on its own compound list (batch 2026-11-04-refinery-compounds, W3; owner 2026-11-04): the network package's compounds its
@@ -103,10 +104,10 @@ final class SheetCompoundsTest {
             if (a.state() == null) continue;
             bits(a.state().volume(), b.state().volume(), id + " volume");
             bits(a.state().enthalpy(), b.state().enthalpy(), id + " state H");
-            bits(a.state().waterLiquid(), b.state().waterLiquid(), id + " free water");
+            bits(TestPhases.waterLiquid(a.state()), TestPhases.waterLiquid(b.state()), id + " free water");
             for (int i = 0; i + 1 < AXIS.size(); i++) {
-                bits(a.state().liquidView()[i], b.state().liquidView()[i], id + " liquid " + AXIS.get(i));
-                bits(a.state().vaporView()[i], b.state().vaporView()[i], id + " vapour " + AXIS.get(i));
+                bits(TestPhases.liquid(a.state())[i], TestPhases.liquid(b.state())[i], id + " liquid " + AXIS.get(i));
+                bits(TestPhases.vapor(a.state())[i], TestPhases.vapor(b.state())[i], id + " vapour " + AXIS.get(i));
             }
         }
         assertEquals(whole.reports().get("D").readings(), viewed.reports().get("D").readings());

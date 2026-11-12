@@ -270,7 +270,8 @@ final class FlowsheetColumnTest {
         var limit = run.reports().get("H-101").notes().stream().filter(note -> note.key().equals("heater.limit")).findFirst().orElseThrow();
         // 98.04 MW: the column took the network's water (E30 of batch 2026-11-04-open-thermo-data), 16 kW less from the products'
         // small re-split, and the pumps' losses heat the crude (D42 of batch 2026-11-03-rotating-machinery), some 45 kW less.
-        assertEquals(98.04e6, Double.parseDouble(limit.arguments().getFirst()), .01e6, "what the furnace asks");
+        // 98.03 MW since W5 D1 of batch 2026-11-11-aqueous-solvents: the column flashes on the network's derived pairs (14 kW less; 98.04 MW to W5a).
+        assertEquals(98.03e6, Double.parseDouble(limit.arguments().getFirst()), .01e6, "what the furnace asks");
         assertEquals(90e6, Double.parseDouble(limit.arguments().get(1)), 1, "and what it may give");
     }
 

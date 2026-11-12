@@ -149,6 +149,11 @@ class SizeAllSampleTest {
      * crude less heat and the furnace fires 73.03 MW before sizing, not 73.00. With condenser
      * carry-over (E31) it fires 73.08 MW before sizing and 67.60 after. Since the pumps' losses heat the crude (D42 of batch
      * 2026-11-03-rotating-machinery) it fires 73.06 MW before sizing and 67.58 after, and the sized coil's vapour share is 0.415.
+     * Since the derived pairs (W3b of batch 2026-11-11-aqueous-solvents) it fires 73.0525 MW before sizing, 3.9 kW under the
+     * 73.0565 it fired: the crude's 2.5 mol/s of methane and 5.3 mol/s of ethane mix with its cuts under the derived rule, and
+     * the liquid's residual enthalpy stands 3.9 kW higher at the feed's 298 K, 3.4 kW higher at the coil's inlet and 0.2 kW
+     * higher at its two-phase outlet. Without those two compounds the crude's enthalpy is the same to the milliwatt at all
+     * three states, and the ideal-gas part is the same. 0.24 kW of it is E-101, whose residue the column makes 0.026 mol/s more of.
      */
     @Test
     void theSampleSizedMovesAsThePlanSays() {
@@ -157,7 +162,8 @@ class SizeAllSampleTest {
         assertEquals(FlowsheetRun.Status.STEADY, all.run().status());
         assertEquals(5.00, before.get("S-6").pressure() / 1e5, HUNDREDTH);
         assertEquals(11.9, after.get("S-6").pressure() / 1e5, .15);
-        assertEquals(73.06, run.reports().get("H-101").readings().get("duty") / 1e6, HUNDREDTH);
+        assertEquals(73.05, run.reports().get("H-101").readings().get("duty") / 1e6, HUNDREDTH,
+                "73.06 before W3b's derived pairs: methane and ethane in the crude's liquid carry 3.9 kW more residual enthalpy into the coil");
         assertEquals(67.58, all.run().reports().get("H-101").readings().get("duty") / 1e6, .1);
         assertEquals(358.5, before.get("S-7").temperature() - 273.15, .1);
         assertEquals(347.1, after.get("S-7").temperature() - 273.15, .15);

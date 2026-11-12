@@ -7,6 +7,7 @@ import com.wormzjl.icheme.science.material.MaterialCatalog;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * The pump's suction (decisions D1, D4, D6 and A37 of documentation/2026-09-26-phase-ports-and-compressor; plan 3.6): the
@@ -28,7 +29,7 @@ class InletPhaseTest extends PortFixture {
 
     /** A 1 m3 vessel at 298.15 K and {@code pressure} holding {@code waterVolume} m3 of water under nitrogen. */
     /** Vapour share of a state's fluid volume. */
-    private static double share(FluidThermodynamics.State s){return s.vaporVolume()/(s.vaporVolume()+s.liquidVolume()+s.waterVolume());}
+    private static double share(FluidThermodynamics.State s){return s.vaporVolume()/(s.vaporVolume()+TestPhases.liquidVolume(s)+TestPhases.waterVolume(s));}
     /** Water with nitrogen at 298.15 K and {@code pressure} whose vapour fills {@code target} of its fluid volume (bisection
      * on the nitrogen amount; 1 m3 of water). */
     private FluidThermodynamics.State twoPhase(double target,double pressure) {
@@ -57,8 +58,10 @@ class InletPhaseTest extends PortFixture {
             for(var transfer:result.boundaries()){var n=transfer.moles();for(int c=0;c<n.length;c++)external[c]+=n[c];externalEnergy+=transfer.totalEnergyJoule();}
             externalEnergy+=result.pumpWorkJoule();
             var now=owned(graph);
-            for(int c=0;c<now.length;c++){double error=Math.abs(now[c]-initial[c]-external[c])/Math.max(1,initial[c]);
-                assertTrue(error<COMPONENT_LEDGER,label+" slice "+slice+": component "+c+" ledger "+error);}
+            // Relative to what the ledger books: a component the island starts without (the generator's water, 3360 mol after
+            // four 5 s slices) rounds on its booked amount, 3 ulp of it being 1.4e-12 mol.
+            for(int c=0;c<now.length;c++){double error=Math.abs(now[c]-initial[c]-external[c])/Math.max(1,Math.max(initial[c],Math.abs(external[c])));
+                assertTrue(error<COMPONENT_LEDGER,label+" slice "+slice+": component "+c+" ledger "+error+" (initial "+initial[c]+", now "+now[c]+", external "+external[c]+")");}
             double error=Math.abs(ownedEnergy(graph)-initialEnergy-externalEnergy)/Math.max(1,Math.abs(initialEnergy));
             assertTrue(error<ENERGY_LEDGER,label+" slice "+slice+": energy ledger "+error);
             accepted+=result.acceptedSubsteps();rejected+=result.rejectedSubsteps();result.rejectionReasons().forEach((k,v)->reasons.merge(k,v,Integer::sum));
@@ -120,7 +123,7 @@ class InletPhaseTest extends PortFixture {
                 case "top","dry bottom"->{assertEquals(1,supply.vapourVolumeShare());assertEquals(1,leading.vapourVolumeShare());}
                 default->{
                     // 4 L of water against 5 L of target over the slice: the draw is 1 L of gas in 5 (by the fluid volumes).
-                    double waterVolume=shortOfWater.waterVolume();
+                    double waterVolume=TestPhases.waterVolume(shortOfWater);
                     assertEquals((.005-waterVolume)/.005,supply.vapourVolumeShare(),1e-12,"the draw breaks through to gas");
                     assertEquals(0,leading.vapourVolumeShare(),"the leading phase alone reads water");
                 }
@@ -219,7 +222,7 @@ class InletPhaseTest extends PortFixture {
         double target=.002,interval=5;
         // The tank's water volume made exactly 2.99 slices of the target (the flash moves it from the charged volume).
         double charged=2.99*target*interval;var tankState=waterUnderNitrogen(charged,120000);
-        for(int i=0;i<3;i++)tankState=waterUnderNitrogen(charged*=2.99*target*interval/tankState.waterVolume(),120000);
+        for(int i=0;i<3;i++)tankState=waterUnderNitrogen(charged*=2.99*target*interval/TestPhases.waterVolume(tankState),120000);
         var start=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,tankState),
                 new PassiveNetwork.Reservoir(2,0,nitrogenAt(150000),PassiveNetwork.NodeKind.VOID)),
                 List.of(pipe(10,0,1,line(5,.025),new FlowControl.Pump(target,500000),PhasePort.LIQUID,PhasePort.BULK)));
@@ -227,13 +230,13 @@ class InletPhaseTest extends PortFixture {
         var modes=new ArrayList<String>();var drawn=new ArrayList<Double>();
         for(var s:run.slices()){modes.add(String.valueOf(s.endpointModes().getFirst()));drawn.add(s.averageMassFlows()[0]*interval);}
         var tank=run.last().reservoirs().getFirst().state();
-        System.out.println("INLET_PHASE_RUN fixture5 modes="+modes+" drawnKg="+drawn+" tankWater="+tank.waterLiquid()*mw[water]+"kg accepted="+run.accepted()+" rejected="+run.rejected()+" reasons="+run.reasons());
+        System.out.println("INLET_PHASE_RUN fixture5 modes="+modes+" drawnKg="+drawn+" tankWater="+TestPhases.waterLiquid(tank)*mw[water]+"kg accepted="+run.accepted()+" rejected="+run.rejected()+" reasons="+run.reasons());
         assertEquals(FlowControl.Mode.MOVER_LAW,run.slices().get(0).endpointModes().getFirst());
         assertEquals(FlowControl.Mode.MOVER_LAW,run.slices().get(1).endpointModes().getFirst());
         for(int i=0;i<2;i++)assertEquals(target*interval*997,drawn.get(i),.01*target*interval*997,"slice "+i+" on target");
         for(int i=2;i<8;i++){assertNotEquals(FlowControl.Mode.INLET_WRONG_PHASE,run.slices().get(i).endpointModes().getFirst(),"not refused: "+modes);
             if(i>=3)assertTrue(drawn.get(i)<.01*target*interval*997,"slice "+i+" draws next to nothing: "+drawn);}
-        assertTrue(tank.waterVolume()<1e-6,"the port drew the water");
+        assertTrue(TestPhases.waterVolume(tank)<1e-6,"the port drew the water");
     }
 
     // ---- Fixture 8: certified replay with a pump on a gassy supply -----------------------------------------------------

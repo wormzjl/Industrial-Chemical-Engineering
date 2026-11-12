@@ -12,6 +12,7 @@ import java.util.*;
 import org.junit.jupiter.api.Test;
 import static com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Direction.*;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * F2 of the owner's test world (row R9; documentation/2026-09-24-coolprop-low-temperature/TEST_WORLD_PLAN.md, section 5),
@@ -50,7 +51,7 @@ class SlurryTankPumpTest {
         var dryIce=new SolidInventory(List.of(new SolidInventory.Population(pilot.crystalSolids().all().getFirst().material(),new ParticleSize("0.00025"),2.919)));
         double t=111.59,p=101370.5;
         double[] liquid=new double[4],vapour=new double[4];liquid[METHANE]=15130;liquid[CO2]=7.548;vapour[METHANE]=49.23;vapour[CO2]=5.6e-4;
-        var guess=pilot.state(t,p,liquid,vapour,0,0,p).withSolids(dryIce);
+        var guess=TestPhases.state(pilot,t,p,liquid,vapour,0,0).withSolids(dryIce);
         var vessel=new PassiveNetwork.Reservoir(TANK,1,guess,PassiveNetwork.NodeKind.RESERVOIR,new PassiveNetwork.Inventory(1,PhaseLayout.totalAmounts(guess),guess.internalEnergy(),dryIce));
         return InventoryEquilibrium.refresh(new PassiveNetwork(List.of(vessel),List.of()),pilot,()->{}).graph().reservoirs().getFirst();
     }
@@ -90,7 +91,7 @@ class SlurryTankPumpTest {
         var g=result.graph();int pump=edge(g,FlowControl.Pump.class),line=suction(g);var j=pumpJunction(g);var tank=g.reservoirs().get(node(g,TANK)).state();
         System.out.printf(Locale.ROOT,"SLURRY_PUMP %s: pump %s %.5f kg/s, suction %.5f kg/s closed=%d; junction %.2f K %.1f Pa %.1f kg/m3; tank %.2f K %.1f Pa liquid %.4f m3 solids %.3f kg; substeps %d/%d %s%n",
                 label,result.endpointModes().get(pump),result.averageMassFlows()[pump],result.averageMassFlows()[line],g.pipes().get(line).blockedDirections(),
-                j.temperature(),j.pressure(),j.mass()/j.volume(),tank.temperature(),tank.pressure(),tank.liquidVolume(),tank.solidMoments().mass(),
+                j.temperature(),j.pressure(),j.mass()/j.volume(),tank.temperature(),tank.pressure(),TestPhases.liquidVolume(tank),tank.solidMoments().mass(),
                 result.acceptedSubsteps(),result.rejectedSubsteps(),result.rejectionReasons());
         return result;
     }
@@ -99,7 +100,7 @@ class SlurryTankPumpTest {
      * slurry it draws (the tank's liquid at the tank's temperature), not from the 298 K nitrogen placeholder. */
     @Test void aPumpUnderAVentedLngSlurryTankStartsAndDrawsTheSlurry() {
         var minted=island(.005);var j=pumpJunction(minted);double tankTemperature=minted.reservoirs().get(node(minted,TANK)).state().temperature();
-        System.out.printf(Locale.ROOT,"SLURRY_PUMP minted junction: %.2f K %.1f Pa %.1f kg/m3 liquid %.3e m3 vapour %.3e m3%n",j.temperature(),j.pressure(),j.mass()/j.volume(),j.liquidVolume(),j.vaporVolume());
+        System.out.printf(Locale.ROOT,"SLURRY_PUMP minted junction: %.2f K %.1f Pa %.1f kg/m3 liquid %.3e m3 vapour %.3e m3%n",j.temperature(),j.pressure(),j.mass()/j.volume(),TestPhases.liquidVolume(j),j.vaporVolume());
         var retained=new RetainedSolver();PassiveIntervalSolver.Result last=null;var graph=minted;
         for(int k=1;k<=2;k++){last=slice(retained,last,graph,"fast "+k);graph=last.graph();}
         int pump=edge(graph,FlowControl.Pump.class);

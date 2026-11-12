@@ -39,12 +39,12 @@ class PilotCryogenicCatalogTest {
      * is every record's revision (MaterialCatalogTest checks the composition), and the physics the packages share is
      * compared directly ({@link #TJL20_PHYSICS}). The refinery record is r3 since O11 of batch 2026-11-04-open-thermo-data
      * (decisions E25, E27): it holds CO2 on its ChemSep dataset and admits the CO2-I crystal, the only column or network
-     * package with a crystal.
+     * package with a crystal. It is r4 since W6 of batch 2026-11-11-aqueous-solvents (ethanol joins icheme:refinery).
      */
     private static final String[][] BUNDLED_PINS = {
         {"icheme:tjl20_methane", "icheme:tjl20_methane@crude-regrouped-r3"},
         {"icheme:tjl20_methane_nitrogen", "icheme:tjl20_methane_nitrogen@crude-regrouped-r3"},
-        {"icheme:refinery", "icheme:refinery@refinery-tier1-r3"},
+        {"icheme:refinery", "icheme:refinery@refinery-tier1-r4"},
     };
     private static final String TJL20 = "icheme:tjl20_methane";
     /**
@@ -61,7 +61,8 @@ class PilotCryogenicCatalogTest {
      * the record's revision, which moves the pin. Until 2026-10-26 these were hashes of the data (history in this file's
      * git log). Since batch 2026-11-04-refinery-compounds the package names its method (r2), which holds the model, the
      * pair libraries and the water model; since option B (2026-11-04) the package record leaves the identity and the method leads;
-     * since D7 (2026-11-04) the method is named by its physics fields, not by its record's revision.
+     * since D7 (2026-11-04) the method is named by its physics fields, not by its record's revision. The water record is r4
+     * since W3b of batch 2026-11-11-aqueous-solvents (e1b9a3dd0, the liquid-water datum on IF97's latent heat).
      */
     private static final String PILOT_SCIENTIFIC_REVISION = String.join(";",
             "method=model:pr78,ideal-gas:spine,missing-interactions:error,pressure-pascal:100..10000000",
@@ -72,7 +73,7 @@ class PilotCryogenicCatalogTest {
                     "icheme:pilot_carbon_dioxide@pilot-carbon-dioxide-p3-r1"),
             "interactions=icheme:pilot_cryogenic@pilot-cryogenic-eppr78-r1",
             "group-interactions=icheme:eppr78_2022@eppr78-2022-si-table-s4-r2",
-            "water=icheme:water@water-iapws95-shomate-r3");
+            "water=icheme:water@water-iapws95-shomate-r4");
     private static final String PILOT_SPINE_REVISION = "spine:icheme:spine_nitrogen@spine-nitrogen-r3,icheme:spine_methane@spine-methane-r3,"
             + "icheme:spine_ethane@spine-ethane-r3,icheme:spine_carbon_dioxide@spine-carbon_dioxide-r4,icheme:crystal_carbon_dioxide_i@crystal-carbon_dioxide-i-r2";
 
@@ -228,7 +229,10 @@ class PilotCryogenicCatalogTest {
         refused(METHANE, o -> o.addProperty("molar_mass_kg_per_mol", 0.01605), "above 1e-4");
         refused(PACKAGE, o -> o.getAsJsonArray("crystals").add("icheme:crystal_carbon_dioxide_i"), "crystals: duplicate crystal record");
         refused(PACKAGE, o -> o.getAsJsonArray("crystals").set(0, new JsonPrimitive("icheme:crystal_water_ih")), "crystals: unresolved");
-        refused(CRYSTAL, o -> o.addProperty("component", "Water"), "is for Water, outside the package components");
+        // Water has a dataset since W3b step 2 (icheme:cubic_water): the relabelled crystal takes its triple point too, so
+        // the dataset agrees with the anchor and the refusal is the package's.
+        refused(CRYSTAL, o -> { o.addProperty("component", "Water"); o.getAsJsonObject("anchor").addProperty("temperature_kelvin", 273.16); },
+                "is for Water, outside the package components");
     }
 
     /** D6: one ideal-gas source per species; ideal_gas_cp is optional only under a method that takes the reference spines. */

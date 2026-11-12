@@ -10,6 +10,7 @@ import com.wormzjl.icheme.science.material.MaterialTestBasis;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * The block lines a player actually builds around an inline filter, compiled through the real
@@ -268,9 +269,9 @@ class FilterBlockLineIslandTest extends BlockLineHarness {
         assertTrue(shutoff.detail().startsWith("OK"),shutoff.detail());
         var pumped=control.last();var reference=shutoff.last();
         System.out.println("(endpoint) pumped tank P="+pumped.pressure()+" mass="+pumped.mass()+" T="+pumped.temperature()
-                +" liq="+(pumped.liquidVolume()+pumped.waterVolume())+" vap="+pumped.vaporVolume()
+                +" liq="+(TestPhases.liquidVolume(pumped)+TestPhases.waterVolume(pumped))+" vap="+pumped.vaporVolume()
                 +"\n(endpoint) passive tank P="+reference.pressure()+" mass="+reference.mass()+" T="+reference.temperature()
-                +" liq="+(reference.liquidVolume()+reference.waterVolume())+" vap="+reference.vaporVolume());
+                +" liq="+(TestPhases.liquidVolume(reference)+TestPhases.waterVolume(reference))+" vap="+reference.vaporVolume());
         assertEquals(101325+500000,pumped.pressure(),1e-6*601325,
                 "A pumped line must settle at its own shutoff pressure");
         assertEquals(reference.pressure(),pumped.pressure(),1e-6*reference.pressure(),

@@ -23,8 +23,11 @@ public final class SolidMobility {
     }
     private SolidMobility() {}
     public static boolean immobileLiquid(FluidThermodynamics model,FluidThermodynamics.State state) {
-        return state.liquidVolume()>0&&SlurryTransport.immobile(model.viscosity.liquid(state.temperature(),state.liquidView()).pascalSeconds(),model.solidSettings.immobileViscosity())
-                ||state.waterVolume()>0&&SlurryTransport.immobile(model.viscosity.waterLiquid(state.temperature()),model.solidSettings.immobileViscosity());
+        return immobile(model,state,FluidThermodynamics.OIL)||immobile(model,state,FluidThermodynamics.AQUEOUS);
+    }
+    /** Whether the liquid labelled {@code label} is held and immobile (W3b: either liquid, by its own viscosity). */
+    private static boolean immobile(FluidThermodynamics model,FluidThermodynamics.State state,int label) {
+        return state.labelVolume(label)>0&&SlurryTransport.immobile(model.viscosity.liquid(state.temperature(),state.labelAmountsView(label)).pascalSeconds(),model.solidSettings.immobileViscosity());
     }
     /** Whether a connection of {@code graph} can close for its solids at the interval's t0: a filter, a vessel holding solids
      * or an immobile liquid, or a feed of solids. {@code SolidEventIntegrator} reads the island's closures at t0 only then; it
@@ -35,7 +38,7 @@ public final class SolidMobility {
                 ||graph.scheduledTransfers().stream().anyMatch(t->t instanceof com.wormzjl.icheme.science.fluid.network.ScheduledTransfer.Injection in&&!in.solidsPerSecond().empty());
     }
     public static boolean monitored(PassiveNetwork graph) {
-        return graph.pipes().stream().anyMatch(p->p.filter()!=null)||graph.reservoirs().stream().anyMatch(n->n.state().solidMoments().mass()>0||n.state().liquidVolume()>0)
+        return graph.pipes().stream().anyMatch(p->p.filter()!=null)||graph.reservoirs().stream().anyMatch(n->n.state().solidMoments().mass()>0||n.state().labelVolume(FluidThermodynamics.OIL)>0)
                 ||graph.scheduledTransfers().stream().anyMatch(t->t instanceof com.wormzjl.icheme.science.fluid.network.ScheduledTransfer.Injection in&&!in.solidsPerSecond().empty());
     }
     /**
@@ -62,11 +65,8 @@ public final class SolidMobility {
     /** {@link Donor} for one state. A donor with no solid above the trace volume fraction
      * costs the two carrier tests and nothing else: no deposition velocity, no mixture viscosity. */
     public static Donor donor(FluidThermodynamics model, FluidThermodynamics.State state) {
-        boolean immobileOrganic=state.liquidVolume()>0
-                &&SlurryTransport.immobile(model.viscosity.liquid(state.temperature(),state.liquidView()).pascalSeconds(),model.solidSettings.immobileViscosity());
-        boolean immobileWater=state.waterVolume()>0
-                &&SlurryTransport.immobile(model.viscosity.waterLiquid(state.temperature()),model.solidSettings.immobileViscosity());
-        double liquidVolume=state.liquidVolume()+state.waterVolume();
+        boolean immobileOrganic=immobile(model,state,FluidThermodynamics.OIL),immobileWater=immobile(model,state,FluidThermodynamics.AQUEOUS);
+        double liquidVolume=state.condensedVolume();
         boolean active=false;double largest=0,required=0,carrierDensity=0,carrierViscosity=0;
         var solids=state.solids();var populations=solids.populations();
         // A solid's populations are adjacent in key order (material first).
@@ -76,11 +76,10 @@ public final class SolidMobility {
             if(!SlurryTransport.activeForBlockage(volume,state.volume(),model.solidSettings.traceVolumeFraction()))continue;
             double diameter=(next==first+1?populations.get(first).size():solids.size(material.id())).diameterMetres();
             if(!active&&liquidVolume>0) {
-                double liquidMass=state.waterLiquid()*model.waterMolecularWeight;
-                var n=state.liquidView();for(int c=0;c<n.length;c++)liquidMass+=n[c]*model.molecularWeight(c);
+                double liquidMass=model.slotMass(state,FluidThermodynamics.State.LIQUID)+model.slotMass(state,FluidThermodynamics.State.AQUEOUS);
                 double mu=0;
-                if(state.liquidVolume()>0)mu+=state.liquidVolume()*model.viscosity.liquid(state.temperature(),n).pascalSeconds();
-                if(state.waterVolume()>0)mu+=state.waterVolume()*model.viscosity.waterLiquid(state.temperature());
+                for(int slot:new int[]{FluidThermodynamics.State.LIQUID,FluidThermodynamics.State.AQUEOUS})
+                    if(state.slotVolume(slot)>0)mu+=state.slotVolume(slot)*model.viscosity.liquid(state.temperature(),state.amountsView(slot)).pascalSeconds();
                 carrierDensity=liquidMass/liquidVolume;carrierViscosity=mu/liquidVolume;
             }
             active=true;

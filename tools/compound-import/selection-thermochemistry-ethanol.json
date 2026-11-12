@@ -1,0 +1,29 @@
+{
+  "comment": "Batch 2026-11-11-aqueous-solvents, W6: the thermochemistry and flammability sub-records of the main ethanol record icheme:chemsep_ethanol, by the route of the 33 defined compounds (selection-thermochemistry-existing.json, O9 form S2): ChemSep's ideal-gas heat of formation at 298.15 K and the element formula; limits from the NIOSH Pocket Guide, ethyl alcohol, read 2026-11-12. Heats of combustion follow by Hess (tools/heating-values).",
+  "properties_revision": "unused",
+  "viscosity_revision": "unused",
+  "freezing_revision": "unused",
+  "thermochemistry_revision": "chemsep-8.3-hf-r1",
+  "flammability_revision": "npg-b627-r1",
+  "limit_sources": {
+    "niosh_npg": "NIOSH Pocket Guide to Chemical Hazards, {entry} ({ref}, https://www.cdc.gov/niosh/npg/{ref}.html, read 2026-11-12): LEL and UEL in air. CDC material, in the public domain. Constant with temperature (owner decision E23)."
+  },
+  "form": {},
+  "compounds": [],
+  "thermochemistry_only": [
+    {
+      "component": "Ethanol",
+      "cas": "64-17-5",
+      "formula": "C2H6O",
+      "properties": "icheme:chemsep_ethanol",
+      "properties_file": "chemsep_ethanol.json",
+      "limits": {
+        "lfl_volume_percent": 3.3,
+        "ufl_volume_percent": 19,
+        "source": "niosh_npg",
+        "ref": "npgd0262",
+        "entry": "Ethyl alcohol"
+      }
+    }
+  ]
+}

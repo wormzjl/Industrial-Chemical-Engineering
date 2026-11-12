@@ -16,6 +16,7 @@ import java.util.Arrays;
 import org.junit.jupiter.api.Test;
 import static com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Direction.*;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * The hold-class worlds of the phase-ports batch (PHASE_PORTS_REVIEW.md, "Hold class ..." sections) and the later
@@ -540,7 +541,7 @@ class HoldClassWorldsTest {
             w.runTo(1254+5*100);
             for(var s:w.coordinator.snapshots())for(var node:s.graph().reservoirs())if(node.kind()==PassiveNetwork.NodeKind.RESERVOIR)
                 System.out.println("REFUTED_PROPOSAL island "+s.id()+" node "+node.id()+" z="+node.elevation()+" P="+node.state().pressure()+" T="+node.state().temperature()
-                        +" m="+node.state().mass()+" liq="+node.state().liquidVolume()+" vap="+node.state().vaporVolume()+" solidsKg="+node.state().solids().massKg());
+                        +" m="+node.state().mass()+" liq="+TestPhases.liquidVolume(node.state())+" vap="+node.state().vaporVolume()+" solidsKg="+node.state().solids().massKg());
             w.assertKeptUp("a boiling tank draining into an empty tank below");
             for(var s:w.coordinator.snapshots())for(var node:s.graph().reservoirs())if(node.kind()==PassiveNetwork.NodeKind.RESERVOIR)
                 assertEquals(0,node.state().vaporVolume(),"tank "+node.id()+" at "+node.state().pressure()+" Pa, "+node.state().temperature()+" K holds no vapour");
@@ -669,9 +670,9 @@ class HoldClassWorldsTest {
         var top=nodes.get(a).state();var bottom=nodes.get(b).state();
         double dz=nodes.get(a).elevation()-nodes.get(b).elevation(),column=bottom.pressure()-top.pressure();
         double upperColumn=w.model.vaporDensity(top)*PassiveStepSolver.GRAVITY*dz,lowerColumn=w.model.vaporDensity(bottom)*PassiveStepSolver.GRAVITY*dz;
-        System.out.println("STATIC_COLUMN_WORLD upper P="+top.pressure()+" liquid="+top.liquidVolume()+" lower P="+bottom.pressure()+" liquid="+bottom.liquidVolume()
+        System.out.println("STATIC_COLUMN_WORLD upper P="+top.pressure()+" liquid="+TestPhases.liquidVolume(top)+" lower P="+bottom.pressure()+" liquid="+TestPhases.liquidVolume(bottom)
                 +" gas column="+column+" Pa (the upper tank's gas "+upperColumn+", the lower tank's "+lowerColumn+") drop line="+flow+" kg/s");
-        assertEquals(0,top.liquidVolume(),"the upper tank is dry: the condensate ran down");
+        assertEquals(0,TestPhases.liquidVolume(top),"the upper tank is dry: the condensate ran down");
         // Owner decision of 2026-10-19 (decision 2 of FORM_D_GATES_TRACE.md): the line stands as a gas column, any between the two
         // tanks' gas columns (it holds the upper tank's gas, which cools towards the lower tank's), never the 17.3 kPa condensate one.
         assertTrue(column>=Math.min(upperColumn,lowerColumn)-.1&&column<=Math.max(upperColumn,lowerColumn)+.1,
@@ -786,7 +787,7 @@ class HoldClassWorldsTest {
             w.runTo(1593+5*100);
             for(var s:w.coordinator.snapshots())for(var node:s.graph().reservoirs())
                 System.out.println("VANISHING_RULE island "+s.id()+" node "+node.id()+" "+node.kind()+" z="+node.elevation()+" P="+node.state().pressure()+" T="+node.state().temperature()
-                        +" m="+node.state().mass()+" liq="+node.state().liquidVolume()+" vap="+node.state().vaporVolume()+" solidsKg="+node.state().solids().massKg());
+                        +" m="+node.state().mass()+" liq="+TestPhases.liquidVolume(node.state())+" vap="+node.state().vaporVolume()+" solidsKg="+node.state().solids().massKg());
             w.assertKeptUp("a junction's vapour collapsing in a subcooled liquid");
             // The junctions carry the LNG at 2.4 to 3.8 MPa and 168.5 to 169.1 K, above its bubble pressure: liquid only.
             for(var s:w.coordinator.snapshots())for(var node:s.graph().reservoirs())if(node.junction())
@@ -874,7 +875,7 @@ class HoldClassWorldsTest {
         var s=w.coordinator.snapshots().stream().filter(sn->sn.graph().reservoirs().stream().anyMatch(r->r.kind()==PassiveNetwork.NodeKind.RESERVOIR)).findFirst().orElseThrow();
         var tank=s.graph().reservoirs().stream().filter(r->r.kind()==PassiveNetwork.NodeKind.RESERVOIR).findFirst().orElseThrow().state();
         var result=s.lastResult().orElseThrow();
-        System.out.println("LIQUID_FULL_CRUDE status="+s.status()+" P="+tank.pressure()+" T="+tank.temperature()+" liqV="+tank.liquidVolume()+" vapV="+tank.vaporVolume()+" flows="+Arrays.toString(result.averageMassFlows()));
+        System.out.println("LIQUID_FULL_CRUDE status="+s.status()+" P="+tank.pressure()+" T="+tank.temperature()+" liqV="+TestPhases.liquidVolume(tank)+" vapV="+tank.vaporVolume()+" flows="+Arrays.toString(result.averageMassFlows()));
         assertEquals(0,tank.vaporVolume(),"liquid-full: no vapour");
         assertEquals(315670.8797145338,tank.pressure(),.01*315670.8797145338,"pressed to the supply");
         assertTrue(s.status().startsWith("STEADY"),"at rest: "+s.status());

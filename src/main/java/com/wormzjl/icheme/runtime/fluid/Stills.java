@@ -10,7 +10,6 @@ import com.wormzjl.icheme.science.fluid.network.PassiveIntervalSolver;
 import com.wormzjl.icheme.science.fluid.network.PassiveNetwork;
 import com.wormzjl.icheme.science.fluid.network.Pool;
 import com.wormzjl.icheme.science.fluid.network.PortPlan;
-import com.wormzjl.icheme.science.fluid.network.StillColumn;
 import com.wormzjl.icheme.science.fluid.network.StillHead;
 import java.util.*;
 import java.util.function.LongFunction;
@@ -98,7 +97,7 @@ public final class Stills implements IslandCoordinator.Ports {
 
     private static final class Run {
         StillHead.Solved solved,next;long nextTick=Long.MAX_VALUE,applyTick=Long.MAX_VALUE;boolean pending;long lastSubmit=Long.MIN_VALUE/2;
-        double condensed=1,heat,boiling,fired,perKilogram,fPerWatt;String failure;
+        double condensed=1,heat,boiling,fired,perKilogram,fPerWatt,spout;String failure;
         long potIsland=-1;final ArrayDeque<Arrival> arrivals=new ArrayDeque<>();final ArrayDeque<Paid> paid=new ArrayDeque<>();
         double potTemperature=Double.NaN,level,filled,distillateFlow,ventFlow,transit;
         int alarms;BatchStill.Status status=BatchStill.Status.IDLE;
@@ -185,7 +184,7 @@ public final class Stills implements IslandCoordinator.Ports {
     private double heat(StillUnit u,Run r,PassiveNetwork.Reservoir node,double seconds) {
         var design=u.design();double asked=firing(u)*design.rating();
         var s=node.state();int alarms=0;
-        double liquid=s.liquidVolume()+s.waterVolume(),volume=node.inventory().volume();
+        double liquid=s.condensedVolume(),volume=node.inventory().volume();
         r.potTemperature=s.temperature();r.filled=volume>0?liquid/volume:0;r.level=r.filled*node.inventory().levelHeight();
         double available=switch(u.heater()) {
             case SOLID->asked>0?Math.min(1,u.burning()*u.heater().efficiency()/(asked*seconds)):0;
@@ -250,16 +249,19 @@ public final class Stills implements IslandCoordinator.Ports {
         double total=0;for(double n:available)total+=n;
         var mine=total>0?onIsland(island,available):null;
         if(!(total>0)||mine==null)return new PortPlan(node.id(),node.id(),0,node.state().temperature(),com.wormzjl.icheme.science.fluid.solver.PhaseLayout.totalAmounts(node.state()));
-        double temperature=r.solved==null?r.potTemperature:distillate?r.solved.condensateTemperature():r.solved.headTemperature();
+        // The distillate leaves at the condenser's outlet; the vent at the outlet too where the condenser took all (a partial
+        // condenser's gas), else at the head (COOLING LIMITED: the vapour it could not take).
+        double temperature=r.solved==null?r.potTemperature:distillate||r.condensed>=1?r.solved.condensateTemperature():r.solved.headTemperature();
         if(!(temperature>0))temperature=node.state().temperature();
         double mass=mass(available),target=mass/Math.max(slice.seconds(coordinator.time()),holdSeconds());
         return new PortPlan(node.id(),node.id(),target,temperature,mine);
     }
-    /** The compounds outlet {@code device} may deliver: those its account holds (water not named), for its island's list. */
+    /** The compounds outlet {@code device} may deliver, for its island's list: those its account holds, and Water whatever it
+     * holds now (W3b option A: a still's outlet can deliver water, so its island is wet from the start). */
     public Set<String> compounds(long device) {
         sync();Long pot=outlets.get(device);var u=pot==null?null:topology.still(pot);if(u==null)return Set.of();
         var n=(device==u.distillate()?u.head():u.venting()).moles();var out=new TreeSet<String>();
-        for(int i=0;i<n.length-1;i++)if(n[i]>0)out.add(axis.get(i));
+        for(int i=0;i<n.length;i++)if(n[i]>0||i==n.length-1)out.add(axis.get(i));
         return out;
     }
 
@@ -293,6 +295,7 @@ public final class Stills implements IslandCoordinator.Ports {
             double joule=potHeat==null?0:potHeat.getOrDefault(node.id(),0.);
             u=burn(u,joule,seconds,end);
             var n=arrived==null?null:arrived.get(node.id());double e=arrivedEnergy==null?0:arrivedEnergy.getOrDefault(node.id(),0.);
+            r.spout=0;
             if(n!=null||e!=0)u=arrive(u,r,n==null?new double[axis.size()]:n,e,end);
             if(joule!=0)u=u.withTotals(u.heated()+joule,u.condensed());
             if(u!=original)topology.still(u);
@@ -332,11 +335,10 @@ public final class Stills implements IslandCoordinator.Ports {
     }
     /** What reached the head over a committed span: into the accounts, divided by the condenser; energy alone is the condenser's. */
     private StillUnit arrive(StillUnit u,Run r,double[] moles,double energy,long end) {
-        var world=critical(r);
-        double condensate=r.solved==null?r.potTemperature:r.solved.condensateTemperature();
         double liquid=StillHead.liquidShare(reflux(u),r.condensed);
-        // Before the column's first answer the condensate stands at the pot's temperature.
-        var division=StillHead.divide(moles,energy,world,condensate,liquid,u.condenser());
+        // Each component's liquid share at the condenser's outlet, the column's answer; before its first one none condenses.
+        var division=StillHead.divide(moles,energy,shares(r),liquid,u.condenser());
+        for(double d:division.distillate())r.spout+=d;
         double total=0;for(double n:moles)total+=n;
         if(!(total>0)) {
             // Energy with no moles: a closed column's reflux, condensed and returned; the water (or the air) takes it now.
@@ -388,8 +390,10 @@ public final class Stills implements IslandCoordinator.Ports {
         var u=topology.still(pot);var r=runs.get(pot);if(u==null||r==null)return null;
         r.transit=transit;r.paid.addLast(new Paid(start,0,transit));
         while(r.paid.size()>1&&r.paid.peekFirst().tick()<start-2*FENCE_TICKS)r.paid.removeFirst();
-        // Before the pot's first slice its temperature is unknown (NaN, which Math.max passes on): the water reads 300 K.
-        double condensate=r.solved!=null&&r.solved.condensateTemperature()>0?r.solved.condensateTemperature():r.potTemperature>300?r.potTemperature:300;
+        // Before the pot's first slice its temperature is unknown (NaN, which Math.max passes on): the water reads 300 K. The
+        // condensing side stands at the mean of the head and the outlet, as the sheet's condenser capacity takes it (a partial
+        // condenser's outlet is its water's inlet plus the approach).
+        double condensate=r.solved!=null&&r.solved.condensateTemperature()>0?(r.solved.headTemperature()+r.solved.condensateTemperature())/2:r.potTemperature>300?r.potTemperature:300;
         double rate=r.heat+Math.max(0,transit-holdSeconds()*r.heat)/(6*holdSeconds());
         return ExchangerRelay.Read.column(transit,seconds,Math.max(1,condensate-APPROACH_KELVIN),Math.max(0,rate));
     }
@@ -404,10 +408,19 @@ public final class Stills implements IslandCoordinator.Ports {
         condensed(u,r,end);
         double reflux=BatchStill.effectiveReflux(reflux(u),r.condensed);
         var warm=r.solved==null?null:r.solved.profile();
-        var job=new StillHead.Job(node.inventory().moles(),node.state().temperature(),BatchStill.ATMOSPHERIC,u.stages(),reflux,warm,u.design().columnDiameter());
+        var job=new StillHead.Job(node.inventory().moles(),node.state().temperature(),BatchStill.ATMOSPHERIC,u.stages(),reflux,warm,u.design().columnDiameter(),outlet(u,end));
         long pot=u.id(),apply=end+APPLY_TICKS;
         if(!solves.submit(pot,island,job,outcome->completed(pot,apply,outcome)))return;
         r.pending=true;r.applyTick=apply;r.lastSubmit=end;
+    }
+    /**
+     * The condenser's outlet floor for a job queued at {@code tick}, K: the water side's inlet as its last commit recorded it
+     * plus {@link BatchStill#OUTLET_APPROACH}; a still with no water, or none recorded yet, the total condenser's (it then
+     * condenses nothing with no water, {@link #condensed}). A change of the water reaches the next queued job only.
+     */
+    private double outlet(StillUnit u,long tick) {
+        double water=u.water()>0?coordinator.sideTemperature(PhysicalFluidTopology.sideIdentity(u.water()),tick):Double.NaN;
+        return water>0?water+BatchStill.OUTLET_APPROACH:com.wormzjl.icheme.science.fluid.network.StillColumn.TOTAL_CONDENSER;
     }
     /** The column's waiting answer, applied once its tick is reached. */
     private static void promote(Run r,long tick){if(r.next!=null&&r.nextTick<=tick){r.solved=r.next;r.fPerWatt=r.solved.fPerWatt();r.next=null;r.nextTick=Long.MAX_VALUE;}}
@@ -426,13 +439,13 @@ public final class Stills implements IslandCoordinator.Ports {
     private void status(StillUnit u,Run r,PassiveNetwork.Reservoir node,double[] arrived,double seconds) {
         int alarms=r.alarms;
         if(u.heater()==BatchStill.Heater.ELECTRIC&&firing(u)>0&&!electric.powered(u.id()))alarms|=BatchStill.Status.NO_FUEL.bit();
-        double up=0;if(arrived!=null)for(double n:arrived)up+=n;
         // A closed pot distils while at least a tenth of its heat leaves as vapour (at water's latent heat, the largest a
         // still's contents have); a gas headspace pushed out by the heating alone carries far less.
         boolean distilled=u.condenser()?r.distillateFlow>0:r.heat>0&&r.ventFlow*LATENT_CEILING>.1*r.heat;
         BatchStill.Status primary=null;
         for(var s:BatchStill.Status.values())if(s.alarm()&&(alarms&s.bit())!=0){primary=s;break;}
-        if(primary==null)primary=distilled||up>0&&u.condenser()?BatchStill.Status.DISTILLING:r.heat>0&&r.solved!=null?BatchStill.Status.BOILING:r.heat>0?BatchStill.Status.HEATING:BatchStill.Status.IDLE;
+        // With a condenser the still distils where liquid reached the spout's account; its vented gas alone is boiling.
+        if(primary==null)primary=distilled||r.spout>0&&u.condenser()?BatchStill.Status.DISTILLING:r.heat>0&&r.solved!=null?BatchStill.Status.BOILING:r.heat>0?BatchStill.Status.HEATING:BatchStill.Status.IDLE;
         r.status=primary;r.alarms=alarms;
         if(u.condenser()&&r.condensed<1)r.alarms|=BatchStill.Status.COOLING_LIMITED.bit();
     }
@@ -459,6 +472,10 @@ public final class Stills implements IslandCoordinator.Ports {
         var r=runs.get(pot);var line=new StringBuilder(v.status().name().replace('_',' '));
         for(var a:v.alarms())if(!line.toString().contains(a.text))line.append(" · ").append(a.text);
         if(r!=null&&r.failure!=null)line.append(" · COLUMN: ").append(r.failure);
+        // A tray that would hold free water (W4 D4): a notice, the column's answer stands.
+        if(r!=null&&r.solved!=null&&r.solved.waterOnTrays())line.append(" · WATER ON THE TRAYS");
+        // Two liquids on the trays (W4 plan section 12): the column's answer is the pot's single stage.
+        if(r!=null&&r.solved!=null&&r.solved.potStill())line.append(" · COLUMN: ").append(r.solved.notice());
         return line.toString();
     }
     /**
@@ -506,20 +523,17 @@ public final class Stills implements IslandCoordinator.Ports {
         return result;
     }
     /**
-     * Each world component's critical temperature, K, as the pot island's model gives it (the column's answer's, or its
-     * model's own before one); a component the island does not carry condenses (water's).
+     * Each world component's liquid share at the condenser's outlet, from the column's answer on the pot island's own list; a
+     * component that list does not carry, and every component before the first answer, none (null: all vents).
      */
-    private double[] critical(Run r) {
-        var result=new double[axis.size()];Arrays.fill(result,StillHead.WATER_CRITICAL);
-        if(r.potIsland<0)return result;
-        var model=models.apply(r.potIsland);var own=model.components();
-        double[] critical=r.solved!=null?r.solved.critical():criticals.computeIfAbsent(model,m->{
-            var column=new StillColumn(m.hydrocarbon,BatchStill.ATMOSPHERIC);int n=m.hydrocarbon.componentCount();
-            var c=new double[n+1];for(int i=0;i<n;i++)c[i]=column.criticalTemperature(i);c[n]=StillHead.WATER_CRITICAL;return c;});
-        for(int i=0;i<critical.length&&i<own.size();i++){int j=axis.indexOf(own.get(i));if(j>=0)result[j]=critical[i];}
+    private double[] shares(Run r) {
+        if(r.solved==null||r.potIsland<0)return null;
+        var own=models.apply(r.potIsland).components();var shares=r.solved.liquidShares();
+        if(shares.length!=own.size())return null;
+        var result=new double[axis.size()];
+        for(int i=0;i<shares.length;i++){int j=axis.indexOf(own.get(i));if(j>=0)result[j]=shares[i];}
         return result;
     }
-    private final Map<com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics,double[]> criticals=new java.util.WeakHashMap<>();
     private double mass(double[] moles){double m=0;for(int i=0;i<moles.length;i++)m+=moles[i]*weights[i];return m;}
     private static double[] plus(double[] a,double[] b){var c=a.clone();for(int i=0;i<c.length;i++)c[i]+=b[i];return c;}
 }

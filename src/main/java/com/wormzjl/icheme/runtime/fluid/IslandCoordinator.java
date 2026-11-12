@@ -405,7 +405,7 @@ public final class IslandCoordinator {
     /** The model island {@code id} runs on: the network package on its own compound list (batch 2026-11-04-refinery-compounds, V2). */
     public FluidThermodynamics model(long id){owned();return require(id).model;}
     /** Snapshot {@code s} of a live island as a checkpoint entry: on the island's own compound list, named in full, so a compound added to the package later moves no island's model (V3). */
-    public FluidCheckpointCodec.IslandEntry entry(String dimension,String packageId,Snapshot s){return new FluidCheckpointCodec.IslandEntry(dimension,packageId,model(s.id()).compounds(),s);}
+    public FluidCheckpointCodec.IslandEntry entry(String dimension,String packageId,Snapshot s){var model=model(s.id());return new FluidCheckpointCodec.IslandEntry(dimension,packageId,model.compounds(),model.wet(),s);}
     /** A certified island is materialised first, so what is read (a view, a save) is current. */
     public Snapshot snapshot(long id){owned();var island=require(id);materialise(island);return island.snapshot();}
     public Optional<Metrics> metrics(long id){owned();return Optional.ofNullable(require(id).metrics);}
@@ -1227,6 +1227,11 @@ public final class IslandCoordinator {
     }
     /** The real valve side connection {@code side}'s control works (W8), or null for none. */
     public @org.jetbrains.annotations.Nullable ExchangerRelay.Operation operation(long side){owned();return operations.get(side);}
+    /**
+     * The temperature (K) of the stream coupled side {@code side} last recorded at or before {@code tick} (what its other side
+     * reads: its inlet), NaN with no record. A read of committed state; it asks for no solve.
+     */
+    public double sideTemperature(long side,long tick){owned();var c=coupled.get(side);var stream=c==null?null:c.asOf(tick);return stream==null?Double.NaN:stream.donor().temperature();}
     /** The heat each exchanger holds in transit, J (the energy owed to its streams), by pair key: the lower of its two sides' connection ids. */
     public Map<Long,Double> transits(){owned();return Map.copyOf(transits);}
     /**

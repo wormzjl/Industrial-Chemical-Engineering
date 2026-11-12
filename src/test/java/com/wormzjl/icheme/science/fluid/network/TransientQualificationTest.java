@@ -9,6 +9,7 @@ import com.wormzjl.icheme.science.material.MaterialCatalog;
 import java.nio.file.*;
 import java.util.*;
 import org.junit.jupiter.api.Test;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /** Independent fixed-step backward-Euler refinements qualify the production interval integration (backward Euler under the
  * state-change controller: first order; the bounds below were re-baselined in WP1 of the mixed-gas junction batch). */
@@ -43,14 +44,14 @@ class TransientQualificationTest {
             var a=new PassiveIntervalSolver(model).solve(candidate,20,PassiveIntervalSolver.Settings.defaults(),()->{});candidate=a.graph();actualMass+=20*a.averageMassFlows()[0];
             var expected=fine.reservoirs().get(1).state();var actual=candidate.reservoirs().get(1).state();
             double referenceError=Math.abs(coarseMass/fineMass-1),massError=Math.abs(actualMass/fineMass-1),pressureError=Math.abs(actual.pressure()/expected.pressure()-1),temperatureError=Math.abs(actual.temperature()-expected.temperature());
-            rows.add(Map.of("simulatedSeconds",20*interval,"referenceRefinementMassError",referenceError,"massError",massError,"pressureError",pressureError,"temperatureErrorKelvin",temperatureError,"freeWaterMoles",actual.waterLiquid()));
+            rows.add(Map.of("simulatedSeconds",20*interval,"referenceRefinementMassError",referenceError,"massError",massError,"pressureError",pressureError,"temperatureErrorKelvin",temperatureError,"freeWaterMoles",TestPhases.waterLiquid(actual)));
             // Measured over the three 20 s intervals: mass 0.0094, pressure 0.0081, temperature 1.37 K (TR-BDF2 bounds
             // 0.005, 0.005, 0.5 K); the water that disappears is located to the same volume fraction.
             assertTrue(referenceError<.001);assertTrue(massError<.015,"mass "+massError);assertTrue(pressureError<.0125,"pressure "+pressureError);assertTrue(temperatureError<2,"temperature "+temperatureError);
-            assertEquals(expected.waterVolume()/expected.volume(),actual.waterVolume()/actual.volume(),.005);
+            assertEquals(TestPhases.waterVolume(expected)/expected.volume(),TestPhases.waterVolume(actual)/actual.volume(),.005);
             assertEquals(n[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK],candidate.reservoirs().get(1).inventory().moles()[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK],1e-8);
         }
-        assertEquals(0,candidate.reservoirs().get(1).state().waterLiquid(),1e-9);
+        assertEquals(0,TestPhases.waterLiquid(candidate.reservoirs().get(1).state()),1e-9);
     }
     private final FluidThermodynamics model=FluidTestSupport.networkModel();
     private PassiveNetwork.Reservoir tank(long id,double pressure,double[] composition) {

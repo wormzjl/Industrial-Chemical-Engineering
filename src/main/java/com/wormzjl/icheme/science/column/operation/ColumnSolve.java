@@ -3,6 +3,7 @@ package com.wormzjl.icheme.science.column.operation;
 import com.wormzjl.icheme.science.column.v3.V3ColumnCalculator;
 import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
 import com.wormzjl.icheme.science.column.v3.V3ColumnOutcome;
+import com.wormzjl.icheme.science.column.v3.V3ColumnProblemResolver;
 import com.wormzjl.icheme.science.column.v3.V3ColumnSpecification;
 import com.wormzjl.icheme.science.column.v3.V3NeuralSeed;
 import com.wormzjl.icheme.science.column.v3.V3PumparoundSpec;
@@ -109,7 +110,8 @@ public final class ColumnSolve {
      *                        first order beside it (plan 5.3: its actual composition, not the solved one's specific enthalpy)
      * @param solvedCondenser V3's own condenser duty, W (column sign)
      * @param route           V3's solve path
-     * @param note            what the input left out (feed water too cold to enter as steam), or empty
+     * @param note            what the input left out (feed water too cold to enter as steam), the liquids that would settle
+     *                        into two with water on the axis (W5 D5), or empty
      * @param advisories      V3's bounded advisory texts of the accepted solve, at most {@link #MAX_ADVISORIES} (W3, step 5)
      */
     public record Solved(SplitTable table, double[][] enthalpy, V3NeuralSeed seed, double solvedCondenser, String route, String note, com.wormzjl.icheme.science.column.v3.V3ColumnInspection inspection,
@@ -145,18 +147,26 @@ public final class ColumnSolve {
 
     /**
      * Solves {@code job} on {@code model}, its feed island's model (a view of the network package, or the whole package),
-     * taken on the engine thread; {@code screen} is V3's liquid-supply screen ratio. V3 reads the model's own catalog.
+     * taken on the engine thread; {@code screen} is V3's liquid-supply screen ratio. The steam and the products' water are
+     * states of the island list's view with water (W3b option A) whether or not the feed island holds water; the axis is the
+     * same, water last. V3 solves on that view's catalog where the shared rule puts water on its axis ({@link ColumnWater#onAxis},
+     * W5 D3 of batch 2026-11-11-aqueous-solvents), else on the view without water, so a crude column's kernel stays classical.
      */
     public static Outcome run(Job job, FluidThermodynamics model, double screen, Runnable checkpoint) {
         String packageId = model.domain().packageId();
         try {
-            return MaterialRuntime.with(model.catalog(), packageId, () -> solve(job, model, packageId, screen, checkpoint));
+            var wet = model.on(model.compounds(), true);
+            var world = model.whole().components();
+            boolean onAxis = ColumnWater.onAxis(model.whole().catalog(), packageId, world, job.taken().feed());
+            var catalog = onAxis ? wet.catalog() : model.on(model.compounds(), false).catalog();
+            return MaterialRuntime.with(catalog, packageId, () -> solve(job, wet, packageId, screen, checkpoint, onAxis, catalog));
         } catch (IllegalArgumentException refused) {
             return new Failed(refused.getMessage());
         }
     }
 
-    private static Outcome solve(Job job, FluidThermodynamics model, String packageId, double screen, Runnable checkpoint) {
+    private static Outcome solve(Job job, FluidThermodynamics model, String packageId, double screen, Runnable checkpoint, boolean onAxis,
+                                 MaterialCatalog catalog) {
         var design = job.design();
         // The model's list (the feed island's compounds, water last) and the world list the accounts are on.
         var axis = model.components();
@@ -182,8 +192,10 @@ public final class ColumnSolve {
         double[] flows = new double[basis.componentCount()];
         for (int c = 0; c < flows.length; c++) {
             int i = axis.indexOf(basis.componentId(c));
-            if (i >= 0 && i != water) flows[c] = feed[i];
+            if (i >= 0 && (i != water || onAxis)) flows[c] = feed[i];
         }
+        // On the axis a steam row with a flow is refused (W5 D2, owner choice 2 a): steam would model that water a second time.
+        if (onAxis) for (var s : job.taken().steam()) if (s.rate() > 0) return new Failed(V3ColumnProblemResolver.STEAM_WITH_WATER_ON_AXIS);
         var steamFeeds = new ArrayList<V3SteamFeedSpec>();
         double[] steamRatios = new double[taken.steam().size()];
         var designSteam = design.steamFeeds();
@@ -202,7 +214,7 @@ public final class ColumnSolve {
         }
         // Feed water enters as a steam feed at the feed tray (Q9) where it is superheated there; else it borrows its row.
         String note = "";
-        if (water >= 0 && feed[water] > 0) {
+        if (!onAxis && water >= 0 && feed[water] > 0) {
             boolean superheated = model.saturationPressure(t - SUPERHEAT) < feedPressure;
             if (superheated && steamFeeds.size() < V3ColumnInput.MAX_STEAM_FEEDS)
                 steamFeeds.add(new V3SteamFeedSpec(design.feedStageNumber(), feed[water], t));
@@ -236,6 +248,13 @@ public final class ColumnSolve {
         var outcome = V3ColumnCalculator.calculateWithStrategy(input, checkpoint::run, V3SolveStrategy.AGGRESSIVE, seed, screen);
         if (outcome instanceof V3ColumnOutcome.Failure failure) return new Failed(failure.code().name() + ": " + failure.summary());
         var success = (V3ColumnOutcome.Success) outcome;
+        // A liquid that would settle into two is a notice, never a failure (W5 D5).
+        if (onAxis) {
+            var settling = ColumnWater.settling(catalog, model, success.result(), checkpoint);
+            String two = (settling.trays().isEmpty() ? "" : "two liquids on trays " + settling.trayList())
+                    + (settling.distillate() ? (settling.trays().isEmpty() ? "" : "; ") + "the distillate would settle into two liquids" : "");
+            if (!two.isEmpty()) note = note.isEmpty() ? two : note + "; " + two;
+        }
         // The table on the world list, its reference the state taken.
         int worldWater = world.indexOf(SplitTable.WATER);
         double[] z = new double[world.size()];

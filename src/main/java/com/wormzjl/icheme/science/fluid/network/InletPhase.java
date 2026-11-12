@@ -7,7 +7,7 @@ import java.util.function.BiConsumer;
 
 import static com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.GAS;
 import static com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.OIL;
-import static com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.WATER;
+import static com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.AQUEOUS;
 
 /**
  * The inlet phase check of a pump or compressor (decisions D1, D2, D6): what the device's suction line delivers,
@@ -100,6 +100,39 @@ public final class InletPhase {
         return measure(model,node.state(),source.drawn(),source.node(),node.id(),source.port(),held(graph,edge));
     }
     /**
+     * {@link #supply} with the stream it measures: the supplier's state, and the drawn phases' fluid amounts (mol,
+     * water last) and fluid enthalpy (J) together, its solids apart; at a BULK end the supplier's whole fluid.
+     * {@code condensed}: whether the stream holds a liquid phase (a BULK end: whether the supplier holds one).
+     */
+    public record Drawn(Supply supply,FluidThermodynamics.State state,double[] amounts,double enthalpy,boolean condensed) {}
+    /** {@link #supply} and its stream ({@link Drawn}), on the same arguments. */
+    public static Drawn drawn(FluidThermodynamics model,PassiveNetwork graph,int edge,double targetVolumeFlow,double duration) {
+        var source=source(model,graph,edge,targetVolumeFlow,duration);var node=graph.reservoirs().get(source.node());
+        var supply=measure(model,node.state(),source.drawn(),source.node(),node.id(),source.port(),held(graph,edge));
+        return stream(supply,node.state(),source.drawn());
+    }
+    /** What a device drawing phase volumes {@code drawn} (m3 by phase; null for the bulk) from {@code state} receives, as
+     * {@link #drawn} states it for a node that is no network's (never dry). */
+    static Drawn of(FluidThermodynamics model,FluidThermodynamics.State state,double[] drawn) {
+        var port=drawn==null?PassiveNetwork.PhasePort.BULK:PassiveNetwork.PhasePort.LIQUID;
+        return stream(measure(model,state,drawn,-1,-1,port,Double.POSITIVE_INFINITY),state,drawn);
+    }
+    /** The stream of {@code state} that phase volumes {@code drawn} (m3 by phase, {@link FluidThermodynamics#phaseVolume};
+     * null for the bulk) take, as {@link Drawn} states it. */
+    private static Drawn stream(Supply supply,FluidThermodynamics.State state,double[] drawn) {
+        if(drawn==null)return new Drawn(supply,state,PhaseLayout.totalAmounts(state),state.fluidEnthalpy(),FluidThermodynamics.holdsLiquid(state));
+        double[] amounts=new double[state.componentCount()];double enthalpy=0;
+        for(int phase=0;phase<3;phase++) {
+            if(!(drawn[phase]>0))continue;
+            int slot=state.slot(phase);double volume=FluidThermodynamics.phaseVolume(state,phase);
+            if(slot<0||!(volume>0)||state.phase(slot)==null)continue;
+            double share=drawn[phase]/volume,moles=0;double[] own=state.amountsView(slot);
+            for(int c=0;c<amounts.length;c++){amounts[c]+=share*own[c];moles+=share*own[c];}
+            enthalpy+=moles*state.phase(slot).molarEnthalpy();
+        }
+        return new Drawn(supply,state,amounts,enthalpy,drawn[OIL]>0||drawn[AQUEOUS]>0);
+    }
+    /**
      * The density (kg/m3) of what connection {@code edge}'s suction line delivers, {@link #supply}'s stream on the same
      * arguments: the drawn phase streams' mass over their volume, each at the density a connection's end draws it with
      * ({@code PassiveStepSolver.endDensity}), the bulk's at a BULK end. What a set-flow pump's relief rise reads (owner
@@ -120,8 +153,8 @@ public final class InletPhase {
     public static double liquidDensity(FluidThermodynamics model,PassiveNetwork graph,int edge,double targetVolumeFlow,double duration) {
         var source=source(model,graph,edge,targetVolumeFlow,duration);var state=graph.reservoirs().get(source.node()).state();
         double mass=0,volume=0;
-        if(source.drawn()!=null)for(int phase:new int[]{OIL,WATER})if(source.drawn()[phase]>0){mass+=source.drawn()[phase]*PassiveStepSolver.phaseDensity(model,state,phase);volume+=source.drawn()[phase];}
-        if(!(volume>0))for(int phase:new int[]{OIL,WATER}){double v=FluidThermodynamics.phaseVolume(state,phase);if(v>0){mass+=v*PassiveStepSolver.phaseDensity(model,state,phase);volume+=v;}}
+        if(source.drawn()!=null)for(int phase:new int[]{OIL,AQUEOUS})if(source.drawn()[phase]>0){mass+=source.drawn()[phase]*PassiveStepSolver.phaseDensity(model,state,phase);volume+=source.drawn()[phase];}
+        if(!(volume>0))for(int phase:new int[]{OIL,AQUEOUS}){double v=FluidThermodynamics.phaseVolume(state,phase);if(v>0){mass+=v*PassiveStepSolver.phaseDensity(model,state,phase);volume+=v;}}
         return volume>0?mass/volume:Double.NaN;
     }
     /** Where a suction walk ends: the node, its end's port there (BULK at a junction) and the phase stream volumes drawn
@@ -176,17 +209,6 @@ public final class InletPhase {
             }
         }
     }
-    /**
-     * Whether {@code node}, which is no liquid water itself, is a junction still priming a tower's spray inlet through
-     * connection {@code edge}: what can feed it gives water alone, so what stands in the line leaves by the atmospheric
-     * inlet ahead of that water, as it does from a real line. A plain vessel's suction primes the same way ({@link #held}).
-     */
-    static boolean priming(FluidThermodynamics model,PassiveNetwork graph,int node,int edge) {
-        if(!graph.reservoirs().get(node).junction())return false;
-        boolean[] water={false},other={false};
-        feeders(graph,node,edge,(feeder,port)->{if(heldShare(feeder,port)>0){if(TowerExchange.liquidWater(model,feeder.state()))water[0]=true;else other[0]=true;}});
-        return water[0]&&!other[0];
-    }
     /** The share of its capacity {@code node} feeds through {@code port}: a vessel's contents over its capacity (zero at a
      * dry end), infinite for a generator, zero for a void or a junction. */
     private static double heldShare(PassiveNetwork.Reservoir node,PassiveNetwork.PhasePort port) {
@@ -207,7 +229,7 @@ public final class InletPhase {
         if(port==PassiveNetwork.PhasePort.BULK)return null;
         var state=graph.reservoirs().get(node).state();
         if(!(volume>0)) {
-            if(PhaseDraw.mixedLiquids(state,port)){var sample=new double[3];sample[FluidThermodynamics.OIL]=.5;sample[FluidThermodynamics.WATER]=.5;return sample;}
+            if(PhaseDraw.mixedLiquids(state,port)){var sample=new double[3];sample[FluidThermodynamics.OIL]=.5;sample[FluidThermodynamics.AQUEOUS]=.5;return sample;}
             int leading=PhaseDraw.leading(model,state,port);if(leading<0)return null;
             double[] drawn=new double[3];drawn[leading]=1;return drawn;
         }
@@ -227,10 +249,10 @@ public final class InletPhase {
     }
 
     private static Supply measure(FluidThermodynamics model,FluidThermodynamics.State state,double[] drawn,int node,long id,PassiveNetwork.PhasePort port,double held) {
-        double[] fluidVolume={state.vaporVolume(),state.liquidVolume(),state.waterVolume()};
+        double[] fluidVolume={state.vaporVolume(),state.labelVolume(OIL),state.labelVolume(AQUEOUS)};
         double gas,oil,water,gasMass,condensedMass,solidScale,total;
         if(drawn==null) {
-            gas=fluidVolume[GAS];oil=fluidVolume[OIL];water=fluidVolume[WATER];
+            gas=fluidVolume[GAS];oil=fluidVolume[OIL];water=fluidVolume[AQUEOUS];
             gasMass=model.vaporMass(state);condensedMass=model.liquidMass(state);
             solidScale=1;total=gas+oil+water+state.solidMoments().volume();
         } else {
@@ -243,7 +265,7 @@ public final class InletPhase {
                 solidScale+=drawn[phase]/stream*FluidThermodynamics.phaseSolidShare(state,phase);
                 total+=drawn[phase];
             }
-            gas=volume[GAS];oil=volume[OIL];water=volume[WATER];gasMass=mass[GAS];condensedMass=mass[OIL]+mass[WATER];
+            gas=volume[GAS];oil=volume[OIL];water=volume[AQUEOUS];gasMass=mass[GAS];condensedMass=mass[OIL]+mass[AQUEOUS];
         }
         double fluid=gas+oil+water;
         double largestSolid=0;

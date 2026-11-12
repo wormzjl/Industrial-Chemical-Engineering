@@ -42,26 +42,23 @@ class ThermoIdentityTest {
     }
 
     @Test
-    void catalogIdentityFollowsThePackageTheSpineAndTheWaterParticipation() {
+    void catalogIdentityFollowsThePackageAndTheSpine() {
         var catalog = MaterialCatalog.bundled();
         String network = PhaseTestSupport.NETWORK;
-        var free = ThermoIdentity.of(catalog, network, CubicPhaseEvaluator.FAMILY, ThermoIdentity.NO_SPINE,
-                WaterParticipation.SEPARATE_FREE_WATER);
-        assertEquals(catalog.fluidRevision(network), free.packageRevision());
-        assertEquals(ThermoIdentity.SEPARATE_FREE_WATER_FORMULATION + ":" + catalog.requirePackage(network).water().revision(),
-                free.waterModelRevision());
-        var none = ThermoIdentity.of(catalog, network, CubicPhaseEvaluator.FAMILY, ThermoIdentity.NO_SPINE, WaterParticipation.NONE);
-        var spine = ThermoIdentity.of(catalog, network, CubicPhaseEvaluator.FAMILY, "spine:test-1", WaterParticipation.SEPARATE_FREE_WATER);
-        var other = ThermoIdentity.of(catalog, "icheme:tjl20_methane", CubicPhaseEvaluator.FAMILY, ThermoIdentity.NO_SPINE,
-                WaterParticipation.SEPARATE_FREE_WATER);
-        assertNotEquals(free.revision(), none.revision());
-        assertNotEquals(free.revision(), spine.revision());
-        assertNotEquals(free.revision(), other.revision());
+        var none = ThermoIdentity.of(catalog, network, CubicPhaseEvaluator.FAMILY, ThermoIdentity.NO_SPINE);
+        assertEquals(catalog.fluidRevision(network), none.packageRevision());
+        assertEquals(ThermoIdentity.NO_WATER, none.waterModelRevision());
+        var spine = ThermoIdentity.of(catalog, network, CubicPhaseEvaluator.FAMILY, "spine:test-1");
+        var other = ThermoIdentity.of(catalog, "icheme:tjl20_methane", CubicPhaseEvaluator.FAMILY, ThermoIdentity.NO_SPINE);
+        assertNotEquals(none.revision(), spine.revision());
+        assertNotEquals(none.revision(), other.revision());
         // Deterministic across catalog loads.
-        assertEquals(free.revision(), ThermoIdentity.of(MaterialCatalog.bundled(), network, CubicPhaseEvaluator.FAMILY,
-                ThermoIdentity.NO_SPINE, WaterParticipation.SEPARATE_FREE_WATER).revision());
-        // The network contract carries it, and its results carry the contract's.
-        var contract = PhaseContract.forNetworkPackage(catalog, network, ThermoIdentity.NO_SPINE);
-        assertEquals(free, contract.identity());
+        assertEquals(none.revision(), ThermoIdentity.of(MaterialCatalog.bundled(), network, CubicPhaseEvaluator.FAMILY,
+                ThermoIdentity.NO_SPINE).revision());
+        // The package's contract carries it with the package's spine.
+        String packageSpine = catalog.spineRevision(network);
+        var contract = PhaseContract.forPackage(catalog, network);
+        assertEquals(ThermoIdentity.of(catalog, network, CubicPhaseEvaluator.FAMILY,
+                packageSpine.isEmpty() ? ThermoIdentity.NO_SPINE : packageSpine), contract.identity());
     }
 }

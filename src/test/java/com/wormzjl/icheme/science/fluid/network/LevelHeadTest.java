@@ -8,6 +8,7 @@ import com.wormzjl.icheme.science.material.MaterialCatalog;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * The level head at a vessel's bottom (LIQUID) port, decision D9 (option B of
@@ -40,7 +41,7 @@ class LevelHeadTest extends PortFixture {
     /** The bottom (LIQUID) port's driving pressure of a vessel. */
     private double bottom(PassiveNetwork.Reservoir vessel){return vessel.state().pressure()+head(vessel);}
     /** The share of the vessel's volume its liquids fill (hydrocarbon liquid and free water). */
-    private static double liquidShare(PassiveNetwork.Reservoir vessel){var s=vessel.state();return (s.liquidVolume()+s.waterVolume())/s.volume();}
+    private static double liquidShare(PassiveNetwork.Reservoir vessel){var s=vessel.state();return (TestPhases.liquidVolume(s)+TestPhases.waterVolume(s))/s.volume();}
 
     /** Committed slices of one run and the solver counters over it. */
     private record Run(List<PassiveIntervalSolver.Result> slices,List<PassiveNetwork> graphs,Map<String,Integer> reasons,long newtonSolves,long newtonIterations,

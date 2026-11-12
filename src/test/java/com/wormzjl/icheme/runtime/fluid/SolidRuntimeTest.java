@@ -11,6 +11,7 @@ import com.wormzjl.icheme.science.material.*;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 class SolidRuntimeTest {
     private final MaterialCatalog catalog=MaterialCatalog.bundled();
@@ -40,7 +41,7 @@ class SolidRuntimeTest {
                 PhysicalFluidTopology.Direction.EAST,new PipeResistance.Geometry(1,.05,0,0),new FlowControl.Passive());
         var source=spec.initialize(device,model,()->{}).state();
         assertEquals(1,source.volume(),1e-10);
-        assertEquals(.1,source.solidMoments().volume()/(source.liquidVolume()+source.waterVolume()+source.solidMoments().volume()),1e-12);
+        assertEquals(.1,source.solidMoments().volume()/(TestPhases.liquidVolume(source)+TestPhases.waterVolume(source)+source.solidMoments().volume()),1e-12);
         assertEquals(250,source.solids().massKg(),1e-8);
         assertEquals(model.componentCount(),spec.composition().length);
     }

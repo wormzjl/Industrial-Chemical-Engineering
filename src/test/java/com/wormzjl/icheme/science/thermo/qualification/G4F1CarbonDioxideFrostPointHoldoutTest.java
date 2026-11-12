@@ -143,7 +143,7 @@ class G4F1CarbonDioxideFrostPointHoldoutTest {
         double approximationMax() { return approximations.stream().mapToDouble(Math::abs).max().orElse(Double.NaN); }
     }
 
-    static double[] feed(double[] z) { return new double[] {z[0], z[1], z[2], z[3], 0.0}; }
+    static double[] feed(double[] z) { return new double[] {z[0], z[1], z[2], z[3]}; }
 
     static Map<String, Score> score(List<Point> points, FluidTpEquilibrium.Workspace ws, boolean print) {
         Map<String, Score> scores = new LinkedHashMap<>();
@@ -324,7 +324,7 @@ class G4F1CarbonDioxideFrostPointHoldoutTest {
         for (String[] c : rows("fandino-2015-ijggc-36-78-table8.tsv")) {
             double t = number(c[1]), p = number(c[2]) * 1e6;
             for (double x : new double[] {0.99, 0.9, 0.5}) {
-                double[] z = {1 - x, 0, 0, x, 0};
+                double[] z = {1 - x, 0, 0, x};
                 var r = SERVICE.tp(EquilibriumRequest.tp(t, p, BASIS, z, PhaseCompetition.FLUID_AND_CRYSTALS), ws);
                 var onset = SERVICE.depositionTemperature(null, Math.min(p, 1.0e7), BASIS, z, ws);
                 System.out.printf(Locale.ROOT, "%.2f | %.3f | %.2f | %s %s %s | %s %s%n", t, p / 1e6, x, r.status(), r.classification(),

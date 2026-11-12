@@ -56,6 +56,8 @@
   "data/icheme/materials/fuels/coal_block.json",
   "data/icheme/materials/fuels/coal_coke.json",
   "data/icheme/materials/fuels/logs.json",
+  "data/icheme/materials/group_interactions/eppr78_2022.json",
+  "data/icheme/materials/group_interactions/modified_unifac_dortmund.json",
   "data/icheme/materials/interactions/dwsim_refinery_pr78.json",
   "data/icheme/materials/interactions/dwsim_refinery_pr78_co2.json",
   "data/icheme/materials/interactions/tjl20.json",
@@ -72,6 +74,7 @@
   "data/icheme/materials/presets/fluid_4.json",
   "data/icheme/materials/presets/fluid_5.json",
   "data/icheme/materials/presets/fluid_6.json",
+  "data/icheme/materials/presets/fluid_7.json",
   "data/icheme/materials/properties/chemsep_ammonia.json",
   "data/icheme/materials/properties/chemsep_benzene.json",
   "data/icheme/materials/properties/chemsep_butadiene.json",
@@ -109,6 +112,7 @@
   "data/icheme/materials/properties/crude_pc10.json",
   "data/icheme/materials/properties/crude_pc11.json",
   "data/icheme/materials/properties/crude_pc12.json",
+  "data/icheme/materials/properties/cubic_water.json",
   "data/icheme/materials/properties/nitrogen.json",
   "data/icheme/materials/properties/tjl19_ethane.json",
   "data/icheme/materials/properties/tjl19_isobutane.json",
@@ -122,5 +126,7 @@
   "data/icheme/materials/transport/chemsep_liquid_reference.json",
   "data/icheme/materials/transport/dissolved_viscosity.json",
   "data/icheme/materials/transport/liquid_calibration.json",
-  "data/icheme/materials/water/water.json"
+  "data/icheme/materials/water/water.json",
+  "data/icheme/materials/components/ethanol.json",
+  "data/icheme/materials/properties/chemsep_ethanol.json"
 ]

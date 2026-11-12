@@ -23,6 +23,14 @@ import java.util.Objects;
  * {@code g^R = R T sum x_i ln phi_i} and {@code s^R = (h^R - g^R)/T}. Components with {@code x_i = 0} are absent:
  * their ideal-gas functions are not evaluated, their chemical potential is minus infinity.</p>
  *
+ * <p>Two books (batch 2026-11-11-aqueous-solvents, W3a decision D2). The fields above are the equilibrium book: the
+ * cubic (or the crystal) alone, self-consistent ({@code g = h - T s}); stability, flash, Newton and crystal anchors read
+ * only it. Water's own share of enthalpy, entropy and volume ({@link #setShare}, {@link #shareEnthalpy()} and the rest;
+ * zero unless the evaluator carries water in the equation of state) is kept apart and never enters {@code g} or
+ * {@code ln phi}; the balance book ({@link #balanceEnthalpy()}, {@link #balanceEntropy()}, {@link #balanceVolume()},
+ * {@link #balanceInternalEnergy()}) is the equilibrium book plus the share, and is what the energy and volume balances
+ * read. With a zero share the balance book equals the equilibrium book bit for bit.</p>
+ *
  * <p>For a pure crystal the composition is the single component of the crystal's own basis, and
  * {@code ln phi = (g_s - g_ig(T, P))/(R T)}: the fugacity of the solid against the ideal gas, so
  * {@link #chemicalPotential(int)} compares directly with a fluid's.</p>
@@ -43,6 +51,7 @@ public final class PhaseState {
     private double idealGasEntropy;
     private double residualEntropy;
     private double gibbsEnergy;
+    private double shareEnthalpy, shareEntropy, shareVolume;
     private boolean frozen;
 
     public PhaseState(int componentCount) {
@@ -98,9 +107,27 @@ public final class PhaseState {
         this.idealGasEntropy = idealGasEntropy;
         this.residualEntropy = residualEntropy;
         this.gibbsEnergy = gibbsEnergy;
+        this.shareEnthalpy = 0.0;
+        this.shareEntropy = 0.0;
+        this.shareVolume = 0.0;
         System.arraycopy(composition, 0, this.composition, 0, composition.length);
         System.arraycopy(logFugacityCoefficients, 0, this.logFugacityCoefficients, 0, composition.length);
         System.arraycopy(idealGasGibbsEnergies, 0, this.idealGasGibbsEnergies, 0, composition.length);
+    }
+
+    /**
+     * Water's share of the balance book (D2), J/mol, J/(mol K), m3/mol, after {@link #set} (which clears it). Never part
+     * of the Gibbs energy.
+     */
+    public void setShare(double enthalpy, double entropy, double volume) {
+        if (frozen) throw new IllegalStateException("A frozen phase state cannot be refilled");
+        requireFilled();
+        if (!Double.isFinite(enthalpy) || !Double.isFinite(entropy) || !Double.isFinite(volume))
+            throw new IllegalArgumentException("A water share must be finite");
+        shareEnthalpy = enthalpy;
+        shareEntropy = entropy;
+        shareVolume = volume;
+        if (!(molarVolume + volume > 0.0)) throw new IllegalArgumentException("A phase's balance volume must be positive");
     }
 
     /** A frozen copy: every value and array copied, {@link #set} refused. */
@@ -110,6 +137,9 @@ public final class PhaseState {
         copy.set(kind, crystal, root, physicalRootCount, temperature, pressure, molarVolume, idealGasEnthalpy,
                 residualEnthalpy, idealGasEntropy, residualEntropy, gibbsEnergy, composition, logFugacityCoefficients,
                 idealGasGibbsEnergies);
+        copy.shareEnthalpy = shareEnthalpy;
+        copy.shareEntropy = shareEntropy;
+        copy.shareVolume = shareVolume;
         copy.frozen = true;
         return copy;
     }
@@ -147,6 +177,20 @@ public final class PhaseState {
     public double molarGibbsEnergy() { requireFilled(); return gibbsEnergy; }
     /** J/mol, {@code h - P v}. */
     public double molarInternalEnergy() { requireFilled(); return molarEnthalpy() - pressure * molarVolume; }
+    /** Water's share of the molar enthalpy (D2), J/mol; zero without water in the equation of state. */
+    public double shareEnthalpy() { requireFilled(); return shareEnthalpy; }
+    /** Water's share of the molar entropy, J/(mol K). */
+    public double shareEntropy() { requireFilled(); return shareEntropy; }
+    /** Water's share of the molar volume, m3/mol. */
+    public double shareVolume() { requireFilled(); return shareVolume; }
+    /** The balance book's molar enthalpy, {@link #molarEnthalpy()} plus the share, J/mol. */
+    public double balanceEnthalpy() { requireFilled(); return idealGasEnthalpy + residualEnthalpy + shareEnthalpy; }
+    /** The balance book's molar entropy, J/(mol K). */
+    public double balanceEntropy() { requireFilled(); return idealGasEntropy + residualEntropy + shareEntropy; }
+    /** The balance book's molar volume, m3/mol. */
+    public double balanceVolume() { requireFilled(); return molarVolume + shareVolume; }
+    /** The balance book's molar internal energy, {@code h - P v} of the balance book, J/mol. */
+    public double balanceInternalEnergy() { requireFilled(); return balanceEnthalpy() - pressure * balanceVolume(); }
     public double moleFraction(int component) { requireFilled(); return composition[component]; }
     /** The caller must not mutate it; refilled by the next evaluation into this state. */
     public double[] compositionView() { requireFilled(); return composition; }

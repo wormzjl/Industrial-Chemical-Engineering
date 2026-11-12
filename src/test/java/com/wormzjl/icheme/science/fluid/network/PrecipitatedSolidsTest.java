@@ -21,6 +21,7 @@ import java.util.Locale;
 import java.util.function.UnaryOperator;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * Crystals as solids (milestone M3 of the unified thermo port, owner decisions D22 (5) and D23; plan
@@ -62,7 +63,7 @@ class PrecipitatedSolidsTest {
     @Test void theSizeOfFormingCrystalGrowsWithItsComponentsShareOfTheLiquids() {
         var crystal=co2();
         var gas=charge(pilot,250,1e5,new double[]{.9,0,0,.1,0},1);
-        assertNull(gas.liquidProperties(),"a gas");
+        assertNull(TestPhases.liquidProperties(gas),"a gas");
         assertEquals(new ParticleSize("0.00025"),VesselCrystals.precipitateDiameter(gas,crystal),"frost from a gas: d_dilute");
         var dilute=charge(pilot,120,3e5,new double[]{0,.995,0,.005,0},1);
         assertEquals(new ParticleSize("0.00025"),VesselCrystals.precipitateDiameter(dilute,crystal),"0.5 % CO2 in LNG: phi "+phi(dilute,crystal));
@@ -73,7 +74,7 @@ class PrecipitatedSolidsTest {
         assertTrue(phi>.09&&phi<.5,"between the dilute and the slush ends: "+phi);
         assertEquals(size(2.5e-4*4.04*Math.pow(phi/(1-phi),.6)),VesselCrystals.precipitateDiameter(between,crystal));
         var rich=charge(pilot,230,2e6,new double[]{0,0,0,1,0},1);
-        assertNotNull(rich.liquidProperties(),"liquid CO2 above its triple point");
+        assertNotNull(TestPhases.liquidProperties(rich),"liquid CO2 above its triple point");
         assertTrue(phi(rich,crystal)>.5,"pure liquid CO2: its share as crystal exceeds the cap");
         assertEquals(new ParticleSize("0.00101"),VesselCrystals.precipitateDiameter(rich,crystal),"the slush: 0.25 mm times 4.04");
     }
@@ -104,15 +105,15 @@ class PrecipitatedSolidsTest {
         var condensed=InventoryEquilibrium.solve(pilot,gas,frostTank.inventory(),Double.NaN,()->{});
         var frost=InventoryEquilibrium.refresh(new PassiveNetwork(List.of(frostTank),List.of()),pilot,()->{}).graph().reservoirs().getFirst();
         System.out.printf(Locale.ROOT,"10 %% CO2 in nitrogen at 170 K, 1 MPa: before the freeze %.4e m3 of liquid (N2 %.4e mol, CO2 %.4e mol, the stand-in %s), phi %.4f;"
-                +" after %.4e m3; %.4f kg of frost at %s m%n",condensed.liquidVolume(),condensed.liquidView()[NITROGEN],condensed.liquidView()[CO2],pilot.condensedShareOnly(condensed),
-                phi(condensed,crystal),frost.state().liquidVolume(),crystalKg(frost),frost.inventory().solids().size(crystal.material().id()).metres());
+                +" after %.4e m3; %.4f kg of frost at %s m%n",TestPhases.liquidVolume(condensed),TestPhases.liquid(condensed)[NITROGEN],TestPhases.liquid(condensed)[CO2],pilot.condensedShareOnly(condensed),
+                phi(condensed,crystal),TestPhases.liquidVolume(frost.state()),crystalKg(frost),frost.inventory().solids().size(crystal.material().id()).metres());
         assertTrue(crystalKg(frost)>0);
         assertEquals(new ParticleSize("0.00025"),frost.inventory().solids().size(crystal.material().id()),"frost from a gas: d_dilute");
     }
     /** The CO2's volume share of the state's liquids as crystal, uncapped. */
     private static double phi(FluidThermodynamics.State state,NetworkCrystals.Crystal crystal) {
-        double liquids=state.liquidVolume()+state.waterVolume();
-        return liquids>0?state.liquidView()[crystal.component()]*crystal.molarMass()/crystal.material().density()/liquids:0;
+        double liquids=TestPhases.liquidVolume(state)+TestPhases.waterVolume(state);
+        return liquids>0?TestPhases.liquid(state)[crystal.component()]*crystal.molarMass()/crystal.material().density()/liquids:0;
     }
     private static ParticleSize size(double metres){return new ParticleSize(new BigDecimal(metres).round(new MathContext(SolidInventory.SIZE_DIGITS,RoundingMode.HALF_EVEN)).toString());}
 
@@ -162,13 +163,13 @@ class PrecipitatedSolidsTest {
     @Test void theOutletReadsEachSolidAtItsMeanSize() {
         var crystal=co2().material();
         var lng=charge(pilot,115,3e5,new double[]{0,1,0,0,0},1);
-        assertNotNull(lng.liquidProperties());assertNull(lng.vaporProperties(),"subcooled liquid methane");
-        double kg=.01*lng.liquidVolume()*crystal.density();
+        assertNotNull(TestPhases.liquidProperties(lng));assertNull(TestPhases.vaporProperties(lng),"subcooled liquid methane");
+        double kg=.01*TestPhases.liquidVolume(lng)*crystal.density();
         var pipe=new PassiveNetwork.Pipe(3,0,1,new PipeResistance.Geometry(100,.05,.000045,0));
         var mixed=lng.withSolids(new SolidInventory(List.of(grade(crystal,"0.00025",.99*kg),grade(crystal,"0.001",.01*kg))));
         var fine=lng.withSolids(new SolidInventory(List.of(grade(crystal,"0.00025",kg))));
         var coarse=lng.withSolids(new SolidInventory(List.of(grade(crystal,"0.001",kg))));
-        double q=1.5*pipe.maximumArea()*mixed.mass()/(mixed.liquidVolume()+mixed.waterVolume());
+        double q=1.5*pipe.maximumArea()*mixed.mass()/(TestPhases.liquidVolume(mixed)+TestPhases.waterVolume(mixed));
         var check=SolidMobility.check(SolidMobility.donor(pilot,mixed),mixed,pipe,q,SolidMobility.Outlet.MIXED,mixed.mass());
         double fineSpeed=SolidMobility.check(SolidMobility.donor(pilot,fine),fine,pipe,0,SolidMobility.Outlet.MIXED,fine.mass()).minimumVelocity();
         double coarseSpeed=SolidMobility.check(SolidMobility.donor(pilot,coarse),coarse,pipe,0,SolidMobility.Outlet.MIXED,coarse.mass()).minimumVelocity();
@@ -188,9 +189,9 @@ class PrecipitatedSolidsTest {
         var demo=demo();var liquid=hotWater(160000);
         var pipe=new PassiveNetwork.Pipe(3,0,1,new PipeResistance.Geometry(100,.05,.000045,0));
         for(double share:new double[]{.5*(1+1e-9),.5*(1-1e-9)}) {
-            double kg=share/(1-share)*liquid.waterVolume()*demo.density();
+            double kg=share/(1-share)*TestPhases.waterVolume(liquid)*demo.density();
             var slurry=liquid.withSolids(new SolidInventory(List.of(grade(demo,"0.00001",kg))));
-            double q=3*pipe.maximumArea()*slurry.mass()/slurry.waterVolume();
+            double q=3*pipe.maximumArea()*slurry.mass()/TestPhases.waterVolume(slurry);
             var check=SolidMobility.check(SolidMobility.donor(water,slurry),slurry,pipe,q,SolidMobility.Outlet.MIXED,slurry.mass());
             assertEquals(share>.5?SolidMobility.Reason.PACKED_SLURRY:SolidMobility.Reason.MOBILE,check.reason(),"solids "+share+" of the condensed volume");
         }
@@ -207,7 +208,7 @@ class PrecipitatedSolidsTest {
      */
     @Test void aLetDownThatWouldFreezePassesAndTheReceivingTankPrecipitatesAtItsRefresh() {
         var liquid=charge(pilot,240,2e6,new double[]{0,0,0,1,0},1);
-        assertNotNull(liquid.liquidProperties());
+        assertNotNull(TestPhases.liquidProperties(liquid));
         var gas=charge(pilot,250,PhaseLayout.AMBIENT_PRESSURE,new double[]{0,0,0,1,0},.05);
         var graph=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,liquid,PassiveNetwork.NodeKind.GENERATOR),vessel(2,gas,1)),
                 List.of(new PassiveNetwork.Pipe(10,0,1,new PipeResistance.Geometry(10,.004,.000045,0))));
@@ -215,7 +216,7 @@ class PrecipitatedSolidsTest {
         var first=solver.solve(graph,5,PassiveIntervalSolver.Settings.defaults(),()->{},.05);
         var tank=first.graph().reservoirs().get(1);
         System.out.printf(Locale.ROOT,"let-down: %.6e kg/s for 5 s; the tank at %.4f K, %.1f Pa, %.4e m3 of liquid, %.4e m3 of vapour, crystal %.3e kg, closures %d%n",
-                first.averageMassFlows()[0],tank.state().temperature(),tank.state().pressure(),tank.state().liquidVolume(),tank.state().vaporVolume(),crystalKg(tank),
+                first.averageMassFlows()[0],tank.state().temperature(),tank.state().pressure(),TestPhases.liquidVolume(tank.state()),tank.state().vaporVolume(),crystalKg(tank),
                 first.graph().pipes().getFirst().blockedDirections());
         assertTrue(first.averageMassFlows()[0]>0,"the let-down passes");
         assertEquals(0,first.graph().pipes().getFirst().blockedDirections(),"no closure for freezing");
@@ -301,11 +302,11 @@ class PrecipitatedSolidsTest {
         checkpoints[0]=0;
         var frozen=InventoryEquilibrium.conversions(cold,water,()->checkpoints[0]++);
         var tank=frozen.graph().reservoirs().getFirst();
-        double melting=water.freeWaterIce().meltingTemperature(tank.state().pressure());
+        double melting=TestPhases.ice(water).meltingTemperature(tank.state().pressure());
         System.out.printf(Locale.ROOT,"water below its melting line: %.4f K to %.4f K (T_m %.4f K at %.1f Pa), %.6f kg of ice of %.6f kg of water, %d checkpoints%n",
                 before.state().temperature(),tank.state().temperature(),melting,tank.state().pressure(),crystalKg(tank),
                 before.inventory().moles()[z.length-1]*water.waterMolecularWeight,checkpoints[0]);
-        assertTrue(before.state().waterLiquid()>0,"the stand-in");
+        assertTrue(TestPhases.waterLiquid(before.state())>0,"the stand-in");
         assertTrue(frozen.converted(),"a freeze is a conversion");
         assertTrue(crystalKg(tank)>0,"water below its melting line freezes");
         assertTrue(tank.state().temperature()>before.state().temperature()&&tank.state().temperature()<melting,"the latent heat warms it, below its melting line");
@@ -332,14 +333,21 @@ class PrecipitatedSolidsTest {
             step=solver.nextStepEstimate();graph=result.graph();
             var node=graph.reservoirs().get(1);var s=node.state();
             System.out.printf(Locale.ROOT,"N2 over water cooled through its freeze, interval %d: %.6f K (T_m %.6f K) %.1f Pa, ice %.6f kg, stand-in %.4f mol of %.4f mol (%d substeps, %d rejected)%n",
-                    k+1,s.temperature(),water.freeWaterIce().meltingTemperature(s.pressure()),s.pressure(),crystalKg(node),s.waterLiquid(),waterMoles,
+                    k+1,s.temperature(),TestPhases.ice(water).meltingTemperature(s.pressure()),s.pressure(),crystalKg(node),TestPhases.waterLiquid(s),waterMoles,
                     result.acceptedSubsteps(),result.rejectedSubsteps());
         }
         var node=graph.reservoirs().get(1);var s=node.state();
         assertTrue(s.pressure()>PhaseLayout.AMBIENT_PRESSURE+1e5,"filled to about 3 bar: taut");
         assertTrue(crystalKg(node)>0,"the water froze");
-        assertTrue(s.waterLiquid()>0,"and some stays liquid beside the ice");
-        assertEquals(water.freeWaterIce().meltingTemperature(s.pressure()),s.temperature(),1e-6,"on the melting line at its pressure");
+        assertTrue(TestPhases.waterLiquid(s)>0,"and some stays liquid beside the ice");
+        // W3b: the liquid water holds the nitrogen it dissolves at about 3 bar (a mole fraction of about 5e-5), and a solvent
+        // freezes below the pure melting line by its colligative depression, ln x_w = -(ΔH_fus/R)(1/T - 1/T_m): about 6 mK
+        // with ice's 6.01 kJ/mol. The pure line held while the free water dissolved nothing. The ideal law stands for the
+        // dilute solvent (its activity coefficient is 1 to the second order in x); the tolerance covers ±5 % on ΔH_fus.
+        double[] liquid=s.amountsView(s.slot(FluidThermodynamics.AQUEOUS));double xw=liquid[liquid.length-1]/java.util.Arrays.stream(liquid).sum();
+        double tm=TestPhases.ice(water).meltingTemperature(s.pressure()),freeze=1/(1/tm-8.314462618*Math.log(xw)/6010);
+        assertTrue(tm-freeze>1e-3,"the dissolved nitrogen depresses the freeze: "+(tm-freeze)+" K");
+        assertEquals(freeze,s.temperature(),.05*(tm-freeze)+1e-5,"on the melting line at its pressure, less the dissolved nitrogen's depression");
     }
 
     /** The trace flush never deletes crystal mass: a vessel at its crystal equilibrium holding a 1e-25 mol methane trace
@@ -378,12 +386,12 @@ class PrecipitatedSolidsTest {
     @Test void aLiquidFullLngTankBesideDryIceAtItsBubblePointHoldsNoVapour() {
         var dryIce=new SolidInventory(List.of(new SolidInventory.Population(co2().material(),new ParticleSize("0.00025"),27.682029902383036)));
         double t=157.39079577144585,p=1381705.5110999327;double[] lng={169.4018947211584,19565.23151661761,1285.9992875806702,393.1261466989467};
-        var tank=pilot.state(t,p,lng,new double[lng.length],0,0,p).withSolids(dryIce);
-        double capacity=tank.liquidVolume()+dryIce.volume();
+        var tank=TestPhases.state(pilot,t,p,lng,new double[lng.length],0,0).withSolids(dryIce);
+        double capacity=TestPhases.liquidVolume(tank)+dryIce.volume();
         var answer=pilot.flashTP(t,p,PhaseLayout.totalAmounts(tank),()->{});
         System.out.printf(Locale.ROOT,"LNG beside dry ice: %.6f m3 of liquid and %.6f m3 of dry ice in %.6f m3; the TP answer: %.4e mol of vapour%n",
-                tank.liquidVolume(),dryIce.volume(),capacity,Arrays.stream(answer.vaporView()).sum());
-        assertNull(answer.vaporProperties(),"the TP answer proposes no vapour");
+                TestPhases.liquidVolume(tank),dryIce.volume(),capacity,Arrays.stream(TestPhases.vapor(answer)).sum());
+        assertNull(TestPhases.vaporProperties(answer),"the TP answer proposes no vapour");
         int[] splits={0},record={0};var own=ownSplit(tank,capacity,splits);
         assertSame(tank,pilot.phaseCheck(tank,false,null,record,0,null,own,()->{}),"no vapour: the tank keeps its liquid");
         assertEquals(0,splits[0],"no crossing: no own split");
@@ -404,14 +412,14 @@ class PrecipitatedSolidsTest {
     @Test void aLiquidFullLngTankWhoseClosureStopsShortOfNothingHoldsNoVapour() {
         var dryIce=new SolidInventory(List.of(new SolidInventory.Population(co2().material(),new ParticleSize("0.00025"),27.681970836122474)));
         double t=157.39032741149214,p=1381057.0648888762;double[] lng={169.40129908820836,19565.177187575668,1285.9959066479023,393.12480966757914};
-        var state=pilot.state(t,p,lng,new double[lng.length],0,0,p).withSolids(dryIce);
-        double capacity=state.liquidVolume()+dryIce.volume();
+        var state=TestPhases.state(pilot,t,p,lng,new double[lng.length],0,0).withSolids(dryIce);
+        double capacity=TestPhases.liquidVolume(state)+dryIce.volume();
         var tank=new PassiveNetwork.Reservoir(1,0,state,PassiveNetwork.NodeKind.RESERVOIR,new PassiveNetwork.Inventory(capacity,PhaseLayout.totalAmounts(state),state.internalEnergy(),dryIce));
-        var feed=new PassiveNetwork.Reservoir(2,0,pilot.state(t,p,lng,new double[lng.length],0,0,p),PassiveNetwork.NodeKind.GENERATOR);
+        var feed=new PassiveNetwork.Reservoir(2,0,TestPhases.state(pilot,t,p,lng,new double[lng.length],0,0),PassiveNetwork.NodeKind.GENERATOR);
         var graph=new PassiveNetwork(List.of(tank,feed),List.of(new PassiveNetwork.Pipe(10,0,1,new PipeResistance.Geometry(10,.02,.000045,0))));
         SolverDiagnostics.reset();SolverDiagnostics.ENABLED=true;PassiveStepSolver.Result step;
         try{step=new PassiveStepSolver(pilot).solve(graph,.05,()->{});}finally{SolverDiagnostics.ENABLED=false;}
-        assertNull(step.states().getFirst().vaporProperties(),"no vapour");
+        assertNull(TestPhases.vaporProperties(step.states().getFirst()),"no vapour");
         assertEquals(1,SolverDiagnostics.activeSetPasses.sum(),"one pass: no cycle");
         assertEquals(0,SolverDiagnostics.phaseSeeds.sum(),"no crossing: no own split");
         assertEquals(0,SolverDiagnostics.phaseRefusals.sum(),"nothing to refuse");
@@ -432,20 +440,20 @@ class PrecipitatedSolidsTest {
         double t=153.07858326704772,p=1141313.268432868;
         double[] lng={127.94664170820322,20017.721696299337,1419.2160471398552,308.7325517796933};
         double[] bubble={8.685458618914788e-7,2.094236045700818e-5,4.4530891574445825e-8,3.930257238466825e-8};
-        var state=pilot.state(t,p,lng,bubble,0,0,p).withSolids(dryIce);
-        double capacity=state.liquidVolume()+state.vaporVolume()+dryIce.volume();
+        var state=TestPhases.state(pilot,t,p,lng,bubble,0,0).withSolids(dryIce);
+        double capacity=TestPhases.liquidVolume(state)+state.vaporVolume()+dryIce.volume();
         var tank=new PassiveNetwork.Reservoir(1,0,state,PassiveNetwork.NodeKind.RESERVOIR,new PassiveNetwork.Inventory(capacity,PhaseLayout.totalAmounts(state),state.internalEnergy(),dryIce));
-        var feed=new PassiveNetwork.Reservoir(2,0,pilot.state(t,p+100,lng,new double[lng.length],0,0,p+100),PassiveNetwork.NodeKind.GENERATOR);
+        var feed=new PassiveNetwork.Reservoir(2,0,TestPhases.state(pilot,t,p+100,lng,new double[lng.length],0,0),PassiveNetwork.NodeKind.GENERATOR);
         var graph=new PassiveNetwork(List.of(tank,feed),List.of(new PassiveNetwork.Pipe(10,0,1,new PipeResistance.Geometry(10,.02,.000045,0))));
         SolverDiagnostics.reset();SolverDiagnostics.ENABLED=true;PassiveStepSolver.Result step;
         try{step=new PassiveStepSolver(pilot).solve(graph,1e-6,()->{});}finally{SolverDiagnostics.ENABLED=false;}
         var end=step.states().getFirst();
         System.out.printf(Locale.ROOT,"E8: the bubble %.4e mol (%.4e of the moles, %.4e m3); after the step %.9f K, %.3f Pa, %.4e kg/s in, vapour %s, %d fold pass(es)%n",
                 Arrays.stream(bubble).sum(),Arrays.stream(bubble).sum()/Arrays.stream(PhaseLayout.totalAmounts(state)).sum(),state.vaporVolume(),end.temperature(),end.pressure(),
-                -step.massFlows()[0],end.vaporProperties()==null?"none":"held",SolverDiagnostics.traceFoldPasses.sum());
+                -step.massFlows()[0],TestPhases.vaporProperties(end)==null?"none":"held",SolverDiagnostics.traceFoldPasses.sum());
         assertTrue(step.massFlows()[0]<0,"the feed flows in");
         assertEquals(1,SolverDiagnostics.traceFoldPasses.sum(),"the reconstruction folded the bubble once");
-        assertNull(end.vaporProperties(),"no vapour");
+        assertNull(TestPhases.vaporProperties(end),"no vapour");
         assertSame(end,InventoryEquilibrium.close(pilot,end,step.inventories().getFirst(),null,Double.NaN,()->{}),"the tank's state meets its inventory to the closure");
     }
 
@@ -460,11 +468,11 @@ class PrecipitatedSolidsTest {
     @Test void aFrostedGasTanksStandInIsDecidedByItsOwnSplitAndRefused() {
         var tank=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,charge(pilot,170,1e6,new double[]{.9,0,0,.1,0},.1))),List.of());
         var frosted=InventoryEquilibrium.refresh(tank,pilot,()->{}).graph().reservoirs().getFirst();
-        assertTrue(crystalKg(frosted)>0);assertNull(frosted.state().liquidProperties(),"a gas beside its frost");
+        assertTrue(crystalKg(frosted)>0);assertNull(TestPhases.liquidProperties(frosted.state()),"a gas beside its frost");
         var gas=frosted.state();double t=gas.temperature()-1;
-        var point=pilot.state(t,gas.pressure(),new double[4],gas.vaporView(),0,0,gas.pressure()).withSolids(gas.solids());
+        var point=TestPhases.state(pilot,t,gas.pressure(),new double[4],TestPhases.vapor(gas),0,0).withSolids(gas.solids());
         var answer=pilot.flashTP(t,point.pressure(),PhaseLayout.totalAmounts(point),()->{});
-        assertNull(answer.liquidProperties(),"the TP answer stays one vapour");
+        assertNull(TestPhases.liquidProperties(answer),"the TP answer stays one vapour");
         int[] splits={0},record={0};var own=ownSplit(point,frosted.inventory().volume(),splits);
         assertSame(point,pilot.phaseCheck(point,false,null,record,0,null,own,()->{}),"no phase added");
         assertEquals(0,splits[0],"no own split");

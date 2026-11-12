@@ -44,7 +44,7 @@ import static org.junit.jupiter.api.Assertions.*;
  *
  * <p>With condenser carry-over (E31 of batch 2026-11-04-open-thermo-data) the column sends more naphtha overhead and a little
  * less residue: E-101 needs 568 m² (the probe's 574.3), E-102 732.5 (750.2), H-101 80.39 MW, and the naphtha takes a 15 m
- * sphere, not 14. P-102 reads 131.6 m³/h and an NPSH of 32.35 m. Every other size stands.
+ * sphere, not 14. P-102 reads 131.6 m³/h and an NPSH of 32.35 m (34.69 m since the NPSH counts over p_v). Every other size stands.
  */
 class UnitSizingSampleTest {
     /** Probe values stand in the table's printed places. */
@@ -97,7 +97,12 @@ class UnitSizingSampleTest {
         assertEquals(96, read(unit.rating(), Limit.PUMP_RATED), ONE);
         assertEquals(730, read(unit.rating(), Limit.PUMP_FLOW), ONE);
         assertEquals(71, read(unit.rating(), Limit.PUMP_HEAD), ONE);
-        assertEquals(80.4, read(unit.rating(), Limit.PUMP_NPSH), TENTH, "a feed stands at grade, so no height is missing");
+        // 80.4 m before W3b: the derived pairs (light ends over the heavy cuts) put the dry crude's bubble pressure at
+        // 298.15 K at 129.6 kPa instead of 115.0 kPa, 1.72 m of this crude's head (batch 2026-11-11-aqueous-solvents).
+        // 78.65 m while the NPSH counted over the full bubble pressure: it counts over p_v now, the crude's vapour pressure
+        // without its methane and ethane (above their critical temperature at 298.15 K), 8.74 m of this crude's head lower
+        // (W3B_NETWORK_PLAN.md section 44, as the world's suction limit counts it).
+        assertEquals(87.39, read(unit.rating(), Limit.PUMP_NPSH), TENTH, "a feed stands at grade, so no height is missing");
     }
 
     @Test
@@ -111,7 +116,8 @@ class UnitSizingSampleTest {
         assertEquals(69, read(unit.rating(), Limit.PUMP_RATED), ONE);
         assertEquals(131.6, read(unit.rating(), Limit.PUMP_FLOW), ONE);
         assertEquals(52, read(unit.rating(), Limit.PUMP_HEAD), ONE);
-        assertEquals(32.35, read(unit.rating(), Limit.PUMP_NPSH), TENTH, "the column's own layout gives the probe's height");
+        // 32.35 m over the full bubble pressure; over p_v the tray's liquid has 2.34 m more (section 44).
+        assertEquals(34.69, read(unit.rating(), Limit.PUMP_NPSH), TENTH, "the column's own layout gives the probe's height");
     }
 
     /**
@@ -232,7 +238,9 @@ class UnitSizingSampleTest {
     @Test
     void theUnstabilisedNaphthaTakesASphereAndTheResidueARoof() {
         var naphtha = tile("NAPHTHA");
-        assertEquals(2.299, naphtha.bubble(), 2.299 * .0005, "both bisect to a ratio of 1.0005, from other bounds");
+        // W5 D1 of batch 2026-11-11-aqueous-solvents: the column flashes on the network's derived pairs, so the receiver's naphtha is again at the network's bubble point of its own drum (2.3186 while the column
+        // flashed on the authored matrix and the network on the derived pairs, W3b).
+        assertEquals(2.2989, naphtha.bubble(), 2.2989 * .0005, "both bisect to a ratio of 1.0005, from other bounds; 2.3186 with the column on the authored matrix (W3b to W5a)");
         assertEquals(new TankSizing.Size(UnitType.SPHERE, 1, 15, 1), TankSizing.auto(naphtha, null).size(), "17 m on Tia Juana; the medium grade makes less naphtha (O3); 14 m before condenser carry-over (E31)");
         var residue = tile("RESIDUE");
         assertTrue(residue.bubble() < .015);

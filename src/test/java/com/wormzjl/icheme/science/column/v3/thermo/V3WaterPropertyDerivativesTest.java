@@ -105,11 +105,16 @@ class V3WaterPropertyDerivativesTest {
         }
     }
 
-    /** The water datum: liquid water at 298.15 K and 1 atm sits one Watson vaporization enthalpy below the ideal-gas steam. */
+    /**
+     * The water datum: saturated liquid water at 298.15 K sits the record's declared latent heat (IF97's, 2441.706 kJ/kg)
+     * below the saturated steam (W3b of batch 2026-11-11-aqueous-solvents; the Watson latent heat it used before stood
+     * 564.5 J/mol higher).
+     */
     @Test
     void theLiquidSitsOneVaporizationEnthalpyBelowTheSteamAtTheDatum() {
-        double gap = V3WaterProperties.vaporMolarEnthalpy(298.15) - V3WaterProperties.liquidMolarEnthalpy(298.15, 101325.0);
-        assertEquals(V3WaterProperties.vaporizationEnthalpy(298.15), gap, 1.0e-9 * gap);
+        double saturation = V3WaterProperties.saturationPressurePascal(298.15);
+        double gap = V3WaterProperties.steamMolarEnthalpy(298.15, saturation) - V3WaterProperties.liquidMolarEnthalpy(298.15, saturation);
+        assertEquals(43988.01, gap, 1.0e-9 * gap);
     }
 
     /** Above the critical point the vaporisation enthalpy is the constant zero. */

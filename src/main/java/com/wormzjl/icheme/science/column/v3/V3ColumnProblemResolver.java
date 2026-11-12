@@ -5,7 +5,27 @@ import java.util.Objects;
 
 /** Resolves topology, generated pressures, and the M0 degree-of-freedom proof before a solve. */
 public final class V3ColumnProblemResolver {
+    /** The water compound of a catalog's water view ({@code MaterialCatalog.withWater}). */
+    public static final String WATER = "Water";
+    /**
+     * The refusal of a steam row in a request with water on its axis (batch 2026-11-11-aqueous-solvents, W5 D2,
+     * owner choice 2 a): the steam rows model water as an immiscible stripping vapour beside the axis, so the same
+     * water would be modelled twice; the reboiler heats such a column.
+     */
+    public static final String STEAM_WITH_WATER_ON_AXIS =
+            "V3 steam feed refused: the feed carries water on the component axis, which steam would model a second time";
+
     private V3ColumnProblemResolver() {}
+
+    /**
+     * Whether a request carries water on its axis (W5 D2): its basis names {@value #WATER} with a feed above zero.
+     * Such a request is an ordinary column of its list, water's pairs the derived ones; it has no steam rows. A
+     * request with Water at zero is solved as one without it.
+     */
+    public static boolean waterOnAxis(V3ColumnInput input) {
+        int water = input.componentBasis().componentIds().indexOf(WATER);
+        return water >= 0 && input.feedComponentMolarFlowsMolPerSecond()[water] > 0.0;
+    }
 
     /**
      * Resolves one candidate condenser branch.
@@ -140,6 +160,7 @@ public final class V3ColumnProblemResolver {
         if (!Double.isFinite(bottomPressure) || bottomPressure <= 0.0) {
             throw new IllegalArgumentException("V3 generated pressure profile is not finite and positive");
         }
+        if (!input.steamFeeds().isEmpty() && waterOnAxis(input)) throw new IllegalArgumentException(STEAM_WITH_WATER_ON_AXIS);
         double totalSteam = 0.0;
         for (V3SteamFeedSpec feed : input.steamFeeds()) {
             if (feed.stageNumber() > input.stageCount() + 1) {

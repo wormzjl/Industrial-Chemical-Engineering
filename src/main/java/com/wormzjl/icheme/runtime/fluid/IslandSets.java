@@ -37,7 +37,7 @@ public final class IslandSets {
         map[source.size()]=target.size();
         return map;
     }
-    private static boolean same(FluidThermodynamics from,FluidThermodynamics to){return from==to||from.compounds().equals(to.compounds());}
+    private static boolean same(FluidThermodynamics from,FluidThermodynamics to){return from==to||from.compounds().equals(to.compounds())&&from.wet()==to.wet();}
     /** {@code to} holds every compound of {@code from}. */
     static boolean covers(FluidThermodynamics to,FluidThermodynamics from){return new HashSet<>(to.compounds()).containsAll(from.compounds());}
 
@@ -55,13 +55,14 @@ public final class IslandSets {
         }
         return result;
     }
-    /** Hydrocarbon amounts (length n, no water) on {@code to}'s hydrocarbon axis, by id. */
-    private static double[] hydrocarbons(double[] values,int[] map,int width) {
-        var result=new double[width];
-        for(int i=0;i<values.length;i++) {
+    /** Conserved amounts (the compounds, then water) on {@code to}'s compound axis, by id, water last on both. */
+    private static double[] conserved(double[] values,int[] map,int width) {
+        var result=new double[width+1];
+        for(int i=0;i<values.length-1;i++) {
             if(map[i]>=0)result[map[i]]=values[i];
             else if(Double.doubleToRawLongBits(values[i])!=0)throw new IllegalStateException("Island compound set: a state holds "+values[i]+" of a compound the new list does not carry");
         }
+        result[width]=values[values.length-1];
         return result;
     }
 
@@ -73,20 +74,25 @@ public final class IslandSets {
     public static FluidThermodynamics.State state(FluidThermodynamics.State s,FluidThermodynamics from,FluidThermodynamics to) {
         if(same(from,to))return s;
         int[] map=map(from,to);int width=to.compounds().size();
-        var liquid=hydrocarbons(s.liquidView(),map,width);var vapor=hydrocarbons(s.vaporView(),map,width);
-        if(covers(from,to)) {
-            // A cut: every number of the state stays, the absent compounds' fugacities go with their slots.
-            return new FluidThermodynamics.State(s.temperature(),s.pressure(),liquid,vapor,s.waterLiquid(),s.waterVapor(),s.hydrocarbonPartialPressure(),s.waterPartialPressure(),
-                    s.volume(),s.enthalpy(),s.internalEnergy(),s.mass(),s.liquidVolume(),s.waterVolume(),s.vaporVolume(),phase(s.liquidProperties(),map,width),phase(s.vaporProperties(),map,width),
-                    s.solids(),s.solidMoments(),s.waterCompressibility());
-        }
+        var vapor=conserved(s.vaporAmountsView(),map,width);var liquid=conserved(s.liquidAmountsView(),map,width);var aqueous=conserved(s.aqueousAmountsView(),map,width);
+        // A cut keeps every number only between models of the same water (W3b option A: a model without water has no water
+        // fugacity to carry).
+        if(covers(from,to)&&from.wet()==to.wet())return cut(s,map,width);
         if(!FluidThermodynamics.holdsFluid(s)&&!s.solids().empty())return to.solidState(s.temperature(),s.pressure(),s.solids());
-        return to.state(s.temperature(),s.pressure(),liquid,vapor,s.waterLiquid(),s.waterVapor(),s.hydrocarbonPartialPressure()).withSolids(s.solids());
+        return to.adoptingState(s.temperature(),s.pressure(),vapor,liquid,aqueous,null).withSolids(s.solids());
+    }
+    /** {@code s} cut onto a list whose compounds hold all of {@code s}'s: every number kept, the absent compounds' slots
+     * and fugacities gone. */
+    private static FluidThermodynamics.State cut(FluidThermodynamics.State s,int[] map,int width) {
+        return new FluidThermodynamics.State(s.temperature(),s.pressure(),conserved(s.vaporAmountsView(),map,width),conserved(s.liquidAmountsView(),map,width),
+                conserved(s.aqueousAmountsView(),map,width),s.volume(),s.enthalpy(),s.internalEnergy(),s.mass(),s.vaporVolume(),s.liquidSlotVolume(),s.aqueousSlotVolume(),
+                phase(s.vaporPhase(),map,width),phase(s.liquidPhase(),map,width),phase(s.aqueousPhase(),map,width),s.solids(),s.solidMoments());
     }
     private static HydrocarbonModel.Phase phase(HydrocarbonModel.Phase p,int[] map,int width) {
         if(p==null)return null;
-        var source=p.logFugacityView();var cut=new double[width];
-        for(int i=0;i<source.length;i++)if(map[i]>=0)cut[map[i]]=source[i];
+        var source=p.logFugacityView();var cut=new double[width+1];
+        for(int i=0;i<source.length-1;i++)if(map[i]>=0)cut[map[i]]=source[i];
+        cut[width]=source[source.length-1];
         return new HydrocarbonModel.Phase(p.molarVolume(),p.molarEnthalpy(),p.molarInternalEnergy(),p.volumePressureDerivative(),cut,p.vaporLike());
     }
     /**
@@ -145,9 +151,7 @@ public final class IslandSets {
     static FluidThermodynamics.State padded(FluidThermodynamics.State s,FluidThermodynamics from,FluidThermodynamics world) {
         if(same(from,world))return s;
         int[] map=map(from,world);int width=world.compounds().size();
-        return new FluidThermodynamics.State(s.temperature(),s.pressure(),hydrocarbons(s.liquidView(),map,width),hydrocarbons(s.vaporView(),map,width),s.waterLiquid(),s.waterVapor(),
-                s.hydrocarbonPartialPressure(),s.waterPartialPressure(),s.volume(),s.enthalpy(),s.internalEnergy(),s.mass(),s.liquidVolume(),s.waterVolume(),s.vaporVolume(),
-                phase(s.liquidProperties(),map,width),phase(s.vaporProperties(),map,width),s.solids(),s.solidMoments(),s.waterCompressibility());
+        return cut(s,map,width);
     }
     /** A node padded onto {@code world}'s list ({@link #padded}): what the ledger books and a view reads, never solved. */
     static PassiveNetwork.Reservoir paddedNode(PassiveNetwork.Reservoir n,FluidThermodynamics from,FluidThermodynamics world) {
@@ -166,7 +170,8 @@ public final class IslandSets {
     /**
      * The list a compiled island starts from (owner decisions 2026-11-04): nitrogen (the ambient and the junction
      * placeholder), every compound a node's stock holds (an origin's on the model it was held on, any other node's on the
-     * world model it was compiled on) and every crystal of a filter cake. Water is on every list.
+     * world model it was compiled on) and every crystal of a filter cake. Water is on every list's conserved basis; the set
+     * names {@code Water} where the island holds some (W3b option A: {@link FluidThermodynamics#island}).
      */
     static Set<String> held(PassiveNetwork graph,FluidThermodynamics world,Map<Long,Origin> origins) {
         var set=new HashSet<String>();
@@ -188,19 +193,20 @@ public final class IslandSets {
     }
     /**
      * The compounds {@code graph} holds on {@code model}: every nonzero amount of a node's inventory or state, every crystal's
-     * compound in a node's or a filter's solids; water never (it is on every list).
+     * compound in a node's or a filter's solids; {@code Water} where any of these holds water (W3b option A).
      */
     static void held(PassiveNetwork graph,FluidThermodynamics model,Set<String> into) {
         for(var n:graph.reservoirs())held(n,model,into);
         for(var p:graph.pipes())if(p.filter()!=null)crystals(p.filter().captured(),into);
     }
     static void held(PassiveNetwork.Reservoir n,FluidThermodynamics model,Set<String> into) {
-        var names=model.compounds();var moles=n.inventory().moles();var l=n.state().liquidView();var v=n.state().vaporView();
-        for(int i=0;i<names.size();i++)if(moles[i]!=0||l[i]!=0||v[i]!=0)into.add(names.get(i));
+        var names=model.compounds();var moles=n.inventory().moles();var totals=n.state().totals();
+        for(int i=0;i<names.size();i++)if(moles[i]!=0||totals[i]!=0)into.add(names.get(i));
+        if(moles[names.size()]!=0||totals[names.size()]!=0)into.add(com.wormzjl.icheme.science.thermo.phase.CubicPhaseEvaluator.WATER);
         crystals(n.inventory().solids(),into);crystals(n.state().solids(),into);
     }
     static void crystals(com.wormzjl.icheme.science.fluid.state.SolidInventory solids,Set<String> into) {
-        for(var p:solids.populations()){var crystal=p.material().crystal();if(crystal!=null&&!crystal.component().equals("Water"))into.add(crystal.component());}
+        for(var p:solids.populations()){var crystal=p.material().crystal();if(crystal!=null)into.add(crystal.component());}
     }
     /**
      * An island snapshot on the world list for presentation (V2 stage 5): the views, sight glasses, tank displays, heat

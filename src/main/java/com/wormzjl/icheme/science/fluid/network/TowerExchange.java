@@ -9,56 +9,69 @@ import java.util.Objects;
 /** Common atmospheric boundary for Newton, conservative reconstruction and accepted presentation. */
 public final class TowerExchange {
     private TowerExchange() {}
-    /** Every tower's rates at {@code states} and {@code flows}, by node identity. */
-    static Map<Long,Rates> readings(PassiveNetwork graph,List<FluidThermodynamics.State> states,double[] flows,FluidThermodynamics model){
+    /** Every tower's rates at {@code states}, {@code flows} and the phase draws {@code draws} (null: every end draws its bulk), by node identity. */
+    static Map<Long,Rates> readings(PassiveNetwork graph,List<FluidThermodynamics.State> states,double[] flows,double[][] draws,FluidThermodynamics model){
         Map<Long,Rates> result=null;
         for(int node=0;node<graph.reservoirs().size();node++)if(graph.reservoirs().get(node).inventory().tower()!=null){
             if(result==null)result=new HashMap<>();
-            result.put(graph.reservoirs().get(node).id(),at(graph,node,states,flows,model));
+            result.put(graph.reservoirs().get(node).id(),at(graph,node,states,flows,draws,model));
         }
         return result==null?Map.of():result;
     }
+    /** At rest nothing arrives: each tower's draught, fans and basin surface alone. */
     static Map<Long,Rates> atRest(PassiveNetwork graph,FluidThermodynamics model){
         boolean tower=false;for(var node:graph.reservoirs())tower|=node.inventory().tower()!=null;
         if(!tower)return Map.of();
-        return readings(graph,graph.reservoirs().stream().map(PassiveNetwork.Reservoir::state).toList(),new double[graph.pipes().size()],model);
+        return readings(graph,graph.reservoirs().stream().map(PassiveNetwork.Reservoir::state).toList(),new double[graph.pipes().size()],null,model);
     }
-    /** Water and energy leave through the fill's result and the basin surface; only the fill evaporates. */
+    /**
+     * What leaves for the air (the fill's result: the arriving gas, the nozzle's vapour, the fill's exchange) and the
+     * basin surface's heat; only the spray exchanges mass. {@code inletFlow}: the liquid the sprays bring, kg/s.
+     */
     public record Rates(TowerTransfer.Result fill,double surfaceWatt,double inletTemperature,double inletFlow,String status) {
         public Rates {
             Objects.requireNonNull(fill);Objects.requireNonNull(status);
             for(double value:new double[]{surfaceWatt,inletTemperature,inletFlow})
                 if(!Double.isFinite(value))throw new IllegalArgumentException("Nonfinite tower reading");
         }
-        public double waterLoss(){return fill.evaporation();}
+        /** Component {@code c}'s loss to the air, kg/s (a gain negative). */
+        public double loss(int c){return fill.loss(c);}
+        /** The net mass the stream loses to the air, kg/s. */
+        public double massLoss(){return fill.evaporation();}
+        /** Water's loss to the air, kg/s. */
+        public double waterLoss(){return fill.waterLoss();}
         public double energyWatt(){return fill.energyWatt()+surfaceWatt;}
         public double coolingDutyWatt(){return fill.dutyWatt()+surfaceWatt;}
     }
-    /** Whether a stream can feed the fill: its liquid is water alone and stays liquid at the atmosphere. Its gas passes to the basin, whose vent takes it. */
-    public static boolean liquidWater(FluidThermodynamics model,FluidThermodynamics.State state) {
-        if(!state.solids().empty()||state.waterLiquid()<=0)return false;
-        for(double amount:state.liquid())if(amount!=0)return false;
-        return model.saturationPressure(state.temperature())<CoolingTower.PRESSURE;
-    }
-    public static Rates at(PassiveNetwork graph,int node,List<FluidThermodynamics.State> states,double[] flows,FluidThermodynamics model) {
-        var basin=graph.reservoirs().get(node);var tower=basin.inventory().tower();
-        double inlet=0,heat=0;boolean unsupported=false;
+    /**
+     * The stream the sprays deliver to {@code node} (COOLING_TOWER_PLAN.md 3.1), at {@code states} and {@code flows}:
+     * per spray edge the stream its donor end draws, {@code draws[edge]} (D11's six mass flows) or the donor's bulk where
+     * that is null; the pinned phases read on the step's start state, the graph's.
+     */
+    static TowerTransfer.Stream stream(PassiveNetwork graph,int node,List<FluidThermodynamics.State> states,double[] flows,double[][] draws,FluidThermodynamics model) {
+        var stream=TowerTransfer.Stream.none(model.componentCount());
         for(int edge=0;edge<flows.length;edge++){
             var pipe=graph.pipes().get(edge);boolean first=pipe.first()==node;
             if(!first&&pipe.second()!=node||pipe.portAt(node)!=PassiveNetwork.PhasePort.SPRAY)continue;
-            double incoming=first?-flows[edge]:flows[edge];
-            var donor=states.get(first?pipe.second():pipe.first());
-            if(!liquidWater(model,donor)){unsupported=true;continue;}
-            if(incoming>0){double water=incoming*donor.waterLiquid()*model.waterMolecularWeight/donor.mass();inlet+=water;heat+=water*donor.temperature();}
+            double incoming=first?-flows[edge]:flows[edge];int donor=first?pipe.second():pipe.first();
+            if(!(incoming>0)||!(states.get(donor).mass()>0))continue;
+            stream=stream.plus(TowerTransfer.Stream.of(model,incoming,draws==null?null:draws[edge],states.get(donor),graph.reservoirs().get(donor).state()));
         }
-        double basinTemperature=states.get(node).temperature();
-        double temperature=inlet>0?heat/inlet:basinTemperature;
+        return stream;
+    }
+    public static Rates at(PassiveNetwork graph,int node,List<FluidThermodynamics.State> states,double[] flows,double[][] draws,FluidThermodynamics model) {
+        return at(graph,node,states.get(node).temperature(),stream(graph,node,states,flows,draws,model),model);
+    }
+    /** {@code node}'s rates for the delivered {@code stream}, its basin at {@code basinTemperature}. */
+    static Rates at(PassiveNetwork graph,int node,double basinTemperature,TowerTransfer.Stream stream,FluidThermodynamics model) {
+        var basin=graph.reservoirs().get(node);var tower=basin.inventory().tower();
+        double inlet=stream.liquidMass(),temperature=inlet>0?stream.temperature():basinTemperature;
+        var prepared=TowerTransfer.prepare(model,stream);
         boolean target=tower.mode()==CoolingTower.Mode.TARGET_TEMPERATURE;
         // Fans without power stand (W5, fanLimit 0): the tower runs on its stack draught alone.
-        double speed=tower.fanSpeed(!target?tower.speed():inlet>0&&tower.fanLimit()>0?TowerTransfer.targetSpeed(model,tower,inlet,temperature):0);
-        var fill=TowerTransfer.fill(model,tower,inlet,temperature,speed);
-        String status=unsupported?"WATER_ONLY: pure liquid water required at atmospheric discharge"
-            :target&&inlet>0&&Math.abs(fill.outletTemperature()-tower.setPoint())>.1?"TARGET_LIMIT: leaving-water temperature target unavailable"
+        double speed=tower.fanSpeed(!target?tower.speed():inlet>0&&tower.fanLimit()>0?TowerTransfer.targetSpeed(model,tower,prepared,basinTemperature):0);
+        var fill=TowerTransfer.spray(model,tower,prepared,basinTemperature,speed);
+        String status=target&&inlet>0&&Math.abs(fill.outletTemperature()-tower.setPoint())>.1?"TARGET_LIMIT: leaving-liquid temperature target unavailable"
             :inlet==0?"NO_SPRAY: basin surface exchange only":"RUNNING";
         return new Rates(fill,basin.empty()?0:TowerTransfer.surfaceWatt(tower,basinTemperature),temperature,inlet,status);
     }

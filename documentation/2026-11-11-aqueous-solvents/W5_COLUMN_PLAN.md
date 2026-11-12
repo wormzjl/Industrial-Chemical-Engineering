@@ -1,0 +1,314 @@
+# W5: the V3 column on the one equation of state, water on its axis
+
+Batch 2026-11-11-aqueous-solvents, work package W5 of [AQUEOUS_SOLVENTS_PLAN.md](AQUEOUS_SOLVENTS_PLAN.md) (M7 and
+row W5). It follows [W4_STILL_PLAN.md](W4_STILL_PLAN.md). Written 2026-11-12 at 0f0577aff (owner: "Write W5
+design"). A design, not built. Section 5 holds the owner's choices, section 9 the delegation request.
+
+## 1. Expected, in numbers
+
+Ethanol and water at 1 atm on the batch's model (measured on the engine in W4): azeotrope 0.8965 ethanol; a liquid
+of 0.0332 boils at 92.574 C under a vapour of 0.2567; the still's own column gives 0.7255 with 4 trays and 0.7995
+with 8 trays at a reflux ratio of 3.
+
+- E1, a rectifier. Feed 100 mol/s, 0.10 ethanol, liquid at its bubble point (about 86.5 C; measured 86.7 C at
+  0.0966 under a vapour of 0.4375). 10 trays, feed on tray 8, reflux ratio 3, all condensed at 70 C, reboiler
+  1.77 MW.
+  - Boil-up 1.77 MW / 40.7 kJ/mol = 43.5 mol/s. The reflux returns 8 K cold and condenses 2.5 % of itself more, so
+    the top vapour is 4.075 D: distillate about 10.7 mol/s.
+  - Distillate 0.80 to 0.86 ethanol, top tray 78.2 to 78.6 C; bottoms about 89 mol/s with about 0.012 ethanol, near
+    96.5 C. The distillate within 0.01 of a McCabe-Thiele construction on the same K values.
+- E2, the limit. 30 trays, reflux ratio 10: distillate between 0.88 and 0.8965; never past the azeotrope.
+- E3, a stripper. The same feed on tray 1 of 8 trays, reflux ratio 0.1, reboiler 1.22 MW (a boil-up of 30 mol/s).
+  Water's stripping factor for ethanol is K V / L: about 1.3 at the feed (K 4.4) and 3.6 in the dilute bottom
+  (K about 12). Bottoms ethanol about 1e-4, under 1e-3.
+- Crude columns. The same pairs as the network move the light ends: a dry crude's bubble pressure at 25 C went
+  from 115.0 to 129.6 kPa in the network (W3B_NETWORK_PLAN.md section 33, G3), H-101's duty by -3.9 kW of 73 MW
+  (section 47). Expected on `medium_crude`: more overhead vapour (an estimate, 5 to 15 %), tray temperatures within
+  1 K, duties within 1 %.
+
+## 2. What the code does
+
+- Two sets of pairs. The column's kernel is `V3PengRobinsonSession.kernelFor`: a classical `PengRobinsonKernel` on
+  the package's authored `interactions()`. The network's model is `CubicPhaseEvaluator.derived`
+  (`DerivedPairs.derive`): authored pairs where a library gives them, derived ones elsewhere. A sheet flashes a
+  column's feed on one and solves the column on the other.
+- Water is outside the column's axis. Hydrocarbons are component flows; water is stripping steam
+  (`V3SteamFeedSpec`), free water on wet trays (`V3WetTraySet`, `V3FreeWaterContinuation`), a condenser water
+  regime and `V3WaterProperties`. The free water is pure.
+- The callers map water. `ColumnBlockSolve.run` (the sheet): the feed's water becomes a steam feed at the feed
+  stage; an aqueous liquid in the feed is refused (`column.liquid_water`). `ColumnSolve` (the running column, its
+  input near lines 164 to 212): feed water superheated at the feed tray is a steam feed, else "it follows the
+  distillate".
+- The Water slot exists already. A sheet's and an island's catalog is the water view (`MaterialCatalog.withWater`):
+  the package names Water last, and V3 carries it on its axis with a flow of zero.
+- So an ethanol and water feed is solved wrong: ethanol on the axis with every pair zero, water as steam and pure
+  free water. No azeotrope, no ethanol in the water.
+- The learned start (`V3NeuralRegistry.bind`) needs a model whose compounds cover the feed. None holds ethanol, so
+  such a column starts from `V3ColumnInitializer`.
+
+## 3. The design
+
+- **D1. One kernel.** `V3PengRobinsonSession.kernelFor` takes the kernel of
+  `DerivedPairs.derive(catalog, packageId, the package's components)` at the numerical box, and the critical
+  constants of that result. The session's arithmetic stays: the ideal-gas polynomial plus the kernel's residual,
+  the kernel's own derivatives. A list without an activity pair runs the classical branch, at today's cost.
+  - `datasetRevision()` stays the package's records, so the bundled learned models still bind; every formulation
+    label of `V3ColumnCalculator.formulationRevision` gains one suffix for the derived pairs.
+  - `binaryInteractions()` keeps the authored matrix for its readers (`TrainedPhysics.matches`, the lens).
+- **D2. V3 has no water mode.** Water is on the axis where the feed's Water entry is above zero. Such a request is
+  an ordinary column of its list: vapour and one liquid on the derived kernel, water's pairs the Huron-Vidal ones.
+  It has no steam rows (refused: water would be modelled twice), no wet tray, no condenser water regime. A request
+  with Water at zero is solved as today.
+- **D3. The callers decide, by one shared rule** (one function, read by `ColumnBlockSolve.run` and
+  `ColumnSolve`): water goes on the axis where the feed carries a water-miscible organic above a share of its
+  moles (section 5, choice 1); otherwise to steam, as today.
+  - On the axis: the feed is every amount, water included; an aqueous liquid in the feed is taken; a steam row
+    with a flow is refused with its reason (section 5, choice 2).
+  - Off the axis: as today, on the list without Water (`MaterialCatalog.restrict`), so the kernel stays on its
+    classical branch. Water dissolved in the oil keeps joining the steam: V3's free water is immiscible by
+    construction. The comment in `ColumnBlockSolve.run` that W5 removes this is corrected.
+- **D4. Water's enthalpy on the axis is the cubic's alone** (section 5, choice 3). Equilibrium is the cubic's in
+  the network too, so the K values are the network's exactly. The network adds water's share to enthalpy; without
+  it the heat of vaporization is 0.23 % off at 25 C, 0.60 % at 100 C, 2.2 % at 200 C. The ports carry moles at a
+  temperature, so nothing is booked twice.
+- **D5. Two liquids warn.** After an accepted solve with water on the axis, the caller splits each tray liquid
+  and the distillate once with the engine (`FluidThermodynamics.flashTP`), only where the liquid holds water and a
+  compound without a polar group above 1e-6. A liquid that settles is a notice naming the trays
+  (`column.two_liquids`), not a failure: the rule of the V3 column's free water and of the still's trays. An
+  ethanol and water column makes no such split.
+- **D6. No start network.** Such lists start from the classical seed; nothing is trained in this batch.
+- **D7. Hydraulics and sizing** read water and the solvent like any compound (the Rackett scaling of the standard
+  density, Kay's rule). The tray correlations stay the hydrocarbon ones: a known approximation, recorded.
+- **D8. Saves and the wire.** No facts field changes: the axis is the catalog's and already holds Water. If any
+  facts format turns out to carry what this changes, the build stops and reports.
+- **D9. Cost.** Kernel evaluations and Newton iterations of `medium_crude` before and after D1; a rise above 2 %
+  is reported. A sour list (hydrogen sulfide, sulfur dioxide, a mercaptan) takes the activity branch today, 5.4
+  times the kernel time in the network (README, open owner item): one sour column is measured, and a rise above
+  1.5 times stops the build for that owner item.
+
+## 4. What moves
+
+- Every V3 reference with a gas beside a crude cut, once (D1): the column tests' pinned numbers, the sizing
+  samples, the sheet examples (`crude_unit` is already waiting for its re-record). Each is re-pinned with its
+  cause.
+- The learned starts are measured against the new pairs on the bundled presets: accepted or not, Newton
+  iterations, beside the classical start. A model is retrained only where its start stops helping; that, and
+  whether the authored libraries retire then, is the owner's decision at that point (README, open item).
+- Literature overlays (`tjl19_dwsim`, `holland_b12`, the CDU17 fixture): if a derived pair moves a number that
+  reproduces a published one, the build reports it before re-pinning.
+- Not touched: the still, the network, the free-water machinery, the wire, facts.
+
+## 5. Choices for the owner
+
+1. Which feeds put water on the axis.
+   - a. A compound that names a homomorph (ethanol today: the batch's mark of a water-miscible organic) above 1e-3
+     of the feed's moles. Recommended.
+   - b. Any compound with a polar group. Then a sour crude column (hydrogen sulfide, a mercaptan) loses its steam
+     and its free water.
+   - c. A new flag on the compound record, written in W6.
+2. Stripping steam in a column with water on its axis.
+   - a. Refused with its reason; the reboiler heats. Recommended: the smallest change.
+   - b. Built now as a vapour feed of water on the axis (a second feed term in the tray rows). One more work
+     package; a beer column on live steam is the classic use.
+3. Water's enthalpy on the axis.
+   - a. The cubic alone (D4). Recommended.
+   - b. The network's share in the column too: exact agreement with the sheet's duties, new derivative plumbing
+     in the column's rows.
+
+## 6. Gates
+
+| Gate | Proves |
+|---|---|
+| E1 against a McCabe-Thiele construction in the test, on the kernel's K at 1 atm | distillate within 0.01; D within 3 % of 10.7 mol/s; the column's own balance audits pass |
+| E2 | 0.88 to 0.8965, never above |
+| E3 | bottoms ethanol under 1e-3 |
+| A dry column before and after D1 on a list with no gas (pentane to octane) | bit for bit: no pair moved |
+| `medium_crude` before and after D1 | the moved numbers inside section 1's bands, or reported |
+| The learned start on each bundled preset | accepted; iterations beside the classical start |
+| Ethanol, water and n-hexane feed | converged or a typed failure; `column.two_liquids` names the trays |
+| A steam row with water on the axis | refused with its reason |
+| The sheet: a wash feed into a column unit | no `column.liquid_water`; products close mass to 1e-9 |
+| A crude sheet with 1e-6 of ethanol | steam and free water kept (under the share) |
+| The running column on a wash island | a split table with water in distillate and bottoms |
+| Kernel evaluations, `medium_crude` | within 2 % of before |
+
+## 7. Failure modes to expect
+
+- A derived pair with no source (`DerivedPairs.Source.MISSING`) on a test overlay whose compounds carry no group
+  counts: the pair must read zero, not refuse the column.
+- The feed flash and the classical seed start from Wilson K values, which know no azeotrope: E1 may need more
+  Newton iterations than a crude column; a failure there is reported with its stage, not patched in the seed.
+- Near the azeotrope the liquid and the vapour have almost one composition. `INTERIOR_PHASE_IDENTITY` also
+  compares roots and enthalpies, so it should pass; if it rejects E2, report.
+- The condenser at 70 C must read all liquid (no vapour distillate, no water regime).
+- A column near choice 1's share flips between the two treatments from one solve to the next; accepted, recorded.
+- Support: Water at zero in a crude request must stay out of the solve as today (the list without Water).
+
+## 8. Build order
+
+Each step ends with a report and a commit by explicit path. Tests by `--tests`, at most 4 workers beside another
+run; `columnGates` holds the column classes.
+
+- W5-0. Baseline: `./gradlew columnGates` once on HEAD. Its inputs changed since its last pass (the kernel, the
+  catalog) and it has not run. Record what fails before any change.
+- W5a. D1 and D9: `kernelFor`, the label suffix. Then the dry bit-for-bit gate, `medium_crude`, the learned
+  starts, the sour column, the moved references re-pinned with causes. One `columnGates` run after it.
+- W5b. D2 inside V3: the steam refusal, the classical start on E1 to E3 (test package `pilot-aqueous`).
+- W5c. D3 and D5 in the callers: the shared rule, `ColumnBlockSolve.run`, `ColumnSolve`, `SplitTable`, the
+  two-liquid notice, the en_us lines (`column.two_liquids`, the steam refusal). Their gates.
+- W5d. The code guide: `column-v3.md`, `column-operation.md`, `process-simulator.md`.
+- Not in W5: the campaign and the final lane; `equipmentGates`' column classes (the final lane); a start
+  network; ethanol in the main data (W6).
+
+## 9. Delegation request
+
+**Sub-thread** (`start_session`, 1-h cache), new, with this document as its brief.
+
+- What it does: steps W5-0 to W5d. Done: section 6's gates pass, every moved reference is re-pinned with its
+  cause, the reports are written, the commits are made.
+- Why not the main thread: it runs `columnGates` twice and many filtered column tests, each minutes long.
+- Model and effort: Opus high. The column's solver and its references are a hard task; it is not a
+  cross-subsystem design.
+- New, not a reuse: `w4-still` holds the still and the open vessel, not the column, and its context is long.
+- Context: fresh, this plan.
+- It waits on: Gradle runs, about 3 to 6 hours in all. Updates every 50 minutes, at once on a decision, a final
+  report.
+
+## 10. Owner approval (2026-11-12)
+
+"Approve both": the design with section 5's recommended choices, and section 9's sub-thread.
+
+- Choice 1 a: water goes on the axis where the feed carries a compound that names a homomorph above 1e-3 of the
+  feed's moles.
+- Choice 2 a: a steam row with water on the axis is refused with its reason; the reboiler heats.
+- Choice 3 a: water's enthalpy on the axis is the cubic's alone.
+- A new sub-thread `w5-column` on Opus high builds steps W5-0 to W5d in this worktree with this document as its
+  brief; the orchestrator records its reports here and in the README. Not built yet.
+
+## 11. W5-0 and W5a's first numbers; the sour column's cost (2026-11-12)
+
+Reports `tmp/w5-column/reports/W5-0_BASELINE.md` and `W5a_SOUR_COST_DECISION.md`; W5a is not committed yet.
+
+- W5-0: `columnGates` on cd0be5189: 83 classes, 540 tests, none failing, 1 min 40 s. The kernel and catalog
+  changes of W1 to W3 moved no column gate: the column was still on the authored matrix.
+- W5a on `medium_crude` (31 new pairs of methane and ethane with the cuts, no activity pair): overhead vapour
+  +0.14 %, temperatures within 0.015 K, duties 0.005 %, kernel evaluations -3.4 %. Section 1's estimate of 5 to
+  15 % more overhead vapour was wrong: the light ends are a small share of that overhead. The kernel's time per
+  call rose 1.11 (evaluate) and 1.46 (derivatives); the whole solve's time is asked for.
+- Three contradictions fixed in place by the sub-thread, to be reviewed with W5a's commit: the learned model's
+  lens has no pair libraries, so the derivation refused it and every learned start fell back (the lens now keeps
+  its own matrix); the CDU17 fixture's catalog has no group tables (counts are made only where the table exists);
+  the native Peng-Robinson batch read the authored matrix (it now reads the kernel's constant matrix or yields to
+  the Java snapshot).
+- The sour column (D9's bound of 1.5 times is passed). List: methane to n-pentane, three cuts, hydrogen sulfide,
+  methyl mercaptan; 10 trays.
+  1. Expected: the same cost as a crude column of that size.
+  2. Measured: one evaluate 163 to 592 ns (3.63 times), one derivative 575 to 2,663 ns (4.63 times); the same 5
+     Newton iterations, evaluations +0.5 %; products move 0.3 to 0.4 %. Hydrogen sulfide and the mercaptan are
+     polar by their group counts, so their pairs with hydrocarbons are activity fits and the kernel leaves its
+     classical branch. The kernel is 10 to 25 % of a solve: a sour column solves about 1.4 to 1.8 times as long.
+     The network pays 5.4 times on a dry sour list (W3B_NETWORK_PLAN.md section 9).
+  3. Options, the owner's (the open item of W3B_NETWORK_PLAN.md section 9):
+     - a. Keep: every compound with a polar group takes activity fits with hydrocarbons. No change.
+     - c. Activity fits with hydrocarbons only for compounds that name a homomorph (the water-miscible organics).
+       Hydrogen sulfide, sulfur dioxide, the mercaptans, ammonia and carbonyl sulfide then take constant pairs
+       with hydrocarbons (library, else E-PPR78 at 298.15 K; all six records carry its counts) and today's cost;
+       their pairs with water stay. A change in `DerivedPairs` for network and column alike; sour references
+       move once, by about the 0.3 to 0.4 % above.
+     - b, a column-only rule, is refused: two kernels again.
+  Until the owner decides, a stands and W5b and W5c go on.
+
+## 12. W5a and W5b committed (2026-11-12)
+
+The sub-thread's update; the diffs are not reviewed by the orchestrator yet.
+
+- W5a `22cb2f96d`: `columnGates` after D1 failed 13 tests, all W5's: 5 label pins, the synthetic learned-model
+  fixtures on the full label, and 12 draw-volume targets moved by 2e-6 to 1.5e-4. Re-pinned with causes; the
+  reruns pass. The literature preset's condenser duty moved 6e-6.
+- W5b `213b1b1e2`, beside section 1:
+
+  | Gate | Expected | Measured |
+  |---|---|---|
+  | E1 distillate, against McCabe-Thiele | 0.80 to 0.86, within 0.01 | 0.8075 against 0.8069 |
+  | E1 distillate rate, top tray | about 10.7 mol/s, 78.2 to 78.6 C | 10.49 mol/s, 78.55 C |
+  | E2 | 0.88 to 0.8965 | 0.8836 |
+  | E3 bottoms ethanol | about 1e-4, under 1e-3 | 5.5e-6 |
+  | A steam row with water on the axis | refused | refused |
+
+  V3 needed no other change for water on its axis.
+- Next: W5c, then W5d. The sour column's choice (section 11) is open; option a stands meanwhile.
+
+## 13. Owner: activity fits only for water and compounds that name a homomorph (2026-11-12)
+
+"Yes, limit them": option c of section 11, and its build by the live sub-thread `w5-column` (Opus high), after W5c.
+
+- The rule: in `DerivedPairs.derive` a pair is an activity fit only where one of its two compounds is water or a
+  polar compound that names a homomorph. Any other pair with a polar compound takes E-PPR78 at 298.15 K where
+  both carry its counts, else zero with its reason. `DerivedPairs.REVISION` goes to r7.
+- What it reaches, from the bundled records: methyl mercaptan alone. It is the one compound other than water with
+  polar Dortmund counts (`CH3SH`). Hydrogen sulfide, sulfur dioxide, ethyl mercaptan, ammonia and carbonyl sulfide
+  carry no Dortmund counts, so they never took activity fits; section 11 and the README's old item named them
+  wrongly. Its pair with water stays an activity fit.
+- Expected: the sour column's kernel calls back near the crude list's ratio (evaluate 1.1 to 1.2 times the
+  authored matrix, derivatives about 1.5); products within 0.4 % of the authored-matrix column; every list without
+  methyl mercaptan bit for bit; the network's dry polar cost scenario near its dry one.
+- Reach: the derivation's identity changes for every list (saved network state on r6 is dropped and rebuilt;
+  facts are not touched). The campaign's numbers can move where a world holds methyl mercaptan: the final lane's.
+
+## 14. W5 built: the callers, the guide, the activity rule (2026-11-12)
+
+Sub-thread `w5-column` (Opus high). Commits: W5c `a7321ef64`, W5d `6e48203b7`, the activity rule `d513fa5bf`
+(`derived-pairs-r7`). Reports: `tmp/w5-column/reports/W5_FINAL.md`, `W5_ACTIVITY_RULE.md`, `W5a_REPORT.md`. The main
+thread read the diffs of the kernel, the lens, the native batch, `ColumnWater` and the two callers: as designed.
+
+W5c, the callers (D3, D5):
+- `ColumnWater.onAxis`: water goes on the axis where a compound that names a homomorph exceeds 1e-3 of the feed's
+  moles. The sheet's block (`ColumnBlockSolve.run`) and the running column (`ColumnSolve.run`) read it on the feed.
+- On the axis the whole feed enters V3 on the list with water; a steam row with a flow is refused
+  (`column.steam_on_axis`). Off the axis nothing changes: water is a steam feed, `column.liquid_water` stays.
+- `ColumnWater.settling`: one `flashTP` per tray liquid and the distillate after an accepted solve; a liquid that
+  would settle is a warning (`column.two_liquids`, `column.two_liquids_distillate`), never a failure.
+
+| Gate | Plan | Measured |
+|---|---|---|
+| Sheet wash | no `liquid_water`; mass to 1e-9 | STEADY; 2.082060 kg/s in = out; distillate 0.8075 |
+| Ethanol, water, hexane | converged or typed; names trays | STEADY; `column.two_liquids` [8] and the distillate |
+| Steam with water on the axis | refused | refused (V3, running column, sheet) |
+| Crude with 1e-6 ethanol | steam and free water kept | free water 381.3 mol/s; basis without water |
+| Running wash island | water in distillate and bottoms | 0.02245 / 0.97755 |
+
+Three more references moved by D1 in W5c's reach, re-pinned with that cause: naphtha bubble 2.3186 to 2.2989 bar
+(the receiver liquid is again at its own bubble point), P-102's NPSH 32.35 to 34.69 m, H-101's ask 98.04 to
+98.03 MW. Attributed to W5a by mechanism, not bisected.
+
+The activity rule (section 13), measured:
+- 20 pairs move, all methyl mercaptan with a hydrocarbon or a cut: activity fit to E-PPR78, k_ij -0.083 to 0.084.
+- Sour column kernel against the authored matrix: evaluate 3.63 to 1.10 times, derivatives 4.63 to 1.15 times.
+- Network polar cost scenario: polar/dry 1.80 after stage B, 1.34 now; main 1.31.
+- Lists without methyl mercaptan: identical, except the identity's revision token. `FluidFactsCompatTest` 21 of 21.
+
+Where the measurement contradicted this plan:
+- Section 13 said methyl mercaptan's pair with water stays an activity fit. It never was one: the Dortmund table
+  has no H2O/CH3SH pair, so it was E-PPR78 already (k 0.344). Methyl mercaptan now takes no activity pair.
+- Sour products against the authored-matrix column: overhead +0.54 %, distillate -0.40 %, bottoms -0.16 %. The
+  overhead is 0.14 points over section 13's 0.4 % bound. Cause: E-PPR78 pairs where the authored library has
+  none. Kept; no reference is pinned on it.
+
+Cost of W5 on a crude column (`medium_crude`): kernel evaluations -3.4 %; one evaluation 1.11 times and one
+derivative 1.46 times the authored matrix's (E-PPR78 pairs of the gases with the cuts); a warm solve about 1.07
+times. The native batch keeps crude lists (constant classical pairs).
+
+Open from W5:
+- The column's digest and label do not carry the derivation's identity (`DerivedPairs.Result.identity`): the label
+  says `-derived-pairs-r1`, so an edit to the derivation (r6 to r7), a Henry record or a group table does not
+  change a column result's digest. Nothing saved compares it (`ColumnWire` sends it for display); the network's
+  identity carries it (`PhaseContract.forDerived`). Left as it is; a later label bump at a derivation edit that
+  moves column results is by hand.
+- E2's margin is thin (0.88356 against a floor of 0.88).
+- A whole-list network model that holds methyl mercaptan at zero amount still changes kernel derivatives; the
+  campaign's reach of r7 is the final lane's.
+- `crude_unit` in `FlowsheetExamplesTest` records water r3 (data r4 since e1b9a3dd0): re-record in the final lane.
+- Six `en_us.json` keys to translate at the translation commit: `column.steam_on_axis`, `column.two_liquids`,
+  `column.two_liquids_distillate`, `still.water`, `still.settles`, `still.pot_still`.
+- Not built, as chosen: stripping steam on the axis (choice 2 b), water's enthalpy shared with the table
+  (choice 3 b), a three-phase column, a start network for ethanol and water columns.

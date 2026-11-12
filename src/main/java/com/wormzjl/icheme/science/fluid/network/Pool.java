@@ -88,7 +88,7 @@ public record Pool(long id,long partner,double area,double bottom,double bundle,
      * its highest. A kettle's duty falls as its level uncovers its bundle (its weir stands just over it).
      */
     public double wetted(FluidThermodynamics.State contents,VesselGeometry vessel) {
-        double liquid=contents.liquidVolume()+contents.waterVolume();if(!(liquid>0))return 0;
+        double liquid=contents.condensedVolume();if(!(liquid>0))return 0;
         double r=bundle/2,depth=vessel.heightAt(liquid)-bottom;
         if(depth<=0)return 0;
         if(depth>=bundle)return 1;

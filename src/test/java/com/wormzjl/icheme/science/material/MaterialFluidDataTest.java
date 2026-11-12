@@ -14,7 +14,7 @@ class MaterialFluidDataTest {
   var original=MaterialCatalog.bundled();var resources=new HashMap<>(original.resources());String path=ROOT+"dissolved_viscosity.json";
   var data=JsonParser.parseString(resources.get(path)).getAsJsonObject();var first=data.getAsJsonArray("curves").get(0).getAsJsonObject();
   var values=first.getAsJsonArray("viscosities_pascal_seconds");values.set(0,new JsonPrimitive(values.get(0).getAsDouble()*2));bump(data);resources.put(path,data.toString());
-  var changed=MaterialCatalog.parse(resources);var p=original.requirePackage(ID);var amounts=new double[p.components().size()];
+  var changed=MaterialCatalog.parse(resources);var p=original.requirePackage(ID);var amounts=new double[original.conservedComponents(ID).size()];
   amounts[p.components().indexOf("Methane")]=.05;amounts[p.components().indexOf("crude_pc12")]=.95;
   var captured=new MixtureViscosity(original,ID);double before=captured.liquid(293.15,amounts).pascalSeconds();
   assertEquals(original.physicsContent(ID,p.components()),changed.physicsContent(ID,p.components()));
@@ -52,8 +52,9 @@ class MaterialFluidDataTest {
   assertNotEquals(translated.fluidRevision(ID),recalibrated.fluidRevision(ID));
   var components=translated.requirePackage(ID).components();double[] pure=new double[components.size()];pure[components.indexOf("Methane")]=1;
   var liquid=com.wormzjl.icheme.science.thermo.PengRobinsonKernel.Root.LIQUID;
-  double before=new com.wormzjl.icheme.science.fluid.thermo.HydrocarbonModel(translated,ID).phase(point.temperatureKelvin(),point.pressurePascal(),pure,liquid).molarVolume();
-  double after=new com.wormzjl.icheme.science.fluid.thermo.HydrocarbonModel(recalibrated,ID).phase(point.temperatureKelvin(),point.pressurePascal(),pure,liquid).molarVolume();
+  var translatedModel=new com.wormzjl.icheme.science.fluid.thermo.HydrocarbonModel(translated,ID);var recalibratedModel=new com.wormzjl.icheme.science.fluid.thermo.HydrocarbonModel(recalibrated,ID);
+  double before=translatedModel.phase(point.temperatureKelvin(),point.pressurePascal(),com.wormzjl.icheme.science.fluid.thermo.TestPhases.conserved(translatedModel,pure),liquid).molarVolume();
+  double after=recalibratedModel.phase(point.temperatureKelvin(),point.pressurePascal(),com.wormzjl.icheme.science.fluid.thermo.TestPhases.conserved(recalibratedModel,pure),liquid).molarVolume();
   assertEquals(point.molarVolumeCubicMetres(),before,1e-9*before,"the calibration point, not the record's translation");
   assertEquals(1.01,after/before,1e-9,"the recalibrated point");
  }

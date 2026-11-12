@@ -61,6 +61,26 @@
     "source": "Hess's law on this record's thermochemistry (chemsep-8.3-hf-r1): the formula burnt to CO2, H2O (gas), SO2 and N2 on the ideal-gas heats of formation at 298.15 K of icheme:chemsep_carbon_dioxide (chemsep-8.3-hf-r1), icheme:water (chemsep-8.3-hf-r1) and icheme:chemsep_sulfur_dioxide (chemsep-8.3-hf-r1). Computed by tools/heating-values/heating-values.mjs. Read by a fired heater's burners.",
     "revision": "hess-lhv-r1"
   },
+  "group_counts": {
+    "eppr78-2022": {
+      "counts": {
+        "H2S": 1
+      },
+      "estimated": false,
+      "source": "PPR78 group counts of ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Hydrogen sulfide\" (ChemSep index 1922, CAS 7783-06-4), group numbers mapped to the names of the eppr78-2022 group_interactions record (eppr78-2022-si-table-s4-r2). Data for the pairs derived from group counts.",
+      "revision": "chemsep-8.3-ppr78-r1"
+    }
+  },
+  "henry_in_water": {
+    "type": "iapws_g7_04",
+    "coefficients": [
+      -4.51499,
+      5.23538,
+      4.42126
+    ],
+    "source": "IAPWS G7-04, Guideline on the Henry's Constant and Vapor-Liquid Distribution Constant for Gases in H2O and D2O at High Temperatures (2004), after R. Fernandez-Prini, J. L. Alvarez, A. H. Harvey, J. Phys. Chem. Ref. Data 32 (2003) 903, table of A, B, C for H2S in H2O: ln(kH/p*) = A/Tr + B tau^0.355/Tr + C Tr^-0.41 exp(tau), Tr = T/647.096 K, tau = 1 - Tr, p* the saturation pressure of water, kH on the mole-fraction basis. Coefficients as in Table 2 of the guideline (iapws.org, read 2026-11-11). Copyright 2004 IAPWS; publication in whole or in part is allowed provided attribution is given to IAPWS.",
+    "revision": "iapws-g7-04-r1"
+  },
   "viscosity": {
     "liquid": {
       "type": "log_table",

@@ -38,8 +38,8 @@ class GasSolidEquilibriumTest {
     static final double R = PhaseTestSupport.R;
     static final PhaseCompetition CRYSTALS = PhaseCompetition.FLUID_AND_CRYSTALS;
 
-    /** A feed over the pilot basis [N2, CH4, C2H6, CO2, Water]. */
-    static double[] feed(double n2, double ch4, double c2h6, double co2) { return new double[] {n2, ch4, c2h6, co2, 0.0}; }
+    /** A feed over the pilot basis [N2, CH4, C2H6, CO2]. */
+    static double[] feed(double n2, double ch4, double c2h6, double co2) { return new double[] {n2, ch4, c2h6, co2}; }
 
     static double[] inNitrogen(double y) { return feed(1.0 - y, 0.0, 0.0, y); }
 
@@ -73,8 +73,8 @@ class GasSolidEquilibriumTest {
         assertEquals(named, contract.resolve(CRYSTALS));
         assertEquals(PhaseCompetition.FLUID_ONLY, contract.resolve(PhaseCompetition.FLUID_ONLY));
         assertEquals(List.of(CRYSTAL), PhaseContract.admittedCrystals(catalog, PILOT));
-        // The network keeps its fluid-only contract, with the same identity and domain.
-        var network = PhaseContract.forNetworkPackage(catalog, PILOT);
+        // The fluid-only form of the contract, with the same identity and domain.
+        var network = PhaseTestSupport.fluidOnly(PhaseContract.forPackage(catalog, PILOT));
         assertEquals(Set.of(PhaseCompetition.FLUID_ONLY), network.qualifiedCompetitions());
         assertEquals(network.identity(), contract.identity());
         assertNull(network.crystalCompetition());
@@ -109,7 +109,7 @@ class GasSolidEquilibriumTest {
         assertEquals(UnsupportedReason.PHASE_COMPETITION_NOT_QUALIFIED, namedRefused.reason());
         // A crystal the contract names without its evaluator here: not implemented (P2 rule kept), at 150 K as at 250 K (no
         // fluid range of CO2 is checked first since the owner rule of 2026-10-16).
-        var withoutEvaluator = new FluidTpEquilibrium(contract, SERVICE.evaluator(), FluidTpEquilibrium.Settings.DEFAULT, null);
+        var withoutEvaluator = new FluidTpEquilibrium(contract, SERVICE.evaluator(), FluidTpEquilibrium.Settings.DEFAULT);
         var cold = withoutEvaluator.tp(EquilibriumRequest.tp(150.0, 1.0e6, BASIS, inNitrogen(0.01), CRYSTALS));
         assertEquals(UnsupportedReason.NOT_IMPLEMENTED, cold.reason(), cold.toString());
         var missing = withoutEvaluator.tp(EquilibriumRequest.tp(250.0, 1.0e6, BASIS, inNitrogen(0.01), CRYSTALS));
@@ -121,7 +121,7 @@ class GasSolidEquilibriumTest {
     @Test
     void fluidOnlyRequestsAreUnchanged() {
         MaterialCatalog catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
-        var network = new FluidTpEquilibrium(PhaseContract.forNetworkPackage(catalog, PILOT), CubicPhaseEvaluator.forPackage(catalog, PILOT), FluidTpEquilibrium.Settings.DEFAULT, null);
+        var network = new FluidTpEquilibrium(PhaseTestSupport.fluidOnly(PhaseContract.forPackage(catalog, PILOT)), CubicPhaseEvaluator.forPackage(catalog, PILOT), FluidTpEquilibrium.Settings.DEFAULT);
         var a = SERVICE.newWorkspace();
         var b = network.newWorkspace();
         int compared = 0;
@@ -201,7 +201,7 @@ class GasSolidEquilibriumTest {
     @Test
     void depositionConservesAndEqualisesTheChemicalPotentials() {
         var ws = SERVICE.newWorkspace();
-        var open = new FluidTpEquilibrium(PhaseTestSupport.openContract(SERVICE.evaluator()), SERVICE.evaluator(), FluidTpEquilibrium.Settings.DEFAULT, null);
+        var open = new FluidTpEquilibrium(PhaseTestSupport.openContract(SERVICE.evaluator()), SERVICE.evaluator(), FluidTpEquilibrium.Settings.DEFAULT);
         var ows = open.newWorkspace();
         List<String> eos = SERVICE.evaluator().components();
         int deposits = 0, noSolid = 0, holds = 0, fromMetastableLiquid = 0, besideLiquid = 0;
@@ -629,16 +629,6 @@ class GasSolidEquilibriumTest {
         System.out.println("50 % CO2 in N2 at 250 K, the onset past 10 MPa: " + compressed);
         assertTrue(compressed.converged() ? compressed.pressure() > 1.0e7 && compressed.coverage().grade() == CoverageGrade.EXTRAPOLATED
                 : compressed.detail().contains("window"), compressed.toString());
-        // Water with a crystal competition is no longer refused as water chemistry (WP4; decision 6 A: gas hydrates are not
-        // modelled, so the free water's ice and CO2 frost coexist): this service has no free-water model, so a wet request
-        // is the free-water phase it cannot state, with a crystal competition as without one. The network's service answers
-        // it (FreeWaterIceTest, SpineNetworkPathTest's wet grid).
-        var wet = SERVICE.tp(EquilibriumRequest.tp(150.0, 1.0e6, BASIS, new double[] {0.9, 0, 0, 0.1, 0.01}, CRYSTALS), ws);
-        assertEquals(UnsupportedReason.NOT_IMPLEMENTED, wet.reason(), wet.toString());
-        var wetOnset = SERVICE.depositionTemperature(null, 1.0e6, BASIS, new double[] {0.9, 0, 0, 0.1, 0.01}, ws);
-        assertEquals(UnsupportedReason.NOT_IMPLEMENTED, wetOnset.reason());
-        var wetFluid = SERVICE.tp(EquilibriumRequest.tp(300.0, 1.0e6, BASIS, new double[] {0.9, 0, 0, 0.1, 0.01}, PhaseCompetition.FLUID_ONLY), ws);
-        assertEquals(UnsupportedReason.NOT_IMPLEMENTED, wetFluid.reason());
         // A crystal the package does not have.
         var foreign = SERVICE.tp(EquilibriumRequest.tp(150.0, 1.0e6, BASIS, inNitrogen(0.01), PhaseCompetition.withCrystals("icheme:crystal_ammonia")), ws);
         assertEquals(UnsupportedReason.PHASE_COMPETITION_NOT_QUALIFIED, foreign.reason());

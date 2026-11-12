@@ -9,6 +9,7 @@ import java.util.*;
 import org.junit.jupiter.api.Test;
 import static com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Direction.*;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * Row D23-1 of the owner's test world (documentation/2026-09-24-coolprop-low-temperature/TEST_WORLD_PLAN.md, row 8 and
@@ -68,7 +69,7 @@ class LiquidCo2LetDownTest {
             catch(RuntimeException held){throw new AssertionError(diameter+" m let-down, slice "+slice+": HELD: "+held.getMessage(),held);}
             graph=last.graph();var tank=graph.reservoirs().get(node(graph,TANK));var s=tank.state();tanks.add(tank);
             System.out.printf(Locale.ROOT,"LET_DOWN %.3f m slice %d: valve %s %.5f kg/s; tank %.3f K %.1f Pa liquid %.4e m3 vapour %.4e m3 fluid %.4f kg dry ice %.4f kg; substeps %d/%d%n",
-                    diameter,slice,last.endpointModes().get(valve),last.averageMassFlows()[valve],s.temperature(),s.pressure(),s.liquidVolume(),s.vaporVolume(),
+                    diameter,slice,last.endpointModes().get(valve),last.averageMassFlows()[valve],s.temperature(),s.pressure(),TestPhases.liquidVolume(s),s.vaporVolume(),
                     tank.empty()?0:s.mass()-s.solidMoments().mass(),dryIce(tank),last.acceptedSubsteps(),last.rejectedSubsteps());
         }
         return tanks;
@@ -93,7 +94,7 @@ class LiquidCo2LetDownTest {
         assertTrue(dryIce(tanks.get(1))>1,"dry ice at the refresh after it: "+dryIce(tanks.get(1))+" kg");
         var tank=tanks.getLast();var s=tank.state();
         assertTrue(s.pressure()>518e3,"above CO2's triple point: "+s.pressure());
-        assertTrue(s.liquidVolume()>.5,"liquid CO2 fills most of the tank: "+s.liquidVolume());
+        assertTrue(TestPhases.liquidVolume(s)>.5,"liquid CO2 fills most of the tank: "+TestPhases.liquidVolume(s));
         assertEquals(240,s.temperature(),5,"near the feed's 250 K, flashed to the tank's pressure");
         assertEquals(0,dryIce(tank),"the dry ice melted above the triple point");
     }

@@ -1,0 +1,908 @@
+# W3b: the fluid network with water in the equation of state
+
+Batch 2026-11-11-aqueous-solvents, work package W3b of [AQUEOUS_SOLVENTS_PLAN.md](AQUEOUS_SOLVENTS_PLAN.md). It follows [W3A_ENGINE_PLAN.md](W3A_ENGINE_PLAN.md) (the engine) and comes before W4 (still), W5 (V3 column) and W6 (ethanol in the main data). Written 2026-11-11. Nothing here is built yet.
+
+## 1. Expected
+
+A vessel holds up to three fluid phases: a gas and two liquids. Every compound, water included, stands in each phase at the amount that makes its fugacity the same in all of them. All phases are at the vessel's one pressure. Numbers at the network's usual states (W3a's measured answers):
+
+- Water with n-hexane at 25 C: the water holds 2.1e-6 mole fraction hexane, the hexane 9.5e-4 water (0.02 % by mass). They boil together at 61.1 C at 1 atm, the vapour 0.79 hexane.
+- Water alone: liquid volume and enthalpy are IF97 Region 1 exactly up to 350 C; it boils within 0.02 K of 100 C at 1 atm (saturation pressure 0.07 % off); the heat of vaporization is 0.03 % off at 100 C and 0.8 % at 200 C.
+- A gas over water dissolves by its Henry constant (CO2 at 25 C and 1 atm: 6e-4 mole fraction, 1.5 g/L). Today it does not dissolve.
+- Ethanol with water is one liquid at every ratio, with the azeotrope at 0.896 ethanol; with n-hexane added it splits in two liquids, and the three boil at 56.8 C.
+- Ice forms from the water-rich liquid at the temperature its composition sets: 0 C for water, -4.0 C at 10 % ethanol by mass. Ice may lie under oil and beside water.
+- A dry node behaves as today, except that a gas with a non-polar compound, where the authored library gives no pair, takes its E-PPR78 value at 298.15 K instead of zero (plan M4 as restated in section 8; the library gives 76 of the refinery list's 990 pairs).
+
+Steady state and conservation are unchanged: amounts and energy are booked exactly; a phase that empties leaves its components in the phases that remain.
+
+## 2. What the code does
+
+- `FluidThermodynamics.State` holds two phases on the hydrocarbon basis (`liquid[]`, `vapor[]`) and water as two scalars (`waterLiquid`, `waterVapor`) with two partial pressures. Free water is pure Region 1 water; steam is a Dalton second-virial gas in the hydrocarbon vapour's volume (`SteamVirial`). Nothing dissolves in water and water dissolves in nothing.
+- `PhaseLayout` gives a node: one total per component, `ln(v/l)` per two-phase component, the two water amounts, `ln T`, `ln P`, and `ln P_hc` with a closure row `P_hc + p_w = P`. Water's equilibrium is one row, `p_w = p_sat(T)`.
+- `NetworkPhaseEngine` builds the engine on the `SEPARATE_FREE_WATER` contract with `NetworkFreeWater`. `FluidThermodynamics.adopt` turns a liquid-liquid answer or a third fluid phase into a hold (`UnsupportedPhases`).
+- Ice is the free water's own solid (`FreeWaterIce`), outside the package's crystals. A step carries it as supercooled free water until the vessel's refresh (D23).
+- The step solver and the ports already draw three phase streams by id (`GAS`, `OIL`, `WATER`) and layer two liquids by density (`heavierLiquid`). About 50 lines of `PassiveStepSolver`, 19 of `PhaseDraw` and 81 of `FluidThermodynamics` read the water scalars directly; 53 test files do.
+- Rules that exist only because water is a scalar: the steam column's log-read floor (`LOG_READ_SPAN`), the partial-pressure box (`requirePartialPressure`, fuzz seeds 145, 157, 164), `waterTraceSeed`, the water branches of `foldTracePhases`, `omittedTrace` and `carriedGas`, the water suction floor, the water viscosity slot.
+- W3a's engine answers all of section 1 on the `IN_EQUATION_OF_STATE` contract, except a crystal beside two liquids (the `CRYSTAL_PHASES` hold). The network does not use it.
+
+## 3. Proposal
+
+### N1. One phase model on the whole basis
+
+The network's basis stays the island's compounds with water last. `HydrocarbonModel` becomes the model of every fluid phase on that basis, built from `DerivedPairs` (plan M4) with water's Mathias-Copeman alpha. A phase state carries W3a's two books: `ln phi` from the cubic alone; volume, enthalpy and energy with water's share (plan M2). The equilibrium rows read the first book, the balance, wall and level rows the second.
+
+### N2. The state: three slots, no water scalars
+
+`State` holds `vapor[]`, `liquid[]` and `aqueous[]` on the whole basis, one property record per held phase, and the totals. Removed: `waterLiquid`, `waterVapor`, `hydrocarbonPartialPressure`, `waterPartialPressure`, `waterCompressibility` (the acoustic bound reads the phase record). The phase ids stay 0, 1, 2; `WATER` is renamed `AQUEOUS`.
+
+Slot rule, a function of the state alone (so a reload labels it the same):
+- two liquids: the one with the larger water mole fraction is `AQUEOUS`;
+- one liquid: `AQUEOUS` when water is at least half of it by moles, else `OIL`.
+
+Layering, level heads and the top, bottom and overflow draws go by density, as today. The label decides only the display row and the boot drum's weir (N7). A relabel of a single liquid is not a phase event: the phase check compares the gas and the number of liquids.
+
+### N3. The layout: one total and one split per extra phase
+
+Per present component: its total, and for each further slot that supports it `ln(n_ik / n_i,ref)`, the reference being its first supported slot in the order liquid, aqueous, vapour. Each split has the row `ln(n_ik / n_k) + ln phi_ik = ln(n_i,ref / n_ref) + ln phi_i,ref`, all at the state pressure. A dry node's unknowns and rows are today's.
+
+Removed: the two water unknowns, `ln P_hc`, the Dalton closure row, the saturation row. `PhaseSupport` becomes a three-slot mask. The truncation rule is unchanged in kind: a component is left out of a slot where its mole fraction is below the cutoff (1e-6) and above it elsewhere, and returns by the reinsertion inequality. At the cutoff a wet node's aqueous slot holds water, the light gases and the compounds up to about C6; the rest fold into the other phases exactly. Size of a wet three-phase node: today's, minus one (`P_hc`), plus one per component the aqueous slot holds.
+
+### N4. Trace, fold and seed rules: one rule per slot
+
+Every rule with a water twin is restated once over the three slots, and the twin is deleted. Each deletion is checked against the measured reason in its comment (AGENTS.md, "Small physics simplifications"): it goes only where the new layout removes the cause. Two causes go by construction: the steam amount is no longer read through a logarithm (it is a log split), and no partial pressure is an unknown. The others (`waterTraceSeed`, the fold and carried-gas branches, D41) are decided rule by rule in step 4 and listed in the result.
+
+### N5. Ice is water's crystal
+
+Ice Ih joins the package's crystals (`NetworkCrystals`, `VesselCrystals`), with W3a's anchor. `FreeWaterIce` and the free-water branch of the refresh go. Between refreshes ice is carried as its stand-in, supercooled liquid in the aqueous slot, by the rule every crystal has (D23 unchanged). The engine first learns a crystal beside two liquids and beside three fluid phases (step 1).
+
+### N6. One engine entry, no phase hold
+
+`NetworkPhaseEngine` builds the engine on `PhaseContract`'s derived contract; `NetworkFreeWater` and `Steam` go. `adopt` places the answer's phases by N2. `UnsupportedPhases.LIQUID_LIQUID` and `THREE_PHASES` are no longer reachable for three fluid phases; a fourth fluid phase stays a capability hold.
+
+### N7. Ports, devices, transport, displays
+
+- Draw orders keep their ids. A boot drum's boot holds the denser liquid (today: always the water). Its hydrocarbon outlet keeps today's rule on the label: `OIL` at any level, `AQUEOUS` only above the weir.
+- The pump suction limit is the bubble pressure of the liquid drawn, one function for either slot; the water floor goes.
+- Viscosity: one log-mixing rule over a liquid's components, water with its own liquid viscosity as its component value; the water slot goes.
+- Utility water outside the network (cooling water sides, the tower's spray density) stays on Region 1, which pure liquid water in the network equals.
+- Displays: the aqueous row reads "Water" while water is at least 99 % of it by moles, else "Aqueous". `en_us.json` only; GUI work follows the gui-creation skill.
+
+### N8. Kernel: one rule, polar sums over what is present
+
+The kernel's classical plans collapse into the Huron-Vidal form: the quadratic part for every pair, the exponential sums only over polar compounds with an amount in the phase (owner: no backward compatibility). A phase without a polar compound then costs what the temperature-dependent classical plan costs today. This is step 1, before the network moves, because the network evaluates the kernel at every Newton residual.
+
+Decided 2026-11-11 (step 1b's question): a classical pair enters the rule as `dg_ji = Lambda [a_i/b_i - (1 - k_ij) s_i s_j / b_j]`, not by the literature conversion (`g_ji = -2 sqrt(b_i b_j)/(b_i + b_j) sqrt(g_ii g_jj)(1 - k)`). Both are the quadratic rule exactly where no local-composition pair is active, so binaries and dry states are the same. With the literature form a water-free phase in a list that holds water pays a second dense pass (about twice the mixing work); with this form each centre's sum follows from a sparse row, O(pairs + n P) with P the polar compounds present. They differ only where a classical pair and a local-composition pair act in one phase. Measured on `pilot_aqueous`: nitrogen in water beside ethanol and hexane 2.04e-6 to 1.92e-6 (6 %), nitrogen in hexane beside ethanol 1.4 %, water in a five-compound oil 0.5 %, everything else under 0.1 %. No data separates the two at that level. Owner, 2026-11-11: "Keep it". The conversion is in one place.
+
+### N9. Saves
+
+- Facts: no schema change. Contents are amounts on the basis with water last and a temperature; both keep their meaning. Step 6 checks every fact field that names a water quantity; a field found is kept and read.
+- State: `FluidCheckpointCodec.VERSION` 46 to 47 (three sparse phase arrays, no water scalars). A mismatch drops the state and the engine rebuilds it.
+- The model's revision changes (water's record, the package record, the derivation's identity). The existing restate job keeps amounts and temperature, recomputes energy and pressure, books the energy difference on the ledger and names it on the status line. No component is removed.
+- Data in main: the cubic water record (alpha, group counts), ice Ih as a crystal, the package's revision. Ethanol stays in the test overlay until W6; W3b's ethanol gates run on `pilot_aqueous`.
+
+### N10. What is deleted at the end
+
+From the engine: `solveWet`, `PartialPressureClosure`, `wetCoexistence`, `waterBoiling`, `waterFreezing`, `freezingAtVolume`, `waterTriplePoint`, `FreeWaterModel`, `FreeWaterIce`, `Classification.FREE_WATER`, `PhaseKind.FREE_WATER`, `SEPARATE_FREE_WATER`, the Dalton helpers of `SteamVirial`. The flowsheet's callers (`SheetCompounds`, `SimulatorRunner`, `ProcessSimulatorScreen`) build the same network model and move with it. The V3 column has its own water code and is W5's. A caller found outside these keeps the rule alive and is reported, not patched.
+
+## 4. Steps
+
+Each step ends in a commit and a filtered test run of the classes it can reach. Steps 3 to 5 compile at each commit; their tests run at the end of step 5.
+
+1. Engine and kernel: a crystal beside two liquids and beside three fluid phases; N8; the bubble-point cost (783 evaluations); the UV restart on a narrow-boiling hydrocarbon binary. Gates: ice under n-hexane over water at -5 C and 1 atm answers ice, two liquids and gas; kernel evaluations per answer no higher than W3a's table; one timing pair for N8 (60 s warm-up, 60 s measured, run alone).
+2. Data: the cubic water record alone goes into the main data (`properties/cubic_water.json`); the test overlay reads it. The derived contract stands beside `PhaseContract.forNetworkPackage`. Changed 2026-11-11: `icheme:refinery` is not edited here, because the network reads that record directly (`MaterialPresets` refuses a network package with a Water component, `forNetworkPackage` appends Water itself, `FluidThermodynamics` indexes crystals on the hydrocarbon list, and the package's revision is in the network's identity, so an edit restates saved worlds). A sibling package was built and dropped: it broke 14 tests that count or rename the refinery's packages.
+3. `HydrocarbonModel`, `State`, `adopt`, `NetworkPhaseEngine` (N1, N2, N6); with them the refinery package's Water component, ice Ih in its crystals and its revision, and the four readers named in step 2.
+4. `PhaseLayout` and the trace rules (N3, N4).
+5. `PassiveStepSolver`, `PhaseDraw`, `InletPhase`, `OpenVessel`, `InventoryEquilibrium`, `VesselCrystals`, `NetworkCrystals`, `ConservativeTransport`, transport (N5, N7); the tests moved to the phase accessors.
+6. Runtime: checkpoint format 47, the restate, presentation rows, labels, the flowsheet callers.
+7. N10's deletions; the code guide chapters (equilibrium-engine, fluid-science, thermo-materials); the final lane, once.
+
+## 5. Gates
+
+- New, on `pilot_aqueous`: a closed tank of water, n-hexane and nitrogen at 25 C holds the section 1 solubilities and conserves amounts and energy to the ledger's tolerance; an ethanol-water tank heated through its bubble point stays one liquid; ethanol added to water under hexane moves between the liquids without a hold; CO2 over water dissolves to its Henry value; ice under oil over water freezes and melts at a refresh; a single liquid crossing half water relabels without a phase event.
+- Existing: `NetworkPhaseEngineTest`, the fluid GameTests (fresh `fluidGameTestRunId`), chain-100, the 33 junction lines and `MIXED_GAS_COST`. Every reference that moves is re-recorded once, in the final lane, with its old and new value in the result.
+- Holds: one full campaign (1000 seeds, 8 workers) on the final code is the new baseline; new holds are listed by class, at most the two smallest traced.
+- Cost, by counters from the campaign and one timing run alone: a dry island's kernel evaluations within 2 % of the baseline lane; its time per evaluation within 10 % where the library gives every gas pair, and measured against section 8's estimate (1.7 times at 12 compounds with 3 gases) where it does not; a wet three-phase island's time per accepted step at most 1.5 times today's. A miss comes back as a decision with the counters, not as an accepted result.
+- Saves: every corpus image under `src/test/resources/compat/` loads; a format-46 state is dropped and rebuilt; the restate books an energy difference and removes no component.
+
+## 6. Risks and what is left out
+
+- Size: `PassiveStepSolver` is 5,465 lines and 168 test files touch the model. The steps are ordered so that the engine and kernel (1, 2) land and are measured before the network changes.
+- Dry references move only through the gas pairs of section 8's option B.
+- The single-liquid label (half water) switches a boot drum's hydrocarbon outlet between "any level" and "above the weir" for a water-miscible liquid. A standpipe rule on the level, for any liquid, would remove the label from the physics; it changes how an oil-only boot drum drains today, so it is an owner option, not part of W3b.
+- A fourth fluid phase, electrolytes and hydrates stay capability holds.
+- Saturated steam above 250 C keeps its 2 to 13 % latent-heat error (plan M2).
+- Not in W3b: the still (W4), the V3 column (W5), ethanol in the main data and its creative preset (W6), merge preparation.
+
+## 7. Result of steps 1 and 2 (2026-11-11)
+
+Built by a sub-thread: 1a `e203997e2`, 1c `93c98f2af`, 1b `f148d1eac`, 2 `af1b7a998`. Its report is `tmp/w3b-engine-kernel/W3B_STEP12_REPORT.md` (local).
+
+| Gate | Measured | Bound |
+|---|---|---|
+| Water, n-hexane, nitrogen at -5 C, 1 atm | ice, hexane liquid, gas | ice, liquid, gas |
+| Ice onset beside hexane, 10 % ethanol by mass of the water | -3.30 C (the water-rich liquid keeps 8.2 % ethanol) | -5.5 to -3.0 C |
+| Below that onset | ice beside two liquids and gas | answers |
+| Ethanol, water, n-hexane, nitrogen at 253 to 263 K | ice beside three fluid phases, every component conserved | answers, conserves |
+| PH and UV round trips | 57 answers within 1e-6 N R T | 1e-6 N R T |
+| Kernel evaluations per TP answer, W3a's five cases | 87, 117, 52, 282, 120 | 87, 117, 52, 282, 120 |
+| Ternary at its bubble point | 515 (783 before) | lower |
+| W3a's gate values under the new pair form | unchanged to their printed digits | W3a's bounds |
+
+Kernel time per evaluation (ns; each run alone, 60 s warm-up, 60 s measured):
+
+| List | Before | After |
+|---|---|---|
+| Network refinery, 45 compounds, constant pairs | 305 | 324 (+6 %) |
+| Derived dry list, 44 compounds | 5344 | 1531 |
+| Wet list, 47 compounds, a wet phase | 6125 | 5420 |
+| The same list, a water-free phase | 5901 | 3963 |
+
+- The kernel has one pair list and one rule (`classicalTau` holds the conversion); its composition derivatives are O(n^2 (1 + polar)), O(n^3) before. `Mixing` is removed.
+- What N8's form moved, above 0.1 %: the three values listed under N8. No derived-pair fit moved (each fit is a binary with one pair).
+- The UV restart fires 3 to 5 times in 41 states on four narrow-boiling hydrocarbon binaries; without it 16 of 164 states end in the critical band. It stays.
+- Runs: 1b 185 classes, 1244 tests; `columnGates` 62 classes, 397 tests; `holdGates` 12 classes, 131 tests; all pass but `MaterialPresetsTest` (the override example's methane record lacked W2a's two sub-records; fixed after, 5 tests pass). One whole quick `test` run by a filter mistake (2381 tests, on data since dropped). The fluid GameTests and the final lane have not run.
+
+For step 3 on: a derived kernel on the 45-compound list costs 5 to 12 times the refinery's constant-pair kernel today (1531 to 3963 ns against 324). The 2 % and 10 % dry bounds of section 5 cannot hold on a derived list as measured; step 3 starts with this cost (which pairs must be temperature-dependent, what a prepared temperature can hold) before the network moves. Also open: the derived contract flags no water chemistry (ammonia with water); the bubble point's cost is now mostly the three-product audit (297 of 515); four probes under `tools/` still name `PengRobinsonKernel.Mixing`.
+
+## 8. Kernel cost on island-size lists, and the size of the derived pairs (2026-11-11)
+
+Owner: "Measure first". Probes: `tools/aqueous-solvents/probes/` (`IslandTime`, `PairSizes`). Each timing run alone, 60 s warm-up, 60 s measured, 330 K and 2 bar; the sublists are evenly spaced over the refinery list's order.
+
+| Sublist | Pairs the library gives | Today's kernel | Derived, water-free phase | Derived, wet phase |
+|---|---|---|---|---|
+| 12 compounds | 7 of 66 | 128 ns | 414 ns (3.2 times) | 566 ns (4.4 times) |
+| 24 compounds | 38 of 276 | 284 ns | 1720 ns (6.1 times) | 1749 ns (6.2 times) |
+
+The refinery list's 990 pairs by source: library 76, hydrogen (zero) 44, activity 20, E-PPR78 713, missing 137.
+
+**Expected.** An interaction coefficient between two non-polar compounds is of order 0.01 to 0.2 and changes slowly with temperature. A dry island should cost what it costs today.
+
+**What the code does.**
+- Cost follows the number of pairs with a value. Today most pairs are zero and cost nothing; derived, every pair has one. The dry bounds of section 5 (2 % and 10 %) do not hold.
+- The derived pairs are not small: the median of the largest |k| over 250 to 600 K is 0.029; 550 of 713 are at or above 0.01, 436 at or above 0.02. Dropping small ones removes a fifth of the work.
+- The E-PPR78 temperature law (a power of 298.15/T per group pair) leaves its fitted range inside the network's. |k| is above 0.3 in 20 pairs at 150 K, none at 298 K, 4 at 450 K and 48 at 700 K; above 1 in 10 pairs at 150 K and 7 at 700 K. Ethylene with isobutene: -0.19 at 298 K, -77 at 450 K, -5.9e4 at 700 K. Oxygen with p-xylene: 0.22 at 298 K, 0.80 at 250 K, 500 at 150 K. The network runs from about 90 K to 800 K. W2b's gates read 298 to 373 K and did not see it.
+
+**Proposal: options for the pairs between two non-polar compounds** (the owner's choice; the polar pairs, Henry pairs and homomorph pairs stay derived in all three).
+
+- **A. Library only.** A non-polar pair the library does not give is zero, as today. Dry islands keep today's numbers and cost; no dry reference moves. Gases in hydrocarbons stay at today's accuracy (in n-hexane 1.02 to 1.20 times measured where the library has the pair, 1.17 to 2.07 where it has not).
+- **B. Gas pairs as constants (recommended).** Where the library is silent, a pair of a gas (a compound with a Henry constant in water: 8 of them) with a non-polar compound takes its E-PPR78 value at 298.15 K, constant in temperature. Every other non-polar pair is zero. This keeps the gain where it was measured (gases in n-hexane 1.05 to 1.32 times measured), bounds every value, and adds about g (n - g) pairs for g gases among n compounds: about 25 on a 12-compound island with 3 gases, an estimated 1.7 times today's kernel time there from the per-pair cost above (not measured). Dry references move.
+- **C. Every pair, temperature held outside a window.** All 713 pairs with the E-PPR78 law inside a window and held outside it. 3 to 6 times today's kernel time unless the kernel gets a dense-row path; the window is a new rule per table, and oxygen with the xylenes is already 0.8 at 250 K.
+
+**Owner, 2026-11-11: B.** The gases are the 8 compounds with a Henry constant (carbon dioxide, carbon monoxide, hydrogen, hydrogen sulfide, oxygen, nitrogen, methane, ethane); hydrogen's pairs stay zero by the rule of 2026-11-04. It is built first in the network work (step 2b): `DerivedPairs` writes these pairs as constants, the `EPPR78` source no longer carries a temperature law, the gates of W2b and W3a that move are listed old and new, and the timing of section 8 is repeated on the same sublists.
+
+With A or B the E-PPR78 temperature law leaves `DerivedPairs` (the unbounded form is not used anywhere), and the plan's M4 is restated. With B or C the kernel's pair loops (ten passes over the pair list per evaluation, about 4 to 5.5 ns a pair) are worth one pass over row sums first.
+
+## 9. Result of step 2b, and what it decided (2026-11-11)
+
+Commit `aaa87375c`; 40 test classes, 199 tests pass. `DerivedPairs` is `derived-pairs-r2`: library first; else a pair with a gas or a polar compound that falls through to E-PPR78 takes its value at 298.15 K as a constant; two non-polar non-gases are zero. No W2b or W3a gate value moved to its printed digits. The kernel forms its pair sums in one pass.
+
+Kernel time per evaluation after it (ns; each run alone, 60 s and 60 s):
+
+| Sublist | Today | Derived, no water in the list | Derived, water-free phase of a wet list | Derived, wet phase |
+|---|---|---|---|---|
+| 12 compounds | 130 | 139 (1.07 times) | 355 (2.7 times) | 399 |
+| 24 compounds | 164 | 884 (5.4 times) | 939 | 993 |
+
+- A list without a polar compound costs today's. The cost is in the local-composition cells: a phase of a list that holds water forms water's cells even when it holds no water, and the 24-compound sublist holds sulfur dioxide, methyl mercaptan and hydrogen sulfide, which take activity fits with every hydrocarbon the library does not give (32 such pairs).
+- The two-temperature lines leave the physical range at the network's ends: at 1 atm the kernel refuses a root (negative mixture attraction) for water with n-hexane from 750 K, water with nitrogen from 700 K, water with a crude cut at 800 K; water and ethanol's energy changes sign below about 230 K.
+
+Decided by the orchestrator (owner: "auto proceed if nothing major breaks"):
+- **The lines are held past their fitted ends**, the slope fading to zero over 50 K, value and slope continuous (step 2c). With it none of the nine pairs tested refuses from 90 to 800 K, and nothing moves between 298.15 and 373.15 K.
+- **An island's phase model holds water only when water can be in the island** (its mask). The conserved basis and the saved forms keep water last. N1 is read this way.
+- **A baseline is recorded before the network changes**: three fixed scenarios (dry, wet three-phase, dry with a polar refinery compound), counters and time per accepted step, run again after step 5. A wet island above 1.5 times or a dry one above 1.1 comes back as a decision. Skipping the cells of absent compounds in the kernel (estimated 200 ns at 12 compounds, about a day) is decided from those numbers.
+- **Open, the owner's:** which compounds take activity fits with hydrocarbons. Today every compound with a polar group does. Limiting them to compounds that name a homomorph (the water-miscible organics, ethanol first) would give hydrogen sulfide, sulfur dioxide, the mercaptans and ammonia constant pairs with hydrocarbons (library, else E-PPR78 at 298.15 K) and today's cost on sour dry islands; their pairs with water would stay as they are.
+
+## 10. Step cost after steps 3 to 5, main code (2026-11-11)
+
+Baseline `48b4fb298` (three chains: dry, wet three-phase, dry with polar refinery compounds), measured again on the main code of steps 3 to 5 (`58376e618`, tests not yet migrated). Each timing run alone, 60 s warm-up, 60 s measured.
+
+| Scenario | ms per accepted step, before | After | Ratio | Bound |
+|---|---|---|---|---|
+| Dry | 0.777 | 0.831 | 1.07 | 1.1 |
+| Wet | 0.923 | 2.305 | 2.50 | 1.5 |
+| Polar (H2S, methyl mercaptan) | 1.021 | 1.680 | 1.64 | 1.1 |
+
+- Steps and Newton iterations are the same in all three; end states agree to 4 digits.
+- Dry and polar: the same kernel evaluation counts. The polar cost is per evaluation: the activity pairs of hydrogen sulfide and the mercaptan put the local-composition excess in every evaluation (profile: 18 % `correctExcess`, 8 % the excess's second temperature derivative, 3 % `presentOmega`).
+- Wet: kernel evaluations 5769 to 11554 and state calls 2868 to 3516, with the excess on every water pair as well.
+
+The bounds are broken for the wet and the polar scenario. Decided by the orchestrator: the tests come first; then an optimisation step 5b in the structure (the second temperature derivative only when read; sparse rows in `correctExcess`; absent centres' cells skipped; a one-component phase on a pure-compound evaluation prepared once per T and P), measured item by item on the same three scenarios. The polar scenario also depends on the owner's open choice of which compounds take activity fits with hydrocarbons (section 9).
+
+## 11. Defect found in the test migration: cancellation in the kernel's sparse sums (2026-11-11)
+
+**Expected.** In pure water an absent heavy crude cut has a large, finite ln phi (it does not dissolve), smooth in temperature.
+
+**What the code does.** The kernel's sparse-row form (N8) builds each centre's local-composition sum as `b` plus corrections, `D_i = b + sum_j w_j (G_ji - 1)`. For water around the heaviest cut the derived energy is 512.8 kJ/mol at 298 K, so `G` is 9e-16; with water holding nearly all of `b` the sum is `b - b (1 - G)`, rounding noise. The cut's ln phi at 1 atm reads 103 at 298.15 K, 150 at 298.2 K, -18 at 290 K, NaN at 285 K. The ice anchor then fails, and every wet refinery list with that cut fails when its engine is built (about 20 of the 83 failures of the first filtered run). The literature form of N8 did not have this subtraction; the sparse-row form introduced it.
+
+**Decided by the orchestrator** (numerics, no physics change): the classical part of each centre's sums is formed directly over the compounds that are not its cell partners, never as `b` minus the partners' weights; the order stays O(n + cells + n P). No cap on the derived energies: a floor on `G` leaves a relative error near 1e-3 in the same subtraction. Gates: a finite, smooth ln phi of the absent cut from 90 to 800 K; agreement to 1e-12 with the plain sums in extended precision for four phases; a dry phase bit for bit unchanged. A guard on the exponent is added only if that gate finds a nonfinite value.
+
+## 12. Engine defects the migrated network tests exposed (2026-11-11)
+
+Status: kernel fix of section 11 committed (`fa0a292f3`); the smooth hold over 150 K committed (`710e9ef51`, `derived-pairs-r4`; heat-capacity step at the fitted ends 7.7e-5 J/mol/K). Decided by the orchestrator; none of the fixes below is built at the time of writing.
+
+| Case | Expected | What the code does | Decision |
+|---|---|---|---|
+| TP, wet crude (water 0.01 mol/mol), 393 K, 5 bar | a converged split | compositions converge to 4e-16, a nearly absent slot's fraction never settles, 1000 iterations | a slot is absent by the convex system's own presence row, not by its fraction's movement; fix now |
+| PH and UV, heavy cuts with water, 1 to 2 bar | three phases on water's boiling step, the steam fraction set by the enthalpy | the step is 3e-9 K wide; the search brackets it and refuses | the binary step rule generalised: a bracketed jump between two answers that differ by one phase leaving and one entering is answered on the step by the lever rule; fix now |
+| TP, nitrogen with 0.1 mol water per mol, 900 K | a near-ideal gas | refused: the mixture attraction is negative (the Henry pair's energy, 13.9 kJ/mol held, against a shrinking a/b) | each cell's energy bounded by its centre's own term, below |
+| Nitrogen with ethane, 125 K, 3 MPa | two liquids and a gas | a hold, as today (a list without a polar compound takes the two-slot path) | open: hand an unstable two-slot product to the three-slot system |
+| Water's share below saturation pressure | continuous slope in P | held at p_sat, dh/dP 9 % off at 350 K, 10 kPa | continued linearly in P, in step 5b |
+
+**The energy bound.** For the cell "j around centre i": `E_ji(T) <= Lambda a_i(T)/b_i`, as a smooth minimum (width 5 % of the bound) so the enthalpy stays continuous. For a classical pair this is k_ij <= 1: the unlike attraction is never negative. A centre's local excess is a weighted mean of its cells' energies, so g^E/Lambda never exceeds the linear term and the mixture attraction is nonnegative at every composition and temperature, by construction. It replaces a guard on the result, keeps the Henry pairs' temperature dependence, and bounds the fits for water around heavy cuts (512.8 kJ/mol). Built only if a probe shows that no gate pair's cell exceeds 0.8 of the bound inside 298.15 to 373.15 K; else it comes back with the table. Gates: wet nitrogen, nitrogen with methane and flue gas from 300 K to the ceiling at 1 atm and 10 MPa.
+
+## 13. The energy bound withdrawn; gas and water pairs become classical (2026-11-11)
+
+The probe section 12 asked for (`tmp/w3b-network/runs/bound-probe.txt`, local): between 298.15 and 373.15 K, 5 of the pilot list's 24 cells and 34 of the refinery list's 116 exceed 0.8 of `Lambda a_i/b_i`. Water around nitrogen is 5.86 times the bound, around carbon monoxide 4.83, oxygen 3.52, methane 2.63, ethane 1.91; from 90 to 900 K 66 cells exceed it, the largest 46.9 times.
+
+**Why.** A gas's solubility in water is carried by the cell on the gas's own centre, which must be several times the gas's cohesive term to reach its Henry constant. The same cell makes a hot gas's mixture attraction negative. No bound keeps the first and prevents the second. The bound of section 12 is withdrawn.
+
+**Decided by the orchestrator; owner, 2026-11-11: "Accept".** A gas with water (source `HENRY`) is a classical pair with k linear in temperature, fitted at 298.15 K and at 373.15 K to the gas's Henry constant through the kernel, held past those ends like every line (`classicalLinear`, as the homomorph pairs). The solubility stays exact at both temperatures; the pair costs no local-composition cell; a k of at most 1 gives a nonnegative mixture attraction by construction (the aqueous k of these gases is negative). Known weakness, to be measured: one k serves the aqueous liquid and the gas, so the gas's water content at high pressure is less accurate. Plan M4 and section 5 of the parent plan change accordingly once the numbers are in.
+
+Built since section 12 (uncommitted at the time of writing): the presence row (wet crude at 393 K and 5 bar converges; TP, PH and UV agree), the step rule for PH and UV, three-slot slots evaluated on their own kind's root (a cut with 30 mol water per mol at 369 K and 1 bar answered two liquids and missed the vapour), V3 ignoring water's ice. Also decided: a carried crystal's stand-in takes a liquid slot of its own (the merge of two dense products was the one-liquid-slot workaround), with CO2's single-liquid states unchanged; a network model supplies water itself for a package that does not name it, and no other package record is edited.
+
+## 14. Decisions in force for steps 3 to 5 (2026-11-11, kept current)
+
+The sub-thread's questions and the orchestrator's answers, in one place. Each was also sent as a message.
+
+1. **Kernel sums (section 11):** the classical part formed directly, no data cap. Built (`fa0a292f3`).
+2. **TP, a nearly absent slot:** absent by its presence row. Built, uncommitted.
+3. **PH and UV on a boiling step:** the lever rule between the bracket's ends, one rule for any number of compounds. Built, uncommitted.
+4. **Hot wet gas:** the energy bound is withdrawn. A gas with water is a classical pair, k linear in T, fitted to the Henry constant at 298.15 K and 373.15 K, held past the ends; the NRTL Henry fit goes; the derivation's revision is bumped. The owner accepted it. Report: the Henry ratio at 273.15, 323.15, 423.15, 473.15 K for nitrogen, methane, carbon dioxide; the gas's water content at 298.15 and 373.15 K, 1 atm and 10 MPa, old and new; carbon dioxide in water at 5 MPa; the wet scenario's kernel time. Gates: wet nitrogen, nitrogen with methane and flue gas answer as one gas from 300 K to the ceiling at 1 atm and 10 MPa; every remaining NRTL pair of the refinery-with-water list scans from 90 K to the ceiling without a kernel refusal (a refusal is reported, not patched).
+5. **A carried crystal** (ice in the oil at 263 K): its stand-in takes a liquid slot of its own; the merge of two dense products goes, for every crystal. Limits: a CO2 state with one dense product today is bit for bit unchanged; every CO2 pin that moves is listed; more than ten moved pins, or a new hold, comes back first. Two liquids without water: the denser takes the `AQUEOUS` slot. `condensedShareOnly` and the vapour-only admission to a stand-in liquid are restated for either slot, not deleted. A dry list that needs three fluid slots under carrying is reported, not built.
+6. **Water for a package that does not name it:** the network model supplies the catalog's cubic water and its ice itself. No package record other than the refinery's is edited to give it water, and any such edit is reverted. If the refinery's Water component changes anything outside the network (what V3, the column operation, the flowsheet or the presets see, the package identity), the refinery takes the implicit way too and its record is restored.
+7. **A vapour missed just above a three-phase point:** a vapour-kind stability trial that lands on a liquid-like root is repeated on the vapour root; no slot changes root. Gates: the band from the three-phase point to 5 K above it answers a vapour; the water tank with a crude trace at 350 K still answers; W3a's evaluation counts rise by at most 10 %.
+8. **Not in these steps:** nitrogen with ethane at 125 K (an unstable two-slot product handed to the three-slot system); the kernel optimisation and water's share below saturation pressure (step 5b, after the tests pass); which compounds take activity fits with hydrocarbons (the owner's).
+9. **Hot steam with hydrocarbons** (15 water-hydrocarbon activity pairs refused in the kernel from 780 K: the cell on water's centre is held flat while water's own term falls with temperature). A local-composition cell's energy fades to zero between 0.75 T* and T*, T* the highest critical temperature among the pair's polar compounds (water 647.096 K), by a quintic that keeps the energy and its first two temperature derivatives continuous. Above T* the pair is classical, so the mixture attraction is nonnegative at every composition. Below 0.75 T* (485 K for water) nothing moves. Activity cells only; the classical linear pairs keep their hold. Built since item 8 was written: items 4 to 7 (the refinery record is back at r3 with water supplied by the model; Henry pairs with k(T), nitrogen -0.636 at 298 K and -0.387 at 373 K, `derived-pairs-r5`; ice under oil answers gas, oil and supercooled water; 1344 dry CO2 carried states bit for bit unchanged).
+   - **Corrected the same day.** The window 0.75 T* to T* (162 K for water) put the fade's curvature into the heat capacity: -171 J/mol/K for water with ethanol at 20 to 30 MPa (refused from 599 to 620 K at 30 MPa), -326 J/mol/K in a pilot state at 630 K and 25 MPa. The window is now the fitted end (373.15 K) to 1.25 T* (808.9 K for water): the curvature is about seven times smaller (-22.5 and -35.5 J/mol/K measured), every state is valid and the scan still has no refusal; above 780 K the factor is below 0.01. Cost: liquids between 373 and 485 K move (water in n-hexane at 450 K 0.0101 to 0.0128, n-hexane in water 9.11e-5 to 8.88e-5). Nothing moves below 373.15 K. Water now dissolves in hot oil (0.26 % of the water at 600 K and 5 bar); two network pins that said "all steam" are re-recorded.
+
+## 15. Result of steps 3 to 5 (2026-11-11)
+
+Commits: `58376e618` (main code), `9c3a23ffb`, `fa0a292f3`, `402b1bf86`, `65828c650` (test migration, engine fixes, section 14 items 4 to 9). The sub-thread's report and lists are in `tmp/w3b-network/` (local). Checked by the orchestrator: no package record differs from main; facts schema 21 and checkpoint format 46 are unchanged; the refinery package is at its earlier revision.
+
+**State of the tests.** Filtered runs: thermo, material and the named network classes 431 tests, 2 failing; network, runtime, flowsheet and client groups 1948 tests, 28 failing. Of the 30, 9 belong to step 6 (checkpoint decode, restate, flowsheet callers) and 21 are open engine and network defects: pumps (6), port priority (3), inlet phase (2), a bulk three-phase transfer that leaves a component behind, a solids-only vessel, a kettle's boil-up (8.14 against 0.443 kg/s), a turbine exhaust that is not wet, the melting line on a UV step (5 mK), a stand-in left after a refresh, three tolerance pins. Steps 3 to 5 are not done until these pass.
+
+| Gate (section 5) | Measured |
+|---|---|
+| n-Hexane in water, water in n-hexane, 25 C | 2.095e-6, 9.48e-4 |
+| CO2 over water | 1.001 of its Henry value |
+| Ethanol and water heated through the bubble point | one liquid |
+| Ethanol added to water under hexane | moves between the liquids, no hold |
+| Ice under oil over water at 263 K | gas, oil, supercooled water; melts on the lever step |
+| A dry island's layout | 42 unknowns, as today |
+| A single liquid crossing half water | relabels without a phase event |
+
+**Numbers.**
+- Engine cost, kernel evaluations per TP answer, before and after: dry 87, 87; water with n-hexane 109, 119; ethanol with water 52, 52; the ternary 282, 287; its bubble point 509, 519; water with a cut 112, 117.
+- Gas in water against IAPWS G7-04 at 273, 323, 423, 473 K (exact at 298 and 373 K), old form then new: nitrogen 1.26, 0.92, 1.21, 1.27 then 1.11, 0.97, 1.01, 0.85; methane 1.27, 0.92, 1.22, 1.32 then 1.16, 0.96, 1.04, 0.87; carbon dioxide 1.20, 0.94, 1.16, 1.23 then 1.11, 0.97, 1.04, 0.96. Carbon dioxide in water at 5 MPa: 17 % high before, 11 % now.
+- Water content of nitrogen at 10 MPa: 1.118e-3 before, 1.180e-3 now at 298 K (ideal 3.17e-4); 1.787e-2, 1.853e-2 at 373 K. At 1 atm within 1.5 % of ideal in both forms.
+- The fade: water with ethanol at 3 bar unchanged (383.63 K), at 10 bar 425.97 to 426.16 K; water in n-hexane at 450 K 0.0101 to 0.0128. Water dissolves in hot oil: 0.36 mol of 30 at 550 K, 11.9 at 700 K and 5 bar.
+- 1344 dry CO2 carried states bit for bit unchanged.
+
+**Deviations and limits.**
+- Facts and checkpoints still write the earlier fields through an adapter (`legacySplit`): compounds in any liquid, water in any liquid, water in the gas. Amounts are exact; on load the two come back as two liquids, and a gas dissolved in water alone decodes as an oil of pure gas and is refused ("Liquid root absent"). Step 6 rebuilds the state from the amounts instead.
+- A network on a package with a reference spine holds no water (test package `pilot_cryogenic`); its wet tests were moved to the refinery or removed. To be reported: which main packages this touches.
+- A dry list with gas and two dense products under carrying still gets today's answer (two fluid slots).
+- Tests removed, each with its reason in the lists file: the bit-for-bit pin of the old dry path, the partial-pressure box, two free-water rule tests, the virial steam's network state, the crude-trace fold in a water-full vessel, one pilot refresh.
+
+Next, in the same sub-thread: the 21 defects group by group (conservation first), then step 5b; steps 6 and 7 after that.
+
+## 16. Stage A (the 21 defects), groups 1 to 3, and the pump suction floor (2026-11-11)
+
+Committed: `e5391b412` (a bottom port's pump left its last 6.8 g of water as vapour at 282 K: a phase the step's start holds and the seed has lost is now pinned, so the port draws it whole), `ba002f4a6` (a vessel holding only solids has no phase to add), `dc6238dc4` (the aqueous liquid's vanishing share is judged by moles as well as by volume, as on main; the volume-only form held condensate as supersaturated vapour, a 2 K sawtooth over 6 slices). Filtered run: 2039 tests, 21 failing, 7 fixed, none new.
+
+**The pump suction floor: the owner's choice.**
+
+- Expected: a pump cannot pull its suction below the pressure at which the liquid it draws forms vapour. For water that is its saturation pressure (3.2 kPa at 25 C). A liquid in equilibrium with its own gas (a separator's oil) is at that pressure already.
+- What the code does: on main, water took its saturation pressure everywhere; a hydrocarbon liquid took its bubble pressure, or its vessel's own pressure when the vessel holds gas (owner decision D16 C). Water now dissolves nitrogen and air, so by equilibrium a blanketed water tank is at its bubble pressure too, and its pump keeps only its static head: 9.8 kPa under 1 m of water against about 17 kPa needed at 10 L/s. Real pumps use the vapour pressure, because dissolved gas comes out slowly; an equilibrium model has no rate.
+- Options:
+  - **Today's behaviour, by label (built provisionally, in one function).** The oil slot keeps D16 C; the aqueous liquid takes the bubble pressure of its condensable compounds (those above their critical temperature left out). No pump in an existing world changes.
+  - **One rule, dissolved gases never count.** Any liquid takes the bubble pressure without the compounds above their critical temperature. Replaces D16 C: an oil under a nitrogen blanket gains suction margin; a live crude ignores its dissolved methane and may then free gas at the pump.
+  - **One rule, equilibrium.** Any liquid takes its full bubble pressure. Pumps on blanketed or open water tanks keep only their static head.
+- Whatever the rule, the floor is read from the supplier directly as well as through a suction walk (a pump drawing straight from its tank had no floor: NPSHA was NaN).
+
+## 17. Pump suction rules lifted (owner, 2026-11-11)
+
+Owner on section 16's question: "The pump cavitation system has been added, this can be lifted now"; on the list below: "All four, measured"; then: "Give pump a small bulletproof zone (without damaging the pump) with minor gas content". The options of section 16 are closed by this section.
+
+**What stays** (the cavitation system is built on it): the suction limit row `PUMP_SUCTION_LIMIT` with the breakdown NPSH (D59 (4), D20 Q11 A); the vapour pressure of the liquid drawn at its own enthalpy (D14, first half of D16 C); limit and lock facts read once per solve (D16 A); the limit never above what the supplier gives (D17).
+
+**What goes.**
+
+| Rule | How |
+|---|---|
+| Water's own saturation curve and `BalanceNet.waterFloor` (D59 (4)) | Now: water is a component, one function for every liquid. The starved water suction of `PumpCavitationTest` must still stand at its own-enthalpy value (about 3174 Pa) with no vapour at the junction (the singular Jacobian recorded at `waterFloor`). |
+| A pump drawing straight from its tank has no limit | Now: the limit is read from the pump's own first node. Such pumps get an NPSH reading, cavitation and wear. |
+| Gas beside the liquid puts the limit at the vessel's pressure (second half of D16 C), and section 16's split by liquid label | Measured: forms below. |
+| Vapour lock, a pump closed for the whole solve at no suction head (D15) | Measured, after the form is chosen. |
+
+**The clean zone (owner).** A centrifugal pump whose suction holds vapour below half the Turpin onset share (1.05 % by volume at 1 bar, 2.6 % at 2.5 bar, 9 % at 10 bar; today's `PumpHealth.GAS_RATIO`, where it is already silent and shows no `GAS` word) takes no harm: no wear, no status word, no sound, and it is not counted as cavitation. Its head there is the gas law's, at least 0.99 of the gas-free head (the law is not changed). One constant states the zone for the limit, the status word and the sound.
+
+**Two pressures, one function.** `releasePressure(liquid, share)`: the lowest pressure at which the liquid drawn, at its own enthalpy, holds a vapour volume share of at most `share` (the bisection of `bubblePressure` with the test "any vapour" replaced by the share).
+
+- Zone edge E: `share` = half the onset at that pressure. A boiling liquid has E at its bubble pressure (its vapour share jumps there); nitrogen-saturated water at 1 atm and 25 C has E near 69 kPa (hand estimate from Henry's law).
+- Vapour pressure p_v, the NPSH reference for the limit, the wear and the page: the bubble pressure of the liquid without its compounds above their critical temperature (the provisional `aqueousFloor`, for every liquid, at its own enthalpy). To report beside it: the pressure at a vapour share of one half, which needs no critical-temperature test (carbon dioxide dissolved in water at 25 C counts as vapour pressure under the first and as gas under the second).
+
+**Forms on the 200-seed quick check** (three, vapour lock kept):
+
+- Form 0: section 16's provisional rule (D16 C for oil, condensables for the aqueous liquid).
+- Form G (expected choice): limit = the greater of E and `p_v + 0.85 rho g NPSH3(Q)`. A pump pulls freely through the clean zone and starves at its edge or at breakdown, at a steady point. Wear reads sigma against p_v, so released gas never wears: blanketed water starved at 69 kPa has 6.7 m over p_v, sigma about 4 for the default pump, at inception.
+- Form T: limit = `p_v + 0.85 rho g NPSH3(Q)` alone; released gas is left to the gas law, which reads the suction once per solve (a step-to-step swing is the risk).
+
+Then, on the chosen form: vapour lock kept against removed. The removals stand only if step 7's campaign shows no new hold class against the baseline. Cases to report under each form (limit, NPSHA, sigma): water under nitrogen at 1 atm; water under carbon dioxide at 1 atm and 25 C; a dead oil under nitrogen; a separator liquid with methane at 10 bar and 310 K; LNG at its bubble point; a propane drum.
+
+Effect on existing worlds: a pump bolted to its tank starts to read NPSH and can cavitate and wear; a pump on a blanketed hydrocarbon tank gains suction margin; modes are state and health keeps its format.
+
+## 18. Stage A group 4 and the kettle's port rule (2026-11-11)
+
+Group 4 committed by the sub-thread (`ae2a457c6`; filtered run 2039 tests, 14 failing, 7 fixed, none new): section 16's provisional floor (form 0 of section 17); a junction's split no longer leaves each component's rounding remainder in the oil slot (a 1e-15 mol nitrogen "liquid" with no liquid root refused the condensate: the cooling tower's suction junction stood supersaturated, and the turbine's 342 K exhaust at 1.89 bar was a vapour 50 K below its dew point; it is now wet at 212 kPa and 395.3 K with 4.7 % liquid); the tower basin's water is accepted with its dissolved nitrogen (the loop runs at 19.94 kg/s).
+
+Suction head available at 10 L/s under 1 m of liquid (NPSH3 1.68 m), by section 16's three rules (today's by label / equilibrium / gases left out): water under nitrogen 11.04 / 1.00 / 11.04 m; a dead oil under nitrogen 1.00 / 1.00 / 12.92 m; a separator liquid at 10 bar and 310 K 1.00 / 1.00 / 135.06 m. Pulled to the gases-left-out floor plus breakdown, the junction holds 8.8 %, 49 % and 95 % vapour by volume, and the pump's head share does not see it (it reads the supplier's stream). Consequence for section 17: form T is compared only with the head share read on the suction junction's own vapour share; otherwise it is dropped.
+
+**The kettle (D11, the port's segment rule).**
+
+- Expected: 1 MW boils 0.443 kg/s of water. A top nozzle cannot reach liquid while vapour space remains.
+- What the code does: once the vent's hydraulic flow exceeds the gas capacity of the step (start gas plus boil-up), the gas is pinned and the liquid carries the rest; the space then flashes and the gas regrows, so about 21 kg/s of liquid leaves through the top port with 0.48 m3 of vapour above the pool (8.14 kg/s reported).
+- Decided (orchestrator; no owner rule moves): a phase the end state still holds is the marginal phase; a phase drawn whole is pinned at what the step could supply, its start holdup plus what forms or arrives within the step. The boil-up was already in that capacity (heat exchanger batch); the feed joins it. Without the feed (measured) a fed tank drains its water only every few slices (86 and 676 boundary reopens). A special case for top ports was rejected.
+- Pass conditions: the kettle at 0.443 kg/s; the two fed-drain tests steady; port ledgers closed at 1e-12; no new failure.
+
+**Fed water under the port rule (2026-11-11).** Built without "remaining > capacity": the kettle passes and the port ledgers close (2e-15 to 8e-14), but the two fed-drain tests fail (24 and 104 boundary reopens against 1 and 1). Once a step draws the start's water whole, the next step starts with no liquid water; the 0.002 kg/s fed within the step could be neither pinned (the start gives no composition to draw it at) nor added as a liquid, and the accepted end states held it as vapour about 2,000 times over saturation (12.9 kPa of water at 194 K against 0.15 Pa) while the tank cooled from 298 to 187 K. Decided: a phase that arrives within the step counts as one the step started with. Pin condition: the seed no longer holds the phase, its capacity (start holdup plus arrivals and boil-up) is finite and positive, and a later phase can take the rest. A pinned phase's stream is the total the step could supply, the start's phase and the arrival's together; the arrival's alone where the start holds none. The supersaturated accepted states are a second defect, to be traced in the phase check whatever the port does.
+
+## 19. Section 17's six cases, and the vapour pressure definition (2026-11-11)
+
+Section 17's removals 1 and 2, the clean zone and the form switch are committed (`e3238449d`); groups 6 and 7 as `db3f14d3c` and `754732f66`. Measured by the sub-thread (10 L/s, 1 m of liquid over the pump, NPSH3 1.68 m; limit under forms 0 / G / T):
+
+| Case | p_v, condensables | p at vapour share 1/2 | Zone edge E | Limit 0 / G / T |
+|---|---|---|---|---|
+| Water under nitrogen, 1 atm, 298 K | 3.18 kPa | 4.72 kPa | 69.9 kPa | 17.1 / 69.9 / 17.1 kPa |
+| Water under carbon dioxide, 1 atm, 298 K | 101.3 kPa | 47.5 kPa | 100.1 kPa | 115.3 kPa, all forms (starved) |
+| Dead oil under nitrogen, 1 atm | 1.7 Pa | 11.8 kPa | 94.1 kPa | 113.5 / 94.1 / 12.1 kPa |
+| Separator liquid, 10 bar, 310 K | 203 kPa | 632 kPa | 940 kPa | 1008 / 940 / 212 kPa |
+| LNG at its bubble point, 111.8 K | 93.7 kPa | 89.7 kPa | 93.7 kPa | 100.2 kPa, all forms (starved) |
+| Propane drum, 298 K | 952 kPa | 850 kPa | 941 kPa | 959 kPa, all forms (starved) |
+
+Sigma at the limit under form G: 4.06 (water under nitrogen), 6.59 (dead oil), 73.7 (separator liquid), so a pump starved by released gas does not wear. Vapour pressure: the condensables definition is kept (orchestrator's default, open to the owner). The half-share definition puts a boiling liquid 4 to 11 % under its bubble pressure (propane 850 against 952 kPa), which gives a boiling-liquid pump 21 m of suction head it does not have. The condensables definition treats a gas dissolved below its critical temperature (carbon dioxide in water at 25 C) as vapour pressure, so that liquid counts as at its bubble point, as a rich solvent is treated in design; it jumps at the critical temperature (carbon dioxide at 304 K).
+
+## 20. Cooling tower: any liquid, every compound evaporates (owner, 2026-11-11; proposed, not built)
+
+Owner: "Remove cooling tower composition requirement, allow evaporation of non-water compounds".
+
+- Expected: air passing a warm liquid takes up every volatile compound in proportion to its partial pressure over the liquid, and the latent heat cools the liquid. Water with 10 mol % ethanol at 35 C stands at about 4.6 kPa of ethanol beside 5.2 kPa of water (rough, activity coefficient 3 to 3.5): ethanol leaves about as fast as water by moles, 2.3 times by mass.
+- What the code does: a spray inlet takes a stream only if its liquid is water alone (`TowerExchange.liquidWater`); anything else closes the inlet with `WATER_ONLY`. The fill is Merkel's rating on water's saturation curve, a constant water heat capacity, and one loss, water (`Rates.waterLoss`).
+- Proposal:
+  - No stream is refused. Gas and carried solids pass to the basin as the gas does now; every liquid feeds the fill.
+  - "Saturated air at the liquid" holds every compound at its partial pressure `x_i phi_i P` from the equation of state. Per fill call the engine is read at two temperatures (the inlet and the wet bulb); between them `ln p_i` is linear in `1/T` and the liquid's heat capacity constant, so the searches inside the fill cost what they cost today.
+  - The air moves straight towards that saturated state (Lewis number one, as now), for each compound; a compound's loss is at most what the stream brings (dissolved nitrogen strips whole).
+  - The loss becomes one rate per component, booked by the ledger per component; the energy each carries is its vapour enthalpy on the model's own datum, so the basin's balance closes.
+  - A liquid that boils at the atmosphere has no air contact (status word); its vapour leaves by the basin's flash and vent. Near boiling the saturated content is continued, not divided by zero.
+  - Water alone goes through the same path: references move by the difference between the cubic's water curve and today's (about 0.15 % in saturation pressure at 25 C).
+- Composition along the fill is the inlet's (evaporation is a small share of the flow); the cap above keeps a trace solute from going negative.
+
+**Air into the water (owner, 2026-11-11: "make cooling water saturated with air as well").** The exchange runs both ways: each compound moves towards equilibrium between the liquid and the air.
+
+- The air's own gases that the package holds (nitrogen 0.7808 and oxygen 0.2095 of the dry air, less the humidity) dissolve: the liquid leaves the fill saturated with them at its leaving temperature, `x_i = p_i,air / (phi_i P)`. For water at 25 C that is about 9e-6 of nitrogen and 5e-6 of oxygen by moles (hand estimate from Henry's law).
+- A component's rate is then signed: a loss for water and the volatile compounds, a gain for nitrogen and oxygen where the stream arrives with less than saturation, a loss where it arrives with more. A gas the air does not hold (dissolved methane) strips whole, which is the same statement with a partial pressure of zero.
+- The gain carries its enthalpy at the air's temperature on the model's datum; the ledger books it as a negative removal per component.
+- A basin with no spray keeps what it holds: only the fill exchanges mass, as now.
+
+## 21. Condensate a port drains (2026-11-11; owner: "review the issue and diagnose")
+
+Fed water pinned at the arrival's composition fixed the two fed-drain tests (1 and 1 boundary reopens). What remains, in the 5 s fed drain only: slices 2 to 32 of 60 end all gas and slightly supersaturated (the condensate would be 0.8 g in the 1 m3 tank: 8e-7 by volume, 7e-4 by moles).
+
+- Expected: the tank's gas cools a little as it leaves, so about 0.8 g of water condenses per slice. The bottom port, which passes about 120 g per slice and is drawing gas, takes that water with it. The tank ends each slice saturated.
+- What the code does: the check after a converged pass proposes the condensate (172 times). Laid out in the seed, it is the bottom port's first phase, and the port rule of section 18 makes a phase the seed holds carry the whole outflow: 120 g from a 0.8 g pool. The Newton has no root and its last iterate empties the water. Owner decision D39 B reads that as "the proposed phase does not exist", refuses it for the rest of the solve, and the all-gas layout is accepted.
+- Diagnosis: one piece of evidence, a failed pass whose iterate empties a phase, has two readers. D39 B (a tank on its bubble point proposing 3.4e-6 of its moles as vapour) reads "refuted"; the port rule's `drainedSeeds` reads "drawn whole". D39 B runs first. For a phase a port draws first its reading is wrong: the phase forms and leaves. The deeper cause is that section 18 decides "carries the flow or drawn whole" from whether the seed holds the phase; that is right for a phase that can sustain the port (the kettle's gas over a pool that flashes) and wrong for one that cannot.
+- Fix (orchestrator; D39 B untouched): a port already passing a lower-priority phase leaves none of a higher-priority phase behind. When a converged pass's check proposes such a phase and the proposed amount is less than what the port passed beyond its pinned phases, the amount joins that phase's capacity as formation within the step (as the boil-up and the arrivals do), the phase is pinned and drawn whole, and the pass is solved again; a larger proposal is laid out as now. This is the removed "outflow exceeds capacity" test with a measured formation in place of a guessed one. The pass key counts the formation updates.
+- Rejected: accepting the state as vanishing (it is above the threshold by moles, section 16's group 3); refuting with the port in view (it spends a failed Newton per step).
+
+**The port rule, final form (2026-11-11; supersedes section 18's rule and folds in the fix above).** Measured by the sub-thread: with the "outflow exceeds capacity" pin removed, three tests that pass at HEAD regress (`LiquidCo2LetDownTest` holds on the substep limit, 3.29 of 5 s at slice 4, a new hold class; `PressureValveContinuationTest` ends `VALVE_OPEN` for `VALVE_REGULATING`; `TracePhaseFoldTest` takes 6.2 s against 2.6 s). With the pin back and the arrivals counted, all three pass; the kettle needs the pin not to hold. One rule:
+
+- (a) First guess, as at HEAD: a phase whose capacity (start holdup, arrivals, boil-up) the remaining outflow exceeds is pinned.
+- (b) Correction at a converged pass. A port passing a lower-priority phase leaves none of a higher-priority phase behind; an end state that holds one above the vanishing share is not a solution. If the check proposes a phase that was absent (the condensate) and its volume is less than the port passed, it joins the capacity as formation and is drawn whole; a larger one is laid out. If the phase was pinned by (a) and regrew (the kettle's 0.48 m3 of vapour), it can form as fast as it is drawn, so it carries that port's flow for the rest of the solve.
+- (c) If the pass under (b)'s second case has no root and its iterate empties the phase, it is pinned again with the regrown amount as formation, finally for that solve.
+
+The pass key carries the formation updates and the overrides. To report: how often (b) and (c) fire, failed Newton passes against HEAD, any HEAD-passing test whose numbers move.
+
+## 22. The port-rule redesign withdrawn (2026-11-11)
+
+Sections 18 and 21 are withdrawn; the port rule stays as at `754732f66` (main's D11 rule with stage A group 1's addition).
+
+Measured by the sub-thread on the rule of section 21's last paragraph: the three regressions pass again, but the correction for a small new phase fired 23,002 times in `PressureValveContinuationTest` (a fixed-point loop, each formation leaving 0.78 of the last; 193.9 s against 43.8 s), the fallback fired 97 times, and the kettle failed (boil-up 0.0000 for 0.443 kg/s: the pass after the correction did not converge and the vapour line was left with no flow).
+
+Why it was the wrong work: the kettle passes on main and at the baseline (`48b4fb298`) under the same pin rule, and `boilUp` is unchanged. W3b did not break the rule; something upstream now drives the kettle into a branch it did not enter before (the duty controller reaches 8.1 MW at t = 10 s). The orchestrator ordered a redesign of the rule before asking what the batch had changed.
+
+Now: the group 5 work is kept as a patch in `tmp/w3b-network/`; the kettle's 1 MW case is run at `48b4fb298` and at HEAD with the same print per accepted step (controller output, pool heat, boil-up, gas capacity, vent flow, pin, pool volume, pressure, temperature), and the first step and quantity that differ decide the fix. If the baseline also passes liquid through the top port, the fault is older than W3b and becomes an open item. The condensate of section 21 arose only under the withdrawn rule.
+
+**The kettle against the baseline (2026-11-11).** The fault is older than W3b. Same start state on both sides (372.147 K, 101325 Pa, liquid only, 1.292 m3; pool heat 5.70 MW; hot side identical).
+
+- First difference, t = 0 to 1 s: water's saturation pressure at the step's end, 101599.5 Pa at the baseline (IF97 to about 1 Pa) against 101676.5 Pa at HEAD (the cubic water, 75 Pa or 0.074 % higher at the same temperature). The vent then passes 4.36 against 6.89 kg/s (274 against 351 Pa over the atmosphere).
+- The baseline also pins the gas and passes liquid through the top nozzle: 107, 96 and 82 kg/s at t = 4.1 to 5.0 s against a boil-up of 3.7 kg/s; 171, 121, 73, 12 and 12 kg/s at t = 23.3 to 26 s against 0.40 kg/s. It then settles at 0.437 kg/s from t = 28 s (pool 1.292 to 0.985 m3) and its test passes.
+- HEAD bursts every 1 to 3 s from t = 25 to 50 s (123 down to 23 kg/s, the vent at 0 in between); the pool falls to 0.633 m3 and the last interval's mean is 8.14 kg/s.
+
+So W3b's 0.07 % shift in vapour pressure only moves the timing of a fault main has: the gas pinned by the outflow test, with liquid through the vapour nozzle while vapour stands above the pool.
+
+One last form, measured (no further port-rule forms in this batch): the outflow test pins a liquid, not a gas the seed still holds. A liquid's holdup is what a port can draw of it in a step; a gas's holdup is no such limit, since drawing it lowers the pressure and the port's own law then passes less. A gas runs out at a port only when liquid displaces it, which is the existing path (the seed no longer holds it, the start did). If any class fails or slows, the rule stays as on main and the kettle is the owner's open item.
+
+**Result of the last form (2026-11-11).** With the outflow test not pinning a gas the seed holds: the kettle passes (1 MW: 0.4427 kg/s against 0.4430; OFF: 1.2333 against 1.2339; the largest vent after t = 5 s is 3.27 kg/s of vapour flashing as the pressure fell 4.5 kPa, no liquid through the nozzle), `TracePhaseFoldTest`, `PhasePortPriorityTest` and `InletPhaseTest` pass, and two classes fail as they did with the pin removed for every phase: `LiquidCo2LetDownTest` (5 cm let-down, slice 4 held at the substep limit: 3.29 of 5 s, 726 accepted steps, 298 state-change rejects) and `PressureValveContinuationTest` (equalSetpoint ends `VALVE_OPEN` for `VALVE_REGULATING`). The port rule is back at main's; the form is kept as `tmp/w3b-network/gas-pin-form.patch`. The kettle (two tests) stays failing and is the owner's open item: the two failures are untraced, so it is not known whether they need the gas pin for a physical reason or lean on it.
+
+Also in the tree: form T reads a pump's head share from its suction junction's own vapour share on the start states (small, so T stays in the comparison); the hold-fuzz harnesses' trace line ported to `phaseVolume`.
+
+## 23. The suction forms' quick check and the two traces (2026-11-11)
+
+**Quick check** (200 seeds, 4 threads beside another worktree's test run; holds by class and seed):
+
+| Form | Cold random | Bundled random | Defaults | Newton iterations, cold / bundled |
+|---|---|---|---|---|
+| 0 (section 16's provisional rule) | 2: E6 101, F 118 | 0 | 0 | 329,694 / 124,843 |
+| G (clean-zone edge in the limit) | 4: E6 101 and 181, F 6 and 118 | 1: F 6 | 0 | 325,285 / 123,806 |
+| T (vapour pressure alone, head share read at the suction junction) | 2: E6 101, F 118 | 1: F 6 | 0 | 346,180 / 123,810 |
+
+Not chosen yet. The budget holds (F 6) are not replayed alone; cold 181 under G is a new hold of an existing class. Ordered before the choice: the batched replay alone of the budget holds; 181 diagnosed from the run's trace; a starved pump on nitrogen-saturated water over 30 steps under G and T (a steady point against a swing is what the hold count does not show).
+
+**The two tests that fail when a gas the seed holds is not pinned by the outflow test** (owner: "Trace the two failures").
+
+- `LiquidCo2LetDownTest`, 5 cm: liquid carbon dioxide enters the tank at about 89 kg/s (0.08 m3/s) and flashes about 5 % at 1.35 MPa and 241 K; the 0.16 m3 vapour space fills in about 2 s and the tank floods, the vent then passing the inflow, liquid with the flash vapour. Main's rule pins the gas at the vent (27.9 kg/s against a capacity of 27.5) and settles with 0.115 m3 of vapour standing while the vent passes 89.2 kg/s, mostly liquid: the kettle fault, here close to the truth. With the patch the step that removes the last vapour leaves the tank liquid-full, the vent passes 126 to 148 kg/s of liquid against 92 in, the pressure falls 93 kPa (a state change of 0.054 to 0.069, above the cap), the step shrinks to 1.2 ms and the node alternates between liquid with vapour and liquid alone (298 rejects, the substep limit at 3.29 s). Reading: the liquid does displace the gas there, so the patch's condition is too wide; and the flooded regime cannot be stepped, which main's standing vapour hides.
+- `PressureValveContinuationTest`, equalSetpoint: a drum with 11.4 of 11.5 m3 as vapour, fed 106.5 kg/s. Nothing displaces the gas. Main's rule pins the gas at the top port and passes drum liquid through it in 84 of 171 passes, which unloads the bottom line so its valve ends regulating at 200.0 kPa. With the patch the top draws vapour only, the bottom line runs on its velocity cap and its valve stays open at 201.8 kPa; ledgers hold and all 12 intervals commit. Reading: the test's endpoint mode leans on liquid through the top port.
+
+The physical statement that covers all three cases: a gas runs out at a port when the liquid entering within the step fills the vapour space (the kettle: none enters; the drum: far less than 11.4 m3; the let-down: 0.08 m3/s into 0.16 m3). The complete form is implicit: the flooded state is "all the gas that forms leaves, the liquid carries the rest, no vapour space", closed by the vapour volume, not by a guessed capacity.
+
+**Owner, 2026-11-11: "Build it, measured".** The displacement test, one form: for a gas the seed holds, the port rule's "outflow exceeds capacity" test becomes "the liquid volume the node gains within the step is at least the vapour volume the step starts with"; liquids and everything else as on main. `PressureValveContinuationTest`'s endpoint assertion is rederived from the physics (the bottom line on its velocity cap, its valve open). Risk stated before the run: in the flooded let-down, main's pin leaves about one step's flash vapour standing (0.115 m3), more than the liquid gained per step, so the test may alternate between a pinned step and a gas-only step. If any class fails or slows, the rule goes back to main's and the kettle is deferred to its own batch (a flooded vessel closed by its vapour volume, implicitly).
+
+## 24. The suction form: G chosen (2026-11-11)
+
+Measured by the sub-thread after the quick check of section 23.
+
+- A starved centrifugal pump (0.01 m3/s, 50 m) on nitrogen-saturated water from a 1 atm supplier. Form G: every step the same, suction at E = 69.88 kPa (p_v 3175 Pa, breakdown 7.3 kPa), 4.489 kg/s, 0.75 % vapour at the junction, head share 1. Form T: period 2 for the whole 60 s; odd steps pull to 14.87 kPa at 7.513 kg/s with 11.8 % vapour at the junction, even steps read that vapour, lose the head and pass 0.021 kg/s at 101.32 kPa.
+- Budget holds replayed alone: cold 6 under G stands (wall deadline, tick 2084); bundled 6 under G stands as E6 (Newton iteration limit, island 43); bundled 6 under T was contention (clean in 26 s).
+- Cold 181 under G (E6, a set-flow pump): for a liquid that is all condensable, E lies below p_v (LNG: 93.67 against 93.71 kPa) and G's limit and lock are T's. G differs only where E exceeds p_v plus the breakdown, which needs a compound above its critical temperature in the liquid; the seed's world has an LNG generator at 128 K, above nitrogen's 126.2 K. Reading, not confirmed: the limit sits just under the supplier's own pressure, where form 0 (D16 C) vapour-locks the pump and G leaves it open on a small margin.
+
+Chosen: form G. Form T is rejected on the alternation; form 0 stays behind the switch until G's three holds (cold 6, bundled 6, cold 181) are understood. Next: a trace of the two smallest (one replay each, release pressures and the lock printed), then the lock's statement under G, then the vapour lock check.
+
+## 25. The kettle fixed (group 5), and form G's holds (2026-11-11)
+
+**Group 5, committed by the sub-thread as `2aebdcd3c`** (the harness port as `2f02dab60`): a gas the seed holds is pinned at a port only when the liquid entering within the step fills the vapour space (each stream's liquid at its donor's start density, injections flashed at the start state).
+
+- Kettle: 1 MW 0.4427 kg/s against 0.4430; the largest vent after 5 s is 3.27 kg/s of flash vapour; OFF 1.2333 against 1.2339 kg/s.
+- `LiquidCo2LetDownTest` 5 cm: no hold, 105 accepted steps (98 before). The risk stated in section 23 is confirmed: the flooded tank saw-tooths, gas-only steps venting about 7 kg/s while the vapour falls from 0.09 to 0.01 m3, then pinned steps venting 115 to 153 kg/s while it regrows to 0.1 m3, every 4 to 6 steps. Open item: the implicit form (a flooded vessel closed by its vapour volume).
+- `PressureValveContinuationTest` equalSetpoint: every interval settles with the bottom line on its cap (82.93 kg/s, valve open, junction at 201.8 kPa) and 23.60 kg/s through the top (valve regulating at 200.0 kPa), in equal to out to 1.7e-9, in 0.35 s. Assertion changed from "bottom valve regulating" to "bottom valve open above 200 kPa, top valve regulating at 200 kPa within 1 Pa".
+- Failed Newton passes on the target classes 66 against 88; filtered run: 8 failures, all present before.
+
+**Form G's holds, two traced** (one replay each):
+
+| | Cold 181 | Bundled 6 |
+|---|---|---|
+| Supplier | two-phase junction, 127.54 K, 312.23 kPa | two-phase junction, 386.32 K, 180.45 kPa |
+| Liquid above its critical temperature | 0.37 % (nitrogen) | 0.61 % |
+| p_v / E / breakdown at shutoff | 295.6 / 311.14 / 2.58 kPa | 143.2 / 179.39 / 0.99 kPa |
+| Limit under G | E, 1.09 kPa under the supplier | E, 1.06 kPa under the supplier |
+| Stall | singular LU, then the iteration limit, on the supplier junction's rows | the iteration limit, same rows; modes alternating |
+
+Both pumps draw from a boiling junction with 0.25 m and 0.11 m of suction head; form 0 (D16 C) closes them as vapour-locked. Decided (orchestrator): E was read on the supplier's liquid alone, but a junction delivers its whole stream, vapour included. E is the pressure at which the stream the pump draws reaches the clean zone's edge: the liquid alone from a vessel's liquid port, the whole mixture from a junction or a bulk draw; where that stream already holds vapour at or past the edge, E is the supplier's own pressure and the pump is locked, as under form 0. Rejected: the lock at the supplier's bubble pressure whenever the supplier holds gas (it would lock water under a nitrogen blanket with any suction lift); the lock below the breakdown at shutoff (it misses bundled 6 by 71 Pa). To be built only if both junction streams are at or past the edge in the traces; then the vapour lock check on form G is their next run.
+
+## 26. The vapour lock stays; the edge on the stream drawn (2026-11-11)
+
+**E on the stream drawn**, committed by the sub-thread as `69db75057`: through a bulk end (a junction's mixture) E is read on the whole mixture at its own enthalpy, and is the supplier's own pressure where that mixture is already past the clean zone's edge; a liquid or bottom port keeps the liquid's E (water under nitrogen 69.9 kPa, unchanged). 29 pump and suction classes pass. The orchestrator's review of that commit found four points not yet in, sent as one follow-up commit: the stream must be the one `InletPhase.supply` delivers, not "bulk end, whole node"; the mixture's enthalpy must leave out carried solids; `limitFloor` drops a finite E where there is no vapour pressure, and a finite vapour pressure where there is no E (a pump with no limit at all); the mixture cache is keyed by the state alone.
+
+**The vapour lock on form G, kept against removed** (200 seeds, 8 threads, machine idle):
+
+| | Cold random | Bundled random | Defaults | Newton iterations, cold / bundled / defaults |
+|---|---|---|---|---|
+| Lock kept | 3: E6 101, F 6, F 118 | 1: F 26 (clean alone: contention) | 0 | 291,234 / 123,409 / 10,894 |
+| Lock removed | 4: E5 181, E6 101, F 6, F 118 | 0 | 0 | 283,474 / 129,734 / 10,894 |
+
+Decided, as the owner asked ("All four, measured"): the vapour lock (D15) stays. Removing it brings cold 181 back as a line search stall at tick 1086 and costs 5.1 % of the bundled iterations. With the lock kept and E on the stream drawn, cold 181 and bundled 6 are clean.
+
+So of section 17's four rules: water's own saturation curve, the no-limit rule for a pump at its tank and D16 C's gas-beside-the-liquid rule are gone (form G); the vapour lock is kept. Forms 0 and T leave the code.
+
+**Open under form G: cold 6**, a wall-deadline hold (tick 2028 to 2084) that form 0 does not have; replayed alone once, not traced (the two-trace allowance went to 181 and bundled 6). Reading from the code: under G a supplier state costs up to three bisections of about 24 PH equilibria each (p_v, the liquid's E, the mixture's E) where form 0 costs one, and a junction supplier changes state every step. Ordered: nothing worked out that the edge does not read (now); a counter of those equilibria per accepted step and cheaper searches in stage B. Step 7's campaign is its next run.
+
+## 27. The cooling tower as one atmospheric contact (owner, 2026-11-11; replaces section 20's bullets where they differ)
+
+Owner: "The cooling tower is performing heat and mass exchange with air, and any gas phase in the inlet stream gets removed, it should be coherent in design".
+
+Section 20 had three different routes for what is not liquid water: gas in the stream went on to the basin for its vent, a liquid that boils at the atmosphere got "no air contact" and a status word, and only the rest met the air. One statement replaces them.
+
+**The tower brings what its spray delivers to atmospheric pressure in the air stream. What is gas there leaves with the air; what is liquid exchanges heat and every compound with the air; the liquid that remains falls to the basin.**
+
+In order, for the stream of one spray inlet:
+
+1. Gas that arrives as gas leaves with the air: every component of the stream's gas phase, with its enthalpy. None of it reaches the basin.
+2. A liquid above its bubble temperature at the atmosphere flashes on leaving the nozzle: it cools to the temperature at which its partial pressures sum to the atmosphere, and the vapour that forms (each compound in proportion to its partial pressure there) leaves with the air. This uses the same table as the fill, `ln p_i` linear in `1/T` between two engine readings, so it costs no engine call; a liquid below that temperature skips this step with nothing lost.
+3. The liquid then meets the air in the fill as section 20 states: each compound moves towards equilibrium with the air (water and volatile compounds leave, limited by the fill's transfer units; a compound's loss is at most what the liquid holds; the air's own nitrogen and oxygen dissolve to saturation at the leaving temperature; a dissolved gas the air does not hold strips whole). Near the bubble temperature the saturated content is continued with value and slope.
+4. The liquid, and any carried solids, reach the basin. The basin's surface exchanges sensible heat only, as now.
+
+One signed rate per component covers 1 to 3 (gas removed, flash vapour, evaporation, less the air dissolved), with one energy rate; the ledger books them per component and the basin's balances close on them. No stream is refused and no status word names a composition: `WATER_ONLY` goes, and section 20's word for a boiling liquid is not added. The exhaust the plume reads keeps water's humidity; the other compounds' share in it is not drawn.
+
+Consequence for the basin: water leaving the fill saturated with the air's nitrogen and oxygen stands just under its bubble pressure at the atmosphere (the air's 1 % of other gases is the margin), so the basin holds no gas phase from the spray and its vent has nothing to take from it.
+
+## 28. The clean zone's edge reads the stream at the suction now (2026-11-12)
+
+Expected: E is the pressure where the liquid at the pump's suction releases more gas than the pump passes cleanly. It belongs to what stands at the suction now. Gas that reaches the suction later in the step lowers the head (the head share), not E.
+
+What the follow-up to 69db75057 did first (uncommitted, the four review points built): E read on the stream the step's slice draws. `InletPhaseTest.aPumpOnABottomPortRunsThenMeetsGasAndMovesNextToNothing` (water under nitrogen at 120 kPa, a 2 L/s pump on the liquid port, 2.99 slices of water) then failed: the last slice's stream is 0.99 slice of water with about 1 % of free nitrogen, the gas that follows the water. The clean share at 120 kPa is 1.27 %, so E came out near 95 kPa and the pump sat on its limit for the whole slice: drawn 9.96 / 9.96 / 6.28 / 3.61 kg instead of 9.96 / 9.96 / 9.88 kg, 45 steps with 22 rejected instead of 24 with none.
+
+Decided (orchestrator, owner: "auto proceed"): E is read on the stream the end draws with no slice (the leading phase of a phase port, the bulk of a BULK end); the head share keeps the slice's stream. Where that stream holds no condensed phase E is none, as before: the dry-suction refusal owns a pump whose port stands in gas. A junction's mixture is unchanged (E = P past the edge: cold 181, bundled 6). Not chosen: E on the slice's liquid phases only (a junction's mixture would lose its gas again); keeping the slice and re-deriving the test (22 rejected steps).
+
+Stage B item 1 (uncommitted, counters only so far): the heat capacity and the second temperature derivative of the volume are formed when read. Excess second-derivative sums: wet 10842 to 0, polar 6738 to 0; all second sums on dry 5475 to 114; end states bit-identical on the three scenarios. Timings not yet run.
+
+Built (969c3633b): section 28's form with the four review points on 69db75057: `limit(p_v, E, breakdown)` is the larger of the edges that exist; E is worked out when first read and cached by state and stream; forms 0 and T and `icheme.suctionForm` are deleted; the vapour lock reads this solve's stream. The 29 suction classes pass (189 tests); the bottom-port drain is as before (MOVER_LAW three times, 24 steps, none rejected).
+
+## 29. Stage B (step 5b, cost): items 1 to 4 (2026-11-12)
+
+Timing runs alone, 60 s warm-up and 60 s measured, ms per accepted step. Bounds against main: dry 1.1, wet 1.5, polar 1.1.
+
+| Item | What | Counters | dry | wet | polar | Outcome |
+|---|---|---|---|---|---|---|
+| before (ab6b90d42) | | | 0.837 | 2.467 | 1.702 | |
+| 1 | The heat capacity and the volume's second temperature derivative formed only when read; the network's kernel callers ask for derivatives without them | excess second-derivative sums wet 10842 to 0, polar 6738 to 0; end states identical | 0.794 | 1.995 | 1.451 | committed 2a780f8f6; 272 tests in 49 classes pass |
+| 2 | Sparse rows: centres with one partner set share one direct sum | identical to item 1 | 0.888 | 2.098 | 1.454 | no gain; reverted (variant kept in the sub-thread's scratch) |
+| 3 | Skip an absent centre's cells where its ln phi is not read | 1.7 absent centres per call in wet (0.54 polar); 9.7 % of the cells visited (3.6 %) | | | | skipped (orchestrator): the network reads ln phi of absent components, so it needs a mask through three layers for at most a tenth of one function |
+| 4 | Water share's pure-water evaluation in closed form, bit for bit | removes 933 of wet's 11554 kernel evaluations (8.1 %) | | | | built, not yet measured |
+
+The dry column's 0.794 against 0.888 is machine noise (the dry kernel has no excess term; about 22 % background load during item 2's run). Wet's remaining excess over dry, about 6200 kernel evaluations, sits in the three-slot states, not in the share. Asked of the sub-thread for its next report: each scenario's ratio to main beside its bound, and wet's kernel evaluations split by caller. If wet or polar is still over its bound after item 5, the decision goes to the owner.
+
+## 30. Stage B result: wet and polar over their bounds (2026-11-12; owner decision)
+
+Items 4 and 5 committed (6ef50c8cd: the share's pure water in closed form, wet kernel evaluations 11554 to 10621, no measurable time; 4d07122fe: the share continued linearly in P below p_sat with its exact temperature derivative, the Maxwell mismatch at 350 K and 10 kPa 9 % to 2.1e-5 of v). Steps, Newton iterations and end states are unchanged by every item.
+
+| ms per accepted step | dry | wet | polar |
+|---|---|---|---|
+| main (48b4fb298) | 0.777 | 0.923 | 1.021 |
+| before stage B (ab6b90d42) | 0.837 | 2.467 | 1.702 |
+| after items 1, 4, 5 | 0.807 | 2.016 | 1.449 |
+| ratio to main | 1.04 | 2.18 | 1.42 |
+| bound | 1.1 | 1.5 | 1.1 |
+
+Timing noise on this machine is about 10 % (a reverted item moved dry by 12 % without touching its path).
+
+Where the time is. Kernel evaluations per accepted step, dry against wet: `PhaseLayout.decode` 429 against 861 (the Newton residual and one decode per finite-difference Jacobian column, every slot each time); repartition 12 against 18; flash, stability and deposition onset 2.8 against 6.1. Wet doubles because a wet node has more unknowns (state calls 220 to 293 per step) and three slots instead of two: 1.33 x 1.5. The stability tests are not the cause. Wet profile: decode 47 % inclusive, the kernel 33 % (the excess correction 20.7 % self, all of it water's cells), the sparse LU about 17 %.
+
+Remaining ideas (the sub-thread's estimates, none built):
+
+- A. A Jacobian column that moves one slot's ratio re-evaluates that slot and the reference slot only. Wet about -10 %; small and local.
+- B. The node's Jacobian from the kernel's derivatives (one derivative evaluation per slot instead of one decode per column). Wet about -30 %, dry and polar a similar share; the only idea that reaches wet's bound alone. A plan-size build in the Newton's core; results move in the last digits, so every reference and the campaign follow it.
+- C. A cheaper excess correction: none found that leaves the physics alone.
+- D. Reuse of the sparse LU's symbolic step: at most 7 %.
+- E. Fewer compounds with activity fits against hydrocarbons: lowers polar's cost and its accuracy (alcohol with hydrocarbon mixtures are strongly non-ideal).
+
+Orchestrator's recommendation to the owner: B in this batch, before steps 6 and 7, with its design written first (`ANALYTIC_JACOBIAN_PLAN.md`), because step 7's campaign and the final lane should be taken once, on the final solver. A only if B is not built. Not E.
+
+## 31. The gates run on 4d07122fe, and whether B can keep the rows (2026-11-12)
+
+Gates, once: `columnGates` 83 classes pass. `holdGates` 131 tests, 14 fail; none failed on main's 0.27.1 lane, and this branch had not run them before. All 14 are flowsheet tests where water crosses between the network's model (cubic water with the share) and V3's own water:
+
+| Tests | What fails |
+|---|---|
+| `FlowsheetColumnTest` (6), `ColumnEjectorTest` (1) | the column block's heat gap, about -180 kW on 174 to 194 MW (0.1 %); one of them holds with `column.liquid_water` |
+| `UtilityRegulationTest` (2) | the same gap (-185 kW) on steam; the steam is not read as saturated condensate |
+| sizing samples (5) | references moved by 0.01 to 10 % (`ColumnSizing` 1265 to 1378 and 509 to 561; `UnitSizing` 80.4 to 78.6 and 2.299 to 2.319; `SizeAll` 73.06 to 73.053) |
+
+Not changed yet. They belong to step 6's flowsheet callers; each group gets its report (expected, what the code does, proposal) before a reference or a tolerance moves.
+
+B with the rows kept (the sub-thread, from the code): possible. `HydrocarbonModel.Phase` is a plain record and a state is built from three independent slot phases, so only the perturbed node's `hydrocarbon.phase()` would be replaced by the base phase plus its first-order change; `transport`, `nodeRows`, `edgeRows` and `nodeAccumulate` run unchanged, and viscosity and the solid moments stay exact. In the way:
+
+1. The domain fallback: today a perturbed decode that throws (no root, a liquid slot on a vapour-like root, the numerical box) hands the build to the coloured sweep. A linear model never throws; the box test can stay, the root tests at the perturbed point are lost.
+2. Exactness: `BlockJacobianEquivalenceTest` asserts bit equality with the residual's column differences. It becomes a tolerance. The Newton's path moves in its last digits: the 33 junction lines, chain-100, the fluid regression and the campaign's references move once.
+3. Derivatives the kernel lacks: the partial molar volume and enthalpy follow from the ln phi derivatives only if those carry the volume translation and water's share; the share's correction has no composition derivative yet; `d(dv/dP)` needs third derivatives (read only by the acoustic velocity bound, mostly above the 100 m/s cap).
+4. The temperature column still prepares the model at the perturbed temperature (about 1 %).
+
+## 32. Step 6 started: the label, the spray riser, spine packages (2026-11-12)
+
+- 1059ece75: the aqueous row reads "Water" at 99 % water by moles or more, else "Aqueous" (plan N7; `en_us.json` only).
+- 5c85000c8: a spray end's riser is weighed with the arriving column in every reader (COOLING_TOWER_PLAN.md section 9's last open point); other ends unchanged to the bit; the 30 tower tests pass.
+- Spine packages and water (orchestrator; owner: "auto proceed"): today's behaviour stays as a documented capability limit. A package whose method takes its ideal gas from reference spines is dry on the network, and water is refused at its state. No main package has a spine; only the test package `icheme:pilot_cryogenic` does. Not chosen: giving it the cubic water now (a water spine record, `withWater` for spine methods, derived pairs, the ice crystal's datum; about half a day, for test data only), and refusing such a package at load (moves 44 test classes). When a main package gets a spine, the first of these is the work to do, and the dry-model path goes with it.
+
+## 33. The 14 flowsheet failures: causes and decisions (2026-11-12)
+
+Diagnosed by the sub-thread from probes on this branch and on main's build; nothing rerun. Decided by the orchestrator (owner: "auto proceed"); not built yet.
+
+**G1. The heat gap (7 column tests, the utility pair), and the condenser's size.**
+Expected: steam enters a column block, free water leaves, and the two water models agree. What the code does: pure liquid water on the network's model stands a constant 564.5 J/mol (31.3 kJ/kg) above V3's from 298 to 450 K at 1 to 10 bar; steam agrees within 1 J/mol. V3's liquid sits one Watson latent heat at 298.15 K below steam (44.554 kJ/mol); the network's model gives IAPWS-95's (43.990 kJ/mol). So V3's latent heat is 1.3 % high at every temperature. The difference does not cancel where water crosses the block in another phase: 326.7 mol/s of free water times 564.5 J/mol is 184.4 kW, the reported gap. The condenser sample (508.9 to 560.8 m2) is the same datum: the product water's enthalpy is 184 kW higher, the inlet 2.1 K hotter, and the extra heat lands on the gas film.
+Decision: correct the datum at its definition (`V3WaterProperties.liquidEnthalpyOffset` subtracts IAPWS's latent heat at 298.15 K, not Watson's). V3's liquid water and the network's Region 1 utility water take it. Effect: steam-stripped column duties -0.6 % on the sample, utility steam duties about -1.3 %; V3 references with condensing water move by a predicted amount. Not chosen: a constant at the boundary (it would move steam too); reading the block's streams on V3's model (the world's product water would stay off its own model).
+
+**G2a. Steam not read as saturated condensate.**
+What the code does: the kettle sets its condensate 1 mK under Wagner-Pruss's saturation temperature. The network model's own water saturates up to 0.43 K away (cubic less Wagner-Pruss: -0.02 K at 1 bar, +0.08 at 10, -0.28 at 100, -0.43 at 150, -0.26 at 200 bar), so at 200 bar the flash reads vapour.
+Decision: inside the network model, water's saturation curve is the model's own (tabulated once per model, no kernel call per read); Wagner-Pruss stays in V3. Recorded for W2's data: the alpha function's fit near 100 to 200 bar.
+
+**G2b. `waterInAHotFeedJoinsAsSteam` holds with `column.liquid_water`.**
+What the code does: the column block refuses any liquid water. On main free water was insoluble, so 50 mol/s of water in a 638 K crude at 2.5 bar was all steam. Now 0.406 mol/s dissolves in the oil (2.8e-3 by moles), with no aqueous phase.
+Decision: the check reads the aqueous liquid only; water dissolved in the oil joins the steam feed until W5 gives V3 water in its liquid.
+
+**G3. Sizing samples.** The condenser and the air cooler follow G1. P-101's NPSH (80.37 to 78.65 m) is not water: the dry crude's bubble pressure at 298.15 K went from 115.0 to 129.6 kPa with the derived pairs (light ends over the heavy cuts). Accepted as their effect; the reference is re-pinned with its cause. `UnitSizing` (2.299 to 2.319) and `SizeAll` (73.06 to 73.053) are attributed after G1.
+
+## 34. G1 measured; the wet flash misses the hydrocarbon liquid above water's dew point (2026-11-12)
+
+**G1 built (uncommitted at the time of writing).** The datum's latent heat is declared on the water record (`water.json` r4, 43988.01 J/mol at 298.15 K; IF97's Region 2 ideal part exists only in test code). The network's cubic liquid less V3's: -2.4 to -2.5 J/mol over 298 to 450 K; steam unchanged. The native column has no water code. The 72 gate classes that load `V3WaterProperties`, once: the sample's gap -184 kW to +1.1 kW (main +8.4); the condenser's duty -0.6 % as predicted; the cooling-water line's drop 0.086 to 0.08519 (predicted 0.0851). `RegroupedCrudeTest`'s side liquids move by 6.8e-5 (accepted with the datum). `ColumnEjectorTest` fails on another assertion; it waits for G2a. The condenser stands at 532 m2 and the air cooler at 1340 (main 508.9 and 1265) with the inlet now as on main: what is left is the defect below.
+
+**The defect.** Expected: steam in a hydrocarbon vapour lowers the hydrocarbons' partial pressure (2.5 to 1.9 bar here), so their dew point falls by a few kelvin. What the code does (the sample's naphtha and offgas with its 326.7 mol/s of water, 23 % steam, at 2.5 bar):
+
+| T, K | 384 | 376 | 368 | 360 | 356 | 352 |
+|---|---|---|---|---|---|---|
+| without the water: liquid share | 9.1 % | 31 % | 50 % | 66 % | 73 % | 79 % |
+| with it: oil liquid | 0 | 0 | 0 | 0 | 42 % (and 14.5 % aqueous) | 51 % (and 18 % aqueous) |
+
+All gas down to 358 K, water's dew point, then 42 % oil at once. It is in every wet flash (condensers, junctions, vessels), so it changes network results.
+
+**Mechanism (orchestrator, from the code).** The feed's stability test (`TangentPlaneStability`) tries Wilson's vapour, Wilson's liquid of the whole feed, and then pure water (or each pure component on a short list). With steam in the feed Wilson's liquid starts with a third or more of water and runs to the aqueous side, as the pure-water trial does. No trial starts in the oil-rich liquid, so above water's dew point nothing proves the gas unstable and the flash answers one phase. Below it the aqueous trial proves instability and the three-slot system runs, whose own first liquid is seeded without the water; W3b step 1c found the same fault in those seeds and fixed it there only.
+
+**Decision.** One rule for both: the stability test's Wilson liquid holds water at a trace when water and another compound are present; the water trial keeps the aqueous side. No added trial. A probe decides first whether the reading holds (the distance of the dry control's liquid against the wet gas at 376 K must be negative). Dry feeds stay bit for bit; wet answers that were wrongly one phase change, and the wet scenario's counters with them.
+
+Probe (sub-thread, on e1b9a3dd0, G1 committed): at 376 K and 2.5 bar the dry control's liquid with a water trace (1e-6, 1e-3, 1e-2) starts at a tangent-plane distance of +0.03 to +0.04 against the wet gas and converges in ten substitutions to one stationary point at -0.0083 (water 1.45e-3 by moles). The gas is unstable and the model has the liquid: the reading above holds, and the fix is in the search.
+
+## 35. Owner: the analytic Jacobian, design first; step 6's fixes committed; the sub-thread stopped (2026-11-12)
+
+Owner on section 30: "Yes, design first". The design is ANALYTIC_JACOBIAN_PLAN.md: the rows stay differenced, and the perturbed node's phases come from a first-order model of each phase (one derivative evaluation per phase per Jacobian). Not built.
+
+Committed by the sub-thread since section 34:
+
+- 530a051c8 (G2a): inside the network, water's saturation curve is the model's own.
+- 938283795 (G2b): the column block refuses an aqueous liquid only.
+- 450ba8f0c (G3): P-101's NPSH re-pinned on the derived pairs.
+- 4c0290223: the stability test's liquid trial seeds water at a trace (`TangentPlaneStability.SEED_TRACE` 1e-6, one constant with the three-slot seeds). The wet naphtha's oil liquid appears at about 376.5 K (dry dew point 377 K) and stays within 1.3 points of the dry flash at the hydrocarbons' partial pressure above 365 K; the 42 % step at 356 K is gone; the condenser and air cooler samples pass again; the wet scenario's counters are unchanged (10621 evaluations, same steps). New gate `WetGasGatesTest.naphthaBesideSteamCondensesAtItsOwnPartialPressure`. Evaluation bounds restated with their cause (the trial now reaches the oil liquid): water with n-hexane 119 to 125, the ethanol, water and n-hexane ternary 287 to 321 and 519 to 561.
+
+Open from that work: `FreeWaterIceTest` fails twice since G2a (the ice line follows the model's own liquid curve, -0.23 %; a search's call count 34 against 15); it goes with N10 or is restated there. `ColumnEjectorTest`'s new assertion after G1 was not reported after G2a. The polar scenario's counters before and after 4c0290223 were asked for and not delivered.
+
+The sub-thread stopped on its account's weekly limit (resets 2026-11-15 17:00, Asia/Singapore) in the middle of N10. Its working tree holds N10 half done, uncommitted: `FreeWaterIce`, `FreeWaterModel` and `FreeWaterIceTest` staged as deleted, and edits in `FluidTpEquilibrium`, `NetworkPhaseEngine`, `CrystalFugacity`, `EquilibriumResult`, `PhaseContract`, `PhaseKind`, `SteamVirial`, `ThermoIdentity`, `WaterParticipation`. Left as it is; the tree may not compile.
+
+Owner, 2026-11-12, on ANALYTIC_JACOBIAN_PLAN.md: "Approve, use Fable now". The W3b sub-thread is moved to Fable (medium effort) for the rest of N10, the build of that plan in its four commits, and the code guide chapters.
+
+## 36. N10 committed; the Jacobian's first three steps (2026-11-12)
+
+- 274e06ac1 (N10): the separate free-water rule leaves the equilibrium engine. With it: `ColumnEjectorTest` passes; the polar scenario's counters are unchanged by 4c0290223 (6609 evaluations, 12 steps, 78 iterations); `NetworkCrystals`' water ice is anchored on the cubic's own pure liquid at the record's triple point and reads no saturation curve.
+- 22c0368a8, 57cd8b5f0, 64239496b: ANALYTIC_JACOBIAN_PLAN.md steps 1 to 3. Results and the `dv/dP` correction are in that plan's section 11: evaluations per step fell by three quarters, time by a seventh (ratios to main 1.09, 1.90, 1.20); the frozen `dv/dP` fails at a velocity cap and is being replaced; a profile comes before any further cost work.
+
+## 37. Owner: the cost bounds for this batch (2026-11-12)
+
+Owner on ANALYTIC_JACOBIAN_PLAN.md section 13: "Accept the bounds". Against main's ms per accepted step: dry 1.1 (unchanged), wet 2.0 (was 1.5), polar 1.25 (was 1.1). Measured before the last fix: 1.09, 1.90, 1.20.
+
+Reason recorded: a wet node now solves three fluid phases with the compounds dissolved in its water, nine more unknowns than main's free water (39 against 30), paid in the linear solve. Not done in this batch: an aqueous floor for trace solutes (it would switch dissolved air in water at ambient pressure), a block form of the linear solve, less viscosity work per Jacobian column. A faster linear solve is a later batch of its own, measured first.
+
+Next (sub-thread): the code guide chapters, the bounds where a gate holds them, a timing of the settled form, what is left of step 6, then the full campaign for the settled form. The final lane runs once at the end of the batch.
+
+Owner, 2026-11-12, on ANALYTIC_JACOBIAN_PLAN.md section 15: "Accept 1.45". The bounds for this batch: dry 1.1, wet 2.0, polar 1.45 times main (measured: dry equal to main under the same recorder, wet 1.95, polar 1.38 to 1.41). The cost work is closed. For a later cost batch: the linear solve for the node blocks, the kernel workspace's reuse across exact evaluations, the polar correction's cost per evaluation. Next: step 6's remainder (the 8 known `test` failures, the sizing re-pins, crude_unit), then the full campaign.
+
+## 38. Step 6: the 8 known `test` failures have four causes (2026-11-12)
+
+Diagnosed by the sub-thread from stored results, the code and two probes; nothing changed.
+
+**A. Saved contents come back as the wrong two liquids** (`FluidCheckpointCodecTest.portsACompressor`, `OpenTankRuntimeTest.aFedOpenTank`). Expected: a vessel saved as gas over water (water holding about 1e-5 of dissolved nitrogen) loads as the same phases. What the code does: the checkpoint (format 47) and the facts still write the record of before W3b: compounds in any liquid, compounds in the gas, water in any liquid, water in the gas. The reader rebuilds the compounds' liquid as one liquid and all liquid water as a second. The water's dissolved nitrogen becomes a liquid of nitrogen alone, which has no liquid root: the load is refused. With an oil present nothing is refused, but the oil's dissolved water and the water's solutes change places. The facts' reader is the same; read from the code, not run, a world with any vessel of water under gas would be refused on reload.
+- Decided (state, free): the checkpoint writes the three slots, format 48.
+- For the owner (a facts change): the orchestrator recommends one appended vessel field, the aqueous slot's amounts, default empty. With it empty the reader is today's, which is what a row of before W3b means; with it the three slots are exact. Not recommended: rebuilding the phases by a flash on load (a vessel of one compound in two phases has no answer at given T and P; a flash can hold; the facts are checked bit for bit against the live state at save).
+
+**B. Liquids leaving a three-phase drum are saturated** (`SheetSizingTest` twice). Expected by the tests: water at 340 K from a 3 bar drum takes a floating-roof tank; the oil pump is yellow. What the code does: the water carries its dissolved gas, so its bubble pressure is 2.98 bar and the sheet chooses a sphere; the oil carries dissolved water, its bubble pressure is the drum's, and the pump's available suction head is -0.18 m against 1.53 m required: red. On main the free water held no gas and gave the oil a margin of water's vapour pressure (27 kPa, 3.4 m). The new numbers are a saturated liquid's. A product choice: for the owner.
+
+**C. A stop counted in polls** (`SimulatorRunnerTest` twice): the tests stop at the seventh checkpoint poll; the water sheet now polls 116 times and nothing is solved at the seventh. Decided: the tests stop on progress. Test only.
+
+**D. Two pinned restate numbers** (`FluidFactsCompatTest` twice): a restate energy 615.41 to 782.36 J on nitrogen with methane and with ethane (the derived gas pairs); a test that expects the virial steam's pressure where the model's steam is now the cubic's. Decided: both tests derive their expectation from the model; no number re-pinned.
+
+Samples: the naphtha's bubble pressure 2.299 to 2.3186 bar is the derived pairs' (re-pinned with its cause); H-101's 73.06 to 73.0525 MW is checked against the water datum by arithmetic; `crude_unit` re-records with the final lane.
+
+The campaign for the settled form starts now: none of A to D is solver code and it loads no save.
+
+Correction to A's recommendation (sub-thread, from the code): one appended field is not exact. The old fields are sums over the two liquids, and a sum less one part is not the other part to the bit, so the oil slot would come back up to one unit in the last place off and the facts' bit-exact check would report the vessel. An empty field is also ambiguous (one oil-like liquid with dissolved water has no aqueous phase). The recommendation is now **two appended fields, the oil slot's and the aqueous slot's amounts**; the four old fields stay written as the sums they mean; the reader branches on the row's schema (below 22: the meaning of before W3b; 22 and later: the two fields are the slots). Facts schema 21 to 22, a corpus image `compat/fluid/schema-22`, and compat cases for water under nitrogen and for oil over water. Rows this branch wrote at 21 were never shipped and read with the old meaning.
+
+B, from the code: the sheet's pump and tank rules both read `FlowThermo.bubblePressure`, the pressure at which the stream's whole liquid first holds vapour, dissolved gas included. The network's suction rule (section 17) is not callable from the sheet as it stands.
+
+The campaign started at 11:21 on c5909be95, alone.
+
+## 39. The full campaign on the settled form (2026-11-12)
+
+c5909be95 (code 3f61f4017), 1000 seeds, three distributions, 8 workers, alone 11:21 to 11:26, against the 0.27.1
+lane's campaign. Refused 0 everywhere. Sub-thread report: `tmp/w3b-network/reports/w3b-campaign-report.md`.
+
+| | clean, base to head | Newton iterations | new holds | fixed holds | moved |
+|---|---|---|---|---|---|
+| cold random | 991 to 990 | -19.9 % | 555 B, 988 E1, 65 E5, 446 E6, 6 F | 431 B, 589 B, 85 E1, 181 E2 | - |
+| bundled random | 990 to 994 | -21.3 % | 575 E2, 514 E9, 698 F | 301 B, 896 E5, 145 E9, 47 F, 118 F, 579 F, 678 F | 431 F to E6 |
+| bundled defaults | 1000 to 999 | +6.6 % | 358 E2 | - | - |
+
+- No class is new to the baseline as a whole (B, E1, E2, E5, E6, E9, F). Three are new to their own distribution:
+  E6 in cold (446), E2 in bundled random (575), E2 in defaults (358; the baseline's defaults were all clean).
+- Budget class: bundled 698 F replayed alone once and holds again at the wall deadline (tick 4551, island 49): real.
+  Cold 6 F had its one replay on form G (section 26).
+- 358 and 575 (E2) are one message: "Singular Newton Jacobian: Sparse LU rejected a singular matrix" at 20 of 20 step
+  sizes on the first solve after a join. 358 is a water-only world (24 blocks): generator 298 K, a pump in a loop
+  round it, a tank joined to the pump's suction junction by the pipe of tick 1945. On 0.27.1 the joined island ends
+  FULL. The refusal (`SparseLuSolver` line 141, EJML `setA`) is an exact zero pivot or a NaN, the same at every step
+  size: structural, not conditioning.
+- Decision (mine, under the owner's autonomy rule): 358 is diagnosed now, with its one traced replay alone; a held
+  water-only default world is a defect. Candidates sent to the sub-thread, none proven: a NaN from a tangent phase
+  (water's ln phi on a list without water); an actuator row of form G reading a node its stencil does not declare
+  (`InletPhase.drawn` against `remoteSuctions`); a slot of the joined tank's support holding exactly zero. 575 is
+  judged from 358's cause, with no replay. Cold 446 E6 (LNG and CO2, crystals, iteration limit), 698 F, 6 F, 514,
+  555 and 988 are recorded as the batch's holds.
+- To the owner: the result, and the three holds new to their distribution.
+
+## 40. Seed 358: an empty tank laid out with a rounding residue (2026-11-12)
+
+358's one traced replay (sub-thread report `tmp/w3b-network/reports/w3b-seed358-report.md`). Step 6's items were
+committed before it (c57a79360, c889eb74c, be53b66d2, 6e8b16746, e04b1755c; 206 tests pass; H-101 is not
+re-pinned: no water passes it).
+
+1. Expected. An empty tank on a line with no driving head stays dry, with no unknowns (D54), until a millilitre
+   has arrived (D59 (2), `HOLDS_NOTHING`, 1e-6 of its capacity).
+2. What the code did. The island has 23 unknowns, every node water only. The tank (1 m3, inventory 0) was laid
+   out on pass 1 with 1.4e-30 mol of water: a flow of 2.8e-29 mol/s between two nodes both at 101325 Pa, times the
+   step. Its energy (6e-26 J) moves by 3e-32 J over the temperature step, under one ulp of the row's other terms,
+   so the tank's lnT column is exactly zero and the LU has no pivot, at every step size. No nonfinite entry, no
+   empty row: my candidates a and b are out; it is c's kind, on lnT. Not the tangents.
+3. The path, read from the code (mine; the replay did not print it). The tank is a slack bag (it turns rigid only
+   once filled taut), so the arrival test (`arrivingPhases`, line 1537) and `filled` both keep it dry at the bag's
+   resolution. `phaseAppeared` (hold class E3) then lays it out: on main it counted hydrocarbon phases only and
+   skipped an omitted trace; on the branch it counts any fluid, and the booked water is 100 % of the tank's
+   total, so any amount passes. Two rules judged one event.
+4. Fix (decided, to be confirmed by a gate test that fails on HEAD): `phaseAppeared` skips a vessel the pass laid
+   out dry; `filled` is the one rule for those. No amount threshold is added. Gate cases: a slack tank on water
+   (358), a mixture (575), and an emptied rigid tank as a test only: a rigid wall's bag is its capacity, so a
+   rigid vessel with any residue never "holds nothing"; whether that is a defect is a rule, kept apart.
+
+Follow-up, the same day (`tmp/w3b-network/reports/w3b-seed358-gate-report.md`). The minimised world does not
+reproduce the hold: a head gives a flow of exactly zero (1 ulp to 1e-3 Pa) or at least 6e-22 mol/s, never the
+replay's 2.8e-29 mol/s, which needs the seed's junction buffers and history. The guard test
+(`EmptyNetworkTest.aDryVesselStaysDryUntilAMillilitreArrives`) passes on HEAD because it reads the step's end,
+where the tank is dry either way. Decision: the fix goes in on the code reading, proved at the pass instead of at
+the hold: a `SolverDiagnostics` counter where `phaseAppeared` answers yes (as `traceFoldPasses`), which the
+trickle case asserts stays 0. Predicted: at least 1 per trickle step on HEAD, 0 after. If it is 0 on HEAD the
+reading is wrong and nothing is fixed. 358 and 575 are measured by the final lane's campaign. The rigid vessel's
+"holds nothing" stays an open rule question.
+
+## 41. Owner: two saved fields for the save defect (2026-11-12)
+
+Owner, verbatim: "Yes, two fields". Section 38's cause A is fixed by two fields appended to a vessel's facts row,
+after `rigid`: the oil liquid's and the aqueous liquid's amounts (conserved basis, water last, zeros written).
+Facts schema 21 to 22. The four old fields stay written with their meaning. A row without the two fields reads as
+today (`fromLegacySplit`); presence is the record's own field count, with no branch on the schema. A row with them
+rebuilds the three slots directly, the vapour from `vapor` and `waterVapor` (never a sum), by the constructor the
+format-48 checkpoint reader uses. The check against the state compares the two slots bit for bit where the row
+carries them. Corpus image `src/test/resources/compat/fluid/schema-22` and compat cases: water under nitrogen, oil
+over water, one compound in two phases, an empty vessel, a rigid vessel. Ruled out: recompute on load; one field.
+Ordered to the sub-thread after the 358 fix.
+
+## 42. Seed 358: the path is the fold rule, not the appearance rule (2026-11-12)
+
+Correction of section 40, point 3 (`tmp/w3b-network/reports/w3b-seed358-fold-report.md`). The pass counter stayed
+0 on HEAD: `phaseAppeared` never reaches a dry tank, because a dry vessel's entry among the solved states is its
+placeholder, the ambient nitrogen charge, which holds fluid. My reading was wrong; the test was built to catch that.
+
+What fires is the fold rule (D34, `phaseFolded` through `recordFolds`, line 670). It compares the placeholder,
+a gas, with the booking of liquid water alone, which has no gas: "the gas folded". The pass is solved again from
+the reconstructed states, the tank's seed is no longer its own state, and it is laid out with whatever was booked.
+Measured on HEAD, one step each: liquid water into the dry tank at 7.6e-20, 7.6e-12 and 1.2e-6 mol gives one fold
+pass each; nitrogen and wet crude trickles give none (their booking carries gas); a real stream is laid out by
+`filled` with no fold. At 1e-20 mol the pass still solves; at 358's 1.4e-30 mol the lnT column is exactly zero.
+main's `phaseFolded` makes the same comparison, so the defect is main's, exposed here by a rounding flow.
+
+Fix (decided): a fold is a phase the pass solved, and a vessel laid out dry has none, so `phaseFolded` and
+`recordFolds` skip it by the pass's dry flags. `filled` stays the one rule for dry vessels. Gate: the water
+trickle of `EmptyNetworkTest.aDryVesselStaysDryUntilAMillilitreArrives` counts 0 fold passes (1 on HEAD). The
+appearance counter is dropped. 575 (pass 0, crude with light ends) is not this path: open, recorded.
+
+## 43. Built: the fold rule's dry-vessel skip and the two facts fields; the owner's cost constraint (2026-11-12)
+
+- b77a807a4: `phaseFolded` and `recordFolds` skip a vessel the pass laid out dry. Gate
+  `EmptyNetworkTest.aDryVesselStaysDryUntilAMillilitreArrives`: the water trickle counts 0 fold passes (1 before).
+  Run once: EmptyNetworkTest 5, PrecipitatedSolidsTest 17, TracePhaseFoldTest 4, EmptyTankFillsTest 1,
+  EmptyRiserTest 1, FedTankOpenOutletsTest 2, JunctionPhaseAppearanceTest 1, all passing; no fold count moved.
+  358 is measured by the final lane's campaign.
+- 2cd895403: facts schema 22 as section 41 states it, corpus image `compat/fluid/schema-22` (8 vessels).
+  FluidFactsCompatTest 21, FluidCheckpointCodecTest 13, OpenTankRuntimeTest 5, all passing.
+- Owner, verbatim, after the build: "go with recommended option but implementation needs to be performance friendly
+  (CPU/RAM)". Read as the two fields. Checked against the commit, no change needed:
+  - step path: none. Facts are written at a world save and read at a load.
+  - RAM while playing: none. The writer reads the state's own slot arrays (views, no copy); `State` is unchanged.
+  - disk: the facts' sparse array form (`Writer.sparse`): a length, one mask bit per component and 8 bytes per
+    amount that is not zero. A slot the vessel does not hold costs about 6 bytes at 40 components; a full liquid
+    about 330.
+  - load: two arrays per vessel row and one copy for the gas slot, dropped once the island is rebuilt.
+
+## 44. Cause B: the sheet's sizing of saturated drum liquids, measured; options for the owner (2026-11-12)
+
+Measured, no source changed (`tmp/w3b-network/reports/w3b-sheet-sizing-numbers-report.md`): the two streams of
+`SheetSizingTest.separator()` (340 K, 3 bar) and two sense checks. Pressures in bar.
+
+| Stream | full bubble (sheet now) | p_v (world) | E (world) | gas on letdown to 1 atm |
+|---|---|---|---|---|
+| drum water | 2.99 | 0.89 | 1.56 | 0.0028 % mol, 4.0 % of the volume |
+| drum oil | 3.00 | 0.89 | 2.68 | 1.05 % mol, 53 % of the volume |
+| propane, 300 K | 9.98 | 9.98 | 9.86 | - |
+| water saturated with N2, 1 atm, 298 K | 1.005 | 0.032 | 0.699 | - |
+
+1. Expected. A pump on a liquid saturated with a permanent gas pulls through its clean zone, as the world's rule
+   (form G) states. Water carrying a trace of dissolved gas goes to an atmospheric tank, where the trace vents.
+2. What the sheet does. Both rules read the full bubble pressure, which a trace of gas sets. The oil pump reads
+   -0.18 m of NPSH available against 1.53 m (red); the water takes a sphere. The pump's row is labelled as the
+   world's rule and no longer states it.
+3. Findings that change the option I had in mind.
+   - Pump: the world's two pressures bring the yellow pump back: 25.2 m over p_v; the world limit is E, with
+     30.3 kPa (3.65 m) to spare (main: 3.4 m).
+   - Tank: p_v does not bring the floating roof back. The water holds propane and butanes at parts per million,
+     at their partial pressures in the drum's gas (0.62 bar); they are below their critical temperature, so p_v
+     keeps them: 0.89 bar against the roof's 0.766. A bubble pressure, with or without the permanent gases, states
+     how hard the first bubble pushes, not how much there is to release.
+   - Cost: the world's own functions read at constant enthalpy, 26 PH equilibria each: 0.2 s a pump, 0.1 s a
+     tank, against 10 ms now. Owner constraint: "performance friendly (CPU/RAM)".
+4. Options.
+   - Pump (recommended): the definitions of p_v and E lifted out of `PassiveStepSolver` to one holder that takes
+     the trial's evaluator. The world keeps its constant-enthalpy trial; the sheet passes a TP flash at the
+     stream's temperature. About 26 TP flashes of 0.7 ms a reading: 40 ms a pump. The two evaluators differ by the
+     cooling of a liquid releasing under 0.1 % of its moles, my estimate under 0.1 K and 1 % of pressure; a gate
+     on the four streams above measures it. NPSH available reads p_v; the world row reads the greater of E and
+     p_v + 0.85 NPSH3. `Service` (boiling service at 0.3 bar over the bubble pressure) keeps the full bubble
+     pressure: a drum liquid is a saturated liquid.
+   - Tank, three choices:
+     a. (recommended) the roof rule and the storage tile read the vapour pressure at equal vapour and liquid
+        volumes (V/L = 1; the oil industry measures crude's vapour pressure at a set V/L for this reason), at the
+        stream's temperature, limit 0.766 bar unchanged. From the letdown numbers: drum water about 0.30 bar (my
+        arithmetic: 2.3e-4 mol/s of gas against 2.1e-4 m3/s of liquid): floating roof. Drum oil above 1 atm (53 %
+        vapour at 1 atm): sphere, as on main. Propane a sphere; nitrogen water a roof. About 20 ms a tank.
+     b. the pump's p_v: the water keeps its sphere (0.89 bar); the test is re-pinned.
+     c. the full bubble pressure as now: sphere at 2.99 bar; the test is re-pinned; no code.
+   - Not proposed here: the world's p_v by the same V/L measure (section 17 named the half-share pressure as a
+     candidate). It moves the pump limit and needs its own campaign: a later batch.
+
+## 45. Owner: the pump rule and the tank's V/L = 1 rule (2026-11-12)
+
+Owner, verbatim: "Yes, both" (section 44's pump option and tank choice a). Ordered to the sub-thread, not built.
+
+- One shared rule in a public holder beside the solver: the release bisection with the trial as a parameter, the
+  vapour volume share of a trial state, the condensable filter (compounds above their critical temperature left
+  out) and `limit`. The world keeps its constant-enthalpy trial, its bracket and its caches; its numbers must not
+  move by a bit. The measured reason for that trial stands in the code (cold 181, `PumpCavitationTest`).
+- The sheet's trial is a TP flash at the stream's temperature, in `FlowThermo`'s own bracket and width: about 15
+  flashes a reading, 30 a pump (about 20 ms against 10 ms now and 0.2 s with the world's trial). No cache.
+- Pump: NPSH available over p_v (over zero where a liquid has none); the world row against the shared `limit` of
+  p_v, E and 0.85 NPSH3. Expected on the test's oil pump: 25.2 m available, limit 21.6 m (E), yellow.
+- Tank: `TankSizing.Load` carries the V/L = 1 reading beside the full bubble pressure. The type and both roof
+  rows read the first; a sphere's design pressure keeps the second. The storage tile stands at the ambient where
+  the reading is at most the roof's 0.766 bar, and at the full bubble pressure otherwise; what it releases leaves
+  by its Gas outlet, as now. Expected: drum water about 0.30 bar, a floating roof at 1 atm; drum oil a sphere on
+  3.00 bar.
+- `Service` (boiling service) keeps the full bubble pressure.
+- Gates: the two `SheetSizingTest` cases pass as written, not re-pinned; the sheet's p_v and E within 1 % of the
+  world's on the four measured streams; the world's suction numbers unmoved. Sample references that move are
+  re-pinned only where a liquid holding dissolved gas explains it.
+
+## 46. Built: the shared release rule, the sheet's pump and tank (2026-11-12)
+
+6cb1f8e33 (report `tmp/w3b-network/reports/w3b-sheet-release-rule-report.md`); diff read against section 45.
+
+- `ReleasePressure` (science.fluid.network): `lowest` (the bisection, the trial a parameter), `vapourVolumeShare`,
+  `leaveOutGases`, `limit`. The solver's side is a move: the same arithmetic in the same order; its 18 probe
+  readings print the same to 0.1 Pa, and PumpCavitationTest, SuctionZoneEdgeTest, PumpRateWarmStartTest and
+  TwoPhaseMoverTest pass.
+- `FlowThermo.vapourPressure`, `zoneEdge`, `storagePressure`, `roofStores` on a TP flash. One limit constant
+  (`FlowThermo.ROOF_STORAGE`, which `Limit.ROOF_BUBBLE` reads).
+- Two premises of mine did not hold, decided by the sub-thread and accepted:
+  - a pure liquid at one temperature is all liquid or all vapour in a TP trial, so no trial states both and it read
+    no pressure; the sheet's trial reads an all-vapour state as share 1. The shared rule and the world are unchanged.
+  - the 1 % gate does not hold for propane's E: 998 166 Pa on the sheet (its p_v) against the world's 985 702 Pa
+    (1.27 %); the gate allows 1.5 % on that reading. The sheet's side is the higher: it errs towards starving.
+- Measured on the separator sheet (expected in brackets): oil pump NPSH available 25.27 m (25.24), world limit
+  21.63 m, it is E (21.59), lamp yellow; drum water storage reading 0.318 bar (about 0.30), a floating roof, the
+  tile at 1 atm with 3.137e-4 mol/s to its Gas outlet; drum oil 1.055 bar, a sphere designed on 3.00 bar; propane
+  9.982 bar; nitrogen water 0.047 bar. Sheet against world: p_v within 0.30 %, E within 0.04 % on the drum liquids.
+- Cost, in TP flashes (1.5 to 2 ms each on a 46-compound drum liquid): a pump 32 (before 15), only where its
+  height is known; a tank's sizing 32 (before 15); a storage tile 17 under a roof and 32 for a sphere, each
+  evaluation (before 15). No cache, nothing on the tick.
+- `SheetSizingTest`'s two cases pass unedited. SheetSizingTest 22, ReleasePressureTest 2 (new), UnitSizingTest 52,
+  LimitTest 12, FlowsheetUnitsTest 45, UnitSizingSampleTest 11: all pass.
+- Moved references, re-pinned with their cause: UnitSizingSample P-101 NPSH 78.65 to 87.39 m and P-102 32.35 to
+  34.69 m (NPSH counts over p_v, the liquid without its methane and ethane); FlowsheetUnitsTest's storage tile of
+  whole wet crude at 300 K, 1.413 bar unflashed to 1 atm with its light ends to Gas (storage reading 0.663 bar,
+  under the roof's limit); its sphere case now stands on propane with n-butane.
+- Still failing, for later: SizeAllSampleTest H-101 (73.06 against 73.0525 MW; the water datum does not explain
+  it, the cause is ordered), FlowsheetExamplesTest `crude_unit` (re-records with the final lane; a storage tile
+  that now degasses its feed must be named among its causes).
+
+## 47. H-101's duty: the derived pairs of methane and ethane; step 6 closed (2026-11-12)
+
+2a5023351 (report `tmp/w3b-network/reports/w3b-h101-duty-report.md`). Measured on main's build and on HEAD at the
+same states: the duty moved -3.945 kW (73.0565 to 73.0525 MW; the old pin 73.06 was main's value rounded, so the
+7.5 kW of section 46 was a rounding). The ideal-gas part is the same (0.003 W). The crude's liquid carries 3.4 kW
+more enthalpy at the coil's inlet and 0.2 kW more at its two-phase outlet. Without its methane (2.5 mol/s) and
+ethane (5.3 mol/s) the crude's enthalpy is the same on both builds at the feed, the inlet and the outlet, and so
+are the pure compounds, the cuts alone and C3 to C5 with a cut: the cause is the derived pairs of methane and
+ethane with the cuts, as expected. 0.24 kW of it is E-101, fed 0.026 mol/s more residue by the column. The pin is
+73.05 MW with its cause; SizeAllSampleTest 7 of 7.
+
+Step 6 is closed. Left of W3b, all with the batch's final lane: `crude_unit`'s re-record, seed 358's measurement,
+seed 575 (open, recorded).

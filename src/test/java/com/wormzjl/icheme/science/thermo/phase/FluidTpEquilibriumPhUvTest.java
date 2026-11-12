@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.wormzjl.icheme.fluid.support.FluidTestSupport;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel.Root;
@@ -21,7 +20,7 @@ import org.junit.jupiter.api.Test;
 
 /**
  * P3 work package WP6b: PH and UV over TP equilibria. Round trips TP -> (H, U, V) -> PH and UV -> (T, P); a pure
- * component's coexistence and free water boiling, whose phase fraction TP leaves undetermined, from the balances;
+ * component's coexistence, whose phase fraction TP leaves undetermined, from the balance;
  * continuity of {@code H(T)} across bubble and dew points; conservation; determinism; typed refusals.
  */
 class FluidTpEquilibriumPhUvTest {
@@ -33,11 +32,7 @@ class FluidTpEquilibriumPhUvTest {
 
     private static FluidTpEquilibrium binary() {
         var evaluator = PhaseTestSupport.methaneNitrogen();
-        return new FluidTpEquilibrium(PhaseTestSupport.openContract(evaluator), evaluator, FluidTpEquilibrium.Settings.DEFAULT, null);
-    }
-
-    private static FluidTpEquilibrium wet() {
-        return PhaseTestSupport.networkService(PhaseTestSupport.networkFreeWater(FluidTestSupport.networkModel()));
+        return new FluidTpEquilibrium(PhaseTestSupport.openContract(evaluator), evaluator, FluidTpEquilibrium.Settings.DEFAULT);
     }
 
     private static double temperature(EquilibriumResult result) { return result.phases().get(0).temperature(); }
@@ -351,101 +346,6 @@ class FluidTpEquilibriumPhUvTest {
                 + (double) phCalls / phStates + " max " + phMax);
     }
 
-    /** Free water under the network's rule: wet round trips, and pure water boiling at the state pressure. */
-    @Test
-    void freeWaterRoundTripsAndBoiling() {
-        var service = wet();
-        var contract = service.contract();
-        var workspace = service.newWorkspace();
-        List<String> species = contract.components();
-        int water = contract.waterIndex();
-        var tally = new Tally("free water");
-        int threePhase = 0;
-        int allSteam = 0;
-        // The WP6a fixture's crude + N2 with water/hydrocarbon 0.01 and 1 on a coarse grid.
-        for (double ratio : new double[] {0.01, 1.0}) {
-            for (double t : new double[] {340.0, 460.0, 580.0}) {
-                for (double p : new double[] {0.5e6, 1.4e6}) {
-                    double[] amounts = PhaseTestSupport.crudeWithNitrogen(contract);
-                    amounts[water] = ratio * PhaseTestSupport.sum(amounts);
-                    var tp = service.tp(EquilibriumRequest.tp(t, p, species, amounts, PhaseCompetition.FLUID_ONLY), workspace);
-                    // Every state is answered: steam past its qualified partial pressure is graded extrapolated (owner rule of
-                    // 2026-10-16; out of domain before), and the round trips stay pinned on the qualified states as before.
-                    assertTrue(tp.converged(), t + " K " + p + " Pa: " + tp.detail());
-                    if (tp.coverage().grade() == CoverageGrade.EXTRAPOLATED) {
-                        assertTrue(tp.coverage().evidence().contains("the steam's qualified partial pressure"), tp.coverage().evidence());
-                        continue;
-                    }
-                    var results = roundTrip(service, workspace, species, amounts, t, p, tally);
-                    var split = results[0].freeWater();
-                    assertNotNull(split);
-                    assertEquals(split.liquidWater(), results[1].freeWater().liquidWater(), 1.0e-8 * amounts[water]);
-                    assertEquals(split.liquidWater(), results[2].freeWater().liquidWater(), 1.0e-8 * amounts[water]);
-                    if (split.liquidWater() > 0.0) threePhase++;
-                    else allSteam++;
-                }
-            }
-        }
-        // WP6a's two cost states: three phases, and too little water to saturate the gas (all steam).
-        double[] wetCrude = PhaseTestSupport.crudeWithNitrogen(contract);
-        wetCrude[water] = 1.0;
-        roundTrip(service, workspace, species, wetCrude, 350.0, 1.0e6, tally);
-        double[] dampCrude = PhaseTestSupport.crudeWithNitrogen(contract);
-        dampCrude[water] = 1.0e-3;
-        roundTrip(service, workspace, species, dampCrude, 350.0, 1.0e6, tally);
-        // Pure water: liquid above its saturation pressure, steam below.
-        double[] pure = new double[species.size()];
-        pure[water] = 1.5;
-        roundTrip(service, workspace, species, pure, 320.0, 1.0e6, tally);
-        roundTrip(service, workspace, species, pure, 450.0, 0.1e6, tally);
-        assertTrue(threePhase > 0 && allSteam > 0, threePhase + " " + allSteam);
-        System.out.println(tally + " (" + threePhase + " with free water, " + allSteam + " all steam, plus 4 fixed states)");
-
-        // Pure water boiling at 0.1 MPa: TP has all liquid at T_sat and all steam above; PH and UV between the two take
-        // the steam fraction from the balance at the water model's saturation temperature.
-        FreeWaterModel model = service.freeWater();
-        double p = 0.1e6;
-        double below = 350.0;
-        double above = 400.0;
-        for (int i = 0; i < 200 && Math.nextUp(below) < above; i++) {
-            double middle = 0.5 * (below + above);
-            if (model.saturationPressure(middle) < p) below = middle; else above = middle;
-        }
-        double boiling = 0.5 * (below + above);
-        double[] liquid = new double[2];
-        model.liquid(boiling, p, liquid);
-        double steam = model.vapor().enthalpy(boiling) + SteamVirial.residualEnthalpy(boiling, p);
-        for (double beta : new double[] {0.25, 0.8}) {
-            String at = "boiling, steam fraction " + beta;
-            double h = pure[water] * ((1.0 - beta) * liquid[1] + beta * steam);
-            var ph = service.ph(EquilibriumRequest.ph(p, h, species, pure, PhaseCompetition.FLUID_ONLY), workspace);
-            assertBoiling(ph, boiling, p, beta, pure, water, at + " PH");
-            assertEquals(h, ph.enthalpy(), 1.0e-9 * Math.abs(h), at);
-            double v = pure[water] * ((1.0 - beta) * liquid[0] + beta * SteamVirial.molarVolume(boiling, p));
-            double u = h - p * v;
-            var uv = service.uv(EquilibriumRequest.uv(u, v, species, pure, PhaseCompetition.FLUID_ONLY), workspace);
-            assertBoiling(uv, boiling, p, beta, pure, water, at + " UV");
-            System.out.println("WP6b water boiling beta " + beta + ": PH " + ph.diagnostics().outerIterations()
-                    + " TP calls, T error " + (temperature(ph) / boiling - 1.0) + "; UV " + uv.diagnostics().outerIterations()
-                    + " TP calls, T error " + (temperature(uv) / boiling - 1.0) + ", P error " + (pressure(uv) / p - 1.0));
-        }
-    }
-
-    private static void assertBoiling(EquilibriumResult result, double boiling, double p, double beta, double[] overall,
-                                      int water, String at) {
-        assertEquals(Status.CONVERGED, result.status(), at + ": " + result);
-        assertEquals(Classification.FREE_WATER, result.classification(), at);
-        assertTrue(result.diagnostics().coexistenceFromBalance(), at);
-        assertEquals(2, result.phases().size(), at);
-        assertEquals(PhaseKind.VAPOR, result.phases().get(0).kind(), at);
-        assertEquals(PhaseKind.FREE_WATER, result.phases().get(1).kind(), at);
-        assertEquals(boiling, temperature(result), 1.0e-9 * boiling, at + " temperature");
-        assertEquals(p, pressure(result), 1.0e-9 * p, at + " pressure");
-        assertEquals(beta * overall[water], result.freeWater().waterVapor(), 1.0e-7 * overall[water], at + " steam");
-        assertEquals(result.freeWater().waterVapor(), result.phases().get(0).amount(water), 0.0, at);
-        assertTrue(result.conservationDefect(overall) < CONSERVATION, at);
-    }
-
     /**
      * Refusals: the critical point of nitrogen (a converged answer there is research-only, a failure is typed
      * {@code CRITICAL_BAND}), states beyond the domain (typed out of domain, naming the component), requests outside
@@ -504,7 +404,7 @@ class FluidTpEquilibriumPhUvTest {
         int typed = 0;
         for (int budget = 2; budget <= 12; budget++) {
             var limited = new FluidTpEquilibrium(binaryService.contract(), binaryService.evaluator(),
-                    PhaseTestSupport.withOuterSearch(FluidTpEquilibrium.Settings.DEFAULT, budget, 1.0e-11), null);
+                    PhaseTestSupport.withOuterSearch(FluidTpEquilibrium.Settings.DEFAULT, budget, 1.0e-11));
             var ph = limited.ph(EquilibriumRequest.ph(pc, atCritical.enthalpy(), BINARY, new double[] {0.0, 1.0},
                     PhaseCompetition.FLUID_ONLY));
             if (ph.converged()) {
@@ -553,16 +453,14 @@ class FluidTpEquilibriumPhUvTest {
         var crystal = service.ph(EquilibriumRequest.ph(1.0e6, 0.0, contract.components(), PhaseTestSupport.over(contract, "Methane", 1.0),
                 PhaseCompetition.withCrystals("co2_solid_i")), workspace);
         assertEquals(UnsupportedReason.PHASE_COMPETITION_NOT_QUALIFIED, crystal.reason());
-        var waterWithoutModel = service.uv(EquilibriumRequest.uv(0.0, 1.0e-3, contract.components(), PhaseTestSupport.over(contract, "Methane", 1.0, "Water", 1.0), PhaseCompetition.FLUID_ONLY), workspace);
-        assertEquals(UnsupportedReason.NOT_IMPLEMENTED, waterWithoutModel.reason());
-        for (var result : List.of(crystal, waterWithoutModel)) {
+        for (var result : List.of(crystal)) {
             assertEquals(Status.UNSUPPORTED, result.status());
             assertEquals(0, result.diagnostics().outerIterations());
         }
 
         // A budget of two TP equilibria: typed not converged, the count reported.
         var tight = new FluidTpEquilibrium(binaryService.contract(), binaryService.evaluator(),
-                PhaseTestSupport.withOuterSearch(FluidTpEquilibrium.Settings.DEFAULT, 2, 1.0e-11), null);
+                PhaseTestSupport.withOuterSearch(FluidTpEquilibrium.Settings.DEFAULT, 2, 1.0e-11));
         var tp = binaryService.tp(EquilibriumRequest.tp(115.0, 1.0e6, BINARY, new double[] {0.5, 0.5}, PhaseCompetition.FLUID_ONLY),
                 binaryWorkspace);
         var starved = tight.ph(EquilibriumRequest.ph(1.0e6, tp.enthalpy(), BINARY, new double[] {0.5, 0.5},
@@ -580,7 +478,6 @@ class FluidTpEquilibriumPhUvTest {
     void searchesAreBitwiseRepeatable() {
         var binaryService = binary();
         var network = PhaseTestSupport.networkService();
-        var water = wet();
         record Case(FluidTpEquilibrium service, EquilibriumRequest request) {}
         List<Case> cases = new ArrayList<>();
         for (double[] state : new double[][] {{110.0, 0.5e6, 0.5}, {120.0, 3.0e6, 0.7}, {115.0, 1.0e6, 0.5}}) {
@@ -595,24 +492,17 @@ class FluidTpEquilibriumPhUvTest {
                 PhaseCompetition.FLUID_ONLY)));
         cases.add(new Case(network, EquilibriumRequest.uv(hot.internalEnergy(), hot.volume(), network.contract().components(),
                 crude, PhaseCompetition.FLUID_ONLY)));
-        // Pure nitrogen at coexistence (a balance) and wet crude (three phases).
+        // Pure nitrogen at coexistence (a balance).
         double[] nitrogen = new double[network.contract().components().size()];
         nitrogen[network.contract().index("Nitrogen")] = 1.0;
         var liquid = network.tp(EquilibriumRequest.tp(90.0, 0.5e6, network.contract().components(), nitrogen, PhaseCompetition.FLUID_ONLY));
         var vapour = network.tp(EquilibriumRequest.tp(100.0, 0.5e6, network.contract().components(), nitrogen, PhaseCompetition.FLUID_ONLY));
         cases.add(new Case(network, EquilibriumRequest.ph(0.5e6, 0.5 * (liquid.enthalpy() + vapour.enthalpy()),
                 network.contract().components(), nitrogen, PhaseCompetition.FLUID_ONLY)));
-        double[] wetCrude = PhaseTestSupport.crudeWithNitrogen(water.contract());
-        wetCrude[water.contract().waterIndex()] = 1.0;
-        var three = water.tp(EquilibriumRequest.tp(350.0, 1.0e6, water.contract().components(), wetCrude, PhaseCompetition.FLUID_ONLY));
-        cases.add(new Case(water, EquilibriumRequest.ph(1.0e6, three.enthalpy(), water.contract().components(), wetCrude,
-                PhaseCompetition.FLUID_ONLY)));
-        cases.add(new Case(water, EquilibriumRequest.uv(three.internalEnergy(), three.volume(), water.contract().components(),
-                wetCrude, PhaseCompetition.FLUID_ONLY)));
         List<EquilibriumResult> fresh = new ArrayList<>();
         for (Case c : cases) fresh.add(solve(c.service(), c.request(), c.service().newWorkspace()));
         for (EquilibriumResult result : fresh) assertEquals(Status.CONVERGED, result.status(), result.toString());
-        assertTrue(fresh.get(fresh.size() - 3).diagnostics().coexistenceFromBalance());
+        assertTrue(fresh.get(fresh.size() - 1).diagnostics().coexistenceFromBalance());
         var reused = new java.util.IdentityHashMap<FluidTpEquilibrium, FluidTpEquilibrium.Workspace>();
         for (int pass = 0; pass < 2; pass++) {
             for (int k = 0; k < cases.size(); k++) {
@@ -639,10 +529,10 @@ class FluidTpEquilibriumPhUvTest {
         var catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
         String pilot = "icheme:pilot_cryogenic";
         var evaluator = CubicPhaseEvaluator.forPackage(catalog, pilot);
-        var network = new FluidTpEquilibrium(PhaseContract.forNetworkPackage(catalog, pilot), evaluator, FluidTpEquilibrium.Settings.DEFAULT, null);
-        var open = new FluidTpEquilibrium(PhaseTestSupport.openContract(evaluator), evaluator, FluidTpEquilibrium.Settings.DEFAULT, null);
+        var network = new FluidTpEquilibrium(PhaseContract.forPackage(catalog, pilot), evaluator, FluidTpEquilibrium.Settings.DEFAULT);
+        var open = new FluidTpEquilibrium(PhaseTestSupport.openContract(evaluator), evaluator, FluidTpEquilibrium.Settings.DEFAULT);
         double[] z = {0.0, 0.5, 0.5, 0.0};
-        double[] zNetwork = {0.0, 0.5, 0.5, 0.0, 0.0};
+        double[] zNetwork = {0.0, 0.5, 0.5, 0.0};
         var ws = network.newWorkspace();
         for (double[] s : new double[][] {{283.0, 10.05e6}, {285.0, 10.3e6}, {300.0, 12.0e6}}) {
             var state = open.tp(EquilibriumRequest.tp(s[0], s[1], open.contract().components(), z, PhaseCompetition.FLUID_ONLY));
@@ -700,7 +590,6 @@ class FluidTpEquilibriumPhUvTest {
         assertEquals(d.coexistenceFromBalance(), e.coexistenceFromBalance());
         assertEquals(Double.doubleToRawLongBits(d.specificationResidual()), Double.doubleToRawLongBits(e.specificationResidual()));
         assertEquals(Double.doubleToRawLongBits(d.fugacityResidual()), Double.doubleToRawLongBits(e.fugacityResidual()));
-        assertEquals(expected.freeWater(), actual.freeWater());
     }
 
     private static long[] bits(double[] values) {

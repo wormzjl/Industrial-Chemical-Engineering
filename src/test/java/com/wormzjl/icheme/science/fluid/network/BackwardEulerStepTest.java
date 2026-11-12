@@ -8,6 +8,7 @@ import java.util.*;
 import org.junit.jupiter.api.Test;
 import com.wormzjl.icheme.science.fluid.solver.PhaseLayout;
 import com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * The backward-Euler step and the interval controller built on it: first-order convergence against refined fixed steps,
@@ -150,9 +151,9 @@ class BackwardEulerStepTest {
         var graph=new PassiveNetwork(List.of(source(200000),new PassiveNetwork.Reservoir(2,0,initial)),List.of(pipe()));
         var result=new PassiveStepSolver(model).solve(graph,.01,()->{});var filled=result.states().get(1);
         int nitrogen=model.hydrocarbon.components().indexOf("Nitrogen"),water=model.hydrocarbon.componentCount();
-        assertEquals(initial.vapor()[nitrogen],PhaseLayout.totalAmounts(filled)[nitrogen],1e-8);
-        assertTrue(filled.waterLiquid()>0&&filled.waterVapor()>0);assertTrue(result.massFlows()[0]>0);
-        assertEquals(result.externalMoles()[water],filled.waterLiquid()+filled.waterVapor(),1e-8);
+        assertEquals(TestPhases.vapor(initial)[nitrogen],PhaseLayout.totalAmounts(filled)[nitrogen],1e-8);
+        assertTrue(TestPhases.waterLiquid(filled)>0&&TestPhases.waterVapor(filled)>0);assertTrue(result.massFlows()[0]>0);
+        assertEquals(result.externalMoles()[water],TestPhases.waterLiquid(filled)+TestPhases.waterVapor(filled),1e-8);
         assertEquals(initial.internalEnergy()+result.externalEnergyJoule(),filled.internalEnergy(),.001);
         assertEquals(graph.reservoirs().getFirst().state(),result.states().getFirst());
     }
@@ -171,11 +172,11 @@ class BackwardEulerStepTest {
         var initial=model.initialNitrogenCharge(1,298.15,101325,()->{});
         var graph=new PassiveNetwork(List.of(source,new PassiveNetwork.Reservoir(2,0,initial)),List.of(pipe()));
         var result=new PassiveStepSolver(model).solve(graph,.01,()->{});var state=result.states().get(1);
-        assertTrue(source.state().liquidVolume()>0&&source.state().waterVolume()>0&&source.state().vaporVolume()>0);
-        assertTrue(result.massFlows()[0]>0);assertTrue(state.liquidVolume()>0);assertTrue(state.vaporVolume()>0);
+        assertTrue(TestPhases.liquidVolume(source.state())>0&&TestPhases.waterVolume(source.state())>0&&source.state().vaporVolume()>0);
+        assertTrue(result.massFlows()[0]>0);assertTrue(TestPhases.liquidVolume(state)>0);assertTrue(state.vaporVolume()>0);
         // A small incoming free-water amount may all evaporate into the nitrogen headspace.
-        assertTrue(state.waterLiquid()+state.waterVapor()>0);
-        assertTrue(state.waterPartialPressure()<=model.saturationPressure(state.temperature())*(1+1e-8));
+        assertTrue(TestPhases.waterLiquid(state)+TestPhases.waterVapor(state)>0);
+        assertTrue(TestPhases.waterPartialPressure(state)<=model.saturationPressure(state.temperature())*(1+1e-8));
         assertArrayEquals(result.externalMoles(),difference(PhaseLayout.totalAmounts(state),PhaseLayout.totalAmounts(initial)),1e-8);
     }
     private static double[] difference(double[] a,double[] b){for(int i=0;i<a.length;i++)a[i]-=b[i];return a;}

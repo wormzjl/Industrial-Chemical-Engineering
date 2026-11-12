@@ -102,8 +102,9 @@ final class Ejectors implements IslandCoordinator.Ports {
         if (!(q > 0) || !(volume > 0)) return 0;
         var weights = model.molecularWeights();
         double gas = 0;
-        for (int i = 0; i < suction.vapor().length; i++) gas += EjectorLaw.asAir(suction.vapor()[i] * weights[i] / volume * q, 1e3 * weights[i]);
-        double water = suction.waterVapor() * model.waterMolecularWeight / volume * q;
+        var vapor = suction.vaporAmountsView();int w = vapor.length - 1;
+        for (int i = 0; i < w; i++) gas += EjectorLaw.asAir(vapor[i] * weights[i] / volume * q, 1e3 * weights[i]);
+        double water = vapor[w] * model.waterMolecularWeight / volume * q;
         double condensing = EjectorLaw.CONDENSING * model.saturationPressure(suction.temperature());
         return EjectorLaw.steam(gas, water, motive, ps, Math.max(discharge, ps), condensing);
     }

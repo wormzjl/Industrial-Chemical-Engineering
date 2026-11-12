@@ -12,9 +12,10 @@ import com.wormzjl.icheme.science.thermo.phase.SteamVirial;
  * <p>The saturation-pressure relation is the IAPWS Wagner--Pruss auxiliary equation. The steam is the network's
  * second-virial gas: the ideal-gas enthalpy integrates the water record's Shomate-form heat capacity (a fit to the
  * IAPWS-95 ideal-gas Cp), and {@link SteamVirial} adds IF97 Region 2's residual at the steam's partial pressure. The
- * liquid is the network's, IF97 Region 1 at the pressure ({@link WaterRegion1}), on the water datum: liquid water at
- * 298.15 K and 1 atm sits one Watson vaporization enthalpy below the ideal-gas steam ({@link #liquidEnthalpyOffset}).
- * The datum cancels in column energy differences. Before E30 the column priced steam as an ideal gas and liquid water
+ * liquid is IF97 Region 1 at the pressure ({@link WaterRegion1}), on the water datum: saturated liquid water at 298.15 K
+ * sits the record's latent heat there (IAPWS's) below the saturated steam ({@link #liquidEnthalpyOffset}). The datum
+ * cancels only where water does not change phase across a boundary; steam in and liquid water out books it (W3b: the
+ * Watson latent heat it used before put liquid water 564.5 J/mol under the network's cubic water). Before E30 the column priced steam as an ideal gas and liquid water
  * as the steam less the Watson enthalpy at every temperature, 136 J/mol (533 K, 2.5 bar) and 285 J/mol (332 K) off the
  * network's.</p>
  *
@@ -236,13 +237,20 @@ public final class V3WaterProperties {
     }
 
     /**
-     * The water datum, J/mol: what moves Region 1's enthalpy (its own datum) onto the steam's, so that liquid water at
-     * 298.15 K and 1 atm sits one Watson vaporization enthalpy below the ideal-gas steam at 298.15 K. The network's
-     * liquid water ({@code FluidThermodynamics.waterLiquid}) and the column's take this one offset.
+     * The water datum, J/mol: what moves Region 1's enthalpy (its own datum) onto the steam's, so that saturated liquid
+     * water at 298.15 K sits the record's latent heat ({@code datum_vaporization_enthalpy}, IF97's 2441.706 kJ/kg) below
+     * the saturated steam ({@link #steamMolarEnthalpy} at the saturation pressure). The network's utility water
+     * ({@code FluidThermodynamics.waterLiquid}) and the column's take this one offset. A record that declares no latent
+     * heat keeps the earlier datum: liquid at 298.15 K and 1 atm one Watson vaporization enthalpy below the ideal-gas
+     * steam.
      */
     public static double liquidEnthalpyOffset(MaterialCatalog.Water water) {
-        return vaporMolarEnthalpy(water, 298.15) - vaporizationEnthalpy(water, 298.15)
-                - WaterRegion1.evaluate(water, 298.15, 101325).specificEnthalpy() * water.molarMass();
+        if (Double.isNaN(water.datumVaporizationEnthalpy()))
+            return vaporMolarEnthalpy(water, 298.15) - vaporizationEnthalpy(water, 298.15)
+                    - WaterRegion1.evaluate(water, 298.15, 101325).specificEnthalpy() * water.molarMass();
+        double saturation = saturationPressurePascal(water, 298.15);
+        return vaporMolarEnthalpy(water, 298.15) + SteamVirial.residualEnthalpy(298.15, saturation) - water.datumVaporizationEnthalpy()
+                - WaterRegion1.evaluate(water, 298.15, saturation).specificEnthalpy() * water.molarMass();
     }
 
     /** Per-thread Region 1 scratch and the last water record's datum, so a residual evaluation allocates nothing. */

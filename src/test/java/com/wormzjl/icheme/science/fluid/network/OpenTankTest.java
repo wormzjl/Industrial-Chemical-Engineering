@@ -8,6 +8,7 @@ import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * The open vessel of batch 2026-10-21-floating-roof-tanks ({@link OpenVessel}, plan section 3.1, WP1): a floating-roof
@@ -84,7 +85,7 @@ class OpenTankTest extends PortFixture {
         assertEquals(PhaseLayout.atmosphere(1),after.state().pressure(),1e-6*P0,"the surface stands at the atmosphere of its height (C1 B)");
         double vented=0;for(int s=0;s<run.slices().size();s++)vented-=run.booked(Kind.VENT,s,nitrogen);
         assertTrue(vented>=.99*gas,"the nitrogen gas vents: "+vented+" of "+gas+" mol");
-        assertEquals(start.waterLiquid(),after.state().waterLiquid()+after.state().waterVapor(),1e-3*start.waterLiquid(),"the water stays");
+        assertEquals(TestPhases.waterLiquid(start),TestPhases.waterLiquid(after.state())+TestPhases.waterVapor(after.state()),1e-3*TestPhases.waterLiquid(start),"the water stays");
         assertTrue(after.state().vaporVolume()<1e-4,"no gas is held after the slices: "+after.state().vaporVolume()+" m3");
         System.out.println("OPEN_TANK_VENT gas="+gas+" vented="+vented+" left="+after.inventory().moles()[nitrogen]+" vapour="+after.state().vaporVolume());
     }
@@ -113,7 +114,7 @@ class OpenTankTest extends PortFixture {
      * step with. With nothing arriving its nitrogen vents over the first step and it ends that step empty, at the ambient.
      */
     @Test void aGasOnlyOpenTankVentsItsGasAndEndsEmpty() {
-        var start=nitrogenAt(P0);double held=start.vapor()[nitrogen];
+        var start=nitrogenAt(P0);double held=TestPhases.vapor(start)[nitrogen];
         var run=drive("gas only",new PassiveNetwork(List.of(openTank(1,0,start,1,1)),List.of()),5,3);
         assertEquals(held,-run.booked(Kind.VENT,0,nitrogen),1e-9*held,"the first step vents all it held");
         for(var g:run.graphs())assertTrue(g.reservoirs().getFirst().empty(),"it ends every step empty");

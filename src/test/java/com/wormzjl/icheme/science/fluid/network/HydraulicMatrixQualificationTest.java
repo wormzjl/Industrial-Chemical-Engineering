@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import java.nio.file.*;
 import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /** P02/P07/P09 and seeded graph-order coverage. Fixed steps isolate ordering from adaptation. */
 class HydraulicMatrixQualificationTest {
@@ -29,7 +30,7 @@ class HydraulicMatrixQualificationTest {
     @Test void unequalParallelPipesMatchIndependentLaminarFlowForGasAndLiquid() {
         for(boolean water:new boolean[]{false,true}) {
             var source=state(water,150100);var sink=state(water,150000);double rho=source.mass()/source.volume();
-            double mu=water?model.viscosity.waterLiquid(350):model.viscosity.vapor(350,source.vapor(),0);
+            double mu=water?model.viscosity.waterLiquid(350):model.viscosity.vapor(350,source.vaporAmounts());
             var sections=List.of(new PipeResistance.Geometry(100,.01,0,0),new PipeResistance.Geometry(200,.012,0,0));
             var graph=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,source,PassiveNetwork.NodeKind.GENERATOR),new PassiveNetwork.Reservoir(2,0,sink,PassiveNetwork.NodeKind.VOID)),List.of(new PassiveNetwork.Pipe(3,0,1,sections.get(0)),new PassiveNetwork.Pipe(4,0,1,sections.get(1))));
             var result=new PassiveStepSolver(model).solve(graph,5,()->{});

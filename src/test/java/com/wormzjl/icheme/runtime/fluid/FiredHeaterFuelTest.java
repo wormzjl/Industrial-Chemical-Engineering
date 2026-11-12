@@ -219,6 +219,28 @@ class FiredHeaterFuelTest {
         assertTrue(view.fanDraw() > 5e-4 * view.fired() && view.fanDraw() < 1.5e-3 * view.fired(), "about 1 kW electric per MW fired: " + view.fanDraw());
     }
 
+    /**
+     * W6 G5 (batch 2026-11-11-aqueous-solvents): ethanol vapour fires the coil on its own record, with no code of its own. The
+     * burners take its lower heating value over its molar mass (1277.5 kJ/mol, 27.7 MJ/kg); what they fire is the fuel flow times
+     * that, and the coil takes its radiant share of it (the heater's efficiency, {@link Burners#radiant}).
+     */
+    @Test
+    void ethanolVapourFiresTheCoilAtItsHeatingValue() {
+        var rig = new Rig(compile(pure("Ethanol", 450, 500_000)));
+        rig.power();
+        rig.run(12, true);
+        var view = rig.heaters.view(BURNERS);
+        int e = model.components().indexOf("Ethanol");
+        double perKilogram = FluidWorldAuthority.heatingValues(catalog, model)[e] / model.molecularWeights()[e];
+        System.out.printf(Locale.ROOT, "ethanol: fired %.0f kW, fuel %.5f kg/s at %.3f MJ/kg, coil %.0f kW%n", view.fired() / 1e3, view.fuelFlow(), view.heatingValue() / 1e6, rig.heat() / 1e3);
+        assertEquals(List.of(), view.alarms(), "no alarm");
+        assertEquals(1_277_500 / .046069, perKilogram, .005 * perKilogram, "ethanol's lower heating value per kilogram");
+        assertEquals(perKilogram, view.heatingValue(), 1e-9 * perKilogram, "the burners read ethanol's record");
+        assertEquals(view.fuelFlow() * view.heatingValue(), view.fired(), 1e-9 * view.fired(), "fired = fuel flow times the heating value");
+        assertEquals(view.demand(), rig.heat(), .02 * view.demand() + 1e3, "the coil fires its demand");
+        assertEquals(Burners.radiant(view.fired()), rig.heat(), .05 * rig.heat() + 1e3, "the coil takes the radiant share of what was fired");
+    }
+
     /** The flue for the stack's plume (batch 2026-11-10-custom-shader-system, W5): methane gas, its water, its fuel and air. */
     @Test
     void theFlueCarriesTheFuelsWaterAndItsCombustionAir() {
