@@ -119,3 +119,40 @@ the end.
 "Approve": the merge as planned, built by the live sub-thread `w5-column` (Opus high). The main thread commits
 no document while the merge is open in the working tree (git refuses a commit by path during a merge); the
 record of the merge follows its commit.
+
+## 10. The merge built (2026-11-12)
+
+Sub-thread `w5-column`. Commits: the merge `d42ccb69f`, the schema-24 corpus image `9a6aba760`, the wash still
+at factor 4 `3bdb8edd4`, the blanket check `1c2415ae6`, the guide `b2c9cc2fb`. Report:
+`tmp/main-merge/reports/MAIN_MERGE.md`. The main thread checked: main is an ancestor of the branch, facts schema
+24, state format 49, `mod_version` 0.27.1, the tree clean.
+
+- Resolutions as section 3. main's `schema-22` image stands; the branch's old one is kept in
+  `tmp/main-merge/branch-schema-22`. `FluidFactsCompatTest` 22 of 22 with the new `schema-24` image.
+- `FluidThermodynamics`: main's time (`SimulationTime`, `withTime`, the revision suffix) is carried onto the
+  branch's model. One change to main's line: a view's `withTime` keeps its water choice
+  (`on(compounds(), wet())`); main's form would have made a dry view wet.
+- `GasBlanket` and the relief valve read the gas slot (`phaseMoles(state, GAS)`, `vaporVolume()`); the room is
+  the condensed volume (both liquids and solids). Four main tests read `condensedVolume()` in place of the
+  removed `liquidVolume() + waterVolume()`. No main line reads the old state.
+- The branch added no tick arithmetic after 0.26.0; main's conversions stand.
+
+| Check (section 5) | Expected | Measured |
+|---|---|---|
+| Blanketed water under N2, 20 C, 1.5 bar | water in the gas 2.3 kPa; N2 about 1e-5 per bar | 2391.5 Pa (saturation 2339, +2.2 %); 1.24e-5 per bar |
+| N2 admitted against volume drawn | within 1 % | -1.65 % of the volume; -0.06 % of the room's N2 share (water fills 1.6 %) |
+| Relief valve | gas at set pressure; liquid when full | main's `ReliefValveWorldTest` passes |
+| Wash still, factor 1 and 4, 180 s | same heat per simulated second | 1970298.5 J at both, bit for bit; 3600 and 900 ticks |
+
+Runs (filtered, 4 workers): 38 classes and 335 tests pass (main's changed classes, the saves classes, the
+batch's gates); `GasBlanketTest` 6, `V3AqueousColumnTest` 4, `ShapeRasterizerTest` 38. No re-pin: no main number
+moved past its tolerance and no W3 to W6 gate moved.
+
+Where the plan was wrong:
+- Section 5 asked for the still's head solve "in simulated seconds". main's rule is that a schedule quantity
+  stays in play ticks (`SimulationTime`). `Stills.SOLVE_TICKS` stays in ticks: one head solve per 100 ticks,
+  20 s of process time at factor 4. Effect: over the first 180 s the pot boils 33.03 mol at factor 4 against
+  34.55 at factor 1 (-4.4 %); the booked heat trails by one cadence, a fixed lag, not a drift.
+- Section 5's 1 % for the nitrogen admitted did not count the water that evaporates into the room.
+
+Not run: the suite, the GameTests, the campaign, `LanguageFilesTest`, `UnitTextTest`. The final lane follows.
