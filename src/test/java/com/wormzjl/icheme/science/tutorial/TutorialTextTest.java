@@ -106,6 +106,31 @@ class TutorialTextTest {
         return out;
     }
 
+    /**
+     * P3: the equipment items' and the JEI pages' lines ({@code tutorial.icheme.equipment.*}, {@code .equipment_info.*},
+     * {@code .item.*}): one sentence of at most 14 words each, and no professional word unless the line marks it.
+     */
+    @Test
+    void theEquipmentAndItemLinesAreShortAndPlain() {
+        var faults = new ArrayList<String>();
+        int read = 0;
+        for (var e : LANG.entrySet()) {
+            var key = e.getKey();
+            if (!key.startsWith("tutorial.icheme.equipment.") && !key.startsWith("tutorial.icheme.equipment_info.") && !key.startsWith("tutorial.icheme.item.")) continue;
+            read++;
+            var marked = Marked.parse(e.getValue());
+            var plain = marked.text();
+            if (TutorialText.words(plain) > 14) faults.add(key + ": over 14 words");
+            if (TutorialText.sentences(plain) != 1) faults.add(key + ": not one sentence");
+            var lower = plain.toLowerCase(Locale.ROOT);
+            for (var word : PROFESSIONAL)
+                for (int at = lower.indexOf(word); at >= 0; at = lower.indexOf(word, at + 1))
+                    if (marked.termAt(at) == null) faults.add(key + " names " + word);
+        }
+        assertTrue(read >= 3 * 38, "the 38 kinds' lines are read: " + read);
+        assertEquals(List.of(), faults);
+    }
+
     @Test
     void theCountsReadAsAPersonWould() {
         assertEquals(2, TutorialText.sentences("Every screen has a ? key at its top. Press it."));
