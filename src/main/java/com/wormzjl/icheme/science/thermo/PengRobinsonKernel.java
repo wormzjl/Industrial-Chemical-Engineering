@@ -18,6 +18,11 @@ import java.util.Objects;
  * {@code k_ij} is not zero), and the exponential sums only where the kernel has NRTL pairs. Every constructor reaches the
  * same rule: a constant matrix, a {@link PairInteractions} model, or a {@link HuronVidalExcess} with a Mathias-Copeman
  * alpha per compound.</p>
+ *
+ * <p>An evaluation costs what the caller's mixture carries: the caller names its support on the workspace
+ * ({@link Workspace#carry}, its feed's nonzero amounts), and the kernel prepares, sums and differentiates over the
+ * support only, in ascending order. The terms it leaves out are exact zeros, so every output on the support keeps its
+ * bits against the whole list; outside it the outputs are zero. A new workspace carries the whole list.</p>
  */
 public final class PengRobinsonKernel {
     public static final double GAS_CONSTANT = 8.31446261815324;
@@ -370,10 +375,15 @@ public final class PengRobinsonKernel {
     public boolean hasExcessPairs() { return excess; }
     /** {@code 0.07780 R Tc / Pc} for one component; the co-volume the mixture rule sums. */
     public double coVolume(int component) { return coVolumes[component]; }
-    public Workspace newWorkspace() {
-        return new Workspace(count, pairFirst.length, interactions == null ? 0 : interactions.pairCount(), excess ? count : 0,
-                cellPartner.length);
-    }
+    /** A workspace that carries the whole list ({@link Workspace#carryAll()}); a caller names its mixture with {@link Workspace#carry}. */
+    public Workspace newWorkspace() { return new Workspace(this); }
+
+    /**
+     * Tests only: outputs outside a workspace's support are NaN instead of zero, so a reader of a compound the caller
+     * did not carry fails loudly. Off by default; a test that turns it on turns it off again.
+     */
+    public static void fillOutsideSupportWithNaN(boolean on) { outsideSupportNaN = on; }
+    private static boolean outsideSupportNaN;
     public Evaluation newEvaluation() { return new Evaluation(count); }
     /** A derivative output that carries {@code dh^R/dT} (and so forms the second temperature derivative it reads). */
     public Derivatives newDerivatives() { return new Derivatives(count, true); }
@@ -409,25 +419,33 @@ public final class PengRobinsonKernel {
                 || temperatureKelvin > maximumTemperatureKelvin) {
             throw new IllegalArgumentException("Temperature is outside package range");
         }
-        if (workspace.preparedTemperature == Double.doubleToLongBits(temperatureKelvin)) return;
-        for (int i = 0; i < count; i++) {
+        long bits = Double.doubleToLongBits(temperatureKelvin);
+        if (workspace.preparedTemperature == bits) return;
+        workspace.requireKernel(this);
+        // Only the support's compounds, pairs and cells, each stamped with the temperature it was prepared at: a support
+        // that grows at the same temperature prepares only what is new. Each value is the same arithmetic as before.
+        boolean roots = excess || (interactions != null && interactions.temperatureDependent());
+        int[] support = workspace.support;
+        for (int s = 0; s < workspace.supportCount; s++) {
+            int i = support[s];
+            if (workspace.compoundStamp[i] == bits) continue;
             if (mathiasCopeman != null && mathiasCopeman[i]) {
                 prepareMathiasCopeman(i, temperatureKelvin, workspace);
-                continue;
+            } else {
+                double sqrtTr = Math.sqrt(temperatureKelvin / criticalTemperatures[i]);
+                double alphaTerm = 1.0 + kappas[i] * (1.0 - sqrtTr);
+                workspace.a[i] = criticalA[i] * alphaTerm * alphaTerm;
+                workspace.daDt[i] = -criticalA[i] * kappas[i] * alphaTerm
+                        / Math.sqrt(temperatureKelvin * criticalTemperatures[i]);
+                workspace.sqrtA[i] = Math.sqrt(workspace.a[i]);
+                if (excess) workspace.d2aDt2[i] = soaveSecondDerivative(i, temperatureKelvin);
             }
-            double sqrtTr = Math.sqrt(temperatureKelvin / criticalTemperatures[i]);
-            double alphaTerm = 1.0 + kappas[i] * (1.0 - sqrtTr);
-            workspace.a[i] = criticalA[i] * alphaTerm * alphaTerm;
-            workspace.daDt[i] = -criticalA[i] * kappas[i] * alphaTerm
-                    / Math.sqrt(temperatureKelvin * criticalTemperatures[i]);
-            workspace.sqrtA[i] = Math.sqrt(workspace.a[i]);
-            if (excess) workspace.d2aDt2[i] = soaveSecondDerivative(i, temperatureKelvin);
+            if (roots) rootDerivatives(i, temperatureKelvin, workspace, workspace.interactionRootDt, workspace.interactionRootDt2);
+            workspace.compoundStamp[i] = bits;
         }
-        workspace.preparedTemperature = Long.MIN_VALUE;
-        if (excess) prepareRootDerivatives(temperatureKelvin, workspace, workspace.interactionRootDt, workspace.interactionRootDt2);
-        preparePairs(temperatureKelvin, workspace);
-        if (excess) prepareExcess(temperatureKelvin, workspace);
-        workspace.preparedTemperature = Double.doubleToLongBits(temperatureKelvin);
+        preparePairs(temperatureKelvin, bits, workspace);
+        if (excess) prepareExcess(temperatureKelvin, bits, workspace);
+        workspace.preparedTemperature = bits;
     }
 
     /**
@@ -462,23 +480,21 @@ public final class PengRobinsonKernel {
     }
 
     /**
-     * {@code k_ij(T)} and its two temperature derivatives per pair of the list: a constant or a line (the second
-     * derivative zero, a constant's first too, so their added terms are exact zeros), or the model's value, O(pairs) per
-     * temperature on the pure-component values just filled. A value that is not finite (the Soave {@code sqrt(a_i)}
+     * {@code k_ij(T)} and its two temperature derivatives per pair of the support's list: a constant or a line (the
+     * second derivative zero, a constant's first too, so their added terms are exact zeros), or the model's value, O(pairs)
+     * per temperature on the pure-component values just filled. A value that is not finite (the Soave {@code sqrt(a_i)}
      * vanishes at {@code Tr = (1 + 1/kappa)^2}) is refused before the temperature is recorded as prepared, so the
      * workspace never caches it.
      */
-    private void preparePairs(double temperatureKelvin, Workspace workspace) {
-        if (interactions != null) {
-            if (!excess && interactions.temperatureDependent()) {
-                prepareRootDerivatives(temperatureKelvin, workspace, workspace.interactionRootDt, workspace.interactionRootDt2);
-            }
-            interactions.evaluate(temperatureKelvin, workspace.sqrtA, workspace.interactionRootDt,
-                    workspace.interactionRootDt2, coVolumes, workspace.modelK, workspace.modelKDt, workspace.modelKDt2);
-        }
-        for (int pair = 0; pair < pairFirst.length; pair++) {
+    private void preparePairs(double temperatureKelvin, long bits, Workspace workspace) {
+        int[] list = workspace.supportPairs;
+        for (int s = 0; s < workspace.supportPairCount; s++) {
+            int pair = list[s];
+            if (workspace.pairStamp[pair] == bits) continue;
             int m = pairModel[pair];
             if (m >= 0) {
+                interactions.evaluatePair(m, temperatureKelvin, workspace.sqrtA, workspace.interactionRootDt,
+                        workspace.interactionRootDt2, coVolumes, workspace.modelK, workspace.modelKDt, workspace.modelKDt2);
                 workspace.pairK[pair] = workspace.modelK[m];
                 workspace.pairKDt[pair] = workspace.modelKDt[m];
                 workspace.pairKDt2[pair] = workspace.modelKDt2[m];
@@ -499,6 +515,7 @@ public final class PengRobinsonKernel {
                 throw new IllegalArgumentException("Pair interaction of components " + pairFirst[pair] + " and "
                         + pairSecond[pair] + " is not finite at " + temperatureKelvin + " K");
             }
+            workspace.pairStamp[pair] = bits;
         }
     }
 
@@ -514,15 +531,20 @@ public final class PengRobinsonKernel {
      * {@code G = 0}, {@code F + 1} and {@code R + tau_cl} have lost them). A value that is not finite is refused before
      * the temperature is recorded as prepared.
      */
-    private void prepareExcess(double temperatureKelvin, Workspace workspace) {
+    private void prepareExcess(double temperatureKelvin, long bits, Workspace workspace) {
         double[] s = workspace.sqrtA;
         double[] sDt = workspace.interactionRootDt;
         double[] sDt2 = workspace.interactionRootDt2;
         double lambda = HuronVidalExcess.LAMBDA;
         double rt = GAS_CONSTANT * temperatureKelvin;
-        for (int i = 0; i < count; i++) {
+        int[] support = workspace.support;
+        int[] cells = workspace.supportCells;
+        for (int si = 0; si < workspace.supportCount; si++) {
+            int i = support[si];
             double bi = coVolumes[i];
-            for (int c = cellStart[i]; c < cellStart[i + 1]; c++) {
+            for (int at = workspace.cellFrom[i]; at < workspace.cellTo[i]; at++) {
+                int c = cells[at];
+                if (workspace.cellStamp[c] == bits) continue;
                 int j = cellPartner[c];
                 double bj = coVolumes[j];
                 double[] held = workspace.held;
@@ -560,6 +582,7 @@ public final class PengRobinsonKernel {
                 workspace.cellGTau[c] = g * tau;
                 workspace.cellGTauDt[c] = gDt * tau + g * tauDt;
                 workspace.cellGTauDt2[c] = gDt2 * tau + 2.0 * gDt * tauDt + g * tauDt2;
+                workspace.cellStamp[c] = bits;
             }
         }
     }
@@ -584,9 +607,16 @@ public final class PengRobinsonKernel {
         Objects.requireNonNull(root, "root");
         Objects.requireNonNull(workspace, "workspace");
         Objects.requireNonNull(output, "output");
-        normalizeInto(composition, workspace.composition);
+        normalizeInto(composition, workspace);
+        // Every sum below runs over the support in ascending order: the compounds it leaves out have no amount, so
+        // their terms are exact zeros and each value on the support keeps its bits against the whole-list sum.
+        int[] support = workspace.support;
+        int n = workspace.supportCount;
+        int[] pairs = workspace.supportPairs;
+        int pairCount = workspace.supportPairCount;
         double bMix = 0.0;
-        for (int i = 0; i < count; i++) {
+        for (int s = 0; s < n; s++) {
+            int i = support[s];
             bMix += workspace.composition[i] * coVolumes[i];
             workspace.q[i] = workspace.sqrtA[i] * workspace.composition[i];
         }
@@ -595,13 +625,14 @@ public final class PengRobinsonKernel {
         if (rankOneMixing) {
             double qSum = 0.0;
             double dqSum = 0.0;
-            for (int i = 0; i < count; i++) {
+            for (int s = 0; s < n; s++) {
+                int i = support[s];
                 qSum += workspace.q[i];
                 dqSum += workspace.composition[i] * workspace.daDt[i] / (2.0 * workspace.sqrtA[i]);
             }
             aMix = qSum * qSum;
             daMixDt = 2.0 * qSum * dqSum;
-            for (int i = 0; i < count; i++) workspace.sumA[i] = workspace.sqrtA[i] * qSum;
+            for (int s = 0; s < n; s++) workspace.sumA[support[s]] = workspace.sqrtA[support[s]] * qSum;
         } else {
             // g_i = sum_j (1 - k_ij) q_j, reached as the rank-one sum minus the pairs that are not zero, on the
             // prepared k_ij(T); with NRTL cells, in the same pass over the pairs, the row's temperature derivative
@@ -613,18 +644,19 @@ public final class PengRobinsonKernel {
             double[] q = workspace.q;
             double[] g = workspace.g;
             double qSum = 0.0;
-            for (int i = 0; i < count; i++) qSum += q[i];
-            for (int i = 0; i < count; i++) g[i] = qSum;
+            for (int s = 0; s < n; s++) qSum += q[support[s]];
+            for (int s = 0; s < n; s++) g[support[s]] = qSum;
             double interactionDt = 0.0;
             if (excess) {
                 double[] x = workspace.composition;
                 double[] sDt = workspace.interactionRootDt;
                 double[] gDt = workspace.rowGDt;
                 double rootSum = 0.0;
-                for (int j = 0; j < count; j++) rootSum += x[j] * sDt[j];
-                for (int i = 0; i < count; i++) gDt[i] = rootSum;
+                for (int s = 0; s < n; s++) rootSum += x[support[s]] * sDt[support[s]];
+                for (int s = 0; s < n; s++) gDt[support[s]] = rootSum;
                 if (constantPairs) {
-                    for (int pair = 0; pair < pairFirst.length; pair++) {
+                    for (int p = 0; p < pairCount; p++) {
+                        int pair = pairs[p];
                         int i = pairFirst[pair];
                         int j = pairSecond[pair];
                         double interaction = k[pair];
@@ -635,7 +667,8 @@ public final class PengRobinsonKernel {
                     }
                 } else {
                     double[] s = workspace.sqrtA;
-                    for (int pair = 0; pair < pairFirst.length; pair++) {
+                    for (int p = 0; p < pairCount; p++) {
+                        int pair = pairs[p];
                         int i = pairFirst[pair];
                         int j = pairSecond[pair];
                         double interaction = k[pair];
@@ -648,7 +681,8 @@ public final class PengRobinsonKernel {
                     }
                 }
             } else if (constantPairs) {
-                for (int pair = 0; pair < pairFirst.length; pair++) {
+                for (int p = 0; p < pairCount; p++) {
+                    int pair = pairs[p];
                     int i = pairFirst[pair];
                     int j = pairSecond[pair];
                     double interaction = k[pair];
@@ -656,7 +690,8 @@ public final class PengRobinsonKernel {
                     g[j] -= interaction * q[i];
                 }
             } else {
-                for (int pair = 0; pair < pairFirst.length; pair++) {
+                for (int p = 0; p < pairCount; p++) {
+                    int pair = pairs[p];
                     int i = pairFirst[pair];
                     int j = pairSecond[pair];
                     double interaction = k[pair];
@@ -667,7 +702,8 @@ public final class PengRobinsonKernel {
             }
             aMix = 0.0;
             daMixDt = 0.0;
-            for (int i = 0; i < count; i++) {
+            for (int s = 0; s < n; s++) {
+                int i = support[s];
                 workspace.sumA[i] = workspace.sqrtA[i] * workspace.g[i];
                 aMix += workspace.q[i] * workspace.g[i];
                 double dq = workspace.composition[i] * workspace.daDt[i] / (2.0 * workspace.sqrtA[i]);
@@ -692,11 +728,18 @@ public final class PengRobinsonKernel {
         // Hoisted, not changed: the argument does not depend on i, so this is the same double the loop
         // used to recompute n times, and one logarithm instead of one per component.
         double freeVolumeLog = DeterministicMath.log(z - reducedB);
-        for (int i = 0; i < count; i++) {
+        for (int s = 0; s < n; s++) {
+            int i = support[s];
             double bRatio = coVolumes[i] / bMix;
             double attractionRatio = 2.0 * workspace.sumA[i] / aMix - bRatio;
             output.logFugacityCoefficients[i] = bRatio * (z - 1.0) - freeVolumeLog
                     - attraction * attractionRatio * logRatio;
+        }
+        if (output.outsideStale(workspace)) {
+            double fill = outsideSupportNaN ? Double.NaN : 0.0;
+            boolean[] carried = workspace.inSupport;
+            for (int i = 0; i < count; i++) if (!carried[i]) output.logFugacityCoefficients[i] = fill;
+            output.markOutside(workspace, outsideSupportNaN);
         }
         output.compressibility = z;
         output.residualEnthalpyJoulesPerMol = GAS_CONSTANT * temperatureKelvin * (z - 1.0)
@@ -757,7 +800,10 @@ public final class PengRobinsonKernel {
         double zDt = zByReducedA * reducedADt + zByReducedB * reducedBDt;
         double logRatioDt = (zDt + (1.0 + SQRT_TWO) * reducedBDt) / lower - (zDt + (1.0 - SQRT_TWO) * reducedBDt) / upper;
         double attractionDt = attraction * (reducedADt / reducedA - reducedBDt / reducedB);
-        for (int i = 0; i < count; i++) {
+        int[] support = workspace.support;
+        int n = workspace.supportCount;
+        for (int s = 0; s < n; s++) {
+            int i = support[s];
             output.coVolumeRatio[i] = coVolumes[i] / b;
             output.attractionRatio[i] = 2.0 * workspace.sumA[i] / a - output.coVolumeRatio[i];
             double sumADt = exponential ? workspace.excessRowDt[i]
@@ -769,7 +815,8 @@ public final class PengRobinsonKernel {
                     + attraction * attractionRatioDt * logRatio
                     + attraction * output.attractionRatio[i] * logRatioDt);
         }
-        for (int j = 0; j < count; j++) {
+        for (int sj = 0; sj < n; sj++) {
+            int j = support[sj];
             double reducedAdn = 2.0 * reducedA * (workspace.sumA[j] - a) / a;
             double coVolumeShift = (coVolumes[j] - b) / b;
             double reducedBdn = reducedB * coVolumeShift;
@@ -780,7 +827,8 @@ public final class PengRobinsonKernel {
             double attractionShift = 2.0 * (workspace.sumA[j] - a);
             double rootAj = workspace.sqrtA[j];
             int[] pairsOfJ = pairIndex[j];
-            for (int i = 0; i < count; i++) {
+            for (int si = 0; si < n; si++) {
+                int i = support[si];
                 double bRatioDn = -output.coVolumeRatio[i] * coVolumeShift;
                 // A composition derivative at fixed T: k_ij(T) enters by value only. crossA_ij is
                 // (1/2) d^2(n^2 a)/dn_i dn_j, which is a_ij = (1 - k_ij) sqrt(a_i a_j) for the quadratic part.
@@ -798,10 +846,33 @@ public final class PengRobinsonKernel {
                 : GAS_CONSTANT * (z - 1.0) + GAS_CONSTANT * temperatureKelvin * zDt
                 + temperatureKelvin * secondDaDt / (2.0 * SQRT_TWO * b) * logRatio
                 + (temperatureKelvin * daDt - a) / (2.0 * SQRT_TWO * b) * logRatioDt;
-        for (int i = 0; i < count; i++) {
+        for (int s = 0; s < n; s++) {
+            int i = support[s];
             output.partialMolarResidualEnthalpy[i] =
                     -GAS_CONSTANT * temperatureKelvin * temperatureKelvin * output.dLogPhiDt[i];
         }
+        if (output.outsideStale(workspace)) fillOutside(output, workspace);
+    }
+
+    /**
+     * Zeros (NaN under {@link #fillOutsideSupportWithNaN}) in every derivative entry with an index outside the support:
+     * the rows and columns of the dn block, {@code d ln phi/dT} and the partial enthalpies. Run only when the output was
+     * last filled on another support, so a fixed support pays it once.
+     */
+    private void fillOutside(Derivatives output, Workspace workspace) {
+        double fill = outsideSupportNaN ? Double.NaN : 0.0;
+        boolean[] carried = workspace.inSupport;
+        for (int i = 0; i < count; i++) {
+            double[] row = output.dLogPhiDn[i];
+            if (!carried[i]) {
+                output.dLogPhiDt[i] = fill;
+                output.partialMolarResidualEnthalpy[i] = fill;
+                Arrays.fill(row, fill);
+                continue;
+            }
+            for (int j = 0; j < count; j++) if (!carried[j]) row[j] = fill;
+        }
+        output.markOutside(workspace, outsideSupportNaN);
     }
 
     /**
@@ -831,14 +902,18 @@ public final class PengRobinsonKernel {
      */
     public void prepareRootDerivatives(
             double temperatureKelvin, Workspace workspace, double[] rootDt, double[] rootDt2) {
-        for (int i = 0; i < count; i++) {
-            double secondADt = mathiasCopeman != null && mathiasCopeman[i]
-                    ? workspace.d2aDt2[i] : soaveSecondDerivative(i, temperatureKelvin);
-            rootDt[i] = workspace.daDt[i] / (2.0 * workspace.sqrtA[i]);
-            rootDt2[i] = secondADt / (2.0 * workspace.sqrtA[i])
-                    - workspace.daDt[i] * workspace.daDt[i]
-                    / (4.0 * workspace.sqrtA[i] * workspace.sqrtA[i] * workspace.sqrtA[i]);
-        }
+        int[] support = workspace.support;
+        for (int s = 0; s < workspace.supportCount; s++) rootDerivatives(support[s], temperatureKelvin, workspace, rootDt, rootDt2);
+    }
+
+    /** One compound of {@link #prepareRootDerivatives}. */
+    private void rootDerivatives(int i, double temperatureKelvin, Workspace workspace, double[] rootDt, double[] rootDt2) {
+        double secondADt = mathiasCopeman != null && mathiasCopeman[i]
+                ? workspace.d2aDt2[i] : soaveSecondDerivative(i, temperatureKelvin);
+        rootDt[i] = workspace.daDt[i] / (2.0 * workspace.sqrtA[i]);
+        rootDt2[i] = secondADt / (2.0 * workspace.sqrtA[i])
+                - workspace.daDt[i] * workspace.daDt[i]
+                / (4.0 * workspace.sqrtA[i] * workspace.sqrtA[i] * workspace.sqrtA[i]);
     }
 
     /**
@@ -848,11 +923,15 @@ public final class PengRobinsonKernel {
     public double mixtureSecondTemperatureDerivative(
             Workspace workspace, double[] rootDt, double[] rootDt2, double[] crossDt) {
         double[] x = workspace.composition;
+        int[] support = workspace.support;
+        int n = workspace.supportCount;
+        int[] pairs = workspace.supportPairs;
         double interactionSum = 0.0;
-        for (int i = 0; i < count; i++) interactionSum += x[i] * rootDt[i];
-        for (int i = 0; i < count; i++) crossDt[i] = interactionSum;
+        for (int s = 0; s < n; s++) interactionSum += x[support[s]] * rootDt[support[s]];
+        for (int s = 0; s < n; s++) crossDt[support[s]] = interactionSum;
         double[] k = workspace.pairK;
-        for (int pair = 0; pair < pairFirst.length; pair++) {
+        for (int p = 0; p < workspace.supportPairCount; p++) {
+            int pair = pairs[p];
             int i = pairFirst[pair];
             int j = pairSecond[pair];
             double interaction = k[pair];
@@ -860,7 +939,8 @@ public final class PengRobinsonKernel {
             crossDt[j] -= interaction * x[i] * rootDt[i];
         }
         double secondDaDt = 0.0;
-        for (int i = 0; i < count; i++) {
+        for (int s = 0; s < n; s++) {
+            int i = support[s];
             // The quadratic row g_i; where the cells corrected the rows, sumA_i is no longer s_i g_i.
             double row = excess ? workspace.g[i] : workspace.sumA[i] / workspace.sqrtA[i];
             secondDaDt += 2.0 * x[i] * (rootDt2[i] * row + rootDt[i] * crossDt[i]);
@@ -885,7 +965,9 @@ public final class PengRobinsonKernel {
         double[] q = workspace.q;
         double firstOrder = 0.0;
         double secondOrder = 0.0;
-        for (int pair = 0; pair < pairFirst.length; pair++) {
+        int[] pairs = workspace.supportPairs;
+        for (int p = 0; p < workspace.supportPairCount; p++) {
+            int pair = pairs[p];
             int i = pairFirst[pair];
             int j = pairSecond[pair];
             double kDt = workspace.pairKDt[pair];
@@ -931,7 +1013,11 @@ public final class PengRobinsonKernel {
         double excessEnergy = 0.0;
         double excessEnergyDt = 0.0;
         boolean activePresent = false;
-        for (int i = 0; i < count; i++) {
+        int[] support = workspace.support;
+        int n = workspace.supportCount;
+        int[] cells = workspace.supportCells;
+        for (int si = 0; si < n; si++) {
+            int i = support[si];
             double u = workspace.a[i] / coVolumes[i] - s[i] * g[i] / bMix;
             double uDt = workspace.daDt[i] / coVolumes[i] - (sDt[i] * g[i] + s[i] * gDt[i]) / bMix;
             double base = share * u;
@@ -940,7 +1026,8 @@ public final class PengRobinsonKernel {
             workspace.thetaBaseDt[i] = baseDt;
             double cellD = 0.0, dDDt = 0.0, dDDt2 = 0.0, cellC = 0.0, cellCDt = 0.0, cellCDt2 = 0.0;
             boolean active = false;
-            for (int c = cellStart[i]; c < cellStart[i + 1]; c++) {
+            for (int at = workspace.cellFrom[i]; at < workspace.cellTo[i]; at++) {
+                int c = cells[at];
                 int j = cellPartner[c];
                 double weight = x[j] * coVolumes[j];
                 if (weight == 0.0) continue;
@@ -967,7 +1054,8 @@ public final class PengRobinsonKernel {
             double restB = 0.0, restG = 0.0, restGDt = 0.0;
             int[] cellsOfI = cellIndex[i];
             int[] pairsOfI = pairIndex[i];
-            for (int j = 0; j < count; j++) {
+            for (int sj = 0; sj < n; sj++) {
+                int j = support[sj];
                 if (x[j] == 0.0 || cellsOfI[j] >= 0) continue;
                 int pair = pairsOfI[j];
                 double k = pair < 0 ? 0.0 : workspace.pairK[pair];
@@ -1002,10 +1090,16 @@ public final class PengRobinsonKernel {
         workspace.excessEnergyDt = excessEnergyDt;
         workspace.activePresent = activePresent;
         double[] logGamma = workspace.deltaLogGamma;
-        for (int k = 0; k < count; k++) logGamma[k] = workspace.active[k] ? workspace.theta[k] - workspace.thetaBase[k] : 0.0;
+        for (int sk = 0; sk < n; sk++) {
+            int k = support[sk];
+            logGamma[k] = workspace.active[k] ? workspace.theta[k] - workspace.thetaBase[k] : 0.0;
+        }
+        int[] pairs = workspace.supportPairs;
+        int pairCount = workspace.supportPairCount;
         if (activePresent) {
             double z1 = 0.0, z2 = 0.0, ySum = 0.0;
-            for (int i = 0; i < count; i++) {
+            for (int si = 0; si < n; si++) {
+                int i = support[si];
                 if (!workspace.active[i] || x[i] == 0.0) continue;
                 double omega = workspace.omega[i];
                 z1 += x[i] * workspace.a[i] / coVolumes[i] * omega;
@@ -1013,8 +1107,9 @@ public final class PengRobinsonKernel {
                 z2 += x[i] * (workspace.theta[i] / workspace.denominator[i] - workspace.thetaBase[i] / bMix);
             }
             double[] y = workspace.rowY;
-            for (int k = 0; k < count; k++) y[k] = ySum;
-            for (int pair = 0; pair < pairFirst.length; pair++) {
+            for (int sk = 0; sk < n; sk++) y[support[sk]] = ySum;
+            for (int p = 0; p < pairCount; p++) {
+                int pair = pairs[p];
                 int i = pairFirst[pair];
                 int j = pairSecond[pair];
                 double k = workspace.pairK[pair];
@@ -1023,19 +1118,25 @@ public final class PengRobinsonKernel {
             }
             workspace.excessZ1 = z1;
             workspace.excessZ2 = z2;
-            for (int k = 0; k < count; k++) logGamma[k] += coVolumes[k] * share * z1 - share * s[k] * y[k] - coVolumes[k] * z2;
+            for (int sk = 0; sk < n; sk++) {
+                int k = support[sk];
+                logGamma[k] += coVolumes[k] * share * z1 - share * s[k] * y[k] - coVolumes[k] * z2;
+            }
         }
-        for (int i = 0; i < count; i++) {
+        for (int si = 0; si < n; si++) {
+            int i = support[si];
             if (x[i] == 0.0) continue;
             double theta = workspace.theta[i];
             double scale = x[i] / workspace.denominator[i];
-            for (int c = cellStart[i]; c < cellStart[i + 1]; c++) {
+            for (int at = workspace.cellFrom[i]; at < workspace.cellTo[i]; at++) {
+                int c = cells[at];
                 int k = cellPartner[c];
                 logGamma[k] += scale * coVolumes[k] * (workspace.cellR[c] - workspace.cellF[c] * theta);
             }
         }
         double half = GAS_CONSTANT * temperatureKelvin / (2.0 * lambda);
-        for (int k = 0; k < count; k++) {
+        for (int sk = 0; sk < n; sk++) {
+            int k = support[sk];
             workspace.sumA[k] -= half * (coVolumes[k] * excessEnergy + bMix * logGamma[k]);
         }
     }
@@ -1065,10 +1166,14 @@ public final class PengRobinsonKernel {
         double[] gDt2 = workspace.rowGDt2;
         double temperature = workspace.excessTemperature;
         double bMix = workspace.excessCoVolume;
+        int[] support = workspace.support;
+        int n = workspace.supportCount;
+        int[] pairs = workspace.supportPairs;
         double rootSum = 0.0;
-        for (int j = 0; j < count; j++) rootSum += x[j] * sDt2[j];
-        for (int i = 0; i < count; i++) gDt2[i] = rootSum;
-        for (int pair = 0; pair < pairFirst.length; pair++) {
+        for (int s0 = 0; s0 < n; s0++) rootSum += x[support[s0]] * sDt2[support[s0]];
+        for (int s0 = 0; s0 < n; s0++) gDt2[support[s0]] = rootSum;
+        for (int p = 0; p < workspace.supportPairCount; p++) {
+            int pair = pairs[p];
             int i = pairFirst[pair];
             int j = pairSecond[pair];
             double k = workspace.pairK[pair];
@@ -1080,7 +1185,8 @@ public final class PengRobinsonKernel {
         double lambdaOverR = HuronVidalExcess.LAMBDA / GAS_CONSTANT;
         double t2 = temperature * temperature;
         double excessEnergyDt2 = 0.0;
-        for (int i = 0; i < count; i++) {
+        for (int si = 0; si < n; si++) {
+            int i = support[si];
             if (!workspace.active[i] || x[i] == 0.0) continue;
             double bi = coVolumes[i];
             double u = workspace.a[i] / bi - s[i] * g[i] / bMix;
@@ -1090,7 +1196,8 @@ public final class PengRobinsonKernel {
             double restGDt2 = 0.0;
             int[] cellsOfI = cellIndex[i];
             int[] pairsOfI = pairIndex[i];
-            for (int j = 0; j < count; j++) {
+            for (int sj = 0; sj < n; sj++) {
+                int j = support[sj];
                 if (x[j] == 0.0 || cellsOfI[j] >= 0) continue;
                 int pair = pairsOfI[j];
                 double k = pair < 0 ? 0.0 : workspace.pairK[pair];
@@ -1139,12 +1246,21 @@ public final class PengRobinsonKernel {
         double[] logGamma = workspace.deltaLogGamma;
         double[] logGammaDt = workspace.deltaLogGammaDt;
         boolean activePresent = workspace.activePresent;
-        for (int k = 0; k < count; k++) {
+        int[] support = workspace.support;
+        int n = workspace.supportCount;
+        int[] pairs = workspace.supportPairs;
+        int pairCount = workspace.supportPairCount;
+        int[] cells = workspace.supportCells;
+        int[] cellFrom = workspace.cellFrom;
+        int[] cellTo = workspace.cellTo;
+        for (int sk = 0; sk < n; sk++) {
+            int k = support[sk];
             logGammaDt[k] = workspace.active[k] ? workspace.thetaDt[k] - workspace.thetaBaseDt[k] : 0.0;
         }
         if (activePresent) {
             double z1Dt = 0.0, z2Dt = 0.0, ySumDt = 0.0;
-            for (int i = 0; i < count; i++) {
+            for (int si = 0; si < n; si++) {
+                int i = support[si];
                 if (!workspace.active[i] || x[i] == 0.0) continue;
                 double d = workspace.denominator[i];
                 double omega = workspace.omega[i];
@@ -1156,8 +1272,9 @@ public final class PengRobinsonKernel {
                         - workspace.thetaBaseDt[i] / bMix);
             }
             double[] yDt = workspace.rowYDt;
-            for (int k = 0; k < count; k++) yDt[k] = ySumDt;
-            for (int pair = 0; pair < pairFirst.length; pair++) {
+            for (int sk = 0; sk < n; sk++) yDt[support[sk]] = ySumDt;
+            for (int p = 0; p < pairCount; p++) {
+                int pair = pairs[p];
                 int i = pairFirst[pair];
                 int j = pairSecond[pair];
                 double k = workspace.pairK[pair];
@@ -1170,19 +1287,22 @@ public final class PengRobinsonKernel {
             }
             double[] y = workspace.rowY;
             double z1 = workspace.excessZ1;
-            for (int k = 0; k < count; k++) {
+            for (int sk = 0; sk < n; sk++) {
+                int k = support[sk];
                 logGammaDt[k] += coVolumes[k] * share * (z1Dt - z1 / temperatureKelvin)
                         - share * (sDt[k] * y[k] + s[k] * yDt[k] - s[k] * y[k] / temperatureKelvin)
                         - coVolumes[k] * z2Dt;
             }
         }
-        for (int i = 0; i < count; i++) {
+        for (int si = 0; si < n; si++) {
+            int i = support[si];
             if (x[i] == 0.0) continue;
             double d = workspace.denominator[i];
             double theta = workspace.theta[i];
             double thetaDt = workspace.thetaDt[i];
             double dDt = workspace.denominatorDt[i];
-            for (int c = cellStart[i]; c < cellStart[i + 1]; c++) {
+            for (int at = cellFrom[i]; at < cellTo[i]; at++) {
+                int c = cells[at];
                 int k = cellPartner[c];
                 double r = workspace.cellR[c] - workspace.cellF[c] * theta;
                 double rDt = workspace.cellRDt[c] - workspace.cellFDt[c] * theta - workspace.cellF[c] * thetaDt;
@@ -1191,20 +1311,23 @@ public final class PengRobinsonKernel {
         }
         double halfR = GAS_CONSTANT / (2.0 * lambda);
         double energyTerm = workspace.excessEnergy + temperatureKelvin * workspace.excessEnergyDt;
-        for (int k = 0; k < count; k++) {
+        for (int sk = 0; sk < n; sk++) {
+            int k = support[sk];
             workspace.excessRowDt[k] = sDt[k] * g[k] + s[k] * gDt[k]
                     - halfR * (coVolumes[k] * energyTerm + bMix * (logGamma[k] + temperatureKelvin * logGammaDt[k]));
         }
         // dS_kl: the classical part where a present centre has a present NRTL partner, then the cells' terms.
         double[] curvature = workspace.excessCurvature;
         double[] v = workspace.rowV;
-        Arrays.fill(v, 0.0);
-        for (int i = 0; i < count; i++) {
+        for (int sk = 0; sk < n; sk++) v[support[sk]] = 0.0;
+        for (int si = 0; si < n; si++) {
+            int i = support[si];
             if (x[i] == 0.0) continue;
             double d = workspace.denominator[i];
             double weight = x[i] / (d * d);
             double theta = workspace.theta[i];
-            for (int c = cellStart[i]; c < cellStart[i + 1]; c++) {
+            for (int at = cellFrom[i]; at < cellTo[i]; at++) {
+                int c = cells[at];
                 v[cellPartner[c]] += weight * (workspace.cellR[c] - workspace.cellF[c] * theta);
             }
         }
@@ -1213,7 +1336,8 @@ public final class PengRobinsonKernel {
         if (activePresent) {
             double y2Sum = 0.0;
             double inverseB2 = 1.0 / (bMix * bMix);
-            for (int i = 0; i < count; i++) {
+            for (int si = 0; si < n; si++) {
+                int i = support[si];
                 if (!workspace.active[i] || x[i] == 0.0) continue;
                 double d = workspace.denominator[i];
                 double weightShift = x[i] / (d * d) - x[i] * inverseB2;
@@ -1222,8 +1346,9 @@ public final class PengRobinsonKernel {
                 y2Sum += weightShift * s[i];
                 classicalTheta += x[i] / (d * d) * workspace.theta[i] - x[i] * inverseB2 * workspace.thetaBase[i];
             }
-            for (int k = 0; k < count; k++) y2[k] = y2Sum;
-            for (int pair = 0; pair < pairFirst.length; pair++) {
+            for (int sk = 0; sk < n; sk++) y2[support[sk]] = y2Sum;
+            for (int p = 0; p < pairCount; p++) {
+                int pair = pairs[p];
                 int i = pairFirst[pair];
                 int j = pairSecond[pair];
                 double k = workspace.pairK[pair];
@@ -1231,21 +1356,25 @@ public final class PengRobinsonKernel {
                 if (presentOmega(i, workspace) != 0.0) y2[j] -= k * workspace.omegaDt[i] * s[i];
             }
         }
-        for (int k = 0; k < count; k++) {
+        for (int sk = 0; sk < n; sk++) {
+            int k = support[sk];
             int row = k * count;
             double rowClassical = activePresent ? share * (classicalLinear - s[k] / coVolumes[k] * y2[k]) - classicalTheta : 0.0;
-            for (int l = 0; l < count; l++) {
+            for (int sl = 0; sl < n; sl++) {
+                int l = support[sl];
                 double columnClassical = activePresent ? share * (classicalLinear - s[l] / coVolumes[l] * y2[l]) - classicalTheta : 0.0;
                 curvature[row + l] = rowClassical + columnClassical + v[k] + v[l];
             }
         }
-        for (int i = 0; i < count; i++) {
-            if (x[i] == 0.0 || cellStart[i] == cellStart[i + 1]) continue;
+        for (int si = 0; si < n; si++) {
+            int i = support[si];
+            if (x[i] == 0.0 || cellFrom[i] == cellTo[i]) continue;
             double d = workspace.denominator[i];
             double weight = x[i] / (d * d);
             double theta = workspace.theta[i];
             double centreEnergy = share * workspace.a[i] / coVolumes[i] - theta;
-            for (int c = cellStart[i]; c < cellStart[i + 1]; c++) {
+            for (int at = cellFrom[i]; at < cellTo[i]; at++) {
+                int c = cells[at];
                 int k = cellPartner[c];
                 double f = workspace.cellF[c];
                 double r = workspace.cellR[c] - f * theta;
@@ -1253,14 +1382,16 @@ public final class PengRobinsonKernel {
                     // c_i F_ki eps^cl_li into (k, l) and (l, k), eps^cl_li = tau^cl_li - theta_i.
                     double scaled = weight * f;
                     int[] pairsOfI = pairIndex[i];
-                    for (int l = 0; l < count; l++) {
+                    for (int sl = 0; sl < n; sl++) {
+                        int l = support[sl];
                         double classical = centreEnergy - share * (1.0 - workspace.interaction(pairsOfI[l])) * s[i] * s[l] / coVolumes[l];
                         double term = scaled * classical;
                         curvature[k * count + l] += term;
                         curvature[l * count + k] += term;
                     }
                 }
-                for (int c2 = cellStart[i]; c2 < cellStart[i + 1]; c2++) {
+                for (int at2 = cellFrom[i]; at2 < cellTo[i]; at2++) {
+                    int c2 = cells[at2];
                     int l = cellPartner[c2];
                     double f2 = workspace.cellF[c2];
                     double r2 = workspace.cellR[c2] - f2 * theta;
@@ -1269,8 +1400,10 @@ public final class PengRobinsonKernel {
             }
         }
         double half = GAS_CONSTANT * temperatureKelvin / (2.0 * lambda);
-        for (int k = 0; k < count; k++) {
-            for (int l = k; l < count; l++) {
+        for (int sk = 0; sk < n; sk++) {
+            int k = support[sk];
+            for (int sl = sk; sl < n; sl++) {
+                int l = support[sl];
                 double localKl = centreShift(k, l, share, bMix, workspace);
                 double localLk = centreShift(l, k, share, bMix, workspace);
                 double deltaN = coVolumes[l] * localKl + coVolumes[k] * localLk
@@ -1439,15 +1572,27 @@ public final class PengRobinsonKernel {
                 && Math.abs(residual) <= 8.0 * Math.ulp(scale);
     }
 
-    private static void normalizeInto(double[] source, double[] target) {
+    /**
+     * The composition, normalised into the workspace on its support (outside it the workspace holds zeros). An amount
+     * outside the support is refused: the kernel forms nothing for a compound the caller did not carry.
+     */
+    private void normalizeInto(double[] source, Workspace workspace) {
+        double[] target = workspace.composition;
         if (source == null || source.length != target.length) throw new IllegalArgumentException("Invalid composition length");
+        workspace.requireKernel(this);
+        boolean[] carried = workspace.inSupport;
         double total = 0.0;
-        for (double value : source) {
+        for (int i = 0; i < source.length; i++) {
+            double value = source[i];
             if (!Double.isFinite(value) || value < 0.0) throw new IllegalArgumentException("Invalid composition");
+            if (value != 0.0 && !carried[i]) {
+                throw new IllegalArgumentException("Composition has an amount of component " + i + " outside the workspace's support");
+            }
             total += value;
         }
         if (!(total > 0.0)) throw new IllegalArgumentException("Composition has no material");
-        for (int i = 0; i < target.length; i++) target[i] = source[i] / total;
+        int[] support = workspace.support;
+        for (int s = 0; s < workspace.supportCount; s++) target[support[s]] = source[support[s]] / total;
     }
 
     private static void requireState(double temperatureKelvin, double pressurePascal) {
@@ -1558,9 +1703,49 @@ public final class PengRobinsonKernel {
         private double excessZ1;
         private double excessZ2;
         private boolean activePresent;
+        /** The temperature every compound, pair and cell of the current support was prepared at, or none. */
         private long preparedTemperature = Long.MIN_VALUE;
+        /**
+         * The support: the compounds the caller's mixture carries, ascending ({@link #carry}). Every loop of the kernel runs
+         * over it, every pair pass over the pairs with both ends in it, and every centre's cells over the partners in it
+         * ({@code supportCells[cellFrom[i] .. cellTo[i] - 1]}, the kernel's cell order kept).
+         */
+        private final PengRobinsonKernel kernel;
+        private final boolean[] inSupport;
+        private final int[] support;
+        private int supportCount;
+        private final int[] supportPairs;
+        private int supportPairCount;
+        private final int[] supportCells;
+        private final int[] cellFrom;
+        private final int[] cellTo;
+        /** Bumped at every change of the support, so an output knows its entries outside the support are current. */
+        private int supportVersion;
+        /** Per compound, pair and cell: the temperature its prepared values belong to. */
+        private final long[] compoundStamp;
+        private final long[] pairStamp;
+        private final long[] cellStamp;
 
-        private Workspace(int count, int pairs, int modelPairs, int excessCount, int cells) {
+        private Workspace(PengRobinsonKernel kernel) {
+            this.kernel = kernel;
+            int count = kernel.count;
+            int pairs = kernel.pairFirst.length;
+            int modelPairs = kernel.interactions == null ? 0 : kernel.interactions.pairCount();
+            int excessCount = kernel.excess ? count : 0;
+            int cells = kernel.cellPartner.length;
+            inSupport = new boolean[count];
+            support = new int[count];
+            supportPairs = new int[pairs];
+            supportCells = new int[cells];
+            cellFrom = new int[excessCount];
+            cellTo = new int[excessCount];
+            compoundStamp = new long[count];
+            pairStamp = new long[pairs];
+            cellStamp = new long[cells];
+            Arrays.fill(compoundStamp, Long.MIN_VALUE);
+            Arrays.fill(pairStamp, Long.MIN_VALUE);
+            Arrays.fill(cellStamp, Long.MIN_VALUE);
+            Arrays.fill(inSupport, true);
             composition = new double[count];
             a = new double[count];
             daDt = new double[count];
@@ -1612,6 +1797,70 @@ public final class PengRobinsonKernel {
             active = new boolean[e];
             excessCross = new double[e * e];
             excessCurvature = new double[e * e];
+            filter();
+        }
+
+        /**
+         * Names the compounds the caller's mixture carries: those with a nonzero amount in {@code feed}. Every evaluation
+         * on this workspace then prepares, sums and differentiates over them only; an amount outside them is refused, and
+         * every output outside them is zero. Each output on the support keeps its bits against the whole list, since the
+         * terms left out are exact zeros, summed in the same order. Set it at every entry from the feed, never from one
+         * phase: a feed compound with no amount in a phase still needs its {@code ln phi} there. Unchanged support: O(n).
+         */
+        public void carry(double[] feed) {
+            if (feed == null || feed.length != inSupport.length) throw new IllegalArgumentException("Support feed has invalid length");
+            boolean changed = false;
+            for (int i = 0; i < feed.length && !changed; i++) changed = (feed[i] != 0.0) != inSupport[i];
+            if (!changed) return;
+            for (int i = 0; i < feed.length; i++) inSupport[i] = feed[i] != 0.0;
+            filter();
+        }
+
+        /** Carries the whole list (a new workspace's support). */
+        public void carryAll() {
+            boolean changed = false;
+            for (int i = 0; i < inSupport.length && !changed; i++) changed = !inSupport[i];
+            if (!changed) return;
+            Arrays.fill(inSupport, true);
+            filter();
+        }
+
+        /** Whether the support holds {@code component}. */
+        public boolean carries(int component) { return inSupport[component]; }
+
+        /** The support's lists, once per change: compounds, pairs with both ends in it, and each centre's cells. */
+        private void filter() {
+            int n = 0;
+            for (int i = 0; i < inSupport.length; i++) {
+                if (inSupport[i]) {
+                    support[n++] = i;
+                } else {
+                    composition[i] = 0.0;
+                }
+            }
+            supportCount = n;
+            int p = 0;
+            for (int pair = 0; pair < kernel.pairFirst.length; pair++) {
+                if (inSupport[kernel.pairFirst[pair]] && inSupport[kernel.pairSecond[pair]]) supportPairs[p++] = pair;
+            }
+            supportPairCount = p;
+            if (kernel.excess) {
+                int at = 0;
+                for (int s = 0; s < n; s++) {
+                    int i = support[s];
+                    cellFrom[i] = at;
+                    for (int c = kernel.cellStart[i]; c < kernel.cellStart[i + 1]; c++) {
+                        if (inSupport[kernel.cellPartner[c]]) supportCells[at++] = c;
+                    }
+                    cellTo[i] = at;
+                }
+            }
+            supportVersion++;
+            preparedTemperature = Long.MIN_VALUE;
+        }
+
+        private void requireKernel(PengRobinsonKernel owner) {
+            if (kernel != owner) throw new IllegalArgumentException("Workspace belongs to another kernel");
         }
 
         private double interaction(int pair) { return pair < 0 ? 0.0 : pairK[pair]; }
@@ -1627,12 +1876,31 @@ public final class PengRobinsonKernel {
         public double[] attractionRowsView() { return sumA; }
         public void clear() {
             preparedTemperature = Long.MIN_VALUE;
+            Arrays.fill(compoundStamp, Long.MIN_VALUE);
+            Arrays.fill(pairStamp, Long.MIN_VALUE);
+            Arrays.fill(cellStamp, Long.MIN_VALUE);
             Arrays.fill(composition, 0.0);
         }
     }
 
+    /** Which workspace support an output's entries outside the support were last filled for. */
+    private abstract static class SupportFill {
+        private Workspace filledFor;
+        private int filledVersion;
+
+        /** True when the entries outside the workspace's support may not hold zeros (or hold the test switch's NaN). */
+        final boolean outsideStale(Workspace workspace) {
+            return outsideSupportNaN || filledFor != workspace || filledVersion != workspace.supportVersion;
+        }
+
+        final void markOutside(Workspace workspace, boolean nan) {
+            filledFor = nan ? null : workspace;
+            filledVersion = workspace.supportVersion;
+        }
+    }
+
     /** Caller-owned mutable output; public V3 results defensively copy the fugacity coefficients. */
-    public static final class Evaluation {
+    public static final class Evaluation extends SupportFill {
         private final double[] logFugacityCoefficients;
         private double compressibility;
         private double residualEnthalpyJoulesPerMol;
@@ -1667,7 +1935,7 @@ public final class PengRobinsonKernel {
      * {@code -R T^2 (d ln phi_i / dT)}, which is already here, and a second copy of the same numbers under a
      * different name is a second thing to keep correct.</p>
      */
-    public static final class Derivatives {
+    public static final class Derivatives extends SupportFill {
         private final Evaluation evaluation;
         private final double[] dLogPhiDt;
         private final double[][] dLogPhiDn;
