@@ -683,3 +683,31 @@ Correction to A's recommendation (sub-thread, from the code): one appended field
 B, from the code: the sheet's pump and tank rules both read `FlowThermo.bubblePressure`, the pressure at which the stream's whole liquid first holds vapour, dissolved gas included. The network's suction rule (section 17) is not callable from the sheet as it stands.
 
 The campaign started at 11:21 on c5909be95, alone.
+
+## 39. The full campaign on the settled form (2026-11-12)
+
+c5909be95 (code 3f61f4017), 1000 seeds, three distributions, 8 workers, alone 11:21 to 11:26, against the 0.27.1
+lane's campaign. Refused 0 everywhere. Sub-thread report: `tmp/w3b-network/reports/w3b-campaign-report.md`.
+
+| | clean, base to head | Newton iterations | new holds | fixed holds | moved |
+|---|---|---|---|---|---|
+| cold random | 991 to 990 | -19.9 % | 555 B, 988 E1, 65 E5, 446 E6, 6 F | 431 B, 589 B, 85 E1, 181 E2 | - |
+| bundled random | 990 to 994 | -21.3 % | 575 E2, 514 E9, 698 F | 301 B, 896 E5, 145 E9, 47 F, 118 F, 579 F, 678 F | 431 F to E6 |
+| bundled defaults | 1000 to 999 | +6.6 % | 358 E2 | - | - |
+
+- No class is new to the baseline as a whole (B, E1, E2, E5, E6, E9, F). Three are new to their own distribution:
+  E6 in cold (446), E2 in bundled random (575), E2 in defaults (358; the baseline's defaults were all clean).
+- Budget class: bundled 698 F replayed alone once and holds again at the wall deadline (tick 4551, island 49): real.
+  Cold 6 F had its one replay on form G (section 26).
+- 358 and 575 (E2) are one message: "Singular Newton Jacobian: Sparse LU rejected a singular matrix" at 20 of 20 step
+  sizes on the first solve after a join. 358 is a water-only world (24 blocks): generator 298 K, a pump in a loop
+  round it, a tank joined to the pump's suction junction by the pipe of tick 1945. On 0.27.1 the joined island ends
+  FULL. The refusal (`SparseLuSolver` line 141, EJML `setA`) is an exact zero pivot or a NaN, the same at every step
+  size: structural, not conditioning.
+- Decision (mine, under the owner's autonomy rule): 358 is diagnosed now, with its one traced replay alone; a held
+  water-only default world is a defect. Candidates sent to the sub-thread, none proven: a NaN from a tangent phase
+  (water's ln phi on a list without water); an actuator row of form G reading a node its stencil does not declare
+  (`InletPhase.drawn` against `remoteSuctions`); a slot of the joined tank's support holding exactly zero. 575 is
+  judged from 358's cause, with no replay. Cold 446 E6 (LNG and CO2, crystals, iteration limit), 698 F, 6 F, 514,
+  555 and 988 are recorded as the batch's holds.
+- To the owner: the result, and the three holds new to their distribution.
