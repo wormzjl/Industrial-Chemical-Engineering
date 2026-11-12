@@ -82,6 +82,20 @@ class CardViewTest {
     }
 
     @Test
+    void atHeatZeroTheThreeKindsAreMixedThroughTheLiquid() {
+        double[] mean = new double[3];
+        for (var kind : Track.Kind.values()) {
+            for (int i = 0; i < ThreeParts.COUNT; i++) {
+                var at = ThreeParts.place(kind, i);
+                assertTrue(at[0] >= 0 && at[0] < 1 && at[1] >= 0 && at[1] < 1);
+                mean[kind.ordinal()] += at[1] / ThreeParts.COUNT;
+            }
+        }
+        double spread = Math.max(Math.max(mean[0], mean[1]), mean[2]) - Math.min(Math.min(mean[0], mean[1]), mean[2]);
+        assertTrue(spread < .1, "the kinds' mean depths differ by " + spread + " of the liquid's depth: one mixed liquid");
+    }
+
+    @Test
     void theDrawingStaysInItsAreaInBatches() {
         var card = Cards.build(ThreeParts.NAME);
         assertNotNull(card);

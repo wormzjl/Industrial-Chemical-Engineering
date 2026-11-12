@@ -63,6 +63,15 @@ public final class ThreeParts implements Card {
         return from + (to - from) * index / (COUNT - 1.0);
     }
 
+    /**
+     * Dot {@code index} of {@code kind}'s place in the liquid, across and down, each 0 to 1: the plastic (R2) sequence over
+     * the three kinds interleaved, so a crude reads as one mixed liquid, not layers.
+     */
+    public static double[] place(Track.Kind kind, int index) {
+        int g = index * Track.Kind.values().length + kind.ordinal() + 1;
+        return new double[]{(g * 0.7548776662466927) % 1, (g * 0.5698402909980532 + .5) % 1};
+    }
+
     /** How many dots of {@code kind} are still in the pot at {@code heat}: those that have not started to leave. */
     public static int inPot(Track.Kind kind, double heat) {
         int n = 0;
@@ -110,18 +119,17 @@ public final class ThreeParts implements Card {
                     c.fill(x + inset, y, x + wide - inset, y + 1, r < tall / 2 ? FLAME : FLAME_CORE);
                 }
             }
-            // The dots: light near the top of the liquid, heavy near the floor; a leaving one rises to the neck and out.
+            // The dots: one mixed liquid, the three kinds spread evenly through it; a leaving one rises to the neck and out.
             var kinds = Track.Kind.values();
             for (int k = 0; k < kinds.length; k++)
                 for (int i = 0; i < COUNT; i++) {
                     var kind = kinds[k];
                     int colour = 0xFF000000 | kind.rgb;
                     double start = leaves(kind, i), way = (heat - start) / WAY;
-                    // A dot's place: its band of the liquid by its kind, its column by its index.
-                    double u = ((i * 0.618034 + k * 0.29) % 1), v = ((i * 0.381966 + k * 0.53) % 1);
+                    double[] at = place(kind, i);
                     int span = Math.max(4, level - 6);
-                    int px = pot.x() + 5 + (int) Math.round(u * (pot.w() - 13) + 1.5 * Math.sin(phase * 2.1 + i + 3 * k));
-                    int band = span / 3, py = liquidTop + 2 + (int) Math.round(k * band + v * Math.max(1, band - 3) + Math.sin(phase * 1.7 + 2 * i + k));
+                    int px = pot.x() + 5 + (int) Math.round(at[0] * (pot.w() - 13) + 1.5 * Math.sin(phase * 2.1 + i + 3 * k));
+                    int py = liquidTop + 2 + (int) Math.round(at[1] * Math.max(1, span - 3) + Math.sin(phase * 1.7 + 2 * i + k));
                     if (way < 0) {
                         c.fill(px, py, px + 3, py + 3, colour);
                         continue;
