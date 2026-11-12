@@ -60,7 +60,8 @@ degrees so it does not read as the exchanger.
 It writes `src/main/resources/assets/icheme/textures/item/equipment_<kind>.png` (committed) and
 `<out>/p3/icons-sheet.png` (every kind at 4x and at 1x on a dark and a light slot, with its name). Options, as JVM
 properties (`JAVA_TOOL_OPTIONS`): `-DiconPreview=true` (the sheet only, textures untouched), `-DiconSize=n`,
-`-DiconCap=r`, `-DkettleTurn=deg`.
+`-DiconCap=r`, `-DkettleTurn=deg`, `-DiconCase=none|plate|blueprint|brackets` (the case behind the body; blueprint is the
+owner's choice and the default), `-DiconCases=true` (only `icons-cases.png`, the cases side by side in slots).
 
 ## History
 

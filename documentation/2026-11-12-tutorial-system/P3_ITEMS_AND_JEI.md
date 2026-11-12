@@ -26,9 +26,9 @@ a69441950 (gate), and this report.
    DELAYED_COKER, FLUIDIZED_BED_BOILER, FLUIDIZED_BED_GASIFIER, GRATE_BOILER, FIXED_BED_GASIFIER.
 4. `needs` lines for items only where they need something: in-line pump and compressor (power), controller and DCS
    (data cables), gas blanketing valve (gas supply), Create coupling (Create).
-5. Icons: constructor default size, the whole drawing (`renderPreview`), one view from the south-east 30 degrees up,
-   cut-out pixels, a dark rim. Kinds over 3.5 times taller than wide show their top part (flare stack, steel stack,
-   brick chimney). The kettle is turned 90 degrees: its model reads as the exchanger from the same view.
+5. Icons: constructor default size, the whole drawing, one view from the south-east 30 degrees up, cut-out pixels, on
+   a blueprint case (owner, 2026-11-12: a clear case sets them apart from regular items; blue sheet, grid, pale border;
+   the body clipped inside). Slender kinds show their top part; the kettle is turned 90 degrees (it read as the exchanger).
 6. Item ids are registry names in saves: a `Kind` renamed later needs `ITEMS.addAlias` from its old item id.
 
 ## Tests (filtered, all pass)

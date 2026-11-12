@@ -52,9 +52,10 @@ public class IconRender {
     /**
      * The case drawn on the texture behind the body, so a reference item stands apart from a regular item in a slot
      * (owner, 2026-11-12): none, plate (a navy plate in a gold frame), blueprint (a blue drawing sheet with its grid) or
-     * brackets (gold corner brackets on a clear background).
+     * brackets (gold corner brackets on a clear background). The owner chose blueprint. The body is clipped to the case's
+     * inside, so a slender kind's cut-off part does not run over the border.
      */
-    static final String CASE = System.getProperty("iconCase", "none");
+    static final String CASE = System.getProperty("iconCase", "blueprint");
     /** The kinds of the case comparison sheet (-DiconCases=true). */
     static final EquipmentShape.Kind[] SAMPLES = {EquipmentShape.Kind.DRUM, EquipmentShape.Kind.COLUMN, EquipmentShape.Kind.EXCHANGER, EquipmentShape.Kind.PUMP,
             EquipmentShape.Kind.BATCH_STILL, EquipmentShape.Kind.FLARE_STACK, EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER, EquipmentShape.Kind.MOTOR};
@@ -171,8 +172,8 @@ public class IconRender {
                 if (face[0] * back[0] + face[1] * back[1] + face[2] * back[2] <= 0) continue;
                 double area = edge(s[0], s[1], s[2][0], s[2][1]);
                 if (Math.abs(area) < 1e-12) continue;
-                int x0 = (int) Math.max(0, Math.floor(Math.min(s[0][0], Math.min(s[1][0], s[2][0])))), x1 = (int) Math.min(n - 1, Math.ceil(Math.max(s[0][0], Math.max(s[1][0], s[2][0]))));
-                int y0 = (int) Math.max(0, Math.floor(Math.min(s[0][1], Math.min(s[1][1], s[2][1])))), y1 = (int) Math.min(n - 1, Math.ceil(Math.max(s[0][1], Math.max(s[1][1], s[2][1]))));
+                int x0 = (int) Math.max(margin, Math.floor(Math.min(s[0][0], Math.min(s[1][0], s[2][0])))), x1 = (int) Math.min(n - 1 - margin, Math.ceil(Math.max(s[0][0], Math.max(s[1][0], s[2][0]))));
+                int y0 = (int) Math.max(margin, Math.floor(Math.min(s[0][1], Math.min(s[1][1], s[2][1])))), y1 = (int) Math.min(n - 1 - margin, Math.ceil(Math.max(s[0][1], Math.max(s[1][1], s[2][1]))));
                 for (int y = y0; y <= y1; y++)
                     for (int x = x0; x <= x1; x++) {
                         double px = x + .5, py = y + .5;
