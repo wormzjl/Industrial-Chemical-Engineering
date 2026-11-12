@@ -43,8 +43,7 @@ public final class EquipmentInfo {
             EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER, EquipmentShape.Kind.MOTOR, EquipmentShape.Kind.GENERATOR, EquipmentShape.Kind.GEARBOX));
 
     /** The ids of the mod's other items that need something to work (a {@code .needs} line beside their {@code .serves}). */
-    public static final Set<String> ITEMS_THAT_NEED = Set.of("fluid_pump", "fluid_compressor", "local_controller", "dcs", "process_simulator", "equipment_constructor",
-            "pressure_probe", "temperature_probe", "flowmeter", "digital_level_meter", "speed_sensor", "fluid_generator", "create_coupling");
+    public static final Set<String> ITEMS_THAT_NEED = Set.of("fluid_pump", "fluid_compressor", "local_controller", "dcs", "gas_blanketing_valve", "create_coupling");
 
     private EquipmentInfo() {
     }
