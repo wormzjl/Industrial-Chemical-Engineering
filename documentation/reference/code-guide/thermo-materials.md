@@ -18,6 +18,7 @@ The fluid network's phase model holds water as a compound of the cubic. What the
   presets and the package's own identity are unchanged. It returns the package itself where it names Water already,
   where it is a lens, or where its method takes its ideal gas from reference spines: there is no water spine, so such
   a network stays dry and refuses water ([fluid-science.md](fluid-science.md)).
+- W5: the V3 column derives its kernel the same way ([column-v3.md](column-v3.md)). `MaterialCatalog.lens(packageId)` is true for a package with no definition (a lens, the learned start's `inferenceView`), which keeps its own matrix. A pseudo-cut takes paraffinic group counts only in a scheme whose table the catalog holds (Dortmund, E-PPR78), so a catalog without them derives a cut's pairs from the later sources.
 - Open data item: water's alpha function near 100 to 200 bar leaves the cubic's saturation temperature up to 0.43 K off
   Wagner-Pruss; a refit is W2's.
 - The engine side (two books, `WaterShare`, the three-slot system, ice as a crystal) is in
