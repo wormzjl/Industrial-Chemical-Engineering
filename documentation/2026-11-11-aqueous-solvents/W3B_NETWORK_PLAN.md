@@ -756,3 +756,22 @@ format-48 checkpoint reader uses. The check against the state compares the two s
 carries them. Corpus image `src/test/resources/compat/fluid/schema-22` and compat cases: water under nitrogen, oil
 over water, one compound in two phases, an empty vessel, a rigid vessel. Ruled out: recompute on load; one field.
 Ordered to the sub-thread after the 358 fix.
+
+## 42. Seed 358: the path is the fold rule, not the appearance rule (2026-11-12)
+
+Correction of section 40, point 3 (`tmp/w3b-network/reports/w3b-seed358-fold-report.md`). The pass counter stayed
+0 on HEAD: `phaseAppeared` never reaches a dry tank, because a dry vessel's entry among the solved states is its
+placeholder, the ambient nitrogen charge, which holds fluid. My reading was wrong; the test was built to catch that.
+
+What fires is the fold rule (D34, `phaseFolded` through `recordFolds`, line 670). It compares the placeholder,
+a gas, with the booking of liquid water alone, which has no gas: "the gas folded". The pass is solved again from
+the reconstructed states, the tank's seed is no longer its own state, and it is laid out with whatever was booked.
+Measured on HEAD, one step each: liquid water into the dry tank at 7.6e-20, 7.6e-12 and 1.2e-6 mol gives one fold
+pass each; nitrogen and wet crude trickles give none (their booking carries gas); a real stream is laid out by
+`filled` with no fold. At 1e-20 mol the pass still solves; at 358's 1.4e-30 mol the lnT column is exactly zero.
+main's `phaseFolded` makes the same comparison, so the defect is main's, exposed here by a rounding flow.
+
+Fix (decided): a fold is a phase the pass solved, and a vessel laid out dry has none, so `phaseFolded` and
+`recordFolds` skip it by the pass's dry flags. `filled` stays the one rule for dry vessels. Gate: the water
+trickle of `EmptyNetworkTest.aDryVesselStaysDryUntilAMillilitreArrives` counts 0 fold passes (1 on HEAD). The
+appearance counter is dropped. 575 (pass 0, crude with light ends) is not this path: open, recorded.
