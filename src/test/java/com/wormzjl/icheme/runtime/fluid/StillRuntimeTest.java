@@ -401,21 +401,30 @@ class StillRuntimeTest {
 
     /** An open still of {@code stages} trays at reflux {@code reflux} on the pilot's ethanol and water, charged with 60 L of a wash at 364 K. */
     private static Rig washStill(int stages, double reflux) {
-        var pilot = com.wormzjl.icheme.science.material.PilotAqueousTestCatalog.catalog();
-        String id = com.wormzjl.icheme.science.material.PilotAqueousTestCatalog.PACKAGE_ID;
-        var model = FluidThermodynamics.forNetwork(pilot, id).on(List.of("Ethanol", "Nitrogen"));
-        assertEquals(List.of("Ethanol", "Nitrogen", "Water"), model.components());
+        return washStill(com.wormzjl.icheme.science.material.PilotAqueousTestCatalog.catalog(), com.wormzjl.icheme.science.material.PilotAqueousTestCatalog.PACKAGE_ID, stages, reflux);
+    }
+
+    /** {@link #washStill(int, double)} on {@code id} of {@code catalog}: its view of ethanol and nitrogen, water last, amounts by id. */
+    private static Rig washStill(com.wormzjl.icheme.science.material.MaterialCatalog catalog, String id, int stages, double reflux) {
+        var model = FluidThermodynamics.forNetwork(catalog, id).on(List.of("Ethanol", "Nitrogen"));
+        assertEquals(java.util.Set.of("Ethanol", "Nitrogen", "Water"), java.util.Set.copyOf(model.components()));
+        assertEquals("Water", model.components().getLast());
+        int e = model.components().indexOf("Ethanol"), w = model.components().indexOf("Water");
+        double[] wash = new double[3], spirit = new double[3];
+        wash[e] = WASH;
+        wash[w] = 1 - WASH;
+        spirit[e] = 1;
         var design = new BatchStill.Design(VOLUME, BatchStill.Heater.SOLID, true, stages);
         var devices = List.of(pot(design),
                 plain(1, 0, 10, Kind.GENERATOR), plain(101, 1, 10, Kind.PIPE), water(design), plain(201, 5, 10, Kind.PIPE), plain(2, 6, 10, Kind.VOID),
                 outlet(DISTILLATE, 20), plain(301, 1, 20, Kind.PIPE), plain(3, 2, 20, Kind.VOID),
                 outlet(VENT, 30), plain(302, 1, 30, Kind.PIPE), plain(4, 2, 30, Kind.VOID));
         var states = new HashMap<Long, PassiveNetwork.Reservoir>();
-        states.put(POT, contents(model, per(model, new double[]{WASH, 0, 1 - WASH}, 364, 150_000), .6, true));
+        states.put(POT, contents(model, per(model, wash, 364, 150_000), .6, true));
         states.put(1L, new PassiveNetwork.Reservoir(1, 0, water(model, 288.15, 300_000), PassiveNetwork.NodeKind.GENERATOR));
         states.put(2L, new PassiveNetwork.Reservoir(2, 0, water(model, 300, 101_325), PassiveNetwork.NodeKind.VOID));
         for (long d : new long[]{DISTILLATE, VENT})
-            states.put(d, new PassiveNetwork.Reservoir(d, 0, per(model, new double[]{1, 0, 0}, 298.15, 150_000), PassiveNetwork.NodeKind.GENERATOR));
+            states.put(d, new PassiveNetwork.Reservoir(d, 0, per(model, spirit, 298.15, 150_000), PassiveNetwork.NodeKind.GENERATOR));
         for (long d : new long[]{3, 4})
             states.put(d, new PassiveNetwork.Reservoir(d, 0, water(model, 300, 101_325), PassiveNetwork.NodeKind.VOID));
         var basis = new WorldTopologyLedger.FluidBasis(id, model.components(), "still-test");
@@ -437,6 +446,33 @@ class StillRuntimeTest {
     @Test
     void aWashInAnOpenPotBoilsAtItsBubblePoint() {
         var rig = washStill(0, 0);
+        double[] onset = boil(rig);
+        assertEquals(365.72, onset[0], .3, "the wash's bubble point");
+        assertEquals(.27, onset[1], .03, "the boil-up: the firing over the latent heat");
+    }
+
+    /**
+     * W6 G10 (batch 2026-11-11-aqueous-solvents): the same wash on the network package {@code icheme:refinery}, whose ethanol is
+     * the main record: it boils from the pilot's bubble point (92.57 C at 1 atm, 365.72 K) at the pilot's boil-up.
+     */
+    @Test
+    void aWashOnTheNetworkPackageBoilsAsOnThePilot() {
+        var catalog = com.wormzjl.icheme.science.material.MaterialCatalog.bundled();
+        String network = catalog.presets().network().packageId();
+        assertEquals("icheme:refinery", network);
+        double[] onset = boil(washStill(catalog, network, 0, 0));
+        double[] pilot = boil(washStill(0, 0));
+        System.out.printf(Locale.ROOT, "W6 wash pot on %s: boils from %.4f K at %.5f mol/s (pilot %.4f K, %.5f mol/s)%n", network, onset[0], onset[1], pilot[0], pilot[1]);
+        assertEquals(365.72, onset[0], .3, "the wash's bubble point");
+        assertEquals(pilot[0], onset[0], 1e-6, "the pilot's onset");
+        assertEquals(pilot[1], onset[1], 1e-6 * pilot[1], "the pilot's boil-up");
+    }
+
+    /**
+     * The pot of {@code rig} fired for 180 s in 10 s slices: the temperature where it gains its gas and its first boil-up, mol/s.
+     * It never superheats, follows its bubble point once boiling, and its energy closes (heat in = the pot's gain and what left).
+     */
+    private static double[] boil(Rig rig) {
         var model = rig.model;
         var start = rig.potNode();
         double u0 = start.inventory().internalEnergy();
@@ -459,8 +495,6 @@ class StillRuntimeTest {
             before = moles;
         }
         System.out.printf(Locale.ROOT, "W4 wash pot: boils from %.3f K, releases %.4f mol/s at first; energies %s%n", onset, released, rig.energies);
-        assertEquals(365.72, onset, .3, "the wash's bubble point");
-        assertEquals(.27, released, .03, "the boil-up: the firing over the latent heat");
         var end = rig.potNode();
         double heat = rig.heat.getOrDefault(PhysicalFluidTopology.sideIdentity(POT), 0.);
         double out = 0;
@@ -468,6 +502,7 @@ class StillRuntimeTest {
         assertTrue(heat > 0);
         // What leaves the pot is booked negative: its vent and its exchanges.
         assertEquals(end.inventory().internalEnergy() - u0, heat + out, 1e-6 * heat, "the heat in is the pot's energy gained and what left");
+        return new double[]{onset, released};
     }
 
     /**

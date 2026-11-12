@@ -82,6 +82,36 @@ final class FlowsheetAqueousColumnTest {
         assertTrue(run.reports().get("T").notes().stream().noneMatch(n -> n.key().startsWith("column.two_liquids")), "a wash is one liquid");
     }
 
+    /**
+     * W6 G10 and the example sheet (batch 2026-11-11-aqueous-solvents): {@code ethanol_rectifier}, the wash at 25 C and 2 bar
+     * through a steam preheater (E-1, to 359.84 K) into E1's rectifier, on {@code icheme:refinery}. It runs steady and makes the
+     * W5 sheet's spirit, 0.8075 ethanol; every component closes over the column's products.
+     */
+    @Test void theEthanolRectifierExampleRunsOnTheNetworkPackage() throws java.io.IOException {
+        assertEquals("icheme:refinery", NETWORK);
+        Flowsheet sheet;
+        try (var in = FlowsheetAqueousColumnTest.class.getResourceAsStream("/assets/icheme/flowsheet_examples/ethanol_rectifier.json")) {
+            sheet = FlowsheetFile.read(java.util.Objects.requireNonNull(in, "the example is bundled").readAllBytes());
+        }
+        assertEquals(NETWORK, sheet.basis().packageId());
+        assertEquals(AXIS, sheet.basis().components());
+        // FlowsheetExamplesTest checks this for every example, but stops at crude_unit's pending re-record.
+        assertEquals(RevisionNotice.data(sheet, CATALOG), sheet.basis().revision(), "the example stands on today's data");
+        var run = FlowsheetRuns.run(sheet, CATALOG, () -> {
+        });
+        assertEquals(FlowsheetRun.Status.STEADY, run.status(), () -> "log " + run.log());
+        double d = run.streams().get("SPIRIT").total(), xd = component(run, "SPIRIT", "Ethanol") / d;
+        System.out.printf(Locale.ROOT, "W6 example: spirit %.5f ethanol at %.4f mol/s, preheater outlet %.2f K%n", xd, d, run.streams().get("S-1").temperature());
+        assertEquals(0.8075, xd, 0.001, "E1's distillate, as the W5 sheet");
+        assertEquals(359.84, run.streams().get("S-1").temperature(), 0.01, "the preheater's outlet");
+        for (String id : List.of("Ethanol", "Water")) {
+            double out = 0;
+            for (String product : List.of("VENT", "SPIRIT", "WATER", "STILLAGE")) out += component(run, product, id);
+            double in = id.equals("Ethanol") ? 10 : 90;
+            assertEquals(in, out, 1e-9 * in, id);
+        }
+    }
+
     /** A steam row with a flow is refused where water is on the axis (owner choice 2 a). */
     @Test void aSteamRowIsRefusedWithWaterOnTheAxis() {
         var run = run(rectifier(List.of(new V3SteamFeedSpec(11, 5, 420))), wash(10, 90), 359.84);
