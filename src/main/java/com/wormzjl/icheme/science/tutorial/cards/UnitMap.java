@@ -106,55 +106,97 @@ public final class UnitMap implements Card {
     }
 
     /**
-     * Where each hit's tag stands: under its symbol, else over it, else right or left of it, then those places moved half a
-     * tag aside, then a row further out; the first inside {@code area} that keeps {@link #TAG_GAP} from every tag placed
-     * before and covers at most an eighth of itself with other symbols, else the first that keeps from the tags, else under it.
+     * Where each hit's tag stands, in {@code hits}' order: the place round its symbol, inside {@code area}, that meets no
+     * symbol and keeps {@link #TAG_GAP} from every tag; of those the one that crosses the fewest stream lines and stands
+     * nearest its symbol. The most hemmed-in unit takes its place first. Where none is free, the place that meets no
+     * symbol and the fewest tags.
      */
     public List<Rect> tags(List<Hit> hits, Rect area, Measure m) {
-        var placed = new ArrayList<Rect>();
+        var view = view(area);
         // Inside by one pixel: the tag's backing reaches a pixel past its words.
         var inner = new Rect(area.x() + 1, area.y() + 1, area.w() - 2, area.h() - 2);
-        for (var h : hits) {
-            var r = h.rect();
-            int w = m.width(sheet.units().get(h.index()).name()), th = 9, cx = r.x() + (r.w() - w) / 2, cy = r.y() + (r.h() - th) / 2;
-            var tries = new ArrayList<Rect>();
-            for (int out = 0; out <= 1; out++)
-                for (int aside : new int[]{0, -w / 2, w / 2}) {
-                    int d = out * (th + 1);
-                    tries.add(new Rect(cx + aside, r.bottom() + 2 + d, w, th));
-                    tries.add(new Rect(cx + aside, r.y() - 2 - th - d, w, th));
-                    tries.add(new Rect(r.right() + 3 + d, cy + aside / 3, w, th));
-                    tries.add(new Rect(r.x() - 3 - w - d, cy + aside / 3, w, th));
-                }
-            Rect chosen = null, apart = null;
-            for (var t : tries) {
-                if (!t.inside(inner)) continue;
-                boolean free = true;
-                for (var p : placed) free &= !grown(t, TAG_GAP).overlaps(p);
-                if (!free) continue;
-                if (apart == null) apart = t;
-                int covered = 0;
-                for (var other : hits) if (other != h) covered += overlap(t, other.rect());
-                if (covered * 8 <= w * th) {
-                    chosen = t;
-                    break;
+        var lines = new ArrayList<int[]>();
+        for (var line : layout.lines()) {
+            int[] pts = line.points();
+            for (int i = 0; i + 3 < pts.length; i += 2)
+                lines.add(new int[]{(int) Math.round(view.canvasX(pts[i])), (int) Math.round(view.canvasY(pts[i + 1])), (int) Math.round(view.canvasX(pts[i + 2])),
+                        (int) Math.round(view.canvasY(pts[i + 3]))});
+        }
+        var tries = new ArrayList<List<Rect>>();
+        for (var h : hits) tries.add(candidates(h, m.width(sheet.units().get(h.index()).name()), inner, hits));
+        // The units with the fewest free places go first.
+        var order = new ArrayList<Integer>();
+        for (int i = 0; i < hits.size(); i++) order.add(i);
+        order.sort(java.util.Comparator.comparingInt(i -> tries.get(i).size()));
+        var placed = new Rect[hits.size()];
+        for (int i : order) {
+            var r = hits.get(i).rect();
+            Rect best = null;
+            double bestCost = Double.MAX_VALUE;
+            for (var t : tries.get(i)) {
+                int met = 0;
+                for (var q : placed) if (q != null && grown(t, TAG_GAP).overlaps(q)) met++;
+                double cost = met * 1e6 + 2 * crossed(t, lines) + distance(t, r);
+                if (cost < bestCost) {
+                    bestCost = cost;
+                    best = t;
                 }
             }
-            placed.add(chosen != null ? chosen : apart != null ? apart : tries.getFirst());
+            int w = m.width(sheet.units().get(hits.get(i).index()).name());
+            placed[i] = best != null ? best : new Rect(r.x() + (r.w() - w) / 2, r.bottom() + 2, w, TAG_H);
         }
-        return placed;
+        return List.of(placed);
     }
 
-    /** Room kept between two tags, px. */
-    static final int TAG_GAP = 2;
+    /** A tag's height, px, and the room kept between two tags and between a tag and a symbol. */
+    static final int TAG_H = 9, TAG_GAP = 3, SYMBOL_GAP = 1;
+
+    /** The places a tag {@code w} wide may take round {@code h}'s symbol: inside {@code inner}, clear of every symbol. */
+    private static List<Rect> candidates(Hit h, int w, Rect inner, List<Hit> hits) {
+        var r = h.rect();
+        var out = new ArrayList<Rect>();
+        int cx = r.x() + (r.w() - w) / 2, cy = r.y() + (r.h() - TAG_H) / 2;
+        for (int out2 = 0; out2 <= 2; out2++) {
+            int d = out2 * (TAG_H + 2);
+            // Centred, half a tag aside, a whole tag aside, and flush with the symbol's left or right edge.
+            for (int shift : new int[]{0, -w / 2, w / 2, -w, w, r.x() - cx, r.right() - w - cx}) {
+                out.add(new Rect(cx + shift, r.bottom() + 2 + d, w, TAG_H));
+                out.add(new Rect(cx + shift, r.y() - 2 - TAG_H - d, w, TAG_H));
+            }
+            for (int shift : new int[]{0, -TAG_H, TAG_H}) {
+                out.add(new Rect(r.right() + 3 + d, cy + shift, w, TAG_H));
+                out.add(new Rect(r.x() - 3 - w - d, cy + shift, w, TAG_H));
+            }
+        }
+        out.removeIf(t -> {
+            if (!t.inside(inner)) return true;
+            for (var other : hits) if (grown(t, SYMBOL_GAP).overlaps(other.rect())) return true;
+            return false;
+        });
+        return out;
+    }
+
+    /** How many pixels of stream line run through {@code t} (with its backing's pixel round it). */
+    private static int crossed(Rect t, List<int[]> lines) {
+        var g = grown(t, 1);
+        int n = 0;
+        for (var l : lines) {
+            int x0 = Math.min(l[0], l[2]), x1 = Math.max(l[0], l[2]), y0 = Math.min(l[1], l[3]), y1 = Math.max(l[1], l[3]);
+            int w = Math.min(x1 + 1, g.right()) - Math.max(x0, g.x()), hgt = Math.min(y1 + 1, g.bottom()) - Math.max(y0, g.y());
+            if (w > 0 && hgt > 0) n += Math.max(w, hgt);
+        }
+        return n;
+    }
+
+    /** The gap between a tag and its symbol, px. */
+    private static double distance(Rect t, Rect r) {
+        int dx = Math.max(0, Math.max(r.x() - t.right(), t.x() - r.right())), dy = Math.max(0, Math.max(r.y() - t.bottom(), t.y() - r.bottom()));
+        // Under or over the symbol reads best: a side place costs a little more.
+        return dx + dy + (dx > 0 ? 3 : 0);
+    }
 
     private static Rect grown(Rect r, int by) {
         return new Rect(r.x() - by, r.y() - by, r.w() + 2 * by, r.h() + 2 * by);
-    }
-
-    private static int overlap(Rect a, Rect b) {
-        int w = Math.min(a.right(), b.right()) - Math.max(a.x(), b.x()), h = Math.min(a.bottom(), b.bottom()) - Math.max(a.y(), b.y());
-        return w > 0 && h > 0 ? w * h : 0;
     }
 
     /** Each unit's box on the card, in the sheet's unit order. */

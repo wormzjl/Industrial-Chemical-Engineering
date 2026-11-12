@@ -1,15 +1,20 @@
 package com.wormzjl.icheme.science.tutorial.cards;
 
+import com.wormzjl.icheme.client.gui.common.kit.Measure;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
+import com.wormzjl.icheme.client.gui.tutorial.GuidePage;
 import com.wormzjl.icheme.client.gui.flowsheet.Tiles;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.flowsheet.sizing.CoolerSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.HeaterSizing;
 import com.wormzjl.icheme.science.tutorial.equipment.EquipmentInfo;
+import com.wormzjl.icheme.science.tutorial.guide.GuideFile;
 import com.wormzjl.icheme.science.tutorial.guide.PageFile;
+import com.wormzjl.icheme.science.tutorial.guide.Progress;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
@@ -22,12 +27,28 @@ import static org.junit.jupiter.api.Assertions.*;
  * recording's duty and the sheet's outlet. Its step is done once one page was opened.
  */
 class UnitMapCardTest {
+    private static final Measure M = Measure.fixed(6);
+
+    private static java.util.function.Function<String, String> english() {
+        try (var in = UnitMapCardTest.class.getResourceAsStream("/assets/icheme/lang/en_us.json")) {
+            var json = com.google.gson.JsonParser.parseReader(new java.io.InputStreamReader(Objects.requireNonNull(in), java.nio.charset.StandardCharsets.UTF_8)).getAsJsonObject();
+            return key -> json.has(key) ? json.get(key).getAsString() : key;
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
+    }
+
     @Test
     void everySymbolIsASheetUnitAndOpensItsKindsPage() {
         var card = (UnitMap) Objects.requireNonNull(Cards.build(UnitMap.NAME));
         var pages = PageFile.load();
         var units = card.flowsheet().units();
-        for (var area : new Rect[]{new Rect(20, 40, 300, 150), new Rect(10, 30, 180, 120)}) {
+        var areas = new java.util.ArrayList<Rect>(List.of(new Rect(20, 40, 300, 150), new Rect(10, 30, 180, 120)));
+        // The card's own drawing in the guide, at the design size and in the smallest window.
+        for (int[] size : new int[][]{{GuidePage.DESIGN_WIDTH, GuidePage.DESIGN_HEIGHT}, {312, 232}})
+            areas.add(Objects.requireNonNull(GuidePage.place(new GuidePage.Input(GuideFile.load(), Progress.NONE, "unit", "unit/map"), size[0], size[1], M, english(), "Light panel")
+                    .card()).drawing());
+        for (var area : areas) {
             var hits = card.hits(area, 0);
             assertEquals(units.size(), hits.size(), "one place for each unit");
             var seen = new HashSet<Integer>();
@@ -42,10 +63,11 @@ class UnitMapCardTest {
                 assertNotNull(pages.page(page), unit.id() + ": its page " + page);
                 assertTrue(pages.inUnit(page), unit.id() + ": a page of the unit's chain");
             }
-            // Each unit's tag on the card, whole, apart from every other tag (a wider font than the game's).
-            var tags = card.tags(hits, area, com.wormzjl.icheme.client.gui.common.kit.Measure.fixed(6));
+            // Each unit's tag on the card, whole, apart from every other tag and off every symbol (a wider font than the game's).
+            var tags = card.tags(hits, area, M);
             for (int i = 0; i < tags.size(); i++) {
                 assertTrue(tags.get(i).inside(area), units.get(hits.get(i).index()).id() + ": its tag on the card");
+                for (var h : hits) assertFalse(tags.get(i).overlaps(h.rect()), area + ": " + units.get(hits.get(i).index()).id() + "'s tag off " + units.get(h.index()).id());
                 for (int j = i + 1; j < tags.size(); j++)
                     assertFalse(tags.get(i).overlaps(tags.get(j)), units.get(hits.get(i).index()).id() + "'s tag apart from " + units.get(hits.get(j).index()).id() + "'s");
             }
