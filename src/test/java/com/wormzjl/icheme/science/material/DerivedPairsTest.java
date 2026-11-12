@@ -203,6 +203,45 @@ class DerivedPairsTest {
         assertEquals(forward.energySlope(1, 0), backward.energySlope(0, 1));
     }
 
+    /**
+     * W6 plan sections 13 and 15: a list's activity pairs are fitted on a parallel first pass. On a fresh catalog the whole wet
+     * network list equals, pair for pair and double for double, each pair derived alone as a two-compound list on another fresh
+     * catalog (one fit, so the pair loop fits it, sequentially), and the whole list runs every fit once (291).
+     */
+    @Test void theParallelFitsEqualEachPairFittedAlone() {
+        String network = "icheme:refinery";
+        var resources = new java.util.HashMap<>(MaterialCatalog.bundled().resources());
+        var whole = MaterialCatalog.parse(resources).withWater(network);
+        var ids = whole.requirePackage(network).components();
+        var all = DerivedPairs.derive(whole, network, ids);
+        assertEquals(291, all.fitsRun(), "every fit of the whole list, once");
+        var alone = MaterialCatalog.parse(resources).withWater(network);
+        var e = all.excess();
+        int n = ids.size(), k = 0;
+        for (int i = 0; i < n; i++)
+            for (int j = i + 1; j < n; j++) {
+                var two = DerivedPairs.derive(alone, network, List.of(ids.get(i), ids.get(j)));
+                assertEquals(two.pairs().getFirst(), all.pairs().get(k++), ids.get(i) + " / " + ids.get(j));
+                var x = two.excess();
+                int[][] cells = {{i, j, 0, 1}, {j, i, 1, 0}};
+                for (int[] c : cells) {
+                    String at = ids.get(c[0]) + " / " + ids.get(c[1]);
+                    assertEquals(x.classical(c[2], c[3]), e.classical(c[0], c[1]), at);
+                    assertEquals(x.alpha(c[2], c[3]), e.alpha(c[0], c[1]), 0.0, at + " alpha");
+                    assertEquals(x.interaction(c[2], c[3]), e.interaction(c[0], c[1]), 0.0, at + " k_ij");
+                    assertEquals(x.interactionSlope(c[2], c[3]), e.interactionSlope(c[0], c[1]), 0.0, at + " k_ij slope");
+                    assertEquals(x.interactionPair(c[2], c[3]) < 0, e.interactionPair(c[0], c[1]) < 0, at + " model pair");
+                    assertEquals(x.energyIntercept(c[3], c[2]), e.energyIntercept(c[1], c[0]), 0.0, at + " energy");
+                    assertEquals(x.energySlope(c[3], c[2]), e.energySlope(c[1], c[0]), 0.0, at + " energy slope");
+                    assertEquals(x.lineLow(c[2], c[3]), e.lineLow(c[0], c[1]), 0.0, at + " line low");
+                    assertEquals(x.lineHigh(c[2], c[3]), e.lineHigh(c[0], c[1]), 0.0, at + " line high");
+                    assertEquals(x.lineFade(c[2], c[3]), e.lineFade(c[0], c[1]), 0.0, at + " fade");
+                }
+            }
+        assertEquals(all.pairs().size(), k);
+        assertEquals(291, alone.derivedPairCache().fitsRun(), "the pairs alone run the same fits");
+    }
+
     @Test void aHomomorphNamesAKnownCompoundWithADataset() {
         for (var edit : List.<java.util.function.Consumer<com.google.gson.JsonObject>>of(
                 o -> o.getAsJsonObject("homomorph").addProperty("component", "Nope"),

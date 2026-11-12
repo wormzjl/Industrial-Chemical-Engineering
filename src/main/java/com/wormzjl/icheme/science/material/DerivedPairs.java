@@ -193,6 +193,9 @@ public final class DerivedPairs {
         /** Fits run since the catalog was made. */
         int fitsRun() { return runs.get(); }
 
+        /** Whether the fit of {@code key} is kept. */
+        boolean holds(String key) { return fits.containsKey(key); }
+
         /** The kept fit of {@code key}, else {@code fit}'s value, kept; {@code counter} counts a fit run here. */
         @SuppressWarnings("unchecked")
         <T> T get(String key, Supplier<T> fit, AtomicInteger counter) {
@@ -234,11 +237,11 @@ public final class DerivedPairs {
         var missing = new ArrayList<String>();
         var notices = new ArrayList<String>();
         var counter = new AtomicInteger();
+        fitActivitiesInParallel(context, p, compounds, authored, counter);
         for (int i = 0; i < n; i++) {
             for (int j = i + 1; j < n; j++) {
                 Compound a = compounds.get(i), b = compounds.get(j);
-                int pi = p.components().indexOf(a.id), pj = p.components().indexOf(b.id);
-                var library = authored.get(Math.min(pi, pj) * p.components().size() + Math.max(pi, pj));
+                var library = library(p, authored, a, b);
                 Pair pair;
                 if (library != null) {
                     tokens.addAll(library.tokens());
@@ -253,7 +256,7 @@ public final class DerivedPairs {
                 } else if (a.id.equals(HYDROGEN) || b.id.equals(HYDROGEN)) {
                     excess.classical(i, j, 0.0);
                     pair = new Pair(a.id, b.id, Source.HYDROGEN, "k_ij 0");
-                } else if (a.id.equals(WATER) && b.henry != null || b.id.equals(WATER) && a.henry != null) {
+                } else if (henry(a, b)) {
                     Compound gas = a.id.equals(WATER) ? b : a, water = gas == a ? b : a;
                     var read = new TreeSet<>(List.of(gas.token, water.token, gas.henryToken, context.waterToken()));
                     tokens.addAll(read);
@@ -261,16 +264,12 @@ public final class DerivedPairs {
                     excess.classicalLinear(i, j, FIRST_KELVIN, k[0], SECOND_KELVIN, k[1]);
                     pair = new Pair(a.id, b.id, Source.HENRY, String.format(java.util.Locale.ROOT,
                             "k_ij %.5f at %.2f K, %.5f at %.2f K (Henry)", k[0], FIRST_KELVIN, k[1], SECOND_KELVIN));
-                } else if (a.activity() && b.activity() && (a.solvent() || b.solvent()) && context.groupModel(a, b, notices)) {
-                    // Fitted with the compounds in record-key order, so one fit serves either list order.
-                    boolean ordered = a.recordKey.compareTo(b.recordKey) <= 0;
-                    Compound first = ordered ? a : b, second = ordered ? b : a;
-                    var read = new TreeSet<>(List.of(first.token, second.token, first.dortmundToken, second.dortmundToken, context.tableToken()));
-                    boolean block = context.blockApplies(first, second);
-                    if (block) read.add(context.blockToken());
-                    tokens.addAll(read);
-                    ActivityFit fit = context.cache.get("activity|" + first.recordKey + "|" + second.recordKey + "|" + String.join(",", read),
-                            () -> context.activity(first, second), counter);
+                } else if (activityCandidate(a, b) && context.groupModel(a, b, notices)) {
+                    var job = ActivityJob.of(context, a, b);
+                    Compound first = job.first(), second = job.second();
+                    boolean ordered = job.ordered(), block = job.block();
+                    tokens.addAll(job.read());
+                    ActivityFit fit = context.cache.get(job.key(), () -> context.activity(first, second), counter);
                     int f = ordered ? i : j, s = ordered ? j : i;
                     excess.nrtl(f, s, fit.alpha, FIRST_KELVIN, fit.first[1], fit.first[0], SECOND_KELVIN, fit.second[1], fit.second[0]);
                     // Item 9 of W3b section 14: the cells fade to zero toward the highest critical temperature of the pair's polar
@@ -348,6 +347,68 @@ public final class DerivedPairs {
         }
         String identity = "derived-pairs=" + REVISION + ";records=" + String.join(",", tokens);
         return new Result(ids, tc, pc, omega, alpha, excess.build(), pairs, missing, notices, identity, counter.get(), polar);
+    }
+
+    /** The pair library entry of {@code a} and {@code b} in package {@code p}, or null. */
+    private static MaterialCatalog.AuthoredPair library(MaterialCatalog.Package p, Map<Integer, MaterialCatalog.AuthoredPair> authored, Compound a, Compound b) {
+        int pi = p.components().indexOf(a.id), pj = p.components().indexOf(b.id);
+        return authored.get(Math.min(pi, pj) * p.components().size() + Math.max(pi, pj));
+    }
+
+    /** Water with a gas that carries a Henry constant: the {@link Source#HENRY} branch. */
+    private static boolean henry(Compound a, Compound b) {
+        return a.id.equals(WATER) && b.henry != null || b.id.equals(WATER) && a.henry != null;
+    }
+
+    /** Two liquids with Dortmund counts, one a solvent: the {@link Source#ACTIVITY} branch where the group model holds the pair. */
+    private static boolean activityCandidate(Compound a, Compound b) {
+        return a.activity() && b.activity() && (a.solvent() || b.solvent());
+    }
+
+    /**
+     * What the {@link Source#ACTIVITY} branch reads before its fit, for both passes: the compounds in record-key order (one fit
+     * serves either list order), the record tokens read, whether the water-hydrocarbon block applies, and the fit's cache key.
+     */
+    private record ActivityJob(Compound first, Compound second, boolean ordered, boolean block, TreeSet<String> read, String key) {
+        static ActivityJob of(Context context, Compound a, Compound b) {
+            boolean ordered = a.recordKey.compareTo(b.recordKey) <= 0;
+            Compound first = ordered ? a : b, second = ordered ? b : a;
+            var read = new TreeSet<>(List.of(first.token, second.token, first.dortmundToken, second.dortmundToken, context.tableToken()));
+            boolean block = context.blockApplies(first, second);
+            if (block) read.add(context.blockToken());
+            return new ActivityJob(first, second, ordered, block, read,
+                    "activity|" + first.recordKey + "|" + second.recordKey + "|" + String.join(",", read));
+        }
+    }
+
+    /**
+     * The first pass (W6 plan sections 13 and 15): the list's activity pairs the cache does not hold yet, found in the pair
+     * loop's branch order, fitted on a parallel stream where there are two or more, one task per key. Each fit builds its own
+     * kernel, workspace and group mixture, so a fit gives the same doubles on any thread; the pair loop then reads them from
+     * the cache and fits nothing twice. A fit that throws is left out of the cache: the loop runs it again and throws as
+     * before. This pass adds nothing to the pairs, tokens, notices or missing pairs.
+     */
+    private static void fitActivitiesInParallel(Context context, MaterialCatalog.Package p, List<Compound> compounds,
+                                                Map<Integer, MaterialCatalog.AuthoredPair> authored, AtomicInteger counter) {
+        var jobs = new LinkedHashMap<String, ActivityJob>();
+        var unused = new ArrayList<String>();
+        int n = compounds.size();
+        for (int i = 0; i < n; i++)
+            for (int j = i + 1; j < n; j++) {
+                Compound a = compounds.get(i), b = compounds.get(j);
+                if (library(p, authored, a, b) != null || a.id.equals(HYDROGEN) || b.id.equals(HYDROGEN) || henry(a, b)) continue;
+                if (!activityCandidate(a, b) || !context.groupModel(a, b, unused)) continue;
+                var job = ActivityJob.of(context, a, b);
+                if (!context.cache.holds(job.key())) jobs.putIfAbsent(job.key(), job);
+            }
+        if (jobs.size() < 2) return;
+        jobs.values().parallelStream().forEach(job -> {
+            try {
+                context.cache.get(job.key(), () -> context.activity(job.first(), job.second()), counter);
+            } catch (RuntimeException refused) {
+                // Left uncached: the pair loop fits it again and throws from the same place.
+            }
+        });
     }
 
     /** A group-contribution pair the tables cannot resolve: the pair falls to {@link Source#MISSING} with this reason. */

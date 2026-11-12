@@ -40,16 +40,24 @@ The fluid network's phase model holds water as a compound of the cubic. What the
   numbers. A world saved before W6 rebuilds its state from facts by compound id (the grown list is another basis).
 - Preset `presets/fluid_7.json` (`ethanol`, one compound at 1.0), listed after `carbon_dioxide` in
   `networks/default.json`. Fired heaters, stills, engines, turbines and the flare burn it from its record.
-- Load cost: the whole-list derivation takes 0.35 to 0.45 s without ethanol and 1.5 to 1.75 s with it (291 fits
-  against 249). Ethanol's 32 activity fits take 1.40 s, about 44 ms each against water's 11 ms. Cause: where the
+- Load cost: `DerivedPairs.derive` fits a list's activity pairs on a parallel first pass (`fitActivitiesInParallel`,
+  owner approval of 2026-11-12, W6 plan sections 13 and 15): it walks the pairs in the loop's branch order
+  (`library`, `henry`, `activityCandidate`, `Context.groupModel`), collects each activity pair whose key the cache
+  does not hold (`ActivityJob`, the one helper both passes read their tokens, block and key from), and with two or
+  more fits them on a parallel stream, one task per key. Each fit builds its own kernel, workspace and group mixture,
+  so the doubles do not depend on the thread; the pair loop reads them from the cache. A fit that throws stays
+  uncached and the loop throws it as before; the pass adds no pair, token or notice. The whole wet list then derives
+  in 0.23 to 0.25 s warm and 0.38 s cold on 16 processors (291 fits; without ethanol 0.08 to 0.17 s), against
+  1.5 to 1.75 s sequentially. `DerivedPairsTest.theParallelFitsEqualEachPairFittedAlone` and the probe `PairDump`
+  (every pair and excess cell as hexadecimal doubles, before and after) hold the numbers. Sequentially, ethanol's
+  32 activity fits take 1.40 s, about 44 ms each against water's 11 ms. Cause: where the
   group model gives one liquid (`DerivedPairs.Context.shape`, `oneLiquid`: every ethanol pair with a hydrocarbon
   and with water), each Nelder-Mead trial also runs `falls()` on `SCAN_POINTS` = 99 points of `model.logPhi`, on
   top of the 15 grid points: 114 evaluations a trial against 15. A water and hydrocarbon pair has two liquids and
   skips the scan. The cost is paid once per catalog, when the whole-list model builds: at world start
   (`FluidWorldAuthority`), on `/reload` (`FluidPropertyReloadGuard`) and at the client's first simulator open
   (`ProcessSimulatorScreen`). A list without ethanol pays nothing: the dry island scenario's kernel counters are
-  identical (G8). A follow-up for the owner; probes `tools/aqueous-solvents/probes/` `LoadFits`, `LoadSplit` and
-  `PairCost`.
+  identical (G8). Probes `tools/aqueous-solvents/probes/` `LoadFits`, `LoadSplit`, `PairCost` and `PairDump`.
 - Tests: `EthanolMainDataTest` (boiling point 351.70 K, standard density, the wash equal to the pilot, heat of
   combustion, the preset), `FiredHeaterFuelTest` (ethanol vapour fires at 27.73 MJ/kg), `StillRuntimeTest` (the wash
   pot on `icheme:refinery` equal to the pilot), `FlowsheetAqueousColumnTest` (the `ethanol_rectifier` example).
