@@ -892,3 +892,17 @@ Owner, verbatim: "Yes, both" (section 44's pump option and tank choice a). Order
 - Still failing, for later: SizeAllSampleTest H-101 (73.06 against 73.0525 MW; the water datum does not explain
   it, the cause is ordered), FlowsheetExamplesTest `crude_unit` (re-records with the final lane; a storage tile
   that now degasses its feed must be named among its causes).
+
+## 47. H-101's duty: the derived pairs of methane and ethane; step 6 closed (2026-11-12)
+
+2a5023351 (report `tmp/w3b-network/reports/w3b-h101-duty-report.md`). Measured on main's build and on HEAD at the
+same states: the duty moved -3.945 kW (73.0565 to 73.0525 MW; the old pin 73.06 was main's value rounded, so the
+7.5 kW of section 46 was a rounding). The ideal-gas part is the same (0.003 W). The crude's liquid carries 3.4 kW
+more enthalpy at the coil's inlet and 0.2 kW more at its two-phase outlet. Without its methane (2.5 mol/s) and
+ethane (5.3 mol/s) the crude's enthalpy is the same on both builds at the feed, the inlet and the outlet, and so
+are the pure compounds, the cuts alone and C3 to C5 with a cut: the cause is the derived pairs of methane and
+ethane with the cuts, as expected. 0.24 kW of it is E-101, fed 0.026 mol/s more residue by the column. The pin is
+73.05 MW with its cause; SizeAllSampleTest 7 of 7.
+
+Step 6 is closed. Left of W3b, all with the batch's final lane: `crude_unit`'s re-record, seed 358's measurement,
+seed 575 (open, recorded).
