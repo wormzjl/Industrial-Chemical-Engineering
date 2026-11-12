@@ -1,6 +1,6 @@
 # P4b: chapter 3 "Pot to tower" and chapter 4 "The simulator"
 
-Batch `2026-11-12-tutorial-system`, 2026-11-12. Commits: recorder 66ed0baa4, chapter 3 3a7bb0d1c, chapter 4 7cbd240e0, tours 402e1b4a9, gates 8295a579e.
+Batch `2026-11-12-tutorial-system`, 2026-11-12. Commits: recorder 66ed0baa4, chapter 3 3a7bb0d1c, chapter 4 7cbd240e0, tours 402e1b4a9, gates 8295a579e; corrections: film 759b1f940, units d23ea3b4c.
 ## Part 1: the still with a column (`still_trays.json`, `StillTraysRecorder`, the still law unchanged)
 | form | first cut (18 % over): naphtha, pot, play min | second (29 %): kerosene, play min | column after the light gas |
 |---|---|---|---|
@@ -17,13 +17,13 @@ on its trays while the pot warms: the old open item (a trayed still answers as a
 - `tray` film `still_tray` (3 stops), guide_step. `build` server `equipment_built` {BATCH_STILL, column}. `reflux` card
   `reflux` (slider over the three forms), server `still_state` {column, min_reflux 2}. `compare` card `compare`, server
   `still_state` {column, liquid, min_pot_temperature 528 = the reflux-2 first cut in whole K}. `many` film `small_tower`
-  (4 stops, on `columnpreset/small_crude.json`), guide_step. Terms: tray, reflux, tower.
+  (4 stops on `columnpreset/small_crude.json`; stop 2 cut open: round plates, downcomers, liquid), guide_step. Terms: tray, reflux, tower.
 - Shell halves: none was needed; the film draws its column from `ShapeRasterizer.stillParts`. The still's `?` tour has
   a variant for a still with a column and its condenser, `fluid_device.still_column` (7 stops, with `still_reflux:open`).
 ## Chapter 4 "The simulator" (`simulator`, after `tower`)
 - `open` client (the screen reports the example "Small crude unit" opened). `sheet` reading step, completed by finishing
   the sheet page's tour. `run` server `sheet_run` (SheetStore stores results that ran on the stored sheet). `balance`
-  card `balance`. `heat` server `sheet_run` {max_heater_outlet 643.15 K}. `size` client (Size all's sizes landed).
+  card `balance`. `heat` server `sheet_run` {max_heater_outlet 643.15 K}; its text writes `{643.15 K}`, shown in the player's unit. `size` client (Size all's sizes landed).
   `send` server `design_sent`. Terms: flowsheet, stream, side draw, heat duty.
 - `small_unit.json` (`SmallUnitRecorder`, gate `SmallUnitRecordingTest` in holdGates): at 390 °C STEADY, crude 8,968
   kg/h, top 18.2 / side 34.9 / bottom 46.9 % by mass, H-101 1,442 kW; at 370 °C 15.1 / 31.9 / 53.0 %, H-101 1,280 kW.
@@ -47,4 +47,4 @@ Films `still_tray-*`, `small_tower-*`; cards `card-reflux`, `card-compare`, `car
 `guide-simulator`; tours `tour-fluid_device-still_column`, `tour-simulator-{sheet,results,sizing,basis}` (light, dark).
 Fixed from them: a finished chapter's title under its done mark (GuidePage now centres it right of the mark); chapter 3's
 title shortened from "From pot to tower" (clipped in the small window); "1 parts back" (card reflux); the balance
-card's labels (now a legend); a lone "%" line (heat step reworded).
+card's labels (now a legend) and its flow (now the player's time unit); a lone "%" line (heat step reworded).
