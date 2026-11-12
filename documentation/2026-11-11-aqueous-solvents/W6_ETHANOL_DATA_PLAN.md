@@ -137,3 +137,18 @@ commits, gates G1 to G10 reported beside this table, the tree clean. Not main-th
 about eight filtered Gradle runs to wait on, about 2 hours. Model and effort: Opus medium (standard: data
 records and tests on a clear brief; no solver change). Not a reuse: `w5-column` is on Opus high and its cache
 will have expired. It reports every 50 minutes, at once on a stop named in section 8, and at the end.
+
+## 11. Owner decision (2026-11-12)
+
+"reuse w5": the build goes to the live sub-thread `w5-column` (Opus high, the owner's choice of thread; section
+10 asked for a new one on Opus medium). Its brief is sections 1 to 9.
+
+- Choice 1: no answer given. The main thread takes a (the example sheet `ethanol_rectifier`), its
+  recommendation. It is the build's last step, so the owner can still drop it.
+- Correction to D1: `selection-tier1.json` carries no thermochemistry form. The heat data take the route of the
+  33 defined compounds: a `thermochemistry_only` entry with its `limits`, as in
+  `selection-thermochemistry-existing.json`, inserted with `insert-subrecord.mjs`; then `heating-values.mjs`.
+- Addition to D4: the importer writes a Tr = 0.7 liquid reference point for every imported compound. It is not
+  copied to the main data, as the pilot's was not.
+- Addition to D2: the overlay changes in the same commit as the records (W6a), since one catalog cannot hold
+  two `Ethanol` components.
