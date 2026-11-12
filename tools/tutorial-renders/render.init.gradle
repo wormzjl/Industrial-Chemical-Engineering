@@ -2,7 +2,7 @@
 // set changes, no client, no test suite. Usage, from the worktree root:
 //   ./gradlew --offline --init-script tools/tutorial-renders/render.init.gradle renderTutorial -PtutorialRenderOut=tmp/tutorial-renders
 // Optional: -PtutorialFilms=still_inside (a comma list; default every film), -PtutorialFrames=n (n frames between stops).
-// renderTutorial draws the film stops (TutorialRender), then the guide, tours and cards (GuideRender, P1), which is
+// renderTutorial draws the film stops (TutorialRender), then the guide, tours and cards (GuideRender, P1). Both are
 // compiled with tools/heat-gui-renders (its game font, canvas and page frame) against the main and test outputs.
 gradle.projectsEvaluated {
     def p = gradle.rootProject
@@ -10,20 +10,10 @@ gradle.projectsEvaluated {
     def films = p.providers.gradleProperty('tutorialFilms')
     def frames = p.providers.gradleProperty('tutorialFrames')
     def target = p.file(out.getOrElse('tmp/tutorial-renders')).absolutePath
-    def sources = p.sourceSets.create('tutorialRenderTools') {
-        java.srcDir p.file('tools/tutorial-renders')
-        java.include 'TutorialRender.java'
-        compileClasspath += p.sourceSets.main.output + p.sourceSets.main.compileClasspath
-        runtimeClasspath += output + p.sourceSets.main.runtimeClasspath
-    }
-    p.tasks.named(sources.compileJavaTaskName) {
-        dependsOn p.tasks.named('classes')
-        options.compilerArgs.add('-proc:none')
-    }
     def guide = p.sourceSets.create('tutorialGuideRenderTools') {
         java.srcDir p.file('tools/heat-gui-renders')
         java.srcDir p.file('tools/tutorial-renders')
-        java.exclude 'TutorialRender.java', 'FieldGuideIcon.java'
+        java.exclude 'FieldGuideIcon.java'
         compileClasspath += p.sourceSets.main.output + p.sourceSets.test.output + p.sourceSets.test.compileClasspath
         runtimeClasspath += output + p.sourceSets.main.output + p.sourceSets.test.output + p.sourceSets.test.runtimeClasspath
     }
@@ -44,10 +34,10 @@ gradle.projectsEvaluated {
     p.tasks.register('renderTutorial', JavaExec) {
         group = 'documentation'
         description = 'Software renders of every tutorial film stop with the mod sprites (TutorialRender), then the guide (GuideRender).'
-        dependsOn p.tasks.named(sources.classesTaskName)
+        dependsOn p.tasks.named(guide.classesTaskName)
         finalizedBy renderGuide
-        classpath = sources.runtimeClasspath
-        mainClass = 'com.wormzjl.icheme.science.tutorial.TutorialRender'
+        classpath = guide.runtimeClasspath
+        mainClass = 'TutorialRender'
         workingDir = p.projectDir
         args(films.isPresent() ? [target, films.get()] : [target])
         jvmArgs '-Djava.awt.headless=true', '-Duser.language=en', '-Dframes=' + frames.getOrElse('0')

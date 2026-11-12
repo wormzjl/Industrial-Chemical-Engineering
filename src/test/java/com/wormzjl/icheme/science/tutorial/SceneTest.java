@@ -247,4 +247,104 @@ class SceneTest {
         double l = Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
         return new double[]{v[0] / l, v[1] / l, v[2] / l};
     }
+
+    /** P2b's tracks on the cube scene: labels, legend, fire, liquid, readouts, pointer and thinned dots. */
+    static Scene overlays() {
+        var box = new Track.Box(new double[]{-.5, -.5, -.5}, new double[]{.5, .5, .5});
+        var series = new com.wormzjl.icheme.science.tutorial.scene.Series(new double[]{0, 100, 200}, new double[]{300, 400, 450});
+        var timeline = new com.wormzjl.icheme.science.tutorial.scene.Value.Timeline(new double[]{0, 6}, new double[]{0, 200});
+        return Scene.builder("t")
+                .actor(cube("a"))
+                .track(new Track.Camera(List.of(new Track.Key(0, .5, .4, 40, 0, 0, 0))))
+                .track(new Track.Cut("a", new double[]{0, 0, 0}, new double[]{0, 0, -1}, 1, 1))
+                .track(new Track.Label(new double[]{1, 1, -1}, "a", 0, 2))
+                .track(new Track.Legend(2, 6))
+                .track(new Track.Flame(new double[]{0, -1, 0}, com.wormzjl.icheme.science.tutorial.scene.Value.of(.4), 3, 6))
+                .track(new Track.Level(new Track.Box(new double[]{-.9, -.9, -.9}, new double[]{.9, .9, .9}), t -> 1 - t / 12, 0x3B2A1A, "a", 0, 6))
+                .track(new Track.Readout("pot", timeline.replay(series), Track.Reading.TEMPERATURE, 0, 6))
+                .track(new Track.Readout("share", t -> t / 6, Track.Reading.SHARE, 4, 6))
+                .track(new Track.Pointer(Track.Sign.RIGHT_CLICK, "", new double[]{0, 1, 0}, 0, 1))
+                .track(new Track.Dots(Track.Kind.LIGHT, box, 0, 6, 10, .2, t -> 1 - t / 6))
+                .stop(2).stop(6)
+                .build();
+    }
+
+    @Test
+    void theNewTracksActOnTheirIntervalsAndAFrameStaysPure() {
+        var s = overlays();
+        for (double t = 0; t <= 6; t += .41) assertEquals(s.at(t), s.at(t), "t = " + t);
+        var start = s.at(.5);
+        assertEquals(1, start.labels().size());
+        assertFalse(start.legend());
+        assertTrue(start.flames().isEmpty());
+        assertEquals(1, start.pointers().size());
+        assertEquals(Track.Sign.RIGHT_CLICK, start.pointers().getFirst().sign());
+        assertEquals(1, start.readouts().size(), "the share readout starts at 4");
+        assertEquals(300 + 100 * (.5 * 200 / 6) / 100, start.readouts().getFirst().value(), 1e-9, "the series replayed on the film's time");
+        var late = s.at(5);
+        assertTrue(late.labels().isEmpty());
+        assertTrue(late.legend());
+        assertEquals(1, late.flames().size());
+        assertEquals(.4, late.flames().getFirst().size());
+        assertTrue(late.pointers().isEmpty());
+        assertEquals(2, late.readouts().size());
+        assertEquals(5 / 6.0, late.readouts().get(1).value(), 1e-12);
+        assertEquals(Math.round(10 * (1 - 5 / 6.0)), late.dots().size(), "the share thins the dots");
+        assertEquals(10, s.at(0).dots().size());
+        var liquid = late.liquids().getFirst();
+        assertEquals(-.9 + (1 - 5 / 12.0) * 1.8, liquid.top(), 1e-12, "the level's share of the box's height");
+        assertEquals(.9, liquid.radius(), 1e-12);
+    }
+
+    @Test
+    void moreThanTwoReadoutsAtOnceAreRefused() {
+        var b = Scene.builder("t").actor(cube("a")).track(new Track.Camera(List.of(new Track.Key(0, 0, 0, 1, 0, 0, 0))));
+        for (int i = 0; i < 3; i++) b.track(new Track.Readout("r" + i, t -> 0, Track.Reading.SHARE, i, 5));
+        assertThrows(IllegalArgumentException.class, () -> b.stop(5).build());
+        assertThrows(IllegalArgumentException.class, () -> Scene.builder("t").actor(cube("a")).track(new Track.Camera(List.of(new Track.Key(0, 0, 0, 1, 0, 0, 0))))
+                .track(new Track.Level(new Track.Box(new double[3], new double[]{1, 1, 1}), t -> 1, 0, "none", 0, 1)).stop(1).build(), "a level cut by no actor");
+    }
+
+    @Test
+    void theLiquidIsCutWithItsActorAndShowsItsSection() {
+        var s = overlays();
+        assertNull(s.at(.5).liquids().getFirst().cut(), "whole before the cut");
+        var cut = s.at(3).liquids().getFirst();
+        assertNotNull(cut.cut());
+        var faces = com.wormzjl.icheme.science.tutorial.scene.Bodies.liquid(cut);
+        var plane = cut.cut();
+        boolean section = false;
+        for (var face : faces) {
+            var p = face.positions();
+            boolean onPlane = true;
+            for (int i = 0; i < face.size(); i++) {
+                double d = (p[3 * i] - plane.px()) * plane.nx() + (p[3 * i + 1] - plane.py()) * plane.ny() + (p[3 * i + 2] - plane.pz()) * plane.nz();
+                assertTrue(d <= 1e-9, "every face on the kept side");
+                onPlane &= Math.abs(d) <= 1e-9;
+            }
+            section |= onPlane;
+        }
+        assertTrue(section, "the cut's face closes the liquid");
+        int whole = com.wormzjl.icheme.science.tutorial.scene.Bodies.liquid(s.at(.5).liquids().getFirst()).size();
+        assertEquals(com.wormzjl.icheme.science.tutorial.scene.Bodies.SIDES + 2, whole);
+    }
+
+    @Test
+    void aFireFlickersByTimeAloneAndStaysWithinItsSize() {
+        var p = new Projection(.5, .4, 40, new double[3], 0, 0);
+        var f = new Frame.FlameFrame(0, 0, 0, .4, 3.3);
+        var a = com.wormzjl.icheme.science.tutorial.scene.Bodies.flame(f, p.right(), p.up(), p.forward());
+        var b = com.wormzjl.icheme.science.tutorial.scene.Bodies.flame(f, p.right(), p.up(), p.forward());
+        assertEquals(3 * com.wormzjl.icheme.science.tutorial.scene.Bodies.TONGUES, a.size());
+        for (int i = 0; i < a.size(); i++) assertArrayEquals(a.get(i).c(), b.get(i).c(), "the same time, the same fire");
+        var later = com.wormzjl.icheme.science.tutorial.scene.Bodies.flame(new Frame.FlameFrame(0, 0, 0, .4, 3.9), p.right(), p.up(), p.forward());
+        boolean moved = false;
+        for (int i = 0; i < a.size(); i++) moved |= !java.util.Arrays.equals(a.get(i).c(), later.get(i).c());
+        assertTrue(moved, "it flickers");
+        var up = p.up();
+        for (var t : a) {
+            double tall = t.c()[0] * up[0] + t.c()[1] * up[1] + t.c()[2] * up[2];
+            assertTrue(tall > 0 && tall <= .4 + 1e-9, "within its size: " + tall);
+        }
+    }
 }

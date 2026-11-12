@@ -12,6 +12,7 @@ import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.model.EquipmentShellModel;
 import com.wormzjl.icheme.science.equipment.Mesh;
 import com.wormzjl.icheme.science.equipment.Paint;
+import com.wormzjl.icheme.science.tutorial.scene.Bodies;
 import com.wormzjl.icheme.science.tutorial.scene.Frame;
 import com.wormzjl.icheme.science.tutorial.scene.Projection;
 import net.minecraft.client.Minecraft;
@@ -32,8 +33,10 @@ import java.util.Map;
  * {@link Projection} projects it (the render tool draws the same picture). Each actor's polygon list is one vertex buffer,
  * built once (sprites, shade and paint tint as {@link com.wormzjl.icheme.client.EquipmentBodyRenderer} bakes a body) and
  * drawn each frame; a cut's steps keep at most the current and the next buffer of an actor. All the dots are one draw of
- * small camera-facing discs in the same depth pass, so the shell hides the ones behind it. Drag turns the view, the wheel
- * zooms, a double click puts it back.
+ * small camera-facing discs in the same depth pass, so the shell hides the ones behind it; the fires (P2b) are one draw of
+ * camera-facing tongues in that pass too, and the liquids ({@link Bodies#liquid}) one translucent draw after everything
+ * opaque, depth-tested without writing depth, so the dots in them show. Drag turns the view, the wheel zooms, a double
+ * click puts it back.
  *
  * <p>The scene's depth goes into the GUI's z: {@code z = Z0 - DEPTH * depth}, behind everything the screen draws at z 0
  * and over, within the GUI projection's range for any actor up to 60 m deep. The rectangle's depth is cleared first
@@ -106,7 +109,10 @@ public final class SceneView implements AutoCloseable {
             RenderSystem.setShaderColor(1, 1, 1, 1);
             RenderSystem.disableCull();
             dots(frame, projection, pose);
+            flames(frame, projection, pose);
+            liquids(frame, projection, pose);
         } finally {
+            RenderSystem.depthMask(true);
             RenderSystem.setShaderColor(1, 1, 1, 1);
             RenderSystem.enableCull();
             RenderSystem.disableBlend();
@@ -135,6 +141,54 @@ public final class SceneView implements AutoCloseable {
         }
         RenderSystem.setShader(GameRenderer::getPositionColorShader);
         BufferUploader.drawWithShader(builder.buildOrThrow());
+    }
+
+    /** Every fire's tongues, facing the camera, in one draw of the depth pass. */
+    private static void flames(Frame frame, Projection projection, Matrix4f pose) {
+        if (frame.flames().isEmpty()) return;
+        var builder = Tesselator.getInstance().begin(VertexFormat.Mode.TRIANGLES, DefaultVertexFormat.POSITION_COLOR);
+        for (var f : frame.flames())
+            for (var t : Bodies.flame(f, projection.right(), projection.up(), projection.forward())) {
+                int argb = 0xFF000000 | t.rgb();
+                for (var v : new double[][]{t.a(), t.b(), t.c()}) vertex(builder, pose, projection, v, argb);
+            }
+        RenderSystem.setShader(GameRenderer::getPositionColorShader);
+        BufferUploader.drawWithShader(builder.buildOrThrow());
+    }
+
+    /** Every liquid's faces, translucent, after everything opaque: depth-tested, writing no depth, both sides. */
+    private static void liquids(Frame frame, Projection projection, Matrix4f pose) {
+        if (frame.liquids().isEmpty()) return;
+        var builder = Tesselator.getInstance().begin(VertexFormat.Mode.TRIANGLES, DefaultVertexFormat.POSITION_COLOR);
+        boolean any = false;
+        for (var l : frame.liquids()) {
+            int argb = (int) Math.round(255 * l.alpha()) << 24 | l.rgb();
+            for (var face : Bodies.liquid(l)) {
+                var p = face.positions();
+                for (int corner = 1; corner + 1 < face.size(); corner++)
+                    for (int index : new int[]{0, corner, corner + 1}) {
+                        vertex(builder, pose, projection, new double[]{p[3 * index], p[3 * index + 1], p[3 * index + 2]}, argb);
+                        any = true;
+                    }
+            }
+        }
+        if (!any) {
+            builder.build();
+            return;
+        }
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        RenderSystem.depthMask(false);
+        RenderSystem.disableCull();
+        RenderSystem.setShader(GameRenderer::getPositionColorShader);
+        BufferUploader.drawWithShader(builder.buildOrThrow());
+        RenderSystem.depthMask(true);
+        RenderSystem.disableBlend();
+    }
+
+    private static void vertex(BufferBuilder b, Matrix4f pose, Projection projection, double[] v, int argb) {
+        var s = projection.screen(v[0], v[1], v[2]);
+        b.addVertex(pose, (float) s[0], (float) s[1], (float) (Z0 - DEPTH * s[2])).setColor(argb);
     }
 
     private static void disc(BufferBuilder b, Matrix4f pose, double x, double y, float z, double r, int argb) {

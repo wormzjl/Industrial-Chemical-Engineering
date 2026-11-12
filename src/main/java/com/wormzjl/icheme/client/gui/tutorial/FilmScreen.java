@@ -35,6 +35,8 @@ public final class FilmScreen extends Screen {
     private FilmLayout layout;
     private Rect glass;
     private SkinButton back, replay, next;
+    /** The client's temperature format for the readouts. */
+    private final java.util.function.DoubleFunction<String> temperature = com.wormzjl.icheme.science.tutorial.cards.Card.temperature(ClientConfig.temperature());
 
     /** The screen a close returns to (null: none), and what runs once when the last stop is first reached (null: nothing). */
     private final Screen parent;
@@ -168,7 +170,11 @@ public final class FilmScreen extends Screen {
             if (i <= frame.stop()) canvas.fill(p.x(), p.y(), p.right(), p.bottom(), skin.tone(Palette.ACCENT));
             else canvas.outline(p.x(), p.y(), p.w(), p.h(), skin.tone(Palette.MUTED));
         }
-        view.draw(g, frame, glass, FilmLayout.fit(glass));
+        double fit = FilmLayout.fit(glass);
+        view.draw(g, frame, glass, fit);
+        // The overlays over the scene, placed on the same projection the view drew with.
+        var overlay = FilmOverlay.layout(frame, view.projection(frame, glass, fit), glass, canvas.measure(), FilmScreen::tr, temperature);
+        FilmOverlay.draw(canvas, frame, overlay, FilmScreen::tr);
         var caption = layout.caption();
         List<String> lines = new ArrayList<>();
         for (var key : frame.captions()) lines.addAll(canvas.measure().wrap(tr(key), caption.w()));

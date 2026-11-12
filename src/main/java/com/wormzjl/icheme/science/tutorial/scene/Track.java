@@ -7,7 +7,8 @@ import java.util.List;
  * interval is {@code from} to {@code to} acts on (from, to]: at a stop the frame shows what led up to it; a track that
  * starts at 0 acts at 0 as well ({@link Scene#active}).
  */
-public sealed interface Track permits Track.Camera, Track.Visible, Track.Cut, Track.Caption, Track.Dots {
+public sealed interface Track permits Track.Camera, Track.Visible, Track.Cut, Track.Caption, Track.Dots, Track.Label, Track.Legend, Track.Flame, Track.Level,
+        Track.Readout, Track.Pointer {
 
     /**
      * The camera's keyframes, in ascending time: between two keyframes each value follows a smoothstep, before the first and
@@ -82,13 +83,76 @@ public sealed interface Track permits Track.Camera, Track.Visible, Track.Cut, Tr
     record Caption(String key, double from, double to) implements Track {
     }
 
-    /** Dots of one {@code kind} over (from, to]: {@code count} of them, moving at {@code speed} m/s on their {@code path}. */
-    record Dots(Kind kind, Path path, double from, double to, int count, double speed) implements Track {
+    /**
+     * Dots of one {@code kind} over (from, to]: {@code count} of them, moving at {@code speed} m/s on their {@code path};
+     * the first {@code share} of them drawn (0 to 1, a constant or a recorded {@link Series} on the film's time), so a
+     * recording can thin the dots as a part leaves.
+     */
+    record Dots(Kind kind, Path path, double from, double to, int count, double speed, Value share) implements Track {
         /** A dot's radius, m. */
         public static final double SIZE = .035;
 
         public Dots {
             if (count < 0) throw new IllegalArgumentException("Negative count");
+            if (share == null) throw new IllegalArgumentException("A share, or Value.of(1)");
+        }
+
+        public Dots(Kind kind, Path path, double from, double to, int count, double speed) {
+            this(kind, path, from, to, count, speed, Value.of(1));
+        }
+
+        /** How many dots are drawn at {@code t}: {@code count} times the share, rounded, within 0 and {@code count}. */
+        public int shown(double t) {
+            double v = share.at(t);
+            return Double.isNaN(v) ? count : (int) Math.max(0, Math.min(count, Math.round(count * v)));
+        }
+    }
+
+    /** A name ({@code key}, a language key) over (from, to], set beside the scene point {@code point} with a leader line to it ({@link Labels#place}). */
+    record Label(double[] point, String key, double from, double to) implements Track {
+        public Label {
+            point = point.clone();
+        }
+    }
+
+    /** The three dot colours with their names (light, middle, heavy), at the glass's top left, over (from, to]. */
+    record Legend(double from, double to) implements Track {
+    }
+
+    /** A fire at the scene point {@code point} over (from, to]: tongues {@code size} m tall (a constant or a recorded series), flickering. */
+    record Flame(double[] point, Value size, double from, double to) implements Track {
+        public Flame {
+            point = point.clone();
+        }
+    }
+
+    /**
+     * The liquid in a vessel over (from, to]: an upright body inscribed in {@code box}'s width and depth, from its floor to
+     * {@code level} of its height (0 to 1, a constant or a recorded series), its colour {@code rgb}, translucent; cut by
+     * actor {@code cut}'s plane where that actor is cut (null: never), so it shows through the cut.
+     */
+    record Level(Box box, Value level, int rgb, String cut, double from, double to) implements Track {
+    }
+
+    /** What a readout's number is: a temperature (K, shown in the client's unit) or a share (shown in whole percent). */
+    enum Reading {
+        TEMPERATURE, SHARE
+    }
+
+    /** One number with its unit at the glass's top right over (from, to]: its name's language key and its value (a recorded series). At most two at once. */
+    record Readout(String key, Value value, Reading reading, double from, double to) implements Track {
+    }
+
+    /** A mouse or key sign. */
+    enum Sign {
+        RIGHT_CLICK, LEFT_CLICK, KEY
+    }
+
+    /** A {@code sign} at the scene point {@code point} over (from, to]; {@code text} is a key's letter (empty for a mouse sign). */
+    record Pointer(Sign sign, String text, double[] point, double from, double to) implements Track {
+        public Pointer {
+            point = point.clone();
+            if (text == null) text = "";
         }
     }
 

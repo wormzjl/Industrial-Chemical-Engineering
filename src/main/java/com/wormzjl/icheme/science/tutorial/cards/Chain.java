@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.science.tutorial.cards;
 
+import com.wormzjl.icheme.science.math.DeterministicMath;
 import com.wormzjl.icheme.client.gui.common.kit.Canvas;
 import com.wormzjl.icheme.client.gui.common.kit.Palette;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
@@ -217,7 +218,7 @@ public final class Chain implements Card {
                 int top = y0 + h * 2 / 5;
                 c.fill(x0, top, x0 + w, y0 + h, LIQUID);
                 for (int x = 0; x < w; x++) {
-                    int wave = (int) Math.round(Math.sin(x * .6 + time * 3));
+                    int wave = (int) Math.round(DeterministicMath.sin(x * .6 + time * 3));
                     c.fill(x0 + x, top - 1 + wave, x0 + x + 1, top + wave, COLD);
                 }
             }

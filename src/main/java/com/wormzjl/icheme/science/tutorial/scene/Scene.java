@@ -48,8 +48,28 @@ public final class Scene {
                 }
                 case Track.Dots d -> {
                 }
+                case Track.Label l -> {
+                }
+                case Track.Legend l -> {
+                }
+                case Track.Flame f -> {
+                }
+                case Track.Level l -> {
+                    if (l.cut() != null) actor(ids, l.cut());
+                }
+                case Track.Readout r -> {
+                }
+                case Track.Pointer p -> {
+                }
             }
         }
+        // At most two readouts at once: at every readout's start, count those that hold there.
+        for (var track : this.tracks)
+            if (track instanceof Track.Readout a) {
+                double t = Math.nextUp(a.from());
+                long at = this.tracks.stream().filter(o -> o instanceof Track.Readout r && active(r.from(), r.to(), t)).count();
+                if (at > 2) throw new IllegalArgumentException("At most two readouts at once");
+            }
         if (found == null) throw new IllegalArgumentException("A film needs a camera");
         camera = found;
         cuts = Map.copyOf(cutMap);
@@ -110,13 +130,66 @@ public final class Scene {
         }
         var dots = new ArrayList<Frame.DotFrame>();
         var captions = new ArrayList<String>();
+        var labels = new ArrayList<Frame.LabelFrame>();
+        var flames = new ArrayList<Frame.FlameFrame>();
+        var liquids = new ArrayList<Frame.LiquidFrame>();
+        var readouts = new ArrayList<Frame.ReadoutFrame>();
+        var pointers = new ArrayList<Frame.PointerFrame>();
+        boolean legend = false;
         for (var track : tracks) {
-            if (track instanceof Track.Dots d && active(d.from(), d.to(), t)) DotMotion.place(d, t, dots);
-            if (track instanceof Track.Caption c && active(c.from(), c.to(), t) && !captions.contains(c.key())) captions.add(c.key());
+            switch (track) {
+                case Track.Dots d -> {
+                    if (active(d.from(), d.to(), t)) DotMotion.place(d, t, dots);
+                }
+                case Track.Caption c -> {
+                    if (active(c.from(), c.to(), t) && !captions.contains(c.key())) captions.add(c.key());
+                }
+                case Track.Label l -> {
+                    if (active(l.from(), l.to(), t)) labels.add(new Frame.LabelFrame(l.key(), l.point()[0], l.point()[1], l.point()[2]));
+                }
+                case Track.Legend l -> legend |= active(l.from(), l.to(), t);
+                case Track.Flame f -> {
+                    double size = f.size().at(t);
+                    if (active(f.from(), f.to(), t) && size > 0) flames.add(new Frame.FlameFrame(f.point()[0], f.point()[1], f.point()[2], size, t));
+                }
+                case Track.Level l -> {
+                    if (active(l.from(), l.to(), t)) liquids.add(liquid(l, t));
+                }
+                case Track.Readout r -> {
+                    if (active(r.from(), r.to(), t)) readouts.add(new Frame.ReadoutFrame(r.key(), r.value().at(t), r.reading()));
+                }
+                case Track.Pointer p -> {
+                    if (active(p.from(), p.to(), t)) pointers.add(new Frame.PointerFrame(p.sign(), p.text(), p.point()[0], p.point()[1], p.point()[2]));
+                }
+                default -> {
+                }
+            }
         }
         int stop = 0;
         while (stop < stops.size() - 1 && stops.get(stop) < t) stop++;
-        return new Frame(camera.at(t), drawn, dots, captions, stop);
+        return new Frame(camera.at(t), drawn, dots, captions, stop, labels, legend, flames, liquids, readouts, pointers);
+    }
+
+    /** The liquid's colour's alpha: translucent, so the dots in it show. */
+    public static final double LIQUID_ALPHA = .55;
+
+    /** A level track's liquid at {@code t}: inscribed in its box, its height the level's share, cut where its actor is cut. */
+    private Frame.LiquidFrame liquid(Track.Level l, double t) {
+        var lo = l.box().lo();
+        var hi = l.box().hi();
+        double share = Math.clamp(l.level().at(t), 0, 1), radius = Math.min(hi[0] - lo[0], hi[2] - lo[2]) / 2;
+        Frame.Plane plane = null;
+        var cut = l.cut() == null ? null : cuts.get(l.cut());
+        if (cut != null) {
+            int step = cut.track.step(t);
+            if (step > 0) {
+                double off = cut.reach * (1 - step / (double) Track.Cut.STEPS);
+                var n = cut.track.normal();
+                var p = cut.track.point();
+                plane = new Frame.Plane(p[0] + n[0] * off, p[1] + n[1] * off, p[2] + n[2] * off, n[0], n[1], n[2]);
+            }
+        }
+        return new Frame.LiquidFrame((lo[0] + hi[0]) / 2, (lo[2] + hi[2]) / 2, radius, lo[1], lo[1] + share * (hi[1] - lo[1]), l.rgb(), LIQUID_ALPHA, plane);
     }
 
     /** An actor's alpha: 1 with no visibility track, else the largest its tracks give. */

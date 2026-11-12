@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.science.tutorial.cards;
 
+import com.wormzjl.icheme.science.math.DeterministicMath;
 import com.wormzjl.icheme.client.gui.common.kit.Canvas;
 import com.wormzjl.icheme.client.gui.common.kit.Palette;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
@@ -113,7 +114,7 @@ public final class ThreeParts implements Card {
             int tongues = Math.max(3, pot.w() / 12);
             for (int t = 0; t < tongues; t++) {
                 int x = pot.x() + 4 + t * (pot.w() - 8) / tongues, wide = Math.max(4, (pot.w() - 8) / tongues - 2);
-                double sway = .85 + .15 * Math.sin(phase * 7 + t * 1.9);
+                double sway = .85 + .15 * DeterministicMath.sin(phase * 7 + t * 1.9);
                 int tall = (int) Math.round(room * heat * sway);
                 for (int r = 0; r < tall; r++) {
                     int inset = wide * r / Math.max(1, 2 * tall), y = area.bottom() - 1 - r;
@@ -129,8 +130,8 @@ public final class ThreeParts implements Card {
                     double start = leaves(kind, i), way = (heat - start) / WAY;
                     double[] at = place(kind, i);
                     int span = Math.max(4, level - 6);
-                    int px = pot.x() + 5 + (int) Math.round(at[0] * (pot.w() - 13) + 1.5 * Math.sin(phase * 2.1 + i + 3 * k));
-                    int py = liquidTop + 2 + (int) Math.round(at[1] * Math.max(1, span - 3) + Math.sin(phase * 1.7 + 2 * i + k));
+                    int px = pot.x() + 5 + (int) Math.round(at[0] * (pot.w() - 13) + 1.5 * DeterministicMath.sin(phase * 2.1 + i + 3 * k));
+                    int py = liquidTop + 2 + (int) Math.round(at[1] * Math.max(1, span - 3) + DeterministicMath.sin(phase * 1.7 + 2 * i + k));
                     if (way < 0) {
                         c.fill(px, py, px + 3, py + 3, colour);
                         continue;

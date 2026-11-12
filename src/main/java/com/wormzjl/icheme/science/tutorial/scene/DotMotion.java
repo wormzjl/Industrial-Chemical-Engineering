@@ -19,7 +19,8 @@ public final class DotMotion {
     /** Adds the drawn dots of {@code track} at {@code t} to {@code out}. */
     static void place(Track.Dots track, double t, List<Frame.DotFrame> out) {
         int k = track.kind().ordinal();
-        for (int i = 0; i < track.count(); i++) {
+        int shown = track.shown(t);
+        for (int i = 0; i < shown; i++) {
             var at = switch (track.path()) {
                 case Track.Box box -> drift(box, k, i, t, track.speed());
                 case Track.Line line -> along(line, k, i, t, track);

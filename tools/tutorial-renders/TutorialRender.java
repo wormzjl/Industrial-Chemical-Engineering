@@ -1,21 +1,20 @@
-package com.wormzjl.icheme.science.tutorial;
-
-import com.wormzjl.icheme.client.gui.common.kit.Canvas;
-import com.wormzjl.icheme.client.gui.common.kit.Measure;
+import com.wormzjl.icheme.client.gui.common.kit.Palette;
 import com.wormzjl.icheme.client.gui.common.kit.PanelSkin;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
+import com.wormzjl.icheme.client.gui.common.kit.Skin;
 import com.wormzjl.icheme.client.gui.tutorial.FilmLayout;
+import com.wormzjl.icheme.client.gui.tutorial.FilmOverlay;
 import com.wormzjl.icheme.science.equipment.Mesh;
 import com.wormzjl.icheme.science.equipment.Paint;
+import com.wormzjl.icheme.science.tutorial.cards.Card;
 import com.wormzjl.icheme.science.tutorial.films.Films;
+import com.wormzjl.icheme.science.tutorial.scene.Bodies;
 import com.wormzjl.icheme.science.tutorial.scene.Frame;
 import com.wormzjl.icheme.science.tutorial.scene.Projection;
 import com.wormzjl.icheme.science.tutorial.scene.Scene;
 
 import javax.imageio.ImageIO;
 import java.awt.Color;
-import java.awt.Font;
-import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
@@ -27,22 +26,30 @@ import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 
 /**
- * Offline look at the tutorial films (batch 2026-11-12-tutorial-system, P0; tools/tutorial-renders): every stop of every
- * film from {@link Scene#at}, through the one {@link Projection} the game's view uses, at 3 px a GUI px on the HMI glass
- * of a 464 by 254 film screen, its English caption under it. Polygons are rasterised with a z-buffer, the mod's sprites,
- * the paint tint and the game's directional shade per vertex; back faces are culled as the chunk renderer culls them,
- * except on a cut actor, drawn two-sided as the game's view draws it. Dots are depth-tested discs on a dark rim.
+ * Offline look at the tutorial films (batch 2026-11-12-tutorial-system, P0, P2b; tools/tutorial-renders): every stop of
+ * every film from {@link Scene#at} as the film screen shows it (its frame from {@link FilmLayout}, the title, the pips,
+ * the scene on the HMI glass, the overlays of {@link FilmOverlay}, the caption and the footer keys), light theme, °C, in
+ * the game's bitmap font at {@link HeatDiagramRender#SCALE} image px a GUI px: at 464 by 254, and the last stop at the
+ * 320 by 240 window's panel (312 by 232). The scene goes through the one {@link Projection} the game's view uses.
+ * Polygons are rasterised with a z-buffer, the mod's sprites, the paint tint and the game's directional shade per vertex;
+ * back faces are culled as the chunk renderer culls them, except on a cut actor, drawn two-sided as the game's view draws
+ * it. Dots are depth-tested discs on a dark rim, fires opaque tongues in the same pass, liquids translucent after it,
+ * writing no depth ({@link Bodies}).
  *
  * <p>Args: {@code outDir [film,...]}; {@code -Dframes=n} adds n frames between stops ({@code <film>-frames.png}). Run from
- * the worktree root (it reads the sprites and the English lines from src/main/resources).
+ * the worktree root (it reads the sprites and the English lines from src/main/resources, the font from the game's
+ * resources jar).
  */
 public class TutorialRender {
     private static final String ASSETS = "src/main/resources/assets/icheme/";
     /** Image pixels a GUI pixel. */
-    static final int SCALE = 3;
+    static final int SCALE = HeatDiagramRender.SCALE;
+    /** The smallest window's panel (320 by 240 less the screen's margins). */
+    static final int SMALL_W = 312, SMALL_H = 232;
 
     private record Sprite(int width, int height, int[] argb) {
         int sample(double u, double v) {
@@ -59,23 +66,29 @@ public class TutorialRender {
         else Films.names().forEach(names::add);
         int frames = Integer.getInteger("frames", 0);
         var sprites = sprites();
+        HeatDiagramRender.lang = HeatDiagramRender.lang(Path.of(ASSETS + "lang/en_us.json"));
+        var jar = Path.of("build/moddev/artifacts/neoforge-21.1.219-client-extra-aka-minecraft-resources.jar");
+        HeatDiagramRender.font = Files.exists(jar) ? HeatDiagramRender.GameFont.load(jar) : null;
         var lang = lang();
         for (var name : names) {
             var scene = Films.build(name);
             if (scene == null) throw new IllegalArgumentException("No film " + name);
             var stops = new ArrayList<BufferedImage>();
             for (int k = 0; k < scene.stops().size(); k++) {
-                var image = render(scene, scene.stops().get(k), sprites, lang);
+                var image = render(scene, scene.stops().get(k), FilmLayout.DESIGN_WIDTH, FilmLayout.DESIGN_HEIGHT, sprites, lang);
                 write(image, new File(out, name + "-stop" + (k + 1) + ".png"));
                 stops.add(image);
             }
             write(sheet(List.of(stops)), new File(out, name + "-sheet.png"));
+            // One stop at the smallest window: the last, where most is shown.
+            write(render(scene, scene.length(), SMALL_W, SMALL_H, sprites, lang), new File(out, name + "-small.png"));
             if (frames > 0) {
                 var rows = new ArrayList<List<BufferedImage>>();
                 double from = 0;
                 for (double stop : scene.stops()) {
                     var row = new ArrayList<BufferedImage>();
-                    for (int j = 0; j <= frames + 1; j++) row.add(render(scene, from + (stop - from) * j / (frames + 1), sprites, lang));
+                    for (int j = 0; j <= frames + 1; j++)
+                        row.add(render(scene, from + (stop - from) * j / (frames + 1), FilmLayout.DESIGN_WIDTH, FilmLayout.DESIGN_HEIGHT, sprites, lang));
                     rows.add(row);
                     from = stop;
                 }
@@ -89,75 +102,56 @@ public class TutorialRender {
         System.out.println("wrote " + file.getPath());
     }
 
-    /** The scene's well and glass at the design size, the frame at {@code t} on the glass, the caption under it. */
-    static BufferedImage render(Scene scene, double t, Map<Mesh.Material, Sprite> sprites, Map<String, String> lang) {
-        var layout = FilmLayout.of(FilmLayout.DESIGN_WIDTH, FilmLayout.DESIGN_HEIGHT, scene.stops().size(), FilmLayout.CAPTION_LINES);
-        var well = layout.scene();
-        var caption = layout.caption();
-        int w = well.w() * SCALE, captionTop = (caption.y() - well.y()) * SCALE, h = captionTop + caption.h() * SCALE + 6 * SCALE;
-        var image = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
+    /** The film screen of a {@code w} by {@code h} panel at {@code t}, as {@code FilmScreen} draws it; a grey line under it names the film, time and size. */
+    static BufferedImage render(Scene scene, double t, int w, int h, Map<Mesh.Material, Sprite> sprites, Map<String, String> lang) {
+        int margin = 4;
+        var image = new BufferedImage((w + 2 * margin) * SCALE, (h + 2 * margin + 10) * SCALE, BufferedImage.TYPE_INT_RGB);
         var g = image.createGraphics();
-        g.setColor(new Color(0xD8D4CC));
-        g.fillRect(0, 0, w, h);
-        // The well as the light panel skin draws it, in the scene's own coordinates.
-        var glass = PanelSkin.LIGHT.well(canvas(image, well.x(), well.y()), well);
+        g.scale(SCALE, SCALE);
+        g.translate(margin, margin);
+        var canvas = new HeatDiagramRender.Java2dCanvas(g);
+        canvas.fill(-margin, -margin, w + margin, h + margin + 10, 0xFF101418);
+        Skin skin = PanelSkin.LIGHT;
+        Function<String, String> tr = key -> lang.getOrDefault(key, key);
+        var captions = new ArrayList<String>();
+        for (var key : scene.captionKeys()) captions.add(tr.apply(key));
+        var layout = FilmLayout.of(w, h, scene.stops().size(), FilmLayout.captionLines(captions, w, canvas.measure()));
+        skin.page(canvas, new Rect(0, 0, w, h));
+        var glass = skin.well(canvas, layout.scene());
         var frame = scene.at(t);
-        var view = new Rect((glass.x() - well.x()) * SCALE, (glass.y() - well.y()) * SCALE, glass.w() * SCALE, glass.h() * SCALE);
-        var projection = Projection.of(frame.camera(), 0, 0, 1, FilmLayout.fit(glass) * SCALE, view.x() + view.w() / 2.0, view.y() + view.h() / 2.0);
+        skin.title(canvas, 10, 10, tr.apply(scene.title()));
+        var pips = layout.pips();
+        for (int i = 0; i < pips.size(); i++) {
+            var p = pips.get(i);
+            if (i <= frame.stop()) canvas.fill(p.x(), p.y(), p.right(), p.bottom(), skin.tone(Palette.ACCENT));
+            else canvas.outline(p.x(), p.y(), p.w(), p.h(), skin.tone(Palette.MUTED));
+        }
+        double fit = FilmLayout.fit(glass);
+        var view = new Rect((glass.x() + margin) * SCALE, (glass.y() + margin) * SCALE, glass.w() * SCALE, glass.h() * SCALE);
+        var projection = Projection.of(frame.camera(), 0, 0, 1, fit * SCALE, view.x() + view.w() / 2.0, view.y() + view.h() / 2.0);
         draw(image, view, frame, projection, sprites);
-        // The caption, wrapped to its width; the game's font differs, the words do not.
-        g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-        g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 8 * SCALE));
-        g.setColor(new Color(0x26292C));
-        var metrics = g.getFontMetrics();
-        Measure measure = text -> metrics.stringWidth(text);
-        int y = captionTop + metrics.getAscent();
-        for (var key : frame.captions())
-            for (var line : measure.wrap(lang.getOrDefault(key, key), caption.w() * SCALE)) {
-                g.drawString(line, (caption.x() - well.x()) * SCALE, y);
-                y += 10 * SCALE;
-            }
-        g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 6 * SCALE));
-        g.setColor(new Color(0x8A8A86));
-        g.drawString(String.format(java.util.Locale.ROOT, "%s  t = %.2f s  stop %d", lang.getOrDefault(scene.title(), scene.title()), t, frame.stop() + 1), 2 * SCALE, h - 2 * SCALE);
+        // The overlays in GUI px, on the projection the scene was drawn with.
+        var gui = Projection.of(frame.camera(), 0, 0, 1, fit, glass.x() + glass.w() / 2.0, glass.y() + glass.h() / 2.0);
+        var overlay = FilmOverlay.layout(frame, gui, glass, canvas.measure(), tr, Card.CELSIUS);
+        FilmOverlay.draw(canvas, frame, overlay, tr);
+        var caption = layout.caption();
+        var lines = new ArrayList<String>();
+        for (var key : frame.captions()) lines.addAll(canvas.measure().wrap(tr.apply(key), caption.w()));
+        for (int i = 0; i < lines.size(); i++) skin.text(canvas, lines.get(i), caption.x(), caption.y() + i * 10, Palette.TEXT);
+        boolean end = frame.stop() == scene.stops().size() - 1 && t >= scene.length();
+        var keys = new String[]{"back", "replay", end ? "close" : "next"};
+        for (int i = 0; i < 3; i++)
+            skin.button(canvas, layout.buttons().get(i), tr.apply("tutorial.icheme.film." + keys[i]),
+                    i == 2 ? Skin.Press.PRIMARY : i == 0 && frame.stop() == 0 ? Skin.Press.OFF : Skin.Press.REST, false);
+        int missing = 0;
+        for (var box : overlay.labels()) if (box == null) missing++;
+        canvas.text(String.format(java.util.Locale.ROOT, "%s  t = %.2f s  stop %d  %d x %d%s", tr.apply(scene.title()), t, frame.stop() + 1, w, h,
+                missing > 0 ? "  LABELS NOT PLACED: " + missing : ""), -2, h + 3, 0xFF8A8A86);
         g.dispose();
         return image;
     }
 
-    /** A canvas that fills on {@code image}, at {@link #SCALE}, from the GUI point (x0, y0). */
-    private static Canvas canvas(BufferedImage image, int x0, int y0) {
-        return new Canvas() {
-            @Override
-            public Measure measure() {
-                return Measure.fixed(6);
-            }
-
-            @Override
-            public void fill(int x1, int y1, int x2, int y2, int argb) {
-                for (int y = Math.max(0, (y1 - y0) * SCALE); y < Math.min(image.getHeight(), (y2 - y0) * SCALE); y++)
-                    for (int x = Math.max(0, (x1 - x0) * SCALE); x < Math.min(image.getWidth(), (x2 - x0) * SCALE); x++)
-                        image.setRGB(x, y, blend(image.getRGB(x, y), argb, (argb >>> 24) / 255.0));
-            }
-
-            @Override
-            public void text(String text, int x, int y, int argb) {
-            }
-
-            @Override
-            public void text(String text, float x, float y, float scale, int argb) {
-            }
-
-            @Override
-            public void clip(Rect area) {
-            }
-
-            @Override
-            public void unclip() {
-            }
-        };
-    }
-
-    /** The frame's actors and dots in {@code view} (image pixels), depth-tested. */
+    /** The frame's actors, dots, fires and liquids in {@code view} (image pixels), depth-tested. */
     static void draw(BufferedImage image, Rect view, Frame frame, Projection projection, Map<Mesh.Material, Sprite> sprites) {
         int w = image.getWidth();
         var zbuf = new double[w * image.getHeight()];
@@ -194,7 +188,7 @@ public class TutorialRender {
                         int r = (int) Math.min(255, (texel >> 16 & 255) * (tint >> 16 & 255) / 255.0 * l), gr = (int) Math.min(255, (texel >> 8 & 255) * (tint >> 8 & 255) / 255.0 * l),
                                 bl = (int) Math.min(255, (texel & 255) * (tint & 255) / 255.0 * l);
                         return r << 16 | gr << 8 | bl;
-                    }, alpha);
+                    }, alpha, true);
                 }
             }
         }
@@ -205,6 +199,28 @@ public class TutorialRender {
             disc(image, zbuf, view, s, r * 1.3, 0xFF1A1A1A);
             disc(image, zbuf, view, new double[]{s[0], s[1], s[2] - .05 / 15}, r, 0xFF000000 | d.kind().rgb);
         }
+        // Fires: opaque tongues facing the camera, in the depth pass.
+        for (var f : frame.flames())
+            for (var tongue : Bodies.flame(f, projection.right(), projection.up(), projection.forward())) {
+                var s = new double[][]{screen(projection, tongue.a()), screen(projection, tongue.b()), screen(projection, tongue.c())};
+                int rgb = tongue.rgb();
+                triangle(image, zbuf, view, s, (w0, w1, w2) -> rgb, 1, true);
+            }
+        // Liquids: translucent after everything opaque, depth-tested, writing no depth, both sides.
+        for (var l : frame.liquids())
+            for (var face : Bodies.liquid(l)) {
+                var p = face.positions();
+                for (int corner = 1; corner + 1 < face.size(); corner++) {
+                    int[] c = {0, corner, corner + 1};
+                    var s = new double[3][];
+                    for (int k = 0; k < 3; k++) s[k] = projection.screen(p[3 * c[k]], p[3 * c[k] + 1], p[3 * c[k] + 2]);
+                    triangle(image, zbuf, view, s, (w0, w1, w2) -> l.rgb(), l.alpha(), false);
+                }
+            }
+    }
+
+    private static double[] screen(Projection p, double[] v) {
+        return p.screen(v[0], v[1], v[2]);
     }
 
     private interface Colour {
@@ -212,7 +228,7 @@ public class TutorialRender {
         int at(double w0, double w1, double w2);
     }
 
-    private static void triangle(BufferedImage image, double[] zbuf, Rect view, double[][] s, Colour colour, double alpha) {
+    private static void triangle(BufferedImage image, double[] zbuf, Rect view, double[][] s, Colour colour, double alpha, boolean depth) {
         int w = image.getWidth();
         int x0 = (int) Math.max(view.x(), Math.floor(Math.min(s[0][0], Math.min(s[1][0], s[2][0])))), x1 = (int) Math.min(view.right() - 1, Math.ceil(Math.max(s[0][0], Math.max(s[1][0], s[2][0]))));
         int y0 = (int) Math.max(view.y(), Math.floor(Math.min(s[0][1], Math.min(s[1][1], s[2][1])))), y1 = (int) Math.min(view.bottom() - 1, Math.ceil(Math.max(s[0][1], Math.max(s[1][1], s[2][1]))));
@@ -227,7 +243,7 @@ public class TutorialRender {
                 if (z > zbuf[y * w + x]) continue;
                 int rgb = colour.at(w0, w1, w2);
                 if (rgb == -1) continue;
-                zbuf[y * w + x] = z;
+                if (depth) zbuf[y * w + x] = z;
                 image.setRGB(x, y, alpha >= 1 ? rgb : blend(image.getRGB(x, y), rgb, alpha));
             }
     }
