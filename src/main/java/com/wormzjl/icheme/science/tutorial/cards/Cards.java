@@ -22,6 +22,7 @@ public final class Cards {
         ALL.put(CompareCut.NAME, CompareCut::new);
         ALL.put(Balance.NAME, Balance::new);
         ALL.put(UnitMap.NAME, UnitMap::new);
+        ALL.put(Limit.NAME, Limit::new);
     }
 
     private Cards() {
