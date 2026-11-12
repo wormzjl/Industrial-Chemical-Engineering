@@ -98,6 +98,8 @@ public final class GuidePage {
     }
 
     public static final int KNOB = 8;
+    /** An option key's width beyond its word. */
+    public static final int OPTION_PAD = 8;
 
     /** The page as placed. */
     public record Page(int width, int height, String title, TitleStrip.Strip strip, Rect help, Rect theme, String themeHint,
@@ -418,18 +420,22 @@ public final class GuidePage {
         var slider = new Rect(sliderX, back.rect().y() + (KEY_H - 8) / 2, Math.max(20, back.rect().x() - 10 - sliderX), 8);
         var caption = m.wrap(tr.apply(card.captionKey()), view.w() - 8);
         int captionY = back.rect().y() - 4 - caption.size() * Measure.LINE;
-        // The options: soft keys across the top, each as wide as the widest word, in as many rows as the glass needs.
+        // The options: soft keys across the top, each as wide as its word, flowing into a second row only where the glass is too narrow.
         var options = new ArrayList<Key>();
         var words = card.options();
         int top = view.y();
         if (!words.isEmpty()) {
-            int ow = 0;
-            for (var word : words) ow = Math.max(ow, m.width(tr.apply(word)) + 12);
-            ow = Math.min(ow, view.w() - 4);
-            int perRow = Math.clamp((view.w() - 4 + KEY_GAP) / (ow + KEY_GAP), 1, words.size());
-            for (int i = 0; i < words.size(); i++)
-                options.add(new Key(CardPlace.OPTION + i, new Rect(view.x() + 2 + (i % perRow) * (ow + KEY_GAP), view.y() + 2 + (i / perRow) * (KEY_H + KEY_GAP), ow, KEY_H),
-                        tr.apply(words.get(i)), null, false));
+            int x = view.x() + 2, y = view.y() + 2;
+            for (int i = 0; i < words.size(); i++) {
+                String word = tr.apply(words.get(i));
+                int ow = Math.min(view.w() - 4, Math.max(24, m.width(word) + OPTION_PAD));
+                if (x > view.x() + 2 && x + ow > view.right() - 2) {
+                    x = view.x() + 2;
+                    y += KEY_H + KEY_GAP;
+                }
+                options.add(new Key(CardPlace.OPTION + i, new Rect(x, y, ow, KEY_H), word, null, false));
+                x += ow + KEY_GAP;
+            }
             top = options.getLast().rect().bottom() + 2;
         }
         var drawing = new Rect(view.x(), top, view.w(), Math.max(10, captionY - 4 - top));

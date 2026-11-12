@@ -72,7 +72,7 @@ public final class Products implements Card {
         int lift = Math.clamp(area.h() / 14, 5, 9), barH = Math.clamp(area.h() / 9, 8, 16);
         int barY = area.y() + 4 + lift, below = barY + barH + 6;
         int[] shares = BarrelData.percents(grade.bands());
-        int unit = Math.clamp((area.bottom() - 4 - below) / 16, 1, 3), side = unit * 16;
+        int unit = Math.clamp(Math.min((area.bottom() - 4 - below) / 16, w / 3 / 16), 1, 5), side = unit * 16;
         int textX = x0 + side + 10, textW = Math.max(20, x0 + w - textX);
         var sentence = m.wrap(tr.apply(KEY + "." + BarrelData.BANDS.get(band)), textW);
         int pointer = x0 + (int) Math.round(Math.clamp(state.control(), 0, 1) * w);

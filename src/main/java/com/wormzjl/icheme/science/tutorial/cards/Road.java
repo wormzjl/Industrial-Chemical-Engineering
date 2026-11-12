@@ -157,14 +157,9 @@ public final class Road implements Card {
             }
             return;
         }
+        // The sentence, then the mark, then the equipment's names: where the glass is short, the names go first.
         var box = BOXES.get(state.hit());
-        var lines = new ArrayList<>(m.wrap(tr.apply(box.sentenceKey()), w));
-        if (!box.kinds().isEmpty()) {
-            var names = new ArrayList<String>();
-            for (var kind : box.kinds()) names.add(tr.apply(shortKey(kind)));
-            lines.addAll(m.wrap(Chain.fill(tr.apply(KEY + ".kinds"), String.join(", ", names)), w));
-        }
-        for (var line : lines) if (y + 8 <= area.bottom()) {
+        for (var line : m.wrap(tr.apply(box.sentenceKey()), w)) if (y + 8 <= area.bottom()) {
             c.text(line, x, y, Palette.TEXT);
             y += 10;
         }
@@ -173,6 +168,15 @@ public final class Road implements Card {
             int my = y;
             c.batch(() -> c.fill(x, my + 1, x + 6, my + 7, mark.colour()));
             c.text(m.cut(tr.apply(mark.key()), w - 9), x + 9, y, mark.colour());
+            y += 10;
+        }
+        if (!box.kinds().isEmpty()) {
+            var names = new ArrayList<String>();
+            for (var kind : box.kinds()) names.add(tr.apply(shortKey(kind)));
+            for (var line : m.wrap(Chain.fill(tr.apply(KEY + ".kinds"), String.join(", ", names)), w)) if (y + 8 <= area.bottom()) {
+                c.text(line, x, y, Palette.MUTED);
+                y += 10;
+            }
         }
     }
 

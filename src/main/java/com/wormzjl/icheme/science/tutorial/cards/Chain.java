@@ -62,7 +62,7 @@ public final class Chain implements Card {
 
     @Override
     public List<String> textKeys() {
-        var out = new ArrayList<>(List.of(KEY + ".atoms", KEY + ".boils", KEY + ".known"));
+        var out = new ArrayList<>(List.of(KEY + ".atom", KEY + ".atoms", KEY + ".boils", KEY + ".known"));
         for (var p : Phase.values()) out.add(KEY + ".room." + p.name().toLowerCase(java.util.Locale.ROOT));
         for (var name : NAMES) if (name != null && !out.contains(nameKey(name))) out.add(nameKey(name));
         return out;
@@ -112,7 +112,7 @@ public final class Chain implements Card {
         int textW = colX - area.x() - 10;
         var m = c.measure();
         var lines = new ArrayList<String>();
-        lines.addAll(m.wrap("C" + sub(n) + "H" + sub(2 * n + 2) + "   " + fill(tr.apply(KEY + ".atoms"), Integer.toString(n)), textW));
+        lines.addAll(m.wrap("C" + sub(n) + "H" + sub(2 * n + 2) + "   " + fill(tr.apply(KEY + (n == 1 ? ".atom" : ".atoms")), Integer.toString(n)), textW));
         if (NAMES[at] != null) lines.addAll(m.wrap(fill(tr.apply(KEY + ".known"), tr.apply(nameKey(NAMES[at]))), textW));
         lines.addAll(m.wrap(fill(tr.apply(KEY + ".boils"), state.temperature().apply(boilK)), textW));
         lines.addAll(m.wrap(fill(tr.apply(KEY + ".room." + phase.name().toLowerCase(java.util.Locale.ROOT)), state.temperature().apply(ROOM)), textW));
@@ -135,8 +135,8 @@ public final class Chain implements Card {
 
     /** The zig-zag chain of {@code n} carbons with their hydrogens, centred in {@code r}, its spacing fixed so 40 fit in the width. */
     static void drawChain(Canvas c, Rect r, int n) {
-        // As wide as the chain's room allows (40 carbons always fit), no wider than 16 px a bond nor taller than the room.
-        double dx = Math.min(Math.min(16, (r.h() - 4) / 1.95), (r.w() - 6) / (n - 1 + 1.6));
+        // As wide as the chain's room allows (40 carbons always fit), no wider than 24 px a bond nor taller than the room.
+        double dx = Math.min(Math.min(24, (r.h() - 4) / 1.95), (r.w() - 6) / (n - 1 + 1.6));
         double dy = Math.max(2, dx * .55), h = Math.max(2, dx * .7);
         int size = (int) Math.clamp(Math.round(dx * .45), 2, 5), hs = size >= 4 ? 2 : 1;
         double width = (n - 1) * dx, x0 = r.x() + (r.w() - width) / 2.0, cy = r.y() + r.h() / 2.0;

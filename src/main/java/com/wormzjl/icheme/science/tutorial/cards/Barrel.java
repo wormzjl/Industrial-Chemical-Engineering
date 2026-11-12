@@ -88,7 +88,7 @@ public final class Barrel implements Card {
         var grade = grade(state.option());
         double kelvin = kelvin(state.control()), boiled = grade.boiled(kelvin);
         var m = c.measure();
-        int x0 = area.x() + 6, w = area.w() - 12, y = area.y() + 3;
+        int x0 = area.x() + 4, w = area.w() - 8, y = area.y() + 3;
         // The title, and the readout beside it where it fits, else under it.
         String title = tr.apply(KEY + ".title");
         String readout = Chain.fill(tr.apply(KEY + ".boiled"), state.temperature().apply(kelvin), Math.round(boiled * 100) + " %");
@@ -104,9 +104,10 @@ public final class Barrel implements Card {
         int widest = 0;
         for (int b = 0; b < shares.length; b++) {
             entries.add(tr.apply(bandKey(BarrelData.BANDS.get(b))) + " " + shares[b] + " %");
-            widest = Math.max(widest, m.width(entries.getLast()) + 10);
+            widest = Math.max(widest, m.width(entries.getLast()) + 12);
         }
-        int columns = Math.max(1, Math.min(3, w / Math.max(1, widest + 6)));
+        // As many legend columns as fit whole, at most three.
+        int columns = Math.clamp(w / Math.max(1, widest), 1, 3);
         int rows = (entries.size() + columns - 1) / columns, colW = w / columns;
         int legendY = barY + barH + 7;
         int guestsY = Math.max(legendY + rows * 10 + 2, area.bottom() - 2 - guests.size() * 10);

@@ -33,7 +33,8 @@ import java.util.function.Function;
  * builders ({@link GuidePage}, {@link TourLayout}) on the kit's canvas as {@code tools/heat-gui-renders/GuiPrototypes}
  * draws its pages: the guide at three states in both themes at the design size and at the smallest window's panel; the
  * guide's tour stop by stop; the still page's tour stop by stop (the page built as GuiPrototypes builds its still page);
- * the card three_parts at heat 0, 0.5 and 1. Run by {@code renderTutorial} (render.init.gradle) after the film sheets.
+ * every card at the positions its gate names (P2a: chain, barrel, products, road, three_parts), each with one 320 by 240
+ * dark frame; the guide with chapter 1 open. Run by {@code renderTutorial} (render.init.gradle) after the film sheets.
  */
 public final class GuideRender {
     static final int SCALE = HeatDiagramRender.SCALE;
@@ -70,12 +71,16 @@ public final class GuideRender {
         return switch (name) {
             case "new" -> Progress.NONE;
             case "step-3-current" -> new Progress(Set.of("welcome/guide", "welcome/units"));
-            default -> new Progress(Set.of("welcome/guide", "welcome/units", "welcome/dots", "welcome/film", "welcome/help"));
+            default -> new Progress(Set.copyOf(GuideFile.load().stepIds()));
         };
     }
 
     static GuidePage.Page page(Canvas c, Progress progress, int w, int h, String card) {
-        return GuidePage.place(new GuidePage.Input(GuideFile.load(), progress, "welcome", card), w, h, c.measure(), tr, tr.apply("gui.icheme.fluid.theme.light"));
+        return page(c, progress, w, h, card == null ? "welcome" : card.substring(0, card.indexOf('/')), card);
+    }
+
+    static GuidePage.Page page(Canvas c, Progress progress, int w, int h, String open, String card) {
+        return GuidePage.place(new GuidePage.Input(GuideFile.load(), progress, open, card), w, h, c.measure(), tr, tr.apply("gui.icheme.fluid.theme.light"));
     }
 
     /** The guide's first view: the current step scrolled into the glass, as the screen opens it. */
@@ -109,6 +114,23 @@ public final class GuideRender {
         }));
         titles.add("Dark, 320 by 240 window: scrolled to the end");
         HeatDiagramRender.grid(out.resolve("guide-small.png"), titles, small);
+        // Chapter 1 open, new.
+        var crude = new ArrayList<BufferedImage>();
+        for (var skin : List.of(PanelSkin.LIGHT, PanelSkin.DARK))
+            crude.add(image(GuidePage.DESIGN_WIDTH, GuidePage.DESIGN_HEIGHT, c -> {
+                var p = page(c, Progress.NONE, GuidePage.DESIGN_WIDTH, GuidePage.DESIGN_HEIGHT, "crude", null);
+                p.draw(c, skin, 0, null, Card.State.of(0, 0));
+            }));
+        crude.add(image(312, 232, c -> {
+            var p = page(c, Progress.NONE, 312, 232, "crude", null);
+            p.draw(c, PanelSkin.DARK, 0, null, Card.State.of(0, 0));
+        }));
+        crude.add(image(312, 232, c -> {
+            var p = page(c, Progress.NONE, 312, 232, "crude", null);
+            p.draw(c, PanelSkin.DARK, p.maxOffset(), null, Card.State.of(0, 0));
+        }));
+        HeatDiagramRender.grid(out.resolve("guide-crude.png"), List.of("Light, 464 by 254: chapter Crude oil, new", "Dark, 464 by 254", "Dark, 320 by 240 window",
+                "Dark, 320 by 240 window: scrolled to the end"), crude);
     }
 
     static TourLayout.Words words() {
@@ -236,21 +258,55 @@ public final class GuideRender {
         TourLayout.of(w, h, lit, tr.apply(tour.key(stop)), stop == 0, last, last && tour.film() != null, words(), c.measure()).draw(c, skin, null);
     }
 
-    static void card(Path out) throws Exception {
+    /** One frame of a card sheet: its title, option, control, last press and the presses so far. */
+    record Frame(String title, int option, double control, int hit, Set<Integer> visited) {
+        static Frame of(String title, int option, double control) {
+            return new Frame(title, option, control, -1, Set.of());
+        }
+    }
+
+    /** A card's sheet: each frame at 464 by 254 in the light theme, and the first frame again dark in the 320 by 240 window. */
+    static void sheet(Path out, String step, String name, List<Frame> frames) throws Exception {
         var pages = new ArrayList<BufferedImage>();
         var titles = new ArrayList<String>();
-        for (double control : new double[]{0, .5, 1}) {
+        for (var f : frames) {
             pages.add(image(GuidePage.DESIGN_WIDTH, GuidePage.DESIGN_HEIGHT, c -> {
-                var p = page(c, state("step-3-current"), GuidePage.DESIGN_WIDTH, GuidePage.DESIGN_HEIGHT, "welcome/dots");
-                p.draw(c, PanelSkin.LIGHT, 0, null, Card.State.of(1.3, control));
+                var p = page(c, state("step-3-current"), GuidePage.DESIGN_WIDTH, GuidePage.DESIGN_HEIGHT, step);
+                p.draw(c, PanelSkin.LIGHT, 0, null, new Card.State(1.3, f.control(), f.option(), f.hit(), f.visited(), Card.CELSIUS));
             }));
-            titles.add("Card three_parts, heat " + control);
+            titles.add("Card " + name + ": " + f.title());
         }
+        var last = frames.getLast();
         pages.add(image(312, 232, c -> {
-            var p = page(c, state("step-3-current"), 312, 232, "welcome/dots");
-            p.draw(c, PanelSkin.DARK, 0, null, Card.State.of(1.3, .5));
+            var p = page(c, state("step-3-current"), 312, 232, step);
+            p.draw(c, PanelSkin.DARK, 0, null, new Card.State(1.3, last.control(), last.option(), last.hit(), last.visited(), Card.CELSIUS));
         }));
-        titles.add("Dark, 320 by 240 window, heat 0.5");
-        HeatDiagramRender.grid(out.resolve("card-three_parts.png"), titles, pages);
+        titles.add("Dark, 320 by 240 window: " + last.title());
+        HeatDiagramRender.grid(out.resolve("card-" + name + ".png"), titles, pages);
+    }
+
+    static void card(Path out) throws Exception {
+        var chain = new ArrayList<Frame>();
+        for (int carbons : new int[]{1, 5, 16, 40}) {
+            int at = 0;
+            while (com.wormzjl.icheme.science.tutorial.cards.Chain.CARBONS[at] != carbons) at++;
+            chain.add(Frame.of(carbons + " carbons", 0, at / 12.0));
+        }
+        sheet(out, "crude/what", "chain", chain);
+        sheet(out, "crude/barrel", "barrel", List.of(Frame.of("Medium, 0 °C", 0, 0), Frame.of("Medium, 200 °C", 0, 200 / 600.0), Frame.of("Medium, 400 °C", 0, 400 / 600.0),
+                Frame.of("Light, 200 °C", 1, 200 / 600.0), Frame.of("Heavy, 200 °C", 2, 200 / 600.0)));
+        var products = new ArrayList<Frame>();
+        var bands = com.wormzjl.icheme.science.tutorial.cards.BarrelData.load().getFirst().bands();
+        double at = 0;
+        for (int i = 0; i < bands.length; i++) {
+            products.add(Frame.of(com.wormzjl.icheme.science.tutorial.cards.BarrelData.BANDS.get(i), 0, at + bands[i] / 2));
+            at += bands[i];
+        }
+        sheet(out, "crude/why", "products", products);
+        // The road: nothing pressed, then one box of each mark (well: not yet; boil: this guide; vacuum: runs; break: shape only).
+        sheet(out, "crude/road", "road", List.of(Frame.of("no box pressed", 0, 0), new Frame("Well pressed", 0, 0, 0, Set.of(0)),
+                new Frame("Boil pressed", 0, 0, 2, Set.of(0, 2)), new Frame("Vacuum pressed", 0, 0, 3, Set.of(0, 2, 3)),
+                new Frame("Break pressed", 0, 0, 4, Set.of(0, 2, 3, 4))));
+        sheet(out, "crude/parts", "three_parts", List.of(Frame.of("heat 0", 0, 0), Frame.of("heat 0.5", 0, .5), Frame.of("heat 1", 0, 1)));
     }
 }
