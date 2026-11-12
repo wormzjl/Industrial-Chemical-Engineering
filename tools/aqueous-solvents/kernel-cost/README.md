@@ -32,6 +32,6 @@ Batch: `documentation/2026-11-11-aqueous-solvents/` (KERNEL_COST_PLAN.md). A per
   6.2 / 35.8 µs; all 46 without water, 4.8 / 24.6 µs.
 - 2026-11-12: Part A (`d009783aa`): the sparse case carries its two compounds (`workspace.carry`). Water + nitrogen of 47,
   0.18 / 0.29 µs; all 47, 6.8 / 34.8 µs; all 46 without water, 5.7 / 28.2 µs (one run each, alone).
-- 2026-11-12: Part B: the long form (`-Dkprobe.seconds`) and the dump (`kernel-dump.js`, `KernelDumpTest.java`). B1
-  (`59c3c8a34`): the dump is byte-identical; all 47, long form, derivatives 43.15 -> 32.46 µs; short form water + nitrogen
-  0.17 / 0.43 µs, all 46 without water 5.9 / 27.1 µs. B2: 30.51 µs (-6 %), dropped.
+- 2026-11-12: Part B: the long form (`-Dkprobe.seconds`) and the dump (`kernel-dump.js`, `KernelDumpTest.java`). All 47,
+  long form, derivatives 43.15 µs -> 32.46 µs after B1 (`59c3c8a34`, dump byte-identical) -> 30.43 µs after B2
+  (`41c3b448e`). Final code, short form: water + nitrogen 0.18 / 0.30 µs; all 46 without water 5.9 / 25.3 µs.

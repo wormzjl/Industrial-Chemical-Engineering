@@ -2,7 +2,7 @@
 
 2026-11-12. Owner: "carrying every component with water is not good, this is not scalable, optimize". Plan for one
 sub-thread (Opus high). Code: `science/thermo/PengRobinsonKernel.java` and its callers. Part A implemented 2026-11-12
-(see Result); Part B: B1 implemented, B2 dropped, 2026-11-12 (see Result (Part B)).
+(see Result); Part B (B1, B2) implemented 2026-11-12 (see Result (Part B)).
 
 ## Measured (HEAD `6084652e4`, one run each, `tools/aqueous-solvents/kernel-cost/`)
 The network list: 47 compounds, 304 pairs, 126 NRTL cells (92 of them with water). Time per call, evaluate / with derivatives:
@@ -155,32 +155,35 @@ Done: both proofs hold, the three timings are in a "Result (Part B)" section her
 per step (B1, B2), no probe or dump left in `src`.
 
 ## Result (Part B, 2026-11-12)
-B1 implemented (`59c3c8a34`); B2 tried and dropped (parent's decision B: 6 % does not pay for moving the dn block's
-digits before the final lane; the cross loop was not bound by its divisions, and B1 took the larger part).
+B1 (`59c3c8a34`) and B2 (`41c3b448e`) implemented. Dense derivatives (long form, 60 s + 60 s, alone): 43.15 µs before,
+32.46 µs after B1, 30.43 µs after B2. The plan's estimate (20 µs) was wrong: the cross loop is not bound by its divisions.
 
 B1, as planned (items 1 to 3):
 - The centre's values are hoisted out of the cross loop, and each pair is looked up once.
-- `classicalTau` takes its parts. `a/b` is formed once per call.
-- A centre's classical energies are formed once for all its cells.
+- `classicalTau` takes its parts. A centre's classical energies are formed once for all its cells.
 - `excessCurvature` lives on its upper triangle.
 - Item 4 is not done. By operation count, a pair pass is about 1 % of a dense call (304 pairs, no division); it was not measured.
 - Proof: the dump (`tools/aqueous-solvents/kernel-cost/KernelDumpTest.java`, 961 lines) is byte-identical to the one
   taken before the first edit (md5 `6e2ce551`).
 - Runs: 121 tests in 18 classes, 0 failed (Part A's filter set). Chain-100 exact: deviation 0.
-- Probe, alone:
-  - Dense row, long form (60 s + 60 s): evaluate 8.45 -> 7.06 µs, derivatives 43.15 -> 32.46 µs (-25 %). Evaluate is
-    not touched by B1, so the step-0 run was on a slower machine state: part of the gain is noise.
-  - Short form, after B1: water + nitrogen 0.17 / 0.43 µs (Part A: 0.18 / 0.29); all 46 without water 5.9 / 27.1 µs
-    (Part A: 5.7 / 28.2). One round each.
+- Dense long form: evaluate 8.45 -> 7.06 µs, derivatives 43.15 -> 32.46 µs (-25 %). Evaluate is not touched by B1,
+  so the step-0 run was on a slower machine state: part of the gain is noise.
 
-B2, as planned (`s/b` and `a/b` per prepared temperature, `1/D_i` stored by `correctExcess`, `1/b` per call), reverted:
-- Bits are kept outside the dn block. 6,449 of 44,180 dn entries moved.
-- The largest elementwise relative difference is 8.1e-11, above the 1e-12 limit. All 14 entries above 1e-12 are on
-  whole-list workspaces with a small feed, on cross terms between two compounds absent from the feed (worst: 1.9e-6 of
-  its row's largest entry, cancellation).
+B2, as planned:
+- `s/b` and `a/b` per prepared temperature (each compound's stamp), `1/D_i` stored by `correctExcess`, `1/b` per call.
+- Proof: everything outside the dn block keeps its bits. 6,449 of 44,180 dn entries moved.
+- The largest elementwise relative difference is 8.1e-11. The 14 entries above 1e-12 are on whole-list workspaces with
+  a small feed, on cross terms between two compounds absent from the feed (worst: 1.9e-6 of its row's largest entry,
+  cancellation).
 - Relative to the row's largest entry: at most 9.9e-15. On carried supports: at most 2.8e-13.
-- Chain-100 exact: 0.
-- Dense long form: derivatives 32.46 -> 30.51 µs (-6.0 %), evaluate 7.00 µs.
+- The owner waived the 1e-12 stop rule for these 14 absent-absent cross terms ("6% is a gain anyway").
+- Re-applied after a first revert. Its dump is byte-identical to the first B2 dump.
+- Runs: 121 tests in 18 classes, 0 failed. NaN audit (Part A's network and engine set): 79 tests in 14 classes, 0 failed.
+  Chain-100 exact: deviation 0.
+- Dense long form: derivatives 32.46 -> 30.43 µs (-6.3 %), evaluate 6.95 µs.
+
+Final code, short form (one round each): water + nitrogen 0.18 / 0.30 µs (Part A: 0.18 / 0.29); all 46 without water
+5.9 / 25.3 µs (Part A: 5.7 / 28.2).
 
 ## Runs (the thread's; no final lane, no run with a change switched off)
 - `./gradlew test --tests "*PengRobinsonKernel*" --tests "*TangentPlaneStability*" --tests "*FluidTpEquilibrium*" --tests "*CubicPhaseEvaluator*" --tests "*HydrocarbonModel*" --offline --max-workers 4`: the callers and the gate.
