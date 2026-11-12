@@ -44,7 +44,7 @@ class UtilityRegulationTest {
     @BeforeAll
     static void runTheSample() {
         sheet = SheetFixture.tiaJuanaSample();
-        run = steady(sheet);
+        run = steady(sheet, null);
         thermo = new FlowThermo(SheetFixture.FLUIDS.model(), SheetFixture.CATALOG, SheetFixture.NETWORK, () -> {
         });
     }
@@ -248,9 +248,17 @@ class UtilityRegulationTest {
         });
     }
 
+    /**
+     * A variant of the sample, run from the sample's steady run as the game runs an edited sheet from its last (batch
+     * 2026-11-11-aqueous-solvents, TEST_DUPLICATES_REVIEW.md item 5); the sample's own run is cold.
+     */
     private static FlowsheetRun steady(Flowsheet sheet) {
+        return steady(sheet, run);
+    }
+
+    private static FlowsheetRun steady(Flowsheet sheet, FlowsheetRun last) {
         var run = com.wormzjl.icheme.science.flowsheet.FlowsheetRuns.run(sheet, SheetFixture.CATALOG, () -> {
-        });
+        }, last);
         assertEquals(FlowsheetRun.Status.STEADY, run.status(), () -> run.log().toString());
         return run;
     }
