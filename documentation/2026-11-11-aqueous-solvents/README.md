@@ -57,8 +57,8 @@ Changed so far: `science/thermo/PengRobinsonKernel`, `HuronVidalExcess`; `scienc
 
 ## Open items
 
-- Cost (W3B_NETWORK_PLAN.md section 30): wet 2.18 and polar 1.42 times main, over their bounds (1.5, 1.1). Owner: the analytic Jacobian in this batch, design first. Design written (ANALYTIC_JACOBIAN_PLAN.md), awaiting the owner's word to build.
-- N10 (deleting the free-water rule) half done and uncommitted in the working tree; the sub-thread is stopped until 2026-11-15 17:00 (Asia/Singapore). `FreeWaterIceTest` fails twice until N10; `ColumnEjectorTest` and the polar counters after 4c0290223 are unreported.
+- Cost (W3B_NETWORK_PLAN.md section 30): wet 2.18 and polar 1.42 times main, over their bounds (1.5, 1.1). Owner: the analytic Jacobian in this batch, design first. Design approved (ANALYTIC_JACOBIAN_PLAN.md; owner: "Approve, use Fable now"); the build is with the sub-thread, after N10.
+- N10 (deleting the free-water rule) half done and uncommitted in the working tree; the sub-thread stopped on its Opus weekly limit and resumes on Fable (owner). `FreeWaterIceTest` fails twice until N10; `ColumnEjectorTest` and the polar counters after 4c0290223 are unreported.
 - W3b steps 1 to 5 built, with 21 open engine and network defects and the cost step 5b (W3B_NETWORK_PLAN.md sections 10 and 15); steps 6 and 7 not started; W4 to W6 not started.
 - Cooling tower (COOLING_TOWER_PLAN.md): built (faf419a4c, follow-up ab6b90d42: the second reading smooth, the bulk stream without its solids). Open: the spray riser's density with step 6, its cost in stage B, and the four choices of section 8 for the owner.
 - The flooded regime (W3B_NETWORK_PLAN.md section 25): the kettle is fixed (2aebdcd3c; owner: "Trace the two failures", "Build it, measured": a gas is pinned at a port only when the entering liquid fills the vapour space), but a flooded tank venting through its top saw-tooths between gas-only and liquid steps (`LiquidCo2LetDownTest` passes). The complete form closes a flooded vessel by its vapour volume, implicitly; its own batch.
