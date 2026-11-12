@@ -445,6 +445,10 @@ public final class PengRobinsonKernel {
                 if (excess) workspace.d2aDt2[i] = soaveSecondDerivative(i, temperatureKelvin);
             }
             if (roots) rootDerivatives(i, temperatureKelvin, workspace, workspace.interactionRootDt, workspace.interactionRootDt2);
+            if (excess) {
+                workspace.excessEnergyRatio[i] = workspace.a[i] / coVolumes[i];
+                workspace.excessRootRatio[i] = workspace.sqrtA[i] / coVolumes[i];
+            }
             workspace.compoundStamp[i] = bits;
         }
         preparePairs(temperatureKelvin, bits, workspace);
@@ -597,11 +601,11 @@ public final class PengRobinsonKernel {
      * by {@code b_j x_j} and summed over {@code j} it is {@code Lambda [b a_i/b_i - s_i g_i]/(R T)} with the quadratic
      * row {@code g_i = sum_j (1 - k_ij) x_j s_j}, so with every pair classical the rule is the quadratic one exactly.
      * Every classical term below is this expression or one of its sums; the NRTL cells store their difference to it.
-     * The caller forms its parts in this order: {@code prefactor = Lambda * (1/(R T))}, {@code ratio = a_i/b_i},
-     * {@code product = (1 - k_ij) s_i s_j} (left to right) and {@code coVolumeJ = b_j}.
+     * The caller passes its parts: {@code prefactor = Lambda * (1/(R T))}, {@code ratio = a_i/b_i},
+     * {@code oneMinusK = 1 - k_ij}, {@code root = s_i} and {@code rootRatio = s_j/b_j} (of the prepared temperature).
      */
-    private static double classicalTau(double prefactor, double ratio, double product, double coVolumeJ) {
-        return prefactor * (ratio - product / coVolumeJ);
+    private static double classicalTau(double prefactor, double ratio, double oneMinusK, double root, double rootRatio) {
+        return prefactor * (ratio - oneMinusK * root * rootRatio);
     }
 
     private void evaluatePrepared(
@@ -1046,6 +1050,7 @@ public final class PengRobinsonKernel {
             workspace.active[i] = active;
             if (!active) {
                 workspace.denominator[i] = bMix;
+                workspace.inverseDenominator[i] = 1.0 / bMix;
                 workspace.denominatorDt[i] = 0.0;
                 workspace.denominatorDt2[i] = 0.0;
                 workspace.numeratorDt2[i] = 0.0;
@@ -1078,6 +1083,7 @@ public final class PengRobinsonKernel {
             workspace.restRow[i] = restG;
             workspace.restRowDt[i] = restGDt;
             workspace.denominator[i] = denominator;
+            workspace.inverseDenominator[i] = 1.0 / denominator;
             workspace.denominatorDt[i] = dDDt;
             workspace.denominatorDt2[i] = dDDt2;
             workspace.numeratorDt2[i] = cellCDt2;
@@ -1363,9 +1369,10 @@ public final class PengRobinsonKernel {
         // dS_kl is read on its upper triangle (l >= k in support order) only: each element (min, max) takes the
         // additions it took on the full matrix, in the same order, and the diagonal takes the cell term twice.
         double[] classicalRow = workspace.excessClassicalRow;
+        double[] rootRatio = workspace.excessRootRatio;
         for (int sl = 0; sl < n; sl++) {
             int l = support[sl];
-            classicalRow[l] = activePresent ? share * (classicalLinear - s[l] / coVolumes[l] * y2[l]) - classicalTheta : 0.0;
+            classicalRow[l] = activePresent ? share * (classicalLinear - rootRatio[l] * y2[l]) - classicalTheta : 0.0;
         }
         for (int sk = 0; sk < n; sk++) {
             int k = support[sk];
@@ -1399,7 +1406,7 @@ public final class PengRobinsonKernel {
                         double sI = s[i];
                         for (int sl = 0; sl < n; sl++) {
                             int l = support[sl];
-                            classicalRow[l] = centreEnergy - share * (1.0 - workspace.interaction(pairsOfI[l])) * sI * s[l] / coVolumes[l];
+                            classicalRow[l] = centreEnergy - share * (1.0 - workspace.interaction(pairsOfI[l])) * sI * rootRatio[l];
                         }
                         classicalFormed = true;
                     }
@@ -1432,11 +1439,9 @@ public final class PengRobinsonKernel {
         }
         double half = GAS_CONSTANT * temperatureKelvin / (2.0 * lambda);
         double prefactor = HuronVidalExcess.LAMBDA * (share / HuronVidalExcess.LAMBDA);
+        double inverseB = 1.0 / bMix;
         double[] ratio = workspace.excessEnergyRatio;
-        for (int sk = 0; sk < n; sk++) {
-            int k = support[sk];
-            ratio[k] = workspace.a[k] / coVolumes[k];
-        }
+        double[] inverseD = workspace.inverseDenominator;
         for (int sk = 0; sk < n; sk++) {
             int k = support[sk];
             int row = k * count;
@@ -1445,21 +1450,22 @@ public final class PengRobinsonKernel {
             boolean activeK = workspace.active[k];
             double thetaK = workspace.theta[k];
             double thetaBaseK = workspace.thetaBase[k];
-            double denominatorK = workspace.denominator[k];
+            double inverseDK = inverseD[k];
             double ratioK = ratio[k];
+            double rootRatioK = rootRatio[k];
             double coVolumeK = coVolumes[k];
             double sK = s[k];
             double logGammaK = logGamma[k];
             for (int sl = sk; sl < n; sl++) {
                 int l = support[sl];
                 double coVolumeL = coVolumes[l];
+                double sL = s[l];
                 double oneMinusK = 1.0 - workspace.interaction(pairsOfK[l]);
-                double quadratic = oneMinusK * sK * s[l];
-                double localKl = centreShift(workspace, cellsOfK[l], activeK, thetaK, thetaBaseK, denominatorK,
-                        prefactor, ratioK, quadratic, coVolumeL, bMix);
+                double quadratic = oneMinusK * sK * sL;
+                double localKl = centreShift(workspace, cellsOfK[l], activeK, thetaK, thetaBaseK, inverseDK,
+                        prefactor, ratioK, oneMinusK, sK, rootRatio[l], inverseB);
                 double localLk = centreShift(workspace, cellIndex[l][k], workspace.active[l], workspace.theta[l],
-                        workspace.thetaBase[l], workspace.denominator[l], prefactor, ratio[l], oneMinusK * s[l] * sK,
-                        coVolumeK, bMix);
+                        workspace.thetaBase[l], inverseD[l], prefactor, ratio[l], oneMinusK, sL, rootRatioK, inverseB);
                 double deltaN = coVolumeL * localKl + coVolumeK * localLk - coVolumeK * coVolumeL * curvature[row + l];
                 double cross = quadratic - half * (coVolumeK * logGamma[l] + coVolumeL * logGammaK + bMix * deltaN);
                 workspace.excessCross[row + l] = cross;
@@ -1474,18 +1480,19 @@ public final class PengRobinsonKernel {
      * {@code tau^cl_lk - theta_k} otherwise, with {@code eps^b_lk = tau^cl_lk - theta_k^b} (as differences of
      * {@code 1/D_k} and {@code 1/b} terms it cancels where {@code D_k} is small, the absent cut in water of
      * {@link #correctExcess}); otherwise {@code D_k = b}, {@code theta_k = theta_k^b} and it is the cell's
-     * {@code (R_lk - F_lk theta_k)/b}, or zero. The centre's values come in hoisted; {@code tau^cl_lk} is
-     * {@link #classicalTau} of {@code ratio = a_k/b_k}, {@code product = (1 - k_kl) s_k s_l} and {@code b_l}.
+     * {@code (R_lk - F_lk theta_k)/b}, or zero. The centre's values come in hoisted, with the reciprocals
+     * {@code 1/D_k} and {@code 1/b}: {@code H_lk (1/D_k) - eps^b_lk (1/b)}, never regrouped into {@code 1/D_k - 1/b};
+     * {@code tau^cl_lk} is {@link #classicalTau} of {@code a_k/b_k}, {@code 1 - k_kl}, {@code s_k} and {@code s_l/b_l}.
      */
     private static double centreShift(
-            Workspace workspace, int cell, boolean active, double theta, double thetaBase, double denominator,
-            double prefactor, double ratio, double product, double coVolumeL, double bMix) {
+            Workspace workspace, int cell, boolean active, double theta, double thetaBase, double inverseDenominator,
+            double prefactor, double ratio, double oneMinusK, double root, double rootRatio, double inverseB) {
         if (active) {
-            double classical = classicalTau(prefactor, ratio, product, coVolumeL);
+            double classical = classicalTau(prefactor, ratio, oneMinusK, root, rootRatio);
             double h = cell >= 0 ? workspace.cellGTau[cell] - workspace.cellG[cell] * theta : classical - theta;
-            return h / denominator - (classical - thetaBase) / bMix;
+            return h * inverseDenominator - (classical - thetaBase) * inverseB;
         }
-        return cell >= 0 ? (workspace.cellR[cell] - workspace.cellF[cell] * theta) / denominator : 0.0;
+        return cell >= 0 ? (workspace.cellR[cell] - workspace.cellF[cell] * theta) * inverseDenominator : 0.0;
     }
 
 
@@ -1750,9 +1757,13 @@ public final class PengRobinsonKernel {
         /** {@code [k * n + l]}: the cross terms, and the curvature sums they are formed from. */
         private final double[] excessCross;
         private final double[] excessCurvature;
-        /** Scratch rows of {@code differentiateExcess}: a centre's classical energies over {@code l}, and {@code a_i/b_i}. */
+        /** Scratch row of {@code differentiateExcess}: a centre's classical energies over {@code l}. */
         private final double[] excessClassicalRow;
+        /** {@code a_i/b_i} and {@code s_i/b_i} of the prepared temperature (each compound's stamp). */
         private final double[] excessEnergyRatio;
+        private final double[] excessRootRatio;
+        /** {@code 1/D_i} of the last composition, stored by {@code correctExcess} for the composition derivatives. */
+        private final double[] inverseDenominator;
         private double excessTemperature;
         private double excessCoVolume;
         private double excessEnergy;
@@ -1858,6 +1869,8 @@ public final class PengRobinsonKernel {
             excessCurvature = new double[e * e];
             excessClassicalRow = new double[e];
             excessEnergyRatio = new double[e];
+            excessRootRatio = new double[e];
+            inverseDenominator = new double[e];
             filter();
         }
 
