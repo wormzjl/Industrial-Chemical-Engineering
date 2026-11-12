@@ -37,13 +37,17 @@ Baselines: main 0.27.1 (`tmp/final-lane/base/merge-lane/head/`) and the first la
 
 ## New budget-class holds: seeds 6 and 431 (cold), replayed once, alone, in one run
 - 6: clean. Its campaign hold was the wall deadline under load: not counted.
-- 431: holds at tick 2785 on island 42 (ten crystal vessels), `Substep refinement exhausted: Phase/device active-set
-  cycle`, class **E7**, which is in none of the three lanes' lists. Main held this seed as B; the first lane's replay
-  held it on the wall deadline at tick 3085. Not traced further (one replay per held seed).
+- 431: holds at tick 2785 on island 42, `Phase/device active-set cycle` at 20 step sizes (class E7, new to the lists).
+  Traced on the owner's word (two replays; `tools/aqueous-solvents/drum-hold/probe-cycle.js`). A crystal plug lets go
+  0.034 s into the interval and a liquid-full vessel at 7 MPa meets the 2 MPa lines. Pass 0 converges with a forbidden
+  direction; the phase check there gives junction 11 a trace of gas; pass 1, with it, has no root; the failed iterate
+  folds the gas, and pass 2 is pass 0 again. The check after the reconstruction records its correction as the solve's
+  proposal (D39 B), so a refuted phase is not given back; this check (rigid reservoirs, on main since 0.25.0) did not.
+  Fix: `PassiveStepSolver`, the correction at a forbidden direction is the proposal too. Ran: 15 classes, 113 tests,
+  3 slow hold gates, 58 tests, chain-100 exact 0. No gate reproduces it: the captured interval solves on a fresh
+  solver (the hold needs the solver's carried state). The seed is not run again: the next final lane's.
 
 ## Open
-- Cold 431 as E7 (active-set cycle): held on main too, in another class. Owner: carry as an open item or diagnose.
-- The converter fix and its GameTest run came after the lane; the lane's other steps do not load the three changed
-  files except `ConversionRuleTest` and `ConvertersTest`, which ran. No further lane.
+- The converter fix, the 431 fix and their runs came after the lane. No further lane has run.
 - `SimulatorResults` changed its stored layout and kept `FORMAT` 3 (MERGE_PREP_REVIEW.md): a one-line bump, owner's word.
 - From the first lane, unchanged: the level loop's load-dependent overshoot, the cost findings.
