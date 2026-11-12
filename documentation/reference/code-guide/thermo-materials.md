@@ -1,5 +1,30 @@
 # Shared thermodynamics, materials and deterministic math
 
+## Water in the cubic and derived pairs (batch 2026-11-11-aqueous-solvents, W2 to W3b, 2026-11-12)
+
+The fluid network's phase model holds water as a compound of the cubic. What the materials side gives it:
+
+| Class or record | Role | Read it for |
+|---|---|---|
+| [`DerivedPairs`](../../../src/main/java/com/wormzjl/icheme/science/material/DerivedPairs.java) | The PR78 kernel of a compound list with every pair derived from the compounds' own data: one source per unordered pair, the first that applies: `LIBRARY` (the package's interaction libraries, a classical pair), `HYDROGEN` (k_ij = 0), `HENRY` (water with a gas that carries `henry_in_water`: a classical k_ij at 298.15 and 373.15 K that gives the Henry constant), `ACTIVITY` (two liquids with modified UNIFAC counts, one polar: NRTL-form alpha and two energies fitted to the group model at 298.15 and 373.15 K), then the remaining sources of its class comment. `Result.identity` is part of the derived contract's package revision | Why a pair has the value it has; what a data edit moves |
+| [`HuronVidalExcess`](../../../src/main/java/com/wormzjl/icheme/science/thermo/HuronVidalExcess.java) | The kernel's one mixing rule (`PengRobinsonKernel.huronVidal`, N8): a_mix/b_mix = Σ x_i a_i/b_i - gE/Λ with an NRTL gE weighted by the co-volumes. A classical pair enters as dg_ji = Λ[a_i/b_i - (1 - k_ij) s_i s_j/b_j]; with every pair classical the rule is the quadratic one exactly. The exponential sums run only over polar compounds with an amount in the phase | Mixing-rule cost and form |
+| [`ModifiedUnifac`](../../../src/main/java/com/wormzjl/icheme/science/material/ModifiedUnifac.java) | The modified UNIFAC (Dortmund) table (`group_interactions/modified_unifac_dortmund.json`) and its activity coefficients from `group_counts`; the water-hydrocarbon block replaces the table's water parameters for hydrocarbons | Read once per data revision at load, never per tick |
+| [`HenryConstant`](../../../src/main/java/com/wormzjl/icheme/science/material/HenryConstant.java) | A gas's `henry_in_water` sub-record, the IAPWS G7-04 form on the water model's Wagner-Pruss line | Gas solubility in water |
+| `properties/cubic_water.json` (`icheme:cubic_water`, `cubic-water-r1`) | Water's record for the cubic: critical constants, a Mathias-Copeman alpha, group counts, no volume translation | `MaterialCatalog.CUBIC_WATER` |
+| `water/*.json` (`water-iapws95-shomate-r4`) | r4 adds `datum_vaporization_enthalpy` 43988.01 J/mol (IF97's latent heat at 298.15 K): saturated liquid water at 298.15 K lies that far below the saturated steam (`V3WaterProperties.liquidEnthalpyOffset`, G1). A record without the field keeps the Watson datum (`MaterialCatalog.Water.datumVaporizationEnthalpy` NaN) | The water datum both engines share |
+
+- `MaterialCatalog.withWater(packageId)` gives a network model its package with Water on `CUBIC_WATER` after the
+  package's own compounds and the water model's ice among its crystals. No package record names it, so the column, the
+  presets and the package's own identity are unchanged. It returns the package itself where it names Water already,
+  where it is a lens, or where its method takes its ideal gas from reference spines: there is no water spine, so such
+  a network stays dry and refuses water ([fluid-science.md](fluid-science.md)).
+- Open data item: water's alpha function near 100 to 200 bar leaves the cubic's saturation temperature up to 0.43 K off
+  Wagner-Pruss; a refit is W2's.
+- The engine side (two books, `WaterShare`, the three-slot system, ice as a crystal) is in
+  [equilibrium-engine.md](equilibrium-engine.md). Tests: `DerivedPairsTest`, `AqueousSolventDataTest`,
+  `PengRobinsonKernelHuronVidalTest`, `V3WaterPropertyDerivativesTest` (the datum); test catalog
+  `PilotAqueousTestCatalog` (`pilot_aqueous`: water, ethanol, n-hexane and gases).
+
 **Snapshot:** 7be61a4b9 (branch `claude/furnace-fuel-power-requirements-f7a46e`, main 0.23.6 merged in), 2026-11-10. Batches `2026-11-09-furnace-fuel-power`, `2026-11-09-flare-stack` and `2026-11-09-batch-distiller`, merged as 0.24.0 on 2026-11-10: heating values (`MaterialCatalog.Combustion`, `heatingValues`, `formulas`; prebuilt by `tools/heating-values/`) and solid fuel records (`SolidFuelCatalog`, kind `fuels`) · earlier: 5daeda5f3 (branch `claude/refinery-compounds-thermos-252973`), 2026-11-09 (`TrainedPhysics` through `DeterministicMath`; the example datapack carries O9's sub-records). Batches `2026-11-04-refinery-compounds` (a package is a method plus a compound list, restricted views, identities by physics fields, 25 refinery compounds in `icheme:refinery`, freezing points), `2026-11-04-open-thermo-data` (open data, four generated crude grades, the Twu cut viscosity and one cut-pair term, CO2 and its crystal on the fit family, Tia Juana and the pilot as test overlays, the sub-records only `SubRecords` reads) and `2026-11-05-neural-retrain` (the neural physics check by value, `TrainedPhysics`), merged as 0.23.0 on 2026-11-09 · earlier: 3f459c176 (branch `claude/in-game-process-simulator-93dd9a`), 2026-11-04 · **Updated:** 2026-11-04 (merge package: the catalog's readers after the calculator block left, W8: no viewer refresh, the simulator's `RevisionNotice`, a placed calculator reading only its design; no code of this chapter changed since 6bf2205bf) · 2026-11-03 (batch 2026-11-02-process-simulator, W5 `61fe9196`: the five crude packages and their five column presets are gone; the five crude assays stand on `tjl20_methane` at `crude-regrouped-r2`; three column presets, four packages, 84 indexed files) · earlier: 2026-10-28 at f20ceefa (batch 2026-10-27-heat-exchanger-design, owner choice (b): a column preset's `columnDiameterMetres` must be above 0; the id `holland_3_2` is no longer reserved, the Holland example having left the presets; the steam's second-virial gas is in [equilibrium-engine.md](equilibrium-engine.md)) · earlier: 2026-10-27 at ce71b45c (batch 2026-10-26-multi-machine-framework, owner decisions 2026-10-26: nothing is hashed; every record declares its revision (a token, `JsonFields.revision`), and a package's identities are composed from them: `scientificRevision`, `fluidRevision`, `spineRevision`; `samePhysics` compares content directly; the fingerprints are gone; interactions records need a `revision`; the eight crude packages' pressure floor 1 kPa) · earlier: 2026-10-25 (batch 2026-10-21-floating-roof-tanks: the crude fractions' appearance colours from their normal boiling points; appearances read by the open tank's display and the sight glass) · earlier: 2026-10-21 (0.11.1 test review; mod rename to IChemE, 0.11.0); 2026-10-20 (`DeterministicMath` gains `sin`, `asin`, `atan2`; the rest of the chapter is unchanged since a08c7134)
 
 ## Heating values and solid fuel (0.24.0)
@@ -177,9 +202,9 @@ flowchart LR
      and `FluidTpEquilibrium` ([equilibrium-engine.md](equilibrium-engine.md)). `FluidDomain` refuses no state: it
      reports data ranges and checks device inputs (`requireInput`); `NumericalBox` is the only bound a trial meets. See
      [fluid-science.md](fluid-science.md).
-   - Water: both engines read `MaterialRuntime.water()` (`V3WaterProperties`, `WaterRegion1`). The fluid model also
-     builds `FreeWaterIce` from `Water.ice()` and `catalog.crystals()`. `FluidThermodynamics` still refuses a water model
-     without ice, but the catalog refuses the network's at loading (step 3), so a datapack no longer reaches that refusal.
+   - Water: the column reads `MaterialRuntime.water()` (`V3WaterProperties`). The fluid network holds water in its
+     cubic (`MaterialCatalog.withWater`, the section at the top): `WaterRegion1` gives water's share of enthalpy and
+     volume, and the water model's ice record is one of the package's crystals (`Water.ice()`).
    - Views: the fluid network runs each island on the network package restricted to the island's own compounds
      (`FluidThermodynamics.on`, built on `MaterialCatalog.restrict`); the process simulator runs a sheet on the
      network package restricted to the compounds its feeds hold (`SheetCompounds`); an in-world column solves under
@@ -209,7 +234,7 @@ group-interaction matrix, which keeps the published MPa.
 | `group_interactions` | 0 (the pilot overlay holds `eppr78_2022`: 40 groups, revision `eppr78-2022-si-table-s4-r2`) | `revision`, `source`, `provenance`, `scheme`, `units` (`MPa`), `groups` (`number`, `name`), `pairs` (`first`, `second`, `a_mpa`, `b_mpa`) | `GroupInteractionMatrix`; per package `GroupContributionInteractions` |
 | `spine` | 0 (the pilot overlay holds nitrogen, methane, ethane, carbon dioxide) | `component`, `revision`, `molar_mass_kg_per_mol`, `formation_enthalpy`, `standard_entropy`, `ideal_gas.segments` (`helmholtz_ideal_terms`, `nasa9`, `nasa7`), `groups` (`scheme`, `counts`), `coverage` | `ReferenceSpine` |
 | `crystals` | 2 (`crystal_carbon_dioxide_i`, `crystal-carbon_dioxide-i-r2`, a `gibbs_function` of type `jaeger_span_2012`; `crystal_ice_ih`, `crystal-ice-ih-r1`, heat-capacity segments and a linear `molar_volume`) | `component`, `crystal`, `revision`, `source`, `anchor` (`triple_point`: T, P, fusion enthalpy), one model, `coverage` | `CrystalReference`, `JaegerSpanGibbsFunction` |
-| `water` | 1 (revision `water-iapws95-shomate-r3`) | `iapws_shomate_watson`: molar mass, triple point, Tc, Pc, enthalpy limit, Watson data, 6 saturation + 7 Shomate coefficients, optional `viscosity`, optional `ice` (`crystal`, `sublimation_pressure`: `type` `iapws_r14_08`, 3 `coefficients`, 3 `exponents`, `source`), optional `thermochemistry` | `Water`, `Water.Ice` |
+| `water` | 1 (revision `water-iapws95-shomate-r4`) | `iapws_shomate_watson`: molar mass, triple point, Tc, Pc, enthalpy limit, Watson data, 6 saturation + 7 Shomate coefficients, optional `datum_vaporization_enthalpy`, optional `viscosity`, optional `ice` (`crystal`, `sublimation_pressure`: `type` `iapws_r14_08`, 3 `coefficients`, 3 `exponents`, `source`), optional `thermochemistry` | `Water`, `Water.Ice` |
 | `packages` | 3 (`tjl20_methane` and `tjl20_methane_nitrogen`, `crude-regrouped-r3`; `refinery`, `refinery-tier1-r3`; all on `crude_pr78`) | `method`, optional `extends` (the parent's compounds first; cycles refused), `components` (an id, or `{id, properties, spine}`), optional `crystals`, `advisory_evidence` (with the method's, max 32 x 256 chars) | `Package` |
 | `assays` | 4 (`light_crude`, `medium_crude`, `heavy_crude`, `oil_sand_dilbit`, revision `generated-r1`, from `tools/crude-grades/`) | `basis` (`mole`/`mass`/`standard_liquid_volume`), positional `components`+`amounts` or sparse `amounts_by_component`, required `appearance`; no `package` | `Assay` in every package that holds its non-zero compounds |
 | `presets` | 1 column (`medium_crude`, package `tjl20_methane`) + 7 fluid (water, nitrogen, the four grades, carbon dioxide) | column: `package`, `assay`, `order`, `visible`, `operating` (SI feed volume m3/s, K, Pa, W, mol/s, required `columnDiameterMetres` above 0 and at most 15 m); fluid: `component` or `assay` | `MaterialPresets.Column`/`Fluid` |
@@ -288,6 +313,11 @@ data); the tjl20-family envelopes and the methane and nitrogen records' `fluid_d
   `NumericalBox` ([equilibrium-engine.md](equilibrium-engine.md)). `VolumeTranslation.shift` builds a one-component
   kernel over 0.5 to 2 times its anchor's T and P.
 - Wilson K (`wilsonK`) is for initialisation only, clamped to ln K in [-40, 40].
+- The fluid network's node Jacobian reads a phase's first-order neighbourhood (`HydrocarbonModel.tangent`, one
+  `PengRobinsonKernel.evaluateDerivatives` call; [fluid-science.md](fluid-science.md)). For it
+  `TranslatedPengRobinson.Values` gives the mixture's `attraction()`, `attractionTemperatureDerivative()` and
+  `attractionAmountDerivative(i)`, and the static `Values.pressureVolumeDerivative(T, v, a, b)` is the untranslated
+  cubic's `dP/dv` in closed form; `Workspace.idealGasEnthalpy(i)` is one component's ideal-gas enthalpy.
 - The fluid `HydrocarbonModel.pureLiquidCompressibility` (package-private; volume calibration of one pure component,
   also called by `SpinePackageData` for a component without `volume_translation`) differs from the kernel: it checks
   only finite and positive T and P, has no root refinement, a near-ideal shortcut (|A|, |B| < 1e-14 gives Z = 1), and
@@ -412,7 +442,7 @@ The numerical box (10..6000 K, 1 Pa..1 GPa) is in [equilibrium-engine.md](equili
   one is not a change to the other.
 - The fit's lower end (`idealGasMinimumTemperature`, nitrogen's 273.16 K) is read only by the fluid
   (`HydrocarbonModel.idealGasFitRange`), which holds Cp below it. `IdealGasFunction` is the shared ideal-gas interface
-  (`ReferenceSpine`, `science/fluid/thermo/CoefficientIdealGas`, `NetworkPhaseEngine.Steam`), but the
+  (`ReferenceSpine`, `science/fluid/thermo/CoefficientIdealGas`), but the
   `shifted_polynomial_5` polynomial is still evaluated in four places: `V3PropertyComponent` (column),
   `TranslatedPengRobinson.prepare` (fluid), `CoefficientIdealGas` (engine and crystals) and `TrainedPhysics` (the
   neural check, as the column evaluates it).
