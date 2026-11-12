@@ -129,3 +129,32 @@ Test 3 on the six fixtures: tangents 5e-7, today's entries 1e-6 to 1.9e-6.
 - the 200-seed quick check against today's form: cold 197 to 195 clean (new E5 on 65 and 101), random 200 to 198 (145 E9 "Invalid inventory volume", 47 F), defaults 200 and 200.
 
 Decision (orchestrator): `dv/dP` of a tangent phase to first order, from the cubic's closed form at the nearby point less the same form at the base (the base stays exact to the bit); the share's `V_P` exact with it. No kernel call. Then the capped fixture, the six fixtures and the quick check again, the third and last form compared. Not chosen: exact phases in every node whose limit is the acoustic one (it loses the saving in every two-phase node); reverting step 3.
+
+## 12. `dv/dP` to first order (3f61f4017), the third quick check, the profile (2026-11-12)
+
+`dv/dP` of a tangent phase is its base value plus the cubic's closed form at the nearby point less the same form at the base. The closed form at the base equals the base `Values`' own to 1e-12 on all nine test phases. Test 3, row-scaled error, tangents against today's entries: the chain at its velocity cap 6.2e-7 against 1.05e-6 (was 1.55e-2); dry 5.0e-7 against 1.03e-6; wet 5.1e-7 against 1.91e-6; polar 5.0e-7 against 1.03e-6.
+
+Quick check, 200 seeds per set (the third and last form compared):
+
+| | today | tangents, frozen `dv/dP` | tangents, first-order `dv/dP` |
+|---|---|---|---|
+| cold clean | 197 | 195 | 196 |
+| cold holds | 101; 6, 118 | 65, 101; 6; 121, 183 | 65, 101; 6, 118 |
+| random clean | 200 | 198 | 200 |
+| defaults clean | 200 | 200 | 200 |
+
+Random 145 and 47 went through a velocity cap and are clean now. Cold 101 holds at the same tick as today. **Cold 65 holds with the tangents and not today**: island 44 on `pilot_cryogenic` (LNG generators at 161 K, 2532 kPa and 115 K, 182 kPa, a compressor, a pump, a filter), "Newton line search stalled at residual 0.158", the first Newton direction not descending, on all 20 attempts; today that island runs steady at 71.9 kg/s. Not `dv/dP`. Open. Order (orchestrator): a probe first, the tangent against the exact phase at that island's states on that package (suspected: the ideal-gas functions below their data's lower end, where h is continued and the tangent's `c_p` may not be the continued function's slope; second, the frozen vapour-like flag near saturation at 161 K); then the seed's one replay alone, after a fix or with the Jacobian's differences printed.
+
+Profile (one run each, tangent form, share of samples, wet and dry):
+
+| | wet | dry |
+|---|---|---|
+| sparse LU with its triangular solves | 31.4 % | 29.1 % |
+| the Jacobian build, whole | 32.3 % | 30.7 % |
+| of it: transport (viscosity) | 11.8 % | 16.8 % |
+| of it: tangents and their reads | 8.3 % | 4.1 % |
+| the residual | 22.3 % | 20.3 % |
+| exact phases in the residual and line search | 11.9 % | 4.3 % |
+| all derivative evaluations | 3.4 % | 1.3 % |
+
+Derivative evaluations per accepted step: 12, 18, 14 (dry, wet, polar). The orchestrator's guess (a derivative evaluation as dear as many value evaluations) is refuted. Wet costs 2.07 times dry here and 1.19 times on main; what is left of that is the linear solve and the work per unknown, so the next question is how many unknowns a wet node carries (the aqueous slot's ratio unknowns for compounds at trace). Asked for: the trace cutoff, the unknowns per node and per slot, branch against main. Dropping trace compounds from a slot's unknowns is a physics simplification and goes to the owner with numbers.

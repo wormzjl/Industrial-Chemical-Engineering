@@ -58,7 +58,8 @@ Changed so far: `science/thermo/PengRobinsonKernel`, `HuronVidalExcess`; `scienc
 
 ## Open items
 
-- Cost (W3B_NETWORK_PLAN.md section 30; ANALYTIC_JACOBIAN_PLAN.md section 11): the Jacobian from phase tangents is built in three commits (64239496b). Ratios to main 1.09, 1.90, 1.20 (bounds 1.1, 1.5, 1.1): evaluations fell by three quarters, time by a seventh. Open: `dv/dP` of a tangent phase to first order (the frozen form fails at a velocity cap; two new hold seeds on the quick check), then a profile, then the owner's bound if wet and polar stay over.
+- Cost (W3B_NETWORK_PLAN.md section 30; ANALYTIC_JACOBIAN_PLAN.md sections 11, 12): the Jacobian from phase tangents is built (64239496b, `dv/dP` to first order 3f61f4017). Ratios to main 1.09, 1.90, 1.20 (bounds 1.1, 1.5, 1.1). The profile puts wet's remaining time in the linear solve and the work per unknown; the unknowns of a wet node are being counted.
+- Cold 65 holds with the tangent form and not today (ANALYTIC_JACOBIAN_PLAN.md section 12): a probe on `pilot_cryogenic` at the island's states, then its one replay.
 - N10 done (274e06ac1). The code guide chapters are in progress (uncommitted).
 - W3b steps 1 to 5 built, with 21 open engine and network defects and the cost step 5b (W3B_NETWORK_PLAN.md sections 10 and 15); steps 6 and 7 not started; W4 to W6 not started.
 - Cooling tower (COOLING_TOWER_PLAN.md): built (faf419a4c, follow-up ab6b90d42: the second reading smooth, the bulk stream without its solids). Open: the spray riser's density with step 6, its cost in stage B, and the four choices of section 8 for the owner.
