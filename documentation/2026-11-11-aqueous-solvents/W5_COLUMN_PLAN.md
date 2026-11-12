@@ -184,3 +184,36 @@ run; `columnGates` holds the column classes.
 - Choice 3 a: water's enthalpy on the axis is the cubic's alone.
 - A new sub-thread `w5-column` on Opus high builds steps W5-0 to W5d in this worktree with this document as its
   brief; the orchestrator records its reports here and in the README. Not built yet.
+
+## 11. W5-0 and W5a's first numbers; the sour column's cost (2026-11-12)
+
+Reports `tmp/w5-column/reports/W5-0_BASELINE.md` and `W5a_SOUR_COST_DECISION.md`; W5a is not committed yet.
+
+- W5-0: `columnGates` on cd0be5189: 83 classes, 540 tests, none failing, 1 min 40 s. The kernel and catalog
+  changes of W1 to W3 moved no column gate: the column was still on the authored matrix.
+- W5a on `medium_crude` (31 new pairs of methane and ethane with the cuts, no activity pair): overhead vapour
+  +0.14 %, temperatures within 0.015 K, duties 0.005 %, kernel evaluations -3.4 %. Section 1's estimate of 5 to
+  15 % more overhead vapour was wrong: the light ends are a small share of that overhead. The kernel's time per
+  call rose 1.11 (evaluate) and 1.46 (derivatives); the whole solve's time is asked for.
+- Three contradictions fixed in place by the sub-thread, to be reviewed with W5a's commit: the learned model's
+  lens has no pair libraries, so the derivation refused it and every learned start fell back (the lens now keeps
+  its own matrix); the CDU17 fixture's catalog has no group tables (counts are made only where the table exists);
+  the native Peng-Robinson batch read the authored matrix (it now reads the kernel's constant matrix or yields to
+  the Java snapshot).
+- The sour column (D9's bound of 1.5 times is passed). List: methane to n-pentane, three cuts, hydrogen sulfide,
+  methyl mercaptan; 10 trays.
+  1. Expected: the same cost as a crude column of that size.
+  2. Measured: one evaluate 163 to 592 ns (3.63 times), one derivative 575 to 2,663 ns (4.63 times); the same 5
+     Newton iterations, evaluations +0.5 %; products move 0.3 to 0.4 %. Hydrogen sulfide and the mercaptan are
+     polar by their group counts, so their pairs with hydrocarbons are activity fits and the kernel leaves its
+     classical branch. The kernel is 10 to 25 % of a solve: a sour column solves about 1.4 to 1.8 times as long.
+     The network pays 5.4 times on a dry sour list (W3B_NETWORK_PLAN.md section 9).
+  3. Options, the owner's (the open item of W3B_NETWORK_PLAN.md section 9):
+     - a. Keep: every compound with a polar group takes activity fits with hydrocarbons. No change.
+     - c. Activity fits with hydrocarbons only for compounds that name a homomorph (the water-miscible organics).
+       Hydrogen sulfide, sulfur dioxide, the mercaptans, ammonia and carbonyl sulfide then take constant pairs
+       with hydrocarbons (library, else E-PPR78 at 298.15 K; all six records carry its counts) and today's cost;
+       their pairs with water stay. A change in `DerivedPairs` for network and column alike; sour references
+       move once, by about the 0.3 to 0.4 % above.
+     - b, a column-only rule, is refused: two kernels again.
+  Until the owner decides, a stands and W5b and W5c go on.
