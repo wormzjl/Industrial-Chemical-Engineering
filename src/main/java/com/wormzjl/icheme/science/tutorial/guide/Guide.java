@@ -88,6 +88,17 @@ public record Guide(List<Chapter> chapters, Map<String, String> terms) {
         public String key(Step step) {
             return KEY + id + "." + step.id();
         }
+
+        /** The chapter's source line's key ({@code <chapter>.source}): where the player takes what a step asks for (P2b: the still's crude). */
+        public String sourceKey() {
+            return KEY + id + ".source";
+        }
+
+        /** {@code step}'s sentence as {@code tr} gives it, a {@code %s} in it filled with the chapter's source line. */
+        public String text(Step step, java.util.function.Function<String, String> tr) {
+            String line = tr.apply(key(step));
+            return line.contains("%s") ? line.replace("%s", tr.apply(sourceKey())) : line;
+        }
     }
 
     /** The chapter {@code id}, or null. */

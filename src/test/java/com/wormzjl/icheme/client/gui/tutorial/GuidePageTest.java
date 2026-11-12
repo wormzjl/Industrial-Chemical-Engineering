@@ -43,7 +43,7 @@ class GuidePageTest {
         }
     }
 
-    static final List<String> CHAPTERS = List.of("welcome", "crude");
+    static final List<String> CHAPTERS = List.of("welcome", "crude", "still");
 
     /** The three states the renders show: new, step 3 current, every step done. */
     static List<Progress> states() {
@@ -72,7 +72,7 @@ class GuidePageTest {
                 assertTrue(p.well().inside(panel) && p.view().inside(p.well()), at + ": the glass in the panel");
                 assertTrue(p.strip().plate().right() + TitleStrip.GAP <= p.help().x() && p.help().right() < p.theme().x(), at + ": the title, then help, then theme");
                 assertEquals(new Rect(size[0] - 28, 5, 18, 18), p.theme(), at + ": the theme key where every screen has it");
-                assertEquals(CHAPTERS.stream().map(c -> "chapter:" + c).toList(), List.copyOf(p.chapters().keySet()), at + ": both chapters on the door");
+                assertEquals(CHAPTERS.stream().map(c -> "chapter:" + c).toList(), List.copyOf(p.chapters().keySet()), at + ": every chapter on the door");
                 Rect previous = null;
                 for (var key : p.chapters().values()) {
                     assertTrue(key.rect().inside(new Rect(10, GuidePage.TOP, GuidePage.doorWidth(size[0]), size[1])), at + ": a chapter key in the door");
@@ -148,12 +148,21 @@ class GuidePageTest {
         var underline = first.lines().stream().flatMap(l -> l.underlines().stream()).findFirst().orElseThrow();
         var line = first.lines().stream().filter(l -> !l.underlines().isEmpty()).findFirst().orElseThrow();
         assertTrue(crude.hover(underline.x0() + 1, line.y() + 2, 0).startsWith("hydrocarbon: A molecule"), "the term's hover is its definition");
+        // P2b: the still's chapter: its films and card, its five terms in order, and the charge step's source filled in.
+        var still = page(Progress.NONE, GuidePage.DESIGN_WIDTH, GuidePage.DESIGN_HEIGHT, "still", null);
+        for (var id : List.of("build", "watch", "cut")) assertTrue(still.anchors().containsKey("media:still/" + id), id);
+        var stillTerms = new java.util.ArrayList<String>();
+        for (var row : still.rows()) for (var l : row.lines()) for (var u : l.underlines()) if (!stillTerms.contains(u.term())) stillTerms.add(u.term());
+        assertEquals(List.of("vapour", "condenser", "distillate", "cut", "boil_dry"), stillTerms);
+        var charge = still.rows().get(1);
+        String text = String.join(" ", charge.lines().stream().map(l -> l.text()).toList());
+        assertTrue(text.contains("Fluid Generator") && !text.contains("%s"), text);
     }
 
     @Test
     void anOpenCardStandsInsideTheGlass() {
         for (var size : SIZES)
-            for (var step : List.of("crude/what", "crude/barrel", "crude/why", "crude/road", "crude/parts")) {
+            for (var step : List.of("crude/what", "crude/barrel", "crude/why", "crude/road", "crude/parts", "still/cut")) {
             var p = page(Progress.NONE, size[0], size[1], step);
             var c = p.card();
             assertNotNull(c, step);

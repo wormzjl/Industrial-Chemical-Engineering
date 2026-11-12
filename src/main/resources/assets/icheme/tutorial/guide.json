@@ -7,7 +7,12 @@
     "diesel": "crude/barrel",
     "gas_oil": "crude/barrel",
     "residue": "crude/barrel",
-    "still": "crude/first"
+    "still": "crude/first",
+    "vapour": "still/build",
+    "condenser": "still/build",
+    "distillate": "still/watch",
+    "cut": "still/cut",
+    "boil_dry": "still/stop"
   },
   "chapters": [
     {
@@ -27,6 +32,19 @@
         { "id": "road", "media": "card:road" },
         { "id": "parts", "media": "card:three_parts" },
         { "id": "first", "media": "film:still_inside" }
+      ]
+    },
+    {
+      "id": "still",
+      "steps": [
+        { "id": "build", "media": "film:still_build", "check": "server", "criterion": "equipment_built" },
+        { "id": "charge", "check": "server", "criterion": "still_state" },
+        { "id": "watch", "media": "film:still_run" },
+        { "id": "fire", "check": "server", "criterion": "still_state" },
+        { "id": "first", "check": "server", "criterion": "still_state" },
+        { "id": "cut", "media": "card:pot_temperature", "check": "server", "criterion": "still_state" },
+        { "id": "switch", "check": "server", "criterion": "diverter_switched" },
+        { "id": "stop", "check": "server", "criterion": "still_stopped" }
       ]
     }
   ]

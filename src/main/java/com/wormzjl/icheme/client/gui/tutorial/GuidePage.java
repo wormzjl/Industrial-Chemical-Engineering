@@ -360,7 +360,7 @@ public final class GuidePage {
             int textX = x0 + MARK + MARK_GAP, full = w - MARK - MARK_GAP;
             boolean beside = !words.isEmpty() && full - bw - 6 >= BESIDE_MIN;
             int tw = beside ? full - bw - 6 : full;
-            var marked = Marked.parse(tr.apply(chapter.key(step)));
+            var marked = Marked.parse(chapter.text(step, tr));
             var wrapped = m.wrap(marked.text(), tw);
             int textY = y + (beside ? (KEY_H - 8) / 2 : 1);
             var lines = new ArrayList<Line>();

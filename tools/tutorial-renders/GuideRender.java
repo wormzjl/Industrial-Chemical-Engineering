@@ -131,6 +131,30 @@ public final class GuideRender {
         }));
         HeatDiagramRender.grid(out.resolve("guide-crude.png"), List.of("Light, 464 by 254: chapter Crude oil, new", "Dark, 464 by 254", "Dark, 320 by 240 window",
                 "Dark, 320 by 240 window: scrolled to the end"), crude);
+        // P2b: chapter 2 open, its first step current (chapters 0 and 1 done), and scrolled to its end.
+        var before = new java.util.HashSet<String>();
+        for (var id : GuideFile.load().stepIds()) if (!id.startsWith("still/")) before.add(id);
+        var reached = new Progress(Set.copyOf(before));
+        var still = new ArrayList<BufferedImage>();
+        for (var skin : List.of(PanelSkin.LIGHT, PanelSkin.DARK))
+            still.add(image(GuidePage.DESIGN_WIDTH, GuidePage.DESIGN_HEIGHT, c -> {
+                var p = page(c, reached, GuidePage.DESIGN_WIDTH, GuidePage.DESIGN_HEIGHT, "still", null);
+                p.draw(c, skin, 0, null, Card.State.of(0, 0));
+            }));
+        still.add(image(GuidePage.DESIGN_WIDTH, GuidePage.DESIGN_HEIGHT, c -> {
+            var p = page(c, reached, GuidePage.DESIGN_WIDTH, GuidePage.DESIGN_HEIGHT, "still", null);
+            p.draw(c, PanelSkin.LIGHT, p.maxOffset(), null, Card.State.of(0, 0));
+        }));
+        still.add(image(312, 232, c -> {
+            var p = page(c, reached, 312, 232, "still", null);
+            p.draw(c, PanelSkin.DARK, 0, null, Card.State.of(0, 0));
+        }));
+        still.add(image(312, 232, c -> {
+            var p = page(c, reached, 312, 232, "still", null);
+            p.draw(c, PanelSkin.DARK, p.maxOffset(), null, Card.State.of(0, 0));
+        }));
+        HeatDiagramRender.grid(out.resolve("guide-still.png"), List.of("Light, 464 by 254: chapter The still, build current", "Dark, 464 by 254",
+                "Light, 464 by 254: scrolled to the end", "Dark, 320 by 240 window", "Dark, 320 by 240 window: scrolled to the end"), still);
     }
 
     static TourLayout.Words words() {
@@ -308,5 +332,10 @@ public final class GuideRender {
                 new Frame("Boil pressed", 0, 0, 2, Set.of(0, 2)), new Frame("Vacuum pressed", 0, 0, 3, Set.of(0, 2, 3)),
                 new Frame("Break pressed", 0, 0, 4, Set.of(0, 2, 3, 4))));
         sheet(out, "crude/parts", "three_parts", List.of(Frame.of("heat 0", 0, 0), Frame.of("heat 0.5", 0, .5), Frame.of("heat 1", 0, 1)));
+        // P2b: the pot's temperature along the run, at five places: the start, the first drops, before the cut, past it, the end.
+        var pot = new com.wormzjl.icheme.science.tutorial.cards.PotTemperature();
+        double cut = pot.cuts()[0] / pot.share(1);
+        sheet(out, "still/cut", "pot_temperature", List.of(Frame.of("start", 0, 0), Frame.of("early", 0, .15), Frame.of("before the cut", 0, cut * .9),
+                Frame.of("past the cut", 0, (cut + 1) / 2), Frame.of("the end", 0, 1)));
     }
 }

@@ -166,12 +166,13 @@ public final class PotTemperature implements Card {
         });
         c.text(top, x0, plot.y(), Palette.MUTED);
         c.text(bottom, x0, plot.bottom() - 9, Palette.MUTED);
-        // The cuts' words at the plot's top, beside their lines (the first left of its line where the second stands right).
+        // The cuts' words at the plot's top, each just left of its line: the first on the top row, the second on the row under it.
         String first = tr.apply(KEY + ".cut_first"), last = tr.apply(KEY + ".cut_end");
         int cx1 = px + (int) Math.round(cuts[0] / end * (pw - 1)), cx2 = plot.right() - 1;
         int lastX = cx2 - 2 - m.width(last), firstX = cx1 - 2 - m.width(first);
-        if (lastX >= px + 2 && lastX > cx1 + 2) c.text(last, lastX, plot.y() + 1, Palette.WARN);
         if (firstX >= px + 2) c.text(first, firstX, plot.y() + 1, Palette.WARN);
+        // The second only where the curve stays under its row (the curve rises to its right end, so its end is its top).
+        if (lastX >= px + 2 && yOf(kelvin(end), plot) >= plot.y() + 21) c.text(last, lastX, plot.y() + 11, Palette.WARN);
         String axis = tr.apply(KEY + ".share");
         c.text(m.cut(axis, pw), px + Math.max(0, (pw - m.width(axis)) / 2), plot.bottom() + 2, Palette.MUTED);
         for (int i = 0; i < entries.size(); i++) c.text(m.cut(entries.get(i), colW - 9), x0 + (i % columns) * colW + 9, legendY + (i / columns) * 10, Palette.TEXT);

@@ -29,7 +29,8 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class GuideCoverageTest {
     private static final Path DATA = Path.of("src/main/resources/data/icheme"), ADVANCEMENTS = DATA.resolve("advancement/tutorial");
-    private static final Set<String> TRIGGERS = Set.of("minecraft:tick", "icheme:guide_step", "icheme:equipment_built");
+    private static final Set<String> TRIGGERS = Set.of("minecraft:tick", "icheme:guide_step", "icheme:equipment_built", "icheme:still_state", "icheme:still_stopped",
+            "icheme:diverter_switched");
 
     private static JsonObject read(Path file) throws IOException {
         return JsonParser.parseString(Files.readString(file)).getAsJsonObject();
@@ -80,7 +81,7 @@ class GuideCoverageTest {
     }
 
     @Test
-    void theStepsChainInGuideOrderAndTheStillHangsOnTheLastCrudeStep() throws IOException {
+    void theStepsChainInGuideOrderAndTheStillFollowsTheLastCrudeStep() throws IOException {
         var guide = GuideFile.load();
         String parent = "icheme:tutorial/root";
         var files = new HashSet<Path>();
@@ -89,10 +90,9 @@ class GuideCoverageTest {
             parent = "icheme:tutorial/" + id;
             files.add(ADVANCEMENTS.resolve(id + ".json"));
         }
-        assertEquals("icheme:tutorial/crude/first", parent);
-        assertEquals(parent, read(ADVANCEMENTS.resolve("still/build.json")).get("parent").getAsString(), "the still's build after chapter 1");
+        assertEquals("icheme:tutorial/still/stop", parent);
+        assertEquals("icheme:tutorial/crude/first", read(ADVANCEMENTS.resolve("still/build.json")).get("parent").getAsString(), "the still's build after chapter 1");
         files.add(ADVANCEMENTS.resolve("root.json"));
-        files.add(ADVANCEMENTS.resolve("still/build.json"));
         try (Stream<Path> all = Files.walk(ADVANCEMENTS)) {
             for (var file : all.filter(p -> p.toString().endsWith(".json")).toList()) assertTrue(files.contains(file), file + ": no advancement without its step");
         }
@@ -121,7 +121,8 @@ class GuideCoverageTest {
     @Test
     void everyCriterionIsRegisteredAndEveryKindIsAStructureKind() throws IOException {
         var source = Files.readString(Path.of("src/main/java/com/wormzjl/icheme/runtime/tutorial/TutorialTriggers.java"));
-        assertTrue(source.contains("register(\"guide_step\"") && source.contains("register(\"equipment_built\""), "both criteria registered");
+        for (var name : List.of("guide_step", "equipment_built", "still_state", "still_stopped", "diverter_switched"))
+            assertTrue(source.contains("register(\"" + name + "\""), name + " registered");
         var kinds = new HashSet<String>();
         for (var kind : EquipmentShape.Kind.values()) kinds.add(kind.name());
         var lang = TutorialText.english();
@@ -144,6 +145,41 @@ class GuideCoverageTest {
         }
         assertTrue(built >= 1, "the still's build proves the server path");
         assertTrue(Files.isRegularFile(ADVANCEMENTS.resolve("still/build.json")));
+    }
+
+    /**
+     * P2b: the still's steps ask what the recording and the brief hold: half a pot to charge, a firing status to light, a
+     * distilling one for the first drops (the text's minutes the recording's), and the cut at the recording's end of the
+     * naphtha in whole K, distilling.
+     */
+    @Test
+    void theStillStepsHoldTheRecordingsNumbers() throws IOException {
+        var run = com.wormzjl.icheme.science.tutorial.films.StillRunData.load();
+        var firing = List.of("HEATING", "BOILING", "DISTILLING", "COOLING_LIMITED");
+        var distilling = List.of("DISTILLING", "COOLING_LIMITED");
+        assertEquals(.5, conditions("charge").get("min_filled").getAsDouble());
+        assertEquals(firing, strings(conditions("fire")));
+        assertEquals(distilling, strings(conditions("first")));
+        assertEquals(distilling, strings(conditions("cut")));
+        assertEquals(Math.round(run.line("naphtha", "pot_kelvin")), conditions("cut").get("min_pot_temperature").getAsDouble(), 0, "the cut: the end of the naphtha, whole K");
+        assertEquals(com.wormzjl.icheme.science.tutorial.guide.StillCondition.FIRING, Set.copyOf(firing), "the stop step's firing statuses");
+        var lang = TutorialText.english();
+        String first = lang.get("tutorial.icheme.guide.still.first");
+        var minutes = java.util.regex.Pattern.compile("(\\d+) minutes? of play").matcher(first);
+        assertTrue(minutes.find(), first);
+        assertEquals(Math.max(1, Math.round(run.line("first", "play_minutes"))), Long.parseLong(minutes.group(1)), "the first drops' minutes of play, the recording's");
+        assertNotNull(lang.get("tutorial.icheme.guide.still.source"));
+        assertTrue(lang.get("tutorial.icheme.guide.still.charge").contains("%s"), "the charge step names its source through the source line");
+    }
+
+    private static JsonObject conditions(String step) throws IOException {
+        return criteria(read(ADVANCEMENTS.resolve("still/" + step + ".json"))).getFirst().getAsJsonObject("conditions");
+    }
+
+    private static List<String> strings(JsonObject conditions) {
+        var out = new ArrayList<String>();
+        for (var e : conditions.getAsJsonArray("status")) out.add(e.getAsString());
+        return out;
     }
 
     @Test

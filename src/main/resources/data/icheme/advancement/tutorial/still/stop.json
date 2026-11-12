@@ -1,0 +1,27 @@
+{
+  "parent": "icheme:tutorial/still/switch",
+  "display": {
+    "icon": {
+      "id": "icheme:field_guide",
+      "count": 1
+    },
+    "title": {
+      "translate": "tutorial.icheme.advancement.still.stop"
+    },
+    "description": {
+      "translate": "tutorial.icheme.advancement.still.stop.description"
+    },
+    "show_toast": false,
+    "announce_to_chat": false
+  },
+  "criteria": {
+    "stopped": {
+      "trigger": "icheme:still_stopped"
+    }
+  },
+  "requirements": [
+    [
+      "stopped"
+    ]
+  ]
+}

@@ -255,7 +255,7 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
             if(player instanceof ServerPlayer serverPlayer&&level.getBlockEntity(position) instanceof FluidDeviceBlockEntity entity)
                 FluidWorldAuthority.find(serverPlayer.server).ifPresent(world->{int open=world.diverterOutlet(entity.fluidIdentity());if(open>=0){var refused=world.divert(entity.fluidIdentity(),(open+1)%3);
                     serverPlayer.displayClientMessage(refused==null?net.minecraft.network.chat.Component.translatable("message.icheme.diverter.outlet",(open+1)%3+1):net.minecraft.network.chat.Component.literal(refused),true);
-                    if(refused==null)turned(level,position,player,(open+1)%3);}});
+                    if(refused==null){turned(level,position,player,(open+1)%3);com.wormzjl.icheme.runtime.tutorial.TutorialTriggers.DIVERTER_SWITCHED.get().trigger(serverPlayer);}}});
             else if(level.isClientSide()&&com.wormzjl.icheme.client.ValveTurnRenderer.clicked(level,position,state))turnSound(level,position,player);
             return InteractionResult.sidedSuccess(level.isClientSide());
         }

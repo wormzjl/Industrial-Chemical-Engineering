@@ -1,0 +1,33 @@
+{
+  "parent": "icheme:tutorial/still/fire",
+  "display": {
+    "icon": {
+      "id": "icheme:field_guide",
+      "count": 1
+    },
+    "title": {
+      "translate": "tutorial.icheme.advancement.still.first"
+    },
+    "description": {
+      "translate": "tutorial.icheme.advancement.still.first.description"
+    },
+    "show_toast": false,
+    "announce_to_chat": false
+  },
+  "criteria": {
+    "dripping": {
+      "trigger": "icheme:still_state",
+      "conditions": {
+        "status": [
+          "DISTILLING",
+          "COOLING_LIMITED"
+        ]
+      }
+    }
+  },
+  "requirements": [
+    [
+      "dripping"
+    ]
+  ]
+}

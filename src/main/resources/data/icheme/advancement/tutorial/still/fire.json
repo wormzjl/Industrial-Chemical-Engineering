@@ -1,0 +1,35 @@
+{
+  "parent": "icheme:tutorial/still/watch",
+  "display": {
+    "icon": {
+      "id": "icheme:field_guide",
+      "count": 1
+    },
+    "title": {
+      "translate": "tutorial.icheme.advancement.still.fire"
+    },
+    "description": {
+      "translate": "tutorial.icheme.advancement.still.fire.description"
+    },
+    "show_toast": false,
+    "announce_to_chat": false
+  },
+  "criteria": {
+    "lit": {
+      "trigger": "icheme:still_state",
+      "conditions": {
+        "status": [
+          "HEATING",
+          "BOILING",
+          "DISTILLING",
+          "COOLING_LIMITED"
+        ]
+      }
+    }
+  },
+  "requirements": [
+    [
+      "lit"
+    ]
+  ]
+}

@@ -32,7 +32,7 @@ class GuideFileTest {
         assertEquals(List.of("what", "barrel", "why", "road", "parts", "first"), crude.steps().stream().map(Guide.Step::id).toList());
         assertEquals(List.of(new Guide.Card("chain"), new Guide.Card("barrel"), new Guide.Card("products"), new Guide.Card("road"), new Guide.Card("three_parts"),
                 new Guide.Film("still_inside")), crude.steps().stream().map(Guide.Step::media).toList());
-        for (var chapter : guide.chapters()) for (var step : chapter.steps()) assertEquals(Guide.Check.CLIENT, step.check(), step.id());
+        for (var chapter : List.of(welcome, crude)) for (var step : chapter.steps()) assertEquals(Guide.Check.CLIENT, step.check(), step.id());
         assertEquals("tutorial.icheme.guide.welcome", welcome.titleKey());
         assertEquals("tutorial.icheme.guide.crude.first", crude.key(crude.steps().get(5)));
         assertEquals("crude/first", guide.terms().get("still"));
@@ -42,7 +42,30 @@ class GuideFileTest {
         assertNotNull(guide.step("crude/parts"));
         assertNull(guide.step("welcome/dots"), "moved to crude/parts");
         assertNull(guide.step("welcome/none"));
-        assertFalse(guide.stepIds().contains("still/build"), "the still's build step comes in P2");
+    }
+
+    /** P2b: chapter 2, the still: its steps, media, checks and criteria, its terms, and its source line filling the charge step. */
+    @Test
+    void chapterTwoReadsAsWritten() {
+        var guide = GuideFile.load();
+        var still = guide.chapters().get(2);
+        assertEquals("still", still.id());
+        assertEquals(List.of("build", "charge", "watch", "fire", "first", "cut", "switch", "stop"), still.steps().stream().map(Guide.Step::id).toList());
+        assertEquals(List.of(new Guide.Film("still_build"), Guide.Media.NONE, new Guide.Film("still_run"), Guide.Media.NONE, Guide.Media.NONE, new Guide.Card("pot_temperature"),
+                Guide.Media.NONE, Guide.Media.NONE), still.steps().stream().map(Guide.Step::media).toList());
+        var criteria = new java.util.ArrayList<String>();
+        for (var step : still.steps()) criteria.add(step.check() == Guide.Check.CLIENT ? "client" : step.criterion());
+        assertEquals(List.of("equipment_built", "still_state", "client", "still_state", "still_state", "still_state", "diverter_switched", "still_stopped"), criteria);
+        for (var term : List.of("vapour", "condenser")) assertEquals("still/build", guide.terms().get(term), term);
+        assertEquals("still/watch", guide.terms().get("distillate"));
+        assertEquals("still/cut", guide.terms().get("cut"));
+        assertEquals("still/stop", guide.terms().get("boil_dry"));
+        assertEquals("tutorial.icheme.guide.still.source", still.sourceKey());
+        var lang = TutorialText.english();
+        var charge = still.text(still.steps().get(1), lang::get);
+        assertFalse(charge.contains("%s"), charge);
+        assertTrue(charge.contains(lang.get(still.sourceKey())), "the charge step names the source: " + charge);
+        assertEquals(lang.get(still.key(still.steps().get(0))), still.text(still.steps().get(0), lang::get), "a step with no %s reads as written");
     }
 
     @Test
@@ -54,7 +77,8 @@ class GuideFileTest {
             for (var name : List.of("com.wormzjl.icheme.science.tutorial.guide.Progress", "com.wormzjl.icheme.science.tutorial.guide.Glossary",
                     "com.wormzjl.icheme.science.tutorial.guide.Marked", "com.wormzjl.icheme.science.tutorial.cards.ThreeParts", "com.wormzjl.icheme.science.tutorial.cards.Chain",
                     "com.wormzjl.icheme.science.tutorial.cards.BarrelData", "com.wormzjl.icheme.science.tutorial.cards.Barrel", "com.wormzjl.icheme.science.tutorial.cards.Products",
-                    "com.wormzjl.icheme.science.tutorial.cards.Road"))
+                    "com.wormzjl.icheme.science.tutorial.cards.Road", "com.wormzjl.icheme.science.tutorial.cards.PotTemperature",
+                    "com.wormzjl.icheme.science.tutorial.guide.StillCondition"))
                 Class.forName(name, true, loader);
             // Every card builds, its recording read, with no Minecraft class.
             var cards = loader.loadClass("com.wormzjl.icheme.science.tutorial.cards.Cards");
