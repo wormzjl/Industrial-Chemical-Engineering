@@ -66,5 +66,23 @@
       { "anchor": "passes" },
       { "anchor": "glass" }
     ]
+  },
+  "assembly.structure": {
+    "stops": [
+      { "anchor": "drawing" },
+      { "anchor": "list" },
+      { "anchor": "check" },
+      { "anchor": "status" },
+      { "anchor": "open" },
+      { "anchor": "tab:operation" }
+    ]
+  },
+  "assembly.operation": {
+    "stops": [
+      { "anchor": "start" },
+      { "anchor": "status" },
+      { "anchor": "glass" },
+      { "anchor": "tab:structure" }
+    ]
   }
 }

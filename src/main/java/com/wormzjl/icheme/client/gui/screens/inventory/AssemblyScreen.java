@@ -2,6 +2,7 @@ package com.wormzjl.icheme.client.gui.screens.inventory;
 
 import com.wormzjl.icheme.client.ClientConfig;
 import com.wormzjl.icheme.client.gui.common.AssemblyColumn;
+import com.wormzjl.icheme.client.gui.common.AssemblyTour;
 import com.wormzjl.icheme.client.gui.common.AssemblyDiagram;
 import com.wormzjl.icheme.client.gui.common.AssemblyDiagram.Part;
 import com.wormzjl.icheme.client.gui.common.AssemblyDiagram.Text;
@@ -180,9 +181,54 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
     private @Nullable String nameDraft, nameShown;
     private @Nullable SkinField nameBox;
 
-    /** The title strip (N1, the owner 2026-11-03: "You can put the equipment name here"): the kind's plate, the name after it, the theme key. */
+    /** The title strip (N1, the owner 2026-11-03: "You can put the equipment name here"): the kind's plate, the name after it, the help and theme keys. */
     private TitleStrip.Strip strip() {
-        return TitleStrip.place(imageWidth, AssemblyColumn.theme(imageWidth).w(), title.getString(), GuiCanvas.measure(font));
+        return TitleStrip.placeKeys(imageWidth, 2, title.getString(), GuiCanvas.measure(font));
+    }
+
+    /** The tab's help tour (batch 2026-11-12-tutorial-system, P5 stage B), opened by the ? key left of the theme key. */
+    private final com.wormzjl.icheme.client.gui.tutorial.HelpTour tour = new com.wormzjl.icheme.client.gui.tutorial.HelpTour();
+
+    /** The help sign: the tab's tour. A tour sends nothing to the server. */
+    private void helpKey(Rect at) {
+        if (com.wormzjl.icheme.client.gui.tutorial.HelpTour.of(AssemblyTour.page(operation())) == null) return;
+        String hint = Component.translatable("tutorial.icheme.guide.help").getString();
+        var key = new SkinButton(leftPos + at.x(), topPos + at.y(), at.w(), at.h(), Component.literal(hint), b -> openTour(), AssemblyScreen::skin).icon(Skin.Icon.HELP);
+        key.setTooltip(Tooltip.create(Component.literal(hint)));
+        addRenderableWidget(key);
+    }
+
+    /** Opens the tab's tour; finishing the Structure tab's completes the guide's reading step of the column's lines. */
+    private void openTour() {
+        var t = com.wormzjl.icheme.client.gui.tutorial.HelpTour.of(AssemblyTour.page(operation()));
+        if (t == null) return;
+        Runnable done = operation() ? null : () -> com.wormzjl.icheme.client.gui.tutorial.GuideClient.report(LINES_STEP);
+        tour.open(t, this::tourAnchor, done);
+    }
+
+    /** The guide's reading step the Structure tab's tour completes. */
+    public static final String LINES_STEP = "building/lines";
+
+    /** A tour's anchor on the screen: a frame place (AssemblyTour.frame), else a door row's widget, the door scrolled to show it where {@code reveal}; null for none. */
+    private @Nullable Rect tourAnchor(String key, boolean reveal) {
+        var at = AssemblyTour.frame(imageWidth, imageHeight, operation()).get(key);
+        if (at != null) return at.moved(leftPos, topPos);
+        if (!door()) return null;
+        Rect r;
+        try {
+            r = AssemblyTour.door(door.column()).get(key);
+        } catch (IllegalStateException none) {
+            return null;
+        }
+        if (r == null) return null;
+        var v = door.view();
+        for (int i = 0; reveal && i < 64 && !v.visible(r); i++) {
+            var port = v.viewport();
+            int before = v.offset();
+            v.wheel(port.x() + 2, port.y() + 2, v.onScreen(r).y() < port.y() ? 1 : -1);
+            if (v.offset() == before) break;
+        }
+        return v.onScreen(r).moved(leftPos, topPos);
     }
 
     /** Saves the typed name by the rename path (N1): Enter in the entry, and Apply. */
@@ -221,6 +267,7 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
     /** A focused entry keeps its keys: the name's letters (the inventory key among them) do not close the screen; Enter saves the name. */
     @Override
     public boolean keyPressed(int key, int scan, int modifiers) {
+        if (tour.isOpen()) return tour.keyPressed(key);
         if (ProcessUi.textKeyPressed(this, key, scan, modifiers)) return true;
         return super.keyPressed(key, scan, modifiers);
     }
@@ -250,6 +297,7 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
         }
         // The theme key shows the contrast sign; its hover names the panel shown.
         String theme = lang(ClientConfig.theme() == ClientConfig.Theme.DARK ? "fluid.theme.dark" : "fluid.theme.light");
+        helpKey(TitleStrip.keys(imageWidth, 2).get(1));
         var at = AssemblyColumn.theme(imageWidth);
         var themeKey = new SkinButton(leftPos + at.x(), topPos + at.y(), at.w(), at.h(), Component.literal(theme), b -> {
             ClientConfig.toggleTheme();
@@ -522,7 +570,14 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         hovered = null;
         if (door()) door.place(leftPos, topPos);
-        super.render(g, mouseX, mouseY, partialTick);
+        // An open tour takes the pointer: the page under it shows no hover (P5 stage B).
+        boolean touring = tour.isOpen();
+        int mx = touring ? -1 : mouseX, my = touring ? -1 : mouseY;
+        super.render(g, mx, my, partialTick);
+        if (touring) {
+            tour.render(g, font, width, height, mouseX, mouseY);
+            return;
+        }
         if (drawing()) glassHover(mouseX - leftPos, mouseY - topPos);
         KitDoor.hint(g, font, hovered, mouseX, mouseY);
     }
@@ -543,6 +598,7 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
 
     @Override
     public boolean mouseClicked(double mx, double my, int button) {
+        if (tour.isOpen() && tour.mouseClicked(font, width, height, mx, my)) return true;
         SkinField.clickOutside(this, mx, my);
         double x = mx - leftPos, y = my - topPos;
         if (door() && door.press(x, y, button) || drawing() && listView.press(x, y, button) || operationView() != null && glassView.press(x, y, button)) return true;
@@ -579,6 +635,7 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
 
     @Override
     public boolean mouseScrolled(double mx, double my, double horizontal, double vertical) {
+        if (tour.isOpen()) return true;
         double x = mx - leftPos, y = my - topPos;
         return door() && door.wheel(x, y, vertical) || drawing() && listView.wheel(x, y, vertical) || operationView() != null && glassView.wheel(x, y, vertical) || super.mouseScrolled(mx, my, horizontal, vertical);
     }

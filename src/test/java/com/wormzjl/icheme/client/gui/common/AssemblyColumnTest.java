@@ -133,8 +133,9 @@ class AssemblyColumnTest {
                         }
                 var display = AssemblyColumn.display(width);
                 for (var s : statuses) assertTrue(M.width(s) <= display.w(), at + ": the status cut: " + s);
-                assertEquals(t.get("assembly.title"), TitleStrip.place(width, AssemblyColumn.theme(width).w(), t.get("assembly.title"), M).kind(), at + ": the title whole");
+                assertEquals(t.get("assembly.title"), TitleStrip.placeKeys(width, 2, t.get("assembly.title"), M).kind(), at + ": the title whole");
                 assertEquals(width - 10, AssemblyColumn.theme(width).right(), at + ": the theme key");
+                assertEquals(TitleStrip.keys(width, 2).get(0), AssemblyColumn.theme(width), at + ": the theme key where it stood, the help key left of it");
                 var tabs = AssemblyColumn.tabs(false, false, t);
                 var tabSlots = AssemblyColumn.tabSlots(width);
                 for (int i = 0; i < tabs.size(); i++) {

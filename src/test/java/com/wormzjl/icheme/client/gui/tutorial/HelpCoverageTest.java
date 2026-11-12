@@ -28,14 +28,16 @@ import static org.junit.jupiter.api.Assertions.*;
  * still's tour stands in the rows StillDoor and DeviceColumn build, for at least one still, at every width the door takes;
  * every anchor of the guide's tour stands on GuidePage; each screen either has a tour or waits in {@link #LATER}. P4b: the
  * still with a column has its own tour (its reflux valve), whose anchors stand on such a still's page; the simulator's four
- * tabs have theirs (their anchors: SimulatorTourTest).
+ * tabs have theirs (their anchors: SimulatorTourTest). P5 stage B: the column's assembly screen has one for each tab (their
+ * anchors: AssemblyTourTest).
  */
 class HelpCoverageTest {
     /** The screens with a tour, by class, and the tours they host. */
     static final Map<String, Set<String>> TOURED = Map.of("GuideScreen", Set.of("guide"), "FluidDeviceScreen", Set.of("fluid_device.still", "fluid_device.still_column"),
-            "ProcessSimulatorScreen", Set.of("simulator.sheet", "simulator.results", "simulator.sizing", "simulator.basis"));
+            "ProcessSimulatorScreen", Set.of("simulator.sheet", "simulator.results", "simulator.sizing", "simulator.basis"),
+            "AssemblyScreen", Set.of("assembly.structure", "assembly.operation"));
     /** The screens with no tour yet; phase P6 empties this list (and FluidDeviceScreen's other pages). */
-    static final Set<String> LATER = Set.of("AssemblyScreen", "ControlPanelScreen", "EquipmentConstructorScreen", "FilmScreen", "GaugeScreen", "MachineScreen",
+    static final Set<String> LATER = Set.of("ControlPanelScreen", "EquipmentConstructorScreen", "FilmScreen", "GaugeScreen", "MachineScreen",
             "PipelineToolScreen", "VesselScreen");
     /** Anchors a page resolves itself, not from its builder's rows. */
     static final Set<String> FRAME = Set.of("status", "title");
