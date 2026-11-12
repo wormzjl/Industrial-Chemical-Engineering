@@ -227,3 +227,23 @@ Report `tmp/w4-still/reports/W4A_TWO_LIQUID_TOP.md`; nothing committed yet. Thre
 5. Gates ordered: water with hexane converged in 10 iterations or fewer, trays within 0.1 K of 61.14 C; the wash
    unmoved at 33 iterations; wet naphtha 0.98 or more in 34 flashes or fewer; dry pots bit for bit; no converged
    answer with a tray more than 1 K colder than the stage above; a stalled solve's cost on the 46-compound list.
+
+## 13. W4a and W4b committed; a wash never boils in a placed still (2026-11-12)
+
+- The sub-thread committed before section 12's order reached it: W4a `473c4f770` (the column with water, one-liquid
+  trays, the relaxation still in it; two liquids at the top end as "no convergence") and W4b `ee3bce248` (the head
+  takes every share, water's among them, from the column; the status line adds "WATER ON THE TRAYS"). Section 12's
+  third form follows as its own commit. Neither diff is reviewed by the orchestrator yet.
+- W4b's finding (`tmp/w4-still/reports/W4B_WASH_POT_NO_VAPOUR.md`), a network defect, not the column's:
+  1. Expected: 60 L of a 10 % wash in an open pot at 1 atm under 10.95 kW reaches 92.5 C in about 30 s, then
+     boils at about 0.27 mol/s and follows its bubble point towards 100 C.
+  2. What the network did: the pot heats as one liquid through its bubble point, 377.4 K at 300 s and 391.0 K at
+     600 s, and releases nothing. An open pot vents only a state that holds a gas (`OpenVessel.releases`), and the
+     wash's node never gains one. Pentane in the same rig boils; water alone in a closed pot boils.
+  3. Where to look (read, not measured): `FluidThermodynamics.phaseCheck` adds a phase only where the TP answer
+     (`equilibriumTP`) holds one the node lacks, the vessel's own split (`crossing`, then `vesselSplit`) keeps it
+     above the vanishing share, and the solve's record has not refused it. Three candidates: the TP answer of an
+     aqueous liquid with ethanol above its bubble point holds no gas; the own split refuses the first bubble;
+     the pot's pressure is not the ambient.
+- The placed-wash gate (`tmp/w4-still/StillRuntimeTest.keep`) waits for that fix. Its diagnosis is a new task: the
+  owner's approval is asked first.
