@@ -432,7 +432,12 @@ class StillRuntimeTest {
 
     /** {@link #washStill(int, double)} on {@code id} of {@code catalog}: its view of ethanol and nitrogen, water last, amounts by id. */
     private static Rig washStill(com.wormzjl.icheme.science.material.MaterialCatalog catalog, String id, int stages, double reflux) {
-        var model = FluidThermodynamics.forNetwork(catalog, id).on(List.of("Ethanol", "Nitrogen"));
+        return washStill(catalog, id, stages, reflux, 1);
+    }
+
+    /** {@link #washStill(com.wormzjl.icheme.science.material.MaterialCatalog, String, int, double)} under time factor {@code factor}. */
+    private static Rig washStill(com.wormzjl.icheme.science.material.MaterialCatalog catalog, String id, int stages, double reflux, int factor) {
+        var model = FluidThermodynamics.forNetwork(catalog, id).on(List.of("Ethanol", "Nitrogen")).withTime(com.wormzjl.icheme.science.fluid.SimulationTime.of(factor));
         assertEquals(java.util.Set.of("Ethanol", "Nitrogen", "Water"), java.util.Set.copyOf(model.components()));
         assertEquals("Water", model.components().getLast());
         int e = model.components().indexOf("Ethanol"), w = model.components().indexOf("Water");
@@ -492,6 +497,36 @@ class StillRuntimeTest {
         assertEquals(365.72, onset[0], .3, "the wash's bubble point");
         assertEquals(pilot[0], onset[0], 1e-6, "the pilot's onset");
         assertEquals(pilot[1], onset[1], 1e-6 * pilot[1], "the pilot's boil-up");
+    }
+
+    /**
+     * The merge of main 0.27.1 (MAIN_MERGE_PLAN section 5): the wash of {@link #aWashInAnOpenPotBoilsAtItsBubblePoint} under
+     * time factor 4 is fired on process time, so in a quarter of the ticks it takes the heat and boils off what it does in
+     * 180 s at factor 1; the view keeps its compounds and its water (withTime on a view). The heat booked trails the run by
+     * one cadence (100 ticks of play: 5 s of process time at factor 1, 20 s at 4), so each runs 5 s of play past 180 s of
+     * process time: 3600 ticks at factor 1 and 900 at 4 are booked. The boil-off agrees within the coarser slices' 5 %.
+     */
+    @Test
+    void aWashAtTimeFactorFourBoilsInAQuarterOfTheTicks() {
+        var catalog = com.wormzjl.icheme.science.material.PilotAqueousTestCatalog.catalog();
+        String id = com.wormzjl.icheme.science.material.PilotAqueousTestCatalog.PACKAGE_ID;
+        int[] factors = {1, 4};
+        double[] heat = new double[2], gone = new double[2];
+        double rating = Double.NaN;
+        for (int k = 0; k < 2; k++) {
+            var rig = washStill(catalog, id, 0, 0, factors[k]);
+            assertEquals(List.of("Ethanol", "Nitrogen", "Water"), rig.model.components());
+            rating = rig.unit().design().rating();
+            double start = Arrays.stream(rig.potNode().inventory().moles()).sum();
+            rig.run(180.0 / factors[k] + 5);
+            heat[k] = rig.heat.getOrDefault(PhysicalFluidTopology.sideIdentity(POT), 0.);
+            gone[k] = start - Arrays.stream(rig.potNode().inventory().moles()).sum();
+        }
+        System.out.printf(Locale.ROOT, "wash at factors 1 and 4: heat %.1f / %.1f J, boiled %.4f / %.4f mol%n", heat[0], heat[1], gone[0], gone[1]);
+        assertEquals(rating * 180, heat[0], 1e-3 * rating * 180, "factor 1: 180 s of firing");
+        assertEquals(heat[0], heat[1], 1e-9 * heat[0], "factor 4: the same heat in a quarter of the ticks");
+        assertTrue(gone[0] > 10, "the wash boils: " + gone[0] + " mol");
+        assertEquals(gone[0], gone[1], .05 * gone[0], "the same boil-off over the same process time");
     }
 
     /**
