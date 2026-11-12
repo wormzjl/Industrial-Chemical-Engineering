@@ -18,10 +18,7 @@
     "hot": {
       "trigger": "icheme:still_state",
       "conditions": {
-        "status": [
-          "DISTILLING",
-          "COOLING_LIMITED"
-        ],
+        "liquid": true,
         "min_pot_temperature": 506
       }
     }

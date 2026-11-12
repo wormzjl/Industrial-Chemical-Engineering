@@ -8,11 +8,12 @@ import java.util.Set;
 
 /**
  * What a guide step asks of a still the player watches (batch 2026-11-12-tutorial-system, P2b; criterion
- * {@code icheme:still_state}): optional statuses (the still law's status names), a least filled share of the pot, and a
- * least pot temperature (K). A condition left out holds. The rule reads only what the published view carries; no
+ * {@code icheme:still_state}): optional statuses (the still law's status names), a least filled share of the pot, a
+ * least pot temperature (K), and liquid at the spout (the view's distillate flow above zero: a head that only vents its
+ * gas gives none). A condition left out holds. The rule reads only what the published view carries; no
  * Minecraft type, so it is tested on its own.
  */
-public record StillCondition(Optional<List<String>> status, Optional<Double> minFilled, Optional<Double> minPotTemperature) {
+public record StillCondition(Optional<List<String>> status, Optional<Double> minFilled, Optional<Double> minPotTemperature, Optional<Boolean> liquid) {
     /** The statuses of a still that is firing: heating, boiling, or taking product over (a limited condenser still distils). */
     public static final Set<String> FIRING = Set.of("HEATING", "BOILING", "DISTILLING", "COOLING_LIMITED");
 
@@ -23,12 +24,14 @@ public record StillCondition(Optional<List<String>> status, Optional<Double> min
     }
 
     /**
-     * Whether a still's published view meets the condition: its {@code status}, its {@code filled} share of the pot and
-     * its {@code potTemperature} (K; null before the first answer, which meets no temperature condition).
+     * Whether a still's published view meets the condition: its {@code status}, its {@code filled} share of the pot, its
+     * {@code potTemperature} (K; null before the first answer, which meets no temperature condition) and its {@code
+     * distillate} flow to the spout (kg/s).
      */
-    public boolean matches(String status, double filled, @Nullable Double potTemperature) {
+    public boolean matches(String status, double filled, @Nullable Double potTemperature, double distillate) {
         if (this.status.isPresent() && !this.status.get().contains(status)) return false;
         if (minFilled.isPresent() && !(filled >= minFilled.get())) return false;
+        if (liquid.isPresent() && liquid.get() != distillate > 0) return false;
         return minPotTemperature.isEmpty() || potTemperature != null && potTemperature >= minPotTemperature.get();
     }
 

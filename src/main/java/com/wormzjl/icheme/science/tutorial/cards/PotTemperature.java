@@ -148,6 +148,17 @@ public final class PotTemperature implements Card {
         var plot = new Rect(px, pyTop, pw, ph);
         int markX = px + (int) Math.round(share / end * (pw - 1));
         double[] cuts = cuts();
+        // The cuts' words at the plot's top, each just left of its line: the first on the top row, the second on the row under
+        // it; past the fire out, where it fits over the curve, the fire left on. Each is placed before the drawing, so the
+        // mark's line breaks where it would cross one.
+        String first = tr.apply(KEY + ".cut_first"), last = tr.apply(KEY + ".cut_end"), after = tr.apply(KEY + ".after");
+        int cx1 = px + (int) Math.round(cuts[0] / end * (pw - 1)), cx2 = Math.min(plot.right() - 1, px + (int) Math.round(cuts[1] / end * (pw - 1)));
+        int lastX = cx2 - 2 - m.width(last), firstX = cx1 - 2 - m.width(first);
+        var words = new ArrayList<Word>();
+        if (firstX >= px + 2) words.add(new Word(first, firstX, plot.y() + 1, m.width(first), Palette.WARN));
+        // The second only where the curve stays under its row (the curve rises to the right, so it is highest at the fire out).
+        if (lastX >= px + 2 && yOf(kelvin(cuts[1]), plot) >= plot.y() + 21) words.add(new Word(last, lastX, plot.y() + 11, m.width(last), Palette.WARN));
+        if (cx2 + 3 + m.width(after) <= plot.right() - 1 && yOf(kelvin(end), plot) >= plot.y() + 11) words.add(new Word(after, cx2 + 3, plot.y() + 1, m.width(after), Palette.MUTED));
         c.batch(() -> {
             int lastY = -1;
             for (int x = 0; x < pw; x++) {
@@ -166,7 +177,16 @@ public final class PotTemperature implements Card {
             }
             c.fill(px, plot.y(), px + 1, plot.bottom(), OUTLINE);
             c.fill(px, plot.bottom() - 1, plot.right(), plot.bottom(), OUTLINE);
-            c.fill(markX, plot.y(), markX + 1, plot.bottom(), MARK);
+            // The mark, broken a pixel round every word it would cross.
+            int from = plot.y();
+            for (int yy = plot.y(); yy <= plot.bottom(); yy++) {
+                boolean covered = false;
+                for (var word : words) covered |= word.covers(markX, yy);
+                if (covered || yy == plot.bottom()) {
+                    if (yy > from) c.fill(markX, from, markX + 1, yy, MARK);
+                    from = yy + 1;
+                }
+            }
             for (int i = 0; i < entries.size(); i++) {
                 int ex = x0 + (i % columns) * colW, ey = legendY + (i / columns) * 10;
                 c.fill(ex, ey + 1, ex + 6, ey + 7, colour(shown.get(i)));
@@ -174,19 +194,18 @@ public final class PotTemperature implements Card {
         });
         c.text(top, x0, plot.y(), Palette.MUTED);
         c.text(bottom, x0, plot.bottom() - 9, Palette.MUTED);
-        // The cuts' words at the plot's top, each just left of its line: the first on the top row, the second on the row under it.
-        String first = tr.apply(KEY + ".cut_first"), last = tr.apply(KEY + ".cut_end");
-        int cx1 = px + (int) Math.round(cuts[0] / end * (pw - 1)), cx2 = Math.min(plot.right() - 1, px + (int) Math.round(cuts[1] / end * (pw - 1)));
-        int lastX = cx2 - 2 - m.width(last), firstX = cx1 - 2 - m.width(first);
-        if (firstX >= px + 2) c.text(first, firstX, plot.y() + 1, Palette.WARN);
-        // The second only where the curve stays under its row (the curve rises to the right, so it is highest at the fire out).
-        if (lastX >= px + 2 && yOf(kelvin(cuts[1]), plot) >= plot.y() + 21) c.text(last, lastX, plot.y() + 11, Palette.WARN);
-        // Past the fire out, where it fits over the curve: the fire left on.
-        String after = tr.apply(KEY + ".after");
-        if (cx2 + 3 + m.width(after) <= plot.right() - 1 && yOf(kelvin(end), plot) >= plot.y() + 11) c.text(after, cx2 + 3, plot.y() + 1, Palette.MUTED);
+        for (var word : words) c.text(word.text(), word.x(), word.y(), word.colour());
         String axis = tr.apply(KEY + ".share");
         c.text(m.cut(axis, pw), px + Math.max(0, (pw - m.width(axis)) / 2), plot.bottom() + 2, Palette.MUTED);
         for (int i = 0; i < entries.size(); i++) c.text(m.cut(entries.get(i), colW - 9), x0 + (i % columns) * colW + 9, legendY + (i / columns) * 10, Palette.TEXT);
+    }
+
+    /** A word on the plot: its text, its top left corner, its width (px) and colour; one text row (9 px) tall. */
+    record Word(String text, int x, int y, int width, int colour) {
+        /** Whether the pixel ({@code px}, {@code py}) is on the word or a pixel round it. */
+        boolean covers(int px, int py) {
+            return px >= x - 1 && px <= x + width && py >= y - 1 && py <= y + 9;
+        }
     }
 
     /** The screen row of temperature {@code k} on {@code plot}. */

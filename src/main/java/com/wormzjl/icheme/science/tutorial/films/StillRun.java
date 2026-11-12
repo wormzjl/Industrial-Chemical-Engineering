@@ -15,11 +15,13 @@ import java.util.List;
 
 /**
  * The film "a still run" (batch 2026-11-12-tutorial-system, P2b; guide step {@code still/watch}), replaying the recorded
- * run {@code still_run.json} ({@link StillRunData}) in five stops; the film computes nothing, it reads the recording
- * through a {@link Value.Timeline}. 1: the fire is lit; the pot's readout climbs. 2: the first drop falls from the spout,
- * the readout at the recorded temperature. 3: the readout climbs on while the level falls and the light dots leave, to
- * the end of the naphtha part. 4: the stream is switched to the second drum; the middle dots leave there, its liquid
- * darker. 5: the fire is put out before the end, the readouts held at the recording's last values.
+ * run {@code still_run.json} ({@link StillRunData}) in four stops; the film computes nothing, it reads the recording
+ * through a {@link Value.Timeline}. 1: the fire is lit and the first drop falls from the spout (the recording's first
+ * liquid at the spout), the readout at the recorded temperature. 2: the readout climbs while the level falls and the light
+ * dots leave, to the end of the naphtha, where the stream is switched to the second drum. 3: the middle dots leave there,
+ * its liquid darker, to the end of the kerosene, where the hand puts the fire out. 4: what the fire left on does: the pot
+ * climbs to the law's overheat cut, the still cuts its own fire and the heavy part stays. The drums fill with the spout's
+ * liquid; the gas the condenser cannot hold leaves by the vent and is not drawn.
  *
  * <p>The still is cut open as in "inside the still" (three actors, three cuts); the two receivers are small upright drums
  * in front of its spout, joined to the distillate nozzle by a plain line with a tee. Each stop maps onto a stretch of the
@@ -65,9 +67,13 @@ public final class StillRun {
         return new Value.Timeline(FILM, recording(run));
     }
 
-    /** The share of the charge's gas and naphtha (the first cut, from the recording's set-up), and the share taken overhead by the run's end. */
+    /**
+     * The share of the charge's mass in the drums at the switch (the end of the naphtha) and at the run's end: the spout's
+     * liquid only; the gas the condenser cannot hold leaves by the vent, not into a drum.
+     */
     static double[] cuts(Series.Recording run) {
-        return new double[]{StillRunData.share(run, "gas") + StillRunData.share(run, "naphtha"), StillRunData.overhead(run, run.time().end())};
+        var distilled = run.series("distilled");
+        return new double[]{distilled.at(run.line("naphtha", "time")), distilled.at(run.time().end())};
     }
 
     public static Scene build() {
@@ -97,10 +103,10 @@ public final class StillRun {
 
         double[] cuts = cuts(run);
         double firstCut = cuts[0], last = cuts[1];
-        Value overhead = t -> StillRunData.overhead(run, t);
-        // The receivers fill with what the recording took overhead: the first up to the cut, the second after it to the run's end.
-        Value fill1 = timeline.replay(t -> DRUM_FULL * Math.min(1, overhead.at(t) / firstCut));
-        Value fill2 = timeline.replay(t -> DRUM_FULL * Math.clamp((overhead.at(t) - firstCut) / (last - firstCut), 0, 1));
+        var distilled = run.series("distilled");
+        // The receivers fill with what reached the spout: the first up to the cut, the second after it to the run's end.
+        Value fill1 = timeline.replay(t -> DRUM_FULL * Math.min(1, distilled.at(t) / firstCut));
+        Value fill2 = timeline.replay(t -> DRUM_FULL * Math.clamp((distilled.at(t) - firstCut) / (last - firstCut), 0, 1));
         Value level = timeline.replay(t -> run.series("level").at(t));
         // The fire: lit at once, left on past the fire out of stop 3 (what if), cut by the still itself over the last second.
         Value fire = t -> StillInside.FIRE * Math.clamp(t / .8, 0, 1) * Math.clamp(STOP_4 - t, 0, 1);

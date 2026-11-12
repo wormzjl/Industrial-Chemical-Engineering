@@ -74,7 +74,7 @@ public final class TutorialTriggers {
         if (still != null && StillCondition.firing(still.status())) STILL_STOPPED.get().trigger(player);
     }
 
-    /** A still the player watches, as its published view shows it: optional statuses, a least filled share and a least pot temperature (K). */
+    /** A still the player watches, as its published view shows it: optional statuses, a least filled share, a least pot temperature (K) and liquid at the spout. */
     public static final class StillState extends SimpleCriterionTrigger<StillState.Instance> {
         @Override
         public Codec<Instance> codec() {
@@ -82,20 +82,21 @@ public final class TutorialTriggers {
         }
 
         public void trigger(ServerPlayer player, FluidView.Still still) {
-            trigger(player, instance -> instance.condition().matches(still.status(), still.filled(), still.potTemperature()));
+            trigger(player, instance -> instance.condition().matches(still.status(), still.filled(), still.potTemperature(), still.distillate()));
         }
 
         public record Instance(Optional<ContextAwarePredicate> player, Optional<List<String>> status, Optional<Double> minFilled,
-                               Optional<Double> minPotTemperature) implements SimpleCriterionTrigger.SimpleInstance {
+                               Optional<Double> minPotTemperature, Optional<Boolean> liquid) implements SimpleCriterionTrigger.SimpleInstance {
             public static final Codec<Instance> CODEC = RecordCodecBuilder.create(i -> i.group(
                     EntityPredicate.ADVANCEMENT_CODEC.optionalFieldOf("player").forGetter(Instance::player),
                     Codec.STRING.listOf().optionalFieldOf("status").forGetter(Instance::status),
                     Codec.doubleRange(0, 1).optionalFieldOf("min_filled").forGetter(Instance::minFilled),
-                    Codec.doubleRange(1, 5000).optionalFieldOf("min_pot_temperature").forGetter(Instance::minPotTemperature)
+                    Codec.doubleRange(1, 5000).optionalFieldOf("min_pot_temperature").forGetter(Instance::minPotTemperature),
+                    Codec.BOOL.optionalFieldOf("liquid").forGetter(Instance::liquid)
             ).apply(i, Instance::new));
 
             public StillCondition condition() {
-                return new StillCondition(status, minFilled, minPotTemperature);
+                return new StillCondition(status, minFilled, minPotTemperature, liquid);
             }
         }
     }

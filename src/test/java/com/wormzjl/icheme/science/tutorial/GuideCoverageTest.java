@@ -156,18 +156,21 @@ class GuideCoverageTest {
     void theStillStepsHoldTheRecordingsNumbers() throws IOException {
         var run = com.wormzjl.icheme.science.tutorial.films.StillRunData.load();
         var firing = List.of("HEATING", "BOILING", "DISTILLING", "COOLING_LIMITED");
-        var distilling = List.of("DISTILLING", "COOLING_LIMITED");
         assertEquals(.5, conditions("charge").get("min_filled").getAsDouble());
         assertEquals(firing, strings(conditions("fire")));
-        assertEquals(distilling, strings(conditions("first")));
-        assertEquals(distilling, strings(conditions("cut")));
+        // The first drop and the cut count liquid at the spout, never a head that only vents its gas (the partial condenser).
+        for (var step : List.of("first", "cut")) {
+            assertTrue(conditions(step).get("liquid").getAsBoolean(), step + " asks for liquid at the spout");
+            assertFalse(conditions(step).has("status"), step + " reads the spout, not a status");
+        }
         assertEquals(Math.round(run.line("naphtha", "pot_kelvin")), conditions("cut").get("min_pot_temperature").getAsDouble(), 0, "the cut: the end of the naphtha, whole K");
         assertEquals(com.wormzjl.icheme.science.tutorial.guide.StillCondition.FIRING, Set.copyOf(firing), "the stop step's firing statuses");
         var lang = TutorialText.english();
         String first = lang.get("tutorial.icheme.guide.still.first");
         var minutes = java.util.regex.Pattern.compile("(\\d+) minutes? of play").matcher(first);
         assertTrue(minutes.find(), first);
-        assertEquals(Math.max(1, Math.round(run.line("first", "play_minutes"))), Long.parseLong(minutes.group(1)), "the first drops' minutes of play, the recording's");
+        // The first drop is a trace; the step names when the spout has given a trickle the player sees in the drum.
+        assertEquals(Math.max(1, Math.round(run.line("trickle", "play_minutes"))), Long.parseLong(minutes.group(1)), "the trickle's minutes of play, the recording's");
         // The fire out: at the end of the kerosene, its minutes of play the recording's.
         String stop = lang.get("tutorial.icheme.guide.still.stop");
         var out = java.util.regex.Pattern.compile("(\\d+) minutes? of play").matcher(stop);
