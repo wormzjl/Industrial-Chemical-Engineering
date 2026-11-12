@@ -112,7 +112,7 @@ public final class StillRunRecorder {
             } catch (IllegalArgumentException | IllegalStateException e) {
                 // The law refuses the next step: the run ends at the last step it took, with the column's reason.
                 finish = "REFUSED";
-                var split = column.solve(pot.moles(), 0, 0, 1, null);
+                var split = column.solve(pot.moles(), 0, 0, null);
                 refusal = split.converged() ? e.getMessage() : split.failure();
                 break;
             }
@@ -212,7 +212,7 @@ public final class StillRunRecorder {
         setup.addProperty("water_kelvin", WATER_KELVIN);
         setup.addProperty("time_factor", TIME_FACTOR);
         setup.addProperty("finish", run.finish());
-        // What ended the run: the law's refusal (a provisional recording, to re-record once the law takes the run on), boiling dry or overheating.
+        // What ended the run: the law's overheat cut, boiling dry, or the law's refusal (the recorder's answer to any refusal).
         setup.addProperty("ended_at", switch (run.finish()) {
             case "REFUSED" -> "law_refusal";
             case "BOIL_DRY" -> "boil_dry";
