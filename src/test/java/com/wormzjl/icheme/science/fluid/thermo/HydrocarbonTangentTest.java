@@ -49,6 +49,13 @@ class HydrocarbonTangentTest {
         list.add(new Case("polar vapour", polar, 400, 1e5, Root.VAPOR, amounts(polar, "Water", 0.4, "Ethanol", 0.5, "N-hexane", 0.1)));
         list.add(new Case("near-critical", refinery, 215, 55e5, Root.VAPOR, amounts(refinery, "Methane", 0.9, "Propylene", 0.1)));
         list.add(new Case("spine liquid (dry model)", spine, 120, 2e6, Root.LIQUID, cryogenic));
+        // The cold campaign's LNG (nitrogen, methane, ethane, carbon dioxide) at two generator states of its seed 65 and
+        // near methane's saturation between them, on each root: all below the spines' data (COLD_PILOT prints the ends).
+        double[] lng = new double[spine.componentCount() + 1];
+        lng[0] = 0.005; lng[1] = 0.925; lng[2] = 0.04; lng[3] = 0.03;
+        for (double[] state : new double[][] {{161, 2532e3}, {115, 182e3}, {140, 640e3}})
+            for (Root root : Root.values())
+                list.add(new Case("LNG " + (int) state[0] + " K " + (int) (state[1] / 1e3) + " kPa " + root, spine, state[0], state[1], root, lng));
         return list;
     }
 
@@ -142,6 +149,23 @@ class HydrocarbonTangentTest {
         var farExact = model.state(t, p, thin, base.liquidAmounts(), base.aqueousAmounts(), prepared);
         assertEquals(Double.doubleToLongBits(farExact.vaporVolume()), Double.doubleToLongBits(far.vaporVolume()));
         assertEquals(Double.doubleToLongBits(exact.liquidSlotVolume()), Double.doubleToLongBits(far.liquidSlotVolume()), "the liquids did not move");
+    }
+
+    /** The cold pilot's states: where the ideal-gas data ends, and which root each slot stands on. Prints only. */
+    @Test void theColdPilotStatesArePrinted() {
+        var spine = new HydrocarbonModel(PilotCryogenicTestCatalog.withPilot(), PilotCryogenicTestCatalog.PACKAGE_ID);
+        var eos = spine.translated();
+        for (int i = 0; i < spine.componentCount(); i++)
+            System.out.printf(Locale.ROOT, "COLD_PILOT %s ideal-gas data %.2f to %.2f K%n", spine.components().get(i), eos.idealGasMinimumTemperature(i), eos.idealGasMaximumTemperature(i));
+        double[] lng = {0.005, 0.925, 0.04, 0.03};
+        for (double[] state : new double[][] {{161, 2532e3}, {115, 182e3}, {140, 640e3}})
+            for (Root root : Root.values()) {
+                var values = eos.evaluateValues(state[0], state[1], lng, root, eos.prepare(state[0]));
+                double z = values.compressibility(), pip = values.phaseIdentificationParameter();
+                System.out.printf(Locale.ROOT, "COLD_PILOT %.0f K %.0f kPa %s: roots %d Z %.6f PIP %.6f liquid-like %b vapour-like %b%n", state[0], state[1] / 1e3, root,
+                        values.physicalRootCount(), z, pip, com.wormzjl.icheme.science.thermo.phase.PhaseIdentification.liquidLike(pip, z),
+                        com.wormzjl.icheme.science.thermo.phase.PhaseIdentification.vapourLike(pip, z));
+            }
     }
 
     /** Test 2: beside the base, in temperature, pressure and every amount, the error falls with the square of the step. */
