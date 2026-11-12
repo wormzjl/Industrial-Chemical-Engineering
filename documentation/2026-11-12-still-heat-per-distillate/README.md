@@ -29,6 +29,10 @@ charge. Fix: the split's rates per mole of distillate; the law's bracket on the 
   StillRuntimeTest 12, BatchStillUnitTest 9, StillSizingTest 4, EthanolMainDataTest 5; the crude gate fails with the
   outlet forced to the total condenser. Moved: the medium crude gate (vented 0.0304 to 0.0638 of the moles) and the
   sheet's wet naphtha (water to the vent 0.8464). Review section 5.
+- 2026-11-12: closed valve gated (option A, owner "Build A"): a short reflux the trays cannot carry runs them dry, the
+  pot's single stage returning all of its liquid; the sheet's refused-solve fallback the same. BatchStillTest 23 (new
+  closed-valve crude gate), StillHeadTest 5, StillRuntimeTest 12, BatchStillUnitTest 9, StillSizingTest 4,
+  EthanolMainDataTest 5, all pass. Moved: continuity at T_b + 1 K, liquid share 0.000078 to 0.
 
 ## Documents
 
@@ -53,9 +57,10 @@ charge. Fix: the split's rates per mole of distillate; the law's bracket on the 
 ## Open items
 
 1. Owner: the runtime's flood cap (heat times F per watt of the condenser's duty) trips early on crude (review, section 3).
-2. The condenser with light ends: built (option c, 5 K). Open: the closed valve with gas at the outlet (review section 5)
-   is read from the code, not run; trays' bubble points keep today's search (a tray's trivial root not examined); the
-   tutorial's chapter 2 crude numbers move with the vented share.
+2. The condenser with light ends: built (option c, 5 K); the closed valve gated (option A). Open: the 4-tray column
+   refuses its own solve on crude at small R (no convergence, no positive tray flow) and answers on dry trays (option B);
+   trays' bubble points keep today's search (a tray's trivial root not examined); the tutorial's chapter 2 crude numbers
+   move with the vented share.
 3. Final lane: the runtime classes that load `StillHead` or `BatchStill` through the coordinator (58 by
    `tools/merge-lane/affected.mjs`, 2 of them in `holdGates`) and the fluid GameTests (`BatchStill.java` changed; no
    GameTest runs a still).
