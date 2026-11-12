@@ -22,12 +22,19 @@ charge. Fix: the split's rates per mole of distillate; the law's bracket on the 
   aqueous branch's equation of state: OVERHEAT at 350.00 C, 143 steps, 41.76 % of the mass and 66.29 % of the moles
   distilled, 3.04 % vented (main: 41.78, 66.43, 2.90). The condenser with light ends diagnosed with a probe (removed):
   CONDENSER_LIGHT_ENDS_REVIEW.md, options a to c, c recommended; nothing built.
+- 2026-11-12: option c built on `claude/still-on-aqueous-fdba0c` (owner: "Approve c, 5 K"): the column (cb534629e), the
+  pot's step and the sheet (2eb3c67ea), the world (36809c8a1). The condenser's outlet is max(T_b, min(T_head, water + 5 K)),
+  partial at T_out with its gas to the vent; the critical-temperature rule deleted; the reflux drawn from the liquid, its
+  ratio solved as one unknown where the liquid is short. Filtered runs, all pass: BatchStillTest 22, StillHeadTest 5,
+  StillRuntimeTest 12, BatchStillUnitTest 9, StillSizingTest 4, EthanolMainDataTest 5; the crude gate fails with the
+  outlet forced to the total condenser. Moved: the medium crude gate (vented 0.0304 to 0.0638 of the moles) and the
+  sheet's wet naphtha (water to the vent 0.8464). Review section 5.
 
 ## Documents
 
 - [STILL_REFUSAL_REVIEW.md](STILL_REFUSAL_REVIEW.md): expected behaviour, the baseline, the fix built and options A, B, C.
 - [CONDENSER_LIGHT_ENDS_REVIEW.md](CONDENSER_LIGHT_ENDS_REVIEW.md): the condenser on a vapour with light ends (a trivial root,
-  a bubble point under the water), the engine-flash reference at three states, options a to c.
+  a bubble point under the water), the engine-flash reference at three states, options a to c, and option c as built.
 - Scratch (local, git-ignored): `tmp/still-merge/` in the aqueous worktree (`distillation-failure-mode-control-db2da5`): the
   merge's edit scripts and test logs, the probe (`CondenserLightEndsProbeTest.java.txt`) and its output (`probe2-out.txt`).
 - Scratch (local, git-ignored): `tmp/still-refusal/` in the batch worktree: baseline and after-fix logs and results, the
@@ -35,19 +42,20 @@ charge. Fix: the split's rates per mole of distillate; the law's bracket on the 
 
 ## Code areas
 
-- `science/fluid/network/StillColumn`: `Split` per mole of distillate (closed valve: per mole of top vapour);
-  `solve(pot, stages, reflux, warm)`; `energyPerDistillate` stored.
+- `science/fluid/network/StillColumn`: `Split` per mole of distillate (closed valve: per mole of top vapour), with each
+  component's liquid share and the gas's enthalpy; `solve(pot, stages, reflux, outlet, warm)`, `TOTAL_CONDENSER`; the
+  partial outlet (`outletAt`, `partial`), the bracketed bubble point, the ratio's secant; `energyPerDistillate` stored.
 - `science/fluid/network/BatchStill`: `boiled`'s bracket seed (`TRIAL_SHARE`), the rate basis for the flood and the
-  condenser's need.
-- `science/fluid/network/StillHead`: the F-factor per watt over the condenser's duty.
+  condenser's need; `OUTLET_APPROACH`, `outlet`; `step` split by each component's liquid share.
+- `science/fluid/network/StillHead`: the F-factor per watt over the condenser's duty; `divide` by liquid shares; `Job.outlet`.
+- `runtime/fluid/Stills` (the job's outlet, the status by liquid at the spout), `IslandCoordinator.sideTemperature`.
 
 ## Open items
 
 1. Owner: the runtime's flood cap (heat times F per watt of the condenser's duty) trips early on crude (review, section 3).
-2. Owner: the condenser with light ends (CONDENSER_LIGHT_ENDS_REVIEW.md): option a or c (c recommended) and the outlet's
-   approach over the water (5 K proposed). Until then, on medium crude, the sheet sends C1 to C3 gas to the spout at 26 to
-   50 C, vents everything at 57 to 78 C and condenses everything from about 90 C; the world divides by critical temperature
-   at that false condensate.
+2. The condenser with light ends: built (option c, 5 K). Open: the closed valve with gas at the outlet (review section 5)
+   is read from the code, not run; trays' bubble points keep today's search (a tray's trivial root not examined); the
+   tutorial's chapter 2 crude numbers move with the vented share.
 3. Final lane: the runtime classes that load `StillHead` or `BatchStill` through the coordinator (58 by
    `tools/merge-lane/affected.mjs`, 2 of them in `holdGates`) and the fluid GameTests (`BatchStill.java` changed; no
    GameTest runs a still).
