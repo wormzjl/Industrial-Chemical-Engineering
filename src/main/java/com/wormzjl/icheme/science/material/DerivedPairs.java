@@ -37,8 +37,10 @@ import java.util.function.ToDoubleFunction;
  *   attraction) is refused. A local-composition cell on the gas centre would carry the solubility only with an energy
  *   several times the gas's own cohesion, which makes the hot wet gas's attraction negative (W3b, section 12 item 3);</li>
  *   <li>{@link Source#ACTIVITY}: two compounds with modified UNIFAC (Dortmund) counts, both liquids at 298.15 K and
- *   2 MPa (below Tc, root denser than PR's critical volume), at least one polar (a main group other than 1, 2, 3, 4 and
- *   42; water is polar), whose main-group pairs the table holds: the group model's ln gamma of both compounds on 15
+ *   2 MPa (below Tc, root denser than PR's critical volume), at least one a solvent ({@code Compound.solvent}: water, or
+ *   a polar compound, one with a main group other than 1, 2, 3, 4 and 42, that names a {@link MaterialCatalog.Homomorph};
+ *   owner, 2026-11-12, section 13 of W5_COLUMN_PLAN.md: a polar compound without one, methyl mercaptan, takes E-PPR78
+ *   below with a hydrocarbon), whose main-group pairs the table holds: the group model's ln gamma of both compounds on 15
  *   compositions at 298.15 K fitted by least squares, through the equation of state at 2 MPa
  *   ({@code ln gamma_i = ln phi_i - ln phi_i} of the pure liquid), into alpha and the two energies; then the two energies
  *   alone at 373.15 K with that alpha (constant energies when a compound is not a liquid at 373.15 K); energies linear
@@ -69,7 +71,7 @@ import java.util.function.ToDoubleFunction;
  */
 public final class DerivedPairs {
     /** The declared revision of the derivation: bumped when a rule, a constant or a fit setting here changes. */
-    public static final String REVISION = "derived-pairs-r6";
+    public static final String REVISION = "derived-pairs-r7";
     public static final double FIRST_KELVIN = 298.15;
     public static final double SECOND_KELVIN = 373.15;
     /** The pressure of the activity fit: both compounds liquid at both temperatures for the usual solvents. */
@@ -259,7 +261,7 @@ public final class DerivedPairs {
                     excess.classicalLinear(i, j, FIRST_KELVIN, k[0], SECOND_KELVIN, k[1]);
                     pair = new Pair(a.id, b.id, Source.HENRY, String.format(java.util.Locale.ROOT,
                             "k_ij %.5f at %.2f K, %.5f at %.2f K (Henry)", k[0], FIRST_KELVIN, k[1], SECOND_KELVIN));
-                } else if (a.activity() && b.activity() && (a.polar || b.polar) && context.groupModel(a, b, notices)) {
+                } else if (a.activity() && b.activity() && (a.solvent() || b.solvent()) && context.groupModel(a, b, notices)) {
                     // Fitted with the compounds in record-key order, so one fit serves either list order.
                     boolean ordered = a.recordKey.compareTo(b.recordKey) <= 0;
                     Compound first = ordered ? a : b, second = ordered ? b : a;
@@ -360,6 +362,8 @@ public final class DerivedPairs {
                             boolean polar, boolean liquidAtFirst, boolean liquidAtSecond) {
         /** Takes part in an activity pair: Dortmund counts, and a liquid at 298.15 K and the fit pressure. */
         boolean activity() { return dortmund != null && liquidAtFirst; }
+        /** Opens an activity pair: water, or a polar compound that names a homomorph (a water-miscible solvent). */
+        boolean solvent() { return id.equals(WATER) || polar && homomorph != null; }
     }
 
     /** A fitted activity pair: alpha and the energies {@code {dg(second around first), dg(first around second)}} at both temperatures. */

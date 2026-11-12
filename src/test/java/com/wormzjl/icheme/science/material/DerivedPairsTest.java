@@ -147,6 +147,26 @@ class DerivedPairsTest {
         assertEquals(Map.of("CH3", 2, "CH2", 7), DerivedPairs.paraffinic(cut));
     }
 
+    /**
+     * Section 13 of W5_COLUMN_PLAN.md (owner, 2026-11-12): an activity pair needs a solvent, water or a polar compound that names a
+     * homomorph. Methyl mercaptan, polar by its SH group with no homomorph, takes E-PPR78 at 298.15 K with a hydrocarbon and a
+     * cut; with water it takes E-PPR78 as before the rule, since the Dortmund table holds no H2O / CH3SH group pair. Water and
+     * ethanol, which names one, keep their fits with the hydrocarbons.
+     */
+    @Test void anActivityPairNeedsASolvent() {
+        var bundled = MaterialCatalog.bundled().withWater("icheme:refinery");
+        var sour = DerivedPairs.derive(bundled, "icheme:refinery", List.of("Propane", "N-hexane", "MethylMercaptan", "crude_pc03", "Water"));
+        assertEquals(DerivedPairs.Source.EPPR78, source(sour, "MethylMercaptan", "Propane"));
+        assertEquals(DerivedPairs.Source.EPPR78, source(sour, "MethylMercaptan", "N-hexane"));
+        assertEquals(DerivedPairs.Source.EPPR78, source(sour, "MethylMercaptan", "crude_pc03"));
+        assertEquals(DerivedPairs.Source.EPPR78, source(sour, "MethylMercaptan", "Water"));
+        assertTrue(sour.notices().stream().anyMatch(n -> n.startsWith("MethylMercaptan / Water: modified UNIFAC: no group pair")), () -> "notices " + sour.notices());
+        assertEquals(DerivedPairs.Source.ACTIVITY, source(sour, "N-hexane", "Water"));
+        assertTrue(sour.polar(sour.components().indexOf("MethylMercaptan")), "still polar by its groups");
+        var pilot = DerivedPairs.derive(PilotAqueousTestCatalog.catalog(), PACKAGE);
+        assertEquals(DerivedPairs.Source.ACTIVITY, source(pilot, "Ethanol", "N-hexane"));
+    }
+
     @Test void theIdentityNamesTheRevisionsRead() {
         List<String> list = List.of("Water", "Ethanol");
         String base = DerivedPairs.derive(PilotAqueousTestCatalog.catalog(), PACKAGE, list).identity();
