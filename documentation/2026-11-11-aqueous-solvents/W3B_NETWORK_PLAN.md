@@ -627,3 +627,18 @@ All gas down to 358 K, water's dew point, then 42 % oil at once. It is in every 
 **Decision.** One rule for both: the stability test's Wilson liquid holds water at a trace when water and another compound are present; the water trial keeps the aqueous side. No added trial. A probe decides first whether the reading holds (the distance of the dry control's liquid against the wet gas at 376 K must be negative). Dry feeds stay bit for bit; wet answers that were wrongly one phase change, and the wet scenario's counters with them.
 
 Probe (sub-thread, on e1b9a3dd0, G1 committed): at 376 K and 2.5 bar the dry control's liquid with a water trace (1e-6, 1e-3, 1e-2) starts at a tangent-plane distance of +0.03 to +0.04 against the wet gas and converges in ten substitutions to one stationary point at -0.0083 (water 1.45e-3 by moles). The gas is unstable and the model has the liquid: the reading above holds, and the fix is in the search.
+
+## 35. Owner: the analytic Jacobian, design first; step 6's fixes committed; the sub-thread stopped (2026-11-12)
+
+Owner on section 30: "Yes, design first". The design is ANALYTIC_JACOBIAN_PLAN.md: the rows stay differenced, and the perturbed node's phases come from a first-order model of each phase (one derivative evaluation per phase per Jacobian). Not built.
+
+Committed by the sub-thread since section 34:
+
+- 530a051c8 (G2a): inside the network, water's saturation curve is the model's own.
+- 938283795 (G2b): the column block refuses an aqueous liquid only.
+- 450ba8f0c (G3): P-101's NPSH re-pinned on the derived pairs.
+- 4c0290223: the stability test's liquid trial seeds water at a trace (`TangentPlaneStability.SEED_TRACE` 1e-6, one constant with the three-slot seeds). The wet naphtha's oil liquid appears at about 376.5 K (dry dew point 377 K) and stays within 1.3 points of the dry flash at the hydrocarbons' partial pressure above 365 K; the 42 % step at 356 K is gone; the condenser and air cooler samples pass again; the wet scenario's counters are unchanged (10621 evaluations, same steps). New gate `WetGasGatesTest.naphthaBesideSteamCondensesAtItsOwnPartialPressure`. Evaluation bounds restated with their cause (the trial now reaches the oil liquid): water with n-hexane 119 to 125, the ethanol, water and n-hexane ternary 287 to 321 and 519 to 561.
+
+Open from that work: `FreeWaterIceTest` fails twice since G2a (the ice line follows the model's own liquid curve, -0.23 %; a search's call count 34 against 15); it goes with N10 or is restated there. `ColumnEjectorTest`'s new assertion after G1 was not reported after G2a. The polar scenario's counters before and after 4c0290223 were asked for and not delivered.
+
+The sub-thread stopped on its account's weekly limit (resets 2026-11-15 17:00, Asia/Singapore) in the middle of N10. Its working tree holds N10 half done, uncommitted: `FreeWaterIce`, `FreeWaterModel` and `FreeWaterIceTest` staged as deleted, and edits in `FluidTpEquilibrium`, `NetworkPhaseEngine`, `CrystalFugacity`, `EquilibriumResult`, `PhaseContract`, `PhaseKind`, `SteamVirial`, `ThermoIdentity`, `WaterParticipation`. Left as it is; the tree may not compile.
