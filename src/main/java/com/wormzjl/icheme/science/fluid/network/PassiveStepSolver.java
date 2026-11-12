@@ -551,8 +551,10 @@ public final class PassiveStepSolver {
                 // Decision D54: a vessel the failed iterate drained to nothing runs dry within the step. Its end state has no
                 // contents, so the pass laid out with them has no root (every step size fails the same way); it is solved
                 // again with the vessel as a junction holding its stock, which ends the step empty (emptyingGraph).
+                // The junction is laid out on its stock, the vessel's own start state (stockSeeds), not on what the failed
+                // passes folded out of it.
                 var drained=equations.runsDry(failure.lastVariables(),emptying);
-                if(drained!=null){emptying=drained;continue;}
+                if(drained!=null){seeds=stockSeeds(original,seeds,drained,emptying);emptying=drained;continue;}
                 // Owner option 1 of FEED_STEP_HOLD_REVIEW.md: a regulating flow valve fed only by vessels that hold nothing or that
                 // this pass runs dry cannot hold a target above what reaches it; its regulation row has no root at any step size
                 // (a drained level-loop drum held its island at residual = the valve's flow). It is solved again open, passing
@@ -4082,6 +4084,24 @@ public final class PassiveStepSolver {
         for(var pipe:graph.pipes())pipes.add(emptying[pipe.first()]||emptying[pipe.second()]
                 ?pipe.withPorts(emptying[pipe.first()]&&pipe.firstPort()!=PassiveNetwork.PhasePort.SPRAY?PassiveNetwork.PhasePort.BULK:pipe.firstPort(),emptying[pipe.second()]&&pipe.secondPort()!=PassiveNetwork.PhasePort.SPRAY?PassiveNetwork.PhasePort.BULK:pipe.secondPort()):pipe);
         return new PassiveNetwork(nodes,pipes,graph.scheduledTransfers());
+    }
+    /**
+     * Decision D54: {@code seeds} with every vessel that {@code drained} adds to {@code emptying} seeded with its own start
+     * state. A junction's seed is its own state, the phases of the stock it holds; the passes that failed before the
+     * vessel was found running dry read diverged iterates and may have folded a phase out of its seed. A blanketed drum
+     * of 2.9 m3 of nitrogen over 20 L of water, its gas folded by a failed 2 s pass, stood as a junction of water alone
+     * at 83.8 kPa and was confirmed emptying; with its gas it stands at 104.7 kPa, above the ambient, and keeps its
+     * contents (batch 2026-11-11-aqueous-solvents, FINAL_LANE_FIXES_REVIEW.md section 3).
+     */
+    private static List<FluidThermodynamics.State> stockSeeds(PassiveNetwork graph,List<FluidThermodynamics.State> seeds,boolean[] drained,boolean[] emptying) {
+        List<FluidThermodynamics.State> result=null;
+        for(int i=0;i<drained.length;i++) {
+            if(!drained[i]||emptying!=null&&emptying[i])continue;
+            var own=graph.reservoirs().get(i).state();if(seeds.get(i)==own)continue;
+            if(result==null)result=new ArrayList<>(seeds);
+            result.set(i,own);
+        }
+        return result==null?seeds:result;
     }
     /** Per node of {@code graph}, the stock an emptying vessel passes over the step and the ambient's work on its bag. */
     private ConservativeTransport.Emptying[] emptyings(PassiveNetwork graph,boolean[] emptying,double dt) {
