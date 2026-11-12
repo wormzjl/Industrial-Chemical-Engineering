@@ -25,6 +25,8 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
   barrel, products and road, the crude barrel recording, decisions, band shares, tests, renders.
 - [P2B_STILL_CHAPTER.md](P2B_STILL_CHAPTER.md): phase P2b, chapter 2 "The still": the recorded run, the film tracks,
   the films still_build and still_run, the card pot_temperature, the still criteria, decisions, derived lines, tests.
+- [P3_ITEMS_AND_JEI.md](P3_ITEMS_AND_JEI.md): phase P3, the 38 equipment reference items, their icons and lines, the
+  Equipment guide tab, the JEI pages, the shape-only kinds, the gate.
 
 ## History
 
@@ -53,6 +55,9 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
 - 2026-11-12: P2b re-recorded on the fixed still law (97e1a949f, dcfbe7eb1): the run ends at the overheat cut, 350 °C,
   41.8 % distilled; film still_run in four stops, the card's fire out at the end of kerosene, the stop step at 21
   minutes of play, the term boil dry dropped. 21 tutorial test classes pass.
+- 2026-11-12: P3 built (a917bf05e, a122ccb00, 2f6a50f8a, 8fe18f508, a69441950): `EquipmentInfoItem` for each of the 38
+  kinds and the Equipment guide tab, 64 px icons baked by `IconRender` (owner: 32 px too coarse), serves, needs and
+  place lines, `IChemEJeiPlugin` pages for every item, `EquipmentInfoCoverageTest`; O1 decided: reference only.
 
 ## Code areas (proposed)
 
@@ -71,7 +76,9 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
   `documentation/INDEX.md`. So: no further still law work on the old code; the still fix is ported onto that branch's
   still code, the condenser fix is made there, and `still_run.json` is recorded once more after it.
 
-- O1: equipment items reference only, or given to a survival player (proposed: reference only).
+- O1: decided 2026-11-12, reference only (creative tab and JEI).
+- P3: the owner's review of the icon sheet and the 160 lines; the in-game rows of P3_ITEMS_AND_JEI.md; icons alike at
+  1x (exchanger and kettle, grate boiler and fixed-bed gasifier) wait for their models.
 - O2: the Forge fluid converter is a prerequisite of chapter 2 in survival and is not in this plan.
 - D4: the small column, chosen by the owner after the three candidates are solved.
 - P0: the owner's one in-game check of the scene player (P0_SCENE_PLAYER.md, last section).
