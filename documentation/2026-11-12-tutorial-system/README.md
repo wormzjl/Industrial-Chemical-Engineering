@@ -63,6 +63,14 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
 
 ## Open items
 
+- Merge order (owner, 2026-11-12): this branch merges after `claude/ethanol-compound-matrix-4b318d` (batch
+  2026-11-11-aqueous-solvents). That branch rewrites `StillColumn` and `StillHead` (water on the column's basis, the
+  decanter) on the law before the still fix: it still has `solve`'s duty argument and the "no positive latent heat"
+  refusal, and it changes the refinery package's equation of state. A trial merge (`git merge-tree`, at 3a9ace9a1
+  against 5155febda) conflicts in `StillColumn.java`, `StillHead.java`, `BatchStillTest.java` and
+  `documentation/INDEX.md`. So: no further still law work on the old code; the still fix is ported onto that branch's
+  still code, the condenser fix is made there, and `still_run.json` is recorded once more after it.
+
 - O1: equipment items reference only, or given to a survival player (proposed: reference only).
 - O2: the Forge fluid converter is a prerequisite of chapter 2 in survival and is not in this plan.
 - D4: the small column, chosen by the owner after the three candidates are solved.
