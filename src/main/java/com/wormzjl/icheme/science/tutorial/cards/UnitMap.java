@@ -43,6 +43,9 @@ public final class UnitMap implements Card {
     static final Measure M = Measure.fixed(6);
     private final Flowsheet sheet;
     private final SheetLayout layout;
+    /** The tags of the hits last drawn: placed once for an area, not each frame. */
+    private @Nullable List<Hit> taggedHits;
+    private List<Rect> tagged = List.of();
     private final SheetState state;
 
     public UnitMap() {
@@ -94,7 +97,11 @@ public final class UnitMap implements Card {
         });
         // Each unit's tag under its symbol (the painter hides its own names at a card's zoom), the symbol last pressed ringed.
         var hits = hits(area, s.option());
-        var tags = tags(hits, area, c.measure());
+        if (!hits.equals(taggedHits)) {
+            tagged = tags(hits, area, c.measure());
+            taggedHits = hits;
+        }
+        var tags = tagged;
         for (int i = 0; i < hits.size(); i++) {
             var t = tags.get(i);
             c.fill(t.x() - 1, t.y() - 1, t.right() + 1, t.bottom(), 0xC0101418);
@@ -112,6 +119,56 @@ public final class UnitMap implements Card {
      * symbol and the fewest tags.
      */
     public List<Rect> tags(List<Hit> hits, Rect area, Measure m) {
+        var placing = placing(hits, area, m);
+        // The most hemmed-in unit first; then each unit put first once (one may take a place another needs more): the
+        // cheapest whole layout stands.
+        var base = new ArrayList<Integer>();
+        for (int i = 0; i < hits.size(); i++) base.add(i);
+        base.sort(java.util.Comparator.comparingInt(i -> placing.tries.get(i).size()));
+        Layout best = placing.place(base);
+        for (int first = 0; first < hits.size(); first++) {
+            var order = new ArrayList<>(base);
+            order.remove(Integer.valueOf(first));
+            order.addFirst(first);
+            var l = placing.place(order);
+            if (l.cost() < best.cost()) best = l;
+        }
+        return List.of(best.tags());
+    }
+
+    /** One whole layout of the tags and its cost. */
+    private record Layout(Rect[] tags, double cost) {
+    }
+
+    /** What placing the tags reads: the hits, their candidate places, the stream lines in view coordinates. */
+    private record Placing(List<Hit> hits, List<List<Rect>> tries, List<int[]> lines, List<Integer> widths) {
+        /** Each unit in {@code order} takes its cheapest place given those placed before it. */
+        Layout place(List<Integer> order) {
+            var placed = new Rect[hits.size()];
+            double total = 0;
+            for (int i : order) {
+                var r = hits.get(i).rect();
+                Rect best = null;
+                double bestCost = Double.MAX_VALUE;
+                for (var t : tries.get(i)) {
+                    int met = 0;
+                    for (var q : placed) if (q != null && grown(t, TAG_GAP).overlaps(q)) met++;
+                    // Near its symbol first: a tag on a line still reads on its backing, a tag far off names the wrong unit.
+                    double cost = met * 1e6 + crossed(t, lines) + 4 * distance(t, r);
+                    if (cost < bestCost) {
+                        bestCost = cost;
+                        best = t;
+                    }
+                }
+                int w = widths.get(i);
+                placed[i] = best != null ? best : new Rect(r.x() + (r.w() - w) / 2, r.bottom() + 2, w, TAG_H);
+                total += best != null ? bestCost : 1e7;
+            }
+            return new Layout(placed, total);
+        }
+    }
+
+    private Placing placing(List<Hit> hits, Rect area, Measure m) {
         var view = view(area);
         // Inside by one pixel: the tag's backing reaches a pixel past its words.
         var inner = new Rect(area.x() + 1, area.y() + 1, area.w() - 2, area.h() - 2);
@@ -123,29 +180,13 @@ public final class UnitMap implements Card {
                         (int) Math.round(view.canvasY(pts[i + 3]))});
         }
         var tries = new ArrayList<List<Rect>>();
-        for (var h : hits) tries.add(candidates(h, m.width(sheet.units().get(h.index()).name()), inner, hits));
-        // The units with the fewest free places go first.
-        var order = new ArrayList<Integer>();
-        for (int i = 0; i < hits.size(); i++) order.add(i);
-        order.sort(java.util.Comparator.comparingInt(i -> tries.get(i).size()));
-        var placed = new Rect[hits.size()];
-        for (int i : order) {
-            var r = hits.get(i).rect();
-            Rect best = null;
-            double bestCost = Double.MAX_VALUE;
-            for (var t : tries.get(i)) {
-                int met = 0;
-                for (var q : placed) if (q != null && grown(t, TAG_GAP).overlaps(q)) met++;
-                double cost = met * 1e6 + 2 * crossed(t, lines) + distance(t, r);
-                if (cost < bestCost) {
-                    bestCost = cost;
-                    best = t;
-                }
-            }
-            int w = m.width(sheet.units().get(hits.get(i).index()).name());
-            placed[i] = best != null ? best : new Rect(r.x() + (r.w() - w) / 2, r.bottom() + 2, w, TAG_H);
+        var widths = new ArrayList<Integer>();
+        for (var h : hits) {
+            int w = m.width(sheet.units().get(h.index()).name());
+            widths.add(w);
+            tries.add(candidates(h, w, inner, hits));
         }
-        return List.of(placed);
+        return new Placing(hits, tries, lines, widths);
     }
 
     /** A tag's height, px, and the room kept between two tags and between a tag and a symbol. */

@@ -22,7 +22,8 @@ import java.util.Objects;
  * <li>the fluid converter fills the crude tank, and P-101 sends it on (stream CRUDE);</li>
  * <li>the preheat: the crude cools the tower's pumparound in its cooler (S-1 to the tower's {@code pa/1/a}, back on
  * {@code pa/1/b}), then takes the hot residue's heat in E-101's tubes (S-4; the residue S-9 on its shell);</li>
- * <li>H-101 heats it (S-5), and V-101 lets it into the tower (S-6, S-7);</li>
+ * <li>H-101 heats it (S-5), and V-101 lets it into the tower (S-6, S-7); H-102 raises the tower's steam from water (BFW,
+ * STEAM: P5 stage B);</li>
  * <li>in the tower it parts: gas and naphtha over the top through the condenser and the reflux drum, the middle product
  * by P-102 (S-8), the residue from the foot to E-101's shell (S-9);</li>
  * <li>each product to a tank of its own, the residue through E-102, the air cooler, first (S-10, RESIDUE).</li>
@@ -37,7 +38,7 @@ public final class CrudeUnit {
     static final String TAG = "tutorial.icheme.film.crude_unit.";
     /** The units the film names, by their tags on the sheet (and the tanks). */
     public static final String CONVERTER = TAG + "converter", CRUDE_TANK = TAG + "crude_tank", P101 = TAG + "p101", LOOP = TAG + "loop_cooler", E101 = TAG + "e101",
-            H101 = TAG + "h101", V101 = TAG + "v101", T101 = TAG + "t101", DRUM = TAG + "drum", P102 = TAG + "p102", E102 = TAG + "e102", TANKS = TAG + "tanks";
+            H101 = TAG + "h101", H102 = TAG + "h102", V101 = TAG + "v101", T101 = TAG + "t101", DRUM = TAG + "drum", P102 = TAG + "p102", E102 = TAG + "e102", TANKS = TAG + "tanks";
 
     private CrudeUnit() {
     }
@@ -94,13 +95,16 @@ public final class CrudeUnit {
         var loop = Placed.of("loop_cooler", ref(Kind.EXCHANGER, false), .45, 19, -3);
         var e101 = Placed.of("e101", ref(Kind.EXCHANGER, false), .45, 23, -3);
         var h101 = Placed.of("h101", ref(Kind.VERTICAL_HEATER, false), .3, 29, 0);
+        // P5 stage B: H-102, the steam heater, raises the tower's steam from water (the sheet's BFW to STEAM).
+        var water = Placed.of("water_converter", ref(Kind.FLUID_CONVERTER, false), .15, 39, 7.5);
+        var h102 = Placed.of("h102", ref(Kind.VERTICAL_HEATER, false), .2, 36, 4.5);
         var t101 = Placed.of("t101", tower, 1, 38, 0);
         var drum = Placed.of("drum", ref(Kind.DRUM, true), .3, 42.5, -2);
         var p102 = Placed.of("p102", ref(Kind.PUMP, false), 1, 42, 3);
         var e102 = Placed.of("e102", ref(Kind.AIR_COOLER, false), .6, 31, 7);
         var tanks = List.of(Placed.of("naphtha_tank", ref(Kind.TANK, false), .13, 50, -5), Placed.of("middle_tank", ref(Kind.TANK, false), .13, 50, 0),
                 Placed.of("residue_tank", ref(Kind.TANK, false), .13, 50, 5));
-        var all = new ArrayList<>(List.of(converter, crudeTank, p101, loop, e101, h101, t101, drum, p102, e102));
+        var all = new ArrayList<>(List.of(converter, crudeTank, p101, loop, e101, h101, water, h102, t101, drum, p102, e102));
         all.addAll(tanks);
         var b = Scene.builder(TITLE);
         for (var p : all) b.actor(p.actor());
@@ -127,9 +131,12 @@ public final class CrudeUnit {
         var middle = ortho(List.of(draw, at(p2In[0], draw[1], p2In[2]), p2In, p2Out, at(p2Out[0], y + .5, p2Out[2]), at(mIn[0], y + .5, mIn[2]), mIn));
         var residue = ortho(List.of(foot, at(foot[0], y - .4, foot[2]), at(sIn[0], y - .4, foot[2]), at(sIn[0], y - .4, sIn[2]), sIn));
         var cooled = ortho(List.of(sOut, at(sOut[0], y - .6, sOut[2]), at(aIn[0], y - .6, sOut[2]), at(aIn[0], y - .6, aIn[2]), aIn));
+        double[] wOut = water.face(Role.BOTTOM), sIn2 = h102.face(Role.CONVECTION_INLET), sOut2 = h102.face(Role.RADIANT_OUTLET), steam = t101.face(Role.VAPOUR_RETURN);
+        var bfw = ortho(List.of(wOut, at(wOut[0], y - .2, wOut[2]), at(sIn2[0], y - .2, wOut[2]), at(sIn2[0], y - .2, sIn2[2] - 1), sIn2));
+        var steamWay = ortho(List.of(sOut2, at(sOut2[0], y - .2, sOut2[2]), at(steam[0], y - .2, sOut2[2]), at(steam[0], steam[1], sOut2[2]), at(steam[0], steam[1], steam[2]), steam));
         var stored = ortho(List.of(aOut, at(aOut[0], y - .8, aOut[2]), at(rIn[0], y - .8, aOut[2]), at(rIn[0], y - .8, rIn[2]), rIn));
         int k = 0;
-        for (var way : List.of(crude1, crude2, crude3, crude4, crude5, crude6, top, naphtha, middle, residue, cooled, stored))
+        for (var way : List.of(crude1, crude2, crude3, crude4, crude5, crude6, top, naphtha, middle, residue, cooled, stored, bfw, steamWay))
             b.actor(Actors.pipe("pipe" + k++, way, PIPE, Mesh.Material.PIPE));
         b.actor(Actors.box("valve", new double[]{valve[0] - .35, y - .35, valve[2] - .35}, new double[]{valve[0] + .35, y + .35, valve[2] + .35}, Mesh.Material.ACTUATOR));
         b.track(new Track.Camera(List.of(
@@ -156,6 +163,7 @@ public final class CrudeUnit {
                 .track(new Track.Label(e101.top(), E101, STOP_1, STOP_2))
                 .track(new Track.Label(h101.top(), H101, STOP_2, STOP_3))
                 .track(new Track.Label(valve, V101, STOP_2, STOP_3))
+                .track(new Track.Label(h102.top(), H102, STOP_2, STOP_3))
                 .track(new Track.Label(t101.top(), T101, STOP_3, STOP_4))
                 .track(new Track.Label(drum.top(), DRUM, STOP_3, STOP_4))
                 .track(new Track.Label(p2Out, P102, STOP_3, STOP_4))
