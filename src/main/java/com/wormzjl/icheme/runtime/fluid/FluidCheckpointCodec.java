@@ -106,10 +106,14 @@ import java.util.function.Function;
  * <p>45 (batch 2026-11-10-vacuum-pump; 44 on its own branch, renumbered at the merge after the chimney's 44): control tag 8 is a vacuum pump casing on its curve.</p>
  * <p>46 (batch 2026-11-10-prime-movers): heat law tag 5, a gas turbine's exhaust coil (its gas inlet and capacity rate); control valve source ENGINE, a prime mover's fuel valve.</p>
  * <p>47 (batch 2026-11-11-aqueous-solvents, W3B_NETWORK_PLAN.md section 20): a tower fill's result carries one loss per component and its leaving air's temperature and humidity.</p>
+ * <p>48 (the same batch, W3B_NETWORK_PLAN.md N9): a node's state is its three slots (gas, liquid, aqueous; sparse, on the
+ * island's basis with water last) in place of the pre-W3b record (the compounds' liquid and vapour, liquid water, steam,
+ * the compounds' gas pressure). That record cannot say which liquid a dissolved compound is in: water under nitrogen came
+ * back as a liquid of nitrogen alone beside the water, which has no liquid root.</p>
  */
 public final class FluidCheckpointCodec {
     /** The state format: the core record's {@code StateFormat} and every unit's state section. */
-    public static final int VERSION=47;
+    public static final int VERSION=48;
     /** The most wall cells a saved heat side holds (crossflow 64, Standard 8, an air cooler's flat wall 1). */
     private static final int MAXIMUM_WALL_CELLS=64;
     /** The envelope: the core record's frame, the unit header and the section layout. Frozen. */
@@ -458,8 +462,7 @@ public final class FluidCheckpointCodec {
         for(var n:graph.reservoirs()) {
             var inventory=n.inventory();var s=n.state();
             w.sparse(inventory.moles());w.f64(inventory.internalEnergy());solids(w,inventory.solids());w.bool(inventory.rigid());
-            var split=FluidThermodynamics.legacySplit(s);
-            w.f64(s.temperature());w.f64(s.pressure());w.sparse(split.liquid());w.sparse(split.vapor());w.f64(split.waterLiquid());w.f64(split.waterVapor());w.f64(split.hydrocarbonPressure());
+            w.f64(s.temperature());w.f64(s.pressure());w.sparse(s.vaporAmountsView());w.sparse(s.liquidAmountsView());w.sparse(s.aqueousAmountsView());
         }
         for(var p:graph.pipes()) {
             w.varint(p.blockedDirections());var filter=p.filter();
@@ -645,9 +648,9 @@ public final class FluidCheckpointCodec {
         var nodes=new ArrayList<PassiveNetwork.Reservoir>(t.ids.length);
         for(int n=0;n<t.ids.length;n++) {
             var moles=r.sparse(MAXIMUM_ARRAY);double energy=r.f64();var solids=solids(r,model);boolean rigid=r.bool();
-            double temperature=r.f64(),pressure=r.f64();var liquid=r.sparse(MAXIMUM_ARRAY);var vapor=r.sparse(MAXIMUM_ARRAY);double waterLiquid=r.f64(),waterVapor=r.f64(),hydrocarbonPressure=r.f64();
+            double temperature=r.f64(),pressure=r.f64();var vapor=r.sparse(MAXIMUM_ARRAY);var liquid=r.sparse(MAXIMUM_ARRAY);var aqueous=r.sparse(MAXIMUM_ARRAY);
             var inventory=new PassiveNetwork.Inventory(t.volumes[n],moles,energy,solids,t.heights[n],t.opens[n],t.geometries[n],t.pools[n],t.towers[n],rigid);
-            var state=Arrays.stream(moles).sum()==0&&!solids.empty()?model.solidState(temperature,pressure,solids):model.fromLegacySplit(temperature,pressure,liquid,vapor,waterLiquid,waterVapor).withSolids(solids);
+            var state=Arrays.stream(moles).sum()==0&&!solids.empty()?model.solidState(temperature,pressure,solids):model.state(temperature,pressure,vapor,liquid,aqueous).withSolids(solids);
             nodes.add(new PassiveNetwork.Reservoir(t.ids[n],t.elevations[n],state,t.kinds[n],inventory));
         }
         var pipes=new ArrayList<PassiveNetwork.Pipe>(t.pipeIds.length);
