@@ -87,6 +87,19 @@ public final class CrudeUnit {
     }
 
     public static Scene build() {
+        return film(false);
+    }
+
+    /**
+     * The film "unit_build" (P5 stage B; guide step {@code build/site}): the same plot, seen whole, its parts appearing in
+     * the build's order: the tower; its top and the cooling loop's cooler; the crude's way (converter, tank, P-101, the
+     * exchangers, H-101, V-101); the steam's (the water converter, H-102); the products' (P-102, E-102, the tanks).
+     */
+    public static Scene buildOrder() {
+        return film(true);
+    }
+
+    private static Scene film(boolean order) {
         var preset = SmallTower.preset();
         var tower = SmallTower.shape(preset);
         var converter = Placed.of("converter", ref(Kind.FLUID_CONVERTER, false), .22, 0, 0);
@@ -106,7 +119,7 @@ public final class CrudeUnit {
                 Placed.of("residue_tank", ref(Kind.TANK, false), .13, 50, 5));
         var all = new ArrayList<>(List.of(converter, crudeTank, p101, loop, e101, h101, water, h102, t101, drum, p102, e102));
         all.addAll(tanks);
-        var b = Scene.builder(TITLE);
+        var b = Scene.builder(order ? BUILD_TITLE : TITLE);
         for (var p : all) b.actor(p.actor());
         b.actor(Actors.box("ground", new double[]{-6, -.1, -10}, new double[]{56, 0, 12}, Mesh.Material.SUPPORT));
         double y = RACK;
@@ -139,6 +152,7 @@ public final class CrudeUnit {
         for (var way : List.of(crude1, crude2, crude3, crude4, crude5, crude6, top, naphtha, middle, residue, cooled, stored, bfw, steamWay))
             b.actor(Actors.pipe("pipe" + k++, way, PIPE, Mesh.Material.PIPE));
         b.actor(Actors.box("valve", new double[]{valve[0] - .35, y - .35, valve[2] - .35}, new double[]{valve[0] + .35, y + .35, valve[2] + .35}, Mesh.Material.ACTUATOR));
+        if (order) return order(b, t101, drum, h101, h102, tanks.get(1), valve);
         b.track(new Track.Camera(List.of(
                 new Track.Key(0, YAW, PITCH, 7, 25, 4, 0),
                 new Track.Key(2, YAW, PITCH, 13, 8, 2, 0),
@@ -184,6 +198,42 @@ public final class CrudeUnit {
         dots(b, Track.Kind.HEAVY, cooled, STOP_4 + .5, STOP_5, 10);
         dots(b, Track.Kind.HEAVY, stored, STOP_4 + 1.5, STOP_5, 10);
         return b.stop(STOP_1).stop(STOP_2).stop(STOP_3).stop(STOP_4).stop(STOP_5).build();
+    }
+
+    /** The build's stops, s. */
+    static final double BUILD_1 = 5, BUILD_2 = 11, BUILD_3 = 17, BUILD_4 = 23, BUILD_5 = 29, FADE = 1.2;
+    public static final String BUILD_NAME = "unit_build", BUILD_TITLE = "tutorial.icheme.film." + BUILD_NAME;
+
+    /** {@link #buildOrder}'s tracks: each group shows from its stop on, the camera on it with the tower whole. Pipes by their index in {@link #film}'s list. */
+    private static Scene order(Scene.Builder b, Placed t101, Placed drum, Placed h101, Placed h102, Placed tank, double[] valve) {
+        b.track(new Track.Visible("t101", .5, BUILD_5, FADE));
+        for (var id : List.of("drum", "pipe6")) b.track(new Track.Visible(id, BUILD_1 + .5, BUILD_5, FADE));
+        for (var id : List.of("converter", "crude_tank", "p101", "loop_cooler", "e101", "h101", "valve", "pipe0", "pipe1", "pipe2", "pipe3", "pipe4", "pipe5"))
+            b.track(new Track.Visible(id, BUILD_2 + .5, BUILD_5, FADE));
+        for (var id : List.of("water_converter", "h102", "pipe12", "pipe13")) b.track(new Track.Visible(id, BUILD_3 + .5, BUILD_5, FADE));
+        for (var id : List.of("p102", "e102", "naphtha_tank", "middle_tank", "residue_tank", "pipe7", "pipe8", "pipe9", "pipe10", "pipe11"))
+            b.track(new Track.Visible(id, BUILD_4 + .5, BUILD_5, FADE));
+        b.track(new Track.Camera(List.of(
+                        new Track.Key(0, YAW, PITCH, 7.5, 40, 10, 0),
+                        new Track.Key(BUILD_2, YAW, PITCH, 7.5, 40, 10, 0),
+                        new Track.Key(BUILD_2 + 2, YAW, PITCH, 6.5, 24, 7, 0),
+                        new Track.Key(BUILD_3, YAW, PITCH, 6.5, 24, 7, 0),
+                        new Track.Key(BUILD_3 + 2, YAW, PITCH, 6.5, 38, 7, 6),
+                        new Track.Key(BUILD_4, YAW, PITCH, 6.5, 38, 7, 6),
+                        new Track.Key(BUILD_4 + 2, YAW, PITCH, 6.5, 30, 4, 1),
+                        new Track.Key(BUILD_5, YAW, PITCH, 6.5, 30, 4, 1))))
+                .track(new Track.Caption(BUILD_TITLE + ".s1", 0, BUILD_1))
+                .track(new Track.Caption(BUILD_TITLE + ".s2", BUILD_1, BUILD_2))
+                .track(new Track.Caption(BUILD_TITLE + ".s3", BUILD_2, BUILD_3))
+                .track(new Track.Caption(BUILD_TITLE + ".s4", BUILD_3, BUILD_4))
+                .track(new Track.Caption(BUILD_TITLE + ".s5", BUILD_4, BUILD_5))
+                .track(new Track.Label(t101.top(), T101, 0, BUILD_1))
+                .track(new Track.Label(drum.top(), DRUM, BUILD_1, BUILD_2))
+                .track(new Track.Label(h101.top(), H101, BUILD_2, BUILD_3))
+                .track(new Track.Label(valve, V101, BUILD_2, BUILD_3))
+                .track(new Track.Label(h102.top(), H102, BUILD_3, BUILD_4))
+                .track(new Track.Label(tank.top(), TANKS, BUILD_4, BUILD_5));
+        return b.stop(BUILD_1).stop(BUILD_2).stop(BUILD_3).stop(BUILD_4).stop(BUILD_5).build();
     }
 
     private static EquipmentShape ref(Kind kind, boolean boot) {

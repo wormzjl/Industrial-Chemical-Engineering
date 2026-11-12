@@ -18,6 +18,7 @@ public final class Films {
         ALL.put(SmallTower.NAME, SmallTower::build);
         // P5: the crude unit, and its equipment pages' films (each built only when its page's Watch is pressed).
         ALL.put(CrudeUnit.NAME, CrudeUnit::build);
+        ALL.put(CrudeUnit.BUILD_NAME, CrudeUnit::buildOrder);
         for (var name : EquipmentFilms.KINDS.keySet()) ALL.put(name, () -> EquipmentFilms.build(name));
     }
 

@@ -84,7 +84,7 @@ class UnitFilmsTest {
         var stops = scene.stops();
         assertEquals(List.of(CrudeUnit.P101, CrudeUnit.CRUDE_TANK, CrudeUnit.CONVERTER).stream().sorted().toList(), keys(scene.at(stops.get(0))).stream().sorted().toList());
         assertEquals(Set.of(CrudeUnit.LOOP, CrudeUnit.E101), Set.copyOf(keys(scene.at(stops.get(1)))), "stop 2: the preheat");
-        assertEquals(Set.of(CrudeUnit.H101, CrudeUnit.V101), Set.copyOf(keys(scene.at(stops.get(2)))), "stop 3: the heater and the valve");
+        assertEquals(Set.of(CrudeUnit.H101, CrudeUnit.H102, CrudeUnit.V101), Set.copyOf(keys(scene.at(stops.get(2)))), "stop 3: the heaters and the valve");
         assertEquals(Set.of(CrudeUnit.T101, CrudeUnit.DRUM, CrudeUnit.P102), Set.copyOf(keys(scene.at(stops.get(3)))), "stop 4: the tower and its products");
         assertEquals(Set.of(CrudeUnit.E102, CrudeUnit.TANKS), Set.copyOf(keys(scene.at(stops.get(4)))), "stop 5: the products' way to their tanks");
         // The order the film tells, as the sheet's streams run: the crude from P-101 to the tower's pumparound, back to E-101's
@@ -120,6 +120,26 @@ class UnitFilmsTest {
 
     private static String end(Flowsheet.End end) {
         return end.unit() + ":" + end.port();
+    }
+
+    /**
+     * P5 stage B: the build film ({@code unit_build}) shows the parts in the order the guide's chapter builds them: the tower
+     * alone, then its drum, then the crude's way, then the steam heater, then the products; each group stays once shown.
+     */
+    @Test
+    void theBuildFilmAddsEachGroupAtItsStop() {
+        var scene = CrudeUnit.buildOrder();
+        assertEquals(scene.stops(), Objects.requireNonNull(Films.build(CrudeUnit.BUILD_NAME)).stops(), "the guide opens it by its name");
+        FilmChecks.everyStopReads(scene);
+        var groups = List.of(List.of("t101"), List.of("drum", "pipe6"), List.of("crude_tank", "p101", "loop_cooler", "e101", "h101", "valve"),
+                List.of("water_converter", "h102", "pipe13"), List.of("p102", "e102", "naphtha_tank", "residue_tank", "pipe11"));
+        assertEquals(groups.size(), scene.stops().size());
+        for (int k = 0; k < groups.size(); k++) {
+            var shown = new java.util.HashSet<String>();
+            for (var a : scene.at(scene.stops().get(k)).actors()) if (a.alpha() > .9) shown.add(a.id());
+            for (int g = 0; g < groups.size(); g++)
+                for (var id : groups.get(g)) assertEquals(g <= k, shown.contains(id), "stop " + (k + 1) + ": " + id + (g <= k ? " shown" : " not yet"));
+        }
     }
 
     private static List<String> keys(Frame frame) {
