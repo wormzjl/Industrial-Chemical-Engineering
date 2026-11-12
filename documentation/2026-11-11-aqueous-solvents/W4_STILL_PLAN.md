@@ -155,3 +155,10 @@ at the end.
   context but runs on Fable, which the owner named for the Jacobian work only; the table gives Fable to very hard
   tasks or to a thread the owner names. If the owner names Fable for W4, the live thread is reused instead while
   its context is live.
+
+## 10. Owner: approved (2026-11-12)
+
+Owner, verbatim: "Approve both": the design, with section 5's choice 1 a (the oil layer first) and choice 2 as
+written (free water refused on the sheet), and section 9's delegation. A new sub-thread `w4-still` on Opus high
+builds steps 1 to 4 in this worktree with this document as its brief; the orchestrator records its reports here
+and in the README. Not built yet.
