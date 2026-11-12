@@ -16,6 +16,7 @@ public final class Cards {
         ALL.put(Chain.NAME, Chain::new);
         ALL.put(Barrel.NAME, Barrel::new);
         ALL.put(Products.NAME, Products::new);
+        ALL.put(Road.NAME, Road::new);
     }
 
     private Cards() {

@@ -170,9 +170,11 @@ class CardViewTest {
             for (var area : new Rect[]{new Rect(100, 30, 330, 140), new Rect(70, 30, 176, 120)})
                 for (int option = 0; option < Math.max(1, card.options().size()); option++)
                     for (int i = 0; i < positions; i++)
+                        for (int hit = -1; hit < card.hits(area, option).size(); hit++)
                         for (double phase : new double[]{0, 7.7}) {
                             var c = new Counting(area);
-                            var state = new Card.State(phase, card.stepped(i / (positions - 1.0)), option, -1, java.util.Set.of(), Card.CELSIUS);
+                            var visited = hit < 0 ? java.util.Set.<Integer>of() : java.util.Set.of(hit);
+                            var state = new Card.State(phase, card.stepped(i / (positions - 1.0)), option, hit, visited, Card.CELSIUS);
                             card.draw(c, area, state, PanelSkin.DARK, k -> "word word");
                             assertNull(c.outside, name + " " + area + " option " + option + " at " + i + ": a fill outside " + c.outside);
                             assertTrue(c.looseFills <= 8, name + ": " + c.looseFills + " fills outside a batch");
