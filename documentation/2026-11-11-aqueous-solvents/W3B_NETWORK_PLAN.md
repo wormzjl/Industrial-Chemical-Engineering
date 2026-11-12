@@ -775,3 +775,21 @@ Fix (decided): a fold is a phase the pass solved, and a vessel laid out dry has 
 `recordFolds` skip it by the pass's dry flags. `filled` stays the one rule for dry vessels. Gate: the water
 trickle of `EmptyNetworkTest.aDryVesselStaysDryUntilAMillilitreArrives` counts 0 fold passes (1 on HEAD). The
 appearance counter is dropped. 575 (pass 0, crude with light ends) is not this path: open, recorded.
+
+## 43. Built: the fold rule's dry-vessel skip and the two facts fields; the owner's cost constraint (2026-11-12)
+
+- b77a807a4: `phaseFolded` and `recordFolds` skip a vessel the pass laid out dry. Gate
+  `EmptyNetworkTest.aDryVesselStaysDryUntilAMillilitreArrives`: the water trickle counts 0 fold passes (1 before).
+  Run once: EmptyNetworkTest 5, PrecipitatedSolidsTest 17, TracePhaseFoldTest 4, EmptyTankFillsTest 1,
+  EmptyRiserTest 1, FedTankOpenOutletsTest 2, JunctionPhaseAppearanceTest 1, all passing; no fold count moved.
+  358 is measured by the final lane's campaign.
+- 2cd895403: facts schema 22 as section 41 states it, corpus image `compat/fluid/schema-22` (8 vessels).
+  FluidFactsCompatTest 21, FluidCheckpointCodecTest 13, OpenTankRuntimeTest 5, all passing.
+- Owner, verbatim, after the build: "go with recommended option but implementation needs to be performance friendly
+  (CPU/RAM)". Read as the two fields. Checked against the commit, no change needed:
+  - step path: none. Facts are written at a world save and read at a load.
+  - RAM while playing: none. The writer reads the state's own slot arrays (views, no copy); `State` is unchanged.
+  - disk: the facts' sparse array form (`Writer.sparse`): a length, one mask bit per component and 8 bytes per
+    amount that is not zero. A slot the vessel does not hold costs about 6 bytes at 40 components; a full liquid
+    about 330.
+  - load: two arrays per vessel row and one copy for the gas slot, dropped once the island is rebuilt.
