@@ -60,7 +60,7 @@ class StillRunRecordingTest {
         assertTrue(run.line("first", "pot_kelvin") < run.line("naphtha", "pot_kelvin"));
         var parts = run.setup();
         assertEquals(end, run.time().end(), 1e-9);
-        for (var name : new String[]{"first", "naphtha", "kerosene", "end"})
+        for (var name : new String[]{"first", "trickle", "naphtha", "kerosene", "end"})
             if (!Double.isNaN(run.line(name, "time"))) {
                 assertEquals(run.line(name, "time") / 4 / 60, run.line(name, "play_minutes"), 1e-9, name);
                 System.out.printf(Locale.ROOT, "%-9s %8.1f s  pot %.2f K  %.1f min of play%n", name, run.line(name, "time"), run.line(name, "pot_kelvin"), run.line(name, "play_minutes"));
@@ -69,6 +69,27 @@ class StillRunRecordingTest {
         // The end of naphtha is where the share taken overhead reaches the charge's gas and naphtha.
         double share = StillRunData.overhead(run, naphtha);
         assertTrue(share > .1 && share < .3, "gas and naphtha: " + share);
+    }
+
+    @Test
+    void theFirstDropIsLiquidAtTheSpout() {
+        // On design water the partial condenser sends the light ends to the vent: the pot boils (BOILING) before any liquid
+        // reaches the spout, then distils; the condenser is never short (no COOLING_LIMITED).
+        var run = StillRunData.load();
+        var status = run.words().get("status");
+        var time = run.time();
+        var rate = run.series("rate");
+        assertFalse(status.contains("COOLING_LIMITED"), "design water never limits the condenser");
+        int first = status.indexOf("DISTILLING");
+        assertTrue(first > 1 && status.subList(1, first).stream().allMatch("BOILING"::equals), "boiling, then distilling: " + status.subList(0, first + 1));
+        assertEquals("HEATING", status.getFirst());
+        assertTrue(rate.value(first) > 0, "the first distilling point gives liquid to the spout");
+        for (int k = 0; k < first; k++) assertEquals(0, rate.value(k), "no liquid before the first drop at " + k);
+        assertEquals(time.value(first), run.line("first", "time"), 1e-9, "the first drop is the first distilling point");
+        // The first drop is a trace; the trickle is where the spout has given TRICKLE_SHARE of the charge's mass.
+        double trickle = run.line("trickle", "time");
+        assertTrue(run.line("first", "time") < trickle && trickle < run.line("naphtha", "time"), "first drop, trickle, end of naphtha: " + trickle);
+        assertEquals(StillRunRecorder.TRICKLE_SHARE, run.series("distilled").at(trickle), 1e-9, "the trickle line");
     }
 
     @Test

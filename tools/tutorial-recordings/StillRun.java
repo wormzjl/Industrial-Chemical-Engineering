@@ -22,7 +22,7 @@ public final class StillRun {
         Files.writeString(out, StillRunRecorder.toJson(run), StandardCharsets.UTF_8);
         System.out.printf(Locale.ROOT, "charge %.3f kg (%.4f kg flashed off), finish %s after %d steps; left %.3f kg, distilled %.3f kg, vented %.3f kg%n", run.chargeKg(), run.flashedKg(), run.finish(), run.steps(),
                 run.leftKg(), run.distilledKg(), run.ventedKg());
-        for (var entry : new Object[][]{{"first", run.first()}, {"naphtha", run.naphtha()}, {"kerosene", run.kerosene()}, {"end", run.end()}}) {
+        for (var entry : new Object[][]{{"first", run.first()}, {"trickle", run.trickle()}, {"naphtha", run.naphtha()}, {"kerosene", run.kerosene()}, {"end", run.end()}}) {
             var line = (StillRunRecorder.Line) entry[1];
             if (line == null) {
                 System.out.println(entry[0] + " not reached");

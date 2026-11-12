@@ -29,11 +29,17 @@ public final class StillRunRecorder {
     /** StillBatch's step rule: about this share of the charge's moles a boiling step, this much heating a warming step, this head rise at most. */
     static final double STEP_SHARE = .01, STEP_KELVIN = 5, HEAD_KELVIN = 2;
     public static final int MOST_STEPS = 2000, MOST_POINTS = 240;
+    /**
+     * The share of the charge's mass the spout has given where a player sees a steady trickle: the first drop is a trace (the
+     * partial condenser sends most of the light end to the vent), and this much (0.26 kg in the drum) is the guide's first
+     * distillate.
+     */
+    public static final double TRICKLE_SHARE = .001;
 
     private StillRunRecorder() {
     }
 
-    /** A step's end: process seconds, the pot's and head's temperatures (K; head NaN with none), the level (share of the pot), the distilled and vented shares of the charge's mass, the rate to the spout (kg/s), the law's status and the part coming over (-1 none). */
+    /** A step's end: process seconds, the pot's and head's temperatures (K; head NaN with none), the level (share of the pot), the distilled and vented shares of the charge's mass, the rate to the spout (kg/s), the law's status and the part coming over (the band with the most mass in what left the pot over the step, spout liquid and vented gas together; -1 none). */
     public record Point(double time, double pot, double head, double level, double distilled, double vented, double rate, BatchStill.Status status, int part) {
     }
 
@@ -48,8 +54,8 @@ public final class StillRunRecorder {
      * The run: the charge (kg, its start K), the charge's six parts' mass shares (the barrel card's medium crude), how it
      * ended, the law's steps, every step's point, and the derived lines.
      */
-    public record Run(double chargeKg, double flashedKg, double startKelvin, double[] parts, String finish, String refusal, int steps, List<Point> points, Line first, Line naphtha,
-                      Line kerosene, Line end, double leftKg, double distilledKg, double ventedKg) {
+    public record Run(double chargeKg, double flashedKg, double startKelvin, double[] parts, String finish, String refusal, int steps, List<Point> points, Line first, Line trickle,
+                      Line naphtha, Line kerosene, Line end, double leftKg, double distilledKg, double ventedKg) {
     }
 
     public static Run run() {
@@ -166,8 +172,9 @@ public final class StillRunRecorder {
         double left = 0;
         for (int i = 0; i < n; i++) left += pot.moles()[i] * mass[i];
         double[] shares = grade.bands();
-        Point firstDrop = points.stream().filter(p -> p.distilled() > 0).findFirst().orElseThrow();
-        return new Run(chargeKg, flashedKg, start, shares, finish, refusal, steps, points, new Line(firstDrop.time(), firstDrop.pot()), reach(points, shares[0] + shares[1]),
+        // The first drop: the first step that distils, liquid to the spout; a step that only vents gas (BOILING) is none.
+        Point firstDrop = points.stream().filter(p -> p.status() == BatchStill.Status.DISTILLING && p.rate() > 0).findFirst().orElseThrow();
+        return new Run(chargeKg, flashedKg, start, shares, finish, refusal, steps, points, new Line(firstDrop.time(), firstDrop.pot()), trickle(points, TRICKLE_SHARE), reach(points, shares[0] + shares[1]),
                 reach(points, shares[0] + shares[1] + shares[2]), new Line(points.getLast().time(), points.getLast().pot()), left, distilled, vented);
     }
 
@@ -185,6 +192,19 @@ public final class StillRunRecorder {
             double sa = a.distilled() + a.vented(), sb = b.distilled() + b.vented();
             if (sb >= share && sb > sa) {
                 double f = (share - sa) / (sb - sa);
+                return new Line(a.time() + f * (b.time() - a.time()), a.pot() + f * (b.pot() - a.pot()));
+            }
+        }
+        return null;
+    }
+
+    /** Where the spout's liquid (the distilled share alone) first reaches {@code share}, linear between steps; null if never. */
+    static Line trickle(List<Point> points, double share) {
+        for (int k = 1; k < points.size(); k++) {
+            var a = points.get(k - 1);
+            var b = points.get(k);
+            if (b.distilled() >= share && b.distilled() > a.distilled()) {
+                double f = (share - a.distilled()) / (b.distilled() - a.distilled());
                 return new Line(a.time() + f * (b.time() - a.time()), a.pot() + f * (b.pot() - a.pot()));
             }
         }
@@ -254,6 +274,7 @@ public final class StillRunRecorder {
         root.add("series", series);
         var lines = new JsonObject();
         lines.add("first", line(run.first()));
+        lines.add("trickle", line(run.trickle()));
         lines.add("naphtha", line(run.naphtha()));
         if (run.kerosene() != null) lines.add("kerosene", line(run.kerosene()));
         lines.add("end", line(run.end()));
