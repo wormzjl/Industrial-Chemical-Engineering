@@ -166,6 +166,27 @@ column uses its coarse body (`RenderLod`) when small on screen; translucent cut 
   film's last stop and the card's dimmed stretch show the fire left on, the heavy part staying in the pot (chapter 3's hook).
 - `water` is a reading step: by the code a still's condenser with no cooling water condenses only part of its vapour.
 
+### Chapter 3, pot to tower, as built (P4B_TOWER_AND_SIMULATOR.md)
+
+- Title "Pot to tower" ("From pot to tower" clipped in the 320 by 240 window). Steps `tray` (film `still_tray`),
+  `build` (a still with a column), `reflux` (card `reflux`; the valve open at ratio 2 or more), `compare` (card
+  `compare`; the first cut, liquid, at the pot temperature of the recorded ratio-2 cut, 528 K), `many` (film
+  `small_tower`). Terms tray, reflux, tower.
+- Numbers from `recordings/still_trays.json` (the still law, 4 trays, ratios 1 and 2): the first cut holds 75 % naphtha
+  in the pot still and 88 % at ratio 2, in 16 and 22 minutes of play. A cut takes about 1.3 times as long, not R + 1
+  times: the charge's sensible heat dominates.
+- The still's `?` tour has a variant for a still with a column and its condenser (`fluid_device.still_column`).
+
+### Chapter 4, the simulator, as built (P4B_TOWER_AND_SIMULATOR.md)
+
+- Steps `open` (client: the example opened), `sheet` (client: the sheet tour finished), `run` (server: results stored
+  on the sheet they ran on), `balance` (card), `heat` (server: a run with H-101's outlet at 370 °C or less), `size`
+  (client: Size all's sizes landed), `send` (server: a design sent). Terms flowsheet, stream, side draw, heat duty.
+- Numbers from `recordings/small_unit.json`: 18 / 35 / 47 % by mass at 390 °C; 15 / 32 / 53 % at 370 °C.
+- `?` tours on the simulator's four tabs (7, 5, 4, 4 stops); the sheet tour's last stop opens chapter 4's card.
+- Not taught: changing the feed temperature (the table above); the step changes the heater's outlet instead, which the
+  stored sheet carries.
+
 ### Chapter 5, the unit and its pages
 
 The unit page comes first: a film that follows the crude (tank, pump, fired heater, tower with bottom steam, air

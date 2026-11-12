@@ -72,3 +72,8 @@ owner's choice and the default), `-DiconCases=true` (only `icons-cases.png`, the
   "LABELS NOT PLACED" when a label has no room; films still_build and still_run; `card-pot_temperature.png` (start,
   early, before and past the cut, end) and `guide-still.png` (chapter 2 at both sizes).
 - 2026-11-12, P3: IconRender, the 38 equipment item icons and their contact sheet.
+- 2026-11-12, P4b: films still_tray and small_tower; GuideRender draws `guide-tower.png` and `guide-simulator.png`
+  (each chapter open, light and dark, both sizes, at its top and end), `card-reflux.png` (pot still, ratio 1, ratio 2),
+  `card-compare.png`, `card-balance.png` and `tour-fluid_device-still_column.png`. The simulator's tours are drawn by
+  `tools/heat-gui-renders/SimulatorRender.java -Donly=tours` (its README's command, with `build/classes/java/test` on the
+  class path): `tour-simulator-<page>.png` and `-dark`, each stop on the small crude unit after its run.

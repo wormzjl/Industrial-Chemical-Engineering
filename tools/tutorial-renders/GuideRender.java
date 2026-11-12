@@ -49,7 +49,8 @@ public final class GuideRender {
         Files.createDirectories(out);
         guide(out);
         guideTour(out);
-        stillTour(out);
+        stillTour(out, "fluid_device.still");
+        stillTour(out, "fluid_device.still_column");
         card(out);
     }
 
@@ -155,6 +156,40 @@ public final class GuideRender {
         }));
         HeatDiagramRender.grid(out.resolve("guide-still.png"), List.of("Light, 464 by 254: chapter The still, build current", "Dark, 464 by 254",
                 "Light, 464 by 254: scrolled to the end", "Dark, 320 by 240 window", "Dark, 320 by 240 window: scrolled to the end"), still);
+        // P4b: chapters 3 and 4 open, each with the chapters before it done.
+        chapter(out, "tower", "still", "From pot to tower");
+        chapter(out, "simulator", "tower", "The simulator");
+    }
+
+    /** Chapter {@code id} open with every step before it done, light and dark, at the design size and in the small window, at its top and its end. */
+    static void chapter(Path out, String id, String after, String name) throws Exception {
+        var done = new java.util.HashSet<String>();
+        for (var c : GuideFile.load().chapters()) {
+            if (c.id().equals(id)) break;
+            for (var s : c.steps()) done.add(c.id() + "/" + s.id());
+        }
+        var reached = new Progress(Set.copyOf(done));
+        var pages = new ArrayList<BufferedImage>();
+        for (var skin : List.of(PanelSkin.LIGHT, PanelSkin.DARK))
+            pages.add(image(GuidePage.DESIGN_WIDTH, GuidePage.DESIGN_HEIGHT, c -> {
+                var p = page(c, reached, GuidePage.DESIGN_WIDTH, GuidePage.DESIGN_HEIGHT, id, null);
+                p.draw(c, skin, 0, null, Card.State.of(0, 0));
+            }));
+        pages.add(image(GuidePage.DESIGN_WIDTH, GuidePage.DESIGN_HEIGHT, c -> {
+            var p = page(c, reached, GuidePage.DESIGN_WIDTH, GuidePage.DESIGN_HEIGHT, id, null);
+            p.draw(c, PanelSkin.DARK, p.maxOffset(), null, Card.State.of(0, 0));
+        }));
+        for (var skin : List.of(PanelSkin.LIGHT, PanelSkin.DARK))
+            pages.add(image(312, 232, c -> {
+                var p = page(c, reached, 312, 232, id, null);
+                p.draw(c, skin, 0, null, Card.State.of(0, 0));
+            }));
+        pages.add(image(312, 232, c -> {
+            var p = page(c, reached, 312, 232, id, null);
+            p.draw(c, PanelSkin.LIGHT, p.maxOffset(), null, Card.State.of(0, 0));
+        }));
+        HeatDiagramRender.grid(out.resolve("guide-" + id + ".png"), List.of("Light, 464 by 254: chapter " + name + ", first step current", "Dark, 464 by 254",
+                "Dark, 464 by 254: scrolled to the end", "Light, 320 by 240 window", "Dark, 320 by 240 window", "Light, 320 by 240 window: scrolled to the end"), pages);
     }
 
     static TourLayout.Words words() {
@@ -206,8 +241,8 @@ public final class GuideRender {
         return null;
     }
 
-    static void stillTour(Path out) throws Exception {
-        var tour = TourFile.load().get("fluid_device.still");
+    static void stillTour(Path out, String name) throws Exception {
+        var tour = TourFile.load().get(name);
         var pages = new ArrayList<BufferedImage>();
         var titles = new ArrayList<String>();
         int w = GuidePage.DESIGN_WIDTH, h = GuidePage.DESIGN_HEIGHT;
@@ -218,7 +253,7 @@ public final class GuideRender {
             pages.add(image(w, h, c -> stillPage(c, PanelSkin.LIGHT, w, h, tour.stops().get(stop).anchor(), stop, tour)));
             titles.add("Stop " + (i + 1) + ": " + tour.stops().get(i).anchor());
         }
-        HeatDiagramRender.grid(out.resolve("tour-fluid_device-still.png"), titles, pages);
+        HeatDiagramRender.grid(out.resolve("tour-" + name.replace('.', '-') + ".png"), titles, pages);
     }
 
     /** The still's page (FluidDeviceScreen's frame: title strip with ? and theme keys, tabs, status, door, glass, footer), its door scrolled to show {@code anchor}, and the tour's stop over it. */
@@ -279,7 +314,7 @@ public final class GuideRender {
             return;
         }
         boolean last = stop == tour.stops().size() - 1;
-        TourLayout.of(w, h, lit, tr.apply(tour.key(stop)), stop == 0, last, last && tour.film() != null, words(), c.measure()).draw(c, skin, null);
+        TourLayout.of(w, h, lit, tr.apply(tour.key(stop)), stop == 0, last, last && tour.shows(), words(), c.measure()).draw(c, skin, null);
     }
 
     /** One frame of a card sheet: its title, option, control, last press and the presses so far. */
@@ -337,5 +372,9 @@ public final class GuideRender {
         double cut = pot.cuts()[0] / pot.share(1);
         sheet(out, "still/cut", "pot_temperature", List.of(Frame.of("start", 0, 0), Frame.of("early", 0, .15), Frame.of("before the cut", 0, cut * .9),
                 Frame.of("past the cut", 0, (cut + 1) / 2), Frame.of("the end", 0, 1)));
+        // P4b: the reflux card at each form, the comparison and the small unit's balance.
+        sheet(out, "tower/reflux", "reflux", List.of(Frame.of("pot still", 0, 0), Frame.of("4 trays, ratio 1", 0, .5), Frame.of("4 trays, ratio 2", 0, 1)));
+        sheet(out, "tower/compare", "compare", List.of(Frame.of("pot still against 4 trays, ratio 2", 0, 0)));
+        sheet(out, "simulator/balance", "balance", List.of(Frame.of("the small crude unit", 0, 0)));
     }
 }

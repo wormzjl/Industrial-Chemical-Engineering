@@ -306,6 +306,73 @@ public final class SimulatorRender {
         }
     }
 
+    // ---- The help tours (batch 2026-11-12-tutorial-system, P4b) ----
+
+    /** Each tab's tour stop by stop on the small crude unit after its run: the page, its ? key, and the stop over it. */
+    private static void tours(Path out) throws Exception {
+        var example = examples().stream().filter(e -> e.stem().equals(com.wormzjl.icheme.client.gui.flowsheet.SimulatorTour.EXAMPLE)).findFirst().orElseThrow();
+        var sheet = example.sheet();
+        var run = FlowsheetEngine.run(sheet, CATALOG, () -> {
+        }, null, FlowsheetSolver.Progress.NONE);
+        System.out.printf("small unit: %s%n", run.status());
+        tourSheet = sheet;
+        tourRun = run;
+        var host = new Host(false, null);
+        var tours = com.wormzjl.icheme.science.tutorial.guide.TourFile.load();
+        var words = new com.wormzjl.icheme.client.gui.tutorial.TourLayout.Words(HeatDiagramRender.tr("tutorial.icheme.tour.back"), HeatDiagramRender.tr("tutorial.icheme.tour.next"),
+                HeatDiagramRender.tr("tutorial.icheme.tour.done"), HeatDiagramRender.tr("tutorial.icheme.tour.close"), HeatDiagramRender.tr("tutorial.icheme.tour.show_me"));
+        for (var tab : SimulatorFrame.Tab.values()) {
+            String name = com.wormzjl.icheme.client.gui.flowsheet.SimulatorTour.page(tab);
+            var tour = tours.get(name);
+            var titles = new ArrayList<String>();
+            var bodies = new ArrayList<BiConsumer<GuiPrototypes.Door, Skin>>();
+            for (int i = -1; i < tour.stops().size(); i++) {
+                int stop = i;
+                titles.add(stop < 0 ? name + ": the page with its ? key" : "Stop " + (stop + 1) + ": " + tour.stops().get(stop).anchor());
+                bodies.add(scene(sheet, run, 0, host, sc -> sc.tab = tab).andThen((d, skin) -> tourStop(d, tab, tour, stop, words)));
+            }
+            grid(out, "tour-" + name.replace('.', '-'), W, H, titles, bodies);
+        }
+    }
+
+    /** The ? key, and stop {@code stop} of {@code tour} over the page (none where {@code stop} < 0), its anchor resolved as the screen resolves it. */
+    private static void tourStop(GuiPrototypes.Door d, SimulatorFrame.Tab tab, com.wormzjl.icheme.science.tutorial.guide.Tour tour, int stop, com.wormzjl.icheme.client.gui.tutorial.TourLayout.Words words) {
+        var frame = new SimulatorFrame(d.w, d.h, d.m.width(HeatDiagramRender.tr("block.icheme.process_simulator")));
+        d.skin.iconKey(d.c, frame.help(), Skin.Icon.HELP, false);
+        if (stop < 0) return;
+        // The anchors: the frame's (keys, status, canvas and palette or glass), then the door's widgets placed as the page places them.
+        var probe = new Scene(tourSheet, tourRun, 0, new Host(false, null));
+        probe.tab = tab;
+        var x = probe.context();
+        var anchors = new java.util.LinkedHashMap<>(com.wormzjl.icheme.client.gui.flowsheet.SimulatorTour.frame(frame, tab, d.w, SimulatorPage.frameKeys(x, tab, frame, probe.host, probe.editor)));
+        List<? extends Column.Row> rows = switch (tab) {
+            case RESULTS -> ResultsPage.rows(x, probe.results);
+            case SIZING -> SizingPage.rows(x, probe.sizing);
+            case BASIS -> BasisPage.rows(x);
+            default -> List.of();
+        };
+        int doorW = switch (tab) {
+            case RESULTS -> SimulatorFrame.RESULT_DOOR;
+            case SIZING -> SimulatorFrame.SIZING_DOOR;
+            case BASIS -> SimulatorFrame.BASIS_DOOR;
+            default -> 10;
+        };
+        if (!rows.isEmpty()) for (var e : com.wormzjl.icheme.client.gui.flowsheet.SimulatorTour.door(Column.place(rows, 10, SimulatorFrame.DOOR_TOP, doorW - 10, d.m, Column.Metrics.COMPACT)).entrySet())
+            anchors.putIfAbsent(e.getKey(), e.getValue());
+        String anchor = tour.stops().get(stop).anchor();
+        var lit = anchors.get(anchor);
+        if (lit == null) {
+            System.out.println("SIMULATOR TOUR " + tour.page() + ": no anchor for stop " + (stop + 1) + " (" + anchor + ")");
+            return;
+        }
+        boolean last = stop == tour.stops().size() - 1;
+        com.wormzjl.icheme.client.gui.tutorial.TourLayout.of(d.w, d.h, lit, HeatDiagramRender.tr(tour.key(stop)), stop == 0, last, last && tour.shows(), words, d.m).draw(d.c, d.skin, null);
+    }
+
+    /** The tour sheets' sheet and run, for {@link #tourStop}'s anchors. */
+    private static Flowsheet tourSheet;
+    private static FlowsheetRun tourRun;
+
     private static void door(GuiPrototypes.Door d, Door door) {
         var box = DoorFrame.back(d.c, d.skin, door, d.w, d.h);
         d.skin.iconKey(d.c, com.wormzjl.icheme.client.gui.common.CalculatorColumn.theme(d.w), Skin.Icon.THEME, false);
@@ -1202,6 +1269,11 @@ public final class SimulatorRender {
         // -Donly=open: Open, with the bundled examples first, and its prompts (sheets 17 and 25), with no run.
         if ("open".equals(System.getProperty("only"))) {
             opened(out);
+            return;
+        }
+        // -Donly=tours: the help tours of the simulator's four pages on the bundled small crude unit (batch 2026-11-12-tutorial-system, P4b).
+        if ("tours".equals(System.getProperty("only"))) {
+            tours(out);
             return;
         }
         var sheet = sample();

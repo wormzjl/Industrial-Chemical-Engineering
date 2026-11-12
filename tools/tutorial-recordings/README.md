@@ -52,3 +52,16 @@ the law and holds the file equal within 1e-9.
 ./gradlew --offline --init-script tools/tutorial-recordings/record.init.gradle recordStillTrays           # print only
 ./gradlew --offline --init-script tools/tutorial-recordings/record.init.gradle recordStillTrays -Pwrite   # and write
 ```
+
+## SmallUnit (P4b)
+
+Records chapter 4's small crude unit: `small_unit.json` for the card `balance` and the steps `balance` and `heat`. It
+runs the bundled example "Small crude unit" (`SmallUnitRecorder`, test source) as bundled (H-101's outlet 390 °C) and
+with the outlet at `-Psecond=K` (default 643.15, 370 °C), and writes each run's status, crude in, the top (off-gas and
+naphtha), side and bottom products by mass without water, their shares and the heaters' duties. `-Ptries=` prints other
+outlets only. `SmallUnitRecordingTest` (holdGates) reruns both and holds the file equal within 1e-9.
+
+```
+./gradlew --offline --init-script tools/tutorial-recordings/record.init.gradle recordSmallUnit           # print only
+./gradlew --offline --init-script tools/tutorial-recordings/record.init.gradle recordSmallUnit -Pwrite   # and write
+```

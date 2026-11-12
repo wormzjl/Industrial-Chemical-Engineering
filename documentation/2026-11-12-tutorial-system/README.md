@@ -27,6 +27,8 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
   the films still_build and still_run, the card pot_temperature, the still criteria, decisions, derived lines, tests.
 - [P3_ITEMS_AND_JEI.md](P3_ITEMS_AND_JEI.md): phase P3, the 38 equipment reference items, their icons and lines, the
   Equipment guide tab, the JEI pages, the shape-only kinds, the gate.
+- [P4B_TOWER_AND_SIMULATOR.md](P4B_TOWER_AND_SIMULATOR.md): phase P4b, the still with a column measured and recorded,
+  chapter 3 "Pot to tower", chapter 4 "The simulator", the small unit's recording, the simulator's tours, gates, renders.
 - [SMALL_COLUMN_CANDIDATES_REVIEW.md](SMALL_COLUMN_CANDIDATES_REVIEW.md): P4, the three small crude tower candidates
   solved and sized on the crude unit at 1/64, the acceptance rules, the steam source, the recommendation (D4).
 
@@ -88,6 +90,12 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
   lamps. Preset counts and the "40 trays, 8 m" check in the tests now read each template. SmallCrudeUnitTest (3),
   FlowsheetExamplesTest (6), V3ClientPresetsTest (10), ColumnTemplatesTest (5), SimulatorRunnerTest (28), OpenDeleteTest (5),
   V3ColumnTemplateTest (6) pass.
+- 2026-11-12: P4b (P4B_TOWER_AND_SIMULATOR.md). Measured the still with 4 trays: at reflux 2 the first cut holds 88 %
+  naphtha against 75 %, the column solves itself on 91 % of boiling steps after the light gas, 21.5 minutes of play.
+  Recorded `still_trays.json` and `small_unit.json`; chapters 3 "Pot to tower" and 4 "The simulator"; films still_tray,
+  small_tower; cards reflux, compare, balance; criteria sheet_run, design_sent; tours on the still with a column and the
+  simulator's four tabs. Commits 66ed0baa4, 3a7bb0d1c, 7cbd240e0, 402e1b4a9, 8295a579e. 35 test classes
+  (265 tests) and SimulatorRunTest (6) pass, run once with `--tests`.
 
 ## Code areas (proposed)
 
@@ -103,8 +111,8 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
   aqueous branch changes again, merge it again. The still branch has had no code review and no final lane.
 - After the merges: done. The tutorial compiles, is recorded and gated on the merged base; the still law's own classes
   and the fluid GameTests wait for the final lane.
-- The still with trays on crude light ends answers as a pot still (the still batch's option B is open): chapter 3 must
-  not show a trayed still on crude until it is fixed.
+- The still with trays on crude: measured in P4b. The column is dry (the law's single stage) only while the pot warms,
+  below 124 °C; it solves itself on 91 to 99 % of the boiling steps after the light gas. Chapter 3 is built on it.
 
 - O1: decided 2026-11-12, reference only (creative tab and JEI).
 - P3: the owner's review of the icon sheet and the 160 lines; the in-game rows of P3_ITEMS_AND_JEI.md; icons alike at
@@ -128,8 +136,11 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
     needed.
   - The grade streams stand at the heater outlet; the small stream stands at the tower's feed (384 °C), because the
     sheet's valve changes the state between the two.
-- Chapter 3 adds a column to the still on crude: the still law answers a trayed still on crude light ends as a pot
-  still (the still batch's option B is open). Measure a trayed run before the chapter is written.
+- P4b: the owner's review of chapters 3 and 4 (text, renders in `tmp/tutorial-renders/p4b/`), the title "Pot to tower"
+  (the brief's "From pot to tower" clips in the small window), and the in-game check of the simulator's `?` tours and
+  the client steps (`open`, `sheet`, `size`). The step `build` accepts any column (2 to 8 trays); its text names 4.
+  The basis page names the package by its id (`icheme:refinery`): no lang line `gui.icheme.flowsheet.basis.pack.icheme.refinery`.
+  Doubled term underlines on the guide's glass (each term also marks the line below), in chapter 2 already.
 - P0: the owner's one in-game check of the scene player (P0_SCENE_PLAYER.md, last section).
 - P1: the owner's review of the English text and the renders; the in-game rows of P1_GUIDE_AND_HELP.md; the Field
   Guide's final icon.
