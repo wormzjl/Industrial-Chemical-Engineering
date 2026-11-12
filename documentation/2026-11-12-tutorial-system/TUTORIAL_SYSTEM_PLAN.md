@@ -152,6 +152,17 @@ column uses its coarse body (`RenderLod`) when small on screen; translucent cut 
 - As built (P2A_CRUDE_CHAPTER.md): steps `what` (card chain), `barrel`, `why` (products), `road`, `parts` (the three
   dot colours) and `first` (the film "inside the still"). The last two moved here from chapter 0.
 
+### Chapter 2, the still, as built (P2B_STILL_CHAPTER.md)
+
+- Steps: `build`, `charge`, `water`, `watch`, `fire`, `first`, `cut`, `switch`, `stop`. The server checks `charge`,
+  `fire`, `first` and `cut` where it already sends the player the still's screen data (`FluidNetwork.deliver`), `stop`
+  where it handles the player's "firing off" against the cached view, `switch` where a player turns a Diverter Valve.
+- Films `still_build`, `still_run` and the reworked `still_inside`; card `pot_temperature`. Their numbers come from
+  `recordings/still_run.json`, a run of the real law (500 L, 60 % full of medium crude, full firing).
+- The recording is provisional: on `main` the law refuses this charge at 248 °C with 20 % distilled (batch
+  `2026-11-12-still-heat-per-distillate`, fixed on its own branch). It is recorded again once that fix is in this branch.
+- `water` is a reading step: by the code a still's condenser with no cooling water condenses only part of its vapour.
+
 ### Chapter 5, the unit and its pages
 
 The unit page comes first: a film that follows the crude (tank, pump, fired heater, tower with bottom steam, air
@@ -204,8 +215,9 @@ this plan.
 | P5 The unit | Chapters 5 and 6, the equipment pages of the unit | A player builds and starts the unit from the guide alone | Standard |
 | P6 Coverage | `?` on every remaining screen, the remaining pages, translation, merge preparation | Every gate passes | Standard |
 
-Built so far (2026-11-12): P0 (P0_SCENE_PLAYER.md), P1 (P1_GUIDE_AND_HELP.md) and chapter 1 of P2
-(P2A_CRUDE_CHAPTER.md). Open in P2: chapter 2, the still. Nothing has been checked in the game yet.
+Built so far (2026-11-12): P0 (P0_SCENE_PLAYER.md), P1 (P1_GUIDE_AND_HELP.md) and P2: chapter 1
+(P2A_CRUDE_CHAPTER.md) and chapter 2 (P2B_STILL_CHAPTER.md). Open in P2: the second recording of the still's run after
+the law's fix. Nothing has been checked in the game yet.
 
 P0 to P2 are the first batch (D7): they prove every layer on the first equipment before content is written in bulk.
 P3 touches no file of P0 to P2 but the lang file and can run beside them.
