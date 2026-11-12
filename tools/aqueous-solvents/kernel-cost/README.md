@@ -19,9 +19,19 @@ Batch: `documentation/2026-11-11-aqueous-solvents/` (KERNEL_COST_PLAN.md). A per
 - `support-nan.init.gradle`: runs every test JVM with the kernel's NaN switch (`icheme.kernel.supportNaN`): NaN outside a
   workspace's support and an `AssertionError` for an amount outside it; the support audit of KERNEL_COST_PLAN.md Part A.
   Add `--init-script tools/aqueous-solvents/kernel-cost/support-nan.init.gradle --no-configuration-cache` to a filtered `test` run.
+- The long form: add `-Dkprobe.seconds=60` to step 2: 60 s of warm-up, then 60 s measured, one mean per call
+  (the `KPROBE round long` line).
+- `kernel-dump.js on|off` and `KernelDumpTest.java`: every kernel output in hexadecimal (Z, h^R, a, b, da/dT, dh^R/dT,
+  d2a/dT2; per compound ln phi, d ln phi/dT, partial enthalpy, the dn row) for the gate's five supports at a liquid
+  and a vapour root, on a carried and a whole-list workspace. `on`, then
+  `./gradlew test --tests "*KernelDumpTest" --offline --console=plain --max-workers 1 --rerun`, then `off`; it writes
+  `tmp/kernel-support/kernel-dump.txt`. Compare two runs with `cmp`.
 
 ## History
 - 2026-11-12: written for the kernel cost plan. HEAD `6084652e4`: water + nitrogen of 47, 3.8 / 17.4 µs; all 47,
   6.2 / 35.8 µs; all 46 without water, 4.8 / 24.6 µs.
 - 2026-11-12: Part A (`d009783aa`): the sparse case carries its two compounds (`workspace.carry`). Water + nitrogen of 47,
   0.18 / 0.29 µs; all 47, 6.8 / 34.8 µs; all 46 without water, 5.7 / 28.2 µs (one run each, alone).
+- 2026-11-12: Part B: the long form (`-Dkprobe.seconds`) and the dump (`kernel-dump.js`, `KernelDumpTest.java`). B1
+  (`59c3c8a34`): the dump is byte-identical; all 47, long form, derivatives 43.15 -> 32.46 µs; short form water + nitrogen
+  0.17 / 0.43 µs, all 46 without water 5.9 / 27.1 µs. B2: 30.51 µs (-6 %), dropped.
