@@ -62,3 +62,5 @@ Result: the plan describes the block and its GUI. It leaves out the physics of t
 ## Decisions for the owner
 
 P2 (tank type), P4 (laundering), P5 (phases), E2 (rate clock), B2 (what balance means), Q1 (build form and power), Q4 (KubeJS form).
+
+Decided 2026-11-12: see [FLUID_CONVERSION_PLAN.md](FLUID_CONVERSION_PLAN.md), section 1.

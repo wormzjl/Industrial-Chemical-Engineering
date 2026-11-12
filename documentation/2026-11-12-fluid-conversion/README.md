@@ -1,6 +1,6 @@
 # 2026-11-12 fluid conversion
 
-Status: Planned. The owner's plan is reviewed; no implementation has started. Branch `claude/fluid-conversion-plan-review-786fbc`, cut from `main` at `ccde84295` (0.27.1).
+Status: Planned. The owner's plan is reviewed, the open points are decided and the build plan is written; no implementation has started. Branch `claude/fluid-conversion-plan-review-786fbc`, cut from `main` at `ccde84295` (0.27.1).
 
 Purpose: a converter between standard Forge (NeoForge) fluids and IChemE fluids.
 
@@ -18,8 +18,11 @@ Add a fluid conversion system between standard forge fluid and IChemE fluid:
 ## History
 
 - 2026-11-12: batch opened. The plan reviewed for what it lacks (FLUID_CONVERSION_PLAN_REVIEW.md): 25 gaps in six groups, seven of them owner decisions. Documents only, no test run.
+- 2026-11-12: the owner decided the seven points (plan section 1): open tank; forward rules few and limited, most use IChemE to Forge; liquids plus gas rules, gas on a closed variant only; rate in process L/s; balance by fill fraction with a deadband; a constructor kind without FE; datapack JSON only for KubeJS. FLUID_CONVERSION_PLAN.md written. Documents only, no test run.
 
 ## Documents
+
+- [FLUID_CONVERSION_PLAN.md](FLUID_CONVERSION_PLAN.md): the decisions, the physics, the design (equipment, the `Converters` port host, rules, control, saves, GUI), what is ruled out, pitfalls and work packages W1 to W7.
 
 - [FLUID_CONVERSION_PLAN_REVIEW.md](FLUID_CONVERSION_PLAN_REVIEW.md): the gaps in the plan (physics and conservation, engine schedule, rule semantics, balance mode, equipment and integration, saves and verification) and the decisions for the owner.
 
@@ -29,6 +32,6 @@ None yet.
 
 ## Open items
 
-- The owner's decisions P2, P4, P5, E2, B2, Q1 and Q4 of the review.
-- The Forge fluid survey (Q5).
-- `FLUID_CONVERSION_PLAN.md`, after the decisions.
+- The Forge fluid survey (review Q5, plan W6) and the bundled rule list, for the owner's check.
+- The build, W1 to W7; not started.
+- The simulator catalog class that AGENTS.md names `FlowsheetCatalog` was not found by that name in `src/main/java` at `ccde84295`; locate it in W3.
