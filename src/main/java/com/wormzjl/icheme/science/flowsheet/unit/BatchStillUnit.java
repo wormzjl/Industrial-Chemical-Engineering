@@ -158,9 +158,9 @@ public final class BatchStillUnit implements UnitModel {
         int axis = thermo.axis().size(), waterAt = thermo.water();
         double[] flows = in.amountsView();
         if (flows[waterAt] > 0) throw new FlowsheetFailure("still.water");
-        var column = new StillColumn(thermo.model().hydrocarbon, PRESSURE);
+        var column = new StillColumn(thermo.model(), PRESSURE);
         int n = column.componentCount();
-        if (n != axis - 1) throw new IllegalStateException("The still's basis is the sheet's less water");
+        if (n != axis - 1 && !(n == axis && column.water() == waterAt)) throw new IllegalStateException("The still's basis is the sheet's, water last or none");
         // The charge: what the inlet brings over one cycle, let down into the pot at its enthalpy.
         double[] charge = new double[n];
         double moles = 0;

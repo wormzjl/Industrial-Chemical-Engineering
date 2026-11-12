@@ -507,7 +507,7 @@ public final class Stills implements IslandCoordinator.Ports {
         if(r.potIsland<0)return result;
         var model=models.apply(r.potIsland);var own=model.components();
         double[] critical=r.solved!=null?r.solved.critical():criticals.computeIfAbsent(model,m->{
-            var column=new StillColumn(m.hydrocarbon,BatchStill.ATMOSPHERIC);int n=m.hydrocarbon.componentCount();
+            var column=new StillColumn(m,BatchStill.ATMOSPHERIC);int n=m.hydrocarbon.componentCount();
             var c=new double[n+1];for(int i=0;i<n;i++)c[i]=column.criticalTemperature(i);c[n]=StillHead.WATER_CRITICAL;return c;});
         for(int i=0;i<critical.length&&i<own.size();i++){int j=axis.indexOf(own.get(i));if(j>=0)result[j]=critical[i];}
         return result;

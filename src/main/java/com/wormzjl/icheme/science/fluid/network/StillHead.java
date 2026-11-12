@@ -59,9 +59,9 @@ public final class StillHead {
         int n=model.hydrocarbon.componentCount();
         var pot=job.pot();
         if(pot.length!=n+1)return new Failed("basis mismatch");
-        var hydrocarbons=java.util.Arrays.copyOf(pot,n);
+        var column=new StillColumn(model,job.pressure());
+        var hydrocarbons=java.util.Arrays.copyOf(pot,column.componentCount());if(column.water()>=0)hydrocarbons[column.water()]=0;
         double total=0;for(double v:hydrocarbons)total+=v;
-        var column=new StillColumn(model.hydrocarbon,job.pressure());
         var critical=new double[n+1];for(int i=0;i<n;i++)critical[i]=column.criticalTemperature(i);critical[n]=WATER_CRITICAL;
         if(!(total>0))return new Solved(Pool.Head.plain(n+1),null,job.temperature(),job.temperature(),critical,0,0,0);
         checkpoint.run();
