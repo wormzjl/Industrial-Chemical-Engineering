@@ -1,0 +1,7 @@
+{
+  "revision": "1",
+  "fluid": "test:nitrogen",
+  "phase": "gas",
+  "to_icheme": {"composition": {"Nitrogen": 1.0}, "moles_per_litre": 0.0409},
+  "to_forge": {"components": {"Nitrogen": {"min": 0.95, "max": 1.0}}, "others_max": 0.05}
+}

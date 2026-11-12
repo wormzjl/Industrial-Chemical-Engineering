@@ -2576,7 +2576,9 @@ public final class PassiveStepSolver {
                 }
             }
             int valve=-1;
-            for(int e=0;e<graph.pipes().size();e++){var pipe=graph.pipes().get(e);if(pipe.control() instanceof FlowControl.Valve&&graph.reservoirs().get(pipe.first()).id()==plan.valve()){valve=e;break;}}
+            // A port's valve is on the run out of its node; a void that is its own valve's port (a converter's drain) has it on the run into it.
+            boolean into=plan.valve()==plan.node()&&n.kind()==PassiveNetwork.NodeKind.VOID;
+            for(int e=0;e<graph.pipes().size();e++){var pipe=graph.pipes().get(e);if(pipe.control() instanceof FlowControl.Valve&&graph.reservoirs().get(into?pipe.second():pipe.first()).id()==plan.valve()){valve=e;break;}}
             if(valve<0)continue;
             var driven=pipes==null?graph.pipes().get(valve):pipes.get(valve);var law=(FlowControl.Valve)driven.control();
             double target=lowest.get(plan.valve());

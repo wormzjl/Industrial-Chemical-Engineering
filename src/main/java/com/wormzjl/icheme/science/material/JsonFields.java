@@ -22,7 +22,7 @@ public final class JsonFields {
         if(o==null||!o.has(key)||o.get(key).isJsonNull())throw new IllegalArgumentException(label+": required field");
         return o.get(key);
     }
-    static JsonObject object(JsonObject o,String key) {
+    public static JsonObject object(JsonObject o,String key) {
         var e=required(o,key);
         if(!e.isJsonObject())throw new IllegalArgumentException(key+": expected object");
         return e.getAsJsonObject();
@@ -45,7 +45,7 @@ public final class JsonFields {
      * A record's declared revision: a token of letters, digits, '_', '.' and '-' that starts with a letter or digit, at
      * most 64 characters, so the separators of a package identity ({@code @ , ; / =}) read back unambiguously.
      */
-    static String revision(JsonObject o,String key){return token(text(o,key),key);}
+    public static String revision(JsonObject o,String key){return token(text(o,key),key);}
     static String token(String revision,String label) {
         if(!REVISION.matcher(revision).matches())throw new IllegalArgumentException(label+": \""+revision
                 +"\" must be a token of letters, digits, '_', '.' and '-', at most 64 characters");

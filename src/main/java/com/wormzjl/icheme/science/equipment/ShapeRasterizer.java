@@ -343,7 +343,22 @@ public final class ShapeRasterizer {
             return List.copyOf(polygons);
         });
     }
-    public static List<Polygon> tankGauge(EquipmentShape shape){if(!drawing)throw new IllegalStateException("A dedicated server keeps no accessory surfaces");return shape.kind()==EquipmentShape.Kind.TANK?geometry(shape).tankGauge():List.of();}
+    public static List<Polygon> tankGauge(EquipmentShape shape){if(!drawing)throw new IllegalStateException("A dedicated server keeps no accessory surfaces");return GaugePlace.of(shape)!=null?geometry(shape).tankGauge():List.of();}
+
+    /**
+     * A level gauge's sight glass in the box (batch 2026-11-12-fluid-conversion: a floating-roof tank's or a liquid
+     * converter's): its column's axis {@code at} (x, z), its chamber from {@code low} to {@code high} and the floor its liquid's
+     * depth stands over, box y; null for a shape that takes no gauge.
+     */
+    public record Glass(double[] at, double low, double high, double floor) {}
+
+    public static @Nullable Glass glass(EquipmentShape shape) {
+        var place = GaugePlace.of(shape);
+        if (place == null) return null;
+        var t = shape.transform();var at = t.point(new double[]{place.x(), 0, place.z()});
+        double lift = t.point(new double[]{0, 0, 0})[1];
+        return new Glass(new double[]{at[0], at[2]}, place.low() + lift, place.high() + lift, place.floor() + lift);
+    }
 
     /** A floating-roof tank's client-drawn parts in the box, or null for any other shape. */
     public static @Nullable Floating floating(EquipmentShape shape) { return floating(shape, RenderDetail.NORMAL); }
@@ -521,6 +536,14 @@ public final class ShapeRasterizer {
     /** A machine's shaft ends, in its design's order; none for a vessel or a unit without a shaft. */
     public static List<Shaft> shafts(EquipmentShape shape) {
         return geometry(shape).shafts;
+    }
+
+    /** A fluid converter's Forge fluid port (batch 2026-11-12-fluid-conversion, W3): the cell behind its face and the face's outward step. */
+    public record ForgePort(Cell cell, int dx, int dy, int dz) {}
+
+    /** A fluid converter's Forge fluid port, or null for any other shape. */
+    public static @Nullable ForgePort forgePort(EquipmentShape shape) {
+        return geometry(shape).forgePort;
     }
 
     /** The cell of an electric machine's terminal box (its RF port, batch 2026-11-03-rotating-machinery W5), or null. */
@@ -726,6 +749,8 @@ public final class ShapeRasterizer {
         private final List<Shaft> shafts = new ArrayList<>();
         /** An electric machine's terminal box cell, its RF port; null without one. */
         private final Cell terminal;
+        /** A fluid converter's Forge fluid port; null without one. */
+        private final ForgePort forgePort;
         private final Layout layout;
         private final Cell fluidCell;
         /** One node cell per registration: the fluid cell, or each heat side's first inlet cell (batch 2026-10-27-heat-exchanger-design). */
@@ -841,6 +866,7 @@ public final class ShapeRasterizer {
                 ports.addAll(physical.ports);
                 shafts.addAll(physical.shafts);
                 terminal = physical.terminal;
+                forgePort = physical.forgePort;
                 layout = physical.layout;
                 fluidCell = physical.fluidCell;
                 fluidCells = physical.fluidCells;
@@ -886,6 +912,14 @@ public final class ShapeRasterizer {
                 box = new Cell(floor(p.x() - .1 * n[0]), floor(p.y() - .1 * n[1]), floor(p.z() - .1 * n[2]));
             }
             terminal = box;
+            ForgePort forge = null;
+            if (unit != null && unit.forgePort != null) {
+                var p = unit.forgePort;
+                var inner = transform.point(new double[]{p[0] - p[3] * .01, p[1] - p[4] * .01, p[2] - p[5] * .01});
+                var out = transform.direction(new double[]{p[3], p[4], p[5]});
+                forge = new ForgePort(new Cell(floor(inner[0]), floor(inner[1]), floor(inner[2])), (int) Math.round(out[0]), (int) Math.round(out[1]), (int) Math.round(out[2]));
+            }
+            forgePort = forge;
             for (var entry : byCell.entrySet()) {
                 if (entry.getValue().size() > KEYED_NOZZLES)
                     throw new IllegalStateException(entry.getValue().size() + " nozzles reach cell " + entry.getKey() + " of " + shape + ": a key carries " + KEYED_NOZZLES);
@@ -1651,7 +1685,7 @@ public final class ShapeRasterizer {
         private List<Polygon> tankGauge(){
             var result=tankGauge;if(result!=null)return result;
             var accessory=new Mesh(detail);accessory.transform(transform);
-            TankDesign.gauge(accessory,TankDesign.Plan.of(shape.diameter(),(int)shape.tangentLength()));
+            TankGaugeGeometry.draw(accessory,GaugePlace.of(shape));
             var polygons=new ArrayList<Polygon>();cut(accessory,accessory.facets(),new double[3],polygons);
             return tankGauge=List.copyOf(polygons);
         }

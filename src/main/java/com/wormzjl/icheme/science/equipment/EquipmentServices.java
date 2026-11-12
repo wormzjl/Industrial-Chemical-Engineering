@@ -306,14 +306,16 @@ public final class EquipmentServices {
             // A turbine's governor enclosure; an electric still's terminal box (batch 2026-11-09-batch-distiller): its data
             // socket to the front and its FE socket opposite, to the back, each on a free cell of the right column (owner,
             // 2026-11-10). A fired still has no data port: only the electric still takes a controller (owner, 2026-11-09).
-            case STEAM_TURBINE, BATCH_STILL -> {
+            // A fluid converter's cabinet (batch 2026-11-12-fluid-conversion, W4): its data socket on the cabinet's side toward
+            // the process tank, in the bay's middle.
+            case STEAM_TURBINE, BATCH_STILL, FLUID_CONVERTER, GAS_CONVERTER -> {
                 if (kind == EquipmentShape.Kind.BATCH_STILL && !electricStill(shape)) return empty();
                 if (unit == null || unit.serviceHousing == null)
                     throw new IllegalArgumentException("Missing native service enclosure: " + kind);
                 var b = unit.serviceHousing;
                 low = north.transform().point(Arrays.copyOfRange(b, 0, 3));
                 high = north.transform().point(Arrays.copyOfRange(b, 3, 6));
-                front = kind == EquipmentShape.Kind.BATCH_STILL ? 2 : 4;
+                front = kind == EquipmentShape.Kind.BATCH_STILL ? 2 : kind.converter() ? 5 : 4;
                 reuse = true;
             }
             default -> {

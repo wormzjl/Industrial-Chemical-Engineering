@@ -18,7 +18,9 @@ public enum EquipmentAlarm {
     // A chimney's (batch 2026-11-10-chimney): nothing drawn while gas stands at its inlet.
     NO_DRAFT("NO DRAFT"),
     // A running column's (batch 2026-11-10-column-failure-modes, W6.1).
-    LOW_FEED("LOW FEED"), LOW_STEAM("LOW STEAM"), HEATING_LIMITED("HEATING LIMITED"), OFF_TABLE("OFF TABLE"), UPSET("UPSET");
+    LOW_FEED("LOW FEED"), LOW_STEAM("LOW STEAM"), HEATING_LIMITED("HEATING LIMITED"), OFF_TABLE("OFF TABLE"), UPSET("UPSET"),
+    // A fluid converter's (batch 2026-11-12-fluid-conversion, W4): its status's four, and its tanks' level thresholds.
+    NO_RULE("NO RULE"), OFF_SPEC("OFF SPEC"), SOURCE_EMPTY("SOURCE EMPTY"), DESTINATION_FULL("DESTINATION FULL"), LEVEL_HIGH("LEVEL HIGH"), LEVEL_LOW("LEVEL LOW");
 
     public final String text;
 
@@ -34,6 +36,19 @@ public enum EquipmentAlarm {
     public static final List<EquipmentAlarm> CHIMNEY = List.of(OVER_CAPACITY, NO_DRAFT);
     /** A running column's alarms (batch 2026-11-10-column-failure-modes, W6.1). */
     public static final List<EquipmentAlarm> COLUMN = List.of(UPSET, OFF_TABLE, LOW_FEED, LOW_STEAM, BLOCKED, COOLING_LIMITED, HEATING_LIMITED, FLOODING, NO_POWER);
+    /** A fluid converter's alarms (batch 2026-11-12-fluid-conversion, W4). */
+    public static final List<EquipmentAlarm> CONVERTER = List.of(NO_RULE, OFF_SPEC, SOURCE_EMPTY, DESTINATION_FULL, LEVEL_HIGH, LEVEL_LOW);
+
+    /** The alarm a converter's status raises, or null: off, idle, balanced and converting raise none. */
+    public static EquipmentAlarm of(Converters.Status status) {
+        return switch (status) {
+            case NO_RULE -> NO_RULE;
+            case OFF_SPEC -> OFF_SPEC;
+            case SOURCE_EMPTY -> SOURCE_EMPTY;
+            case DESTINATION_FULL -> DESTINATION_FULL;
+            case OFF, IDLE, BALANCED, CONVERTING -> null;
+        };
+    }
 
     /** The alarm a column's condition raises, or null: a pending solve, a refused set point and the notices raise none. */
     public static EquipmentAlarm of(Condition condition) {

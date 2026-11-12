@@ -212,6 +212,10 @@ public final class EquipmentStructure {
             registerStill(level, vessel, 0);
             return;
         }
+        if (vessel.shape().kind().converter()) {
+            registerConverter(level, vessel, 0);
+            return;
+        }
         if (HeatSides.unit(vessel.shape().kind()) != null) {
             registerUnit(level, vessel);
             return;
@@ -295,6 +299,7 @@ public final class EquipmentStructure {
         if(!vessel.shape().fluidDevice()){ShaftParts.structure(level,vessel.origin(),vessel.shape(),0);return true;}
         var world=FluidWorldAuthority.find(level.getServer()).orElse(null);if(world==null)return false;
         if(vessel.shape().kind()==EquipmentShape.Kind.BATCH_STILL)return restoreStill(level,vessel,world);
+        boolean converter=vessel.shape().kind().converter();
         boolean unit=HeatSides.unit(vessel.shape().kind())!=null;
         var heldIds=unit?heldAtNodes(world,level,vessel):List.<Long>of();
         if(unit&&unitRecords(world,heldIds).size()==registrations(vessel.shape())) {
@@ -310,6 +315,8 @@ public final class EquipmentStructure {
             if(level.hasChunkAt(node)&&record.device().position().equals(held)&&!record.device().ports().isEmpty()
                     &&level.getBlockEntity(node) instanceof EquipmentShellBlockEntity shell&&ours(shell,vessel.origin(),vessel.shape())) {
                 if(vessel.shape().reservoir()&&!record.spec().geometry().equals(vessel.shape().fluidGeometry()))reregister(level,vessel,node,List.of());
+                // A converter missing its facts or a hidden port (W3) is restated whole onto its vessel, which keeps what it holds.
+                if(converter&&world.converterDevices(record.device().id()).size()<3)reregister(level,vessel,node,List.of());
                 // A casing saved before W3 (reading A29): its set-flow control becomes its machine, keeping its set flow.
                 var machine=restoredControl(vessel.shape(),record.device().control());
                 if(machine!=null)world.edit(record.device().id(),record.revision(),record.device().withControl(machine),record.spec());
@@ -643,6 +650,14 @@ public final class EquipmentStructure {
             FluidWorldAuthority.find(level.getServer()).ifPresent(world -> world.removeUnit(heldAtNodes(world, level, vessel)));
             return;
         }
+        if (vessel.shape().kind().converter()) {
+            // A converter's vessel and its hidden ports leave together (W3); its facts follow its vessel's removal.
+            var at = position(level, node(vessel));
+            FluidWorldAuthority.find(level.getServer()).ifPresent(world -> world.at(at)
+                    .filter(record -> record.device().position().equals(at) && !record.device().ports().isEmpty())
+                    .ifPresent(record -> {var ids = new HashSet<>(world.converterDevices(record.device().id()));ids.add(record.device().id());world.removeUnit(List.copyOf(ids));}));
+            return;
+        }
         if (HeatSides.unit(vessel.shape().kind()) != null) {
             // A unit's sides leave together: no event leaves half a pair.
             FluidWorldAuthority.find(level.getServer()).ifPresent(world -> world.removeUnit(
@@ -655,6 +670,48 @@ public final class EquipmentStructure {
                 .ifPresent(record -> world.remove(record.device().id())));
     }
 
+
+    // ---------------- the fluid converter (batch 2026-11-12-fluid-conversion, W3) ----------------
+
+    /**
+     * A whole fluid converter joins the fluid network as one event ({@link FluidWorldAuthority#placeConverter}): its process
+     * vessel at its lowest inside cell with its nozzles, and its two hidden ports, each meeting the vessel from inside
+     * through an upward contact, one at its node and one {@link EquipmentShape#converterRise} rows up. A liquid converter
+     * drains liquid low and fills high; a gas converter fills low and drains vapour high. Its Forge tank holds the vessel's
+     * volume in mB, its rate setting starts at the rated flow. {@code former}: the vessel it refreshes (0 for none).
+     */
+    private static void registerConverter(ServerLevel level, Vessel vessel, long former) {
+        FluidWorldAuthority.find(level.getServer()).ifPresent(world -> {
+            var placed = world.placeConverter(converterDevices(level, vessel, former > 0 ? world.registrations().get(former) : null), former);
+            long id = placed.getFirst().device().id();
+            if (level.getBlockEntity(node(vessel)) instanceof EquipmentShellBlockEntity entity && entity.fluidIdentity() != id) entity.bindIdentity(id);
+            // The Forge port answers from now on: cached fluid handlers look again.
+            var port = ShapeRasterizer.forgePort(vessel.shape());
+            if (port != null) level.invalidateCapabilities(vessel.origin().offset(port.cell().x(), port.cell().y(), port.cell().z()));
+        });
+    }
+
+    /** {@code vessel}'s converter devices, keeping {@code former}'s fitted blanketing valve and safety valve where it has them. */
+    static FluidWorldAuthority.ConverterDevices converterDevices(Level level, Vessel vessel, WorldTopologyLedger.@Nullable Registration registration) {
+        var former = registration == null ? null : registration.spec();
+        var shape = vessel.shape();boolean gas = shape.kind() == EquipmentShape.Kind.GAS_CONVERTER;
+        var node = node(vessel);
+        var low = new PhysicalFluidTopology.Port(position(level, node), PhysicalFluidTopology.Direction.UP, gas ? PassiveNetwork.PhasePort.BULK : PassiveNetwork.PhasePort.LIQUID);
+        var high = new PhysicalFluidTopology.Port(position(level, node.above(shape.converterRise())), PhysicalFluidTopology.Direction.UP, gas ? PassiveNetwork.PhasePort.VAPOR : PassiveNetwork.PhasePort.BULK);
+        var nozzles = ports(level, vessel);
+        double blanket = 0, relief = 0;PhysicalFluidTopology.Direction reliefFace = null;
+        if (gas && former != null) {
+            var valve = former.blanket() > 0 ? com.wormzjl.icheme.runtime.instrument.InstrumentHosts.BlanketValve.of(level, vessel.origin(), shape) : null;
+            if (valve != null) {nozzles = new ArrayList<>(nozzles);nozzles.add(valve.port());blanket = former.blanket();}
+            // A fitted safety valve keeps the face it was fitted with, the default where the layout now takes that cell (as a drum's).
+            var fitted = registration.device().ports().stream().filter(p -> p.role() == PhysicalFluidTopology.ConnectionRole.RELIEF).map(p -> Direction.valueOf(p.face().name())).findFirst().orElse(null);
+            var psv = former.relief() > 0 ? com.wormzjl.icheme.runtime.instrument.InstrumentHosts.ReliefValve.of(level, vessel.origin(), shape, fitted) : null;
+            if (former.relief() > 0 && psv == null) psv = com.wormzjl.icheme.runtime.instrument.InstrumentHosts.ReliefValve.of(level, vessel.origin(), shape);
+            if (psv != null) {nozzles = new ArrayList<>(nozzles);nozzles.add(psv.port());relief = former.relief();reliefFace = former.reliefFace();}
+        }
+        return new FluidWorldAuthority.ConverterDevices(position(level, node), nozzles, shape.volume(), shape.levelHeight(), gas, shape.fluidGeometry(),
+                gas ? high : low, gas ? low : high, shape.converterRate(), Math.round(shape.volume() * 1000), blanket, relief, reliefFace);
+    }
 
     // ---------------- the batch still (batch 2026-11-09-batch-distiller, W3 and W4) ----------------
 
@@ -1455,6 +1512,16 @@ public final class EquipmentStructure {
         }
         if (HeatSides.unit(vessel.shape().kind()) != null) {
             FluidWorldAuthority.find(level.getServer()).ifPresent(world -> restateUnit(level, vessel, world, heldIds));
+            return;
+        }
+        if (vessel.shape().kind().converter()) {
+            // A converter moves whole onto its new layout (D7): its vessel and hidden ports keep their identities and contents.
+            var world = FluidWorldAuthority.find(level.getServer()).orElse(null);
+            if (world == null) return;
+            var held = position(level, oldNode == null ? node(vessel) : oldNode);
+            var record = world.at(held).filter(r -> r.device().position().equals(held) && !r.device().ports().isEmpty()).orElse(null);
+            if (oldNode != null && !oldNode.equals(node(vessel)) && record != null && level.getBlockEntity(oldNode) instanceof EquipmentShellBlockEntity old && old.fluidIdentity() == record.device().id()) old.releaseIdentity();
+            registerConverter(level, vessel, record == null ? 0 : record.device().id());
             return;
         }
         var node = node(vessel);

@@ -1,0 +1,9 @@
+{
+  "revision": "1",
+  "priority": 1,
+  "fluid": "ad_astra:oil",
+  "phase": "liquid",
+  "to_icheme": {
+    "preset": "medium_crude"
+  }
+}

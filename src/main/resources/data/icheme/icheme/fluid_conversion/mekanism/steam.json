@@ -1,0 +1,24 @@
+{
+  "revision": "1",
+  "priority": 50,
+  "fluid": "mekanism:steam",
+  "phase": "gas",
+  "to_forge": {
+    "basis": "mole",
+    "components": {
+      "Water": {
+        "min": 0.99,
+        "max": 1
+      }
+    },
+    "others_max": 0.01,
+    "temperature": {
+      "min": 368.15,
+      "max": 623.15
+    },
+    "pressure": {
+      "min": 80000,
+      "max": 500000
+    }
+  }
+}

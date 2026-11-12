@@ -165,4 +165,33 @@ class BuiltInInputsTest {
                 ControlInput.builtIn(43, 42, "inlet_pressure", Sensor.Kind.PRESSURE, "MOVER:INLET")
                         .instance());
     }
+
+    /**
+     * A fluid converter's channels (batch 2026-11-12-fluid-conversion, W4): both tanks' levels, its booked rate, its direction
+     * and its six alarms, all on its process vessel; its cabinet carries the data socket that reaches them.
+     */
+    @Test
+    void aConverterReadsBothLevelsItsRateDirectionAndAlarms() {
+        for (var kind : List.of(EquipmentShape.Kind.FLUID_CONVERTER, EquipmentShape.Kind.GAS_CONVERTER)) {
+            var design = UnitDesign.of(kind);
+            double d = design.minSize();
+            var shape = EquipmentShape.unit(kind, d, design.defaultLength(d), EquipmentShape.Heading.NORTH, design.minSupport(d, design.defaultLength(d)));
+            var inputs = BuiltInInputs.channels(binding(shape, 10));
+            var names = inputs.stream().map(ControlInput::channel).toList();
+            assertEquals(List.of("level_icheme", "level_forge", "rate", "direction", "alarm_no_rule", "alarm_off_spec", "alarm_source_empty",
+                    "alarm_destination_full", "alarm_level_high", "alarm_level_low"), names, kind.name());
+            assertTrue(inputs.stream().allMatch(i -> i.source() == 10 && i.host() == 77), "every channel reads the vessel");
+            assertEquals(List.of(Sensor.Kind.LEVEL, Sensor.Kind.LEVEL, Sensor.Kind.FLOW, Sensor.Kind.ALARM),
+                    inputs.subList(0, 4).stream().map(ControlInput::kind).toList());
+            assertTrue(inputs.stream().noneMatch(BuiltInInputs::volumeAvailable), "a converter's channels carry no stream volume");
+            assertNotNull(ShapeRasterizer.services(shape).data(), "the cabinet carries the data socket");
+        }
+        assertEquals(EquipmentAlarm.NO_RULE, EquipmentAlarm.of(Converters.Status.NO_RULE));
+        assertEquals(EquipmentAlarm.OFF_SPEC, EquipmentAlarm.of(Converters.Status.OFF_SPEC));
+        assertEquals(EquipmentAlarm.SOURCE_EMPTY, EquipmentAlarm.of(Converters.Status.SOURCE_EMPTY));
+        assertEquals(EquipmentAlarm.DESTINATION_FULL, EquipmentAlarm.of(Converters.Status.DESTINATION_FULL));
+        for (var quiet : List.of(Converters.Status.OFF, Converters.Status.IDLE, Converters.Status.BALANCED, Converters.Status.CONVERTING))
+            assertNull(EquipmentAlarm.of(quiet), quiet.name());
+        assertEquals("DESTINATION FULL", EquipmentAlarm.DESTINATION_FULL.text);
+    }
 }
