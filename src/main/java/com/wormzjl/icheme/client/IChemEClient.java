@@ -31,6 +31,12 @@ public final class IChemEClient {
         com.wormzjl.icheme.client.gui.tutorial.FilmCommand.register(event);
     }
 
+    /** The field guide asks the server for this player's tutorial progress (batch 2026-11-12-tutorial-system, P1). */
+    @SubscribeEvent
+    public static void loggingIn(ClientPlayerNetworkEvent.LoggingIn event) {
+        com.wormzjl.icheme.client.gui.tutorial.GuideClient.hello();
+    }
+
     /** Fluid device identities belong to a world: the remembered last-delivered views go with it. */
     @SubscribeEvent
     public static void loggingOut(ClientPlayerNetworkEvent.LoggingOut event) {

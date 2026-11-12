@@ -18,6 +18,7 @@ public final class ModCreativeTabs {
             .title(Component.translatable("itemGroup.icheme"))
             .icon(() -> ModItems.PRESSURE_CONTROL_VALVE.get().getDefaultInstance())
             .displayItems((parameters, output) -> {
+                output.accept(ModItems.FIELD_GUIDE.get());
                 output.accept(ModItems.PROCESS_SIMULATOR.get());
                 output.accept(ModItems.PRESSURE_PROBE.get());
                 output.accept(ModItems.TEMPERATURE_PROBE.get());
