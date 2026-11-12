@@ -744,3 +744,15 @@ the hold: a `SolverDiagnostics` counter where `phaseAppeared` answers yes (as `t
 trickle case asserts stays 0. Predicted: at least 1 per trickle step on HEAD, 0 after. If it is 0 on HEAD the
 reading is wrong and nothing is fixed. 358 and 575 are measured by the final lane's campaign. The rigid vessel's
 "holds nothing" stays an open rule question.
+
+## 41. Owner: two saved fields for the save defect (2026-11-12)
+
+Owner, verbatim: "Yes, two fields". Section 38's cause A is fixed by two fields appended to a vessel's facts row,
+after `rigid`: the oil liquid's and the aqueous liquid's amounts (conserved basis, water last, zeros written).
+Facts schema 21 to 22. The four old fields stay written with their meaning. A row without the two fields reads as
+today (`fromLegacySplit`); presence is the record's own field count, with no branch on the schema. A row with them
+rebuilds the three slots directly, the vapour from `vapor` and `waterVapor` (never a sum), by the constructor the
+format-48 checkpoint reader uses. The check against the state compares the two slots bit for bit where the row
+carries them. Corpus image `src/test/resources/compat/fluid/schema-22` and compat cases: water under nitrogen, oil
+over water, one compound in two phases, an empty vessel, a rigid vessel. Ruled out: recompute on load; one field.
+Ordered to the sub-thread after the 358 fix.
