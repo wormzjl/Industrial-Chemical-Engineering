@@ -21,7 +21,7 @@ public final class ThreeParts implements Card {
     /** Dots of each kind. */
     public static final int COUNT = 9;
     /** The heat over which each kind's dots leave, one after another, and how long one dot takes from its place to the top. */
-    static final double LIGHT_FROM = .1, LIGHT_TO = .42, MIDDLE_FROM = .52, MIDDLE_TO = .84, WAY = .08;
+    static final double LIGHT_FROM = .1, LIGHT_TO = .5, MIDDLE_FROM = .58, MIDDLE_TO = .88, WAY = .1;
     private static final int WALL = 0xFFB3C0CA, LIQUID = 0xFF2F4B5E, FLAME = 0xFFF08A24, FLAME_CORE = 0xFFFFD27A;
 
     @Override
@@ -98,7 +98,7 @@ public final class ThreeParts implements Card {
             c.fill(pot.right() - 2, pot.y(), pot.right(), pot.bottom(), WALL);
             c.fill(pot.x(), pot.bottom() - 2, pot.right(), pot.bottom(), WALL);
             c.fill(pot.x() + 2, liquidTop, pot.right() - 2, pot.bottom() - 2, LIQUID);
-            // The fire under the pot: tongues as tall as the heat.
+            // The fire under the pot: tongues rising from the hearth toward the pot, as tall as the heat.
             int fireTop = pot.bottom() + 1, room = area.bottom() - fireTop;
             int tongues = Math.max(3, pot.w() / 12);
             for (int t = 0; t < tongues; t++) {
@@ -106,8 +106,8 @@ public final class ThreeParts implements Card {
                 double sway = .85 + .15 * Math.sin(phase * 7 + t * 1.9);
                 int tall = (int) Math.round(room * heat * sway);
                 for (int r = 0; r < tall; r++) {
-                    int inset = wide * r / Math.max(1, 2 * tall);
-                    c.fill(x + inset, fireTop + r, x + wide - inset, fireTop + r + 1, r < tall / 2 ? FLAME_CORE : FLAME);
+                    int inset = wide * r / Math.max(1, 2 * tall), y = area.bottom() - 1 - r;
+                    c.fill(x + inset, y, x + wide - inset, y + 1, r < tall / 2 ? FLAME : FLAME_CORE);
                 }
             }
             // The dots: light near the top of the liquid, heavy near the floor; a leaving one rises to the neck and out.
@@ -145,11 +145,15 @@ public final class ThreeParts implements Card {
         int x = area.x() + 4;
         var kinds = Track.Kind.values();
         var words = textKeys();
+        int[] at = new int[kinds.length];
         for (int k = 0; k < kinds.length; k++) {
-            c.fill(x, area.y() + 4, x + 5, area.y() + 9, 0xFF000000 | kinds[k].rgb);
+            at[k] = x;
             String word = tr.apply(words.get(k));
             c.text(word, x + 8, area.y() + 3, Palette.TEXT);
             x += 8 + c.measure().width(word) + 10;
         }
+        c.batch(() -> {
+            for (int k = 0; k < kinds.length; k++) c.fill(at[k], area.y() + 4, at[k] + 5, area.y() + 9, 0xFF000000 | kinds[k].rgb);
+        });
     }
 }
