@@ -179,3 +179,16 @@ Wet's whole growth is nine split unknowns per node: the solutes of the aqueous p
 An aqueous floor of 1e-5 would bring the node to 33 unknowns (about 1.2 times main's block against 1.7). Not built, and the orchestrator advises against it: nitrogen in water under air or a nitrogen blanket stands at about 1e-5 at one atmosphere, so the floor would switch the water's dissolved gas on and off at ambient pressure, and the pump's clean-zone edge (W3B_NETWORK_PLAN.md section 19: water under nitrogen, 69.9 kPa) and the cooling tower's saturated water read that gas.
 
 Where this leaves the cost (ratios to main 1.09, 1.90, 1.20 against 1.1, 1.5, 1.1; a timing of the settled form is ordered): wet's remaining excess is real work, three-phase equilibrium with nine more unknowns per node, paid in the linear solve (31 % of the profile) and per Jacobian column. Routes that keep the physics: a faster linear solve for the node blocks, and less viscosity work per column (12 to 17 %); neither is measured. To the owner.
+
+## 14. Timing of the settled form, alone (2026-11-12)
+
+| ms per step (ratio to main) | dry | wet | polar |
+|---|---|---|---|
+| before the first-order `dv/dP` | 0.843 (1.09) | 1.749 (1.90) | 1.224 (1.20) |
+| HEAD, a run that was not alone (not a measurement) | 0.827 (1.06) | 1.942 (2.10) | 1.436 (1.41) |
+| HEAD, alone: the record | 0.915 (1.18) | 1.803 (1.95) | 1.412 (1.38) |
+| bound (W3B_NETWORK_PLAN.md section 37) | 1.1 | 2.0 | 1.25 |
+
+Runs of the same code differ by about 10 % on this machine (dry 1.06 and 1.18 an hour apart). Dry's 1.18 is inside that spread of its bound; wet is inside its bound; polar is over in both runs, back at its time before the tangents (1.449).
+
+Open: why polar. The `dv/dP` change adds two closed forms per tangent read, too little for 15 %. Suspect (orchestrator, from the diff): `Tangent.at` now refuses a phase whose `dv/dP` is not negative, and inside the Jacobian build that refusal hands the whole build to the coloured sweep, at the old cost. A count run on HEAD decides (fallbacks and evaluations per step against the count before the change); a profile of polar if the counts are unchanged. No gate in the code holds the cost bounds; they stand in the plan.
