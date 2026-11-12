@@ -123,6 +123,17 @@ public final class HydrocarbonModel {
         return java.util.Arrays.copyOf(amounts,compounds.size());
     }
 
+    /**
+     * The compounds {@code terms}' evaluations carry in the kernel ({@link TranslatedPengRobinson.Workspace#carry}):
+     * those nonzero in conserved {@code support} (water last, dropped on a list without water), or the whole list for
+     * null. Set at every use by the caller that knows what it reads ({@code FluidThermodynamics.state}).
+     */
+    public void carry(TranslatedPengRobinson.Workspace terms,double[] support) {
+        if(support==null){terms.carryAll();return;}
+        if(support.length!=compounds.size()+1)throw new IllegalArgumentException("Fluid basis mismatch");
+        terms.carry(water>=0?support:java.util.Arrays.copyOf(support,compounds.size()));
+    }
+
     public Phase phase(double t,double p,double[] amounts,PengRobinsonKernel.Root root) {
         return phase(t,p,amounts,root,translated.prepare(t),false);
     }
@@ -159,7 +170,8 @@ public final class HydrocarbonModel {
         double[] logPhi=new double[compounds.size()+1];
         System.arraycopy(values.logFugacityCoefficientsView(),0,logPhi,0,kernel.length);
         if(water<0)logPhi[compounds.size()]=Double.NaN;
-        return new Phase(v,h,h-p*v,dvdp,logPhi,root==PengRobinsonKernel.Root.VAPOR&&PhaseIdentification.vapourLike(values.phaseIdentificationParameter(),values.compressibility()));
+        return new Phase(v,h,h-p*v,dvdp,logPhi,root==PengRobinsonKernel.Root.VAPOR&&PhaseIdentification.vapourLike(values.phaseIdentificationParameter(),values.compressibility()),
+                values.supportSnapshot());
     }
 
     /**
@@ -185,20 +197,28 @@ public final class HydrocarbonModel {
         double[] partialVolume=values.partialMolarVolumesView().clone();
         double[] logPhi=java.util.Arrays.copyOf(values.logFugacityCoefficientsView(),n);
         TangentScratch scratch=tangentScratch.get();
-        // The same root on the kernel's own workspace: d ln phi/dn per mole of phase, the untranslated d ln phi/dT.
+        // The same root on the kernel's own workspace, on the same support: d ln phi/dn per mole of phase, the untranslated d ln phi/dT.
+        terms.carryOnto(scratch.mixture);
         try{evaluator.kernel().evaluateDerivatives(t,p,kernel,root,scratch.mixture,scratch.derivatives);}
         catch(IllegalStateException coalescing){return null;}
         double[] kernelDt=scratch.derivatives.dLogPhiDtView(),residual=scratch.derivatives.partialMolarResidualEnthalpyView();
         double[] logPhiT=new double[n],logPhiP=new double[n],partialEnthalpy=new double[n],rawPartialVolume=new double[n],coVolumes=new double[n];
         double[][] logPhiN=new double[n][n];
+        double outside=PengRobinsonKernel.outsideSupportFill();
         for(int i=0;i<n;i++) {
+            coVolumes[i]=evaluator.kernel().coVolume(i);
+            if(!terms.carries(i)) {
+                // A compound the support does not carry: the kernel's fill in every derivative.
+                logPhiT[i]=logPhiP[i]=partialEnthalpy[i]=rawPartialVolume[i]=outside;
+                java.util.Arrays.fill(logPhiN[i],outside);
+                continue;
+            }
             double c=translated.translation(i);
             // ln phi_i carries +P c_i/(RT) from the translation; h carries +P c_i.
             logPhiT[i]=kernelDt[i]-p*c/(rt*t);
             logPhiP[i]=partialVolume[i]/rt-1/p;
             partialEnthalpy[i]=terms.idealGasEnthalpy(i)+residual[i]+p*c;
             rawPartialVolume[i]=partialVolume[i]-c;
-            coVolumes[i]=evaluator.kernel().coVolume(i);
             double[] row=scratch.derivatives.dLogPhiDnRowView(i);
             for(int j=0;j<n;j++)logPhiN[i][j]=row[j]/total;
             if(!Double.isFinite(logPhiT[i])||!Double.isFinite(logPhiP[i])||!Double.isFinite(partialEnthalpy[i]))throw new IllegalArgumentException("Nonfinite chemical-potential derivative");
@@ -298,7 +318,7 @@ public final class HydrocarbonModel {
             if(n<amounts.length)out[n]=Double.NaN;
             if(!(v>0)||!Double.isFinite(h))throw new IllegalArgumentException("Invalid translated phase properties");
             if(!(phaseSlope<0))throw new IllegalArgumentException("Invalid translated phase properties");
-            return new Phase(v,h,h-p*v,phaseSlope,out,base.vaporLike());
+            return new Phase(v,h,h-p*v,phaseSlope,out,base.vaporLike(),base.carried());
         }
     }
 
@@ -335,10 +355,17 @@ public final class HydrocarbonModel {
     /**
      * One phase's molar properties on the balance book (volume and enthalpy with water's share) and its {@code ln phi} on
      * the conserved basis (water last; not a number on a list without water). {@code vaporLike}: a vapour evaluation's
-     * root is vapour-like by the phase identification parameter.
+     * root is vapour-like by the phase identification parameter. {@code carried}: the kernel support it was evaluated on
+     * (kernel basis, never mutated), or null for the whole list; outside it {@code ln phi} is the kernel's fill.
      */
     public record Phase(double molarVolume,double molarEnthalpy,double molarInternalEnergy,
-                        double volumePressureDerivative,double[] logFugacity,boolean vaporLike) {
+                        double volumePressureDerivative,double[] logFugacity,boolean vaporLike,boolean[] carried) {
+        /** A phase evaluated on the whole list. */
+        public Phase(double molarVolume,double molarEnthalpy,double molarInternalEnergy,double volumePressureDerivative,double[] logFugacity,boolean vaporLike) {
+            this(molarVolume,molarEnthalpy,molarInternalEnergy,volumePressureDerivative,logFugacity,vaporLike,null);
+        }
+        /** Whether {@code ln phi} of conserved component {@code i} is the equation of state's (its support carried it). */
+        public boolean carries(int i) { return carried==null||i<carried.length&&carried[i]; }
         @Override public double[] logFugacity() { return logFugacity.clone(); }
         /** The coefficients themselves, for the solver packages. The caller must not mutate them. */
         public double[] logFugacityView() { return logFugacity; }

@@ -258,6 +258,10 @@ public final class TranslatedPengRobinson {
         public void carryAll(){if(mixture.carryAll())supportChanged();}
         /** Whether the support holds component {@code i}. */
         public boolean carries(int i){return mixture.carries(i);}
+        /** The support as a mask never mutated ({@link PengRobinsonKernel.Workspace#supportSnapshot}); null for the whole list. */
+        public boolean[] supportSnapshot(){return mixture.supportSnapshot();}
+        /** This workspace's support onto a kernel workspace of the same kernel (a derivative evaluation of the same phase). */
+        public void carryOnto(PengRobinsonKernel.Workspace target){target.carrySame(mixture);}
         private void supportChanged(){if(!Double.isNaN(temperature))owner.prepareSupport(this);}
         /** Component {@code i}'s ideal-gas heat capacity at the prepared temperature, J/(mol K). */
         public double idealGasHeatCapacity(int i){return heatCapacity[i];}
@@ -327,6 +331,9 @@ public final class TranslatedPengRobinson {
         }
         /** Physical roots of the cubic at this state and composition: 1, or 3 where both roots exist. */
         public int physicalRootCount(){return physicalRootCount;}
+        /** The support these values were evaluated on ({@link Workspace#supportSnapshot}); null for the whole list. */
+        public boolean[] supportSnapshot(){return carried;}
+        private boolean[] carried;
         /** The caller must not mutate these; they are refilled by the next evaluation. */
         public double[] logFugacityCoefficientsView(){return logFugacityCoefficients;}
         public double[] partialMolarVolumesView(){return partialMolarVolumes;}
@@ -488,6 +495,7 @@ public final class TranslatedPengRobinson {
         out.dpdv=dpdv;out.denominator=denominator;out.dpdtv=dpdtv;out.dpdvv=dpdvv;
         out.temperature=temperature;out.untranslatedVolume=v;out.attraction=a;out.coVolume=b;out.attractionTemperatureDerivative=da;
         out.physicalRootCount=evaluation.physicalRootCount();
+        out.carried=workspace.mixture.supportSnapshot();
     }
 
     private double coVolume(int component) { return kernel.coVolume(component); }

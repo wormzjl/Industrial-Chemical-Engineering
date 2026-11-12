@@ -93,7 +93,14 @@ public final class IslandSets {
         var source=p.logFugacityView();var cut=new double[width+1];
         for(int i=0;i<source.length-1;i++)if(map[i]>=0)cut[map[i]]=source[i];
         cut[width]=source[source.length-1];
-        return new HydrocarbonModel.Phase(p.molarVolume(),p.molarEnthalpy(),p.molarInternalEnergy(),p.volumePressureDerivative(),cut,p.vaporLike());
+        // The support it was evaluated on, on the cut basis (the kernel's: water last where the list carries it).
+        boolean[] carried=null;
+        if(p.carried()!=null){
+            carried=new boolean[p.carried().length==source.length?width+1:width];
+            for(int i=0;i<source.length-1;i++)if(map[i]>=0&&map[i]<carried.length)carried[map[i]]=p.carries(i);
+            if(carried.length==width+1)carried[width]=p.carries(source.length-1);
+        }
+        return new HydrocarbonModel.Phase(p.molarVolume(),p.molarEnthalpy(),p.molarInternalEnergy(),p.volumePressureDerivative(),cut,p.vaporLike(),carried);
     }
     /**
      * {@code pool} on {@code to}'s list: a still's head (batch 2026-11-09-batch-distiller, W3) is a slice input on the island's

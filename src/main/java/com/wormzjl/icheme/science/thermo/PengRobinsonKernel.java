@@ -380,12 +380,14 @@ public final class PengRobinsonKernel {
 
     /**
      * Tests only: outputs outside a workspace's support are NaN instead of zero, so a reader of a compound the caller
-     * did not carry fails loudly. Off by default; a test that turns it on turns it off again.
+     * did not carry fails loudly, and an amount outside the support is an {@link AssertionError} (no refused-trial
+     * handler hides it). Off by default; the system property {@code icheme.kernel.supportNaN} turns it on for a whole test
+     * JVM ({@code tools/aqueous-solvents/kernel-cost/support-nan.init.gradle}); a test that turns it on turns it off again.
      */
     public static void fillOutsideSupportWithNaN(boolean on) { outsideSupportNaN = on; }
     /** The value every output outside a workspace's support holds: zero, or NaN under {@link #fillOutsideSupportWithNaN}. */
     public static double outsideSupportFill() { return outsideSupportNaN ? Double.NaN : 0.0; }
-    private static boolean outsideSupportNaN;
+    private static boolean outsideSupportNaN = Boolean.getBoolean("icheme.kernel.supportNaN");
     public Evaluation newEvaluation() { return new Evaluation(count); }
     /** A derivative output that carries {@code dh^R/dT} (and so forms the second temperature derivative it reads). */
     public Derivatives newDerivatives() { return new Derivatives(count, true); }
@@ -1588,6 +1590,7 @@ public final class PengRobinsonKernel {
             double value = source[i];
             if (!Double.isFinite(value) || value < 0.0) throw new IllegalArgumentException("Invalid composition");
             if (value != 0.0 && !carried[i]) {
+                if (outsideSupportNaN) throw new AssertionError("Composition has an amount of component " + i + " outside the workspace's support");
                 throw new IllegalArgumentException("Composition has an amount of component " + i + " outside the workspace's support");
             }
             total += value;
@@ -1723,6 +1726,8 @@ public final class PengRobinsonKernel {
         private final int[] cellTo;
         /** Bumped at every change of the support, so an output knows its entries outside the support are current. */
         private int supportVersion;
+        /** {@link #supportSnapshot()}. */
+        private boolean[] snapshot;
         /** Per compound, pair and cell: the temperature its prepared values belong to. */
         private final long[] compoundStamp;
         private final long[] pairStamp;
@@ -1834,6 +1839,21 @@ public final class PengRobinsonKernel {
         /** Whether the support holds {@code component}. */
         public boolean carries(int component) { return inSupport[component]; }
 
+        /**
+         * The support as a mask that is never mutated (a new one per change), for a result that records what it was
+         * evaluated on; null while the whole list is carried.
+         */
+        public boolean[] supportSnapshot() { return snapshot; }
+
+        /** The support of {@code other}, a workspace of the same kernel; returns whether this one's changed. */
+        public boolean carrySame(Workspace other) {
+            if (other.kernel != kernel) throw new IllegalArgumentException("Workspace belongs to another kernel");
+            if (Arrays.equals(inSupport, other.inSupport)) return false;
+            System.arraycopy(other.inSupport, 0, inSupport, 0, inSupport.length);
+            filter();
+            return true;
+        }
+
         /** The support's lists, once per change: compounds, pairs with both ends in it, and each centre's cells. */
         private void filter() {
             int n = 0;
@@ -1861,6 +1881,7 @@ public final class PengRobinsonKernel {
                     cellTo[i] = at;
                 }
             }
+            snapshot = n == inSupport.length ? null : inSupport.clone();
             supportVersion++;
             preparedTemperature = Long.MIN_VALUE;
         }
