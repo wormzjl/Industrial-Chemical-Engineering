@@ -3,7 +3,6 @@
 Set-up: 500 L solid-fired pot still, built-in condenser, 0 stages, 60 % full of medium crude at 25 °C (259.5 kg, 1,156 mol), firing 1 (32.0 kW), run by `StillBatch` (`BatchStillTest.aMediumCrudePotStillRunsToItsLimit`).
 
 ## 1. Expected behaviour
-
 - Per step the pot's balance is Q dt = d(N hL) + hV dD = (hV(y) − Σ yᵢ h̄ᵢ(T, z)) dD + N cp dT. The first term is the distillate's partial molar latent heat out of the pot liquid: always positive, 14 kJ/mol at 45 °C (light ends) rising to 47 kJ/mol at 339 °C. The warming term adds to it.
 - About half of medium crude boils below 360 °C: the run goes on to OVERHEAT (350 °C) with 30 to 50 % of the mass distilled, every component and the energy ledger closed, the pot never cooling.
 
