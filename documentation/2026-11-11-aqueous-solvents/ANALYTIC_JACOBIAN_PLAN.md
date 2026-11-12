@@ -194,3 +194,25 @@ Runs of the same code differ by about 10 % on this machine (dry 1.06 and 1.18 an
 Open: why polar. The `dv/dP` change adds two closed forms per tangent read, too little for 15 %. Suspect (orchestrator, from the diff): `Tangent.at` now refuses a phase whose `dv/dP` is not negative, and inside the Jacobian build that refusal hands the whole build to the coloured sweep, at the old cost. A count run on HEAD decides (fallbacks and evaluations per step against the count before the change); a profile of polar if the counts are unchanged. No gate in the code holds the cost bounds; they stand in the plan.
 
 Polar, settled (sub-thread's count and profile on HEAD): every counter equals the count before the `dv/dP` change (no fallbacks, no exact phases inside a Jacobian, 145 evaluations and 6.5 Newton iterations per step), so the orchestrator's fallback suspicion is refuted. The profile has the shape of wet and dry: linear solve 29 %, Jacobian build 32 % (viscosity 14 %), residual 24 %; the excess correction is 6 % self. Three runs on this code give 1.412 (alone), 1.436 and 1.432 ms; the single 1.224 before the change was the outlier. Polar stands at 1.38 to 1.41 times main with no defect found, over the 1.25 bound: to the owner. Ordered for the record: main's own iteration and build counts on the three scenarios, to say whether the ratio is more iterations per step or more time per iteration.
+
+## 15. Main's build beside the branch: counters and profile (2026-11-12)
+
+Counters per 12 accepted steps, main (ccde84295's classes) against the branch: Newton iterations 82 and 81 (dry), 82 and 82 (wet), 78 and 78 (polar); solves 16 everywhere; residual evaluations 98 and 97, 98 and 98, 94 and 94; kernel value evaluations 5337 and 1725, 5769 and 2629, 6609 and 1737. The Newton work per step is the same; the branch makes a third of main's evaluations.
+
+Profiles, both builds under the recorder, each run alone, ms per accepted step:
+
+| part | dry main | dry branch | polar main | polar branch |
+|---|---|---|---|---|
+| whole | 0.804 | 0.805 | 1.069 | 1.432 |
+| LU factor | 0.214 | 0.204 | 0.327 | 0.379 |
+| Jacobian build (less the factor) | 0.274 | 0.248 | 0.393 | 0.454 |
+| residual (outside the build) | 0.136 | 0.158 | 0.154 | 0.316 |
+| of it the kernel | 0.026 | 0.042 | 0.028 | 0.151 |
+| kernel, all callers | 0.098 | 0.074 | 0.128 | 0.276 |
+| outside the Newton solve | 0.139 | 0.157 | 0.152 | 0.234 |
+
+- **Dry costs what it costs on main** (0.804 against 0.805). The 1.06 to 1.18 of the unprofiled timings is the machine's spread.
+- **Polar's extra 0.36 ms is the polar correction in each exact kernel evaluation**, mostly in the residual and line search (+0.16) and in the interval's own states outside the Newton solve (+0.08). Main's polar chain ran no excess correction; with water on the cubic's basis every phase holding hydrogen sulfide, methyl mercaptan or carbon dioxide runs it (`correctExcess`, `prepareExcess`). Beside it, each exact evaluation's temperature preparation allocates a kernel workspace that is larger with the excess arrays (0.026 ms, and a third more garbage-collection pauses, which fits the LU's +0.05 at equal nonzeros).
+- So polar's ratio is not the tangent Jacobian and not the linear solve. Wet carries the same term.
+
+Candidates for the later cost batch, not built: reuse the kernel workspace across the residual's exact evaluations; the correction's cost per evaluation.
