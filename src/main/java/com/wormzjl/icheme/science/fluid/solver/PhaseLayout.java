@@ -257,6 +257,17 @@ public final class PhaseLayout {
     /** {@code prepared} carries this node's temperature-only properties; it must be for the exact
      * temperature the variables decode to, and {@code null} evaluates them here as before. */
     public FluidThermodynamics.State decode(double[] variables,int offset,FluidThermodynamics.Prepared prepared) {
+        return decode(variables,offset,prepared,null);
+    }
+    /**
+     * The node at {@code variables} beside its base state, whose phase {@code tangents} these are
+     * ({@link FluidThermodynamics#tangents}): the split of the amounts is exact, each phase is its tangent's first-order
+     * phase where the step is small for it ({@link FluidThermodynamics#adoptingState(double, double, double[], double[],
+     * double[], FluidThermodynamics.Prepared, com.wormzjl.icheme.science.fluid.thermo.HydrocarbonModel.Tangent[])}). For
+     * the Jacobian's perturbed columns; {@code null} tangents decode on the equation of state.
+     */
+    public FluidThermodynamics.State decode(double[] variables,int offset,FluidThermodynamics.Prepared prepared,
+                                            com.wormzjl.icheme.science.fluid.thermo.HydrocarbonModel.Tangent[] tangents) {
         int n=amountIndex.length;double[][] out=new double[3][n];
         for(int i:components) {
             double amount=amountScale*variables[offset+amountIndex[i]];
@@ -275,7 +286,7 @@ public final class PhaseLayout {
             out[last][i]=rest;
         }
         double t=350*DeterministicMath.exp(variables[offset+temperatureIndex]),p=1e5*DeterministicMath.exp(variables[offset+pressureIndex]);
-        var state=model.adoptingState(t,p,out[0],out[1],out[2],prepared);
+        var state=tangents==null?model.adoptingState(t,p,out[0],out[1],out[2],prepared):model.adoptingState(t,p,out[0],out[1],out[2],prepared,tangents);
         if(solidIndex<0)return state;
         // The three moments are hard-nonnegative in SolidInventory.Moments. Enforce that by
         // projection rather than by refusing the trial: a Newton candidate that overshoots one of

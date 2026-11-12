@@ -97,6 +97,51 @@ class HydrocarbonTangentTest {
         }
     }
 
+    /**
+     * Section 3.2: a node's state from its tangents is the base state at the base point, the exact state to first order
+     * beside it, and takes a phase from the equation of state where the point moves its composition by more than
+     * {@link FluidThermodynamics#TANGENT_COMPOSITION_STEP}.
+     */
+    @Test void aStateFromTangentsIsTheBaseStateAndFirstOrderBesideIt() {
+        var model = FluidThermodynamics.forNetwork(MaterialCatalog.bundled(), FluidMaterialCatalog.NETWORK_PACKAGE);
+        double[] feed = amounts(model.hydrocarbon, "Methane", 2.0, "N-hexane", 3.0, "Toluene", 1.0, "Water", 4.0);
+        var base = model.flashTP(320, 5e5, feed, () -> { });
+        assertTrue(base.vaporPhase() != null && base.liquidPhase() != null && base.aqueousPhase() != null, "a gas and two liquids");
+        double t = base.temperature(), p = base.pressure();
+        var prepared = model.prepare(t);
+        var tangents = model.tangents(base, prepared);
+        for (int slot = 0; slot < 3; slot++) assertNotNull(tangents[slot]);
+        var same = model.adoptingState(t, p, base.vaporAmounts(), base.liquidAmounts(), base.aqueousAmounts(), prepared, tangents);
+        var exact = model.state(t, p, base.vaporAmounts(), base.liquidAmounts(), base.aqueousAmounts(), prepared);
+        for (double[] pair : new double[][] {{exact.volume(), same.volume()}, {exact.enthalpy(), same.enthalpy()}, {exact.internalEnergy(), same.internalEnergy()},
+                {exact.mass(), same.mass()}, {exact.vaporVolume(), same.vaporVolume()}, {exact.liquidSlotVolume(), same.liquidSlotVolume()},
+                {exact.aqueousSlotVolume(), same.aqueousSlotVolume()}})
+            assertEquals(Double.doubleToLongBits(pair[0]), Double.doubleToLongBits(pair[1]));
+        for (int slot = 0; slot < 3; slot++) assertArrayEquals(exact.phase(slot).logFugacityView(), same.phase(slot).logFugacityView(), 0.0);
+        // A small step: 1e-7 of the temperature and the pressure, and 1e-7 of the hexane moved from the oil to the gas.
+        int hexane = model.components().indexOf("N-hexane");
+        double[] vapor = base.vaporAmounts(), liquid = base.liquidAmounts(), aqueous = base.aqueousAmounts();
+        double moved = 1e-7 * liquid[hexane];
+        vapor[hexane] += moved;
+        liquid[hexane] -= moved;
+        double t1 = t * (1 + 1e-7), p1 = p * (1 + 1e-7);
+        var near = model.adoptingState(t1, p1, vapor.clone(), liquid.clone(), aqueous.clone(), model.prepare(t1), tangents);
+        var there = model.state(t1, p1, vapor, liquid, aqueous);
+        assertEquals(there.volume(), near.volume(), 1e-11 * there.volume());
+        assertEquals(there.enthalpy(), near.enthalpy(), 1e-11 * Math.abs(there.enthalpy()));
+        for (int slot = 0; slot < 3; slot++)
+            for (int i = 0; i < model.componentCount(); i++) assertEquals(there.phase(slot).logFugacityView()[i], near.phase(slot).logFugacityView()[i], 1e-9, slot + " " + i);
+        // A step that is not small for the gas (three tenths of its methane leave): the gas is the equation of state's.
+        int methane = model.components().indexOf("Methane");
+        double[] thin = base.vaporAmounts();
+        thin[methane] *= 0.7;
+        assertTrue(tangents[FluidThermodynamics.State.VAPOR].compositionShift(thin) > FluidThermodynamics.TANGENT_COMPOSITION_STEP);
+        var far = model.adoptingState(t, p, thin.clone(), base.liquidAmounts(), base.aqueousAmounts(), prepared, tangents);
+        var farExact = model.state(t, p, thin, base.liquidAmounts(), base.aqueousAmounts(), prepared);
+        assertEquals(Double.doubleToLongBits(farExact.vaporVolume()), Double.doubleToLongBits(far.vaporVolume()));
+        assertEquals(Double.doubleToLongBits(exact.liquidSlotVolume()), Double.doubleToLongBits(far.liquidSlotVolume()), "the liquids did not move");
+    }
+
     /** Test 2: beside the base, in temperature, pressure and every amount, the error falls with the square of the step. */
     @Test void theErrorFallsWithTheSquareOfTheStep() {
         double[] steps = {1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9};

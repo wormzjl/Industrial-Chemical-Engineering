@@ -713,8 +713,49 @@ public final class FluidThermodynamics {
     public State adoptingState(double t,double p,double[] vapor,double[] liquid,double[] aqueous,Prepared prepared) {
         return state(t,p,vapor,liquid,aqueous,null,match(prepared,t));
     }
+    /**
+     * A column of the node Jacobian moving a mole fraction of a phase by more than this takes that phase from the equation
+     * of state, not from its tangent (ANALYTIC_JACOBIAN_PLAN.md section 3.4: a step that is not small for a phase).
+     */
+    public static final double TANGENT_COMPOSITION_STEP=1e-3;
+    /**
+     * The tangents of {@code state}'s phases about it, by storage slot ({@link HydrocarbonModel#tangent}): null for a slot
+     * the state does not hold and for a root that cannot be differentiated. Each tangent's base is the state's own phase.
+     */
+    public HydrocarbonModel.Tangent[] tangents(State state,Prepared prepared) {
+        double t=state.temperature(),p=state.pressure();
+        var tangents=new HydrocarbonModel.Tangent[3];
+        TranslatedPengRobinson.Workspace terms=null;
+        boolean gas=state.phase(State.VAPOR)!=null;
+        for(int slot=0;slot<3;slot++) {
+            if(state.phase(slot)==null)continue;
+            if(terms==null)terms=prepared==null?hydrocarbon.prepare(t):match(prepared,t).pengRobinson();
+            tangents[slot]=hydrocarbon.tangent(t,p,state.amountsView(slot),slot==State.VAPOR?PengRobinsonKernel.Root.VAPOR:PengRobinsonKernel.Root.LIQUID,
+                    terms,slot!=State.VAPOR&&gas);
+        }
+        return tangents;
+    }
+    /**
+     * {@link #adoptingState} beside a base state whose {@code tangents} these are (section 3.2 of the plan): each phase
+     * that has a tangent, and whose composition the point moves by at most {@link #TANGENT_COMPOSITION_STEP}, is the
+     * tangent's first-order phase; any other is evaluated on the equation of state. The totals are formed by the same
+     * arithmetic. For the Jacobian's perturbed decodes alone: no state of the network is built from it.
+     */
+    public State adoptingState(double t,double p,double[] vapor,double[] liquid,double[] aqueous,Prepared prepared,HydrocarbonModel.Tangent[] tangents) {
+        return state(t,p,vapor,liquid,aqueous,null,match(prepared,t),tangents);
+    }
+    /** One slot's phase: its tangent's where the step is small for the phase, the equation of state's otherwise. */
+    private HydrocarbonModel.Phase slotPhase(HydrocarbonModel.Tangent tangent,double t,double p,double[] amounts,PengRobinsonKernel.Root root,
+                                             Prepared prepared,boolean vaporCoexists) {
+        if(tangent!=null&&tangent.compositionShift(amounts)<=TANGENT_COMPOSITION_STEP)return tangent.at(t,p,amounts);
+        return hydrocarbon.phase(t,p,amounts,root,prepared==null?hydrocarbon.prepare(t):prepared.pengRobinson(),vaporCoexists);
+    }
     private State state(double t,double p,double[] vapor,double[] liquid,double[] aqueous,
                         TranslatedPengRobinson.Workspace terms,Prepared prepared) {
+        return state(t,p,vapor,liquid,aqueous,terms,prepared,null);
+    }
+    private State state(double t,double p,double[] vapor,double[] liquid,double[] aqueous,
+                        TranslatedPengRobinson.Workspace terms,Prepared prepared,HydrocarbonModel.Tangent[] tangents) {
         if(SolverDiagnostics.ENABLED) {
             SolverDiagnostics.stateCalls.increment();
             if(SolverDiagnostics.inJacobian())SolverDiagnostics.stateCallsInJacobian.increment();
@@ -726,12 +767,13 @@ public final class FluidThermodynamics {
         // interval's notice reports it); only the numerical box refuses a trial, a plain IllegalArgumentException.
         NumericalBox.require(t,p);
         double nv=sum(vapor),nl=sum(liquid),na=sum(aqueous),volume=0,h=0,mass=0,vv=0,vl=0,va=0;
-        if(terms==null&&(nv>0||nl>0||na>0))terms=prepared==null?hydrocarbon.prepare(t):prepared.pengRobinson();
+        if(terms==null&&tangents==null&&(nv>0||nl>0||na>0))terms=prepared==null?hydrocarbon.prepare(t):prepared.pengRobinson();
         HydrocarbonModel.Phase gp=null,lp=null,ap=null;
         // Every phase at the state pressure; with a vapour beside it, a liquid slot on a single vapour-like root is refused.
-        if(nv>0){gp=hydrocarbon.phase(t,p,vapor,PengRobinsonKernel.Root.VAPOR,terms,false);vv=nv*gp.molarVolume();volume+=vv;h+=nv*gp.molarEnthalpy();}
-        if(nl>0){lp=hydrocarbon.phase(t,p,liquid,PengRobinsonKernel.Root.LIQUID,terms,nv>0);vl=nl*lp.molarVolume();volume+=vl;h+=nl*lp.molarEnthalpy();}
-        if(na>0){ap=hydrocarbon.phase(t,p,aqueous,PengRobinsonKernel.Root.LIQUID,terms,nv>0);va=na*ap.molarVolume();volume+=va;h+=na*ap.molarEnthalpy();}
+        // Beside a base state (tangents), a phase is its tangent's where the step is small for it (slotPhase).
+        if(nv>0){gp=tangents==null?hydrocarbon.phase(t,p,vapor,PengRobinsonKernel.Root.VAPOR,terms,false):slotPhase(tangents[State.VAPOR],t,p,vapor,PengRobinsonKernel.Root.VAPOR,prepared,false);vv=nv*gp.molarVolume();volume+=vv;h+=nv*gp.molarEnthalpy();}
+        if(nl>0){lp=tangents==null?hydrocarbon.phase(t,p,liquid,PengRobinsonKernel.Root.LIQUID,terms,nv>0):slotPhase(tangents[State.LIQUID],t,p,liquid,PengRobinsonKernel.Root.LIQUID,prepared,nv>0);vl=nl*lp.molarVolume();volume+=vl;h+=nl*lp.molarEnthalpy();}
+        if(na>0){ap=tangents==null?hydrocarbon.phase(t,p,aqueous,PengRobinsonKernel.Root.LIQUID,terms,nv>0):slotPhase(tangents[State.AQUEOUS],t,p,aqueous,PengRobinsonKernel.Root.LIQUID,prepared,nv>0);va=na*ap.molarVolume();volume+=va;h+=na*ap.molarEnthalpy();}
         for(int i=0;i<n;i++)mass+=(vapor[i]+liquid[i]+aqueous[i])*molecularWeight(i);
         if(!(volume>0)||!(mass>0)||!Double.isFinite(h))throw new IllegalArgumentException("Empty/nonfinite fluid properties");
         return new State(t,p,vapor,liquid,aqueous,volume,h,h-p*volume,mass,vv,vl,va,gp,lp,ap,SolidInventory.EMPTY,SolidInventory.Moments.ZERO);
