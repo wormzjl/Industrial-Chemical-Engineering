@@ -666,8 +666,9 @@ public final class PassiveStepSolver {
             if(phaseAppeared(graph,states,projection.states())){seeds=projection.states();continue;}
             // Decision D34: the reconstruction folded a phase this pass solved (its booked share fell below the trace share),
             // so the pass is solved again from the folded states: the Newton, the reconstruction and the equation gate then
-            // read the same phases.
-            if(recordFolds(graph,states,projection.states(),foldedPhases)){SolverDiagnostics.count(SolverDiagnostics.traceFoldPasses);seeds=projection.states();continue;}
+            // read the same phases. A vessel the pass laid out dry solved no phase: its state is its placeholder, and what
+            // is booked into it is judged by `filled` alone.
+            if(recordFolds(graph,states,projection.states(),foldedPhases,equations.dry)){SolverDiagnostics.count(SolverDiagnostics.traceFoldPasses);seeds=projection.states();continue;}
             var changedSeeds=phaseCorrection(graph,projection.states(),checkpoint,equations.cachedPrepared,foldedPhases);
             if(changedSeeds!=null){changedSeeds=flashSeeds(graph,modes,boundaryClosed,projection.states(),changedSeeds,checkpoint);proposal=Proposal.of(projection.states(),changedSeeds);seeds=changedSeeds;continue;}
             var reconstructed=x.clone();
@@ -796,7 +797,7 @@ public final class PassiveStepSolver {
         if(equations.segmentsMoved(flows))return null;
         var draws=equations.draws(flows,states);
         var projection=ConservativeTransport.reconstruct(graph,states,flows,heads,dt,model,checkpoint,transport,rateOnly,draws,equations.supports,emptyings,equations.releases,equations::sideHeat,equations::moverPower);
-        if(phaseAppeared(graph,states,projection.states())||phaseFolded(graph,states,projection.states())
+        if(phaseAppeared(graph,states,projection.states())||phaseFolded(graph,states,projection.states(),equations.dry)
                 ||phaseCorrection(graph,projection.states(),checkpoint,equations.cachedPrepared,foldedPhases.clone())!=null)return null;
         var reconstructed=variables.clone();
         for(int node=0;node<projection.states().size();node++)if(equations.layout[node]!=null){var encoded=equations.layout[node].encode(projection.states().get(node));System.arraycopy(encoded,0,reconstructed,equations.offsets[node],encoded.length);}
@@ -2857,9 +2858,9 @@ public final class PassiveStepSolver {
         return result==null?seeds:result;
     }
     /** {@link #phaseFolded}, recording the folded phases ({@link #phaseCode} bits) of each node in {@code foldedPhases}. */
-    private static boolean recordFolds(PassiveNetwork graph,List<FluidThermodynamics.State> solved,List<FluidThermodynamics.State> reconstructed,int[] foldedPhases) {
-        if(!phaseFolded(graph,solved,reconstructed))return false;
-        for(int i=0;i<solved.size();i++)if(!graph.reservoirs().get(i).fixed())foldedPhases[i]|=phaseCode(solved.get(i))&~phaseCode(reconstructed.get(i))&7;
+    private static boolean recordFolds(PassiveNetwork graph,List<FluidThermodynamics.State> solved,List<FluidThermodynamics.State> reconstructed,int[] foldedPhases,boolean[] dry) {
+        if(!phaseFolded(graph,solved,reconstructed,dry))return false;
+        for(int i=0;i<solved.size();i++)if(!graph.reservoirs().get(i).fixed()&&!dry[i])foldedPhases[i]|=phaseCode(solved.get(i))&~phaseCode(reconstructed.get(i))&7;
         return true;
     }
     /**
@@ -2867,20 +2868,28 @@ public final class PassiveStepSolver {
      * hydrocarbon liquid, free water or gas phase its Newton state holds, or its gas lost its water vapour (a carried gas,
      * decision D41). The restatement ({@code ConservativeTransport.repartition}) keeps every phase whose booked amounts are
      * not all zero, so a phase it drops is a phase it folded.
+     *
+     * <p>A vessel the pass laid out dry ({@code dry}, decision D54) solved no phase: its entry in {@code solved} is its
+     * placeholder, the ambient nitrogen charge of an empty vessel, not a Newton state. Liquid water booked into it gives a
+     * restated state with no gas, which is no fold of the placeholder's: {@link #filled} alone lays a dry vessel out, at
+     * the bag's resolution. Before, any such booking solved the pass again with the vessel laid out on it, 1.4e-30 mol
+     * in defaults fuzz seed 358, whose temperature column was zero and its Jacobian singular.</p>
      */
-    private static boolean phaseFolded(PassiveNetwork graph,List<FluidThermodynamics.State> solved,List<FluidThermodynamics.State> reconstructed) {
+    private static boolean phaseFolded(PassiveNetwork graph,List<FluidThermodynamics.State> solved,List<FluidThermodynamics.State> reconstructed,boolean[] dry) {
         for(int i=0;i<solved.size();i++) {
-            if(graph.reservoirs().get(i).fixed())continue;
+            if(graph.reservoirs().get(i).fixed()||dry[i])continue;
             var before=solved.get(i);var after=reconstructed.get(i);
             if((PhaseLayout.activeBits(before)&~PhaseLayout.activeBits(after))!=0)return true;
         }
         return false;
     }
     /**
-     * Whether the reconstruction gave a hydrocarbon phase to a node the Newton state holds none in (hold class E3). A
-     * node the booked amounts give an omitted trace has none to give (decision D41 for vessels,
-     * {@link FluidThermodynamics#omittedTrace}): the next pass would omit it again ({@code PhaseLayout.support}), so it
-     * is the node's state, not an appearance.
+     * Whether the reconstruction gave a fluid to a node whose solved state holds none (hold class E3): a compound the
+     * solved state has none of, booked as at least the trace share of the node's booked total. A smaller share is a
+     * trace the next pass would omit again ({@code PhaseLayout.support}), so it is the node's state, not an appearance.
+     * Only a node whose state holds solids alone reaches the share test. A junction always holds fluid, and so does a
+     * dry vessel: its solved state is its placeholder, the ambient nitrogen charge, so what is booked into a dry vessel
+     * is judged by {@link #filled} alone.
      */
     private static boolean phaseAppeared(PassiveNetwork graph,List<FluidThermodynamics.State> solved,List<FluidThermodynamics.State> reconstructed) {
         for(int i=0;i<solved.size();i++) {
