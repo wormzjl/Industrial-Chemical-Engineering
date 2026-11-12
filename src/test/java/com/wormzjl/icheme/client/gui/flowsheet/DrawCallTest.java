@@ -232,9 +232,12 @@ class DrawCallTest {
                         com.wormzjl.icheme.science.tutorial.guide.Progress.NONE, "unit", null).withPage(pages, id), size[0], size[1], SheetFixture.M, tr, "theme");
                 var c = new Counting();
                 p.draw(c, PanelSkin.LIGHT, 0, null, state);
-                most = Math.max(most, c.draws());
+                // Its picture: the game's draws for the still frame (SceneView: the depth clear, an actor each, dots, flames, liquids).
+                var picture = com.wormzjl.icheme.science.tutorial.films.PagePicture.of(java.util.Objects.requireNonNull(p.equipment()).page());
+                assertNotNull(picture, id + ": a picture");
+                most = Math.max(most, c.draws() + com.wormzjl.icheme.science.tutorial.films.PagePicture.draws(picture));
             }
-            System.out.println(size[0] + " by " + size[1] + ": an equipment page at most " + most + " draw calls, a chapter page " + budget);
+            System.out.println(size[0] + " by " + size[1] + ": an equipment page with its picture at most " + most + " draw calls, a chapter page " + budget);
             assertTrue(most <= budget, most + " draw calls against the chapter pages' " + budget);
             var map = com.wormzjl.icheme.client.gui.tutorial.GuidePage.place(new com.wormzjl.icheme.client.gui.tutorial.GuidePage.Input(guide,
                     com.wormzjl.icheme.science.tutorial.guide.Progress.NONE, "unit", "unit/map"), size[0], size[1], SheetFixture.M, tr, "theme");

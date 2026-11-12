@@ -50,6 +50,11 @@ public class GuideScreen extends Screen {
     /** P5: where Back returns to from an equipment page: the chapter, card or page the player came from. Empty: Back closes the guide. */
     private final java.util.ArrayDeque<Back> back = new java.util.ArrayDeque<>();
 
+    /** P5: the open page's picture (its film's first stop or its body), built when the page opens, and the view that draws it. */
+    private @org.jetbrains.annotations.Nullable String pictured;
+    private com.wormzjl.icheme.science.tutorial.scene.@org.jetbrains.annotations.Nullable Frame picture;
+    private final SceneView pictureView = new SceneView();
+
     private record Back(String open, @org.jetbrains.annotations.Nullable String card, @org.jetbrains.annotations.Nullable CardView cardView,
                         @org.jetbrains.annotations.Nullable String page, int offset) {
     }
@@ -114,6 +119,15 @@ public class GuideScreen extends Screen {
         else super.onClose();
     }
 
+    @Override
+    public void removed() {
+        // The picture's buffers go with the screen; a return from a film builds them again.
+        pictureView.close();
+        pictured = null;
+        picture = null;
+        super.removed();
+    }
+
     protected static String tr(String key) {
         return Component.translatable(key).getString();
     }
@@ -173,6 +187,15 @@ public class GuideScreen extends Screen {
         g.pose().pushPose();
         g.pose().translate(left, top, 0);
         page.draw(canvas, ClientConfig.skin(), offset, hover, cardView == null ? Card.State.of(0, 0) : cardView.state(Card.temperature(ClientConfig.temperature()), Card.massFlow(ClientConfig.flowTime())));
+        var e = page.equipment();
+        if (e != null) {
+            // Picture first: the page's own picture, built when the page first shows, drawn still over its frame.
+            if (!e.page().id().equals(pictured)) {
+                pictured = e.page().id();
+                picture = com.wormzjl.icheme.science.tutorial.films.PagePicture.of(e.page());
+            }
+            if (picture != null) pictureView.draw(g, picture, e.picture(), FilmLayout.fit(e.picture()));
+        }
         g.pose().popPose();
         renderOver(g, mouseX, mouseY);
         String hint = tour.isOpen() ? null : hintAt(x, y);
@@ -289,7 +312,12 @@ public class GuideScreen extends Screen {
                 var next = GuideClient.pages().next(p.id());
                 if (next != null) openPage(next.id());
             }
-            case GuidePage.PAGE_FILM -> film(p.film());
+            case GuidePage.PAGE_FILM -> {
+                // Watch plays on from the picture: the film opens at its first stop.
+                var scene = p.film() == null ? null : Films.build(p.film());
+                if (scene != null && minecraft != null) minecraft.setScreen(new FilmScreen(scene, this, () -> {
+                }).fromFirstStop());
+            }
             case GuidePage.PAGE_TOUR -> {
                 var tour = p.tour() == null ? null : com.wormzjl.icheme.science.tutorial.guide.TourFile.load().get(p.tour());
                 if (tour != null && tour.film() != null) film(tour.film());

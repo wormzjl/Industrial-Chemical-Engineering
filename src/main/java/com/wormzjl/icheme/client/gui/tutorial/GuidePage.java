@@ -70,16 +70,19 @@ public final class GuidePage {
 
     /** P5: an equipment page's keys' actions: its film, its screen's tour, the next page in the crude unit, back to where the player came from. */
     public static final String PAGE_FILM = "page:film", PAGE_TOUR = "page:tour", PAGE_NEXT = "page:next", PAGE_BACK = "page:back";
-    /** An equipment page's icon side (the item's texture), and the room between its header and its lines and between two lines. */
-    public static final int ICON = 16, HEADER_GAP = 6, LINE_GAP = 4;
+    /** The room between an equipment page's name and its lines and between two lines. */
+    public static final int HEADER_GAP = 6, LINE_GAP = 4;
+    /** An equipment page's picture: the films' glass's shape (432 by 148), at most this share of the room over the keys. */
+    public static final double PICTURE_ASPECT = 432 / 148.0, PICTURE_SHARE = .5;
 
     /**
-     * An open equipment page in the glass (batch 2026-11-12-tutorial-system, P5): the page; its icon's place (null for a page
-     * with no item texture: the control valve's header has its name only) and its name's lines beside it; its lines; each
-     * with its colour; all in content coordinates, scrolling in {@code text} (panel); its keys at the glass's foot (Watch,
-     * Tour and Next where it has them, Back always).
+     * An open equipment page in the glass (batch 2026-11-12-tutorial-system, P5): the page; its picture's place at the
+     * glass's top (panel coordinates; it stays while the lines scroll), where the screen draws the kind's picture
+     * ({@code PagePicture}: its film's first stop, else its body); its name and lines, each with its colour, in content
+     * coordinates, scrolling in {@code text} (panel) under the picture; its keys at the glass's foot (Watch, Tour and Next
+     * where it has them, Back always).
      */
-    public record EquipmentPlace(Pages.Page page, @Nullable Rect icon, List<Text> texts, Rect text, List<Key> keys) {
+    public record EquipmentPlace(Pages.Page page, Rect picture, List<Text> texts, Rect text, List<Key> keys) {
         public EquipmentPlace {
             texts = List.copyOf(texts);
             keys = List.copyOf(keys);
@@ -324,22 +327,14 @@ public final class GuidePage {
         }
     }
 
-    /** An equipment page's item icon: the reference item's texture, a {@value #ICON_TEXTURE_SIDE} px square. */
-    public static final int ICON_TEXTURE_SIDE = 64;
-
-    /** The item texture of an equipment page's icon. */
-    public static String iconTexture(Pages.Page page) {
-        return "icheme:textures/item/" + page.id() + ".png";
-    }
-
-    /** An open equipment page: its icon and texts scrolled by {@code offset} in its text area, its keys at the foot. */
+    /**
+     * An open equipment page: its picture's frame (the screen draws the picture in it), its texts scrolled by {@code offset}
+     * in its text area, its keys at the foot.
+     */
     private static void drawEquipment(Canvas c, Skin skin, EquipmentPlace p, int offset, @Nullable String hover) {
+        var f = p.picture();
+        c.batch(() -> c.outline(f.x() - 1, f.y() - 1, f.w() + 2, f.h() + 2, Palette.MUTED));
         c.clip(p.text());
-        if (p.icon() != null) {
-            var r = p.icon().moved(0, -offset);
-            c.sprite(new com.wormzjl.icheme.client.gui.common.kit.Sprite(iconTexture(p.page()), 0, 0, ICON_TEXTURE_SIDE, ICON_TEXTURE_SIDE, ICON_TEXTURE_SIDE, ICON_TEXTURE_SIDE),
-                    r.x(), r.y(), r.right(), r.bottom(), 0xFFFFFFFF);
-        }
         c.batch(() -> {
             for (var t : p.texts()) c.text(t.text(), t.x(), t.y() - offset, t.colour());
         });
@@ -383,10 +378,17 @@ public final class GuidePage {
             top = row(tail, x0, w, bottom, m, keys);
             if (!media.isEmpty()) top = row(media, x0, w, top - KEY_GAP, m, keys);
         }
-        var text = new Rect(view.x(), view.y(), view.w(), Math.max(10, top - 4 - view.y()));
+        // Picture first: the films' glass's shape across the glass, at most half the room over the keys; the lines under it.
+        int room = top - 4 - view.y(), pw = view.w() - 8, ph = (int) Math.round(pw / PICTURE_ASPECT);
+        if (ph > PICTURE_SHARE * room) {
+            ph = (int) Math.floor(PICTURE_SHARE * room);
+            pw = (int) Math.round(ph * PICTURE_ASPECT);
+        }
+        var picture = new Rect(view.x() + (view.w() - pw) / 2, view.y() + 4, pw, ph);
+        var text = new Rect(view.x(), picture.bottom() + 3, view.w(), Math.max(10, top - 4 - picture.bottom() - 3));
         var place = texts(page, text, view.w() - 8, m, tr);
         if (textHeight(place, text) > text.h()) place = texts(page, text, view.w() - 10 - bar, m, tr);
-        return new EquipmentPlace(page, page.kind() == null ? null : new Rect(text.x() + 4, text.y() + 4, ICON, ICON), place, text, keys);
+        return new EquipmentPlace(page, picture, place, text, keys);
     }
 
     /**
@@ -414,15 +416,13 @@ public final class GuidePage {
         return y;
     }
 
-    /** The page's texts in content coordinates from {@code text}'s top: its name beside the icon, then its lines {@code w} wide. */
+    /** The page's texts in content coordinates from {@code text}'s top: its name, then its lines {@code w} wide. */
     private static List<Text> texts(Pages.Page page, Rect text, int w, Measure m, Function<String, String> tr) {
         var out = new ArrayList<Text>();
-        int x = text.x() + 4, y = text.y() + 4;
-        int nameX = page.kind() == null ? x : x + ICON + 6;
-        var name = m.wrap(tr.apply(page.nameKey()), w - (nameX - x));
-        int nameY = name.size() == 1 && page.kind() != null ? y + (ICON - 8) / 2 : y;
-        for (int i = 0; i < name.size(); i++) out.add(new Text(name.get(i), nameX, nameY + i * Measure.LINE, Palette.ACCENT));
-        y = Math.max(page.kind() == null ? y : y + ICON, nameY + name.size() * Measure.LINE) + HEADER_GAP;
+        int x = text.x() + 4, y = text.y() + 2;
+        var name = m.wrap(tr.apply(page.nameKey()), w);
+        for (int i = 0; i < name.size(); i++) out.add(new Text(name.get(i), x, y + i * Measure.LINE, Palette.ACCENT));
+        y += name.size() * Measure.LINE + HEADER_GAP;
         var status = page.kind() == null ? null : com.wormzjl.icheme.science.tutorial.equipment.EquipmentInfo.statusKey(page.kind());
         for (var key : page.lines()) {
             for (var line : m.wrap(tr.apply(key), w)) {

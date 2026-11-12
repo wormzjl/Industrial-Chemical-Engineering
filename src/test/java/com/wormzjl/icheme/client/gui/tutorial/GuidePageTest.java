@@ -132,8 +132,12 @@ class GuidePageTest {
                 assertEquals(e.text(), p.view(), at + ": its texts scroll in the glass");
                 assertTrue(e.text().inside(p.well()), at + ": its text area in the glass");
                 int right = p.bar() ? p.barTrack().x() : e.text().right();
-                if (e.icon() != null) assertTrue(e.icon().inside(e.text()), at + ": its icon at the top");
-                assertEquals(e.page().kind() != null, e.icon() != null, at + ": a kind's page has its item's icon, the valve's none");
+                // Picture first: at the glass's top, in the films' glass's shape, the lines scrolling under it.
+                var pic = e.picture();
+                assertTrue(pic.inside(p.well()) && pic.bottom() < e.text().y(), at + ": its picture at the top, over the lines");
+                assertEquals(GuidePage.PICTURE_ASPECT, pic.w() / (double) pic.h(), .05, at + ": the picture in the films' glass's shape");
+                assertTrue(pic.w() >= .5 * p.well().w(), at + ": a picture, not an icon: " + pic);
+                assertTrue(e.text().h() >= 3 * 10, at + ": room for three lines under it");
                 for (var t : e.texts()) assertTrue(t.x() >= e.text().x() && t.x() + M.width(t.text()) <= right, at + ": a line within its width: " + t.text());
                 var keys = e.keys().stream().map(GuidePage.Key::key).toList();
                 assertTrue(keys.contains(GuidePage.PAGE_BACK), at + ": Back");

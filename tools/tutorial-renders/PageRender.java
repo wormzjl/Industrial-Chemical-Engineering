@@ -48,15 +48,39 @@ final class PageRender {
         HeatDiagramRender.grid(out.resolve("pages-dark.png"), darkTitles, dark);
         GuideRender.sheet(out, "unit/map", "unit_map", List.of(GuideRender.Frame.of("nothing pressed", 0, 0),
                 new GuideRender.Frame("H-101 pressed (its page opens)", 0, 0, 3, Set.of(3))));
-        GuideRender.chapter(out, "unit", "simulator", "The crude unit");
+        GuideRender.chapter(out, "unit", "simulator", "Crude unit");
     }
 
-    /** Page {@code id} open, chapter 5 behind it, scrolled by {@code offset} (clamped to the page's end). */
+    /** The shell sprites the pictures are drawn with, read once. */
+    private static java.util.Map<com.wormzjl.icheme.science.equipment.Mesh.Material, TutorialRender.Sprite> sprites;
+
+    /**
+     * Page {@code id} open, chapter 5 behind it, scrolled by {@code offset} (clamped to the page's end), its picture drawn
+     * in its frame as the game's {@code SceneView} draws it (TutorialRender's rasteriser).
+     */
     static BufferedImage page(String id, int w, int h, Skin skin, int offset) {
-        return GuideRender.image(w, h, c -> {
+        var placed = new GuidePage.Page[1];
+        var image = GuideRender.image(w, h, c -> {
             var in = new GuidePage.Input(GuideFile.load(), Progress.NONE, "unit", null).withPage(PageFile.load(), id);
             var p = GuidePage.place(in, w, h, c.measure(), GuideRender.tr, GuideRender.tr.apply("gui.icheme.fluid.theme.light"));
             p.draw(c, skin, Math.min(offset, p.maxOffset()), null, Card.State.of(0, 0));
+            placed[0] = p;
         });
+        var e = placed[0].equipment();
+        var frame = e == null ? null : com.wormzjl.icheme.science.tutorial.films.PagePicture.of(e.page());
+        if (frame != null) {
+            try {
+                if (sprites == null) sprites = TutorialRender.sprites();
+            } catch (Exception x) {
+                throw new IllegalStateException(x);
+            }
+            int s = HeatDiagramRender.SCALE;
+            var r = e.picture();
+            double fit = com.wormzjl.icheme.client.gui.tutorial.FilmLayout.fit(r);
+            var view = new com.wormzjl.icheme.client.gui.common.kit.Rect((r.x() + 4) * s, (r.y() + 4) * s, r.w() * s, r.h() * s);
+            var projection = com.wormzjl.icheme.science.tutorial.scene.Projection.of(frame.camera(), 0, 0, 1, fit * s, view.x() + view.w() / 2.0, view.y() + view.h() / 2.0);
+            TutorialRender.draw(image, view, frame, projection, sprites);
+        }
+        return image;
     }
 }

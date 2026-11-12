@@ -54,6 +54,13 @@ public final class FilmScreen extends Screen {
         this.onFinished = onFinished;
     }
 
+    /** P5: the film standing at its first stop (an equipment page's picture), from which Next plays on. */
+    public FilmScreen fromFirstStop() {
+        time = stop(0);
+        target = 0;
+        return this;
+    }
+
     @Override
     public void onClose() {
         if (parent != null && minecraft != null) minecraft.setScreen(parent);

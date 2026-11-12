@@ -91,6 +91,13 @@ class GuideFileTest {
             assertNotNull(loader.loadClass("com.wormzjl.icheme.science.tutorial.guide.PageFile").getMethod("load").invoke(null));
             var films = loader.loadClass("com.wormzjl.icheme.science.tutorial.films.Films");
             for (var name : (Iterable<?>) films.getMethod("names").invoke(null)) assertNotNull(films.getMethod("build", String.class).invoke(null, name), String.valueOf(name));
+            // P5 review: every page's picture (a film's first stop, a body, the valve's item) builds with no Minecraft class.
+            var pages = loader.loadClass("com.wormzjl.icheme.science.tutorial.guide.PageFile").getMethod("load").invoke(null);
+            var picture = loader.loadClass("com.wormzjl.icheme.science.tutorial.films.PagePicture");
+            var pageType = loader.loadClass("com.wormzjl.icheme.science.tutorial.guide.Pages$Page");
+            var all = (java.util.Map<?, ?>) pages.getClass().getMethod("pages").invoke(pages);
+            assertEquals(41, all.size());
+            for (var e : all.entrySet()) assertNotNull(picture.getMethod("of", pageType).invoke(null, e.getValue()), e.getKey() + ": its picture");
         }
     }
 
