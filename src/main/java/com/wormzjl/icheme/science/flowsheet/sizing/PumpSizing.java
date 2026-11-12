@@ -6,6 +6,7 @@ import com.wormzjl.icheme.science.flowsheet.FlowStream;
 import com.wormzjl.icheme.science.flowsheet.FlowThermo;
 import com.wormzjl.icheme.science.fluid.network.FlowControl;
 import com.wormzjl.icheme.science.fluid.network.PassiveStepSolver;
+import com.wormzjl.icheme.science.fluid.network.ReleasePressure;
 import com.wormzjl.icheme.science.machine.CentrifugalPump;
 import com.wormzjl.icheme.science.machine.Motor;
 import com.wormzjl.icheme.science.machine.Npsh;
@@ -40,16 +41,26 @@ public final class PumpSizing {
      * @param flow     m³/h
      * @param head     m of what it pumps
      * @param mostHead what the world's 2 MPa of its reference fluid gives, m
-     * @param npsh     what it has available (m), null until the height it draws from is known: then neither NPSH row reads
+     * @param npsh     what it has available (m), null until the height it draws from is known: then neither NPSH row reads.
+     *                 Its suction pressure over its liquid's p_v ({@link FlowThermo#vapourPressure}), or over zero pressure
+     *                 where the liquid has none ({@code boils} false)
      * @param density  its liquid's, kg/m³, which its shaft power reads; NaN where the caller gives none (no shaft power)
+     * @param edge     the clean zone's edge E of its liquid ({@link FlowThermo#zoneEdge}) over the pressure {@code npsh} counts
+     *                 from, m; positive infinity where it has none
+     * @param boils    whether its liquid has a p_v
      */
-    public record Load(double flow, double head, double mostHead, @Nullable Double npsh, double density) {
+    public record Load(double flow, double head, double mostHead, @Nullable Double npsh, double density, double edge, boolean boils) {
         /** A pump with no flow: no size, no lamp. */
         public static final Load NONE = new Load(0, 0, 0, null, Double.NaN);
 
         /** A pump whose liquid's density is not given: its duty has no shaft power. */
         public Load(double flow, double head, double mostHead, @Nullable Double npsh) {
             this(flow, head, mostHead, npsh, Double.NaN);
+        }
+
+        /** A pump on a liquid that holds no gas: its NPSH counts from its vapour pressure and it has no edge above that. */
+        public Load(double flow, double head, double mostHead, @Nullable Double npsh, double density) {
+            this(flow, head, mostHead, npsh, density, Double.POSITIVE_INFINITY, true);
         }
 
         /**
@@ -64,13 +75,21 @@ public final class PumpSizing {
         /**
          * A pump with no sheet streams of its own, a block's member: it draws {@code liquid} at its source's pressure and adds
          * {@code rise} (Pa), which the caller adds up from the loop it serves.
+         *
+         * <p>Its NPSH available is its suction pressure over its liquid's p_v, as the world counts it (W3B_NETWORK_PLAN.md
+         * sections 17 and 44): a liquid saturated with a permanent gas stands at its bubble pressure in its drum and still
+         * has the head over its vapour pressure. What the gas costs is the clean zone's edge E, which the world's row reads.
+         * Two searches of the sheet's flash, 16 flashes each.</p>
          */
         public static Load of(LineSizing.Line suction, LineSizing.Size size, FlowStream liquid, double rise, @Nullable Double height, FlowThermo thermo) {
             if (!suction.flows()) return NONE;
             double weight = suction.density() * PassiveStepSolver.GRAVITY, reference = thermo.model().pumpReferenceDensity() * PassiveStepSolver.GRAVITY;
-            Double npsh = null;
-            if (height != null) npsh = (liquid.pressure() + weight * height - 1e5 * LineSizing.drop(suction, size, suction.length()) - thermo.bubblePressure(liquid.temperature(), liquid.amountsView())) / weight;
-            return new Load(suction.volume() * 3600, rise / weight, Limit.PUMP_HEAD.value() / reference, npsh, suction.density());
+            if (height == null) return new Load(suction.volume() * 3600, rise / weight, Limit.PUMP_HEAD.value() / reference, null, suction.density());
+            double vapour = thermo.vapourPressure(liquid.temperature(), liquid.pressure(), liquid.amountsView()), edge = thermo.zoneEdge(liquid.temperature(), liquid.pressure(), liquid.amountsView());
+            boolean boils = vapour < Double.POSITIVE_INFINITY;
+            double from = boils ? vapour : 0, at = liquid.pressure() + weight * height - 1e5 * LineSizing.drop(suction, size, suction.length());
+            return new Load(suction.volume() * 3600, rise / weight, Limit.PUMP_HEAD.value() / reference, (at - from) / weight, suction.density(),
+                    edge < Double.POSITIVE_INFINITY ? (edge - from) / weight : Double.POSITIVE_INFINITY, boils);
         }
 
         boolean flows() {
@@ -125,7 +144,9 @@ public final class PumpSizing {
         var npsh = load.npsh();
         if (npsh != null) {
             double required = requiredNpsh(load.flow());
-            readings.add(Limit.PUMP_NPSH_WORLD.against(npsh, Npsh.BREAKDOWN * required));
+            // The world's suction limit as heads over the pressure the NPSH counts from: p_v stands at 0 there, or nowhere.
+            double floor = ReleasePressure.limit(load.boils() ? 0 : Double.POSITIVE_INFINITY, load.edge(), Npsh.BREAKDOWN * required);
+            if (floor < Double.POSITIVE_INFINITY) readings.add(Limit.PUMP_NPSH_WORLD.against(npsh, floor));
             readings.add(Limit.PUMP_NPSH.against(npsh, required + Limit.PUMP_NPSH.value()));
         }
         readings.add(Limit.PUMP_RATED.read(100 * load.flow() / ProcessUnit.pumpFlow(size.discharge())));

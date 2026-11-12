@@ -932,23 +932,12 @@ public final class PassiveStepSolver {
     }
     /**
      * W3B_NETWORK_PLAN.md section 17: the pressure the suction of the pump on connection {@code edge} of {@code graph} is
-     * held at with {@code breakdown} (Pa) of breakdown NPSH: {@link #limit} of its liquid's p_v ({@link #vapourPressure})
+     * held at with {@code breakdown} (Pa) of breakdown NPSH: {@link ReleasePressure#limit} of its liquid's p_v ({@link #vapourPressure})
      * and the clean zone's edge E of what its line delivers ({@link #zoneEdge}). The suction limit reads it with the
      * breakdown at the pump's flow; the vapour lock, and every test of whether a pump has a limit, with none.
      */
     private double suctionLimitPressure(PassiveNetwork graph,int edge,double breakdown) {
-        return limit(vapourPressure(graph,edge),zoneEdge(edge),breakdown);
-    }
-    /**
-     * The suction limit of section 17 from its two edges: the larger of those that exist, p_v with the breakdown NPSH added
-     * and E without it; positive infinity (no limit) only where neither exists. A heavy dead oil under a blanket has no
-     * p_v (its condensables stay liquid down to the box's floor) and an E; a liquid whose top trial the engine refused has
-     * a p_v and no E.
-     */
-    static double limit(double vapourPressure,double zoneEdge,double breakdown) {
-        boolean vapour=vapourPressure<Double.POSITIVE_INFINITY,zone=zoneEdge<Double.POSITIVE_INFINITY;
-        if(vapour&&zone)return Math.max(zoneEdge,vapourPressure+breakdown);
-        return vapour?vapourPressure+breakdown:zone?zoneEdge:Double.POSITIVE_INFINITY;
+        return ReleasePressure.limit(vapourPressure(graph,edge),zoneEdge(edge),breakdown);
     }
     /**
      * The clean zone's edge E of what the suction line of the pump on connection {@code edge} delivers in this solve
@@ -1064,7 +1053,7 @@ public final class PassiveStepSolver {
      * and bundled random 6: a pump on a boiling two-phase junction, E read on its liquid alone 1.1 kPa under the junction's
      * pressure, was left open there and the junction's rows stalled; read on the junction's mixture, E is its pressure. A
      * liquid drawn through a vessel's liquid port from under its blanket keeps an E below the vessel's pressure. The limit
-     * is max(E, p_v + 0.85 ρ g NPSH3(Q)) ({@link #limit}); wear reads σ against p_v.
+     * is max(E, p_v + 0.85 ρ g NPSH3(Q)) ({@link ReleasePressure#limit}); wear reads σ against p_v.
      */
     double zoneEdge(InletPhase.Drawn drawn,Runnable checkpoint) {
         // A phase port drawing gas now draws no liquid: no edge (the dry-suction refusal owns that case).
@@ -1094,9 +1083,8 @@ public final class PassiveStepSolver {
             // W3b: the supplier's liquids together, water among their components: two liquids at equilibrium share one bubble
             // pressure, and a pump drawing either draws the same floor.
             double[] x=liquidMoles(s);double h=liquidEnthalpy(s),t=s.temperature();
-            double[] c=x.clone();boolean removed=false,left=false;
-            for(int k=0;k<c.length;k++){if(c[k]>0&&model.hydrocarbon.criticalTemperature(k)<=t){c[k]=0;removed=true;}left|=c[k]>0;}
-            if(left) {
+            double[] c=x.clone();int kept=ReleasePressure.leaveOutGases(model,t,c);boolean removed=(kept&ReleasePressure.REMOVED)!=0;
+            if((kept&ReleasePressure.LEFT)!=0) {
                 double hc=h;
                 if(removed)try{hc=model.flashTP(t,s.pressure(),c.clone(),checkpoint).enthalpy();}catch(IllegalArgumentException refused){hc=Double.NaN;}
                 if(Double.isFinite(hc))r=releasePressure(s,c,hc,p->0,checkpoint);
@@ -1114,7 +1102,8 @@ public final class PassiveStepSolver {
      * W3B_NETWORK_PLAN.md section 17, after owner decisions D14 (reading A13) and D16 C's first half: the lowest pressure,
      * between the numerical box's floor and supplier {@code s}'s pressure, at which the liquid {@code x} drawn from it, at
      * its own enthalpy {@code h} (J), holds a vapour volume share at most {@code share} at that pressure. The liquid reaches
-     * the pump through its line as through a throttle, which keeps its enthalpy. A bisection in ln P to
+     * the pump through its line as through a throttle, which keeps its enthalpy. The search is the shared one
+     * ({@link ReleasePressure#lowest}, which the process simulator's sizing reads on its own trial): a bisection in ln P to
      * {@link #BUBBLE_WIDTH} on the engine's PH equilibrium ({@link FluidThermodynamics#equilibriumPH}, unfolded, so a trace
      * of vapour counts) that returns the high end, so a suction held there holds no more vapour than {@code share}; with
      * {@code share} 0 it is the bubble pressure. Midpoints are geometric means ({@link Math#sqrt}, correctly rounded, the
@@ -1135,27 +1124,15 @@ public final class PassiveStepSolver {
      * reads every liquid's.
      */
     private double releasePressure(FluidThermodynamics.State s,double[] x,double h,java.util.function.DoubleUnaryOperator share,Runnable checkpoint) {
-        double hi=s.pressure(),lo=NumericalBox.MINIMUM_PRESSURE;
-        if(!(hi>lo))return Double.POSITIVE_INFINITY;
-        double top=releaseShare(s,x,h,hi,checkpoint);
-        if(Double.isNaN(top))return Double.POSITIVE_INFINITY;
-        if(!(top<=share.applyAsDouble(hi)))return hi;
-        double bottom=releaseShare(s,x,h,lo,checkpoint);
-        if(bottom<=share.applyAsDouble(lo))return Double.POSITIVE_INFINITY;
-        boolean vapour=bottom>0;
-        for(int k=0;k<200&&hi>lo*(1+BUBBLE_WIDTH);k++){double mid=Math.sqrt(lo*hi),at=releaseShare(s,x,h,mid,checkpoint);if(at<=share.applyAsDouble(mid))hi=mid;else{lo=mid;vapour|=at>0;}}
-        return vapour?hi:Double.POSITIVE_INFINITY;
+        return ReleasePressure.lowest(p->releaseShare(s,x,h,p,checkpoint),share,NumericalBox.MINIMUM_PRESSURE,s.pressure(),BUBBLE_WIDTH);
     }
     /** The vapour volume share of the PH equilibrium of liquid {@code x} at enthalpy {@code h} (J) and pressure {@code p},
-     * warm-started at supplier {@code s}'s temperature ({@link #releasePressure}): 0 for liquid alone, the smallest positive
-     * double for a vapour too small to have a volume, NaN for anything the network cannot carry or no liquid. */
+     * warm-started at supplier {@code s}'s temperature ({@link #releasePressure}): {@link ReleasePressure#vapourVolumeShare}
+     * of that state, NaN too for anything the network cannot carry. */
     private double releaseShare(FluidThermodynamics.State s,double[] x,double h,double p,Runnable checkpoint) {
         FluidThermodynamics.State at;
         try{at=model.equilibriumPH(s.temperature(),p,h,x.clone(),checkpoint);}catch(IllegalArgumentException refused){return Double.NaN;}
-        if(at==null||!(FluidThermodynamics.holdsPhase(at,FluidThermodynamics.OIL)||FluidThermodynamics.holdsPhase(at,FluidThermodynamics.AQUEOUS)))return Double.NaN;
-        if(!FluidThermodynamics.holdsPhase(at,FluidThermodynamics.GAS))return 0;
-        double v=at.vaporVolume(),total=v+at.condensedVolume();
-        return total>0&&v>0?v/total:Double.MIN_VALUE;
+        return ReleasePressure.vapourVolumeShare(at);
     }
     /** The answers of {@link #liquidPH}: liquid alone, a vapour beside the liquid, or anything else (a refusal, a phase set
      * the network cannot carry, no liquid). */

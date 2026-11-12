@@ -238,15 +238,45 @@ final class FlowsheetUnitsTest {
         assertEquals(450, reading(back, "D", "temperature"), 1e-3, "the same duty reaches the same temperature");
     }
 
-    @Test void aStorageTileHoldsTheHigherOfAmbientAndItsBubblePressure() {
+    @Test void aStorageTileHoldsAmbientUnderARoofAndItsBubblePressureInASphere() {
         var water = closes(sheet().unit("T", "storage_tank", "{}")
                 .feed("in", "T", "in", feed(300, 5e5, PURE_WATER, 100)).product("gas", "T", "gas").product("oil", "T", "oil").product("water", "T", "water").run());
         assertEquals(101325, reading(water, "T", "pressure"), 1e-6, "a floating roof holds ambient");
-        var light = closes(sheet().unit("T", "storage_tank", "{}")
+        // W3B_NETWORK_PLAN.md section 44: a whole crude's bubble pressure at 300 K, 1.41 bar, is its dissolved methane and
+        // ethane; at equal vapour and liquid volumes it pushes with 0.66 bar, so a roof stores it and its light ends leave as gas
+        // (before, the tile held it unflashed at 1.41 bar, a sphere).
+        var crude = closes(sheet().unit("T", "storage_tank", "{}")
                 .feed("in", "T", "in", feed(300, 2e7, WET_CRUDE, 100)).product("gas", "T", "gas").product("oil", "T", "oil").product("water", "T", "water").run());
+        assertEquals(101325, reading(crude, "T", "pressure"), 1e-6, "a whole crude stands under a roof");
+        assertTrue(crude.streams().get("gas").total() > 0, "its light ends leave by the Gas outlet");
+        double[] lpg = only("Propane");
+        lpg[AXIS.indexOf("N-butane")] = 1;
+        var light = closes(sheet().unit("T", "storage_tank", "{}")
+                .feed("in", "T", "in", feed(300, 2e6, lpg, 100)).product("gas", "T", "gas").product("oil", "T", "oil").product("water", "T", "water").run());
         double held = reading(light, "T", "pressure");
-        assertTrue(held > 101325 && held < 2e7, "a sphere holds its bubble pressure, read " + held);
+        assertTrue(held > 3e5 && held < 2e6, "a sphere holds propane and butane at their bubble pressure, read " + held);
         assertTrue(reading(light, "T", "vapour") < 1e-2, "at its bubble point the tank holds liquid");
+    }
+
+    /**
+     * W3B_NETWORK_PLAN.md section 44, on the liquids of a 3 bar drum at 340 K (wet crude with nitrogen): the water holds a
+     * trace of dissolved gas, which puts its bubble pressure at the drum's 3 bar and its storage pressure (equal vapour and
+     * liquid volumes) at 0.32 bar, so a roof stores it at ambient and the gas leaves by the Gas outlet; the oil's is 1.05
+     * bar, a sphere's, held unflashed at the pressure it arrives at.
+     */
+    @Test void aStorageTileDegassesWhatARoofStoresAndHoldsTheRestUnflashed() {
+        double[] feed = DRY_CRUDE.clone();
+        double dry = Arrays.stream(feed).sum();
+        for (int i = 0; i < feed.length; i++) feed[i] *= 40 / dry;
+        feed[WATER] = 12;
+        feed[AXIS.indexOf(FluidMaterialCatalog.NITROGEN)] = 4;
+        var run = closes(sheet().unit("D", "drum", "{\"pressure_mode\":\"inlet\"}").unit("TW", "storage_tank", "{}").unit("TO", "storage_tank", "{}")
+                .feed("in", "D", "in", feed(340, 3e5, feed, 56)).product("gas", "D", "gas").line("water", "D", "water", "TW", "in").line("oil", "D", "oil", "TO", "in")
+                .product("wg", "TW", "gas").product("wo", "TW", "oil").product("ww", "TW", "water").product("og", "TO", "gas").product("oo", "TO", "oil").product("ow", "TO", "water").run());
+        assertEquals(101325, reading(run, "TW", "pressure"), 1e-6, "a floating roof holds ambient");
+        assertEquals(3.14e-4, run.streams().get("wg").total(), .02 * 3.14e-4, "what the water held dissolved leaves as gas, mol/s");
+        assertEquals(3e5, reading(run, "TO", "pressure"), 1e-6, "a sphere holds the oil at the pressure it arrives at, its bubble pressure");
+        assertTrue(reading(run, "TO", "vapour") < 1e-4, "unflashed");
     }
 
     /** Water both ways, so the answer is a textbook's: U = 1000 W/m²K from two 2000 films, Q / (U LMTD). */

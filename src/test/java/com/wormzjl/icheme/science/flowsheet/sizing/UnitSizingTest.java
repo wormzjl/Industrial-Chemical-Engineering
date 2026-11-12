@@ -542,7 +542,44 @@ final class UnitSizingTest {
         assertTrue(DrumSizing.auto(longer, null).size().shape().volume() > size.shape().volume());
     }
 
+    /**
+     * W3B_NETWORK_PLAN.md section 44: the world's row reads the greater of the clean zone's edge and 0.85 NPSH3, both as heads
+     * over the liquid's vapour pressure. A liquid with no vapour pressure has the edge alone; one with neither has no row.
+     */
+    @Test void aPumpsWorldRowReadsTheGreaterOfTheCleanZonesEdgeAndItsBreakdown() {
+        var size = new PumpSizing.Size(.3);
+        var gassy = PumpSizing.rate(new PumpSizing.Load(731, 71, 204.5, 25., 850, 21.6, true), size);
+        assertEquals(21.6, gassy.reading(Limit.PUMP_NPSH_WORLD).low(), 1e-12, "a drum liquid saturated with gas: the edge");
+        assertEquals(Lamp.GREEN, gassy.reading(Limit.PUMP_NPSH_WORLD).lamp());
+        assertEquals(Lamp.GREEN, gassy.reading(Limit.PUMP_NPSH).lamp(), "the margin row reads the same NPSH available");
+        assertEquals(Lamp.RED, PumpSizing.rate(new PumpSizing.Load(731, 71, 204.5, 21.5, 850, 21.6, true), size).lamp(), "under the edge the world starves it");
+        assertEquals(.85 * 3.3, PumpSizing.rate(new PumpSizing.Load(731, 71, 204.5, 25., 850, 1., true), size).reading(Limit.PUMP_NPSH_WORLD).low(), 1e-9, "an edge under the breakdown: 0.85 NPSH3");
+        assertEquals(12, PumpSizing.rate(new PumpSizing.Load(731, 71, 204.5, 30., 850, 12., false), size).reading(Limit.PUMP_NPSH_WORLD).low(), 1e-12, "no vapour pressure: the edge alone, over zero pressure");
+        var dead = PumpSizing.rate(new PumpSizing.Load(731, 71, 204.5, 30., 850, Double.POSITIVE_INFINITY, false), size);
+        assertNull(dead.reading(Limit.PUMP_NPSH_WORLD), "neither: the world has no limit");
+        assertNotNull(dead.reading(Limit.PUMP_NPSH));
+    }
+
     // ---- Tanks ----
+
+    /**
+     * W3B_NETWORK_PLAN.md section 44: the type and a roof's rows read the storage pressure (equal vapour and liquid volumes),
+     * whatever the bubble pressure; a sphere holds its liquid unflashed and is designed on the bubble pressure.
+     */
+    @Test void aTanksTypeReadsItsStoragePressureAndASpheresDesignItsBubblePressure() {
+        double limit = Limit.ROOF_BUBBLE.value();
+        assertEquals(.766, limit, 0);
+        assertEquals(UnitType.FLOATING_ROOF, TankSizing.type(new TankSizing.Load(100, 3, 24, limit)), "water from a 3 bar drum: its gas pushes the first bubble, not the roof");
+        assertEquals(UnitType.SPHERE, TankSizing.type(new TankSizing.Load(100, 3, 24, limit + .001)));
+        var roof = TankSizing.rate(new TankSizing.Load(100, 3, 24, .3), new TankSizing.Size(UnitType.FLOATING_ROOF, 1, 19, 11));
+        assertEquals(.3, roof.reading(Limit.ROOF_BUBBLE).value(), 0);
+        assertEquals(.3, roof.reading(Limit.ROOF_BUBBLE_WORLD).value(), 0);
+        assertEquals(Lamp.GREEN, roof.lamp());
+        var sphere = TankSizing.auto(new TankSizing.Load(100, 3, 24, 1.05), null);
+        assertEquals(UnitType.SPHERE, sphere.size().type());
+        assertEquals(3.3, sphere.rating().reading(Limit.SPHERE_DESIGN).value(), 1e-9, "1.1 times its bubble pressure");
+        assertEquals(1.1, new TankSizing.Load(100, 1.1, 24).storage(), 0, "a liquid given by its bubble pressure alone boils as a whole");
+    }
 
     @Test void aTankIsAFloatingRoofToItsBubblePressureThenASphere() {
         double limit = Limit.ROOF_BUBBLE.value();

@@ -70,11 +70,11 @@ class SuctionZoneEdgeTest {
     /** The limit is the larger of the edges that exist, the breakdown NPSH on p_v only; none only where neither exists. */
     @Test void theLimitIsTheLargerOfTheEdgesThatExist() {
         double none=Double.POSITIVE_INFINITY;
-        assertEquals(50e3,PassiveStepSolver.limit(none,50e3,1e3),0,"no p_v (a dead oil under a blanket): E alone");
-        assertEquals(4e3,PassiveStepSolver.limit(3e3,none,1e3),0,"no E (its top trial refused): p_v and the breakdown");
-        assertEquals(50e3,PassiveStepSolver.limit(3e3,50e3,1e3),0,"both: the larger");
-        assertEquals(60e3,PassiveStepSolver.limit(55e3,50e3,5e3),0,"both: p_v and the breakdown past E");
-        assertEquals(none,PassiveStepSolver.limit(none,none,1e3),0,"neither: no limit");
+        assertEquals(50e3,ReleasePressure.limit(none,50e3,1e3),0,"no p_v (a dead oil under a blanket): E alone");
+        assertEquals(4e3,ReleasePressure.limit(3e3,none,1e3),0,"no E (its top trial refused): p_v and the breakdown");
+        assertEquals(50e3,ReleasePressure.limit(3e3,50e3,1e3),0,"both: the larger");
+        assertEquals(60e3,ReleasePressure.limit(55e3,50e3,5e3),0,"both: p_v and the breakdown past E");
+        assertEquals(none,ReleasePressure.limit(none,none,1e3),0,"neither: no limit");
     }
 
     /** The whole of one liquid phase of {@code s}, as a liquid port at a unit-free target draws it. */

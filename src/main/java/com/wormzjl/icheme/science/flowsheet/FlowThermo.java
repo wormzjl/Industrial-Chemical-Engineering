@@ -1,14 +1,17 @@
 package com.wormzjl.icheme.science.flowsheet;
 
 import com.wormzjl.icheme.science.fluid.network.HeatCurve;
+import com.wormzjl.icheme.science.fluid.network.ReleasePressure;
 import com.wormzjl.icheme.science.fluid.state.SolidInventory;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
+import com.wormzjl.icheme.science.machine.GasEntrainment;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.thermo.NumericalBox;
 
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CancellationException;
+import java.util.function.DoubleUnaryOperator;
 
 /**
  * The stream thermo of a run (batch 2026-11-02-process-simulator, plan section 3.2): the world's own flash, on the network's
@@ -24,6 +27,10 @@ public final class FlowThermo implements StreamThermo {
     private static final double GAS_CONSTANT = 8.314462618;
     /** Where the bubble search looks (Pa), and how close it stops. */
     private static final double LOWEST_BUBBLE = 100, HIGHEST_BUBBLE = 2e7, BUBBLE_RATIO = 1.0005;
+    /** The vapour volume share a stored liquid is judged at: as much vapour as liquid, V/L = 1 ({@link #storagePressure}). */
+    private static final double STORAGE_SHARE = .5;
+    /** A floating roof stores a liquid whose {@link #storagePressure} is at most this (Pa); a sphere above ({@link #roofStores}). */
+    public static final double ROOF_STORAGE = 76600;
     /** A trace of vapour by mole counts as boiling. */
     private static final double BOILING = 1e-7;
     /** How close a stream comes to its enthalpy, as a share of its n R T. */
@@ -188,6 +195,65 @@ public final class FlowThermo implements StreamThermo {
             else high = middle;
         }
         return high;
+    }
+
+    /**
+     * p_v of a liquid stream (Pa), as the world's pump suction limit reads it ({@link ReleasePressure}): the bubble pressure of
+     * {@code amounts} without the compounds above their critical temperature, searched up to the stream's {@code pressure}.
+     * Positive infinity where there is none: nothing condensable, or no boiling down to the search's floor.
+     */
+    public double vapourPressure(double temperature, double pressure, double[] amounts) {
+        double[] condensable = amounts.clone();
+        if ((ReleasePressure.leaveOutGases(model, temperature, condensable) & ReleasePressure.LEFT) == 0) return Double.POSITIVE_INFINITY;
+        return release(temperature, condensable, at -> 0, pressure);
+    }
+
+    /**
+     * The clean zone's edge E of a stream (Pa), the world's ({@link ReleasePressure}): the lowest pressure at which {@code amounts}
+     * hold at most the clean share of vapour by volume; the stream's {@code pressure} where it holds more there; positive
+     * infinity where there is none.
+     */
+    public double zoneEdge(double temperature, double pressure, double[] amounts) {
+        return release(temperature, amounts, GasEntrainment::cleanShare, pressure);
+    }
+
+    /**
+     * What a stored liquid's vapour pushes with (Pa; W3B_NETWORK_PLAN.md section 44): the pressure at which {@code amounts} hold
+     * as much vapour as liquid by volume (V/L = 1). A trace of dissolved gas raises a liquid's bubble pressure to the pressure it
+     * came from and this hardly at all; a liquid that boils as a whole reads its bubble pressure. Positive infinity where the
+     * search finds none (a dead oil that holds less vapour at the floor; a top trial with no state).
+     */
+    public double storagePressure(double temperature, double[] amounts) {
+        return release(temperature, amounts, at -> STORAGE_SHARE, HIGHEST_BUBBLE);
+    }
+
+    /** Whether a floating roof stores {@code amounts} at {@code temperature}: {@link #storagePressure} at most {@link #ROOF_STORAGE}. */
+    public boolean roofStores(double temperature, double[] amounts) {
+        return storagePressure(temperature, amounts) <= ROOF_STORAGE;
+    }
+
+    /** {@link ReleasePressure#lowest} on this sheet's trial, from the bubble search's floor to {@code top}, as close as it stops. */
+    private double release(double temperature, double[] amounts, DoubleUnaryOperator share, double top) {
+        return ReleasePressure.lowest(pressure -> releaseShare(temperature, pressure, amounts), share, LOWEST_BUBBLE, top, BUBBLE_RATIO - 1);
+    }
+
+    /**
+     * The sheet's trial: the vapour volume share of the world's TP flash of {@code amounts} ({@link ReleasePressure#vapourVolumeShare}).
+     * A sheet stream stands at its temperature, so the trial keeps it, where the world's keeps the enthalpy of what its line
+     * throttles: on drum liquids the two readings agree to 0.3 %. A state that is all vapour has boiled away, share 1: at one
+     * temperature a pure liquid has no pressure at which it holds both phases, and with no such trial it would read no pressure.
+     * A trial with no state says nothing.
+     */
+    private double releaseShare(double temperature, double pressure, double[] amounts) {
+        try {
+            var state = model.flashTP(temperature, pressure, amounts, checkpoint);
+            double share = ReleasePressure.vapourVolumeShare(state);
+            return Double.isNaN(share) && state != null && FluidThermodynamics.holdsPhase(state, FluidThermodynamics.GAS) ? 1 : share;
+        } catch (CancellationException stop) {
+            throw stop;
+        } catch (RuntimeException noState) {
+            return Double.NaN;
+        }
     }
 
     /** Whether {@code amounts} at {@code temperature} and {@code pressure} hold vapour. A trial with no state does not boil. */
