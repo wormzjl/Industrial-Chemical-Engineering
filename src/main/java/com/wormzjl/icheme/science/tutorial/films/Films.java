@@ -12,6 +12,8 @@ public final class Films {
 
     static {
         ALL.put(StillInside.NAME, StillInside::build);
+        ALL.put(StillBuild.NAME, StillBuild::build);
+        ALL.put(StillRun.NAME, StillRun::build);
     }
 
     private Films() {

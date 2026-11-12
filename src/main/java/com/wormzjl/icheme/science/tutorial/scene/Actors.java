@@ -31,6 +31,56 @@ public final class Actors {
         return new Actor(id, out);
     }
 
+    /** {@code actor}'s polygons moved by (x, y, z), as actor {@code id}: equipment set beside another on the scene. */
+    public static Actor moved(String id, Actor actor, double x, double y, double z) {
+        var out = new ArrayList<Mesh.Polygon>(actor.polygons().size());
+        for (var polygon : actor.polygons()) out.add(moved(polygon, x, y, z));
+        return new Actor(id, out);
+    }
+
+    /** A box from {@code lo} to {@code hi} (m) of {@code material}, its six faces counter-clockwise from outside, its texture a tile a metre: a ground plate, a block. */
+    public static Actor box(String id, double[] lo, double[] hi, Mesh.Material material) {
+        return new Actor(id, boxFaces(lo, hi, material));
+    }
+
+    private static java.util.List<Mesh.Polygon> boxFaces(double[] lo, double[] hi, Mesh.Material material) {
+        var faces = new ArrayList<Mesh.Polygon>();
+        int[][] axes = {{0, 1, 2}, {1, 2, 0}, {2, 0, 1}};
+        for (var a : axes)
+            for (int sign : new int[]{-1, 1}) {
+                double[][] corners = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
+                double[] p = new double[12], n = new double[12], uv = new double[8];
+                for (int k = 0; k < 4; k++) {
+                    var c = corners[sign > 0 ? k : 3 - k];
+                    p[3 * k + a[0]] = sign > 0 ? hi[a[0]] : lo[a[0]];
+                    p[3 * k + a[1]] = c[0] > 0 ? hi[a[1]] : lo[a[1]];
+                    p[3 * k + a[2]] = c[1] > 0 ? hi[a[2]] : lo[a[2]];
+                    n[3 * k + a[0]] = sign;
+                    uv[2 * k] = p[3 * k + a[1]];
+                    uv[2 * k + 1] = p[3 * k + a[2]];
+                }
+                faces.add(new Mesh.Polygon(p, uv, n, material));
+            }
+        return faces;
+    }
+
+    /** A plain square run of {@code side} m through {@code points}, each leg its own box of {@code material}: a hose or a pipe joining two actors. */
+    public static Actor pipe(String id, java.util.List<double[]> points, double side, Mesh.Material material) {
+        var out = new ArrayList<Mesh.Polygon>();
+        double h = side / 2;
+        for (int i = 0; i + 1 < points.size(); i++) {
+            var a = points.get(i);
+            var b = points.get(i + 1);
+            double[] lo = new double[3], hi = new double[3];
+            for (int k = 0; k < 3; k++) {
+                lo[k] = Math.min(a[k], b[k]) - h;
+                hi[k] = Math.max(a[k], b[k]) + h;
+            }
+            out.addAll(boxFaces(lo, hi, material));
+        }
+        return new Actor(id, out);
+    }
+
     /** {@code polygon} moved by (x, y, z). */
     public static Mesh.Polygon moved(Mesh.Polygon polygon, double x, double y, double z) {
         var p = polygon.positions().clone();

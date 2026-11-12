@@ -43,6 +43,15 @@ class StillInsideFilmTest {
             var scene = film.getMethod("build").invoke(null);
             var frame = scene.getClass().getMethod("at", double.class).invoke(scene, 24.0);
             assertNotNull(frame);
+            // Every film (P2b: the recorded run read through Series), and the overlays' layout class the render tool shares.
+            var films = loader.loadClass(Films.class.getName());
+            for (var name : Films.names()) {
+                var built = films.getMethod("build", String.class).invoke(null, name);
+                for (double t : new double[]{0, 5, 12, 30}) assertNotNull(built.getClass().getMethod("at", double.class).invoke(built, t), name);
+            }
+            var overlay = loader.loadClass(com.wormzjl.icheme.client.gui.tutorial.FilmOverlay.class.getName());
+            assertEquals(3, ((List<?>) overlay.getMethod("legendKeys").invoke(null)).size());
+            loader.loadClass(com.wormzjl.icheme.science.tutorial.films.StillRunData.class.getName()).getMethod("load").invoke(null);
         }
         try (Stream<Path> files = Files.walk(Path.of("src/main/java/com/wormzjl/icheme/science/tutorial"))) {
             for (var file : files.filter(p -> p.toString().endsWith(".java")).toList()) {
@@ -115,6 +124,46 @@ class StillInsideFilmTest {
         assertTrue(middleOut > 0 && middleOut <= 3, "a few middle ones follow: " + middleOut);
         for (var id : List.of("pot", "neck", "cooler"))
             assertTrue(frame.actors().stream().anyMatch(a -> a.id().equals(id) && a.twoSided()), id + " cut open");
+    }
+
+    /** P2b: stop 1 names the pot, the fire and the cooler; the legend and the liquid from stop 2; at stop 3 the fire burns, and the camera is close. */
+    @Test
+    void theStopsNameShowAndCloseIn() {
+        var scene = StillInside.build();
+        var one = scene.at(scene.stops().get(0));
+        assertEquals(List.of(StillInside.POT, StillInside.FIRE_KEY, StillInside.COOLER), one.labels().stream().map(Frame.LabelFrame::key).toList());
+        assertFalse(one.legend());
+        var two = scene.at(scene.stops().get(1));
+        assertTrue(two.legend() && two.labels().isEmpty());
+        assertEquals(1, two.liquids().size());
+        assertNotNull(two.liquids().getFirst().cut(), "the liquid shows through the pot's cut");
+        assertTrue(two.flames().isEmpty(), "the fire burns at stop 3");
+        var three = scene.at(scene.length());
+        assertEquals(1, three.flames().size());
+        assertTrue(three.legend());
+        FilmChecks.everyStopReads(scene);
+        // Stop 3: a dot at least three GUI px across on the design glass, and the pot, neck, cooler and the flame's upper part inside the glass.
+        var glass = com.wormzjl.icheme.client.gui.tutorial.FilmLayout.DESIGN_GLASS;
+        double fit = com.wormzjl.icheme.client.gui.tutorial.FilmLayout.fit(glass);
+        assertTrue(2 * Track.Dots.SIZE * three.camera().scale() * fit >= StillInside.LEAST_DOT, "a dot's width: " + 2 * Track.Dots.SIZE * three.camera().scale() * fit);
+        var p = com.wormzjl.icheme.science.tutorial.scene.Projection.of(three.camera(), 0, 0, 1, fit, glass.x() + glass.w() / 2.0, glass.y() + glass.h() / 2.0);
+        var parts = ShapeRasterizer.stillParts(StillInside.shape());
+        var points = new ArrayList<double[]>(parts.vapour());
+        var c = parts.condenser();
+        points.add(new double[]{(c[0] + c[3]) / 2, c[1], (c[2] + c[5]) / 2});
+        points.add(new double[]{(c[0] + c[3]) / 2, c[4], (c[2] + c[5]) / 2});
+        var bed = StillInside.fireBed(StillInside.shape());
+        points.add(new double[]{bed[0], bed[1] + .8 * StillInside.FIRE, bed[2]}); // the flame's upper part
+        points.add(new double[]{(parts.pot()[0] + parts.pot()[3]) / 2, parts.pot()[1], (parts.pot()[2] + parts.pot()[5]) / 2});
+        for (var point : points) {
+            var s = p.screen(point[0], point[1], point[2]);
+            assertTrue(glass.contains(s[0], s[1]), "inside the glass " + glass + ": " + java.util.Arrays.toString(point) + " at " + s[0] + ", " + s[1]);
+        }
+        for (var d : three.dots()) {
+            if (d.y() < parts.pot()[1]) continue; // the cooled ones on their way down to the spout leave under the glass
+            var s = p.screen(d.x(), d.y(), d.z());
+            assertTrue(glass.contains(s[0], s[1]), "a dot inside the glass: " + d);
+        }
     }
 
     private static boolean inside(double[] box, Frame.DotFrame d, double tolerance) {

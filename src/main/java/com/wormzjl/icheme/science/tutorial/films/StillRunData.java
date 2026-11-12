@@ -29,6 +29,13 @@ public final class StillRunData {
         return loaded;
     }
 
+    /** The charge's mass share of part {@code part} (gas, naphtha, kerosene, diesel, gas_oil or residue), from the set-up. */
+    public static double share(Series.Recording run, String part) {
+        var v = run.setup().get("share_" + part);
+        if (v == null) throw new IllegalArgumentException("No share of " + part);
+        return v;
+    }
+
     /** The share of the charge taken overhead (distilled and vented) at process time {@code t}. */
     public static double overhead(Series.Recording run, double t) {
         return run.series("distilled").at(t) + run.series("vented").at(t);

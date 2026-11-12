@@ -220,6 +220,7 @@ public final class StillRunRecorder {
         var parts = new JsonArray();
         for (double p : run.parts()) parts.add(p);
         setup.add("parts", parts);
+        for (int i = 0; i < run.parts().length; i++) setup.addProperty("share_" + BarrelData.BANDS.get(i), run.parts()[i]);
         root.add("setup", setup);
         var names = new JsonArray();
         for (var b : BarrelData.BANDS) names.add(b);
