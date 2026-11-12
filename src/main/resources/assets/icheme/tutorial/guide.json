@@ -14,7 +14,11 @@
     "cut": "still/cut",
     "tray": "tower/tray",
     "reflux": "tower/reflux",
-    "tower": "tower/many"
+    "tower": "tower/many",
+    "flowsheet": "simulator/sheet",
+    "stream": "simulator/sheet",
+    "side_draw": "simulator/balance",
+    "heat_duty": "simulator/heat"
   },
   "chapters": [
     {
@@ -58,6 +62,18 @@
         { "id": "reflux", "media": "card:reflux", "check": "server", "criterion": "still_state" },
         { "id": "compare", "media": "card:compare", "check": "server", "criterion": "still_state" },
         { "id": "many", "media": "film:small_tower" }
+      ]
+    },
+    {
+      "id": "simulator",
+      "steps": [
+        { "id": "open" },
+        { "id": "sheet", "media": "read" },
+        { "id": "run", "check": "server", "criterion": "sheet_run" },
+        { "id": "balance", "media": "card:balance" },
+        { "id": "heat", "check": "server", "criterion": "sheet_run" },
+        { "id": "size" },
+        { "id": "send", "check": "server", "criterion": "design_sent" }
       ]
     }
   ]

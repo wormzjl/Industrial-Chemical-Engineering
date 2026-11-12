@@ -3,6 +3,7 @@
 //   ./gradlew --offline --init-script tools/tutorial-recordings/record.init.gradle recordCrudeBarrel
 //   ./gradlew --offline --init-script tools/tutorial-recordings/record.init.gradle recordStillRun
 //   ./gradlew --offline --init-script tools/tutorial-recordings/record.init.gradle recordStillTrays [-Pwrite]
+//   ./gradlew --offline --init-script tools/tutorial-recordings/record.init.gradle recordSmallUnit [-Pwrite] [-Ptries=643.15,653.15] [-Psecond=K]
 // recordCrudeBarrel writes src/main/resources/assets/icheme/tutorial/recordings/crude_barrel.json from the material data.
 // recordStillRun writes src/main/resources/assets/icheme/tutorial/recordings/still_run.json from the still law
 // (StillRunRecorder lives in the test sources, so StillRunRecordingTest reruns the same code).
@@ -44,5 +45,17 @@ gradle.projectsEvaluated {
         workingDir = p.projectDir
         args(p.projectDir.absolutePath)
         if (p.hasProperty('write')) args('-write')
+    }
+    p.tasks.register('recordSmallUnit', JavaExec) {
+        group = 'documentation'
+        description = 'Measures and (with -Pwrite) records the Small crude unit runs of tutorial chapter 4 on the simulator path (SmallUnit).'
+        dependsOn p.tasks.named(sources.classesTaskName)
+        classpath = sources.runtimeClasspath
+        mainClass = 'SmallUnit'
+        workingDir = p.projectDir
+        args(p.projectDir.absolutePath)
+        if (p.hasProperty('write')) args('-write')
+        if (p.hasProperty('tries')) args('-tries=' + p.property('tries'))
+        if (p.hasProperty('second')) systemProperty 'icheme.tutorial.second', p.property('second')
     }
 }

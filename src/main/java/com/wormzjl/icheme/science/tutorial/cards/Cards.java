@@ -20,6 +20,7 @@ public final class Cards {
         ALL.put(PotTemperature.NAME, PotTemperature::new);
         ALL.put(RefluxCut.NAME, RefluxCut::new);
         ALL.put(CompareCut.NAME, CompareCut::new);
+        ALL.put(Balance.NAME, Balance::new);
     }
 
     private Cards() {

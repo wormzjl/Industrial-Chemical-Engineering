@@ -1,0 +1,30 @@
+{
+  "parent": "icheme:tutorial/simulator/balance",
+  "display": {
+    "icon": {
+      "id": "icheme:field_guide",
+      "count": 1
+    },
+    "title": {
+      "translate": "tutorial.icheme.advancement.simulator.heat"
+    },
+    "description": {
+      "translate": "tutorial.icheme.advancement.simulator.heat.description"
+    },
+    "show_toast": false,
+    "announce_to_chat": false
+  },
+  "criteria": {
+    "lowered": {
+      "trigger": "icheme:sheet_run",
+      "conditions": {
+        "max_heater_outlet": 643.15
+      }
+    }
+  },
+  "requirements": [
+    [
+      "lowered"
+    ]
+  ]
+}

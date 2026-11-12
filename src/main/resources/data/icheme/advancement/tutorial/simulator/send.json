@@ -1,0 +1,27 @@
+{
+  "parent": "icheme:tutorial/simulator/size",
+  "display": {
+    "icon": {
+      "id": "icheme:field_guide",
+      "count": 1
+    },
+    "title": {
+      "translate": "tutorial.icheme.advancement.simulator.send"
+    },
+    "description": {
+      "translate": "tutorial.icheme.advancement.simulator.send.description"
+    },
+    "show_toast": false,
+    "announce_to_chat": false
+  },
+  "criteria": {
+    "sent": {
+      "trigger": "icheme:design_sent"
+    }
+  },
+  "requirements": [
+    [
+      "sent"
+    ]
+  ]
+}

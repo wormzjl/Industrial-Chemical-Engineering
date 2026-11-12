@@ -5,6 +5,7 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.wormzjl.icheme.IChemE;
 import com.wormzjl.icheme.runtime.fluid.FluidView;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
+import com.wormzjl.icheme.science.tutorial.guide.SheetCondition;
 import com.wormzjl.icheme.science.tutorial.guide.StillCondition;
 import net.minecraft.advancements.CriterionTrigger;
 import net.minecraft.advancements.critereon.ContextAwarePredicate;
@@ -26,7 +27,10 @@ import java.util.Optional;
  * event, a structure built from the constructor, with an optional kind. P2b: {@code icheme:still_state} fires where a
  * still's published view goes to one player (the scheduled publication and the replay at opening), its conditions a
  * {@link StillCondition}; {@code icheme:still_stopped} where the player's screen sets a firing still's fire off (its last
- * cached status, a read); {@code icheme:diverter_switched} where the player turns a diverter valve by hand. Each mirrors the game's
+ * cached status, a read); {@code icheme:diverter_switched} where the player turns a diverter valve by hand. P4b:
+ * {@code icheme:sheet_run} where a process simulator stores a player's sheet with results that ran on it (a run's end on the
+ * client sends them; the server reads the stored sheet's settings, a {@link SheetCondition}, and solves nothing);
+ * {@code icheme:design_sent} where it stores what the player's Send to block sent. Each mirrors the game's
  * {@code ConstructBeaconTrigger}: an instance record with its optional player predicate and a record codec. No client
  * class: loads on a dedicated server.
  */
@@ -37,6 +41,8 @@ public final class TutorialTriggers {
     public static final DeferredHolder<CriterionTrigger<?>, StillState> STILL_STATE = TRIGGERS.register("still_state", StillState::new);
     public static final DeferredHolder<CriterionTrigger<?>, Plain> STILL_STOPPED = TRIGGERS.register("still_stopped", Plain::new);
     public static final DeferredHolder<CriterionTrigger<?>, Plain> DIVERTER_SWITCHED = TRIGGERS.register("diverter_switched", Plain::new);
+    public static final DeferredHolder<CriterionTrigger<?>, SheetRun> SHEET_RUN = TRIGGERS.register("sheet_run", SheetRun::new);
+    public static final DeferredHolder<CriterionTrigger<?>, Plain> DESIGN_SENT = TRIGGERS.register("design_sent", Plain::new);
 
     private TutorialTriggers() {
     }
@@ -103,7 +109,45 @@ public final class TutorialTriggers {
         }
     }
 
-    /** An event with no condition of its own: a firing still's fire set off, a diverter valve turned by hand. */
+    /**
+     * A process simulator stored {@code body} (a packed sheet and its results) from {@code player}: where the results ran on that
+     * sheet, the sheet's settings meet each instance's condition or not. A read of what was stored; nothing is solved.
+     */
+    public static void sheetStored(ServerPlayer player, byte[] body) {
+        try {
+            var contents = com.wormzjl.icheme.science.flowsheet.SheetBody.unpack(body);
+            if (!com.wormzjl.icheme.network.SimulatorResults.ranOnBody(contents.results())) return;
+            var sheet = com.wormzjl.icheme.science.flowsheet.FlowsheetFile.read(contents.sheet());
+            SHEET_RUN.get().trigger(player, sheet);
+        } catch (com.wormzjl.icheme.science.flowsheet.SheetBody.Refused | RuntimeException unread) {
+            // The store took it already; a body the guide cannot read earns nothing.
+        }
+    }
+
+    /** A sheet stored with the results of its own run: optionally a fired heater's outlet at most {@code max_heater_outlet} K. */
+    public static final class SheetRun extends SimpleCriterionTrigger<SheetRun.Instance> {
+        @Override
+        public Codec<Instance> codec() {
+            return Instance.CODEC;
+        }
+
+        public void trigger(ServerPlayer player, com.wormzjl.icheme.science.flowsheet.Flowsheet sheet) {
+            trigger(player, instance -> instance.condition().matches(sheet, true));
+        }
+
+        public record Instance(Optional<ContextAwarePredicate> player, Optional<Double> maxHeaterOutlet) implements SimpleCriterionTrigger.SimpleInstance {
+            public static final Codec<Instance> CODEC = RecordCodecBuilder.create(i -> i.group(
+                    EntityPredicate.ADVANCEMENT_CODEC.optionalFieldOf("player").forGetter(Instance::player),
+                    Codec.doubleRange(1, 5000).optionalFieldOf("max_heater_outlet").forGetter(Instance::maxHeaterOutlet)
+            ).apply(i, Instance::new));
+
+            public SheetCondition condition() {
+                return new SheetCondition(maxHeaterOutlet);
+            }
+        }
+    }
+
+    /** An event with no condition of its own: a firing still's fire set off, a diverter valve turned by hand, a design sent. */
     public static final class Plain extends SimpleCriterionTrigger<Plain.Instance> {
         @Override
         public Codec<Instance> codec() {
