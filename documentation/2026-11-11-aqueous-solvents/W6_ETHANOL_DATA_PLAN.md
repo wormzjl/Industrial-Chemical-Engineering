@@ -221,3 +221,34 @@ for the owner, in this order:
   change to the load path; only if more solvents make a still too slow.
 - c. Cut the scan (fit without the penalty first, add it only where the optimum splits). It moves the fitted
   numbers in the last digits: a revision of the derivation and re-pins. Not recommended now.
+
+## 14. W6 built (2026-11-12)
+
+Sub-thread `w5-column` (Opus high). Commits: W6a `e1cc5ceca`, W6b `691552f3f`, W6c `ca8b9c92e`, W6d `031d96c25`.
+Report: `tmp/w6-ethanol/reports/W6_FINAL.md`. The main thread checked the commits: main changes are data only
+(the record, the component, the package, the preset, the network's list, the index, the example sheet, two
+`en_us.json` keys); no main Java changed.
+
+- Gates G1 to G8 and G10 pass, with the numbers of section 13. G1: 0 differences from the pilot record. G7:
+  `FluidFactsCompatTest` passes, images and recorded strings untouched.
+- G9 is over its bound and accepted for W6 (section 13): 0.35 to 0.45 s before, 1.52 to 1.75 s after.
+- The record: heat of formation -234.95 kJ/mol, C2H6O, limits 0.033 and 0.19 (NIOSH npgd0262, read
+  2026-11-12), heating value 1277.512 kJ/mol.
+- New tests: `EthanolMainDataTest`; cases in `FiredHeaterFuelTest`, `StillRuntimeTest`,
+  `FlowsheetAqueousColumnTest`. `PilotSolventTestCatalog` is retired: its tests run on `icheme:refinery`.
+- The example `ethanol_rectifier`: a wash at 25 C and 2 bar, a steam preheater to 359.84 K, the E1 rectifier;
+  STEADY, spirit 0.80747. One name key; the picker shows names only. `WriteRectifier.java` in
+  `tools/aqueous-solvents/probes` writes it again when the data move.
+- Guide: `thermo-materials.md` (the records, the counts, the load cost), `process-simulator.md` (the example),
+  MATERIALS.md (the counts).
+
+Where the measurement contradicted this plan:
+- Section 1's boiling point 351.4 K: the cubic gives 351.70 K (inside the bound).
+- Section 4's load estimate (section 13).
+
+Open from W6:
+- The whole list's load time; the parallel fit of section 13 waits on the owner.
+- 96 test files run networks on the whole list, where production narrows each island.
+- Two `en_us.json` keys for the translation commit: `material.icheme.ethanol`,
+  `gui.icheme.flowsheet.example.ethanol_rectifier`.
+- Not run: `LanguageFilesTest`, `UnitTextTest` (the translation commit), the final lane, `crude_unit`'s re-record.
