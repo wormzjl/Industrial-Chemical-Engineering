@@ -27,10 +27,11 @@ public record Guide(List<Chapter> chapters, Map<String, String> terms) {
         for (var chapter : chapters) if (!ids.add(chapter.id())) throw new IllegalArgumentException("Chapter twice: " + chapter.id());
     }
 
-    /** How a step is shown with it: nothing, a film, a card, or the display units' offer. */
-    public sealed interface Media permits None, Film, Card, Units {
+    /** How a step is shown with it: nothing, a film, a card, the display units' offer, or a key that says the step was read. */
+    public sealed interface Media permits None, Film, Card, Units, Read {
         Media NONE = new None();
         Media UNITS = new Units();
+        Media READ = new Read();
     }
 
     public record None() implements Media {
@@ -46,6 +47,10 @@ public record Guide(List<Chapter> chapters, Map<String, String> terms) {
 
     /** The display units' offer (owner decision D5): °C, bar, per hour and mass, or the player's own. */
     public record Units() implements Media {
+    }
+
+    /** A step to read (P2b: the condenser's water): its key "Got it" reports it done. */
+    public record Read() implements Media {
     }
 
     /** Who reports a step done: the client (a film to its last stop, a card worked, a tour finished, a choice made) or the server's engine criterion. */

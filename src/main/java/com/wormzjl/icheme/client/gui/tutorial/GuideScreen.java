@@ -180,7 +180,7 @@ public class GuideScreen extends Screen {
             GuideClient.report(step);
             return;
         }
-        if (action.equals("units:keep")) {
+        if (action.equals("units:keep") || action.startsWith("read:")) {
             GuideClient.report(step);
             return;
         }

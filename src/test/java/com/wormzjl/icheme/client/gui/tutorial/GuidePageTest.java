@@ -151,6 +151,10 @@ class GuidePageTest {
         // P2b: the still's chapter: its films and card, its five terms in order, and the charge step's source filled in.
         var still = page(Progress.NONE, GuidePage.DESIGN_WIDTH, GuidePage.DESIGN_HEIGHT, "still", null);
         for (var id : List.of("build", "watch", "cut")) assertTrue(still.anchors().containsKey("media:still/" + id), id);
+        var water = still.rows().get(2);
+        assertEquals("still/water", water.step());
+        assertEquals(List.of("read:still/water"), water.keys().stream().map(k -> k.key()).toList(), "a step to read has its Got it key");
+        assertEquals("Got it", water.keys().getFirst().text());
         var stillTerms = new java.util.ArrayList<String>();
         for (var row : still.rows()) for (var l : row.lines()) for (var u : l.underlines()) if (!stillTerms.contains(u.term())) stillTerms.add(u.term());
         assertEquals(List.of("vapour", "condenser", "distillate", "cut", "boil_dry"), stillTerms);

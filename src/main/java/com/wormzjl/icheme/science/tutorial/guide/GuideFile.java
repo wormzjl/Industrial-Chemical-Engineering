@@ -24,6 +24,7 @@ import java.util.function.Predicate;
  *   "chapters": [ { "id": "welcome", "steps": [
  *       { "id": "guide" },
  *       { "id": "units", "media": "units" },
+ *       { "id": "water", "media": "read" },
  *       { "id": "dots", "media": "card:three_parts" },
  *       { "id": "film", "media": "film:still_inside" },
  *       { "id": "build", "check": "server", "criterion": "equipment_built" } ] } ] }
@@ -91,6 +92,7 @@ public final class GuideFile {
     private static Guide.Media media(String text, Predicate<String> films, Predicate<String> cards) {
         if (text == null) return Guide.Media.NONE;
         if (text.equals("units")) return Guide.Media.UNITS;
+        if (text.equals("read")) return Guide.Media.READ;
         if (text.startsWith("film:")) {
             String name = text.substring(5);
             if (!films.test(name)) throw new IllegalArgumentException("Unknown film: " + name);

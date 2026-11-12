@@ -50,12 +50,12 @@ class GuideFileTest {
         var guide = GuideFile.load();
         var still = guide.chapters().get(2);
         assertEquals("still", still.id());
-        assertEquals(List.of("build", "charge", "watch", "fire", "first", "cut", "switch", "stop"), still.steps().stream().map(Guide.Step::id).toList());
-        assertEquals(List.of(new Guide.Film("still_build"), Guide.Media.NONE, new Guide.Film("still_run"), Guide.Media.NONE, Guide.Media.NONE, new Guide.Card("pot_temperature"),
+        assertEquals(List.of("build", "charge", "water", "watch", "fire", "first", "cut", "switch", "stop"), still.steps().stream().map(Guide.Step::id).toList());
+        assertEquals(List.of(new Guide.Film("still_build"), Guide.Media.NONE, Guide.Media.READ, new Guide.Film("still_run"), Guide.Media.NONE, Guide.Media.NONE, new Guide.Card("pot_temperature"),
                 Guide.Media.NONE, Guide.Media.NONE), still.steps().stream().map(Guide.Step::media).toList());
         var criteria = new java.util.ArrayList<String>();
         for (var step : still.steps()) criteria.add(step.check() == Guide.Check.CLIENT ? "client" : step.criterion());
-        assertEquals(List.of("equipment_built", "still_state", "client", "still_state", "still_state", "still_state", "diverter_switched", "still_stopped"), criteria);
+        assertEquals(List.of("equipment_built", "still_state", "client", "client", "still_state", "still_state", "still_state", "diverter_switched", "still_stopped"), criteria);
         for (var term : List.of("vapour", "condenser")) assertEquals("still/build", guide.terms().get(term), term);
         assertEquals("still/watch", guide.terms().get("distillate"));
         assertEquals("still/cut", guide.terms().get("cut"));

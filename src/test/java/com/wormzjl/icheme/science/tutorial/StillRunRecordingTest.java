@@ -52,6 +52,7 @@ class StillRunRecordingTest {
         assertTrue(first > 0 && first < naphtha && naphtha <= end, first + " " + naphtha + " " + end);
         if (!Double.isNaN(kerosene)) assertTrue(naphtha < kerosene && kerosene <= end);
         else assertEquals("REFUSED", run.setupWords().get("finish"), "a run that never reaches the end of kerosene ended early");
+        if ("REFUSED".equals(run.setupWords().get("finish"))) assertEquals("law_refusal", run.setupWords().get("ended_at"), "the set-up says the run ended at the law's refusal");
         assertTrue(run.line("first", "pot_kelvin") < run.line("naphtha", "pot_kelvin"));
         var parts = run.setup();
         assertEquals(end, run.time().end(), 1e-9);

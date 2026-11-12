@@ -212,6 +212,13 @@ public final class StillRunRecorder {
         setup.addProperty("water_kelvin", WATER_KELVIN);
         setup.addProperty("time_factor", TIME_FACTOR);
         setup.addProperty("finish", run.finish());
+        // What ended the run: the law's refusal (a provisional recording, to re-record once the law takes the run on), boiling dry or overheating.
+        setup.addProperty("ended_at", switch (run.finish()) {
+            case "REFUSED" -> "law_refusal";
+            case "BOIL_DRY" -> "boil_dry";
+            case "OVERHEAT" -> "overheat";
+            default -> "unfinished";
+        });
         if (run.refusal() != null) setup.addProperty("refusal", run.refusal());
         setup.addProperty("steps", run.steps());
         setup.addProperty("left_kg", run.leftKg());

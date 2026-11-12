@@ -39,6 +39,7 @@
       "steps": [
         { "id": "build", "media": "film:still_build", "check": "server", "criterion": "equipment_built" },
         { "id": "charge", "check": "server", "criterion": "still_state" },
+        { "id": "water", "media": "read" },
         { "id": "watch", "media": "film:still_run" },
         { "id": "fire", "check": "server", "criterion": "still_state" },
         { "id": "first", "check": "server", "criterion": "still_state" },

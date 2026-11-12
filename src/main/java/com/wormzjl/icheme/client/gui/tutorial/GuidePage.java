@@ -406,6 +406,7 @@ public final class GuidePage {
             case Guide.Film ignored -> List.<String[]>of(new String[]{"media:" + id, tr.apply(KEY + "watch")});
             case Guide.Card ignored -> List.<String[]>of(new String[]{"media:" + id, tr.apply(KEY + "open")});
             case Guide.Units ignored -> List.of(new String[]{"units:use", tr.apply(KEY + "units.use")}, new String[]{"units:keep", tr.apply(KEY + "units.keep")});
+            case Guide.Read ignored -> List.<String[]>of(new String[]{"read:" + id, tr.apply(KEY + "read")});
             case Guide.None ignored -> List.of();
         };
     }

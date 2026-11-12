@@ -15,6 +15,7 @@
     "water_kelvin": 298.15,
     "time_factor": 4.0,
     "finish": "REFUSED",
+    "ended_at": "law_refusal",
     "refusal": "no positive latent heat",
     "steps": 96,
     "left_kg": 205.22254330688827,
