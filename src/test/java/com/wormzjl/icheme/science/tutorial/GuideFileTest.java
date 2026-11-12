@@ -52,8 +52,13 @@ class GuideFileTest {
             assertNotSame(GuideFile.class, file);
             assertNotNull(file.getMethod("load").invoke(null));
             for (var name : List.of("com.wormzjl.icheme.science.tutorial.guide.Progress", "com.wormzjl.icheme.science.tutorial.guide.Glossary",
-                    "com.wormzjl.icheme.science.tutorial.guide.Marked", "com.wormzjl.icheme.science.tutorial.cards.ThreeParts"))
+                    "com.wormzjl.icheme.science.tutorial.guide.Marked", "com.wormzjl.icheme.science.tutorial.cards.ThreeParts", "com.wormzjl.icheme.science.tutorial.cards.Chain",
+                    "com.wormzjl.icheme.science.tutorial.cards.BarrelData", "com.wormzjl.icheme.science.tutorial.cards.Barrel", "com.wormzjl.icheme.science.tutorial.cards.Products",
+                    "com.wormzjl.icheme.science.tutorial.cards.Road"))
                 Class.forName(name, true, loader);
+            // Every card builds, its recording read, with no Minecraft class.
+            var cards = loader.loadClass("com.wormzjl.icheme.science.tutorial.cards.Cards");
+            for (var name : (List<?>) cards.getMethod("names").invoke(null)) assertNotNull(cards.getMethod("build", String.class).invoke(null, name), String.valueOf(name));
         }
     }
 

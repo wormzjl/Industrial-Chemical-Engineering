@@ -8,6 +8,7 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 
 | Folder | Purpose | Batch | Status |
 |---|---|---|---|
+| [tutorial-recordings/](tutorial-recordings/README.md) | Records what tutorial cards draw from the mod's data (CrudeBarrel: the crude barrel of the cards barrel and products) | `2026-11-12-tutorial-system` | In use since 2026-11-12 |
 | [tutorial-renders/](tutorial-renders/README.md) | Software renders of the tutorial film stops (P0), the field guide, tours and cards (P1), the Field Guide icon | `2026-11-12-tutorial-system` | In use since 2026-11-12 |
 | [psv-flare/](psv-flare/README.md) | The PSV-to-flare GameTest alone on the review server | `2026-11-11-gas-blanketing` | In use since 2026-11-11 |
 | [drum-operation-holds/](drum-operation-holds/README.md) | Headless gas-vent drum rig (defect 1) | `2026-11-11-drum-operation-holds` | In use since 2026-11-11 |

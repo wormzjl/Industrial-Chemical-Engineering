@@ -21,6 +21,8 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
   the still": classes, decisions, tests, renders, what the in-game check looks at.
 - [P1_GUIDE_AND_HELP.md](P1_GUIDE_AND_HELP.md): phase P1, the field guide, progress as advancements, the `?` key and
   its tours, the card view: classes, decisions, tests, renders, what the in-game check looks at.
+- [P2A_CRUDE_CHAPTER.md](P2A_CRUDE_CHAPTER.md): phase P2a, chapter 1 "Crude oil": the card interface, the cards chain,
+  barrel, products and road, the crude barrel recording, decisions, band shares, tests, renders.
 
 ## History
 
@@ -39,6 +41,9 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
   advancements (`guide_step`, `equipment_built`, protocol `tutorial-1`), the Field Guide item (placeholder icon),
   `GuideScreen`, HUD line, key H, the `?` key and tours on the guide and the still's page, the card `three_parts`.
   21 filtered test classes pass; renders in `tmp/tutorial-renders/`. The fluid GameTests wait for the final lane.
+- 2026-11-12: P2a built (07ae749e5, 849cf20ef, aa9120b0d, 3450240c6, 923f39d53, 207577d1f, 5aa24fd86): three_parts mixed
+  at heat 0, the card interface (options, hits, steps, temperature format), cards chain, barrel, products, road, the
+  crude barrel recording (`tools/tutorial-recordings`), chapter 1 and its advancements. 19 filtered test classes pass.
 
 ## Code areas (proposed)
 
@@ -55,3 +60,5 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
 - P0: the owner's one in-game check of the scene player (P0_SCENE_PLAYER.md, last section).
 - P1: the owner's review of the English text and the renders; the in-game rows of P1_GUIDE_AND_HELP.md; the Field
   Guide's final icon.
+- P2a: the owner's review of chapter 1's text, the four marks and the renders; decisions 1 and 2 of
+  P2A_CRUDE_CHAPTER.md (the road's marks from a test-code catalog, the lightest cut's lower edge).

@@ -37,10 +37,13 @@ Each image's footer line gives the film, the time and the stop.
 `renderTutorialGuide`, run after `renderTutorial`) draws the shipped `GuidePage` and `TourLayout` in the game's bitmap
 font: `guide-<state>.png` (new, step-3-current, chapter-done; light and dark at 464 by 254), `guide-small.png` (320 by
 240 window), `tour-guide.png`, `tour-fluid_device-still.png` (the still page built as GuiPrototypes builds it, with
-its `?` key), `card-three_parts.png` (heat 0, 0.5, 1). `FieldGuideIcon.java` writes the Field Guide's placeholder
+its `?` key), `card-<name>.png` for every card (P2a: chain at 1, 5, 16, 40 carbons; barrel, medium at 0, 200 and
+400 °C, light and heavy at 200 °C; products in each band; road unpressed and with one box of each mark; three_parts at
+heat 0, 0.5, 1; each with a dark 320 by 240 frame), `guide-crude.png` (chapter 1 open). `FieldGuideIcon.java` writes the Field Guide's placeholder
 texture: `java tools/tutorial-renders/FieldGuideIcon.java src/main/resources/assets/icheme/textures/item/field_guide.png`.
 
 ## History
 
 - 2026-11-12, P0: the tool, for the film `still_inside`.
 - 2026-11-12, P1: GuideRender (guide, tours, card) and FieldGuideIcon.
+- 2026-11-12, P2a: card sheets for chain, barrel, products and road; the crude chapter.
