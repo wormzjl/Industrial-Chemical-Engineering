@@ -1,7 +1,8 @@
 # Kernel cost: an evaluation follows what the mixture carries
 
 2026-11-12. Owner: "carrying every component with water is not good, this is not scalable, optimize". Plan for one
-sub-thread (Opus high). Code: `science/thermo/PengRobinsonKernel.java` and its callers. Not started.
+sub-thread (Opus high). Code: `science/thermo/PengRobinsonKernel.java` and its callers. Part A implemented 2026-11-12
+(see Result); Part B not started.
 
 ## Measured (HEAD `6084652e4`, one run each, `tools/aqueous-solvents/kernel-cost/`)
 The network list: 47 compounds, 304 pairs, 126 NRTL cells (92 of them with water). Time per call, evaluate / with derivatives:
@@ -47,6 +48,10 @@ differentiates over those only. A sum that leaves out exact zeros, in the same o
      three-phase paths, `kernel.evaluateDerivatives` at 5292, 5300, the slot derivatives at 6181).
    - `CubicPhaseEvaluator`: a workspace's support comes from the flash that owns it; a direct call carries all.
    - `HydrocarbonModel` (state, tangent at 189): from the node's amounts. `V3PengRobinsonSession`: all (no change).
+   - Changed 2026-11-12 (owner, option A): the node's amounts are too narrow. A layout carries reachable compounds
+     with zero amount and reads their `ln phi` at infinite dilution (`PhaseLayout.encode`, `reactivate`). The network's
+     support is the node's amounts plus the layout's build mask, named on `FluidThermodynamics.Prepared` at every
+     decode. Rule: every compound whose `ln phi` or derivative is read is in the support.
 6. Gate, in `PengRobinsonKernelHuronVidalTest`: on the refinery list, for five supports (water + nitrogen; water + one
    cut; three miscible compounds; half the list; all), every output on the support equals the whole-list call bit for
    bit (`ln phi`, `d ln phi/dT`, the dn block, `secondTemperatureDerivative`, enthalpy), at a liquid and a vapour root.
@@ -61,6 +66,38 @@ Ruled out: a support the kernel derives from the phase alone (it loses `ln phi` 
 phase); a cached sub-kernel per support (tables and preparation per support: memory, and a second arithmetic path).
 
 Expected: the first row near a two-compound kernel, under 0.5 µs / 1.5 µs; the pump test under 10 s; rows 2 and 3 unchanged.
+
+## Result (Part A, 2026-11-12)
+Commits: `2b43a4427` (kernel), `6b9fa2ef5` (gate), `ce6d31ffc` (engine callers), `d009783aa` (network callers).
+
+- Kernel: `Workspace.carry(feed)` / `carryAll()` / `carrySame`; pairs and cells filtered once per change; a temperature
+  stamp per compound, pair and cell; every loop over the support. Outside it the outputs are zero
+  (`outsideSupportFill`), and they are refilled only when the support changes. An amount outside the support is
+  refused. `PairInteractions.evaluatePair` lets the model pairs follow the support.
+- Engine: `FluidTpEquilibrium` sets the support from the request's feed at every entry (`implementationChecks`), on its
+  kernel workspace and on both workspaces of its phase evaluator. `TangentPlaneStability` carries its present compounds.
+- Network (option A): `PhaseLayout` names its build mask (seed amounts plus what can arrive) on `Prepared` at every
+  decode. `state()`, `tangents()` and the tangent's exact fallback carry that mask plus the node's amounts. Paths with no
+  named mask carry the whole list. Each `HydrocarbonModel.Phase` records its support (`carried`), and `encode` /
+  `reactivate` evaluate a seed again on the whole list when its phases miss a compound the layout reads.
+- Gate (`aCarriedSupportKeepsEveryOutputOnItBitForBit`): 98,880 outputs bit-equal on 5 supports, liquid and vapour root.
+- Audit: the NaN switch (system property `icheme.kernel.supportNaN`, `tools/aqueous-solvents/kernel-cost/support-nan.init.gradle`;
+  under it an amount outside the support is an `AssertionError`). Engine callers: 60 tests. Network classes,
+  `DrumFillColdStartTest`, `PumpBottomPortDrainTest`, `MixedSetMergeTest` and the engine: 79 tests. No reader outside
+  the support.
+- Runs without the switch: 121 tests in 18 classes, 0 failed; chain-100 exact deviation 0.
+
+| Probe row (one run each, alone) | Before | After |
+|---|---|---|
+| water + nitrogen of 47 (carried: 2) | 3.8 / 17.4 µs | 0.18 / 0.29 µs |
+| every compound (47) | 6.2 / 35.8 µs | 6.8 / 34.8 µs |
+| every compound, list without water (46) | 4.8 / 24.6 µs | 5.7 / 28.2 µs |
+
+- The sparse row is below the 0.5 / 1.5 µs target. The two dense rows were expected unchanged. The list without water
+  is 15 to 19 % higher in one run each: noise or the support indirection, not separated.
+- `PumpBottomPortDrainTest`: 2.23 s for the class (3 tests), run once alone. The test was shortened in `e8a25bd2e`
+  before this run, and `src/main` had already changed, so there is no before on the same test. The plan's 82 s was the
+  old 400-slice form.
 
 ## Part B: the dense excess path (moves last digits; the owner's choice after Part A's numbers)
 - Rest sums of a centre whose only partner is water: one sum over the non-water compounds less its pairs' k terms

@@ -27,6 +27,13 @@ class KernelCostProbeTest {
             System.out.println("KPROBE dense");
         }
         var workspace = kernel.newWorkspace();
+        // The sparse phase pair carries its two compounds (KERNEL_COST_PLAN.md Part A); the dense rows carry the whole list.
+        if (System.getProperty("kprobe.dense") == null) {
+            double[] feed = liquid.clone();
+            for (int i = 0; i < n; i++) feed[i] += gas[i];
+            workspace.carry(feed);
+            System.out.println("KPROBE carried " + java.util.stream.IntStream.range(0, n).filter(workspace::carries).count());
+        }
         var output = kernel.newEvaluation();
         var derivatives = kernel.newDerivatives();
         double sink = 0;
