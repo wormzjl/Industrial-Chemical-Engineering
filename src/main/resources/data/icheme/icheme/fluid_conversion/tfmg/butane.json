@@ -1,0 +1,28 @@
+{
+  "revision": "1",
+  "priority": 50,
+  "fluid": "tfmg:butane",
+  "phase": "gas",
+  "to_forge": {
+    "basis": "mole",
+    "components": {
+      "Isobutane": {
+        "min": 0,
+        "max": 1
+      },
+      "N-butane": {
+        "min": 0,
+        "max": 1
+      }
+    },
+    "others_max": 0.02,
+    "temperature": {
+      "min": 280,
+      "max": 400
+    },
+    "pressure": {
+      "min": 50000,
+      "max": 1000000
+    }
+  }
+}

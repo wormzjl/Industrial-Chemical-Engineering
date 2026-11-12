@@ -113,6 +113,43 @@ class ConversionRuleTest {
         assertNull(ConversionLaws.fractions(water,List.of("Nitrogen")));
     }
 
+    /** The bundled rules (W6) under {@code data/icheme/icheme/fluid_conversion/}, by id ({@code icheme:<path>}). */
+    static Map<String,String> bundled() throws IOException {
+        var folder=Path.of("src/main/resources/data/icheme/icheme/fluid_conversion");var files=new TreeMap<String,String>();
+        try(var walk=Files.walk(folder)){for(var p:walk.filter(f->f.toString().endsWith(".json")).toList()){var name=folder.relativize(p).toString().replace('\\','/');files.put("icheme:"+name.substring(0,name.length()-5),Files.readString(p,StandardCharsets.UTF_8));}}
+        return files;
+    }
+    /** Every bundled rule loads on the real catalog with every mod present; the absent mods' rules are skipped, never refused. */
+    @Test void everyBundledRuleLoadsOnTheRealCatalog() throws IOException {
+        var files=bundled();
+        assertTrue(files.size()>=20,"the bundled rules: "+files.keySet());
+        var all=ConversionRules.parse(files,NAMES,ns->true);
+        assertEquals(List.of(),all.refused().stream().map(ConversionRules.Refused::message).toList());
+        assertEquals(files.size(),all.rules().size());
+        var none=ConversionRules.parse(files,NAMES,ns->ns.equals("minecraft")||ns.equals("c"));
+        assertEquals(List.of(),none.refused());
+        assertEquals(List.of("icheme:c/crude_oil","icheme:minecraft/water"),none.rules().stream().map(ConversionRule::id).sorted().toList(),"without the other mods, water and the crude tag stay");
+        assertEquals("icheme:minecraft/water",all.forward("minecraft:water",Set.of(),false).id());
+        assertEquals("icheme:tfmg/crude_oil",all.forward("tfmg:crude_oil",Set.of("c:crude_oil"),false).id(),"an explicit id before the tag");
+        assertEquals("icheme:c/crude_oil",none.forward("othermod:crude",Set.of("c:crude_oil"),false).id());
+        assertEquals("icheme:minecraft/water",all.reverse(drawnWater(300),null,false).id());
+        // A column's cuts, by mass on the package's pseudo-components, go to their products; each window holds its own cut alone.
+        assertEquals("kerosene",product(all,cut(Map.of("crude_pc03",.3,"crude_pc04",.4,"crude_pc05",.3))));
+        assertEquals("diesel",product(all,cut(Map.of("crude_pc04",.2,"crude_pc05",.3,"crude_pc06",.35,"crude_pc07",.15))));
+        assertEquals("lubricant",product(all,cut(Map.of("crude_pc07",.2,"crude_pc08",.6,"crude_pc09",.2))));
+        assertEquals("heavy_oil",product(all,cut(Map.of("crude_pc08",.2,"crude_pc09",.3,"crude_pc10",.3,"crude_pc11",.1,"crude_pc12",.1))));
+        assertEquals("gasoline",product(all,cut(Map.of("N-pentane",.2,"crude_pc01",.5,"crude_pc02",.3))),"gasoline before naphtha, by priority");
+        assertEquals("naphtha",product(all,cut(Map.of("crude_pc01",.3,"crude_pc02",.4,"crude_pc03",.3))),"too heavy for gasoline");
+    }
+    /** The product (the fluid id's path) of the reverse rule {@code rules} picks for {@code drawn}; equal priorities between mods go by rule id. */
+    private static String product(ConversionRules rules,ConversionRules.Drawn drawn){var f=rules.reverse(drawn,null,false).fluid();return f.substring(f.indexOf(':')+1);}
+    /** A drawn liquid at 300 K and 1 atm with mass fractions {@code w} on the network package's list. */
+    private static ConversionRules.Drawn cut(Map<String,Double> w) {
+        FluidThermodynamics model=FluidTestSupport.networkModel();var ids=model.components();var mw=model.molecularWeights();var n=new double[ids.size()];
+        for(var e:w.entrySet()){int i=ids.indexOf(e.getKey());assertTrue(i>=0,e.getKey());n[i]=e.getValue()/mw[i];}
+        return new ConversionRules.Drawn(ids,n,mw,300,101325,false);
+    }
+
     private static ConversionRules.Drawn drawnWater(double t){return drawn(Map.of("Water",1.),t);}
     private static ConversionRules.Drawn drawn(Map<String,Double> x,double t) {
         var ids=List.of("Nitrogen","Water");var n=new double[]{x.getOrDefault("Nitrogen",0.),x.getOrDefault("Water",0.)};

@@ -1,0 +1,30 @@
+{
+  "revision": "1",
+  "fluid": "minecraft:water",
+  "phase": "liquid",
+  "to_icheme": {
+    "composition": {
+      "Water": 1
+    },
+    "temperature": "ambient",
+    "pressure": "ambient"
+  },
+  "to_forge": {
+    "basis": "mole",
+    "components": {
+      "Water": {
+        "min": 0.99,
+        "max": 1
+      }
+    },
+    "others_max": 0.01,
+    "temperature": {
+      "min": 278.15,
+      "max": 333.15
+    },
+    "pressure": {
+      "min": 90000,
+      "max": 150000
+    }
+  }
+}
