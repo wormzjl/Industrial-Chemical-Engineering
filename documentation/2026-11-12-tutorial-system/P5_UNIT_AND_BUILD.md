@@ -39,3 +39,68 @@ title's width), and the classes they touch rerun once each. Not run: LanguageFil
 in the 320 by 240 window, eight a sheet, the unit's first), `pages-dark` (column, valve), `card-unit_map` (nothing pressed, H-101 pressed, small dark), `guide-unit`. Fixed from them:
 slanted pipe legs, cuts that did not open the bodies, the heater coil outside its shell, the drum's oil box, bodies too
 small, key rows in the small window, map tags that met.
+
+## Part 2, stage A: what building and starting the unit asks for (facts only; no code changed)
+
+### The assembly and Import
+
+- `ColumnBlueprint.of(trays)` for T-101 (14 trays, exchanger condenser, no reboiler, one steam, one draw, one
+  pumparound). Slots in report order: `column`, `condenser` (an exchanger, overhead on its SHELL side), `receiver` (a
+  lying drum with a boot), `offgas_valve`, `water_valve` (boot drain), `reflux_pump`, `reflux_tee`, `reflux_valve`,
+  `distillate_valve`, `feed_valve` (the sheet's V-101), `steam_valve` 1, `draw_valve` 1, `pa_pump` 1, `pa_cooler` 1,
+  `bottoms_valve`. Links: overhead, condensate, offgas, water and oil (through the tee) at the top; feed and steam walked
+  upstream (their valves point into the column); draw 1; pumparound 1 (pump and cooler in either order, the loop on the
+  cooler's shell, its tubes a utility); bottoms (no kettle). A line leaving the plant ends at a terminal, a branch, or
+  an open end 16 pipe blocks past its valve. Check parts reports COMPLETE (all teal) or CHECKED.
+- In the world the sheet's pumparound cooler takes the crude in its tubes: P-101 into the cooler's tubes, out to
+  E-101's tubes. E-101, H-101, P-101, P-102 and E-102 stand outside the column's boundary valves.
+- Send to block (`SheetSizing.designs`) stores each sized unit: P-101, E-101, H-101 (vertical heater), T-101 (column with
+  its operating point), E-102 (air cooler), P-102, and T-101's members (condenser, receiver, reflux pump, the pumparound's
+  pump and cooler); valves are left out (the pipe tool lays them). Tanks and the converter are not on the sheet.
+- Import (constructor within 16 blocks of the simulator) lists the saved column design first, then the sent designs.
+  One choice lands on the constructor's draft (`Design.landed`): a column at its diameter, the least skirt, bottoms to
+  the front; a unit at its form, sizes and support; a drum with its boot and standard connections. Placement, paint
+  and turns stay the player's. One Build makes one structure.
+
+### Utilities and supplies in survival
+
+| Need | Sheet | Who supplies it in survival |
+|---|---|---|
+| Crude | CRUDE, 8,968 kg/h | Fluid converter on `#c:crude_oil` (TFMG, PneumaticCraft) or `ad_astra:oil`; none without those mods (O2) |
+| Stripping steam | 14.37 kmol/h (259 kg/h), 533.15 K, tray 14 | **No in-mod source.** Boilers are drawing only; `mekanism:steam` converts out, not in. Possible: water from a converter (`minecraft:water`) through a fired heater's coil |
+| Heater fuel | not on the sheet (the simulator's heater has no fuel port) | H-101's FUEL nozzle (burners, `FiredHeaters`): a combustible product, e.g. off-gas (27 % of the firing) or naphtha; LOW/NO FUEL alarms |
+| Cooling water | CWS/CWR on the condenser | Converter on `minecraft:water` (fill at 500 kPa), back to a drain converter (accepts 278 to 333 K) or a void |
+| Power | none | With `energy.machinesNeedPower` (default on): 4 casing pumps need a driver (motor on FE, steam turbine, combustion engine or gas turbine, Create coupling; `Refusal.NO_DRIVER` for the reflux and pumparound pumps), the burners' fans and E-102's fans need FE |
+| Products | OFFGAS, NAPHTHA, WATER, MIDDLE, RESIDUE | Gas to a flare stack (or a fuel line); naphtha, middle and residue to floating-roof tanks; boot water to a drain converter. MIDDLE has no cooler on the sheet |
+
+### Refusals and conditions, in code order
+
+- Start (`ColumnStarts.build`): no designed column; no operating point; vacuum column; assembly not complete; a
+  boundary valve not registered. Then `FluidWorldAuthority.startColumn`: world closed; already running; a nozzle's pipe
+  not registered; a generator or void inside; a device held inside; more than the device limit; two ports share a
+  place; a boundary valve missing; a port's place taken; more than 6 condenser shells; more than 6 utility units a
+  duty; NO_DRIVER; ports that do not fit their lines. First solve: no operating point; a product with no nozzle; the
+  solve's own refusal (NOT READY).
+- Running (`ColumnCycle.step`, each a share of the set feed, the lowest binds): FEED_SHORT, PRODUCT_FULL,
+  COOLING_SHORT (condenser water), NO_POWER (each unpowered member pump, share 0), PUMPAROUND_SHORT (the crude through
+  the cooler's tubes takes the loop's 0.59 MW: no crude flow, no pumparound), FLOODING, STEAM_SHORT. TRIP: CLOSURE.
+- Steam short: rule B takes the whole feed (`LIMITED: steam`) and asks a STEAM_RATIO solve; if that solve is refused,
+  rule A cuts feed and steam together, so with no steam at all the take falls to 0. Whether V3 solves T-101 with no
+  steam is not known without a run.
+
+### A headless proof
+
+- `ColumnOperationReviewWorld.rig(helper, Options)` builds a column plant from any `V3ColumnInput` (feed, steam and
+  water from generators, products to voids, pumps on FE motors or creative motors), validates it COMPLETE, starts it.
+  `ColumnOperationGameTests.aColumnRunsInItsPlantStopsAndLeaves` runs it to RUNNING at the design feed (timeout
+  20,000 ticks). A new GameTest with the `small_crude` template proves T-101's Check parts and Start: one fluid GameTest
+  run, in the final lane. No builder exists for the survival supplies (converter, the heater on fuel, steam from water,
+  the crude through the pumparound cooler); a rig for them is a new file of the review world's size (about 600 lines).
+
+### Server points for criteria
+
+- `EquipmentNetwork`: Build (`equipment_built`, kind and column, exists) and the Import choice's answer (`imported`).
+- `AssemblyNetwork`: the view sent to the open screen (`send`): status COMPLETE after Check parts, the Operation
+  view's phase (RUNNING, LIMITED with its condition); START accepted in `operate`.
+- `FluidNetwork` view to a subscribed player (as `stillShown`): a converter's fill, a heat side's outlet temperature
+  and burners, a tank's level. Each fires on the engine's schedule, from cached data.

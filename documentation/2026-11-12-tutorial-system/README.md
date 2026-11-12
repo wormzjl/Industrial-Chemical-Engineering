@@ -104,6 +104,9 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
   and the film `crude_unit`; card `unit_map` on the simulator's painter; chapter 5 "Crude unit" (whole, map, tower,
   next). `--tests` run once, 4 workers: 135 tests in the tutorial packages, DrawCallTest and SimulatorTourTest; three
   failures fixed and their classes rerun once each.
+- 2026-11-13: P5 stage A (P5_UNIT_AND_BUILD.md, part 2): the column's slots and links, Import, the supplies in
+  survival (no in-mod steam source; fuel, water, power and products), refusals and limits in code order, the headless
+  proof and the criteria points. Documents only, no test run. Chapter 6 waits for the owner.
 
 ## Code areas (proposed)
 
