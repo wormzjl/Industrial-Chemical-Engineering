@@ -124,7 +124,7 @@ column uses its coarse body (`RenderLod`) when small on screen; translucent cut 
 
 | Chapter | The player does | The idea it carries |
 |---|---|---|
-| 0 Welcome | Opens the guide, plays one film, presses one `?` | How the guide, films and `?` work |
+| 0 Welcome | Opens the guide, chooses units, takes the guide's own `?` tour | How the guide and `?` work |
 | 1 Crude oil | Works five cards and one film (below) | What crude is, what is in it, why it is taken apart, the road to daily products |
 | 2 The still | Builds a 500 L still, charges crude, fires it, collects two cuts, stops before it boils dry | Each liquid boils at its own temperature; the vapour is richer in the light part; cooling turns it back to liquid; a cut; the pot temperature tells what is coming over |
 | 3 From pot to tower | Adds the small column to the still, opens the reflux valve, compares the cut | Reflux makes the product purer; a tray is one small still; a tower is many, running without stopping |
@@ -142,10 +142,15 @@ column uses its coarse body (`RenderLod`) when small on screen; translucent cut 
 | 1.4 The road to daily products | A map from the well to the home: clean (take out salt and water), separate by boiling (this guide's unit), separate again under vacuum, convert (break long chains into short ones, reshape them, take out sulfur), blend; then fuel gas, petrol, jet fuel, diesel, lubricating oil, bitumen, and the feed for plastics, fibres, soap and medicine | Presses each box: one sentence, its equipment item, and a mark: built in this guide, in the mod, or not yet |
 | 1.5 The first step | A film: dots of three colours in a heated pot; the light ones leave first | Presses Next into chapter 2 |
 
-- Every number comes from the mod's data: the bar from the assay's distribution, written once by
-  `tools/tutorial-recordings`; the grades from the four bundled assays. The chapter states no outside figure.
-- The map's marks are read from the code (the simulator's catalog and `EquipmentShape.Kind`), so they stay true.
+- Every number comes from the mod's data: the bar from the assays, written once by `tools/tutorial-recordings`
+  (`CrudeBarrel`) and held to the data by `CrudeBarrelTest`; the grades from the four bundled assays.
+- One exception, decided 2026-11-12: the chain card's boiling and melting points beyond 6 carbons are handbook values
+  (CRC, NIST), since the mod's own compounds stop at hexane. `ChainCardTest` holds the first six to the mod's records.
+- The bar's parts are cut at 20, 180, 240, 360 and 565 °C (565 °C is the assays' own residue line).
+- The map's marks are held to the code (`RoadCardTest` against the simulator's catalog), so they stay true.
 - Chapter 1 needs no equipment and no world: a player can do it in the first minute.
+- As built (P2A_CRUDE_CHAPTER.md): steps `what` (card chain), `barrel`, `why` (products), `road`, `parts` (the three
+  dot colours) and `first` (the film "inside the still"). The last two moved here from chapter 0.
 
 ### Chapter 5, the unit and its pages
 
@@ -198,6 +203,9 @@ this plan.
 | P4 Simulator and column | Chapters 3 and 4, the simulator tours, the small column template, the bundled sheet | The sheet runs and sizes green | Standard; the template's solves need a sub-thread |
 | P5 The unit | Chapters 5 and 6, the equipment pages of the unit | A player builds and starts the unit from the guide alone | Standard |
 | P6 Coverage | `?` on every remaining screen, the remaining pages, translation, merge preparation | Every gate passes | Standard |
+
+Built so far (2026-11-12): P0 (P0_SCENE_PLAYER.md), P1 (P1_GUIDE_AND_HELP.md) and chapter 1 of P2
+(P2A_CRUDE_CHAPTER.md). Open in P2: chapter 2, the still. Nothing has been checked in the game yet.
 
 P0 to P2 are the first batch (D7): they prove every layer on the first equipment before content is written in bulk.
 P3 touches no file of P0 to P2 but the lang file and can run beside them.
