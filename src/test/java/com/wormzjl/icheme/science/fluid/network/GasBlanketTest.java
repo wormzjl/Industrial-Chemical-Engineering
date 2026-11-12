@@ -89,6 +89,47 @@ class GasBlanketTest extends PortFixture {
         assertTrue(range[1]<=GasBlanket.ventPressure(SET)*1.001,"and never passes the vent pressure: "+range[1]);
     }
 
+    /**
+     * The merge of main 0.27.1 into batch 2026-11-11-aqueous-solvents (MAIN_MERGE_PLAN section 5): a drum of water under
+     * nitrogen at 20 C on the three-slot state. Its gas holds water at its vapour pressure (2.34 kPa at 293.15 K), its water
+     * dissolves nitrogen by the Henry pair (about 1.2e-5 mole fraction per bar), and drained, the pad admits the gas for the
+     * room the liquid vacates: the nitrogen it brings, at the drum's gas molar volume, is the volume of water drawn times
+     * the gas's nitrogen share (the rest of the room fills with the water that evaporates into it).
+     */
+    @Test void aBlanketedWaterDrumAtTwentyCAdmitsTheVolumeItsWaterLeaves() {
+        double t=293.15;double[] n=new double[mw.length];
+        n[water]=.8*998/mw[water];n[nitrogen]=SET*.2/(FluidThermodynamics.R*t);
+        var unit=model.flashTP(t,SET,n,NOOP);for(int c=0;c<n.length;c++)n[c]/=unit.volume();
+        var start=drum(model.flashTP(t,SET,n,NOOP));var s=start.state();
+        double[] gas=FluidThermodynamics.phaseMoles(s,FluidThermodynamics.GAS),liquid=PhaseLayout.totalAmounts(s);
+        double gasMoles=total(gas),steam=gas[water]/gasMoles*s.pressure();
+        for(int c=0;c<n.length;c++)liquid[c]-=gas[c];
+        double dissolved=liquid[nitrogen]/total(liquid),perBar=dissolved/(gas[nitrogen]/gasMoles*s.pressure()/1e5);
+        System.out.println("BLANKET_RUN 20 C: water in the gas "+steam+" Pa, dissolved nitrogen "+dissolved+" ("+perBar+" per bar)");
+        assertEquals(2339,steam,.03*2339,"the gas holds water at its vapour pressure");
+        assertTrue(perBar>.8e-5&&perBar<1.6e-5,"nitrogen dissolves by its Henry pair: "+perBar+" per bar");
+        // Slices 10 to 30 of the drain: past the first steps' sag, before the drum runs dry (0.02 m3/s from 0.8 m3).
+        var graph=new PassiveNetwork(List.of(start,supply(),exit()),List.of(pad(1),outlet(2)));
+        var solver=new PassiveIntervalSolver(model);double admitted=0,drawn=0,share=0,low=Double.POSITIVE_INFINITY,high=0;
+        for(int i=0;i<30;i++) {
+            var result=solver.solve(graph,1,PassiveIntervalSolver.Settings.defaults(),NOOP);
+            assertEquals(1,result.advancedSeconds(),1e-9,"slice "+i);
+            graph=result.graph();var e=graph.reservoirs().getFirst().state();
+            if(i<10)continue;
+            var g=FluidThermodynamics.phaseMoles(e,FluidThermodynamics.GAS);double v=e.vaporVolume()/total(g),y=g[nitrogen]/total(g);
+            for(var p:result.pipeTransfers()) {
+                if(p.pipeId()==1)admitted+=v*total(p.forward().componentMoles());
+                if(p.pipeId()==2){var f=p.forward().phaseVolumes();drawn+=f[0]+f[1];share+=y*(f[0]+f[1]);}
+            }
+            low=Math.min(low,e.pressure());high=Math.max(high,e.pressure());
+        }
+        System.out.println("BLANKET_RUN 20 C drain: admitted "+admitted+" m3 at the drum's gas, drawn "+drawn+" m3 (its nitrogen share "+share+"), P "+low+" to "+high+", level "+level(graph));
+        assertTrue(drawn>.2,"the water drains: "+drawn);
+        // The room is filled by the nitrogen admitted and by the water that evaporates into it to its vapour pressure: the
+        // pad admits the room's nitrogen share (1 - 2.39 kPa / 150 kPa).
+        assertEquals(share,admitted,.01*share,"the pad admits the volume drawn, less the water that evaporates into it");
+    }
+
     /** A 4 bar water line of 2 m and 0.05 m into node 0. */
     private static PassiveNetwork.Pipe feed(int from) {
         return new PassiveNetwork.Pipe(3,from,0,List.of(new PipeResistance.Geometry(2,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0)),new FlowControl.Passive(),0,null,PhasePort.BULK,PhasePort.BULK);
