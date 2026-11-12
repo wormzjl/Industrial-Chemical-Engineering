@@ -6,6 +6,7 @@ import com.wormzjl.icheme.runtime.fluid.Converters;
 import com.wormzjl.icheme.runtime.instrument.InstrumentHosts;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.ShapeRasterizer;
+import com.wormzjl.icheme.science.fluid.conversion.ConversionLaws;
 import com.wormzjl.icheme.science.fluid.conversion.ConversionRules;
 import com.wormzjl.icheme.science.fluid.conversion.ConversionRuntime;
 import com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog;
@@ -56,6 +57,7 @@ public final class ConverterGameTests {
         long[] id = {0};
         // Vessel water (kg) after the forward run; the converter's numbers at its end.
         double[] water = {-1, -1, -1};
+        double[] density = {Double.NaN};
         long[] seen = {-1};
         String[] failure = {null};
         Runnable cleanup = () -> {
@@ -82,6 +84,7 @@ public final class ConverterGameTests {
                     })
                     .thenExecute(guarded(cleanup, () -> {
                         id[0] = world.at(plant.position(node)).orElseThrow().device().id();
+                        density[0] = ConversionLaws.perLitre(rule.toIChemE(), world.model()).density();
                         var u = world.converters().unit(id[0]);
                         var spec = world.registrations().get(id[0]).spec();
                         check(spec.open() && !u.closed(), "the liquid converter registers open");
@@ -96,47 +99,46 @@ public final class ConverterGameTests {
                         // The gauge's place (plan D11).
                         var host = InstrumentHosts.at(level, converter.controller());
                         check(host != null && InstrumentHosts.LevelGauge.of(host) != null, "the liquid converter takes the level gauge");
-                        world.converters().settings(id[0], ConverterUnit.Mode.TO_ICHEME, u.maxRate(), u.deadband());
+                        world.converters().settings(id[0], new Converters.Settings(ConverterUnit.Mode.TO_ICHEME, u.maxRate(), u.deadband(), u.thresholds()));
                     }))
                     .thenWaitUntil(() -> {
                         var u = world.converters().unit(id[0]);
-                        var t = world.converters().totals(id[0]);
                         var view = world.view(id[0]);
                         // Done: the Forge tank and its account empty, and the vessel shows it on two publications.
-                        boolean done = u.stored() == 0 && u.account() < 1 && t.litresIn() > FILL - 1;
+                        boolean done = u.stored() == 0 && u.account() < 1;
                         if (done && view.committedTick() != seen[0]) {seen[0] = view.committedTick();water[1] = water[0];water[0] = water(plant, view);}
-                        helper.assertTrue(done && water[1] >= 0 && Math.abs(water[0] - water[1]) < 1e-9 * water[0], "waiting for the forward conversion: " + u + " " + t);
+                        helper.assertTrue(done && water[1] >= 0 && Math.abs(water[0] - water[1]) < 1e-9 * water[0], "waiting for the forward conversion: " + u);
                     })
                     .thenExecute(() -> {
                         var u = world.converters().unit(id[0]);
-                        var t = world.converters().totals(id[0]);
                         water[2] = water[0];
-                        IChemE.LOGGER.info("converter_gametest forward litres_in={} account={} mass_in={} kg vessel_water={} kg status={}", t.litresIn(), u.account(), t.massIn(), water[0], world.converters().status(id[0]));
-                        if (Math.abs(t.litresIn() + u.account() - FILL) > 1e-6) failure[0] = "forward: " + t.litresIn() + " L booked and " + u.account() + " L in the account of " + FILL + " mB";
-                        else if (Math.abs(water[0] - t.massIn()) > 1e-3 * t.massIn()) failure[0] = "forward: the vessel holds " + water[0] + " kg of water, the converter booked " + t.massIn();
-                        world.converters().settings(id[0], ConverterUnit.Mode.TO_FORGE, u.maxRate(), u.deadband());
+                        // The litres that left the Forge side, at the rule's density (the network's liquid water at its T and P).
+                        double litresIn = FILL - u.stored() - u.account(), massIn = litresIn * density[0] / 1000;
+                        IChemE.LOGGER.info("converter_gametest forward litres_in={} account={} mass_in={} kg vessel_water={} kg status={}", litresIn, u.account(), massIn, water[0], world.converters().status(id[0]));
+                        if (Math.abs(water[0] - massIn) > 1e-3 * massIn) failure[0] = "forward: the vessel holds " + water[0] + " kg of water, " + litresIn + " L converted give " + massIn;
+                        world.converters().settings(id[0], new Converters.Settings(ConverterUnit.Mode.TO_FORGE, u.maxRate(), u.deadband(), u.thresholds()));
                         seen[0] = -1;water[0] = water[1] = -1;
                     })
                     .thenWaitUntil(() -> {
-                        var t = world.converters().totals(id[0]);
+                        var u = world.converters().unit(id[0]);
                         var status = world.converters().status(id[0]);
                         var view = world.view(id[0]);
-                        boolean done = t.litresOut() > 500 && status != Converters.Status.CONVERTING;
+                        boolean done = u.stored() + u.remainder() > 500 && status != Converters.Status.CONVERTING;
                         if (done && view.committedTick() != seen[0]) {seen[0] = view.committedTick();water[1] = water[0];water[0] = water(plant, view);}
-                        helper.assertTrue(done && water[1] >= 0 && Math.abs(water[0] - water[1]) < 1e-9 * water[0], "waiting for the reverse conversion: " + world.converters().unit(id[0]) + " " + t + " " + status);
+                        helper.assertTrue(done && water[1] >= 0 && Math.abs(water[0] - water[1]) < 1e-9 * water[0], "waiting for the reverse conversion: " + u + " " + status);
                     })
                     .thenExecute(() -> {
                         var u = world.converters().unit(id[0]);
-                        var t = world.converters().totals(id[0]);
                         long stored = u.stored();
+                        // The Forge side was empty before the reverse run: what it holds now is what was converted.
+                        double litresOut = stored + u.remainder(), massOut = litresOut * density[0] / 1000;
                         var drained = handler(level, portCell, face).drain(Integer.MAX_VALUE, IFluidHandler.FluidAction.EXECUTE);
                         var after = world.converters().unit(id[0]);
                         double fell = water[2] - water[0];
                         IChemE.LOGGER.info("converter_gametest reverse litres_out={} mass_out={} kg drained={} mB remainder={} vessel_water={} kg fell={} kg status={}",
-                                t.litresOut(), t.massOut(), drained.getAmount(), u.remainder(), water[0], fell, world.converters().status(id[0]));
+                                litresOut, massOut, drained.getAmount(), u.remainder(), water[0], fell, world.converters().status(id[0]));
                         if (failure[0] == null && (drained.getFluid() != Fluids.WATER || drained.getAmount() != stored || after.stored() != 0)) failure[0] = "reverse: drained " + drained.getAmount() + " mB of " + stored;
-                        else if (failure[0] == null && Math.abs(t.litresOut() - stored - u.remainder()) > 1e-6) failure[0] = "reverse: " + t.litresOut() + " L booked, " + stored + " mB and " + u.remainder() + " L remainder";
-                        else if (failure[0] == null && Math.abs(fell - t.massOut()) > 1e-3 * t.massOut()) failure[0] = "reverse: the vessel's water fell " + fell + " kg, the converter booked " + t.massOut();
+                        else if (failure[0] == null && Math.abs(fell - massOut) > 1e-3 * massOut) failure[0] = "reverse: the vessel's water fell " + fell + " kg, " + litresOut + " L converted give " + massOut;
                         cleanup.run();
                     })
                     .thenWaitUntil(() -> helper.assertTrue(plant.removed() && world.converters().unit(id[0]) == null, "waiting for the plant's removal"))

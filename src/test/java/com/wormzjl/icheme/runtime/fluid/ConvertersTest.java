@@ -100,46 +100,46 @@ class ConvertersTest {
         return new Rig(world,converters,counting,vessel);
     }
 
+    /** Converter {@code id}'s mode, rate (L per process second) and deadband, its thresholds kept, applied at once. */
+    static void set(Converters c,long id,ConverterUnit.Mode mode,double rate,double deadband){c.settings(id,new Converters.Settings(mode,rate,deadband,c.unit(id).thresholds()));}
+
     @Test void whatCrossedThePortsEqualsTheForgeVolumeChangeAndTheBookingsEachWay() throws IOException {
         var rig=rig(2000);var world=rig.world;var c=rig.converters;long id=rig.vessel;
         assertEquals(1500,rig.tank().fill(WATER,1500,false));
         assertEquals(0,rig.tank().fill("minecraft:lava",10,false),"a tank holds one fluid");
-        c.settings(id,ConverterUnit.Mode.TO_ICHEME,.8,ConverterUnit.DEFAULT_DEADBAND);
+        set(c,id,ConverterUnit.Mode.TO_ICHEME,.8,ConverterUnit.DEFAULT_DEADBAND);
         rig.slices(100,false);
         world.assertKeptUp("forward");
-        var t=c.totals(id);var u=rig.unit();
-        // The bookings and the converter's totals agree; the Forge tank lost exactly the litres the rule's density gives.
+        var u=rig.unit();
+        // The Forge tank lost exactly the litres the rule's density gives to the mass the engine booked at the fill port.
         var per=ConversionLaws.perLitre(rules().rule("test:water").toIChemE(),world.coordinator.model(rig.island()));
-        assertEquals(rig.counting.fillMass,t.massIn(),1e-9*t.massIn());
-        assertEquals(rig.counting.fillEnergy,t.energyIn(),1e-6*Math.abs(t.energyIn())+1e-6);
-        assertEquals(ConversionLaws.litres(t.massIn(),per.density()),t.litresIn(),1e-9*t.litresIn());
-        assertEquals(1500,u.stored()+u.account()+t.litresIn(),1e-6,"the Forge side: stored "+u.stored()+", account "+u.account()+", converted "+t.litresIn());
-        assertTrue(t.litresIn()>50,"100 slices at 0.8 L/s: "+t.litresIn()+" L");
+        double litresIn=1500-u.stored()-u.account();
+        assertEquals(ConversionLaws.litres(rig.counting.fillMass,per.density()),litresIn,1e-6,"the Forge side: stored "+u.stored()+", account "+u.account());
+        assertTrue(litresIn>50,"100 slices at 0.8 L/s: "+litresIn+" L");
         // What came in is in the open tank (a little evaporates to the atmosphere).
-        assertEquals(t.massIn(),rig.water(),.01*t.massIn());
-        System.out.println("CONVERTERS forward slices="+rig.counting.fillSlices+" kg="+t.massIn()+" J="+t.energyIn()+" L="+t.litresIn()+" rho="+per.density()+" stored="+u.stored()+" account="+u.account()+" vessel_kg="+rig.water());
+        assertEquals(rig.counting.fillMass,rig.water(),.01*rig.counting.fillMass);
+        System.out.println("CONVERTERS forward slices="+rig.counting.fillSlices+" kg="+rig.counting.fillMass+" J="+rig.counting.fillEnergy+" L="+litresIn+" rho="+per.density()+" stored="+u.stored()+" account="+u.account()+" vessel_kg="+rig.water());
 
         // Reverse: the tank's water back into the Forge tank.
         long before=rig.unit().stored();double remainderBefore=rig.unit().remainder(),accountBefore=rig.unit().account();
-        c.settings(id,ConverterUnit.Mode.TO_FORGE,.4,ConverterUnit.DEFAULT_DEADBAND);
+        set(c,id,ConverterUnit.Mode.TO_FORGE,.4,ConverterUnit.DEFAULT_DEADBAND);
         rig.slices(100,true);
         world.assertKeptUp("reverse");
-        t=c.totals(id);u=rig.unit();
-        assertEquals(rig.counting.drainMass,t.massOut(),1e-9*t.massOut());
-        assertEquals(rig.counting.drainEnergy,t.energyOut(),1e-6*Math.abs(t.energyOut())+1e-6);
+        u=rig.unit();
         // The remainder never loses volume: the Forge tank gained the booked litres, whole mB plus the remainder.
-        assertEquals(t.litresOut(),(u.stored()-before)+(u.remainder()-remainderBefore)+(u.account()-accountBefore),1e-6);
+        double litresOut=(u.stored()-before)+(u.remainder()-remainderBefore)+(u.account()-accountBefore);
+        assertTrue(litresOut>20,"100 slices at 0.4 L/s: "+litresOut+" L");
         assertTrue(u.remainder()<1,"a remainder below 1 mB: "+u.remainder());
         assertEquals(WATER,u.fluid());
-        // V = m / rho at the drawn water's density.
-        assertEquals(t.massOut()/t.litresOut()*1000,per.density(),.01*per.density(),"the drawn water's density");
-        System.out.println("CONVERTERS reverse slices="+rig.counting.drainSlices+" kg="+t.massOut()+" J="+t.energyOut()+" L="+t.litresOut()+" stored="+u.stored()+" remainder="+u.remainder());
+        // V = m / rho at the drawn water's density: the mass the engine booked at the drain port over the litres the Forge side gained.
+        assertEquals(rig.counting.drainMass/litresOut*1000,per.density(),.01*per.density(),"the drawn water's density");
+        System.out.println("CONVERTERS reverse slices="+rig.counting.drainSlices+" kg="+rig.counting.drainMass+" J="+rig.counting.drainEnergy+" L="+litresOut+" stored="+u.stored()+" remainder="+u.remainder());
     }
 
     @Test void aFullDestinationOrAnEmptySourceMovesNothingAndHoldsNothing() throws IOException {
         var rig=rig(300);var world=rig.world;var c=rig.converters;long id=rig.vessel;
         // Forward from an empty Forge tank.
-        c.settings(id,ConverterUnit.Mode.TO_ICHEME,5,ConverterUnit.DEFAULT_DEADBAND);
+        set(c,id,ConverterUnit.Mode.TO_ICHEME,5,ConverterUnit.DEFAULT_DEADBAND);
         world.runTo(world.ledger.onlineTick()+400);
         assertEquals(0,rig.counting.fillSlices);assertEquals(Converters.Status.SOURCE_EMPTY,c.status(id));
         // Fill 300 mB; forward until the Forge tank is empty: then it stops.
@@ -152,7 +152,7 @@ class ConvertersTest {
         assertEquals(Converters.Status.SOURCE_EMPTY,c.status(id));
         // Reverse into a Forge tank already full of water.
         rig.tank().fill(WATER,300,false);assertEquals(300,rig.unit().stored());
-        c.settings(id,ConverterUnit.Mode.TO_FORGE,5,ConverterUnit.DEFAULT_DEADBAND);
+        set(c,id,ConverterUnit.Mode.TO_FORGE,5,ConverterUnit.DEFAULT_DEADBAND);
         world.runTo(world.ledger.onlineTick()+400);
         assertEquals(0,rig.counting.drainSlices,"a full destination gives no flow");
         assertEquals(Converters.Status.DESTINATION_FULL,c.status(id));
@@ -163,8 +163,8 @@ class ConvertersTest {
     @Test void aSupersededOrLapsedReservationIsReleased() throws IOException {
         var rig=rig(2000);var world=rig.world;var c=rig.converters;long id=rig.vessel;
         rig.tank().fill(WATER,1000,false);
-        c.settings(id,ConverterUnit.Mode.TO_ICHEME,2,ConverterUnit.DEFAULT_DEADBAND);rig.slices(20,false);
-        c.settings(id,ConverterUnit.Mode.TO_FORGE,4,ConverterUnit.DEFAULT_DEADBAND);
+        set(c,id,ConverterUnit.Mode.TO_ICHEME,2,ConverterUnit.DEFAULT_DEADBAND);rig.slices(20,false);
+        set(c,id,ConverterUnit.Mode.TO_FORGE,4,ConverterUnit.DEFAULT_DEADBAND);
         // Plans outside the engine, as a slice dispatched and never booked (a rejected job, a held island): the second
         // plan supersedes the first's reservation, not adds to it.
         long island=rig.island();var graph=world.coordinator.observe(island).graph();long now=world.ledger.onlineTick();
@@ -186,15 +186,16 @@ class ConvertersTest {
     @Test void balanceModeStopsInsideItsDeadband() throws IOException {
         var rig=rig(1000);var world=rig.world;var c=rig.converters;long id=rig.vessel;
         rig.tank().fill(WATER,600,false);
-        c.settings(id,ConverterUnit.Mode.BALANCE,5,.05);
+        set(c,id,ConverterUnit.Mode.BALANCE,5,.05);
         long limit=world.ledger.onlineTick()+40000;
         while(c.status(id)!=Converters.Status.BALANCED&&world.ledger.onlineTick()<limit)world.tick();
         assertEquals(Converters.Status.BALANCED,c.status(id));
         var n=rig.node();double vessel=com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.liquidStreamVolume(n.state())/n.inventory().volume();
         assertTrue(Math.abs(vessel-rig.unit().forgeFill())<=.05+.01,"balanced: vessel "+vessel+", Forge "+rig.unit().forgeFill());
-        var t=c.totals(id);world.runTo(world.ledger.onlineTick()+600);
-        assertEquals(t.litresIn(),c.totals(id).litresIn(),1e-12,"inside the deadband nothing moves");
-        assertEquals(t.litresOut(),c.totals(id).litresOut(),1e-12);
+        double in=rig.counting.fillMass,out=rig.counting.drainMass;var held=rig.unit();world.runTo(world.ledger.onlineTick()+600);
+        assertEquals(in,rig.counting.fillMass,1e-12,"inside the deadband nothing moves");
+        assertEquals(out,rig.counting.drainMass,1e-12);
+        assertEquals(held.stored(),rig.unit().stored());
         world.assertKeptUp("balance");
     }
 
@@ -237,8 +238,8 @@ class ConvertersTest {
         assertEquals(Converters.Direction.TO_ICHEME,c.direction(id));
         var rate=c.rate(id);
         assertTrue(rate.litres()>0&&rate.litres()<=.8+1e-9&&rate.mass()>0,"booked to IChemE inside the set rate: "+rate);
-        // The old four-value call keeps the thresholds.
-        c.settings(id,ConverterUnit.Mode.OFF,.8,.05);
+        // A mode change from the page's settings keeps the thresholds.
+        set(c,id,ConverterUnit.Mode.OFF,.8,.05);
         assertArrayEquals(new double[]{.9,.1,.7,Double.NaN},rig.unit().thresholds(),0);
         assertEquals(Converters.Direction.NONE,c.direction(id),"off converts in no direction");
     }

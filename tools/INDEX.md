@@ -9,6 +9,7 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 | Folder | Purpose | Batch | Status |
 |---|---|---|---|
 | [psv-flare/](psv-flare/README.md) | The PSV-to-flare GameTest alone on the review server | `2026-11-11-gas-blanketing` | In use since 2026-11-11 |
+| [conversion-rules/](conversion-rules/README.md) | Generator of the bundled fluid conversion rules | `2026-11-12-fluid-conversion` | In use since 2026-11-12 |
 | [converter-gametest/](converter-gametest/README.md) | The fluid converter's GameTests alone on the review server | `2026-11-12-fluid-conversion` | In use since 2026-11-12 |
 | [drum-operation-holds/](drum-operation-holds/README.md) | Headless gas-vent drum rig (defect 1) | `2026-11-11-drum-operation-holds` | In use since 2026-11-11 |
 | [minecraft-time-delta/](minecraft-time-delta/README.md) | Time-scale probe patch, hold-fuzz runner on the built time factor (`factor.sh`), headless 1 h worlds at 4 and 72, the drum level loop at another factor, single-seed hold study probe, run summaries | `2026-11-11-minecraft-time-delta`, `2026-11-11-drum-operation-holds`, `2026-11-11-gas-blanketing`, `2026-11-11-valve-followups` | In progress since 2026-11-11 |

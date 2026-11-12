@@ -50,11 +50,6 @@ public final class Converters implements IslandCoordinator.Ports {
      */
     static final double HEEL=.01;
 
-    /** What crossed a converter's ports, since the engine started (state): kg, J and Forge litres each way. */
-    public record Totals(double massOut,double energyOut,double litresOut,double massIn,double energyIn,double litresIn) {
-        public static final Totals NONE=new Totals(0,0,0,0,0,0);
-        Totals plus(Totals o){return new Totals(massOut+o.massOut,energyOut+o.energyOut,litresOut+o.litresOut,massIn+o.massIn,energyIn+o.energyIn,litresIn+o.litresIn);}
-    }
     /** The Forge-facing tank of a converter (W3 exposes it as the fluid handler): whole mB only, no process calculation. */
     public interface Tank {
         long capacity();
@@ -84,7 +79,6 @@ public final class Converters implements IslandCoordinator.Ports {
     private final Map<Long,Planned> planned=new HashMap<>();
     private final Map<Long,String> lastRule=new HashMap<>();
     private final Map<Long,Status> status=new HashMap<>();
-    private final Map<Long,Totals> totals=new HashMap<>();
     private final Map<Long,Direction> direction=new HashMap<>();
     /** The rule each converter's last plan read (state, its page): its id, and a reverse plan's drawn phase. */
     private final Map<Long,String> matched=new HashMap<>();
@@ -113,7 +107,6 @@ public final class Converters implements IslandCoordinator.Ports {
     }
     /** The Forge fluids' tags, without '#' (W3: the fluid registry's), for tag rules. */
     public void tags(Function<String,Set<String>> value){tags=Objects.requireNonNull(value);}
-    public void rules(Supplier<ConversionRules> value){rules=Objects.requireNonNull(value);perLitre.clear();}
     private void index(ConverterUnit u){if(u.drain()!=0)byPort.put(u.drain(),u.id());if(u.fill()!=0)byPort.put(u.fill(),u.id());}
 
     // ---------------- registration and settings (W3 calls these from the equipment structure) ----------------
@@ -123,7 +116,7 @@ public final class Converters implements IslandCoordinator.Ports {
     /** Removes converter {@code id}; its Forge tank leaves with the block (nothing of the fluid world is in it). */
     public ConverterUnit remove(long id) {
         var u=topology.removeConverter(id);if(u==null)return null;
-        byPort.values().removeIf(v->v==id);reserved.remove(id);planned.remove(id);lastRule.remove(id);status.remove(id);totals.remove(id);direction.remove(id);rate.remove(id);queued.remove(id);matched.remove(id);drawn.remove(id);return u;
+        byPort.values().removeIf(v->v==id);reserved.remove(id);planned.remove(id);lastRule.remove(id);status.remove(id);direction.remove(id);rate.remove(id);queued.remove(id);matched.remove(id);drawn.remove(id);return u;
     }
     /**
      * A converter's settings as a queued engine event carries them (W4, plan 3.4): its mode, its rate (L per process second),
@@ -168,13 +161,8 @@ public final class Converters implements IslandCoordinator.Ports {
     public void settings(long id,Settings s) {
         var u=topology.converter(id);if(u==null)return;topology.converter(u.withSettings(s.mode(),s.rate(),s.deadband()).withThresholds(s.thresholds()));moved.accept(id);
     }
-    /** Sets converter {@code id}'s mode, rate (L per process second) and deadband, keeping its thresholds. */
-    public void settings(long id,ConverterUnit.Mode mode,double rate,double deadband) {
-        var u=topology.converter(id);if(u!=null)settings(id,new Settings(mode,rate,deadband,u.thresholds()));
-    }
     public ConverterUnit unit(long id){return topology.converter(id);}
     public Status status(long id){var u=topology.converter(id);if(u==null)return null;return u.mode()==ConverterUnit.Mode.OFF?Status.OFF:status.getOrDefault(id,Status.IDLE);}
-    public Totals totals(long id){return totals.getOrDefault(id,Totals.NONE);}
     /** The direction converter {@code id}'s last plan converted in (state): NONE while it does not convert. */
     public Direction direction(long id){var u=topology.converter(id);return u==null||u.mode()==ConverterUnit.Mode.OFF?Direction.NONE:direction.getOrDefault(id,Direction.NONE);}
     /** What converter {@code id} booked over its island's last span (state), per process second, positive to IChemE. */
@@ -426,13 +414,13 @@ public final class Converters implements IslandCoordinator.Ports {
             var u=topology.converter(id);if(u==null)continue;
             if(weights==null)weights=models.apply(island).molecularWeights();
             var n=b.moles();double mass=0;for(int i=0;i<n.length;i++)mass+=n[i]*weights[i];
-            double litres=b.nodeId()==u.drain()?drained(u,-mass,-b.totalEnergyJoule()):givenIn(u,mass,b.totalEnergyJoule());
+            double litres=b.nodeId()==u.drain()?drained(u,-mass):givenIn(u,mass);
             if(span!=null)span.merge(id,b.nodeId()==u.drain()?new Rate(mass,-litres):new Rate(mass,litres),Rate::plus);
         }
         if(span!=null&&seconds>0)for(var e:span.entrySet())rate.put(e.getKey(),new Rate(e.getValue().mass()/seconds,e.getValue().litres()/seconds));
     }
     /** Reverse: {@code mass} kg left through the drain port; its litres join the remainder, whole mB go into the tank. */
-    private double drained(ConverterUnit u,double mass,double energy) {
+    private double drained(ConverterUnit u,double mass) {
         reserved.remove(u.id());
         if(!(mass>0))return 0;
         var p=planned.get(u.id());
@@ -441,12 +429,11 @@ public final class Converters implements IslandCoordinator.Ports {
         var fluid=u.fluid().isEmpty()?p.fluid():u.fluid();long stored=u.stored();
         if(fluid.equals(p.fluid())){long whole=Math.min((long)Math.floor(remainder),u.capacity()-stored);if(whole>0){stored+=whole;remainder-=whole;}}
         topology.converter(u.withTank(fluid,stored,remainder));
-        totals.merge(u.id(),new Totals(mass,energy,litres,0,0,0),Totals::plus);
         moved.accept(u.id());
         return litres;
     }
     /** Forward: {@code mass} kg came in through the fill port; its litres leave the account, the rest goes back in whole mB. */
-    private double givenIn(ConverterUnit u,double mass,double energy) {
+    private double givenIn(ConverterUnit u,double mass) {
         var p=planned.get(u.id());
         double litres=0;
         if(mass>0) {
@@ -466,7 +453,7 @@ public final class Converters implements IslandCoordinator.Ports {
         long back=Math.min((long)Math.floor(u.account()),u.capacity()-u.stored());
         if(back>0&&(u.fluid().isEmpty()||u.fluid().equals(fluid)))u=u.withTank(fluid,u.stored()+back,u.remainder()).withAccount(fluid,u.account()-back);
         topology.converter(u);
-        if(litres>0){totals.merge(u.id(),new Totals(0,0,0,mass,energy,litres),Totals::plus);moved.accept(u.id());}
+        if(litres>0)moved.accept(u.id());
         return litres;
     }
 }

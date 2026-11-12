@@ -19,3 +19,4 @@ Entry points:
 ## History
 
 - 2026-11-12: created (W3).
+- 2026-11-12, merge preparation: the GameTest reads what was converted from the Forge side and the rule's density, since `Converters.totals` left `src/main` (only tests read it).

@@ -1,6 +1,6 @@
 # Bundled fluid conversion rules (W6)
 
-The mod ships 26 rule files under `src/main/resources/data/icheme/icheme/fluid_conversion/<mod>/<fluid>.json` (rule id `icheme:<mod>/<fluid>`, revision `1`). The listener (`ConversionReloadListener`, folder `icheme/fluid_conversion`, read recursively) skips a rule whose fluid's mod is absent; that is not a refusal. `ConversionRuleTest.everyBundledRuleLoadsOnTheRealCatalog` loads all 26 on the bundled catalog (network package `icheme:refinery`) with no refusal. The generator is `tmp/fluid-conversion/scripts/rules.js` (local); the JSON files are the source of record.
+The mod ships 26 rule files under `src/main/resources/data/icheme/icheme/fluid_conversion/<mod>/<fluid>.json` (rule id `icheme:<mod>/<fluid>`, revision `1`). The listener (`ConversionReloadListener`, folder `icheme/fluid_conversion`, read recursively) skips a rule whose fluid's mod is absent; that is not a refusal. `ConversionRuleTest.everyBundledRuleLoadsOnTheRealCatalog` loads all 26 on the bundled catalog (network package `icheme:refinery`) with no refusal. The generator is [`tools/conversion-rules/rules.js`](../../tools/conversion-rules/README.md); the JSON files are the source of record.
 
 ## The windows
 
