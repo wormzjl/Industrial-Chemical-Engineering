@@ -5394,11 +5394,25 @@ public final class PassiveStepSolver {
          * block of each neighbour across an incident edge, and the hydraulic, actuator and filter-loading rows of those
          * edges; the flow, actuator and filter columns sweep the same way over their own edge). Every such row is produced
          * by the same {@link #nodeAccumulate}, {@link #edgeRows} and {@link #nodeRows} the whole-island residual uses, in the
-         * same accumulation order, so each entry is the double the coloured sweep computed. The cost this removes is the
-         * assembly: the coloured sweep paid a complete island residual for each of its 143 to 191 colour groups.
+         * same accumulation order. The cost this removes is the assembly: the coloured sweep paid a complete island residual
+         * for each of its 143 to 191 colour groups.
+         *
+         * <p>The phases of a perturbed node come from the node's phase tangents about its base point
+         * ({@link FluidThermodynamics#tangents}, one derivative evaluation per phase and node), not from the equation of
+         * state at each column (ANALYTIC_JACOBIAN_PLAN.md of batch 2026-11-11-aqueous-solvents): the rows are differenced
+         * as before, over states that are first order in the column. An entry is therefore the row's derivative without
+         * the phases' curvature inside the step, and differs from the coloured sweep's double near its sixth digit. A
+         * phase whose composition the column moves by more than {@link FluidThermodynamics#TANGENT_COMPOSITION_STEP}, and
+         * a phase without a tangent, is evaluated on the equation of state for that column.</p>
          */
         public int differentiateEntries(double[] x,double[] f,double differenceStep,int[] entryOffsets,int[] entryRows,
                                         double[] entries,Runnable checkpoint) {
+            return differentiateEntries(x,f,differenceStep,entryOffsets,entryRows,entries,checkpoint,true);
+        }
+        /** {@link #differentiateEntries} with every perturbed phase from the equation of state where {@code tangents} is
+         * false: the form before the tangents, which the equivalence test measures the entries against. */
+        int differentiateEntries(double[] x,double[] f,double differenceStep,int[] entryOffsets,int[] entryRows,
+                                 double[] entries,Runnable checkpoint,boolean tangents) {
             if(hasWeirs)return -1;
             if(sparsity==null)buildSparsity();
             FluidThermodynamics.State[] st,baseStates;Transport[] tr,baseTransport;FluidThermodynamics.Prepared[] pr,basePrepared;
@@ -5415,6 +5429,8 @@ public final class PassiveStepSolver {
             try {
                 for(int node=0;node<layout.length;node++) {
                     if(layout[node]==null)continue;
+                    // One derivative evaluation per phase of the node; every local column decodes through them.
+                    var nodeTangents=tangents?model.tangents(baseStates[node],basePrepared[node]):null;
                     for(int local=0;local<layout[node].size();local++) {
                         checkpoint.run();columns++;
                         int column=offsets[node]+local;
@@ -5422,7 +5438,9 @@ public final class PassiveStepSolver {
                         trial[column]+=step;
                         double temperature=layout[node].temperature(trial,offsets[node]);
                         var prepared=basePrepared[node]!=null&&basePrepared[node].temperature()==temperature?basePrepared[node]:model.prepare(temperature);
-                        var state=layout[node].decode(trial,offsets[node],prepared);
+                        long exactBefore=SolverDiagnostics.ENABLED&&tangents?SolverDiagnostics.jacobianExactPhases.sum():0;
+                        var state=layout[node].decode(trial,offsets[node],prepared,nodeTangents);
+                        if(SolverDiagnostics.ENABLED&&tangents&&SolverDiagnostics.jacobianExactPhases.sum()>exactBefore)SolverDiagnostics.jacobianExactColumns.increment();
                         st[node]=state;pr[node]=prepared;
                         tr[node]=transport(node,state,prepared);
                         // Seed every neighbour before recomputing any of them: parallel pipes reach

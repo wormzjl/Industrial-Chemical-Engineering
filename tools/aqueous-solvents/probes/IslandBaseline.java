@@ -101,7 +101,18 @@ public final class IslandBaseline {
                 intervals, accepted, rejected, sample.value("newtonIterations"), sample.value("newtonSolves"),
                 sample.value("stateCalls"), sample.value("flashCalls"), sample.value("residualEvaluations"),
                 kernel < 0 ? "n/a" : Long.toString(kernel));
+        System.out.printf(Locale.ROOT, "  jacobian: blockBuilds %d blockColumns %d blockFallbacks %d stateCallsInJacobian %d tangentsBuilt %s tangentPhases %s exactPhases %s%n",
+                sample.value("jacobianBlockBuilds"), sample.value("jacobianBlockColumns"), sample.value("jacobianBlockFallbacks"),
+                sample.value("stateCallsInJacobian"), optional(sample, "jacobianTangentsBuilt"), optional(sample, "jacobianTangentPhases"),
+                optional(sample, "jacobianExactPhases"));
         for (var r : graph.reservoirs()) System.out.println("  end node " + r.id() + ": " + phases(r.state()));
+        for (var r : graph.reservoirs()) System.out.printf(Locale.ROOT, "  end state %d: T %.12e P %.12e V %.12e H %.12e%n", r.id(),
+                r.state().temperature(), r.state().pressure(), r.state().volume(), r.state().enthalpy());
+    }
+
+    /** A counter a later form adds: its value, or n/a on a form without it. */
+    static String optional(SolverDiagnostics.Sample sample, String name) {
+        try { return Long.toString(sample.value(name)); } catch (RuntimeException absent) { return "n/a"; }
     }
 
     static void time(FluidThermodynamics model, PassiveNetwork start, String scenario, int intervals, double warm, double measure) {

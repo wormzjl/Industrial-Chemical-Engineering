@@ -732,6 +732,7 @@ public final class FluidThermodynamics {
             if(terms==null)terms=prepared==null?hydrocarbon.prepare(t):match(prepared,t).pengRobinson();
             tangents[slot]=hydrocarbon.tangent(t,p,state.amountsView(slot),slot==State.VAPOR?PengRobinsonKernel.Root.VAPOR:PengRobinsonKernel.Root.LIQUID,
                     terms,slot!=State.VAPOR&&gas);
+            if(tangents[slot]!=null)SolverDiagnostics.count(SolverDiagnostics.jacobianTangentsBuilt);
         }
         return tangents;
     }
@@ -747,7 +748,11 @@ public final class FluidThermodynamics {
     /** One slot's phase: its tangent's where the step is small for the phase, the equation of state's otherwise. */
     private HydrocarbonModel.Phase slotPhase(HydrocarbonModel.Tangent tangent,double t,double p,double[] amounts,PengRobinsonKernel.Root root,
                                              Prepared prepared,boolean vaporCoexists) {
-        if(tangent!=null&&tangent.compositionShift(amounts)<=TANGENT_COMPOSITION_STEP)return tangent.at(t,p,amounts);
+        if(tangent!=null&&tangent.compositionShift(amounts)<=TANGENT_COMPOSITION_STEP) {
+            SolverDiagnostics.count(SolverDiagnostics.jacobianTangentPhases);
+            return tangent.at(t,p,amounts);
+        }
+        SolverDiagnostics.count(tangent!=null?SolverDiagnostics.jacobianExactPhases:SolverDiagnostics.jacobianUntangentPhases);
         return hydrocarbon.phase(t,p,amounts,root,prepared==null?hydrocarbon.prepare(t):prepared.pengRobinson(),vaporCoexists);
     }
     private State state(double t,double p,double[] vapor,double[] liquid,double[] aqueous,
