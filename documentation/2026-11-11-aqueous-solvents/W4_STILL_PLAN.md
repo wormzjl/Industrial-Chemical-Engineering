@@ -284,3 +284,6 @@ Report `tmp/w4-still/reports/W4A_THIRD_FORM.md`; built, not committed yet.
      hot pot's vapour is mostly steam, the oil layer is under the reflux, tray 1 receives free water.
   3. The flash counts are accepted as measured.
 - Cost to record: one wet solve's time on the wet naphtha and the crude, and when the world submits one.
+- Owner, 2026-11-12: "Keep notice". Trays that would settle stay one liquid with the notice; their temperatures
+  read low there (about 1 K on the wet naphtha, 10 to 20 K under an entrainer top). No pot-still trigger on the
+  head's temperature.
