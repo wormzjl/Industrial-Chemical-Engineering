@@ -242,6 +242,16 @@ public final class CubicPhaseEvaluator {
             idealGibbs = new double[owner.names.size()];
             shareScratch = owner.waterShare == null ? null : owner.waterShare.newWorkspace();
         }
+
+        /**
+         * The compounds the owning flash's feed carries ({@link PengRobinsonKernel.Workspace#carry}), on both kernel
+         * workspaces: every value on them keeps its bits, and outside them the phase's {@code ln phi} and derivatives
+         * are the kernel's fill (zero). A new workspace, and so a direct call, carries the whole list.
+         */
+        public void carry(double[] feed) {
+            terms.carry(feed);
+            mixture.carry(feed);
+        }
     }
 
     public PhaseState evaluate(double temperature, double pressure, double[] amounts, Root preference,
@@ -275,7 +285,13 @@ public final class CubicPhaseEvaluator {
         double[] partialVolumes = values.partialMolarVolumesView();
         double[] dt = out.logFugacityTemperatureBuffer();
         double[] dp = out.logFugacityPressureBuffer();
+        double outside = PengRobinsonKernel.outsideSupportFill();
         for (int i = 0; i < n; i++) {
+            if (!w.terms.carries(i)) {
+                dt[i] = outside;
+                dp[i] = outside;
+                continue;
+            }
             dt[i] = mixtureDt[i] - pressure * translations[i] / (rt * temperature);
             dp[i] = partialVolumes[i] / rt - 1 / pressure;
             if (!Double.isFinite(dt[i]) || !Double.isFinite(dp[i])) {

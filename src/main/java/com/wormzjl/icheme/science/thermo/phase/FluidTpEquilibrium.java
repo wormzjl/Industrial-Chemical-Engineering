@@ -985,6 +985,10 @@ public final class FluidTpEquilibrium {
         }
         w.hydrocarbonTotal = hydrocarbons;
         w.total = hydrocarbons;
+        // The kernel carries the request's compounds at every entry: every phase and trial of this solve lives on them
+        // (a crystal's reduced feed only lowers their amounts).
+        w.mixture.carry(w.feed);
+        w.phases.carry(w.feed);
         return null;
     }
 

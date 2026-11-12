@@ -383,6 +383,8 @@ public final class PengRobinsonKernel {
      * did not carry fails loudly. Off by default; a test that turns it on turns it off again.
      */
     public static void fillOutsideSupportWithNaN(boolean on) { outsideSupportNaN = on; }
+    /** The value every output outside a workspace's support holds: zero, or NaN under {@link #fillOutsideSupportWithNaN}. */
+    public static double outsideSupportFill() { return outsideSupportNaN ? Double.NaN : 0.0; }
     private static boolean outsideSupportNaN;
     public Evaluation newEvaluation() { return new Evaluation(count); }
     /** A derivative output that carries {@code dh^R/dT} (and so forms the second temperature derivative it reads). */
@@ -1806,23 +1808,27 @@ public final class PengRobinsonKernel {
          * every output outside them is zero. Each output on the support keeps its bits against the whole list, since the
          * terms left out are exact zeros, summed in the same order. Set it at every entry from the feed, never from one
          * phase: a feed compound with no amount in a phase still needs its {@code ln phi} there. Unchanged support: O(n).
+         *
+         * @return whether the support changed
          */
-        public void carry(double[] feed) {
+        public boolean carry(double[] feed) {
             if (feed == null || feed.length != inSupport.length) throw new IllegalArgumentException("Support feed has invalid length");
             boolean changed = false;
             for (int i = 0; i < feed.length && !changed; i++) changed = (feed[i] != 0.0) != inSupport[i];
-            if (!changed) return;
+            if (!changed) return false;
             for (int i = 0; i < feed.length; i++) inSupport[i] = feed[i] != 0.0;
             filter();
+            return true;
         }
 
-        /** Carries the whole list (a new workspace's support). */
-        public void carryAll() {
+        /** Carries the whole list (a new workspace's support); returns whether the support changed. */
+        public boolean carryAll() {
             boolean changed = false;
             for (int i = 0; i < inSupport.length && !changed; i++) changed = !inSupport[i];
-            if (!changed) return;
+            if (!changed) return false;
             Arrays.fill(inSupport, true);
             filter();
+            return true;
         }
 
         /** Whether the support holds {@code component}. */
