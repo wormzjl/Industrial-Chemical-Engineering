@@ -44,6 +44,26 @@ public final class Datasheet {
     record Rule(String text, boolean pass) {
     }
 
+    /**
+     * A yellow row of a unit larger than its need (the catalogue's smallest size): a pump below 70 % of its best flow, an
+     * exchanger with more than twice the surface it needs. {@code factor} is the feed multiple at which that smallest size
+     * comes into its green range (constant temperatures, so flows and duties go with the feed).
+     */
+    record Oversize(String item, String limit, double value, double factor) {
+        static Oversize of(String item, JsonObject reading) {
+            String limit = reading.get("limit").getAsString();
+            double v = reading.get("value").getAsDouble();
+            if (limit.equals("PUMP_RATED") && v < reading.get("low").getAsDouble()) return new Oversize(item, limit, v, reading.get("low").getAsDouble() / v);
+            if (limit.equals("EXCHANGER_OVER_NEED")) return new Oversize(item, limit, v, (1 + v / 100) / (1 + reading.get("high").getAsDouble() / 100));
+            return null;
+        }
+
+        String text() {
+            return limit.equals("PUMP_RATED") ? String.format(Locale.ROOT, "%s at %.0f %% of best flow (x%.1f)", item, value, factor)
+                    : String.format(Locale.ROOT, "%s %.1f x the surface needed (x%.1f)", item, 1 + value / 100, factor);
+        }
+    }
+
     /** One candidate's numbers, read once. */
     static final class Sheet {
         final String id;
@@ -55,6 +75,7 @@ public final class Datasheet {
         final List<Item> items = new ArrayList<>();
         final List<Rule> rules = new ArrayList<>();
         final List<String> notGreen = new ArrayList<>();
+        final List<Oversize> oversize = new ArrayList<>();
         final Map<String, Double> gaps = new LinkedHashMap<>();
         /** Lines of tmp/tutorial-p4/findings-<id>.txt: what the analysis found, drawn under the rules. */
         final List<String> findings = new ArrayList<>();
@@ -69,7 +90,17 @@ public final class Datasheet {
                 for (var e : units.entrySet()) {
                     var u = e.getValue().getAsJsonObject();
                     String lamp = u.get("lamp").getAsString();
-                    if (!lamp.equals("GREEN") && !lamp.equals("NONE")) notGreen.add(e.getKey() + " " + lamp + " " + worst(u));
+                    if (!lamp.equals("GREEN") && !lamp.equals("NONE")) {
+                        var real = new ArrayList<String>();
+                        for (var x : u.getAsJsonArray("readings")) {
+                            var o = x.getAsJsonObject();
+                            if (o.get("lamp").getAsString().equals("GREEN")) continue;
+                            var big = Oversize.of(e.getKey(), o);
+                            if (big != null) oversize.add(big);
+                            else real.add(o.get("limit").getAsString() + String.format(Locale.ROOT, " load %.2f", o.get("load").getAsDouble()));
+                        }
+                        if (!real.isEmpty()) notGreen.add(e.getKey() + " " + lamp + " " + String.join(", ", real));
+                    }
                     if (!u.has("blocks_x")) continue;
                     var item = new Item(e.getKey(), u.get("kind").getAsString(), u.get("blocks_x").getAsInt(), u.get("blocks_z").getAsInt(), u.get("blocks_y").getAsInt(),
                             Math.max(1, u.get("count").getAsInt()), lamp);
@@ -144,7 +175,7 @@ public final class Datasheet {
 
     public static void main(String[] args) throws IOException {
         var root = Path.of(args.length > 0 ? args[0] : ".");
-        var ids = System.getProperty("candidates", "A,B,C1").split(",");
+        var ids = System.getProperty("candidates", "A,B,C").split(",");
         var sheets = new ArrayList<Sheet>();
         for (var id : ids) {
             var file = root.resolve(IN).resolve(id.trim() + "-result.json");
@@ -197,7 +228,12 @@ public final class Datasheet {
         }
         double sized = s.r.has("sized_diameter") ? s.r.get("sized_diameter").getAsDouble() : Double.NaN;
         double given = s.template().get("diameter_m").getAsDouble();
-        s.rules.add(new Rule(s.notGreen.isEmpty() ? "Every sizing lamp green with the 20 % spare (Size all)" : "Lamps not green after Size all: " + String.join("; ", s.notGreen), s.notGreen.isEmpty()));
+        s.rules.add(new Rule(s.notGreen.isEmpty() ? "Real fails after Size all (short of a limit or its 20 % spare): none" : "Real fails after Size all (short of a limit or its 20 % spare): " + String.join("; ", s.notGreen), s.notGreen.isEmpty()));
+        if (!s.oversize.isEmpty()) {
+            double most = s.oversize.stream().mapToDouble(Oversize::factor).max().orElse(1);
+            s.rules.add(new Rule("Larger than needed (yellow, the catalogue's smallest size; x feed to green): " + String.join("; ", s.oversize.stream().map(Oversize::text).toList())
+                    + String.format(Locale.ROOT, ". All green from about %.0f kmol/h, a %.1f m tower", 39.96 * most, Math.ceil(2 * Math.sqrt(most)) / 2), true));
+        }
         s.rules.add(new Rule(String.format(Locale.ROOT, "Column diameter: candidate %.1f m, Size all %.1f m", given, sized), sized <= given + 1e-9));
         boolean apart = true;
         var text = new StringBuilder("Products apart: ");
@@ -210,7 +246,7 @@ public final class Datasheet {
         }
         s.rules.add(new Rule(text.toString(), apart));
         s.rules.add(new Rule(s.packing.fits ? "Fits a 16 x 16 block plot with one block between units" : "Does not fit 16 x 16: " + String.join(", ", s.packing.left), s.packing.fits));
-        s.rules.add(new Rule("World supplies: steam from a fired heater on water, fuel from the off-gas, cooling water, FE for the pumps", true));
+        s.rules.add(new Rule(supplies(s), true));
         if (s.id.equals("A") && ref8 != null) {
             double worst = 0;
             int at = -1;
@@ -466,8 +502,10 @@ public final class Datasheet {
             return;
         }
         w.head("Products (hydrocarbon; boiling points by mass)");
-        int[] at = {0, 120, 240, 360, 470, 580, 700, 820, 960};
-        w.row(MUTED, at, "product", "kmol/h", "kg/h", "m3/h", "mass %", "5 % C", "50 % C", "95 % C", "gap to next");
+        int[] at = {0, 120, 230, 330, 430, 530, 650, 750, 850, 960};
+        w.row(MUTED, at, "product", "kmol/h", "kg/h", "m3/h", "mass %", "barrel %", "5 % C", "50 % C", "95 % C", "gap to next");
+        double[] barrel = barrel();
+        boolean ago = s.r.getAsJsonArray("products").asList().stream().anyMatch(e -> e.getAsJsonObject().get("name").getAsString().equals("AGO") && !e.getAsJsonObject().has("missing"));
         var products = new ArrayList<JsonObject>();
         for (var e : s.r.getAsJsonArray("products")) if (!e.getAsJsonObject().has("missing")) products.add(e.getAsJsonObject());
         for (int i = 0; i < products.size(); i++) {
@@ -479,8 +517,11 @@ public final class Datasheet {
                 if (v != null) gap = String.format(Locale.ROOT, "%+.0f K", v);
             }
             w.row(p.has("m3_h") || name.equals("OFFGAS") ? INK : YELLOW, at, label(name), fmt(p.get("kmol_h").getAsDouble(), 2), fmt(p.get("kg_h").getAsDouble(), 0),
-                    p.has("m3_h") ? fmt(p.get("m3_h").getAsDouble(), 2) : "gas", fmt(100 * p.get("share").getAsDouble(), 1), c(p, "t5"), c(p, "t50"), c(p, "t95"), gap);
+                    p.has("m3_h") ? fmt(p.get("m3_h").getAsDouble(), 2) : "gas", fmt(100 * p.get("share").getAsDouble(), 1), fmt(100 * target(name, barrel, ago), 0), c(p, "t5"), c(p, "t50"), c(p, "t95"), gap);
         }
+        double overhead = 0;
+        for (var p : products) if (p.get("name").getAsString().equals("OFFGAS") || p.get("name").getAsString().equals("NAPHTHA")) overhead += p.get("share").getAsDouble();
+        w.line(INK, String.format(Locale.ROOT, "Overhead (off-gas and naphtha) %.1f %% against the barrel's gas and naphtha %.0f %%. %s", 100 * overhead, 100 * (barrel[0] + barrel[1]), naphtha(products)));
         w.head("Utilities");
         var col = s.r.getAsJsonObject("column_readings");
         var units = s.r.getAsJsonObject("units");
@@ -493,8 +534,9 @@ public final class Datasheet {
         var steam = t.getAsJsonArray("steam").get(0).getAsJsonObject();
         double steamKg = steam.get("flow_kmol_h").getAsDouble() * 18.015;
         double bottoms = bottomsKg(s);
-        w.line(INK, String.format(Locale.ROOT, "Reflux ratio %.2f; condenser %.3f MW; fired heater %.3f MW; pumparounds %s", t.get("reflux_ratio").getAsDouble(),
-                col.get("condenser").getAsDouble() / 1e6, heater / 1e6, String.join(", ", pas)));
+        w.line(INK, String.format(Locale.ROOT, "Reflux ratio %.2f; condenser %.3f MW; fired heater %.3f MW to %.0f C; V-101 %.2f bar; pumparounds %s", t.get("reflux_ratio").getAsDouble(),
+                col.get("condenser").getAsDouble() / 1e6, heater / 1e6, s.r.has("heater_outlet_kelvin") ? s.r.get("heater_outlet_kelvin").getAsDouble() - 273.15 : 365.0,
+                s.r.has("v101_bar") ? s.r.get("v101_bar").getAsDouble() : 2.8, String.join(", ", pas)));
         w.line(INK, String.format(Locale.ROOT, "Bottom steam %.2f kmol/h (%.0f kg/h) at %.0f C on tray %d: %.3f kg per kg of bottoms", steam.get("flow_kmol_h").getAsDouble(), steamKg,
                 steam.get("temperature_kelvin").getAsDouble() - 273.15, steam.get("tray").getAsInt(), steamKg / bottoms));
         if (s.r.has("sized_units")) {
@@ -536,7 +578,10 @@ public final class Datasheet {
 
     static void rulesBlock(Writer w, Sheet s) {
         w.head("Acceptance rules");
-        for (var rule : s.rules) w.line(rule.pass() ? GREEN : RED, (rule.pass() ? "PASS  " : "FAIL  ") + rule.text());
+        for (var rule : s.rules) {
+            boolean note = rule.text().startsWith("Larger than needed");
+            w.line(note ? YELLOW : rule.pass() ? GREEN : RED, (note ? "NOTE  " : rule.pass() ? "PASS  " : "FAIL  ") + rule.text());
+        }
         if (!s.findings.isEmpty()) {
             w.head("Findings");
             for (var f : s.findings) w.line(INK, f);
@@ -550,6 +595,59 @@ public final class Datasheet {
         b.append(solves.size()).append(" column solves");
         if (!solves.isEmpty()) b.append("; first: ").append(solves.get(0).getAsString());
         return b.toString();
+    }
+
+    /** The medium crude barrel's six bands by mass (the tutorial recording): gas, naphtha, kerosene, diesel, gas oil, residue. */
+    static double[] barrel() {
+        return com.wormzjl.icheme.science.tutorial.cards.BarrelData.load().stream().filter(g -> g.id().equals("medium_crude")).findFirst().orElseThrow().bands();
+    }
+
+    /** The barrel share a product stands for: the bottoms are the residue beside a gas oil draw, gas oil and residue without one. */
+    static double target(String name, double[] b, boolean ago) {
+        return switch (name) {
+            case "OFFGAS" -> b[0];
+            case "NAPHTHA" -> b[1];
+            case "KERO" -> b[2];
+            case "DIESEL" -> b[3];
+            case "MIDDLE" -> b[2] + b[3];
+            case "AGO" -> b[4];
+            case "RESIDUE" -> ago ? b[5] : b[4] + b[5];
+            default -> Double.NaN;
+        };
+    }
+
+    /** Where the crude's naphtha band (20 to 180 C) leaves: its share in each product. */
+    static String naphtha(List<JsonObject> products) {
+        double total = 0;
+        for (var p : products) if (p.has("bands_kg_h")) total += p.getAsJsonArray("bands_kg_h").get(1).getAsDouble();
+        if (total <= 0) return "";
+        var parts = new ArrayList<String>();
+        for (var p : products)
+            if (p.has("bands_kg_h")) {
+                double share = p.getAsJsonArray("bands_kg_h").get(1).getAsDouble() / total;
+                if (share >= .005) parts.add(String.format(Locale.ROOT, "%s %.0f %%", label(p.get("name").getAsString()), 100 * share));
+            }
+        return "The crude's naphtha (20 to 180 C) leaves in: " + String.join(", ", parts) + ".";
+    }
+
+    /**
+     * What the world supplies, with the fuel balance: the fired heater (Size all's duty) and a second fired heater raising the
+     * bottom steam from water at 20 C (2.87 MJ/kg) each absorb 80 % of the fuel's heat (Burners); the off-gas gives 47 MJ/kg,
+     * and a burner takes liquid fuel too, the bottoms at 41 MJ/kg (lower heating values, estimates).
+     */
+    static String supplies(Sheet s) {
+        double heater = s.r.getAsJsonObject("sized_units").getAsJsonObject("H-101").get("duty").getAsDouble();
+        double steamKg = s.template().getAsJsonArray("steam").get(0).getAsJsonObject().get("flow_kmol_h").getAsDouble() * 18.015;
+        double fired = (heater + steamKg / 3600 * 2.87e6) / .80, offgas = 0;
+        for (var e : s.r.getAsJsonArray("products")) {
+            var p = e.getAsJsonObject();
+            if (p.get("name").getAsString().equals("OFFGAS") && !p.has("missing")) offgas = p.get("kg_h").getAsDouble();
+        }
+        double fromGas = offgas / 3600 * 47e6, rest = fired - fromGas;
+        String fuel = rest <= 0 ? String.format(Locale.ROOT, "fuel from the off-gas (%.2f of %.2f MW fired)", fromGas / 1e6, fired / 1e6)
+                : String.format(Locale.ROOT, "fuel: the off-gas gives %.2f of %.2f MW fired, the rest %.0f kg/h of bottoms (%.1f %%)", fromGas / 1e6, fired / 1e6,
+                rest / 41e6 * 3600, 100 * rest / 41e6 * 3600 / bottomsKg(s));
+        return "World supplies: steam from a fired heater on water, " + fuel + ", cooling water, FE for the pumps";
     }
 
     static double bottomsKg(Sheet s) {

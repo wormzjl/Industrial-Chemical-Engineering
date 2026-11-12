@@ -1,23 +1,23 @@
 {
-  "_about": "Candidates B and C of the small crude tower (P4, decision D4), trays numbered as the player reads them (condenser 1, sump = tray_count). A is built in SmallColumn.candidateA from medium_crude.json / 64. Top pressure, condenser temperature, reflux ratio and design feed are A's. Steam keeps A's 0.0614 kg per kg of bottoms on A's residue plus its gas oil (5459 + 589 kg/h), 371.5 kg/h. Pumparound heat is A's 0.740 MW regrouped.",
+  "_about": "Candidates B and C of the small crude tower (P4, decision D4), trays numbered as the player reads them (condenser 1, sump = tray_count). A is built in SmallColumn.candidateA from medium_crude.json / 64. Top pressure, condenser temperature, reflux ratio and design feed are A's. Steam keeps A's 0.0614 kg per kg of bottoms on A's residue plus its gas oil (5459 + 589 kg/h), 371.5 kg/h. Pumparound heat is A's 0.740 MW regrouped. Since the parent's targets (2026-11-12): B and C aim at the barrel's shares; reflux 1.5 keeps the top vapour of the 4.17 designs at twice the overhead; steam keeps 0.0614 kg per kg on a 47 % bottoms (14.37 kmol/h); the heater limit is 4 MW and its outlet 390 C (sheet choices). C0 and C1 are the first round (A's rates). tuning.json holds every tuning solve.",
   "B": {
-    "note": "20 trays: naphtha overhead, kerosene draw 6 and diesel draw 11 at A's rates, PA 10 to 8 between the draws (A's PA 1 + PA 2), PA 13 to 12 under the diesel draw (A's PA 3), feed 16, 3 stripping trays, sump steam",
+    "note": "20 trays aimed at the barrel: overhead 18 %, kerosene 11 %, diesel 24 %, bottoms 47 % by mass; kerosene draw 6, diesel draw 11, PA 10 to 8 between the draws, PA 13 to 12 under diesel, feed 16, 3 stripping trays, reflux 1.5, heater outlet 390 C",
     "tray_count": 20,
     "feed_tray": 16,
     "draws": [
       {
         "tray": 6,
-        "flow_kmol_h": 8.098097694535676
+        "flow_kmol_h": 6.1
       },
       {
         "tray": 11,
-        "flow_kmol_h": 7.445028206260295
+        "flow_kmol_h": 9.4
       }
     ],
     "steam": [
       {
         "tray": 20,
-        "flow_kmol_h": 20.62,
+        "flow_kmol_h": 14.37,
         "temperature_kelvin": 533.15
       }
     ],
@@ -25,19 +25,51 @@
       {
         "draw_tray": 10,
         "return_tray": 8,
-        "cooling_mw": 0.5328832,
+        "cooling_mw": 0.483,
         "split": "UNIFORM"
       },
       {
         "draw_tray": 13,
         "return_tray": 12,
-        "cooling_mw": 0.2068507,
+        "cooling_mw": 0.107,
         "split": "UNIFORM"
       }
-    ]
+    ],
+    "reflux_ratio": 1.5,
+    "heater_outlet_kelvin": 663.15,
+    "heater_limit_mw": 4
   },
   "C": {
-    "note": "14 trays: naphtha overhead, one middle draw 6 (A's kerosene + diesel rates), PA 9 to 7 under it (A's three PAs), feed 11, 2 stripping trays, sump steam",
+    "note": "14 trays aimed at the barrel: overhead 18 %, middle draw 35 %, bottoms 47 % by mass; middle draw 6, PA 7 to 5 above it, feed 11, 2 stripping trays, reflux 1.5, heater outlet 390 C",
+    "tray_count": 14,
+    "feed_tray": 11,
+    "draws": [
+      {
+        "tray": 6,
+        "flow_kmol_h": 15.4
+      }
+    ],
+    "steam": [
+      {
+        "tray": 14,
+        "flow_kmol_h": 14.37,
+        "temperature_kelvin": 533.15
+      }
+    ],
+    "pumparounds": [
+      {
+        "draw_tray": 7,
+        "return_tray": 5,
+        "cooling_mw": 0.59,
+        "split": "UNIFORM"
+      }
+    ],
+    "reflux_ratio": 1.5,
+    "heater_outlet_kelvin": 663.15,
+    "heater_limit_mw": 4
+  },
+  "C0": {
+    "note": "C as first asked (A's kerosene + diesel rates on tray 6, PA 9 to 7 under the draw, A's reflux 4.17): does not converge, the draw tray runs dry",
     "tray_count": 14,
     "feed_tray": 11,
     "draws": [

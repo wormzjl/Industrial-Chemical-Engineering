@@ -78,6 +78,29 @@ final class Boiling {
         return sum;
     }
 
+    /** The mass of {@code parts} in each band between {@code edges} (K, ascending): edges.length + 1 bands, an open cut in the last. */
+    static double[] bands(List<Part> parts, double[] edges) {
+        double[] out = new double[edges.length + 1];
+        for (var p : parts) {
+            if (Double.isNaN(p.upper())) {
+                int b = 0;
+                while (b < edges.length && p.lower() >= edges[b]) b++;
+                out[b] += p.mass();
+                continue;
+            }
+            for (int b = 0; b <= edges.length; b++) {
+                double lo = b == 0 ? Double.NEGATIVE_INFINITY : edges[b - 1], hi = b == edges.length ? Double.POSITIVE_INFINITY : edges[b];
+                if (p.upper() <= p.lower()) {
+                    if (p.lower() >= lo && p.lower() < hi) out[b] += p.mass();
+                } else {
+                    double a = Math.max(lo, p.lower()), c = Math.min(hi, p.upper());
+                    if (c > a) out[b] += p.mass() * (c - a) / (p.upper() - p.lower());
+                }
+            }
+        }
+        return out;
+    }
+
     /** The gap between a lighter and a heavier product (K): the heavier one's 5 % point less the lighter one's 95 % point. */
     static double gap(List<Part> lighter, List<Part> heavier) {
         return at(heavier, .05).kelvin() - at(lighter, .95).kelvin();

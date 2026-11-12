@@ -44,6 +44,14 @@ From the worktree root. Each run is one Gradle invocation, so check the machine'
 
 - `REF8` runs the bundled 8 m sheet once, unchanged, for A's tray comparison.
 - `-Ddraft=true` writes the template and the sheet only, for `ShapeCheck`.
+- `-Dnosize=true` runs the sheet without sizing (the tuning solves).
+- `-Dv101=3.2` sets V-101's outlet, bar (default 3.2, the bundled sheet's 2.8 leaves the transfer path red at 1/64).
+- `-Dspecs=tools/tutorial-column/tuning.json` reads the candidates from another file. `tuning.json` holds every solve
+  that aimed B and C at the barrel's shares (`B-t1` to `B-t14`, `C-t1` to `C-t14`).
+- A candidate's `heater_outlet_kelvin` and `heater_limit_mw` set H-101 (sheet choices); its `reflux_ratio` the column's.
+- The datasheet splits the lamps: real fails after Size all, and "larger than needed" (the catalogue's smallest pump or
+  shell, with the feed factor at which it turns green). It shows each product's mass share beside the barrel's, where the
+  crude's naphtha leaves, and the fuel balance (off-gas, then bottoms through a burner).
 
 ## Outputs
 

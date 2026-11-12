@@ -27,6 +27,9 @@ gradle.projectsEvaluated {
         maxHeapSize = '4g'
         systemProperty 'candidate', System.getProperty('candidate', 'A')
         systemProperty 'draft', System.getProperty('draft', 'false')
+        systemProperty 'nosize', System.getProperty('nosize', 'false')
+        systemProperty 'v101', System.getProperty('v101', '3.2')
+        systemProperty 'specs', System.getProperty('specs', 'tools/tutorial-column/candidates.json')
         args(p.projectDir.absolutePath)
     }
     p.tasks.register('smallColumnShape', JavaExec) {
@@ -49,7 +52,7 @@ gradle.projectsEvaluated {
         mainClass = 'Datasheet'
         workingDir = p.projectDir
         systemProperty 'java.awt.headless', 'true'
-        systemProperty 'candidates', System.getProperty('candidates', 'A,B,C1')
+        systemProperty 'candidates', System.getProperty('candidates', 'A,B,C')
         args(p.projectDir.absolutePath)
     }
 }

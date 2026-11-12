@@ -51,6 +51,8 @@ public final class SmallColumn {
     static final String SHEET = "assets/icheme/flowsheet_examples/crude_unit.json";
     static final String PRESET = "assets/icheme/columnpreset/medium_crude.json";
     static final String CANDIDATES = "tools/tutorial-column/candidates.json";
+    /** V-101's outlet set point on every small sheet, bar (the bundled sheet's 2.80 leaves the transfer line short: owner's parent session, 2026-11-12). */
+    static final double V101_BAR = Double.parseDouble(System.getProperty("v101", "3.2"));
 
     private static MaterialCatalog catalog;
     private static String network;
@@ -67,7 +69,8 @@ public final class SmallColumn {
         for (var grade : BarrelData.compute(root.resolve("src/main/resources/data/icheme/materials")))
             if (grade.id().equals("medium_crude")) for (var s : grade.segments()) segments.put(s.component(), s);
         Files.createDirectories(root.resolve(OUT));
-        var specs = Files.exists(root.resolve(CANDIDATES)) ? JsonParser.parseString(Files.readString(root.resolve(CANDIDATES))).getAsJsonObject() : new JsonObject();
+        var specFile = root.resolve(System.getProperty("specs", CANDIDATES));
+        var specs = Files.exists(specFile) ? JsonParser.parseString(Files.readString(specFile)).getAsJsonObject() : new JsonObject();
         for (var id : ids) {
             id = id.trim();
             if (id.equals("REF8")) {
@@ -143,12 +146,15 @@ public final class SmallColumn {
                 case "H-101" -> {
                     scale(params, "duty");
                     scale(params, "limit");
+                    if (spec != null && spec.has("heater_outlet_kelvin")) params.addProperty("temperature", spec.get("heater_outlet_kelvin").getAsDouble());
+                    if (spec != null && spec.has("heater_limit_mw")) params.addProperty("limit", spec.get("heater_limit_mw").getAsDouble() * 1e6);
                 }
                 case "E-101" -> {
                     scale(params, "duty");
                     scale(params, "area");
                 }
                 case "E-102" -> scale(params, "duty");
+                case "V-101" -> params.addProperty("pressure", V101_BAR * 1e5);
                 case "T-101" -> u.add("params", ColumnDoor.template(new Params(params), template).json());
                 default -> {
                 }
@@ -192,6 +198,9 @@ public final class SmallColumn {
         out.addProperty("id", id);
         out.addProperty("note", spec != null && spec.has("note") ? spec.get("note").getAsString() : "the 42-tray medium crude tower, every flow and duty / 64, 1.0 m");
         out.add("template", preset);
+        out.addProperty("v101_bar", V101_BAR);
+        for (var e : sheetJson.getAsJsonArray("units"))
+            if (e.getAsJsonObject().get("id").getAsString().equals("H-101")) out.addProperty("heater_outlet_kelvin", e.getAsJsonObject().getAsJsonObject("params").get("temperature").getAsDouble());
         var run = FlowsheetEngine.run(sheet, catalog, probe, null, probe);
         out.addProperty("status", run.status().name());
         out.add("log", notes(run));
@@ -210,7 +219,7 @@ public final class SmallColumn {
         column(out, column, template, thermo);
         out.add("products", products(run, thermo, drawCount));
         out.add("units", unitReadings(run));
-        if (run.status() == FlowsheetRun.Status.STEADY) {
+        if (run.status() == FlowsheetRun.Status.STEADY && !Boolean.getBoolean("nosize")) {
             probe.phase("rate");
             var rated = MaterialRuntime.with(catalog, network, () -> SheetSizing.rate(sheet, run, thermo));
             out.add("rated", sized(rated));
@@ -359,6 +368,9 @@ public final class SmallColumn {
                 o.addProperty("m3_h_refused", String.valueOf(refused.getMessage()));
             }
             points(o, parts);
+            var bands = new JsonArray();
+            for (double b : Boiling.bands(parts, BarrelData.EDGES)) bands.add(b * 3600);
+            o.add("bands_kg_h", bands);
             out.add(o);
         }
         return out;
@@ -415,6 +427,9 @@ public final class SmallColumn {
             o.addProperty("count", u.size() == null ? 0 : u.size().count());
             o.addProperty("lamp", u.rating().lamp().name());
             o.add("readings", readings(u.rating()));
+            var values = new JsonObject();
+            u.rating().values().forEach(values::addProperty);
+            o.add("values", values);
             if (u.size() != null) {
                 var shape = UnitSize.built(u.size());
                 if (shape != null) {
