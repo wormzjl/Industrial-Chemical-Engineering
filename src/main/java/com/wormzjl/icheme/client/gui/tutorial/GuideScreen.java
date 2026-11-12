@@ -106,7 +106,7 @@ public class GuideScreen extends Screen {
         int w = Math.min(GuidePage.DESIGN_WIDTH, width - 8), h = Math.min(GuidePage.DESIGN_HEIGHT, height - 8);
         left = (width - w) / 2;
         top = (height - h) / 2;
-        page = GuidePage.place(new GuidePage.Input(guide(), GuideClient.progress(), open, card), w, h, GuiCanvas.measure(font), GuideScreen::tr, themeHint());
+        page = GuidePage.place(new GuidePage.Input(guide(), GuideClient.progress(), open, card, com.wormzjl.icheme.science.tutorial.cards.Card.temperature(ClientConfig.temperature())), w, h, GuiCanvas.measure(font), GuideScreen::tr, themeHint());
         offset = Math.clamp(offset, 0, page.maxOffset());
     }
 
@@ -121,7 +121,7 @@ public class GuideScreen extends Screen {
         var canvas = new GuiCanvas(g, font, left, top);
         g.pose().pushPose();
         g.pose().translate(left, top, 0);
-        page.draw(canvas, ClientConfig.skin(), offset, hover, cardView == null ? Card.State.of(0, 0) : cardView.state(Card.temperature(ClientConfig.temperature())));
+        page.draw(canvas, ClientConfig.skin(), offset, hover, cardView == null ? Card.State.of(0, 0) : cardView.state(Card.temperature(ClientConfig.temperature()), Card.massFlow(ClientConfig.flowTime())));
         g.pose().popPose();
         renderOver(g, mouseX, mouseY);
         String hint = tour.isOpen() ? null : hintAt(x, y);

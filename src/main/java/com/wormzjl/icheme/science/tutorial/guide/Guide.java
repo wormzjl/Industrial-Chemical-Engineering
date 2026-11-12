@@ -99,11 +99,28 @@ public record Guide(List<Chapter> chapters, Map<String, String> terms) {
             return KEY + id + ".source";
         }
 
-        /** {@code step}'s sentence as {@code tr} gives it, a {@code %s} in it filled with the chapter's source line. */
+        /** {@code step}'s sentence as {@code tr} gives it, a {@code %s} in it filled with the chapter's source line, temperatures in °C. */
         public String text(Step step, java.util.function.Function<String, String> tr) {
-            String line = tr.apply(key(step));
-            return line.contains("%s") ? line.replace("%s", tr.apply(sourceKey())) : line;
+            return text(step, tr, com.wormzjl.icheme.science.tutorial.cards.Card.CELSIUS);
         }
+
+        /**
+         * {@code step}'s sentence as {@code tr} gives it: a {@code %s} filled with the chapter's source line, and each
+         * temperature written {@code {<kelvin> K}} (P4b: chapter 4's heater outlet) in the player's unit by {@code temperature}.
+         */
+        public String text(Step step, java.util.function.Function<String, String> tr, java.util.function.DoubleFunction<String> temperature) {
+            String line = tr.apply(key(step));
+            if (line.contains("%s")) line = line.replace("%s", tr.apply(sourceKey()));
+            return temperatures(line, temperature);
+        }
+    }
+
+    /** A text's temperature written {@code {<kelvin> K}}: the number, in kelvin. */
+    public static final Pattern KELVIN = Pattern.compile("\\{(\\d+(?:\\.\\d+)?) K\\}");
+
+    /** {@code line} with each {@link #KELVIN} token in {@code temperature}'s format (the cards' format: whole degrees and the unit). */
+    public static String temperatures(String line, java.util.function.DoubleFunction<String> temperature) {
+        return KELVIN.matcher(line).replaceAll(m -> java.util.regex.Matcher.quoteReplacement(temperature.apply(Double.parseDouble(m.group(1)))));
     }
 
     /** The chapter {@code id}, or null. */

@@ -43,7 +43,7 @@ public final class GuideHud {
         var step = guide.step(current);
         if (chapter == null || step == null) return;
         var m = GuiCanvas.measure(mc.font);
-        String text = line(Marked.parse(chapter.text(step, k -> Component.translatable(k).getString())).text(), Math.min(MAX_WIDTH, g.guiWidth() - 2 * X - 4), m);
+        String text = line(Marked.parse(chapter.text(step, k -> Component.translatable(k).getString(), com.wormzjl.icheme.science.tutorial.cards.Card.temperature(ClientConfig.temperature()))).text(), Math.min(MAX_WIDTH, g.guiWidth() - 2 * X - 4), m);
         var canvas = new GuiCanvas(g, mc.font, 0, 0);
         canvas.batch(() -> {
             canvas.fill(X - 2, Y - 2, X + m.width(text) + 2, Y + 10, 0x90000000);

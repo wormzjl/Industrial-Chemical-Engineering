@@ -243,7 +243,9 @@ class GuideCoverageTest {
             assertEquals(Math.round(100 * bundled.share(com.wormzjl.icheme.science.tutorial.cards.SmallUnitData.PRODUCTS.get(i))), Long.parseLong(shares.group(i + 1)), balance);
         assertEquals(lowered.heaterKelvin(), conditions("simulator", "heat").get("max_heater_outlet").getAsDouble(), 1e-9, "the heat step: the lowered outlet");
         String heat = lang.get("tutorial.icheme.guide.simulator.heat");
-        assertEquals(Math.round(lowered.heaterKelvin() - 273.15), (long) number(heat, "°C"), heat);
+        var outlet = com.wormzjl.icheme.science.tutorial.guide.Guide.KELVIN.matcher(heat);
+        assertTrue(outlet.find(), "the outlet in the player's unit: " + heat);
+        assertEquals(lowered.heaterKelvin(), Double.parseDouble(outlet.group(1)), 1e-9, "the lowered outlet, the recording's");
         var falls = java.util.regex.Pattern.compile("from (\\d+) to (\\d+) %").matcher(heat);
         assertTrue(falls.find(), heat);
         assertEquals(Math.round(100 * bundled.share("overhead")), Long.parseLong(falls.group(1)), heat);

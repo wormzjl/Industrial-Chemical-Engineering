@@ -7,7 +7,6 @@ import com.wormzjl.icheme.client.gui.common.kit.Skin;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.function.Function;
 
 /**
@@ -48,14 +47,9 @@ public final class Balance implements Card {
 
     @Override
     public List<String> textKeys() {
-        var out = new ArrayList<>(List.of(KEY + ".in", KEY + ".out", KEY + ".flow"));
+        var out = new ArrayList<>(List.of(KEY + ".in", KEY + ".out"));
         for (var p : SmallUnitData.PRODUCTS) out.add(KEY + "." + p);
         return out;
-    }
-
-    /** A mass flow in whole kg/h with thousands apart. */
-    static String kgPerHour(double value) {
-        return String.format(Locale.ROOT, "%,d", Math.round(value)).replace(',', ' ');
     }
 
     @Override
@@ -64,7 +58,7 @@ public final class Balance implements Card {
         int x0 = area.x() + 4, w = area.w() - 8, y = area.y() + 3;
         double[] shares = new double[SmallUnitData.PRODUCTS.size()];
         for (int i = 0; i < shares.length; i++) shares[i] = run.share(SmallUnitData.PRODUCTS.get(i));
-        String flow = Chain.fill(tr.apply(KEY + ".flow"), kgPerHour(run.crudeKgH()));
+        String flow = state.massFlow().apply(run.crudeKgH() / 3600);
         int free = area.bottom() - y - 2;
         int barH = Math.clamp((free - 44) / 2, 8, 20);
         int inY = y + 10, outLabel = inY + barH + Math.max(6, (free - 2 * barH - 44) / 2), outY = outLabel + 10, words = outY + barH + 3;

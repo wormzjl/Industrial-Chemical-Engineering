@@ -52,9 +52,14 @@ public final class CardView {
         return Set.copyOf(visited);
     }
 
-    /** What the card draws now, temperatures in {@code temperature}'s format. */
+    /** What the card draws now, temperatures in {@code temperature}'s format, mass flows per hour. */
     public Card.State state(DoubleFunction<String> temperature) {
-        return new Card.State(phase, control, option, hit, visited, temperature);
+        return state(temperature, Card.PER_HOUR);
+    }
+
+    /** What the card draws now, temperatures and mass flows in the given formats (P4b: the client's units). */
+    public Card.State state(DoubleFunction<String> temperature, DoubleFunction<String> massFlow) {
+        return new Card.State(phase, control, option, hit, visited, temperature, massFlow);
     }
 
     /** Advances the phase to now ({@code nanos}, as {@code System.nanoTime}). */

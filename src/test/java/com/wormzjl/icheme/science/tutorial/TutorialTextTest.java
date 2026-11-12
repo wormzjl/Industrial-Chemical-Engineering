@@ -154,4 +154,21 @@ class TutorialTextTest {
             for (var span : Marked.parse(line).spans()) assertTrue(guide.terms().containsKey(span.term()), key + " marks " + span.term());
         }
     }
+
+    /**
+     * P4b (chapter 2's rule, gated): no tutorial line names a temperature, pressure or flow in a fixed unit; a step writes a
+     * temperature as {@code {<kelvin> K}}, which the guide shows in the player's unit. The units step names the units it offers.
+     */
+    @Test
+    void noLineNamesAValueInAFixedUnit() {
+        var fixed = java.util.regex.Pattern.compile("\\d\\s*(°C|°F|K\\b|bar\\b|kPa|kg/)");
+        var faults = new ArrayList<String>();
+        for (var e : LANG.entrySet()) {
+            if (!e.getKey().startsWith("tutorial.icheme.") || e.getKey().equals("tutorial.icheme.guide.welcome.units")) continue;
+            String line = com.wormzjl.icheme.science.tutorial.guide.Guide.KELVIN.matcher(e.getValue()).replaceAll("");
+            if (fixed.matcher(line).find()) faults.add(e.getKey() + ": " + e.getValue());
+        }
+        assertEquals(List.of(), faults);
+        assertEquals("Set it to 370 °C.", com.wormzjl.icheme.science.tutorial.guide.Guide.temperatures("Set it to {643.15 K}.", com.wormzjl.icheme.science.tutorial.cards.Card.CELSIUS));
+    }
 }

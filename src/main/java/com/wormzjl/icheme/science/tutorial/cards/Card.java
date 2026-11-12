@@ -31,11 +31,17 @@ public interface Card {
     /**
      * What the card draws: its animation's {@code phase} (s), its {@code control} (0 to 1, already stepped), the chosen
      * {@code option} (0 with none), the last pressed hit ({@code -1}: none), the hits pressed so far, and the client's
-     * temperature format (kelvin to text with its unit).
+     * temperature format (kelvin to text with its unit); P4b: its mass flow format (kg/s to text with its unit, in the
+     * client's flow time unit).
      */
-    record State(double phase, double control, int option, int hit, Set<Integer> visited, DoubleFunction<String> temperature) {
+    record State(double phase, double control, int option, int hit, Set<Integer> visited, DoubleFunction<String> temperature, DoubleFunction<String> massFlow) {
         public State {
             visited = Set.copyOf(visited);
+        }
+
+        /** With mass flows per hour. */
+        public State(double phase, double control, int option, int hit, Set<Integer> visited, DoubleFunction<String> temperature) {
+            this(phase, control, option, hit, visited, temperature, PER_HOUR);
         }
 
         /** At rest: phase 0, the control at {@code control}, the first option, nothing pressed, °C. */
@@ -44,11 +50,11 @@ public interface Card {
         }
 
         public State withOption(int value) {
-            return new State(phase, control, value, hit, visited, temperature);
+            return new State(phase, control, value, hit, visited, temperature, massFlow);
         }
 
         public State withHit(int value) {
-            return new State(phase, control, option, value, visited, temperature);
+            return new State(phase, control, option, value, visited, temperature, massFlow);
         }
     }
 
@@ -59,6 +65,21 @@ public interface Card {
 
     /** Whole degrees Celsius: the render tool's format, and the client's default. */
     DoubleFunction<String> CELSIUS = temperature(DisplayUnit.TemperatureUnit.CELSIUS);
+
+    /** A mass flow (kg/s) in {@code unit}'s time: three significant figures, thousands apart, and its unit (kg/h, kg/min, kg/s). */
+    static DoubleFunction<String> massFlow(DisplayUnit.FlowRateUnit unit) {
+        return kgPerSecond -> {
+            double v = unit.display(kgPerSecond);
+            double step = v <= 0 ? 1 : Math.pow(10, Math.max(0, Math.floor(Math.log10(v)) - 2));
+            double shown = Math.round(v / step) * step;
+            String number = step >= 1 ? String.format(Locale.ROOT, "%,d", Math.round(shown)).replace(',', ' ')
+                    : String.format(Locale.ROOT, "%." + (int) Math.ceil(-Math.log10(step)) + "f", shown);
+            return number + " " + unit.unit("kg");
+        };
+    }
+
+    /** Mass flows per hour: the render tool's format, and the client's default. */
+    DoubleFunction<String> PER_HOUR = massFlow(DisplayUnit.FlowRateUnit.PER_HOUR);
 
     /** Draws the card in {@code area} (on the HMI glass, the screens' dark palette) in {@code state}; {@code tr} gives a language key's line. */
     void draw(Canvas c, Rect area, State state, Skin skin, Function<String, String> tr);

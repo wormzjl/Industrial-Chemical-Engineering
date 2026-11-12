@@ -45,8 +45,15 @@ public final class GuidePage {
     private GuidePage() {
     }
 
-    /** What the page shows: the guide, the player's progress, the open chapter, and the step whose card is open (null: the steps). */
-    public record Input(Guide guide, Progress progress, String open, @Nullable String card) {
+    /**
+     * What the page shows: the guide, the player's progress, the open chapter, and the step whose card is open (null: the
+     * steps); P4b: the player's temperature format, for a step's {@code {<kelvin> K}}.
+     */
+    public record Input(Guide guide, Progress progress, String open, @Nullable String card, java.util.function.DoubleFunction<String> temperature) {
+        /** In °C: the render tool's and the tests' page. */
+        public Input(Guide guide, Progress progress, String open, @Nullable String card) {
+            this(guide, progress, open, card, com.wormzjl.icheme.science.tutorial.cards.Card.CELSIUS);
+        }
     }
 
     public enum Mark {
@@ -367,7 +374,7 @@ public final class GuidePage {
             int textX = x0 + MARK + MARK_GAP, full = w - MARK - MARK_GAP;
             boolean beside = !words.isEmpty() && full - bw - 6 >= BESIDE_MIN;
             int tw = beside ? full - bw - 6 : full;
-            var marked = Marked.parse(chapter.text(step, tr));
+            var marked = Marked.parse(chapter.text(step, tr, in.temperature()));
             var wrapped = m.wrap(marked.text(), tw);
             int textY = y + (beside ? (KEY_H - 8) / 2 : 1);
             var lines = new ArrayList<Line>();
