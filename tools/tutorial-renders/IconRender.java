@@ -36,7 +36,7 @@ import java.util.Map;
  */
 public class IconRender {
     /** The icon's side in px. */
-    static final int SIZE = Integer.getInteger("iconSize", 32);
+    static final int SIZE = Integer.getInteger("iconSize", 64);
     /** Samples a pixel along each axis. */
     static final int SUPER = 8;
     /** The view: from the south-east, 30 degrees above the horizon (a Minecraft block item's view is 30 degrees). */
@@ -209,7 +209,7 @@ public class IconRender {
 
     /** Every icon at 1x and 4x with its name, ten a row, on an inventory slot's grey and a dark band. */
     static BufferedImage sheet(List<BufferedImage> icons, List<String> names) {
-        int cols = 6, cellW = 300, cellH = 4 * SIZE + 28, rows = (icons.size() + cols - 1) / cols;
+        int cols = 6, cellW = 5 * SIZE + 150, cellH = 4 * SIZE + 28, rows = (icons.size() + cols - 1) / cols;
         var sheet = new BufferedImage(cols * cellW, rows * cellH, BufferedImage.TYPE_INT_RGB);
         var g = sheet.createGraphics();
         g.setColor(new Color(0x8B8B8B));

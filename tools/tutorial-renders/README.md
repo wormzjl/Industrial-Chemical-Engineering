@@ -49,7 +49,7 @@ each `EquipmentShape.Kind` at its native reference size (the constructor's defau
 `tools/equipment-drawings/EngineeringExport.java` builds it; a drum lying), its whole drawing
 (`ShapeRasterizer.renderPreview`, the constructor ghost), one orthographic view from the south-east 30 degrees above the
 horizon, the mod's sprites, default paints and the game's directional shade, 8 by 8 samples a pixel, cut out (a pixel
-is the body's where half its samples are), a one-pixel dark rim, 32 by 32 px, transparent background. A kind more than
+is the body's where half its samples are), a one-pixel dark rim, 64 by 64 px (owner, 2026-11-12: 32 px was too coarse), transparent background. A kind more than
 3.5 times taller than wide shows its top 3.5 widths (flare stack, steel stack, brick chimney). The kettle is turned 90
 degrees so it does not read as the exchanger.
 
