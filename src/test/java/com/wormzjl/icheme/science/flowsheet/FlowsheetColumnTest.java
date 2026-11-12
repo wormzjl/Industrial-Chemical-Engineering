@@ -234,8 +234,16 @@ final class FlowsheetColumnTest {
         assertTrue(Math.abs(run.heatGap()) < heatShare * heatScale(run), () -> "heat gap " + run.heatGap() + " of " + heatScale(run));
     }
 
+    /**
+     * The sample with its furnace on an outlet temperature, solved once for the tests that read it (batch
+     * 2026-11-11-aqueous-solvents, TEST_DUPLICATES_REVIEW.md item 6).
+     */
+    private static final class Held {
+        static final FlowsheetRun RUN = sample(HOLDS).feed("CRUDE", "P-101", "in", crude(298.15, 8e5)).product("RESIDUE", "E-102", "b").run();
+    }
+
     @Test void theSampleClosesInTwoPasses() {
-        var run = sample(HOLDS).feed("CRUDE", "P-101", "in", crude(298.15, 8e5)).product("RESIDUE", "E-102", "b").run();
+        var run = Held.RUN;
         closed(run, 5e-4);
         assertEquals(1, run.loops().size(), "one loop stays, the residue's");
         assertEquals(2, run.loops().getFirst().passes());
@@ -276,7 +284,7 @@ final class FlowsheetColumnTest {
     }
 
     @Test void aFurnaceOnAFixedDutyCloses() {
-        var held = sample(HOLDS).feed("CRUDE", "P-101", "in", crude(298.15, 8e5)).product("RESIDUE", "E-102", "b").run();
+        var held = Held.RUN;
         double duty = held.reports().get("H-101").readings().get("duty") - 8e6;
         var run = onDuty(duty).run(held);
         closed(run, 1e-3);

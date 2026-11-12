@@ -32,7 +32,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * The run half of the simulator (W7 of batch 2026-11-02-process-simulator) on water, which runs in no time. The column's part is in
- * {@link SimulatorRunTest}. A latch holds a run still, so nothing here reads a clock.
+ * {@link CrudeUnitSampleTest.SimulatorRunTest}. A latch holds a run still, so nothing here reads a clock.
  */
 class SimulatorRunnerTest {
     private static final long GUARD = 60;
