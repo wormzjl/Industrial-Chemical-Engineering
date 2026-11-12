@@ -14,7 +14,7 @@ Status words:
 
 | Batch | Purpose | Status |
 |---|---|---|
-| [2026-11-12-tutorial-system/](2026-11-12-tutorial-system/README.md) | Tutorial for new players: own films, help tours on every GUI, a field guide to a first small crude unit, equipment items and JEI pages | Planned |
+| [2026-11-12-tutorial-system/](2026-11-12-tutorial-system/README.md) | Tutorial for new players: own films, help tours on every GUI, a field guide to a first small crude unit, equipment items and JEI pages | In progress since 2026-11-12 |
 | [2026-11-11-drum-operation-holds/](2026-11-11-drum-operation-holds/README.md) | Drum operation defects at factor 1: column re-entry crash, worker-failure status, drop-leg cold start, gas-vent hold, liquid-full drum | Implemented 2026-11-11 |
 | [2026-11-11-gas-blanketing/](2026-11-11-gas-blanketing/README.md) | Gas blanketing valve on drums (pad from a gas line, vent to atmosphere); pressure safety valve on drums and pipes; flare flow by back pressure | Implemented 2026-11-11 |
 | [2026-11-11-valve-followups/](2026-11-11-valve-followups/README.md) | Open items of 0.27.0: blanketed direct start, vent lag, relief into a second regulator, flare solids block, campaign at the game's time factor | Implemented 2026-11-12 |

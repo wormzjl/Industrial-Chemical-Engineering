@@ -1,6 +1,6 @@
 # Tutorial system
 
-Status: **Planned** (2026-11-12). Branch `claude/tutorial-system-chem-mod-950ca9`. No code.
+Status: **In progress since 2026-11-12**. Branch `claude/tutorial-system-chem-mod-950ca9`.
 
 ## Scope
 
@@ -17,6 +17,8 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
 - [TUTORIAL_SYSTEM_PLAN.md](TUTORIAL_SYSTEM_PLAN.md): what exists, why Ponder is dropped, the framework (films, help
   tours and cards, field guide, equipment items and JEI), the teaching rules, the path of seven chapters, the small
   column template, gates, phases P0 to P6, owner decisions D1 to D8 and open items O1, O2.
+- [P0_SCENE_PLAYER.md](P0_SCENE_PLAYER.md): phase P0, the scene player, its view, the render tool and the film "inside
+  the still": classes, decisions, tests, renders, what the in-game check looks at.
 
 ## History
 
@@ -27,6 +29,10 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
   the first crude from a Forge fluid converter, later an extraction system (neither in the code). D2 to D5, D7 as
   recommended. New: chapter 1 on crude oil, an item for each equipment kind, JEI pages. Plan revision 2. Documents only,
   no test run.
+- 2026-11-12: P0 built: `science/tutorial/scene`, film `still_inside` (three cut actors, two-sided cut faces),
+  `client/gui/tutorial` (`SceneView`, `FilmScreen`, `/icheme-film`), `tools/tutorial-renders`, `ShapeRasterizer.stillParts`.
+  Filtered tests pass (tutorial 12, HeatDiagram, KitLayout, DeterministicMathSource, ProcessUnit, ShapeRasterizer);
+  renders in `tmp/tutorial-renders/`. The owner's in-game check is open.
 
 ## Code areas (proposed)
 
@@ -40,4 +46,4 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
 - O1: equipment items reference only, or given to a survival player (proposed: reference only).
 - O2: the Forge fluid converter is a prerequisite of chapter 2 in survival and is not in this plan.
 - D4: the small column, chosen by the owner after the three candidates are solved.
-- The first batch (P0 to P2) waits for the owner's word to start.
+- P0: the owner's one in-game check of the scene player (P0_SCENE_PLAYER.md, last section).
