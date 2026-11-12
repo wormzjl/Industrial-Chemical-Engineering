@@ -47,6 +47,7 @@ Owner, 2026-11-11: add ethanol to the compound matrix, identify what it affects 
 - 2026-11-12: gates run once on 4d07122fe: columnGates pass, 14 flowsheet tests of holdGates fail where water crosses to V3's own water (W3B_NETWORK_PLAN.md section 31; reports before any reference moves). Step 6 started: 1059ece75 (the "Water" label at 99 % water), 5c85000c8 (the spray riser's column); spine packages stay dry, a documented capability limit (section 32).
 - 2026-11-12: the 14 flowsheet failures fixed by the sub-thread (W3B_NETWORK_PLAN.md sections 33 to 35): e1b9a3dd0 (V3's liquid-water datum on IAPWS's latent heat, water.json r4), 530a051c8 (the network's own water saturation curve), 938283795 (the column block refuses an aqueous liquid only), 450ba8f0c (P-101 re-pinned), 4c0290223 (the stability test's liquid trial holds water at a trace: a wet flash no longer misses the hydrocarbon liquid above water's dew point). Owner on the cost: "Yes, design first"; ANALYTIC_JACOBIAN_PLAN.md written. The sub-thread stopped on its weekly limit in the middle of N10.
 - 2026-11-12: owner "Approve, use Fable now"; sub-thread on Fable: 274e06ac1 (N10), 22c0368a8, 57cd8b5f0, 64239496b (the Jacobian from phase tangents, steps 1 to 3; ANALYTIC_JACOBIAN_PLAN.md section 11).
+- 2026-11-12: 3f61f4017 (`dv/dP` of a tangent phase to first order), 0f5817745 (probe cases); cold 65 is not the Jacobian's form; wet's excess is nine aqueous-solute unknowns per node (ANALYTIC_JACOBIAN_PLAN.md sections 12, 13). Owner: "Accept the bounds" (wet 2.0, polar 1.25).
 
 ## Tools
 
@@ -58,7 +59,8 @@ Changed so far: `science/thermo/PengRobinsonKernel`, `HuronVidalExcess`; `scienc
 
 ## Open items
 
-- Cost (ANALYTIC_JACOBIAN_PLAN.md sections 11 to 13): the Jacobian from phase tangents is built and its form settled (3f61f4017). Ratios to main 1.09, 1.90, 1.20 (bounds 1.1, 1.5, 1.1). Wet's excess is nine aqueous-solute unknowns per node (39 against main's 30), paid in the linear solve. Owner decision open: the wet and polar bounds, or more solver work; a 1e-5 aqueous floor is advised against.
+- Cost: closed for this batch (W3B_NETWORK_PLAN.md section 37; owner: "Accept the bounds"): dry 1.1, wet 2.0, polar 1.25 times main; measured 1.09, 1.90, 1.20. Later batch: a faster linear solve for the node blocks, measured first.
+- Next: the full campaign for the settled Jacobian form (1000 seeds); a hold class the baseline does not have goes to the owner.
 - Cold 65 (ANALYTIC_JACOBIAN_PLAN.md section 13): not the Jacobian's form; a near-singular solve at a junction with a trace liquid, reached by a trajectory that moved in its last digits. Left to step 7's campaign.
 - N10 done (274e06ac1). The code guide chapters are in progress (uncommitted).
 - W3b steps 1 to 5 built, with 21 open engine and network defects and the cost step 5b (W3B_NETWORK_PLAN.md sections 10 and 15); steps 6 and 7 not started; W4 to W6 not started.
