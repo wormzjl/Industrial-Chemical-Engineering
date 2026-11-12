@@ -1,0 +1,80 @@
+{
+  "revision": "1",
+  "priority": 41,
+  "fluid": "tfmg:gasoline",
+  "phase": "liquid",
+  "to_forge": {
+    "basis": "mass",
+    "components": {
+      "Isopentane": {
+        "min": 0,
+        "max": 1
+      },
+      "N-pentane": {
+        "min": 0,
+        "max": 1
+      },
+      "N-hexane": {
+        "min": 0,
+        "max": 1
+      },
+      "Cyclohexane": {
+        "min": 0,
+        "max": 1
+      },
+      "Benzene": {
+        "min": 0,
+        "max": 1
+      },
+      "Toluene": {
+        "min": 0,
+        "max": 1
+      },
+      "Ethylbenzene": {
+        "min": 0,
+        "max": 1
+      },
+      "O-xylene": {
+        "min": 0,
+        "max": 1
+      },
+      "M-xylene": {
+        "min": 0,
+        "max": 1
+      },
+      "P-xylene": {
+        "min": 0,
+        "max": 1
+      },
+      "crude_pc01": {
+        "min": 0,
+        "max": 1
+      },
+      "crude_pc02": {
+        "min": 0,
+        "max": 1
+      },
+      "Isobutane": {
+        "min": 0,
+        "max": 0.05
+      },
+      "N-butane": {
+        "min": 0,
+        "max": 0.08
+      },
+      "crude_pc03": {
+        "min": 0,
+        "max": 0.15
+      }
+    },
+    "others_max": 0.02,
+    "temperature": {
+      "min": 233.15,
+      "max": 323.15
+    },
+    "pressure": {
+      "min": 80000,
+      "max": 500000
+    }
+  }
+}

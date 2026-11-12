@@ -15,6 +15,16 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+## [0.28.0] - 2026-11-12
+
+### Added
+
+- Fluid conversion between other mods' fluids and IChemE streams (`2026-11-12-fluid-conversion`): a fluid converter and a gas converter in the equipment constructor (Vessels; a square Forge tank and a round process tank, 1 to 20 m across, up to 7,540 m3 and a rated flow of one tank in 1000 s of process time), connected to Forge fluid pipes at its Forge port (1 mB = 1 L) and to IChemE pipes at its process tank; rules by datapack (`data/<namespace>/icheme/fluid_conversion/`: forward, a fluid to a composition at a temperature and pressure; reverse, a composition, temperature and pressure window to a fluid; KubeJS writes the same JSON), 26 bundled rules (water both ways, crude oil to medium crude, refinery products and gases of Create: The Factory Must Grow, PneumaticCraft, Ad Astra and Mekanism); modes Off, Balance (equal fill within a deadband), To IChemE and To Forge at a set rate; the converter's page (mode, set rate, deadband, alarm levels, both tanks, the rule and its ranges beside the drawn values, the booked rate); level, rate, direction and six alarm channels on the control system, and a DCS page with mode, rate, deadband and alarm-level commands over the converter's data link; the liquid converter takes the level gauge, the gas converter the pressure safety and gas blanketing valves; `a94aaba41`, `28a6a9464`, `4d72a0cba`, `32d203131`, `b366c182a`, `e670a8dab`, `93c906766`, `81564dfb2`, `640bbcceb`, `56bdbf15b`. Formats: fluid facts schema 24 (the converters), protocols `fluid-24` and `control-5`.
+
+### Changed
+
+- Tooling cleanup of `2026-11-12-fluid-conversion`: the converter's totals, a four-value settings call and an unused rules setter, read only by tests, left `src/main` (the tests read the Forge side and the island's bookings); the bundled rules' generator is in `tools/conversion-rules/`, the converter's GameTests runner in `tools/converter-gametest/`, `44cad3da1`.
+
 ## [0.27.1] - 2026-11-12
 
 ### Fixed

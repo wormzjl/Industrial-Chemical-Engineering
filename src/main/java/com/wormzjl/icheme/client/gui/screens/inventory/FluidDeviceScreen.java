@@ -129,7 +129,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     /** Saves the typed name by the rename path (N1), as Apply does: Enter in the entry; a tank with contents has Copy in Apply's slot. */
     private void saveName(){if(canEdit()&&renames())com.wormzjl.icheme.network.EquipmentNetwork.rename(menu.position(),nameDraft);}
     /** Whether Apply sends this device's controls: every kind but a tank (an induced-draught tower's aside), a filter, and a heat side off its Control tab or with nothing to control. */
-    private boolean controlsApply(){var data=menu.clientData();return data!=null&&(data.kind()!=TopologyCompiler.Kind.RESERVOIR||blanket()||relief()||tower()&&data.controls().tower().draft()==com.wormzjl.icheme.science.fluid.network.CoolingTower.Draft.INDUCED||still()!=null)&&data.kind()!=TopologyCompiler.Kind.FILTER&&(data.kind()!=TopologyCompiler.Kind.HEAT_SIDE||page==CONTROL&&(fans()||burners()||controllable()));}
+    private boolean controlsApply(){var data=menu.clientData();return data!=null&&(data.kind()!=TopologyCompiler.Kind.RESERVOIR||blanket()||relief()||tower()&&data.controls().tower().draft()==com.wormzjl.icheme.science.fluid.network.CoolingTower.Draft.INDUCED||still()!=null||converter()!=null)&&data.kind()!=TopologyCompiler.Kind.FILTER&&(data.kind()!=TopologyCompiler.Kind.HEAT_SIDE||page==CONTROL&&(fans()||burners()||controllable()));}
     private boolean constructedMover(){var data=menu.clientData();return data!=null&&datasheet!=null&&(data.kind()==TopologyCompiler.Kind.PUMP||data.kind()==TopologyCompiler.Kind.COMPRESSOR);}
     /** An air cooler's side: its fans switch as a mover does (batch 2026-10-27-heat-exchanger-design). */
     private boolean fans(){var data=menu.clientData();return data!=null&&data.view().heat()!=null&&data.view().heat().fans()!=null;}
@@ -143,6 +143,57 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private boolean tower(){return menu.clientData()!=null&&menu.clientData().controls().tower()!=null;}
     // A batch still's pot (batch 2026-11-09-batch-distiller, W6): its Firing, Reflux valve and Fuel lead its door column
     // (StillDoor), its readings join the meters; the switches and set points are drafts until Apply.
+    // A fluid converter's process vessel (batch 2026-11-12-fluid-conversion, W5): its Mode, Rate and Alarm levels lead its door
+    // column (ConverterDoor), then its tanks, its rule and what it books; the settings are drafts until Apply.
+    private com.wormzjl.icheme.runtime.fluid.FluidView.Converter converter(){var data=menu.clientData();return data==null?null:data.view().converter();}
+    private ConverterDoor.Mode converterMode=ConverterDoor.Mode.OFF;
+    /** What the converter's drafts and door last followed: its settings; its mode, rule and rows. */
+    private String converterShown,converterDoor;
+    /** The drafts follow the converter's settings when they change; a new rule or a new count of its rows rebuilds the door. */
+    private void refreshConverter(com.wormzjl.icheme.runtime.fluid.FluidView.Converter c){
+        String door=c==null?"":c.rule()+"/"+c.ranges().size()+"/"+(c.fluid().isEmpty());
+        if(!door.equals(converterDoor)){converterDoor=door;rebuildNext=true;}
+        String shown=c==null?"":c.mode()+"/"+c.rate()+"/"+c.deadband()+"/"+c.thresholds();
+        if(shown.equals(converterShown))return;
+        converterShown=shown;rebuildNext=true;if(c==null)return;
+        converterMode=ConverterDoor.Mode.valueOf(c.mode());
+        fields.put("converterRate",new NumericDraft(c.rate(),flowRateUnit));
+        fields.put("converterDeadband",new NumericDraft(100*c.deadband()));
+        for(int i=0;i<ConverterDoor.THRESHOLDS.size();i++){var v=c.thresholds().get(i);var draft=new NumericDraft(v==null?0:100*v);if(v==null)draft.text("");fields.put(ConverterDoor.THRESHOLDS.get(i),draft);}
+    }
+    /** The converter's settings as drafted, queued by its own edit: the rate in L/s, the deadband and the thresholds as fractions, a blank threshold none. */
+    private void converterApply(){
+        try{
+            double rate=fields.get("converterRate").si(),band=fields.get("converterDeadband").value()/100;
+            var t=new double[ConverterDoor.THRESHOLDS.size()];
+            for(int i=0;i<t.length;i++){var d=fields.get(ConverterDoor.THRESHOLDS.get(i));t[i]=d.text().isBlank()?-1:d.value()/100;}
+            FluidNetwork.converterEdit(menu,com.wormzjl.icheme.runtime.fluid.ConverterUnit.Mode.valueOf(converterMode.name()),rate,band,t);message=tr("waiting");
+        }catch(IllegalArgumentException e){message=tr("invalid_input");}
+    }
+    /** The converter's groups' input (ConverterDoor), from its view and the player's units: the rate in L per the time basis. */
+    private ConverterDoor.Input converterInput(){
+        var c=converter();var data=menu.clientData();String unit=flowRateUnit.unit("L");
+        java.util.function.DoubleFunction<String> litres=v->value(flowRateUnit.display(v));
+        var thresholds=new ArrayList<String>();for(var v:c.thresholds())thresholds.add(v==null?"—":value(100*v));
+        var forge=new ConverterDoor.Tank(c.forge(),value(100*c.forge()),tr("converter_tank.forge_amount",number(c.stored()),number(c.capacity())));
+        double fill=c.fill()==null?Double.NaN:c.fill();
+        var process=new ConverterDoor.Tank(fill,value(100*fill),c.closed()?tr("converter_tank.gas_amount",value(c.kmol()),value(c.kg())):tr("converter_tank.liquid_amount",number(c.litres())));
+        var ranges=new ArrayList<ConverterDoor.Range>();
+        for(var r:c.ranges()){
+            String name,unitText;java.util.function.Function<Double,String> shown;
+            switch(r.kind()){
+                case "TEMPERATURE"->{name=tr("converter_temperature");unitText=temperatureUnit.symbol();shown=v->temperatureValue(v);}
+                case "PRESSURE"->{name=tr("converter_pressure");unitText=pressureUnit.symbol();shown=v->pressureUnit.number(v);}
+                case "OTHERS"->{name=tr("converter_others");unitText=tr("converter_basis.mole");shown=v->value(v);}
+                default->{name=materialName(data.materialNames().getOrDefault(r.name(),MaterialName.chemical(r.name())));unitText=tr(r.kind().equals("MASS")?"converter_basis.mass":"converter_basis.mole");shown=v->value(v);}
+            }
+            if(r.kind().equals("OTHERS")&&c.ranges().stream().anyMatch(x->x.kind().equals("MASS")))unitText=tr("converter_basis.mass");
+            String bounds=!c.reverse()?tr("converter_bounds.gives"):r.min()!=null&&r.max()!=null?tr("converter_bounds.between",shown.apply(r.min()),shown.apply(r.max())):r.min()!=null?tr("converter_bounds.at_least",shown.apply(r.min())):r.max()!=null?tr("converter_bounds.at_most",shown.apply(r.max())):tr("converter_bounds.any");
+            ranges.add(new ConverterDoor.Range(name,r.value()==null?"—":shown.apply(r.value()),bounds,unitText,r.outside()));
+        }
+        return new ConverterDoor.Input(canEdit(),converterMode,unit,litres.apply(c.rated()),litres.apply(c.rate()),value(100*c.deadband()),thresholds,forge,c.fluid().isEmpty()?null:c.fluid(),process,
+            c.rule().isEmpty()?null:c.rule(),c.reverse(),ranges,litres.apply(c.booked()),c.direction().toLowerCase(java.util.Locale.ROOT));
+    }
     private com.wormzjl.icheme.runtime.fluid.FluidView.Still still(){var data=menu.clientData();return data==null?null:data.view().still();}
     private boolean stillFiring,stillOpen=true;
     /** What the still's drafts and widgets last followed: its settings, what a controller holds and the slot's item. */
@@ -257,7 +308,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             }
             if(selected!=phase){phase=selected;scroll.reset();rebuildNext=true;}
         }
-        refreshStill(data.view().still());
+        refreshStill(data.view().still());refreshConverter(data.view().converter());
         if(data.view().inputRevision()==revision)return;
         revision=data.view().inputRevision();var c=data.controls();
         powerOn=c.power()==FluidNetwork.Power.ON;valveSource=c.valveSource();
@@ -285,7 +336,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         composition=new RelativeComposition(data.components(),data.molecularWeights(),c.composition());
         if(mass)composition.toggleBasis();
         loadSolids(c.solids());
-        stillShown=null;refreshStill(data.view().still());
+        stillShown=null;refreshStill(data.view().still());converterShown=null;refreshConverter(data.view().converter());
         templates=false;scroll.reset();rebuildNext=true;
     }
     private void loadSolids(SlurryFeed solids){
@@ -338,7 +389,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         var next=temperatureUnit.next();if(convertUnit(next,"temperature","heatTemperature","lowLimit")){temperatureUnit=next;ClientConfig.temperature(next);rebuild();}
     }
     private void toggleFlowRate(){
-        var next=flowRateUnit.next();if(convertUnit(next,"volumeFlow","massFlow")){flowRateUnit=next;ClientConfig.flowTime(next);rebuild();}
+        var next=flowRateUnit.next();if(convertUnit(next,"volumeFlow","massFlow","converterRate")){flowRateUnit=next;ClientConfig.flowTime(next);rebuild();}
     }
     private void togglePressure(){
         var next=pressureUnit.next();if(convertUnit(next,"pressure","maximumAddedPressure")){pressureUnit=next;ClientConfig.pressure(next);rebuild();}
@@ -526,6 +577,8 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         saveName();
         if(!controlsApply())return;
         if(!canEdit())return;
+        // A converter's page sends its settings by their own edit (W5); its accessory page sends the valves as a drum's.
+        if(converter()!=null&&page!=ACCESSORY){converterApply();return;}
         // A compressor's ratio outside its bounds is named with them (the bounds Controls validates with), not the generic message.
         if(menu.clientData().kind()==TopologyCompiler.Kind.COMPRESSOR){
             double ratio;try{ratio=fields.get("maximumPressureRatio").value();}catch(IllegalArgumentException e){ratio=Double.NaN;}
@@ -849,7 +902,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     }
     /** A tank's Level group: its fill (NaN while unknown), and its contents of its capacity in litres. */
     private DeviceColumn.Level level(){
-        if(!tank())return null;
+        if(!tank()||converter()!=null)return null;
         var view=menu.clientData().view();var vessel=view.tank();var state=view.state();boolean empty=vessel!=null&&state==null;
         double capacity=vessel!=null?vessel.capacity():state==null?Double.NaN:state.capacity();
         return new DeviceColumn.Level(state!=null?state.fill():empty?0:Double.NaN,state!=null?number(state.volume()*1000):empty?number(0):"—",value(capacity*1000));
@@ -862,7 +915,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         var opening=data.valve()==null?null:new DeviceColumn.Opening(data.valve().opening(),data.valve().status());
         String junction=pipe()&&view.pipeInfo().junction()?tr("junction",view.pipeInfo().connections().size()):null;
         // A paired heat side leads with its side selector, as its Control tab does.
-        var lead=still()!=null?StillDoor.rows(stillInput(),FluidDeviceScreen::tr):tower()?DeviceColumn.towerControl(menu.clientData().controls().tower().draft()==com.wormzjl.icheme.science.fluid.network.CoolingTower.Draft.INDUCED,towerAuto,canEdit(),temperatureUnit.symbol(),FluidDeviceScreen::tr):heat()!=null?HeatControlColumn.sideSelector(controlInput(),FluidDeviceScreen::tr):List.<Column.Row>of();
+        var lead=converter()!=null?ConverterDoor.rows(converterInput(),FluidDeviceScreen::tr):still()!=null?StillDoor.rows(stillInput(),FluidDeviceScreen::tr):tower()?DeviceColumn.towerControl(menu.clientData().controls().tower().draft()==com.wormzjl.icheme.science.fluid.network.CoolingTower.Draft.INDUCED,towerAuto,canEdit(),temperatureUnit.symbol(),FluidDeviceScreen::tr):heat()!=null?HeatControlColumn.sideSelector(controlInput(),FluidDeviceScreen::tr):List.<Column.Row>of();
         var input=new DeviceColumn.Input(data.kind(),canEdit(),switchable(),powerOn,pressureUnit.symbol(),temperatureUnit.symbol(),flowRateUnit.suffix(),valve,opening,
             view.filter()!=null&&!view.filter().captured().empty(),level(),junction,lead,phases(),meters(),drive(),power(),suction());
         return data.controls().fixedMover()?input.withFixedDuty(tr(data.kind()==TopologyCompiler.Kind.PUMP?"inline.pump_rating":"inline.compressor_rating",value(data.controls().volumeFlow()*3600))):input;
@@ -1209,6 +1262,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
                 case "valve:volume"->valveSource=com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.VOLUME_FLOW;
                 case "still_firing:off","still_firing:on"->stillFiring=action.endsWith(":on");
                 case "still_reflux:closed","still_reflux:open"->stillOpen=action.endsWith(":open");
+                case "converter_mode:off","converter_mode:balance","converter_mode:to_icheme","converter_mode:to_forge"->converterMode=ConverterDoor.Mode.valueOf(action.substring("converter_mode:".length()).toUpperCase(java.util.Locale.ROOT));
                 default->{}
             }
             rebuild();

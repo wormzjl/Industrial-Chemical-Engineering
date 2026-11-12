@@ -662,6 +662,8 @@ public final class ProcessUnit {
     final List<Access.WoundStair> woundStairs = new ArrayList<>();
     /** A storage vessel's fluid node: a frame point in the shell cell at its lowest inside, or null for a unit. */
     double[] fluidPoint;
+    /** A fluid converter's Forge fluid port: a frame point on its face and the face's outward normal {x, y, z, nx, ny, nz}; null for any other unit. */
+    double[] forgePort;
     /**
      * Frame heights {low, high, phase} between which whole cell rows are body rows (a floating-roof tank's plain shell
      * courses, {@link ShapeRasterizer}): their cells repeat every {@link ShapeRasterizer#COURSE} pair from {@code phase},

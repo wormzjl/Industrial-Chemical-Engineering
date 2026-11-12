@@ -551,8 +551,10 @@ public final class PassiveStepSolver {
                 // Decision D54: a vessel the failed iterate drained to nothing runs dry within the step. Its end state has no
                 // contents, so the pass laid out with them has no root (every step size fails the same way); it is solved
                 // again with the vessel as a junction holding its stock, which ends the step empty (emptyingGraph).
+                // The junction is laid out on its stock, the vessel's own start state (stockSeeds), not on what the failed
+                // passes folded out of it.
                 var drained=equations.runsDry(failure.lastVariables(),emptying);
-                if(drained!=null){emptying=drained;continue;}
+                if(drained!=null){seeds=stockSeeds(original,seeds,drained,emptying);emptying=drained;continue;}
                 // Owner option 1 of FEED_STEP_HOLD_REVIEW.md: a regulating flow valve fed only by vessels that hold nothing or that
                 // this pass runs dry cannot hold a target above what reaches it; its regulation row has no root at any step size
                 // (a drained level-loop drum held its island at residual = the valve's flow). It is solved again open, passing
@@ -1585,18 +1587,36 @@ public final class PassiveStepSolver {
                 FluidThermodynamics.State engine;
                 try{var split=model.equilibriumPH(weighted/mass,seed.pressure(),enthalpy,n,checkpoint);engine=split!=null?split:model.flashTP(weighted/mass,seed.pressure(),n,checkpoint);}
                 catch(com.wormzjl.icheme.science.fluid.thermo.ThermoHold outside){continue;}
-                if(laidOutFor(phaseCode(model.folded(engine,true)),phaseCode(seed)))continue;
+                // A cold solve's seed is the balance's upwind mixture (balanceStart), right for a junction the step flushes. One
+                // that keeps at least half its stock over the step is stated by that stock: its seed is the stock's mixture
+                // whatever it is laid out for (stocked).
+                boolean stocked=stocked(j,seed,seeds,heldMass,mass);
+                if(!stocked&&laidOutFor(phaseCode(model.folded(engine,true)),phaseCode(seed)))continue;
                 // The engine's answer is the start of the junction's own split, not its verdict (D26): its rows decide the phase.
                 var own=model.junctionSplit(n,enthalpy,molarMass(n),seed.pressure(),engine,checkpoint);
                 if(own==null)continue;
                 var mixture=model.folded(own,true);
-                if(laidOutFor(phaseCode(mixture),phaseCode(seed)))continue;
+                if(!stocked&&laidOutFor(phaseCode(mixture),phaseCode(seed)))continue;
                 if(result==null)result=new ArrayList<>(seeds);
                 result.set(j,mixture.withSolidState(seed.solids(),seed.solidMoments()));changed=true;
             }
             if(!changed)break;
         }
         return result==null?seeds:flashSeeds(graph,modes,boundaryClosed,seeds,result,checkpoint);
+    }
+    /**
+     * Whether junction {@code j} of a cold solve is seeded by its stock: its {@code seed} is the balance's restatement
+     * ({@link #balanceStart}), not its own state, and the step's start flows bring it no more than it holds
+     * ({@code heldMass} of the mixture's {@code mass}). The balance states a junction as the mixture of what flows through
+     * it; the backward-Euler rows state it as its stock and what arrives, and where the stock outweighs the arrivals the
+     * two differ by the whole stock. The level loop's outlet junction (1 kg of water with 0.15 % of nitrogen, 72 % gas by
+     * volume) stood behind a shut valve; the balance seeded it as the drum's liquid with 1e-7 of its volume as gas, its
+     * rows asked for the stock back, and the Newton crossed to all vapour at every step size (batch
+     * 2026-11-11-aqueous-solvents, FINAL_LANE_FIXES_REVIEW.md section 3). A seed starts a pass and decides nothing.
+     */
+    private boolean stocked(int j,FluidThermodynamics.State seed,List<FluidThermodynamics.State> seeds,double heldMass,double mass) {
+        return balanceLawFlows!=null&&supplyGraph!=null&&j<supplyGraph.reservoirs().size()&&seed==seeds.get(j)
+                &&seed!=supplyGraph.reservoirs().get(j).state()&&heldMass>=mass-heldMass;
     }
     /**
      * Decisions D54 and D26: an empty bag's own split of what arrives over a step, the amounts {@code n} with the enthalpy
@@ -2556,7 +2576,9 @@ public final class PassiveStepSolver {
                 }
             }
             int valve=-1;
-            for(int e=0;e<graph.pipes().size();e++){var pipe=graph.pipes().get(e);if(pipe.control() instanceof FlowControl.Valve&&graph.reservoirs().get(pipe.first()).id()==plan.valve()){valve=e;break;}}
+            // A port's valve is on the run out of its node; a void that is its own valve's port (a converter's drain) has it on the run into it.
+            boolean into=plan.valve()==plan.node()&&n.kind()==PassiveNetwork.NodeKind.VOID;
+            for(int e=0;e<graph.pipes().size();e++){var pipe=graph.pipes().get(e);if(pipe.control() instanceof FlowControl.Valve&&graph.reservoirs().get(into?pipe.second():pipe.first()).id()==plan.valve()){valve=e;break;}}
             if(valve<0)continue;
             var driven=pipes==null?graph.pipes().get(valve):pipes.get(valve);var law=(FlowControl.Valve)driven.control();
             double target=lowest.get(plan.valve());
@@ -3151,13 +3173,19 @@ public final class PassiveStepSolver {
         return true;
     }
     /** The initial device modes of a solve on {@code graph}'s states (the mint reads them too): the switch of {@link #solve}.
-     * A vapour-locked pump ({@link #vapourLocks}, owner decision D16 A) starts closed, as one set to no flow does. */
+     * A vapour-locked pump ({@link #vapourLocks}, owner decision D16 A) starts closed, as one set to no flow does. A flow
+     * valve set to no flow starts closed too, unless it stands open behind a lower target ({@link ControlConstraints#standing}):
+     * the fact the carry and a converged pass already state ({@link #nextMode}). Started open, it closed only after an open
+     * pass converged, and a cold solve of the level loop's drum had none: the level valve, set to zero by its controller,
+     * drew 790 kg/s down the outlet of a drum holding 7.9 L at every step size (batch 2026-11-11-aqueous-solvents,
+     * FINAL_LANE_FIXES_REVIEW.md section 3). */
     private List<FlowControl.Mode> initialModes(PassiveNetwork graph) {
-        var modes=new ArrayList<FlowControl.Mode>();
+        var modes=new ArrayList<FlowControl.Mode>();var stands=ControlConstraints.standing(graph);
         for(var pipe:graph.pipes())modes.add(switch(pipe.control()) {
             case FlowControl.Passive ignored->FlowControl.Mode.PASSIVE;
             case FlowControl.Mover pump->pump.targetVolumeFlow()==0||vapourLocked(modes.size())?FlowControl.Mode.CLOSED:FlowControl.Mode.MOVER_LAW;
-            case FlowControl.Valve valve->heldOpenings.length==graph.pipes().size()&&!Double.isNaN(heldOpenings[modes.size()])?(heldOpenings[modes.size()]==0?FlowControl.Mode.CLOSED:FlowControl.Mode.VALVE_CONFLICT):valve.bare()||!valve.pressureControl()||graph.reservoirs().get(pipe.first()).state().pressure()>valve.targetPressure()+.01
+            case FlowControl.Valve valve->heldOpenings.length==graph.pipes().size()&&!Double.isNaN(heldOpenings[modes.size()])?(heldOpenings[modes.size()]==0?FlowControl.Mode.CLOSED:FlowControl.Mode.VALVE_CONFLICT):!valve.bare()&&!valve.pressureControl()&&valve.targetMassFlow(1)==0&&!stands.get(modes.size())?FlowControl.Mode.CLOSED
+                    :valve.bare()||!valve.pressureControl()||graph.reservoirs().get(pipe.first()).state().pressure()>valve.targetPressure()+.01
                     ?FlowControl.Mode.VALVE_OPEN:FlowControl.Mode.CLOSED;
         });
         return modes;
@@ -4082,6 +4110,24 @@ public final class PassiveStepSolver {
         for(var pipe:graph.pipes())pipes.add(emptying[pipe.first()]||emptying[pipe.second()]
                 ?pipe.withPorts(emptying[pipe.first()]&&pipe.firstPort()!=PassiveNetwork.PhasePort.SPRAY?PassiveNetwork.PhasePort.BULK:pipe.firstPort(),emptying[pipe.second()]&&pipe.secondPort()!=PassiveNetwork.PhasePort.SPRAY?PassiveNetwork.PhasePort.BULK:pipe.secondPort()):pipe);
         return new PassiveNetwork(nodes,pipes,graph.scheduledTransfers());
+    }
+    /**
+     * Decision D54: {@code seeds} with every vessel that {@code drained} adds to {@code emptying} seeded with its own start
+     * state. A junction's seed is its own state, the phases of the stock it holds; the passes that failed before the
+     * vessel was found running dry read diverged iterates and may have folded a phase out of its seed. A blanketed drum
+     * of 2.9 m3 of nitrogen over 20 L of water, its gas folded by a failed 2 s pass, stood as a junction of water alone
+     * at 83.8 kPa and was confirmed emptying; with its gas it stands at 104.7 kPa, above the ambient, and keeps its
+     * contents (batch 2026-11-11-aqueous-solvents, FINAL_LANE_FIXES_REVIEW.md section 3).
+     */
+    private static List<FluidThermodynamics.State> stockSeeds(PassiveNetwork graph,List<FluidThermodynamics.State> seeds,boolean[] drained,boolean[] emptying) {
+        List<FluidThermodynamics.State> result=null;
+        for(int i=0;i<drained.length;i++) {
+            if(!drained[i]||emptying!=null&&emptying[i])continue;
+            var own=graph.reservoirs().get(i).state();if(seeds.get(i)==own)continue;
+            if(result==null)result=new ArrayList<>(seeds);
+            result.set(i,own);
+        }
+        return result==null?seeds:result;
     }
     /** Per node of {@code graph}, the stock an emptying vessel passes over the step and the ambient's work on its bag. */
     private ConservativeTransport.Emptying[] emptyings(PassiveNetwork graph,boolean[] emptying,double dt) {

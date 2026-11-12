@@ -415,6 +415,20 @@ final class ControlHosts {
         return out;
     }
 
+    /** Whether {@code host} is a fluid converter's (batch 2026-11-12-fluid-conversion, W4): its vessel's binding. */
+    boolean converter(long host) {
+        var b = bindings.get(host);
+        return b != null && b.shape().kind().converter() && b.node(0) == host;
+    }
+
+    /** The converter hosts whose data socket {@code controller}'s bus reaches, in host order (W4: the DCS's converter page). */
+    List<Long> converters(UUID controller) {
+        var out = new ArrayList<Long>();
+        for (long host : bindings.keySet()) if (converter(host) && wired(controller, host)) out.add(host);
+        out.sort(null);
+        return out;
+    }
+
     /** A loaded cell of column host {@code host}, or null: the column's origin and level for its Operation commands. */
     EquipmentShellBlockEntity column(long host) {
         var ref = columnCells.get(host);

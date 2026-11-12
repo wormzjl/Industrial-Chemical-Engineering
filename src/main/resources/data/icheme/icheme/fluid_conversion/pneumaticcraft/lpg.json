@@ -1,0 +1,60 @@
+{
+  "revision": "1",
+  "priority": 45,
+  "fluid": "pneumaticcraft:lpg",
+  "phase": "liquid",
+  "to_forge": {
+    "basis": "mass",
+    "components": {
+      "Propane": {
+        "min": 0,
+        "max": 1
+      },
+      "Propylene": {
+        "min": 0,
+        "max": 1
+      },
+      "Isobutane": {
+        "min": 0,
+        "max": 1
+      },
+      "N-butane": {
+        "min": 0,
+        "max": 1
+      },
+      "Butene-1": {
+        "min": 0,
+        "max": 1
+      },
+      "Isobutene": {
+        "min": 0,
+        "max": 1
+      },
+      "Cis-2-butene": {
+        "min": 0,
+        "max": 1
+      },
+      "Trans-2-butene": {
+        "min": 0,
+        "max": 1
+      },
+      "Butadiene": {
+        "min": 0,
+        "max": 1
+      },
+      "Ethane": {
+        "min": 0,
+        "max": 0.02
+      }
+    },
+    "others_max": 0.03,
+    "temperature": {
+      "min": 183.15,
+      "max": 275.15
+    },
+    "pressure": {
+      "min": 80000,
+      "max": 200000
+    }
+  }
+}

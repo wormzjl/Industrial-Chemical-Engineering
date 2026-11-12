@@ -1,0 +1,44 @@
+{
+  "revision": "1",
+  "priority": 20,
+  "fluid": "tfmg:diesel",
+  "phase": "liquid",
+  "to_forge": {
+    "basis": "mass",
+    "components": {
+      "crude_pc05": {
+        "min": 0,
+        "max": 1
+      },
+      "crude_pc03": {
+        "min": 0,
+        "max": 0.05
+      },
+      "crude_pc04": {
+        "min": 0,
+        "max": 0.4
+      },
+      "crude_pc06": {
+        "min": 0.15,
+        "max": 1
+      },
+      "crude_pc07": {
+        "min": 0,
+        "max": 0.5
+      },
+      "crude_pc08": {
+        "min": 0,
+        "max": 0.05
+      }
+    },
+    "others_max": 0.01,
+    "temperature": {
+      "min": 253.15,
+      "max": 353.15
+    },
+    "pressure": {
+      "min": 80000,
+      "max": 500000
+    }
+  }
+}

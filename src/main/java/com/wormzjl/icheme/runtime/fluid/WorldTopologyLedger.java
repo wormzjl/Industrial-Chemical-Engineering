@@ -156,7 +156,9 @@ public final class WorldTopologyLedger {
     }
     public record Snapshot(long onlineTick,long nextIdentity,Map<Long,Registration> active,List<Event> events,
                            MaterialTotal constructed,MaterialTotal destroyed,FluidBasis basis,Map<UUID,RecoveredSolid> recoveries,Restated restated,
-                           Map<Long,ColumnUnit> columns,Map<Long,ShaftUnit> shafts,Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores,Map<Long,Double> health,Builds builds,Map<Long,StillUnit> stills) {
+                           Map<Long,ColumnUnit> columns,Map<Long,ShaftUnit> shafts,Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores,Map<Long,Double> health,Builds builds,Map<Long,StillUnit> stills,Map<Long,ConverterUnit> converters) {
+        /** Without fluid converters (fluid facts before schema 24, batch 2026-11-12-fluid-conversion). */
+        public Snapshot(long onlineTick,long nextIdentity,Map<Long,Registration> active,List<Event> events,MaterialTotal constructed,MaterialTotal destroyed,FluidBasis basis,Map<UUID,RecoveredSolid> recoveries,Restated restated,Map<Long,ColumnUnit> columns,Map<Long,ShaftUnit> shafts,Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores,Map<Long,Double> health,Builds builds,Map<Long,StillUnit> stills){this(onlineTick,nextIdentity,active,events,constructed,destroyed,basis,recoveries,restated,columns,shafts,stores,health,builds,stills,Map.of());}
         /** Without batch stills (fluid facts before schema 16, batch 2026-11-09-batch-distiller). */
         public Snapshot(long onlineTick,long nextIdentity,Map<Long,Registration> active,List<Event> events,MaterialTotal constructed,MaterialTotal destroyed,FluidBasis basis,Map<UUID,RecoveredSolid> recoveries,Restated restated,Map<Long,ColumnUnit> columns,Map<Long,ShaftUnit> shafts,Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores,Map<Long,Double> health,Builds builds){this(onlineTick,nextIdentity,active,events,constructed,destroyed,basis,recoveries,restated,columns,shafts,stores,health,builds,Map.of());}
         /** Without the build facts (fluid facts before schema 15, batch 2026-11-03-save-corruption): the blocks teach them. */
@@ -191,17 +193,17 @@ public final class WorldTopologyLedger {
                 if(changed==null)changed=new HashMap<>(active);
                 changed.put(r.device().id(),new Registration(r.device().withHeat(heat.withTransit(joule)),r.spec(),r.revision()));
             }
-            return changed==null?this:new Snapshot(onlineTick,nextIdentity,changed,events,constructed,destroyed,basis,recoveries,restated,columns,shafts,stores,health,builds,stills);
+            return changed==null?this:new Snapshot(onlineTick,nextIdentity,changed,events,constructed,destroyed,basis,recoveries,restated,columns,shafts,stores,health,builds,stills,converters);
         }
         /** These facts on {@code basis}, which holds the same compounds ({@link FluidBasis#sameAs}): a load names the current package. */
         public Snapshot withBasis(FluidBasis basis){
             if(!this.basis.sameAs(basis))throw new IllegalArgumentException("Another basis needs a restatement, not a new name");
             // Every unit and store goes along (batch 2026-11-09-batch-distiller: the shaft units, stores and pump health were left behind).
-            return new Snapshot(onlineTick,nextIdentity,active,events,constructed,destroyed,basis,recoveries,restated,columns,shafts,stores,health,builds,stills);
+            return new Snapshot(onlineTick,nextIdentity,active,events,constructed,destroyed,basis,recoveries,restated,columns,shafts,stores,health,builds,stills,converters);
         }
         public Snapshot {
             FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.topologySnapshots);
-            recoveries=Map.copyOf(recoveries);columns=Map.copyOf(columns);shafts=Map.copyOf(shafts);stores=Map.copyOf(stores);health=Map.copyOf(health);stills=Map.copyOf(stills);if(recoveries.size()>MAXIMUM_EVENTS)throw new IllegalArgumentException("Recovery queue is full");
+            recoveries=Map.copyOf(recoveries);columns=Map.copyOf(columns);shafts=Map.copyOf(shafts);stores=Map.copyOf(stores);health=Map.copyOf(health);stills=Map.copyOf(stills);converters=Map.copyOf(converters);if(recoveries.size()>MAXIMUM_EVENTS)throw new IllegalArgumentException("Recovery queue is full");
             if(onlineTick<0||nextIdentity<1||events.size()>MAXIMUM_EVENTS)throw new IllegalArgumentException("Invalid world topology snapshot");
             active=Map.copyOf(active);events=List.copyOf(events);Objects.requireNonNull(constructed);Objects.requireNonNull(destroyed);Objects.requireNonNull(restated);
             Objects.requireNonNull(basis);int count=basis.components().size();
@@ -233,6 +235,8 @@ public final class WorldTopologyLedger {
             for(var e:health.entrySet())if(e.getKey()<=0||e.getKey()>=nextIdentity||!(e.getValue()>=0&&e.getValue()<=1))throw new IllegalArgumentException("Invalid pump health "+e.getKey()+"="+e.getValue());
             // A batch still (batch 2026-11-09-batch-distiller): keyed by its pot (registered, or queued to be); its accounts on the basis.
             for(var e:stills.entrySet()){var u=e.getValue();if(e.getKey()!=u.id()||u.id()>=nextIdentity||u.head().moles().length!=count||u.venting().moles().length!=count)throw new IllegalArgumentException("Invalid batch still "+e.getKey());}
+            // A fluid converter (batch 2026-11-12-fluid-conversion): keyed by its vessel's identity, its ports' identities given.
+            for(var e:converters.entrySet()){var u=e.getValue();if(e.getKey()!=u.id()||u.id()>=nextIdentity||u.drain()>=nextIdentity||u.drainValve()>=nextIdentity||u.fill()>=nextIdentity||u.fillValve()>=nextIdentity)throw new IllegalArgumentException("Invalid fluid converter "+e.getKey());}
             Objects.requireNonNull(builds);for(long id:builds.paints().keySet())if(id>=nextIdentity)throw new IllegalArgumentException("Paint of an identity never given: "+id);
             for(long id:builds.racks().keySet())if(id>=nextIdentity)throw new IllegalArgumentException("Rack frame of an identity never given: "+id);
         }
@@ -286,6 +290,8 @@ public final class WorldTopologyLedger {
     private Map<Long,Double> health=Map.of();
     // The batch stills (batch 2026-11-09-batch-distiller), by their pots' identities.
     private final LinkedHashMap<Long,StillUnit> stills=new LinkedHashMap<>();
+    // The fluid converters (batch 2026-11-12-fluid-conversion), by their vessels' identities.
+    private final LinkedHashMap<Long,ConverterUnit> converters=new LinkedHashMap<>();
     private final Map<Long,Registration> activeView=Collections.unmodifiableMap(active),latestView=Collections.unmodifiableMap(latest);
     private final List<Event> eventsView=Collections.unmodifiableList(events);
     private final Map<UUID,RecoveredSolid> recoveriesView=Collections.unmodifiableMap(recoveries);
@@ -304,7 +310,7 @@ public final class WorldTopologyLedger {
         latest.putAll(active);latestAt.putAll(activeAt);
         // Every queued event must apply to the registry before it, in order, as when it was queued.
         for(var event:restored.events){check(latest,latestAt,event.edits);apply(latest,latestAt,event.edits);events.add(event);}
-        recoveries.putAll(restored.recoveries);columns.putAll(restored.columns);shafts.putAll(restored.shafts);stores=restored.stores;health=restored.health;stills.putAll(restored.stills);
+        recoveries.putAll(restored.recoveries);columns.putAll(restored.columns);shafts.putAll(restored.shafts);stores=restored.stores;health=restored.health;stills.putAll(restored.stills);converters.putAll(restored.converters);
         paints.putAll(restored.builds.paints());structures.putAll(restored.builds.structures());racks.putAll(restored.builds.racks());names.putAll(restored.builds.names());builds=restored.builds;
         shared=restored;sharedVersion=version;
     }
@@ -313,8 +319,8 @@ public final class WorldTopologyLedger {
     public Snapshot snapshot() {
         owned();
         if(builds==null)builds=new Builds(paints,structures,racks,names);
-        if(sharedVersion!=version){shared=new Snapshot(onlineTick,nextIdentity,Map.copyOf(active),List.copyOf(events),constructed,destroyed,basis,Map.copyOf(recoveries),restated,Map.copyOf(columns),Map.copyOf(shafts),stores,health,builds,Map.copyOf(stills));sharedVersion=version;}
-        else if(shared.onlineTick!=onlineTick||shared.builds!=builds)shared=new Snapshot(onlineTick,shared.nextIdentity,shared.active,shared.events,shared.constructed,shared.destroyed,shared.basis,shared.recoveries,shared.restated,shared.columns,shared.shafts,shared.stores,shared.health,builds,shared.stills);
+        if(sharedVersion!=version){shared=new Snapshot(onlineTick,nextIdentity,Map.copyOf(active),List.copyOf(events),constructed,destroyed,basis,Map.copyOf(recoveries),restated,Map.copyOf(columns),Map.copyOf(shafts),stores,health,builds,Map.copyOf(stills),Map.copyOf(converters));sharedVersion=version;}
+        else if(shared.onlineTick!=onlineTick||shared.builds!=builds)shared=new Snapshot(onlineTick,shared.nextIdentity,shared.active,shared.events,shared.constructed,shared.destroyed,shared.basis,shared.recoveries,shared.restated,shared.columns,shared.shafts,shared.stores,shared.health,builds,shared.stills,shared.converters);
         return shared;
     }
     /** The build facts as the next snapshot holds them. */
@@ -523,6 +529,17 @@ public final class WorldTopologyLedger {
         for(var a:new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account[]{unit.head(),unit.venting()}){var n=a.moles();for(int c=0;c<n.length;c++)moles[c]+=n[c];energy+=a.energy();}
         destroyed=new MaterialTotal(moles,energy,destroyed.solidMasses());version++;return unit;
     }
+    /** The fluid converters (batch 2026-11-12-fluid-conversion): a copy, by their vessels' identities. */
+    public Map<Long,ConverterUnit> converters(){owned();return Map.copyOf(converters);}
+    /** The converter whose vessel is {@code id}, or null. */
+    public ConverterUnit converter(long id){owned();return converters.get(id);}
+    /** Installs or replaces a converter's facts; its vessel is a registered device. */
+    public void converter(ConverterUnit unit) {
+        owned();if(!latest.containsKey(unit.id())&&!active.containsKey(unit.id()))throw new IllegalArgumentException("A fluid converter's vessel is a registered device");
+        var old=converters.put(unit.id(),unit);if(!unit.equals(old))version++;
+    }
+    /** Removes converter {@code id}. Its Forge tank and account were never in the fluid world, so nothing is booked. */
+    public ConverterUnit removeConverter(long id){owned();var unit=converters.remove(id);if(unit!=null)version++;return unit;}
     /** Reserves {@code count} identities and returns the first. */
     public long reserve(int count){owned();if(count<1)throw new IllegalArgumentException("Reserve at least one identity");long first=nextIdentity;nextIdentity=Math.addExact(nextIdentity,count);version++;return first;}
     public void validate(Prepared prepared){owned();if(prepared.version!=version||prepared.preparedTick!=onlineTick)throw new IllegalStateException("Stale topology preparation");}

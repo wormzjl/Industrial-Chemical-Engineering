@@ -41,6 +41,17 @@ public record BlanketValveGeometry(double[] foot, double centre, double seat, in
 
     /** The valve's place on {@code shape}, or null where the shape reserves no flange for it (every kind but a drum). */
     public static BlanketValveGeometry of(EquipmentShape shape) {
+        if (shape.kind() == EquipmentShape.Kind.GAS_CONVERTER) {
+            // A gas converter's valve stands on its process vessel's head beside the apex (batch 2026-11-12-fluid-conversion):
+            // the drum's valve, its foot on the head, none where the head is too small for it.
+            var frame = ConverterDesign.blanketFoot(shape.diameter(), shape.tangentLength());
+            if (frame == null) return null;
+            var foot = shape.transform().point(frame);
+            double seat = Math.ceil(foot[1] + LEAST * HEIGHT);
+            int[] cell = {(int) Math.floor(foot[0]), (int) seat - 1, (int) Math.floor(foot[2])};
+            for (var port : ShapeRasterizer.ports(shape)) if (port.dy() == 1 && port.cell().x() == cell[0] && port.cell().z() == cell[2]) return null;
+            return new BlanketValveGeometry(foot, .5 * (foot[1] + seat), seat, 1, cell, Math.min(1, (seat - foot[1]) / HEIGHT));
+        }
         if (shape.kind() != EquipmentShape.Kind.DRUM) return null;
         EquipmentInstruments.Reservation own = null, other = null;
         for (var r : EquipmentInstruments.of(shape).reserved()) {

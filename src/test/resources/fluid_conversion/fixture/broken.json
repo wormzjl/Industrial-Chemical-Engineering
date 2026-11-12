@@ -1,0 +1,6 @@
+{
+  "revision": "1",
+  "fluid": "test:broken",
+  "phase": "liquid",
+  "to_icheme": {"composition": {"Unobtainium": 1.0}}
+}

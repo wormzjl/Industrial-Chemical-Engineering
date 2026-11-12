@@ -12,6 +12,7 @@ import com.wormzjl.icheme.client.gui.common.MachineColumnSamples;
 import com.wormzjl.icheme.client.gui.common.MachineColumn;
 import com.wormzjl.icheme.client.gui.common.PumpCurve;
 import com.wormzjl.icheme.client.gui.common.StillDoor;
+import com.wormzjl.icheme.client.gui.common.ConverterDoor;
 import com.wormzjl.icheme.client.gui.common.kit.Canvas;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
 import com.wormzjl.icheme.client.gui.common.kit.Measure;
@@ -96,6 +97,7 @@ public final class GuiPrototypes {
         out.addAll(firedHeater());
         out.addAll(flareStack());
         out.addAll(batchStill());
+        out.addAll(fluidConverter());
         out.addAll(blanketValve());
         out.addAll(reliefValve());
         return out;
@@ -106,6 +108,47 @@ public final class GuiPrototypes {
      * damper held by a controller; a liquid-fired pot still heating; an electric still boiled dry; and the constructor's
      * still options.
      */
+    /**
+     * A fluid converter (batch 2026-11-12-fluid-conversion, W5): its process tank's page idle (Off, no rule, the Forge tank
+     * empty), converting to the Forge tank on a water rule, and a closed gas converter in Balance with an alarm (its Forge
+     * tank over its high level).
+     */
+    static List<Prototype> fluidConverter() {
+        var out = new ArrayList<Prototype>();
+        record Page(String file, String title, ConverterDoor.Input in, String status, int colour, Map<String, String> drafts) {}
+        var none = List.of("—", "—", "—", "—");
+        var water = List.of(new ConverterDoor.Range("Water", "0.998", "at least 0.99", "mol frac", false), new ConverterDoor.Range("Others", "0.002", "at most 0.01", "mol frac", false),
+                new ConverterDoor.Range("Temperature", "25.0", "5.0 to 60.0", "°C", false), new ConverterDoor.Range("Pressure", "1.013", "0.900 to 1.500", "bar", false));
+        var gas = List.of(new ConverterDoor.Range("Methane", "0.951", "gives", "mol frac", false), new ConverterDoor.Range("Ethane", "0.049", "gives", "mol frac", false),
+                new ConverterDoor.Range("Temperature", "25.0", "gives", "°C", false), new ConverterDoor.Range("Pressure", "1.013", "gives", "bar", false));
+        var pages = List.of(
+                new Page("fluid-converter-idle", "Fluid converter", new ConverterDoor.Input(true, ConverterDoor.Mode.OFF, "L/h", "5,655", "5,655", "5", none,
+                        new ConverterDoor.Tank(0, "0.0", "0 of 1,571 mB"), null, new ConverterDoor.Tank(0, "0.0", "0 L"), null, false, List.of(), "0.0", "none"),
+                        "OFF", Palette.MUTED, Map.of("converterRate", "5,655", "converterDeadband", "5")),
+                new Page("fluid-converter-converting", "Fluid converter", new ConverterDoor.Input(true, ConverterDoor.Mode.TO_FORGE, "L/h", "5,655", "2,880", "5", List.of("90", "—", "95", "—"),
+                        new ConverterDoor.Tank(.41, "41.0", "644 of 1,571 mB"), "minecraft:water", new ConverterDoor.Tank(.52, "52.0", "817 L"), "icheme:water_to_forge", true, water, "-2,880", "to_forge"),
+                        "CONVERTING", Palette.ACCENT, Map.of("converterRate", "2,880", "converterIchemeHigh", "90", "converterForgeHigh", "95")),
+                new Page("fluid-converter-gas-alarm", "Gas converter", new ConverterDoor.Input(true, ConverterDoor.Mode.BALANCE, "L/h", "50,894", "50,894", "5", List.of("—", "—", "80", "—"),
+                        new ConverterDoor.Tank(.86, "86.0", "12,159 of 14,137 mB"), "examplemod:natural_gas", new ConverterDoor.Tank(.31, "31.0", "0.41 kmol, 7.0 kg"), "examplemod:natural_gas_in", false, gas, "14,400", "to_icheme"),
+                        "CONVERTING / LEVEL HIGH", Palette.RED, Map.of("converterRate", "50,894", "converterDeadband", "5", "converterForgeHigh", "80")));
+        for (var p : pages) {
+            var door = ConverterDoor.rows(p.in(), TEXTS);
+            var input = new DeviceColumn.Input(Kind.RESERVOIR, true, false, true, "bar", "°C", "/h", DeviceColumn.Valve.NONE, null, false,
+                    null, null, door, phases("volume", p.file().contains("gas") ? 0 : 52, 0, p.file().contains("gas") ? 100 : 48, 0), List.of(meter("temperature", "25.0", "°C"), meter("pressure", "1.013", "bar")), null, null);
+            out.add(devicePage(p.file(), WINDOW[0], WINDOW[1], input, (d, k) -> {
+                d.title(p.title());
+                d.name("FC-1", false);
+                d.tabs(0, "Overview", "Outlets", "Datasheet");
+                d.status(p.status(), p.colour());
+                var box = device(d, input, DeviceColumn.rows(input, TEXTS), p.drafts());
+                contents(d, box, p.file().contains("gas") ? 2 : 0, p.file().contains("gas") ? List.of(new String[]{"Component", "Mole %", "kmol"}, new String[]{"Methane", "95.1", "0.39"}, new String[]{"Ethane", "4.9", "0.02"})
+                        : List.of(new String[]{"Component", "Mole %", "kmol"}, new String[]{"Water", "99.8", "45.3"}));
+                d.footer(2, "Close", "Mole", "°C", "bar", "/h");
+            }));
+        }
+        return out;
+    }
+
     static List<Prototype> batchStill() {
         var out = new ArrayList<Prototype>();
         record Still(String file, StillDoor.Heater heater, boolean column, String held, StillDoor.Fuel fuel, String status, int colour, List<DeviceColumn.Meter> meters,

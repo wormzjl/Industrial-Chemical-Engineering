@@ -167,6 +167,12 @@ final class TankDesign extends UnitDesign {
             return new Gauge(a + GLASS_OFFSET, a - Math.sqrt(rho * rho - GLASS_OFFSET * GLASS_OFFSET), new double[]{0, 0, -1});
         }
 
+        /** The level gauge's place, kind-neutral (batch 2026-11-12-fluid-conversion): from {@link #GAUGE_LOW} over grade to 0.3 m above the fill height. */
+        GaugePlace gaugePlace() {
+            var g = gauge();
+            return new GaugePlace(g.x(), g.z(), g.out(), a, a, r, 0, GAUGE_LOW, fill + .3, 0, fill);
+        }
+
         /** Whether the rim landing continues round the shell as a ring walkway. */
         boolean ringWalkway() {
             return d >= RING_SIZE;
@@ -381,53 +387,7 @@ final class TankDesign extends UnitDesign {
      * pale scale board behind it, ticked dark at each metre over the floor, the fifth ones across the whole board.
      */
     static void gauge(Mesh mesh, Plan p) {
-        var g = p.gauge();
-        double x = g.x(), z = g.z(), low = GAUGE_LOW, high = p.fill + .3, flange = GLASS_RADIUS + .03;
-        double[] out = g.out(), side = {-out[2], 0, out[0]};
-        var column = Frame.of(new double[]{x, 0, z}, 1, 1);
-        double end = TankGaugeGeometry.END_HEIGHT;
-        // Only vertical glass faces: opaque end manifolds close the sleeve without coplanar transparent caps.
-        TankGaugeGeometry.sleeve(mesh, x, z, low, high);
-        // Corner rails leave the front and sides clear; no opaque barrel hides the empty window or its liquid.
-        double rail = TankGaugeGeometry.BAND_HALF + .025;
-        for (int sx : new int[]{-1, 1}) for (int sz : new int[]{-1, 1})
-            mesh.bar(new double[]{x + sx * rail, low, z + sz * rail}, new double[]{x + sx * rail, high, z + sz * rail}, .011, out, Mesh.NO_ENDS, Material.FLANGE);
-        for (double[] cap : new double[][]{{low - end, low}, {high, high + end}})
-            mesh.cylinder(column, flange, cap[0], cap[1], 12, Material.FLANGE);
-        mesh.cylinder(column, .025, 0, low - end, 12, Material.PIPE);
-        mesh.cylinder(column, .025, high + end, high + .3, 12, Material.PIPE);
-        // Real round connections enter the end manifolds, outside the liquid/scale area, rather than stopping behind it.
-        double offset = (x - p.a) * side[0] + (z - p.a) * side[2], radial = Math.sqrt(p.r * p.r - offset * offset);
-        double[] shell = {p.a + offset * side[0] + radial * out[0], 0, p.a + offset * side[2] + radial * out[2]};
-        for (double y : new double[]{low - end / 2, high + end / 2}) {
-            var pipe = new Frame(new double[]{shell[0], y, shell[2]}, out, UP);
-            double length = (x - shell[0]) * out[0] + (z - shell[2]) * out[2], union = length - GLASS_RADIUS - .10;
-            mesh.cylinder(pipe, .045, -.04, length, 12, Material.PIPE);
-            mesh.cylinder(pipe, .067, -.01, .055, 12, Material.FLANGE);
-            mesh.cylinder(pipe, .065, union - .05, union + .05, 12, Material.FLANGE);
-            mesh.cylinder(pipe, .075, union - .025, union + .025, 6, Material.FLANGE);
-        }
-        for (double y = low + .6; y < high - .3; y += CLIP) {
-            mesh.bar(new double[]{shell[0] + .02 * out[0], y, shell[2] + .02 * out[2]}, new double[]{x - GLASS_RADIUS * out[0], y, z - GLASS_RADIUS * out[2]},
-                    .04, UP, Mesh.END, Material.STEELWORK);
-        }
-        // The scale board just behind the chamber, and its ticks on its face either side of it.
-        double[] face = {x - (GLASS_RADIUS - .02) * out[0], 0, z - (GLASS_RADIUS - .02) * out[2]};
-        board(mesh, face, out, side, -SCALE_HALF, SCALE_HALF, low, p.fill + .1, .04, Material.GAUGE_SCALE);
-        for (int m = 1; m <= p.fill + 1e-9; m++) {
-            boolean fifth = m % 5 == 0;
-            double half = fifth ? .03 : .015;
-            double[] proud = {face[0] + .01 * out[0], 0, face[2] + .01 * out[2]};
-            double window = TankGaugeGeometry.BAND_HALF + .045;
-            board(mesh, proud, out, side, -SCALE_HALF, -window, m - half, m + half, .01, Material.BOLT);
-            if (fifth) board(mesh, proud, out, side, window, SCALE_HALF, m - half, m + half, .01, Material.BOLT);
-        }
-    }
-
-    /** An axis-aligned plate whose face is the plane through {@code face} facing {@code out}, {@code depth} thick behind it, from {@code s0} to {@code s1} along {@code side}, from {@code y0} to {@code y1}. */
-    private static void board(Mesh mesh, double[] face, double[] out, double[] side, double s0, double s1, double y0, double y1, double depth, Material material) {
-        double[] a = {face[0] + s0 * side[0], y0, face[2] + s0 * side[2]}, b = {face[0] + s1 * side[0] - depth * out[0], y1, face[2] + s1 * side[2] - depth * out[2]};
-        mesh.box(new double[]{Math.min(a[0], b[0]), y0, Math.min(a[2], b[2])}, new double[]{Math.max(a[0], b[0]), y1, Math.max(a[2], b[2])}, 63, material);
+        TankGaugeGeometry.draw(mesh, p.gaugePlace());
     }
 
     /**

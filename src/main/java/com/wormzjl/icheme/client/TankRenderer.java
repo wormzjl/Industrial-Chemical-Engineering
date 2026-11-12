@@ -124,9 +124,9 @@ public final class TankRenderer {
             if (!frustum.isVisible(new AABB(origin.getX(), origin.getY(), origin.getZ(), origin.getX() + shape.sizeX(), origin.getY() + shape.sizeY(), origin.getZ() + shape.sizeZ())))
                 continue;
             var f = ShapeRasterizer.floating(shape, EquipmentShellModel.detail());
-            if (f == null) continue;
-            double liquid = level(cell.getBlockPos(), ticks);
-            double lift = f.underside(liquid) - f.landed(), pitch = f.pitch(liquid);
+            // A liquid converter (batch 2026-11-12-fluid-conversion) has no roof: only its fitted level gauge.
+            var glass = f == null && cell.instruments().levelGauge() ? ShapeRasterizer.glass(shape) : null;
+            if (f == null && glass == null) continue;
             if (shader == null) {
                 type.setupRenderState();
                 shader = RenderSystem.getShader();
@@ -140,6 +140,14 @@ public final class TankRenderer {
             }
             if (shader.MODEL_VIEW_MATRIX == null) continue;
             double ox = origin.getX() - camera.x, oy = origin.getY() - camera.y, oz = origin.getZ() - camera.z;
+            if (f == null) {
+                var fixedPose = new Matrix4f(event.getModelViewMatrix()).translate((float) ox, (float) oy, (float) oz);
+                int gaugeLight = LevelRenderer.getLightColor(level, BlockPos.containing(origin.getX() + glass.at()[0], origin.getY() + (glass.low() + glass.high()) / 2, origin.getZ() + glass.at()[1]));
+                bound = draw(shader, buffer(new Key(shape, Part.GAUGE, cell.paint(), gaugeLight), null), fixedPose, bound);
+                continue;
+            }
+            double liquid = level(cell.getBlockPos(), ticks);
+            double lift = f.underside(liquid) - f.landed(), pitch = f.pitch(liquid);
             // The roof: lifted from where it lies landed, lit at its deck's middle.
             int roofLight = LevelRenderer.getLightColor(level, BlockPos.containing(origin.getX() + shape.sizeX() / 2.0, origin.getY() + f.underside(liquid) + f.deck() + .5, origin.getZ() + shape.sizeZ() / 2.0));
             var pose = new Matrix4f(event.getModelViewMatrix()).translate((float) ox, (float) (oy + lift), (float) oz);
@@ -191,9 +199,13 @@ public final class TankRenderer {
             if (!cell.instruments().levelGauge() || display == null || cell.isRemoved() || cell.getLevel() != level || shape == null || origin == null) continue;
             if (cell.getBlockPos().distToCenterSqr(camera) > DRAW_RANGE * DRAW_RANGE) continue;
             var f = ShapeRasterizer.floating(shape, EquipmentShellModel.detail());
-            if (f == null) continue;
-            double low = f.glassLow(), high = f.glassHigh(), water = Math.min(display.waterLevel(), high), oil = Math.min(display.level(), high);
-            double[] g = f.glass();
+            // A liquid converter's glass (batch 2026-11-12-fluid-conversion): its liquid's depth stands over its floor.
+            var glass = f == null ? ShapeRasterizer.glass(shape) : null;
+            if (f == null && glass == null) continue;
+            double floor = f != null ? 0 : glass.floor();
+            double low = f != null ? f.glassLow() : glass.low(), high = f != null ? f.glassHigh() : glass.high();
+            double water = Math.min(floor + display.waterLevel(), high), oil = Math.min(floor + display.level(), high);
+            double[] g = f != null ? f.glass() : glass.at();
             if (!event.getFrustum().isVisible(new AABB(origin.getX() + g[0] - BAND, origin.getY() + low, origin.getZ() + g[1] - BAND, origin.getX() + g[0] + BAND, origin.getY() + high, origin.getZ() + g[1] + BAND)))
                 continue;
             int light = LevelRenderer.getLightColor(level, BlockPos.containing(origin.getX() + g[0], origin.getY() + (low + high) / 2, origin.getZ() + g[1]));
