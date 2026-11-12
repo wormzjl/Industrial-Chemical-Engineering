@@ -1,0 +1,21 @@
+{
+  "guide": {
+    "stops": [
+      { "anchor": "chapters" },
+      { "anchor": "step" },
+      { "anchor": "media" }
+    ]
+  },
+  "fluid_device.still": {
+    "film": "still_inside",
+    "stops": [
+      { "anchor": "still_firing:on" },
+      { "anchor": "stillFiring" },
+      { "anchor": "still_fuel:load" },
+      { "anchor": "reading:still_pot_temperature" },
+      { "anchor": "reading:still_level" },
+      { "anchor": "reading:still_distillate" },
+      { "anchor": "status" }
+    ]
+  }
+}

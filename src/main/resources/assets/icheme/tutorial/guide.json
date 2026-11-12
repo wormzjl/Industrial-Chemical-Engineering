@@ -1,0 +1,17 @@
+{
+  "terms": {
+    "still": "welcome/film"
+  },
+  "chapters": [
+    {
+      "id": "welcome",
+      "steps": [
+        { "id": "guide" },
+        { "id": "units", "media": "units" },
+        { "id": "dots", "media": "card:three_parts" },
+        { "id": "film", "media": "film:still_inside" },
+        { "id": "help" }
+      ]
+    }
+  ]
+}
