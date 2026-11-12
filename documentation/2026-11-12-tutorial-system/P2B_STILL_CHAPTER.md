@@ -12,7 +12,7 @@ Batch `2026-11-12-tutorial-system`, 2026-11-12. Commits: A 5e5d3e25a, B 8922ffd7
   `still_build` has 4 stops, its connection labels taken from the shape. `still_run` replays the recording in 5 stops.
 - D: the card `pot_temperature` plots the pot's temperature against the share distilled. The area is coloured by the
   part coming over. The card marks two cuts, "Second drum" and "Fire out", and is done at the slider's end.
-- E: the chapter `still` has the steps build, charge, watch, fire, first, cut, switch and stop. Terms: vapour,
+- E: the chapter `still` has the steps build, charge, water, watch, fire, first, cut, switch and stop. Terms: vapour,
   condenser, distillate, cut, boil dry. The criterion `still_state` fires in `FluidNetwork.deliver` (the scheduled send
   and the replay; rule `StillCondition`). `still_stopped` fires in `FluidNetwork.edit` when the firing is set to 0 and
   the cached view is firing. `diverter_switched` fires when `FluidDeviceBlock` turns a diverter by hand.
@@ -23,9 +23,9 @@ Batch `2026-11-12-tutorial-system`, 2026-11-12. Commits: A 5e5d3e25a, B 8922ffd7
 | first drop | 220.4 | 312.9 | 0.92 |
 | end of naphtha | 3905.4 | 505.8 | 16.27 |
 | end of run | 4227.3 | 521.2 | 17.61 |
-
-The end of the kerosene is not reached: the run ends REFUSED at 521 K ("no positive latent heat"), with 20 % distilled
-(52.5 kg) and 1.8 kg vented. Most points report COOLING_LIMITED.
+Kerosene's end is not reached: the run ends REFUSED at 521 K ("no positive latent heat"), 20 % distilled (52.5 kg), 1.8
+kg vented; most points report COOLING_LIMITED. The recording is provisional (parent: build on it; set-up `ended_at`:
+`law_refusal`). Re-record when the law's fix merges. Every number sits behind a gate, so a re-record changes only the asset.
 
 ## Decisions
 1. first and cut accept DISTILLING or COOLING_LIMITED. fire and stop accept those two, HEATING and BOILING. Reason: a
@@ -37,14 +37,14 @@ The end of the kerosene is not reached: the run ends REFUSED at 521 K ("no posit
 4. `switch` exists because a diverter turns by hand. The charge step names its source through
    `tutorial.icheme.guide.still.source`; `Guide.Chapter.text` fills the `%s`.
 5. The stop step reads `world.view(id).still()` before the setting applies: a cached read, with no solver run.
+6. A CLIENT step `water` (new media `read`: its key "Got it" reports it) stands between charge and watch. The code
+   shows a still with no water condenses only part of its vapour (`Stills` lines 33-35, 364-383). A built-in condenser
+   always registers its water side (`FluidWorldAuthority` ~758). The duty goes to that side's node (`owe`), and
+   `condensed()` keeps the share at 1 only while the owed heat stays within HOLD_CYCLES. Then it falls to what the
+   water took, and line 437 raises COOLING_LIMITED. Line 377 (no water side, share 0) is never reached with a condenser.
 
-## Tests
-21 tutorial test classes (93 tests) pass. New classes: StillRunRecordingTest, SeriesTest, LabelsTest, StillConditionTest,
-StillBuildFilmTest, StillRunFilmTest, PotTemperatureCardTest. HeatDiagramTest, KitLayoutTest and DrawCallTest pass,
-and so do the 7 classes that name FluidNetwork or FluidDeviceBlock. For the final lane: FluidPresentationGameTests,
-DcsConsoleGameTests, FluidServerBenchmark.
-
-## Open
-- With the parent: the law's refusal at 521 K, and the world still's cooling water.
-- Past the cut the card shows mostly naphtha: the run ends before kerosene leads.
-- In-game: the film labels, the still_run drums, the triggers with the still screen open, the diverter step.
+## Tests and open items
+21 tutorial classes (93 tests) pass, with HeatDiagramTest, KitLayoutTest, DrawCallTest and the 7 classes naming
+FluidNetwork or FluidDeviceBlock. Final lane: FluidPresentationGameTests, DcsConsoleGameTests, FluidServerBenchmark.
+Past the cut, the card shows mostly naphtha, because the run ends before kerosene leads. In-game check: the film labels,
+the still_run drums, the triggers with the still screen open, the diverter step, and an unwatered still going COOLING LIMITED.

@@ -49,6 +49,7 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
 - 2026-11-12: P2b built (5e5d3e25a, 8922ffd73, 05c2e81da, a90748849, 7d1cbd1f1): the recorded still run, film tracks,
   films still_build and still_run, still_inside reworked, card pot_temperature, chapter 2 with criteria still_state,
   still_stopped and diverter_switched. 21 tutorial test classes (93 tests) pass; renders in `tmp/tutorial-renders/p2b/`.
+  Then, on the parent's answer: the step `water` (media `read`), and the recording's `ended_at` set to `law_refusal`.
 
 ## Code areas (proposed)
 
@@ -67,5 +68,5 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
   Guide's final icon.
 - P2a: the owner's review of chapter 1's text, the four marks and the renders; decisions 1 and 2 of
   P2A_CRUDE_CHAPTER.md (the road's marks from a test-code catalog, the lightest cut's lower edge).
-- P2b: the still law's refusal at 521 K and the world still's cooling water (asked of the parent session); the owner's
+- P2b: re-record `still_run.json` when the law's refusal at 521 K is fixed (a separate solver task); the owner's
   review of chapter 2's text and renders; the in-game check named in P2B_STILL_CHAPTER.md.
