@@ -25,6 +25,12 @@ public final class IChemEClient {
         event.register(ModMenus.PIPELINE_TOOL.get(), com.wormzjl.icheme.client.gui.screens.inventory.PipelineToolScreen::new);
     }
 
+    /** The P0 film command (batch 2026-11-12-tutorial-system); the field guide replaces it in P1. */
+    @SubscribeEvent
+    public static void registerCommands(net.neoforged.neoforge.client.event.RegisterClientCommandsEvent event) {
+        com.wormzjl.icheme.client.gui.tutorial.FilmCommand.register(event);
+    }
+
     /** Fluid device identities belong to a world: the remembered last-delivered views go with it. */
     @SubscribeEvent
     public static void loggingOut(ClientPlayerNetworkEvent.LoggingOut event) {
