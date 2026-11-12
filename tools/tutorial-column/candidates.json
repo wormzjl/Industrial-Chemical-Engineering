@@ -1,0 +1,91 @@
+{
+  "_about": "Candidates B and C of the small crude tower (P4, decision D4), trays numbered as the player reads them (condenser 1, sump = tray_count). A is built in SmallColumn.candidateA from medium_crude.json / 64. Top pressure, condenser temperature, reflux ratio and design feed are A's. Steam keeps A's 0.0614 kg per kg of bottoms on A's residue plus its gas oil (5459 + 589 kg/h), 371.5 kg/h. Pumparound heat is A's 0.740 MW regrouped.",
+  "B": {
+    "note": "20 trays: naphtha overhead, kerosene draw 6 and diesel draw 11 at A's rates, PA 10 to 8 between the draws (A's PA 1 + PA 2), PA 13 to 12 under the diesel draw (A's PA 3), feed 16, 3 stripping trays, sump steam",
+    "tray_count": 20,
+    "feed_tray": 16,
+    "draws": [
+      {
+        "tray": 6,
+        "flow_kmol_h": 8.098097694535676
+      },
+      {
+        "tray": 11,
+        "flow_kmol_h": 7.445028206260295
+      }
+    ],
+    "steam": [
+      {
+        "tray": 20,
+        "flow_kmol_h": 20.62,
+        "temperature_kelvin": 533.15
+      }
+    ],
+    "pumparounds": [
+      {
+        "draw_tray": 10,
+        "return_tray": 8,
+        "cooling_mw": 0.5328832,
+        "split": "UNIFORM"
+      },
+      {
+        "draw_tray": 13,
+        "return_tray": 12,
+        "cooling_mw": 0.2068507,
+        "split": "UNIFORM"
+      }
+    ]
+  },
+  "C": {
+    "note": "14 trays: naphtha overhead, one middle draw 6 (A's kerosene + diesel rates), PA 9 to 7 under it (A's three PAs), feed 11, 2 stripping trays, sump steam",
+    "tray_count": 14,
+    "feed_tray": 11,
+    "draws": [
+      {
+        "tray": 6,
+        "flow_kmol_h": 15.54312590079597
+      }
+    ],
+    "steam": [
+      {
+        "tray": 14,
+        "flow_kmol_h": 20.62,
+        "temperature_kelvin": 533.15
+      }
+    ],
+    "pumparounds": [
+      {
+        "draw_tray": 9,
+        "return_tray": 7,
+        "cooling_mw": 0.7397339,
+        "split": "UNIFORM"
+      }
+    ]
+  },
+  "C1": {
+    "note": "C, variation 1: the pumparound moved to draw from tray 7 and return on tray 5, above the middle draw (C left the draw tray 10 % short of liquid: 15.54 asked of 14.07 kmol/h)",
+    "tray_count": 14,
+    "feed_tray": 11,
+    "draws": [
+      {
+        "tray": 6,
+        "flow_kmol_h": 15.54312590079597
+      }
+    ],
+    "steam": [
+      {
+        "tray": 14,
+        "flow_kmol_h": 20.62,
+        "temperature_kelvin": 533.15
+      }
+    ],
+    "pumparounds": [
+      {
+        "draw_tray": 7,
+        "return_tray": 5,
+        "cooling_mw": 0.7397339,
+        "split": "UNIFORM"
+      }
+    ]
+  }
+}

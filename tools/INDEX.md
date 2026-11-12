@@ -10,6 +10,7 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 |---|---|---|---|
 | [tutorial-recordings/](tutorial-recordings/README.md) | Records what tutorial cards draw from the mod's data (CrudeBarrel: the crude barrel of the cards barrel and products; StillRun: the recorded still run of chapter 2) | `2026-11-12-tutorial-system` | In use since 2026-11-12 |
 | [tutorial-renders/](tutorial-renders/README.md) | Software renders of the tutorial film stops (P0), the field guide, tours and cards (P1), the Field Guide icon, chapter 2's films, card and guide (P2b), the equipment item icons (P3) | `2026-11-12-tutorial-system` | In use since 2026-11-12 |
+| [tutorial-column/](tutorial-column/README.md) | Solves and sizes the small crude tower candidates on the crude unit scaled to 1/64 and draws their datasheets (P4, decision D4) | `2026-11-12-tutorial-system` | In use since 2026-11-12 |
 | [psv-flare/](psv-flare/README.md) | The PSV-to-flare GameTest alone on the review server | `2026-11-11-gas-blanketing` | In use since 2026-11-11 |
 | [conversion-rules/](conversion-rules/README.md) | Generator of the bundled fluid conversion rules | `2026-11-12-fluid-conversion` | In use since 2026-11-12 |
 | [converter-gametest/](converter-gametest/README.md) | The fluid converter's GameTests alone on the review server | `2026-11-12-fluid-conversion` | In use since 2026-11-12 |
