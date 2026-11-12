@@ -3709,5 +3709,10 @@
   "tutorial.icheme.advancement.still.stop.description": "Set a running still's firing to zero.",
   "item.icheme.field_guide": "Field Guide",
   "key.categories.icheme": "Industrial Chemical Engineering",
-  "key.icheme.guide": "Open the Field Guide"
+  "key.icheme.guide": "Open the Field Guide",
+  "itemGroup.icheme.equipment_guide": "Equipment guide",
+  "item.icheme.equipment_drum": "Drum",
+  "tutorial.icheme.equipment_info.reference": "Reference item: it builds nothing.",
+  "tutorial.icheme.equipment_info.shape_only": "Shape only for now.",
+  "tutorial.icheme.equipment_info.simulator_shape": "Works in the world; the simulator shows its shape only."
 }

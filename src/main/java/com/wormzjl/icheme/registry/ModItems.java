@@ -98,6 +98,18 @@ public final class ModItems {
     public static final DeferredItem<com.wormzjl.icheme.world.item.LiquidLevelGaugeItem> PRESSURE_SAFETY_VALVE = ITEMS.registerItem("pressure_safety_valve", p -> new com.wormzjl.icheme.world.item.LiquidLevelGaugeItem(p, "pressure_safety_valve"));
     /** The Field Guide (batch 2026-11-12-tutorial-system, D3): given at first join by the tutorial root's reward; using it opens the guide. */
     public static final DeferredItem<com.wormzjl.icheme.world.item.FieldGuideItem> FIELD_GUIDE = ITEMS.registerItem("field_guide", com.wormzjl.icheme.world.item.FieldGuideItem::new);
+    /**
+     * The equipment reference items (batch 2026-11-12-tutorial-system, P3; owner decisions D8, O1): one per structure kind,
+     * {@code equipment_<kind>}, in {@code Kind} order; no recipe, no loot. A {@code Kind} renamed later needs an alias here.
+     */
+    public static final java.util.Map<com.wormzjl.icheme.science.equipment.EquipmentShape.Kind, DeferredItem<com.wormzjl.icheme.world.item.EquipmentInfoItem>> EQUIPMENT_INFO = equipmentInfo();
+
+    private static java.util.Map<com.wormzjl.icheme.science.equipment.EquipmentShape.Kind, DeferredItem<com.wormzjl.icheme.world.item.EquipmentInfoItem>> equipmentInfo() {
+        var out = new java.util.EnumMap<com.wormzjl.icheme.science.equipment.EquipmentShape.Kind, DeferredItem<com.wormzjl.icheme.world.item.EquipmentInfoItem>>(com.wormzjl.icheme.science.equipment.EquipmentShape.Kind.class);
+        for (var kind : com.wormzjl.icheme.science.equipment.EquipmentShape.Kind.values())
+            out.put(kind, ITEMS.registerItem(com.wormzjl.icheme.science.tutorial.equipment.EquipmentInfo.itemId(kind), p -> new com.wormzjl.icheme.world.item.EquipmentInfoItem(p, kind)));
+        return java.util.Collections.unmodifiableMap(out);
+    }
 
     private ModItems() {
     }
