@@ -42,6 +42,26 @@ its `?` key), `card-<name>.png` for every card (P2a: chain at 1, 5, 16, 40 carbo
 heat 0, 0.5, 1; each with a dark 320 by 240 frame), `guide-crude.png` (chapter 1 open). `FieldGuideIcon.java` writes the Field Guide's placeholder
 texture: `java tools/tutorial-renders/FieldGuideIcon.java src/main/resources/assets/icheme/textures/item/field_guide.png`.
 
+## Equipment icons (P3)
+
+`IconRender.java` (task `renderTutorialIcons`, same source set) bakes the icon of every equipment reference item:
+each `EquipmentShape.Kind` at its native reference size (the constructor's default, as
+`tools/equipment-drawings/EngineeringExport.java` builds it; a drum lying), its whole drawing
+(`ShapeRasterizer.renderPreview`, the constructor ghost), one orthographic view from the south-east 30 degrees above the
+horizon, the mod's sprites, default paints and the game's directional shade, 8 by 8 samples a pixel, cut out (a pixel
+is the body's where half its samples are), a one-pixel dark rim, 32 by 32 px, transparent background. A kind more than
+3.5 times taller than wide shows its top 3.5 widths (flare stack, steel stack, brick chimney). The kettle is turned 90
+degrees so it does not read as the exchanger.
+
+```
+./gradlew --offline --init-script tools/tutorial-renders/render.init.gradle renderTutorialIcons -PtutorialRenderOut=tmp/tutorial-renders
+```
+
+It writes `src/main/resources/assets/icheme/textures/item/equipment_<kind>.png` (committed) and
+`<out>/p3/icons-sheet.png` (every kind at 4x and at 1x on a dark and a light slot, with its name). Options, as JVM
+properties (`JAVA_TOOL_OPTIONS`): `-DiconPreview=true` (the sheet only, textures untouched), `-DiconSize=n`,
+`-DiconCap=r`, `-DkettleTurn=deg`.
+
 ## History
 
 - 2026-11-12, P0: the tool, for the film `still_inside`.
@@ -50,3 +70,4 @@ texture: `java tools/tutorial-renders/FieldGuideIcon.java src/main/resources/ass
 - 2026-11-12, P2b: TutorialRender draws the whole film screen in the game font (overlays, fires, liquids) and prints
   "LABELS NOT PLACED" when a label has no room; films still_build and still_run; `card-pot_temperature.png` (start,
   early, before and past the cut, end) and `guide-still.png` (chapter 2 at both sizes).
+- 2026-11-12, P3: IconRender, the 38 equipment item icons and their contact sheet.

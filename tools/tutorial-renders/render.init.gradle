@@ -4,6 +4,8 @@
 // Optional: -PtutorialFilms=still_inside (a comma list; default every film), -PtutorialFrames=n (n frames between stops).
 // renderTutorial draws the film stops (TutorialRender), then the guide, tours and cards (GuideRender, P1). Both are
 // compiled with tools/heat-gui-renders (its game font, canvas and page frame) against the main and test outputs.
+// renderTutorialIcons (P3) bakes the equipment reference items' icons into src/main/resources/assets/icheme/textures/item
+// and writes their contact sheet to <out>/p3/icons-sheet.png (IconRender).
 gradle.projectsEvaluated {
     def p = gradle.rootProject
     def out = p.providers.gradleProperty('tutorialRenderOut')
@@ -41,5 +43,15 @@ gradle.projectsEvaluated {
         workingDir = p.projectDir
         args(films.isPresent() ? [target, films.get()] : [target])
         jvmArgs '-Djava.awt.headless=true', '-Duser.language=en', '-Dframes=' + frames.getOrElse('0')
+    }
+    p.tasks.register('renderTutorialIcons', JavaExec) {
+        group = 'documentation'
+        description = 'Bakes the icons of the equipment reference items and their contact sheet (IconRender, P3).'
+        dependsOn p.tasks.named(guide.classesTaskName)
+        classpath = guide.runtimeClasspath
+        mainClass = 'IconRender'
+        workingDir = p.projectDir
+        args(p.file('src/main/resources/assets/icheme/textures/item').absolutePath, new File(target, 'p3').absolutePath)
+        jvmArgs '-Djava.awt.headless=true', '-Duser.language=en'
     }
 }

@@ -51,7 +51,7 @@ public class TutorialRender {
     /** The smallest window's panel (320 by 240 less the screen's margins). */
     static final int SMALL_W = 312, SMALL_H = 232;
 
-    private record Sprite(int width, int height, int[] argb) {
+    record Sprite(int width, int height, int[] argb) {
         int sample(double u, double v) {
             int x = Math.floorMod((int) Math.floor(u * width), width), y = Math.floorMod((int) Math.floor(v * height), height);
             return argb[y * width + x];
