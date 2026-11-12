@@ -11,7 +11,6 @@ import com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
-import com.wormzjl.icheme.science.thermo.phase.SteamVirial;
 import net.minecraft.nbt.*;
 import java.io.IOException;
 import java.nio.file.*;
@@ -734,8 +733,12 @@ class FluidFactsCompatTest {
      * from the engine by {@code tools/open-thermo-data/compat-energy.mjs} from the vessels' saved states and the records
      * at the batch's parent (03e7b6138); the loads book these to 1e-8 J. Before O2 each was 0 (the same data). O7 refitted
      * the methane Cp to the reference spine (decision E16): island-sets 616.608360671 to 615.412696198 J.
+     *
+     * <p>Since W3b of batch 2026-11-11-aqueous-solvents the island-sets and steam-v2 images carry no pinned number: the gas
+     * pairs are derived and steam is the cubic's water, so their tests state the restate on the model itself, each vessel's
+     * energy on this build's data less its saved energy, which the ledger books.
      */
-    private static final double SCHEMA_ONE_DATA_CHANGE=-10.2747985856,ISLAND_SETS_DATA_CHANGE=615.412696198,STEAM_V2_DATA_CHANGE=126.968251430;
+    private static final double SCHEMA_ONE_DATA_CHANGE=-10.2747985856;
     /** A batch still's facts (schema 16) survive an exact load and a facts-only rebuild, every field as saved. */
     @Test void aBatchStillsFactsSurviveBothExactAndFactsOnlyLoads(){
         var world=corpusWorld();var saved=image(world);var expected=stills(world.ledger.snapshot());
@@ -773,9 +776,9 @@ class FluidFactsCompatTest {
         var stored=load(image,key->key.on(model),CATALOG);
         var lists=stored.checkpoint().islands().stream().map(e->Set.copyOf(e.compounds())).collect(java.util.stream.Collectors.toSet());
         assertEquals(Set.of(Set.of("Nitrogen","Methane"),Set.of("Nitrogen","Ethane")),lists,"each island on its own list");
-        int vessels=0;double energy=0;var world=model.components();
+        int vessels=0;double energy=0,booked=0;var world=model.components();
         for(var entry:stored.checkpoint().islands())for(var n:entry.snapshot().graph().reservoirs()) {
-            var v=saved.get(n.id());if(v==null)continue;vessels++;energy+=Math.abs(v.energy());
+            var v=saved.get(n.id());if(v==null)continue;vessels++;energy+=Math.abs(v.energy());booked+=n.inventory().internalEnergy()-v.energy();
             var held=IslandSets.amounts(n.inventory().moles(),entry.key().on(model),model);var axis=axes.get(n.id());
             for(int c=0;c<axis.size();c++)assertEquals(v.moles()[c],held[world.indexOf(axis.get(c))],"vessel "+n.id()+": "+axis.get(c)+", bit for bit");
         }
@@ -783,7 +786,7 @@ class FluidFactsCompatTest {
         printRestated("island-sets",image,stored);
         var restated=stored.world().orElseThrow().restated();
         assertTrue(restated.removedMoles().isEmpty()&&restated.removedSolids().isEmpty(),"nothing removed");
-        assertEquals(ISLAND_SETS_DATA_CHANGE,restated.energy(),Math.max(1e-3,1e-9*energy),"the same physics gives the same energy, plus the data change of O2");
+        assertEquals(booked,restated.energy(),Math.max(1e-3,1e-9*energy),"the ledger books each vessel's energy on this build's data less its saved energy");
         var rebuilt=load(edited(image,c->c.putInt("StateFormat",Integer.MAX_VALUE)),key->key.on(model),CATALOG);
         assertEquals(FluidCheckpointStore.Route.FACTS,rebuilt.route());
         assertEquals(lists,rebuilt.checkpoint().islands().stream().map(e->Set.copyOf(e.compounds())).collect(java.util.stream.Collectors.toSet()),"the facts rebuild each island on the same list");
@@ -891,8 +894,8 @@ class FluidFactsCompatTest {
      * the ideal steam of {@code separate-free-water-v2} (corpus image {@code steam-v2}, 2026-10-28). The second-virial
      * steam of v3 changes the thermodynamic revision, so the world restates on load by a TP flash at each vessel's saved
      * temperature and pressure: its moles, wall volume, temperature and pressure kept, its contents' volume and energy the
-     * virial steam's ({@code p_w = n_w R T / (V - n_w B)}), and the ledger books the energy difference, the steam's
-     * residual energy {@code n_w u_res = -n_w p_w T dB/dT}. When the image is missing the test writes it under
+     * model's own (since W3b the steam is water in the equation of state), and the ledger books the energy difference.
+     * When the image is missing the test writes it under
      * {@code build/compat/fluid/}.
      */
     @Test void aWorldSavedUnderTheIdealSteamRestatesOntoTheVirialSteam() throws IOException {
@@ -909,7 +912,7 @@ class FluidFactsCompatTest {
         assertTrue(restated.reason().contains("property data of package "+CORPUS_PACKAGE+" changed"),restated.reason());
         var ledger=restated.world().orElseThrow();
         assertTrue(ledger.restated().removedMoles().isEmpty()&&ledger.restated().removedSolids().isEmpty());
-        double energy=0,residual=0;int vessels=0;
+        double energy=0;int vessels=0;
         for(var e:restated.checkpoint().islands())for(var n:e.snapshot().graph().reservoirs()) {
             if(n.kind()!=PassiveNetwork.NodeKind.RESERVOIR)continue;
             var v=saved.get(n.id());var s=n.state();vessels++;
@@ -921,20 +924,18 @@ class FluidFactsCompatTest {
             // The restatement is a TP flash at the saved temperature and pressure (FluidFacts.rebuild): the denser virial
             // steam fills less than the wall until the island's first solve brings the contents back to it.
             assertEquals(v.pressure(),s.pressure(),"vessel "+n.id()+": restated at its saved pressure");
-            assertTrue(s.volume()<v.volume(),"vessel "+n.id()+": the virial steam is denser than the ideal steam it was saved as");
-            double b=SteamVirial.secondVirial(s.temperature()),t=s.temperature();
-            assertEquals(TestPhases.waterVapor(s)*FluidThermodynamics.R*t/(s.vaporVolume()-TestPhases.waterVapor(s)*b),TestPhases.waterPartialPressure(s),1e-9*TestPhases.waterPartialPressure(s),"the virial steam's partial pressure");
+            assertTrue(s.volume()<v.volume(),"vessel "+n.id()+": the model's steam is denser than the ideal steam it was saved as");
+            double t=s.temperature(),gas=0;for(double held:s.vaporAmountsView())gas+=held;
+            assertTrue(s.pressure()*s.vaporVolume()<gas*FluidThermodynamics.R*t,"the model's own steam (water in the equation of state): its compressibility is under one");
+            assertEquals(s.internalEnergy(),n.inventory().internalEnergy(),1e-9*Math.abs(s.internalEnergy()),"the vessel's energy is the model's own of its contents at the saved temperature and pressure");
             energy+=n.inventory().internalEnergy()-v.energy();
-            residual+=-TestPhases.waterVapor(s)*TestPhases.waterPartialPressure(s)*t*SteamVirial.temperatureDerivative(t);
             System.out.println("steam-v2 vessel "+n.id()+": T "+t+" K, steam "+TestPhases.waterVapor(s)+" mol at "+TestPhases.waterPartialPressure(s)+" Pa of "+s.pressure()
                     +" Pa, volume "+v.volume()+" -> "+s.volume()+" m3, U "+v.energy()+" -> "+n.inventory().internalEnergy()+" J");
         }
         assertEquals(1,vessels);
-        // U = U_N2 + n_w (u_ig - p_w T dB/dT): the steam's residual energy, the nitrogen's own moving a few joules.
-        assertEquals(residual+STEAM_V2_DATA_CHANGE,energy,1e-3*Math.abs(residual),"the energy moves by the steam's residual energy and the data change of O2");
-        // dB/dT > 0 below the Boyle temperature, so the steam's own energy falls: -25.1 kJ for the image's 145.5 mol at 661 K and
-        // 7.98 bar, -173 J/mol (SteamVirialTest checks dB/dT against IF97 Region 2).
-        assertTrue(residual<0,"the steam's residual energy: "+residual+" J");
+        // The steam's attraction lowers its energy under the ideal gas it was saved as (about -25 kJ for the image's 145.5 mol
+        // at 661 K and 8 bar under the second virial coefficient this test read before W3b); the data change of O2 is +127 J.
+        assertTrue(energy<0,"the steam's own energy falls: "+energy+" J");
         assertEquals(energy,ledger.restated().energy(),1e-9*Math.abs(energy),"the ledger books the energy difference");
         var reloaded=new EventPathWorld(1,ledger,restated.checkpoint().islands());
         assertEquals(FluidCheckpointStore.Route.EXACT,load(image(reloaded),key->key.on(model),CATALOG).route(),"restated once");
