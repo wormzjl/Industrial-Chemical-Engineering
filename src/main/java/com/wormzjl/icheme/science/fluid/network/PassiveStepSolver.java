@@ -2657,7 +2657,7 @@ public final class PassiveStepSolver {
             var state=states.get(i);var node=graph.reservoirs().get(i);if(node.fixed())continue;
             FluidThermodynamics.State checked;
             try{checked=model.phaseCheck(state,node.junction(),inputStates.get(i),foldedPhases,i,prepared==null?null:prepared[i],
-                    node.junction()?null:start->vesselSplit(node,state,start,checkpoint),!node.junction()&&node.inventory().rigid(),checkpoint);}
+                    node.junction()?null:start->vesselSplit(node,state,start,checkpoint),!node.junction()&&node.inventory().rigid(),!node.junction()&&node.inventory().open(),checkpoint);}
             catch(com.wormzjl.icheme.science.fluid.thermo.ThermoHold hold){throw hold.at(node.id());}
             if(checked==state)continue;
             var corrected=new ArrayList<>(states);corrected.set(i,checked);return corrected;

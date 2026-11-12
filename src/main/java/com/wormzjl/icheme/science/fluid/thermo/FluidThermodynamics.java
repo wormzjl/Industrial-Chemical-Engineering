@@ -935,10 +935,13 @@ public final class FluidThermodynamics {
      * @return {@code state} itself when it keeps its phases and gains none; otherwise the node's new seed
      */
     public State phaseCheck(State state,boolean junction,State from,int[] record,int at,Prepared prepared,UnaryOperator<State> vesselSplit,Runnable checkpoint) {
-        return phaseCheck(state,junction,from,record,at,prepared,vesselSplit,false,checkpoint);
+        return phaseCheck(state,junction,from,record,at,prepared,vesselSplit,false,false,checkpoint);
     }
-    /** {@link #phaseCheck}; {@code rigid}: a rigid vessel's (batch 2026-11-10-rigid-reservoir), whose crossing holds its volume at any pressure. */
-    public State phaseCheck(State state,boolean junction,State from,int[] record,int at,Prepared prepared,UnaryOperator<State> vesselSplit,boolean rigid,Runnable checkpoint) {
+    /**
+     * {@link #phaseCheck}; {@code rigid}: a rigid vessel's (batch 2026-11-10-rigid-reservoir), whose crossing holds its volume
+     * at any pressure; {@code open}: an open vessel's, whose wall is never taut, so its crossing is at its pressure (its ambient).
+     */
+    public State phaseCheck(State state,boolean junction,State from,int[] record,int at,Prepared prepared,UnaryOperator<State> vesselSplit,boolean rigid,boolean open,Runnable checkpoint) {
         int shrinking=from==null?0:vanishing(from,state,rigid);
         var kept=folded(state,rigid&&!junction,shrinking);var checked=kept;
         int excluded=(record==null?0:record[at])|shrinking&phaseBits(state)&~phaseBits(kept),refused=0;
@@ -957,7 +960,7 @@ public final class FluidThermodynamics {
                     start=engine!=null?engine.withSolidState(kept.solids(),kept.solidMoments()):tpSeed(kept,equilibrium,prepared);
                     split=junctionSplit(totals,state.enthalpy(),state.mass(),kept.pressure(),start,checkpoint);
                 }
-                else{start=crossing(state,kept,proposed,totals,rigid,checkpoint);split=start==null||vesselSplit==null?null:vesselSplit.apply(start);}
+                else{start=crossing(state,kept,proposed,totals,rigid,open,checkpoint);split=start==null||vesselSplit==null?null:vesselSplit.apply(start);}
                 if(split!=null) {
                     SolverDiagnostics.count(SolverDiagnostics.phaseSeeds);
                     var seed=folded(split.withSolidState(kept.solids(),kept.solidMoments()),junction,rigid);
@@ -1093,15 +1096,18 @@ public final class FluidThermodynamics {
      * where the engine does not converge, answers a phase set the network cannot carry, or answers none of the phases
      * {@code proposed} adds (no crossing).
      */
-    private State crossing(State state,State kept,int proposed,double[] totals,boolean rigid,Runnable checkpoint) {
+    private State crossing(State state,State kept,int proposed,double[] totals,boolean rigid,boolean open,Runnable checkpoint) {
         double t=kept.temperature(),p=kept.pressure();var solids=state.solidMoments();
-        var own=!rigid&&p<=PhaseLayout.AMBIENT_PRESSURE*(1+SLACK_PRESSURE)?equilibriumPH(t,p,state.enthalpy()-solids.enthalpy(state.temperature(),state.pressure()),totals,checkpoint)
+        // An open vessel's wall is never taut (PhaseLayout.wallRow): its surface stands at its own ambient, which falls with
+        // height (batch 2026-11-10-chimney), so the slack branch is its only one at any pressure. A closed bag's slack branch
+        // holds it at the sea-level ambient.
+        var own=!rigid&&(open||p<=PhaseLayout.AMBIENT_PRESSURE*(1+SLACK_PRESSURE))?equilibriumPH(t,p,state.enthalpy()-solids.enthalpy(state.temperature(),state.pressure()),totals,checkpoint)
                 :equilibriumUV(t,p,state.internalEnergy()-solids.internalEnergy(state.temperature()),state.volume()-solids.volume(),totals,checkpoint);
         if(own==null)return null;
         var seed=folded(own.withSolidState(kept.solids(),kept.solidMoments()),false,rigid);
         return (lacking(kept,seed)&proposed)!=0?seed:null;
     }
-    /** How far above the ambient pressure, relatively, a vessel's state still reads as its wall's slack branch in
+    /** How far above the ambient pressure, relatively, a closed vessel's state still reads as its wall's slack branch in
      * {@link #crossing}: the slack row holds it at the ambient to the solve's tolerance (a vessel's closure, 1e-11). */
     private static final double SLACK_PRESSURE=1e-9;
 

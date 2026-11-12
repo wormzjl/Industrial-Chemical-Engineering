@@ -145,6 +145,7 @@ public final class InventoryEquilibrium {
             @Override public FluidThermodynamics.State iterate(FluidThermodynamics.State start,double[] variables){return layout(model,start,null).decode(variables,0);}
             @Override public FluidThermodynamics.State split(FluidThermodynamics.State start){return InventoryEquilibrium.split(model,start,inventory,workFrom,checkpoint);}
             @Override public boolean rigid(){return inventory.rigid();}
+            @Override public boolean open(){return inventory.open();}
         },checkpoint);
     }
     /**
@@ -155,6 +156,8 @@ public final class InventoryEquilibrium {
     interface Closure {
         /** Whether the vessel's wall is rigid (batch 2026-11-10-rigid-reservoir): its crossings hold its volume. */
         default boolean rigid(){return false;}
+        /** Whether the vessel is open: its wall is never taut, so its crossings stand at its pressure, its ambient. */
+        default boolean open(){return false;}
         /** The vessel closed, laid out with {@code start}'s phases; a {@link SparseNewton.Nonconvergence}, with its last
          * iterate where it has one, where it stops short. */
         FluidThermodynamics.State close(FluidThermodynamics.State start);
@@ -198,7 +201,7 @@ public final class InventoryEquilibrium {
                 state=checked.withSolids(state.solids());continue;
             }
             if(candidate==state)return state;
-            var checked=model.phaseCheck(candidate,false,from,excluded,0,null,own,closure.rigid(),checkpoint);
+            var checked=model.phaseCheck(candidate,false,from,excluded,0,null,own,closure.rigid(),closure.open(),checkpoint);
             if(checked!=candidate){state=checked;continue;}
             return candidate;
         }

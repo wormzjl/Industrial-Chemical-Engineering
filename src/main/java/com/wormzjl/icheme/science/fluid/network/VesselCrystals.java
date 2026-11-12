@@ -307,6 +307,7 @@ final class VesselCrystals {
         }
         private Joint joint(FluidThermodynamics.State start){return new Joint(model,start,present,seeds,totals,trueEnergy,capacity,ambient,workFrom,inert);}
         @Override public boolean rigid(){return PhaseLayout.rigid(capacity);}
+        @Override public boolean open(){return capacity==Double.POSITIVE_INFINITY;}
         private double[] solve(Joint joint,FluidThermodynamics.State start) {
             return SparseNewton.solve(joint,joint.start(start,seeds),new SparseNewton.Settings(SparseNewton.ITERATIONS,InventoryEquilibrium.CLOSURE,1e-6,24),checkpoint).variables();
         }
