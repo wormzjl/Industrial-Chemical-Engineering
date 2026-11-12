@@ -19,8 +19,7 @@
     "stream": "simulator/sheet",
     "side_draw": "simulator/balance",
     "heat_duty": "simulator/heat",
-    "preheat": "unit/whole",
-    "pumparound": "unit/whole"
+    "pumparound": "unit/tower"
   },
   "chapters": [
     {
