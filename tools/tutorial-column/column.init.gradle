@@ -44,6 +44,17 @@ gradle.projectsEvaluated {
         systemProperty 'search', System.getProperty('search', 'false')
         args(p.projectDir.absolutePath)
     }
+    p.tasks.register('smallColumnPair', JavaExec) {
+        group = 'documentation'
+        description = 'Solves a bundled stream and tower pair in the column calculator and prints the products by mass (PairCheck).'
+        dependsOn p.tasks.named(sources.classesTaskName)
+        classpath = sources.runtimeClasspath
+        mainClass = 'PairCheck'
+        workingDir = p.projectDir
+        maxHeapSize = '4g'
+        systemProperty 'pair', System.getProperty('pair', 'small_crude')
+        systemProperty 'feedK', System.getProperty('feedK', '')
+    }
     p.tasks.register('smallColumnDatasheets', JavaExec) {
         group = 'documentation'
         description = 'Draws the small crude tower datasheets from the result files (Datasheet).'

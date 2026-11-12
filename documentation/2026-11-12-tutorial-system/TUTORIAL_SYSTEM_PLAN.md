@@ -194,6 +194,13 @@ survival player has no crude until the extraction system exists.
   which then starts from the classical seed.
 - Accepted when the solve passes its audit, every sizing lamp is green with the 20 % spare, the products' boiling
   ranges are apart, and the whole unit fits a plot of 16 by 16 blocks.
+- As built (2026-11-12, owner chose C, variation 1; SMALL_COLUMN_CANDIDATES_REVIEW.md): `columnpreset/small_crude.json`
+  (14 trays, 1.0 m, feed 11, middle draw on 6, pumparound 7 to 5, reflux 1.5, bottom steam, 39.96 kmol/h) and
+  `flowsheet_examples/small_crude_unit.json`, "Small crude unit": the crude unit at 1/64 with the same unit tags, heater
+  outlet 390 °C, V-101 at 3.20 bar. Its paired stream `mixturepreset/small_crude.json` (39.96 kmol/h at 384 °C, the
+  column's feed on that run) gives the same shares in the calculator. Products by mass: overhead 18, middle 35, bottoms 47 %. After Size all one line (S-6)
+  is short of its limit and six units are yellow as larger than needed (the catalogue's smallest pump and shell); a
+  tutorial sentence explains them (owner). `SmallCrudeUnitTest` (holdGates) names each.
 
 ## 7. Gates and checks
 

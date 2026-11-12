@@ -80,6 +80,14 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
   pump head). Datasheets split the lamps: real fails (S-6 slow two-phase line on all three) and "larger than needed"
   (catalogue's smallest pump and shell; C all green from about 195 kmol/h, 2.5 m). B and C need about 123 kg/h of bottoms
   as fuel beside the off-gas. Recommended: C variation 1. Tool and documents only, no test run.
+- 2026-11-12: P4 built (owner chose C, variation 1): column preset `small_crude.json`, its paired stream
+  `mixturepreset/small_crude.json` (medium crude at 39.96 kmol/h, 384 °C: the feed T-101 meets on the example's run; at
+  the grades' heater outlet convention the calculator leaves 44.9 % in the bottoms) and the example
+  `small_crude_unit.json`, "Small crude unit" (unsized, as `crude_unit`). The calculator on the pair (PairCheck) gives
+  18.4 / 35.2 / 46.4 %. Gate `SmallCrudeUnitTest` (holdGates) names the one real fail (S-6) and the six larger-than-needed
+  lamps. Preset counts and the "40 trays, 8 m" check in the tests now read each template. SmallCrudeUnitTest (3),
+  FlowsheetExamplesTest (6), V3ClientPresetsTest (10), ColumnTemplatesTest (5), SimulatorRunnerTest (28), OpenDeleteTest (5),
+  V3ColumnTemplateTest (6) pass.
 
 ## Code areas (proposed)
 
@@ -104,7 +112,8 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
 - O2: the charge step names the Fluid converter (bundled rules: `#c:crude_oil` of TFMG and PneumaticCraft, `ad_astra:oil`).
   A survival player without one of those mods has no crude source until an extraction system exists.
 - D4: decided 2026-11-12, candidate C (variation 1): 14 trays, 1.0 m, one middle draw (kerosene and diesel together),
-  one pumparound above it, reflux 1.5, heater outlet 390 °C, V-101 at 3.2 bar. Not yet a preset or a bundled sheet.
+  one pumparound above it, reflux 1.5, heater outlet 390 °C, V-101 at 3.2 bar. Built 2026-11-12: column preset
+  `small_crude`, its paired stream `small_crude` and the example "Small crude unit" (gate `SmallCrudeUnitTest`).
   Still open for the owner: the yellow "larger than needed" pumps and exchangers (a tutorial note, a unit of about
   195 kmol/h, or smaller catalogue sizes); the bottoms as fuel for the heater (the sheet draws no line for it); why Size
   all keeps S-6 at 0.1 m (SMALL_COLUMN_CANDIDATES_REVIEW.md).

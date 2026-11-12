@@ -53,6 +53,26 @@ From the worktree root. Each run is one Gradle invocation, so check the machine'
   shell, with the feed factor at which it turns green). It shows each product's mass share beside the barrel's, where the
   crude's naphtha leaves, and the fuel balance (off-gas, then bottoms through a burner).
 
+## The bundled preset and example (candidate C)
+
+The owner chose candidate C, variation 1 (D4). Two bundled files come from its final run:
+
+- `src/main/resources/assets/icheme/columnpreset/small_crude.json` is `tmp/tutorial-p4/C.json` with the preset's name
+  and `translation_key` (`gui.icheme.column_template.small_crude`).
+- `src/main/resources/assets/icheme/flowsheet_examples/small_crude_unit.json` is `tmp/tutorial-p4/C-sheet.json`
+  (unsized, no results, as `crude_unit.json`), with gson's `=` escapes written as `=`.
+
+- `src/main/resources/assets/icheme/mixturepreset/small_crude.json` is the medium crude stream at C's design feed, at the
+  feed T-101 meets on the example's run (S-7, 657.15 K). The grades' streams stand at the heater outlet; at the small
+  unit's (663.15 K) the calculator leaves 44.9 % in the bottoms. `PairCheck` solves a stream and tower pair the way
+  `V3TestInputs.crude` builds it and prints each product's share by mass:
+  `./gradlew --offline --init-script tools/tutorial-column/column.init.gradle smallColumnPair -Dpair=small_crude`
+  (`-DfeedK=663.15,657.15` tries other feed temperatures).
+
+To regenerate them after a change to the crude unit or to C, run `smallColumnSolve -Dcandidate=C`, check the result, and
+write the three files with `node tools/tutorial-column/bundle.js` (it also keeps the index lines). Then run
+`SmallCrudeUnitTest` (holdGates), which names every lamp the sheet may show.
+
 ## Outputs
 
 - In `tmp/tutorial-p4/`, for each candidate id:
