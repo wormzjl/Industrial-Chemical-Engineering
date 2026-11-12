@@ -35,7 +35,11 @@ public final class EquipmentFilms {
     public static final String INLET = PART + "inlet", OUTLET = PART + "outlet", CRUDE_OUT = PART + "crude_out", TO_TANK = PART + "to_tank", TO_PUMP = PART + "to_pump",
             FROM_TANK = PART + "from_tank", TO_EXCHANGERS = PART + "to_exchangers", HOT_IN = PART + "hot_in", TO_HEATER = PART + "to_heater", TO_COOLER = PART + "to_cooler",
             FUEL = PART + "fuel", TO_TOWER = PART + "to_tower", GAS = PART + "gas", OIL = PART + "oil", WATER = PART + "water", BACK = PART + "oil_back";
-    static final double STOP_1 = 4, STOP_2 = 11, STOP_3 = 17, YAW = .62, PITCH = .3;
+    static final double STOP_1 = 4, STOP_2 = 11, STOP_3 = 17, YAW = .62, PITCH = .22;
+    /** A dot's radius on the glass at the inside stop, px at the design size: large enough to read its colour. */
+    static final double DOT_PX = 2.4;
+    /** The share of the glass's width and height a framed box may take. */
+    static final double FILL_W = .92, FILL_H = .88;
     public static final int WATER_RGB = 0x3A78B0;
 
     private EquipmentFilms() {
@@ -94,34 +98,55 @@ public final class EquipmentFilms {
 
     /** The camera's scale (px/m at the design size) that keeps the box {@code b} on the design glass from the films' view. */
     static double fit(double[][] b) {
-        double dx = b[1][0] - b[0][0], dy = b[1][1] - b[0][1], dz = b[1][2] - b[0][2];
-        double across = Math.abs(dx * DeterministicMath.cos(YAW)) + Math.abs(dz * DeterministicMath.sin(YAW));
-        double deep = Math.abs(dx * DeterministicMath.sin(YAW)) + Math.abs(dz * DeterministicMath.cos(YAW));
-        double tall = dy * DeterministicMath.cos(PITCH) + deep * DeterministicMath.sin(PITCH);
-        return Math.min(.9 * GLASS_W / across, .85 * GLASS_H / tall);
+        return fit(b, yaw(b));
     }
 
-    /** The film named {@code name}, built anew; null for none. */
+    /** The same from {@code yaw}. */
+    static double fit(double[][] b, double yaw) {
+        double dx = b[1][0] - b[0][0], dy = b[1][1] - b[0][1], dz = b[1][2] - b[0][2];
+        double across = Math.abs(dx * DeterministicMath.cos(yaw)) + Math.abs(dz * DeterministicMath.sin(yaw));
+        double deep = Math.abs(dx * DeterministicMath.sin(yaw)) + Math.abs(dz * DeterministicMath.cos(yaw));
+        double tall = dy * DeterministicMath.cos(PITCH) + deep * DeterministicMath.sin(PITCH);
+        return Math.min(FILL_W * GLASS_W / across, FILL_H * GLASS_H / tall);
+    }
+
+    /** The view's yaw for a body of box {@code b}: a long body seen from its side, its length across the glass; a round one at {@link #YAW}. */
+    static double yaw(double[][] b) {
+        double dx = b[1][0] - b[0][0], dz = b[1][2] - b[0][2];
+        return dz > 1.4 * dx ? 1.1 : dx > 1.4 * dz ? .45 : YAW;
+    }
+
+    private static double[] centre(double[][] b) {
+        return new double[]{(b[0][0] + b[1][0]) / 2, (b[0][1] + b[1][1]) / 2, (b[0][2] + b[1][2]) / 2};
+    }
+
+    /**
+     * The film named {@code name}, built anew; null for none. Stop 1 and the last stop frame the whole body; the inside stop
+     * frames the part its caption names ({@link #focus}), close. Its dots are sized to read at that stop.
+     */
     public static @Nullable Scene build(String name) {
         if (!KINDS.containsKey(name)) return null;
         var shape = shape(name);
         var body = Actors.equipment("body", shape);
         var b = bounds(body);
-        double[] c = {(b[0][0] + b[1][0]) / 2, (b[0][1] + b[1][1]) / 2, (b[0][2] + b[1][2]) / 2};
-        double scale = fit(b);
-        // The heater stands tall over its firebox: the film looks at the firebox, where the flames and the coil are.
-        if (name.equals(HEATER)) {
-            double low = face(shape, Role.RADIANT_OUTLET, 0, 0)[1] - 3, high = face(shape, Role.CONVECTION_INLET, 0, 0)[1] + 2;
-            var box = new double[][]{{b[0][0], low, b[0][2]}, {b[1][0], high, b[1][2]}};
-            scale = fit(box);
-            c = new double[]{c[0], (low + high) / 2, c[2]};
-        }
+        // The heater's stack is no part of the idea: the films look at the firebox and the top box.
+        if (name.equals(HEATER)) b = new double[][]{b[0], {b[1][0], face(shape, Role.CONVECTION_INLET, 0, 0)[1] + 2, b[1][2]}};
+        double yaw = yaw(b), whole = fit(b, yaw);
+        var focus = focus(name, shape, b);
+        double near = fit(focus, yaw);
+        double[] c = centre(b), fc = centre(focus);
         String title = "tutorial.icheme.film." + name;
-        var film = new Film(Scene.builder(title).actor(body), shape, b, c);
+        var film = new Film(Scene.builder(title).actor(body), shape, b, c, yaw, DOT_PX / near);
         int stops = stops(name);
-        double last = stops == 2 ? STOP_2 : STOP_3;
-        film.scene.track(new Track.Camera(List.of(new Track.Key(0, 0, .1, scale, c[0], c[1], c[2]), new Track.Key(STOP_1, YAW, PITCH, scale, c[0], c[1], c[2]),
-                new Track.Key(last, YAW + .35, PITCH, scale, c[0], c[1], c[2]))));
+        var keys = new ArrayList<Track.Key>(List.of(new Track.Key(0, 0, .1, whole, c[0], c[1], c[2]), new Track.Key(STOP_1, yaw, PITCH, whole, c[0], c[1], c[2])));
+        if (stops == 2) keys.add(new Track.Key(STOP_2, yaw + .3, PITCH, whole, c[0], c[1], c[2]));
+        else {
+            keys.add(new Track.Key(STOP_1 + 1.5, yaw, PITCH, near, fc[0], fc[1], fc[2]));
+            keys.add(new Track.Key(STOP_2, yaw + .12, PITCH, near, fc[0], fc[1], fc[2]));
+            keys.add(new Track.Key(STOP_2 + 1.5, yaw + .2, PITCH, whole, c[0], c[1], c[2]));
+            keys.add(new Track.Key(STOP_3, yaw + .3, PITCH, whole, c[0], c[1], c[2]));
+        }
+        film.scene.track(new Track.Camera(keys));
         for (int i = 1; i <= stops; i++) film.scene.track(new Track.Caption(title + ".s" + i, i == 1 ? 0 : i == 2 ? STOP_1 : STOP_2, i == 1 ? STOP_1 : i == 2 ? STOP_2 : STOP_3));
         switch (name) {
             case CONVERTER -> converter(film);
@@ -138,8 +163,33 @@ public final class EquipmentFilms {
         return film.scene.build();
     }
 
+    /**
+     * The box the inside stop frames: a lying shell between its heads without its saddles (the exchanger; the drum with its
+     * boot); the heater's firebox and top box; the whole body for the rest.
+     */
+    static double[][] focus(String name, EquipmentShape shape, double[][] b) {
+        double r = shape.diameter() / 2;
+        return switch (name) {
+            case EXCHANGER -> {
+                double axis = axis(shape, Role.TUBE_INLET, Role.TUBE_OUTLET);
+                yield new double[][]{{b[0][0], axis - r - .2, b[0][2]}, {b[1][0], axis + r + .2, b[1][2]}};
+            }
+            case DRUM -> {
+                double axis = axis(shape, Role.LIQUID_OUTLET, Role.VAPOUR_OUTLET);
+                yield new double[][]{{b[0][0], face(shape, Role.BOOT_DRAIN, 0, 0)[1] + .5, b[0][2]}, {b[1][0], axis + r + .3, b[1][2]}};
+            }
+            case HEATER -> new double[][]{{b[0][0] + 1, shape.support() - .5, b[0][2] + 1}, {b[1][0] - 1, b[1][1] - 1.5, b[1][2] - 1}};
+            default -> b;
+        };
+    }
+
+    /** A lying shell's axis height: midway between a nozzle below it ({@code down}) and one on top ({@code up}), whose necks are alike. */
+    static double axis(EquipmentShape shape, Role down, Role up) {
+        return (face(shape, down, 0, 0)[1] + face(shape, up, 0, 0)[1]) / 2;
+    }
+
     /** A film under construction: its builder, its shape, its body's bounds and centre. */
-    private record Film(Scene.Builder scene, EquipmentShape shape, double[][] b, double[] c) {
+    private record Film(Scene.Builder scene, EquipmentShape shape, double[][] b, double[] c, double yaw, double dot) {
         double[] face(Role role, int which, double beyond) {
             return EquipmentFilms.face(shape, role, which, beyond);
         }
@@ -150,7 +200,7 @@ public final class EquipmentFilms {
 
         /** The view's toward-the-camera direction at the stops' yaw: a cut along it keeps the far half. */
         double[] toCamera() {
-            return new double[]{-DeterministicMath.sin(YAW), 0, -DeterministicMath.cos(YAW)};
+            return new double[]{-DeterministicMath.sin(yaw), 0, -DeterministicMath.cos(yaw)};
         }
 
         /**
@@ -158,20 +208,31 @@ public final class EquipmentFilms {
          * the other level axis toward the camera), a round or standing one across the view.
          */
         void cut(double from) {
+            cut(from, c, .5);
+        }
+
+        /** The same through the point {@code on}, {@code past} metres beyond it (a slim shell keeps its far half: a small step). */
+        void cut(double from, double[] on, double past) {
             var n = opening();
-            // Half a metre past the axis: the cells on the axis go too, so a slim body opens rather than keeping its middle row.
-            double[] at = {c[0] - .5 * n[0], c[1], c[2] - .5 * n[2]};
+            // Past the axis: the cells on the axis go too, so a body opens rather than keeping its middle row.
+            double[] at = {on[0] - past * n[0], on[1], on[2] - past * n[2]};
             scene.track(new Track.Cut("body", at, n, from, 2));
         }
 
         /** Tubes inside the body, shown from {@code from} and cut with it: straight runs of pipe, each between two points. */
         void tubes(List<double[][]> runs, double side, double from) {
+            tubes(runs, side, from, c);
+        }
+
+        /** The same, cut through {@code on}. */
+        void tubes(List<double[][]> runs, double side, double from, double[] on) {
             var polygons = new ArrayList<com.wormzjl.icheme.science.equipment.Mesh.Polygon>();
-            for (var run : runs) polygons.addAll(Actors.pipe("tube", List.of(run[0], run[1]), side, com.wormzjl.icheme.science.equipment.Mesh.Material.PIPE).polygons());
+            // Bright steel, so the tubes stand out against the shell's inside.
+            for (var run : runs) polygons.addAll(Actors.pipe("tube", List.of(run[0], run[1]), side, com.wormzjl.icheme.science.equipment.Mesh.Material.SHAFT).polygons());
             scene.actor(new Actor("tubes", polygons));
             scene.track(new Track.Visible("tubes", from, STOP_3, .5));
             // Cut on the axis itself: the near tubes go, the middle and far ones stay in view.
-            scene.track(new Track.Cut("tubes", c, opening(), from, 0));
+            scene.track(new Track.Cut("tubes", on, opening(), from, 0));
         }
 
         double[] opening() {
@@ -201,7 +262,7 @@ public final class EquipmentFilms {
             var start = way.getFirst();
             double s = .02 * size;
             var source = new Track.Box(new double[]{start[0] - s, start[1] - s, start[2] - s}, new double[]{start[0] + s, start[1] + s, start[2] + s});
-            scene.track(new Track.Dots(kind, new Track.Line(way, .015 * size, source, count, gap, 0), from, to, count, speed));
+            scene.track(new Track.Dots(kind, new Track.Line(way, .015 * size, source, count, gap, 0), from, to, count, speed).sized(dot));
         }
     }
 
@@ -232,12 +293,12 @@ public final class EquipmentFilms {
         f.label(out, OUTLET, 0, STOP_1);
         double floor = b[0][1] + .5, level = floor + .55 * (b[1][1] - floor);
         f.cut(STOP_1 + .3);
-        f.scene().track(new Track.Level(new Track.Box(new double[]{cx - .7 * r, floor, cz - .7 * r}, new double[]{cx + .7 * r, level, cz + .7 * r}), Value.of(1),
+        f.scene().track(new Track.Level(new Track.Box(new double[]{cx - .97 * r, floor, cz - .97 * r}, new double[]{cx + .97 * r, level, cz + .97 * r}), Value.of(1),
                 SmallTower.TRAY_LIQUID, "body", STOP_1, STOP_3));
         var ring = new ArrayList<double[]>();
         for (int i = 0; i < 24; i++) {
             double t = 2 * Math.PI * i / 24;
-            ring.add(new double[]{cx + .96 * r * DeterministicMath.cos(t), cz + .96 * r * DeterministicMath.sin(t)});
+            ring.add(new double[]{cx + .93 * r * DeterministicMath.cos(t), cz + .93 * r * DeterministicMath.sin(t)});
         }
         f.scene().actor(new Actor("roof", SmallTower.prism(ring, level, level + .4)));
         f.scene().track(new Track.Visible("roof", STOP_1 + 1, STOP_3, .5));
@@ -259,92 +320,122 @@ public final class EquipmentFilms {
         f.label(after, TO_EXCHANGERS, STOP_2, STOP_3);
     }
 
-    /** The exchanger: outside; cut open, the crude through the tubes and the residue round them; then where it stands. */
+    /**
+     * The exchanger: outside; cut open on its axis, the bundle in the far half of the shell, the crude's dots inside the
+     * middle row of tubes (cut in half, so they show), the residue's dots in the shell round them; then where it stands.
+     */
     private static void exchanger(Film f) {
         double[] tubeIn = f.face(Role.TUBE_INLET), tubeOut = f.face(Role.TUBE_OUTLET), shellIn = f.face(Role.SHELL_INLET), shellOut = f.face(Role.SHELL_OUTLET);
         f.label(tubeIn, PART + "crude_in", 0, STOP_1);
         f.label(shellIn, HOT_IN, 0, STOP_1);
-        f.cut(STOP_1 + .3);
+        var shape = f.shape();
+        double r = shape.diameter() / 2, cy = axis(shape, Role.TUBE_INLET, Role.TUBE_OUTLET), x = tubeIn[0];
+        double[] axis = {x, cy, f.c()[2]};
+        f.cut(STOP_1 + .3, axis, .05 * r);
         var b = f.b();
-        double cy = f.c()[1], low = cy - .25, high = cy + .25, x = f.c()[0];
         // The tube side's two passes: in at the channel, along the lower tubes to the far end, back by the upper ones.
-        double near = tubeIn[2], far = shellIn[2] > near ? b[1][2] - 1 : b[0][2] + 1;
+        double near = tubeIn[2], far = shellIn[2] > near ? b[1][2] - 1 : b[0][2] + 1, low = cy - .45 * r, high = cy + .45 * r, side = .14 * r;
         var bundle = new ArrayList<double[][]>();
-        for (double dy : new double[]{-.3, -.1, .1, .3})
-            for (double dx : new double[]{-.2, 0, .2}) bundle.add(new double[][]{at(x + dx, cy + dy, near), at(x + dx, cy + dy, far)});
-        f.tubes(bundle, .06, STOP_1 + .5);
-        f.dots(Track.Kind.MIDDLE, List.of(tubeIn, at(x, low, near), at(x, low, far), at(x, high, far), at(x, high, near), tubeOut), STOP_1 + 1, STOP_3, 14);
-        f.dots(Track.Kind.HEAVY, List.of(shellIn, at(x, cy + .5, shellIn[2]), at(x, cy - .5, (shellIn[2] + shellOut[2]) / 2), at(x, cy, shellOut[2]), shellOut), STOP_1 + 1.5,
-                STOP_3, 12);
+        for (double dy : new double[]{-.45, -.15, .15, .45})
+            for (double dx : new double[]{0, .3}) bundle.add(new double[][]{at(x + dx * r, cy + dy * r, near), at(x + dx * r, cy + dy * r, far)});
+        f.tubes(bundle, side, STOP_1 + .5, axis);
+        f.dots(Track.Kind.MIDDLE, List.of(tubeIn, at(x, low, near), at(x, low, far), at(x, high, far), at(x, high, near), tubeOut), STOP_1 + 1, STOP_3, 16);
+        // The residue zigzags round the baffles, between the rows of tubes and the shell.
+        double mid = (shellIn[2] + shellOut[2]) / 2, top = cy + .75 * r, under = cy - .75 * r, gap = cy;
+        f.dots(Track.Kind.HEAVY, List.of(shellIn, at(x, top, shellIn[2]), at(x, under, (shellIn[2] + mid) / 2), at(x, gap, mid), at(x, top, (mid + shellOut[2]) / 2),
+                at(x, under, shellOut[2]), shellOut), STOP_1 + 1.5, STOP_3, 14);
         f.label(f.face(Role.TUBE_OUTLET, 0, .5), TO_HEATER, STOP_2, STOP_3);
         f.label(f.face(Role.SHELL_OUTLET, 0, .5), TO_COOLER, STOP_2, STOP_3);
     }
 
-    /** The fired heater: outside; cut open, its flames and the crude down its coils; then where it stands. */
+    /**
+     * The fired heater: outside; cut open, the flames on the firebox's floor, the radiant tubes up its wall and the
+     * convection tubes across the top box, the crude through the top box first, then down the wall tubes; then where it stands.
+     */
     private static void heater(Film f) {
         double[] fuel = f.face(Role.FUEL), convIn = f.face(Role.CONVECTION_INLET), convOut = f.face(Role.CONVECTION_OUTLET), radIn = f.face(Role.RADIANT_INLET),
                 radOut = f.face(Role.RADIANT_OUTLET);
         f.label(fuel, FUEL, 0, STOP_1);
         f.label(convIn, PART + "crude_in", 0, STOP_1);
         f.cut(STOP_1 + .3);
-        var b = f.b();
-        // The coil's radius inside the shell (the box also holds the platforms round it).
-        double cx = f.c()[0], cz = f.c()[2], r = .7 * f.shape().diameter() / 2;
-        f.scene().track(new Track.Flame(at(cx, b[0][1] + 1.5, cz), Value.of(4), STOP_1 + .5, STOP_3));
-        var way = new ArrayList<double[]>(List.of(convIn, at(cx, convIn[1], cz), at(cx, convOut[1], cz), convOut, radIn));
-        // The radiant coil: down the wall in turns round the flames.
-        int turns = 6;
-        for (int i = 0; i <= turns * 4; i++) {
-            double t = Math.PI / 2 * i, y = radIn[1] + (radOut[1] - radIn[1]) * i / (turns * 4.0);
-            way.add(at(cx + r * DeterministicMath.cos(t + Math.PI), y, cz - r * DeterministicMath.sin(t + Math.PI / 2)));
+        var shape = f.shape();
+        // The firebox's axis and its wall's radius; the tubes stand just inside the wall.
+        double cx = f.c()[0], cz = f.c()[2], wall = .8 * shape.diameter() / 2, floor = shape.support() + .3;
+        f.scene().track(new Track.Flame(at(cx, floor, cz), Value.of(5), STOP_1 + .5, STOP_3));
+        var tubes = new ArrayList<double[][]>();
+        int count = 14;
+        for (int i = 0; i < count; i++) {
+            double t = 2 * Math.PI * i / count;
+            double tx = cx + wall * DeterministicMath.cos(t), tz = cz + wall * DeterministicMath.sin(t);
+            tubes.add(new double[][]{at(tx, radOut[1], tz), at(tx, radIn[1], tz)});
+        }
+        // The top box's rows across it, between its inlet and outlet.
+        double box = .35 * shape.diameter();
+        var rows = new double[]{convOut[1] + .4, (convIn[1] + convOut[1]) / 2, convIn[1] - .4};
+        for (double y : rows)
+            for (double dz : new double[]{-.6, -.2, .2, .6}) tubes.add(new double[][]{at(cx - box, y, cz + dz * box), at(cx + box, y, cz + dz * box)});
+        f.tubes(tubes, .45, STOP_1 + .5);
+        // The crude: across the top box row by row, down to the wall tubes, down them in turns round the flames.
+        var way = new ArrayList<double[]>(List.of(convIn, at(cx - box, rows[2], cz), at(cx + box, rows[2], cz), at(cx + box, rows[1], cz), at(cx - box, rows[1], cz),
+                at(cx - box, rows[0], cz), at(cx + box, rows[0], cz), convOut, radIn));
+        int turns = 4;
+        for (int i = 0; i <= turns * count; i++) {
+            double t = 2 * Math.PI * i / count + Math.PI, y = radIn[1] + (radOut[1] - radIn[1]) * i / (double) (turns * count);
+            way.add(at(cx + wall * DeterministicMath.cos(t), y, cz + wall * DeterministicMath.sin(t)));
         }
         way.add(radOut);
-        f.crude(way, STOP_1 + 1, STOP_3, 10);
-        // The radiant tubes: upright round the firebox's wall, beside the flames.
-        var wall = new ArrayList<double[][]>();
-        for (int i = 0; i < 16; i++) {
-            double t = 2 * Math.PI * i / 16;
-            double tx = cx + 1.2 * r * DeterministicMath.cos(t), tz = cz + 1.2 * r * DeterministicMath.sin(t);
-            wall.add(new double[][]{at(tx, radOut[1], tz), at(tx, radIn[1], tz)});
-        }
-        f.tubes(wall, .25, STOP_1 + .5);
+        f.crude(way, STOP_1 + 1, STOP_3, 12);
         f.label(f.face(Role.RADIANT_OUTLET, 0, 1), TO_TOWER, STOP_2, STOP_3);
     }
 
-    /** The reflux drum with its boot: outside, its three outlets; cut open, oil and water and the gas over them; then where it stands. */
+    /**
+     * The reflux drum with its boot: outside, its three outlets; cut open along its length, the oil lying in the shell's
+     * lower part, the gas over it, the water in the boot; then where it stands.
+     */
     private static void drum(Film f) {
         double[] gas = f.face(Role.VAPOUR_OUTLET), oil = f.face(Role.LIQUID_OUTLET), water = f.face(Role.BOOT_DRAIN), in = f.face(Role.SIDE);
         f.label(gas, GAS, 0, STOP_1);
         f.label(oil, OIL, 0, STOP_1);
         f.label(water, WATER, 0, STOP_1);
-        f.cut(STOP_1 + .3);
+        var shape = f.shape();
+        double radius = shape.diameter() / 2, axis = axis(shape, Role.LIQUID_OUTLET, Role.VAPOUR_OUTLET);
+        f.cut(STOP_1 + .3, at(f.c()[0], axis, f.c()[2]), .1 * radius);
         var b = f.b();
         double cx = f.c()[0], cz = f.c()[2];
-        // The shell: its radius and its axis's height (it lies on saddles of the support's height), its oil up to the axis
-        // along its length between the heads, the boot's water under the oil outlet's end.
-        double radius = f.shape().diameter() / 2, axis = b[0][1] + f.shape().support() + radius;
         boolean alongZ = b[1][2] - b[0][2] > b[1][0] - b[0][0];
-        double w = .6 * radius;
-        double[] lo = alongZ ? new double[]{cx - w, axis - .85 * radius, b[0][2] + .7 * radius} : new double[]{b[0][0] + .7 * radius, axis - .85 * radius, cz - w};
-        double[] hi = alongZ ? new double[]{cx + w, axis, b[1][2] - .7 * radius} : new double[]{b[1][0] - .7 * radius, axis, cz + w};
-        f.scene().track(new Track.Level(new Track.Box(lo, hi), Value.of(1), SmallTower.TRAY_LIQUID, "body", STOP_1, STOP_3));
+        // The oil: upright pools side by side along the shell (a liquid stands in a round pool), their tops at the level,
+        // their floors where the shell's curve allows at their radius.
+        double pool = .62 * radius, level = axis - .15 * radius, bottom = axis - Math.sqrt(radius * radius - pool * pool) + .1;
+        double length = (alongZ ? b[1][2] - b[0][2] : b[1][0] - b[0][0]) - 2 * radius, start = (alongZ ? b[0][2] : b[0][0]) + radius;
+        int pools = Math.max(2, (int) Math.ceil(length / (1.6 * pool)));
+        for (int i = 0; i < pools; i++) {
+            double along = start + pool + (length - 2 * pool) * i / Math.max(1, pools - 1);
+            double px = alongZ ? cx : along, pz = alongZ ? along : cz;
+            f.scene().track(new Track.Level(new Track.Box(new double[]{px - pool, bottom, pz - pool}, new double[]{px + pool, level, pz + pool}), Value.of(1),
+                    SmallTower.TRAY_LIQUID, "body", STOP_1, STOP_3));
+        }
         double[] boot = {alongZ ? cx : water[0], water[1], alongZ ? water[2] : cz};
-        f.scene().track(new Track.Level(new Track.Box(new double[]{boot[0] - .35, b[0][1] + .3, boot[2] - .35}, new double[]{boot[0] + .35, axis - radius, boot[2] + .35}),
+        f.scene().track(new Track.Level(new Track.Box(new double[]{boot[0] - .35, water[1] + .5, boot[2] - .35}, new double[]{boot[0] + .35, axis - radius + .2, boot[2] + .35}),
                 Value.of(1), WATER_RGB, "body", STOP_1, STOP_3));
-        double[] mid = {(in[0] + gas[0]) / 2, axis, (in[2] + gas[2]) / 2};
+        double[] mid = {(in[0] + gas[0]) / 2, axis + .5 * radius, (in[2] + gas[2]) / 2};
         f.dots(Track.Kind.LIGHT, List.of(in, mid, gas, f.face(Role.VAPOUR_OUTLET, 0, 1)), STOP_1 + 1, STOP_3, 10);
-        f.dots(Track.Kind.MIDDLE, List.of(in, at(mid[0], axis - .4 * radius, mid[2]), oil, f.face(Role.LIQUID_OUTLET, 0, 1)), STOP_1 + 1.4, STOP_3, 10);
+        f.dots(Track.Kind.MIDDLE, List.of(in, at(mid[0], level - .3 * radius, mid[2]), at(oil[0], level - .3 * radius, oil[2]), oil, f.face(Role.LIQUID_OUTLET, 0, 1)),
+                STOP_1 + 1.4, STOP_3, 10);
         f.label(f.face(Role.LIQUID_OUTLET, 0, 1), BACK, STOP_2, STOP_3);
         f.label(f.face(Role.VAPOUR_OUTLET, 0, 1), GAS, STOP_2, STOP_3);
     }
 
-    /** The air cooler: outside, its inlet and outlet; the residue along its tubes; then where it stands. */
+    /** The air cooler: outside, its inlet and outlet; the residue to and fro along the bundle on its top, over the fans; then where it stands. */
     private static void airCooler(Film f) {
         double[] in = f.face(Role.PROCESS_INLET), out = f.face(Role.PROCESS_OUTLET);
         f.label(in, INLET, 0, STOP_1);
         f.label(out, OUTLET, 0, STOP_1);
-        double y = f.c()[1], x = f.c()[0];
-        f.dots(Track.Kind.HEAVY, List.of(f.face(Role.PROCESS_INLET, 0, 1), in, at(x, y, in[2]), at(x, y, out[2]), out, f.face(Role.PROCESS_OUTLET, 0, 1)), STOP_1 + .5, STOP_3, 14);
+        // The bundle's top: its fins' (the heads' boxes at its ends), the passes across its width.
+        double top = f.b()[0][1] + .875 * (f.b()[1][1] - f.b()[0][1]) + .1, x = f.c()[0], w = .3 * (f.b()[1][0] - f.b()[0][0]);
+        double near = in[2] + .5, far = out[2] - 1;
+        var way = List.of(f.face(Role.PROCESS_INLET, 0, 1), in, at(x - w, top, near), at(x - w, top, far), at(x, top, far), at(x, top, near), at(x + w, top, near),
+                at(x + w, top, far), at(out[0], top - .3, out[2] - .4), out, f.face(Role.PROCESS_OUTLET, 0, 1));
+        f.dots(Track.Kind.HEAVY, way, STOP_1 + .5, STOP_3, 16);
         f.label(f.face(Role.PROCESS_OUTLET, 0, 1), TO_TANK, STOP_2, STOP_3);
     }
 

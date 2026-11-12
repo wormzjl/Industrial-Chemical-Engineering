@@ -25,7 +25,7 @@ public final class DotMotion {
                 case Track.Box box -> drift(box, k, i, t, track.speed());
                 case Track.Line line -> along(line, k, i, t, track);
             };
-            if (at != null) out.add(new Frame.DotFrame(at[0], at[1], at[2], track.kind(), Track.Dots.SIZE));
+            if (at != null) out.add(new Frame.DotFrame(at[0], at[1], at[2], track.kind(), track.size()));
         }
     }
 

@@ -44,6 +44,33 @@ class UnitFilmsTest {
             assertEquals(CUT.contains(name), cut, name + ": cut open where the inside is the idea");
             boolean dots = scene.tracks().stream().anyMatch(t -> t instanceof Track.Dots);
             assertTrue(dots, name + ": dots run through it");
+            // P5 review: at every stop the body fills at least 60 % of the glass's width or height; at the inside stop
+            // its dots read at 2 px or more, and a cut film shows its tubes or its liquid.
+            for (int k = 0; k < scene.stops().size(); k++) {
+                var frame = scene.at(scene.stops().get(k));
+                var projection = FilmChecks.projection(frame, glass);
+                double x0 = Double.MAX_VALUE, x1 = -Double.MAX_VALUE, y0 = Double.MAX_VALUE, y1 = -Double.MAX_VALUE;
+                for (var a : frame.actors())
+                    if (a.id().equals("body"))
+                        for (var poly : a.polygons())
+                            for (int i = 0; i < poly.size(); i++) {
+                                var s = projection.screen(poly.positions()[3 * i], poly.positions()[3 * i + 1], poly.positions()[3 * i + 2]);
+                                x0 = Math.min(x0, s[0]);
+                                x1 = Math.max(x1, s[0]);
+                                y0 = Math.min(y0, s[1]);
+                                y1 = Math.max(y1, s[1]);
+                            }
+                double w = Math.min(x1, glass.right()) - Math.max(x0, glass.x()), h = Math.min(y1, glass.bottom()) - Math.max(y0, glass.y());
+                assertTrue(w >= .6 * glass.w() || h >= .6 * glass.h(), name + " stop " + (k + 1) + ": the body fills " + Math.round(100 * w / glass.w()) + " % of the width, "
+                        + Math.round(100 * h / glass.h()) + " % of the height");
+                if (k == 1 && scene.stops().size() == 3) {
+                    double ppm = frame.camera().scale() * com.wormzjl.icheme.client.gui.tutorial.FilmLayout.fit(glass);
+                    for (var d : frame.dots()) assertTrue(d.size() * ppm >= 2, name + ": a dot of " + d.size() * ppm + " px at the inside stop");
+                    if (CUT.contains(name))
+                        assertTrue(frame.actors().stream().anyMatch(a -> a.id().equals("tubes") && a.alpha() > .9) || frame.actors().stream().anyMatch(a -> a.id().equals("roof"))
+                                || !frame.liquids().isEmpty(), name + ": the inside its caption names, shown");
+                }
+            }
         }
         assertTrue(EquipmentFilms.shape(EquipmentFilms.DRUM).boot(), "the reflux drum with its boot");
     }

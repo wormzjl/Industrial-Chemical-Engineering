@@ -88,17 +88,27 @@ public sealed interface Track permits Track.Camera, Track.Visible, Track.Cut, Tr
      * the first {@code share} of them drawn (0 to 1, a constant or a recorded {@link Series} on the film's time), so a
      * recording can thin the dots as a part leaves.
      */
-    record Dots(Kind kind, Path path, double from, double to, int count, double speed, Value share) implements Track {
-        /** A dot's radius, m. */
+    record Dots(Kind kind, Path path, double from, double to, int count, double speed, Value share, double size) implements Track {
+        /** A dot's radius, m, unless a film sets its own. */
         public static final double SIZE = .035;
 
         public Dots {
             if (count < 0) throw new IllegalArgumentException("Negative count");
             if (share == null) throw new IllegalArgumentException("A share, or Value.of(1)");
+            if (!(size > 0)) throw new IllegalArgumentException("A dot's radius above 0");
+        }
+
+        public Dots(Kind kind, Path path, double from, double to, int count, double speed, Value share) {
+            this(kind, path, from, to, count, speed, share, SIZE);
         }
 
         public Dots(Kind kind, Path path, double from, double to, int count, double speed) {
             this(kind, path, from, to, count, speed, Value.of(1));
+        }
+
+        /** P5: the same dots at radius {@code size}, m (a film of a large body, whose dots would be specks at {@link #SIZE}). */
+        public Dots sized(double size) {
+            return new Dots(kind, path, from, to, count, speed, share, size);
         }
 
         /** How many dots are drawn at {@code t}: {@code count} times the share, rounded, within 0 and {@code count}. */
