@@ -10,7 +10,6 @@ import com.wormzjl.icheme.science.fluid.network.PassiveIntervalSolver;
 import com.wormzjl.icheme.science.fluid.network.PassiveNetwork;
 import com.wormzjl.icheme.science.fluid.network.Pool;
 import com.wormzjl.icheme.science.fluid.network.PortPlan;
-import com.wormzjl.icheme.science.fluid.network.StillColumn;
 import com.wormzjl.icheme.science.fluid.network.StillHead;
 import java.util.*;
 import java.util.function.LongFunction;
@@ -452,6 +451,8 @@ public final class Stills implements IslandCoordinator.Ports {
         var r=runs.get(pot);var line=new StringBuilder(v.status().name().replace('_',' '));
         for(var a:v.alarms())if(!line.toString().contains(a.text))line.append(" · ").append(a.text);
         if(r!=null&&r.failure!=null)line.append(" · COLUMN: ").append(r.failure);
+        // A tray that would hold free water (W4 D4): a notice, the column's answer stands.
+        if(r!=null&&r.solved!=null&&r.solved.waterOnTrays())line.append(" · WATER ON THE TRAYS");
         return line.toString();
     }
     /**
@@ -500,15 +501,14 @@ public final class Stills implements IslandCoordinator.Ports {
     }
     /**
      * Each world component's critical temperature, K, as the pot island's model gives it (the column's answer's, or its
-     * model's own before one); a component the island does not carry condenses (water's).
+     * model's own before one: {@link StillHead#critical}, water's from the model too); a component the island does not
+     * carry condenses (water's constant).
      */
     private double[] critical(Run r) {
         var result=new double[axis.size()];Arrays.fill(result,StillHead.WATER_CRITICAL);
         if(r.potIsland<0)return result;
         var model=models.apply(r.potIsland);var own=model.components();
-        double[] critical=r.solved!=null?r.solved.critical():criticals.computeIfAbsent(model,m->{
-            var column=new StillColumn(m,BatchStill.ATMOSPHERIC);int n=m.hydrocarbon.componentCount();
-            var c=new double[n+1];for(int i=0;i<n;i++)c[i]=column.criticalTemperature(i);c[n]=StillHead.WATER_CRITICAL;return c;});
+        double[] critical=r.solved!=null?r.solved.critical():criticals.computeIfAbsent(model,StillHead::critical);
         for(int i=0;i<critical.length&&i<own.size();i++){int j=axis.indexOf(own.get(i));if(j>=0)result[j]=critical[i];}
         return result;
     }

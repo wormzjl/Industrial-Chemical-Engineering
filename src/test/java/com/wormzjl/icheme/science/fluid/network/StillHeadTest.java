@@ -2,6 +2,7 @@ package com.wormzjl.icheme.science.fluid.network;
 
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
+import com.wormzjl.icheme.science.material.PilotAqueousTestCatalog;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
@@ -47,7 +48,7 @@ class StillHeadTest {
         assertEquals(0, none.distillateEnergy() + none.ventEnergy(), 0, "energy with no moles stays the condenser's");
     }
 
-    /** The column returns the heavier pentane: the head passes more isopentane than n-pentane, and all the water. */
+    /** The column returns the heavier pentane: the head passes more isopentane than n-pentane; a pot without water sends no flash to the engine. */
     @Test
     void theColumnsAnswerIsThePotsHead() {
         int n = PENTANES.componentCount();
@@ -62,7 +63,9 @@ class StillHeadTest {
         assertEquals(n, recovery.length);
         for (double r : recovery) assertTrue(r >= 0 && r <= 1, "a share: " + r);
         assertTrue(recovery[0] > recovery[1], "isopentane leaves the head before n-pentane: " + recovery[0] + " / " + recovery[1]);
-        assertEquals(1, recovery[n - 1], 0, "water is not in the column's basis: it leaves with the distillate");
+        assertEquals(1, recovery[n - 1], 0, "no water in the pot: its share stands at 1");
+        assertEquals(0, solved.flashes(), "no engine split on a pot without water (W4 D7)");
+        assertFalse(solved.waterOnTrays());
         assertTrue(solved.headTemperature() > 290 && solved.headTemperature() < 315, "the head near the pentanes' boiling points: " + solved.headTemperature());
         assertTrue(solved.condensateTemperature() <= solved.headTemperature() + 1e-9, "the condensate at or below the head vapour");
         assertTrue(solved.fPerWatt() > 0, "a column has an F-factor per watt of boil-up");
@@ -72,5 +75,29 @@ class StillHeadTest {
         var warm = assertInstanceOf(StillHead.Solved.class, StillHead.run(new StillHead.Job(pot, 305, BatchStill.ATMOSPHERIC, 4, 3, solved.profile(), .15), PENTANES, () -> {
         }));
         assertArrayEquals(recovery, warm.head().recovery(), 1e-6, "a warm start lands on the same split");
+    }
+
+    /**
+     * A wash of 10 % ethanol by volume (W4 D1): the column carries its water, so the head returns most of the water with
+     * the reflux and passes ethanol before it; the shares are the column's, water's among them.
+     */
+    @Test
+    void aWashsHeadReturnsItsWater() {
+        var model = FluidThermodynamics.forNetwork(PilotAqueousTestCatalog.catalog(), PilotAqueousTestCatalog.PACKAGE_ID).on(List.of("Ethanol"));
+        int n = model.componentCount(), e = model.components().indexOf("Ethanol");
+        double[] pot = new double[n];
+        pot[e] = .332;
+        pot[n - 1] = 9.668;
+        var outcome = StillHead.run(new StillHead.Job(pot, 365, BatchStill.ATMOSPHERIC, 4, 3, null, .15), model, () -> {
+        });
+        var solved = assertInstanceOf(StillHead.Solved.class, outcome, () -> "the column solves: " + outcome);
+        var recovery = solved.head().recovery();
+        System.out.printf(java.util.Locale.ROOT, "W4 wash head: ethanol share %.4f, water share %.4f, head %.2f C, condensate %.2f C, %d flashes%n",
+                recovery[e], recovery[n - 1], solved.headTemperature() - 273.15, solved.condensateTemperature() - 273.15, solved.flashes());
+        assertTrue(recovery[n - 1] < .5, "the column returns most of the water: " + recovery[n - 1]);
+        assertTrue(recovery[e] > 2 * recovery[n - 1], "ethanol leaves the head before water");
+        assertTrue(solved.flashes() > 0, "the wash's liquids hold water: the engine states them");
+        assertEquals(model.hydrocarbon.criticalTemperature(n - 1), solved.critical()[n - 1], 1e-9, "water's critical temperature is the model's");
+        assertTrue(Double.isFinite(solved.head().returnEnthalpy()));
     }
 }
