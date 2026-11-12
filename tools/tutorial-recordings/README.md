@@ -37,3 +37,18 @@ within 1e-9.
 ```
 ./gradlew --offline --init-script tools/tutorial-recordings/record.init.gradle recordStillRun
 ```
+
+## StillTrays (P4b)
+
+Measures and records chapter 3's still with a column: `still_trays.json` for the cards `reflux` and `compare`. The same
+still as StillRun (`StillRunRecorder.run(stages, reflux)`, test source) as a pot still and with a column of
+`StillTraysRecorder.STAGES` (4) trays at reflux ratios 1 and 2. For each form it prints how the column answered on its
+boiling steps (solved itself, dry: the law's single stage, fallback: the solve refused) with their pot temperature
+ranges, and the two cuts: the first to the charge's gas and naphtha taken overhead (18 %), the second on to its
+kerosene (29 %), each with its liquid's six parts, pot temperature and minutes of play. `StillTraysRecordingTest` reruns
+the law and holds the file equal within 1e-9.
+
+```
+./gradlew --offline --init-script tools/tutorial-recordings/record.init.gradle recordStillTrays           # print only
+./gradlew --offline --init-script tools/tutorial-recordings/record.init.gradle recordStillTrays -Pwrite   # and write
+```

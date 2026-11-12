@@ -40,7 +40,21 @@ public final class StillRunRecorder {
     }
 
     /** A step's end: process seconds, the pot's and head's temperatures (K; head NaN with none), the level (share of the pot), the distilled and vented shares of the charge's mass, the rate to the spout (kg/s), the law's status and the part coming over (the band with the most mass in what left the pot over the step, spout liquid and vented gas together; -1 none). */
-    public record Point(double time, double pot, double head, double level, double distilled, double vented, double rate, BatchStill.Status status, int part) {
+    public record Point(double time, double pot, double head, double level, double distilled, double vented, double rate, BatchStill.Status status, int part,
+                        Column column) {
+        Point(double time, double pot, double head, double level, double distilled, double vented, double rate, BatchStill.Status status, int part) {
+            this(time, pot, head, level, distilled, vented, rate, status, part, Column.NONE);
+        }
+    }
+
+    /**
+     * What the column answered on a step (chapter 3's measurement, P4b): whether the step boiled, the stages of the split the
+     * law used (the design's trays where the column solved itself, 0 where it answered as the pot's single stage), the reason
+     * the column's own solve failed (null if none: the law then kept its last answer or fell back to one stage), the split's
+     * notice, and the spout's liquid by part to the step's end (kg, cumulative).
+     */
+    public record Column(boolean boiled, int stages, String failure, String notice, double[] spoutKg) {
+        static final Column NONE = new Column(false, 0, null, null, new double[0]);
     }
 
     /** A derived line: process seconds and the pot's temperature (K) there. */
@@ -59,6 +73,11 @@ public final class StillRunRecorder {
     }
 
     public static Run run() {
+        return run(0, 0);
+    }
+
+    /** The run on a still with {@code stages} column trays (0: none) at the valve's reflux ratio {@code reflux} (0 with no column). */
+    public static Run run(int stages, double reflux) {
         var catalog = MaterialCatalog.bundled();
         var thermo = FluidThermodynamics.forNetwork(catalog, PACKAGE);
         var column = new StillColumn(thermo, BatchStill.ATMOSPHERIC);
@@ -84,7 +103,7 @@ public final class StillRunRecorder {
         }
         double[] x = new double[n];
         for (int i = 0; i < n; i++) x[i] = liquid[i] / liquidMoles;
-        var design = new BatchStill.Design(VOLUME, BatchStill.Heater.SOLID, true, 0);
+        var design = new BatchStill.Design(VOLUME, BatchStill.Heater.SOLID, true, stages);
         var bubble = column.bubble(x, Double.NaN);
         if (bubble == null) throw new IllegalStateException("No bubble point for the charge");
         double moles = FILL * VOLUME / column.liquidVolume(CHARGE_KELVIN, x);
@@ -106,7 +125,7 @@ public final class StillRunRecorder {
             for (int b = 0; b < BarrelData.BANDS.size(); b++) in[i][b] = segment.in(b);
         }
         var cooling = new BatchStill.Cooling(WATER_KELVIN, BatchStill.designWaterFlow(design.rating()) * BatchStill.WATER_HEAT_CAPACITY);
-        var inputs = new BatchStill.Inputs(FIRING, 1, 0, cooling);
+        var inputs = new BatchStill.Inputs(FIRING, 1, reflux, cooling);
         double rating = FIRING * design.rating();
         var points = new ArrayList<Point>();
         // The flash's liquid is at its bubble point: the pot starts there (a hair under 25 °C), the law's start for a boiling charge.
@@ -116,6 +135,7 @@ public final class StillRunRecorder {
         double t = 0, distilled = 0, vented = 0, lastHead = Double.NaN, target = STEP_SHARE * moles;
         double dt = Math.max(1, moles * (column.liquidEnthalpy(start + STEP_KELVIN, x) - column.liquidEnthalpy(start, x)) / rating);
         int steps = 0;
+        double[] spoutKg = new double[BarrelData.BANDS.size()];
         String finish = "UNFINISHED", refusal = null;
         while (steps < MOST_STEPS) {
             BatchStill.Step s;
@@ -135,7 +155,10 @@ public final class StillRunRecorder {
                 removed += s.liquid()[i] + s.vapour()[i];
                 out += s.liquid()[i] * mass[i];
                 gone += s.vapour()[i] * mass[i];
-                for (int b = 0; b < parts.length; b++) parts[b] += (s.liquid()[i] + s.vapour()[i]) * mass[i] * in[i][b];
+                for (int b = 0; b < parts.length; b++) {
+                    parts[b] += (s.liquid()[i] + s.vapour()[i]) * mass[i] * in[i][b];
+                    spoutKg[b] += s.liquid()[i] * mass[i] * in[i][b];
+                }
             }
             pot = s.pot();
             t += dt;
@@ -148,7 +171,9 @@ public final class StillRunRecorder {
             }
             double[] xp = pot.total() > 0 ? fractions(pot.moles(), pot.total()) : x;
             double level = pot.total() * column.liquidVolume(pot.temperature(), xp) / VOLUME;
-            points.add(new Point(t, pot.temperature(), s.headTemperature(), level, distilled / chargeKg, vented / chargeKg, out / dt, s.status(), part));
+            boolean boiled = removed > 0 || s.status() == BatchStill.Status.BOILING;
+            var answer = new Column(boiled, s.split() != null ? s.split().stages() : 0, s.columnFailure(), s.split() != null ? s.split().notice() : null, spoutKg.clone());
+            points.add(new Point(t, pot.temperature(), s.headTemperature(), level, distilled / chargeKg, vented / chargeKg, out / dt, s.status(), part, answer));
             if (s.alarm(BatchStill.Status.BOIL_DRY)) {
                 finish = "BOIL_DRY";
                 break;
