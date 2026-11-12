@@ -210,8 +210,9 @@ final class BatchStillUnitTest {
 
     /**
      * W4: a naphtha holding its dissolved water (1e-4 by mole, under its solubility) is one liquid: the sheet's still boils it on
-     * the column's basis, water in it, and refuses nothing. Water's volatility in the oil is high, so nearly all of it leaves with
-     * the first cut, and what entered left. (A wash cannot reach a sheet yet: the bundled network package holds no ethanol, and a
+     * the column's basis, water in it, and refuses nothing. Water's volatility in the oil is high, so nearly all of it leaves
+     * early: with the first cut, or with the light gas the condenser cannot take at its 30 °C outlet (this naphtha heads near
+     * 30 °C; water's K over the oil there is some 40, so the gas carries most of it), and what entered left. (A wash cannot reach a sheet yet: the bundled network package holds no ethanol, and a
      * network preset refuses a package whose water is a cubic component.)
      */
     @Test void aNaphthaWithItsDissolvedWaterIsOneLiquidAndBoils() {
@@ -223,9 +224,10 @@ final class BatchStillUnitTest {
         assertFalse(noted(run, "still.settles"));
         int w = AXIS.indexOf("Water");
         double fed = run.streams().get("in").amounts()[w], first = run.streams().get("cut/1").amounts()[w], residue = run.streams().get("residue").amounts()[w];
-        System.out.printf(java.util.Locale.ROOT, "W4 wet naphtha on the sheet: water fed %.3e, first cut %.4f of it, residue %.2e of it%n", fed, first / fed, residue / fed);
+        double vented = run.streams().get("vent").amounts()[w];
+        System.out.printf(java.util.Locale.ROOT, "W4 wet naphtha on the sheet: water fed %.3e, first cut %.4f of it, vent %.4f, residue %.2e of it%n", fed, first / fed, vented / fed, residue / fed);
         assertTrue(fed > 0);
-        assertTrue(first > .5 * fed, "the dissolved water leaves early, with the light cut: " + first / fed);
+        assertTrue(first + vented > .5 * fed, "the dissolved water leaves early, with the light cut and the vent: " + first / fed + " and " + vented / fed);
         assertTrue(residue < .01 * fed, "the residue keeps almost none of it: " + residue / fed);
     }
 

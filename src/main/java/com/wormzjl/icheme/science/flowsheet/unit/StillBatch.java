@@ -207,7 +207,10 @@ public final class StillBatch {
             if (removed > 0 && Double.isNaN(boiled)) boiled = t - step;
             double rate = 0;
             for (double e : out) rate += e;
-            points.add(new Point(t, pot.temperature(), s.headTemperature(), rate / step, removed > 0 ? s.split().distillate() : null, removed > 0 ? cut : -1));
+            // The point's composition is what reaches the cut: the liquid's with a condenser (none while a partial one vents its gas alone).
+            double[] composition = removed > 0 ? condenses ? s.split().liquidComposition() : s.split().distillate() : null;
+            if (composition != null && condenses && s.split().partial() && !(rate > 0)) composition = null;
+            points.add(new Point(t, pot.temperature(), s.headTemperature(), rate / step, composition, removed > 0 ? cut : -1));
             if (s.alarm(BatchStill.Status.BOIL_DRY)) {
                 finish = Finish.DRY;
                 break;
