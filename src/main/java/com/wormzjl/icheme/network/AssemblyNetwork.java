@@ -424,6 +424,8 @@ public final class AssemblyNetwork {
         @Override
         public void send(AssemblyMenu menu, AssemblyView view) {
             PacketDistributor.sendToPlayer(Objects.requireNonNull(menu.serverPlayer()), new StatePayload(menu.containerId, view));
+            // The field guide's build and start steps (batch 2026-11-12-tutorial-system, P5 stage B): what this player was shown, a read.
+            com.wormzjl.icheme.runtime.tutorial.TutorialTriggers.assemblyShown(menu.serverPlayer(), view);
         }
     };
 

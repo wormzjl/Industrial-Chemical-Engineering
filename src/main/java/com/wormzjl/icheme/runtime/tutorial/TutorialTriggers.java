@@ -5,6 +5,8 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.wormzjl.icheme.IChemE;
 import com.wormzjl.icheme.runtime.fluid.FluidView;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
+import com.wormzjl.icheme.science.tutorial.guide.AssemblyCondition;
+import com.wormzjl.icheme.science.tutorial.guide.ColumnCondition;
 import com.wormzjl.icheme.science.tutorial.guide.SheetCondition;
 import com.wormzjl.icheme.science.tutorial.guide.StillCondition;
 import net.minecraft.advancements.CriterionTrigger;
@@ -30,7 +32,9 @@ import java.util.Optional;
  * cached status, a read); {@code icheme:diverter_switched} where the player turns a diverter valve by hand. P4b:
  * {@code icheme:sheet_run} where a process simulator stores a player's sheet with results that ran on it (a run's end on the
  * client sends them; the server reads the stored sheet's settings, a {@link SheetCondition}, and solves nothing);
- * {@code icheme:design_sent} where it stores what the player's Send to block sent. Each mirrors the game's
+ * {@code icheme:design_sent} where it stores what the player's Send to block sent. P5 stage B: {@code icheme:assembly_state}
+ * and {@code icheme:column_state} where a column's assembly screen gets its view (the scheduled send to its open screen),
+ * conditions an {@link AssemblyCondition} and a {@link ColumnCondition}. Each mirrors the game's
  * {@code ConstructBeaconTrigger}: an instance record with its optional player predicate and a record codec. No client
  * class: loads on a dedicated server.
  */
@@ -43,6 +47,8 @@ public final class TutorialTriggers {
     public static final DeferredHolder<CriterionTrigger<?>, Plain> DIVERTER_SWITCHED = TRIGGERS.register("diverter_switched", Plain::new);
     public static final DeferredHolder<CriterionTrigger<?>, SheetRun> SHEET_RUN = TRIGGERS.register("sheet_run", SheetRun::new);
     public static final DeferredHolder<CriterionTrigger<?>, Plain> DESIGN_SENT = TRIGGERS.register("design_sent", Plain::new);
+    public static final DeferredHolder<CriterionTrigger<?>, AssemblyState> ASSEMBLY_STATE = TRIGGERS.register("assembly_state", AssemblyState::new);
+    public static final DeferredHolder<CriterionTrigger<?>, ColumnState> COLUMN_STATE = TRIGGERS.register("column_state", ColumnState::new);
 
     private TutorialTriggers() {
     }
@@ -144,6 +150,63 @@ public final class TutorialTriggers {
 
             public SheetCondition condition() {
                 return new SheetCondition(maxHeaterOutlet, heater);
+            }
+        }
+    }
+
+    /**
+     * A column's assembly view reached the player's open screen: its status for {@code assembly_state}, its Operation view
+     * (null before any Start) for {@code column_state}. A read of what was sent.
+     */
+    public static void assemblyShown(ServerPlayer player, com.wormzjl.icheme.science.assembly.AssemblyView view) {
+        if (view == null) return;
+        ASSEMBLY_STATE.get().trigger(player, view.status().name());
+        if (view.operation() != null) COLUMN_STATE.get().trigger(player, view.operation());
+    }
+
+    /** A column's assembly as its screen shows it: optionally one of the statuses named. */
+    public static final class AssemblyState extends SimpleCriterionTrigger<AssemblyState.Instance> {
+        @Override
+        public Codec<Instance> codec() {
+            return Instance.CODEC;
+        }
+
+        public void trigger(ServerPlayer player, String status) {
+            trigger(player, instance -> instance.condition().matches(status));
+        }
+
+        public record Instance(Optional<ContextAwarePredicate> player, Optional<List<String>> status) implements SimpleCriterionTrigger.SimpleInstance {
+            public static final Codec<Instance> CODEC = RecordCodecBuilder.create(i -> i.group(
+                    EntityPredicate.ADVANCEMENT_CODEC.optionalFieldOf("player").forGetter(Instance::player),
+                    Codec.STRING.listOf().optionalFieldOf("status").forGetter(Instance::status)
+            ).apply(i, Instance::new));
+
+            public AssemblyCondition condition() {
+                return new AssemblyCondition(status);
+            }
+        }
+    }
+
+    /** A running column's Operation view as its screen shows it: optionally one of the phases named, optionally a product leaving. */
+    public static final class ColumnState extends SimpleCriterionTrigger<ColumnState.Instance> {
+        @Override
+        public Codec<Instance> codec() {
+            return Instance.CODEC;
+        }
+
+        public void trigger(ServerPlayer player, com.wormzjl.icheme.science.column.operation.OperationView view) {
+            trigger(player, instance -> instance.condition().matches(view));
+        }
+
+        public record Instance(Optional<ContextAwarePredicate> player, Optional<List<String>> phase, Optional<Boolean> product) implements SimpleCriterionTrigger.SimpleInstance {
+            public static final Codec<Instance> CODEC = RecordCodecBuilder.create(i -> i.group(
+                    EntityPredicate.ADVANCEMENT_CODEC.optionalFieldOf("player").forGetter(Instance::player),
+                    Codec.STRING.listOf().optionalFieldOf("phase").forGetter(Instance::phase),
+                    Codec.BOOL.optionalFieldOf("product").forGetter(Instance::product)
+            ).apply(i, Instance::new));
+
+            public ColumnCondition condition() {
+                return new ColumnCondition(phase, product);
             }
         }
     }
