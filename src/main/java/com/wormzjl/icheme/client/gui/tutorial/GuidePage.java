@@ -73,8 +73,18 @@ public final class GuidePage {
     public record Row(String step, Mark mark, Rect rect, Rect markRect, List<Line> lines, List<Key> keys, int textWidth) {
     }
 
-    /** An open card's place (panel coordinates): the drawing, the caption's lines and top left, the control's label and slider, Back. */
-    public record CardPlace(String step, Card card, Rect drawing, List<String> caption, int captionX, int captionY, String label, int labelX, Rect slider, Key back) {
+    /**
+     * An open card's place (panel coordinates): the option keys over the drawing (action {@code card:option:<i>}), the
+     * drawing, the caption's lines and top left, the control's label and slider, Back.
+     */
+    public record CardPlace(String step, Card card, List<Key> options, Rect drawing, List<String> caption, int captionX, int captionY, String label, int labelX,
+                            Rect slider, Key back) {
+        public CardPlace {
+            options = List.copyOf(options);
+        }
+
+        public static final String OPTION = "card:option:";
+
         /** The slider's knob at {@code control}. */
         public Rect knob(double control) {
             int x = slider.x() + (int) Math.round((slider.w() - KNOB) * Math.clamp(control, 0, 1));
@@ -139,7 +149,10 @@ public final class GuidePage {
             }
             for (var row : rows) if (media == null && !row.keys().isEmpty()) media = row.keys().getFirst();
             if (media != null) out.put("media", media.rect());
-            if (card != null) out.put("card:back", card.back().rect());
+            if (card != null) {
+                for (var key : card.options()) out.put(key.key(), key.rect());
+                out.put("card:back", card.back().rect());
+            }
             return out;
         }
 
@@ -168,7 +181,10 @@ public final class GuidePage {
             if (help.contains(x, y)) return "help";
             if (theme.contains(x, y)) return "theme";
             for (var key : chapters.values()) if (!key.latched() && key.rect().contains(x, y)) return key.key();
-            if (card != null) return card.back().rect().contains(x, y) ? card.back().key() : null;
+            if (card != null) {
+                for (var key : card.options()) if (key.rect().contains(x, y)) return key.key();
+                return card.back().rect().contains(x, y) ? card.back().key() : null;
+            }
             if (!view.contains(x, y)) return null;
             for (var row : rows) for (var key : row.keys()) if (onPanel(key.rect(), offset).contains(x, y)) return key.key();
             return null;
@@ -195,10 +211,10 @@ public final class GuidePage {
 
         /**
          * Draws the page in {@code skin}: the door, the title strip and its keys, the glass with the steps scrolled by
-         * {@code offset} (or the open card at {@code phase} and {@code control}), {@code hover} the action under the pointer.
-         * Loops of fills go in one batch each.
+         * {@code offset} (or the open card in {@code state}), {@code hover} the action under the pointer. Loops of fills go in
+         * one batch each.
          */
-        public void draw(Canvas c, Skin skin, int offset, @Nullable String hover, double phase, double control) {
+        public void draw(Canvas c, Skin skin, int offset, @Nullable String hover, Card.State state) {
             skin.page(c, new Rect(0, 0, width, height));
             skin.title(c, TitleStrip.TITLE_X, TitleStrip.TITLE_Y, strip.kind());
             skin.iconKey(c, help, Skin.Icon.HELP, "help".equals(hover));
@@ -211,7 +227,7 @@ public final class GuidePage {
             }
             skin.well(c, well);
             if (card != null) {
-                drawCard(c, skin, card, phase, control, hover, tr);
+                drawCard(c, skin, card, state, hover, tr);
                 return;
             }
             c.clip(view);
@@ -257,9 +273,14 @@ public final class GuidePage {
         });
     }
 
-    private static void drawCard(Canvas c, Skin skin, CardPlace p, double phase, double control, @Nullable String hover, Function<String, String> tr) {
+    private static void drawCard(Canvas c, Skin skin, CardPlace p, Card.State state, @Nullable String hover, Function<String, String> tr) {
+        double control = state.control();
+        for (int i = 0; i < p.options().size(); i++) {
+            var key = p.options().get(i);
+            skin.button(c, key.rect(), key.text(), i == state.option() ? Skin.Press.CURRENT : Skin.Press.REST, key.key().equals(hover));
+        }
         c.clip(p.drawing());
-        p.card().draw(c, p.drawing(), phase, control, skin, tr);
+        p.card().draw(c, p.drawing(), state, skin, tr);
         c.unclip();
         for (int i = 0; i < p.caption().size(); i++) c.text(p.caption().get(i), p.captionX(), p.captionY() + i * Measure.LINE, Palette.TEXT);
         if (p.card().control() != Card.Control.NONE) {
@@ -397,7 +418,19 @@ public final class GuidePage {
         var slider = new Rect(sliderX, back.rect().y() + (KEY_H - 8) / 2, Math.max(20, back.rect().x() - 10 - sliderX), 8);
         var caption = m.wrap(tr.apply(card.captionKey()), view.w() - 8);
         int captionY = back.rect().y() - 4 - caption.size() * Measure.LINE;
-        var drawing = new Rect(view.x(), view.y(), view.w(), Math.max(10, captionY - 4 - view.y()));
-        return new CardPlace(step, card, drawing, caption, view.x() + 4, captionY, label, labelX, slider, back);
+        // The options: one row of soft keys across the top, as wide as the widest word, shrunk to fit.
+        var options = new ArrayList<Key>();
+        var words = card.options();
+        int top = view.y();
+        if (!words.isEmpty()) {
+            int ow = 0;
+            for (var word : words) ow = Math.max(ow, m.width(tr.apply(word)) + 12);
+            ow = Math.min(ow, (view.w() - 4 - (words.size() - 1) * KEY_GAP) / words.size());
+            for (int i = 0; i < words.size(); i++)
+                options.add(new Key(CardPlace.OPTION + i, new Rect(view.x() + 2 + i * (ow + KEY_GAP), view.y() + 2, ow, KEY_H), tr.apply(words.get(i)), null, false));
+            top = view.y() + 2 + KEY_H + 2;
+        }
+        var drawing = new Rect(view.x(), top, view.w(), Math.max(10, captionY - 4 - top));
+        return new CardPlace(step, card, options, drawing, caption, view.x() + 4, captionY, label, labelX, slider, back);
     }
 }

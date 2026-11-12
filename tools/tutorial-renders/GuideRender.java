@@ -12,6 +12,7 @@ import com.wormzjl.icheme.client.gui.screens.inventory.FluidDeviceScreen.FluidGu
 import com.wormzjl.icheme.client.gui.tutorial.GuidePage;
 import com.wormzjl.icheme.client.gui.tutorial.TourLayout;
 import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind;
+import com.wormzjl.icheme.science.tutorial.cards.Card;
 import com.wormzjl.icheme.science.tutorial.guide.GuideFile;
 import com.wormzjl.icheme.science.tutorial.guide.Progress;
 import com.wormzjl.icheme.science.tutorial.guide.Tour;
@@ -89,7 +90,7 @@ public final class GuideRender {
             for (var skin : List.of(PanelSkin.LIGHT, PanelSkin.DARK))
                 pages.add(image(GuidePage.DESIGN_WIDTH, GuidePage.DESIGN_HEIGHT, c -> {
                     var p = page(c, state(state), GuidePage.DESIGN_WIDTH, GuidePage.DESIGN_HEIGHT, null);
-                    p.draw(c, skin, opening(p), null, 0, 0);
+                    p.draw(c, skin, opening(p), null, Card.State.of(0, 0));
                 }));
             HeatDiagramRender.grid(out.resolve("guide-" + state + ".png"), List.of("Light, 464 by 254: " + state, "Dark, 464 by 254: " + state), pages);
         }
@@ -98,13 +99,13 @@ public final class GuideRender {
         for (var state : List.of("new", "step-3-current")) {
             small.add(image(312, 232, c -> {
                 var p = page(c, state(state), 312, 232, null);
-                p.draw(c, PanelSkin.LIGHT, opening(p), null, 0, 0);
+                p.draw(c, PanelSkin.LIGHT, opening(p), null, Card.State.of(0, 0));
             }));
             titles.add("Light, 320 by 240 window: " + state);
         }
         small.add(image(312, 232, c -> {
             var p = page(c, state("step-3-current"), 312, 232, null);
-            p.draw(c, PanelSkin.DARK, p.maxOffset(), null, 0, 0);
+            p.draw(c, PanelSkin.DARK, p.maxOffset(), null, Card.State.of(0, 0));
         }));
         titles.add("Dark, 320 by 240 window: scrolled to the end");
         HeatDiagramRender.grid(out.resolve("guide-small.png"), titles, small);
@@ -126,7 +127,7 @@ public final class GuideRender {
                     String anchor = tour.stops().get(stop).anchor();
                     var r = p.anchors().get(anchor);
                     int offset = p.scrolls(anchor) ? p.reveal(r, opening(p)) : opening(p);
-                    p.draw(c, PanelSkin.LIGHT, offset, null, 0, 0);
+                    p.draw(c, PanelSkin.LIGHT, offset, null, Card.State.of(0, 0));
                     var lit = p.scrolls(anchor) ? p.onPanel(r, offset) : r;
                     TourLayout.of(size[0], size[1], lit, tr.apply(tour.key(stop)), stop == 0, stop == tour.stops().size() - 1, false, words(), c.measure()).draw(c, PanelSkin.LIGHT, null);
                 }));
@@ -241,13 +242,13 @@ public final class GuideRender {
         for (double control : new double[]{0, .5, 1}) {
             pages.add(image(GuidePage.DESIGN_WIDTH, GuidePage.DESIGN_HEIGHT, c -> {
                 var p = page(c, state("step-3-current"), GuidePage.DESIGN_WIDTH, GuidePage.DESIGN_HEIGHT, "welcome/dots");
-                p.draw(c, PanelSkin.LIGHT, 0, null, 1.3, control);
+                p.draw(c, PanelSkin.LIGHT, 0, null, Card.State.of(1.3, control));
             }));
             titles.add("Card three_parts, heat " + control);
         }
         pages.add(image(312, 232, c -> {
             var p = page(c, state("step-3-current"), 312, 232, "welcome/dots");
-            p.draw(c, PanelSkin.DARK, 0, null, 1.3, .5);
+            p.draw(c, PanelSkin.DARK, 0, null, Card.State.of(1.3, .5));
         }));
         titles.add("Dark, 320 by 240 window, heat 0.5");
         HeatDiagramRender.grid(out.resolve("card-three_parts.png"), titles, pages);

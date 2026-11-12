@@ -104,11 +104,102 @@ class CardViewTest {
             for (double heat : new double[]{0, .3, .5, .75, 1})
                 for (double phase : new double[]{0, 1.3, 7.7}) {
                     var c = new Counting(area);
-                    card.draw(c, area, phase, heat, PanelSkin.LIGHT, k -> "word");
+                    card.draw(c, area, Card.State.of(phase, heat), PanelSkin.LIGHT, k -> "word");
                     assertNull(c.outside, area + " heat " + heat + ": a fill outside " + c.outside);
                     assertTrue(c.fills > 20);
                     assertEquals(3, c.loose, "only the legend's three words outside a batch");
                 }
+    }
+
+    /** A card with two options, a five-step slider and three places to press, done when all three were pressed. */
+    static final class Probe implements Card {
+        @Override
+        public void draw(Canvas c, Rect area, State state, com.wormzjl.icheme.client.gui.common.kit.Skin skin, java.util.function.Function<String, String> tr) {
+        }
+
+        @Override
+        public String captionKey() {
+            return "caption";
+        }
+
+        @Override
+        public Control control() {
+            return Control.SLIDER;
+        }
+
+        @Override
+        public String controlKey() {
+            return "slider";
+        }
+
+        @Override
+        public java.util.List<String> textKeys() {
+            return java.util.List.of();
+        }
+
+        @Override
+        public java.util.List<String> options() {
+            return java.util.List.of("one", "two");
+        }
+
+        @Override
+        public int steps() {
+            return 5;
+        }
+
+        @Override
+        public java.util.List<Hit> hits(Rect area, int option) {
+            return java.util.List.of(new Hit(0, new Rect(area.x(), area.y(), 10, 10)), new Hit(1, new Rect(area.x() + 20, area.y(), 10, 10)),
+                    new Hit(2, new Rect(area.x() + 40, area.y(), 10, 10)));
+        }
+
+        @Override
+        public boolean done(double control, java.util.Set<Integer> visited) {
+            return visited.size() == 3;
+        }
+    }
+
+    @Test
+    void optionsHitsStepsAndDoneReachTheView() {
+        var view0 = new CardView(new Probe(), () -> {
+        });
+        var area = new Rect(100, 50, 300, 120);
+        var place = new GuidePage.CardPlace("x/y", view0.card(), java.util.List.of(), area, java.util.List.of(), 0, 0, "", 0, new Rect(120, 200, 200, 8),
+                new GuidePage.Key("card:back", new Rect(340, 196, 48, 16), "Back", null, false));
+        int[] ended = {0};
+        var view = new CardView(place.card(), () -> ended[0]++);
+        view.option(1);
+        assertEquals(1, view.option());
+        view.option(7);
+        assertEquals(1, view.option(), "no such option");
+        assertEquals(.25, place.card().stepped(.3), 1e-12, "five steps snap to quarters");
+        assertTrue(view.press(place, area.x() + 22, area.y() + 2));
+        assertEquals(1, view.hit());
+        view.step(1, place);
+        assertEquals(2, view.hit(), "Right steps to the next place");
+        assertEquals(0, ended[0]);
+        view.step(-1, place);
+        view.step(-1, place);
+        assertEquals(0, view.hit());
+        assertEquals(java.util.Set.of(0, 1, 2), view.visited());
+        assertEquals(1, ended[0], "every place pressed: done once");
+        var state = view.state(Card.CELSIUS);
+        assertEquals(1, state.option());
+        assertEquals(0, state.hit());
+        assertEquals("100 °C", state.temperature().apply(373.15));
+        assertEquals("373 K", Card.temperature(com.wormzjl.icheme.science.display.DisplayUnit.TemperatureUnit.KELVIN).apply(373.15));
+        // The slider snaps to its steps.
+        var s = place.slider();
+        assertTrue(view.press(place, s.x() + s.w() * .3, s.y() + 4));
+        assertEquals(.25, view.control(), 1e-12);
+        view.release();
+    }
+
+    @Test
+    void anOptionsCardPlacesItsKeysOverTheDrawing() {
+        var page = GuidePageTest.page(Progress.NONE, GuidePage.DESIGN_WIDTH, GuidePage.DESIGN_HEIGHT, "welcome/dots");
+        assertTrue(page.card().options().isEmpty(), "three_parts has no options");
+        assertEquals(0, Card.State.of(0, 0).option());
     }
 
     @Test

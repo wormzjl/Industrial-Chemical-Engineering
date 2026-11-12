@@ -4,6 +4,7 @@ import com.wormzjl.icheme.client.ClientConfig;
 import com.wormzjl.icheme.client.gui.common.kit.GuiCanvas;
 import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
 import com.wormzjl.icheme.science.display.DisplayUnit;
+import com.wormzjl.icheme.science.tutorial.cards.Card;
 import com.wormzjl.icheme.science.tutorial.cards.Cards;
 import com.wormzjl.icheme.science.tutorial.films.Films;
 import com.wormzjl.icheme.science.tutorial.guide.Guide;
@@ -11,6 +12,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
+import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 
@@ -88,7 +90,7 @@ public class GuideScreen extends Screen {
         var canvas = new GuiCanvas(g, font, left, top);
         g.pose().pushPose();
         g.pose().translate(left, top, 0);
-        page.draw(canvas, ClientConfig.skin(), offset, hover, cardView == null ? 0 : cardView.phase(), cardView == null ? 0 : cardView.control());
+        page.draw(canvas, ClientConfig.skin(), offset, hover, cardView == null ? Card.State.of(0, 0) : cardView.state(Card.temperature(ClientConfig.temperature())));
         g.pose().popPose();
         renderOver(g, mouseX, mouseY);
         String hint = tour.isOpen() ? null : hintAt(x, y);
@@ -106,7 +108,7 @@ public class GuideScreen extends Screen {
 
     /** The action the pointer stands on, for the keys' hover light. */
     protected String hoverAction(double x, double y) {
-        if (page.card() != null && page.card().knob(cardView == null ? 0 : cardView.control()).contains(x, y)) return "card:slider";
+        if (page.card() != null && page.card().card().control() != Card.Control.NONE && page.card().knob(cardView == null ? 0 : cardView.control()).contains(x, y)) return "card:slider";
         return page.action(x, y, offset);
     }
 
@@ -155,6 +157,10 @@ public class GuideScreen extends Screen {
         if (action.equals("card:back")) {
             card = null;
             cardView = null;
+            return;
+        }
+        if (action.startsWith(GuidePage.CardPlace.OPTION)) {
+            if (cardView != null) cardView.option(Integer.parseInt(action.substring(GuidePage.CardPlace.OPTION.length())));
             return;
         }
         if (action.startsWith("chapter:")) {
@@ -225,6 +231,11 @@ public class GuideScreen extends Screen {
     @Override
     public boolean keyPressed(int key, int scan, int modifiers) {
         if (tour.isOpen()) return tour.keyPressed(key);
+        // Left and Right step through the open card's places, or its slider.
+        if (page.card() != null && cardView != null && (key == GLFW.GLFW_KEY_LEFT || key == GLFW.GLFW_KEY_RIGHT)) {
+            cardView.step(key == GLFW.GLFW_KEY_LEFT ? -1 : 1, page.card());
+            return true;
+        }
         return super.keyPressed(key, scan, modifiers);
     }
 

@@ -3,14 +3,20 @@ package com.wormzjl.icheme.science.tutorial.cards;
 import com.wormzjl.icheme.client.gui.common.kit.Canvas;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
+import com.wormzjl.icheme.science.display.DisplayUnit;
 
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+import java.util.function.DoubleFunction;
 import java.util.function.Function;
 
 /**
  * A concept card (batch 2026-11-12-tutorial-system, TUTORIAL_SYSTEM_PLAN.md section 3.2): one animated drawing on the
- * kit's canvas (Minecraft-free, so the render tool draws what the game does), its one-sentence caption, and a slider or a
- * switch where the idea has one. A card is a pure function of its phase and its control: it computes no process state.
+ * kit's canvas (Minecraft-free, so the render tool draws what the game does), its one-sentence caption, and what the
+ * player works on it: a slider (continuous or stepped) or a switch, a row of options (soft keys over the card), and
+ * places on the drawing to press. A card is a pure function of its {@link State}: it computes no process state and reads
+ * no file while it draws (a recording is read once, when the card is built).
  */
 public interface Card {
     /** What the player moves on the card: nothing, a slider (0 to 1) or a switch (0 or 1). */
@@ -18,11 +24,44 @@ public interface Card {
         NONE, SLIDER, SWITCH
     }
 
+    /** A place on the drawing the player can press, and its index. */
+    record Hit(int index, Rect rect) {
+    }
+
     /**
-     * Draws the card in {@code area} (on the HMI glass, the screens' dark palette) at {@code phase} (seconds of its
-     * animation) with its control at {@code control} (0 to 1); {@code tr} gives a language key's line.
+     * What the card draws: its animation's {@code phase} (s), its {@code control} (0 to 1, already stepped), the chosen
+     * {@code option} (0 with none), the last pressed hit ({@code -1}: none), the hits pressed so far, and the client's
+     * temperature format (kelvin to text with its unit).
      */
-    void draw(Canvas c, Rect area, double phase, double control, Skin skin, Function<String, String> tr);
+    record State(double phase, double control, int option, int hit, Set<Integer> visited, DoubleFunction<String> temperature) {
+        public State {
+            visited = Set.copyOf(visited);
+        }
+
+        /** At rest: phase 0, the control at {@code control}, the first option, nothing pressed, °C. */
+        public static State of(double phase, double control) {
+            return new State(phase, control, 0, -1, Set.of(), CELSIUS);
+        }
+
+        public State withOption(int value) {
+            return new State(phase, control, value, hit, visited, temperature);
+        }
+
+        public State withHit(int value) {
+            return new State(phase, control, option, value, visited, temperature);
+        }
+    }
+
+    /** Kelvin in whole degrees of {@code unit}, with its symbol. */
+    static DoubleFunction<String> temperature(DisplayUnit.TemperatureUnit unit) {
+        return kelvin -> String.format(Locale.ROOT, "%d %s", Math.round(unit.display(kelvin)), unit.symbol());
+    }
+
+    /** Whole degrees Celsius: the render tool's format, and the client's default. */
+    DoubleFunction<String> CELSIUS = temperature(DisplayUnit.TemperatureUnit.CELSIUS);
+
+    /** Draws the card in {@code area} (on the HMI glass, the screens' dark palette) in {@code state}; {@code tr} gives a language key's line. */
+    void draw(Canvas c, Rect area, State state, Skin skin, Function<String, String> tr);
 
     /** The caption's language key: one sentence. */
     String captionKey();
@@ -32,6 +71,35 @@ public interface Card {
     /** The control's label's language key; null for {@link Control#NONE}. */
     String controlKey();
 
-    /** Every language key the card draws besides its caption and its control's label. */
+    /** Every language key the card draws besides its caption, its control's label and its options. */
     List<String> textKeys();
+
+    /** The options' language keys, drawn as soft keys over the card, the chosen one latched; none by default. */
+    default List<String> options() {
+        return List.of();
+    }
+
+    /** The places on the drawing in {@code area} the player can press with {@code option} chosen; none by default. */
+    default List<Hit> hits(Rect area, int option) {
+        return List.of();
+    }
+
+    /** The slider's positions (0: continuous); a stepped slider snaps to {@code steps} evenly spaced positions from 0 to 1. */
+    default int steps() {
+        return 0;
+    }
+
+    /** The slider value at {@code control} after its steps. */
+    default double stepped(double control) {
+        double value = Math.clamp(control, 0, 1);
+        return steps() > 1 ? Math.round(value * (steps() - 1)) / (double) (steps() - 1) : value;
+    }
+
+    /**
+     * Whether the card's step is done, from the stepped control and the hits pressed so far: by default the slider at its
+     * end (a card with no control at once); a card whose places are pressed says when every one was.
+     */
+    default boolean done(double control, Set<Integer> visited) {
+        return control() == Control.NONE || control >= 1;
+    }
 }

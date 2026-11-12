@@ -87,7 +87,8 @@ public final class ThreeParts implements Card {
     }
 
     @Override
-    public void draw(Canvas c, Rect area, double phase, double control, Skin skin, Function<String, String> tr) {
+    public void draw(Canvas c, Rect area, State state, Skin skin, Function<String, String> tr) {
+        double phase = state.phase(), control = state.control();
         double heat = Math.clamp(control, 0, 1);
         var pot = pot(area);
         int neckW = Math.max(6, pot.w() / 6), neckX = pot.x() + (pot.w() - neckW) / 2, top = area.y() + 16;
