@@ -159,8 +159,9 @@ column uses its coarse body (`RenderLod`) when small on screen; translucent cut 
   where it handles the player's "firing off" against the cached view, `switch` where a player turns a Diverter Valve.
 - Films `still_build`, `still_run` and the reworked `still_inside`; card `pot_temperature`. Their numbers come from
   `recordings/still_run.json`, a run of the real law (500 L, 60 % full of medium crude, full firing).
-- The recording is provisional: on `main` the law refuses this charge at 248 °C with 20 % distilled (batch
-  `2026-11-12-still-heat-per-distillate`, fixed on its own branch). It is recorded again once that fix is in this branch.
+- The recording is on the fixed law (batch `2026-11-12-still-heat-per-distillate`, merged into this branch): the run
+  ends where the law cuts the fire at 350 °C, 41.8 % distilled. The fire goes out at the end of the kerosene; the
+  film's last stop and the card's dimmed stretch show the fire left on, the heavy part staying in the pot (chapter 3's hook).
 - `water` is a reading step: by the code a still's condenser with no cooling water condenses only part of its vapour.
 
 ### Chapter 5, the unit and its pages
