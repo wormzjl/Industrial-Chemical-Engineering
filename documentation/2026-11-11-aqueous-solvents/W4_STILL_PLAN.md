@@ -247,3 +247,11 @@ Report `tmp/w4-still/reports/W4A_TWO_LIQUID_TOP.md`; nothing committed yet. Thre
      the pot's pressure is not the ambient.
 - The placed-wash gate (`tmp/w4-still/StillRuntimeTest.keep`) waits for that fix. Its diagnosis is a new task: the
   owner's approval is asked first.
+- Owner, 2026-11-12: "Approve". The live sub-thread `w4-still` (Opus high) diagnoses the wash that never boils
+  after the column's third form, and fixes it where the physics forces the fix; otherwise it returns options.
+  Its brief names four candidates with their signatures: the pot off the slack branch of `crossing` (its pressure
+  then climbs the bubble curve, about 1.9 bar at 391 K); a TP answer with no gas over an aqueous liquid; the
+  vessel's own split refusing the first bubble; the check never reaching the pot. Controls: water alone in the
+  same open pot, pentane charged cold.
+- Meanwhile the sub-thread committed W4c `bc51003fb` (the sheet's still takes water that stays in one liquid) and
+  the code guide `73fbe584d`; neither is reviewed by the orchestrator yet.
