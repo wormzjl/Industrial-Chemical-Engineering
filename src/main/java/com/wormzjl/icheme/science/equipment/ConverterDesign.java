@@ -155,6 +155,22 @@ final class ConverterDesign extends UnitDesign {
         return Math.max(1, (int) Math.floor(base + shell - .5) - (int) Math.floor(base + .01));
     }
 
+    /** A gas converter's apex stub's top (plan D9): the safety valve's inlet flange, {x, y, z} in the unit's frame. */
+    static double[] reliefFoot(double diameter, double shell) {
+        double r = diameter / 2, a = ProcessUnit.centre(r + MARGIN), crown = SLAB + skirt(diameter) + shell + r / 2;
+        return new double[]{a + Math.ceil(diameter) + bay(diameter), crown + ProcessUnit.clamp(.3 * r, .15, .3) + .05, a};
+    }
+
+    /**
+     * A gas converter's gas blanketing valve's foot (W3): on the 2:1 head a cell in front of the apex, {x, y, z} in the unit's
+     * frame; null where that point lies outside 0.8 of the radius (a vessel under 2.5 m across takes none).
+     */
+    static double[] blanketFoot(double diameter, double shell) {
+        double r = diameter / 2, a = ProcessUnit.centre(r + MARGIN), top = SLAB + skirt(diameter) + shell, rho = 1;
+        if (rho > .8 * r) return null;
+        return new double[]{a + Math.ceil(diameter) + bay(diameter), top + r / 2 * Math.sqrt(1 - rho * rho / (r * r)), a - rho};
+    }
+
     /** The skirt under a gas converter's vessels, m. */
     static double skirt(double diameter) {
         return ProcessUnit.clamp(.25 * diameter, .4, 1.5);
