@@ -1,50 +1,50 @@
 # After the final lane: the two fixes, and the hold of the level loop's drum
 
-2026-11-12, main thread (owner: "Fix both here", "Diagnose here"), on `236164771`. Follows [FINAL_LANE_REVIEW.md](FINAL_LANE_REVIEW.md).
-Outputs: `tmp/final-lane/fix/`. No second lane was run; the campaign and the suite stand from the lane.
+2026-11-12, main thread (owner: "Fix both here", "Diagnose here", "Fix hold first"), on `236164771`. Follows
+[FINAL_LANE_REVIEW.md](FINAL_LANE_REVIEW.md). Outputs: `tmp/final-lane/fix/`. No second lane was run.
 
 ## 1. A dry island reloads on its own model (`b20e25501`, state format 50)
-- The model key carries the water choice: `FluidCheckpointCodec.PackageKey.wet`, one byte after an island's compound
-  list, a package record's `Dry` (written only for a list without water). `IslandCoordinator.entry` and the facts
-  rebuild pass the island's own choice. State only: a format-49 state is dropped and rebuilt. No fact or image moved.
-- Gate: `FluidCheckpointCodecTest.anIslandWithoutWaterComesBackOnItsOwnModel`. Ran: 22 save and load classes, 288
-  tests pass. GameTest `aSavedRestingTankReloadsCertifiedWithItsStatusLineAndNoSolve` passes.
+The model key carries the water choice (`FluidCheckpointCodec.PackageKey.wet`). State only: a format-49 state is
+dropped and rebuilt. Gate: `FluidCheckpointCodecTest.anIslandWithoutWaterComesBackOnItsOwnModel`; 22 classes, 288 tests.
 
 ## 2. chain-100 captured again (`e616970c9`)
 Cause: the batch's equation of state; the reference dated from `77152ecaf`. Exact replay after the capture: 0.
 
-## 3. The blanketed drum of the level loop holds at its start: two mechanisms, one fixed
-GameTest `aBlanketedDrumOfTwoCyclesHoldsItsLevelOnTheCadence` (blanket, not direct, factor 4); two tests after it fail
-on what a hold leaves. Expected: the drum, a slack bag never filled (nitrogen at 101.325 kPa), takes a tenth of its
-feed (19.8 kg/s of water) and the pad's gas, its open bottom outlet passes what arrives, and it fills to 25 % once
-the level valve has its law.
+## 3. The blanketed drum of the level loop holds at its start: two mechanisms, both fixed
+GameTest `aBlanketedDrumOfTwoCyclesHoldsItsLevelOnTheCadence`. Expected: the drum, a slack bag never filled (nitrogen
+at 101.325 kPa), takes its feed (19.8 kg/s of water) and the pad's gas, and fills to 25 % under its level valve.
 
-**Mechanism 1 (fixed, `PassiveStepSolver.stockSeeds`).** Found on a rig of the plant over `EventPathWorld`, 96 setup
-orders: main 0.27.1 holds 0, the branch held 6. A failed 2 s pass folded the drum's 2.9 m3 of gas out of its seed;
-the next failed pass drained it and decision D54 found it running dry. Its junction was laid out on the folded seed,
-water alone: 83.8 kPa, not above the ambient, so the emptying was confirmed. With its gas it stands at 104.7 kPa and
-keeps its contents; booked empty, the drum had no form at the next step (a vessel that drains, a junction at 143 kPa).
-Fix: a vessel found running dry is laid out as a junction on its own start state, the rule of every junction's seed.
-Gate: `LevelLoopBlanketStartTest` (4 held orders; fails with the rule disabled). Rig: 0 of 96. Ran: 24 classes that
-name the emptying rule, 134 tests pass; chain-100 exact replay 0.
+**Mechanism 1 (`4f2c922ec`, `PassiveStepSolver.stockSeeds`).** On a rig of the plant over `EventPathWorld`, 96 setup
+orders: main 0.27.1 holds 0, the branch held 6. A failed 2 s pass folded the drum's 2.9 m3 of gas out of its seed; the
+next failed pass drained it and decision D54 found it running dry, its junction laid out on the folded seed: water
+alone at 83.8 kPa, so the emptying was confirmed. With its gas it stands at 104.7 kPa and keeps its contents.
+Fix: a vessel found running dry is laid out as a junction on its own start state. Gate: `LevelLoopBlanketStartTest`
+(fails with the rule disabled). Rig: 0 of 96. 24 classes, 134 tests pass; chain-100 exact 0.
 
-**Mechanism 2 (the GameTest's own hold; located, not fixed).** Captured in the server by solving the held interval
-again in place with the failure probe (`gametests-probe5.gradle.txt`). The level valve's first law recompiles the
-island 0.4 s after the feed comes on. The drum then holds 7.9 L of water and 1.7 m3 of gas; the junction under it
-(1 L) is full of water at 84.9 kPa, below both its neighbours. The cold solve's balance sends 789 kg/s down the
-outlet. Pass 0 stalls at residual 3.57 on that junction's rows at every step size down to 1.5e-6 s (start norm 3.7:
-789 kg/s in, 793 out), its iterate reversing the outlet to -65 kg/s with the junction all vapour; the failed iterate's
-check then folds the junction's liquid (the collapse rule) and pass 1 states 1 kg of water as vapour: residual 917.
-- Two forms tried and withdrawn: the flow valves regulating after a failed open pass (1 of 5 runs passed), and the
-  balance deciding them at a cold start (2 of 5). With both valves regulating the same hold occurs to the digit
-  (`gametests-fix4-b.gradle.txt`): the valves are not the cause.
-- Frequency (runs of the 94 fluid GameTests): branch before the fix 4 holds of 5; with the fix 2 holds and 1
-  overflow (99.71 %, machine loaded) of 6; main 0.27.1 1 hold of 8 (residual 264, pass 1, at the same start). The
-  hold predates the batch (`VALVE_FOLLOWUPS_REVIEW.md` item 1 recorded one as not reproduced).
+**Mechanism 2 (the GameTest's own hold; `PassiveStepSolver.initialModes` and `stocked`).** The server dumped the held
+interval's input; replayed offline it holds to the digit (residual 917, pass 1). The level valve's first law
+recompiles the island 0.4 s after the feed comes on, so the solve is cold. Expected: the level valve, set to no flow,
+passes nothing; the drum (7.9 L of water, 1.7 m3 of gas) takes its feed; the 1 L junction under it, froth behind the
+shut valve (0.15 % nitrogen, 72 % gas by volume, 84.9 kPa), keeps its contents. What the code did:
+- A cold solve started every flow valve open and closed one set to zero only after an open pass converged. Open, the
+  outlet drew 790 kg/s from the drum.
+- The cold balance seeded the junction as what flows through it: the drum's liquid, 1e-7 of its volume as gas. Its
+  backward-Euler rows state it as its stock and what arrives; asked for the froth back, the Newton crossed to all
+  vapour at every step size (residual 3.57), and the collapse rule then stated its 1 kg of water as vapour (917).
+
+Fix, both at the cold start: a flow valve set to no flow starts closed unless it stands open behind a lower target
+(a mover's rule, and what `nextMode` decides after a converged pass); a junction that keeps at least half its stock
+over the step is seeded with its stock's mixture. The interval is then one accepted step, none rejected. The seed
+rule alone: 5 steps, 4 rejected. The valve rule alone: held (residual 5.74).
+- Gate: `DrumFillColdStartTest` (the dumped island as literals; fails with either rule disabled). Ran: 32 valve,
+  blanket, junction-start and cold-start classes, 113 tests; 3 slow hold gates, 58 tests; all pass; chain-100 exact 0.
+  Fluid GameTests after the fix: one run, 94 of 94, no hold, level high 74.2 %.
+- Withdrawn: the flow valves regulating after a failed open pass; the balance deciding them at a cold start.
+- Before the fix the branch held in about 1 GameTest run of 3, main 0.27.1 in 1 of 8 (same start): the hold predates
+  the batch (`VALVE_FOLLOWUPS_REVIEW.md` item 1). The owner stopped further repeated runs ("stop repeating").
 
 ## Open after this
-- Mechanism 2: the liquid-full outlet junction under a nearly dry drum (no root from the cold balance; the collapse
-  rule folding a junction's bulk phase on a diverged iterate). The GameTest fails in about 1 run of 3 on the branch.
-- The level loop's overshoot depends on the machine's load (high 63 % to 99.71 %; main 66 % to 87 % in 7 runs).
+- The level loop's overshoot depends on the machine's load (high 63 % to 99.71 %, limit 99 %; main 66 % to 87 %).
 - An empty slack bag with more gas arriving than its outlet passes at the ambient has no form (mechanism 1's end state).
+- The two cold-start rules have not been through a campaign: the next final lane's.
 - From the lane, unchanged: the cost findings, bundled 575 (E2), `LanguageFilesTest` until the translation commit.
