@@ -838,3 +838,25 @@ Measured, no source changed (`tmp/w3b-network/reports/w3b-sheet-sizing-numbers-r
      c. the full bubble pressure as now: sphere at 2.99 bar; the test is re-pinned; no code.
    - Not proposed here: the world's p_v by the same V/L measure (section 17 named the half-share pressure as a
      candidate). It moves the pump limit and needs its own campaign: a later batch.
+
+## 45. Owner: the pump rule and the tank's V/L = 1 rule (2026-11-12)
+
+Owner, verbatim: "Yes, both" (section 44's pump option and tank choice a). Ordered to the sub-thread, not built.
+
+- One shared rule in a public holder beside the solver: the release bisection with the trial as a parameter, the
+  vapour volume share of a trial state, the condensable filter (compounds above their critical temperature left
+  out) and `limit`. The world keeps its constant-enthalpy trial, its bracket and its caches; its numbers must not
+  move by a bit. The measured reason for that trial stands in the code (cold 181, `PumpCavitationTest`).
+- The sheet's trial is a TP flash at the stream's temperature, in `FlowThermo`'s own bracket and width: about 15
+  flashes a reading, 30 a pump (about 20 ms against 10 ms now and 0.2 s with the world's trial). No cache.
+- Pump: NPSH available over p_v (over zero where a liquid has none); the world row against the shared `limit` of
+  p_v, E and 0.85 NPSH3. Expected on the test's oil pump: 25.2 m available, limit 21.6 m (E), yellow.
+- Tank: `TankSizing.Load` carries the V/L = 1 reading beside the full bubble pressure. The type and both roof
+  rows read the first; a sphere's design pressure keeps the second. The storage tile stands at the ambient where
+  the reading is at most the roof's 0.766 bar, and at the full bubble pressure otherwise; what it releases leaves
+  by its Gas outlet, as now. Expected: drum water about 0.30 bar, a floating roof at 1 atm; drum oil a sphere on
+  3.00 bar.
+- `Service` (boiling service) keeps the full bubble pressure.
+- Gates: the two `SheetSizingTest` cases pass as written, not re-pinned; the sheet's p_v and E within 1 % of the
+  world's on the four measured streams; the world's suction numbers unmoved. Sample references that move are
+  re-pinned only where a liquid holding dissolved gas explains it.
