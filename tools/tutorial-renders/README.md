@@ -82,3 +82,7 @@ owner's choice and the default), `-DiconCases=true` (only `icons-cases.png`, the
   `card-unit_map.png` and `guide-unit.png`; films `crude_unit` and `unit_*` through `-PtutorialFilms`. IconRender's
   reference bodies now come from `ReferenceShapes` (main), which the page films share. HeatDiagramRender keeps an item
   sprite's own colours under a white tint.
+- 2026-11-13, P5 stage B: `StageBRender.java` (run by `renderTutorialGuide -PtutorialGuideOnly=p5b`): the assembly
+  screen's two tours stop by stop (`tour-assembly-structure.png`, `tour-assembly-operation.png`, the pages as
+  GuiPrototypes and OperationPrototypes draw them, the anchors from `AssemblyTour`), `card-limit.png`, `guide-building.png`
+  and `guide-start.png`; the film `unit_build` through `-PtutorialFilms=unit_build`.

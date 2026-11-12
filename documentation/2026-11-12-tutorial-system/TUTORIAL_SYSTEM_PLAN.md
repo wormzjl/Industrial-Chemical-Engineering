@@ -130,7 +130,8 @@ column uses its coarse body (`RenderLod`) when small on screen; translucent cut 
 | 3 From pot to tower | Adds the small column to the still, opens the reflux valve, compares the cut | Reflux makes the product purer; a tray is one small still; a tower is many, running without stopping |
 | 4 The simulator | Opens the bundled sheet "Small crude unit", runs it, reads the products, changes the feed temperature, runs again, sizes it, sends it | Try on paper first; a flowsheet; in equals out; heat duty; a side draw is a cut taken at its own height |
 | 5 The crude unit | Reads the unit page, then each equipment page as the build needs it | The whole before the parts |
-| 6 Build and start | Imports the design, places the tower, lays the lines, passes "Check parts", starts, fills the product tanks | Start-up order; what a limit means; reading the Operation tab |
+| 6 Building | Sends the design, imports and builds the tower and its top, lays the lines, passes "Check parts" | The design becomes the plant; a check before a start |
+| 7 Start-up | Lines up crude, fuel, water and steam, presses On, reads the limit, sees the first product leave | Start-up order; what a limit means; reading the Operation tab |
 
 ### Chapter 1, crude oil
 
@@ -193,11 +194,17 @@ The unit page comes first: a film that follows the crude (tank, pump, fired heat
 cooler, reflux drum, side products, residue) and a flowsheet picture whose symbols open the pages. Each equipment page
 has a film, a card, the `?` tour of its screen, its JEI lines, and "next in the unit".
 
-- As built (P5_UNIT_AND_BUILD.md, part 1): chapter `unit`, "Crude unit": `whole` film `crude_unit` (5 stops, the
+- As built (P5_PART1_UNIT_CHAPTER.md): chapter `unit`, "Crude unit": `whole` film `crude_unit` (5 stops, the
   example's streams), `map` card `unit_map` (the simulator's own drawing; a symbol opens its kind's page), `tower` the
   column's page read to its end, `next`. Terms preheat, pumparound. A page is data (`pages.json`): icon, name, the JEI
   lines, a film or a tour key, "Next in the unit", Back. No card on a page: the films carry the teaching. The bottom
-  steam is in the sheet and the column's film, not a page of its own (its supply is chapter 6's, part 2).
+  steam is in the sheet and the column's film, not a page of its own.
+
+### Chapters 6 and 7, building and start-up, as built (P5_PART2_BUILD_AND_START.md)
+
+- `building` "Building": site (film `unit_build`), tower, top, lines, parts. `start` "Start-up": feed, fire, water, go,
+  limit (card `limit`), products, end. Criteria `assembly_state` and `column_state`; tours on the assembly screen's two tabs.
+- Start-up order: everything lined up, then On; no crude or water passes the column's boundary valves before it.
 
 ### The first crude (D6)
 
@@ -228,6 +235,9 @@ survival player has no crude until the extraction system exists.
   column's feed on that run) gives the same shares in the calculator. Products by mass: overhead 18, middle 35, bottoms 47 %. After Size all one line (S-6)
   is short of its limit and six units are yellow as larger than needed (the catalogue's smallest pump and shell); a
   tutorial sentence explains them (owner). `SmallCrudeUnitTest` (holdGates) names each.
+- Stage B (P5 part 2, form A): the sheet raises its own steam. H-102, a fired heater (the catalogue's smallest vertical
+  heater, green), takes water at ambient and 5 bar (stream BFW) to 533.15 K (STEAM, T-101's bottom steam), 207 kW; both
+  heaters burn crude in the world. The products are unchanged to the last digit.
 
 ## 7. Gates and checks
 

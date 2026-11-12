@@ -15,7 +15,7 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
 ## Documents
 
 - [TUTORIAL_SYSTEM_PLAN.md](TUTORIAL_SYSTEM_PLAN.md): what exists, why Ponder is dropped, the framework (films, help
-  tours and cards, field guide, equipment items and JEI), the teaching rules, the path of seven chapters, the small
+  tours and cards, field guide, equipment items and JEI), the teaching rules, the path of eight chapters, the small
   column template, gates, phases P0 to P6, owner decisions D1 to D8 and open items O1, O2.
 - [P0_SCENE_PLAYER.md](P0_SCENE_PLAYER.md): phase P0, the scene player, its view, the render tool and the film "inside
   the still": classes, decisions, tests, renders, what the in-game check looks at.
@@ -29,8 +29,10 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
   Equipment guide tab, the JEI pages, the shape-only kinds, the gate.
 - [P4B_TOWER_AND_SIMULATOR.md](P4B_TOWER_AND_SIMULATOR.md): phase P4b, the still with a column measured and recorded,
   chapter 3 "Pot to tower", chapter 4 "The simulator", the small unit's recording, the simulator's tours, gates, renders.
-- [P5_UNIT_AND_BUILD.md](P5_UNIT_AND_BUILD.md): phase P5, the equipment pages (41), the unit chain, chapter 5 "Crude
-  unit" (film crude_unit, card unit_map, the column's page), gates, renders; part 2, the build facts for chapter 6.
+- [P5_PART1_UNIT_CHAPTER.md](P5_PART1_UNIT_CHAPTER.md): phase P5 part 1, the equipment pages (41), the unit chain,
+  chapter 5 "Crude unit" (film crude_unit, card unit_map, the column's page), the corrections, gates, renders.
+- [P5_PART2_BUILD_AND_START.md](P5_PART2_BUILD_AND_START.md): phase P5 part 2, the supplies (steam form A, crude fuel,
+  power), the start-up order, chapters 6 "Building" and 7 "Start-up", the limit card, the assembly tours, the proofs.
 - [SMALL_COLUMN_CANDIDATES_REVIEW.md](SMALL_COLUMN_CANDIDATES_REVIEW.md): P4, the three small crude tower candidates
   solved and sized on the crude unit at 1/64, the acceptance rules, the steam source, the recommendation (D4).
 
@@ -99,17 +101,22 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
   simulator's four tabs. Commits 66ed0baa4, 3a7bb0d1c, 7cbd240e0, 402e1b4a9, 8295a579e. 35 test classes
   (265 tests) and SimulatorRunTest (6) pass, run once with `--tests`.
 
-- 2026-11-13: P5 part 1 (P5_UNIT_AND_BUILD.md). Equipment pages for the 40 kinds and the control valve (`pages.json`),
+- 2026-11-13: P5 part 1 (P5_PART1_UNIT_CHAPTER.md). Equipment pages for the 40 kinds and the control valve (`pages.json`),
   opened by the item and the map, Back to where the player came from; the unit chain of nine pages; seven page films
   and the film `crude_unit`; card `unit_map` on the simulator's painter; chapter 5 "Crude unit" (whole, map, tower,
   next). `--tests` run once, 4 workers: 135 tests in the tutorial packages, DrawCallTest and SimulatorTourTest; three
   failures fixed and their classes rerun once each.
-- 2026-11-13: P5 stage A (P5_UNIT_AND_BUILD.md, part 2): the column's slots and links, Import, the supplies in
+- 2026-11-13: P5 stage A (P5_PART2_BUILD_AND_START.md): the column's slots and links, Import, the supplies in
   survival (no in-mod steam source; fuel, water, power and products), refusals and limits in code order, the headless
   proof and the criteria points. Documents only, no test run. Chapter 6 waits for the owner.
-- 2026-11-13: P5 part 1 corrections (P5_UNIT_AND_BUILD.md): pages open on their picture (film's first stop or the
+- 2026-11-13: P5 part 1 corrections (P5_PART1_UNIT_CHAPTER.md): pages open on their picture (film's first stop or the
   body), unit films framed large with their insides and readable dots, map tags clear of tags and symbols, one new
   term per step. `--tests` run once, 4 workers: 13 classes, 75 tests pass.
+- 2026-11-13: P5 stage B (P5_PART2_BUILD_AND_START.md): steam form A (H-102 on water; products unchanged), crude fuel
+  on both heaters, power in the mod; chapters `building` and `start`, film `unit_build`, card `limit`, criteria
+  `assembly_state` and `column_state`, the assembly screen's two tours; chapter 4's heat step names H-101. Proofs:
+  SteamHeaterCoilTest, SmallCrudeUnitTest, SmallUnitRecordingTest pass; TutorialUnitGameTests compiled, its first run is
+  the final lane's. Quick suite 18 classes, 85 tests pass after six gate fixes. Commits e5b1c6ac9 to the docs commit.
 
 ## Code areas (proposed)
 
@@ -132,7 +139,12 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
 - P3: the owner's review of the icon sheet and the 160 lines; the in-game rows of P3_ITEMS_AND_JEI.md; icons alike at
   1x (exchanger and kettle, grate boiler and fixed-bed gasifier) wait for their models.
 - O2: the charge step names the Fluid converter (bundled rules: `#c:crude_oil` of TFMG and PneumaticCraft, `ad_astra:oil`).
-  A survival player without one of those mods has no crude source until an extraction system exists.
+  A survival player without one of those mods has no crude source until an extraction system exists. Steam's in-mod
+  path (P5 stage B): water from a `minecraft:water` converter through H-102, a crude-fired heater. FE: a generator on a
+  shaft train turned by a combustion engine (crude) or a gas turbine (off-gas); pumps on the engine or a motor.
+- P5 stage B: the owner's in-game check of the survival supplies together (converters, crude-fired burners, driven pumps,
+  FE fans, H-102 feeding the tower), which no test proves; the review of chapters 6 and 7 and the renders in
+  `tmp/tutorial-renders/p5/`; TutorialUnitGameTests' first run in the final lane.
 - D4: decided 2026-11-12, candidate C (variation 1): 14 trays, 1.0 m, one middle draw (kerosene and diesel together),
   one pumparound above it, reflux 1.5, heater outlet 390 °C, V-101 at 3.2 bar. Built 2026-11-12: column preset
   `small_crude`, its paired stream `small_crude` and the example "Small crude unit" (gate `SmallCrudeUnitTest`).
@@ -140,8 +152,8 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
   unit of about 195 kmol/h, or smaller catalogue sizes).
 - Found while building the small unit (sub-thread report, 2026-11-12), nothing changed:
   - Fuel: the simulator's fired heater has no fuel port or setting (its code keeps the fuel off the sheet), so the sheet
-    cannot draw the bottoms slip (about 124 kg/h; the off-gas covers 27 % of the firing). Chapter 6 must say where the
-    world's heater gets its fuel.
+    cannot draw the bottoms slip (about 124 kg/h; the off-gas covers 27 % of the firing). Settled in P5 stage B: both
+    heaters burn crude in the world (about 150 and 18 kg/h), step `start/fire`.
   - Line S-6 (H-101 to V-101): Size all picks line bores on its first pass, on the heater's typed drop (10.2 m/s; 0.075 m
     would exceed the momentum limit). After its re-run on the sized drops the vapour share falls from 0.72 to 0.45 and
     the speed to 2.7 m/s, under the 3 m/s minimum; it re-rates but does not re-size lines. At 0.075 m the line would be

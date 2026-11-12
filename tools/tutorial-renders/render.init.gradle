@@ -2,7 +2,8 @@
 // set changes, no client, no test suite. Usage, from the worktree root:
 //   ./gradlew --offline --init-script tools/tutorial-renders/render.init.gradle renderTutorial -PtutorialRenderOut=tmp/tutorial-renders
 // Optional: -PtutorialFilms=still_inside (a comma list; default every film), -PtutorialFrames=n (n frames between stops).
-// renderTutorialGuide -PtutorialGuideOnly=p5 renders the equipment pages, the unit map and chapter 5 only (PageRender, P5).
+// renderTutorialGuide -PtutorialGuideOnly=p5 renders the equipment pages, the unit map and chapter 5 only (PageRender, P5);
+// -PtutorialGuideOnly=p5b the assembly tours, the limit card and chapters 6 and 7 (StageBRender, P5 stage B).
 // renderTutorial draws the film stops (TutorialRender), then the guide, tours and cards (GuideRender, P1). Both are
 // compiled with tools/heat-gui-renders (its game font, canvas and page frame) against the main and test outputs.
 // renderTutorialIcons (P3) bakes the equipment reference items' icons into src/main/resources/assets/icheme/textures/item
