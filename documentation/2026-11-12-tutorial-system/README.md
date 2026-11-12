@@ -58,6 +58,10 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
 - 2026-11-12: P3 built (a917bf05e, a122ccb00, 2f6a50f8a, 8fe18f508, a69441950): `EquipmentInfoItem` for each of the 38
   kinds and the Equipment guide tab, 64 px icons baked by `IconRender` (owner: 32 px too coarse), serves, needs and
   place lines, `IChemEJeiPlugin` pages for every item, `EquipmentInfoCoverageTest`; O1 decided: reference only.
+- 2026-11-12: merged into this branch, on the owner's word ("Merge now"): the still branch (59f05855f: the still law per
+  mole of distillate on the aqueous branch's column, the partial condenser at the water plus 5 K, the closed valve on
+  dry trays) and the aqueous branch's newer tip (5106f0c15: main 0.28.0, fluid conversion). Conflicts only in
+  `documentation/INDEX.md` (every row kept). No test run.
 
 ## Code areas (proposed)
 
@@ -68,18 +72,20 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
 
 ## Open items
 
-- Merge order (owner, 2026-11-12): this branch merges after `claude/ethanol-compound-matrix-4b318d` (batch
-  2026-11-11-aqueous-solvents). That branch rewrites `StillColumn` and `StillHead` (water on the column's basis, the
-  decanter) on the law before the still fix: it still has `solve`'s duty argument and the "no positive latent heat"
-  refusal, and it changes the refinery package's equation of state. A trial merge (`git merge-tree`, at 3a9ace9a1
-  against 5155febda) conflicts in `StillColumn.java`, `StillHead.java`, `BatchStillTest.java` and
-  `documentation/INDEX.md`. So: no further still law work on the old code; the still fix is ported onto that branch's
-  still code, the condenser fix is made there, and `still_run.json` is recorded once more after it.
+- Merge order (owner, 2026-11-12): this branch merges after `claude/ethanol-compound-matrix-4b318d`. It now holds that
+  branch (at 6b8d03389, with main 0.28.0) and the still branch `claude/still-on-aqueous-fdba0c` (at 1b1ad1d07); when the
+  aqueous branch changes again, merge it again. The still branch has had no code review and no final lane.
+- After the merges: the test sources do not compile (`StillRunRecorder` calls `solve` without the outlet argument);
+  `still_run.json` and chapter 2 are on the old law and equation of state (its first drop at 40 °C is gas the old
+  condenser sent to the spout); `crude_barrel.json` and the P0 to P3 gates are not run on the new base.
+- The still with trays on crude light ends answers as a pot still (the still batch's option B is open): chapter 3 must
+  not show a trayed still on crude until it is fixed.
 
 - O1: decided 2026-11-12, reference only (creative tab and JEI).
 - P3: the owner's review of the icon sheet and the 160 lines; the in-game rows of P3_ITEMS_AND_JEI.md; icons alike at
   1x (exchanger and kettle, grate boiler and fixed-bed gasifier) wait for their models.
-- O2: the Forge fluid converter is a prerequisite of chapter 2 in survival and is not in this plan.
+- O2: the Forge fluid converter is on main since 0.28.0 (batch 2026-11-12-fluid-conversion); chapter 2's charge step does
+  not name it yet.
 - D4: the small column, chosen by the owner after the three candidates are solved.
 - P0: the owner's one in-game check of the scene player (P0_SCENE_PLAYER.md, last section).
 - P1: the owner's review of the English text and the renders; the in-game rows of P1_GUIDE_AND_HELP.md; the Field
