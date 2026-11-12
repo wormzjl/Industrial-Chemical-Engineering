@@ -113,3 +113,9 @@ wait on, 2 to 4 hours. Model and effort: Opus high (hard: a merge across the sav
 and main's new devices). Reuse: it is live, on that model and effort, and holds the batch's fixtures, column
 and data context; its brief is this plan. It reports every 50 minutes, at once on a stop of section 6, and at
 the end.
+
+## 9. Owner decision (2026-11-12)
+
+"Approve": the merge as planned, built by the live sub-thread `w5-column` (Opus high). The main thread commits
+no document while the merge is open in the working tree (git refuses a commit by path during a merge); the
+record of the merge follows its commit.
