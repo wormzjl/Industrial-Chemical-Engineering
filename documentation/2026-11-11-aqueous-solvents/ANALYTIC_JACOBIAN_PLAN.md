@@ -158,3 +158,24 @@ Profile (one run each, tangent form, share of samples, wet and dry):
 | all derivative evaluations | 3.4 % | 1.3 % |
 
 Derivative evaluations per accepted step: 12, 18, 14 (dry, wet, polar). The orchestrator's guess (a derivative evaluation as dear as many value evaluations) is refuted. Wet costs 2.07 times dry here and 1.19 times on main; what is left of that is the linear solve and the work per unknown, so the next question is how many unknowns a wet node carries (the aqueous slot's ratio unknowns for compounds at trace). Asked for: the trace cutoff, the unknowns per node and per slot, branch against main. Dropping trace compounds from a slot's unknowns is a physics simplification and goes to the owner with numbers.
+
+## 13. Cold 65 is not the Jacobian's form; where wet's unknowns come from (2026-11-12)
+
+**Cold 65.** Probe (0f5817745, cases in `HydrocarbonTangentTest`): the island's LNG at 161 K and 2532 kPa (one root, liquid-like), 115 K and 140 K (three roots) passes tests 1 and 2 on both roots; the ideal-gas data's lower ends are 63 to 91 K and no state is below one. The orchestrator's two suspicions are refuted. The seed's one replay, alone, with the Jacobian's differences printed at each stall: the tangent entries agree with exact forward differences to 7.7e-7, 1.2e-6 and 7.6e-7 at the three junctions; no exact perturbed decode throws, so today's form would not have fallen back. The solve itself is near singular: junctions at 111.6 K and 83 to 104 kPa hold gas with a trace liquid, the residual 0.158 sits in one equilibrium row of one junction, the Newton direction descends only under 5e-9 of the step, and the full step leaves the numerical box. The trajectory moved in its last digits and reached a state today's form does not; the defect there is the solve at a trace-liquid junction, not this form. Decision: no further work on the seed; step 7's campaign counts the class.
+
+**The form is settled**: tangents, `dv/dP` to first order.
+
+**Unknowns** (branch against main ccde84295; the trace cutoff is 1e-6 on both, applied in `PhaseLayout.support`):
+
+| scenario | node unknowns | island unknowns | Jacobian nonzeros | LU nonzeros |
+|---|---|---|---|---|
+| dry, branch and main | 27 | 167 | 9297 | 12551 |
+| polar, branch and main | 31 | 191 | 12161 | 16383 |
+| wet, main | 30 | 185 | 11645 | 15393 |
+| wet, branch | 39 | 239 | 19521 | 25458 |
+
+Wet's whole growth is nine split unknowns per node: the solutes of the aqueous phase. Benzene 1.7e-4, carbon dioxide 1e-4 and toluene 3e-5 by moles; methane, ethane, propane, butane, pentane and nitrogen between 1.1e-6 and 8.8e-6. None is under the cutoff. On main the free water held nothing.
+
+An aqueous floor of 1e-5 would bring the node to 33 unknowns (about 1.2 times main's block against 1.7). Not built, and the orchestrator advises against it: nitrogen in water under air or a nitrogen blanket stands at about 1e-5 at one atmosphere, so the floor would switch the water's dissolved gas on and off at ambient pressure, and the pump's clean-zone edge (W3B_NETWORK_PLAN.md section 19: water under nitrogen, 69.9 kPa) and the cooling tower's saturated water read that gas.
+
+Where this leaves the cost (ratios to main 1.09, 1.90, 1.20 against 1.1, 1.5, 1.1; a timing of the settled form is ordered): wet's remaining excess is real work, three-phase equilibrium with nine more unknowns per node, paid in the linear solve (31 % of the profile) and per Jacobian column. Routes that keep the physics: a faster linear solve for the node blocks, and less viscosity work per column (12 to 17 %); neither is measured. To the owner.
