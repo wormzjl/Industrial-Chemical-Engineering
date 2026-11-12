@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "id": "icheme:pilot_ethanol",
+  "id": "icheme:chemsep_ethanol",
   "component": "Ethanol",
   "revision": "chemsep-8.3-dwsim-10.2.5-r1",
   "source": "ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Ethanol\" (ChemSep index 1102, CAS 64-17-5). Molecular weight, normal boiling point, Tc, Pc and acentric factor as given; standard liquid density: eq. 105 saturated liquid at 288.7056 K (60 F), as the bundled light ends; ideal-gas Cp eq. 16 (A=44530, B=-660.89, C=12.153, D=0.000019532, E=-1.5636e-8; data 150..1500 K) fitted by least squares as shifted_polynomial_5 over 159.05..900 K (31 points), largest deviation -0.188 % at 159.1 K, 0.097 % over 298.15..900 K; viscosity tables and freezing data in their entries. Imported by tools/compound-import.",
@@ -37,6 +37,30 @@
       "critical_pressure_pascal": 6148000,
       "acentric_factor": 0.649
     }
+  },
+  "thermochemistry": {
+    "formation_enthalpy_j_per_mol": -234950,
+    "elements": {
+      "C": 2,
+      "H": 6,
+      "O": 1
+    },
+    "estimated": false,
+    "source": "Ideal-gas heat of formation at 298.15 K and formula C2H6O (molar mass 46.069 g/mol) of ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Ethanol\" (ChemSep index 1102, CAS 64-17-5). Heats of reaction follow by Hess's law. Data only.",
+    "revision": "chemsep-8.3-hf-r1"
+  },
+  "flammability": {
+    "lfl_volume_fraction": 0.033,
+    "ufl_volume_fraction": 0.19,
+    "estimated": false,
+    "source": "NIOSH Pocket Guide to Chemical Hazards, Ethyl alcohol (npgd0262, https://www.cdc.gov/niosh/npg/npgd0262.html, read 2026-11-12): LEL and UEL in air. CDC material, in the public domain. Constant with temperature (owner decision E23).",
+    "revision": "npg-b627-r1"
+  },
+  "combustion": {
+    "lower_heating_value_j_per_mol": 1277512,
+    "estimated": false,
+    "source": "Hess's law on this record's thermochemistry (chemsep-8.3-hf-r1): the formula burnt to CO2, H2O (gas), SO2 and N2 on the ideal-gas heats of formation at 298.15 K of icheme:chemsep_carbon_dioxide (chemsep-8.3-hf-r1), icheme:water (chemsep-8.3-hf-r1) and icheme:chemsep_sulfur_dioxide (chemsep-8.3-hf-r1). Computed by tools/heating-values/heating-values.mjs. Read by a fired heater's burners.",
+    "revision": "hess-lhv-r1"
   },
   "viscosity": {
     "liquid": {

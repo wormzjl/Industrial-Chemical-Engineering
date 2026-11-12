@@ -125,5 +125,7 @@
   "data/icheme/materials/transport/chemsep_liquid_reference.json",
   "data/icheme/materials/transport/dissolved_viscosity.json",
   "data/icheme/materials/transport/liquid_calibration.json",
-  "data/icheme/materials/water/water.json"
+  "data/icheme/materials/water/water.json",
+  "data/icheme/materials/components/ethanol.json",
+  "data/icheme/materials/properties/chemsep_ethanol.json"
 ]

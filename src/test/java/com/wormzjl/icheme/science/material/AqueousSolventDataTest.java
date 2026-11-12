@@ -131,7 +131,8 @@ class AqueousSolventDataTest {
             boolean g=o.remove("group_counts")!=null,h=o.remove("henry_in_water")!=null;
             if(g)counts++;if(h)henry++;if(g||h)entry.setValue(o.toString());
         }
-        assertEquals(34,counts,"the 33 defined compounds of the world list and the cubic water");assertEquals(8,henry);
+        // W6: ethanol's main record (icheme:chemsep_ethanol) carries Dortmund counts: 34 before it.
+        assertEquals(35,counts,"the 33 defined compounds of the world list, ethanol and the cubic water");assertEquals(8,henry);
         resources.remove(ROOT+TABLE);resources.remove(ROOT+"group_interactions/eppr78_2022.json");
         var without=MaterialCatalog.parse(resources);
         var edited=MaterialCatalog.parse(changed(HEXANE,o->{var d=o.getAsJsonObject("group_counts").getAsJsonObject(ModifiedUnifac.SCHEME);

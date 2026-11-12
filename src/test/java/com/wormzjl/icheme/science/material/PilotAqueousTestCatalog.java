@@ -11,10 +11,11 @@ import java.util.function.Consumer;
  * material resources, from the test overlay {@code /materials/pilot-aqueous/index.json}: water as a compound of the
  * cubic (the main record {@code icheme:cubic_water} since W3b step 2: IAPWS-95 critical point, acentric factor 0.3443, a
  * Mathias-Copeman alpha, the water model's steam Cp, Dortmund and E-PPR78 counts H2O 1), ethanol from ChemSep with its homomorph propane
- * ({@code icheme:pilot_ethanol}, compound record {@code Ethanol}), the method {@code icheme:pilot_aqueous_pr78} (the
+ * (the main record {@code icheme:chemsep_ethanol} since W6, compound record {@code Ethanol}; the overlay's pilot record had the same
+ * phase data), the method {@code icheme:pilot_aqueous_pr78} (the
  * crude_pr78 pair libraries) and the package with n-hexane, benzene, propane, methane, nitrogen, CO2, hydrogen and the
- * cut crude_pc03. Written by {@code tools/compound-import} ({@code selection-aqueous-pilot.json}). Main data holds
- * no ethanol (W6); the overlay lives outside {@code data/}, so every other test sees the game's catalog.
+ * cut crude_pc03. The overlay holds the method and the package only (W6 moved its ethanol to main data); it lives outside
+ * {@code data/}, so every other test sees the game's catalog.
  */
 public final class PilotAqueousTestCatalog {
     public static final String PACKAGE_ID = "icheme:pilot_aqueous";

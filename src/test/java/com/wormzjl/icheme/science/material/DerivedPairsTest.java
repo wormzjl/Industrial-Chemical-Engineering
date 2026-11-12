@@ -20,7 +20,8 @@ import org.junit.jupiter.api.Test;
  */
 class DerivedPairsTest {
     private static final String PACKAGE = PilotAqueousTestCatalog.PACKAGE_ID;
-    private static final String ETHANOL_RECORD = "data/icheme/materials/properties/pilot_ethanol.json";
+    // W6: ethanol joins the main data; the pilot package names the main record icheme:chemsep_ethanol (was icheme:pilot_ethanol).
+    private static final String ETHANOL_RECORD = "data/icheme/materials/properties/chemsep_ethanol.json";
     private static final double ATM = 101325.0;
     private static final double ROOM = 298.15;
     /** Perry's table at 101.325 kPa: x ethanol, y ethanol, T in C. */
@@ -176,7 +177,7 @@ class DerivedPairsTest {
         });
         String moved = DerivedPairs.derive(bumped, PACKAGE, list).identity();
         assertNotEquals(base, moved);
-        assertTrue(moved.contains("properties/icheme:pilot_ethanol/" + ModifiedUnifac.SCHEME + "@chemsep-8.3-modfac-r1-edited"), moved);
+        assertTrue(moved.contains("properties/icheme:chemsep_ethanol/" + ModifiedUnifac.SCHEME + "@chemsep-8.3-modfac-r1-edited"), moved);
         var unread = PilotAqueousTestCatalog.parseWith(ETHANOL_RECORD, o -> {
             var freezing = o.getAsJsonObject("freezing");
             freezing.addProperty("revision", freezing.get("revision").getAsString() + "-edited");
@@ -209,7 +210,7 @@ class DerivedPairsTest {
                 o -> o.getAsJsonObject("homomorph").addProperty("revision", "bad revision"),
                 o -> o.getAsJsonObject("homomorph").remove("source"))) {
             var error = assertThrows(IllegalArgumentException.class, () -> PilotAqueousTestCatalog.parseWith(ETHANOL_RECORD, edit));
-            assertTrue(error.getMessage().contains("pilot_ethanol.json") && error.getMessage().contains("homomorph."), error.getMessage());
+            assertTrue(error.getMessage().contains("chemsep_ethanol.json") && error.getMessage().contains("homomorph."), error.getMessage());
         }
         assertEquals("Propane", PilotAqueousTestCatalog.catalog().homomorph(PACKAGE, "Ethanol").orElseThrow().component());
     }

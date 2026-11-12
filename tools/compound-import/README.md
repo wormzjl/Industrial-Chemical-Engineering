@@ -47,7 +47,18 @@ Water as a compound of the cubic in main data (same batch, W3b step 2):
 node tools/compound-import/import.mjs tmp/dwsim-groups tools/compound-import/selection-aqueous-main.json tmp/w3b-engine-kernel/main-import --materials src/main/resources/data/icheme/materials
 ```
 
-The pilot import's `components/ethanol.json` and `properties/pilot_ethanol.json` are copied into the test overlay `src/test/resources/materials/pilot-aqueous/`, never into main data. Its `properties/pilot_water.json` is no longer copied: since W3b step 2 the main import's `properties/cubic_water.json` (same values, `icheme:cubic_water`) is copied into main data, and the pilot reads it.
+The pilot import's `components/ethanol.json` and `properties/pilot_ethanol.json` were copied into the test overlay `src/test/resources/materials/pilot-aqueous/`, never into main data; since W6 the overlay holds no ethanol (below). Its `properties/pilot_water.json` is no longer copied: since W3b step 2 the main import's `properties/cubic_water.json` (same values, `icheme:cubic_water`) is copied into main data, and the pilot reads it.
+
+Ethanol in the main data (same batch, W6): the pilot's ethanol entry and form, prefix `icheme:chemsep_`; its `components/ethanol.json` and `properties/chemsep_ethanol.json` go to main data (the Tr = 0.7 liquid reference point is not copied: the volume anchor is the standard density). The heat data take the route of the defined compounds; flammability from the NIOSH Pocket Guide, ethyl alcohol (npgd0262, read 2026-11-12). The importer refuses ethanol's PPR78 counts (ChemSep group 41 has no name in the eppr78-2022 table), as in the pilot.
+
+```
+node tools/compound-import/import.mjs tmp/dwsim-groups tools/compound-import/selection-aqueous-ethanol.json tmp/w6-ethanol/import --materials src/main/resources/data/icheme/materials
+node tools/compound-import/import.mjs tmp/dwsim-groups tools/compound-import/selection-thermochemistry-ethanol.json tmp/w6-ethanol/heat-import --materials src/main/resources/data/icheme/materials
+node tools/compound-import/insert-subrecord.mjs thermochemistry tmp/w6-ethanol/heat-import/thermochemistry src/main/resources/data/icheme/materials
+node tools/compound-import/insert-subrecord.mjs flammability tmp/w6-ethanol/heat-import/flammability src/main/resources/data/icheme/materials
+node tools/heating-values/heating-values.mjs src/main/resources/data/icheme/materials tmp/w6-ethanol/combustion
+node tools/compound-import/insert-subrecord.mjs combustion <a folder with properties__chemsep_ethanol.json only> src/main/resources/data/icheme/materials
+```
 
 `import.mjs` options: `--data <md>` (the cross-check document; default the batch's REFINERY_COMPOUNDS_DATA.md), `--materials <dir>` (bundled records, for the crude-fraction molar masses and the crystal anchors).
 
@@ -75,6 +86,8 @@ Parser check (plain `javac`, no Gradle; reads `src/`, writes only `tmp/`): compi
 | `selection-aqueous-authored.json` | W2b of the same batch: `groups_only` entries with `authored_counts` (E-PPR78 for cyclohexane, propylene, butene-1, isobutene, butadiene; Dortmund for ethylene) |
 | `selection-aqueous-pilot.json` | W2b: ethanol from ChemSep (prefix `icheme:pilot_`, homomorph Propane, `no_pair_library`) and a `cubic_water` entry, for the test overlay only |
 | `selection-aqueous-main.json` | W3b step 2 of the same batch: the `cubic_water` entry alone (`icheme:cubic_water`, revision cubic-water-r1, the pilot water's values), for main data; no main package names it until W3b step 3 |
+| `selection-aqueous-ethanol.json` | W6 of the same batch: the pilot's ethanol entry and form with prefix `icheme:chemsep_`, for main data (`icheme:chemsep_ethanol`) |
+| `selection-thermochemistry-ethanol.json` | W6: ethanol's `thermochemistry` (ChemSep, chemsep-8.3-hf-r1) and `flammability` (NIOSH npgd0262, npg-b627-r1) as a `thermochemistry_only` entry |
 | `selection-aqueous-existing.json` | W2a of batch 2026-11-11-aqueous-solvents: `groups_only` entries (group counts for the 33 defined compounds of `icheme:refinery`) and `henry_only` entries (IAPWS G7-04 coefficients of its eight gases) |
 
 ## Conversions
@@ -114,3 +127,4 @@ Parser check (plain `javac`, no Gradle; reads `src/`, writes only `tmp/`): compi
 - 2026-11-11 (W2a, batch 2026-11-11-aqueous-solvents): `groups.mjs` writes `group_interactions/modified_unifac_dortmund.json` (108 subgroups, 52 main groups, 620 pairs, the water-hydrocarbon block; two runs byte-identical); `chemsep.mjs` reads the `ModifiedUnifac` element and accepts an extract without `chemsep2.xml`; `import.mjs` writes `group_counts` for every imported compound and `group_counts/` and `henry_in_water/` wrappers for `groups_only` and `henry_only` entries, and reads no pair file when the selection imports no compound. `selection-aqueous-existing.json` wrote 33 group-count and 8 Henry wrappers into `tmp/w2-check/aqueous-import/`, inserted into the bundled datasets (only inserted lines). Refused schemes: Dortmund for the 11 compounds ChemSep gives none (methane, the inorganic gases, ethyl mercaptan) and for ethylene; E-PPR78 for cyclohexane, propylene, butene-1, isobutene and butadiene. Parse check passes on the bundled resources.
 - 2026-11-11 (W2b, batch 2026-11-11-aqueous-solvents): `authored_counts`, `homomorph`, `no_pair_library` and `cubic_water`. `selection-aqueous-authored.json` wrote six group-count wrappers into `tmp/w2-check/authored-import/`, inserted with `--replace` into the six bundled datasets (only inserted lines: the refused schemes had no block). `selection-aqueous-pilot.json` wrote the pilot ethanol (ChemSep Tc 513.92 K, Pc 6.148 MPa, omega 0.649; Dortmund CH3 1, CH2 1, OH 1; E-PPR78 refused, group 41) and the pilot water into `tmp/w2-check/pilot-import/`, copied into the test overlay.
 - 2026-11-11 (W3b step 2, same batch): `cubic_water` takes `from_crystal`; `selection-aqueous-main.json` (ice Ih) wrote `properties/cubic_water.json` with the ice anchor as its freezing sub-record, copied into main data and the materials index; the test overlay's `pilot_water.json` removed, the pilot package (pilot-aqueous-r3) names `icheme:cubic_water`. `icheme:refinery` unchanged (its water and ice move with W3b step 3).
+- 2026-11-12 (W6, same batch): ethanol in the main data: `selection-aqueous-ethanol.json` wrote `components/ethanol.json` and `properties/chemsep_ethanol.json` (the pilot record's phase data, equal key by key); `selection-thermochemistry-ethanol.json` its heat of formation -234.95 kJ/mol and flammability 3.3 to 19 %; `heating-values.mjs` its LHV 1277.5 kJ/mol. The overlay's ethanol files left.

@@ -198,7 +198,8 @@ class MaterialThermochemistryTest {
             boolean t=o.remove("thermochemistry")!=null,f=o.remove("flammability")!=null,c=o.remove("combustion")!=null;
             if(t)thermo++;if(f)limits++;if(t||f||c)entry.setValue(o.toString());
         }
-        assertEquals(46,thermo,"the 45 compounds of the world list and the water");assertEquals(40,limits,"28 compounds and 12 cuts");
+        // W6: ethanol's main record (icheme:chemsep_ethanol) has thermochemistry and flammability: 46 and 40 before it.
+        assertEquals(47,thermo,"the 45 compounds of the world list, ethanol and the water");assertEquals(41,limits,"29 compounds and 12 cuts");
         var without=MaterialCatalog.parse(resources);
         var edited=MaterialCatalog.parse(changed(METHANE,o->{var t=o.getAsJsonObject("thermochemistry");
             t.addProperty("formation_enthalpy_j_per_mol",-75000);t.addProperty("revision",t.get("revision").getAsString()+"-edited");
