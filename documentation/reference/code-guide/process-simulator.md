@@ -50,7 +50,7 @@ The screen retains the player's GUI scale; `WindowScale` is removed. Layout and 
 
 Type follows `SizingChoice`, `SizingFacts`, sent designs, constructor import and column member choices, including condensers, water trims and pumparound coolers. It does not create another flowsheet tile. `FlowsheetFile` remains format 2 with optional appended fields; missing type is Standard. Wire simulator protocol is `3`; it is not a saved-data migration. See [heat-exchangers.md](heat-exchangers.md).
 
-Tests: `UnitSizingTest`, `CrossflowSizingTest`, `SizingPageTest`, `ColumnSizingSampleTest`, sent-design and constructor compatibility tests.
+Tests: `UnitSizingTest`, `CrossflowSizingTest`, `SizingPageTest`, `CrudeUnitSampleTest.ColumnSizingSampleTest`, sent-design and constructor compatibility tests.
 
 
 Up: [code guide](README.md)
@@ -315,8 +315,8 @@ Every new `EquipmentShape.Kind`, `ConstructorColumn.Equipment` and `TopologyComp
 | Order, tears, loops | `FlowGraph`, `FlowsheetSolver` | `FlowGraphTest`, `FlowsheetSolverTest` |
 | The column on the sheet against the world's solver | `ColumnUnit`, `ColumnDoor` | `FlowsheetColumnTest` (slow), `ColumnEjectorTest` (slow), `UtilityRegulationTest` (slow) |
 | A utility feed's flow | `FlowsheetCompiler`, `WiredUnit.Utilities`, `ColumnUnit` | `UtilityRegulationTest` |
-| A Sizing row or lamp | `Limit`, the unit's sizer | `LimitTest`, `UnitSizingTest`, `CoolerSizingTest`, `SheetSizingTest`; the sample: `UnitSizingSampleTest`, `ColumnSizingSampleTest` (slow) |
-| Lines and paths | `LineSizing`, `Service`, `PressurePath`, `SheetSizing` | `LineSizingTest`, `ServiceTest`, `LineSizingSampleTest`, `SizeAllSampleTest` (slow) |
+| A Sizing row or lamp | `Limit`, the unit's sizer | `LimitTest`, `UnitSizingTest`, `CoolerSizingTest`, `SheetSizingTest`; the sample: `CrudeUnitSampleTest.UnitSizingSampleTest`, `CrudeUnitSampleTest.ColumnSizingSampleTest` (slow) |
+| Lines and paths | `LineSizing`, `Service`, `PressurePath`, `SheetSizing` | `LineSizingTest`, `ServiceTest`, `CrudeUnitSampleTest.LineSizingSampleTest`, `CrudeUnitSampleTest.SizeAllSampleTest` (slow) |
 | Which end of a passage is its inlet | `Passage`, `Wiring`, `UnitModel.passages`, `SheetEditor.takes` | `WiringTest`, `PassageEndsTest` |
 | The file | `FlowsheetFile` | `FlowsheetFileTest` (25, the corpus) |
 | The bundled examples and Open's rows | `FlowsheetExamples`, `FileColumns.entries`, `FileColumns.opened`, `assets/icheme/flowsheet_examples/` | `FlowsheetExamplesTest`; the sample gates run the crude unit; `FlowsheetAqueousColumnTest` runs the ethanol rectifier |
@@ -324,14 +324,14 @@ Every new `EquipmentShape.Kind`, `ConstructorColumn.Equipment` and `TopologyComp
 | The block's store, uploads and packets ([packets](#packets-and-protocol), [block](#the-block-and-its-store)) | `SheetStore`, `SheetBody`, `ProcessSimulatorNetwork`, `ProcessSimulatorBlockEntity` | `SheetStoreTest`, `SimulatorBlockTest`, `ProcessSimulatorGameTests` |
 | Sent designs and Import | `SheetSizing.designs`, `SentDesign`, `SentDesignTags`, `EquipmentNetwork` | `SentDesignTagsTest` (the corpus), `ProcessSimulatorGameTests.aConstructorImportsTheNearestSimulatorsDesign` |
 | The screen ([the screen](#the-screen)) | `ProcessSimulatorScreen`, `client/gui/flowsheet/*` | `SimulatorFrameTest`, `SimulatorColumnsTest`, `StreamFlowBasisTest` (the flow basis), `RunKeyTest` (Run lit), `SheetLayoutTest`, `SheetEditorTest`, `SheetGesturesTest`, `SizingPageTest`, `ColumnBlockTest`, `AssemblyBlockTest`, `DrawCallTest` (draw calls), `DoorUnitsTest` (a door in the display units), `SheetAutosaveTest` (the autosave writer), `EditFocusTest` (an edit ends on a click outside); renders: `tools/heat-gui-renders/SimulatorRender.java` (`-Donly=run-key`: Run's states, sheet 28, and what grabs a column, sheet 29; `-Dcount`: draw calls per page; `-Dbasis`: MOLE, MASS or VOLUME) |
-| The runner and Stop | `SimulatorRunner` | `SimulatorRunnerTest`, `SimulatorRunTest` (slow: Stop inside a column) |
-| Where a run starts: tears and the column's warm start | `FlowsheetCompiler.compile`, `estimates`, `Report.Warm`, `ColumnBlockSolve`, `SimulatorRunner.restore`, `stop` | `SimulatorRunTest.aRunFromASteadyOneStartsTheColumnWhereItEnded` (slow), `SimulatorRunnerTest.stopLeavesTheNextRunsColumnsToTheLearnedStart`, `SimulatorBlockTest.aStoredSteadyRunStartsTheNextRunsLoops` |
+| The runner and Stop | `SimulatorRunner` | `SimulatorRunnerTest`, `CrudeUnitSampleTest.SimulatorRunTest` (slow: Stop inside a column) |
+| Where a run starts: tears and the column's warm start | `FlowsheetCompiler.compile`, `estimates`, `Report.Warm`, `ColumnBlockSolve`, `SimulatorRunner.restore`, `stop` | `CrudeUnitSampleTest.SimulatorRunTest.aRunFromASteadyOneStartsTheColumnWhereItEnded` (slow), `SimulatorRunnerTest.stopLeavesTheNextRunsColumnsToTheLearnedStart`, `SimulatorBlockTest.aStoredSteadyRunStartsTheNextRunsLoops` |
 | A new kind | `FlowsheetCatalog`, `SizingCoverage` (both in `src/test`) | `FlowsheetPaletteCoverageTest`, `SizingCoverageTest` |
 
 ## Tests that pin it
 
 - `test`: `science/flowsheet/` (`FlowGraphTest`, `FlowsheetSolverTest`, `FlowsheetUnitsTest`, `FlowsheetColumnDoorTest`, `FlowsheetFileTest`, `SheetStoreTest`, `EjectorTest`, `WiringTest`), `science/flowsheet/sizing/` (`LimitTest`, `ServiceTest`, `LineSizingTest`, `UnitSizingTest`, `SheetSizingTest`, `CoolerSizingTest`), `client/gui/flowsheet/` (the screen tests above, `PassageEndsTest`, `FlowsheetExamplesTest`, `OpenDeleteTest`, `DrawCallTest`, `SimulatorBlockTest`, `SimulatorRunnerTest`, the two coverage tests), `network/ColumnWireTest`, `world/level/block/entity/SentDesignTagsTest`.
-- `holdGates` (slow, `slowGateClasses`): `FlowsheetColumnTest`, `ColumnEjectorTest`, `SimulatorRunTest`, `LineSizingSampleTest`, `UnitSizingSampleTest`, `ColumnSizingSampleTest`, `SizeAllSampleTest`, `UtilityRegulationTest`.
+- `holdGates` (slow, `slowGateClasses`): `FlowsheetColumnTest`, `ColumnEjectorTest`, `CrudeUnitSampleTest` (its `@Nested` groups `SimulatorRunTest`, `LineSizingSampleTest`, `UnitSizingSampleTest`, `ColumnSizingSampleTest`, `SizeAllSampleTest`, named by `CrudeUnitSampleTest$*`), `UtilityRegulationTest`.
 - `runColumnGameTestServer` (namespace `icheme_column_test`): `ProcessSimulatorGameTests` (11): the old id, a reload with no update tag, a damaged sheet kept, the constructor's Import, a second player reads, uploads only from the screen near the block, a bad upload refused, the holder freed on disconnect, away and when the block goes, a replay that runs no solver.
 - Shared fixture: `client/gui/flowsheet/SheetFixture` (the sample sheet: `sample()` reads the bundled crude unit example, so the sample gates run the sheet players open).
 - Probes and renders outside the gates: `tools/process-simulator/`, `tools/device-names/`, `tools/heat-gui-renders/` (`SimulatorPrototypes`, `SimulatorRender`, `SimulatorSizing`).
