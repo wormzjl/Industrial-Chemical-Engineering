@@ -237,3 +237,20 @@ The sub-thread's update; the diffs are not reviewed by the orchestrator yet.
 
   V3 needed no other change for water on its axis.
 - Next: W5c, then W5d. The sour column's choice (section 11) is open; option a stands meanwhile.
+
+## 13. Owner: activity fits only for water and compounds that name a homomorph (2026-11-12)
+
+"Yes, limit them": option c of section 11, and its build by the live sub-thread `w5-column` (Opus high), after W5c.
+
+- The rule: in `DerivedPairs.derive` a pair is an activity fit only where one of its two compounds is water or a
+  polar compound that names a homomorph. Any other pair with a polar compound takes E-PPR78 at 298.15 K where
+  both carry its counts, else zero with its reason. `DerivedPairs.REVISION` goes to r7.
+- What it reaches, from the bundled records: methyl mercaptan alone. It is the one compound other than water with
+  polar Dortmund counts (`CH3SH`). Hydrogen sulfide, sulfur dioxide, ethyl mercaptan, ammonia and carbonyl sulfide
+  carry no Dortmund counts, so they never took activity fits; section 11 and the README's old item named them
+  wrongly. Its pair with water stays an activity fit.
+- Expected: the sour column's kernel calls back near the crude list's ratio (evaluate 1.1 to 1.2 times the
+  authored matrix, derivatives about 1.5); products within 0.4 % of the authored-matrix column; every list without
+  methyl mercaptan bit for bit; the network's dry polar cost scenario near its dry one.
+- Reach: the derivation's identity changes for every list (saved network state on r6 is dropped and rebuilt;
+  facts are not touched). The campaign's numbers can move where a world holds methyl mercaptan: the final lane's.
