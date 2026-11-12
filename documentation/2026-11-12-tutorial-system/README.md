@@ -43,7 +43,7 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
   21 filtered test classes pass; renders in `tmp/tutorial-renders/`. The fluid GameTests wait for the final lane.
 - 2026-11-12: P2a built (07ae749e5, 849cf20ef, aa9120b0d, 3450240c6, 923f39d53, 207577d1f, 5aa24fd86): three_parts mixed
   at heat 0, the card interface (options, hits, steps, temperature format), cards chain, barrel, products, road, the
-  crude barrel recording (`tools/tutorial-recordings`), chapter 1 and its advancements. 19 filtered test classes pass.
+  crude barrel recording (`tools/tutorial-recordings`), chapter 1 and its advancements. 17 filtered test classes pass.
 
 ## Code areas (proposed)
 
