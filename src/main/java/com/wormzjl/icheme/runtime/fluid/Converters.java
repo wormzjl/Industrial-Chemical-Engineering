@@ -86,6 +86,9 @@ public final class Converters implements IslandCoordinator.Ports {
     private final Map<Long,Status> status=new HashMap<>();
     private final Map<Long,Totals> totals=new HashMap<>();
     private final Map<Long,Direction> direction=new HashMap<>();
+    /** The rule each converter's last plan read (state, its page): its id, and a reverse plan's drawn phase. */
+    private final Map<Long,String> matched=new HashMap<>();
+    private final Map<Long,ConversionRules.Drawn> drawn=new HashMap<>();
     private final Map<Long,Rate> rate=new HashMap<>();
     /** A converter's booked rate over its island's last span (state): kg and Forge litres per process second, positive to IChemE. */
     public record Rate(double mass,double litres) {
@@ -120,7 +123,7 @@ public final class Converters implements IslandCoordinator.Ports {
     /** Removes converter {@code id}; its Forge tank leaves with the block (nothing of the fluid world is in it). */
     public ConverterUnit remove(long id) {
         var u=topology.removeConverter(id);if(u==null)return null;
-        byPort.values().removeIf(v->v==id);reserved.remove(id);planned.remove(id);lastRule.remove(id);status.remove(id);totals.remove(id);direction.remove(id);rate.remove(id);queued.remove(id);return u;
+        byPort.values().removeIf(v->v==id);reserved.remove(id);planned.remove(id);lastRule.remove(id);status.remove(id);totals.remove(id);direction.remove(id);rate.remove(id);queued.remove(id);matched.remove(id);drawn.remove(id);return u;
     }
     /**
      * A converter's settings as a queued engine event carries them (W4, plan 3.4): its mode, its rate (L per process second),
@@ -334,9 +337,10 @@ public final class Converters implements IslandCoordinator.Ports {
         var moles=FluidThermodynamics.phaseMoles(state,phase);double mass=model.phaseMass(state,phase),volume=FluidThermodynamics.phaseVolume(state,phase);
         if(tank.empty()||!(mass>0)||!(volume>0))return new Outcome(null,Status.SOURCE_EMPTY);
         var drawn=new ConversionRules.Drawn(model.components(),moles,model.molecularWeights(),state.temperature(),state.pressure(),phase==FluidThermodynamics.GAS);
+        this.drawn.put(u.id(),drawn);
         var set=rules.get();var rule=set.reverse(drawn,lastRule.get(u.id()),u.closed());
-        if(rule==null){lastRule.remove(u.id());return new Outcome(null,offSpec(set,u)?Status.OFF_SPEC:Status.NO_RULE);}
-        lastRule.put(u.id(),rule.id());
+        if(rule==null){lastRule.remove(u.id());var near=candidate(set,u);if(near!=null)matched.put(u.id(),near.id());else matched.remove(u.id());return new Outcome(null,near!=null?Status.OFF_SPEC:Status.NO_RULE);}
+        lastRule.put(u.id(),rule.id());matched.put(u.id(),rule.id());
         if(!u.fluid().isEmpty()&&!u.fluid().equals(rule.fluid()))return new Outcome(null,Status.DESTINATION_FULL);
         double density=mass/volume,room=u.capacity()-u.stored()-u.remainder();
         if(room<LEAST_LITRES)return new Outcome(null,Status.DESTINATION_FULL);
@@ -349,18 +353,24 @@ public final class Converters implements IslandCoordinator.Ports {
         planned.put(u.id(),new Planned(Direction.TO_FORGE,rule.id(),rule.fluid(),density,null,slice.endTick()));
         return new Outcome(new PortPlan(u.drain(),u.drainValve(),target,0,null),Status.CONVERTING);
     }
-    /** Whether a reverse rule exists for the Forge tank's fluid (or any, for an empty tank): its ranges then do not hold (OFF_SPEC). */
-    private static boolean offSpec(ConversionRules set,ConverterUnit u) {
-        for(var r:set.rules())if(r.toForge()!=null&&(u.fluid().isEmpty()||r.fluid().equals(u.fluid()))&&(u.closed()||r.phase()==ConversionRule.Phase.LIQUID))return true;
-        return false;
+    /** The first reverse rule for the Forge tank's fluid (or any, for an empty tank), or null: its ranges then do not hold (OFF_SPEC). */
+    private static ConversionRule candidate(ConversionRules set,ConverterUnit u) {
+        for(var r:set.rules())if(r.toForge()!=null&&(u.fluid().isEmpty()||r.fluid().equals(u.fluid()))&&(u.closed()||r.phase()==ConversionRule.Phase.LIQUID))return r;
+        return null;
     }
+    /** The rule converter {@code id}'s last plan read (state): the one it converts on, or the one whose ranges failed; null for none. */
+    public ConversionRule matched(long id){var r=matched.get(id);return r==null?null:rules.get().rule(r);}
+    /** The phase converter {@code id}'s last reverse plan drew (state), or null. */
+    public ConversionRules.Drawn drawn(long id){return drawn.get(id);}
     /** Step 3: the fill port's generator, on the rule for the Forge tank's fluid, bounded by the account. */
     private Outcome forward(PassiveNetwork graph,int vessel,ConverterUnit u,FluidThermodynamics model,double dt,IslandClock.Slice slice) {
         if(u.fill()==0)return new Outcome(null,Status.NO_RULE);
         var fluid=u.account()>0?u.accountFluid():u.fluid();
         if(fluid.isEmpty())return new Outcome(null,Status.SOURCE_EMPTY);
         var rule=rules.get().forward(fluid,tags.apply(fluid),u.closed());
-        if(rule==null)return new Outcome(null,Status.NO_RULE);
+        drawn.remove(u.id());
+        if(rule==null){matched.remove(u.id());return new Outcome(null,Status.NO_RULE);}
+        matched.put(u.id(),rule.id());
         var per=perLitre(rule,model);
         // A rule naming a compound the island does not carry waits for its island to grow (W3), as a column outlet's does.
         if(per==null){growth.add(u.fill());return new Outcome(null,Status.NO_RULE);}

@@ -63,9 +63,11 @@ import java.util.*;
  * built on it) before it merges.</p>
  * <p>{@code fluid-23} (batch 2026-11-10-chimney): a chimney's page view ({@link FluidView.Chimney}), the chimneys' watch
  * ({@link Watch#CHIMNEYS}) and their published plumes ({@link ChimneyState}).</p>
+ * <p>{@code fluid-24} (batch 2026-11-12-fluid-conversion, W5): a fluid converter's vessel carries its page view
+ * ({@link FluidView.Converter}), and its page's settings travel as their own edit ({@link ConverterEditPayload}).</p>
  */
 public final class FluidNetwork {
-    public static final String PROTOCOL="fluid-23";
+    public static final String PROTOCOL="fluid-24";
     private static final Gson JSON=new Gson();
     public static final int MAX_JSON=262144;
     public static final int MAX_EDIT_JSON=4096;
@@ -259,6 +261,7 @@ public final class FluidNetwork {
         var registrar=event.registrar(PROTOCOL).executesOn(HandlerThread.MAIN);
         registrar.playToServer(EditPayload.TYPE,EditPayload.STREAM_CODEC,FluidNetwork::edit);
         registrar.playToServer(RecoverPayload.TYPE,RecoverPayload.STREAM_CODEC,FluidNetwork::recover);
+        registrar.playToServer(ConverterEditPayload.TYPE,ConverterEditPayload.STREAM_CODEC,(payload,context)->{if(context.player() instanceof ServerPlayer player)converterEdit(payload,player);});
         registrar.playToServer(PartnerPayload.TYPE,PartnerPayload.STREAM_CODEC,(payload,context)->{if(context.player() instanceof ServerPlayer player)openPartner(payload,player);});
         registrar.playToServer(LinesPayload.TYPE,LinesPayload.STREAM_CODEC,(payload,context)->{if(context.player() instanceof ServerPlayer player)checkLines(payload,player);});
         registerDisplays(event,registrar);
@@ -683,6 +686,35 @@ public final class FluidNetwork {
      * the inventory. An item move, as a hopper's: no process state, done at once; the pot's island reads the fire again at
      * its next slice, and the page's next bucket shows the slot.
      */
+    /**
+     * A fluid converter's page settings (batch 2026-11-12-fluid-conversion, W5): its mode, its rate (L per process second), its
+     * deadband and its four thresholds (fill fractions, a negative value for none), in SI as every control.
+     */
+    public record ConverterEditPayload(int menuId,BlockPos position,long identity,com.wormzjl.icheme.runtime.fluid.ConverterUnit.Mode mode,double rate,double deadband,double[] thresholds) implements CustomPacketPayload {
+        public static final Type<ConverterEditPayload> TYPE=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"converter_edit"));
+        public static final StreamCodec<RegistryFriendlyByteBuf,ConverterEditPayload> STREAM_CODEC=new StreamCodec<>() {
+            public ConverterEditPayload decode(RegistryFriendlyByteBuf b){var menu=b.readVarInt();var at=b.readBlockPos();var id=b.readLong();var mode=b.readEnum(com.wormzjl.icheme.runtime.fluid.ConverterUnit.Mode.class);double rate=b.readDouble(),band=b.readDouble();
+                var t=new double[com.wormzjl.icheme.runtime.fluid.ConverterUnit.THRESHOLDS];for(int i=0;i<t.length;i++)t[i]=b.readDouble();return new ConverterEditPayload(menu,at,id,mode,rate,band,t);}
+            public void encode(RegistryFriendlyByteBuf b,ConverterEditPayload p){b.writeVarInt(p.menuId);b.writeBlockPos(p.position);b.writeLong(p.identity);b.writeEnum(p.mode);b.writeDouble(p.rate);b.writeDouble(p.deadband);for(double v:p.thresholds)b.writeDouble(v);}
+        };
+        public ConverterEditPayload{Objects.requireNonNull(mode);thresholds=thresholds.clone();if(thresholds.length!=com.wormzjl.icheme.runtime.fluid.ConverterUnit.THRESHOLDS)throw new IllegalArgumentException("A converter has four level thresholds");}
+        @Override public Type<? extends CustomPacketPayload> type(){return TYPE;}
+    }
+    public static void converterEdit(FluidDeviceMenu menu,com.wormzjl.icheme.runtime.fluid.ConverterUnit.Mode mode,double rate,double deadband,double[] thresholds){PacketDistributor.sendToServer(new ConverterEditPayload(menu.containerId,menu.position(),menu.identity(),mode,rate,deadband,thresholds));}
+    /**
+     * A converter page's Apply (W5): the admission of an edit, then the settings queued for the engine's next tick
+     * ({@code FluidWorldAuthority.converterSettings}, clamped there); the reply comes with the menu's next bucket.
+     */
+    public static void converterEdit(ConverterEditPayload payload,ServerPlayer player) {
+        if(!(player.containerMenu instanceof FluidDeviceMenu menu))return;
+        if(menu.containerId!=payload.menuId||menu.identity()!=payload.identity||!menu.position().equals(payload.position)||!menu.stillValid(player)||menu.debug()||!player.mayBuild()||player.isSpectator()||!player.level().mayInteract(player,payload.position)||!menu.admitEdit(player.server.getTickCount()))return;
+        FluidWorldAuthority.find(player.server).ifPresent(world->{
+            String refusal;
+            try{refusal=world.converterSettings(payload.identity,new com.wormzjl.icheme.runtime.fluid.Converters.Settings(payload.mode,payload.rate,payload.deadband,payload.thresholds));}
+            catch(RuntimeException rejected){refusal=reason(rejected);}
+            world.input(menu,null,refusal);
+        });
+    }
     public record StillFuelPayload(int menuId,BlockPos position,long identity,boolean load) implements CustomPacketPayload {
         public static final Type<StillFuelPayload> TYPE=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"still_fuel"));
         public static final StreamCodec<RegistryFriendlyByteBuf,StillFuelPayload> STREAM_CODEC=new StreamCodec<>() {

@@ -28,7 +28,7 @@ public final class ConversionRules {
         public double total(){double s=0;for(double n:moles)s+=n;return s;}
         public double mass(){double m=0;for(int i=0;i<moles.length;i++)m+=moles[i]*molarMasses[i];return m;}
         /** Each compound's fraction on {@code basis}, by id. */
-        Map<String,Double> fractions(ConversionRule.Basis basis) {
+        public Map<String,Double> fractions(ConversionRule.Basis basis) {
             double sum=basis==ConversionRule.Basis.MOLE?total():mass();var x=new HashMap<String,Double>();
             if(!(sum>0))return x;
             for(int i=0;i<moles.length;i++)if(moles[i]>0)x.merge(components.get(i),(basis==ConversionRule.Basis.MOLE?moles[i]:moles[i]*molarMasses[i])/sum,Double::sum);

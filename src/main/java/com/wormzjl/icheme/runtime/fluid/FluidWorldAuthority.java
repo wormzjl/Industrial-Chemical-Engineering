@@ -729,10 +729,46 @@ public final class FluidWorldAuthority implements AutoCloseable {
      */
     public double converterFill(long id) {
         owned();var u=converters.unit(id);var r=registrations().get(id);if(u==null||r==null)return Double.NaN;
-        var view=view(id);var s=view.state();if(s==null||view.committedTick()<=0)return Double.NaN;
+        return converterFill(u,r,view(id));
+    }
+    /** {@link #converterFill(long)} on {@code view}, the vessel's published view. */
+    private static double converterFill(ConverterUnit u,WorldTopologyLedger.Registration r,FluidView view) {
+        var s=view.state();if(s==null||view.committedTick()<=0)return Double.NaN;
         var v=s.phaseVolumes();double gas=0;for(double n:s.phaseMoles()[2])gas+=n;
         return Converters.fill(u.closed(),s.capacity(),v[0]+v[1]+s.solids().volume(),gas,s.temperature(),r.spec().blanket());
     }
+    /**
+     * Converter {@code id}'s page (W5), a read of its facts, its queued settings, the engine's state and {@code view}, its
+     * vessel's published view: its rule's ranges beside what the last plan drew. Null for no converter.
+     */
+    private FluidView.Converter converterView(long id,FluidView view) {
+        var u=converters.unit(id);var r=registrations().get(id);var next=converters.next(id);if(u==null||r==null||next==null)return null;
+        double fill=converterFill(u,r,view);var s=view.state();
+        double litres=0,kmol=0,kg=0;
+        if(s!=null){var v=s.phaseVolumes();litres=Math.max(0,(v[0]+v[1])*1000);for(double n:s.phaseMoles()[2])kmol+=n/1000;kmol=Math.max(0,kmol);kg=Math.max(0,s.mass());}
+        var thresholds=new ArrayList<Double>();for(double t:next.thresholds())thresholds.add(Double.isNaN(t)?null:t);
+        var status=converters.status(id);var alarms=Converters.alarms(status,u.thresholds(),fill,u.forgeFill()).stream().map(a->a.text).toList();
+        var rule=converters.matched(id);var ranges=new ArrayList<FluidView.Range>();boolean reverse=false;
+        if(rule!=null&&rule.toForge()!=null&&(converters.direction(id)!=Converters.Direction.TO_ICHEME||rule.toIChemE()==null)) {
+            reverse=true;var f=rule.toForge();var drawn=converters.drawn(id);var x=drawn==null?null:drawn.fractions(f.basis());double named=0;
+            for(var e:f.components().entrySet()){Double value=x==null?null:x.getOrDefault(e.getKey(),0.);if(value!=null)named+=value;ranges.add(new FluidView.Range(e.getKey(),f.basis().name(),bound(e.getValue().min()),bound(e.getValue().max()),value));}
+            ranges.add(new FluidView.Range("others","OTHERS",null,f.othersMax(),x==null?null:Math.max(0,1-named)));
+            ranges.add(new FluidView.Range("temperature","TEMPERATURE",bound(f.temperature().min()),bound(f.temperature().max()),drawn==null?null:drawn.temperature()));
+            ranges.add(new FluidView.Range("pressure","PRESSURE",bound(f.pressure().min()),bound(f.pressure().max()),drawn==null?null:drawn.pressure()));
+        } else if(rule!=null&&rule.toIChemE()!=null) {
+            var g=rule.toIChemE();
+            for(var e:g.composition().entrySet())ranges.add(new FluidView.Range(e.getKey(),"MOLE",e.getValue(),e.getValue(),e.getValue()));
+            ranges.add(new FluidView.Range("temperature","TEMPERATURE",g.temperature(),g.temperature(),g.temperature()));
+            ranges.add(new FluidView.Range("pressure","PRESSURE",g.pressure(),g.pressure(),g.pressure()));
+        }
+        if(ranges.size()>FluidView.Converter.MAXIMUM_RANGES)ranges.subList(FluidView.Converter.MAXIMUM_RANGES,ranges.size()).clear();
+        double booked=converters.rate(id).litres();
+        return new FluidView.Converter(u.closed(),next.mode().name(),next.rate(),com.wormzjl.icheme.science.equipment.EquipmentShape.converterRate(r.spec().volume()),next.deadband(),thresholds,converters.queued(id),
+                status==null?"":status.name(),converters.direction(id).name(),Double.isFinite(booked)?booked:0,alarms,u.fluid(),u.stored(),u.capacity(),u.forgeFill(),Double.isNaN(fill)?null:fill,litres,kmol,kg,
+                rule==null?"":rule.id(),reverse,ranges);
+    }
+    /** A rule's bound, null where it is open. */
+    private static Double bound(double value){return Double.isFinite(value)?value:null;}
     /** Converter {@code id}'s active alarms (W4): its status's and its level thresholds', on its published fill. */
     public java.util.Set<EquipmentAlarm> converterAlarms(long id) {
         owned();var u=converters.unit(id);if(u==null)return java.util.Set.of();
@@ -2562,6 +2598,15 @@ public final class FluidWorldAuthority implements AutoCloseable {
             var line=stills.statusLine(id);if(!line.isEmpty()&&!view.status().contains(line))view=view.withStatus(view.status()+" / "+line);
             // W6: the still's page, its settings, what a controller holds and its fuel slot.
             var still=stillView(id);if(still!=null)view=view.withStill(still);
+        }
+        // A fluid converter's vessel (batch 2026-11-12-fluid-conversion, W5): its page; its status word and alarms on the status line.
+        if(converters.unit(id)!=null) {
+            var c=converterView(id,view);
+            if(c!=null) {
+                view=view.withConverter(c);
+                var word=c.status().replace('_',' ');if(!word.isEmpty()&&!view.status().contains(word))view=view.withStatus(view.status()+" / "+word);
+                for(var a:c.alarms())if(!view.status().contains(a))view=view.withStatus(view.status()+" / "+a);
+            }
         }
         // A flare stack (batch 2026-11-09-flare-stack): its flow, heat, gas and status; its alarms on the status line.
         if(registration.device().flare()) {
