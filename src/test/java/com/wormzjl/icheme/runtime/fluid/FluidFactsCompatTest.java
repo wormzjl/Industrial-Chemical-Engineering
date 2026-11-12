@@ -133,7 +133,110 @@ class FluidFactsCompatTest {
         vacuumPumps(world);
         world.runTo(900);
         primeMovers(world);
-        world.runTo(910);return world;
+        world.runTo(910);
+        phases(world);return world;
+    }
+    /** The vessels {@link #phases} fills: nitrogen over water, oil over water under their gas, and boiling water. */
+    private long wetNitrogen,oilOverWater,boiling;
+    /**
+     * Facts schema 22 (batch 2026-11-11-aqueous-solvents, W3b step 6): three slack 20 m3 vessels, each fed for 5 s by its
+     * own generator, then cut off: wet nitrogen (a gas over an aqueous liquid that holds dissolved nitrogen), wet crude
+     * (a gas, an oil and an aqueous liquid) and water from 380 K at 1.5 bar (one compound, boiling at the ambient pressure).
+     */
+    private void phases(EventPathWorld world) {
+        double[] nitrogen=FluidDeviceSpec.nitrogen(CATALOG).composition(),water=FluidDeviceSpec.water(CATALOG).composition(),wet=nitrogen.clone();
+        for(int c=0;c<wet.length;c++)wet[c]+=water[c];
+        var crude=com.wormzjl.icheme.science.fluid.solver.PhaseLayout.totalAmounts(FluidTestSupport.oneCubicMetreState(model,FluidTestSupport.Mixture.WET_CRUDE,298.15,120000));
+        var feeds=List.of(new FluidDeviceSpec(1,298.15,120000,wet),new FluidDeviceSpec(1,298.15,120000,crude),new FluidDeviceSpec(1,380,150000,water));
+        var generators=new ArrayList<WorldTopologyLedger.Edit>();var tanks=new long[3];
+        for(int k=0;k<3;k++) {
+            int z=200+4*k;
+            generators.add(new WorldTopologyLedger.Edit(world.place(0,64,z,Kind.GENERATOR,Direction.EAST,feeds.get(k),.05),null));
+            for(int x=1;x<=2;x++)world.place(x,64,z,Kind.PIPE,Direction.EAST,.05);
+            tanks[k]=world.place(3,64,z,Kind.RESERVOIR,Direction.EAST,new FluidDeviceSpec(20,298.15,101325,nitrogen),.05);
+        }
+        world.runTo(world.ledger.onlineTick()+100);
+        world.registry.submit(generators,world.ledger.nextIdentity(),null);world.runTo(world.ledger.onlineTick()+40);
+        wetNitrogen=tanks[0];oilOverWater=tanks[1];boiling=tanks[2];
+    }
+    /** Every vessel state of a checkpoint on the world list, by device identity. */
+    private Map<Long,FluidThermodynamics.State> states(FluidCheckpointCodec.Checkpoint checkpoint) {
+        var out=new TreeMap<Long,FluidThermodynamics.State>();
+        for(var entry:checkpoint.islands()) {
+            var own=entry.key().on(model);
+            for(var n:entry.snapshot().graph().reservoirs())if(n.kind()==PassiveNetwork.NodeKind.RESERVOIR)out.put(n.id(),IslandSets.paddedNode(n,own,model).state());
+        }
+        return out;
+    }
+    /**
+     * Facts schema 22: a vessel row carries its oil and aqueous slots, so a rebuild from the facts alone gives every vessel
+     * the three slots of its saved state bit for bit: the gas over water with its dissolved nitrogen, the oil over water,
+     * the one compound in two phases, the empty vessel and the rigid one. The exact load compares every row with the
+     * live state (FluidFacts.disagreement), so its route proves they agree.
+     */
+    @Test void aVesselsThreeSlotsRebuildFromItsFactsBitForBit() {
+        var world=corpusWorld();var image=image(world);
+        var exact=load(image,key->key.on(model),CATALOG);
+        assertEquals(FluidCheckpointStore.Route.EXACT,exact.route(),"the facts agree with the state: "+exact.reason());
+        var rebuilt=load(edited(image,core->core.putInt("StateFormat",FluidCheckpointCodec.VERSION+1)),key->key.on(model),CATALOG);
+        assertEquals(FluidCheckpointStore.Route.FACTS,rebuilt.route());
+        var saved=states(exact.checkpoint());var read=states(rebuilt.checkpoint());
+        assertEquals(saved.keySet(),read.keySet());
+        for(var e:saved.entrySet()) {
+            var a=e.getValue();var b=read.get(e.getKey());String vessel="vessel "+e.getKey();
+            assertEquals(a.temperature(),b.temperature(),vessel);assertEquals(a.pressure(),b.pressure(),vessel);
+            assertArrayEquals(a.vaporAmountsView(),b.vaporAmountsView(),vessel+" vapour");
+            assertArrayEquals(a.liquidAmountsView(),b.liquidAmountsView(),vessel+" oil");
+            assertArrayEquals(a.aqueousAmountsView(),b.aqueousAmountsView(),vessel+" aqueous");
+        }
+        int w=model.componentCount()-1,n2=com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN;
+        var gas=saved.get(wetNitrogen);double[] wetLiquid=gas.liquidAmountsView(),wetAqueous=gas.aqueousAmountsView();
+        assertTrue(gas.vaporAmountsView()[n2]>0&&wetLiquid[w]+wetAqueous[w]>0&&wetLiquid[n2]+wetAqueous[n2]>0,"a gas over water with dissolved nitrogen: "+gas);
+        var three=saved.get(oilOverWater);
+        assertTrue(Arrays.stream(three.vaporAmountsView()).sum()>0&&Arrays.stream(three.liquidAmountsView()).sum()>0&&Arrays.stream(three.aqueousAmountsView()).sum()>0,"three phases: "+three);
+        var one=saved.get(boiling);double steam=one.vaporAmountsView()[w],liquid=one.liquidAmountsView()[w]+one.aqueousAmountsView()[w];
+        assertTrue(steam>0&&liquid>0,"water in two phases: "+one);
+        var stock=contents(exact.checkpoint());
+        assertEquals(steam+liquid,Arrays.stream(((PassiveNetwork.Inventory)stock.get(boiling)).moles()).sum(),1e-9*(steam+liquid),"one compound");
+        assertTrue(stock.values().stream().anyMatch(v->v instanceof PassiveNetwork.Inventory i&&Arrays.stream(i.moles()).sum()==0),"an empty vessel");
+        assertTrue(rigid(exact.checkpoint())>0,"a rigid vessel");
+        var core=FluidCheckpointCodec.readCore(image.core());
+        for(var row:core.islands()) {
+            var pack=image.packs().get(row.unit().pack());var facts=FluidCheckpointCodec.islandFacts(pack,FluidCheckpointCodec.islandSections(pack,row),row.id());
+            for(var v:facts.vessels())assertTrue(v.oil()!=null&&v.aqueous()!=null&&v.oil().length==v.moles().length,"vessel "+v.id()+" carries its two liquid slots");
+        }
+    }
+    /** One vessel row of an island section, {@code slots} fields after its {@code rigid}: none as a build before schema 22 wrote it. */
+    private byte[] vesselRow(double[] moles,double[] liquid,double[] vapor,double waterLiquid,double waterVapor,double[]... slots) {
+        return FluidFacts.section(f->f.text("minecraft:overworld").text(CORPUS_PACKAGE).list(model.components(),(c,id)->c.text(id.toString())).list(List.of(1L),(q,id)->{
+            q.i64(id).f64(1).f64(1).bool(false).doubles(moles).f64(-5e4).list(List.of(),(s,none)->{});
+            q.f64(300).f64(101325).doubles(liquid).doubles(vapor).f64(waterLiquid).f64(waterVapor).f64(90000).bool(false);
+            for(var slot:slots)q.doubles(slot);}));
+    }
+    /**
+     * A row an older build wrote ends at its {@code rigid}: it reads with no slot fields and states its liquids as before
+     * schema 22, the compounds as the oil and the water as the aqueous liquid. A row with the fields states them as
+     * written, whatever the summed fields say. A row with one slot of two, a slot off the axis or a negative amount is damaged.
+     */
+    @Test void aRowWithoutTheSlotFieldsReadsItsLiquidsAsBeforeSchema22() {
+        int w=model.componentCount()-1;
+        var wet=FluidTestSupport.oneCubicMetreState(model,FluidTestSupport.Mixture.WET_CRUDE,300,101325);var split=FluidThermodynamics.legacySplit(wet);
+        double[] moles=com.wormzjl.icheme.science.fluid.solver.PhaseLayout.totalAmounts(wet),liquid=split.liquid(),vapor=split.vapor(),oil=wet.liquidAmountsView().clone(),aqueous=wet.aqueousAmountsView().clone();
+        double waterLiquid=split.waterLiquid(),waterVapor=split.waterVapor();
+        assertTrue(Arrays.stream(oil).sum()>0&&aqueous[w]>0&&waterVapor>0,"an oil, an aqueous liquid and a wet gas: "+wet);
+        var older=vesselRow(moles,liquid,vapor,waterLiquid,waterVapor);
+        var old=FluidFacts.island(older,0,older.length,"an older row").vessels().getFirst();
+        assertNull(old.oil());assertNull(old.aqueous());
+        var before=model.fromLegacySplit(300,101325,liquid,vapor,waterLiquid,waterVapor);var read=old.state(model);
+        assertArrayEquals(before.vaporAmountsView(),read.vaporAmountsView());assertArrayEquals(before.liquidAmountsView(),read.liquidAmountsView());assertArrayEquals(before.aqueousAmountsView(),read.aqueousAmountsView());
+        assertEquals(waterLiquid,read.aqueousAmountsView()[w],"the pre-W3b reading: the water is the second liquid");assertEquals(0,read.liquidAmountsView()[w]);
+        var current=vesselRow(moles,liquid,vapor,waterLiquid,waterVapor,oil,aqueous);
+        var now=FluidFacts.island(current,0,current.length,"a current row").vessels().getFirst().state(model);
+        assertArrayEquals(oil,now.liquidAmountsView());assertArrayEquals(aqueous,now.aqueousAmountsView());
+        assertArrayEquals(wet.vaporAmountsView(),now.vaporAmountsView());
+        var negative=aqueous.clone();negative[w]=-1e-9;
+        for(var damaged:List.of(vesselRow(moles,liquid,vapor,waterLiquid,waterVapor,oil),vesselRow(moles,liquid,vapor,waterLiquid,waterVapor,oil,new double[w]),vesselRow(moles,liquid,vapor,waterLiquid,waterVapor,oil,negative)))
+            assertThrows(IllegalArgumentException.class,()->FluidFacts.island(damaged,0,damaged.length,"a damaged row"));
     }
     /**
      * Facts schema 20 (batch 2026-11-10-prime-movers): a 300 MW heavy-duty gas turbine's fuel void at its combustor's
@@ -450,7 +553,8 @@ class FluidFactsCompatTest {
             var pack=image.packs().get(row.unit().pack());var facts=FluidCheckpointCodec.islandFacts(pack,FluidCheckpointCodec.islandSections(pack,row),row.id());
             var components=new ArrayList<>(facts.components());components.add("Retired");
             var widened=facts.vessels().stream().map(v->{var moles=Arrays.copyOf(v.moles(),v.moles().length+1);moles[moles.length-1]=2.5;kept.put(v.id(),onWorld(v.moles(),facts.components()));
-                return new FluidFacts.Vessel(v.id(),v.volume(),v.levelHeight(),v.open(),moles,v.energy(),v.solids(),v.temperature(),v.pressure(),v.liquid(),v.vapor(),v.waterLiquid(),v.waterVapor(),v.hydrocarbonPressure(),v.rigid());}).toList();
+                return new FluidFacts.Vessel(v.id(),v.volume(),v.levelHeight(),v.open(),moles,v.energy(),v.solids(),v.temperature(),v.pressure(),v.liquid(),v.vapor(),v.waterLiquid(),v.waterVapor(),v.hydrocarbonPressure(),v.rigid(),
+                        v.oil()==null?null:Arrays.copyOf(v.oil(),moles.length),v.aqueous()==null?null:Arrays.copyOf(v.aqueous(),moles.length));}).toList();
             vessels+=widened.size();
             placed.add(new FluidFacts.Placed(new FluidFacts.Island(facts.dimension(),facts.packageId(),components,widened,facts.filters(),null),row.committed()));
         }
