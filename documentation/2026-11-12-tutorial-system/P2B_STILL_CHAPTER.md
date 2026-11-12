@@ -1,50 +1,50 @@
 # P2b: chapter 2, the still
 
 Batch `2026-11-12-tutorial-system`, 2026-11-12. Commits: A 5e5d3e25a, B 8922ffd73, C 05c2e81da, D a90748849, E 7d1cbd1f1;
-water step 362008a6b; re-record on the fixed law 97e1a949f, chapter on the new run dcfbe7eb1.
+water step 362008a6b; fixed law 97e1a949f, dcfbe7eb1; on the merged base (still law per mole of distillate, partial
+condenser, PR78 kernel): compile 29d05694c, recording c074b11a9, chapter 49175330f.
 
 ## What was built
-- A: `StillRunRecorder` runs the still law offline on 500 L of medium crude, 60 % full, solid fire at full firing,
-  design cooling water at 25 °C. `tools/tutorial-recordings/StillRun` writes `still_run.json` (144 points).
-  `StillRunRecordingTest` checks the mass balance, the order of the lines, the overheat ending and that a rerun equals the file.
-- B: film tracks Label, Legend, Flame, Level, Readout (two at most), Pointer, Dots by a Series; `Labels.place`,
-  `Bodies`, `FilmOverlay`. `Scene.at` stays pure.
-- C: `still_inside` reworked; `still_build` (4 stops, connection labels from the shape); `still_run` (4 stops: first
-  drop, end of naphtha, end of kerosene, and the run's end, where the still cuts its own fire and the heavy part stays).
-- D: card `pot_temperature`: pot temperature against the share distilled, the area coloured by the part coming over,
-  cut lines "Second drum" (end of naphtha) and "Fire out" (end of kerosene); past the fire out the curve runs on,
-  dimmed, to the run's end ("Fire left on").
-- E: chapter `still`: build, charge, water, watch, fire, first, cut, switch, stop; terms vapour, condenser, distillate,
-  cut. Criteria `still_state` (`FluidNetwork.deliver`; rule `StillCondition`), `still_stopped` (`FluidNetwork.edit`,
-  firing set to 0 on a firing still), `diverter_switched` (`FluidDeviceBlock`, a diverter turned by hand).
+- `StillRunRecorder` runs the still law offline: 500 L solid-fired pot, built-in condenser, no column, 60 % full of medium
+  crude flashed at 25 °C, firing 1, design water at 25 °C (outlet floor 30 °C). `tools/tutorial-recordings/StillRun`
+  writes `still_run.json`; `StillRunRecordingTest` holds it to the law (a rerun equals the file within 1e-9).
+- Films `still_inside`, `still_build`, `still_run` (4 stops), card `pot_temperature`, chapter `still` (9 steps).
 
-## The recording (on the law of batch 2026-11-12-still-heat-per-distillate)
+## The recording (merged base)
 | line | process s | pot K | °C | play min (factor 4) |
 |---|---|---|---|---|
-| first drop | 220.4 | 312.92 | 39.8 | 0.92 |
-| end of naphtha | 3905.4 | 505.79 | 232.6 | 16.27 |
-| end of kerosene | 5019.6 | 560.21 | 287.1 | 20.91 |
-| end (law's overheat cut) | 6220.7 | 623.15 | 350.0 | 25.92 |
-143 law steps; of 259.47 kg charged, 108.43 kg distilled (41.8 %), 1.77 kg vented, 149.27 kg left in the pot. Statuses
-of the 144 points: DISTILLING 124 (86 %), COOLING_LIMITED 17 (12 %), OVERHEAT 2 (1 %), HEATING 1. The recording is
-final (`ended_at`: `overheat`). Up to the end of naphtha it equals the first recording: the old law went wrong only
-past 248 °C.
+| first drop (first DISTILLING point) | 293.9 | 317.74 | 44.6 | 1.22 |
+| trickle (0.1 % of the charge's mass at the spout) | 1041.4 | 363.31 | 90.2 | 4.34 |
+| end of naphtha | 3907.3 | 505.85 | 232.7 | 16.28 |
+| end of kerosene | 5021.4 | 560.27 | 287.1 | 20.92 |
+| end (law's overheat cut) | 6324.4 | 623.15 | 350.0 | 26.35 |
 
-## Decisions
-1. first and cut accept DISTILLING or COOLING_LIMITED; fire and stop those two, HEATING and BOILING.
-2. Cut at 506 K (end of naphtha, rounded); fire out at the end of kerosene, its 21 minutes of play in the stop step.
-   Both read from the recording by gates. Step texts name no temperature (the unit is the player's).
-3. Films say "cooler"; the build step marks "condenser". TutorialTextTest lets a professional word stand where it is
-   marked, in its term's entry, or in a film caption shown after the term's step.
-4. `switch`: a diverter turns by hand. `water` (media `read`, key "Got it"): `Stills` lines 364-383 and 437 show a
-   still with no water condenses only part of its vapour. The charge step names its source by one key.
-5. The term "boil dry" is gone: on the new run the pot overheats with 38 % of its volume left; the stop step says
-   "before the pot overheats".
-6. The stop step reads `world.view(id).still()` before the setting applies: a cached read, no solver run.
+145 law steps, `ended_at` overheat, no refusal. Of 259.51 kg charged: 106.32 kg distilled (40.97 %), 3.88 kg vented
+(1.49 %), 149.32 kg left (57.54 %). Statuses of the 146 points: HEATING 1, BOILING 2 (gas to the vent only), DISTILLING
+139 (95 %), OVERHEAT 4; no COOLING_LIMITED. The first drop is a trace (0.03 % of the mass leaving that step is liquid;
+14 % at 81 °C, 48 % at 103 °C, 91 % at 128 °C). The old run: first drop 0.92 min at 39.8 °C (light gas the old condenser
+sent to the spout), 17 points COOLING_LIMITED, 143 steps, 41.8 % distilled.
 
-## Tests and open items
-21 tutorial classes (93 tests) pass, with HeatDiagramTest, KitLayoutTest, DrawCallTest and the 7 classes naming
-FluidNetwork or FluidDeviceBlock. Final lane: FluidPresentationGameTests, DcsConsoleGameTests, FluidServerBenchmark.
-COOLING_LIMITED falls on the early, light-end points, the condensate root defect the law batch names; a further
-recording after the condenser fix if the owner approves it. In-game check: film labels, drums, the triggers with the
-still screen open, the diverter step, an unwatered still going COOLING LIMITED.
+## What changed in the chapter
+1. `first` and `cut` count liquid at the spout: criterion field `liquid` (the view's distillate flow above zero), no
+   status list. A head that only vents gas reads BOILING in the world (`Stills.status`: DISTILLING only where liquid
+   reached the spout's account) and gives no distillate flow, so neither fires on it.
+2. `first` step: "after about 4 minutes of play ... in a steady trickle": the trickle line (0.26 kg in the drum,
+   5.9 g/s of play), not the trace at 1.2 min. Gate: the text's minutes = the trickle line's, rounded.
+3. Cut at 506 K (end of naphtha, unchanged); stop step at 21 minutes of play (end of kerosene, unchanged).
+4. Film: stops on the new lines (45, 233, 287, 350 °C); the drums fill with the spout's liquid (the vented gas no
+   longer counts); the vent is not shown (it needs a new word and a stop). The part coming over (colours, dots) stays
+   the band with the most mass in what leaves the pot, spout and vent together.
+5. Card: the cursor line breaks round "Second drum", "Fire out" and "Fire left on" (it crossed two of them).
+6. Charge step: "Pipe crude into the pot from a Fluid converter (another mod's crude oil) or Fluid Generator until it is
+   half full." The bundled rules turn `#c:crude_oil` (TFMG, PneumaticCraft) and `ad_astra:oil` into medium crude at
+   ambient. A survival player without one of those mods has no crude source.
+
+## Tests
+29 classes, 222 tests, all pass (`--tests`, `--max-workers 4`): the 22 under `science/tutorial` and
+`client/gui/tutorial` (EquipmentInfoCoverageTest included) and the 7 naming FluidNetwork or FluidDeviceBlock. Not run:
+the still law's own classes (the final lane's on this base), LanguageFilesTest, UnitTextTest.
+
+## Open
+In-game check: film labels, drums, the triggers with the screen open (BOILING, then DISTILLING at a trace), the diverter,
+an unwatered still. `first` fires at the trace (about 1 min), its text names the trickle (4): option, a least flow.

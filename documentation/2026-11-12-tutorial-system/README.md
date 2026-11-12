@@ -62,6 +62,11 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
   mole of distillate on the aqueous branch's column, the partial condenser at the water plus 5 K, the closed valve on
   dry trays) and the aqueous branch's newer tip (5106f0c15: main 0.28.0, fluid conversion). Conflicts only in
   `documentation/INDEX.md` (every row kept). No test run.
+- 2026-11-12: the tutorial on the merged base (29d05694c, c074b11a9, 49175330f, 818bfb8a8): the recorder compiles on the
+  W4 column; the still run recorded again (OVERHEAT at 350 °C, 145 steps, 41.0 % distilled, 1.5 % vented, no
+  COOLING_LIMITED; first drop a trace at 1.2 min, a new trickle line at 4.3 min); first and cut count liquid at the spout;
+  the charge step names the Fluid converter; the card's cursor breaks round its words; items for the two converter kinds
+  (40 items). `crude_barrel.json` unchanged. 29 classes (222 tests) pass. P2B_STILL_CHAPTER.md.
 
 ## Code areas (proposed)
 
@@ -75,22 +80,22 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
 - Merge order (owner, 2026-11-12): this branch merges after `claude/ethanol-compound-matrix-4b318d`. It now holds that
   branch (at 6b8d03389, with main 0.28.0) and the still branch `claude/still-on-aqueous-fdba0c` (at 1b1ad1d07); when the
   aqueous branch changes again, merge it again. The still branch has had no code review and no final lane.
-- After the merges: the test sources do not compile (`StillRunRecorder` calls `solve` without the outlet argument);
-  `still_run.json` and chapter 2 are on the old law and equation of state (its first drop at 40 °C is gas the old
-  condenser sent to the spout); `crude_barrel.json` and the P0 to P3 gates are not run on the new base.
+- After the merges: done. The tutorial compiles, is recorded and gated on the merged base; the still law's own classes
+  and the fluid GameTests wait for the final lane.
 - The still with trays on crude light ends answers as a pot still (the still batch's option B is open): chapter 3 must
   not show a trayed still on crude until it is fixed.
 
 - O1: decided 2026-11-12, reference only (creative tab and JEI).
 - P3: the owner's review of the icon sheet and the 160 lines; the in-game rows of P3_ITEMS_AND_JEI.md; icons alike at
   1x (exchanger and kettle, grate boiler and fixed-bed gasifier) wait for their models.
-- O2: the Forge fluid converter is on main since 0.28.0 (batch 2026-11-12-fluid-conversion); chapter 2's charge step does
-  not name it yet.
+- O2: the charge step names the Fluid converter (bundled rules: `#c:crude_oil` of TFMG and PneumaticCraft, `ad_astra:oil`).
+  A survival player without one of those mods has no crude source until an extraction system exists.
 - D4: the small column, chosen by the owner after the three candidates are solved.
 - P0: the owner's one in-game check of the scene player (P0_SCENE_PLAYER.md, last section).
 - P1: the owner's review of the English text and the renders; the in-game rows of P1_GUIDE_AND_HELP.md; the Field
   Guide's final icon.
 - P2a: the owner's review of chapter 1's text, the four marks and the renders; decisions 1 and 2 of
   P2A_CRUDE_CHAPTER.md (the road's marks from a test-code catalog, the lightest cut's lower edge).
-- P2b: a further recording after the condenser fix (the single stage's K = 1 root), if the owner approves it; the owner's
-  review of chapter 2's text and renders; the in-game check named in P2B_STILL_CHAPTER.md.
+- P2b: the owner's review of chapter 2's text and renders (`tmp/tutorial-renders/p2b/`); whether `first` should wait for
+  a least distillate flow (it fires at the first trace, about 1 minute, while its text names the trickle at 4); the
+  in-game check named in P2B_STILL_CHAPTER.md.

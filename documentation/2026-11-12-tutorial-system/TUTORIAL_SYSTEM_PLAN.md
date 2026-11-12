@@ -159,8 +159,10 @@ column uses its coarse body (`RenderLod`) when small on screen; translucent cut 
   where it handles the player's "firing off" against the cached view, `switch` where a player turns a Diverter Valve.
 - Films `still_build`, `still_run` and the reworked `still_inside`; card `pot_temperature`. Their numbers come from
   `recordings/still_run.json`, a run of the real law (500 L, 60 % full of medium crude, full firing).
-- The recording is on the fixed law (batch `2026-11-12-still-heat-per-distillate`, merged into this branch): the run
-  ends where the law cuts the fire at 350 °C, 41.8 % distilled. The fire goes out at the end of the kerosene; the
+- The recording is on the still law per mole of distillate with the partial condenser (batch
+  `2026-11-12-still-heat-per-distillate`, merged into this branch): the light gas vents first (BOILING), the first liquid
+  is a trace at 1.2 minutes of play and a trickle at 4; the run ends where the law cuts the fire at 350 °C, 41.0 %
+  distilled. `first` and `cut` count liquid at the spout. The fire goes out at the end of the kerosene; the
   film's last stop and the card's dimmed stretch show the fire left on, the heavy part staying in the pot (chapter 3's hook).
 - `water` is a reading step: by the code a still's condenser with no cooling water condenses only part of its vapour.
 
@@ -172,10 +174,10 @@ has a film, a card, the `?` tour of its screen, its JEI lines, and "next in the 
 
 ### The first crude (D6)
 
-The owner: a converter from a Forge fluid, and later a crude extraction system. Neither is in the code. Chapter 2's
-charging step names the source through one key, so it follows whichever exists; until then it uses the Fluid
-Generator, which is a creative block. The converter is a prerequisite for a survival tutorial and is not part of
-this plan.
+The owner: a converter from a Forge fluid, and later a crude extraction system. The Fluid converter is on main since
+0.28.0; its bundled rules turn `#c:crude_oil` (TFMG, PneumaticCraft) and `ad_astra:oil` into medium crude at ambient.
+Chapter 2's charging step names it, and the creative Fluid Generator, through one key. Without one of those mods a
+survival player has no crude until the extraction system exists.
 
 ## 6. The small column template
 
