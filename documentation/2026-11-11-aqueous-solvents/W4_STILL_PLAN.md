@@ -189,3 +189,41 @@ Three statements of this plan did not hold:
      the end. No tray of a liquid without water is tested.
    - Gates added: no tray colder than the stage above it by more than 0.1 K; the water and hexane profile flat
      within 0.1 K at the pot's temperature and vapour.
+
+## 12. Two liquids on the trays: section 11's D4 withdrawn (2026-11-12)
+
+Report `tmp/w4-still/reports/W4A_TWO_LIQUID_TOP.md`; nothing committed yet. Three forms compared (the limit).
+
+1. Expected. A tray in the gap holds two liquids at its oil layer's bubble point. Water with n-hexane, 4 trays,
+   R = 3: every tray at 61.14 C under the same vapour (0.7936 hexane), the tray liquid the oil layer at saturation
+   (water about 0.003); the reflux takes 0.945 of the oil layer, the distillate is about 0.18 hexane, 0.82 water.
+2. What the two built forms did.
+   - One-liquid trays (D4 as approved) from a start at the pot's whole liquid: the trays start half water, read
+     as one liquid (unstable; the 18 C tray), and cycle by 5 to 30 K. Relaxation converged some cases and not
+     others, and slowed the wash's 8 trays at R = 3 from 33 to 110 iterations.
+   - Trays stated like the pot (section 11): hexane at 3e-7 and water with hexane fail in 300 iterations; wet
+     naphtha takes 399 flashes against 34 and returns 55 % of its steam to the pot.
+   - Cause of the second (derived from the code): K over the tray's whole liquid makes the method read the tray's
+     vapour as proportional to its liquid, and in the gap the vapour does not depend on it. One tray contracts by
+     S/(1+S), S = V y_w / (L x_w), about 92 at the edge of the gap: 0.989 an iteration. A remedy is a three-phase
+     Newton column, not this batch's.
+   - The first fails by its start, not its answer: at the answer each tray is the oil layer at saturation, where
+     one liquid's K is Henry's (about 69 for water) and smooth through the edge of the gap. From an oil-layer
+     start the first balance returns it: water x = 0.8256 / 276 = 0.0030.
+3. Decision (third form, ordered; section 11's corrected D4 is withdrawn, D4 stands as approved in section 10):
+   - where the pot settles, a cold start puts the pot's oil layer on the condenser and the trays;
+   - the relaxation goes;
+   - a stall rule ends the iterating: 20 iterations with no new least change (300 stays the bound);
+   - where the solve stalls, or converges with a wet tray more than 1 K colder than the tray above it, and a
+     liquid of the still settles (pot, condensate or a tray), the answer is the pot's single stage with a notice,
+     "two liquids on the trays: the column does not rectify". A dry stall fails as today.
+4. Known limit, the owner's to veto. A still whose trays hold two liquids for real (an entrainer top; a reflux
+   that draws on the aqueous layer, such as steam distilling a heavy oil under reflux) runs as a pot still with
+   the notice. For a light immiscible trace the quasi-steady column was not its physics: returned oil first, the
+   steady column needs more of it on the trays than the pot holds. The distillate steps at the onset (wash with
+   hexane: about 0.72 to 0.26 ethanol near 1e-7 of the charge). The alternative is a three-phase column
+   (two-liquid trays, a Newton method): a later batch, about ten times the flashes on wet oil, and wet oil's
+   water then cycles on the trays instead of leaving overhead.
+5. Gates ordered: water with hexane converged in 10 iterations or fewer, trays within 0.1 K of 61.14 C; the wash
+   unmoved at 33 iterations; wet naphtha 0.98 or more in 34 flashes or fewer; dry pots bit for bit; no converged
+   answer with a tray more than 1 K colder than the stage above; a stalled solve's cost on the 46-compound list.
