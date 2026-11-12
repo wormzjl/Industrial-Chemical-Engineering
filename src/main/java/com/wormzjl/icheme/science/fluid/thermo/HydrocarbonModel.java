@@ -44,6 +44,7 @@ public final class HydrocarbonModel {
     private final int water;
     private final WaterShare share;
     private final ThreadLocal<WaterShare.Workspace> shareScratch;
+    private final ThreadLocal<TangentScratch> tangentScratch;
     private final String revision;
     private final FluidDomain domain;
     private final SpinePackageData spine;
@@ -73,6 +74,7 @@ public final class HydrocarbonModel {
                     derivation.acentricFactors()[water],derivation.mathiasCopeman()[water]);
             shareScratch=ThreadLocal.withInitial(share::newWorkspace);
         } else {share=null;shareScratch=null;}
+        tangentScratch=ThreadLocal.withInitial(()->new TangentScratch(evaluator.kernel()));
         molecularWeights=new double[compounds.size()+1];
         for(int i=0;i<compounds.size();i++)molecularWeights[i]=propertyPackage.properties().get(propertyPackage.components().indexOf(compounds.get(i))).molecularWeight();
         int packageWater=propertyPackage.components().indexOf(CubicPhaseEvaluator.WATER);
@@ -136,10 +138,17 @@ public final class HydrocarbonModel {
     public Phase phase(double t,double p,double[] amounts,PengRobinsonKernel.Root root,TranslatedPengRobinson.Workspace terms,boolean vaporCoexists) {
         if(!Double.isFinite(t)||!Double.isFinite(p))throw new IllegalArgumentException("Fluid state is not finite");
         double[] kernel=kernelAmounts(amounts);
+        return phase(t,p,kernel,root,values(t,p,kernel,root,terms,vaporCoexists));
+    }
+    /** The slot's root of the kernel's {@code amounts}, or the typed refusal of {@link #phase}. */
+    private TranslatedPengRobinson.Values values(double t,double p,double[] kernel,PengRobinsonKernel.Root root,TranslatedPengRobinson.Workspace terms,boolean vaporCoexists) {
         TranslatedPengRobinson.Values values;
         try{values=translated.evaluateValues(t,p,kernel,root,terms);}
         catch(PengRobinsonKernel.NoPhysicalRoot lost){throw RootAbsent.lost(root,t,p,lost);}
         if(vaporCoexists&&root==PengRobinsonKernel.Root.LIQUID&&values.physicalRootCount()==1&&!liquidLike(values))throw RootAbsent.liquidBesideVapour(t,p);
+        return values;
+    }
+    private Phase phase(double t,double p,double[] kernel,PengRobinsonKernel.Root root,TranslatedPengRobinson.Values values) {
         double v=values.molarVolume(),h=values.molarEnthalpy(),dvdp=values.volumePressureDerivative();
         if(water>=0&&kernel[water]>0) {
             double total=0;for(double x:kernel)total+=x;
@@ -151,6 +160,129 @@ public final class HydrocarbonModel {
         System.arraycopy(values.logFugacityCoefficientsView(),0,logPhi,0,kernel.length);
         if(water<0)logPhi[compounds.size()]=Double.NaN;
         return new Phase(v,h,h-p*v,dvdp,logPhi,root==PengRobinsonKernel.Root.VAPOR&&PhaseIdentification.vapourLike(values.phaseIdentificationParameter(),values.compressibility()));
+    }
+
+    /**
+     * The first-order model of one phase about a base point (ANALYTIC_JACOBIAN_PLAN.md section 3.1): the base
+     * {@link #phase} and, from one derivative evaluation of the kernel on the same root, the derivatives of the kernel
+     * part of its volume, enthalpy and {@code ln phi} in temperature, pressure and every amount. Null where the root is
+     * too close to coalescence to differentiate (the kernel's guard): the caller evaluates that phase exactly. The
+     * refusals of {@link #phase} are this entry's too.
+     */
+    public Tangent tangent(double t,double p,double[] amounts,PengRobinsonKernel.Root root,TranslatedPengRobinson.Workspace terms,boolean vaporCoexists) {
+        if(!Double.isFinite(t)||!Double.isFinite(p))throw new IllegalArgumentException("Fluid state is not finite");
+        double[] kernel=kernelAmounts(amounts);int n=kernel.length;
+        TranslatedPengRobinson.Values values=values(t,p,kernel,root,terms,vaporCoexists);
+        Phase base=phase(t,p,kernel,root,values);
+        double total=0;for(double x:kernel)total+=x;
+        double rt=FluidThermodynamics.R*t;
+        // The kernel part: the translated cubic and the ideal gas, without water's share.
+        double v=values.molarVolume(),h=values.molarEnthalpy(),dvdt=values.volumeTemperatureDerivative(),dvdp=values.volumePressureDerivative();
+        double cp=values.heatCapacity(),dhdp=values.enthalpyPressureDerivative(),raw=values.untranslatedVolume(),b=values.coVolume();
+        double[] partialVolume=values.partialMolarVolumesView().clone();
+        double[] logPhi=java.util.Arrays.copyOf(values.logFugacityCoefficientsView(),n);
+        TangentScratch scratch=tangentScratch.get();
+        // The same root on the kernel's own workspace: d ln phi/dn per mole of phase, the untranslated d ln phi/dT.
+        try{evaluator.kernel().evaluateDerivatives(t,p,kernel,root,scratch.mixture,scratch.derivatives);}
+        catch(IllegalStateException coalescing){return null;}
+        double[] kernelDt=scratch.derivatives.dLogPhiDtView(),residual=scratch.derivatives.partialMolarResidualEnthalpyView();
+        double[] logPhiT=new double[n],logPhiP=new double[n],partialEnthalpy=new double[n],rawPartialVolume=new double[n],coVolumes=new double[n];
+        double[][] logPhiN=new double[n][n];
+        for(int i=0;i<n;i++) {
+            double c=translated.translation(i);
+            // ln phi_i carries +P c_i/(RT) from the translation; h carries +P c_i.
+            logPhiT[i]=kernelDt[i]-p*c/(rt*t);
+            logPhiP[i]=partialVolume[i]/rt-1/p;
+            partialEnthalpy[i]=terms.idealGasEnthalpy(i)+residual[i]+p*c;
+            rawPartialVolume[i]=partialVolume[i]-c;
+            coVolumes[i]=evaluator.kernel().coVolume(i);
+            double[] row=scratch.derivatives.dLogPhiDnRowView(i);
+            for(int j=0;j<n;j++)logPhiN[i][j]=row[j]/total;
+            if(!Double.isFinite(logPhiT[i])||!Double.isFinite(logPhiP[i])||!Double.isFinite(partialEnthalpy[i]))throw new IllegalArgumentException("Nonfinite chemical-potential derivative");
+        }
+        return new Tangent(this,base,t,p,kernel.clone(),total,v,h,raw,b,total*dvdt,total*dvdp,total*cp,total*dhdp,dvdt,dvdp,
+                partialVolume,partialEnthalpy,rawPartialVolume,coVolumes,logPhi,logPhiT,logPhiP,logPhiN);
+    }
+
+    /** One thread's scratch for {@link #tangent}: the kernel's own workspace and derivative bundle. */
+    private static final class TangentScratch {
+        final PengRobinsonKernel.Workspace mixture;final PengRobinsonKernel.Derivatives derivatives;
+        TangentScratch(PengRobinsonKernel kernel){mixture=kernel.newWorkspace();derivatives=kernel.newDerivativesWithoutHeatCapacity();}
+    }
+
+    /**
+     * One phase about its base point {@code (T0, P0, n0)}, to first order ({@link #tangent}). {@link #at} gives the phase
+     * at a nearby point: the kernel part of its volume and enthalpy from the extensive derivatives
+     * ({@code V = N0 v0 + N0 v_T dT + N0 v_P dP + sum vbar_i dn_i}, the enthalpy the same with {@code c_p}, {@code h_P}
+     * and {@code hbar_i}), {@code ln phi} from its three derivative blocks, and water's share, a closed form with no
+     * kernel call, exactly at the nearby point's temperature, pressure, water fraction, untranslated volume and
+     * co-volume. {@code dv/dP} and the vapour-like flag are the base's. At the base point itself the phase is the base
+     * phase, bit for bit.
+     */
+    public static final class Tangent {
+        private final HydrocarbonModel model;
+        private final Phase base;
+        private final double t0,p0,total,v0,h0,raw0,b0,volumeT,volumeP,enthalpyT,enthalpyP,dvdt,dvdp;
+        private final double[] n0,partialVolume,partialEnthalpy,rawPartialVolume,coVolumes,logPhi,logPhiT,logPhiP;
+        private final double[][] logPhiN;
+        private Tangent(HydrocarbonModel model,Phase base,double t0,double p0,double[] n0,double total,double v0,double h0,double raw0,double b0,
+                        double volumeT,double volumeP,double enthalpyT,double enthalpyP,double dvdt,double dvdp,
+                        double[] partialVolume,double[] partialEnthalpy,double[] rawPartialVolume,double[] coVolumes,
+                        double[] logPhi,double[] logPhiT,double[] logPhiP,double[][] logPhiN) {
+            this.model=model;this.base=base;this.t0=t0;this.p0=p0;this.n0=n0;this.total=total;this.v0=v0;this.h0=h0;this.raw0=raw0;this.b0=b0;
+            this.volumeT=volumeT;this.volumeP=volumeP;this.enthalpyT=enthalpyT;this.enthalpyP=enthalpyP;this.dvdt=dvdt;this.dvdp=dvdp;
+            this.partialVolume=partialVolume;this.partialEnthalpy=partialEnthalpy;this.rawPartialVolume=rawPartialVolume;this.coVolumes=coVolumes;
+            this.logPhi=logPhi;this.logPhiT=logPhiT;this.logPhiP=logPhiP;this.logPhiN=logPhiN;
+        }
+        /** The exact phase at the base point. */
+        public Phase base() { return base; }
+        public double temperature() { return t0; }
+        public double pressure() { return p0; }
+        /** The kernel part of the base's molar volume and enthalpy (the translated cubic and the ideal gas, no share). */
+        public double kernelVolume() { return v0; }
+        public double kernelEnthalpy() { return h0; }
+        /** Partial molar volume and enthalpy of kernel component {@code i} (kernel part). */
+        public double partialMolarVolume(int i) { return partialVolume[i]; }
+        public double partialMolarEnthalpy(int i) { return partialEnthalpy[i]; }
+        /** {@code d ln phi_i / d n_j} per mole of amount (the kernel's per mole of phase, over the base's total). */
+        public double logFugacityAmountDerivative(int i,int j) { return logPhiN[i][j]; }
+        public double logFugacityTemperatureDerivative(int i) { return logPhiT[i]; }
+        public double logFugacityPressureDerivative(int i) { return logPhiP[i]; }
+        /** The largest change of a mole fraction between the base and conserved {@code amounts} (water last). */
+        public double compositionShift(double[] amounts) {
+            int n=n0.length;double sum=0,worst=0;
+            for(int i=0;i<n;i++)sum+=amounts[i];
+            for(int i=0;i<n;i++)worst=Math.max(worst,Math.abs(amounts[i]/sum-n0[i]/total));
+            return worst;
+        }
+        /** The phase of conserved {@code amounts} (water last) at {@code (t, p)}, to first order about the base. */
+        public Phase at(double t,double p,double[] amounts) {
+            int n=n0.length;
+            if(amounts.length!=model.compounds.size()+1)throw new IllegalArgumentException("Fluid basis mismatch");
+            if(n<amounts.length&&amounts[n]!=0)throw new IllegalArgumentException("Water in a phase of a list without water (package "+model.propertyPackage.id()+")");
+            double dT=t-t0,dP=p-p0,sum=0;
+            for(int i=0;i<n;i++)sum+=amounts[i];
+            if(!(sum>0)||!Double.isFinite(t)||!Double.isFinite(p))throw new IllegalArgumentException("Fluid state is not finite");
+            double[] out=new double[amounts.length];
+            for(int i=0;i<n;i++)out[i]=logPhi[i]+logPhiT[i]*dT+logPhiP[i]*dP;
+            // Extensive increments less the base's molar value times the amount's: exactly zero at the base point.
+            double dv=volumeT*dT+volumeP*dP,dh=enthalpyT*dT+enthalpyP*dP,draw=dv,db=0;
+            for(int j=0;j<n;j++) {
+                double dn=amounts[j]-n0[j];
+                if(dn==0)continue;
+                dv+=(partialVolume[j]-v0)*dn;dh+=(partialEnthalpy[j]-h0)*dn;draw+=(rawPartialVolume[j]-raw0)*dn;db+=(coVolumes[j]-b0)*dn;
+                for(int i=0;i<n;i++)out[i]+=logPhiN[i][j]*dn;
+            }
+            double v=v0+dv/sum,h=h0+dh/sum;
+            if(model.water>=0&&amounts[model.water]>0) {
+                double[] share=new double[WaterShare.SIZE];
+                model.share.phase(t,p,amounts[model.water]/sum,raw0+draw/sum,b0+db/sum,dvdt,dvdp,model.shareScratch.get(),share);
+                v+=share[WaterShare.V];h+=share[WaterShare.H];
+            }
+            if(n<amounts.length)out[n]=Double.NaN;
+            if(!(v>0)||!Double.isFinite(h))throw new IllegalArgumentException("Invalid translated phase properties");
+            return new Phase(v,h,h-p*v,base.volumePressureDerivative(),out,base.vaporLike());
+        }
     }
 
     /**

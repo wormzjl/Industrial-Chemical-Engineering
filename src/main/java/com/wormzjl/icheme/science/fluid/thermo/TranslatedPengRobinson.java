@@ -249,6 +249,8 @@ public final class TranslatedPengRobinson {
         public double temperature(){return temperature;}
         /** Component {@code i}'s ideal-gas heat capacity at the prepared temperature, J/(mol K). */
         public double idealGasHeatCapacity(int i){return heatCapacity[i];}
+        /** Component {@code i}'s ideal-gas enthalpy at the prepared temperature on the model's datum, J/mol. */
+        public double idealGasEnthalpy(int i){return enthalpy[i];}
     }
 
     /**
