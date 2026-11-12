@@ -107,6 +107,9 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
 - 2026-11-13: P5 stage A (P5_UNIT_AND_BUILD.md, part 2): the column's slots and links, Import, the supplies in
   survival (no in-mod steam source; fuel, water, power and products), refusals and limits in code order, the headless
   proof and the criteria points. Documents only, no test run. Chapter 6 waits for the owner.
+- 2026-11-13: P5 part 1 corrections (P5_UNIT_AND_BUILD.md): pages open on their picture (film's first stop or the
+  body), unit films framed large with their insides and readable dots, map tags clear of tags and symbols, one new
+  term per step. `--tests` run once, 4 workers: 13 classes, 75 tests pass.
 
 ## Code areas (proposed)
 

@@ -17,7 +17,7 @@
   the sheet's streams. `map` card `unit_map`: `small_crude_unit.json` drawn by the simulator's own `SheetPainter`, each
   unit a place that opens its kind's page (H-101 the vertical heater, E-102 the air cooler: the types Size all gives);
   done once a page was opened. `tower` page `equipment_column`, done when read to its end. `next` one sentence.
-  Terms preheat and pumparound (at `unit/whole`).
+  Term pumparound at `unit/tower` (corrections below).
 - **Changes outside the tutorial packages:** `EquipmentInfoItem.openGuide` opens the kind's page;
   `HeatDiagramRender.tinted` keeps an item sprite's colours (render tool). The guide step media `page:<id>`.
 - The chapter's title is "Crude unit": "The crude unit" did not fit the door's key in the 312-px window.
@@ -39,6 +39,32 @@ title's width), and the classes they touch rerun once each. Not run: LanguageFil
 in the 320 by 240 window, eight a sheet, the unit's first), `pages-dark` (column, valve), `card-unit_map` (nothing pressed, H-101 pressed, small dark), `guide-unit`. Fixed from them:
 slanted pipe legs, cuts that did not open the bodies, the heater coil outside its shell, the drum's oil box, bodies too
 small, key rows in the small window, map tags that met.
+
+### Corrections after the parent's check of part 1
+
+1. **Picture first.** A page opens on its picture (`PagePicture`): the film's first stop where it has a film, else the
+   kind's reference body from the icon's view (south-east, 30 degrees up), centred on its projected extent; the valve
+   its item's valve geometry. The picture sits above the lines at both sizes, in the films' glass shape, at most half
+   the room over the keys; the lines scroll under it, the picture stays. Built when the page first shows (no film body
+   before), drawn by the screen's `SceneView`; Watch opens the film at its first stop (`FilmScreen.fromFirstStop`).
+   DrawCallTest counts the picture's draws inside the page budget. The item icon on the page is gone.
+2. **Unit films.** Each stop frames its body at 92 % by 88 % of the glass, the yaw turned to the body's long side;
+   stop 2 closes in on what the caption names (the shell's axis, the drum's oil, the heater's tubes). Dots carry a size
+   (`Track.Dots.size`, default the old 0.035 m; behaviour unchanged for other films), scaled to 2.4 px at the inside
+   stop. Exchanger: a tube bundle on the nozzles' axis, crude dots in the tubes, residue dots in the shell. Heater:
+   14 wall tubes and 12 top-box tubes in shaft grey, the flames on the floor. Drum: oil pools along the cut shell, gas
+   dots above, water in the boot. Tank: the roof ring floats on the liquid. No `ShapeRasterizer` change.
+3. **Map tags** (`UnitMap.tags`): each tag takes the cheapest free place round its symbol (rings below and above,
+   shifted and flush, then the sides), fewest choices first; never on another tag or a symbol, few line pixels crossed.
+   Checked at both guide sizes and two card areas; no unit moved in the example file.
+4. **Wording.** `whole` only says to watch the crude cross the unit; "cooling loop" is the plain name and labels use
+   it; pumparound is given once, at `tower`; the term preheat is gone. Pump stop 2: in at the front (its axial suction).
+
+Gates: UnitFilmsTest (each stop's body fills 60 % of the glass's width or height; dots at least 2 px at the inside stop;
+cut films show tubes, a roof or liquids), UnitMapCardTest (no tag on a tag or a symbol, guide card at 464 and 312),
+GuidePageTest (the picture inside the well, above the lines, in the glass's shape), DrawCallTest (the picture's draws),
+GuideFileTest (every page has a picture). One run, `--tests`, 4 workers, with the classes that load `Track`,
+`DotMotion` and `UnitMap`: 13 classes, 75 tests, all pass. Renders again in `tmp/tutorial-renders/p5/`.
 
 ## Part 2, stage A: what building and starting the unit asks for (facts only; no code changed)
 
