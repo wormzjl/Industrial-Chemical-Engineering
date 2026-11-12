@@ -59,7 +59,7 @@ Changed so far: `science/thermo/PengRobinsonKernel`, `HuronVidalExcess`; `scienc
 
 ## Open items
 
-- Cost (W3B_NETWORK_PLAN.md section 37; ANALYTIC_JACOBIAN_PLAN.md sections 14, 15): bounds dry 1.1, wet 2.0, polar 1.25 (owner). The settled form: wet 1.95; dry equals main when both are profiled (0.804 and 0.805 ms); polar 1.38 to 1.41, its extra 0.36 ms being the polar correction in each exact kernel evaluation and a workspace allocation. Owner decision open: polar's bound. Later cost batch: the linear solve for the node blocks, the kernel workspace's reuse, the correction's cost.
+- Cost: closed for this batch (owner: "Accept the bounds", "Accept 1.45"; W3B_NETWORK_PLAN.md section 37, ANALYTIC_JACOBIAN_PLAN.md sections 14, 15): dry 1.1, wet 2.0, polar 1.45 times main; measured dry equal to main, wet 1.95, polar 1.38 to 1.41. Later cost batch: the linear solve for the node blocks, the kernel workspace's reuse, the polar correction's cost.
 - Next: the full campaign for the settled Jacobian form (1000 seeds); a hold class the baseline does not have goes to the owner.
 - Cold 65 (ANALYTIC_JACOBIAN_PLAN.md section 13): not the Jacobian's form; a near-singular solve at a junction with a trace liquid, reached by a trajectory that moved in its last digits. Left to step 7's campaign.
 - N10 done (274e06ac1). The code guide chapters are in progress (uncommitted).
