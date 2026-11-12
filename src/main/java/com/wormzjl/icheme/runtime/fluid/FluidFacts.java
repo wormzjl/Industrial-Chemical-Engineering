@@ -998,7 +998,7 @@ final class FluidFacts {
             var own=model.island(set);
             var graph=PassiveNetwork.mintJunctions(IslandSets.onto(island.graph(),model,own,origins),own);long id=next++;
             var dimension=registrations.get(island.physicalIds().iterator().next()).device().position().dimension();
-            entries.add(new FluidCheckpointCodec.IslandEntry(dimension,key.packageId(),own.compounds(),new IslandCoordinator.Snapshot(id,0,graph,new IslandClock.Snapshot(epoch,epoch,0,REBUILT_CADENCE),
+            entries.add(new FluidCheckpointCodec.IslandEntry(dimension,key.packageId(),own.compounds(),own.wet(),new IslandCoordinator.Snapshot(id,0,graph,new IslandClock.Snapshot(epoch,epoch,0,REBUILT_CADENCE),
                     Optional.empty(),status,Map.of(),Optional.empty(),0)));
         }
         var recoveries=new HashMap<UUID,WorldTopologyLedger.RecoveredSolid>();

@@ -825,7 +825,7 @@ class FluidFactsCompatTest {
         assertEquals("icheme:network_renamed",kept.world().orElseThrow().basis().packageId());
         // The world saves its islands as the authority does, on the current package: every unit is written again under the
         // new id (a unit is reused only for the package it names), and the save loads exactly.
-        var islands=new FluidCheckpointCodec.Checkpoint(kept.checkpoint().islands().stream().map(e->new FluidCheckpointCodec.IslandEntry(e.dimension(),"icheme:network_renamed",e.compounds(),e.snapshot())).toList());
+        var islands=new FluidCheckpointCodec.Checkpoint(kept.checkpoint().islands().stream().map(e->new FluidCheckpointCodec.IslandEntry(e.dimension(),"icheme:network_renamed",e.compounds(),e.wet(),e.snapshot())).toList());
         store.commit(store.prepare(islands,kept.world(),FluidCheckpointCodec.epoch(fresh.core()),key->key.on(renamedModel)));var again=store.image();
         var resaved=FluidCheckpointCodec.readCore(again.core());
         assertEquals(List.of("icheme:network_renamed"),resaved.packages().stream().map(FluidCheckpointCodec.PackageRecord::packageId).toList());

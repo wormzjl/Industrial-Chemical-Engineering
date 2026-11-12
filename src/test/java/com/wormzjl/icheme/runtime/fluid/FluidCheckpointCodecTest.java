@@ -246,6 +246,26 @@ class FluidCheckpointCodecTest {
         assertArrayEquals(full.endpointFlows(),after.lastResult().orElseThrow().endpointFlows(),"the committed end flows (format 7)");
         assertSameImage(image,FluidCheckpointCodec.encode(FluidCheckpointCodec.decode(image,key->key.on(model)),key->key.on(model)),"a reloaded checkpoint re-encodes to the same bytes");
     }
+    /** Format 50 (batch 2026-11-11-aqueous-solvents, FINAL_LANE_REVIEW.md): an island that holds no water runs on its list
+     * without water, and its saved key says so. A nitrogen tank's island comes back on the same model, the one its
+     * certificate's revision names; the list with water is another model with another revision. A whole list has no form
+     * without water. */
+    @Test void anIslandWithoutWaterComesBackOnItsOwnModel() {
+        var dry=wet.island(List.of("Nitrogen"));var watered=wet.on(List.of("Nitrogen"));
+        assertFalse(dry.wet());assertTrue(watered.wet());assertNotEquals(dry.revision(),watered.revision(),"the two models of one list are told apart by their revisions");
+        var graph=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,dry.initialNitrogenCharge(1,298.15,150000,()->{}))),List.of());
+        var state=new IslandCoordinator.Snapshot(1,4,graph,new IslandClock.Snapshot(350,200,400,100),Optional.empty(),"READY");
+        var entry=new FluidCheckpointCodec.IslandEntry("minecraft:overworld",WET,dry.compounds(),dry.wet(),state);
+        assertSame(dry,entry.key().on(wet));assertSame(watered,new FluidCheckpointCodec.PackageKey(WET,dry.compounds()).on(wet));
+        var image=FluidCheckpointCodec.encode(new FluidCheckpointCodec.Checkpoint(List.of(entry)),key->key.on(wet));
+        var loaded=FluidCheckpointCodec.decode(image,key->key.on(wet));var after=loaded.islands().getFirst();
+        assertFalse(after.wet(),"the island's water choice round-trips");assertEquals(entry.key(),after.key());
+        assertSame(dry,after.key().on(wet),"the reloaded island runs on the model it was saved on");
+        var tank=after.snapshot().graph().reservoirs().getFirst();
+        assertArrayEquals(graph.reservoirs().getFirst().inventory().moles(),tank.inventory().moles());assertEquals(graph.reservoirs().getFirst().state().internalEnergy(),tank.state().internalEnergy());
+        assertSameImage(image,FluidCheckpointCodec.encode(loaded,key->key.on(wet)),"a reloaded checkpoint re-encodes to the same bytes");
+        assertTrue(new FluidCheckpointCodec.PackageKey(WET,null,false).wet(),"a whole list always carries water");
+    }
     /** Format 31 (batch 2026-11-03-rotating-machinery, W2): machines on their curves, control tag 5. A pump's and a
      * compressor's law (rated flow, head and efficiency, and since format 33 a pump's rated speed), speed and switch come back exactly, and the reloaded checkpoint
      * re-encodes to the same bytes. */

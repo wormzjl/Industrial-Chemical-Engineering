@@ -77,7 +77,7 @@ public final class FluidCheckpointGameTests {
                 helper.assertTrue(restored.certificate().isPresent(),"The restarted tank was not restored certified: "+restored.status()+" / "+restarted[0].certificationRefusal(saved[0].id()));
                 helper.assertTrue(restored.status().equals(status[0]),"The status line did not continue: "+restored.status());
                 // The restarted store was seeded by the load: its first save writes no unit for the unchanged tank and no topology.
-                loaded.bindCapture(()->new FluidSavedData.Capture(new FluidCheckpointCodec.Checkpoint(restarted[0].snapshots().stream().map(s->new FluidCheckpointCodec.IslandEntry(entry.dimension(),entry.packageId(),entry.compounds(),s)).toList()),
+                loaded.bindCapture(()->new FluidSavedData.Capture(new FluidCheckpointCodec.Checkpoint(restarted[0].snapshots().stream().map(s->new FluidCheckpointCodec.IslandEntry(entry.dimension(),entry.packageId(),entry.compounds(),entry.wet(),s)).toList()),
                         loaded.world().orElseThrow()));
                 loaded.save(new CompoundTag(),level.registryAccess());var first=loaded.lastSave();
                 helper.assertTrue(first.payloadsEncoded()==0&&first.payloadsReused()==1&&!first.topologyEncoded()&&first.stats().encodedBytes()==0,"The first save after the load encoded units: "+first.stats());
