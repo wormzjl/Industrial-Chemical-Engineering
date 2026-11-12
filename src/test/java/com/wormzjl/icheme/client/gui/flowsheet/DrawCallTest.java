@@ -180,4 +180,31 @@ class DrawCallTest {
         System.out.println("sample sheet in a frame batch: " + held.fillDraws() + " fill runs, " + held.textDraws() + " text runs, " + held.spriteDraws() + " sprites");
         assertTrue(held.fillDraws() + held.textDraws() <= FRAME_RUNS, held.fillDraws() + " fill runs and " + held.textDraws() + " text runs against " + FRAME_RUNS);
     }
+
+    /** A help tour's stop over the simulator (batch 2026-11-12-tutorial-system, P4b): the dim, the frame and the bubble with its sentence and keys, in one batch. */
+    private static final int TOUR_DRAWS = 4;
+
+    /**
+     * An open tour adds a few draw calls to the screen's frame (P4b): the stop's fills go in runs and its texts wait for them,
+     * at every stop of the simulator's sheet tour, the last one with its Show me key, at the smallest and the design frame.
+     */
+    @Test
+    void aTourStopIsAFewDraws() {
+        var words = new com.wormzjl.icheme.client.gui.tutorial.TourLayout.Words("Back", "Next", "Done", "Close", "Show me");
+        int most = 0;
+        for (int[] size : new int[][]{{SimulatorFrame.LEAST_W, SimulatorFrame.LEAST_H}, {SimulatorFrame.DOOR_W, SimulatorFrame.DOOR_H}}) {
+            var frame = new SimulatorFrame(size[0], size[1]);
+            for (var lit : List.of(frame.status(), frame.palette(), SimulatorFrame.inner(frame.well()), frame.help()))
+                for (boolean last : new boolean[]{false, true}) {
+                    var layout = com.wormzjl.icheme.client.gui.tutorial.TourLayout.of(size[0], size[1], lit,
+                            "Drag a unit from these tiles onto the sheet to add it, then join its ports with lines.", !last, last, last, words, SheetFixture.M);
+                    var c = new Counting();
+                    layout.draw(c, PanelSkin.DARK, "next");
+                    assertTrue(c.texts > 0 && c.fills > 0);
+                    most = Math.max(most, c.draws());
+                }
+        }
+        System.out.println("a tour stop: at most " + most + " draw calls");
+        assertTrue(most <= TOUR_DRAWS, most + " draw calls against " + TOUR_DRAWS);
+    }
 }

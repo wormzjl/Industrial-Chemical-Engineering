@@ -26,14 +26,17 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * The help tours' coverage (batch 2026-11-12-tutorial-system, P1): every tour has at most 7 stops; every anchor of the
  * still's tour stands in the rows StillDoor and DeviceColumn build, for at least one still, at every width the door takes;
- * every anchor of the guide's tour stands on GuidePage; each screen either has a tour or waits in {@link #LATER}.
+ * every anchor of the guide's tour stands on GuidePage; each screen either has a tour or waits in {@link #LATER}. P4b: the
+ * still with a column has its own tour (its reflux valve), whose anchors stand on such a still's page; the simulator's four
+ * tabs have theirs (their anchors: SimulatorTourTest).
  */
 class HelpCoverageTest {
     /** The screens with a tour, by class, and the tours they host. */
-    static final Map<String, Set<String>> TOURED = Map.of("GuideScreen", Set.of("guide"), "FluidDeviceScreen", Set.of("fluid_device.still"));
+    static final Map<String, Set<String>> TOURED = Map.of("GuideScreen", Set.of("guide"), "FluidDeviceScreen", Set.of("fluid_device.still", "fluid_device.still_column"),
+            "ProcessSimulatorScreen", Set.of("simulator.sheet", "simulator.results", "simulator.sizing", "simulator.basis"));
     /** The screens with no tour yet; phase P6 empties this list (and FluidDeviceScreen's other pages). */
     static final Set<String> LATER = Set.of("AssemblyScreen", "ControlPanelScreen", "EquipmentConstructorScreen", "FilmScreen", "GaugeScreen", "MachineScreen",
-            "PipelineToolScreen", "ProcessSimulatorScreen", "VesselScreen");
+            "PipelineToolScreen", "VesselScreen");
     /** Anchors a page resolves itself, not from its builder's rows. */
     static final Set<String> FRAME = Set.of("status", "title");
 
@@ -81,12 +84,24 @@ class HelpCoverageTest {
 
     @Test
     void everyAnchorOfTheStillsTourStandsOnItsPageAtEveryWidth() {
-        var tour = TourFile.load().get("fluid_device.still");
+        stillTourStands("fluid_device.still", stills());
+    }
+
+    /** The column's tour, which FluidDeviceScreen shows on a still with a column and its condenser: on such a still's page. */
+    @Test
+    void everyAnchorOfTheColumnStillsTourStandsOnSuchAStillsPage() {
+        var columns = stills().stream().filter(in -> in.readings().stream().anyMatch(r -> r.key().equals("still_reflux_run"))).toList();
+        assertFalse(columns.isEmpty());
+        stillTourStands("fluid_device.still_column", columns);
+        assertTrue(TourFile.load().get("fluid_device.still_column").stops().stream().anyMatch(s -> s.anchor().startsWith("still_reflux:")), "a stop on the reflux valve");
+    }
+
+    private static void stillTourStands(String name, List<DeviceColumn.Input> inputs) {
+        var tour = TourFile.load().get(name);
         var m = GuidePageTest.M;
         for (int width = 300; width <= 790; width += 7) {
             int door = FluidGuiLayout.side(width) - 10;
             var placed = new ArrayList<Map<String, ?>>();
-            var inputs = stills();
             for (var in : inputs) placed.add(Column.place(DeviceColumn.rows(in, TEXTS), 10, FluidGuiLayout.DOOR_TOP, door, m, Column.Metrics.COMPACT).slots());
             for (var stop : tour.stops()) {
                 if (FRAME.contains(stop.anchor())) continue;
@@ -95,7 +110,7 @@ class HelpCoverageTest {
                     var slot = slot(stop.anchor(), inputs.get(i));
                     found = slot != null && placed.get(i).containsKey(slot);
                 }
-                assertTrue(found, width + " px: " + stop.anchor() + " on the still's page");
+                assertTrue(found, width + " px: " + stop.anchor() + " on the still's page (" + name + ")");
             }
         }
     }

@@ -30,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class GuideCoverageTest {
     private static final Path DATA = Path.of("src/main/resources/data/icheme"), ADVANCEMENTS = DATA.resolve("advancement/tutorial");
     private static final Set<String> TRIGGERS = Set.of("minecraft:tick", "icheme:guide_step", "icheme:equipment_built", "icheme:still_state", "icheme:still_stopped",
-            "icheme:diverter_switched");
+            "icheme:diverter_switched", "icheme:sheet_run", "icheme:design_sent");
 
     private static JsonObject read(Path file) throws IOException {
         return JsonParser.parseString(Files.readString(file)).getAsJsonObject();
@@ -90,8 +90,10 @@ class GuideCoverageTest {
             parent = "icheme:tutorial/" + id;
             files.add(ADVANCEMENTS.resolve(id + ".json"));
         }
-        assertEquals("icheme:tutorial/still/stop", parent);
+        assertEquals("icheme:tutorial/simulator/send", parent);
         assertEquals("icheme:tutorial/crude/first", read(ADVANCEMENTS.resolve("still/build.json")).get("parent").getAsString(), "the still's build after chapter 1");
+        assertEquals("icheme:tutorial/still/stop", read(ADVANCEMENTS.resolve("tower/tray.json")).get("parent").getAsString(), "chapter 3 after the still");
+        assertEquals("icheme:tutorial/tower/many", read(ADVANCEMENTS.resolve("simulator/open.json")).get("parent").getAsString(), "chapter 4 after chapter 3");
         files.add(ADVANCEMENTS.resolve("root.json"));
         try (Stream<Path> all = Files.walk(ADVANCEMENTS)) {
             for (var file : all.filter(p -> p.toString().endsWith(".json")).toList()) assertTrue(files.contains(file), file + ": no advancement without its step");
@@ -121,7 +123,7 @@ class GuideCoverageTest {
     @Test
     void everyCriterionIsRegisteredAndEveryKindIsAStructureKind() throws IOException {
         var source = Files.readString(Path.of("src/main/java/com/wormzjl/icheme/runtime/tutorial/TutorialTriggers.java"));
-        for (var name : List.of("guide_step", "equipment_built", "still_state", "still_stopped", "diverter_switched"))
+        for (var name : List.of("guide_step", "equipment_built", "still_state", "still_stopped", "diverter_switched", "sheet_run", "design_sent"))
             assertTrue(source.contains("register(\"" + name + "\""), name + " registered");
         var kinds = new HashSet<String>();
         for (var kind : EquipmentShape.Kind.values()) kinds.add(kind.name());
@@ -181,7 +183,73 @@ class GuideCoverageTest {
     }
 
     private static JsonObject conditions(String step) throws IOException {
-        return criteria(read(ADVANCEMENTS.resolve("still/" + step + ".json"))).getFirst().getAsJsonObject("conditions");
+        return conditions("still", step);
+    }
+
+    private static JsonObject conditions(String chapter, String step) throws IOException {
+        return criteria(read(ADVANCEMENTS.resolve(chapter + "/" + step + ".json"))).getFirst().getAsJsonObject("conditions");
+    }
+
+    /** The first number before {@code after} in {@code text} ("22 minutes of play" gives 22), or fails. */
+    private static double number(String text, String after) {
+        var m = java.util.regex.Pattern.compile("(\\d+(?:\\.\\d+)?) ?" + java.util.regex.Pattern.quote(after)).matcher(text);
+        assertTrue(m.find(), "\"" + after + "\" in: " + text);
+        return Double.parseDouble(m.group(1));
+    }
+
+    /**
+     * P4b: chapter 3 asks what the still with a column records (still_trays.json): a still built with a column of the
+     * recording's trays, the valve open at the shown form's ratio, and its first cut at that form's pot temperature in whole
+     * K, liquid at the spout; the texts' trays, ratio and minutes of play are the recording's.
+     */
+    @Test
+    void theTowerStepsHoldTheRecordingsNumbers() throws IOException {
+        var shown = com.wormzjl.icheme.science.tutorial.cards.StillTraysData.columns().getLast();
+        var build = conditions("tower", "build");
+        assertEquals("BATCH_STILL", build.get("kind").getAsString());
+        assertTrue(build.get("column").getAsBoolean(), "a still with a column");
+        var reflux = conditions("tower", "reflux");
+        assertTrue(reflux.get("column").getAsBoolean());
+        assertEquals(shown.reflux(), reflux.get("min_reflux").getAsDouble(), 0, "the shown form's ratio");
+        var compare = conditions("tower", "compare");
+        assertTrue(compare.get("column").getAsBoolean());
+        assertTrue(compare.get("liquid").getAsBoolean(), "the cut is liquid at the spout");
+        assertEquals(Math.round(shown.first().pot()), compare.get("min_pot_temperature").getAsDouble(), 0, "the first cut's pot temperature, whole K");
+        var lang = TutorialText.english();
+        String text = lang.get("tutorial.icheme.guide.tower.build");
+        assertEquals(shown.stages(), (int) number(text, "trays"), "the build's trays: " + text);
+        assertEquals(shown.stages(), (int) number(lang.get("tutorial.icheme.guide.tower.build"), ":"), "Stages set to the recording's trays");
+        var ratio = java.util.regex.Pattern.compile("ratio to (\\d+)").matcher(lang.get("tutorial.icheme.guide.tower.reflux"));
+        assertTrue(ratio.find());
+        assertEquals(shown.reflux(), Double.parseDouble(ratio.group(1)), 0, "the ratio the text names");
+        assertEquals(Math.round(shown.first().playMinutes()), (long) number(lang.get("tutorial.icheme.guide.tower.compare"), "minutes of play"), "the first cut's minutes of play");
+    }
+
+    /**
+     * P4b: chapter 4 asks what the bundled small unit records (small_unit.json): the balance text's shares by mass, the
+     * lowered heater's outlet as the heat step's condition and its sentence's temperature and top share.
+     */
+    @Test
+    void theSimulatorStepsHoldTheRecordingsNumbers() throws IOException {
+        var bundled = com.wormzjl.icheme.science.tutorial.cards.SmallUnitData.bundled();
+        var lowered = com.wormzjl.icheme.science.tutorial.cards.SmallUnitData.lowered();
+        assertEquals("STEADY", bundled.status());
+        assertEquals("STEADY", lowered.status());
+        var lang = TutorialText.english();
+        String balance = lang.get("tutorial.icheme.guide.simulator.balance");
+        var shares = java.util.regex.Pattern.compile("(\\d+), (\\d+) and (\\d+) % by mass").matcher(balance);
+        assertTrue(shares.find(), balance);
+        for (int i = 0; i < 3; i++)
+            assertEquals(Math.round(100 * bundled.share(com.wormzjl.icheme.science.tutorial.cards.SmallUnitData.PRODUCTS.get(i))), Long.parseLong(shares.group(i + 1)), balance);
+        assertEquals(lowered.heaterKelvin(), conditions("simulator", "heat").get("max_heater_outlet").getAsDouble(), 1e-9, "the heat step: the lowered outlet");
+        String heat = lang.get("tutorial.icheme.guide.simulator.heat");
+        assertEquals(Math.round(lowered.heaterKelvin() - 273.15), (long) number(heat, "°C"), heat);
+        var falls = java.util.regex.Pattern.compile("from (\\d+) to (\\d+) %").matcher(heat);
+        assertTrue(falls.find(), heat);
+        assertEquals(Math.round(100 * bundled.share("overhead")), Long.parseLong(falls.group(1)), heat);
+        assertEquals(Math.round(100 * lowered.share("overhead")), Long.parseLong(falls.group(2)), heat);
+        assertTrue(lowered.duty("H-101") < bundled.duty("H-101"), "less heat duty goes in");
+        assertFalse(conditions("simulator", "run") != null && conditions("simulator", "run").has("max_heater_outlet"), "any run counts");
     }
 
     private static List<String> strings(JsonObject conditions) {
@@ -201,6 +269,9 @@ class GuideCoverageTest {
                     default -> {
                     }
                 }
-        for (var tour : TourFile.load().values()) if (tour.film() != null) assertNotNull(Films.build(tour.film()), tour.page());
+        for (var tour : TourFile.load().values()) {
+            if (tour.film() != null) assertNotNull(Films.build(tour.film()), tour.page());
+            if (tour.show() != null) assertNotNull(guide.step(tour.show()), tour.page() + " shows " + tour.show());
+        }
     }
 }

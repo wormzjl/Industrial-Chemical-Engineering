@@ -78,7 +78,8 @@ class GuideFileTest {
                     "com.wormzjl.icheme.science.tutorial.guide.Marked", "com.wormzjl.icheme.science.tutorial.cards.ThreeParts", "com.wormzjl.icheme.science.tutorial.cards.Chain",
                     "com.wormzjl.icheme.science.tutorial.cards.BarrelData", "com.wormzjl.icheme.science.tutorial.cards.Barrel", "com.wormzjl.icheme.science.tutorial.cards.Products",
                     "com.wormzjl.icheme.science.tutorial.cards.Road", "com.wormzjl.icheme.science.tutorial.cards.PotTemperature",
-                    "com.wormzjl.icheme.science.tutorial.guide.StillCondition"))
+                    "com.wormzjl.icheme.science.tutorial.guide.StillCondition",
+                    "com.wormzjl.icheme.science.tutorial.guide.SheetCondition", "com.wormzjl.icheme.science.tutorial.films.StillTray", "com.wormzjl.icheme.science.tutorial.films.SmallTower"))
                 Class.forName(name, true, loader);
             // Every card builds, its recording read, with no Minecraft class.
             var cards = loader.loadClass("com.wormzjl.icheme.science.tutorial.cards.Cards");
