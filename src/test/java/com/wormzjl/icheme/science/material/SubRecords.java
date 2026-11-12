@@ -32,7 +32,8 @@ final class SubRecords {
      * or of the package's water model for the water; absent where the record has none.
      */
     static Optional<MaterialCatalog.Thermochemistry> thermochemistry(MaterialCatalog catalog,String packageId,String componentId) {
-        var record=dataset(catalog,packageId,componentId).orElseGet(()->water(catalog,packageId));
+        // W3b: Water in a package's cubic takes its thermochemistry from the water model where its cubic record carries none.
+        var record=dataset(catalog,packageId,componentId).filter(o->o.has("thermochemistry")||!componentId.equals("Water")).orElseGet(()->water(catalog,packageId));
         return Optional.of(record).filter(o->o.has("thermochemistry")).map(o->MaterialCatalog.readThermochemistry(o.getAsJsonObject("thermochemistry")));
     }
 

@@ -57,12 +57,10 @@ class G3F9DataRangeBoundaryTest {
         var net = G3Support.network();
         double[] n2 = {1, 0, 0, 0, 0}, ch4 = {0, 1, 0, 0, 0}, c2h6 = {0, 0, 1, 0, 0}, co2 = {0, 0, 0, 1, 0};
         var pkg = net.hydrocarbon.components();
-        double[] netN2 = new double[net.componentCount()], netCh4 = new double[net.componentCount()], netC2h6 = new double[net.componentCount()],
-                netWater = new double[net.componentCount()];
+        double[] netN2 = new double[net.componentCount()], netCh4 = new double[net.componentCount()], netC2h6 = new double[net.componentCount()];
         netN2[pkg.indexOf("Nitrogen")] = 1;
         netCh4[pkg.indexOf("Methane")] = 1;
         netC2h6[pkg.indexOf("Ethane")] = 1;
-        netWater[net.componentCount() - 1] = 1;
         // The 10 MPa envelope and the records' 2 MPa: a compressed state continues.
         continued("10 MPa, N2", pilot, "pilot network", n2, 300, 1e7, 300, 1.005e7);
         continued("10 MPa, CO2", pilot, "pilot network", co2, 400, 1e7, 400, 1.005e7);
@@ -88,9 +86,11 @@ class G3F9DataRangeBoundaryTest {
         // Free water across its melting line (273.1526 K at 0.1 MPa, 273.0859 K at 1 MPa; WP4): below it the engine states
         // ice, which the network carries as its stand-in (free liquid water held at its 273.16 K values) until a vessel's
         // refresh freezes it: no hold, and continuous (the interim ice hold before WP4).
-        double[] wet = {0.5, 0, 0, 0, 0.5};
-        continued("melting line, free water (WP4)", pilot, "pilot network", wet, 273.2, 1e5, 273.1, 1e5);
-        continued("melting line, free water (bundled, WP4)", net, "bundled network", netWater, 273.1, 1e6, 273.05, 1e6);
+        // W3b: water is a component of the network model's cubic (the pilot and the crude packages hold none).
+        var wetModel = com.wormzjl.icheme.fluid.support.FluidTestSupport.networkModel();
+        double[] netWater = new double[wetModel.componentCount()];
+        netWater[wetModel.componentCount() - 1] = 1;
+        continued("melting line, water (network, WP4)", wetModel, "refinery network", netWater, 273.1, 1e6, 273.05, 1e6);
 
         // The spine ranges through the evaluator: methane 90.6941-1200 K (D13), CO2 from 90 K (WP3), N2 to 6000 K.
         var evaluator = CubicPhaseEvaluator.forPackage(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PILOT);
@@ -99,20 +99,23 @@ class G3F9DataRangeBoundaryTest {
         spine("CO2 spine 90 K (WP3 extension)", evaluator, new double[] {0, 0, 0, 1}, Root.LIQUID, 90.0, 89.9, 1e5);
         spine("N2 spine to 6000 K (envelope 1200 K)", evaluator, new double[] {1, 0, 0, 0}, Root.VAPOR, 1500, 1500.5, 2e5);
 
-        // The engine's contract: the CO2-I crystal is research-only, so no competition with it is qualified (D8).
-        var engine = new FluidTpEquilibrium(PhaseContract.forNetworkPackage(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PILOT), evaluator, FluidTpEquilibrium.Settings.DEFAULT, null);
+        // A fluid-only contract of the package: no competition with the CO2-I crystal is qualified on it.
+        var whole = PhaseContract.forPackage(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PILOT);
+        var engine = new FluidTpEquilibrium(new PhaseContract(whole.packageId(), whole.identity(), whole.components(), whole.water(),
+                whole.waterComponent(), java.util.Set.of(PhaseCompetition.FLUID_ONLY), whole.waterChemistrySpecies(), whole.domain(),
+                whole.fluidCoverage()), evaluator, FluidTpEquilibrium.Settings.DEFAULT);
         var ews = engine.newWorkspace();
         var components = engine.contract().components();
-        var crystal = engine.tp(EquilibriumRequest.tp(180, 1e5, components, new double[] {0.99, 0, 0, 0.01, 0},
+        var crystal = engine.tp(EquilibriumRequest.tp(180, 1e5, components, new double[] {0.99, 0, 0, 0.01},
                 PhaseCompetition.withCrystals("icheme:crystal_carbon_dioxide_i")), ews);
         assertEquals(EquilibriumResult.Status.UNSUPPORTED, crystal.status());
         assertEquals(EquilibriumResult.UnsupportedReason.PHASE_COMPETITION_NOT_QUALIFIED, crystal.reason());
         table.row("CO2-I crystal (research-only record)", "pilot engine contract", "-", "competition with CO2-I at 180 K", crystal.status() + ", "
                 + crystal.reason());
         // Past the envelope the contract's answer is graded extrapolated, the envelope named; just inside it is not.
-        var below = engine.tp(EquilibriumRequest.tp(300, 9.95e6, components, new double[] {1, 0, 0, 0, 0}, PhaseCompetition.FLUID_ONLY), ews);
+        var below = engine.tp(EquilibriumRequest.tp(300, 9.95e6, components, new double[] {1, 0, 0, 0}, PhaseCompetition.FLUID_ONLY), ews);
         assertTrue(below.converged() && below.coverage().grade() != CoverageGrade.EXTRAPOLATED, below.coverage().toString());
-        var pressure = engine.tp(EquilibriumRequest.tp(300, 1.005e7, components, new double[] {1, 0, 0, 0, 0}, PhaseCompetition.FLUID_ONLY), ews);
+        var pressure = engine.tp(EquilibriumRequest.tp(300, 1.005e7, components, new double[] {1, 0, 0, 0}, PhaseCompetition.FLUID_ONLY), ews);
         assertTrue(pressure.converged(), pressure.detail());
         assertEquals(CoverageGrade.EXTRAPOLATED, pressure.coverage().grade());
         assertTrue(pressure.coverage().evidence().contains("extrapolated past the package envelope"), pressure.coverage().evidence());
@@ -123,7 +126,7 @@ class G3F9DataRangeBoundaryTest {
         double[] vessel = {0, 0.5, 0.5, 0};
         var beyond = open.tp(EquilibriumRequest.tp(283, 1.005e7, open.contract().components(), vessel, PhaseCompetition.FLUID_ONLY));
         var within = open.tp(EquilibriumRequest.tp(283, 9.95e6, open.contract().components(), vessel, PhaseCompetition.FLUID_ONLY));
-        double[] closed = {0, 0.5, 0.5, 0, 0};
+        double[] closed = {0, 0.5, 0.5, 0};
         var uvIn = engine.uv(EquilibriumRequest.uv(within.internalEnergy(), within.volume(), components, closed, PhaseCompetition.FLUID_ONLY), ews);
         assertTrue(uvIn.converged() && uvIn.coverage().grade() != CoverageGrade.EXTRAPOLATED, uvIn.detail());
         var uvOut = engine.uv(EquilibriumRequest.uv(beyond.internalEnergy(), beyond.volume(), components, closed, PhaseCompetition.FLUID_ONLY), ews);
@@ -135,7 +138,7 @@ class G3F9DataRangeBoundaryTest {
                 f("(U, V) of 283 K, 10.05 MPa: %.4g MPa", uvOut.phases().get(0).pressure() / 1e6), uvOut.coverage().grade()
                         + " (" + uvOut.diagnostics().outerIterations() + " TP equilibria)");
         // CO2 below its triple point as a fluid: inside its spine and the envelope, so not even extrapolated.
-        var co2Contract = engine.tp(EquilibriumRequest.tp(216.5, 1e5, components, new double[] {0, 0, 0, 1, 0}, PhaseCompetition.FLUID_ONLY), ews);
+        var co2Contract = engine.tp(EquilibriumRequest.tp(216.5, 1e5, components, new double[] {0, 0, 0, 1}, PhaseCompetition.FLUID_ONLY), ews);
         assertTrue(co2Contract.converged(), co2Contract.detail());
         assertNotEquals(CoverageGrade.EXTRAPOLATED, co2Contract.coverage().grade(), co2Contract.coverage().evidence());
         table.row("216.592 K, CO2 (no floor)", "pilot engine contract", "-", "216.5 K, 0.1 MPa", co2Contract.classification() + ", "

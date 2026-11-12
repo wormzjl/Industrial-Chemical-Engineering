@@ -117,9 +117,10 @@ public final class IslandCertificate {
             // Rest is the identity of the map: nothing may move, not even back and forth inside the interval.
             exactZero=zero&&!gross;grossWithoutNet=zero&&gross;
         }
-        /** Which of vapour, hydrocarbon liquid and free water a node holds. */
+        /** Which of vapour, oil and aqueous liquid a node holds. */
         static int phases(com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.State state) {
-            return (state.vaporVolume()>0?1:0)|(state.liquidVolume()>0?2:0)|(state.waterVolume()>0?4:0);
+            return (state.vaporVolume()>0?1:0)|(state.labelVolume(com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.OIL)>0?2:0)
+                    |(state.labelVolume(com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.AQUEOUS)>0?4:0);
         }
         private static boolean rate(com.wormzjl.icheme.science.fluid.network.ConservativeTransport.BoundaryTransfer boundary) {
             var kind=boundary.kind();

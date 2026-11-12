@@ -18,10 +18,10 @@ class NitrogenInitializationTest {
     @Test void placementCreatesRealNitrogenInventoryWithoutChangingTheColumnPackage() {
         var catalog=MaterialCatalog.bundled();var original=catalog.requirePackage(COLUMN);
         var model=FluidThermodynamics.forNetwork(catalog,NETWORK);var state=model.initialNitrogenCharge(1,298.15,101325,()->{});
-        assertEquals(catalog.requirePackage(NETWORK).components().size(),model.hydrocarbon.componentCount());assertEquals(1,state.volume(),1e-12);assertEquals(0,state.liquidVolume());
-        assertTrue(state.mass()>1.13&&state.mass()<1.16);assertEquals(0,state.waterLiquid()+state.waterVapor());
-        int nitrogen=model.hydrocarbon.components().indexOf("Nitrogen");assertEquals(catalog.requirePackage(NETWORK).components().indexOf("Nitrogen"),nitrogen);assertTrue(state.vapor()[nitrogen]>40);
-        assertTrue(model.viscosity.vapor(298.15,state.vapor(),0)>1.7e-5);
+        assertEquals(catalog.requirePackage(NETWORK).components().stream().filter(c->!c.equals("Water")).count(),model.hydrocarbon.componentCount(),"the compounds; Water is the conserved basis's last");assertEquals(1,state.volume(),1e-12);assertEquals(0,TestPhases.liquidVolume(state));
+        assertTrue(state.mass()>1.13&&state.mass()<1.16);assertEquals(0,TestPhases.waterLiquid(state)+TestPhases.waterVapor(state));
+        int nitrogen=model.hydrocarbon.components().indexOf("Nitrogen");assertEquals(catalog.requirePackage(NETWORK).components().indexOf("Nitrogen"),nitrogen);assertTrue(TestPhases.vapor(state)[nitrogen]>40);
+        assertTrue(model.viscosity.vapor(298.15,state.vaporAmounts())>1.7e-5);
         assertSame(original,catalog.requirePackage(COLUMN));assertTrue(model.hydrocarbon.components().containsAll(catalog.requirePackage(COLUMN).components())&&!catalog.requirePackage(COLUMN).components().contains("Nitrogen"));
     }
     /** The model is the named package's, whatever its id (a saved world names its basis by compound ids, batch
@@ -51,6 +51,6 @@ class NitrogenInitializationTest {
         var solution=SparseNewton.solve(layout.wallClosure(amounts,energy,1,Double.NaN),layout.encode(seed),new SparseNewton.Settings(30,1e-10,1e-6,24),()->{});
         var result=layout.decode(solution.variables(),0);
         assertEquals(energy,result.internalEnergy(),1e-4);assertArrayEquals(amounts,PhaseLayout.totalAmounts(result),1e-10);
-        assertTrue(result.temperature()>273.16&&result.temperature()<298.15);assertTrue(result.waterLiquid()>0);assertTrue(result.waterVapor()>0);
+        assertTrue(result.temperature()>273.16&&result.temperature()<298.15);assertTrue(TestPhases.waterLiquid(result)>0);assertTrue(TestPhases.waterVapor(result)>0);
     }
 }

@@ -38,7 +38,8 @@ class V3RegroupedTransformerTest {
         family.addProperty("inPlaneLimit",1e-8);family.addProperty("outOfPlaneLimit",1e-8);
         var families=new JsonArray();families.add(family);d.add("families",families);
         d.addProperty("offAxisLimit",0);d.add("lumpMap",new JsonObject());
-        d.add("formulationRevisions",JSON.toJsonTree(List.of(V3ColumnCalculator.formulationRevision(input,0,V3ConvergenceEvidence.MAXIMUM_LOG_FLOW_CHANGE))));
+        // A model is trained on the label without the derived-pairs suffix (W5 D1 of batch 2026-11-11-aqueous-solvents): the seed label.
+        d.add("formulationRevisions",JSON.toJsonTree(List.of(V3ColumnCalculator.seedFormulationRevision(input))));
         d.add("branchesSeen",JSON.toJsonTree(new boolean[]{true,true,false}));
         d.addProperty("presenceThreshold",.02); d.addProperty("traceFloorFraction",V3TruncationSupport.TRACE_FLOOR_FRACTION);
         d.add("globalMin",JSON.toJsonTree(fill(global,-1e6))); d.add("globalMax",JSON.toJsonTree(fill(global,1e6)));

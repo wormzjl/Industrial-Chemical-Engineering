@@ -58,20 +58,25 @@ class CoolingTowerRuntimeTest {
             // Built with the basin empty: the seed gas in the line leaves by the spray inlet and the pump primes.
             int pump=java.util.stream.IntStream.range(0,snapshot.graph().pipes().size()).filter(e->snapshot.graph().pipes().get(e).control() instanceof FlowControl.Pump).findFirst().orElseThrow();
             assertTrue(last.averageMassFlows()[pump]>0,"the pump circulates: "+last.endpointModes());
-            assertTrue(rates.waterLoss()>0,"the fill runs: "+rates);
+            assertTrue(rates.loss(rates.fill().losses().length-1)>0,"the fill runs: "+rates);
             assertFalse(new IslandCertificate.Summary(new IslandCertificate.Interval(0,100,snapshot.graph(),last),w.coordinator.model(snapshot.id()).molecularWeights()).flushed,"Evaporation is a rate a steady tower repeats, not a flush");
         }
     }
 
-    @Test void aPumpedHydrocarbonClosesTheInletWithoutAHold(){
+    /**
+     * No stream is refused (COOLING_TOWER_PLAN.md). Ethyl mercaptan at 330 K is above its boiling point at one atmosphere
+     * (308 K): it flashes at the nozzle, and what stays liquid evaporates in the fill; the island keeps up without a hold.
+     */
+    @Test void aPumpedVolatileHydrocarbonFlashesAndEvaporatesWithoutAHold(){
         var w=new EventPathWorld();w.runTo(20);
         long id=tower(w,CoolingTower.induced(8,2,1,1),new PhysicalFluidTopology.Port(at(1,7,0),NORTH,PassiveNetwork.PhasePort.SPRAY),new PhysicalFluidTopology.Port(at(1,0,4),SOUTH,PassiveNetwork.PhasePort.LIQUID));
-        double[] oil=new double[model.componentCount()];oil[oil.length-3]=1;
+        double[] oil=new double[model.componentCount()];oil[model.components().indexOf("EthylMercaptan")]=1;
         w.place(1,7,-1,Kind.PIPE,NORTH,.05);w.place(1,7,-2,Kind.PUMP,SOUTH,new FlowControl.Pump(.005,800000),null,.05);
         w.place(1,7,-3,Kind.PIPE,NORTH,.05);w.place(1,7,-4,Kind.GENERATOR,NORTH,new FluidDeviceSpec(1,330,300000,oil),.05);
         w.runTo(600);w.assertKeptUp("pumped hydrocarbon");
         var snapshot=w.coordinator.observe(w.registry.owner(id));
-        assertTrue(snapshot.graph().reservoirs().stream().filter(n->n.id()==id).findFirst().orElseThrow().empty(),"nothing reached the basin");
+        var rates=snapshot.lastResult().orElseThrow().towers().get(id);
+        assertEquals("RUNNING",rates.status());assertTrue(rates.massLoss()>0,"it leaves with the air: "+rates);
     }
 
     @Test void anEmptyBasinPublishesItsFansThroughTheScheduledDisplay(){
@@ -82,7 +87,7 @@ class CoolingTowerRuntimeTest {
             var result=new PassiveIntervalSolver(model).solve(new PassiveNetwork(List.of(node),List.of()),1,PassiveIntervalSolver.Settings.defaults(),()->{});
             var rates=result.towers().get(1L);assertNotNull(rates);
             assertEquals(mode==CoolingTower.Mode.FAN_SPEED?1:0,rates.fill().speed());
-            assertEquals(0,rates.waterLoss());
+            assertEquals(0,rates.massLoss());
             if(mode==CoolingTower.Mode.FAN_SPEED)assertTrue(rates.fill().fanPowerWatt()>0);
             var view=new FluidView(1,0,0,0,"EMPTY",null,0,List.of()).withTank(new FluidView.Tank(CoolingTower.BASIN_DEPTH,true,0,0,tower.basinVolume(),null,null))
                 .withTower(new FluidView.Tower(tower,rates));

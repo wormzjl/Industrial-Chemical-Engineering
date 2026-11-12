@@ -18,11 +18,13 @@ import java.util.Objects;
 
 import static org.junit.jupiter.api.Assertions.*;
 import java.util.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /** Independent P03-P05 references. No production resistance call supplies an oracle. */
 class HydraulicReferenceQualificationTest {
+    // W3b: on the refinery network, whose cubic holds water (the tjl20 packages hold none).
     private final FluidThermodynamics model = FluidThermodynamics.forNetwork(
-            MaterialCatalog.bundled(), "icheme:tjl20_methane_nitrogen");
+            MaterialCatalog.bundled(), "icheme:refinery");
 
     @Test void boundaryFlowsAcrossAllRegimesMatchOfflineDecimalFrictionInBothDirections() throws Exception {
         var rows = new ArrayList<Map<String, Object>>();
@@ -38,7 +40,7 @@ class HydraulicReferenceQualificationTest {
                     var source = state(water, 200000);
                     double rho = source.mass() / source.volume();
                     double mu = water ? model.viscosity.waterLiquid(350)
-                            : model.viscosity.vapor(350, source.vapor(), 0);
+                            : model.viscosity.vapor(350, source.vaporAmounts());
                     double diameter = .02, length = 1, area = Math.PI * diameter * diameter / 4;
                     double lawFlow = re * Math.PI * mu * diameter / 4;
                     double velocity = lawFlow / (rho * area);

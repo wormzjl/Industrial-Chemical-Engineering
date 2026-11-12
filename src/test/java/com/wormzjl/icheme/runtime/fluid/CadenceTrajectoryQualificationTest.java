@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import java.nio.file.*;
 import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /** P31 physical cadence qualification. CPU samples are injected to exercise clock policy;
  * this test does not claim that the aggregate-load classifier measures actual CPU saturation. */
@@ -55,7 +56,7 @@ class CadenceTrajectoryQualificationTest {
         var nodes=new ArrayList<PassiveNetwork.Reservoir>();
         for(double pressure:new double[]{upper,150000}) {
             var state=FluidTestSupport.oneCubicMetreState(model,mixture,350,pressure);
-            if(fluid.equals("wet-crude"))assertTrue(state.vaporVolume()>0&&state.liquidVolume()+state.waterVolume()>0,"Wet-crude cadence fixture must contain multiple phases");
+            if(fluid.equals("wet-crude"))assertTrue(state.vaporVolume()>0&&TestPhases.liquidVolume(state)+TestPhases.waterVolume(state)>0,"Wet-crude cadence fixture must contain multiple phases");
             nodes.add(new PassiveNetwork.Reservoir(nodes.size()+1,0,state));
         }
         var geometry=fluid.equals("water")?new PipeResistance.Geometry(10000,.006,.000045,0):new PipeResistance.Geometry(200,.01,.000045,0);
@@ -124,8 +125,8 @@ class CadenceTrajectoryQualificationTest {
                 var a=actual.graph().reservoirs().get(node);var b=expected.graph().reservoirs().get(node);
                 double pressure=Math.abs(a.state().pressure()-b.state().pressure());maximumPressureError=Math.max(maximumPressureError,pressure/Math.max(100,b.state().pressure()));
                 maximumTemperatureError=Math.max(maximumTemperatureError,Math.abs(a.state().temperature()-b.state().temperature()));
-                double[] phaseA={a.state().vaporVolume(),a.state().liquidVolume(),a.state().waterVolume()};
-                double[] phaseB={b.state().vaporVolume(),b.state().liquidVolume(),b.state().waterVolume()};
+                double[] phaseA={a.state().vaporVolume(),TestPhases.liquidVolume(a.state()),TestPhases.waterVolume(a.state())};
+                double[] phaseB={b.state().vaporVolume(),TestPhases.liquidVolume(b.state()),TestPhases.waterVolume(b.state())};
                 for(int phase=0;phase<phaseA.length;phase++)maximumPhaseError=Math.max(maximumPhaseError,Math.abs(phaseA[phase]/a.state().volume()-phaseB[phase]/b.state().volume()));
                 assertTrue(pressure<=1+relativeTolerance*Math.abs(b.state().pressure()),fluid+" "+cadence+" pressure");
                 var n=a.inventory().moles();var target=b.inventory().moles();
@@ -154,7 +155,7 @@ class CadenceTrajectoryQualificationTest {
                 for(var node:frame.graph().reservoirs()) {
                     put.accept(node.id());for(double n:node.inventory().moles())put.accept(Double.doubleToLongBits(n));
                     put.accept(Double.doubleToLongBits(node.inventory().internalEnergy()));var s=node.state();
-                    for(double v:new double[]{s.pressure(),s.temperature(),s.mass(),s.vaporVolume(),s.liquidVolume(),s.waterVolume()})put.accept(Double.doubleToLongBits(v));
+                    for(double v:new double[]{s.pressure(),s.temperature(),s.mass(),s.vaporVolume(),TestPhases.liquidVolume(s),TestPhases.waterVolume(s)})put.accept(Double.doubleToLongBits(v));
                 }
             }
             put.accept(trajectory.intervals());for(int cadence:new TreeSet<>(trajectory.cadences()))put.accept(cadence);

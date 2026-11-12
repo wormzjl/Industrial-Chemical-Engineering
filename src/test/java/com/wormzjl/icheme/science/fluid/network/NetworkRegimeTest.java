@@ -9,6 +9,7 @@ import java.util.*;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 class NetworkRegimeTest {
     @Test void serialSectionsPreserveIndependentLaminarAndFittingLosses() {
@@ -95,20 +96,20 @@ class NetworkRegimeTest {
     }
     @Test void hotNitrogenCanEvaporateTheLastFreeWaterWithoutDiscardingIt() {
         double[] n=new double[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1];n[com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN]=40;n[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK]=5;var initial=model.flashTP(298.15,150000,n,()->{});double scale=1/initial.volume();for(int i=0;i<n.length;i++)n[i]*=scale;
-        var tank=new PassiveNetwork.Reservoir(2,0,model.flashTP(298.15,150000,n,()->{}));assertTrue(tank.state().waterLiquid()>0);
+        var tank=new PassiveNetwork.Reservoir(2,0,model.flashTP(298.15,150000,n,()->{}));assertTrue(TestPhases.waterLiquid(tank.state())>0);
         var graph=new PassiveNetwork(List.of(gas(1,500,500000,com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN,PassiveNetwork.NodeKind.GENERATOR),tank),List.of(new PassiveNetwork.Pipe(1,0,1,geometry)));
         for(int i=0;i<3;i++)graph=new PassiveIntervalSolver(model).solve(graph,20,PassiveIntervalSolver.Settings.defaults(),()->{}).graph();
-        var end=graph.reservoirs().get(1);assertEquals(0,end.state().waterLiquid(),1e-9,"T="+end.state().temperature()+" P="+end.state().pressure());assertEquals(n[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK],end.inventory().moles()[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK],1e-8);
+        var end=graph.reservoirs().get(1);assertEquals(0,TestPhases.waterLiquid(end.state()),1e-9,"T="+end.state().temperature()+" P="+end.state().pressure());assertEquals(n[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK],end.inventory().moles()[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK],1e-8);
     }
     @Test void hydrocarbonLiquidCanDisappearIntoTheSharedGasPhase() {
         int pentane=model.hydrocarbon.components().indexOf("N-pentane");assertTrue(pentane>=0);
         double[] n=new double[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1];n[com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN]=30;n[pentane]=50;var unit=model.flashTP(298.15,150000,n,()->{});for(int i=0;i<n.length;i++)n[i]/=unit.volume();
-        var tank=new PassiveNetwork.Reservoir(2,0,model.flashTP(298.15,150000,n,()->{}));assertTrue(tank.state().liquidVolume()>0);
+        var tank=new PassiveNetwork.Reservoir(2,0,model.flashTP(298.15,150000,n,()->{}));assertTrue(TestPhases.liquidVolume(tank.state())>0);
         var graph=new PassiveNetwork(List.of(gas(1,500,500000,com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN,PassiveNetwork.NodeKind.GENERATOR),tank,gas(3,350,101325,com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN,PassiveNetwork.NodeKind.VOID)),
                 List.of(new PassiveNetwork.Pipe(1,0,1,geometry),new PassiveNetwork.Pipe(2,1,2,geometry)));
         double removed=0;
         for(int i=0;i<6;i++) {var result=new PassiveIntervalSolver(model).solve(graph,20,PassiveIntervalSolver.Settings.defaults(),()->{});graph=result.graph();for(var entry:result.boundaries())if(entry.nodeId()==3)removed-=entry.moles()[pentane];}
-        var end=graph.reservoirs().get(1);assertEquals(0,end.state().liquidVolume(),1e-12);assertEquals(n[pentane],end.inventory().moles()[pentane]+removed,1e-8);
+        var end=graph.reservoirs().get(1);assertEquals(0,TestPhases.liquidVolume(end.state()),1e-12);assertEquals(n[pentane],end.inventory().moles()[pentane]+removed,1e-8);
     }
     @Test void cancellationCannotLeavePartialTransfersAndExcessVelocityIsConservativelyLimited() {
         var graph=new PassiveNetwork(List.of(gas(1,350,200000,com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN,PassiveNetwork.NodeKind.RESERVOIR),gas(2,350,101325,com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN,PassiveNetwork.NodeKind.RESERVOIR)),List.of(new PassiveNetwork.Pipe(1,0,1,geometry)));

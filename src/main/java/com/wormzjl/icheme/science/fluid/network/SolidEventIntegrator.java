@@ -119,7 +119,7 @@ final class SolidEventIntegrator {
         var port=pipe.drawPort(flow);
         if(PhaseDraw.mixedLiquids(donor,port)) {
             var shares=PhaseDraw.mixedShares(donor,pipe.volume());double drawnMass=0;
-            for(int liquid:new int[]{FluidThermodynamics.OIL,FluidThermodynamics.WATER})drawnMass+=shares[liquid]*model.phaseMass(donor,liquid)/FluidThermodynamics.phaseSolidShare(donor,liquid);
+            for(int liquid:new int[]{FluidThermodynamics.OIL,FluidThermodynamics.AQUEOUS})drawnMass+=shares[liquid]*model.phaseMass(donor,liquid)/FluidThermodynamics.phaseSolidShare(donor,liquid);
             return SolidMobility.check(prepared[upstream],donor,pipe,flow,SolidMobility.Outlet.MIXED,drawnMass);
         }
         int phase=PhaseDraw.leading(model,donor,port);

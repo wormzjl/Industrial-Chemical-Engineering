@@ -3,25 +3,22 @@ package com.wormzjl.icheme.science.thermo.phase;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel;
 
 /**
- * The free water's steam as a second-virial gas ({@code separate-free-water-v3}, 2026-10-28; option B of
- * {@code documentation/2026-10-27-heat-exchanger-design/OWNER_TEST_REVIEW.md}, section 5): the steam's ideal-gas
- * functions ({@link FreeWaterModel#vapor()}) plus the residual of IAPWS-IF97 Region 2 truncated to its five terms linear
- * in pressure ({@code I = 1}).
+ * Steam as a second-virial gas (2026-10-28; option B of
+ * {@code documentation/2026-10-27-heat-exchanger-design/OWNER_TEST_REVIEW.md}, section 5): the residual of IAPWS-IF97
+ * Region 2 truncated to its five terms linear in pressure ({@code I = 1}). The V3 column's steam reads its residual
+ * enthalpy and heat capacity; the fluid network's water share ({@link WaterShare}) reads its {@code B(T)} and slope.
  *
  * <p>The model. {@code v = R T / p + B(T)}, with {@code B(T) = (R T / p*) sum n_i (tau - 0.5)^J_i},
  * {@code p* = 1 MPa} and {@code tau = 540 K / T}: the low-pressure limit of Region 2's volume. Its residual properties at
- * the steam's partial pressure {@code p} are {@code h_res = p (B - T dB/dT)}, {@code s_res = -p dB/dT},
- * {@code g_res = p B} and {@code u_res = -p T dB/dT}; {@code n_w} moles of steam in a gas volume {@code V} (Dalton: the
- * hydrocarbon vapour shares it) are at {@code p_w = n_w R T / (V - n_w B)}, the exact inverse of
- * {@code V = n_w (R T / p_w + B)}. Its volume is within 2 % of the full Region 2's up to saturation below 480.9 K
- * (1.82 MPa; 1.0 % at 10 bar, where ideal steam is 7.6 % off) and to 4.9 MPa at 584 K: the qualified partial pressure,
- * {@code FluidThermodynamics.waterVaporPressureLimit}.</p>
+ * the steam's partial pressure {@code p} are {@code h_res = p (B - T dB/dT)} and {@code c_p,res = -p T d2B/dT2}. Its
+ * volume is within 2 % of the full Region 2's up to saturation below 480.9 K (1.82 MPa; 1.0 % at 10 bar, where ideal
+ * steam is 7.6 % off) and to 4.9 MPa at 584 K.</p>
  *
  * <p>Range. The polynomial is Region 2's from its 273.15 K floor up; past its 1073.15 K ceiling it continues as it is
  * ({@code |B p / (R T)|} below 0.4 % at 20 bar there and falling with temperature; the steam's record ends at 900 K).
  * Below 273.15 K it continues linearly, value and slope continuous (owner rule of 2026-10-16), where the polynomial's
  * {@code tau^6} term would grow without bound; the steam there is at the ice's sublimation pressure, at most 611 Pa, and
- * {@code |B p / (R T)|} at most 5.1e-4. The steam's notice of the water model's range reports both ends.</p>
+ * {@code |B p / (R T)|} at most 5.1e-4.</p>
  *
  * <p>Pure functions of their arguments, safe to share; nothing allocates.</p>
  */
@@ -59,21 +56,6 @@ public final class SteamVirial {
         return R * t / p + secondVirial(t);
     }
 
-    /**
-     * The partial pressure of {@code steam} moles in the gas volume {@code volume}, Pa: {@code n R T / (V - n B)}.
-     * Infinite where {@code V <= n B} (a positive B above about 1550 K and a gas volume the steam's co-volume fills: no
-     * state of the virial gas).
-     */
-    public static double partialPressure(double steam, double t, double volume) {
-        double free = volume - steam * secondVirial(t);
-        return free > 0.0 ? steam * R * t / free : Double.POSITIVE_INFINITY;
-    }
-
-    /** The moles of steam at partial pressure {@code p} in the gas volume {@code volume}: {@code p V / (R T + p B)}. */
-    public static double moles(double p, double t, double volume) {
-        return p * volume / (R * t + p * secondVirial(t));
-    }
-
     /** The residual molar enthalpy at the steam's partial pressure {@code p}, {@code p (B - T dB/dT)}, J/mol. */
     public static double residualEnthalpy(double t, double p) {
         return p * (secondVirial(t) - t * temperatureDerivative(t));
@@ -86,16 +68,6 @@ public final class SteamVirial {
     public static double residualHeatCapacity(double t, double p) {
         require(t);
         return t < MINIMUM_TEMPERATURE ? 0.0 : -p * t * polynomialCurvature(t);
-    }
-
-    /** The residual molar entropy at the steam's partial pressure {@code p}, {@code -p dB/dT}, J/(mol K). */
-    public static double residualEntropy(double t, double p) {
-        return -p * temperatureDerivative(t);
-    }
-
-    /** The residual molar Gibbs energy at {@code p}, {@code p B}, J/mol: {@code ln phi = p B / (R T)}. */
-    public static double residualGibbs(double t, double p) {
-        return p * secondVirial(t);
     }
 
     private static double polynomial(double t) {

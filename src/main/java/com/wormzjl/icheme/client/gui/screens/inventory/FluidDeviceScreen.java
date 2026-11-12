@@ -442,8 +442,9 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             tabsY=118;
         }
         for(int i=0;i<4;i++){
-            int selected=i;var tab=button(tr((tableWidth()<240?"phase_tab.":"phase.")+i),tableX()+i*(w+4),tabsY,w,()->{phase=selected;phaseSelected=true;scroll.reset();rebuild();});
-            tab.active=phase!=i;tab.setTooltip(Tooltip.create(Component.literal(tr("phase."+i))));
+            int selected=i;String key=DeviceColumn.phaseKey(i,aqueousWater());
+            var tab=button(tr((tableWidth()<240?"phase_tab.":"phase.")+key),tableX()+i*(w+4),tabsY,w,()->{phase=selected;phaseSelected=true;scroll.reset();rebuild();});
+            tab.active=phase!=i;tab.setTooltip(Tooltip.create(Component.literal(tr("phase."+key))));
         }
         configureScroll(phase==3?shownSolids().size():present().size());
     }
@@ -581,6 +582,8 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         if(view.pipeInfo()!=null)return view.pipeInfo().contents().phaseMoles();
         return view.state()==null?new double[3][data.components().size()]:view.state().phaseMoles();
     }
+    /** Whether the shown aqueous liquid is named water (plan N7, {@link DeviceColumn#aqueousIsWater}). */
+    private boolean aqueousWater(){return DeviceColumn.aqueousIsWater(amounts()[1],menu.clientData().components().indexOf("Water"));}
     private List<Integer> present(){
         double[] values=amounts()[Math.min(2,phase)];var ids=new ArrayList<Integer>();
         for(int i=0;i<values.length;i++)if(values[i]>0)ids.add(i);return ids;
@@ -730,6 +733,8 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             rows.add(meter("tower_cooling_duty",rate==null?"—":value(rate.coolingDutyWatt()/1000),"kW"));
             rows.add(meter("tower_return",rate==null?"—":value(flowRateUnit.display(rate.inletFlow())),flowRateUnit.unit("kg")));
             rows.add(meter("tower_evaporation",rate==null?"—":value(flowRateUnit.display(rate.waterLoss())),flowRateUnit.unit("kg")));
+            // What else leaves for the air (gas, flash vapour, volatile compounds, less the air dissolved): only when there is any.
+            if(rate!=null&&Math.abs(rate.massLoss()-rate.waterLoss())>1e-9)rows.add(meter("tower_other_losses",value(flowRateUnit.display(rate.massLoss()-rate.waterLoss())),flowRateUnit.unit("kg")));
             if(view.tower().specification().draft()==com.wormzjl.icheme.science.fluid.network.CoolingTower.Draft.INDUCED){
                 rows.add(meter("fan_power",rate==null?"—":value(rate.fill().fanPowerWatt()/1000),"kW"));
                 rows.add(meter("tower_speed",rate==null?"—":value(rate.fill().speed()*100),"%"));
@@ -857,7 +862,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         var solids=port!=null?SolidInventory.EMPTY:info!=null?info.contents().solids():state!=null?state.solids():SolidInventory.EMPTY;
         String hint=tr(generator()?"phase_ratio.generator_hint":tank()?"phase_ratio.tank_hint":"phase_ratio.hint");
         if(phaseBasis==PhaseRatioBasis.MOLAR)hint+="\n"+tr("phase_ratio.mole_hint");
-        return new DeviceColumn.Phases(phaseBasis.key(),phaseBasis.amounts(volumes,amounts(),solids,data.components(),data.molecularWeights()),phaseBasis.excludesCustomSolids(solids),hint);
+        return new DeviceColumn.Phases(phaseBasis.key(),phaseBasis.amounts(volumes,amounts(),solids,data.components(),data.molecularWeights()),phaseBasis.excludesCustomSolids(solids),hint,aqueousWater());
     }
     /** A tank's Level group: its fill (NaN while unknown), and its contents of its capacity in litres. */
     private DeviceColumn.Level level(){

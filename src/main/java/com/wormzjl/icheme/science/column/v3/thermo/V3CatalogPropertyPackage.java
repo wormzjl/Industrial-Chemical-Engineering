@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.science.column.v3.thermo;
 
 import com.wormzjl.icheme.science.material.CrystalPhasesUnavailable;
+import com.wormzjl.icheme.science.material.DerivedPairs;
 import com.wormzjl.icheme.science.material.IdealGasFitUnavailable;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.material.MaterialRuntime;
@@ -12,6 +13,8 @@ final class V3CatalogPropertyPackage implements V3PropertyPackage {
     private final MaterialCatalog.Package data;
     private final V3ComponentBasis basis;
     private final List<V3PropertyComponent> components;
+    /** The pairs of the network's model over this package's components (W5 D1); the catalog keeps each fit. */
+    private final DerivedPairs.Result pairs;
     /** Resolves immutable package data from the current calculation's catalog snapshot. */
     static V3PropertyPackage require(String packageId) {
         return new V3CatalogPropertyPackage(MaterialRuntime.current(),packageId);
@@ -20,7 +23,9 @@ final class V3CatalogPropertyPackage implements V3PropertyPackage {
         data=catalog.requirePackage(id);
         if(!data.model().equals("pr78")) throw new IllegalArgumentException("Thermodynamic solver unavailable: " + data.model());
         // A package that admits crystals (P6): the column is a vapour-liquid algorithm without crystal equations.
-        if(!data.crystals().isEmpty()) throw new CrystalPhasesUnavailable(data.id(),data.crystals(),"the V3 column");
+        // Water's ice is the network's (W3b): the column's own water code has none, as it had none of the free water's ice.
+        var crystals=data.crystals().stream().filter(crystal->{var reference=catalog.crystals().get(crystal);return reference==null||!"Water".equals(reference.component());}).toList();
+        if(!crystals.isEmpty()) throw new CrystalPhasesUnavailable(data.id(),crystals,"the V3 column");
         // A spine package's records carry no shifted_polynomial_5 fits (D6); the column reads them.
         if(!data.spine().isEmpty()) throw new IdealGasFitUnavailable(data.id(),"the V3 column");
         basis=new V3ComponentBasis(data.components());
@@ -30,7 +35,11 @@ final class V3CatalogPropertyPackage implements V3PropertyPackage {
                     pr.criticalTemperature(),pr.criticalPressure(),pr.acentricFactor(),p.density(),
                     cp.get(0),cp.get(1),cp.get(2),cp.get(3),cp.get(4),cp.get(5),p.estimated());
         }).toList();
+        // A learned model's lens (MaterialCatalog.inferenceView) carries the physics the model was trained on, its own
+        // matrix: the model's anchor is computed on it as in training. Every other package takes the network's pairs.
+        pairs=catalog.lens(id)?null:DerivedPairs.derive(catalog,id,data.components());
     }
+    @Override public DerivedPairs.Result derivedPairs(){return pairs;}
     @Override public String packageId(){return data.id();}
     @Override public String datasetRevision(){return data.scientificRevision();}
     @Override public V3ComponentBasis componentBasis(){return basis;}

@@ -7,7 +7,6 @@ import com.wormzjl.icheme.science.fluid.state.SolidInventory;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.fluid.thermo.NetworkCrystals;
 import com.wormzjl.icheme.science.math.DeterministicMath;
-import com.wormzjl.icheme.science.thermo.PhaseSupport;
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.math.RoundingMode;
@@ -69,20 +68,17 @@ final class VesselCrystals {
         return settle(model,inventory,closed,true,checkpoint);
     }
     /**
-     * Whether a crystal may be present in a vessel holding {@code inventory} near {@code state}: the free water's ice (WP4)
-     * where the vessel holds ice, or holds water at or below the melting line at the state's pressure ({@code T <= T_m(P)},
-     * {@link com.wormzjl.icheme.science.thermo.phase.FreeWaterIce#meltingTemperature}), and the package's crystals where
-     * the vessel's species are under their competition (at or below the crystals' ceiling, {@link FluidThermodynamics#crystalsCompete}).
-     * Physics: above its melting line water cannot freeze, since the latent heat a freeze releases would raise the vessel
-     * further above it; ice the vessel holds melts there, and as it melts it cools the vessel, so some may stay at the line.
+     * Whether a crystal may be present in a vessel holding {@code inventory} near {@code state}: where the vessel holds a
+     * crystal, and where its species are under their competition (at or below their crystals' ceilings,
+     * {@link FluidThermodynamics#crystalsCompete}). W3b: ice is a package crystal under the same rule; the free water's
+     * melting-line test went with the free water.
      */
     static boolean competes(FluidThermodynamics model,PassiveNetwork.Inventory inventory,FluidThermodynamics.State state) {
         var crystals=model.crystalSolids();
         if(PhaseLayout.sum(inventory.moles())==0)return false;
         double[] held=held(crystals,inventory),totals=totals(crystals,inventory,held);
-        double t=state.temperature();boolean ice=false;
-        for(int k=0;k<held.length;k++)ice|=held[k]>0&&crystals.all().get(k).water();
-        return ice||totals[totals.length-1]>0&&t<=model.freeWaterIce().meltingTemperature(state.pressure())||model.crystalsCompete(t,totals);
+        boolean holds=false;for(double mass:held)holds|=mass>0;
+        return holds||model.crystalsCompete(state.temperature(),totals);
     }
     private static double[] held(NetworkCrystals crystals,PassiveNetwork.Inventory inventory) {
         var all=crystals.all();double[] held=new double[all.size()];
@@ -110,14 +106,13 @@ final class VesselCrystals {
         double[] totals=totals(crystals,inventory,held);
         double t=closed.temperature(),p=closed.pressure(),capacity=inventory.wallCapacity();
         double trueEnergy=inventory.internalEnergy();for(int k=0;k<count;k++)trueEnergy+=held[k]*all.get(k).material().crystal().energyOffset();
-        // The package's crystals compete at or below their ceiling, the free water's ice wherever the vessel holds water
-        // (WP4); neither: what a vessel holds melts. A held crystal that cannot be present melts in the crystal test.
-        boolean competing=model.crystalsCompete(t,totals),wet=totals[totals.length-1]>0;
-        if(!competing&&!wet)return holds&&isClosed?melt(model,inventory,closed,totals,trueEnergy,checkpoint):null;
+        // The package's crystals compete at or below their ceilings, else what a vessel holds melts. A held crystal that cannot
+        // be present melts in the crystal test.
+        boolean competing=model.crystalsCompete(t,totals);
+        if(!competing)return holds&&isClosed?melt(model,inventory,closed,totals,trueEnergy,checkpoint):null;
         boolean drive=!isClosed;
         for(int k=0;k<count&&!drive;k++) {
             var crystal=all.get(k);
-            if(!(crystal.water()?wet:competing)){drive=held[k]>0;continue;}
             double d=drive(model,closed,crystal,t,p);
             if(held[k]>0?!(Math.abs(d)<=DEADBAND):d>DEADBAND)drive=true;
         }
@@ -126,7 +121,7 @@ final class VesselCrystals {
         // is slack, switching once to the other where the answer says the wall is on the other branch.
         var inert=inventory.solids().withoutCrystals();var inertMoments=inert.moments();
         double crystalEnergy=trueEnergy-inertMoments.internalEnergy(t),bag=PhaseLayout.bagVolume(closed,capacity);
-        boolean warm=holds&&(closed.liquidProperties()==null||closed.vaporProperties()==null||majorSpecies(totals)>=3);
+        boolean warm=holds&&(!(closed.condensedVolume()>0)||closed.phase(FluidThermodynamics.State.VAPOR)==null||majorSpecies(totals)>=3);
         boolean taut=PhaseLayout.taut(closed,capacity);FluidThermodynamics.CrystalAnswer answer=null;
         for(int attempt=0;attempt<2;attempt++) {
             answer=taut?model.crystalsAtVolume(totals,crystalEnergy,PhaseLayout.capacityVolume(capacity)-inertMoments.volume(),warm?t:Double.NaN,warm?p:Double.NaN,competing,checkpoint)
@@ -159,32 +154,27 @@ final class VesselCrystals {
     }
 
     /**
-     * The fluid's drive to {@code crystal} at {@code state}: {@code ln f_i(fluid) - ln f_s(T, P)}, read in the gas where
-     * the state holds the component there, else in the liquid; minus infinity where the fluid holds none of it. For the
-     * free water's ice (WP4) the water's fugacity is its steam's partial pressure, else its liquid's saturation pressure;
-     * minus infinity in a gas holding no steam (the ice sublimes into it); where the fluid holds no water and no gas the
-     * ice has nothing to exchange with but its own melt, and its drive is the liquid's against it where that is negative
-     * (above the melting line), else zero.
+     * The fluid's drive to {@code crystal} at {@code state}: {@code ln f_i(fluid) - ln f_s(T, P)}, read in the slot
+     * {@link #readSlot} names; minus infinity where the fluid holds none of it. W3b: ice is read as every crystal is, its
+     * water a component of the fluid's phases.
      */
     static double drive(FluidThermodynamics model,FluidThermodynamics.State state,NetworkCrystals.Crystal crystal,double t,double p) {
-        if(!crystal.water())return logFugacity(state,crystal.component(),state.vaporView()[crystal.component()]>0)-crystal.logFugacityCoefficient(t,p);
-        if(state.waterVapor()>0||state.waterLiquid()>0)return waterLogFugacity(model,state,state.waterVapor()>0)-crystal.logFugacityCoefficient(t,p);
-        if(state.vaporProperties()!=null)return Double.NEGATIVE_INFINITY;
-        return Math.min(0,DeterministicMath.log(model.saturationPressure(t)/p)-crystal.logFugacityCoefficient(t,p));
+        int slot=readSlot(state,crystal.component());
+        return slot<0?Double.NEGATIVE_INFINITY:logFugacity(state,crystal.component(),slot)-crystal.logFugacityCoefficient(t,p);
     }
-    /** {@code ln (f_w / P)} of the free water in the state's gas ({@code vapour}: its steam's partial pressure) or in its
-     * liquid water (its saturation pressure, the free-water rule's fugacity of the liquid); minus infinity without it. */
-    private static double waterLogFugacity(FluidThermodynamics model,FluidThermodynamics.State state,boolean vapour) {
-        if(vapour)return state.waterVapor()>0?DeterministicMath.log(state.waterPartialPressure()/state.pressure()):Double.NEGATIVE_INFINITY;
-        return state.waterLiquid()>0?DeterministicMath.log(model.saturationPressure(state.temperature())/state.pressure()):Double.NEGATIVE_INFINITY;
+    /** The slot a crystal's drive reads component {@code i} in: the gas where it holds some, else the liquid slot holding
+     * more of it; -1 where no phase holds it. At equilibrium every phase gives the same fugacity. */
+    static int readSlot(FluidThermodynamics.State state,int i) {
+        if(state.phase(FluidThermodynamics.State.VAPOR)!=null&&state.vaporAmountsView()[i]>0)return FluidThermodynamics.State.VAPOR;
+        double l=state.phase(FluidThermodynamics.State.LIQUID)!=null?state.liquidAmountsView()[i]:0,a=state.phase(FluidThermodynamics.State.AQUEOUS)!=null?state.aqueousAmountsView()[i]:0;
+        if(!(l>0)&&!(a>0))return -1;
+        return a>l?FluidThermodynamics.State.AQUEOUS:FluidThermodynamics.State.LIQUID;
     }
-    /** {@code ln (f_i / P)} of component {@code i} in the state's gas ({@code vapour}) or liquid. */
-    private static double logFugacity(FluidThermodynamics.State state,int i,boolean vapour) {
-        double[] amounts=vapour?state.vaporView():state.liquidView();
-        var phase=vapour?state.vaporProperties():state.liquidProperties();
+    /** {@code ln (f_i / P)} of component {@code i} in the state's slot {@code slot}: {@code ln x_i + ln phi_i}. */
+    private static double logFugacity(FluidThermodynamics.State state,int i,int slot) {
+        double[] amounts=state.amountsView(slot);var phase=state.phase(slot);
         if(phase==null||!(amounts[i]>0))return Double.NEGATIVE_INFINITY;
-        double lnf=DeterministicMath.log(amounts[i]/PhaseLayout.sum(amounts))+phase.logFugacityView()[i];
-        return vapour?lnf+DeterministicMath.log(state.hydrocarbonPartialPressure()/state.pressure()):lnf;
+        return DeterministicMath.log(amounts[i]/PhaseLayout.sum(amounts))+phase.logFugacityView()[i];
     }
 
     /**
@@ -196,8 +186,8 @@ final class VesselCrystals {
      * {@link SolidInventory#SIZE_DIGITS} significant digits from the exact double, as a merged size is.
      */
     static ParticleSize precipitateDiameter(FluidThermodynamics.State fluid,NetworkCrystals.Crystal crystal) {
-        double liquids=fluid==null?0:fluid.liquidVolume()+fluid.waterVolume(),phi=0;
-        double held=fluid==null?0:crystal.water()?fluid.waterLiquid():fluid.liquidView()[crystal.component()];
+        double liquids=fluid==null?0:fluid.condensedVolume(),phi=0;int c=crystal.component();
+        double held=fluid==null?0:fluid.liquidAmountsView()[c]+fluid.aqueousAmountsView()[c];
         if(liquids>0)phi=Math.min(SLUSH_SHARE,held*crystal.molarMass()/crystal.material().density()/liquids);
         double factor=phi>0?4.04*DeterministicMath.pow(phi/(1-phi),.6):0;
         return size(DILUTE_DIAMETER*Math.max(1,factor));
@@ -210,7 +200,7 @@ final class VesselCrystals {
      * snow of a let-down. phi is 0 there (D23 (1)).
      */
     private static FluidThermodynamics.State freezing(FluidThermodynamics.State closed,FluidThermodynamics.State beside) {
-        return beside!=null&&beside.liquidVolume()+beside.waterVolume()>0?closed:null;
+        return beside!=null&&beside.condensedVolume()>0?closed:null;
     }
     private static ParticleSize size(double metres) {
         return new ParticleSize(new BigDecimal(metres).round(new MathContext(SolidInventory.SIZE_DIGITS,RoundingMode.HALF_EVEN)).toString());
@@ -317,6 +307,7 @@ final class VesselCrystals {
         }
         private Joint joint(FluidThermodynamics.State start){return new Joint(model,start,present,seeds,totals,trueEnergy,capacity,ambient,workFrom,inert);}
         @Override public boolean rigid(){return PhaseLayout.rigid(capacity);}
+        @Override public boolean open(){return capacity==Double.POSITIVE_INFINITY;}
         private double[] solve(Joint joint,FluidThermodynamics.State start) {
             return SparseNewton.solve(joint,joint.start(start,seeds),new SparseNewton.Settings(SparseNewton.ITERATIONS,InventoryEquilibrium.CLOSURE,1e-6,24),checkpoint).variables();
         }
@@ -343,19 +334,20 @@ final class VesselCrystals {
      * component's, {@code ln f_i(fluid) - ln f_s = 0} ({@link #drive}). A crystal amount may go below zero in a trial (the
      * crystal is then absent, which the caller reads).
      */
-    /** The fluid phase a crystal's row reads its component in: the gas, the liquid, or none (the ice holds all the water). */
-    private enum Row {VAPOUR,LIQUID,ALL}
+    /** The crystal's row where the fluid holds none of its component: the crystal holds all of it. */
+    private static final int ALL=-1;
     private static final class Joint implements SparseNewton.Equations {
         private final FluidThermodynamics model;
         private final PhaseLayout layout;
         final List<NetworkCrystals.Crystal> crystals;
         private final double[] totals,crystalScale;
-        private final Row[] row;
+        /** Per crystal, the storage slot its row reads its component in, or {@link #ALL}. */
+        private final int[] row;
         private final double trueEnergy,capacity,workFrom;
         private final SolidInventory inert;
         private final SolidInventory.Moments inertMoments;
-        /** The layout's steam column where the ice's row reads it ({@link Row#VAPOUR}), else -1. */
-        private final int steamRead;
+        /** Per crystal, the layout's column of its component's total, read through a logarithm by its row, else -1. */
+        private final int[] logRead;
         private final int fluidSize;
         private volatile FluidThermodynamics.Prepared prepared;
         /** The wall's branches of the Jacobian in use (decision A423), as {@link PhaseLayout#wallClosure} keeps them. */
@@ -365,23 +357,18 @@ final class VesselCrystals {
               double trueEnergy,double capacity,double ambient,double workFrom,SolidInventory inert) {
             this.model=model;this.crystals=List.copyOf(crystals);this.totals=totals;this.trueEnergy=trueEnergy;this.capacity=capacity;this.workFrom=workFrom;
             this.inert=inert;inertMoments=inert.moments();
-            layout=new PhaseLayout(model,seed,null,null,PhaseLayout.support(model,seed,null,null,false),false).atAmbient(ambient);
-            fluidSize=layout.size();crystalScale=new double[crystals.size()];row=new Row[crystals.size()];int steam=-1;
+            layout=new PhaseLayout(model,seed,null,null,PhaseLayout.support(model,seed,null,null),false).atAmbient(ambient);
+            fluidSize=layout.size();crystalScale=new double[crystals.size()];row=new int[crystals.size()];logRead=new int[crystals.size()];
             for(int j=0;j<crystals.size();j++) {
-                var crystal=crystals.get(j);
-                if(crystal.water()) {
-                    // The ice against the free water (WP4): its steam where the layout carries steam, else its liquid (the
-                    // melting line), else the vessel's water is all ice (no fluid water for it to exchange with).
-                    row[j]=layout.carriesWaterVapor()?Row.VAPOUR:layout.carriesWaterLiquid()?Row.LIQUID:Row.ALL;
-                    if(row[j]==Row.VAPOUR)steam=layout.waterVaporVariable();
-                } else {
-                    var support=layout.support(crystal.component());
-                    if(support==PhaseSupport.ABSENT)throw new IllegalArgumentException("Crystal "+crystal.material().id()+" beside a fluid that holds none of its species");
-                    row[j]=support.vapor()?Row.VAPOUR:Row.LIQUID;
-                }
+                // The crystal against its component in the fluid: in the gas where the layout lays it out there, else in a
+                // liquid slot it holds; where the fluid holds none of it, the crystal holds all of it (W3b: every crystal
+                // alike, ice's former rule).
+                int c=crystals.get(j).component(),support=layout.support(c);
+                row[j]=(support&PhaseLayout.VAPOR)!=0?FluidThermodynamics.State.VAPOR:(support&PhaseLayout.LIQUID)!=0?FluidThermodynamics.State.LIQUID
+                        :(support&PhaseLayout.AQUEOUS)!=0?FluidThermodynamics.State.AQUEOUS:ALL;
+                logRead[j]=row[j]==ALL?-1:layout.amountVariable(c);
                 crystalScale[j]=Math.max(1e-6,seeds.get(j)/layout.amountScale());
             }
-            steamRead=steam;
         }
         double[] start(FluidThermodynamics.State seed,List<Double> seeds) {
             double[] x=new double[size()];System.arraycopy(layout.encode(seed),0,x,0,fluidSize);
@@ -398,9 +385,9 @@ final class VesselCrystals {
         FluidThermodynamics.State fluid(double[] x){return layout.decode(x,0,prepare(x));}
         @Override public int size(){return fluidSize+crystals.size();}
         @Override public double differenceScale(int column,double value) {
-            // The ice's row reads the steam through a logarithm, as the saturation row does (PhaseLayout.LOG_READ_SPAN): 5.6e-12
-            // Pa over ice at 111.6 K, 1e-10 of a cold vessel at 150 K, which the bulk floor differenced at its own size.
-            if(column==steamRead)return layout.steamLogReadScale(value);
+            // A crystal's row reads its component's fluid total through a logarithm (PhaseLayout.LOG_READ_SPAN): 5.6e-12 Pa of
+            // steam over ice at 111.6 K, 1e-10 of a cold vessel at 150 K, which the bulk floor differenced at its own size.
+            for(int read:logRead)if(column==read)return layout.logReadScale(column,value);
             return column<fluidSize?layout.differenceStepScale(column,value):Math.max(Math.abs(value),crystalScale[column-fluidSize]);
         }
         @Override public double maximumStep(double[] x,double[] direction) {
@@ -423,16 +410,12 @@ final class VesselCrystals {
             double t=fluid.temperature(),p=fluid.pressure();
             for(int j=0;j<crystals.size();j++) {
                 var crystal=crystals.get(j);int c=crystal.component();
-                if(crystal.water()) {
-                    // The water balance over the vessel's water, its ice included: the fluid's own share may be a trace of
-                    // steam (5.6e-12 Pa over ice at 111.6 K), against which the ice's amount is not resolved.
-                    int balance=layout.waterBalanceRow();
-                    if(balance>=0)f[balance]*=layout.componentScale(c)/Math.max(layout.componentScale(c),totals[c]);
-                    if(row[j]==Row.ALL){f[fluidSize+j]=(crystalMoles(x,j)-totals[c])/totals[c];continue;}
-                    f[fluidSize+j]=waterLogFugacity(model,fluid,row[j]==Row.VAPOUR)-crystal.logFugacityCoefficient(t,p);
-                    continue;
-                }
-                f[fluidSize+j]=logFugacity(fluid,c,row[j]==Row.VAPOUR)-crystal.logFugacityCoefficient(t,p);
+                // The balance over the vessel's amount of the crystal's component, its crystal included: the fluid's own share
+                // may be a trace (5.6e-12 Pa of steam over ice at 111.6 K), against which the crystal's amount is not resolved.
+                int balance=layout.balanceRow(c);
+                if(balance>=0)f[balance]*=layout.componentScale(c)/Math.max(layout.componentScale(c),totals[c]);
+                if(row[j]==ALL){f[fluidSize+j]=(crystalMoles(x,j)-totals[c])/totals[c];continue;}
+                f[fluidSize+j]=logFugacity(fluid,c,row[j])-crystal.logFugacityCoefficient(t,p);
             }
             return f;
         }
@@ -446,10 +429,10 @@ final class VesselCrystals {
                 var material=crystals.get(j).material();double m=crystalMoles(x,j)*crystals.get(j).molarMass();
                 volume+=m/material.density();energy+=m*material.specificInternalEnergy(t);mass+=m;
             }
-            return new FluidThermodynamics.State(t,p,base.liquidView(),base.vaporView(),base.waterLiquid(),base.waterVapor(),base.hydrocarbonPartialPressure(),
-                    base.waterPartialPressure(),base.volume()+volume,base.enthalpy()+energy+p*volume,base.internalEnergy()+energy,base.mass()+mass,
-                    base.liquidVolume(),base.waterVolume(),base.vaporVolume(),base.liquidProperties(),base.vaporProperties(),base.solids(),base.solidMoments(),
-                    base.waterCompressibility());
+            return new FluidThermodynamics.State(t,p,base.vaporAmountsView(),base.liquidAmountsView(),base.aqueousAmountsView(),
+                    base.volume()+volume,base.enthalpy()+energy+p*volume,base.internalEnergy()+energy,base.mass()+mass,
+                    base.vaporVolume(),base.liquidSlotVolume(),base.aqueousSlotVolume(),base.vaporPhase(),base.liquidPhase(),base.aqueousPhase(),
+                    base.solids(),base.solidMoments());
         }
         private FluidThermodynamics.Prepared prepare(double[] x) {
             double temperature=layout.temperature(x,0);var local=prepared;

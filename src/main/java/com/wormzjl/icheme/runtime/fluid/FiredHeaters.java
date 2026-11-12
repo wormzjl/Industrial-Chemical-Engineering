@@ -198,9 +198,10 @@ public final class FiredHeaters {
     /** The phase a burner's fuel arrives in: solids carried with it, else liquid where its liquid moles outweigh its vapour's. */
     static Burners.Fuel phase(PassiveNetwork.Reservoir donor) {
         if(!donor.inventory().solids().empty()||!donor.state().solids().empty())return Burners.Fuel.SOLID;
-        var s=donor.state();double liquid=s.waterLiquid(),vapor=s.waterVapor();
-        for(double n:s.liquid())liquid+=Math.max(0,n);
-        for(double n:s.vapor())vapor+=Math.max(0,n);
+        var s=donor.state();double liquid=0,vapor=0;
+        for(double n:s.liquidAmountsView())liquid+=Math.max(0,n);
+        for(double n:s.aqueousAmountsView())liquid+=Math.max(0,n);
+        for(double n:s.vaporAmountsView())vapor+=Math.max(0,n);
         return liquid>vapor?Burners.Fuel.LIQUID:Burners.Fuel.GAS;
     }
 

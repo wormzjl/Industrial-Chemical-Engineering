@@ -16,6 +16,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * Checkpoint format 11 through its real layout on a temporary directory (F3): the core record as the world's saved
@@ -50,7 +51,7 @@ class FluidCheckpointStoreTest extends CertifyingRig.Islands {
             var a=expected.reservoirs().get(n);var b=actual.reservoirs().get(n);
             assertEquals(a.id(),b.id(),what);assertEquals(a.kind(),b.kind(),what);assertEquals(a.inventory(),b.inventory(),what+": node "+a.id()+" inventory, bit for bit");
             assertEquals(Double.doubleToRawLongBits(a.state().temperature()),Double.doubleToRawLongBits(b.state().temperature()),what);assertEquals(Double.doubleToRawLongBits(a.state().pressure()),Double.doubleToRawLongBits(b.state().pressure()),what);
-            assertArrayEquals(a.state().liquid(),b.state().liquid(),what);assertArrayEquals(a.state().vapor(),b.state().vapor(),what);
+            assertArrayEquals(TestPhases.liquid(a.state()),TestPhases.liquid(b.state()),what);assertArrayEquals(TestPhases.vapor(a.state()),TestPhases.vapor(b.state()),what);
         }
     }
     /** A backend that fails its next pack or core write on demand, as a crash or a full disk would. */
@@ -293,13 +294,14 @@ class FluidCheckpointStoreTest extends CertifyingRig.Islands {
 
     /** A save larger than the pack size spans several packs (no save is bounded by one), all written before the core. */
     @Test void aSaveLargerThanOnePackSpansSeveralAndReadsBack() throws IOException {
-        // A tank's unit is about 1 kB (state format 47 added each node's blanket pressure): a limit that holds one, not two.
-        var folder=temporary.resolve("spanning");var store=directory(folder);store.packLimit(1_100);
+        // A tank's unit is about 1 kB on main's 46 list with its blanket pressure (state format 47); W6's 47-long list and the
+        // three slots of format 49 make it larger: a limit that holds one, not two.
+        var folder=temporary.resolve("spanning");var store=directory(folder);store.packLimit(1_500);
         var snapshots=new ArrayList<IslandCoordinator.Snapshot>();for(long id=1;id<=12;id++)snapshots.add(tank(id,id,0));
         var data=new FluidSavedData(checkpoint(snapshots),key->key.on(model),store);data.save(new CompoundTag(),null);
         var stats=data.lastSave().stats();
         assertTrue(stats.newPacks()>1,"several packs: "+stats.newPacks());assertEquals(stats.newPacks(),packs(folder).size());assertEquals(stats.newPacks(),stats.packs());
-        for(var name:packs(folder))assertTrue(Files.size(folder.resolve(FluidCheckpointStore.UNIT_DIRECTORY).resolve(name))<=1_100||name.equals("fluid-1.pack"),name);
+        for(var name:packs(folder))assertTrue(Files.size(folder.resolve(FluidCheckpointStore.UNIT_DIRECTORY).resolve(name))<=1_500||name.equals("fluid-1.pack"),name);
         var loaded=FluidSavedData.read(directory(folder),key->key.on(model)).orElseThrow();
         assertEquals(12,loaded.checkpoint().islands().size());
         for(int i=0;i<12;i++)assertInventories(snapshots.get(i).graph(),loaded.checkpoint().islands().get(i).snapshot().graph(),"island "+(i+1));

@@ -69,7 +69,9 @@ public final class StillBatch {
         /** The pot's bubble point reached {@link BatchStill#OVERHEAT} first: the firing is cut. */
         OVERHEAT,
         /** The steps ran out first. */
-        UNFINISHED
+        UNFINISHED,
+        /** The pot's liquid settled into two liquids first (W4): the batch stops there and the rest is residue. */
+        SETTLED
     }
 
     /**
@@ -108,10 +110,11 @@ public final class StillBatch {
      * @param fFactor    the column's highest F-factor (Pa^0.5)
      * @param boiled     the seconds from the start to the first vapour at the head (NaN if it never boiled)
      * @param failure    the first reason a column solve was refused, null if none was
+     * @param potStill   whether a step's column fell back to the pot's single stage (two liquids on its trays, W4)
      */
     public record Batch(Finish finish, int steps, double seconds, BatchStill.Pot end, List<Taken> cuts, double[] vent, double ventEnthalpy, double heat,
                         double warming, double fuel, double condenser, double condensed, double flooded, double fFactor, double boiled, List<Point> points,
-                        @Nullable String failure) {
+                        @Nullable String failure, boolean potStill) {
         public Batch {
             cuts = List.copyOf(cuts);
             points = List.copyOf(points);
@@ -149,6 +152,7 @@ public final class StillBatch {
         double dt = Math.max(1, total * (column.liquidEnthalpy(temperature + STEP_KELVIN, x0) - column.liquidEnthalpy(temperature, x0)) / rating);
         int cut = 0, steps = 0;
         String failure = null;
+        boolean potStill = false;
         var finish = Finish.UNFINISHED;
         while (steps < MOST_STEPS) {
             checkpoint.run();
@@ -184,6 +188,7 @@ public final class StillBatch {
                 }
             }
             if (failure == null && s.columnFailure() != null) failure = s.columnFailure();
+            if (s.split() != null && s.split().notice() != null) potStill = true;
             pot = s.pot();
             t += step;
             heat += s.heat();
@@ -211,6 +216,11 @@ public final class StillBatch {
                 finish = Finish.OVERHEAT;
                 break;
             }
+            // The column's pot split states the pot (no extra flash): a pot that settles is past what the sheet's still models.
+            if (removed > 0 && s.split() != null && s.split().twoLiquidPot()) {
+                finish = Finish.SETTLED;
+                break;
+            }
             // The next step: about the target share distilled, or STEP_KELVIN of heating; the head never jumps more than HEAD_KELVIN.
             double factor;
             if (removed > 0) {
@@ -230,7 +240,7 @@ public final class StillBatch {
         }
         var out = new ArrayList<Taken>();
         for (int c = 0; c < cuts.size(); c++) out.add(new Taken(cuts.get(c).id(), taken[c], enthalpies[c], from[c], to[c]));
-        return new Batch(finish, steps, t, pot, out, vent, ventEnthalpy, heat, warming, fuel, condenser, condensed, flooded, fFactor, boiled, thin(points), failure);
+        return new Batch(finish, steps, t, pot, out, vent, ventEnthalpy, heat, warming, fuel, condenser, condensed, flooded, fFactor, boiled, thin(points), failure, potStill);
     }
 
     /** At most {@link #MOST_POINTS} of {@code points}, evenly spaced, the first and last kept. */

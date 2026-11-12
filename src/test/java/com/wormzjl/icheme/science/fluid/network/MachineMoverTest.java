@@ -102,7 +102,8 @@ class MachineMoverTest extends PortFixture {
         assertEquals(1.40,model.heatCapacityRatio(nitrogenAt(101325)),.005,"nitrogen");
         var n=new double[mw.length];n[water]=1;
         double cp=3.470+1.450e-3*400+.121e5/(400.*400);
-        assertEquals(cp/(cp-1),model.heatCapacityRatio(model.flashTP(400,101325,n,NOOP)),1e-9,"steam at 400 K");
+        // W3b: steam's ideal gas is the cubic water record's fit; its ratio at 400 K is 4.8e-4 over the correlation's.
+        assertEquals(cp/(cp-1),model.heatCapacityRatio(model.flashTP(400,101325,n,NOOP)),1e-3,"steam at 400 K");
     }
     /** Form F2e (plan 3.3) as a set-flow mover states it: the set flow is the displacement and the rise limit the relief
      * rise, so the law holds the limit at no flow, 99.80 % of the set flow at half the limit and

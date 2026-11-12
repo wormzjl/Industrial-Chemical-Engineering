@@ -19,8 +19,8 @@ class AmbientCrudePresetTest {
                 assertEquals(t,state.temperature());
                 assertTrue(state.volume()>0);
                 assertTrue(Double.isFinite(state.internalEnergy()));
-                assertTrue(model.viscosity.liquid(t,state.liquid()).pascalSeconds()>0);
-                if(state.vaporVolume()>0)assertTrue(model.viscosity.vapor(t,state.vapor(),state.waterVapor())>0);
+                assertTrue(model.viscosity.liquid(t,TestPhases.oil(state)).pascalSeconds()>0);
+                if(state.vaporVolume()>0)assertTrue(model.viscosity.vapor(t,state.vaporAmounts())>0);
             }
         }
     }
@@ -34,7 +34,7 @@ class AmbientCrudePresetTest {
         for(var preset:FluidPresetCatalog.resolve(catalog).subList(2,6)) {
             var generator=new FluidDeviceSpec(1,298,200000,preset.moleFractions()).initialize(device,model,()->{});
             assertEquals(298,generator.state().temperature());
-            var liquid=generator.state().liquid();
+            var liquid=TestPhases.oil(generator.state());
             var viscosity=model.viscosity.liquid(298,liquid).pascalSeconds();
             var density=generator.state().mass()/generator.state().volume();
             assertTrue(PipeResistance.evaluate(geometry,.01,density,viscosity).pressureDrop()>0);
@@ -50,7 +50,7 @@ class AmbientCrudePresetTest {
     @Test void colderStatesAndPropertyOverridesAreContinuedFromTheirOwnRange() {
         var catalog=MaterialCatalog.bundled();
         var original=new HydrocarbonModel(catalog,FluidPresetCatalog.NETWORK_PACKAGE);
-        double[] n=new double[original.componentCount()];n[10]=1;
+        double[] n=new double[original.componentCount()+1];n[10]=1;
         var colder=assertDoesNotThrow(()->original.phase(293,101325,n,com.wormzjl.icheme.science.thermo.PengRobinsonKernel.Root.LIQUID));
         assertTrue(Double.isFinite(colder.molarEnthalpy()));
         var resources=new java.util.HashMap<>(catalog.resources());

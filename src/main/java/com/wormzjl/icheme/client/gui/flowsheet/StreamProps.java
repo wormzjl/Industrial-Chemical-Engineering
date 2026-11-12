@@ -58,12 +58,14 @@ public record StreamProps(double temperature, double pressure, double vapour, do
             volume += n.length == 0 ? 0 : n[n.length - 1] * WATER_WEIGHT / WATER_DENSITY;
             return new StreamProps(stream.temperature(), stream.pressure(), 0, all, stream.mass(), volume, Double.NaN, Double.NaN, Double.NaN, all == 0 ? 0 : stream.mass() / all * 1000, stream.mass() == 0 ? 0 : stream.enthalpy() / stream.mass(), Phases.NONE);
         }
-        double vapour = Arrays.stream(s.vaporView()).sum() + s.waterVapor(), oil = Arrays.stream(s.liquidView()).sum();
-        volume += (s.waterLiquid() + s.waterVapor()) * WATER_WEIGHT / WATER_DENSITY;
-        double mu = oil > 0 ? fluids.model().viscosity.liquid(s.temperature(), s.liquidView()).pascalSeconds() : s.waterLiquid() > 0 ? fluids.model().viscosity.waterLiquid(s.temperature()) : Double.NaN;
-        double gas = vapour > 0 ? fluids.model().viscosity.vapor(s.temperature(), s.vaporView(), s.waterVapor()) : Double.NaN;
+        double[] oilAmounts = s.labelAmountsView(FluidThermodynamics.OIL), aqueousAmounts = s.labelAmountsView(FluidThermodynamics.AQUEOUS);
+        double vapour = Arrays.stream(s.vaporAmountsView()).sum(), oil = Arrays.stream(oilAmounts).sum(), aqueous = Arrays.stream(aqueousAmounts).sum();
+        volume += s.totals()[s.componentCount() - 1] * WATER_WEIGHT / WATER_DENSITY;
+        // The liquid's viscosity: the oil's where it holds one, else the aqueous liquid's (W3b: one log-mixing rule each).
+        double mu = oil > 0 ? fluids.model().viscosity.liquid(s.temperature(), oilAmounts).pascalSeconds() : aqueous > 0 ? fluids.model().viscosity.liquid(s.temperature(), aqueousAmounts).pascalSeconds() : Double.NaN;
+        double gas = vapour > 0 ? fluids.model().viscosity.vapor(s.temperature(), s.vaporAmountsView()) : Double.NaN;
         double total = Math.max(all, Double.MIN_NORMAL);
-        var phases = new Phases(100 * oil / total, 100 * s.waterLiquid() / total, 100 * vapour / total, 0);
+        var phases = new Phases(100 * oil / total, 100 * aqueous / total, 100 * vapour / total, 0);
         return new StreamProps(s.temperature(), s.pressure(), 100 * vapour / total, all, s.mass(), volume, s.volume() > 0 ? s.mass() / s.volume() : Double.NaN, mu, gas, all == 0 ? 0 : s.mass() / all * 1000, s.mass() == 0 ? 0 : s.enthalpy() / s.mass(), phases);
     }
 
@@ -89,12 +91,9 @@ public record StreamProps(double temperature, double pressure, double vapour, do
         double[] out = new double[whole.length];
         int water = out.length - 1;
         switch (phase) {
-            case 0 -> System.arraycopy(s.liquidView(), 0, out, 0, Math.min(water, s.liquidView().length));
-            case 1 -> out[water] = s.waterLiquid();
-            case 2 -> {
-                System.arraycopy(s.vaporView(), 0, out, 0, Math.min(water, s.vaporView().length));
-                out[water] = s.waterVapor();
-            }
+            case 0 -> System.arraycopy(s.labelAmountsView(FluidThermodynamics.OIL), 0, out, 0, Math.min(out.length, s.componentCount()));
+            case 1 -> System.arraycopy(s.labelAmountsView(FluidThermodynamics.AQUEOUS), 0, out, 0, Math.min(out.length, s.componentCount()));
+            case 2 -> System.arraycopy(s.vaporAmountsView(), 0, out, 0, Math.min(out.length, s.componentCount()));
             default -> {
             }
         }

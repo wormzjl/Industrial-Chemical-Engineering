@@ -991,7 +991,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
     /** The network package's formulas (atoms of C, H, N, O, S) in {@code model}'s conserved order, by component name. */
     static double[][] formulas(MaterialCatalog catalog,FluidThermodynamics model) {
         String id=com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(catalog);
-        var values=catalog.formulas(id);var names=new ArrayList<>(catalog.requirePackage(id).components());names.add("Water");
+        var values=catalog.formulas(id);var names=catalog.conservedComponents(id);
         var out=new double[model.componentCount()][];var components=model.components();
         for(int c=0;c<out.length;c++){int i=names.indexOf(components.get(c));out[c]=i<0?new double[MaterialCatalog.FORMULA_ELEMENTS.size()]:values[i];}
         return out;
@@ -999,7 +999,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
     /** The network package's lower heating values (J/mol) in {@code model}'s conserved order, by component name. */
     static double[] heatingValues(MaterialCatalog catalog,FluidThermodynamics model) {
         String id=com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(catalog);
-        var values=catalog.heatingValues(id);var names=new ArrayList<>(catalog.requirePackage(id).components());names.add("Water");
+        var values=catalog.heatingValues(id);var names=catalog.conservedComponents(id);
         var out=new double[model.componentCount()];var components=model.components();
         for(int c=0;c<out.length;c++){int i=names.indexOf(components.get(c));out[c]=i<0?0:values[i];}
         return out;
@@ -2101,7 +2101,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         var still=new com.wormzjl.icheme.network.FluidNetwork.TowerPlume(target,0,(float)com.wormzjl.icheme.science.fluid.network.CoolingTower.AIR_TEMPERATURE,0,0);
         if(rates==null||!(plumeAir(rates.fill().dryAirFlow())>0))return still;
         var exhaust=com.wormzjl.icheme.science.fluid.network.TowerTransfer.exhaust(runtime.coordinator().model(owner),rates.fill());
-        float air=(float)plumeAir(rates.fill().dryAirFlow()),t=(float)exhaust.temperature(),w=(float)exhaust.humidity(),e=(float)Math.max(0,rates.fill().evaporation());
+        float air=(float)plumeAir(rates.fill().dryAirFlow()),t=(float)exhaust.temperature(),w=(float)exhaust.humidity(),e=(float)Math.max(0,rates.fill().waterLoss());
         if(!Float.isFinite(air)||!Float.isFinite(t)||!Float.isFinite(w)||!Float.isFinite(e))return still;
         return new com.wormzjl.icheme.network.FluidNetwork.TowerPlume(target,air,t,Math.clamp(w,0,1),e);
     }

@@ -77,8 +77,6 @@ public final class FlareUnit implements UnitModel {
     }
 
     private static List<String> names(FlowThermo thermo) {
-        var names = new ArrayList<>(thermo.catalog().requirePackage(thermo.packageId()).components());
-        names.add("Water");
-        return names;
+        return new ArrayList<>(thermo.catalog().conservedComponents(thermo.packageId()));
     }
 }

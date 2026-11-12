@@ -112,7 +112,7 @@ public final class PassiveIntervalSolver {
         var monitored=conversions.converted()?conversions.graph():initial;
         var start=InventoryEquilibrium.completed(initial,conversions,model,checkpoint);
         Result result;
-        if(com.wormzjl.icheme.science.fluid.transport.SolidMobility.monitored(monitored)||model.solidSettings.immobileViscosity()<.002&&monitored.reservoirs().stream().anyMatch(n->n.state().waterVolume()>0))result=new SolidEventIntegrator(model,this).solve(start,committed,duration,settings,checkpoint,startingStep);
+        if(com.wormzjl.icheme.science.fluid.transport.SolidMobility.monitored(monitored)||model.solidSettings.immobileViscosity()<.002&&monitored.reservoirs().stream().anyMatch(n->FluidThermodynamics.holdsPhase(n.state(),FluidThermodynamics.AQUEOUS)))result=new SolidEventIntegrator(model,this).solve(start,committed,duration,settings,checkpoint,startingStep);
         else result=integrate(start,duration,settings,checkpoint,StageGuard.NONE,startingStep);
         return committedInlets(result);
     }

@@ -136,7 +136,7 @@ class RefineryCarbonDioxideCrystalTest {
         int i = model.compounds().indexOf("CarbonDioxide");
         double[] pure = new double[model.compounds().size()];
         pure[i] = 1;
-        double vapour = model.hydrocarbon.phase(t, p, pure, Root.VAPOR).molarEnthalpy();
+        double vapour = model.hydrocarbon.phase(t, p, com.wormzjl.icheme.science.fluid.thermo.TestPhases.conserved(model.hydrocarbon, pure), Root.VAPOR).molarEnthalpy();
         var material = crystal.material();
         double molarMass = crystal.molarMass();
         double solid = (material.specificInternalEnergy(t) + material.crystal().energyOffset()) * molarMass + p * molarMass / material.density();

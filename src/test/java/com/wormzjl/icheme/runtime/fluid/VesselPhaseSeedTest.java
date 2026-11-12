@@ -13,6 +13,7 @@ import java.util.*;
 import org.junit.jupiter.api.Test;
 import static com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Direction.*;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * Test world rows 2 and 9b, holds H1 and H3 (documentation/2026-09-24-coolprop-low-temperature/TEST_WORLD_RIG_HOLDS_TRACE.md;
@@ -39,7 +40,7 @@ class VesselPhaseSeedTest {
 
     /** A 1 m3 tank of {@code liquid} and {@code vapour} mol at (T, P) beside {@code solids}, as its refresh closes it. */
     PassiveNetwork.Reservoir tank(double t,double p,double[] liquid,double[] vapour,SolidInventory solids) {
-        var guess=pilot.state(t,p,liquid,vapour,0,0,p).withSolids(solids);
+        var guess=TestPhases.state(pilot,t,p,liquid,vapour,0,0).withSolids(solids);
         var vessel=new PassiveNetwork.Reservoir(TANK,1,guess,PassiveNetwork.NodeKind.RESERVOIR,new PassiveNetwork.Inventory(1,PhaseLayout.totalAmounts(guess),guess.internalEnergy(),solids));
         return InventoryEquilibrium.refresh(new PassiveNetwork(List.of(vessel),List.of()),pilot,()->{}).graph().reservoirs().getFirst();
     }
@@ -67,7 +68,7 @@ class VesselPhaseSeedTest {
             graph=last.graph();results.add(last);
             var tank=graph.reservoirs().get(node(graph,TANK));var s=tank.state();int vent=vent(graph);
             System.out.printf(Locale.ROOT,"VESSEL_SEED %s slice %d (%.2f s): tank %.4f K %.1f Pa liquid %.5f m3 vapour %.5f m3 fluid %.3f kg solids %.3f kg; vent %s %.5f kg/s; substeps %d/%d%n",
-                    label,slice,seconds[slice-1],s.temperature(),s.pressure(),s.liquidVolume(),s.vaporVolume(),s.mass()-s.solidMoments().mass(),s.solidMoments().mass(),
+                    label,slice,seconds[slice-1],s.temperature(),s.pressure(),TestPhases.liquidVolume(s),s.vaporVolume(),s.mass()-s.solidMoments().mass(),s.solidMoments().mass(),
                     last.endpointModes().get(vent),last.averageMassFlows()[vent],last.acceptedSubsteps(),last.rejectedSubsteps());
         }
         return results;
@@ -134,7 +135,7 @@ class VesselPhaseSeedTest {
     @Test void aLiquidFullSlushTankVentsTowardOneAtmosphereWhileItsVentPassesGas() {
         var graph=slush();var start=graph.reservoirs().get(node(graph,TANK)).state();
         System.out.printf(Locale.ROOT,"VESSEL_SEED slush: %.4f K %.1f Pa liquid %.5f m3 vapour %.5f m3 solids %.3f kg%n",
-                start.temperature(),start.pressure(),start.liquidVolume(),start.vaporVolume(),start.solidMoments().mass());
+                start.temperature(),start.pressure(),TestPhases.liquidVolume(start),start.vaporVolume(),start.solidMoments().mass());
         var results=run(graph,"H3 slush",.05,.1,5,5,5,5,5,5);
         var g=results.getLast().graph();var end=g.reservoirs().get(node(g,TANK)).state();int vent=vent(g);
         assertTrue(end.pressure()<1e6,"the tank vents toward 1 atm: "+end.pressure());

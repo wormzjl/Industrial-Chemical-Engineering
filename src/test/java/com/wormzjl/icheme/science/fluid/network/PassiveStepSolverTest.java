@@ -7,11 +7,13 @@ import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo;
 import java.util.*;
 import org.junit.jupiter.api.Test;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 class PassiveStepSolverTest {
-    private final FluidThermodynamics model=com.wormzjl.icheme.fluid.support.FluidTestSupport.model(MaterialCatalog.bundled(),"icheme:tjl20_methane");
+    // W3b: on the refinery network, whose cubic holds water (the tjl20 packages hold none); its first compounds are tjl20's.
+    private final FluidThermodynamics model=com.wormzjl.icheme.fluid.support.FluidTestSupport.model(MaterialCatalog.bundled(),"icheme:refinery");
     private FluidThermodynamics.State fill(double pressure,int component) {
-        double[] n=new double[com.wormzjl.icheme.science.material.MaterialTestBasis.CRUDE+1];n[component]=1;var unit=model.flashTP(350,pressure,n,()->{});n[component]/=unit.volume();
+        double[] n=new double[model.componentCount()];n[component]=1;var unit=model.flashTP(350,pressure,n,()->{});n[component]/=unit.volume();
         return model.flashTP(350,pressure,n,()->{});
     }
     private PassiveNetwork graph(int component,boolean reverse) {
@@ -72,7 +74,7 @@ class PassiveStepSolverTest {
         assertEquals(result.states().get(1).pressure(),result.states().get(2).pressure(),1e-4);
     }
     @Test void bulkThreePhaseCrudeTransfersAllComponentsUpAnElevation() {
-        String id="icheme:tjl20_methane";double[] composition=Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo(id).crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(),com.wormzjl.icheme.science.material.MaterialTestBasis.CRUDE+1);composition[com.wormzjl.icheme.science.material.MaterialTestBasis.CRUDE]=.2;
+        String id="icheme:tjl20_methane";double[] composition=Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo(id).crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(),model.componentCount());composition[model.componentCount()-1]=.2;
         var reservoirs=new ArrayList<PassiveNetwork.Reservoir>();
         for(double pressure:new double[]{200000,150000}) {
             double[] n=composition.clone();var unit=model.flashTP(350,pressure,n,()->{});for(int i=0;i<n.length;i++)n[i]/=unit.volume();
@@ -81,14 +83,15 @@ class PassiveStepSolverTest {
         var graph=new PassiveNetwork(reservoirs,List.of(new PassiveNetwork.Pipe(4,0,1,new PipeResistance.Geometry(10,.05,.000045,0))));
         var result=new PassiveStepSolver(model).solve(graph,.01,()->{});assertTrue(result.massFlows()[0]>0);
         var oldReceiver=PhaseLayout.totalAmounts(reservoirs.get(1).state());var newReceiver=PhaseLayout.totalAmounts(result.states().get(1));
-        for(int i=0;i<oldReceiver.length;i++)assertTrue(newReceiver[i]>oldReceiver[i],"component "+i);
-        for(var state:result.states()){assertTrue(state.liquidVolume()>0);assertTrue(state.waterVolume()>0);assertTrue(state.vaporVolume()>0);}
+        // Every component of the feed (the refinery basis holds 26 the feed does not name; they stay zero).
+        for(int i=0;i<oldReceiver.length;i++)if(composition[i]>0)assertTrue(newReceiver[i]>oldReceiver[i],"component "+i);else assertEquals(0,newReceiver[i],0.0,"component "+i);
+        for(var state:result.states()){assertTrue(TestPhases.liquidVolume(state)>0);assertTrue(TestPhases.waterVolume(state)>0);assertTrue(state.vaporVolume()>0);}
     }
     @Test void aPreviouslyAbsentGasComponentCanEnterAReceivingReservoir() {
         var graph=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,fill(200000,0)),new PassiveNetwork.Reservoir(2,0,fill(101325,1))),
                 List.of(new PassiveNetwork.Pipe(3,0,1,new PipeResistance.Geometry(10,.05,.000045,0))));
         var result=new PassiveStepSolver(model).solve(graph,.01,()->{});
-        assertTrue(result.states().get(1).vapor()[0]>0);assertTrue(result.massFlows()[0]>0);
-        assertEquals(0,result.states().get(0).vapor()[1],1e-10);
+        assertTrue(TestPhases.vapor(result.states().get(1))[0]>0);assertTrue(result.massFlows()[0]>0);
+        assertEquals(0,TestPhases.vapor(result.states().get(0))[1],1e-10);
     }
 }

@@ -13,8 +13,10 @@ import java.util.Objects;
  * {@code W} is measured by the modified tangent-plane distance {@code tm(W) = 1 + sum_i W_i (ln W_i + ln phi_i(W) - d_i - 1)},
  * whose minimum over the amount scale is {@code 1 - exp(-D(w))}, so {@code tm(W) < 0} at any {@code W} proves the feed
  * unstable; every trial phase is evaluated on its own lower-Gibbs root. Trials run in a fixed order: Wilson vapour-like
- * {@code W = z K}, Wilson liquid-like {@code W = z / K}, and, when at most {@link Settings#pureComponentTrialLimit()}
- * components are present, each pure present component in basis order. A trial iterates {@code ln W_i = d_i - ln phi_i(W)}
+ * {@code W = z K}, Wilson liquid-like {@code W = z / K} (on a list with water and another present component, water at
+ * {@link #SEED_TRACE} of its Wilson value: the oil-rich liquid, W3b), and, when at most
+ * {@link Settings#pureComponentTrialLimit()} components are present, each pure present component in basis order, else
+ * the water-rich trial. A trial iterates {@code ln W_i = d_i - ln phi_i(W)}
  * by successive substitution with a fixed-cycle dominant-eigenvalue extrapolation, then Newton on
  * {@code alpha_i = 2 sqrt(W_i)} with the Hessian {@code delta_ij (1 + g_i / 2) + sqrt(w_i w_j) d ln phi_i/d n_j}, a
  * decrease test on {@code tm} and step halving; it ends converged, at the trivial solution {@code W = z}, or out of
@@ -129,12 +131,35 @@ public final class TangentPlaneStability {
     private static final int LOCALLY_UNSTABLE = 2;
     private static final int UNDETERMINED = 3;
 
+    /**
+     * The share a seed gives a compound it means to leave out, relative to its own value: water in Wilson's liquid trial and
+     * in the three-slot split's first liquid, every other compound in its water-rich liquid (W3b). Wilson's liquid of a
+     * steam-laden gas holds a third or more of water; its substitution ran to the aqueous side, which above water's dew point
+     * proves nothing, so a gas that would condense its oil was called stable (naphtha with 23 % steam at 2.5 bar stayed all
+     * gas from water's dew point at 358 K up to 384 K, where without the steam it is 9 to 66 % liquid).
+     */
+    public static final double SEED_TRACE = 1.0e-6;
+
     private final PengRobinsonKernel kernel;
     private final Settings settings;
+    /** The component of the water-rich trial (W3a D3), -1 for none. */
+    private final int waterRichTrial;
 
     public TangentPlaneStability(PengRobinsonKernel kernel, Settings settings) {
+        this(kernel, settings, -1);
+    }
+
+    /**
+     * The test with one added trial for a list with water (batch 2026-11-11-aqueous-solvents, W3a D3): where the
+     * pure-component trials do not run (more than {@link Settings#pureComponentTrialLimit()} components present) and
+     * component {@code waterRichTrial} is present, a last trial starts from it pure, as a pure-component trial does. With
+     * {@code -1} this is the two-argument test bit for bit.
+     */
+    public TangentPlaneStability(PengRobinsonKernel kernel, Settings settings, int waterRichTrial) {
         this.kernel = Objects.requireNonNull(kernel, "kernel");
         this.settings = Objects.requireNonNull(settings, "settings");
+        if (waterRichTrial < -1 || waterRichTrial >= kernel.componentCount()) throw new IllegalArgumentException("Invalid water-rich trial component");
+        this.waterRichTrial = waterRichTrial;
     }
 
     public PengRobinsonKernel kernel() { return kernel; }
@@ -227,6 +252,8 @@ public final class TangentPlaneStability {
         // Only present entries are written below; the others must be the zeros the kernel is handed.
         Arrays.fill(w.current.amounts, 0.0);
         Arrays.fill(w.candidate.amounts, 0.0);
+        // The kernel carries the present components only: every trial lives on them.
+        w.mixture.carry(w.feed);
         kernel.prepareTemperature(temperatureKelvin, w.mixture);
 
         // The feed on its lower-Gibbs physical root; a tie keeps the vapour root.
@@ -270,12 +297,22 @@ public final class TangentPlaneStability {
         System.arraycopy(w.feed, 0, w.best, 0, w.count);
         boolean proven = false;
         boolean unresolved = false;
-        int trialCount = 2 + (w.presentCount <= settings.pureComponentTrialLimit() ? w.presentCount : 0);
+        boolean pureTrials = w.presentCount <= settings.pureComponentTrialLimit();
+        int trialCount = 2 + (pureTrials ? w.presentCount : 0)
+                + (!pureTrials && waterRichTrial >= 0 && w.feed[waterRichTrial] > 0.0 ? 1 : 0);
         int trials = 0;
+        // The vapour trial (0) that ends on a liquid root duplicates the liquid trial and tells nothing; it is repeated
+        // with every iterate held on the vapour root (W3b). A water-rich feed seeds it water-rich, where below 373 K the
+        // lower-Gibbs root is the liquid, so the substitution never left the liquid basin: a cut with 30 mol of water
+        // per mol at 369 K and 1 bar, above its three-phase point, answered two liquids.
+        boolean held = false;
         for (int trial = 0; trial < trialCount; trial++) {
+            w.heldRoot = held;
             Outcome outcome = runTrial(w, trial);
             trials++;
             Point end = w.current;
+            held = trial == 0 && !held && outcome != Outcome.PROVEN && end.root == PengRobinsonKernel.Root.LIQUID;
+            if (held) trial--;
             if (filter != null && (outcome == Outcome.PROVEN || outcome == Outcome.UNRESOLVED)) {
                 // runTrial ends such a trial at its stationary point or its budget, so the current point is the trial's.
                 for (int i = 0; i < w.count; i++) w.shares[i] = end.amounts[i] / end.total;
@@ -301,6 +338,7 @@ public final class TangentPlaneStability {
                 w.nearestStationary = Math.min(w.nearestStationary, end.trivial);
             }
         }
+        w.heldRoot = false;
         Verdict verdict;
         if (proven || w.localStability == LOCALLY_UNSTABLE) verdict = Verdict.UNSTABLE;
         else if (unresolved) verdict = Verdict.UNRESOLVED;
@@ -333,14 +371,19 @@ public final class TangentPlaneStability {
         if (trial < 2) {
             preferred = trial == 0 ? PengRobinsonKernel.Root.VAPOR : PengRobinsonKernel.Root.LIQUID;
             double sign = trial == 0 ? 1.0 : -1.0;
+            // The liquid trial is the oil-rich liquid: water at a trace where anything else is present (SEED_TRACE); the
+            // aqueous side stays the pure-component or water-rich trial's.
+            int traced = trial == 1 && waterRichTrial >= 0 && w.feed[waterRichTrial] > 0.0 && w.presentCount > 1 ? waterRichTrial : -1;
             for (int a = 0; a < w.presentCount; a++) {
                 int i = w.present[a];
-                seed.logAmounts[i] = bounded(w.logFeed[i] + sign * DeterministicMath.log(w.wilson[i]));
+                seed.logAmounts[i] = bounded(w.logFeed[i] + sign * DeterministicMath.log(w.wilson[i])
+                        + (i == traced ? DeterministicMath.log(SEED_TRACE) : 0.0));
             }
             evaluate(w, seed, preferred, false, true);
         } else {
             preferred = opposite(w.feedRoot);
-            int pure = w.present[trial - 2];
+            int pure = trial - 2 < w.presentCount && w.presentCount <= settings.pureComponentTrialLimit()
+                    ? w.present[trial - 2] : waterRichTrial;
             Arrays.fill(seed.amounts, 0.0);
             seed.amounts[pure] = 1.0;
             for (int a = 0; a < w.presentCount; a++) {
@@ -539,7 +582,7 @@ public final class TangentPlaneStability {
     }
 
     /**
-     * Evaluates a trial point on its lower-Gibbs root and fills its gradient {@code g_i = ln W_i + ln phi_i - d_i},
+     * Evaluates a trial point on its lower-Gibbs root (a held trial: on its preferred root) and fills its gradient {@code g_i = ln W_i + ln phi_i - d_i},
      * {@code tm}, the largest {@code |g_i|} and the squared log distance from the feed.
      *
      * @param fromLogarithms take the amounts from {@code logAmounts}; otherwise they are already set
@@ -589,7 +632,7 @@ public final class TangentPlaneStability {
             boolean otherAdmissible = admissible(w, c.second, other);
             double otherShift = other == PengRobinsonKernel.Root.VAPOR ? w.branchShift(c.amounts, total) : 0.0;
             double preferredShift = preferred == PengRobinsonKernel.Root.VAPOR ? w.branchShift(c.amounts, total) : 0.0;
-            if (!preferredAdmissible || otherAdmissible && w.residualGibbs(c.second, c.amounts, total) + otherShift
+            if (!preferredAdmissible || !w.heldRoot && otherAdmissible && w.residualGibbs(c.second, c.amounts, total) + otherShift
                     < w.residualGibbs(chosen, c.amounts, total) + preferredShift) {
                 root = other;
                 chosen = c.second;
@@ -604,7 +647,7 @@ public final class TangentPlaneStability {
                     }
                 }
             }
-        } else if (chosen.physicalRootCount() > 1) {
+        } else if (!w.heldRoot && chosen.physicalRootCount() > 1) {
             PengRobinsonKernel.Root other = opposite(preferred);
             kernel.evaluate(t, pressure, c.amounts, other, w.mixture, c.second);
             w.evaluations++;
@@ -720,7 +763,7 @@ public final class TangentPlaneStability {
             gradient = new double[count];
             first = kernel.newEvaluation();
             second = kernel.newEvaluation();
-            derivatives = kernel.newDerivatives();
+            derivatives = kernel.newDerivativesWithoutHeatCapacity();
         }
     }
 
@@ -763,6 +806,8 @@ public final class TangentPlaneStability {
         private PengRobinsonKernel.Root feedRoot;
         private int localStability;
         private boolean fullStep;
+        /** Whether the current trial keeps every iterate on its preferred root (the repeated vapour trial). */
+        private boolean heldRoot;
         private int evaluations;
         private int derivativeEvaluations;
         private int iterations;
@@ -773,7 +818,7 @@ public final class TangentPlaneStability {
             mixture = kernel.newWorkspace();
             feedVapor = kernel.newEvaluation();
             feedLiquid = kernel.newEvaluation();
-            feedDerivatives = kernel.newDerivatives();
+            feedDerivatives = kernel.newDerivativesWithoutHeatCapacity();
             feed = new double[count];
             logFeed = new double[count];
             reference = new double[count];

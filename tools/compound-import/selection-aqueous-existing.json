@@ -1,0 +1,312 @@
+{
+  "comment": "Batch 2026-11-11-aqueous-solvents, plan W2a (M3): group counts for the datasets of the 33 defined compounds of icheme:refinery (modified UNIFAC (Dortmund) and E-PPR78, from each compound's ChemSep record; the crude cuts get none in this package), and the IAPWS G7-04 Henry constants in water of its eight gases. The water model takes no record here.",
+  "properties_revision": "unused",
+  "viscosity_revision": "unused",
+  "freezing_revision": "unused",
+  "group_counts_revisions": {
+    "modfac": "chemsep-8.3-modfac-r1",
+    "eppr78": "chemsep-8.3-ppr78-r1"
+  },
+  "henry_revision": "iapws-g7-04-r1",
+  "henry_source": "IAPWS G7-04, Guideline on the Henry's Constant and Vapor-Liquid Distribution Constant for Gases in H2O and D2O at High Temperatures (2004), after R. Fernandez-Prini, J. L. Alvarez, A. H. Harvey, J. Phys. Chem. Ref. Data 32 (2003) 903, table of A, B, C for {entry} in H2O: ln(kH/p*) = A/Tr + B tau^0.355/Tr + C Tr^-0.41 exp(tau), Tr = T/647.096 K, tau = 1 - Tr, p* the saturation pressure of water, kH on the mole-fraction basis. Coefficients as in Table 2 of the guideline (iapws.org, read 2026-11-11). Copyright 2004 IAPWS; publication in whole or in part is allowed provided attribution is given to IAPWS.",
+  "form": {},
+  "compounds": [],
+  "groups_only": [
+    {
+      "component": "Methane",
+      "cas": "74-82-8",
+      "properties": "icheme:tjl20_methane",
+      "properties_file": "tjl20_methane.json"
+    },
+    {
+      "component": "Ethane",
+      "cas": "74-84-0",
+      "properties": "icheme:tjl19_ethane",
+      "properties_file": "tjl19_ethane.json"
+    },
+    {
+      "component": "Propane",
+      "cas": "74-98-6",
+      "properties": "icheme:tjl19_propane",
+      "properties_file": "tjl19_propane.json"
+    },
+    {
+      "component": "Isobutane",
+      "cas": "75-28-5",
+      "properties": "icheme:tjl19_isobutane",
+      "properties_file": "tjl19_isobutane.json"
+    },
+    {
+      "component": "N-butane",
+      "cas": "106-97-8",
+      "properties": "icheme:tjl19_n_butane",
+      "properties_file": "tjl19_n_butane.json"
+    },
+    {
+      "component": "Isopentane",
+      "cas": "78-78-4",
+      "properties": "icheme:tjl19_isopentane",
+      "properties_file": "tjl19_isopentane.json"
+    },
+    {
+      "component": "N-pentane",
+      "cas": "109-66-0",
+      "properties": "icheme:tjl19_n_pentane",
+      "properties_file": "tjl19_n_pentane.json"
+    },
+    {
+      "component": "Hydrogen",
+      "cas": "1333-74-0",
+      "properties": "icheme:chemsep_hydrogen",
+      "properties_file": "chemsep_hydrogen.json"
+    },
+    {
+      "component": "HydrogenSulfide",
+      "cas": "7783-06-4",
+      "properties": "icheme:chemsep_hydrogen_sulfide",
+      "properties_file": "chemsep_hydrogen_sulfide.json"
+    },
+    {
+      "component": "CarbonMonoxide",
+      "cas": "630-08-0",
+      "properties": "icheme:chemsep_carbon_monoxide",
+      "properties_file": "chemsep_carbon_monoxide.json"
+    },
+    {
+      "component": "Ammonia",
+      "cas": "7664-41-7",
+      "properties": "icheme:chemsep_ammonia",
+      "properties_file": "chemsep_ammonia.json"
+    },
+    {
+      "component": "CarbonylSulfide",
+      "cas": "463-58-1",
+      "properties": "icheme:chemsep_carbonyl_sulfide",
+      "properties_file": "chemsep_carbonyl_sulfide.json"
+    },
+    {
+      "component": "Ethylene",
+      "cas": "74-85-1",
+      "properties": "icheme:chemsep_ethylene",
+      "properties_file": "chemsep_ethylene.json"
+    },
+    {
+      "component": "Propylene",
+      "cas": "115-07-1",
+      "properties": "icheme:chemsep_propylene",
+      "properties_file": "chemsep_propylene.json"
+    },
+    {
+      "component": "Butene-1",
+      "cas": "106-98-9",
+      "properties": "icheme:chemsep_butene_1",
+      "properties_file": "chemsep_butene_1.json"
+    },
+    {
+      "component": "Isobutene",
+      "cas": "115-11-7",
+      "properties": "icheme:chemsep_isobutene",
+      "properties_file": "chemsep_isobutene.json"
+    },
+    {
+      "component": "Cis-2-butene",
+      "cas": "590-18-1",
+      "properties": "icheme:chemsep_cis_2_butene",
+      "properties_file": "chemsep_cis_2_butene.json"
+    },
+    {
+      "component": "Trans-2-butene",
+      "cas": "624-64-6",
+      "properties": "icheme:chemsep_trans_2_butene",
+      "properties_file": "chemsep_trans_2_butene.json"
+    },
+    {
+      "component": "Butadiene",
+      "cas": "106-99-0",
+      "properties": "icheme:chemsep_butadiene",
+      "properties_file": "chemsep_butadiene.json"
+    },
+    {
+      "component": "N-hexane",
+      "cas": "110-54-3",
+      "properties": "icheme:chemsep_n_hexane",
+      "properties_file": "chemsep_n_hexane.json"
+    },
+    {
+      "component": "Cyclohexane",
+      "cas": "110-82-7",
+      "properties": "icheme:chemsep_cyclohexane",
+      "properties_file": "chemsep_cyclohexane.json"
+    },
+    {
+      "component": "Benzene",
+      "cas": "71-43-2",
+      "properties": "icheme:chemsep_benzene",
+      "properties_file": "chemsep_benzene.json"
+    },
+    {
+      "component": "Toluene",
+      "cas": "108-88-3",
+      "properties": "icheme:chemsep_toluene",
+      "properties_file": "chemsep_toluene.json"
+    },
+    {
+      "component": "Ethylbenzene",
+      "cas": "100-41-4",
+      "properties": "icheme:chemsep_ethylbenzene",
+      "properties_file": "chemsep_ethylbenzene.json"
+    },
+    {
+      "component": "O-xylene",
+      "cas": "95-47-6",
+      "properties": "icheme:chemsep_o_xylene",
+      "properties_file": "chemsep_o_xylene.json"
+    },
+    {
+      "component": "M-xylene",
+      "cas": "108-38-3",
+      "properties": "icheme:chemsep_m_xylene",
+      "properties_file": "chemsep_m_xylene.json"
+    },
+    {
+      "component": "P-xylene",
+      "cas": "106-42-3",
+      "properties": "icheme:chemsep_p_xylene",
+      "properties_file": "chemsep_p_xylene.json"
+    },
+    {
+      "component": "MethylMercaptan",
+      "cas": "74-93-1",
+      "properties": "icheme:chemsep_methyl_mercaptan",
+      "properties_file": "chemsep_methyl_mercaptan.json"
+    },
+    {
+      "component": "EthylMercaptan",
+      "cas": "75-08-1",
+      "properties": "icheme:chemsep_ethyl_mercaptan",
+      "properties_file": "chemsep_ethyl_mercaptan.json"
+    },
+    {
+      "component": "Oxygen",
+      "cas": "7782-44-7",
+      "properties": "icheme:chemsep_oxygen",
+      "properties_file": "chemsep_oxygen.json"
+    },
+    {
+      "component": "SulfurDioxide",
+      "cas": "7446-09-5",
+      "properties": "icheme:chemsep_sulfur_dioxide",
+      "properties_file": "chemsep_sulfur_dioxide.json"
+    },
+    {
+      "component": "Nitrogen",
+      "cas": "7727-37-9",
+      "properties": "icheme:fluid_nitrogen",
+      "properties_file": "nitrogen.json"
+    },
+    {
+      "component": "CarbonDioxide",
+      "cas": "124-38-9",
+      "properties": "icheme:chemsep_carbon_dioxide",
+      "properties_file": "chemsep_carbon_dioxide.json"
+    }
+  ],
+  "henry_only": [
+    {
+      "component": "Methane",
+      "cas": "74-82-8",
+      "properties": "icheme:tjl20_methane",
+      "properties_file": "tjl20_methane.json",
+      "gas": "CH4",
+      "coefficients": [
+        -10.44708,
+        4.66491,
+        12.12986
+      ]
+    },
+    {
+      "component": "Ethane",
+      "cas": "74-84-0",
+      "properties": "icheme:tjl19_ethane",
+      "properties_file": "tjl19_ethane.json",
+      "gas": "C2H6",
+      "coefficients": [
+        -19.67563,
+        4.51222,
+        20.62567
+      ]
+    },
+    {
+      "component": "Hydrogen",
+      "cas": "1333-74-0",
+      "properties": "icheme:chemsep_hydrogen",
+      "properties_file": "chemsep_hydrogen.json",
+      "gas": "H2",
+      "coefficients": [
+        -4.73284,
+        6.08954,
+        6.06066
+      ]
+    },
+    {
+      "component": "HydrogenSulfide",
+      "cas": "7783-06-4",
+      "properties": "icheme:chemsep_hydrogen_sulfide",
+      "properties_file": "chemsep_hydrogen_sulfide.json",
+      "gas": "H2S",
+      "coefficients": [
+        -4.51499,
+        5.23538,
+        4.42126
+      ]
+    },
+    {
+      "component": "CarbonMonoxide",
+      "cas": "630-08-0",
+      "properties": "icheme:chemsep_carbon_monoxide",
+      "properties_file": "chemsep_carbon_monoxide.json",
+      "gas": "CO",
+      "coefficients": [
+        -10.52862,
+        5.13259,
+        12.01421
+      ]
+    },
+    {
+      "component": "Oxygen",
+      "cas": "7782-44-7",
+      "properties": "icheme:chemsep_oxygen",
+      "properties_file": "chemsep_oxygen.json",
+      "gas": "O2",
+      "coefficients": [
+        -9.44833,
+        4.43822,
+        11.42005
+      ]
+    },
+    {
+      "component": "Nitrogen",
+      "cas": "7727-37-9",
+      "properties": "icheme:fluid_nitrogen",
+      "properties_file": "nitrogen.json",
+      "gas": "N2",
+      "coefficients": [
+        -9.67578,
+        4.72162,
+        11.70585
+      ]
+    },
+    {
+      "component": "CarbonDioxide",
+      "cas": "124-38-9",
+      "properties": "icheme:chemsep_carbon_dioxide",
+      "properties_file": "chemsep_carbon_dioxide.json",
+      "gas": "CO2",
+      "coefficients": [
+        -8.55445,
+        4.01195,
+        9.52345
+      ]
+    }
+  ]
+}

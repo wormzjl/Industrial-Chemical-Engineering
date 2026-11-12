@@ -40,13 +40,23 @@ public final class ConversionLaws {
      * Null where the model lacks one of the rule's compounds or the composition holds no liquid there.
      */
     public static PerLitre perLitre(ConversionRule.ToIChemE rule,FluidThermodynamics model) {
-        var fractions=fractions(rule,model.components());if(fractions==null)return null;
+        var fractions=fractions(rule,model);if(fractions==null)return null;
         double molar=0;for(int i=0;i<fractions.length;i++)molar+=fractions[i]*model.molecularWeight(i);
         if(!Double.isNaN(rule.molesPerLitre()))return new PerLitre(fractions,rule.molesPerLitre(),rule.molesPerLitre()*molar*LITRES_PER_M3,molar);
         var state=model.flashTP(rule.temperature(),rule.pressure(),fractions,()->{});
         if(!FluidThermodynamics.holdsLiquid(state))return null;
         double density=model.liquidDensity(state);
         return new PerLitre(fractions,density/molar/LITRES_PER_M3,density,molar);
+    }
+    /**
+     * The rule's mole fractions on {@code model}'s list, or null where the model does not carry one of its compounds: an id
+     * off its list, or water on a model without water in its cubic. An island that holds no water and can be given none is
+     * built dry (batch 2026-11-11-aqueous-solvents, W3b option A): its model lists water last and carries none, so a rule
+     * that gives water waits there for the island to grow wet, as for any compound ({@code Converters.grow}).
+     */
+    public static double[] fractions(ConversionRule.ToIChemE rule,FluidThermodynamics model) {
+        var x=fractions(rule,model.components());
+        return x==null||!model.wet()&&x[x.length-1]>0?null:x;
     }
     /** The rule's mole fractions on {@code components}, or null where one of its compounds is not on the list. */
     public static double[] fractions(ConversionRule.ToIChemE rule,List<String> components) {

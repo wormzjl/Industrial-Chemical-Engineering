@@ -7,6 +7,7 @@ import com.wormzjl.icheme.science.material.MaterialCatalog;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * Fixture 1 of documentation/2026-09-26-phase-ports-and-compressor/PHASE_PORTS_PLAN.md section 6 (work package WP1): a
@@ -93,8 +94,8 @@ class PhasePortTest extends PortFixture {
             assertZero(vapor.phaseMoles()[0],kind+" vapour line hydrocarbon liquid");assertZero(vapor.phaseMoles()[1],kind+" vapour line free water");
             assertEquals(0,vapor.phaseVolumes()[0]);assertEquals(0,vapor.phaseVolumes()[1]);assertTrue(vapor.solids().empty());
             assertZero(liquid.phaseMoles()[2],kind+" liquid line vapour");assertEquals(0,liquid.phaseVolumes()[2]);
-            double[] y=Arrays.copyOf(end.vapor(),mw.length);y[water]=end.waterVapor();
-            double[] x=Arrays.copyOf(end.liquid(),mw.length);x[water]=end.waterLiquid();
+            double[] y=Arrays.copyOf(TestPhases.vapor(end),mw.length);y[water]=TestPhases.waterVapor(end);
+            double[] x=Arrays.copyOf(TestPhases.liquid(end),mw.length);x[water]=TestPhases.waterLiquid(end);
             double worst=Math.max(proportional(vapor.phaseMoles()[2],y),proportional(add(liquid.phaseMoles()[0],liquid.phaseMoles()[1]),x));
             assertTrue(worst<1e-12,kind+": a line's composition is its phase's to "+worst);
             for(var line:List.of(vapor,liquid,bulk))assertEquals(line.massKg(),mass(line.componentMoles()),1e-12*line.massKg(),kind+" stream mass");
@@ -163,8 +164,8 @@ class PhasePortTest extends PortFixture {
             assertTrue(worstExcess<=1e-12,kind+" at "+interval+" s: a line's mole fractions left its phase's by "+worstExcess+" more than the vessel's own drift");
         }
     }
-    private double[] vaporOf(FluidThermodynamics.State s){double[] y=Arrays.copyOf(s.vapor(),mw.length);y[water]=s.waterVapor();return y;}
-    private double[] liquidOf(FluidThermodynamics.State s){double[] x=Arrays.copyOf(s.liquid(),mw.length);x[water]=s.waterLiquid();return x;}
+    private double[] vaporOf(FluidThermodynamics.State s){double[] y=Arrays.copyOf(TestPhases.vapor(s),mw.length);y[water]=TestPhases.waterVapor(s);return y;}
+    private double[] liquidOf(FluidThermodynamics.State s){double[] x=Arrays.copyOf(TestPhases.liquid(s),mw.length);x[water]=TestPhases.waterLiquid(s);return x;}
     /** How far, beyond the drift {@code |x_start - x_end|} of each mole fraction over the slice, the line's mole fractions
      * stand off the slice's end composition. */
     private static double excess(double[] moved,double[] start,double[] end) {
@@ -296,7 +297,7 @@ class PhasePortTest extends PortFixture {
             committed=result;graph=result.graph();
             bits.add((long)result.acceptedSubsteps());bits.add((long)result.rejectedSubsteps());
             for(var node:graph.reservoirs()){var s=node.state();
-                for(double v:new double[]{s.temperature(),s.pressure(),s.mass(),s.volume(),s.liquidVolume(),s.waterVolume(),s.vaporVolume(),node.inventory().internalEnergy()})bits.add(bits(v));
+                for(double v:new double[]{s.temperature(),s.pressure(),s.mass(),s.volume(),TestPhases.liquidVolume(s),TestPhases.waterVolume(s),s.vaporVolume(),node.inventory().internalEnergy()})bits.add(bits(v));
                 for(double n:node.inventory().moles())bits.add(bits(n));}
             for(double q:result.averageMassFlows())bits.add(bits(q));
             for(var b:result.boundaries()){bits.add(b.nodeId());bits.add(bits(b.totalEnergyJoule()));for(double n:b.moles())bits.add(bits(n));}

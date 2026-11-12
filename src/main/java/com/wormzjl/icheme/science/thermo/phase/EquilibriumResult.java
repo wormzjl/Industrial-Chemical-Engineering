@@ -17,9 +17,7 @@ import java.util.Objects;
  *   <li>{@link Status#UNSUPPORTED}: a typed {@link UnsupportedReason}, no phases, grade {@link CoverageGrade#UNAVAILABLE}.</li>
  *   <li>{@link Status#NOT_CONVERGED}: no phases, grade {@link CoverageGrade#UNAVAILABLE}, diagnostics of the attempt.</li>
  * </ul>
- * <p>A solid phase must name a crystal of {@link #competition()}, or be the free water's ice in a
- * {@link Classification#FREE_WATER} result (WP4: ice is decided by water's own rule, under every competition); a
- * {@link PhaseCompetition#FLUID_ONLY} result therefore holds no competing crystal and {@link #solidsAssessed()} is false:
+ * <p>A solid phase must name a crystal of {@link #competition()}; a {@link PhaseCompetition#FLUID_ONLY} result therefore holds no competing crystal and {@link #solidsAssessed()} is false:
  * it is a constrained fluid answer, not a complete equilibrium.</p>
  */
 public final class EquilibriumResult {
@@ -57,6 +55,12 @@ public final class EquilibriumResult {
          * network) holds on it with a typed reason.
          */
         LIQUID_LIQUID,
+        /**
+         * Three fluid phases of a list with water in the equation of state (batch 2026-11-11-aqueous-solvents, W3a D3): the
+         * lightest (largest molar volume) labelled {@link PhaseKind#VAPOR}, then the two liquids labelled
+         * {@link PhaseKind#LIQUID}, the lighter first; neither is named aqueous.
+         */
+        VAPOR_LIQUID_LIQUID,
         /** A pure component at its own coexistence pressure: two phases, split undetermined by T and P. */
         PURE_COEXISTENCE_UNDERDETERMINED,
         /**
@@ -87,53 +91,24 @@ public final class EquilibriumResult {
          */
         VAPOR_LIQUID_SOLID,
         /**
-         * Water took part as separate free water (P3): the phases are the gas (hydrocarbon vapour and steam), the
-         * hydrocarbon liquid, a competing crystal and the free water's condensed phase (its liquid, or its ice below the
-         * melting line, WP4), each where present; {@link #freeWater()} carries the rule's pressures and the hydrocarbon
-         * phases' own classification, which holds the competing crystal where one formed.
+         * Two liquids and one crystal (W3b step 1, with water in the equation of state), the liquids lighter first, then the crystal: the fluid the crystal
+         * leaves is a stable {@link #LIQUID_LIQUID} split, each liquid at the crystal's chemical potential of its species
+         * (ice beside a water-rich and an oil-rich liquid).
          */
-        FREE_WATER,
+        LIQUID_LIQUID_SOLID,
+        /**
+         * A vapour, two liquids and one crystal (W3b step 1, with water in the equation of state), in that order: the fluid the crystal leaves is a stable
+         * {@link #VAPOR_LIQUID_LIQUID} split at the crystal's chemical potential of its species.
+         */
+        VAPOR_LIQUID_LIQUID_SOLID,
         /** No answer. */
         NONE;
 
         /** Whether an answer of this classification holds a crystal among its phases (P4 stage 2a, P5). */
         public boolean holdsCrystal() {
-            return this == SOLID_PRESENT || this == VAPOR_SOLID || this == LIQUID_SOLID || this == VAPOR_LIQUID_SOLID;
+            return this == SOLID_PRESENT || this == VAPOR_SOLID || this == LIQUID_SOLID || this == VAPOR_LIQUID_SOLID
+                    || this == LIQUID_LIQUID_SOLID || this == VAPOR_LIQUID_LIQUID_SOLID;
         }
-    }
-
-    /**
-     * The separate free-water rule's numbers of a {@link Classification#FREE_WATER} result.
-     *
-     * @param hydrocarbon the classification of the hydrocarbon phases alone, a crystal competition's included
-     *        ({@link Classification#NONE} without hydrocarbons)
-     * @param saturationPressure the vapour pressure of the condensed water at the temperature, Pa: the liquid's saturation
-     *        pressure above the ice's melting line ({@code +infinity} above the critical temperature), the ice's fugacity
-     *        below it ({@link FreeWaterIce#fugacity}); the two are equal on the line
-     * @param hydrocarbonPressure the pressure the hydrocarbon vapour is evaluated at, {@code P - p_w}, Pa (the state
-     *        pressure when no gas carries steam)
-     * @param waterPartialPressure the steam's partial pressure {@code n_w R T / V_gas}, Pa; zero without steam
-     * @param liquidWater moles of free liquid water
-     * @param waterVapor moles of steam in the gas
-     * @param ice moles of the free water's ice (WP4): its condensed phase below the melting line, an ice phase among the
-     *        result's phases exactly when positive; at the melting line a balance splits the condensed water between both
-     */
-    public record FreeWater(Classification hydrocarbon, double saturationPressure, double hydrocarbonPressure,
-                            double waterPartialPressure, double liquidWater, double waterVapor, double ice) {
-        public FreeWater {
-            Objects.requireNonNull(hydrocarbon, "hydrocarbon");
-            if (hydrocarbon == Classification.FREE_WATER || hydrocarbon == Classification.PURE_COEXISTENCE_UNDERDETERMINED) {
-                throw new IllegalArgumentException("Not a hydrocarbon classification: " + hydrocarbon);
-            }
-            if (!(liquidWater >= 0.0) || !(waterVapor >= 0.0) || !(ice >= 0.0) || !(liquidWater + waterVapor + ice > 0.0)
-                    || !Double.isFinite(liquidWater + waterVapor + ice) || !(hydrocarbonPressure > 0.0)
-                    || !(waterPartialPressure >= 0.0) || !(saturationPressure > 0.0)) {
-                throw new IllegalArgumentException("Invalid free-water split");
-            }
-        }
-
-        /** Moles of condensed free water: its liquid and its ice. */
-        public double condensed() { return liquidWater + ice; }
     }
 
     /**
@@ -245,8 +220,9 @@ public final class EquilibriumResult {
 
     /**
      * The prefix of the detail of the typed hold of a crystal competition whose answer needs a phase set the engine does
-     * not implement: two liquids beside a crystal, three fluid phases beside a crystal (that fluid has a product proved
-     * unstable), or two crystals forming. The result is {@link Status#UNSUPPORTED} with
+     * not implement: on the free-water contract two liquids or three fluid phases beside a crystal (a split with a
+     * product proved unstable included; with water in the equation of state both are answers, W3b step 1), three
+     * crystals forming, or two crystals whose fluid is not answered. The result is {@link Status#UNSUPPORTED} with
      * {@link UnsupportedReason#NOT_IMPLEMENTED}, the fluid answer's diagnostics, and no phases.
      */
     public static final String CRYSTAL_PHASES = "CRYSTAL_PHASES";
@@ -270,7 +246,6 @@ public final class EquilibriumResult {
     private final List<PhaseState> coexisting;
     private final Coverage coverage;
     private final Diagnostics diagnostics;
-    private final FreeWater freeWater;
     private final Deposition deposition;
 
     public EquilibriumResult(EquilibriumRequest.Specification specification, Status status, UnsupportedReason reason,
@@ -282,19 +257,6 @@ public final class EquilibriumResult {
     }
 
     /**
-     * @param freeWater the free-water rule's numbers, exactly for a {@link Classification#FREE_WATER} result
-     */
-    public EquilibriumResult(EquilibriumRequest.Specification specification, Status status, UnsupportedReason reason,
-                             String detail, ThermoIdentity identity,
-                             PhaseCompetition competition, Classification classification, List<PhaseAmounts> phases,
-                             List<PhaseState> coexisting, Coverage coverage, Diagnostics diagnostics,
-                             FreeWater freeWater) {
-        this(specification, status, reason, detail, identity, competition, classification, phases, coexisting,
-                coverage, diagnostics, freeWater, null);
-    }
-
-    /**
-     * @param freeWater the free-water rule's numbers, exactly for a {@link Classification#FREE_WATER} result
      * @param deposition the gas-solid solve's numbers of a converged result with a crystal among its phases (P4 stage 2a;
      *        the engine attaches one to every such answer), otherwise {@code null}
      */
@@ -302,12 +264,8 @@ public final class EquilibriumResult {
                              String detail, ThermoIdentity identity,
                              PhaseCompetition competition, Classification classification, List<PhaseAmounts> phases,
                              List<PhaseState> coexisting, Coverage coverage, Diagnostics diagnostics,
-                             FreeWater freeWater, Deposition deposition) {
-        this.freeWater = freeWater;
+                             Deposition deposition) {
         this.deposition = deposition;
-        if ((classification == Classification.FREE_WATER) != (freeWater != null)) {
-            throw new IllegalArgumentException("Exactly a free-water result carries the free-water split");
-        }
         this.specification = Objects.requireNonNull(specification, "specification");
         this.status = Objects.requireNonNull(status, "status");
         this.reason = reason;
@@ -334,27 +292,17 @@ public final class EquilibriumResult {
             }
             int basis = -1;
             boolean solid = false;
-            int ice = 0;
             for (PhaseAmounts phase : this.phases) {
                 if (basis >= 0 && phase.amountsView().length != basis) throw new IllegalArgumentException("Phases on different bases");
                 basis = phase.amountsView().length;
                 if (phase.kind() == PhaseKind.SOLID) {
-                    if (competition.crystals().contains(phase.crystal())) {
-                        solid = true;
-                    } else if (freeWater != null) {
-                        // The free water's ice is decided by water's own rule, never by the competition (WP4).
-                        ice++;
-                    } else {
+                    if (!competition.crystals().contains(phase.crystal())) {
                         throw new IllegalArgumentException("Crystal " + phase.crystal() + " is outside the competition " + competition);
                     }
+                    solid = true;
                 }
             }
-            if (freeWater != null && (ice > 1 || (ice == 1) != (freeWater.ice() > 0.0))) {
-                throw new IllegalArgumentException("A free-water result holds one ice phase exactly when its split holds ice");
-            }
-            // A free-water result's crystals are its hydrocarbon phases' (the competition's beside the free water).
-            Classification crystals = classification == Classification.FREE_WATER ? freeWater.hydrocarbon() : classification;
-            if (solid != crystals.holdsCrystal()) {
+            if (solid != classification.holdsCrystal()) {
                 throw new IllegalArgumentException("A crystal classification exactly when a crystal is among the phases");
             }
             if (deposition != null && !solid) throw new IllegalArgumentException("A deposition needs a crystal among the phases");
@@ -382,7 +330,7 @@ public final class EquilibriumResult {
     /** This result with another coverage (the engine grades an answer outside a data range, owner rule of 2026-10-16). */
     EquilibriumResult withCoverage(Coverage coverage) {
         return new EquilibriumResult(specification, status, reason, detail, identity, competition, classification, phases,
-                coexisting, coverage, diagnostics, freeWater, deposition);
+                coexisting, coverage, diagnostics, deposition);
     }
 
     public EquilibriumRequest.Specification specification() { return specification; }
@@ -402,8 +350,6 @@ public final class EquilibriumResult {
     public List<PhaseState> coexisting() { return coexisting; }
     public Coverage coverage() { return coverage; }
     public Diagnostics diagnostics() { return diagnostics; }
-    /** The free-water rule's numbers of a {@link Classification#FREE_WATER} result, {@code null} otherwise. */
-    public FreeWater freeWater() { return freeWater; }
     /** The gas-solid solve of a result with a crystal among its phases (P4 stage 2a), {@code null} otherwise. */
     public Deposition deposition() { return deposition; }
 
@@ -435,17 +381,21 @@ public final class EquilibriumResult {
         for (PhaseAmounts phase : phases) total += phase.total();
         return total;
     }
-    /** {@code sum_p n_p h_p}, J. */
+    // The aggregates read each phase's balance book (W3a D2): the equilibrium book plus water's share, which is zero
+    // unless water is a component of the cubic, so these equal the equilibrium book's sums bit for bit then.
+    /** {@code sum_p n_p h_p}, J, on the balance book. */
     public double enthalpy() { return sum(Property.ENTHALPY); }
-    /** {@code sum_p n_p u_p}, J. */
+    /** {@code sum_p n_p u_p}, J, on the balance book. */
     public double internalEnergy() { return sum(Property.INTERNAL_ENERGY); }
-    /** {@code sum_p n_p g_p}, J. */
+    /** {@code sum_p n_p g_p}, J: the equilibrium book (no share enters the Gibbs energy). */
     public double gibbsEnergy() { return sum(Property.GIBBS); }
-    /** {@code sum_p n_p v_p}, m3. */
+    /** {@code sum_p n_p v_p}, m3, on the balance book. */
     public double volume() { return sum(Property.VOLUME); }
+    /** {@code sum_p n_p s_p}, J/K, on the balance book. */
+    public double entropy() { return sum(Property.ENTROPY); }
     public double molarEnthalpy() { return enthalpy() / totalAmount(); }
 
-    private enum Property { ENTHALPY, INTERNAL_ENERGY, GIBBS, VOLUME }
+    private enum Property { ENTHALPY, INTERNAL_ENERGY, GIBBS, VOLUME, ENTROPY }
 
     private double sum(Property property) {
         requireSplit();
@@ -453,10 +403,11 @@ public final class EquilibriumResult {
         for (PhaseAmounts phase : phases) {
             PhaseState state = phase.state();
             double molar = switch (property) {
-                case ENTHALPY -> state.molarEnthalpy();
-                case INTERNAL_ENERGY -> state.molarInternalEnergy();
+                case ENTHALPY -> state.balanceEnthalpy();
+                case INTERNAL_ENERGY -> state.balanceInternalEnergy();
                 case GIBBS -> state.molarGibbsEnergy();
-                case VOLUME -> state.molarVolume();
+                case VOLUME -> state.balanceVolume();
+                case ENTROPY -> state.balanceEntropy();
             };
             sum += phase.total() * molar;
         }

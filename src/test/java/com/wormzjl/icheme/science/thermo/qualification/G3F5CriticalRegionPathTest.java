@@ -51,7 +51,7 @@ class G3F5CriticalRegionPathTest {
 
     static FluidTpEquilibrium engine() {
         var catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
-        return new FluidTpEquilibrium(PhaseContract.forNetworkPackage(catalog, PILOT), CubicPhaseEvaluator.forPackage(catalog, PILOT), FluidTpEquilibrium.Settings.DEFAULT, null);
+        return new FluidTpEquilibrium(PhaseContract.forPackage(catalog, PILOT), CubicPhaseEvaluator.forPackage(catalog, PILOT), FluidTpEquilibrium.Settings.DEFAULT);
     }
 
     static final class Path {
@@ -142,7 +142,7 @@ class G3F5CriticalRegionPathTest {
             double tc = oracle(s).criticalTemperature();
             double[] pressures = new double[161];
             for (int k = 0; k <= 160; k++) pressures[k] = 2e6 + k * 5e4;
-            double[] amounts = new double[5];
+            double[] amounts = new double[4];
             amounts[s] = 1;
             for (double dt : new double[] {-5, -2, 0, 2, 5}) {
                 var path = run(engine, f("%s Tc%+.0f K", SHORT[s], dt), amounts, tc + dt, pressures, s);
@@ -152,7 +152,7 @@ class G3F5CriticalRegionPathTest {
                 failures.addAll(path.failures.stream().map(failure -> path.name + " " + failure).toList());
             }
         }
-        double[] mixture = {0.67, 0.33, 0, 0, 0};
+        double[] mixture = {0.67, 0.33, 0, 0};
         double[] pressures = new double[251];
         for (int k = 0; k <= 250; k++) pressures[k] = 3e6 + k * 1e4;
         var path = run(engine, "N2/CH4 0.67/0.33 150 K", mixture, 150, pressures, null);

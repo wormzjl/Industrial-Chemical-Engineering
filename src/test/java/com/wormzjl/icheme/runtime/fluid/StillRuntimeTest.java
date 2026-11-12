@@ -111,6 +111,8 @@ class StillRuntimeTest {
         /** By node: the heat booked (HEAT boundaries, J) and the moles given (EXCHANGE boundaries) over every committed span. */
         final Map<Long, Double> heat = new HashMap<>();
         final Map<Long, double[]> given = new HashMap<>();
+        /** By node and boundary kind: the energy booked (J) over every committed span. */
+        final Map<String, Double> energies = new TreeMap<>();
         final IslandCoordinator coordinator;
         final WorldTopologyLedger ledger;
         final ElectricStores stores;
@@ -191,6 +193,7 @@ class StillRuntimeTest {
                 if (Math.abs(scale - 1) < 1e-12) scale = 1;
                 for (var b : result.boundaries()) {
                     if (b.kind() == ConservativeTransport.BoundaryTransfer.Kind.HEAT) heat.merge(b.nodeId(), b.totalEnergyJoule() * scale, Double::sum);
+                    energies.merge(b.nodeId() + " " + b.kind(), b.totalEnergyJoule() * scale, Double::sum);
                     if (b.kind() == ConservativeTransport.BoundaryTransfer.Kind.EXCHANGE) {
                         var sum = given.computeIfAbsent(b.nodeId(), id -> new double[model.componentCount()]);
                         var n = b.moles();
@@ -235,8 +238,12 @@ class StillRuntimeTest {
 
         /** The pot's moles as its island last committed them. */
         double[] pot() {
+            return potNode().inventory().moles();
+        }
+
+        PassiveNetwork.Reservoir potNode() {
             var graph = coordinator.observe(owners.get(POT)).graph();
-            return graph.reservoirs().stream().filter(r -> r.id() == POT).findFirst().orElseThrow().inventory().moles();
+            return graph.reservoirs().stream().filter(r -> r.id() == POT).findFirst().orElseThrow();
         }
     }
 
@@ -415,6 +422,176 @@ class StillRuntimeTest {
         for (int c = 0; c < 2; c++) {
             double total = now[c] + head[c] + vent[c] + dGave[c] + vGave[c];
             assertEquals(start[c], total, 1e-6 * start[c], "component " + c + " conserved");
+        }
+    }
+
+    /** An open still of {@code stages} trays at reflux {@code reflux} on the pilot's ethanol and water, charged with 60 L of a wash at 364 K. */
+    private static Rig washStill(int stages, double reflux) {
+        return washStill(com.wormzjl.icheme.science.material.PilotAqueousTestCatalog.catalog(), com.wormzjl.icheme.science.material.PilotAqueousTestCatalog.PACKAGE_ID, stages, reflux);
+    }
+
+    /** {@link #washStill(int, double)} on {@code id} of {@code catalog}: its view of ethanol and nitrogen, water last, amounts by id. */
+    private static Rig washStill(com.wormzjl.icheme.science.material.MaterialCatalog catalog, String id, int stages, double reflux) {
+        return washStill(catalog, id, stages, reflux, 1);
+    }
+
+    /** {@link #washStill(com.wormzjl.icheme.science.material.MaterialCatalog, String, int, double)} under time factor {@code factor}. */
+    private static Rig washStill(com.wormzjl.icheme.science.material.MaterialCatalog catalog, String id, int stages, double reflux, int factor) {
+        var model = FluidThermodynamics.forNetwork(catalog, id).on(List.of("Ethanol", "Nitrogen")).withTime(com.wormzjl.icheme.science.fluid.SimulationTime.of(factor));
+        assertEquals(java.util.Set.of("Ethanol", "Nitrogen", "Water"), java.util.Set.copyOf(model.components()));
+        assertEquals("Water", model.components().getLast());
+        int e = model.components().indexOf("Ethanol"), w = model.components().indexOf("Water");
+        double[] wash = new double[3], spirit = new double[3];
+        wash[e] = WASH;
+        wash[w] = 1 - WASH;
+        spirit[e] = 1;
+        var design = new BatchStill.Design(VOLUME, BatchStill.Heater.SOLID, true, stages);
+        var devices = List.of(pot(design),
+                plain(1, 0, 10, Kind.GENERATOR), plain(101, 1, 10, Kind.PIPE), water(design), plain(201, 5, 10, Kind.PIPE), plain(2, 6, 10, Kind.VOID),
+                outlet(DISTILLATE, 20), plain(301, 1, 20, Kind.PIPE), plain(3, 2, 20, Kind.VOID),
+                outlet(VENT, 30), plain(302, 1, 30, Kind.PIPE), plain(4, 2, 30, Kind.VOID));
+        var states = new HashMap<Long, PassiveNetwork.Reservoir>();
+        states.put(POT, contents(model, per(model, wash, 364, 150_000), .6, true));
+        states.put(1L, new PassiveNetwork.Reservoir(1, 0, water(model, 288.15, 300_000), PassiveNetwork.NodeKind.GENERATOR));
+        states.put(2L, new PassiveNetwork.Reservoir(2, 0, water(model, 300, 101_325), PassiveNetwork.NodeKind.VOID));
+        for (long d : new long[]{DISTILLATE, VENT})
+            states.put(d, new PassiveNetwork.Reservoir(d, 0, per(model, spirit, 298.15, 150_000), PassiveNetwork.NodeKind.GENERATOR));
+        for (long d : new long[]{3, 4})
+            states.put(d, new PassiveNetwork.Reservoir(d, 0, water(model, 300, 101_325), PassiveNetwork.NodeKind.VOID));
+        var basis = new WorldTopologyLedger.FluidBasis(id, model.components(), "still-test");
+        var unit = StillUnit.built(POT, WATER, DISTILLATE, VENT, 0, design, model.componentCount()).withFiring(1).withReflux(reflux);
+        var rig = new Rig(model, basis, devices, states, unit);
+        rig.items = Integer.MAX_VALUE;
+        return rig;
+    }
+
+    /** A wash of 10 % ethanol by volume: 0.0332 by mole (BatchStillTest). */
+    private static final double WASH = .0332;
+
+    /**
+     * W4: 60 L of a wash in an open pot (2981 mol, 98.975 ethanol), fired at 10.95 kW from 364 K. It warms to its bubble
+     * point at the pot's ambient (about 365.9 K at 102 kPa; 365.72 K at 1 atm), gains its gas there and boils at about
+     * 0.27 mol/s, following its bubble point as it strips. Its energy closes: the heat in is the pot's energy gained and what
+     * left by its vent. (The network found no gas in an open pot below its height's ambient: W4_WASH_NO_BOIL.md.)
+     */
+    @Test
+    void aWashInAnOpenPotBoilsAtItsBubblePoint() {
+        var rig = washStill(0, 0);
+        double[] onset = boil(rig);
+        assertEquals(365.72, onset[0], .3, "the wash's bubble point");
+        assertEquals(.27, onset[1], .03, "the boil-up: the firing over the latent heat");
+    }
+
+    /**
+     * W6 G10 (batch 2026-11-11-aqueous-solvents): the same wash on the network package {@code icheme:refinery}, whose ethanol is
+     * the main record: it boils from the pilot's bubble point (92.57 C at 1 atm, 365.72 K) at the pilot's boil-up.
+     */
+    @Test
+    void aWashOnTheNetworkPackageBoilsAsOnThePilot() {
+        var catalog = com.wormzjl.icheme.science.material.MaterialCatalog.bundled();
+        String network = catalog.presets().network().packageId();
+        assertEquals("icheme:refinery", network);
+        double[] onset = boil(washStill(catalog, network, 0, 0));
+        double[] pilot = boil(washStill(0, 0));
+        System.out.printf(Locale.ROOT, "W6 wash pot on %s: boils from %.4f K at %.5f mol/s (pilot %.4f K, %.5f mol/s)%n", network, onset[0], onset[1], pilot[0], pilot[1]);
+        assertEquals(365.72, onset[0], .3, "the wash's bubble point");
+        assertEquals(pilot[0], onset[0], 1e-6, "the pilot's onset");
+        assertEquals(pilot[1], onset[1], 1e-6 * pilot[1], "the pilot's boil-up");
+    }
+
+    /**
+     * The merge of main 0.27.1 (MAIN_MERGE_PLAN section 5): the wash of {@link #aWashInAnOpenPotBoilsAtItsBubblePoint} under
+     * time factor 4 is fired on process time, so in a quarter of the ticks it takes the heat and boils off what it does in
+     * 180 s at factor 1; the view keeps its compounds and its water (withTime on a view). The heat booked trails the run by
+     * one cadence (100 ticks of play: 5 s of process time at factor 1, 20 s at 4), so each runs 5 s of play past 180 s of
+     * process time: 3600 ticks at factor 1 and 900 at 4 are booked. The boil-off agrees within the coarser slices' 5 %.
+     */
+    @Test
+    void aWashAtTimeFactorFourBoilsInAQuarterOfTheTicks() {
+        var catalog = com.wormzjl.icheme.science.material.PilotAqueousTestCatalog.catalog();
+        String id = com.wormzjl.icheme.science.material.PilotAqueousTestCatalog.PACKAGE_ID;
+        int[] factors = {1, 4};
+        double[] heat = new double[2], gone = new double[2];
+        double rating = Double.NaN;
+        for (int k = 0; k < 2; k++) {
+            var rig = washStill(catalog, id, 0, 0, factors[k]);
+            assertEquals(List.of("Ethanol", "Nitrogen", "Water"), rig.model.components());
+            rating = rig.unit().design().rating();
+            double start = Arrays.stream(rig.potNode().inventory().moles()).sum();
+            rig.run(180.0 / factors[k] + 5);
+            heat[k] = rig.heat.getOrDefault(PhysicalFluidTopology.sideIdentity(POT), 0.);
+            gone[k] = start - Arrays.stream(rig.potNode().inventory().moles()).sum();
+        }
+        System.out.printf(Locale.ROOT, "wash at factors 1 and 4: heat %.1f / %.1f J, boiled %.4f / %.4f mol%n", heat[0], heat[1], gone[0], gone[1]);
+        assertEquals(rating * 180, heat[0], 1e-3 * rating * 180, "factor 1: 180 s of firing");
+        assertEquals(heat[0], heat[1], 1e-9 * heat[0], "factor 4: the same heat in a quarter of the ticks");
+        assertTrue(gone[0] > 10, "the wash boils: " + gone[0] + " mol");
+        assertEquals(gone[0], gone[1], .05 * gone[0], "the same boil-off over the same process time");
+    }
+
+    /**
+     * The pot of {@code rig} fired for 180 s in 10 s slices: the temperature where it gains its gas and its first boil-up, mol/s.
+     * It never superheats, follows its bubble point once boiling, and its energy closes (heat in = the pot's gain and what left).
+     */
+    private static double[] boil(Rig rig) {
+        var model = rig.model;
+        var start = rig.potNode();
+        double u0 = start.inventory().internalEnergy();
+        double onset = Double.NaN, released = Double.NaN;
+        double[] before = null;
+        for (int k = 0; k < 18; k++) {
+            rig.run(10);
+            var node = rig.potNode();
+            var s = node.state();
+            boolean gas = FluidThermodynamics.holdsPhase(s, FluidThermodynamics.GAS);
+            double[] moles = node.inventory().moles();
+            var column = new StillColumn(model, s.pressure());
+            double bubble = column.bubble(moles, s.temperature()).temperature();
+            System.out.printf(Locale.ROOT, "W4 wash pot at %.0f s: %.3f K (bubble %.3f K at %.1f Pa), gas %b, %.3f mol%n", rig.epoch[0] / 20.0, s.temperature(), bubble,
+                    s.pressure(), gas, Arrays.stream(moles).sum());
+            if (gas && Double.isNaN(onset)) onset = s.temperature();
+            else if (gas && Double.isNaN(released)) released = (Arrays.stream(before).sum() - Arrays.stream(moles).sum()) / 10;
+            if (gas) assertEquals(bubble, s.temperature(), .5, "the boiling pot follows its bubble point");
+            else assertTrue(s.temperature() < bubble + .5, "no superheat: " + s.temperature() + " over " + bubble);
+            before = moles;
+        }
+        System.out.printf(Locale.ROOT, "W4 wash pot: boils from %.3f K, releases %.4f mol/s at first; energies %s%n", onset, released, rig.energies);
+        var end = rig.potNode();
+        double heat = rig.heat.getOrDefault(PhysicalFluidTopology.sideIdentity(POT), 0.);
+        double out = 0;
+        for (var e : rig.energies.entrySet()) if (e.getKey().startsWith(POT + " ") && !e.getKey().endsWith("HEAT")) out += e.getValue();
+        assertTrue(heat > 0);
+        // What leaves the pot is booked negative: its vent and its exchanges.
+        assertEquals(end.inventory().internalEnergy() - u0, heat + out, 1e-6 * heat, "the heat in is the pot's energy gained and what left");
+        return new double[]{onset, released};
+    }
+
+    /**
+     * W4: the same wash under four trays at reflux 3: the column carries the pot's water, so the head passes ethanol before
+     * water (StillHeadTest: an ethanol share of 0.727 and water's 0.095), and every mole of ethanol and water stands in the
+     * pot, the head's accounts or what the outlets gave.
+     */
+    @Test
+    void aWashInAPlacedStillIsRectified() {
+        var rig = washStill(4, 3);
+        double[] start = rig.pot();
+        rig.run(300);
+        print("wash", rig);
+        var v = rig.view();
+        assertEquals(BatchStill.Status.DISTILLING, v.status(), () -> rig.stills.statusLine(POT));
+        assertTrue(rig.solves > 0, "the column solved");
+        assertTrue(v.headTemperature() < v.potTemperature(), "the head is cooler than the pot: " + v.headTemperature() + " / " + v.potTemperature());
+        var head = rig.potNode().inventory().pool().head();
+        assertNotNull(head, "the column's head is on the pot");
+        System.out.printf(Locale.ROOT, "W4 wash in a still: head ethanol share %.4f, water share %.4f, status %s%n", head.recovery(0), head.recovery(2), rig.stills.statusLine(POT));
+        assertEquals(.727, head.recovery(0), .05, "the head passes ethanol as StillHeadTest's");
+        assertTrue(head.recovery(0) > 2 * head.recovery(2), "ethanol before water");
+        var out = rig.given.getOrDefault(DISTILLATE, new double[3]);
+        assertTrue(Arrays.stream(out).sum() > 0, "the distillate flows");
+        double[] now = rig.pot(), held = rig.unit().head().moles(), vent = rig.unit().venting().moles(), vGave = rig.given.getOrDefault(VENT, new double[3]);
+        for (int c : new int[]{0, 2}) {
+            double total = now[c] + held[c] + vent[c] + out[c] + vGave[c];
+            assertEquals(start[c], total, 1e-9 * start[c], "component " + c + " conserved");
         }
     }
 

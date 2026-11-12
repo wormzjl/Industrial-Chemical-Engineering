@@ -12,6 +12,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * CO2 in the world's package (O11 of batch 2026-11-04-open-thermo-data, owner decisions E25, E27 and E28): the package
@@ -33,7 +34,9 @@ class RefineryCarbonDioxideCatalogTest {
         var catalog = MaterialCatalog.bundled();
         var refinery = catalog.requirePackage(REFINERY);
         int co2 = refinery.components().indexOf("CarbonDioxide");
-        assertEquals(refinery.components().size() - 1, co2, "CO2 joins at the end of the world list");
+        // W6: ethanol joins icheme:refinery after CO2, so CO2 keeps its index (44) and is no longer the last.
+        assertEquals(refinery.components().size() - 2, co2, "CO2 keeps index 44, ethanol after it");
+        assertEquals("Ethanol", refinery.components().get(co2 + 1));
         assertEquals("icheme:chemsep_carbon_dioxide", refinery.properties().get(co2).id());
         assertEquals(List.of(CRYSTAL), refinery.crystals());
         assertEquals(List.of(CRYSTAL), com.wormzjl.icheme.science.thermo.phase.PhaseContract.admittedCrystals(catalog, REFINERY));
@@ -91,10 +94,10 @@ class RefineryCarbonDioxideCatalogTest {
                 var a = modelAfter.flashTP(tp[0], tp[1], overall, () -> {});
                 var b = modelBefore.flashTP(tp[0], tp[1], overall, () -> {});
                 assertEquals(b.temperature(), a.temperature(), 0.0);
-                assertArrayEquals(b.liquid(), a.liquid(), 0.0, compounds + " liquid at " + tp[0] + " K");
-                assertArrayEquals(b.vapor(), a.vapor(), 0.0, compounds + " vapour at " + tp[0] + " K");
-                assertEquals(b.waterLiquid(), a.waterLiquid(), 0.0);
-                assertEquals(b.waterVapor(), a.waterVapor(), 0.0);
+                assertArrayEquals(TestPhases.liquid(b), TestPhases.liquid(a), 0.0, compounds + " liquid at " + tp[0] + " K");
+                assertArrayEquals(TestPhases.vapor(b), TestPhases.vapor(a), 0.0, compounds + " vapour at " + tp[0] + " K");
+                assertEquals(TestPhases.waterLiquid(b), TestPhases.waterLiquid(a), 0.0);
+                assertEquals(TestPhases.waterVapor(b), TestPhases.waterVapor(a), 0.0);
             }
         }
         var co2 = bundled.restrict(REFINERY, List.of("Methane", "CarbonDioxide"));

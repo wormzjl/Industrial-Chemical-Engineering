@@ -79,7 +79,7 @@ class ReliefValveWorldTest {
         world.runTo(4000);
         world.assertKeptUp("liquid-full relief");
         var s=island(world,drum);var n=node(world,drum);int e=relief(s);
-        double liquid=(n.state().liquidVolume()+n.state().waterVolume())/n.inventory().volume();
+        double liquid=n.state().condensedVolume()/n.inventory().volume();
         System.out.println("RELIEF_WORLD liquid: P="+n.state().pressure()+" level="+liquid+" relief="+flow(s,e)+" kg/s status="+s.status());
         assertTrue(liquid>.97,"it fills with water: "+liquid);
         assertTrue(flow(s,e)>1,"and relieves the feed as liquid: "+flow(s,e));

@@ -617,7 +617,7 @@ public final class WorldTopologyLedger {
                     ||!components.getLast().equals("Water")||!components.contains("Nitrogen"))throw new IllegalArgumentException("Invalid fluid basis contract");
         }
         public static FluidBasis capture(MaterialCatalog catalog) {
-            String id=FluidMaterialCatalog.networkPackage(catalog);var ids=new ArrayList<>(catalog.requirePackage(id).components());ids.add("Water");
+            String id=FluidMaterialCatalog.networkPackage(catalog);var ids=new ArrayList<>(catalog.conservedComponents(id));
             return new FluidBasis(id,ids,catalog.fluidRevision(id));
         }
         /** The same compound ids in the same order and the same fluid identity, whatever package id each names. */

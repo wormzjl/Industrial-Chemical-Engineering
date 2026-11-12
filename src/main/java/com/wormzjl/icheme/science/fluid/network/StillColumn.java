@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.science.fluid.network;
 
+import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.fluid.thermo.HydrocarbonModel;
 import com.wormzjl.icheme.science.math.DeterministicMath;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel;
@@ -27,16 +28,45 @@ import java.util.List;
  * distillate is e - h_pot. With no column (N = 0) or no reflux the still is one equilibrium stage: the distillate is the
  * pot's bubble vapour, e its enthalpy.</p>
  *
+ * <p>Water (batch 2026-11-11-aqueous-solvents, W4_STILL_PLAN.md section 3). Where the model carries water
+ * ({@link HydrocarbonModel#wet}) the column's basis is the model's conserved basis, water last, and water is one more
+ * component of every stage (D1); a list without water keeps its compounds. The method states each stage's liquid as one
+ * liquid. Where water is in it, two liquids are stated with the engine's own TP split ({@link FluidThermodynamics#flashTP},
+ * D2): the pot once a solve and the condensate once an iteration. From the liquid's one-liquid bubble point, each trial
+ * temperature is split by the engine and the oil layer's ln Σ K x read there, a bracketed secant to its zero (at most
+ * {@value #LAYER_ROUNDS} splits); the condensate's next iteration splits once, at the temperature its last search gave.
+ * The pot's vapour is its oil layer's; K is that vapour over the pot's overall liquid, all the stage above reads. A
+ * condensate of two layers returns its oil layer first (D3, owner choice 1 a): per mole of distillate it is R + 1 moles,
+ * oil O and aqueous A; the reflux takes the share ρo = min(1, R / O) of the oil and ρa = max(0, (R - O) / A) of the
+ * aqueous layer, so component i returns the share s_i = ρo ω_i + ρa (1 - ω_i) (ω_i the oil layer's share of i). The
+ * condenser's row reads the reflux x0 = s_i V1 y1 / R, the distillate is (R + 1) y1 (1 - s_i), and the energy balance
+ * reads the reflux's enthalpy hR where it read h0; the condenser takes the top vapour to the whole condensate's enthalpy
+ * hC. The shares are the previous iteration's and continuous where a layer appears or the oil runs out. With one liquid
+ * s_i = R / (R + 1) and hR = hC = h0: the arithmetic is the one-liquid column's, row for row. The trays hold one liquid; at
+ * convergence each tray with water in it is split once by the engine, and a tray whose liquid would settle is reported
+ * ({@link Split#settlingTrays}, D4), never a failure. A liquid without water is never sent to the engine; a refused split
+ * reads as one liquid.</p>
+ *
  * <p>A closed valve (R infinite, total reflux) solves at {@link #CLOSED_REFLUX} for its profile and sends no distillate.
  * Numerical guards only: the bubble search's box and a phase with no equation-of-state root, both a refused trial. One
  * instance belongs to one thread at a time; it keeps no state between solves (a warm start passes its {@link Profile}).</p>
  */
 public final class StillColumn {
+    /** The most engine splits that find one liquid's two layers at their bubble point (the pot's, a cold condensate's). */
+    public static final int LAYER_ROUNDS = 8;
+    /** How far under its predicted bubble point a warm condensate is split, K: below it, so the one split finds its layers. */
+    static final double LAYER_MARGIN = .02;
+    private static final Runnable NO_CHECKPOINT = () -> {
+    };
     /** The flows switch from constant molar overflow to the energy balance once no stage moves this much in an iteration, K. */
     public static final double SWITCH_KELVIN = 1;
     /** Converged once no stage moves this much in an energy-balance iteration, K. */
     public static final double TOLERANCE = 1e-4;
     public static final int MAX_ITERATIONS = 300;
+    /** Iterations with no new least change, since the flows last changed form, that end the iterating (W4 plan section 12). */
+    public static final int STALL_ITERATIONS = 20;
+    /** The notice of a wet column that fell back to the pot's single stage (W4 plan section 12). */
+    public static final String POT_STILL = "two liquids on the trays: the column does not rectify";
     /** The most trays. */
     public static final int MAX_STAGES = 8;
     /** The reflux ratio a closed valve's profile is solved at. */
@@ -44,29 +74,43 @@ public final class StillColumn {
     /** The bubble search's numerical box, K. */
     static final double LOWEST = 60, HIGHEST = 1400;
 
+    private final FluidThermodynamics thermo;
     private final HydrocarbonModel model;
     private final double pressure;
-    private final int n;
+    /** The basis: the compounds, then water where the model carries it ({@link #water}). */
+    private final int n, water;
     private final double[] tc, pc, omega, molarMass;
+    /** The engine splits of the solve under way (one thread at a time). */
+    private int flashes;
 
-    /** The column on {@code model} at {@code pressure} Pa on every stage. */
-    public StillColumn(HydrocarbonModel model, double pressure) {
+    /** The column on {@code thermo}'s model at {@code pressure} Pa on every stage; its engine states the liquids that hold water. */
+    public StillColumn(FluidThermodynamics thermo, double pressure) {
         if (!(pressure > 0) || !Double.isFinite(pressure)) throw new IllegalArgumentException("Invalid still pressure");
-        this.model = model;
+        this.thermo = thermo;
+        model = thermo.hydrocarbon;
         this.pressure = pressure;
-        n = model.componentCount();
+        int compounds = model.componentCount();
+        water = model.wet() ? compounds : -1;
+        n = model.wet() ? compounds + 1 : compounds;
         tc = new double[n];
         pc = new double[n];
         omega = new double[n];
         molarMass = new double[n];
         var components = components(model);
-        for (int i = 0; i < n; i++) {
+        for (int i = 0; i < compounds; i++) {
             var c = components.get(i);
             tc[i] = c.criticalTemperatureKelvin();
             pc[i] = c.criticalPressurePascal();
             omega[i] = c.acentricFactor();
-            molarMass[i] = model.molecularWeight(i);
         }
+        if (water >= 0) {
+            // Water's constants for the Wilson start: the model's own derivation, where its cubic carries water last.
+            var derivation = model.evaluator().derivation();
+            tc[water] = derivation.criticalTemperatures()[water];
+            pc[water] = derivation.criticalPressures()[water];
+            omega[water] = derivation.acentricFactors()[water];
+        }
+        for (int i = 0; i < n; i++) molarMass[i] = model.molecularWeight(i);
     }
 
     private static List<ThermoComponent> components(HydrocarbonModel model) {
@@ -80,8 +124,22 @@ public final class StillColumn {
         return tc[i];
     }
 
+    /** A vector on the column's basis on the model's conserved basis: itself where the model carries water, else water at zero. */
+    private double[] conserved(double[] x) {
+        return water >= 0 ? x : java.util.Arrays.copyOf(x, n + 1);
+    }
+
     public HydrocarbonModel model() {
         return model;
+    }
+
+    public FluidThermodynamics thermo() {
+        return thermo;
+    }
+
+    /** Water's index on the column's basis (the last), -1 on a list without water. */
+    public int water() {
+        return water;
     }
 
     public double pressure() {
@@ -116,25 +174,38 @@ public final class StillColumn {
      * @param liquidRate            the liquid back to the pot, of {@code liquid}, at {@code liquidEnthalpy}
      * @param topVapourRate         the vapour into the condenser, (R + 1) D, of the distillate's composition
      * @param headEnthalpy          H1, the head vapour's
-     * @param condensateEnthalpy    h0, the condensate's at its bubble point
-     * @param potEnthalpy           the pot liquid's at its bubble point
-     * @param boilUpHeat            the boil-up heat per mole of distillate, (R + 1) H1 - R h0 - h_pot (infinite with a closed valve)
+     * @param condensateEnthalpy    hC, the whole condensate's at its bubble point (both layers; h0 with one liquid)
+     * @param potEnthalpy           the pot liquid's at its bubble point (both layers where it holds two)
+     * @param boilUpHeat            the boil-up heat per mole of distillate, (R + 1) H1 - R hR - h_pot (infinite with a closed valve)
      * @param refluxRatio           the reflux ratio solved (0 for one stage, {@link #CLOSED_REFLUX} for a closed valve)
+     * @param refluxEnthalpy        hR, the reflux's (h0 with one liquid; the condensate's with no reflux)
+     * @param distillateEnthalpy    hD, the distillate's, ((R + 1) hC - R hR) from the layers (h0 with one liquid)
+     * @param twoLiquidPot          the pot's liquid settles into two liquids at its bubble point
+     * @param twoLiquidCondensate   the condensate settles into two layers
+     * @param settlingTrays         the trays (1..N) whose liquid would settle into two liquids (D4): a notice, not a failure
+     * @param flashes               the engine splits the solve made (0 where no liquid holds water)
+     * @param notice                {@link #POT_STILL} where a wet column fell back to the pot's single stage, else null
      */
     public record Split(boolean converged, int iterations, String failure, int stages, double refluxRatio, boolean closed,
                         double[] distillate, double headTemperature, double condensateTemperature, double potTemperature,
                         double distillateRate, double vapourRate, double[] vapour, double vapourEnthalpy,
                         double liquidRate, double[] liquid, double liquidEnthalpy,
                         double topVapourRate, double headEnthalpy, double condensateEnthalpy, double potEnthalpy,
-                        double boilUpHeat, Profile profile) {
-        /** The energy that leaves the pot and the column per mole of distillate, J/mol: (R + 1) H1 - R h0. */
+                        double boilUpHeat, Profile profile, double refluxEnthalpy, double distillateEnthalpy,
+                        boolean twoLiquidPot, boolean twoLiquidCondensate, int[] settlingTrays, int flashes, String notice) {
+        /** The energy that leaves the pot and the column per mole of distillate, J/mol: (R + 1) H1 - R hR. */
         public double energyPerDistillate() {
             return potEnthalpy + boilUpHeat;
         }
 
-        /** The condenser's duty at this boil-up, W: all of the top vapour condensed to its bubble point. */
+        /** The condenser's duty at this boil-up, W: all of the top vapour condensed to its bubble point, both layers. */
         public double condenserDuty() {
             return topVapourRate * (headEnthalpy - condensateEnthalpy);
+        }
+
+        @Override
+        public int[] settlingTrays() {
+            return settlingTrays.clone();
         }
 
         /** Per component, mol/s: the vapour up from the pot, the liquid back, the distillate; up = back + distillate exactly. */
@@ -165,6 +236,31 @@ public final class StillColumn {
     }
 
     /**
+     * A liquid at its bubble point as the engine states it (D2): the temperature, the vapour, K over the whole liquid, its
+     * molar enthalpy and, with two liquids, the oil layer's share of the moles, each layer's composition and enthalpy, the
+     * next trial temperature of its search and the slope of the oil layer's ln Σ K x there (a warm start's).
+     */
+    private record Boiling(Bubble bubble, double enthalpy, boolean two, double oil, double[] oilLayer, double[] aqueousLayer,
+                           double oilEnthalpy, double aqueousEnthalpy, double next, double slope) {
+        double temperature() {
+            return bubble.temperature();
+        }
+    }
+
+    /** Two liquid layers of one liquid: the oil layer's share of its moles, each layer's composition, and whether a vapour stands beside them. */
+    private record Layers(double oil, double[] oilLayer, double[] aqueousLayer, boolean vapour) {
+    }
+
+    /**
+     * The condensate of two layers returned oil first (D3), per mole of distillate: each component's share s_i back to the
+     * column, the reflux's, the whole condensate's and the distillate's enthalpies, the distillate's composition and the
+     * condensate's bubble point. A condensate of one liquid has none (null).
+     */
+    private record Decanter(double temperature, double[] shares, double reflux, double whole, double distillate, double[] composition,
+                            Boiling condensate) {
+    }
+
+    /**
      * The column for pot liquid {@code pot} (any amounts) under {@code stages} trays (0: none) at reflux ratio
      * {@code reflux} (0: no reflux, the trays dry; {@link Double#POSITIVE_INFINITY}: a closed valve) and boil-up
      * {@code duty} W, warm from {@code warm} (null for a cold start, or a profile of another stage count).
@@ -172,14 +268,20 @@ public final class StillColumn {
     public Split solve(double[] pot, int stages, double reflux, double duty, Profile warm) {
         if (stages < 0 || stages > MAX_STAGES) throw new IllegalArgumentException("Still column stages must be 0 to " + MAX_STAGES);
         if (!(reflux >= 0) || !(duty >= 0) || !Double.isFinite(duty)) throw new IllegalArgumentException("Invalid still reflux or duty");
+        flashes = 0;
         double[] z = fractions(pot);
         if (stages == 0 || reflux == 0) return single(z, duty, warm);
         boolean closed = reflux > CLOSED_REFLUX;
         double ratio = Math.min(reflux, CLOSED_REFLUX);
         int m = stages + 2, r = m - 1;
         boolean seeded = warm != null && warm.temperatures().length == m && warm.liquids().length == m;
-        var start = bubble(z, seeded ? warm.potTemperature() : Double.NaN);
-        if (start == null) return failed(stages, ratio, closed, "no bubble point of the pot liquid");
+        var potBoiling = boiling(fractions(z), seeded ? warm.potTemperature() : Double.NaN, null);
+        if (potBoiling == null) return failed(stages, ratio, closed, "no bubble point of the pot liquid");
+        var start = potBoiling.bubble();
+        // A pot that settles starts its stages on its oil layer (W4 plan section 12): at the answer each tray is the oil layer
+        // at saturation, where one liquid's K is smooth through the edge of the gap; the pot's whole liquid read as one is not.
+        double[] oil = potBoiling.two() ? fractions(potBoiling.oilLayer()) : null;
+        var oilStart = oil != null ? bubble(oil, start.temperature(), start.vapour()) : null;
         double[] t = new double[m];
         double[][] x = new double[m][], y = new double[m][], k = new double[m][];
         for (int j = 0; j < m; j++) {
@@ -188,6 +290,10 @@ public final class StillColumn {
                 x[j] = fractions(warm.liquids()[j]);
                 var e = eval(x[j], warm.temperatures()[j], start.vapour());
                 if (e != null) b = new Bubble(warm.temperatures()[j], e.y(), e.k());
+            }
+            if (b == null && oilStart != null) {
+                x[j] = oil.clone();
+                b = oilStart;
             }
             if (b == null) {
                 x[j] = z.clone();
@@ -205,12 +311,18 @@ public final class StillColumn {
         // vapour[j]: leaving stage j (1..r); liquid[j]: leaving stage j (0..N), liquid[0] the reflux; per mole of distillate.
         double[] vapour = new double[m], liquid = new double[m];
         boolean energy = false;
-        for (int iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
+        // The stall rule: the least change since the flows last changed form; STALL_ITERATIONS with no new least end it.
+        double least = Double.POSITIVE_INFINITY;
+        int sinceLeast = 0, iteration = 0;
+        // The condensate's layers on the top vapour (D2, D3): the shares of this iteration are the last one's.
+        var decanter = decanter(y[1], t[0], ratio, null);
+        while (++iteration <= MAX_ITERATIONS) {
             if (energy) {
-                if (!energyFlows(ratio, t, x, y, vapour, liquid)) return failed(stages, ratio, closed, "no enthalpy on a stage");
+                if (!energyFlows(ratio, t, x, y, vapour, liquid, decanter))
+                    return failedOrPot(failed(stages, ratio, closed, "no enthalpy on a stage"), z, duty, potBoiling, decanter, t, x, stages, iteration);
                 for (int j = 0; j < m; j++)
                     if ((j > 0 && !(vapour[j] > 0)) || (j < r && !(liquid[j] > 0)))
-                        return failed(stages, ratio, closed, "no positive flow on stage " + j);
+                        return failedOrPot(failed(stages, ratio, closed, "no positive flow on stage " + j), z, duty, potBoiling, decanter, t, x, stages, iteration);
             } else {
                 for (int j = 0; j < m; j++) {
                     vapour[j] = ratio + 1;
@@ -220,8 +332,11 @@ public final class StillColumn {
             double[][] raw = new double[r][n];
             for (int i = 0; i < n; i++) {
                 a[0] = 0;
-                b[0] = -(liquid[0] + 1);
-                c[0] = vapour[1] * k[1][i];
+                // The condenser: the reflux R x0 is the share s_i of the top vapour V1 y1 (R / (R + 1) with one liquid).
+                double share = decanter == null ? Double.NaN : decanter.shares()[i];
+                if (decanter == null) b[0] = -(liquid[0] + 1);
+                else b[0] = share > 0 ? -(liquid[0] / share) : 1;
+                c[0] = decanter == null || share > 0 ? vapour[1] * k[1][i] : 0;
                 rhs[0] = 0;
                 for (int j = 1; j < r; j++) {
                     a[j] = liquid[j - 1];
@@ -239,59 +354,116 @@ public final class StillColumn {
             double change = 0;
             for (int j = 0; j < r; j++) {
                 double sum = sum(raw[j]);
-                if (!(sum > 0) || !Double.isFinite(sum)) return failed(stages, ratio, closed, "no liquid on stage " + j);
+                if (!(sum > 0) || !Double.isFinite(sum))
+                    return failedOrPot(failed(stages, ratio, closed, "no liquid on stage " + j), z, duty, potBoiling, decanter, t, x, stages, iteration);
                 x[j] = fractions(raw[j]);
                 var bubble = bubble(x[j], t[j], y[j]);
-                if (bubble == null) return failed(stages, ratio, closed, "no bubble point on stage " + j);
+                if (bubble == null) return failedOrPot(failed(stages, ratio, closed, "no bubble point on stage " + j), z, duty, potBoiling, decanter, t, x, stages, iteration);
                 change = Math.max(change, Math.abs(bubble.temperature() - t[j]));
                 t[j] = bubble.temperature();
                 y[j] = bubble.vapour();
                 k[j] = bubble.k();
             }
-            if (energy && change < TOLERANCE) return answer(stages, ratio, closed, iteration, t, x, y, duty);
-            if (change < SWITCH_KELVIN) energy = true;
+            decanter = decanter(y[1], t[0], ratio, decanter);
+            if (energy && change < TOLERANCE) {
+                // A wet tray colder than the tray above it is the miscibility gap's sign: where a liquid of the still settles,
+                // the column does not rectify (W4 plan section 12).
+                if (coldWetTray(t, x, stages) && settles(potBoiling, decanter, t, x, stages)) return single(z, duty, potBoiling, POT_STILL, iteration);
+                var answer = answer(stages, ratio, closed, iteration, t, x, y, duty, potBoiling, decanter);
+                return answer.converged() ? answer : failedOrPot(answer, z, duty, potBoiling, decanter, t, x, stages, iteration);
+            }
+            if (change < least) {
+                least = change;
+                sinceLeast = 0;
+            } else if (++sinceLeast >= STALL_ITERATIONS) break;
+            if (!energy && change < SWITCH_KELVIN) {
+                energy = true;
+                least = Double.POSITIVE_INFINITY;
+                sinceLeast = 0;
+            }
         }
-        return failed(stages, ratio, closed, "no convergence in " + MAX_ITERATIONS + " iterations");
+        int done = Math.min(iteration, MAX_ITERATIONS);
+        return failedOrPot(failed(stages, ratio, closed, "no convergence in " + done + " iterations"), z, duty, potBoiling, decanter, t, x, stages, done);
+    }
+
+    /**
+     * A failure of the iteration (W4 plan section 12): where a liquid of the still settles (the pot, the condensate or a wet
+     * tray), a tray holds free water the one-liquid trays cannot carry, and the answer is the pot's single stage with
+     * {@link #POT_STILL}; a dry solve fails as {@code failure} (no flash: {@link #settles} splits wet trays only).
+     */
+    private Split failedOrPot(Split failure, double[] z, double duty, Boiling pot, Decanter decanter, double[] t, double[][] x, int stages, int iterations) {
+        return settles(pot, decanter, t, x, stages) ? single(z, duty, pot, POT_STILL, iterations) : failure;
+    }
+
+    /** A tray j (2..N) whose liquid holds water and stands more than {@link #SWITCH_KELVIN} under tray j - 1. */
+    private boolean coldWetTray(double[] t, double[][] x, int stages) {
+        if (water < 0) return false;
+        for (int j = 2; j <= stages; j++) if (x[j][water] > 0 && t[j] < t[j - 1] - SWITCH_KELVIN) return true;
+        return false;
+    }
+
+    /** Whether a liquid of the still settles: the pot, the condensate, or a wet tray the engine splits (one split a tray). */
+    private boolean settles(Boiling pot, Decanter decanter, double[] t, double[][] x, int stages) {
+        if (pot.two() || decanter != null) return true;
+        if (water < 0) return false;
+        for (int j = 1; j <= stages; j++) if (x[j][water] > 0 && layers(x[j], t[j]) != null) return true;
+        return false;
     }
 
     /** The converged column's answer: its flows from the energy balance on the final profile, scaled to {@code duty}. */
-    private Split answer(int stages, double ratio, boolean closed, int iterations, double[] t, double[][] x, double[][] y, double duty) {
+    private Split answer(int stages, double ratio, boolean closed, int iterations, double[] t, double[][] x, double[][] y, double duty,
+                         Boiling pot, Decanter decanter) {
         int m = t.length, r = m - 1;
         double[] vapour = new double[m], liquid = new double[m];
-        if (!energyFlows(ratio, t, x, y, vapour, liquid)) return failed(stages, ratio, closed, "no enthalpy on a stage");
+        if (!energyFlows(ratio, t, x, y, vapour, liquid, decanter)) return failed(stages, ratio, closed, "no enthalpy on a stage");
         double h0, headVapour, hPot, hBack, hUp;
         try {
-            h0 = liquidEnthalpy(t[0], x[0]);
+            h0 = decanter == null ? liquidEnthalpy(t[0], x[0]) : Double.NaN;
             headVapour = vapourEnthalpy(t[1], y[1]);
-            hPot = liquidEnthalpy(t[r], x[r]);
+            hPot = pot.two() ? pot.enthalpy() : liquidEnthalpy(t[r], x[r]);
             hBack = liquidEnthalpy(t[r - 1], x[r - 1]);
             hUp = vapourEnthalpy(t[r], y[r]);
         } catch (RuntimeException absent) {
             return failed(stages, ratio, closed, "no enthalpy on a stage");
         }
-        double perDistillate = (ratio + 1) * headVapour - ratio * h0 - hPot;
+        // One liquid: hR = hC = hD = h0. Two layers: the decanter's (D3).
+        double hR = decanter == null ? h0 : decanter.reflux(), hC = decanter == null ? h0 : decanter.whole();
+        double hD = decanter == null ? h0 : decanter.distillate();
+        double perDistillate = (ratio + 1) * headVapour - ratio * hR - hPot;
         if (!(perDistillate > 0)) return failed(stages, ratio, closed, "no positive boil-up heat");
         // The rates per mole of distillate (D = 1) scale with the duty: D = duty / boil-up heat per mole.
         double d = duty / perDistillate;
         var profile = new Profile(t.clone(), copy(x));
-        // The head vapour leaves tray 1 at its dew point; a total condenser gives its composition, x0, to the distillate.
-        return new Split(true, iterations, null, stages, ratio, closed, x[0].clone(), t[1], t[0], t[r], closed ? 0 : d,
+        // The head vapour leaves tray 1 at its dew point; a total condenser gives its composition, x0, to the distillate; of
+        // two layers the distillate is what the reflux leaves, (R + 1) y1 (1 - s).
+        double[] distillate = decanter == null ? x[0].clone() : decanter.composition().clone();
+        double condensing = decanter == null ? t[0] : decanter.temperature();
+        int[] settling = settling(t, x, stages);
+        return new Split(true, iterations, null, stages, ratio, closed, distillate, t[1], condensing, t[r], closed ? 0 : d,
                 vapour[r] * d, y[r].clone(), hUp, closed ? vapour[r] * d : liquid[r - 1] * d, closed ? y[r].clone() : x[r - 1].clone(),
-                hBack, vapour[1] * d, headVapour, h0, hPot, closed ? Double.POSITIVE_INFINITY : perDistillate, profile);
+                hBack, vapour[1] * d, headVapour, hC, hPot, closed ? Double.POSITIVE_INFINITY : perDistillate, profile, hR, hD,
+                pot.two(), decanter != null, settling, flashes, null);
     }
 
     /** One equilibrium stage: the pot's bubble vapour is the distillate. */
     private Split single(double[] z, double duty, Profile warm) {
-        var pot = bubble(z, warm != null ? warm.potTemperature() : Double.NaN);
-        if (pot == null) return failed(0, 0, false, "no bubble point of the pot liquid");
+        var potBoiling = boiling(fractions(z), warm != null ? warm.potTemperature() : Double.NaN, null);
+        if (potBoiling == null) return failed(0, 0, false, "no bubble point of the pot liquid");
+        return single(z, duty, potBoiling, null, 0);
+    }
+
+    /** One equilibrium stage on the pot's {@code potBoiling}, with {@code notice} on its answer, after {@code iterations} of a column. */
+    private Split single(double[] z, double duty, Boiling potBoiling, String notice, int iterations) {
+        var pot = potBoiling.bubble();
         double[] y = pot.vapour();
-        var condensate = bubble(y, pot.temperature() - 1);
-        if (condensate == null) return failed(0, 0, false, "no bubble point of the condensate");
+        var condensing = boiling(fractions(y), pot.temperature() - 1, null);
+        if (condensing == null) return failed(0, 0, false, "no bubble point of the condensate");
+        var condensate = condensing.bubble();
         double hPot, hVapour, h0;
         try {
-            hPot = liquidEnthalpy(pot.temperature(), z);
+            hPot = potBoiling.two() ? potBoiling.enthalpy() : liquidEnthalpy(pot.temperature(), z);
             hVapour = vapourEnthalpy(pot.temperature(), y);
-            h0 = liquidEnthalpy(condensate.temperature(), y);
+            h0 = condensing.two() ? condensing.enthalpy() : liquidEnthalpy(condensate.temperature(), y);
         } catch (RuntimeException absent) {
             return failed(0, 0, false, "no enthalpy of the pot or its vapour");
         }
@@ -299,21 +471,205 @@ public final class StillColumn {
         if (!(perDistillate > 0)) return failed(0, 0, false, "no positive latent heat");
         double d = duty / perDistillate;
         var profile = new Profile(new double[]{condensate.temperature(), pot.temperature()}, new double[][]{y.clone(), z.clone()});
-        return new Split(true, 0, null, 0, 0, false, y.clone(), pot.temperature(), condensate.temperature(), pot.temperature(), d, d, y.clone(),
-                hVapour, 0, z.clone(), hPot, d, hVapour, h0, hPot, perDistillate, profile);
+        // No reflux: the whole condensate, both layers, is the distillate.
+        return new Split(true, iterations, null, 0, 0, false, y.clone(), pot.temperature(), condensate.temperature(), pot.temperature(), d, d, y.clone(),
+                hVapour, 0, z.clone(), hPot, d, hVapour, h0, hPot, perDistillate, profile, h0, h0, potBoiling.two(), condensing.two(),
+                NO_TRAYS, flashes, notice);
+    }
+
+    private static final int[] NO_TRAYS = new int[0];
+
+    /**
+     * Liquid {@code x} (mole fractions) at its bubble point as the engine states it (D2): its one-liquid bubble point from
+     * {@code guess}; where water is in it, the engine's split there and, with two liquids, the layers' bubble point
+     * ({@link #layered}). The vapour is the oil layer's and K that vapour over {@code x}. Null where no bubble point is
+     * found; one liquid where a split is refused.
+     */
+    private Boiling boiling(double[] x, double guess, double[] yGuess) {
+        return boiling(x, guess, yGuess, null);
+    }
+
+    /**
+     * {@link #boiling(double[], double, double[])}; with {@code warm} (the last iteration's two layers of a liquid that moves
+     * little, the condensate's) one split at its next start first (just under the bubble point it predicted), and the full
+     * search only where that split is not below the bubble point.
+     */
+    private Boiling boiling(double[] x, double guess, double[] yGuess, Boiling warm) {
+        boolean wetLiquid = water >= 0 && x[water] > 0;
+        if (wetLiquid && warm != null && warm.two()) {
+            var once = layered(x, warm.next(), warm.bubble().vapour(), warm.slope(), 1);
+            if (once != null) return once;
+        }
+        var one = bubble(x, guess, yGuess);
+        if (one == null) return null;
+        var single = new Boiling(one, Double.NaN, false, 1, x, null, Double.NaN, Double.NaN, Double.NaN, Double.NaN);
+        if (!wetLiquid) return single;
+        var best = layered(x, one.temperature(), one.vapour(), Double.NaN, LAYER_ROUNDS);
+        return best != null ? best : single;
+    }
+
+    /**
+     * Liquid {@code x}'s two layers at their bubble point, from {@code t} K: at each trial temperature the engine's split
+     * and, where it holds two liquids and no vapour (below the bubble point), the oil layer's f = ln Σ K x on its layers
+     * there, negative and rising to zero at the bubble point. A split with vapour or one liquid lies above it (in a mixture
+     * of three or more components two liquids and a vapour coexist over a range of temperatures, where f is zero
+     * throughout). A secant on the trials below, held inside the bracket (bisection where it leaves it), at most
+     * {@code most} splits. The first slope is {@code slope} where finite, else f's at the first layers' fixed composition
+     * (too small: the layers take up more of each other as the temperature rises). The answer is the highest trial below,
+     * and the next start {@link #LAYER_MARGIN} under the bubble point it predicts. Null where no trial is below.
+     */
+    private Boiling layered(double[] x, double t, double[] yStart, double slope, int most) {
+        double below = Double.NEGATIVE_INFINITY, above = Double.POSITIVE_INFINITY, lastT = Double.NaN, lastF = Double.NaN;
+        double[] y = yStart;
+        Layers bestLayers = null;
+        Eval best = null;
+        double bestT = Double.NaN, bestSlope = Double.NaN;
+        for (int round = 0; round < most; round++) {
+            var layers = layers(x, t);
+            var e = layers == null || layers.vapour() ? null : eval(layers.oilLayer(), t, y);
+            double step;
+            if (e == null || !(e.f() < 0)) {
+                // Two liquids, no vapour, and f not below zero: at the bubble point (the engine's split and the oil layer's
+                // ln Σ K x agree to their tolerances). Else above it.
+                if (e != null) {
+                    best = e;
+                    bestLayers = layers;
+                    bestT = t;
+                    bestSlope = slope;
+                    break;
+                }
+                // One liquid before any trial below: the liquid does not settle.
+                if (layers == null && !Double.isFinite(below)) break;
+                above = Math.min(above, t);
+                step = Double.isFinite(below) ? (below + above) / 2 : t - 5;
+            } else {
+                double f = e.f();
+                double s = Double.isFinite(lastT) ? (f - lastF) / (t - lastT) : slope;
+                if (!(s > 0)) {
+                    var shifted = eval(layers.oilLayer(), t + 1, e.y());
+                    s = shifted == null ? Double.NaN : shifted.f() - f;
+                }
+                if (!(t < bestT)) {
+                    best = e;
+                    bestLayers = layers;
+                    bestT = t;
+                    bestSlope = s;
+                }
+                below = Math.max(below, t);
+                lastT = t;
+                lastF = f;
+                y = e.y();
+                step = s > 0 ? t - f / s : Double.NaN;
+                if (!(step > below && step < above)) step = Double.isFinite(above) ? (below + above) / 2 : t + 5;
+                if (f > -1e-10) break;
+            }
+            if (Math.abs(step - t) < TOLERANCE || above - below < TOLERANCE) break;
+            t = step;
+        }
+        if (best == null) return null;
+        double hOil, hAqueous;
+        try {
+            hOil = liquidEnthalpy(bestT, bestLayers.oilLayer());
+            hAqueous = liquidEnthalpy(bestT, bestLayers.aqueousLayer());
+        } catch (RuntimeException absent) {
+            return null;
+        }
+        double[] k = new double[n];
+        for (int i = 0; i < n; i++) k[i] = x[i] > 0 ? best.y()[i] / x[i] : best.k()[i];
+        double beta = bestLayers.oil();
+        double predicted = bestSlope > 0 ? bestT - best.f() / bestSlope : bestT;
+        if (Double.isFinite(above)) predicted = Math.min(predicted, above);
+        return new Boiling(new Bubble(bestT, best.y(), k), beta * hOil + (1 - beta) * hAqueous, true, beta, bestLayers.oilLayer(),
+                bestLayers.aqueousLayer(), hOil, hAqueous, predicted - LAYER_MARGIN, bestSlope);
+    }
+
+    /**
+     * The engine's TP split of liquid {@code x} (mole fractions, water in it) at {@code t} K: its two liquid layers, or null
+     * for one liquid or a refused split. The layers' compositions are the slots'; the oil layer's share of the moles is the
+     * least-squares lever rule of {@code x} on them (a trace of vapour at a bubble point does not move it).
+     */
+    private Layers layers(double[] x, double t) {
+        flashes++;
+        FluidThermodynamics.State state;
+        try {
+            state = thermo.flashTP(t, pressure, conserved(x), NO_CHECKPOINT);
+        } catch (RuntimeException refused) {
+            return null;
+        }
+        if (!FluidThermodynamics.holdsPhase(state, FluidThermodynamics.OIL) || !FluidThermodynamics.holdsPhase(state, FluidThermodynamics.AQUEOUS))
+            return null;
+        double[] oil = normalized(state.labelAmountsView(FluidThermodynamics.OIL)), aqueous = normalized(state.labelAmountsView(FluidThermodynamics.AQUEOUS));
+        if (oil == null || aqueous == null) return null;
+        double along = 0, span = 0;
+        for (int i = 0; i < n; i++) {
+            double d = oil[i] - aqueous[i];
+            along += (x[i] - aqueous[i]) * d;
+            span += d * d;
+        }
+        if (!(span > 0)) return null;
+        return new Layers(Math.clamp(along / span, 0, 1), oil, aqueous, FluidThermodynamics.holdsPhase(state, FluidThermodynamics.GAS));
+    }
+
+    /** Whether liquid {@code amounts} (any amounts on the column's basis) would settle into two liquids at {@code t} K: the engine's split; false without water. */
+    public boolean twoLiquids(double[] amounts, double t) {
+        double[] x = fractions(amounts);
+        return water >= 0 && x[water] > 0 && layers(x, t) != null;
+    }
+
+    /**
+     * The condensate of top vapour {@code y1} (D2, D3): null for one liquid (no water in it, a refused split, one layer);
+     * else its layers at its bubble point (from {@code guess} K) and the reflux R drawn from the oil layer first. With the
+     * last iteration's two layers ({@code last}) one split at their temperature states them (D7: one a iteration).
+     */
+    private Decanter decanter(double[] y1, double guess, double ratio, Decanter last) {
+        if (water < 0 || !(y1[water] > 0)) return null;
+        var condensate = boiling(fractions(y1), guess, null, last != null ? last.condensate() : null);
+        if (condensate == null || !condensate.two()) return null;
+        double beta = condensate.oil(), total = ratio + 1, oil = beta * total, aqueous = total - oil;
+        double fromOil = oil > 0 ? Math.min(1, ratio / oil) : 1, fromAqueous = aqueous > 0 ? Math.max(0, (ratio - oil) / aqueous) : 0;
+        double[] xo = condensate.oilLayer(), xa = condensate.aqueousLayer(), shares = new double[n], out = new double[n];
+        double sum = 0;
+        for (int i = 0; i < n; i++) {
+            double o = beta * xo[i], a = (1 - beta) * xa[i], omega = o + a > 0 ? o / (o + a) : 1;
+            shares[i] = fromOil * omega + fromAqueous * (1 - omega);
+            sum += out[i] = (1 - shares[i]) * y1[i];
+        }
+        if (!(sum > 0)) return null;
+        for (int i = 0; i < n; i++) out[i] /= sum;
+        double hOil = condensate.oilEnthalpy(), hAqueous = condensate.aqueousEnthalpy();
+        double reflux = (fromOil * oil * hOil + fromAqueous * aqueous * hAqueous) / ratio;
+        double distillate = (1 - fromOil) * oil * hOil + (1 - fromAqueous) * aqueous * hAqueous;
+        return new Decanter(condensate.temperature(), shares, reflux, beta * hOil + (1 - beta) * hAqueous, distillate, out, condensate);
+    }
+
+    /** The trays (1..N) whose liquid, with water in it, the engine splits into two liquids at the tray's temperature (D4). */
+    private int[] settling(double[] t, double[][] x, int stages) {
+        if (water < 0) return NO_TRAYS;
+        int[] found = new int[stages];
+        int count = 0;
+        for (int j = 1; j <= stages; j++) if (x[j][water] > 0 && layers(x[j], t[j]) != null) found[count++] = j;
+        return count == 0 ? NO_TRAYS : java.util.Arrays.copyOf(found, count);
+    }
+
+    private static double[] normalized(double[] amounts) {
+        double sum = sum(amounts);
+        if (!(sum > 0) || !Double.isFinite(sum)) return null;
+        double[] out = new double[amounts.length];
+        for (int i = 0; i < out.length; i++) out[i] = Math.max(0, amounts[i]) / sum;
+        return out;
     }
 
     /**
      * The flows per mole of distillate from the energy balances on the stage states (Wang and Henke): around the condenser
-     * and stages 1..j, V(j+1) (H(j+1) - hj) = (R + 1)(H1 - h0) + h0 - hj, and Lj = V(j+1) - 1; L0 = R. False where a stage
-     * has no enthalpy.
+     * and stages 1..j, V(j+1) (H(j+1) - hj) = (R + 1) H1 - R hR - hj, and Lj = V(j+1) - 1; L0 = R. hR is the reflux's: the
+     * stage-0 liquid's with one liquid, the decanter's with two layers. False where a stage has no enthalpy.
      */
-    private boolean energyFlows(double ratio, double[] t, double[][] x, double[][] y, double[] vapour, double[] liquid) {
+    private boolean energyFlows(double ratio, double[] t, double[][] x, double[][] y, double[] vapour, double[] liquid, Decanter decanter) {
         int m = t.length, r = m - 1;
         double[] h = new double[m], hv = new double[m];
         try {
             for (int j = 0; j < m; j++) {
-                h[j] = liquidEnthalpy(t[j], x[j]);
+                h[j] = j == 0 && decanter != null ? decanter.reflux() : liquidEnthalpy(t[j], x[j]);
                 if (j > 0) hv[j] = vapourEnthalpy(t[j], y[j]);
             }
         } catch (RuntimeException absent) {
@@ -369,11 +725,11 @@ public final class StillColumn {
     private Eval eval(double[] x, double t, double[] yStart) {
         try {
             var terms = model.prepare(t);
-            double[] liquid = model.phase(t, pressure, x, PengRobinsonKernel.Root.LIQUID, terms).logFugacityView();
+            double[] liquid = model.phase(t, pressure, conserved(x), PengRobinsonKernel.Root.LIQUID, terms, false).logFugacityView();
             double[] y = yStart.clone(), k = new double[n];
             double sum = 1;
             for (int pass = 0; pass < 8; pass++) {
-                double[] vapour = model.phase(t, pressure, y, PengRobinsonKernel.Root.VAPOR, terms).logFugacityView();
+                double[] vapour = model.phase(t, pressure, conserved(y), PengRobinsonKernel.Root.VAPOR, terms, false).logFugacityView();
                 sum = 0;
                 for (int i = 0; i < n; i++) {
                     k[i] = DeterministicMath.exp(liquid[i] - vapour[i]);
@@ -397,22 +753,22 @@ public final class StillColumn {
 
     /** Liquid {@code x}'s molar enthalpy at {@code t} K on the network's datum, J/mol. */
     public double liquidEnthalpy(double t, double[] x) {
-        return model.phase(t, pressure, fractions(x), PengRobinsonKernel.Root.LIQUID).molarEnthalpy();
+        return model.phase(t, pressure, conserved(fractions(x)), PengRobinsonKernel.Root.LIQUID).molarEnthalpy();
     }
 
     /** Vapour {@code y}'s molar enthalpy at {@code t} K, J/mol. */
     public double vapourEnthalpy(double t, double[] y) {
-        return model.phase(t, pressure, fractions(y), PengRobinsonKernel.Root.VAPOR).molarEnthalpy();
+        return model.phase(t, pressure, conserved(fractions(y)), PengRobinsonKernel.Root.VAPOR).molarEnthalpy();
     }
 
     /** Liquid {@code x}'s molar volume at {@code t} K, m³/mol. */
     public double liquidVolume(double t, double[] x) {
-        return model.phase(t, pressure, fractions(x), PengRobinsonKernel.Root.LIQUID).molarVolume();
+        return model.phase(t, pressure, conserved(fractions(x)), PengRobinsonKernel.Root.LIQUID).molarVolume();
     }
 
     /** Vapour {@code y}'s molar volume at {@code t} K, m³/mol. */
     public double vapourVolume(double t, double[] y) {
-        return model.phase(t, pressure, fractions(y), PengRobinsonKernel.Root.VAPOR).molarVolume();
+        return model.phase(t, pressure, conserved(fractions(y)), PengRobinsonKernel.Root.VAPOR).molarVolume();
     }
 
     /** The molar mass of a mixture of mole fractions {@code x}, kg/mol. */
@@ -494,6 +850,7 @@ public final class StillColumn {
 
     private Split failed(int stages, double ratio, boolean closed, String why) {
         return new Split(false, 0, why, stages, ratio, closed, new double[n], Double.NaN, Double.NaN, Double.NaN, 0, 0, new double[n], Double.NaN,
-                0, new double[n], Double.NaN, 0, Double.NaN, Double.NaN, Double.NaN, Double.NaN, null);
+                0, new double[n], Double.NaN, 0, Double.NaN, Double.NaN, Double.NaN, Double.NaN, null, Double.NaN, Double.NaN, false, false,
+                NO_TRAYS, flashes, null);
     }
 }

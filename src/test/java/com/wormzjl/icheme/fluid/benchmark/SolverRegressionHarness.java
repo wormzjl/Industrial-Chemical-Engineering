@@ -14,6 +14,7 @@ import com.wormzjl.icheme.science.material.MaterialCatalog;
 import java.lang.management.ManagementFactory;
 import java.nio.file.*;
 import java.util.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * Saved-island replay harness for the solver optimization work packages: it re-solves fixed
@@ -144,7 +145,7 @@ final class SolverRegressionHarness {
         for(var reservoir:result.graph().reservoirs()) {
             var state=reservoir.state();
             nodes.add(new NodeState(reservoir.id(),state.temperature(),state.pressure(),state.mass(),state.volume(),
-                    state.liquidVolume(),state.vaporVolume(),state.waterVolume(),PhaseLayout.totalAmounts(state)));
+                    TestPhases.liquidVolume(state),state.vaporVolume(),TestPhases.waterVolume(state),PhaseLayout.totalAmounts(state)));
         }
         return new IntervalState(result.acceptedSubsteps(),result.rejectedSubsteps(),List.copyOf(nodes),result.averageMassFlows());
     }

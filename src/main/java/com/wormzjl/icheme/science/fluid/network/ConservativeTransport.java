@@ -6,7 +6,6 @@ import com.wormzjl.icheme.science.fluid.linalg.*;
 import com.wormzjl.icheme.science.fluid.solver.*;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.fluid.thermo.NetworkCrystals;
-import com.wormzjl.icheme.science.thermo.PhaseSupport;
 import java.util.*;
 import com.wormzjl.icheme.science.fluid.state.SolidInventory;
 
@@ -142,7 +141,7 @@ public final class ConservativeTransport {
      */
     public static Projection reconstruct(PassiveNetwork graph,List<FluidThermodynamics.State> candidate,double[] flows,double[] heads,
                                          double dt,FluidThermodynamics model,Runnable checkpoint,Workspace workspace,boolean frozenJunctions,double[][] draws,
-                                         PhaseSupport[][] supports,Emptying[] emptying,OpenVessel.Releases[] releases) {
+                                         byte[][] supports,Emptying[] emptying,OpenVessel.Releases[] releases) {
         return reconstruct(graph,candidate,flows,heads,dt,model,checkpoint,workspace,frozenJunctions,draws,supports,emptying,releases,null,null);
     }
     /** As above, with the heat the heat-exchanging connections take up ({@link EdgeHeat}; null where the graph has none),
@@ -150,7 +149,7 @@ public final class ConservativeTransport {
      * ({@link MoverWork}; null: its own law's on the suction it meets). */
     public static Projection reconstruct(PassiveNetwork graph,List<FluidThermodynamics.State> candidate,double[] flows,double[] heads,
                                          double dt,FluidThermodynamics model,Runnable checkpoint,Workspace workspace,boolean frozenJunctions,double[][] draws,
-                                         PhaseSupport[][] supports,Emptying[] emptying,OpenVessel.Releases[] releases,EdgeHeat heat,MoverWork moverWork) {
+                                         byte[][] supports,Emptying[] emptying,OpenVessel.Releases[] releases,EdgeHeat heat,MoverWork moverWork) {
         if(draws!=null&&draws.length!=flows.length)throw new IllegalArgumentException("Invalid phase draws");
         if(releases!=null&&releases.length!=graph.reservoirs().size())throw new IllegalArgumentException("Invalid open-vessel releases");
         if(!SolverDiagnostics.ENABLED)return reconstruct0(graph,candidate,flows,heads,dt,model,checkpoint,workspace,frozenJunctions,draws,supports,emptying,releases,heat,moverWork);
@@ -245,7 +244,7 @@ public final class ConservativeTransport {
     }
     private static Projection reconstruct0(PassiveNetwork graph,List<FluidThermodynamics.State> candidate,double[] solvedFlows,double[] heads,
                                          double dt,FluidThermodynamics model,Runnable checkpoint,Workspace workspace,boolean frozen,double[][] draws,
-                                         PhaseSupport[][] supports,Emptying[] emptying,OpenVessel.Releases[] releases,EdgeHeat heat,MoverWork moverWork) {
+                                         byte[][] supports,Emptying[] emptying,OpenVessel.Releases[] releases,EdgeHeat heat,MoverWork moverWork) {
         int nodes=graph.reservoirs().size(),components=model.hydrocarbon.componentCount()+1;
         if(candidate.size()!=nodes||solvedFlows.length!=graph.pipes().size()||heads.length!=solvedFlows.length)throw new IllegalArgumentException("Invalid transport reconstruction");
         for(double q:solvedFlows)if(!Double.isFinite(q))throw new IllegalArgumentException("Nonfinite candidate flow/head");
@@ -255,7 +254,7 @@ public final class ConservativeTransport {
         TowerExchange.Rates[] towerExchanges=null;
         for(int n=0;n<nodes;n++)if(graph.reservoirs().get(n).inventory().tower()!=null){
             if(towerExchanges==null)towerExchanges=new TowerExchange.Rates[nodes];
-            towerExchanges[n]=TowerExchange.at(graph,n,candidate,flows,model);
+            towerExchanges[n]=TowerExchange.at(graph,n,candidate,flows,draws,model);
         }
         var populationBasis=new TreeMap<SolidInventory.Key,SolidInventory.Population>();
         for(var node:graph.reservoirs())for(var population:node.inventory().solids().populations())populationBasis.merge(population.key(),population,(a,b)->{if(!a.material().equals(b.material()))throw new IllegalArgumentException("Conflicting solid material definitions");return a;});
@@ -329,7 +328,7 @@ public final class ConservativeTransport {
             if(transfer instanceof ScheduledTransfer.Withdrawal out){outgoing[node]+=out.massKgPerSecond();endMass[node]-=dt*out.massKgPerSecond();}
             else if(transfer instanceof ScheduledTransfer.Injection in){var n=in.molesPerSecond();for(int c=0;c<components;c++)endMass[node]+=dt*n[c]*molecularWeight[c];endMass[node]+=dt*in.solidsPerSecond().massKg();}
         }
-        if(towerExchanges!=null)for(int n=0;n<nodes;n++)if(towerExchanges[n]!=null)endMass[n]-=dt*towerExchanges[n].waterLoss();
+        if(towerExchanges!=null)for(int n=0;n<nodes;n++)if(towerExchanges[n]!=null)endMass[n]-=dt*towerExchanges[n].massLoss();
         // An open vessel's vent and spill leave it as fixed amounts (OpenVessel), off its right-hand side below.
         if(releases!=null)for(int node=0;node<nodes;node++)if(releases[node]!=null)for(var released:releases[node].each())endMass[node]-=released.mass(molecularWeight);
         // Owner decision D61 (JunctionCrystals): per solved junction, the crystal each population is if it melts there (else
@@ -397,7 +396,7 @@ public final class ConservativeTransport {
             for(int c=0;c<populationKeys.size();c++)rhs[components+c][index[node]]-=released.solids().mass(populationKeys.get(c));
         }
         if(towerExchanges!=null)for(int n=0;n<nodes;n++)if(towerExchanges[n]!=null&&index[n]>=0)
-            rhs[components-1][index[n]]-=dt*towerExchanges[n].waterLoss();
+            for(int c=0;c<components;c++)rhs[c][index[n]]-=dt*towerExchanges[n].loss(c);
         double[][] solved;
         // One backward-error check on the first component vector qualifies this factorization; the
         // remaining component columns are bounded by the junction continuity and conservation
@@ -498,9 +497,10 @@ public final class ConservativeTransport {
         }
         double[] external=new double[components];double externalEnergy=0,pumpWork=0;var boundaries=new ArrayList<BoundaryTransfer>();
         if(towerExchanges!=null)for(int n=0;n<nodes;n++)if(towerExchanges[n]!=null) {
-            var exchange=towerExchanges[n];double moved=-dt*exchange.waterLoss()/model.waterMolecularWeight,heatMoved=-dt*exchange.energyWatt();
-            energy[n]+=heatMoved;externalEnergy+=heatMoved;external[components-1]+=moved;
-            var amounts=new double[components];amounts[components-1]=moved;
+            var exchange=towerExchanges[n];double heatMoved=-dt*exchange.energyWatt();
+            energy[n]+=heatMoved;externalEnergy+=heatMoved;
+            var amounts=new double[components];
+            for(int c=0;c<components;c++){amounts[c]=-dt*exchange.loss(c)/molecularWeight[c];external[c]+=amounts[c];}
             boundaries.add(new BoundaryTransfer(graph.reservoirs().get(n).id(),amounts,heatMoved,SolidInventory.EMPTY,0,BoundaryTransfer.Kind.ATMOSPHERE));
         }
         for(var transfer:graph.scheduledTransfers()) {
@@ -792,7 +792,7 @@ public final class ConservativeTransport {
                 if(donor==node)out+=rate;
             }
             // An emptying vessel (decision D54) passes what reaches it and its whole stock: dt (In' - Out') = -m_stock.
-            double atmospheric=graph.reservoirs().get(node).inventory().tower()==null?0:TowerExchange.at(graph,node,candidate,flows,model).waterLoss();
+            double atmospheric=graph.reservoirs().get(node).inventory().tower()==null?0:TowerExchange.at(graph,node,candidate,flows,draws,model).massLoss();
             double outflow=fromJunctions+fromOthers-atmospheric+(emptying!=null&&emptying[node]!=null?emptying[node].drain():0),inflow=out-fromJunctions+atmospheric;
             if(out>0&&Double.isFinite(outflow)){double f=outflow/out;for(int edge=0;edge<flows.length;edge++){if(flows[edge]==0)continue;var pipe=graph.pipes().get(edge);if((flows[edge]>0?pipe.first():pipe.second())==node)factor[edge]=f;}}
             else if(fromOthers>0&&inflow>=0&&inflow<=fromOthers){double g=inflow/fromOthers;for(int edge=0;edge<flows.length;edge++){if(flows[edge]==0)continue;var pipe=graph.pipes().get(edge);int donor=flows[edge]>0?pipe.first():pipe.second(),receiver=flows[edge]>0?pipe.second():pipe.first();if(receiver==node&&!junction[donor])factor[edge]=g;}}
@@ -830,33 +830,33 @@ public final class ConservativeTransport {
      * cannot state.
      */
     static FluidThermodynamics.State repartition(FluidThermodynamics model,FluidThermodynamics.State state,double[] moles,boolean rigid) {
-        double[] oldL=state.liquidView(),oldV=state.vaporView(),l=new double[oldL.length],v=new double[l.length];
         if(appearsWithoutPhase(state,moles))return model.flashTP(state.temperature(),state.pressure(),moles,()->{}).withSolidState(state.solids(),state.solidMoments());
-        for(int c=0;c<l.length;c++) {
-            double total=oldL[c]+oldV[c];
-            if(total==0){if(state.liquidVolume()>0)l[c]=moles[c];else v[c]=moles[c];}
-            else if(oldL[c]<oldV[c]){l[c]=moles[c]*(oldL[c]/total);v[c]=moles[c]-l[c];}
-            else{v[c]=moles[c]*(oldV[c]/total);l[c]=moles[c]-v[c];}
+        int n=moles.length;double[][] out=new double[3][n];
+        // A component the node holds none of goes to its larger liquid, else to its vapour; the next pass equilibrates it.
+        int fresh=state.condensedVolume()>0?(state.slotVolume(FluidThermodynamics.State.AQUEOUS)>state.slotVolume(FluidThermodynamics.State.LIQUID)
+                ?FluidThermodynamics.State.AQUEOUS:FluidThermodynamics.State.LIQUID):FluidThermodynamics.State.VAPOR;
+        for(int c=0;c<n;c++) {
+            double total=0;int largest=fresh;double most=-1;
+            for(int slot=0;slot<3;slot++){double x=state.amountsView(slot)[c];total+=x;if(x>most){most=x;largest=slot;}}
+            if(total==0){out[fresh][c]=moles[c];continue;}
+            // Each slot but the one holding most of the component takes its share; that one takes the remainder.
+            double rest=moles[c];
+            for(int slot=0;slot<3;slot++){if(slot==largest)continue;out[slot][c]=moles[c]*(state.amountsView(slot)[c]/total);rest-=out[slot][c];}
+            out[largest][c]=rest;
         }
-        double water=state.waterLiquid()+state.waterVapor(),wl,wv;
-        if(water==0){wl=state.vaporVolume()>0?0:moles[l.length];wv=moles[l.length]-wl;}
-        else if(state.waterLiquid()<state.waterVapor()){wl=moles[l.length]*(state.waterLiquid()/water);wv=moles[l.length]-wl;}
-        else{wv=moles[l.length]*(state.waterVapor()/water);wl=moles[l.length]-wv;}
-        double[] split={wl,wv};double pc=state.hydrocarbonPartialPressure();
-        if(rigid)return model.folded(model.adoptingState(state.temperature(),state.pressure(),l,v,split[0],split[1],pc,null),false,true).withSolidState(state.solids(),state.solidMoments());
-        if(model.foldTracePhases(l,v,split)){SolverDiagnostics.count(SolverDiagnostics.traceFolds);pc=FluidThermodynamics.foldedHydrocarbonPressure(state.pressure(),pc,v,split[1]);}
-        return model.adoptingState(state.temperature(),state.pressure(),l,v,split[0],split[1],pc,null).withSolidState(state.solids(),state.solidMoments());
+        if(rigid)return model.folded(model.adoptingState(state.temperature(),state.pressure(),out[0],out[1],out[2],null),false,true).withSolidState(state.solids(),state.solidMoments());
+        if(model.foldTracePhases(out[0],out[1],out[2]))SolverDiagnostics.count(SolverDiagnostics.traceFolds);
+        return model.adoptingState(state.temperature(),state.pressure(),out[0],out[1],out[2],null).withSolidState(state.solids(),state.solidMoments());
     }
     /** A vessel that held no fluid at the step start and that the step solved with no phase support: no unknowns, its state
      * the ambient or its solids' (decision D54, {@code PassiveStepSolver.dry}). One the step laid out holds its own phases. */
-    private static boolean dryVessel(PassiveNetwork.Reservoir reservoir,PhaseSupport[][] supports,int node) {
+    private static boolean dryVessel(PassiveNetwork.Reservoir reservoir,byte[][] supports,int node) {
         return PassiveStepSolver.holdsNoFluidVessel(reservoir)&&(supports==null||supports[node]==null);
     }
-    /** Whether {@code moles} book a hydrocarbon into a state that holds no hydrocarbon phase (see {@link #repartition}). */
+    /** Whether {@code moles} book material into a state that holds no fluid phase (see {@link #repartition}). */
     static boolean appearsWithoutPhase(FluidThermodynamics.State state,double[] moles) {
-        if(state.liquidVolume()>0||state.vaporProperties()!=null)return false;
-        double[] l=state.liquidView(),v=state.vaporView();
-        for(int c=0;c<l.length;c++)if(l[c]+v[c]==0&&moles[c]>0)return true;
+        if(FluidThermodynamics.holdsFluid(state))return false;
+        for(double x:moles)if(x>0)return true;
         return false;
     }
     private static void add(List<TreeMap<Integer,Double>> columns,int column,int row,double value){columns.get(column).merge(row,value,Double::sum);}

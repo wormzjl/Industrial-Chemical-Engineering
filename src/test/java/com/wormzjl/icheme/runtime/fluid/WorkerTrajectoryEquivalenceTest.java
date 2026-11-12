@@ -20,6 +20,7 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /** P12: worker scheduling may change wall completion order, never the physical trajectory. */
 class WorkerTrajectoryEquivalenceTest {
@@ -206,7 +207,7 @@ class WorkerTrajectoryEquivalenceTest {
                 for(var node:snapshot.graph().reservoirs()) {
                     var state=node.state();var inventory=node.inventory();
                     nodes.add(new NodeFrame(node.id(),node.elevation(),inventory.moles(),inventory.internalEnergy(),
-                            state.pressure(),state.temperature(),state.mass(),state.vaporVolume(),state.liquidVolume(),state.waterVolume()));
+                            state.pressure(),state.temperature(),state.mass(),state.vaporVolume(),TestPhases.liquidVolume(state),TestPhases.waterVolume(state)));
                 }
                 histories.get(snapshot.id()).add(new Frame(snapshot.clock().committedTick(),nodes,result.averageMassFlows(),
                         result.acceptedSubsteps(),result.rejectedSubsteps()));
@@ -231,7 +232,7 @@ class WorkerTrajectoryEquivalenceTest {
                 var crude=new java.util.HashSet<>(com.wormzjl.icheme.science.material.MaterialCatalog.bundled().requirePackage("icheme:tjl20_methane_nitrogen").components());crude.add("Water");
                 var moles=first.inventory().moles();
                 for(int c=0;c<moles.length;c++)assertEquals(crude.contains(model.components().get(c)),moles[c]>0,"wet-crude fixture must exercise every crude, nitrogen and water component: "+model.components().get(c));
-                assertTrue(first.state().vaporVolume()>0&&first.state().liquidVolume()+first.state().waterVolume()>0,
+                assertTrue(first.state().vaporVolume()>0&&TestPhases.liquidVolume(first.state())+TestPhases.waterVolume(first.state())>0,
                         "wet-crude fixture must remain multiphase");
             }
             return graph;

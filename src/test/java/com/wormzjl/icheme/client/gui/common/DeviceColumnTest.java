@@ -201,7 +201,7 @@ class DeviceColumnTest {
                     column.slots();
                     assertInLine(column, "tower at " + width);
                 }
-        for (var key : List.of("inlet_temperature", "tower_basin_temperature", "bottom_pressure.hint", "tower_cooling_duty", "tower_return", "tower_evaporation", "fan_power", "tower_speed")) texts.get(key);
+        for (var key : List.of("inlet_temperature", "tower_basin_temperature", "bottom_pressure.hint", "tower_cooling_duty", "tower_return", "tower_evaporation", "tower_other_losses", "fan_power", "tower_speed")) texts.get(key);
         assertEquals(Set.of(), texts.missing);
     }
 
@@ -342,6 +342,20 @@ class DeviceColumnTest {
         assertTrue(basis.soft() && basis.active(), "the basis is a display key, a reader's too");
         assertEquals("Crystals", ((Column.Split) phases.rows().get(1)).shares().get(3).label());
         assertEquals(3, phases.rows().size(), "a mole basis that leaves custom solids out says so");
+    }
+
+    /** Plan N7: the aqueous liquid reads "Water" while water is at least 99 % of it by moles, else "Aqueous". */
+    @Test void theAqueousRowIsNamedWaterWhileItIsAlmostPureWater() {
+        assertTrue(DeviceColumn.aqueousIsWater(new double[]{0.01, 0.99}, 1));
+        assertFalse(DeviceColumn.aqueousIsWater(new double[]{0.0101, 0.9899}, 1), "an ethanol-water liquid stays aqueous");
+        assertFalse(DeviceColumn.aqueousIsWater(new double[]{0, 0}, 1), "an empty liquid is not named");
+        assertFalse(DeviceColumn.aqueousIsWater(new double[]{1}, -1), "a basis without water never names it");
+        var texts = new HeatControlColumnTest.Recording();
+        for (boolean water : new boolean[]{true, false}) {
+            var group = (Column.Group) DeviceColumn.phases(new DeviceColumn.Phases("mole", new double[]{1, 2, 3, 0}, false, "Phase fractions.", water), texts);
+            assertEquals(water ? "Water" : "Aqueous", ((Column.Split) group.rows().get(1)).shares().get(1).label());
+        }
+        assertTrue(texts.missing.isEmpty(), () -> "missing keys " + texts.missing);
     }
 
     /**

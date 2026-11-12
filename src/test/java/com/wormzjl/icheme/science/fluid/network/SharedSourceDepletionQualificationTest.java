@@ -12,6 +12,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import org.junit.jupiter.api.Test;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * Physical qualification fixtures for finite source depletion and pump suction.
@@ -348,7 +349,7 @@ class SharedSourceDepletionQualificationTest {
                     reservoir.inventory().volume(), mass(reservoir.inventory().moles())});
             var state = reservoir.state();
             states.add(new double[] {state.temperature(), state.pressure(), state.internalEnergy(),
-                    state.liquidVolume(), state.vaporVolume(), state.waterLiquid(), state.waterVapor()});
+                    TestPhases.liquidVolume(state), state.vaporVolume(), TestPhases.waterLiquid(state), TestPhases.waterVapor(state)});
         }
         return new Snapshot(inventories, states);
     }
@@ -360,8 +361,8 @@ class SharedSourceDepletionQualificationTest {
                     new double[] {inventory.internalEnergy(), inventory.volume(), mass(inventory.moles())}, 0);
             var state = after.reservoirs().get(i).state();
             assertArrayEquals(before.states().get(i), new double[] {state.temperature(), state.pressure(),
-                    state.internalEnergy(), state.liquidVolume(), state.vaporVolume(), state.waterLiquid(),
-                    state.waterVapor()}, 0);
+                    state.internalEnergy(), TestPhases.liquidVolume(state), state.vaporVolume(), TestPhases.waterLiquid(state),
+                    TestPhases.waterVapor(state)}, 0);
         }
     }
 }

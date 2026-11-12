@@ -21,7 +21,7 @@ public final class FluidPresetCatalog {
     }
     public static List<Preset> resolve(MaterialCatalog catalog) {
         var config=catalog.presets().network();var target=catalog.requirePackage(config.packageId());
-        var ids=new ArrayList<>(target.components());ids.add("Water");var axis=new MaterialAxis(ids);var result=new ArrayList<Preset>();
+        var ids=new ArrayList<>(target.components());ids.remove("Water");ids.add("Water");var axis=new MaterialAxis(ids);var result=new ArrayList<Preset>();
         for(String id:config.fluidPresets()) {
             var preset=catalog.presets().fluid(id);double[] amounts;
             if(!preset.component().isEmpty()){amounts=new double[axis.size()];amounts[axis.requireIndex(preset.component())]=1;}

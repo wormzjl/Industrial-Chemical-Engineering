@@ -44,6 +44,18 @@ public final class SolverDiagnostics {
     public static final LongAdder jacobianBlockBuilds=new LongAdder();
     public static final LongAdder jacobianBlockColumns=new LongAdder();
     public static final LongAdder jacobianBlockFallbacks=new LongAdder();
+    /**
+     * The node Jacobian from phase tangents (ANALYTIC_JACOBIAN_PLAN.md of batch 2026-11-11-aqueous-solvents): the phase
+     * tangents built (one derivative evaluation each), the phases of perturbed columns taken from a tangent, those taken
+     * from the equation of state because the column's step was not small for the phase (section 3.4) or because the
+     * phase had no tangent (a slot the base does not hold, a root too close to coalescence), and the columns that held
+     * at least one phase of the first kind.
+     */
+    public static final LongAdder jacobianTangentsBuilt=new LongAdder();
+    public static final LongAdder jacobianTangentPhases=new LongAdder();
+    public static final LongAdder jacobianExactPhases=new LongAdder();
+    public static final LongAdder jacobianUntangentPhases=new LongAdder();
+    public static final LongAdder jacobianExactColumns=new LongAdder();
     public static final LongAdder newtonSolvesPreconditioned=new LongAdder();
     public static final LongAdder newtonIterationsPreconditioned=new LongAdder();
     public static final LongAdder newtonIterationsFresh=new LongAdder();
@@ -199,6 +211,9 @@ public final class SolverDiagnostics {
         map.put("jacobianBuilds",jacobianBuilds);map.put("jacobianColors",jacobianColors);map.put("jacobianNonzeros",jacobianNonzeros);
         map.put("jacobianBlockBuilds",jacobianBlockBuilds);map.put("jacobianBlockColumns",jacobianBlockColumns);
         map.put("jacobianBlockFallbacks",jacobianBlockFallbacks);
+        map.put("jacobianTangentsBuilt",jacobianTangentsBuilt);map.put("jacobianTangentPhases",jacobianTangentPhases);
+        map.put("jacobianExactPhases",jacobianExactPhases);map.put("jacobianUntangentPhases",jacobianUntangentPhases);
+        map.put("jacobianExactColumns",jacobianExactColumns);
         map.put("newtonSolvesPreconditioned",newtonSolvesPreconditioned);
         map.put("newtonIterationsPreconditioned",newtonIterationsPreconditioned);
         map.put("newtonIterationsFresh",newtonIterationsFresh);map.put("newtonIterationsStale",newtonIterationsStale);

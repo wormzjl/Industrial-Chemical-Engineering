@@ -56,12 +56,17 @@ class CarriedCrystalsTest {
         assertFalse(pilot.condensedShareOnly(pilot.flashTP(112, 101325, lng, () -> {})));
     }
 
-    /** The share condition: a phase set with no crystal-rich phase is no crystal's, and stays the liquid-liquid hold. */
-    @Test void twoLiquidsWithNoCrystalRichPhaseStayTheHold() {
+    /**
+     * The share condition: a phase set with no crystal-rich phase is no crystal's, and stays the liquid-liquid split. Since
+     * W3b the network carries it as two liquids (three fluid phases come from the physics and are never a hold; before, the
+     * liquid-liquid hold).
+     */
+    @Test void twoLiquidsWithNoCrystalRichPhaseStayTwoLiquids() {
         double[] feed = {.5, 0, .45, .05, 0};
         assertEquals(EquilibriumResult.Classification.LIQUID_LIQUID, carried(95, 2e6, feed).classification());
-        var hold = assertThrows(FluidThermodynamics.UnsupportedPhases.class, () -> pilot.flashTP(95, 2e6, feed, () -> {}));
-        assertEquals(FluidThermodynamics.UnsupportedPhases.Kind.LIQUID_LIQUID, hold.kind());
+        var state = assertDoesNotThrow(() -> pilot.flashTP(95, 2e6, feed, () -> {}));
+        assertTrue(state.liquidSlotVolume() > 0 && state.aqueousSlotVolume() > 0, "two liquid slots");
+        assertArrayEquals(feed, state.totals(), 1e-12);
     }
 
     /** The dense-trial and feed conditions: a vapour trial and a vapour feed are never filtered, so a let-down still splits. */

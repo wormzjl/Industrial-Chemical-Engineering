@@ -112,12 +112,12 @@ public final class SheetCompounds {
         double[] placed = new double[n];
         for (int i = 0; i < amounts.length; i++) placed[up[i]] = amounts[i];
         if (state == null) return new FlowStream(stream.temperature(), stream.pressure(), placed, stream.enthalpy(), stream.mass(), null);
-        double[] liquid = new double[n - 1], vapor = new double[n - 1], l = state.liquidView(), v = state.vaporView();
-        for (int i = 0; i < l.length; i++) {
-            liquid[up[i]] = l[i];
-            vapor[up[i]] = v[i];
+        double[][] slots = new double[3][n];
+        for (int slot = 0; slot < 3; slot++) {
+            var held = state.amountsView(slot);
+            for (int i = 0; i < held.length; i++) slots[slot][up[i]] = held[i];
         }
-        var on = network.state(state.temperature(), state.pressure(), liquid, vapor, state.waterLiquid(), state.waterVapor(), state.hydrocarbonPartialPressure()).withSolids(state.solids());
+        var on = network.adoptingState(state.temperature(), state.pressure(), slots[0], slots[1], slots[2], null).withSolids(state.solids());
         return new FlowStream(stream.temperature(), stream.pressure(), placed, stream.enthalpy(), stream.mass(), on);
     }
 
@@ -145,13 +145,13 @@ public final class SheetCompounds {
         for (int i = 0; i < up.length; i++) mine[i] = amounts[up[i]];
         var state = stream.state();
         if (state == null) return new FlowStream(stream.temperature(), stream.pressure(), mine, stream.enthalpy(), stream.mass(), null);
-        double[] liquid = new double[up.length - 1], vapor = new double[up.length - 1], l = state.liquidView(), v = state.vaporView();
-        for (int i = 0; i < liquid.length; i++) {
-            liquid[i] = l[up[i]];
-            vapor[i] = v[up[i]];
+        double[][] slots = new double[3][up.length];
+        for (int slot = 0; slot < 3; slot++) {
+            var held = state.amountsView(slot);
+            for (int i = 0; i < up.length; i++) slots[slot][i] = held[up[i]];
         }
         try {
-            var on = thermo.model().state(state.temperature(), state.pressure(), liquid, vapor, state.waterLiquid(), state.waterVapor(), state.hydrocarbonPartialPressure()).withSolids(state.solids());
+            var on = thermo.model().adoptingState(state.temperature(), state.pressure(), slots[0], slots[1], slots[2], null).withSolids(state.solids());
             return new FlowStream(stream.temperature(), stream.pressure(), mine, stream.enthalpy(), stream.mass(), on);
         } catch (CancellationException stop) {
             throw stop;

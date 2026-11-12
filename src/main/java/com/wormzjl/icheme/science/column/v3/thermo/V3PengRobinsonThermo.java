@@ -80,6 +80,19 @@ public final class V3PengRobinsonThermo implements V3ThermoModel, V3ThermoDeriva
         return copy;
     }
 
+    /**
+     * The constant classical matrix the column's kernel evaluates (W5 D1: the derived pairs, not the authored
+     * matrix of {@link #binaryInteractions()}), or null where the kernel holds an activity pair, a {@code k_ij(T)}
+     * or a Mathias-Copeman alpha; a copy.
+     */
+    public double[][] constantClassicalInteractions() {
+        double[][] source = session.constantClassicalInteractions();
+        if (source == null) return null;
+        double[][] copy = new double[source.length][];
+        for (int row = 0; row < source.length; row++) copy[row] = source[row].clone();
+        return copy;
+    }
+
     public double idealGasMolarEnthalpy(double temperatureKelvin, double[] normalizedComposition) {
         return session.idealGasMolarEnthalpy(temperatureKelvin, normalizedComposition);
     }

@@ -7,6 +7,7 @@ import com.wormzjl.icheme.science.material.MaterialCatalog;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * The trace flush (owner decision 2026-09-27, option T1 with the removed amount booked;
@@ -55,7 +56,7 @@ class TraceFlushLedgerTest {
         var result=solver.solve(before,5,PassiveIntervalSolver.Settings.defaults(),NOOP);
         var after=result.graph();
         assertEquals(0.0,after.reservoirs().getFirst().inventory().moles()[methane],"the trace is gone from the vessel");
-        assertEquals(0.0,after.reservoirs().getFirst().state().vaporView()[methane],"and from its state");
+        assertEquals(0.0,TestPhases.vapor(after.reservoirs().getFirst().state())[methane],"and from its state");
         var booked=at(result,1);
         assertEquals(1,booked.size(),"one transfer booked at the flushed vessel");
         var moles=booked.getFirst().moles();

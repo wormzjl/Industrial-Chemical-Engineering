@@ -1,0 +1,4 @@
+// The kernel support audit (KERNEL_COST_PLAN.md Part A): every test JVM runs with PengRobinsonKernel's NaN switch on,
+// so a reader of a compound outside a workspace's support sees NaN and an amount outside it is an AssertionError.
+// ./gradlew test --tests "..." --init-script tools/aqueous-solvents/kernel-cost/support-nan.init.gradle --no-configuration-cache
+allprojects { tasks.withType(Test).configureEach { systemProperty 'icheme.kernel.supportNaN', 'true' } }

@@ -892,11 +892,15 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
             submit.accept(List.of(new WorldTopologyLedger.Edit(device,new WorldTopologyLedger.Registration(r.device(),r.spec(),Math.addExact(r.revision(),1)))));
         }
     }
-    /** The compounds outlet port {@code device} may deliver: those its account holds (water not named), for its island's list (V2). */
+    /**
+     * The compounds outlet port {@code device} may deliver, for its island's list (V2): those its account holds, and Water
+     * whatever the account holds now (W3b option A: a column's steam and its feed's water reach every product, so the
+     * island is wet from the column's start, not from its first wet product).
+     */
     public Set<String> compounds(long device) {
         Long unit=portUnits.get(device);if(unit==null)return Set.of();var u=topology.column(unit);if(u==null)return Set.of();
         var found=new HashSet<String>();
-        for(var st:u.stations())if(st.device()==device&&!st.port().inlet()){var n=st.account().moles();for(int i=0;i<n.length;i++)if(n[i]>0&&!axis.get(i).equals(SplitTable.WATER))found.add(axis.get(i));}
+        for(var st:u.stations())if(st.device()==device&&!st.port().inlet()){found.add(SplitTable.WATER);var n=st.account().moles();for(int i=0;i<n.length;i++)if(n[i]>0)found.add(axis.get(i));}
         return found;
     }
     /** {@code moles} on the world list on island {@code island}'s own list, or null where it holds a compound the island does not carry. */

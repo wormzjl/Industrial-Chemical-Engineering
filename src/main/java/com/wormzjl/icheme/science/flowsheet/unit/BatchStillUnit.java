@@ -157,10 +157,11 @@ public final class BatchStillUnit implements UnitModel {
         if (!in.solids().empty()) throw new FlowsheetFailure("still.solids");
         int axis = thermo.axis().size(), waterAt = thermo.water();
         double[] flows = in.amountsView();
-        if (flows[waterAt] > 0) throw new FlowsheetFailure("still.water");
-        var column = new StillColumn(thermo.model().hydrocarbon, PRESSURE);
+        var column = new StillColumn(thermo.model(), PRESSURE);
         int n = column.componentCount();
-        if (n != axis - 1) throw new IllegalStateException("The still's basis is the sheet's less water");
+        if (n != axis - 1 && !(n == axis && column.water() == waterAt)) throw new IllegalStateException("The still's basis is the sheet's, water last or none");
+        // A package without water in its column leaves the water out of the pot: it takes no part.
+        if (column.water() < 0 && flows[waterAt] > 0) throw new FlowsheetFailure("still.water");
         // The charge: what the inlet brings over one cycle, let down into the pot at its enthalpy.
         double[] charge = new double[n];
         double moles = 0;
@@ -170,6 +171,9 @@ public final class BatchStillUnit implements UnitModel {
         if (bubble == null) throw new FlowsheetFailure("still.no_bubble");
         double tb = bubble.temperature();
         double start = letDown(column, charge, perMole, in.temperature(), tb);
+        // W4: water in one liquid with the rest (a wash) boils on the column's basis; a charge that settles into two liquids,
+        // free water under an oil, is refused (the sheet keeps the pot one liquid, BatchStill.step).
+        if (column.twoLiquids(charge, start)) throw new FlowsheetFailure("still.water");
         if (start >= tb && perMole > column.liquidEnthalpy(tb, charge) * (1 + 1e-9))
             report.note(Note.warning(u.id(), "still.hot_charge", String.valueOf(in.temperature()), String.valueOf(tb)));
         double potStart = moles * column.liquidEnthalpy(start, charge);
@@ -233,6 +237,7 @@ public final class BatchStillUnit implements UnitModel {
         switch (batch.finish()) {
             case DRY -> report.note(Note.warning(id, "still.dry", cutName(batch, cuts)));
             case OVERHEAT -> report.note(Note.warning(id, "still.overheat", String.valueOf(BatchStill.OVERHEAT)));
+            case SETTLED -> report.note(Note.warning(id, "still.settles", cutName(batch, cuts)));
             default -> {
             }
         }
@@ -240,6 +245,7 @@ public final class BatchStillUnit implements UnitModel {
         if (design.condenser() && batch.condensed() < 1 - 1e-6) report.note(Note.warning(id, "still.cooling", percent(1 - batch.condensed())));
         if (batch.flooded() > 0) report.note(Note.warning(id, "still.flooding", percent(batch.flooded() / batch.seconds())));
         if (batch.failure() != null) report.note(Note.warning(id, "still.column", batch.failure()));
+        if (batch.potStill()) report.note(Note.warning(id, "still.pot_still"));
     }
 
     /** The cut that was running when the batch ended early. */

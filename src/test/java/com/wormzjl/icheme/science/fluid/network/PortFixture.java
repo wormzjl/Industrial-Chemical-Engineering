@@ -4,6 +4,7 @@ import com.wormzjl.icheme.fluid.support.FluidTestSupport;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * The network model, its supplies and vessels, and the ledger of what a graph's tanks and junctions own: shared by
@@ -55,7 +56,7 @@ abstract class PortFixture {
                 nodes.add(node.fixed()?node:new PassiveNetwork.Reservoir(node.id(),node.elevation(),result.states().get(i),node.kind(),result.inventories().get(i)));}
             graph=new PassiveNetwork(nodes,graph.pipes(),graph.scheduledTransfers());
             for(var node:graph.reservoirs()){var s=node.state();
-                for(double v:new double[]{s.temperature(),s.pressure(),s.mass(),s.volume(),s.liquidVolume(),s.waterVolume(),s.vaporVolume(),node.inventory().internalEnergy()})bits.add(bits(v));
+                for(double v:new double[]{s.temperature(),s.pressure(),s.mass(),s.volume(),TestPhases.liquidVolume(s),TestPhases.waterVolume(s),s.vaporVolume(),node.inventory().internalEnergy()})bits.add(bits(v));
                 for(double n:node.inventory().moles())bits.add(bits(n));}
             for(double q:result.massFlows())bits.add(bits(q));
             for(var b:result.boundaries()){bits.add(b.nodeId());bits.add(bits(b.totalEnergyJoule()));for(double n:b.moles())bits.add(bits(n));}

@@ -414,9 +414,11 @@ public record FluidView(long identity,long inputRevision,long committedTick,long
         /** The share of the capacity the contents take, 1 for a full (taut) vessel. */
         public double fill(){return Math.min(1,volume/capacity);}
         static State from(FluidThermodynamics.State s,double capacity) {
-            double[][] n=new double[3][s.liquid().length+1];var l=s.liquid();var v=s.vapor();
-            for(int c=0;c<l.length;c++){n[0][c]=l[c];n[2][c]=v[c];}n[1][l.length]=s.waterLiquid();n[2][l.length]=s.waterVapor();
-            return new State(s.pressure(),s.temperature(),s.volume(),s.mass(),new double[]{s.liquidVolume(),s.waterVolume(),s.vaporVolume()},n,s.solids(),capacity);
+            // The view's rows: the oil, the aqueous liquid and the gas, by label (W3b).
+            double[][] n={s.labelAmountsView(com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.OIL).clone(),
+                    s.labelAmountsView(com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.AQUEOUS).clone(),s.vaporAmounts()};
+            return new State(s.pressure(),s.temperature(),s.volume(),s.mass(),new double[]{s.labelVolume(com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.OIL),
+                    s.labelVolume(com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.AQUEOUS),s.vaporVolume()},n,s.solids(),capacity);
         }
     }
     public interface Receiver {

@@ -9,6 +9,7 @@ import java.util.*;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 import static com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Direction.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * An open (floating-roof) tank in the runtime (batch 2026-10-21-floating-roof-tanks, WP2): registered open with its two
@@ -50,7 +51,7 @@ class OpenTankRuntimeTest {
         var node=snapshot.graph().reservoirs().stream().filter(n->n.id()==tank).findFirst().orElseThrow();
         assertTrue(node.inventory().open(),"the island keeps the open flag");
         assertEquals(PhaseLayout.atmosphere(2),node.state().pressure(),1e-6*PhaseLayout.AMBIENT_PRESSURE,"the surface stands at the atmosphere of its height (C1 B)");
-        double held=node.state().liquidVolume()+node.state().waterVolume();
+        double held=TestPhases.liquidVolume(node.state())+TestPhases.waterVolume(node.state());
         assertTrue(held>=2-1e-6&&held<2.5,"the tank stands at its overflow: "+held+" m3 of 2; "+snapshot.status());
         assertTrue(snapshot.status().startsWith("STEADY"),"a steadily venting, overflowing tank certifies: "+snapshot.status());
         assertTrue(snapshot.status().contains("venting"),"the status line names the vent: "+snapshot.status());

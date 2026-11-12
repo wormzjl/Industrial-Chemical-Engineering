@@ -8,6 +8,7 @@ import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 class SolidTransportAcceptanceTest {
     private final FluidThermodynamics model=FluidTestSupport.networkModel();
@@ -27,7 +28,7 @@ class SolidTransportAcceptanceTest {
     @Test void suspensionBoundaryIsStrictAndReversalUsesTheSameLiquidVelocity() {
         var state=water(160000).withSolids(stock(1,100));var pipe=pipe();
         double dep=check(state,pipe,0,SolidMobility.Outlet.MIXED).minimumVelocity();
-        double q=dep*pipe.maximumArea()*state.mass()/state.waterVolume();
+        double q=dep*pipe.maximumArea()*state.mass()/TestPhases.waterVolume(state);
         assertFalse(check(state,pipe,q*(1-1e-10),SolidMobility.Outlet.MIXED).allowed());
         assertTrue(check(state,pipe,q*(1+1e-10),SolidMobility.Outlet.MIXED).allowed());
         assertTrue(check(state,pipe,-q*(1+1e-10),SolidMobility.Outlet.MIXED).allowed());
@@ -78,7 +79,7 @@ class SolidTransportAcceptanceTest {
         // form G), so the two step grids differ by at most the solids a flow at the deposition velocity carries in between.
         var slurry=graph.reservoirs().getFirst().state();double deposition=deposition(first),late=Math.abs(closure(first)-closure(second));
         assertTrue(late<=Math.sqrt(4*pipe().maximumArea()/Math.PI)*model.solidSettings.suspensionMultiplier()/deposition,"closures "+closure(first)+" and "+closure(second));
-        double carried=slurry.solids().massKg()/slurry.waterVolume()*pipe().maximumArea()*deposition*late;
+        double carried=slurry.solids().massKg()/TestPhases.waterVolume(slurry)*pipe().maximumArea()*deposition*late;
         assertEquals(first.graph().reservoirs().get(1).inventory().solids().massKg(),second.graph().reservoirs().get(1).inventory().solids().massKg(),carried+2e-6,"carried "+carried+" in "+late+" s");
         double after=first.graph().reservoirs().stream().mapToDouble(r->r.inventory().solids().massKg()).sum();
         assertEquals(100,after,1e-9);

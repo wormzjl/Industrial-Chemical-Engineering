@@ -6,9 +6,10 @@ import com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo;
 import org.junit.jupiter.api.Test;
 import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 class VelocityClampTest {
-    private FluidThermodynamics model(double limit){return FluidThermodynamics.forNetwork(MaterialCatalog.bundled(),"icheme:tjl20_methane_nitrogen",limit, FluidThermodynamics.DEFAULT_TRACE_CUTOFF_MOLE_FRACTION);}
+    private FluidThermodynamics model(double limit){return FluidThermodynamics.forNetwork(MaterialCatalog.bundled(),"icheme:refinery",limit, FluidThermodynamics.DEFAULT_TRACE_CUTOFF_MOLE_FRACTION);}
     private FluidThermodynamics.State state(FluidThermodynamics model,double pressure,boolean wet) {
         double[] n=new double[model.componentCount()];if(wet){n=Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo("icheme:tjl20_methane_nitrogen").crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(),model.componentCount());n[model.componentCount()-1]=.2;}else n[com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN]=1;
         var unit=model.flashTP(350,pressure,n,()->{});for(int c=0;c<n.length;c++)n[c]/=unit.volume();return model.flashTP(350,pressure,n,()->{});
@@ -33,7 +34,7 @@ class VelocityClampTest {
             var donor=result.states().get(reverse?1:0);var other=result.states().get(reverse?0:1);var pipe=graph.pipes().getFirst();
             double cap=donor.mass()/donor.volume()*pipe.minimumArea()*model.velocityLimit(donor),q=result.massFlows()[0];
             assertTrue(Math.abs(q)<cap&&Math.abs(q)>.9*cap,"q="+q+" cap="+cap);assertEquals(reverse?-1:1,Math.signum(q));
-            double rho=donor.mass()/donor.volume(),mu=model.viscosity.vapor(350,donor.vapor(),0),driving=Math.abs(donor.pressure()-other.pressure());
+            double rho=donor.mass()/donor.volume(),mu=model.viscosity.vapor(350,donor.vaporAmounts()),driving=Math.abs(donor.pressure()-other.pressure());
             double lo=0,hi=cap;while(pipe.pressureDrop(hi,rho,mu)<driving)hi*=2;
             for(int j=0;j<60;j++){double mid=(lo+hi)/2;if(pipe.pressureDrop(mid,rho,mu)>driving)hi=mid;else lo=mid;}
             assertEquals(PassiveStepSolver.saturated((lo+hi)/2,cap),Math.abs(q),1e-6*cap,"the transported flow is the saturated law's");
@@ -83,7 +84,7 @@ class VelocityClampTest {
         var capped=solver.solve(high,1,()->{});assertTrue(capped.massFlows()[0]<=cap&&capped.massFlows()[0]>cap*(1-1e-6),"choked: "+capped.massFlows()[0]+" of "+cap);
         var low=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,state(model,101325.1,false),PassiveNetwork.NodeKind.PORT),new PassiveNetwork.Reservoir(2,0,state(model,101325,false),PassiveNetwork.NodeKind.PORT)),high.pipes());
         var released=solver.solve(low,1,()->{});assertEquals(FlowControl.Mode.PASSIVE,released.modes().getFirst());bounded(model,low,released);
-        var donor=low.reservoirs().getFirst().state();double rho=donor.mass()/donor.volume(),mu=model.viscosity.vapor(350,donor.vapor(),0);
+        var donor=low.reservoirs().getFirst().state();double rho=donor.mass()/donor.volume(),mu=model.viscosity.vapor(350,donor.vaporAmounts());
         double expected=.1*Math.PI*rho*Math.pow(.01,4)/(128*mu*.1);
         assertEquals(expected,released.massFlows()[0],1e-10+1e-4*expected);
         double again=solver.solve(high,1,()->{}).massFlows()[0];assertTrue(again<=cap&&again>cap*(1-1e-6),"choked again: "+again+" of "+cap);

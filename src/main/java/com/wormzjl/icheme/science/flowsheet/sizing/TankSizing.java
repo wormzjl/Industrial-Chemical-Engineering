@@ -12,7 +12,10 @@ import java.util.List;
 
 /**
  * A storage tile (batch 2026-11-02-process-simulator, {@code SIZING_PLAN.md} sections 3.4, 3.5 and 3.10): a floating roof while the
- * liquid's bubble pressure at the tile's temperature allows one, a sphere above; then the fewest vessels, then the least volume. A
+ * liquid's storage pressure at the tile's temperature allows one, a sphere above; then the fewest vessels, then the least volume.
+ * The storage pressure is the vapour pressure at equal vapour and liquid volumes ({@link FlowThermo#storagePressure},
+ * W3B_NETWORK_PLAN.md section 44): a tank is judged by how much its liquid can release, not by how hard its first bubble pushes.
+ * A sphere holds its liquid unflashed, so it is designed on the full bubble pressure. A
  * new tank's shell follows its diameter, as the constructor's does. What a size holds is the shape's own {@link EquipmentShape#volume}.
  */
 public final class TankSizing {
@@ -52,14 +55,26 @@ public final class TankSizing {
      * A tile at design flow.
      *
      * @param flow   its liquid, m³/h
-     * @param bubble that liquid's bubble pressure at the tile's temperature, bar
-     * @param hold   the tank's entry, h
+     * @param bubble  that liquid's bubble pressure at the tile's temperature, bar: a sphere's design reads it
+     * @param hold    the tank's entry, h
+     * @param storage that liquid's storage pressure there, bar, at most {@code bubble}: the type and a roof's rows read it
      */
-    public record Load(double flow, double bubble, double hold) {
+    public record Load(double flow, double bubble, double hold, double storage) {
         /** A tile that holds no liquid: no size, no lamp. */
         public static final Load NONE = new Load(0, 0, 0);
 
-        /** The tile whose liquid leaves by these streams, each possibly empty. @param hold its entry (h), null for the row's */
+        /** A tile whose liquid holds no dissolved gas: it boils as a whole, at its bubble pressure. */
+        public Load(double flow, double bubble, double hold) {
+            this(flow, bubble, hold, bubble);
+        }
+
+        /**
+         * The tile whose liquid leaves by these streams, each possibly empty. Two searches of the sheet's flash on their
+         * amounts together: 15 flashes for the bubble pressure, 17 for the storage pressure. Where the second finds none
+         * (a dead oil, or no state at its top) the tile reads its bubble pressure.
+         *
+         * @param hold its entry (h), null for the row's
+         */
         public static Load of(FlowStream oil, FlowStream water, @Nullable Double hold, DesignBasis basis, FlowThermo thermo) {
             if (oil.empty() && water.empty()) return NONE;
             double[] amounts = oil.amounts();
@@ -67,7 +82,8 @@ public final class TankSizing {
             double volume = 0;
             for (var stream : List.of(oil, water)) if (!stream.empty()) volume += stream.state().volume();
             double temperature = oil.empty() ? water.temperature() : oil.temperature();
-            return new Load(volume * basis.designFlow() * 3600, thermo.bubblePressure(temperature, amounts) / 1e5, hold == null ? Limit.TANK_HOLD.value() : hold);
+            double bubble = thermo.bubblePressure(temperature, amounts) / 1e5;
+            return new Load(volume * basis.designFlow() * 3600, bubble, hold == null ? Limit.TANK_HOLD.value() : hold, Math.min(bubble, thermo.storagePressure(temperature, amounts) / 1e5));
         }
 
         boolean flows() {
@@ -77,7 +93,7 @@ public final class TankSizing {
 
     /** The type for {@code load}. */
     public static UnitType type(Load load) {
-        return load.bubble() <= Limit.ROOF_BUBBLE.value() ? UnitType.FLOATING_ROOF : UnitType.SPHERE;
+        return load.storage() <= Limit.ROOF_BUBBLE.value() ? UnitType.FLOATING_ROOF : UnitType.SPHERE;
     }
 
     /** Every limit of {@code load} read at {@code size}, either type. */
@@ -89,8 +105,8 @@ public final class TankSizing {
         readings.add((roof ? Limit.TANK_DIAMETER : Limit.SPHERE_DIAMETER).read(size.diameter()));
         if (roof) {
             readings.add(Limit.TANK_SHELL.read(size.shell()));
-            readings.add(Limit.ROOF_BUBBLE_WORLD.read(load.bubble()));
-            readings.add(Limit.ROOF_BUBBLE.read(load.bubble()));
+            readings.add(Limit.ROOF_BUBBLE_WORLD.read(load.storage()));
+            readings.add(Limit.ROOF_BUBBLE.read(load.storage()));
         } else readings.add(Limit.SPHERE_DESIGN.read(Limit.SPHERE_DESIGN_FACTOR.value() * load.bubble()));
         if (shape != null) {
             double each = shape.volume(), held = size.count() * each;

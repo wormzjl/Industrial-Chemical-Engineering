@@ -61,6 +61,24 @@
     "source": "Hess's law on this record's thermochemistry (chemsep-8.3-hf-r1): the formula burnt to CO2, H2O (gas), SO2 and N2 on the ideal-gas heats of formation at 298.15 K of icheme:chemsep_carbon_dioxide (chemsep-8.3-hf-r1), icheme:water (chemsep-8.3-hf-r1) and icheme:chemsep_sulfur_dioxide (chemsep-8.3-hf-r1). Computed by tools/heating-values/heating-values.mjs. Read by a fired heater's burners.",
     "revision": "hess-lhv-r1"
   },
+  "group_counts": {
+    "modified-unifac-dortmund": {
+      "counts": {
+        "CH2=CH": 1
+      },
+      "estimated": false,
+      "source": "Authored in batch 2026-11-11-aqueous-solvents (W2b) from the modified UNIFAC (Dortmund) group definitions, ChemSep's counts (2 CH2) having put both alkenic carbons in an alkane group: ethylene CH2=CH2 has no subgroup of its own; it is counted as one CH2=CH (subgroup 5 of main group 2, C=C), the alkenic subgroup with a terminal CH2, so its main group is right and its volume and area (R 1.2832, Q 1.6016) are those of the vinyl group. (table dwsim-10.2.5-modfac-r1)",
+      "revision": "dortmund-group-definitions-r1"
+    },
+    "eppr78-2022": {
+      "counts": {
+        "C2H4": 1
+      },
+      "estimated": false,
+      "source": "PPR78 group counts of ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Ethylene\" (ChemSep index 201, CAS 74-85-1), group numbers mapped to the names of the eppr78-2022 group_interactions record (eppr78-2022-si-table-s4-r2). Data for the pairs derived from group counts.",
+      "revision": "chemsep-8.3-ppr78-r1"
+    }
+  },
   "viscosity": {
     "liquid": {
       "type": "log_table",

@@ -75,9 +75,12 @@ final class FluidFacts {
      *  its blanket (absent: 0 and none, no valve); the port role {@code RELIEF}, a vessel's relief port.
      *  24 (batch 2026-11-12-fluid-conversion, W2): the world's fluid converters (after the batch stills): each one's devices,
      *  its mode by name, rate, deadband and level thresholds, its Forge tank (capacity, fluid id as its string, mB), its
-     *  remainder and its account (absent: no converter). */
-    static final int SCHEMA=24;
-    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 21. */
+     *  remainder and its account (absent: no converter).
+     *  25 (batch 2026-11-11-aqueous-solvents, W3b step 6; numbered 25 at the merge of main 0.28.0): a vessel's oil-liquid and
+     *  aqueous-liquid amounts, after its {@code rigid}; absent means the pre-W3b reading of its liquid fields (the compounds'
+     *  liquid and the water as two liquids). */
+    static final int SCHEMA=25;
+    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 25. */
     private static final Map<Class<?>,Map<String,String>> ALIASES=Map.of();
     private static final int MAXIMUM_FIELDS=256,MAXIMUM_ITEMS=1<<22,MAXIMUM_TEXTS=1<<20,MAXIMUM_ARRAY=4096,MAXIMUM_CHANNELS=1<<20;
     /** The cadence an island rebuilt from facts starts at (ticks): the shortest the clock allows, as after a merge. */
@@ -765,9 +768,22 @@ final class FluidFacts {
 
     // ---------------- an island ----------------
 
-    /** A vessel's contents as saved: its inventory and the phase split of its state, on the island's component axis. */
+    /**
+     * A vessel's contents as saved: its inventory and the phase split of its state, on the island's component axis.
+     * {@code oil} and {@code aqueous} (schema 25) are the amounts of its state's LIQUID and AQUEOUS slots on that axis, water
+     * last, as {@code moles} is; both null in a row an older build wrote, which states its liquids from {@code liquid} and
+     * {@code waterLiquid} ({@link FluidThermodynamics#fromLegacySplit}).
+     */
     record Vessel(long id,double volume,double levelHeight,boolean open,double[] moles,double energy,List<Solid> solids,
-                  double temperature,double pressure,double[] liquid,double[] vapor,double waterLiquid,double waterVapor,double hydrocarbonPressure,boolean rigid) {}
+                  double temperature,double pressure,double[] liquid,double[] vapor,double waterLiquid,double waterVapor,double hydrocarbonPressure,boolean rigid,
+                  double[] oil,double[] aqueous) {
+        /** The state these facts give on {@code held}, without its solids: the three slots as saved (no placement rule, no flash), or an older row's reading. */
+        FluidThermodynamics.State state(FluidThermodynamics held) {
+            if(oil==null)return held.fromLegacySplit(temperature,pressure,liquid,vapor,waterLiquid,waterVapor);
+            var gas=Arrays.copyOf(vapor,moles.length);gas[moles.length-1]=waterVapor;
+            return held.state(temperature,pressure,gas,oil,aqueous);
+        }
+    }
     /** A filter's cake as saved, by the filter's device identity. */
     record Filter(long device,double capacity,List<Solid> captured,double energy,boolean stopped) {}
     /** The change a certified island's certificate replays per {@code duration} ticks from {@code baseTick}, per vessel. */
@@ -782,7 +798,7 @@ final class FluidFacts {
             for(var v:vessels) {
                 var delta=drift.moles.get(v.id);if(delta==null){result.add(v);continue;}
                 var moles=v.moles.clone();for(int c=0;c<moles.length;c++)moles[c]+=f*delta[c];
-                result.add(new Vessel(v.id,v.volume,v.levelHeight,v.open,moles,v.energy+f*drift.energy.get(v.id),v.solids,v.temperature,v.pressure,v.liquid,v.vapor,v.waterLiquid,v.waterVapor,v.hydrocarbonPressure,v.rigid));
+                result.add(new Vessel(v.id,v.volume,v.levelHeight,v.open,moles,v.energy+f*drift.energy.get(v.id),v.solids,v.temperature,v.pressure,v.liquid,v.vapor,v.waterLiquid,v.waterVapor,v.hydrocarbonPressure,v.rigid,v.oil,v.aqueous));
             }
             return result;
         }
@@ -796,7 +812,9 @@ final class FluidFacts {
             var vessels=graph.reservoirs().stream().filter(n->n.kind()==PassiveNetwork.NodeKind.RESERVOIR).toList();
             f.list(vessels,(q,n)->{var i=n.inventory();var t=n.state();
                 q.i64(n.id()).f64(i.volume()).f64(i.levelHeight()).bool(i.open()).doubles(i.moles()).f64(i.internalEnergy());solids(q,Solid.of(i.solids()));
-                q.f64(t.temperature()).f64(t.pressure()).doubles(t.liquid()).doubles(t.vapor()).f64(t.waterLiquid()).f64(t.waterVapor()).f64(t.hydrocarbonPartialPressure()).bool(i.rigid());});
+                var split=FluidThermodynamics.legacySplit(t);
+                q.f64(t.temperature()).f64(t.pressure()).doubles(split.liquid()).doubles(split.vapor()).f64(split.waterLiquid()).f64(split.waterVapor()).f64(split.hydrocarbonPressure()).bool(i.rigid())
+                        .doubles(t.liquidAmountsView()).doubles(t.aqueousAmountsView());});
             var filters=graph.pipes().stream().filter(p->p.filter()!=null).toList();
             f.list(filters,(q,p)->{var cake=p.filter();q.i64(device(p.id())).f64(cake.capacity());solids(q,Solid.of(cake.captured()));q.f64(cake.energyJoule()).bool(cake.stoppedAtCapacity());});
             var drift=new ArrayList<Consumer<Fields>>();
@@ -821,7 +839,7 @@ final class FluidFacts {
         return read(data,offset,length,"facts of "+what,f->{
             var dimension=f.text(null);var packageId=f.text(null);var components=f.list(List.of(),c->c.text(""));
             var vessels=f.list(List.of(),q->new Vessel(q.i64(0),q.f64(0),q.f64(com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.LEVEL_HEAD_HEIGHT),q.bool(false),
-                    required(q.doubles(null),q,"vessel moles"),q.f64(0),solids(q),q.f64(0),q.f64(0),required(q.doubles(null),q,"vessel liquid"),required(q.doubles(null),q,"vessel vapour"),q.f64(0),q.f64(0),q.f64(0),q.bool(false)));
+                    required(q.doubles(null),q,"vessel moles"),q.f64(0),solids(q),q.f64(0),q.f64(0),required(q.doubles(null),q,"vessel liquid"),required(q.doubles(null),q,"vessel vapour"),q.f64(0),q.f64(0),q.f64(0),q.bool(false),q.doubles(null),q.doubles(null)));
             var filters=f.list(List.of(),q->new Filter(q.i64(0),q.f64(0),solids(q),q.f64(0),q.bool(false)));
             var drifts=f.list(List.of(),q->{long base=q.count(0);long duration=q.count(0);var moles=new HashMap<Long,double[]>();var energy=new HashMap<Long,Double>();
                 for(var node:q.list(List.of(),e->Map.entry(e.i64(0),Map.entry(required(e.doubles(null),e,"drift moles"),e.f64(0))))){
@@ -829,7 +847,11 @@ final class FluidFacts {
                 if(duration<1||duration>Integer.MAX_VALUE)throw q.invalid("drift over "+duration+" ticks");
                 return new Drift(base,(int)duration,moles,energy);});
             required(dimension,f,"dimension");required(packageId,f,"package");if(drifts.size()>1)throw f.invalid("two drifts");
-            var ids=new HashSet<Long>();for(var v:vessels){if(!ids.add(v.id))throw f.invalid("duplicate vessel "+v.id);if(v.moles.length!=components.size())throw f.invalid("vessel "+v.id+" off the island's axis");}
+            var ids=new HashSet<Long>();for(var v:vessels){if(!ids.add(v.id))throw f.invalid("duplicate vessel "+v.id);if(v.moles.length!=components.size())throw f.invalid("vessel "+v.id+" off the island's axis");
+                if((v.oil==null)!=(v.aqueous==null))throw f.invalid("vessel "+v.id+" carries one liquid slot of two");
+                if(v.oil!=null)for(var slot:List.of(v.oil,v.aqueous)){
+                    if(slot.length!=v.moles.length)throw f.invalid("vessel "+v.id+" liquid slot off the island's axis");
+                    for(double amount:slot)if(!Double.isFinite(amount)||amount<0)throw f.invalid("vessel "+v.id+" liquid slot amount "+amount);}}
             return new Island(dimension,packageId,components,vessels,filters,drifts.isEmpty()?null:drifts.getFirst());
         });
     }
@@ -846,8 +868,10 @@ final class FluidFacts {
             var i=n.inventory();var t=n.state();
             if(v.volume!=i.volume()||v.levelHeight!=i.levelHeight()||v.open!=i.open()||v.rigid!=i.rigid()||!same(v.moles,i.moles())||v.energy!=i.internalEnergy())return "vessel "+n.id()+" inventory";
             if(!same(v.solids,i.solids()))return "vessel "+n.id()+" solids";
-            if(v.temperature!=t.temperature()||v.pressure!=t.pressure()||!same(v.liquid,t.liquid())||!same(v.vapor,t.vapor())||v.waterLiquid!=t.waterLiquid()||v.waterVapor!=t.waterVapor()||v.hydrocarbonPressure!=t.hydrocarbonPartialPressure())
+            var split=FluidThermodynamics.legacySplit(t);
+            if(v.temperature!=t.temperature()||v.pressure!=t.pressure()||!same(v.liquid,split.liquid())||!same(v.vapor,split.vapor())||v.waterLiquid!=split.waterLiquid()||v.waterVapor!=split.waterVapor()||v.hydrocarbonPressure!=split.hydrocarbonPressure())
                 return "vessel "+n.id()+" state";
+            if(v.oil!=null&&(!same(v.oil,t.liquidAmountsView())||!same(v.aqueous,t.aqueousAmountsView())))return "vessel "+n.id()+" liquid slots";
         }
         if(!vessels.isEmpty())return "vessels "+vessels.keySet()+" are in no node";
         var cakes=new HashMap<Long,Filter>();for(var c:facts.filters)cakes.put(c.device,c);
@@ -969,7 +993,7 @@ final class FluidFacts {
                 double y=r.device().position().y();var solids=inventory(v.solids,solid);
                 PassiveNetwork.Reservoir node;
                 if(held!=null) {
-                    var state=Arrays.stream(v.moles).sum()==0&&!solids.empty()?held.solidState(v.temperature,v.pressure,solids):held.state(v.temperature,v.pressure,v.liquid,v.vapor,v.waterLiquid,v.waterVapor,v.hydrocarbonPressure).withSolids(solids);
+                    var state=Arrays.stream(v.moles).sum()==0&&!solids.empty()?held.solidState(v.temperature,v.pressure,solids):v.state(held).withSolids(solids);
                     var kept=new PassiveNetwork.Reservoir(v.id,y,state,PassiveNetwork.NodeKind.RESERVOIR,new PassiveNetwork.Inventory(v.volume,v.moles,v.energy,solids,v.levelHeight,v.open,r.spec().geometry(),null,r.spec().tower(),v.rigid&&!v.open).withBlanket(r.spec().blanket()));
                     origins.put(v.id,new IslandSets.Origin(kept,held));node=IslandSets.node(kept,held,model);
                 } else {
@@ -999,17 +1023,19 @@ final class FluidFacts {
         var delivers=new HashMap<Long,Set<String>>();
         for(var u:columns.values())for(var st:u.stations()) {
             if(st.device()==0||st.port().inlet())continue;var n=st.account().moles();
-            for(int i=0;i<n.length;i++)if(n[i]>0&&!basis.components().get(i).equals("Water"))delivers.computeIfAbsent(st.device(),ignored->new HashSet<>()).add(basis.components().get(i));
+            // W3b option A: a column outlet can deliver water whatever its account holds now, so its island is wet.
+            var outlet=delivers.computeIfAbsent(st.device(),ignored->new HashSet<>());outlet.add("Water");
+            for(int i=0;i<n.length;i++)if(n[i]>0)outlet.add(basis.components().get(i));
         }
         var compiled=PhysicalFluidTopology.compile(devices,stock,cakes,NetworkReduction.ambient(model),Set.of(),PhysicalRegistry.reliefs(registrations.values()));
         long next=world.nextIdentity;var entries=new ArrayList<FluidCheckpointCodec.IslandEntry>();
         String status="WAITING: rebuilt from saved facts ("+reason+")"+(removed.empty()?"":"; removed by the property data: "+removed.summary());
         for(var island:compiled.islands()) {
             var set=IslandSets.held(island.graph(),model,origins);for(long device:island.physicalIds())set.addAll(delivers.getOrDefault(device,Set.of()));
-            var own=model.on(set);
+            var own=model.island(set);
             var graph=PassiveNetwork.mintJunctions(IslandSets.onto(island.graph(),model,own,origins),own);long id=next++;
             var dimension=registrations.get(island.physicalIds().iterator().next()).device().position().dimension();
-            entries.add(new FluidCheckpointCodec.IslandEntry(dimension,key.packageId(),own.compounds(),new IslandCoordinator.Snapshot(id,0,graph,new IslandClock.Snapshot(epoch,epoch,0,REBUILT_CADENCE),
+            entries.add(new FluidCheckpointCodec.IslandEntry(dimension,key.packageId(),own.compounds(),own.wet(),new IslandCoordinator.Snapshot(id,0,graph,new IslandClock.Snapshot(epoch,epoch,0,REBUILT_CADENCE),
                     Optional.empty(),status,Map.of(),Optional.empty(),0)));
         }
         var recoveries=new HashMap<UUID,WorldTopologyLedger.RecoveredSolid>();

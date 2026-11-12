@@ -1,0 +1,91 @@
+{
+  "comment": "Batch 2026-11-11-aqueous-solvents, W2b: the pilot records of the test overlay src/test/resources/materials/pilot-aqueous (not main data): ethanol from ChemSep with its homomorph, and water as a compound of the cubic. Its pairs are derived (MaterialCatalog derived pairs), so no pair library is written.",
+  "properties_prefix": "icheme:pilot_",
+  "properties_revision": "chemsep-8.3-dwsim-10.2.5-r1",
+  "viscosity_revision": "dwsim-viscosity-api-r1",
+  "freezing_revision": "chemsep-8.3-r1",
+  "group_counts_revisions": {
+    "modfac": "chemsep-8.3-modfac-r1",
+    "eppr78": "chemsep-8.3-ppr78-r1"
+  },
+  "no_pair_library": true,
+  "form": {
+    "column_range_kelvin": [
+      298.15,
+      900
+    ],
+    "cp_fit": {
+      "low": "data",
+      "high": 900,
+      "grid_step_kelvin": 25,
+      "include_low_end": true
+    },
+    "fluid_domain": {
+      "temperature_min": "cp_fit",
+      "temperature_max": 900,
+      "pressure_min_pascal": 100,
+      "pressure_max_pascal": 2000000
+    },
+    "liquid_viscosity": {
+      "low": "data",
+      "high_reduced_temperature": 0.95,
+      "above_data": "andrade"
+    },
+    "vapor_viscosity": {
+      "low": "fluid_domain",
+      "high": 900
+    },
+    "tolerance": 0.0005
+  },
+  "compounds": [
+    {
+      "id": "Ethanol",
+      "cas": "64-17-5",
+      "english": "Ethanol",
+      "appearance": {
+        "color": "#F2F4F0",
+        "transparency": 0.9
+      },
+      "homomorph": {
+        "component": "Propane",
+        "source": "The hydrocarbon homomorph of ethanol: its OH read as CH3 (CH3-CH2-OH as CH3-CH2-CH3). A gas without modified UNIFAC groups takes the E-PPR78 k_ij(T) it has with propane, on propane's own Tc, Pc and acentric factor (tools/aqueous-solvents/gas-in-organics.mjs: N2, CH4, CO2 in ethanol at 25 C within 0.85 to 0.93 of the measured solubility).",
+        "revision": "homomorph-r1"
+      }
+    }
+  ],
+  "cubic_water": {
+    "id": "icheme:pilot_water",
+    "file": "pilot_water",
+    "water_model": "water/water.json",
+    "revision": "cubic-water-r1",
+    "constants": {
+      "tc": 647.096,
+      "pc": 22064000,
+      "omega": 0.3443
+    },
+    "alpha": [
+      0.91976,
+      -0.33844,
+      0.33431
+    ],
+    "normal_boiling_point_kelvin": 373.124,
+    "standard_liquid_density_kg_per_m3": 999,
+    "source": "Water as a compound of the PR78 cubic (batch 2026-11-11-aqueous-solvents, plan M2), a test pilot: IAPWS-95 critical point (Tc 647.096 K, Pc 22.064 MPa), acentric factor 0.3443, normal boiling point 373.124 K, standard liquid density 999.0 kg/m3 at 60 F (IAPWS-95, rounded); Mathias-Copeman alpha c1 0.91976, c2 -0.33844, c3 0.33431 matched to the Wagner-Pruss saturation line from 0 to 370 C (tools/aqueous-solvents/cubic-water.mjs).",
+    "authored_counts": {
+      "modified-unifac-dortmund": {
+        "counts": {
+          "H2O": 1
+        },
+        "source": "Water is the one subgroup H2O (subgroup 16, main group 7) of modified UNIFAC (Dortmund).",
+        "revision": "dortmund-group-definitions-r1"
+      },
+      "eppr78-2022": {
+        "counts": {
+          "H2O": 1
+        },
+        "source": "Water is the one group H2O (G16) of E-PPR78 (Jaubert et al. 2022).",
+        "revision": "eppr78-group-definitions-r1"
+      }
+    }
+  }
+}

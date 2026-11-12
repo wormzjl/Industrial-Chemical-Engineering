@@ -22,6 +22,7 @@ import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.PipeSizes;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
 import com.wormzjl.icheme.science.equipment.UnitDesign;
+import com.wormzjl.icheme.science.flowsheet.FlowThermo;
 import com.wormzjl.icheme.science.flowsheet.sizing.Bound.Axis;
 import com.wormzjl.icheme.science.flowsheet.sizing.Bound.Sense;
 import com.wormzjl.icheme.science.fluid.network.FlowControl;
@@ -110,10 +111,11 @@ public enum Limit {
     /** A rise for the world's reference fluid, so a head in metres takes that fluid's density. */
     // Its bound is the world's added pressure, Pa; a pump reads it as head, m of its own liquid, against that pressure as head of the reference liquid.
     PUMP_HEAD(MUST, most(FlowControl.Pump.MAXIMUM_ADDED_PRESSURE), "m", "World: 2 MPa at water reference", QUIET),
-    /** The world starves a pump whose suction falls to its liquid's vapour pressure plus {@code 0.85 NPSH3} at its flow
-     * (batch 2026-11-03-rotating-machinery, owner decisions D20 Q11 A and D21): the rating gives that floor
-     * ({@link PumpSizing#requiredNpsh}). */
-    PUMP_NPSH_WORLD(MUST, given(Sense.ABOVE), "m", "World: `PUMP_SUCTION_LIMIT` at `0.85 NPSH3` (`Npsh`)", QUIET),
+    /** The world starves a pump whose suction falls to the greater of its liquid's clean zone's edge and its vapour
+     * pressure plus {@code 0.85 NPSH3} at its flow (batch 2026-11-03-rotating-machinery, owner decisions D20 Q11 A and D21;
+     * W3B_NETWORK_PLAN.md sections 17 and 44, {@code ReleasePressure.limit}): the rating gives that floor as a head over
+     * the vapour pressure ({@link PumpSizing#requiredNpsh}). */
+    PUMP_NPSH_WORLD(MUST, given(Sense.ABOVE), "m", "World: `PUMP_SUCTION_LIMIT` at the greater of the clean zone's edge and `0.85 NPSH3` (`Npsh`)", QUIET),
     /** The margin over the pump's NPSH3 (m): the rating reads NPSH available against NPSH3 plus this number. */
     PUMP_NPSH(SHOULD, least(1), "m", "[HI-961]", QUIET),
     PUMP_RATED(SHOULD, within(70, 120), "%", "[API610]"),
@@ -199,9 +201,10 @@ public enum Limit {
     /** The tank's entry starts at this. */
     TANK_HOLD(SHOULD, least(24), "h", "This plan"),
     TANK_WORKING(SHOULD, most(85), "%", "[REDDY]"),
+    /** Both roof rows read the liquid's storage pressure, at equal vapour and liquid volumes ({@code FlowThermo.storagePressure}). */
     ROOF_BUBBLE_WORLD(MUST, most(PhaseLayout.AMBIENT_PRESSURE / 1e5), "bar", "World: `OpenVessel`", QUIET),
-    /** Also the type's threshold, section 3.10: a floating roof at most this, a sphere above. */
-    ROOF_BUBBLE(SHOULD, most(.766), "bar", "[CFR], [KC]"),
+    /** Also the type's threshold, section 3.10: a floating roof at most this, a sphere above. The storage tile reads the same number. */
+    ROOF_BUBBLE(SHOULD, most(FlowThermo.ROOF_STORAGE / 1e5), "bar", "[CFR], [KC]"),
     SPHERE_DESIGN(SHOULD, most(20), "bar", "[API-P]"),
     /** A sphere's design pressure over its bubble pressure. */
     SPHERE_DESIGN_FACTOR(RULE, least(1.1), "", "[API-P]"),

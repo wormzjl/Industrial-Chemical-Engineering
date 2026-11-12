@@ -7,11 +7,12 @@ import java.util.*;
 import org.junit.jupiter.api.Test;
 
 class FlowControlTest {
-    private final FluidThermodynamics model=com.wormzjl.icheme.fluid.support.FluidTestSupport.model(MaterialCatalog.bundled(),"icheme:tjl20_methane");
+    // W3b: on the refinery network, whose cubic holds water (the tjl20 packages hold none); its first compounds are tjl20's.
+    private final FluidThermodynamics model=com.wormzjl.icheme.fluid.support.FluidTestSupport.model(MaterialCatalog.bundled(),"icheme:refinery");
     /** Two 1 m3 vessels of one component at 350 K and {@code pa}, {@code pb}, joined by 10 m of 5 cm pipe with {@code control}. */
     private PassiveNetwork line(double pa,double pb,int component,FlowControl control) {
         var nodes=new ArrayList<PassiveNetwork.Reservoir>();
-        for(double p:new double[]{pa,pb}){double[] n=new double[com.wormzjl.icheme.science.material.MaterialTestBasis.CRUDE+1];n[component]=1;var unit=model.flashTP(350,p,n,()->{});n[component]/=unit.volume();nodes.add(new PassiveNetwork.Reservoir(nodes.size(),0,model.flashTP(350,p,n,()->{})));}
+        for(double p:new double[]{pa,pb}){double[] n=new double[model.componentCount()];n[component]=1;var unit=model.flashTP(350,p,n,()->{});n[component]/=unit.volume();nodes.add(new PassiveNetwork.Reservoir(nodes.size(),0,model.flashTP(350,p,n,()->{})));}
         return new PassiveNetwork(nodes,List.of(new PassiveNetwork.Pipe(5,0,1,new PipeResistance.Geometry(10,.05,.000045,0),control)));
     }
     private PassiveStepSolver.Result run(double pa,double pb,int component,FlowControl control,double dt) {

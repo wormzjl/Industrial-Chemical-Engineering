@@ -11,8 +11,8 @@ import java.util.Random;
 import org.junit.jupiter.api.Test;
 
 /**
- * {@link PengRobinsonKernel.Mixing#TEMPERATURE_DEPENDENT_PAIRS}: on a constant model it is
- * {@link PengRobinsonKernel.Mixing#SPARSE_PAIRS} bit for bit; on the E-PPR78 pilot model every temperature derivative
+ * The kernel on a {@link PairInteractions} model: on a constant model it is
+ * the constant matrix's kernel bit for bit; on the E-PPR78 pilot model every temperature derivative
  * the kernel forms (including the interactions' own {@code dk/dT} and {@code d^2k/dT^2} terms) matches central
  * differences of the values it differentiates; a reused workspace equals fresh ones bit for bit; and a pair value that
  * is not finite is refused without being cached.
@@ -72,7 +72,7 @@ class PengRobinsonKernelPairInteractionsTest {
 
     private static int compareConstant(double[] tc, double[] pc, double[] omega, double[][] matrix, List<State> states, long seed) {
         var sparse = new PengRobinsonKernel(tc, pc, omega, matrix, Double.MIN_VALUE, Double.MAX_VALUE,
-                Double.MIN_VALUE, Double.MAX_VALUE, PengRobinsonKernel.Mixing.SPARSE_PAIRS);
+                Double.MIN_VALUE, Double.MAX_VALUE);
         var dependent = new PengRobinsonKernel(tc, pc, omega, PairInteractionsTest.constant(matrix),
                 Double.MIN_VALUE, Double.MAX_VALUE, Double.MIN_VALUE, Double.MAX_VALUE);
         assertEquals(sparse.usesRankOneMixing(), dependent.usesRankOneMixing());
@@ -321,8 +321,6 @@ class PengRobinsonKernelPairInteractionsTest {
 
     @Test void refusesMismatchedModelsAndUncachesNonFinitePairs() {
         double[] tc = PairInteractionsTest.TC, pc = PairInteractionsTest.PC, omega = PairInteractionsTest.OMEGA;
-        assertThrows(IllegalArgumentException.class, () -> new PengRobinsonKernel(tc, pc, omega, new double[4][4],
-                1, 2000, 1, 1e8, PengRobinsonKernel.Mixing.TEMPERATURE_DEPENDENT_PAIRS));
         assertThrows(IllegalArgumentException.class, () -> new PengRobinsonKernel(tc, pc, omega, PairInteractions.builder(3).build(),
                 1, 2000, 1, 1e8));
         // An exponent B/A - 1 of 1e10 overflows (298.15/T)^n below 298.15 K: k_ij is infinite there and refused.

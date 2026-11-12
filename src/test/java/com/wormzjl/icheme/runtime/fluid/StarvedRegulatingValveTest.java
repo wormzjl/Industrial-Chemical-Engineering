@@ -26,7 +26,7 @@ class StarvedRegulatingValveTest {
         var island = w.registry.owner(drum);
         if (island == null) return Double.NaN;
         for (var n : w.coordinator.observe(island).graph().reservoirs())
-            if (n.id() == drum) return (n.state().liquidVolume() + n.state().waterVolume()) / n.inventory().volume();
+            if (n.id() == drum) return n.state().condensedVolume() / n.inventory().volume();
         return Double.NaN;
     }
 

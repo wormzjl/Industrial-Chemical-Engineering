@@ -6,6 +6,7 @@ import com.wormzjl.icheme.science.machine.SteamTurbine;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * The steam turbine as a fluid connection (batch 2026-11-03-rotating-machinery, plan section 3.4, owner decision D22): a
@@ -62,7 +63,7 @@ class SteamTurbineConnectionTest extends PortFixture {
         assertEquals(322e3,shaft/q,8e3,"about 322 kJ per kg at η 0.61");
         assertEquals(0,result.pumpWorkJoule(),0,"no mover work enters the stream");
         var n=new double[mw.length];n[water]=1;var flashed=model.equilibriumPH(450,exhaust,hOut*mass(n),n,NOOP);
-        assertNotNull(flashed);assertEquals(0,flashed.waterLiquid(),1e-12,"superheated at 4 bar");
+        assertNotNull(flashed);assertEquals(0,TestPhases.waterLiquid(flashed),1e-12,"superheated at 4 bar");
         assertTrue(flashed.temperature()>450&&flashed.temperature()<520,"the exhaust temperature "+flashed.temperature());
     }
 
@@ -166,11 +167,11 @@ class SteamTurbineConnectionTest extends PortFixture {
                 List.of(new PassiveNetwork.Pipe(TURBINE,0,2,CASING,new FlowControl.Turbine(turbine)),new PassiveNetwork.Pipe(11,2,1,LINE))),model);
         var last=drive("wet",graph,5,4);
         var exhaust=last.graph().reservoirs().get(2).state();
-        double liquid=exhaust.waterLiquid()/(exhaust.waterLiquid()+exhaust.waterVapor());
+        double liquid=TestPhases.waterLiquid(exhaust)/(TestPhases.waterLiquid(exhaust)+TestPhases.waterVapor(exhaust));
         System.out.println("TURBINE_RUN wet flow="+last.averageMassFlows()[0]+" kg/s exhaust="+exhaust.pressure()+" Pa "+exhaust.temperature()+" K liquid share="+liquid);
         assertEquals(.76,turbine.efficiency(),1e-9);
         assertTrue(last.averageMassFlows()[0]>0);
-        assertTrue(exhaust.waterLiquid()>0,"the exhaust is wet");
+        assertTrue(TestPhases.waterLiquid(exhaust)>0,"the exhaust is wet");
         assertTrue(liquid>.02&&liquid<.15,"about 7 % liquid: "+liquid);
         assertTrue(exhaust.temperature()>365&&exhaust.temperature()<400,"near the saturation temperature at the exhaust's pressure: "+exhaust.temperature());
     }

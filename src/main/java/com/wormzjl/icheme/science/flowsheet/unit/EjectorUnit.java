@@ -33,8 +33,6 @@ public final class EjectorUnit implements UnitModel {
     public static final double STEAM_SHARE = .9;
     /** A wired motive this much under the need is short of it: the law's own last digits. */
     private static final double SHORT = 1e-9;
-    /** The bounds and tolerance of the saturation search, K; a temperature past the critical point reads infinite. */
-    private static final double COLDEST = 200, HOTTEST = 700, SATURATION = 1e-6;
 
     @Override public List<Port> ports(Params params) {
         return List.of(Port.in(SUCTION), Port.optionalIn(MOTIVE), Port.out(DISCHARGE));
@@ -109,12 +107,6 @@ public final class EjectorUnit implements UnitModel {
 
     /** The least temperature at which water at {@code pressure} is all steam in the world's model, K. */
     static double saturation(FlowThermo thermo, double pressure) {
-        double low = COLDEST, high = HOTTEST;
-        while (high - low > SATURATION) {
-            double middle = (low + high) / 2;
-            if (thermo.model().saturationPressure(middle) >= pressure) high = middle;
-            else low = middle;
-        }
-        return high;
+        return thermo.model().saturationTemperature(pressure);
     }
 }

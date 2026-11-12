@@ -24,6 +24,7 @@ public final class PhaseDerivatives {
     private double volumePressure;
     private double enthalpyTemperature;
     private double enthalpyPressure;
+    private double shareEnthalpyT, shareEnthalpyP, shareEntropyT, shareEntropyP, shareVolumeT, shareVolumeP;
 
     public PhaseDerivatives(int componentCount) {
         state = new PhaseState(componentCount);
@@ -51,10 +52,38 @@ public final class PhaseDerivatives {
     /** m3/mol ({@code J/(mol Pa)}). */
     public double enthalpyPressureDerivative() { return enthalpyPressure; }
 
+    /** {@code d/dT} of water's share of the molar enthalpy (D2), at fixed P and composition; zero without one. */
+    public double shareEnthalpyTemperatureDerivative() { return shareEnthalpyT; }
+    public double shareEnthalpyPressureDerivative() { return shareEnthalpyP; }
+    public double shareEntropyTemperatureDerivative() { return shareEntropyT; }
+    public double shareEntropyPressureDerivative() { return shareEntropyP; }
+    public double shareVolumeTemperatureDerivative() { return shareVolumeT; }
+    public double shareVolumePressureDerivative() { return shareVolumeP; }
+    /** The balance book's {@code c_p}: the cubic's plus the share's, J/(mol K). */
+    public double balanceHeatCapacity() { return enthalpyTemperature + shareEnthalpyT; }
+    /** The balance book's {@code dh/dP}. */
+    public double balanceEnthalpyPressureDerivative() { return enthalpyPressure + shareEnthalpyP; }
+    /** The balance book's {@code dv/dT}. */
+    public double balanceVolumeTemperatureDerivative() { return volumeTemperature + shareVolumeT; }
+    /** The balance book's {@code dv/dP}. */
+    public double balanceVolumePressureDerivative() { return volumePressure + shareVolumeP; }
+
     // Filling, for an evaluator. Nothing here allocates.
 
-    /** Names the family filling this. */
-    public void begin(String family) { this.family = Objects.requireNonNull(family, "family"); }
+    /** Names the family filling this, and clears the share's derivatives. */
+    public void begin(String family) {
+        this.family = Objects.requireNonNull(family, "family");
+        shareEnthalpyT = shareEnthalpyP = shareEntropyT = shareEntropyP = shareVolumeT = shareVolumeP = 0.0;
+    }
+    /** The share's derivatives (D2), after {@link #begin}. */
+    public void setShare(double enthalpyT, double enthalpyP, double entropyT, double entropyP, double volumeT, double volumeP) {
+        shareEnthalpyT = enthalpyT;
+        shareEnthalpyP = enthalpyP;
+        shareEntropyT = entropyT;
+        shareEntropyP = entropyP;
+        shareVolumeT = volumeT;
+        shareVolumeP = volumeP;
+    }
     /** Writable row buffer for {@code d ln phi_i / d n_j}. */
     public double[] logFugacityCompositionRowBuffer(int component) { return logFugacityComposition[component]; }
     public double[] logFugacityTemperatureBuffer() { return logFugacityTemperature; }

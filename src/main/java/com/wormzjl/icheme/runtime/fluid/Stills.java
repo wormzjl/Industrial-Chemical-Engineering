@@ -10,7 +10,6 @@ import com.wormzjl.icheme.science.fluid.network.PassiveIntervalSolver;
 import com.wormzjl.icheme.science.fluid.network.PassiveNetwork;
 import com.wormzjl.icheme.science.fluid.network.Pool;
 import com.wormzjl.icheme.science.fluid.network.PortPlan;
-import com.wormzjl.icheme.science.fluid.network.StillColumn;
 import com.wormzjl.icheme.science.fluid.network.StillHead;
 import java.util.*;
 import java.util.function.LongFunction;
@@ -185,7 +184,7 @@ public final class Stills implements IslandCoordinator.Ports {
     private double heat(StillUnit u,Run r,PassiveNetwork.Reservoir node,double seconds) {
         var design=u.design();double asked=firing(u)*design.rating();
         var s=node.state();int alarms=0;
-        double liquid=s.liquidVolume()+s.waterVolume(),volume=node.inventory().volume();
+        double liquid=s.condensedVolume(),volume=node.inventory().volume();
         r.potTemperature=s.temperature();r.filled=volume>0?liquid/volume:0;r.level=r.filled*node.inventory().levelHeight();
         double available=switch(u.heater()) {
             case SOLID->asked>0?Math.min(1,u.burning()*u.heater().efficiency()/(asked*seconds)):0;
@@ -255,11 +254,12 @@ public final class Stills implements IslandCoordinator.Ports {
         double mass=mass(available),target=mass/Math.max(slice.seconds(coordinator.time()),holdSeconds());
         return new PortPlan(node.id(),node.id(),target,temperature,mine);
     }
-    /** The compounds outlet {@code device} may deliver: those its account holds (water not named), for its island's list. */
+    /** The compounds outlet {@code device} may deliver, for its island's list: those its account holds, and Water whatever it
+     * holds now (W3b option A: a still's outlet can deliver water, so its island is wet from the start). */
     public Set<String> compounds(long device) {
         sync();Long pot=outlets.get(device);var u=pot==null?null:topology.still(pot);if(u==null)return Set.of();
         var n=(device==u.distillate()?u.head():u.venting()).moles();var out=new TreeSet<String>();
-        for(int i=0;i<n.length-1;i++)if(n[i]>0)out.add(axis.get(i));
+        for(int i=0;i<n.length;i++)if(n[i]>0||i==n.length-1)out.add(axis.get(i));
         return out;
     }
 
@@ -459,6 +459,10 @@ public final class Stills implements IslandCoordinator.Ports {
         var r=runs.get(pot);var line=new StringBuilder(v.status().name().replace('_',' '));
         for(var a:v.alarms())if(!line.toString().contains(a.text))line.append(" · ").append(a.text);
         if(r!=null&&r.failure!=null)line.append(" · COLUMN: ").append(r.failure);
+        // A tray that would hold free water (W4 D4): a notice, the column's answer stands.
+        if(r!=null&&r.solved!=null&&r.solved.waterOnTrays())line.append(" · WATER ON THE TRAYS");
+        // Two liquids on the trays (W4 plan section 12): the column's answer is the pot's single stage.
+        if(r!=null&&r.solved!=null&&r.solved.potStill())line.append(" · COLUMN: ").append(r.solved.notice());
         return line.toString();
     }
     /**
@@ -507,15 +511,14 @@ public final class Stills implements IslandCoordinator.Ports {
     }
     /**
      * Each world component's critical temperature, K, as the pot island's model gives it (the column's answer's, or its
-     * model's own before one); a component the island does not carry condenses (water's).
+     * model's own before one: {@link StillHead#critical}, water's from the model too); a component the island does not
+     * carry condenses (water's constant).
      */
     private double[] critical(Run r) {
         var result=new double[axis.size()];Arrays.fill(result,StillHead.WATER_CRITICAL);
         if(r.potIsland<0)return result;
         var model=models.apply(r.potIsland);var own=model.components();
-        double[] critical=r.solved!=null?r.solved.critical():criticals.computeIfAbsent(model,m->{
-            var column=new StillColumn(m.hydrocarbon,BatchStill.ATMOSPHERIC);int n=m.hydrocarbon.componentCount();
-            var c=new double[n+1];for(int i=0;i<n;i++)c[i]=column.criticalTemperature(i);c[n]=StillHead.WATER_CRITICAL;return c;});
+        double[] critical=r.solved!=null?r.solved.critical():criticals.computeIfAbsent(model,StillHead::critical);
         for(int i=0;i<critical.length&&i<own.size();i++){int j=axis.indexOf(own.get(i));if(j>=0)result[j]=critical[i];}
         return result;
     }

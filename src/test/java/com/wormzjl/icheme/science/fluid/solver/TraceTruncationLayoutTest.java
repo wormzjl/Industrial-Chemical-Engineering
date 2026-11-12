@@ -9,6 +9,7 @@ import com.wormzjl.icheme.science.thermo.PhaseSupport;
 import com.wormzjl.icheme.science.thermo.TraceTruncationPolicy;
 import java.util.Arrays;
 import org.junit.jupiter.api.Test;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * The frozen per-component phase support and the node layout it reduces. The cutoff-0 cases are the
@@ -21,31 +22,48 @@ class TraceTruncationLayoutTest {
 
     /** A wet crude at conditions that carry all three phases, which is the gameplay regime. */
     private FluidThermodynamics.State wetCrude(double temperature,double pressure) {
-        double[] n=Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo(PACKAGE)
-                .crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(),com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1);
+        double[] n=com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.worldCrude();
         n[com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN]=.1;n[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK]=.2;
         return model.flashTP(temperature,pressure,n,()->{});
     }
-    private static PhaseSupport[] support(FluidThermodynamics.State seed,double cutoff) {
+    private static byte[] support(FluidThermodynamics.State seed,double cutoff) {
         return PhaseLayout.support(seed,null,TraceTruncationPolicy.of(cutoff),null);
     }
-    private static int count(PhaseSupport[] support,PhaseSupport value) {
-        int n=0;for(var entry:support)if(entry==value)n++;return n;
+    /** A component's support between the oil liquid and the vapour (W3b: the masks are slot bits; the aqueous bit aside). */
+    private static PhaseSupport kind(byte support) {
+        int bits=support&(PhaseLayout.LIQUID|PhaseLayout.VAPOR);
+        return bits==0?PhaseSupport.ABSENT:bits==PhaseLayout.LIQUID?PhaseSupport.LIQUID_ONLY:bits==PhaseLayout.VAPOR?PhaseSupport.VAPOR_ONLY:PhaseSupport.BOTH;
+    }
+    /** The slots the layout carries (the off switch's support of any present component). */
+    private static int active(FluidThermodynamics.State seed) {
+        int bits=0;for(byte b:support(seed,0))bits|=b;return bits;
+    }
+    /** W3b: the omitted (component, slot) unknowns of {@code support} against the carried slots {@code active}. */
+    private static int omittedSlots(byte[] support,int active) {
+        int n=0;for(byte b:support)if(b!=0)n+=Integer.bitCount(active)-Integer.bitCount(b&0xff);return n;
+    }
+    /** W3b: the components a support reduces (held in fewer than every carried slot). */
+    private static int reduced(byte[] support,int active) {
+        int n=0;for(byte b:support)if(b!=0&&(b&0xff)!=active)n++;return n;
+    }
+    /** The compounds (water, the last entry, aside) of {@code value}. */
+    private static int count(byte[] support,PhaseSupport value) {
+        int n=0;for(int i=0;i<support.length-1;i++)if(kind(support[i])==value)n++;return n;
     }
 
     @Test void supportFollowsTheSeedCompositionsAndNothingElse() {
         var seed=wetCrude(350,101325);
-        double[] l=seed.liquid(),v=seed.vapor();double nl=Arrays.stream(l).sum(),nv=Arrays.stream(v).sum();
+        double[] l=TestPhases.liquid(seed),v=TestPhases.vapor(seed);double nl=Arrays.stream(l).sum(),nv=Arrays.stream(v).sum();
         assertTrue(nl>0&&nv>0,"fixture must be two-phase");
         for(double cutoff:new double[]{1e-6,1e-5}) {
             var support=support(seed,cutoff);
-            assertEquals(l.length,support.length);
+            assertEquals(l.length+1,support.length,"the compounds and water");
             for(int i=0;i<l.length;i++) {
                 boolean liquidTrace=l[i]/nl<cutoff,vaporTrace=v[i]/nv<cutoff;
                 var expected=l[i]+v[i]==0?PhaseSupport.ABSENT
                         :liquidTrace&&!vaporTrace?PhaseSupport.VAPOR_ONLY
                         :vaporTrace&&!liquidTrace?PhaseSupport.LIQUID_ONLY:PhaseSupport.BOTH;
-                assertEquals(expected,support[i],"component "+i+" at cutoff "+cutoff);
+                assertEquals(expected,kind(support[i]),"component "+i+" at cutoff "+cutoff);
             }
             // The gameplay basis really does have vapour-side heavy ends to drop; a cutoff that
             // omitted nothing would make every other assertion here vacuous.
@@ -62,8 +80,8 @@ class TraceTruncationLayoutTest {
     @Test void theOffSwitchIsThePreTruncationLayoutBitForBit() {
         var seed=wetCrude(350,101325);
         var off=support(seed,0);
-        for(int i=0;i<off.length;i++)
-            assertEquals(seed.liquid()[i]+seed.vapor()[i]==0?PhaseSupport.ABSENT:PhaseSupport.BOTH,off[i]);
+        for(int i=0;i<off.length-1;i++)
+            assertEquals(TestPhases.liquid(seed)[i]+TestPhases.vapor(seed)[i]==0?PhaseSupport.ABSENT:PhaseSupport.BOTH,kind(off[i]));
         var reference=new PhaseLayout(model,seed);
         var explicit=new PhaseLayout(model,seed,null,null,off);
         assertEquals(reference.size(),explicit.size());
@@ -83,9 +101,9 @@ class TraceTruncationLayoutTest {
         var full=new PhaseLayout(model,seed);
         for(double cutoff:new double[]{1e-6,1e-5}) {
             var support=support(seed,cutoff);
-            int omitted=count(support,PhaseSupport.LIQUID_ONLY)+count(support,PhaseSupport.VAPOR_ONLY);
+            int active=active(seed),omitted=omittedSlots(support,active);
             var layout=new PhaseLayout(model,seed,null,null,support);
-            assertEquals(omitted,layout.singlePhaseComponentCount());
+            assertEquals(reduced(support,active),layout.singlePhaseComponentCount());
             assertEquals(full.size()-omitted,layout.size(),"one unknown per omitted phase");
             // Square: the component balances, the water balance, the energy and volume closures and
             // the water/partial-pressure rows are untouched, so the rows it loses are exactly the
@@ -103,24 +121,26 @@ class TraceTruncationLayoutTest {
         var support=support(seed,1e-5);
         var layout=new PhaseLayout(model,seed,null,null,support);
         var decoded=layout.decode(layout.encode(seed),0);
-        double[] l=decoded.liquid(),v=decoded.vapor(),before=PhaseLayout.totalAmounts(seed),after=PhaseLayout.totalAmounts(decoded);
+        double[] l=TestPhases.liquid(decoded),v=TestPhases.vapor(decoded),before=PhaseLayout.totalAmounts(seed),after=PhaseLayout.totalAmounts(decoded);
         int checked=0;
+        // W3b: water is a compound of the layout like any other (it was a free-water slot carried apart, which the decode
+        // returned to the last ulp); its split between the liquids and the vapour is a phase split like theirs, its total
+        // exact with theirs.
         for(int i=0;i<support.length;i++) {
-            if(support[i]==PhaseSupport.LIQUID_ONLY){assertEquals(0,v[i],0,"vapour of component "+i);checked++;}
-            if(support[i]==PhaseSupport.VAPOR_ONLY){assertEquals(0,l[i],0,"liquid of component "+i);checked++;}
+            if(kind(support[i])==PhaseSupport.LIQUID_ONLY){assertEquals(0,v[i],0,"vapour of component "+i);checked++;}
+            if(kind(support[i])==PhaseSupport.VAPOR_ONLY){assertEquals(0,l[i],0,"liquid of component "+i);checked++;}
         }
         assertTrue(checked>0);
         // Folding an omitted trace into the retained phase is a phase-split approximation and never a
         // material one: the balance rows subtract the same totals the untruncated layout would.
         for(int i=0;i<before.length;i++)assertEquals(before[i],after[i],Math.max(1e-30,4*Math.ulp(before[i])),"total of component "+i);
-        assertEquals(seed.waterLiquid(),decoded.waterLiquid(),4*Math.ulp(seed.waterLiquid()));
-        assertEquals(seed.waterVapor(),decoded.waterVapor(),4*Math.ulp(seed.waterVapor()));
     }
 
     @Test void aTruncatedInventorySolveReachesTheSameTemperaturePressureAndTotals() {
-        double[] n=Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo(PACKAGE)
-                .crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(),com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1);
-        n[com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN]=.1;n[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK]=.2;
+        double[] n=com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.worldCrude();
+        // W3b: 1 mol of water, so the aqueous liquid is at both states (with 0.2 mol it holds 6e-4 mol at 350 K and none at
+        // 351 K and 105 kPa: the step crosses water's dew point, which a layout of fixed phases does not follow).
+        n[com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN]=.1;n[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK]=1.0;
         var seed=model.flashTP(350,101325,n,()->{});var target=model.flashTP(351,105000,n,()->{});
         var layout=new PhaseLayout(model,seed,null,null,support(seed,1e-5));
         assertTrue(layout.singlePhaseComponentCount()>0);
@@ -134,18 +154,18 @@ class TraceTruncationLayoutTest {
 
     @Test void aTraceThatCrossesTheReinsertionThresholdIsPutBackIntoBothPhases() {
         var equilibrium=wetCrude(350,101325);
-        double[] l=equilibrium.liquid(),v=equilibrium.vapor();
+        double[] l=TestPhases.liquid(equilibrium),v=TestPhases.vapor(equilibrium);
         // Methane is genuinely volatile here, so an artificial state that holds all of it in the
         // liquid is exactly the situation reactivation exists for: the seed says VAPOR is a trace,
         // the converged fugacity coefficients say it is not.
         int methane=0;
         assertTrue(v[methane]/Arrays.stream(v).sum()>1e-4,"fixture must have real methane vapour");
         l[methane]+=v[methane];v[methane]=0;
-        var seed=model.state(equilibrium.temperature(),equilibrium.pressure(),l,v,
-                equilibrium.waterLiquid(),equilibrium.waterVapor(),equilibrium.hydrocarbonPartialPressure());
+        var seed=TestPhases.state(model,equilibrium.temperature(),equilibrium.pressure(),l,v,
+                TestPhases.waterLiquid(equilibrium),TestPhases.waterVapor(equilibrium));
         var policy=TraceTruncationPolicy.of(1e-6);
         var support=PhaseLayout.support(seed,null,policy,null);
-        assertEquals(PhaseSupport.LIQUID_ONLY,support[methane]);
+        assertEquals(PhaseSupport.LIQUID_ONLY,kind(support[methane]));
         var layout=new PhaseLayout(model,seed,null,null,support);
         boolean[] promoted=new boolean[support.length];
         assertTrue(layout.reactivate(seed,policy,promoted)>0);
@@ -156,12 +176,14 @@ class TraceTruncationLayoutTest {
         // A promoted component comes back as BOTH on the next pass, seeded at the equilibrium ratio
         // the same expression states, and the unknown count grows back by one per component.
         var next=PhaseLayout.support(seed,null,policy,promoted);
-        assertEquals(PhaseSupport.BOTH,next[methane]);
+        assertEquals(PhaseSupport.BOTH,kind(next[methane]));
         var restored=new PhaseLayout(model,seed,null,null,next);
-        assertEquals(layout.size()+1,restored.size());
+        int restoredSlots=0;
+        for(int i=0;i<next.length;i++)if(promoted[i])restoredSlots+=Integer.bitCount(next[i]&0xff)-Integer.bitCount(support[i]&0xff);
+        assertEquals(layout.size()+restoredSlots,restored.size(),"one unknown back per restored slot");
         var decoded=restored.decode(restored.encode(seed),0);
-        assertTrue(decoded.vapor()[methane]>0,"the restored phase must be seeded, not left at zero");
-        assertEquals(l[methane],decoded.liquid()[methane]+decoded.vapor()[methane],1e-12*l[methane]);
+        assertTrue(TestPhases.vapor(decoded)[methane]>0,"the restored phase must be seeded, not left at zero");
+        assertEquals(l[methane],TestPhases.liquid(decoded)[methane]+TestPhases.vapor(decoded)[methane],1e-12*l[methane]);
         // The off switch reactivates nothing, because it omits nothing.
         assertEquals(0,new PhaseLayout(model,seed).reactivate(seed,TraceTruncationPolicy.OFF,new boolean[support.length]));
     }
@@ -196,8 +218,7 @@ class TraceTruncationLayoutTest {
         // A nearly liquid-full vessel (the small-headspace regime) and a dry one: the water unknowns,
         // the water equilibrium row and the partial-pressure closure belong to the regime state, not
         // to the hydrocarbon trace support, so the cutoff may not move any of them.
-        double[] wet=Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo(PACKAGE)
-                .crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(),com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1);
+        double[] wet=com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.worldCrude();
         wet[com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN]=.001;wet[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK]=.2;
         double[] dry=Arrays.copyOf(wet,com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1);dry[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK]=0;
         for(double[] n:new double[][]{wet,dry})for(double pressure:new double[]{101325,1_500_000}) {
@@ -205,12 +226,12 @@ class TraceTruncationLayoutTest {
             var full=new PhaseLayout(model,seed);
             var reduced=new PhaseLayout(model,seed,null,null,support(seed,1e-5));
             assertEquals(full.componentBalanceCount(),reduced.componentBalanceCount());
-            assertEquals(full.size()-reduced.singlePhaseComponentCount(),reduced.size());
+            assertEquals(full.size()-omittedSlots(support(seed,1e-5),active(seed)),reduced.size());
             var reference=full.decode(full.encode(seed),0);
             var decoded=reduced.decode(reduced.encode(seed),0);
-            assertEquals(reference.waterLiquid(),decoded.waterLiquid(),0);
-            assertEquals(reference.waterVapor(),decoded.waterVapor(),0);
-            assertEquals(reference.hydrocarbonPartialPressure(),decoded.hydrocarbonPartialPressure(),0);
+            assertEquals(TestPhases.waterLiquid(reference),TestPhases.waterLiquid(decoded),0);
+            assertEquals(TestPhases.waterVapor(reference),TestPhases.waterVapor(decoded),0);
+            // W3b: the hydrocarbons' partial pressure is no unknown of its own any more (steam is in the vapour's cubic).
             assertEquals(reference.pressure(),decoded.pressure(),0);
             assertEquals(reference.temperature(),decoded.temperature(),0);
         }

@@ -234,8 +234,16 @@ final class FlowsheetColumnTest {
         assertTrue(Math.abs(run.heatGap()) < heatShare * heatScale(run), () -> "heat gap " + run.heatGap() + " of " + heatScale(run));
     }
 
+    /**
+     * The sample with its furnace on an outlet temperature, solved once for the tests that read it (batch
+     * 2026-11-11-aqueous-solvents, TEST_DUPLICATES_REVIEW.md item 6).
+     */
+    private static final class Held {
+        static final FlowsheetRun RUN = sample(HOLDS).feed("CRUDE", "P-101", "in", crude(298.15, 8e5)).product("RESIDUE", "E-102", "b").run();
+    }
+
     @Test void theSampleClosesInTwoPasses() {
-        var run = sample(HOLDS).feed("CRUDE", "P-101", "in", crude(298.15, 8e5)).product("RESIDUE", "E-102", "b").run();
+        var run = Held.RUN;
         closed(run, 5e-4);
         assertEquals(1, run.loops().size(), "one loop stays, the residue's");
         assertEquals(2, run.loops().getFirst().passes());
@@ -270,12 +278,13 @@ final class FlowsheetColumnTest {
         var limit = run.reports().get("H-101").notes().stream().filter(note -> note.key().equals("heater.limit")).findFirst().orElseThrow();
         // 98.04 MW: the column took the network's water (E30 of batch 2026-11-04-open-thermo-data), 16 kW less from the products'
         // small re-split, and the pumps' losses heat the crude (D42 of batch 2026-11-03-rotating-machinery), some 45 kW less.
-        assertEquals(98.04e6, Double.parseDouble(limit.arguments().getFirst()), .01e6, "what the furnace asks");
+        // 98.03 MW since W5 D1 of batch 2026-11-11-aqueous-solvents: the column flashes on the network's derived pairs (14 kW less; 98.04 MW to W5a).
+        assertEquals(98.03e6, Double.parseDouble(limit.arguments().getFirst()), .01e6, "what the furnace asks");
         assertEquals(90e6, Double.parseDouble(limit.arguments().get(1)), 1, "and what it may give");
     }
 
     @Test void aFurnaceOnAFixedDutyCloses() {
-        var held = sample(HOLDS).feed("CRUDE", "P-101", "in", crude(298.15, 8e5)).product("RESIDUE", "E-102", "b").run();
+        var held = Held.RUN;
         double duty = held.reports().get("H-101").readings().get("duty") - 8e6;
         var run = onDuty(duty).run(held);
         closed(run, 1e-3);

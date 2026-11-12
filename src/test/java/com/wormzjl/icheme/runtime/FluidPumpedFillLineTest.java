@@ -9,6 +9,7 @@ import com.wormzjl.icheme.science.material.MaterialTestBasis;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * The pumped fills and pump transfers the WP5 in-game rig placed, with the mod's placement defaults (reservoirs 1 m3 of
@@ -61,7 +62,7 @@ class FluidPumpedFillLineTest {
         return connected.getFirst().graph();
     }
     private static List<PassiveNetwork.Reservoir> tanks(PassiveNetwork graph){return graph.reservoirs().stream().filter(n->n.kind()==PassiveNetwork.NodeKind.RESERVOIR).toList();}
-    private static double liquidFraction(FluidThermodynamics.State s){return (s.liquidVolume()+s.waterVolume())/s.volume();}
+    private static double liquidFraction(FluidThermodynamics.State s){return (TestPhases.liquidVolume(s)+TestPhases.waterVolume(s))/s.volume();}
     /** The mover on connection 1 at its shutoff: on its law with no net flow, its relief passing its whole displacement back
      * (batch 2026-11-03-rotating-machinery, form F2e), or closed; a millionth of its 10 kg/s at most. */
     private static void assertAtShutoff(IslandCoordinator.Snapshot island,String device) {

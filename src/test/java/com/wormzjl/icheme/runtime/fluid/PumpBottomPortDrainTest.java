@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import static com.wormzjl.icheme.fluid.support.FluidTestSupport.nitrogen;
 import static com.wormzjl.icheme.fluid.support.FluidTestSupport.water;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * Defect F1 of the phase-ports in-game check (2026-09-27): a pump drawing water from a tank's bottom face held its island
@@ -111,16 +112,21 @@ class PumpBottomPortDrainTest {
                 PumpBottomPortDrainTest.device(5,2,y-2,Kind.PIPE),PumpBottomPortDrainTest.device(11,2,y-3,Kind.PIPE),PumpBottomPortDrainTest.device(6,2,y-4,Kind.VOID));
         var graph=base.island(devices,Map.of(7L,new com.wormzjl.icheme.runtime.fluid.FluidDeviceSpec(1,298.15,130000,com.wormzjl.icheme.fluid.support.FluidTestSupport.water()),
                 6L,new com.wormzjl.icheme.runtime.fluid.FluidDeviceSpec(1,298.15,101325,com.wormzjl.icheme.fluid.support.FluidTestSupport.nitrogen())),Map.of(tankId,tank));
-        var retained=new RetainedSolver();PassiveIntervalSolver.Result last=null;
-        for(int slice=0;slice<400;slice++) {
+        // The trace's whole lifetime: until the junctions hold no vapour, then five like slices more (batch
+        // 2026-11-11-aqueous-solvents, TEST_DUPLICATES_REVIEW.md item 1: the 397 slices after the trace ended repeated a steady fill).
+        var retained=new RetainedSolver();PassiveIntervalSolver.Result last=null;int dryAt=-1;
+        for(int slice=0;slice<400&&(dryAt<0||slice<dryAt+5);slice++) {
             retained.committed(last);PassiveIntervalSolver.Result result;
             try{result=retained.solve(model,graph,5,PassiveIntervalSolver.Settings.defaults(),()->{});}
             catch(RuntimeException held){System.out.println("FED_PUMP HELD at slice "+slice+": "+held.getMessage());fail(held.getMessage());return;}
             graph=result.graph();last=result;
             var line=new StringBuilder("FED_PUMP slice="+slice+" accepted="+result.acceptedSubsteps()+" rejected="+result.rejectedSubsteps()+" modes="+result.endpointModes());
-            for(var node:graph.reservoirs())if(node.junction())line.append(" junction ").append(node.id()).append(" vapour=").append(Arrays.stream(node.state().vaporView()).sum()).append(" wV=").append(node.state().waterVapor());
+            double vapour=0;
+            for(var node:graph.reservoirs())if(node.junction()){double v=Arrays.stream(TestPhases.vapor(node.state())).sum();vapour+=v;line.append(" junction ").append(node.id()).append(" vapour=").append(v).append(" wV=").append(TestPhases.waterVapor(node.state()));}
+            if(vapour>0)dryAt=-1;else if(dryAt<0)dryAt=slice;
             var t=graph.reservoirs().get(PumpBottomPortDrainTest.node(graph,tankId)).state();line.append(" tank P=").append(t.pressure()).append(" water=").append(model.liquidMass(t));
             System.out.println(line);
         }
+        assertTrue(dryAt>=0,"the junctions' gas trace ends within 400 slices");
     }
 }

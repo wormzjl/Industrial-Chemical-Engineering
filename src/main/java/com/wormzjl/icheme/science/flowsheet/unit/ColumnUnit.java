@@ -181,6 +181,22 @@ public final class ColumnUnit implements UnitModel {
     }
 
     /**
+     * The catalog the column solves on (W5 D3 of batch 2026-11-11-aqueous-solvents), a view of the sheet's compounds kept by the
+     * model ({@code FluidThermodynamics.on}): with water where water is on the axis; else without it, so a crude column's kernel
+     * stays on the classical branch and carries no water at zero flow. The sheet's own catalog ({@code FlowThermo.catalog}) is
+     * the list without water: the model appends water to its cubic.
+     */
+    public static MaterialCatalog catalogFor(com.wormzjl.icheme.science.flowsheet.FlowThermo thermo, boolean waterOnAxis) {
+        var model = thermo.model();
+        return model.on(model.compounds(), waterOnAxis).catalog();
+    }
+
+    /** {@link #catalogFor(com.wormzjl.icheme.science.flowsheet.FlowThermo, boolean)} of a column solved on {@code basis}. */
+    public static MaterialCatalog catalogFor(com.wormzjl.icheme.science.flowsheet.FlowThermo thermo, com.wormzjl.icheme.science.column.v3.V3ComponentBasis basis) {
+        return catalogFor(thermo, basis.componentIds().contains(com.wormzjl.icheme.science.column.operation.ColumnWater.WATER));
+    }
+
+    /**
      * One solve of {@code input}: warm from {@code seed} when there is one, and from the learned start if that does not answer, as a
      * pass's change can leave the warm start behind. The block's solve and the sizing stage's trial diameters both take it.
      */

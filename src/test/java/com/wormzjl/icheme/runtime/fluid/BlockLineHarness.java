@@ -11,6 +11,7 @@ import java.util.*;
 import static com.wormzjl.icheme.fluid.support.FluidTestSupport.nitrogen;
 import static com.wormzjl.icheme.fluid.support.FluidTestSupport.water;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * Lines of blocks a player builds, compiled as the world compiles them and run as the island worker runs them:
@@ -132,7 +133,7 @@ abstract class BlockLineHarness {
             text.append("\n  node[").append(n).append("] id=").append(node.id()).append(' ').append(node.kind())
                     .append(" y=").append(node.elevation()).append(" P=").append(node.state().pressure())
                     .append(" mass=").append(node.state().mass()).append(" rho=").append(node.state().mass()/node.state().volume())
-                    .append(" liquid=").append(node.state().liquidVolume()+node.state().waterVolume())
+                    .append(" liquid=").append(TestPhases.liquidVolume(node.state())+TestPhases.waterVolume(node.state()))
                     .append(" vapour=").append(node.state().vaporVolume())
                     .append(" solidKg=").append(node.state().solidMoments().mass())
                     .append(" storedSolidKg=").append(node.inventory().solids().massKg());

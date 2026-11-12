@@ -317,9 +317,9 @@ public final class BatchStill {
         var split = boil.split;
         double liquidEnthalpy = 0, vapourEnthalpy = 0, condenser = boil.used;
         if (removed > 0) {
-            // Out of the column per mole of distillate: e = (R + 1) H1 - R h0; the condensate leaves at h0, the vented vapour at
-            // H1, and the condenser takes the rest.
-            liquidEnthalpy = boil.liquidShare * removed * split.condensateEnthalpy();
+            // Out of the column per mole of distillate: e = (R + 1) H1 - R hR; the distillate leaves at its own hD (h0 with one
+            // liquid; of two layers what the reflux leaves), the vented vapour at H1, and the condenser takes the rest.
+            liquidEnthalpy = boil.liquidShare * removed * split.distillateEnthalpy();
             vapourEnthalpy = (1 - boil.liquidShare) * removed * split.headEnthalpy();
             condenser = removed * split.energyPerDistillate() - liquidEnthalpy - vapourEnthalpy;
         }

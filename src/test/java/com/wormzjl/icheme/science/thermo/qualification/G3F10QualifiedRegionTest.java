@@ -10,6 +10,7 @@ import com.wormzjl.icheme.science.thermo.reference.HelmholtzFluid;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * G3 fixture family F10 (plan {@code P3_PILOT_ENGINE_PLAN.md} section 8.2; P0 sections 2.3 and 3.1): the old qualified
@@ -163,7 +164,7 @@ class G3F10QualifiedRegionTest {
                 for (double p : new double[] {1e5, 5e5, 2e6}) {
                     var state = net.flashTP(t, p, feeds[k], () -> { });
                     double liquid = 0;
-                    for (double amount : state.liquidView()) liquid += amount;
+                    for (double amount : TestPhases.liquid(state)) liquid += amount;
                     states++;
                     if (liquid != 0) wrong.add(f("%s %.0f K %.1f MPa", names[k], t, p / 1e6));
                 }

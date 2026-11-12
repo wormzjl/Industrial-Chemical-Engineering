@@ -12,8 +12,10 @@ import java.util.Objects;
  * from its last profile, at the effective reflux the condenser allows. Its answer is the pot's {@link Pool.Head}: for each
  * component the share of the pot's vapour that leaves the head, d_i / v_i (the column's distillate over the vapour up from the
  * pot); the rest is the column's liquid, back to the pot at its own enthalpy (the network's, at the bottom tray's
- * temperature). Water is not in the column's basis: it leaves the head with the distillate (share 1), as do components the
- * column carries no vapour of. A closed valve returns every hydrocarbon (share 0).</li>
+ * temperature). On a model with water the column carries the whole pot, water among its components (batch
+ * 2026-11-11-aqueous-solvents, W4 D1): water's share is the column's like every other. On a list without water, and for a
+ * component the column carries no vapour of, the share is 1. A closed valve returns every component (share 0). A tray
+ * that would hold two liquids is reported ({@link Solved#settlingTrays}), never a failure.</li>
  * <li><b>The condenser's split</b> ({@link #divide}), arithmetic on the server: what reached the head goes to the
  * distillate (liquid) or the vent (vapour). A component whose critical temperature is at or below the condensate's cannot
  * condense: it vents whole. Of the rest, the share {@link #liquidShare} goes to the distillate. The energy goes with the
@@ -42,41 +44,56 @@ public final class StillHead {
      * The pot's head ({@link Pool.Head}, on the island's list), the column's profile for the next warm start, the head vapour's
      * and the condensate's temperatures (K), the critical temperature of each component (K, water last), the condenser's
      * need per mole that reached the head (J/mol: (R + 1)(H1 - h0) over the net top product), the reflux ratio solved and
-     * the column's F-factor per watt of boil-up (Pa^0.5 / W: the top vapour's, {@link BatchStill#fFactor}; 0 with no column).
+     * the column's F-factor per watt of boil-up (Pa^0.5 / W: the top vapour's, {@link BatchStill#fFactor}; 0 with no column),
+     * the trays whose liquid would settle into two liquids (the status line's notice) and the engine splits the solve made.
      */
     public record Solved(Pool.Head head,StillColumn.Profile profile,double headTemperature,double condensateTemperature,
-                         double[] critical,double needPerMole,double reflux,double fPerWatt) implements Outcome {
-        public Solved {Objects.requireNonNull(head);critical=critical.clone();}
+                         double[] critical,double needPerMole,double reflux,double fPerWatt,int[] settlingTrays,int flashes,String notice) implements Outcome {
+        public Solved {Objects.requireNonNull(head);critical=critical.clone();settlingTrays=settlingTrays.clone();}
         @Override public double[] critical(){return critical.clone();}
+        @Override public int[] settlingTrays(){return settlingTrays.clone();}
+        /** Whether a tray would hold free water: the still's notice "water on the trays". */
+        public boolean waterOnTrays(){return settlingTrays.length>0;}
+        /** Whether the column fell back to the pot's single stage ({@link StillColumn#POT_STILL}): two liquids on its trays. */
+        public boolean potStill(){return notice!=null;}
     }
     public record Failed(String reason) implements Outcome {}
 
-    /** The critical temperature of water, K: it condenses at any condensate temperature the still reaches. */
+    /** The critical temperature of water, K, for a component an island does not carry: it condenses at any condensate temperature the still reaches. */
     public static final double WATER_CRITICAL=647.096;
+
+    /** Each conserved component's critical temperature on {@code model} (K, water last): the column's own for its basis, the model's for water on a list without it. */
+    public static double[] critical(FluidThermodynamics model) {
+        var column=new StillColumn(model,BatchStill.ATMOSPHERIC);int n=model.hydrocarbon.componentCount();
+        var critical=new double[n+1];for(int i=0;i<column.componentCount();i++)critical[i]=column.criticalTemperature(i);
+        if(column.water()<0)critical[n]=model.hydrocarbon.criticalTemperature(n);
+        return critical;
+    }
 
     /** The column for {@code job} on {@code model} (the pot island's own model). */
     public static Outcome run(Job job,FluidThermodynamics model,Runnable checkpoint) {
         int n=model.hydrocarbon.componentCount();
         var pot=job.pot();
         if(pot.length!=n+1)return new Failed("basis mismatch");
-        var hydrocarbons=java.util.Arrays.copyOf(pot,n);
-        double total=0;for(double v:hydrocarbons)total+=v;
-        var column=new StillColumn(model.hydrocarbon,job.pressure());
-        var critical=new double[n+1];for(int i=0;i<n;i++)critical[i]=column.criticalTemperature(i);critical[n]=WATER_CRITICAL;
-        if(!(total>0))return new Solved(Pool.Head.plain(n+1),null,job.temperature(),job.temperature(),critical,0,0,0);
+        var column=new StillColumn(model,job.pressure());
+        // The column's basis: the whole pot where the model carries water, else its compounds (water's share then 1).
+        int carried=column.componentCount();
+        var inPot=java.util.Arrays.copyOf(pot,carried);
+        double total=0;for(double v:inPot)total+=v;
+        var critical=critical(model);
+        if(!(total>0))return new Solved(Pool.Head.plain(n+1),null,job.temperature(),job.temperature(),critical,0,0,0,new int[0],0,null);
         checkpoint.run();
-        var split=column.solve(hydrocarbons,job.stages(),job.reflux(),1,job.warm());
+        var split=column.solve(inPot,job.stages(),job.reflux(),1,job.warm());
         checkpoint.run();
         if(!split.converged())return new Failed(split.failure()==null?"no convergence":split.failure());
         var up=split.vapourFlows();var out=split.distillateFlows();var back=split.liquidFlows();
-        var recovery=new double[n+1];
-        for(int i=0;i<n;i++)recovery[i]=up[i]>0?Math.max(0,Math.min(1,out[i]/up[i])):1;
-        recovery[n]=1;
+        var recovery=new double[n+1];java.util.Arrays.fill(recovery,1);
+        for(int i=0;i<carried;i++)recovery[i]=up[i]>0?Math.max(0,Math.min(1,out[i]/up[i])):1;
         // The liquid back to the pot leaves the bottom tray at its temperature, on the network's own energy basis.
         double returned=0;for(double b:back)returned+=b;
         double returnEnthalpy=0;
         if(returned>0) {
-            var x=new double[n+1];for(int i=0;i<n;i++)x[i]=Math.max(0,back[i]);
+            var x=new double[n+1];for(int i=0;i<carried;i++)x[i]=Math.max(0,back[i]);
             var temperatures=split.profile()==null?null:split.profile().temperatures();
             double t=temperatures!=null&&temperatures.length>split.stages()&&split.stages()>0?temperatures[split.stages()]:split.potTemperature();
             var liquid=model.flashTP(t,job.pressure(),x,checkpoint);
@@ -90,7 +107,8 @@ public final class StillHead {
             var y=split.distillate();double molar=column.molarMass(y),volume=column.vapourVolume(split.headTemperature(),y);
             if(molar>0&&volume>0)fPerWatt=BatchStill.fFactor(split.topVapourRate()*molar,molar/volume,job.columnDiameter());
         }
-        return new Solved(new Pool.Head(recovery,returnEnthalpy),split.profile(),split.headTemperature(),split.condensateTemperature(),critical,need,split.refluxRatio(),fPerWatt);
+        return new Solved(new Pool.Head(recovery,returnEnthalpy),split.profile(),split.headTemperature(),split.condensateTemperature(),critical,need,split.refluxRatio(),fPerWatt,
+                split.settlingTrays(),split.flashes(),split.notice());
     }
 
     /**

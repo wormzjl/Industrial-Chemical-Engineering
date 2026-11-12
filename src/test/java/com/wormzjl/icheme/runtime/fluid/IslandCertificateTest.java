@@ -14,6 +14,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 import java.util.Map;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * Rest and steady-flow certificates (plan sections 3.2, 3.3 and 4; section 5 items 3, 5 and 6): the entry
@@ -499,7 +500,7 @@ class IslandCertificateTest {
         double[] wet=amounts(40,0);wet[water]=10;var condensed=model.flashTP(298.15,101325,wet,()->{});
         var wetTank=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,condensed,PassiveNetwork.NodeKind.RESERVOIR,new PassiveNetwork.Inventory(1,amounts(40,0),-1e5)),
                 new PassiveNetwork.Reservoir(2,0,gas,PassiveNetwork.NodeKind.VOID)),a.pipes());
-        assertTrue(condensed.waterVolume()>0);
+        assertTrue(TestPhases.waterVolume(condensed)>0);
         var phase=interval(0,a,wetTank,0,0,0,Map.of());
         assertFalse(phase.phasesUnchanged);assertNull(IslandCertificate.issue(phase,CertificatePolicy.defaults()).certificate());
         // A connection closes inside the interval.
@@ -612,10 +613,7 @@ class IslandCertificateTest {
     /** The paced benchmark's composition: the Tia Juana light feed with 0.1 nitrogen and 0.2 water, not renormalised. */
     private static double[] benchmarkComposition() {
         var catalog=MaterialCatalog.bundled();
-        var z=Arrays.copyOf(com.wormzjl.icheme.science.material.MaterialRuntime.with(catalog,FluidPresetCatalog.NETWORK_PACKAGE,
-                ()->com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo(FluidPresetCatalog.NETWORK_PACKAGE)
-                        .crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions()),
-                com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.conservedCount());
+        var z=com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.worldCrude();
         z[com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.nitrogenIndex()]=.1;z[com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.waterIndex()]=.2;
         return z;
     }
@@ -704,7 +702,7 @@ class IslandCertificateTest {
                 sha.update(s.status().getBytes(java.nio.charset.StandardCharsets.UTF_8));
                 for(var node:s.graph().reservoirs()) {
                     put.accept(node.id());for(double n:node.inventory().moles())bits.accept(n);bits.accept(node.inventory().internalEnergy());
-                    var state=node.state();for(double v:new double[]{state.temperature(),state.pressure(),state.mass(),state.vaporVolume(),state.liquidVolume(),state.waterVolume()})bits.accept(v);
+                    var state=node.state();for(double v:new double[]{state.temperature(),state.pressure(),state.mass(),state.vaporVolume(),TestPhases.liquidVolume(state),TestPhases.waterVolume(state)})bits.accept(v);
                 }
                 var result=s.lastResult().orElseThrow();
                 for(double q:result.averageMassFlows())bits.accept(q);

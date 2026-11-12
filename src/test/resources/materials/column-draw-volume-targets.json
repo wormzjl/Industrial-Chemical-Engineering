@@ -1,42 +1,42 @@
 {
   "source_commit": "8396d8d98",
   "reference": "additive standard-liquid volume from selected component densities; accepted old-basis classical results",
-  "recaptured": "2026-11-05, batch 2026-11-04-open-thermo-data O3: captured on the four generated grades (their client templates on the default column), classical, prescribed drop; parent 8396d8d98 plus the O3 data; re-captured 2026-11-05 for the network's water (E30 of the same batch, wet formulation r32/r33): moves up to 3.9e-4; re-captured 2026-11-05 for condenser carry-over (E31 of the same batch, wet formulation r34/r35): heavy crude and oil-sand dilbit, whose tray 1 now carries its free water over, move up to 8.5e-3, light and medium are unchanged",
+  "recaptured": "2026-11-05, batch 2026-11-04-open-thermo-data O3: captured on the four generated grades (their client templates on the default column), classical, prescribed drop; parent 8396d8d98 plus the O3 data; re-captured 2026-11-05 for the network's water (E30 of the same batch, wet formulation r32/r33): moves up to 3.9e-4; re-captured 2026-11-05 for condenser carry-over (E31 of the same batch, wet formulation r34/r35): heavy crude and oil-sand dilbit, whose tray 1 now carries its free water over, move up to 8.5e-3, light and medium are unchanged; re-captured 2026-11-12 for the water datum on IF97's latent heat (W3b of batch 2026-11-11-aqueous-solvents, water record r4): the six side liquids of heavy_crude and oil_sand_dilbit move -3.1e-5 to -8.4e-5; re-captured 2026-11-12 for the derived pairs in the column (W5 D1 of batch 2026-11-11-aqueous-solvents: methane and ethane take E-PPR78 pairs with the cuts): the twelve side liquids move +2.4e-6 to +1.5e-4",
   "targets": [
     {
       "preset": "light_crude",
       "package": "icheme:tjl20_methane",
       "targets_m3_per_second": {
-        "side_liquid_tray_10": 0.03665887950860499,
-        "side_liquid_tray_18": 0.03466729841141742,
-        "side_liquid_tray_28": 0.012536517481299423
+        "side_liquid_tray_10": 0.036659581283117776,
+        "side_liquid_tray_18": 0.034668792193494787,
+        "side_liquid_tray_28": 0.012536547408753049
       }
     },
     {
       "preset": "medium_crude",
       "package": "icheme:tjl20_methane",
       "targets_m3_per_second": {
-        "side_liquid_tray_10": 0.023403721975614918,
-        "side_liquid_tray_18": 0.02760088824607825,
-        "side_liquid_tray_28": 0.012728311212685197
+        "side_liquid_tray_10": 0.023404985339283754,
+        "side_liquid_tray_18": 0.027601739440785613,
+        "side_liquid_tray_28": 0.012729266709020708
       }
     },
     {
       "preset": "heavy_crude",
       "package": "icheme:tjl20_methane",
       "targets_m3_per_second": {
-        "side_liquid_tray_10": 0.017245590155231548,
-        "side_liquid_tray_18": 0.0186932608312932,
-        "side_liquid_tray_28": 0.008745076832022261
+        "side_liquid_tray_10": 0.017245155298190283,
+        "side_liquid_tray_18": 0.01869268491213373,
+        "side_liquid_tray_28": 0.008744890877895659
       }
     },
     {
       "preset": "oil_sand_dilbit",
       "package": "icheme:tjl20_methane",
       "targets_m3_per_second": {
-        "side_liquid_tray_10": 0.010120141802549117,
-        "side_liquid_tray_18": 0.009742322546532666,
-        "side_liquid_tray_28": 0.007111529683656045
+        "side_liquid_tray_10": 0.010120432667069733,
+        "side_liquid_tray_18": 0.009743031725382555,
+        "side_liquid_tray_28": 0.007111973299565689
       }
     }
   ]

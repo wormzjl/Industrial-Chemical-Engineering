@@ -256,7 +256,7 @@ final class G3Support {
         var contract = new PhaseContract("g3:" + label, identity, evaluator.components(), WaterParticipation.NONE, null,
                 Set.of(PhaseCompetition.FLUID_ONLY), Set.of(), PhaseDomain.open("g3:" + label, evaluator.components()),
                 new EquilibriumResult.Coverage(EquilibriumResult.CoverageGrade.RESEARCH_ONLY, "G3 probe, open domain"));
-        return new FluidTpEquilibrium(contract, evaluator, FluidTpEquilibrium.Settings.DEFAULT, null);
+        return new FluidTpEquilibrium(contract, evaluator, FluidTpEquilibrium.Settings.DEFAULT);
     }
 
     /** The bundled network package's PR78 components and constant kij with zero translations and stub ideal gases. */

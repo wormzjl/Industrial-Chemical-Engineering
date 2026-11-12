@@ -60,7 +60,7 @@ final class SheetSizingTest {
     private static final double[] DRY_CRUDE = dryCrude();
 
     private static double[] dryCrude() {
-        var crude = Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo(PACKAGE).crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(), AXIS.size());
+        var crude = com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.worldCrude();
         crude[WATER] = 0;
         return crude;
     }

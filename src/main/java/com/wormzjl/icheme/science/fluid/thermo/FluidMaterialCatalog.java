@@ -13,7 +13,8 @@ public final class FluidMaterialCatalog {
     public static final String NITROGEN="Nitrogen";
     private FluidMaterialCatalog() {}
     public static String networkPackage(MaterialCatalog catalog){return catalog.presets().network().packageId();}
-    public static int conservedCount(){return MaterialRuntime.current().requirePackage(networkPackage(MaterialRuntime.current())).components().size()+1;}
+    /** The network's conserved basis size: its package's components with water once, last (W3b: the package may list Water). */
+    public static int conservedCount(){return MaterialRuntime.current().conservedComponents(networkPackage(MaterialRuntime.current())).size();}
     public static int nitrogenIndex(){return new MaterialAxis(MaterialRuntime.current().requirePackage(networkPackage(MaterialRuntime.current())).components()).requireIndex(NITROGEN);}
     public static int waterIndex(){return conservedCount()-1;}
 }

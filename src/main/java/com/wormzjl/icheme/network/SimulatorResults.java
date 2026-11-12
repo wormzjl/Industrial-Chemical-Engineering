@@ -38,8 +38,9 @@ import org.jetbrains.annotations.Nullable;
  */
 public final class SimulatorResults {
     /** 2: a report carries its time-series readings ({@link Report.Series}, batch 2026-11-09-batch-distiller, W7); 3: a column
-     * display's tray hydraulics carry their total dry drop (batch 2026-11-10-column-failure-modes, W3.3). */
-    public static final int FORMAT = 3;
+     * display's tray hydraulics carry their total dry drop (batch 2026-11-10-column-failure-modes, W3.3); 4: a stream's state
+     * is its vapour, oil and aqueous amounts (batch 2026-11-11-aqueous-solvents, W3b). */
+    public static final int FORMAT = 4;
     private static final int MAX_LIST = 4096, MAX_TEXT = 512, MAX_TOKEN = Short.MAX_VALUE, MAX_ARGUMENTS = 16, SAME_SHEET = 0, SAME_AS_RAN = 1, OWN_SHEET = 2;
 
     private SimulatorResults() {
@@ -311,9 +312,9 @@ public final class SimulatorResults {
         var state = stream.state();
         b.writeBoolean(state != null);
         if (state == null) return;
-        doubles(b, state.liquidView());
-        doubles(b, state.vaporView());
-        for (double value : new double[]{state.waterLiquid(), state.waterVapor(), state.hydrocarbonPartialPressure()}) b.writeDouble(value);
+        doubles(b, state.vaporAmountsView());
+        doubles(b, state.liquidAmountsView());
+        doubles(b, state.aqueousAmountsView());
         write(b, state.solids().populations(), (o, population) -> {
             var material = population.material();
             text(o, material.id());
@@ -341,10 +342,9 @@ public final class SimulatorResults {
         double temperature = b.readDouble(), pressure = b.readDouble(), enthalpy = b.readDouble(), mass = b.readDouble();
         var amounts = doubles(b);
         if (!b.readBoolean()) return new FlowStream(temperature, pressure, amounts, enthalpy, mass, null);
-        double[] liquid = doubles(b), vapor = doubles(b);
-        double waterLiquid = b.readDouble(), waterVapor = b.readDouble(), partial = b.readDouble();
+        double[] vapor = doubles(b), liquid = doubles(b), aqueous = doubles(b);
         var populations = list(b, o -> new SolidInventory.Population(material(o), new ParticleSize(text(o)), o.readDouble()));
-        var state = model.state(temperature, pressure, liquid, vapor, waterLiquid, waterVapor, partial);
+        var state = model.adoptingState(temperature, pressure, vapor, liquid, aqueous, null);
         return new FlowStream(temperature, pressure, amounts, enthalpy, mass, populations.isEmpty() ? state : state.withSolids(new SolidInventory(populations)));
     }
 }

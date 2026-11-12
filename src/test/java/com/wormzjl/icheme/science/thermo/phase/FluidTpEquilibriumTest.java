@@ -37,7 +37,7 @@ class FluidTpEquilibriumTest {
     @Test
     void methaneNitrogenSplitsAtTheSixtyStabilityStates() {
         var evaluator = PhaseTestSupport.methaneNitrogen();
-        var service = new FluidTpEquilibrium(PhaseTestSupport.openContract(evaluator), evaluator, FluidTpEquilibrium.Settings.DEFAULT, null);
+        var service = new FluidTpEquilibrium(PhaseTestSupport.openContract(evaluator), evaluator, FluidTpEquilibrium.Settings.DEFAULT);
         var workspace = service.newWorkspace();
         var independent = new TangentPlaneStability(PhaseTestSupport.classicalKernel("Methane", "Nitrogen"), TangentPlaneStability.Settings.DEFAULT);
         int states = 0;
@@ -163,7 +163,7 @@ class FluidTpEquilibriumTest {
         // Above its critical point pure nitrogen is a supercritical fluid: on the open research contract, and since WP7
         // (nitrogen and the network envelope to 10 MPa) on the network contract too.
         var evaluator = PhaseTestSupport.methaneNitrogen();
-        var open = new FluidTpEquilibrium(PhaseTestSupport.openContract(evaluator), evaluator, FluidTpEquilibrium.Settings.DEFAULT, null);
+        var open = new FluidTpEquilibrium(PhaseTestSupport.openContract(evaluator), evaluator, FluidTpEquilibrium.Settings.DEFAULT);
         var supercritical = open.tp(EquilibriumRequest.tp(150.0, 6.0e6, BINARY, new double[] {0.0, 1.0}, PhaseCompetition.FLUID_ONLY));
         assertEquals(Classification.SUPERCRITICAL_FLUID, supercritical.classification());
         assertEquals(PhaseKind.FLUID, supercritical.phases().get(0).kind());
@@ -190,7 +190,7 @@ class FluidTpEquilibriumTest {
         var service = PhaseTestSupport.networkService();
         var contract = service.contract();
         double[] z = PhaseTestSupport.crudeWithNitrogen(contract);
-        assertEquals(21, z.length);
+        assertEquals(20, z.length);
         var workspace = service.newWorkspace();
         var two = service.tp(EquilibriumRequest.tp(350.0, 0.5e6, contract.components(), z, PhaseCompetition.FLUID_ONLY), workspace);
         assertEquals(Status.CONVERGED, two.status(), two.toString());
@@ -199,7 +199,6 @@ class FluidTpEquilibriumTest {
         double defect = two.conservationDefect(z);
         assertTrue(defect < 1.0e-13, "defect " + defect);
         assertTrue(two.diagnostics().fugacityResidual() < 1.0e-9, "fugacity " + two.diagnostics().fugacityResidual());
-        assertEquals(0.0, two.phases().get(0).amount(contract.waterIndex()));
         assertEquals(CoverageGrade.ESTIMATED_DECLARED_ERROR, two.coverage().grade());
         assertTrue(two.coverage().evidence().contains("solid phases not assessed"));
         // Aggregates are the phase sums.
@@ -269,13 +268,6 @@ class FluidTpEquilibriumTest {
         var contract = service.contract();
         List<EquilibriumResult> refused = new ArrayList<>();
 
-        // Free water is in the contract but not yet in this service.
-        var water = service.tp(EquilibriumRequest.tp(300.0, 1.0e6, contract.components(), PhaseTestSupport.over(contract, "Methane", 1.0, "Water", 1.0),
-                PhaseCompetition.FLUID_ONLY));
-        assertEquals(UnsupportedReason.NOT_IMPLEMENTED, water.reason());
-        assertTrue(water.detail().contains("P3"));
-        refused.add(water);
-
         // A crystal the package is not qualified for: refused, not answered fluid-only.
         var crystal = service.tp(EquilibriumRequest.tp(300.0, 1.0e6, contract.components(), PhaseTestSupport.over(contract, "Methane", 1.0),
                 PhaseCompetition.withCrystals("co2_solid_i")));
@@ -295,20 +287,13 @@ class FluidTpEquilibriumTest {
         var dense = service.tp(EquilibriumRequest.tp(350.0, 12.0e6, contract.components(), PhaseTestSupport.over(contract, "Methane", 1.0), PhaseCompetition.FLUID_ONLY));
         assertEquals(Status.CONVERGED, dense.status(), dense.toString());
         assertEquals(CoverageGrade.EXTRAPOLATED, dense.coverage().grade());
-        // Free water below its triple point without a water model: unimplemented, as above it.
-        var ice = service.tp(EquilibriumRequest.tp(250.0, 1.0e6, contract.components(), PhaseTestSupport.over(contract, "Nitrogen", 1.0, "Water", 2.0),
-                PhaseCompetition.FLUID_ONLY));
-        assertEquals(UnsupportedReason.NOT_IMPLEMENTED, ice.reason());
-        refused.add(ice);
-
-        // PH and UV (P3 WP6b) run the same contract checks first; free water without a water model stays unimplemented.
-        var ph = service.ph(EquilibriumRequest.ph(1.0e6, -1.0e4, contract.components(), PhaseTestSupport.over(contract, "Methane", 1.0, "Water", 1.0),
-                PhaseCompetition.FLUID_ONLY));
-        assertEquals(UnsupportedReason.NOT_IMPLEMENTED, ph.reason());
-        assertTrue(ph.detail().contains("FreeWaterModel"));
-        var uv = service.uv(EquilibriumRequest.uv(-1.0e4, 1.0e-3, contract.components(), PhaseTestSupport.over(contract, "Methane", 1.0, "Water", 1.0),
-                PhaseCompetition.FLUID_ONLY));
-        assertEquals(UnsupportedReason.NOT_IMPLEMENTED, uv.reason());
+        // PH and UV (P3 WP6b) run the same contract checks first.
+        var ph = service.ph(EquilibriumRequest.ph(1.0e6, -1.0e4, contract.components(), PhaseTestSupport.over(contract, "Methane", 1.0),
+                PhaseCompetition.withCrystals("co2_solid_i")));
+        assertEquals(UnsupportedReason.PHASE_COMPETITION_NOT_QUALIFIED, ph.reason());
+        var uv = service.uv(EquilibriumRequest.uv(-1.0e4, 1.0e-3, contract.components(), PhaseTestSupport.over(contract, "Methane", 1.0),
+                PhaseCompetition.withCrystals("co2_solid_i")));
+        assertEquals(UnsupportedReason.PHASE_COMPETITION_NOT_QUALIFIED, uv.reason());
         refused.add(ph);
         refused.add(uv);
         assertThrows(IllegalArgumentException.class, () -> service.tp(EquilibriumRequest.ph(1.0e6, 0.0, contract.components(), PhaseTestSupport.over(contract, "Methane", 1.0), PhaseCompetition.FLUID_ONLY)));
@@ -331,25 +316,24 @@ class FluidTpEquilibriumTest {
         var methane = pkg.properties().get(pkg.components().indexOf("Methane")).pr();
         List<ThermoComponent> components = List.of(
                 new ThermoComponent("Methane", methane.criticalTemperature(), methane.criticalPressure(), methane.acentricFactor(), 0.0160428),
-                new ThermoComponent("Ammonia", 405.4, 11.333e6, 0.256, 0.017031));
-        var evaluator = new CubicPhaseEvaluator("test:ammonia", components, new double[2][2], new double[2],
-                List.of(StubIdealGas.constant(35.7, 100, 1000), StubIdealGas.constant(35.1, 100, 1000)));
+                new ThermoComponent("Ammonia", 405.4, 11.333e6, 0.256, 0.017031),
+                new ThermoComponent("Water", 647.096, 22.064e6, 0.3443, 0.018015));
+        var evaluator = new CubicPhaseEvaluator("test:ammonia", components, new double[3][3], new double[3],
+                List.of(StubIdealGas.constant(35.7, 100, 1000), StubIdealGas.constant(35.1, 100, 1000), StubIdealGas.constant(33.6, 100, 1000)));
         List<String> basis = List.of("Methane", "Ammonia", "Water");
         var identity = new ThermoIdentity("test:ammonia", evaluator.family(), ThermoIdentity.NO_SPINE,
-                ThermoIdentity.SEPARATE_FREE_WATER_FORMULATION + ":test");
-        var contract = new PhaseContract("test:ammonia", identity, basis, WaterParticipation.SEPARATE_FREE_WATER, "Water",
+                ThermoIdentity.WATER_IN_EOS_FORMULATION + ":test");
+        var contract = new PhaseContract("test:ammonia", identity, basis, WaterParticipation.IN_EQUATION_OF_STATE, "Water",
                 Set.of(PhaseCompetition.FLUID_ONLY, PhaseCompetition.withCrystals("ammonia_solid")), Set.of("Ammonia"),
                 PhaseDomain.open("test:ammonia", basis),
                 new EquilibriumResult.Coverage(CoverageGrade.RESEARCH_ONLY, "test"));
-        var service = new FluidTpEquilibrium(contract, evaluator, FluidTpEquilibrium.Settings.DEFAULT, null);
+        var service = new FluidTpEquilibrium(contract, evaluator, FluidTpEquilibrium.Settings.DEFAULT);
         var withWater = service.tp(EquilibriumRequest.tp(300.0, 1.0e6, basis, new double[] {1.0, 0.2, 1.0}, PhaseCompetition.FLUID_ONLY));
         assertEquals(UnsupportedReason.WATER_CHEMISTRY_NOT_MODELLED, withWater.reason());
         assertTrue(withWater.detail().contains("Ammonia"));
         var dry = service.tp(EquilibriumRequest.tp(300.0, 1.0e6, basis, new double[] {1.0, 0.2, 0.0}, PhaseCompetition.FLUID_ONLY));
         assertEquals(Status.CONVERGED, dry.status());
         assertEquals(CoverageGrade.RESEARCH_ONLY, dry.coverage().grade());
-        var waterWithoutAmmonia = service.tp(EquilibriumRequest.tp(300.0, 1.0e6, basis, new double[] {1.0, 0.0, 1.0}, PhaseCompetition.FLUID_ONLY));
-        assertEquals(UnsupportedReason.NOT_IMPLEMENTED, waterWithoutAmmonia.reason());
         var qualifiedCrystal = service.tp(EquilibriumRequest.tp(300.0, 1.0e6, basis, new double[] {1.0, 0.2, 0.0},
                 PhaseCompetition.withCrystals("ammonia_solid")));
         assertEquals(UnsupportedReason.NOT_IMPLEMENTED, qualifiedCrystal.reason());
@@ -358,18 +342,18 @@ class FluidTpEquilibriumTest {
                 PhaseCompetition.withCrystals("ammonia_solid", "methane_solid")));
         assertEquals(UnsupportedReason.PHASE_COMPETITION_NOT_QUALIFIED, otherCrystal.reason());
 
-        // The contract refuses what no P2 water participation can back.
+        // The contract refuses what no water participation can back.
         assertThrows(IllegalArgumentException.class, () -> new PhaseContract("x", identity, basis, WaterParticipation.NONE,
                 "Water", Set.of(PhaseCompetition.FLUID_ONLY), Set.of(), PhaseDomain.open("x", basis),
                 new EquilibriumResult.Coverage(CoverageGrade.RESEARCH_ONLY, "")));
         assertThrows(IllegalArgumentException.class, () -> new PhaseContract("x", identity, basis,
-                WaterParticipation.SEPARATE_FREE_WATER, "Water", Set.of(PhaseCompetition.FLUID_ONLY), Set.of("Water"),
+                WaterParticipation.IN_EQUATION_OF_STATE, "Water", Set.of(PhaseCompetition.FLUID_ONLY), Set.of("Water"),
                 PhaseDomain.open("x", basis), new EquilibriumResult.Coverage(CoverageGrade.RESEARCH_ONLY, "")));
         assertThrows(IllegalArgumentException.class, () -> new PhaseContract("x", identity, basis,
-                WaterParticipation.SEPARATE_FREE_WATER, "Water", Set.of(PhaseCompetition.FLUID_ONLY), Set.of(),
+                WaterParticipation.IN_EQUATION_OF_STATE, "Water", Set.of(PhaseCompetition.FLUID_ONLY), Set.of(),
                 PhaseDomain.open("x", List.of("Methane", "Water")), new EquilibriumResult.Coverage(CoverageGrade.RESEARCH_ONLY, "")));
         assertThrows(IllegalArgumentException.class, () -> new PhaseContract("x", identity, basis,
-                WaterParticipation.SEPARATE_FREE_WATER, "Water", Set.of(PhaseCompetition.FLUID_ONLY), Set.of(),
+                WaterParticipation.IN_EQUATION_OF_STATE, "Water", Set.of(PhaseCompetition.FLUID_ONLY), Set.of(),
                 PhaseDomain.open("x", basis), new EquilibriumResult.Coverage(CoverageGrade.UNAVAILABLE, "")));
     }
 
@@ -377,7 +361,7 @@ class FluidTpEquilibriumTest {
     @Test
     void repeatedCallsAreBitwiseIdentical() {
         var binaryEvaluator = PhaseTestSupport.methaneNitrogen();
-        var binary = new FluidTpEquilibrium(PhaseTestSupport.openContract(binaryEvaluator), binaryEvaluator, FluidTpEquilibrium.Settings.DEFAULT, null);
+        var binary = new FluidTpEquilibrium(PhaseTestSupport.openContract(binaryEvaluator), binaryEvaluator, FluidTpEquilibrium.Settings.DEFAULT);
         var network = PhaseTestSupport.networkService();
         double[] crude = PhaseTestSupport.crudeWithNitrogen(network.contract());
         double[] nitrogen = new double[network.contract().components().size()];

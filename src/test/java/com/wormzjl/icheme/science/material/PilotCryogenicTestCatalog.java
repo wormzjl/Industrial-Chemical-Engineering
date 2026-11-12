@@ -14,7 +14,8 @@ import java.util.function.Consumer;
  * {@code P3_PILOT_ENGINE_PLAN.md} section 1.3) over the bundled material resources. Since O5 of batch
  * 2026-11-04-open-thermo-data (owner decision E25: once CO2 is in the world list the pilot is a test reference only) its
  * records live in this test overlay, {@code /materials/pilot-cryogenic/index.json}: the package, its method, the E-PPR78
- * interactions and group matrix, the four {@code pilot_*} property records and the four reference spines, with the
+ * interactions, the four {@code pilot_*} property records and the four reference spines (the E-PPR78 group matrix
+ * {@code icheme:eppr78_2022} is bundled again since W2a of batch 2026-11-11-aqueous-solvents), with the
  * CarbonDioxide compound record naming {@code icheme:pilot_carbon_dioxide} as its default dataset again (the game's names
  * its own, {@code icheme:chemsep_carbon_dioxide}; the pilot package lists CarbonDioxide by that default). The CO2-I crystal
  * stays bundled: {@code icheme:refinery} declares it. {@link #withPilot()} is the bundled catalog with these records and

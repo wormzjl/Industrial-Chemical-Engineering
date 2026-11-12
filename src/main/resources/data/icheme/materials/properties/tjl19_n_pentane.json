@@ -70,6 +70,26 @@
     "source": "Hess's law on this record's thermochemistry (chemsep-8.3-hf-r1): the formula burnt to CO2, H2O (gas), SO2 and N2 on the ideal-gas heats of formation at 298.15 K of icheme:chemsep_carbon_dioxide (chemsep-8.3-hf-r1), icheme:water (chemsep-8.3-hf-r1) and icheme:chemsep_sulfur_dioxide (chemsep-8.3-hf-r1). Computed by tools/heating-values/heating-values.mjs. Read by a fired heater's burners.",
     "revision": "hess-lhv-r1"
   },
+  "group_counts": {
+    "modified-unifac-dortmund": {
+      "counts": {
+        "CH3": 2,
+        "CH2": 3
+      },
+      "estimated": false,
+      "source": "Modified UNIFAC group counts of ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"N-pentane\" (ChemSep index 7, CAS 109-66-0), group numbers mapped to the names of the modified-unifac-dortmund group_interactions record (dwsim-10.2.5-modfac-r1). Data for the pairs derived from group counts.",
+      "revision": "chemsep-8.3-modfac-r1"
+    },
+    "eppr78-2022": {
+      "counts": {
+        "CH3": 2,
+        "CH2": 3
+      },
+      "estimated": false,
+      "source": "PPR78 group counts of ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"N-pentane\" (ChemSep index 7, CAS 109-66-0), group numbers mapped to the names of the eppr78-2022 group_interactions record (eppr78-2022-si-table-s4-r2). Data for the pairs derived from group counts.",
+      "revision": "chemsep-8.3-ppr78-r1"
+    }
+  },
   "viscosity": {
     "liquid": {
       "type": "log_table",

@@ -174,44 +174,59 @@ public final class GroupContributionInteractions {
             if (!spine.groupScheme().equals(matrix.scheme()))
                 throw new IllegalArgumentException("rule: scheme mismatch for " + components.get(i) + ": spine " + spine.id() + " uses groups.scheme "
                         + spine.groupScheme() + ", group_interactions " + matrix.id() + " is scheme " + matrix.scheme());
-            int total = 0;
-            for (int count : spine.groups().values()) total += count;
-            var alpha = new TreeMap<String, Double>();
-            for (var entry : spine.groups().entrySet()) {
-                if (!matrix.groups().contains(entry.getKey()))
-                    throw new IllegalArgumentException("rule: unknown group " + entry.getKey() + " of " + components.get(i) + " (spine " + spine.id()
-                            + ") in group_interactions " + matrix.id());
-                alpha.put(entry.getKey(), entry.getValue() / (double) total);
-            }
-            fractions.add(alpha);
+            fractions.add(fractions(matrix, spine.groups(), components.get(i) + " (spine " + spine.id() + ")"));
         }
         var pairs = new ArrayList<Pair>();
         for (int i = 0; i < n; i++) for (int j = i + 1; j < n; j++) {
             if (constantPairs[i][j]) continue;
-            // Groups of either molecule in the matrix's number order, so the term order is fixed by the record.
-            var groups = new ArrayList<String>();
-            for (String group : matrix.groups()) if (fractions.get(i).containsKey(group) || fractions.get(j).containsKey(group)) groups.add(group);
-            var terms = new ArrayList<Term>();
-            for (int k = 0; k < groups.size(); k++) for (int l = k + 1; l < groups.size(); l++) {
-                String gk = groups.get(k), gl = groups.get(l);
-                double dk = fractions.get(i).getOrDefault(gk, 0.0) - fractions.get(j).getOrDefault(gk, 0.0);
-                double dl = fractions.get(i).getOrDefault(gl, 0.0) - fractions.get(j).getOrDefault(gl, 0.0);
-                double weight = -(dk * dl);
-                if (weight == 0.0) continue;
-                var found = matrix.parameters(gk, gl);
-                if (found.isEmpty()) throw new IllegalArgumentException("rule: unresolved group pair " + gk + " / " + gl
-                        + " for " + components.get(i) + " / " + components.get(j) + ": absent from group_interactions " + matrix.id());
-                var parameters = found.get();
-                if (parameters.aMegapascal() == 0.0) {
-                    if (parameters.bMegapascal() == 0.0) continue;
-                    throw new IllegalArgumentException("rule: undefined term " + gk + " / " + gl + " for " + components.get(i) + " / " + components.get(j)
-                            + ": A_kl = 0 with B_kl = " + parameters.bMegapascal() + " MPa in group_interactions " + matrix.id());
-                }
-                terms.add(new Term(gk, gl, parameters.aMegapascal(), parameters.bMegapascal(), weight));
-            }
-            pairs.add(new Pair(i, j, terms));
+            pairs.add(new Pair(i, j, terms(matrix, fractions.get(i), fractions.get(j), components.get(i) + " / " + components.get(j))));
         }
         return new GroupContributionInteractions(rule, matrix.scheme(), matrix.id(), matrix.revision(), n, pairs);
+    }
+
+    /**
+     * The group fractions alpha_ik of one molecule: each count over the molecule's total. Refused ("rule: unknown group")
+     * when the matrix lacks a group; {@code label} names the molecule.
+     */
+    static Map<String, Double> fractions(GroupInteractionMatrix matrix, Map<String, Integer> counts, String label) {
+        int total = 0;
+        for (int count : counts.values()) total += count;
+        var alpha = new TreeMap<String, Double>();
+        for (var entry : counts.entrySet()) {
+            if (!matrix.groups().contains(entry.getKey()))
+                throw new IllegalArgumentException("rule: unknown group " + entry.getKey() + " of " + label + " in group_interactions " + matrix.id());
+            alpha.put(entry.getKey(), entry.getValue() / (double) total);
+        }
+        return alpha;
+    }
+
+    /**
+     * The terms of E_ij for two molecules' group fractions, groups in the matrix's number order so the term order is fixed
+     * by the record. Refused ("rule: unresolved group pair") when a group pair with a nonzero weight is absent from the
+     * matrix, and for A_kl = 0 with B_kl != 0; {@code label} names the pair.
+     */
+    static List<Term> terms(GroupInteractionMatrix matrix, Map<String, Double> first, Map<String, Double> second, String label) {
+        var groups = new ArrayList<String>();
+        for (String group : matrix.groups()) if (first.containsKey(group) || second.containsKey(group)) groups.add(group);
+        var terms = new ArrayList<Term>();
+        for (int k = 0; k < groups.size(); k++) for (int l = k + 1; l < groups.size(); l++) {
+            String gk = groups.get(k), gl = groups.get(l);
+            double dk = first.getOrDefault(gk, 0.0) - second.getOrDefault(gk, 0.0);
+            double dl = first.getOrDefault(gl, 0.0) - second.getOrDefault(gl, 0.0);
+            double weight = -(dk * dl);
+            if (weight == 0.0) continue;
+            var found = matrix.parameters(gk, gl);
+            if (found.isEmpty()) throw new IllegalArgumentException("rule: unresolved group pair " + gk + " / " + gl
+                    + " for " + label + ": absent from group_interactions " + matrix.id());
+            var parameters = found.get();
+            if (parameters.aMegapascal() == 0.0) {
+                if (parameters.bMegapascal() == 0.0) continue;
+                throw new IllegalArgumentException("rule: undefined term " + gk + " / " + gl + " for " + label
+                        + ": A_kl = 0 with B_kl = " + parameters.bMegapascal() + " MPa in group_interactions " + matrix.id());
+            }
+            terms.add(new Term(gk, gl, parameters.aMegapascal(), parameters.bMegapascal(), weight));
+        }
+        return terms;
     }
 
     @Override public String toString() { return "GroupContributionInteractions[" + rule + ", " + scheme + ", " + pairs.size() + " pairs]"; }
