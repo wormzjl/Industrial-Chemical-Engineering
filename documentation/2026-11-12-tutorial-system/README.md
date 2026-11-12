@@ -103,10 +103,13 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
   1x (exchanger and kettle, grate boiler and fixed-bed gasifier) wait for their models.
 - O2: the charge step names the Fluid converter (bundled rules: `#c:crude_oil` of TFMG and PneumaticCraft, `ad_astra:oil`).
   A survival player without one of those mods has no crude source until an extraction system exists.
-- D4: the small column. The datasheets are in `tmp/tutorial-renders/p4/` of this worktree. Open for the owner: which
-  candidate (recommended: C variation 1); the yellow "larger than needed" pumps and exchangers (0.025 and 0.04 m pumps and
-  a 0.25 m shell in the catalogue, a unit of about 195 kmol/h, or a tutorial note); the bottoms as fuel for B and C; why
-  Size all keeps S-6 at 0.1 m (SMALL_COLUMN_CANDIDATES_REVIEW.md).
+- D4: decided 2026-11-12, candidate C (variation 1): 14 trays, 1.0 m, one middle draw (kerosene and diesel together),
+  one pumparound above it, reflux 1.5, heater outlet 390 °C, V-101 at 3.2 bar. Not yet a preset or a bundled sheet.
+  Still open for the owner: the yellow "larger than needed" pumps and exchangers (a tutorial note, a unit of about
+  195 kmol/h, or smaller catalogue sizes); the bottoms as fuel for the heater (the sheet draws no line for it); why Size
+  all keeps S-6 at 0.1 m (SMALL_COLUMN_CANDIDATES_REVIEW.md).
+- Chapter 3 adds a column to the still on crude: the still law answers a trayed still on crude light ends as a pot
+  still (the still batch's option B is open). Measure a trayed run before the chapter is written.
 - P0: the owner's one in-game check of the scene player (P0_SCENE_PLAYER.md, last section).
 - P1: the owner's review of the English text and the renders; the in-game rows of P1_GUIDE_AND_HELP.md; the Field
   Guide's final icon.

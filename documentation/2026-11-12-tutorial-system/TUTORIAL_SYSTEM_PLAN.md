@@ -232,7 +232,7 @@ P3 touches no file of P0 to P2 but the lang file and can run beside them.
 | D1 | Ponder or own | Owner, 2026-11-12: own if Ponder is not sufficient. It is not (section 2): own framework |
 | D2 | Progress store | Vanilla advancements (as recommended) |
 | D3 | How the guide starts | A Field Guide item at first join, plus a key (as recommended) |
-| D4 | The small column | Candidate B if it converges and fits; the owner picks from the datasheets |
+| D4 | The small column | Decided 2026-11-12: candidate C (14 trays, one middle draw, one pumparound; SMALL_COLUMN_CANDIDATES_REVIEW.md) |
 | D5 | Units | The first step offers °C, bar, m³/h, kg/h (as recommended) |
 | D6 | The first crude | Owner: a converter from a Forge fluid, later an extraction system; see section 5 |
 | D7 | First batch | P0 to P2, then review (as recommended) |
