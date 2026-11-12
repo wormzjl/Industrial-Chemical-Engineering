@@ -69,7 +69,9 @@ public final class StillBatch {
         /** The pot's bubble point reached {@link BatchStill#OVERHEAT} first: the firing is cut. */
         OVERHEAT,
         /** The steps ran out first. */
-        UNFINISHED
+        UNFINISHED,
+        /** The pot's liquid settled into two liquids first (W4): the batch stops there and the rest is residue. */
+        SETTLED
     }
 
     /**
@@ -209,6 +211,11 @@ public final class StillBatch {
             }
             if (s.alarm(BatchStill.Status.OVERHEAT) && !(s.heat() > 0)) {
                 finish = Finish.OVERHEAT;
+                break;
+            }
+            // The column's pot split states the pot (no extra flash): a pot that settles is past what the sheet's still models.
+            if (removed > 0 && s.split() != null && s.split().twoLiquidPot()) {
+                finish = Finish.SETTLED;
                 break;
             }
             // The next step: about the target share distilled, or STEP_KELVIN of heating; the head never jumps more than HEAD_KELVIN.

@@ -208,7 +208,28 @@ final class BatchStillUnitTest {
         assertTrue(reading(run, "charge_heat") < 0, "the let-down gives heat off: " + reading(run, "charge_heat"));
     }
 
-    /** What the pot takes no part of, and what it cannot hold, it refuses whole. */
+    /**
+     * W4: a naphtha holding its dissolved water (1e-4 by mole, under its solubility) is one liquid: the sheet's still boils it on
+     * the column's basis, water in it, and refuses nothing. Water's volatility in the oil is high, so nearly all of it leaves with
+     * the first cut, and what entered left. (A wash cannot reach a sheet yet: the bundled network package holds no ethanol, and a
+     * network preset refuses a package whose water is a cubic component.)
+     */
+    @Test void aNaphthaWithItsDissolvedWaterIsOneLiquidAndBoils() {
+        var wet = new LinkedHashMap<>(NAPHTHA);
+        wet.put("Water", 1e-4);
+        var run = closes(still("{}", feed(300, 1.5e5, wet, FLOW)));
+        ledger(run);
+        assertFalse(noted(run, "still.water"));
+        assertFalse(noted(run, "still.settles"));
+        int w = AXIS.indexOf("Water");
+        double fed = run.streams().get("in").amounts()[w], first = run.streams().get("cut/1").amounts()[w], residue = run.streams().get("residue").amounts()[w];
+        System.out.printf(java.util.Locale.ROOT, "W4 wet naphtha on the sheet: water fed %.3e, first cut %.4f of it, residue %.2e of it%n", fed, first / fed, residue / fed);
+        assertTrue(fed > 0);
+        assertTrue(first > .5 * fed, "the dissolved water leaves early, with the light cut: " + first / fed);
+        assertTrue(residue < .01 * fed, "the residue keeps almost none of it: " + residue / fed);
+    }
+
+    /** What the pot takes no part of (free water under an oil), and what it cannot hold, it refuses whole. */
     @Test void thePotRefusesWaterAndMoreThanItHolds() {
         var wet = new LinkedHashMap<>(NAPHTHA);
         wet.put("Water", .05);
