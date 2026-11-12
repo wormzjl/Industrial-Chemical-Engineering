@@ -27,6 +27,8 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
   the films still_build and still_run, the card pot_temperature, the still criteria, decisions, derived lines, tests.
 - [P3_ITEMS_AND_JEI.md](P3_ITEMS_AND_JEI.md): phase P3, the 38 equipment reference items, their icons and lines, the
   Equipment guide tab, the JEI pages, the shape-only kinds, the gate.
+- [SMALL_COLUMN_CANDIDATES_REVIEW.md](SMALL_COLUMN_CANDIDATES_REVIEW.md): P4, the three small crude tower candidates
+  solved and sized on the crude unit at 1/64, the acceptance rules, the steam source, the recommendation (D4).
 
 ## History
 
@@ -67,6 +69,11 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
   COOLING_LIMITED; first drop a trace at 1.2 min, a new trickle line at 4.3 min); first and cut count liquid at the spout;
   the charge step names the Fluid converter; the card's cursor breaks round its words; items for the two converter kinds
   (40 items). `crude_barrel.json` unchanged. 29 classes (222 tests) pass. P2B_STILL_CHAPTER.md.
+- 2026-11-12: P4 small column candidates (`tools/tutorial-column`): A (42 trays / 64), B (20), C (14) each run once on the
+  crude unit at 1/64 with Size all. A needs 1.5 m (no nozzle row at 1.0 m), B floods at 1.0 m (Size all 1.5 m), C as asked
+  hits the draw wall and its variation 1 (pumparound above the draw) stands at 1.0 m. Every candidate is yellow on the
+  smallest pump and exchanger at 10 m³/h and red on the V-101 path. Recommended: C variation 1. No preset registered, no
+  production change, no test run. SMALL_COLUMN_CANDIDATES_REVIEW.md.
 
 ## Code areas (proposed)
 
@@ -90,7 +97,9 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
   1x (exchanger and kettle, grate boiler and fixed-bed gasifier) wait for their models.
 - O2: the charge step names the Fluid converter (bundled rules: `#c:crude_oil` of TFMG and PneumaticCraft, `ad_astra:oil`).
   A survival player without one of those mods has no crude source until an extraction system exists.
-- D4: the small column, chosen by the owner after the three candidates are solved.
+- D4: the small column. The datasheets are in `tmp/tutorial-renders/p4/` of this worktree. Open for the owner: which
+  candidate (recommended: C variation 1); the yellow pumps and exchangers at 10 m³/h (a smaller catalogue unit, or a
+  larger feed); V-101 at about 3.0 bar on the small sheet (SMALL_COLUMN_CANDIDATES_REVIEW.md).
 - P0: the owner's one in-game check of the scene player (P0_SCENE_PLAYER.md, last section).
 - P1: the owner's review of the English text and the renders; the in-game rows of P1_GUIDE_AND_HELP.md; the Field
   Guide's final icon.
