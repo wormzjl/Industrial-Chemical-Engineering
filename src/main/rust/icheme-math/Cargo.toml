@@ -1,0 +1,13 @@
+[package]
+name = "icheme-math"
+version = "0.1.0"
+description = "The Java mathematics of the IChemE column solver, bit for bit: fdlibm 5.3, DeterministicPow, a software fma and java.lang.Math semantics"
+edition.workspace = true
+rust-version.workspace = true
+license = "MIT AND SunPro"
+publish.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

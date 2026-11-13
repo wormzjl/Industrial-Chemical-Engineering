@@ -1,0 +1,39 @@
+# RUST_COLUMN_PORT_PLAN.md section 6, "No platform libm": these call the platform's C library (or an LLVM intrinsic
+# that lowers to it on a target without the instruction), whose results differ from fdlibm and between platforms.
+# Use icheme_math (fdlibm transliterations, the software fma, the Java semantics) instead. f64::sqrt and f64::abs stay
+# allowed: correctly rounded or exact on every target.
+disallowed-methods = [
+    { path = "f64::ln", reason = "platform libm; use icheme_math::log" },
+    { path = "f64::exp", reason = "platform libm; use icheme_math::exp" },
+    { path = "f64::exp_m1", reason = "platform libm; use icheme_math::expm1" },
+    { path = "f64::powf", reason = "platform libm; use icheme_math::pow" },
+    { path = "f64::powi", reason = "LLVM powi, not Java's pow; use icheme_math::pow" },
+    { path = "f64::cbrt", reason = "platform libm; use icheme_math::cbrt" },
+    { path = "f64::sin", reason = "platform libm; port fdlibm s_sin.c when needed" },
+    { path = "f64::cos", reason = "platform libm; use icheme_math::cos" },
+    { path = "f64::acos", reason = "platform libm; use icheme_math::acos" },
+    { path = "f64::tan", reason = "platform libm" },
+    { path = "f64::atan", reason = "platform libm" },
+    { path = "f64::sinh", reason = "platform libm" },
+    { path = "f64::mul_add", reason = "calls the C library without the fma target feature; use icheme_math::fma::fma" },
+    { path = "f64::hypot", reason = "platform libm" },
+    # Beyond the plan's list: Java semantics differ, or the operation lowers to a libm call on x86-64 without SSE4.1.
+    { path = "f64::max", reason = "Java's Math.max differs on NaN and signed zero; use icheme_math::java::max" },
+    { path = "f64::min", reason = "Java's Math.min differs on NaN and signed zero; use icheme_math::java::min" },
+    { path = "f64::clamp", reason = "Java's Math.clamp; use icheme_math::java::clamp" },
+    { path = "f64::floor", reason = "libm call on baseline x86-64; use icheme_math::java::floor" },
+    { path = "f64::ceil", reason = "libm call on baseline x86-64" },
+    { path = "f64::round", reason = "rounds half away from zero, not Java's half up; use icheme_math::java::round" },
+    { path = "f64::round_ties_even", reason = "libm call on baseline x86-64; use icheme_math::java::rint" },
+    { path = "f64::trunc", reason = "libm call on baseline x86-64; use an as cast" },
+    { path = "f64::log", reason = "platform libm" },
+    { path = "f64::log10", reason = "platform libm" },
+    { path = "f64::log2", reason = "platform libm" },
+    { path = "f64::ln_1p", reason = "platform libm" },
+    { path = "f64::exp2", reason = "platform libm" },
+    { path = "f64::asin", reason = "platform libm" },
+    { path = "f64::atan2", reason = "platform libm" },
+    { path = "f64::sin_cos", reason = "platform libm" },
+    { path = "f64::tanh", reason = "platform libm" },
+    { path = "f64::cosh", reason = "platform libm" },
+]

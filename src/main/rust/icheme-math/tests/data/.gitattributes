@@ -1,0 +1,2 @@
+# The bit tables are compared row by row; keep their bytes as generated (LF) on every checkout.
+*.txt text eol=lf

@@ -1,0 +1,2 @@
+# The known-answer table is compared slot by slot; keep its bytes as generated (LF) on every checkout.
+*.txt text eol=lf

@@ -1,0 +1,8 @@
+# The toolchain of the icheme-math workspace (batch 2026-11-13-codebase-review): the release installed on the
+# development machine, pinned so a build does not move with "stable". Only the Windows target is installed here; the
+# other targets of the port (RUST_COLUMN_PORT_PLAN.md section 8) are added when they are built.
+[toolchain]
+channel = "1.99.1"
+profile = "minimal"
+components = ["clippy", "rustfmt"]
+targets = ["x86_64-pc-windows-msvc"]

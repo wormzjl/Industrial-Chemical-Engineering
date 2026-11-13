@@ -1,0 +1,2 @@
+# Vendored crates are checked against .cargo-checksum.json byte for byte: store and check them out unchanged.
+* -text

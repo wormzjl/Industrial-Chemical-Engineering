@@ -1,0 +1,26 @@
+[package]
+name = "icheme-jni"
+version = "0.1.0"
+description = "The JNI library icheme_column of the IChemE column solver port: the handshake, the self-test and the band solve"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "icheme_column"
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+[dependencies]
+icheme-math = { path = "../icheme-math" }
+# Declarations of jni.h only, no dependencies of its own (0.4 pulls in a proc-macro crate). Vendored in ../vendor.
+jni-sys = "=0.3.0"
+
+# The only crate with unsafe code: the JNI boundary. Every unsafe block states why it holds.
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+disallowed_methods = "deny"
+undocumented_unsafe_blocks = "deny"

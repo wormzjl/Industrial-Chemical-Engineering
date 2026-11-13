@@ -1,0 +1,16 @@
+# Agent rules (AGENTS.md "Native code"): a cargo build uses at most 4 jobs; its output goes to the worktree's
+# build/native/cargo (git-ignored). Paths are relative to src/main/rust, the folder that holds .cargo/.
+[build]
+jobs = 4
+target-dir = "../../../build/native/cargo"
+
+# The one dependency (jni-sys) is vendored, so `--locked --offline` builds need no network (plan section 4).
+[source.crates-io]
+replace-with = "vendored-sources"
+
+[source.vendored-sources]
+directory = "vendor"
+
+# The C runtime is linked statically, so icheme_column.dll needs only the operating system (plan section 8).
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
