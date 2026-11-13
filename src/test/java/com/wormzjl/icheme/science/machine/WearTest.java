@@ -56,6 +56,26 @@ class WearTest {
         assertEquals(0, Wear.rate(1, 1, new Wear.Settings(false, 8, 40)), "switched off");
     }
 
+    /**
+     * N5 (M-06): a dry screw's wear follows its noise, a ramp from the trace (1 %) to full at 10 % liquid by volume: 40 min
+     * of process time from 10 % up, 80 min at 5 %, 400 min just above 1 %, none at and below it.
+     */
+    @Test
+    void aDryScrewsLiquidWearFollowsItsNoise() {
+        var s = Wear.Settings.DEFAULT;
+        java.util.function.DoubleUnaryOperator minutes = liquid -> {
+            double r = Wear.rate(0, Wear.Fault.LIQUID.intensity(liquid), s);
+            return r > 0 ? 1 / r / 60 : Double.POSITIVE_INFINITY;
+        };
+        assertEquals(Double.POSITIVE_INFINITY, minutes.applyAsDouble(VacuumPump.LIQUID_TRACE), "none at the trace");
+        assertEquals(400, minutes.applyAsDouble(.01 + 1e-12), 1e-6, "400 min just above 1 %");
+        assertEquals(80, minutes.applyAsDouble(.05), 1e-9, "80 min at 5 %");
+        assertEquals(40, minutes.applyAsDouble(.1), 1e-9, "40 min at 10 %");
+        assertEquals(40, minutes.applyAsDouble(.6), 1e-9, "40 min above 10 %");
+        for (double liquid = 0; liquid <= 1; liquid += .001)
+            assertEquals((int) Math.round(255 * Wear.Fault.LIQUID.intensity(liquid)), VacuumPump.liquidNoise(liquid), "the noise byte is 255 times the wear's intensity at " + liquid);
+    }
+
     @Test
     void runningDryLastsFortyProcessMinutesAndTheSwitchStopsAllWear() {
         assertEquals(2400, Wear.life(Double.NaN, true, Wear.Settings.DEFAULT), 1e-9);

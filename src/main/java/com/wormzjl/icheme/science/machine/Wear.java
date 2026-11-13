@@ -50,7 +50,7 @@ public final class Wear {
     /**
      * A machine's faults (M-12), each with its class and its intensity, 0 to 1, from its driving quantity {@code q}:
      * {@code CAVITATION} from σ = NPSHA/NPSH3 ({@link #intensity}); {@code DRY} 1 for {@code q > 0} (the pump runs dry);
-     * {@code LIQUID} from a dry screw's suction liquid volume share (1 above {@link VacuumPump#LIQUID_TRACE}); the others
+     * {@code LIQUID} from a dry screw's suction liquid volume share ({@link VacuumPump#liquidIntensity}, N5); the others
      * wear nothing yet.
      */
     public enum Fault {
@@ -68,7 +68,7 @@ public final class Wear {
             return switch (this) {
                 case CAVITATION -> Wear.intensity(q);
                 case DRY -> q > 0 ? 1 : 0;
-                case LIQUID -> q > VacuumPump.LIQUID_TRACE ? 1 : 0;
+                case LIQUID -> VacuumPump.liquidIntensity(q);
                 case LOW_FLOW, WET_GAS, WET_EXHAUST -> 0;
             };
         }
