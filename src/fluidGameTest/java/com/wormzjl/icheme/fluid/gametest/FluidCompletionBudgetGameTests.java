@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.fluid.gametest;
 
 import com.wormzjl.icheme.runtime.ProcessSolveServices;
+import com.wormzjl.icheme.runtime.ProcessSolveJobs;
 import com.wormzjl.icheme.runtime.fluid.FluidPresetCatalog;
 import com.wormzjl.icheme.science.fluid.network.PassiveIntervalSolver;
 import com.wormzjl.icheme.science.fluid.network.PassiveNetwork;
@@ -25,7 +26,7 @@ public final class FluidCompletionBudgetGameTests {
         var model=FluidThermodynamics.forNetwork(MaterialCatalog.bundled(),FluidPresetCatalog.NETWORK_PACKAGE);
         var graph=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,
                 model.initialNitrogenCharge(1,298.15,101325,()->{}))),List.of());
-        var command=new ProcessSolveServices.FluidIslandCommand(model,graph,5,
+        var command=new ProcessSolveJobs.FluidIslandCommand(model,graph,5,
                 PassiveIntervalSolver.Settings.defaults(),2_000_000_000L);
         int[] issued={0},completed={0},saturatedTick={-1};long[] started={0};
         var byTick=new HashMap<Integer,Integer>();var previousPump=new Runnable[1];
@@ -104,7 +105,7 @@ public final class FluidCompletionBudgetGameTests {
         var model=FluidThermodynamics.forNetwork(MaterialCatalog.bundled(),FluidPresetCatalog.NETWORK_PACKAGE);
         var graph=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,
                 model.initialNitrogenCharge(1,298.15,101325,()->{}))),List.of());
-        var command=new ProcessSolveServices.FluidIslandCommand(model,graph,5,
+        var command=new ProcessSolveJobs.FluidIslandCommand(model,graph,5,
                 PassiveIntervalSolver.Settings.defaults(),2_000_000_000L);
         // 65 jobs, one after another, then nothing: the 65th completion is the one the budget leaves behind.
         int[] issued={0},completed={0},saturatedTick={-1};long[] started={0},counted=new long[2];

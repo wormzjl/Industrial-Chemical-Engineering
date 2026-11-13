@@ -2,7 +2,7 @@ package com.wormzjl.icheme.runtime.fluid;
 
 import com.google.gson.GsonBuilder;
 import com.wormzjl.icheme.fluid.support.FluidTestSupport;
-import com.wormzjl.icheme.runtime.ProcessSolveServices;
+import com.wormzjl.icheme.runtime.ProcessSolveJobs;
 import com.wormzjl.icheme.science.fluid.network.*;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import org.junit.jupiter.api.Test;
@@ -83,10 +83,10 @@ class CadenceTrajectoryQualificationTest {
     }
     private Trajectory runAdaptive(PassiveNetwork initial) {
         class Dispatch implements IslandCoordinator.Dispatcher {
-            long sequence;IslandCoordinator.Attempt attempt;ProcessSolveServices.FluidIslandCommand command;
+            long sequence;IslandCoordinator.Attempt attempt;ProcessSolveJobs.FluidIslandCommand command;
             public int availableWorkers(){return attempt==null?1:0;}
             public long nextRequestId(){return ++sequence;}
-            public boolean submit(IslandCoordinator.Attempt a,ProcessSolveServices.FluidIslandCommand c){attempt=a;command=c;return true;}
+            public boolean submit(IslandCoordinator.Attempt a,ProcessSolveJobs.FluidIslandCommand c){attempt=a;command=c;return true;}
             public void cancel(long request){fail("Controlled cadence fixture must not time out");}
         }
         var dispatch=new Dispatch();double[] moved={0};var frames=new ArrayList<Frame>();var published=new ArrayList<Frame>();var clocks=new ArrayList<IslandClock.Snapshot>();var cadences=new TreeSet<Integer>();int[] intervals={0};
@@ -107,7 +107,7 @@ class CadenceTrajectoryQualificationTest {
                 var attempt=dispatch.attempt;var command=dispatch.command;dispatch.attempt=null;dispatch.command=null;
                 var result=new PassiveIntervalSolver(model).solve(command.snapshot(),command.durationSeconds(),command.settings(),()->{});
                 long cpu=intervals[0]<3?1_600_000_000L:10_000_000L;
-                coordinator.completed(attempt,Optional.of(new ProcessSolveServices.FluidIslandSolveResult(Optional.of(result),"FULL",cpu,cpu)));
+                coordinator.completed(attempt,Optional.of(new ProcessSolveJobs.FluidIslandSolveResult(Optional.of(result),"FULL",cpu,cpu)));
                 coordinator.pump();
             }
             if(tick%400==0&&tick<1600){coordinator.releaseFence(boundary,List.of(1L));boundary=UUID.randomUUID();coordinator.fence(boundary,tick+400,List.of(1L));}

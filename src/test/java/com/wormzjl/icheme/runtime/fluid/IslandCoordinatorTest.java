@@ -1,7 +1,7 @@
 package com.wormzjl.icheme.runtime.fluid;
 
 import com.wormzjl.icheme.fluid.support.FluidTestSupport;
-import com.wormzjl.icheme.runtime.ProcessSolveServices;
+import com.wormzjl.icheme.runtime.ProcessSolveJobs;
 import com.wormzjl.icheme.science.fluid.network.*;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
@@ -26,18 +26,18 @@ class IslandCoordinatorTest {
         private long sequence;
         private int capacity=2;
         private final Map<Long,IslandCoordinator.Attempt> attempts=new LinkedHashMap<>();
-        private final Map<Long,ProcessSolveServices.FluidIslandCommand> commands=new HashMap<>();
+        private final Map<Long,ProcessSolveJobs.FluidIslandCommand> commands=new HashMap<>();
         private final Set<Long> cancelled=new HashSet<>();
         public int availableWorkers(){return capacity-attempts.size();}
         public long nextRequestId(){return ++sequence;}
-        public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveServices.FluidIslandCommand command) {
+        public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveJobs.FluidIslandCommand command) {
             attempts.put(attempt.slice().requestId(),attempt);commands.put(attempt.slice().requestId(),command);return true;
         }
         public void cancel(long request){cancelled.add(request);}
         private IslandCoordinator.Attempt finish(long request) {
             var attempt=attempts.remove(request);var command=commands.remove(request);
             var result=new PassiveIntervalSolver(model).solve(command.snapshot(),command.durationSeconds(),command.settings(),()->{});
-            coordinator.completed(attempt,Optional.of(new ProcessSolveServices.FluidIslandSolveResult(Optional.of(result),"FULL",10)));
+            coordinator.completed(attempt,Optional.of(new ProcessSolveJobs.FluidIslandSolveResult(Optional.of(result),"FULL",10)));
             return attempt;
         }
     }
@@ -110,7 +110,7 @@ class IslandCoordinatorTest {
         register(1,200,0);coordinator.pump();
         var attempt=dispatch.attempts.values().stream().filter(a->a.islandId()==1).findFirst().orElseThrow();
         dispatch.attempts.remove(attempt.slice().requestId());dispatch.commands.remove(attempt.slice().requestId());
-        coordinator.completed(attempt,Optional.of(new ProcessSolveServices.FluidIslandSolveResult(Optional.empty(),"HELD: test refusal",10)));
+        coordinator.completed(attempt,Optional.of(new ProcessSolveJobs.FluidIslandSolveResult(Optional.empty(),"HELD: test refusal",10)));
         coordinator.pump();assertTrue(dispatch.attempts.isEmpty());
         assertTrue(coordinator.snapshot(1).status().startsWith("HELD"),coordinator.snapshot(1).status());assertEquals(0,coordinator.snapshot(1).clock().committedTick());
         var before=coordinator.snapshot(1).graph();
@@ -165,7 +165,7 @@ class IslandCoordinatorTest {
             long sequence;
             public int availableWorkers(){return 2-attempts.size();}
             public long nextRequestId(){return ++sequence;}
-            public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveServices.FluidIslandCommand command){attempts.put(attempt.slice().requestId(),attempt);return true;}
+            public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveJobs.FluidIslandCommand command){attempts.put(attempt.slice().requestId(),attempt);return true;}
             public void cancel(long request){cancelled.add(request);}
         };
         var lagging=new IslandCoordinator(slow,changed->{},time::get,new IslandCoordinator.Settings(2_000_000_000L,1_500_000_000L,64,false));
@@ -183,7 +183,7 @@ class IslandCoordinatorTest {
     }
     @Test void aHeldOwnerRetriesExactlyAtItsRetryDeadlineAndIsNotVisitedBefore() {
         register(1,100,0);coordinator.pump();var first=dispatch.attempts.remove(1L);dispatch.commands.remove(1L);
-        coordinator.completed(first,Optional.of(new ProcessSolveServices.FluidIslandSolveResult(Optional.empty(),"HELD: test refusal",10)));
+        coordinator.completed(first,Optional.of(new ProcessSolveJobs.FluidIslandSolveResult(Optional.empty(),"HELD: test refusal",10)));
         coordinator.pump();assertEquals(200,coordinator.snapshot(1).clock().retryAtTick());
         FluidRuntimeDiagnostics.reset();FluidRuntimeDiagnostics.ENABLED=true;
         try {
@@ -199,7 +199,7 @@ class IslandCoordinatorTest {
     }
     private void hold(IslandCoordinator.Attempt attempt,String detail) {
         dispatch.attempts.remove(attempt.slice().requestId());dispatch.commands.remove(attempt.slice().requestId());
-        coordinator.completed(attempt,Optional.of(new ProcessSolveServices.FluidIslandSolveResult(Optional.empty(),detail,10)));
+        coordinator.completed(attempt,Optional.of(new ProcessSolveJobs.FluidIslandSolveResult(Optional.empty(),detail,10)));
         coordinator.pump();
     }
     /** Ticks until the island's next attempt is dispatched; that attempt. */
@@ -243,7 +243,7 @@ class IslandCoordinatorTest {
         register(1,1_000,0);coordinator.pump();var first=dispatch.attempts.values().iterator().next();var solver=dispatch.commands.get(first.slice().requestId()).retained();
         FluidRuntimeDiagnostics.reset();FluidRuntimeDiagnostics.ENABLED=true;
         try {
-            hold(first,ProcessSolveServices.WALL_DEADLINE);
+            hold(first,ProcessSolveJobs.WALL_DEADLINE);
             var retry=nextAttempt();assertEquals(100,retry.getKey());assertEquals(50,retry.getValue().slice().endTick());
             assertNotSame(solver,dispatch.commands.get(retry.getValue().slice().requestId()).retained());
             assertEquals(1,FluidRuntimeDiagnostics.sample().get("budgetHolds"));
@@ -258,7 +258,7 @@ class IslandCoordinatorTest {
             for(long request:List.copyOf(dispatch.attempts.keySet())) {
                 var attempt=dispatch.attempts.remove(request);var command=dispatch.commands.remove(request);order.add(attempt.islandId());
                 var result=new PassiveIntervalSolver(model).solve(command.snapshot(),command.durationSeconds(),command.settings(),()->{});
-                budgeted.completed(attempt,Optional.of(new ProcessSolveServices.FluidIslandSolveResult(Optional.of(result),"FULL",10)));
+                budgeted.completed(attempt,Optional.of(new ProcessSolveJobs.FluidIslandSolveResult(Optional.of(result),"FULL",10)));
             }
             budgeted.pump();
         };
@@ -271,14 +271,14 @@ class IslandCoordinatorTest {
     }
     @Test void theAllocatorShrinkIsObservedExactlyAtItsDeadlineWithNoOtherActivity() {
         long[] epoch={0};var allocator=new com.wormzjl.icheme.runtime.WorkerAllocation.Demand(8);int[] limit={1};var observed=new ArrayList<long[]>();
-        var attempts=new LinkedHashMap<Long,IslandCoordinator.Attempt>();var commands=new HashMap<Long,ProcessSolveServices.FluidIslandCommand>();
+        var attempts=new LinkedHashMap<Long,IslandCoordinator.Attempt>();var commands=new HashMap<Long,ProcessSolveJobs.FluidIslandCommand>();
         var elastic=new IslandCoordinator.Dispatcher() {
             long sequence;
             @Override public void demand(int eligible){limit[0]=allocator.observe(eligible+attempts.size(),epoch[0]);observed.add(new long[]{epoch[0],limit[0]});}
             @Override public long demandShrinkDelay(){long due=allocator.shrinkTick();return due<0?-1:due-epoch[0];}
             public int availableWorkers(){return limit[0]-attempts.size();}
             public long nextRequestId(){return ++sequence;}
-            public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveServices.FluidIslandCommand command){attempts.put(attempt.slice().requestId(),attempt);commands.put(attempt.slice().requestId(),command);return true;}
+            public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveJobs.FluidIslandCommand command){attempts.put(attempt.slice().requestId(),attempt);commands.put(attempt.slice().requestId(),command);return true;}
             public void cancel(long request){}
         };
         // A shared epoch: the owner advances it before each tick, as the world does.
@@ -288,7 +288,7 @@ class IslandCoordinatorTest {
         shared.pump();assertEquals(3,limit[0]);assertEquals(3,attempts.size());
         for(long request:List.copyOf(attempts.keySet())) {
             var attempt=attempts.remove(request);var command=commands.remove(request);var result=new PassiveIntervalSolver(model).solve(command.snapshot(),command.durationSeconds(),command.settings(),()->{});
-            shared.completed(attempt,Optional.of(new ProcessSolveServices.FluidIslandSolveResult(Optional.of(result),"FULL",10)));
+            shared.completed(attempt,Optional.of(new ProcessSolveJobs.FluidIslandSolveResult(Optional.of(result),"FULL",10)));
         }
         // Park all three owners on an event so nothing but the allocator deadline can wake the coordinator.
         shared.fence(UUID.randomUUID(),100,List.of(1L,2L,3L));shared.pump();
@@ -307,7 +307,7 @@ class IslandCoordinatorTest {
     }
     private void phaseHold(IslandCoordinator.Attempt attempt,com.wormzjl.icheme.science.fluid.thermo.ThermoHold v) {
         dispatch.attempts.remove(attempt.slice().requestId());dispatch.commands.remove(attempt.slice().requestId());
-        coordinator.completed(attempt,Optional.of(new ProcessSolveServices.FluidIslandSolveResult(Optional.empty(),ProcessSolveServices.PHASE_HOLD+v.getMessage(),10,-1,
+        coordinator.completed(attempt,Optional.of(new ProcessSolveJobs.FluidIslandSolveResult(Optional.empty(),ProcessSolveJobs.PHASE_HOLD+v.getMessage(),10,-1,
                 Optional.of(v))));
         coordinator.pump();
     }

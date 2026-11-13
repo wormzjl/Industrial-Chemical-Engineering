@@ -6,9 +6,14 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.TickTask;
 import net.minecraft.world.level.Level;
-import com.wormzjl.icheme.science.fluid.network.PassiveNetwork;
-import com.wormzjl.icheme.science.fluid.network.PassiveIntervalSolver;
-import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
+import com.wormzjl.icheme.runtime.ProcessSolveJobs.ColumnUnitCommand;
+import com.wormzjl.icheme.runtime.ProcessSolveJobs.ColumnUnitSolveResult;
+import com.wormzjl.icheme.runtime.ProcessSolveJobs.FluidIslandCommand;
+import com.wormzjl.icheme.runtime.ProcessSolveJobs.FluidIslandSolveResult;
+import com.wormzjl.icheme.runtime.ProcessSolveJobs.ProcessSolveCommand;
+import com.wormzjl.icheme.runtime.ProcessSolveJobs.ProcessSolveResult;
+import com.wormzjl.icheme.runtime.ProcessSolveJobs.StillCommand;
+import com.wormzjl.icheme.runtime.ProcessSolveJobs.StillSolveResult;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -17,7 +22,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -351,99 +355,6 @@ public final class ProcessSolveServices {
         }
     }
 
-    /** Immutable worker envelope. Adding a job family extends this sealed protocol, never the executor count. */
-    public sealed interface ProcessSolveCommand permits FluidIslandCommand,ColumnUnitCommand,StillCommand {
-        ProcessSolveResult solve(BoundedCpuSolveService.CancellationToken cancellationToken);
-    }
-
-    /** Immutable worker result envelope routed only after main-thread completion draining. */
-    public sealed interface ProcessSolveResult permits FluidIslandSolveResult,ColumnUnitSolveResult,StillSolveResult {}
-
-    /** Contains no live level, block entity, callback, or mutable server-owned collection. {@code reads}: each coupled
-     * exchanger side's read of its other side, by connection id, made on the server at the dispatch (plan section 5.2). */
-    public record FluidIslandCommand(FluidThermodynamics model,PassiveNetwork snapshot,double durationSeconds,
-                                     PassiveIntervalSolver.Settings settings,long wallBudgetNanos,
-                                     com.wormzjl.icheme.runtime.fluid.RetainedSolver retained,
-                                     Map<Long,com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read> reads,
-                                     Map<Long,com.wormzjl.icheme.science.fluid.network.PortPlan> ports) implements ProcessSolveCommand {
-        /** No running column's port in the island. */
-        public FluidIslandCommand(FluidThermodynamics model,PassiveNetwork snapshot,double durationSeconds,PassiveIntervalSolver.Settings settings,long wallBudgetNanos,
-                                  com.wormzjl.icheme.runtime.fluid.RetainedSolver retained,Map<Long,com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read> reads) {
-            this(model,snapshot,durationSeconds,settings,wallBudgetNanos,retained,reads,Map.of());
-        }
-        /** Without a retained handle the job gets its own, which is the per-job solver of before. */
-        public FluidIslandCommand(FluidThermodynamics model,PassiveNetwork snapshot,double durationSeconds,PassiveIntervalSolver.Settings settings,long wallBudgetNanos) {
-            this(model,snapshot,durationSeconds,settings,wallBudgetNanos,new com.wormzjl.icheme.runtime.fluid.RetainedSolver());
-        }
-        /** No coupled exchanger side read. */
-        public FluidIslandCommand(FluidThermodynamics model,PassiveNetwork snapshot,double durationSeconds,PassiveIntervalSolver.Settings settings,long wallBudgetNanos,com.wormzjl.icheme.runtime.fluid.RetainedSolver retained) {
-            this(model,snapshot,durationSeconds,settings,wallBudgetNanos,retained,Map.of());
-        }
-        public FluidIslandCommand {
-            Objects.requireNonNull(model);Objects.requireNonNull(snapshot);Objects.requireNonNull(settings);Objects.requireNonNull(retained);reads=Map.copyOf(reads);ports=Map.copyOf(ports);
-            if(!Double.isFinite(durationSeconds)||durationSeconds<=0||wallBudgetNanos<=0)throw new IllegalArgumentException("Invalid island solve budget");
-        }
-        @Override public ProcessSolveResult solve(BoundedCpuSolveService.CancellationToken cancellationToken) {
-            long cpuStart=WorkerAllocation.CpuTime.sample();
-            var result=(FluidIslandSolveResult)solve(cancellationToken,System::nanoTime);
-            long cpu=WorkerAllocation.CpuTime.elapsed(cpuStart,WorkerAllocation.CpuTime.sample());
-            return new FluidIslandSolveResult(result.candidate(),result.detail(),result.workerNanos(),cpu,result.phaseHold(),result.notices());
-        }
-        /**
-         * The full solve, on the whole wall budget. Owner decision D37 (S2) removed the approximate fallback a soft budget
-         * used to start: it refused every interval it was tried on (M5), and the island was held and retried with the
-         * full solve alone on the whole budget, which is now every attempt.
-         */
-        ProcessSolveResult solve(BoundedCpuSolveService.CancellationToken cancellationToken,java.util.function.LongSupplier nanoClock) {
-            Objects.requireNonNull(cancellationToken);Objects.requireNonNull(nanoClock);long start=nanoClock.getAsLong();
-            long[] elapsed={0};
-            Runnable hard=()->{cancellationToken.throwIfCancellationRequested();elapsed[0]=nanoClock.getAsLong()-start;if(elapsed[0]>=wallBudgetNanos)throw new FluidWallDeadline();};
-            try {
-                var candidate=retained.solve(model,snapshot,durationSeconds,settings,hard,reads,ports);hard.run();
-                return new FluidIslandSolveResult(Optional.of(candidate),"FULL",elapsed[0],-1,Optional.empty(),notices(model,candidate));
-            }catch(FluidWallDeadline deadline){return new FluidIslandSolveResult(Optional.empty(),WALL_DEADLINE,elapsed[0]);}
-            catch(com.wormzjl.icheme.science.fluid.solver.SparseNewton.Nonconvergence|IllegalArgumentException failed) {
-                cancellationToken.throwIfCancellationRequested();
-                // A failure a phase hold decided (a phase set the network cannot carry, or the critical band) carries the
-                // hold itself, so the coordinator can hold the island with the dedicated status and tell a reproduced hold
-                // from a numerical failure (IslandCoordinator.hold).
-                var hold=Optional.ofNullable(com.wormzjl.icheme.science.fluid.solver.SparseNewton.phaseHold(failed));
-                return new FluidIslandSolveResult(Optional.empty(),hold.map(v->PHASE_HOLD+v.getMessage()).orElse("HELD: "+failed.getMessage()),elapsed[0],-1,hold);
-            }
-        }
-    }
-    /**
-     * The data ranges an accepted interval's end state lies outside, node by node in the network's order (owner rule of
-     * 2026-10-16, RANGE_EXTRAPOLATION_PLAN section 5): read once per committed interval, here in the worker, and published
-     * with the interval's status line. A vessel that holds nothing keeps the ambient as its state and is skipped.
-     */
-    static List<com.wormzjl.icheme.science.fluid.thermo.DataRangeNotices.Notice> notices(FluidThermodynamics model,PassiveIntervalSolver.Result candidate) {
-        var notices=new com.wormzjl.icheme.science.fluid.thermo.DataRangeNotices();
-        for(var reservoir:candidate.graph().reservoirs())if(!reservoir.empty())model.dataRanges(reservoir.state(),reservoir.id(),notices);
-        return notices.notices();
-    }
-    /** The detail of an island interval the hard wall budget cut. */
-    public static final String WALL_DEADLINE="HELD: wall deadline";
-    /** The detail prefix of an island interval a phase hold refused; the result carries the hold. */
-    public static final String PHASE_HOLD="HELD (phases): ";
-    private static final class FluidWallDeadline extends RuntimeException {}
-    public record FluidIslandSolveResult(Optional<PassiveIntervalSolver.Result> candidate,String detail,long workerNanos,long workerCpuNanos,
-                                        Optional<com.wormzjl.icheme.science.fluid.thermo.ThermoHold> phaseHold,
-                                        List<com.wormzjl.icheme.science.fluid.thermo.DataRangeNotices.Notice> notices) implements ProcessSolveResult {
-        public FluidIslandSolveResult(Optional<PassiveIntervalSolver.Result> candidate,String detail,long workerNanos,long workerCpuNanos,
-                                      Optional<com.wormzjl.icheme.science.fluid.thermo.ThermoHold> phaseHold) {
-            this(candidate,detail,workerNanos,workerCpuNanos,phaseHold,List.of());
-        }
-        public FluidIslandSolveResult(Optional<PassiveIntervalSolver.Result> candidate,String detail,long workerNanos,long workerCpuNanos) {
-            this(candidate,detail,workerNanos,workerCpuNanos,Optional.empty());
-        }
-        public FluidIslandSolveResult(Optional<PassiveIntervalSolver.Result> candidate,String detail,long workerNanos) {
-            this(candidate,detail,workerNanos,-1);
-        }
-        /** {@code notices}: the data ranges the accepted interval's end state lies outside, empty for a held one. */
-        public FluidIslandSolveResult {Objects.requireNonNull(phaseHold);notices=List.copyOf(notices);if(!notices.isEmpty()&&candidate.isEmpty())throw new IllegalArgumentException("Only an accepted interval carries data-range notices");if(phaseHold.isPresent()&&candidate.isPresent())throw new IllegalArgumentException("An accepted interval has no phase hold");Objects.requireNonNull(candidate);Objects.requireNonNull(detail);if(workerNanos<0||workerCpuNanos < -1)throw new IllegalArgumentException("Invalid worker elapsed time");}
-    }
-
     /** Stable block identity; no loaded level or block entity is retained. */
     public sealed interface SolveTarget permits FluidIslandTarget,ColumnUnitTarget,StillTarget {}
 
@@ -454,16 +365,6 @@ public final class ProcessSolveServices {
     /** Server-only delivery context of a column unit's solve; the handler gets the outcome, a failed one for a worker failure or a shutdown. */
     public record ColumnUnitRequest(long requestId,ColumnUnitTarget target,long inputRevision,java.util.function.Consumer<com.wormzjl.icheme.science.plant.column.ColumnSolve.Outcome> handler) implements ProcessSolveRequest {
         public ColumnUnitRequest {Objects.requireNonNull(target);Objects.requireNonNull(handler);if(requestId<=0||inputRevision<0)throw new IllegalArgumentException("Invalid column unit request stamp");}
-    }
-    /** A column unit's solve: the job and its feed island's model (its compound list's view, which V3 reads too), read on the server at admission. */
-    public record ColumnUnitCommand(com.wormzjl.icheme.science.plant.column.ColumnSolve.Job job,FluidThermodynamics model,double liquidSupplyScreenRatio) implements ProcessSolveCommand {
-        public ColumnUnitCommand {Objects.requireNonNull(job);Objects.requireNonNull(model);}
-        @Override public ProcessSolveResult solve(BoundedCpuSolveService.CancellationToken cancellationToken) {
-            return new ColumnUnitSolveResult(com.wormzjl.icheme.science.plant.column.ColumnSolve.run(job,model,liquidSupplyScreenRatio,cancellationToken::throwIfCancellationRequested));
-        }
-    }
-    public record ColumnUnitSolveResult(com.wormzjl.icheme.science.plant.column.ColumnSolve.Outcome outcome) implements ProcessSolveResult {
-        public ColumnUnitSolveResult {Objects.requireNonNull(outcome);}
     }
     public record ColumnUnitCompletion(ColumnUnitRequest request,com.wormzjl.icheme.science.plant.column.ColumnSolve.Outcome outcome) implements ProcessSolveCompletion {
         public ColumnUnitCompletion {Objects.requireNonNull(request);Objects.requireNonNull(outcome);}
@@ -476,16 +377,6 @@ public final class ProcessSolveServices {
     /** Server-only delivery context of a still's column solve; the handler gets the outcome, a failed one for a worker failure or a shutdown. */
     public record StillRequest(long requestId,StillTarget target,long inputRevision,java.util.function.Consumer<com.wormzjl.icheme.science.plant.still.StillHead.Outcome> handler) implements ProcessSolveRequest {
         public StillRequest {Objects.requireNonNull(target);Objects.requireNonNull(handler);if(requestId<=0||inputRevision<0)throw new IllegalArgumentException("Invalid still request stamp");}
-    }
-    /** A still's column solve: the job and its pot island's model, read on the server at admission. */
-    public record StillCommand(com.wormzjl.icheme.science.plant.still.StillHead.Job job,FluidThermodynamics model) implements ProcessSolveCommand {
-        public StillCommand {Objects.requireNonNull(job);Objects.requireNonNull(model);}
-        @Override public ProcessSolveResult solve(BoundedCpuSolveService.CancellationToken cancellationToken) {
-            return new StillSolveResult(com.wormzjl.icheme.science.plant.still.StillHead.run(job,model,cancellationToken::throwIfCancellationRequested));
-        }
-    }
-    public record StillSolveResult(com.wormzjl.icheme.science.plant.still.StillHead.Outcome outcome) implements ProcessSolveResult {
-        public StillSolveResult {Objects.requireNonNull(outcome);}
     }
     public record StillCompletion(StillRequest request,com.wormzjl.icheme.science.plant.still.StillHead.Outcome outcome) implements ProcessSolveCompletion {
         public StillCompletion {Objects.requireNonNull(request);Objects.requireNonNull(outcome);}

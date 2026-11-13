@@ -2,7 +2,7 @@ package com.wormzjl.icheme.runtime.fluid;
 
 import com.wormzjl.icheme.fluid.support.FluidTestSupport;
 import com.wormzjl.icheme.runtime.BoundedCpuSolveService;
-import com.wormzjl.icheme.runtime.ProcessSolveServices;
+import com.wormzjl.icheme.runtime.ProcessSolveJobs;
 import com.wormzjl.icheme.science.fluid.network.*;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind;
@@ -28,7 +28,7 @@ class EventPathWorld {
     final FluidThermodynamics model;
     final WorldTopologyLedger ledger;
     final Map<Long,IslandCoordinator.Attempt> attempts=new LinkedHashMap<>();
-    final Map<Long,ProcessSolveServices.FluidIslandCommand> commands=new HashMap<>();
+    final Map<Long,ProcessSolveJobs.FluidIslandCommand> commands=new HashMap<>();
     final int workers;long requests;
     /** Every published HELD status, with the online tick it was published at. */
     final List<Held> held=new ArrayList<>();
@@ -77,7 +77,7 @@ class EventPathWorld {
         coordinator=new IslandCoordinator(new IslandCoordinator.Dispatcher() {
             public int availableWorkers(){return workers-attempts.size();}
             public long nextRequestId(){return ++requests;}
-            public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveServices.FluidIslandCommand command){attempts.put(attempt.slice().requestId(),attempt);submitted.put(attempt.slice().requestId(),ledger.onlineTick());commands.put(attempt.slice().requestId(),command);return true;}
+            public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveJobs.FluidIslandCommand command){attempts.put(attempt.slice().requestId(),attempt);submitted.put(attempt.slice().requestId(),ledger.onlineTick());commands.put(attempt.slice().requestId(),command);return true;}
             public void cancel(long request){}
         },changed->{for(var s:changed)if(s.status().startsWith("HELD"))held.add(new Held(ledger.onlineTick(),s.id(),s.clock().committedTick(),s.status()));},
                 ()->0L,new IslandCoordinator.Settings(2_000_000_000L,1_500_000_000L,64,false,100,CertificatePolicy.defaults()).withTime(model.time()),ledger::onlineTick);
@@ -180,7 +180,7 @@ class EventPathWorld {
             var attempt=attempts.remove(request);var command=commands.remove(request);
 
             if(failing.contains(attempt.islandId())){coordinator.completed(attempt,Optional.empty(),failure);continue;}
-            var result=(ProcessSolveServices.FluidIslandSolveResult)command.solve(FluidTestSupport.NEVER);
+            var result=(ProcessSolveJobs.FluidIslandSolveResult)command.solve(FluidTestSupport.NEVER);
             coordinator.completed(attempt,Optional.of(result));
         }
         coordinator.pump();

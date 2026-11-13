@@ -1,6 +1,6 @@
 package com.wormzjl.icheme.runtime.fluid;
 
-import com.wormzjl.icheme.runtime.ProcessSolveServices;
+import com.wormzjl.icheme.runtime.ProcessSolveJobs;
 import com.wormzjl.icheme.science.fluid.SimulationTime;
 import com.wormzjl.icheme.science.machine.CreateCoupling;
 import com.wormzjl.icheme.science.machine.ElectricStore;
@@ -24,7 +24,7 @@ class TimeFactorElectricTest {
         var coordinator = new IslandCoordinator(new IslandCoordinator.Dispatcher() {
             public int availableWorkers() {return 1;}
             public long nextRequestId() {return 1;}
-            public boolean submit(IslandCoordinator.Attempt attempt, ProcessSolveServices.FluidIslandCommand command) {return false;}
+            public boolean submit(IslandCoordinator.Attempt attempt, ProcessSolveJobs.FluidIslandCommand command) {return false;}
             public void cancel(long request) {}
         }, changed -> {}, () -> 0L, new IslandCoordinator.Settings(2_000_000_000L, 1_500_000_000L, 64, false, 100, CertificatePolicy.defaults()).withTime(SimulationTime.of(factor)), () -> 0L);
         var ledger = new WorldTopologyLedger(WorldTopologyLedger.Snapshot.empty(EventPathWorld.CATALOG));

@@ -1,7 +1,7 @@
 package com.wormzjl.icheme.runtime.fluid;
 
 import com.wormzjl.icheme.fluid.support.FluidTestSupport;
-import com.wormzjl.icheme.runtime.ProcessSolveServices;
+import com.wormzjl.icheme.runtime.ProcessSolveJobs;
 import com.wormzjl.icheme.science.plant.column.ColumnCycle.Account;
 import com.wormzjl.icheme.science.equipment.HeatSides;
 import com.wormzjl.icheme.science.fluid.network.*;
@@ -119,7 +119,7 @@ class StillRuntimeTest {
         final FluidThermodynamics model;
         final long[] epoch = {0};
         final Map<Long, IslandCoordinator.Attempt> attempts = new LinkedHashMap<>();
-        final Map<Long, ProcessSolveServices.FluidIslandCommand> commands = new HashMap<>();
+        final Map<Long, ProcessSolveJobs.FluidIslandCommand> commands = new HashMap<>();
         /** The column solves asked and not yet answered, each with the tick it was asked in. */
         final List<Solve> solved = new ArrayList<>();
         final Map<Long, Long> committed = new HashMap<>(), owners = new HashMap<>();
@@ -167,7 +167,7 @@ class StillRuntimeTest {
                     return ++requests;
                 }
 
-                public boolean submit(IslandCoordinator.Attempt attempt, ProcessSolveServices.FluidIslandCommand command) {
+                public boolean submit(IslandCoordinator.Attempt attempt, ProcessSolveJobs.FluidIslandCommand command) {
                     attempts.put(attempt.slice().requestId(), attempt);
                     commands.put(attempt.slice().requestId(), command);
                     submitted.put(attempt.slice().requestId(), epoch[0]);
@@ -265,7 +265,7 @@ class StillRuntimeTest {
                     var attempt = attempts.remove(request);
                     var command = commands.remove(request);
                     submitted.remove(request);
-                    coordinator.completed(attempt, Optional.of((ProcessSolveServices.FluidIslandSolveResult) command.solve(FluidTestSupport.NEVER)));
+                    coordinator.completed(attempt, Optional.of((ProcessSolveJobs.FluidIslandSolveResult) command.solve(FluidTestSupport.NEVER)));
                 }
                 var answered = solved.stream().filter(this::due).toList();
                 solved.removeAll(answered);

@@ -1,7 +1,7 @@
 package com.wormzjl.icheme.runtime.fluid;
 
 import com.wormzjl.icheme.fluid.support.FluidTestSupport;
-import com.wormzjl.icheme.runtime.ProcessSolveServices;
+import com.wormzjl.icheme.runtime.ProcessSolveJobs;
 import com.wormzjl.icheme.science.fluid.network.*;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.machine.Npsh;
@@ -34,7 +34,7 @@ class MachineHealthTest {
     private final class Rig {
         final long[] epoch = {0};
         final Map<Long, IslandCoordinator.Attempt> attempts = new LinkedHashMap<>();
-        final Map<Long, ProcessSolveServices.FluidIslandCommand> commands = new HashMap<>();
+        final Map<Long, ProcessSolveJobs.FluidIslandCommand> commands = new HashMap<>();
         final IslandCoordinator coordinator;
         final MachineHealth health;
         /** The in-line pump's electric store (M-04), or null where the line runs without stores. */
@@ -83,7 +83,7 @@ class MachineHealthTest {
                     return ++requests;
                 }
 
-                public boolean submit(IslandCoordinator.Attempt attempt, ProcessSolveServices.FluidIslandCommand command) {
+                public boolean submit(IslandCoordinator.Attempt attempt, ProcessSolveJobs.FluidIslandCommand command) {
                     attempts.put(attempt.slice().requestId(), attempt);
                     commands.put(attempt.slice().requestId(), command);
                     return true;
@@ -119,7 +119,7 @@ class MachineHealthTest {
                 for (long request : List.copyOf(attempts.keySet())) {
                     var attempt = attempts.remove(request);
                     var command = commands.remove(request);
-                    coordinator.completed(attempt, Optional.of((ProcessSolveServices.FluidIslandSolveResult) command.solve(FluidTestSupport.NEVER)));
+                    coordinator.completed(attempt, Optional.of((ProcessSolveJobs.FluidIslandSolveResult) command.solve(FluidTestSupport.NEVER)));
                 }
                 coordinator.pump();
             }

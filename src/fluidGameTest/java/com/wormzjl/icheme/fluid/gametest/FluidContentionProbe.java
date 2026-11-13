@@ -2,6 +2,7 @@ package com.wormzjl.icheme.fluid.gametest;
 
 import com.wormzjl.icheme.runtime.BoundedCpuSolveService;
 import com.wormzjl.icheme.runtime.ProcessSolveServices;
+import com.wormzjl.icheme.runtime.ProcessSolveJobs;
 import com.wormzjl.icheme.science.fluid.network.*;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import net.minecraft.server.MinecraftServer;
@@ -30,17 +31,17 @@ final class FluidContentionProbe {
             var statesField=ProcessSolveServices.class.getDeclaredField("STATES");statesField.setAccessible(true);
             var state=((Map<MinecraftServer,?>)statesField.get(null)).get(server);
             var serviceField=state.getClass().getDeclaredField("service");serviceField.setAccessible(true);
-            var service=(BoundedCpuSolveService<ProcessSolveServices.SolveTarget,ProcessSolveServices.ProcessSolveCommand,ProcessSolveServices.ProcessSolveResult>)serviceField.get(state);
+            var service=(BoundedCpuSolveService<ProcessSolveServices.SolveTarget,ProcessSolveJobs.ProcessSolveCommand,ProcessSolveJobs.ProcessSolveResult>)serviceField.get(state);
             var contextsField=state.getClass().getDeclaredField("requestsBySequence");contextsField.setAccessible(true);var contexts=(Map<Long,Object>)contextsField.get(state);
             var contextType=Class.forName(ProcessSolveServices.class.getName()+"$RequestContext");
             var constructor=contextType.getDeclaredConstructor(ProcessSolveServices.ProcessSolveRequest.class,ProcessSolveServices.Diagnostics.class,BoundedCpuSolveService.JobStamp.class);constructor.setAccessible(true);
             var graph=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,model.initialNitrogenCharge(1,298.15,101325,()->{}))),List.of());
-            var command=new ProcessSolveServices.FluidIslandCommand(model,graph,5,PassiveIntervalSolver.Settings.defaults(),2_000_000_000L);
+            var command=new ProcessSolveJobs.FluidIslandCommand(model,graph,5,PassiveIntervalSolver.Settings.defaults(),2_000_000_000L);
             var probe=new FluidContentionProbe();
             for(int index=0;index<count;index++) {
                 var job=new Occupation();long id=ProcessSolveServices.nextRequestId();
                 var handler=new ProcessSolveServices.FluidCompletionHandler() {
-                    public void completed(ProcessSolveServices.FluidIslandCompletion completion){job.terminal=true;job.success=completion.completion().result().flatMap(ProcessSolveServices.FluidIslandSolveResult::candidate).isPresent();job.detail=completion.completion().status().name();}
+                    public void completed(ProcessSolveServices.FluidIslandCompletion completion){job.terminal=true;job.success=completion.completion().result().flatMap(ProcessSolveJobs.FluidIslandSolveResult::candidate).isPresent();job.detail=completion.completion().status().name();}
                     public void abandoned(ProcessSolveServices.FluidIslandRequest request){job.terminal=true;job.detail="ABANDONED";}
                 };
                 var target=new ProcessSolveServices.FluidIslandTarget(server.overworld().dimension(),Long.MAX_VALUE-id);

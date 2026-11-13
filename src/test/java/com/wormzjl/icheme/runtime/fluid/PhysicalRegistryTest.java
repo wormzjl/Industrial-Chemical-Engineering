@@ -2,7 +2,7 @@ package com.wormzjl.icheme.runtime.fluid;
 
 import com.wormzjl.icheme.fluid.support.FluidTestSupport;
 import com.wormzjl.icheme.runtime.BoundedCpuSolveService;
-import com.wormzjl.icheme.runtime.ProcessSolveServices;
+import com.wormzjl.icheme.runtime.ProcessSolveJobs;
 import com.wormzjl.icheme.science.fluid.network.*;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind;
@@ -63,7 +63,7 @@ class PhysicalRegistryTest {
                 ledger.tick();coordinator.tick();apply();coordinator.pumpIfUseful();
                 for(long request:List.copyOf(attempts.keySet())) {
                     var attempt=attempts.remove(request);var command=commands.remove(request);
-                    var result=(ProcessSolveServices.FluidIslandSolveResult)command.solve(FluidTestSupport.NEVER);
+                    var result=(ProcessSolveJobs.FluidIslandSolveResult)command.solve(FluidTestSupport.NEVER);
                     coordinator.completed(attempt,Optional.of(result));
                 }
                 coordinator.pump();
@@ -128,8 +128,8 @@ class PhysicalRegistryTest {
         Runnable heldTick=()->{
             w.ledger.tick();w.coordinator.tick();if(w.ledger.hasPendingEvents()){w.registry.applyPending();w.coordinator.pumpIfUseful();}
             for(long request:List.copyOf(w.attempts.keySet())){var attempt=w.attempts.remove(request);var command=w.commands.remove(request);
-                var result=attempt.islandId()==island?new ProcessSolveServices.FluidIslandSolveResult(Optional.empty(),"HELD: test refusal",10)
-                        :(ProcessSolveServices.FluidIslandSolveResult)command.solve(FluidTestSupport.NEVER);
+                var result=attempt.islandId()==island?new ProcessSolveJobs.FluidIslandSolveResult(Optional.empty(),"HELD: test refusal",10)
+                        :(ProcessSolveJobs.FluidIslandSolveResult)command.solve(FluidTestSupport.NEVER);
                 w.coordinator.completed(attempt,Optional.of(result));}
             w.coordinator.pump();
         };

@@ -1,7 +1,7 @@
 package com.wormzjl.icheme.runtime.fluid;
 
 import com.wormzjl.icheme.science.fluid.SimulationTime;
-import com.wormzjl.icheme.runtime.ProcessSolveServices;
+import com.wormzjl.icheme.runtime.ProcessSolveJobs;
 import com.wormzjl.icheme.science.fluid.network.*;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import java.util.*;
@@ -30,7 +30,7 @@ public final class IslandCoordinator {
         default long demandShrinkDelay(){return -1;}
         int availableWorkers();
         long nextRequestId();
-        boolean submit(Attempt attempt, ProcessSolveServices.FluidIslandCommand command);
+        boolean submit(Attempt attempt, ProcessSolveJobs.FluidIslandCommand command);
         void cancel(long requestId);
     }
     @FunctionalInterface public interface Publisher {void published(List<Snapshot> changed);}
@@ -211,7 +211,7 @@ public final class IslandCoordinator {
     private static final class Pending {
         private PassiveNetwork dispatched;
         private final Attempt attempt;
-        private ProcessSolveServices.FluidIslandSolveResult result;
+        private ProcessSolveJobs.FluidIslandSolveResult result;
         /** Why a terminal completion brought no result (the worker's failure, a cancellation), or null where it did not say. */
         private String failure;
         private boolean terminal,closed,lateResult;
@@ -690,7 +690,7 @@ public final class IslandCoordinator {
                 // The shaft trains' slice inputs (W3), read here as a heat side's partner is.
                 var controlled=controls.apply(island.graph);
                 var dispatched=ports.dispatch(island.id,com.wormzjl.icheme.science.fluid.network.ShaftPlan.apply(controlled,shafts.plans(island.id,controlled)),slice);
-                var command=new ProcessSolveServices.FluidIslandCommand(island.model,dispatched,slice.seconds(settings.time),PassiveIntervalSolver.Settings.defaults(settings.time),settings.hardBudgetNanos,island.retained,reads,ports.plans(island.id,dispatched,slice));
+                var command=new ProcessSolveJobs.FluidIslandCommand(island.model,dispatched,slice.seconds(settings.time),PassiveIntervalSolver.Settings.defaults(settings.time),settings.hardBudgetNanos,island.retained,reads,ports.plans(island.id,dispatched,slice));
                 if(!dispatcher.submit(attempt,command)) {island.status="WAITING: shared worker capacity";island.touch();break;}
                 island.clock.admitted(slice);island.status="SOLVING";island.touch();FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.solvesDispatched);
                 var entry=new Pending(attempt,island.clock.snapshot().onlineTick(),nanoClock.getAsLong());entry.dispatched=dispatched;entry.reads=reads;pending.put(request,entry);island.pendingEntries++;admitted.add(entry);dispatchedThisTick++;
@@ -706,9 +706,9 @@ public final class IslandCoordinator {
     }
     private int capacity(){return Math.min(dispatcher.availableWorkers(),Math.min(settings.maximumDispatchesPerTick-dispatchedThisTick,settings.maximumDispatchesPerTick-pending.size()));}
     /** A missing result denotes cancellation, failure or abandonment. Duplicate/late results never advance clocks. */
-    public void completed(Attempt attempt,Optional<ProcessSolveServices.FluidIslandSolveResult> result){completed(attempt,result,null);}
+    public void completed(Attempt attempt,Optional<ProcessSolveJobs.FluidIslandSolveResult> result){completed(attempt,result,null);}
     /** {@code failure}: why a missing result is missing (the worker's exception, a cancellation), named in the held status; null where unknown. */
-    public void completed(Attempt attempt,Optional<ProcessSolveServices.FluidIslandSolveResult> result,String failure) {
+    public void completed(Attempt attempt,Optional<ProcessSolveJobs.FluidIslandSolveResult> result,String failure) {
         owned();Objects.requireNonNull(result);var entry=pending.get(attempt.slice.requestId());
         if(entry==null||!entry.attempt.equals(attempt)||entry.terminal)return;
         FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.completionsRouted);
@@ -790,7 +790,7 @@ public final class IslandCoordinator {
      * {@link #MAXIMUM_RETRY_DOUBLINGS}. Anything that changes the island's inputs (a fence, a released fence, a property
      * resume) clears the wait and the count. Online ticks only: no wall clock decides a delay.
      */
-    private void hold(Island island,IslandClock.Slice slice,ProcessSolveServices.FluidIslandSolveResult outcome) {
+    private void hold(Island island,IslandClock.Slice slice,ProcessSolveJobs.FluidIslandSolveResult outcome) {
         FluidRuntimeDiagnostics.count(budgetHold(outcome)?FluidRuntimeDiagnostics.budgetHolds:FluidRuntimeDiagnostics.numericalHolds);
         var hold=outcome==null?null:outcome.phaseHold().orElse(null);
         if(hold!=null) {
@@ -823,8 +823,8 @@ public final class IslandCoordinator {
     }
     /** A hold the worker's budget decided rather than the solve: no result by the round deadline, or the wall budget. A
      * repeat can pass with more CPU; the rest cannot. */
-    static boolean budgetHold(ProcessSolveServices.FluidIslandSolveResult outcome) {
-        return outcome==null||outcome.detail().startsWith(ProcessSolveServices.WALL_DEADLINE);
+    static boolean budgetHold(ProcessSolveJobs.FluidIslandSolveResult outcome) {
+        return outcome==null||outcome.detail().startsWith(ProcessSolveJobs.WALL_DEADLINE);
     }
     /** Something the island solves against changed: a held island is retried at once, from its first retry again - a
      * phase hold included, which starts a new episode. */
@@ -832,7 +832,7 @@ public final class IslandCoordinator {
     /** The dedicated status line of a phase hold: a phase set the network cannot carry, see
      * {@link com.wormzjl.icheme.science.fluid.thermo.ThermoHold}. */
     private String phaseHoldStatus(com.wormzjl.icheme.science.fluid.thermo.ThermoHold hold,boolean parked) {
-        return ProcessSolveServices.PHASE_HOLD+hold.status(where(hold))
+        return ProcessSolveJobs.PHASE_HOLD+hold.status(where(hold))
                 +(parked?"; the retry failed the same way, so the island waits for a change to its network":"");
     }
     private String where(com.wormzjl.icheme.science.fluid.thermo.ThermoHold hold) {
@@ -1402,7 +1402,7 @@ public final class IslandCoordinator {
      * revalidating slice renews the certificate from its solved state if it repeats the certified interval, and
      * otherwise starts a fresh streak.
      */
-    private void qualify(Island island,ProcessSolveServices.FluidIslandSolveResult accepted,PassiveNetwork before,Attempt attempt) {
+    private void qualify(Island island,ProcessSolveJobs.FluidIslandSolveResult accepted,PassiveNetwork before,Attempt attempt) {
         var revalidation=island.revalidating;island.revalidating=null;var policy=settings.certificates();
         boolean usable=policy.enabled()&&!stopped&&suspension==null&&accepted!=null;
         if(!usable) {
