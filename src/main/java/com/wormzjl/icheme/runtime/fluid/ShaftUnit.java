@@ -79,8 +79,11 @@ public record ShaftUnit(long id,ShaftNetwork.Kind kind,PhysicalFluidTopology.Pos
         if(kind==ShaftNetwork.Kind.SHAFT)return ShaftNetwork.Part.shaft(id,cell(position),axis);
         return new ShaftNetwork.Part(id,kind,null,-1,ends.stream().map(End::science).toList(),kind==ShaftNetwork.Kind.GEARBOX?settings.ratio():0,designSpeed);
     }
-    /** The driver this unit is in the step's terms, or null for a part that drives nothing. */
-    public ShaftTrain.Drive drive(boolean variable) {
+    /**
+     * The driver this unit is in the step's terms, or null for a part that drives nothing. Every motor runs on its
+     * variable-speed drive, whatever its duty's {@link #drive} (code base review M-03).
+     */
+    public ShaftTrain.Drive trainDrive() {
         return switch(kind){case MOTOR->ShaftTrain.Drive.VARIABLE_MOTOR;case STEAM_TURBINE->ShaftTrain.Drive.TURBINE;case COMBUSTION_ENGINE,GAS_TURBINE->ShaftTrain.Drive.FUEL;case CREATIVE_MOTOR->ShaftTrain.Drive.CREATIVE;case CREATE_COUPLING->ShaftTrain.Drive.CREATE;default->null;};
     }
     static ShaftNetwork.Cell cell(PhysicalFluidTopology.Position p){return new ShaftNetwork.Cell(p.dimension(),p.x(),p.y(),p.z());}

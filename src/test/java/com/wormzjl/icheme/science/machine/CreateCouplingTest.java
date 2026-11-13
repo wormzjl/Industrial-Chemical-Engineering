@@ -19,7 +19,7 @@ class CreateCouplingTest {
     private static final double WPS = CreateCoupling.wattsPerStress(2.5, CreateCoupling.STRESS_PER_FE);
 
     private static Driver coupling(double rpm, double spareStress) {
-        return new Driver(Drive.CREATE, 0, CreateCoupling.DESIGN_SPEED, 0, true, Mode.SPEED, rpm, spareStress * WPS, Trip.NONE, false);
+        return new Driver(Drive.CREATE, 0, CreateCoupling.DESIGN_SPEED, 0, true, Mode.SPEED, rpm, spareStress * WPS, Trip.NONE);
     }
 
     /** D7: 1 su is 20 x 2.5 / 34.13 = 1.465 W; the 30 kW pump train takes 20,500 su; 100 kW at 256 rpm is 267 su per rpm. */

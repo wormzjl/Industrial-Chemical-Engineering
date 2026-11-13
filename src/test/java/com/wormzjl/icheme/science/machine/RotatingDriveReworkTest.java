@@ -29,8 +29,7 @@ class RotatingDriveReworkTest {
                                 mode,
                                 10,
                                 0,
-                                ShaftTrain.Trip.NONE,
-                                false);
+                                ShaftTrain.Trip.NONE);
                 var measure = new ShaftTrain.Measure(0, 0, false, 1, 100, Double.NaN, Double.NaN);
                 assertEquals(3000, ShaftTrain.step(driver, 2950, measure).speed(), 1e-9);
                 assertTrue(driver.setSpeed() <= Motor.MAXIMUM_RPM);

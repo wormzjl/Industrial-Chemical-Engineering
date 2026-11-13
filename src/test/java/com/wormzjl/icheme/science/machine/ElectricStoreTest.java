@@ -92,17 +92,16 @@ class ElectricStoreTest {
     /** A motor without power stands, NO POWER, not latched; a creative motor or a turbine needs none. */
     @Test
     void aMotorWithoutPowerStandsAndItsTripIsNotLatched() {
-        for (var drive : new ShaftTrain.Drive[]{ShaftTrain.Drive.FIXED_MOTOR, ShaftTrain.Drive.VARIABLE_MOTOR}) {
-            var driver = new ShaftTrain.Driver(drive, 30e3, 2950, 2, true, ShaftTrain.Mode.SPEED, 0, 0, ShaftTrain.Trip.NONE, false, false);
-            var step = ShaftTrain.step(driver, 2950, ShaftTrain.Measure.of(24.9e3));
-            assertEquals(0, step.speed());
-            assertEquals(ShaftTrain.Trip.NO_POWER, step.trip());
-            assertEquals("TRIPPED: NO POWER", step.status());
-            assertEquals(0, step.electricPower(), "it draws nothing");
-            assertFalse(step.trip().latched(), "it clears itself on restart");
-        }
+        // Every motor is on its variable-speed drive (code base review M-03).
+        var driver = new ShaftTrain.Driver(ShaftTrain.Drive.VARIABLE_MOTOR, 30e3, 2950, 2, true, ShaftTrain.Mode.SPEED, 0, 0, ShaftTrain.Trip.NONE, false);
+        var step = ShaftTrain.step(driver, 2950, ShaftTrain.Measure.of(24.9e3));
+        assertEquals(0, step.speed());
+        assertEquals(ShaftTrain.Trip.NO_POWER, step.trip());
+        assertEquals("TRIPPED: NO POWER", step.status());
+        assertEquals(0, step.electricPower(), "it draws nothing");
+        assertFalse(step.trip().latched(), "it clears itself on restart");
         assertTrue(ShaftTrain.Trip.OVERLOAD.latched() && ShaftTrain.Trip.OVERSPEED.latched());
-        var creative = new ShaftTrain.Driver(ShaftTrain.Drive.CREATIVE, 0, ShaftTrain.CREATIVE_SPEED, 0, true, ShaftTrain.Mode.SPEED, 0, 0, ShaftTrain.Trip.NONE, false, false);
+        var creative = new ShaftTrain.Driver(ShaftTrain.Drive.CREATIVE, 0, ShaftTrain.CREATIVE_SPEED, 0, true, ShaftTrain.Mode.SPEED, 0, 0, ShaftTrain.Trip.NONE, false);
         assertEquals("RUNNING", ShaftTrain.step(creative, ShaftTrain.CREATIVE_SPEED, ShaftTrain.Measure.of(1e3)).status());
     }
 

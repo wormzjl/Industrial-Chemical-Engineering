@@ -12,8 +12,6 @@ import com.wormzjl.icheme.science.math.DeterministicMath;
  * @param efficiency η_is, the isentropic efficiency
  */
 public record SteamTurbine(double ratedPower, double efficiency) {
-    /** The overspeed trip, as a share of the rated speed (API 612: 110 % of the maximum continuous speed). */
-    public static final double TRIP_SPEED = 1.10;
     /** The efficiencies of a single-stage and a multistage machine: 40 bar and 400 °C to 4 bar is 6.8 kg/kWh ideal, about
      * 15 kg/kWh in a single stage and 9 in a multistage machine (US DOE steam tip sheet 21). */
     static final double SINGLE_STAGE = .45, MULTISTAGE = .76;
