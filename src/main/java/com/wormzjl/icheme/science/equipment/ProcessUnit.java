@@ -502,11 +502,17 @@ public final class ProcessUnit {
         return UnitDesign.of(kind).moves();
     }
 
+    /**
+     * The unit of {@code shape}, built once for every heading: it is drawn in its frame, and no design reads the front
+     * (only {@link EquipmentShape#transform()}, {@link Nameplate} and {@link ShapeRepair} do), so the four headings share
+     * the unit built facing north (finding E12, batch 2026-11-13-codebase-review).
+     */
     static ProcessUnit of(EquipmentShape shape) {
-        var built = BUILT.get(shape);
+        var key = shape.front() == EquipmentShape.Heading.NORTH ? shape : shape.withFront(EquipmentShape.Heading.NORTH);
+        var built = BUILT.get(key);
         if (built != null) return built;
         if (BUILT.size() >= CACHE) BUILT.clear();
-        return BUILT.computeIfAbsent(shape, s -> new ProcessUnit(s, UnitDesign.of(s.kind())::build, false));
+        return BUILT.computeIfAbsent(key, s -> new ProcessUnit(s, UnitDesign.of(s.kind())::build, false));
     }
 
     // ---- Collision parts --------------------------------------------------------------------------------------------
