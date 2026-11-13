@@ -104,7 +104,7 @@ public final class EquipmentCompatGameTests {
 
     /**
      * A refresh that finds another block in one of its layout's cells leaves the cell out and the block where it stands, and
-     * the cells it wrote keep no stamp (batch 2026-10-26-backward-compat): the next load tries again and, the block cleared,
+     * the cells it wrote hold the stale layout revision (batch 2026-10-26-backward-compat): the next load tries again and, the block cleared,
      * places the cell. The drum keeps its registration throughout.
      */
     @GameTest(template="empty",timeoutTicks=400,batch="equipment-compat-blocked")
@@ -122,11 +122,12 @@ public final class EquipmentCompatGameTests {
         var position=new PhysicalFluidTopology.Position(level.dimension().location().toString(),nodeAt.getX(),nodeAt.getY(),nodeAt.getZ());
         long[] identity={0};
         Runnable reload=()->{
-            // Every shell cell reloads as an older layout placed it: no stamp of the current one.
+            // Every shell cell reloads as an older layout placed it, in a save from before layout revisions: a stamp that is
+            // not the current layout's (E20), so the cell is stale.
             for(var c:layout.shell()) {
                 var at=origin.offset(c.x(),c.y(),c.z());
                 if(!(level.getBlockEntity(at) instanceof EquipmentShellBlockEntity shell))continue;
-                var tag=shell.saveWithoutMetadata(level.registryAccess());tag.putLong("Layout",0);shell.loadWithComponents(tag,level.registryAccess());shell.onLoad();
+                var tag=shell.saveWithoutMetadata(level.registryAccess());tag.remove("LayoutRevision");tag.putLong("Layout",0);shell.loadWithComponents(tag,level.registryAccess());shell.onLoad();
             }
         };
         helper.startSequence().thenWaitUntil(()->helper.assertTrue(world.at(position).isPresent(),"Waiting for the drum's registration"))
@@ -145,14 +146,14 @@ public final class EquipmentCompatGameTests {
             helper.assertTrue(level.getBlockState(blockedAt).is(Blocks.STONE),"the player's block stands");
             for(var c:layout.shell()) {
                 var at=origin.offset(c.x(),c.y(),c.z());if(at.equals(blockedAt))continue;
-                helper.assertTrue(((EquipmentShellBlockEntity)level.getBlockEntity(at)).stale(),"a cell the blocked refresh wrote keeps no stamp: "+c);
+                helper.assertTrue(((EquipmentShellBlockEntity)level.getBlockEntity(at)).stale(),"a cell the blocked refresh wrote holds the stale layout revision: "+c);
             }
             helper.assertTrue(world.at(position).map(r->r.device().id()).orElse(0L)==identity[0],"the drum keeps its registration");
             level.setBlock(blockedAt,Blocks.AIR.defaultBlockState(),3);
             reload.run();
         }).thenWaitUntil(()->{
             helper.assertTrue(level.getBlockEntity(blockedAt) instanceof EquipmentShellBlockEntity,"Waiting for the cleared cell to be placed");
-            for(var c:layout.shell())helper.assertFalse(((EquipmentShellBlockEntity)level.getBlockEntity(origin.offset(c.x(),c.y(),c.z()))).stale(),"Waiting for every cell's stamp at "+c);
+            for(var c:layout.shell())helper.assertFalse(((EquipmentShellBlockEntity)level.getBlockEntity(origin.offset(c.x(),c.y(),c.z()))).stale(),"Waiting for every cell's layout revision at "+c);
         }).thenExecute(()->{
             helper.assertTrue(world.at(position).map(r->r.device().id()).orElse(0L)==identity[0],"the drum keeps its registration");
             // The drum leaves with its registration. GameTest areas are not cleared between batches, and a later test may

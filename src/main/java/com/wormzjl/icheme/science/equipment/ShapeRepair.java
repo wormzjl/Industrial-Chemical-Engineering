@@ -14,7 +14,8 @@ import org.jetbrains.annotations.Nullable;
  * reads its default. A shape the current rules refuse is repaired a field at a time, in a fixed order: sizes clamped and
  * snapped to the kind's grid, the support into its range, side connections outside the shell dropped, the bottom outlet
  * to the front, the boot and the bank removed, and last the kind's default size. Each change is named, so the caller logs
- * it; the repaired shape has another layout stamp, so the vessel is then rebuilt by the normal refresh. A kind this build
+ * it; a repaired shape's cells read as stale ({@link EquipmentRefresh#placedRevision}; a cell saved before layout
+ * revisions when the repair changed its stamp), so the vessel is then rebuilt by the normal refresh. A kind this build
  * no longer has is {@link Read#retired}: its structure is removed whole (owner decision D6).
  */
 public final class ShapeRepair {

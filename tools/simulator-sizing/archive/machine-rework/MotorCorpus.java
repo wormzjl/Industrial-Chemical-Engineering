@@ -20,7 +20,7 @@ public class MotorCorpus {
                 double size=sizes[sizeIndex++];at++;int length=ProcessUnit.defaultLength(kind,size);
                 var shape=EquipmentShape.designed(kind,size,length,EquipmentShape.Heading.NORTH,ProcessUnit.defaultSupport(kind,size,length),ProcessUnit.Bank.ONE,0);
                 var layout=ShapeRasterizer.layout(shape);var text=new StringBuilder(shape.toString().replace(", baseSpeed=0.0]","]").replace(", exchangerType=STANDARD]","]"));
-                text.append(" | box ").append(shape.sizeX()).append(' ').append(shape.sizeY()).append(' ').append(shape.sizeZ()).append(" | shell ").append(layout.shell().size()).append(" interior ").append(layout.interior().size()).append(" | stamp ").append(Long.toHexString(ShapeRasterizer.stamp(shape))).append(" | pipes");
+                text.append(" | box ").append(shape.sizeX()).append(' ').append(shape.sizeY()).append(' ').append(shape.sizeZ()).append(" | shell ").append(layout.shell().size()).append(" interior ").append(layout.interior().size()).append(" | stamp ").append(Long.toHexString(ShapeRasterizer.legacyStamp(shape))).append(" | pipes");
                 for(var nozzle:ShapeRasterizer.ports(shape))text.append(' ').append(nozzle.cell().x()+nozzle.dx()).append(',').append(nozzle.cell().y()+nozzle.dy()).append(',').append(nozzle.cell().z()+nozzle.dz());
                 var terminal=ShapeRasterizer.terminal(shape);if(terminal!=null)text.append(" | terminal ").append(terminal.x()).append(',').append(terminal.y()).append(',').append(terminal.z());
                 previous.set(i,text.toString());

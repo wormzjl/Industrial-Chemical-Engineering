@@ -79,7 +79,7 @@ class EquipmentLayoutGoldenTest {
         if (shape.exchangerType() == ExchangerType.STANDARD) printed = printed.replace(", exchangerType=STANDARD]", "]").replaceAll(", exchangers=Exchangers\\[condenser=STANDARD, trim=STANDARD, coolers=\\[[A-Z, ]*\\]\\]", "");
         var b = new StringBuilder(printed).append(" | box ").append(shape.sizeX()).append(' ').append(shape.sizeY()).append(' ').append(shape.sizeZ())
                 .append(" | shell ").append(layout.shell().size()).append(" interior ").append(layout.interior().size())
-                .append(" | stamp ").append(Long.toHexString(ShapeRasterizer.stamp(shape))).append(" | pipes");
+                .append(" | stamp ").append(Long.toHexString(ShapeRasterizer.legacyStamp(shape))).append(" | pipes");
         for (var nozzle : ShapeRasterizer.ports(shape))
             b.append(' ').append(nozzle.cell().x() + nozzle.dx()).append(',').append(nozzle.cell().y() + nozzle.dy()).append(',').append(nozzle.cell().z() + nozzle.dz());
         // An electric machine's or fan unit's terminal box, its FE port (W5): an existing cell, recorded where there is one.

@@ -516,14 +516,15 @@ public final class ShapeRasterizer {
     }
 
     /**
-     * The stamp of the shape's layout (owner request 2026-10-18: a placed vessel follows its kind's current drawing):
-     * a 64-bit FNV-1a hash of its box, its shell and interior cells and its ports, never 0. A shell cell keeps the stamp
-     * it was placed with; another one on load means the vessel's cells in the world no longer match the layout the code
-     * draws ({@link EquipmentRefresh}). The drawing of a cell needs no stamp: it follows the code at every load.
+     * The legacy stamp of the shape's layout: a 64-bit FNV-1a hash of its box, its shell and interior cells and its ports,
+     * never 0. Only the reader of old saves, as an alias reader is: a shell cell saved before the layout revision (batch
+     * 2026-11-13-codebase-review, E20) holds the stamp it was placed with under {@code Layout}, and it is current when its
+     * design's {@link #layoutRevision} is still 1 and the stamp equals this one ({@link EquipmentRefresh#placedRevision}).
+     * Nothing new saves it; {@code EquipmentLayoutGoldenTest} prints it as its digest of the recorded cells.
      */
-    public static long stamp(EquipmentShape shape) {
+    public static long legacyStamp(EquipmentShape shape) {
         var g = geometry(shape);
-        long stamp = g.stamp;
+        long stamp = g.legacyStamp;
         if (stamp != 0) return stamp;
         long h = 0xcbf29ce484222325L;
         h = mix(mix(mix(h, shape.sizeX()), shape.sizeY()), shape.sizeZ());
@@ -533,7 +534,7 @@ public final class ShapeRasterizer {
         }
         for (var port : g.ports)
             h = mix(mix(mix(mix(mix(mix(mix(mix(h, port.cell().x()), port.cell().y()), port.cell().z()), port.dx()), port.dy()), port.dz()), port.port().ordinal()), port.nozzle());
-        g.stamp = stamp = h == 0 ? 1 : h;
+        g.legacyStamp = stamp = h == 0 ? 1 : h;
         return stamp;
     }
 
@@ -796,8 +797,8 @@ public final class ShapeRasterizer {
         private final Cell fluidCell;
         /** One node cell per registration: the fluid cell, or each heat side's first inlet cell (batch 2026-10-27-heat-exchanger-design). */
         private final List<Cell> fluidCells;
-        /** The layout's {@link #stamp}, 0 until first asked. */
-        private volatile long stamp;
+        /** The layout's {@link ShapeRasterizer#legacyStamp}, 0 until first asked. */
+        private volatile long legacyStamp;
 
         Geometry(EquipmentShape shape) { this(shape, RenderDetail.NORMAL); }
         Geometry(EquipmentShape shape, RenderDetail detail) {

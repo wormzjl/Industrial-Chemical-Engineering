@@ -17,6 +17,7 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import com.wormzjl.icheme.science.equipment.ShapeRepair;
+import com.wormzjl.icheme.science.equipment.EquipmentRefresh;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.NozzleBore;
 import com.wormzjl.icheme.science.equipment.Paint;
@@ -56,6 +57,12 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
     public static final ModelProperty<ShapeRasterizer.CellKey> CELL = new ModelProperty<>();
     /** A saved cell or box beyond this many cells along any side is corrupt (the largest unit is under 100). */
     private static final int MAX_CELL = 512;
+    /**
+     * The cell's tags for the layout it was placed by (batch 2026-11-13-codebase-review, E20): {@code LayoutRevision}, the
+     * int this build writes ({@link ShapeRasterizer#layoutRevision}), and {@code Layout}, the long a save from before held
+     * ({@link ShapeRasterizer#legacyStamp}), read only, as an alias is.
+     */
+    private static final String LAYOUT_REVISION = "LayoutRevision", LEGACY_LAYOUT = "Layout";
     private @Nullable EquipmentShape shape;
     private int cellX, cellY, cellZ;
     private long nozzles;
@@ -72,10 +79,12 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
     private final com.wormzjl.icheme.runtime.instrument.Instrument.Metadata instruments=new com.wormzjl.icheme.runtime.instrument.Instrument.Metadata();
     @Override public com.wormzjl.icheme.runtime.instrument.Instrument.Metadata instruments(){return instruments;}
     /**
-     * The layout this cell was placed by: its {@link ShapeRasterizer#stamp} and its box (0 for a cell saved before the
-     * stamp existed). Another stamp on load sends the vessel to {@link EquipmentStructure#refreshLater}.
+     * The layout this cell was placed by: its design's {@link ShapeRasterizer#layoutRevision} and its box. A cell read from
+     * a save holds its shape's current revision when its cells are the current layout's, else
+     * {@link EquipmentRefresh#STALE} (0, which no design declares); so does a cell a blocked refresh wrote. Another value
+     * than the current one on load sends the vessel to {@link EquipmentStructure#refreshLater}.
      */
-    private long stamp;
+    private int layoutRevision;
     private int[] box = new int[3];
     /**
      * The saved kind of a cell whose kind this build no longer has (owner decision D6, batch 2026-10-26-backward-compat):
@@ -334,7 +343,7 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
         assign(shape, cell, 0);
         this.paint = paint;
         this.name = com.wormzjl.icheme.science.equipment.DeviceName.clean(name);
-        stamp = ShapeRasterizer.stamp(shape);
+        layoutRevision = ShapeRasterizer.layoutRevision(shape);
         box = new int[]{shape.sizeX(), shape.sizeY(), shape.sizeZ()};
         setChanged();
         trackRoof();
@@ -442,12 +451,12 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
     }
 
     /**
-     * The vessel's layout stands incomplete: a refresh left cells of it out where other blocks stand. The cell keeps no
-     * stamp, so the next load refreshes the vessel again and places what the player has cleared since (batch
-     * 2026-10-26-backward-compat).
+     * The vessel's layout stands incomplete: a refresh left cells of it out where other blocks stand. The cell holds
+     * {@link EquipmentRefresh#STALE}, the revision no design declares, so the next load refreshes the vessel again and
+     * places what the player has cleared since (batch 2026-10-26-backward-compat).
      */
     public void layoutIncomplete() {
-        stamp = 0;
+        layoutRevision = EquipmentRefresh.STALE;
         setChanged();
     }
 
@@ -464,10 +473,10 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
 
     /** Whether this cell was placed by another layout than the one the code draws for its shape (server, after load). */
     public boolean stale() {
-        return shape != null && (key == null || stamp != ShapeRasterizer.stamp(shape));
+        return shape != null && (key == null || layoutRevision != ShapeRasterizer.layoutRevision(shape));
     }
 
-    /** The box of the layout this cell was placed by (zeros when it was saved before the stamp existed). */
+    /** The box of the layout this cell was placed by (zeros when it was saved before the box existed). */
     public int[] placedBox() {
         return box.clone();
     }
@@ -590,7 +599,7 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
         key = null;
         paint = Paint.DEFAULT;
         name = DeviceNames.read(tag, "equipment_compat at=" + worldPosition.toShortString());
-        stamp = 0;
+        layoutRevision = EquipmentRefresh.STALE;
         box = new int[3];
         identity = tag.getLong("FluidIdentity");
         fuel = null;
@@ -634,7 +643,10 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
             }
             assign(read.shape(), new ShapeRasterizer.Cell(cell[0], cell[1], cell[2]), tag.getLong("Nozzles"));
             paint = painted;
-            stamp = tag.getLong("Layout");
+            // A save from before layout revisions holds only the stamp (E20); this cell writes the revision at its next save.
+            layoutRevision = tag.contains(LAYOUT_REVISION, net.minecraft.nbt.Tag.TAG_INT)
+                    ? EquipmentRefresh.placedRevision(read.shape(), !read.repairs().isEmpty(), tag.getInt(LAYOUT_REVISION))
+                    : EquipmentRefresh.legacyRevision(read.shape(), tag.getLong(LEGACY_LAYOUT));
         } catch (IllegalArgumentException invalid) {
             IChemE.LOGGER.warn("Equipment shell at {} has invalid data and stays unbound: {}", worldPosition, invalid.getMessage());
         }
@@ -651,7 +663,7 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
         tag.putLong("Nozzles", nozzles);
         tag.putIntArray("Paint", paint.encode());
         DeviceNames.write(tag, name);
-        tag.putLong("Layout", stamp);
+        tag.putInt(LAYOUT_REVISION, layoutRevision);
         tag.putIntArray("Box", box);
         if (roofLevel > 0) tag.putFloat("RoofLevel", roofLevel);
     }

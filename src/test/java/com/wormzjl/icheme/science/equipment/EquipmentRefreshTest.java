@@ -31,15 +31,15 @@ class EquipmentRefreshTest {
                 drum(3, 6, Orientation.VERTICAL, Heading.NORTH, 4, EquipmentShape.defaultConnections(3, 6, Orientation.VERTICAL, 4, false, 2), false, 2));
         var stamps = new ArrayList<Long>();
         for (var shape : shapes) {
-            long stamp = ShapeRasterizer.stamp(shape);
+            long stamp = ShapeRasterizer.legacyStamp(shape);
             assertNotEquals(0, stamp, shape.toString());
             stamps.add(stamp);
         }
         assertEquals(shapes.size(), new HashSet<>(stamps).size(), "distinct layouts share a stamp");
-        assertEquals(stamps.getFirst(), ShapeRasterizer.stamp(drum(3, 6, Orientation.VERTICAL, Heading.NORTH, 4)));
+        assertEquals(stamps.getFirst(), ShapeRasterizer.legacyStamp(drum(3, 6, Orientation.VERTICAL, Heading.NORTH, 4)));
         try {
             ShapeRasterizer.drawing(false);
-            for (int k = 0; k < shapes.size(); k++) assertEquals(stamps.get(k), ShapeRasterizer.stamp(shapes.get(k)), shapes.get(k).toString());
+            for (int k = 0; k < shapes.size(); k++) assertEquals(stamps.get(k), ShapeRasterizer.legacyStamp(shapes.get(k)), shapes.get(k).toString());
         } finally {
             ShapeRasterizer.drawing(true);
         }

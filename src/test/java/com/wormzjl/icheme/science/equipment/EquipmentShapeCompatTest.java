@@ -281,7 +281,7 @@ class EquipmentShapeCompatTest {
                 retired++;assertEquals("retired_unit", read.retired());continue;
             }
             assertNotNull(read.shape());if (!read.repairs().isEmpty()) repaired++;
-            if (i % 100 == 0) assertNotEquals(0, ShapeRasterizer.stamp(read.shape()), "the repaired shape is drawn: " + read.shape());
+            if (i % 100 == 0) assertNotEquals(0, ShapeRasterizer.legacyStamp(read.shape()), "the repaired shape is drawn: " + read.shape());
         }
         assertTrue(retired > 0 && repaired > 1000, "retired " + retired + ", repaired " + repaired);
     }
