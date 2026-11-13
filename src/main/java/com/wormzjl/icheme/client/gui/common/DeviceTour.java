@@ -1,7 +1,6 @@
 package com.wormzjl.icheme.client.gui.common;
 
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
-import com.wormzjl.icheme.client.gui.screens.inventory.FluidDeviceScreen.FluidGuiLayout;
 
 import java.util.LinkedHashMap;
 import java.util.List;

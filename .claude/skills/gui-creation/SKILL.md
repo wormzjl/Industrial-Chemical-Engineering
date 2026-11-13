@@ -101,7 +101,7 @@ mean two things, ask. When a fix changes what the player sees, or rests on an as
 - A unit wider than its place (kmol/min, m³/min, kPa/m) is the label's last line ("Flow" over "kmol/min").
 - A group's labels stand all beside their boxes (two lines at most, words whole) or all above them. Never mix.
 - Buttons in a row share its width; where a text does not fit, every button of the row stacks to the full width.
-- Shared frame parts come from one layout class (`FluidDeviceScreen.FluidGuiLayout`: `footer`, `softKeys`, `tabs`,
+- Shared frame parts come from one layout class (`client/gui/common/FluidGuiLayout`: `footer`, `softKeys`, `tabs`,
   `control`, `side`), so every page puts its keys, tabs and columns at the same places.
 - Gate: `DeviceColumnTest.assertInLine(column, what)` on every case at every width the door can take (see the gates
   below).
@@ -157,8 +157,8 @@ sheets (in the Claude app, with `SendUserFile`).
 
 ## Pitfalls
 
-- In the tools, import `FluidDeviceScreen.FluidGuiLayout`; its qualified name fails to compile without the game's
-  classes on the class path.
+- In the tools, import `client.gui.common.FluidGuiLayout`: it names no Minecraft class, so a tool compiles with it
+  without the game's classes on the class path.
 - Tests measure with `Measure.fixed(6)`; the game font is narrower for i, l, t and k. Check close calls on a render.
 - Working copies are CRLF (autocrlf): edit them with the Edit tool or line-based perl (`\r?$`), never `sed -i` or
   `perl -0`. `printf >>` appends an LF line to a CRLF file.

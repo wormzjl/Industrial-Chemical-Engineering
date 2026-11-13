@@ -3,7 +3,6 @@ package com.wormzjl.icheme.client.gui.common;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
 import com.wormzjl.icheme.client.gui.common.kit.Measure;
 import com.wormzjl.icheme.client.gui.common.kit.Palette;
-import com.wormzjl.icheme.client.gui.screens.inventory.FluidDeviceScreen.FluidGuiLayout;
 import com.wormzjl.icheme.runtime.fluid.FluidView;
 import com.wormzjl.icheme.runtime.fluid.HeatUnit;
 import java.util.ArrayList;

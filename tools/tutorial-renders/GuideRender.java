@@ -8,7 +8,7 @@ import com.wormzjl.icheme.client.gui.common.kit.PanelSkin;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
-import com.wormzjl.icheme.client.gui.screens.inventory.FluidDeviceScreen.FluidGuiLayout;
+import com.wormzjl.icheme.client.gui.common.FluidGuiLayout;
 import com.wormzjl.icheme.client.gui.tutorial.GuidePage;
 import com.wormzjl.icheme.client.gui.tutorial.TourLayout;
 import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind;

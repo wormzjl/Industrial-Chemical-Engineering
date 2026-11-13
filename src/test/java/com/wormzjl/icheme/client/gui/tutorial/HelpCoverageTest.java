@@ -6,7 +6,7 @@ import com.wormzjl.icheme.client.gui.common.ScreenTours;
 import com.wormzjl.icheme.client.gui.common.HeatControlColumn;
 import com.wormzjl.icheme.client.gui.common.StillDoor;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
-import com.wormzjl.icheme.client.gui.screens.inventory.FluidDeviceScreen.FluidGuiLayout;
+import com.wormzjl.icheme.client.gui.common.FluidGuiLayout;
 import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind;
 import com.wormzjl.icheme.science.tutorial.guide.Tour;
 import com.wormzjl.icheme.science.tutorial.guide.TourFile;

@@ -1,7 +1,6 @@
 package com.wormzjl.icheme.client.gui.common;
 import com.wormzjl.icheme.science.display.DisplayUnit.FlowRateUnit;
 import com.wormzjl.icheme.science.display.DisplayUnit.PressureUnit;
-import com.wormzjl.icheme.client.gui.screens.inventory.FluidDeviceScreen.FluidGuiLayout;
 import com.wormzjl.icheme.client.gui.screens.inventory.FluidDeviceScreen.PhaseRatioBasis;
 
 import com.wormzjl.icheme.client.gui.common.ProcessUi.NumericDraft;

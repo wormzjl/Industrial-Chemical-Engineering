@@ -14,7 +14,6 @@ import com.wormzjl.icheme.client.gui.common.kit.FlowsheetPainter;
 import com.wormzjl.icheme.client.gui.common.kit.Palette;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
-import com.wormzjl.icheme.client.gui.screens.inventory.FluidDeviceScreen.FluidGuiLayout;
 import com.wormzjl.icheme.science.assembly.ExchangerBlueprint;
 import com.wormzjl.icheme.science.equipment.HeatSides;
 import com.wormzjl.icheme.science.flowsheet.Flowsheet;
