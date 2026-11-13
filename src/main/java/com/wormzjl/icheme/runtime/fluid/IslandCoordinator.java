@@ -409,6 +409,9 @@ public final class IslandCoordinator {
     /** A certified island is materialised first, so what the engine reads (a save, an event's base) is current; a view takes {@link #presentation}. */
     public Snapshot snapshot(long id){owned();var island=require(id);materialise(island);return island.snapshot();}
     public Optional<Metrics> metrics(long id){owned();return Optional.ofNullable(require(id).metrics);}
+    /** The island's last solved interval as stored: what {@link #presentation} carries too (a preview keeps it). A read that
+     * builds no snapshot: an instrument reads its observations (code base review R1). */
+    public Optional<PassiveIntervalSolver.Result> lastResult(long id){owned();return require(id).lastResult;}
     /**
      * A presentation read, for a view of a loaded device, an open menu or an instrument: a preview that changes nothing on
      * the island (code base review R5). A certified island behind its {@link #previewTarget} is shown as its certificate's
