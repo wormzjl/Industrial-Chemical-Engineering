@@ -128,15 +128,31 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
   DeviceTourTest and ScreenToursTest, `FilmScreen` exempt) and a film on every equipment page (`PageFilms`, 29 films,
   gate PageFilmsTest; motor, generator, gearbox and the control valve picture only); tour render `CoverageRender`.
   18 test classes pass, run once with `--tests`.
+- 2026-11-13: CODE_REVIEW.md's findings (owner approved), each fixed: 1 the stop step reads the still's stored view
+  (ae47b06ef); 2 and 2b trays that do not solve run as the pot's single stage, and a still that solves a column keeps its
+  fire out until the first answer (ab4620e78; History of `2026-11-12-still-heat-per-distillate`); 3 `building/site` a
+  film step, gate `noTwoStepsShareATriggerAndItsConditions` (1ca54ee67); 4 and 5 the guide, its HUD line and the tour
+  lay out only on a change, tours read once and checked by name, caches drop at a resource reload (5cd85b8a8; the page
+  picture was already built once a page: sound); 6 and 7 one Hello a player a second, `/icheme-film` removed
+  (cace5dd6d); 8 and 9 the cards and `Labels` in `client/gui/tutorial/`, `TutorialNetworkCodecTest`'s loader gate
+  (e6fe48dc8). Unconfirmed item checked, not changed (open item below). Every changed test class run once with `--tests`.
 
 ## Code areas (proposed)
 
-- `science/tutorial/` (guide, tours, scenes, films, cards), `client/gui/tutorial/` and the GUI kit (`?` key, scene
-  view, tours, cards, guide screen), `runtime/tutorial/` (advancement criteria), `compat/jei/`, the equipment items,
+- `science/tutorial/` (guide, tours, scenes, films, the cards' data), `client/gui/tutorial/` and the GUI kit (`?` key,
+  scene view, tours, the cards, guide screen), `runtime/tutorial/` (advancement criteria), `compat/jei/`, the equipment items,
   `assets/icheme/tutorial/`, `assets/icheme/columnpreset/` (the small crude tower), `tools/tutorial-renders/`,
   `tools/tutorial-recordings/`.
 
 ## Open items
+
+- Code review, for the owner: (a) overlapping criteria, not identical (the new gate passes): `simulator/run` (any run)
+  and `simulator/heat` (a run with H-101 at most 643 K), `start/go` (RUNNING among its phases) and `start/limit`
+  (RUNNING): a first event that meets the second completes both. (b) The unconfirmed `BatchStill:457`: a propane-rich pot
+  with water (300, 150, 50 mol, bubble 237.5 K), outlet 290 K, valve closed: the one-stage split has head and condensate
+  at 239.0 K and a condenser duty of 0.00397 J/mol, but `closed` is false (0 and 4 trays alike), so the step takes the
+  open path (line 514), not 457; it reads COOLING LIMITED, condensed 0, duty -0.0009 J over 10 s, heat 109 kJ. Taken,
+  line 457 would give 2.75e6 mol/s, which `need` multiplies back by the duty (the heat) and `flood` uses only with trays.
 
 - Merge order: the aqueous batch reached main as 0.29.0 and this branch holds main (1cfca0ab0, 2026-11-13). Before that
   (owner, 2026-11-12): this branch merges after `claude/ethanol-compound-matrix-4b318d`. It held that

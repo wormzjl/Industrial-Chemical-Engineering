@@ -65,6 +65,11 @@ owner's choice and the default), `-DiconCases=true` (only `icons-cases.png`, the
 
 ## History
 
+Removed: the P0 client command `/icheme-film <name>` (`client/gui/tutorial/FilmCommand.java` and its registration in
+`IChemEClient.registerCommands`), code review finding 7, commit cace5dd6d. To attach it again for a look in the game:
+`git show cace5dd6d^:src/main/java/com/wormzjl/icheme/client/gui/tutorial/FilmCommand.java` into that path, and the
+`RegisterClientCommandsEvent` handler from `git show cace5dd6d -- src/main/java/com/wormzjl/icheme/client/IChemEClient.java`.
+
 - 2026-11-12, P0: the tool, for the film `still_inside`.
 - 2026-11-12, P1: GuideRender (guide, tours, card) and FieldGuideIcon.
 - 2026-11-12, P2a: card sheets for chain, barrel, products and road; the crude chapter.
