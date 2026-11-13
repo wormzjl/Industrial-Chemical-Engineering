@@ -621,7 +621,22 @@ public final class FluidTpEquilibrium {
         private final PengRobinsonKernel.Evaluation first, second;
         private final TangentPlaneStability.Workspace stability;
         private final CubicPhaseEvaluator.Workspace phases;
+        /** The split's products: written only by a split's finish and its restatements, read as the dry core's outcome. */
         private final PhaseState vaporState, liquidState;
+        /**
+         * Whether {@link #liquidState} and {@link #vaporState} hold the split of the dry solve now running or last run: cleared
+         * at the entry of {@code hydrocarbon} (and by the stand-in's failure, whose states may be the rest's), set once a
+         * split's own finish has written both ({@code finishSplit}, {@code slotOutcome}, the stand-in's restated split;
+         * {@code carriedSplit} restates the split {@code finishSplit} wrote). {@code splitChemicalPotentialsUsable} judges
+         * the pair only then.
+         */
+        private boolean ownSplit;
+        /**
+         * Scratch states of the stages that evaluate a phase and copy it into their answer or read one value of it: the pure
+         * coexistence, the pure crystal step and its fluid, the onsets' one-phase drive, and the single-phase and merged
+         * builders. Never the split's products.
+         */
+        private final PhaseState vaporScratch, liquidScratch;
         private int kernelEvaluations, derivativeEvaluations, rachfordRiceSteps, iterations, extrapolations,
                 newtonIterations;
         private double lastChange;
@@ -721,6 +736,8 @@ public final class FluidTpEquilibrium {
             phases = owner.evaluator.newWorkspace();
             vaporState = owner.evaluator.newState();
             liquidState = owner.evaluator.newState();
+            vaporScratch = owner.evaluator.newState();
+            liquidScratch = owner.evaluator.newState();
             vaporMoles = new double[n];
             liquidMoles = new double[n];
             trialVapor = new double[n];
@@ -2024,8 +2041,8 @@ public final class FluidTpEquilibrium {
         boolean energy = specification == Specification.PH;
         if (energy) t = coexistenceTemperature(t, p, w); else p = coexistencePressure(t, p, w);
         if (Double.isNaN(t) || Double.isNaN(p)) return null;
-        PhaseState liquid = evaluator.evaluate(t, p, w.request.amounts, Root.LIQUID, w.phases, w.liquidState);
-        PhaseState vapour = evaluator.evaluate(t, p, w.request.amounts, Root.VAPOR, w.phases, w.vaporState);
+        PhaseState liquid = evaluator.evaluate(t, p, w.request.amounts, Root.LIQUID, w.phases, w.liquidScratch);
+        PhaseState vapour = evaluator.evaluate(t, p, w.request.amounts, Root.VAPOR, w.phases, w.vaporScratch);
         w.outerKernel += 2;
         double n = w.hydrocarbonTotal;
         double liquidValue = energy ? liquid.balanceEnthalpy() : liquid.balanceVolume();
@@ -2315,8 +2332,10 @@ public final class FluidTpEquilibrium {
      * third fluid phase indicated, {@link EquilibriumResult#UNSTABLE_PRODUCT}; also where a short tie line types it
      * {@link EquilibriumResult#CRITICAL_BAND}), whose two phases are still in the workspace with equal chemical potentials
      * (to 1e-6 RT): the split's chemical potentials then test and steer the crystals (P5). They are never an answer: an
-     * answer needs a converged, stability-tested fluid the crystal leaves. {@code material} is the feed {@code fluid}
-     * answers: its present list is checked.
+     * answer needs a converged, stability-tested fluid the crystal leaves. {@code fluid} is the answer of the last dry
+     * solve on {@code w} (each caller calls this right after {@code solveDry}), and the two phases must be that solve's
+     * own split ({@code Workspace.ownSplit}): a three-slot audit failure writes no split, and a pair an earlier solve or
+     * request left there is never judged. {@code material} is the feed {@code fluid} answers: its present list is checked.
      */
     private boolean splitChemicalPotentialsUsable(EquilibriumResult fluid, Feed material, Workspace w) {
         if (fluid.status() != EquilibriumResult.Status.NOT_CONVERGED) return false;
@@ -2324,7 +2343,7 @@ public final class FluidTpEquilibrium {
         boolean unstableProduct = detail.startsWith(EquilibriumResult.UNSTABLE_PRODUCT)
                 || detail.startsWith(EquilibriumResult.CRITICAL_BAND) && detail.contains("): " + EquilibriumResult.UNSTABLE_PRODUCT);
         if (!unstableProduct) return false;
-        if (!w.liquidState.filled() || !w.vaporState.filled()) return false;
+        if (!w.ownSplit) return false;
         for (int a = 0; a < material.presentCount; a++) {
             int i = material.present[a];
             if (!(w.liquidState.moleFraction(i) > 0.0) || !(w.vaporState.moleFraction(i) > 0.0)) return false;
@@ -3077,7 +3096,7 @@ public final class FluidTpEquilibrium {
         if (Double.isNaN(t) || Double.isNaN(p)) return null;
         int i = c.component();
         String species = evaluator.components().get(i);
-        PhaseState fluid = evaluator.evaluate(t, p, w.request.amounts, root, w.phases, w.vaporState);
+        PhaseState fluid = evaluator.evaluate(t, p, w.request.amounts, root, w.phases, w.vaporScratch);
         PhaseState solid = c.anchored().evaluate(t, p, w.solidState);
         w.outerKernel++;
         double n = w.hydrocarbonTotal;
@@ -3163,13 +3182,14 @@ public final class FluidTpEquilibrium {
 
     /**
      * The fluid a near-pure crystal step leaves (D21): the feed's traces with {@code amount} of species {@code i},
-     * evaluated at (t, p) on {@code root} into the workspace's vapour state.
+     * evaluated at (t, p) on {@code root} into the workspace's vapour scratch state (the one {@link #pureCrystalStep}'s
+     * fluid is in).
      */
     private PhaseState stepFluid(double t, double p, int i, double amount, Root root, Workspace w) {
         System.arraycopy(w.request.amounts, 0, w.stepFluid, 0, count);
         w.stepFluid[i] = amount;
         w.outerKernel++;
-        return evaluator.evaluate(t, p, w.stepFluid, root, w.phases, w.vaporState);
+        return evaluator.evaluate(t, p, w.stepFluid, root, w.phases, w.vaporScratch);
     }
 
     /** The typed hold of a crystal step the near-pure rule does not answer (D21 option C, {@link EquilibriumResult#CRYSTAL_STEP}). */
@@ -4334,7 +4354,7 @@ public final class FluidTpEquilibrium {
      */
     private double singlePhaseDrive(double t, double p, Crystal c, Root root, Workspace w) {
         try {
-            PhaseState phase = evaluator.evaluate(t, p, w.request.amounts, root, w.phases, w.liquidState);
+            PhaseState phase = evaluator.evaluate(t, p, w.request.amounts, root, w.phases, w.liquidScratch);
             w.kernelEvaluations++;
             return (phase.chemicalPotential(c.component()) - c.anchored().chemicalPotential(t, p)) / (R * t);
         } catch (IllegalArgumentException | IllegalStateException | ArithmeticException refused) {
@@ -4419,8 +4439,8 @@ public final class FluidTpEquilibrium {
                 double gap = w.second.logFugacityCoefficient(only) - w.first.logFugacityCoefficient(only);
                 double compressibilityGap = w.first.compressibility() - w.second.compressibility();
                 if (Math.abs(gap) <= settings.coexistenceTolerance() * compressibilityGap) {
-                    PhaseState vapour = evaluator.evaluate(t, p, material.amounts, Root.VAPOR, w.phases, w.vaporState).copy();
-                    PhaseState liquid = evaluator.evaluate(t, p, material.amounts, Root.LIQUID, w.phases, w.liquidState).copy();
+                    PhaseState vapour = evaluator.evaluate(t, p, material.amounts, Root.VAPOR, w.phases, w.vaporScratch).copy();
+                    PhaseState liquid = evaluator.evaluate(t, p, material.amounts, Root.LIQUID, w.phases, w.liquidScratch).copy();
                     w.kernelEvaluations += 2;
                     return converged(competition, Classification.PURE_COEXISTENCE_UNDERDETERMINED, List.of(),
                             List.of(vapour, liquid), diagnostics(w, feed, band), why);
@@ -4428,7 +4448,7 @@ public final class FluidTpEquilibrium {
             }
         }
         Root root = w.singleRoot == Root.VAPOR ? Root.VAPOR : Root.LIQUID;
-        PhaseState state = evaluator.evaluate(t, p, material.amounts, root, w.phases, w.vaporState);
+        PhaseState state = evaluator.evaluate(t, p, material.amounts, root, w.phases, w.vaporScratch);
         w.kernelEvaluations++;
         Classification classification = singleClassification(state, t, p, material, w);
         PhaseKind label = singleLabel(state, classification, t, p, material, w);
@@ -4476,7 +4496,7 @@ public final class FluidTpEquilibrium {
     /** A near-critical split below the model's resolution: one fluid, the feed on its stability root, in the band. */
     private EquilibriumResult merged(double t, double p, PhaseCompetition competition, Feed material, Workspace w) {
         Root root = w.feedResult.feedRoot() == Root.VAPOR ? Root.VAPOR : Root.LIQUID;
-        PhaseState state = evaluator.evaluate(t, p, material.amounts, root, w.phases, w.vaporState);
+        PhaseState state = evaluator.evaluate(t, p, material.amounts, root, w.phases, w.vaporScratch);
         w.kernelEvaluations++;
         var phase = new PhaseAmounts(PhaseKind.FLUID, null, t, p, material.basisAmounts, state.copy());
         return converged(competition, Classification.SINGLE_FLUID, List.of(phase), List.of(), diagnostics(w, w.feedResult, true),
@@ -4537,6 +4557,7 @@ public final class FluidTpEquilibrium {
         w.seedDistance = Double.NaN;
         w.residual = Double.NaN;
         w.productDistance = Double.NaN;
+        w.ownSplit = false;
         w.carriedTemperature = t;
         TangentPlaneStability.Result feed = feedStability(stability, t, material, w);
         if (feed.verdict() == TangentPlaneStability.Verdict.UNRESOLVED) {
@@ -4707,7 +4728,9 @@ public final class FluidTpEquilibrium {
         }
         w.feedResult = feed;
         if (outcome == FAILED || outcome == MERGED) {
+            // The failure is the whole feed's split again; the states may hold the rest's.
             w.failure = failure;
+            w.ownSplit = false;
             return FAILED;
         }
         if (outcome == SINGLE) {
@@ -4720,6 +4743,7 @@ public final class FluidTpEquilibrium {
         for (int i = 0; i < count; i++) w.liquidAmounts[i] += held[i];
         evaluator.evaluate(t, w.pressure, w.liquidAmounts, Root.LIQUID, w.phases, w.liquidState);
         evaluator.evaluate(t, w.pressure, w.vaporAmounts, Root.VAPOR, w.phases, w.vaporState);
+        w.ownSplit = true;
         w.kernelEvaluations += 2;
         w.liquidProductDenseLiquidLike = false;
         w.vapourProductDenseLiquidLike = false;
@@ -4893,6 +4917,7 @@ public final class FluidTpEquilibrium {
         Root vapourRoot = lowerGibbsRoot(t, w.vaporAmounts, Root.VAPOR, w.vaporLogPhi, w);
         w.vapourProductDenseLiquidLike = PhaseIdentification.denseLiquidLike(w.chosen, t, w.pressure);
         PhaseState vapour = evaluator.evaluate(t, w.pressure, w.vaporAmounts, vapourRoot, w.phases, w.vaporState);
+        w.ownSplit = true;
         w.kernelEvaluations += 2;
         double gap = Math.abs(vapour.molarVolume() - liquid.molarVolume()) / (0.5 * (vapour.molarVolume() + liquid.molarVolume()));
         if (w.tieLine < settings.mergeTieLine() && gap < settings.mergeVolumeGap()) return MERGED;
@@ -6005,6 +6030,7 @@ public final class FluidTpEquilibrium {
         w.vapourProductDenseLiquidLike = s.dense[vapour];
         evaluator.evaluate(t, w.pressure, w.liquidAmounts, s.root[liquid], w.phases, w.liquidState);
         evaluator.evaluate(t, w.pressure, w.vaporAmounts, s.root[vapour], w.phases, w.vaporState);
+        w.ownSplit = true;
         w.kernelEvaluations += 2;
         double gap = Math.abs(w.vaporState.molarVolume() - w.liquidState.molarVolume())
                 / (0.5 * (w.vaporState.molarVolume() + w.liquidState.molarVolume()));
