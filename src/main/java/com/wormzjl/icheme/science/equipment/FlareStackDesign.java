@@ -16,44 +16,11 @@ import java.util.List;
  * stack's height ({@link Flare#stackHeight}).
  */
 final class FlareStackDesign extends UnitDesign {
-    @Override
-    public double minSize() {
-        return Flare.MIN_TIP;
-    }
-
-    @Override
-    public double maxSize() {
-        return Flare.MAX_TIP;
-    }
-
-    @Override
-    public double sizeStep() {
-        return Flare.TIP_STEP;
-    }
-
-    @Override
-    public int minSupport(double size, int length) {
-        return 0;
-    }
-
-    @Override
-    public int maxSupport() {
-        return 0;
-    }
-
-    @Override
-    public Orientation orientation() {
-        return Orientation.VERTICAL;
-    }
-
-    @Override
-    public String sizeRow() {
-        return "flare_tip";
-    }
-
-    @Override
-    public String supportRow() {
-        return null;
+    FlareStackDesign() {
+        super(new Sizes(Flare.MIN_TIP, Flare.MAX_TIP, Flare.TIP_STEP,
+                1, 1,
+                0, 0,
+                Orientation.VERTICAL, "flare_tip", null, null, false));
     }
 
     @Override

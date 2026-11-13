@@ -33,6 +33,12 @@ final class PrimeMoverDesign extends UnitDesign {
     private final PrimeMover.Family family;
 
     PrimeMoverDesign(PrimeMover.Family family) {
+        // moves: The coupling's hub and the radiator's fans turn.
+        // Computed in its overrides: maxSize, maxLength, lengthRow.
+        super(new Sizes(1, Sizes.COMPUTED, 1,
+                1, Sizes.COMPUTED,
+                0, 0,
+                Orientation.HORIZONTAL, "prime_mover.model", null, null, true));
         this.family = family;
     }
 
@@ -81,46 +87,13 @@ final class PrimeMoverDesign extends UnitDesign {
         return Math.max(0, flue * (m.exhaust() - 533.15)) / 2.127e6;
     }
 
-    @Override public double minSize() {
-        return 1;
-    }
-
     @Override public double maxSize() {
         return models().size();
-    }
-
-    @Override public double sizeStep() {
-        return 1;
-    }
-
-    @Override public int minLength(double size) {
-        return 1;
     }
 
     /** A gas turbine with or without its steam coil; an engine has none. */
     @Override public int maxLength(double size) {
         return family == PrimeMover.Family.GAS_TURBINE ? 2 : 1;
-    }
-
-    @Override public int minSupport(double size, int length) {
-        return 0;
-    }
-
-    @Override public int maxSupport() {
-        return 0;
-    }
-
-    @Override public Orientation orientation() {
-        return Orientation.HORIZONTAL;
-    }
-
-    /** The coupling's hub and the radiator's fans turn. */
-    @Override public boolean moves() {
-        return true;
-    }
-
-    @Override public String sizeRow() {
-        return "prime_mover.model";
     }
 
     /** A model reads as its rated power, the unit beside the box; its name is on the datasheet. */
@@ -139,10 +112,6 @@ final class PrimeMoverDesign extends UnitDesign {
 
     @Override public boolean lengthInMetres() {
         return false;
-    }
-
-    @Override public String supportRow() {
-        return null;
     }
 
     @Override public Line held(EquipmentShape shape) {
