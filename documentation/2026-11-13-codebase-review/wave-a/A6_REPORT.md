@@ -18,8 +18,7 @@ Branch `claude/review-wave-a6-fluid-18ecaf`, four fix commits. Lane files only; 
   - a LIQUID port draws both liquids at equal volume rates while both are held (`Segment.mixed`); otherwise it draws first the liquid that runs out first;
   - with one liquid held, the order is oil, water, gas;
   - the comment also names the boot and overflow orders.
-- No test.
-- Open: the `PassiveNetwork.PhasePort` comment (lines 14-16) still has the old "heavier liquid first" wording. It is outside this lane.
+- No test. Open: the `PassiveNetwork.PhasePort` comment (lines 14-16) still has the old "heavier liquid first" wording. It is outside this lane.
 
 ## D-02, heat curves sampled between evaluations (commits e2bf2e92c, then 62416ccaa after the parent's review)
 - A pass is built with the curves the solver already keeps (`curveKept`: a curve kept for the stream and span, or an end that draws nothing). No sample at build.
@@ -30,11 +29,9 @@ Branch `claude/review-wave-a6-fluid-18ecaf`, four fix commits. Lane files only; 
 - Repeatability check (decode + assemble at one x), with what I found:
   - `cachedStates`, `cachedTransport` and `cachedPrepared` form a per-node cache keyed by x; a redo hits it.
   - `nodeAccumulate` resets every accumulator.
-  - `junctionWeight` is set before it is read.
-  - `sweepWall` and `builtWall` change only in `linearising`.
+  - `junctionWeight` is set before it is read; `sweepWall` and `builtWall` change only in `linearising`.
   - `allowedRestart` and `flashRestated` are read only in `buildInitial` and the pass loop.
-  - The viscosity workspace is scratch.
-  - The checkpoint is cancellation plus a wall deadline, with no counter.
+  - The viscosity workspace is scratch; the checkpoint is cancellation plus a wall deadline, with no counter.
   - `SolverDiagnostics` counters count the redo, but no decision reads them.
   - Nothing else is carried.
 - Values: identical. The same curve enters the same evaluation at the same x. Each curve is sampled where it was first needed, as before, and no extra sample is made.
