@@ -859,8 +859,11 @@ public final class ShapeRasterizer {
 
             if (unit != null) {
                 // The design's facets one for one: those from its irregular index on cross its body rows (a tank's stair).
-                mesh.include(unit.mesh(detail));
+                // Drawn once at this detail (finding E11): a floating-roof tank keeps the drawing for its client-drawn parts.
+                var drawn = unit.drawing(detail);
+                mesh.include(drawn.mesh);
                 irregularFrom = unit.irregularFrom;
+                if (drawing && unit.floating != null) floatingDrawing = drawn;
             } else {
                 build();
                 if (shape.skirt()) skirtBase();
@@ -1722,6 +1725,8 @@ public final class ShapeRasterizer {
             return tankGauge=List.copyOf(polygons);
         }
         private volatile Floating floating;
+        /** A floating-roof tank's drawing at this detail, kept from the layout until {@link #floating} cuts it; null otherwise. */
+        private volatile ProcessUnit floatingDrawing;
         private volatile Roof roof;
 
         /** A floating-roof tank's roof in the box, from its layout (no surfaces); null for any other shape. */
@@ -1739,7 +1744,9 @@ public final class ShapeRasterizer {
         @Nullable Floating floating() {
             var out = floating;
             if (out != null || unit == null || unit.floating == null) return out;
-            var drawn = unit.drawing(detail);
+            // The drawing the layout made (E11), released once its parts are cut; drawn afresh where none was kept.
+            var kept = floatingDrawing;
+            var drawn = kept != null ? kept : unit.drawing(detail);
             var f = drawn.floating;
             var pivot = transform.point(f.pivot());
             var roof = new ArrayList<Polygon>();
@@ -1751,6 +1758,7 @@ public final class ShapeRasterizer {
                 cut(m, m.facets(), part == drawn.roof ? new double[3] : pivot, part == drawn.roof ? roof : ladder);
             }
             var glass = transform.point(new double[]{f.glass()[0], 0, f.glass()[1]});
+            floatingDrawing = null;
             return floating = new Floating(List.copyOf(roof), List.copyOf(ladder), f.landed(), f.top(), f.deck(), pivot, transform.direction(f.along()),
                     transform.direction(f.axis()), f.length(), f.runway(), new double[]{glass[0], glass[2]}, f.glassLow(), f.glassHigh(), transform.direction(f.facing()));
         }
