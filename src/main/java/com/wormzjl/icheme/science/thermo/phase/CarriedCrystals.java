@@ -103,7 +103,7 @@ final class CarriedCrystals {
         return lost > 0.0;
     }
 
-    /** The deposit test's sign ({@link FluidTpEquilibrium#solveWithCrystals}): whether {@code c} would form from {@code state}. */
+    /** The deposit test's sign ({@link CrystalEquilibrium#solveWithCrystals}): whether {@code c} would form from {@code state}. */
     private static boolean supersaturated(Crystal c, PhaseState state, double t, double p) {
         return (state.chemicalPotential(c.component()) - c.anchored().chemicalPotential(t, p)) / (R * t) > DEPOSITION_TOLERANCE;
     }

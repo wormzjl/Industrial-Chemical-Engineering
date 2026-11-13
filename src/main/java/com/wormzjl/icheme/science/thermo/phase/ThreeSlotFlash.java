@@ -663,8 +663,8 @@ final class ThreeSlotFlash {
 
     /**
      * The converged slots as the core's outcome: one present slot is the feed (SINGLE on its root); two fill the two-slot
-     * workspace (the denser the liquid) for {@link FluidTpEquilibrium#twoPhaseResult}, merged where the split is below the model's
-     * resolution; three are THREE for {@link FluidTpEquilibrium#threePhaseResult}. Each component's amounts: every share but the largest by
+     * workspace (the denser the liquid) for {@link DryCore#twoPhaseResult}, merged where the split is below the model's
+     * resolution; three are THREE for {@link DryCore#threePhaseResult}. Each component's amounts: every share but the largest by
      * its own mole number, the largest by difference, so each component conserves to rounding.
      */
     private int slotOutcome(double t, int present, Feed material, Workspace w) {

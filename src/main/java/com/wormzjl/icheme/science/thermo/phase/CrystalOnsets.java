@@ -25,19 +25,22 @@ import java.util.List;
  * {@link FluidTpEquilibrium#frostTemperature}, {@link FluidTpEquilibrium#freezingTemperature},
  * {@link FluidTpEquilibrium#depositionPressure}); each fluid answer is the engine's TP answer with the crystals left out.
  * It reads the engine's contract and evaluator, given once at construction, and calls back into the engine for the
- * request's checks, its TP answer, the crystal step's temperature and pressure (the partial-pressure approximation), the
- * grading and the solids-assessed answer. Immutable; one instance per engine.
+ * request's checks, its TP answer, the crystal step's temperature and pressure (the partial-pressure approximation) and
+ * the grading; the solids-assessed answer is the crystal equilibrium's. Immutable; one instance per engine.
  */
 final class CrystalOnsets {
     /** Fluid TP equilibria of an onset search before NOT_CONVERGED. */
     private static final int ONSET_EVALUATIONS = 100;
 
     private final FluidTpEquilibrium engine;
+    private final CrystalEquilibrium crystalEquilibrium;
     private final PhaseContract contract;
     private final CubicPhaseEvaluator evaluator;
 
-    CrystalOnsets(FluidTpEquilibrium engine, PhaseContract contract, CubicPhaseEvaluator evaluator) {
+    CrystalOnsets(FluidTpEquilibrium engine, CrystalEquilibrium crystalEquilibrium, PhaseContract contract,
+                  CubicPhaseEvaluator evaluator) {
         this.engine = engine;
+        this.crystalEquilibrium = crystalEquilibrium;
         this.contract = contract;
         this.evaluator = evaluator;
     }
@@ -230,7 +233,7 @@ final class CrystalOnsets {
             return DepositionOnset.without(EquilibriumResult.Status.UNSUPPORTED, UnsupportedReason.NOT_IMPLEMENTED, detail, c.id(),
                     t, p, approximation, evaluations);
         }
-        EquilibriumResult atOnset = engine.graded(engine.assessed(fluid, "onset of " + c.id() + ": |mu_i - mu_s|/RT = " + Math.abs(d), w), c, w);
+        EquilibriumResult atOnset = engine.graded(crystalEquilibrium.assessed(fluid, "onset of " + c.id() + ": |mu_i - mu_s|/RT = " + Math.abs(d), w), c, w);
         String kind = freezing
                 ? holdsLiquid(fluid) && fluid.phases().size() == 1 ? "a liquidus point (the liquid is the stable fluid, " + fluid.classification() + ")"
                         : "a liquidus point of the liquid as one phase (the stable fluid of the feed there is " + fluid.classification() + ")"

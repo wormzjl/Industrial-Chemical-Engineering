@@ -66,7 +66,7 @@ final class CrystalSet {
                 }
                 set.add(c);
             }
-            if (set != null) coverages.put(competition, FluidTpEquilibrium.solidCoverage(convergedCoverage, competition, set));
+            if (set != null) coverages.put(competition, CrystalEquilibrium.solidCoverage(convergedCoverage, competition, set));
         }
         crystalCoverages = Map.copyOf(coverages);
     }
