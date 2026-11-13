@@ -1,7 +1,6 @@
 package com.wormzjl.icheme.science.flowsheet.unit;
 
 import com.wormzjl.icheme.science.flowsheet.Calculation;
-import com.wormzjl.icheme.science.flowsheet.EjectorLaw;
 import com.wormzjl.icheme.science.flowsheet.FlowStream;
 import com.wormzjl.icheme.science.flowsheet.FlowThermo;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetFailure;
@@ -12,6 +11,8 @@ import com.wormzjl.icheme.science.flowsheet.Report;
 import com.wormzjl.icheme.science.flowsheet.UnitModel;
 import com.wormzjl.icheme.science.flowsheet.WiredUnit;
 import com.wormzjl.icheme.science.fluid.state.SolidInventory;
+import com.wormzjl.icheme.science.machine.EjectorLaw;
+import com.wormzjl.icheme.science.machine.SteamEjector;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -27,8 +28,8 @@ import java.util.List;
  */
 public final class EjectorUnit implements UnitModel {
     public static final String SUCTION = "suction", MOTIVE = "motive", DISCHARGE = "discharge";
-    /** The door's defaults (Pa): to 120 kPa on 10 bar steam, as section 3.12's table. */
-    public static final double DISCHARGE_PRESSURE = 1.2e5, MOTIVE_PRESSURE = 1e6;
+    /** The door's defaults (Pa): to 120 kPa on 10 bar steam, as section 3.12's table; the world's ejector's rated pressures. */
+    public static final double DISCHARGE_PRESSURE = SteamEjector.RATED_DISCHARGE, MOTIVE_PRESSURE = SteamEjector.RATED_MOTIVE;
     /** A wired motive with less water than this share of its mass is not the steam the law is fitted on: a warning. */
     public static final double STEAM_SHARE = .9;
     /** A wired motive this much under the need is short of it: the law's own last digits. */

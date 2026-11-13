@@ -2292,6 +2292,11 @@ public final class ProcessUnit {
 
     /** A shaft's allowable shear stress for its drawn size, Pa (a plain steel shaft's 40 MPa, plan 5.3). */
     static final double SHAFT_SHEAR = 40e6;
+    /**
+     * A shaft's drawn diameter, px, before its train has drawn it (a placed shaft block, a train with no driver or at rest):
+     * the shaft block's default size, which the block and the engine's trains read from here (codebase review M-15).
+     */
+    public static final int SHAFT_DEFAULT_SIZE = 4;
 
     /** Rated torque, N·m, of {@code kw} at {@code rpm}. */
     public static double torque(double kw, double rpm) {

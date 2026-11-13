@@ -2,6 +2,7 @@ package com.wormzjl.icheme.science.machine;
 
 import com.wormzjl.icheme.science.math.DeterministicMath;
 
+import java.util.List;
 import java.util.Locale;
 
 /**
@@ -48,6 +49,31 @@ public record VacuumPump(Type type, double capacity, double ratedSpeed) implemen
     public static final double LIQUID_TRACE = .01, LIQUID_LOUD = .1;
     /** The capacity left when the curve gives none, m³/s: the row needs a displacement above zero. */
     private static final double NONE = 1e-12;
+
+    /**
+     * One catalogue model (batch 2026-11-10-vacuum-pump, owner "Both types & different models"): its name, nominal capacity
+     * (m³/h), design speed (rpm) and its rotor's or housing's width (m), which the casing's drawing scales by.
+     */
+    public record Model(String name, double capacity, double speed, double width) {
+    }
+
+    /** The liquid ring's models by number: its name takes the stage count, its 5000 m³/h ring is single stage. */
+    public static final List<Model> RINGS = List.of(new Model("150", 150, 1450, .3), new Model("500", 500, 1450, .45),
+            new Model("1500", 1500, 980, .7), new Model("5000", 5000, 590, 1.1));
+    /** The dry screw's models by number. */
+    public static final List<Model> SCREWS = List.of(new Model("DS-100", 100, 2950, .35), new Model("DS-300", 300, 2950, .45),
+            new Model("DS-650", 650, 2950, .55), new Model("DS-2500", 2500, 2950, .8));
+
+    /** Model {@code number} of {@code models} (1 up, rounded; below the first the first, past the last the last). */
+    public static Model model(List<Model> models, double number) {
+        return models.get((int) Math.max(0, Math.min(models.size() - 1, Math.round(number) - 1)));
+    }
+
+    /** The law of model {@code m}: a dry screw, or a liquid ring of two stages from {@code stages} 2 up, else one. */
+    public static VacuumPump of(Model m, boolean dryScrew, double stages) {
+        var type = dryScrew ? Type.DRY_SCREW : stages >= 2 ? Type.LIQUID_RING_TWO_STAGE : Type.LIQUID_RING_ONE_STAGE;
+        return new VacuumPump(type, m.capacity() / 3600, m.speed());
+    }
 
     public enum Type {
         /** Liquid ring, one stage: {@code n} 2, ring friction 9 W per m³/h. */

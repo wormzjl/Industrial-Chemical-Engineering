@@ -1,6 +1,5 @@
 package com.wormzjl.icheme.science.machine;
 
-import com.wormzjl.icheme.science.flowsheet.EjectorLaw;
 import com.wormzjl.icheme.science.flowsheet.sizing.EjectorSizing;
 import org.junit.jupiter.api.Test;
 

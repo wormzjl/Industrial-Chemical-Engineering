@@ -625,7 +625,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
             if (d != null && d.kind() == ShaftNetwork.Kind.CREATIVE_MOTOR || d != null && (d.kind() == ShaftNetwork.Kind.CREATE_COUPLING||createDrivers.contains(d.id()))) rpm = driver(d).setSpeed();
             for (var e : run.train.shafts().entrySet()) {
                 double speed = rpm * e.getValue();
-                int pixels = d == null || speed <= 0 ? com.wormzjl.icheme.world.level.block.ShaftBlock.DEFAULT_SIZE
+                int pixels = d == null || speed <= 0 ? com.wormzjl.icheme.science.equipment.ProcessUnit.SHAFT_DEFAULT_SIZE
                         : com.wormzjl.icheme.science.equipment.ProcessUnit.shaftPixels(com.wormzjl.icheme.science.equipment.ProcessUnit.torque(rated / 1000, speed));
                 var u = units.get(e.getKey());
                 if (u != null && !Objects.equals(sizes.put(u.id(), pixels), pixels)) host.resize(u.position(), pixels);
@@ -749,7 +749,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
                     double q = density > 0 ? Math.max(0, flows[e]) / density : 0;
                     double kappa = com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.suctionKappa(model, m, suction);
                     double wet = com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.wetShare(model, solved, e, result.advancedSeconds());
-                    run.power(unit, com.wormzjl.icheme.science.machine.InlineMachines.shaftPower(m, average[e], heads[e], density, suction.pressure(), kappa, wet));
+                    run.power(unit, com.wormzjl.icheme.science.fluid.network.InlineMovers.shaftPower(m, average[e], heads[e], density, suction.pressure(), kappa, wet));
                     run.duty(unit,Duty.machine(q,solved.reservoirs().get(pipe.second()).state().pressure(),m.setFlow(),m.setPressure(),m.law(),heads[e],density,suction.pressure(),kappa));
                     if (first(run, unit)) {
                         run.measured = q;
@@ -759,7 +759,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
                 }
                 case FlowControl.Compressor c -> {
                     double kappa=com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.suctionKappa(model,c,suction);
-                    run.power(unit,com.wormzjl.icheme.science.machine.InlineMachines.shaftPower(c,average[e],heads[e],density,suction.pressure(),kappa,1));
+                    run.power(unit,com.wormzjl.icheme.science.fluid.network.InlineMovers.shaftPower(c,average[e],heads[e],density,suction.pressure(),kappa,1));
                     var registration=topology.latest().get(node.id());
                     if(density>0&&registration!=null&&registration.device().control() instanceof FlowControl.Compressor design&&design.requestedVolumeFlow()>0){
                         double q=Math.max(0,flows[e])/density,pressure=solved.reservoirs().get(pipe.second()).state().pressure();
@@ -1206,7 +1206,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
 
     /** The size shaft block {@code unit} was last drawn at, or the default before its train drew it (a read; the re-alignment places a lost block at it). */
     public int drawnSize(long unit) {
-        return sizes.getOrDefault(unit, com.wormzjl.icheme.world.level.block.ShaftBlock.DEFAULT_SIZE);
+        return sizes.getOrDefault(unit, com.wormzjl.icheme.science.equipment.ProcessUnit.SHAFT_DEFAULT_SIZE);
     }
 
     /** Unit {@code unit} as the ledger holds it, or null (a read; W7's pages). */

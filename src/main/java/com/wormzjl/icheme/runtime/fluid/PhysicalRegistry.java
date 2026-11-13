@@ -175,7 +175,7 @@ public final class PhysicalRegistry {
     public boolean installPipeMover(long id,PhysicalFluidTopology.Direction axis,TopologyCompiler.Kind kind){
         var record=registrations().get(id);
         if(record==null)return false;
-        var control=com.wormzjl.icheme.science.machine.InlineMachines.design(record.device().geometry().diameter(),kind==TopologyCompiler.Kind.PUMP);
+        var control=com.wormzjl.icheme.science.fluid.network.InlineMovers.design(record.device().geometry().diameter(),kind==TopologyCompiler.Kind.PUMP);
         if(axis==null||axis.y!=0||!canInstallFitting(record,axis))return false;
         var d=record.device();var replacement=new PhysicalFluidTopology.Device(d.id(),d.position(),d.kind(),axis,d.geometry(),control,d.ports(),d.generatorEnabled(),d.cutoff(),d.inlineFilter(),d.joints());
         submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(replacement,record.spec(),Math.addExact(record.revision(),1)))),topology.nextIdentity(),null);return true;

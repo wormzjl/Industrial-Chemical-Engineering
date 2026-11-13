@@ -1185,7 +1185,7 @@ class ColumnRunTest {
         assertTrue(status.startsWith("RUNNING")||status.startsWith("LIMITED: outlet"),status);
         assertNull(Condition.find(r.ops().conditions(r.unit()),Condition.NO_POWER),"power back clears NO POWER");
         assertTrue(r.ops().last(r.unit()).feedMoles()>0,"the feed resumes");
-        double rated=com.wormzjl.icheme.science.machine.InlineMachines.ratedShaftPower(new FlowControl.Machine(REFLUX_PUMP,1,true));
+        double rated=com.wormzjl.icheme.science.fluid.network.InlineMovers.ratedShaftPower(new FlowControl.Machine(REFLUX_PUMP,1,true));
         assertEquals(rated*r.ops().last(r.unit()).alpha(),motor.demand(),1e-6*rated,"the train carries the pump's rated shaft power at the share");
         assertTrue(motor.electricPower()>motor.demand(),"the motor draws it over its efficiency");
         needPower=false;

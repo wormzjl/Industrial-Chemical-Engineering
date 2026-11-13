@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Code base review M-01 and M-07 (owner decisions A2 and B1): a driver pays the shaft power the solve's own function gives,
- * {@link InlineMachines#shaftPower} at the slice's average flow and booked head, on the suction's heat capacity ratio and wet
+ * {@link InlineMovers#shaftPower} at the slice's average flow and booked head, on the suction's heat capacity ratio and wet
  * share as the solve reads them ({@link PassiveStepSolver#suctionKappa}, {@link PassiveStepSolver#wetShare}). On a settled
  * slice (a fixed suction into a fixed discharge: every step the same):
  * <ul>
@@ -44,7 +44,7 @@ class ShaftPowerBookingTest extends PortFixture {
         var graph=result.graph();var pipe=graph.pipes().getFirst();var suction=graph.reservoirs().get(pipe.first()).state();
         var mover=(FlowControl.Mover)pipe.control();double density=suction.mass()/suction.volume();
         double kappa=PassiveStepSolver.suctionKappa(model,mover,suction),wet=PassiveStepSolver.wetShare(model,graph,0,result.advancedSeconds());
-        return InlineMachines.shaftPower(mover,result.averageMassFlows()[0],result.endpointHeads()[0],density,suction.pressure(),kappa,wet)*result.advancedSeconds();
+        return InlineMovers.shaftPower(mover,result.averageMassFlows()[0],result.endpointHeads()[0],density,suction.pressure(),kappa,wet)*result.advancedSeconds();
     }
 
     /** A frame on propane (k about 1.13) at a ratio of 2.5: the charge is its booked work, where k 1.4 would charge 13 % more. */

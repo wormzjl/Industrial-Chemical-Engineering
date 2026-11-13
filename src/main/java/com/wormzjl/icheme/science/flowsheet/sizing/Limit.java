@@ -29,6 +29,7 @@ import com.wormzjl.icheme.science.fluid.network.FlowControl;
 import com.wormzjl.icheme.science.fluid.network.HeatCurve;
 import com.wormzjl.icheme.science.fluid.solver.PhaseLayout;
 import com.wormzjl.icheme.science.machine.Motor;
+import com.wormzjl.icheme.science.machine.SteamEjector;
 
 /**
  * The sizing stage's limits, one row a limit (batch 2026-11-02-process-simulator, {@code SIZING_PLAN.md} sections 3.3, 3.4 and
@@ -99,7 +100,8 @@ public enum Limit {
     STEAM_SUPERHEATED_SPEED(SHOULD, most(60), "m/s", "[SPX]"),
     STEAM_SUPERHEATED_DROP(SHOULD, most(.2), "bar/100 m", "[SPX]"),
     STEAM_SUPERHEATED_MOMENTUM(SHOULD, most(15000), "kg/m·s²", "[KARM]"),
-    VACUUM_SPEED(SHOULD, most(Axis.ABSOLUTE, rising(.05, 60, .25), rest(60)), "m/s", "[KARM]"),
+    /** The world's ejector's numbers ({@link SteamEjector#speed}): 60 m/s from 0.05 bara up, {@code 60 (0.05 / P)^0.25} below. */
+    VACUUM_SPEED(SHOULD, most(Axis.ABSOLUTE, rising(SteamEjector.SPEED_EDGE, SteamEjector.SPEED, SteamEjector.SPEED_EXPONENT), rest(SteamEjector.SPEED)), "m/s", "[KARM]"),
     /** A share of the absolute pressure, over the whole line, so it reads the line's length. */
     VACUUM_DROP(SHOULD, most(5), "%", "[BRAN]"),
     /** A floor: a slower flow slugs. */

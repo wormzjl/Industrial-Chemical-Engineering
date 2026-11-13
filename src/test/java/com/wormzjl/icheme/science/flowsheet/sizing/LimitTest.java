@@ -67,6 +67,15 @@ final class LimitTest {
         assertEquals(60, Limit.VACUUM_SPEED.value(.05), EXACT, "60 from 0.05 bara up");
     }
 
+    /** The vacuum speed row reads the world's ejector's numbers, and the two give the same bits (codebase review C3, M-14). */
+    @Test void theVacuumSpeedRowIsTheWorldsEjectorSpeed() {
+        for (double pressure : new double[]{0, 1, 100, 1e3, 3e3, 4999, 5e3, 5001, 1e4, 5e4, 1e5, 1e6, Double.POSITIVE_INFINITY})
+            assertEquals(Double.doubleToRawLongBits(Limit.VACUUM_SPEED.value(pressure / 1e5)),
+                    Double.doubleToRawLongBits(com.wormzjl.icheme.science.machine.SteamEjector.speed(pressure)), pressure + " Pa");
+        assertThrows(IllegalArgumentException.class, () -> Limit.VACUUM_SPEED.value(Double.NaN));
+        assertThrows(IllegalArgumentException.class, () -> com.wormzjl.icheme.science.machine.SteamEjector.speed(Double.NaN));
+    }
+
     @Test void aRowReadsBySense() {
         assertEquals(Lamp.GREEN, Limit.LINE_BORE.read(.8).lamp());
         assertEquals(Lamp.RED, Limit.LINE_BORE.read(.81).lamp());

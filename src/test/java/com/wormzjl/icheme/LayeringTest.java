@@ -74,7 +74,10 @@ class LayeringTest {
             new PackageRule("fluid-free-of-plant", "science/fluid", "science.plant", "the plant layer is above the solvers"),
             new PackageRule("fluid-free-of-flowsheet", "science/fluid", "science.flowsheet", "the sheet is above the plant"),
             new PackageRule("machine-free-of-column", "science/machine", "science.column", "the machines are beside the column solver"),
-            new PackageRule("machine-free-of-plant", "science/machine", "science.plant", "the plant layer is above the solvers"));
+            new PackageRule("machine-free-of-plant", "science/machine", "science.plant", "the plant layer is above the solvers"),
+            new PackageRule("machine-free-of-fluid", "science/machine", "science.fluid", "the machine laws are below the network"),
+            new PackageRule("machine-free-of-flowsheet", "science/machine", "science.flowsheet", "the sheet is above the machines"),
+            new PackageRule("machine-free-of-equipment", "science/machine", "science.equipment", "the machines are below the geometry"));
 
     private static final Pattern IMPORT =
             Pattern.compile("^\\s*import\\s+(?:static\\s+)?com\\.wormzjl\\.icheme\\.([A-Za-z_]\\w*)[\\w.*]*\\s*;");
