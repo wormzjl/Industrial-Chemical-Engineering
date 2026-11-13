@@ -117,7 +117,7 @@ final class V3AnchorTransformerInitializer implements V3NeuralInitializer {
     @Override public String modelId() { return model.modelId; }
 
     /** The identity a prediction carries: the scientific revision of the request's package in the calculation's catalog. */
-    String propertyRevision(String packageId) { return com.wormzjl.icheme.science.material.MaterialRuntime.current().requirePackage(packageId).scientificRevision(); }
+    String propertyRevision(String packageId) { return V3PengRobinsonThermo.columnIdentity(com.wormzjl.icheme.science.material.MaterialRuntime.current(), packageId); }
 
     List<String> componentIds() { return List.copyOf(model.components); }
     /** The physics the model was trained on; a request binds only where its values on its active compounds are these. */

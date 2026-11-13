@@ -15,6 +15,8 @@ final class V3CatalogPropertyPackage implements V3PropertyPackage {
     private final List<V3PropertyComponent> components;
     /** The pairs of the network's model over this package's components (W5 D1); the catalog keeps each fit. */
     private final DerivedPairs.Result pairs;
+    /** The column's identity: {@link #identity(MaterialCatalog.Package, DerivedPairs.Result)} of this package and its pairs. */
+    private final String datasetRevision;
     /** Resolves immutable package data from the current calculation's catalog snapshot. */
     static V3PropertyPackage require(String packageId) {
         return new V3CatalogPropertyPackage(MaterialRuntime.current(),packageId);
@@ -38,10 +40,26 @@ final class V3CatalogPropertyPackage implements V3PropertyPackage {
         // A learned model's lens (MaterialCatalog.inferenceView) carries the physics the model was trained on, its own
         // matrix: the model's anchor is computed on it as in training. Every other package takes the network's pairs.
         pairs=catalog.lens(id)?null:DerivedPairs.derive(catalog,id,data.components());
+        datasetRevision=identity(data,pairs);
+    }
+    /**
+     * The column's identity of package {@code id} on {@code catalog} (F1 of batch 2026-11-13-codebase-review): its scientific
+     * revision and, but for a learned model's lens, the identity of the pairs the column evaluates. The network's form
+     * ({@code PhaseContract}: fluid revision {@code ;} derivation identity). The catalog's fit cache answers the derivation.
+     */
+    static String identity(MaterialCatalog catalog,String id) {
+        var data=catalog.requirePackage(id);
+        return identity(data,catalog.lens(id)?null:DerivedPairs.derive(catalog,id,data.components()));
+    }
+    private static String identity(MaterialCatalog.Package data,DerivedPairs.Result pairs) {
+        String identity=pairs==null?data.scientificRevision():data.scientificRevision()+";"+pairs.identity();
+        if(identity.length()>MaterialCatalog.MAX_IDENTITY)
+            throw new IllegalArgumentException("the package's column identity is "+identity.length()+" characters, above "+MaterialCatalog.MAX_IDENTITY);
+        return identity;
     }
     @Override public DerivedPairs.Result derivedPairs(){return pairs;}
     @Override public String packageId(){return data.id();}
-    @Override public String datasetRevision(){return data.scientificRevision();}
+    @Override public String datasetRevision(){return datasetRevision;}
     @Override public V3ComponentBasis componentBasis(){return basis;}
     @Override public V3PropertyComponent component(int i){return components.get(i);}
     @Override public double minimumTemperatureKelvin(){return data.minimumTemperature();}

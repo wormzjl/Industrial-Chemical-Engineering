@@ -221,5 +221,36 @@ final class SheetCompoundsTest {
         assertEquals(CATALOG.restrict(NETWORK, compounds).requirePackage(NETWORK).scientificRevision(), edited.restrict(NETWORK, compounds).requirePackage(NETWORK).scientificRevision(),
                 "the identity a column's warm start is checked on");
         assertNotEquals(CATALOG.requirePackage(NETWORK).scientificRevision(), edited.requirePackage(NETWORK).scientificRevision(), "the whole package's moved");
+        assertEquals(com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo.columnIdentity(CATALOG.restrict(NETWORK, compounds), NETWORK), com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo.columnIdentity(edited.restrict(NETWORK, compounds), NETWORK),
+                "the column identity, its pairs named (F1), stands too");
+    }
+
+    /**
+     * A column's warm start stands on the column identity it was captured on (F1 of batch 2026-11-13-codebase-review): current on the
+     * same catalog, not after a record its pairs read moves, though the package's scientific revision does not.
+     */
+    @Test void aWarmStartStandsOnTheColumnIdentityItsPairsName() {
+        String pilot = com.wormzjl.icheme.science.material.PilotAqueousTestCatalog.PACKAGE_ID;
+        MaterialCatalog base = com.wormzjl.icheme.science.material.PilotAqueousTestCatalog.catalog();
+        var components = base.requirePackage(pilot).components();
+        double[] feed = new double[components.size()];
+        java.util.Arrays.fill(feed, 1.0);
+        var input = com.wormzjl.icheme.science.column.v3.V3TestInputs.dry(com.wormzjl.icheme.science.column.v3.V3ColumnInput.SCHEMA_VERSION, pilot, "test:warm",
+                new com.wormzjl.icheme.science.column.v3.V3ComponentBasis(components), feed, 350, 2, 1, 101325, 0,
+                List.of(new com.wormzjl.icheme.science.column.v3.V3ColumnSpecification.CondenserOutletTemperature(300),
+                        new com.wormzjl.icheme.science.column.v3.V3ColumnSpecification.OrganicRefluxRatio(2),
+                        new com.wormzjl.icheme.science.column.v3.V3ColumnSpecification.ReboilerDuty(0)));
+        double[][] flows = new double[4][components.size()];
+        for (double[] row : flows) java.util.Arrays.fill(row, 1.0);
+        var seed = new com.wormzjl.icheme.science.column.v3.V3NeuralSeed(input, com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo.columnIdentity(base, pilot),
+                com.wormzjl.icheme.science.column.v3.V3CondenserPhaseBranch.TWO_PHASE, flows, flows, new double[] {300, 330, 350, 370}, new double[4], new boolean[4]);
+        var warm = new Report.Warm(seed, 101325, Map.of());
+        assertTrue(warm.current(base), "captured on this catalog");
+        var bumped = com.wormzjl.icheme.science.material.PilotAqueousTestCatalog.parseWith("data/icheme/materials/properties/chemsep_ethanol.json", o -> {
+            var counts = o.getAsJsonObject("group_counts").getAsJsonObject(com.wormzjl.icheme.science.material.ModifiedUnifac.SCHEME);
+            counts.addProperty("revision", counts.get("revision").getAsString() + "-edited");
+        });
+        assertEquals(base.requirePackage(pilot).scientificRevision(), bumped.requirePackage(pilot).scientificRevision());
+        assertTrue(!warm.current(bumped), "a record its pairs read moved");
     }
 }

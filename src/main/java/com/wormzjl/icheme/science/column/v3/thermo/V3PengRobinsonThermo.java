@@ -28,6 +28,15 @@ public final class V3PengRobinsonThermo implements V3ThermoModel, V3ThermoDeriva
         return session.datasetRevision();
     }
 
+    /**
+     * The column's identity of package {@code packageId} on {@code catalog}, which {@link #datasetRevision} of a thermo built
+     * there returns: the one statement seeds, digests and published results are keyed on (F1 of batch
+     * 2026-11-13-codebase-review).
+     */
+    public static String columnIdentity(com.wormzjl.icheme.science.material.MaterialCatalog catalog, String packageId) {
+        return V3CatalogPropertyPackage.identity(catalog, packageId);
+    }
+
     /** Returns immutable, non-blocking dataset evidence for audits and solver diagnostics. */
     public java.util.List<String> advisoryEvidence() {
         return session.advisoryEvidence();
