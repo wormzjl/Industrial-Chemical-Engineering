@@ -162,8 +162,8 @@ class ColumnSolveTest {
         assertEquals("", solved.note());
         var feeds = solved.seed().input().steamFeeds();
         assertEquals(design.steamFeeds().size() + 1, feeds.size(), feeds::toString);
-        var entered = feeds.getLast();
-        assertEquals(design.feedStageNumber(), entered.stageNumber());
+        // The input holds its steam rows by stage: the feed tray's is found by its stage.
+        var entered = feeds.stream().filter(f -> f.stageNumber() == design.feedStageNumber()).findFirst().orElseThrow(() -> new AssertionError(feeds.toString()));
         assertEquals(20, entered.molarFlowMolPerSecond(), 0);
     }
 
