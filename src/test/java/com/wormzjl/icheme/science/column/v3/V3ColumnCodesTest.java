@@ -29,7 +29,7 @@ class V3ColumnCodesTest {
         assertEquals(List.copyOf(expected.keySet()), Arrays.stream(V3AttemptCode.values()).map(V3AttemptCode::text).toList());
         for (V3AttemptCode code : V3AttemptCode.values()) {
             assertEquals(code.text(), code.toString());
-            assertEquals(expected.get(code.text()), V3ColumnCalculator.failureCode(code), code.text());
+            assertEquals(expected.get(code.text()), V3SolveReport.failureCode(code), code.text());
         }
         // The band solver's code behind "LINEAR_": the text the solver built by concatenation.
         for (V3BandedPivotedSolver.FailureCode band : V3BandedPivotedSolver.FailureCode.values()) {
