@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.science.thermo.water;
 
 import com.wormzjl.icheme.science.math.DeterministicMath;
+import com.wormzjl.icheme.science.thermo.ThermoRefusal;
 
 /**
  * The IAPWS Wagner-Pruss auxiliary equation of water's saturation line, the one copy of it (F2 of batch
@@ -35,7 +36,7 @@ public final class WagnerPruss {
      */
     public static double pressure(WaterConstants w, double temperatureKelvin) {
         if (!(temperatureKelvin > 0) || !(temperatureKelvin <= w.criticalTemperature()))
-            throw new IllegalArgumentException("Water saturation temperature must be positive and at most critical: " + temperatureKelvin);
+            throw new ThermoRefusal("Water saturation temperature must be positive and at most critical: ", temperatureKelvin, "");
         if (temperatureKelvin == w.criticalTemperature()) return w.criticalPressure();
         return w.criticalPressure() * DeterministicMath.exp(w.criticalTemperature() / temperatureKelvin
                 * polynomial(w, 1.0 - temperatureKelvin / w.criticalTemperature()));
@@ -61,11 +62,11 @@ public final class WagnerPruss {
      */
     public static double temperature(WaterConstants w, double pressurePascal) {
         if (!Double.isFinite(pressurePascal) || pressurePascal <= 0.0 || pressurePascal > w.criticalPressure()) {
-            throw new IllegalArgumentException("Water saturation pressure is outside the correlation envelope");
+            throw new ThermoRefusal("Water saturation pressure is outside the correlation envelope");
         }
         double minimumPressure = pressure(w, w.triplePoint());
         if (pressurePascal < minimumPressure) {
-            throw new IllegalArgumentException("Water saturation pressure is below the triple-point envelope");
+            throw new ThermoRefusal("Water saturation pressure is below the triple-point envelope");
         }
         double low = w.triplePoint();
         double high = w.criticalTemperature();

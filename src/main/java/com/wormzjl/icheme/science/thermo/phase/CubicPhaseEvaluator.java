@@ -8,6 +8,7 @@ import com.wormzjl.icheme.science.thermo.PairInteractions;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel.Root;
 import com.wormzjl.icheme.science.thermo.ThermoComponent;
+import com.wormzjl.icheme.science.thermo.ThermoRefusal;
 import com.wormzjl.icheme.science.thermo.TranslatedCubic;
 import java.util.List;
 import java.util.Objects;
@@ -195,7 +196,7 @@ public final class CubicPhaseEvaluator {
             dt[i] = mixtureDt[i] - pressure * translations[i] / (rt * temperature);
             dp[i] = partialVolumes[i] / rt - 1 / pressure;
             if (!Double.isFinite(dt[i]) || !Double.isFinite(dp[i])) {
-                throw new IllegalArgumentException("Nonfinite chemical-potential derivative");
+                throw new ThermoRefusal("Nonfinite chemical-potential derivative");
             }
         }
         out.setVolumetric(values.volumeTemperatureDerivative(), values.volumePressureDerivative());
@@ -207,7 +208,7 @@ public final class CubicPhaseEvaluator {
         // The residual-only model's heat capacity is the residual c_p; the whole c_p must be positive.
         double heatCapacity = idealHeatCapacity + values.heatCapacity();
         if (!(heatCapacity > 0.0) || !Double.isFinite(heatCapacity)) {
-            throw new IllegalArgumentException("Invalid phase heat capacity " + heatCapacity);
+            throw new ThermoRefusal("Invalid phase heat capacity ", heatCapacity, "");
         }
         out.setCaloric(heatCapacity, values.enthalpyPressureDerivative());
         if (waterShare != null) {
@@ -228,15 +229,15 @@ public final class CubicPhaseEvaluator {
     private void prepare(double temperature, double pressure, double[] amounts, Root preference, Workspace w) {
         Objects.requireNonNull(preference, "preference");
         if (!Double.isFinite(temperature) || !(temperature > 0.0) || !Double.isFinite(pressure) || !(pressure > 0.0)) {
-            throw new IllegalArgumentException("Positive finite temperature and pressure required");
+            throw new ThermoRefusal("Positive finite temperature and pressure required");
         }
         if (amounts == null || amounts.length != names.size()) throw new IllegalArgumentException("Composition basis mismatch");
         double total = 0.0;
         for (double amount : amounts) {
-            if (!Double.isFinite(amount) || amount < 0.0) throw new IllegalArgumentException("Invalid composition");
+            if (!Double.isFinite(amount) || amount < 0.0) throw new ThermoRefusal("Invalid composition");
             total += amount;
         }
-        if (!(total > 0.0)) throw new IllegalArgumentException("Composition has no material");
+        if (!(total > 0.0)) throw new ThermoRefusal("Composition has no material");
         for (int i = 0; i < amounts.length; i++) w.composition[i] = amounts[i] / total;
         if (w.terms.temperature() != temperature) eos.prepare(temperature, w.terms);
     }

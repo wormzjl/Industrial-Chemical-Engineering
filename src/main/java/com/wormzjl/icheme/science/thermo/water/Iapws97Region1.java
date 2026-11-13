@@ -1,5 +1,7 @@
 package com.wormzjl.icheme.science.thermo.water;
 
+import com.wormzjl.icheme.science.thermo.ThermoRefusal;
+
 /**
  * IF97 Region 1 (IAPWS R7-97(2012)), liquid water, in SI units on its own datum: the one table and evaluator of the
  * repository (F2 and X39 of batch 2026-11-13-codebase-review; before, the fluid network's {@code WaterRegion1} and the
@@ -111,12 +113,12 @@ public final class Iapws97Region1 {
      */
     public static void liquid(double triplePoint, double temperatureKelvin, double pressurePascal, Liquid out) {
         if (!(temperatureKelvin > 0) || !Double.isFinite(temperatureKelvin) || !Double.isFinite(pressurePascal) || pressurePascal <= 0)
-            throw new IllegalArgumentException("Water state is not finite and positive");
+            throw new ThermoRefusal("Water state is not finite and positive");
         double held = temperatureKelvin < triplePoint ? triplePoint : Math.min(temperatureKelvin, MAXIMUM_TEMPERATURE);
         evaluate(held, pressurePascal, out.region);
         State s = out.region;
         double v = s.volume, h = s.enthalpy, cp = s.heatCapacity, vt = s.volumeT, vp = s.volumeP;
-        if (!(v > 0) || !(cp > 0) || !(vp < 0) || !Double.isFinite(h)) throw new IllegalArgumentException("Invalid Region 1 result");
+        if (!(v > 0) || !(cp > 0) || !(vp < 0) || !Double.isFinite(h)) throw new ThermoRefusal("Invalid Region 1 result");
         out.specificVolume = v; out.specificEnthalpy = h; out.specificInternalEnergy = h - pressurePascal * v; out.specificHeatCapacity = cp;
         out.volumeTemperatureDerivative = vt; out.volumePressureDerivative = vp; out.enthalpyPressureDerivative = v - held * vt;
         out.volumeSecondTemperatureDerivative = s.volumeTT;
@@ -126,7 +128,7 @@ public final class Iapws97Region1 {
             out.specificEnthalpy += out.specificHeatCapacity * step;
             out.specificInternalEnergy = out.specificEnthalpy - pressurePascal * out.specificVolume;
         }
-        if (!(out.specificVolume > 0)) throw new IllegalArgumentException("Invalid Region 1 result");
+        if (!(out.specificVolume > 0)) throw new ThermoRefusal("Invalid Region 1 result");
     }
 
     /** Caller-owned result of {@link #liquid}, specific (per kg), with its region scratch. */

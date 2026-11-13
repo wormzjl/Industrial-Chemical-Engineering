@@ -19,6 +19,7 @@ import com.wormzjl.icheme.science.thermo.PengRobinsonKernel.Root;
 import com.wormzjl.icheme.science.thermo.PhaseIdentification;
 import com.wormzjl.icheme.science.thermo.SubstitutionAcceleration;
 import com.wormzjl.icheme.science.thermo.TangentPlaneStability;
+import com.wormzjl.icheme.science.thermo.ThermoRefusal;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult.FailureKind;
 import com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium.Feed;
 import com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium.Settings;
@@ -513,7 +514,7 @@ final class TwoPhaseFlash {
                     + l[i] * (Math.abs(liquidTerm) + Math.abs(w.reference[i]));
         }
         w.gibbsScale = magnitude;
-        if (!Double.isFinite(sum)) throw new IllegalArgumentException("Non-finite Gibbs energy of a trial split");
+        if (!Double.isFinite(sum)) throw new ThermoRefusal("Non-finite Gibbs energy of a trial split");
         return sum;
     }
 

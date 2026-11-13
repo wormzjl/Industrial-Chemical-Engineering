@@ -22,6 +22,7 @@ import com.wormzjl.icheme.science.thermo.PengRobinsonKernel.Root;
 import com.wormzjl.icheme.science.thermo.PhaseIdentification;
 import com.wormzjl.icheme.science.thermo.SubstitutionAcceleration;
 import com.wormzjl.icheme.science.thermo.TangentPlaneStability;
+import com.wormzjl.icheme.science.thermo.ThermoRefusal;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult.FailureKind;
 import com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium.Feed;
 import com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium.Settings;
@@ -661,7 +662,7 @@ final class ThreeSlotFlash {
             }
         }
         w.gibbsScale = magnitude;
-        if (!Double.isFinite(sum)) throw new IllegalArgumentException("Non-finite Gibbs energy of a trial three-slot split");
+        if (!Double.isFinite(sum)) throw new ThermoRefusal("Non-finite Gibbs energy of a trial three-slot split");
         return sum;
     }
 

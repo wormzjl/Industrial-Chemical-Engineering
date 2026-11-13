@@ -421,7 +421,7 @@ public final class PengRobinsonKernel {
         Objects.requireNonNull(workspace, "workspace");
         if (!Double.isFinite(temperatureKelvin) || temperatureKelvin < minimumTemperatureKelvin
                 || temperatureKelvin > maximumTemperatureKelvin) {
-            throw new IllegalArgumentException("Temperature is outside package range");
+            throw new ThermoRefusal("Temperature is outside package range");
         }
         long bits = Double.doubleToLongBits(temperatureKelvin);
         if (workspace.preparedTemperature == bits) return;
@@ -522,8 +522,8 @@ public final class PengRobinsonKernel {
             }
             if (!Double.isFinite(workspace.pairK[pair]) || !Double.isFinite(workspace.pairKDt[pair])
                     || !Double.isFinite(workspace.pairKDt2[pair])) {
-                throw new IllegalArgumentException("Pair interaction of components " + pairFirst[pair] + " and "
-                        + pairSecond[pair] + " is not finite at " + temperatureKelvin + " K");
+                throw new ThermoRefusal("Pair interaction of components ", pairFirst[pair], " and ", pairSecond[pair],
+                        " is not finite at ", temperatureKelvin, " K");
             }
             workspace.pairStamp[pair] = bits;
         }
@@ -579,8 +579,8 @@ public final class PengRobinsonKernel {
                 double rDt2 = gDt2 * tau + 2.0 * gDt * tauDt + g * tauDt2 - classicalDt2;
                 if (!Double.isFinite(g) || !Double.isFinite(gDt) || !Double.isFinite(gDt2)
                         || !Double.isFinite(r) || !Double.isFinite(rDt) || !Double.isFinite(rDt2)) {
-                    throw new IllegalArgumentException("Excess energy of component " + j + " around " + i
-                            + " is not finite at " + temperatureKelvin + " K");
+                    throw new ThermoRefusal("Excess energy of component ", j, " around ", i, " is not finite at ",
+                            temperatureKelvin, " K");
                 }
                 workspace.cellF[c] = g - 1.0;
                 workspace.cellFDt[c] = gDt;
@@ -1577,7 +1577,7 @@ public final class PengRobinsonKernel {
     private static double selectRoot(double reducedA, double reducedB, Root root, Evaluation counts) {
         Objects.requireNonNull(root, "root");
         if (!Double.isFinite(reducedA) || reducedA < 0.0 || !Double.isFinite(reducedB) || reducedB < 0.0) {
-            throw new IllegalArgumentException("PR reduced parameters must be finite and nonnegative");
+            throw new ThermoRefusal("PR reduced parameters must be finite and nonnegative");
         }
         double c2 = -(1.0 - reducedB);
         double c1 = reducedA - 3.0 * reducedB * reducedB - 2.0 * reducedB;
@@ -1722,21 +1722,21 @@ public final class PengRobinsonKernel {
         double total = 0.0;
         for (int i = 0; i < source.length; i++) {
             double value = source[i];
-            if (!Double.isFinite(value) || value < 0.0) throw new IllegalArgumentException("Invalid composition");
+            if (!Double.isFinite(value) || value < 0.0) throw new ThermoRefusal("Invalid composition");
             if (value != 0.0 && !carried[i]) {
                 if (outsideSupportNaN) throw new AssertionError("Composition has an amount of component " + i + " outside the workspace's support");
                 throw new IllegalArgumentException("Composition has an amount of component " + i + " outside the workspace's support");
             }
             total += value;
         }
-        if (!(total > 0.0)) throw new IllegalArgumentException("Composition has no material");
+        if (!(total > 0.0)) throw new ThermoRefusal("Composition has no material");
         int[] support = workspace.support;
         for (int s = 0; s < workspace.supportCount; s++) target[support[s]] = source[support[s]] / total;
     }
 
     private static void requireState(double temperatureKelvin, double pressurePascal) {
         if (!Double.isFinite(temperatureKelvin) || !Double.isFinite(pressurePascal) || pressurePascal <= 0.0) {
-            throw new IllegalArgumentException("Invalid temperature or pressure");
+            throw new ThermoRefusal("Invalid temperature or pressure");
         }
     }
 
@@ -1744,7 +1744,7 @@ public final class PengRobinsonKernel {
         requireState(temperatureKelvin, pressurePascal);
         if (temperatureKelvin < minimumTemperatureKelvin || temperatureKelvin > maximumTemperatureKelvin
                 || pressurePascal < minimumPressurePascal || pressurePascal > maximumPressurePascal) {
-            throw new IllegalArgumentException("State is outside the injected property-package range");
+            throw new ThermoRefusal("State is outside the injected property-package range");
         }
     }
 

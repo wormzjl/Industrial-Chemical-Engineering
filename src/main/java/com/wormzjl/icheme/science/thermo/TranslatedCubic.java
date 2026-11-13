@@ -219,7 +219,7 @@ public class TranslatedCubic {
             // The operations of the closed form, in its order: the same double as forming it at once.
             double t=temperature,b=coVolume;
             double cp=heatCapacityBase+t*dda/(2*SQRT_TWO*b)*logTerm+heatCapacityTail;
-            if(!(w.owner.residualOnly||cp>0)||!Double.isFinite(cp))throw new IllegalArgumentException("Invalid translated phase properties");
+            if(!(w.owner.residualOnly||cp>0)||!Double.isFinite(cp))throw new ThermoRefusal("Invalid translated phase properties");
             heatCapacity=cp;
             volumeSecondTemperatureDerivative=-(-dda/denominator+2*dpdtv*dvdt+dpdvv*dvdt*dvdt)/dpdv;
             secondFormed=true;
@@ -291,7 +291,7 @@ public class TranslatedCubic {
         Runnable counter=preparationCounter;
         if(counter!=null)counter.run();
         if(workspace.owner!=this)throw new IllegalArgumentException("Temperature coefficients belong to another state/model");
-        if(!Double.isFinite(temperature)||temperature<=0)throw new IllegalArgumentException("Invalid coefficient temperature");
+        if(!Double.isFinite(temperature)||temperature<=0)throw new ThermoRefusal("Invalid coefficient temperature");
         idealGasTerms(temperature,workspace.heatCapacity,workspace.enthalpy);
         prepareCubic(temperature,workspace);
         workspace.temperature=temperature;
@@ -304,7 +304,7 @@ public class TranslatedCubic {
         // sqrt(a_i) vanishes exactly where the PR alpha term does, which is where every d/dT below divides
         // by zero. The same state the dense form refused as a degenerate alpha derivative.
         double[] roots=workspace.mixture.attractionRootsView();
-        for(int i=0;i<count;i++)if(workspace.mixture.carries(i)&&roots[i]==0)throw new IllegalArgumentException("Degenerate PR alpha derivative");
+        for(int i=0;i<count;i++)if(workspace.mixture.carries(i)&&roots[i]==0)throw new ThermoRefusal("Degenerate PR alpha derivative");
         // The pure-component root derivatives depend on temperature alone, exactly like the dense form's
         // three matrices did; only the composition-weighted sums below are per evaluation.
         kernel.prepareRootDerivatives(temperature,workspace.mixture,workspace.rootDt,workspace.rootDt2);
@@ -354,7 +354,7 @@ public class TranslatedCubic {
 
     private void requireState(double temperature,double pressure,double[] amounts,Workspace workspace) {
         if (!Double.isFinite(temperature) || temperature <= 0 || !Double.isFinite(pressure) || pressure <= 0) {
-            throw new IllegalArgumentException("Positive finite temperature and pressure required");
+            throw new ThermoRefusal("Positive finite temperature and pressure required");
         }
         if(workspace.owner!=this||temperature!=workspace.temperature)throw new IllegalArgumentException("Temperature coefficients belong to another state/model");
         if(amounts.length!=components.size())throw new IllegalArgumentException("Composition basis mismatch");
@@ -375,7 +375,7 @@ public class TranslatedCubic {
         double denominator = PengRobinsonKernel.cubicDenominator(v,b);
         double dpdv = PengRobinsonKernel.pressureVolumeDerivative(temperature,v,a,b);
         double dpdt = PengRobinsonKernel.pressureTemperatureDerivative(v,b,da);
-        if (!(dpdv < 0)) throw new IllegalArgumentException("Mechanically unstable PR root");
+        if (!(dpdv < 0)) throw new ThermoRefusal("Mechanically unstable PR root");
         double dvdp = 1/dpdv, dvdt = -dpdt/dpdv;
         double dpdvv = PengRobinsonKernel.pressureSecondVolumeDerivative(temperature,v,a,b);
         double dpdtv = PengRobinsonKernel.pressureTemperatureVolumeDerivative(v,b,da);
@@ -398,11 +398,11 @@ public class TranslatedCubic {
             double pressureCompositionDerivative=-2*(attractionRows[i]-a)/denominator
                     +db*(R*temperature/((v-b)*(v-b))+2*a*(v-b)/(denominator*denominator));
             partialVolumes[i]=v-pressureCompositionDerivative/dpdv+translations[i];
-            if(!Double.isFinite(logPhi[i])||!Double.isFinite(partialVolumes[i]))throw new IllegalArgumentException("Nonfinite chemical-potential derivative");
+            if(!Double.isFinite(logPhi[i])||!Double.isFinite(partialVolumes[i]))throw new ThermoRefusal("Nonfinite chemical-potential derivative");
         }
         if (!(physicalV > 0) || !Double.isFinite(h) || !Double.isFinite(cpBase + cpTail)
                 || !Double.isFinite(dvdp) || !Double.isFinite(dvdt) || !Double.isFinite(dhdp)) {
-            throw new IllegalArgumentException("Invalid translated phase properties");
+            throw new ThermoRefusal("Invalid translated phase properties");
         }
         out.molarVolume=physicalV;out.molarEnthalpy=h;out.molarInternalEnergy=h-pressure*physicalV;
         out.volumeTemperatureDerivative=dvdt;out.volumePressureDerivative=dvdp;

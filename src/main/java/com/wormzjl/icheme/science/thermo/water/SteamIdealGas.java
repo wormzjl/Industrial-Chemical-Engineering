@@ -1,5 +1,7 @@
 package com.wormzjl.icheme.science.thermo.water;
 
+import com.wormzjl.icheme.science.thermo.ThermoRefusal;
+
 /**
  * Water vapour as an ideal gas on the record's datum: the record's Shomate form (a fit to the IAPWS-95 ideal-gas
  * {@code c_p} over 273.16 to 900 K, {@code water-iapws95-shomate-r3}), held at its end heat capacity past either end of
@@ -26,7 +28,7 @@ public final class SteamIdealGas {
     /** {@code temperatureKelvin} held inside the steam's data range; it refuses a non-finite temperature. */
     public static double dataTemperature(WaterConstants w, double temperatureKelvin) {
         if (!Double.isFinite(temperatureKelvin))
-            throw new IllegalArgumentException("Water enthalpy temperature is not finite");
+            throw new ThermoRefusal("Water enthalpy temperature is not finite");
         return Math.max(w.triplePoint(), Math.min(w.steamDataMaximum(), temperatureKelvin));
     }
 
