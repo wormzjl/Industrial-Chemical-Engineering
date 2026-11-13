@@ -171,8 +171,8 @@ final class V3LearnedRoute {
             }
         }
         V3SolvePass pass = V3ColumnCalculator.solveSingleProblem(problem, thermo, state, control, "lnn/requested-state",
-                V3ColumnCalculator.ContinuationJacobianPolicy.STAGE_LOCAL_BLOCKS, options.maximumIterations(), policy,
-                neuralRungBudget(options), wet, neuralExtension(options));
+                new RungOptions(V3ColumnCalculator.ContinuationJacobianPolicy.STAGE_LOCAL_BLOCKS,
+                        options.maximumIterations(), neuralRungBudget(options), neuralExtension(options)), policy, wet);
         List<String> events = fixedWaterRefined ? mergedEvents(List.of(
                 "wet seed refinement: fixed-water warm pass; final certificate releases every wet coordinate"), pass.solverEvents())
                 : pass.solverEvents();
@@ -182,7 +182,7 @@ final class V3LearnedRoute {
         }
         return new V3ColumnOutcome.Failure(V3SolverFailureCode.INITIALIZATION_FAILURE,
                 "Learned seed did not reach an audited requested solution",
-                V3ColumnCalculator.diagnostics(pass.attempt(), pass.audit(), pass.solvePath(), events, policy));
+                V3ColumnCalculator.diagnostics(pass.attempt(), pass.audit(), pass.solvePath(), events, policy, null));
     }
 
     /**

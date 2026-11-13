@@ -185,9 +185,8 @@ final class V3HydraulicPublish {
             if (V3OperatingDomainValidator.assess(reprofiled, thermo)
                     instanceof V3OperatingDomainValidator.Assessment.Rejected) return null;
             V3SolvePass corrected = V3ColumnCalculator.solveSingleProblem(reprofiled, thermo, pass.attempt().state(), correctionControl,
-                    pass.solvePath(), V3ColumnCalculator.ContinuationJacobianPolicy.STAGE_LOCAL_BLOCKS,
-                    HYDRAULIC_CORRECTION_MAXIMUM_ITERATIONS, policy,
-                    V3SimultaneousColumnSolver.RungBudget.DEFAULT,
+                    pass.solvePath(), RungOptions.of(V3ColumnCalculator.ContinuationJacobianPolicy.STAGE_LOCAL_BLOCKS,
+                            HYDRAULIC_CORRECTION_MAXIMUM_ITERATIONS), policy,
                     V3WetTraySet.of(reprofiled.topology(), wetTrayMask(solved)));
             return V3ColumnCalculator.publishesSuccess(corrected.attempt(), corrected.audit())
                     && V3ColumnCalculator.publishesRequestedGeometry(corrected, input)
