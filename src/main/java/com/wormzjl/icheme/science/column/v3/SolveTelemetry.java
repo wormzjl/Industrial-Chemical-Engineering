@@ -15,7 +15,7 @@ import java.util.Objects;
 final class SolveTelemetry implements NewtonTrace {
     private final V3ColumnProblem problem;
     /** Where a learned pass keeps its in-flight evidence; null on every classical solve. */
-    private final V3ColumnCalculator.NeuralProgress progress;
+    private final NeuralProgress progress;
     private int acceptedLocalBlockDirections;
     private int rejectedLocalBlockDirections;
     private int freshFiniteDifferenceJacobians;
@@ -26,7 +26,7 @@ final class SolveTelemetry implements NewtonTrace {
     private double finalDominantPhysicalResidual;
     private V3DryMeshState finalState;
 
-    SolveTelemetry(V3ColumnProblem problem, V3ColumnCalculator.NeuralProgress progress) {
+    SolveTelemetry(V3ColumnProblem problem, NeuralProgress progress) {
         this.problem = Objects.requireNonNull(problem, "problem");
         this.progress = progress;
     }
