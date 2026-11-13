@@ -729,8 +729,8 @@ public final class PengRobinsonKernel {
         }
         double reducedA = aMix * pressurePascal / (GAS_CONSTANT * GAS_CONSTANT * temperatureKelvin * temperatureKelvin);
         double reducedB = bMix * pressurePascal / (GAS_CONSTANT * temperatureKelvin);
-        RootSelection rootSelection = selectRoot(reducedA, reducedB, root);
-        double z = rootSelection.selectedCompressibility();
+        // Writes the root count and separation into the output; no record per evaluation.
+        double z = selectRoot(reducedA, reducedB, root, output);
         double logRatio = DeterministicMath.log((z + (1.0 + SQRT_TWO) * reducedB) / (z + (1.0 - SQRT_TWO) * reducedB));
         double attraction = reducedA / (2.0 * SQRT_TWO * Math.max(reducedB, 1.0e-300));
         // Hoisted, not changed: the argument does not depend on i, so this is the same double the loop
@@ -757,8 +757,6 @@ public final class PengRobinsonKernel {
         // Recorded, not recomputed: the derivative evaluation below needs exactly this mixture da/dT, and
         // recomputing it there would be a second arithmetic path for a number this one already has.
         output.daMixDt = daMixDt;
-        output.physicalRootCount = rootSelection.physicalRootCount();
-        output.rootSeparation = rootSelection.rootSeparation();
     }
 
     /**
@@ -1501,6 +1499,21 @@ public final class PengRobinsonKernel {
      * physical root the requested one stands on, the selection fails with the typed {@link NoPhysicalRoot}.
      */
     public static RootSelection selectRoot(double reducedA, double reducedB, Root root) {
+        Evaluation counts = new Evaluation(0);
+        double selected = selectRoot(reducedA, reducedB, root, counts);
+        return new RootSelection(selected, counts.physicalRootCount, counts.rootSeparation);
+    }
+
+    /** The selected compressibility alone, with no allocation. */
+    public static double selectCompressibility(double reducedA, double reducedB, Root root) {
+        return selectRoot(reducedA, reducedB, root, null);
+    }
+
+    /**
+     * The selection itself: returns the selected compressibility and, when {@code counts} is given, writes the
+     * physical root count and the root separation into it. Nothing is written when the selection refuses.
+     */
+    private static double selectRoot(double reducedA, double reducedB, Root root, Evaluation counts) {
         Objects.requireNonNull(root, "root");
         if (!Double.isFinite(reducedA) || reducedA < 0.0 || !Double.isFinite(reducedB) || reducedB < 0.0) {
             throw new IllegalArgumentException("PR reduced parameters must be finite and nonnegative");
@@ -1575,7 +1588,11 @@ public final class PengRobinsonKernel {
         }
         double selected = root == Root.VAPOR ? largest : smallestPhysical;
         if (!Double.isFinite(selected) || selected <= reducedB) throw new NoPhysicalRoot(root);
-        return new RootSelection(selected, physicalRootCount, Math.max(0.0, largest - smallestPhysical));
+        if (counts != null) {
+            counts.physicalRootCount = physicalRootCount;
+            counts.rootSeparation = Math.max(0.0, largest - smallestPhysical);
+        }
+        return selected;
     }
 
     /**

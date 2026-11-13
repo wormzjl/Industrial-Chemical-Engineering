@@ -308,7 +308,7 @@ public final class WaterShare {
         double root = w.mixture.attractionRootsView()[0], r1 = w.rootDt[0], r2 = w.rootDt2[0];
         double a = root * root, a1 = 2.0 * root * r1, a2 = 2.0 * (r1 * r1 + root * r2), b = coVolume;
         double reducedA = a * p / (R * R * t * t), reducedB = b * p / (R * t);
-        double z = PengRobinsonKernel.selectRoot(reducedA, reducedB, Root.LIQUID).selectedCompressibility();
+        double z = PengRobinsonKernel.selectCompressibility(reducedA, reducedB, Root.LIQUID);
         double logPhi = (z - 1.0) - DeterministicMath.log(z - reducedB) - reducedA / (2.0 * SQRT_TWO * Math.max(reducedB, 1.0e-300))
                 * DeterministicMath.log((z + (1.0 + SQRT_TWO) * reducedB) / (z + (1.0 - SQRT_TWO) * reducedB));
         double rt = R * t, v = z * rt / p;
