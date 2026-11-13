@@ -121,6 +121,13 @@ public final class FluidTpEquilibrium {
     /** Fraction of the predicted decrease an accepted Newton step must achieve. */
     private static final double ARMIJO = 1.0e-4;
     private static final int NEWTON_HALVINGS = 40;
+    /**
+     * The diagonal shifts a shifted factorization tries, per attempt: zero, then {@code 10^(attempt - 9)}
+     * ({@code 1e-8 .. 1e4}) or {@code 10^(attempt - 14)} ({@code 1e-13 .. 1e-1}), each the same {@code pow} call the
+     * attempt loops made, formed once.
+     */
+    private static final double[] SHIFTS_FROM_1E8 = shifts(9);
+    private static final double[] SHIFTS_FROM_1E13 = shifts(14);
     /** One Newton step leaves every mole number above {@code 1 - FRACTION_TO_BOUNDARY} of itself. */
     private static final double FRACTION_TO_BOUNDARY = 0.9;
     /** Roundoff allowance on the Gibbs-energy decrease, relative to the magnitude of its summands. */
@@ -5258,10 +5265,17 @@ public final class FluidTpEquilibrium {
      * Solves {@code (H + mu I) s = -s g} in place into {@code step} for the scaled Hessian in {@code hessian}, with
      * {@code mu} zero or the first of {@code 1e-8, 1e-7, ..., 1e4} that makes it positive definite.
      */
+    /** The 14 shifts of an attempt loop: zero, then {@code 10^(attempt - offset)}. */
+    private static double[] shifts(int offset) {
+        double[] shifts = new double[14];
+        for (int attempt = 1; attempt < shifts.length; attempt++) shifts[attempt] = DeterministicMath.pow(10.0, attempt - offset);
+        return shifts;
+    }
+
     private static boolean shiftedSolve(Workspace w, int m) {
         double[] h = w.hessian;
         for (int attempt = 0; attempt < 14; attempt++) {
-            double mu = attempt == 0 ? 0.0 : DeterministicMath.pow(10.0, attempt - 9);
+            double mu = SHIFTS_FROM_1E8[attempt];
             if (factorShifted(h, m, mu, w.factor)) {
                 for (int a = 0; a < m; a++) {
                     int i = w.present[a];
@@ -5792,7 +5806,7 @@ public final class FluidTpEquilibrium {
                 }
                 factored = false;
                 for (int attempt = 0; attempt < 14 && !factored; attempt++) {
-                    double mu = attempt == 0 ? 0.0 : DeterministicMath.pow(10.0, attempt - 14);
+                    double mu = SHIFTS_FROM_1E13[attempt];
                     factored = factorShifted(s.rrMatrix, free, mu, s.rrFactor);
                 }
                 if (!factored) break;
@@ -5945,7 +5959,7 @@ public final class FluidTpEquilibrium {
             }
             boolean factored = false;
             for (int attempt = 0; attempt < 14 && !factored; attempt++) {
-                double mu = attempt == 0 ? 0.0 : DeterministicMath.pow(10.0, attempt - 9);
+                double mu = SHIFTS_FROM_1E8[attempt];
                 factored = factorShifted(s.newtonHessian, dimension, mu, s.newtonFactor);
             }
             if (!factored) return false;
