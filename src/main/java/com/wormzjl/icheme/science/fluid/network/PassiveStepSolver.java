@@ -1380,9 +1380,14 @@ public final class PassiveStepSolver {
         return List.copyOf(identities);
     }
     /** {@link #identities} of {@code graph}, built once per graph object (P-05): a solve and its passes ask for the same
-     * graph's identities a dozen times. A graph is immutable, so the list is its own for as long as it is the one asked about. */
+     * graph's identities a dozen times. A graph is immutable, so the list is its own for as long as it is the one asked about;
+     * an equal list is the same list. */
     private List<PassiveNetwork.Pipe.Identity> identitiesOf(PassiveNetwork graph) {
-        if(graph!=identityGraph){identityList=identities(graph);identityGraph=graph;}
+        if(graph!=identityGraph) {
+            // A graph of the same connections as the last one (every step's) keeps the last list object, so the workspace keys
+            // stored from earlier solves compare by reference: one list comparison per new graph in place of one per lookup.
+            var list=identities(graph);identityList=list.equals(identityList)?identityList:list;identityGraph=graph;
+        }
         return identityList;
     }
     private PassiveNetwork identityGraph;private List<PassiveNetwork.Pipe.Identity> identityList;
