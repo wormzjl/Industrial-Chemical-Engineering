@@ -12,6 +12,7 @@ package com.wormzjl.icheme.science.fluid.linalg;
  * specific language governing permissions and limitations under the License.
  */
 
+import com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics;
 import java.util.Arrays;
 
 /**
@@ -52,6 +53,15 @@ import java.util.Arrays;
  * returns the last reach of column k, in the same order. So each column's reach is kept, and reused while every earlier
  * pivot repeated; from the first column whose pivot differs, every later column searches again (and keeps its new reach).
  * A matrix of another pattern searches every column. Values never enter the search.</p>
+ *
+ * <p><b>Reuse across factorizations</b> (P-17b: an island keeps its instances across steps). Nothing numeric carries from
+ * one factorization to the next, whatever matrix came before: {@code pinv} is set to -1 over n; the dense column is cleared
+ * on each column's reach before A(:,k) is scattered, and only reach rows are read (a row with a pivot leads to the rows of
+ * its L column, which the search put in the reach), so a value a rejected factorization left there is never read; the
+ * search's marks are cleared on the reach it returns and its stack entries are written before they are read; L, U and
+ * their column pointers are written from position 0. What carries over is the arrays' capacity, which no value depends on,
+ * and the kept reach, used only under the induction above. So a reused instance gives the L, U, pivots, rejection column
+ * and solutions of a fresh one.</p>
  */
 public final class UpLookingLu {
     private int size;
@@ -211,11 +221,10 @@ public final class UpLookingLu {
     }
     private void ensureReach(int length){if(reachRows.length<length)reachRows=Arrays.copyOf(reachRows,Math.max(2*reachRows.length,length));}
 
-    /** Columns factored and reach searches run by every instance, process-wide (P-17's counters for the bench and the tests). */
-    private static final java.util.concurrent.atomic.LongAdder COLUMNS=new java.util.concurrent.atomic.LongAdder(),SEARCHES=new java.util.concurrent.atomic.LongAdder();
-    private static void count(int columns,long searched){COLUMNS.add(columns);SEARCHES.add(searched);}
-    public static long columnsFactored(){return COLUMNS.sum();}
-    public static long reachSearches(){return SEARCHES.sum();}
+    /** Columns factored and reach searches, into the solver's diagnostics (behind its switch). */
+    private static void count(int columns,long searched) {
+        SolverDiagnostics.count(SolverDiagnostics.luColumnsFactored,columns);SolverDiagnostics.count(SolverDiagnostics.luReachSearches,searched);
+    }
     public int size(){return size;}
     /** The column whose pivot was missing in the last rejected factorization, -1 after a completed one. */
     public int failedColumn(){return failedColumn;}

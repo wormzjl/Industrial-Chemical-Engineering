@@ -17,7 +17,9 @@ import java.util.Objects;
  * {@code min(initialStep, duration)}, a function of the interval alone. A certified island is woken with a new handle,
  * and its replay must reproduce the island that solved every interval bit for bit; a factorization or a step estimate
  * carried from an earlier job made them differ in the last digits (HANDOFF_REVIEW.md 8.9 of the mixed-gas junction
- * batch). The cost is one fresh Jacobian per job, +8 % wall time at 5 s slices.
+ * batch). The cost is one fresh Jacobian per job, +8 % wall time at 5 s slices. What the handle keeps across jobs besides
+ * structure is capacity: the island's sparse-LU storages with each column's reach (finding P-17b, batch
+ * 2026-11-13-codebase-review), which carry nothing numeric from one factorization to the next.
  *
  * <p>This is ephemeral cost state, never material state: dropping it costs one Jacobian build and a
  * few substeps and changes nothing that is committed. The coordinator replaces the handle whenever

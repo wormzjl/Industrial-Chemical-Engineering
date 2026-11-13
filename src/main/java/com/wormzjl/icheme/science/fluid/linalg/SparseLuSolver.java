@@ -73,7 +73,9 @@ public final class SparseLuSolver {
      * each column's reach while the pivot rows repeat (finding P-17, batch 2026-11-13-codebase-review): the symbolic
      * phase EJML could not keep ({@code LuUpLooking_DSCC.setStructureLocked(true)} throws). The refill supersedes every
      * {@link Factorization} handed out before it - a modified-Newton holder of one must build its own, which is exactly
-     * what a refresh does.
+     * what a refresh does. An island keeps its storages across steps and jobs, one per matrix role and structure (the
+     * Newton's fork family, the transport's structures, the kept closure storages: P-17b); a refill carries nothing numeric
+     * from the factorization before, so a kept storage and a new one give the same bits.
      */
     public static final class Storage {
         private static final double[] NO_VALUES=new double[0];

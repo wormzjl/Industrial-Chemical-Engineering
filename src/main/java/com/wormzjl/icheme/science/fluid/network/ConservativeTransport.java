@@ -13,27 +13,30 @@ import com.wormzjl.icheme.science.fluid.state.SolidInventory;
 public final class ConservativeTransport {
     private ConservativeTransport() {}
     /**
-     * One island's transport linear algebra, retained across its reconstructions as {@code SparseNewton.Workspace.Shared}
-     * is retained across a fork family: one EJML storage every reconstruction refills in place, and the fill-reducing
-     * ordering of each structure the island produces (a step solve and a rate solve of the port graph do not share a
-     * sparsity pattern, so the orderings are a small keyed cache). Without it each reconstruction built its own
-     * {@link SparseLuSolver.Storage} and ordering, three or four times per interval. Reuse is bitwise: the storage clears
-     * every buffer it reads, an ordering is only reused for a matrix with the identical structure, and each factorization
-     * is consumed inside the reconstruction that produced it.
+     * One island's transport linear algebra, retained across its reconstructions, steps and jobs with the island's step
+     * solver: per structure the island produces (a step solve and a rate solve of the port graph do not share a sparsity
+     * pattern, nor do the fluid and the solid system of an island with a filter), its fill-reducing ordering and its own
+     * {@link SparseLuSolver.Storage}, a small keyed cache. One storage per structure keeps each one's reach (P-17b, batch
+     * 2026-11-13-codebase-review): alternating patterns through one storage searched every column of every factorization.
+     * Without the cache each reconstruction built its own storage and ordering, three or four times per interval. Reuse is
+     * bitwise: a storage carries nothing numeric from one factorization to the next ({@link UpLookingLu}), an ordering is
+     * only reused for a matrix with the identical structure, and each factorization is consumed inside the reconstruction
+     * that produced it, before the next one.
      */
     public static final class Workspace {
-        private static final int RETAINED_ORDERINGS=4;
-        private final SparseLuSolver.Storage factors;
-        private final LinkedHashMap<Structure,SparseLuSolver.Ordering> orderings=new LinkedHashMap<>();
-        public Workspace(SolverOwnership ownership){factors=new SparseLuSolver.Storage(ownership);}
+        private static final int RETAINED_STRUCTURES=4;
+        private final SolverOwnership ownership;
+        private record Factors(SparseLuSolver.Ordering ordering,SparseLuSolver.Storage storage) {}
+        private final LinkedHashMap<Structure,Factors> structures=new LinkedHashMap<>();
+        public Workspace(SolverOwnership ownership){this.ownership=Objects.requireNonNull(ownership,"ownership");}
         private SparseLuSolver.Factorization factor(SparseMatrix matrix) {
             var structure=Structure.of(matrix);
-            var ordering=orderings.get(structure);
-            if(ordering==null) {
-                if(orderings.size()>=RETAINED_ORDERINGS)orderings.remove(orderings.keySet().iterator().next());
-                ordering=SparseLuSolver.prepareOrdering(matrix);orderings.put(structure,ordering);
+            var factors=structures.get(structure);
+            if(factors==null) {
+                if(structures.size()>=RETAINED_STRUCTURES)structures.remove(structures.keySet().iterator().next());
+                factors=new Factors(SparseLuSolver.prepareOrdering(matrix),new SparseLuSolver.Storage(ownership));structures.put(structure,factors);
             }
-            return factors.factor(matrix,ordering);
+            return factors.storage().factor(matrix,factors.ordering());
         }
     }
     /** Everything the ordering depends on: the sparsity pattern, and which stored entries are

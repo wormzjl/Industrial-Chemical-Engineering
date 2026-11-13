@@ -35,6 +35,8 @@ public final class SolverOwnership {
         if(owner!=current)throw new IllegalStateException("Retained fluid solver is held by "+owner);
         holder.set(null);
     }
+    /** Whether the calling thread holds the latch: {@link #check} would pass. */
+    public boolean heldByCurrentThread(){return holder.get()==Thread.currentThread();}
     public void check(String what) {
         if(holder.get()!=Thread.currentThread())throw new IllegalStateException(Objects.requireNonNull(what));
     }
