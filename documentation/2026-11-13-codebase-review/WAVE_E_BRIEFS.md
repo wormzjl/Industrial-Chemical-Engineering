@@ -96,3 +96,21 @@ COLUMN_REVIEW row L1: "measure the first rung with and without it; delete it if 
 - The trial costs about 0.09 s on every dry cold solve and saves nothing after it: the same path, the same Newton iterations, and the published streams equal in every printed digit (flows to 1e-9 mol/s, temperatures to 1e-6 K) in all six cases.
 - It acts only on the first grid of a request with no draw, steam or stage heat, on the classical chain; the bench inputs of PROFILE_REVIEW (both with features, through the learned start) never run it, which is why no profile showed it.
 - **Decision: delete it** (about 330 Java lines: `solveWithInsideOut`, the frozen-property evaluator paths, the `INSIDE_OUT` policy and its telemetry line). It goes in after E0-3 merges, because both change the calculator and the solver. Expected to move: nothing published in these six cases; the gate is the column classes' digests and the cold-start sweep.
+
+## E0-4 The inside-out trial leaves the column: L1 (subagent, Opus high)
+
+Written by the main thread on 2026-11-13, after E0-3 merged (`a8050413b`). Decision and measurement: "L1 measured" above. COLUMN_REVIEW row L1 names the places (line numbers predate three waves: find them by text).
+
+Lane: `science/column/v3/**` (not `linalg/**`), their tests, `tools/native-column-default/` (removed whole), `tools/INDEX.md` (its row), `documentation/reference/code-guide/column-v3.md`.
+
+What goes, in one commit:
+1. In `V3ColumnCalculator`: the choice of `ContinuationJacobianPolicy.INSIDE_OUT` for the first grid of a request without draw, steam or stage heat (the rung then takes the policy every other rung takes, `STAGE_LOCAL_BLOCKS`); the `INSIDE_OUT` constant and its `case` in the attempt switch; the `insideOut` flag of `SolveTelemetry` and its event line ("Boston-Sullivan inside-out: ...").
+2. In `V3SimultaneousColumnSolver`: `solveWithInsideOut`, its outer-pass loop, its constants and the comment at the class head that reserves the trial for cold seeds.
+3. In `V3MeshResidualEvaluator` (and wherever else they live): the frozen-property mode the trial alone used (`usesFrozenThermo` and the frozen K and enthalpy snapshot paths). Before you delete a frozen-property path, grep its every caller: delete only what the trial alone reached; a path that the predictor, a continuation or a test of another feature also uses stays, and the report names it.
+4. Tests that test the trial itself are deleted (name them in the report); a test of another behaviour that happened to run through the trial keeps its assertions. Any expectation that reads the event line or a solve path containing the trial's text is restated.
+
+Expected results: the first rung now takes block steps from the same seed. On the six dry cold cases of the measurement nothing published moved; elsewhere a digest of a dry cold solve may move inside the solver's closure. A moved expectation is listed in the report with old and new values; do not re-record by guess: leave the old value and name the test, the main thread re-records from the run.
+
+Pitfalls: `ContinuationJacobianPolicy` is passed through several `solveSingleProblem` overloads: keep their signatures unless the parameter becomes single-valued everywhere (then say so, do not remove it in this commit); the native library's self-test and `NativeColumnSolver` do not use the trial (the C++ outer pass is already gone): do not touch `src/main/rust`; the learned start's training export does not use the trial.
+
+Tests for the main thread (`columnGates`): `V3SimultaneousColumnSolverTest`, `V3ColdStartTest`, `V3StageContinuationTest`, `V3ColumnCalculatorTest`, `V3ConvergenceClosureTest`, `V3StageTraceCalculatorTest`, `V3BoundedSolvePathTest`, `V3LiteraturePresetTest`, `V3VacuumStartupTest`, `V3PathDependentInfeasibilityTest`, `V3BandFactorizationCountTest`, `V3LearnedRecoveryTest`, `V3ColumnCodesTest`, `HollandExample32BenchmarkTest`; `test`: `NativeColumnSolverTest`, `FlowsheetExamplesTest`; `holdGates`: `FlowsheetColumnTest`, `SmallCrudeUnitTest`. Report: `wave-e/E0-4_REPORT.md`: lines removed per file, what stayed and why, tests deleted and restated.
