@@ -14,7 +14,7 @@ Status words:
 
 | Batch | Purpose | Status |
 |---|---|---|
-| [2026-11-13-codebase-review/](2026-11-13-codebase-review/README.md) | Whole code base review: modules, solver de-correlation, Rust port evaluation, machine failure modes, documentation and collaboration | In progress since 2026-11-13 |
+| [2026-11-13-codebase-review/](2026-11-13-codebase-review/README.md) | Whole code base review and revamp: defect fixes, free performance, the water module, machine shaft power and wear modes, the Rust column library (stage a), documentation and collaboration | In progress since 2026-11-13 |
 | [2026-11-12-tutorial-system/](2026-11-12-tutorial-system/README.md) | Tutorial for new players: own films, help tours on every GUI, a field guide to a first small crude unit, equipment items and JEI pages | Implemented 2026-11-13 (0.30.0) |
 | [2026-11-12-fluid-conversion/](2026-11-12-fluid-conversion/README.md) | Converter between Forge fluids and IChemE fluids | Implemented 2026-11-12 (0.28.0) |
 | [2026-11-12-still-heat-per-distillate/](2026-11-12-still-heat-per-distillate/README.md) | Batch still refused part way through a wide-boiling (crude) charge: split per mole of distillate, bracket on the balance's slope | Implemented 2026-11-13 (0.30.0) |

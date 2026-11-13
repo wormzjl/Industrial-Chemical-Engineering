@@ -37,3 +37,7 @@ The k and recycle percentages are from MACHINES_REVIEW M-01's formulas and are n
   - a set-flow pump: charge = booked / .65;
   - M-07 on ethane (k 1.19) at ratio 1.5 (ratio 2 needs more than the 1.5 speed clamp on this law).
 - To run once the lane is free: `ShaftPowerBookingTest`, `ShaftCouplingTest`, `TimeFactorElectricTest`, `HeatUnitPowerTest`, `PumpHealthTest`, `MachineMoverTest` and `CompressorTest` (both read the solve's kappa, refactored), `RotatingDriveReworkTest`, `ColumnRunTest` (ratedShaftPower), `ElectricStoreTest`. `ElectricGameTests` belong to the main thread.
+
+## Run by the main thread (2026-11-13)
+
+The thread could not be reached (the app paused cross-session messages), so the main thread test-merged this branch into the review branch and ran the named classes itself; all pass. Counts and the merge commit: the batch README history and `wave-b/FINAL_LANE_REPORT.md` (both final lanes of the review branch include this code). Any "tests pending" or "results pending" line above is superseded by this note.

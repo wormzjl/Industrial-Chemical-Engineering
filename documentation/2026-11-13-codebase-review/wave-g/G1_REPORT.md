@@ -47,3 +47,7 @@ Status: three items committed. **No test has run yet**; the lane is held.
 
 1. `compileJava compileTestJava` once.
 2. `test --tests` `MachineHealthTest`, `WearTest`, `MoverHealthStatusTest`, `VacuumPumpTest`, `FluidFactsCompatTest`, `ShaftCouplingTest`, `--max-workers 4`. The last two only for the rename.
+
+## Run by the main thread (2026-11-13)
+
+The thread could not be reached (the app paused cross-session messages), so the main thread test-merged this branch into the review branch and ran the named classes itself; all pass. Counts and the merge commit: the batch README history and `wave-b/FINAL_LANE_REPORT.md` (both final lanes of the review branch include this code). Any "tests pending" or "results pending" line above is superseded by this note.

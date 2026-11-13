@@ -38,3 +38,7 @@ Branch `claude/review-wave-a6-fluid-18ecaf`, merged from the review branch at 7f
 ## For the main thread's lane
 - I expect no value to move in chain-100, the junction lines or the campaign: same L, U, pivots and solutions, so the same iterates.
 - The bench measures the step's CPU share of the triangular solves and the reach, before and after.
+
+## Note of the main thread (2026-11-13)
+
+Merged into the review branch (e31c38fd8) after the thread's own run above. EJML is still an `implementation` dependency packaged in the jar: its move to `testImplementation` is WAVE_B_BRIEFS amendment 11, with P-17b. The bench after wave B shows the kept reach does not yet reach the engine's step (amendment 10).

@@ -68,13 +68,25 @@ Synthesis (main thread):
 
 Reviews (subagents): [THERMO_CORE_REVIEW.md](THERMO_CORE_REVIEW.md) (S1), [THERMO_ADAPTERS_REVIEW.md](THERMO_ADAPTERS_REVIEW.md) (S2), [FLUID_STEP_REVIEW.md](FLUID_STEP_REVIEW.md) (S3), [FLUID_LAWS_REVIEW.md](FLUID_LAWS_REVIEW.md) (S4), [COLUMN_REVIEW.md](COLUMN_REVIEW.md) and [RUST_COLUMN_PORT_PLAN.md](RUST_COLUMN_PORT_PLAN.md) (S5), [RUNTIME_REVIEW.md](RUNTIME_REVIEW.md) (S6), [MACHINES_REVIEW.md](MACHINES_REVIEW.md) (S7), [PLANT_COUPLING_REVIEW.md](PLANT_COUPLING_REVIEW.md) (S8), [EQUIPMENT_REVIEW.md](EQUIPMENT_REVIEW.md) (P1), [CLIENT_REVIEW.md](CLIENT_REVIEW.md) (P2), [FLOWSHEET_CONTROL_REVIEW.md](FLOWSHEET_CONTROL_REVIEW.md) (P3), [INVENTORY.md](INVENTORY.md) (P4).
 
-Plan and briefs: [REVIEW_PLAN.md](REVIEW_PLAN.md) (its section 2 is replaced by SOLVER_DECOUPLING_PLAN), [BRIEFS.md](BRIEFS.md), [WAVE_A_BRIEFS.md](WAVE_A_BRIEFS.md), [WAVE_B_BRIEFS.md](WAVE_B_BRIEFS.md) (column, fluid step, thermo kernel, runtime, machines, equipment geometry; its amendments), [WAVE_C_BRIEFS.md](WAVE_C_BRIEFS.md) (C1a, the water module), [WAVE_G_BRIEFS.md](WAVE_G_BRIEFS.md) (G0, the driver pays the fluid's shaft power).
+Plan and briefs: [REVIEW_PLAN.md](REVIEW_PLAN.md) (its section 2 is replaced by SOLVER_DECOUPLING_PLAN), [BRIEFS.md](BRIEFS.md), [WAVE_A_BRIEFS.md](WAVE_A_BRIEFS.md), [WAVE_B_BRIEFS.md](WAVE_B_BRIEFS.md) (column, fluid step, thermo kernel, runtime, machines, equipment geometry; its amendments), [WAVE_C_BRIEFS.md](WAVE_C_BRIEFS.md) (C1a, the water module), [WAVE_E_BRIEFS.md](WAVE_E_BRIEFS.md) (E0-1, the analytic Jacobian certifies and solves), [WAVE_G_BRIEFS.md](WAVE_G_BRIEFS.md) (G0, the driver pays the fluid's shaft power; G1 part 1, one health and wear modes N5, N1).
 
-Profile (bench sub-thread B1): [PROFILE_REVIEW.md](PROFILE_REVIEW.md): the Java baseline (wall, CPU, allocation, GC, retained heap, time share by kind) of an island step, a column solve and 20 shaft trains; harness `tools/codebase-review-bench/`.
+Profile (bench sub-thread B1): [PROFILE_REVIEW.md](PROFILE_REVIEW.md): the Java baseline (wall, CPU, allocation, GC, retained heap, time share by kind) of an island step, a column solve and 20 shaft trains; "After wave B"; "The Rust band solve, measured"; harness `tools/codebase-review-bench/`.
+
+Thread reports: wave A [A1](wave-a/A1_REPORT.md) to [A6](wave-a/A6_REPORT.md), [A5_GAMETEST_FIXES.md](wave-a/A5_GAMETEST_FIXES.md), [LEVEL_LOOP_REVIEW.md](wave-a/LEVEL_LOOP_REVIEW.md) (the level loop GameTests: a deadbeat level law with no margin against the dispatch delay); wave B [B-T1](wave-b/B-T1_REPORT.md), [B-S1](wave-b/B-S1_REPORT.md), [B-S2](wave-b/B-S2_REPORT.md), [B-R1](wave-b/B-R1_REPORT.md), [B-M1](wave-b/B-M1_REPORT.md), [B-E1](wave-b/B-E1_REPORT.md), [B-C1](wave-b/B-C1_REPORT.md), [B-K1](wave-b/B-K1_REPORT.md), [FINAL_LANE_REPORT.md](wave-b/FINAL_LANE_REPORT.md) (the review branch's final lane, at a0b157325 and at 4563176e1); wave C [C1A](wave-c/C1A_REPORT.md); wave G [G0](wave-g/G0_REPORT.md), [G1](wave-g/G1_REPORT.md); Rust [RUST_A1](rust/RUST_A1_REPORT.md), [RUST_A2](rust/RUST_A2_REPORT.md), [RUST_2B](rust/RUST_2B_REPORT.md).
+
+Merge preparation: [MERGE_PREP_REVIEW.md](MERGE_PREP_REVIEW.md) (the version proposal, translation and format checks, the code guide chapters, the tooling list).
 
 ## Code areas
 
-None changed.
+- Thermo: `science/thermo/PengRobinsonKernel`, `PairInteractions`, `TangentPlaneStability`, `SubstitutionAcceleration`, `science/thermo/phase/*` (`FluidTpEquilibrium`, `CubicPhaseEvaluator`, `PhaseIdentification`, `WaterShare`), the new `science/thermo/water/` (`SteamVirial` moved there), `science/math/SmallDenseSolve`, `science/material/{HenryConstant,TrainedPhysics,WaterRecords}`.
+- Fluid step: `science/fluid/network/{PassiveStepSolver,ConservativeTransport,PassiveNetwork,TowerTransfer,PhaseDraw}`, `science/fluid/linalg/{SparseLuSolver,UpLookingLu}`, `science/fluid/thermo/{FluidThermodynamics,TranslatedPengRobinson,WaterRegion1,HydrocarbonModel}`, `science/fluid/solver/PhaseLayout`.
+- Runtime: `runtime/{BoundedCpuSolveService,ProcessSolveServices}`, `runtime/fluid/{FluidWorldAuthority,IslandCoordinator,IslandSets,PipePresentation,PhysicalRegistry,ShaftTrains,WorldTopologyLedger,ElectricStores,ColumnPower,MachineHealth}`, `runtime/control/{ControlLaw,ControlService,InventoryControl}`.
+- Machines: `science/machine/{InlineMachines,Motor,VacuumPump,Wear}`, `world/item/RepairKitItem`.
+- Column: `science/column/v3/*` (the ledger, `V3SolveScratch`, the band solver, `NativeColumnSolver`, `V3WaterProperties`, the C++ outer pass's hooks removed), `science/column/operation/ColumnSolve`; `src/main/rust/` (new), `src/main/cpp/` (removed).
+- Equipment: `science/equipment/{BoundedCache,ProcessUnit,ShapeRasterizer,NozzleBore,ColumnStructure,ShapeRepair}`, `world/level/block/{EquipmentStructure,FloatingRoofs,LineShapes}`, the design tags of the constructor, the shell and the simulator.
+- Client: `client/gui/common/kit/{GuiCanvas,HeldDraws,KitDoor,FrameBatchEvents,SkinButton,SkinField}`, five screens, `client/{DataControlRenderer,EquipmentBodyRenderer,InstrumentRenderer}` and four other renderers.
+- Simulator: `science/flowsheet/{Report,sizing/*,unit/BatchStillUnit}`.
+- Build and tests: `build.gradle` (cargo tasks, the gate groups' water module), `src/fluidGameTest` (the in-line pumps powered, the level loops), `tools/agent-guard` (cargo rule), `tools/merge-lane/readers.txt`.
 
 ## Open items
 

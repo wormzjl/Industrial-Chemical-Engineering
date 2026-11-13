@@ -46,3 +46,7 @@ Thread wave-a2 (Opus medium), branch `claude/review-wave-a2-saves-96a998`, after
 - The render tools once (`GuiPrototypes`, `HeatDiagramRender`), as the skill gives them.
 
 Results: pending.
+
+## Run by the main thread (2026-11-13)
+
+The thread could not be reached (the app paused cross-session messages), so the main thread test-merged this branch into the review branch and ran the named classes itself; all pass. Counts and the merge commit: the batch README history and `wave-b/FINAL_LANE_REPORT.md` (both final lanes of the review branch include this code). Any "tests pending" or "results pending" line above is superseded by this note.
