@@ -27,11 +27,7 @@ public record PassiveNetwork(List<Reservoir> reservoirs,List<Pipe> pipes,List<Sc
      * nozzle's head over the line's datum.</p>
      */
     public enum PhasePort { BULK, VAPOR, LIQUID, OVERFLOW, BOOT_WATER, BOOT_HC, SPRAY }
-    /** Temporary, for the B-S1 report's P-06 count (batch 2026-11-13-codebase-review): the graphs built since the class
-     * loaded. Read once by PassiveStepSolverTest's probe, then removed. */
-    static final java.util.concurrent.atomic.LongAdder CONSTRUCTED=new java.util.concurrent.atomic.LongAdder();
     public PassiveNetwork {
-        CONSTRUCTED.increment();
         reservoirs=List.copyOf(reservoirs);pipes=List.copyOf(pipes);scheduledTransfers=List.copyOf(scheduledTransfers);
         if(reservoirs.isEmpty())throw new IllegalArgumentException("Empty island");
         var ids=new HashSet<Long>();for(var reservoir:reservoirs)if(!ids.add(reservoir.id))throw new IllegalArgumentException("Duplicate reservoir identity");

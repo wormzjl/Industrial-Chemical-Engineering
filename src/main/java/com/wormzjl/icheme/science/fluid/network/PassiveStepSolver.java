@@ -336,6 +336,10 @@ public final class PassiveStepSolver {
     private LastSolve lastSolve;
     /** The pass whose node bundles ({@code Equations.cachedPrepared}) the next pass takes over (P-18). */
     private Equations preparedPass;
+    /** The node bundles the passes of this solver have built new (P-18): a step's first pass builds them and its later
+     * passes refill them; the accepted pass drops them with its decode cache (review 8.7 (c) E2). A test's counter. */
+    private long preparedBuilt;
+    long preparedBuilt(){return preparedBuilt;}
     private boolean rateOnly;
     /** Owned by this solver, which the ownership latch confines to one worker at a time. */
     private final com.wormzjl.icheme.science.fluid.transport.MixtureViscosity.Workspace viscosities=
@@ -4378,6 +4382,10 @@ public final class PassiveStepSolver {
          * ({@link FluidThermodynamics#prepare(double,FluidThermodynamics.Prepared)}, finding P-18): the decode's own
          * ({@link #cachedPrepared}) is the probe's base and stays as it is through the node's columns. */
         private final FluidThermodynamics.Prepared[] probePrepared;
+        private FluidThermodynamics.Prepared probe(int node,double temperature) {
+            if(probePrepared[node]==null)preparedBuilt++;
+            return probePrepared[node]=model.prepare(temperature,probePrepared[node]);
+        }
         /**
          * Takes over the bundles of the solver's previous pass (P-18): a bundle holds one temperature's terms and no node's
          * state, so any slot serves any node, refilled at its first decode. The previous pass drops its decode cache and
@@ -4389,7 +4397,7 @@ public final class PassiveStepSolver {
             if(previous==null||previous==this)return;
             System.arraycopy(previous.cachedPrepared,0,cachedPrepared,0,Math.min(cachedPrepared.length,previous.cachedPrepared.length));
             System.arraycopy(previous.probePrepared,0,probePrepared,0,Math.min(probePrepared.length,previous.probePrepared.length));
-            previous.releaseDecodeCache();Arrays.fill(previous.probePrepared,null);
+            previous.releaseDecodeCache();
         }
         /** Whether this island carries the three aggregate solid moment unknowns on every node;
          * the whole-island predicate {@link PhaseLayout} is built with, evaluated once. */
@@ -5254,7 +5262,7 @@ public final class PassiveStepSolver {
             return states;
         }
         /** Drops the per-node decode cache; the next decode rebuilds every node exactly. */
-        void releaseDecodeCache(){Arrays.fill(cachedStates,null);Arrays.fill(cachedTransport,null);Arrays.fill(cachedPrepared,null);}
+        void releaseDecodeCache(){Arrays.fill(cachedStates,null);Arrays.fill(cachedTransport,null);Arrays.fill(cachedPrepared,null);Arrays.fill(probePrepared,null);}
         /** Brings the per-node decode cache up to {@code x}; the residual reads the arrays directly. */
         private void decode(double[] x) {
             if(hasWeirs)for(int edge=0;edge<weirOffsets.length;edge++)for(int end=0;end<2;end++)if(weirOffsets[edge][end]>=0)weirValues[edge][end]=x[weirOffsets[edge][end]];
@@ -5264,6 +5272,7 @@ public final class PassiveStepSolver {
                 if(layout[i]!=null) {
                     double temperature=layout[i].temperature(x,offsets[i]);
                     // Refilled in place (P-18): this node's state and transport are decoded again from it just below.
+                    if(cachedPrepared[i]==null)preparedBuilt++;
                     cachedPrepared[i]=model.prepare(temperature,cachedPrepared[i]);
                 }
                 FluidThermodynamics.State state;
@@ -5723,7 +5732,7 @@ public final class PassiveStepSolver {
                         trial[column]+=step;
                         double temperature=layout[node].temperature(trial,offsets[node]);
                         var prepared=basePrepared[node]!=null&&basePrepared[node].temperature()==temperature?basePrepared[node]
-                                :(probePrepared[node]=model.prepare(temperature,probePrepared[node]));
+                                :probe(node,temperature);
                         long exactBefore=SolverDiagnostics.ENABLED&&tangents?SolverDiagnostics.jacobianExactPhases.sum():0;
                         var state=layout[node].decode(trial,offsets[node],prepared,nodeTangents);
                         if(SolverDiagnostics.ENABLED&&tangents&&SolverDiagnostics.jacobianExactPhases.sum()>exactBefore)SolverDiagnostics.jacobianExactColumns.increment();
