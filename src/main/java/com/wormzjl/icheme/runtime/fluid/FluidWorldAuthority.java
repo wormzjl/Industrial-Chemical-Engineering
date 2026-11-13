@@ -5,6 +5,7 @@ import com.wormzjl.icheme.science.fluid.network.*;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler;
 import com.wormzjl.icheme.science.material.*;
+import com.wormzjl.icheme.science.plant.still.BatchStill;
 import com.wormzjl.icheme.world.level.block.EquipmentStructure;
 import com.wormzjl.icheme.world.level.block.EquipmentShellBlock;
 import com.wormzjl.icheme.world.level.block.FluidDeviceBlock;
@@ -883,7 +884,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
      */
     public record StillDevices(UnitVessel pot,@org.jetbrains.annotations.Nullable UnitSide water,
                                @org.jetbrains.annotations.Nullable PhysicalFluidTopology.Port distillate,@org.jetbrains.annotations.Nullable PhysicalFluidTopology.Port vent,
-                               @org.jetbrains.annotations.Nullable PhysicalFluidTopology.Port burners,com.wormzjl.icheme.science.fluid.network.BatchStill.Design design) {}
+                               @org.jetbrains.annotations.Nullable PhysicalFluidTopology.Port burners,com.wormzjl.icheme.science.plant.still.BatchStill.Design design) {}
     /**
      * Registers a batch still as one ledger event, and its facts ({@link StillUnit}): the water side first (the lower identity
      * keeps the pair's heat in transit), then the pot, the outlets and the burners. An open pot (the condenser built in) vents
@@ -909,7 +910,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         if(u!=null&&formerPot!=null&&formerPot.device().stillPot())return moveStill(d,u,formerPot);
         var design=d.design();
         if(design.condenser()!=(d.water()!=null)||design.condenser()!=(d.distillate()!=null)||design.condenser()!=(d.vent()!=null))throw new IllegalArgumentException("A still's condenser has its water side and its outlets, and only it");
-        if((d.burners()!=null)!=(design.heater()==com.wormzjl.icheme.science.fluid.network.BatchStill.Heater.LIQUID))throw new IllegalArgumentException("A liquid-fired still has its burners, and only it");
+        if((d.burners()!=null)!=(design.heater()==com.wormzjl.icheme.science.plant.still.BatchStill.Heater.LIQUID))throw new IllegalArgumentException("A liquid-fired still has its burners, and only it");
         long next=topology.nextIdentity();var edits=new ArrayList<WorldTopologyLedger.Edit>();var placed=new ArrayList<WorldTopologyLedger.Registration>();
         long water=0,distillate=0,vent=0,fired=0;
         if(d.water()!=null)water=next++;
@@ -950,7 +951,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
     private List<WorldTopologyLedger.Registration> moveStill(StillDevices d,StillUnit u,WorldTopologyLedger.Registration potRecord) {
         var design=d.design();
         if(design.condenser()!=(d.water()!=null)||design.condenser()!=(d.distillate()!=null)||design.condenser()!=(d.vent()!=null))throw new IllegalArgumentException("A still's condenser has its water side and its outlets, and only it");
-        if((d.burners()!=null)!=(design.heater()==com.wormzjl.icheme.science.fluid.network.BatchStill.Heater.LIQUID))throw new IllegalArgumentException("A liquid-fired still has its burners, and only it");
+        if((d.burners()!=null)!=(design.heater()==com.wormzjl.icheme.science.plant.still.BatchStill.Heater.LIQUID))throw new IllegalArgumentException("A liquid-fired still has its burners, and only it");
         long pot=u.id(),next=topology.nextIdentity();var edits=new ArrayList<WorldTopologyLedger.Edit>();var placed=new ArrayList<WorldTopologyLedger.Registration>();
         var old=potRecord.spec();var vessel=d.pot();
         var potDevice=potRecord.device().withPlacement(vessel.node(),vessel.ports()).withHeat(potRecord.device().heat().withArea(vessel.heat().area()));

@@ -302,7 +302,7 @@ final class BuiltInInputs {
                         span = still.filled() > 0 ? still.level() / still.filled() : 0;
                     }
                     case "STILL:DISTILLATE" -> value = still.distillateFlow();
-                    default -> value = still.status() == com.wormzjl.icheme.science.fluid.network.BatchStill.Status.DISTILLING ? 1 : 0;
+                    default -> value = still.status() == com.wormzjl.icheme.science.plant.still.BatchStill.Status.DISTILLING ? 1 : 0;
                 }
                 // The head has no temperature until the column first answers: the channel is unavailable until then.
                 if (Double.isFinite(value)) {

@@ -1,16 +1,12 @@
-package com.wormzjl.icheme.science.fluid.network;
+package com.wormzjl.icheme.science.column.still;
 
-import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
-import com.wormzjl.icheme.science.fluid.thermo.HydrocarbonModel;
 import com.wormzjl.icheme.science.math.DeterministicMath;
-import com.wormzjl.icheme.science.thermo.PengRobinsonKernel;
-import com.wormzjl.icheme.science.thermo.ThermoComponent;
-import java.util.List;
 
 /**
  * The batch still's column (batch 2026-11-09-batch-distiller, BATCH_DISTILLER_PLAN.md section 7, owner B3): the
  * bubble-point method (Wang and Henke) with its energy-balance flow update, in pot mode, on the network's own phase
- * evaluator ({@link HydrocarbonModel}, any package the network takes, {@code icheme:refinery} included). Minecraft-free.
+ * evaluator (any package the network takes, {@code icheme:refinery} included), read through {@link StageThermo} (the
+ * plant layer's {@code NetworkStageThermo}; batch 2026-11-13-codebase-review, C17). Minecraft-free.
  *
  * <p>Stages: 0 the total condenser, 1..N the trays, N + 1 the pot. The column is quasi-steady (its holdup is small next to
  * the pot's): at each moment a steady rectifier with the pot's liquid held at its composition, the pot's vapour in at the
@@ -22,7 +18,7 @@ import java.util.List;
  * every converged answer stands on the energy balance.</p>
  *
  * <p>In pot mode the compositions and temperatures do not depend on the boil-up: every flow is proportional to D. So the
- * solve and its rates are per mole of distillate; the pot's energy balance ({@link BatchStill}) sets how many moles a step
+ * solve and its rates are per mole of distillate; the pot's energy balance ({@code BatchStill}) sets how many moles a step
  * distils. The energy that leaves the pot and the column per mole of distillate is the top envelope's, e = (R + 1) H1 - R h0:
  * H1 the head vapour's enthalpy (its composition the distillate's, at the top tray's temperature), h0 the condensate's at its
  * bubble point. With no column (N = 0) or no reflux the still is one equilibrium stage: the distillate is the pot's bubble
@@ -31,9 +27,9 @@ import java.util.List;
  * still distils (batch 2026-11-12-still-heat-per-distillate).</p>
  *
  * <p>Water (batch 2026-11-11-aqueous-solvents, W4_STILL_PLAN.md section 3). Where the model carries water
- * ({@link HydrocarbonModel#wet}) the column's basis is the model's conserved basis, water last, and water is one more
+ * ({@link StageThermo#water}) the column's basis is the model's conserved basis, water last, and water is one more
  * component of every stage (D1); a list without water keeps its compounds. The method states each stage's liquid as one
- * liquid. Where water is in it, two liquids are stated with the engine's own TP split ({@link FluidThermodynamics#flashTP},
+ * liquid. Where water is in it, two liquids are stated with the engine's own TP split ({@link StageThermo#flash},
  * D2): the pot once a solve and the condensate once an iteration. From the liquid's one-liquid bubble point, each trial
  * temperature is split by the engine and the oil layer's ln Σ K x read there, a bracketed secant to its zero (at most
  * {@value #LAYER_ROUNDS} splits); the condensate's next iteration splits once, at the temperature its last search gave.
@@ -59,8 +55,6 @@ public final class StillColumn {
     public static final int LAYER_ROUNDS = 8;
     /** How far under its predicted bubble point a warm condensate is split, K: below it, so the one split finds its layers. */
     static final double LAYER_MARGIN = .02;
-    private static final Runnable NO_CHECKPOINT = () -> {
-    };
     /** The flows switch from constant molar overflow to the energy balance once no stage moves this much in an iteration, K. */
     public static final double SWITCH_KELVIN = 1;
     /** Converged once no stage moves this much in an energy-balance iteration, K. */
@@ -83,8 +77,7 @@ public final class StillColumn {
      */
     public static final double TOTAL_CONDENSER = LOWEST;
 
-    private final FluidThermodynamics thermo;
-    private final HydrocarbonModel model;
+    private final StageThermo thermo;
     private final double pressure;
     /** The basis: the compounds, then water where the model carries it ({@link #water}). */
     private final int n, water;
@@ -101,40 +94,23 @@ public final class StillColumn {
     private double asked;
     private boolean closedAsked, shortOfReflux;
 
-    /** The column on {@code thermo}'s model at {@code pressure} Pa on every stage; its engine states the liquids that hold water. */
-    public StillColumn(FluidThermodynamics thermo, double pressure) {
+    /** The column on {@code thermo} at {@code pressure} Pa on every stage; its split states the liquids that hold water. */
+    public StillColumn(StageThermo thermo, double pressure) {
         if (!(pressure > 0) || !Double.isFinite(pressure)) throw new IllegalArgumentException("Invalid still pressure");
         this.thermo = thermo;
-        model = thermo.hydrocarbon;
         this.pressure = pressure;
-        int compounds = model.componentCount();
-        water = model.wet() ? compounds : -1;
-        n = model.wet() ? compounds + 1 : compounds;
+        n = thermo.componentCount();
+        water = thermo.water();
         tc = new double[n];
         pc = new double[n];
         omega = new double[n];
         molarMass = new double[n];
-        var components = components(model);
-        for (int i = 0; i < compounds; i++) {
-            var c = components.get(i);
-            tc[i] = c.criticalTemperatureKelvin();
-            pc[i] = c.criticalPressurePascal();
-            omega[i] = c.acentricFactor();
+        for (int i = 0; i < n; i++) {
+            tc[i] = thermo.criticalTemperature(i);
+            pc[i] = thermo.criticalPressure(i);
+            omega[i] = thermo.acentricFactor(i);
+            molarMass[i] = thermo.molecularWeight(i);
         }
-        if (water >= 0) {
-            // Water's constants for the Wilson start: the model's own derivation, where its cubic carries water last.
-            var derivation = model.evaluator().derivation();
-            tc[water] = derivation.criticalTemperatures()[water];
-            pc[water] = derivation.criticalPressures()[water];
-            omega[water] = derivation.acentricFactors()[water];
-        }
-        for (int i = 0; i < n; i++) molarMass[i] = model.molecularWeight(i);
-    }
-
-    private static List<ThermoComponent> components(HydrocarbonModel model) {
-        if (model.spine().isPresent()) return model.spine().get().components();
-        return model.propertyPackage().properties().stream().map(p -> new ThermoComponent(p.component(), p.pr().criticalTemperature(),
-                p.pr().criticalPressure(), p.pr().acentricFactor(), p.molecularWeight())).toList();
     }
 
     /** The critical temperature of component {@code i} of the column's basis, K. */
@@ -142,16 +118,8 @@ public final class StillColumn {
         return tc[i];
     }
 
-    /** A vector on the column's basis on the model's conserved basis: itself where the model carries water, else water at zero. */
-    private double[] conserved(double[] x) {
-        return water >= 0 ? x : java.util.Arrays.copyOf(x, n + 1);
-    }
-
-    public HydrocarbonModel model() {
-        return model;
-    }
-
-    public FluidThermodynamics thermo() {
+    /** The thermo the column reads. */
+    public StageThermo thermo() {
         return thermo;
     }
 
@@ -698,8 +666,8 @@ public final class StillColumn {
     /** Whether liquid {@code x} has a root of its own at {@code t} K, apart from the vapour root (the cubic's roots themselves). */
     private boolean liquidRoot(double[] x, double t) {
         try {
-            double liquid = model.phase(t, pressure, conserved(x), PengRobinsonKernel.Root.LIQUID).molarVolume();
-            double vapour = model.phase(t, pressure, conserved(x), PengRobinsonKernel.Root.VAPOR).molarVolume();
+            double liquid = thermo.phase(t, pressure, x, StageThermo.Root.LIQUID).molarVolume();
+            double vapour = thermo.phase(t, pressure, x, StageThermo.Root.VAPOUR).molarVolume();
             return liquid < vapour * (1 - 1e-9);
         } catch (RuntimeException absent) {
             return false;
@@ -858,15 +826,15 @@ public final class StillColumn {
      */
     private Layers layers(double[] x, double t) {
         flashes++;
-        FluidThermodynamics.State state;
+        StageThermo.Phases state;
         try {
-            state = thermo.flashTP(t, pressure, conserved(x), NO_CHECKPOINT);
+            state = thermo.flash(t, pressure, x);
         } catch (RuntimeException refused) {
             return null;
         }
-        if (!FluidThermodynamics.holdsPhase(state, FluidThermodynamics.OIL) || !FluidThermodynamics.holdsPhase(state, FluidThermodynamics.AQUEOUS))
+        if (!state.oil() || !state.aqueous())
             return null;
-        double[] oil = normalized(state.labelAmountsView(FluidThermodynamics.OIL)), aqueous = normalized(state.labelAmountsView(FluidThermodynamics.AQUEOUS));
+        double[] oil = normalized(state.oilAmounts()), aqueous = normalized(state.aqueousAmounts());
         if (oil == null || aqueous == null) return null;
         double along = 0, span = 0;
         for (int i = 0; i < n; i++) {
@@ -875,7 +843,7 @@ public final class StillColumn {
             span += d * d;
         }
         if (!(span > 0)) return null;
-        return new Layers(Math.clamp(along / span, 0, 1), oil, aqueous, FluidThermodynamics.holdsPhase(state, FluidThermodynamics.GAS));
+        return new Layers(Math.clamp(along / span, 0, 1), oil, aqueous, state.gas());
     }
 
     /** Whether liquid {@code amounts} (any amounts on the column's basis) would settle into two liquids at {@code t} K: the engine's split; false without water. */
@@ -911,10 +879,10 @@ public final class StillColumn {
         if (water >= 0 && z[water] > 0) {
             flashes++;
             try {
-                var state = thermo.flashTP(t, pressure, conserved(z), NO_CHECKPOINT);
-                double[] g = java.util.Arrays.copyOf(state.labelAmountsView(FluidThermodynamics.GAS), n);
-                double[] o = java.util.Arrays.copyOf(state.labelAmountsView(FluidThermodynamics.OIL), n);
-                double[] a = java.util.Arrays.copyOf(state.labelAmountsView(FluidThermodynamics.AQUEOUS), n);
+                var state = thermo.flash(t, pressure, z);
+                double[] g = java.util.Arrays.copyOf(state.gasAmounts(), n);
+                double[] o = java.util.Arrays.copyOf(state.oilAmounts(), n);
+                double[] a = java.util.Arrays.copyOf(state.aqueousAmounts(), n);
                 double sg = sum(g), so = sum(o), sa = sum(a), all = sg + so + sa;
                 if (all > 0) {
                     double[] gas = normalized(g), oil = normalized(o), aqueous = normalized(a);
@@ -926,15 +894,15 @@ public final class StillColumn {
             }
         }
         try {
-            var terms = model.prepare(t);
+            var terms = thermo.prepare(t);
             double[] k = new double[n], liquid = z.clone(), gas = z.clone();
             // A component the top vapour does not hold stays out (K 1, no amount in either phase).
             for (int i = 0; i < n; i++) k[i] = z[i] > 0 ? bounded(wilson(i, t)) : 1;
             double beta = rachfordRice(z, k);
             for (int pass = 0; pass < OUTLET_PASSES; pass++) {
                 split(z, k, beta, liquid, gas);
-                double[] lnL = model.phase(t, pressure, conserved(liquid), PengRobinsonKernel.Root.LIQUID, terms, false).logFugacityView();
-                double[] lnV = model.phase(t, pressure, conserved(gas), PengRobinsonKernel.Root.VAPOR, terms, false).logFugacityView();
+                double[] lnL = thermo.logFugacity(t, pressure, liquid, StageThermo.Root.LIQUID, terms);
+                double[] lnV = thermo.logFugacity(t, pressure, gas, StageThermo.Root.VAPOUR, terms);
                 double moved = 0;
                 for (int i = 0; i < n; i++) {
                     if (!(z[i] > 0)) continue;
@@ -1160,12 +1128,12 @@ public final class StillColumn {
     /** ln Σ K x at {@code t}, the vapour taken to its fixed point from {@code yStart}; null where a phase has no root. */
     private Eval eval(double[] x, double t, double[] yStart) {
         try {
-            var terms = model.prepare(t);
-            double[] liquid = model.phase(t, pressure, conserved(x), PengRobinsonKernel.Root.LIQUID, terms, false).logFugacityView();
+            var terms = thermo.prepare(t);
+            double[] liquid = thermo.logFugacity(t, pressure, x, StageThermo.Root.LIQUID, terms);
             double[] y = yStart.clone(), k = new double[n];
             double sum = 1;
             for (int pass = 0; pass < 8; pass++) {
-                double[] vapour = model.phase(t, pressure, conserved(y), PengRobinsonKernel.Root.VAPOR, terms, false).logFugacityView();
+                double[] vapour = thermo.logFugacity(t, pressure, y, StageThermo.Root.VAPOUR, terms);
                 sum = 0;
                 for (int i = 0; i < n; i++) {
                     k[i] = DeterministicMath.exp(liquid[i] - vapour[i]);
@@ -1189,22 +1157,22 @@ public final class StillColumn {
 
     /** Liquid {@code x}'s molar enthalpy at {@code t} K on the network's datum, J/mol. */
     public double liquidEnthalpy(double t, double[] x) {
-        return model.phase(t, pressure, conserved(fractions(x)), PengRobinsonKernel.Root.LIQUID).molarEnthalpy();
+        return thermo.phase(t, pressure, fractions(x), StageThermo.Root.LIQUID).molarEnthalpy();
     }
 
     /** Vapour {@code y}'s molar enthalpy at {@code t} K, J/mol. */
     public double vapourEnthalpy(double t, double[] y) {
-        return model.phase(t, pressure, conserved(fractions(y)), PengRobinsonKernel.Root.VAPOR).molarEnthalpy();
+        return thermo.phase(t, pressure, fractions(y), StageThermo.Root.VAPOUR).molarEnthalpy();
     }
 
     /** Liquid {@code x}'s molar volume at {@code t} K, m³/mol. */
     public double liquidVolume(double t, double[] x) {
-        return model.phase(t, pressure, conserved(fractions(x)), PengRobinsonKernel.Root.LIQUID).molarVolume();
+        return thermo.phase(t, pressure, fractions(x), StageThermo.Root.LIQUID).molarVolume();
     }
 
     /** Vapour {@code y}'s molar volume at {@code t} K, m³/mol. */
     public double vapourVolume(double t, double[] y) {
-        return model.phase(t, pressure, conserved(fractions(y)), PengRobinsonKernel.Root.VAPOR).molarVolume();
+        return thermo.phase(t, pressure, fractions(y), StageThermo.Root.VAPOUR).molarVolume();
     }
 
     /** The molar mass of a mixture of mole fractions {@code x}, kg/mol. */
@@ -1244,7 +1212,7 @@ public final class StillColumn {
     }
 
     /** Amounts as mole fractions; refused for no amount or the wrong basis. */
-    double[] fractions(double[] amounts) {
+    public double[] fractions(double[] amounts) {
         if (amounts.length != n) throw new IllegalArgumentException("Still basis mismatch");
         double sum = 0;
         for (double e : amounts) {

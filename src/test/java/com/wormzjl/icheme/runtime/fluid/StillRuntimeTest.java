@@ -10,6 +10,10 @@ import com.wormzjl.icheme.science.fluid.state.SolidInventory;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
+import com.wormzjl.icheme.science.column.still.StillColumn;
+import com.wormzjl.icheme.science.plant.still.BatchStill;
+import com.wormzjl.icheme.science.plant.still.NetworkStageThermo;
+import com.wormzjl.icheme.science.plant.still.StillHead;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import static com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Direction.*;
@@ -686,7 +690,7 @@ class StillRuntimeTest {
             var s = node.state();
             boolean gas = FluidThermodynamics.holdsPhase(s, FluidThermodynamics.GAS);
             double[] moles = node.inventory().moles();
-            var column = new StillColumn(model, s.pressure());
+            var column = new StillColumn(new NetworkStageThermo(model), s.pressure());
             double bubble = column.bubble(moles, s.temperature()).temperature();
             System.out.printf(Locale.ROOT, "W4 wash pot at %.0f s: %.3f K (bubble %.3f K at %.1f Pa), gas %b, %.3f mol%n", rig.epoch[0] / 20.0, s.temperature(), bubble,
                     s.pressure(), gas, Arrays.stream(moles).sum());

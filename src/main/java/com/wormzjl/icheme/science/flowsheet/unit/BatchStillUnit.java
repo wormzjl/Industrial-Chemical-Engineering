@@ -10,8 +10,9 @@ import com.wormzjl.icheme.science.flowsheet.Port;
 import com.wormzjl.icheme.science.flowsheet.Report;
 import com.wormzjl.icheme.science.flowsheet.UnitModel;
 import com.wormzjl.icheme.science.flowsheet.WiredUnit;
-import com.wormzjl.icheme.science.fluid.network.BatchStill;
-import com.wormzjl.icheme.science.fluid.network.StillColumn;
+import com.wormzjl.icheme.science.plant.still.BatchStill;
+import com.wormzjl.icheme.science.column.still.StillColumn;
+import com.wormzjl.icheme.science.plant.still.NetworkStageThermo;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -155,7 +156,7 @@ public final class BatchStillUnit implements UnitModel {
         if (!in.solids().empty()) throw new FlowsheetFailure("still.solids");
         int axis = thermo.axis().size(), waterAt = thermo.water();
         double[] flows = in.amountsView();
-        var column = new StillColumn(thermo.model(), PRESSURE);
+        var column = new StillColumn(new NetworkStageThermo(thermo.model()), PRESSURE);
         int n = column.componentCount();
         if (n != axis - 1 && !(n == axis && column.water() == waterAt)) throw new IllegalStateException("The still's basis is the sheet's, water last or none");
         // A package without water in its column leaves the water out of the pot: it takes no part.

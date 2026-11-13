@@ -3,13 +3,16 @@ package com.wormzjl.icheme.science.fluid.network;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.wormzjl.icheme.fluid.support.FluidTestSupport;
-import com.wormzjl.icheme.science.fluid.network.BatchStill.Cooling;
-import com.wormzjl.icheme.science.fluid.network.BatchStill.Design;
-import com.wormzjl.icheme.science.fluid.network.BatchStill.Heater;
-import com.wormzjl.icheme.science.fluid.network.BatchStill.Inputs;
-import com.wormzjl.icheme.science.fluid.network.BatchStill.Pot;
-import com.wormzjl.icheme.science.fluid.network.BatchStill.Status;
-import com.wormzjl.icheme.science.fluid.network.BatchStill.Step;
+import com.wormzjl.icheme.science.column.still.StillColumn;
+import com.wormzjl.icheme.science.plant.still.BatchStill;
+import com.wormzjl.icheme.science.plant.still.NetworkStageThermo;
+import com.wormzjl.icheme.science.plant.still.BatchStill.Cooling;
+import com.wormzjl.icheme.science.plant.still.BatchStill.Design;
+import com.wormzjl.icheme.science.plant.still.BatchStill.Heater;
+import com.wormzjl.icheme.science.plant.still.BatchStill.Inputs;
+import com.wormzjl.icheme.science.plant.still.BatchStill.Pot;
+import com.wormzjl.icheme.science.plant.still.BatchStill.Status;
+import com.wormzjl.icheme.science.plant.still.BatchStill.Step;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.material.PilotAqueousTestCatalog;
@@ -35,7 +38,7 @@ class BatchStillTest {
     private static StillColumn column(List<String> compounds) {
         var view = REFINERY.on(compounds);
         assertEquals(compounds, view.compounds(), "the view keeps the package's order");
-        return new StillColumn(view, P);
+        return new StillColumn(new NetworkStageThermo(view), P);
     }
 
     /** {@code x} on the column's basis: water last at zero where the column carries it (W4 D1). */
@@ -231,7 +234,7 @@ class BatchStillTest {
         // stages, reflux, component, V3's distillate mole fraction.
         Object[][] rows = {{2, .5, 2, .1034}, {2, 2., 0, .5283}, {2, 8., 0, .5741}, {4, .5, 2, .0923}, {4, 2., 0, .5762}, {4, 8., 0, .6354},
                 {8, .5, 2, .0891}, {8, 2., 0, .6135}, {8, 8., 0, .6728}};
-        var reference = new StillColumn(FluidTestSupport.model(MaterialCatalog.bundled(), "icheme:tjl20_methane_nitrogen").on(NAPHTHA), P);
+        var reference = new StillColumn(new NetworkStageThermo(FluidTestSupport.model(MaterialCatalog.bundled(), "icheme:tjl20_methane_nitrogen").on(NAPHTHA)), P);
         var refinery = column(NAPHTHA);
         for (var row : rows) {
             int stages = (int) row[0], i = (int) row[2];
@@ -408,7 +411,7 @@ class BatchStillTest {
      */
     @Test
     void aMediumCrudePotStillRunsToItsLimit() {
-        var column = new StillColumn(REFINERY, P);
+        var column = new StillColumn(new NetworkStageThermo(REFINERY), P);
         double[] z = on(column, preset("medium_crude", REFINERY.compounds()));
         var design = new Design(.5, Heater.SOLID, true, 0);
         double t0 = 298.15, total = .6 * design.volume() / column.liquidVolume(t0, z);
@@ -476,7 +479,7 @@ class BatchStillTest {
      */
     private static CrudeRun crudeRun(double share) {
         return CRUDE_RUNS.computeIfAbsent(share, s -> {
-            var column = new StillColumn(REFINERY, P);
+            var column = new StillColumn(new NetworkStageThermo(REFINERY), P);
             int n = column.componentCount();
             double[] overall = on(column, preset("medium_crude", REFINERY.compounds()));
             var flashed = REFINERY.flashTP(298.15, P, java.util.Arrays.copyOf(overall, REFINERY.hydrocarbon.componentCount() + 1), () -> {
@@ -573,7 +576,7 @@ class BatchStillTest {
      */
     @Test
     void aClosedValveOnTheCrudesLightEndsVentsTheGasAndReturnsTheLiquid() {
-        var column = new StillColumn(REFINERY, P);
+        var column = new StillColumn(new NetworkStageThermo(REFINERY), P);
         int n = column.componentCount();
         double[] overall = on(column, preset("medium_crude", REFINERY.compounds()));
         var flashed = REFINERY.flashTP(298.15, P, java.util.Arrays.copyOf(overall, REFINERY.hydrocarbon.componentCount() + 1), () -> {
@@ -721,13 +724,13 @@ class BatchStillTest {
     private static final double WASH = .0332;
 
     private static StillColumn wet(FluidThermodynamics thermo, List<String> compounds) {
-        var column = new StillColumn(thermo.on(compounds), P);
+        var column = new StillColumn(new NetworkStageThermo(thermo.on(compounds)), P);
         assertEquals(column.componentCount() - 1, column.water(), "water last on the column's basis");
         return column;
     }
 
     private static int index(StillColumn column, String id) {
-        int i = column.model().components().indexOf(id);
+        int i = ((NetworkStageThermo) column.thermo()).model().components().indexOf(id);
         assertTrue(i >= 0, id);
         return i;
     }
@@ -1028,7 +1031,7 @@ class BatchStillTest {
      */
     @Test
     void aWetCrudeOnTheWholeListCostsAFewHundredFlashes() {
-        var column = new StillColumn(REFINERY, P);
+        var column = new StillColumn(new NetworkStageThermo(REFINERY), P);
         int w = column.water(), n = column.componentCount();
         double[] z = new double[n];
         // A crude falling off with its boiling cuts: each compound 0.85 of the last.
@@ -1052,7 +1055,7 @@ class BatchStillTest {
             assertTrue(split.flashes() <= 400, "flashes " + split.flashes());
             if (pass == 0) {
                 // The first decanter's O against R: the pot vapour's condensate, its oil layer's share of R + 1 = 4 moles.
-                var model = column.thermo();
+                var model = REFINERY;
                 var condensate = model.flashTP(split.condensateTemperature() - .5, P, split.distillate(), () -> {
                 });
                 double oil = java.util.Arrays.stream(FluidThermodynamics.phaseMoles(condensate, FluidThermodynamics.OIL)).sum() / java.util.Arrays.stream(split.distillate()).sum();

@@ -1,7 +1,7 @@
 package com.wormzjl.icheme.science.flowsheet.unit;
 
-import com.wormzjl.icheme.science.fluid.network.BatchStill;
-import com.wormzjl.icheme.science.fluid.network.StillColumn;
+import com.wormzjl.icheme.science.plant.still.BatchStill;
+import com.wormzjl.icheme.science.column.still.StillColumn;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;

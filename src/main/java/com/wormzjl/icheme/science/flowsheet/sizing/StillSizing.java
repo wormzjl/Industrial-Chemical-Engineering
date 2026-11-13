@@ -4,7 +4,7 @@ import com.wormzjl.icheme.science.equipment.BatchStillOptions;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
 import com.wormzjl.icheme.science.equipment.UnitDesign;
-import com.wormzjl.icheme.science.fluid.network.BatchStill;
+import com.wormzjl.icheme.science.plant.still.BatchStill;
 
 import java.util.ArrayList;
 import java.util.List;

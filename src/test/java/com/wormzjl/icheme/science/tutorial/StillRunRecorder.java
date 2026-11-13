@@ -5,8 +5,9 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.wormzjl.icheme.runtime.fluid.FluidPresetCatalog;
-import com.wormzjl.icheme.science.fluid.network.BatchStill;
-import com.wormzjl.icheme.science.fluid.network.StillColumn;
+import com.wormzjl.icheme.science.plant.still.BatchStill;
+import com.wormzjl.icheme.science.plant.still.NetworkStageThermo;
+import com.wormzjl.icheme.science.column.still.StillColumn;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.tutorial.cards.BarrelData;
@@ -80,7 +81,7 @@ public final class StillRunRecorder {
     public static Run run(int stages, double reflux) {
         var catalog = MaterialCatalog.bundled();
         var thermo = FluidThermodynamics.forNetwork(catalog, PACKAGE);
-        var column = new StillColumn(thermo, BatchStill.ATMOSPHERIC);
+        var column = new StillColumn(new NetworkStageThermo(thermo), BatchStill.ATMOSPHERIC);
         int n = column.componentCount();
         var preset = FluidPresetCatalog.resolve(catalog).stream().filter(p -> p.id().equals(CRUDE)).findFirst().orElseThrow();
         double[] axis = preset.moleFractions();

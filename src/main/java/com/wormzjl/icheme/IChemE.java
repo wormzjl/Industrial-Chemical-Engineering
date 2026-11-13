@@ -171,7 +171,7 @@ public final class IChemE {
         // Solid fuel without a fuel record (batch 2026-11-09-batch-distiller, owner B1 B).
         ENERGY_JOULES_PER_BURN_TICK = builder.comment("Joules of heat per burn tick for a firebox item without a fuel record (materials/fuels): its furnace burn time times this. Default 1.45e6, the coal anchor: a coal item of 92.6 kg at 25 MJ/kg over its 1600 ticks. Items with a record burn at their mass times their heating value.",
                         "An item's heat is conserved: it burns over process time, so a still takes fluid.timeScale times the items per play minute.")
-                .defineInRange("joulesPerBurnTick", com.wormzjl.icheme.science.fluid.network.BatchStill.JOULES_PER_BURN_TICK, 1.0, 1e12);
+                .defineInRange("joulesPerBurnTick", com.wormzjl.icheme.science.plant.still.BatchStill.JOULES_PER_BURN_TICK, 1.0, 1e12);
         builder.pop();
         // The Create coupling (batch 2026-11-03-rotating-machinery W6b, decision D7): read only with Create installed.
         builder.push("create");
@@ -292,7 +292,7 @@ public final class IChemE {
 
     /** Joules per burn tick of a firebox item without a fuel record (batch 2026-11-09-batch-distiller; default before the config loads). */
     public static double joulesPerBurnTick() {
-        return CONFIG_SPEC.isLoaded() ? ENERGY_JOULES_PER_BURN_TICK.get() : com.wormzjl.icheme.science.fluid.network.BatchStill.JOULES_PER_BURN_TICK;
+        return CONFIG_SPEC.isLoaded() ? ENERGY_JOULES_PER_BURN_TICK.get() : com.wormzjl.icheme.science.plant.still.BatchStill.JOULES_PER_BURN_TICK;
     }
 
     /** The pumps' wear settings (W10b; the defaults before the config loads). */

@@ -6,7 +6,7 @@ Purpose: the measurement that chose the still's column model. `BubblePointColumn
 (energy-balance bubble point, constant molar overflow); `BatchColumnComparisonTest` solves it against V3 on the same
 problem (V3's total condenser, N trays and reboiler, the pot liquid fed into the reboiler at 20 times the boil-up), over
 stages 2, 4, 8, reflux 0.5, 2, 8 and four distilled fractions. The owner adopted the energy form; the game's
-`science/fluid/network/StillColumn` is its port, so neither file is reached by the product or a gate.
+`science/column/still/StillColumn` is its port, so neither file is reached by the product or a gate.
 
 ## How to run
 
@@ -36,3 +36,5 @@ The report goes to `build/batch-column/` (`report.txt`, `snapshots.csv`). The st
 - 2026-11-10: detached from `src/test/java/com/wormzjl/icheme/science/column/batch/` at the merge's tooling cleanup.
   The files are stored unchanged: `git show 52415da92:src/test/java/com/wormzjl/icheme/science/column/batch/<file>`
   equals `src/<file>`; no patch is needed.
+- 2026-11-13: the game's port moved from `science/fluid/network/` to `science/column/still/StillColumn`, on its own
+  `StageThermo` (batch 2026-11-13-codebase-review, C4b); these two files are unchanged.
