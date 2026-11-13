@@ -3482,8 +3482,7 @@ public final class V3ColumnCalculator {
         if (code.startsWith("LINEAR_") || code.startsWith("JACOBIAN_")) {
             return V3SolverFailureCode.LINEAR_SOLVE_FAILURE;
         }
-        if (code.startsWith("MAX_ITERATIONS") || code.startsWith("LINE_SEARCH")
-                || code.startsWith("CONVERGENCE_EVIDENCE") || code.startsWith("STATE_DOMAIN")
+        if (code.startsWith("MAX_ITERATIONS") || code.startsWith("LINE_SEARCH") || code.startsWith("STATE_DOMAIN")
                 || code.startsWith("STALLED")) {
             return V3SolverFailureCode.NONCONVERGENCE;
         }
