@@ -11,10 +11,13 @@ Branch `claude/codebase-review-refactor-8a85ef`, base `259d22a2c` (main 0.30.0).
 - 2026-11-13: survey in the main thread (sizes, import matrix, native lane, wear, documentation and `tools/` sizes); [REVIEW_PLAN.md](REVIEW_PLAN.md) written. No test run: documents only.
 - 2026-11-13: owner notes: the column solver goes to Rust, extending the limited C++ lane, Java as the fallback; Fable may be a subagent for difficult tasks; an optimization need not keep results byte-identical, the shift small and justified. Plan revised (section 2 "Rust" and "Results", S1, S3 and S5 on Fable, S8 added for the column and network meeting points, S5 writes the Rust port plan); [BRIEFS.md](BRIEFS.md) written. Read for it: `src/main/cpp` (PR outer pass only; platform `cbrt`, `acos`, `cos`), Rust target `x86_64-pc-windows-msvc` only, no zig. No test run: documents only.
 
+- 2026-11-13: B1 profile (sub-thread, branch `claude/codebase-review-bench-930e08`): [PROFILE_REVIEW.md](PROFILE_REVIEW.md), JFR CPU and allocation of the fluid step (`fluidServerBenchmark` on `mixed100`, 60 + 60 s; the default `one` stops collecting once its island certifies), the column cold and warm (`medium_crude`, literature) and 20 shaft trains; harness `tools/codebase-review-bench/`. Timed runs alone; no suite run.
+
 ## Documents
 
 - [REVIEW_PLAN.md](REVIEW_PLAN.md): the survey's findings, the direction, the phase 1 work packages, the synthesis documents, and where AGENTS.md and CLAUDE.md do not fit.
 - [BRIEFS.md](BRIEFS.md): the common rules and the full brief of each phase 1 package (S1 to S8, P1 to P4, B1).
+- [PROFILE_REVIEW.md](PROFILE_REVIEW.md): B1, the Java baseline profile (wall, CPU, allocation, GC, retained heap, time share by kind).
 
 ## Code areas
 

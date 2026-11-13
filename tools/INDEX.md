@@ -8,6 +8,7 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 
 | Folder | Purpose | Batch | Status |
 |---|---|---|---|
+| [codebase-review-bench/](codebase-review-bench/README.md) | B1 CPU, allocation and heap profile of the fluid step, the column and 20 shaft trains, with JFR | `2026-11-13-codebase-review` | In use since 2026-11-13 |
 | [tutorial-recordings/](tutorial-recordings/README.md) | Writes the tutorial's four recordings from the mod's data and models | `2026-11-12-tutorial-system` | In use since 2026-11-12 |
 | [tutorial-renders/](tutorial-renders/README.md) | Software renders of the tutorial's films, guide pages, tours, cards, equipment pages and item icons; the detached `/icheme-film` command | `2026-11-12-tutorial-system` | In use since 2026-11-12 |
 | [tutorial-column/](tutorial-column/README.md) | Small crude tower candidates on the crude unit at 1/64, their datasheets, the bundled preset writer | `2026-11-12-tutorial-system` | In use since 2026-11-12 |
