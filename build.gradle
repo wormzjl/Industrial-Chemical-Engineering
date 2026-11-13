@@ -222,14 +222,9 @@ def prepareMcpControlMod = tasks.register('prepareMcpControlMod', Copy) {
 tasks.matching { it.name == 'runMcpClient' }.configureEach { dependsOn prepareMcpControlMod }
 
 dependencies {
-    // Sequential sparse LU for the fluid solver; package its runtime graph with the mod.
-    implementation('org.ejml:ejml-dsparse:0.44.0')
-    additionalRuntimeClasspath('org.ejml:ejml-dsparse:0.44.0')
-    ['ejml-core', 'ejml-ddense', 'ejml-dsparse'].each { module ->
-        jarJar("org.ejml:${module}:[0.44.0,0.45.0)") {
-            version { prefer '0.44.0' }
-        }
-    }
+    // EJML 0.44's sparse LU is the reference of the fluid solver's own LU (UpLookingLu, derived from it): the parity gate
+    // UpLookingLuParityTest alone needs it. The mod neither ships nor loads it.
+    testImplementation('org.ejml:ejml-dsparse:0.44.0')
     // Create (with its libraries Ponder, Catnip inside Ponder, Flywheel and Registrate) and KubeJS are optional mods: compiled
     // against, loaded in dev runs, GameTests and tests through optionalModRuntime. -PwithoutCreate drops all five from
     // those runtimes, for the check without Create. Create's slim development jar excludes its companion libraries.
@@ -420,7 +415,8 @@ def nativeResources = tasks.register('nativeResources', Sync) {
 if (nativeCargo != null) sourceSets.main.resources.srcDir nativeResources
 else logger.lifecycle('No cargo found: the jar carries no column library, and the column runs on its Java path.')
 tasks.withType(Test).configureEach { systemProperty 'icheme.native.packaged', nativeCargo != null }
-// Only PackagedSparseLuTest reads the packaged jar; it runs under test and fluidScienceTest.
+// Only PackagedSparseLuTest reads the packaged jar (the jar alone solves a sparse system; no EJML inside); it runs under
+// test and fluidScienceTest.
 tasks.withType(Test).matching { it.name in ['test', 'fluidScienceTest'] }.configureEach {
     dependsOn tasks.named('jar')
     systemProperty 'fluid.modJar', tasks.named('jar', Jar).flatMap { it.archiveFile }.get().asFile.absolutePath

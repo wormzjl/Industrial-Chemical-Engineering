@@ -25,6 +25,9 @@ public final class PassiveIntervalSolver {
     static final double STATE_CAP=.05;
     private final PassiveStepSolver implicit;
     private final FluidThermodynamics model;
+    /** The island's kept LU storages of the solves that run on a workspace of their own (vessel closures, junction splits;
+     * P-17b), bound to the worker for each interval solve; they answer to the same latch as the step solver. */
+    private final SparseNewton.KeptFactors kept;
     /** A converged step the state-change controller refused. */
     private static final class StateChangeRejection extends RuntimeException {
         private StateChangeRejection(String message){super(message);}
@@ -33,6 +36,7 @@ public final class PassiveIntervalSolver {
     /** Retained across island jobs: every nested workspace answers to the supplied latch. */
     public PassiveIntervalSolver(FluidThermodynamics model,SolverOwnership ownership) {
         this.model=Objects.requireNonNull(model);implicit=new PassiveStepSolver(model,Objects.requireNonNull(ownership));
+        kept=new SparseNewton.KeptFactors(ownership);
     }
     /** The step bounds and the attempt cap of an interval. There is no tolerance: the backward-Euler controller's step
      * bound is {@link #STATE_CAP} (the relative tolerance of the TR-BDF2 error estimate went with it). */
@@ -87,6 +91,9 @@ public final class PassiveIntervalSolver {
     }
     /** That solve with each running column's port planned for the interval first ({@link PassiveStepSolver#ports}, batch 2026-10-28-column-operation). */
     public Result solve(PassiveNetwork initial,double duration,Settings settings,Runnable checkpoint,double startingStep,Map<Long,ExchangerRelay.Read> reads,Map<Long,PortPlan> ports) {
+        return kept.around(()->solveKept(initial,duration,settings,checkpoint,startingStep,reads,ports));
+    }
+    private Result solveKept(PassiveNetwork initial,double duration,Settings settings,Runnable checkpoint,double startingStep,Map<Long,ExchangerRelay.Read> reads,Map<Long,PortPlan> ports) {
         var committed=PassiveNetwork.sizeJunctionHoldups(initial,model);
         committed=implicit.ports(committed,ports,checkpoint);
         committed=implicit.couple(committed,reads,carriedFlows(committed),duration,checkpoint);

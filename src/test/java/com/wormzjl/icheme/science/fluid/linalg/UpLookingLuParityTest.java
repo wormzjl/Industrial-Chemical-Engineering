@@ -185,10 +185,12 @@ class UpLookingLuParityTest {
         try {
             com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics.ENABLED=true;
             var solver=new PassiveStepSolver(model);solver.solve(graph,.1,()->{});
-            long columns=UpLookingLu.columnsFactored(),searches=UpLookingLu.reachSearches(),factorizations=com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics.luFactorizations.sum();
+            long columns=com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics.luColumnsFactored.sum(),searches=com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics.luReachSearches.sum(),factorizations=com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics.luFactorizations.sum();
             for(int i=0;i<5;i++)solver.solve(graph,.1,()->{});
             System.out.printf(java.util.Locale.ROOT,"P-17 counters, heat side, five solves: %d LU factorizations, %d columns factored, %d reach searches%n",
-                    com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics.luFactorizations.sum()-factorizations,UpLookingLu.columnsFactored()-columns,UpLookingLu.reachSearches()-searches);
+                    com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics.luFactorizations.sum()-factorizations,
+                    com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics.luColumnsFactored.sum()-columns,
+                    com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics.luReachSearches.sum()-searches);
         } finally {com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics.ENABLED=enabled;}
         var m=stepMatrices(model,graph,.1).getFirst();
         var matrix=new SparseMatrix(m.size(),m.columns(),m.rows(),m.values());var ordering=SparseLuSolver.prepareOrdering(matrix);
