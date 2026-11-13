@@ -29,8 +29,36 @@ public final class GuiCanvas implements Canvas {
         this.originY = originY;
     }
 
-    /** The game font as a measure. */
+    /** A font and its measure, the last asked for: the game has one font, so this is one measure for the session (finding C20). */
+    private record FontMeasure(Font font, Measure measure) {
+    }
+
+    private static volatile FontMeasure measured;
+    /** The last canvas {@link #of} made: one per frame, since the game makes a new {@code GuiGraphics} each frame. */
+    private static volatile GuiCanvas framed;
+    /** Texture names as resource locations, parsed once each; render thread. */
+    private static final java.util.Map<String, ResourceLocation> LOCATIONS = new java.util.HashMap<>();
+
+    /**
+     * The frame's canvas at the screen's origin: the one made last while it draws on the same {@code GuiGraphics} with the
+     * same font, else a new one. A canvas holds no state of its own (the batch's is shared), so widgets share it (C20).
+     */
+    public static GuiCanvas of(GuiGraphics g, Font font) {
+        var last = framed;
+        if (last != null && last.g == g && last.font == font && last.originX == 0 && last.originY == 0) return last;
+        return framed = new GuiCanvas(g, font, 0, 0);
+    }
+
+    /** The game font as a measure; one per font. */
     public static Measure measure(Font font) {
+        var last = measured;
+        if (last != null && last.font() == font) return last.measure();
+        var made = measureOf(font);
+        measured = new FontMeasure(font, made);
+        return made;
+    }
+
+    private static Measure measureOf(Font font) {
         return new Measure() {
             @Override
             public int width(String text) {
@@ -77,11 +105,26 @@ public final class GuiCanvas implements Canvas {
 
     @Override
     public void text(String text, int x, int y, int argb) {
+        // Outside a batch a text draws at once: no pose copy and no closure (C20).
+        if (!HELD.open()) {
+            HELD.textNow();
+            g.drawString(font, text, x, y, argb, false);
+            return;
+        }
         hold(text, x, y, 1, () -> g.drawString(font, text, x, y, argb, false));
     }
 
     @Override
     public void text(String text, float x, float y, float scale, int argb) {
+        if (!HELD.open()) {
+            HELD.textNow();
+            g.pose().pushPose();
+            g.pose().translate(x, y, 0);
+            g.pose().scale(scale, scale, 1);
+            g.drawString(font, text, 0, 0, argb, false);
+            g.pose().popPose();
+            return;
+        }
         hold(text, x, y, scale, () -> {
             g.pose().translate(x, y, 0);
             g.pose().scale(scale, scale, 1);
@@ -155,7 +198,7 @@ public final class GuiCanvas implements Canvas {
 
     private void blit(Sprite sprite, float x0, float y0, float x1, float y1, int argb) {
         g.flush();
-        var location = ResourceLocation.parse(sprite.texture());
+        var location = LOCATIONS.computeIfAbsent(sprite.texture(), ResourceLocation::parse);
         Minecraft.getInstance().getTextureManager().getTexture(location).setFilter(true, false);
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();

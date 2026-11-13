@@ -73,7 +73,7 @@ public final class SkinButton extends Button {
 
     @Override
     protected void renderWidget(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        var canvas = new GuiCanvas(g, Minecraft.getInstance().font, 0, 0);
+        var canvas = GuiCanvas.of(g, Minecraft.getInstance().font);
         var r = new Rect(getX(), getY(), width, height);
         if (icon != null) {
             skin.get().iconKey(canvas, r, icon, isHoveredOrFocused());
