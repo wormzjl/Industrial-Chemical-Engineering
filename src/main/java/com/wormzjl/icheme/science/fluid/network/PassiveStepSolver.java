@@ -209,9 +209,9 @@ public final class PassiveStepSolver {
     private record SideCurve(double coldest,double hottest,HeatCurve.Films films,PassiveNetwork.PhasePort port,double volume,FluidThermodynamics.State start,HeatCurve curve) {}
     private final Map<Long,SideCurve[]> sideCurves=new HashMap<>();
     /**
-     * The heat curves this solver has sampled ({@link #sideCurve}), and of them those sampled while a pass's residual was
-     * evaluated, which is none: a pass samples its curves when it is built ({@link Equations#sideHeat}; finding D-02, batch
-     * 2026-11-13-codebase-review). A test's counters.
+     * The heat curves this solver has sampled ({@link #sideCurve}), and of them those sampled while a pass's residual or
+     * Jacobian was evaluated, which is none: a missing curve is sampled between two evaluations ({@link Equations#sideHeat};
+     * finding D-02, batch 2026-11-13-codebase-review). A test's counters.
      */
     private long heatCurveSamples,heatCurvesInResidual;private boolean inResidual;
     long heatCurveSamples(){return heatCurveSamples;}
@@ -704,7 +704,7 @@ public final class PassiveStepSolver {
                 var arrived=arrivingPhases(graph,point,lawFlows,draws,true,modes,boundaryClosed,dt,checkpoint);
                 if(arrived!=point){seeds=arrived;previousPipes=pipeIdentities;previousNodeIds=nodeIds;previousInputStates=inputStates;previousOutputStates=states;previousRateOnly=rateOnly;previousFlows=flows.clone();previousLawFlows=lawFlows;previousHeads=heads.clone();previousModes=List.copyOf(modes);continue;}
             }
-            var projection=ConservativeTransport.reconstruct(graph,states,flows,heads,dt,model,checkpoint,transport,rateOnly,draws,equations.supports,emptyings,equations.releases,equations::sideHeat,equations::moverPower);
+            var projection=ConservativeTransport.reconstruct(graph,states,flows,heads,dt,model,checkpoint,transport,rateOnly,draws,equations.supports,emptyings,equations.releases,equations::bookedHeat,equations::moverPower);
             // Decision D54: what the booking fills past the bag's resolution though the flows delivered nothing at it (the
             // delivered amounts stated warmer) is laid out from that state.
             if(filled(equations,projection)){seeds=projection.states();continue;}
@@ -845,7 +845,7 @@ public final class PassiveStepSolver {
         }
         if(equations.segmentsMoved(flows))return null;
         var draws=equations.draws(flows,states);
-        var projection=ConservativeTransport.reconstruct(graph,states,flows,heads,dt,model,checkpoint,transport,rateOnly,draws,equations.supports,emptyings,equations.releases,equations::sideHeat,equations::moverPower);
+        var projection=ConservativeTransport.reconstruct(graph,states,flows,heads,dt,model,checkpoint,transport,rateOnly,draws,equations.supports,emptyings,equations.releases,equations::bookedHeat,equations::moverPower);
         if(phaseAppeared(graph,states,projection.states())||phaseFolded(graph,states,projection.states(),equations.dry)
                 ||phaseCorrection(graph,projection.states(),checkpoint,equations.cachedPrepared,foldedPhases.clone())!=null)return null;
         var reconstructed=variables.clone();
@@ -2385,7 +2385,7 @@ public final class PassiveStepSolver {
     private HeatCurve sideCurve(PassiveNetwork graph,PassiveNetwork.Pipe pipe,int node,Runnable checkpoint) {
         var start=graph.reservoirs().get(node).state();int end=node==pipe.first()?0:1;var port=pipe.portAt(node);double volume=pipe.volume();
         var kept=sideCurves.computeIfAbsent(pipe.id(),id->new SideCurve[2]);var old=kept[end];var law=pipe.heat();
-        if(old!=null&&old.start()==start&&old.port()==port&&old.volume()==volume&&old.coldest()==law.coldest()&&old.hottest()==law.hottest()) {
+        if(keeps(old,start,port,volume,law)) {
             if(old.films().equals(law.films())||old.curve()==null)return old.curve();
             var curve=old.curve().withFilms(law.films());kept[end]=new SideCurve(old.coldest(),old.hottest(),law.films(),port,volume,start,curve);return curve;
         }
@@ -2399,6 +2399,18 @@ public final class PassiveStepSolver {
         }
         kept[end]=new SideCurve(law.coldest(),law.hottest(),law.films(),port,volume,start,curve);
         return curve;
+    }
+    private static boolean keeps(SideCurve old,FluidThermodynamics.State start,PassiveNetwork.PhasePort port,double volume,HeatLaw law) {
+        return old!=null&&old.start()==start&&old.port()==port&&old.volume()==volume&&old.coldest()==law.coldest()&&old.hottest()==law.hottest();
+    }
+    /** Whether {@link #sideCurve} gives {@code node}'s end of {@code pipe} without a flash march: a curve kept for its
+     * stream and span (new films are applied without one), or an end that draws nothing. */
+    private boolean curveKept(PassiveNetwork graph,PassiveNetwork.Pipe pipe,int node) {
+        var start=graph.reservoirs().get(node).state();int end=node==pipe.first()?0:1;var port=pipe.portAt(node);double volume=pipe.volume();
+        var kept=sideCurves.get(pipe.id());
+        if(keeps(kept==null?null:kept[end],start,port,volume,pipe.heat()))return true;
+        double[] amounts=endMoles(start,port,volume);double total=0;for(double n:amounts)total+=n;
+        return !(total>0&&endMass(start,port,volume)>0);
     }
     /**
      * {@code graph} with each local heat actuator planned for a step that starts with {@code flows} (kg/s per connection, in
@@ -4471,7 +4483,7 @@ public final class PassiveStepSolver {
             this.seeds=List.copyOf(seeds);this.supports=supports;
             this.boundaryClosed=boundaryClosed.clone();
             this.graph=graph;this.dt=dt;solidSupport=hasSolids(graph);int count=graph.reservoirs().size();layout=new PhaseLayout[count];offsets=new int[count];oldAmounts=new double[count][];
-            passCurves=sampleSideCurves(checkpoint);
+            this.checkpoint=checkpoint;passCurves=new HeatCurve[graph.pipes().size()][];passKnown=new boolean[graph.pipes().size()][];heldCurves();
             cachedVariables=new double[count][];cachedStates=new FluidThermodynamics.State[count];cachedTransport=new Transport[count];
             cachedPrepared=new FluidThermodynamics.Prepared[count];
             drawsPhase=new boolean[count];
@@ -5259,12 +5271,13 @@ public final class PassiveStepSolver {
                     stream.specificEnthalpy(),stream.velocityLimit(),stream.solidMoments(),null);
         }
         public double[] residual(double[] x) {
-            inResidual=true;
-            try {
-                decode(x);double[] f=new double[size];
-                assemble(x,cachedStates,cachedTransport,cachedPrepared,f);
-                return f;
-            } finally {inResidual=false;}
+            while(true) {
+                double[] f=null;RuntimeException failed=null;
+                evaluating();
+                try{decode(x);f=new double[size];assemble(x,cachedStates,cachedTransport,cachedPrepared,f);}
+                catch(RuntimeException failure){failed=failure;}
+                if(evaluated(failed))return f;
+            }
         }
         /** The largest row, each times its {@link #rowWeights} weight. */
         @Override public double residualNorm(double[] residual) {
@@ -5429,46 +5442,81 @@ public final class PassiveStepSolver {
         }
         /**
          * The heat (W, into the stream) heat-exchanging connection {@code edge} takes up when it carries {@code flow} drawn at
-         * {@code specificEnthalpy} from the end the flow leaves: its side's march ({@link HeatSide#heat}) on that end's curve,
-         * as this pass sampled it ({@link #passCurves}). Zero for a plain connection, at no flow, and from an end that draws
-         * nothing. The residual, the block Jacobian and the reconstruction ({@link ConservativeTransport.EdgeHeat}) all read
-         * this one function (batch 2026-10-27-heat-exchanger-design); it reads, it never samples.
+         * {@code specificEnthalpy} from the end the flow leaves: its side's march ({@link HeatSide#heat}) on that end's curve
+         * ({@link #passCurves}). Zero for a plain connection, at no flow, and from an end that draws nothing. The residual, the
+         * block Jacobian and, through {@link #bookedHeat}, the reconstruction ({@link ConservativeTransport.EdgeHeat}) all
+         * read this one function (batch 2026-10-27-heat-exchanger-design). It never samples: an end whose curve the pass does
+         * not hold yet is noted and reads zero, and its evaluation is discarded ({@link #evaluated}).
          */
         double sideHeat(int edge,double specificEnthalpy,double flow) {
             var pipe=graph.pipes().get(edge);
             if(pipe.heat()==null||flow==0)return 0;
             int end=flow>0?0:1;
             if(passRefusals!=null&&passRefusals[edge]!=null&&passRefusals[edge][end]!=null)throw passRefusals[edge][end];
+            if(!passKnown[edge][end]){if(missingEdge<0){missingEdge=edge;missingEnd=end;}return 0;}
             var curve=passCurves[edge][end];
             return curve==null?0:pipe.heat().heat(curve,specificEnthalpy,flow);
         }
+        /** {@link #sideHeat} for the reconstruction, outside every evaluation: an end not held yet is sampled first. */
+        double bookedHeat(int edge,double specificEnthalpy,double flow) {
+            var pipe=graph.pipes().get(edge);
+            if(pipe.heat()!=null&&flow!=0&&!passKnown[edge][flow>0?0:1])sample(edge,flow>0?0:1);
+            return sideHeat(edge,specificEnthalpy,flow);
+        }
         /**
          * Finding D-02 (batch 2026-11-13-codebase-review): per heat-exchanging connection, the curve of each of its ends
-         * ({@link PassiveStepSolver#sideCurve}), the donor of either flow direction, sampled when the pass is built, so no
-         * residual or Jacobian probe runs a flash march (a probe or a trial may reverse a flow, a closed one's included). Null
-         * for a plain connection. A sample the property model refuses is kept as that end's refusal, which a residual that
-         * draws from the end meets as it met the sample before; the checkpoint's own cancellation ends the pass.
+         * ({@link PassiveStepSolver#sideCurve}) as far as the pass holds it ({@code passKnown}). A pass is built with the
+         * curves the solver keeps already (the start balance's, the seeds', an earlier pass's), without a sample. An
+         * evaluation that reaches an end without one (the start flow's donor, a flow a trial reverses or a probe moves off
+         * zero) has that end sampled between two evaluations and is done again from the same point: no flash march runs
+         * inside a residual or a Jacobian, and each curve is sampled where it was first needed, as before. A sample the
+         * property model refuses is kept as that end's refusal and thrown where an evaluation draws from the end, as the
+         * sample threw before; the checkpoint's own cancellation ends the pass.
          */
-        private final HeatCurve[][] passCurves;private RuntimeException[][] passRefusals;
-        private HeatCurve[][] sampleSideCurves(Runnable checkpoint) {
-            var curves=new HeatCurve[graph.pipes().size()][];
-            for(int edge=0;edge<curves.length;edge++) {
+        private final HeatCurve[][] passCurves;private final boolean[][] passKnown;private RuntimeException[][] passRefusals;
+        /** The first end an evaluation found without its curve, -1 for none. */
+        private int missingEdge=-1,missingEnd;
+        /** The solver's checkpoint for this pass: a deferred sample runs under it. */
+        private final Runnable checkpoint;
+        private void heldCurves() {
+            for(int edge=0;edge<passCurves.length;edge++) {
                 var pipe=graph.pipes().get(edge);
                 if(pipe.heat()==null)continue;
-                curves[edge]=new HeatCurve[2];
+                passCurves[edge]=new HeatCurve[2];passKnown[edge]=new boolean[2];
                 for(int end=0;end<2;end++) {
-                    RuntimeException[] cancelled={null};
-                    Runnable guarded=()->{try{checkpoint.run();}catch(RuntimeException cancel){cancelled[0]=cancel;throw cancel;}};
-                    try{curves[edge][end]=sideCurve(graph,pipe,end==0?pipe.first():pipe.second(),guarded);}
-                    catch(RuntimeException refusal) {
-                        if(refusal==cancelled[0])throw refusal;
-                        if(passRefusals==null)passRefusals=new RuntimeException[curves.length][];
-                        if(passRefusals[edge]==null)passRefusals[edge]=new RuntimeException[2];
-                        passRefusals[edge][end]=refusal;
-                    }
+                    int node=end==0?pipe.first():pipe.second();
+                    if(curveKept(graph,pipe,node)){passCurves[edge][end]=sideCurve(graph,pipe,node,checkpoint);passKnown[edge][end]=true;}
                 }
             }
-            return curves;
+        }
+        /** Samples end {@code end} of heat side {@code edge} outside every evaluation, keeping a refusal as the end's. */
+        private void sample(int edge,int end) {
+            var pipe=graph.pipes().get(edge);
+            RuntimeException[] cancelled={null};
+            Runnable guarded=()->{try{checkpoint.run();}catch(RuntimeException cancel){cancelled[0]=cancel;throw cancel;}};
+            try{passCurves[edge][end]=sideCurve(graph,pipe,end==0?pipe.first():pipe.second(),guarded);}
+            catch(RuntimeException refusal) {
+                if(refusal==cancelled[0])throw refusal;
+                if(passRefusals==null)passRefusals=new RuntimeException[passCurves.length][];
+                if(passRefusals[edge]==null)passRefusals[edge]=new RuntimeException[2];
+                passRefusals[edge][end]=refusal;
+            }
+            passKnown[edge][end]=true;
+        }
+        /** Opens an evaluation of the residual or the Jacobian. */
+        private void evaluating(){missingEdge=-1;inResidual=true;}
+        /**
+         * Closes an evaluation and says whether it stands. One that met an end without its curve does not, whatever it
+         * returned or threw: that end is sampled here, between evaluations, and the caller evaluates again from the same
+         * point (decode and assemble carry nothing from one evaluation to the next but the per-node decode cache, keyed by
+         * the point). {@code failed}: what a standing evaluation threw, rethrown.
+         */
+        private boolean evaluated(RuntimeException failed) {
+            inResidual=false;
+            if(missingEdge<0){if(failed!=null)throw failed;return true;}
+            int edge=missingEdge,end=missingEnd;missingEdge=-1;
+            sample(edge,end);
+            return false;
         }
         /** The power (W) mover connection {@code edge} gives what it moves ({@link PassiveStepSolver#moverPower}, on this step's
          * graph): the energy rows and the reconstruction ({@link ConservativeTransport.MoverWork}) read this one function. */
@@ -5573,6 +5621,18 @@ public final class PassiveStepSolver {
          * false: the form before the tangents, which the equivalence test measures the entries against. */
         int differentiateEntries(double[] x,double[] f,double differenceStep,int[] entryOffsets,int[] entryRows,
                                  double[] entries,Runnable checkpoint,boolean tangents) {
+            // An evaluation like the residual (D-02, {@link #evaluated}): one that met a heat side's end without its curve is
+            // done again, whole, once that curve is sampled.
+            while(true) {
+                int columns=-1;RuntimeException failed=null;
+                evaluating();
+                try{columns=differentiate(x,f,differenceStep,entryOffsets,entryRows,entries,checkpoint,tangents);}
+                catch(RuntimeException failure){failed=failure;}
+                if(evaluated(failed))return columns;
+            }
+        }
+        private int differentiate(double[] x,double[] f,double differenceStep,int[] entryOffsets,int[] entryRows,
+                                  double[] entries,Runnable checkpoint,boolean tangents) {
             if(hasWeirs)return -1;
             if(sparsity==null)buildSparsity();
             FluidThermodynamics.State[] st,baseStates;Transport[] tr,baseTransport;FluidThermodynamics.Prepared[] pr,basePrepared;

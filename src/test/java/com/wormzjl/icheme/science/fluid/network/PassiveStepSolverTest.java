@@ -97,8 +97,10 @@ class PassiveStepSolverTest {
     /**
      * Finding D-02 (batch 2026-11-13-codebase-review): a heat side between two water tanks at 350 K, cooled by a 300 K wall.
      * The first step runs forward (3 bar to 1.5 bar); the second starts from that flow on swapped pressures, so its Newton
-     * reverses the flow through zero onto the other end's stream. Each pass samples both ends' curves when it is built: the
-     * step converges backward, its side books the cooling of the other end's water, and no curve is sampled in a residual.
+     * reverses the flow through zero onto the other end's stream. The first step samples its donor's curve alone; in the
+     * second, the evaluation that first draws from the other end has that end sampled between two evaluations and is done
+     * again: the step converges backward, its side books the cooling of the other end's water, and no curve is sampled
+     * inside a residual or a Jacobian.
      */
     @Test void aHeatSideWhoseFlowReversesReadsTheCurvesItsPassSampled() {
         int water=model.componentCount()-1;
@@ -108,12 +110,30 @@ class PassiveStepSolverTest {
         var forward=solver.solve(new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,fill(300000,water)),new PassiveNetwork.Reservoir(2,0,fill(150000,water))),List.of(pipe)),.1,()->{});
         assertTrue(forward.massFlows()[0]>0);
         long first=solver.heatCurveSamples();
-        assertTrue(first>=2,"both ends sampled: "+first);
+        assertEquals(1,first,"the forward step samples its donor's end alone");
         var backward=solver.solve(new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,fill(150000,water)),new PassiveNetwork.Reservoir(2,0,fill(300000,water))),List.of(pipe)),.1,()->{});
         assertTrue(backward.massFlows()[0]<0,"the flow reversed: "+backward.massFlows()[0]);
-        assertTrue(solver.heatCurveSamples()>=first+2,"the new start states' curves");
+        assertTrue(solver.heatCurveSamples()>first,"the second tank's end, on its new start state");
+        assertTrue(solver.heatCurveSamples()<=first+2,"at most both ends once on the new start states: "+solver.heatCurveSamples());
         double heat=0;for(var b:backward.boundaries())if(b.kind()==ConservativeTransport.BoundaryTransfer.Kind.HEAT)heat+=b.totalEnergyJoule();
         assertTrue(heat<0,"the wall cools the water arriving from the second tank: "+heat);
-        assertEquals(0,solver.heatCurvesInResidual(),"no curve sampled during a residual");
+        assertEquals(0,solver.heatCurvesInResidual(),"no curve sampled inside an evaluation");
+    }
+    /**
+     * Finding D-02: a heat side whose flow does not reverse costs what it cost before the fix. Water from a 3 bar generator
+     * through a cooled side into a junction, then a plain run to a 1 atm void: over the step one curve is sampled, the
+     * generator's end's, and none for the junction's end it never draws from.
+     */
+    @Test void aHeatSideThatKeepsItsDirectionSamplesItsDonorsCurveAlone() {
+        int water=model.componentCount()-1;var source=fill(300000,water);
+        var run=new PipeResistance.Geometry(10,.05,.000045,0);
+        var graph=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,source,PassiveNetwork.NodeKind.GENERATOR),
+                new PassiveNetwork.Reservoir(2,0,source,PassiveNetwork.NodeKind.JUNCTION),new PassiveNetwork.Reservoir(3,0,fill(101325,water),PassiveNetwork.NodeKind.VOID)),
+            List.of(new PassiveNetwork.Pipe(5,0,1,run).withHeat(new HeatSide(2,HeatCurve.Films.DEFAULT,new double[]{300},0,0)),new PassiveNetwork.Pipe(6,1,2,run)));
+        var solver=new PassiveStepSolver(model);
+        var result=solver.solve(graph,.1,()->{});
+        assertTrue(result.massFlows()[0]>0);
+        assertEquals(1,solver.heatCurveSamples(),"the donor's end alone");
+        assertEquals(0,solver.heatCurvesInResidual());
     }
 }
