@@ -16,6 +16,7 @@ Branch `claude/codebase-review-refactor-8a85ef`, base `259d22a2c` (main 0.30.0).
 - "Approve all": the twelve review subagents and the bench sub-thread of REVIEW_PLAN section 3.
 - "Start A and J": phase 2 begins with wave A (defects) and wave J (documents); PHASE2_PLAN decision 1. The other thirteen decisions are open.
 - Plan update given by the owner on 2026-11-13, which it says came from the owner's question of that day (the question itself was not put in this session, so it is not quoted): the thermo kernel is ported with the column, at wave E stage (b); the fluid step's port is gated (F0 in Java always; a re-measurement of an island step after F0 and the wave B fluid and thermo batches; F1 only if kernel calls, residual and Jacobian assembly and the LU are still the large majority of step time and step cost still limits plant size); the equilibrium engine is not ported unless a profile shows flashes as the top cost after P20, P21, P24 and P25. Recorded as decision 15 of PHASE2_PLAN.
+- "You have full authority over this subject, drive it end-to-end." (2026-11-13). The main thread's reading and the decisions it took under it: PHASE2_PLAN, "Decided (2026-11-13)". Still the owner's: a merge to `main`, a push, the version number.
 
 ## History
 
@@ -60,6 +61,6 @@ None changed.
 - Not measured by B1: the `viewers` profile (R1, R2), one large awake island, the native column path, the first rung with and without the inside-out trial (L1).
 - Code guide, left by J1: the chapters still carry their batch sections (shrinking them needs the chapter split that follows waves C and D); old format numbers stated as current outside `fluid-runtime.md` (`process-control.md` "formats are 14/4/3", `equipment.md` `equipment-21`, `cooling-towers.md` `fluid-21`); `verification.md` links `LegacyNetworkPathPinTest.java`, which does not exist, and names an old lane baseline (`891c8acf5`); the items of DOCS_AND_COLLABORATION_PLAN 2.5 outside the guide (the gui-creation skill, the `PumpHealth`, `PhaseDraw` and `ProcessSolveServices` comments).
 - Shape fields (12) have no production constant, only `EquipmentShapeCompatTest.SHAPE_FIELDS`; the planned `FormatsTableTest` needs one or reads the test constant.
-- Owner: decisions 2 to 14 and 16 of PHASE2_PLAN's last section (1 and 15 are given).
+- The plan's decisions are taken (PHASE2_PLAN, "Decided (2026-11-13)"); the owner can change any of them.
 - Owner: accept or change `documentation/reference/COLLABORATION.md` (it is marked "proposed").
 - Not verified by the main thread: the findings marked "no" in CODEBASE_REVIEW section 4, and every number marked as an estimate.

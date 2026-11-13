@@ -205,3 +205,23 @@ In the order they unblock work. "Rec." is the main thread's recommendation.
 | 14 | The rest of SIMPLIFICATIONS_REVIEW, row by row, when its wave comes | per row | wave H |
 | 15 | Fluid step in Rust: gated on a re-measurement after the Java groundwork; equilibrium engine stays in Java | yes (given by the owner, 2026-11-13) | wave F |
 | 16 | The column's route: where a learned model binds, the running column's first solve and a solve whose warm seed is refused take the learned start, at the strict closure, before the classical chain | yes, after the same count on every shipped preset (B1 measured two inputs: 27,000 to 30,000 checkpoints against 184,000 to 258,000). A published state moves from the 1e-3 closure to 1e-8, so inside the old closure; the `-closure1e-3` label goes where a model binds | stage 0 fixtures; settles 8 where a model binds |
+
+### Decided (2026-11-13)
+
+Owner, 2026-11-13: "You have full authority over this subject, drive it end-to-end." The main thread's reading: the rows above, the order of the waves, the merges among this batch's branches and the delegations the waves need are the main thread's to decide; each delegation is still named (type, model and effort, what done looks like) when it starts. Still the owner's: a merge to `main`, a push, the version number, and the global CLAUDE.md.
+
+| # | Decided | Where it is carried out |
+|---|---|---|
+| 2 | Yes: the C++ pass off by default. This reverses the owner's choice A of the native-column-default batch (0.18.0); the reason is determinism (the C++ lane uses the platform's libm) and that it measured no gain. Column references recorded on the native path move in their last digits and are re-recorded once | wave E stage 0, first commit |
+| 3 | Yes: the step result carries each mover's shaft power and the train, the stores and the column's member power read it (M-01, M-07). Electricity draws move by the sizes of MACHINE_FAILURE_MODES_REVIEW section 2 item 4 | first batch after wave A is integrated (it crosses the fluid, machines and runtime lanes) |
+| 4 | Failure modes N1, N2, N4, N5 and N7 option A; the unreachable trips option A | wave G |
+| 5 | Yes: R6 option A | B runtime |
+| 6 | Yes: C2 and C5 | wave H, first batch |
+| 7 | P1 yes, after P7's count states its gain; L2 with P1; L1 measured on the first rung and deleted under 5 % | wave E stage 0 |
+| 8, 16 | The learned start first where a model binds, at the strict closure, for the running column's first solve and for a refused warm seed; where no model binds, D3 option A. Before the change: the checkpoint count on every shipped preset, old route and new | wave E stage 0, before the parity fixtures are recorded |
+| 9 | Yes: declared revisions in place of the three hashes | wave H |
+| 10 | As stated: Windows and Linux first, macOS on the Java path until built; an unverified target is guarded | wave E stage (a) |
+| 11 | Yes: amendments 1 to 7 are applied to AGENTS.md on this branch; they reach `main` with a merge the owner approves | wave J |
+| 12 | Yes, each deletion after its list has been read: nothing a document or a build file names is removed | wave J |
+| 13 | Covered by the grant | |
+| 14 | Row by row when its wave comes, each with its numbers in the batch's review | wave H |
