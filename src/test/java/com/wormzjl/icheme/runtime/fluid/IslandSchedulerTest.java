@@ -1,7 +1,7 @@
 package com.wormzjl.icheme.runtime.fluid;
 
 import com.wormzjl.icheme.fluid.support.FluidTestSupport;
-import com.wormzjl.icheme.runtime.ProcessSolveServices;
+import com.wormzjl.icheme.runtime.ProcessSolveJobs;
 import com.wormzjl.icheme.science.fluid.network.*;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
@@ -30,17 +30,17 @@ class IslandSchedulerTest {
     private static final class Dispatch implements IslandCoordinator.Dispatcher {
         long sequence;int capacity=64;IslandCoordinator coordinator;
         final Map<Long,IslandCoordinator.Attempt> attempts=new LinkedHashMap<>();
-        final Map<Long,ProcessSolveServices.FluidIslandCommand> commands=new HashMap<>();
+        final Map<Long,ProcessSolveJobs.FluidIslandCommand> commands=new HashMap<>();
         final List<IslandCoordinator.Attempt> submitted=new ArrayList<>();
         public int availableWorkers(){return capacity-attempts.size();}
         public long nextRequestId(){return ++sequence;}
-        public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveServices.FluidIslandCommand command){attempts.put(attempt.slice().requestId(),attempt);commands.put(attempt.slice().requestId(),command);submitted.add(attempt);return true;}
+        public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveJobs.FluidIslandCommand command){attempts.put(attempt.slice().requestId(),attempt);commands.put(attempt.slice().requestId(),command);submitted.add(attempt);return true;}
         public void cancel(long request){}
         void finishAll() {
             for(long request:List.copyOf(attempts.keySet())) {
                 var attempt=attempts.remove(request);var command=commands.remove(request);
                 var result=new PassiveIntervalSolver(MODEL).solve(command.snapshot(),command.durationSeconds(),command.settings(),()->{});
-                coordinator.completed(attempt,Optional.of(new ProcessSolveServices.FluidIslandSolveResult(Optional.of(result),"FULL",10)));
+                coordinator.completed(attempt,Optional.of(new ProcessSolveJobs.FluidIslandSolveResult(Optional.of(result),"FULL",10)));
             }
             coordinator.pump();
         }

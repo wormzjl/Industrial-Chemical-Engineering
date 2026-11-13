@@ -1,5 +1,5 @@
 import com.wormzjl.icheme.fluid.support.FluidTestSupport;
-import com.wormzjl.icheme.runtime.ProcessSolveServices;
+import com.wormzjl.icheme.runtime.ProcessSolveJobs;
 import com.wormzjl.icheme.runtime.fluid.CertificatePolicy;
 import com.wormzjl.icheme.runtime.fluid.ElectricStores;
 import com.wormzjl.icheme.runtime.fluid.IslandClock;
@@ -58,7 +58,7 @@ public final class MachineBench {
     final FluidThermodynamics model = FluidTestSupport.networkModel();
     final long[] epoch = {0};
     final Map<Long, IslandCoordinator.Attempt> attempts = new LinkedHashMap<>();
-    final Map<Long, ProcessSolveServices.FluidIslandCommand> commands = new HashMap<>();
+    final Map<Long, ProcessSolveJobs.FluidIslandCommand> commands = new HashMap<>();
     final SimulationTime time = SimulationTime.of(4);
     IslandCoordinator coordinator;
     ShaftTrains trains;
@@ -79,7 +79,7 @@ public final class MachineBench {
         coordinator = new IslandCoordinator(new IslandCoordinator.Dispatcher() {
             public int availableWorkers() { return 64 - attempts.size(); }
             public long nextRequestId() { return ++requests; }
-            public boolean submit(IslandCoordinator.Attempt attempt, ProcessSolveServices.FluidIslandCommand command) {
+            public boolean submit(IslandCoordinator.Attempt attempt, ProcessSolveJobs.FluidIslandCommand command) {
                 attempts.put(attempt.slice().requestId(), attempt);
                 commands.put(attempt.slice().requestId(), command);
                 return true;
@@ -123,7 +123,7 @@ public final class MachineBench {
                 var attempt = attempts.remove(request);
                 var command = commands.remove(request);
                 long t0 = System.nanoTime();
-                var result = (ProcessSolveServices.FluidIslandSolveResult) command.solve(FluidTestSupport.NEVER);
+                var result = (ProcessSolveJobs.FluidIslandSolveResult) command.solve(FluidTestSupport.NEVER);
                 solveNanos += System.nanoTime() - t0;
                 solves++;
                 coordinator.completed(attempt, Optional.of(result));

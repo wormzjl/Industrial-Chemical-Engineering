@@ -1,7 +1,7 @@
 package com.wormzjl.icheme.runtime.fluid;
 
 import com.wormzjl.icheme.fluid.support.FluidTestSupport;
-import com.wormzjl.icheme.runtime.ProcessSolveServices;
+import com.wormzjl.icheme.runtime.ProcessSolveJobs;
 import com.wormzjl.icheme.science.equipment.HeatSides;
 import com.wormzjl.icheme.science.fluid.network.*;
 import com.wormzjl.icheme.science.fluid.solver.PhaseLayout;
@@ -62,7 +62,7 @@ class ExchangerCouplingTest {
      */
     private final class Rig {
         final long[] epoch={0};final Map<Long,IslandCoordinator.Attempt> attempts=new LinkedHashMap<>();
-        final Map<Long,ProcessSolveServices.FluidIslandCommand> commands=new HashMap<>();
+        final Map<Long,ProcessSolveJobs.FluidIslandCommand> commands=new HashMap<>();
         final Map<Long,Long> committed=new HashMap<>();final Map<Long,Double> heat=new HashMap<>();
         final IslandCoordinator coordinator;long requests,hotIsland,coldIsland;
         java.util.function.LongPredicate failing=id->false;
@@ -72,7 +72,7 @@ class ExchangerCouplingTest {
             coordinator=new IslandCoordinator(new IslandCoordinator.Dispatcher() {
                 public int availableWorkers(){return 64-attempts.size();}
                 public long nextRequestId(){return ++requests;}
-                public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveServices.FluidIslandCommand command){attempts.put(attempt.slice().requestId(),attempt);commands.put(attempt.slice().requestId(),command);return true;}
+                public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveJobs.FluidIslandCommand command){attempts.put(attempt.slice().requestId(),attempt);commands.put(attempt.slice().requestId(),command);return true;}
                 public void cancel(long request){throw new AssertionError("no deadlines here");}
             },this::book,()->0L,new IslandCoordinator.Settings(30_000_000_000L,20_000_000_000L,64,false,100,policy).withTime(model.time()),()->epoch[0]);
             coordinator.onReplayed(this::book);
@@ -108,7 +108,7 @@ class ExchangerCouplingTest {
                 for(long request:List.copyOf(attempts.keySet())) {
                     var attempt=attempts.remove(request);var command=commands.remove(request);
                     if(failing.test(attempt.islandId()))coordinator.completed(attempt,Optional.empty());
-                    else coordinator.completed(attempt,Optional.of((ProcessSolveServices.FluidIslandSolveResult)command.solve(FluidTestSupport.NEVER)));
+                    else coordinator.completed(attempt,Optional.of((ProcessSolveJobs.FluidIslandSolveResult)command.solve(FluidTestSupport.NEVER)));
                 }
                 coordinator.pump();
             }

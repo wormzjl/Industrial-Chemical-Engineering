@@ -2,7 +2,7 @@ package com.wormzjl.icheme.runtime.fluid;
 
 import com.wormzjl.icheme.fluid.support.FluidTestSupport;
 import com.wormzjl.icheme.runtime.BoundedCpuSolveService;
-import com.wormzjl.icheme.runtime.ProcessSolveServices;
+import com.wormzjl.icheme.runtime.ProcessSolveJobs;
 import com.wormzjl.icheme.runtime.WorkerAllocation.Demand;
 import com.wormzjl.icheme.science.fluid.network.PassiveIntervalSolver;
 import com.wormzjl.icheme.science.fluid.network.PassiveNetwork;
@@ -103,7 +103,7 @@ class WorkerTrajectoryEquivalenceTest {
         private final FluidThermodynamics model=FluidTestSupport.networkModel();
         private final double[] molecularWeights=FluidTestSupport.molecularWeights(model);
         private final Semaphore completionSignal=new Semaphore(0);
-        private final BoundedCpuSolveService<Long,ProcessSolveServices.FluidIslandCommand,ProcessSolveServices.FluidIslandSolveResult> service;
+        private final BoundedCpuSolveService<Long,ProcessSolveJobs.FluidIslandCommand,ProcessSolveJobs.FluidIslandSolveResult> service;
         private final Map<Long,IslandCoordinator.Attempt> attempts=new LinkedHashMap<>();
         private final Map<Long,BoundedCpuSolveService.JobStamp<Long>> stamps=new LinkedHashMap<>();
         private final Map<Long,List<Frame>> histories=new LinkedHashMap<>();
@@ -134,13 +134,13 @@ class WorkerTrajectoryEquivalenceTest {
                     return diagnostics.readyJobs()>0?0:Math.max(0,diagnostics.workerCount()-diagnostics.activeWorkers());
                 }
                 @Override public long nextRequestId(){return ++sequence;}
-                @Override public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveServices.FluidIslandCommand command) {
+                @Override public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveJobs.FluidIslandCommand command) {
                     long request=attempt.slice().requestId();
                     var stamp=new BoundedCpuSolveService.JobStamp<Long>(service.serverEpoch(),request,attempt.islandId(),
                             attempt.revision(),model.revision(),BoundedCpuSolveService.NO_DEADLINE);
                     attempts.put(request,attempt);stamps.put(request,stamp);
                     var admission=service.trySubmit(stamp,command,(snapshot,token)->
-                            (ProcessSolveServices.FluidIslandSolveResult)snapshot.solve(token));
+                            (ProcessSolveJobs.FluidIslandSolveResult)snapshot.solve(token));
                     if(admission!=BoundedCpuSolveService.Admission.ACCEPTED){attempts.remove(request);stamps.remove(request);return false;}
                     observeCapacity();return true;
                 }

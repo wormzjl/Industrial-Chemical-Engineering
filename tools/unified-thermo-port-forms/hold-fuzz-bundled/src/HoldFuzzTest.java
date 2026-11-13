@@ -2,7 +2,7 @@ package com.wormzjl.icheme.runtime.fluid;
 
 import com.wormzjl.icheme.fluid.support.FluidTestSupport;
 import com.wormzjl.icheme.runtime.BoundedCpuSolveService;
-import com.wormzjl.icheme.runtime.ProcessSolveServices;
+import com.wormzjl.icheme.runtime.ProcessSolveJobs;
 import com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo;
 import com.wormzjl.icheme.science.fluid.network.*;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
@@ -158,7 +158,7 @@ class HoldFuzzTest {
         final FluidThermodynamics model;
         final WorldTopologyLedger ledger=new WorldTopologyLedger(WorldTopologyLedger.Snapshot.empty(CATALOG));
         final Map<Long,IslandCoordinator.Attempt> attempts=new LinkedHashMap<>();
-        final Map<Long,ProcessSolveServices.FluidIslandCommand> commands=new HashMap<>();
+        final Map<Long,ProcessSolveJobs.FluidIslandCommand> commands=new HashMap<>();
         long requests;
         final List<Held> held=new ArrayList<>();
         final IslandCoordinator coordinator;
@@ -168,7 +168,7 @@ class HoldFuzzTest {
             coordinator=new IslandCoordinator(new IslandCoordinator.Dispatcher() {
                 public int availableWorkers(){return 1-attempts.size();}
                 public long nextRequestId(){return ++requests;}
-                public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveServices.FluidIslandCommand command){attempts.put(attempt.slice().requestId(),attempt);commands.put(attempt.slice().requestId(),command);return true;}
+                public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveJobs.FluidIslandCommand command){attempts.put(attempt.slice().requestId(),attempt);commands.put(attempt.slice().requestId(),command);return true;}
                 public void cancel(long request){}
             },changed->{for(var s:changed)if(s.status().startsWith("HELD"))held.add(new Held(ledger.onlineTick(),s.id(),s.clock().committedTick(),s.status()));},
                     ()->0L,new IslandCoordinator.Settings(Long.getLong("holdFuzz.wallNanos",2_000_000_000L),Long.getLong("holdFuzz.softNanos",1_500_000_000L),64,false,100,CertificatePolicy.defaults()).withTime(TIME),ledger::onlineTick);
@@ -207,7 +207,7 @@ class HoldFuzzTest {
             if(ledger.hasPendingEvents()){registry.applyPending();coordinator.pumpIfUseful();}
             for(long request:List.copyOf(attempts.keySet())) {
                 var attempt=attempts.remove(request);var command=commands.remove(request);
-                var result=(ProcessSolveServices.FluidIslandSolveResult)command.solve(NEVER);
+                var result=(ProcessSolveJobs.FluidIslandSolveResult)command.solve(NEVER);
                 coordinator.completed(attempt,Optional.of(result));
             }
             coordinator.pump();
