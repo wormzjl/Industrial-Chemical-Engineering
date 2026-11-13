@@ -80,10 +80,26 @@ For a review:
 - Fix the output format: a summary of at most 50 lines, a module map, a findings table (id, file and line, what it is, proposed change, class, lines, risk, proof), open questions.
 - A reviewer cannot measure. Start the thread that measures first; its numbers order the findings.
 
+### Implementation by a subagent that does not build
+
+A subagent has a short cache and must not wait, so it runs no Gradle, cargo or JVM. It can still write code that a build accepts, if the main thread does the building. The pattern, as batch `2026-11-13-codebase-review` ran it (eleven packages; every one compiled at the first build, two had one failing test each, both in the test's own fixture or assertion):
+
+1. The brief is a section of the batch's briefs file. The call that starts the subagent adds only the frame: fast-forward your worktree to the batch branch first; run no build; re-read every changed file and grep every changed symbol in every source set; the line-ending rule; one commit per item; what is already known; what done looks like.
+2. The brief says which of two kinds the task is: **structure only** (every result bit for bit; "if it cannot be done without changing an operation, a saved name or a message, leave it and say what blocks it") or **a stated shift** (the quantity and its bound, in its own last commit, so that it can be dropped).
+3. The brief names the pitfalls that only the build shows: the gate groups' class lists in `build.gradle`, saved and wire names, a package-private access lost by a move, a text a test pins.
+4. The subagent's report lists the exact test classes with their Gradle task, what each run proves, and every point where it was unsure the code compiles.
+5. The main thread test-merges the branch without committing (`git merge --no-commit --no-ff`), compiles every source set, runs the named classes, reads the diff of anything that surprises, fixes small faults there, and commits the merge with the counts in its message. A branch that fails its premise stays unmerged and is named in the batch README.
+6. Lanes are packages. Two subagents never edit one file, except lists that grow at the end (a rules list, an index): each adds its rows on its own lines and the main thread resolves the merge.
+
+What the main thread keeps for itself: anything that needs a measurement, any decision the physics does not force, and every merge.
+
 ## 6. Receiving
 
 - A report is a claim. Before a finding is passed to the owner as a fact, read the cited lines. Say which findings were checked and which were not.
 - A thread's files are not in this checkout until its branch is merged; read them from its worktree, and merge only on the owner's word.
+- A review's cost estimate is a count until something measures it. Measure before a batch is built on it: in batch `2026-11-13-codebase-review` three such estimates did not survive their measurement (a native band solve was slower than Java's, a cache of the sparse LU's reach saved nothing on a loaded island, a preconditioner cost more than it saved), and one refactor's premise failed its first test run.
+- A subagent's decision request is answered from the physics, in the order of AGENTS.md ("Physics and defects"), before its branch merges.
+- While a final lane's campaign runs, start no second build and keep other work on the machine light: wall-deadline holds appear under load and each costs a replay.
 - Commit the reports as they are; write the synthesis beside them, with the corrections named.
 
 ## 7. Results that move
