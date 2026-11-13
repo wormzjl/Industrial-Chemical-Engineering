@@ -30,9 +30,7 @@ Status: three items committed. **No test has run yet**; the lane is held.
 
 - **Campaign:** runs on `EventPathWorld`, which installs no `MachineHealth`, so no pump wears or fails.
 - **chain-100 and the junction lines:** solver-level runs (`SolverRegressionHarness`, `PassiveIntervalSolver`), with no health.
-- **Fluid GameTests:** the pump casings run for minutes of play. 8 h of process time at factor 4 is 144,000 ticks, past every timeout. `PumpHealthGameTests` checks the word `CAVITATION`; its pump runs at its rated flow into a tank, so `LOW FLOW` should not show. No status assertion on a casing compares the whole line.
-
-No reference moves, so no decision request was needed.
+- **Fluid GameTests:** the pump casings run for minutes of play. 8 h of process time at factor 4 is 144,000 ticks, past every timeout. `PumpHealthGameTests` checks the word `CAVITATION`; its pump runs at its rated flow into a tank, so `LOW FLOW` should not show. No status assertion on a casing compares the whole line. No reference moves, so no decision request was needed.
 
 ## CHANGELOG lines
 
