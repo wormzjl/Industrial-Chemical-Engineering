@@ -48,6 +48,7 @@ None changed.
 
 ## Open items
 
+- Running threads (owner: "Approve all seven", 2026-11-13), each on its own branch and worktree cut from this branch, none merged here: `wave-a1` (column, Opus high), `wave-a2` (saves, Opus medium), `wave-a3` (machines, Opus medium), `wave-a4` (sheet against world, Opus medium), `wave-a5` (runtime, Opus high), `wave-a6` (fluid, Opus high); subagent J1 (documents, Opus medium) writes under `documentation/reference/` in this worktree, uncommitted until the main thread has checked it. The wave A threads run no Gradle until the main thread sends "lane free" (after the bench thread's timed runs; then two at a time). Their reports: `wave-a/A<n>_REPORT.md` on their branches.
 - B1 (bench sub-thread): `PROFILE_REVIEW.md` is not in. It orders wave B, decides P1, L1 and P25, and confirms or refutes the cost estimates of R1, G-C4 and the machines' per-step work. PHASE2_PLAN and SOLVER_DECOUPLING_PLAN section 6.3 are updated when it reports.
 - Owner: the fourteen decisions of PHASE2_PLAN's last section.
 - Owner: accept or change `documentation/reference/COLLABORATION.md` (it is marked "proposed").
