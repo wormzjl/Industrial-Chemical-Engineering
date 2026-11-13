@@ -1522,10 +1522,11 @@ public final class FluidWorldAuthority implements AutoCloseable {
         // The watched drivers' states at the presentation cadence (W3): a read of what the trains last decided.
         if(!driverWatchers.isEmpty()&&topology.onlineTick()%100==0)publishDrivers();
         if(!rotationWatchers.isEmpty()&&topology.onlineTick()%100==0)publishRotations();
-        if(topology.onlineTick()%100==0)publishFlares();
-        if(topology.onlineTick()%100==0)publishStills();
-        // The towers' plumes, the fired heaters' flues, the far silhouettes and the noise levels (batch 2026-11-10-custom-shader-system): reads only.
-        if(topology.onlineTick()%100==0){publishTowers();publishHeaters();publishChimneys();publishSilhouettes();publishNoise();}
+        // The device displays publish at their device's slot of the 100-tick cadence, as presentation buckets do (code base
+        // review R10): flares, stills, towers' plumes, fired heaters' flues and chimneys. Reads only.
+        publishFlares();publishStills();publishTowers();publishHeaters();publishChimneys();
+        // The far silhouettes and the noise levels (batch 2026-11-10-custom-shader-system), by watcher: reads only.
+        if(topology.onlineTick()%100==0){publishSilhouettes();publishNoise();}
         if(topology.onlineTick()%ElectricStores.CADENCE==0&&propertyHold==null)health.cadence();
         // A generator's port pushes FE to its neighbours (the FE protocol, reading A65): stored FE only, nothing solves.
         pushGenerators();
@@ -1955,9 +1956,13 @@ public final class FluidWorldAuthority implements AutoCloseable {
         return new com.wormzjl.icheme.network.FluidNetwork.FlareState(target,view.status().ordinal(),flame?Math.max(share,.02f):0,plume,soot,Float.isFinite(exit)?exit:0);
     }
     /** The presentation cadence's flare states: one per watched flare, to its watchers only. */
+    /** Whether device {@code id} publishes its display at online tick {@code tick}: its slot of the
+     * {@value FluidPresentation#BUCKET_TICKS}-tick cadence, by identity, as a presentation bucket (code base review R10). */
+    static boolean displayDue(long id,long tick){return Math.floorMod(id,(long)FluidPresentation.BUCKET_TICKS)==Math.floorMod(tick,(long)FluidPresentation.BUCKET_TICKS);}
     private void publishFlares() {
-        publishedFlares.clear();
+        long now=topology.onlineTick();publishedFlares.keySet().removeIf(id->displayDue(id,now));
         for(long id:flareWatchers.devices()) {
+            if(!displayDue(id,now))continue;
             var record=registrations().get(id);
             if(record==null||!record.device().flare()){flareWatchers.remove(id);continue;}
             var pos=cell(record);var state=flareState(new com.wormzjl.icheme.network.FluidNetwork.Target(pos,id));if(state==null)continue;
@@ -1999,8 +2004,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
     }
     /** The presentation cadence's still states: one per watched still, to its watchers only. */
     private void publishStills() {
-        publishedStills.clear();
+        long now=topology.onlineTick();publishedStills.keySet().removeIf(id->displayDue(id,now));
         for(long id:stillWatchers.devices()) {
+            if(!displayDue(id,now))continue;
             var record=registrations().get(id);
             if(record==null||!record.device().stillPot()){stillWatchers.remove(id);continue;}
             var pos=cell(record);var state=stillState(new com.wormzjl.icheme.network.FluidNetwork.Target(pos,id));if(state==null)continue;
@@ -2070,8 +2076,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
     }
     /** The presentation cadence's chimney plumes: one per watched chimney, to its watchers only. */
     private void publishChimneys() {
-        publishedChimneys.clear();if(chimneyWatchers.devices().isEmpty())return;
+        long now=topology.onlineTick();publishedChimneys.keySet().removeIf(id->displayDue(id,now));if(chimneyWatchers.devices().isEmpty())return;
         for(long id:chimneyWatchers.devices()) {
+            if(!displayDue(id,now))continue;
             var record=registrations().get(id);
             if(record==null||!record.device().chimney()){chimneyWatchers.remove(id);continue;}
             var pos=cell(record);var state=chimneyState(new com.wormzjl.icheme.network.FluidNetwork.Target(pos,id));if(state==null)continue;
@@ -2154,8 +2161,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
     }
     /** The presentation cadence's tower plumes: one per watched tower, to its watchers only. */
     private void publishTowers() {
-        publishedTowers.clear();if(towerWatchers.devices().isEmpty())return;var islands=new HashMap<Long,IslandCoordinator.Snapshot>();
+        long now=topology.onlineTick();publishedTowers.keySet().removeIf(id->displayDue(id,now));if(towerWatchers.devices().isEmpty())return;var islands=new HashMap<Long,IslandCoordinator.Snapshot>();
         for(long id:towerWatchers.devices()) {
+            if(!displayDue(id,now))continue;
             var record=registrations().get(id);
             if(record==null||record.spec().tower()==null){towerWatchers.remove(id);continue;}
             var pos=cell(record);var state=towerPlume(new com.wormzjl.icheme.network.FluidNetwork.Target(pos,id),islands,this::presentation);if(state==null)continue;
@@ -2169,8 +2177,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
     }
     /** The presentation cadence's heater flues: one per watched heater, to its watchers only. */
     private void publishHeaters() {
-        publishedHeaters.clear();if(heaterWatchers.devices().isEmpty())return;var islands=new HashMap<Long,IslandCoordinator.Snapshot>();
+        long now=topology.onlineTick();publishedHeaters.keySet().removeIf(id->displayDue(id,now));if(heaterWatchers.devices().isEmpty())return;var islands=new HashMap<Long,IslandCoordinator.Snapshot>();
         for(long id:heaterWatchers.devices()) {
+            if(!displayDue(id,now))continue;
             var record=registrations().get(id);
             if(record==null||!flued(record)){heaterWatchers.remove(id);continue;}
             var pos=cell(record);var state=heaterFlue(new com.wormzjl.icheme.network.FluidNetwork.Target(pos,id),islands,this::presentation);if(state==null)continue;
