@@ -103,7 +103,8 @@ class StillRuntimeTest {
     /**
      * The still's runtime: a coordinator on its own epoch whose worker solves each admitted slice at once (as
      * {@code ExchangerCouplingTest}'s does), the ledger with the still's facts, its electric stores and {@link Stills} as
-     * the coordinator's ports. A column solve completes at the next drain, as the worker's would.
+     * the coordinator's ports. A column solve completes at the next drain, as the worker's would. An island's jobs may take
+     * {@link #lags} ticks, and an island's slices may be {@link #offset} (the determinism gate).
      */
     private static final class Rig {
         final FluidThermodynamics model;
@@ -126,6 +127,13 @@ class StillRuntimeTest {
         final List<double[]> jobs = new ArrayList<>();
         boolean feeding;
         long requests;
+        /** By island: the ticks its jobs take to complete (0, the default: within the tick they were dispatched in), a worker's timing. */
+        final Map<Long, Integer> lags = new HashMap<>();
+        /** By request: the tick its job was dispatched in. */
+        final Map<Long, Long> submitted = new HashMap<>();
+        /** A fence that offsets an island's slices ({@link #offset}), released once the island reached it. */
+        UUID offsetEvent;
+        long offsetIsland;
 
         Rig(FluidThermodynamics model, WorldTopologyLedger.FluidBasis basis, List<PhysicalFluidTopology.Device> devices, Map<Long, PassiveNetwork.Reservoir> states, StillUnit unit) {
             this.model = model;
@@ -141,6 +149,7 @@ class StillRuntimeTest {
                 public boolean submit(IslandCoordinator.Attempt attempt, ProcessSolveServices.FluidIslandCommand command) {
                     attempts.put(attempt.slice().requestId(), attempt);
                     commands.put(attempt.slice().requestId(), command);
+                    submitted.put(attempt.slice().requestId(), epoch[0]);
                     return true;
                 }
 
@@ -210,11 +219,19 @@ class StillRuntimeTest {
             }
         }
 
+        /** Whether request {@code request}'s job has taken its island's {@link #lags} by now. */
+        private boolean done(long request) {
+            return epoch[0] - submitted.get(request) >= lags.getOrDefault(attempts.get(request).islandId(), 0);
+        }
+
+        /** Completes every job whose island's lag has passed and every column solve, pumping after each pass, until none is left to complete this tick. */
         void drain() {
-            while (!attempts.isEmpty() || !solved.isEmpty()) {
+            while (!solved.isEmpty() || attempts.keySet().stream().anyMatch(this::done)) {
                 for (long request : List.copyOf(attempts.keySet())) {
+                    if (!done(request)) continue;
                     var attempt = attempts.remove(request);
                     var command = commands.remove(request);
+                    submitted.remove(request);
                     coordinator.completed(attempt, Optional.of((ProcessSolveServices.FluidIslandSolveResult) command.solve(FluidTestSupport.NEVER)));
                 }
                 var done = List.copyOf(solved);
@@ -232,7 +249,23 @@ class StillRuntimeTest {
                 if (epoch[0] % ElectricStores.CADENCE == 0) stores.cadence();
                 coordinator.tick();
                 drain();
+                if (offsetEvent != null && coordinator.aligned(offsetEvent, Set.of(offsetIsland))) {
+                    coordinator.releaseFence(offsetEvent, Set.of(offsetIsland));
+                    offsetEvent = null;
+                    coordinator.pump();
+                    drain();
+                }
             }
+        }
+
+        /**
+         * Offsets the slices of device {@code device}'s island by {@code ticks}: a fence ends its first slice there, as an island
+         * a topology event formed starts at the event's tick; the fence is released once the island committed through it.
+         */
+        void offset(long device, long ticks) {
+            offsetIsland = owners.get(device);
+            offsetEvent = UUID.randomUUID();
+            coordinator.fence(offsetEvent, ticks, Set.of(offsetIsland));
         }
 
         Stills.View view() {
@@ -454,6 +487,58 @@ class StillRuntimeTest {
             double total = now[c] + head[c] + vent[c] + dGave[c] + vGave[c];
             assertEquals(start[c], total, 1e-6 * start[c], "component " + c + " conserved");
         }
+    }
+
+    /**
+     * The still's determinism gate (codebase review R-ST1, as the column's {@code ColumnRunTest}): the pentane still with its
+     * water island's slices 10 ticks off the pot's and its outlets' (as a topology event would leave them), run twice: its
+     * jobs completing in the tick they were dispatched in, and then 7 ticks later on the pot's island, 12 on the distillate's,
+     * 4 on the vent's and 5 on the water's (the pot's and the outlets' jobs share a round, which closes with its last). The
+     * water's slice from tick 1010 is dispatched at 1110: in the first run the outlets' and the pot's commits of [1000, 1100)
+     * landed at 1100, before it; in the second they land at 1112, after it (and before the water's commit at 1115, so every
+     * commit keeps its order: only the water's reads move against the others' commits).
+     * Before the fence the water read the heat in transit as it stood then (STILL_HEAT_READ_REVIEW: a slice's duty, or none),
+     * so its heat differed between the runs. Behind the fence it reads what was owed through its start less 440 ticks, which
+     * both runs booked by then: the accounts, the totals, the heat each side booked, what the outlets gave, the heat in
+     * transit, the jobs' outlets and the condenser's share are the same bit for bit.
+     */
+    @Test
+    void aStillsWaterDoesNotDependOnWhenItsIslandsJobsComplete() {
+        var a = pentanes();
+        var b = pentanes();
+        a.offset(WATER, 10);
+        b.offset(WATER, 10);
+        b.lags.put(b.owners.get(POT), 7);
+        b.lags.put(b.owners.get(DISTILLATE), 12);
+        b.lags.put(b.owners.get(VENT), 4);
+        b.lags.put(b.owners.get(WATER), 5);
+        assertEquals(4, new HashSet<>(List.of(b.owners.get(POT), b.owners.get(DISTILLATE), b.owners.get(VENT), b.owners.get(WATER))).size(), "four islands");
+        // 4820 ticks: both runs have committed every slice that ends by 4810 (the last ones were dispatched at 4800 and 4810).
+        a.run(241);
+        b.run(241);
+        double water = a.heat.getOrDefault(PhysicalFluidTopology.sideIdentity(WATER), 0.);
+        System.out.printf(Locale.ROOT, "still determinism gate: the water took %.1f J, the condenser gave %.1f J, the pot took %.1f J, %d jobs%n",
+                water, a.unit().condensed(), a.unit().heated(), a.jobs.size());
+        assertTrue(water > 0, "the water took the condenser's duty: " + water);
+        assertEquals(BatchStill.Status.DISTILLING, a.view().status(), () -> a.stills.statusLine(POT));
+        var ua = a.unit();
+        var ub = b.unit();
+        assertArrayEquals(ua.head().moles(), ub.head().moles(), "the distillate's account");
+        assertEquals(ua.head().energy(), ub.head().energy(), "the distillate's account's energy");
+        assertArrayEquals(ua.venting().moles(), ub.venting().moles(), "the vent's account");
+        assertEquals(ua.venting().energy(), ub.venting().energy(), "the vent's account's energy");
+        assertEquals(ua.heated(), ub.heated(), "the heat into the pot");
+        assertEquals(ua.condensed(), ub.condensed(), "the condenser's duty");
+        assertEquals(ua.burning(), ub.burning(), "the fire");
+        assertEquals(a.heat, b.heat, "the heat each side booked, the water's among them");
+        assertEquals(a.energies, b.energies, "every boundary's energy");
+        assertEquals(a.given.keySet(), b.given.keySet());
+        for (var e : a.given.entrySet()) assertArrayEquals(e.getValue(), b.given.get(e.getKey()), "what " + e.getKey() + " gave");
+        assertArrayEquals(a.pot(), b.pot(), "the pot");
+        assertEquals(a.coordinator.transits(), b.coordinator.transits(), "the heat in transit");
+        assertEquals(a.jobs.stream().map(j -> j[1]).toList(), b.jobs.stream().map(j -> j[1]).toList(), "the jobs' condenser outlets");
+        assertEquals(a.view().condensed(), b.view().condensed(), "the condenser's share");
+        assertEquals(a.view().reflux(), b.view().reflux(), "the reflux it leaves");
     }
 
     /**

@@ -29,11 +29,16 @@ import java.util.function.LongFunction;
  * pot's own step. What the pot's vent and spill give the head (its VENT and SPILL boundaries) goes, at the pot's commit, into
  * the head's two accounts (facts): the distillate's (what the condenser condenses) and the vent's.</li>
  * <li><b>Outlets.</b> DISTILLATE and VENT are generators carrying the still's outlet valve ({@link FlowControl.ValveSource#STILL});
- * each slice gives what its account held as of {@link #FENCE_TICKS} before its start, over {@link #HOLD_CYCLES}. A gift's
- * energy short of what its account carried is the condenser's duty: owed to the water side, or to the air with none.</li>
- * <li><b>Condenser.</b> It condenses what its water takes: while the heat owed stays within {@link #HOLD_CYCLES} of the
- * pot's heat it condenses all; past that, the share the water took over the last window (COOLING LIMITED), and the column
- * solves at the reflux that share leaves ({@link BatchStill#effectiveReflux}).</li>
+ * each slice gives what its account held as of {@link #FENCE_TICKS} before its start, over {@link #HOLD_CYCLES}, at the
+ * temperature of the column's answer in force then. A gift's energy short of what its account carried is the condenser's
+ * duty: owed to the water side, or to the air with none.</li>
+ * <li><b>Condenser.</b> It condenses what its water takes. The water side reads as of its slice start less
+ * {@link #FENCE_TICKS}, as the running column's does (codebase review R-ST1): the heat owed through then less what the water
+ * took through its start, the pot's heat and the column's answer in force then; it waits for the pot's and the outlets'
+ * islands through that tick, so its read does not depend on when their workers finished. While the heat due stays within
+ * {@link #HOLD_CYCLES} of the pot's heat it condenses all; past that, the share the water took over the window before the
+ * pot slice's own fence (COOLING LIMITED; the pot waits for its water through that tick), and the column solves at the
+ * reflux that share leaves ({@link BatchStill#effectiveReflux}).</li>
  * <li><b>Column.</b> Solved every {@link #SOLVE_TICKS} of a boiling pot's commits, on the worker, warm from its last profile;
  * its answer applies at a fixed tick ({@link #APPLY_TICKS} after the commit that asked), so the pot's slices do not depend
  * on the worker's timing.</li>
@@ -72,6 +77,12 @@ public final class Stills implements IslandCoordinator.Ports {
      * ({@link #SOLVE_TICKS}, {@link #APPLY_TICKS}), the outlet's fence ({@link #FENCE_TICKS}) and its hold ({@link #HOLD_CYCLES}).
      */
     public static final long RESPONSE_TICKS=SOLVE_TICKS+APPLY_TICKS+FENCE_TICKS+HOLD_CYCLES*CYCLE_TICKS;
+    /**
+     * The fenced logs keep this many ticks beyond what a reader as of the fence needs, as the running column's do
+     * ({@code ColumnOperation.KEEP_TICKS}): a reader that lags their writer by less than this reads exactly what it would
+     * have read at once (the pot leads its water, and the water its pot, by at most a fence and a cadence; R-ST1).
+     */
+    static final long KEEP_TICKS=2400;
     /** {@link #HOLD_CYCLES} and {@link #REFILL_CYCLES} in process seconds under the coordinator's time factor. */
     private double holdSeconds(){return HOLD_CYCLES*coordinator.time().seconds(CYCLE_TICKS);}
     private double refillSeconds(){return REFILL_CYCLES*coordinator.time().seconds(CYCLE_TICKS);}
@@ -96,16 +107,41 @@ public final class Stills implements IslandCoordinator.Ports {
                        double condensed,double reflux,BatchStill.Status status,List<EquipmentAlarm> alarms) {}
 
     private record Arrival(long tick,double[] distillate,double[] vent) {}
-    private record Paid(long tick,double owed,double transit) {}
+    /** A pot slice's heat, W, and the pot's temperature at its dispatch, K, booked at its commit: the slice from {@code start}. */
+    private record Heat(long start,double watts,double temperature) {}
+    /** No pot slice before the fence (a load, a new still): no heat, the temperature unknown. */
+    private static final Heat UNKNOWN=new Heat(Long.MIN_VALUE,0,Double.NaN);
+    /** A water side's read at its slice start {@code tick}: the heat due (J), its inlet's temperature (K, NaN for none) and the heat the water had taken by then (J). */
+    private record Read(long tick,double due,double inlet,double taken) {}
+    /** A column answer and the tick it applies from. */
+    private record Answer(long tick,StillHead.Solved solved) {}
+    /** The condenser's share from the pot's commit at {@code tick}. */
+    private record Share(long tick,double value) {}
+    /** Where an owe to the water comes from: its order within one tick, so its sum does not depend on the commits' order. */
+    private static final int FROM_POT=0,FROM_DISTILLATE=1,FROM_VENT=2;
 
+    /**
+     * A still's engine state (memory only: a load starts a new one). The fenced logs (codebase review R-ST1) date what a
+     * read as of a fence may need: the owes to the water by the end of the span that owed them, the pot's heat by its
+     * slice's start, the water's reads by theirs, the column's answers by the tick they apply from, the condenser's share
+     * by the commit that set it.
+     */
     private static final class Run {
         StillHead.Solved solved,next;long nextTick=Long.MAX_VALUE,applyTick=Long.MAX_VALUE;boolean pending;long lastSubmit=Long.MIN_VALUE/2;
         double condensed=1,heat,boiling,fired,perKilogram,fPerWatt,spout;String failure;
         /** The fire is set and nothing cuts it (OVERHEAT, BOIL DRY, NO FUEL): the column is asked, lit or waiting. */
         boolean asked;
-        long potIsland=-1;final ArrayDeque<Arrival> arrivals=new ArrayDeque<>();final ArrayDeque<Paid> paid=new ArrayDeque<>();
-        double potTemperature=Double.NaN,level,filled,distillateFlow,ventFlow,transit;
+        long potIsland=-1;final ArrayDeque<Arrival> arrivals=new ArrayDeque<>();
+        double potTemperature=Double.NaN,level,filled,distillateFlow,ventFlow;
         int alarms;BatchStill.Status status=BatchStill.Status.IDLE;
+        /** By tick: the heat owed to the water (J) from the pot, the distillate and the vent, in that order. */
+        final TreeMap<Long,double[]> owes=new TreeMap<>();
+        final ArrayDeque<Heat> heats=new ArrayDeque<>();
+        final ArrayDeque<Read> reads=new ArrayDeque<>();
+        final ArrayDeque<Answer> answers=new ArrayDeque<>();
+        final ArrayDeque<Share> shares=new ArrayDeque<>();
+        /** The heat the water took, J: in all, and since its last read; the heat due at that read and its fence (none yet: MIN_VALUE). */
+        double taken,since,settled;long settledFence=Long.MIN_VALUE;
     }
 
     private final WorldTopologyLedger topology;
@@ -122,6 +158,8 @@ public final class Stills implements IslandCoordinator.Ports {
     private final Map<Long,Run> runs=new HashMap<>();
     /** By an outlet's, a water side's connection's and a burner's identity: the still's pot. */
     private final Map<Long,Long> outlets=new HashMap<>(),waters=new HashMap<>(),burners=new HashMap<>();
+    /** By tick: the devices whose islands wake there (a certified island ends its certificate at the decision point). */
+    private final TreeMap<Long,Set<Long>> wakes=new TreeMap<>();
     private long synced=-1;
 
     public Stills(WorldTopologyLedger topology,LongFunction<Long> owner,IslandCoordinator coordinator,LongFunction<com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics> models,ElectricStores electric,List<String> axis,double[] weights,double[] heatingValues) {
@@ -248,16 +286,41 @@ public final class Stills implements IslandCoordinator.Ports {
 
     // ---------------- the ports ----------------
 
+    /**
+     * The fence's waits (R-ST1 item 3), each on another island through this slice's start less {@link #FENCE_TICKS}, so what
+     * a read as of the fence takes is booked on any schedule: a pot waits for its column answer due by its start and for its
+     * water side's island (the reads its condenser's share and its job's outlet take); an outlet for its pot's island and the
+     * answer due by the fence; a water side for its pot's and both outlets' islands and that answer. Each waits behind the
+     * other by a fence, so no two of them block each other.
+     */
     @Override public boolean ready(long island,PassiveNetwork graph,long start) {
         sync();if(runs.isEmpty())return true;
+        long fence=start-FENCE_TICKS;
         for(var node:graph.reservoirs()) {
             var r=runs.get(node.id());
-            // A pot waits for a column answer due at or before its slice's start.
-            if(r!=null&&r.pending&&r.applyTick<=start)return false;
+            if(r!=null) {
+                // A pot waits for a column answer due at or before its slice's start.
+                if(r.pending&&r.applyTick<=start)return false;
+                var u=topology.still(node.id());
+                if(u!=null&&u.condenser()&&u.water()>0&&!through(island,u.water(),fence))return false;
+            }
             Long pot=outlets.get(node.id());
-            if(pot!=null){var p=runs.get(pot);Long potIsland=owner.apply(pot);if(p!=null&&potIsland!=null&&potIsland!=island&&!coordinator.through(potIsland,start-FENCE_TICKS))return false;}
+            if(pot!=null&&!fenced(island,pot,fence,false))return false;
         }
+        if(!waters.isEmpty())for(var pipe:graph.pipes()){Long pot=waters.get(pipe.id());if(pot!=null&&!fenced(island,pot,fence,true))return false;}
         return true;
+    }
+    /** Whether device {@code device}'s island has booked through {@code tick}: true for {@code island} itself and for a device in no island. */
+    private boolean through(long island,long device,long tick){Long other=owner.apply(device);return other==null||other==island||coordinator.through(other,tick);}
+    /**
+     * Whether still {@code pot}'s values as of {@code fence} are final for a slice of {@code island}: the column answer due by
+     * then arrived and the pot's island booked through it; for its water side ({@code water}) its outlets' islands too.
+     */
+    private boolean fenced(long island,long pot,long fence,boolean water) {
+        var p=runs.get(pot);if(p==null)return true;
+        if(p.pending&&p.applyTick<=fence||!through(island,pot,fence))return false;
+        var u=water?topology.still(pot):null;
+        return u==null||(u.distillate()<=0||through(island,u.distillate(),fence))&&(u.vent()<=0||through(island,u.vent(),fence));
     }
     @Override public Map<Long,PortPlan> plans(long island,PassiveNetwork graph,IslandClock.Slice slice) {
         sync();if(outlets.isEmpty())return Map.of();
@@ -270,7 +333,10 @@ public final class Stills implements IslandCoordinator.Ports {
         }
         return plans==null?Map.of():plans;
     }
-    /** An outlet's generator and valve: its account as of the fence, at the condensate's or the head's temperature, over {@link #HOLD_CYCLES}. */
+    /**
+     * An outlet's generator and valve: its account as of the fence, at the condensate's or the head's temperature of the
+     * column's answer and the condenser's share in force then (R-ST1 item 5), over {@link #HOLD_CYCLES}.
+     */
     private PortPlan outletPlan(long island,StillUnit u,Run r,PassiveNetwork.Reservoir node,IslandClock.Slice slice,boolean distillate) {
         long fence=slice.startTick()-FENCE_TICKS;
         var available=(distillate?u.head():u.venting()).moles();
@@ -280,7 +346,8 @@ public final class Stills implements IslandCoordinator.Ports {
         if(!(total>0)||mine==null)return PortAccounts.idle(node,node.id());
         // The distillate leaves at the condenser's outlet; the vent at the outlet too where the condenser took all (a partial
         // condenser's gas), else at the head (COOLING LIMITED: the vapour it could not take).
-        double temperature=r.solved==null?r.potTemperature:distillate||r.condensed>=1?r.solved.condensateTemperature():r.solved.headTemperature();
+        var solved=solvedAt(r,fence);
+        double temperature=solved==null?heatAt(r,fence).temperature():distillate||condensedAt(r,fence)>=1?solved.condensateTemperature():solved.headTemperature();
         if(!(temperature>0))temperature=node.state().temperature();
         double mass=mass(available),target=mass/Math.max(slice.seconds(coordinator.time()),holdSeconds());
         return new PortPlan(node.id(),node.id(),target,temperature,mine);
@@ -297,7 +364,7 @@ public final class Stills implements IslandCoordinator.Ports {
     @Override public void booked(long island,PassiveNetwork graph,long start,long end,PassiveIntervalSolver.Result result) {
         sync();if(runs.isEmpty()||end<=start)return;
         double seconds=coordinator.time().seconds(end-start);
-        Map<Long,double[]> arrived=null;Map<Long,Double> arrivedEnergy=null,potHeat=null,given=null;Map<Long,double[]> gifts=null;
+        Map<Long,double[]> arrived=null;Map<Long,Double> arrivedEnergy=null,potHeat=null,given=null,took=null;Map<Long,double[]> gifts=null;
         for(var b:result.boundaries()) {
             var kind=b.kind();
             if((kind==ConservativeTransport.BoundaryTransfer.Kind.VENT||kind==ConservativeTransport.BoundaryTransfer.Kind.SPILL)&&runs.containsKey(b.nodeId())) {
@@ -308,6 +375,8 @@ public final class Stills implements IslandCoordinator.Ports {
             } else if(kind==ConservativeTransport.BoundaryTransfer.Kind.HEAT&&b.nodeId()<0) {
                 long pot=b.nodeId()-PhysicalFluidTopology.sideIdentity(0);
                 if(runs.containsKey(pot)){if(potHeat==null)potHeat=new HashMap<>();potHeat.merge(pot,b.totalEnergyJoule(),Double::sum);}
+                // A condenser's water side: the heat it took, which leaves the transit (the coordinator books the same sum).
+                else{Long still=waters.get(b.nodeId());if(still!=null){if(took==null)took=new HashMap<>();took.merge(still,b.totalEnergyJoule(),Double::sum);}}
             } else if(kind==ConservativeTransport.BoundaryTransfer.Kind.EXCHANGE&&outlets.containsKey(b.nodeId())) {
                 if(gifts==null){gifts=new HashMap<>();given=new HashMap<>();}
                 var sum=gifts.computeIfAbsent(b.nodeId(),id->new double[axis.size()]);var n=onWorld(island,b.moles());
@@ -331,8 +400,13 @@ public final class Stills implements IslandCoordinator.Ports {
             // A closed pot's vapour leaves by its VAPOUR nozzle: what its lines carry out, kg/s.
             if(!u.condenser()){double out=0;for(int pipe=0;pipe<result.graph().pipes().size();pipe++){var p=result.graph().pipes().get(pipe);if(p.first()==k)out+=flows[pipe];if(p.second()==k)out-=flows[pipe];}r.ventFlow=Math.max(0,out);}
             status(u,r,node,n,seconds);
-            submit(u,r,island,node,end);
+            // The slice's heat as its dispatch set it, dated by its start: what a read as of a later fence takes (R-ST1 item 2).
+            r.heats.addLast(new Heat(start,r.heat,r.potTemperature));
+            keepAsOf(r.heats,Heat::start,start-2*FENCE_TICKS-KEEP_TICKS);
+            submit(u,r,island,node,start,end);
         }
+        // The water sides: what each took, for the next read's heat due and the condenser's share.
+        if(took!=null)for(var t:took.entrySet()){var r=runs.get(t.getKey());if(r!=null){r.taken+=t.getValue();r.since+=t.getValue();}}
         // The outlets: what each gave, and the condenser's duty it leaves.
         if(gifts!=null)for(var g:gifts.entrySet())give(g.getKey(),g.getValue(),given.get(g.getKey()),seconds,end);
         // The burners: the fuel's heat fired.
@@ -370,11 +444,12 @@ public final class Stills implements IslandCoordinator.Ports {
         for(double d:division.distillate())r.spout+=d;
         double total=0;for(double n:moles)total+=n;
         if(!(total>0)) {
-            // Energy with no moles: a closed column's reflux, condensed and returned; the water (or the air) takes it now.
-            return owe(u,r,energy,end);
+            // Energy with no moles: a closed column's reflux, condensed and returned; owed now (the water reads it a fence later), or the air's.
+            return owe(u,r,energy,end,FROM_POT);
         }
         r.arrivals.addLast(new Arrival(end,division.distillate(),division.vent()));
-        PortAccounts.keep(r.arrivals,Arrival::tick,end-2*FENCE_TICKS);
+        // Kept for a fence and the keep window, as the column's (F6): an outlet's read lagging the pot keeps what it subtracts.
+        PortAccounts.keep(r.arrivals,Arrival::tick,end-FENCE_TICKS-KEEP_TICKS);
         var head=new Account(plus(u.head().moles(),division.distillate()),u.head().energy()+division.distillateEnergy());
         var vent=new Account(plus(u.venting().moles(),division.vent()),u.venting().energy()+division.ventEnergy());
         return u.withAccounts(head,vent);
@@ -388,78 +463,149 @@ public final class Stills implements IslandCoordinator.Ports {
         double debited=debit.energy();var next=debit.account();
         u=distillate?u.withAccounts(next,u.venting()):u.withAccounts(u.head(),next);
         if(distillate)r.distillateFlow=mass(moles)/seconds;else r.ventFlow=mass(moles)/seconds;
-        topology.still(owe(u,r,debited-joule,end));
+        topology.still(owe(u,r,debited-joule,end,distillate?FROM_DISTILLATE:FROM_VENT));
     }
-    /** {@code joule} of condenser duty: owed to the water side, or with none given to the air; the still's total either way. */
-    private StillUnit owe(StillUnit u,Run r,double joule,long end) {
+    /**
+     * {@code joule} of condenser duty from {@code source}: owed to the water side, or with none given to the air; the still's
+     * total either way. The owe is dated by the end of the span that owed it (R-ST1 item 1): the water's slices from that
+     * tick plus {@link #FENCE_TICKS} read it, so a certified water island wakes there, not when this commit landed.
+     */
+    private StillUnit owe(StillUnit u,Run r,double joule,long end,int source) {
         if(joule==0)return u;
         var water=u.water()>0?topology.active().get(u.water()):null;
         if(water!=null&&water.device().heat()!=null) {
             coordinator.owe(PhysicalFluidTopology.sideIdentity(u.water()),PhysicalFluidTopology.sideIdentity(u.id()),joule);
-            r.paid.addLast(new Paid(end,joule,Double.NaN));
-            Long island=owner.apply(u.water());if(island!=null)coordinator.controlsMoved(List.of(island));
+            r.owes.computeIfAbsent(end,tick->new double[3])[source]+=joule;
+            // The water's reads drop what they no longer subtract (due); this bounds the log while the water stops reading.
+            r.owes.headMap(end-FENCE_TICKS-KEEP_TICKS).clear();
+            wakeAt(end+FENCE_TICKS,u.water());
         }
         return u.withTotals(u.heated(),u.condensed()+joule);
     }
-    /** The condenser's share for the next solve: all while what it owes stays within {@link #HOLD_CYCLES} of the pot's heat, else what the water took. */
-    private void condensed(StillUnit u,Run r,long now) {
-        if(!u.condenser()){r.condensed=0;return;}
-        if(u.water()==0){r.condensed=0;return;}
-        double need=Math.max(r.heat,NO_HEAT);
-        if(r.transit<=holdSeconds()*need){r.condensed=1;return;}
-        double owed=0,first=Double.NaN;long from=now;
-        for(var p:r.paid){if(p.tick()<now-FENCE_TICKS)continue;owed+=p.owed();if(Double.isNaN(first)&&!Double.isNaN(p.transit())){first=p.transit();from=p.tick();}}
-        double span=Math.max(1,coordinator.time().seconds(now-from)),took=Double.isNaN(first)?0:Math.max(0,owed-(r.transit-first));
-        r.condensed=Math.max(0,Math.min(1,took/span/need));
-        PortAccounts.keep(r.paid,Paid::tick,now-2*FENCE_TICKS);
+    /**
+     * The condenser's share for the next solve, at the pot's commit of the slice from {@code start} (R-ST1 item 4): from the
+     * water's reads before the slice's fence ({@code start} less {@link #FENCE_TICKS}), which the pot waited for, and the
+     * pot's heat as of that fence. All while the heat due at the last such read stays within {@link #HOLD_CYCLES} of that
+     * heat (and with no such read: a load, a new still); past that, what the water took over the window of a fence before
+     * that read (COOLING LIMITED); with one read alone in it, the share stands. Logged by {@code end} for the outlets' reads.
+     */
+    private void condensed(StillUnit u,Run r,long start,long end) {
+        double share=r.condensed;
+        if(!u.condenser()||u.water()==0)share=0;
+        else {
+            long fence=start-FENCE_TICKS;Read last=null;
+            for(var x:r.reads){if(x.tick()>=fence)break;last=x;}
+            double need=Math.max(heatAt(r,fence).watts(),NO_HEAT);
+            if(last==null||last.due()<=holdSeconds()*need)share=1;
+            else {
+                Read first=last;for(var x:r.reads)if(x.tick()>=last.tick()-FENCE_TICKS){first=x;break;}
+                double span=coordinator.time().seconds(last.tick()-first.tick());
+                if(span>0)share=Math.max(0,Math.min(1,Math.max(0,last.taken()-first.taken())/span/need));
+            }
+        }
+        r.condensed=share;
+        double before=r.shares.isEmpty()?1:r.shares.peekLast().value();
+        if(share!=before){r.shares.addLast(new Share(end,share));keepAsOf(r.shares,Share::tick,end-2*FENCE_TICKS-KEEP_TICKS);}
     }
+    /**
+     * The water side's read of its slice from {@code start} (R-ST1 items 1 and 2): as of its fence, {@code start} less
+     * {@link #FENCE_TICKS}, through which it waited for the pot's and the outlets' islands and the column answer due. The
+     * heat due, the pot's heat as of the fence with a backlog over the hold drained over six holds, and the outlet's ceiling
+     * from the answer in force then. Before the pot's first slice on this load its temperature is unknown (NaN, which the
+     * comparison passes on): the water reads 300 K. The condensing side stands at the mean of the head and the outlet, as the
+     * sheet's condenser capacity takes it (a partial condenser's outlet is its water's inlet plus the approach).
+     */
     @Override public ExchangerRelay.Read heatRead(long side,long partner,long start,double seconds,double transit) {
         sync();Long pot=waters.get(side);if(pot==null)return null;
         var u=topology.still(pot);var r=runs.get(pot);if(u==null||r==null)return null;
-        r.transit=transit;r.paid.addLast(new Paid(start,0,transit));
-        PortAccounts.keep(r.paid,Paid::tick,start-2*FENCE_TICKS);
-        // Before the pot's first slice its temperature is unknown (NaN, which Math.max passes on): the water reads 300 K. The
-        // condensing side stands at the mean of the head and the outlet, as the sheet's condenser capacity takes it (a partial
-        // condenser's outlet is its water's inlet plus the approach).
-        double condensate=r.solved!=null&&r.solved.condensateTemperature()>0?(r.solved.headTemperature()+r.solved.condensateTemperature())/2:r.potTemperature>300?r.potTemperature:300;
-        double rate=r.heat+Math.max(0,transit-holdSeconds()*r.heat)/(6*holdSeconds());
-        return ExchangerRelay.Read.column(transit,seconds,Math.max(1,condensate-APPROACH_KELVIN),Math.max(0,rate));
+        long fence=start-FENCE_TICKS;
+        double due=due(r,fence,transit);
+        // A retried slice reads again from the same start: its read replaces the one it repeats.
+        if(!r.reads.isEmpty()&&r.reads.peekLast().tick()==start)r.reads.removeLast();
+        r.reads.addLast(new Read(start,due,coordinator.sideTemperature(side,start),r.taken));
+        PortAccounts.keep(r.reads,Read::tick,start-2*FENCE_TICKS-KEEP_TICKS);
+        var heat=heatAt(r,fence);var solved=solvedAt(r,fence);
+        double condensate=solved!=null&&solved.condensateTemperature()>0?(solved.headTemperature()+solved.condensateTemperature())/2:heat.temperature()>300?heat.temperature():300;
+        double rate=heat.watts()+Math.max(0,due-holdSeconds()*heat.watts())/(6*holdSeconds());
+        return ExchangerRelay.Read.column(due,seconds,Math.max(1,condensate-APPROACH_KELVIN),Math.max(0,rate));
+    }
+    /**
+     * The heat due to still {@code r}'s water as of {@code fence} (R-ST1 item 1), J: what was owed through the fence less what
+     * the water took through its slice's start. The heat in transit now, {@code transit}, less every owe dated after the fence
+     * (the strict edge: an owe dated at the fence is booked, its island being through it) is that value; it is carried here
+     * from the last read in the owes' tick order and the water's own bookings, so its last bit does not depend on whether a
+     * later owe landed in the transit first ((x + o) - o is not x). Where the two differ by more than rounding (a load, a
+     * removed side, an owe the keep window dropped) the transit's value stands. The owes through the fence leave the log.
+     */
+    private static double due(Run r,long fence,double transit) {
+        double live=transit;for(var owed:r.owes.tailMap(fence,false).values())for(double j:owed)live-=j;
+        double due=live;
+        if(r.settledFence!=Long.MIN_VALUE&&fence>=r.settledFence) {
+            due=r.settled;for(var owed:r.owes.subMap(r.settledFence,false,fence,true).values())for(double j:owed)due+=j;
+            due-=r.since;
+            if(Math.abs(due-live)>1+1e-6*Math.abs(live))due=live;
+        }
+        r.settled=due;r.settledFence=fence;r.since=0;
+        r.owes.headMap(fence,true).clear();
+        return due;
+    }
+    /** The pot's slice in force just before {@code tick} (the latest booked from before it), or {@link #UNKNOWN}. */
+    private static Heat heatAt(Run r,long tick){Heat h=UNKNOWN;for(var x:r.heats){if(x.start()>=tick)break;h=x;}return h;}
+    /** The column answer in force at {@code tick} (the latest applying at or before it), or null. */
+    private static StillHead.Solved solvedAt(Run r,long tick){StillHead.Solved s=null;for(var a:r.answers){if(a.tick()>tick)break;s=a.solved();}return s;}
+    /** The condenser's share in force at {@code tick} (the latest set at or before it), 1 before any. */
+    private static double condensedAt(Run r,long tick){double s=1;for(var x:r.shares){if(x.tick()>tick)break;s=x.value();}return s;}
+    /** Drops the oldest entries of a dated log while the next is dated at or before {@code from}: a read as of {@code from} or later still finds the one in force. */
+    private static <T> void keepAsOf(ArrayDeque<T> log,java.util.function.ToLongFunction<T> tick,long from) {
+        while(log.size()>1){var it=log.iterator();it.next();if(tick.applyAsLong(it.next())>from)return;log.removeFirst();}
+    }
+    /** Device {@code device}'s island wakes at {@code tick}: a fixed tick of the world's, not the moment a commit lands (R-ST1 item 5). */
+    private void wakeAt(long tick,long device){wakes.computeIfAbsent(tick,k->new TreeSet<>()).add(device);}
+    /** The wakes due by now, at the engine's decision points (every tick's due deadlines among them): each device's island, certified, ends its certificate. */
+    @Override public void decide() {
+        if(wakes.isEmpty())return;long now=coordinator.now();
+        while(!wakes.isEmpty()&&wakes.firstKey()<=now)for(long device:wakes.pollFirstEntry().getValue()){Long island=owner.apply(device);if(island!=null)coordinator.controlsMoved(List.of(island));}
     }
 
     // ---------------- the column's solves ----------------
 
     /** Asks for the column's next answer when the fire is asked (lit, or waiting for the first answer) and its last answer is {@link #SOLVE_TICKS} old. */
-    private void submit(StillUnit u,Run r,long island,PassiveNetwork.Reservoir node,long end) {
+    private void submit(StillUnit u,Run r,long island,PassiveNetwork.Reservoir node,long start,long end) {
         // A still with neither column nor condenser has nothing to solve: its vapour leaves as the pot releases it.
         promote(r,end);
         if(!u.condenser()&&u.stages()==0||r.pending||end<r.lastSubmit+SOLVE_TICKS||!r.asked)return;
-        condensed(u,r,end);
+        condensed(u,r,start,end);
         double reflux=BatchStill.effectiveReflux(reflux(u),r.condensed);
         var warm=r.solved==null?null:r.solved.profile();
-        var job=new StillHead.Job(node.inventory().moles(),node.state().temperature(),BatchStill.ATMOSPHERIC,u.stages(),reflux,warm,u.design().columnDiameter(),outlet(u,end));
+        var job=new StillHead.Job(node.inventory().moles(),node.state().temperature(),BatchStill.ATMOSPHERIC,u.stages(),reflux,warm,u.design().columnDiameter(),outlet(r,start-FENCE_TICKS));
         long pot=u.id(),apply=end+APPLY_TICKS;
         if(!solves.submit(pot,island,job,outcome->completed(pot,apply,outcome)))return;
         r.pending=true;r.applyTick=apply;r.lastSubmit=end;
     }
     /**
-     * The condenser's outlet floor for a job queued at {@code tick}, K: the water side's inlet as its last commit recorded it
-     * plus {@link BatchStill#OUTLET_APPROACH}; a still with no water, or none recorded yet, the total condenser's (it then
-     * condenses nothing with no water, {@link #condensed}). A change of the water reaches the next queued job only.
+     * The condenser's outlet floor for a job queued by the pot slice whose fence is {@code fence}, K (R-ST1 item 5): the water
+     * side's inlet as its last read before that fence recorded it (the pot waited for its water through it) plus
+     * {@link BatchStill#OUTLET_APPROACH}; a still with no water, or none recorded yet, the total condenser's (it then
+     * condenses nothing with no water, {@link #condensed}). A change of the water reaches a job queued a fence later.
      */
-    private double outlet(StillUnit u,long tick) {
-        double water=u.water()>0?coordinator.sideTemperature(PhysicalFluidTopology.sideIdentity(u.water()),tick):Double.NaN;
+    private static double outlet(Run r,long fence) {
+        double water=Double.NaN;for(var x:r.reads){if(x.tick()>=fence)break;if(x.inlet()>0)water=x.inlet();}
         return water>0?water+BatchStill.OUTLET_APPROACH:com.wormzjl.icheme.science.column.still.StillColumn.TOTAL_CONDENSER;
     }
     /** The column's waiting answer, applied once its tick is reached. */
     private static void promote(Run r,long tick){if(r.next!=null&&r.nextTick<=tick){r.solved=r.next;r.fPerWatt=r.solved.fPerWatt();r.next=null;r.nextTick=Long.MAX_VALUE;}}
+    /** A column job's outcome: the answer applies at {@code apply}, where the pot's island wakes (and the fenced reads find it there). */
     private void completed(long pot,long apply,StillHead.Outcome outcome) {
         var r=runs.get(pot);if(r==null)return;
         r.pending=false;r.applyTick=Long.MAX_VALUE;
         switch(outcome) {
-            case StillHead.Solved solved->{r.next=solved;r.nextTick=apply;r.failure=null;}
+            case StillHead.Solved solved->{
+                r.next=solved;r.nextTick=apply;r.failure=null;
+                r.answers.addLast(new Answer(apply,solved));keepAsOf(r.answers,Answer::tick,apply-2*FENCE_TICKS-KEEP_TICKS);
+            }
             case StillHead.Failed failed->r.failure=failed.reason();
         }
-        if(r.potIsland>=0)coordinator.controlsMoved(List.of(r.potIsland));
+        wakeAt(apply,pot);
     }
 
     // ---------------- statuses, views and settings ----------------
