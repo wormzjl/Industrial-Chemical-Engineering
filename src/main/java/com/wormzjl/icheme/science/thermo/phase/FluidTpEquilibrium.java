@@ -144,7 +144,7 @@ public final class FluidTpEquilibrium {
     /** Consecutive halvings back toward the last evaluated state when a trial state has no TP answer. */
     private static final int MAXIMUM_RETREATS = 8;
     /** Largest step of an unbracketed pressure search, and of one UV Newton step, in {@code ln P}; in {@code ln T}. */
-    private static final double PRESSURE_STEP_CAP = 2.0;
+    static final double PRESSURE_STEP_CAP = 2.0;
     private static final double TEMPERATURE_STEP_CAP = 0.25;
     /** The UV Newton phase's finite-difference step in {@code ln T} and {@code ln P}. */
     private static final double DIFFERENCE_STEP = 1.0e-7;
@@ -180,9 +180,8 @@ public final class FluidTpEquilibrium {
      * solid takes the whole species, the vapour none).
      */
     public static final double DEPOSITION_TRACE = 1.0e-15;
-    /** Newton steps of the gas-solid solve, and fluid TP equilibria of an onset search, before NOT_CONVERGED. */
+    /** Newton steps of the gas-solid solve before NOT_CONVERGED. */
     private static final int DEPOSITION_ITERATIONS = 60;
-    private static final int ONSET_EVALUATIONS = 100;
     /** Re-flashes of the general crystal solve (P5) before NOT_CONVERGED. */
     private static final int CRYSTAL_ITERATIONS = 100;
     /** Newton steps of a binary's three-phase point (P5), and its tolerance on {@code |mu - mu_s|/(R T)}. */
@@ -310,6 +309,8 @@ public final class FluidTpEquilibrium {
     private final CriticalBand criticalBand;
     /** The dry core (S01): the feed's stability test, both flashes, the carried crystals and the dry answers, built once at construction. */
     private final DryCore dryCore;
+    /** The onset searches (S01), built once at construction. */
+    private final CrystalOnsets crystalOnsets;
 
     /** @param evaluator its basis must be the contract's basis, in the same order, and its family the contract identity's */
     public FluidTpEquilibrium(PhaseContract contract, CubicPhaseEvaluator evaluator, Settings settings) {
@@ -352,6 +353,7 @@ public final class FluidTpEquilibrium {
         criticalBand = new CriticalBand(evaluator);
         dryCore = new DryCore(this, contract, kernel, evaluator, settings, stability, count, basis, inEquationOfState,
                 cubicWater, crystalSet, criticalBand);
+        crystalOnsets = new CrystalOnsets(this, contract, evaluator);
     }
 
     /**
@@ -406,7 +408,7 @@ public final class FluidTpEquilibrium {
     public static final class Workspace {
         private final FluidTpEquilibrium owner;
         /** The request's material, set before any calculation and never overwritten by a solve. */
-        private final Feed request;
+        final Feed request;
         /**
          * Scratch feeds of the crystal solves and the carried path: the fluid a crystal leaves (the base feed with the
          * crystal's species at its step's amount), the request less the partner crystal's solid ({@link #twoCrystals}),
@@ -462,7 +464,8 @@ public final class FluidTpEquilibrium {
         String failure;
         double residual, productDistance;
         // The request's material, set before any calculation.
-        private double hydrocarbonTotal, total;
+        double hydrocarbonTotal;
+        private double total;
         // PH and UV: the search window, the searches, counters over the whole search, the Jacobian of the UV Newton phase.
         private double minimumT, maximumT, minimumP, maximumP;
         /** Where a PH or UV search starts: inside the data of the models the material uses (see {@link #searchWindow}). */
@@ -485,9 +488,9 @@ public final class FluidTpEquilibrium {
         private double innerT1, innerY1, innerT2, innerY2;
         // Crystals (P4 stage 2a): the request's resolved competition, the competing crystals, the solid and pure-species
         // scratch, fluid equilibria of the last crystal answer.
-        private PhaseCompetition competition;
-        private final Crystal[] active;
-        private int activeCount;
+        PhaseCompetition competition;
+        final Crystal[] active;
+        int activeCount;
         // Carried crystals: the request's mode, the filter the stability tests read, its temperature and whether a product
         // is being tested, the tested phase's state (never liquidState or vaporState, which finishSplit reads after the tests).
         boolean carrying, carriedProduct, standInHeld;
@@ -779,7 +782,7 @@ public final class FluidTpEquilibrium {
      * What this implementation does not do (crystals; water without a water model), then the request's material into
      * the workspace: the EOS feed, the hydrocarbon and water totals.
      */
-    private EquilibriumResult implementationChecks(Specification specification, PhaseCompetition competition, Workspace w) {
+    EquilibriumResult implementationChecks(Specification specification, PhaseCompetition competition, Workspace w) {
         w.activeCount = 0;
         w.carrying = competition.carried();
         for (String id : competition.crystals()) {
@@ -816,7 +819,7 @@ public final class FluidTpEquilibrium {
     }
 
     /** One TP equilibrium at (t, p) of the workspace's material, the checks done; its own counters. */
-    private EquilibriumResult evaluateTp(double t, double p, PhaseCompetition competition, Workspace w) {
+    EquilibriumResult evaluateTp(double t, double p, PhaseCompetition competition, Workspace w) {
         w.kernelEvaluations = 0;
         w.derivativeEvaluations = 0;
         w.rachfordRiceSteps = 0;
@@ -847,7 +850,7 @@ public final class FluidTpEquilibrium {
      *
      * @param onset the crystal of an onset answer (its record is used even where no crystal is among the phases), or null
      */
-    private EquilibriumResult graded(EquilibriumResult answer, Crystal onset, Workspace w) {
+    EquilibriumResult graded(EquilibriumResult answer, Crystal onset, Workspace w) {
         if (!answer.converged()) return answer;
         PhaseState at = answer.phases().isEmpty() ? answer.coexisting().get(0) : answer.phases().get(0).state();
         String outside = outsideData(at.temperature(), at.pressure(), answer, onset, w);
@@ -906,7 +909,7 @@ public final class FluidTpEquilibrium {
      * CO2-I), above which they cease to exist (P4 stage 2a). Not a data range: the onset searches stay below it, and a PH
      * or UV start that fails restarts there, where no crystal forms. {@code +infinity} without crystals.
      */
-    private static double crystalCeiling(Workspace w) {
+    static double crystalCeiling(Workspace w) {
         double ceiling = Double.POSITIVE_INFINITY;
         for (int a = 0; a < w.activeCount; a++) ceiling = Math.min(ceiling, w.active[a].anchored().record().maximumTemperature());
         return ceiling;
@@ -2668,13 +2671,13 @@ public final class FluidTpEquilibrium {
     }
 
     /** {@code mu_i} of EOS component {@code i} in a fluid answer: its first phase's (equal in every phase), or a coexisting state's. */
-    private static double fluidChemicalPotential(EquilibriumResult fluid, int component) {
+    static double fluidChemicalPotential(EquilibriumResult fluid, int component) {
         PhaseState state = fluid.phases().isEmpty() ? fluid.coexisting().get(0) : fluid.phases().get(0).state();
         return state.chemicalPotential(component);
     }
 
     /** Whether a fluid answer holds a liquid: a phase labelled liquid, or a pure fluid's liquid-vapour coexistence. */
-    private static boolean holdsLiquid(EquilibriumResult fluid) {
+    static boolean holdsLiquid(EquilibriumResult fluid) {
         if (fluid.classification() == Classification.PURE_COEXISTENCE_UNDERDETERMINED) {
             for (PhaseState state : fluid.coexisting()) if (state.kind() == PhaseKind.LIQUID) return true;
             return false;
@@ -2842,7 +2845,7 @@ public final class FluidTpEquilibrium {
     }
 
     /** The fluid answer under a crystal competition, no crystal among its phases: the solids assessed. */
-    private EquilibriumResult assessed(EquilibriumResult fluid, String note, Workspace w) {
+    EquilibriumResult assessed(EquilibriumResult fluid, String note, Workspace w) {
         return new EquilibriumResult(fluid.specification(), EquilibriumResult.Status.CONVERGED, null, fluid.detail() + "; " + note,
                 fluid.identity(), fluid.competition(), fluid.classification(), fluid.phases(), fluid.coexisting(),
                 solidCoverage(fluid.coverage(), w), fluid.diagnostics(), null);
@@ -3006,7 +3009,7 @@ public final class FluidTpEquilibrium {
      * seen, within the numerical box's floor and the crystal's ceiling; converged at {@code |dx| <= 1e-14 x}. {@code NaN}
      * when it does not converge. The kernel calls count into {@code outerKernel}.
      */
-    private double crystalStepTemperature(double p, double start, Crystal c, Root root, Workspace w) {
+    double crystalStepTemperature(double p, double start, Crystal c, Root root, Workspace w) {
         int i = c.component();
         Arrays.fill(w.pure, 0.0);
         w.pure[i] = 1.0;
@@ -3045,7 +3048,7 @@ public final class FluidTpEquilibrium {
      * P5): Newton in {@code ln P} on {@code g = (mu_F - mu_s)/(R T)} with {@code dg/d ln P = P (v_F - v_s)/(R T)}, either
      * sign of {@code v_F - v_s}, bisection once both signs are seen; converged at {@code |d ln P| <= 1e-14}; {@code NaN} when it does not converge.
      */
-    private double crystalStepPressure(double t, double start, Crystal c, Root root, Workspace w) {
+    double crystalStepPressure(double t, double start, Crystal c, Root root, Workspace w) {
         int i = c.component();
         Arrays.fill(w.pure, 0.0);
         w.pure[i] = 1.0;
@@ -3904,7 +3907,7 @@ public final class FluidTpEquilibrium {
      */
     public DepositionOnset depositionTemperature(String crystal, double pressure, List<String> species, double[] amounts,
                                                  Workspace workspace) {
-        return onset(true, null, crystal, pressure, species, amounts, own(workspace));
+        return crystalOnsets.onset(true, null, crystal, pressure, species, amounts, own(workspace));
     }
 
     /**
@@ -3916,7 +3919,7 @@ public final class FluidTpEquilibrium {
      */
     public DepositionOnset frostTemperature(String crystal, double pressure, List<String> species, double[] amounts,
                                             Workspace workspace) {
-        return onset(true, Root.VAPOR, crystal, pressure, species, amounts, own(workspace));
+        return crystalOnsets.onset(true, Root.VAPOR, crystal, pressure, species, amounts, own(workspace));
     }
 
     /**
@@ -3931,7 +3934,7 @@ public final class FluidTpEquilibrium {
      */
     public DepositionOnset freezingTemperature(String crystal, double pressure, List<String> species, double[] amounts,
                                                Workspace workspace) {
-        return onset(true, Root.LIQUID, crystal, pressure, species, amounts, own(workspace));
+        return crystalOnsets.onset(true, Root.LIQUID, crystal, pressure, species, amounts, own(workspace));
     }
 
     /**
@@ -3941,237 +3944,7 @@ public final class FluidTpEquilibrium {
      */
     public DepositionOnset depositionPressure(String crystal, double temperature, List<String> species, double[] amounts,
                                               Workspace workspace) {
-        return onset(false, null, crystal, temperature, species, amounts, own(workspace));
-    }
-
-    /**
-     * @param single the root of the feed as one phase whose chemical potential the search uses ({@link Root#LIQUID}:
-     *        the freezing point, {@link Root#VAPOR}: the frost point of the gas as one phase), or {@code null} for the
-     *        fluid answer of the whole feed (the onset functions of P4)
-     */
-    private DepositionOnset onset(boolean temperatureSearch, Root single, String crystalId, double fixed, List<String> species,
-                                  double[] amounts, Workspace w) {
-        boolean freezing = single == Root.LIQUID;
-        if (!(fixed > 0.0) || !Double.isFinite(fixed)) throw new IllegalArgumentException("The fixed temperature or pressure must be positive");
-        var request = EquilibriumRequest.tp(temperatureSearch ? 200.0 : fixed, temperatureSearch ? fixed : 1.0e5, species, amounts,
-                PhaseCompetition.FLUID_AND_CRYSTALS);
-        EquilibriumResult refused = contractChecks(request, w);
-        if (refused == null) refused = implementationChecks(Specification.TP, w.competition, w);
-        if (refused == null && w.activeCount == 0) {
-            refused = unsupported(Specification.TP, w.competition, UnsupportedReason.PHASE_COMPETITION_NOT_QUALIFIED,
-                    "package " + contract.packageId() + " admits no crystal");
-        }
-        if (refused != null) {
-            return DepositionOnset.without(refused.status(), refused.reason(), refused.detail(), crystalId,
-                    Double.NaN, Double.NaN, Double.NaN, 0);
-        }
-        PhaseCompetition competition = w.competition;
-        Crystal c = null;
-        for (int a = 0; a < w.activeCount; a++) {
-            Crystal k = w.active[a];
-            if (!(w.request.amounts[k.component()] > 0.0) || crystalId != null && !k.id().equals(crystalId)) continue;
-            if (c != null) throw new IllegalArgumentException("Several competing crystals are made of carried species; name one");
-            c = k;
-        }
-        if (c == null) {
-            throw new IllegalArgumentException("No competing crystal" + (crystalId == null ? "" : " " + crystalId)
-                    + " is made of a carried species");
-        }
-        int i = c.component();
-        double y = w.request.amounts[i] / w.hydrocarbonTotal;
-        // The window: the numerical box below the competition's ceiling, where its crystals cease to exist (owner rule of
-        // 2026-10-16: the models continue past their data ranges).
-        double tLow = NumericalBox.MINIMUM_TEMPERATURE;
-        double tHigh = Math.min(NumericalBox.MAXIMUM_TEMPERATURE, crystalCeiling(w));
-        double pLow = NumericalBox.MINIMUM_PRESSURE;
-        double pHigh = NumericalBox.MAXIMUM_PRESSURE;
-        var anchor = c.anchored().anchor();
-        double temperature = temperatureSearch ? Double.NaN : fixed;
-        double pressure = temperatureSearch ? fixed : Double.NaN;
-        // The fixed variable inside the window.
-        if (temperatureSearch ? pressure < pLow || pressure > pHigh : temperature < tLow || temperature > tHigh) {
-            String detail = temperatureSearch ? "the pressure " + pressure + " Pa lies outside the numerical box " + pLow + " .. " + pHigh + " Pa"
-                    : "the temperature " + temperature + " K lies outside the window " + tLow + " .. " + tHigh
-                    + " K (the numerical box below the ceiling of " + competition + ", where its crystals cease to exist)";
-            return DepositionOnset.without(EquilibriumResult.Status.NOT_CONVERGED, null, detail, c.id(), temperature, pressure, Double.NaN, 0);
-        }
-        // The partial-pressure approximation, a diagnostic: the pure sublimation line at y_i P, or p_sub(T)/y_i.
-        double approximation = Double.NaN;
-        if (temperatureSearch) {
-            if (y * pressure <= anchor.pressure()) {
-                double estimate = crystalStepTemperature(y * pressure, Double.NaN, c, Root.VAPOR, w);
-                if (estimate <= anchor.temperature()) approximation = estimate;
-            }
-        } else if (temperature <= anchor.temperature()) {
-            double sublimation = crystalStepPressure(temperature, Double.NaN, c, Root.VAPOR, w);
-            if (sublimation > 0.0) approximation = sublimation / y;
-        }
-        double xLow = temperatureSearch ? 1.0 / tHigh : DeterministicMath.log(pLow);
-        double xHigh = temperatureSearch ? 1.0 / tLow : DeterministicMath.log(pHigh);
-        // A pressure search without an approximation starts at the top of the package's data, inside the box.
-        double xStart = temperatureSearch ? xLow : Math.min(xHigh, DeterministicMath.log(contract.domain().envelope()[3]));
-        double x;
-        if (freezing) {
-            // The ideal-solubility estimate of the liquidus (a start only).
-            approximation = Double.NaN;
-            double fusion = c.fusionEnthalpy();
-            double start = 1.0 / (1.0 / c.tripleTemperature() - R * DeterministicMath.log(Math.min(y, 1.0)) / fusion);
-            x = Double.isFinite(start) && start > 0.0 ? Math.clamp(1.0 / start, xLow, xHigh) : xLow;
-        } else if (Double.isFinite(approximation) && (temperatureSearch ? approximation >= tLow && approximation <= tHigh
-                : approximation >= pLow && approximation <= pHigh)) {
-            x = temperatureSearch ? 1.0 / approximation : DeterministicMath.log(approximation);
-        } else {
-            x = xStart;
-        }
-        double negative = Double.NaN;
-        double positive = Double.NaN;
-        double negativeValue = Double.NaN;
-        double positiveValue = Double.NaN;
-        double previousX = Double.NaN;
-        double previousD = Double.NaN;
-        int evaluations = 0;
-        EquilibriumResult fluid;
-        double d;
-        while (true) {
-            if (evaluations >= ONSET_EVALUATIONS) {
-                return DepositionOnset.without(EquilibriumResult.Status.NOT_CONVERGED, null, "the onset search of " + c.id()
-                        + " did not converge in " + evaluations + " fluid equilibria", c.id(), temperature, pressure,
-                        approximation, evaluations);
-            }
-            double t = temperatureSearch ? 1.0 / x : temperature;
-            double p = temperatureSearch ? pressure : DeterministicMath.exp(x);
-            if (single != null) {
-                fluid = null;
-                d = singlePhaseDrive(t, p, c, single, w);
-                evaluations++;
-                if (Double.isNaN(d)) {
-                    return DepositionOnset.without(EquilibriumResult.Status.NOT_CONVERGED, null, "the liquid at " + t + " K, " + p
-                            + " Pa of the freezing search of " + c.id() + " was refused by the equation of state", c.id(),
-                            temperature, pressure, approximation, evaluations);
-                }
-            } else {
-                fluid = fluidAnswer(t, p, competition, w);
-                evaluations++;
-                if (!fluid.converged()) {
-                    return DepositionOnset.without(EquilibriumResult.Status.NOT_CONVERGED, null, "the fluid equilibrium at " + t + " K, "
-                            + p + " Pa of the onset search of " + c.id() + ": " + fluid.detail(), c.id(), temperature, pressure,
-                            approximation, evaluations);
-                }
-                d = (fluidChemicalPotential(fluid, i) - c.anchored().chemicalPotential(t, p)) / (R * t);
-            }
-            if (Math.abs(d) <= DEPOSITION_TOLERANCE) break;
-            if (d > 0.0) {
-                positive = x;
-                positiveValue = d;
-            } else {
-                negative = x;
-                negativeValue = d;
-            }
-            boolean bracketed = !Double.isNaN(positive) && !Double.isNaN(negative);
-            if (bracketed && Math.abs(positive - negative) <= (temperatureSearch ? 1.0e-13 * x : 1.0e-13)) {
-                if (Math.abs(negativeValue) < Math.abs(positiveValue)) x = negative; else x = positive;
-                t = temperatureSearch ? 1.0 / x : temperature;
-                p = temperatureSearch ? pressure : DeterministicMath.exp(x);
-                if (single != null) {
-                    d = singlePhaseDrive(t, p, c, single, w);
-                    evaluations++;
-                    break;
-                }
-                fluid = fluidAnswer(t, p, competition, w);
-                evaluations++;
-                if (!fluid.converged()) continue;
-                d = (fluidChemicalPotential(fluid, i) - c.anchored().chemicalPotential(t, p)) / (R * t);
-                break;
-            }
-            double slope = Double.NaN;
-            if (!Double.isNaN(previousX) && previousX != x) slope = (d - previousD) / (x - previousX);
-            if (!(slope > 0.0) || !Double.isFinite(slope)) {
-                slope = temperatureSearch
-                        ? (evaluator.idealGas(i).enthalpy(t) - c.anchored().properties(t, p).enthalpy()) / R : 1.0;
-            }
-            previousX = x;
-            previousD = d;
-            double next = x - d / slope;
-            if (bracketed) {
-                double a = Math.min(positive, negative);
-                double b = Math.max(positive, negative);
-                if (!(next > a && next < b)) next = 0.5 * (a + b);
-            } else {
-                double cap = temperatureSearch ? 0.2 * x : PRESSURE_STEP_CAP;
-                next = x + Math.clamp(next - x, -cap, cap);
-                if (!Double.isFinite(next)) next = x;
-                if (d < 0.0 && x >= xHigh || d > 0.0 && x <= xLow) {
-                    // The onset lies beyond the window: colder (or denser) than its end without a crystal, or warmer (or
-                    // more dilute) than its other end with one.
-                    boolean beyondHigh = d < 0.0;
-                    // x = 1/T: beyond xHigh is below tLow; x = ln P: beyond xHigh is above pHigh.
-                    boolean below = temperatureSearch == beyondHigh;
-                    String detail = "the onset of " + c.id() + " lies " + (below ? "below" : "above") + " the "
-                            + (temperatureSearch ? "temperature window " + tLow + " .. " + tHigh + " K" : "pressure window " + pLow + " .. "
-                            + pHigh + " Pa") + " (the numerical box below the ceiling of " + competition + ")";
-                    return DepositionOnset.without(EquilibriumResult.Status.NOT_CONVERGED, null, detail, c.id(),
-                            temperature, pressure, approximation, evaluations);
-                }
-                next = Math.clamp(next, xLow, xHigh);
-            }
-            x = next;
-        }
-        double t = temperatureSearch ? 1.0 / x : temperature;
-        double p = temperatureSearch ? pressure : DeterministicMath.exp(x);
-        if (single != null) {
-            fluid = fluidAnswer(t, p, competition, w);
-            evaluations++;
-            if (!fluid.converged()) {
-                return DepositionOnset.without(EquilibriumResult.Status.NOT_CONVERGED, null, "the fluid equilibrium at the one-phase onset "
-                        + t + " K, " + p + " Pa of " + c.id() + ": " + fluid.detail(), c.id(), t, p, approximation, evaluations);
-            }
-        }
-        if (fluid.classification() == Classification.LIQUID_LIQUID) {
-            String detail = EquilibriumResult.CRYSTAL_PHASES + ": the onset of " + c.id() + " at " + t + " K, " + p + " Pa lies where the"
-                    + " fluid is two liquids; that phase set beside a crystal is not implemented";
-            return DepositionOnset.without(EquilibriumResult.Status.UNSUPPORTED, UnsupportedReason.NOT_IMPLEMENTED, detail, c.id(),
-                    t, p, approximation, evaluations);
-        }
-        EquilibriumResult atOnset = graded(assessed(fluid, "onset of " + c.id() + ": |mu_i - mu_s|/RT = " + Math.abs(d), w), c, w);
-        String kind = freezing
-                ? holdsLiquid(fluid) && fluid.phases().size() == 1 ? "a liquidus point (the liquid is the stable fluid, " + fluid.classification() + ")"
-                        : "a liquidus point of the liquid as one phase (the stable fluid of the feed there is " + fluid.classification() + ")"
-                : single != null ? !holdsLiquid(fluid) ? "a frost point (the gas is the stable fluid, " + fluid.classification() + ")"
-                        : "a frost point of the gas as one phase (the stable fluid of the feed there is " + fluid.classification() + ")"
-                : holdsLiquid(fluid) ? fluid.phases().size() > 1 ? "a three-phase point (the fluid is " + fluid.classification() + ")"
-                        : "a liquidus point (the fluid is " + fluid.classification() + ")" : "a frost point (the fluid is " + fluid.classification() + ")";
-        String detail = "onset of " + c.id() + " at " + t + " K, " + p + " Pa by fugacity (" + evaluations + " fluid equilibria), "
-                + kind + (freezing ? "" : "; the partial-pressure approximation " + approximation + (temperatureSearch ? " K" : " Pa")
-                + " is a diagnostic, not the answer");
-        var coverage = new EquilibriumResult.Coverage(atOnset.coverage().grade(), atOnset.coverage().evidence()
-                + "; onset by fugacity" + (freezing ? "" : ", the partial-pressure approximation a diagnostic"));
-        return new DepositionOnset(EquilibriumResult.Status.CONVERGED, null, detail, c.id(), t, p, approximation, Math.abs(d),
-                evaluations, atOnset, coverage);
-    }
-
-    /**
-     * {@code (mu_i - mu_s)/(R T)} of the feed as one phase at (t, p) on {@code root} (its only root where it has one), the
-     * function of the freezing and one-phase frost searches (P5); {@code NaN} when the equation of state refuses the state.
-     */
-    private double singlePhaseDrive(double t, double p, Crystal c, Root root, Workspace w) {
-        try {
-            PhaseState phase = evaluator.evaluate(t, p, w.request.amounts, root, w.phases, w.liquidScratch);
-            w.kernelEvaluations++;
-            return (phase.chemicalPotential(c.component()) - c.anchored().chemicalPotential(t, p)) / (R * t);
-        } catch (IllegalArgumentException | IllegalStateException | ArithmeticException refused) {
-            return Double.NaN;
-        }
-    }
-
-    /** The fluid answer of the workspace's material at (t, p) with the crystals left out (onset searches). */
-    private EquilibriumResult fluidAnswer(double t, double p, PhaseCompetition competition, Workspace w) {
-        int active = w.activeCount;
-        w.activeCount = 0;
-        try {
-            return evaluateTp(t, p, competition, w);
-        } finally {
-            w.activeCount = active;
-        }
+        return crystalOnsets.onset(false, null, crystal, temperature, species, amounts, own(workspace));
     }
 
     private String species(int component) { return evaluator.components().get(component); }
@@ -4180,7 +3953,7 @@ public final class FluidTpEquilibrium {
 
     /** Takes the request's amounts over the contract basis (owner decision O2: a request names the basis, in order) and
      * applies the water-chemistry and competition rules. */
-    private EquilibriumResult contractChecks(EquilibriumRequest request, Workspace w) {
+    EquilibriumResult contractChecks(EquilibriumRequest request, Workspace w) {
         Specification specification = request.specification();
         PhaseCompetition competition = request.competition();
         if (!request.species().equals(contract.components())) {
@@ -4240,15 +4013,15 @@ public final class FluidTpEquilibrium {
     }
 
     EquilibriumResult converged(PhaseCompetition competition, Classification classification,
-                                        List<PhaseAmounts> phases, List<PhaseState> coexisting, Diagnostics diagnostics,
-                                        String band) {
+                                List<PhaseAmounts> phases, List<PhaseState> coexisting, Diagnostics diagnostics,
+                                String band) {
         return converged(competition, classification, phases, coexisting, diagnostics, band, null);
     }
 
     /** @param note appended to the detail (a coexistence solved from a balance, P3 WP6b), or null */
     EquilibriumResult converged(PhaseCompetition competition, Classification classification,
-                                        List<PhaseAmounts> phases, List<PhaseState> coexisting, Diagnostics diagnostics,
-                                        String band, String note) {
+                                List<PhaseAmounts> phases, List<PhaseState> coexisting, Diagnostics diagnostics,
+                                String band, String note) {
         EquilibriumResult.Coverage coverage = band == null ? convergedCoverage
                 : new EquilibriumResult.Coverage(EquilibriumResult.CoverageGrade.RESEARCH_ONLY,
                         contract.fluidCoverage().evidence() + "; " + band + ": research-only"
@@ -4259,8 +4032,8 @@ public final class FluidTpEquilibrium {
                 contract.identity(), competition, classification, phases, coexisting, coverage, diagnostics);
     }
 
-    private EquilibriumResult unsupported(Specification specification, PhaseCompetition competition,
-                                          UnsupportedReason reason, String detail) {
+    EquilibriumResult unsupported(Specification specification, PhaseCompetition competition,
+                                  UnsupportedReason reason, String detail) {
         return EquilibriumResult.unsupported(specification, contract.identity(), competition, reason, detail);
     }
 
