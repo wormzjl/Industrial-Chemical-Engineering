@@ -421,6 +421,7 @@ flowchart TD
 | Fluid evaluator and conventions | `CubicPhaseEvaluator` (and the kernel's `TranslatedCubic.residualOnly`, material `SpinePackageData`) | `CubicPhaseEvaluatorTest`, `SpinePackageEvaluatorTest` |
 | Solid contract | `SolidPhaseEvaluator`, `CrystalFugacity` | `SolidPhaseEvaluatorTest`, `CrystalPhaseEvaluatorTest` |
 | Cache identity | `ThermoIdentity`, `PhaseContract.forDerived` | `ThermoIdentityTest`, `SpinePackageEvaluatorTest` |
+| Layers (C1b) | the imports and qualified names of `science/thermo/**` and `science/math` | `ThermoLayeringTest` (plain reading of `src/main/java`) |
 | Numerical box | `NumericalBox` | fluid `RangeContinuationGateTest` |
 | How the network calls the engine | fluid-science: `NetworkPhaseEngine`, `FluidThermodynamics` | `science/fluid/thermo/NetworkPhaseEngineTest`, `SpineNetworkPathTest`, `science/fluid/network/CrystalDepositionIslandTest`, `CrystalFlushBudgetTest`, `LiquidFullBubblePointTest` |
 

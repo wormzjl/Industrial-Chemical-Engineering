@@ -6,7 +6,7 @@ import com.wormzjl.icheme.science.thermo.PengRobinsonKernel;
  * Steam as a second-virial gas (2026-10-28; option B of
  * {@code documentation/2026-10-27-heat-exchanger-design/OWNER_TEST_REVIEW.md}, section 5): the residual of IAPWS-IF97
  * Region 2 truncated to its five terms linear in pressure ({@code I = 1}). The V3 column's steam reads its residual
- * enthalpy and heat capacity; the fluid network's water share ({@link com.wormzjl.icheme.science.thermo.phase.WaterShare}) reads its {@code B(T)} and slope.
+ * enthalpy and heat capacity; the fluid network's water share (the engine's {@code WaterShare}) reads its {@code B(T)} and slope.
  *
  * <p>The model. {@code v = R T / p + B(T)}, with {@code B(T) = (R T / p*) sum n_i (tau - 0.5)^J_i},
  * {@code p* = 1 MPa} and {@code tau = 540 K / T}: the low-pressure limit of Region 2's volume. Its residual properties at
