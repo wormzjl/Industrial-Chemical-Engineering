@@ -59,3 +59,19 @@ Lane: `runtime/**` except `runtime/fluid/ShaftTrains.java`, `PumpHealth.java`, `
 3. **R10** last: it changes the tick a display is published on (wire timing only). List the GameTests that pin a publish tick.
 
 Tests: the rows' own; `PresentationBucketTest`, `IslandSchedulerTest` (holdGates), `BoundedCpuSolveServiceTest`. GameTests are the main thread's lane.
+
+## B-M1 Machines (thread wave-a3, Opus medium)
+
+Lane: `runtime/fluid/ShaftTrains.java`, `ElectricStores.java`, `Ejectors.java`, and in `runtime/fluid/WorldTopologyLedger.java` only the shaft and store accessors (`shafts`, `shaft`, `stores`, 485 to 503) with the position index M-09 needs; their tests. The rest of `runtime/**` is B-R1's. Review: MACHINES_REVIEW M-08, M-09, M-10, M-11, M-18. B1: with 20 certified trains `WorldTopologyLedger.shafts()` (`Map.copyOf`) is 92 % of the bytes and `ShaftTrains.decide` walks its `TreeMap` every tick; the cost is 11 µs per 100 ticks today and linear in units.
+
+Items, in order, as their rows: M-09 (publish the stepped train's members only; the ledger gives an unmodifiable view and a position index; no use may come to depend on a map's iteration order), M-08 (one `out` map and one walk, the overwrite precedence kept, which now includes wave A's M-04 rule in `failures`), M-10, M-11, M-18. M-01 and M-07 (the step result carries each mover's shaft power) are decided but not in this round: they wait for B-S1, which changes the step's result type.
+
+Tests: the rows' own (`ShaftPlanTest`, `ShaftCouplingTest`, `WorldTopologyLedgerTest`, `SteamEjectorRuntimeTest`, `PumpHealthTest`). Counter for the report: bytes allocated per 100 ticks for a rig of certified trains before and after (ThreadMXBean, as `tools/codebase-review-bench/MachineBench.java` reads them; read its numbers from PROFILE_REVIEW for "before").
+
+## B-E1 Equipment geometry (thread wave-a2, Opus medium)
+
+Lane: `science/equipment/**`, the caches E13 lists in `client/**` (only the cache fields and their eviction), their tests. Review: EQUIPMENT_REVIEW E11, E12, E13.
+
+Items, in order, as their rows: E12 (the built-unit cache keyed by the shape with its front set to north; first confirm in the code that no design reads `front`), E11 (a designed unit's drawing built once per detail level when `drawing` is on; the server path unchanged), E13 (one `BoundedCache`, least recently used, bounded by weight, in place of the 22 caches that clear everything when full). Every geometry, mesh and layout stays bit for bit: a cache changes when a value is built, never the value. E13 pitfall: a cache read on the render thread and on a worker needs the same thread safety its old form had; say for each of the 22 which threads read it.
+
+Tests: `EquipmentLayoutGoldenTest`, the facet-area tests, `EquipmentShapeCompatTest` (`equipmentGates`). Counter for the report: builds per designed unit per geometry (E11: one in place of two or three), cache entries per heading (E12: one in place of four), rebuilds when a 65th shape enters view (E13).
