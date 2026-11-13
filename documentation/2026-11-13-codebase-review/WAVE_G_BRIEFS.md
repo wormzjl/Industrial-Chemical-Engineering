@@ -42,3 +42,10 @@ Lane: `runtime/fluid/PumpHealth.java` (renamed `MachineHealth.java` with `git mv
    - Tests: `WearTest` (the intensity at `q_s` 0, 0.15, 0.3 and 1; the class rule with two erosion faults; the lives), `MachineHealthTest` (a casing pump against a closed discharge loses `1/(8 h)` of health per process second and its word is `LOW FLOW`; a set-flow pump and a stopped pump lose none; a pump at 15 % that also cavitates wears at the larger term).
 
 Report: `wave-g/G1_REPORT.md`, with the lines for the CHANGELOG (the two lives' wider meaning, N5's moved lives, N1 as a new way to wear a pump and the player's fix: open the discharge, add a minimum-flow recycle, or switch the pump off).
+
+## Amendments (main thread, 2026-11-13)
+
+1. **G0, after `wave-a5`'s reading of the code** (no pump, compressor or machine work is booked as a transfer; only the aggregate pump work is). Decision A2 and B1:
+   - No array in `PassiveIntervalSolver.Result`, no state format change, no file outside G0's lane. The driver is charged through the solve's own function, made reachable (the suction's heat-capacity ratio and the wet factor), at the booked average flow and heads. The two errors go (k = 1.4, no wet factor); what is left is sub-step variation in a transient, zero at a steady state. "To the last bit" in item 3 and in the test is withdrawn; the test states its bound.
+   - Gas movers are charged the shaft power the solve's function gives, the work on a centrifugal machine's recycle flow included (a stated loss: the recycle's heat). Liquid movers are charged the fluid's work over the efficiency: a `Machine`'s law at the point, as today; a set-flow pump's booked `q Δp` over a named `SET_FLOW_PUMP_EFFICIENCY` (.65), because the solve books only the ideal work (simplification S1). The in-line set-flow compressor loses its `/ .65`: its power is already over its efficiency.
+   - The report lists the three stated losses (pump hydraulic loss, recycle work, motor and drive efficiency).
