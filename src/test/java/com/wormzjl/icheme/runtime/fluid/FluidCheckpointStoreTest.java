@@ -127,6 +127,7 @@ class FluidCheckpointStoreTest extends CertifyingRig.Islands {
                 var x=a.certificate().orElseThrow();var y=b.certificate().orElseThrow();
                 assertEquals(List.of(x.drift(),x.sinceTick(),x.baseTick(),x.horizonTick(),x.largestFlow()),List.of(y.drift(),y.sinceTick(),y.baseTick(),y.horizonTick(),y.largestFlow()),what);
                 var s=x.saved().orElseThrow();var t=y.saved().orElseThrow();assertEquals(s.signature(),t.signature(),what);
+                assertEquals(IslandCertificate.REPLAY_REVISION,t.signature().replay(),what+": a current certificate reads back its declared replay revision");
                 assertEquals(s.interval().startTick(),t.interval().startTick(),what);assertEquals(s.interval().endTick(),t.interval().endTick(),what);
                 assertInventories(s.interval().before(),t.interval().before(),what+" certified interval start");assertInventories(s.interval().result().graph(),t.interval().result().graph(),what+" base");
                 assertArrayEquals(s.interval().result().averageMassFlows(),t.interval().result().averageMassFlows(),what);
@@ -325,7 +326,7 @@ class FluidCheckpointStoreTest extends CertifyingRig.Islands {
             var result=new PassiveIntervalSolver.Result(relabel.apply(r.graph()),r.advancedSeconds(),r.averageMassFlows(),r.acceptedSubsteps(),r.rejectedSubsteps(),r.pumpWorkJoule(),
                     r.boundaries().stream().map(b->new ConservativeTransport.BoundaryTransfer(node,b.moles(),b.totalEnergyJoule(),b.solids(),b.solidDirection())).toList(),r.rejectionReasons(),r.endpointModes(),r.endpointHeads(),r.endpointFlows(),r.pipeTransfers());
             var copy=new IslandCertificate.Saved(saved.sinceTick(),saved.horizonTick(),new IslandCertificate.Interval(saved.interval().startTick(),saved.interval().endTick(),relabel.apply(saved.interval().before()),result),
-                    IslandCertificate.Signature.of(model,policy,result.graph()));
+                    IslandCertificate.Signature.of(model,policy));
             snapshots.add(new IslandCoordinator.Snapshot(id,0,relabel.apply(t.graph()),t.clock(),Optional.of(result),t.status(),Map.of(),
                     Optional.of(new IslandCoordinator.Certified(certified.drift(),certified.sinceTick(),certified.baseTick(),certified.horizonTick(),certified.largestFlow(),Optional.of(copy)))));
         }

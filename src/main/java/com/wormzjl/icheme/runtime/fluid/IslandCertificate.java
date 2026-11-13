@@ -4,10 +4,6 @@ import com.wormzjl.icheme.science.fluid.SimulationTime;
 import com.wormzjl.icheme.science.fluid.network.*;
 import com.wormzjl.icheme.science.fluid.state.SolidInventory;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.*;
 
 /**
@@ -312,32 +308,44 @@ public final class IslandCertificate {
     // ---------------- persistence (plan section 3.5) ----------------
 
     /**
+     * The revision of what replay takes as fixed about an island and of how a saved certificate's interval is read back
+     * (AGENTS.md, "Saves and data formats": an identity is a declared revision). Bump it when a change alters what a
+     * replayed island holds fixed (the laws, settings or node facts a replay carries over from its interval's graph), or
+     * when the saved interval's decoding changes so that a restored certificate would replay another result than the one it
+     * was issued with. A saved certificate of another replay revision is discarded on load and its island keeps its
+     * inventory. Saves before this constant carry a 64-digit graph digest here (identity 10 and older), which is never a
+     * declared revision. A token of letters, digits, {@code _}, {@code .} and {@code -}, at most 32 characters (the
+     * checkpoint's field, {@link FluidCheckpointCodec#replayField}).
+     */
+    public static final String REPLAY_REVISION="replay-1";
+
+    /**
      * The validity signature of a certificate: the model's full property revision ({@link FluidThermodynamics#revision},
      * which also carries the velocity clamp, the trace cutoff and the solid settings), the six certificate policy values
-     * it was issued under, and a SHA-256 digest of its island's graph identity - node ids, kinds, elevations and finite
-     * volumes, fixed-node inventories and states, and pipe identities with their sections, controls, blocked masks, end
-     * ports and filters. Replay repeats one solved interval of one graph under one model and one policy, so a certificate holds
-     * only under the signature it was issued with; a saved one whose signature is not its island's current one is
-     * discarded on load and the island keeps its inventory.
+     * it was issued under, and the {@link #REPLAY_REVISION replay revision} of the code that issued it. Replay repeats one
+     * solved interval of one graph under one model and one policy, so a certificate holds only under the signature it was
+     * issued with; a saved one whose signature is not its island's current one is discarded on load and the island keeps
+     * its inventory. A change of the graph while the island runs (a topology event, a setting, a device edit, a partner's
+     * commit) ends the certificate where it happens, never through the signature.
      */
-    public record Signature(String propertyRevision,String policy,String graph) {
+    public record Signature(String propertyRevision,String policy,String replay) {
         /** The longest property revision: the model's carries the package's fluid identity twice (its thermodynamics and its
          * viscosity), each at most {@link com.wormzjl.icheme.science.material.MaterialCatalog#MAX_IDENTITY}, and its tags. */
         static final int MAXIMUM_PROPERTY_REVISION=1<<16;
         public Signature {
-            Objects.requireNonNull(propertyRevision);Objects.requireNonNull(policy);Objects.requireNonNull(graph);
-            if(propertyRevision.isBlank()||propertyRevision.length()>MAXIMUM_PROPERTY_REVISION||policy.isBlank()||policy.length()>512||!graph.matches("[0-9a-f]{64}"))
+            Objects.requireNonNull(propertyRevision);Objects.requireNonNull(policy);Objects.requireNonNull(replay);
+            if(propertyRevision.isBlank()||propertyRevision.length()>MAXIMUM_PROPERTY_REVISION||policy.isBlank()||policy.length()>512||!replay.matches("[A-Za-z0-9_.-]{1,64}"))
                 throw new IllegalArgumentException("Invalid certificate signature");
         }
-        /** The signature a certificate of this graph gets under this model and policy. */
-        public static Signature of(FluidThermodynamics model,CertificatePolicy policy,PassiveNetwork graph) {
-            return new Signature(model.revision(),policyValues(policy),graphIdentity(graph));
+        /** The signature a certificate gets under this model and policy from this code. */
+        public static Signature of(FluidThermodynamics model,CertificatePolicy policy) {
+            return new Signature(model.revision(),policyValues(policy),REPLAY_REVISION);
         }
         /** Which part of this signature differs from {@code current}, or null when none does. */
         public String difference(Signature current) {
             if(!propertyRevision.equals(current.propertyRevision))return "property revision";
             if(!policy.equals(current.policy))return "certificate policy ("+policy+" when saved, "+current.policy+" now)";
-            if(!graph.equals(current.graph))return "graph identity";
+            if(!replay.equals(current.replay))return "replay revision";
             return null;
         }
     }
@@ -347,83 +355,6 @@ public final class IslandCertificate {
                 +";inventoryBudget="+Double.toHexString(policy.inventoryBudget())+";maximumIntervals="+policy.maximumIntervals()
                 +";confirmIntervals="+policy.confirmIntervals()+";recheckSeconds="+policy.recheckSeconds();
     }
-    /** A heat side's controller (W4): absent, or its target, value, low limit and manual effort. */
-    private static void control(Digest d,com.wormzjl.icheme.science.fluid.network.HeatControl control) {
-        if(control==null){d.integer(0);return;}
-        d.integer(1);d.text(control.target().name());d.real(control.value());d.real(control.lowLimit());d.real(control.manual());
-    }
-    /** The digest of what replay takes to be fixed about an island: everything but its finite inventories and states. */
-    static String graphIdentity(PassiveNetwork graph) {
-        var d=new Digest();d.text("icheme-certificate-graph-identity-10");d.integer(graph.reservoirs().size());
-        for(var node:graph.reservoirs()) {
-            d.number(node.id());d.text(node.kind().name());d.real(node.elevation());
-            // A junction's volume is a numerical placeholder that a solve may move; a vessel's is its identity.
-            if(!node.junction()){d.real(node.inventory().volume());d.text(node.inventory().geometry().toString());d.integer(node.inventory().open()?1:0);d.integer(node.inventory().rigid()?1:0);}
-            var tower=node.inventory().tower();d.text(tower==null?"":tower.toString());
-            // A kettle's pool's facts and slice inputs (W7): a replay holds them fixed.
-            var pool=node.inventory().pool();
-            if(pool==null)d.integer(0);
-            else{d.integer(1);d.number(pool.id());d.number(pool.partner());d.real(pool.area());d.real(pool.bottom());d.real(pool.bundle());d.integer(pool.cells());for(double t:pool.wall())d.real(t);d.real(pool.giveBack());d.real(pool.active());
-                // A still's column head (batch 2026-11-09-batch-distiller, W3): a slice input a replay holds fixed. Named only
-                // where there is one, so the signatures of kettles saved before it stand (within identity 9).
-                var head=pool.head();if(head!=null){d.integer(2);for(double r:head.recovery())d.real(r);d.real(head.returnEnthalpy());}}
-            if(node.fixed()) {
-                var inventory=node.inventory();d.integer(inventory.moles().length);for(double n:inventory.moles())d.real(n);
-                d.real(inventory.internalEnergy());d.solids(inventory.solids());d.real(node.state().temperature());d.real(node.state().pressure());
-            }
-        }
-        d.integer(graph.pipes().size());
-        for(var pipe:graph.pipes()) {
-            d.number(pipe.id());d.integer(pipe.first());d.integer(pipe.second());d.integer(pipe.sections().size());
-            for(var section:pipe.sections()){d.real(section.length());d.real(section.diameter());d.real(section.roughness());d.real(section.minorLoss());d.integer(section.channels());}
-            switch(pipe.control()) {
-                case FlowControl.Passive ignored->d.text("passive");
-                case FlowControl.Turbine turbine->{d.text("turbine");d.real(turbine.design().ratedPower());d.real(turbine.design().efficiency());d.real(turbine.massTarget());}
-                case FlowControl.Pump pump->{d.text("pump");d.real(pump.requestedVolumeFlow());d.real(pump.maximumAddedPressure());d.integer(pump.enabled()?1:0);}
-                case FlowControl.Compressor compressor->{d.text("compressor");d.real(compressor.requestedVolumeFlow());d.real(compressor.maximumPressureRatio());d.integer(compressor.enabled()?1:0);}
-                case FlowControl.Ejector ejector->{d.text("ejector");d.real(ejector.design().suction());d.real(ejector.motivePressure());d.real(ejector.delivered());}
-                case FlowControl.Machine machine when machine.law() instanceof com.wormzjl.icheme.science.machine.VacuumPump vacuum->{d.text("vacuum_pump");d.text(vacuum.type().name());d.real(vacuum.capacity());d.real(vacuum.ratedSpeed());d.real(machine.speed());d.integer(machine.enabled()?1:0);}
-                case FlowControl.Machine machine->{var law=machine.law();d.text("machine");d.integer(law.liquid()?1:0);d.real(law.ratedFlow());d.real(law.ratedHead());d.real(law.efficiency());if(law instanceof com.wormzjl.icheme.science.machine.CentrifugalPump pump)d.real(pump.ratedSpeed());d.real(machine.speed());d.integer(machine.enabled()?1:0);}
-                case FlowControl.PressureValve valve->{d.text("valve");d.real(valve.targetPressure());}
-                case FlowControl.ControlValve valve->{d.text("control_valve");d.text(valve.source().name());d.real(valve.target());d.text(String.valueOf(valve.sensor()));d.number(valve.revision());d.real(valve.targetPressure());d.real(valve.massTarget());d.real(valve.volumeTarget());}
-            }
-            d.integer(pipe.blockedDirections());d.integer(pipe.forbiddenDirections());d.real(pipe.actuatorArea());
-            // A heat side's or fired coil's facts and slice inputs (batch 2026-10-27-heat-exchanger-design): a replay holds them fixed.
-            switch(pipe.heat()){
-                case null->d.integer(0);
-                case com.wormzjl.icheme.science.fluid.network.HeatSide side->{d.integer(1);d.real(side.area());d.real(side.films().liquid());d.real(side.films().twoPhase());d.real(side.films().gas());
-                    d.integer(side.wall().length);for(double t:side.wall())d.real(t);d.real(side.bypass());d.real(side.giveBack());d.number(side.partner());d.real(side.active());
-                    control(d,side.control());d.integer(side.limit().ordinal());d.text(side.routing().name());}
-                case com.wormzjl.icheme.science.fluid.network.AirCooled cooled->{var air=cooled.air();d.integer(3);d.real(cooled.area());d.real(air.temperature());d.real(air.barePerFace());d.real(air.film());d.real(air.capacity());d.real(air.natural());
-                    d.real(cooled.draught());control(d,cooled.control());d.integer(cooled.limit().ordinal());
-                    // Fans without power (W5): a held fan limit is part of the law, named only below 1 (older signatures stand).
-                    if(cooled.fanLimit()<1)d.real(cooled.fanLimit());}
-                case com.wormzjl.icheme.science.fluid.network.ConvectionCoil coil->{d.integer(4);d.real(coil.conductance());d.number(coil.radiant());d.real(coil.flue());}
-                case com.wormzjl.icheme.science.fluid.network.ExhaustCoil coil->{d.integer(5);d.real(coil.gasInlet());d.real(coil.flue());}
-                case com.wormzjl.icheme.science.fluid.network.FiredCoil coil->{d.integer(2);d.real(coil.setTemperature());d.number(coil.partner());d.real(coil.duty());d.real(coil.firing());
-                    // The burners short of fuel or air (batch 2026-11-09-furnace-fuel-power): named only below 1 (older signatures stand).
-                    if(coil.limit()<1)d.real(coil.limit());}
-            }
-            // What each end draws (PassiveNetwork.PhasePort): it changes the equations, so a replay holds only under it.
-            d.integer(pipe.firstPort().ordinal());d.integer(pipe.secondPort().ordinal());
-            var filter=pipe.filter();
-            if(filter==null)d.text("no filter");
-            else{d.text("filter");d.real(filter.capacity());d.real(filter.cleanResistance());d.integer(filter.stoppedAtCapacity()?1:0);d.solids(filter.captured());d.real(filter.energyJoule());}
-        }
-        return d.hex();
-    }
-    /** A canonical SHA-256 stream: every value with its exact bits, every text with its length. */
-    private static final class Digest {
-        private final MessageDigest sha;private final ByteBuffer buffer=ByteBuffer.allocate(8);
-        Digest(){try{sha=MessageDigest.getInstance("SHA-256");}catch(NoSuchAlgorithmException impossible){throw new AssertionError(impossible);}}
-        void number(long value){buffer.clear();buffer.putLong(value);sha.update(buffer.array(),0,8);}
-        void integer(int value){number(value);}
-        void real(double value){number(Double.doubleToRawLongBits(value));}
-        void text(String value){var bytes=value.getBytes(StandardCharsets.UTF_8);integer(bytes.length);sha.update(bytes);}
-        void solids(SolidInventory solids){integer(solids.populations().size());for(var p:solids.populations()){text(p.material().id());text(p.size().metres());real(p.massKg());}}
-        String hex(){return HexFormat.of().formatHex(sha.digest());}
-    }
-
     /**
      * A certificate as a checkpoint keeps it: the tick its island first certified (a renewal keeps it), its horizon,
      * the solved interval it replays together with the graph that interval started from, and the signature it was
@@ -436,7 +367,7 @@ public final class IslandCertificate {
                 throw new IllegalArgumentException("Saved certificate needs 0 <= since <= base < horizon: since "+sinceTick+", base "+interval.endTick()+", horizon "+horizonTick);
         }
         public long baseTick(){return interval.endTick();}
-        @Override public String toString(){return "Saved[since "+sinceTick+", base "+baseTick()+", horizon "+horizonTick+", "+signature.graph().substring(0,12)+"]";}
+        @Override public String toString(){return "Saved[since "+sinceTick+", base "+baseTick()+", horizon "+horizonTick+", "+signature.replay()+"]";}
     }
     /**
      * The replay arithmetic of a saved certificate, rebuilt from its interval without judging whether it still holds:
@@ -466,7 +397,7 @@ public final class IslandCertificate {
      */
     static Restored restore(Saved saved,FluidThermodynamics model,CertificatePolicy policy) {
         if(!policy.enabled())return new Restored(null,"certificates are off (restDetection=false)");
-        String difference=saved.signature().difference(Signature.of(model,policy,saved.interval().result().graph()));
+        String difference=saved.signature().difference(Signature.of(model,policy));
         if(difference!=null)return new Restored(null,"its "+difference+" changed");
         var rebuilt=rebuild(saved,model.molecularWeights(),model.time());
         var issued=issue(rebuilt.summary,policy);
