@@ -72,7 +72,7 @@ public final class StillHead {
         int n=model.hydrocarbon.componentCount();
         var pot=job.pot();
         if(pot.length!=n+1)return new Failed("basis mismatch");
-        var column=new StillColumn(model,job.pressure());
+        var column=new StillColumn(new NetworkStageThermo(model),job.pressure());
         // The column's basis: the whole pot where the model carries water, else its compounds (water's share then 1).
         int carried=column.componentCount();
         var inPot=java.util.Arrays.copyOf(pot,carried);

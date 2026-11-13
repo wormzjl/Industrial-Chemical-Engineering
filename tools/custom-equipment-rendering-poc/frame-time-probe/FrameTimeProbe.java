@@ -875,7 +875,7 @@ public final class FrameTimeProbe {
         var marks = com.wormzjl.icheme.science.equipment.ShapeRasterizer.marks(shape);
         return switch (kind) {
             case 0 -> new FluidNetwork.FlareState(target, com.wormzjl.icheme.runtime.fluid.Flares.Status.FLARING.ordinal(), 1f, 0f, .7f, 80f);
-            case 1 -> new FluidNetwork.StillState(target, shape.still().heater().ordinal(), com.wormzjl.icheme.science.fluid.network.BatchStill.Status.DISTILLING.ordinal(), 1f, true, true);
+            case 1 -> new FluidNetwork.StillState(target, shape.still().heater().ordinal(), com.wormzjl.icheme.science.plant.still.BatchStill.Status.DISTILLING.ordinal(), 1f, true, true);
             case 2 -> {
                 boolean natural = shape.kind() == com.wormzjl.icheme.science.equipment.EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER;
                 float w = .036f, air = (float) (1.1 * (natural ? 4 : 9) * area(marks, natural ? "throat" : "fan_exhaust_") / (1 + w));

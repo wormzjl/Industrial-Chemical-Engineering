@@ -5,6 +5,7 @@ import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.material.PilotAqueousTestCatalog;
 import com.wormzjl.icheme.science.plant.still.BatchStill;
+import com.wormzjl.icheme.science.plant.still.NetworkStageThermo;
 import com.wormzjl.icheme.science.plant.still.StillHead;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -134,7 +135,7 @@ class StillHeadTest {
             0.0, 0.0, 0.0, 0.0, 0.0};
         assertEquals(model.hydrocarbon.componentCount() + 1, pot.length, "the network's basis, water last");
         double outlet = 303.15, diameter = BatchStill.columnDiameter(new BatchStill.Design(.5, BatchStill.Heater.SOLID, true, 4).rating());
-        assertFalse(new StillColumn(model, BatchStill.ATMOSPHERIC).solve(pot, 4, 1, outlet, null).converged(), "the trays do not solve here");
+        assertFalse(new StillColumn(new NetworkStageThermo(model), BatchStill.ATMOSPHERIC).solve(pot, 4, 1, outlet, null).converged(), "the trays do not solve here");
         var outcome = StillHead.run(new StillHead.Job(pot, 388.212694, BatchStill.ATMOSPHERIC, 4, 1, null, diameter, outlet), model, () -> {
         });
         var solved = assertInstanceOf(StillHead.Solved.class, outcome, () -> "the single stage answers: " + outcome);
