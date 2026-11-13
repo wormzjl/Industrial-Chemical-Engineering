@@ -20,7 +20,7 @@ import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.NozzleBore;
 import com.wormzjl.icheme.science.equipment.Paint;
 import com.wormzjl.icheme.science.equipment.PipeSizes;
-import com.wormzjl.icheme.science.equipment.ProcessUnit;
+import com.wormzjl.icheme.science.equipment.UnitDesign;
 import com.wormzjl.icheme.science.equipment.ShapeRasterizer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -221,7 +221,7 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
                 CLIENT_PORTS.add(this);
                 break;
             }
-        if (!shape.unit() || !ProcessUnit.moves(shape.kind())) return;
+        if (!shape.unit() || !UnitDesign.of(shape.kind()).moves()) return;
         var parts = ShapeRasterizer.moving(shape);
         var here = new ArrayList<Integer>();
         for (int k = 0; k < parts.size(); k++) {

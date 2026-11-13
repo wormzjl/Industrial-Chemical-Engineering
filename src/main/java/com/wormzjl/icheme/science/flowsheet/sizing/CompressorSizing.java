@@ -8,6 +8,7 @@ import com.wormzjl.icheme.science.flowsheet.FlowThermo;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.fluid.transport.MixtureViscosity;
 import com.wormzjl.icheme.science.math.DeterministicMath;
+import com.wormzjl.icheme.science.equipment.design.UnitRatings;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -53,7 +54,7 @@ public final class CompressorSizing {
 
         /** What the whole frame takes at its inlet, m³/h. */
         double frame() {
-            return type == UnitType.PISTON ? ProcessUnit.displacement(size, length) : ProcessUnit.turboFlow(size);
+            return type == UnitType.PISTON ? UnitRatings.displacement(size, length) : ProcessUnit.turboFlow(size);
         }
 
         /** The stages it runs {@code ratio} in. */
@@ -65,7 +66,7 @@ public final class CompressorSizing {
 
         /** What it takes at its inlet in {@code stages} stages, m³/h: a piston's first stage has only its share of the pairs. */
         double displacement(int stages) {
-            return type == UnitType.PISTON ? ProcessUnit.displacement(size, 2 * (length / 2 / stages)) : frame();
+            return type == UnitType.PISTON ? UnitRatings.displacement(size, 2 * (length / 2 / stages)) : frame();
         }
 
         @Override public EquipmentShape shape() {

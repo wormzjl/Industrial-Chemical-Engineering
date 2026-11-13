@@ -37,7 +37,7 @@ public final class StillSizing {
 
         @Override public EquipmentShape shape() {
             var kind = EquipmentShape.Kind.BATCH_STILL;
-            return UnitSize.unit(kind, pot, ProcessUnit.defaultLength(kind, pot), ProcessUnit.Bank.ONE).withStill(options);
+            return UnitSize.unit(kind, pot, UnitDesign.of(kind).defaultLength(pot), ProcessUnit.Bank.ONE).withStill(options);
         }
 
         /** The law's still of this pot. */

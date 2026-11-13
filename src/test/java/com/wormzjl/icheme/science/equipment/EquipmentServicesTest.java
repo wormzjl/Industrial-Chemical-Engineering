@@ -64,7 +64,7 @@ class EquipmentServicesTest {
     @Test
     void aFlaresDataGlandSitsCentredOnTheBottomBlock() {
         var kind = EquipmentShape.Kind.FLARE_STACK;
-        for (double tip = ProcessUnit.minDiameter(kind); tip <= ProcessUnit.maxDiameter(kind) + 1e-9; tip += com.wormzjl.icheme.science.fluid.network.Flare.TIP_STEP)
+        for (double tip = UnitDesign.of(kind).minSize(); tip <= UnitDesign.of(kind).maxSize() + 1e-9; tip += com.wormzjl.icheme.science.fluid.network.Flare.TIP_STEP)
             for (var heading : EquipmentShape.Heading.values()) {
                 var shape = EquipmentShape.designed(kind, tip, 1, heading, 0, ProcessUnit.Bank.ONE);
                 var services = ShapeRasterizer.services(shape);
@@ -89,10 +89,10 @@ class EquipmentServicesTest {
     @Test
     void aChimneysDataGlandSitsCentredOnTheBottomBlock() {
         for (var kind : List.of(EquipmentShape.Kind.STEEL_STACK, EquipmentShape.Kind.BRICK_CHIMNEY)) {
-            double low = ProcessUnit.minDiameter(kind), high = ProcessUnit.maxDiameter(kind);
-            for (double d : new double[] {low, ProcessUnit.snap(kind, (low + high) / 2), high})
+            double low = UnitDesign.of(kind).minSize(), high = UnitDesign.of(kind).maxSize();
+            for (double d : new double[] {low, UnitDesign.of(kind).snap((low + high) / 2), high})
                 for (var heading : EquipmentShape.Heading.values()) {
-                    var shape = EquipmentShape.designed(kind, d, ProcessUnit.defaultLength(kind, d), heading, 0, ProcessUnit.Bank.ONE);
+                    var shape = EquipmentShape.designed(kind, d, UnitDesign.of(kind).defaultLength(d), heading, 0, ProcessUnit.Bank.ONE);
                     var services = ShapeRasterizer.services(shape);
                     var data = services.data();
                     assertNotNull(data, shape.toString());
@@ -118,7 +118,7 @@ class EquipmentServicesTest {
     void aStillsDataGlandSitsCentredOnItsBox() {
         var kind = EquipmentShape.Kind.BATCH_STILL;
         var stills = new ArrayList<EquipmentShape>();
-        for (double litres : ProcessUnit.sizes(kind)) stills.add(EquipmentShape.unit(kind, litres, 1, EquipmentShape.Heading.NORTH, 0));
+        for (double litres : UnitDesign.of(kind).sizes()) stills.add(EquipmentShape.unit(kind, litres, 1, EquipmentShape.Heading.NORTH, 0));
         stills.addAll(ProcessUnitTest.stillOptions());
         for (var still : stills)
             for (var heading : EquipmentShape.Heading.values()) {

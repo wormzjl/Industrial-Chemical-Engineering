@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.science.equipment;
 
 import com.wormzjl.icheme.science.equipment.EquipmentShape.Orientation;
+import com.wormzjl.icheme.science.equipment.design.UnitRatings;
 
 import java.util.List;
 
@@ -60,13 +61,13 @@ final class KettleDesign extends UnitDesign {
     @Override
     public Line held(EquipmentShape shape) {
         double d = shape.diameter();
-        return new Line("kettle_surface", size(ProcessUnit.kettleShell(d)), number(ProcessUnit.tubeSurface(d, shape.tangentLength())));
+        return new Line("kettle_surface", size(UnitRatings.kettleShell(d)), number(UnitRatings.tubeSurface(d, shape.tangentLength())));
     }
 
     @Override
     public List<Line> datasheet(EquipmentShape shape) {
         double d = shape.diameter(), tubes = shape.tangentLength();
-        return List.of(new Line("bundle", size(d), size(ProcessUnit.kettleShell(d))), new Line("tubes", number(tubes), number(ProcessUnit.tubeSurface(d, tubes))));
+        return List.of(new Line("bundle", size(d), size(UnitRatings.kettleShell(d))), new Line("tubes", number(tubes), number(UnitRatings.tubeSurface(d, tubes))));
     }
 
     @Override

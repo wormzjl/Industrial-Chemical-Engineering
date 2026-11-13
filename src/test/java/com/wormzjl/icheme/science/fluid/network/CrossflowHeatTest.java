@@ -115,7 +115,7 @@ class CrossflowHeatTest {
             for (int length = (int) Math.ceil(3 * d); length <= 12; length++)
                 for (var pair : pairs) {
                     double area =
-                            com.wormzjl.icheme.science.equipment.ProcessUnit.tubeSurface(d, length);
+                            com.wormzjl.icheme.science.equipment.design.UnitRatings.tubeSurface(d, length);
                     double hot = pair[0].enthalpyAt(420), cold = pair[1].enthalpyAt(290);
                     var coarse = rate(pair[0], hot, 100, pair[1], cold, 150, area, 8);
                     var fine = rate(pair[0], hot, 100, pair[1], cold, 150, area, 16);

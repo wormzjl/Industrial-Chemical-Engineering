@@ -30,6 +30,7 @@ import com.wormzjl.icheme.science.fluid.network.HeatCurve;
 import com.wormzjl.icheme.science.fluid.solver.PhaseLayout;
 import com.wormzjl.icheme.science.machine.Motor;
 import com.wormzjl.icheme.science.machine.SteamEjector;
+import com.wormzjl.icheme.science.equipment.design.UnitRatings;
 
 /**
  * The sizing stage's limits, one row a limit (batch 2026-11-02-process-simulator, {@code SIZING_PLAN.md} sections 3.3, 3.4 and
@@ -331,7 +332,7 @@ public enum Limit {
 
     private static double largestHeater(EquipmentShape.Kind kind) {
         var design = UnitDesign.of(kind);
-        return ProcessUnit.heaterDuty(kind, design.maxSize(), design.maxLength(design.maxSize()));
+        return UnitRatings.heaterDuty(kind, design.maxSize(), design.maxLength(design.maxSize()));
     }
 
     private static Bound size(EquipmentShape.Kind kind) {

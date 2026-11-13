@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.science.equipment;
 
 import com.wormzjl.icheme.science.equipment.EquipmentShape.Orientation;
+import com.wormzjl.icheme.science.equipment.design.UnitRatings;
 
 import java.util.List;
 
@@ -62,7 +63,7 @@ final class CabinHeaterDesign extends UnitDesign {
 
     @Override
     public Line held(EquipmentShape shape) {
-        return new Line("heater_duty", number(ProcessUnit.heaterDuty(EquipmentShape.Kind.CABIN_HEATER, shape.diameter(), shape.tangentLength())));
+        return new Line("heater_duty", number(UnitRatings.heaterDuty(EquipmentShape.Kind.CABIN_HEATER, shape.diameter(), shape.tangentLength())));
     }
 
     @Override
@@ -70,7 +71,7 @@ final class CabinHeaterDesign extends UnitDesign {
         double d = shape.diameter(), length = shape.tangentLength();
         int cells = ProcessUnit.cabinCells(length);
         return List.of(new Line("radiant.cabin_heater" + (cells > 1 ? ".twin" : ""), size(d), number(length / cells)),
-                new Line("duty", number(ProcessUnit.heaterDuty(EquipmentShape.Kind.CABIN_HEATER, d, length))));
+                new Line("duty", number(UnitRatings.heaterDuty(EquipmentShape.Kind.CABIN_HEATER, d, length))));
     }
 
     @Override

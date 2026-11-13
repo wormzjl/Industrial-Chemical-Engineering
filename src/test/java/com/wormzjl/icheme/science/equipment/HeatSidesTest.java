@@ -3,6 +3,7 @@ package com.wormzjl.icheme.science.equipment;
 import com.wormzjl.icheme.science.fluid.network.ConvectionCoil;
 import com.wormzjl.icheme.science.fluid.network.FiredCoil;
 import com.wormzjl.icheme.science.fluid.network.PipeResistance;
+import com.wormzjl.icheme.science.equipment.design.UnitRatings;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -57,9 +58,9 @@ class HeatSidesTest {
                 EquipmentShape.unit(EquipmentShape.Kind.KETTLE,2,10,EquipmentShape.Heading.NORTH,2)}) {
             var sides=HeatSides.of(shape);
             assertEquals(1,sides.size(),shape.toString());assertEquals(HeatSides.Side.TUBE,sides.getFirst().side());
-            assertEquals(ProcessUnit.tubeSurface(shape.diameter(),shape.tangentLength()),sides.getFirst().area(),1e-9);
+            assertEquals(UnitRatings.tubeSurface(shape.diameter(),shape.tangentLength()),sides.getFirst().area(),1e-9);
             assertTrue(HeatSides.pool(shape.kind())&&shape.fluidDevice());
-            double dk=ProcessUnit.kettleShell(shape.diameter()),length=.9*shape.tangentLength()+.3;
+            double dk=UnitRatings.kettleShell(shape.diameter()),length=.9*shape.tangentLength()+.3;
             assertEquals(Math.PI*dk*dk*length/4+Math.PI*dk*dk*dk/12,shape.volume(),1e-9,shape.toString());assertEquals(dk,shape.levelHeight(),1e-12);
             var cells=ShapeRasterizer.fluidCells(shape);
             assertEquals(2,cells.size());assertNotEquals(cells.get(0),cells.get(1));
@@ -91,7 +92,7 @@ class HeatSidesTest {
         var sides=HeatSides.of(bay);
         assertEquals(1,sides.size());var side=sides.getFirst();
         assertEquals(HeatSides.Side.PROCESS,side.side());assertEquals(EquipmentShape.Role.PROCESS_INLET,side.inlet());assertEquals(EquipmentShape.Role.PROCESS_OUTLET,side.outlet());
-        double face=ProcessUnit.bundleFace(3,6);
+        double face=UnitRatings.bundleFace(3,6);
         assertEquals(5*face,side.area(),1e-9);
         // 174 tubes of 21.2 mm bore, 6 m, two header turns: water at 1.5 m/s loses about 10 kPa.
         assertEquals(174,side.passage().channels());assertEquals(6,side.passage().length());
@@ -112,7 +113,7 @@ class HeatSidesTest {
     @Test void aFiredHeatersCoilsShareItsDatasheetDuty() {
         for(var shape:new EquipmentShape[]{EquipmentShape.unit(EquipmentShape.Kind.VERTICAL_HEATER,4,8,EquipmentShape.Heading.NORTH,3),
                 EquipmentShape.unit(EquipmentShape.Kind.CABIN_HEATER,6,12,EquipmentShape.Heading.WEST,3)}) {
-            var sides=HeatSides.of(shape);double duty=1e6*ProcessUnit.heaterDuty(shape.kind(),shape.diameter(),shape.tangentLength());
+            var sides=HeatSides.of(shape);double duty=1e6*UnitRatings.heaterDuty(shape.kind(),shape.diameter(),shape.tangentLength());
             assertEquals(2,sides.size());assertTrue(shape.fluidDevice());
             var convection=sides.get(0);var radiant=sides.get(1);
             assertEquals(HeatSides.Side.CONVECTION,convection.side());assertEquals(EquipmentShape.Role.CONVECTION_INLET,convection.inlet());assertEquals(EquipmentShape.Role.CONVECTION_OUTLET,convection.outlet());
@@ -128,7 +129,7 @@ class HeatSidesTest {
             var convectionCoil=assertInstanceOf(ConvectionCoil.class,HeatSides.heatSide(HeatSides.Unit.FIRED_HEATER,HeatSides.Side.CONVECTION,convection.area(),0,573.15,8,null));
             assertEquals(54.9*convection.area(),convectionCoil.conductance(),1e-9*duty);assertEquals(8,convectionCoil.radiant());assertEquals(0,convectionCoil.flue(),"no flue gas until planned");
         }
-        assertEquals(6.29e6,1e6*ProcessUnit.heaterDuty(EquipmentShape.Kind.VERTICAL_HEATER,4,8),1e4);
+        assertEquals(6.29e6,1e6*UnitRatings.heaterDuty(EquipmentShape.Kind.VERTICAL_HEATER,4,8),1e4);
         // A 10 MW heater's radiant coil: one pass of 380 m, about 1 bar of oil at 2 m/s; 40 MW takes five passes.
         var coil=HeatSides.heaterPassage(200,10);
         assertEquals(1,coil.channels());assertEquals(379,coil.length(),1);

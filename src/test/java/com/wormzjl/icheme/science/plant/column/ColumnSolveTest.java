@@ -12,6 +12,7 @@ import com.wormzjl.icheme.science.equipment.HeatSides;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
+import com.wormzjl.icheme.science.equipment.design.UnitRatings;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -515,7 +516,7 @@ class ColumnSolveTest {
                 for (int parallel = 1; parallel <= ProcessUnit.Bank.MAX_PARALLEL; parallel++)
                     for (int series = 1; series <= ProcessUnit.Bank.MAX_SERIES; series++) {
                         var bank = new ProcessUnit.Bank(parallel, series);
-                        double surface = banks * HeatSides.airCoolerSurface(bay[0], (int) bay[1], bank), face = bank.bays() * ProcessUnit.bundleFace(bay[0], (int) bay[1]);
+                        double surface = banks * HeatSides.airCoolerSurface(bay[0], (int) bay[1], bank), face = bank.bays() * UnitRatings.bundleFace(bay[0], (int) bay[1]);
                         if (surface >= held && (found == null || face < found[1] || face == found[1] && bank.bays() < found[2]))
                             found = new double[] {banks, face, bank.bays(), surface, bay[0], bay[1], parallel, series};
                     }

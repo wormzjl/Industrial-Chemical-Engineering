@@ -8,6 +8,7 @@ import com.wormzjl.icheme.science.flowsheet.FlowStream;
 import com.wormzjl.icheme.science.flowsheet.FlowThermo;
 import com.wormzjl.icheme.science.flowsheet.unit.ExchangerRating;
 import com.wormzjl.icheme.science.fluid.transport.MixtureViscosity;
+import com.wormzjl.icheme.science.equipment.design.UnitRatings;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -50,7 +51,7 @@ public final class AirCoolerSizing {
 
         /** One bank's bundle face, m². */
         public double face() {
-            return bank.bays() * ProcessUnit.bundleFace(width, length);
+            return bank.bays() * UnitRatings.bundleFace(width, length);
         }
 
         /** All its banks' bare surface, m². */

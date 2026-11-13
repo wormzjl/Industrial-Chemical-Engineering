@@ -22,6 +22,7 @@ import com.wormzjl.icheme.science.equipment.ProcessUnit;
 import com.wormzjl.icheme.science.equipment.ShapeRasterizer;
 import com.wormzjl.icheme.science.equipment.UnitDesign;
 import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler;
+import com.wormzjl.icheme.science.plant.machine.MachineRatings;
 import com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity;
 import com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity;
 import net.minecraft.commands.CommandSourceStack;
@@ -236,7 +237,7 @@ public final class EquipmentStructure {
         if (vessel.shape().kind() == EquipmentShape.Kind.EJECTOR) {
             // A steam ejector set on its curve at its suction's cell (batch 2026-11-10-steam-ejector-flow): no shaft.
             FluidWorldAuthority.find(level.getServer()).ifPresent(world -> {
-                var record = world.placeMachine(position(level, node), TopologyCompiler.Kind.EJECTOR, ports(level, vessel), ejectorControl(vessel.shape()));
+                var record = world.placeMachine(position(level, node), TopologyCompiler.Kind.EJECTOR, ports(level, vessel), MachineRatings.ejectorControl(vessel.shape()));
                 if (level.getBlockEntity(node) instanceof EquipmentShellBlockEntity entity) entity.bindIdentity(record.device().id());
             });
             return;
@@ -268,7 +269,7 @@ public final class EquipmentStructure {
             // A casing on its curve, a frame at its displacement, a turbine on its steam (W3): each turns with its shaft train.
             var kind = turbine(vessel.shape()) ? TopologyCompiler.Kind.TURBINE : vessel.shape().kind() == EquipmentShape.Kind.PUMP ? TopologyCompiler.Kind.PUMP : TopologyCompiler.Kind.COMPRESSOR;
             FluidWorldAuthority.find(level.getServer()).ifPresent(world -> {
-                var record = world.placeMachine(position(level, node), kind, ports(level, vessel), machineControl(vessel.shape()));
+                var record = world.placeMachine(position(level, node), kind, ports(level, vessel), MachineRatings.machineControl(vessel.shape()));
                 if (level.getBlockEntity(node) instanceof EquipmentShellBlockEntity entity) entity.bindIdentity(record.device().id());
                 ShaftParts.structure(level, vessel.origin(), vessel.shape(), record.device().id());
             });
@@ -1548,60 +1549,27 @@ public final class EquipmentStructure {
         ShaftParts.structure(level, vessel.origin(), vessel.shape(), device.id());
     }
 
-    /** A steam ejector's control (batch 2026-11-10-steam-ejector-flow): its curve from its suction bore, no motive until its first slice. */
-    static com.wormzjl.icheme.science.fluid.network.FlowControl.Ejector ejectorControl(EquipmentShape shape) {
-        return new com.wormzjl.icheme.science.fluid.network.FlowControl.Ejector(new com.wormzjl.icheme.science.machine.SteamEjector(shape.diameter()));
-    }
-
     /** Whether a shape registers as a steam turbine (W3, reading A37). */
     private static boolean turbine(EquipmentShape shape) {
         return shape.kind() == EquipmentShape.Kind.STEAM_TURBINE;
     }
 
     /**
-     * A shaft-driven machine's control from its shape's design point (W3, readings A3 and A32): a pump on its curve at its
-     * duty, with Corripio's efficiency; a centrifugal compressor on its curve at its rating, efficiency 0.78; a reciprocating
-     * frame at its displacement; a steam turbine at its rated power and its size's efficiency. A machine's speed is its train's.
-     */
-    static com.wormzjl.icheme.science.fluid.network.FlowControl machineControl(EquipmentShape shape) {
-        return switch (shape.kind()) {
-            case PUMP -> {
-                var r = UnitDesign.pumpRating(shape);
-                yield new com.wormzjl.icheme.science.fluid.network.FlowControl.Machine(new com.wormzjl.icheme.science.machine.CentrifugalPump(r[0], r[1],
-                        com.wormzjl.icheme.science.machine.CentrifugalPump.bestEfficiency(r[0]), UnitDesign.designSpeed(shape)), 0, true);
-            }
-            case CENTRIFUGAL_COMPRESSOR -> {
-                var r = UnitDesign.compressorRating(shape);
-                yield new com.wormzjl.icheme.science.fluid.network.FlowControl.Machine(new com.wormzjl.icheme.science.machine.CentrifugalCompressor(r[0], r[1], .78), 0, true);
-            }
-            case COMPRESSOR -> new com.wormzjl.icheme.science.fluid.network.FlowControl.Compressor(frameDisplacement(shape), 3, true);
-            // A vacuum pump casing (batch 2026-11-10-vacuum-pump): its model's curve, on the machine row at its train's speed.
-            case LIQUID_RING_PUMP, DRY_SCREW_PUMP -> new com.wormzjl.icheme.science.fluid.network.FlowControl.Machine(UnitDesign.vacuumPump(shape), 0, true);
-            case STEAM_TURBINE -> new com.wormzjl.icheme.science.fluid.network.FlowControl.Turbine(com.wormzjl.icheme.science.machine.SteamTurbine.rated(Math.max(1e3, UnitDesign.ratedPower(shape))));
-            default -> throw new IllegalArgumentException("Not a shaft-driven machine: " + shape.kind());
-        };
-    }
-
-    private static double frameDisplacement(EquipmentShape shape) {
-        return Math.max(1e-4, Math.min(com.wormzjl.icheme.science.fluid.network.FlowControl.Mover.MAXIMUM_VOLUME_FLOW, UnitDesign.displacement(shape)));
-    }
-
-    /**
      * The control a casing saved before W3 takes at its restore (reading A29), or null when it already has its own: a pump's
      * or centrifugal compressor's set-flow control becomes its machine, its set flow kept as the machine's; a frame takes
-     * its displacement, keeping its pressure ratio and switch.
+     * its displacement, keeping its pressure ratio and switch. A machine's law itself is {@link MachineRatings}' (E9).
      */
     static @Nullable com.wormzjl.icheme.science.fluid.network.FlowControl restoredControl(EquipmentShape shape, com.wormzjl.icheme.science.fluid.network.FlowControl control) {
         return switch (shape.kind()) {
             case PUMP, CENTRIFUGAL_COMPRESSOR -> {
                 if (!(control instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.Pump) && !(control instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.Compressor)) yield null;
                 var mover = (com.wormzjl.icheme.science.fluid.network.FlowControl.Mover) control;
-                var machine = (com.wormzjl.icheme.science.fluid.network.FlowControl.Machine) machineControl(shape);
+                var machine = (com.wormzjl.icheme.science.fluid.network.FlowControl.Machine) MachineRatings.machineControl(shape);
                 double set = Math.max(0, Math.min(com.wormzjl.icheme.science.fluid.network.FlowControl.Mover.MAXIMUM_VOLUME_FLOW, mover.requestedVolumeFlow()));
                 yield new com.wormzjl.icheme.science.fluid.network.FlowControl.Machine(machine.law(), 0, mover.enabled(), set, 0);
             }
-            case COMPRESSOR -> control instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.Compressor c && c.requestedVolumeFlow() != frameDisplacement(shape)
-                    ? new com.wormzjl.icheme.science.fluid.network.FlowControl.Compressor(frameDisplacement(shape), c.maximumPressureRatio(), c.enabled()) : null;
+            case COMPRESSOR -> control instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.Compressor c && c.requestedVolumeFlow() != MachineRatings.frameDisplacement(shape)
+                    ? new com.wormzjl.icheme.science.fluid.network.FlowControl.Compressor(MachineRatings.frameDisplacement(shape), c.maximumPressureRatio(), c.enabled()) : null;
             default -> null;
         };
     }
@@ -1683,7 +1651,7 @@ public final class EquipmentStructure {
                                 .then(Commands.argument("series", IntegerArgumentType.integer(1, ProcessUnit.Bank.MAX_SERIES)).executes(context -> placeUnit(context, kind, front, true, 0))))
                         .then(Commands.literal("outlet").then(Commands.argument("outlet", IntegerArgumentType.integer(0, EquipmentShape.CONNECTION_SIDES - 1))
                                 .executes(context -> placeUnit(context, kind, front, false, IntegerArgumentType.getInteger(context, "outlet"))))));
-            at.then(Commands.literal(kind.name().toLowerCase(Locale.ROOT)).then(Commands.argument("size", DoubleArgumentType.doubleArg(ProcessUnit.SUCTION_STEP, ProcessUnit.maxDiameter(kind)))
+            at.then(Commands.literal(kind.name().toLowerCase(Locale.ROOT)).then(Commands.argument("size", DoubleArgumentType.doubleArg(ProcessUnit.SUCTION_STEP, UnitDesign.of(kind).maxSize()))
                     .then(Commands.argument("length", IntegerArgumentType.integer(1, (int) EquipmentShape.MAX_TANGENT_LENGTH)).then(support))));
         }
         var unit = Commands.literal("unit").then(at);

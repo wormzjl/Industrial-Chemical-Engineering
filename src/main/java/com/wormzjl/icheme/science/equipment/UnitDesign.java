@@ -2,6 +2,7 @@ package com.wormzjl.icheme.science.equipment;
 
 import com.wormzjl.icheme.science.equipment.EquipmentShape.Kind;
 import com.wormzjl.icheme.science.equipment.EquipmentShape.Orientation;
+import com.wormzjl.icheme.science.equipment.design.UnitRatings;
 
 import java.util.EnumMap;
 import java.util.List;
@@ -12,7 +13,7 @@ import java.util.Map;
  * One kind of standalone unit (owner request 2026-10-18: eleven new units, built in parallel; batch
  * 2026-10-15-custom-equipment-rendering): its sizes, the constructor's rows, the datasheet's lines and its parts. Each
  * kind's design is its own file; {@link ProcessUnit} keeps the shared drawing kit (parts, solids, nozzles, decks,
- * ladders, moving parts) and the static sizes the game calls, which ask the kind's design.
+ * ladders, moving parts). The game asks a kind's sizes of its design: {@code UnitDesign.of(kind).minSize()}.
  *
  * <p>The sizes a player sets are the shape's {@code diameter} (the unit's main size, on {@link #sizeStep()}),
  * {@code tangentLength} (a second whole number: a length, a height or a count; 1 where the kind has none) and
@@ -104,8 +105,11 @@ public abstract class UnitDesign {
             throw new IllegalArgumentException("A machine's sizes follow its design point: " + size(duty) + " and " + length(duty) + ", not " + size + " and " + length);
     }
 
-    /** {@code value} rounded up onto a grid of {@code step} (a micrometre's rounding error kept on its step), within lo..hi. */
-    static double upTo(double value, double step, double lo, double hi) {
+    /**
+     * {@code value} rounded up onto a grid of {@code step} (a micrometre's rounding error kept on its step), within lo..hi.
+     * Public: a pump's discharge ({@code UnitRatings.pumpDischarge}) reads it.
+     */
+    public static double upTo(double value, double step, double lo, double hi) {
         double k = Math.ceil(value / step - 1e-6);
         return Math.max(lo, Math.min(hi, Math.round(k * step * 1000) / 1000.0));
     }
@@ -393,7 +397,7 @@ public abstract class UnitDesign {
         return switch (shape.kind()) {
             case MOTOR, PUMP, GENERATOR -> designSpeed(shape.kind(),duty);
             case CENTRIFUGAL_COMPRESSOR -> CentrifugalCompressorDesign.speed(shape.diameter());
-            case COMPRESSOR -> ProcessUnit.compressorSpeed(shape.diameter());
+            case COMPRESSOR -> UnitRatings.compressorSpeed(shape.diameter());
             case STEAM_TURBINE -> SteamTurbineTrain.speed(shape.diameter());
             case LIQUID_RING_PUMP, DRY_SCREW_PUMP -> VacuumPumpDesign.model(shape).speed();
             case COMBUSTION_ENGINE, GAS_TURBINE -> PrimeMoverDesign.model(shape).speed();
@@ -423,7 +427,7 @@ public abstract class UnitDesign {
     /** A pump casing's rated flow, m³/s, and head, m (W3): its duty, or without one its discharge's flow at {@code PUMP_HEAD}. */
     public static double[] pumpRating(EquipmentShape shape) {
         var duty = shape.duty();
-        return new double[]{(duty.flow() > 0 ? duty.flow() : ProcessUnit.pumpFlow(shape.diameter())) / 3600, duty.head() > 0 ? duty.head() : ProcessUnit.PUMP_HEAD};
+        return new double[]{(duty.flow() > 0 ? duty.flow() : UnitRatings.pumpFlow(shape.diameter())) / 3600, duty.head() > 0 ? duty.head() : UnitRatings.PUMP_HEAD};
     }
 
     /** A vacuum pump casing's law, its model's type, capacity and design speed (batch 2026-11-10-vacuum-pump). */
@@ -457,7 +461,7 @@ public abstract class UnitDesign {
 
     /** A reciprocating frame's displacement at its design speed, m³/s (W3). */
     public static double displacement(EquipmentShape shape) {
-        return ProcessUnit.displacement(shape.diameter(), (int) shape.tangentLength()) / 3600;
+        return UnitRatings.displacement(shape.diameter(), (int) shape.tangentLength()) / 3600;
     }
 
     /** A centrifugal compressor's rated polytropic head, J/kg, and inlet flow, m³/s, from its design point (W3). */

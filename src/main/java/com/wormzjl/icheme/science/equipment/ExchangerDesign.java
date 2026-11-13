@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.science.equipment;
 
 import com.wormzjl.icheme.science.equipment.EquipmentShape.Orientation;
+import com.wormzjl.icheme.science.equipment.design.UnitRatings;
 
 import java.util.List;
 
@@ -59,7 +60,7 @@ final class ExchangerDesign extends UnitDesign {
 
     @Override
     public Line held(EquipmentShape shape) {
-        return new Line("surface", number(ProcessUnit.tubeSurface(shape.diameter(), shape.tangentLength())));
+        return new Line("surface", number(UnitRatings.tubeSurface(shape.diameter(), shape.tangentLength())));
     }
 
     @Override
@@ -70,7 +71,7 @@ final class ExchangerDesign extends UnitDesign {
     @Override
     public List<Line> datasheet(EquipmentShape shape) {
         double d = shape.diameter(), tubes = shape.tangentLength();
-        return List.of(new Line("shell", size(d)), new Line("tubes", number(tubes), number(ProcessUnit.tubeSurface(d, tubes))));
+        return List.of(new Line("shell", size(d)), new Line("tubes", number(tubes), number(UnitRatings.tubeSurface(d, tubes))));
     }
 
     @Override

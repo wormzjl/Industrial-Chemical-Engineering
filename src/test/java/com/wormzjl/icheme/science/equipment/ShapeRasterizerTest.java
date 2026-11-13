@@ -205,8 +205,8 @@ class ShapeRasterizerTest {
     }
 
     private static EquipmentShape leastUnit(Kind kind) {
-        double d = ProcessUnit.minDiameter(kind);
-        int length = ProcessUnit.minLength(kind, d);
+        double d = UnitDesign.of(kind).minSize();
+        int length = UnitDesign.of(kind).minLength(d);
         return EquipmentShape.designed(kind, d, length, Heading.NORTH, ProcessUnit.minSupport(kind, d, length), ProcessUnit.Bank.ONE);
     }
 

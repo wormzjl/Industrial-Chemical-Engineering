@@ -32,14 +32,14 @@ class EquipmentLayoutGoldenTest {
             shapes.add(EquipmentShape.column(diameter, ColumnTrays.simple(20, 10), Heading.NORTH, EquipmentShape.minimumSkirt(diameter)));
         for (var kind : Kind.values()) {
             if (!kind.designed()) continue;
-            double low = ProcessUnit.minDiameter(kind), high = ProcessUnit.maxDiameter(kind);
-            for (double diameter : new double[]{low, ProcessUnit.snap(kind, (low + high) / 2), high}) {
-                int length = ProcessUnit.defaultLength(kind, diameter);
+            double low = UnitDesign.of(kind).minSize(), high = UnitDesign.of(kind).maxSize();
+            for (double diameter : new double[]{low, UnitDesign.of(kind).snap((low + high) / 2), high}) {
+                int length = UnitDesign.of(kind).defaultLength(diameter);
                 shapes.add(EquipmentShape.designed(kind, diameter, length, Heading.NORTH, ProcessUnit.defaultSupport(kind, diameter, length), ProcessUnit.Bank.ONE, 0));
             }
         }
         for (double diameter : new double[]{.5, 1.5, 2.5}) {
-            int length = ProcessUnit.defaultLength(Kind.EXCHANGER, diameter);
+            int length = UnitDesign.of(Kind.EXCHANGER).defaultLength(diameter);
             shapes.add(EquipmentShape.unit(Kind.EXCHANGER, diameter, length, Heading.NORTH, ProcessUnit.defaultSupport(Kind.EXCHANGER, diameter, length))
                     .withExchangerType(ExchangerType.CROSSFLOW));
         }
@@ -60,7 +60,7 @@ class EquipmentLayoutGoldenTest {
             shapes.add(EquipmentShape.unit(Kind.STEAM_TURBINE, 3, 1, Heading.NORTH, 0).withDuty(duty));
         // The generators the table held before their range grew to 400 MW: their layouts stand.
         for (double kilowatts : new double[]{10000, 20000}) {
-            int length = ProcessUnit.defaultLength(Kind.GENERATOR, kilowatts);
+            int length = UnitDesign.of(Kind.GENERATOR).defaultLength(kilowatts);
             shapes.add(EquipmentShape.designed(Kind.GENERATOR, kilowatts, length, Heading.NORTH, ProcessUnit.defaultSupport(Kind.GENERATOR, kilowatts, length), ProcessUnit.Bank.ONE, 0));
         }
         return shapes;

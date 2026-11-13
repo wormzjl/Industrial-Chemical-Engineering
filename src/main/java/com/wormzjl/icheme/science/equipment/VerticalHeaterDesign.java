@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.science.equipment;
 
 import com.wormzjl.icheme.science.equipment.EquipmentShape.Orientation;
+import com.wormzjl.icheme.science.equipment.design.UnitRatings;
 
 import java.util.List;
 
@@ -62,14 +63,14 @@ final class VerticalHeaterDesign extends UnitDesign {
 
     @Override
     public Line held(EquipmentShape shape) {
-        return new Line("heater_duty", number(ProcessUnit.heaterDuty(EquipmentShape.Kind.VERTICAL_HEATER, shape.diameter(), shape.tangentLength())));
+        return new Line("heater_duty", number(UnitRatings.heaterDuty(EquipmentShape.Kind.VERTICAL_HEATER, shape.diameter(), shape.tangentLength())));
     }
 
     @Override
     public List<Line> datasheet(EquipmentShape shape) {
         double d = shape.diameter(), height = shape.tangentLength();
         return List.of(new Line("radiant.vertical_heater", size(d), number(height)),
-                new Line("duty", number(ProcessUnit.heaterDuty(EquipmentShape.Kind.VERTICAL_HEATER, d, height))));
+                new Line("duty", number(UnitRatings.heaterDuty(EquipmentShape.Kind.VERTICAL_HEATER, d, height))));
     }
 
     @Override

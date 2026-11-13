@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.science.equipment;
 
 import com.wormzjl.icheme.science.equipment.EquipmentShape.Orientation;
+import com.wormzjl.icheme.science.equipment.design.UnitRatings;
 
 import java.util.List;
 
@@ -29,7 +30,7 @@ final class AirCoolerDesign extends UnitDesign {
     @Override
     public int minLength(double size) {
         int length = ProcessUnit.MIN_BAY_LENGTH;
-        while (length < ProcessUnit.MAX_BAY_LENGTH && ProcessUnit.coverage(size, length) < ProcessUnit.FAN_COVERAGE) length++;
+        while (length < ProcessUnit.MAX_BAY_LENGTH && UnitRatings.coverage(size, length) < ProcessUnit.FAN_COVERAGE) length++;
         return length;
     }
 
@@ -70,7 +71,7 @@ final class AirCoolerDesign extends UnitDesign {
 
     @Override
     void check(double size, int length, int support, ProcessUnit.Bank bank) {
-        if (ProcessUnit.coverage(size, length) < ProcessUnit.FAN_COVERAGE)
+        if (UnitRatings.coverage(size, length) < ProcessUnit.FAN_COVERAGE)
             throw new IllegalArgumentException("An air cooler bay of " + size + " × " + length + " m has no room for fans covering " + ProcessUnit.FAN_COVERAGE + " of its bundle");
     }
 
@@ -87,19 +88,19 @@ final class AirCoolerDesign extends UnitDesign {
     @Override
     public Line held(EquipmentShape shape) {
         double d = shape.diameter(), length = shape.tangentLength();
-        var fans = ProcessUnit.fans(d, length);
+        var fans = UnitRatings.fans(d, length);
         int bays = shape.bank().bays();
-        return new Line("bay_face", number(bays * ProcessUnit.bundleFace(d, length)), bays * fans.count(), size(fans.diameter()));
+        return new Line("bay_face", number(bays * UnitRatings.bundleFace(d, length)), bays * fans.count(), size(fans.diameter()));
     }
 
     @Override
     public List<Line> datasheet(EquipmentShape shape) {
         double d = shape.diameter(), length = shape.tangentLength();
-        var fans = ProcessUnit.fans(d, length);
+        var fans = UnitRatings.fans(d, length);
         // The process side's bare tube surface and the fans' power at full speed (batch 2026-10-27-heat-exchanger-design).
         double surface = HeatSides.of(shape).getFirst().area();
-        return List.of(new Line("bank", shape.bank().parallel(), shape.bank().series()), new Line("bay", size(d), number(length), number(ProcessUnit.bundleFace(d, length))),
-                new Line("fans", fans.count(), size(fans.diameter()), Math.round(100 * ProcessUnit.coverage(d, length))),
+        return List.of(new Line("bank", shape.bank().parallel(), shape.bank().series()), new Line("bay", size(d), number(length), number(UnitRatings.bundleFace(d, length))),
+                new Line("fans", fans.count(), size(fans.diameter()), Math.round(100 * UnitRatings.coverage(d, length))),
                 new Line("air_side", number(surface), number(HeatSides.fanPower(surface, 1) / 1000)));
     }
 

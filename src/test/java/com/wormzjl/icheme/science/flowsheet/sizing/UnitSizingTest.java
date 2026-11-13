@@ -2,6 +2,7 @@ package com.wormzjl.icheme.science.flowsheet.sizing;
 
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
+import com.wormzjl.icheme.science.equipment.design.UnitRatings;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -449,8 +450,8 @@ final class UnitSizingTest {
         var size = new CompressorSizing.Size(UnitType.PISTON, .5, 4);
         assertEquals(1, size.stages(3));
         assertEquals(2, size.stages(8), "2.8 a stage");
-        assertEquals(ProcessUnit.displacement(.5, 4), size.displacement(1), 0);
-        assertEquals(ProcessUnit.displacement(.5, 2), size.displacement(2), 0, "its first stage has half the throws");
+        assertEquals(UnitRatings.displacement(.5, 4), size.displacement(1), 0);
+        assertEquals(UnitRatings.displacement(.5, 2), size.displacement(2), 0, "its first stage has half the throws");
         assertEquals(Math.sqrt(8), CompressorSizing.rate(gas(1000, 8), size).reading(Limit.COMPRESSOR_STAGE_PISTON).value(), 1e-12);
         assertEquals(8, CompressorSizing.rate(gas(1000, 8), new CompressorSizing.Size(UnitType.PISTON, .5, 2)).reading(Limit.COMPRESSOR_STAGE_PISTON).value(), 1e-12, "one pair is one stage");
     }

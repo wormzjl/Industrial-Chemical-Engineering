@@ -53,7 +53,7 @@ public record VesselPlacement(int forward, int right, int up) {
         }
 
         public EquipmentShape.Orientation orientation() {
-            if (designed()) return ProcessUnit.orientation(kind());
+            if (designed()) return UnitDesign.of(kind()).orientation();
             return this == LENGTHWISE || this == CROSSWISE ? EquipmentShape.Orientation.HORIZONTAL : EquipmentShape.Orientation.VERTICAL;
         }
 
