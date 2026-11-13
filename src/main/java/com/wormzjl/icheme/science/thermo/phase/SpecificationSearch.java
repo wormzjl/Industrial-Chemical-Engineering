@@ -16,6 +16,7 @@ import com.wormzjl.icheme.science.thermo.phase.CrystalSet.Crystal;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumRequest.Specification;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult.Classification;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult.Diagnostics;
+import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult.FailureKind;
 import com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium.Settings;
 import com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium.Workspace;
 import java.util.Objects;
@@ -105,6 +106,7 @@ final class SpecificationSearch {
         w.innerResult = null;
         w.innerCoexistence = false;
         w.innerFailure = null;
+        w.innerFailureKind = null;
         w.innerLooseness = 0.0;
         w.innerSlope = 1.0;
         w.innerLoose = false;
@@ -145,7 +147,7 @@ final class SpecificationSearch {
         if (result.status() == EquilibriumResult.Status.NOT_CONVERGED && !result.diagnostics().criticalBand()
                 && w.hydrocarbonTotal > 0.0 && criticalBand.inBand(t, p, w.request)) {
             Diagnostics d = result.diagnostics();
-            result = EquilibriumResult.notConverged(Specification.TP, contract.identity(), competition,
+            result = EquilibriumResult.notConverged(Specification.TP, contract.identity(), competition, result.failureKind(), true,
                     EquilibriumResult.CRITICAL_BAND + " (critical band: pure fluid near its critical point): " + result.detail(),
                     new Diagnostics(d.feedVerdict(), d.feedTangentPlaneDistance(), d.flashIterations(), d.extrapolations(),
                             d.rachfordRiceIterations(), d.lnKChange(), d.fugacityResidual(),
@@ -263,7 +265,7 @@ final class SpecificationSearch {
         int warmer = 0;
         while (true) {
             if (w.outerEvaluations >= settings.maximumOuterIterations()) {
-                return searchFailure(Specification.PH, competition, "no convergence of the PH temperature search in "
+                return searchFailure(Specification.PH, competition, FailureKind.SEARCH, "no convergence of the PH temperature search in "
                         + w.outerEvaluations + " TP equilibria (bracket " + s.lower + " .. " + s.upper + " K)", last, w);
             }
             EquilibriumResult result = outerTp(t, p, competition, w);
@@ -296,7 +298,7 @@ final class SpecificationSearch {
                         : balanceSteps.pureCoexistence(Specification.PH, t, p, target, false, competition, w);
                 if (answer != null) return outerAnswer(Specification.PH, answer, target, Double.NaN, true, null, w);
                 if (Double.isNaN(w.coexistenceX)) {
-                    return searchFailure(Specification.PH, competition, "no equal-fugacity temperature found near " + t
+                    return searchFailure(Specification.PH, competition, FailureKind.SEARCH, "no equal-fugacity temperature found near " + t
                             + " K at " + p + " Pa", result, w);
                 }
                 t = w.coexistenceX;
@@ -393,7 +395,7 @@ final class SpecificationSearch {
         if (!closed) return null;
         EquilibriumResult lever = balanceSteps.leverStep(Specification.PH, s, target, competition, w);
         if (lever != null) return outerAnswer(Specification.PH, lever, target, Double.NaN, true, null, w);
-        return searchFailure(Specification.PH, competition, crystalStepType(crystalStep) + "the specified enthalpy " + target
+        return searchFailure(Specification.PH, competition, crystalStepKind(crystalStep), crystalStepType(crystalStep) + "the specified enthalpy " + target
                 + " J lies in a step of H(T) at " + p + " Pa between " + s.lower + " and " + s.upper + " K (from "
                 + (target + s.lowerResidual) + " to " + (target + s.upperResidual) + " J): no state of the model has it",
                 s.lowerResult, w);
@@ -695,7 +697,7 @@ final class SpecificationSearch {
         int warmer = 0;
         for (int steps = 0; ; steps++) {
             if (steps >= settings.maximumOuterIterations()) {
-                return searchFailure(Specification.UV, competition, "no convergence of the UV temperature search in "
+                return searchFailure(Specification.UV, competition, FailureKind.SEARCH, "no convergence of the UV temperature search in "
                         + steps + " steps (bracket " + s.lower + " .. " + s.upper + " K)", last, w);
             }
             // An inexact volume solve while the energy is far off: a hundredth of the last relative energy residual. Not
@@ -720,7 +722,7 @@ final class SpecificationSearch {
                 if (Double.isNaN(lastT) || ++retreats > MAXIMUM_RETREATS) {
                     return w.innerResult != null
                             ? outerAnswer(Specification.UV, w.innerResult, u, v, false, w.innerFailure, w)
-                            : searchFailure(Specification.UV, competition, w.innerFailure, last, w);
+                            : searchFailure(Specification.UV, competition, w.innerFailureKind, w.innerFailure, last, w);
                 }
                 t = 0.5 * (t + lastT);
                 continue;
@@ -793,7 +795,7 @@ final class SpecificationSearch {
                 if (lever != null) return outerAnswer(Specification.UV, lever, u, v, true, null, w);
                 // A target inside a one-major feed's triple-point triangle was answered before the search (solveUv).
                 boolean crystalStep = balanceSteps.pureCrystal(w) != null && s.endHoldsSolid();
-                return searchFailure(Specification.UV, competition, crystalStepType(crystalStep) + "the specified internal energy "
+                return searchFailure(Specification.UV, competition, crystalStepKind(crystalStep), crystalStepType(crystalStep) + "the specified internal energy "
                         + u + " J lies in a step of U(T) at the specified volume between " + s.lower + " and " + s.upper + " K",
                         last, w);
             }
@@ -851,9 +853,11 @@ final class SpecificationSearch {
         w.innerResult = null;
         w.innerCoexistence = false;
         w.innerFailure = null;
+        w.innerFailureKind = null;
         for (int steps = 0; ; steps++) {
             if (steps >= settings.maximumOuterIterations()) {
                 w.innerFailure = "no convergence of the UV pressure search at " + t + " K in " + steps + " TP equilibria";
+                w.innerFailureKind = FailureKind.SEARCH;
                 return INNER_FAILED;
             }
             double p = DeterministicMath.exp(y);
@@ -862,6 +866,7 @@ final class SpecificationSearch {
                 if (Double.isNaN(lastY) || ++retreats > MAXIMUM_RETREATS) {
                     w.innerResult = result;
                     w.innerFailure = "UV search: the TP equilibrium at " + t + " K, " + p + " Pa";
+                    w.innerFailureKind = result.failureKind();
                     return INNER_FAILED;
                 }
                 y = 0.5 * (y + lastY);
@@ -876,6 +881,7 @@ final class SpecificationSearch {
                 if (answer != null) return foundOrHeld(answer, w);
                 if (Double.isNaN(w.coexistenceX)) {
                     w.innerFailure = "no equal-fugacity pressure found near " + p + " Pa at " + t + " K";
+                    w.innerFailureKind = FailureKind.SEARCH;
                     return INNER_FAILED;
                 }
                 y = w.coexistenceX;
@@ -981,6 +987,7 @@ final class SpecificationSearch {
         w.innerFailure = crystalStepType(crystalStep) + "the specified volume " + v + " m3 lies in a step of V(P) at " + t
                 + " K between " + DeterministicMath.exp(s.lower) + " and " + DeterministicMath.exp(s.upper)
                 + " Pa: no state of the model has it";
+        w.innerFailureKind = crystalStepKind(crystalStep);
         return INNER_FAILED;
     }
 
@@ -991,6 +998,11 @@ final class SpecificationSearch {
      */
     private static String crystalStepType(boolean crystalStep) {
         return crystalStep ? EquilibriumResult.CRYSTAL_STEP + ": " : "";
+    }
+
+    /** The kind beside {@link #crystalStepType}: {@link FailureKind#CRYSTAL_STEP} on the crystal step, else a search's failure. */
+    private static FailureKind crystalStepKind(boolean crystalStep) {
+        return crystalStep ? FailureKind.CRYSTAL_STEP : FailureKind.SEARCH;
     }
 
     // Results of a search.
@@ -1018,12 +1030,12 @@ final class SpecificationSearch {
                 : new EquilibriumResult.Coverage(answer.coverage().grade(), detail);
         return new EquilibriumResult(specification, answer.status(), answer.reason(), detail,
                 answer.identity(), answer.competition(), answer.classification(), answer.phases(), answer.coexisting(),
-                coverage, outer, answer.deposition());
+                coverage, outer, answer.deposition(), answer.failureKind(), answer.failedInCriticalBand());
     }
 
     /** A search that ended without an answer; inside the critical band (by its last TP answer) typed {@code CRITICAL_BAND}. */
-    private EquilibriumResult searchFailure(Specification specification, PhaseCompetition competition, String why,
-                                            EquilibriumResult last, Workspace w) {
+    private EquilibriumResult searchFailure(Specification specification, PhaseCompetition competition, FailureKind kind,
+                                            String why, EquilibriumResult last, Workspace w) {
         Diagnostics d = last == null ? Diagnostics.NONE : last.diagnostics();
         boolean band = d.criticalBand();
         String detail = band ? EquilibriumResult.CRITICAL_BAND + " (the search's last TP equilibrium lies in the critical band): "
@@ -1032,7 +1044,7 @@ final class SpecificationSearch {
                 d.extrapolations(), d.rachfordRiceIterations(), d.lnKChange(), d.fugacityResidual(),
                 d.productTangentPlaneDistance(), w.outerKernel, w.outerDerivative, d.newtonIterations(), d.tieLine(), band,
                 w.outerEvaluations, Double.NaN, false);
-        return EquilibriumResult.notConverged(specification, contract.identity(), competition, detail, outer);
+        return EquilibriumResult.notConverged(specification, contract.identity(), competition, kind, band, detail, outer);
     }
 
     /**
@@ -1043,7 +1055,7 @@ final class SpecificationSearch {
                                             PhaseCompetition competition, EquilibriumResult last, Workspace w) {
         double minimum = temperature ? w.minimumT : w.minimumP;
         double maximum = temperature ? w.maximumT : w.maximumP;
-        return searchFailure(specification, competition, what + " lies " + (below ? "below" : "above") + " the "
+        return searchFailure(specification, competition, FailureKind.SEARCH, what + " lies " + (below ? "below" : "above") + " the "
                 + (temperature ? "temperature" : "pressure") + " window " + minimum + " .. " + maximum + (temperature ? " K" : " Pa")
                 + " of the " + specification + " search (the numerical box)", last, w);
     }
@@ -1069,6 +1081,7 @@ final class SpecificationSearch {
         if (answer.converged()) return found(answer, true, w);
         w.innerResult = answer;
         w.innerFailure = answer.detail();
+        w.innerFailureKind = answer.failureKind();
         return INNER_FAILED;
     }
 

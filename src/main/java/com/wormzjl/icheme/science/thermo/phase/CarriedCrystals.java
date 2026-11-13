@@ -13,6 +13,7 @@ import com.wormzjl.icheme.science.thermo.PengRobinsonKernel.Root;
 import com.wormzjl.icheme.science.thermo.PhaseIdentification;
 import com.wormzjl.icheme.science.thermo.TangentPlaneStability;
 import com.wormzjl.icheme.science.thermo.phase.CrystalSet.Crystal;
+import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult.FailureKind;
 import com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium.Feed;
 import com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium.Workspace;
 
@@ -159,6 +160,7 @@ final class CarriedCrystals {
      */
     int beyondStandIn(double t, TangentPlaneStability.Result feed, Feed material, Workspace w) {
         String failure = w.failure;
+        FailureKind failureKind = w.failureKind;
         Feed rest = w.standInFeed;
         double[] held = w.standIn;
         for (int i = 0; i < count; i++) rest.amounts[i] = material.amounts[i] - held[i];
@@ -174,6 +176,7 @@ final class CarriedCrystals {
         if (outcome == FAILED || outcome == MERGED) {
             // The failure is the whole feed's split again; the states may hold the rest's.
             w.failure = failure;
+            w.failureKind = failureKind;
             w.ownSplit = false;
             return FAILED;
         }

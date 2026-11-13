@@ -10,6 +10,7 @@ import com.wormzjl.icheme.science.thermo.TangentPlaneStability;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumRequest.Specification;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult.Classification;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult.Diagnostics;
+import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult.FailureKind;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult.UnsupportedReason;
 import com.wormzjl.icheme.science.thermo.phase.CrystalSet.Crystal;
 import com.wormzjl.icheme.science.thermo.phase.ThreeSlotFlash.Slots;
@@ -412,7 +413,9 @@ public final class FluidTpEquilibrium {
         // Outcome of the hydrocarbon core.
         TangentPlaneStability.Result feedResult;
         Root singleRoot;
+        // The failed core's detail and its kind, written together.
         String failure;
+        FailureKind failureKind;
         double residual, productDistance;
         // The request's material, set before any calculation.
         double hydrocarbonTotal;
@@ -431,6 +434,7 @@ public final class FluidTpEquilibrium {
         EquilibriumResult innerResult;
         boolean innerCoexistence;
         String innerFailure;
+        FailureKind innerFailureKind;
         // The nested UV search's pressure solves: accepted residual, whether the last was inexact, the last secant (of one
         // classification), whether the last answer was one phase.
         double innerLooseness, innerSlope;
@@ -628,7 +632,7 @@ public final class FluidTpEquilibrium {
      */
     private EquilibriumResult outsideBox(Specification specification, double t, double p, PhaseCompetition competition) {
         if (NumericalBox.contains(t, p)) return null;
-        return EquilibriumResult.notConverged(specification, contract.identity(), competition, "the state " + t + " K, " + p
+        return EquilibriumResult.notConverged(specification, contract.identity(), competition, FailureKind.OUTSIDE_BOX, false, "the state " + t + " K, " + p
                 + " Pa lies outside the numerical box " + NumericalBox.MINIMUM_TEMPERATURE + " .. " + NumericalBox.MAXIMUM_TEMPERATURE
                 + " K, " + NumericalBox.MINIMUM_PRESSURE + " .. " + NumericalBox.MAXIMUM_PRESSURE + " Pa", Diagnostics.NONE);
     }
@@ -651,7 +655,7 @@ public final class FluidTpEquilibrium {
             return w.activeCount > 0 ? crystalEquilibrium.solveWithCrystals(t, p, competition, w) : dryCore.solveDry(t, p, competition, w.request, w);
         } catch (IllegalArgumentException | IllegalStateException | ArithmeticException refusedByModel) {
             // The equation of state refused a state (no physical root, a mechanically unstable root): no answer.
-            return EquilibriumResult.notConverged(Specification.TP, contract.identity(), competition,
+            return EquilibriumResult.notConverged(Specification.TP, contract.identity(), competition, FailureKind.REFUSED, false,
                     "evaluation refused: " + refusedByModel.getMessage(), diagnostics(w, w.feedResult, false));
         }
     }

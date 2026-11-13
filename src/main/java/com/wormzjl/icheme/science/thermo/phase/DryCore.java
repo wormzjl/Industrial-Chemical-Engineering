@@ -16,6 +16,7 @@ import com.wormzjl.icheme.science.thermo.PhaseIdentification;
 import com.wormzjl.icheme.science.thermo.TangentPlaneStability;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumRequest.Specification;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult.Classification;
+import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult.FailureKind;
 import com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium.Feed;
 import com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium.Settings;
 import com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium.Workspace;
@@ -217,7 +218,7 @@ final class DryCore {
         double seed = w.feedResult == null ? Double.NaN : w.seedDistance;
         boolean band = criticalBand.inBand(t, p, material) || w.tieLine < BAND_TIE_LINE || seed < BAND_STATIONARY_DISTANCE;
         String detail = band ? EquilibriumResult.CRITICAL_BAND + " (" + criticalBand.bandReason(t, p, material, w, seed) + "): " + w.failure : w.failure;
-        return EquilibriumResult.notConverged(Specification.TP, contract.identity(), competition,
+        return EquilibriumResult.notConverged(Specification.TP, contract.identity(), competition, w.failureKind, band,
                 detail, diagnostics(w, w.feedResult, band));
     }
 
@@ -252,6 +253,7 @@ final class DryCore {
             case UNRESOLVED -> {
                 w.failure = "the feed's stability test is unresolved (also with " + patientStability.settings().maximumIterations()
                         + " iterations per trial)";
+                w.failureKind = FailureKind.FLASH;
                 return FAILED;
             }
             case STABLE -> {

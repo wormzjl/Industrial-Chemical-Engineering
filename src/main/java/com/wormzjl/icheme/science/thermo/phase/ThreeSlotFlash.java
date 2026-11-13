@@ -22,6 +22,7 @@ import com.wormzjl.icheme.science.thermo.PengRobinsonKernel.Root;
 import com.wormzjl.icheme.science.thermo.PhaseIdentification;
 import com.wormzjl.icheme.science.thermo.SubstitutionAcceleration;
 import com.wormzjl.icheme.science.thermo.TangentPlaneStability;
+import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult.FailureKind;
 import com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium.Feed;
 import com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium.Settings;
 import com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium.Workspace;
@@ -170,6 +171,7 @@ final class ThreeSlotFlash {
                 w.failure = (worst == TangentPlaneStability.Verdict.UNSTABLE ? EquilibriumResult.UNSTABLE_PRODUCT
                         : EquilibriumResult.UNRESOLVED_PRODUCT) + ": a product of the three-slot system is not stable ("
                         + present + " phases present" + (s.reseeded ? ", after one reseed" : "") + ")";
+                w.failureKind = worst == TangentPlaneStability.Verdict.UNSTABLE ? FailureKind.UNSTABLE_PRODUCT : FailureKind.UNRESOLVED_PRODUCT;
                 return FAILED;
             }
             s.reseeded = true;
@@ -254,10 +256,12 @@ final class ThreeSlotFlash {
             if (change < settings.lnKTolerance() && s.fractionsConverged) break;
             if (!Double.isFinite(change)) {
                 w.failure = "the three-slot substitution met a non-finite ln phi";
+                w.failureKind = FailureKind.FLASH;
                 return false;
             }
             if (steps >= settings.maximumIterations()) {
                 w.failure = "no convergence of the three-slot system in " + steps + " substitution iterations (max |d ln phi| " + change + ")";
+                w.failureKind = FailureKind.FLASH;
                 return false;
             }
             plainSteps++;

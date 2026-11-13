@@ -19,6 +19,7 @@ import com.wormzjl.icheme.science.thermo.PengRobinsonKernel.Root;
 import com.wormzjl.icheme.science.thermo.PhaseIdentification;
 import com.wormzjl.icheme.science.thermo.SubstitutionAcceleration;
 import com.wormzjl.icheme.science.thermo.TangentPlaneStability;
+import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult.FailureKind;
 import com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium.Feed;
 import com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium.Settings;
 import com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium.Workspace;
@@ -71,9 +72,14 @@ final class TwoPhaseFlash {
         int outcome = attempt(t, feed, false, material, w);
         if (outcome == FAILED) {
             String first = w.failure;
+            FailureKind firstKind = w.failureKind;
             double seed = w.seedDistance;
             outcome = attempt(t, feed, true, material, w);
-            if (outcome == FAILED) w.failure = first + "; again from Wilson's K: " + w.failure;
+            if (outcome == FAILED) {
+                // The detail starts with the first attempt's failure, so it keeps that failure's kind.
+                w.failure = first + "; again from Wilson's K: " + w.failure;
+                w.failureKind = firstKind;
+            }
             w.seedDistance = seed;
         }
         return outcome;
@@ -138,6 +144,7 @@ final class TwoPhaseFlash {
             }
             if (steps >= settings.maximumIterations()) {
                 w.failure = "no convergence in " + steps + " substitution iterations (max |d ln K| " + change + ")";
+                w.failureKind = FailureKind.FLASH;
                 return FAILED;
             }
             boolean extrapolated = false;
@@ -255,6 +262,7 @@ final class TwoPhaseFlash {
             w.failure = (unstable ? EquilibriumResult.UNSTABLE_PRODUCT : EquilibriumResult.UNRESOLVED_PRODUCT) + ": a product phase is not stable (liquid "
                     + liquidCheck.verdict() + ", vapour " + vapourCheck.verdict()
                     + "): a third phase or another split; three-phase equilibrium is not implemented";
+            w.failureKind = unstable ? FailureKind.UNSTABLE_PRODUCT : FailureKind.UNRESOLVED_PRODUCT;
             return FAILED;
         }
         double residual = 0.0;
@@ -308,6 +316,7 @@ final class TwoPhaseFlash {
         if (Double.isNaN(gibbs)) {
             w.failure = "no two-phase start below the feed's Gibbs energy for the Newton finish (stationary tm "
                     + feed.minimumTangentPlaneDistance() + ")";
+            w.failureKind = FailureKind.FLASH;
             return false;
         }
         int m = material.presentCount;
@@ -327,6 +336,7 @@ final class TwoPhaseFlash {
                 liquid = differentiatePhase(t, w.liquidMoles, false, w.liquidDerivatives, w);
             } catch (IllegalStateException coalescing) {
                 w.failure = "the Newton finish met a phase at root coalescence: " + coalescing.getMessage();
+                w.failureKind = FailureKind.FLASH;
                 return false;
             }
             double largest = 0.0;
@@ -344,6 +354,7 @@ final class TwoPhaseFlash {
             if (largest < FUGACITY_TOLERANCE) break;
             if (!Double.isFinite(largest) || iteration >= settings.maximumNewtonIterations()) {
                 w.failure = "no convergence in " + w.newtonIterations + " Newton steps (max |ln f_V - ln f_L| " + largest + ")";
+                w.failureKind = FailureKind.FLASH;
                 return false;
             }
             // Scaled Hessian: s_i H_ij s_j with s_i = sqrt(v_i l_i / z_i), so the ideal part is the identity.
@@ -366,6 +377,7 @@ final class TwoPhaseFlash {
             }
             if (!shiftedSolve(material, w, m)) {
                 w.failure = "the Newton finish found no positive definite shift of the Gibbs Hessian";
+                w.failureKind = FailureKind.FLASH;
                 return false;
             }
             // Step in mole numbers, cut so that no amount shrinks below a tenth of itself.
@@ -401,6 +413,7 @@ final class TwoPhaseFlash {
             }
             if (!accepted) {
                 w.failure = "the Newton finish found no Gibbs-energy decrease (max |ln f_V - ln f_L| " + largest + ")";
+                w.failureKind = FailureKind.FLASH;
                 return false;
             }
             for (int a = 0; a < m; a++) {

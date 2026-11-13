@@ -15,6 +15,7 @@ import com.wormzjl.icheme.science.thermo.PhaseIdentification;
 import com.wormzjl.icheme.science.thermo.phase.CrystalSet.Crystal;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumRequest.Specification;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult.Classification;
+import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult.FailureKind;
 import com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium.Workspace;
 import com.wormzjl.icheme.science.thermo.phase.ThreeSlotFlash.Slots;
 import java.util.ArrayList;
@@ -446,7 +447,7 @@ final class BalanceSteps {
 
     /** The typed hold of a crystal step the near-pure rule does not answer (D21 option C, {@link EquilibriumResult#CRYSTAL_STEP}). */
     private EquilibriumResult crystalStepHold(String why, PhaseCompetition competition, Workspace w) {
-        return EquilibriumResult.notConverged(Specification.TP, contract.identity(), competition,
+        return EquilibriumResult.notConverged(Specification.TP, contract.identity(), competition, FailureKind.CRYSTAL_STEP, false,
                 EquilibriumResult.CRYSTAL_STEP + ": " + why, diagnostics(w, null, false));
     }
 
