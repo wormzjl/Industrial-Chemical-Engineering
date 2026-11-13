@@ -1,11 +1,11 @@
 package com.wormzjl.icheme.runtime.fluid;
 
-import com.wormzjl.icheme.science.flowsheet.EjectorLaw;
 import com.wormzjl.icheme.science.fluid.network.FlowControl;
 import com.wormzjl.icheme.science.fluid.network.PassiveIntervalSolver;
 import com.wormzjl.icheme.science.fluid.network.PassiveNetwork;
 import com.wormzjl.icheme.science.fluid.network.PassiveStepSolver;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
+import com.wormzjl.icheme.science.machine.EjectorLaw;
 import com.wormzjl.icheme.science.machine.SteamEjector;
 
 import java.util.ArrayList;

@@ -76,7 +76,7 @@ class SteamEjectorRuntimeTest {
             assertEquals(curve,load.massFlow(),.05*curve,"the load is the curve's volume at the suction's state");
             double expected=(top>5e3?190:64)/3600.;
             assertEquals(expected,load.massFlow(),.08*expected,"the owner's table, as nitrogen");
-            double law=com.wormzjl.icheme.science.flowsheet.EjectorLaw.steam(load.massFlow()*Math.sqrt(29/28.013),0,ejector.motivePressure(),ps,pd,1);
+            double law=com.wormzjl.icheme.science.machine.EjectorLaw.steam(load.massFlow()*Math.sqrt(29/28.013),0,ejector.motivePressure(),ps,pd,1);
             assertEquals(law,valve.massTarget(),.05*law,"the steam is the sheet's law for that load");
         }
     }

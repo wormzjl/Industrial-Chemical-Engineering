@@ -11,6 +11,7 @@ import com.wormzjl.icheme.science.flowsheet.sizing.UnitSize;
 import com.wormzjl.icheme.science.flowsheet.unit.EjectorUnit;
 import com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
+import com.wormzjl.icheme.science.machine.EjectorLaw;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.material.MaterialRuntime;
 import org.junit.jupiter.api.Test;
