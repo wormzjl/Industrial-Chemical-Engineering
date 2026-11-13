@@ -705,7 +705,8 @@ class FluidFactsCompatTest {
                     new ColumnUnit.Totals(new com.wormzjl.icheme.science.plant.column.ColumnCycle.Account(widen.apply(u.totals().taken().moles(),0.),u.totals().taken().energy()),
                             new com.wormzjl.icheme.science.plant.column.ColumnCycle.Account(widen.apply(u.totals().produced().moles(),0.),u.totals().produced().energy()),u.totals().reboiler(),u.totals().condenser(),u.totals().pumparounds()),u.condensers()));
         }
-        var wide=new FluidFacts.World(world.nextIdentity(),new WorldTopologyLedger.FluidBasis(world.basis().packageId(),ids,world.basis().revision()),registrations,total.apply(world.constructed()),total.apply(world.destroyed()),world.recoveries(),world.restated(),world.removedMovers(),columns,world.shafts(),world.stores(),world.health(),world.builds());
+        var wide=FluidFacts.World.builder().nextIdentity(world.nextIdentity()).basis(new WorldTopologyLedger.FluidBasis(world.basis().packageId(),ids,world.basis().revision())).registrations(registrations).constructed(total.apply(world.constructed())).destroyed(total.apply(world.destroyed()))
+                .recoveries(world.recoveries()).restated(world.restated()).removedMovers(world.removedMovers()).columns(columns).shafts(world.shafts()).stores(world.stores()).health(world.health()).builds(world.builds()).build();
         return FluidFacts.rebuild(wide,placed,core.epoch(),key->key.on(model),CATALOG,true,"test");
         };
         var rebuilt=restated.apply(1.5);
