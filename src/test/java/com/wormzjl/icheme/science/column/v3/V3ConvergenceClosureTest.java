@@ -59,10 +59,10 @@ class V3ConvergenceClosureTest {
             V3ColumnResult result = success.result();
             assertEquals(V3ConvergenceEvidence.MAXIMUM_LOG_FLOW_CHANGE, result.closureTolerance(), 0.0);
             assertFalse(result.formulationRevision().contains("-closure"), result::formulationRevision);
-            assertEquals(V3ColumnCalculator.formulationRevision(input, 0.0), result.formulationRevision());
+            assertEquals(V3ColumnLabels.formulationRevision(input, 0.0), result.formulationRevision());
             assertEquals(V3InputDigest.of(result.problem(), result.formulationRevision(),
                             V3PengRobinsonThermo.fromRegisteredPackage(input.packageId()).datasetRevision(),
-                            V3ColumnCalculator.assumptionsRevision(input)),
+                            V3ColumnLabels.assumptionsRevision(input)),
                     result.inputDigest(), label);
         }
     }
@@ -104,10 +104,10 @@ class V3ConvergenceClosureTest {
 
         String revision = result.formulationRevision();
         assertTrue(revision.endsWith("-closure1e-3"), () -> label + " revision " + revision);
-        assertEquals(V3ColumnCalculator.formulationRevision(input, 0.0) + "-closure1e-3", revision);
-        assertNotEquals(V3InputDigest.of(result.problem(), V3ColumnCalculator.formulationRevision(input, 0.0),
+        assertEquals(V3ColumnLabels.formulationRevision(input, 0.0) + "-closure1e-3", revision);
+        assertNotEquals(V3InputDigest.of(result.problem(), V3ColumnLabels.formulationRevision(input, 0.0),
                         V3PengRobinsonThermo.fromRegisteredPackage(input.packageId()).datasetRevision(),
-                        V3ColumnCalculator.assumptionsRevision(input)),
+                        V3ColumnLabels.assumptionsRevision(input)),
                 result.inputDigest(), "a state accepted at a looser closure must not share the default digest");
     }
 
@@ -133,12 +133,12 @@ class V3ConvergenceClosureTest {
 
     @Test
     void theClosureLabelIsCanonicalAndOnlyAppearsAboveTheDefault() {
-        assertEquals("", V3ColumnCalculator.closureSuffix(V3ConvergenceEvidence.MAXIMUM_LOG_FLOW_CHANGE));
-        assertEquals("-closure1e-3", V3ColumnCalculator.closureSuffix(1.0e-3));
-        assertEquals("-closure5e-4", V3ColumnCalculator.closureSuffix(5.0e-4));
-        assertEquals("-closure1e-6", V3ColumnCalculator.closureSuffix(1.0e-6));
-        assertEquals("-closure2.5e-5", V3ColumnCalculator.closureSuffix(2.5e-5));
-        assertEquals("-closure1.5e-8", V3ColumnCalculator.closureSuffix(1.5e-8));
+        assertEquals("", V3ColumnLabels.closureSuffix(V3ConvergenceEvidence.MAXIMUM_LOG_FLOW_CHANGE));
+        assertEquals("-closure1e-3", V3ColumnLabels.closureSuffix(1.0e-3));
+        assertEquals("-closure5e-4", V3ColumnLabels.closureSuffix(5.0e-4));
+        assertEquals("-closure1e-6", V3ColumnLabels.closureSuffix(1.0e-6));
+        assertEquals("-closure2.5e-5", V3ColumnLabels.closureSuffix(2.5e-5));
+        assertEquals("-closure1.5e-8", V3ColumnLabels.closureSuffix(1.5e-8));
     }
 
     @Test

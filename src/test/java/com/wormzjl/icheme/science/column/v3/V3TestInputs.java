@@ -131,7 +131,7 @@ public final class V3TestInputs {
     static V3ColumnResult stateless(V3ColumnProblem problem, V3InputDigest digest, V3AcceptanceAudit audit,
             V3ConvergenceEvidence evidence) {
         return new V3ColumnResult(problem, digest, audit, evidence, List.of(),
-                V3ColumnCalculator.formulationRevision(problem.input(), problem.truncationSupport().cutoffMoleFraction()),
+                V3ColumnLabels.formulationRevision(problem.input(), problem.truncationSupport().cutoffMoleFraction()),
                 null, null, null);
     }
 }
