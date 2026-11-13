@@ -258,6 +258,8 @@ class V3TrayHydraulicsColumnTest {
                 continue;
             }
             String polls = event.substring(at + 17);
+            int factorizations = polls.indexOf(", correction band factorizations ");
+            if (factorizations >= 0) polls = polls.substring(0, factorizations);
             System.out.println("V3 hydraulic correction polls, " + entry.getKey() + ": " + polls);
             for (String count : polls.split("/")) {
                 long value = Long.parseLong(count.trim());

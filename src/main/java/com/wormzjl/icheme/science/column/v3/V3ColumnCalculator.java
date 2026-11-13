@@ -437,7 +437,7 @@ public final class V3ColumnCalculator {
                 V3ColumnDutyLedger.fromAccepted(selected, corrected, thermo, published.feedMolarEnthalpyJoulesPerMol()),
                 publication.summary());
         var success = new V3ColumnOutcome.Success(result, diagnostics(published.attempt(), publication.audit(),
-                publication.solvePath(), publication.solverEvents(), policy));
+                publication.solvePath(), publication.solverEvents(), policy, V3SolveScratch.factorizationEvent()));
         if (policy.observer() != null)
             policy.observer().accept(V3NeuralSeed.capture(selected, corrected, thermo.datasetRevision()));
         return success;
@@ -467,7 +467,8 @@ public final class V3ColumnCalculator {
             V3PengRobinsonThermo thermo, SolvePolicy policy, V3SolveControl control, String solvePath,
             List<String> solverEvents) {
         HydraulicPublication nominal = new HydraulicPublication(pass, pass.audit(), solvePath, solverEvents, null);
-        List<Long> polls = new ArrayList<>();
+        // Each correction's control polls and band factorizations (P7), in the order they ran.
+        List<long[]> polls = new ArrayList<>();
         if (!input.usesTrayHydraulics()) return nominal;
         try {
             V3TrayHydraulics hydraulics = V3TrayHydraulics.ofDiameter(input.columnDiameterMetres());
@@ -541,8 +542,9 @@ public final class V3ColumnCalculator {
      * so a correction that turns out to be expensive costs the request a bounded amount and nothing else.</p>
      */
     private static V3SolvePass hydraulicCorrection(V3ColumnInput input, V3SolvePass pass,
-            V3PengRobinsonThermo thermo, SolvePolicy policy, V3SolveControl control, double[] profile, List<Long> polls) {
+            V3PengRobinsonThermo thermo, SolvePolicy policy, V3SolveControl control, double[] profile, List<long[]> polls) {
         long[] spent = new long[1];
+        int factorizedBefore = V3SolveScratch.totalFactorizations();
         V3SolveControl correctionControl = () -> {
             control.checkpoint(); // Whole-request cancellation always wins over the correction's own budget.
             if (++spent[0] > HYDRAULIC_CORRECTION_BUDGET_POLLS) throw new HydraulicBudgetExceeded();
@@ -568,7 +570,7 @@ public final class V3ColumnCalculator {
         } catch (HydraulicBudgetExceeded | V3ThermoException | IllegalArgumentException refused) {
             return null;
         } finally {
-            polls.add(spent[0]);
+            polls.add(new long[] {spent[0], V3SolveScratch.totalFactorizations() - factorizedBefore});
         }
     }
 
@@ -581,7 +583,7 @@ public final class V3ColumnCalculator {
 
     private static HydraulicPublication summarised(HydraulicPublication publication, V3TrayHydraulics hydraulics,
             V3ColumnProblem problem, V3TrayHydraulics.Tray[] traffic, double[] profile, boolean correctionApplied,
-            double residualMismatch, List<Long> polls) {
+            double residualMismatch, List<long[]> polls) {
         V3TrayHydraulicsSummary summary = hydraulics.summarise(problem, traffic, profile, correctionApplied,
                 Math.min(residualMismatch, 1.0));
         String event = String.format(Locale.ROOT,
@@ -591,7 +593,9 @@ public final class V3ColumnCalculator {
                 summary.totalPressureDropPascal() / 1000.0, summary.maximumFloodFraction(),
                 summary.maximumFloodTray() + 1, correctionApplied ? "applied" : "not needed",
                 100.0 * summary.residualMismatchFraction(), polls.isEmpty() ? "" : ", correction polls "
-                        + String.join("/", polls.stream().map(String::valueOf).toList()));
+                        + String.join("/", polls.stream().map(spent -> String.valueOf(spent[0])).toList())
+                        + ", correction band factorizations "
+                        + String.join("/", polls.stream().map(spent -> String.valueOf(spent[1])).toList()));
         HydraulicPublication summarised = new HydraulicPublication(publication.pass(), publication.audit(),
                 publication.solvePath(), mergedEvents(List.of(boundedEvent(event)), publication.solverEvents()),
                 summary);
@@ -1796,9 +1800,16 @@ public final class V3ColumnCalculator {
                         problem.nodePressurePascal(problem.topology().feedTrayNumber()),
                         problem.input().feedComponentMolarFlowsMolPerSecond(), TraceTruncationPolicy.of(policy.attemptCutoff()),
                         thermo.newWorkspace(), control::checkpoint)
-                : thermo.flashTP(problem.input().feedTemperatureKelvin(),
-                        problem.nodePressurePascal(problem.topology().feedTrayNumber()),
-                        problem.input().feedComponentMolarFlowsMolPerSecond(), thermo.newWorkspace());
+                : untruncatedFeedFlash(problem, thermo);
+    }
+
+    /** The untruncated feed flash, once per calculation and feed-tray pressure (P6): it polls nothing, so caching skips no poll. */
+    private static V3FlashResult untruncatedFeedFlash(V3ColumnProblem problem, V3PengRobinsonThermo thermo) {
+        double temperature = problem.input().feedTemperatureKelvin();
+        double pressure = problem.nodePressurePascal(problem.topology().feedTrayNumber());
+        double[] feed = problem.input().feedComponentMolarFlowsMolPerSecond();
+        return V3SolveScratch.feedFlash(thermo.datasetRevision(), temperature, pressure, feed,
+                () -> thermo.flashTP(temperature, pressure, feed, thermo.newWorkspace()));
     }
 
     private static boolean hasCondenserPhaseMismatch(V3SolvePass pass) {
@@ -3392,11 +3403,23 @@ public final class V3ColumnCalculator {
             String solvePath,
             List<String> solverEvents,
             SolvePolicy policy) {
+        return diagnostics(attempt, audit, solvePath, solverEvents, policy, null);
+    }
+
+    /** As above, with {@code trailer} (the calculation's band factorizations, P7) after the termination where there is room. */
+    private static V3SolverDiagnostics diagnostics(
+            V3SimultaneousColumnSolver.Attempt attempt,
+            V3AcceptanceAudit audit,
+            String solvePath,
+            List<String> solverEvents,
+            SolvePolicy policy,
+            String trailer) {
         V3SimultaneousColumnSolver.Evidence evidence = attempt.evidence();
         double finalStepNorm = Math.max(evidence.convergenceEvidence().maximumLogFlowChange(),
                 evidence.convergenceEvidence().maximumTemperatureChangeKelvin());
         List<String> events = new ArrayList<>(solverEvents);
         if (events.size() < V3SolverDiagnostics.MAX_EVENTS) events.add(evidence.termination());
+        if (trailer != null && events.size() < V3SolverDiagnostics.MAX_EVENTS) events.add(boundedEvent(trailer));
         return new V3SolverDiagnostics(0, evidence.iterations(), 0, 0, evidence.maximumScaledResidual(), finalStepNorm,
                 boundedSolvePath(solvePath), events, audit, evidence.convergenceEvidence(), policy.closureTolerance());
     }

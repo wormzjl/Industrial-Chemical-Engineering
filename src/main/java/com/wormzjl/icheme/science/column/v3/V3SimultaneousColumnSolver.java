@@ -466,6 +466,7 @@ final class V3SimultaneousColumnSolver {
                 try {
                     V3BlockJacobian localJacobian = V3BlockJacobianAssembler.assembleLocal(
                             problem, evaluator, coordinates, state, workspaceFactory, differenceScale, control, scratch);
+                    V3SolveScratch.factorized(V3SolveScratch.Factorization.LOCAL_BLOCK);
                     V3BandedPivotedSolver.Result localLinear = V3BandedPivotedSolver.solve(
                             localJacobian.toBandedMatrix(linearWorkspace), negativeScaledResidual(residual), linearWorkspace);
                     if (localLinear instanceof V3BandedPivotedSolver.Result.Success localSuccess) {
@@ -507,6 +508,7 @@ final class V3SimultaneousColumnSolver {
             }
             V3BandedPivotedSolver.Result linearResult;
             try {
+                V3SolveScratch.factorized(V3SolveScratch.Factorization.NEWTON);
                 linearResult = V3BandedPivotedSolver.solve(
                         toBandedMatrix(jacobian, layout, linearWorkspace), negativeScaledResidual(residual), linearWorkspace);
             } catch (IllegalStateException unavailable) {
@@ -645,6 +647,7 @@ final class V3SimultaneousColumnSolver {
             control.checkpoint();
             V3FiniteDifferenceJacobian.Jacobian jacobian = V3FiniteDifferenceJacobian.evaluateCompact(
                     evaluator, coordinates, state, workspaceFactory, V3FiniteDifferenceJacobian.DifferenceScale.FINE, control);
+            V3SolveScratch.factorized(V3SolveScratch.Factorization.VERIFY_DIRECT);
             V3BandedPivotedSolver.Result linear = V3BandedPivotedSolver.solve(
                     toBandedMatrix(jacobian, layout, linearWorkspace), negativeScaledResidual(residual), linearWorkspace);
             if (linear instanceof V3BandedPivotedSolver.Result.Success success) {
@@ -658,6 +661,7 @@ final class V3SimultaneousColumnSolver {
             double damping = INITIAL_GAUSS_NEWTON_DAMPING;
             for (int attempt = 0; attempt < budget.verificationDampingSteps(); attempt++) {
                 control.checkpoint();
+                V3SolveScratch.factorized(V3SolveScratch.Factorization.VERIFY_DAMPED);
                 V3BandedPivotedSolver.Result regularized = V3BandedPivotedSolver.solve(
                         normal.dampedMatrix(damping, control, linearWorkspace), normal.negativeGradient(), linearWorkspace);
                 if (regularized instanceof V3BandedPivotedSolver.Result.Success success) {
@@ -874,6 +878,7 @@ final class V3SimultaneousColumnSolver {
             control.checkpoint();
             V3BandedPivotedSolver.Result result;
             try {
+                V3SolveScratch.factorized(V3SolveScratch.Factorization.DAMPED_FALLBACK);
                 result = V3BandedPivotedSolver.solve(
                         normal.dampedMatrix(damping, control, linearWorkspace), normal.negativeGradient(), linearWorkspace);
             } catch (IllegalStateException unavailable) {
