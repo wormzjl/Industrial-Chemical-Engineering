@@ -776,6 +776,21 @@ public final class PengRobinsonKernel {
         Objects.requireNonNull(output, "output");
         prepareTemperature(temperatureKelvin, workspace);
         evaluatePrepared(temperatureKelvin, pressurePascal, composition, root, workspace, output.evaluation);
+        differentiatePrepared(temperatureKelvin, pressurePascal, root, workspace, output);
+    }
+
+    /**
+     * The derivative half of {@link #evaluateDerivatives}, for a caller that has just evaluated into
+     * {@code output.evaluation()} on {@code workspace} (by {@link #evaluate} or {@link #evaluatePrepared}, at the same
+     * temperature, pressure and root) and has only read the workspace since: the same numbers as
+     * {@link #evaluateDerivatives}, without evaluating the state a second time. It reads the mixture terms that evaluation
+     * left in the workspace and writes, besides {@code output}, only the NRTL derivative scratch of
+     * {@code differentiateExcess} (the rows' {@code dS_i/dT}, the cross terms and their sums), which neither the
+     * evaluation's views ({@link Workspace#compositionView}, {@link Workspace#attractionRowsView}) nor
+     * {@link #mixtureSecondTemperatureDerivative} read.
+     */
+    public void differentiatePrepared(
+            double temperatureKelvin, double pressurePascal, Root root, Workspace workspace, Derivatives output) {
         double a = output.evaluation.aMix;
         double b = output.evaluation.bMix;
         double daDt = output.evaluation.daMixDt;

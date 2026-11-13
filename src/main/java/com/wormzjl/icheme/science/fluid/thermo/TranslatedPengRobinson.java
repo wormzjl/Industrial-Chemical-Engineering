@@ -426,6 +426,21 @@ public final class TranslatedPengRobinson {
         fill(temperature,pressure,workspace,workspace.evaluation,workspace.values);
         return workspace.values;
     }
+    /**
+     * {@link #evaluateValues(double, double, double[], PengRobinsonKernel.Root, Workspace)} and the kernel's derivative
+     * block of the same root from the same evaluation ({@link PengRobinsonKernel#differentiatePrepared}): the kernel
+     * evaluates the state once, into {@code derivatives.evaluation()}, and the values are filled before the derivatives,
+     * so a refusal comes from the same check as the two calls made apart. {@code derivatives} belongs to this model's kernel.
+     */
+    public Values evaluateValues(double temperature,double pressure,double[] amounts,PengRobinsonKernel.Root root,Workspace workspace,
+                                 PengRobinsonKernel.Derivatives derivatives) {
+        requireState(temperature,pressure,amounts,workspace);
+        PengRobinsonKernel.Evaluation evaluation=derivatives.evaluation();
+        kernel.evaluate(temperature,pressure,amounts,root,workspace.mixture,evaluation);
+        fill(temperature,pressure,workspace,evaluation,workspace.values);
+        kernel.differentiatePrepared(temperature,pressure,root,workspace.mixture,derivatives);
+        return workspace.values;
+    }
     public Phase evaluate(double temperature,double pressure,double[] amounts,PengRobinsonKernel.Root root,Workspace workspace) {
         requireState(temperature,pressure,amounts,workspace);
         kernel.evaluate(temperature,pressure,amounts,root,workspace.mixture,workspace.evaluation);

@@ -545,6 +545,54 @@ class PengRobinsonKernelHuronVidalTest {
         assertTrue(compared > 500, "compared " + compared);
     }
 
+    /**
+     * P23 (wave B): {@code differentiatePrepared} after a value evaluation is {@code evaluateDerivatives} on a fresh
+     * workspace bit for bit, and leaves what the value side reads afterwards (the composition, the attraction rows and
+     * {@code mixtureSecondTemperatureDerivative}, which the translated model's c_p reads) as the evaluation alone left it.
+     */
+    @Test void differentiatePreparedIsTheDerivativeEvaluationAndKeepsTheValueSide() {
+        int compared = 0;
+        for (Mixture mixture : polarMixtures()) {
+            var kernel = mixture.kernel();
+            int n = mixture.size();
+            var alone = kernel.newWorkspace();
+            var shared = kernel.newWorkspace();
+            var aloneValue = kernel.newEvaluation();
+            var sharedOutput = kernel.newDerivativesWithoutHeatCapacity();
+            var freshOutput = kernel.newDerivativesWithoutHeatCapacity();
+            double[] rootDt = new double[n], rootDt2 = new double[n], crossDt = new double[n];
+            for (double[] state : POLAR_STATES) {
+                for (double[] x : mixture.compositions) {
+                    for (PengRobinsonKernel.Root root : PengRobinsonKernel.Root.values()) {
+                        double t = state[0], p = state[1];
+                        try {
+                            kernel.evaluateDerivatives(t, p, x, root, kernel.newWorkspace(), freshOutput);
+                        } catch (IllegalStateException coalescing) { continue; }
+                        kernel.evaluate(t, p, x, root, alone, aloneValue);
+                        kernel.prepareRootDerivatives(t, alone, rootDt, rootDt2);
+                        double expectedSecond = kernel.mixtureSecondTemperatureDerivative(alone, rootDt, rootDt2, crossDt);
+                        kernel.evaluate(t, p, x, root, shared, sharedOutput.evaluation());
+                        kernel.differentiatePrepared(t, p, root, shared, sharedOutput);
+                        compared += same(alone.compositionView(), shared.compositionView(), "x");
+                        compared += same(alone.attractionRowsView(), shared.attractionRowsView(), "S_i");
+                        kernel.prepareRootDerivatives(t, shared, rootDt, rootDt2);
+                        double second = kernel.mixtureSecondTemperatureDerivative(shared, rootDt, rootDt2, crossDt);
+                        compared += same(new double[] {expectedSecond}, new double[] {second}, "d2a/dT2");
+                        compared += same(aloneValue.logFugacityCoefficientsView(),
+                                sharedOutput.evaluation().logFugacityCoefficientsView(), "ln phi");
+                        compared += same(freshOutput.evaluation().logFugacityCoefficientsView(),
+                                sharedOutput.evaluation().logFugacityCoefficientsView(), "ln phi");
+                        compared += same(freshOutput.dLogPhiDtView(), sharedOutput.dLogPhiDtView(), "d ln phi/dT");
+                        for (int i = 0; i < n; i++) {
+                            compared += same(freshOutput.dLogPhiDnRowView(i), sharedOutput.dLogPhiDnRowView(i), "dn");
+                        }
+                    }
+                }
+            }
+        }
+        assertTrue(compared > 500, "compared " + compared);
+    }
+
     // ---------------------------------------------------------------------------------------------------------------
     // Mathias-Copeman alpha
     // ---------------------------------------------------------------------------------------------------------------
