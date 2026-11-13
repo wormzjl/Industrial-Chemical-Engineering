@@ -68,6 +68,8 @@ public final class MachineHealth {
         /** The fault that set the larger class term of its last booking, and its intensity (M-12): state, never saved; null for none. */
         Wear.Fault fault;
         double intensity;
+        /** Its low-flow intensity at its last committed slice (N1): its {@code LOW FLOW} word while above 0. */
+        double lowFlow;
         long bookedTick;
         boolean failed;
     }
@@ -107,14 +109,16 @@ public final class MachineHealth {
         });
     }
 
-    private static final List<Wear.Fault> LIQUID_MOVER = List.of(Wear.Fault.CAVITATION, Wear.Fault.DRY), SCREW = List.of(Wear.Fault.LIQUID);
+    private static final List<Wear.Fault> LIQUID_MOVER = List.of(Wear.Fault.CAVITATION, Wear.Fault.DRY), SCREW = List.of(Wear.Fault.LIQUID),
+            CENTRIFUGAL = List.of(Wear.Fault.CAVITATION, Wear.Fault.DRY, Wear.Fault.LOW_FLOW);
 
     /**
-     * The faults {@code mover} reads (M-12): a liquid mover cavitation and running dry; a dry screw vacuum pump liquid at its
-     * suction (owner V6 B); none for another mover.
+     * The faults {@code mover} reads (M-12): a liquid mover cavitation and running dry, and a centrifugal pump on its curve
+     * also low flow (N1; a set-flow pump has no curve); a dry screw vacuum pump liquid at its suction (owner V6 B); none for
+     * another mover.
      */
     static List<Wear.Fault> faults(FlowControl.Mover mover) {
-        if (mover.liquid()) return LIQUID_MOVER;
+        if (mover.liquid()) return mover instanceof FlowControl.Machine m && m.law() instanceof com.wormzjl.icheme.science.machine.CentrifugalPump ? CENTRIFUGAL : LIQUID_MOVER;
         if (mover instanceof FlowControl.Machine m && com.wormzjl.icheme.science.machine.VacuumPump.dryScrew(m.law())) return SCREW;
         return List.of();
     }
@@ -163,7 +167,9 @@ public final class MachineHealth {
         var solved = result.graph();
         Map<Long, PassiveStepSolver.PipeObservation> rows = null;
         var s = settings();
-        for (var pipe : solved.pipes()) {
+        var flows = result.endpointFlows();
+        for (int e = 0; e < solved.pipes().size(); e++) {
+            var pipe = solved.pipes().get(e);
             if (!(pipe.control() instanceof FlowControl.Mover m) || !worn(m)) continue;
             long id = solved.reservoirs().get(pipe.first()).id();
             var p = pump(id);
@@ -176,6 +182,15 @@ public final class MachineHealth {
             boolean read = row != null && m.targetVolumeFlow() > 0;
             // A dry screw's liquid share (owner V6 B): its LIQUID fault's driving quantity, and its liquid noise.
             double liquid = !m.liquid() && read && Double.isFinite(row.vapourShare()) ? 1 - row.vapourShare() : 0;
+            // A centrifugal pump's flow over its rated flow at its speed (N1): its suction volume flow, the committed endpoint
+            // flow over the suction node's density (as the trains book its shaft power; the row's density is the drawn stream's).
+            double share = Double.NaN;
+            if (read && m instanceof FlowControl.Machine machine && machine.law() instanceof com.wormzjl.icheme.science.machine.CentrifugalPump law && machine.speed() > 0) {
+                var suction = solved.reservoirs().get(pipe.first()).state();
+                double density = suction.volume() > 0 ? suction.mass() / suction.volume() : 0;
+                if (density > 0) share = Math.max(0, flows[e]) / density / (law.ratedFlow() * machine.speed());
+            }
+            p.lowFlow = Wear.lowFlow(share);
             // The largest intensity of each class, and the fault that set it.
             double erosion = 0, seizure = 0;
             Wear.Fault eroding = null, seizing = null;
@@ -184,7 +199,8 @@ public final class MachineHealth {
                     case CAVITATION -> row.npshRatio();
                     case DRY -> row.dry() ? 1 : 0;
                     case LIQUID -> liquid;
-                    case LOW_FLOW, WET_GAS, WET_EXHAUST -> 0;
+                    case LOW_FLOW -> share;
+                    case WET_GAS, WET_EXHAUST -> 0;
                 };
                 double i = fault.intensity(q);
                 if (fault.type == Wear.FaultClass.EROSION) {
@@ -363,7 +379,8 @@ public final class MachineHealth {
 
     /**
      * Pump {@code id}'s status word on its page's message display, said once (W10d, owner decision D37): {@code FAILED} at
-     * health 0, which takes precedence; else {@code CAVITATION} while σ is below inception ({@link Wear#INCEPTION}: while it
+     * health 0, which takes precedence; else {@code LIQUID} while a dry screw takes liquid; else {@code LOW FLOW} while a
+     * centrifugal pump runs below its minimum flow (N1, {@link Wear#lowFlow} above 0); else {@code CAVITATION} while σ is below inception ({@link Wear#INCEPTION}: while it
      * crackles); else {@code GAS} while its gas ratio is above half the Turpin onset (while it churns); else empty. Its
      * health has its meter.
      */
@@ -371,6 +388,7 @@ public final class MachineHealth {
         if (failed(id)) return "FAILED";
         var screw = pumps.get(id);
         if (screw != null && screw.liquid > com.wormzjl.icheme.science.machine.VacuumPump.LIQUID_TRACE) return "LIQUID";
+        if (screw != null && screw.lowFlow > 0) return "LOW FLOW";
         var s = suction(id);
         if (s.sigma() < Wear.INCEPTION) return "CAVITATION";
         if (s.ratio() > GAS_RATIO) return "GAS";

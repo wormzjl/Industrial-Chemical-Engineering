@@ -28,6 +28,11 @@ public final class Wear {
     public static final double CAVITATION_PROCESS_HOURS = 8;
     /** The life running dry, min of process time. */
     public static final double DRY_PROCESS_MINUTES = 40;
+    /**
+     * A centrifugal pump's minimum continuous flow, a share of its rated flow at its speed (N1; API 610's minimum
+     * continuous stable flow): below it the pump recirculates at its suction and discharge and its vanes erode.
+     */
+    public static final double MINIMUM_FLOW = .3;
     /** The σ of the erosion peak, and the inception σ above which nothing erodes. */
     public static final double PEAK = 2.06, INCEPTION = 4;
 
@@ -50,7 +55,8 @@ public final class Wear {
     /**
      * A machine's faults (M-12), each with its class and its intensity, 0 to 1, from its driving quantity {@code q}:
      * {@code CAVITATION} from σ = NPSHA/NPSH3 ({@link #intensity}); {@code DRY} 1 for {@code q > 0} (the pump runs dry);
-     * {@code LIQUID} from a dry screw's suction liquid volume share ({@link VacuumPump#liquidIntensity}, N5); the others
+     * {@code LIQUID} from a dry screw's suction liquid volume share ({@link VacuumPump#liquidIntensity}, N5);
+     * {@code LOW_FLOW} from a centrifugal pump's flow over its rated flow at its speed ({@link #lowFlow}, N1); the others
      * wear nothing yet.
      */
     public enum Fault {
@@ -69,9 +75,21 @@ public final class Wear {
                 case CAVITATION -> Wear.intensity(q);
                 case DRY -> q > 0 ? 1 : 0;
                 case LIQUID -> VacuumPump.liquidIntensity(q);
-                case LOW_FLOW, WET_GAS, WET_EXHAUST -> 0;
+                case LOW_FLOW -> lowFlow(q);
+                case WET_GAS, WET_EXHAUST -> 0;
             };
         }
+    }
+
+    /**
+     * A centrifugal pump's low-flow erosion intensity at {@code share} = Q / (Q_r s), its suction volume flow over its rated
+     * flow at its speed share (N1): {@code ((0.3 − share) / 0.3)²}, one against a closed discharge, 0 from 30 % up and for NaN.
+     * In the erosion class: at the default lives 8 h of process time dead-headed, 32 h at 15 %.
+     */
+    public static double lowFlow(double share) {
+        if (!(share < MINIMUM_FLOW)) return 0;
+        double x = Math.min(1, (MINIMUM_FLOW - share) / MINIMUM_FLOW);
+        return x * x;
     }
 
     /** Gülich's erosion intensity at {@code sigma} = NPSHA/NPSH3, one at its peak: 0 at and below 0, from 4 up and for NaN. */

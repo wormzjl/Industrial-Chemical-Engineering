@@ -76,6 +76,29 @@ class WearTest {
             assertEquals((int) Math.round(255 * Wear.Fault.LIQUID.intensity(liquid)), VacuumPump.liquidNoise(liquid), "the noise byte is 255 times the wear's intensity at " + liquid);
     }
 
+    /**
+     * N1: below 30 % of its rated flow at its speed a centrifugal pump erodes, ((0.3 − q)/0.3)², in the erosion class: 8 h of
+     * process time against a closed discharge, 32 h at 15 %, none from 30 % up. Two erosion faults: the larger counts.
+     */
+    @Test
+    void lowFlowErodesBelowThirtyPercentOfRatedFlow() {
+        assertEquals(Wear.FaultClass.EROSION, Wear.Fault.LOW_FLOW.type);
+        assertEquals(1, Wear.Fault.LOW_FLOW.intensity(0), 1e-15);
+        assertEquals(.25, Wear.Fault.LOW_FLOW.intensity(.15), 1e-15);
+        assertEquals(0, Wear.Fault.LOW_FLOW.intensity(.3));
+        assertEquals(0, Wear.Fault.LOW_FLOW.intensity(1));
+        assertEquals(0, Wear.Fault.LOW_FLOW.intensity(Double.NaN));
+        var s = Wear.Settings.DEFAULT;
+        assertEquals(8, 1 / Wear.rate(Wear.Fault.LOW_FLOW.intensity(0), 0, s) / 3600, 1e-9, "8 h dead-headed");
+        assertEquals(32, 1 / Wear.rate(Wear.Fault.LOW_FLOW.intensity(.15), 0, s) / 3600, 1e-9, "32 h at 15 %");
+        // The class rule: cavitation at its peak (1) and low flow at 15 % (0.25) are both erosion; the larger counts, alone.
+        double erosion = Math.max(Wear.Fault.CAVITATION.intensity(Wear.PEAK), Wear.Fault.LOW_FLOW.intensity(.15));
+        assertEquals(1, erosion, 1e-12);
+        assertEquals(Wear.rate(Wear.PEAK, false, s), Wear.rate(erosion, 0, s), 0, "the larger erosion term, not their sum");
+        // A dry pump adds the seizure term.
+        assertEquals(.25 / (8 * 3600.) + 1 / 2400., Wear.rate(Wear.Fault.LOW_FLOW.intensity(.15), Wear.Fault.DRY.intensity(1), s), 1e-18);
+    }
+
     @Test
     void runningDryLastsFortyProcessMinutesAndTheSwitchStopsAllWear() {
         assertEquals(2400, Wear.life(Double.NaN, true, Wear.Settings.DEFAULT), 1e-9);
