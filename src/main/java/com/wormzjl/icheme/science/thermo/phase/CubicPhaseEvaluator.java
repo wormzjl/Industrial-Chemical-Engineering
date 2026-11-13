@@ -5,7 +5,7 @@ import com.wormzjl.icheme.science.math.DeterministicMath;
 import com.wormzjl.icheme.science.material.CoefficientIdealGas;
 import com.wormzjl.icheme.science.material.CoefficientTranslations;
 import com.wormzjl.icheme.science.material.SpinePackageData;
-import com.wormzjl.icheme.science.fluid.thermo.TranslatedPengRobinson;
+import com.wormzjl.icheme.science.thermo.TranslatedCubic;
 import com.wormzjl.icheme.science.material.DerivedPairs;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.material.WaterRecords;
@@ -24,9 +24,9 @@ import java.util.Objects;
  * situation actually met. {@link #family()} is part of the thermodynamic identity ({@link ThermoIdentity}): a change of
  * the residual formulation is a new family id.
  *
- * <p>The residual parts are {@link TranslatedPengRobinson#residualOnly} (the shared {@link PengRobinsonKernel} with a
+ * <p>The residual parts are {@link TranslatedCubic#residualOnly} (the shared {@link PengRobinsonKernel} with a
  * constant per-component volume translation), evaluated at the state pressure for every root, so the volume,
- * {@code ln phi} and volumetric derivatives are bit for bit those of a {@link TranslatedPengRobinson} with the same
+ * {@code ln phi} and volumetric derivatives are bit for bit those of a {@link TranslatedCubic} with the same
  * constants, and the fluid network's {@code HydrocarbonModel} agrees with them. The ideal-gas parts are the
  * {@link IdealGasFunction}s given at construction, one per component; {@link #forPackage} takes a spine package's
  * ({@link SpinePackageData}: spines, E-PPR78 pair interactions, the records' {@code volume_translation} anchors).</p>
@@ -56,7 +56,7 @@ public final class CubicPhaseEvaluator {
     private final List<String> names;
     private final List<ThermoComponent> components;
     private final IdealGasFunction[] idealGas;
-    private final TranslatedPengRobinson eos;
+    private final TranslatedCubic eos;
     private final double[] translations;
     private final String family;
     /** The derived family's water share, its water index and the derivation; null, -1, null otherwise. */
@@ -72,23 +72,23 @@ public final class CubicPhaseEvaluator {
      */
     public CubicPhaseEvaluator(String sourceId, List<ThermoComponent> components, double[][] interactions,
                                double[] translations, List<? extends IdealGasFunction> idealGas) {
-        this(sourceId, components, TranslatedPengRobinson.residualOnly(List.copyOf(components), interactions, translations),
+        this(sourceId, components, TranslatedCubic.residualOnly(List.copyOf(components), interactions, translations),
                 translations, idealGas);
     }
 
     /** The same evaluator on a pair-interaction model (the kernel's {@code TEMPERATURE_DEPENDENT_PAIRS}). */
     private CubicPhaseEvaluator(String sourceId, List<ThermoComponent> components, PairInteractions interactions,
                                 double[] translations, List<? extends IdealGasFunction> idealGas) {
-        this(sourceId, components, TranslatedPengRobinson.residualOnly(List.copyOf(components), interactions, translations),
+        this(sourceId, components, TranslatedCubic.residualOnly(List.copyOf(components), interactions, translations),
                 translations, idealGas);
     }
 
-    private CubicPhaseEvaluator(String sourceId, List<ThermoComponent> components, TranslatedPengRobinson eos,
+    private CubicPhaseEvaluator(String sourceId, List<ThermoComponent> components, TranslatedCubic eos,
                                 double[] translations, List<? extends IdealGasFunction> idealGas) {
         this(sourceId, components, eos, translations, idealGas, FAMILY, null, -1, null);
     }
 
-    private CubicPhaseEvaluator(String sourceId, List<ThermoComponent> components, TranslatedPengRobinson eos,
+    private CubicPhaseEvaluator(String sourceId, List<ThermoComponent> components, TranslatedCubic eos,
                                 double[] translations, List<? extends IdealGasFunction> idealGas, String family,
                                 WaterShare waterShare, int waterIndex, DerivedPairs.Result derivation) {
         this.family = family;
@@ -195,7 +195,7 @@ public final class CubicPhaseEvaluator {
             boolean liquid = evaluation.physicalRootCount() > 1 || raw < PhaseIdentification.VAPOUR_BRANCH_VOLUME_RATIO * kernel.coVolume(i);
             translations[i] = liquid ? target - raw : 0.0;
         }
-        var eos = TranslatedPengRobinson.residualOnly(components, kernel, translations);
+        var eos = TranslatedCubic.residualOnly(components, kernel, translations);
         WaterShare share = null;
         if (water >= 0) share = new WaterShare(WaterRecords.constants(pack.water()), tc[water], pc[water],
                 omega[water], result.mathiasCopeman()[water]);
@@ -228,7 +228,7 @@ public final class CubicPhaseEvaluator {
      */
     public static final class Workspace {
         private final CubicPhaseEvaluator owner;
-        private final TranslatedPengRobinson.Workspace terms;
+        private final TranslatedCubic.Workspace terms;
         private final PengRobinsonKernel.Derivatives mixtureDerivatives;
         private final double[] composition;
         private final double[] idealGibbs;
@@ -258,7 +258,7 @@ public final class CubicPhaseEvaluator {
                                Workspace workspace, PhaseState out) {
         Workspace w = own(workspace);
         prepare(temperature, pressure, amounts, preference, w);
-        TranslatedPengRobinson.Values values = eos.evaluateValues(temperature, pressure, amounts, preference, w.terms);
+        TranslatedCubic.Values values = eos.evaluateValues(temperature, pressure, amounts, preference, w.terms);
         fill(temperature, pressure, preference, values, w, Objects.requireNonNull(out, "out"));
         return out;
     }
@@ -270,7 +270,7 @@ public final class CubicPhaseEvaluator {
         if (out.componentCount() != names.size()) throw new IllegalArgumentException("Derivative basis mismatch");
         prepare(temperature, pressure, amounts, preference, w);
         // One kernel evaluation for the values and, on the same root, d ln phi/dn and the untranslated d ln phi/dT.
-        TranslatedPengRobinson.Values values = eos.evaluateValues(temperature, pressure, amounts, preference, w.terms,
+        TranslatedCubic.Values values = eos.evaluateValues(temperature, pressure, amounts, preference, w.terms,
                 w.mixtureDerivatives);
         fill(temperature, pressure, preference, values, w, out.state());
         out.begin(family);
@@ -341,7 +341,7 @@ public final class CubicPhaseEvaluator {
         if (w.terms.temperature() != temperature) eos.prepare(temperature, w.terms);
     }
 
-    private void fill(double temperature, double pressure, Root preference, TranslatedPengRobinson.Values values,
+    private void fill(double temperature, double pressure, Root preference, TranslatedCubic.Values values,
                       Workspace w, PhaseState out) {
         double rt = R * temperature;
         double[] logPhi = values.logFugacityCoefficientsView();

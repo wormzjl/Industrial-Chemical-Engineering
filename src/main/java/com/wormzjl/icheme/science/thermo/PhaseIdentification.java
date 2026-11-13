@@ -23,7 +23,7 @@ package com.wormzjl.icheme.science.thermo;
  * three-root case does not use this rule: there the stability root decides.</p>
  *
  * <p>For {@code P = R T/(v - b) - a/D}, {@code D = v^2 + 2 b v - b^2}, the four derivatives are the ones
- * {@code TranslatedPengRobinson.fill} forms for its volumetric block:</p>
+ * {@code TranslatedCubic.fill} forms for its volumetric block:</p>
  * <pre>
  *   dP/dv    = -R T/(v - b)^2 + 2 a (v + b)/D^2
  *   dP/dT    =  R/(v - b) - (da/dT)/D
