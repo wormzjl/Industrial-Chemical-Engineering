@@ -429,13 +429,23 @@ final class StructureRegistration {
             var valve = former.blanket() > 0 ? com.wormzjl.icheme.runtime.instrument.InstrumentHosts.BlanketValve.of(level, vessel.origin(), shape) : null;
             if (valve != null) {nozzles = new ArrayList<>(nozzles);nozzles.add(valve.port());blanket = former.blanket();}
             // A fitted safety valve keeps the face it was fitted with, the default where the layout now takes that cell (as a drum's).
-            var fitted = registration.device().ports().stream().filter(p -> p.role() == PhysicalFluidTopology.ConnectionRole.RELIEF).map(p -> Direction.valueOf(p.face().name())).findFirst().orElse(null);
-            var psv = former.relief() > 0 ? com.wormzjl.icheme.runtime.instrument.InstrumentHosts.ReliefValve.of(level, vessel.origin(), shape, fitted) : null;
-            if (former.relief() > 0 && psv == null) psv = com.wormzjl.icheme.runtime.instrument.InstrumentHosts.ReliefValve.of(level, vessel.origin(), shape);
+            var psv = fittedRelief(level, vessel, registration);
             if (psv != null) {nozzles = new ArrayList<>(nozzles);nozzles.add(psv.port());relief = former.relief();reliefFace = former.reliefFace();}
         }
         return new FluidWorldAuthority.ConverterDevices(EquipmentStructure.position(level, node), nozzles, shape.volume(), shape.levelHeight(), gas, shape.fluidGeometry(),
                 gas ? high : low, gas ? low : high, shape.converterRate(), Math.round(shape.volume() * 1000), blanket, relief, reliefFace);
+    }
+
+    /**
+     * The pressure safety valve fitted to {@code registration}'s device, its outlet the relief port where {@code vessel}'s
+     * layout now puts it: on the face it was fitted with (owner: "outlet should face the user when placed"), the default
+     * where the layout now takes that cell; null where the device has none fitted or the layout has no room for it.
+     */
+    private static com.wormzjl.icheme.runtime.instrument.InstrumentHosts.@Nullable ReliefValve fittedRelief(Level level, Vessel vessel, WorldTopologyLedger.Registration registration) {
+        var fitted = registration.device().ports().stream().filter(p -> p.role() == PhysicalFluidTopology.ConnectionRole.RELIEF).map(p -> Direction.valueOf(p.face().name())).findFirst().orElse(null);
+        var psv = registration.spec().relief() > 0 ? com.wormzjl.icheme.runtime.instrument.InstrumentHosts.ReliefValve.of(level, vessel.origin(), vessel.shape(), fitted) : null;
+        if (registration.spec().relief() > 0 && psv == null) psv = com.wormzjl.icheme.runtime.instrument.InstrumentHosts.ReliefValve.of(level, vessel.origin(), vessel.shape());
+        return psv;
     }
 
     // ---------------- the batch still (batch 2026-11-09-batch-distiller, W3 and W4) ----------------
@@ -616,11 +626,8 @@ final class StructureRegistration {
         // A fitted gas blanketing valve (batch 2026-11-11-gas-blanketing) keeps its set pressure, its inlet where the layout now puts it.
         var valve = spec.blanket() > 0 ? com.wormzjl.icheme.runtime.instrument.InstrumentHosts.BlanketValve.of(level, vessel.origin(), vessel.shape()) : null;
         if (valve != null) { nozzles = new ArrayList<>(nozzles); nozzles.add(valve.port()); }
-        // So does a fitted pressure safety valve, its outlet the relief port where the layout now puts it.
-        // Its outlet keeps the face it was fitted with (owner: "outlet should face the user when placed"), the default where the new layout takes that cell.
-        var fittedFace = device.ports().stream().filter(p -> p.role() == com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.ConnectionRole.RELIEF).map(p -> net.minecraft.core.Direction.valueOf(p.face().name())).findFirst().orElse(null);
-        var relief = spec.relief() > 0 ? com.wormzjl.icheme.runtime.instrument.InstrumentHosts.ReliefValve.of(level, vessel.origin(), vessel.shape(), fittedFace) : null;
-        if (spec.relief() > 0 && relief == null) relief = com.wormzjl.icheme.runtime.instrument.InstrumentHosts.ReliefValve.of(level, vessel.origin(), vessel.shape());
+        // So does a fitted pressure safety valve, its outlet the relief port where the layout now puts it, on its fitted face.
+        var relief = fittedRelief(level, vessel, record);
         if (relief != null) { nozzles = new ArrayList<>(nozzles); nozzles.add(relief.port()); }
         world.edit(device.id(), record.revision(), device.withPlacement(EquipmentStructure.position(level, node), nozzles),
                 vessel.shape().kind().mover() || vessel.shape().kind() == EquipmentShape.Kind.FLARE_STACK || vessel.shape().kind().chimney() ? spec : new FluidDeviceSpec(vessel.shape().volume(), spec.temperature(), spec.pressure(), spec.composition(), spec.solids(), vessel.shape().levelHeight(), open(vessel), vessel.shape().fluidGeometry(),spec.tower(), valve == null ? 0 : spec.blanket(), relief == null ? 0 : spec.relief(), null));
