@@ -6,7 +6,6 @@ import static com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.liquidE
 import static com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.liquidMoles;
 import static com.wormzjl.icheme.science.fluid.network.DeviceModes.shutoffBand;
 import static com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.wetShare;
-import com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.Equations;
 import com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.SolveConstants;
 import com.wormzjl.icheme.science.fluid.solver.PhaseLayout;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
@@ -38,7 +37,7 @@ final class MoverSuction {
      * (m3/s) (Pa), so the mode test and the limit's row read one value; positive infinity where the connection is not a
      * liquid pump or its suction has no vapour pressure to stand at.
      */
-    double cavitationMargin(Equations equations,int edge,List<FluidThermodynamics.State> states,double volumeFlow) {
+    double cavitationMargin(StepEquations equations,int edge,List<FluidThermodynamics.State> states,double volumeFlow) {
         var pipe=equations.graph.pipes().get(edge);int a=pipe.first();
         double limit=suctionLimit(equations,edge,states::get,volumeFlow);
         return limit<Double.POSITIVE_INFINITY?PortStreams.endPressure(model,equations.graph.reservoirs().get(a),pipe.firstPort(),states.get(a))-limit:Double.POSITIVE_INFINITY;
@@ -47,7 +46,7 @@ final class MoverSuction {
      * Owner decision D17 (bundled random 896): the pressure the suction end of pump connection {@code edge} stands at on its
      * suction limit, on the node states {@code states} and its suction volume flow {@code volumeFlow} (m3/s; the trial point
      * in the Newton's row): the lesser of its floor and what its supplier gives at no flow ({@link #suctionSupply}, the supplier
-     * its suction walk ends at, {@link Equations#suctionSuppliers}). A suction limit never stands above its supplier: where
+     * its suction walk ends at, {@link StepEquations#suctionSuppliers}). A suction limit never stands above its supplier: where
      * the supplier falls to its bubble point within the step (896's tee, flashing to pass its main stream), the suction
      * stands at the supplier less its static column, the suction line carries nothing and the pump delivers nothing,
      * continuously and with no mode change. Held at the floor alone, the suction stood above a tee that had to flash below
@@ -59,9 +58,9 @@ final class MoverSuction {
      * its head breaks down, so it delivers what its suction can feed there; the floor rises with the flow while the suction
      * line's pressure falls with it, so they cross once, and the bubble floor is its {@code NPSH3 = 0} end. The row reads it on
      * its own flow column: the block sweep re-assembles the actuator row for the edge's flow, which the sparsity declares
-     * ({@link Equations#buildSparsity}). Where the pump has no floor (infinite) the NPSH adds none.
+     * ({@link StepEquations#buildSparsity}). Where the pump has no floor (infinite) the NPSH adds none.
      */
-    double suctionLimit(Equations equations,int edge,IntFunction<FluidThermodynamics.State> states,double volumeFlow) {
+    double suctionLimit(StepEquations equations,int edge,IntFunction<FluidThermodynamics.State> states,double volumeFlow) {
         var pipe=equations.graph.pipes().get(edge);
         double floor=suctionLimitPressure(equations.graph,edge,breakdown(equations.graph,edge,volumeFlow));int supplier=equations.suctionSuppliers[edge];
         if(!(floor<Double.POSITIVE_INFINITY)||supplier<0)return floor;
@@ -87,7 +86,7 @@ final class MoverSuction {
      * decision D59 (4) was lifted by the owner on 2026-11-11 (W3B_NETWORK_PLAN.md section 17): water is one more liquid.
      * {@code suction} is the trial state of the pump's first node, which the floor does not read.
      */
-    double vapourPressure(Equations equations,int edge,FluidThermodynamics.State suction) {
+    double vapourPressure(StepEquations equations,int edge,FluidThermodynamics.State suction) {
         return vapourPressure(equations.graph,edge);
     }
     /** {@link #vapourPressure} on {@code graph}. */

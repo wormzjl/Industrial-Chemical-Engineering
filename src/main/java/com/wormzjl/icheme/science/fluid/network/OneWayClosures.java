@@ -142,7 +142,7 @@ final class OneWayClosures {
      * a gas), so the closure is taken from the starting point instead.
      *
      * <p>Three conditions keep it a statement that cannot be wrong for the solve: both columns are asked (a forward flow
-     * stands in the first end's fluid and a reverse flow in the second's, the pairing {@link PassiveStepSolver.Equations#columnEnds} states);
+     * stands in the first end's fluid and a reverse flow in the second's, the pairing {@link StepEquations#columnEnds} states);
      * neither end of the run is a zero-holdup junction (a junction's pressure is an output of the previous solve, while a
      * boundary's is fixed and a vessel's moves monotonically against the flow that delivers it, so a drive that refuses a
      * direction at the start refuses it everywhere the solve can go; the run is a chain of

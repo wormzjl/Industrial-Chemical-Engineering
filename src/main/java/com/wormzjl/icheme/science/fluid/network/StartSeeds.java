@@ -148,7 +148,7 @@ final class StartSeeds {
     }
     /** {@link #arrivingPhases} at the law flows {@code flows}; {@code vesselsOnly} leaves the junctions, for a converged pass
      * whose junctions are solved; {@code seeds} itself where nothing is laid out. A connection the pass drew phases on
-     * ({@code draws}, {@link PassiveStepSolver.Equations#draws}) delivers its drawn stream ({@link PortStreams#drawnStream}), what the booking books;
+     * ({@code draws}, {@link StepEquations#draws}) delivers its drawn stream ({@link PortStreams#drawnStream}), what the booking books;
      * any other the stream of its end at a vanishing flow. The junctions {@link #flashSeeds} restated in the result travel
      * with it ({@link Seeded}). */
     Seeded arrivingPhases(PassiveNetwork graph,List<FluidThermodynamics.State> seeds,double[] flows,double[][] draws,boolean vesselsOnly,List<FlowControl.Mode> modes,
@@ -247,7 +247,7 @@ final class StartSeeds {
     }
     /**
      * The connection flows and actuator heads a pass with this active set starts from, the whole of
-     * {@link PassiveStepSolver.Equations#buildInitial}'s edge half; it lives here because {@link OneWayClosures#closeIllegalStarts} reads it before the
+     * {@link StepEquations#buildInitial}'s edge half; it lives here because {@link OneWayClosures#closeIllegalStarts} reads it before the
      * equations exist. {@code seeds} may be {@code null} before this solve has any, which only a regulating valve reads.
      * {@code passStart}: what the pass before handed this one ({@link PassStart}); {@link PassStart#NONE} for every start
      * point but a pass's own.

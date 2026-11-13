@@ -2,7 +2,6 @@ package com.wormzjl.icheme.science.fluid.network;
 
 import static com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.holdsNoFluid;
 import static com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.phaseCode;
-import com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.Equations;
 import com.wormzjl.icheme.science.fluid.solver.PhaseLayout;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import java.util.*;
@@ -31,7 +30,7 @@ final class PhaseActiveSet {
      * at the engine's fixed-volume equilibrium of the iterate's amounts and energy, once per solve ({@code flashed}); null
      * where none is. The seed list is otherwise the pass's own.
      */
-    List<FluidThermodynamics.State> flashes(Equations equations,double[] last,List<FluidThermodynamics.State> seeds,boolean[] flashed,Runnable checkpoint) {
+    List<FluidThermodynamics.State> flashes(StepEquations equations,double[] last,List<FluidThermodynamics.State> seeds,boolean[] flashed,Runnable checkpoint) {
         List<FluidThermodynamics.State> states;
         try{states=equations.states(last);}catch(IllegalArgumentException outsideDomain){return null;}
         List<FluidThermodynamics.State> result=null;
@@ -243,10 +242,10 @@ final class PhaseActiveSet {
         return result;
     }
     /** Whether this pass laid out a vessel dry. */
-    static boolean anyDry(Equations equations){for(boolean dry:equations.dry)if(dry)return true;return false;}
+    static boolean anyDry(StepEquations equations){for(boolean dry:equations.dry)if(dry)return true;return false;}
     /** Whether a converged pass's reconstruction books a fluid into a vessel the pass laid out dry: more than none at the
      * bag's resolution ({@link PassiveStepSolver#holdsNoFluid}); a roundoff it receives stays booked and the vessel stays dry. */
-    static boolean filled(Equations equations,ConservativeTransport.Projection projection) {
+    static boolean filled(StepEquations equations,ConservativeTransport.Projection projection) {
         for(int node=0;node<equations.dry.length;node++)
             if(equations.dry[node]&&!holdsNoFluid(projection.inventories().get(node),projection.states().get(node)))return true;
         return false;
