@@ -1,19 +1,16 @@
 package com.wormzjl.icheme.science.column.v3;
 
-import com.wormzjl.icheme.science.column.v3.V3ColumnCalculator.CondenserAttempts;
-import com.wormzjl.icheme.science.column.v3.V3ColumnCalculator.ContinuationJacobianPolicy;
-import com.wormzjl.icheme.science.column.v3.V3ColumnCalculator.PhaseCorrection;
 import com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo;
 import com.wormzjl.icheme.science.column.v3.thermo.V3ThermoException;
 import com.wormzjl.icheme.science.column.v3.thermo.V3WaterProperties;
 import java.util.ArrayList;
 import java.util.List;
 
+import static com.wormzjl.icheme.science.column.v3.V3AttemptLoop.correctCondenserPhase;
+import static com.wormzjl.icheme.science.column.v3.V3AttemptLoop.feedFlash;
+import static com.wormzjl.icheme.science.column.v3.V3AttemptLoop.solveSingleProblem;
 import static com.wormzjl.icheme.science.column.v3.V3ColumnCalculator.MAXIMUM_NEWTON_ITERATIONS;
-import static com.wormzjl.icheme.science.column.v3.V3ColumnCalculator.correctCondenserPhase;
-import static com.wormzjl.icheme.science.column.v3.V3ColumnCalculator.feedFlash;
 import static com.wormzjl.icheme.science.column.v3.V3ColumnCalculator.publishesSuccess;
-import static com.wormzjl.icheme.science.column.v3.V3ColumnCalculator.solveSingleProblem;
 import static com.wormzjl.icheme.science.column.v3.V3ColumnCalculator.withPriorSupportNotes;
 import static com.wormzjl.icheme.science.column.v3.V3FeatureRamp.recoverWithDrawRamp;
 import static com.wormzjl.icheme.science.column.v3.V3SolveReport.boundedSummary;

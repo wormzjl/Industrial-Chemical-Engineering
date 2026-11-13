@@ -16,7 +16,7 @@ import static com.wormzjl.icheme.science.column.v3.V3SolveReport.mergedEvents;
  *
  * <p>Moved out of {@link V3ColumnCalculator} unchanged (batch 2026-11-13-codebase-review, D-C2). {@code publishAccepted}
  * became package-private with the move (the classical ladder and the learned route call it). The correction solves
- * through the calculator's {@code solveSingleProblem} and judges through its {@code publishesSuccess} and
+ * through {@code V3AttemptLoop.solveSingleProblem} and judges through the calculator's {@code publishesSuccess} and
  * {@code publishesRequestedGeometry}; the diagnostics are the calculator's.</p>
  */
 final class V3HydraulicPublish {
@@ -184,8 +184,8 @@ final class V3HydraulicPublish {
                     input, solved.topology().condenserPhaseBranch(), profile);
             if (V3OperatingDomainValidator.assess(reprofiled, thermo)
                     instanceof V3OperatingDomainValidator.Assessment.Rejected) return null;
-            V3SolvePass corrected = V3ColumnCalculator.solveSingleProblem(reprofiled, thermo, pass.attempt().state(), correctionControl,
-                    pass.solvePath(), RungOptions.of(V3ColumnCalculator.ContinuationJacobianPolicy.STAGE_LOCAL_BLOCKS,
+            V3SolvePass corrected = V3AttemptLoop.solveSingleProblem(reprofiled, thermo, pass.attempt().state(), correctionControl,
+                    pass.solvePath(), RungOptions.of(ContinuationJacobianPolicy.STAGE_LOCAL_BLOCKS,
                             HYDRAULIC_CORRECTION_MAXIMUM_ITERATIONS), policy,
                     V3WetTraySet.of(reprofiled.topology(), wetTrayMask(solved)));
             return V3ColumnCalculator.publishesSuccess(corrected.attempt(), corrected.audit())

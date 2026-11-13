@@ -10,7 +10,7 @@ import com.wormzjl.icheme.science.column.v3.thermo.V3ThermoModel;
  *
  * <p>Moved out of {@link V3ColumnCalculator} unchanged (batch 2026-11-13-codebase-review, D-C2). Each function
  * reads only its arguments: a problem, a thermodynamic model, a state and the flow arrays it lifts in place.
- * {@code componentFloor} became package-private with the move ({@code V3ColumnCalculator.seedForTopology} reads it).</p>
+ * {@code componentFloor} became package-private with the move ({@code V3AttemptLoop.seedForTopology} reads it).</p>
  */
 final class V3FloorLift {
     /**

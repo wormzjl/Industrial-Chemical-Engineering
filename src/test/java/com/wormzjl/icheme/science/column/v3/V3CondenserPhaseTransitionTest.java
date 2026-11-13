@@ -21,7 +21,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 class V3CondenserPhaseTransitionTest {
     @Test
     void successfulPhaseCorrectionRestoresLaterNumericalRecoveryWithoutForgettingAttemptedBranches() {
-        V3ColumnCalculator.CondenserAttempts policy = new V3ColumnCalculator.CondenserAttempts();
+        CondenserAttempts policy = new CondenserAttempts();
         policy.recordAttempt(V3CondenserPhaseBranch.LIQUID_ONLY);
         assertTrue(policy.allowsColdRecovery());
         policy.beginPhaseCorrection();
@@ -37,7 +37,7 @@ class V3CondenserPhaseTransitionTest {
 
     @Test
     void unresolvedOrNewPhaseMismatchContinuesToBlockColdRecovery() {
-        V3ColumnCalculator.CondenserAttempts policy = new V3ColumnCalculator.CondenserAttempts();
+        CondenserAttempts policy = new CondenserAttempts();
         policy.beginPhaseCorrection();
         policy.finishPhaseCorrection(false);
         assertFalse(policy.allowsColdRecovery());

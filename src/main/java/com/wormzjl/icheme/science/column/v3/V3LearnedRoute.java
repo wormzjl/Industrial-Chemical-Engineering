@@ -19,8 +19,8 @@ import static com.wormzjl.icheme.science.column.v3.V3SolveReport.terminalFailure
  *
  * <p>Moved out of {@link V3ColumnCalculator} unchanged (batch 2026-11-13-codebase-review, D-C2). The calculator keeps
  * the entry points and the catalog pin, and calls {@link #calculateInCatalog} (package-private with the move). The
- * route calls back into the calculator for the classical backup, the attempt preparation, the feed flash, the
- * single-problem solve, the acceptance gates and the diagnostics.</p>
+ * route calls back into the calculator for the classical backup, the acceptance gates and the diagnostics, and into
+ * {@link V3AttemptLoop} for the attempt preparation, the feed flash and the single-problem solve (D-C4).</p>
  */
 final class V3LearnedRoute {
     private V3LearnedRoute() {}
@@ -154,13 +154,13 @@ final class V3LearnedRoute {
             // Near an aqueous phase boundary, releasing the weakly determined water coordinate before
             // correcting the energy profile gives enormous Newton steps. Hold only the predicted water
             // during this warm prepass, then release it for the unchanged final wet-system certificate.
-            PreparedAttempt prepared = V3ColumnCalculator.prepareAttempt(problem, thermo, state, policy, wet, false);
+            PreparedAttempt prepared = V3AttemptLoop.prepareAttempt(problem, thermo, state, policy, wet, false);
             boolean[] mask = new boolean[problem.topology().nodeCount()];
             for (int tray : wet.wetTrays()) mask[tray] = true;
             V3WetTraySet parametric = V3WetTraySet.parametric(problem.topology(), mask,
                     V3ColumnInitializer.freeWaterFlows(prepared.seed()));
             V3ColumnProblem warm = V3ColumnProblemResolver.withTruncation(problem, prepared.support(), parametric);
-            var flash = V3ColumnCalculator.feedFlash(problem, thermo, control, policy);
+            var flash = V3AttemptLoop.feedFlash(problem, thermo, control, policy);
             var evaluator = new V3MeshResidualEvaluator(warm, thermo, flash.molarEnthalpyJoulesPerMol());
             var attempt = V3SimultaneousColumnSolver.solveWithContinuationLocalBlocks(warm, evaluator,
                     new V3DryMeshCoordinateMap(warm), parametric.seed(warm, prepared.seed()), thermo::newWorkspace,
@@ -170,8 +170,8 @@ final class V3LearnedRoute {
                 fixedWaterRefined = true;
             }
         }
-        V3SolvePass pass = V3ColumnCalculator.solveSingleProblem(problem, thermo, state, control, "lnn/requested-state",
-                new RungOptions(V3ColumnCalculator.ContinuationJacobianPolicy.STAGE_LOCAL_BLOCKS,
+        V3SolvePass pass = V3AttemptLoop.solveSingleProblem(problem, thermo, state, control, "lnn/requested-state",
+                new RungOptions(ContinuationJacobianPolicy.STAGE_LOCAL_BLOCKS,
                         options.maximumIterations(), neuralRungBudget(options), neuralExtension(options)), policy, wet);
         List<String> events = fixedWaterRefined ? mergedEvents(List.of(
                 "wet seed refinement: fixed-water warm pass; final certificate releases every wet coordinate"), pass.solverEvents())
