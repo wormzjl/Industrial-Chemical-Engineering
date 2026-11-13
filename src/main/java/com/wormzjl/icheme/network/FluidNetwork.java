@@ -431,8 +431,9 @@ public final class FluidNetwork {
                     case RESERVOIR->{
                         // A batch still's pot (W6): its firing and reflux valve, a fact its islands read at their next slice.
                         if(d.stillPot()&&controls.still!=null){
-                            // The field guide's stop step (P2b): the fire set off, read against the still's last cached view.
-                            var shown=controls.still.firing()==0?world.view(d.id()).still():null;
+                            // The field guide's stop step (P2b): the fire set off, read against the still's view as its island is
+                            // stored (code review finding 1: a packet handler materialises no island).
+                            var shown=controls.still.firing()==0?world.stored(()->world.view(d.id())).still():null;
                             String refused=world.stillSettings(d.id(),controls.still.firing(),controls.still.ratio());
                             if(refused!=null)throw new IllegalArgumentException(refused);
                             com.wormzjl.icheme.runtime.tutorial.TutorialTriggers.stillFiringOff(player,shown);
