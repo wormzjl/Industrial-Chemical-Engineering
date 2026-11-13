@@ -223,7 +223,7 @@ Owner, 2026-11-13, three statements in order: "You have full authority over this
 | 4 | Failure modes N1, N2, N4, N5 and N7 option A; the unreachable trips option A. N1 is in the erosion class (8 h of process time against a closed discharge, 32 h at 15 % of rated flow), not the review's seizure class: a pump behind a closed control valve is a normal state of a plant here | wave G (G1) |
 | 5 | Yes: R6 option A | B runtime |
 | 6 | Yes: C2 and C5 | wave H, first batch |
-| 7 | P1 yes, after P7's count states its gain; L2 with P1; L1 measured on the first rung and deleted under 5 % | wave E stage 0 |
+| 7 | P1 and L2: **not pursued** (revised 2026-11-13 after E0-1 was written and run: step A changes no count, and the block Jacobian alone stalls or is singular on 14 of 166 column tests; WAVE_E_BRIEFS amendment 1). The finite-difference Jacobian and the damped cascade stay. L1 measured on the first rung and deleted under 5 % | wave E stage 0 |
 | 8, 16 | The learned start first where a model binds, at the strict closure, for the running column's first solve and for a refused warm seed; where no model binds, D3 option A. Before the change: the checkpoint count on every shipped preset, old route and new | wave E stage 0, before the parity fixtures are recorded |
 | 9 | Yes: declared revisions in place of the three hashes | wave H |
 | 10 | As stated: Windows and Linux first, macOS on the Java path until built; an unverified target is guarded | wave E stage (a) |
