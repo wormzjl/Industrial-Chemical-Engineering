@@ -208,6 +208,14 @@ public final class PassiveStepSolver {
      * (batch 2026-10-27-heat-exchanger-design). */
     private record SideCurve(double coldest,double hottest,HeatCurve.Films films,PassiveNetwork.PhasePort port,double volume,FluidThermodynamics.State start,HeatCurve curve) {}
     private final Map<Long,SideCurve[]> sideCurves=new HashMap<>();
+    /**
+     * The heat curves this solver has sampled ({@link #sideCurve}), and of them those sampled while a pass's residual was
+     * evaluated, which is none: a pass samples its curves when it is built ({@link Equations#sideHeat}; finding D-02, batch
+     * 2026-11-13-codebase-review). A test's counters.
+     */
+    private long heatCurveSamples,heatCurvesInResidual;private boolean inResidual;
+    long heatCurveSamples(){return heatCurveSamples;}
+    long heatCurvesInResidual(){return heatCurvesInResidual;}
     private final Map<WorkspaceKey,SparseNewton.Workspace> workspaces=new LinkedHashMap<>();
     private final Map<WorkspaceKey,SparseNewton.Workspace> structures=new LinkedHashMap<>();
     private List<PassiveNetwork.Pipe.Identity> previousPipes=List.of();
@@ -519,7 +527,7 @@ public final class PassiveStepSolver {
             int[] phases=new int[seeds.size()];for(int i=0;i<phases.length;i++)phases[i]=dry(graph.reservoirs().get(i),seeds.get(i))?DRY:phaseCode(seeds.get(i));
             byte[] modeCodes=new byte[modes.size()];for(int i=0;i<modeCodes.length;i++)modeCodes[i]=(byte)modes.get(i).ordinal();
             var supports=supports(graph,seeds,reachable,promoted);
-            var equations=new Equations(graph,dt,modes,boundaryClosed,seeds,reachable,supports,pipeIdentities);allowedRestart=null;
+            var equations=new Equations(graph,dt,modes,boundaryClosed,seeds,reachable,supports,pipeIdentities,checkpoint);allowedRestart=null;
             flashRestated=null;
             // The active-set state is what varies between passes, so the structure key is also the cycle key: repeating one
             // means the pass sequence cannot make progress. The frozen junction donors, the phase-port segments and the static
@@ -2357,20 +2365,8 @@ public final class PassiveStepSolver {
         if(!(fluid>0))return whole;
         return (whole*mass-solidShare(s,phase)*s.solidMoments().enthalpy(s.temperature(),s.pressure()))/fluid;
     }
-    /**
-     * The heat (W, into the stream) heat-exchanging connection {@code pipe} takes up when it carries {@code flow} drawn at
-     * {@code specificEnthalpy} from {@code graph}'s end the flow leaves: its side's march ({@link HeatSide#heat}) on that
-     * end's curve ({@link #sideCurve}). Zero for a plain connection, at no flow, and from an end that draws nothing. The
-     * step's rows and reconstruction, the start balance and the junction seeds all read it (batch
-     * 2026-10-27-heat-exchanger-design).
-     */
-    private double sideHeat(PassiveNetwork graph,PassiveNetwork.Pipe pipe,double specificEnthalpy,double flow,Runnable checkpoint) {
-        if(pipe.heat()==null||flow==0)return 0;
-        var curve=sideCurve(graph,pipe,flow>0?pipe.first():pipe.second(),checkpoint);
-        return curve==null?0:pipe.heat().heat(curve,specificEnthalpy,flow);
-    }
     /** What a stream drawn at {@code specificEnthalpy} (J/kg) and {@code temperature} arrives as through {@code pipe} at
-     * {@code flow}: its specific enthalpy and temperature after the side ({@link #sideHeat}, the temperature off the same
+     * {@code flow}: its specific enthalpy and temperature after the side ({@link Equations#sideHeat}, the temperature off the same
      * curve); unchanged through a plain connection. A seed's reading: a junction a heater boils is seeded with its vapour. */
     private double[] delivered(PassiveNetwork graph,PassiveNetwork.Pipe pipe,double specificEnthalpy,double temperature,double flow,Runnable checkpoint) {
         var curve=pipe.heat()==null||flow==0?null:sideCurve(graph,pipe,flow>0?pipe.first():pipe.second(),checkpoint);
@@ -2398,6 +2394,7 @@ public final class PassiveStepSolver {
         if(total>0&&endMass(start,port,volume)>0) {
             double low=Math.max(NumericalBox.MINIMUM_TEMPERATURE,Math.min(start.temperature(),law.coldest())-10);
             double high=Math.min(NumericalBox.MAXIMUM_TEMPERATURE,Math.max(start.temperature(),law.hottest())+10);
+            heatCurveSamples++;if(inResidual)heatCurvesInResidual++;
             curve=HeatCurve.sample(model,amounts,start.pressure(),low,high,law.films(),checkpoint);
         }
         kept[end]=new SideCurve(law.coldest(),law.hottest(),law.films(),port,volume,start,curve);
@@ -4469,11 +4466,12 @@ public final class PassiveStepSolver {
          * amount form over the junction's own mass; see there. */
         double junctionWeight=1;
         Equations(PassiveNetwork graph,double dt,List<FlowControl.Mode> modes,boolean[] boundaryClosed,List<FluidThermodynamics.State> seeds,boolean[][] reachable,
-                  byte[][] supports,List<PassiveNetwork.Pipe.Identity> pipeIdentities) {
+                  byte[][] supports,List<PassiveNetwork.Pipe.Identity> pipeIdentities,Runnable checkpoint) {
             this.modes=List.copyOf(modes);this.pipeIdentities=pipeIdentities;
             this.seeds=List.copyOf(seeds);this.supports=supports;
             this.boundaryClosed=boundaryClosed.clone();
             this.graph=graph;this.dt=dt;solidSupport=hasSolids(graph);int count=graph.reservoirs().size();layout=new PhaseLayout[count];offsets=new int[count];oldAmounts=new double[count][];
+            passCurves=sampleSideCurves(checkpoint);
             cachedVariables=new double[count][];cachedStates=new FluidThermodynamics.State[count];cachedTransport=new Transport[count];
             cachedPrepared=new FluidThermodynamics.Prepared[count];
             drawsPhase=new boolean[count];
@@ -5261,9 +5259,12 @@ public final class PassiveStepSolver {
                     stream.specificEnthalpy(),stream.velocityLimit(),stream.solidMoments(),null);
         }
         public double[] residual(double[] x) {
-            decode(x);double[] f=new double[size];
-            assemble(x,cachedStates,cachedTransport,cachedPrepared,f);
-            return f;
+            inResidual=true;
+            try {
+                decode(x);double[] f=new double[size];
+                assemble(x,cachedStates,cachedTransport,cachedPrepared,f);
+                return f;
+            } finally {inResidual=false;}
         }
         /** The largest row, each times its {@link #rowWeights} weight. */
         @Override public double residualNorm(double[] residual) {
@@ -5428,11 +5429,47 @@ public final class PassiveStepSolver {
         }
         /**
          * The heat (W, into the stream) heat-exchanging connection {@code edge} takes up when it carries {@code flow} drawn at
-         * {@code specificEnthalpy} from the end the flow leaves ({@link PassiveStepSolver#sideHeat}, on this step's graph).
-         * The residual, the block Jacobian and the reconstruction ({@link ConservativeTransport.EdgeHeat}) all read this one
-         * function.
+         * {@code specificEnthalpy} from the end the flow leaves: its side's march ({@link HeatSide#heat}) on that end's curve,
+         * as this pass sampled it ({@link #passCurves}). Zero for a plain connection, at no flow, and from an end that draws
+         * nothing. The residual, the block Jacobian and the reconstruction ({@link ConservativeTransport.EdgeHeat}) all read
+         * this one function (batch 2026-10-27-heat-exchanger-design); it reads, it never samples.
          */
-        double sideHeat(int edge,double specificEnthalpy,double flow){return PassiveStepSolver.this.sideHeat(graph,graph.pipes().get(edge),specificEnthalpy,flow,()->{});}
+        double sideHeat(int edge,double specificEnthalpy,double flow) {
+            var pipe=graph.pipes().get(edge);
+            if(pipe.heat()==null||flow==0)return 0;
+            int end=flow>0?0:1;
+            if(passRefusals!=null&&passRefusals[edge]!=null&&passRefusals[edge][end]!=null)throw passRefusals[edge][end];
+            var curve=passCurves[edge][end];
+            return curve==null?0:pipe.heat().heat(curve,specificEnthalpy,flow);
+        }
+        /**
+         * Finding D-02 (batch 2026-11-13-codebase-review): per heat-exchanging connection, the curve of each of its ends
+         * ({@link PassiveStepSolver#sideCurve}), the donor of either flow direction, sampled when the pass is built, so no
+         * residual or Jacobian probe runs a flash march (a probe or a trial may reverse a flow, a closed one's included). Null
+         * for a plain connection. A sample the property model refuses is kept as that end's refusal, which a residual that
+         * draws from the end meets as it met the sample before; the checkpoint's own cancellation ends the pass.
+         */
+        private final HeatCurve[][] passCurves;private RuntimeException[][] passRefusals;
+        private HeatCurve[][] sampleSideCurves(Runnable checkpoint) {
+            var curves=new HeatCurve[graph.pipes().size()][];
+            for(int edge=0;edge<curves.length;edge++) {
+                var pipe=graph.pipes().get(edge);
+                if(pipe.heat()==null)continue;
+                curves[edge]=new HeatCurve[2];
+                for(int end=0;end<2;end++) {
+                    RuntimeException[] cancelled={null};
+                    Runnable guarded=()->{try{checkpoint.run();}catch(RuntimeException cancel){cancelled[0]=cancel;throw cancel;}};
+                    try{curves[edge][end]=sideCurve(graph,pipe,end==0?pipe.first():pipe.second(),guarded);}
+                    catch(RuntimeException refusal) {
+                        if(refusal==cancelled[0])throw refusal;
+                        if(passRefusals==null)passRefusals=new RuntimeException[curves.length][];
+                        if(passRefusals[edge]==null)passRefusals[edge]=new RuntimeException[2];
+                        passRefusals[edge][end]=refusal;
+                    }
+                }
+            }
+            return curves;
+        }
         /** The power (W) mover connection {@code edge} gives what it moves ({@link PassiveStepSolver#moverPower}, on this step's
          * graph): the energy rows and the reconstruction ({@link ConservativeTransport.MoverWork}) read this one function. */
         double moverPower(int edge,double massFlow,double head,double suctionDensity,double suctionPressure,double dischargePressure){return PassiveStepSolver.this.moverPower(graph,edge,massFlow,head,suctionDensity,suctionPressure,dischargePressure);}

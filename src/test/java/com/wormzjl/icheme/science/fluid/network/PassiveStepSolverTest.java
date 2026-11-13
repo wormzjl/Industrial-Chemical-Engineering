@@ -94,4 +94,26 @@ class PassiveStepSolverTest {
         assertTrue(TestPhases.vapor(result.states().get(1))[0]>0);assertTrue(result.massFlows()[0]>0);
         assertEquals(0,TestPhases.vapor(result.states().get(0))[1],1e-10);
     }
+    /**
+     * Finding D-02 (batch 2026-11-13-codebase-review): a heat side between two water tanks at 350 K, cooled by a 300 K wall.
+     * The first step runs forward (3 bar to 1.5 bar); the second starts from that flow on swapped pressures, so its Newton
+     * reverses the flow through zero onto the other end's stream. Each pass samples both ends' curves when it is built: the
+     * step converges backward, its side books the cooling of the other end's water, and no curve is sampled in a residual.
+     */
+    @Test void aHeatSideWhoseFlowReversesReadsTheCurvesItsPassSampled() {
+        int water=model.componentCount()-1;
+        var side=new HeatSide(2,HeatCurve.Films.DEFAULT,new double[]{300},0,0);
+        var pipe=new PassiveNetwork.Pipe(3,0,1,new PipeResistance.Geometry(10,.05,.000045,0)).withHeat(side);
+        var solver=new PassiveStepSolver(model);
+        var forward=solver.solve(new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,fill(300000,water)),new PassiveNetwork.Reservoir(2,0,fill(150000,water))),List.of(pipe)),.1,()->{});
+        assertTrue(forward.massFlows()[0]>0);
+        long first=solver.heatCurveSamples();
+        assertTrue(first>=2,"both ends sampled: "+first);
+        var backward=solver.solve(new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,fill(150000,water)),new PassiveNetwork.Reservoir(2,0,fill(300000,water))),List.of(pipe)),.1,()->{});
+        assertTrue(backward.massFlows()[0]<0,"the flow reversed: "+backward.massFlows()[0]);
+        assertTrue(solver.heatCurveSamples()>=first+2,"the new start states' curves");
+        double heat=0;for(var b:backward.boundaries())if(b.kind()==ConservativeTransport.BoundaryTransfer.Kind.HEAT)heat+=b.totalEnergyJoule();
+        assertTrue(heat<0,"the wall cools the water arriving from the second tank: "+heat);
+        assertEquals(0,solver.heatCurvesInResidual(),"no curve sampled during a residual");
+    }
 }
