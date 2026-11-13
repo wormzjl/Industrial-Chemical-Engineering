@@ -1,6 +1,6 @@
 package com.wormzjl.icheme.science.assembly;
 
-import com.wormzjl.icheme.science.column.operation.OperationView;
+import com.wormzjl.icheme.science.plant.column.OperationView;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Objects;

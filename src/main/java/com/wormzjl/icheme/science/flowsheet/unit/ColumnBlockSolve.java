@@ -1,7 +1,7 @@
 package com.wormzjl.icheme.science.flowsheet.unit;
 
-import com.wormzjl.icheme.science.column.operation.ColumnSolve;
-import com.wormzjl.icheme.science.column.operation.ColumnWater;
+import com.wormzjl.icheme.science.plant.column.ColumnSolve;
+import com.wormzjl.icheme.science.plant.column.ColumnWater;
 import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
 import com.wormzjl.icheme.science.column.v3.V3ColumnDisplayResult;
 import com.wormzjl.icheme.science.column.v3.V3ColumnOutcome;

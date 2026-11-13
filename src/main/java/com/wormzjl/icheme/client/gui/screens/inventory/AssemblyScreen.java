@@ -26,7 +26,7 @@ import com.wormzjl.icheme.science.assembly.AssemblyReport.SlotReport;
 import com.wormzjl.icheme.science.assembly.AssemblyView;
 import com.wormzjl.icheme.science.assembly.Blueprint.Slot;
 import com.wormzjl.icheme.science.assembly.ColumnBlueprint;
-import com.wormzjl.icheme.science.column.operation.OperationView;
+import com.wormzjl.icheme.science.plant.column.OperationView;
 import com.wormzjl.icheme.science.equipment.ColumnTrays;
 import com.wormzjl.icheme.world.inventory.AssemblyMenu;
 import com.wormzjl.icheme.world.level.block.EquipmentStructure;

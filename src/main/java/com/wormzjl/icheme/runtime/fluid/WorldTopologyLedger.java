@@ -534,7 +534,7 @@ public final class WorldTopologyLedger {
     public StillUnit removeStill(long id) {
         owned();var unit=stills.remove(id);if(unit==null)return null;
         var moles=destroyed.moles();double energy=destroyed.totalEnergy();
-        for(var a:new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account[]{unit.head(),unit.venting()}){var n=a.moles();for(int c=0;c<n.length;c++)moles[c]+=n[c];energy+=a.energy();}
+        for(var a:new com.wormzjl.icheme.science.plant.column.ColumnCycle.Account[]{unit.head(),unit.venting()}){var n=a.moles();for(int c=0;c<n.length;c++)moles[c]+=n[c];energy+=a.energy();}
         destroyed=new MaterialTotal(moles,energy,destroyed.solidMasses());version++;return unit;
     }
     /** The fluid converters (batch 2026-11-12-fluid-conversion): a copy, by their vessels' identities. */

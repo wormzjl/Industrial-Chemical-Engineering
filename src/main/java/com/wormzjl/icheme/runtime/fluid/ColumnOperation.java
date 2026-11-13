@@ -1,16 +1,16 @@
 package com.wormzjl.icheme.runtime.fluid;
 
 import com.wormzjl.icheme.science.fluid.SimulationTime;
-import com.wormzjl.icheme.science.column.operation.ColumnCycle;
-import com.wormzjl.icheme.science.column.operation.ColumnCycle.Account;
-import com.wormzjl.icheme.science.column.operation.ColumnSolve;
-import com.wormzjl.icheme.science.column.operation.ColumnStatus;
-import com.wormzjl.icheme.science.column.operation.Condition;
-import com.wormzjl.icheme.science.column.operation.Refusal;
-import com.wormzjl.icheme.science.column.operation.Setpoints;
-import com.wormzjl.icheme.science.column.operation.DriftBands;
-import com.wormzjl.icheme.science.column.operation.Port;
-import com.wormzjl.icheme.science.column.operation.SplitTable;
+import com.wormzjl.icheme.science.plant.column.ColumnCycle;
+import com.wormzjl.icheme.science.plant.column.ColumnCycle.Account;
+import com.wormzjl.icheme.science.plant.column.ColumnSolve;
+import com.wormzjl.icheme.science.plant.column.ColumnStatus;
+import com.wormzjl.icheme.science.plant.column.Condition;
+import com.wormzjl.icheme.science.plant.column.Refusal;
+import com.wormzjl.icheme.science.plant.column.Setpoints;
+import com.wormzjl.icheme.science.plant.column.DriftBands;
+import com.wormzjl.icheme.science.plant.column.Port;
+import com.wormzjl.icheme.science.plant.column.SplitTable;
 import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
 import com.wormzjl.icheme.science.column.v3.V3NeuralSeed;
 import com.wormzjl.icheme.science.fluid.network.ConservativeTransport;
@@ -80,8 +80,8 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
      * was given (as a drift reference, with the components its table holds); its outcome once it is done.
      */
     static final class Pending {
-        final DriftBands.Trigger trigger;final long tick;final com.wormzjl.icheme.science.column.operation.Setpoints setpoints;final SplitTable.Reference state;final boolean[] held;ColumnSolve.Outcome outcome;
-        Pending(DriftBands.Trigger trigger,long tick,com.wormzjl.icheme.science.column.operation.Setpoints setpoints,SplitTable.Reference state,boolean[] held){this.trigger=trigger;this.tick=tick;this.setpoints=setpoints;this.state=state;this.held=held;}
+        final DriftBands.Trigger trigger;final long tick;final com.wormzjl.icheme.science.plant.column.Setpoints setpoints;final SplitTable.Reference state;final boolean[] held;ColumnSolve.Outcome outcome;
+        Pending(DriftBands.Trigger trigger,long tick,com.wormzjl.icheme.science.plant.column.Setpoints setpoints,SplitTable.Reference state,boolean[] held){this.trigger=trigger;this.tick=tick;this.setpoints=setpoints;this.state=state;this.held=held;}
         long applyAt(){return tick+APPLY_TICKS;}
     }
     /** A state whose solve was refused (W2): no solve is asked again while the state taken stays inside its bands. */
@@ -133,7 +133,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         long nextCycle;
         String status="STARTING: waiting for the first solve";
         /** The status as the Operation tab says it (C7), set with {@link #status}; the solve that gave the table, whether warm. */
-        com.wormzjl.icheme.science.column.operation.OperationView.Phase phase=com.wormzjl.icheme.science.column.operation.OperationView.Phase.STARTING;DriftBands.Trigger solvedBy;boolean warm;
+        com.wormzjl.icheme.science.plant.column.OperationView.Phase phase=com.wormzjl.icheme.science.plant.column.OperationView.Phase.STARTING;DriftBands.Trigger solvedBy;boolean warm;
         /** What the last cycle and the solves found (W1): the step's conditions, then the solve's and the notices. */
         List<Condition.Active> conditions=List.of();
         ColumnCycle.Step last;
@@ -142,7 +142,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         /** After a solve the worker did not finish, no solve before this tick; whether that solve was already the one retry (W2). */
         long waitUntil=Long.MIN_VALUE/2;boolean retried;
         /** The state whose solve was refused, or null; the requested set points whose solve was refused and why, or null (W2, memory only). */
-        Refused refused;com.wormzjl.icheme.science.column.operation.Setpoints refusedSetpoints;Condition.Active setpointRefusal;
+        Refused refused;com.wormzjl.icheme.science.plant.column.Setpoints refusedSetpoints;Condition.Active setpointRefusal;
         /** The design had no operating point at the last request while no table stands: NOT READY, or null. */
         Condition.Active missing;
         /** Rule A in force (owner Q1, C1: rule B, with A where a solve fails): a solve of the short steam was refused, so every input is cut together until the steam is no longer short or its shortage leaves the refused state's bands. */
@@ -338,16 +338,16 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
      * set rate; an outlet: its buffer of design production), its valve's opening as {@code opening} reads it (NaN unknown);
      * the duties booked over the cycle against the table's at the set feed. Null where the ledger has no such unit.
      */
-    public com.wormzjl.icheme.science.column.operation.OperationView view(long unit,long now,java.util.function.LongToDoubleFunction opening) {
+    public com.wormzjl.icheme.science.plant.column.OperationView view(long unit,long now,java.util.function.LongToDoubleFunction opening) {
         var u=topology.column(unit);if(u==null)return null;
         var r=u.running()?runs.get(unit):null;var set=u.setpoints();
-        if(r==null)return new com.wormzjl.icheme.science.column.operation.OperationView(com.wormzjl.icheme.science.column.operation.OperationView.Phase.STOPPED,List.of(),0,null,
+        if(r==null)return new com.wormzjl.icheme.science.plant.column.OperationView(com.wormzjl.icheme.science.plant.column.OperationView.Phase.STOPPED,List.of(),0,null,
                 "STOPPED",false,true,set,null,List.of(),List.of(),null);
         var t=r.table;var step=r.last!=null&&!r.last.tripped()?r.last:null;double seconds=cycleSeconds();
         // The cycle demands its inlets at the accepted set points (W2); the view shows the requested ones beside them where they differ.
         var demanded=running(u,t);var accepted=t!=null&&set.intensivelyDiffers(t.reference().setpoints())?demanded:null;
         var stations=new ArrayList<>(u.stations());stations.removeIf(s->s.device()==0);stations.sort(Comparator.comparing((ColumnUnit.Station s)->s.port()).thenComparingInt(ColumnUnit.Station::index));
-        var streams=new ArrayList<com.wormzjl.icheme.science.column.operation.OperationView.Stream>();
+        var streams=new ArrayList<com.wormzjl.icheme.science.plant.column.OperationView.Stream>();
         for(var s:stations) {
             var registration=s.device()==0?null:topology.active().get(s.device());
             double rate=0,temperature=Double.NaN,held=Double.NaN,pressure=registration==null?Double.NaN:registration.spec().pressure();
@@ -367,26 +367,26 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
                     if(capacity>0)held=s.account().total()/capacity;
                 }
             }
-            streams.add(new com.wormzjl.icheme.science.column.operation.OperationView.Stream(s.port(),s.index(),rate,temperature,pressure,held,opening.applyAsDouble(s.valve())));
+            streams.add(new com.wormzjl.icheme.science.plant.column.OperationView.Stream(s.port(),s.index(),rate,temperature,pressure,held,opening.applyAsDouble(s.valve())));
         }
-        var duties=new ArrayList<com.wormzjl.icheme.science.column.operation.OperationView.Duty>();
+        var duties=new ArrayList<com.wormzjl.icheme.science.plant.column.OperationView.Duty>();
         if(t!=null) {
             double f=set.feedRate();
-            duties.add(new com.wormzjl.icheme.science.column.operation.OperationView.Duty(com.wormzjl.icheme.science.column.operation.OperationView.DutyKind.CONDENSER,0,step==null?0:step.condenser()/seconds,t.condenserPerFeed()*f));
-            if(set.reboilerPerFeed()!=0)duties.add(new com.wormzjl.icheme.science.column.operation.OperationView.Duty(com.wormzjl.icheme.science.column.operation.OperationView.DutyKind.REBOILER,0,step==null?0:step.reboiler()/seconds,t.reboilerPerFeed()*f));
+            duties.add(new com.wormzjl.icheme.science.plant.column.OperationView.Duty(com.wormzjl.icheme.science.plant.column.OperationView.DutyKind.CONDENSER,0,step==null?0:step.condenser()/seconds,t.condenserPerFeed()*f));
+            if(set.reboilerPerFeed()!=0)duties.add(new com.wormzjl.icheme.science.plant.column.OperationView.Duty(com.wormzjl.icheme.science.plant.column.OperationView.DutyKind.REBOILER,0,step==null?0:step.reboiler()/seconds,t.reboilerPerFeed()*f));
             var pa=t.pumparoundPerFeed();
-            for(int j=0;j<pa.length;j++)duties.add(new com.wormzjl.icheme.science.column.operation.OperationView.Duty(com.wormzjl.icheme.science.column.operation.OperationView.DutyKind.PUMPAROUND,j,
+            for(int j=0;j<pa.length;j++)duties.add(new com.wormzjl.icheme.science.plant.column.OperationView.Duty(com.wormzjl.icheme.science.plant.column.OperationView.DutyKind.PUMPAROUND,j,
                     step==null||j>=step.pumparounds().length?0:step.pumparounds()[j]/seconds,pa[j]*f));
             // An air condenser's fans (U2): their power at the last cycle, and at the set feed, for the electricity network to come.
             double atSet=t.fans(u.airSurface(),f);
-            if(!Double.isNaN(atSet))duties.add(new com.wormzjl.icheme.science.column.operation.OperationView.Duty(com.wormzjl.icheme.science.column.operation.OperationView.DutyKind.FANS,0,
+            if(!Double.isNaN(atSet))duties.add(new com.wormzjl.icheme.science.plant.column.OperationView.Duty(com.wormzjl.icheme.science.plant.column.OperationView.DutyKind.FANS,0,
                     step==null||Double.isNaN(r.fanPower)?0:r.fanPower,com.wormzjl.icheme.science.equipment.HeatSides.fanPower(u.airSurface(),atSet)));
         }
-        var solve=t==null?null:new com.wormzjl.icheme.science.column.operation.OperationView.Solve(r.solvedBy,r.warm,SimulationTime.playSeconds(Math.max(0,now-r.tableTick)));
+        var solve=t==null?null:new com.wormzjl.icheme.science.plant.column.OperationView.Solve(r.solvedBy,r.warm,SimulationTime.playSeconds(Math.max(0,now-r.tableTick)));
         // The trays at the feed taken (W7): the live drop as the channel reads it, the worst tray's flood fraction.
-        var trays=com.wormzjl.icheme.science.column.operation.OperationView.Trays.NONE;
-        if(t!=null&&t.flood().known()){double taken=step==null?0:step.feedMoles()/seconds;trays=new com.wormzjl.icheme.science.column.operation.OperationView.Trays(drop(t,taken),t.flood().fraction(taken),drop(t,set.feedRate()),t.flood().fraction(set.feedRate()),t.flood().tray()+1);}
-        return new com.wormzjl.icheme.science.column.operation.OperationView(r.phase,r.conditions,step==null?0:step.alpha(),
+        var trays=com.wormzjl.icheme.science.plant.column.OperationView.Trays.NONE;
+        if(t!=null&&t.flood().known()){double taken=step==null?0:step.feedMoles()/seconds;trays=new com.wormzjl.icheme.science.plant.column.OperationView.Trays(drop(t,taken),t.flood().fraction(taken),drop(t,set.feedRate()),t.flood().fraction(set.feedRate()),t.flood().tray()+1);}
+        return new com.wormzjl.icheme.science.plant.column.OperationView(r.phase,r.conditions,step==null?0:step.alpha(),
                 r.pending==null?null:r.pending.trigger,r.status+water(u),true,true,set,accepted,streams,duties,solve,trays);
     }
     /** The role of a column's pressure drop channel, {@code differential_pressure} (W3.3). */

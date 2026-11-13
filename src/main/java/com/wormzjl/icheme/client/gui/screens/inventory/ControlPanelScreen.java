@@ -97,7 +97,7 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
     // A DCS's column page (W6.2): the columns its bus reaches, the one chosen, its Operation view and its entries' drafts.
     private List<CompoundTag> columns = List.of();
     private long column;
-    private com.wormzjl.icheme.science.column.operation.OperationView operation;
+    private com.wormzjl.icheme.science.plant.column.OperationView operation;
     private final Map<String, String> columnDrafts = new HashMap<>();
 
     private static OperationColumn.Units units() {

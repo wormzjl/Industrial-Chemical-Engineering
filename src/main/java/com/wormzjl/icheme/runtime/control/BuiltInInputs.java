@@ -62,11 +62,11 @@ final class BuiltInInputs {
                                 : "COLUMN_PORT:" + nozzle.role().name() + ":" + index,
                         true);
             }
-            for (var role : com.wormzjl.icheme.science.column.operation.Port.values()) {
+            for (var role : com.wormzjl.icheme.science.plant.column.Port.values()) {
                 int count =
-                        role == com.wormzjl.icheme.science.column.operation.Port.STEAM
+                        role == com.wormzjl.icheme.science.plant.column.Port.STEAM
                                 ? counts.getOrDefault(EquipmentShape.Role.STEAM, 0)
-                                : role == com.wormzjl.icheme.science.column.operation.Port.DRAW
+                                : role == com.wormzjl.icheme.science.plant.column.Port.DRAW
                                         ? counts.getOrDefault(EquipmentShape.Role.DRAW, 0)
                                         : 1;
                 for (int i = 0; i < count; i++)

@@ -25,7 +25,7 @@ A lane is a set of packages with one writer at a time. A batch names its lane in
 | column | `science/column/**`, the Rust column crates | `V3ColumnCalculator`, `V3SimultaneousColumnSolver` |
 | fluid step | `science/fluid/network/PassiveStepSolver` and its split, `fluid/solver`, `fluid/linalg` | `PassiveStepSolver` |
 | fluid laws | the rest of `science/fluid/**` | `ConservativeTransport`, `FlowControl` |
-| plant | `science/plant` (when it exists), `science/column/operation`, the still, `runtime/fluid` column and still classes | `ColumnOperation`, `Stills` |
+| plant | `science/plant` (when it exists), `science/plant/column`, the still, `runtime/fluid` column and still classes | `ColumnOperation`, `Stills` |
 | runtime | `runtime/**` but the plant and machine classes, `network/FluidNetwork` | `FluidWorldAuthority`, `IslandCoordinator`, `FluidFacts`, `FluidCheckpointCodec` |
 | machines | `science/machine`, the shaft, store and health classes of `runtime/fluid`, `compat/create` | `ShaftTrains` |
 | equipment | `science/equipment`, `world/**`, `registry` | `ProcessUnit`, `ShapeRasterizer`, `EquipmentStructure`, `EquipmentShape` |

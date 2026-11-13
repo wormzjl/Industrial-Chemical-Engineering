@@ -476,7 +476,7 @@ final class FluidFacts {
     private static ColumnUnit column(Record f) {
         long id=f.count(0);var master=position(f);boolean running=f.bool(false);
         var setpoints=f.record(null,FluidFacts::setpoints);
-        var stations=f.list(List.of(),q->{var port=q.name(com.wormzjl.icheme.science.column.operation.Port.class,null);long index=q.count(0),device=q.count(0),valve=q.count(0);
+        var stations=f.list(List.of(),q->{var port=q.name(com.wormzjl.icheme.science.plant.column.Port.class,null);long index=q.count(0),device=q.count(0),valve=q.count(0);
             var account=q.record(null,FluidFacts::account);required(port,q,"station port");required(account,q,"station account");var held=solids(q);
             if(index>=ColumnUnit.MAXIMUM_STATIONS)throw q.invalid("station index "+index);
             // Crystals melt where they arrive, so what an account holds is inert: its saved record is the whole material.
@@ -500,14 +500,14 @@ final class FluidFacts {
         required(master,f,"column origin");required(setpoints,f,"column setpoints");required(totals,f,"column totals");
         return valid(f,"column unit "+id,()->new ColumnUnit(id,master,running,setpoints,stations,totals,condensers,null,leaving,air,utilities,members));
     }
-    private static Fields setpoints(Fields q,com.wormzjl.icheme.science.column.operation.Setpoints s) {
+    private static Fields setpoints(Fields q,com.wormzjl.icheme.science.plant.column.Setpoints s) {
         return q.f64(s.designFeedRate()).f64(s.feedRate()).f64(s.condenserTemperature()).f64(s.refluxRatio()).f64(s.reboilerPerFeed())
                 .doubles(s.steamPerFeed()).doubles(s.drawsPerFeed()).doubles(s.pumparoundsPerFeed());
     }
-    private static com.wormzjl.icheme.science.column.operation.Setpoints setpoints(Record q) {
+    private static com.wormzjl.icheme.science.plant.column.Setpoints setpoints(Record q) {
         double design=q.f64(0),rate=q.f64(0),condenser=q.f64(0),reflux=q.f64(0),reboiler=q.f64(0);
         var steam=q.doubles(new double[0]);var draws=q.doubles(new double[0]);var pumparounds=q.doubles(new double[0]);
-        return valid(q,"column setpoints",()->new com.wormzjl.icheme.science.column.operation.Setpoints(design,rate,condenser,reflux,reboiler,steam,draws,pumparounds));
+        return valid(q,"column setpoints",()->new com.wormzjl.icheme.science.plant.column.Setpoints(design,rate,condenser,reflux,reboiler,steam,draws,pumparounds));
     }
     /**
      * A batch still (schema 16, batch 2026-11-09-batch-distiller): its pot's identity, its water side, distillate, vent and
@@ -552,10 +552,10 @@ final class FluidFacts {
         long capacity=f.count(0);var fluid=f.text("");long stored=f.count(0);double remainder=f.f64(0);var accountFluid=f.text("");double account=f.f64(0);
         return valid(f,"fluid converter "+id,()->new ConverterUnit(id,drain,drainValve,fill,fillValve,closed,mode,rate,deadband,thresholds,capacity,fluid,stored,remainder,accountFluid,account));
     }
-    private static void account(Fields f,com.wormzjl.icheme.science.column.operation.ColumnCycle.Account a){f.doubles(a.moles()).f64(a.energy());}
-    private static com.wormzjl.icheme.science.column.operation.ColumnCycle.Account account(Record f) {
+    private static void account(Fields f,com.wormzjl.icheme.science.plant.column.ColumnCycle.Account a){f.doubles(a.moles()).f64(a.energy());}
+    private static com.wormzjl.icheme.science.plant.column.ColumnCycle.Account account(Record f) {
         var moles=f.doubles(null);double energy=f.f64(0);required(moles,f,"account moles");
-        return valid(f,"column account",()->new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(moles,energy));
+        return valid(f,"column account",()->new com.wormzjl.icheme.science.plant.column.ColumnCycle.Account(moles,energy));
     }
     /**
      * A shaft unit (schema 10, batch 2026-11-03-rotating-machinery W3): its identity, kind by name, position, axis, ends (each a
@@ -733,13 +733,13 @@ final class FluidFacts {
     /** A column unit's engine state as saved, or null where it does not validate. */
     private static ColumnUnit.State columnState(Record f) {
         var axis=f.list(List.<String>of(),q->q.text(""));
-        var products=f.list(List.<com.wormzjl.icheme.science.column.operation.SplitTable.Product>of(),q->{
-            var port=q.name(com.wormzjl.icheme.science.column.operation.Port.class,null);long index=q.count(0);var recovery=q.doubles(new double[0]);double t=q.f64(0),p=q.f64(0);
-            try{return new com.wormzjl.icheme.science.column.operation.SplitTable.Product(port,Math.toIntExact(index),recovery,t,p);}catch(RuntimeException invalid){return null;}});
+        var products=f.list(List.<com.wormzjl.icheme.science.plant.column.SplitTable.Product>of(),q->{
+            var port=q.name(com.wormzjl.icheme.science.plant.column.Port.class,null);long index=q.count(0);var recovery=q.doubles(new double[0]);double t=q.f64(0),p=q.f64(0);
+            try{return new com.wormzjl.icheme.science.plant.column.SplitTable.Product(port,Math.toIntExact(index),recovery,t,p);}catch(RuntimeException invalid){return null;}});
         double reboiler=f.f64(0);var pa=f.doubles(new double[0]);double condenser=f.f64(0);
         var reference=f.record(null,q->{var z=q.doubles(new double[0]);double h=q.f64(0),slope=q.f64(0);var steam=q.doubles(new double[0]);double alpha=q.f64(0);
             var setpoints=q.record(null,p->{try{return setpoints(p);}catch(IllegalArgumentException invalid){return null;}});double feedT=q.f64(Double.NaN);var steamT=q.doubles(new double[0]);
-            try{return new com.wormzjl.icheme.science.column.operation.SplitTable.Reference(z,h,slope,steam,alpha,setpoints,feedT,steamT);}catch(RuntimeException invalid){return null;}});
+            try{return new com.wormzjl.icheme.science.plant.column.SplitTable.Reference(z,h,slope,steam,alpha,setpoints,feedT,steamT);}catch(RuntimeException invalid){return null;}});
         var held=f.doubles(new double[0]);var enthalpy=f.list(List.<double[]>of(),q->q.doubles(new double[0])).toArray(new double[0][]);long tableTick=f.i64(0),applied=f.i64(0);double solved=f.f64(0);
         var levels=f.list(List.<ColumnUnit.State.Level>of(),q->{long device=q.count(0),tick=q.i64(0);double amount=q.f64(0),rate=q.f64(0),molar=q.f64(0);return new ColumnUnit.State.Level(device,tick,amount,rate,molar);});
         var credits=f.list(List.<ColumnUnit.State.Credit>of(),q->{long device=q.count(0),tick=q.i64(0);
@@ -753,15 +753,15 @@ final class FluidFacts {
         var probes=f.record(null,q->{try{return new ColumnUnit.Probes(q.f64(0),q.f64(0),q.f64(0),q.f64(0),q.f64(0),q.f64(0),q.f64(-1),q.f64(-1));}catch(IllegalArgumentException invalid){return null;}});
         // The table's hydraulics (batch 2026-11-10-column-failure-modes, W3): a state written before them is dropped, and that unit solves again.
         var flood=f.record(null,q->{double per=q.f64(-1);long tray=q.count(-1);boolean vapour=q.bool(true);double dry=q.f64(-1),liquid=q.f64(-1);
-            try{return new com.wormzjl.icheme.science.column.operation.SplitTable.Flood(per,Math.toIntExact(tray),vapour,dry,liquid);}catch(RuntimeException invalid){return null;}});
+            try{return new com.wormzjl.icheme.science.plant.column.SplitTable.Flood(per,Math.toIntExact(tray),vapour,dry,liquid);}catch(RuntimeException invalid){return null;}});
         // The pumparounds' draw temperatures (W4): a state written before them has none, and its coolers' utilities read the hottest product.
         var draws=f.doubles(new double[0]);
         if(flood==null)return null;
         try {
             var kept=new boolean[held.length];for(int i=0;i<kept.length;i++)kept[i]=held[i]!=0;
             if(products.contains(null)||credits.contains(null))return null;
-            var table=Double.isNaN(below)?new com.wormzjl.icheme.science.column.operation.SplitTable(axis,products,reboiler,pa,condenser,reference,kept,water)
-                    :new com.wormzjl.icheme.science.column.operation.SplitTable(axis,products,reboiler,pa,condenser,reference,kept,water,below,air);
+            var table=Double.isNaN(below)?new com.wormzjl.icheme.science.plant.column.SplitTable(axis,products,reboiler,pa,condenser,reference,kept,water)
+                    :new com.wormzjl.icheme.science.plant.column.SplitTable(axis,products,reboiler,pa,condenser,reference,kept,water,below,air);
             return new ColumnUnit.State(table.withFlood(flood).withPumparoundDraw(draws),enthalpy,tableTick,applied,solved,levels,credits,probes);
         }catch(RuntimeException invalid){return null;}
     }
@@ -951,10 +951,10 @@ final class FluidFacts {
                 for(var s:u.stations()) {
                     var held=s.account();var kept=axis.map(held.moles(),removed);
                     double left=held.total()>0?held.energy()*Arrays.stream(kept).sum()/held.total():held.energy();
-                    energy+=left-held.energy();stations.add(s.withAccount(new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(kept,left)));
+                    energy+=left-held.energy();stations.add(s.withAccount(new com.wormzjl.icheme.science.plant.column.ColumnCycle.Account(kept,left)));
                 }
-                var totals=new ColumnUnit.Totals(new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(axis.map(u.totals().taken().moles(),null),u.totals().taken().energy()),
-                        new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(axis.map(u.totals().produced().moles(),null),u.totals().produced().energy()),u.totals().reboiler(),u.totals().condenser(),u.totals().pumparounds());
+                var totals=new ColumnUnit.Totals(new com.wormzjl.icheme.science.plant.column.ColumnCycle.Account(axis.map(u.totals().taken().moles(),null),u.totals().taken().energy()),
+                        new com.wormzjl.icheme.science.plant.column.ColumnCycle.Account(axis.map(u.totals().produced().moles(),null),u.totals().produced().energy()),u.totals().reboiler(),u.totals().condenser(),u.totals().pumparounds());
                 u=new ColumnUnit(u.id(),u.master(),u.running(),u.setpoints(),stations,totals,u.condensers(),null,u.leaving(),u.airSurface(),u.utilities(),u.members());
             }
             columns.put(u.id(),settled(u,registrations));
@@ -965,11 +965,11 @@ final class FluidFacts {
         for(var saved:world.stills) {
             var u=saved;
             if(!axis.identity()) {
-                var kept=new ArrayList<com.wormzjl.icheme.science.column.operation.ColumnCycle.Account>();
+                var kept=new ArrayList<com.wormzjl.icheme.science.plant.column.ColumnCycle.Account>();
                 for(var held:List.of(u.head(),u.venting())) {
                     var moles=axis.map(held.moles(),removed);
                     double left=held.total()>0?held.energy()*Arrays.stream(moles).sum()/held.total():held.energy();
-                    energy+=left-held.energy();kept.add(new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(moles,left));
+                    energy+=left-held.energy();kept.add(new com.wormzjl.icheme.science.plant.column.ColumnCycle.Account(moles,left));
                 }
                 u=u.withAccounts(kept.get(0),kept.get(1));
             }

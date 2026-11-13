@@ -4,8 +4,8 @@ import com.wormzjl.icheme.client.gui.common.kit.Canvas;
 import com.wormzjl.icheme.client.gui.common.kit.Palette;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
-import com.wormzjl.icheme.science.column.operation.ColumnStatus;
-import com.wormzjl.icheme.science.column.operation.Condition;
+import com.wormzjl.icheme.science.plant.column.ColumnStatus;
+import com.wormzjl.icheme.science.plant.column.Condition;
 
 import java.util.ArrayList;
 import java.util.List;

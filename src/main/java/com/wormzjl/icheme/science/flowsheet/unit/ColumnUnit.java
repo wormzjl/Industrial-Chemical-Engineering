@@ -193,7 +193,7 @@ public final class ColumnUnit implements UnitModel {
 
     /** {@link #catalogFor(com.wormzjl.icheme.science.flowsheet.FlowThermo, boolean)} of a column solved on {@code basis}. */
     public static MaterialCatalog catalogFor(com.wormzjl.icheme.science.flowsheet.FlowThermo thermo, com.wormzjl.icheme.science.column.v3.V3ComponentBasis basis) {
-        return catalogFor(thermo, basis.componentIds().contains(com.wormzjl.icheme.science.column.operation.ColumnWater.WATER));
+        return catalogFor(thermo, basis.componentIds().contains(com.wormzjl.icheme.science.plant.column.ColumnWater.WATER));
     }
 
     /**

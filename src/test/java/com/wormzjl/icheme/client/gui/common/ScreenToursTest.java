@@ -7,7 +7,7 @@ import com.wormzjl.icheme.client.gui.common.kit.Measure;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
 import com.wormzjl.icheme.client.gui.screens.inventory.FluidDeviceScreen.FluidGuiLayout;
-import com.wormzjl.icheme.science.column.operation.OperationView;
+import com.wormzjl.icheme.science.plant.column.OperationView;
 import com.wormzjl.icheme.science.display.DisplayUnit;
 import com.wormzjl.icheme.science.equipment.VesselPlacement.Form;
 import com.wormzjl.icheme.science.tutorial.guide.TourFile;

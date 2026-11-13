@@ -297,7 +297,7 @@ public final class ProcessSolveServices {
                 // A worker failure, a cancellation or the deadline is a failed solve, named by its status: the worker did not
                 // finish it, so it is transient, not a refusal of the state (W2).
                 var outcome=completion.result().map(value->{if(!(value instanceof ColumnUnitSolveResult column))throw new IllegalStateException("Column unit request completed with a different result family");return column.outcome();})
-                        .orElseGet(()->new com.wormzjl.icheme.science.column.operation.ColumnSolve.Failed(completion.status().name()+(completion.detail()==null?"":": "+completion.detail()),true));
+                        .orElseGet(()->new com.wormzjl.icheme.science.plant.column.ColumnSolve.Failed(completion.status().name()+(completion.detail()==null?"":": "+completion.detail()),true));
                 result.add(new ColumnUnitCompletion(columnRequest,outcome));
             } else if(context.request() instanceof StillRequest stillRequest) {
                 var outcome=completion.result().map(value->{if(!(value instanceof StillSolveResult still))throw new IllegalStateException("Still request completed with a different result family");return still.outcome();})
@@ -445,20 +445,20 @@ public final class ProcessSolveServices {
         public ColumnUnitTarget {Objects.requireNonNull(dimension);if(unit<=0)throw new IllegalArgumentException("Invalid column unit identity");}
     }
     /** Server-only delivery context of a column unit's solve; the handler gets the outcome, a failed one for a worker failure or a shutdown. */
-    public record ColumnUnitRequest(long requestId,ColumnUnitTarget target,long inputRevision,java.util.function.Consumer<com.wormzjl.icheme.science.column.operation.ColumnSolve.Outcome> handler) implements ProcessSolveRequest {
+    public record ColumnUnitRequest(long requestId,ColumnUnitTarget target,long inputRevision,java.util.function.Consumer<com.wormzjl.icheme.science.plant.column.ColumnSolve.Outcome> handler) implements ProcessSolveRequest {
         public ColumnUnitRequest {Objects.requireNonNull(target);Objects.requireNonNull(handler);if(requestId<=0||inputRevision<0)throw new IllegalArgumentException("Invalid column unit request stamp");}
     }
     /** A column unit's solve: the job and its feed island's model (its compound list's view, which V3 reads too), read on the server at admission. */
-    public record ColumnUnitCommand(com.wormzjl.icheme.science.column.operation.ColumnSolve.Job job,FluidThermodynamics model,double liquidSupplyScreenRatio) implements ProcessSolveCommand {
+    public record ColumnUnitCommand(com.wormzjl.icheme.science.plant.column.ColumnSolve.Job job,FluidThermodynamics model,double liquidSupplyScreenRatio) implements ProcessSolveCommand {
         public ColumnUnitCommand {Objects.requireNonNull(job);Objects.requireNonNull(model);}
         @Override public ProcessSolveResult solve(BoundedCpuSolveService.CancellationToken cancellationToken) {
-            return new ColumnUnitSolveResult(com.wormzjl.icheme.science.column.operation.ColumnSolve.run(job,model,liquidSupplyScreenRatio,cancellationToken::throwIfCancellationRequested));
+            return new ColumnUnitSolveResult(com.wormzjl.icheme.science.plant.column.ColumnSolve.run(job,model,liquidSupplyScreenRatio,cancellationToken::throwIfCancellationRequested));
         }
     }
-    public record ColumnUnitSolveResult(com.wormzjl.icheme.science.column.operation.ColumnSolve.Outcome outcome) implements ProcessSolveResult {
+    public record ColumnUnitSolveResult(com.wormzjl.icheme.science.plant.column.ColumnSolve.Outcome outcome) implements ProcessSolveResult {
         public ColumnUnitSolveResult {Objects.requireNonNull(outcome);}
     }
-    public record ColumnUnitCompletion(ColumnUnitRequest request,com.wormzjl.icheme.science.column.operation.ColumnSolve.Outcome outcome) implements ProcessSolveCompletion {
+    public record ColumnUnitCompletion(ColumnUnitRequest request,com.wormzjl.icheme.science.plant.column.ColumnSolve.Outcome outcome) implements ProcessSolveCompletion {
         public ColumnUnitCompletion {Objects.requireNonNull(request);Objects.requireNonNull(outcome);}
     }
 

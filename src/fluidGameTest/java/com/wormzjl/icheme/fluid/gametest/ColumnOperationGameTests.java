@@ -7,8 +7,8 @@ import com.wormzjl.icheme.runtime.assembly.AssemblyService;
 import com.wormzjl.icheme.runtime.fluid.ColumnUnit;
 import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
 import com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity;
-import com.wormzjl.icheme.science.column.operation.OperationView;
-import com.wormzjl.icheme.science.column.operation.Port;
+import com.wormzjl.icheme.science.plant.column.OperationView;
+import com.wormzjl.icheme.science.plant.column.Port;
 import com.wormzjl.icheme.science.fluid.network.PassiveNetwork;
 import com.wormzjl.icheme.runtime.assembly.AssemblyStore;
 import com.wormzjl.icheme.runtime.control.ColumnCommands;
@@ -241,7 +241,7 @@ public final class ColumnOperationGameTests {
                 .thenExecute(() -> life.stage(() -> {
                     life.check(answer(operator[0]).equals(ColumnCommands.APPLIED), "START is answered APPLIED: " + answer(operator[0]));
                     life.check(life.unit() != null && life.unit().running(), "START reached the unit");
-                    var s = com.wormzjl.icheme.science.column.operation.Setpoints.of(java.util.Objects.requireNonNull(rig.design.trays().operating()));
+                    var s = com.wormzjl.icheme.science.plant.column.Setpoints.of(java.util.Objects.requireNonNull(rig.design.trays().operating()));
                     var values = new java.util.ArrayList<Double>(List.of(s.feedRate(), s.condenserTemperature(), s.refluxRatio(), s.reboilerPerFeed()));
                     for (double d : s.steamPerFeed()) values.add(d);
                     for (double d : s.drawsPerFeed()) values.add(d);
@@ -406,7 +406,7 @@ public final class ColumnOperationGameTests {
         var view = life.view();
         if (view == null) return false;
         if (!view.running()) life.failure[0] = "A blocked product does not stop the column: " + view.phase() + " " + view.engine();
-        return view.binding() != null && view.binding().condition() == com.wormzjl.icheme.science.column.operation.Condition.PRODUCT_FULL && view.alpha() < .05;
+        return view.binding() != null && view.binding().condition() == com.wormzjl.icheme.science.plant.column.Condition.PRODUCT_FULL && view.alpha() < .05;
     }
 
     /** Plan C3: the blocked product's buffer is full and the feed stands, the column still running. */

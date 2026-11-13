@@ -16,7 +16,7 @@ import static com.wormzjl.icheme.science.flowsheet.sizing.Limit.Rank.PAID;
 import static com.wormzjl.icheme.science.flowsheet.sizing.Limit.Rank.SURPLUS;
 import static com.wormzjl.icheme.science.flowsheet.sizing.Limit.Rank.QUIET;
 
-import com.wormzjl.icheme.science.column.operation.ColumnSolve;
+import com.wormzjl.icheme.science.plant.column.ColumnSolve;
 import com.wormzjl.icheme.science.equipment.ColumnTrays;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.PipeSizes;

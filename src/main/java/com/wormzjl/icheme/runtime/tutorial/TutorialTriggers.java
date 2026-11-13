@@ -194,7 +194,7 @@ public final class TutorialTriggers {
             return Instance.CODEC;
         }
 
-        public void trigger(ServerPlayer player, com.wormzjl.icheme.science.column.operation.OperationView view) {
+        public void trigger(ServerPlayer player, com.wormzjl.icheme.science.plant.column.OperationView view) {
             trigger(player, instance -> instance.condition().matches(view));
         }
 

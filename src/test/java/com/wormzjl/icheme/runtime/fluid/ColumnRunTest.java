@@ -1,12 +1,12 @@
 package com.wormzjl.icheme.runtime.fluid;
 
-import com.wormzjl.icheme.science.column.operation.ColumnCycle.Account;
-import com.wormzjl.icheme.science.column.operation.ColumnSolve;
-import com.wormzjl.icheme.science.column.operation.Condition;
-import com.wormzjl.icheme.science.column.operation.DriftBands;
-import com.wormzjl.icheme.science.column.operation.Port;
-import com.wormzjl.icheme.science.column.operation.Setpoints;
-import com.wormzjl.icheme.science.column.operation.SplitTable;
+import com.wormzjl.icheme.science.plant.column.ColumnCycle.Account;
+import com.wormzjl.icheme.science.plant.column.ColumnSolve;
+import com.wormzjl.icheme.science.plant.column.Condition;
+import com.wormzjl.icheme.science.plant.column.DriftBands;
+import com.wormzjl.icheme.science.plant.column.Port;
+import com.wormzjl.icheme.science.plant.column.Setpoints;
+import com.wormzjl.icheme.science.plant.column.SplitTable;
 import com.wormzjl.icheme.science.fluid.network.ConservativeTransport;
 import com.wormzjl.icheme.science.fluid.network.FlowControl;
 import com.wormzjl.icheme.science.fluid.network.PassiveIntervalSolver;
@@ -526,10 +526,10 @@ class ColumnRunTest {
         assertEquals(last.products().getFirst().total()/5,product.rate(),1e-12);
         assertTrue(product.held()>0,"the outlet's buffer holds product: "+product.held());
         var condenser=view.duties().getFirst();
-        assertEquals(com.wormzjl.icheme.science.column.operation.OperationView.DutyKind.CONDENSER,condenser.kind());
+        assertEquals(com.wormzjl.icheme.science.plant.column.OperationView.DutyKind.CONDENSER,condenser.kind());
         assertEquals(last.condenser()/5,condenser.booked(),1e-9*Math.abs(condenser.booked()));
         world.ledger.column(before.withStations(false,before.stations().stream().map(s->s.withDevice(0)).toList()));
-        assertEquals(com.wormzjl.icheme.science.column.operation.OperationView.Phase.STOPPED,ops.view(unit,now,valve->.5).phase(),"a stopped unit reads stopped");
+        assertEquals(com.wormzjl.icheme.science.plant.column.OperationView.Phase.STOPPED,ops.view(unit,now,valve->.5).phase(),"a stopped unit reads stopped");
     }
     /**
      * The determinism gate (plan section 9): the same world with its jobs completing three ticks later books the same feed,
@@ -918,7 +918,7 @@ class ColumnRunTest {
         var u=world.ledger.column(r.unit());
         assertTrue(r.ops().status(r.unit()).startsWith("LIMITED: outlet"),r.ops().status(r.unit()));
         double held=u.station(Port.DISTILLATE,0).account().total(),buffer=.5*(ColumnOperation.BUFFER_CYCLES*ColumnOperation.CYCLE_TICKS/20.0);
-        assertEquals(com.wormzjl.icheme.science.column.operation.Condition.PRODUCT_FULL,r.ops().last(r.unit()).binding().condition());
+        assertEquals(com.wormzjl.icheme.science.plant.column.Condition.PRODUCT_FULL,r.ops().last(r.unit()).binding().condition());
         assertTrue(EquipmentAlarm.column(r.ops().conditions(r.unit())).contains(EquipmentAlarm.BLOCKED),"the column raises BLOCKED: "+r.ops().conditions(r.unit()));
         assertEquals(buffer,held,1e-6*buffer,"the outlet holds its full buffer");
         assertEquals(held,u.totals().taken().total(),1e-9,"the column took what its outlet holds, no more");
@@ -1117,7 +1117,7 @@ class ColumnRunTest {
         airSurface=40;
         var r=rig(0);r.world().runTo(3000);
         String status=r.ops().status(r.unit());var last=r.ops().last(r.unit());
-        var fans=r.ops().view(r.unit(),r.world().ledger.onlineTick(),d->Double.NaN).duties().stream().filter(d->d.kind()==com.wormzjl.icheme.science.column.operation.OperationView.DutyKind.FANS).findFirst().orElseThrow();
+        var fans=r.ops().view(r.unit(),r.world().ledger.onlineTick(),d->Double.NaN).duties().stream().filter(d->d.kind()==com.wormzjl.icheme.science.plant.column.OperationView.DutyKind.FANS).findFirst().orElseThrow();
         double speed=r.ops().run(r.unit()).table.fans(40,last.feedMoles()/CYCLE_SECONDS);
         System.out.printf(Locale.ROOT,"U2_FANS speed=%.4f booked=%.1f W solved=%.1f W | %s%n",speed,fans.booked(),fans.solved(),status);
         assertTrue(status.startsWith("RUNNING")||status.startsWith("LIMITED: outlet"),status);

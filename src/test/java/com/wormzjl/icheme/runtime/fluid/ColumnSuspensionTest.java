@@ -1,8 +1,8 @@
 package com.wormzjl.icheme.runtime.fluid;
 
-import com.wormzjl.icheme.science.column.operation.ColumnCycle.Account;
-import com.wormzjl.icheme.science.column.operation.Port;
-import com.wormzjl.icheme.science.column.operation.Setpoints;
+import com.wormzjl.icheme.science.plant.column.ColumnCycle.Account;
+import com.wormzjl.icheme.science.plant.column.Port;
+import com.wormzjl.icheme.science.plant.column.Setpoints;
 import com.wormzjl.icheme.science.fluid.network.FlowControl;
 import com.wormzjl.icheme.science.fluid.network.PassiveNetwork;
 import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind;
@@ -20,7 +20,7 @@ class ColumnSuspensionTest {
     /** Two boundary valves on one inside cell have one place for a port: Start refuses them before anything changes (merge review, finding 12). */
     @Test void twoPortsCannotShareAPlace() {
         var cell=new PhysicalFluidTopology.Position(EventPathWorld.DIM,0,64,0);var other=new PhysicalFluidTopology.Position(EventPathWorld.DIM,1,64,0);
-        java.util.function.BiFunction<PhysicalFluidTopology.Position,Long,FluidWorldAuthority.PortSpot> spot=(at,valve)->new FluidWorldAuthority.PortSpot(com.wormzjl.icheme.science.column.operation.Port.DRAW,valve.intValue(),valve,at,PhysicalFluidTopology.Direction.EAST,1e5,300);
+        java.util.function.BiFunction<PhysicalFluidTopology.Position,Long,FluidWorldAuthority.PortSpot> spot=(at,valve)->new FluidWorldAuthority.PortSpot(com.wormzjl.icheme.science.plant.column.Port.DRAW,valve.intValue(),valve,at,PhysicalFluidTopology.Direction.EAST,1e5,300);
         assertTrue(FluidWorldAuthority.sharePlace(java.util.List.of(spot.apply(cell,1L),spot.apply(cell,2L))));
         assertFalse(FluidWorldAuthority.sharePlace(java.util.List.of(spot.apply(cell,1L),spot.apply(other,2L))));
     }

@@ -125,10 +125,10 @@ class BuiltInInputsTest {
         assertTrue(alarms.stream().allMatch(i -> i.role().startsWith("ALARM:") && !BuiltInInputs.volumeAvailable(i)));
         // The conditions a column's cycle finds raise its alarms: a blocked product BLOCKED, a pending solve none.
         var raised = com.wormzjl.icheme.runtime.fluid.EquipmentAlarm.column(List.of(
-                new com.wormzjl.icheme.science.column.operation.Condition.Active(com.wormzjl.icheme.science.column.operation.Condition.PRODUCT_FULL, 0, 0, ""),
-                new com.wormzjl.icheme.science.column.operation.Condition.Active(com.wormzjl.icheme.science.column.operation.Condition.OFF_TABLE, "composition")));
+                new com.wormzjl.icheme.science.plant.column.Condition.Active(com.wormzjl.icheme.science.plant.column.Condition.PRODUCT_FULL, 0, 0, ""),
+                new com.wormzjl.icheme.science.plant.column.Condition.Active(com.wormzjl.icheme.science.plant.column.Condition.OFF_TABLE, "composition")));
         assertEquals(Set.of(com.wormzjl.icheme.runtime.fluid.EquipmentAlarm.BLOCKED), raised);
-        for (var c : com.wormzjl.icheme.science.column.operation.Condition.values()) {
+        for (var c : com.wormzjl.icheme.science.plant.column.Condition.values()) {
             var alarm = com.wormzjl.icheme.runtime.fluid.EquipmentAlarm.of(c);
             assertTrue(alarm == null || com.wormzjl.icheme.runtime.fluid.EquipmentAlarm.COLUMN.contains(alarm), c + " raises a column alarm");
         }
