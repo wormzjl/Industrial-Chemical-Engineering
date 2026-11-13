@@ -361,7 +361,8 @@ public final class Converters implements IslandCoordinator.Ports {
         matched.put(u.id(),rule.id());
         var per=perLitre(rule,model);
         // A rule naming a compound the island does not carry waits for its island to grow (W3), as a column outlet's does.
-        if(per==null){growth.add(u.fill());return new Outcome(null,Status.NO_RULE);}
+        // Only where the package can carry the rule's compounds: one without water never grows wet, and would be recompiled at every plan.
+        if(per==null){if(ConversionLaws.fractions(rule.toIChemE(),model.whole())!=null)growth.add(u.fill());return new Outcome(null,Status.NO_RULE);}
         var tank=graph.reservoirs().get(vessel);
         double free=(tank.inventory().volume()-FluidThermodynamics.liquidStreamVolume(tank.state()))*ConversionLaws.LITRES_PER_M3;
         double want=Math.min(u.maxRate()*dt,free);
@@ -377,9 +378,10 @@ public final class Converters implements IslandCoordinator.Ports {
         double target=ConversionLaws.kilograms(litres,per.density())/dt;
         return new Outcome(new PortPlan(u.fill(),u.fillValve(),target,rule.toIChemE().temperature(),per.moles(litres)),Status.CONVERTING);
     }
-    /** A forward rule's stream per litre on {@code model}'s list: a flash once per rule revision and list. */
+    /** A forward rule's stream per litre on {@code model}'s list: a flash once per rule revision and list. A dry and a wet
+     * model list the same ids (water last), so the key names which it is: an island that grew wet asks again. */
     private ConversionLaws.PerLitre perLitre(ConversionRule rule,FluidThermodynamics model) {
-        var key=rule.id()+"@"+rule.revision()+"#"+model.components();
+        var key=rule.id()+"@"+rule.revision()+"#"+model.components()+(model.wet()?"":"#dry");
         if(perLitre.containsKey(key))return perLitre.get(key);
         var per=ConversionLaws.perLitre(rule.toIChemE(),model);perLitre.put(key,per);return per;
     }

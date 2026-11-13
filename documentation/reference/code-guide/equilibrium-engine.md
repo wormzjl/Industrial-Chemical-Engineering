@@ -1,6 +1,6 @@
 # Multiphase equilibrium engine
 
-**Snapshot:** branch `claude/ethanol-compound-matrix-4b318d` after W3b's N10 (batch `2026-11-11-aqueous-solvents`), 2026-11-12: water is a component of the cubic on every network package with water (`WaterParticipation.IN_EQUATION_OF_STATE`, derived pairs, water's IF97 share on the balance book), up to three fluid phases (the three-slot system), ice Ih a crystal of the competition; the separate free-water rule (`solveWet`, `PartialPressureClosure`, `FreeWaterModel`, `FreeWaterIce`, `Classification.FREE_WATER`, `PhaseKind.FREE_WATER`, `SEPARATE_FREE_WATER`, the Dalton helpers of `SteamVirial`) is deleted; the stability test's liquid trial seeds water at a trace (`TangentPlaneStability.SEED_TRACE`) · earlier: f4130065f (branch `claude/refinery-compounds-thermos-252973`, 0.23.0), 2026-11-09 · 2026-11-03 (batch 2026-11-02-dry-ice-cost: carried crystals, `FLUID_CARRYING_CRYSTALS`, `TangentPlaneStability.TrialFilter`) · 2026-10-27 (`ThermoIdentity` format `thermo-identity-v2`, declared revisions) · 2026-10-21 (mod rename to IChemE, 0.11.0) · earlier: 2026-10-19
+**Snapshot:** ce6d31ffc (branch `claude/ethanol-compound-matrix-4b318d`), 2026-11-12. Batch `2026-11-11-aqueous-solvents`, to merge: the engine carries its request's compounds on the kernel (`FluidTpEquilibrium.implementationChecks`, `TangentPlaneStability`, `CubicPhaseEvaluator.Workspace.carry`) · earlier: 274e06ac1 (W3b's N10), 2026-11-12: water is a component of the cubic on every network package with water (`WaterParticipation.IN_EQUATION_OF_STATE`, derived pairs, water's IF97 share on the balance book), up to three fluid phases (the three-slot system), ice Ih a crystal of the competition; the separate free-water rule (`solveWet`, `PartialPressureClosure`, `FreeWaterModel`, `FreeWaterIce`, `Classification.FREE_WATER`, `PhaseKind.FREE_WATER`, `SEPARATE_FREE_WATER`, the Dalton helpers of `SteamVirial`) is deleted; the stability test's liquid trial seeds water at a trace (`TangentPlaneStability.SEED_TRACE`) · earlier: f4130065f (branch `claude/refinery-compounds-thermos-252973`, 0.23.0), 2026-11-09 · 2026-11-03 (batch 2026-11-02-dry-ice-cost: carried crystals, `FLUID_CARRYING_CRYSTALS`, `TangentPlaneStability.TrialFilter`) · 2026-10-27 (`ThermoIdentity` format `thermo-identity-v2`, declared revisions) · 2026-10-21 (mod rename to IChemE, 0.11.0) · earlier: 2026-10-19
 Up: [code guide](README.md)
 
 ## Read this when
@@ -330,6 +330,12 @@ flowchart TD
 - Fixed arithmetic order and a fixed trial order; elementary functions through `DeterministicMath`.
 - The engine is immutable after construction. A `Workspace` is per thread and belongs to one engine (`own` refuses
   another engine's). The network keeps one per thread in a `ThreadLocal` of `NetworkPhaseEngine`.
+- Kernel support ([thermo-materials.md](thermo-materials.md)): at every entry (`tp`, `ph`, `uv`, through
+  `implementationChecks`) the engine names the request's feed on its kernel workspace and on its phase evaluator's
+  workspace (`CubicPhaseEvaluator.Workspace.carry`, both kernel workspaces), so every phase and trial of the solve lives
+  on the feed's compounds. `TangentPlaneStability.run` carries its present compounds. Outside the support `ln phi` and
+  its derivatives are the kernel's fill (zero); a direct `CubicPhaseEvaluator` call carries the whole list. Results on
+  the support keep their bits.
 - `CrystalPhaseEvaluator` caches a `volatile Anchored last` for callers that pass an equal anchor. `WaterShare` keeps
   the liquid gap of the last (T, P) in its per-thread scratch.
 - Iterations allocate nothing; results hold frozen `PhaseState` copies.

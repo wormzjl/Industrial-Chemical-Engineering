@@ -30,7 +30,7 @@ import org.junit.jupiter.api.Test;
 
 /**
  * The client's half of the sheet on the block (W8 of batch 2026-11-02-process-simulator, plan sections 3.4, 3.8 and 3.9): results as state, what gives way, a replay, a reader who sends
- * nothing, the clipboard. A run here is water, which takes no time; the sample's size is in {@link SimulatorRunTest}.
+ * nothing, the clipboard. A run here is water, which takes no time; the sample's size is in {@link CrudeUnitSampleTest.SimulatorRunTest}.
  */
 class SimulatorBlockTest {
     private static SimulatorHost.Finished run(Flowsheet sheet) throws InterruptedException {

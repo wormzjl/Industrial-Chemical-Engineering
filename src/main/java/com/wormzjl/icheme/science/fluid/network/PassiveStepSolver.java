@@ -649,7 +649,12 @@ public final class PassiveStepSolver {
             // again. A bag hid it: its slack wall held the ambient there.
             if(!changed&&illegalDirection>=0) {
                 var corrected=phaseCorrection(graph,states,checkpoint,equations.cachedPrepared,foldedPhases);
-                if(corrected!=null){seeds=corrected;continue;}
+                // The correction is the solve's proposal here too (owner decision D39 B): the pass after it is the network's
+                // closure of that layout and may refute it. Without the record, a junction given a trace of gas here, whose
+                // pass then had no root, was folded off the failed iterate back to the active set of the converged pass, and
+                // the check added the gas again: a cycle at every step size (cold seed 431, batch 2026-11-11-aqueous-solvents,
+                // FINAL_LANE_2_REVIEW.md).
+                if(corrected!=null){proposal=Proposal.of(states,corrected);seeds=corrected;continue;}
                 // Owner decision of 2026-11-10 (option A): a converged point can flow the way a void or generator end forbids
                 // where the network has a second root. A rigid kettle shell boiling at 101.6 kPa into a void at 1 atm converged
                 // from rest on 29 kg/s drawn from the void at 101.320 kPa; the closure held its vapour line shut for the step,

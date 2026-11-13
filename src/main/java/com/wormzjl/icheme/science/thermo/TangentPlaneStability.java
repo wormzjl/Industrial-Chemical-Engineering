@@ -252,6 +252,8 @@ public final class TangentPlaneStability {
         // Only present entries are written below; the others must be the zeros the kernel is handed.
         Arrays.fill(w.current.amounts, 0.0);
         Arrays.fill(w.candidate.amounts, 0.0);
+        // The kernel carries the present components only: every trial lives on them.
+        w.mixture.carry(w.feed);
         kernel.prepareTemperature(temperatureKelvin, w.mixture);
 
         // The feed on its lower-Gibbs physical root; a tie keeps the vapour root.

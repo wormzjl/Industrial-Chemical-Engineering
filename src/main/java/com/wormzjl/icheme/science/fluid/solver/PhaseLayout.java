@@ -37,6 +37,12 @@ public final class PhaseLayout {
     /** Per component, its reference storage slot; -1 for an absent one. */
     private final int[] referenceSlot;
     private final byte[] support;
+    /**
+     * The compounds this layout's evaluations carry in the kernel ({@link FluidThermodynamics.Prepared#carry}): what the
+     * seed holds and what its mask says can arrive, whose {@code ln phi} the layout reads at zero amount too
+     * ({@link #encode}, {@link #reactivate}). Named on the prepared bundle at every decode.
+     */
+    private final boolean[] carried;
     /** The bits of the slots the seed holds. */
     private final int active;
     /** The conserved components a junction writes mass fractions for: the graph fixes it, so it is built with the layout
@@ -77,6 +83,8 @@ public final class PhaseLayout {
         if(componentMask!=null&&componentMask.length!=n)throw new IllegalArgumentException("Component mask mismatch");
         if(support.length!=n)throw new IllegalArgumentException("Phase support basis mismatch");
         this.support=support.clone();
+        carried=new boolean[n];
+        for(int i=0;i<n;i++)carried[i]=totals[i]>0||componentMask!=null&&componentMask[i];
         // A masked component the support calls absent is an omitted trace, not a member of this layout: it carries no
         // unknown and no row, and the mask keeps it available to the phase appearance pass.
         for(int i=0;i<n;i++)if((totals[i]>0||componentMask!=null&&componentMask[i])&&support[i]!=0)present.add(i);
@@ -224,7 +232,22 @@ public final class PhaseLayout {
         double total=high-low;
         return Double.isNaN(total)&&Double.isInfinite(simple)?simple:total;
     }
+    /**
+     * {@code state} where each of its phases carried every component of this layout in the kernel, else the same amounts
+     * evaluated again on the whole list: a seed from an earlier pass or step was evaluated on that layout's support, and
+     * this one reads {@code ln phi} at zero amount of what it can now receive. The phases it carried keep their bits.
+     */
+    private FluidThermodynamics.State carriedState(FluidThermodynamics.State state) {
+        for(int slot=0;slot<3;slot++) {
+            var phase=state.phase(slot);if(phase==null)continue;
+            for(int i:components)if(!phase.carries(i))
+                return model.adoptingState(state.temperature(),state.pressure(),state.vaporAmounts(),state.liquidAmounts(),state.aqueousAmounts(),null)
+                        .withSolidState(state.solids(),state.solidMoments());
+        }
+        return state;
+    }
     public double[] encode(FluidThermodynamics.State state) {
+        state=carriedState(state);
         double[] x=new double[size];double[] slotTotal=null;
         for(int i:components) {
             int ref=referenceSlot[i];double total=0;
@@ -286,6 +309,7 @@ public final class PhaseLayout {
             out[last][i]=rest;
         }
         double t=350*DeterministicMath.exp(variables[offset+temperatureIndex]),p=1e5*DeterministicMath.exp(variables[offset+pressureIndex]);
+        if(prepared!=null)prepared.carry(carried);
         var state=tangents==null?model.adoptingState(t,p,out[0],out[1],out[2],prepared):model.adoptingState(t,p,out[0],out[1],out[2],prepared,tangents);
         if(solidIndex<0)return state;
         // The three moments are hard-nonnegative in SolidInventory.Moments. Enforce that by
@@ -516,6 +540,7 @@ public final class PhaseLayout {
     public int reactivate(FluidThermodynamics.State state,TraceTruncationPolicy policy,boolean[] promoted) {
         if(!policy.enabled()||Integer.bitCount(active)<2)return 0;
         if(promoted.length!=amountIndex.length)throw new IllegalArgumentException("Reactivation basis mismatch");
+        state=carriedState(state);
         double[] slotTotal=new double[3];double[][] f=new double[3][];
         for(int slot=0;slot<3;slot++) {
             if((active&bit(slot))==0)continue;

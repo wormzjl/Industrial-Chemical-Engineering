@@ -247,6 +247,22 @@ public final class TranslatedPengRobinson {
             rootDt=new double[count];rootDt2=new double[count];crossDt=new double[count];
         }
         public double temperature(){return temperature;}
+        /**
+         * The compounds the caller's mixture carries ({@link PengRobinsonKernel.Workspace#carry}): its feed's nonzero
+         * amounts, set at every entry from the feed, never from one phase. Every value on them keeps its bits; outside
+         * them {@code ln phi} and the partial volumes are the kernel's fill (zero). A changed support at a prepared
+         * temperature prepares what it adds.
+         */
+        public void carry(double[] feed){if(mixture.carry(feed))supportChanged();}
+        /** The whole list (a new workspace's support). */
+        public void carryAll(){if(mixture.carryAll())supportChanged();}
+        /** Whether the support holds component {@code i}. */
+        public boolean carries(int i){return mixture.carries(i);}
+        /** The support as a mask never mutated ({@link PengRobinsonKernel.Workspace#supportSnapshot}); null for the whole list. */
+        public boolean[] supportSnapshot(){return mixture.supportSnapshot();}
+        /** This workspace's support onto a kernel workspace of the same kernel (a derivative evaluation of the same phase). */
+        public void carryOnto(PengRobinsonKernel.Workspace target){target.carrySame(mixture);}
+        private void supportChanged(){if(!Double.isNaN(temperature))owner.prepareSupport(this);}
         /** Component {@code i}'s ideal-gas heat capacity at the prepared temperature, J/(mol K). */
         public double idealGasHeatCapacity(int i){return heatCapacity[i];}
         /** Component {@code i}'s ideal-gas enthalpy at the prepared temperature on the model's datum, J/mol. */
@@ -315,6 +331,9 @@ public final class TranslatedPengRobinson {
         }
         /** Physical roots of the cubic at this state and composition: 1, or 3 where both roots exist. */
         public int physicalRootCount(){return physicalRootCount;}
+        /** The support these values were evaluated on ({@link Workspace#supportSnapshot}); null for the whole list. */
+        public boolean[] supportSnapshot(){return carried;}
+        private boolean[] carried;
         /** The caller must not mutate these; they are refilled by the next evaluation. */
         public double[] logFugacityCoefficientsView(){return logFugacityCoefficients;}
         public double[] partialMolarVolumesView(){return partialMolarVolumes;}
@@ -327,6 +346,7 @@ public final class TranslatedPengRobinson {
         /** {@code N da_mix/dn_i} of the evaluated mixture: {@code 2 (S_i - a_mix)}, the rows the partial molar volumes read. */
         public double attractionAmountDerivative(int i) {
             if(source.generation!=generation)throw new IllegalStateException("The workspace was evaluated again since these values");
+            if(!source.mixture.carries(i))return PengRobinsonKernel.outsideSupportFill();
             return 2*(source.mixture.attractionRowsView()[i]-attraction);
         }
         /** {@code (dP/dv)_T} of the cubic at an untranslated volume, attraction and co-volume: the closed form of {@code fill}. */
@@ -369,16 +389,33 @@ public final class TranslatedPengRobinson {
             workspace.heatCapacity[i]=cp;workspace.enthalpy[i]=h*delta;
             if(fit!=temperature)workspace.enthalpy[i]+=cp*(temperature-fit);
         }
+        prepareCubic(temperature,workspace);
+        workspace.temperature=temperature;
+    }
+
+    /** The kernel's part of {@link #prepare} on the workspace's support: at its temperature, again when the support changes. */
+    private void prepareCubic(double temperature,Workspace workspace) {
+        int count=components.size();
         kernel.prepareTemperature(temperature,workspace.mixture);
         // sqrt(a_i) vanishes exactly where the PR alpha term does, which is where every d/dT below divides
         // by zero. The same state the dense form refused as a degenerate alpha derivative.
         double[] roots=workspace.mixture.attractionRootsView();
-        for(int i=0;i<count;i++)if(roots[i]==0)throw new IllegalArgumentException("Degenerate PR alpha derivative");
+        for(int i=0;i<count;i++)if(workspace.mixture.carries(i)&&roots[i]==0)throw new IllegalArgumentException("Degenerate PR alpha derivative");
         // The pure-component root derivatives depend on temperature alone, exactly like the dense form's
         // three matrices did; only the composition-weighted sums below are per evaluation.
         kernel.prepareRootDerivatives(temperature,workspace.mixture,workspace.rootDt,workspace.rootDt2);
-        workspace.temperature=temperature;
         workspace.generation++;
+    }
+
+    /**
+     * A changed support at the prepared temperature: its new compounds' terms (the kernel's stamps keep the others). A
+     * refusal leaves the workspace unprepared, so no evaluation reads the new compounds' missing terms.
+     */
+    private void prepareSupport(Workspace workspace) {
+        double temperature=workspace.temperature;
+        workspace.temperature=Double.NaN;
+        prepareCubic(temperature,workspace);
+        workspace.temperature=temperature;
     }
 
     /** {@link #evaluate} without the record and its two
@@ -434,7 +471,10 @@ public final class TranslatedPengRobinson {
         double[] logPhi = out.logFugacityCoefficients;
         double[] partialVolumes = out.partialMolarVolumes;
         double[] mixtureLogPhi=evaluation.logFugacityCoefficientsView();
+        double outside=PengRobinsonKernel.outsideSupportFill();
         for (int i=0;i<x.length;i++) {
+            // A compound the workspace does not carry has no kernel terms: its entries are the kernel's fill.
+            if(!workspace.mixture.carries(i)){logPhi[i]=outside;partialVolumes[i]=outside;continue;}
             logPhi[i]=mixtureLogPhi[i]+pressure*translations[i]/rt;
             double db=coVolume(i)-b;
             double pressureCompositionDerivative=-2*(attractionRows[i]-a)/denominator
@@ -455,6 +495,7 @@ public final class TranslatedPengRobinson {
         out.dpdv=dpdv;out.denominator=denominator;out.dpdtv=dpdtv;out.dpdvv=dpdvv;
         out.temperature=temperature;out.untranslatedVolume=v;out.attraction=a;out.coVolume=b;out.attractionTemperatureDerivative=da;
         out.physicalRootCount=evaluation.physicalRootCount();
+        out.carried=workspace.mixture.supportSnapshot();
     }
 
     private double coVolume(int component) { return kernel.coVolume(component); }

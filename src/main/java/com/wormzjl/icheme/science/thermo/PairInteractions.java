@@ -95,52 +95,61 @@ public final class PairInteractions {
         if (value.length < pairs || firstDerivative.length < pairs || secondDerivative.length < pairs) {
             throw new IllegalArgumentException("Pair output arrays are too short");
         }
+        for (int pair = 0; pair < pairs; pair++) {
+            evaluatePair(pair, temperatureKelvin, sqrtA, sqrtADt, sqrtADt2, coVolumes, value, firstDerivative, secondDerivative);
+        }
+    }
+
+    /**
+     * {@link #evaluate} for one declared pair, reading only its two components: a kernel that carries part of its list
+     * fills the pairs of the compounds it carries, each with the same arithmetic.
+     */
+    public void evaluatePair(int pair, double temperatureKelvin, double[] sqrtA, double[] sqrtADt, double[] sqrtADt2,
+                             double[] coVolumes, double[] value, double[] firstDerivative, double[] secondDerivative) {
+        if (!groupPair[pair]) {
+            value[pair] = constantValue[pair];
+            firstDerivative[pair] = 0.0;
+            secondDerivative[pair] = 0.0;
+            return;
+        }
         double ratio = REFERENCE_TEMPERATURE_KELVIN / temperatureKelvin;
         double inverseT = 1.0 / temperatureKelvin;
-        for (int pair = 0; pair < pairs; pair++) {
-            if (!groupPair[pair]) {
-                value[pair] = constantValue[pair];
-                firstDerivative[pair] = 0.0;
-                secondDerivative[pair] = 0.0;
-                continue;
-            }
-            double energy = 0.0;
-            double energyDt = 0.0;
-            double energyDt2 = 0.0;
-            for (int term = termStart[pair]; term < termStart[pair + 1]; term++) {
-                double exponent = termExponent[term];
-                double contribution = termCoefficient[term] * DeterministicMath.pow(ratio, exponent);
-                energy += contribution;
-                energyDt -= exponent * contribution * inverseT;
-                energyDt2 += exponent * (exponent + 1.0) * contribution * inverseT * inverseT;
-            }
-            int i = first[pair];
-            int j = second[pair];
-            double bi = coVolumes[i];
-            double bj = coVolumes[j];
-            double beta = bi * bj;
-            double betaSquared = beta * beta;
-            double si = sqrtA[i];
-            double sj = sqrtA[j];
-            double siDt = sqrtADt[i];
-            double sjDt = sqrtADt[j];
-            double siDt2 = sqrtADt2[i];
-            double sjDt2 = sqrtADt2[j];
-            double d = si * bj - sj * bi;
-            double dDt = siDt * bj - sjDt * bi;
-            double dDt2 = siDt2 * bj - sjDt2 * bi;
-            double numerator = energy * betaSquared - d * d;
-            double numeratorDt = energyDt * betaSquared - 2.0 * d * dDt;
-            double numeratorDt2 = energyDt2 * betaSquared - 2.0 * (dDt * dDt + d * dDt2);
-            double denominator = 2.0 * beta * si * sj;
-            double denominatorDt = 2.0 * beta * (siDt * sj + si * sjDt);
-            double denominatorDt2 = 2.0 * beta * (siDt2 * sj + 2.0 * siDt * sjDt + si * sjDt2);
-            double k = numerator / denominator;
-            double kDt = (numeratorDt - k * denominatorDt) / denominator;
-            value[pair] = k;
-            firstDerivative[pair] = kDt;
-            secondDerivative[pair] = (numeratorDt2 - 2.0 * kDt * denominatorDt - k * denominatorDt2) / denominator;
+        double energy = 0.0;
+        double energyDt = 0.0;
+        double energyDt2 = 0.0;
+        for (int term = termStart[pair]; term < termStart[pair + 1]; term++) {
+            double exponent = termExponent[term];
+            double contribution = termCoefficient[term] * DeterministicMath.pow(ratio, exponent);
+            energy += contribution;
+            energyDt -= exponent * contribution * inverseT;
+            energyDt2 += exponent * (exponent + 1.0) * contribution * inverseT * inverseT;
         }
+        int i = first[pair];
+        int j = second[pair];
+        double bi = coVolumes[i];
+        double bj = coVolumes[j];
+        double beta = bi * bj;
+        double betaSquared = beta * beta;
+        double si = sqrtA[i];
+        double sj = sqrtA[j];
+        double siDt = sqrtADt[i];
+        double sjDt = sqrtADt[j];
+        double siDt2 = sqrtADt2[i];
+        double sjDt2 = sqrtADt2[j];
+        double d = si * bj - sj * bi;
+        double dDt = siDt * bj - sjDt * bi;
+        double dDt2 = siDt2 * bj - sjDt2 * bi;
+        double numerator = energy * betaSquared - d * d;
+        double numeratorDt = energyDt * betaSquared - 2.0 * d * dDt;
+        double numeratorDt2 = energyDt2 * betaSquared - 2.0 * (dDt * dDt + d * dDt2);
+        double denominator = 2.0 * beta * si * sj;
+        double denominatorDt = 2.0 * beta * (siDt * sj + si * sjDt);
+        double denominatorDt2 = 2.0 * beta * (siDt2 * sj + 2.0 * siDt * sjDt + si * sjDt2);
+        double k = numerator / denominator;
+        double kDt = (numeratorDt - k * denominatorDt) / denominator;
+        value[pair] = k;
+        firstDerivative[pair] = kDt;
+        secondDerivative[pair] = (numeratorDt2 - 2.0 * kDt * denominatorDt - k * denominatorDt2) / denominator;
     }
 
     /** Declares pairs one at a time; each unordered pair at most once. */

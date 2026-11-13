@@ -111,6 +111,12 @@ class ConversionRuleTest {
         assertEquals(.0409,n2.moles(),0);
         // A rule naming a compound off the model's list gives none.
         assertNull(ConversionLaws.fractions(water,List.of("Nitrogen")));
+        // A dry island's model lists water last and carries none: the rule's water waits for the island to grow wet.
+        var dry=model.on(List.of("Nitrogen"),false);
+        assertEquals("Water",dry.components().getLast());
+        assertNull(ConversionLaws.perLitre(water,dry),"water on a dry island");
+        assertNotNull(ConversionLaws.fractions(water,dry.whole()),"its package carries water, so the island can grow wet");
+        assertNotNull(ConversionLaws.perLitre(water,model.on(List.of("Nitrogen"),true)),"water on a wet island");
     }
 
     /** The bundled rules (W6) under {@code data/icheme/icheme/fluid_conversion/}, by id ({@code icheme:<path>}). */

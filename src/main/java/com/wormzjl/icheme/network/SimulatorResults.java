@@ -38,8 +38,9 @@ import org.jetbrains.annotations.Nullable;
  */
 public final class SimulatorResults {
     /** 2: a report carries its time-series readings ({@link Report.Series}, batch 2026-11-09-batch-distiller, W7); 3: a column
-     * display's tray hydraulics carry their total dry drop (batch 2026-11-10-column-failure-modes, W3.3). */
-    public static final int FORMAT = 3;
+     * display's tray hydraulics carry their total dry drop (batch 2026-11-10-column-failure-modes, W3.3); 4: a stream's state
+     * is its vapour, oil and aqueous amounts (batch 2026-11-11-aqueous-solvents, W3b). */
+    public static final int FORMAT = 4;
     private static final int MAX_LIST = 4096, MAX_TEXT = 512, MAX_TOKEN = Short.MAX_VALUE, MAX_ARGUMENTS = 16, SAME_SHEET = 0, SAME_AS_RAN = 1, OWN_SHEET = 2;
 
     private SimulatorResults() {
