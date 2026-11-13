@@ -97,6 +97,32 @@ class SentDesignTagsTest {
     }
 
     /**
+     * An exchanger type this build does not have (finding E10, batch 2026-11-13-codebase-review), in an exchanger's shape and in a column's
+     * design, reads as standard and is named; the list still loads every one of its designs.
+     */
+    @Test
+    void anUnknownExchangerTypeIsRepairedAndEveryDesignLoads() {
+        var designs = new ArrayList<>(designs());
+        designs.add(new SentDesign("E-9", "", 1, com.wormzjl.icheme.science.equipment.EquipmentShape.unit(com.wormzjl.icheme.science.equipment.EquipmentShape.Kind.EXCHANGER,
+                2.25, 7, com.wormzjl.icheme.science.equipment.EquipmentShape.Heading.NORTH, 2), null));
+        var list = SentDesignTags.write(designs, List.of());
+        int exchanger = designs.size() - 1, column = -1;
+        for (int i = 0; i < designs.size() && column < 0; i++) if (designs.get(i).column() != null) column = i;
+        assertTrue(column >= 0, "a column design");
+        var shape = list.getCompound(exchanger).getCompound("Shape");
+        assertEquals("STANDARD", shape.getString("ExchangerType"), "saved by name");
+        shape.putString("ExchangerType", "NO_SUCH_TYPE");
+        var exchangers = list.getCompound(column).getCompound("Column").getCompound("Exchangers");
+        assertEquals("STANDARD", exchangers.getString("Condenser"), "saved by name");
+        exchangers.putString("Condenser", "NO_SUCH_TYPE");
+        var read = SentDesignTags.read(list);
+        assertTrue(read.unread().isEmpty(), read.repairs().toString());
+        assertEquals(designs, read.designs());
+        assertEquals(List.of("design " + column + ": condenser exchanger type NO_SUCH_TYPE -> STANDARD", "design " + exchanger + ": exchanger type NO_SUCH_TYPE -> STANDARD"),
+                read.repairs());
+    }
+
+    /**
      * Every corpus image's saved designs read with no repair, to the designs recorded beside them. The image of this build's fields must exist
      * (AGENTS.md: a facts-schema change adds one); when it is missing the test writes it under {@code build/compat/simulator/} to be copied in.
      */

@@ -124,6 +124,46 @@ public final class ShapeRepair {
     /** Renamed or removed pumparound splits, by their saved name: the current name. None yet. */
     static final Map<String, String> SPLIT_ALIASES = Map.of();
 
+    /** Renamed or removed exchanger types, by their saved name: the current name. None yet. */
+    static final Map<String, String> EXCHANGER_TYPE_ALIASES = Map.of();
+
+    /**
+     * The exchanger type a saved name names, through its aliases; a name this build does not have reads {@link ExchangerType#STANDARD}
+     * (the type every exchanger had before the catalog), and the repair {@code <field> <name> -> STANDARD} goes to {@code repairs}.
+     * {@code field} names what the type configures: "exchanger type" for a shell, "condenser exchanger type" for a column's condenser.
+     */
+    public static ExchangerType exchangerType(String field, @Nullable String saved, java.util.function.Consumer<String> repairs) {
+        var type = constant(ExchangerType.class, saved, EXCHANGER_TYPE_ALIASES).orElse(null);
+        if (type != null) return type;
+        repairs.accept(field + " " + saved + " -> " + ExchangerType.STANDARD.name());
+        return ExchangerType.STANDARD;
+    }
+
+    /** A column's exchanger types as saved: the condenser's, the trim's and each pumparound cooler's, by name as written. */
+    public record SavedExchangers(String condenser, String trim, List<String> coolers) {
+        /** A design saved before its exchanger types: every exchanger standard. */
+        public static final SavedExchangers STANDARD = new SavedExchangers(ExchangerType.STANDARD.name(), ExchangerType.STANDARD.name(), List.of());
+
+        public SavedExchangers {
+            Objects.requireNonNull(condenser, "condenser");
+            Objects.requireNonNull(trim, "trim");
+            coolers = List.copyOf(coolers);
+        }
+
+        /**
+         * The types, each name this build does not have read as standard and named to {@code repairs}.
+         *
+         * @throws IllegalArgumentException for more coolers than a column has pumparounds
+         */
+        public ColumnComponents.Exchangers resolve(java.util.function.Consumer<String> repairs) {
+            var condenserType = exchangerType("condenser exchanger type", condenser, repairs);
+            var trimType = exchangerType("trim exchanger type", trim, repairs);
+            var coolerTypes = new ArrayList<ExchangerType>();
+            for (int i = 0; i < coolers.size(); i++) coolerTypes.add(exchangerType("pumparound cooler " + (i + 1) + " exchanger type", coolers.get(i), repairs));
+            return new ColumnComponents.Exchangers(condenserType, trimType, coolerTypes);
+        }
+    }
+
     /** A turned side nozzle as saved (finding F3): its role by name, its number and the side it faces. */
     public record SavedTurn(String role, int index, int side) {
         /** @throws IllegalArgumentException naming a role this build does not have or does not turn, a number or a side out of range */
@@ -137,17 +177,17 @@ public final class ShapeRepair {
      * A column's component design as saved: its kinds by name and its two flags (batch 2026-10-26-multi-machine-framework);
      * its member counts (batch 2026-11-02-process-simulator, S3b; shape fields 6), as written: a design saved before them
      * reads 1 on every step, and a cooler count not saved reads 1; the water trim's count (shape fields 7, {@code COOLER_MODEL_PLAN.md}
-     * section 6), 1 where a design was saved before it.
+     * section 6), 1 where a design was saved before it; its exchanger types by name, as written.
      */
     public record SavedComponents(String condenser, String refluxPump, List<String> pumparoundPumps, boolean ejector, boolean kettle,
-                                  int condenserUnits, int kettleUnits, int[] coolerUnits, int trimUnits,ColumnComponents.Exchangers exchangers,
+                                  int condenserUnits, int kettleUnits, int[] coolerUnits, int trimUnits,SavedExchangers exchangers,
                                   String vacuum) {
         /** A design saved before its vacuum (shape fields 12): a steam ejector. */
-        public SavedComponents(String condenser,String refluxPump,List<String> pumparoundPumps,boolean ejector,boolean kettle,int condenserUnits,int kettleUnits,int[] coolerUnits,int trimUnits,ColumnComponents.Exchangers exchangers) {
+        public SavedComponents(String condenser,String refluxPump,List<String> pumparoundPumps,boolean ejector,boolean kettle,int condenserUnits,int kettleUnits,int[] coolerUnits,int trimUnits,SavedExchangers exchangers) {
             this(condenser,refluxPump,pumparoundPumps,ejector,kettle,condenserUnits,kettleUnits,coolerUnits,trimUnits,exchangers,ColumnComponents.Vacuum.EJECTOR.name());
         }
         public SavedComponents(String condenser,String refluxPump,List<String> pumparoundPumps,boolean ejector,boolean kettle,int condenserUnits,int kettleUnits,int[] coolerUnits,int trimUnits) {
-            this(condenser,refluxPump,pumparoundPumps,ejector,kettle,condenserUnits,kettleUnits,coolerUnits,trimUnits,ColumnComponents.Exchangers.STANDARD);
+            this(condenser,refluxPump,pumparoundPumps,ejector,kettle,condenserUnits,kettleUnits,coolerUnits,trimUnits,SavedExchangers.STANDARD);
         }
         public SavedComponents {
             pumparoundPumps = List.copyOf(pumparoundPumps);
@@ -178,7 +218,7 @@ public final class ShapeRepair {
             for (int i = 0; i < Math.min(coolerUnits.length, pumparoundPumps.size()); i++) coolers.add(count(coolerUnits[i], "pumparound cooler " + (i + 1) + " units", repairs));
             if (coolerUnits.length > pumparoundPumps.size()) repairs.accept("cooler units (" + coolerUnits.length + " for " + pumparoundPumps.size() + " pumparounds) -> " + pumparoundPumps.size());
             int trimCount = count(trimUnits, "trim units", repairs);
-            return ColumnComponents.named(condenser, refluxPump, pumparoundPumps, ejector, kettle, new ColumnComponents.Units(condenserCount, kettleCount, coolers, trimCount)).withExchangers(exchangers).withVacuum(constant(ColumnComponents.Vacuum.class, vacuum, Map.of()).orElseThrow(() -> new IllegalArgumentException("no vacuum " + vacuum)));
+            return ColumnComponents.named(condenser, refluxPump, pumparoundPumps, ejector, kettle, new ColumnComponents.Units(condenserCount, kettleCount, coolers, trimCount)).withExchangers(exchangers.resolve(repairs)).withVacuum(constant(ColumnComponents.Vacuum.class, vacuum, Map.of()).orElseThrow(() -> new IllegalArgumentException("no vacuum " + vacuum)));
         }
 
         private static int count(int saved, String field, java.util.function.Consumer<String> repairs) {

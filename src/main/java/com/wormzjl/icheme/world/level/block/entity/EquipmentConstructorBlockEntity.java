@@ -316,7 +316,8 @@ public final class EquipmentConstructorBlockEntity extends BlockEntity {
      */
     public static Design readDesign(CompoundTag tag, Design fresh, java.util.function.Consumer<String> repairs) {
         var design=readBaseDesign(tag,fresh,repairs).withName(savedName(tag,repairs));
-        if(tag.contains("ExchangerType"))design=design.withExchangerType(com.wormzjl.icheme.science.equipment.ExchangerType.valueOf(tag.getString("ExchangerType")));
+        // The exchanger type by name (shape fields 9): a name this build does not have reads standard, a repair.
+        if(tag.contains("ExchangerType"))design=design.withExchangerType(ShapeRepair.exchangerType("exchanger type",tag.getString("ExchangerType"),repairs));
         // A batch still's options (W6), as a shell saves them: absent, the default still; a refused field repaired to its default.
         if(tag.contains("Still",net.minecraft.nbt.Tag.TAG_COMPOUND)){var still=tag.getCompound("Still");var list=new java.util.ArrayList<String>();
             design=design.withStill(com.wormzjl.icheme.science.equipment.BatchStillOptions.read(still.contains("Heater")?still.getString("Heater"):null,still.contains("Condenser")?still.getString("Condenser"):null,still.contains("Stages")?still.getInt("Stages"):null,list));
@@ -392,7 +393,7 @@ public final class EquipmentConstructorBlockEntity extends BlockEntity {
         // The imported column (shape fields 2): its own checks, then the skirt at least its least.
         try {
             if (!tag.contains("Column", net.minecraft.nbt.Tag.TAG_COMPOUND)) throw new IllegalArgumentException("not a compound");
-            var column = ColumnDesignTags.read(tag.getCompound("Column"));
+            var column = ColumnDesignTags.read(tag.getCompound("Column"), repairs);
             int skirt = Math.max(design.support(), EquipmentShape.minimumSkirt(column.diameter()));
             if (form.column() && skirt != design.support()) repairs.accept("support " + design.support() + " -> " + skirt);
             return new Design(design.diameter(), design.tangentLength(), form, form.column() ? skirt : design.support(), placement, design.trays(), design.connections(),

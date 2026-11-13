@@ -701,7 +701,12 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
      */
     public static ShapeRepair.Read readShape(CompoundTag tag) {
         var read=ShapeRepair.read(saved(tag));
-        if(read.shape()!=null && tag.contains("ExchangerType")) read=new ShapeRepair.Read(read.shape().withExchangerType(com.wormzjl.icheme.science.equipment.ExchangerType.valueOf(tag.getString("ExchangerType"))),read.retired(),read.repairs());
+        if(read.shape()!=null && tag.contains("ExchangerType")) {
+            // An exchanger's type by name (shape fields 9): a name this build does not have reads standard, a repair.
+            var repairs = new java.util.ArrayList<>(read.repairs());
+            var type = ShapeRepair.exchangerType("exchanger type", tag.getString("ExchangerType"), repairs::add);
+            read = new ShapeRepair.Read(read.shape().withExchangerType(type), read.retired(), repairs);
+        }
         if (read.shape() != null && read.shape().kind() == EquipmentShape.Kind.BATCH_STILL) {
             // Shape fields 11: a still saved without its options is the default still; a refused field is repaired to its default.
             var still = tag.getCompound("Still");
