@@ -7,6 +7,7 @@ import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
 import com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology;
 import com.wormzjl.icheme.world.inventory.FluidDeviceMenu;
 import com.wormzjl.icheme.world.level.block.EquipmentStructure;
+import com.wormzjl.icheme.world.level.block.Positions;
 import com.wormzjl.icheme.world.level.block.FloatingRoofs;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
@@ -157,7 +158,7 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
 
     /** This cell's position in the fluid topology. */
     public PhysicalFluidTopology.Position fluidPosition() {
-        return new PhysicalFluidTopology.Position(level.dimension().location().toString(), worldPosition.getX(), worldPosition.getY(), worldPosition.getZ());
+        return Positions.of(level, worldPosition);
     }
 
     /** Client: the cells holding a moving part's pivot in the client's level. */
@@ -264,8 +265,7 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
             EquipmentStructure.restateLater(serverLevel, origin(), shape);
         }
         var here = fluidPosition();
-        FluidWorldAuthority.find(serverLevel.getServer()).ifPresent(world -> world.at(here)
-                .filter(record -> record.device().position().equals(here) && !record.device().ports().isEmpty())
+        FluidWorldAuthority.find(serverLevel.getServer()).ifPresent(world -> EquipmentStructure.heldAt(world, here)
                 .ifPresent(record -> {
                     if (identity != record.device().id()) bindIdentity(record.device().id());
                     else world.deviceLoaded(identity);
@@ -367,7 +367,7 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
         var world = com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.find(server.getServer()).orElse(null);
         if (world == null) return null;
         var p = at.offset(node.x(), node.y(), node.z());
-        var vessel = world.at(new com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Position(server.dimension().location().toString(), p.getX(), p.getY(), p.getZ())).orElse(null);
+        var vessel = world.at(Positions.of(server, p)).orElse(null);
         if (vessel == null || world.converters().unit(vessel.device().id()) == null) return null;
         return new ConverterPort(world.converters().tank(vessel.device().id()));
     }
