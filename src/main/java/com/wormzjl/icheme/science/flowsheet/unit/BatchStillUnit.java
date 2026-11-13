@@ -44,8 +44,6 @@ public final class BatchStillUnit implements UnitModel {
     /** The curve's composition channels: at most this many components, each at least this share of what the batch distilled. */
     static final int MOST_COMPONENTS = 5;
     static final double LEAST_SHARE = .01;
-    /** Past this share of its volume a pot boils over into its neck (plan section 6, item 6). */
-    public static final double PUKE = .75;
     /** The let-down's search goes no colder than this, K: a numerical floor, under every charge the network carries. */
     private static final double LOWEST = 100;
 
@@ -179,7 +177,7 @@ public final class BatchStillUnit implements UnitModel {
         double potStart = moles * column.liquidEnthalpy(start, charge);
         double volume = moles * column.liquidVolume(start, charge), fill = volume / design.volume();
         if (fill > 1) throw new FlowsheetFailure("still.overfull", litres(volume), litres(design.volume()));
-        if (fill > PUKE) report.note(Note.warning(u.id(), "still.full", percent(fill)));
+        if (fill > BatchStill.FILL) report.note(Note.warning(u.id(), "still.full", percent(fill)));
         var cooling = design.condenser() ? new BatchStill.Cooling(water, BatchStill.designWaterFlow(design.rating()) * BatchStill.WATER_HEAT_CAPACITY) : null;
         var batch = StillBatch.run(column, new StillBatch.Settings(design, firing, reflux, cooling, cuts), charge, start, thermo.checkpoint());
         if (batch.finish() == StillBatch.Finish.UNFINISHED) throw new FlowsheetFailure("still.unfinished", String.valueOf(batch.steps()), hours(batch.seconds()));

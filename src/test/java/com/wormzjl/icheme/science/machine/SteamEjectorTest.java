@@ -57,7 +57,7 @@ class SteamEjectorTest {
         for (var top : tops) {
             double p = top[0], mass = top[1] / 3600, flow = mass / air(p) * 3600;
             double need = EjectorLaw.steam(mass, 0, 1e6, p, 1.2e5, 1);
-            var size = EjectorSizing.auto(new EjectorSizing.Load(flow, p / 1e5, need * 3600, null)).size();
+            var size = EjectorSizing.auto(new EjectorSizing.Load(flow, p / 1e5, need * 3600, null, SteamEjector.RATED_MOTIVE)).size();
             assertNotNull(size, p + " Pa: the sheet sizes it");
             var set = new SteamEjector(size.suction());
             double holds = set.capacity(p, SteamEjector.RATED_MOTIVE, 1) * 3600;
