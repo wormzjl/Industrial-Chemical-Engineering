@@ -79,3 +79,20 @@ Bit-for-bit rule: no branch changes which side it takes on any input. A reordere
 Pitfalls: digests of result records (a `toString` or a canonical text that includes a code: an enum's `toString` is its name, not the old text, so records must not start printing the enum); `switch` exhaustiveness (keep a default that throws where the old code fell through to a failure); the solve-path string (`solvePath`) is concatenated text that tests match with `contains`: do not touch its characters; `V3StageContinuationTest` prints failed-check lists.
 
 Tests for the main thread (the subagent runs none; `columnGates` unless the report finds otherwise): `V3BoundedSolvePathTest`, `V3StageContinuationTest`, `V3ColdStartTest`, `V3ColumnCalculatorTest`, `V3ConvergenceClosureTest`, `V3StageTraceCalculatorTest`, `V3LiteraturePresetTest`, `V3PumparoundSteamCalculatorTest`, `V3VacuumStartupTest`, `V3PathDependentInfeasibilityTest`, `V3SimultaneousColumnSolverTest`, `V3BandFactorizationCountTest`, `V3LearnedRecoveryTest`, `network/ColumnWireTest`, `FlowsheetExamplesTest`, and every other test that reads a changed accessor. Report: `wave-e/E0-3_REPORT.md`: the survey table, the enums with their texts, what stayed a string and why, the dead comparisons removed, lines changed.
+
+## L1 measured: the inside-out trial is a net loss (main thread, 2026-11-13)
+
+COLUMN_REVIEW row L1: "measure the first rung with and without it; delete it if it saves less than 5 % of a cold solve". Measured at `1dbb7f3cb`, the machine alone, a scratch probe (`tmp/l1-inside-out/L1Probe.java`: `V3ColumnCalculator.calculate` cold, the classical chain, 15 s warm-up and 20 s measured a case), once as built and once with the first rung on `STAGE_LOCAL_BLOCKS` in place of `INSIDE_OUT` (a scratch edit, reverted):
+
+| Dry cold case (Tia Juana light, CDU-17) | With the trial | Without | |
+|---|---|---|---|
+| 4 stages, 2.5 bar | 0.105 s | 0.015 s | 6.8 times |
+| 8 stages | 0.123 s | 0.031 s | 3.9 times |
+| 15 stages | 0.169 s | 0.082 s | 2.1 times |
+| 30 stages | 0.254 s | 0.170 s | -33 % |
+| 30 stages, 1.5 bar top | 0.247 s | 0.168 s | -32 % |
+| 30 stages, 1.1 bar top | 1.293 s | 0.907 s | -30 % |
+
+- The trial costs about 0.09 s on every dry cold solve and saves nothing after it: the same path, the same Newton iterations, and the published streams equal in every printed digit (flows to 1e-9 mol/s, temperatures to 1e-6 K) in all six cases.
+- It acts only on the first grid of a request with no draw, steam or stage heat, on the classical chain; the bench inputs of PROFILE_REVIEW (both with features, through the learned start) never run it, which is why no profile showed it.
+- **Decision: delete it** (about 330 Java lines: `solveWithInsideOut`, the frozen-property evaluator paths, the `INSIDE_OUT` policy and its telemetry line). It goes in after E0-3 merges, because both change the calculator and the solver. Expected to move: nothing published in these six cases; the gate is the column classes' digests and the cold-start sweep.
