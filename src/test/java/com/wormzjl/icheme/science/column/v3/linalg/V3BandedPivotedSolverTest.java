@@ -94,6 +94,44 @@ class V3BandedPivotedSolverTest {
         assertTrue(success.backwardError() <= 1.0e-12);
     }
 
+    /**
+     * The elimination updates a row only out to the last column its pivot rows can hold (P8 of batch
+     * 2026-11-13-codebase-review), also where partial pivoting swaps rows: random bands that are not diagonally dominant
+     * solve as the dense partial-pivot oracle does, in fewer updates than the full fill width.
+     */
+    @Test
+    void pivotedBandsUpdateOnlyToTheirPivotRowsExtent() {
+        Random random = new Random(0xB0B5L);
+        var workspace = new V3BandedPivotedSolver.Workspace();
+        for (int size = 6; size <= 40; size += 17) {
+            V3BandedMatrix matrix = new V3BandedMatrix(size, 3, 2);
+            for (int row = 0; row < size; row++)
+                for (int column = Math.max(0, row - 3); column <= Math.min(size - 1, row + 2); column++)
+                    matrix.set(row, column, random.nextDouble() * 2.0 - 1.0);
+            double[] expected = vector(size, random);
+            double[] rightHandSide = multiply(matrix, expected);
+            var result = V3BandedPivotedSolver.solve(matrix, rightHandSide, workspace);
+            var success = assertInstanceOf(V3BandedPivotedSolver.Result.Success.class, result, result::toString);
+            assertTrue(success.pivotSwaps() > 0, "the case pivots");
+            assertArrayEquals(densePivotedSolve(toDense(matrix), rightHandSide), success.solution(), 1.0e-8);
+        }
+        assertEquals(0, workspace.fullWidthSolves());
+        assertTrue(workspace.updatedEntries() < workspace.fullWidthEntries(),
+                workspace.updatedEntries() + " of " + workspace.fullWidthEntries());
+    }
+
+    /** A negative entry that row scaling takes to -0.0 sends its solve through the full fill width, which keeps that zero's sign. */
+    @Test
+    void aNegativeZeroAfterScalingTakesTheFullWidth() {
+        V3BandedMatrix matrix = new V3BandedMatrix(2, 1, 1);
+        matrix.set(0, 0, 10.0); matrix.set(0, 1, -Double.MIN_VALUE);
+        matrix.set(1, 0, 1.0); matrix.set(1, 1, 1.0);
+        var workspace = new V3BandedPivotedSolver.Workspace();
+        assertInstanceOf(V3BandedPivotedSolver.Result.Success.class, V3BandedPivotedSolver.solve(matrix, new double[] {10.0, 2.0}, workspace));
+        assertEquals(1, workspace.fullWidthSolves());
+        assertEquals(workspace.fullWidthEntries(), workspace.updatedEntries());
+    }
+
     @Test
     void deterministicRandomDiagonallyDominantBandsMatchDenseOracleAndPreserveInputs() {
         Random random = new Random(0x5EEDBA5DL);

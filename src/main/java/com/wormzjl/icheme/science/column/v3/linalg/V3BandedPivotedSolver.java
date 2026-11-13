@@ -31,7 +31,8 @@ public final class V3BandedPivotedSolver {
         matrix = Objects.requireNonNull(matrix, "matrix");
         rightHandSide = copiedFiniteRightHandSide(matrix, rightHandSide);
         double[] originalRightHandSide = rightHandSide.clone();
-        BandRows work = Objects.requireNonNull(workspace, "workspace").factorization(matrix);
+        workspace = Objects.requireNonNull(workspace, "workspace");
+        BandRows work = workspace.factorization(matrix);
         double originalMatrixInfinityNorm = infinityNorm(matrix);
         double originalRightHandSideInfinityNorm = infinityNorm(rightHandSide);
         if (originalMatrixInfinityNorm == 0.0) {
@@ -51,7 +52,16 @@ public final class V3BandedPivotedSolver {
         int size = work.size;
         int width = work.width;
         int lowerBandwidth = work.lowerBandwidth;
+        int upperBandwidth = work.upperBandwidth;
         int fillBandwidth = work.fillBandwidth;
+        // The last column any pivot row so far can hold a nonzero in (LAPACK dgbtf2's ju; P8 of batch
+        // 2026-11-13-codebase-review). Past it a pivot row holds the +0.0 its slots started with, so updating a
+        // row there computes x - m * (+0.0), which is x for every x but -0.0. Without a -0.0 in the scaled band no
+        // -0.0 ever arises (a difference is -0.0 only when its minuend is), so those updates are skipped; a band
+        // with one (a negative entry under 2^-1074 of its row's largest, scaled to zero) takes the full width.
+        int extent = -1;
+        boolean fullWidth = work.holdsNegativeZero();
+        if (fullWidth) workspace.fullWidthSolves++;
         for (int pivot = 0; pivot < size; pivot++) {
             int lastCandidateRow = Math.min(size - 1, pivot + lowerBandwidth);
             int pivotBase = pivot * width + lowerBandwidth - pivot;
@@ -70,8 +80,12 @@ public final class V3BandedPivotedSolver {
             }
             // Rows reaching this pivot hold nothing beyond this column, so it also bounds the fill they take on.
             int lastFilledColumn = Math.min(size - 1, pivot + fillBandwidth);
+            // A row holds nonzeros only to its own declared band or to the extent of the pivots that updated it, so
+            // the chosen row raises the extent to its declared band at most; both swapped rows hold +0.0 past it.
+            extent = Math.max(extent, Math.min(size - 1, pivotRow + upperBandwidth));
+            int lastUpdatedColumn = fullWidth ? lastFilledColumn : extent;
             if (pivotRow != pivot) {
-                work.swapRowTails(pivot, pivotRow, pivot, lastFilledColumn);
+                work.swapRowTails(pivot, pivotRow, pivot, lastUpdatedColumn);
                 double temporary = rightHandSide[pivot];
                 rightHandSide[pivot] = rightHandSide[pivotRow];
                 rightHandSide[pivotRow] = temporary;
@@ -86,10 +100,12 @@ public final class V3BandedPivotedSolver {
                 double multiplier = band[rowBase + pivot] / diagonal;
                 if (multiplier == 0.0) continue;
                 band[rowBase + pivot] = multiplier;
+                workspace.updatedEntries += lastUpdatedColumn - pivot;
+                workspace.fullWidthEntries += lastFilledColumn - pivot;
                 // Each entry is written once per pivot, so these values survive to its end.
                 // Including the L multiplier preserves the former whole-matrix growth scan.
                 maximumDuringFactorization = Math.max(maximumDuringFactorization, Math.abs(multiplier));
-                for (int column = pivot + 1; column <= lastFilledColumn; column++) {
+                for (int column = pivot + 1; column <= lastUpdatedColumn; column++) {
                     double updated = band[rowBase + column] - multiplier * band[pivotBase + column];
                     band[rowBase + column] = updated;
                     maximumDuringFactorization = Math.max(maximumDuringFactorization, Math.abs(updated));
@@ -128,6 +144,16 @@ public final class V3BandedPivotedSolver {
     public static final class Workspace {
         private V3BandedMatrix matrix;
         private BandRows work;
+        /** Entries the elimination updated, and those the full fill width would have, over this workspace's solves (P8). */
+        private long updatedEntries, fullWidthEntries;
+        /** Solves whose scaled band held a -0.0 and so took the full fill width (P8). */
+        private int fullWidthSolves;
+
+        public long updatedEntries() { return updatedEntries; }
+
+        public long fullWidthEntries() { return fullWidthEntries; }
+
+        public int fullWidthSolves() { return fullWidthSolves; }
 
         /**
          * Returns a zeroed matrix for immediate assembly and solving. A later call may overwrite it;
@@ -375,6 +401,17 @@ public final class V3BandedPivotedSolver {
                             ? values[rowBase + column] * scale : values[rowBase + column] / columnDivisors[column];
                 }
             }
+        }
+
+        /** Whether a stored entry is -0.0 (only row scaling can make one, from a negative entry it scales to zero). */
+        boolean holdsNegativeZero() {
+            for (int row = 0; row < size; row++) {
+                int rowBase = rowBase(row);
+                for (int column = firstColumn(row); column <= lastColumn(row); column++) {
+                    if (Double.doubleToRawLongBits(values[rowBase + column]) == Long.MIN_VALUE) return true;
+                }
+            }
+            return false;
         }
 
         double maximumAbsoluteValue() {

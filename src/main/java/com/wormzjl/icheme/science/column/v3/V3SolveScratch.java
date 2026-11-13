@@ -73,7 +73,15 @@ final class V3SolveScratch {
             text.append(' ').append(site.label).append(' ').append(counts[site.ordinal()]).append(',');
             total += counts[site.ordinal()];
         }
-        return text.append(" total ").append(total).toString();
+        text.append(" total ").append(total);
+        // The pooled workspace's elimination (P8): an attempt nested in another works in a fresh set this leaves out.
+        var pool = OPEN.get();
+        if (pool != null && pool.free != null) {
+            var linear = pool.free.linear;
+            text.append("; elimination updates ").append(linear.updatedEntries()).append(" of ").append(linear.fullWidthEntries())
+                    .append(" at full width, full-width solves ").append(linear.fullWidthSolves());
+        }
+        return text.toString();
     }
 
     /** Runs {@code body} as one calculation: its attempts share one scratch set, dropped when it returns. */
