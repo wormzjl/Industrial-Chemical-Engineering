@@ -4,6 +4,7 @@ import com.wormzjl.icheme.science.math.DeterministicMath;
 
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel.Root;
+import com.wormzjl.icheme.science.thermo.PhaseTraits;
 import java.util.Arrays;
 import java.util.Objects;
 
@@ -52,6 +53,9 @@ public final class PhaseState {
     private double residualEntropy;
     private double gibbsEnergy;
     private double shareEnthalpy, shareEntropy, shareVolume;
+    /** The identification inputs of a fluid's root (I-1, {@link #setIdentification}); NaN until set. */
+    private double rootCompressibility = Double.NaN, attraction = Double.NaN, coVolume = Double.NaN,
+            attractionTemperatureDerivative = Double.NaN;
     private boolean frozen;
 
     public PhaseState(int componentCount) {
@@ -110,6 +114,10 @@ public final class PhaseState {
         this.shareEnthalpy = 0.0;
         this.shareEntropy = 0.0;
         this.shareVolume = 0.0;
+        this.rootCompressibility = Double.NaN;
+        this.attraction = Double.NaN;
+        this.coVolume = Double.NaN;
+        this.attractionTemperatureDerivative = Double.NaN;
         System.arraycopy(composition, 0, this.composition, 0, composition.length);
         System.arraycopy(logFugacityCoefficients, 0, this.logFugacityCoefficients, 0, composition.length);
         System.arraycopy(idealGasGibbsEnergies, 0, this.idealGasGibbsEnergies, 0, composition.length);
@@ -130,6 +138,22 @@ public final class PhaseState {
         if (!(molarVolume + volume > 0.0)) throw new IllegalArgumentException("A phase's balance volume must be positive");
     }
 
+    /**
+     * The numbers of the kernel evaluation that filled a fluid state (I-1), after {@link #set} (which clears them): the
+     * untranslated compressibility factor of the evaluated root and the mixture's {@code a}, {@code b} and {@code da/dT}.
+     * Stored, not computed: {@link #traits()} forms the phase's traits from them where a result's phase is built.
+     */
+    public void setIdentification(double compressibility, double attraction, double coVolume,
+                                  double attractionTemperatureDerivative) {
+        if (frozen) throw new IllegalStateException("A frozen phase state cannot be refilled");
+        requireFilled();
+        if (kind == PhaseKind.SOLID) throw new IllegalArgumentException("A crystal has no cubic root to identify");
+        this.rootCompressibility = compressibility;
+        this.attraction = attraction;
+        this.coVolume = coVolume;
+        this.attractionTemperatureDerivative = attractionTemperatureDerivative;
+    }
+
     /** A frozen copy: every value and array copied, {@link #set} refused. */
     public PhaseState copy() {
         requireFilled();
@@ -140,8 +164,24 @@ public final class PhaseState {
         copy.shareEnthalpy = shareEnthalpy;
         copy.shareEntropy = shareEntropy;
         copy.shareVolume = shareVolume;
+        copy.rootCompressibility = rootCompressibility;
+        copy.attraction = attraction;
+        copy.coVolume = coVolume;
+        copy.attractionTemperatureDerivative = attractionTemperatureDerivative;
         copy.frozen = true;
         return copy;
+    }
+
+    /**
+     * The traits of a fluid state's root ({@link PhaseTraits#of(int, double, double, double, double, double, double)} on
+     * the numbers {@link #setIdentification} stored, at this state's temperature and pressure), or {@code null} for a
+     * crystal and for a state filled without them. A new record per call: read it where a result's phase is built.
+     */
+    public PhaseTraits traits() {
+        requireFilled();
+        if (kind == PhaseKind.SOLID || Double.isNaN(rootCompressibility)) return null;
+        return PhaseTraits.of(physicalRootCount, rootCompressibility, attraction, coVolume, attractionTemperatureDerivative,
+                temperature, pressure);
     }
 
     public boolean frozen() { return frozen; }

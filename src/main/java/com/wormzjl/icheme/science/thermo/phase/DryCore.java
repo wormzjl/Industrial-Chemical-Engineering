@@ -132,7 +132,7 @@ final class DryCore {
         w.kernelEvaluations++;
         Classification classification = singleClassification(state, t, p, material, w);
         PhaseKind label = singleLabel(state, classification, t, p, material, w);
-        var phase = new PhaseAmounts(label, null, t, p, material.basisAmounts, state.copy());
+        var phase = new PhaseAmounts(label, null, t, p, material.basisAmounts, state.copy(), state.traits());
         return engine.converged(competition, classification, List.of(phase), List.of(), diagnostics(w, feed, band), why);
     }
 
@@ -178,7 +178,7 @@ final class DryCore {
         Root root = w.feedResult.feedRoot() == Root.VAPOR ? Root.VAPOR : Root.LIQUID;
         PhaseState state = evaluator.evaluate(t, p, material.amounts, root, w.phases, w.vaporScratch);
         w.kernelEvaluations++;
-        var phase = new PhaseAmounts(PhaseKind.FLUID, null, t, p, material.basisAmounts, state.copy());
+        var phase = new PhaseAmounts(PhaseKind.FLUID, null, t, p, material.basisAmounts, state.copy(), state.traits());
         return engine.converged(competition, Classification.SINGLE_FLUID, List.of(phase), List.of(), diagnostics(w, w.feedResult, true),
                 mergedDetail(w));
     }
@@ -203,10 +203,12 @@ final class DryCore {
         boolean swapped = vapour.molarVolume() < liquid.molarVolume();
         boolean band = criticalBand.inBand(t, p, material) || w.tieLine < BAND_TIE_LINE;
         boolean liquidLiquid = !band && w.liquidProductDenseLiquidLike && w.vapourProductDenseLiquidLike;
+        PhaseState lighterState = swapped ? liquid : vapour;
+        PhaseState denserState = swapped ? vapour : liquid;
         PhaseAmounts lighter = new PhaseAmounts(liquidLiquid ? PhaseKind.LIQUID : PhaseKind.VAPOR, null, t, p,
-                engine.expand(swapped ? w.liquidAmounts : w.vaporAmounts), (swapped ? liquid : vapour).copy());
+                engine.expand(swapped ? w.liquidAmounts : w.vaporAmounts), lighterState.copy(), lighterState.traits());
         PhaseAmounts denser = new PhaseAmounts(PhaseKind.LIQUID, null, t, p,
-                engine.expand(swapped ? w.vaporAmounts : w.liquidAmounts), (swapped ? vapour : liquid).copy());
+                engine.expand(swapped ? w.vaporAmounts : w.liquidAmounts), denserState.copy(), denserState.traits());
         return engine.converged(competition, liquidLiquid ? Classification.LIQUID_LIQUID : Classification.VAPOR_LIQUID,
                 List.of(lighter, denser), List.of(), diagnostics(w, w.feedResult, band), band ? criticalBand.bandReason(t, p, material, w, Double.NaN) : null);
     }
@@ -321,7 +323,8 @@ final class DryCore {
         List<PhaseAmounts> phases = new ArrayList<>(3);
         for (int a = 0; a < 3; a++) {
             int k = order[a];
-            phases.add(new PhaseAmounts(a == 0 ? PhaseKind.VAPOR : PhaseKind.LIQUID, null, t, p, engine.expand(s.amounts[k]), s.states[k].copy()));
+            phases.add(new PhaseAmounts(a == 0 ? PhaseKind.VAPOR : PhaseKind.LIQUID, null, t, p, engine.expand(s.amounts[k]), s.states[k].copy(),
+                    s.states[k].traits()));
         }
         boolean band = criticalBand.inBand(t, p, material) || w.tieLine < BAND_TIE_LINE;
         return engine.converged(competition, Classification.VAPOR_LIQUID_LIQUID, phases, List.of(), diagnostics(w, w.feedResult, band),
