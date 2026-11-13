@@ -36,7 +36,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
     final FluidThermodynamics model;
     private final FluidPropertyReloadGuard propertyReload;
     private String propertyHold;
-    private final IChemE.FluidOptions options;
+    final IChemE.FluidOptions options;
     private final List<FluidPresetCatalog.Preset> presetCache;
     final List<String> componentNames;
     /** The menus' static part, constant for the server (its catalog and model are captured at start): the component names
@@ -91,6 +91,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
     private final Map<Long,com.wormzjl.icheme.network.FluidNetwork.MenuData> publishedMenuData=new HashMap<>();
     /** The requested world-space displays, their watchers and what each last published (code base review R8, R9). */
     private final Displays displays=new Displays(this);
+    /** What a placed, changed or removed device does to the ledger (code base review R8). */
+    private final Placement placement=new Placement(this);
     /** The far silhouettes' subscriptions (W10): registry facts of the placed structures, read as stored. */
     private final Silhouettes silhouettes=new Silhouettes(this::structuresOf);
     /** The plant's noise levels by chunk, as last published, and the players that ask for them (PROCESS_SOUNDS_REVIEW.md, S2 A). */
@@ -239,7 +241,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
     }
     public static void stop(MinecraftServer server){find(server).ifPresent(FluidWorldAuthority::close);}
     public static void forget(MinecraftServer server){EARLY_CHUNKS.remove(server);com.wormzjl.icheme.network.AssemblyNetwork.forget(server);com.wormzjl.icheme.network.MachineNetwork.forget(server);var world=SERVERS.remove(server);if(world!=null)world.close();}
-    private void owned(){if(!server.isSameThread())throw new IllegalStateException("Fluid authority requires the logical server thread");}
+    void owned(){if(!server.isSameThread())throw new IllegalStateException("Fluid authority requires the logical server thread");}
     /** Every island of this world solves on a model built from the same captured options, so the
      * configured trace cutoff is one value for every worker and every retained solver: a retained
      * solver is replaced whenever its model identity changes, and the model is the cutoff's home. A saved island's key
@@ -497,39 +499,30 @@ public final class FluidWorldAuthority implements AutoCloseable {
      * and a block draws what the network joins. -1 where no device without ports stands. Reads no block and loads no
      * chunk: a neighbour in a chunk that is not loaded is known by its registration.
      */
-    public int drawnFaces(PhysicalFluidTopology.Position position){
-        owned();var record=topology.latestAt(position);
-        if(record==null||!record.device().position().equals(position)||!record.device().ports().isEmpty())return -1;
-        return PhysicalFluidTopology.builtFaces(this::latestDevice,record.device());
-    }
+    public int drawnFaces(PhysicalFluidTopology.Position position){owned();return placement.drawnFaces(position);}
     /**
      * The faces a block of {@code kind} placed at {@code position} facing {@code facing} will draw joined once registered:
      * a hand-placed block, every face a joint and no fitting, as {@link #place} registers it.
      */
-    public int placedFaces(PhysicalFluidTopology.Position position,TopologyCompiler.Kind kind,PhysicalFluidTopology.Direction facing){
-        owned();
-        var placed=PhysicalFluidTopology.Device.builder(Long.MAX_VALUE,position,kind,facing,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive()).generatorEnabled(kind!=TopologyCompiler.Kind.GENERATOR).build();
-        return PhysicalFluidTopology.builtFaces(p->p.equals(position)?placed:latestDevice(p),placed);
-    }
-    private PhysicalFluidTopology.Device latestDevice(PhysicalFluidTopology.Position position){var record=topology.latestAt(position);return record==null?null:record.device();}
+    public int placedFaces(PhysicalFluidTopology.Position position,TopologyCompiler.Kind kind,PhysicalFluidTopology.Direction facing){owned();return placement.placedFaces(position,kind,facing);}
     /** Applied events that did nothing for the player who asked (a recovery that found no cake or a full inventory), by event, for their reply. Bounded. */
     private final LinkedHashMap<UUID,String> refusedEvents=new LinkedHashMap<>();
     private void refuseEvent(UUID event,String reason){refusedEvents.put(event,reason);if(refusedEvents.size()>WorldTopologyLedger.MAXIMUM_EVENTS)refusedEvents.remove(refusedEvents.keySet().iterator().next());}
     public WorldTopologyLedger.Registration place(PhysicalFluidTopology.Position position,TopologyCompiler.Kind kind,PhysicalFluidTopology.Direction facing) {
-        return place(position,kind,facing,List.of());
+        return placement.place(position,kind,facing,List.of());
     }
     /** Registry reconstruction reads installed cutoff state from the placed block. */
     public WorldTopologyLedger.Registration place(PhysicalFluidTopology.Position position,TopologyCompiler.Kind kind,PhysicalFluidTopology.Direction facing,PhysicalFluidTopology.Cutoff cutoff) {
-        return place(position,kind,facing,List.of(),cutoff);
+        return placement.place(position,kind,facing,List.of(),cutoff);
     }
     /** Rebuild installed pressure controls directly from static block state, without an intermediate passive pipe. */
     public WorldTopologyLedger.Registration place(PhysicalFluidTopology.Position position,TopologyCompiler.Kind kind,PhysicalFluidTopology.Direction facing,PhysicalFluidTopology.Cutoff cutoff,boolean pressureValve) {
-        return place(position,kind,facing,List.of(),cutoff,pressureValve,false,TopologyCompiler.Kind.PIPE,PhysicalFluidTopology.ALL_FACES);
+        return placement.place(position,kind,facing,List.of(),cutoff,pressureValve,false,TopologyCompiler.Kind.PIPE,PhysicalFluidTopology.ALL_FACES);
     }
-    public WorldTopologyLedger.Registration place(PhysicalFluidTopology.Position position,TopologyCompiler.Kind kind,PhysicalFluidTopology.Direction facing,PhysicalFluidTopology.Cutoff cutoff,boolean pressureValve,boolean filter){return place(position,kind,facing,List.of(),cutoff,pressureValve,filter,TopologyCompiler.Kind.PIPE,PhysicalFluidTopology.ALL_FACES);}
-    public WorldTopologyLedger.Registration place(PhysicalFluidTopology.Position position,TopologyCompiler.Kind kind,PhysicalFluidTopology.Direction facing,PhysicalFluidTopology.Cutoff cutoff,boolean pressureValve,boolean filter,TopologyCompiler.Kind inlineMover){return place(position,kind,facing,List.of(),cutoff,pressureValve,filter,inlineMover,PhysicalFluidTopology.ALL_FACES);}
+    public WorldTopologyLedger.Registration place(PhysicalFluidTopology.Position position,TopologyCompiler.Kind kind,PhysicalFluidTopology.Direction facing,PhysicalFluidTopology.Cutoff cutoff,boolean pressureValve,boolean filter){return placement.place(position,kind,facing,List.of(),cutoff,pressureValve,filter,TopologyCompiler.Kind.PIPE,PhysicalFluidTopology.ALL_FACES);}
+    public WorldTopologyLedger.Registration place(PhysicalFluidTopology.Position position,TopologyCompiler.Kind kind,PhysicalFluidTopology.Direction facing,PhysicalFluidTopology.Cutoff cutoff,boolean pressureValve,boolean filter,TopologyCompiler.Kind inlineMover){return placement.place(position,kind,facing,List.of(),cutoff,pressureValve,filter,inlineMover,PhysicalFluidTopology.ALL_FACES);}
     /** A placed block registered again from what it holds (a chunk load after the D4 reset): a laid pipe keeps its joints. */
-    public WorldTopologyLedger.Registration place(PhysicalFluidTopology.Position position,TopologyCompiler.Kind kind,PhysicalFluidTopology.Direction facing,PhysicalFluidTopology.Cutoff cutoff,boolean pressureValve,boolean filter,TopologyCompiler.Kind inlineMover,int joints){return place(position,kind,facing,List.of(),cutoff,pressureValve,filter,inlineMover,joints);}
+    public WorldTopologyLedger.Registration place(PhysicalFluidTopology.Position position,TopologyCompiler.Kind kind,PhysicalFluidTopology.Direction facing,PhysicalFluidTopology.Cutoff cutoff,boolean pressureValve,boolean filter,TopologyCompiler.Kind inlineMover,int joints){return placement.place(position,kind,facing,List.of(),cutoff,pressureValve,filter,inlineMover,joints);}
     /** A cell of a laid line: its position (a rack lane's too), its facing (along its run), its joints, and a lane's width in positions and face points (0: a pipe block). */
     public record Laid(PhysicalFluidTopology.Position position,PhysicalFluidTopology.Direction facing,int joints,int slots,long points){}
     /**
@@ -538,33 +531,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
      * ({@code hosts}, by identity), each new pipe painted {@code primary} and {@code secondary}. Returns the new pipes'
      * registrations in the order of {@code cells}.
      */
-    public List<WorldTopologyLedger.Registration> lay(List<Laid> cells,double diameter,Map<Long,Integer> hosts,int primary,int secondary) {
-        owned();
-        if(cells.isEmpty())throw new IllegalArgumentException("An empty line");
-        long first=topology.nextIdentity();var edits=new ArrayList<WorldTopologyLedger.Edit>();var placed=new ArrayList<WorldTopologyLedger.Registration>();
-        for(int i=0;i<cells.size();i++) {
-            var cell=cells.get(i);
-            var device=PhysicalFluidTopology.Device.builder(first+i,cell.position(),TopologyCompiler.Kind.PIPE,cell.facing(),new PipeResistance.Geometry(1,diameter,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),
-                    new FlowControl.Passive()).joints(cell.joints()).slots(cell.slots()).points(cell.points()).build();
-            var record=new WorldTopologyLedger.Registration(device,FluidDeviceSpec.nitrogen(catalog),0);placed.add(record);edits.add(new WorldTopologyLedger.Edit(first+i,record));
-        }
-        for(var host:new TreeMap<>(hosts).entrySet()) {
-            var old=registrations().get(host.getKey());
-            if(old==null||old.device().kind()!=TopologyCompiler.Kind.PIPE)throw new IllegalStateException("A laid line's host pipe is gone");
-            edits.add(new WorldTopologyLedger.Edit(host.getKey(),new WorldTopologyLedger.Registration(old.device().withJoints(host.getValue()),old.spec(),Math.addExact(old.revision(),1))));
-        }
-        submit(edits,Math.addExact(first,cells.size()));
-        for(var record:placed)paint(record.device().id(),primary,secondary);
-        return placed;
-    }
+    public List<WorldTopologyLedger.Registration> lay(List<Laid> cells,double diameter,Map<Long,Integer> hosts,int primary,int secondary){owned();return placement.lay(cells,diameter,hosts,primary,secondary);}
     /** A rack lane registered again from its rack's copy (a chunk load after the D4 reset): its joints, width, face points and bore. */
-    public WorldTopologyLedger.Registration placeLane(PhysicalFluidTopology.Position position,PhysicalFluidTopology.Direction facing,int joints,int slots,long points,double diameter) {
-        owned();long id=topology.nextIdentity();
-        var device=PhysicalFluidTopology.Device.builder(id,position,TopologyCompiler.Kind.PIPE,facing,new PipeResistance.Geometry(1,diameter,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),
-                new FlowControl.Passive()).joints(joints).slots(slots).points(points).build();
-        var record=new WorldTopologyLedger.Registration(device,FluidDeviceSpec.nitrogen(catalog),0);
-        submit(List.of(new WorldTopologyLedger.Edit(id,record)),Math.addExact(id,1));return record;
-    }
+    public WorldTopologyLedger.Registration placeLane(PhysicalFluidTopology.Position position,PhysicalFluidTopology.Direction facing,int joints,int slots,long points,double diameter){owned();return placement.placeLane(position,facing,joints,slots,points,diameter);}
     /** One side of a heat-exchanging unit to place: its node (its first inlet's cell), its inlet and outlet ports, its
      * passage and its unit's facts ({@link #placeUnit} names the partners). */
     public record UnitSide(PhysicalFluidTopology.Position node,List<PhysicalFluidTopology.Port> ports,PipeResistance.Geometry passage,HeatUnit heat){}
@@ -998,42 +967,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         submit(List.of(new WorldTopologyLedger.Edit(id,record)),Math.addExact(id,1));return record;
     }
     /** A complete multi-cell mover uses the same controls and geometry as its one-block counterpart. */
-    public WorldTopologyLedger.Registration placeMover(PhysicalFluidTopology.Position suction,TopologyCompiler.Kind kind,List<PhysicalFluidTopology.Port> ports) {
-        if(kind!=TopologyCompiler.Kind.PUMP&&kind!=TopologyCompiler.Kind.COMPRESSOR||ports.isEmpty())throw new IllegalArgumentException("Expected a multi-cell mover");
-        return place(suction,kind,PhysicalFluidTopology.Direction.NORTH,ports);
-    }
-    private WorldTopologyLedger.Registration place(PhysicalFluidTopology.Position position,TopologyCompiler.Kind kind,PhysicalFluidTopology.Direction facing,List<PhysicalFluidTopology.Port> ports) {
-        return place(position,kind,facing,ports,PhysicalFluidTopology.Cutoff.NONE);
-    }
-    private WorldTopologyLedger.Registration place(PhysicalFluidTopology.Position position,TopologyCompiler.Kind kind,PhysicalFluidTopology.Direction facing,List<PhysicalFluidTopology.Port> ports,PhysicalFluidTopology.Cutoff cutoff) {
-        return place(position,kind,facing,ports,cutoff,false,false,TopologyCompiler.Kind.PIPE,PhysicalFluidTopology.ALL_FACES);
-    }
-    private WorldTopologyLedger.Registration place(PhysicalFluidTopology.Position position,TopologyCompiler.Kind kind,PhysicalFluidTopology.Direction facing,List<PhysicalFluidTopology.Port> ports,PhysicalFluidTopology.Cutoff cutoff,boolean pressureValve,boolean filter,TopologyCompiler.Kind inlineMover,int joints) {
-        owned();
-        if(pressureValve&&kind!=TopologyCompiler.Kind.PIPE)throw new IllegalArgumentException("Only a pipe hosts a pressure-control accessory");
-        long id=topology.nextIdentity();FlowControl control=switch(kind){case PUMP,COMPRESSOR->PhysicalFluidTopology.defaultMover(kind);case VALVE->FlowControl.ControlValve.unconfigured();default->new FlowControl.Passive();};
-        if(inlineMover!=TopologyCompiler.Kind.PIPE){if(kind!=TopologyCompiler.Kind.PIPE||pressureValve||filter)throw new IllegalArgumentException("Conflicting inline mover");control=PhysicalFluidTopology.defaultMover(inlineMover);}
-        if(pressureValve)control=FlowControl.ControlValve.unconfigured();
-        double diameter=kind==TopologyCompiler.Kind.PIPE||kind==TopologyCompiler.Kind.DIVERTER_VALVE?placedPipeDiameter(position):.05;
-        // A diverter valve is placed open to its straight outlet (batch 2026-11-09-batch-distiller).
-        if(kind==TopologyCompiler.Kind.DIVERTER_VALVE&&joints==PhysicalFluidTopology.ALL_FACES)joints=PhysicalFluidTopology.diverterJoints(facing,0);
-        var device=PhysicalFluidTopology.Device.builder(id,position,kind,facing,new PipeResistance.Geometry(1,diameter,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),control).ports(ports).generatorEnabled(kind!=TopologyCompiler.Kind.GENERATOR).cutoff(cutoff).inlineFilter(filter).joints(joints).build();
-        var spec=kind==TopologyCompiler.Kind.GENERATOR?FluidDeviceSpec.water(catalog):FluidDeviceSpec.nitrogen(catalog);
-        // A reservoir is placed empty (decision D54): of its settings only the capacity means anything.
-        if(kind==TopologyCompiler.Kind.RESERVOIR)spec=new FluidDeviceSpec(options.volume(),298.15,com.wormzjl.icheme.science.fluid.solver.PhaseLayout.AMBIENT_PRESSURE,spec.composition());
-        var record=new WorldTopologyLedger.Registration(device,spec,0);
-        submit(List.of(new WorldTopologyLedger.Edit(id,record)),Math.addExact(id,1));return record;
-    }
-    /** Inherit the largest mechanically connected adjacent pipe's latest bore, including a closed axial cutoff. */
-    private double placedPipeDiameter(PhysicalFluidTopology.Position position) {
-        double largest=0;
-        for(var direction:PhysicalFluidTopology.Direction.values()) {
-            var neighbour=registry.at(position.offset(direction)).orElse(null);
-            if(neighbour!=null&&neighbour.device().kind()==TopologyCompiler.Kind.PIPE&&neighbour.device().mechanicallyConnects(PhysicalFluidTopology.opposite(direction)))
-                largest=Math.max(largest,neighbour.device().geometry().diameter());
-        }
-        return largest>0?largest:.05;
-    }
+    public WorldTopologyLedger.Registration placeMover(PhysicalFluidTopology.Position suction,TopologyCompiler.Kind kind,List<PhysicalFluidTopology.Port> ports){return placement.placeMover(suction,kind,ports);}
     /**
      * Registers a vessel that spans several cells (a drum, batch 2026-10-15-custom-equipment-rendering): its node at
      * {@code node} (its lowest inside cell), its ports, and its design volume and level height. It is placed empty, as a
@@ -1049,93 +983,37 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public WorldTopologyLedger.Registration placeVessel(PhysicalFluidTopology.Position node,List<PhysicalFluidTopology.Port> ports,double volume,double levelHeight,boolean open,com.wormzjl.icheme.science.fluid.network.VesselGeometry geometry) {
         return placeVessel(node,ports,volume,levelHeight,open,geometry,null);
     }
-    public WorldTopologyLedger.Registration placeVessel(PhysicalFluidTopology.Position node,List<PhysicalFluidTopology.Port> ports,double volume,double levelHeight,boolean open,com.wormzjl.icheme.science.fluid.network.VesselGeometry geometry,com.wormzjl.icheme.science.fluid.network.CoolingTower tower) {
-        owned();
-        long id=topology.nextIdentity();
-        var device=PhysicalFluidTopology.Device.builder(id,node,TopologyCompiler.Kind.RESERVOIR,PhysicalFluidTopology.Direction.NORTH,
-                new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive()).ports(ports).build();
-        var spec=new FluidDeviceSpec(volume,298.15,com.wormzjl.icheme.science.fluid.solver.PhaseLayout.AMBIENT_PRESSURE,FluidDeviceSpec.nitrogen(catalog).composition(),SlurryFeed.NONE,levelHeight,open,geometry,tower);
-        var record=new WorldTopologyLedger.Registration(device,spec,0);
-        submit(List.of(new WorldTopologyLedger.Edit(id,record)),Math.addExact(id,1));return record;
-    }
+    public WorldTopologyLedger.Registration placeVessel(PhysicalFluidTopology.Position node,List<PhysicalFluidTopology.Port> ports,double volume,double levelHeight,boolean open,com.wormzjl.icheme.science.fluid.network.VesselGeometry geometry,com.wormzjl.icheme.science.fluid.network.CoolingTower tower){owned();return placement.placeVessel(node,ports,volume,levelHeight,open,geometry,tower);}
     /**
      * Queues a configuration change as a ledger event and returns it, or null when nothing would change. A fired heater's
      * coils share their burners and set point (batch 2026-10-27-heat-exchanger-design): a coil's new control moves its
      * partner coil in the same event.
      */
-    public WorldTopologyLedger.Event edit(long id,long expectedRevision,PhysicalFluidTopology.Device device,FluidDeviceSpec spec) {
-        owned();var old=registrations().get(id);if(old==null||old.revision()!=expectedRevision||device.id()!=id)throw new IllegalStateException("Stale fluid controls");
-        if(old.device().equals(device)&&old.spec().equals(spec))return null;
-        var edits=new ArrayList<WorldTopologyLedger.Edit>();edits.add(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,spec,Math.addExact(expectedRevision,1))));
-        var heat=device.heat();var partner=heat!=null&&heat.burners()?registrations().get(heat.partner()):null;
-        if(partner!=null&&partner.device().heat()!=null&&!partner.device().heat().control().equals(heat.control()))
-            edits.add(new WorldTopologyLedger.Edit(partner.device().id(),new WorldTopologyLedger.Registration(partner.device().withHeat(partner.device().heat().withControl(heat.control())),partner.spec(),Math.addExact(partner.revision(),1))));
-        return submit(edits,topology.nextIdentity());
-    }
+    public WorldTopologyLedger.Event edit(long id,long expectedRevision,PhysicalFluidTopology.Device device,FluidDeviceSpec spec){owned();return placement.edit(id,expectedRevision,device,spec);}
     /**
      * Fits a closed vessel's gas blanketing valve, its gas inlet {@code port} (role {@code BLANKET}), or removes it
      * ({@code port} null), as one queued ledger event (batch 2026-11-11-gas-blanketing). A fitted valve starts at
      * {@link FluidDeviceSpec#DEFAULT_BLANKET}; a removed one leaves no set pressure. False for a device that takes no valve: one
      * that is not a closed vessel, or whose inlet meets another of its ports.
      */
-    public boolean blanketValve(long id,PhysicalFluidTopology.Port port) {
-        owned();var record=registrations().get(id);
-        if(record==null||record.device().kind()!=TopologyCompiler.Kind.RESERVOIR||record.spec().open()||record.device().ports().isEmpty())return false;
-        if(port!=null&&port.role()!=PhysicalFluidTopology.ConnectionRole.BLANKET)throw new IllegalArgumentException("A gas blanketing valve's inlet is a blanket gas port");
-        var ports=new ArrayList<>(record.device().ports());ports.removeIf(p->p.role()==PhysicalFluidTopology.ConnectionRole.BLANKET);
-        if(port!=null){for(var p:ports)if(p.cell().equals(port.cell())&&p.face()==port.face())return false;ports.add(port);}
-        // A pressure safety valve already fitted stays above the new valve's vent pressure.
-        if(port!=null&&record.spec().relief()>0&&!(record.spec().relief()>com.wormzjl.icheme.science.fluid.network.GasBlanket.ventPressure(FluidDeviceSpec.DEFAULT_BLANKET)))return false;
-        edit(id,record.revision(),record.device().withPlacement(record.device().position(),ports),record.spec().withBlanket(port==null?0:FluidDeviceSpec.DEFAULT_BLANKET));
-        return true;
-    }
+    public boolean blanketValve(long id,PhysicalFluidTopology.Port port){owned();return placement.blanketValve(id,port);}
     /** Sets a fitted gas blanketing valve's set pressure, Pa absolute, as a queued ledger event; false for a vessel without one or a pressure outside the valve's range. */
-    public boolean blanketPressure(long id,double pascal) {
-        owned();var record=registrations().get(id);
-        if(record==null||!(record.spec().blanket()>0)||!(pascal>=FluidDeviceSpec.MIN_BLANKET)||!(pascal<=FluidDeviceSpec.MAX_BLANKET))return false;
-        // A pressure safety valve on the same vessel stays above the blanketing valve's vent pressure.
-        if(record.spec().relief()>0&&!(record.spec().relief()>com.wormzjl.icheme.science.fluid.network.GasBlanket.ventPressure(pascal)))return false;
-        edit(id,record.revision(),record.device(),record.spec().withBlanket(pascal));return true;
-    }
+    public boolean blanketPressure(long id,double pascal){owned();return placement.blanketPressure(id,pascal);}
     /**
      * Fits a closed vessel's pressure safety valve, its outlet {@code port} (role {@code RELIEF}), or removes it ({@code port}
      * null), as one queued ledger event (batch 2026-11-11-gas-blanketing, the pressure safety valve). A fitted valve starts at
      * {@link FluidDeviceSpec#DEFAULT_RELIEF}, or just above a blanketing valve's vent pressure where that is higher. False for a
      * device that takes no valve: one that is not a closed vessel, or whose outlet meets another of its ports.
      */
-    public boolean reliefValve(long id,PhysicalFluidTopology.Port port) {
-        owned();var record=registrations().get(id);
-        if(record==null||record.device().kind()!=TopologyCompiler.Kind.RESERVOIR||record.spec().open()||record.device().ports().isEmpty())return false;
-        if(port!=null&&port.role()!=PhysicalFluidTopology.ConnectionRole.RELIEF)throw new IllegalArgumentException("A pressure safety valve's outlet is a relief port");
-        var ports=new ArrayList<>(record.device().ports());ports.removeIf(p->p.role()==PhysicalFluidTopology.ConnectionRole.RELIEF);
-        if(port!=null){for(var p:ports)if(p.cell().equals(port.cell())&&p.face()==port.face())return false;ports.add(port);}
-        double set=port==null?0:fittedRelief(record.spec());if(port!=null&&!(set>0))return false;
-        edit(id,record.revision(),record.device().withPlacement(record.device().position(),ports),record.spec().withRelief(set,null));
-        return true;
-    }
-    /** The set pressure a newly fitted pressure safety valve starts at on a device with {@code spec}: the default, or just above its blanketing valve's vent pressure; 0 where none fits. */
-    static double fittedRelief(FluidDeviceSpec spec) {
-        double set=FluidDeviceSpec.DEFAULT_RELIEF;
-        if(spec.blanket()>0)set=Math.max(set,Math.ceil(com.wormzjl.icheme.science.fluid.network.GasBlanket.ventPressure(spec.blanket())*1.1/1000)*1000);
-        return spec.reliefTakes(set)?set:0;
-    }
+    public boolean reliefValve(long id,PhysicalFluidTopology.Port port){owned();return placement.reliefValve(id,port);}
     /**
      * Fits a pressure safety valve on pipe {@code id}, its outlet leaving through {@code face}, or removes it ({@code face}
      * null), as one queued ledger event. The pipe's other faces stay joined as a plain pipe's. False for a device that is no
      * plain pipe: a pipe carrying a fitting, a rack lane, or a pipe with ports.
      */
-    public boolean pipeRelief(long id,PhysicalFluidTopology.Direction face) {
-        owned();var record=registrations().get(id);if(record==null)return false;var d=record.device();
-        if(d.kind()!=TopologyCompiler.Kind.PIPE||!d.ports().isEmpty()||d.slots()>0||face!=null&&(d.actuator()||d.filter()||d.cutoff()!=PhysicalFluidTopology.Cutoff.NONE))return false;
-        edit(id,record.revision(),d,record.spec().withRelief(face==null?0:FluidDeviceSpec.DEFAULT_RELIEF,face));
-        return true;
-    }
+    public boolean pipeRelief(long id,PhysicalFluidTopology.Direction face){owned();return placement.pipeRelief(id,face);}
     /** Sets a fitted pressure safety valve's set pressure, Pa absolute, as a queued ledger event; false for a device without one or a pressure it does not take ({@link FluidDeviceSpec#reliefTakes}). */
-    public boolean reliefPressure(long id,double pascal) {
-        owned();var record=registrations().get(id);
-        if(record==null||!(record.spec().relief()>0)||!record.spec().reliefTakes(pascal))return false;
-        edit(id,record.revision(),record.device(),record.spec().withRelief(pascal,record.spec().reliefFace()));return true;
-    }
+    public boolean reliefPressure(long id,double pascal){owned();return placement.reliefPressure(id,pascal);}
     // ---------------- running columns (batch 2026-10-28-column-operation, C3) ----------------
 
     /**
@@ -1372,68 +1250,36 @@ public final class FluidWorldAuthority implements AutoCloseable {
      * 2026-11-09-batch-distiller): a fact, one queued edit of its joints; its island recompiles on the engine's schedule.
      * Null, or why not.
      */
-    public @org.jetbrains.annotations.Nullable String divert(long id,int outlet) {
-        owned();if(closed)return "the fluid world is closed";
-        var r=topology.latest().get(id);
-        if(r==null||r.device().kind()!=TopologyCompiler.Kind.DIVERTER_VALVE)return "no diverter valve";
-        if(outlet<0||outlet>2)return "a diverter valve has three outlets";
-        int joints=PhysicalFluidTopology.diverterJoints(r.device().facing(),outlet);
-        if(joints==r.device().joints())return null;
-        if(topology.pending(id))return "the diverter valve is being edited";
-        edit(id,r.revision(),r.device().withJoints(joints),r.spec());
-        return null;
-    }
+    public @org.jetbrains.annotations.Nullable String divert(long id,int outlet){owned();if(closed)return "the fluid world is closed";return placement.divert(id,outlet);}
     /** The open outlet of diverter valve {@code id} (0 to 2), or -1 for none. */
-    public int diverterOutlet(long id) {
-        owned();var r=topology.latest().get(id);
-        return r==null||r.device().kind()!=TopologyCompiler.Kind.DIVERTER_VALVE?-1:PhysicalFluidTopology.diverterOutlet(r.device().facing(),r.device().joints());
-    }
+    public int diverterOutlet(long id){owned();return placement.diverterOutlet(id);}
     /** Reading committed static configuration never advances or materialises process state. */
     public Optional<PhysicalFluidTopology.Device> committedDevice(long id){owned();var record=topology.active().get(id);return record==null?Optional.empty():Optional.of(record.device());}
-    public void remove(long id){owned();controls().removeHost(id);instruments.recoverHost(id);var old=registrations().get(id);if(old!=null)submit(List.of(new WorldTopologyLedger.Edit(id,null)),topology.nextIdentity(),old.device().filter()?new WorldTopologyLedger.Recovery(id,null):null);}
+    public void remove(long id){owned();placement.remove(id);}
     /**
      * Holds registration {@code id}, or releases it (decision S11, REGISTRY_FIRST_PLAN.md 4.1): held, it keeps what it holds
      * and joins nothing. A topology edit at its next revision, so its islands recompile on the engine's schedule. Whether an
      * edit was queued: none for an unknown identity, a column's port, or one already so.
      */
-    public boolean hold(long id,boolean held) {
-        owned();var r=registrations().get(id);if(r==null||r.device().port()||r.device().held()==held)return false;
-        submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(r.device().withHeld(held),r.spec(),Math.addExact(r.revision(),1)))),topology.nextIdentity());
-        return true;
-    }
+    public boolean hold(long id,boolean held){owned();return placement.hold(id,held);}
     /** Every held part (W5c C5): the held registrations, shaft parts, cables, controllers and consoles. */
-    public int heldCount() {
-        owned();int count=held().size();for(var u:topology.shafts().values())if(u.held())count++;
-        var facts=controls().facts();return count+facts.held().size()+facts.heldPanels().size();
-    }
+    public int heldCount(){owned();return placement.heldCount();}
     /** The held registrations, queued holds included, by identity. */
-    public List<WorldTopologyLedger.Registration> held() {
-        owned();var held=new ArrayList<WorldTopologyLedger.Registration>();
-        for(var r:registrations().values())if(r.device().held())held.add(r);
-        held.sort(Comparator.comparingLong(r->r.device().id()));return held;
-    }
+    public List<WorldTopologyLedger.Registration> held(){owned();return placement.held();}
     /**
      * An operator drops held registration {@code id} (REGISTRY_FIRST_PLAN.md 4.5): it leaves as a broken device does, what
      * it holds booked as removed, but nothing drops (decision S9): its block is not in the world. Its accessories leave the
      * accessory store with it. Whether it was held.
      */
-    public boolean drop(long id) {
-        owned();var r=registrations().get(id);if(r==null||!r.device().held())return false;
-        instruments.discardHost(id);submit(List.of(new WorldTopologyLedger.Edit(id,null)),topology.nextIdentity());
-        return true;
-    }
+    public boolean drop(long id){owned();return placement.drop(id);}
     /**
      * Queues a filter's solid recovery as a ledger event and returns it, as an edit is queued: nothing is applied or
      * delivered here. The engine applies it with the next batch of events, takes the cake the island holds then and
      * delivers the item; an empty filter or a full inventory at that point refuses it in the menu's next reply.
      */
-    public WorldTopologyLedger.Event recoverFilter(long id,long expectedRevision,net.minecraft.server.level.ServerPlayer player){
-        owned();var old=registrations().get(id);if(old==null||old.revision()!=expectedRevision||!old.device().filter())throw new IllegalStateException("Stale filter controls");
-        if(player.getInventory().getFreeSlot()<0)throw new IllegalStateException("Inventory full; filter unchanged");
-        return submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(old.device(),old.spec(),Math.addExact(old.revision(),1)))),topology.nextIdentity(),new WorldTopologyLedger.Recovery(id,player.getUUID()));
-    }
-    private WorldTopologyLedger.Event submit(List<WorldTopologyLedger.Edit> edits,long nextId){return submit(edits,nextId,null);}
-    private WorldTopologyLedger.Event submit(List<WorldTopologyLedger.Edit> edits,long nextId,WorldTopologyLedger.Recovery recovery) {
+    public WorldTopologyLedger.Event recoverFilter(long id,long expectedRevision,net.minecraft.server.level.ServerPlayer player){owned();return placement.recoverFilter(id,expectedRevision,player);}
+    WorldTopologyLedger.Event submit(List<WorldTopologyLedger.Edit> edits,long nextId){return submit(edits,nextId,null);}
+    WorldTopologyLedger.Event submit(List<WorldTopologyLedger.Edit> edits,long nextId,WorldTopologyLedger.Recovery recovery) {
         if(closed)throw new IllegalStateException("Fluid world is closed");
         var changes=LISTENERS.isEmpty()?List.<DeviceChange>of():changes(edits);
         var event=registry.submit(edits,nextId,recovery);data.setDirty();
