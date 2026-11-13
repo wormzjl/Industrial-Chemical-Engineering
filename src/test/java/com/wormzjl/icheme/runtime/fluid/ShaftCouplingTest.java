@@ -419,6 +419,49 @@ class ShaftCouplingTest {
         assertEquals(0, sent.getLast(), 0);
     }
 
+    /**
+     * M-16: a casing whose pump failed shows FAILED on its own row, not its train's word; its motor's row keeps the train's.
+     * Repaired, the casing's row returns to the train's word.
+     */
+    @Test
+    void aFailedPumpsCasingShowsFailed() {
+        var rig = new Rig();
+        var ledger = new WorldTopologyLedger(WorldTopologyLedger.Snapshot.empty(EventPathWorld.CATALOG));
+        long first = ledger.reserve(3);
+        var fixed = com.wormzjl.icheme.science.equipment.MachineDuty.Drive.FIXED;
+        var trip = com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE;
+        ledger.shaft(new ShaftUnit(first, com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR, cell(0), 0, List.of(new ShaftUnit.End(cell(0), 1, 0, 0, true)), 0,
+                11e3, 2950, 2, fixed, ShaftUnit.Settings.DEFAULT, trip, null));
+        ledger.shaft(ShaftUnit.shaft(first + 1, cell(1), 0));
+        ledger.shaft(new ShaftUnit(first + 2, com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.CASING, cell(2), 0, List.of(new ShaftUnit.End(cell(2), -1, 0, 0, false)), 1,
+                0, 2950, 0, fixed, ShaftUnit.Settings.DEFAULT, trip, null));
+        ledger.health(Map.of(1L, 0.0));
+        var trains = new ShaftTrains(ledger, device -> device == 1 ? 1L : null, rig.coordinator);
+        var health = new PumpHealth(ledger, device -> device == 1 ? 1L : null, rig.coordinator, device -> device == 1, device -> null,
+                () -> com.wormzjl.icheme.science.machine.Wear.Settings.DEFAULT);
+        trains.health(health);
+        rig.coordinator.shafts(trains);
+        trains.host(ShaftTrains.Host.NONE);
+        rig.coordinator.register(new IslandCoordinator.Snapshot(1, 0, line(), new IslandClock.Snapshot(0, 0, 0, 100), Optional.empty(), "READY"), model);
+        Runnable tick = () -> {
+            rig.epoch[0]++;
+            rig.coordinator.tick();
+            rig.drain();
+            if (rig.epoch[0] % ElectricStores.CADENCE == 0) trains.cadence();
+            if (health.hasEvents()) health.apply();
+        };
+        for (int i = 0; i < 300; i++) tick.run();
+        long casing = first + 2, motor = first;
+        assertTrue(health.failed(1), "saved at 0, the pump stands failed");
+        assertEquals("FAILED", trains.view(casing).status(), "the casing's row says its pump failed");
+        assertNotEquals("FAILED", trains.view(motor).status(), "the motor's row keeps its train's word");
+        var outcome = new ArrayList<PumpHealth.Outcome>();
+        health.queue(new PumpHealth.Repair(1, () -> true, outcome::add));
+        tick.run();
+        assertEquals(List.of(PumpHealth.Outcome.REPAIRED), outcome);
+        assertNotEquals("FAILED", trains.view(casing).status(), "repaired, the casing's row returns to its train's word");
+    }
+
     /** The governor walk: from a turbine's inlet upstream through unbranched pipes to the nearest control valve. */
     @Test
     void theGovernorWalkFindsTheTurbinesValve() {

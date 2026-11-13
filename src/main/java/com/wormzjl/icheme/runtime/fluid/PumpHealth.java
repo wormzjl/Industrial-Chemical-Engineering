@@ -20,7 +20,7 @@ import java.util.function.Supplier;
  * <ul>
  * <li>at each commit and replay its wear rate ({@link Wear#rate}) is read from the slice's committed suction (its
  * {@link PassiveStepSolver.PipeObservation#npshRatio} and {@link PassiveStepSolver.PipeObservation#dry}) and booked over
- * the slice's online ticks ({@link #booked});</li>
+ * the slice's process time, its online ticks times the time factor ({@link #booked});</li>
  * <li>on the presentation cadence a pump not booked for a cadence (a resting island) books its last rate to now, one that
  * reached 0 fails, and the facts go to the ledger ({@link #cadence});</li>
  * <li>a failed pump is closed at dispatch by a {@link ShaftPlan.Kind#FAILED} plan, its settings kept ({@link #plans});</li>

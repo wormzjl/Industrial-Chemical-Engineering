@@ -56,9 +56,8 @@ public final class Motor {
      * {@link #LARGE_EFFICIENCY} at {@link #LARGE_GENERATOR}: 97.0 % at 10 MW, 98.2 % at 100 MW for two poles.
      */
     public static double generatorEfficiency(double ratedPower, int poles) {
-        int p = poles == 12 ? 8 : poles;
-        if (!(ratedPower > 1e6)) return efficiency(ratedPower, p);
-        double base = efficiency(1e6, p), x = Math.min(1, DeterministicMath.log(ratedPower / 1e6) / DeterministicMath.log(LARGE_GENERATOR / 1e6));
+        if (!(ratedPower > 1e6)) return efficiency(ratedPower, poles);
+        double base = efficiency(1e6, poles), x = Math.min(1, DeterministicMath.log(ratedPower / 1e6) / DeterministicMath.log(LARGE_GENERATOR / 1e6));
         return base + (LARGE_EFFICIENCY - base) * x;
     }
 
@@ -74,7 +73,7 @@ public final class Motor {
     }
 
     /** The full-load efficiency of a {@code poles}-pole motor rated {@code ratedPower} (W): IE3, the table's value at a
-     * standard rating, in log power between two. */
+     * standard rating, in log power between two; 12 poles ({@code MachineDuty.POLES}) read the 8-pole row (M-19). */
     public static double efficiency(double ratedPower, int poles) {
         double[] column = IE3[poleColumn(poles)];
         double kw = ratedPower / 1000;
@@ -112,8 +111,9 @@ public final class Motor {
             case 2 -> 0;
             case 4 -> 1;
             case 6 -> 2;
-            case 8 -> 3;
-            default -> throw new IllegalArgumentException("A motor has 2, 4, 6 or 8 poles, not " + poles);
+            // IE3 tabulates to 8 poles; a 12-pole machine reads the 8-pole row (M-19).
+            case 8, 12 -> 3;
+            default -> throw new IllegalArgumentException("A motor has 2, 4, 6, 8 or 12 poles, not " + poles);
         };
     }
 }
