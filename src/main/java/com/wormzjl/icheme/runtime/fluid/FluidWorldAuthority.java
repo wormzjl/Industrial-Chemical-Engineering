@@ -31,41 +31,41 @@ public final class FluidWorldAuthority implements AutoCloseable {
     @FunctionalInterface public interface EditListener{void edited(MinecraftServer server,List<DeviceChange> changes);}
     private static final List<EditListener> LISTENERS=new java.util.concurrent.CopyOnWriteArrayList<>();
     public static void listen(EditListener listener){LISTENERS.add(Objects.requireNonNull(listener));}
-    private final MinecraftServer server;
-    private final MaterialCatalog catalog;
-    private final FluidThermodynamics model;
+    final MinecraftServer server;
+    final MaterialCatalog catalog;
+    final FluidThermodynamics model;
     private final FluidPropertyReloadGuard propertyReload;
     private String propertyHold;
-    private final IChemE.FluidOptions options;
+    final IChemE.FluidOptions options;
     private final List<FluidPresetCatalog.Preset> presetCache;
-    private final List<String> componentNames;
+    final List<String> componentNames;
     /** The menus' static part, constant for the server (its catalog and model are captured at start): the component names
      * and the boxed molecular weights, built once (code base review R4). */
     private final Map<String,MaterialName> materialNames;
     private final List<Double> molecularWeights;
     private final FluidSavedData data;
-    private final WorldTopologyLedger topology;
-    private final MinecraftFluidRuntime runtime;
+    final WorldTopologyLedger topology;
+    final MinecraftFluidRuntime runtime;
     /** Island ownership, compiler diagnostics and chunk membership of the registered devices, and the event path. */
-    private final PhysicalRegistry registry;
+    final PhysicalRegistry registry;
     /** The running columns (batch 2026-10-28-column-operation): their ports' plans and bookings, and their cycles. */
     private final ColumnOperation columns;
     /** The shaft trains (batch 2026-11-03-rotating-machinery W3): their parts' queued events, speeds and the islands' slice inputs. */
-    private final ShaftTrains shafts;
+    final ShaftTrains shafts;
     /** The powered units' electric stores (W5). */
-    private final ElectricStores electric;
-    private final FiredHeaters burners;
-    private final Flares flares;
+    final ElectricStores electric;
+    final FiredHeaters burners;
+    final Flares flares;
     /** The chimneys (batch 2026-11-10-chimney). */
-    private final Chimneys chimneys;
+    final Chimneys chimneys;
     /** The batch stills (batch 2026-11-09-batch-distiller, W3 to W5). */
-    private final Stills stills;
+    final Stills stills;
     /** The steam ejectors' motive slice inputs (batch 2026-11-10-steam-ejector-flow). */
     private final Ejectors ejectors;
     /** The fluid converters (batch 2026-11-12-fluid-conversion, W2): their ports share the port hooks with the columns. */
-    private final Converters converters;
+    final Converters converters;
     /** The pumps' health (W10b). */
-    private final MachineHealth health;
+    final MachineHealth health;
     /**
      * Queued topology events apply as one batch at the next tick's hook, or earlier when something reads what they
      * change (a view, a capture, a filter recovery). A run of events inside one tick (a command placing thousands of
@@ -74,79 +74,29 @@ public final class FluidWorldAuthority implements AutoCloseable {
     static final int APPLY_BATCH=1024;
     /** How long an undeliverable recovery (offline player, full inventory, unloaded chunk) waits for its next attempt. */
     private static final int RECOVERY_RETRY_TICKS=20;
-    private final Set<Long> unboundBindings=new HashSet<>();
-    /** Equipment whose remaining chunks must load before its complete structure can be registered. */
-    private final Map<PhysicalFluidTopology.Position,EquipmentStructure.Vessel> unboundStructures=new LinkedHashMap<>();
-    /** Registrations whose chunk loaded, by dimension, each queued once until the re-alignment checks it (REGISTRY_FIRST_PLAN.md 4.2). */
-    private final Map<String,ArrayDeque<Long>> realignment=new HashMap<>();
-    private final Set<Long> realigning=new HashSet<>();
-    /** The shaft parts whose chunk loaded, by dimension, each queued once until the re-alignment checks it (W5c C1). */
-    private final Map<String,ArrayDeque<Long>> shaftRealignment=new HashMap<>();
-    private final Set<Long> shaftRealigning=new HashSet<>();
-    /** The origins of the structures the registry records, by dimension and by chunk of their box: a chunk load queues them for their re-alignment (plan 4.4). */
-    private final Map<String,Map<Long,Set<PhysicalFluidTopology.Position>>> structureChunks=new HashMap<>();
+    final Set<Long> unboundBindings=new HashSet<>();
+    /** The chunk binding: what a chunk load binds and queues, and the chunks each recorded structure spans (code base review R8). */
+    private final ChunkBinding chunks=new ChunkBinding(this);
     /** Engine-owned presentation: loaded devices and open menus, updated on their island's bucket only. */
-    private final FluidPresentation<com.wormzjl.icheme.world.inventory.FluidDeviceMenu> presentation;
+    final FluidPresentation<com.wormzjl.icheme.world.inventory.FluidDeviceMenu> presentation;
     /** Complete immutable snapshots from the last bucket; bounded by loaded/open devices, never player replies. */
     private final Map<Long,com.wormzjl.icheme.network.FluidNetwork.MenuData> publishedMenuData=new HashMap<>();
-    /**
-     * The requested world-space displays (owner decision FR4, request path R-B; code base review R9), each its watchers and
-     * what it last published. The bucket displays publish from the presentation host's {@code present}: the open tanks'
-     * latest glides (their roofs' motion to the latest display; a tank's request is by node cell, {@link #watchTanks}),
-     * the sight glasses and the movers, whose watches keep their devices observed ({@link #refreshObserved}).
-     */
-    private final Display<TankDisplay.Glide> tankDisplay=Display.bucket(this::online,FluidWorldAuthority::inRange,null,null,null,
-            (player,pos,target,glide)->com.wormzjl.icheme.network.FluidNetwork.sendTank(player,pos,glide));
-    /** A sight glass is checked by its block state before its block entity. */
-    private final Display<PipePresentation.SightGlass> sightGlassDisplay=Display.bucket(this::online,FluidWorldAuthority::inRange,this::sightGlassWatchable,
-            this::observeWatched,this::refreshObserved,(player,pos,target,sample)->com.wormzjl.icheme.network.FluidNetwork.sendSightGlass(player,target,sample));
-    /** A constructed mover at its fluid cell, or (W10c, owner 2026-11-04) an in-line mover at its pipe block. */
-    private final Display<com.wormzjl.icheme.network.FluidNetwork.MoverState> moverDisplay=Display.bucket(this::online,FluidWorldAuthority::moverRange,
-            (player,level,target)->{var record=watchable(player,level,target,FluidWorldAuthority::moverRange);return record!=null&&record.device().control() instanceof FlowControl.Mover;},
-            this::refreshObserved,this::refreshObserved,(player,pos,target,state)->com.wormzjl.icheme.network.FluidNetwork.sendMover(player,state));
-    /**
-     * The cadence displays, at their device's slot of the 100-tick cadence (code base review R10): the flares' flames (batch
-     * 2026-11-09-flare-stack, W5), the batch stills' fires (2026-11-09-batch-distiller, W6), the cooling towers' plumes
-     * (2026-11-10-custom-shader-system, W4), the fired heaters' flues by their radiant coils (W5) and the chimneys' plumes
-     * (2026-11-10-chimney). A new watch with nothing cached replays a read of what was last booked; the towers and heaters
-     * read their islands as stored there ({@link #storedIsland}) and, at the cadence, as presented, once per island per pass.
-     */
-    private final Display<com.wormzjl.icheme.network.FluidNetwork.FlareState> flareDisplay=Display.cadence(this::online,FluidWorldAuthority::moverRange,
-            (player,level,target)->{var record=watchable(player,level,target,FluidWorldAuthority::moverRange);return record!=null&&record.device().flare();},
-            id->registrations().get(id),record->record.device().flare(),this::flareState,Display.each(this::flareState),
-            (player,pos,target,state)->com.wormzjl.icheme.network.FluidNetwork.sendFlare(player,state));
-    private final Display<com.wormzjl.icheme.network.FluidNetwork.StillState> stillDisplay=Display.cadence(this::online,FluidWorldAuthority::moverRange,
-            (player,level,target)->{var record=watchable(player,level,target,FluidWorldAuthority::moverRange);return record!=null&&record.device().stillPot();},
-            id->registrations().get(id),record->record.device().stillPot(),this::stillState,Display.each(this::stillState),
-            (player,pos,target,state)->com.wormzjl.icheme.network.FluidNetwork.sendStill(player,state));
-    private final Display<com.wormzjl.icheme.network.FluidNetwork.TowerPlume> towerDisplay=Display.cadence(this::online,FluidWorldAuthority::inRange,
-            (player,level,target)->{var record=watchable(player,level,target,FluidWorldAuthority::inRange);return record!=null&&record.spec().tower()!=null;},
-            id->registrations().get(id),record->record.spec().tower()!=null,target->towerPlume(target,new HashMap<>(),this::storedIsland),
-            ()->{var islands=new HashMap<Long,IslandCoordinator.Snapshot>();return target->towerPlume(target,islands,this::presentation);},
-            (player,pos,target,state)->com.wormzjl.icheme.network.FluidNetwork.sendTower(player,state));
-    private final Display<com.wormzjl.icheme.network.FluidNetwork.HeaterFlue> heaterDisplay=Display.cadence(this::online,FluidWorldAuthority::inRange,
-            (player,level,target)->{var record=watchable(player,level,target,FluidWorldAuthority::inRange);return record!=null&&flued(record);},
-            id->registrations().get(id),FluidWorldAuthority::flued,target->heaterFlue(target,new HashMap<>(),this::storedIsland),
-            ()->{var islands=new HashMap<Long,IslandCoordinator.Snapshot>();return target->heaterFlue(target,islands,this::presentation);},
-            (player,pos,target,state)->com.wormzjl.icheme.network.FluidNetwork.sendHeater(player,state));
-    private final Display<com.wormzjl.icheme.network.FluidNetwork.ChimneyState> chimneyDisplay=Display.cadence(this::online,FluidWorldAuthority::inRange,
-            (player,level,target)->{var record=watchable(player,level,target,FluidWorldAuthority::inRange);return record!=null&&record.device().chimney();},
-            id->registrations().get(id),record->record.device().chimney(),this::chimneyState,Display.each(this::chimneyState),
-            (player,pos,target,state)->com.wormzjl.icheme.network.FluidNetwork.sendChimney(player,state));
-    /** Every display, in the order a player who left is forgotten. */
-    private final List<Display<?>> displays=List.of(tankDisplay,sightGlassDisplay,moverDisplay,flareDisplay,stillDisplay,towerDisplay,heaterDisplay,chimneyDisplay);
-    /** The cadence displays, in the order they publish at each tick. */
-    private final List<Display<?>> cadenceDisplays=List.of(flareDisplay,stillDisplay,towerDisplay,heaterDisplay,chimneyDisplay);
+    /** The requested world-space displays, their watchers and what each last published (code base review R8, R9). */
+    private final Displays displays=new Displays(this);
+    /** What a placed, changed or removed device does to the ledger (code base review R8). */
+    private final Placement placement=new Placement(this);
+    /** The views and status lines the presentation host reads (code base review R8). */
+    private final ViewBuilder views=new ViewBuilder(this);
     /** The far silhouettes' subscriptions (W10): registry facts of the placed structures, read as stored. */
     private final Silhouettes silhouettes=new Silhouettes(this::structuresOf);
     /** The plant's noise levels by chunk, as last published, and the players that ask for them (PROCESS_SOUNDS_REVIEW.md, S2 A). */
     private final Noise.Store noise=new Noise.Store();
-    private final com.wormzjl.icheme.runtime.instrument.InstrumentService instruments;
+    final com.wormzjl.icheme.runtime.instrument.InstrumentService instruments;
     private final com.wormzjl.icheme.runtime.control.ControlFacts controlFacts;
     private com.wormzjl.icheme.runtime.control.ControlService controls;
     public com.wormzjl.icheme.runtime.control.ControlService controls(){owned();if(controls==null)controls=new com.wormzjl.icheme.runtime.control.ControlService(this,controlFacts);return controls;}
     public com.wormzjl.icheme.runtime.instrument.InstrumentService instruments(){owned();return instruments;}
-    private boolean closed;
+    boolean closed;
     private long lastDebugChat=Long.MIN_VALUE;
     private MaterialCatalog observedSolidData;
     private String solidPropertyHold;
@@ -170,7 +120,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         var savedTopology=data.world().orElseGet(()->WorldTopologyLedger.Snapshot.empty(catalog));savedTopology.basis().requireCurrent(catalog);
         FluidPropertyReloadGuard.validateSolids(catalog.solids(),data.checkpoint(),savedTopology);observedSolidData=catalog;
         topology=new WorldTopologyLedger(savedTopology);
-        topology.builds().structures().forEach((origin,structure)->indexStructure(origin,structure,true));
+        topology.builds().structures().forEach((origin,structure)->chunks.indexStructure(origin,structure,true));
         presentation=new FluidPresentation<>(new PresentationHost(),topology.onlineTick());
         var settings=new IslandCoordinator.Settings(options.wallBudgetNanos(),options.wallBudgetNanos()*3/4,64,options.adaptiveCadence(),options.initialCadenceTicks(),options.certificates()).withTime(options.time());
         // Island clocks read the world's online tick: one epoch increment per tick advances every island.
@@ -259,7 +209,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         var world=new FluidWorldAuthority(server);SERVERS.put(server,world);
         var early=EARLY_CHUNKS.remove(server);
         if(early!=null)for(var loaded:early)world.loadedChunk(loaded.dimension(),loaded.chunk());
-        world.holdWithoutLevel();
+        world.chunks.holdWithoutLevel();
     }
     /** Retain early chunk loads as well as normal ones; called only on this server's thread. */
     public static void loadedChunk(MinecraftServer server,ResourceKey<Level> dimension,long chunk) {
@@ -285,7 +235,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
     }
     public static void stop(MinecraftServer server){find(server).ifPresent(FluidWorldAuthority::close);}
     public static void forget(MinecraftServer server){EARLY_CHUNKS.remove(server);com.wormzjl.icheme.network.AssemblyNetwork.forget(server);com.wormzjl.icheme.network.MachineNetwork.forget(server);var world=SERVERS.remove(server);if(world!=null)world.close();}
-    private void owned(){if(!server.isSameThread())throw new IllegalStateException("Fluid authority requires the logical server thread");}
+    void owned(){if(!server.isSameThread())throw new IllegalStateException("Fluid authority requires the logical server thread");}
     /** Every island of this world solves on a model built from the same captured options, so the
      * configured trace cutoff is one value for every worker and every retained solver: a retained
      * solver is replaced whenever its model identity changes, and the model is the cutoff's home. A saved island's key
@@ -296,7 +246,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
     private FluidThermodynamics model(FluidCheckpointCodec.PackageKey saved) {
         return saved.on(model);
     }
-    private static ResourceKey<Level> dimension(String name){return ResourceKey.create(Registries.DIMENSION,ResourceLocation.parse(name));}
+    static ResourceKey<Level> dimension(String name){return ResourceKey.create(Registries.DIMENSION,ResourceLocation.parse(name));}
     public List<FluidPresetCatalog.Preset> presets(){owned();return presetCache;}
     public List<String> components(){owned();return componentNames;}
     /** The world's network property model; its {@code domain()} is where a state may be evaluated. */
@@ -353,15 +303,15 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public WorldTopologyLedger.Structure structure(PhysicalFluidTopology.Position origin){owned();return topology.structure(origin);}
     /** Records the structure whose origin is {@code origin}; null removes it. A load of a chunk of its box queues it for its re-alignment. */
     public void structure(PhysicalFluidTopology.Position origin,WorldTopologyLedger.Structure structure) {
-        owned();var old=topology.structure(origin);if(old!=null)indexStructure(origin,old,false);
-        topology.structure(origin,structure);if(structure!=null)indexStructure(origin,structure,true);data.setDirty();
+        owned();var old=topology.structure(origin);if(old!=null)chunks.indexStructure(origin,old,false);
+        topology.structure(origin,structure);if(structure!=null)chunks.indexStructure(origin,structure,true);data.setDirty();
         // The far silhouettes follow the registry (W10): its subscribers see the change at the next presentation bucket.
         if(!Objects.equals(old,structure))silhouettes.changed(origin.dimension());
     }
     /** The registry's structures of {@code dimension}, as stored (W10): each origin once, its shape and paint. */
     private void structuresOf(String dimension,java.util.function.Consumer<Silhouettes.Placement> into) {
         var seen=new HashSet<PhysicalFluidTopology.Position>();
-        for(var origins:structureChunks.getOrDefault(dimension,Map.of()).values())for(var origin:origins) {
+        for(var origins:chunks.structureChunks.getOrDefault(dimension,Map.of()).values())for(var origin:origins) {
             if(!seen.add(origin))continue;
             var s=topology.structure(origin);if(s!=null)into.accept(new Silhouettes.Placement(new BlockPos(origin.x(),origin.y(),origin.z()),s.shape(),s.paint()));
         }
@@ -527,15 +477,6 @@ public final class FluidWorldAuthority implements AutoCloseable {
         }
         return best;
     }
-    /** Adds or removes the structure at {@code origin} in the index of the chunks its box spans. */
-    private void indexStructure(PhysicalFluidTopology.Position origin,WorldTopologyLedger.Structure structure,boolean add) {
-        var shape=structure.shape();var chunks=structureChunks.computeIfAbsent(origin.dimension(),k->new HashMap<>());
-        for(int x=origin.x()>>4;x<=(origin.x()+shape.sizeX()-1)>>4;x++)for(int z=origin.z()>>4;z<=(origin.z()+shape.sizeZ()-1)>>4;z++) {
-            long chunk=net.minecraft.world.level.ChunkPos.asLong(x,z);
-            if(add)chunks.computeIfAbsent(chunk,k->new HashSet<>()).add(origin);
-            else{var at=chunks.get(chunk);if(at!=null&&at.remove(origin)&&at.isEmpty())chunks.remove(chunk);}
-        }
-    }
 
     /**
      * The faces the device registered at {@code position} draws joined (batch 2026-11-09-drawn-connections): its
@@ -543,39 +484,30 @@ public final class FluidWorldAuthority implements AutoCloseable {
      * and a block draws what the network joins. -1 where no device without ports stands. Reads no block and loads no
      * chunk: a neighbour in a chunk that is not loaded is known by its registration.
      */
-    public int drawnFaces(PhysicalFluidTopology.Position position){
-        owned();var record=topology.latestAt(position);
-        if(record==null||!record.device().position().equals(position)||!record.device().ports().isEmpty())return -1;
-        return PhysicalFluidTopology.builtFaces(this::latestDevice,record.device());
-    }
+    public int drawnFaces(PhysicalFluidTopology.Position position){owned();return placement.drawnFaces(position);}
     /**
      * The faces a block of {@code kind} placed at {@code position} facing {@code facing} will draw joined once registered:
      * a hand-placed block, every face a joint and no fitting, as {@link #place} registers it.
      */
-    public int placedFaces(PhysicalFluidTopology.Position position,TopologyCompiler.Kind kind,PhysicalFluidTopology.Direction facing){
-        owned();
-        var placed=PhysicalFluidTopology.Device.builder(Long.MAX_VALUE,position,kind,facing,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive()).generatorEnabled(kind!=TopologyCompiler.Kind.GENERATOR).build();
-        return PhysicalFluidTopology.builtFaces(p->p.equals(position)?placed:latestDevice(p),placed);
-    }
-    private PhysicalFluidTopology.Device latestDevice(PhysicalFluidTopology.Position position){var record=topology.latestAt(position);return record==null?null:record.device();}
+    public int placedFaces(PhysicalFluidTopology.Position position,TopologyCompiler.Kind kind,PhysicalFluidTopology.Direction facing){owned();return placement.placedFaces(position,kind,facing);}
     /** Applied events that did nothing for the player who asked (a recovery that found no cake or a full inventory), by event, for their reply. Bounded. */
     private final LinkedHashMap<UUID,String> refusedEvents=new LinkedHashMap<>();
     private void refuseEvent(UUID event,String reason){refusedEvents.put(event,reason);if(refusedEvents.size()>WorldTopologyLedger.MAXIMUM_EVENTS)refusedEvents.remove(refusedEvents.keySet().iterator().next());}
     public WorldTopologyLedger.Registration place(PhysicalFluidTopology.Position position,TopologyCompiler.Kind kind,PhysicalFluidTopology.Direction facing) {
-        return place(position,kind,facing,List.of());
+        return placement.place(position,kind,facing,List.of());
     }
     /** Registry reconstruction reads installed cutoff state from the placed block. */
     public WorldTopologyLedger.Registration place(PhysicalFluidTopology.Position position,TopologyCompiler.Kind kind,PhysicalFluidTopology.Direction facing,PhysicalFluidTopology.Cutoff cutoff) {
-        return place(position,kind,facing,List.of(),cutoff);
+        return placement.place(position,kind,facing,List.of(),cutoff);
     }
     /** Rebuild installed pressure controls directly from static block state, without an intermediate passive pipe. */
     public WorldTopologyLedger.Registration place(PhysicalFluidTopology.Position position,TopologyCompiler.Kind kind,PhysicalFluidTopology.Direction facing,PhysicalFluidTopology.Cutoff cutoff,boolean pressureValve) {
-        return place(position,kind,facing,List.of(),cutoff,pressureValve,false,TopologyCompiler.Kind.PIPE,PhysicalFluidTopology.ALL_FACES);
+        return placement.place(position,kind,facing,List.of(),cutoff,pressureValve,false,TopologyCompiler.Kind.PIPE,PhysicalFluidTopology.ALL_FACES);
     }
-    public WorldTopologyLedger.Registration place(PhysicalFluidTopology.Position position,TopologyCompiler.Kind kind,PhysicalFluidTopology.Direction facing,PhysicalFluidTopology.Cutoff cutoff,boolean pressureValve,boolean filter){return place(position,kind,facing,List.of(),cutoff,pressureValve,filter,TopologyCompiler.Kind.PIPE,PhysicalFluidTopology.ALL_FACES);}
-    public WorldTopologyLedger.Registration place(PhysicalFluidTopology.Position position,TopologyCompiler.Kind kind,PhysicalFluidTopology.Direction facing,PhysicalFluidTopology.Cutoff cutoff,boolean pressureValve,boolean filter,TopologyCompiler.Kind inlineMover){return place(position,kind,facing,List.of(),cutoff,pressureValve,filter,inlineMover,PhysicalFluidTopology.ALL_FACES);}
+    public WorldTopologyLedger.Registration place(PhysicalFluidTopology.Position position,TopologyCompiler.Kind kind,PhysicalFluidTopology.Direction facing,PhysicalFluidTopology.Cutoff cutoff,boolean pressureValve,boolean filter){return placement.place(position,kind,facing,List.of(),cutoff,pressureValve,filter,TopologyCompiler.Kind.PIPE,PhysicalFluidTopology.ALL_FACES);}
+    public WorldTopologyLedger.Registration place(PhysicalFluidTopology.Position position,TopologyCompiler.Kind kind,PhysicalFluidTopology.Direction facing,PhysicalFluidTopology.Cutoff cutoff,boolean pressureValve,boolean filter,TopologyCompiler.Kind inlineMover){return placement.place(position,kind,facing,List.of(),cutoff,pressureValve,filter,inlineMover,PhysicalFluidTopology.ALL_FACES);}
     /** A placed block registered again from what it holds (a chunk load after the D4 reset): a laid pipe keeps its joints. */
-    public WorldTopologyLedger.Registration place(PhysicalFluidTopology.Position position,TopologyCompiler.Kind kind,PhysicalFluidTopology.Direction facing,PhysicalFluidTopology.Cutoff cutoff,boolean pressureValve,boolean filter,TopologyCompiler.Kind inlineMover,int joints){return place(position,kind,facing,List.of(),cutoff,pressureValve,filter,inlineMover,joints);}
+    public WorldTopologyLedger.Registration place(PhysicalFluidTopology.Position position,TopologyCompiler.Kind kind,PhysicalFluidTopology.Direction facing,PhysicalFluidTopology.Cutoff cutoff,boolean pressureValve,boolean filter,TopologyCompiler.Kind inlineMover,int joints){return placement.place(position,kind,facing,List.of(),cutoff,pressureValve,filter,inlineMover,joints);}
     /** A cell of a laid line: its position (a rack lane's too), its facing (along its run), its joints, and a lane's width in positions and face points (0: a pipe block). */
     public record Laid(PhysicalFluidTopology.Position position,PhysicalFluidTopology.Direction facing,int joints,int slots,long points){}
     /**
@@ -584,33 +516,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
      * ({@code hosts}, by identity), each new pipe painted {@code primary} and {@code secondary}. Returns the new pipes'
      * registrations in the order of {@code cells}.
      */
-    public List<WorldTopologyLedger.Registration> lay(List<Laid> cells,double diameter,Map<Long,Integer> hosts,int primary,int secondary) {
-        owned();
-        if(cells.isEmpty())throw new IllegalArgumentException("An empty line");
-        long first=topology.nextIdentity();var edits=new ArrayList<WorldTopologyLedger.Edit>();var placed=new ArrayList<WorldTopologyLedger.Registration>();
-        for(int i=0;i<cells.size();i++) {
-            var cell=cells.get(i);
-            var device=PhysicalFluidTopology.Device.builder(first+i,cell.position(),TopologyCompiler.Kind.PIPE,cell.facing(),new PipeResistance.Geometry(1,diameter,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),
-                    new FlowControl.Passive()).joints(cell.joints()).slots(cell.slots()).points(cell.points()).build();
-            var record=new WorldTopologyLedger.Registration(device,FluidDeviceSpec.nitrogen(catalog),0);placed.add(record);edits.add(new WorldTopologyLedger.Edit(first+i,record));
-        }
-        for(var host:new TreeMap<>(hosts).entrySet()) {
-            var old=registrations().get(host.getKey());
-            if(old==null||old.device().kind()!=TopologyCompiler.Kind.PIPE)throw new IllegalStateException("A laid line's host pipe is gone");
-            edits.add(new WorldTopologyLedger.Edit(host.getKey(),new WorldTopologyLedger.Registration(old.device().withJoints(host.getValue()),old.spec(),Math.addExact(old.revision(),1))));
-        }
-        submit(edits,Math.addExact(first,cells.size()));
-        for(var record:placed)paint(record.device().id(),primary,secondary);
-        return placed;
-    }
+    public List<WorldTopologyLedger.Registration> lay(List<Laid> cells,double diameter,Map<Long,Integer> hosts,int primary,int secondary){owned();return placement.lay(cells,diameter,hosts,primary,secondary);}
     /** A rack lane registered again from its rack's copy (a chunk load after the D4 reset): its joints, width, face points and bore. */
-    public WorldTopologyLedger.Registration placeLane(PhysicalFluidTopology.Position position,PhysicalFluidTopology.Direction facing,int joints,int slots,long points,double diameter) {
-        owned();long id=topology.nextIdentity();
-        var device=PhysicalFluidTopology.Device.builder(id,position,TopologyCompiler.Kind.PIPE,facing,new PipeResistance.Geometry(1,diameter,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),
-                new FlowControl.Passive()).joints(joints).slots(slots).points(points).build();
-        var record=new WorldTopologyLedger.Registration(device,FluidDeviceSpec.nitrogen(catalog),0);
-        submit(List.of(new WorldTopologyLedger.Edit(id,record)),Math.addExact(id,1));return record;
-    }
+    public WorldTopologyLedger.Registration placeLane(PhysicalFluidTopology.Position position,PhysicalFluidTopology.Direction facing,int joints,int slots,long points,double diameter){owned();return placement.placeLane(position,facing,joints,slots,points,diameter);}
     /** One side of a heat-exchanging unit to place: its node (its first inlet's cell), its inlet and outlet ports, its
      * passage and its unit's facts ({@link #placeUnit} names the partners). */
     public record UnitSide(PhysicalFluidTopology.Position node,List<PhysicalFluidTopology.Port> ports,PipeResistance.Geometry passage,HeatUnit heat){}
@@ -770,7 +678,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
      * Converter {@code id}'s page (W5), a read of its facts, its queued settings, the engine's state and {@code view}, its
      * vessel's published view: its rule's ranges beside what the last plan drew. Null for no converter.
      */
-    private FluidView.Converter converterView(long id,FluidView view) {
+    FluidView.Converter converterView(long id,FluidView view) {
         var u=converters.unit(id);var r=registrations().get(id);var next=converters.next(id);if(u==null||r==null||next==null)return null;
         double fill=converterFill(u,r,view);var s=view.state();
         double litres=0,kmol=0,kg=0;
@@ -1044,42 +952,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         submit(List.of(new WorldTopologyLedger.Edit(id,record)),Math.addExact(id,1));return record;
     }
     /** A complete multi-cell mover uses the same controls and geometry as its one-block counterpart. */
-    public WorldTopologyLedger.Registration placeMover(PhysicalFluidTopology.Position suction,TopologyCompiler.Kind kind,List<PhysicalFluidTopology.Port> ports) {
-        if(kind!=TopologyCompiler.Kind.PUMP&&kind!=TopologyCompiler.Kind.COMPRESSOR||ports.isEmpty())throw new IllegalArgumentException("Expected a multi-cell mover");
-        return place(suction,kind,PhysicalFluidTopology.Direction.NORTH,ports);
-    }
-    private WorldTopologyLedger.Registration place(PhysicalFluidTopology.Position position,TopologyCompiler.Kind kind,PhysicalFluidTopology.Direction facing,List<PhysicalFluidTopology.Port> ports) {
-        return place(position,kind,facing,ports,PhysicalFluidTopology.Cutoff.NONE);
-    }
-    private WorldTopologyLedger.Registration place(PhysicalFluidTopology.Position position,TopologyCompiler.Kind kind,PhysicalFluidTopology.Direction facing,List<PhysicalFluidTopology.Port> ports,PhysicalFluidTopology.Cutoff cutoff) {
-        return place(position,kind,facing,ports,cutoff,false,false,TopologyCompiler.Kind.PIPE,PhysicalFluidTopology.ALL_FACES);
-    }
-    private WorldTopologyLedger.Registration place(PhysicalFluidTopology.Position position,TopologyCompiler.Kind kind,PhysicalFluidTopology.Direction facing,List<PhysicalFluidTopology.Port> ports,PhysicalFluidTopology.Cutoff cutoff,boolean pressureValve,boolean filter,TopologyCompiler.Kind inlineMover,int joints) {
-        owned();
-        if(pressureValve&&kind!=TopologyCompiler.Kind.PIPE)throw new IllegalArgumentException("Only a pipe hosts a pressure-control accessory");
-        long id=topology.nextIdentity();FlowControl control=switch(kind){case PUMP,COMPRESSOR->PhysicalFluidTopology.defaultMover(kind);case VALVE->FlowControl.ControlValve.unconfigured();default->new FlowControl.Passive();};
-        if(inlineMover!=TopologyCompiler.Kind.PIPE){if(kind!=TopologyCompiler.Kind.PIPE||pressureValve||filter)throw new IllegalArgumentException("Conflicting inline mover");control=PhysicalFluidTopology.defaultMover(inlineMover);}
-        if(pressureValve)control=FlowControl.ControlValve.unconfigured();
-        double diameter=kind==TopologyCompiler.Kind.PIPE||kind==TopologyCompiler.Kind.DIVERTER_VALVE?placedPipeDiameter(position):.05;
-        // A diverter valve is placed open to its straight outlet (batch 2026-11-09-batch-distiller).
-        if(kind==TopologyCompiler.Kind.DIVERTER_VALVE&&joints==PhysicalFluidTopology.ALL_FACES)joints=PhysicalFluidTopology.diverterJoints(facing,0);
-        var device=PhysicalFluidTopology.Device.builder(id,position,kind,facing,new PipeResistance.Geometry(1,diameter,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),control).ports(ports).generatorEnabled(kind!=TopologyCompiler.Kind.GENERATOR).cutoff(cutoff).inlineFilter(filter).joints(joints).build();
-        var spec=kind==TopologyCompiler.Kind.GENERATOR?FluidDeviceSpec.water(catalog):FluidDeviceSpec.nitrogen(catalog);
-        // A reservoir is placed empty (decision D54): of its settings only the capacity means anything.
-        if(kind==TopologyCompiler.Kind.RESERVOIR)spec=new FluidDeviceSpec(options.volume(),298.15,com.wormzjl.icheme.science.fluid.solver.PhaseLayout.AMBIENT_PRESSURE,spec.composition());
-        var record=new WorldTopologyLedger.Registration(device,spec,0);
-        submit(List.of(new WorldTopologyLedger.Edit(id,record)),Math.addExact(id,1));return record;
-    }
-    /** Inherit the largest mechanically connected adjacent pipe's latest bore, including a closed axial cutoff. */
-    private double placedPipeDiameter(PhysicalFluidTopology.Position position) {
-        double largest=0;
-        for(var direction:PhysicalFluidTopology.Direction.values()) {
-            var neighbour=registry.at(position.offset(direction)).orElse(null);
-            if(neighbour!=null&&neighbour.device().kind()==TopologyCompiler.Kind.PIPE&&neighbour.device().mechanicallyConnects(PhysicalFluidTopology.opposite(direction)))
-                largest=Math.max(largest,neighbour.device().geometry().diameter());
-        }
-        return largest>0?largest:.05;
-    }
+    public WorldTopologyLedger.Registration placeMover(PhysicalFluidTopology.Position suction,TopologyCompiler.Kind kind,List<PhysicalFluidTopology.Port> ports){return placement.placeMover(suction,kind,ports);}
     /**
      * Registers a vessel that spans several cells (a drum, batch 2026-10-15-custom-equipment-rendering): its node at
      * {@code node} (its lowest inside cell), its ports, and its design volume and level height. It is placed empty, as a
@@ -1095,93 +968,37 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public WorldTopologyLedger.Registration placeVessel(PhysicalFluidTopology.Position node,List<PhysicalFluidTopology.Port> ports,double volume,double levelHeight,boolean open,com.wormzjl.icheme.science.fluid.network.VesselGeometry geometry) {
         return placeVessel(node,ports,volume,levelHeight,open,geometry,null);
     }
-    public WorldTopologyLedger.Registration placeVessel(PhysicalFluidTopology.Position node,List<PhysicalFluidTopology.Port> ports,double volume,double levelHeight,boolean open,com.wormzjl.icheme.science.fluid.network.VesselGeometry geometry,com.wormzjl.icheme.science.fluid.network.CoolingTower tower) {
-        owned();
-        long id=topology.nextIdentity();
-        var device=PhysicalFluidTopology.Device.builder(id,node,TopologyCompiler.Kind.RESERVOIR,PhysicalFluidTopology.Direction.NORTH,
-                new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive()).ports(ports).build();
-        var spec=new FluidDeviceSpec(volume,298.15,com.wormzjl.icheme.science.fluid.solver.PhaseLayout.AMBIENT_PRESSURE,FluidDeviceSpec.nitrogen(catalog).composition(),SlurryFeed.NONE,levelHeight,open,geometry,tower);
-        var record=new WorldTopologyLedger.Registration(device,spec,0);
-        submit(List.of(new WorldTopologyLedger.Edit(id,record)),Math.addExact(id,1));return record;
-    }
+    public WorldTopologyLedger.Registration placeVessel(PhysicalFluidTopology.Position node,List<PhysicalFluidTopology.Port> ports,double volume,double levelHeight,boolean open,com.wormzjl.icheme.science.fluid.network.VesselGeometry geometry,com.wormzjl.icheme.science.fluid.network.CoolingTower tower){owned();return placement.placeVessel(node,ports,volume,levelHeight,open,geometry,tower);}
     /**
      * Queues a configuration change as a ledger event and returns it, or null when nothing would change. A fired heater's
      * coils share their burners and set point (batch 2026-10-27-heat-exchanger-design): a coil's new control moves its
      * partner coil in the same event.
      */
-    public WorldTopologyLedger.Event edit(long id,long expectedRevision,PhysicalFluidTopology.Device device,FluidDeviceSpec spec) {
-        owned();var old=registrations().get(id);if(old==null||old.revision()!=expectedRevision||device.id()!=id)throw new IllegalStateException("Stale fluid controls");
-        if(old.device().equals(device)&&old.spec().equals(spec))return null;
-        var edits=new ArrayList<WorldTopologyLedger.Edit>();edits.add(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,spec,Math.addExact(expectedRevision,1))));
-        var heat=device.heat();var partner=heat!=null&&heat.burners()?registrations().get(heat.partner()):null;
-        if(partner!=null&&partner.device().heat()!=null&&!partner.device().heat().control().equals(heat.control()))
-            edits.add(new WorldTopologyLedger.Edit(partner.device().id(),new WorldTopologyLedger.Registration(partner.device().withHeat(partner.device().heat().withControl(heat.control())),partner.spec(),Math.addExact(partner.revision(),1))));
-        return submit(edits,topology.nextIdentity());
-    }
+    public WorldTopologyLedger.Event edit(long id,long expectedRevision,PhysicalFluidTopology.Device device,FluidDeviceSpec spec){owned();return placement.edit(id,expectedRevision,device,spec);}
     /**
      * Fits a closed vessel's gas blanketing valve, its gas inlet {@code port} (role {@code BLANKET}), or removes it
      * ({@code port} null), as one queued ledger event (batch 2026-11-11-gas-blanketing). A fitted valve starts at
      * {@link FluidDeviceSpec#DEFAULT_BLANKET}; a removed one leaves no set pressure. False for a device that takes no valve: one
      * that is not a closed vessel, or whose inlet meets another of its ports.
      */
-    public boolean blanketValve(long id,PhysicalFluidTopology.Port port) {
-        owned();var record=registrations().get(id);
-        if(record==null||record.device().kind()!=TopologyCompiler.Kind.RESERVOIR||record.spec().open()||record.device().ports().isEmpty())return false;
-        if(port!=null&&port.role()!=PhysicalFluidTopology.ConnectionRole.BLANKET)throw new IllegalArgumentException("A gas blanketing valve's inlet is a blanket gas port");
-        var ports=new ArrayList<>(record.device().ports());ports.removeIf(p->p.role()==PhysicalFluidTopology.ConnectionRole.BLANKET);
-        if(port!=null){for(var p:ports)if(p.cell().equals(port.cell())&&p.face()==port.face())return false;ports.add(port);}
-        // A pressure safety valve already fitted stays above the new valve's vent pressure.
-        if(port!=null&&record.spec().relief()>0&&!(record.spec().relief()>com.wormzjl.icheme.science.fluid.network.GasBlanket.ventPressure(FluidDeviceSpec.DEFAULT_BLANKET)))return false;
-        edit(id,record.revision(),record.device().withPlacement(record.device().position(),ports),record.spec().withBlanket(port==null?0:FluidDeviceSpec.DEFAULT_BLANKET));
-        return true;
-    }
+    public boolean blanketValve(long id,PhysicalFluidTopology.Port port){owned();return placement.blanketValve(id,port);}
     /** Sets a fitted gas blanketing valve's set pressure, Pa absolute, as a queued ledger event; false for a vessel without one or a pressure outside the valve's range. */
-    public boolean blanketPressure(long id,double pascal) {
-        owned();var record=registrations().get(id);
-        if(record==null||!(record.spec().blanket()>0)||!(pascal>=FluidDeviceSpec.MIN_BLANKET)||!(pascal<=FluidDeviceSpec.MAX_BLANKET))return false;
-        // A pressure safety valve on the same vessel stays above the blanketing valve's vent pressure.
-        if(record.spec().relief()>0&&!(record.spec().relief()>com.wormzjl.icheme.science.fluid.network.GasBlanket.ventPressure(pascal)))return false;
-        edit(id,record.revision(),record.device(),record.spec().withBlanket(pascal));return true;
-    }
+    public boolean blanketPressure(long id,double pascal){owned();return placement.blanketPressure(id,pascal);}
     /**
      * Fits a closed vessel's pressure safety valve, its outlet {@code port} (role {@code RELIEF}), or removes it ({@code port}
      * null), as one queued ledger event (batch 2026-11-11-gas-blanketing, the pressure safety valve). A fitted valve starts at
      * {@link FluidDeviceSpec#DEFAULT_RELIEF}, or just above a blanketing valve's vent pressure where that is higher. False for a
      * device that takes no valve: one that is not a closed vessel, or whose outlet meets another of its ports.
      */
-    public boolean reliefValve(long id,PhysicalFluidTopology.Port port) {
-        owned();var record=registrations().get(id);
-        if(record==null||record.device().kind()!=TopologyCompiler.Kind.RESERVOIR||record.spec().open()||record.device().ports().isEmpty())return false;
-        if(port!=null&&port.role()!=PhysicalFluidTopology.ConnectionRole.RELIEF)throw new IllegalArgumentException("A pressure safety valve's outlet is a relief port");
-        var ports=new ArrayList<>(record.device().ports());ports.removeIf(p->p.role()==PhysicalFluidTopology.ConnectionRole.RELIEF);
-        if(port!=null){for(var p:ports)if(p.cell().equals(port.cell())&&p.face()==port.face())return false;ports.add(port);}
-        double set=port==null?0:fittedRelief(record.spec());if(port!=null&&!(set>0))return false;
-        edit(id,record.revision(),record.device().withPlacement(record.device().position(),ports),record.spec().withRelief(set,null));
-        return true;
-    }
-    /** The set pressure a newly fitted pressure safety valve starts at on a device with {@code spec}: the default, or just above its blanketing valve's vent pressure; 0 where none fits. */
-    static double fittedRelief(FluidDeviceSpec spec) {
-        double set=FluidDeviceSpec.DEFAULT_RELIEF;
-        if(spec.blanket()>0)set=Math.max(set,Math.ceil(com.wormzjl.icheme.science.fluid.network.GasBlanket.ventPressure(spec.blanket())*1.1/1000)*1000);
-        return spec.reliefTakes(set)?set:0;
-    }
+    public boolean reliefValve(long id,PhysicalFluidTopology.Port port){owned();return placement.reliefValve(id,port);}
     /**
      * Fits a pressure safety valve on pipe {@code id}, its outlet leaving through {@code face}, or removes it ({@code face}
      * null), as one queued ledger event. The pipe's other faces stay joined as a plain pipe's. False for a device that is no
      * plain pipe: a pipe carrying a fitting, a rack lane, or a pipe with ports.
      */
-    public boolean pipeRelief(long id,PhysicalFluidTopology.Direction face) {
-        owned();var record=registrations().get(id);if(record==null)return false;var d=record.device();
-        if(d.kind()!=TopologyCompiler.Kind.PIPE||!d.ports().isEmpty()||d.slots()>0||face!=null&&(d.actuator()||d.filter()||d.cutoff()!=PhysicalFluidTopology.Cutoff.NONE))return false;
-        edit(id,record.revision(),d,record.spec().withRelief(face==null?0:FluidDeviceSpec.DEFAULT_RELIEF,face));
-        return true;
-    }
+    public boolean pipeRelief(long id,PhysicalFluidTopology.Direction face){owned();return placement.pipeRelief(id,face);}
     /** Sets a fitted pressure safety valve's set pressure, Pa absolute, as a queued ledger event; false for a device without one or a pressure it does not take ({@link FluidDeviceSpec#reliefTakes}). */
-    public boolean reliefPressure(long id,double pascal) {
-        owned();var record=registrations().get(id);
-        if(record==null||!(record.spec().relief()>0)||!record.spec().reliefTakes(pascal))return false;
-        edit(id,record.revision(),record.device(),record.spec().withRelief(pascal,record.spec().reliefFace()));return true;
-    }
+    public boolean reliefPressure(long id,double pascal){owned();return placement.reliefPressure(id,pascal);}
     // ---------------- running columns (batch 2026-10-28-column-operation, C3) ----------------
 
     /**
@@ -1418,68 +1235,36 @@ public final class FluidWorldAuthority implements AutoCloseable {
      * 2026-11-09-batch-distiller): a fact, one queued edit of its joints; its island recompiles on the engine's schedule.
      * Null, or why not.
      */
-    public @org.jetbrains.annotations.Nullable String divert(long id,int outlet) {
-        owned();if(closed)return "the fluid world is closed";
-        var r=topology.latest().get(id);
-        if(r==null||r.device().kind()!=TopologyCompiler.Kind.DIVERTER_VALVE)return "no diverter valve";
-        if(outlet<0||outlet>2)return "a diverter valve has three outlets";
-        int joints=PhysicalFluidTopology.diverterJoints(r.device().facing(),outlet);
-        if(joints==r.device().joints())return null;
-        if(topology.pending(id))return "the diverter valve is being edited";
-        edit(id,r.revision(),r.device().withJoints(joints),r.spec());
-        return null;
-    }
+    public @org.jetbrains.annotations.Nullable String divert(long id,int outlet){owned();if(closed)return "the fluid world is closed";return placement.divert(id,outlet);}
     /** The open outlet of diverter valve {@code id} (0 to 2), or -1 for none. */
-    public int diverterOutlet(long id) {
-        owned();var r=topology.latest().get(id);
-        return r==null||r.device().kind()!=TopologyCompiler.Kind.DIVERTER_VALVE?-1:PhysicalFluidTopology.diverterOutlet(r.device().facing(),r.device().joints());
-    }
+    public int diverterOutlet(long id){owned();return placement.diverterOutlet(id);}
     /** Reading committed static configuration never advances or materialises process state. */
     public Optional<PhysicalFluidTopology.Device> committedDevice(long id){owned();var record=topology.active().get(id);return record==null?Optional.empty():Optional.of(record.device());}
-    public void remove(long id){owned();controls().removeHost(id);instruments.recoverHost(id);var old=registrations().get(id);if(old!=null)submit(List.of(new WorldTopologyLedger.Edit(id,null)),topology.nextIdentity(),old.device().filter()?new WorldTopologyLedger.Recovery(id,null):null);}
+    public void remove(long id){owned();placement.remove(id);}
     /**
      * Holds registration {@code id}, or releases it (decision S11, REGISTRY_FIRST_PLAN.md 4.1): held, it keeps what it holds
      * and joins nothing. A topology edit at its next revision, so its islands recompile on the engine's schedule. Whether an
      * edit was queued: none for an unknown identity, a column's port, or one already so.
      */
-    public boolean hold(long id,boolean held) {
-        owned();var r=registrations().get(id);if(r==null||r.device().port()||r.device().held()==held)return false;
-        submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(r.device().withHeld(held),r.spec(),Math.addExact(r.revision(),1)))),topology.nextIdentity());
-        return true;
-    }
+    public boolean hold(long id,boolean held){owned();return placement.hold(id,held);}
     /** Every held part (W5c C5): the held registrations, shaft parts, cables, controllers and consoles. */
-    public int heldCount() {
-        owned();int count=held().size();for(var u:topology.shafts().values())if(u.held())count++;
-        var facts=controls().facts();return count+facts.held().size()+facts.heldPanels().size();
-    }
+    public int heldCount(){owned();return placement.heldCount();}
     /** The held registrations, queued holds included, by identity. */
-    public List<WorldTopologyLedger.Registration> held() {
-        owned();var held=new ArrayList<WorldTopologyLedger.Registration>();
-        for(var r:registrations().values())if(r.device().held())held.add(r);
-        held.sort(Comparator.comparingLong(r->r.device().id()));return held;
-    }
+    public List<WorldTopologyLedger.Registration> held(){owned();return placement.held();}
     /**
      * An operator drops held registration {@code id} (REGISTRY_FIRST_PLAN.md 4.5): it leaves as a broken device does, what
      * it holds booked as removed, but nothing drops (decision S9): its block is not in the world. Its accessories leave the
      * accessory store with it. Whether it was held.
      */
-    public boolean drop(long id) {
-        owned();var r=registrations().get(id);if(r==null||!r.device().held())return false;
-        instruments.discardHost(id);submit(List.of(new WorldTopologyLedger.Edit(id,null)),topology.nextIdentity());
-        return true;
-    }
+    public boolean drop(long id){owned();return placement.drop(id);}
     /**
      * Queues a filter's solid recovery as a ledger event and returns it, as an edit is queued: nothing is applied or
      * delivered here. The engine applies it with the next batch of events, takes the cake the island holds then and
      * delivers the item; an empty filter or a full inventory at that point refuses it in the menu's next reply.
      */
-    public WorldTopologyLedger.Event recoverFilter(long id,long expectedRevision,net.minecraft.server.level.ServerPlayer player){
-        owned();var old=registrations().get(id);if(old==null||old.revision()!=expectedRevision||!old.device().filter())throw new IllegalStateException("Stale filter controls");
-        if(player.getInventory().getFreeSlot()<0)throw new IllegalStateException("Inventory full; filter unchanged");
-        return submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(old.device(),old.spec(),Math.addExact(old.revision(),1)))),topology.nextIdentity(),new WorldTopologyLedger.Recovery(id,player.getUUID()));
-    }
-    private WorldTopologyLedger.Event submit(List<WorldTopologyLedger.Edit> edits,long nextId){return submit(edits,nextId,null);}
-    private WorldTopologyLedger.Event submit(List<WorldTopologyLedger.Edit> edits,long nextId,WorldTopologyLedger.Recovery recovery) {
+    public WorldTopologyLedger.Event recoverFilter(long id,long expectedRevision,net.minecraft.server.level.ServerPlayer player){owned();return placement.recoverFilter(id,expectedRevision,player);}
+    WorldTopologyLedger.Event submit(List<WorldTopologyLedger.Edit> edits,long nextId){return submit(edits,nextId,null);}
+    WorldTopologyLedger.Event submit(List<WorldTopologyLedger.Edit> edits,long nextId,WorldTopologyLedger.Recovery recovery) {
         if(closed)throw new IllegalStateException("Fluid world is closed");
         var changes=LISTENERS.isEmpty()?List.<DeviceChange>of():changes(edits);
         var event=registry.submit(edits,nextId,recovery);data.setDirty();
@@ -1540,11 +1325,11 @@ public final class FluidWorldAuthority implements AutoCloseable {
         controls().tick(topology.onlineTick());
         presentation.tick(topology.onlineTick());
         // The watched drivers' states at the presentation cadence (W3): a read of what the trains last decided.
-        if(!driverWatchers.isEmpty()&&topology.onlineTick()%100==0)publishDrivers();
-        if(!rotationWatchers.isEmpty()&&topology.onlineTick()%100==0)publishRotations();
+        if(!displays.driverWatchers.isEmpty()&&topology.onlineTick()%100==0)displays.publishDrivers();
+        if(!displays.rotationWatchers.isEmpty()&&topology.onlineTick()%100==0)displays.publishRotations();
         // The device displays publish at their device's slot of the 100-tick cadence, as presentation buckets do (code base
         // review R10): flares, stills, towers' plumes, fired heaters' flues and chimneys. Reads only.
-        long displayTick=topology.onlineTick();for(var display:cadenceDisplays)display.publishDue(displayTick);
+        long displayTick=topology.onlineTick();displays.publishDue(displayTick);
         // The far silhouettes and the noise levels (batch 2026-11-10-custom-shader-system), by watcher: reads only.
         if(topology.onlineTick()%100==0){publishSilhouettes();publishNoise();}
         if(topology.onlineTick()%ElectricStores.CADENCE==0&&propertyHold==null)health.cadence();
@@ -1669,7 +1454,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         runtime.coordinator().operations(next);
     }
     /** The status a side's lines add (W8), ending in " / ", or nothing for a side without lines. */
-    private String linesStatus(long id,HeatUnit heat) {
+    String linesStatus(long id,HeatUnit heat) {
         var asked=heat.lines();if(asked==com.wormzjl.icheme.science.assembly.ExchangerBlueprint.Lines.NONE)return "";
         var l=lines.get(id);boolean ratio=asked==com.wormzjl.icheme.science.assembly.ExchangerBlueprint.Lines.RATIO,column=asked==com.wormzjl.icheme.science.assembly.ExchangerBlueprint.Lines.FEED;
         String fallback=ratio?"the ratio holds nothing":column?"the water flows as its line lets it":"the internal bypass controls";
@@ -1684,274 +1469,42 @@ public final class FluidWorldAuthority implements AutoCloseable {
      * structures recorded over it, are queued for their re-alignment (REGISTRY_FIRST_PLAN.md 4.2, 4.4). Never loads a chunk
      * or runs a solve.
      */
-    public void loadedChunk(ResourceKey<Level> dimension,long chunk) {
-        owned();if(closed)return;
-        var level=server.getLevel(dimension);if(level==null)return;
-        var at=new net.minecraft.world.level.ChunkPos(chunk);
-        var loaded=level.getChunkSource().getChunkNow(at.x,at.z);if(loaded==null)return;
-        String name=dimension.location().toString();
-        for(var cell:List.copyOf(loaded.getBlockEntitiesPos())) {
-            var block=loaded.getBlockState(cell).getBlock();
-            if(!(block instanceof FluidDeviceBlock)&&!(block instanceof EquipmentShellBlock)&&!(block instanceof com.wormzjl.icheme.world.level.block.PipeRackBlock)&&!(block instanceof com.wormzjl.icheme.world.level.block.ControlPanelBlock)&&!(block instanceof com.wormzjl.icheme.world.level.block.ConduitBlock))continue;
-            var entity=loaded.getBlockEntity(cell); // Includes saved cells not yet promoted from pending NBT.
-            if(entity instanceof com.wormzjl.icheme.world.level.block.entity.ControlPanelBlockEntity box)controls().loaded(box);
-            else if(entity instanceof com.wormzjl.icheme.world.level.block.entity.ConduitBlockEntity cable)controls().loaded(cable);
-            else if(entity instanceof com.wormzjl.icheme.world.level.block.entity.PipeRackBlockEntity rack){rack.bind(this);controls().loaded(rack);}
-            else if(entity instanceof FluidDeviceBlockEntity pipe) {
-                var position=new PhysicalFluidTopology.Position(name,cell.getX(),cell.getY(),cell.getZ());
-                var record=registry.at(position).orElseGet(()->place(position,pipe.kind(),PhysicalFluidTopology.Direction.valueOf(pipe.getBlockState().getValue(FluidDeviceBlock.FACING).name()),FluidDeviceBlock.cutoff(pipe.getBlockState()),FluidDeviceBlock.hasPressureValve(pipe.getBlockState()),FluidDeviceBlock.hasFilter(pipe.getBlockState()),FluidDeviceBlock.hasMover(pipe.getBlockState())?pipe.getBlockState().getValue(FluidDeviceBlock.INLINE_MOVER).kind():TopologyCompiler.Kind.PIPE,pipe.kind()==TopologyCompiler.Kind.PIPE?pipe.joints():PhysicalFluidTopology.ALL_FACES));
-                pipe.bind(this,record.device());
-            } else if(entity instanceof EquipmentShellBlockEntity shell&&shell.shape()!=null&&(shell.shape().fluidDevice()||com.wormzjl.icheme.science.equipment.UnitDesign.shafted(shell.shape().kind()))) {
-                var origin=shell.origin();
-                unboundStructures.put(new PhysicalFluidTopology.Position(name,origin.getX(),origin.getY(),origin.getZ()),new EquipmentStructure.Vessel(origin,shell.shape()));
-            }
-        }
-        for(var it=unboundStructures.entrySet().iterator();it.hasNext();) {
-            var entry=it.next();if(!entry.getKey().dimension().equals(name))continue;
-            var vessel=entry.getValue();var origin=vessel.origin();
-            if(at.x<(origin.getX()>>4)||at.x>((origin.getX()+vessel.shape().sizeX()-1)>>4)
-                    ||at.z<(origin.getZ()>>4)||at.z>((origin.getZ()+vessel.shape().sizeZ()-1)>>4))continue;
-            if(EquipmentStructure.restoreFluidBinding(level,vessel))it.remove();
-        }
-        var devices=registry.chunk(name,chunk);
-        if(!devices.isEmpty())FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.realignChunks);
-        for(long id:devices){presentation.markDirty(id);if(realigning.add(id))realignment.computeIfAbsent(name,k->new ArrayDeque<>()).add(id);}
-        for(long id:topology.shaftsIn(name,chunk))if(shaftRealigning.add(id))shaftRealignment.computeIfAbsent(name,k->new ArrayDeque<>()).add(id);
-        controls().loadedChunk(name,chunk);
-        var structures=structureChunks.getOrDefault(name,Map.of()).get(chunk);
-        if(structures!=null)for(var origin:structures)EquipmentStructure.realignLater(level,new net.minecraft.core.BlockPos(origin.x(),origin.y(),origin.z()));
-    }
+    public void loadedChunk(ResourceKey<Level> dimension,long chunk){owned();if(closed)return;chunks.loadedChunk(dimension,chunk);}
     /**
      * The next registration of {@code dimension} the re-alignment checks, taken off its queue, or 0 when none is queued
      * (registry first, REGISTRY_FIRST_PLAN.md 4.2). Each registration of a loaded chunk is queued once, at the load.
      */
-    public long nextRealignment(String dimension) {
-        owned();var queue=closed?null:realignment.get(dimension);if(queue==null)return 0;
-        Long id=queue.poll();if(queue.isEmpty())realignment.remove(dimension);
-        if(id==null)return 0;realigning.remove(id);return id;
-    }
+    public long nextRealignment(String dimension){owned();return chunks.nextRealignment(dimension);}
     /** The next shaft part of {@code dimension} the re-alignment checks, taken off its queue, or 0 when none is queued (W5c C1). */
-    public long nextShaftRealignment(String dimension) {
-        owned();var queue=closed?null:shaftRealignment.get(dimension);if(queue==null)return 0;
-        Long id=queue.poll();if(queue.isEmpty())shaftRealignment.remove(dimension);
-        if(id==null)return 0;shaftRealigning.remove(id);return id;
-    }
-    /**
-     * Holds every registration whose dimension has no level (REGISTRY_FIRST_PLAN.md 4.2): no block can stand for it, so it
-     * keeps what it holds and joins nothing until a level of that dimension loads its chunk again. One queued event.
-     */
-    private void holdWithoutLevel() {
-        var levels=new HashSet<String>();for(var level:server.getAllLevels())levels.add(level.dimension().location().toString());
-        var edits=new ArrayList<WorldTopologyLedger.Edit>();
-        for(var r:registrations().values()) {
-            var d=r.device();
-            if(!d.port()&&!d.held()&&!levels.contains(d.position().dimension()))
-                edits.add(new WorldTopologyLedger.Edit(d.id(),new WorldTopologyLedger.Registration(d.withHeld(true),r.spec(),Math.addExact(r.revision(),1))));
-        }
-        if(edits.isEmpty())return;
-        edits.sort(Comparator.comparingLong(WorldTopologyLedger.Edit::id));
-        submit(edits,topology.nextIdentity());
-        IChemE.LOGGER.warn("fluid_realign held={} reason=NO_LEVEL: their dimensions have no level; /icheme devices held lists them",edits.size());
-    }
+    public long nextShaftRealignment(String dimension){owned();return chunks.nextShaftRealignment(dimension);}
     /** A device's block entity loaded or was bound: marked for its bucket, never presented at once. */
     public void deviceLoaded(long id){owned();if(!closed){presentation.deviceLoaded(id);if(instruments!=null)instruments.bind(instrumentHost(id));}}
     /** A device's block entity unloaded or was removed: publications stop marking it, and its watches end (a client asks again when it loads the device). */
-    public void deviceUnloaded(long id){owned();instruments.forget(id);sightGlassDisplay.forget(id);moverDisplay.forget(id);tankDisplay.forget(id);presentation.deviceUnloaded(id);publishedMenuData.remove(id);lastLines.remove(id);}
+    public void deviceUnloaded(long id){owned();instruments.forget(id);displays.unloaded(id);presentation.deviceUnloaded(id);publishedMenuData.remove(id);lastLines.remove(id);}
     /**
      * A client's watch request for open tanks by their node cells (owner decision FR4, R-B): each new watch of a loaded
      * open tank within {@link com.wormzjl.icheme.network.FluidNetwork#WATCH_RANGE} is answered with the tank's last published display, if it has one (a
      * read of cached data: nothing solves, nothing is marked), and the tank's next buckets send it again. Cells that are
      * no open tank, out of range or over the player's maximum are ignored.
      */
-    public void watchTanks(net.minecraft.server.level.ServerPlayer player,List<BlockPos> watch,List<BlockPos> unwatch) {
-        owned();if(closed)return;var uuid=player.getUUID();
-        if(!unwatch.isEmpty())for(long device:tankDisplay.watchers.devices(uuid)){var record=registrations().get(device);if(record==null||unwatch.contains(cell(record)))tankDisplay.unwatch(uuid,device);}
-        var level=player.serverLevel();
-        for(var pos:watch) {
-            if(!level.hasChunkAt(pos)||!(level.getBlockEntity(pos) instanceof FluidView.Receiver receiver))continue;
-            var record=registrations().get(receiver.fluidIdentity());
-            if(record==null||!record.spec().open()||!cell(record).equals(pos)||!record.device().position().dimension().equals(level.dimension().location().toString())||!inRange(player,pos))continue;
-            // By its node cell, with no target: the identity is the block entity's.
-            tankDisplay.replay(player,receiver.fluidIdentity(),pos,null);
-        }
-    }
-    /**
-     * A casing's or a steam turbine's Drive group (W7, owner decision D31, option A): its train's driver (a turbine is its
-     * own), its status and speed, the casing's share and shaft power; {@code NO DRIVER} for a casing with none, where it
-     * stands closed; null for a device with no shaft unit. A read of what the trains last decided.
-     */
-    private FluidView.Drive drive(long id){
-        var own=shafts.unitOfDevice(id);if(own==null)return null;
-        var mine=shafts.view(own.id());double share=mine==null?0:Math.max(0,mine.share()),power=mine==null?0:mine.shaftPower();
-        var driver=own.kind()==com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.STEAM_TURBINE?own:shafts.driverOf(id);
-        if(driver==null)return new FluidView.Drive("",0,0,"NO DRIVER",0,false,0,power);
-        var v=shafts.view(driver.id());String status=v==null?"":v.status();if(status.length()>256)status=status.substring(0,256);
-        return new FluidView.Drive(shafts.kindOf(driver.id()).name(),driver.ratedPower(),driver.poles(),status,v==null?0:v.speed(),
-                false,share,power);
-    }
-    /**
-     * A pump's readings (W10d, owner decision D37): its suction as its last committed slice read it and its health (W10b),
-     * a constructed centrifugal pump's design for its curve; null for a device that is no pump. A read of what the engine
-     * last committed: no solve.
-     */
-    private FluidView.Pump pump(long id,WorldTopologyLedger.Registration registration){
-        if(!MachineHealth.pump(registration))return null;var h=health.health(id);if(h==null)return null;
-        var s=health.suction(id);
-        var curve=registration.device().control() instanceof FlowControl.Machine machine&&machine.law() instanceof com.wormzjl.icheme.science.machine.CentrifugalPump law
-                ?new FluidView.Curve(law.ratedFlow(),law.ratedHead(),law.efficiency(),law.ratedSpeed()):null;
-        // Its life in play time: the health left over the wear rate per process second, over the factor (W5).
-        double rate=health.rate(id),life=h>0&&rate>0?h/rate/model.time().factor():Double.NaN;
-        return new FluidView.Pump(finite(s.available()),finite(s.required()),finite(s.gas()),Math.clamp(h,0,1),curve,finite(life));
-    }
-    private static Double finite(double value){return Double.isFinite(value)?value:null;}
+    public void watchTanks(net.minecraft.server.level.ServerPlayer player,List<BlockPos> watch,List<BlockPos> unwatch){owned();if(closed)return;displays.watchTanks(player,watch,unwatch);}
     /** Ends every watch of a player who left. */
-    public void forgetWatcher(UUID player){owned();driverWatchers.remove(player);rotationWatchers.remove(player);for(var display:displays)display.forget(player);silhouettes.forget(player);noise.forget(player);}
-
-    /** Requested shaft/machine speeds, keyed by dimension as well as cell; published values are presentation state only. */
-    private final Map<UUID,Set<PhysicalFluidTopology.Position>> rotationWatchers=new HashMap<>();
-    private final Map<PhysicalFluidTopology.Position,com.wormzjl.icheme.network.RotationNetwork.State> publishedRotations=new HashMap<>();
+    public void forgetWatcher(UUID player){owned();displays.forget(player);silhouettes.forget(player);noise.forget(player);}
 
     /** Validate a bounded subscription and replay its cached publication. Opening a watch never reads a train's speed. */
-    public void watchRotations(net.minecraft.server.level.ServerPlayer player,List<BlockPos> watch,List<BlockPos> unwatch) {
-        owned();if(closed)return;
-        var level=player.serverLevel();String dimension=level.dimension().location().toString();
-        var set=rotationWatchers.computeIfAbsent(player.getUUID(),k->new HashSet<>());
-        var removed=new HashSet<>(unwatch);
-        set.removeIf(p->!p.dimension().equals(dimension)||removed.contains(new BlockPos(p.x(),p.y(),p.z())));
-        for(var position:watch) {
-            if(set.size()>=com.wormzjl.icheme.network.RotationNetwork.MAXIMUM_WATCHED||!level.hasChunkAt(position)||!moverRange(player,position))continue;
-            var key=new PhysicalFluidTopology.Position(dimension,position.getX(),position.getY(),position.getZ());
-            if(!(level.getBlockState(position).getBlock() instanceof com.wormzjl.icheme.world.level.block.ShaftBlock)&&shafts.unitAt(key)==null)continue;
-            set.add(key);
-            var published=publishedRotations.get(key);
-            if(published!=null)com.wormzjl.icheme.network.RotationNetwork.send(player,published);
-        }
-        if(set.isEmpty())rotationWatchers.remove(player.getUUID());
-    }
+    public void watchRotations(net.minecraft.server.level.ServerPlayer player,List<BlockPos> watch,List<BlockPos> unwatch){owned();if(closed)return;displays.watchRotations(player,watch,unwatch);}
 
-    /** Cadence-only reads of the trains' already decided rpm, sent exclusively to clients watching those parts. */
-    private void publishRotations() {
-        var current=new HashMap<PhysicalFluidTopology.Position,com.wormzjl.icheme.network.RotationNetwork.State>();
-        var units=new HashMap<PhysicalFluidTopology.Position,ShaftUnit>();
-        for(var unit:shafts.units())units.put(unit.position(),unit);
-        var speeds=new HashMap<Long,Double>();
-        for(var it=rotationWatchers.entrySet().iterator();it.hasNext();) {
-            var entry=it.next();var player=server.getPlayerList().getPlayer(entry.getKey());
-            if(player==null||player.hasDisconnected()){it.remove();continue;}
-            String dimension=player.serverLevel().dimension().location().toString();
-            for(var key:List.copyOf(entry.getValue())) {
-                var position=new BlockPos(key.x(),key.y(),key.z());
-                if(!key.dimension().equals(dimension)||!player.serverLevel().hasChunkAt(position)||!moverRange(player,position)){
-                    entry.getValue().remove(key);continue;
-                }
-                var state=current.computeIfAbsent(key,p->{
-                    var pair=rotationSpeeds(units.get(p),units,speeds);
-                    float rpm=(float)pair[0],output=(float)pair[1];
-                    return new com.wormzjl.icheme.network.RotationNetwork.State(position,Float.isFinite(rpm)?rpm:0,Float.isFinite(output)?output:0);
-                });
-                com.wormzjl.icheme.network.RotationNetwork.send(player,state);
-            }
-            if(entry.getValue().isEmpty())it.remove();
-        }
-        publishedRotations.clear();publishedRotations.putAll(current);
-    }
-
-    /** A gearbox's connected shaft fixes that end's speed; its compiled ratio also fixes an unconnected other end. */
-    private double[] rotationSpeeds(ShaftUnit unit,Map<PhysicalFluidTopology.Position,ShaftUnit> units,Map<Long,Double> speeds) {
-        if(unit==null)return new double[]{0,0};
-        if(unit.kind()==com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.GEARBOX) {
-            double ratio=shafts.ratio(unit.id());
-            if(!(ratio>0))return new double[]{0,0};
-            for(var end:unit.ends()) {
-                var p=end.cell();var adjacent=units.get(new PhysicalFluidTopology.Position(p.dimension(),p.x()+end.dx(),p.y()+end.dy(),p.z()+end.dz()));
-                int axis=end.dx()!=0?0:end.dy()!=0?1:2;
-                if(adjacent==null||adjacent.kind()!=com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.SHAFT||adjacent.axis()!=axis)continue;
-                double rpm=rotationSpeed(adjacent,speeds);
-                return end.output()?new double[]{rpm/ratio,rpm}:new double[]{rpm,rpm*ratio};
-            }
-            return new double[]{0,0};
-        }
-        double rpm=rotationSpeed(unit,speeds);
-        return new double[]{rpm,rpm};
-    }
-
-    private double rotationSpeed(ShaftUnit unit,Map<Long,Double> speeds) {
-        return speeds.computeIfAbsent(unit.id(),id->{
-            var view=shafts.view(id);double rpm=view==null?0:Math.max(0,view.speed());
-            if(unit.kind()==com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.SHAFT&&(view==null||view.status().equals("LOOSE")||view.status().equals("NO DRIVER"))) {
-                var level=server.getLevel(dimension(unit.position().dimension()));var pos=new BlockPos(unit.position().x(),unit.position().y(),unit.position().z());
-                if(level!=null&&level.hasChunkAt(pos)&&level.getBlockEntity(pos) instanceof com.wormzjl.icheme.world.level.block.ShaftParts.Coupling nativeShaft)rpm=nativeShaft.nativeSpeed();
-            }
-            return rpm;
-        });
-    }
-
-    /** The drivers each player watches (W3), by their structures' origins, within their dimension. */
-    private final Map<UUID,Set<BlockPos>> driverWatchers=new HashMap<>();
-    private final Map<PhysicalFluidTopology.Position,com.wormzjl.icheme.network.FluidNetwork.DriverState> publishedDrivers=new HashMap<>();
     /**
      * A driver sound subscription replays its cached publication; only the presentation cadence reads train state.
      */
-    public void watchDrivers(net.minecraft.server.level.ServerPlayer player,List<BlockPos> watch,List<BlockPos> unwatch) {
-        owned();if(closed)return;var set=driverWatchers.computeIfAbsent(player.getUUID(),k->new HashSet<>());
-        unwatch.forEach(set::remove);
-        for(var origin:watch) {
-            if(set.size()>=com.wormzjl.icheme.network.FluidNetwork.MAXIMUM_WATCHED||!player.serverLevel().hasChunkAt(origin)||!moverRange(player,origin))continue;
-            var key=new PhysicalFluidTopology.Position(player.serverLevel().dimension().location().toString(),origin.getX(),origin.getY(),origin.getZ());
-            var unit=shafts.unitAt(key);
-            if(unit==null||!(unit.kind().driver()||unit.kind()==com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.GENERATOR))continue;
-            set.add(origin.immutable());
-            var state=publishedDrivers.get(key);
-            if(state!=null)com.wormzjl.icheme.network.FluidNetwork.sendDriver(player,state);
-        }
-        if(set.isEmpty())driverWatchers.remove(player.getUUID());
-    }
-    private com.wormzjl.icheme.network.FluidNetwork.DriverState driverState(net.minecraft.server.level.ServerLevel level,BlockPos origin) {
-        var unit=shafts.unitAt(new PhysicalFluidTopology.Position(level.dimension().location().toString(),origin.getX(),origin.getY(),origin.getZ()));
-        if(unit==null||!(unit.kind().driver()||unit.kind()==com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.GENERATOR))return null;
-        var view=shafts.view(unit.id());if(view==null)return null;
-        return new com.wormzjl.icheme.network.FluidNetwork.DriverState(origin,view.share()>0,(float)Math.max(0,view.share()));
-    }
-    /** The presentation cadence's driver states: one per watched driver, to its watchers only. */
-    private void publishDrivers() {
-        var current=new HashMap<PhysicalFluidTopology.Position,com.wormzjl.icheme.network.FluidNetwork.DriverState>();
-        for(var it=driverWatchers.entrySet().iterator();it.hasNext();) {
-            var e=it.next();var player=server.getPlayerList().getPlayer(e.getKey());
-            if(player==null||player.hasDisconnected()){it.remove();continue;}
-            for(var origin:List.copyOf(e.getValue())) {
-                var key=new PhysicalFluidTopology.Position(player.serverLevel().dimension().location().toString(),origin.getX(),origin.getY(),origin.getZ());
-                var state=player.serverLevel().hasChunkAt(origin)&&moverRange(player,origin)
-                        ?current.computeIfAbsent(key,k->driverState(player.serverLevel(),origin)):null;
-                if(state==null) {
-                    e.getValue().remove(origin);
-                    com.wormzjl.icheme.network.FluidNetwork.sendDriver(player,new com.wormzjl.icheme.network.FluidNetwork.DriverState(origin,false,0));
-                } else com.wormzjl.icheme.network.FluidNetwork.sendDriver(player,state);
-            }
-            if(e.getValue().isEmpty())it.remove();
-        }
-        publishedDrivers.clear();publishedDrivers.putAll(current);
-    }
+    public void watchDrivers(net.minecraft.server.level.ServerPlayer player,List<BlockPos> watch,List<BlockPos> unwatch){owned();if(closed)return;displays.watchDrivers(player,watch,unwatch);}
     /** A sound/animation subscription replays published operating state only; it never reads or advances a process. */
-    public void watchMovers(net.minecraft.server.level.ServerPlayer player,List<com.wormzjl.icheme.network.FluidNetwork.Target> watch,List<com.wormzjl.icheme.network.FluidNetwork.Target> unwatch) {
-        owned();if(closed)return;moverDisplay.watch(player,watch,unwatch);
-    }
+    public void watchMovers(net.minecraft.server.level.ServerPlayer player,List<com.wormzjl.icheme.network.FluidNetwork.Target> watch,List<com.wormzjl.icheme.network.FluidNetwork.Target> unwatch){owned();if(closed)return;displays.watchMovers(player,watch,unwatch);}
     /**
      * A flare's flame subscription (W5): it replays the state last published, or the flare's last booked span (a read), and
      * the presentation cadence keeps it current. It never reads or advances a process.
      */
-    public void watchFlares(net.minecraft.server.level.ServerPlayer player,List<com.wormzjl.icheme.network.FluidNetwork.Target> watch,List<com.wormzjl.icheme.network.FluidNetwork.Target> unwatch) {
-        owned();if(closed)return;flareDisplay.watch(player,watch,unwatch);
-    }
-    /** Flare {@code target}'s flame from its last booked span (a read): its heat over its rating, its unburnt flow over its limit. */
-    private com.wormzjl.icheme.network.FluidNetwork.FlareState flareState(com.wormzjl.icheme.network.FluidNetwork.Target target) {
-        var view=flares.view(target.identity());if(view==null)return null;
-        boolean flame=view.status()==Flares.Status.FLARING||view.status()==Flares.Status.OVER_CAPACITY;
-        float share=(float)Math.clamp(view.heat()/view.rated(),0,1),plume=view.status()==Flares.Status.FLAME_OUT&&view.limit()>0?(float)Math.clamp(view.massFlow()/view.limit(),.05,1):0;
-        // W3 (batch 2026-11-10-custom-shader-system): the flame's soot index and the gas's exit velocity, as the span booked them.
-        var f=flares.flame(target.identity());if(f==null)f=Flares.Flame.NONE;
-        float soot=flame?(float)Math.clamp(f.soot(),0,1):0,exit=(float)Math.clamp(f.exitVelocity(),0,com.wormzjl.icheme.network.FluidNetwork.MAXIMUM_SPEED);
-        return new com.wormzjl.icheme.network.FluidNetwork.FlareState(target,view.status().ordinal(),flame?Math.max(share,.02f):0,plume,soot,Float.isFinite(exit)?exit:0);
-    }
+    public void watchFlares(net.minecraft.server.level.ServerPlayer player,List<com.wormzjl.icheme.network.FluidNetwork.Target> watch,List<com.wormzjl.icheme.network.FluidNetwork.Target> unwatch){owned();if(closed)return;displays.watchFlares(player,watch,unwatch);}
     /** Whether device {@code id} publishes its display at online tick {@code tick}: its slot of the
      * {@value FluidPresentation#BUCKET_TICKS}-tick cadence, by identity, as a presentation bucket (code base review R10). */
     static boolean displayDue(long id,long tick){return Math.floorMod(id,(long)FluidPresentation.BUCKET_TICKS)==Math.floorMod(tick,(long)FluidPresentation.BUCKET_TICKS);}
@@ -1960,78 +1513,26 @@ public final class FluidWorldAuthority implements AutoCloseable {
      * (a read), and the presentation cadence keeps it current. It never reads or advances a process. A still is watched at
      * its pot's cell, where its identity binds.
      */
-    public void watchStills(net.minecraft.server.level.ServerPlayer player,List<com.wormzjl.icheme.network.FluidNetwork.Target> watch,List<com.wormzjl.icheme.network.FluidNetwork.Target> unwatch) {
-        owned();if(closed)return;stillDisplay.watch(player,watch,unwatch);
-    }
-    /** Still {@code target}'s fire from its cached view (a read): its heat over its rating, whether it boils, whether its spout drips. */
-    private com.wormzjl.icheme.network.FluidNetwork.StillState stillState(com.wormzjl.icheme.network.FluidNetwork.Target target) {
-        var u=topology.still(target.identity());var v=stills.view(target.identity());if(u==null||v==null)return null;
-        float fire=(float)Math.clamp(v.heat()/u.design().rating(),0,1);
-        var s=v.status();
-        boolean boiling=v.heat()>0&&(s==BatchStill.Status.DISTILLING||s==BatchStill.Status.BOILING||s==BatchStill.Status.FLOODING||s==BatchStill.Status.COOLING_LIMITED);
-        boolean dripping=u.condenser()&&v.distillateFlow()>com.wormzjl.icheme.network.FluidNetwork.StillState.DRIP;
-        return new com.wormzjl.icheme.network.FluidNetwork.StillState(target,u.heater().ordinal(),s.ordinal(),fire,boiling,dripping);
-    }
+    public void watchStills(net.minecraft.server.level.ServerPlayer player,List<com.wormzjl.icheme.network.FluidNetwork.Target> watch,List<com.wormzjl.icheme.network.FluidNetwork.Target> unwatch){owned();if(closed)return;displays.watchStills(player,watch,unwatch);}
     /**
      * A cooling tower's plume subscription (batch 2026-11-10-custom-shader-system, W4), as a flare's: watched at its basin's
      * fluid cell within {@link com.wormzjl.icheme.network.FluidNetwork#WATCH_RANGE}; it replays the state last published, or the
      * rates its island last accepted (a read), and the presentation cadence keeps it current. It never reads or advances a process.
      */
-    public void watchTowers(net.minecraft.server.level.ServerPlayer player,List<com.wormzjl.icheme.network.FluidNetwork.Target> watch,List<com.wormzjl.icheme.network.FluidNetwork.Target> unwatch) {
-        owned();if(closed)return;towerDisplay.watch(player,watch,unwatch);
-    }
+    public void watchTowers(net.minecraft.server.level.ServerPlayer player,List<com.wormzjl.icheme.network.FluidNetwork.Target> watch,List<com.wormzjl.icheme.network.FluidNetwork.Target> unwatch){owned();if(closed)return;displays.watchTowers(player,watch,unwatch);}
     /**
      * A fired heater's flue subscription (W5), as a flare's: watched at its fluid cell, where its radiant coil binds; it
      * replays the state last published, or the heater's last booked slices (a read), and the presentation cadence keeps it current.
      */
-    public void watchHeaters(net.minecraft.server.level.ServerPlayer player,List<com.wormzjl.icheme.network.FluidNetwork.Target> watch,List<com.wormzjl.icheme.network.FluidNetwork.Target> unwatch) {
-        owned();if(closed)return;heaterDisplay.watch(player,watch,unwatch);
-    }
+    public void watchHeaters(net.minecraft.server.level.ServerPlayer player,List<com.wormzjl.icheme.network.FluidNetwork.Target> watch,List<com.wormzjl.icheme.network.FluidNetwork.Target> unwatch){owned();if(closed)return;displays.watchHeaters(player,watch,unwatch);}
     /**
      * A chimney's plume subscription (batch 2026-11-10-chimney), as a heater's: watched at its tip's cell; it replays the state
      * last published, or the chimney's last booked span (a read), and the presentation cadence keeps it current.
      */
-    public void watchChimneys(net.minecraft.server.level.ServerPlayer player,List<com.wormzjl.icheme.network.FluidNetwork.Target> watch,List<com.wormzjl.icheme.network.FluidNetwork.Target> unwatch) {
-        owned();if(closed)return;chimneyDisplay.watch(player,watch,unwatch);
-    }
-    /** Chimney {@code target}'s release from its last booked span (a read), or null for no chimney. */
-    private com.wormzjl.icheme.network.FluidNetwork.ChimneyState chimneyState(com.wormzjl.icheme.network.FluidNetwork.Target target) {
-        var c=chimneys.view(target.identity());if(c==null)return null;
-        float flow=(float)c.massFlow(),t=(float)Math.clamp(c.temperature(),1,2999),w=(float)Math.clamp(c.waterShare(),0,9),s=(float)c.solids(),o=(float)Math.clamp(c.opacity(),0,1),u=(float)Math.clamp(c.exitVelocity(),0,1000);
-        if(!Float.isFinite(flow+t+w+s+o+u))return new com.wormzjl.icheme.network.FluidNetwork.ChimneyState(target,0,298.15f,0,0,0,0);
-        return new com.wormzjl.icheme.network.FluidNetwork.ChimneyState(target,flow,t,w,s,o,u);
-    }
-    /**
-     * The registration {@code target} names at its cell, loaded, in {@code level} and within {@code range} of {@code player}
-     * (checked before the block entity is read); null otherwise.
-     */
-    private WorldTopologyLedger.Registration watchable(net.minecraft.server.level.ServerPlayer player,net.minecraft.server.level.ServerLevel level,com.wormzjl.icheme.network.FluidNetwork.Target target,Display.Range range) {
-        var pos=target.position();
-        if(!level.hasChunkAt(pos)||!range.within(player,pos)||!(level.getBlockEntity(pos) instanceof FluidView.Receiver receiver)||receiver.fluidIdentity()!=target.identity())return null;
-        var record=registrations().get(target.identity());
-        if(record==null||!cell(record).equals(pos)||!record.device().position().dimension().equals(level.dimension().location().toString()))return null;
-        return record;
-    }
-    /** Whether {@code record}'s flue is watched: a fired heater's radiant coil, or a prime mover's fuel void (its stack). */
-    private static boolean flued(WorldTopologyLedger.Registration record){return radiantCoil(record)||record.device().engineFuel();}
-    private static boolean radiantCoil(WorldTopologyLedger.Registration record) {
+    public void watchChimneys(net.minecraft.server.level.ServerPlayer player,List<com.wormzjl.icheme.network.FluidNetwork.Target> watch,List<com.wormzjl.icheme.network.FluidNetwork.Target> unwatch){owned();if(closed)return;displays.watchChimneys(player,watch,unwatch);}
+    static boolean radiantCoil(WorldTopologyLedger.Registration record) {
         var heat=record.device().heat();
         return heat!=null&&heat.burners()&&heat.side()==com.wormzjl.icheme.science.equipment.HeatSides.Side.RADIANT;
-    }
-    /**
-     * Tower {@code target}'s plume from the rates its island last accepted (a read): its dry air, its exhaust
-     * ({@code TowerTransfer.exhaust}) and its evaporation; no air without rates or below {@code TowerTransfer.NO_AIR}.
-     */
-    private com.wormzjl.icheme.network.FluidNetwork.TowerPlume towerPlume(com.wormzjl.icheme.network.FluidNetwork.Target target,Map<Long,IslandCoordinator.Snapshot> islands,java.util.function.Function<Long,IslandCoordinator.Snapshot> read) {
-        var record=registrations().get(target.identity());if(record==null||record.spec().tower()==null)return null;
-        Long owner=registry.owner(target.identity());
-        var rates=owner==null?null:islands.computeIfAbsent(owner,read).lastResult().map(r->r.towers().get(target.identity())).orElse(null);
-        var still=new com.wormzjl.icheme.network.FluidNetwork.TowerPlume(target,0,(float)com.wormzjl.icheme.science.fluid.network.CoolingTower.AIR_TEMPERATURE,0,0);
-        if(rates==null||!(plumeAir(rates.fill().dryAirFlow())>0))return still;
-        var exhaust=com.wormzjl.icheme.science.fluid.network.TowerTransfer.exhaust(runtime.coordinator().model(owner),rates.fill());
-        float air=(float)plumeAir(rates.fill().dryAirFlow()),t=(float)exhaust.temperature(),w=(float)exhaust.humidity(),e=(float)Math.max(0,rates.fill().waterLoss());
-        if(!Float.isFinite(air)||!Float.isFinite(t)||!Float.isFinite(w)||!Float.isFinite(e))return still;
-        return new com.wormzjl.icheme.network.FluidNetwork.TowerPlume(target,air,t,Math.clamp(w,0,1),e);
     }
     /**
      * The dry air a tower's plume leaves with, kg/s, of its fill's {@code dryAirFlow} (batch 2026-11-10-custom-shader-system):
@@ -2039,132 +1540,12 @@ public final class FluidWorldAuthority implements AutoCloseable {
      * (negative: air drawn down the stack and out of the inlets, which leaves no plume over the stack).
      */
     static double plumeAir(double dryAirFlow){return dryAirFlow>com.wormzjl.icheme.science.fluid.network.TowerTransfer.NO_AIR?dryAirFlow:0;}
-    /**
-     * Heater {@code target}'s flue (a read of what its islands last booked): its firing, the fuel fired over the design's;
-     * its stack temperature, the bridgewall less its convection coil's heat over the flue's capacity rate
-     * ({@code ConvectionCoil.stackTemperature}), the bridgewall without a convection coil, the combustion air unfired; its flue
-     * flow and water ({@link FiredHeaters#flue}); its fuel's phase.
-     */
-    private com.wormzjl.icheme.network.FluidNetwork.HeaterFlue heaterFlue(com.wormzjl.icheme.network.FluidNetwork.Target target,Map<Long,IslandCoordinator.Snapshot> islands,java.util.function.Function<Long,IslandCoordinator.Snapshot> read) {
-        long id=target.identity();var record=registrations().get(id);if(record==null)return null;
-        if(record.device().engineFuel()) {
-            // A prime mover's stack (batch 2026-11-10-prime-movers): its set's exhaust, by its fuel void.
-            var stack=shafts.primeMovers()==null?null:shafts.primeMovers().flue(id);
-            if(stack==null)return new com.wormzjl.icheme.network.FluidNetwork.HeaterFlue(target,0,(float)com.wormzjl.icheme.science.fluid.network.Burners.AIR,0,0,0);
-            return new com.wormzjl.icheme.network.FluidNetwork.HeaterFlue(target,(float)stack.firing(),(float)stack.stack(),(float)stack.flow(),(float)Math.clamp(stack.water(),0,1),stack.fuel().ordinal());
-        }
-        if(!radiantCoil(record))return null;
-        long b=burners.burnersOf(id);var flue=b==0?null:burners.flue(b);
-        if(flue==null)return new com.wormzjl.icheme.network.FluidNetwork.HeaterFlue(target,0,(float)com.wormzjl.icheme.science.fluid.network.Burners.AIR,0,(float)com.wormzjl.icheme.science.fluid.network.Burners.METHANE_WATER,0);
-        double design=FiredHeaters.designFired(registrations().get(b)),firing=design>0?Math.clamp(flue.fired()/design,0,1):0;
-        double radiant=sideHeat(id,islands,read);long convection=record.device().heat().partner();
-        double stack=convection==0?(radiant>0?com.wormzjl.icheme.science.fluid.network.ConvectionCoil.BRIDGEWALL:com.wormzjl.icheme.science.fluid.network.Burners.AIR)
-                :com.wormzjl.icheme.science.fluid.network.ConvectionCoil.stackTemperature(radiant,sideHeat(convection,islands,read),com.wormzjl.icheme.science.fluid.network.Burners.AIR);
-        float flow=(float)flue.flueFlow(),water=(float)Math.clamp(flue.waterShare(),0,1);
-        return new com.wormzjl.icheme.network.FluidNetwork.HeaterFlue(target,(float)firing,(float)stack,Float.isFinite(flow)?flow:0,Float.isFinite(water)?water:0,flue.fuel().ordinal());
-    }
-    /** The heat side {@code device}'s heat over its island's last interval, W, into its stream: its {@code HEAT} boundaries (a read). */
-    private double sideHeat(long device,Map<Long,IslandCoordinator.Snapshot> islands,java.util.function.Function<Long,IslandCoordinator.Snapshot> read) {
-        Long owner=registry.owner(device);if(owner==null)return 0;
-        var result=islands.computeIfAbsent(owner,read).lastResult().orElse(null);if(result==null||!(result.advancedSeconds()>0))return 0;
-        long key=PhysicalFluidTopology.sideIdentity(device);double joule=0;
-        for(var boundary:result.boundaries())if(boundary.kind()==com.wormzjl.icheme.science.fluid.network.ConservativeTransport.BoundaryTransfer.Kind.HEAT&&boundary.nodeId()==key)joule+=boundary.totalEnergyJoule();
-        double rate=joule/result.advancedSeconds();
-        return Double.isFinite(rate)?Math.max(0,rate):0;
-    }
-    /**
-     * Batch still {@code pot}'s page (W6), a read: the engine's cached view, the player's settings, what a data-network
-     * controller holds instead (where {@code Stills.firing} or {@code Stills.reflux} differs from the setting), and a solid
-     * still's fuel slot as its pot's cell holds it. Null for no still or none in the engine yet.
-     */
-    private FluidView.Still stillView(long pot) {
-        var u=topology.still(pot);var v=stills.view(pot);if(u==null||v==null)return null;
-        boolean column=u.condenser()&&u.stages()>0;
-        double firing=stills.firing(pot),reflux=stills.reflux(pot);
-        Double heldFiring=Double.isFinite(firing)&&firing!=u.firing()?Math.clamp(firing,0,1):null;
-        boolean heldValve=column&&!Double.isNaN(reflux)&&reflux!=u.reflux();
-        boolean heldClosed=heldValve&&reflux==Double.POSITIVE_INFINITY;
-        Double heldReflux=heldValve&&!heldClosed&&reflux>=0?reflux:null;
-        String fuel="";int count=0;double energy=0;
-        if(u.heater()==BatchStill.Heater.SOLID) {
-            var stack=stillFuel(pot);
-            if(!stack.isEmpty()){fuel=net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();count=Math.min(64,stack.getCount());energy=EquipmentShellBlockEntity.fuelEnergy(stack);}
-        }
-        double effective=v.reflux();
-        var alarms=v.alarms().stream().map(a->a.text).toList();
-        return new FluidView.Still(u.heater().name(),u.stages(),u.condenser(),u.design().rating(),u.firing(),u.closedValve()?StillUnit.DEFAULT_REFLUX:u.reflux(),u.closedValve(),
-                heldFiring,heldReflux,heldClosed,
-                positive(v.potTemperature()),positive(v.headTemperature()),Math.max(0,finiteOr(v.level())),Math.max(0,finiteOr(v.filled())),Math.max(0,finiteOr(v.heat())),
-                Math.max(0,finiteOr(v.distillateFlow())),Math.max(0,finiteOr(v.ventFlow())),Math.clamp(finiteOr(v.condensed()),0,1),
-                column&&Double.isFinite(effective)&&effective>=0?effective:null,v.status().name(),alarms,fuel,count,Math.max(0,finiteOr(energy)),Math.max(0,finiteOr(u.burning())));
-    }
-    /** A temperature, K, or null where unknown (NaN before the first slice or column answer). */
-    private static Double positive(double value){return Double.isFinite(value)&&value>0?value:null;}
-    private static double finiteOr(double value){return Double.isFinite(value)?value:0;}
-    /** What a solid still's fuel slot holds (a read of its pot's cell), or an empty stack when the cell is not loaded. */
-    private net.minecraft.world.item.ItemStack stillFuel(long pot) {
-        var r=registrations().get(pot);if(r==null)return net.minecraft.world.item.ItemStack.EMPTY;
-        var p=r.device().position();var level=server.getLevel(dimension(p.dimension()));
-        var at=new BlockPos(p.x(),p.y(),p.z());
-        if(level==null||!level.isLoaded(at)||!(level.getBlockEntity(at) instanceof EquipmentShellBlockEntity shell)||shell.fluidIdentity()!=pot)return net.minecraft.world.item.ItemStack.EMPTY;
-        var slot=shell.fuel();return slot==null?net.minecraft.world.item.ItemStack.EMPTY:slot.getStackInSlot(0);
-    }
-    private static boolean moverRange(net.minecraft.server.level.ServerPlayer player,BlockPos pos){return pos.distToCenterSqr(player.position())<=com.wormzjl.icheme.network.FluidNetwork.MOVER_RANGE*com.wormzjl.icheme.network.FluidNetwork.MOVER_RANGE;}
-    private void refreshObserved(long id){if(moverDisplay.watchers.watchers(id).isEmpty()&&sightGlassDisplay.watchers.watchers(id).isEmpty()&&(instruments==null||!instruments.observes(id)))presentation.unobserve(id);else presentation.observe(id);}
-    /** A new sight glass watch keeps its device observed (its on-watch hook; a mover's is {@link #refreshObserved}). */
-    private void observeWatched(long id){presentation.observe(id);}
-    /** An online player by identity (the displays' watcher lookup), read when a state is sent. */
-    private net.minecraft.server.level.ServerPlayer online(UUID player){return server.getPlayerList().getPlayer(player);}
     /** The mover state last published for device {@code id} (a read), or null. */
-    public com.wormzjl.icheme.network.FluidNetwork.MoverState publishedMover(long id){owned();return moverDisplay.published(id);}
-    private void publishMover(WorldTopologyLedger.Registration record,net.minecraft.server.level.ServerLevel level,BlockPos pos) {
-        if(!(record.device().control() instanceof FlowControl.Mover mover))return;
-        long id=record.device().id();var target=new com.wormzjl.icheme.network.FluidNetwork.Target(pos,id);
-        // A machine turns at its shaft train's share (W3); a set-flow mover at its whole speed while it runs.
-        double share=shafts.unitOf(id)?shafts.share(id):record.device().kind()==TopologyCompiler.Kind.PIPE&&electric.generator(id)!=null?(electric.powered(id)?mover instanceof FlowControl.Machine m?m.speed():1:0):1;
-        boolean running=record.device().suspendedBy()!=0||mover.enabled()&&share>0&&mover.requestedVolumeFlow()>0;
-        var state=new com.wormzjl.icheme.network.FluidNetwork.MoverState(target,!mover.liquid(),
-                // A column holds its pumps and fans only while it runs, and runs them (C7).
-                running,(float)(running?Math.max(share,0):0),
-                // A pump's crackle and churn (W10c) from its last committed suction, a dry screw's liquid noise in the crackle (owner V6 B); 0 for a compressor and a stopped mover.
-                running?health.crackle(id):0,running&&mover.liquid()?health.churn(id):0,
-                // An in-line pump's rated speed (its D21 duty speed) for its pitch; a casing's comes from its shape.
-                mover instanceof FlowControl.Pump pump&&pump.requestedVolumeFlow()>0?(float)com.wormzjl.icheme.science.machine.Npsh.dutySpeed(pump.requestedVolumeFlow(),com.wormzjl.icheme.science.machine.Motor.ratedSpeed(2)):0);
-        moverDisplay.publish(id,pos,target,state,level);
-    }
+    public com.wormzjl.icheme.network.FluidNetwork.MoverState publishedMover(long id){owned();return displays.publishedMover(id);}
 
     /** Explicit visual requests replay cached appearance only, then keep a future engine bucket scheduled. */
-    public void watchSightGlasses(net.minecraft.server.level.ServerPlayer player,List<com.wormzjl.icheme.network.FluidNetwork.Target> watch,List<com.wormzjl.icheme.network.FluidNetwork.Target> unwatch) {
-        owned();if(closed)return;sightGlassDisplay.watch(player,watch,unwatch);
-    }
-    /** A sight glass watch's target check: its block state is read before its block entity, which a pipe without a glass is not asked for. */
-    private boolean sightGlassWatchable(net.minecraft.server.level.ServerPlayer player,net.minecraft.server.level.ServerLevel level,com.wormzjl.icheme.network.FluidNetwork.Target target) {
-        var pos=target.position();
-        if(!level.hasChunkAt(pos)||!inRange(player,pos)||!com.wormzjl.icheme.world.level.block.FluidDeviceBlock.hasSightGlass(level.getBlockState(pos)))return false;
-        if(!(level.getBlockEntity(pos) instanceof FluidView.Receiver receiver)||receiver.fluidIdentity()!=target.identity())return false;
-        var record=registrations().get(target.identity());
-        return !(record==null||record.device().kind()!=TopologyCompiler.Kind.PIPE||!cell(record).equals(pos)||!record.device().position().dimension().equals(level.dimension().location().toString()));
-    }
-    private void publishSightGlass(WorldTopologyLedger.Registration record,net.minecraft.server.level.ServerLevel level,BlockPos pos,FluidView view) {
-        long id=record.device().id();
-        var sample=PipePresentation.sightGlass(view,componentNames,model.molecularWeights(),catalog,com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(catalog),registry.pipeViews(id));
-        sightGlassDisplay.publish(id,pos,new com.wormzjl.icheme.network.FluidNetwork.Target(pos,id),sample,level);
-    }
+    public void watchSightGlasses(net.minecraft.server.level.ServerPlayer player,List<com.wormzjl.icheme.network.FluidNetwork.Target> watch,List<com.wormzjl.icheme.network.FluidNetwork.Target> unwatch){owned();if(closed)return;displays.watchSightGlasses(player,watch,unwatch);}
     static BlockPos cell(WorldTopologyLedger.Registration record){var p=record.device().position();return new BlockPos(p.x(),p.y(),p.z());}
-    private static boolean inRange(net.minecraft.server.level.ServerPlayer player,BlockPos pos){return player.position().distanceToSqr(pos.getCenter())<=com.wormzjl.icheme.network.FluidNetwork.WATCH_RANGE*com.wormzjl.icheme.network.FluidNetwork.WATCH_RANGE;}
-    /**
-     * An open tank's bucket: its display is read off the view just presented, its roof glides to it from where it stands
-     * ({@link TankDisplay.Glide}, which the level's roofs collide by) and the glide is sent to each watcher still online,
-     * in its dimension and within range; the others are dropped. Nothing is sent when nobody watches. A tank with no glide
-     * since it loaded glides from the level its node cell saved, so this runs before the cell takes the new view.
-     */
-    private void publishTank(WorldTopologyLedger.Registration record,net.minecraft.server.level.ServerLevel level,BlockPos pos,FluidView view) {
-        long id=record.device().id();var display=TankDisplay.of(view,componentNames,model.molecularWeights(),catalog,com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(catalog));
-        var roofs=com.wormzjl.icheme.world.level.block.FloatingRoofs.of(level);
-        if(display==null){tankDisplay.unpublish(id);roofs.glide(pos,null);return;}
-        long now=level.getGameTime();var glide=TankDisplay.Glide.next(tankDisplay.published(id),roofs.standing(pos,now),display,now);
-        roofs.glide(pos,glide);tankDisplay.publish(id,pos,null,glide,level);
-    }
     /** Marks a device for its next bucket (a test or tool asking for a refresh gets it on the engine's schedule). */
     public com.wormzjl.icheme.runtime.instrument.InstrumentHosts.Host instrumentHost(long id){owned();var r=registrations().get(id);if(r==null)return null;var p=r.device().position();var level=server.getLevel(dimension(p.dimension()));if(level==null)return null;var h=com.wormzjl.icheme.runtime.instrument.InstrumentHosts.at(level,new BlockPos(p.x(),p.y(),p.z()));return h!=null&&h.identity()==id?h:null;}
     public void controlInputsChanged(java.util.Collection<Long> devices){owned();runtime.coordinator().controlsMoved(devices.stream().map(registry::owner).filter(java.util.Objects::nonNull).distinct().toList());
@@ -2190,7 +1571,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
             return seen.get(source)?com.wormzjl.icheme.runtime.control.ControlSettings.Action.OUTLET:com.wormzjl.icheme.runtime.control.ControlSettings.Action.INLET;
         }return null;
     }
-    public void instrumentObservationChanged(long id){owned();refreshObserved(id);}
+    public void instrumentObservationChanged(long id){owned();displays.refreshObserved(id);}
     public void forgetFlowmeter(long id){owned();registry.forgetFlowmeter(id);}
     /** Whether a flowmeter is installed on device {@code id} (W8). */
     public boolean flowmeterOn(long id){owned();return registry.flowmeterOn(id);}
@@ -2255,33 +1636,15 @@ public final class FluidWorldAuthority implements AutoCloseable {
         return new FluidSavedData.Capture(new FluidCheckpointCodec.Checkpoint(islands),world);
     }
     /** Each pipe's last flowing line reading, for its screen while it stands still. Presentation state: a restart starts it empty. */
-    private final Map<Long,FluidView.Reading> lastLines=new HashMap<>();
-    /**
-     * The stream pipe {@code id} carries: a junction its own node, another pipe the observation its gauge reads (the donor's
-     * temperature, the pressure at the block). A still pipe keeps the last flowing temperature seen, or, with none, what lies
-     * in it at rest, both marked still. Null where the pipe has no observation yet.
-     */
-    private @org.jetbrains.annotations.Nullable FluidView.Reading lineReading(long id,FluidView view) {
-        boolean moving=view.pipeInfo().connections().stream().anyMatch(c->c.massRateKgPerSecond()>0);
-        FluidView.Reading now;
-        if(view.state()!=null)now=new FluidView.Reading(view.state().temperature(),view.state().pressure(),moving);
-        else {
-            var reading=instrumentPipeReading(id);
-            if(reading==null||!(reading.temperature()>0)||!Double.isFinite(reading.pressure()))return lastLines.get(id)==null?null:lastLines.get(id).still();
-            now=new FluidView.Reading(reading.temperature(),reading.pressure(),reading.flowing());
-        }
-        if(now.flowing()){lastLines.put(id,now);return now;}
-        var last=lastLines.get(id);
-        return last==null?now:new FluidView.Reading(last.temperature(),now.pressure(),false);
-    }
+    final Map<Long,FluidView.Reading> lastLines=new HashMap<>();
     /** The heat presentation's reads, over this bucket's island cache. */
-    private HeatPresentation.Source heatSource(Map<Long,IslandCoordinator.Snapshot> islands) {
+    HeatPresentation.Source heatSource(Map<Long,IslandCoordinator.Snapshot> islands) {
         return new HeatPresentation.Source() {
             @Override public WorldTopologyLedger.Registration registration(long id){return registrations().get(id);}
             @Override public IslandCoordinator.Snapshot island(long device){Long owner=registry.owner(device);return owner==null?null:islands.computeIfAbsent(owner,FluidWorldAuthority.this::presentation);}
             @Override public Lines lines(long side){return lines.get(side);}
             @Override public WorldTopologyLedger.Registration at(PhysicalFluidTopology.Position position){return registry.at(position).orElse(null);}
-            @Override public FluidView view(long device){return FluidWorldAuthority.this.view(device,islands);}
+            @Override public FluidView view(long device){return views.view(device,islands);}
             @Override public double[] weights(){return model.molecularWeights();}
             @Override public double portPressure(PassiveNetwork.Reservoir node,PassiveNetwork.PhasePort port){return node.state().pressure()+com.wormzjl.icheme.science.fluid.network.PortStreams.portHead(model,node,port,node.state());}
         };
@@ -2297,37 +1660,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
             case LOW_LIMIT->String.format(java.util.Locale.ROOT,"LOW LIMIT: the outlet is held at %.1f K / ",unit==null?0:unit.control().lowLimit());
         };
     }
-    /** A device's view, as a presentation read: queued events are not applied (they apply on the engine's tick), and a
-     * certified island is previewed at now, never materialised, booked or woken by it (code base review R5). */
-    /** A device in no island: the column that holds it and runs it (C7, plan section 13), or why it has none. */
-    /** The held registrations beside the network ({@link PhysicalRegistry#heldBeside}), derived again when the registry's facts change. */
-    private PhysicalRegistry.HeldBeside heldBeside=PhysicalRegistry.HeldBeside.NONE;
-    private long heldBesideVersion=-1;
-    /**
-     * The status clause that names the held registrations beside device {@code id}, or beside its island {@code owner}
-     * (registry first, REGISTRY_FIRST_PLAN.md 4.5): the position of the one of lowest identity and how many more, ending in
-     * " / "; empty when none is. Its words are the client's (FluidDeviceScreen).
-     */
-    private String heldClause(long id,Long owner) {
-        if(heldBesideVersion!=topology.version()) {
-            heldBesideVersion=topology.version();var held=new ArrayList<WorldTopologyLedger.Registration>();
-            for(var r:topology.active().values())if(r.device().held())held.add(r);
-            held.sort(Comparator.comparingLong(r->r.device().id()));
-            heldBeside=held.isEmpty()?PhysicalRegistry.HeldBeside.NONE:registry.heldBeside(held);
-        }
-        var near=heldBeside.of(id,owner);if(near.isEmpty())return "";
-        var first=topology.active().get(near.getFirst());if(first==null)return "";
-        var p=first.device().position();
-        return HELD_DEVICE+p.x()+", "+p.y()+", "+p.z()+(near.size()>1?" (and "+(near.size()-1)+" more)":"")+" / ";
-    }
     /** The status clause of a held registration beside a device's network: its position, as {@link #heldClause} writes it. */
     public static final String HELD_DEVICE="HELD DEVICE: ";
-    private String islandless(PhysicalFluidTopology.Device d,long id){
-        var u=d.suspendedBy()==0?null:topology.column(d.suspendedBy());
-        if(u!=null)return "COLUMN: part of the column at "+u.master().x()+", "+u.master().y()+", "+u.master().z()+", running";
-        return !topology.active().containsKey(id)?"WAITING: topology event":Objects.requireNonNullElse(registry.diagnostic(id),"NO FLOW: no hydraulic boundary");
-    }
-    public FluidView view(long id){owned();return view(id,new HashMap<>());}
+    public FluidView view(long id){owned();return views.view(id,new HashMap<>());}
     /**
      * Machine {@code control}'s status line {@code status} with its health word {@code word} ({@link MachineHealth#status}), for
      * every machine that wears ({@link MachineHealth#worn}: a liquid mover, a dry screw, owner V6 B, code base review M-02, a
@@ -2340,10 +1675,10 @@ public final class FluidWorldAuthority implements AutoCloseable {
         return word.equals("FAILED")?"FAILED: use a repair kit / "+status:status+" / "+word;
     }
     /** Island {@code island} as it is stored, materialising nothing: what a watch's replay reads (batch 2026-11-10-custom-shader-system). */
-    private IslandCoordinator.Snapshot storedIsland(long island){return onWorldList(island,runtime.coordinator().observe(island));}
+    IslandCoordinator.Snapshot storedIsland(long island){return onWorldList(island,runtime.coordinator().observe(island));}
     /** Island {@code island} as a presentation reads it, on the world list (V2 stage 5): every view, display and wire vector
      * stays on the network package's whole list whatever the island carries. */
-    private IslandCoordinator.Snapshot presentation(long island){return onWorldList(island,runtime.coordinator().presentation(island));}
+    IslandCoordinator.Snapshot presentation(long island){return onWorldList(island,runtime.coordinator().presentation(island));}
     private IslandCoordinator.Snapshot onWorldList(long island,IslandCoordinator.Snapshot snapshot){return IslandSets.presented(snapshot,runtime.coordinator().model(island),model);}
     /** {@code islands} caches island reads, so one bucket reads each island once however many of its devices it presents. */
     /**
@@ -2378,193 +1713,6 @@ public final class FluidWorldAuthority implements AutoCloseable {
         BitSet dependent(){if(dependent==null)dependent=ControlConstraints.dependent(snapshot.graph());return dependent;}
         BitSet standing(){if(standing==null)standing=ControlConstraints.standing(snapshot.graph());return standing;}
     }
-    /** The bucket the indexes belong to (its island cache, by identity), and the indexes. */
-    private Map<Long,IslandCoordinator.Snapshot> indexedFor;
-    private final Map<Long,ViewIndex> viewIndexes=new HashMap<>();
-    /** Island {@code island} as {@code islands} presents it, with its index: built once per bucket (code base review R2). */
-    private ViewIndex index(long island,Map<Long,IslandCoordinator.Snapshot> islands) {
-        var snapshot=islands.computeIfAbsent(island,this::presentation);
-        if(indexedFor!=islands){indexedFor=islands;viewIndexes.clear();}
-        var index=viewIndexes.get(island);
-        if(index==null||index.snapshot!=snapshot){index=new ViewIndex(snapshot);viewIndexes.put(island,index);}
-        return index;
-    }
-    private FluidView view(long id,Map<Long,IslandCoordinator.Snapshot> islands) {
-        FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.viewBuilds);var registration=registrations().get(id);if(registration==null)return new FluidView(id,0,0,topology.onlineTick(),"REMOVED",null,0,List.of());
-        Long owner=registry.owner(id);if(owner==null)return new FluidView(id,registration.revision(),0,topology.onlineTick(),heldClause(id,null)+islandless(registration.device(),id),null,0,List.of(),null,0,List.of(),null);
-        var ix=index(owner,islands);var snapshot=ix.snapshot;FluidView.State state=null;int nodeIndex=-1;boolean empty=false;
-        Integer at=ix.nodes.get(id);
-        if(at!=null){nodeIndex=at;var node=snapshot.graph().reservoirs().get(at);empty=node.empty();if(!empty)state=FluidView.State.from(node.state(),node.kind()==PassiveNetwork.NodeKind.RESERVOIR?node.inventory().volume():node.state().volume());}
-        InlineFilter filter=null;if(registration.device().filter()){state=null;Integer p=ix.pipes.get(PhysicalFluidTopology.filterIdentity(id));if(p!=null)filter=snapshot.graph().pipes().get(p).filter();}
-        var mappings=registration.device().actuator()?PipePresentation.actuatorMappings(registration.device(),snapshot.graph()):registry.pipeViews(id);
-        var history=new ArrayList<PipeTransfer>();double flow=0;Double devicePressureChange=null;String status=snapshot.status();
-        // Decision D54: a placed tank holds nothing until something fills it.
-        if(empty)status="EMPTY: holds nothing / "+status;
-        if(snapshot.lastResult().isPresent()) {
-            var result=snapshot.lastResult().orElseThrow();var q=result.averageMassFlows();
-            for(int i:ix.incident(nodeIndex)){var pipe=snapshot.graph().pipes().get(i);if(pipe.first()==nodeIndex)flow+=q[i];if(pipe.second()==nodeIndex)flow-=q[i];}
-            for(var mapping:mappings){var values=ix.transfers.get(mapping.pipeId());if(values!=null)history.addAll(values);}
-            if(!history.isEmpty())flow=(history.getFirst().forward().massKg()-history.getFirst().reverse().massKg())/result.advancedSeconds();
-            if(registration.device().actuator())for(int i:ix.incident(nodeIndex)){var pipe=snapshot.graph().pipes().get(i);if(pipe.first()==nodeIndex&&!(pipe.control() instanceof FlowControl.Passive)){flow=q[i];devicePressureChange=result.endpointHeads()[i];var mode=result.endpointModes().get(i);
-                if(pipe.control() instanceof FlowControl.Valve&&ix.dependent().get(i))status+=" / CONTROL_CONFLICT: dependent control constraints; holding last accepted opening";
-                else if(pipe.control() instanceof FlowControl.Valve&&ix.standing().get(i))status+=" / STANDING_OPEN: a lower flow target on this line regulates";
-                if(pipe.control() instanceof FlowControl.Mover mover) {
-                    String inlet=mode==FlowControl.Mode.INLET_WRONG_PHASE?inletReason(snapshot.graph(),i,result.advancedSeconds()):"";
-                    // The share of its set flow a set-flow mover moved, on its suction's density; a machine has no set flow.
-                    var drawn=snapshot.graph().reservoirs().get(pipe.first());
-                    double delivered=mover instanceof FlowControl.Machine||drawn.empty()||!(mover.targetVolumeFlow()>0)?Double.NaN
-                            :q[i]/(drawn.state().mass()/drawn.state().volume())/mover.targetVolumeFlow();
-                    if(mover.liquid())status=PipePresentation.pumpStatus(status,mover,mode,inlet,delivered);
-                    if(!mover.liquid()){status+=" / "+mode;if(!inlet.isEmpty())status+=" / "+inlet;var shortfall=PipePresentation.shortfall(mover,mode,delivered);if(!shortfall.isEmpty())status+=" / "+shortfall;}
-                    status=withHealth(status,mover,health.status(id));
-                    // The limit the mover's law holds: a set-flow pump's setting is the rise for water and scales with its
-                    // supply's density, the stream its supply walk ends at (owner decision D11, A2); a compressor's is the ratio over
-                    // the suction pressure; a machine's reads the suction stream it draws (decision D4).
-                    if(!snapshot.graph().reservoirs().get(pipe.first()).empty()&&mode!=FlowControl.Mode.INLET_WRONG_PHASE&&mode!=FlowControl.Mode.PUMP_SUCTION_LIMIT) {var suction=snapshot.graph().reservoirs().get(pipe.first()).state();
-                        double density=mover instanceof FlowControl.Pump?InletPhase.density(model,NetworkReduction.reopened(snapshot.graph()),i,mover.targetVolumeFlow(),result.advancedSeconds()):suction.mass()/suction.volume();
-                        double limit=mover.riseLimit(density,suction.pressure(),model.pumpReferenceDensity(),mover.liquid()?1.4:model.heatCapacityRatio(suction));
-                        status+=String.format(java.util.Locale.ROOT,mover.liquid()?" (limit %.0f Pa on this fluid)":" (limit %.0f Pa at this suction)",limit);}
-                }else{status+=" / "+mode;
-                    // A steam turbine's health word (N4): WET EXHAUST, or FAILED first.
-                    if(pipe.control() instanceof FlowControl.Turbine)status=withHealth(status,pipe.control(),health.status(id));}}}
-        }
-        // A generator or a void in several islands (owner decision D17) reads the status of its owner (the lowest island) and
-        // the net flow of all of them.
-        if(registration.device().fixed())for(long other:registry.islands(id))if(other!=owner) {
-            var sharedIndex=index(other,islands);var shared=sharedIndex.snapshot;if(shared.lastResult().isEmpty())continue;var q=shared.lastResult().orElseThrow().averageMassFlows();
-            Integer found=sharedIndex.nodes.get(id);int index=found==null?-1:found;
-            for(int i:sharedIndex.incident(index)){var pipe=shared.graph().pipes().get(i);if(pipe.first()==index)flow+=q[i];if(pipe.second()==index)flow-=q[i];}
-        }
-        // A filter's and a heat side's own pipe (batch 2026-10-27-heat-exchanger-design): the drop across the cake or the passage.
-        long own=filter!=null?PhysicalFluidTopology.filterIdentity(id):registration.device().kind()==TopologyCompiler.Kind.HEAT_SIDE?PhysicalFluidTopology.sideIdentity(id):0;
-        Integer ownAt=own==0?null:ix.pipes.get(own);var ownPipe=ownAt==null?null:snapshot.graph().pipes().get(ownAt);
-        if(ownPipe!=null)devicePressureChange=snapshot.graph().reservoirs().get(ownPipe.first()).state().pressure()-snapshot.graph().reservoirs().get(ownPipe.second()).state().pressure();
-        // A fired heater's radiant coil firing at its maximum short of what it should do (batch 2026-10-27-heat-exchanger-design,
-        // owner Q11): it names its outlet's shortfall from the set point. The convection coil takes the flue gas as it comes (F1).
-        if(ownPipe!=null&&ownPipe.heat() instanceof com.wormzjl.icheme.science.fluid.network.FiredCoil coil&&coil.firing()>0&&coil.firing()<1) {
-            double shortfall=coil.setTemperature()-snapshot.graph().reservoirs().get(ownPipe.second()).state().temperature();
-            status=(shortfall>0?String.format(java.util.Locale.ROOT,"DUTY INSUFFICIENT: outlet %.1f K below the set point / ",shortfall):"")+status;
-        }
-        // A side's controller short of its target (W4, plan section 6): its actuator at an end, or held back by its low limit.
-        if(ownPipe!=null)status=controlStatus(ownPipe.heat(),registration.device().heat())+status;
-        // A side's lines (W8): whether its control works the real valves.
-        if(registration.device().heat()!=null)status=linesStatus(id,registration.device().heat())+status;
-        if(filter!=null&&filter.clogged())status="filter clogged / "+status;
-        var closures=snapshot.lastResult().map(PassiveIntervalSolver.Result::rejectionReasons).orElse(Map.of());
-        for(var mapping:mappings){Integer p=ix.pipes.get(mapping.pipeId());if(p==null)continue;var pipe=snapshot.graph().pipes().get(p);if(pipe.blockedDirections()!=0&&pipe.filter()==null)status=solidClosure(mapping.pipeId(),closures)+" / "+status;}
-        if(registry.diagnostic(id)!=null)status=registry.diagnostic(id)+" / "+status;
-        var active=topology.active().get(id);if(active==null||active.revision()!=registration.revision())status="WAITING: configuration event / "+status;
-        if(unboundBindings.contains(id))status="UNBOUND: saved inventory retained / "+status;
-        status=heldClause(id,owner)+status;
-        var routes=new ArrayList<FluidView.PipeRoute>();
-        for(var historyEntry:history){Integer p=ix.pipes.get(historyEntry.pipeId());if(p==null)continue;var pipe=snapshot.graph().pipes().get(p);
-            routes.add(new FluidView.PipeRoute(pipe.id(),nodeLabel(snapshot.graph().reservoirs().get(pipe.first()).id()),nodeLabel(snapshot.graph().reservoirs().get(pipe.second()).id())));
-        }
-        double seconds=snapshot.lastResult().map(PassiveIntervalSolver.Result::advancedSeconds).orElse(0.0);
-        var view=new FluidView(id,registration.revision(),snapshot.clock().committedTick(),topology.onlineTick(),status,state,flow,history,devicePressureChange,
-                seconds,routes,filter);
-        if(registration.device().kind()==TopologyCompiler.Kind.RESERVOIR&&nodeIndex>=0)view=view.withOutlets(TankOutlets.of(model,snapshot.graph(),nodeIndex,snapshot.lastResult().orElse(null),registry.tankFaces(id)))
-                .withTank(TankOutlets.tank(model,snapshot.graph().reservoirs().get(nodeIndex),snapshot.lastResult().orElse(null)));
-        if(registration.device().kind()==TopologyCompiler.Kind.PIPE||registration.device().filter()||registration.device().actuator()||registration.device().kind()==TopologyCompiler.Kind.HEAT_SIDE)
-            view=view.withPipeInfo(PipePresentation.withBulkSpeed(
-                PipePresentation.inspect(registration.device(),snapshot.graph(),mappings,history,seconds,componentNames.size()),
-                runtime.coordinator().bulkVolumeRates(owner),registration.device().geometry().area()));
-        if(registration.spec().tower()!=null) {
-            var rates=snapshot.lastResult().map(result->result.towers().get(id)).orElse(null);
-            view=view.withTower(new FluidView.Tower(registration.spec().tower(),rates));
-            if(rates!=null&&!rates.status().equals("RUNNING"))view=view.withStatus(view.status()+" / "+rates.status());
-        }
-        // A fan unit's power (W5, reading A68): NO POWER, the notice UNMETERED, or its electric draw and store.
-        // W7 (reading A86): the draw and the store go to the Power group; NO POWER or UNMETERED stay on the display.
-        var power=electric.power(id);if(power!=null){view=view.withPower(power);if(!power.status().isEmpty())view=view.withStatus(view.status()+" / "+power.status());}
-        // A casing's or turbine's driver (W7, option A's Drive group; it replaces W3's SHAFT clause, reading A43).
-        var drive=drive(id);if(drive!=null)view=view.withDrive(drive);
-        var pump=pump(id,registration);if(pump!=null)view=view.withPump(pump);
-        // A heat side (batch 2026-10-27-heat-exchanger-design): its outlet junction's temperature, the heat its HEAT boundaries
-        // booked over the interval, an air cooler's fans and an exchanger side's bypass as planned, a fired heater's burners,
-        // set point and most heat.
-        var heat=registration.device().heat();
-        if(heat!=null&&ownPipe!=null) {
-            var pipe=ownPipe;double joule=ix.heat(own);
-            double share=heat.control().share(),outlet=snapshot.graph().reservoirs().get(pipe.second()).state().temperature();
-            var coil=pipe.heat() instanceof com.wormzjl.icheme.science.fluid.network.FiredCoil fired?fired:null;
-            if(pipe.heat() instanceof com.wormzjl.icheme.science.fluid.network.AirCooled cooled)share=cooled.fans();
-            Double bypass=pipe.heat() instanceof com.wormzjl.icheme.science.fluid.network.HeatSide side?side.bypass():null;
-            view=view.withHeat(new FluidView.Heat(heat.unit().name(),heat.side().name(),heat.partner()!=0,outlet,seconds>0?joule/seconds:0,
-                    heat.fans()?share:null,heat.fans()?com.wormzjl.icheme.science.equipment.HeatSides.fanPower(heat.area(),share):null,
-                    heat.burners()?share:null,heat.burners()?heat.control().target():null,coil!=null?coil.duty():null,bypass));
-        }
-        // A fired heater's burners (batch 2026-11-09-furnace-fuel-power): fuel, fired heat, the fans' power and the alarms on both coils' pages.
-        if(heat!=null&&heat.burners()&&view.heat()!=null) {
-            long b=burners.burnersOf(heat.side()==com.wormzjl.icheme.science.equipment.HeatSides.Side.RADIANT?id:heat.partner());
-            var fired=b==0?null:burners.view(b);
-            if(fired!=null) {
-                var alarms=fired.alarms().stream().map(a->a.text).toList();
-                view=view.withHeat(view.heat().withFuel(new FluidView.Fuel(fired.fuelFlow(),fired.heatingValue(),fired.fired(),fired.asked(),fired.fanDraw(),alarms)));
-                var fans=electric.power(b);if(fans!=null)view=view.withPower(fans);
-                for(var a:alarms)if(!view.status().contains(a))view=view.withStatus(view.status()+" / "+a);
-            }
-        }
-        // A kettle's shell (W7): the heat its pool took over the interval, booked at its key, at the pool's temperature.
-        if(heat!=null&&heat.pool()&&nodeIndex>=0) {
-            long key=PhysicalFluidTopology.sideIdentity(id);double joule=ix.heat(key);
-            view=view.withHeat(new FluidView.Heat(heat.unit().name(),heat.side().name(),true,snapshot.graph().reservoirs().get(nodeIndex).state().temperature(),seconds>0?joule/seconds:0,
-                    null,null,null,null,null,null));
-        }
-        // The heat GUI (HEAT_GUI_PLAN.md section 1): the actuator, the unit's ports and its lines.
-        if(heat!=null&&view.heat()!=null) {
-            com.wormzjl.icheme.science.fluid.network.HeatLaw law=ownPipe==null?null:ownPipe.heat();
-            view=view.withHeat(HeatPresentation.complete(view.heat(),id,heat,law,heatSource(islands)));
-        }
-        // A batch still's pot (batch 2026-11-09-batch-distiller, W3): its status and alarms on the status line, an electric one's power.
-        if(registration.device().stillPot()) {
-            var line=stills.statusLine(id);if(!line.isEmpty()&&!view.status().contains(line))view=view.withStatus(view.status()+" / "+line);
-            // W6: the still's page, its settings, what a controller holds and its fuel slot.
-            var still=stillView(id);if(still!=null)view=view.withStill(still);
-        }
-        // A fluid converter's vessel (batch 2026-11-12-fluid-conversion, W5): its page; its status word and alarms on the status line.
-        if(converters.unit(id)!=null) {
-            var c=converterView(id,view);
-            if(c!=null) {
-                view=view.withConverter(c);
-                var word=c.status().replace('_',' ');if(!word.isEmpty()&&!view.status().contains(word))view=view.withStatus(view.status()+" / "+word);
-                for(var a:c.alarms())if(!view.status().contains(a))view=view.withStatus(view.status()+" / "+a);
-            }
-        }
-        // A flare stack (batch 2026-11-09-flare-stack): its flow, heat, gas and status; its alarms on the status line.
-        if(registration.device().flare()) {
-            var f=flares.view(id);
-            if(f!=null) {
-                view=view.withFlare(new FluidView.Flare(f.massFlow(),f.heat(),f.heatingValue(),f.flameTemperature(),f.limit(),f.rated(),registration.device().geometry().diameter(),f.status().name()));
-                for(var a:f.alarms())if(!view.status().contains(a.text))view=view.withStatus(view.status()+" / "+a.text);
-            }
-        }
-        // A chimney (batch 2026-11-10-chimney): its release, gas and status; its status line names the flow and the solids.
-        if(registration.device().chimney()) {
-            var c=chimneys.view(id);
-            if(c!=null) {
-                view=view.withChimney(new FluidView.Chimney(c.massFlow(),c.solids(),c.temperature(),c.exitVelocity(),c.opacity(),c.draft(),registration.device().geometry().diameter(),c.status().name()));
-                var line=c.line();if(!view.status().contains(line))view=view.withStatus(view.status()+" / "+line);
-            }
-        }
-        // A pressure safety valve (batch 2026-11-11-gas-blanketing): what its run out of the guarded node relieved, and whether
-        // that run is the open stub to the atmosphere.
-        if(registration.spec().relief()>0) {
-            double relieved=0;boolean open=true;var q=snapshot.lastResult().map(PassiveIntervalSolver.Result::averageMassFlows).orElse(null);
-            for(int i:ix.incident(nodeIndex)){var pipe=snapshot.graph().pipes().get(i);
-                if(pipe.control() instanceof FlowControl.PressureValve&&pipe.first()==nodeIndex){open=pipe.id()==PhysicalFluidTopology.reliefIdentity(id);if(q!=null)relieved=Math.max(0,q[i]);}}
-            view=view.withRelief(new FluidView.Relief(relieved,open));
-        }
-        // A plain pipe's line reading (OWNER_TEST_REVIEW.md section 6): the stream it carries, as its gauge reads it.
-        if(registration.device().kind()==TopologyCompiler.Kind.PIPE&&view.pipeInfo()!=null)view=view.withPipeInfo(view.pipeInfo().withReading(lineReading(id,view)));
-        if(registration.device().kind()==TopologyCompiler.Kind.VOID) {
-            var sources=new ArrayList<IslandCoordinator.Snapshot>();
-            for(long island:registry.islands(id))sources.add(islands.computeIfAbsent(island,this::presentation));
-            // Independent boundary islands can have different intervals: combine rates, expressed as one second of transport.
-            view=view.withPipeInfo(PipePresentation.boundaryInflow(id,sources,componentNames.size()),1);
-        }
-        return view;
-    }
     /**
      * Why this connection carries nothing, in the words the solver used, for the device status a
      * player reads. The event integrator names the connection and the two velocities in the reason
@@ -2597,7 +1745,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         return String.format(java.util.Locale.ROOT,Math.abs(value)>=.01?"%.2f":"%.2e",value);
     }
     /** A node as a status line names it: a device by kind and position, anything else as the pipe junction it is. */
-    private String deviceLabel(long id) {
+    String deviceLabel(long id) {
         var registration=topology.active().get(id);if(registration==null)return "pipe junction "+id;
         var p=registration.device().position();return registration.device().kind().name().toLowerCase(java.util.Locale.ROOT)+" at "+p.x()+", "+p.y()+", "+p.z();
     }
@@ -2613,21 +1761,6 @@ public final class FluidWorldAuthority implements AutoCloseable {
         IChemE.LOGGER.warn("fluid_island={} dimension={} node={} device={} status=PHASE_HOLD code={} package={} temperature={} pressure={} waits_for_inputs={} detail={} action=Change what the island mixes or the conditions it holds: the network carries one hydrocarbon liquid, one vapour, water and the package's crystals",
                 island,dimension,node,device,hold.reasonKey().substring(com.wormzjl.icheme.science.fluid.thermo.ThermoHold.REASON_PREFIX.length()),hold.packageId(),hold.temperature(),hold.pressure(),parked,hold.getMessage());
     }
-    /**
-     * Why a mover is refused (decision D6), as the solver's inlet check states it on the committed state the next slice
-     * decides on ({@link InletPhase#reason}), with the node the supply walk ended at named as a device. Pure arithmetic on
-     * the committed state's stored phase amounts: no solve and no flash. Its transport closures read as open, as that
-     * slice reads them (owner decision D33, {@link NetworkReduction#reopened}).
-     */
-    private String inletReason(PassiveNetwork graph,int edge,double seconds) {
-        var mover=(FlowControl.Mover)graph.pipes().get(edge).control();
-        var supply=InletPhase.supply(model,NetworkReduction.reopened(graph),edge,mover.targetVolumeFlow(),seconds);
-        return InletPhase.reason(mover,supply).replace("from node "+supply.nodeId()+")","from "+deviceLabel(supply.nodeId())+")");
-    }
-    private String nodeLabel(long id) {
-        var registration=topology.active().get(id);if(registration==null)return "Junction "+id;
-        var p=registration.device().position();return p.x()+", "+p.y()+", "+p.z();
-    }
     /** The world side of {@link FluidPresentation}: ownership, views, loaded block entities and menu delivery. */
     private final class PresentationHost implements FluidPresentation.Host<com.wormzjl.icheme.world.inventory.FluidDeviceMenu> {
         public long key(long device){return bucketKey(device);}
@@ -2638,7 +1771,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
             var player=menu.serverPlayer();return player!=null&&!player.hasDisconnected()&&player.containerMenu==menu&&menu.stillValid(player);
         }
         public FluidView view(long device,Map<Long,IslandCoordinator.Snapshot> islands){
-            var view=FluidWorldAuthority.this.view(device,islands);
+            var view=views.view(device,islands);
             var record=registrations().get(device);
             if(record!=null&&(record.device().kind()==TopologyCompiler.Kind.PIPE||record.device().filter()||record.device().kind()==TopologyCompiler.Kind.VOID)&&view.pipeInfo()==null)
                 view=view.withPipeInfo(FluidView.PipeInfo.empty(componentNames.size()));
@@ -2660,9 +1793,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
             if(!record.device().ports().isEmpty()) {
                 if(level.getBlockEntity(pos) instanceof FluidView.Receiver receiver&&receiver.fluidIdentity()==id){unboundBindings.remove(id);var presented=view.get();
                     // The roof glides from the level the node cell saved: read before the cell takes this view (publishTank).
-                    if(record.spec().open())publishTank(record,level,pos,presented);
+                    if(record.spec().open())displays.publishTank(record,level,pos,presented);
                     receiver.acceptFluidView(presented);instruments.publish(id,presented);
-                    publishMover(record,level,pos);
+                    displays.publishMover(record,level,pos);
                     return true;}
                 if(unboundBindings.add(id))IChemE.LOGGER.warn("fluid_binding={} status=UNBOUND detail=Loaded vessel cell mismatch; saved inventory and topology retained",id);
                 return false;
@@ -2675,10 +1808,10 @@ public final class FluidWorldAuthority implements AutoCloseable {
             if(level.getBlockEntity(pos) instanceof com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity entity&&entity.fluidIdentity()!=id)entity.bindIdentity(id);
             if(!(level.getBlockEntity(pos) instanceof FluidView.Receiver receiver)||receiver.fluidIdentity()!=id)return false;
             var presented=view.get();receiver.acceptFluidView(presented);instruments.publish(id,presented);
-            if(com.wormzjl.icheme.world.level.block.FluidDeviceBlock.hasSightGlass(level.getBlockState(pos)))publishSightGlass(record,level,pos,presented);
-            else sightGlassDisplay.forget(id);
+            if(com.wormzjl.icheme.world.level.block.FluidDeviceBlock.hasSightGlass(level.getBlockState(pos)))displays.publishSightGlass(record,level,pos,presented);
+            else displays.forgetSightGlass(id);
             // An in-line mover's state (W10c, owner 2026-11-04): a pump's crackle and churn for its watchers.
-            if(record.device().control() instanceof FlowControl.Mover)publishMover(record,level,pos);
+            if(record.device().control() instanceof FlowControl.Mover)displays.publishMover(record,level,pos);
             return true;
         }
         public void failed(long device,RuntimeException failure){IChemE.LOGGER.error("fluid_presentation device={} status=FAILED detail=The view could not be presented at its bucket",device,failure);}
@@ -2733,7 +1866,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         public void committed(Set<Long> removed,Set<Long> recompiled) {
             // A removed exchanger takes its heat in transit along (plan section 5.2): its sides leave in one event, keyed by the lower.
             for(long device:removed)topology.removedHeat(runtime.coordinator().removeTransit(PhysicalFluidTopology.sideIdentity(device)));
-            unboundBindings.removeAll(removed);publishedMenuData.keySet().removeAll(removed);for(long device:removed){tankDisplay.forget(device);sightGlassDisplay.forget(device);moverDisplay.forget(device);}
+            unboundBindings.removeAll(removed);publishedMenuData.keySet().removeAll(removed);for(long device:removed)displays.removed(device);
             columns.committed();
             // A batch still whose pot left takes its head's accounts along, booked as destroyed (batch 2026-11-09-batch-distiller).
             for(long device:removed)if(topology.still(device)!=null){topology.removeStill(device);stills.removed(device);}
@@ -2743,7 +1876,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
             // Every recompiled device's cached snapshot predates the change, and one left in no island (a pipe whose only
             // tank was broken) gets no publication that would mark it: each is marked for its next bucket, which presents
             // its new view (its replacement island, or "no hydraulic boundary"); an opening menu waits for that bucket.
-            publishedMenuData.keySet().removeAll(recompiled);sightGlassDisplay.unpublish(recompiled);moverDisplay.unpublish(recompiled);for(long device:recompiled)presentation.markIfLoaded(device);
+            publishedMenuData.keySet().removeAll(recompiled);displays.recompiled(recompiled);for(long device:recompiled)presentation.markIfLoaded(device);
             // Open menus follow their devices to the replacement islands' buckets.
             presentation.rekey();
             // A committed edit is drawn now: a loaded pipe takes its registered bore, and its neighbours their faces.
@@ -2776,10 +1909,10 @@ public final class FluidWorldAuthority implements AutoCloseable {
             });
         }
     }
-    @Override public void close(){owned();if(closed)return;closed=true;unboundStructures.clear();realignment.clear();realigning.clear();shaftRealignment.clear();shaftRealigning.clear();structureChunks.clear();publishedMenuData.clear();
+    @Override public void close(){owned();if(closed)return;closed=true;chunks.clear();publishedMenuData.clear();
         // The tanks' glides and the chimneys' states are not cleared at close (as before R9); no watcher list is.
-        sightGlassDisplay.clearPublished();moverDisplay.clearPublished();flareDisplay.clearPublished();stillDisplay.clearPublished();towerDisplay.clearPublished();heaterDisplay.clearPublished();
-        noise.clear();driverWatchers.clear();publishedDrivers.clear();rotationWatchers.clear();publishedRotations.clear();runtime.close();data.setDirty();}
+        displays.clearPublished();
+        noise.clear();displays.clearWatches();runtime.close();data.setDirty();}
 
     /**
      * Which players watch which devices of one {@link Display} (the request path R-B of the engine-owned presentation
