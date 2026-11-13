@@ -12,6 +12,7 @@ import com.wormzjl.icheme.science.column.v3.V3ColumnTemplate;
 import com.wormzjl.icheme.science.column.v3.V3PumparoundSpec;
 import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetFailure;
+import com.wormzjl.icheme.science.flowsheet.Members;
 import com.wormzjl.icheme.science.flowsheet.Params;
 
 import java.util.ArrayList;
@@ -148,10 +149,10 @@ public record ColumnDoor(String assayId, int stages, int feedStage, double topPr
     public static void exchanger(JsonObject json,String member,com.wormzjl.icheme.science.equipment.ExchangerType type) {
         var door=of(new Params(json));var previous=door.exchangers().fit(door.pumparounds().size());var types=previous;
         if(member.equals("condenser"))types=types.withCondenser(type);
-        else if(member.equals(com.wormzjl.icheme.science.flowsheet.sizing.SheetSizing.TRIM))types=types.withTrim(type);
+        else if(member.equals(Members.TRIM))types=types.withTrim(type);
         else {
-            var pa=com.wormzjl.icheme.science.flowsheet.sizing.SheetSizing.PumparoundMember.of(member);
-            if(pa==null||!pa.part().equals("cooler"))return;
+            var pa=Members.Pumparound.of(member);
+            if(pa==null||!pa.part().equals(Members.COOLER))return;
             for(int i=0;i<door.pumparounds().size();i++)if(door.pumparounds().get(i).id().equals(pa.pumparound()))types=types.withCooler(i,type);
         }
         if(!types.equals(previous))writeExchangers(json,types);

@@ -220,7 +220,7 @@ Data: presets and packages are JSON under `src/main/resources/data/icheme/materi
 | Format | Version | Where |
 | --- | --- | --- |
 | Scientific input schema | `V3ColumnInput.SCHEMA_VERSION = 1` | Wire, NBT, digest |
-| Wire | No number: the packets that carry a column (`ProcessSimulatorNetwork.PROTOCOL`, `EquipmentNetwork.PROTOCOL`) version it | `ColumnWire` |
+| Wire | No number: the packets that carry a column (`ProcessSimulatorNetwork`, `EquipmentNetwork`) ride on the mod's protocol `NetworkProtocol.VERSION`, which versions it | `ColumnWire` |
 | Inspection blob | Unversioned, <= 262,144 bytes, length-checked | `V3InspectionCodec`, wire and the simulator's results |
 | Saved design | `ColumnDesignTags` (NBT `Design`) | The simulator block, the constructor ([equipment.md](equipment.md)) |
 
@@ -313,7 +313,7 @@ Gradle tasks (from `build.gradle`; not run for this chapter): `test` runs everyt
 
 [wire]: ../../../src/main/java/com/wormzjl/icheme/network/ColumnWire.java
 [inspection-codec]: ../../../src/main/java/com/wormzjl/icheme/network/V3InspectionCodec.java
-[coordinator]: ../../../src/main/java/com/wormzjl/icheme/network/ProcessSolveCoordinator.java
+[coordinator]: ../../../src/main/java/com/wormzjl/icheme/runtime/ProcessSolveCoordinator.java
 [services]: ../../../src/main/java/com/wormzjl/icheme/runtime/ProcessSolveServices.java
 [service]: ../../../src/main/java/com/wormzjl/icheme/runtime/BoundedCpuSolveService.java
 [bootstrap]: ../../../src/main/java/com/wormzjl/icheme/CreateChemE.java

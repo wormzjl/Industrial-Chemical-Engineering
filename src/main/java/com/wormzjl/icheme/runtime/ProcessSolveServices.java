@@ -67,7 +67,7 @@ public final class ProcessSolveServices {
         var wakeup=new CompletionWakeup(action->server.tell(new TickTask(0,action)),()->{
             var current=STATES.get(server);
             if(current==null||current.stopResult!=null)return;
-            com.wormzjl.icheme.network.ProcessSolveCoordinator.drainCompletedCalculations(server);
+            ProcessSolveCoordinator.drainCompletedCalculations(server);
         });
         BoundedCpuSolveService<SolveTarget, ProcessSolveCommand, ProcessSolveResult> service =
                 new BoundedCpuSolveService<>(epoch, new BoundedCpuSolveService.Config(
@@ -240,7 +240,7 @@ public final class ProcessSolveServices {
                 com.wormzjl.icheme.runtime.fluid.FluidRuntimeDiagnostics.count(com.wormzjl.icheme.runtime.fluid.FluidRuntimeDiagnostics.drainContinuationsDeferred);
                 return;
             }
-            com.wormzjl.icheme.network.ProcessSolveCoordinator.drainCompletedCalculations(server);
+            ProcessSolveCoordinator.drainCompletedCalculations(server);
         }));
     }
 

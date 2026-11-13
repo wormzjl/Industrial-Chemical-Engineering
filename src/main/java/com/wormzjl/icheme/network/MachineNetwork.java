@@ -36,7 +36,7 @@ import net.neoforged.neoforge.network.registration.HandlerThread;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * Machine protocol {@value #PROTOCOL} (batch 2026-11-03-rotating-machinery, W7, owner decision D31, readings A85, A87,
+ * The machine pages' payloads, on the mod's protocol {@link NetworkProtocol#VERSION} (before it: machine-4; batch 2026-11-03-rotating-machinery, W7, owner decision D31, readings A85, A87,
  * A89, A100): a motor, generator, gearbox, creative motor or Create coupling (W6b, protocol 2) opens its own page ({@link MachineMenu}); a casing's or a
  * turbine's fluid page opens its driver's ({@link OpenDriverPayload}). An open page is a session of the engine's
  * presentation ({@link MachinePresentation}): it gets its part's view at once and on the buckets after. An edit
@@ -45,7 +45,6 @@ import org.jetbrains.annotations.Nullable;
  * get no compatibility work (AGENTS.md).
  */
 public final class MachineNetwork {
-    public static final String PROTOCOL = "machine-4";
     /** The highest speed share a variable drive or a turbine's governor takes, and the highest creative motor speed (rpm) and power limit (W). */
     public static final double MAXIMUM_SHARE = 1.1, MAXIMUM_RPM = 1e5, MAXIMUM_LIMIT = 1e9;
 
@@ -204,7 +203,7 @@ public final class MachineNetwork {
     }
 
     public static void register(RegisterPayloadHandlersEvent event) {
-        var registrar = event.registrar(PROTOCOL).executesOn(HandlerThread.MAIN);
+        var registrar = event.registrar(NetworkProtocol.VERSION).executesOn(HandlerThread.MAIN);
         registrar.playToServer(EditPayload.TYPE, EditPayload.STREAM_CODEC, MachineNetwork::edit);
         registrar.playToServer(OpenDriverPayload.TYPE, OpenDriverPayload.STREAM_CODEC, MachineNetwork::openDriver);
         registrar.playToServer(DatasheetPayload.TYPE, DatasheetPayload.STREAM_CODEC, MachineNetwork::datasheet);

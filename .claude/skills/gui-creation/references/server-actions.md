@@ -33,10 +33,10 @@ Worked example: the constructor's template (`TemplatePayload`, `EquipmentNetwork
 
 1. Payload: a record with `TYPE` and `STREAM_CODEC`. Bound its strings (`MAX_NAME`) and lists in the codec.
 2. Register it: `registrar.playToServer(TYPE, STREAM_CODEC, EquipmentNetwork::template)`.
-3. Bump the version of the registrar it joins, and name the number in the class comment. `EquipmentNetwork.PROTOCOL`
-   and `FluidNetwork.PROTOCOL` are constants; each requested display and item payload in `FluidNetwork` has its own
-   registrar with a literal version (`registerDisplays`), which `FluidNetwork.PROTOCOL` does not change.
-   `FluidPacketCodecTest` pins `FluidNetwork.PROTOCOL`. Wire formats get no compatibility work (`AGENTS.md`).
+3. Bump `NetworkProtocol.VERSION` (`network/NetworkProtocol`): every registrar of the mod reads it, so one bump covers
+   any payload change, and a client and a server of different builds are refused at login. `FluidPacketCodecTest` and
+   `EquipmentNetworkCodecTest` pin it. Bound every list with `Wire.count` (its maximum and the least bytes an element
+   takes). Wire formats get no compatibility work (`AGENTS.md`).
 4. Handler: find the block with `editable(player, position)`. It is private to `EquipmentNetwork`. A copy keeps all its
    checks: loaded, the right block, within `REACH`, `mayBuild`, not a spectator, `level.mayInteract`.
 5. Trust nothing the client built. It sends the input; the server makes the result (`ColumnDesign.of`), as the

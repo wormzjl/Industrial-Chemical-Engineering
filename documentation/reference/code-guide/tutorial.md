@@ -24,7 +24,7 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`. Every class under `sc
 | `science/tutorial/cards/` | Recording readers: `BarrelData` (`crude_barrel.json`, also `compute` for the recorder), `StillTraysData`, `SmallUnitData` |
 | `science/tutorial/equipment/` | `EquipmentInfo` (item id `equipment_<kind>`, name key, serves/needs/place/status lines, shape-only kinds), `ReferenceShapes` (each kind at the constructor's default size: icons, pictures, page films) |
 | `runtime/tutorial/TutorialTriggers` | The ten criteria (`DeferredRegister` of `TRIGGER_TYPE`, registered from `IChemE`) |
-| `network/TutorialNetwork` | Protocol `tutorial-1`: `StepDone`, `Hello` (to server), `Progress` (to client); `earned` on `AdvancementEarnEvent` |
+| `network/TutorialNetwork` | On the mod's protocol `NetworkProtocol.VERSION`: `StepDone`, `Hello` (to server), `Progress` (to client); `earned` on `AdvancementEarnEvent` |
 | `client/gui/tutorial/` (13) | `GuideClient` (guide, pages, progress, key, reload), `GuideScreen` and `GuidePage` (Minecraft-free layout), `GuideHud`, `FilmScreen`, `FilmLayout`, `FilmOverlay`, `Labels`, `SceneView` (render thread; one vertex buffer per actor list), `CardView`, `HelpTour`, `TourHost`, `TourLayout` |
 | `client/gui/tutorial/cards/` (14) | `Card`, `Cards` (name to builder), `Bars`, and the 11 cards: `three_parts`, `chain`, `barrel`, `products`, `road`, `pot_temperature`, `reflux`, `compare`, `balance`, `unit_map`, `limit` |
 | `client/gui/common/` `TourAnchors`, `DeviceTour`, `ScreenTours`, `AssemblyTour`; `client/gui/flowsheet/SimulatorTour` | Minecraft-free anchor maps: where each stop stands on a page, in the screen's own coordinates; the screens resolve the same maps the gates check |

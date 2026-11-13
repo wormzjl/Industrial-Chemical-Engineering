@@ -139,7 +139,8 @@ class FluidPacketCodecTest {
      * menu's axis is refused. fluid-14 adds a tank's capacity and paired pressures; fluid-16 a heat unit's ports, lines and
      * actuator and a pipe's line reading (the heat GUI). */
     @Test void theProtocolIsFluidNineteenWithDistinctStaticAndLivePayloads() {
-        assertEquals("fluid-24",FluidNetwork.PROTOCOL);
+        // One protocol for every registrar since icheme-1 (codebase review P3-22); the fluid menu payloads were fluid-24.
+        assertEquals("icheme-1",com.wormzjl.icheme.network.NetworkProtocol.VERSION);
         var ids=java.util.Set.of(FluidNetwork.EditPayload.TYPE.id(),FluidNetwork.RecoverPayload.TYPE.id(),FluidNetwork.StaticPayload.TYPE.id(),FluidNetwork.LivePayload.TYPE.id());
         assertEquals(4,ids.size());
         var base=generatorMenu("");int count=base.components().size();
@@ -212,7 +213,8 @@ class FluidPacketCodecTest {
     }
     /** W7: the machine page's view, edit and driver payloads round-trip; a view with a bad number is refused on read. */
     @Test void theMachinePayloadsRoundTripOnTheirOwnRegistrar() {
-        assertEquals("machine-4",com.wormzjl.icheme.network.MachineNetwork.PROTOCOL);
+        // The machine payloads ride on the one protocol since icheme-1 (P3-22); they were machine-4.
+        assertEquals("icheme-1",com.wormzjl.icheme.network.NetworkProtocol.VERSION);
         var settings=new ShaftUnit.Settings(true,com.wormzjl.icheme.science.machine.ShaftTrain.Mode.REGULATE_FLOW,.8,0,0);
         var view=new MachineView(7,com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR,"RUNNING",2950,24900,26700,534,settings,
                 com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE,30000,2950,2,true,.72,370,"FV-101",0,2.9,40e5,4e5,null);

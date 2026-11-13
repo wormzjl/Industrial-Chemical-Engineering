@@ -26,27 +26,27 @@ A batch that changes a format changes its row here in the same commit. Where to 
 
 ## Wire protocols
 
-Each string is a NeoForge payload registrar version. Client and server must carry the same string for every registrar; with another one NeoForge refuses the connection. None is optional.
+Every payload registrar of the mod carries one version, [`network/NetworkProtocol.java`](../../src/main/java/com/wormzjl/icheme/network/NetworkProtocol.java), `NetworkProtocol.VERSION` (codebase review P3-22). NeoForge negotiates each payload channel (its type id) at login, with the version of the registrar it was registered on: a client and a server whose versions differ on any channel, or where one lacks a channel the other requires, are refused with the channels and the reasons (`NetworkComponentNegotiator`). None is optional. So client and server must be the same version of the mod. Bump the version at any change of a payload's bytes, type ids or registration.
 
-| Registrar | Value | Declared at |
-|---|---|---|
-| Fluid menu, edits, tank watch, converter view | `fluid-24` | [`network/FluidNetwork.java`](../../src/main/java/com/wormzjl/icheme/network/FluidNetwork.java), `FluidNetwork#PROTOCOL` |
-| Sight glass watch and display | `sight-glass-3` | `FluidNetwork.java` (inline, at its registration) |
-| Mover and driver watches | `mover-4` | `FluidNetwork.java` (inline, at its registration) |
-| Flare display | `flare-2` | `FluidNetwork.java` (inline, at its registration) |
-| Still display | `still-1` | `FluidNetwork.java` (inline, at its registration) |
-| Gauge watch, display and save | `instruments-1` | `FluidNetwork.java` (inline, at its registration) |
-| Pipe tool settings | `pipeline-tool-5` | `FluidNetwork.java` (inline, at its registration) |
-| Equipment constructor, rename, far silhouettes | `equipment-23` | [`network/EquipmentNetwork.java`](../../src/main/java/com/wormzjl/icheme/network/EquipmentNetwork.java), `EquipmentNetwork#PROTOCOL` |
-| Machine assemblies | `assembly-6` | [`network/AssemblyNetwork.java`](../../src/main/java/com/wormzjl/icheme/network/AssemblyNetwork.java), `AssemblyNetwork#PROTOCOL` |
-| Machine pages | `machine-4` | [`network/MachineNetwork.java`](../../src/main/java/com/wormzjl/icheme/network/MachineNetwork.java), `MachineNetwork#PROTOCOL` |
-| Controllers and DCS | `control-5` | [`network/ControlNetwork.java`](../../src/main/java/com/wormzjl/icheme/network/ControlNetwork.java) line 174 (inline) |
-| Shared line commands | `lines-1` | [`network/LineNetwork.java`](../../src/main/java/com/wormzjl/icheme/network/LineNetwork.java) line 130 (inline) |
-| Shaft speeds | `rotation-1` | [`network/RotationNetwork.java`](../../src/main/java/com/wormzjl/icheme/network/RotationNetwork.java) line 104 (inline; registered from `FluidNetwork` line 850) |
-| Tutorial | `tutorial-1` | [`network/TutorialNetwork.java`](../../src/main/java/com/wormzjl/icheme/network/TutorialNetwork.java), `TutorialNetwork#PROTOCOL` |
-| Process simulator | `3` (no prefix) | [`network/ProcessSimulatorNetwork.java`](../../src/main/java/com/wormzjl/icheme/network/ProcessSimulatorNetwork.java), `ProcessSimulatorNetwork#PROTOCOL` |
+| Registrar | Value | Declared at | Read by |
+|---|---|---|---|
+| Fluid menu, edits, tank watch, converter view | `icheme-1` (was `fluid-24`) | `NetworkProtocol#VERSION` | `FluidNetwork.register` |
+| Sight glass watch and display | `icheme-1` (was `sight-glass-3`) | `NetworkProtocol#VERSION` | `FluidNetwork.registerDisplays` |
+| Mover and driver watches | `icheme-1` (was `mover-4`) | `NetworkProtocol#VERSION` | `FluidNetwork.registerDisplays` |
+| Flare display | `icheme-1` (was `flare-2`) | `NetworkProtocol#VERSION` | `FluidNetwork.registerDisplays` |
+| Still display | `icheme-1` (was `still-1`) | `NetworkProtocol#VERSION` | `FluidNetwork.registerDisplays` |
+| Gauge watch, display and save | `icheme-1` (was `instruments-1`) | `NetworkProtocol#VERSION` | `FluidNetwork.registerDisplays` |
+| Pipe tool settings | `icheme-1` (was `pipeline-tool-5`) | `NetworkProtocol#VERSION` | `FluidNetwork.registerDisplays` |
+| Equipment constructor, rename, far silhouettes | `icheme-1` (was `equipment-23`) | `NetworkProtocol#VERSION` | `EquipmentNetwork.register` |
+| Machine assemblies | `icheme-1` (was `assembly-6`) | `NetworkProtocol#VERSION` | `AssemblyNetwork.register` |
+| Machine pages | `icheme-1` (was `machine-4`) | `NetworkProtocol#VERSION` | `MachineNetwork.register` |
+| Controllers and DCS | `icheme-1` (was `control-5`) | `NetworkProtocol#VERSION` | `ControlNetwork.register` |
+| Shared line commands | `icheme-1` (was `lines-1`) | `NetworkProtocol#VERSION` | `LineNetwork.register` |
+| Shaft speeds | `icheme-1` (was `rotation-1`) | `NetworkProtocol#VERSION` | `RotationNetwork.register` (called from `FluidNetwork.registerDisplays`) |
+| Tutorial | `icheme-1` (was `tutorial-1`) | `NetworkProtocol#VERSION` | `TutorialNetwork.register` |
+| Process simulator | `icheme-1` (was `3`) | `NetworkProtocol#VERSION` | `ProcessSimulatorNetwork.register` |
 
-Fifteen strings in nine registrar classes, nine of them inline literals (codebase review P3-22 proposes one `NetworkProtocol.VERSION`).
+Fifteen registrars in nine classes, one version. A new payload joins one of them; a new registrar gets a row here.
 
 ## Native library
 

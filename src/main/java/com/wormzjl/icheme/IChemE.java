@@ -2,11 +2,11 @@ package com.wormzjl.icheme;
 
 import com.mojang.logging.LogUtils;
 import com.wormzjl.icheme.network.ProcessSimulatorNetwork;
-import com.wormzjl.icheme.network.ProcessSolveCoordinator;
 import com.wormzjl.icheme.registry.ModBlockEntities;
 import com.wormzjl.icheme.registry.ModBlocks;
 import com.wormzjl.icheme.registry.ModItems;
 import com.wormzjl.icheme.registry.ModMenus;
+import com.wormzjl.icheme.runtime.ProcessSolveCoordinator;
 import com.wormzjl.icheme.runtime.ProcessSolveServices;
 import com.wormzjl.icheme.runtime.WorkerAllocation;
 import com.wormzjl.icheme.science.column.v3.V3ColumnCalculator;

@@ -15,7 +15,7 @@
 | `PowerGrid` | Compiled circuits grouped by owner, FE transfer/extraction and read-only source availability |
 | `CableMedium`, `ConduitGeometry` | Shared 0.125 m steel housings, blue data/orange power identity, sparse symbols and closed ends |
 | `ConduitLineBackend`, `ConduitBlockEntity`, rack lanes | Structural placement adapter, saved joint/socket endpoints and world/model updates |
-| `ControlNetwork`, controller/DCS menus/screens | Protocol `control-4`, subscriptions, paged ID choices and acknowledgements, the DCS's column select and commands |
+| `ControlNetwork`, controller/DCS menus/screens | On the mod's protocol `NetworkProtocol.VERSION` ([FORMATS.md](../FORMATS.md)), subscriptions, paged ID choices and acknowledgements, the DCS's column select and commands |
 
 ## Control path
 
@@ -47,7 +47,7 @@ Registry first (batch 2026-11-03-save-corruption, W5c C2 and C3; [fluid-runtime.
 ## A fluid converter on the DCS
 
 - The converter's DATA socket is on its cabinet, on the side toward the process tank (`ConverterDesign.serviceHousing`, `EquipmentServices`); no layout row moved.
-- `ControlNetwork.ConverterCommand` (registrar `control-5`) carries a `ConverterCommands.Command` from the DCS's converter page; `ControlPublication.converters` publishes each converter the console's bus reaches (label `FC-%04d`, settings, pending, status, direction, booked rate, both fills, fluid, rule, alarms). Channels and alarms: [process-control.md](process-control.md).
+- `ControlNetwork.ConverterCommand` (the control registrar) carries a `ConverterCommands.Command` from the DCS's converter page; `ControlPublication.converters` publishes each converter the console's bus reaches (label `FC-%04d`, settings, pending, status, direction, booked rate, both fills, fluid, rule, alarms). Channels and alarms: [process-control.md](process-control.md).
 
 ## A column on the DCS
 
