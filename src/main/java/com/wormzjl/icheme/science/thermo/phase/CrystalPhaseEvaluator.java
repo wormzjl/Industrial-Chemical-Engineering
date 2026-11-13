@@ -1,6 +1,6 @@
 package com.wormzjl.icheme.science.thermo.phase;
 
-import com.wormzjl.icheme.science.fluid.thermo.CoefficientIdealGas;
+import com.wormzjl.icheme.science.material.CoefficientIdealGas;
 import com.wormzjl.icheme.science.material.CrystalReference;
 import com.wormzjl.icheme.science.material.JaegerSpanGibbsFunction;
 import com.wormzjl.icheme.science.material.MaterialCatalog;

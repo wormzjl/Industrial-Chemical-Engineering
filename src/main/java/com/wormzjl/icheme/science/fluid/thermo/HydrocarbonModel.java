@@ -25,7 +25,7 @@ import java.util.List;
  *
  * <p>The ideal gas: on a package with a reference spine the spine records with each species' formation enthalpy
  * subtracted (the network's sensible datum, as before), on any other package the {@code shifted_polynomial_5} fits on
- * that datum ({@link CoefficientIdealGas}); the engine's evaluator is the same kernel and translations on the spine's own
+ * that datum ({@code science.material.CoefficientIdealGas}); the engine's evaluator is the same kernel and translations on the spine's own
  * datum, which {@code FluidThermodynamics.engineEnergy} bridges.</p>
  */
 public final class HydrocarbonModel {

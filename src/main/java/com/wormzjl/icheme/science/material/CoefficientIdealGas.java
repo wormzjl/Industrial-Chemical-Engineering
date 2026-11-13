@@ -1,8 +1,8 @@
-package com.wormzjl.icheme.science.fluid.thermo;
+package com.wormzjl.icheme.science.material;
 
-import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.math.DeterministicMath;
 import com.wormzjl.icheme.science.thermo.IdealGasFunction;
+import com.wormzjl.icheme.science.thermo.PengRobinsonKernel;
 
 /**
  * A {@code shifted_polynomial_5} ideal-gas fit as an {@link IdealGasFunction} on the network's sensible datum:
@@ -10,11 +10,11 @@ import com.wormzjl.icheme.science.thermo.IdealGasFunction;
  * enthalpy), the entropy {@code integral c_p/T dT} from 298.15 K minus {@code R ln(P/1e5)}. Past the fit's range
  * {@code [minimum, maximum]} ({@link #fitRange}, the translated model's own ends, so both continue at the same
  * temperatures) the heat capacity is held at the end value and the enthalpy and entropy integrate it (owner rule of
- * 2026-10-16), as {@link TranslatedPengRobinson}'s coefficient path does.
+ * 2026-10-16), as the network's {@code TranslatedPengRobinson} coefficient path does.
  *
- * <p>The ideal gas of a package without a reference spine, shared by the network ({@link HydrocarbonModel}'s
- * coefficient path), the phase engine's evaluator of that package ({@link HydrocarbonModel#coefficientEvaluator}) and
- * the package's crystals ({@code CrystalPhaseEvaluator.forPackage}). A crystal anchored to this family's liquid at its
+ * <p>The ideal gas of a package without a reference spine, shared by the network ({@code HydrocarbonModel}), the phase
+ * engine's evaluator of that package ({@code CubicPhaseEvaluator.forPackage}) and the package's crystals
+ * ({@code CrystalPhaseEvaluator.forPackage}). A crystal anchored to this family's liquid at its
  * triple point is then on the network's datum itself, as the free water's ice is: its formation offset is 0 (decision
  * E27 of batch 2026-11-04-open-thermo-data).</p>
  */
@@ -64,7 +64,7 @@ public final class CoefficientIdealGas implements IdealGasFunction {
         double e=edge(t);if(!(p>0))throw new IllegalArgumentException("Ideal-gas entropy needs a positive pressure");
         double integral=entropyIntegral(mainPowers,e);
         if(e!=t)integral+=fitHeatCapacity(e)*DeterministicMath.log(t/e);
-        return integral-FluidThermodynamics.R*DeterministicMath.log(p/1.0e5);
+        return integral-PengRobinsonKernel.GAS_CONSTANT*DeterministicMath.log(p/1.0e5);
     }
     @Override public double minimumTemperature(){return minimum;}
     @Override public double maximumTemperature(){return maximum;}
