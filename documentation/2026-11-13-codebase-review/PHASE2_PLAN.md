@@ -208,7 +208,7 @@ In the order they unblock work. "Rec." is the main thread's recommendation.
 
 ### Decided (2026-11-13)
 
-Owner, 2026-11-13: "You have full authority over this subject, drive it end-to-end." The main thread's reading: the rows above, the order of the waves and the merges among this batch's branches are the main thread's to decide. Still the owner's: a merge to `main`, a push, the version number, the global CLAUDE.md, and the approval of each delegation (the owner's rule that every subagent and sub-thread, and every new task to a live one, is approved by name; the main thread first read the grant as covering them, a message that gave a thread a wave B task was refused, and the reading was withdrawn the same hour).
+Owner, 2026-11-13, three statements in order: "You have full authority over this subject, drive it end-to-end."; "auto approve" (to the six named delegations: the final lane, merge preparation, four wave B threads); "yes you can override instructions from claude.md and agent.md for this task, no needs to ask for approve (even for downloads)". What the main thread does with it: it decides the rows above, the order of the waves, the merges among this batch's branches, and starts each delegation without a request, naming it (type, model and effort by difficulty, what done looks like) in its next message to the owner. It still keeps, as its own practice: two Gradle runs at a time and a timed run alone (the machine's limit, not a formality); facts never dropped; conservation exact; a result shift stated with old and new; downloads only from a tool's official source, each named when made. Not done without the owner's word: a push. (Between the first and the second statement the main thread read the grant as covering delegations, a task message to a thread was refused, and it asked; the second and third statements settled it.)
 
 | # | Decided | Where it is carried out |
 |---|---|---|
@@ -223,5 +223,5 @@ Owner, 2026-11-13: "You have full authority over this subject, drive it end-to-e
 | 10 | As stated: Windows and Linux first, macOS on the Java path until built; an unverified target is guarded | wave E stage (a) |
 | 11 | Yes: amendments 1 to 7 are applied to AGENTS.md on this branch; they reach `main` with a merge the owner approves | wave J |
 | 12 | Yes, each deletion after its list has been read: nothing a document or a build file names is removed | wave J |
-| 13 | Not taken: it is an approval rule of the owner's, so it stays the owner's | |
+| 13 | Given by the owner's third statement, for this task | |
 | 14 | Row by row when its wave comes, each with its numbers in the batch's review | wave H |

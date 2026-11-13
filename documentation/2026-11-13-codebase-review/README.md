@@ -17,6 +17,8 @@ Branch `claude/codebase-review-refactor-8a85ef`, base `259d22a2c` (main 0.30.0).
 - "Start A and J": phase 2 begins with wave A (defects) and wave J (documents); PHASE2_PLAN decision 1. The other thirteen decisions are open.
 - Plan update given by the owner on 2026-11-13, which it says came from the owner's question of that day (the question itself was not put in this session, so it is not quoted): the thermo kernel is ported with the column, at wave E stage (b); the fluid step's port is gated (F0 in Java always; a re-measurement of an island step after F0 and the wave B fluid and thermo batches; F1 only if kernel calls, residual and Jacobian assembly and the LU are still the large majority of step time and step cost still limits plant size); the equilibrium engine is not ported unless a profile shows flashes as the top cost after P20, P21, P24 and P25. Recorded as decision 15 of PHASE2_PLAN.
 - "You have full authority over this subject, drive it end-to-end." (2026-11-13). The main thread's reading and the decisions it took under it: PHASE2_PLAN, "Decided (2026-11-13)". Still the owner's: a merge to `main`, a push, the version number, and the approval of each delegation.
+- "auto approve" (2026-11-13), to the six delegations the main thread named: the final lane, merge preparation, wave B column, fluid step, runtime and thermo kernel.
+- "yes you can override instructions from claude.md and agent.md for this task, no needs to ask for approve (even for downloads)" (2026-11-13). What the main thread keeps as its own practice, and that it does not push: PHASE2_PLAN, "Decided (2026-11-13)".
 
 ## History
 
