@@ -455,11 +455,17 @@ class ShaftCouplingTest {
         assertTrue(health.failed(1), "saved at 0, the pump stands failed");
         assertEquals("FAILED", trains.view(casing).status(), "the casing's row says its pump failed");
         assertNotEquals("FAILED", trains.view(motor).status(), "the motor's row keeps its train's word");
+        // M-08: one plan map in a fixed order; the health's close overwrites the casing's speed share.
+        var closed = trains.plans(1, line()).get(1L);
+        assertEquals(ShaftPlan.Kind.FAILED, closed.kind(), "the health close wins over the share");
+        assertEquals(0, closed.value());
         var outcome = new ArrayList<PumpHealth.Outcome>();
         health.queue(new PumpHealth.Repair(1, () -> true, outcome::add));
         tick.run();
         assertEquals(List.of(PumpHealth.Outcome.REPAIRED), outcome);
         assertNotEquals("FAILED", trains.view(casing).status(), "repaired, the casing's row returns to its train's word");
+        var running = trains.plans(1, line()).get(1L);
+        assertTrue(running == null || running.kind() == ShaftPlan.Kind.SPEED, "repaired, no close: the share's plan, if any: " + running);
     }
 
     /** The governor walk: from a turbine's inlet upstream through unbranched pipes to the nearest control valve. */

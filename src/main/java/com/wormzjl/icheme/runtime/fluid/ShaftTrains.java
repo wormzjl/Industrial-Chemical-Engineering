@@ -542,42 +542,18 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
 
     @Override
     public Map<Long, ShaftPlan> plans(long island, PassiveNetwork graph) {
-        Map<Long, ShaftPlan> plans = null;
+        // One map, filled in a fixed order: a later source overwrites an earlier one's plan for the same device (M-08), as
+        // the separate maps merged in this order did: fans, burners, prime movers, flares, shares and governors, health.
+        var out = new HashMap<Long, ShaftPlan>();
         // The fan units' power (W5): a fan limit for every air cooler and induced tower with a store.
-        if (electric != null) {
-            var fans = new HashMap<Long, ShaftPlan>();
-            electric.plans(graph, fans);
-            if (!fans.isEmpty()) plans = fans;
-        }
+        if (electric != null) electric.plans(graph, out);
         // The burners' fuel valves and radiant coils' limits.
-        if (burners != null) {
-            var fired = new HashMap<Long, ShaftPlan>();
-            burners.plans(graph, fired);
-            if (!fired.isEmpty()) {
-                if (plans == null) plans = new HashMap<>();
-                plans.putAll(fired);
-            }
-        }
+        if (burners != null) burners.plans(graph, out);
         // The prime movers' fuel valves and steam coils' gas.
-        if (primeMovers != null) {
-            var fuel = new HashMap<Long, ShaftPlan>();
-            primeMovers.plans(graph, fuelTargets, fuel);
-            if (!fuel.isEmpty()) {
-                if (plans == null) plans = new HashMap<>();
-                plans.putAll(fuel);
-            }
-        }
+        if (primeMovers != null) primeMovers.plans(graph, fuelTargets, out);
         // The flares' tip limits.
-        if (flares != null) {
-            var tips = new HashMap<Long, ShaftPlan>();
-            flares.plans(graph, tips);
-            if (!tips.isEmpty()) {
-                if (plans == null) plans = new HashMap<>();
-                plans.putAll(tips);
-            }
-        }
-        if (shares.isEmpty() && governorTargets.isEmpty()) return failures(plans, graph);
-        for (var pipe : graph.pipes()) {
+        if (flares != null) flares.plans(graph, out);
+        if (!shares.isEmpty() || !governorTargets.isEmpty()) for (var pipe : graph.pipes()) {
             long id = graph.reservoirs().get(pipe.first()).id();
             ShaftPlan plan = null;
             Double share = shares.get(id);
@@ -590,31 +566,31 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
             if (target != null && (pipe.control() instanceof FlowControl.Turbine
                     || pipe.control() instanceof FlowControl.ControlValve v && v.source() == FlowControl.ValveSource.SHAFT_SPEED))
                 plan = new ShaftPlan(ShaftPlan.Kind.GOVERNOR, target);
-            if (plan == null) continue;
-            if (plans == null) plans = new HashMap<>();
-            plans.put(id, plan);
+            if (plan != null) out.put(id, plan);
         }
-        return failures(plans, graph);
+        failures(out, graph);
+        return out.isEmpty() ? Map.of() : out;
     }
 
+    /** The health's plans of one dispatch, merged into its map by {@link #failures} (engine state, cleared at each use). */
+    private final Map<Long, ShaftPlan> failed = new HashMap<>();
+
     /**
-     * {@code plans} with each failed pump of {@code graph} closed (W10b): its {@code FAILED} plan stands in for its speed.
+     * {@code out} with each failed pump of {@code graph} closed (W10b): its {@code FAILED} plan stands in for its speed.
      * A health {@code FAILED 1} (switch a repaired pump back on) never replaces a {@code FAILED 0} already planned: an
      * unpowered in-line pump's store close wins (M-04). A health close {@code FAILED 0} replaces anything.
      */
-    private Map<Long, ShaftPlan> failures(Map<Long, ShaftPlan> plans, PassiveNetwork graph) {
-        if (health != null) {
-            var failed = new HashMap<Long, ShaftPlan>();
-            health.plans(graph, failed);
-            for (var e : failed.entrySet()) {
-                var planned = plans == null ? null : plans.get(e.getKey());
-                if (e.getValue().kind() == ShaftPlan.Kind.FAILED && e.getValue().value() > 0
-                        && planned != null && planned.kind() == ShaftPlan.Kind.FAILED && planned.value() == 0) continue;
-                if (plans == null) plans = new HashMap<>();
-                plans.put(e.getKey(), e.getValue());
-            }
+    private void failures(Map<Long, ShaftPlan> out, PassiveNetwork graph) {
+        if (health == null) return;
+        failed.clear();
+        health.plans(graph, failed);
+        for (var e : failed.entrySet()) {
+            var planned = out.get(e.getKey());
+            if (e.getValue().kind() == ShaftPlan.Kind.FAILED && e.getValue().value() > 0
+                    && planned != null && planned.kind() == ShaftPlan.Kind.FAILED && planned.value() == 0) continue;
+            out.put(e.getKey(), e.getValue());
         }
-        return plans == null ? Map.of() : plans;
+        failed.clear();
     }
 
     /** A frame's displacement at its design speed: its registered control's flow (a dispatch's graph carries the planned one). */
