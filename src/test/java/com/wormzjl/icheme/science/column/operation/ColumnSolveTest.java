@@ -117,6 +117,70 @@ class ColumnSolveTest {
      * W3b: the model a column of {@code design} solves on in a world: the network package's view of the design's compounds with
      * water (its feed island's list; the steam is water in the cubic, which the design's own package, a tjl20 one, holds none of).
      */
+    /**
+     * Feed water enters as a steam feed at the feed tray where V3 would admit it as steam there (C4 of batch
+     * 2026-11-13-codebase-review): at least 5 K above saturation at the injection pressure, on V3's curve, and above the
+     * critical temperature always. Before C4 the comparison stood reversed: a hot wet feed's water followed the distillate
+     * and a cold one's was handed to V3 as steam, which V3 refused.
+     */
+    @Test void feedWaterIsASteamFeedExactlyWhereV3AdmitsItAsSteam() {
+        var catalog = com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog();
+        V3ColumnInput preset = catalog.presets().column("tia_juana_nitrogen").input(catalog);
+        var water = catalog.requirePackage(preset.packageId()).water();
+        V3ColumnInput vacuum = at(preset, 20_000.0), pressured = at(preset, 200_000.0);
+        assertTrue(ColumnSolve.steamAtFeedTray(water, vacuum, 680), "above the critical temperature: steam");
+        assertTrue(ColumnSolve.steamAtFeedTray(water, vacuum, 600), "530 K above saturation at 20 kPa: steam");
+        assertFalse(ColumnSolve.steamAtFeedTray(water, pressured, 300), "liquid at 300 K and 200 kPa");
+        assertFalse(ColumnSolve.steamAtFeedTray(water, vacuum, 950), "past the water data V3 admits no steam");
+        // The border, against V3's own admission of the same steam feed.
+        com.wormzjl.icheme.science.material.MaterialRuntime.with(catalog, preset.packageId(), () -> {
+            double saturation = com.wormzjl.icheme.science.column.v3.thermo.V3WaterProperties.saturationTemperatureKelvin(preset.topPressurePascal());
+            assertFalse(ColumnSolve.steamAtFeedTray(water, preset, saturation + 4), "4 K above saturation is below steam");
+            assertTrue(ColumnSolve.steamAtFeedTray(water, preset, saturation + 6), "6 K above saturation is a steam feed");
+            com.wormzjl.icheme.science.column.v3.V3ColumnProblemResolver.validateInput(preset);
+            com.wormzjl.icheme.science.column.v3.V3ColumnProblemResolver.validateInput(withFeedSteam(preset, saturation + 6));
+            assertThrows(IllegalArgumentException.class,
+                    () -> com.wormzjl.icheme.science.column.v3.V3ColumnProblemResolver.validateInput(withFeedSteam(preset, saturation + 4)),
+                    "V3 refuses as steam what the column routes to the distillate");
+            return null;
+        });
+    }
+
+    /** A wet feed of the default column at its own 638 K: its water enters as a steam feed at the feed tray, no note (C4). */
+    @Test void aHotWetFeedsWaterEntersAsASteamFeedAtTheFeedTray() {
+        var catalog = com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog();
+        V3ColumnInput design = catalog.presets().column("tia_juana_nitrogen").input(catalog);
+        var model = column(catalog, design);
+        double[] feed = feedOnTheNetwork(model, design);
+        int water = model.whole().components().indexOf(SplitTable.WATER);
+        feed[water] = 20;
+        var setpoints = Setpoints.of(ColumnOperatingPoint.of(design));
+        var steam = design.steamFeeds().stream().map(s -> new ColumnSolve.Steam(s.molarFlowMolPerSecond(), s.temperatureKelvin(), Double.NaN)).toList();
+        var outcome = ColumnSolve.run(new ColumnSolve.Job(DriftBands.Trigger.START, design, setpoints, new ColumnSolve.Taken(feed, Double.NaN, steam), null),
+                model, V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO, () -> {});
+        var solved = assertInstanceOf(ColumnSolve.Solved.class, outcome, outcome::toString);
+        assertEquals("", solved.note());
+        var feeds = solved.seed().input().steamFeeds();
+        assertEquals(design.steamFeeds().size() + 1, feeds.size(), feeds::toString);
+        var entered = feeds.getLast();
+        assertEquals(design.feedStageNumber(), entered.stageNumber());
+        assertEquals(20, entered.molarFlowMolPerSecond(), 0);
+    }
+
+    private static V3ColumnInput at(V3ColumnInput d, double topPressure) {
+        return new V3ColumnInput(d.schemaVersion(), d.packageId(), d.assayId(), d.componentBasis(), d.feedComponentMolarFlowsMolPerSecond(), d.feedTemperatureKelvin(),
+                d.stageCount(), d.feedStageNumber(), topPressure, d.stagePressureDropPascal(), d.specifications(), d.sideDraws(), d.steamFeeds(), d.pumparounds(),
+                d.columnDiameterMetres());
+    }
+
+    private static V3ColumnInput withFeedSteam(V3ColumnInput d, double temperature) {
+        var steam = new ArrayList<>(d.steamFeeds());
+        steam.add(new com.wormzjl.icheme.science.column.v3.V3SteamFeedSpec(d.feedStageNumber(), 20, temperature));
+        return new V3ColumnInput(d.schemaVersion(), d.packageId(), d.assayId(), d.componentBasis(), d.feedComponentMolarFlowsMolPerSecond(), d.feedTemperatureKelvin(),
+                d.stageCount(), d.feedStageNumber(), d.topPressurePascal(), d.stagePressureDropPascal(), d.specifications(), d.sideDraws(), steam, d.pumparounds(),
+                d.columnDiameterMetres());
+    }
+
     private static FluidThermodynamics column(MaterialCatalog catalog, V3ColumnInput design) {
         var network = FluidThermodynamics.forNetwork(catalog, com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(catalog));
         var ids = new ArrayList<String>();
