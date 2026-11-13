@@ -156,7 +156,8 @@ class WaterShareTest {
         pure[ev.waterComponent()] = 1.0;
         var ws = ev.newWorkspace();
         var d = ev.newDerivatives();
-        double t = 350, saturation = WaterShare.saturationPressure(t);
+        double t = 350, saturation = com.wormzjl.icheme.science.thermo.water.WagnerPruss.pressure(
+                com.wormzjl.icheme.science.material.WaterRecords.constants(PilotAqueousTestCatalog.catalog().requirePackage(PilotAqueousTestCatalog.PACKAGE_ID).water()), t);
         for (double p : new double[] {1.0e4, saturation * (1 - 1e-6), saturation * (1 + 1e-6), 101325}) {
             ev.derivatives(t, p, pure, Root.LIQUID, ws, d);
             var s = d.state();

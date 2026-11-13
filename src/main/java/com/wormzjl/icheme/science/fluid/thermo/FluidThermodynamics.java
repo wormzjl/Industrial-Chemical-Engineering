@@ -59,6 +59,8 @@ public final class FluidThermodynamics {
     public final double waterMolecularWeight;
     /** The package's water model: utility water's Region 1 ({@link #waterLiquid}) and the pump's reference density. */
     private final MaterialCatalog.Water water;
+    /** {@link #water}'s numbers for the water module, mapped once. */
+    private final com.wormzjl.icheme.science.thermo.water.WaterConstants waterConstants;
     private final double waterEnthalpyOffset;
     private final double maximumVelocity;
     /** Process time against online time ({@link SimulationTime}): carried on the model, like {@link #maximumVelocity}, so a
@@ -141,7 +143,8 @@ public final class FluidThermodynamics {
         }
         // Region 1 at 298.15 K and 1 atm itself, the stable liquid: the pump's density and utility water's datum.
         var reference=WaterRegion1.evaluate(water,298.15,101325);
-        waterEnthalpyOffset=com.wormzjl.icheme.science.column.v3.thermo.V3WaterProperties.liquidEnthalpyOffset(water);
+        waterConstants=com.wormzjl.icheme.science.material.WaterRecords.constants(water);
+        waterEnthalpyOffset=com.wormzjl.icheme.science.thermo.water.WaterDatum.liquidEnthalpyOffset(waterConstants);
         // The pump's density is the network's own water at that state (W3b: the cubic's, 7e-6 off Region 1, which put a pumped
         // water line 3.5 Pa over its shutoff); a view keeps its whole model's, a package without water Region 1's.
         if(whole!=null)pumpReferenceDensity=whole.pumpReferenceDensity;
@@ -656,9 +659,7 @@ public final class FluidThermodynamics {
      */
     public double vaporWaterEnthalpy(double t) {
         if(!Double.isFinite(t))throw new IllegalArgumentException("Non-finite water temperature");
-        double low=water.triplePoint(),high=water.maximumTemperature(),at=Math.max(low,Math.min(high,t));
-        double h=com.wormzjl.icheme.science.column.v3.thermo.V3WaterProperties.vaporMolarEnthalpy(water,at);
-        return at==t?h:h+com.wormzjl.icheme.science.column.v3.thermo.V3WaterProperties.dVaporMolarEnthalpyDT(water,at)*(t-at);
+        return com.wormzjl.icheme.science.thermo.water.SteamIdealGas.enthalpy(waterConstants,t);
     }
     /**
      * Pure water's saturation pressure at {@code t} (Pa): steam services, ejectors, the cooling tower's air and the
@@ -671,7 +672,7 @@ public final class FluidThermodynamics {
         if(!Double.isFinite(t))throw new IllegalArgumentException("Non-finite water temperature");
         var curve=whole.waterSaturation();
         if(curve!=null)return curve.pressure(t);
-        return t>=water.criticalTemperature()?Double.POSITIVE_INFINITY:com.wormzjl.icheme.science.column.v3.thermo.V3WaterProperties.wagnerPruss(water,t);
+        return t>=water.criticalTemperature()?Double.POSITIVE_INFINITY:com.wormzjl.icheme.science.thermo.water.WagnerPruss.pressure(waterConstants,t);
     }
     /** The temperature whose {@link #saturationPressure} is {@code p} (Pa), K: the saturation a state at {@code p} is built at. */
     public double saturationTemperature(double p) {
@@ -690,7 +691,7 @@ public final class FluidThermodynamics {
         if(curve!=null)return curve;
         synchronized(this) {
             if(waterSaturation==null)waterSaturation=new WaterSaturation(hydrocarbon,hydrocarbon.componentCount(),water.triplePoint(),water.criticalTemperature(),
-                    t->com.wormzjl.icheme.science.column.v3.thermo.V3WaterProperties.wagnerPruss(water,t));
+                    t->com.wormzjl.icheme.science.thermo.water.WagnerPruss.pressure(waterConstants,t));
             return waterSaturation;
         }
     }

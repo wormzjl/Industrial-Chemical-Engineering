@@ -8,6 +8,7 @@ import com.wormzjl.icheme.science.fluid.thermo.SpinePackageData;
 import com.wormzjl.icheme.science.fluid.thermo.TranslatedPengRobinson;
 import com.wormzjl.icheme.science.material.DerivedPairs;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
+import com.wormzjl.icheme.science.material.WaterRecords;
 import com.wormzjl.icheme.science.thermo.IdealGasFunction;
 import com.wormzjl.icheme.science.thermo.PairInteractions;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel;
@@ -195,7 +196,8 @@ public final class CubicPhaseEvaluator {
         }
         var eos = TranslatedPengRobinson.residualOnly(components, kernel, translations);
         WaterShare share = null;
-        if (water >= 0) share = new WaterShare(tc[water], pc[water], omega[water], result.mathiasCopeman()[water]);
+        if (water >= 0) share = new WaterShare(WaterRecords.constants(pack.water()), tc[water], pc[water],
+                omega[water], result.mathiasCopeman()[water]);
         return new CubicPhaseEvaluator(packageId, components, eos, translations, idealGas, DERIVED_FAMILY, share, water, result);
     }
 
