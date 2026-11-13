@@ -379,7 +379,7 @@ rustCheckSteps.each { stepName, step ->
         commandLine([nativeCargoCommand] + step[0])
         inputs.files(fileTree(rustDirectory)).withPropertyName('rustWorkspace').withPathSensitivity(PathSensitivity.RELATIVE)
         // icheme-jni's formulation test reads the Java constants of the token.
-        if (stepName == 'rustTest') inputs.file('src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnCalculator.java')
+        if (stepName == 'rustTest') inputs.file('src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnLabels.java')
                 .withPropertyName('formulationSource').withPathSensitivity(PathSensitivity.RELATIVE)
         outputs.file(stamp)
         if (after != null) mustRunAfter after
