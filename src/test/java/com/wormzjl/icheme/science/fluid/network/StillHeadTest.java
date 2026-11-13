@@ -111,6 +111,39 @@ class StillHeadTest {
         assertEquals(StillColumn.POT_STILL, solved.notice());
     }
 
+    /**
+     * Code review finding 2: a column whose trays do not solve runs as the pot's single stage. The medium crude in the
+     * tutorial's 500 L still with 4 trays at reflux 1 (chapter 3, tools/tutorial-recordings/StillTrays), its pot at 115 °C
+     * after the light gas has gone: the tray solve fails cold and warm, and the head answers with the pot's single stage, the
+     * trays' failure its notice. At a 30 °C condenser outlet the gas stays gas and the naphtha condenses.
+     */
+    @Test
+    void traysThatDoNotSolveGiveThePotsSingleStage() {
+        var model = FluidThermodynamics.forNetwork(MaterialCatalog.bundled(), com.wormzjl.icheme.runtime.fluid.FluidPresetCatalog.NETWORK_PACKAGE);
+        double[] pot = {
+            0.0, 0.0022625252366497636, 2.0311600915328696, 3.7853015233320737, 11.058328559701161, 13.52425750804062,
+            18.80952816360237, 69.33998829124849, 140.71720552379952, 150.61734657959096, 143.48196014957185, 125.89443085074299,
+            104.0344174660747, 91.7574535474477, 83.0424757665696, 64.46596428282525, 34.1361776421039, 16.614663083325915,
+            9.330721335352653, 0.0, 0.0, 0.0, 0.0, 0.0,
+            0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+            0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+            0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+            0.0, 0.0, 0.0, 0.0, 0.0};
+        assertEquals(model.hydrocarbon.componentCount() + 1, pot.length, "the network's basis, water last");
+        double outlet = 303.15, diameter = BatchStill.columnDiameter(new BatchStill.Design(.5, BatchStill.Heater.SOLID, true, 4).rating());
+        assertFalse(new StillColumn(model, BatchStill.ATMOSPHERIC).solve(pot, 4, 1, outlet, null).converged(), "the trays do not solve here");
+        var outcome = StillHead.run(new StillHead.Job(pot, 388.212694, BatchStill.ATMOSPHERIC, 4, 1, null, diameter, outlet), model, () -> {
+        });
+        var solved = assertInstanceOf(StillHead.Solved.class, outcome, () -> "the single stage answers: " + outcome);
+        assertTrue(solved.potStill(), "the marker");
+        assertTrue(solved.notice().startsWith("no convergence"), solved.notice());
+        assertEquals(outlet, solved.condensateTemperature(), 1e-9, "the condenser's outlet");
+        var names = model.components();
+        var shares = solved.liquidShares();
+        for (var gas : List.of("Methane", "Ethane", "Propane")) assertTrue(shares[names.indexOf(gas)] < .1, gas + " stays gas: " + shares[names.indexOf(gas)]);
+        for (var naphtha : List.of("crude_pc02", "crude_pc03", "crude_pc04", "crude_pc05")) assertTrue(shares[names.indexOf(naphtha)] > .9, naphtha + " condenses: " + shares[names.indexOf(naphtha)]);
+    }
+
     private static void assertWashHead() {
         var model = FluidThermodynamics.forNetwork(PilotAqueousTestCatalog.catalog(), PilotAqueousTestCatalog.PACKAGE_ID).on(List.of("Ethanol"));
         int n = model.componentCount(), e = model.components().indexOf("Ethanol");

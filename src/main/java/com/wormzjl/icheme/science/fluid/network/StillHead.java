@@ -19,8 +19,9 @@ import java.util.Objects;
  * <li><b>The condenser's split</b> ({@link #divide}), arithmetic on the server: what reached the head goes to the
  * distillate (liquid) or the vent (vapour). Each component's liquid share at the condenser's outlet is the column's answer
  * ({@link StillColumn.Split#liquidShares}: 1 where the head condenses whole, less where its outlet, the water's inlet plus
- * {@link BatchStill#OUTLET_APPROACH}, leaves gas); of that, the share {@link #liquidShare} goes to the distillate. Before the
- * column's first answer nothing is known to condense: all vents. The energy goes with the moles; the condenser's duty is what
+ * {@link BatchStill#OUTLET_APPROACH}, leaves gas); of that, the share {@link #liquidShare} goes to the distillate. A column
+ * that solves the column waits for its first answer before it fires (Stills), so nothing reaches its head unknown. The energy
+ * goes with the moles; the condenser's duty is what
  * the outlets then give at their own temperatures less what the accounts carried.</li>
  * </ul>
  */
@@ -59,7 +60,7 @@ public final class StillHead {
         @Override public int[] settlingTrays(){return settlingTrays.clone();}
         /** Whether a tray would hold free water: the still's notice "water on the trays". */
         public boolean waterOnTrays(){return settlingTrays.length>0;}
-        /** Whether the column fell back to the pot's single stage ({@link StillColumn#POT_STILL}): two liquids on its trays. */
+        /** Whether the column fell back to the pot's single stage ({@link StillColumn#POT_STILL}): two liquids on its trays, or trays that did not solve (the notice says which). */
         public boolean potStill(){return notice!=null;}
     }
     public record Failed(String reason) implements Outcome {}
@@ -78,7 +79,16 @@ public final class StillHead {
         checkpoint.run();
         var split=column.solve(inPot,job.stages(),job.reflux(),job.outlet(),job.warm());
         checkpoint.run();
+        // A column whose trays do not solve still condenses what its condenser can: it runs as the pot's single stage (the
+        // sheet's rule, BatchStill), the trays' failure its notice (Solved.potStill). Only a single stage that fails too is no answer.
+        String notice=null;
+        if(!split.converged()&&job.stages()>0) {
+            notice=split.failure()==null?"no convergence":split.failure();
+            split=column.solve(inPot,0,job.reflux(),job.outlet(),null);
+            checkpoint.run();
+        }
         if(!split.converged())return new Failed(split.failure()==null?"no convergence":split.failure());
+        if(notice==null)notice=split.notice();
         var up=split.vapourFlows();var out=split.distillateFlows();var back=split.liquidFlows();
         var recovery=new double[n+1];java.util.Arrays.fill(recovery,1);
         // Each component's liquid share at the outlet; water on a list without it is in no pot, its share 1.
@@ -105,7 +115,7 @@ public final class StillHead {
             if(molar>0&&volume>0)fPerWatt=BatchStill.fFactor(split.topVapourRate()*molar,molar/volume,job.columnDiameter())/split.condenserDuty();
         }
         return new Solved(new Pool.Head(recovery,returnEnthalpy),split.profile(),split.headTemperature(),split.condensateTemperature(),liquidShares,need,split.refluxRatio(),fPerWatt,
-                split.settlingTrays(),split.flashes(),split.notice());
+                split.settlingTrays(),split.flashes(),notice);
     }
 
     /**
@@ -130,7 +140,7 @@ public final class StillHead {
     /**
      * Divides {@code arrived} moles with {@code energy} J (what the pot's vent gave its head) between the distillate and the
      * vent: of each component its liquid share at the condenser's outlet ({@code shares}, on the world's list; null before the
-     * column's first answer: none) times the condenser's share {@code liquid} goes to the distillate, the rest to the vent;
+     * still that solves no column: none) times the condenser's share {@code liquid} goes to the distillate, the rest to the vent;
      * with no condenser everything vents. The energy goes by the moles' share; energy with no moles (the latent heat of a
      * closed column's reflux) stays at the head as the condenser's, in neither account.
      */

@@ -400,8 +400,8 @@ class StillRuntimeTest {
      * is cooler than the pot, the distillate richer in isopentane than the charge, the water takes the condenser's duty, and
      * every mole stands in the pot, the head's accounts or what the outlets gave.
      */
-    @Test
-    void aPentanePotWithItsColumnDistilsIsopentaneFirst() {
+    /** A solid-fired still of 100 L with a 4-tray column and its condenser on 15 °C water, 60 % full of a 50/50 pentane charge at 300 K, reflux 2. */
+    private static Rig pentanes() {
         var model = FluidThermodynamics.forNetwork(CATALOG, "icheme:refinery").on(List.of("Isopentane", "N-pentane", "Nitrogen"));
         // A fluid basis holds nitrogen, and water last (WorldTopologyLedger.FluidBasis).
         assertEquals(List.of("Isopentane", "N-pentane", "Nitrogen", "Water"), model.components());
@@ -424,6 +424,12 @@ class StillRuntimeTest {
         var unit = StillUnit.built(POT, WATER, DISTILLATE, VENT, 0, design, model.componentCount()).withFiring(1).withReflux(2);
         var rig = new Rig(model, basis, devices, states, unit);
         rig.items = Integer.MAX_VALUE;
+        return rig;
+    }
+
+    @Test
+    void aPentanePotWithItsColumnDistilsIsopentaneFirst() {
+        var rig = pentanes();
         double[] start = rig.pot();
         rig.run(240);
         print("pentanes", rig);
@@ -444,6 +450,52 @@ class StillRuntimeTest {
             double total = now[c] + head[c] + vent[c] + dGave[c] + vGave[c];
             assertEquals(start[c], total, 1e-6 * start[c], "component " + c + " conserved");
         }
+    }
+
+    /**
+     * Code review finding 2b: a still that solves a column keeps its fire out until the column's first answer. The boiling
+     * pentane still loses its engine state, as at a load: until the first answer the pot takes no heat, the fire's total
+     * stands, no mole reaches the head's accounts (which would all go to the vent: the condenser returns its headspace gas)
+     * and the still reads HEATING (DISTILLING while its outlet gives what its account held); the slice after the answer the
+     * heat is back.
+     */
+    @Test
+    void aBoilingStillsFireWaitsForItsColumnsFirstAnswerAfterALoad() {
+        var rig = pentanes();
+        rig.run(240);
+        assertEquals(BatchStill.Status.DISTILLING, rig.view().status(), () -> rig.stills.statusLine(POT));
+        rig.stills.removed(POT);
+        int solves = rig.solves;
+        double heated = rig.unit().heated();
+        double[] head = rig.unit().head().moles(), vent = rig.unit().venting().moles();
+        boolean heating = false;
+        long waited = 0, limit = 4 * (Stills.SOLVE_TICKS + Stills.APPLY_TICKS);
+        while (Double.isNaN(rig.view().headTemperature())) {
+            assertTrue(++waited < limit, "the first answer arrives within " + limit + " ticks");
+            rig.run(.05);
+            if (!Double.isNaN(rig.view().headTemperature())) break;
+            var v = rig.view();
+            assertEquals(0, v.heat(), 0, "no heat before the first answer");
+            assertEquals(heated, rig.unit().heated(), 0, "the fire's total stands");
+            double[] h = rig.unit().head().moles(), n = rig.unit().venting().moles();
+            for (int c = 0; c < n.length; c++) {
+                assertTrue(n[c] <= vent[c] * (1 + 1e-12), "component " + c + " reaches no vent account: " + n[c] + " after " + vent[c]);
+                assertTrue(h[c] <= head[c] * (1 + 1e-12), "component " + c + " reaches no distillate account");
+            }
+            head = h;
+            vent = n;
+            // Before its first commit IDLE; then HEATING, or DISTILLING while its outlet still gives what its account held.
+            if (v.status() != BatchStill.Status.IDLE) {
+                heating = true;
+                assertTrue(v.status() == BatchStill.Status.HEATING || v.status() == BatchStill.Status.DISTILLING && v.distillateFlow() > 0, rig.stills.statusLine(POT));
+            }
+        }
+        assertTrue(heating, "the waiting still does not read IDLE");
+        assertTrue(rig.solves > solves, "the waiting still asked its column");
+        System.out.printf(Locale.ROOT, "finding 2b: the first answer after %d ticks%n", waited);
+        rig.run(Stills.CYCLE_TICKS / 20.0);
+        assertTrue(rig.view().heat() > 0, "the heat is back after the answer: " + rig.stills.statusLine(POT));
+        assertTrue(rig.unit().heated() > heated, "the fire burns again");
     }
 
     /**
@@ -586,8 +638,10 @@ class StillRuntimeTest {
      * The merge of main 0.27.1 (MAIN_MERGE_PLAN section 5): the wash of {@link #aWashInAnOpenPotBoilsAtItsBubblePoint} under
      * time factor 4 is fired on process time, so in a quarter of the ticks it takes the heat and boils off what it does in
      * 180 s at factor 1; the view keeps its compounds and its water (withTime on a view). The heat booked trails the run by
-     * one cadence (100 ticks of play: 5 s of process time at factor 1, 20 s at 4), so each runs 5 s of play past 180 s of
-     * process time: 3600 ticks at factor 1 and 900 at 4 are booked. The boil-off agrees within the coarser slices' 5 %.
+     * one cadence (100 ticks of play: 5 s of process time at factor 1, 20 s at 4). The fire waits for the condenser's first
+     * answer (code review finding 2b), which comes in the same ticks of play at either factor and takes effect at a slice's
+     * dispatch: the pot takes no heat before it, and from the tick the answer shows, the slice already dispatched included,
+     * 180 s of process time are booked (3600 ticks at factor 1, 900 at 4). The boil-off agrees within the coarser slices' 5 %.
      */
     @Test
     void aWashAtTimeFactorFourBoilsInAQuarterOfTheTicks() {
@@ -600,8 +654,12 @@ class StillRuntimeTest {
             var rig = washStill(catalog, id, 0, 0, factors[k]);
             assertEquals(List.of("Ethanol", "Nitrogen", "Water"), rig.model.components());
             rating = rig.unit().design().rating();
+            while (Double.isNaN(rig.view().headTemperature()) && rig.epoch[0] < 4 * (Stills.SOLVE_TICKS + Stills.APPLY_TICKS)) rig.run(.05);
+            assertFalse(Double.isNaN(rig.view().headTemperature()), "the condenser answered");
+            assertEquals(0, rig.heat.getOrDefault(PhysicalFluidTopology.sideIdentity(POT), 0.), 0, "no heat before the first answer");
+            System.out.printf(Locale.ROOT, "wash at factor %d: the first answer at tick %d%n", factors[k], rig.epoch[0]);
             double start = Arrays.stream(rig.potNode().inventory().moles()).sum();
-            rig.run(180.0 / factors[k] + 5);
+            rig.run(180.0 / factors[k]);
             heat[k] = rig.heat.getOrDefault(PhysicalFluidTopology.sideIdentity(POT), 0.);
             gone[k] = start - Arrays.stream(rig.potNode().inventory().moles()).sum();
         }

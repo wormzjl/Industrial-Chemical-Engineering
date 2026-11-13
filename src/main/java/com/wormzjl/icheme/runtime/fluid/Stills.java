@@ -11,6 +11,7 @@ import com.wormzjl.icheme.science.fluid.network.PassiveNetwork;
 import com.wormzjl.icheme.science.fluid.network.Pool;
 import com.wormzjl.icheme.science.fluid.network.PortPlan;
 import com.wormzjl.icheme.science.fluid.network.StillHead;
+import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import java.util.*;
 import java.util.function.LongFunction;
 
@@ -38,7 +39,8 @@ import java.util.function.LongFunction;
  * <li><b>Fuel.</b> A solid still burns the heat left in its item (a fact) and takes the next item from its slot when that runs
  * low; a liquid one plans its burners' valve from its firing and books the fuel's heat; an electric one draws on its store.</li>
  * </ul>
- * Everything but the accounts, the fire's heat and the settings is state: a load starts each still at no column answer. A
+ * Everything but the accounts, the fire's heat and the settings is state: a load starts each still at no column answer, and
+ * a still that solves a column keeps its fire out until the first one arrives ({@link #waits}; code review finding 2b). A
  * data-network controller's setpoints ({@link Plans}, owner decision O1) override the settings while it runs; the settings
  * resume when it stops.
  */
@@ -98,6 +100,8 @@ public final class Stills implements IslandCoordinator.Ports {
     private static final class Run {
         StillHead.Solved solved,next;long nextTick=Long.MAX_VALUE,applyTick=Long.MAX_VALUE;boolean pending;long lastSubmit=Long.MIN_VALUE/2;
         double condensed=1,heat,boiling,fired,perKilogram,fPerWatt,spout;String failure;
+        /** The fire is set and nothing cuts it (OVERHEAT, BOIL DRY, NO FUEL): the column is asked, lit or waiting. */
+        boolean asked;
         long potIsland=-1;final ArrayDeque<Arrival> arrivals=new ArrayDeque<>();final ArrayDeque<Paid> paid=new ArrayDeque<>();
         double potTemperature=Double.NaN,level,filled,distillateFlow,ventFlow,transit;
         int alarms;BatchStill.Status status=BatchStill.Status.IDLE;
@@ -162,7 +166,7 @@ public final class Stills implements IslandCoordinator.Ports {
             r.potIsland=island;
             promote(r,slice.startTick());
             double heat=heat(u,r,node,slice.seconds(coordinator.time()));
-            var head=pool.head()==null?null:head(u,r,pool.head().components());
+            var head=pool.head()==null?null:head(u,r,node,island,pool.head().components());
             var planned=pool.withFiring(heat).withHead(head);
             if(planned.equals(pool))continue;
             if(nodes==null)nodes=new ArrayList<>(graph.reservoirs());
@@ -180,7 +184,12 @@ public final class Stills implements IslandCoordinator.Ports {
         }
         return nodes==null&&pipes==null?graph:new PassiveNetwork(nodes==null?graph.reservoirs():nodes,pipes==null?graph.pipes():pipes,graph.scheduledTransfers());
     }
-    /** The heat into the pot for the slice, W, and its alarms. */
+    /**
+     * Whether still {@code u}'s fire waits for its column's first answer (code review finding 2b): a still that solves a
+     * column (a condenser or trays) and has none yet. Its head would send all to the vent, so nothing is boiled up until then.
+     */
+    private static boolean waits(StillUnit u,Run r){return (u.condenser()||u.stages()>0)&&r.solved==null;}
+    /** The heat into the pot for the slice, W, and its alarms; 0 while the fire {@link #waits}. */
     private double heat(StillUnit u,Run r,PassiveNetwork.Reservoir node,double seconds) {
         var design=u.design();double asked=firing(u)*design.rating();
         var s=node.state();int alarms=0;
@@ -191,25 +200,44 @@ public final class Stills implements IslandCoordinator.Ports {
             case LIQUID->asked>0?Math.min(1,r.fired*u.heater().efficiency()/asked):0;
             case ELECTRIC->{if(!electric.powered(u.id()))electric.restart(u.id());yield electric.powered(u.id())?1:0;}
         };
-        // A liquid still's burners light on the fuel's arrival: until they have fired once, the pot waits for it.
-        if(asked>0&&!(available>0))alarms|=u.heater()==BatchStill.Heater.ELECTRIC?0:BatchStill.Status.NO_FUEL.bit();
+        // A liquid still's burners light on the fuel's arrival: until they have fired once, the pot waits for it. A waiting
+        // fire asks no fuel yet (fuelTarget), so its burners' fuel is not missing.
+        boolean waits=waits(u,r);
+        if(asked>0&&!(available>0)&&!(waits&&u.heater()==BatchStill.Heater.LIQUID))alarms|=u.heater()==BatchStill.Heater.ELECTRIC?0:BatchStill.Status.NO_FUEL.bit();
         if(s.temperature()>=BatchStill.OVERHEAT)alarms|=BatchStill.Status.OVERHEAT.bit();
         if(liquid<=BatchStill.DRY_SHARE*volume)alarms|=BatchStill.Status.BOIL_DRY.bit();
-        double heat=(alarms&(BatchStill.Status.OVERHEAT.bit()|BatchStill.Status.BOIL_DRY.bit()))!=0?0:asked*available;
+        int cut=BatchStill.Status.OVERHEAT.bit()|BatchStill.Status.BOIL_DRY.bit();
+        r.asked=asked>=NO_HEAT&&(alarms&(cut|BatchStill.Status.NO_FUEL.bit()))==0;
+        double heat=waits||(alarms&cut)!=0?0:asked*available;
         // A column floods past its F-factor: the firing is held at the flood boil-up.
         if(design.stages()>0&&r.fPerWatt>0&&heat*r.fPerWatt>BatchStill.FLOOD_F_FACTOR){heat=BatchStill.FLOOD_F_FACTOR/r.fPerWatt;alarms|=BatchStill.Status.FLOODING.bit();}
         if(u.condenser()&&r.condensed<1)alarms|=BatchStill.Status.COOLING_LIMITED.bit();
         r.alarms=alarms;r.heat=heat>=NO_HEAT?heat:0;
         return r.heat;
     }
-    /** The pot's head for the slice: the column's answer on the island's list, all up before it or without a column. */
-    private Pool.Head head(StillUnit u,Run r,int components) {
+    /**
+     * The pot's head for the slice: the column's answer on the island's list, all up without a column. While the fire
+     * {@link #waits} for the first answer, the condenser returns all the gas the pot's vent releases (its headspace: no heat
+     * boils it up) at the gas's own molar enthalpy, so no mole reaches the head's accounts before the answer divides them.
+     */
+    private Pool.Head head(StillUnit u,Run r,PassiveNetwork.Reservoir node,long island,int components) {
+        if(waits(u,r))return returned(node,island,components);
         if(u.stages()==0||r.solved==null||r.solved.head().components()!=components)return Pool.Head.plain(components);
         return r.solved.head();
     }
-    /** A liquid still's burners' fuel, kg/s: its firing's fuel over the fuel's heat with {@link Burners#MARGIN}, 0 when cut. */
+    /** A head that returns all the pot's released gas at the gas's molar enthalpy (cached phase values; 0 with no gas, which releases none). */
+    private Pool.Head returned(PassiveNetwork.Reservoir node,long island,int components) {
+        var s=node.state();double molar=0;
+        if(FluidThermodynamics.holdsPhase(s,FluidThermodynamics.GAS)) {
+            var model=models.apply(island);double moles=0;
+            for(double v:FluidThermodynamics.phaseMoles(s,FluidThermodynamics.GAS))moles+=v;
+            if(moles>0)molar=model.phaseMass(s,FluidThermodynamics.GAS)*model.phaseSpecificEnthalpy(s,FluidThermodynamics.GAS,null)/moles;
+        }
+        return new Pool.Head(new double[components],Double.isFinite(molar)?molar:0);
+    }
+    /** A liquid still's burners' fuel, kg/s: its firing's fuel over the fuel's heat with {@link Burners#MARGIN}, 0 when cut or while the fire {@link #waits}. */
     private double fuelTarget(StillUnit u,Run r) {
-        if(u.heater()!=BatchStill.Heater.LIQUID||!(firing(u)>0))return 0;
+        if(u.heater()!=BatchStill.Heater.LIQUID||!(firing(u)>0)||waits(u,r))return 0;
         if((r.alarms&(BatchStill.Status.OVERHEAT.bit()|BatchStill.Status.BOIL_DRY.bit()))!=0)return 0;
         double fired=u.heater().drawn(firing(u)*u.design().rating());
         // Until fuel has arrived its heat is unknown: methane's, 50 MJ/kg, as the fired heaters ask.
@@ -400,11 +428,11 @@ public final class Stills implements IslandCoordinator.Ports {
 
     // ---------------- the column's solves ----------------
 
-    /** Asks for the column's next answer when the pot boils and its last answer is {@link #SOLVE_TICKS} old. */
+    /** Asks for the column's next answer when the fire is asked (lit, or waiting for the first answer) and its last answer is {@link #SOLVE_TICKS} old. */
     private void submit(StillUnit u,Run r,long island,PassiveNetwork.Reservoir node,long end) {
         // A still with neither column nor condenser has nothing to solve: its vapour leaves as the pot releases it.
         promote(r,end);
-        if(!u.condenser()&&u.stages()==0||r.pending||end<r.lastSubmit+SOLVE_TICKS||!(r.heat>0))return;
+        if(!u.condenser()&&u.stages()==0||r.pending||end<r.lastSubmit+SOLVE_TICKS||!r.asked)return;
         condensed(u,r,end);
         double reflux=BatchStill.effectiveReflux(reflux(u),r.condensed);
         var warm=r.solved==null?null:r.solved.profile();
@@ -445,7 +473,8 @@ public final class Stills implements IslandCoordinator.Ports {
         BatchStill.Status primary=null;
         for(var s:BatchStill.Status.values())if(s.alarm()&&(alarms&s.bit())!=0){primary=s;break;}
         // With a condenser the still distils where liquid reached the spout's account; its vented gas alone is boiling.
-        if(primary==null)primary=distilled||r.spout>0&&u.condenser()?BatchStill.Status.DISTILLING:r.heat>0&&r.solved!=null?BatchStill.Status.BOILING:r.heat>0?BatchStill.Status.HEATING:BatchStill.Status.IDLE;
+        // A fire waiting for its column's first answer reads HEATING: it is set and lights at the answer (the line gives a failure).
+        if(primary==null)primary=distilled||r.spout>0&&u.condenser()?BatchStill.Status.DISTILLING:r.heat>0&&r.solved!=null?BatchStill.Status.BOILING:r.heat>0||r.asked&&waits(u,r)?BatchStill.Status.HEATING:BatchStill.Status.IDLE;
         r.status=primary;r.alarms=alarms;
         if(u.condenser()&&r.condensed<1)r.alarms|=BatchStill.Status.COOLING_LIMITED.bit();
     }
@@ -524,7 +553,8 @@ public final class Stills implements IslandCoordinator.Ports {
     }
     /**
      * Each world component's liquid share at the condenser's outlet, from the column's answer on the pot island's own list; a
-     * component that list does not carry, and every component before the first answer, none (null: all vents).
+     * component that list does not carry, none; null (all vents) for a still that solves no column (the fire of one that
+     * does waits for its first answer, {@link #waits}).
      */
     private double[] shares(Run r) {
         if(r.solved==null||r.potIsland<0)return null;

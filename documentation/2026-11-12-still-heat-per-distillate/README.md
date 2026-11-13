@@ -33,6 +33,14 @@ charge. Fix: the split's rates per mole of distillate; the law's bracket on the 
   pot's single stage returning all of its liquid; the sheet's refused-solve fallback the same. BatchStillTest 23 (new
   closed-valve crude gate), StillHeadTest 5, StillRuntimeTest 12, BatchStillUnitTest 9, StillSizingTest 4,
   EthanolMainDataTest 5, all pass. Moved: continuity at T_b + 1 K, liquid share 0.000078 to 0.
+- 2026-11-13: tutorial code review findings 2 and 2b (owner: "do the fix"). The runtime's trays that do not solve run
+  as the pot's single stage, their failure the notice (`StillHead.run`, as the sheet); only a failed single stage is no
+  answer. A still that solves a column keeps its fire out until the first answer (`Stills.waits`): no heat, fuel or draw,
+  its condenser returns the headspace gas at the gas's molar enthalpy, it still asks the column (fire set, no OVERHEAT,
+  BOIL DRY or NO FUEL) and reads HEATING, a failure on its line. The first answer comes 200 to 300 ticks of play after a
+  load or a build. StillHeadTest 6 (new: crude at 115 °C, 4 trays, reflux 1), StillRuntimeTest 13 (new: the fire waits
+  after a reload; the factor-4 wash times its 180 s from the first answer), all pass. Recordings untouched (`BatchStill`
+  unchanged); no GameTest runs a still.
 
 ## Documents
 
