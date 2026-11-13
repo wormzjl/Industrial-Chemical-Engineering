@@ -101,6 +101,7 @@ public final class SpinePackageData {
         }
         List<Anchor> anchors = new ArrayList<>(count);
         var calibrations = catalog.fluidData().volumeReferences();
+        PengRobinsonKernel pure = null;
         for (int i = 0; i < count; i++) {
             var property = propertyPackage.properties().get(i);
             var translation = catalog.volumeTranslation(packageId, property.component());
@@ -115,8 +116,8 @@ public final class SpinePackageData {
             double t = point == null ? property.standardTemperature() : point.temperatureKelvin();
             double target = point == null ? property.molecularWeight() / property.density() : point.molarVolumeCubicMetres();
             double p = point == null ? property.standardPressure() : point.pressurePascal();
-            double rawVolume = CoefficientTranslations.pureLiquidCompressibility(components.get(i), constants[i][i], t, p)
-                    * PengRobinsonKernel.GAS_CONSTANT * t / p;
+            if (pure == null) pure = CoefficientTranslations.pureKernel(components, constants);
+            double rawVolume = CoefficientTranslations.pureLiquidVolume(pure, i, t, p);
             anchors.add(new Anchor(point == null ? AnchorSource.STANDARD_DENSITY : AnchorSource.CALIBRATION_POINT, t, p, target,
                     target - rawVolume));
         }
