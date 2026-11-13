@@ -70,14 +70,14 @@ final class StepObservations {
                 }
                 observed=observed.withFlowSamples(meters);
             }
-            if(pipe.control() instanceof FlowControl.Mover mover&&mover.liquid()&&mover.targetVolumeFlow()>0&&solver.read(e.graph,edge))
+            if(pipe.control() instanceof FlowControl.Mover mover&&mover.liquid()&&mover.targetVolumeFlow()>0&&solver.suctions.read(e.graph,edge))
                 observed=observed.withSuction(npshRatio(e,edge,states,flows[edge]),dry(edge,mover,modes.get(edge),flows[edge],states.get(a).pressure()),gasRatio(edge,mover,states.get(a).pressure()),
                         npshRequired(edge,flows[edge]),solver.constants.vapourShares[edge]);
             // A running dry screw's suction vapour share (owner V6 B): its wear and liquid noise read its liquid share.
-            else if(pipe.control() instanceof FlowControl.Machine screw&&com.wormzjl.icheme.science.machine.VacuumPump.dryScrew(screw.law())&&screw.targetVolumeFlow()>0&&solver.read(e.graph,edge))
+            else if(pipe.control() instanceof FlowControl.Machine screw&&com.wormzjl.icheme.science.machine.VacuumPump.dryScrew(screw.law())&&screw.targetVolumeFlow()>0&&solver.suctions.read(e.graph,edge))
                 observed=observed.withSuction(Double.NaN,false,Double.NaN,Double.NaN,solver.constants.vapourShares[edge]);
             // A running centrifugal compressor's suction condensed mass share (N2): its wet gas wear reads it.
-            else if(pipe.control() instanceof FlowControl.Machine compressor&&compressor.law() instanceof com.wormzjl.icheme.science.machine.CentrifugalCompressor&&compressor.targetVolumeFlow()>0&&solver.read(e.graph,edge))
+            else if(pipe.control() instanceof FlowControl.Machine compressor&&compressor.law() instanceof com.wormzjl.icheme.science.machine.CentrifugalCompressor&&compressor.targetVolumeFlow()>0&&solver.suctions.read(e.graph,edge))
                 observed=observed.withCondensed(solver.constants.condensedShares[edge]);
             // A steam turbine passing steam forward: its own exhaust moisture (N4), which its wet exhaust wear reads.
             else if(pipe.control() instanceof FlowControl.Turbine&&flows[edge]>0&&carried.mass()>0)
@@ -101,7 +101,7 @@ final class StepObservations {
      * outlet pressure {@code p2}: FLASHING where p2 lies below Pv (the vapour stays), CAVITATING where σ ≤ 1 / x_Fz
      * ({@link #VALVE_INCIPIENT}: the vena contracta falls below Pv and the bubbles collapse downstream), else PLAIN. Water
      * reads its saturation pressure at the donor's temperature. A hydrocarbon liquid is throttled at its own enthalpy, as
-     * {@link PassiveStepSolver#releasePressure} reads it, but tested at two pressures instead of bisected: it flashes if it holds vapour at
+     * {@link MoverSuction#releasePressure} reads it, but tested at two pressures instead of bisected: it flashes if it holds vapour at
      * p2, and it cavitates if it holds vapour at p1 − (p1 − p2) / x_Fz, where σ = 1 / x_Fz (any Pv cavitates where that
      * pressure is below the box's floor); a liquid beside vapour stands at its bubble point, its node's pressure. The worse
      * of the two liquids counts. NONE with no liquid or where the thermodynamics refuses. Observational only.
@@ -133,7 +133,7 @@ final class StepObservations {
     /**
      * W10b (owner decision D34): a running liquid pump's σ = NPSHA / NPSH3 at the accepted point, which its wear reads
      * ({@link com.wormzjl.icheme.science.machine.Wear}): its suction end's pressure over the floor of the liquid it draws
-     * ({@link PassiveStepSolver#vapourPressure}), as a head of that liquid ({@code liquidDensities}), over this solve's NPSH3 at its suction
+     * ({@link MoverSuction#vapourPressure}), as a head of that liquid ({@code liquidDensities}), over this solve's NPSH3 at its suction
      * flow ({@link com.wormzjl.icheme.science.machine.Npsh#required}). NaN where it has no NPSH design (a set-flow
      * constructed pump), no floor or no liquid. Observational: never fed back into the solve.
      */
@@ -141,7 +141,7 @@ final class StepObservations {
         double rho=solver.constants.liquidDensities[edge],required=npshRequired(edge,massFlow);
         if(!(required>0))return Double.NaN;
         var pipe=e.graph.pipes().get(edge);int a=pipe.first();double floor;
-        try{floor=solver.vapourPressure(e,edge,states.get(a));}catch(IllegalArgumentException outsideData){return Double.NaN;}
+        try{floor=solver.suctions.vapourPressure(e,edge,states.get(a));}catch(IllegalArgumentException outsideData){return Double.NaN;}
         if(!(floor<Double.POSITIVE_INFINITY))return Double.NaN;
         return (PortStreams.endPressure(model,e.graph.reservoirs().get(a),pipe.firstPort(),states.get(a))-floor)/(rho*GRAVITY)/required;
     }
@@ -153,7 +153,7 @@ final class StepObservations {
     /**
      * W10c (owner decision D35): a running centrifugal pump's suction vapour share in Turpin onsets, {@code r = α/α_T} at its
      * suction node's pressure ({@link com.wormzjl.icheme.science.machine.GasEntrainment#onset}), the share this solve read
-     * ({@link PassiveStepSolver#readSuctions}); NaN for a set-flow pump, which has no head factor, or no suction pressure. Observational.
+     * ({@link MoverSuction#readSuctions}); NaN for a set-flow pump, which has no head factor, or no suction pressure. Observational.
      */
     double gasRatio(int edge,FlowControl.Mover mover,double suctionPressure) {
         if(!(mover instanceof FlowControl.Machine)||!(suctionPressure>0))return Double.NaN;
@@ -161,11 +161,11 @@ final class StepObservations {
     }
     /**
      * W10b (owner decision D34): whether a liquid pump whose driver is on runs dry at the accepted point: vapour-locked
-     * ({@link PassiveStepSolver#vapourLocks}), refused for a dry suction ({@code INLET_WRONG_PHASE}, decision D58), or gas-locked (a
+     * ({@link MoverSuction#vapourLocks}), refused for a dry suction ({@code INLET_WRONG_PHASE}, decision D58), or gas-locked (a
      * centrifugal pump passing nothing with its suction's vapour share past the onset, {@link com.wormzjl.icheme.science.machine.GasEntrainment#onset}).
      */
     boolean dry(int edge,FlowControl.Mover mover,FlowControl.Mode mode,double massFlow,double suctionPressure) {
-        if(solver.vapourLocked(edge)||mode==FlowControl.Mode.INLET_WRONG_PHASE)return true;
+        if(solver.suctions.vapourLocked(edge)||mode==FlowControl.Mode.INLET_WRONG_PHASE)return true;
         return mover instanceof FlowControl.Machine&&Math.abs(massFlow)<=1e-10&&suctionPressure>0&&solver.constants.vapourShares[edge]>com.wormzjl.icheme.science.machine.GasEntrainment.onset(suctionPressure);
     }
     /**
