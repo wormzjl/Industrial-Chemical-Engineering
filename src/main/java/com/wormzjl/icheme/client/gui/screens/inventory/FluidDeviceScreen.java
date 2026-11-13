@@ -9,10 +9,9 @@ import com.wormzjl.icheme.client.gui.common.*;
 import com.wormzjl.icheme.client.gui.common.DeviceMeters.PhaseRatioBasis;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
 import com.wormzjl.icheme.client.gui.common.kit.GuiCanvas;
-import com.wormzjl.icheme.client.gui.common.kit.KitWidgets;
+import com.wormzjl.icheme.client.gui.common.kit.KitDoor;
 import com.wormzjl.icheme.client.gui.common.kit.Palette;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
-import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
 import com.wormzjl.icheme.client.gui.common.kit.SkinButton;
 import com.wormzjl.icheme.client.gui.common.kit.SkinField;
@@ -96,8 +95,8 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         if(key.equals("title"))return strip().plate().moved(leftPos,topPos);
         String slot=key;
         if(key.startsWith("reading:")){slot=null;var readings=page==Page.ACCESSORY?List.<DeviceColumn.Meter>of():deviceInput().readings();for(int k=0;k<readings.size();k++)if(readings.get(k).key().equals(key.substring(8)))slot="meter:"+k;}
-        var r=slot==null?null:com.wormzjl.icheme.client.gui.common.TourAnchors.find(slot,doorColumns,k->tr(k));
-        return r==null?null:com.wormzjl.icheme.client.gui.common.TourAnchors.reveal(doorView,r,reveal).moved(leftPos,topPos);
+        var r=slot==null?null:com.wormzjl.icheme.client.gui.common.TourAnchors.find(slot,door.columns(),k->tr(k));
+        return r==null?null:com.wormzjl.icheme.client.gui.common.TourAnchors.reveal(door.view(),r,reveal).moved(leftPos,topPos);
     }
     /** The device's name as the client's block holds it (N1): a structure's on its cells, a one-block device's on itself. */
     private String currentName(){var level=minecraft==null?null:minecraft.level;return level==null?"":com.wormzjl.icheme.world.level.block.EquipmentStructure.name(level,menu.position());}
@@ -343,7 +342,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         box.setTooltip(Tooltip.create(Component.literal(label)));box.setEditable(canEdit());editors.put(key,addRenderableWidget(box));
         return box;
     }
-    private void changePage(Page target){if(heat()!=null&&(target==Page.OVERVIEW||target==Page.CONTROL))preferredHeatPage=target;page=target;templates=false;scroll.reset();doorView.reset();rebuild();}
+    private void changePage(Page target){if(heat()!=null&&(target==Page.OVERVIEW||target==Page.CONTROL))preferredHeatPage=target;page=target;templates=false;scroll.reset();door.reset();rebuild();}
     private void toggleBasis(){
         try{if(composition!=null){composition.toggleBasis();mass=composition.mass();}else mass=!mass;ClientConfig.basis(mass?ClientConfig.Basis.MASS:ClientConfig.Basis.MOLE);rebuild();}
         catch(IllegalArgumentException e){message=tr("invalid_composition");}
@@ -370,7 +369,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         rebuildNext=false;String focused=editors.entrySet().stream().filter(e->e.getValue()==getFocused()).map(Map.Entry::getKey).findFirst().orElse(null);
         int cursor=focused==null?0:editors.get(focused).getCursorPosition();
         boolean dropdownOpen=componentDropdown!=null&&componentDropdown.expanded();
-        clearWidgets();editors.clear();labels.clear();componentDropdown=null;doorWidgets.clear();doorColumns=List.of();
+        clearWidgets();editors.clear();labels.clear();componentDropdown=null;
         var data=menu.clientData();
         var tabs=new ArrayList<String>();var pages=new ArrayList<Page>();tabs.add("overview");pages.add(Page.OVERVIEW);
         if(heat()!=null){tabs.add("control");pages.add(Page.CONTROL);}
@@ -618,7 +617,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     @Override public void render(GuiGraphics g,int mouseX,int mouseY,float partialTick){
         ProcessUi.restoreCursor(minecraft,this);refresh();if(rebuildNext)rebuild();hovered=null;
         // The door column's widgets follow its scroll before they draw.
-        doorWidgets.place(doorView,leftPos,topPos);
+        door.place(leftPos,topPos);
         // An open tour takes the pointer: the page under it shows no hover.
         if(tour.isOpen()){super.render(g,-1,-1,partialTick);tour.render(g,font,width,height,mouseX,mouseY);return;}
         super.render(g,mouseX,mouseY,partialTick);
@@ -942,11 +941,12 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     }
     // ---- The Control tab (HEAT_GUI_PLAN.md section 2): the unit's flowsheet on the left, its control column on the right ----
 
-    // The door column's view on every page: the Control tab's columns, or a device's page's column (DeviceColumn).
-    private final ScrollView doorView=new ScrollView();
-    private final KitWidgets doorWidgets=new KitWidgets();
-    /** The door columns as placed: layout C's two (GUI_TOOLKIT_PLAN.md section 10), one on a narrow screen, or a device's page's. */
-    private List<Column> doorColumns=List.of();
+    /**
+     * The door column's view on every page (KitDoor, finding C2): the Control tab's columns, layout C's two
+     * (GUI_TOOLKIT_PLAN.md section 10) or one on a narrow screen, or a device's page's column (DeviceColumn); one view, one
+     * bar, the kept widgets.
+     */
+    private final KitDoor door=new KitDoor();
     private HeatFlowsheet flowsheet;private String flowsheetKey="";
     private int controlTop(){return FluidGuiLayout.DOOR_TOP;}
     private int controlBottom(){return imageHeight-FluidGuiLayout.DOOR_FOOT;}
@@ -967,18 +967,21 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
      */
     private void buildControl(){
         var slots=controlSlots();
-        doorColumns=controlColumns(imageWidth);
-        int tall=doorColumns.stream().mapToInt(c->c.bounds().h()).max().orElse(0);
-        doorView.layout(new Rect(slots.leftX()-2,controlTop(),slots.rightX()+slots.rightWidth()-slots.leftX()+4,controlBottom()-controlTop()),slots.scrollX(),tall);
+        door.layout(controlAreas(imageWidth),slots.scrollX(),controlRows(imageWidth),GuiCanvas.measure(font));
         keepWidgets(this::controlAction);
     }
-    /** The Control tab's columns at an image width: layout C's two, or one on a narrow screen. */
-    private List<Column> controlColumns(int width){
-        var slots=FluidGuiLayout.control(width);var input=controlInput();var measure=GuiCanvas.measure(font);
-        if(!slots.split())return List.of(Column.place(HeatControlColumn.rows(input,FluidDeviceScreen::tr),slots.rightX(),controlTop(),slots.rightWidth(),measure,Column.Metrics.COMPACT));
+    /** The Control tab's columns' areas at an image width: layout C's two, or one on a narrow screen; the door's view spans them. */
+    private List<Rect> controlAreas(int width){
+        var slots=FluidGuiLayout.control(width);int h=controlBottom()-controlTop();
+        if(!slots.split())return List.of(new Rect(slots.rightX(),controlTop(),slots.rightWidth(),h));
+        return List.of(new Rect(slots.leftX(),controlTop(),slots.leftWidth(),h),new Rect(slots.rightX(),controlTop(),slots.rightWidth(),h));
+    }
+    /** The Control tab's columns' rows at an image width: layout C's two, or one on a narrow screen. */
+    private List<List<Column.Row>> controlRows(int width){
+        var slots=FluidGuiLayout.control(width);var input=controlInput();
+        if(!slots.split())return List.of(HeatControlColumn.rows(input,FluidDeviceScreen::tr));
         var two=HeatControlColumn.columns(input,FluidDeviceScreen::tr);
-        return List.of(Column.place(two.left(),slots.leftX(),controlTop(),slots.leftWidth(),measure,Column.Metrics.COMPACT),
-            Column.place(two.right(),slots.rightX(),controlTop(),slots.rightWidth(),measure,Column.Metrics.COMPACT));
+        return List.of(two.left(),two.right());
     }
     /**
      * A device's page's door column (DeviceColumn, GUI_REVIEW.md order 1) in place of the old rail: from x 10 to
@@ -986,39 +989,30 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
      * ({@link #renderDevice}).
      */
     private void buildDevice(){
-        doorColumns=List.of(placeDevice());
+        door.layout(List.of(new Rect(10,controlTop(),side()-10,controlBottom()-controlTop())),side()+3,List.of(deviceRows()),GuiCanvas.measure(font));
         keepWidgets(this::deviceAction);
     }
-    private Column placeDevice(){
-        var column=deviceColumn(imageWidth);
-        doorView.layout(new Rect(8,controlTop(),side()-6,controlBottom()-controlTop()),side()+3,column.bounds().h());
-        return column;
-    }
-    /** The device's page's column at an image width: from x 10 to {@code FluidGuiLayout.side}. */
-    private Column deviceColumn(int width){
+    /** The device's page's column's rows, placed from x 10 to {@code FluidGuiLayout.side}. */
+    private List<Column.Row> deviceRows(){
         var state=menu.clientData().view().state();
         var rows=new ArrayList<>(page==Page.ACCESSORY?accessoryRows():DeviceColumn.rows(deviceInput(),FluidDeviceScreen::tr));
         var ids=new ArrayList<>(com.wormzjl.icheme.client.InstrumentRenderer.identities(minecraft.level,menu.position()));
         if(menu.clientData().valve()!=null)ids.add(String.format(Locale.ROOT,"CV-%04d",menu.identity()));
         rows.addAll(DeviceColumn.instrumentIds(ids,FluidDeviceScreen::tr));
-        return Column.place(rows,10,controlTop(),FluidGuiLayout.side(width)-10,GuiCanvas.measure(font),Column.Metrics.COMPACT);
+        return rows;
     }
     /**
      * The door columns' fields and buttons, kept at their slots and moved as the view scrolls, so a scroll rebuilds
      * nothing; a button acts through {@code action}.
      */
     private void keepWidgets(java.util.function.Consumer<String> action){
-        for(var column:doorColumns)for(var p:column.rows()){
-            if(p.row() instanceof Column.Field f)doorWidgets.keep(doorBox(f,p.slots().get(f.key())),p.slots().get(f.key()));
-            else if(p.row() instanceof Column.Buttons b)for(var spec:b.buttons()){
-                var slot=p.slots().get(spec.key());
-                // The side shown and the switch's position are latched, as the page's tab is; a display key is flat.
-                var button=doorButton(spec.text(),slot.x(),slot.y(),slot.w(),()->action.accept(spec.key())).latched(spec.latched()).soft(spec.soft());
-                button.active=spec.active();if(spec.hint()!=null)button.setTooltip(Tooltip.create(Component.literal(spec.hint())));
-                doorWidgets.keep(button,slot);
-            }
-        }
-        doorWidgets.place(doorView,leftPos,topPos);
+        door.keep(this::doorBox,(spec,slot)->{
+            // The side shown and the switch's position are latched, as the page's tab is; a display key is flat.
+            var button=doorButton(spec.text(),slot.x(),slot.y(),slot.w(),()->action.accept(spec.key())).latched(spec.latched()).soft(spec.soft());
+            button.active=spec.active();if(spec.hint()!=null)button.setTooltip(Tooltip.create(Component.literal(spec.hint())));
+            return button;
+        });
+        door.place(leftPos,topPos);
     }
     /**
      * A device's page's action (DeviceColumn's keys): the other side's screen; the solids' recovery, sent at once; the
@@ -1047,14 +1041,12 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     }
     /** A device's page's door column, placed again from this frame's view: its texts follow the plant with no rebuild. */
     private void renderDevice(GuiCanvas canvas,Skin skin){
-        doorColumns=List.of(placeDevice());
+        door.place(deviceRows(),GuiCanvas.measure(font));
         drawDoor(canvas,skin);
     }
-    /** The door columns as placed: drawn clipped to their view, a row's hint read on hover, the view's bar. */
+    /** The door columns as placed: drawn clipped to their view, the view's bar, a row's hint read on hover. */
     private void drawDoor(GuiCanvas canvas,Skin skin){
-        canvas.clip(doorView.viewport());for(var column:doorColumns)column.draw(canvas,-doorView.offset(),skin);canvas.unclip();
-        if(doorView.inside(hoverX,hoverY))for(var column:doorColumns){var hover=column.hover(hoverX,doorView.contentY(hoverY));if(hover!=null)hovered=hover;}
-        doorView.drawBar(canvas,skin);
+        var hover=door.draw(canvas,skin,hoverX,hoverY);if(hover!=null)hovered=hover;
     }
     /** The name's entry in the title strip (N1): the name as typed, at most DeviceName.MAX characters, sent with Apply; its hint while empty. */
     private EditBox nameBox(Rect slot){
@@ -1231,22 +1223,22 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         SkinField.clickOutside(this,x,y);
         // The door column's view on every page: its bar, then a choice it places (a mode, a valve's target); then the table's scroll.
         double rx=x-leftPos,ry=y-topPos;
-        if(doorView.press(rx,ry,button))return true;
-        if(button==0&&doorView.inside(rx,ry))for(var column:doorColumns){var action=column.action(rx,doorView.contentY(ry));if(action!=null){if(page==Page.CONTROL)controlAction(action);else deviceAction(action);return true;}}
+        if(door.press(rx,ry,button))return true;
+        if(button==0&&door.view().inside(rx,ry))for(var column:door.columns()){var action=column.action(rx,door.view().contentY(ry));if(action!=null){if(page==Page.CONTROL)controlAction(action);else deviceAction(action);return true;}}
         if(page!=Page.CONTROL&&scroll.click(x,y,button)){rebuildNext=true;return true;}
         return super.mouseClicked(x,y,button);
     }
     @Override public boolean mouseDragged(double x,double y,int button,double dx,double dy){
         if(componentDropdown!=null&&componentDropdown.popupDrag(y))return true;
-        if(doorView.drag(y-topPos))return true;
+        if(door.drag(y-topPos))return true;
         if(page!=Page.CONTROL&&scroll.drag(y)){rebuildNext=true;return true;}
         return super.mouseDragged(x,y,button,dx,dy);
     }
-    @Override public boolean mouseReleased(double x,double y,int button){if(componentDropdown!=null)componentDropdown.popupRelease();scroll.release();doorView.release();return super.mouseReleased(x,y,button);}
+    @Override public boolean mouseReleased(double x,double y,int button){if(componentDropdown!=null)componentDropdown.popupRelease();scroll.release();door.release();return super.mouseReleased(x,y,button);}
     @Override public boolean mouseScrolled(double x,double y,double horizontal,double vertical){
         if(tour.isOpen())return true;
         if(componentDropdown!=null&&componentDropdown.popupScroll(x,y,vertical))return true;
-        if(doorView.wheel(x-leftPos,y-topPos,vertical))return true;
+        if(door.wheel(x-leftPos,y-topPos,vertical))return true;
         if(page!=Page.CONTROL&&x>=leftPos+tableX()&&scroll.wheel(vertical)){rebuildNext=true;return true;}
         return super.mouseScrolled(x,y,horizontal,vertical);
     }
