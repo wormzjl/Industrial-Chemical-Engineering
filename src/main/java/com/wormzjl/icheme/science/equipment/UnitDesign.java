@@ -189,6 +189,16 @@ public abstract class UnitDesign {
         return stated.moves();
     }
 
+    /**
+     * The revision of the cells this design places, as its {@link Sizes} states it (AGENTS.md: an identity is a declared
+     * revision): each shell cell saves it, and a cell saved with another one is rebuilt to the current layout at its load
+     * ({@link ShapeRasterizer#layoutRevision}). Bumped by a change of the box, the shell or interior cells or the nozzles
+     * at any size; {@code EquipmentLayoutGoldenTest} fails when the recorded cells change and it does not.
+     */
+    public int layoutRevision() {
+        return stated.layoutRevision();
+    }
+
     // ---- Constructor and datasheet ----------------------------------------------------------------------------------
 
     /** The constructor's row for the main size (its translation key under the constructor's prefix). */

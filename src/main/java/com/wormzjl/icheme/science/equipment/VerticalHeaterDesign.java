@@ -26,7 +26,8 @@ final class VerticalHeaterDesign extends UnitDesign {
         super(new Sizes(2.5, 12, .5,
                 Sizes.COMPUTED, Sizes.COMPUTED,
                 3, EquipmentShape.MAX_SUPPORT,
-                Orientation.VERTICAL, "radiant_diameter", "radiant_height", "heater_floor", false));
+                Orientation.VERTICAL, "radiant_diameter", "radiant_height", "heater_floor", false,
+                1));
     }
 
     @Override

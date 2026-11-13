@@ -22,7 +22,8 @@ final class DelayedCokerDesign extends UnitDesign {
         super(new Sizes(4, 10, .5,
                 1, 2,
                 8, EquipmentShape.MAX_SUPPORT,
-                Orientation.VERTICAL, "delayed_coker.drum", "delayed_coker.pairs", "delayed_coker.flange", true));
+                Orientation.VERTICAL, "delayed_coker.drum", "delayed_coker.pairs", "delayed_coker.flange", true,
+                1));
     }
 
     @Override

@@ -62,7 +62,8 @@ final class BatchStillDesign extends UnitDesign {
         super(new Sizes(Sizes.COMPUTED, Sizes.COMPUTED, 50,
                 1, 1,
                 0, 0,
-                Orientation.VERTICAL, "still_pot", null, null, false));
+                Orientation.VERTICAL, "still_pot", null, null, false,
+                1));
     }
 
     @Override

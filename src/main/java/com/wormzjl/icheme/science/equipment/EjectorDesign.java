@@ -17,7 +17,8 @@ final class EjectorDesign extends UnitDesign {
         super(new Sizes(ProcessUnit.SUCTION_STEP, PipeSizes.MAX_OUTSIDE, ProcessUnit.SUCTION_STEP,
                 1, 1,
                 1, EquipmentShape.MAX_SUPPORT,
-                Orientation.VERTICAL, "suction", null, "discharge", false));
+                Orientation.VERTICAL, "suction", null, "discharge", false,
+                1));
     }
 
     @Override

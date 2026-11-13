@@ -28,7 +28,8 @@ final class GearboxDesign extends UnitDesign {
         super(new Sizes(MachineDuty.MOTOR_POWERS.getFirst(), MachineDuty.MOTOR_POWERS.getLast(), .05,
                 1, 1,
                 0, 8,
-                Orientation.HORIZONTAL, "gearbox.power", null, "machine_table", true));
+                Orientation.HORIZONTAL, "gearbox.power", null, "machine_table", true,
+                1));
     }
 
     @Override

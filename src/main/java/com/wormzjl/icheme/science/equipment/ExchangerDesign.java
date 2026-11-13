@@ -17,7 +17,8 @@ final class ExchangerDesign extends UnitDesign {
         super(new Sizes(.5, 2.5, ProcessUnit.SHELL_STEP,
                 Sizes.COMPUTED, 12,
                 2, EquipmentShape.MAX_SUPPORT,
-                Orientation.HORIZONTAL, "shell", "tubes", "shell_bottom", false));
+                Orientation.HORIZONTAL, "shell", "tubes", "shell_bottom", false,
+                1));
     }
 
     @Override

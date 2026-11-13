@@ -45,7 +45,8 @@ final class StirredReactorDesign extends UnitDesign {
         super(new Sizes(1, 4, .2,
                 Sizes.COMPUTED, Sizes.COMPUTED,
                 1, 3,
-                Orientation.VERTICAL, "stirred_reactor.diameter", "stirred_reactor.straight_side", "stirred_reactor.clearance", true));
+                Orientation.VERTICAL, "stirred_reactor.diameter", "stirred_reactor.straight_side", "stirred_reactor.clearance", true,
+                1));
     }
 
     /** The straight side, whole metres: 0.7 D at least (DIN 28136 small reactors are squat, 0.65 to 1.2 D), 1 m at least. */

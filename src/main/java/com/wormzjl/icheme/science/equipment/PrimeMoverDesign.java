@@ -38,7 +38,8 @@ final class PrimeMoverDesign extends UnitDesign {
         super(new Sizes(1, Sizes.COMPUTED, 1,
                 1, Sizes.COMPUTED,
                 0, 0,
-                Orientation.HORIZONTAL, "prime_mover.model", null, null, true));
+                Orientation.HORIZONTAL, "prime_mover.model", null, null, true,
+                1));
         this.family = family;
     }
 

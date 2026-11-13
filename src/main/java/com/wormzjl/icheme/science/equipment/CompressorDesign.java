@@ -25,7 +25,8 @@ final class CompressorDesign extends UnitDesign {
         super(new Sizes(.15, 1.2, ProcessUnit.SUCTION_STEP,
                 2, ProcessUnit.MAX_THROWS,
                 Sizes.COMPUTED, EquipmentShape.MAX_SUPPORT,
-                Orientation.HORIZONTAL, "bore", "throws", "foundation", true));
+                Orientation.HORIZONTAL, "bore", "throws", "foundation", true,
+                1));
     }
 
     @Override

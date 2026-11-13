@@ -31,7 +31,8 @@ final class PumpDesign extends UnitDesign {
         super(new Sizes(ProcessUnit.SUCTION_STEP, .6, ProcessUnit.SUCTION_STEP,
                 1, 1,
                 0, 0,
-                Orientation.HORIZONTAL, "pump_discharge", null, null, true));
+                Orientation.HORIZONTAL, "pump_discharge", null, null, true,
+                1));
     }
 
     @Override

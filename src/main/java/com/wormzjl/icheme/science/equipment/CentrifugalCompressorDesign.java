@@ -36,7 +36,8 @@ final class CentrifugalCompressorDesign extends UnitDesign {
         super(new Sizes(.3, 1.5, .1,
                 2, 9,
                 0, MAX_SUPPORT,
-                Orientation.HORIZONTAL, "centrifugal_compressor.impeller", "centrifugal_compressor.impellers", "centrifugal_compressor.table", true));
+                Orientation.HORIZONTAL, "centrifugal_compressor.impeller", "centrifugal_compressor.impellers", "centrifugal_compressor.table", true,
+                1));
     }
 
     @Override

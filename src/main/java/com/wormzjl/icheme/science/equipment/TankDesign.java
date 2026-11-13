@@ -74,7 +74,8 @@ final class TankDesign extends UnitDesign {
         super(new Sizes(4, 40, 1,
                 4, 24,
                 0, 0,
-                Orientation.VERTICAL, "tank.diameter", "tank.shell", null, false));
+                Orientation.VERTICAL, "tank.diameter", "tank.shell", null, false,
+                1));
     }
 
     /** A new tank's shell: 0.6 D (the concept sheet's 20 m tank on a 12 m shell), within its range. */

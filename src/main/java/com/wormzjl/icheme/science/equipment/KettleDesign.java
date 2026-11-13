@@ -18,7 +18,8 @@ final class KettleDesign extends UnitDesign {
         super(new Sizes(.5, 2, ProcessUnit.SHELL_STEP,
                 Sizes.COMPUTED, 10,
                 2, EquipmentShape.MAX_SUPPORT,
-                Orientation.HORIZONTAL, "bundle", "tubes", "kettle_bottom", false));
+                Orientation.HORIZONTAL, "bundle", "tubes", "kettle_bottom", false,
+                1));
     }
 
     @Override

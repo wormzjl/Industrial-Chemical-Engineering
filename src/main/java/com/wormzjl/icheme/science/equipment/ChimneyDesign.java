@@ -25,7 +25,8 @@ final class ChimneyDesign extends UnitDesign {
         super(new Sizes(Sizes.COMPUTED, Sizes.COMPUTED, Sizes.COMPUTED,
                 Sizes.COMPUTED, Sizes.COMPUTED,
                 0, 0,
-                Orientation.VERTICAL, "chimney_diameter", "chimney_height", null, false));
+                Orientation.VERTICAL, "chimney_diameter", "chimney_height", null, false,
+                1));
         this.form = form;
     }
 

@@ -35,7 +35,8 @@ final class VacuumPumpDesign extends UnitDesign {
         super(new Sizes(1, Sizes.COMPUTED, 1,
                 1, Sizes.COMPUTED,
                 0, 0,
-                Orientation.HORIZONTAL, "vacuum_pump.model", null, null, true));
+                Orientation.HORIZONTAL, "vacuum_pump.model", null, null, true,
+                1));
         this.ring = ring;
     }
 
