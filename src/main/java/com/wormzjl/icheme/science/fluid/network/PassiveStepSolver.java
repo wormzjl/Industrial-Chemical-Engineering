@@ -1985,7 +1985,7 @@ public final class PassiveStepSolver {
                 // A vacuum pump (batch 2026-11-10-vacuum-pump) counts the suction mixture's volume as a set-flow mover does; a dry
                 // screw keeps its vapour share for its wear and liquid noise (owner V6 B).
                 else if(machine.law() instanceof com.wormzjl.icheme.science.machine.VacuumPump){if(com.wormzjl.icheme.science.machine.VacuumPump.dryScrew(machine.law()))vapourShares[edge]=supply.vapourVolumeShare();}
-                else wetShares[edge]=com.wormzjl.icheme.science.machine.CentrifugalCompressor.wetEfficiency(1,supply.condensedMassShare());
+                else wetShares[edge]=wetShare(supply);
             }
             // W10d: a set-flow pump's suction vapour share, for its page's gas reading only (its law counts the mixture already).
             else if(mover.liquid())vapourShares[edge]=(duration>0?InletPhase.supply(model,graph,edge,mover.targetVolumeFlow(),duration):drawnStreams[edge].supply()).vapourVolumeShare();
@@ -2004,9 +2004,32 @@ public final class PassiveStepSolver {
     private double kappa(PassiveNetwork graph,PassiveNetwork.Pipe pipe) {
         if(pipe.control() instanceof FlowControl.Mover mover&&mover.liquid())return 1.4;
         var state=graph.reservoirs().get(pipe.first()).state();int slot=System.identityHashCode(state)&15;
-        if(kappaStates[slot]!=state){kappaValues[slot]=model.heatCapacityRatio(state);kappaStates[slot]=state;}
+        if(kappaStates[slot]!=state){kappaValues[slot]=suctionKappa(model,pipe.control(),state);kappaStates[slot]=state;}
         return kappaValues[slot];
     }
+    /**
+     * The heat capacity ratio the solve reads for the mover or turbine {@code control} drawing from {@code suction}: 1.4 for
+     * a liquid mover (its law does not use it), else the gas's on that state ({@link FluidThermodynamics#heatCapacityRatio}).
+     * The one function the solve ({@link #kappa}), a driver's charge and its speed control read (code base review M-01, M-07).
+     */
+    public static double suctionKappa(FluidThermodynamics model,FlowControl control,FluidThermodynamics.State suction) {
+        if(control instanceof FlowControl.Mover mover&&mover.liquid())return 1.4;
+        return model.heatCapacityRatio(suction);
+    }
+    /**
+     * The share of its dry efficiency a centrifugal compressor on connection {@code edge} of {@code graph} keeps on its wet
+     * suction over a slice of {@code duration} s (zero for a rate solve), as {@link #readSuctions} reads it: the wet efficiency
+     * of the supply's condensed mass share ({@link com.wormzjl.icheme.science.machine.CentrifugalCompressor#wetEfficiency}); 1 for
+     * every other connection (a liquid machine, a vacuum pump, a stopped mover, a set-flow mover, no mover). A driver's charge
+     * reads the same function (code base review M-01).
+     */
+    public static double wetShare(FluidThermodynamics model,PassiveNetwork graph,int edge,double duration) {
+        if(!(graph.pipes().get(edge).control() instanceof FlowControl.Machine machine)||machine.liquid()||machine.targetVolumeFlow()==0
+                ||machine.law() instanceof com.wormzjl.icheme.science.machine.VacuumPump)return 1;
+        return wetShare(InletPhase.supply(model,graph,edge,machine.targetVolumeFlow(),duration));
+    }
+    /** {@link #wetShare} of the supply a compressor's suction line delivers. */
+    private static double wetShare(InletPhase.Supply supply){return com.wormzjl.icheme.science.machine.CentrifugalCompressor.wetEfficiency(1,supply.condensedMassShare());}
     /** The velocity cap's mass flow of what leaves {@code donor} through {@code port} at a vanishing flow (the stream
      * {@link #endDensity} names): its density, area and velocity limit, multiplied in the order the bulk form
      * {@code mass/volume*area*velocityLimit} always was, so a BULK end is that form to the bit. The cap a pass imposes on

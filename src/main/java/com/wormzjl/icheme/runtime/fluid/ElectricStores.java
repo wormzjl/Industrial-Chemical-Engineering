@@ -489,14 +489,19 @@ public final class ElectricStores {
     void booked(long island, long start, long end, PassiveIntervalSolver.Result result) {
         if (stores.isEmpty() || end <= start) return;
         var solved = result.graph();
-        var average=result.averageMassFlows();var heads=result.endpointHeads();
+        var average=result.averageMassFlows();var heads=result.endpointHeads();com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics model=null;
         for(int edge=0;edge<solved.pipes().size();edge++) {
             var pipe=solved.pipes().get(edge);var node=solved.reservoirs().get(pipe.first());var supply=node.state();
             var store=stores.get(node.id());
             if(store!=null&&store.kind==Kind.INLINE&&pipe.control() instanceof FlowControl.Mover mover) {
-                double rho=supply.volume()>0?supply.mass()/supply.volume():0;
-                double q=rho>0?Math.max(0,average[edge])/rho:0,shaft=0;
-                if(rho>0&&mover.enabled())shaft=mover instanceof FlowControl.Machine m?m.law().shaftPower(q,m.speed(),rho,supply.pressure(),1.4):mover.power(Math.max(0,average[edge]),heads[edge],rho,supply.pressure(),1.4)/.65;
+                double rho=supply.volume()>0?supply.mass()/supply.volume():0,shaft=0;
+                // The shaft power the solve's own function gives (code base review M-01, owner decisions A2 and B1): the suction's
+                // heat capacity ratio and wet share as the solve reads them; a set-flow pump over its hydraulic efficiency, a
+                // set-flow compressor's power as it is (already over its own efficiency: the second one is gone).
+                if(rho>0&&mover.enabled()){if(model==null)model=coordinator.model(island);
+                    shaft=com.wormzjl.icheme.science.machine.InlineMachines.shaftPower(mover,average[edge],heads[edge],rho,supply.pressure(),
+                            com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.suctionKappa(model,mover,supply),
+                            com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.wetShare(model,solved,edge,result.advancedSeconds()));}
                 draw(store,com.wormzjl.icheme.science.machine.InlineMachines.electricPower(shaft),start,end,false);
                 continue;
             }

@@ -729,6 +729,9 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         var flows = result.endpointFlows();
         var heads = result.endpointHeads();
         var average = result.averageMassFlows();
+        // The driver pays the shaft power the solve's own function gives (code base review M-01, owner decisions A2 and B1): the
+        // slice's average flow, the booked head, the suction's heat capacity ratio and wet share as the solve reads them.
+        var model = coordinator.model(island);
         for (int e = 0; e < solved.pipes().size(); e++) {
             var pipe = solved.pipes().get(e);
             var node = solved.reservoirs().get(pipe.first());
@@ -742,7 +745,9 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
             switch (pipe.control()) {
                 case FlowControl.Machine m -> {
                     double q = density > 0 ? Math.max(0, flows[e]) / density : 0;
-                    run.power(unit, m.speed() > 0 && density > 0 ? m.law().shaftPower(q, m.speed(), density, suction.pressure(), 1.4) : 0);
+                    double kappa = com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.suctionKappa(model, m, suction);
+                    double wet = com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.wetShare(model, solved, e, result.advancedSeconds());
+                    run.power(unit, com.wormzjl.icheme.science.machine.InlineMachines.shaftPower(m, average[e], heads[e], density, suction.pressure(), kappa, wet));
                     run.duty(unit,Duty.machine(q,solved.reservoirs().get(pipe.second()).state().pressure(),m.setFlow(),m.setPressure(),m.law(),heads[e],density,suction.pressure()));
                     if (first(run, unit)) {
                         run.measured = q;
@@ -751,7 +756,8 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
                     }
                 }
                 case FlowControl.Compressor c -> {
-                    run.power(unit,density>0?c.power(Math.max(0,flows[e]),heads[e],density,suction.pressure(),1.4):0);
+                    double kappa=com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.suctionKappa(model,c,suction);
+                    run.power(unit,com.wormzjl.icheme.science.machine.InlineMachines.shaftPower(c,average[e],heads[e],density,suction.pressure(),kappa,1));
                     var registration=topology.latest().get(node.id());
                     if(density>0&&registration!=null&&registration.device().control() instanceof FlowControl.Compressor design&&design.requestedVolumeFlow()>0){
                         double q=Math.max(0,flows[e])/density,pressure=solved.reservoirs().get(pipe.second()).state().pressure();
