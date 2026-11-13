@@ -6,7 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.Supplier;
 
-/** The films by name (batch 2026-11-12-tutorial-system): the guide, the render tool and the P0 command open them by it. */
+/** The films by name (batch 2026-11-12-tutorial-system): the guide and the render tool open them by it. */
 public final class Films {
     private static final Map<String, Supplier<Scene>> ALL = new LinkedHashMap<>();
 

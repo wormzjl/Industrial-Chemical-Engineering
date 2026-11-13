@@ -22,7 +22,7 @@ import java.util.List;
  * through every tray to the cooler. 3: middle and heavy dots fall back from the top trays to the pot while the light ones
  * rise on. The column's places come from the still's plan ({@link ShapeRasterizer#stillParts}): its top is the vapour
  * path's second point, its trays stand {@link #TRAY_SPACING} apart from {@link #FIRST_TRAY} over its base, its radius
- * {@link #COLUMN_SHARE} of the pot's diameter ({@code ProcessUnit.StillPlan}; {@code StillTrayFilmTest} holds them to the
+ * {@link #COLUMN_SHARE} of the pot's diameter ({@code ProcessUnit.StillPlan}; {@code TowerFilmsTest} holds them to the
  * plan's drawn sight glasses).
  */
 public final class StillTray {
