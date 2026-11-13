@@ -151,8 +151,9 @@ final class BalanceSteps {
         if (beta == 0.0 || beta == 1.0) {
             boolean vapourOnly = beta == 1.0;
             classification = vapourOnly ? Classification.SINGLE_VAPOR : Classification.SINGLE_LIQUID;
+            PhaseState only = vapourOnly ? vapour : liquid;
             phases = List.of(new PhaseAmounts(vapourOnly ? PhaseKind.VAPOR : PhaseKind.LIQUID, null, t, p, w.request.basisAmounts,
-                    (vapourOnly ? vapour : liquid).copy()));
+                    only.copy(), only.traits()));
         } else {
             int slot = basisOfComponent[w.request.present[0]];
             double amount = w.request.amounts[w.request.present[0]];
@@ -167,8 +168,8 @@ final class BalanceSteps {
                 vapourAmounts[slot] = amount - liquidAmounts[slot];
             }
             classification = Classification.VAPOR_LIQUID;
-            phases = List.of(new PhaseAmounts(PhaseKind.VAPOR, null, t, p, vapourAmounts, vapour.copy()),
-                    new PhaseAmounts(PhaseKind.LIQUID, null, t, p, liquidAmounts, liquid.copy()));
+            phases = List.of(new PhaseAmounts(PhaseKind.VAPOR, null, t, p, vapourAmounts, vapour.copy(), vapour.traits()),
+                    new PhaseAmounts(PhaseKind.LIQUID, null, t, p, liquidAmounts, liquid.copy(), liquid.traits()));
         }
         return engine.converged(competition, classification, phases, List.of(), diagnostics(w, null, band), why, note);
     }
@@ -400,10 +401,10 @@ final class BalanceSteps {
             if (traces > 0.0) fluid = stepFluid(t, p, i, amount, root, w);
             classification = !melting ? Classification.SINGLE_VAPOR
                     : fluid.physicalRootCount() > 1 ? Classification.SINGLE_LIQUID : Classification.SINGLE_FLUID;
-            phases = List.of(new PhaseAmounts(fluidKind, null, t, p, w.request.basisAmounts, fluid.copy()));
+            phases = List.of(new PhaseAmounts(fluidKind, null, t, p, w.request.basisAmounts, fluid.copy(), fluid.traits()));
         } else if (beta == 0.0) {
             classification = Classification.SOLID_PRESENT;
-            phases = List.of(new PhaseAmounts(PhaseKind.SOLID, c.id(), t, p, w.request.basisAmounts, solid.copy()));
+            phases = List.of(new PhaseAmounts(PhaseKind.SOLID, c.id(), t, p, w.request.basisAmounts, solid.copy(), null));
             deposition = new EquilibriumResult.Deposition(c.id(), species, Double.NaN, Double.NaN, amount, true, 0, 0);
         } else {
             double[] fluidAmounts = new double[basis];
@@ -422,8 +423,8 @@ final class BalanceSteps {
                 fluidAmounts[slot] = amount - solidAmounts[slot];
             }
             classification = melting ? Classification.LIQUID_SOLID : Classification.VAPOR_SOLID;
-            phases = List.of(new PhaseAmounts(fluidKind, null, t, p, fluidAmounts, fluid.copy()),
-                    new PhaseAmounts(PhaseKind.SOLID, c.id(), t, p, solidAmounts, solid.copy()));
+            phases = List.of(new PhaseAmounts(fluidKind, null, t, p, fluidAmounts, fluid.copy(), fluid.traits()),
+                    new PhaseAmounts(PhaseKind.SOLID, c.id(), t, p, solidAmounts, solid.copy(), null));
             deposition = new EquilibriumResult.Deposition(c.id(), species, Double.NaN, Double.NaN, solidAmounts[slot], false, 0, 0);
         }
         return new EquilibriumResult(Specification.TP, EquilibriumResult.Status.CONVERGED, null, CONVERGED + "; " + note,
@@ -599,9 +600,11 @@ final class BalanceSteps {
         double ns = amounts[2];
         int slot = c.slot();
         List<PhaseAmounts> phases = new ArrayList<>(3);
-        if (nv > 0.0) phases.add(new PhaseAmounts(PhaseKind.VAPOR, null, t, p, tripleAmounts(slot, nv, traces > 0.0 && inVapour, i, w), vapour.copy()));
-        if (nl > 0.0) phases.add(new PhaseAmounts(PhaseKind.LIQUID, null, t, p, tripleAmounts(slot, nl, traces > 0.0 && !inVapour, i, w), liquid.copy()));
-        if (ns > 0.0) phases.add(new PhaseAmounts(PhaseKind.SOLID, c.id(), t, p, engine.single(slot, ns), solid.copy()));
+        if (nv > 0.0) phases.add(new PhaseAmounts(PhaseKind.VAPOR, null, t, p, tripleAmounts(slot, nv, traces > 0.0 && inVapour, i, w), vapour.copy(),
+                vapour.traits()));
+        if (nl > 0.0) phases.add(new PhaseAmounts(PhaseKind.LIQUID, null, t, p, tripleAmounts(slot, nl, traces > 0.0 && !inVapour, i, w), liquid.copy(),
+                liquid.traits()));
+        if (ns > 0.0) phases.add(new PhaseAmounts(PhaseKind.SOLID, c.id(), t, p, engine.single(slot, ns), solid.copy(), null));
         Classification classification = crystalClassification(nv > 0.0, nl > 0.0, ns > 0.0);
         if (classification == null) return null;
         String note = "pure " + species + " at its family's triple point (" + t + " K, " + p + " Pa): vapour " + nv + ", liquid " + nl
@@ -893,9 +896,9 @@ final class BalanceSteps {
             liquidAmounts[basisOfComponent[k]] = amount - vapourAmounts[basisOfComponent[k]];
         }
         List<PhaseAmounts> phases = new ArrayList<>(3);
-        if (vi + vj > 0.0) phases.add(new PhaseAmounts(PhaseKind.VAPOR, null, t3, p3, vapourAmounts, vapour.copy()));
-        if (li + lj > 0.0) phases.add(new PhaseAmounts(PhaseKind.LIQUID, null, t3, p3, liquidAmounts, liquid.copy()));
-        if (si > 0.0) phases.add(new PhaseAmounts(PhaseKind.SOLID, c.id(), t3, p3, engine.single(c.slot(), si), solid.copy()));
+        if (vi + vj > 0.0) phases.add(new PhaseAmounts(PhaseKind.VAPOR, null, t3, p3, vapourAmounts, vapour.copy(), vapour.traits()));
+        if (li + lj > 0.0) phases.add(new PhaseAmounts(PhaseKind.LIQUID, null, t3, p3, liquidAmounts, liquid.copy(), liquid.traits()));
+        if (si > 0.0) phases.add(new PhaseAmounts(PhaseKind.SOLID, c.id(), t3, p3, engine.single(c.slot(), si), solid.copy(), null));
         Classification classification = crystalClassification(vi + vj > 0.0, li + lj > 0.0, si > 0.0);
         if (classification == null) return null;
         String species = evaluator.components().get(i);
@@ -1012,7 +1015,7 @@ final class BalanceSteps {
     private static PhaseAmounts scaled(PhaseAmounts phase, double factor, double[] amounts) {
         double[] n = amounts != null ? amounts : phase.amounts();
         if (amounts == null) for (int i = 0; i < n.length; i++) n[i] *= factor;
-        return new PhaseAmounts(phase.kind(), phase.crystal(), phase.temperature(), phase.pressure(), n, phase.state());
+        return new PhaseAmounts(phase.kind(), phase.crystal(), phase.temperature(), phase.pressure(), n, phase.state(), phase.traits());
     }
 
     private double[] pair(int first, double a, int second, double b) {
@@ -1211,11 +1214,11 @@ final class BalanceSteps {
         List<PhaseAmounts> phases = new ArrayList<>(3);
         boolean hasVapour = amounts[0] > 0.0;
         int liquids = 0;
-        if (hasVapour) phases.add(new PhaseAmounts(PhaseKind.VAPOR, null, t3, p3, split[0], vapour.copy()));
+        if (hasVapour) phases.add(new PhaseAmounts(PhaseKind.VAPOR, null, t3, p3, split[0], vapour.copy(), vapour.traits()));
         int lighter = first.molarVolume() >= second.molarVolume() ? 1 : 2;
         for (int c : new int[] {lighter, 3 - lighter}) {
             if (amounts[c] > 0.0) {
-                phases.add(new PhaseAmounts(PhaseKind.LIQUID, null, t3, p3, split[c], states[c].copy()));
+                phases.add(new PhaseAmounts(PhaseKind.LIQUID, null, t3, p3, split[c], states[c].copy(), states[c].traits()));
                 liquids++;
             }
         }

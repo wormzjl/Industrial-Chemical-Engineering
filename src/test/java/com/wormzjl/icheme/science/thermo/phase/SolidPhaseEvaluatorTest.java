@@ -108,8 +108,8 @@ class SolidPhaseEvaluatorTest {
         PhaseState solidState = solid.evaluate(t, p, ANCHOR, new PhaseState(1)).copy();
         var competition = PhaseCompetition.withCrystals("co2_solid_i");
         var identity = new ThermoIdentity("test:frost", evaluator.family(), ThermoIdentity.NO_SPINE, ThermoIdentity.NO_WATER);
-        var vapour = new PhaseAmounts(PhaseKind.VAPOR, null, t, p, vapourAmounts, vapourState);
-        var frost = new PhaseAmounts(PhaseKind.SOLID, "co2_solid_i", t, p, solidAmounts, solidState);
+        var vapour = new PhaseAmounts(PhaseKind.VAPOR, null, t, p, vapourAmounts, vapourState, vapourState.traits());
+        var frost = new PhaseAmounts(PhaseKind.SOLID, "co2_solid_i", t, p, solidAmounts, solidState, null);
         var result = new EquilibriumResult(EquilibriumRequest.Specification.TP, EquilibriumResult.Status.CONVERGED, null,
                 "test", identity, competition, Classification.SOLID_PRESENT, List.of(vapour, frost), List.of(),
                 new EquilibriumResult.Coverage(CoverageGrade.RESEARCH_ONLY, "test double"), EquilibriumResult.Diagnostics.NONE);
@@ -135,10 +135,10 @@ class SolidPhaseEvaluatorTest {
                 Classification.SOLID_PRESENT, List.of(vapour), List.of(),
                 new EquilibriumResult.Coverage(CoverageGrade.RESEARCH_ONLY, "t"), EquilibriumResult.Diagnostics.NONE));
         // Phase amounts are nonnegative and a phase holds material.
-        assertThrows(IllegalArgumentException.class, () -> new PhaseAmounts(PhaseKind.VAPOR, null, t, p, new double[] {0.9, -1e-18}, vapourState));
-        assertThrows(IllegalArgumentException.class, () -> new PhaseAmounts(PhaseKind.VAPOR, null, t, p, new double[] {0.0, 0.0}, vapourState));
-        assertThrows(IllegalArgumentException.class, () -> new PhaseAmounts(PhaseKind.SOLID, "co2_solid_i", t, p, solidAmounts, vapourState));
-        assertThrows(IllegalArgumentException.class, () -> new PhaseAmounts(PhaseKind.VAPOR, null, t + 1.0, p, vapourAmounts, vapourState));
+        assertThrows(IllegalArgumentException.class, () -> new PhaseAmounts(PhaseKind.VAPOR, null, t, p, new double[] {0.9, -1e-18}, vapourState, null));
+        assertThrows(IllegalArgumentException.class, () -> new PhaseAmounts(PhaseKind.VAPOR, null, t, p, new double[] {0.0, 0.0}, vapourState, null));
+        assertThrows(IllegalArgumentException.class, () -> new PhaseAmounts(PhaseKind.SOLID, "co2_solid_i", t, p, solidAmounts, vapourState, null));
+        assertThrows(IllegalArgumentException.class, () -> new PhaseAmounts(PhaseKind.VAPOR, null, t + 1.0, p, vapourAmounts, vapourState, null));
         assertFalse(new PhaseState(1).filled());
     }
 }

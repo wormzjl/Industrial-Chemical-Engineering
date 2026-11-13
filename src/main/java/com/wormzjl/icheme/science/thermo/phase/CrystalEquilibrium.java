@@ -124,7 +124,7 @@ final class CrystalEquilibrium {
             if (!(drive > DEPOSITION_TOLERANCE)) return assessed(fluid, "solids assessed: no crystal forms (" + forces + ")", w);
             boolean liquid = holdsLiquid(fluid);
             PhaseAmounts solid = new PhaseAmounts(PhaseKind.SOLID, forming.id(), t, p, w.request.basisAmounts,
-                    forming.anchored().evaluate(t, p, w.solidState).copy());
+                    forming.anchored().evaluate(t, p, w.solidState).copy(), null);
             var deposition = new EquilibriumResult.Deposition(forming.id(), evaluator.components().get(forming.component()), drive,
                     Double.NaN, w.request.amounts[forming.component()], true, 0, w.fluidEquilibria);
             return solidAnswer(competition, Classification.SOLID_PRESENT, List.of(solid), fluid, deposition,
@@ -293,7 +293,7 @@ final class CrystalEquilibrium {
         boolean liquidLike = fluidPhase.kind() == PhaseKind.LIQUID;
         double[] solidAmounts = new double[basis];
         solidAmounts[slot] = solid;
-        PhaseAmounts crystal = new PhaseAmounts(PhaseKind.SOLID, c.id(), t, p, solidAmounts, c.anchored().evaluate(t, p, w.solidState).copy());
+        PhaseAmounts crystal = new PhaseAmounts(PhaseKind.SOLID, c.id(), t, p, solidAmounts, c.anchored().evaluate(t, p, w.solidState).copy(), null);
         var deposition = new EquilibriumResult.Deposition(c.id(), species, drive, residual, solid, complete,
                 iterations, w.fluidEquilibria);
         String note = complete
@@ -480,7 +480,7 @@ final class CrystalEquilibrium {
         if (held != null) return held;
         double[] solidAmounts = new double[basis];
         solidAmounts[slot] = solid;
-        PhaseAmounts crystal = new PhaseAmounts(PhaseKind.SOLID, c.id(), t, p, solidAmounts, c.anchored().evaluate(t, p, w.solidState).copy());
+        PhaseAmounts crystal = new PhaseAmounts(PhaseKind.SOLID, c.id(), t, p, solidAmounts, c.anchored().evaluate(t, p, w.solidState).copy(), null);
         List<PhaseAmounts> phases = new ArrayList<>(reduced.phases());
         phases.add(crystal);
         var deposition = new EquilibriumResult.Deposition(c.id(), species, drive, residual, solid, complete,
@@ -592,7 +592,8 @@ final class CrystalEquilibrium {
             List<PhaseAmounts> phases = new ArrayList<>(2);
             for (int a = 0; a < 2; a++) {
                 Crystal c = pair[a];
-                phases.add(new PhaseAmounts(PhaseKind.SOLID, c.id(), t, p, engine.single(c.slot(), solid[a]), c.anchored().evaluate(t, p, w.solidState).copy()));
+                phases.add(new PhaseAmounts(PhaseKind.SOLID, c.id(), t, p, engine.single(c.slot(), solid[a]), c.anchored().evaluate(t, p, w.solidState).copy(),
+                        null));
             }
             var deposition = new EquilibriumResult.Deposition(second.id(), evaluator.components().get(second.component()), Double.NaN,
                     Double.NaN, solid[1], true, sweeps, w.fluidEquilibria);
@@ -625,7 +626,8 @@ final class CrystalEquilibrium {
                     diagnostics(w, w.feedResult, false));
         }
         List<PhaseAmounts> phases = new ArrayList<>(last.phases());
-        phases.add(new PhaseAmounts(PhaseKind.SOLID, first.id(), t, p, engine.single(first.slot(), solid[0]), first.anchored().evaluate(t, p, w.solidState).copy()));
+        phases.add(new PhaseAmounts(PhaseKind.SOLID, first.id(), t, p, engine.single(first.slot(), solid[0]), first.anchored().evaluate(t, p, w.solidState).copy(),
+                null));
         return new EquilibriumResult(Specification.TP, EquilibriumResult.Status.CONVERGED, null, last.detail() + "; " + note,
                 contract.identity(), competition, last.classification(), phases, List.of(), last.coverage(), last.diagnostics(),
                 last.deposition());

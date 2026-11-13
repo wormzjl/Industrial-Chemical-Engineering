@@ -274,6 +274,9 @@ public final class CubicPhaseEvaluator {
         out.set(kind, null, preference, values.physicalRootCount(), temperature, pressure, values.molarVolume(),
                 idealEnthalpy, residualEnthalpy, idealEntropy, residualEntropy, gibbs, w.composition, logPhi,
                 w.idealGibbs);
+        // The root's identification inputs (I-1): the kernel evaluation's own Z, a, b and da/dT, stored as they are.
+        out.setIdentification(values.compressibility(), values.attraction(), values.coVolume(),
+                values.attractionTemperatureDerivative());
         if (waterShare != null) {
             // The balance book's share (D2): from the phase's own untranslated v/b, never part of g or ln phi.
             double shift = 0.0, coVolume = 0.0;

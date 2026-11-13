@@ -72,14 +72,7 @@ class EngineDigestTest {
     @Test
     void everyDigestRequestIsAnsweredBitForBitAsRecorded() throws IOException {
         var digest = new Digest();
-        testEngines(digest);
-        pilotCryogenic(digest);
-        pilotNetwork(digest);
-        pilotAqueous(digest);
-        bundledDry(digest);
-        bundledWet(digest);
-        refineryWet(digest);
-        refineryDry(digest);
+        requests(digest);
         List<String> lines = digest.lines;
         System.out.println("engine digest: " + lines.size() + " requests; " + digest.tally);
         if (recording()) {
@@ -105,6 +98,35 @@ class EngineDigestTest {
             fail(lines.size() + " requests against " + reference.size() + " in the reference; the first "
                     + (lines.size() > common ? "new one: " + id(lines.get(common)) : "missing one: " + id(reference.get(common))));
         }
+    }
+
+    /** The request list, engine by engine, in its order. */
+    private static void requests(Digest digest) {
+        testEngines(digest);
+        pilotCryogenic(digest);
+        pilotNetwork(digest);
+        pilotAqueous(digest);
+        bundledDry(digest);
+        bundledWet(digest);
+        refineryWet(digest);
+        refineryDry(digest);
+    }
+
+    /**
+     * One answer of the request list: its digest id ({@code " [onset fluid]"} appended for an onset's fluid answer), the
+     * engine that gave it, and the answer.
+     */
+    record Answer(String id, FluidTpEquilibrium engine, EquilibriumResult result) {}
+
+    /**
+     * Every answer of the request list in order (each TP, PH and UV answer and each onset's fluid answer; a refusal by an
+     * exception has none), on fresh engines and workspaces: for the gates that read the answers themselves
+     * ({@code PhaseTraitsTest}, I-1).
+     */
+    static List<Answer> answers() {
+        var digest = new Digest();
+        requests(digest);
+        return digest.answers;
     }
 
     private static boolean recording() {
@@ -601,6 +623,7 @@ class EngineDigestTest {
     /** The digest's lines in request order, the ids unique, and a tally of the answers by kind. */
     private static final class Digest {
         final List<String> lines = new ArrayList<>();
+        final List<Answer> answers = new ArrayList<>();
         final Map<String, Integer> tally = new TreeMap<>();
         private final Set<String> ids = new HashSet<>();
 
@@ -677,7 +700,10 @@ class EngineDigestTest {
                     .append(" P=").append(hex(onset.pressure())).append(" approximation=").append(hex(onset.approximation()))
                     .append(" residual=").append(hex(onset.residual())).append(" fluids=").append(onset.fluidEquilibria())
                     .append(" grade=").append(onset.coverage().grade());
-            if (onset.fluid() != null) s.append(SEPARATOR).append("fluid ").append(describe(onset.fluid(), z));
+            if (onset.fluid() != null) {
+                s.append(SEPARATOR).append("fluid ").append(describe(onset.fluid(), z));
+                answers.add(new Answer(id + " [onset fluid]", e.engine, onset.fluid()));
+            }
             add(id, s.toString());
             count("onset " + onset.status());
         }
@@ -708,6 +734,7 @@ class EngineDigestTest {
                 return null;
             }
             add(id, describe(r, z));
+            answers.add(new Answer(id, e.engine, r));
             count(r.status() + " " + (r.converged() ? r.classification().toString() : failureKind(r.detail())));
             var d = r.diagnostics();
             if (d.coexistenceFromBalance()) count("balance");
