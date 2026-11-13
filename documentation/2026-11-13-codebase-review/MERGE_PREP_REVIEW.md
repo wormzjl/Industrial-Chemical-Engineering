@@ -39,3 +39,15 @@ Chapters changed (snapshot `4563176e1`): `fluid-science` (`UpLookingLu`, `Sparse
 | `tools/codebase-review-bench/ColumnBench.java` line 100 | The bench's header line prints the dead property | Print `icheme.native.column` instead (harmless as is) |
 
 No CHANGELOG line for detached code: nothing was detached.
+
+## Unit 2 (added by the main thread, 2026-11-13)
+
+Unit 2 is the review branch after the marker `claude/codebase-review-unit1`, to the marker `claude/codebase-review-unit2`: 261 files, +4,955 −2,626. Its final lane is green ([UNIT2_FINAL_LANE_REPORT.md](UNIT2_FINAL_LANE_REPORT.md)). Nothing is merged to `main`.
+
+- **Version proposal (the owner chooses).** Units 1 and 2 in one merge: 0.31.0, as proposed above (unit 2 adds features of the same kind: wet gas and wet exhaust wear, the gearbox limit). Unit 2 in a merge of its own after unit 1: 0.32.0 (minor: new wear modes and a changed model of an under-rated gearbox). `gradle.properties` is not edited.
+- **Translation.** One commit, `c1ad97269`: eight keys in four languages follow `en_us.json`; `LanguageFilesTest` and `UnitTextTest` pass in the lane.
+- **Formats.** No facts schema, state format, protocol or shape field changed (`FormatsTableTest`, 31 rows of `FORMATS.md` against the code; `FluidFactsCompatTest` 22). Health facts now exist for a centrifugal compressor and a steam turbine under the same field.
+- **Code guide.** Updated in each merge; `node tools/code-guide/map.mjs --check` reports the README's counts current.
+- **CHANGELOG.** `[Unreleased]` gains: wet gas, wet exhaust and the gearbox limit (Added, Changed), the trips, the inside-out pass removed, EJML out of the jar, the layers and their tests.
+- **Tooling.** `tools/native-column-default/` is removed with E0-4; `tools/code-guide/` is new; `ColumnBench` prints the Rust ceiling. `perl tools/merge-lane/main-reach.pl .`: the same four optional-mod bridges as before, none of this batch. `git ls-files -i -c --exclude-standard` is empty. Left: `V3TestInputs.cdu17BoilingBinary` has no caller (test tree).
+- **Changes of play in unit 2, for the owner's reading before a merge:** a centrifugal compressor on a wet suction and a steam turbine on saturated inlet steam now wear and can fail; a gearbox below its train's power now holds the train at its rating (GEAR LIMITED), where it passed any power; the wet exhaust numbers are set on the solve's turbine law ([wave-g/G1_PART2_REPORT.md](wave-g/G1_PART2_REPORT.md)).
