@@ -97,7 +97,7 @@ public final class ColumnBench {
         boolean warm = parts[0].equals("warm");
         Case c = of(parts[1]);
         var lines = new ArrayList<String>();
-        lines.add("phase " + phase + " native.thermo.batch=" + System.getProperty("icheme.native.thermo.batch", "(default)") + " java " + System.getProperty("java.version"));
+        lines.add("phase " + phase + " native.column=" + System.getProperty("icheme.native.column", "(default: off)") + " java " + System.getProperty("java.version"));
         lines.add("stages " + c.input().stageCount() + " components " + c.input().componentBasis().componentIds().size() + " draws " + c.input().sideDraws().size()
                 + " steam " + c.input().steamFeeds().size() + " pumparounds " + c.input().pumparounds().size());
         long t0 = System.nanoTime(), a0 = allocated();
