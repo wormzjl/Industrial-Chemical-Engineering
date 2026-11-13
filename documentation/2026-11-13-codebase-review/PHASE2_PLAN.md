@@ -214,7 +214,7 @@ Owner, 2026-11-13, three statements in order: "You have full authority over this
 |---|---|---|
 | 2 | Yes: the C++ pass off by default. This reverses the owner's choice A of the native-column-default batch (0.18.0); the reason is determinism (the C++ lane uses the platform's libm) and that it measured no gain. Column references recorded on the native path move in their last digits and are re-recorded once | wave E stage 0, first commit |
 | 3 | Yes: the step result carries each mover's shaft power and the train, the stores and the column's member power read it (M-01, M-07). Electricity draws move by the sizes of MACHINE_FAILURE_MODES_REVIEW section 2 item 4 | first batch after wave A is integrated (it crosses the fluid, machines and runtime lanes) |
-| 4 | Failure modes N1, N2, N4, N5 and N7 option A; the unreachable trips option A | wave G |
+| 4 | Failure modes N1, N2, N4, N5 and N7 option A; the unreachable trips option A. N1 is in the erosion class (8 h of process time against a closed discharge, 32 h at 15 % of rated flow), not the review's seizure class: a pump behind a closed control valve is a normal state of a plant here | wave G (G1) |
 | 5 | Yes: R6 option A | B runtime |
 | 6 | Yes: C2 and C5 | wave H, first batch |
 | 7 | P1 yes, after P7's count states its gain; L2 with P1; L1 measured on the first rung and deleted under 5 % | wave E stage 0 |
