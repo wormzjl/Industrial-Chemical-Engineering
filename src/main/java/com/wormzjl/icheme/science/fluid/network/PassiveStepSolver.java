@@ -2451,17 +2451,17 @@ public final class PassiveStepSolver {
                 double own=PortStreams.endSpecificEnthalpy(model,start,port,pipe.volume()),low=start.temperature(),high=low;
                 // A kettle's tube side reads its pool (W7): the vessel's contents, isothermal, no stream.
                 boolean pool=partner!=null&&partner.pool();
-                boolean drawn=partner!=null&&(pool||PortStreams.endMass(reading(partner).model,partner.donor(),partner.port(),partner.volume())>0);
+                boolean drawn=partner!=null&&(pool||PortStreams.endMass(partnerModel(partner),partner.donor(),partner.port(),partner.volume())>0);
                 if(drawn){low=Math.min(low,partner.donor().temperature());high=Math.max(high,partner.donor().temperature());}
                 // A column's heating side (W4) gives its heat down to its floor, through its condensation: the curve spans it.
                 if(read.gives())low=Math.min(low,read.ceiling());
                 low=Math.max(NumericalBox.MINIMUM_TEMPERATURE,low-10);high=Math.min(NumericalBox.MAXIMUM_TEMPERATURE,high+10);
-                var curve=spanned(start,port,pipe.volume(),low,high,side.films(),checkpoint);
-                var other=!drawn||pool?null:reading(partner).spanned(partner.donor(),partner.port(),partner.volume(),low,high,partner.law().films(),checkpoint);
+                var curve=PortStreams.spanned(model,start,port,pipe.volume(),low,high,side.films(),checkpoint);
+                var other=!drawn||pool?null:PortStreams.spanned(partnerModel(partner),partner.donor(),partner.port(),partner.volume(),low,high,partner.law().films(),checkpoint);
                 var stream=curve==null?null:new ExchangerRelay.Stream(curve,own,flow,side,true);
                 if(stream!=null&&pool)planned=ExchangerRelay.plan(side,stream,partner.bath(),read);
                 else if(stream!=null)planned=ExchangerRelay.plan(side,stream,
-                        other==null?null:new ExchangerRelay.Stream(other,PortStreams.endSpecificEnthalpy(reading(partner).model,partner.donor(),partner.port(),partner.volume()),partner.massFlow(),partner.law(),false),read,seconds);
+                        other==null?null:new ExchangerRelay.Stream(other,PortStreams.endSpecificEnthalpy(partnerModel(partner),partner.donor(),partner.port(),partner.volume()),partner.massFlow(),partner.law(),false),read,seconds);
                 // A column's water side (U2): the flow that carries the heat the column asks for, the water rising its range but
                 // staying under the ceiling; water at or over the ceiling can take nothing, and its valve holds. A column's heating
                 // side (W4, a reboiler's tubes) gives its heat down to the floor: the flow is the heat rate over h(inlet) − h(floor);
@@ -2573,11 +2573,11 @@ public final class PassiveStepSolver {
             else {
                 var bath=new ExchangerRelay.Bath(contents.temperature(),pool.film(contents,node.inventory().geometry()));
                 ExchangerRelay.Stream stream=null;
-                if(tube!=null&&!tube.pool()&&PortStreams.endMass(reading(tube).model,tube.donor(),tube.port(),tube.volume())>0) {
+                if(tube!=null&&!tube.pool()&&PortStreams.endMass(partnerModel(tube),tube.donor(),tube.port(),tube.volume())>0) {
                     double low=Math.max(NumericalBox.MINIMUM_TEMPERATURE,Math.min(contents.temperature(),tube.donor().temperature())-10);
                     double high=Math.min(NumericalBox.MAXIMUM_TEMPERATURE,Math.max(contents.temperature(),tube.donor().temperature())+10);
-                    var curve=reading(tube).spanned(tube.donor(),tube.port(),tube.volume(),low,high,tube.law().films(),checkpoint);
-                    if(curve!=null)stream=new ExchangerRelay.Stream(curve,PortStreams.endSpecificEnthalpy(reading(tube).model,tube.donor(),tube.port(),tube.volume()),tube.massFlow(),tube.law(),true);
+                    var curve=PortStreams.spanned(partnerModel(tube),tube.donor(),tube.port(),tube.volume(),low,high,tube.law().films(),checkpoint);
+                    if(curve!=null)stream=new ExchangerRelay.Stream(curve,PortStreams.endSpecificEnthalpy(partnerModel(tube),tube.donor(),tube.port(),tube.volume()),tube.massFlow(),tube.law(),true);
                 }
                 planned=ExchangerRelay.planPool(pool,bath,stream,read,seconds);
             }
@@ -2587,19 +2587,12 @@ public final class PassiveStepSolver {
         }
         return nodes==null?graph:new PassiveNetwork(nodes,graph.pipes(),graph.scheduledTransfers());
     }
-    /** The solver a coupled side's other stream is read on: this one, or one on the model of the island that stream is in (batch
-     * 2026-11-04-refinery-compounds, V2: each island carries its own compound list). */
-    private PassiveStepSolver reading(ExchangerRelay.Partner partner) {
+    /** The model a coupled side's other stream is read on ({@link PortStreams#spanned}, {@link PortStreams#endMass}): this
+     * solver's, or that of the island that stream is in (batch 2026-11-04-refinery-compounds, V2: each island carries its own
+     * compound list). The stream functions read nothing else, so no second solver is built to read it (S-06). */
+    private FluidThermodynamics partnerModel(ExchangerRelay.Partner partner) {
         var other=partner.model();
-        if(other==null||other==model)return this;
-        if(partnerReader==null||partnerReader.model!=other)partnerReader=new PassiveStepSolver(other,ownership);
-        return partnerReader;
-    }
-    private PassiveStepSolver partnerReader;
-    /** The heat curve of the stream drawn through {@code port} from state {@code s} over {@code [low, high]} K, or null where it draws nothing. */
-    private HeatCurve spanned(FluidThermodynamics.State s,PassiveNetwork.PhasePort port,double volume,double low,double high,HeatCurve.Films films,Runnable checkpoint) {
-        double[] amounts=PortStreams.endMoles(model,s,port,volume);double total=0;for(double n:amounts)total+=n;
-        return total>0&&PortStreams.endMass(model,s,port,volume)>0?HeatCurve.sample(model,amounts,s.pressure(),low,high,films,checkpoint):null;
+        return other==null?model:other;
     }
     /**
      * The head this connection demands of its device at the point one active-set pass converged to: the discharge
