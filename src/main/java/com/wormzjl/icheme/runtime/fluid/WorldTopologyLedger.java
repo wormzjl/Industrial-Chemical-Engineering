@@ -289,7 +289,7 @@ public final class WorldTopologyLedger {
     private final HashMap<PhysicalFluidTopology.Position,Long> shaftAt=new HashMap<>();
     // The electric stores (W5) as last handed over: the engine keeps them live ({@link ElectricStores}) and sets them here.
     private Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores=Map.of();
-    // The pumps' health (W10b) as last handed over: the engine keeps it live ({@link PumpHealth}) and sets it here.
+    // The machines' health (W10b, M-12) as last handed over: the engine keeps it live ({@link MachineHealth}) and sets it here.
     private Map<Long,Double> health=Map.of();
     // The batch stills (batch 2026-11-09-batch-distiller), by their pots' identities.
     private final LinkedHashMap<Long,StillUnit> stills=new LinkedHashMap<>();

@@ -65,6 +65,7 @@ class MachineColumnTest {
         var plate = MachineColumn.nameplate(MachineColumnSamples.couplingSample("RUNNING", 256, 2950, 17345, 20480, 25.41e3), texts);
         assertEquals(List.of("1.465 W/su", "256 rpm"), plate.stream().map(l -> l[1]).toList());
         assertTrue(MachineColumn.warns("POWER LIMITED") && !MachineColumn.warns("NO ROTATION") && !MachineColumn.warns("RUNNING"));
+        assertTrue(MachineColumn.warns("GEAR LIMITED") && MachineColumn.warns("FAILED: use a repair kit") && MachineColumn.warns("TRIPPED: OVERLOAD"));
     }
 
     @Test
