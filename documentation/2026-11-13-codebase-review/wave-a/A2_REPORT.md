@@ -35,6 +35,10 @@ Corpus image added: `src/test/resources/compat/equipment/repairs-exchanger-types
 
 Values moved: none.
 
+## Follow-up (parent's request, same finding): the simulator's saved design
+`ProcessSimulatorBlockEntity.loadAdditional` 134 now reads its saved design with `ColumnDesignTags.read(tag, repairs)`, each repair logged as `equipment_compat process simulator at=... repair=saved design: ...` (the sent designs' form). Before, the strict read emptied `savedDesign` for an unknown exchanger type or a count out of range, and the next save dropped the design (a lost fact). A malformed tag is still caught and refused.
+Test: none added. No test class loads this block entity from a tag; `SimulatorBlockTest.theServersHalfNamesNoSolverAndNoProcessState` only scans its source text, and the change adds none of its banned words.
+Status: committed, pending one `compileJava compileTestJava` after the next "lane free".
+
 ## Not done (outside the lane), for the parent
-1. `ProcessSimulatorBlockEntity.loadAdditional` 134 reads its saved design with the strict `ColumnDesignTags.read(tag)`: an unknown exchanger type there still refuses that one design (logged). The fix is one line: `read(tag, repair -> LOGGER.warn(...))`.
-2. `readShape` still throws for a non-exchanger tag that carries a known non-standard `ExchangerType` (`EquipmentShape.withExchangerType` refuses it), and for a malformed `Components.Exchangers` (kept by the brief). The writers never produce either.
+1. `readShape` still throws for a non-exchanger tag that carries a known non-standard `ExchangerType` (`EquipmentShape.withExchangerType` refuses it), and for a malformed `Components.Exchangers` (kept by the brief). The writers never produce either.
