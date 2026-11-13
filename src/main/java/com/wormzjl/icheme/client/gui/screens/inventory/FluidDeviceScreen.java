@@ -417,7 +417,8 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         buildDevice();
         if(page==Page.OVERVIEW&&curve())configureScroll(0);else if(page==Page.OVERVIEW)buildContents();else if(page==Page.COMPOSITION)buildComposition();else if(page==Page.SOLIDS)buildSolids();
         else if(page==Page.OUTLETS)configureScroll(data.view().outlets().size());else if(page==Page.DATASHEET)configureScroll(datasheetGlass().lines().size());
-        else configureScroll(data.view().pipeInfo().connections().size());
+        // A tank's view has no pipe information: its Accessory page has nothing to scroll.
+        else configureScroll(data.view().pipeInfo()==null?0:data.view().pipeInfo().connections().size());
         if(focused!=null&&editors.containsKey(focused)){setFocused(editors.get(focused));editors.get(focused).setCursorPosition(cursor);}
         if(componentDropdown!=null&&"search".equals(focused))componentDropdown.expanded(dropdownOpen);
     }
