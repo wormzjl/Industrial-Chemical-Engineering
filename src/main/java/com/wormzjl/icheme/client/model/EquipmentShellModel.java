@@ -76,6 +76,13 @@ public final class EquipmentShellModel implements IDynamicBakedModel {
         return active == null ? null : active.sprites()[material.ordinal()];
     }
 
+    /** The sprites of the model last baked ({@link #sprite}) for {@link PolygonBake}: a sprite's {@code getU} and {@code getV}. */
+    public static final PolygonBake.Atlas<TextureAtlasSprite> ATLAS = new PolygonBake.Atlas<TextureAtlasSprite>() {
+        @Override public @Nullable TextureAtlasSprite sprite(Mesh.Material material) {return EquipmentShellModel.sprite(material);}
+        @Override public float u(TextureAtlasSprite sprite, float u) {return sprite.getU(u);}
+        @Override public float v(TextureAtlasSprite sprite, float v) {return sprite.getV(v);}
+    };
+
     /** The profile of the atlas/model actually baked, so a config edit cannot mix old chunk meshes with new bodies. */
     public static com.wormzjl.icheme.science.equipment.RenderDetail detail() {
         var active = current;

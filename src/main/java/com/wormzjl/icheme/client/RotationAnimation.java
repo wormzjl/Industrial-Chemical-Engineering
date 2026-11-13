@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.client;
 
 import com.wormzjl.icheme.IChemE;
+import com.wormzjl.icheme.client.fx.state.ClientWatch;
 import com.wormzjl.icheme.network.RotationNetwork;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
@@ -29,9 +30,11 @@ import java.util.concurrent.ConcurrentHashMap;
 @EventBusSubscriber(modid = IChemE.MOD_ID, value = Dist.CLIENT)
 public final class RotationAnimation {
     private static final Set<BlockPos> DISCOVERED = ConcurrentHashMap.newKeySet();
-    private static final Set<BlockPos> SHAFTS = new HashSet<>(), WATCHED = new HashSet<>();
+    private static final Set<BlockPos> SHAFTS = new HashSet<>();
     private static final Map<Endpoint, Spin> SPINS = new HashMap<>();
-    private static final Map<BlockPos, RotationNetwork.State> STATES = new HashMap<>();
+    /** The watched shafts and machine origins and their last published speeds (C11: the one client watch). */
+    private static final ClientWatch<BlockPos, RotationNetwork.State> WATCH =
+            new ClientWatch<>(RotationNetwork.MAXIMUM_WATCHED, RotationNetwork::request);
     private static ClientLevel world;
     private static int age;
 
@@ -76,8 +79,8 @@ public final class RotationAnimation {
 
     public static void accept(RotationNetwork.State state) {
         var level = Minecraft.getInstance().level;
-        if (level == null || level != world || !WATCHED.contains(state.position())) return;
-        STATES.put(state.position(), state);
+        if (level == null || level != world || !WATCH.watches(state.position())) return;
+        WATCH.accept(state.position(), state);
         update(
                 SPINS.computeIfAbsent(new Endpoint(state.position(), false), p -> new Spin()),
                 state.rpm(),
@@ -202,12 +205,9 @@ public final class RotationAnimation {
     public static void tick(ClientTickEvent.Post event) {
         var mc = Minecraft.getInstance();
         if (world != mc.level) {
-            if (mc.getConnection() != null)
-                RotationNetwork.request(List.of(), List.copyOf(WATCHED));
+            WATCH.reset(mc.getConnection() != null);
             SHAFTS.clear();
-            WATCHED.clear();
             SPINS.clear();
-            STATES.clear();
             world = mc.level;
             age = 0;
         }
@@ -234,23 +234,13 @@ public final class RotationAnimation {
         alignClocks(machines);
         var point = mc.player.position();
         double range = RotationNetwork.RANGE - 8;
-        var near =
-                wanted.stream()
-                        .filter(p -> p.distToCenterSqr(point) <= range * range)
-                        .sorted(
-                                Comparator.comparingDouble((BlockPos p) -> p.distToCenterSqr(point))
-                                        .thenComparingLong(BlockPos::asLong))
-                        .limit(RotationNetwork.MAXIMUM_WATCHED)
-                        .toList();
-        var selected = new HashSet<>(near);
-        var gone = WATCHED.stream().filter(p -> !selected.contains(p)).toList();
-        // Retry an unanswered watch: a freshly placed machine's queued engine registration may not
-        // exist yet.
-        var added =
-                near.stream().filter(p -> !WATCHED.contains(p) || !STATES.containsKey(p)).toList();
-        WATCHED.removeAll(gone);
-        gone.forEach(STATES::remove);
-        WATCHED.addAll(near);
-        RotationNetwork.request(added, gone);
+        var near = new ArrayList<BlockPos>();
+        for (var p : wanted) if (p.distToCenterSqr(point) <= range * range) near.add(p);
+        // The nearest RotationNetwork.MAXIMUM_WATCHED; the watch retries an unanswered one: a freshly
+        // placed machine's queued engine registration may not exist yet.
+        WATCH.request(
+                near,
+                Comparator.comparingDouble((BlockPos p) -> p.distToCenterSqr(point))
+                        .thenComparingLong(BlockPos::asLong));
     }
 }

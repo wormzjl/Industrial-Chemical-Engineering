@@ -10,6 +10,7 @@ import com.mojang.blaze3d.vertex.VertexBuffer;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.model.EquipmentShellModel;
+import com.wormzjl.icheme.client.model.PolygonBake;
 import com.wormzjl.icheme.science.equipment.Mesh;
 import com.wormzjl.icheme.science.equipment.Paint;
 import com.wormzjl.icheme.science.tutorial.scene.Bodies;
@@ -31,7 +32,7 @@ import java.util.Map;
 /**
  * Render thread only (batch 2026-11-12-tutorial-system, P0): draws a film's {@link Frame} in a rectangle of a screen, as
  * {@link Projection} projects it (the render tool draws the same picture). Each actor's polygon list is one vertex buffer,
- * built once (sprites, shade and paint tint as {@link com.wormzjl.icheme.client.EquipmentBodyRenderer} bakes a body) and
+ * built once (sprites, shade and paint tint by {@link PolygonBake}, as {@link com.wormzjl.icheme.client.EquipmentBodyRenderer} bakes a body) and
  * drawn each frame; a cut's steps keep at most the current and the next buffer of an actor. All the dots are one draw of
  * small camera-facing discs in the same depth pass, so the shell hides the ones behind it; the fires (P2b) are one draw of
  * camera-facing tongues in that pass too, and the liquids ({@link Bodies#liquid}) one translucent draw after everything
@@ -211,28 +212,20 @@ public final class SceneView implements AutoCloseable {
         return buffer;
     }
 
-    /** The polygons as triangles, as the shell model shades and tints them with the default paint; null while a sprite is missing. */
+    /** The polygons as triangles, as the shell model shades and tints them with the default paint ({@link PolygonBake}); null while a sprite is missing. */
     private static VertexBuffer upload(List<Mesh.Polygon> polygons) {
-        int vertices = 0;
-        for (var polygon : polygons) vertices += 3 * (polygon.size() - 2);
+        int vertices = PolygonBake.vertices(polygons);
         if (vertices == 0) return null;
         int[] tints = {Paint.tint(Paint.DEFAULT.body()), Paint.tint(Paint.DEFAULT.structure())};
+        var triangles = PolygonBake.triangles(polygons, tints, EquipmentShellModel.ATLAS, EquipmentShellModel::shade);
+        if (triangles == null) return null;
         try (var bytes = new ByteBufferBuilder(vertices * DefaultVertexFormat.POSITION_TEX_COLOR.getVertexSize())) {
             var builder = new BufferBuilder(bytes, VertexFormat.Mode.TRIANGLES, DefaultVertexFormat.POSITION_TEX_COLOR);
-            for (var polygon : polygons) {
-                var sprite = EquipmentShellModel.sprite(polygon.material());
-                if (sprite == null) return null;
-                int channel = polygon.material().channel(), tint = channel < 0 || channel >= tints.length ? 0xFFFFFF : tints[channel];
-                var p = polygon.positions();
-                var uv = polygon.uvs();
-                for (int corner = 1; corner + 1 < polygon.size(); corner++)
-                    for (int index : new int[]{0, corner, corner + 1}) {
-                        int shade = EquipmentShellModel.shade(polygon, index);
-                        int colour = 0xFF000000 | shade * (tint >> 16 & 255) / 255 << 16 | shade * (tint >> 8 & 255) / 255 << 8 | shade * (tint & 255) / 255;
-                        builder.addVertex((float) p[3 * index], (float) p[3 * index + 1], (float) p[3 * index + 2])
-                                .setUv(sprite.getU((float) uv[2 * index]), sprite.getV((float) uv[2 * index + 1])).setColor(colour);
-                    }
-            }
+            var p = triangles.positions();
+            var uv = triangles.uvs();
+            var colours = triangles.colours();
+            for (int v = 0; v < colours.length; v++)
+                builder.addVertex(p[3 * v], p[3 * v + 1], p[3 * v + 2]).setUv(uv[2 * v], uv[2 * v + 1]).setColor(colours[v]);
             var mesh = builder.build();
             if (mesh == null) return null;
             var buffer = new VertexBuffer(VertexBuffer.Usage.STATIC);
