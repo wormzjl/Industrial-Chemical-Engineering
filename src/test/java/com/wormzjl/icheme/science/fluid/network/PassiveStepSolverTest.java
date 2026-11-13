@@ -73,6 +73,30 @@ class PassiveStepSolverTest {
             }
         } finally {com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics.ENABLED=enabled;}
     }
+    /**
+     * P-06's count for wave F0 (batch 2026-11-13-codebase-review, B-S1 report): the graphs one step builds on an island
+     * whose junction a heated side boils (HeatSideNetworkTest's line: water at 420 K and 10 bar through 22 m2 of 540 K wall
+     * into a junction, then a plain run to an 8 bar void, 2 s steps), the first step and the next three. Printed once;
+     * the counter it reads is temporary.
+     */
+    @Test void printsTheGraphsAStepBuildsOnAFlashedJunction() {
+        var network=com.wormzjl.icheme.fluid.support.FluidTestSupport.networkModel();int water=network.componentCount()-1;
+        java.util.function.BiFunction<Double,Double,FluidThermodynamics.State> fill=(t,p)->{
+            double[] n=new double[network.componentCount()];n[water]=1;n[water]/=network.flashTP(t,p,n,()->{}).volume();return network.flashTP(t,p,n,()->{});};
+        var source=fill.apply(420.,1_000_000.);var run=new PipeResistance.Geometry(10,.05,.000045,0);
+        var graph=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,source,PassiveNetwork.NodeKind.GENERATOR),new PassiveNetwork.Reservoir(2,0,source,PassiveNetwork.NodeKind.JUNCTION),
+                new PassiveNetwork.Reservoir(3,0,fill.apply(300.,800_000.),PassiveNetwork.NodeKind.VOID)),
+            List.of(new PassiveNetwork.Pipe(5,0,1,run).withHeat(new HeatSide(22,HeatCurve.Films.DEFAULT,new double[]{540},0,0)),new PassiveNetwork.Pipe(6,1,2,run)));
+        var solver=new PassiveStepSolver(network);
+        long before=PassiveNetwork.CONSTRUCTED.sum();
+        var first=solver.solve(graph,2,()->{});long firstStep=PassiveNetwork.CONSTRUCTED.sum()-before;
+        assertTrue(network.vaporMass(first.states().get(1))>0,"the junction boils");
+        graph=PassiveIntervalSolver.replace(graph,first);
+        long later=0;
+        for(int step=0;step<3;step++){before=PassiveNetwork.CONSTRUCTED.sum();var result=solver.solve(graph,2,()->{});later+=PassiveNetwork.CONSTRUCTED.sum()-before;graph=PassiveIntervalSolver.replace(graph,result);}
+        System.out.printf(java.util.Locale.ROOT,"S1 P-06 count, flashed junction: %d graphs in the first step's solve, %.1f a step in the next three%n",
+                firstStep,later/3.0);
+    }
     @Test void endpointOrderOnlyChangesTheFlowSign() {
         var solver=new PassiveStepSolver(model);var forward=solver.solve(graph(0,false),.1,()->{});var backward=solver.solve(graph(0,true),.1,()->{});
         assertEquals(forward.massFlows()[0],-backward.massFlows()[0],1e-8);
