@@ -77,7 +77,7 @@ public final class UpLookingLu {
         if(!sameStructure){kept=false;keepPattern(n,columns,rows,nonzeros);}
         // The kept reach (see the class comment): every column reuses its last reach while every earlier pivot repeated.
         boolean reuse=sameStructure;
-        failedColumn=-1;lLength=0;uLength=0;
+        failedColumn=-1;lLength=0;uLength=0;long searchedBefore=searches;
         for(int k=0;k<n;k++) {
             lColumns[k]=lLength;uColumns[k]=uLength;
             int top,end;int[] reach;
@@ -111,7 +111,7 @@ public final class UpLookingLu {
                     uRows[uLength]=pinv[i];uValues[uLength++]=dense[i];
                 }
             }
-            if(ipiv==-1||a<=0){failedColumn=k;kept=false;return false;}
+            if(ipiv==-1||a<=0){failedColumn=k;kept=false;count(k+1,searches-searchedBefore);return false;}
             double pivot=dense[ipiv];
             uRows[uLength]=k;uValues[uLength++]=pivot;
             pinv[ipiv]=k;
@@ -126,7 +126,7 @@ public final class UpLookingLu {
         }
         lColumns[n]=lLength;uColumns[n]=uLength;
         for(int p=0;p<lLength;p++)lRows[p]=pinv[lRows[p]];
-        kept=true;
+        kept=true;count(n,searches-searchedBefore);
         return true;
     }
 
@@ -211,6 +211,11 @@ public final class UpLookingLu {
     }
     private void ensureReach(int length){if(reachRows.length<length)reachRows=Arrays.copyOf(reachRows,Math.max(2*reachRows.length,length));}
 
+    /** Columns factored and reach searches run by every instance, process-wide (P-17's counters for the bench and the tests). */
+    private static final java.util.concurrent.atomic.LongAdder COLUMNS=new java.util.concurrent.atomic.LongAdder(),SEARCHES=new java.util.concurrent.atomic.LongAdder();
+    private static void count(int columns,long searched){COLUMNS.add(columns);SEARCHES.add(searched);}
+    public static long columnsFactored(){return COLUMNS.sum();}
+    public static long reachSearches(){return SEARCHES.sum();}
     public int size(){return size;}
     /** The column whose pivot was missing in the last rejected factorization, -1 after a completed one. */
     public int failedColumn(){return failedColumn;}

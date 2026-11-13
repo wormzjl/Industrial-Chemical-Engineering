@@ -171,4 +171,30 @@ class UpLookingLuParityTest {
         }
         System.out.printf(java.util.Locale.ROOT,"P-17 gate: %d step matrices%n",matrices);
     }
+    /**
+     * P-17's counters for the report, printed: on a heat side's island solved five times by one retained solver (after a warm
+     * solve), the LU factorizations, the columns factored and the reach searches; and the bytes one {@code Storage.factor}
+     * allocates on a step's own matrix once the storage has its size. Counts, not times.
+     */
+    @Test void printsTheLuCounters() {
+        var model=FluidTestSupport.networkModel();var run=new PipeResistance.Geometry(10,.05,.000045,0);var source=water(model,350,300_000,1);
+        var graph=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,source,PassiveNetwork.NodeKind.GENERATOR),new PassiveNetwork.Reservoir(2,0,source,PassiveNetwork.NodeKind.JUNCTION),
+                new PassiveNetwork.Reservoir(3,0,water(model,300,101_325,1),PassiveNetwork.NodeKind.VOID)),
+            List.of(new PassiveNetwork.Pipe(5,0,1,run).withHeat(new HeatSide(2,HeatCurve.Films.DEFAULT,new double[]{300},0,0)),new PassiveNetwork.Pipe(6,1,2,run)));
+        boolean enabled=com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics.ENABLED;
+        try {
+            com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics.ENABLED=true;
+            var solver=new PassiveStepSolver(model);solver.solve(graph,.1,()->{});
+            long columns=UpLookingLu.columnsFactored(),searches=UpLookingLu.reachSearches(),factorizations=com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics.luFactorizations.sum();
+            for(int i=0;i<5;i++)solver.solve(graph,.1,()->{});
+            System.out.printf(java.util.Locale.ROOT,"P-17 counters, heat side, five solves: %d LU factorizations, %d columns factored, %d reach searches%n",
+                    com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics.luFactorizations.sum()-factorizations,UpLookingLu.columnsFactored()-columns,UpLookingLu.reachSearches()-searches);
+        } finally {com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics.ENABLED=enabled;}
+        var m=stepMatrices(model,graph,.1).getFirst();
+        var matrix=new SparseMatrix(m.size(),m.columns(),m.rows(),m.values());var ordering=SparseLuSolver.prepareOrdering(matrix);
+        var storage=new SparseLuSolver.Storage(com.wormzjl.icheme.science.fluid.SolverOwnership.confinedToCurrentThread());storage.factor(matrix,ordering);
+        var threads=(com.sun.management.ThreadMXBean)java.lang.management.ManagementFactory.getThreadMXBean();long bytes=threads.getCurrentThreadAllocatedBytes();
+        int repeats=20;for(int i=0;i<repeats;i++)assertNotNull(storage.factor(matrix,ordering));
+        System.out.printf(java.util.Locale.ROOT,"P-17 counters, Storage.factor on a %d-unknown step matrix: %d bytes a factorization%n",m.size(),(threads.getCurrentThreadAllocatedBytes()-bytes)/repeats);
+    }
 }
