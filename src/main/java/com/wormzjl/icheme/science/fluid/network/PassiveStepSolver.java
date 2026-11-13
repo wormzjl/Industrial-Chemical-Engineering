@@ -764,7 +764,7 @@ public final class PassiveStepSolver {
                         &&new PassiveNetwork.Reservoir(node.id(),node.elevation(),endStates.get(i),node.kind(),end).empty();
                 if(!dry)continue;
                 if(shown==null)shown=new ArrayList<>(endStates);
-                shown.set(i,NetworkReduction.ambient(model));
+                shown.set(i,ambient());
             }
             if(shown!=null)endStates=shown;
             var accepted=new Result(endStates,flows,dt,numerical,acceptedModes,heads,projection.pumpWork(),projection.externalMoles(),projection.externalEnergy(),projection.inventories(),projection.boundaries(),PipeTransfer.sample(model,graph,projection.states(),flows,dt,draws),projection.filters(),observe(equations,states,flows,lawFlows,heads,acceptedModes,checkpoint),TowerExchange.readings(original,states,flows,draws,model));
