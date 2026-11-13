@@ -1,5 +1,7 @@
 package com.wormzjl.icheme.science.thermo.phase;
 
+import com.wormzjl.icheme.science.thermo.PhaseIdentification;
+
 /**
  * What kind of phase a state is.
  *

@@ -82,7 +82,7 @@ public final class NetworkCrystals {
     static NetworkCrystals of(FluidThermodynamics model,NetworkPhaseEngine engine,List<String> ids,String packageId) {
         var species=engine.species();var built=new ArrayList<Crystal>();
         // The anchored model's datum: a spine package's formation datum (D10), a fit package's network datum itself (E27).
-        var formation=model.hydrocarbon.spine().map(SpinePackageData::formationReference).orElse(null);
+        var formation=model.hydrocarbon.formationReference().orElse(null);
         for(String id:ids) {
             var anchored=engine.engine().anchoredCrystal(id);
             if(anchored==null)throw new IllegalStateException("The network's engine has no evaluator of crystal "+id);

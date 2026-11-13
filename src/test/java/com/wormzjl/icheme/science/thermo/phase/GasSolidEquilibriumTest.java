@@ -32,7 +32,7 @@ import org.junit.jupiter.api.Test;
 class GasSolidEquilibriumTest {
     static final String PILOT = "icheme:pilot_cryogenic";
     static final String CRYSTAL = "icheme:crystal_carbon_dioxide_i";
-    static final FluidTpEquilibrium SERVICE = FluidTpEquilibrium.forPackage(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PILOT);
+    static final FluidTpEquilibrium SERVICE = PackageBinding.equilibrium(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PILOT);
     static final List<String> BASIS = SERVICE.contract().components();
     static final int CO2 = BASIS.indexOf("CarbonDioxide");
     static final double R = PhaseTestSupport.R;
@@ -72,9 +72,9 @@ class GasSolidEquilibriumTest {
         assertEquals(named, contract.crystalCompetition());
         assertEquals(named, contract.resolve(CRYSTALS));
         assertEquals(PhaseCompetition.FLUID_ONLY, contract.resolve(PhaseCompetition.FLUID_ONLY));
-        assertEquals(List.of(CRYSTAL), PhaseContract.admittedCrystals(catalog, PILOT));
+        assertEquals(List.of(CRYSTAL), PackageBinding.admittedCrystals(catalog, PILOT));
         // The fluid-only form of the contract, with the same identity and domain.
-        var network = PhaseTestSupport.fluidOnly(PhaseContract.forPackage(catalog, PILOT));
+        var network = PhaseTestSupport.fluidOnly(PackageBinding.contract(catalog, PILOT));
         assertEquals(Set.of(PhaseCompetition.FLUID_ONLY), network.qualifiedCompetitions());
         assertEquals(network.identity(), contract.identity());
         assertNull(network.crystalCompetition());
@@ -95,14 +95,14 @@ class GasSolidEquilibriumTest {
                 && byPackage.coverage().evidence().contains("-22 %"), byPackage.coverage().evidence());
 
         // A package without crystals, and the pilot with a research-only crystal record: the request is refused.
-        assertEquals(Set.of(PhaseCompetition.FLUID_ONLY), PhaseContract.forPackage(catalog, PhaseTestSupport.NETWORK).qualifiedCompetitions());
+        assertEquals(Set.of(PhaseCompetition.FLUID_ONLY), PackageBinding.contract(catalog, PhaseTestSupport.NETWORK).qualifiedCompetitions());
         var bundled = PhaseTestSupport.networkService();
         var none = bundled.tp(EquilibriumRequest.tp(150.0, 1.0e6, bundled.contract().components(), PhaseTestSupport.over(bundled.contract(), "Nitrogen", 1.0), CRYSTALS));
         assertEquals(UnsupportedReason.PHASE_COMPETITION_NOT_QUALIFIED, none.reason(), none.toString());
         var researchCatalog = PilotCryogenicTestCatalog.parseWith(CrystalPhaseEvaluatorTest.CRYSTAL_PATH,
                 o -> o.getAsJsonObject("coverage").addProperty("grade", "research_only"));
-        assertEquals(List.of(), PhaseContract.admittedCrystals(researchCatalog, PILOT));
-        var research = FluidTpEquilibrium.forPackage(researchCatalog, PILOT);
+        assertEquals(List.of(), PackageBinding.admittedCrystals(researchCatalog, PILOT));
+        var research = PackageBinding.equilibrium(researchCatalog, PILOT);
         var refused = research.tp(EquilibriumRequest.tp(150.0, 1.0e6, BASIS, inNitrogen(0.01), CRYSTALS));
         assertEquals(UnsupportedReason.PHASE_COMPETITION_NOT_QUALIFIED, refused.reason(), refused.toString());
         var namedRefused = research.tp(EquilibriumRequest.tp(150.0, 1.0e6, BASIS, inNitrogen(0.01), named));
@@ -121,7 +121,7 @@ class GasSolidEquilibriumTest {
     @Test
     void fluidOnlyRequestsAreUnchanged() {
         MaterialCatalog catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
-        var network = new FluidTpEquilibrium(PhaseTestSupport.fluidOnly(PhaseContract.forPackage(catalog, PILOT)), CubicPhaseEvaluator.forPackage(catalog, PILOT), FluidTpEquilibrium.Settings.DEFAULT);
+        var network = new FluidTpEquilibrium(PhaseTestSupport.fluidOnly(PackageBinding.contract(catalog, PILOT)), PackageBinding.evaluator(catalog, PILOT), FluidTpEquilibrium.Settings.DEFAULT);
         var a = SERVICE.newWorkspace();
         var b = network.newWorkspace();
         int compared = 0;
@@ -523,8 +523,8 @@ class GasSolidEquilibriumTest {
     @Test
     void theCrystalsDerivativesAndItsAnchoredView() {
         MaterialCatalog catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
-        var fluid = CubicPhaseEvaluator.forPackage(catalog, PILOT);
-        var crystal = CrystalPhaseEvaluator.forPackage(catalog, PILOT, CRYSTAL);
+        var fluid = PackageBinding.evaluator(catalog, PILOT);
+        var crystal = PackageBinding.crystal(catalog, PILOT, CRYSTAL);
         var anchor = crystal.anchor(fluid);
         var view = crystal.anchored(anchor);
         double worst = 0;

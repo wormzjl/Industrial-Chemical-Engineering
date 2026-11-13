@@ -4,7 +4,6 @@ import com.wormzjl.icheme.science.math.SmallDenseSolve;
 import com.wormzjl.icheme.science.math.DeterministicMath;
 
 import com.wormzjl.icheme.science.material.CrystalReference;
-import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.material.MaterialCoverage;
 import com.wormzjl.icheme.science.thermo.IdealGasFunction;
 import com.wormzjl.icheme.science.thermo.NumericalBox;
@@ -16,6 +15,7 @@ import com.wormzjl.icheme.science.thermo.phase.EquilibriumRequest.Specification;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult.Classification;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult.Diagnostics;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult.UnsupportedReason;
+import com.wormzjl.icheme.science.thermo.PhaseIdentification;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -80,7 +80,7 @@ import java.util.Objects;
  * {@link Classification#VAPOR_LIQUID} with {@link Diagnostics#coexistenceFromBalance()}. A target inside any other step is {@code NOT_CONVERGED}. Every search is
  * bounded ({@link Settings#maximumOuterIterations()}); near a critical point the searches take secants and brackets.</p>
  *
- * <p>Crystals: a service built with crystal evaluators ({@link #forPackage}) answers the competitions its contract
+ * <p>Crystals: a service built with crystal evaluators ({@link PackageBinding#equilibrium}) answers the competitions its contract
  * qualifies ({@link PhaseCompetition#FLUID_AND_CRYSTALS} resolves to the package's set). Each crystal is anchored once,
  * at construction, to this evaluator's pure liquid at its triple point ({@link CrystalPhaseEvaluator.Anchored}). A
  * crystal's record continues past its data range; the lowest record ceiling of a competition ({@link #crystalCeiling},
@@ -352,40 +352,6 @@ public final class FluidTpEquilibrium {
     /** @param evaluator its basis must be the contract's basis, in the same order, and its family the contract identity's */
     public FluidTpEquilibrium(PhaseContract contract, CubicPhaseEvaluator evaluator, Settings settings) {
         this(contract, evaluator, settings, List.of());
-    }
-
-    /**
-     * The service of a package with its crystals (P4 stage 2a): {@link PhaseContract#forPackage}, the package's cubic
-     * evaluator, the default settings, no water model (a request with water is {@code NOT_IMPLEMENTED}, with crystals or
-     * without, unless the contract refuses it first as {@code WATER_CHEMISTRY_NOT_MODELLED}, when it also holds a species that
-     * needs aqueous chemistry), and an evaluator of every crystal the contract admits.
-     */
-    public static FluidTpEquilibrium forPackage(MaterialCatalog catalog, String packageId) {
-        // W3b: a package that carries Water in its cubic is served on its derived contract.
-        if (catalog.requirePackage(packageId).components().contains(CubicPhaseEvaluator.WATER)) return forDerivedPackage(catalog, packageId);
-        PhaseContract contract = PhaseContract.forPackage(catalog, packageId);
-        List<CrystalPhaseEvaluator> solids = new ArrayList<>();
-        PhaseCompetition competition = contract.crystalCompetition();
-        if (competition != null) {
-            for (String crystal : competition.crystals()) solids.add(CrystalPhaseEvaluator.forPackage(catalog, packageId, crystal));
-        }
-        return new FluidTpEquilibrium(contract, CubicPhaseEvaluator.forPackage(catalog, packageId), Settings.DEFAULT, solids);
-    }
-
-    /**
-     * The service of a package with derived pairs (batch 2026-11-11-aqueous-solvents, W3a): {@link PhaseContract#forDerived}
-     * on {@link CubicPhaseEvaluator#derived} over {@link PhaseContract#derivedBasis}, the default settings
-     * (water is a component of the cubic), an evaluator of every crystal the contract admits (ice is water's, D5).
-     */
-    public static FluidTpEquilibrium forDerivedPackage(MaterialCatalog catalog, String packageId) {
-        CubicPhaseEvaluator evaluator = CubicPhaseEvaluator.derived(catalog, packageId, PhaseContract.derivedBasis(catalog, packageId));
-        PhaseContract contract = PhaseContract.forDerived(catalog, packageId, evaluator);
-        List<CrystalPhaseEvaluator> solids = new ArrayList<>();
-        PhaseCompetition competition = contract.crystalCompetition();
-        if (competition != null) {
-            for (String crystal : competition.crystals()) solids.add(CrystalPhaseEvaluator.forPackage(catalog, packageId, crystal));
-        }
-        return new FluidTpEquilibrium(contract, evaluator, Settings.DEFAULT, solids);
     }
 
     /**

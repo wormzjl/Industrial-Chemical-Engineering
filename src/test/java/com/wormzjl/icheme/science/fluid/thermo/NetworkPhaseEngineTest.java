@@ -7,7 +7,7 @@ import com.wormzjl.icheme.science.thermo.PengRobinsonKernel.Root;
 import com.wormzjl.icheme.science.thermo.TangentPlaneStability;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult;
 import com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium;
-import com.wormzjl.icheme.science.thermo.phase.PhaseIdentification;
+import com.wormzjl.icheme.science.thermo.PhaseIdentification;
 import com.wormzjl.icheme.science.thermo.phase.PhaseKind;
 import java.util.ArrayList;
 import java.util.Arrays;

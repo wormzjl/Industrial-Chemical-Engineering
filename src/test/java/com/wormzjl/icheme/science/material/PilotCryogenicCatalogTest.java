@@ -184,8 +184,8 @@ class PilotCryogenicCatalogTest {
         // global calibration points do not move its anchors.
         var edited = PilotCryogenicTestCatalog.parseWith(CALIBRATION, o -> o.getAsJsonArray("points").get(0).getAsJsonObject()
                 .addProperty("molarVolumeCubicMetres", 4.46e-5));
-        assertEquals(com.wormzjl.icheme.science.fluid.thermo.SpinePackageData.of(pilot, id).anchors(),
-                com.wormzjl.icheme.science.fluid.thermo.SpinePackageData.of(edited, id).anchors());
+        assertEquals(SpinePackageData.of(pilot, id).anchors(),
+                SpinePackageData.of(edited, id).anchors());
     }
 
     @Test

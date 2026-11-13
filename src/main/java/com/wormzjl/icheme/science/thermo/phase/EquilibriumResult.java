@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.science.thermo.phase;
 
 import com.wormzjl.icheme.science.thermo.TangentPlaneStability;
+import com.wormzjl.icheme.science.thermo.PhaseIdentification;
 import java.util.List;
 import java.util.Objects;
 

@@ -11,7 +11,7 @@ Up: [code guide](README.md)
 - A step's answer states a CO2-rich liquid, a stand-in or one liquid where you expected frost (carried crystals, below).
 - A wet gas condenses its oil late or all at once (the liquid trial's water trace, below).
 
-This chapter covers `science/thermo/phase/**`, the water module `science/thermo/water/**`, `TangentPlaneStability`, `SubstitutionAcceleration`, `NumericalBox` and `IdealGasFunction`. It ends at the engine's public API and at the interfaces it consumes (`IdealGasFunction`, `SolidPhaseEvaluator`, `CrystalFugacity`). The network side is in [fluid-science.md](fluid-science.md): when the network calls the engine, how it turns failures into holds, the "outside data range" status-line notice, `NetworkPhaseEngine` and the implementations it supplies (`CoefficientIdealGas`, `SpinePackageData`, `TranslatedPengRobinson.residualOnly`). The records the engine reads (`ReferenceSpine`, `CrystalReference`, `MaterialCoverage`, `DerivedPairs`), the PR78 kernel, `PairInteractions` and `HuronVidalExcess` are in [thermo-materials.md](thermo-materials.md). The column does not use the engine and refuses crystal packages ([column-v3.md](column-v3.md)).
+This chapter covers `science/thermo/phase/**`, the water module `science/thermo/water/**`, `TangentPlaneStability`, `PhaseIdentification`, `SubstitutionAcceleration`, `NumericalBox` and `IdealGasFunction`. It ends at the engine's public API and at the interfaces it consumes (`IdealGasFunction`, `SolidPhaseEvaluator`, `CrystalFugacity`). The network side is in [fluid-science.md](fluid-science.md): when the network calls the engine, how it turns failures into holds, the "outside data range" status-line notice, `NetworkPhaseEngine`; the engine imports nothing of the network (C1b). The residual cubic it evaluates, `TranslatedCubic` (`residualOnly`), is the kernel's. The records the engine reads (`ReferenceSpine`, `CoefficientIdealGas`, `SpinePackageData`, `CrystalReference`, `MaterialCoverage`, `DerivedPairs`), the PR78 kernel, `PairInteractions` and `HuronVidalExcess` are in [thermo-materials.md](thermo-materials.md). The column does not use the engine and refuses crystal packages ([column-v3.md](column-v3.md)).
 
 ## In one paragraph
 
@@ -39,15 +39,16 @@ Paths are under [`src/main/java/com/wormzjl/icheme/science/thermo/`](../../../sr
 
 | Class | Role | Read it for |
 |---|---|---|
-| [`phase/FluidTpEquilibrium`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/FluidTpEquilibrium.java) (6288) | The engine: `tp`, `ph`, `uv` (also warm-started `uv(request, workspace, hintT, hintP)`); onsets `depositionTemperature`, `frostTemperature`, `freezingTemperature`, `depositionPressure`; `anchoredCrystal`, `forPackage`, `forDerivedPackage`, `pureBandBox`; the three-slot system (`threeSlot`, `slotFractions`, `slotNewton`); carried crystals (`carriedTrial`, `crystalLean`, `carriedSplit`, `beyondStandIn`); nested `Settings` (12 components, `DEFAULT`) and `Workspace` | Every algorithm; public constants |
+| [`phase/FluidTpEquilibrium`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/FluidTpEquilibrium.java) (6288) | The engine: `tp`, `ph`, `uv` (also warm-started `uv(request, workspace, hintT, hintP)`); onsets `depositionTemperature`, `frostTemperature`, `freezingTemperature`, `depositionPressure`; `anchoredCrystal`, `pureBandBox`; the three-slot system (`threeSlot`, `slotFractions`, `slotNewton`); carried crystals (`carriedTrial`, `crystalLean`, `carriedSplit`, `beyondStandIn`); nested `Settings` (12 components, `DEFAULT`) and `Workspace` | Every algorithm; public constants |
 | [`phase/EquilibriumRequest`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/EquilibriumRequest.java) (71) | Record: `Specification` {TP, PH, UV}, two values (K and Pa; Pa and J; J and m3), species list (the contract basis, in order), amounts, competition | Input validation |
 | [`phase/EquilibriumResult`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/EquilibriumResult.java) (427) | Answer: `Status`, `UnsupportedReason`, `Classification` (15 values), `PhaseAmounts` list, `coexisting`, `Coverage`/`CoverageGrade`, `Deposition`, `Diagnostics`; detail prefixes; aggregates (`enthalpy`, `internalEnergy`, `volume`, `conservationDefect`) | Status rules, grades, typed failures |
-| [`phase/PhaseContract`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/PhaseContract.java) (193) | What a package promises: basis, `WaterParticipation`, qualified competitions, water-chemistry species, `PhaseDomain`, fluid coverage, `ThermoIdentity`; `forPackage`, `forDerivedPackage`, `forDerived`, `derivedBasis`, `admittedCrystals`, `resolve`; `qualifies` (the carried request wherever a crystal competition is) | Which requests are refused and why |
+| [`phase/PhaseContract`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/PhaseContract.java) (193) | What a package promises: basis, `WaterParticipation`, qualified competitions, water-chemistry species, `PhaseDomain`, fluid coverage, `ThermoIdentity`; `resolve`; `qualifies` (the carried request wherever a crystal competition is) | Which requests are refused and why |
+| [`phase/PackageBinding`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/PackageBinding.java) (305) | The catalog factories, the only class of the engine's package that reads `MaterialCatalog` (C1b item 6, S05): `equilibrium`, `derivedEquilibrium`, `contract`, `derivedContract`, `derivedBasis`, `admittedCrystals`, `evaluator`, `fromPackage`, `derivedEvaluator`, `crystal`, `identity`; the other engine classes take arrays, interfaces and records | How a package becomes an engine |
 | [`phase/PhaseCompetition`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/PhaseCompetition.java) (74) | `(crystals, packageCrystals, carried)`; `FLUID_ONLY`, `FLUID_AND_CRYSTALS` (the package's set, resolved by the contract), `FLUID_CARRYING_CRYSTALS` (a step's request: no crystal competes, `fluid+carried-crystals`), `withCrystals` | Competition semantics |
-| [`phase/PhaseDomain`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/PhaseDomain.java) (56) | The package envelope (`fluid_domain`, through `FluidDomain.envelope`) used for grading; `open` for research and test contracts | `covers`: extrapolated or not |
-| [`phase/CubicPhaseEvaluator`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/CubicPhaseEvaluator.java) (373) | Fluid family `pr78_translated_v1`: translated PR78 at the state pressure for every root (`TranslatedPengRobinson.residualOnly`), one `IdealGasFunction` per component; `forPackage`, `fromPackage`, a public constructor on a constant k matrix; the derived family `DERIVED_FAMILY` (`derived`): pairs from `DerivedPairs` (Huron-Vidal rule, Mathias-Copeman alpha), water untranslated, `WaterShare` on each state's balance book; `waterComponent()`, `derivation()` | State and derivative conventions; the two books |
+| [`phase/PhaseDomain`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/PhaseDomain.java) (56) | The package envelope (`fluid_domain`: `of(packageId, components, Tmin, Tmax, Pmin, Pmax)`, four numbers the caller reads from the catalog; the engine does not import the network's `FluidDomain`) used for grading; `open` for research and test contracts | `covers`: extrapolated or not |
+| [`phase/CubicPhaseEvaluator`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/CubicPhaseEvaluator.java) (373) | Fluid family `pr78_translated_v1`: translated PR78 at the state pressure for every root (`TranslatedCubic.residualOnly`), one `IdealGasFunction` per component; a public constructor on a constant k matrix (the catalog factories are `PackageBinding`'s); the derived family `DERIVED_FAMILY` (`PackageBinding.derivedEvaluator`): pairs from `DerivedPairs` (Huron-Vidal rule, Mathias-Copeman alpha), water untranslated, `WaterShare` on each state's balance book; `waterComponent()`, `derivation()` | State and derivative conventions; the two books |
 | [`phase/WaterShare`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/WaterShare.java) (395) | Water's own share of h, s and v in a phase of the cubic (W3a D2): `x_w W L + x_w^2 (1 - W) G`, the liquid gap L to IF97 Region 1, the gas gap G to the second virial of `SteamVirial`, the weight W a C2 quintic of v/b; never in g or ln phi; `REVISION`. It keeps the gaps, the weight, the fades and its continuation below the triple point; Region 1, Region 2's ideal part, the saturation line and the record's numbers come from `science/thermo/water` on the `WaterConstants` it is given; its pure cubic calls `PengRobinsonKernel.cubicPressure` and `selectCompressibility` | Why water's enthalpy and volume are IF97's while its fugacity is the cubic's |
-| [`phase/CrystalPhaseEvaluator`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/CrystalPhaseEvaluator.java) (261) | `SolidPhaseEvaluator` of a crystal record; `forPackage` takes the package's ideal gas of the species, its spine or its fit (`CoefficientIdealGas`, E27); `anchor(CubicPhaseEvaluator)` on the family's own pure liquid at the record's triple point, `anchored(...)` gives the immutable `Anchored` view (a `CrystalFugacity`; ice carries the liquid's water share, W3a D5) | Crystal state, ln phi against the ideal gas |
+| [`phase/CrystalPhaseEvaluator`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/CrystalPhaseEvaluator.java) (261) | `SolidPhaseEvaluator` of a crystal record; `of(record, idealGas)` (`PackageBinding.crystal` takes the package's ideal gas of the species, its spine or its fit, `CoefficientIdealGas`, E27); `anchor(CubicPhaseEvaluator)` on the family's own pure liquid at the record's triple point, `anchored(...)` gives the immutable `Anchored` view (a `CrystalFugacity`; ice carries the liquid's water share, W3a D5) | Crystal state, ln phi against the ideal gas |
 | **The water module** (`water/`, Minecraft-, column-, network- and material-free; constants from `WaterConstants`, which `science/material/WaterRecords.constants` maps from the catalog's water record, no cache: hot callers hold the constants) | | |
 | [`water/WaterConstants`](../../../src/main/java/com/wormzjl/icheme/science/thermo/water/WaterConstants.java) | The water record's doubles (critical and triple point, Wagner-Pruss coefficients, Shomate and datum fields) | What a water formula reads |
 | [`water/WagnerPruss`](../../../src/main/java/com/wormzjl/icheme/science/thermo/water/WagnerPruss.java) | The saturation line: `pressure`, `logSlope`, `temperature` (the 80-step bisection), `polynomial` | The one saturation line of the network, the column, `WaterShare`, `TrainedPhysics.Water` and `HenryConstant` |
@@ -56,13 +57,13 @@ Paths are under [`src/main/java/com/wormzjl/icheme/science/thermo/`](../../../sr
 | [`water/SteamIdealGas`](../../../src/main/java/com/wormzjl/icheme/science/thermo/water/SteamIdealGas.java), [`water/WaterDatum`](../../../src/main/java/com/wormzjl/icheme/science/thermo/water/WaterDatum.java), [`water/DiluteSteamViscosity`](../../../src/main/java/com/wormzjl/icheme/science/thermo/water/DiluteSteamViscosity.java) | The steam's Shomate ideal gas (held past 273.16 K to 900 K); the liquid datum offset and Watson's latent heat; the dilute steam viscosity | Callers that delegate: `V3WaterProperties` (constants per thread in its scratch), `WaterRegion1`, `WaterShare`, `TrainedPhysics.Water`, `FluidThermodynamics`, `HenryConstant` |
 | [`SubstitutionAcceleration`](../../../src/main/java/com/wormzjl/icheme/science/thermo/SubstitutionAcceleration.java) | The dominant-eigenvalue extrapolation of successive substitution: `factor` λ/(1 − λ), the engine's acceptance 0 < λ < 1 (`admissible`), `scale`, `MAXIMUM_EXTRAPOLATION` 20 | Used by the flash and the three-slot balance; `TangentPlaneStability` keeps its own acceptance and cap (they differ where the quotient rounds to one) |
 | [`phase/PhaseState`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/PhaseState.java) (223), [`PhaseDerivatives`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/PhaseDerivatives.java) (99), [`PhaseAmounts`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/PhaseAmounts.java) (54) | Caller-owned phase state (frozen copies in results): the cubic's book (g, ln phi) and the balance book (h, s, v with water's share, `shareEnthalpy`, `shareEntropy`, `shareVolume`, `balanceInternalEnergy`, `balanceVolume`); first derivatives at fixed composition; one phase of a result over the shared basis | Conventions, conservation |
-| [`phase/PhaseIdentification`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/PhaseIdentification.java) (134) | Venkatarathnam–Oellrich phase identification parameter (PIP) on the untranslated cubic; liquid-like when PIP > max(1, Z); `denseLiquidLike` (v < 3.9514 b, `VAPOUR_BRANCH_VOLUME_RATIO`) | Phase labels |
-| [`phase/ThermoIdentity`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/ThermoIdentity.java) (90) | Identity of the numbers: package revision + evaluator family + spine revision + water part; `of` (a package without water), `revision()`; nothing is hashed | What invalidates caches |
+| [`PhaseIdentification`](../../../src/main/java/com/wormzjl/icheme/science/thermo/PhaseIdentification.java) (131) | Venkatarathnam–Oellrich phase identification parameter (PIP) on the untranslated cubic, in the kernel since C1b (math only; read by `TangentPlaneStability`, the engine and the network); liquid-like when PIP > max(1, Z); `denseLiquidLike` (v < 3.9514 b, `VAPOUR_BRANCH_VOLUME_RATIO`) | Phase labels |
+| [`phase/ThermoIdentity`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/ThermoIdentity.java) (90) | Identity of the numbers: package revision + evaluator family + spine revision + water part; `revision()` (a package without water: `PackageBinding.identity`); nothing is hashed | What invalidates caches |
 | [`phase/DepositionOnset`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/DepositionOnset.java) (63) | Onset answer (frost point, liquidus or three-phase point); `approximation` for diagnostics only | Onset searches |
 | [`phase/PhaseKind`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/PhaseKind.java) (22), [`WaterParticipation`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/WaterParticipation.java) (24), [`SolidPhaseEvaluator`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/SolidPhaseEvaluator.java) (52), [`CrystalFugacity`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/CrystalFugacity.java) (12) | Kinds `VAPOR`, `LIQUID`, `FLUID`, `SOLID`; water `NONE` or `IN_EQUATION_OF_STATE`; the solid contract with its `TriplePointAnchor`; a crystal's ln(f_s/P) | |
 | [`TangentPlaneStability`](../../../src/main/java/com/wormzjl/icheme/science/thermo/TangentPlaneStability.java) (896) | Michelsen tangent-plane test on the kernel; one-pressure and per-branch-pressure `test`, and the per-branch `test` with a `TrialFilter`; the water-rich trial (W3a D3) and the liquid trial's water trace (`SEED_TRACE`, W3b); `Verdict` {STABLE, UNSTABLE, UNRESOLVED}; `Settings.DEFAULT`; its small dense solves are `science/math/SmallDenseSolve` (`cholesky`, `solveCholesky`, `factorShifted`, `solve3`, `solvePivoted`), shared with `FluidTpEquilibrium` | Stability verdicts |
 | [`NumericalBox`](../../../src/main/java/com/wormzjl/icheme/science/thermo/NumericalBox.java) (53) | 10..6000 K, 1 Pa..1 GPa, partial-pressure floor 1e-6 Pa; `contains`, `require`, `containsPartialPressure`, `requirePartialPressure` | The only bound a trial meets (also read by fluid `FluidThermodynamics`, `HydrocarbonModel`, `FluidDomain`, `PassiveStepSolver`) |
-| [`IdealGasFunction`](../../../src/main/java/com/wormzjl/icheme/science/thermo/IdealGasFunction.java) (31) | Ideal-gas interface: h(298.15 K) = formation enthalpy, s(298.15 K, 1e5 Pa) = standard entropy; continues past its range with Cp held | Datum convention. Implemented by `ReferenceSpine` and `science/fluid/thermo/CoefficientIdealGas` |
+| [`IdealGasFunction`](../../../src/main/java/com/wormzjl/icheme/science/thermo/IdealGasFunction.java) (31) | Ideal-gas interface: h(298.15 K) = formation enthalpy, s(298.15 K, 1e5 Pa) = standard entropy; continues past its range with Cp held | Datum convention. Implemented by `ReferenceSpine` and `science/material/CoefficientIdealGas` |
 
 ## Main flow
 
@@ -84,10 +85,10 @@ flowchart TD
   G --> O[EquilibriumResult]
 ```
 
-1. **Construction.** `FluidTpEquilibrium.forPackage(catalog, packageId)` builds a package's engine: a package with
-   water in its cubic on its derived contract (`forDerivedPackage`), any other on `PhaseContract.forPackage` and
-   `CubicPhaseEvaluator.forPackage`; default settings; one `CrystalPhaseEvaluator` per admitted crystal. The network
-   builds its own through `NetworkPhaseEngine.of` on `PhaseContract.forDerived` of its model's evaluator. The
+1. **Construction.** `PackageBinding.equilibrium(catalog, packageId)` builds a package's engine: a package with
+   water in its cubic on its derived contract (`derivedEquilibrium`), any other on `PackageBinding.contract` and
+   `PackageBinding.evaluator`; default settings; one `CrystalPhaseEvaluator` per admitted crystal. The network
+   builds its own through `NetworkPhaseEngine.of` on `PackageBinding.derivedContract` of its model's evaluator. The
    constructor requires the evaluator's basis to be the contract's, anchors each crystal once to the evaluator's pure
    liquid at its triple point, and builds the coverage of each qualified crystal competition.
 2. **`contractChecks`.** A species list other than the contract basis throws `IllegalArgumentException`. Water beside a
@@ -110,7 +111,7 @@ flowchart TD
 <details><summary>Request, contract and result model</summary>
 
 - Units are SI: K, Pa, J, m3, mol. A request's amounts are per species of the contract basis, in order: the package's
-  compounds, water last where the package carries it (`PhaseContract.derivedBasis`). The record refuses non-finite
+  compounds, water last where the package carries it (`PackageBinding.derivedBasis`). The record refuses non-finite
   values, a non-positive T or P (TP), P (PH) or V (UV), negative amounts, no material and duplicate species.
 - Status rules (enforced by the `EquilibriumResult` constructor):
   - `CONVERGED`: a classification other than `NONE`, at least one phase, and a grade an answer can have.
@@ -139,11 +140,11 @@ flowchart TD
   range `EXTRAPOLATED`.
 - `solidsAssessed()` is false for a `FLUID_ONLY` or a carried result: a constrained fluid answer, not a complete
   equilibrium. A carried answer is graded as a fluid one. A solid phase must name a crystal of the competition.
-- Contracts:
-  - `forDerivedPackage` / `forDerived`: the package's compounds other than water in package order, then water,
+- Contracts (`PackageBinding`):
+  - `derivedContract`: the package's compounds other than water in package order, then water,
     `IN_EQUATION_OF_STATE` (`NONE` without water in the package), fluid-only plus the admitted crystals as one set
     (ice among them), the package envelope, `ESTIMATED_DECLARED_ERROR`, the derived family's identity.
-  - `forPackage`: a package with water in its cubic takes `forDerivedPackage`; any other its PR78 compounds without
+  - `contract`: a package with water in its cubic takes `derivedContract`; any other its PR78 compounds without
     water, `NONE`, fluid-only plus the admitted crystals, the package's spine in the identity.
   - `admittedCrystals` takes the package's crystal records that are usable and graded `qualified` or
     `estimated_declared_error`.
@@ -318,8 +319,8 @@ flowchart TD
 <details><summary>Identity and caching</summary>
 
 - `ThermoIdentity.revision()` is `thermo-identity-v2` followed by four length-prefixed parts: the package revision, the
-  evaluator family, the spine revision (`NO_SPINE` "spine:none" without one), and the water part. `of` builds a
-  package without water (`NO_WATER` "water:none"). The derived contract (`forDerived`) builds its own: the package
+  evaluator family, the spine revision (`NO_SPINE` "spine:none" without one), and the water part. `PackageBinding.identity` builds a
+  package without water (`NO_WATER` "water:none"). The derived contract (`PackageBinding.derivedContract`) builds its own: the package
   revision `MaterialCatalog.fluidRevision` with the derivation's identity (`DerivedPairs.Result.identity`), the family
   `DERIVED_FAMILY`, and the water part `water-in-eos-v1:<water dataset revision>:<WaterShare.REVISION>`. Nothing is
   hashed (owner decision 2026-10-26): a data change moves the identity only through the revision bump that declares it.
@@ -376,16 +377,15 @@ flowchart TD
 - `FluidTpEquilibrium` also answers PH, UV, crystals and onsets.
 - A balance answer meets its target by construction, so a balance that does not hold leaves no residual. Only a round
   trip shows it.
-- The packages depend on each other in both directions. `science/thermo/phase` imports `science/fluid/thermo`
-  (`CubicPhaseEvaluator` imports `SpinePackageData` and `TranslatedPengRobinson`; `PhaseContract` and `PhaseDomain`
-  import `FluidDomain`), and `science/fluid/thermo` imports `science/thermo/phase`. `TangentPlaneStability` imports
-  `phase/PhaseIdentification`. The engine is not free of the fluid package.
+- The layers (C1b, `ThermoLayeringTest`): the kernel (`science/thermo/*.java`, `water/`, `science/math`) imports neither
+  `science/material` nor `phase/`; nothing under `science/thermo/**` imports `science/fluid` or `science/column`;
+  `science/fluid/thermo` imports the engine. The network's `TranslatedPengRobinson` extends the kernel's `TranslatedCubic`.
 - `hydrocarbonTotal` in the workspace is the whole feed's amount, water included: the name is from the free-water
   rule.
 - The per-branch-pressure machinery (`setBranches`, `Workspace.branched`, the per-branch `TangentPlaneStability.test`
   overloads) has no caller with two pressures since N10.
-- `PhaseContract.forPackage` of a package without water qualifies the admitted crystals as well as fluid-only; the
-  network uses `forDerived` on its own evaluator. The carried request is in no `qualifiedCompetitions` list:
+- `PackageBinding.contract` of a package without water qualifies the admitted crystals as well as fluid-only; the
+  network uses `PackageBinding.derivedContract` on its own evaluator. The carried request is in no `qualifiedCompetitions` list:
   `qualifies` answers it wherever a crystal competition is.
 - `FLUID_CARRYING_CRYSTALS` is neither `fluidOnly()` nor `crystalsCompete()`; test `carried()`.
 - `PhaseKind` on a `PhaseState` is the root situation the evaluator met (one root gives `FLUID`); on a `PhaseAmounts`
@@ -408,20 +408,21 @@ flowchart TD
 | Stability test (trials, the water-rich trial, the liquid trial's water trace, Newton) | `TangentPlaneStability` | `TangentPlaneStabilityTest`, `AqueousEquilibriumTest`, fluid `WetGasGatesTest.naphthaBesideSteamCondensesAtItsOwnPartialPressure` |
 | Flash, Newton finish, merge, critical band, two liquids | `FluidTpEquilibrium` (`hydrocarbon`, `attempt`, `newtonFinish`, `merged`, `inBand`, `pureBandBox`), `Settings` | `FluidTpEquilibriumTest`, `FluidTpEquilibriumP3Test` |
 | Three fluid phases | `FluidTpEquilibrium` (`threeSlotFeed`, `threeSlot`, `slotFractions`, `slotNewton`, `slotOutcome`) | `AqueousEquilibriumTest` (with `kernelEvaluationsRecorded`, the per-answer evaluation table), fluid `AqueousNetworkGatesTest`, `WetGasGatesTest` |
-| Water's share of h, s, v | `WaterShare`, `CubicPhaseEvaluator.derived`, `PhaseState` | `WaterShareTest`, `AqueousEquilibriumTest` |
+| Water's share of h, s, v | `WaterShare`, `PackageBinding.derivedEvaluator`, `PhaseState` | `WaterShareTest`, `AqueousEquilibriumTest` |
 | Phase labels | `PhaseIdentification` | `FluidTpEquilibriumP3Test` (`singlePhasesAreLabelledByThePhaseIdentificationParameter`, `hotGasesAreVapourLikeOverTheGrid`, `theLabelRuleSeparatesAHotGasFromACompressedLiquid`) |
 | PH/UV searches and balance steps | `FluidTpEquilibrium` (`solvePh`, `solveUv`, `newtonUv`, `nestedUv`, `pureCoexistence`, `binaryFluidThreePhase`, `leverStep`) | `FluidTpEquilibriumPhUvTest`, `NetworkPhaseEngineTest`, `qualification/G3F8ConservationAndDerivativeTest` |
 | Steam's second virial | `water/SteamVirial` | `SteamVirialTest` (in `phase/`, against the full IF97 Region 2 of `If97Region2`), fluid `FluidPropertyCoverageTest` (NIST steam) |
 | Any water formula (saturation, Region 1, steam ideal gas, datum) | the water module `water/*`, `science/material/WaterRecords` | `water/WaterModuleTest` (every function against the old formulas written out, bit for bit, on a grid from 1 K past 900 K; the share's saturation shift bounded and printed), `WaterRegion1Test`, `WaterShareTest`, column `V3WaterPropertyDerivativesTest` |
-| The cubic's pressure and its derivatives | `PengRobinsonKernel.cubicDenominator`, `cubicPressure` (one form for `TranslatedPengRobinson.fill`, `PhaseIdentification`, `WaterShare`, `FluidTpEquilibrium`) | `CubicVolumetricBlockTest` |
+| The cubic's pressure and its derivatives | `PengRobinsonKernel.cubicDenominator`, `cubicPressure` (one form for `TranslatedCubic.fill`, `PhaseIdentification`, `WaterShare`, `FluidTpEquilibrium`) | `CubicVolumetricBlockTest` |
 | Crystal competition and deposition, ice | `FluidTpEquilibrium` (`solveWithCrystals`, `depositFromVapour`, `depositFromFluid`, `twoCrystals`, `binaryThreePhase`, `pureCrystalStep`), `CrystalPhaseEvaluator`; data `crystals/ice_ih.json` | `GasSolidEquilibriumTest`, `NearPureCrystalStepTest`, `CrystalPhaseEvaluatorTest`, `SolidCarbonDioxideQualificationTest`, `RefineryCarbonDioxideCrystalTest`, `AqueousEquilibriumTest`, `qualification/G4*`, `G5*` |
 | Carried crystals (a step's request) | `FluidTpEquilibrium` (`carriedTrial`, `crystalLean`, `carriedSplit`, `beyondStandIn`, `stabilityOf`), `TangentPlaneStability.TrialFilter`, `PhaseCompetition.FLUID_CARRYING_CRYSTALS`, `PhaseContract.qualifies` | fluid `science/fluid/thermo/CarriedCrystalsTest`, `NetworkPhaseEngineTest`, fluid `CrystalDepositionIslandTest` |
 | Onsets | `depositionTemperature`, `frostTemperature`, `freezingTemperature`, `depositionPressure`, `DepositionOnset` | `GasSolidEquilibriumTest`, `G4F1`, `G4F2`, `G5F2` |
 | Admitted competitions, water chemistry | `PhaseContract` | `FluidTpEquilibriumTest.waterChemistryAndQualifiedCrystalsFollowTheContract`, `GasSolidEquilibriumTest.theCrystalCompetitionIsQualifiedAsAWholeSet`, `SpinePackageEvaluatorTest` |
 | Grades and extrapolation | `graded`, `outsideData`, `PhaseDomain`, `EquilibriumResult.Coverage` | `qualification/G3F9DataRangeBoundaryTest`, `FluidTpEquilibriumPhUvTest.aClosedVesselBeyondThePressureEnvelopeIsAnsweredExtrapolated` |
-| Fluid evaluator and conventions | `CubicPhaseEvaluator` (and fluid `TranslatedPengRobinson.residualOnly`, `SpinePackageData`) | `CubicPhaseEvaluatorTest`, `SpinePackageEvaluatorTest` |
+| Fluid evaluator and conventions | `CubicPhaseEvaluator` (and the kernel's `TranslatedCubic.residualOnly`, material `SpinePackageData`) | `CubicPhaseEvaluatorTest`, `SpinePackageEvaluatorTest` |
 | Solid contract | `SolidPhaseEvaluator`, `CrystalFugacity` | `SolidPhaseEvaluatorTest`, `CrystalPhaseEvaluatorTest` |
-| Cache identity | `ThermoIdentity`, `PhaseContract.forDerived` | `ThermoIdentityTest`, `SpinePackageEvaluatorTest` |
+| Cache identity | `ThermoIdentity`, `PackageBinding.derivedContract` | `ThermoIdentityTest`, `SpinePackageEvaluatorTest` |
+| Layers (C1b) | the imports and qualified names of `science/thermo/**` and `science/math`; only `PackageBinding` of the engine reads `MaterialCatalog` | `ThermoLayeringTest` (plain reading of `src/main/java`) |
 | Numerical box | `NumericalBox` | fluid `RangeContinuationGateTest` |
 | How the network calls the engine | fluid-science: `NetworkPhaseEngine`, `FluidThermodynamics` | `science/fluid/thermo/NetworkPhaseEngineTest`, `SpineNetworkPathTest`, `science/fluid/network/CrystalDepositionIslandTest`, `CrystalFlushBudgetTest`, `LiquidFullBubblePointTest` |
 

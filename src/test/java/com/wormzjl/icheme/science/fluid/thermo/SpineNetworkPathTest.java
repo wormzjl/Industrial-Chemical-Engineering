@@ -10,6 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.wormzjl.icheme.science.fluid.state.EnergyReference;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog;
+import com.wormzjl.icheme.science.material.SpinePackageData;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel.Root;
 import com.wormzjl.icheme.science.thermo.phase.ThermoIdentity;
 import com.wormzjl.icheme.science.thermo.reference.HelmholtzFluid;
@@ -85,7 +86,7 @@ class SpineNetworkPathTest {
             assertEquals(spine.formationEnthalpy().value(), data.formationEnthalpies()[i], 0.0);
             assertEquals(0.0, data.idealGas().get(i).enthalpy(298.15) - data.formationEnthalpies()[i], 0.0, SPECIES[i] + " sensible zero");
         }
-        EnergyReference formation = data.formationReference();
+        EnergyReference formation = hydrocarbon.formationReference().orElseThrow();
         assertTrue(formation.formationDataQualified());
         assertEquals(hydrocarbon.components(), formation.components());
         assertEquals(SpinePackageData.FORMATION_DATUM + ":" + catalog.spineRevision(PILOT), formation.revision());
@@ -443,7 +444,7 @@ class SpineNetworkPathTest {
         var model = pilot();
         // The network's revision is its package's derived identity and the model's formulation (W3b: the derived contract,
         // main keeps the revision, not the identity).
-        var identity = com.wormzjl.icheme.science.thermo.phase.PhaseContract.forDerived(catalog, PILOT, new HydrocarbonModel(catalog, PILOT).evaluator()).identity();
+        var identity = com.wormzjl.icheme.science.thermo.phase.PackageBinding.derivedContract(catalog, PILOT, new HydrocarbonModel(catalog, PILOT).evaluator()).identity();
         assertEquals(identity.revision() + ":" + HydrocarbonModel.FORMULATION, model.revision());
         assertTrue(identity.packageRevision().startsWith(catalog.fluidRevision(PILOT) + ";"), identity.packageRevision());
         assertEquals(com.wormzjl.icheme.science.thermo.phase.CubicPhaseEvaluator.DERIVED_FAMILY, identity.evaluatorFamily());
@@ -479,7 +480,7 @@ class SpineNetworkPathTest {
                 o -> { o.getAsJsonObject("formation_enthalpy").addProperty("value_j_per_mol", -73513); PilotCryogenicTestCatalog.bump(o); });
         var shifted = new HydrocarbonModel(formation, PILOT);
         assertTrue(!base.equals(shifted.revision()));
-        assertEquals(-73513.0, shifted.spine().orElseThrow().formationReference().offsetJoulesPerMole(1), 0.0);
+        assertEquals(-73513.0, shifted.formationReference().orElseThrow().offsetJoulesPerMole(1), 0.0);
         double[] x = {0.2, 0.6, 0.1, 0.1};
         double before = model.phase(300, 2e6, TestPhases.conserved(model, x), Root.VAPOR).molarEnthalpy();
         double after = shifted.phase(300, 2e6, TestPhases.conserved(shifted, x), Root.VAPOR).molarEnthalpy();

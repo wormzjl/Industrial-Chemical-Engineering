@@ -8,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.wormzjl.icheme.science.fluid.state.EnergyReference;
-import com.wormzjl.icheme.science.fluid.thermo.CoefficientIdealGas;
+import com.wormzjl.icheme.science.material.CoefficientIdealGas;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.fluid.thermo.HydrocarbonModel;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
@@ -18,7 +18,7 @@ import org.junit.jupiter.api.Test;
 
 /**
  * P3 WP5 gate (batch 2026-09-24-coolprop-low-temperature, plan {@code P3_PILOT_ENGINE_PLAN.md} section 5, decision
- * D10): the phase engine's evaluator of the pilot package ({@link CubicPhaseEvaluator#forPackage}) and the fluid
+ * D10): the phase engine's evaluator of the pilot package ({@link PackageBinding#evaluator}) and the fluid
  * network's model of the same package ({@code HydrocarbonModel} on its spine path) are one thermodynamics on two energy
  * datums. On every state: the molar volume and every {@code ln phi_i} bit for bit; the network's enthalpy is the
  * evaluator's minus {@code sum x_i DeltafH_i} to 1e-15 of the larger magnitude (rounding of sums of about 4e5 J/mol);
@@ -31,10 +31,10 @@ class SpinePackageEvaluatorTest {
     @Test
     void theNetworkPhaseIsTheEvaluatorPhaseOnTheSensibleDatum() {
         var catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
-        var evaluator = CubicPhaseEvaluator.forPackage(catalog, PILOT);
+        var evaluator = PackageBinding.evaluator(catalog, PILOT);
         var network = FluidTestSupport.model(catalog, PILOT).hydrocarbon;
         assertEquals(network.components(), evaluator.components());
-        var formation = network.spine().orElseThrow().formationReference();
+        var formation = network.formationReference().orElseThrow();
         var sensible = EnergyReference.sensible(network.components());
         int n = network.componentCount();
         double[] offsets = new double[n];
@@ -109,8 +109,8 @@ class SpinePackageEvaluatorTest {
     void theEvaluatorTakesEitherIdealGasAndContinuesOutsideIt() {
         var catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
         // A package without a spine takes its fits on the network's datum (decision E27; it was refused before).
-        assertTrue(CubicPhaseEvaluator.forPackage(catalog, PhaseTestSupport.NETWORK).idealGas(0) instanceof CoefficientIdealGas);
-        var evaluator = CubicPhaseEvaluator.forPackage(catalog, PILOT);
+        assertTrue(PackageBinding.evaluator(catalog, PhaseTestSupport.NETWORK).idealGas(0) instanceof CoefficientIdealGas);
+        var evaluator = PackageBinding.evaluator(catalog, PILOT);
         var workspace = evaluator.newWorkspace();
         var out = new PhaseState(4);
         // Liquid methane at 85 K, below its spine's data: evaluated on the held cp (owner rule of 2026-10-16), not refused.
@@ -129,18 +129,18 @@ class SpinePackageEvaluatorTest {
     @Test
     void theContractCarriesThePackageSpineWaterAndCompetition() {
         var catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
-        var contract = PhaseContract.forPackage(catalog, PILOT);
+        var contract = PackageBinding.contract(catalog, PILOT);
         assertEquals(catalog.spineRevision(PILOT), contract.identity().spineRevision());
         assertEquals(CubicPhaseEvaluator.FAMILY, contract.identity().evaluatorFamily());
         assertEquals(catalog.fluidRevision(PILOT), contract.identity().packageRevision());
         assertEquals(WaterParticipation.NONE, contract.water());
         assertEquals(ThermoIdentity.NO_WATER, contract.identity().waterModelRevision());
-        assertEquals(Set.of(PhaseCompetition.FLUID_ONLY, PhaseCompetition.withCrystals(PhaseContract.admittedCrystals(catalog, PILOT).toArray(String[]::new))),
+        assertEquals(Set.of(PhaseCompetition.FLUID_ONLY, PhaseCompetition.withCrystals(PackageBinding.admittedCrystals(catalog, PILOT).toArray(String[]::new))),
                 contract.qualifiedCompetitions(), "fluid-only and the admitted crystals as one set");
         assertEquals(java.util.List.of("Nitrogen", "Methane", "Ethane", "CarbonDioxide"), contract.components());
         // The network's own identity is the same package on the derived family (W3b): a different revision.
         var network = FluidTestSupport.model(catalog, PILOT).hydrocarbon;
-        var networkIdentity = PhaseContract.forDerived(catalog, PILOT, network.evaluator()).identity();
+        var networkIdentity = PackageBinding.derivedContract(catalog, PILOT, network.evaluator()).identity();
         assertEquals(networkIdentity.revision() + ":" + HydrocarbonModel.FORMULATION, network.revision(), "the network's revision is its identity's");
         assertEquals(CubicPhaseEvaluator.DERIVED_FAMILY, networkIdentity.evaluatorFamily());
         assertTrue(networkIdentity.packageRevision().startsWith(contract.identity().packageRevision() + ";"), networkIdentity.packageRevision());
@@ -148,8 +148,8 @@ class SpinePackageEvaluatorTest {
         assertNotEquals(contract.identity().revision(), networkIdentity.revision());
         // A package without a spine names NO_SPINE (W3b: the network package carries water in its cubic and takes the
         // derived contract; a crude package stands in).
-        var bundled = PhaseContract.forPackage(catalog, "icheme:tjl20_methane_nitrogen");
-        assertEquals(ThermoIdentity.of(catalog, "icheme:tjl20_methane_nitrogen", CubicPhaseEvaluator.FAMILY, ThermoIdentity.NO_SPINE),
+        var bundled = PackageBinding.contract(catalog, "icheme:tjl20_methane_nitrogen");
+        assertEquals(PackageBinding.identity(catalog, "icheme:tjl20_methane_nitrogen", CubicPhaseEvaluator.FAMILY, ThermoIdentity.NO_SPINE),
                 bundled.identity());
         assertEquals(ThermoIdentity.NO_SPINE, bundled.identity().spineRevision());
     }

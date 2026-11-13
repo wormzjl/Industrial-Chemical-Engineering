@@ -16,6 +16,7 @@ import com.wormzjl.icheme.science.thermo.phase.PhaseDomain;
 import com.wormzjl.icheme.science.thermo.phase.ThermoIdentity;
 import com.wormzjl.icheme.science.thermo.phase.WaterParticipation;
 import com.wormzjl.icheme.science.thermo.reference.HelmholtzFluid;
+import com.wormzjl.icheme.science.thermo.phase.PackageBinding;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -264,7 +265,7 @@ final class G3Support {
         var pkg = MaterialCatalog.bundled().requirePackage(NETWORK);
         List<IdealGasFunction> gas = new ArrayList<>();
         for (int i = 0; i < pkg.components().size(); i++) gas.add(stubGas());
-        return CubicPhaseEvaluator.fromPackage(pkg, pkg.components(), new double[pkg.components().size()], gas);
+        return PackageBinding.fromPackage(pkg, pkg.components(), new double[pkg.components().size()], gas);
     }
 
     // ------------------------------------------------------------------------------------------------ reporting

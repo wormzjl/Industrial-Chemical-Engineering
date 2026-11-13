@@ -19,6 +19,7 @@ import com.wormzjl.icheme.science.thermo.phase.PhaseKind;
 import com.wormzjl.icheme.science.thermo.phase.PhaseAmounts;
 import com.wormzjl.icheme.science.fluid.state.EnergyReference;
 import com.wormzjl.icheme.science.fluid.state.SolidInventory;
+import com.wormzjl.icheme.science.thermo.phase.PackageBinding;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -130,7 +131,7 @@ public final class FluidThermodynamics {
         domain=hydrocarbon.domain();
         // The crystal competition: the package's admitted crystals (ice among them on a list with water), on either ideal-gas
         // source (E27). A view without a crystal's compound admits none.
-        var admitted=PhaseContract.admittedCrystals(catalog,packageId);
+        var admitted=PackageBinding.admittedCrystals(catalog,packageId);
         crystalIds=List.copyOf(admitted);crystalSpecies=new boolean[n+1];crystalTriple=new double[n+1];
         Arrays.fill(crystalTriple,Double.NEGATIVE_INFINITY);
         crystalCeiling=new double[n+1];Arrays.fill(crystalCeiling,Double.NEGATIVE_INFINITY);
@@ -307,7 +308,7 @@ public final class FluidThermodynamics {
     private double engineEnergy(double energy,double[] totals) {
         var spine=hydrocarbon.spine();
         if(spine.isEmpty())return energy;
-        var formation=spine.get().formationReference();
+        var formation=hydrocarbon.formationReference().orElseThrow();
         return EnergyReference.sensible(formation.components()).rebase(energy,Arrays.copyOf(totals,hydrocarbon.componentCount()),formation);
     }
     private CrystalAnswer crystalAnswer(EquilibriumResult result,double[] totals) {

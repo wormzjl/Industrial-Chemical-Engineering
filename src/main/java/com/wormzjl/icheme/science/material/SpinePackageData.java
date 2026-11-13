@@ -1,9 +1,7 @@
-package com.wormzjl.icheme.science.fluid.thermo;
+package com.wormzjl.icheme.science.material;
 
-import com.wormzjl.icheme.science.fluid.state.EnergyReference;
-import com.wormzjl.icheme.science.material.MaterialCatalog;
-import com.wormzjl.icheme.science.material.ReferenceSpine;
 import com.wormzjl.icheme.science.thermo.PairInteractions;
+import com.wormzjl.icheme.science.thermo.PengRobinsonKernel;
 import com.wormzjl.icheme.science.thermo.ThermoComponent;
 import java.util.ArrayList;
 import java.util.List;
@@ -12,7 +10,7 @@ import java.util.Objects;
 /**
  * The thermodynamic inputs of a package that declares a reference spine, resolved once from the catalog (P3 WP5, batch
  * 2026-09-24-coolprop-low-temperature, plan {@code P3_PILOT_ENGINE_PLAN.md} section 5, decisions D6 and D10). The fluid
- * network's {@link HydrocarbonModel} and the phase engine's {@code CubicPhaseEvaluator.forPackage} both build from this
+ * network's {@code HydrocarbonModel} and the phase engine's {@code PackageBinding.evaluator} both build from this
  * one object, so the two evaluate the same components, pair interactions and translations and differ only by the
  * energy datum.
  *
@@ -28,15 +26,16 @@ import java.util.Objects;
  *   coefficient path does.</li>
  *   <li>Ideal gas: the package's {@link ReferenceSpine} per component, the only ideal-gas source (D6).</li>
  *   <li>Energy datum (D10): the network subtracts {@code DeltafH_i = spine_i.formationEnthalpy()} per species, so its
- *   enthalpies stay sensible (zero at 298.15 K); {@link #formationReference()} is the formation datum as an
- *   {@link EnergyReference} over the package components, whose offsets are those formation enthalpies
- *   ({@code formationDataQualified}): {@code EnergyReference.sensible(basis).rebase(E, n, formationReference())} is the
- *   engine's energy of a network energy {@code E}. Free water is not in this basis; it keeps the network's sensible
+ *   enthalpies stay sensible (zero at 298.15 K). The formation datum is carried as numbers: {@link #formationEnthalpies()}
+ *   over the package components with its revision {@link #formationRevision()}; the network builds its
+ *   {@code EnergyReference} from them ({@code HydrocarbonModel.formationReference()}, {@code formationDataQualified}):
+ *   {@code EnergyReference.sensible(basis).rebase(E, n, formationReference)} is the engine's energy of a network energy
+ *   {@code E}. Free water is not in this basis; it keeps the network's sensible
  *   free-water reference.</li>
  * </ul>
  */
 public final class SpinePackageData {
-    /** The revision prefix of {@link #formationReference()}; the package's spine revision follows it. */
+    /** The revision prefix of {@link #formationRevision()}; the package's spine revision follows it. */
     public static final String FORMATION_DATUM = "icheme:formation-298.15K-spine-v1";
 
     /** Where a component's volume translation is anchored. */
@@ -54,7 +53,6 @@ public final class SpinePackageData {
     private final PairInteractions interactions;
     private final List<Anchor> anchors;
     private final double[] formationEnthalpies;
-    private final EnergyReference formationReference;
     private final String spineRevision;
 
     private SpinePackageData(String packageId, List<ThermoComponent> components, List<ReferenceSpine> spines,
@@ -67,8 +65,6 @@ public final class SpinePackageData {
         this.anchors = List.copyOf(anchors);
         this.formationEnthalpies = formationEnthalpies.clone();
         this.spineRevision = spineRevision;
-        formationReference = new EnergyReference(FORMATION_DATUM + ":" + spineRevision,
-                this.components.stream().map(ThermoComponent::id).toList(), this.formationEnthalpies, true);
     }
 
     /** Resolves a package that declares a reference spine; a package without one is refused. */
@@ -105,6 +101,7 @@ public final class SpinePackageData {
         }
         List<Anchor> anchors = new ArrayList<>(count);
         var calibrations = catalog.fluidData().volumeReferences();
+        PengRobinsonKernel pure = null;
         for (int i = 0; i < count; i++) {
             var property = propertyPackage.properties().get(i);
             var translation = catalog.volumeTranslation(packageId, property.component());
@@ -119,8 +116,8 @@ public final class SpinePackageData {
             double t = point == null ? property.standardTemperature() : point.temperatureKelvin();
             double target = point == null ? property.molecularWeight() / property.density() : point.molarVolumeCubicMetres();
             double p = point == null ? property.standardPressure() : point.pressurePascal();
-            double rawVolume = HydrocarbonModel.pureLiquidCompressibility(components.get(i), constants[i][i], t, p)
-                    * FluidThermodynamics.R * t / p;
+            if (pure == null) pure = CoefficientTranslations.pureKernel(components, constants);
+            double rawVolume = CoefficientTranslations.pureLiquidVolume(pure, i, t, p);
             anchors.add(new Anchor(point == null ? AnchorSource.STANDARD_DENSITY : AnchorSource.CALIBRATION_POINT, t, p, target,
                     target - rawVolume));
         }
@@ -144,6 +141,9 @@ public final class SpinePackageData {
     }
     /** A copy of the formation enthalpies at 298.15 K, J/mol: the datum offsets the network subtracts. */
     public double[] formationEnthalpies() { return formationEnthalpies.clone(); }
-    /** The formation datum over the package components; see the class comment. */
-    public EnergyReference formationReference() { return formationReference; }
+    /**
+     * The revision of the formation datum, {@value #FORMATION_DATUM}{@code :<spine revision>}: the network's
+     * {@code EnergyReference} of {@link #formationEnthalpies()} over the package components carries it.
+     */
+    public String formationRevision() { return FORMATION_DATUM + ":" + spineRevision; }
 }

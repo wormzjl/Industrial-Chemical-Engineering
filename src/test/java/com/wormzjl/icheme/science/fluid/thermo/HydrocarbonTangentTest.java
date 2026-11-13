@@ -163,8 +163,8 @@ class HydrocarbonTangentTest {
                 var values = eos.evaluateValues(state[0], state[1], lng, root, eos.prepare(state[0]));
                 double z = values.compressibility(), pip = values.phaseIdentificationParameter();
                 System.out.printf(Locale.ROOT, "COLD_PILOT %.0f K %.0f kPa %s: roots %d Z %.6f PIP %.6f liquid-like %b vapour-like %b%n", state[0], state[1] / 1e3, root,
-                        values.physicalRootCount(), z, pip, com.wormzjl.icheme.science.thermo.phase.PhaseIdentification.liquidLike(pip, z),
-                        com.wormzjl.icheme.science.thermo.phase.PhaseIdentification.vapourLike(pip, z));
+                        values.physicalRootCount(), z, pip, com.wormzjl.icheme.science.thermo.PhaseIdentification.liquidLike(pip, z),
+                        com.wormzjl.icheme.science.thermo.PhaseIdentification.vapourLike(pip, z));
             }
     }
 
