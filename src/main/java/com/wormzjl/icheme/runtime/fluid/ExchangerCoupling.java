@@ -163,7 +163,7 @@ final class ExchangerCoupling {
             // A column's condenser read by its water side carries the valve the column sets, where its lines are complete (U2).
             if(held!=null){reads.put(pipe,held.ceiling()>0&&held.operation()==null?held.withOperation(operations.get(pipe)):held);continue;}
             var other=other(side);var otherSide=coordinator.coupled.get(side.partner);
-            if(other!=null&&other!=island&&other.certificate!=null&&other.clock.committedTick()<start)coordinator.materialise(other);
+            if(other!=null&&other!=island&&other.certificate!=null&&other.clock.committedTick()<start)coordinator.certificates.materialise(other);
             // A convection coil reads its radiant coil's heat as of the slice start (F1); one in this island plans it per step.
             if(side.kind==SideKind.CONVECTION){reads.put(pipe,ExchangerRelay.Read.radiant(otherSide==null||other==null?0:otherSide.rateAsOf(start)));continue;}
             boolean stoppedOther=other==null||other!=island&&stoppedSide(other);
@@ -230,7 +230,7 @@ final class ExchangerCoupling {
                 var it=coordinator.toWake.iterator();long id=it.next();it.remove();
                 var island=coordinator.islands.get(id);if(island==null||island.certificate==null||coordinator.stopped||coordinator.suspension!=null)continue;
                 // Its replay up to now first (which books its heat); that may reach its horizon, which ends it anyway.
-                coordinator.materialise(island);if(island.certificate==null)continue;
+                coordinator.certificates.materialise(island);if(island.certificate==null)continue;
                 island.certificate=null;island.revalidating=null;island.certifiedSince=-1;island.signature=null;island.retained=new RetainedSolver();
                 island.lastInterval=null;island.streak=0;island.status="WAITING: an exchanger's other side changed";island.touch();
                 FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.couplingWakes);coordinator.reconsider(island);
