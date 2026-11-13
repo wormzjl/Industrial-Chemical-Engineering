@@ -468,6 +468,51 @@ class ShaftCouplingTest {
         assertTrue(running == null || running.kind() == ShaftPlan.Kind.SPEED, "repaired, no close: the share's plan, if any: " + running);
     }
 
+    /**
+     * M-11: a variable-speed motor in flow regulation, linked to its pump's casing, reads the casing's duty (the speed share
+     * that meets the set flow, solved when the step first reads it) and runs the pump at its set flow.
+     */
+    @Test
+    void aRegulatingMotorRunsItsPumpAtTheSetFlow() {
+        var rig = new Rig();
+        var ledger = new WorldTopologyLedger(WorldTopologyLedger.Snapshot.empty(EventPathWorld.CATALOG));
+        long first = ledger.reserve(3);
+        var trip = com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE;
+        ledger.shaft(new ShaftUnit(first, com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR, cell(0), 0, List.of(new ShaftUnit.End(cell(0), 1, 0, 0, true)), 0,
+                11e3, 2950, 2, com.wormzjl.icheme.science.equipment.MachineDuty.Drive.VARIABLE,
+                new ShaftUnit.Settings(true, com.wormzjl.icheme.science.machine.ShaftTrain.Mode.REGULATE_FLOW, 0, 0, 0), trip, null));
+        ledger.shaft(ShaftUnit.shaft(first + 1, cell(1), 0));
+        ledger.shaft(new ShaftUnit(first + 2, com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.CASING, cell(2), 0, List.of(new ShaftUnit.End(cell(2), -1, 0, 0, false)), 1,
+                0, 2950, 0, com.wormzjl.icheme.science.equipment.MachineDuty.Drive.FIXED, ShaftUnit.Settings.DEFAULT, trip, null));
+        var trains = new ShaftTrains(ledger, device -> device == 1 ? 1L : null, rig.coordinator);
+        rig.coordinator.shafts(trains);
+        trains.host(new ShaftTrains.Host() {
+            public void edit(long device, FlowControl.ControlValve control) {
+            }
+
+            public UUID speedSensor(long turbine) {
+                return null;
+            }
+
+            public void resize(PhysicalFluidTopology.Position shaft, int pixels) {
+            }
+
+            public Set<Long> linked(long motor) {
+                return Set.of(1L);
+            }
+        });
+        double setFlow = .006;
+        var base = line();
+        var line = new PassiveNetwork(base.reservoirs(), List.of(base.pipes().getFirst().withControl(new FlowControl.Machine(PUMP, 0, true, setFlow, 0))));
+        rig.coordinator.register(new IslandCoordinator.Snapshot(1, 0, line, new IslandClock.Snapshot(0, 0, 0, 100), Optional.empty(), "READY"), model);
+        rig.run(120);
+        var status = trains.view(first).status();
+        for (var word : List.of("NO DATA LINK", "MULTIPLE DUTIES", "NO DUTY TARGET", "LAST SPEED")) assertFalse(status.contains(word), status);
+        var supply = water(101325);
+        double target = setFlow * supply.mass() / supply.volume(), flow = rig.coordinator.observe(1).lastResult().orElseThrow().endpointFlows()[0];
+        assertEquals(target, flow, .05 * target, "the motor holds the set flow: " + status);
+    }
+
     /** The governor walk: from a turbine's inlet upstream through unbranched pipes to the nearest control valve. */
     @Test
     void theGovernorWalkFindsTheTurbinesValve() {
