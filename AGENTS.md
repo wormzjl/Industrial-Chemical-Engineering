@@ -164,6 +164,7 @@ These rules apply to every agent working in this repository (Claude, Codex, suba
 - The Java path is the reference and the fallback. A native path gives the same results as Java where its gate says so, and its ceiling states which solves it takes.
 - A Java method with a Rust twin changes in both in the same batch, or the batch lowers the native ceiling below it.
 - A `cargo` build or test uses at most 4 jobs and never runs during a timed run. The merge lane builds the native library through Gradle.
+- Run `cargo` from `src/main/rust`: its config sets 4 jobs, the target folder and the vendored sources. A cargo build or test counts as one of the two Gradle lanes.
 
 ## Merging to main
 

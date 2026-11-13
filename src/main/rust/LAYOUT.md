@@ -34,7 +34,7 @@ builds the same string and compares with `equals`; null (the JVM could not make 
 ## `int nativeSelfTest(double[] out)`
 
 `out.length == 256`. Fills the known answers of `icheme-jni/src/self_test.rs`; Java computes the same with
-`RustNativeTables.selfTestValues()` (to move into `NativeColumnSolver`) and compares raw bits slot by slot.
+`NativeColumnSolver.expectedSelfTest()` and compares raw bits slot by slot (slots 0..127 at load).
 
 | Slots | Values |
 |---|---|

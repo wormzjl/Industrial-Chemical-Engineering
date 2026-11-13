@@ -26,9 +26,26 @@ Every function with a Java twin carries `// java: <Class>.<method>` and keeps th
 
 ## Build and test
 
-From this folder (`src/main/rust`). `rust-toolchain.toml` pins Rust 1.99.1 with clippy and rustfmt;
+Through Gradle, from the repository root. Gradle finds cargo from `-Pcargo=<path>`, the PATH or `~/.cargo/bin`; with
+none the jar carries no library, the build says so in one line, and the column runs on its Java path. No CMake and no
+C++ compiler is needed (the C++ library of `src/main/cpp` is gone).
+
+| Task | Does |
+|---|---|
+| `nativeBuild` | `cargo build --release --locked --offline -p icheme-jni` into `build/native/cargo/release/` (`icheme_column.dll`); inputs this folder without `vendor/` and `tests/data/` |
+| `nativeResources` | copies the library into `build/generated/nativeResources/natives/<os>-<arch>/`, which the jar and every run carry when cargo is found |
+| `rustCheck` | `rustFmtCheck` (`cargo fmt --all --check`), `rustClippy` (`cargo clippy --locked --offline --all-targets -- -D warnings`), `rustTest` (`cargo test --locked --offline`); each leaves a stamp in `build/native/checks/` and runs again only when this folder changed |
+| `nativeSmoke` | `NativeColumnSolverTest` on the built library (`icheme.native.path` = `build/native/cargo/release`): the handshake, the band solve bit for bit against the Java body on the 1 570 cases of `banded.txt`, and a column with the ceiling off and at band; part of `slowGates` (so `check`) where cargo is found |
+
+The library is used only up to its ceiling, `-Dicheme.native.column=off|band` (Gradle `-PnativeColumn=`, to every test
+JVM); the default is `off`, where the library is not even loaded. `band` hands every `V3BandedPivotedSolver` solve to
+`nativeBandedSolve`; a status other than 0 runs that solve on Java, and a panic (6) turns the library off for the
+session. `-Dicheme.native.path=<file or folder>` (Gradle `-PnativeLibraryPath=`) loads another build.
+
+By hand, from this folder (`src/main/rust`): `rust-toolchain.toml` pins Rust 1.99.1 with clippy and rustfmt;
 `.cargo/config.toml` limits cargo to 4 jobs, puts its output in the worktree's `build/native/cargo`, reads crates
-from `vendor/` only and links the C runtime statically on Windows.
+from `vendor/` only and links the C runtime statically on Windows. `tools/agent-guard` blocks a cargo build run
+elsewhere, or with more than 4 jobs; a cargo build counts as one of the two Gradle lanes.
 
 ```text
 cargo test --locked --offline                    # the bit tables, the band LU, the JNI crate
@@ -46,7 +63,8 @@ NaN bits for the same call (interpreter and intrinsics). Every other value requi
 
 The tables come from `src/test/java/com/wormzjl/icheme/science/math/RustBitTables.java`, run without Gradle with
 JDK 21 (the commands are in its class comment). `banded.txt` and `icheme-jni/tests/data/self_test.txt` come from
-`src/test/java/com/wormzjl/icheme/science/column/v3/linalg/RustNativeTables.java`: a band row names a case that
+`src/test/java/com/wormzjl/icheme/science/column/v3/linalg/RustNativeTables.java` (the self-test answers are
+`NativeColumnSolver.expectedSelfTest()`, the vector the loader checks): a band row names a case that
 `tests/banded_tables.rs` rebuilds with the twin of the Java case generator, checks by an input fingerprint, solves
 and compares output by output. Regenerate the tables only when the Java functions they prove change.
 

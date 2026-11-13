@@ -30,9 +30,9 @@ Build once (not timed): `./gradlew jar compileTestJava compileFluidGameTestJava 
 powershell -NoProfile -File tools/codebase-review-bench/run.ps1 ColumnBench.java cold:medium tmp/codebase-review-bench/column
 ```
 
-`run.ps1` runs a source program of this folder with JDK 21 on `build/classes/java/{main,test}`, their resources, gson and EJML from the Gradle cache, `-Xmx4g` and `-Dicheme.native.thermo.batch=false`; `-JvmArgs "-Dwarm=60 -Dmeasure=60"` adds JVM options.
+`run.ps1` runs a source program of this folder with JDK 21 on `build/classes/java/{main,test}`, their resources, gson and EJML from the Gradle cache, `-Xmx4g`; `-JvmArgs "-Dwarm=60 -Dmeasure=60"` adds JVM options.
 
-Phases `cold:medium`, `cold:literature`, `warm:medium`, `warm:literature`, each in its own JVM. Cold is `ColumnUnit.solve(input, null, ...)`, the block's cold route (learned start, then the classical chain). Warm is one cold base solve, then `ColumnUnit.solve(input × 1.02, baseSeed, ...)` again and again: every extensive input (feed, steam, draws, pumparound duties) times 1.02. `medium` is the `medium_crude` stream under its tower template (`V3TestInputs.crude`); `literature` is the `literature_tia_juana` preset. `-Dicheme.native.thermo.batch=false` gives the Java path (the C++ library is not on this class path anyway). Output: `<phase>.txt`, `<phase>.jfr`.
+Phases `cold:medium`, `cold:literature`, `warm:medium`, `warm:literature`, each in its own JVM. Cold is `ColumnUnit.solve(input, null, ...)`, the block's cold route (learned start, then the classical chain). Warm is one cold base solve, then `ColumnUnit.solve(input × 1.02, baseSeed, ...)` again and again: every extensive input (feed, steam, draws, pumparound duties) times 1.02. `medium` is the `medium_crude` stream under its tower template (`V3TestInputs.crude`); `literature` is the `literature_tia_juana` preset. The column runs on its Java path (the Rust library's ceiling `icheme.native.column` is off by default). Output: `<phase>.txt`, `<phase>.jfr`.
 
 ### Machines
 

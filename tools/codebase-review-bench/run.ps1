@@ -13,6 +13,6 @@ if (-not $gson) { throw "gson 2.10.1 is missing from the Gradle cache: run compi
 # EJML (the fluid network's sparse LU), as build.gradle bundles it.
 $ejml = (Get-ChildItem "$env:USERPROFILE\.gradle\caches\modules-2\files-2.1\org.ejml" -Recurse -Filter "ejml-*-0.44.0.jar" | Where-Object { $_.Name -notmatch "sources|javadoc" } | ForEach-Object { $_.FullName }) -join ";"
 $cp = "build\classes\java\main;build\resources\main;build\classes\java\test;build\resources\test;$($gson.FullName);$ejml"
-$args2 = @("-Xmx4g", "-Dfile.encoding=UTF-8", "-Duser.language=en", "-Dicheme.native.thermo.batch=false") + @($JvmArgs -split " " | Where-Object { $_ }) + @("-cp", $cp, (Join-Path $PSScriptRoot $Program)) + $Rest
+$args2 = @("-Xmx4g", "-Dfile.encoding=UTF-8", "-Duser.language=en") + @($JvmArgs -split " " | Where-Object { $_ }) + @("-cp", $cp, (Join-Path $PSScriptRoot $Program)) + $Rest
 & "$Jdk\bin\java.exe" @args2
 exit $LASTEXITCODE

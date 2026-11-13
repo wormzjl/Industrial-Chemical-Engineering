@@ -1,7 +1,6 @@
 package com.wormzjl.icheme.science.column.v3.linalg;
 
-import com.wormzjl.icheme.science.math.DeterministicMath;
-
+import com.wormzjl.icheme.science.column.v3.NativeColumnSolver;
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
@@ -24,19 +23,17 @@ import java.util.List;
  * counters of the workspace for this solve (or {@code -} for a solver without them), backward error, minimum and
  * maximum pivot, pivot growth, and the solution on success.
  *
- * <p>{@link #selfTestValues()} is the known-answer vector of {@code nativeSelfTest} ({@code src/main/rust/LAYOUT.md});
- * part 2b moves it into {@code NativeColumnSolver}, which compares it bit for bit with the library's.
+ * <p>The known-answer vector of {@code nativeSelfTest} ({@code src/main/rust/LAYOUT.md}) is
+ * {@link NativeColumnSolver#expectedSelfTest()}, which the loader compares bit for bit with the library's; this class
+ * writes it out. {@link #specs()} gives the band cases to {@code NativeColumnSolverTest}, which replays them through
+ * the library.
  *
- * <p>Run without Gradle (JDK 21), from the repository root, after {@code git show}ing the solver version to prove into
- * {@code tmp/rust-a2/solver-<label>/.../V3BandedPivotedSolver.java}:
+ * <p>Run without Gradle (JDK 21), from the repository root, on the classes of a Gradle build ({@code compileJava
+ * compileTestJava}) and with no {@code icheme.native.column} property, so every solve runs on the Java path. To prove
+ * another solver version, compile it with {@code -cp build/classes/java/main} into a folder under {@code tmp/} and put
+ * that folder first on the class path:
  * <pre>
- * javac -d tmp/rust-a2/classes-a1 src/main/java/com/wormzjl/icheme/science/math/DeterministicMath.java \
- *     src/main/java/com/wormzjl/icheme/science/math/DeterministicPow.java \
- *     src/main/java/com/wormzjl/icheme/science/math/FdlibmPow.java \
- *     src/main/java/com/wormzjl/icheme/science/column/v3/linalg/V3BandedMatrix.java \
- *     tmp/rust-a2/solver-a1/V3BandedPivotedSolver.java \
- *     src/test/java/com/wormzjl/icheme/science/column/v3/linalg/RustNativeTables.java
- * java -cp tmp/rust-a2/classes-a1 com.wormzjl.icheme.science.column.v3.linalg.RustNativeTables \
+ * java -cp build/classes/java/main;build/classes/java/test com.wormzjl.icheme.science.column.v3.linalg.RustNativeTables \
  *     src/main/rust/icheme-math/tests/data src/main/rust/icheme-jni/tests/data "label of the solver version"
  * </pre>
  */
@@ -46,7 +43,7 @@ public final class RustNativeTables {
 
     private static final long SEED = 0x1C4E3E2026111302L;
 
-    static final int RANDOM = 0, DOMINANT = 1, BLOCK = 2, ZERO = 3, ZERO_COLUMN = 4, DUPLICATE_ROW = 5,
+    public static final int RANDOM = 0, DOMINANT = 1, BLOCK = 2, ZERO = 3, ZERO_COLUMN = 4, DUPLICATE_ROW = 5,
         NEAR_SINGULAR = 6, ILL_SCALING = 7, NEGATIVE_ZERO = 8, WILKINSON = 9, NON_FINITE = 10, RHS_NON_FINITE = 11;
 
     public static void main(String[] args) throws IOException {
@@ -95,15 +92,15 @@ public final class RustNativeTables {
     }
 
     /** One case: the band storage as {@code V3BandedMatrix} lays it out, and the right-hand side. */
-    static final class Case {
-        int size, kl, ku;
-        double[] band, rhs;
+    public static final class Case {
+        public int size, kl, ku;
+        public double[] band, rhs;
 
-        int index(int row, int column) {
+        public int index(int row, int column) {
             return row * (kl + ku + 1) + column - row + kl;
         }
 
-        boolean inBand(int row, int column) {
+        public boolean inBand(int row, int column) {
             return column >= row - kl && column <= row + ku && column >= 0 && column < size;
         }
 
@@ -274,14 +271,19 @@ public final class RustNativeTables {
 
     // ---- the band table ----
 
-    private static void banded(Path out, String label) throws IOException {
+    /** One row of the band table: the case's kind, seed and three parameters; {@link #build()} makes the case. */
+    public record Spec(int kind, long seed, int p1, int p2, int p3) {
+        public Case build() {
+            return RustNativeTables.build(kind, seed, p1, p2, p3);
+        }
+    }
+
+    /** The cases of {@code banded.txt}, in its order (the parameters are drawn before each case's seed). */
+    public static List<Spec> specs() {
         Rng master = new Rng(SEED);
-        List<int[]> params = new ArrayList<>();
-        List<Long> seeds = new ArrayList<>();
-        java.util.function.BiConsumer<Integer, int[]> add = (kind, p) -> {
-            params.add(new int[] {kind, p[0], p[1], p[2]});
-            seeds.add(master.next());
-        };
+        List<Spec> specs = new ArrayList<>();
+        java.util.function.BiConsumer<Integer, int[]> add =
+            (kind, p) -> specs.add(new Spec(kind, master.next(), p[0], p[1], p[2]));
         for (int i = 0; i < 500; i++) add.accept(RANDOM, new int[] {master.intIn(1, 24), master.intIn(0, 7), master.intIn(0, 7)});
         for (int i = 0; i < 500; i++) add.accept(DOMINANT, new int[] {master.intIn(1, 24), master.intIn(0, 7), master.intIn(0, 7)});
         for (int i = 0; i < 20; i++) add.accept(DOMINANT, new int[] {master.intIn(1, 6), master.intIn(6, 30), master.intIn(6, 30)});
@@ -302,7 +304,11 @@ public final class RustNativeTables {
             add.accept(WILKINSON, new int[] {n, 1, 0});
         }
         add.accept(WILKINSON, new int[] {1026, 0, 0}); // growth 2^1025: a non-finite entry
+        return specs;
+    }
 
+    private static void banded(Path out, String label) throws IOException {
+        List<Spec> specs = specs();
         StringBuilder sb = new StringBuilder();
         sb.append("# icheme-math band LU table, generated by src/test/java/com/wormzjl/icheme/science/column/v3/linalg/RustNativeTables.java\n");
         sb.append("# java: V3BandedPivotedSolver.solve (").append(label).append("), V3BandedMatrix\n");
@@ -311,19 +317,17 @@ public final class RustNativeTables {
         sb.append("# jdk: ").append(System.getProperty("java.vendor")).append(' ').append(System.getProperty("java.version"))
             .append(", seed 0x").append(Long.toHexString(SEED)).append('\n');
         int[] outcomes = new int[9];
-        for (int i = 0; i < params.size(); i++) {
-            int[] p = params.get(i);
-            long seed = seeds.get(i);
-            Case c = build(p[0], seed, p[1], p[2], p[3]);
-            sb.append(p[0]).append(' ').append(hex(seed)).append(' ').append(p[1]).append(' ').append(p[2]).append(' ')
-                .append(p[3]).append(" | ").append(c.size).append(' ').append(c.kl).append(' ').append(c.ku).append(' ')
+        for (Spec spec : specs) {
+            Case c = spec.build();
+            sb.append(spec.kind()).append(' ').append(hex(spec.seed())).append(' ').append(spec.p1()).append(' ')
+                .append(spec.p2()).append(' ').append(spec.p3()).append(" | ").append(c.size).append(' ').append(c.kl).append(' ').append(c.ku).append(' ')
                 .append(hex(c.fingerprint())).append(" | ");
             sb.append(solveRow(c, outcomes)).append('\n');
         }
         sb.append("# outcomes 0..7, iae: ");
         for (int k = 0; k < 9; k++) sb.append(outcomes[k]).append(k < 8 ? " " : "\n");
         Files.writeString(out.resolve("banded.txt"), sb.toString(), StandardCharsets.US_ASCII);
-        System.out.print("banded: " + params.size() + " cases; outcomes 0..7, iae:");
+        System.out.print("banded: " + specs.size() + " cases; outcomes 0..7, iae:");
         for (int k = 0; k < 9; k++) System.out.print(" " + outcomes[k]);
         System.out.println(" (" + sb.length() + " bytes)");
     }
@@ -389,64 +393,11 @@ public final class RustNativeTables {
 
     // ---- the self-test ----
 
-    /** Slots 0..255 of {@code nativeSelfTest}; 128..255 are reserved (0.0) until the kernel is ported. */
-    public static double[] selfTestValues() {
-        double[] out = new double[256];
-        double[] logArguments = {0.5, 1.0 + 0x1p-30, 2.0, 1e-300, 1e300, 0x1p-1060, 7.0, 1234.5678};
-        double[] expArguments = {-745.1, -700.5, -1.0, -1e-10, 0.3, 1.0, 50.5, 709.7};
-        double[] expm1Arguments = {-40.0, -1.0, -0.3, -1e-12, 1e-8, 0.4, 13.9, 300.0};
-        double[] cbrtArguments = {-27.5, -1e-310, 1e-300, 0.001, 2.0, 1e10, 3.3e200, Double.MAX_VALUE};
-        double[] cosArguments = {0.0, 0.5, 0.785, 2.0, -3.5, 1e6, 1e22, 6381956970095103.0 * 0x1p797};
-        double[] acosArguments = {-1.0, -0.9, -0.5, -1e-20, 0.3, 0.5, 0.99, 1.0};
-        for (int i = 0; i < 8; i++) {
-            out[i] = DeterministicMath.log(logArguments[i]);
-            out[8 + i] = DeterministicMath.exp(expArguments[i]);
-            out[16 + i] = DeterministicMath.expm1(expm1Arguments[i]);
-            out[24 + i] = DeterministicMath.cbrt(cbrtArguments[i]);
-            out[32 + i] = DeterministicMath.cos(cosArguments[i]);
-            out[40 + i] = DeterministicMath.acos(acosArguments[i]);
-        }
-        double[][] fma = {{0x1p-27, 0x1p-27 * (1.0 + 0x1p-52), 1.0}, {0x1p-27, 0x1p-27, 1.0}, {3.0, 0.1, -0.3},
-            {1.0 + 0x1p-52, 1.0 + 0x1p-52, -(1.0 + 0x1p-51)}, {0x1p-540, 0x1p-540, 0x1p-1070}, {-2.5, 4.0, 10.0},
-            {Double.MAX_VALUE, 2.0, -Double.MAX_VALUE}, {0.1, 0.1, -0.01}, {1e308, 10.0, -1e308}, {-0.0, 0.0, 0.0},
-            {1.5, 2.0 / 3.0, -1.0}, {7.0, 1.0 / 7.0, -1.0}, {1e-200, 1e-200, 1e-300}, {123.456, 789.012, 0.5},
-            {-1e10, 1e-10, 1.0}, {2.0, Math.nextUp(1.0), -2.0}};
-        for (int i = 0; i < 16; i++) out[48 + i] = Math.fma(fma[i][0], fma[i][1], fma[i][2]);
-        double[][] pow = {{2.0, 0.5}, {10.0, -3.0}, {0.9, 1000.0}, {1.0 + 0x1p-40, 1e12}, {3.7, 2.5}, {-2.0, 3.0},
-            {-2.0, 0.5}, {0.0, -1.0}, {1e-300, 0.25}, {7.25, -9.75}, {1.5, 1700.0}, {0.5, 1074.5}, {2.0, 1023.5},
-            {123.0, 1.0 / 3.0}, {Math.E, 708.5}, {1.0000001, 7.0e9}};
-        for (int i = 0; i < 16; i++) {
-            out[64 + i] = DeterministicMath.pow(pow[i][0], pow[i][1]);
-            out[80 + i] = DeterministicMath.strictPow(pow[i][0], pow[i][1]);
-        }
-        // One band solve: size 8, kl 2, ku 1, a(r, r) = 4 + r, a(r, c) = 1 / (1 + r + 2 c) off the diagonal,
-        // b(r) = 1 + r / 8.
-        int size = 8, kl = 2, ku = 1;
-        V3BandedMatrix matrix = new V3BandedMatrix(size, kl, ku);
-        double[] rhs = new double[size];
-        for (int row = 0; row < size; row++) {
-            for (int column = Math.max(0, row - kl); column <= Math.min(size - 1, row + ku); column++) {
-                matrix.set(row, column, column == row ? 4.0 + row : 1.0 / (1 + row + 2 * column));
-            }
-            rhs[row] = 1.0 + row / 8.0;
-        }
-        V3BandedPivotedSolver.Result.Success s = (V3BandedPivotedSolver.Result.Success) V3BandedPivotedSolver.solve(matrix, rhs);
-        double[] x = s.solution();
-        System.arraycopy(x, 0, out, 96, size);
-        out[104] = s.backwardError();
-        out[105] = s.minimumPivotMagnitude();
-        out[106] = s.maximumPivotMagnitude();
-        out[107] = s.pivotGrowth();
-        out[108] = 0.0; // outcome Success
-        out[109] = s.pivotSwaps();
-        return out;
-    }
-
     private static void selfTest(Path out) throws IOException {
         StringBuilder sb = new StringBuilder();
-        sb.append("# nativeSelfTest known answers, generated by RustNativeTables.selfTestValues(); columns: slot value (hex bits)\n");
+        sb.append("# nativeSelfTest known answers, generated by NativeColumnSolver.expectedSelfTest(); columns: slot value (hex bits)\n");
         sb.append("# jdk: ").append(System.getProperty("java.vendor")).append(' ').append(System.getProperty("java.version")).append('\n');
-        double[] values = selfTestValues();
+        double[] values = NativeColumnSolver.expectedSelfTest();
         for (int i = 0; i < values.length; i++) sb.append(i).append(' ').append(d(values[i])).append('\n');
         Files.createDirectories(out);
         Files.writeString(out.resolve("self_test.txt"), sb.toString(), StandardCharsets.US_ASCII);

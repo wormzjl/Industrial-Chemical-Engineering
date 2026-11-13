@@ -4,7 +4,6 @@ import com.wormzjl.icheme.science.math.DeterministicMath;
 
 import com.wormzjl.icheme.science.column.v3.thermo.V3FugacityDerivatives;
 import com.wormzjl.icheme.science.column.v3.thermo.V3FugacityResult;
-import com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo;
 import com.wormzjl.icheme.science.column.v3.thermo.V3ThermoDerivatives;
 import com.wormzjl.icheme.science.column.v3.thermo.V3ThermoModel;
 import com.wormzjl.icheme.science.column.v3.thermo.V3ThermoWorkspace;
@@ -58,8 +57,6 @@ final class V3MeshResidualEvaluator {
     /** Captures one strict PR property state for reuse by a cheap inner MESH solve. */
     ThermoSnapshot captureThermoSnapshot(V3DryMeshState state, V3ThermoWorkspace workspace) {
         if (frozenThermo != null) throw new IllegalStateException("V3 frozen evaluator cannot capture a new snapshot");
-        ThermoSnapshot nativeSnapshot = captureNativeThermoSnapshot(state);
-        if (nativeSnapshot != null) return nativeSnapshot;
         int nodes = problem.topology().nodeCount();
         ThermoSnapshot.Phase[] liquid = new ThermoSnapshot.Phase[nodes];
         ThermoSnapshot.Phase[] vapor = new ThermoSnapshot.Phase[nodes];
@@ -76,90 +73,6 @@ final class V3MeshResidualEvaluator {
             }
         }
         return new ThermoSnapshot(liquid, vapor, problem.input().componentBasis().componentCount());
-    }
-
-    /** Optional one-call PR outer pass. A failed or nonfinite native batch falls back to the strict Java snapshot. */
-    private ThermoSnapshot captureNativeThermoSnapshot(V3DryMeshState state) {
-        if (!NativeColumnSolver.thermoBatchEnabled() || !(thermo instanceof V3PengRobinsonThermo pr)) return null;
-        try {
-            int nodes = problem.topology().nodeCount();
-            int components = problem.input().componentBasis().componentCount();
-            double[] temperatures = new double[nodes];
-            double[] pressures = new double[nodes];
-            double[] liquidCompositions = new double[nodes * components];
-            double[] vaporCompositions = new double[nodes * components];
-            for (int node = 0; node < nodes; node++) {
-                temperatures[node] = state.temperatureKelvin(node);
-                pressures[node] = problem.nodePressurePascal(node);
-                if (problem.topology().hasLiquidPhase(node)) {
-                    System.arraycopy(normalizedPublicPhaseComposition(state, node, true), 0,
-                            liquidCompositions, node * components, components);
-                }
-                if (problem.topology().hasVaporPhase(node)) {
-                    System.arraycopy(normalizedPublicPhaseComposition(state, node, false), 0,
-                            vaporCompositions, node * components, components);
-                }
-            }
-            double[] criticalTemperatures = new double[components];
-            double[] criticalPressures = new double[components];
-            double[] acentricFactors = new double[components];
-            // The kernel's own pairs (W5 D1); a kernel the C++ PR78 cannot carry takes the Java snapshot.
-            double[][] interactions = pr.constantClassicalInteractions();
-            if (interactions == null) return null;
-            double[] flattenedInteractions = new double[components * components];
-            for (int component = 0; component < components; component++) {
-                criticalTemperatures[component] = pr.componentCriticalTemperatureKelvin(component);
-                criticalPressures[component] = pr.componentCriticalPressurePascal(component);
-                acentricFactors[component] = pr.componentAcentricFactor(component);
-                System.arraycopy(interactions[component], 0, flattenedInteractions, component * components, components);
-            }
-            double[] batch = NativeColumnSolver.pengRobinsonBatchTemperatureDerivatives(criticalTemperatures,
-                    criticalPressures, acentricFactors, flattenedInteractions, temperatures, pressures,
-                    liquidCompositions, vaporCompositions);
-            int phaseWidth = components * 2 + 3;
-            if (!validNativeDerivativeBatch(batch, nodes, components)) return null;
-            ThermoSnapshot.Phase[] liquid = new ThermoSnapshot.Phase[nodes];
-            ThermoSnapshot.Phase[] vapor = new ThermoSnapshot.Phase[nodes];
-            for (int node = 0; node < nodes; node++) {
-                int liquidOffset = 1 + (node * 2) * phaseWidth;
-                int vaporOffset = liquidOffset + phaseWidth;
-                if (problem.topology().hasLiquidPhase(node)) {
-                    liquid[node] = nativePhase(pr, Root.LIQUID, temperatures[node], liquidCompositions,
-                            node, liquidOffset, batch, components);
-                }
-                if (problem.topology().hasVaporPhase(node)) {
-                    vapor[node] = nativePhase(pr, Root.VAPOR, temperatures[node], vaporCompositions,
-                            node, vaporOffset, batch, components);
-                }
-            }
-            return new ThermoSnapshot(liquid, vapor, components);
-        } catch (RuntimeException unavailable) {
-            return null;
-        }
-    }
-
-    private ThermoSnapshot.Phase nativePhase(V3PengRobinsonThermo pr, Root root, double temperature,
-            double[] compositions, int node, int offset, double[] batch,
-            int components) {
-        double[] logPhi = new double[components];
-        double[] dLogPhi = new double[components];
-        int derivativeOffset = offset + components + 2;
-        for (int component = 0; component < components; component++) {
-            logPhi[component] = batch[offset + component];
-            dLogPhi[component] = batch[derivativeOffset + component];
-        }
-        double[] composition = Arrays.copyOfRange(compositions, node * components, (node + 1) * components);
-        double step = Math.max(1.0, Math.min(5.0, 1.0e-3 * Math.max(temperature, 1.0)));
-        double enthalpy = batch[offset + components] + pr.idealGasMolarEnthalpy(temperature, composition);
-        double enthalpyDerivative = batch[derivativeOffset + components];
-        double idealAhead = pr.idealGasMolarEnthalpy(temperature + step, composition);
-        enthalpyDerivative += (idealAhead - pr.idealGasMolarEnthalpy(temperature, composition)) / step;
-        return ThermoSnapshot.nativePhase(root, temperature, logPhi, dLogPhi, enthalpy, enthalpyDerivative,
-                batch[offset + components + 1]);
-    }
-
-    private static boolean validNativeDerivativeBatch(double[] values, int nodes, int components) {
-        return values != null && values.length == 1 + nodes * 2 * (components * 2 + 3) && values[0] == 0.0;
     }
 
     V3MeshResidualEvaluator withFrozenThermo(ThermoSnapshot snapshot) {
@@ -731,11 +644,6 @@ final class V3MeshResidualEvaluator {
             }
             return new Phase(root, temperature, logPhi, dLogPhi, reference.molarEnthalpyJoulesPerMol(),
                     (ahead.molarEnthalpyJoulesPerMol() - reference.molarEnthalpyJoulesPerMol()) / step);
-        }
-
-        static Phase nativePhase(Root root, double temperature, double[] logPhi, double[] dLogPhi,
-                double enthalpy, double enthalpySlope, double compressibility) {
-            return new Phase(root, temperature, logPhi, dLogPhi, enthalpy, enthalpySlope);
         }
 
         private record Phase(Root root, double referenceTemperature, double[] logPhi, double[] dLogPhi,

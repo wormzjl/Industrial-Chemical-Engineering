@@ -47,3 +47,12 @@ Each string is a NeoForge payload registrar version. Client and server must carr
 | Process simulator | `3` (no prefix) | [`network/ProcessSimulatorNetwork.java`](../../src/main/java/com/wormzjl/icheme/network/ProcessSimulatorNetwork.java) line 39, `PROTOCOL` |
 
 Fifteen strings in nine registrar classes, nine of them inline literals (codebase review P3-22 proposes one `NetworkProtocol.VERSION`).
+
+## Native library
+
+The JNI layout between Java and the Rust column library `icheme_column` (`src/main/rust/LAYOUT.md`). No compatibility: the library is built with the jar, and a library of another ABI or formulation is refused at load and the column runs on its Java path. Nothing is saved.
+
+| Format | Value | Declared at | What a mismatch does |
+|---|---|---|---|
+| Native column ABI | 1 | [`science/column/v3/NativeColumnSolver.java`](../../src/main/java/com/wormzjl/icheme/science/column/v3/NativeColumnSolver.java) line 38, `ABI`; its twin `src/main/rust/icheme-jni/src/layout.rs` line 7, `ABI` | The library is refused (one log line) and the column runs on its Java path; the copy in the game folder is named `icheme_column-<ABI>`, so another ABI is never picked up |
+| Native formulation token | `FORMULATION_REVISION;WET_ASSUMPTIONS_REVISION;HEAT_ASSUMPTIONS_REVISION` of `V3ColumnCalculator` | `NativeColumnSolver.java` line 40, `FORMULATION`; its twin `layout.rs` line 13, `FORMULATION` | The same: refused, Java path |
