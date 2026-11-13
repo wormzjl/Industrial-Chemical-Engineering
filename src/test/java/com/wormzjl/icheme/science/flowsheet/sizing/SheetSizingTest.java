@@ -28,6 +28,7 @@ import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.material.MaterialRuntime;
 import org.junit.jupiter.api.Test;
 
+import com.wormzjl.icheme.science.machine.CentrifugalCompressor;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -182,12 +183,14 @@ final class SheetSizingTest {
         });
     }
 
-    @Test void aGassCapacityGivesItsAdiabaticExponent() {
+    /** P3-02 of the 2026-11-13 simplifications: the discharge estimate is on the world's polytropic exponent, (k - 1)/(k x 0.78),
+     * so a stage of ratio 3 from 300 K reads 175 degC where the adiabatic exponent (2/7 for a diatomic gas) read 137 degC. */
+    @Test void aGassHeatCapacityRatioGivesTheWorldsPolytropicExponent() {
         on(() -> {
             var in = at(300, 2e5, pure(NITROGEN, 100));
             var out = at(300, 6e5, pure(NITROGEN, 100));
             var load = CompressorSizing.Load.of(in, out, DesignBasis.DEFAULT, THERMO, new MixtureViscosity.Workspace());
-            assertEquals(2. / 7, load.exponent(), .005, "a diatomic gas");
+            assertEquals(2. / 7 / CentrifugalCompressor.DEFAULT_EFFICIENCY, load.exponent(), .005, "a diatomic gas at the world's polytropic efficiency");
             assertEquals(3, load.ratio(), 1e-12);
             assertEquals(0, load.liquid(), 1e-9);
             assertEquals(1.1 * in.state().volume() * 3600, load.flow(), 1e-6);

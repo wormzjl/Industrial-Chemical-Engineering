@@ -5,8 +5,8 @@ import com.wormzjl.icheme.science.equipment.ProcessUnit;
 import com.wormzjl.icheme.science.equipment.UnitDesign;
 import com.wormzjl.icheme.science.flowsheet.FlowStream;
 import com.wormzjl.icheme.science.flowsheet.FlowThermo;
-import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.fluid.transport.MixtureViscosity;
+import com.wormzjl.icheme.science.machine.CentrifugalCompressor;
 import com.wormzjl.icheme.science.math.DeterministicMath;
 import com.wormzjl.icheme.science.equipment.design.UnitRatings;
 import org.jetbrains.annotations.Nullable;
@@ -19,13 +19,11 @@ import java.util.List;
  * A compressor (batch 2026-11-02-process-simulator, {@code SIZING_PLAN.md} sections 3.4, 3.5 and 3.10): the type by its inlet flow,
  * then the smallest frame. The world's law is one isothermal step for both, so stages live here alone: a turbo's are its impellers,
  * and a piston machine's opposed pairs are shared out among as many stages as its ratio asks, its first stage then taking only its
- * own pairs' displacement. The discharge is the adiabatic estimate of one stage, cooled back to the suction between stages.
+ * own pairs' displacement. The discharge is one stage's polytropic estimate on the world's exponent ({@link CentrifugalCompressor#sigma} at its
+ * default efficiency, the heat capacity ratio as the network reads it), cooled back to the suction between stages.
  */
 public final class CompressorSizing {
     private static final String HYDROGEN = "Hydrogen";
-    private static final double GAS_CONSTANT = FluidThermodynamics.R;
-    /** The step of the heat capacity's difference, K. */
-    private static final double STEP = 1;
     private static final List<Size> PISTON = sizes(UnitType.PISTON), TURBO = sizes(UnitType.TURBO);
 
     private CompressorSizing() {
@@ -81,7 +79,7 @@ public final class CompressorSizing {
      * @param ratio    outlet pressure over inlet
      * @param liquid   the suction's condensed share by mass, %
      * @param suction  K
-     * @param exponent (γ − 1) / γ of the gas
+     * @param exponent (n − 1) / n of the world's polytropic compression, (k − 1) / (k η_p)
      * @param hydrogen its hydrogen's mole share, %
      */
     public record Load(double flow, double ratio, double liquid, double suction, double exponent, double hydrogen) {
@@ -90,12 +88,12 @@ public final class CompressorSizing {
 
         public static Load of(FlowStream in, FlowStream out, DesignBasis basis, FlowThermo thermo, MixtureViscosity.Workspace scratch) {
             if (in.empty()) return NONE;
-            var warmer = thermo.atTemperature(in.temperature() + STEP, in.pressure(), in.amountsView(), in.solids());
-            double capacity = (warmer.enthalpy() - in.enthalpy()) / STEP / in.total();
+            double k = thermo.model().heatCapacityRatio(in.state());
             int hydrogen = thermo.place(HYDROGEN);
             double share = hydrogen < 0 ? 0 : 100 * in.amountsView()[hydrogen] / in.total();
             double liquid = 100 - Service.vapourShare(in.state(), thermo.model());
-            return new Load(LineSizing.Carried.of(in, basis.designFlow(), thermo, scratch).volume() * 3600, out.pressure() / in.pressure(), liquid, in.temperature(), GAS_CONSTANT / capacity, share);
+            return new Load(LineSizing.Carried.of(in, basis.designFlow(), thermo, scratch).volume() * 3600, out.pressure() / in.pressure(), liquid, in.temperature(),
+                    k > 1 ? 1 / CentrifugalCompressor.sigma(k, CentrifugalCompressor.DEFAULT_EFFICIENCY) : 0, share);
         }
 
         boolean flows() {
