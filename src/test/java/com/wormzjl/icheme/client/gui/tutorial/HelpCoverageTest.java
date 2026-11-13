@@ -81,7 +81,7 @@ class HelpCoverageTest {
                 for (boolean condenser : new boolean[]{false, true}) {
                     var fuel = heater == StillDoor.Heater.SOLID ? new StillDoor.Fuel("Coal", "12", "1630", "27.7") : null;
                     var door = StillDoor.rows(new StillDoor.Input(heater, true, true, column, true, null, null, fuel), TEXTS);
-                    // The readings as FluidDeviceScreen.stillMeters lists them.
+                    // The readings as DeviceMeters.stillMeters lists them.
                     var meters = new ArrayList<DeviceColumn.Meter>(List.of(new DeviceColumn.Meter("still_pot_temperature", "118.4", "°C", null),
                             new DeviceColumn.Meter("still_head_temperature", "86.2", "°C", null), new DeviceColumn.Meter("still_level", "0.52", "m", null),
                             new DeviceColumn.Meter("still_heat", "20.2", "kW", null)));
