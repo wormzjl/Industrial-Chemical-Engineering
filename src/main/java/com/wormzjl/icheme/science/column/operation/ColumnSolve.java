@@ -11,6 +11,7 @@ import com.wormzjl.icheme.science.column.v3.V3SideDrawSpec;
 import com.wormzjl.icheme.science.column.v3.V3SolveStrategy;
 import com.wormzjl.icheme.science.column.v3.V3SteamFeedSpec;
 import com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo;
+import com.wormzjl.icheme.science.column.v3.thermo.V3WaterProperties;
 import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.equipment.HeatSides;
 import com.wormzjl.icheme.science.fluid.network.HeatCurve;
@@ -165,6 +166,23 @@ public final class ColumnSolve {
         }
     }
 
+    /**
+     * Whether feed water at {@code t} K enters as a steam feed at the feed tray (Q9; C4 of batch 2026-11-13-codebase-review):
+     * V3's own steam admission ({@code V3ColumnProblemResolver}), on its curve (Wagner-Pruss) at its injection pressure on
+     * the nominal profile, inside the water data, at least {@link #SUPERHEAT} above saturation. Above the critical pressure,
+     * or below the triple point's, nothing saturates and V3 admits no steam. So the decision and V3's check never disagree.
+     */
+    static boolean steamAtFeedTray(MaterialCatalog.Water water, V3ColumnInput design, double t) {
+        if (!(t >= water.triplePoint() && t <= water.maximumTemperature())) return false;
+        int tray = Math.min(design.feedStageNumber(), design.stageCount());
+        double injection = design.topPressurePascal() + Math.max(0, tray - 1) * design.stagePressureDropPascal();
+        try {
+            return !(t < V3WaterProperties.saturationTemperatureKelvin(water, injection) + SUPERHEAT);
+        } catch (IllegalArgumentException noSaturation) {
+            return false;
+        }
+    }
+
     private static Outcome solve(Job job, FluidThermodynamics model, String packageId, double screen, Runnable checkpoint, boolean onAxis,
                                  MaterialCatalog catalog) {
         var design = job.design();
@@ -215,7 +233,7 @@ public final class ColumnSolve {
         // Feed water enters as a steam feed at the feed tray (Q9) where it is superheated there; else it borrows its row.
         String note = "";
         if (!onAxis && water >= 0 && feed[water] > 0) {
-            boolean superheated = model.saturationPressure(t - SUPERHEAT) < feedPressure;
+            boolean superheated = steamAtFeedTray(catalog.requirePackage(packageId).water(), design, t);
             if (superheated && steamFeeds.size() < V3ColumnInput.MAX_STEAM_FEEDS)
                 steamFeeds.add(new V3SteamFeedSpec(design.feedStageNumber(), feed[water], t));
             else note = superheated ? "feed water: no steam feed left, it follows the distillate" : "feed water below steam at the feed tray: it follows the distillate";

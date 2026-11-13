@@ -62,10 +62,12 @@ class V3NeuralRegistryTest {
     @Test void aRequestBindsByItsActiveCompoundsAndNeverDiscardsNonzeroFeed() throws Exception {
         var catalog=CATALOG;var input=input();var registry=registry("test:list");
         var base=registry.bind(catalog,input).predict(input,V3SolveControl.UNBOUNDED).orElseThrow();
+        // The request on the model's own list (no projection) names the correction's column identity too, not the lens's (F1).
+        assertEquals(com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo.columnIdentity(catalog,MAIN),base.propertyRevision());
         var network=on(input,NETWORK,catalog.requirePackage(NETWORK).components());
         var prediction=registry.bind(catalog,network).predict(network,V3SolveControl.UNBOUNDED).orElseThrow();
         assertEquals(network,prediction.input());assertArrayEquals(base.temperatures(),prediction.temperatures());
-        assertEquals(catalog.requirePackage(NETWORK).scientificRevision(),prediction.propertyRevision());
+        assertEquals(com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo.columnIdentity(catalog,NETWORK),prediction.propertyRevision(),"the column identity, its pairs named (F1)");
         var mainAxis=new MaterialAxis(input.componentBasis().componentIds());var networkAxis=new MaterialAxis(network.componentBasis().componentIds());
         for(int n=0;n<base.liquid().length;n++) {
             assertArrayEquals(networkAxis.project(mainAxis,base.liquid()[n]),prediction.liquid()[n]);
@@ -167,7 +169,7 @@ class V3NeuralRegistryTest {
             var pending=worker.submit(()->{ready.countDown();if(!release.await(5,TimeUnit.SECONDS))throw new AssertionError("release");return bound.predict(input,V3SolveControl.UNBOUNDED).orElseThrow();});
             assertTrue(ready.await(5,TimeUnit.SECONDS));MaterialRuntime.publish(changed);release.countDown();
             var actual=pending.get(10,TimeUnit.SECONDS);assertArrayEquals(expected.temperatures(),actual.temperatures());
-            assertEquals(catalog.requirePackage(MAIN).scientificRevision(),actual.propertyRevision());
+            assertEquals(com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo.columnIdentity(catalog,MAIN),actual.propertyRevision());
             assertFalse(isCurrent(MAIN,actual.propertyRevision()));
         } finally {release.countDown();}
         assertThrows(CancellationException.class,()->bound.predict(input,()->{throw new CancellationException();}));
@@ -290,9 +292,9 @@ class V3NeuralRegistryTest {
         assertThrows(IllegalArgumentException.class,()->V3NeuralRegistry.TransformerArtifact.read(new ByteArrayInputStream(payload),stream(side.toString())));
     }
 
-    /** A result is current only for the exact resolved scientific dataset (moved from MaterialRuntime, which had no other caller). */
-    private static boolean isCurrent(String packageId, String scientificRevision) {
+    /** A result is current only for the exact column identity (moved from MaterialRuntime, which had no other caller; F1). */
+    private static boolean isCurrent(String packageId, String identity) {
         var p = MaterialRuntime.current().packages().get(packageId);
-        return p != null && p.scientificRevision().equals(scientificRevision);
+        return p != null && com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo.columnIdentity(MaterialRuntime.current(), packageId).equals(identity);
     }
 }

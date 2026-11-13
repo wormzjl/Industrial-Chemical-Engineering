@@ -40,7 +40,11 @@ public final class V3WaterProperties {
     }
 
 
-    /** Saturation pressure in Pa, valid from the triple point through the critical point. */
+    /**
+     * Saturation pressure in Pa at any positive temperature up to the critical point: {@link #wagnerPruss}, continued
+     * below the triple point as the network's (F3 of batch 2026-11-13-codebase-review). Above the critical temperature
+     * there is no saturation, and it refuses.
+     */
     public static double saturationPressurePascal(double temperatureKelvin) {
         return saturationPressurePascal(data(), temperatureKelvin);
     }
@@ -53,8 +57,7 @@ public final class V3WaterProperties {
     /**
      * The Wagner--Pruss equation itself at any positive temperature up to the critical point: below the triple point it
      * is the supercooled liquid's saturation pressure (1.10 times the ice sublimation pressure at 263 K, the measured
-     * ratio). The fluid network's free water continues there (owner rule of 2026-10-16); the column keeps the checked
-     * {@link #saturationPressurePascal(MaterialCatalog.Water, double)}.
+     * ratio). The fluid network and the column both continue there (owner rule of 2026-10-16; F3).
      */
     public static double wagnerPruss(MaterialCatalog.Water water, double temperatureKelvin) {
         if (!(temperatureKelvin > 0) || !(temperatureKelvin <= water.criticalTemperature()))
@@ -120,13 +123,34 @@ public final class V3WaterProperties {
         return 0.5 * (low + high);
     }
 
-    /** Ideal-gas water-vapor molar enthalpy in J/mol, valid from 273.16 K through 900 K. */
+    /**
+     * Ideal-gas water-vapor molar enthalpy in J/mol: the record's Shomate fit inside its range (273.16 K through 900 K),
+     * held at its end heat capacity past either end, so value and slope are continuous there (owner rule of 2026-10-16,
+     * the network's {@code FluidThermodynamics.vaporWaterEnthalpy}; F3 of batch 2026-11-13-codebase-review).
+     */
     public static double vaporMolarEnthalpy(double temperatureKelvin) {
         return vaporMolarEnthalpy(data(), temperatureKelvin);
     }
 
     public static double vaporMolarEnthalpy(MaterialCatalog.Water water, double temperatureKelvin) {
-        requireEnthalpyTemperature(water, temperatureKelvin);
+        double at = steamDataTemperature(water, temperatureKelvin);
+        double h = shomateEnthalpy(water, at);
+        return at == temperatureKelvin ? h : h + shomateHeatCapacity(water, at) * (temperatureKelvin - at);
+    }
+
+    /** Whether {@code temperatureKelvin} lies past the steam's data, where {@link #vaporMolarEnthalpy} is continued. */
+    public static boolean steamContinued(MaterialCatalog.Water water, double temperatureKelvin) {
+        return temperatureKelvin < water.triplePoint() || temperatureKelvin > water.maximumTemperature();
+    }
+
+    /** {@code temperatureKelvin} held inside the steam's data range; it refuses a non-finite temperature. */
+    private static double steamDataTemperature(MaterialCatalog.Water water, double temperatureKelvin) {
+        if (!Double.isFinite(temperatureKelvin))
+            throw new IllegalArgumentException("Water enthalpy temperature is not finite");
+        return Math.max(water.triplePoint(), Math.min(water.maximumTemperature(), temperatureKelvin));
+    }
+
+    private static double shomateEnthalpy(MaterialCatalog.Water water, double temperatureKelvin) {
         double t = temperatureKelvin / 1_000.0;
         // The record's Shomate form, fitted to the IAPWS-95 ideal-gas Cp over 273.16..900 K (water-iapws95-shomate-r3).
         double kiloJoulesPerMol = water.shomate().get(0) * t + water.shomate().get(1) * t * t / 2.0 + water.shomate().get(2) * t * t * t / 3.0
@@ -135,7 +159,8 @@ public final class V3WaterProperties {
     }
 
     /**
-     * The water-vapour heat capacity in J/(mol K): the Shomate polynomial the enthalpy integrates.
+     * The water-vapour heat capacity in J/(mol K): the Shomate polynomial the enthalpy integrates, held at its end value
+     * past the steam's data (F3).
      *
      * <p>Differentiating the integral rather than quoting the Shomate coefficients again keeps one set of
      * numbers in the file, so the capacity cannot drift away from the enthalpy it belongs to.</p>
@@ -145,7 +170,10 @@ public final class V3WaterProperties {
     }
 
     public static double dVaporMolarEnthalpyDT(MaterialCatalog.Water water, double temperatureKelvin) {
-        requireEnthalpyTemperature(water, temperatureKelvin);
+        return shomateHeatCapacity(water, steamDataTemperature(water, temperatureKelvin));
+    }
+
+    private static double shomateHeatCapacity(MaterialCatalog.Water water, double temperatureKelvin) {
         double t = temperatureKelvin / 1_000.0;
         return water.shomate().get(0) + water.shomate().get(1) * t + water.shomate().get(2) * t * t + water.shomate().get(3) * t * t * t + water.shomate().get(4) / (t * t);
     }
@@ -270,8 +298,9 @@ public final class V3WaterProperties {
         }
     }
 
+    /** Positive and at most critical: Wagner-Pruss continues below the triple point, and nothing saturates above Tc. */
     private static void requireSaturationTemperature(MaterialCatalog.Water water, double temperatureKelvin) {
-        if (!Double.isFinite(temperatureKelvin) || temperatureKelvin < water.triplePoint()
+        if (!Double.isFinite(temperatureKelvin) || !(temperatureKelvin > 0.0)
                 || temperatureKelvin > water.criticalTemperature()) {
             throw new IllegalArgumentException("Water saturation temperature is outside the correlation envelope");
         }

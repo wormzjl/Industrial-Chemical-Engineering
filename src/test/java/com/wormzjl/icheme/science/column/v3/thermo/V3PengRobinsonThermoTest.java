@@ -23,7 +23,9 @@ class V3PengRobinsonThermoTest {
         copy[0] = 1.0;
 
         assertEquals(PACKAGE_ID, thermo.packageId());
-        assertEquals(com.wormzjl.icheme.science.material.Cdu17TestCatalog.catalog().requirePackage(PACKAGE_ID).scientificRevision(), thermo.datasetRevision());
+        var current = com.wormzjl.icheme.science.material.MaterialRuntime.current();
+        assertEquals(V3PengRobinsonThermo.columnIdentity(current, PACKAGE_ID), thermo.datasetRevision());
+        assertTrue(thermo.datasetRevision().startsWith(com.wormzjl.icheme.science.material.Cdu17TestCatalog.catalog().requirePackage(PACKAGE_ID).scientificRevision()));
         assertEquals(16, thermo.componentBasis().componentCount());
         assertEquals("Methane", thermo.componentBasis().componentId(0));
         assertEquals("cdu17_pc12", thermo.componentBasis().componentId(15));

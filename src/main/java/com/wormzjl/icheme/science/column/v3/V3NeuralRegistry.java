@@ -170,12 +170,15 @@ public final class V3NeuralRegistry implements V3NeuralInitializer {
             if(!input.equals(original))return Optional.empty();
             return MaterialRuntime.with(view,projected.packageId(),
                     ()->entry.model().predict(projected,lumping.knownFeed(),control)).map(seed->{
-                if(projected==original)return seed;
+                // Both branches name the original catalog's column identity, the one the correction checks (F1).
+                String identity=com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo.columnIdentity(originalCatalog,original.packageId());
+                if(projected==original)return new V3NeuralSeed(original,identity,seed.branch(),seed.liquid(),seed.vapor(),
+                        seed.temperatures(),seed.freeWater(),seed.wetTrays());
                 double[][] liquid=seed.liquid(),vapor=seed.vapor();
                 for(int n=0;n<liquid.length;n++) {
                     control.checkpoint();liquid[n]=lumping.delump(liquid[n]);vapor[n]=lumping.delump(vapor[n]);
                 }
-                return new V3NeuralSeed(original,originalCatalog.requirePackage(original.packageId()).scientificRevision(),
+                return new V3NeuralSeed(original,identity,
                         seed.branch(),liquid,vapor,seed.temperatures(),seed.freeWater(),seed.wetTrays());
             });
         }
