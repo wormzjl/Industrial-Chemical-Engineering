@@ -385,4 +385,73 @@ class PairInteractionsTest {
         assertEquals(1, identical.pairCount());
         assertTrue(identical.temperatureDependent());
     }
+
+    /**
+     * P21 (wave B): the power table gives the direct {@code pow}'s bits, on a table reused across temperatures and
+     * shared by every pair, and one {@code pow} per distinct exponent of a preparation in place of one per term. The
+     * pilot model and a mixed-group model, on arbitrary positive pure-component values (the identity does not need them physical).
+     */
+    @Test void powerTableKeepsTheBitsAndComputesEachDistinctPowerOnce() {
+        // The pilot spine package (the bundled model with temperature-dependent pairs: single-group molecules, one term
+        // each, every exponent distinct) and twenty molecules of mixed groups over the same table, whose pairs share them.
+        assertPowerTable(pilotModel(), "pilot");
+        double[][] a = new double[4][4];
+        double[][] b = new double[4][4];
+        for (double[] row : PAIRS_A_B) {
+            int k = (int) row[0];
+            int l = (int) row[1];
+            a[k][l] = a[l][k] = row[2];
+            b[k][l] = b[l][k] = row[3];
+        }
+        var random = new java.util.Random(20261113L);
+        int[][] counts = new int[20][4];
+        for (int[] molecule : counts) for (int g = 0; g < 4; g++) molecule[g] = random.nextInt(4);
+        for (int[] molecule : counts) molecule[random.nextInt(4)]++;
+        var builder = PairInteractions.builder(counts.length);
+        for (int i = 0; i < counts.length; i++) {
+            for (int j = i + 1; j < counts.length; j++) groupContribution(builder, i, j, counts[i], counts[j], a, b);
+        }
+        assertPowerTable(builder.build(), "mixed groups");
+    }
+
+    private static void assertPowerTable(PairInteractions model, String name) {
+        int n = model.componentCount();
+        int pairs = model.pairCount();
+        var random = new java.util.Random(20261113L);
+        double[] s = new double[n], sDt = new double[n], sDt2 = new double[n], b = new double[n];
+        for (int i = 0; i < n; i++) {
+            s[i] = 1.0 + 9.0 * random.nextDouble();
+            sDt[i] = -1.0e-2 * random.nextDouble();
+            sDt2[i] = 1.0e-5 * random.nextDouble();
+            b[i] = 1.0e-5 * (1.0 + random.nextDouble());
+        }
+        double[] expected = new double[pairs], expectedDt = new double[pairs], expectedDt2 = new double[pairs];
+        double[] value = new double[pairs], valueDt = new double[pairs], valueDt2 = new double[pairs];
+        double[] powers = new double[model.powerCount()];
+        long[] stamp = new long[model.powerCount()];
+        java.util.Arrays.fill(stamp, Long.MIN_VALUE);
+        int terms = 0;
+        java.util.BitSet used = new java.util.BitSet();
+        for (int pair = 0; pair < pairs; pair++) {
+            terms += model.termCount(pair);
+            for (int at = 0; at < model.termCount(pair); at++) used.set(model.termPower(pair, at));
+        }
+        for (double t : new double[] {150.0, 298.15, 298.15, 371.3, 650.0, 150.0}) {
+            long bits = Double.doubleToLongBits(t);
+            model.evaluate(t, s, sDt, sDt2, b, expected, expectedDt, expectedDt2);
+            for (int pair = 0; pair < pairs; pair++) {
+                model.evaluatePair(pair, t, bits, powers, stamp, s, sDt, sDt2, b, value, valueDt, valueDt2);
+            }
+            for (int pair = 0; pair < pairs; pair++) {
+                assertEquals(Double.doubleToRawLongBits(expected[pair]), Double.doubleToRawLongBits(value[pair]), "k at " + t);
+                assertEquals(Double.doubleToRawLongBits(expectedDt[pair]), Double.doubleToRawLongBits(valueDt[pair]), "k' at " + t);
+                assertEquals(Double.doubleToRawLongBits(expectedDt2[pair]), Double.doubleToRawLongBits(valueDt2[pair]), "k'' at " + t);
+            }
+        }
+        assertEquals(model.powerCount(), used.cardinality(), "every distinct exponent belongs to a term");
+        assertTrue(model.powerCount() <= terms);
+        System.out.println(String.format(Locale.ROOT,
+                "P21 %s: %d components, %d pairs, pow calls per full preparation %d (one per term) -> %d (one per distinct exponent)",
+                name, n, pairs, terms, model.powerCount()));
+    }
 }

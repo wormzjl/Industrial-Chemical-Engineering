@@ -220,13 +220,12 @@ public final class CubicPhaseEvaluator {
     public PhaseDerivatives newDerivatives() { return new PhaseDerivatives(names.size()); }
 
     /**
-     * Scratch for one thread: the translated model's prepared temperature, the kernel's own workspace and derivative
-     * bundle for the derivative block, and the per-evaluation buffers.
+     * Scratch for one thread: the translated model's prepared temperature (its kernel workspace serves the values and
+     * the derivative block alike), the kernel's derivative bundle, and the per-evaluation buffers.
      */
     public static final class Workspace {
         private final CubicPhaseEvaluator owner;
         private final TranslatedPengRobinson.Workspace terms;
-        private final PengRobinsonKernel.Workspace mixture;
         private final PengRobinsonKernel.Derivatives mixtureDerivatives;
         private final double[] composition;
         private final double[] idealGibbs;
@@ -236,7 +235,6 @@ public final class CubicPhaseEvaluator {
         private Workspace(CubicPhaseEvaluator owner) {
             this.owner = owner;
             terms = owner.eos.newWorkspace();
-            mixture = owner.eos.kernel().newWorkspace();
             mixtureDerivatives = owner.eos.kernel().newDerivativesWithoutHeatCapacity();
             composition = new double[owner.names.size()];
             idealGibbs = new double[owner.names.size()];
@@ -244,13 +242,12 @@ public final class CubicPhaseEvaluator {
         }
 
         /**
-         * The compounds the owning flash's feed carries ({@link PengRobinsonKernel.Workspace#carry}), on both kernel
-         * workspaces: every value on them keeps its bits, and outside them the phase's {@code ln phi} and derivatives
+         * The compounds the owning flash's feed carries ({@link PengRobinsonKernel.Workspace#carry}), on the kernel
+         * workspace: every value on them keeps its bits, and outside them the phase's {@code ln phi} and derivatives
          * are the kernel's fill (zero). A new workspace, and so a direct call, carries the whole list.
          */
         public void carry(double[] feed) {
             terms.carry(feed);
-            mixture.carry(feed);
         }
     }
 
@@ -269,9 +266,9 @@ public final class CubicPhaseEvaluator {
         Objects.requireNonNull(out, "out");
         if (out.componentCount() != names.size()) throw new IllegalArgumentException("Derivative basis mismatch");
         prepare(temperature, pressure, amounts, preference, w);
-        TranslatedPengRobinson.Values values = eos.evaluateValues(temperature, pressure, amounts, preference, w.terms);
-        // The same root on the kernel's own workspace: d ln phi/dn and the untranslated d ln phi/dT.
-        eos.kernel().evaluateDerivatives(temperature, pressure, amounts, preference, w.mixture, w.mixtureDerivatives);
+        // One kernel evaluation for the values and, on the same root, d ln phi/dn and the untranslated d ln phi/dT.
+        TranslatedPengRobinson.Values values = eos.evaluateValues(temperature, pressure, amounts, preference, w.terms,
+                w.mixtureDerivatives);
         fill(temperature, pressure, preference, values, w, out.state());
         out.begin(family);
         int n = names.size();

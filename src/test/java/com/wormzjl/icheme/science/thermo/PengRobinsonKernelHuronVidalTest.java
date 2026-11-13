@@ -2,6 +2,8 @@ package com.wormzjl.icheme.science.thermo;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.util.ArrayList;
@@ -544,6 +546,357 @@ class PengRobinsonKernelHuronVidalTest {
         }
         assertTrue(compared > 500, "compared " + compared);
     }
+
+    /**
+     * P23 (wave B): {@code differentiatePrepared} after a value evaluation is {@code evaluateDerivatives} on a fresh
+     * workspace bit for bit, and leaves what the value side reads afterwards (the composition, the attraction rows and
+     * {@code mixtureSecondTemperatureDerivative}, which the translated model's c_p reads) as the evaluation alone left it.
+     */
+    @Test void differentiatePreparedIsTheDerivativeEvaluationAndKeepsTheValueSide() {
+        int compared = 0;
+        for (Mixture mixture : polarMixtures()) {
+            var kernel = mixture.kernel();
+            int n = mixture.size();
+            var alone = kernel.newWorkspace();
+            var shared = kernel.newWorkspace();
+            var aloneValue = kernel.newEvaluation();
+            var sharedOutput = kernel.newDerivativesWithoutHeatCapacity();
+            var freshOutput = kernel.newDerivativesWithoutHeatCapacity();
+            double[] rootDt = new double[n], rootDt2 = new double[n], crossDt = new double[n];
+            for (double[] state : POLAR_STATES) {
+                for (double[] x : mixture.compositions) {
+                    for (PengRobinsonKernel.Root root : PengRobinsonKernel.Root.values()) {
+                        double t = state[0], p = state[1];
+                        try {
+                            kernel.evaluateDerivatives(t, p, x, root, kernel.newWorkspace(), freshOutput);
+                        } catch (IllegalStateException coalescing) { continue; }
+                        kernel.evaluate(t, p, x, root, alone, aloneValue);
+                        kernel.prepareRootDerivatives(t, alone, rootDt, rootDt2);
+                        double expectedSecond = kernel.mixtureSecondTemperatureDerivative(alone, rootDt, rootDt2, crossDt);
+                        kernel.evaluate(t, p, x, root, shared, sharedOutput.evaluation());
+                        kernel.differentiatePrepared(t, p, root, shared, sharedOutput);
+                        compared += same(alone.compositionView(), shared.compositionView(), "x");
+                        compared += same(alone.attractionRowsView(), shared.attractionRowsView(), "S_i");
+                        kernel.prepareRootDerivatives(t, shared, rootDt, rootDt2);
+                        double second = kernel.mixtureSecondTemperatureDerivative(shared, rootDt, rootDt2, crossDt);
+                        compared += same(new double[] {expectedSecond}, new double[] {second}, "d2a/dT2");
+                        compared += same(aloneValue.logFugacityCoefficientsView(),
+                                sharedOutput.evaluation().logFugacityCoefficientsView(), "ln phi");
+                        compared += same(freshOutput.evaluation().logFugacityCoefficientsView(),
+                                sharedOutput.evaluation().logFugacityCoefficientsView(), "ln phi");
+                        compared += same(freshOutput.dLogPhiDtView(), sharedOutput.dLogPhiDtView(), "d ln phi/dT");
+                        for (int i = 0; i < n; i++) {
+                            compared += same(freshOutput.dLogPhiDnRowView(i), sharedOutput.dLogPhiDnRowView(i), "dn");
+                        }
+                    }
+                }
+            }
+        }
+        assertTrue(compared > 500, "compared " + compared);
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------
+    // P28 (wave B): correctExcess on the prepared ratios and the non-partner lists, against its old operation order
+    // ---------------------------------------------------------------------------------------------------------------
+
+    /**
+     * A 47-compound list with water present (46 synthetic hydrocarbons, both kappa branches, each with an NRTL pair to
+     * water, so every centre is active; a few classical constants among the hydrocarbons; absent compounds in some
+     * phases): the cells' correction, its excess energy and temperature derivative, the corrected rows, {@code a_mix},
+     * {@code da_mix/dT}, {@code ln phi} and the cells' {@code d^2a/dT^2} equal, bit for bit, a plain loop written here in
+     * the operation order the kernel had before P28 ({@code a_i/b_i} and {@code (da_i/dT)/b_i} divided per evaluation, the
+     * non-partners found by the cell-index test), on the inputs the evaluation itself prepared (read by reflection).
+     */
+    @Test void correctExcessKeepsItsOldOperationOrderOnFortySevenCompoundsWithWater() throws Exception {
+        int n = 47, water = 17;
+        var random = new java.util.Random(20261113L);
+        double[] tc = new double[n], pc = new double[n], omega = new double[n];
+        double[][] alpha = new double[n][];
+        var builder = HuronVidalExcess.builder(n);
+        for (int i = 0; i < n; i++) {
+            if (i == water) {
+                tc[i] = POLAR_TC[1]; pc[i] = POLAR_PC[1]; omega[i] = POLAR_OMEGA[1]; alpha[i] = WATER_ALPHA;
+                continue;
+            }
+            tc[i] = 300.0 + 490.0 * random.nextDouble();
+            pc[i] = 1.2e6 + 3.8e6 * random.nextDouble();
+            omega[i] = 0.01 + 0.9 * random.nextDouble();
+            double g = 4000.0 + 8000.0 * random.nextDouble();
+            builder.nrtl(i, water, 0.2 + 0.1 * random.nextDouble(), 298.15, g, 0.6 * g, 373.15, 0.9 * g, 0.5 * g);
+        }
+        for (int placed = 0; placed < 30; ) {
+            int i = random.nextInt(n), j = random.nextInt(n);
+            if (i == j || i == water || j == water) continue;
+            try {
+                builder.classical(i, j, 0.12 * random.nextDouble() - 0.02);
+                placed++;
+            } catch (IllegalArgumentException twice) {
+                // the pair was drawn before
+            }
+        }
+        var kernel = PengRobinsonKernel.huronVidal(tc, pc, omega, builder.build(), alpha, 1.0, 3000.0, 1.0, 1.0e9);
+        Method second = PengRobinsonKernel.class.getDeclaredMethod("excessSecondTemperatureDerivative", PengRobinsonKernel.Workspace.class);
+        second.setAccessible(true);
+        List<double[]> compositions = new ArrayList<>();
+        for (int c = 0; c < 4; c++) {
+            double[] x = new double[n];
+            for (int i = 0; i < n; i++) x[i] = random.nextDouble();
+            x[water] = c == 0 ? 50.0 : c == 1 ? 0.05 : 3.0;
+            if (c >= 2) for (int i = 0; i < n; i += 5 + c) if (i != water) x[i] = 0.0;
+            compositions.add(x);
+        }
+        var workspace = kernel.newWorkspace();
+        var evaluation = kernel.newEvaluation();
+        int compared = 0;
+        for (double[] state : new double[][] {{300.0, 1.0e5}, {373.15, 1.0e6}, {450.0, 5.0e6}, {520.0, 2.0e6}}) {
+            for (int c = 0; c < compositions.size(); c++) {
+                double[] x = compositions.get(c);
+                // The phase's own support, or the whole list with the phase's absent compounds inside it.
+                if (c % 2 == 0) workspace.carry(x); else workspace.carryAll();
+                for (PengRobinsonKernel.Root root : PengRobinsonKernel.Root.values()) {
+                    kernel.evaluate(state[0], state[1], x, root, workspace, evaluation);
+                    compared += sameAsOldOrder(kernel, workspace, evaluation, state[0], state[1], root, second);
+                }
+            }
+        }
+        assertTrue(compared > 5000, "compared " + compared);
+    }
+
+    private static Object field(Object owner, Class<?> type, String name) throws ReflectiveOperationException {
+        Field field = type.getDeclaredField(name);
+        field.setAccessible(true);
+        return field.get(owner);
+    }
+
+    /** The reference: correctExcess, the mixture sums, ln phi and excessSecondTemperatureDerivative as before P28. */
+    private static int sameAsOldOrder(PengRobinsonKernel kernel, PengRobinsonKernel.Workspace w, PengRobinsonKernel.Evaluation e,
+                                      double t, double p, PengRobinsonKernel.Root root, Method secondMethod) throws Exception {
+        Class<?> k = PengRobinsonKernel.class, ws = PengRobinsonKernel.Workspace.class;
+        double[] b = (double[]) field(kernel, k, "coVolumes");
+        int[] cellPartner = (int[]) field(kernel, k, "cellPartner");
+        int[][] cellIndex = (int[][]) field(kernel, k, "cellIndex");
+        int[][] pairIndex = (int[][]) field(kernel, k, "pairIndex");
+        int[] pairFirst = (int[]) field(kernel, k, "pairFirst"), pairSecond = (int[]) field(kernel, k, "pairSecond");
+        double[] x = (double[]) field(w, ws, "composition"), s = (double[]) field(w, ws, "sqrtA");
+        double[] sDt = (double[]) field(w, ws, "interactionRootDt"), sDt2 = (double[]) field(w, ws, "interactionRootDt2");
+        double[] g = (double[]) field(w, ws, "g"), gDt = (double[]) field(w, ws, "rowGDt"), q = (double[]) field(w, ws, "q");
+        double[] a = (double[]) field(w, ws, "a"), daDt = (double[]) field(w, ws, "daDt"), d2aDt2 = (double[]) field(w, ws, "d2aDt2");
+        double[] pairK = (double[]) field(w, ws, "pairK"), pairKDt = (double[]) field(w, ws, "pairKDt");
+        double[] pairKDt2 = (double[]) field(w, ws, "pairKDt2");
+        double[] cellG = (double[]) field(w, ws, "cellG"), cellFDt = (double[]) field(w, ws, "cellFDt");
+        double[] cellFDt2 = (double[]) field(w, ws, "cellFDt2"), cellGTau = (double[]) field(w, ws, "cellGTau");
+        double[] cellGTauDt = (double[]) field(w, ws, "cellGTauDt"), cellGTauDt2 = (double[]) field(w, ws, "cellGTauDt2");
+        double[] cellR = (double[]) field(w, ws, "cellR"), cellF = (double[]) field(w, ws, "cellF");
+        int[] support = (int[]) field(w, ws, "support"), cells = (int[]) field(w, ws, "supportCells");
+        int[] cellFrom = (int[]) field(w, ws, "cellFrom"), cellTo = (int[]) field(w, ws, "cellTo");
+        int[] pairs = (int[]) field(w, ws, "supportPairs");
+        int n = (int) field(w, ws, "supportCount"), pairCount = (int) field(w, ws, "supportPairCount");
+        double bMix = (double) field(w, ws, "excessCoVolume");
+        int count = b.length;
+        // correctExcess, before P28.
+        double[] thetaBase = new double[count], thetaBaseDt = new double[count], theta = new double[count];
+        double[] thetaDt = new double[count], denominator = new double[count], denominatorDt = new double[count];
+        double[] denominatorDt2 = new double[count], numeratorDt2 = new double[count], omega = new double[count];
+        double[] restCoVolume = new double[count], restRow = new double[count], restRowDt = new double[count];
+        double[] logGamma = new double[count];
+        boolean[] active = new boolean[count];
+        double inverseRt = 1.0 / (R * t);
+        double lambdaOverR = LAMBDA / R;
+        double share = LAMBDA * inverseRt;
+        double excessEnergy = 0.0, excessEnergyDt = 0.0;
+        boolean activePresent = false;
+        for (int si = 0; si < n; si++) {
+            int i = support[si];
+            double u = a[i] / b[i] - s[i] * g[i] / bMix;
+            double uDt = daDt[i] / b[i] - (sDt[i] * g[i] + s[i] * gDt[i]) / bMix;
+            double base = share * u;
+            double baseDt = lambdaOverR * (uDt / t - u / (t * t));
+            thetaBase[i] = base;
+            thetaBaseDt[i] = baseDt;
+            double cellD = 0.0, dDDt = 0.0, dDDt2 = 0.0, cellC = 0.0, cellCDt = 0.0, cellCDt2 = 0.0;
+            boolean on = false;
+            for (int at = cellFrom[i]; at < cellTo[i]; at++) {
+                int c = cells[at];
+                int j = cellPartner[c];
+                double weight = x[j] * b[j];
+                if (weight == 0.0) continue;
+                on = true;
+                cellD += weight * cellG[c];
+                dDDt += weight * cellFDt[c];
+                dDDt2 += weight * cellFDt2[c];
+                cellC += weight * cellGTau[c];
+                cellCDt += weight * cellGTauDt[c];
+                cellCDt2 += weight * cellGTauDt2[c];
+            }
+            active[i] = on;
+            if (!on) {
+                denominator[i] = bMix;
+                theta[i] = base;
+                thetaDt[i] = baseDt;
+                continue;
+            }
+            double restB = 0.0, restG = 0.0, restGDt = 0.0;
+            for (int sj = 0; sj < n; sj++) {
+                int j = support[sj];
+                if (x[j] == 0.0 || cellIndex[i][j] >= 0) continue;
+                int pair = pairIndex[i][j];
+                double kij = pair < 0 ? 0.0 : pairK[pair];
+                double kDt = pair < 0 ? 0.0 : pairKDt[pair];
+                restB += x[j] * b[j];
+                restG += (1.0 - kij) * x[j] * s[j];
+                restGDt += (1.0 - kij) * x[j] * sDt[j] - kDt * x[j] * s[j];
+            }
+            double rest = a[i] / b[i] * restB - s[i] * restG;
+            double restDt = daDt[i] / b[i] * restB - (sDt[i] * restG + s[i] * restGDt);
+            double d = restB + cellD;
+            double th = (share * rest + cellC) / d;
+            double numeratorDt = lambdaOverR * (restDt / t - rest / (t * t)) + cellCDt;
+            double thDt = (numeratorDt - th * dDDt) / d;
+            restCoVolume[i] = restB;
+            restRow[i] = restG;
+            restRowDt[i] = restGDt;
+            denominator[i] = d;
+            denominatorDt[i] = dDDt;
+            denominatorDt2[i] = dDDt2;
+            numeratorDt2[i] = cellCDt2;
+            theta[i] = th;
+            thetaDt[i] = thDt;
+            omega[i] = 1.0 / d - 1.0 / bMix;
+            if (x[i] > 0.0) {
+                activePresent = true;
+                excessEnergy += x[i] * (th - base);
+                excessEnergyDt += x[i] * (thDt - baseDt);
+            }
+        }
+        for (int sk = 0; sk < n; sk++) {
+            int i = support[sk];
+            logGamma[i] = active[i] ? theta[i] - thetaBase[i] : 0.0;
+        }
+        if (activePresent) {
+            double z1 = 0.0, z2 = 0.0, ySum = 0.0;
+            for (int si = 0; si < n; si++) {
+                int i = support[si];
+                if (!active[i] || x[i] == 0.0) continue;
+                z1 += x[i] * a[i] / b[i] * omega[i];
+                ySum += x[i] * s[i] * omega[i];
+                z2 += x[i] * (theta[i] / denominator[i] - thetaBase[i] / bMix);
+            }
+            double[] y = new double[count];
+            for (int sk = 0; sk < n; sk++) y[support[sk]] = ySum;
+            for (int pp = 0; pp < pairCount; pp++) {
+                int pair = pairs[pp];
+                int i = pairFirst[pair], j = pairSecond[pair];
+                y[i] -= pairK[pair] * x[j] * s[j] * (x[j] == 0.0 ? 0.0 : omega[j]);
+                y[j] -= pairK[pair] * x[i] * s[i] * (x[i] == 0.0 ? 0.0 : omega[i]);
+            }
+            for (int sk = 0; sk < n; sk++) {
+                int i = support[sk];
+                logGamma[i] += b[i] * share * z1 - share * s[i] * y[i] - b[i] * z2;
+            }
+        }
+        for (int si = 0; si < n; si++) {
+            int i = support[si];
+            if (x[i] == 0.0) continue;
+            double weight = x[i] / denominator[i];
+            for (int at = cellFrom[i]; at < cellTo[i]; at++) {
+                int c = cells[at];
+                int partner = cellPartner[c];
+                logGamma[partner] += weight * b[partner] * (cellR[c] - cellF[c] * theta[i]);
+            }
+        }
+        double half = R * t / (2.0 * LAMBDA);
+        double[] sumA = new double[count];
+        double aMix = 0.0, daMixDt = 0.0;
+        for (int si = 0; si < n; si++) {
+            int i = support[si];
+            sumA[i] = s[i] * g[i];
+            aMix += q[i] * g[i];
+            double dq = x[i] * daDt[i] / (2.0 * s[i]);
+            daMixDt += 2.0 * dq * g[i];
+        }
+        daMixDt -= 2.0 * 0.0;
+        for (int sk = 0; sk < n; sk++) {
+            int i = support[sk];
+            sumA[i] -= half * (b[i] * excessEnergy + bMix * logGamma[i]);
+        }
+        double scale = R / LAMBDA;
+        aMix -= scale * t * bMix * excessEnergy;
+        daMixDt -= scale * bMix * (excessEnergy + t * excessEnergyDt);
+        String at = t + " K " + p + " Pa " + root;
+        assertEquals(bits(excessEnergy), bits((double) field(w, ws, "excessEnergy")), at + " E");
+        assertEquals(bits(excessEnergyDt), bits((double) field(w, ws, "excessEnergyDt")), at + " dE/dT");
+        assertEquals(bits(aMix), bits(e.aMix()), at + " a");
+        assertEquals(bits(daMixDt), bits(e.daMixDt()), at + " da/dT");
+        double[] kernelTheta = (double[]) field(w, ws, "theta"), kernelThetaDt = (double[]) field(w, ws, "thetaDt");
+        double[] kernelLogGamma = (double[]) field(w, ws, "deltaLogGamma");
+        double[] kernelSumA = w.attractionRowsView();
+        double reducedA = aMix * p / (R * R * t * t);
+        double reducedB = bMix * p / (R * t);
+        double z = PengRobinsonKernel.selectCompressibility(reducedA, reducedB, root);
+        double logRatio = StrictMath.log((z + (1.0 + SQRT_TWO) * reducedB) / (z + (1.0 - SQRT_TWO) * reducedB));
+        double attraction = reducedA / (2.0 * SQRT_TWO * Math.max(reducedB, 1.0e-300));
+        double freeVolumeLog = StrictMath.log(z - reducedB);
+        int compared = 4;
+        for (int si = 0; si < n; si++) {
+            int i = support[si];
+            assertEquals(bits(theta[i]), bits(kernelTheta[i]), at + " theta " + i);
+            assertEquals(bits(thetaDt[i]), bits(kernelThetaDt[i]), at + " dtheta/dT " + i);
+            assertEquals(bits(logGamma[i]), bits(kernelLogGamma[i]), at + " ln gamma " + i);
+            assertEquals(bits(sumA[i]), bits(kernelSumA[i]), at + " S " + i);
+            double bRatio = b[i] / bMix;
+            double attractionRatio = 2.0 * sumA[i] / aMix - bRatio;
+            double logPhi = bRatio * (z - 1.0) - freeVolumeLog - attraction * attractionRatio * logRatio;
+            assertEquals(bits(logPhi), bits(e.logFugacityCoefficient(i)), at + " ln phi " + i);
+            compared += 5;
+        }
+        if (!activePresent) return compared;
+        // excessSecondTemperatureDerivative, before P28.
+        double[] gDt2 = new double[count];
+        double rootSum = 0.0;
+        for (int s0 = 0; s0 < n; s0++) rootSum += x[support[s0]] * sDt2[support[s0]];
+        for (int s0 = 0; s0 < n; s0++) gDt2[support[s0]] = rootSum;
+        for (int pp = 0; pp < pairCount; pp++) {
+            int pair = pairs[pp];
+            int i = pairFirst[pair], j = pairSecond[pair];
+            double kij = pairK[pair], kDt = pairKDt[pair], kDt2 = pairKDt2[pair];
+            gDt2[i] -= kij * x[j] * sDt2[j] + 2.0 * kDt * x[j] * sDt[j] + kDt2 * x[j] * s[j];
+            gDt2[j] -= kij * x[i] * sDt2[i] + 2.0 * kDt * x[i] * sDt[i] + kDt2 * x[i] * s[i];
+        }
+        double t2 = t * t;
+        double excessEnergyDt2 = 0.0;
+        for (int si = 0; si < n; si++) {
+            int i = support[si];
+            if (!active[i] || x[i] == 0.0) continue;
+            double bi = b[i];
+            double u = a[i] / bi - s[i] * g[i] / bMix;
+            double uDt = daDt[i] / bi - (sDt[i] * g[i] + s[i] * gDt[i]) / bMix;
+            double uDt2 = d2aDt2[i] / bi - (sDt2[i] * g[i] + 2.0 * sDt[i] * gDt[i] + s[i] * gDt2[i]) / bMix;
+            double baseDt2 = lambdaOverR * (uDt2 / t - 2.0 * uDt / t2 + 2.0 * u / (t2 * t));
+            double restGDt2 = 0.0;
+            for (int sj = 0; sj < n; sj++) {
+                int j = support[sj];
+                if (x[j] == 0.0 || cellIndex[i][j] >= 0) continue;
+                int pair = pairIndex[i][j];
+                double kij = pair < 0 ? 0.0 : pairK[pair];
+                double kDt = pair < 0 ? 0.0 : pairKDt[pair];
+                double kDt2 = pair < 0 ? 0.0 : pairKDt2[pair];
+                restGDt2 += (1.0 - kij) * x[j] * sDt2[j] - 2.0 * kDt * x[j] * sDt[j] - kDt2 * x[j] * s[j];
+            }
+            double rest = a[i] / bi * restCoVolume[i] - s[i] * restRow[i];
+            double restDt = daDt[i] / bi * restCoVolume[i] - (sDt[i] * restRow[i] + s[i] * restRowDt[i]);
+            double restDt2 = d2aDt2[i] / bi * restCoVolume[i]
+                    - (sDt2[i] * restRow[i] + 2.0 * sDt[i] * restRowDt[i] + s[i] * restGDt2);
+            double numDt2 = lambdaOverR * (restDt2 / t - 2.0 * restDt / t2 + 2.0 * rest / (t2 * t)) + numeratorDt2[i];
+            double thetaDt2 = (numDt2 - 2.0 * thetaDt[i] * denominatorDt[i] - theta[i] * denominatorDt2[i]) / denominator[i];
+            excessEnergyDt2 += x[i] * (thetaDt2 - baseDt2);
+        }
+        double expected = -scale * bMix * (2.0 * excessEnergyDt + t * excessEnergyDt2);
+        double actual = (double) secondMethod.invoke(kernel, w);
+        assertEquals(bits(expected), bits(actual), at + " d2a/dT2 of the cells");
+        return compared + 1;
+    }
+
+    private static long bits(double value) { return Double.doubleToRawLongBits(value); }
 
     // ---------------------------------------------------------------------------------------------------------------
     // Mathias-Copeman alpha
