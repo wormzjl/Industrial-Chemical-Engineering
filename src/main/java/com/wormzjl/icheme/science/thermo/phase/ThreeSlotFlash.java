@@ -33,8 +33,8 @@ import java.util.Arrays;
  * and the workspace ({@link FluidTpEquilibrium#threeSlotFeed} decides); it answers the core's outcome (SINGLE, SPLIT,
  * MERGED, THREE or FAILED) and leaves the products in the workspace as the two-slot path does. It reads the engine's
  * kernel, evaluator, settings and stability test, given once at construction, and calls back into the engine only for
- * the counted stability test ({@code stabilityOf}) and the lower-Gibbs root of a composition ({@code lowerGibbsRoot},
- * {@code differentiatePhase}). Immutable; one instance per engine.
+ * the counted stability test ({@code stabilityOf}); the lower-Gibbs root of a composition is the two-phase flash's
+ * ({@link TwoPhaseFlash#lowerGibbsRoot}, {@link TwoPhaseFlash#differentiatePhase}). Immutable; one instance per engine.
  */
 final class ThreeSlotFlash {
     // The three-slot system (W3a D3).
@@ -58,6 +58,7 @@ final class ThreeSlotFlash {
     private static final double SLOT_FRACTION_TOLERANCE = 1.0e-13;
 
     private final FluidTpEquilibrium engine;
+    private final TwoPhaseFlash twoPhase;
     private final PengRobinsonKernel kernel;
     private final CubicPhaseEvaluator evaluator;
     private final Settings settings;
@@ -68,9 +69,10 @@ final class ThreeSlotFlash {
     /** The cubic's water component, -1 without one. */
     private final int cubicWater;
 
-    ThreeSlotFlash(FluidTpEquilibrium engine, PengRobinsonKernel kernel, CubicPhaseEvaluator evaluator, Settings settings,
-                   TangentPlaneStability stability, int count, boolean[] polar, int cubicWater) {
+    ThreeSlotFlash(FluidTpEquilibrium engine, TwoPhaseFlash twoPhase, PengRobinsonKernel kernel, CubicPhaseEvaluator evaluator,
+                   Settings settings, TangentPlaneStability stability, int count, boolean[] polar, int cubicWater) {
         this.engine = engine;
+        this.twoPhase = twoPhase;
         this.kernel = kernel;
         this.evaluator = evaluator;
         this.settings = settings;
@@ -186,7 +188,7 @@ final class ThreeSlotFlash {
         Root preferred = k == 0 ? Root.VAPOR : Root.LIQUID;
         for (int halving = 0; ; halving++) {
             try {
-                s.root[k] = engine.lowerGibbsRoot(t, composition, preferred, s.logPhi[k], w);
+                s.root[k] = twoPhase.lowerGibbsRoot(t, composition, preferred, s.logPhi[k], w);
                 s.compressibility[k] = w.chosen.compressibility();
                 System.arraycopy(composition, 0, s.accepted[k], 0, count);
                 return;
@@ -530,7 +532,7 @@ final class ThreeSlotFlash {
             for (int k = 0; k < SLOT_COUNT; k++) {
                 if (!s.present[k]) continue;
                 try {
-                    engine.differentiatePhase(t, s.moles[k], k == 0, s.derivatives[k], w);
+                    twoPhase.differentiatePhase(t, s.moles[k], k == 0, s.derivatives[k], w);
                 } catch (IllegalStateException | IllegalArgumentException coalescing) {
                     return false;
                 }
@@ -646,7 +648,7 @@ final class ThreeSlotFlash {
             for (int a = 0; a < material.presentCount; a++) total += moles[k][material.present[a]];
             Arrays.fill(w.x, 0.0);
             for (int a = 0; a < material.presentCount; a++) w.x[material.present[a]] = moles[k][material.present[a]] / total;
-            engine.lowerGibbsRoot(t, w.x, k == 0 ? Root.VAPOR : Root.LIQUID, w.liquidLogPhi, w);
+            twoPhase.lowerGibbsRoot(t, w.x, k == 0 ? Root.VAPOR : Root.LIQUID, w.liquidLogPhi, w);
             for (int a = 0; a < material.presentCount; a++) {
                 int i = material.present[a];
                 double term = DeterministicMath.log(w.x[i]) + w.liquidLogPhi[i];
