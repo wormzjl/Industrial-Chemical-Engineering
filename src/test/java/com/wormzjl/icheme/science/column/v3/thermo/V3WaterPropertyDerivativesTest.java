@@ -145,7 +145,7 @@ class V3WaterPropertyDerivativesTest {
             assertEquals(left, right, 1.0e-6 * Math.abs(left), "slope continuous at " + end + " K");
             assertEquals(V3WaterProperties.dVaporMolarEnthalpyDT(end), right, 1.0e-6 * Math.abs(right), "c_p at " + end + " K");
         }
-        assertEquals(V3WaterProperties.vaporMolarEnthalpy(950.0) + com.wormzjl.icheme.science.thermo.phase.SteamVirial.residualEnthalpy(950.0, 1.0e5),
+        assertEquals(V3WaterProperties.vaporMolarEnthalpy(950.0) + com.wormzjl.icheme.science.thermo.water.SteamVirial.residualEnthalpy(950.0, 1.0e5),
                 V3WaterProperties.steamMolarEnthalpy(950.0, 1.0e5), 0.0, "the virial steam at 950 K evaluates");
     }
 

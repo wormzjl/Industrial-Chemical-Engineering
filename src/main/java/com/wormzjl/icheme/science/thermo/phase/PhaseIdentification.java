@@ -48,13 +48,10 @@ public final class PhaseIdentification {
      * {@code da/dT}; {@code NaN} where it is undefined.
      */
     public static double parameter(double temperatureKelvin, double volume, double a, double b, double dadt) {
-        double free = volume - b;
-        double denominator = volume * volume + 2.0 * b * volume - b * b;
-        double dpdv = -R * temperatureKelvin / (free * free) + 2.0 * a * (volume + b) / (denominator * denominator);
-        double dpdt = R / free - dadt / denominator;
-        double dpdvv = 2.0 * R * temperatureKelvin / (free * free * free) + 2.0 * a / (denominator * denominator)
-                - 8.0 * a * (volume + b) * (volume + b) / (denominator * denominator * denominator);
-        double dpdtv = -R / (free * free) + 2.0 * dadt * (volume + b) / (denominator * denominator);
+        double dpdv = PengRobinsonKernel.pressureVolumeDerivative(temperatureKelvin, volume, a, b);
+        double dpdt = PengRobinsonKernel.pressureTemperatureDerivative(volume, b, dadt);
+        double dpdvv = PengRobinsonKernel.pressureSecondVolumeDerivative(temperatureKelvin, volume, a, b);
+        double dpdtv = PengRobinsonKernel.pressureTemperatureVolumeDerivative(volume, b, dadt);
         if (!(dpdv < 0.0) || dpdt == 0.0) return Double.NaN;
         return volume * (dpdtv / dpdt - dpdvv / dpdv);
     }

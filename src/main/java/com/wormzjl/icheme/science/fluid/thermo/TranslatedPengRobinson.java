@@ -351,8 +351,7 @@ public final class TranslatedPengRobinson {
         }
         /** {@code (dP/dv)_T} of the cubic at an untranslated volume, attraction and co-volume: the closed form of {@code fill}. */
         public static double pressureVolumeDerivative(double temperature,double v,double a,double b) {
-            double denominator=v*v+2*b*v-b*b;
-            return -R*temperature/((v-b)*(v-b))+2*a*(v+b)/(denominator*denominator);
+            return PengRobinsonKernel.pressureVolumeDerivative(temperature,v,a,b);
         }
         private Phase phase() {
             secondOrder();
@@ -468,14 +467,13 @@ public final class TranslatedPengRobinson {
         }
         double rt=R*temperature;
         double z=evaluation.compressibility(),v=z*rt/pressure;
-        double denominator = v*v + 2*b*v - b*b;
-        double dpdv = -R*temperature / ((v-b)*(v-b)) + 2*a*(v+b) / (denominator*denominator);
-        double dpdt = R/(v-b) - da/denominator;
+        double denominator = PengRobinsonKernel.cubicDenominator(v,b);
+        double dpdv = PengRobinsonKernel.pressureVolumeDerivative(temperature,v,a,b);
+        double dpdt = PengRobinsonKernel.pressureTemperatureDerivative(v,b,da);
         if (!(dpdv < 0)) throw new IllegalArgumentException("Mechanically unstable PR root");
         double dvdp = 1/dpdv, dvdt = -dpdt/dpdv;
-        double dpdvv = 2*R*temperature/((v-b)*(v-b)*(v-b)) + 2*a/(denominator*denominator)
-                - 8*a*(v+b)*(v+b)/(denominator*denominator*denominator);
-        double dpdtv = -R/((v-b)*(v-b)) + 2*da*(v+b)/(denominator*denominator);
+        double dpdvv = PengRobinsonKernel.pressureSecondVolumeDerivative(temperature,v,a,b);
+        double dpdtv = PengRobinsonKernel.pressureTemperatureVolumeDerivative(v,b,da);
         double physicalV = v + shift;
         double log = DeterministicMath.log((v+(1+SQRT_TWO)*b)/(v+(1-SQRT_TWO)*b));
         double h=idealH+evaluation.residualEnthalpyJoulesPerMol()+pressure*shift;

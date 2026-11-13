@@ -1514,6 +1514,48 @@ public final class PengRobinsonKernel {
 
 
     /**
+     * {@code v^2 + 2 b v - b^2}, the attraction term's denominator of the cubic {@code P = R T/(v - b) - a/(v^2 + 2 b v - b^2)}
+     * at untranslated molar volume {@code v}. This and the four pressure derivatives below are the one copy of the
+     * cubic's volumetric block (the translated model's {@code fill}, phase identification, the water share, the
+     * engine's pressure start), each in the operation order the translated model had.
+     */
+    public static double cubicDenominator(double volume, double coVolume) {
+        return volume * volume + 2.0 * coVolume * volume - coVolume * coVolume;
+    }
+
+    /** The cubic's pressure {@code R T/(v - b) - a/(v^2 + 2 b v - b^2)}. */
+    public static double cubicPressure(double temperatureKelvin, double volume, double attraction, double coVolume) {
+        return GAS_CONSTANT * temperatureKelvin / (volume - coVolume) - attraction / cubicDenominator(volume, coVolume);
+    }
+
+    /** {@code (dP/dv)_T}. */
+    public static double pressureVolumeDerivative(double temperatureKelvin, double volume, double attraction, double coVolume) {
+        double denominator = cubicDenominator(volume, coVolume);
+        return -GAS_CONSTANT * temperatureKelvin / ((volume - coVolume) * (volume - coVolume))
+                + 2.0 * attraction * (volume + coVolume) / (denominator * denominator);
+    }
+
+    /** {@code (dP/dT)_v}, with {@code da/dT} at fixed composition. */
+    public static double pressureTemperatureDerivative(double volume, double coVolume, double attractionDt) {
+        return GAS_CONSTANT / (volume - coVolume) - attractionDt / cubicDenominator(volume, coVolume);
+    }
+
+    /** {@code (d^2P/dv^2)_T}. */
+    public static double pressureSecondVolumeDerivative(double temperatureKelvin, double volume, double attraction, double coVolume) {
+        double denominator = cubicDenominator(volume, coVolume);
+        return 2.0 * GAS_CONSTANT * temperatureKelvin / ((volume - coVolume) * (volume - coVolume) * (volume - coVolume))
+                + 2.0 * attraction / (denominator * denominator)
+                - 8.0 * attraction * (volume + coVolume) * (volume + coVolume) / (denominator * denominator * denominator);
+    }
+
+    /** {@code d^2P/dT dv}. */
+    public static double pressureTemperatureVolumeDerivative(double volume, double coVolume, double attractionDt) {
+        double denominator = cubicDenominator(volume, coVolume);
+        return -GAS_CONSTANT / ((volume - coVolume) * (volume - coVolume))
+                + 2.0 * attractionDt * (volume + coVolume) / (denominator * denominator);
+    }
+
+    /**
      * Precision qualifier; the EOS owns phase selection and its coalescence policy. Where floating point loses the
      * physical root the requested one stands on, the selection fails with the typed {@link NoPhysicalRoot}.
      */

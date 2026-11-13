@@ -70,7 +70,7 @@ public final class HydrocarbonModel {
         translated=new TranslatedPengRobinson(components,evaluator.kernel(),gas,offsets,evaluator.translations());
         if(water>=0) {
             var derivation=evaluator.derivation();
-            share=new WaterShare(derivation.criticalTemperatures()[water],derivation.criticalPressures()[water],
+            share=new WaterShare(com.wormzjl.icheme.science.material.WaterRecords.constants(propertyPackage.water()),derivation.criticalTemperatures()[water],derivation.criticalPressures()[water],
                     derivation.acentricFactors()[water],derivation.mathiasCopeman()[water]);
             shareScratch=ThreadLocal.withInitial(share::newWorkspace);
         } else {share=null;shareScratch=null;}
