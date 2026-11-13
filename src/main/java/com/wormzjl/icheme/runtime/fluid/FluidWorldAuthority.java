@@ -38,6 +38,10 @@ public final class FluidWorldAuthority implements AutoCloseable {
     private final IChemE.FluidOptions options;
     private final List<FluidPresetCatalog.Preset> presetCache;
     private final List<String> componentNames;
+    /** The menus' static part, constant for the server (its catalog and model are captured at start): the component names
+     * and the boxed molecular weights, built once (code base review R4). */
+    private final Map<String,MaterialName> materialNames;
+    private final List<Double> molecularWeights;
     private final FluidSavedData data;
     private final WorldTopologyLedger topology;
     private final MinecraftFluidRuntime runtime;
@@ -135,6 +139,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
         data=FluidSavedData.open(server,this::model,catalog);
         propertyReload=new FluidPropertyReloadGuard(catalog,com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(catalog),model);
         presetCache=FluidPresetCatalog.resolve(catalog);componentNames=model.components();
+        {var names=new LinkedHashMap<String,MaterialName>();for(String id:componentNames)names.put(id,catalog.name(id));materialNames=Map.copyOf(names);}
+        molecularWeights=Arrays.stream(model.molecularWeights()).boxed().toList();
         var savedTopology=data.world().orElseGet(()->WorldTopologyLedger.Snapshot.empty(catalog));savedTopology.basis().requireCurrent(catalog);
         FluidPropertyReloadGuard.validateSolids(catalog.solids(),data.checkpoint(),savedTopology);observedSolidData=catalog;
         topology=new WorldTopologyLedger(savedTopology);
@@ -271,7 +277,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public FluidThermodynamics model(){owned();return model;}
     /** The server's time factor ({@code fluid.timeScale}), captured at server start: the world model's. */
     public com.wormzjl.icheme.science.fluid.SimulationTime time(){return model.time();}
-    public Map<String,MaterialName> materialNames(){owned();var result=new LinkedHashMap<String,MaterialName>();for(String id:componentNames)result.put(id,catalog.name(id));return Map.copyOf(result);}
+    public Map<String,MaterialName> materialNames(){owned();return materialNames;}
+    /** The world model's molecular weights, boxed for a menu's static part (code base review R4). */
+    public List<Double> molecularWeights(){owned();return molecularWeights;}
     public long onlineTick(){owned();return topology.onlineTick();}
     /** Optional read-only diagnostics; all values are immutable and callbacks run on the server thread. */
     public void observe(java.util.function.BiConsumer<List<IslandCoordinator.Snapshot>,Map<Long,IslandCoordinator.Metrics>> observer){owned();this.observer=observer;}

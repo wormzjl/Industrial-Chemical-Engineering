@@ -282,7 +282,7 @@ public final class FluidNetwork {
         if(view.identity()!=record.device().id()||view.inputRevision()!=record.revision())
             throw new IllegalArgumentException("Presentation snapshot registration mismatch");
         return new MenuData(record.device().hydraulicKind(),view,Controls.from(record),world.components(),world.presets(),"",
-            world.materialNames(),Arrays.stream(world.model().molecularWeights()).boxed().toList(),world.instruments().sensorReadings(record.device().id(),view),valveData(world,record,view));
+            world.materialNames(),world.molecularWeights(),world.instruments().sensorReadings(record.device().id(),view),valveData(world,record,view));
     }
     /** The opening of valve {@code id} as its screen reads it, 0 to 1, or NaN where it has none or no signal (the column's Operation tab, C7). */
     public static double opening(FluidWorldAuthority world,long id){var record=world.registrations().get(id);if(record==null)return Double.NaN;var data=valveData(world,record,world.view(id));return data==null||!data.configured()?Double.NaN:data.opening();}
