@@ -39,7 +39,7 @@ Paths are under [`src/main/java/com/wormzjl/icheme/science/thermo/`](../../../sr
 
 | Class | Role | Read it for |
 |---|---|---|
-| [`phase/FluidTpEquilibrium`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/FluidTpEquilibrium.java) (6288) | The engine: `tp`, `ph`, `uv` (also warm-started `uv(request, workspace, hintT, hintP)`); onsets `depositionTemperature`, `frostTemperature`, `freezingTemperature`, `depositionPressure`; `anchoredCrystal`, `pureBandBox`; the three-slot system (`threeSlot`, `slotFractions`, `slotNewton`); carried crystals (`carriedTrial`, `crystalLean`, `carriedSplit`, `beyondStandIn`); nested `Settings` (12 components, `DEFAULT`) and `Workspace` | Every algorithm; public constants |
+| [`phase/FluidTpEquilibrium`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/FluidTpEquilibrium.java) (6156) | The engine: `tp`, `ph`, `uv` (also warm-started `uv(request, workspace, hintT, hintP)`); onsets `depositionTemperature`, `frostTemperature`, `freezingTemperature`, `depositionPressure`; `anchoredCrystal`, `pureBandBox`; the three-slot system (`threeSlot`, `slotFractions`, `slotNewton`); carried crystals (`carriedTrial`, `crystalLean`, `carriedSplit`, `beyondStandIn`); nested `Settings` (12 components, `DEFAULT`) and `Workspace` | Every algorithm; public constants |
 | [`phase/EquilibriumRequest`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/EquilibriumRequest.java) (71) | Record: `Specification` {TP, PH, UV}, two values (K and Pa; Pa and J; J and m3), species list (the contract basis, in order), amounts, competition | Input validation |
 | [`phase/EquilibriumResult`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/EquilibriumResult.java) (427) | Answer: `Status`, `UnsupportedReason`, `Classification` (15 values), `PhaseAmounts` list, `coexisting`, `Coverage`/`CoverageGrade`, `Deposition`, `Diagnostics`; detail prefixes; aggregates (`enthalpy`, `internalEnergy`, `volume`, `conservationDefect`) | Status rules, grades, typed failures |
 | [`phase/PhaseContract`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/PhaseContract.java) (193) | What a package promises: basis, `WaterParticipation`, qualified competitions, water-chemistry species, `PhaseDomain`, fluid coverage, `ThermoIdentity`; `resolve`; `qualifies` (the carried request wherever a crystal competition is) | Which requests are refused and why |
@@ -61,7 +61,7 @@ Paths are under [`src/main/java/com/wormzjl/icheme/science/thermo/`](../../../sr
 | [`phase/ThermoIdentity`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/ThermoIdentity.java) (90) | Identity of the numbers: package revision + evaluator family + spine revision + water part; `revision()` (a package without water: `PackageBinding.identity`); nothing is hashed | What invalidates caches |
 | [`phase/DepositionOnset`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/DepositionOnset.java) (63) | Onset answer (frost point, liquidus or three-phase point); `approximation` for diagnostics only | Onset searches |
 | [`phase/PhaseKind`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/PhaseKind.java) (22), [`WaterParticipation`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/WaterParticipation.java) (24), [`SolidPhaseEvaluator`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/SolidPhaseEvaluator.java) (52), [`CrystalFugacity`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/CrystalFugacity.java) (12) | Kinds `VAPOR`, `LIQUID`, `FLUID`, `SOLID`; water `NONE` or `IN_EQUATION_OF_STATE`; the solid contract with its `TriplePointAnchor`; a crystal's ln(f_s/P) | |
-| [`TangentPlaneStability`](../../../src/main/java/com/wormzjl/icheme/science/thermo/TangentPlaneStability.java) (896) | Michelsen tangent-plane test on the kernel; one-pressure and per-branch-pressure `test`, and the per-branch `test` with a `TrialFilter`; the water-rich trial (W3a D3) and the liquid trial's water trace (`SEED_TRACE`, W3b); `Verdict` {STABLE, UNSTABLE, UNRESOLVED}; `Settings.DEFAULT`; its small dense solves are `science/math/SmallDenseSolve` (`cholesky`, `solveCholesky`, `factorShifted`, `solve3`, `solvePivoted`), shared with `FluidTpEquilibrium` | Stability verdicts |
+| [`TangentPlaneStability`](../../../src/main/java/com/wormzjl/icheme/science/thermo/TangentPlaneStability.java) (729) | Michelsen tangent-plane test on the kernel at one pressure; `test`, and `test` with a `TrialFilter`; the water-rich trial (W3a D3) and the liquid trial's water trace (`SEED_TRACE`, W3b); `Verdict` {STABLE, UNSTABLE, UNRESOLVED}; `Settings.DEFAULT`; its small dense solves are `science/math/SmallDenseSolve` (`cholesky`, `solveCholesky`, `factorShifted`, `solve3`, `solvePivoted`), shared with `FluidTpEquilibrium` | Stability verdicts |
 | [`NumericalBox`](../../../src/main/java/com/wormzjl/icheme/science/thermo/NumericalBox.java) (53) | 10..6000 K, 1 Pa..1 GPa, partial-pressure floor 1e-6 Pa; `contains`, `require`, `containsPartialPressure`, `requirePartialPressure` | The only bound a trial meets (also read by fluid `FluidThermodynamics`, `HydrocarbonModel`, `FluidDomain`, `PassiveStepSolver`) |
 | [`IdealGasFunction`](../../../src/main/java/com/wormzjl/icheme/science/thermo/IdealGasFunction.java) (31) | Ideal-gas interface: h(298.15 K) = formation enthalpy, s(298.15 K, 1e5 Pa) = standard entropy; continues past its range with Cp held | Datum convention. Implemented by `ReferenceSpine` and `science/material/CoefficientIdealGas` |
 
@@ -166,9 +166,8 @@ flowchart TD
   side, which above water's dew point proves nothing, and naphtha with 23 % steam at 2.5 bar stayed all gas from 358 K
   up to 384 K, then condensed 42 % at once. The aqueous side stays the pure-component or water-rich trial's. The
   three-slot split's first liquid follows the same rule (`SEED_TRACE` is the one constant).
-- Per-branch pressures: the overloads that evaluate the liquid branch at P and the vapour branch at another pressure
-  are still in `TangentPlaneStability` and in the engine's split (`setBranches`, `Workspace.branched`), but since N10
-  every caller passes one pressure. Equal pressures give the one-pressure test bit for bit.
+- One pressure: the stability test, the split and the three-slot system evaluate every phase at the state pressure
+  (`Workspace.pressure`).
 - Flash: Rachford–Rice substitution on ln K_i = ln phi_i^L - ln phi_i^V from the stability test's stationary
   composition, each phase on its own lower-Gibbs root, a dominant-eigenvalue extrapolation every `accelerationCycle`
   steps, solved in the minor phase's fraction so a trace phase keeps its precision.
@@ -382,8 +381,6 @@ flowchart TD
   `science/fluid/thermo` imports the engine. The network's `TranslatedPengRobinson` extends the kernel's `TranslatedCubic`.
 - `hydrocarbonTotal` in the workspace is the whole feed's amount, water included: the name is from the free-water
   rule.
-- The per-branch-pressure machinery (`setBranches`, `Workspace.branched`, the per-branch `TangentPlaneStability.test`
-  overloads) has no caller with two pressures since N10.
 - `PackageBinding.contract` of a package without water qualifies the admitted crystals as well as fluid-only; the
   network uses `PackageBinding.derivedContract` on its own evaluator. The carried request is in no `qualifiedCompetitions` list:
   `qualifies` answers it wherever a crystal competition is.
@@ -428,17 +425,20 @@ flowchart TD
 
 ## Tests that document it
 
-- Unit tests, `science/thermo/phase` (88 tests): `AqueousEquilibriumTest` (13: water with hydrocarbons and ethanol on
+- Unit tests, `science/thermo/phase` (89 tests): `AqueousEquilibriumTest` (13: water with hydrocarbons and ethanol on
   `pilot_aqueous`, the three-slot system, ice beside two liquids, the evaluation table), `CrystalPhaseEvaluatorTest` (2),
-  `CubicPhaseEvaluatorTest` (6), `FluidTpEquilibriumP3Test` (14: critical band, Newton finish, merging, phase labels, the
+  `CubicPhaseEvaluatorTest` (6), `EngineDigestTest` (1: the engine digest gate, D-E0 of batch
+  `2026-11-13-codebase-review`; a fixed list of TP, PH, UV requests and onsets on the test, pilot and bundled engines,
+  one line of raw bits each, compared with `src/test/resources/thermo/engine-digest.txt`; record with
+  `ICHEME_ENGINE_DIGEST_RECORD=true`, which writes `build/engine-digest.txt`), `FluidTpEquilibriumP3Test` (14: critical band, Newton finish, merging, phase labels, the
   longer stability budget, two liquids, unstable products), `FluidTpEquilibriumPhUvTest` (7), `FluidTpEquilibriumTest`
   (7), `GasSolidEquilibriumTest` (12), `NearPureCrystalStepTest` (4), `RefineryCarbonDioxideCrystalTest` (3),
   `SolidCarbonDioxideQualificationTest` (5), `SolidPhaseEvaluatorTest` (2), `SpinePackageEvaluatorTest` (3),
   `SteamVirialTest` (4), `ThermoIdentityTest` (2), `WaterShareTest` (4). Helpers: `PhaseTestSupport`,
   `SolidCarbonDioxideReferences`, `If97Region2` (the full IF97 Region 2 residual, Region 4's saturation line and the
   B23 boundary).
-- `science/thermo/TangentPlaneStabilityTest` (10: brute-force minima, per-branch verdicts, bitwise repeats, a dense
-  liquid is no vapour at the lower pressure).
+- `science/thermo/TangentPlaneStabilityTest` (8: brute-force minima, bitwise repeats, the filtered call with no filter
+  is the test bit for bit).
 - Qualification families, `science/thermo/qualification` (described in [verification.md](verification.md)):
   G3F1..G3F10, G4F1, G4F2, G5F1..G5F6. Helpers: `G3Support`, `G5Support`. Fixtures: the CoolProp files in
   `src/test/resources/science/thermo/coolprop/`, `gerg2008/pilot-binaries.json`, `solid-co2-holdouts/*.tsv`.
