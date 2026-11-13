@@ -37,14 +37,23 @@ class PumpHealthTest {
         final Map<Long, ProcessSolveServices.FluidIslandCommand> commands = new HashMap<>();
         final IslandCoordinator coordinator;
         final PumpHealth health;
+        /** The in-line pump's electric store (M-04), or null where the line runs without stores. */
+        final ElectricStores electric;
         long requests;
 
         Rig(double supply) {
             this(supply, 1, FAST);
         }
 
-        /** The line under time factor {@code factor} and wear lives {@code wear} (batch 2026-11-11-minecraft-time-delta, W4). */
         Rig(double supply, int factor, Wear.Settings wear) {
+            this(supply, factor, wear, false);
+        }
+
+        /**
+         * The line under time factor {@code factor} and wear lives {@code wear} (batch 2026-11-11-minecraft-time-delta, W4);
+         * {@code metered}: the pump is a registered in-line pump with an empty metered store (M-04).
+         */
+        Rig(double supply, int factor, Wear.Settings wear, boolean metered) {
             var time = com.wormzjl.icheme.science.fluid.SimulationTime.of(factor);
             coordinator = new IslandCoordinator(new IslandCoordinator.Dispatcher() {
                 public int availableWorkers() {
@@ -66,10 +75,16 @@ class PumpHealthTest {
                 }
             }, changed -> {
             }, () -> 0L, new IslandCoordinator.Settings(30_000_000_000L, 20_000_000_000L, 64, false, 100, CertificatePolicy.defaults()).withTime(time), () -> epoch[0]);
-            var ledger = new WorldTopologyLedger(WorldTopologyLedger.Snapshot.empty(EventPathWorld.CATALOG));
+            var empty = WorldTopologyLedger.Snapshot.empty(EventPathWorld.CATALOG);
+            var ledger = new WorldTopologyLedger(metered ? new WorldTopologyLedger.Snapshot(0, 1000, Map.of(1L, inline()), List.of(), empty.constructed(), empty.destroyed(), empty.basis()) : empty);
             var trains = new ShaftTrains(ledger, device -> device == 1 ? 1L : null, coordinator);
             health = new PumpHealth(ledger, device -> device == 1 ? 1L : null, coordinator, device -> device == 1, device -> device == 1 ? new FlowControl.Pump(FLOW, 5e5) : null, () -> wear);
             trains.health(health);
+            if (metered) {
+                ledger.stores(Map.of(1L, com.wormzjl.icheme.science.machine.ElectricStore.Facts.EMPTY));
+                electric = new ElectricStores(ledger, device -> device == 1 ? 1L : null, coordinator, () -> ElectricStores.Settings.DEFAULT);
+                trains.electric(electric);
+            } else electric = null;
             trains.host(ShaftTrains.Host.NONE);
             coordinator.shafts(trains);
             var line = new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1, 0, water(supply), PassiveNetwork.NodeKind.GENERATOR),
@@ -89,8 +104,16 @@ class PumpHealthTest {
                 }
                 coordinator.pump();
             }
-            if (epoch[0] % PumpHealth.CADENCE == 0) health.cadence();
+            if (epoch[0] % PumpHealth.CADENCE == 0) {
+                health.cadence();
+                if (electric != null) electric.cadence();
+            }
             if (health.hasEvents()) health.apply();
+        }
+
+        /** Whether the island's last solved graph carries the pump switched on. */
+        boolean open() {
+            return coordinator.observe(1).graph().pipes().getFirst().control() instanceof FlowControl.Pump p && p.enabled();
         }
 
         double flow() {
@@ -100,6 +123,13 @@ class PumpHealthTest {
         double ratio() {
             return coordinator.observe(1).lastResult().orElseThrow().observations().getFirst().npshRatio();
         }
+    }
+
+    /** The in-line pump's registration (M-04): a pipe block at the supply carrying the pump, switched on. */
+    private static WorldTopologyLedger.Registration inline() {
+        var device = new PhysicalFluidTopology.Device(1, new PhysicalFluidTopology.Position("minecraft:overworld", 0, 0, 0), com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.PIPE,
+                PhysicalFluidTopology.Direction.EAST, FAT, new FlowControl.Pump(FLOW, 5e5));
+        return new WorldTopologyLedger.Registration(device, FluidDeviceSpec.nitrogen(EventPathWorld.CATALOG), 0);
     }
 
     /** The supply pressure that puts the pump's NPSHA at {@code sigma} times its NPSH3 at its set flow. */
@@ -179,6 +209,39 @@ class PumpHealthTest {
         assertTrue(rig.health.health(1) < 1 && rig.health.health(1) > .7, "cavitating, it wears again: " + rig.health.health(1));
         assertTrue(rig.flow() > 9, "it runs again: " + rig.flow());
         assertTrue(rig.coordinator.observe(1).graph().pipes().getFirst().control() instanceof FlowControl.Pump p && p.enabled(), "switched back on");
+    }
+
+    /**
+     * M-04: an unpowered in-line set-flow pump (an empty metered store) stays closed at every dispatch: the store's
+     * {@code FAILED 0} is not overwritten by the health's "switch back on" {@code FAILED 1}. With power restored it opens at
+     * the next dispatch.
+     */
+    @Test
+    void anUnpoweredInlinePumpStaysClosedAndOpensWhenPowered() {
+        var rig = new Rig(101325, 1, FAST, true);
+        assertFalse(rig.electric.powered(1), "an empty metered store stands unpowered");
+        long seen = rig.requests;
+        int closed = 0;
+        for (int i = 0; i < 2000 && closed < 3; i++) {
+            rig.tick();
+            if (rig.requests == seen) continue;
+            seen = rig.requests;
+            closed++;
+            assertFalse(rig.open(), "dispatch " + closed + ": the unpowered pump stands closed");
+            assertEquals(0, rig.flow(), 1e-9, "dispatch " + closed + ": it passes nothing");
+        }
+        assertEquals(3, closed, "three dispatches seen");
+        // Power restored: FE every tick; the store restarts at a cadence and wakes the island.
+        int opened = -1;
+        for (int i = 0; i < 4000 && opened < 0; i++) {
+            rig.electric.receive(1, 1_000_000, false);
+            boolean was = rig.electric.powered(1);
+            seen = rig.requests;
+            rig.tick();
+            if (was && rig.requests != seen) opened = rig.open() ? 1 : 0;
+        }
+        assertEquals(1, opened, "the first dispatch after the store restarted opens the pump");
+        assertTrue(rig.flow() > 9, "it delivers: " + rig.flow());
     }
 
     @Test

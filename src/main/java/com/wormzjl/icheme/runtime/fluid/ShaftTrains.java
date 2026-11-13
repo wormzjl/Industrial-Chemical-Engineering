@@ -598,14 +598,21 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         return failures(plans, graph);
     }
 
-    /** {@code plans} with each failed pump of {@code graph} closed (W10b): its {@code FAILED} plan stands in for its speed. */
+    /**
+     * {@code plans} with each failed pump of {@code graph} closed (W10b): its {@code FAILED} plan stands in for its speed.
+     * A health {@code FAILED 1} (switch a repaired pump back on) never replaces a {@code FAILED 0} already planned: an
+     * unpowered in-line pump's store close wins (M-04). A health close {@code FAILED 0} replaces anything.
+     */
     private Map<Long, ShaftPlan> failures(Map<Long, ShaftPlan> plans, PassiveNetwork graph) {
         if (health != null) {
             var failed = new HashMap<Long, ShaftPlan>();
             health.plans(graph, failed);
-            if (!failed.isEmpty()) {
+            for (var e : failed.entrySet()) {
+                var planned = plans == null ? null : plans.get(e.getKey());
+                if (e.getValue().kind() == ShaftPlan.Kind.FAILED && e.getValue().value() > 0
+                        && planned != null && planned.kind() == ShaftPlan.Kind.FAILED && planned.value() == 0) continue;
                 if (plans == null) plans = new HashMap<>();
-                plans.putAll(failed);
+                plans.put(e.getKey(), e.getValue());
             }
         }
         return plans == null ? Map.of() : plans;
