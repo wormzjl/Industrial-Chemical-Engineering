@@ -187,18 +187,26 @@ public final class IslandCoordinator {
          * the checkpoint store's unit of that snapshot stays in place until something it records changes. */
         private Island(Snapshot saved,FluidThermodynamics model,LongSupplier epoch) {
             id=saved.id;revision=saved.revision;this.model=Objects.requireNonNull(model);graph=saved.graph;sides=coupledSides(graph);
-            clock=new IslandClock(saved.clock,epoch);lastResult=saved.lastResult;status=saved.status;fences.putAll(saved.fences);
+            clock=new IslandClock(saved.clock,epoch);lastResult=saved.lastResult;status=saved.status;fences.putAll(saved.fences);fencesChanged();
             notice=releaseLine(saved.lastResult,model)+com.wormzjl.icheme.science.fluid.thermo.DataRangeNotices.suffix(saved.status);
             payloadGeneration=saved.payloadGeneration!=0?saved.payloadGeneration:PAYLOAD_GENERATIONS.incrementAndGet();
         }
         private Snapshot snapshot(){return new Snapshot(id,revision,graph,clock.snapshot(),lastResult,
-                !suspended&&!clock.busy()&&fence()==clock.committedTick()?"WAITING: event alignment":status,fences,
+                !suspended&&!clock.busy()&&fence()==clock.committedTick()?"WAITING: event alignment":status,frozenFences(),
                 certificate==null?Optional.empty():Optional.of(new Certified(certificate.drift(),certifiedSince,certificate.baseTick(),certificate.horizonTick(),certificate.largestFlow(),
                         suspended?Optional.empty():Optional.of(new IslandCertificate.Saved(certifiedSince,certificate.horizonTick(),certificate.interval(),signature)))),
                 payloadGeneration);}
         /** Something a checkpoint payload records changed: the next checkpoint encodes this island afresh. */
         private void touch(){payloadGeneration=PAYLOAD_GENERATIONS.incrementAndGet();}
-        private long fence(){return fences.values().stream().mapToLong(Long::longValue).min().orElse(Long.MAX_VALUE);}
+        // The nearest fence and an immutable copy of the fences, kept as they change (code base review R22): the scheduler
+        // reads the minimum at every readiness test, and a snapshot shares the copy until a fence moves.
+        private long nearestFence=Long.MAX_VALUE;
+        private Map<UUID,Long> frozen=Map.of();
+        private long fence(){return nearestFence;}
+        private Map<UUID,Long> frozenFences(){if(frozen==null)frozen=Map.copyOf(fences);return frozen;}
+        private void putFence(UUID event,long tick){fences.put(event,tick);fencesChanged();}
+        private void removeFence(UUID event){if(fences.remove(event)!=null)fencesChanged();}
+        private void fencesChanged(){long min=Long.MAX_VALUE;for(long t:fences.values())min=Math.min(min,t);nearestFence=min;frozen=null;}
     }
     private static final class Pending {
         private PassiveNetwork dispatched;
@@ -843,7 +851,7 @@ public final class IslandCoordinator {
                 throw new IllegalStateException("Event would modify an admitted or committed interval");
             if(island.fences.containsKey(event))throw new IllegalStateException("Duplicate event fence");
         }
-        for(long id:affected){var island=require(id);island.fences.put(event,tick);fenceOwners.computeIfAbsent(event,ignored->new HashSet<>()).add(id);inputsChanged(island);island.touch();reconsider(island);}
+        for(long id:affected){var island=require(id);island.putFence(event,tick);fenceOwners.computeIfAbsent(event,ignored->new HashSet<>()).add(id);inputsChanged(island);island.touch();reconsider(island);}
     }
     /** A certified owner answers by materialisation and a held one by {@link #acceptAtFence}: each advances to the
      * fence and is then aligned like any other. */
@@ -1459,7 +1467,7 @@ public final class IslandCoordinator {
     }
     private void unindex(Island island){for(var event:island.fences.keySet()){var owners=fenceOwners.get(event);if(owners!=null){owners.remove(island.id);if(owners.isEmpty())fenceOwners.remove(event);}}}
     private void removeFence(Island island,UUID event) {
-        island.fences.remove(event);var owners=fenceOwners.get(event);
+        island.removeFence(event);var owners=fenceOwners.get(event);
         if(owners!=null){owners.remove(island.id);if(owners.isEmpty())fenceOwners.remove(event);}
     }
     /** In verification runs, the incremental schedule must equal a from-scratch derivation for every island. */
@@ -1484,6 +1492,9 @@ public final class IslandCoordinator {
                 throw new IllegalStateException("Scheduler state diverged for island "+island.id+": ready="+island.ready+"/"+ready.isReady(island.id)+" expected "+eligible
                         +", deadline="+island.deadline+" expected "+due+", pending="+island.pendingEntries+" expected "+owning+", epoch="+epoch.getAsLong());
             for(var event:island.fences.keySet())if(!fenceOwners.getOrDefault(event,Set.of()).contains(island.id))throw new IllegalStateException("Fence index lost island "+island.id);
+            // The kept minimum and copy (R22) against the fences themselves.
+            if(island.fence()!=island.fences.values().stream().mapToLong(Long::longValue).min().orElse(Long.MAX_VALUE)||!island.frozenFences().equals(island.fences))
+                throw new IllegalStateException("Kept fences diverged for island "+island.id);
         }
         if(ready.readyCount()!=islands.values().stream().filter(i->i.ready).count())throw new IllegalStateException("Ready queue holds unknown owners");
         for(var entry:fenceOwners.entrySet())for(long id:entry.getValue()){var island=islands.get(id);if(island==null||!island.fences.containsKey(entry.getKey()))throw new IllegalStateException("Fence index holds a stale owner "+id);}
