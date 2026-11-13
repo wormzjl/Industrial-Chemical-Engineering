@@ -25,7 +25,8 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * <p>Every method is server-thread confined. The worker receives only a deeply immutable
  * {@link ProcessSolveCommand}; Minecraft objects and request-delivery metadata stay in the server-thread context
- * map. V3 jobs enter the one owned bounded service through this sealed envelope.</p>
+ * map. Three job families enter the one owned bounded service through this sealed envelope: a fluid island's slice,
+ * a running column unit's solve and a batch still's column solve.</p>
  */
 public final class ProcessSolveServices {
     public static final int MAXIMUM_COMPLETIONS_PER_TICK = 64;
@@ -36,11 +37,11 @@ public final class ProcessSolveServices {
     private ProcessSolveServices() {}
 
     /**
-     * Returns the only process-wide request identity used by calculator requests.
+     * Returns the only process-wide request identity, used by the requests of every job family.
      *
      * <p>The value is deliberately not reset with a logical server: this keeps stale packet/log identities
      * unambiguous across an integrated-server restart in the same JVM. It is allocated only on the logical server
-     * thread by the network admission boundary.</p>
+     * thread, by the fluid dispatcher and by the column and still admissions.</p>
      */
     public static long nextRequestId() {
         return PROCESS_REQUEST_SEQUENCE.updateAndGet(previous -> {
@@ -96,7 +97,13 @@ public final class ProcessSolveServices {
         return submit(server,request,command,command.model().hydrocarbon.revision());
     }
 
-    /** Fluid islands share the existing workers and queue with V3; their wall budget starts on the worker. */
+    /**
+     * Fluid islands share the workers and the queue with the column and still jobs; their wall budget starts on the worker.
+     *
+     * <p>The owner check below comes before the worker check and before {@link #submit}'s worker allocation, so a busy
+     * island is refused {@link Admission#OWNER_BUSY} even with every worker active, and its refusal leaves the allocator
+     * as it was. The service's own owner check comes after both, so it cannot replace this one (code base review R19).</p>
+     */
     public static AdmissionResult submitFluidIsland(MinecraftServer server,FluidIslandRequest request,FluidIslandCommand command) {
         requireServerThread(server);Objects.requireNonNull(request);Objects.requireNonNull(command);
         var state=STATES.get(server);
@@ -114,8 +121,8 @@ public final class ProcessSolveServices {
     public static Diagnostics diagnostics(MinecraftServer server) {
         requireServerThread(server);var state=STATES.get(server);return state==null?Diagnostics.EMPTY:Diagnostics.from(state.service.diagnostics());
     }
-    /** Independent fluid owners report readiness without queueing their snapshots. Other
-     * calculator jobs already owned by the service share the same demand budget. */
+    /** Independent fluid owners report readiness without queueing their snapshots. The column and still
+     * jobs already owned by the service share the same demand budget. */
     public static void fluidWorkerDemand(MinecraftServer server,int eligibleOwners) {
         requireServerThread(server);if(eligibleOwners<0)throw new IllegalArgumentException("Negative fluid demand");
         var state=STATES.get(server);if(state==null||state.stopResult!=null)return;
