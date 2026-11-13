@@ -56,7 +56,7 @@ class HeatPresentationTest {
             }
             @Override public FluidView view(long device){return views.get(device);}
             @Override public double[] weights(){return model.molecularWeights();}
-            @Override public double portPressure(PassiveNetwork.Reservoir node,PassiveNetwork.PhasePort port){return node.state().pressure()+PassiveStepSolver.portHead(model,node,port,node.state());}
+            @Override public double portPressure(PassiveNetwork.Reservoir node,PassiveNetwork.PhasePort port){return node.state().pressure()+PortStreams.portHead(model,node,port,node.state());}
         };
     }
     private static WorldTopologyLedger.Registration registration(PhysicalFluidTopology.Device device){return new WorldTopologyLedger.Registration(device,FluidDeviceSpec.water(),1);}

@@ -53,7 +53,7 @@ public final class TankOutlets {
     }
     /** The same condensed head used by bottom/overflow hydraulic ports; no flash or process advancement. */
     private static double bottomHead(FluidThermodynamics model,PassiveNetwork.Reservoir tank){
-        return tank.empty()?0:PassiveStepSolver.portHead(model,tank,PassiveNetwork.PhasePort.LIQUID,tank.state());
+        return tank.empty()?0:PortStreams.portHead(model,tank,PassiveNetwork.PhasePort.LIQUID,tank.state());
     }
     /** The mass rates (kg/s) the VENT and SPILL boundary transfers of {@code result} took to the atmosphere at node
      * {@code nodeId} (at every node when null), over the interval's seconds: {@code [vent, spill]}; zeros without an
