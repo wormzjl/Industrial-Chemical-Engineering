@@ -75,16 +75,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
     /** How long an undeliverable recovery (offline player, full inventory, unloaded chunk) waits for its next attempt. */
     private static final int RECOVERY_RETRY_TICKS=20;
     final Set<Long> unboundBindings=new HashSet<>();
-    /** Equipment whose remaining chunks must load before its complete structure can be registered. */
-    private final Map<PhysicalFluidTopology.Position,EquipmentStructure.Vessel> unboundStructures=new LinkedHashMap<>();
-    /** Registrations whose chunk loaded, by dimension, each queued once until the re-alignment checks it (REGISTRY_FIRST_PLAN.md 4.2). */
-    private final Map<String,ArrayDeque<Long>> realignment=new HashMap<>();
-    private final Set<Long> realigning=new HashSet<>();
-    /** The shaft parts whose chunk loaded, by dimension, each queued once until the re-alignment checks it (W5c C1). */
-    private final Map<String,ArrayDeque<Long>> shaftRealignment=new HashMap<>();
-    private final Set<Long> shaftRealigning=new HashSet<>();
-    /** The origins of the structures the registry records, by dimension and by chunk of their box: a chunk load queues them for their re-alignment (plan 4.4). */
-    private final Map<String,Map<Long,Set<PhysicalFluidTopology.Position>>> structureChunks=new HashMap<>();
+    /** The chunk binding: what a chunk load binds and queues, and the chunks each recorded structure spans (code base review R8). */
+    private final ChunkBinding chunks=new ChunkBinding(this);
     /** Engine-owned presentation: loaded devices and open menus, updated on their island's bucket only. */
     final FluidPresentation<com.wormzjl.icheme.world.inventory.FluidDeviceMenu> presentation;
     /** Complete immutable snapshots from the last bucket; bounded by loaded/open devices, never player replies. */
@@ -104,7 +96,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
     private com.wormzjl.icheme.runtime.control.ControlService controls;
     public com.wormzjl.icheme.runtime.control.ControlService controls(){owned();if(controls==null)controls=new com.wormzjl.icheme.runtime.control.ControlService(this,controlFacts);return controls;}
     public com.wormzjl.icheme.runtime.instrument.InstrumentService instruments(){owned();return instruments;}
-    private boolean closed;
+    boolean closed;
     private long lastDebugChat=Long.MIN_VALUE;
     private MaterialCatalog observedSolidData;
     private String solidPropertyHold;
@@ -128,7 +120,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         var savedTopology=data.world().orElseGet(()->WorldTopologyLedger.Snapshot.empty(catalog));savedTopology.basis().requireCurrent(catalog);
         FluidPropertyReloadGuard.validateSolids(catalog.solids(),data.checkpoint(),savedTopology);observedSolidData=catalog;
         topology=new WorldTopologyLedger(savedTopology);
-        topology.builds().structures().forEach((origin,structure)->indexStructure(origin,structure,true));
+        topology.builds().structures().forEach((origin,structure)->chunks.indexStructure(origin,structure,true));
         presentation=new FluidPresentation<>(new PresentationHost(),topology.onlineTick());
         var settings=new IslandCoordinator.Settings(options.wallBudgetNanos(),options.wallBudgetNanos()*3/4,64,options.adaptiveCadence(),options.initialCadenceTicks(),options.certificates()).withTime(options.time());
         // Island clocks read the world's online tick: one epoch increment per tick advances every island.
@@ -217,7 +209,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         var world=new FluidWorldAuthority(server);SERVERS.put(server,world);
         var early=EARLY_CHUNKS.remove(server);
         if(early!=null)for(var loaded:early)world.loadedChunk(loaded.dimension(),loaded.chunk());
-        world.holdWithoutLevel();
+        world.chunks.holdWithoutLevel();
     }
     /** Retain early chunk loads as well as normal ones; called only on this server's thread. */
     public static void loadedChunk(MinecraftServer server,ResourceKey<Level> dimension,long chunk) {
@@ -311,15 +303,15 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public WorldTopologyLedger.Structure structure(PhysicalFluidTopology.Position origin){owned();return topology.structure(origin);}
     /** Records the structure whose origin is {@code origin}; null removes it. A load of a chunk of its box queues it for its re-alignment. */
     public void structure(PhysicalFluidTopology.Position origin,WorldTopologyLedger.Structure structure) {
-        owned();var old=topology.structure(origin);if(old!=null)indexStructure(origin,old,false);
-        topology.structure(origin,structure);if(structure!=null)indexStructure(origin,structure,true);data.setDirty();
+        owned();var old=topology.structure(origin);if(old!=null)chunks.indexStructure(origin,old,false);
+        topology.structure(origin,structure);if(structure!=null)chunks.indexStructure(origin,structure,true);data.setDirty();
         // The far silhouettes follow the registry (W10): its subscribers see the change at the next presentation bucket.
         if(!Objects.equals(old,structure))silhouettes.changed(origin.dimension());
     }
     /** The registry's structures of {@code dimension}, as stored (W10): each origin once, its shape and paint. */
     private void structuresOf(String dimension,java.util.function.Consumer<Silhouettes.Placement> into) {
         var seen=new HashSet<PhysicalFluidTopology.Position>();
-        for(var origins:structureChunks.getOrDefault(dimension,Map.of()).values())for(var origin:origins) {
+        for(var origins:chunks.structureChunks.getOrDefault(dimension,Map.of()).values())for(var origin:origins) {
             if(!seen.add(origin))continue;
             var s=topology.structure(origin);if(s!=null)into.accept(new Silhouettes.Placement(new BlockPos(origin.x(),origin.y(),origin.z()),s.shape(),s.paint()));
         }
@@ -484,15 +476,6 @@ public final class FluidWorldAuthority implements AutoCloseable {
             if(r!=null&&d<gap){gap=d;best=cell(r);}
         }
         return best;
-    }
-    /** Adds or removes the structure at {@code origin} in the index of the chunks its box spans. */
-    private void indexStructure(PhysicalFluidTopology.Position origin,WorldTopologyLedger.Structure structure,boolean add) {
-        var shape=structure.shape();var chunks=structureChunks.computeIfAbsent(origin.dimension(),k->new HashMap<>());
-        for(int x=origin.x()>>4;x<=(origin.x()+shape.sizeX()-1)>>4;x++)for(int z=origin.z()>>4;z<=(origin.z()+shape.sizeZ()-1)>>4;z++) {
-            long chunk=net.minecraft.world.level.ChunkPos.asLong(x,z);
-            if(add)chunks.computeIfAbsent(chunk,k->new HashSet<>()).add(origin);
-            else{var at=chunks.get(chunk);if(at!=null&&at.remove(origin)&&at.isEmpty())chunks.remove(chunk);}
-        }
     }
 
     /**
@@ -1486,75 +1469,14 @@ public final class FluidWorldAuthority implements AutoCloseable {
      * structures recorded over it, are queued for their re-alignment (REGISTRY_FIRST_PLAN.md 4.2, 4.4). Never loads a chunk
      * or runs a solve.
      */
-    public void loadedChunk(ResourceKey<Level> dimension,long chunk) {
-        owned();if(closed)return;
-        var level=server.getLevel(dimension);if(level==null)return;
-        var at=new net.minecraft.world.level.ChunkPos(chunk);
-        var loaded=level.getChunkSource().getChunkNow(at.x,at.z);if(loaded==null)return;
-        String name=dimension.location().toString();
-        for(var cell:List.copyOf(loaded.getBlockEntitiesPos())) {
-            var block=loaded.getBlockState(cell).getBlock();
-            if(!(block instanceof FluidDeviceBlock)&&!(block instanceof EquipmentShellBlock)&&!(block instanceof com.wormzjl.icheme.world.level.block.PipeRackBlock)&&!(block instanceof com.wormzjl.icheme.world.level.block.ControlPanelBlock)&&!(block instanceof com.wormzjl.icheme.world.level.block.ConduitBlock))continue;
-            var entity=loaded.getBlockEntity(cell); // Includes saved cells not yet promoted from pending NBT.
-            if(entity instanceof com.wormzjl.icheme.world.level.block.entity.ControlPanelBlockEntity box)controls().loaded(box);
-            else if(entity instanceof com.wormzjl.icheme.world.level.block.entity.ConduitBlockEntity cable)controls().loaded(cable);
-            else if(entity instanceof com.wormzjl.icheme.world.level.block.entity.PipeRackBlockEntity rack){rack.bind(this);controls().loaded(rack);}
-            else if(entity instanceof FluidDeviceBlockEntity pipe) {
-                var position=new PhysicalFluidTopology.Position(name,cell.getX(),cell.getY(),cell.getZ());
-                var record=registry.at(position).orElseGet(()->place(position,pipe.kind(),PhysicalFluidTopology.Direction.valueOf(pipe.getBlockState().getValue(FluidDeviceBlock.FACING).name()),FluidDeviceBlock.cutoff(pipe.getBlockState()),FluidDeviceBlock.hasPressureValve(pipe.getBlockState()),FluidDeviceBlock.hasFilter(pipe.getBlockState()),FluidDeviceBlock.hasMover(pipe.getBlockState())?pipe.getBlockState().getValue(FluidDeviceBlock.INLINE_MOVER).kind():TopologyCompiler.Kind.PIPE,pipe.kind()==TopologyCompiler.Kind.PIPE?pipe.joints():PhysicalFluidTopology.ALL_FACES));
-                pipe.bind(this,record.device());
-            } else if(entity instanceof EquipmentShellBlockEntity shell&&shell.shape()!=null&&(shell.shape().fluidDevice()||com.wormzjl.icheme.science.equipment.UnitDesign.shafted(shell.shape().kind()))) {
-                var origin=shell.origin();
-                unboundStructures.put(new PhysicalFluidTopology.Position(name,origin.getX(),origin.getY(),origin.getZ()),new EquipmentStructure.Vessel(origin,shell.shape()));
-            }
-        }
-        for(var it=unboundStructures.entrySet().iterator();it.hasNext();) {
-            var entry=it.next();if(!entry.getKey().dimension().equals(name))continue;
-            var vessel=entry.getValue();var origin=vessel.origin();
-            if(at.x<(origin.getX()>>4)||at.x>((origin.getX()+vessel.shape().sizeX()-1)>>4)
-                    ||at.z<(origin.getZ()>>4)||at.z>((origin.getZ()+vessel.shape().sizeZ()-1)>>4))continue;
-            if(EquipmentStructure.restoreFluidBinding(level,vessel))it.remove();
-        }
-        var devices=registry.chunk(name,chunk);
-        if(!devices.isEmpty())FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.realignChunks);
-        for(long id:devices){presentation.markDirty(id);if(realigning.add(id))realignment.computeIfAbsent(name,k->new ArrayDeque<>()).add(id);}
-        for(long id:topology.shaftsIn(name,chunk))if(shaftRealigning.add(id))shaftRealignment.computeIfAbsent(name,k->new ArrayDeque<>()).add(id);
-        controls().loadedChunk(name,chunk);
-        var structures=structureChunks.getOrDefault(name,Map.of()).get(chunk);
-        if(structures!=null)for(var origin:structures)EquipmentStructure.realignLater(level,new net.minecraft.core.BlockPos(origin.x(),origin.y(),origin.z()));
-    }
+    public void loadedChunk(ResourceKey<Level> dimension,long chunk){owned();if(closed)return;chunks.loadedChunk(dimension,chunk);}
     /**
      * The next registration of {@code dimension} the re-alignment checks, taken off its queue, or 0 when none is queued
      * (registry first, REGISTRY_FIRST_PLAN.md 4.2). Each registration of a loaded chunk is queued once, at the load.
      */
-    public long nextRealignment(String dimension) {
-        owned();var queue=closed?null:realignment.get(dimension);if(queue==null)return 0;
-        Long id=queue.poll();if(queue.isEmpty())realignment.remove(dimension);
-        if(id==null)return 0;realigning.remove(id);return id;
-    }
+    public long nextRealignment(String dimension){owned();return chunks.nextRealignment(dimension);}
     /** The next shaft part of {@code dimension} the re-alignment checks, taken off its queue, or 0 when none is queued (W5c C1). */
-    public long nextShaftRealignment(String dimension) {
-        owned();var queue=closed?null:shaftRealignment.get(dimension);if(queue==null)return 0;
-        Long id=queue.poll();if(queue.isEmpty())shaftRealignment.remove(dimension);
-        if(id==null)return 0;shaftRealigning.remove(id);return id;
-    }
-    /**
-     * Holds every registration whose dimension has no level (REGISTRY_FIRST_PLAN.md 4.2): no block can stand for it, so it
-     * keeps what it holds and joins nothing until a level of that dimension loads its chunk again. One queued event.
-     */
-    private void holdWithoutLevel() {
-        var levels=new HashSet<String>();for(var level:server.getAllLevels())levels.add(level.dimension().location().toString());
-        var edits=new ArrayList<WorldTopologyLedger.Edit>();
-        for(var r:registrations().values()) {
-            var d=r.device();
-            if(!d.port()&&!d.held()&&!levels.contains(d.position().dimension()))
-                edits.add(new WorldTopologyLedger.Edit(d.id(),new WorldTopologyLedger.Registration(d.withHeld(true),r.spec(),Math.addExact(r.revision(),1))));
-        }
-        if(edits.isEmpty())return;
-        edits.sort(Comparator.comparingLong(WorldTopologyLedger.Edit::id));
-        submit(edits,topology.nextIdentity());
-        IChemE.LOGGER.warn("fluid_realign held={} reason=NO_LEVEL: their dimensions have no level; /icheme devices held lists them",edits.size());
-    }
+    public long nextShaftRealignment(String dimension){owned();return chunks.nextShaftRealignment(dimension);}
     /** A device's block entity loaded or was bound: marked for its bucket, never presented at once. */
     public void deviceLoaded(long id){owned();if(!closed){presentation.deviceLoaded(id);if(instruments!=null)instruments.bind(instrumentHost(id));}}
     /** A device's block entity unloaded or was removed: publications stop marking it, and its watches end (a client asks again when it loads the device). */
@@ -1987,7 +1909,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
             });
         }
     }
-    @Override public void close(){owned();if(closed)return;closed=true;unboundStructures.clear();realignment.clear();realigning.clear();shaftRealignment.clear();shaftRealigning.clear();structureChunks.clear();publishedMenuData.clear();
+    @Override public void close(){owned();if(closed)return;closed=true;chunks.clear();publishedMenuData.clear();
         // The tanks' glides and the chimneys' states are not cleared at close (as before R9); no watcher list is.
         displays.clearPublished();
         noise.clear();displays.clearWatches();runtime.close();data.setDirty();}
