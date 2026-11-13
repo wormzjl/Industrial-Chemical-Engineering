@@ -1,11 +1,12 @@
 # A4 Sheet against world: report
 
-Branch `claude/review-wave-a4-flowsheet-8e60b8`. Findings P3-01 and P3-04 of `FLOWSHEET_CONTROL_REVIEW.md`. Status: code written, tests pending the lane.
+Branch `claude/review-wave-a4-flowsheet-8e60b8`. Findings P3-01 and P3-04 of `FLOWSHEET_CONTROL_REVIEW.md`. Status: done; the named tests pass.
 
 ## P3-01 Ejector sized on the world's capacity
 
 1. Expected: a sheet-sized set takes its load in the world. The world's set takes `Q = f(P_m) A v(P_s)` (`SteamEjector.capacity`), and `f(P_m) = (P_m / 1 MPa) / motiveFactor(P_m)`.
 2. What the code did: `EjectorSizing.Size.passes` rated the bore as `A v(P_s)`, which is `f = 1` at every motive. The review's numbers check out against `SteamEjector:37-39` and `EjectorLaw.motiveFactor`: pcf(500 kPa) = 1.2351, pcf(1000) = 1.0101, pcf(1500) = 0.9351. So f = 0.409 at 5 bar, 1.000 at 10 bar and 1.620 at 15 bar. On 5 bar steam the sheet gave the set 2.44 times what the world gives it.
+- Commit `d6dd084e2`.
 3. Fix: `Size.capacity(load)` = `new SteamEjector(bore).capacity(Ps, motivePressure, 1)` x 3600, used by Auto's spare-first order. The rating's `VACUUM_SPEED` reading becomes `v(P_s) x flow / capacity`: the load's speed through the bore at 10 bar, and higher on weaker steam. `passes` is deleted.
    `EjectorSizing.Load` gets `motivePressure` (Pa), and `Load.of` takes it.
    - Callers, outside the lane: `SheetSizing` passes the tile's `motive` param (default `EjectorUnit.MOTIVE_PRESSURE`). `BlockSizing` passes `door.ejector().motive()`.
@@ -25,3 +26,10 @@ Branch `claude/review-wave-a4-flowsheet-8e60b8`. Findings P3-01 and P3-04 of `FL
 ## Decisions
 
 - The parent took option A and widened the lane by `SheetSizing` (the `Load.of` call), `BlockSizing` (the `Load.of` call) and `SteamEjectorTest` (the extra argument). No form defaults to 10 bar: a caller without the motive pressure does not compile.
+
+## Tests run (after "lane free", each once, `--max-workers 4`)
+
+- `compileJava compileTestJava`: passed.
+- `test --tests` with five classes, all passed, 0 skipped: `SheetSizingTest` 23, `EjectorTest` 9, `SteamEjectorTest` 3, `BatchStillUnitTest` 10, `StillSizingTest` 4.
+- References moved: none. Old and new are equal at 10 bar, and every stored sheet and door is at 10 bar.
+- For the final lane: `BlockSizing` changed, so the column-ejector sheets (`ColumnEjectorTest`, a gate group in `build.gradle:600`) can load it. That test was not in the brief and did not run here; it runs at 10 bar, so nothing should move.
