@@ -1,7 +1,5 @@
 # Tutorial: the Field Guide, films, cards, help tours and equipment pages
 
-**Snapshot:** 3063488da (branch `claude/tutorial-system-chem-mod-950ca9`, main 0.29.0 merged in at 1cfca0ab0), 2026-11-13. Batch `2026-11-12-tutorial-system`, to merge: the scene player and 43 films (7 chapter films, 7 crude unit page films, 29 generic page films), 11 cards, the Field Guide (chapter 0 and seven chapters, 51 steps as vanilla advancements, ten criteria, protocol `tutorial-1`), 41 help tours on every screen page, 41 equipment pages, the equipment reference items and their JEI pages, four recordings, the small crude tower preset and the "Small crude unit" example.
-
 ## Read this when
 
 - You add or change a guide chapter or step, its advancement or its criterion.
@@ -134,3 +132,5 @@ All under `src/main/resources/assets/icheme/tutorial/` are client assets: no com
 </invoke>
 <invoke name="Bash">
 <parameter name="command">cd "D:/Minecraft/Modding/1.21/CreateChemE/.claude/worktrees/chimney-b7484c/src/main/java/com/wormzjl/icheme" && grep -c "ALL.put\|KINDS" science/tutorial/films/Films.java; grep -n "KINDS *=" -A3 science/tutorial/films/EquipmentFilms.java science/tutorial/films/PageFilms.java | head; grep -n "BUILD_NAME\|NAME =" science/tutorial/films/*.java | cut -c1-150
+
+**Snapshot:** `3063488da`, 2026-11-13 (the last commit this chapter was checked against). Earlier snapshots and batch notes: [HISTORY.md](HISTORY.md).

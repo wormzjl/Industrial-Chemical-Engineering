@@ -1,14 +1,12 @@
 # Process sensors and ideal regulation
 
-**Snapshot:** 44cad3da1 (branch `claude/fluid-conversion-build-656f98`), 2026-11-12. Batch `2026-11-12-fluid-conversion`, to merge: the converter's channels, the six alarms appended to `EquipmentAlarm`, `ConverterCommands` · earlier: d647d331d (branch `claude/gas-vent-hold`), 2026-11-11. Batches `2026-11-11-minecraft-time-delta` and `2026-11-11-gas-blanketing`, merged as 0.27.0: the level loop's first decision, the starved regulating valve, the valve sources `BLANKET` and the open flare tip, the pressure safety valve on the pressure valve law · earlier: 0893d2339 (branch `claude/distillation-failure-mode-control-db2da5`, `claude/custom-shader-system-caff9e` merged in), 2026-11-10. Batch `2026-11-10-column-failure-modes`, merged as 0.26.0: a running column's alarms (`EquipmentAlarm.COLUMN`, `of(Condition)`), its `differential_pressure` channel, the DCS's column commands (`ColumnCommands`) and a feed-rate loop on a column (`ControlLaw`, `ControlPlans.columnFeed`) · earlier: 7be61a4b9 (branch `claude/furnace-fuel-power-requirements-f7a46e`, main 0.23.6 merged in), 2026-11-10. Batches `2026-11-09-furnace-fuel-power`, `2026-11-09-flare-stack` and `2026-11-09-batch-distiller`, merged as 0.24.0 on 2026-11-10: equipment alarms (`Sensor.Kind.ALARM`, `EquipmentAlarm`, `BuiltInInputs` alarm channels), the electric still's and the diverter's controllers, `ControlHosts` (no actuator port without a data socket) · earlier: 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
-
-## Fluid converters on the control system (batch 2026-11-12-fluid-conversion)
+## Fluid converters on the control system
 
 - Channels (`BuiltInInputs`, a converter's host): `level_icheme` and `level_forge` (LEVEL: the fill times the level height in m, the fill in % as the second value), `rate` (FLOW: the booked rate in kg/s, m3/s second), `direction` (ALARM kind, the `Converters.Direction` ordinal), and one ALARM channel per converter alarm. They read the published view (`FluidWorldAuthority.converterFill`, `converterAlarms`).
 - `EquipmentAlarm` appends NO_RULE, OFF_SPEC, SOURCE_EMPTY, DESTINATION_FULL (from `Converters.Status`, `EquipmentAlarm.of`) and LEVEL_HIGH, LEVEL_LOW (either tank's fill at or past its threshold, `Converters.alarms`); `EquipmentAlarm.CONVERTER` lists the six. Saved by name.
 - Commands: `runtime/control/ConverterCommands` (SET_MODE, SET_RATE, SET_DEADBAND, SET_THRESHOLDS, each changing one field of the converter's next settings; the answers of `ColumnCommands`), queued by `ControlService.converter` and run on the control cadence (`applyConverterCommands`) through a door onto `Converters.next` and `FluidWorldAuthority.converterSettings`. A DCS reaches a converter only over its data link (`NO_CONVERTER` otherwise). `ControlHosts.converter`, `converters`; `ControlPublication.converters` lists them for the DCS.
 
-## Level loop, starved valves and self-acting valves (batches 2026-11-11, merged as 0.27.0)
+## Level loop, starved valves and self-acting valves
 
 - **Level loop (owner choice A).** `InventoryControl.target(volume, desired, actual, previous, elapsed, horizon, …)`: `previous` NaN is a first decision (no earlier sample of that sensor and output), whose balance flow is 0, so it acts on the level error alone; a sample that has not advanced (`elapsed` 0) keeps the actuated flow; otherwise the actuated flow corrected by the change between samples. `ControlLaw` gives the sample gap and the horizon (`ControlService.CADENCE`) in process seconds (`world.time().seconds`). Test: `ControlSystemTest.aFirstDecisionActsOnTheLevelErrorAlone`.
 - **Starved regulating valve (option 1).** A regulating flow valve whose supply holds nothing past the pass (`InletPhase.starved`) starts open and is re-solved open (`PassiveStepSolver.openStarved`): it passes what reaches it ([fluid-science.md](fluid-science.md)). Test: `StarvedRegulatingValveTest`.
@@ -16,7 +14,7 @@
 - **Pressure safety valve.** The run out of the guarded node carries the existing `FlowControl.PressureValve` at the valve's set pressure (`FluidDeviceSpec.relief`); no new law ([fluid-runtime.md](fluid-runtime.md)).
 - **Flare tip.** `ControlValve.bare()` is true for an open `FLARE` valve: it regulates nothing (owner D6).
 
-## A running column on the control system (0.26.0, batch 2026-11-10-column-failure-modes)
+## A running column on the control system
 
 - **Alarms.** `EquipmentAlarm` adds LOW FEED, LOW STEAM, HEATING LIMITED, OFF TABLE and UPSET (saved by name; the chimney's NO DRAFT of 0.25.0 stands beside them). `EquipmentAlarm.COLUMN` lists a column's nine: UPSET, OFF_TABLE, LOW_FEED, LOW_STEAM, BLOCKED, COOLING_LIMITED, HEATING_LIMITED, FLOODING, NO_POWER. `EquipmentAlarm.of(Condition)` maps a column condition to its alarm: FEED_SHORT LOW_FEED, STEAM_SHORT LOW_STEAM, PRODUCT_FULL BLOCKED, COOLING_SHORT and PUMPAROUND_SHORT COOLING_LIMITED, HEATING_SHORT HEATING_LIMITED, FLOODING, NO_POWER, SOLVE_REFUSED OFF_TABLE, CLOSURE UPSET; a pending solve, a refused set point and the notices raise none ([column-operation.md](column-operation.md)).
 - **Channels.** `BuiltInInputs` gives a column's host one `alarm_<name>` channel per alarm of `COLUMN` and a `differential_pressure` PRESSURE channel (role `ColumnOperation.DIFFERENTIAL`: the live drop over the trays). `raised` answers a column's alarm from `FluidWorldAuthority.columnAlarms(origin)`, a read of the run's last conditions; a stopped column raises none. `ControlPublication` lists the active ones as for other equipment.
@@ -24,18 +22,17 @@
 - **Column commands.** See [wired-control-power.md](wired-control-power.md): a DCS sends Start, Stop and Apply to a column on its bus (`ColumnCommands`).
 - Tests: `BuiltInInputsTest` (the column's channels and `EquipmentAlarm.of`), `ControlSystemTest` (`aColumnLoopPlansTheFeedInMolesPerSecond`, `aColumnLevelLoopReadsItsFeedValveEitherWay`, `aDcsColumnCommandReachesTheColumnOnlyOverItsDataLink`), `ColumnRunTest.aFeedLoopsPlanHoldsTheFeedBelowTheSetRateAndOffReturnsIt`, GameTest `ColumnOperationGameTests.aDcsListsStartsAppliesStopsAndSeesABlockedProduct`.
 
-## Equipment alarms and the still's controllers (0.24.0)
+## Equipment alarms and the still's controllers
 
 - `Sensor.Kind.ALARM` (unit STATE): an `EquipmentAlarm` (NO POWER, NO FUEL, LOW FUEL, FUEL NOT COMBUSTIBLE, FLAME OUT, OVER CAPACITY, BLOCKED, OVERHEAT, BOIL DRY, FLOODING, COOLING LIMITED) is a built-in input channel `alarm_<name>`, 1 active and 0 clear (`BuiltInInputs`). `ControlPublication` lists the active ones; the control panel's Alarms group shows them (`ControlColumns.alarms`). The words stay in English.
 - The electric still takes a controller on its pot: it holds the distillate flow by its firing (action INLET) or by its reflux (OUTLET), one correction per 42 s response (`ControlLaw`, `ControlPlans`, `ControlService`). A controller switches a diverter valve at its target: straight below, the first side at or above.
 - `ControlHosts`: a shell with no data socket gets no actuator port; an older one is removed at its next bind.
 
-## Manual and equipment-owned signal sources (0.22.0)
+## Manual and equipment-owned signal sources
 
 The current placement catalog is `EquipmentInstruments`: vessel roof/top-platform mounts are manual; rotating, column, thermal and tower instruments are built in. `ControlInput`/`BuiltInInputs` add stable equipment/channel identities without allocating accessory facts. Physical instruments retain their saved UUIDs. Level measurements include liquid plus solid volume, excluding gas. Controller/DCS choices are limited to equipment connected to the selected controller (including column assembly members through its C1), with location/EQ ID on hover. See [instrument-accessories.md](instrument-accessories.md) and [wired-control-power.md](wired-control-power.md) for the actual sources and availability limits.
 
-
-## Wired controller boxes and DCS (0.22.0)
+## Wired controller boxes and DCS
 
 [Wired control and FE power](wired-control-power.md) owns `runtime/control` and `runtime/power`: boxes run native ideal loops, DCS edits/monitors linked boxes, sensors have stable human IDs, and the common pipe/rack framework lays data/power lines. Structural sensor installation/removal is immediate without a solver; measurements and loop plans remain on the 100-online-tick engine cadence. The turbine also has internal admission regulation, so an external speed-sensor valve is optional. Current fluid/accessory/control formats are 14/4/3; older format introductions below are history.
 
@@ -67,3 +64,5 @@ Fluid facts schema 3 (`FluidFacts.SCHEMA`) appends, after main's schema 2 (pipe 
 Later work: [data-system contract](../../2026-10-26-process-control/DATA_SYSTEM_CONTRACT.md). One unbranched cable component connects one sensor and one valve in the same fluid island; no fanout or second source. `ControlBinding` defines height/height-percent target and Outlet/Inlet actions. Broken signals hold the accepted opening or default fully open. Level constraints must enter end-of-step inventory equations and use stationary balances on rate/certificate paths. Neither cables nor remote level regulation ships in this batch.
 
 Release 0.14.1 (`CHANGELOG.md` `[0.14.1]`). Verification: [batch review](../../2026-10-26-process-control/PROCESS_CONTROL_REVIEW.md); the second-reader review and its fixes: [PROCESS_CONTROL_CODE_REVIEW.md](../../2026-10-26-process-control/PROCESS_CONTROL_CODE_REVIEW.md), [SEED236_FIX_REVIEW.md](../../2026-10-26-process-control/SEED236_FIX_REVIEW.md). Tests of the fixes: `VesselGeometryTest.bootHeadStandsOverTheBodyBottom`, `ProcessOutletTest` (`aSlurryHeadWeighsItsSolids`, `aTraceFilmDoesNotTurnTheBottomStreamHalfOil`), runtime `TracePhaseFoldTest` (`aCrudeTraceInAWaterFullVesselHasNoPhaseOfItsOwn`, `waterThroughATankHoldingACrudeTraceKeepsUp`, seed 236 minimized), runtime `PipelineFittingTest` (`aFlowmeterTapsItsPipeOnTheEngineScheduleAndAgainAfterAReload`, `aRestingIslandKeepsItsTapThroughItsRestoredCertificate`), `FlowControlTest.aFlowValveRestsWhenNothingDrivesThroughIt`.
+
+**Snapshot:** `44cad3da1`, 2026-11-12 (the last commit this chapter was checked against). Earlier snapshots and batch notes: [HISTORY.md](HISTORY.md).

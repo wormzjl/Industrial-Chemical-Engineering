@@ -1,41 +1,5 @@
 # Heat exchangers: heat sides, the coupling across islands and built-in control
 
-**Snapshot:** 0893d2339 (branch `claude/distillation-failure-mode-control-db2da5`, `claude/custom-shader-system-caff9e` merged in), 2026-11-10. Batch `2026-11-10-column-failure-modes`, merged as 0.26.0: a running column's reboiler and pumparound coolers owed to their utility sides, the heating read (`ExchangerRelay.Read.heating`), a kettle's tubes in mode COLUMN with a flow station, the kettle's lines (`ExchangerLines`) · earlier: 971dd8346 (branch `claude/custom-shader-system-caff9e`), 2026-11-10. Batches `2026-11-10-prime-movers` and `2026-11-10-custom-shader-system`, to merge as 0.25.0: the gas turbine's steam coil (`ExhaustCoil`, heat unit `PRIME_MOVER`, side `EXHAUST`), the fired heater's stack temperature for the plume (`ConvectionCoil.stackTemperature`) · earlier: 7be61a4b9 (branch `claude/furnace-fuel-power-requirements-f7a46e`, main 0.23.6 merged in), 2026-11-10. Batches `2026-11-09-furnace-fuel-power`, `2026-11-09-flare-stack` and `2026-11-09-batch-distiller`, merged as 0.24.0 on 2026-11-10: `FiredCoil.limit` (the burners' share of the coil's duty), the still's condenser water side · earlier: f4130065f (branch `claude/refinery-compounds-thermos-252973`), 2026-11-09. Batch `2026-11-04-refinery-compounds` (with `2026-11-04-open-thermo-data` and `2026-11-05-neural-retrain`, merged as 0.23.0 on 2026-11-09): a partner read on its own island's model · earlier: 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08, batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
-
-## A column's reboiler and pumparound utilities (0.26.0, batch 2026-11-10-column-failure-modes)
-
-- **Who is owed.** At Start a column keeps, besides its condenser's water sides, the utility sides of its reboiler (a kettle's tubes, one a unit in parallel) and of each pumparound cooler: sides outside the column whose partner it holds (`ColumnUnit.Utilities`, fluid facts schema 21). Each cycle owes each duty to its sides' heat in transit, as the condenser's ([column-operation.md](column-operation.md)). A member with no such side (an air-cooled pumparound cooler, a unit saved before schema 21) still reads `Read.NONE`: its duty stays the column's own.
-- **The heating read.** `ExchangerRelay.Read.heating(transitDue, seconds, floor, heatRate)`: the heat the side owes the column (negative), the outlet's floor (the bottoms' temperature plus `APPROACH_KELVIN`) in the ceiling's place, and the heat the column asks it to give as a negative `heatRate`; `Read.gives()` says which. `ExchangerRelay` shifts the stream's enthalpy down, its outlet at or above the floor. A pumparound cooler's side reads `Read.column` with its ceiling at the draw tray's solved temperature less the approach.
-- **The valve.** `PassiveStepSolver.couple`, for a heating read with an operation: the feed valve's mass flow is `−heatRate / (h(inlet) − h(floor))` on the side's curve (the curve spans the floor, through the condensation); a stream at or under the floor gives nothing and its valve holds. No new unknown or equation ([fluid-science.md](fluid-science.md)).
-- **The kettle's tubes.** `HeatUnit` allows `Mode.COLUMN` on a kettle's TUBE side (`kettleTubes`), with lines `Lines.FEED` (a flow station on the tubes' feed); its bypass control stays internal. `ExchangerLines` gives an EXCHANGER's or a KETTLE's sides their lines by each registration's own side (the kettle's shell is its pool and asks for none). The Control tab offers COLUMN for a kettle with the `column_heating` texts (`HeatControlColumn.columnTexts`).
-- Tests: `ExchangerRelayTest.aColumnsHeatingSideGivesItsDueDownToTheFloor`; `ColumnRunTest` (`aReboilersHeatClosesAgainstItsUtilitysIsland`, `aReboilersSteamValveCarriesItsDutyDownToTheFloor`, `aShortReboilerUtilityLimitsTheColumn`, `aShortPumparoundCoolerLimitsTheColumn`, `aUnitSavedWithoutUtilitiesRunsAsBefore`); `HeatControlColumnTest.aKettlesTubesOfferTheColumnsModeAsAReboilersUtility`.
-
-## The gas turbine's steam coil (0.25.0)
-
-- `HeatLaw` permits `ExhaustCoil` (batch 2026-11-10-prime-movers, owner P8 A): one counterflow coil in a gas turbine's exhaust duct, water in at FEEDWATER, steam out at STEAM. Designed to its pinch, no UA: the outlet enthalpy is the least of the enthalpy `APPROACH` 25 K under the gas inlet and, at every knot of the stream's curve, the enthalpy that leaves the gas `PINCH` 10 K over the stream; on a boiling stream the bubble point's liquid end decides. Gas inlet (K) and capacity rate (W/K) are slice inputs from the turbine's last fired slice (`ShaftPlan.Kind.EXHAUST`, `PrimeMovers`); `ExhaustCoil.COLD` while stopped. The heat enters from outside, booked as the coil's `HEAT` boundary. Checkpoint heat law tag 5 (state format 46).
-- `HeatSides`: unit `PRIME_MOVER` with one side `EXHAUST`; registered at the FEEDWATER nozzle's cell after the fuel void (`EquipmentStructure`); the simulator reads the same law ([process-simulator.md](process-simulator.md)). Tests: `science/fluid/network/ExhaustCoilTest`.
-- `ConvectionCoil.stackTemperature(radiant, convection, air)`: the flue at the stack, the bridgewall less the convection heat over the flue's capacity rate (about 370 °C at the 70/30 split); a read for the effects' plume, no change to the coil's law.
-
-## Fired coil limit and the still's condenser (0.24.0)
-
-- `FiredCoil` gains `limit`: the most heat the coil takes now is its duty at its limit, the share its burners can fire (fuel delivered, fan power). Fuel and air: `Burners` ([fluid-science.md](fluid-science.md)); the coupling: `FiredHeaters` ([fluid-runtime.md](fluid-runtime.md)).
-- A batch still's condenser water side is a heat side on its registration; the condenser's capacity is the still's law (`BatchStill`).
-
-## Factory probes and one physical data interface (0.22.0)
-
-Both exchanger types have four equipment-owned temperature probe roots on the actual nozzle necks. `EquipmentInstruments` rebuilds these datums from live nozzle size codes, and `InstrumentWiring` follows the real nozzle/body facets. The mounted service enclosure and one C1 are shared by rendering, physical layout and registration; each heat-side fluid ID aliases to that physical host for controller visibility. Accepted P/T/flow readings remain per named process/utility role. Factory probes appear in constructor previews; manual exchanger sensor placement is disabled. This adds no thermal routing, pressure-law or column duty change.
-
-
-## Standard and Low-dP crossflow (0.22.0)
-
-`science/equipment/ExchangerType` is the shared catalog for display, physical layout, hydraulic passages and thermal routing. `STANDARD` retains the 8-cell series-side calculation. `CROSSFLOW` selects `HeatRouting.TWO_PASS_TUBES` and `MIXED_CROSSFLOW` on an 8 × 8 wall grid: shell flow mixes along the bundle length between transverse rows; tubes traverse two passes, mixing in the return header. `CrossflowHeat` and the relay reuse heat curves, phase films, cell marching, wall roots, bypass and energy-in-transit bookkeeping. Rating and sizing use the same routing. The kettle retains its pool law.
-
-Crossflow shell pressure loss uses an explicit game-level passage: free area `0.1 D L`, equivalent path `2.5 D`, hydraulic diameter 0.018 m and existing roughness, with rounded parallel channel count. Tube pressure loss remains the existing two-pass law. Both side limits and 20% sizing spare still apply; low shell loss cannot make an unreachable thermal duty feasible.
-
-`ExchangerType.Layout` is shared with rendering, rasterisation, nozzle positions, constructor preview and assembly laying. The approved exterior represents the distribution/collection spaces inside the pressure shell: opposite upper/lower shell nozzles near the bundle centre, front-channel tube connections and clear saddles. Standard's existing connection positions remain compatible. Type propagates through `HeatSides`, `HeatUnit`, shapes, constructors, sizing and column designs; an assembly reports a configuration mismatch. The column operation's duty/energy transfer remains its existing contract, not a new V3 solver.
-
-Current fluid facts schema 14 appends the type (missing means Standard); checkpoint state format 39 admits up to 64 wall cells. Shape/constructor/column member and heat-unit corpus images pin the defaults. `CrossflowHeatTest`, `CrossflowSizingTest` and `CrossflowEquipmentTest` check analytic single-phase limits, phase changes, reverse routing, energy, bypass, zero flow, finer-grid error, hydraulic limits and geometry. The existing heat law details below still apply to Standard unless a routing is selected explicitly.
-
 Up: [code guide](README.md)
 
 ## Read this when
@@ -227,6 +191,39 @@ A column's overhead condenser is an exchanger with one side in the column, or se
 - The campaign has no exchanger worlds: the wall's cost is gated in `ExchangerCouplingTest`, not in the campaign.
 </details>
 
+## A column's reboiler and pumparound utilities
+
+- **Who is owed.** At Start a column keeps, besides its condenser's water sides, the utility sides of its reboiler (a kettle's tubes, one a unit in parallel) and of each pumparound cooler: sides outside the column whose partner it holds (`ColumnUnit.Utilities`, fluid facts schema 21). Each cycle owes each duty to its sides' heat in transit, as the condenser's ([column-operation.md](column-operation.md)). A member with no such side (an air-cooled pumparound cooler, a unit saved before schema 21) still reads `Read.NONE`: its duty stays the column's own.
+- **The heating read.** `ExchangerRelay.Read.heating(transitDue, seconds, floor, heatRate)`: the heat the side owes the column (negative), the outlet's floor (the bottoms' temperature plus `APPROACH_KELVIN`) in the ceiling's place, and the heat the column asks it to give as a negative `heatRate`; `Read.gives()` says which. `ExchangerRelay` shifts the stream's enthalpy down, its outlet at or above the floor. A pumparound cooler's side reads `Read.column` with its ceiling at the draw tray's solved temperature less the approach.
+- **The valve.** `PassiveStepSolver.couple`, for a heating read with an operation: the feed valve's mass flow is `−heatRate / (h(inlet) − h(floor))` on the side's curve (the curve spans the floor, through the condensation); a stream at or under the floor gives nothing and its valve holds. No new unknown or equation ([fluid-science.md](fluid-science.md)).
+- **The kettle's tubes.** `HeatUnit` allows `Mode.COLUMN` on a kettle's TUBE side (`kettleTubes`), with lines `Lines.FEED` (a flow station on the tubes' feed); its bypass control stays internal. `ExchangerLines` gives an EXCHANGER's or a KETTLE's sides their lines by each registration's own side (the kettle's shell is its pool and asks for none). The Control tab offers COLUMN for a kettle with the `column_heating` texts (`HeatControlColumn.columnTexts`).
+- Tests: `ExchangerRelayTest.aColumnsHeatingSideGivesItsDueDownToTheFloor`; `ColumnRunTest` (`aReboilersHeatClosesAgainstItsUtilitysIsland`, `aReboilersSteamValveCarriesItsDutyDownToTheFloor`, `aShortReboilerUtilityLimitsTheColumn`, `aShortPumparoundCoolerLimitsTheColumn`, `aUnitSavedWithoutUtilitiesRunsAsBefore`); `HeatControlColumnTest.aKettlesTubesOfferTheColumnsModeAsAReboilersUtility`.
+
+## The gas turbine's steam coil
+
+- `HeatLaw` permits `ExhaustCoil` (batch 2026-11-10-prime-movers, owner P8 A): one counterflow coil in a gas turbine's exhaust duct, water in at FEEDWATER, steam out at STEAM. Designed to its pinch, no UA: the outlet enthalpy is the least of the enthalpy `APPROACH` 25 K under the gas inlet and, at every knot of the stream's curve, the enthalpy that leaves the gas `PINCH` 10 K over the stream; on a boiling stream the bubble point's liquid end decides. Gas inlet (K) and capacity rate (W/K) are slice inputs from the turbine's last fired slice (`ShaftPlan.Kind.EXHAUST`, `PrimeMovers`); `ExhaustCoil.COLD` while stopped. The heat enters from outside, booked as the coil's `HEAT` boundary. Checkpoint heat law tag 5 (state format 46).
+- `HeatSides`: unit `PRIME_MOVER` with one side `EXHAUST`; registered at the FEEDWATER nozzle's cell after the fuel void (`EquipmentStructure`); the simulator reads the same law ([process-simulator.md](process-simulator.md)). Tests: `science/fluid/network/ExhaustCoilTest`.
+- `ConvectionCoil.stackTemperature(radiant, convection, air)`: the flue at the stack, the bridgewall less the convection heat over the flue's capacity rate (about 370 °C at the 70/30 split); a read for the effects' plume, no change to the coil's law.
+
+## Fired coil limit and the still's condenser
+
+- `FiredCoil` gains `limit`: the most heat the coil takes now is its duty at its limit, the share its burners can fire (fuel delivered, fan power). Fuel and air: `Burners` ([fluid-science.md](fluid-science.md)); the coupling: `FiredHeaters` ([fluid-runtime.md](fluid-runtime.md)).
+- A batch still's condenser water side is a heat side on its registration; the condenser's capacity is the still's law (`BatchStill`).
+
+## Factory probes and one physical data interface
+
+Both exchanger types have four equipment-owned temperature probe roots on the actual nozzle necks. `EquipmentInstruments` rebuilds these datums from live nozzle size codes, and `InstrumentWiring` follows the real nozzle/body facets. The mounted service enclosure and one C1 are shared by rendering, physical layout and registration; each heat-side fluid ID aliases to that physical host for controller visibility. Accepted P/T/flow readings remain per named process/utility role. Factory probes appear in constructor previews; manual exchanger sensor placement is disabled. This adds no thermal routing, pressure-law or column duty change.
+
+## Standard and Low-dP crossflow
+
+`science/equipment/ExchangerType` is the shared catalog for display, physical layout, hydraulic passages and thermal routing. `STANDARD` retains the 8-cell series-side calculation. `CROSSFLOW` selects `HeatRouting.TWO_PASS_TUBES` and `MIXED_CROSSFLOW` on an 8 × 8 wall grid: shell flow mixes along the bundle length between transverse rows; tubes traverse two passes, mixing in the return header. `CrossflowHeat` and the relay reuse heat curves, phase films, cell marching, wall roots, bypass and energy-in-transit bookkeeping. Rating and sizing use the same routing. The kettle retains its pool law.
+
+Crossflow shell pressure loss uses an explicit game-level passage: free area `0.1 D L`, equivalent path `2.5 D`, hydraulic diameter 0.018 m and existing roughness, with rounded parallel channel count. Tube pressure loss remains the existing two-pass law. Both side limits and 20% sizing spare still apply; low shell loss cannot make an unreachable thermal duty feasible.
+
+`ExchangerType.Layout` is shared with rendering, rasterisation, nozzle positions, constructor preview and assembly laying. The approved exterior represents the distribution/collection spaces inside the pressure shell: opposite upper/lower shell nozzles near the bundle centre, front-channel tube connections and clear saddles. Standard's existing connection positions remain compatible. Type propagates through `HeatSides`, `HeatUnit`, shapes, constructors, sizing and column designs; an assembly reports a configuration mismatch. The column operation's duty/energy transfer remains its existing contract, not a new V3 solver.
+
+Current fluid facts schema 14 appends the type (missing means Standard); checkpoint state format 39 admits up to 64 wall cells. Shape/constructor/column member and heat-unit corpus images pin the defaults. `CrossflowHeatTest`, `CrossflowSizingTest` and `CrossflowEquipmentTest` check analytic single-phase limits, phase changes, reverse routing, energy, bypass, zero flow, finer-grid error, hydraulic limits and geometry. The existing heat law details below still apply to Standard unless a routing is selected explicitly.
+
 ## Change the layer that owns it
 
 | Change | Owning class | Tests that pin it |
@@ -274,3 +271,5 @@ Design background: `documentation/2026-10-27-heat-exchanger-design/` (`HEAT_EXCH
 - **Fence**: the readiness condition that a coupled side's partners have committed through its slice start (form C).
 - **Effort**: the actuator's position from 0 to 1 (bypass fully open to shut; louvers shut to full fans; burners out to full).
 - **Lines**: an exchanger side's control piping as an assembly (bypass, ratio station, or a flow station a column sets) and its report's state.
+
+**Snapshot:** `0893d2339`, 2026-11-10 (the last commit this chapter was checked against). Earlier snapshots and batch notes: [HISTORY.md](HISTORY.md).

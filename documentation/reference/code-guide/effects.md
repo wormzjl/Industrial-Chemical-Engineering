@@ -1,7 +1,5 @@
 # Effects, process sounds and far silhouettes
 
-**Snapshot:** 971dd8346 (branch `claude/custom-shader-system-caff9e`), 2026-11-10. Batch `2026-11-10-custom-shader-system` (with `2026-11-10-steam-ejector-flow`, `2026-11-10-chimney` and `2026-11-10-prime-movers` merged in), to merge as 0.25.0: flames, smoke, plumes and heat haze drawn from published state, the instrument wiring's normal-mapped textures, one client loop budget for every process sound, the noise watch, the hand valve turn, painted equipment silhouettes in Distant Horizons. New chapter.
-
 Up: [code guide](README.md)
 
 ## Read this when
@@ -59,3 +57,5 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
 ## Tests that pin it
 
 All in `test` except `EffectMarksTest`, which `equipmentGates` runs. `client/fx/`: `FxAmbientTest`, `FxBudgetTest`, `FxCompatTest`, `FxGlideTest`, `FxGuardTest`, `FxPathTest`, `FxPlumeTest`, `FxSinkTest`, `FxStatsTest`, `FxWindTest`, `WiringTexturesTest`; `emitter/`: `FlameModelTest`, `PlumeModelTest`, `StillModelTest`; `silhouette/`: `SilhouetteBudgetTest`, `SilhouetteShapesTest`; `sound/FxSoundsTest`; `compat/dh/DhBridgeTest` (stub API). `client/ValveTurnsTest`; `runtime/fluid/NoiseTest`, `SilhouettesTest`; `science/equipment/EffectMarksTest`; `science/fluid/network/ValveCavitationTest`. The render cost is measured offline only (`tools/fx-bench/`, [FX_BENCH_REVIEW.md](../../2026-11-10-custom-shader-system/FX_BENCH_REVIEW.md)); no test pins it.
+
+**Snapshot:** `971dd8346`, 2026-11-10 (the last commit this chapter was checked against). Earlier snapshots and batch notes: [HISTORY.md](HISTORY.md).

@@ -1,6 +1,5 @@
 # Multiphase equilibrium engine
 
-**Snapshot:** ce6d31ffc (branch `claude/ethanol-compound-matrix-4b318d`), 2026-11-12. Batch `2026-11-11-aqueous-solvents`, to merge: the engine carries its request's compounds on the kernel (`FluidTpEquilibrium.implementationChecks`, `TangentPlaneStability`, `CubicPhaseEvaluator.Workspace.carry`) · earlier: 274e06ac1 (W3b's N10), 2026-11-12: water is a component of the cubic on every network package with water (`WaterParticipation.IN_EQUATION_OF_STATE`, derived pairs, water's IF97 share on the balance book), up to three fluid phases (the three-slot system), ice Ih a crystal of the competition; the separate free-water rule (`solveWet`, `PartialPressureClosure`, `FreeWaterModel`, `FreeWaterIce`, `Classification.FREE_WATER`, `PhaseKind.FREE_WATER`, `SEPARATE_FREE_WATER`, the Dalton helpers of `SteamVirial`) is deleted; the stability test's liquid trial seeds water at a trace (`TangentPlaneStability.SEED_TRACE`) · earlier: f4130065f (branch `claude/refinery-compounds-thermos-252973`, 0.23.0), 2026-11-09 · 2026-11-03 (batch 2026-11-02-dry-ice-cost: carried crystals, `FLUID_CARRYING_CRYSTALS`, `TangentPlaneStability.TrialFilter`) · 2026-10-27 (`ThermoIdentity` format `thermo-identity-v2`, declared revisions) · 2026-10-21 (mod rename to IChemE, 0.11.0) · earlier: 2026-10-19
 Up: [code guide](README.md)
 
 ## Read this when
@@ -458,3 +457,5 @@ flowchart TD
 - **Coverage grade**: the quality label of an answer (`QUALIFIED` .. `UNAVAILABLE`).
 - **Numerical box**: 10..6000 K and 1 Pa..1 GPa; the only bound on a trial.
 - **Contract basis**: the request's species list: the package's compounds, water last where the package carries it.
+
+**Snapshot:** `ce6d31ffc`, 2026-11-12 (the last commit this chapter was checked against). Earlier snapshots and batch notes: [HISTORY.md](HISTORY.md).

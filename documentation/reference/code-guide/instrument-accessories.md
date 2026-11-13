@@ -1,62 +1,5 @@
 # Pipe accessories and pressure and temperature gauges
 
-**Process control (batch 2026-10-26-process-control, 0.14.1):** process sensors and the control valve's modules; the contracts are in [process-control.md](process-control.md).
-
-Sensors use `Sensor.Installed` (host/mount, UUID, revision and kind), `Sensor.Reading` (SI units, accepted tick and availability), and `SensorItem`. They have closed housings and placement ghosts; readings exist only in the process GUI. P/T probes share analog sockets. Horizontal drums have distinct top P/T sockets and separate body/boot level identities. Ordinary pipes retain one accessory; a Control Valve permits one P or flow module. `InstrumentHosts` snapshots its bounds-aware loaded index under `INDEX_LOCK`, and never loads chunks.
-`InstrumentService` installs/removes structural sensors immediately on interaction, revalidates exact held stack, mount/revision, reach and permissions, and consumes/refunds once. Store facts schema 2 adds `sensors` and `modular_valves` tombstones; old lists default empty. Duplicate sensor instances or occupied mounts refuse damaged facts. Legacy pressure-valve registrations, including unloaded ones, queue equivalent probe/valve conversions once. Removing the probe never recreates it. A sensor on a valve's `valve_sensor` mount sets the valve's control by one registry edit, `PhysicalFluidTopology.Device.withControl` (`editSensorValve`), so a laid pipe keeps its joints and lane. An installed or removed flowmeter calls `FluidWorldAuthority.flowmeter(host, installed)`, which queues the host's registration at its next revision so its island recompiles the tap; a recovered host's flowmeter is only forgotten (`forgetFlowmeter`), since the host's removal recompiles. Static metadata is disposable and rebound from the store. Samples are disposable; temperature retains its last accepted flowing value/time as NO_FLOW.
-
-
-**Feature branch:** `b1477c09` (`codex/liquid-gauge-accessory`), 2026-10-26, based on main `600549d9`. Floating-roof tank level gauge is an optional item/accessory;24 focused checks/package and8 native views pass. Ported into this 0.22.0 branch; the batch is not merged. [Contracts](../../2026-10-26-liquid-level-gauge-accessory/LEVEL_GAUGE_CONTRACTS.md).
-
-
-**Snapshot:** 44cad3da1 (branch `claude/fluid-conversion-build-656f98`), 2026-11-12. Batch `2026-11-12-fluid-conversion`, to merge: the level gauge on the liquid converter, the safety and blanketing valves on the gas converter · earlier: d647d331d (branch `claude/gas-vent-hold`), 2026-11-11. Batch `2026-11-11-gas-blanketing`, merged as 0.27.0: the gas blanketing valve and the pressure safety valve as vessel fittings (`Instrument.Type.BLANKET_VALVE`, `SAFETY_VALVE`; mounts `blanket_valve`, `safety_valve`), the pipe's safety valve, accessory facts schema 6 · earlier: 971dd8346 (branch `claude/custom-shader-system-caff9e`), 2026-11-10. Batch `2026-11-10-custom-shader-system`, to merge as 0.25.0: the instrument wiring after ATEX practice, its finish in metres and its normal-mapped textures; accessory store unchanged (facts schema 4, state 1) · earlier: 2f86539b0 (branch `claude/save-corruption-prevention-2bd7ac`, main 0.23.4 merged in), 2026-11-09. Batch `2026-11-03-save-corruption`, merged as 0.23.5 on 2026-11-09: a pipe the re-alignment sets back takes the sight glass its fitting record holds (`InstrumentService.fitting`, `RegistryRealignment.sightGlass`) · earlier: e4d3d2d9b (branch `claude/lod-rendering-optimization-1ad1f9`), 2026-11-09. Batch `2026-11-09-lod-rendering`, merged as 0.23.2 on 2026-11-09: dial, transmitter and wiring detail tiers, frustum tests · earlier: 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08, batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
-
-## Converter accessories (batch 2026-11-12-fluid-conversion)
-
-- The liquid converter takes the optional level gauge at `ConverterDesign.gaugePlace` (`InstrumentHosts.LevelGauge.of` takes every shape with a `GaugePlace`); `TankRenderer` watches its node cell with the open tanks' cells and draws its gauge without a roof, its liquid's depth over its floor. The gas converter has none.
-- The gas converter takes the pressure safety valve on its apex stub (`ReliefValveGeometry.of`, `ConverterDesign.reliefFoot`, the drum's rule factored into `placed`) and the gas blanketing valve on its head (`BlanketValveGeometry.of`, `blanketFoot`). Registration passes both through a refresh as a drum does. The accessory store's format is unchanged.
-
-## Gas blanketing valve and pressure safety valve (batch 2026-11-11-gas-blanketing, merged as 0.27.0)
-
-- Items (`ModItems`, both `LiquidLevelGaugeItem(properties, tooltip)`, no per-item settings): `gas_blanketing_valve` (a drum's) and `pressure_safety_valve` (a drum's or a pipe's). `Instrument.Type` appends `BLANKET_VALVE` and `SAFETY_VALVE`; `Type.vessel()` (LEVEL_GAUGE and both valves) marks a fitting placed where its host's shape gives it, through the accessory request, never through `install`. `MOUNTS` adds `blanket_valve` and `safety_valve`.
-- Places: `EquipmentInstruments` reserves two top flanges, F1 (the blanketing valve) and F2 (the safety valve): on a standing drum on its roof row (a drum 3 m across, whose two fall in one cell, moves F2 to the next free roof cell); on a lying drum on the crown line, F1 at the rear end and F2 at the front, a cell from every top nozzle and half a cell from every probe station (an end with no such station reserves none). Geometry: `BlanketValveGeometry`, `ReliefValveGeometry` ([equipment.md](equipment.md)). `InstrumentHosts.BlanketValve(bounds, port)` gives the drum its `BLANKET` port; `InstrumentHosts.ReliefValve(bounds, port, face)` its `RELIEF` port, or on a pipe the outlet face. The outlet faces the player who fits it (`InstrumentHosts.toward(look)`); `vesselFitting`, `fittingType` pick the place the player looks at.
-- A pipe's safety valve is its only fitting (`Host.occupied`, `InstrumentService.occupied`); a drum's stands beside its other fitting. `Metadata.relief()`, `safetyValve()`, `reliefFace()`; `Store.relief(host)`, `removeRelief`, a second map beside the fittings (`fittings()` lists both).
-- `InstrumentService`: a fitted valve is one queued registry edit (`FluidWorldAuthority.blanketValve`, `reliefValve`, `pipeRelief`; a drum that refuses keeps no valve); removal and recovery refund the item. `EquipmentStructure` keeps a fitted valve's set pressure and the safety valve's face across a layout refresh (the default face where the new layout takes that cell). `FluidDeviceBlock`: a plain pipe opens its screen only with a sensor or a safety valve on it.
-- Drawing: `InstrumentRenderer.drawBlanketValve`, `drawReliefValve` (fitted under the world's light; a placement ghost, green when clear, red when blocked, while the item is held).
-- Format: accessory facts schema 6 (`AccessoryFacts.SCHEMA`; 5 the type `BLANKET_VALVE` on mount `blanket_valve`, 6 `SAFETY_VALVE` on `safety_valve`), state 1; corpora `compat/accessories/schema-5.snbt`, `schema-6.snbt` (`AccessoryStoreCompatTest`).
-
-## Instrument wiring after ATEX practice (0.25.0)
-
-- `InstrumentWiring` (batch 2026-11-10-custom-shader-system, plan 4.4, W2; still no blocks, nodes or collision): each transmitter's cable leaves its head through an Ex gland in the bottom M20 entry (`GLAND` 0.045 m) and drops in a drip loop (`DROP` 0.09 m) to the skin (owner X9 A); a 20 mm branch (`BRANCH`) carries one light-blue IS cable on its strap to the baseline, a 25 mm perforated tray (`TRAY`) every cable joined beyond it, shown by count up to `TRAY_MAX` 6 (owner X10 A), to the service enclosure's side entry. `Finish(cables, tray)`; v runs in metres along each run, the textures repeat every `PERIOD` (0.5 m, owner X1).
-- Textures `textures/wiring/branch` and `tray_1` to `tray_6`, each with LabPBR `_n` and `_s` (`tools/pbr-textures/`, `WiringTexturesTest`); drawn by `InstrumentRenderer` on the effects' render path ([client-gui.md](client-gui.md), [effects.md](effects.md)). Noise and wiring arithmetic go through `DeterministicMath` (525e0f8f1).
-- Tests: `science/equipment/InstrumentWiringTest` (in `equipmentGates`).
-
-## Manual mounts and factory instruments (0.22.0)
-
-`EquipmentInstruments` supplies physical probe locations and eligibility. Standing drums have P/T/body-level taps on a front roof row, reserving F1/F2 footprints for the blanketing valve and the PSV (placed since batch 2026-11-11-gas-blanketing, see above). Horizontal drums have crown P/T/body-level taps and a separate boot level tap. Sphere P/T/level heads sit on supported top-platform mounts. Floating tanks retain grade-level P/T and their digital level mount beside the front service area; the mechanical liquid-level gauge remains optional.
-
-Rotating equipment, columns, exchangers, kettles, air coolers and fired heaters accept no new manual equipment probes. Their accepted internal channels are in `BuiltInInputs`. Both cooling towers own inlet/basin T probes and a built-in basin level head, at the retained level location. Level means liquid plus retained solid volume, excluding gas. Ordinary pipe/control-valve accessory rules remain separate.
-
-`InstrumentHosts.equipmentMount` and `Sensor.levelMounts` adapt this catalog for selection, reach, occupancy and bounds. Digital heads and analog gauges reuse `InstrumentGeometry`; protected process roots and surface leads come from `InstrumentWiring`. The renderer uses installed mount IDs, actual exchanger nozzle sizes and the selected detail profile; it never requests or computes process state. Removing a pipe's last sensor retires its socket through `ControlService.bind`, preserving the cable as an open end.
-
-Installed instruments retain accessory UUIDs and human IDs. Factory channel UUIDs derive from physical equipment identity plus channel name, with no accessory allocation; locations are hover information and never identity. Missing/unsupported quantities are unavailable, not zero. Old installed facts are retained or recovered by the existing accessory lifecycle, rather than replaced by factory allocations.
-
-
-## Installed sensors, IDs and optional gauge (0.22.0)
-
-`InstrumentService` installs/removes structural accessories immediately, including equipment mounts (owner exception to scheduled process inputs). Readings remain cached accepted process observations, published on the engine cadence. Installing a fitting never forces a solver. `ControlFacts` assigns a stable human `SensorId` backed by each sensor UUID; controllers select IDs, not coordinates. Sensor housings share the workstation/control-cabinet neutral metal, dark bezel, blue display and amber tag treatment with P/T/F/L/N identification (`ControlAssets`). `InstrumentRenderer.identities` reads synced host metadata for fluid/machine GUIs; `DeviceColumn.instrumentIds` wraps each stable ID with its measurement label, including body/boot distinction. This needs no sample or process update. Controller choices and disconnected-display handling are in wired-control-power.md.
-
-| Item | Supported host |
-|---|---|
-| Pressure sensor | Straight pipe, control valve or equipment pressure tap |
-| Temperature sensor | Straight pipe or equipment temperature tap |
-| Flow sensor | Straight pipe/control valve; equipment uses its nozzle pipe |
-| Digital level sensor | Drum, floating-roof tank or sphere; cooling-basin level is factory fitted |
-| Speed sensor | No manual rotating-equipment mount; use the factory shaft-speed channel |
-| Liquid level gauge accessory | Floating-roof tank only |
-
-Actual mounts come from `Instrument`, `Sensor` and equipment geometry; a generic equipment face is not automatically a valid process tap. Pressure/temperature/level metadata survives equipment reconstruction. Accessory facts schema is 4; the compatibility corpus preserves older fittings and the optional tank gauge. Data socket registration follows the eligible host and installed sensors, with casing/cabinet mounts instead of attaching an equipment socket to its fluid nozzle. See [wired-control-power.md](wired-control-power.md).
-
 Up: [code guide](README.md)
 
 ## Read this when
@@ -111,6 +54,58 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
 - **Registry first** (batch 2026-11-03-save-corruption, W5 step 8). The accessory store is the fact and the block state draws it: a pipe the re-alignment places or restates takes the sight glass its fitting record holds (`InstrumentService.fitting`, `RegistryRealignment.sightGlass`), on its run's default axis (the record keeps no axis; owner decision open). A run that cannot carry one stays bare and the record stays for the break to refund. `InstrumentService.occupied` counts a pipe fitting.
 - **Breaking.** A broken host refunds each attachment once (`recoverOnBreak`; a creative break drops nothing).
 
+## Process control
+
+**Process control (batch 2026-10-26-process-control, 0.14.1):** process sensors and the control valve's modules; the contracts are in [process-control.md](process-control.md).
+
+Sensors use `Sensor.Installed` (host/mount, UUID, revision and kind), `Sensor.Reading` (SI units, accepted tick and availability), and `SensorItem`. They have closed housings and placement ghosts; readings exist only in the process GUI. P/T probes share analog sockets. Horizontal drums have distinct top P/T sockets and separate body/boot level identities. Ordinary pipes retain one accessory; a Control Valve permits one P or flow module. `InstrumentHosts` snapshots its bounds-aware loaded index under `INDEX_LOCK`, and never loads chunks.
+`InstrumentService` installs/removes structural sensors immediately on interaction, revalidates exact held stack, mount/revision, reach and permissions, and consumes/refunds once. Store facts schema 2 adds `sensors` and `modular_valves` tombstones; old lists default empty. Duplicate sensor instances or occupied mounts refuse damaged facts. Legacy pressure-valve registrations, including unloaded ones, queue equivalent probe/valve conversions once. Removing the probe never recreates it. A sensor on a valve's `valve_sensor` mount sets the valve's control by one registry edit, `PhysicalFluidTopology.Device.withControl` (`editSensorValve`), so a laid pipe keeps its joints and lane. An installed or removed flowmeter calls `FluidWorldAuthority.flowmeter(host, installed)`, which queues the host's registration at its next revision so its island recompiles the tap; a recovered host's flowmeter is only forgotten (`forgetFlowmeter`), since the host's removal recompiles. Static metadata is disposable and rebound from the store. Samples are disposable; temperature retains its last accepted flowing value/time as NO_FLOW.
+
+## Converter accessories
+
+- The liquid converter takes the optional level gauge at `ConverterDesign.gaugePlace` (`InstrumentHosts.LevelGauge.of` takes every shape with a `GaugePlace`); `TankRenderer` watches its node cell with the open tanks' cells and draws its gauge without a roof, its liquid's depth over its floor. The gas converter has none.
+- The gas converter takes the pressure safety valve on its apex stub (`ReliefValveGeometry.of`, `ConverterDesign.reliefFoot`, the drum's rule factored into `placed`) and the gas blanketing valve on its head (`BlanketValveGeometry.of`, `blanketFoot`). Registration passes both through a refresh as a drum does. The accessory store's format is unchanged.
+
+## Gas blanketing valve and pressure safety valve
+
+- Items (`ModItems`, both `LiquidLevelGaugeItem(properties, tooltip)`, no per-item settings): `gas_blanketing_valve` (a drum's) and `pressure_safety_valve` (a drum's or a pipe's). `Instrument.Type` appends `BLANKET_VALVE` and `SAFETY_VALVE`; `Type.vessel()` (LEVEL_GAUGE and both valves) marks a fitting placed where its host's shape gives it, through the accessory request, never through `install`. `MOUNTS` adds `blanket_valve` and `safety_valve`.
+- Places: `EquipmentInstruments` reserves two top flanges, F1 (the blanketing valve) and F2 (the safety valve): on a standing drum on its roof row (a drum 3 m across, whose two fall in one cell, moves F2 to the next free roof cell); on a lying drum on the crown line, F1 at the rear end and F2 at the front, a cell from every top nozzle and half a cell from every probe station (an end with no such station reserves none). Geometry: `BlanketValveGeometry`, `ReliefValveGeometry` ([equipment.md](equipment.md)). `InstrumentHosts.BlanketValve(bounds, port)` gives the drum its `BLANKET` port; `InstrumentHosts.ReliefValve(bounds, port, face)` its `RELIEF` port, or on a pipe the outlet face. The outlet faces the player who fits it (`InstrumentHosts.toward(look)`); `vesselFitting`, `fittingType` pick the place the player looks at.
+- A pipe's safety valve is its only fitting (`Host.occupied`, `InstrumentService.occupied`); a drum's stands beside its other fitting. `Metadata.relief()`, `safetyValve()`, `reliefFace()`; `Store.relief(host)`, `removeRelief`, a second map beside the fittings (`fittings()` lists both).
+- `InstrumentService`: a fitted valve is one queued registry edit (`FluidWorldAuthority.blanketValve`, `reliefValve`, `pipeRelief`; a drum that refuses keeps no valve); removal and recovery refund the item. `EquipmentStructure` keeps a fitted valve's set pressure and the safety valve's face across a layout refresh (the default face where the new layout takes that cell). `FluidDeviceBlock`: a plain pipe opens its screen only with a sensor or a safety valve on it.
+- Drawing: `InstrumentRenderer.drawBlanketValve`, `drawReliefValve` (fitted under the world's light; a placement ghost, green when clear, red when blocked, while the item is held).
+- Format: accessory facts schema 6 (`AccessoryFacts.SCHEMA`; 5 the type `BLANKET_VALVE` on mount `blanket_valve`, 6 `SAFETY_VALVE` on `safety_valve`), state 1; corpora `compat/accessories/schema-5.snbt`, `schema-6.snbt` (`AccessoryStoreCompatTest`).
+
+## Instrument wiring after ATEX practice
+
+- `InstrumentWiring` (batch 2026-11-10-custom-shader-system, plan 4.4, W2; still no blocks, nodes or collision): each transmitter's cable leaves its head through an Ex gland in the bottom M20 entry (`GLAND` 0.045 m) and drops in a drip loop (`DROP` 0.09 m) to the skin (owner X9 A); a 20 mm branch (`BRANCH`) carries one light-blue IS cable on its strap to the baseline, a 25 mm perforated tray (`TRAY`) every cable joined beyond it, shown by count up to `TRAY_MAX` 6 (owner X10 A), to the service enclosure's side entry. `Finish(cables, tray)`; v runs in metres along each run, the textures repeat every `PERIOD` (0.5 m, owner X1).
+- Textures `textures/wiring/branch` and `tray_1` to `tray_6`, each with LabPBR `_n` and `_s` (`tools/pbr-textures/`, `WiringTexturesTest`); drawn by `InstrumentRenderer` on the effects' render path ([client-gui.md](client-gui.md), [effects.md](effects.md)). Noise and wiring arithmetic go through `DeterministicMath` (525e0f8f1).
+- Tests: `science/equipment/InstrumentWiringTest` (in `equipmentGates`).
+
+## Manual mounts and factory instruments
+
+`EquipmentInstruments` supplies physical probe locations and eligibility. Standing drums have P/T/body-level taps on a front roof row, reserving F1/F2 footprints for the blanketing valve and the PSV (placed since batch 2026-11-11-gas-blanketing, see above). Horizontal drums have crown P/T/body-level taps and a separate boot level tap. Sphere P/T/level heads sit on supported top-platform mounts. Floating tanks retain grade-level P/T and their digital level mount beside the front service area; the mechanical liquid-level gauge remains optional.
+
+Rotating equipment, columns, exchangers, kettles, air coolers and fired heaters accept no new manual equipment probes. Their accepted internal channels are in `BuiltInInputs`. Both cooling towers own inlet/basin T probes and a built-in basin level head, at the retained level location. Level means liquid plus retained solid volume, excluding gas. Ordinary pipe/control-valve accessory rules remain separate.
+
+`InstrumentHosts.equipmentMount` and `Sensor.levelMounts` adapt this catalog for selection, reach, occupancy and bounds. Digital heads and analog gauges reuse `InstrumentGeometry`; protected process roots and surface leads come from `InstrumentWiring`. The renderer uses installed mount IDs, actual exchanger nozzle sizes and the selected detail profile; it never requests or computes process state. Removing a pipe's last sensor retires its socket through `ControlService.bind`, preserving the cable as an open end.
+
+Installed instruments retain accessory UUIDs and human IDs. Factory channel UUIDs derive from physical equipment identity plus channel name, with no accessory allocation; locations are hover information and never identity. Missing/unsupported quantities are unavailable, not zero. Old installed facts are retained or recovered by the existing accessory lifecycle, rather than replaced by factory allocations.
+
+## Installed sensors, IDs and optional gauge
+
+`InstrumentService` installs/removes structural accessories immediately, including equipment mounts (owner exception to scheduled process inputs). Readings remain cached accepted process observations, published on the engine cadence. Installing a fitting never forces a solver. `ControlFacts` assigns a stable human `SensorId` backed by each sensor UUID; controllers select IDs, not coordinates. Sensor housings share the workstation/control-cabinet neutral metal, dark bezel, blue display and amber tag treatment with P/T/F/L/N identification (`ControlAssets`). `InstrumentRenderer.identities` reads synced host metadata for fluid/machine GUIs; `DeviceColumn.instrumentIds` wraps each stable ID with its measurement label, including body/boot distinction. This needs no sample or process update. Controller choices and disconnected-display handling are in wired-control-power.md.
+
+| Item | Supported host |
+|---|---|
+| Pressure sensor | Straight pipe, control valve or equipment pressure tap |
+| Temperature sensor | Straight pipe or equipment temperature tap |
+| Flow sensor | Straight pipe/control valve; equipment uses its nozzle pipe |
+| Digital level sensor | Drum, floating-roof tank or sphere; cooling-basin level is factory fitted |
+| Speed sensor | No manual rotating-equipment mount; use the factory shaft-speed channel |
+| Liquid level gauge accessory | Floating-roof tank only |
+
+Actual mounts come from `Instrument`, `Sensor` and equipment geometry; a generic equipment face is not automatically a valid process tap. Pressure/temperature/level metadata survives equipment reconstruction. Accessory facts schema is 4; the compatibility corpus preserves older fittings and the optional tank gauge. Data socket registration follows the eligible host and installed sensors, with casing/cabinet mounts instead of attaching an equipment socket to its fluid nozzle. See [wired-control-power.md](wired-control-power.md).
+
 ## Change the layer that owns it
 
 | Change | Owning class | Tests that pin it |
@@ -137,6 +132,12 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
 - **Watch**: a client's explicit request for a gauge's, sight glass's, tank's or mover's display.
 
 
-## Optional tank level-gauge accessory (feature 2026-10-26)
+## Optional tank level-gauge accessory
 
 Instrument.Type adds LEVEL_GAUGE and tank_level is a validated logical mount. Instrument.Fitting replaces the store-local pipe-only Legacy record; store methods retain existing fitting handling and permit a tank fitting beside pressure/temperature dials. Metadata synchronizes the optional fitting record. LiquidLevelGaugeItem has no GaugeSettings/menu. InstrumentService validates/commits install/removal through queued/revisioned transactions, with shared refund and invalid-host recovery. New type reuses the existing record fields, facts schema1/state1; no alias/migration added. Full shared selection bounds are available without surfaces on the server.
+
+## Traps
+
+- The item id `pressure_control_valve` names the Control Valve. `FlowControl.PressureValve` (facts control `pressure_valve`) is the legacy valve: a saved one is converted once to a `ControlValve` (`InstrumentService.reconcileLegacyValves`, `bind`).
+
+**Snapshot:** `44cad3da1`, 2026-11-12 (the last commit this chapter was checked against). Earlier snapshots and batch notes: [HISTORY.md](HISTORY.md).

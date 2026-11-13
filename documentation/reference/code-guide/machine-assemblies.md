@@ -1,35 +1,5 @@
 # Machine assemblies: a column's plant, validated against its design
 
-**Snapshot:** 3063488da (branch `claude/tutorial-system-chem-mod-950ca9`, main 0.29.0 merged in), 2026-11-13. Batch `2026-11-12-tutorial-system`, to merge: the assembly screen's two help tours (`AssemblyTour`), the `assembly_state` and `column_state` criteria on the scheduled send · earlier: 0893d2339 (branch `claude/distillation-failure-mode-control-db2da5`, `claude/custom-shader-system-caff9e` merged in), 2026-11-10. Batch `2026-11-10-column-failure-modes`, merged as 0.26.0: Start carries the reboiler's and pumparound coolers' heat sides and the powered members (`ColumnStarts`), refusals as `Refusal` texts, set points on a column that never ran (`AssemblyService.setpoints`), a kettle's lines (`ExchangerLines`); protocol `assembly-6`, store format 2 unchanged · earlier: 971dd8346 (branch `claude/custom-shader-system-caff9e`), 2026-11-10. Batch `2026-11-10-vacuum-pump`, to merge as 0.25.0: a vacuum column's pump on the receiver's vapour outlet (`ColumnBlueprint` slots `vacuum_pump`, `water_pump`; `AssemblyDiagram`); protocol `assembly-4` and store format 2 unchanged · earlier: 3efffdb2d (branch `claude/simulator-sizing-refactor-6bacab`, the consolidation review of `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
-
-## Help tours and the guide's criteria (batch 2026-11-12-tutorial-system)
-
-- `AssemblyScreen` holds a `TourHost`: the Structure tab's tour `assembly.structure` and the Operation tab's `assembly.operation`; its anchors (`AssemblyTour`: `tab:structure`, `tab:operation`, `status`, `glass`, `drawing`, `list`, and the door rows `check`, `open`, `start`) in the screen's own coordinates. Finishing the Structure tour reports the guide's client step `building/lines` (`AssemblyScreen.LINES_STEP`). Gate `AssemblyTourTest`; renders `tools/tutorial-renders/StageBRender.java`.
-- `AssemblyNetwork`'s presentation `send`, the scheduled view to an open assembly screen, also fires `TutorialTriggers.assemblyShown`: `assembly_state` with the view's status and, when it carries an Operation view, `column_state` ([tutorial.md](tutorial.md)). A read of the view sent anyway; protocol `assembly-6` unchanged.
-
-## Utilities, members and set points at Start (0.26.0, batch 2026-11-10-column-failure-modes)
-
-- `ColumnStarts.build` now also gives `FluidWorldAuthority.ColumnStart` the heat sides of every unit in slot `REBOILER` and in each `pumparoundCooler(i)` (`heatSides`, one unit after another), the air condenser's fan sides (an AIR_COOLER member's sides whose heat unit has fans) and the pumps' movers of `REFLUX_PUMP` and each `pumparoundPump(i)` (`movers`: a casing's through `EquipmentStructure.movers`, or the registration of an in-line pump at the slot's place), as `ColumnUnit.Members`. The ledger keeps those that qualify ([column-operation.md](column-operation.md)).
-- Refusal texts come from `Refusal` (`NO_DESIGN`, `NO_SAVED_POINT`, `VACUUM`, `INCOMPLETE`, `VALVE_UNREGISTERED`); the words are unchanged.
-- `AssemblyService.setpoints` takes set points on a column that never ran, on its design's (it refuses with "the column has no operating point" or `Refusal.VACUUM`); `operation` marks the idle view editable unless the column is a vacuum column.
-- `ExchangerLines` gives lines to an EXCHANGER and to a KETTLE (whose tubes a column may set, mode COLUMN), each side by its registration's own side.
-- Protocol `assembly-6` (`assembly-5`: the conditions list; `assembly-6`: accepted set points and tray readings in the operation view). `AssemblyNetwork.encodeOperation`/`decodeOperation` give the view's bytes to the DCS's column page.
-
-## The vacuum pump on the receiver (0.25.0)
-
-- With `ColumnComponents.Vacuum` `LIQUID_RING` or `DRY_SCREW` (shape fields 12; owner V5: "placed on the drum vapor outlet") the blueprint asks for the vacuum pump of the design's type on the receiver's VAPOUR_OUTLET before the offgas valve, and a water pump (of the reflux pump's kind) on its BOOT_DRAIN before the water valve, in place of the ejector on the overhead (table below). `AssemblyDiagram` draws both parts. A vacuum column still refuses to start in the world (open item of the batch).
-
-## Column C1 instrumentation (0.22.0)
-
-`ControlHosts.refreshColumnMembers`, which each `ControlService` cadence calls before it validates edits, reads the accepted cached `AssemblyReport` and loaded member registration identities. It does not walk or validate pipes from a GUI request, load chunks, or run the column solver. Stable member/slot/channel identities expose accepted member process and utility readings through the column's physical C1. Existing assembly/column ownership still reserves its outputs; monitoring does not replace its duty/energy-transfer controller. Line placement/edit notifications now come through the shared `LineLaying` owners.
-
-
-## Exchanger configuration and shared laying (0.22.0)
-
-`ColumnComponents` and blueprint member choices carry `ExchangerType`. The match compares the built exchanger's selected sub-type as well as kind/count/dimensions and reports a configuration mismatch when Standard and Crossflow differ. Missing saved type means Standard. `AssemblyNetwork` now uses `assembly-4` for these choices; wire payloads are tested on fresh data, not migrated.
-
-Assembly pipe laying and previews use the same selected layout/nozzle definition as constructor rendering and occupied cells. Crossflow applies to standalone exchangers and column condensers, trims and pumparound coolers; the kettle pool is unchanged. This does not redesign column operation: the existing duty/energy transfer contract still determines the running column's heat work. Assembly registration/reversion remains event-driven, preserving physical equipment and stored settings.
-
 Up: [code guide](README.md)
 
 ## Read this when
@@ -260,6 +230,33 @@ States in rank order (a later one outranks an earlier one on the same slot):
 - **A flowmeter changes a code.** A FLOWMETER is a fitting kind, so installing or removing one reverts a report that read the pipe (`metered`), as installing a valve does.
 </details>
 
+## Help tours and the guide's criteria
+
+- `AssemblyScreen` holds a `TourHost`: the Structure tab's tour `assembly.structure` and the Operation tab's `assembly.operation`; its anchors (`AssemblyTour`: `tab:structure`, `tab:operation`, `status`, `glass`, `drawing`, `list`, and the door rows `check`, `open`, `start`) in the screen's own coordinates. Finishing the Structure tour reports the guide's client step `building/lines` (`AssemblyScreen.LINES_STEP`). Gate `AssemblyTourTest`; renders `tools/tutorial-renders/StageBRender.java`.
+- `AssemblyNetwork`'s presentation `send`, the scheduled view to an open assembly screen, also fires `TutorialTriggers.assemblyShown`: `assembly_state` with the view's status and, when it carries an Operation view, `column_state` ([tutorial.md](tutorial.md)). A read of the view sent anyway; protocol `assembly-6` unchanged.
+
+## Utilities, members and set points at Start
+
+- `ColumnStarts.build` now also gives `FluidWorldAuthority.ColumnStart` the heat sides of every unit in slot `REBOILER` and in each `pumparoundCooler(i)` (`heatSides`, one unit after another), the air condenser's fan sides (an AIR_COOLER member's sides whose heat unit has fans) and the pumps' movers of `REFLUX_PUMP` and each `pumparoundPump(i)` (`movers`: a casing's through `EquipmentStructure.movers`, or the registration of an in-line pump at the slot's place), as `ColumnUnit.Members`. The ledger keeps those that qualify ([column-operation.md](column-operation.md)).
+- Refusal texts come from `Refusal` (`NO_DESIGN`, `NO_SAVED_POINT`, `VACUUM`, `INCOMPLETE`, `VALVE_UNREGISTERED`); the words are unchanged.
+- `AssemblyService.setpoints` takes set points on a column that never ran, on its design's (it refuses with "the column has no operating point" or `Refusal.VACUUM`); `operation` marks the idle view editable unless the column is a vacuum column.
+- `ExchangerLines` gives lines to an EXCHANGER and to a KETTLE (whose tubes a column may set, mode COLUMN), each side by its registration's own side.
+- Protocol `assembly-6` (`assembly-5`: the conditions list; `assembly-6`: accepted set points and tray readings in the operation view). `AssemblyNetwork.encodeOperation`/`decodeOperation` give the view's bytes to the DCS's column page.
+
+## The vacuum pump on the receiver
+
+- With `ColumnComponents.Vacuum` `LIQUID_RING` or `DRY_SCREW` (shape fields 12; owner V5: "placed on the drum vapor outlet") the blueprint asks for the vacuum pump of the design's type on the receiver's VAPOUR_OUTLET before the offgas valve, and a water pump (of the reflux pump's kind) on its BOOT_DRAIN before the water valve, in place of the ejector on the overhead (table below). `AssemblyDiagram` draws both parts. A vacuum column still refuses to start in the world (open item of the batch).
+
+## Column C1 instrumentation
+
+`ControlHosts.refreshColumnMembers`, which each `ControlService` cadence calls before it validates edits, reads the accepted cached `AssemblyReport` and loaded member registration identities. It does not walk or validate pipes from a GUI request, load chunks, or run the column solver. Stable member/slot/channel identities expose accepted member process and utility readings through the column's physical C1. Existing assembly/column ownership still reserves its outputs; monitoring does not replace its duty/energy-transfer controller. Line placement/edit notifications now come through the shared `LineLaying` owners.
+
+## Exchanger configuration and shared laying
+
+`ColumnComponents` and blueprint member choices carry `ExchangerType`. The match compares the built exchanger's selected sub-type as well as kind/count/dimensions and reports a configuration mismatch when Standard and Crossflow differ. Missing saved type means Standard. `AssemblyNetwork` now uses `assembly-4` for these choices; wire payloads are tested on fresh data, not migrated.
+
+Assembly pipe laying and previews use the same selected layout/nozzle definition as constructor rendering and occupied cells. Crossflow applies to standalone exchangers and column condensers, trims and pumparound coolers; the kettle pool is unchanged. This does not redesign column operation: the existing duty/energy transfer contract still determines the running column's heat work. Assembly registration/reversion remains event-driven, preserving physical equipment and stored settings.
+
 ## Change the layer that owns it
 
 | Change | Owning class | Tests that pin it |
@@ -304,3 +301,5 @@ Design background: `documentation/2026-10-26-multi-machine-framework/` (the plan
 - **Utility**: a port the design advises but does not check (cooling water, motive steam).
 - **Units in parallel**: the identical units a step's count asks for, between a split and a merge on its link; the first is the slot's member, the others its `parallel`.
 - **Trim**: an air-then-water condenser's water exchanger, after its air cooler (`trim_condenser`).
+
+**Snapshot:** `3063488da`, 2026-11-13 (the last commit this chapter was checked against). Earlier snapshots and batch notes: [HISTORY.md](HISTORY.md).

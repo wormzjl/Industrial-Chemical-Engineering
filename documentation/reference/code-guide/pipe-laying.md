@@ -1,7 +1,5 @@
 # Fluid, data and power line placement
 
-**Snapshot:** 2f86539b0 (branch `claude/save-corruption-prevention-2bd7ac`, main 0.23.4 merged in), 2026-11-09. Batch `2026-11-03-save-corruption`, merged as 0.23.5 on 2026-11-09: the laying tool writes the registry's build facts: a line's paint and a rack lane's frame (`FluidLineBackend.register`), a cable lane's frame (`ConduitLineBackend.register`); `LinePlacement.apply` places under the quiet flag · earlier: fc8f928e5 (branch `claude/drawn-connections`, main merged in), 2026-11-09. Batch `2026-11-09-drawn-connections`, merged as 0.23.4 on 2026-11-09: a lane is drawn joined where the network joins it, by the points it saved · earlier: da982f268 (branch `claude/simulator-sizing-refactor-6bacab`, the consolidation review of `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
-
 Up: [code guide](README.md). Related: [equipment](equipment.md), [fluid runtime](fluid-runtime.md), [wired control/power](wired-control-power.md), [GUI](client-gui.md).
 
 ## Contract and ownership
@@ -112,3 +110,5 @@ Wire protocols have no save migration. Corpus images under `compat/pipes`, `comp
 Change workflow in `LineToolSession`, command/admission in `LineLaying`/`LinePlacement`, retained geometry/host edits in `LineLayout`, physical lead lifecycle in `LinePieces`, and only medium facts in the backend. Calling a shared helper while a second class owns the same decision is not consolidation. Software meshes cannot prove live chunk sync; dedicated-server tests and owner acceptance cover that boundary.
 
 Historical route/rack design decisions and prior captures: `documentation/2026-10-26-pipe-laying-system/`. Offline render/probe tools live under `tools/pipe-laying-renders`, `tools/pipe-laying-system` and `tools/simulator-sizing`; generated evidence remains local.
+
+**Snapshot:** `2f86539b0`, 2026-11-09 (the last commit this chapter was checked against). Earlier snapshots and batch notes: [HISTORY.md](HISTORY.md).
