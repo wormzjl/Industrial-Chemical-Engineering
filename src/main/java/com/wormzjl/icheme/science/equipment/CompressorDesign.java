@@ -20,29 +20,12 @@ import java.util.List;
  * grade by 0.3 m and its motor by 0.1 m.
  */
 final class CompressorDesign extends UnitDesign {
-    @Override
-    public double minSize() {
-        return .15;
-    }
-
-    @Override
-    public double maxSize() {
-        return 1.2;
-    }
-
-    @Override
-    public double sizeStep() {
-        return ProcessUnit.SUCTION_STEP;
-    }
-
-    @Override
-    public int minLength(double size) {
-        return 2;
-    }
-
-    @Override
-    public int maxLength(double size) {
-        return ProcessUnit.MAX_THROWS;
+    CompressorDesign() {
+        // Computed in its overrides: minSupport.
+        super(new Sizes(.15, 1.2, ProcessUnit.SUCTION_STEP,
+                2, ProcessUnit.MAX_THROWS,
+                Sizes.COMPUTED, EquipmentShape.MAX_SUPPORT,
+                Orientation.HORIZONTAL, "bore", "throws", "foundation", true));
     }
 
     @Override
@@ -59,38 +42,13 @@ final class CompressorDesign extends UnitDesign {
     }
 
     @Override
-    public Orientation orientation() {
-        return Orientation.HORIZONTAL;
-    }
-
-    @Override
-    public boolean moves() {
-        return true;
-    }
-
-    @Override
     void check(double size, int length, int support, ProcessUnit.Bank bank) {
         if (length % 2 != 0) throw new IllegalArgumentException("A balanced-opposed compressor has an even number of throws, not " + length);
     }
 
     @Override
-    public String sizeRow() {
-        return "bore";
-    }
-
-    @Override
-    public String lengthRow() {
-        return "throws";
-    }
-
-    @Override
     public boolean lengthInMetres() {
         return false;
-    }
-
-    @Override
-    public String supportRow() {
-        return "foundation";
     }
 
     @Override

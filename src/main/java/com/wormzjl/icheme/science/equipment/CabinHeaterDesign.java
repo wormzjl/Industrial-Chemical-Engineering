@@ -18,55 +18,18 @@ import java.util.List;
  * long; above {@link ProcessUnit#MAX_CABIN_CELL} a twin cell of two half-length cells.
  */
 final class CabinHeaterDesign extends UnitDesign {
-    @Override
-    public double minSize() {
-        return 4;
-    }
-
-    @Override
-    public double maxSize() {
-        return 12;
-    }
-
-    @Override
-    public double sizeStep() {
-        return 1;
+    CabinHeaterDesign() {
+        // minSupport: The floor 3 m up: room to stand under the burners.
+        // Computed in its overrides: minLength.
+        super(new Sizes(4, 12, 1,
+                Sizes.COMPUTED, 2 * ProcessUnit.MAX_CABIN_CELL,
+                3, EquipmentShape.MAX_SUPPORT,
+                Orientation.HORIZONTAL, "radiant_width", "radiant_length", "heater_floor", false));
     }
 
     @Override
     public int minLength(double size) {
         return Math.max(6, (int) Math.ceil(1.2 * size - 1e-9));
-    }
-
-    @Override
-    public int maxLength(double size) {
-        return 2 * ProcessUnit.MAX_CABIN_CELL;
-    }
-
-    /** The floor 3 m up: room to stand under the burners. */
-    @Override
-    public int minSupport(double size, int length) {
-        return 3;
-    }
-
-    @Override
-    public Orientation orientation() {
-        return Orientation.HORIZONTAL;
-    }
-
-    @Override
-    public String sizeRow() {
-        return "radiant_width";
-    }
-
-    @Override
-    public String lengthRow() {
-        return "radiant_length";
-    }
-
-    @Override
-    public String supportRow() {
-        return "heater_floor";
     }
 
     @Override

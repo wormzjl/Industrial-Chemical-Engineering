@@ -21,6 +21,11 @@ final class ChimneyDesign extends UnitDesign {
     private final Chimney.Form form;
 
     ChimneyDesign(Chimney.Form form) {
+        // Computed in its overrides: minSize, maxSize, sizeStep, minLength, maxLength.
+        super(new Sizes(Sizes.COMPUTED, Sizes.COMPUTED, Sizes.COMPUTED,
+                Sizes.COMPUTED, Sizes.COMPUTED,
+                0, 0,
+                Orientation.VERTICAL, "chimney_diameter", "chimney_height", null, false));
         this.form = form;
     }
 
@@ -53,36 +58,6 @@ final class ChimneyDesign extends UnitDesign {
     @Override
     public int defaultLength(double size) {
         return Math.max(minLength(size), Math.min(maxLength(size), Chimney.gepHeight(15)));
-    }
-
-    @Override
-    public int minSupport(double size, int length) {
-        return 0;
-    }
-
-    @Override
-    public int maxSupport() {
-        return 0;
-    }
-
-    @Override
-    public Orientation orientation() {
-        return Orientation.VERTICAL;
-    }
-
-    @Override
-    public String sizeRow() {
-        return "chimney_diameter";
-    }
-
-    @Override
-    public String lengthRow() {
-        return "chimney_height";
-    }
-
-    @Override
-    public String supportRow() {
-        return null;
     }
 
     @Override
