@@ -110,8 +110,10 @@ flowchart TD
 3. **`implementationChecks`.** A competing crystal without its evaluator here is `NOT_IMPLEMENTED`. Then the request's
    material goes into the workspace's `request` feed (its amounts and total), which no solve overwrites.
 4. **TP.** `outsideBox` answers `NOT_CONVERGED` for a state outside the box. `evaluateTp` dispatches to `solveDry` or
-   `solveWithCrystals`. An exception from the model (no physical root, a mechanically unstable root) becomes
-   `NOT_CONVERGED` "evaluation refused: ...". The carried request competes no crystal, so it takes `solveDry`, with its
+   `solveWithCrystals`. A refusal from the model (`ThermoRefusal`, or the kernel's `NoPhysicalRoot`) becomes
+   `NOT_CONVERGED` "evaluation refused: ..." of kind `REFUSED`; any other `IllegalArgumentException`,
+   `IllegalStateException` or `ArithmeticException` of the solve gets the same text and kind `INTERNAL` (a defect, still
+   answered; `EngineFailureKindTest` pins the digest's `INTERNAL` answers, none). The carried request competes no crystal, so it takes `solveDry`, with its
    stability tests filtered and its splits restated (see "Carried crystals" below).
 5. **PH and UV** (`SpecificationSearch`). PH checks its pressure against the box, then `searchWindow` and `solvePh`. UV runs `searchWindow`, then
    `solveUv`: `newtonUv` first, else `nestedUv` with `innerUv` per temperature. Both answer undetermined steps from the
@@ -144,6 +146,17 @@ flowchart TD
     in a step.
   - `CRYSTAL_STEP` (`NOT_CONVERGED`): a PH or UV search closed on a crystal step of a near-pure feed's major species
     that its pure step does not answer.
+- `FailureKind`, set where each answer is built, beside its detail (read it, not the text, inside the engine): `NONE`
+  (converged), `UNSUPPORTED`, `REFUSED`, `INTERNAL`, `OUTSIDE_BOX`, `FLASH`, `UNSTABLE_PRODUCT`, `UNRESOLVED_PRODUCT`,
+  `CRYSTAL_SOLVE`, `CRYSTAL_PHASES`, `CRYSTAL_STEP`, `SEARCH`. A failure inside the band keeps its own kind;
+  `failedInCriticalBand()` is true exactly when the detail starts with `CRITICAL_BAND`. The workspace writes `failure`
+  and `failureKind` together; a search's answer copies both from its TP answer (`outerAnswer`).
+- Refusals: `ThermoRefusal` (kernel package) is the one refusal type of the kernel, the engine and the water module, an
+  `IllegalArgumentException` without a stack trace whose formatted message is built when read; argument, layout and
+  invariant failures stay JDK exceptions. The kernel's `NoPhysicalRoot` and its coalescence refusal in
+  `differentiatePrepared` stay `IllegalStateException`s (the column's session and the network's hydrocarbon model tell
+  them apart). The engine's trial catch sites (the flashes, the searches' derivatives, the balance residuals) reject the
+  trial whatever they catch.
 - `CoverageGrade`: `QUALIFIED`, `ESTIMATED_DECLARED_ERROR`, `RESEARCH_ONLY`, `EXTRAPOLATED`, `UNAVAILABLE`; `answer()`
   is true for the first four. A fluid answer carries the contract's fluid coverage (a network package:
   `ESTIMATED_DECLARED_ERROR`) with "; fluid-only: solid phases not assessed". Under a crystal competition the grade is
@@ -330,8 +343,8 @@ flowchart TD
   the record of each crystal among the phases and of an onset's crystal. Outside any of them a converged answer is
   `EXTRAPOLATED`; it is still an answer.
 - The numerical box is where the mathematics stops being trusted, never a data range. A TP state outside it is
-  `NOT_CONVERGED`, searches stay inside it, and the fluid code calls `NumericalBox.require` on its trial states, which
-  makes a rejected trial and a backtrack, not a hold.
+  `NOT_CONVERGED` (`OUTSIDE_BOX`), searches stay inside it, and the fluid code calls `NumericalBox.require` on its trial
+  states, whose `ThermoRefusal` makes a rejected trial and a backtrack, not a hold.
 - Continuation past a data range is the models' job: `ReferenceSpine`, `CrystalReference`, `ViscosityCorrelation`,
   `WaterShare` ([thermo-materials.md](thermo-materials.md)) and the fluid's coefficient path
   ([fluid-science.md](fluid-science.md)). The rule is the owner's of 2026-10-16 (AGENTS.md).
