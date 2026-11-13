@@ -8,6 +8,7 @@ These rules apply to every agent working in this repository (Claude, Codex, suba
 - A code or data change never discards a fact. State formats change freely: a mismatch drops the state, and the engine rebuilds it on its schedule.
 - Fact and shape fields are append-only. A new field has a default equal to the behaviour before the field existed. A field never changes meaning or unit. Enums are saved by name; a renamed or removed constant gets an alias.
 - Material data are identified by declared revisions, never by hashes. A change to a material record's values bumps that record's own `revision`; a viscosity edit bumps the viscosity's own `revision`; a freezing-point edit bumps the freezing point's own `revision`. Bump a package's `revision` only when the package record changes: its identities list the revisions of the records it names (`MaterialCatalog.Package.scientificRevision` for the column, `MaterialCatalog.fluidRevision` for the fluid network), and name the method by its physics fields, not by its revision. A revision is a token of letters, digits, `_`, `.` and `-`, at most 64 characters.
+- An identity is a declared revision. No saved or cached value is keyed by a hash of its content.
 - After a material or model change, contents keep their amounts and temperature. An engine job recomputes energy and pressure. The ledger books the energy difference and every removed component; the island's status line names them.
 - After a placed equipment structure loads, rebuild it to the current layout if another layout placed its cells (`EquipmentRefresh`, `EquipmentStructure.refreshLater`). Keep nozzle pipe blocks in place first, then cells. Keep the origin, paint, nozzle sizes and the fluid identity. Never overwrite another block. Remove a structure whose kind no longer exists whole, with every one of its cells. A layout change updates the layout table (`EquipmentLayoutGoldenTest`); a moved nozzle pipe block needs the owner's approval.
 - Every format validates what it reads and round-trips what it carries. A damaged facts section refuses the world and leaves its files untouched.
@@ -54,6 +55,13 @@ These rules apply to every agent working in this repository (Claude, Codex, suba
 - A simplification never breaks conservation of mass, energy or components, and never overrides an owner rule.
 - A code comment that records a measured reason for a term blocks removing that term, unless the simplification also removes the cause.
 
+### Results that move
+
+- A change that only moves code keeps every reference exact.
+- A change that moves a reference states, in its review, the old and new values and the bound it was expected to keep. The bound comes from the solver's own tolerances.
+- The final lane re-records a moved reference once, with both values in the lane's output.
+- Conservation of mass, energy and components stays exact.
+
 ## Gradle, measurement and verification
 
 - Run at most two Gradle invocations at a time on the machine, each in its own worktree. The final lane may be one of the two. Never run a test suite while a dev client is running.
@@ -70,7 +78,7 @@ These rules apply to every agent working in this repository (Claude, Codex, suba
   - To prove a gate test fails with its rule disabled, run that one test, not the suite.
   - Take counters from the campaign. Do not make separate per-seed Newton runs.
   - Split a hold class by mechanism only when the task targets that class, on the final code, with the existing classifier script.
-- Reports are at most 50 lines.
+- A report's summary is at most 50 lines. A findings table may follow it.
 
 ### No repeated tests
 
@@ -136,13 +144,26 @@ These rules apply to every agent working in this repository (Claude, Codex, suba
   - Commit the documents and tool folders on the task's branch.
 - Work that never merges (research only, abandoned) brings its documents and tool folders to `main` in a documentation-only merge.
 - Index files change row by row. When a merge conflicts in `documentation/INDEX.md` or `tools/INDEX.md`, keep every row of both sides. Patch the main checkout's `research/INDEX.md` in place; never copy it whole.
-- Keep large files out of `documentation/`. It holds text documents, each under 1 MB. Screenshots and other images, PDFs, world region files and `*-logs/` folders are git-ignored there. Store them in the main checkout at the same path under `research/` (`documentation/<batch>/shots/a.png` goes to `research/<batch>/shots/a.png`) and link them there. Treat any other file over 1 MB the same way, and add a `.gitignore` line for a new large file type.
+- Keep large files out of `documentation/` and `tools/`. `documentation/` holds text documents, each under 1 MB; a tool folder holds scripts and small inputs, each file under 1 MB. Screenshots and other images, PDFs, world region files and `*-logs/` folders are git-ignored there. Store them in the main checkout at the same path under `research/` (`documentation/<batch>/shots/a.png` goes to `research/<batch>/shots/a.png`) and link them there. Treat any other file over 1 MB the same way, and add a `.gitignore` line for a new large file type.
 - Logs stay git-ignored (`logs/`, `*.log`). Store them compressed in the main checkout, `tools/<tool-folder>/logs/<name>-logs-<date>.tar.gz`. These archives stay local; never stage them.
 
 ## Code guide
 
 - The code guide is at `documentation/reference/code-guide/`. `README.md` gives what the mod calculates and the code map. There is one chapter per subsystem.
 - Read `README.md` first in an unfamiliar area. Open only the chapter the task needs.
+- `README.md` stays under 150 lines. The guide holds no history: history goes to `CHANGELOG.md` and the batch's README.
+- `documentation/reference/FORMATS.md` lists every saved and wire format with the constant that declares it. A batch that changes a format changes its row in the same commit.
+
+## Parallel batches
+
+- Before a batch starts beside another, read `documentation/reference/COLLABORATION.md`: lanes and hot files, how a format or schema number is reserved, the brief template, how a moved result is reported.
+- Two batches never change the same file at the same time. A hot file has one owner batch at a time.
+
+## Native code
+
+- The Java path is the reference and the fallback. A native path gives the same results as Java where its gate says so, and its ceiling states which solves it takes.
+- A Java method with a Rust twin changes in both in the same batch, or the batch lowers the native ceiling below it.
+- A `cargo` build or test uses at most 4 jobs and never runs during a timed run. The merge lane builds the native library through Gradle.
 
 ## Merging to main
 

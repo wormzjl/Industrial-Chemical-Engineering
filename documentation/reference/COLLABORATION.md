@@ -1,6 +1,6 @@
 # Working together on IChemE: a guide for agents
 
-Status: proposed 2026-11-13 (batch `2026-11-13-codebase-review`); it binds once the owner accepts it. `AGENTS.md` and the owner's own instructions win where they differ. This guide adds what they do not cover: how several agents work on one code base at the same time without undoing each other.
+Status: in force since 2026-11-13 (batch `2026-11-13-codebase-review`; taken by the main thread under the owner's grant of that day, and named by `AGENTS.md`, "Parallel batches"). `AGENTS.md` and the owner's own instructions win where they differ. This guide adds what they do not cover: how several agents work on one code base at the same time without undoing each other.
 
 ## 1. The project in one page
 
