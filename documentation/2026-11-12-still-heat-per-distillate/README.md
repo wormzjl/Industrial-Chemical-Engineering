@@ -45,6 +45,9 @@ charge. Fix: the split's rates per mole of distillate; the law's bracket on the 
 - 2026-11-13: merge preparation with the tutorial batch (`2026-11-12-tutorial-system/MERGE_PREP.md`): the CHANGELOG line,
   the code guide's still sections (the critical-temperature line in `fluid-science.md` was stale and is corrected).
   Documents only, no test run.
+- 2026-11-13: the tutorial branch's final lane (`2026-11-12-tutorial-system/FINAL_LANE_REVIEW.md`): the still tests
+  pass; their printed lines move as this batch records (wet naphtha first cut 0.1536, vent 0.8464; crude vented 0.0638;
+  new CONDENSER and CONTINUITY lines); the campaign as the baseline. No GameTest runs a still.
 
 ## Documents
 

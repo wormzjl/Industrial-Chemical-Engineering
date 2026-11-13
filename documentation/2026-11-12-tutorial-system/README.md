@@ -149,6 +149,10 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
 - 2026-11-13: merge preparation (MERGE_PREP.md), on the owner's word: CHANGELOG lines for both batches, version proposal,
   code guide chapter `tutorial.md` and seven chapters updated, tool READMEs and `tools/INDEX.md` rows, the detached
   `/icheme-film` command stored in `tools/tutorial-renders/film-command/`. Documents and tools only, no test run.
+- 2026-11-13: final lane on df15654c0 (FINAL_LANE_REVIEW.md): 3505 tests with 1 failure, GameTests 96 of 97; both
+  test-side, fixed: `SmallTower` on `DeterministicMath` (d1e35e4d3), the tower GameTest built from its asset templates
+  (df5b43c26), each proven by one run (GameTests 97 of 97). chain-100, junction lines, `MIXED_GAS_COST` as the
+  baseline; campaign cold 992 clean (991), bundled 994, defaults 1000; bundled 431 F replayed alone: E6, as the baseline.
 
 ## Code areas
 
