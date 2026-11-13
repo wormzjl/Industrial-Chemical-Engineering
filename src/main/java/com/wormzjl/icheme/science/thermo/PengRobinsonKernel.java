@@ -447,6 +447,7 @@ public final class PengRobinsonKernel {
             if (roots) rootDerivatives(i, temperatureKelvin, workspace, workspace.interactionRootDt, workspace.interactionRootDt2);
             if (excess) {
                 workspace.excessEnergyRatio[i] = workspace.a[i] / coVolumes[i];
+                workspace.excessEnergyRatioDt[i] = workspace.daDt[i] / coVolumes[i];
                 workspace.excessRootRatio[i] = workspace.sqrtA[i] / coVolumes[i];
             }
             workspace.compoundStamp[i] = bits;
@@ -1040,8 +1041,9 @@ public final class PengRobinsonKernel {
         int[] cells = workspace.supportCells;
         for (int si = 0; si < n; si++) {
             int i = support[si];
-            double u = workspace.a[i] / coVolumes[i] - s[i] * g[i] / bMix;
-            double uDt = workspace.daDt[i] / coVolumes[i] - (sDt[i] * g[i] + s[i] * gDt[i]) / bMix;
+            // a_i/b_i and (da_i/dT)/b_i: the prepared ratios, the same divisions once per temperature.
+            double u = workspace.excessEnergyRatio[i] - s[i] * g[i] / bMix;
+            double uDt = workspace.excessEnergyRatioDt[i] - (sDt[i] * g[i] + s[i] * gDt[i]) / bMix;
             double base = share * u;
             double baseDt = lambdaOverR * (uDt / temperatureKelvin - u / (temperatureKelvin * temperatureKelvin));
             workspace.thetaBase[i] = base;
@@ -1073,13 +1075,14 @@ public final class PengRobinsonKernel {
                 workspace.omega[i] = 0.0;
                 continue;
             }
-            // The classical part over the non-partners, directly: never b less the partners' weights.
+            // The classical part over the non-partners, directly: never b less the partners' weights. The support's
+            // non-partners of i in support order, so the same additions in the same order.
             double restB = 0.0, restG = 0.0, restGDt = 0.0;
-            int[] cellsOfI = cellIndex[i];
             int[] pairsOfI = pairIndex[i];
-            for (int sj = 0; sj < n; sj++) {
-                int j = support[sj];
-                if (x[j] == 0.0 || cellsOfI[j] >= 0) continue;
+            int[] nonPartners = workspace.nonPartners;
+            for (int at = workspace.nonPartnerFrom[i]; at < workspace.nonPartnerTo[i]; at++) {
+                int j = nonPartners[at];
+                if (x[j] == 0.0) continue;
                 int pair = pairsOfI[j];
                 double k = pair < 0 ? 0.0 : workspace.pairK[pair];
                 double kDt = pair < 0 ? 0.0 : workspace.pairKDt[pair];
@@ -1087,8 +1090,8 @@ public final class PengRobinsonKernel {
                 restG += (1.0 - k) * x[j] * s[j];
                 restGDt += (1.0 - k) * x[j] * sDt[j] - kDt * x[j] * s[j];
             }
-            double rest = workspace.a[i] / coVolumes[i] * restB - s[i] * restG;
-            double restDt = workspace.daDt[i] / coVolumes[i] * restB - (sDt[i] * restG + s[i] * restGDt);
+            double rest = workspace.excessEnergyRatio[i] * restB - s[i] * restG;
+            double restDt = workspace.excessEnergyRatioDt[i] * restB - (sDt[i] * restG + s[i] * restGDt);
             double denominator = restB + cellD;
             double theta = (share * rest + cellC) / denominator;
             double numeratorDt = lambdaOverR * (restDt / temperatureKelvin - rest / (temperatureKelvin * temperatureKelvin)) + cellCDt;
@@ -1213,16 +1216,16 @@ public final class PengRobinsonKernel {
             int i = support[si];
             if (!workspace.active[i] || x[i] == 0.0) continue;
             double bi = coVolumes[i];
-            double u = workspace.a[i] / bi - s[i] * g[i] / bMix;
-            double uDt = workspace.daDt[i] / bi - (sDt[i] * g[i] + s[i] * gDt[i]) / bMix;
+            double u = workspace.excessEnergyRatio[i] - s[i] * g[i] / bMix;
+            double uDt = workspace.excessEnergyRatioDt[i] - (sDt[i] * g[i] + s[i] * gDt[i]) / bMix;
             double uDt2 = workspace.d2aDt2[i] / bi - (sDt2[i] * g[i] + 2.0 * sDt[i] * gDt[i] + s[i] * gDt2[i]) / bMix;
             double baseDt2 = lambdaOverR * (uDt2 / temperature - 2.0 * uDt / t2 + 2.0 * u / (t2 * temperature));
             double restGDt2 = 0.0;
-            int[] cellsOfI = cellIndex[i];
             int[] pairsOfI = pairIndex[i];
-            for (int sj = 0; sj < n; sj++) {
-                int j = support[sj];
-                if (x[j] == 0.0 || cellsOfI[j] >= 0) continue;
+            int[] nonPartners = workspace.nonPartners;
+            for (int at = workspace.nonPartnerFrom[i]; at < workspace.nonPartnerTo[i]; at++) {
+                int j = nonPartners[at];
+                if (x[j] == 0.0) continue;
                 int pair = pairsOfI[j];
                 double k = pair < 0 ? 0.0 : workspace.pairK[pair];
                 double kDt = pair < 0 ? 0.0 : workspace.pairKDt[pair];
@@ -1230,8 +1233,8 @@ public final class PengRobinsonKernel {
                 restGDt2 += (1.0 - k) * x[j] * sDt2[j] - 2.0 * kDt * x[j] * sDt[j] - kDt2 * x[j] * s[j];
             }
             double restB = workspace.restCoVolume[i], restG = workspace.restRow[i], restGDt = workspace.restRowDt[i];
-            double rest = workspace.a[i] / bi * restB - s[i] * restG;
-            double restDt = workspace.daDt[i] / bi * restB - (sDt[i] * restG + s[i] * restGDt);
+            double rest = workspace.excessEnergyRatio[i] * restB - s[i] * restG;
+            double restDt = workspace.excessEnergyRatioDt[i] * restB - (sDt[i] * restG + s[i] * restGDt);
             double restDt2 = workspace.d2aDt2[i] / bi * restB - (sDt2[i] * restG + 2.0 * sDt[i] * restGDt + s[i] * restGDt2);
             double numeratorDt2 = lambdaOverR * (restDt2 / temperature - 2.0 * restDt / t2 + 2.0 * rest / (t2 * temperature))
                     + workspace.numeratorDt2[i];
@@ -1795,6 +1798,15 @@ public final class PengRobinsonKernel {
         /** {@code a_i/b_i} and {@code s_i/b_i} of the prepared temperature (each compound's stamp). */
         private final double[] excessEnergyRatio;
         private final double[] excessRootRatio;
+        /** {@code (da_i/dT)/b_i} of the prepared temperature (each compound's stamp, with {@link #excessEnergyRatio}). */
+        private final double[] excessEnergyRatioDt;
+        /**
+         * Per centre of the support, the support's compounds that are not its NRTL partners, in support order (itself
+         * included): {@code nonPartners[nonPartnerFrom[i] .. nonPartnerTo[i] - 1]}, built with the support.
+         */
+        private final int[] nonPartners;
+        private final int[] nonPartnerFrom;
+        private final int[] nonPartnerTo;
         /** {@code 1/D_i} of the last composition, stored by {@code correctExcess} for the composition derivatives. */
         private final double[] inverseDenominator;
         private double excessTemperature;
@@ -1913,6 +1925,10 @@ public final class PengRobinsonKernel {
             excessClassicalRow = new double[e];
             excessEnergyRatio = new double[e];
             excessRootRatio = new double[e];
+            excessEnergyRatioDt = new double[e];
+            nonPartners = new int[e * e];
+            nonPartnerFrom = new int[e];
+            nonPartnerTo = new int[e];
             inverseDenominator = new double[e];
             filter();
         }
@@ -1989,6 +2005,17 @@ public final class PengRobinsonKernel {
                         if (inSupport[kernel.cellPartner[c]]) supportCells[at++] = c;
                     }
                     cellTo[i] = at;
+                }
+                int rest = 0;
+                for (int s = 0; s < n; s++) {
+                    int i = support[s];
+                    int[] cellsOfI = kernel.cellIndex[i];
+                    nonPartnerFrom[i] = rest;
+                    for (int sj = 0; sj < n; sj++) {
+                        int j = support[sj];
+                        if (cellsOfI[j] < 0) nonPartners[rest++] = j;
+                    }
+                    nonPartnerTo[i] = rest;
                 }
             }
             snapshot = n == inSupport.length ? null : inSupport.clone();
