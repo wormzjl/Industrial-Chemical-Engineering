@@ -65,7 +65,7 @@ import java.util.List;
  * <p>A structure the registry records (plan 4.4) is checked once every chunk of its box and of the blocks beside it is
  * block-ticking, after the layout refresh when that has it queued: one whose cells stand as its record says is left as it
  * is; any other is rebuilt to its record where the record puts it, its cells placed where the world is free; with a cell
- * another block holds, its registrations are held ({@link EquipmentStructure#serveRealignment}).</p>
+ * another block holds, its registrations are held ({@link StructureRealignment#serveRealignment}).</p>
  */
 public final class RegistryRealignment {
     private RegistryRealignment() {}
@@ -125,7 +125,7 @@ public final class RegistryRealignment {
                 IChemE.LOGGER.error("fluid_realign failed panel={}", id, failed);
             }
         }
-        EquipmentStructure.serveRealignment(level, world, start + BUDGET_NANOS, STRUCTURES, tally::add);
+        StructureRealignment.serveRealignment(level, world, start + BUDGET_NANOS, STRUCTURES, tally::add);
         if (tally.checked == 0) return;
         FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.realignChecked, tally.checked);
         FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.realignPlaced, tally.placed);
