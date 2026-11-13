@@ -26,9 +26,10 @@ Thread wave-a2 (Opus medium), branch `claude/review-wave-a2-saves-96a998`, after
 - World, the four E13 names (main thread's decision A, commit 0adfa7819), cache fields and eviction only: `EquipmentStructure` SHAPES (4096), `FloatingRoofs` RIMS (4096; the lazily filled step array unchanged) and JOINS (4096; keys equal by shape identity, as before), `LineShapes` (2048). Their readers are the server thread (collision, selection) and the client main thread (outline, client collision), plus chunk-build workers where Minecraft asks a block's shape off-thread. Old form: ConcurrentHashMap. `BoundedCache` keeps that thread safety, with one build per key.
 - Not in E13's list, left as found: the client model caches (`EquipmentShellModel`, `FluidDeviceModel`, `PipeRackModel`, `ConduitModel`), `RenderLod.Tiers`, `runtime` `Silhouettes` and `InstrumentHosts`.
 
-## Tests (pending "lane free"), each once
+## Tests, each run once after "lane free"
 - `./gradlew compileJava compileTestJava --max-workers 4`
 - `./gradlew equipmentGates --tests com.wormzjl.icheme.science.equipment.EquipmentLayoutGoldenTest --tests com.wormzjl.icheme.science.equipment.ShapeRasterizerTest --tests com.wormzjl.icheme.science.equipment.ProcessUnitTest --tests com.wormzjl.icheme.science.equipment.EquipmentShapeCompatTest --tests com.wormzjl.icheme.science.equipment.BoundedCacheTest --max-workers 4`
 - No test class loads the six client renderers; their change is compile-checked only. No class in this run list loads the four world caches either: they too are compile-checked only.
 
-Results: pending.
+Results: the compile passed. `equipmentGates`: `EquipmentLayoutGoldenTest` 1/1 (the layout table unchanged), `ShapeRasterizerTest` 38/38, `ProcessUnitTest` 27/27 (with `everyHeadingSharesTheUnitBuiltFacingNorth`), `EquipmentShapeCompatTest` 20/20, `BoundedCacheTest` 3/3. 89 tests, 0 failures, 0 errors, 0 skipped. No geometry, mesh or layout moved.
+Counters read: E12, 4 -> 1 cache entries per shape (asserted for every unit kind and heading); E11, the draw counts above (from the code paths); E13, 65 -> 1 builds when a 65th key enters (asserted).
