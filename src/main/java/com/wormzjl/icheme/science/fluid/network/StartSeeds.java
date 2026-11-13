@@ -247,7 +247,7 @@ final class StartSeeds {
     }
     /**
      * The connection flows and actuator heads a pass with this active set starts from, the whole of
-     * {@link PassiveStepSolver.Equations#buildInitial}'s edge half; it lives here because {@link PassiveStepSolver#closeIllegalStarts} reads it before the
+     * {@link PassiveStepSolver.Equations#buildInitial}'s edge half; it lives here because {@link OneWayClosures#closeIllegalStarts} reads it before the
      * equations exist. {@code seeds} may be {@code null} before this solve has any, which only a regulating valve reads.
      * {@code passStart}: what the pass before handed this one ({@link PassStart}); {@link PassStart#NONE} for every start
      * point but a pass's own.
