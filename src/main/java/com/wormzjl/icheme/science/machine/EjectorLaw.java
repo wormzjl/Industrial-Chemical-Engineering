@@ -38,6 +38,19 @@ public final class EjectorLaw {
     }
 
     /**
+     * A suction's gas as air, kg where the amounts are mol (per second where they are per second): every compound of
+     * {@code vapour} before the index {@code water} (water vapour is carried apart, {@link #steam}), each as
+     * {@code vapour[i] * weights[i] / per * times} kilograms ({@link #asAir}). Liquid carried with the suction is not gas:
+     * the caller passes the vapour's amounts. The sheet passes rates with 1 and 1; the world a state's vapour amounts, its
+     * vapour volume and the set's capacity (P3-03 of the 2026-11-13 simplifications: one sum for both).
+     */
+    public static double gasAsAir(double[] vapour, double[] weights, int water, double per, double times) {
+        double gas = 0;
+        for (int i = 0; i < water; i++) gas += asAir(vapour[i] * weights[i] / per * times, 1e3 * weights[i]);
+        return gas;
+    }
+
+    /**
      * Kilograms of motive steam the set takes, per second where the load is per second.
      *
      * @param gas        the load's gas as air ({@link #asAir}), kg

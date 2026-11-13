@@ -73,10 +73,10 @@ public final class EjectorUnit implements UnitModel {
     public static FlowStream motive(String id, String prefix, FlowThermo thermo, FlowStream load, @Nullable FlowStream wired, double motive, double discharge, Report report) {
         if (!(discharge > load.pressure())) throw new FlowsheetFailure("ejector.rise");
         if (!(motive > discharge)) throw new FlowsheetFailure("ejector.motive");
-        double[] amounts = load.amountsView(), weights = thermo.model().molecularWeights();
+        // The load is the suction's vapour, as the world's set counts it (Ejectors.steam): liquid carried with it is not gas.
+        double[] amounts = load.state() == null ? load.amountsView() : load.state().vaporAmountsView(), weights = thermo.model().molecularWeights();
         int water = thermo.water();
-        double gas = 0;
-        for (int i = 0; i < water; i++) gas += EjectorLaw.asAir(amounts[i] * weights[i], 1e3 * weights[i]);
+        double gas = EjectorLaw.gasAsAir(amounts, weights, water, 1, 1);
         double condensing = EjectorLaw.CONDENSING * thermo.model().saturationPressure(load.temperature());
         double need = EjectorLaw.steam(gas, amounts[water] * weights[water], motive, load.pressure(), discharge, condensing);
         report.reading(prefix + "load", load.mass());
