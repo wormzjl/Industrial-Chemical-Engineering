@@ -7,6 +7,7 @@ Status: Reference. Index: [../INDEX.md](../INDEX.md).
 ## Documents
 
 - [code-guide/README.md](code-guide/README.md)
+- [COLLABORATION.md](COLLABORATION.md): working together on the code base (lanes, numbers, briefs, results that move, hand-over); proposed 2026-11-13, batch `2026-11-13-codebase-review`
 
 ## Code areas
 
