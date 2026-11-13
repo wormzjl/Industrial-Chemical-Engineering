@@ -149,28 +149,12 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     // A fluid converter's process vessel (batch 2026-11-12-fluid-conversion, W5): its Mode, Rate and Alarm levels lead its door
     // column (ConverterDoor), then its tanks, its rule and what it books; the settings are drafts until Apply.
     private com.wormzjl.icheme.runtime.fluid.FluidView.Converter converter(){var data=menu.clientData();return data==null?null:data.view().converter();}
-    private ConverterDoor.Mode converterMode=ConverterDoor.Mode.OFF;
-    /** What the converter's drafts and door last followed: its settings; its mode, rule and rows. */
-    private String converterShown,converterDoor;
-    /** The drafts follow the converter's settings when they change; a new rule or a new count of its rows rebuilds the door. */
-    private void refreshConverter(com.wormzjl.icheme.runtime.fluid.FluidView.Converter c){
-        String door=c==null?"":c.rule()+"/"+c.ranges().size()+"/"+(c.fluid().isEmpty());
-        if(!door.equals(converterDoor)){converterDoor=door;rebuildNext=true;}
-        String shown=c==null?"":c.mode()+"/"+c.rate()+"/"+c.deadband()+"/"+c.thresholds();
-        if(shown.equals(converterShown))return;
-        converterShown=shown;rebuildNext=true;if(c==null)return;
-        converterMode=ConverterDoor.Mode.valueOf(c.mode());
-        fields.put("converterRate",new NumericDraft(c.rate(),flowRateUnit));
-        fields.put("converterDeadband",new NumericDraft(100*c.deadband()));
-        for(int i=0;i<ConverterDoor.THRESHOLDS.size();i++){var v=c.thresholds().get(i);var draft=new NumericDraft(v==null?0:100*v);if(v==null)draft.text("");fields.put(ConverterDoor.THRESHOLDS.get(i),draft);}
-    }
-    /** The converter's settings as drafted, queued by its own edit: the rate in L/s, the deadband and the thresholds as fractions, a blank threshold none. */
+    /** The converter's Mode and the settings it follows (ConverterDrafts); the rate, deadband and alarm levels are drafts in {@link #fields}. */
+    private final ConverterDrafts converterDrafts=new ConverterDrafts();
+    /** The converter's settings as drafted, queued by its own edit (ConverterDrafts.apply). */
     private void converterApply(){
         try{
-            double rate=fields.get("converterRate").si(),band=fields.get("converterDeadband").value()/100;
-            var t=new double[ConverterDoor.THRESHOLDS.size()];
-            for(int i=0;i<t.length;i++){var d=fields.get(ConverterDoor.THRESHOLDS.get(i));t[i]=d.text().isBlank()?-1:d.value()/100;}
-            FluidNetwork.converterEdit(menu,com.wormzjl.icheme.runtime.fluid.ConverterUnit.Mode.valueOf(converterMode.name()),rate,band,t);message=tr("waiting");
+            converterDrafts.apply(fields,(mode,rate,band,t)->FluidNetwork.converterEdit(menu,mode,rate,band,t));message=tr("waiting");
         }catch(IllegalArgumentException e){message=tr("invalid_input");}
     }
     /** The converter's groups' input (ConverterDoor), from its view and the player's units: the rate in L per the time basis. */
@@ -194,30 +178,12 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             String bounds=!c.reverse()?tr("converter_bounds.gives"):r.min()!=null&&r.max()!=null?tr("converter_bounds.between",shown.apply(r.min()),shown.apply(r.max())):r.min()!=null?tr("converter_bounds.at_least",shown.apply(r.min())):r.max()!=null?tr("converter_bounds.at_most",shown.apply(r.max())):tr("converter_bounds.any");
             ranges.add(new ConverterDoor.Range(name,r.value()==null?"—":shown.apply(r.value()),bounds,unitText,r.outside()));
         }
-        return new ConverterDoor.Input(canEdit(),converterMode,unit,litres.apply(c.rated()),litres.apply(c.rate()),value(100*c.deadband()),thresholds,forge,c.fluid().isEmpty()?null:c.fluid(),process,
+        return new ConverterDoor.Input(canEdit(),converterDrafts.mode,unit,litres.apply(c.rated()),litres.apply(c.rate()),value(100*c.deadband()),thresholds,forge,c.fluid().isEmpty()?null:c.fluid(),process,
             c.rule().isEmpty()?null:c.rule(),c.reverse(),ranges,litres.apply(c.booked()),c.direction().toLowerCase(java.util.Locale.ROOT));
     }
     private com.wormzjl.icheme.runtime.fluid.FluidView.Still still(){var data=menu.clientData();return data==null?null:data.view().still();}
-    private boolean stillFiring,stillOpen=true;
-    /** What the still's drafts and widgets last followed: its settings, what a controller holds and the slot's item. */
-    private String stillShown,stillDoor;
-    /** The drafts follow the still's settings when they change (no device revision moves with them); a controller's hold or a new item in the slot rebuilds the door. */
-    private void refreshStill(com.wormzjl.icheme.runtime.fluid.FluidView.Still s){
-        String door=s==null?"":s.heldFiring()+"/"+s.heldReflux()+"/"+s.heldClosed()+"/"+s.fuel();
-        if(!door.equals(stillDoor)){stillDoor=door;rebuildNext=true;}
-        String shown=s==null?"":s.firing()+"/"+s.reflux()+"/"+s.closed();
-        if(shown.equals(stillShown))return;
-        stillShown=shown;rebuildNext=true;if(s==null)return;
-        stillFiring=s.firing()>0;stillOpen=!s.closed();
-        // Off keeps the opening On returns to: full, where none was set.
-        fields.put("stillFiring",new NumericDraft(s.firing()>0?s.firing()*100:100));
-        fields.put("stillReflux",new NumericDraft(s.reflux()));
-    }
-    /** The still's settings as drafted: Off fires at 0, Closed sends the ratio drafted with the closed valve. */
-    private FluidNetwork.StillControls stillControls(){
-        double firing=stillFiring?fields.get("stillFiring").value()/100:0;
-        return new FluidNetwork.StillControls(firing,fields.get("stillReflux").value(),!stillOpen);
-    }
+    /** The still's Firing switch and Reflux valve and the settings they follow (StillDrafts); the firing and the ratio are drafts in {@link #fields}. */
+    private final StillDrafts stillDrafts=new StillDrafts();
     /** The still's groups' input (StillDoor): its heater, the drafts, what a controller holds, a solid still's slot. */
     private StillDoor.Input stillInput(){
         var s=still();var heater=StillDoor.Heater.valueOf(s.heater());
@@ -233,7 +199,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             double heat=s.fuelCount()*s.fuelEnergy()+s.burning(),draw=s.heat()/com.wormzjl.icheme.science.plant.still.BatchStill.Heater.SOLID.efficiency();
             fuel=new StillDoor.Fuel(item,Integer.toString(s.fuelCount()),draw>0?value(heat/draw/60):"—",value(heat/1e9));
         }
-        return new StillDoor.Input(heater,canEdit(),stillFiring,s.stages()>0&&s.condenser(),stillOpen,heldFiring,heldReflux,fuel);
+        return new StillDoor.Input(heater,canEdit(),stillDrafts.firing,s.stages()>0&&s.condenser(),stillDrafts.open,heldFiring,heldReflux,fuel);
     }
     /** The target the switch's On holds: the drafted mode while On (OFF: an air cooler's fixed fan speed); for a side loaded Off, the outlet temperature. */
     private HeatUnit.Mode heatTarget=HeatUnit.Mode.OUTLET_TEMPERATURE;
@@ -314,7 +280,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             }
             if(selected!=phase){phase=selected;scroll.reset();rebuildNext=true;}
         }
-        refreshStill(data.view().still());refreshConverter(data.view().converter());
+        stillDrafts.refresh(data.view().still(),fields,()->rebuildNext=true);converterDrafts.refresh(data.view().converter(),fields,flowRateUnit,()->rebuildNext=true);
         if(data.view().inputRevision()==revision)return;
         revision=data.view().inputRevision();var c=data.controls();
         powerOn=c.power()==FluidNetwork.Power.ON;valveSource=c.valveSource();
@@ -342,7 +308,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         composition=new RelativeComposition(data.components(),data.molecularWeights(),c.composition());
         if(mass)composition.toggleBasis();
         loadSolids(c.solids());
-        stillShown=null;refreshStill(data.view().still());converterShown=null;refreshConverter(data.view().converter());
+        stillDrafts.shown=null;stillDrafts.refresh(data.view().still(),fields,()->rebuildNext=true);converterDrafts.shown=null;converterDrafts.refresh(data.view().converter(),fields,flowRateUnit,()->rebuildNext=true);
         templates=false;scroll.reset();rebuildNext=true;
     }
     private void loadSolids(SlurryFeed solids){
@@ -595,7 +561,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
                 fields.get("diameter").value(),PipeResistance.DEFAULT_ROUGHNESS_METRES,fields.get("volumeFlow").si(),
                 fields.get("maximumAddedPressure").si(),composition.moleFractions(),solids(),fields.get("maximumPressureRatio").value(),powerOn?FluidNetwork.Power.ON:FluidNetwork.Power.OFF,valveSource,fields.get("massFlow").si(),
                 heatControl(),towerControl()).withBlanket(blanket()?fields.get("blanket").si():0).withRelief(relief()?fields.get("relief").si():0);
-            if(still()!=null)controls=controls.withStill(stillControls());
+            if(still()!=null)controls=controls.withStill(stillDrafts.controls(fields));
             FluidNetwork.sendEdit(menu,revision,controls);message=tr("waiting");
         }catch(IllegalArgumentException e){message=tr("invalid_input");}
     }
@@ -1071,9 +1037,9 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
                 case "power:off","power:on"->powerOn=action.endsWith(":on");
                 case "valve:mass"->valveSource=com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.MASS_FLOW;
                 case "valve:volume"->valveSource=com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.VOLUME_FLOW;
-                case "still_firing:off","still_firing:on"->stillFiring=action.endsWith(":on");
-                case "still_reflux:closed","still_reflux:open"->stillOpen=action.endsWith(":open");
-                case "converter_mode:off","converter_mode:balance","converter_mode:to_icheme","converter_mode:to_forge"->converterMode=ConverterDoor.Mode.valueOf(action.substring("converter_mode:".length()).toUpperCase(java.util.Locale.ROOT));
+                case "still_firing:off","still_firing:on"->stillDrafts.firing=action.endsWith(":on");
+                case "still_reflux:closed","still_reflux:open"->stillDrafts.open=action.endsWith(":open");
+                case "converter_mode:off","converter_mode:balance","converter_mode:to_icheme","converter_mode:to_forge"->converterDrafts.mode=ConverterDoor.Mode.valueOf(action.substring("converter_mode:".length()).toUpperCase(java.util.Locale.ROOT));
                 default->{}
             }
             rebuild();
