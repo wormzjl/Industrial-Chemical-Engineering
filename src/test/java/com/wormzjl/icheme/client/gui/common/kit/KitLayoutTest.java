@@ -518,6 +518,34 @@ class KitLayoutTest {
         assertThrows(IllegalArgumentException.class, () -> door.layout(areas, 448, List.of(tall), M), "one row list an area");
     }
 
+    /**
+     * A screen places its door's rows again each frame (finding C5, batch 2026-11-13-codebase-review): rows equal to the last
+     * give the same column object, placed once; a changed row, another measure or a new layout places them again.
+     */
+    @Test
+    void equalRowsGiveTheSameColumn() {
+        var door = new KitDoor();
+        var area = new Rect(10, 30, 200, 120);
+        java.util.function.Function<String, List<Column.Row>> rows = value -> List.of(new Column.Group("Flow", null, List.of(
+                new Column.Field("f", "Target", "kg/s", null), new Column.Reading("r", "Reading", value, "kg/s", null))),
+                new Column.Buttons(List.of(new Column.Button("a", "Apply", true, null))));
+        door.layout(area, rows.apply("1.0"), M);
+        var first = door.place(rows.apply("1.0"), M);
+        assertSame(first, door.place(rows.apply("1.0"), M), "equal rows: the same column");
+        var mutable = new ArrayList<>(rows.apply("1.0"));
+        assertSame(first, door.place(mutable, M));
+        mutable.set(1, new Column.Buttons(List.of(new Column.Button("a", "Apply", false, null))));
+        var changed = door.place(mutable, M);
+        assertNotSame(first, changed, "a list changed in place after the call is not taken as equal");
+        var moved = door.place(rows.apply("2.5"), M);
+        assertNotSame(changed, moved, "a changed reading: placed again");
+        assertEquals(moved.rows().size(), first.rows().size());
+        assertNotSame(moved, door.place(rows.apply("2.5"), Measure.fixed(7)), "another measure: placed again");
+        var again = door.place(rows.apply("2.5"), M);
+        door.layout(area, rows.apply("2.5"), M);
+        assertNotSame(again, door.place(rows.apply("2.5"), M), "a new layout: placed again");
+    }
+
     @Test void productionScreensNeverOverrideThePlayerGuiScale() throws Exception {
         var root=java.nio.file.Path.of("src/main/java/com/wormzjl/icheme/client");
         var forbidden=java.util.regex.Pattern.compile("setGuiScale\\s*\\(|WindowScale\\.(apply|restore|lower)\\s*\\(|guiScale\\(\\)\\.set\\s*\\(");

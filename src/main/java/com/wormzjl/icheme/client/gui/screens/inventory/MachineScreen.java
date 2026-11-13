@@ -91,12 +91,22 @@ public final class MachineScreen extends AbstractContainerScreen<MachineMenu> {
         return Objects.requireNonNull(MachineColumn.Kind.of(menu.kind()));
     }
 
+    /**
+     * The installed sensors' identities, gathered at init and each tick before the signature is checked, not on every frame
+     * (finding C5, batch 2026-11-13-codebase-review): a change shows at the next tick, as it rebuilt the widgets there before.
+     */
+    private List<String> instrumentIds = List.of();
+
+    private void gatherIds() {
+        instrumentIds = com.wormzjl.icheme.client.InstrumentRenderer.identities(minecraft.level, menu.origin());
+    }
+
     /** The page's rows: the view with the drafts, or, before the first view, the kind's rows with nothing read yet. */
     private List<Column.Row> rows() {
         var v = menu.view();
         if (v == null) return MachineColumn.rows(new MachineColumn.Input(kind(), false, running, true, mode, false, null, List.of(), List.of(), null), MachineScreen::tr);
         var rows=new java.util.ArrayList<>(MachineColumn.rows(MachineColumn.input(v, canEdit(), running, mode, MachineScreen::tr), MachineScreen::tr));
-        rows.addAll(DeviceColumn.instrumentIds(com.wormzjl.icheme.client.InstrumentRenderer.identities(minecraft.level,menu.origin()),(key,args)->tr("fluid."+key,args)));
+        rows.addAll(DeviceColumn.instrumentIds(instrumentIds,(key,args)->tr("fluid."+key,args)));
         return java.util.List.copyOf(rows);
     }
 
@@ -117,6 +127,7 @@ public final class MachineScreen extends AbstractContainerScreen<MachineMenu> {
         titleLabelY = -1000;
         if (nameDraft == null) nameDraft = currentName();
         follow();
+        gatherIds();
         var m = GuiCanvas.measure(font);
         var rows = rows();
         int side = FluidGuiLayout.side(imageWidth);
@@ -256,6 +267,7 @@ public final class MachineScreen extends AbstractContainerScreen<MachineMenu> {
     protected void containerTick() {
         super.containerTick();
         follow();
+        gatherIds();
         if (!signature(rows()).equals(signature)) rebuildWidgets();
     }
 
