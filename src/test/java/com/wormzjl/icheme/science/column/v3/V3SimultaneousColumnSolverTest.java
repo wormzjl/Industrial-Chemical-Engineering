@@ -140,37 +140,6 @@ class V3SimultaneousColumnSolverTest {
                 .audit(warmConverged.state(), thermo.newWorkspace(), V3SolveControl.UNBOUNDED).accepted());
     }
 
-    @Test
-    void insideOutFrozenPropertyPredictorStillRequiresStrictPrCertification() {
-        V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-        V3ColumnProblem problem = V3ColumnProblemResolver.resolve(
-                V3TestInputs.cdu17BoilingBinary("test:inside-out-gate"), V3CondenserPhaseBranch.LIQUID_ONLY);
-        V3FlashResult feedFlash = thermo.flashTP(problem.input().feedTemperatureKelvin(),
-                problem.nodePressurePascal(problem.topology().feedTrayNumber()),
-                problem.input().feedComponentMolarFlowsMolPerSecond(), thermo.newWorkspace());
-        V3MeshResidualEvaluator evaluator = new V3MeshResidualEvaluator(
-                problem, thermo, feedFlash.molarEnthalpyJoulesPerMol());
-        V3DryMeshCoordinateMap coordinates = new V3DryMeshCoordinateMap(problem);
-        var accepted = assertInstanceOf(V3ColumnOutcome.Success.class, V3TestInputs.calculate(problem.input()));
-        var physical = accepted.result().warmSeed().orElseThrow().stateFor(problem);
-        double[] moved = coordinates.encode(physical);
-        for (int i = 0; i < moved.length; i++) moved[i] +=
-                coordinates.unknowns().get(i).id().family() == V3DegreeOfFreedomLedger.UnknownFamily.TEMPERATURE ? 1.0 : 0.01;
-        V3DryMeshState seed = coordinates.decode(moved);
-
-        V3SimultaneousColumnSolver.Attempt attempt = V3SimultaneousColumnSolver.solveWithInsideOut(
-                problem, evaluator, coordinates, seed, thermo::newWorkspace, 128, 1.0e-8,
-                V3SolveControl.UNBOUNDED, V3SimultaneousColumnSolver.NewtonTrace.NONE);
-
-        V3SimultaneousColumnSolver.Attempt.Converged converged = assertInstanceOf(
-                V3SimultaneousColumnSolver.Attempt.Converged.class, attempt, attempt::toString);
-        assertTrue(converged.evidence().convergenceEvidence().satisfiesGates());
-        assertTrue(evaluator.evaluate(converged.state(), thermo.newWorkspace()).maximumAbsoluteScaledResidual() <= 1.0e-8);
-        assertTrue(converged.evidence().iterations() > 0);
-        assertTrue(new V3AcceptanceAuditor(problem, thermo, feedFlash.molarEnthalpyJoulesPerMol())
-                .audit(converged.state(), thermo.newWorkspace(), V3SolveControl.UNBOUNDED).accepted());
-    }
-
     /**
      * The stall stop belongs to the budget that asks for it and to no other solve.
      *

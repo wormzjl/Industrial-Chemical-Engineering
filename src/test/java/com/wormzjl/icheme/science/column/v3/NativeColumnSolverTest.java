@@ -232,7 +232,7 @@ class NativeColumnSolverTest {
     }
 
     /**
-     * A four-tray dry crude column (its cold solve takes the inside-out trial) publishes the same bits, products,
+     * A four-tray dry crude column (a dry cold solve on the classical chain) publishes the same bits, products,
      * duties and diagnostics, with the ceiling off and at band, and the library carried band solves in the second.
      */
     @Test

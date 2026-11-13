@@ -23,8 +23,6 @@ final class V3MeshResidualEvaluator {
     private final double reboilerDutyWatts;
     private final double totalFeedFlow;
     private final V3ActiveComponentBasis activeComponentBasis;
-    /** Frozen outer-loop phase properties used by the Boston-Sullivan inside-out inner solve. */
-    private ThermoSnapshot frozenThermo;
 
     V3MeshResidualEvaluator(V3ColumnProblem problem, V3ThermoModel thermo, double feedMolarEnthalpyJoulesPerMol) {
         this.problem = Objects.requireNonNull(problem, "problem");
@@ -40,46 +38,7 @@ final class V3MeshResidualEvaluator {
         this.reboilerDutyWatts = specification(V3ColumnSpecification.ReboilerDuty.class).watts();
         this.activeComponentBasis = problem.activeComponentBasis();
         this.totalFeedFlow = activeComponentBasis.totalFeedFlowMolPerSecond();
-        this.frozenThermo = null;
     }
-
-    private V3MeshResidualEvaluator(
-            V3ColumnProblem problem, V3ThermoModel thermo, double feedMolarEnthalpyJoulesPerMol,
-            ThermoSnapshot frozenThermo) {
-        this(problem, thermo, feedMolarEnthalpyJoulesPerMol);
-        if (frozenThermo.nodeCount() != problem.topology().nodeCount()
-                || frozenThermo.componentCount() != problem.input().componentBasis().componentCount()) {
-            throw new IllegalArgumentException("V3 frozen thermodynamic snapshot does not match the resolved problem");
-        }
-        this.frozenThermo = frozenThermo;
-    }
-
-    /** Captures one strict PR property state for reuse by a cheap inner MESH solve. */
-    ThermoSnapshot captureThermoSnapshot(V3DryMeshState state, V3ThermoWorkspace workspace) {
-        if (frozenThermo != null) throw new IllegalStateException("V3 frozen evaluator cannot capture a new snapshot");
-        int nodes = problem.topology().nodeCount();
-        ThermoSnapshot.Phase[] liquid = new ThermoSnapshot.Phase[nodes];
-        ThermoSnapshot.Phase[] vapor = new ThermoSnapshot.Phase[nodes];
-        for (int node = 0; node < nodes; node++) {
-            double temperature = state.temperatureKelvin(node);
-            double pressure = problem.nodePressurePascal(node);
-            if (problem.topology().hasLiquidPhase(node)) {
-                double[] composition = normalizedPublicPhaseComposition(state, node, true);
-                liquid[node] = ThermoSnapshot.phase(temperature, pressure, composition, Root.LIQUID, thermo, workspace);
-            }
-            if (problem.topology().hasVaporPhase(node)) {
-                double[] composition = normalizedPublicPhaseComposition(state, node, false);
-                vapor[node] = ThermoSnapshot.phase(temperature, pressure, composition, Root.VAPOR, thermo, workspace);
-            }
-        }
-        return new ThermoSnapshot(liquid, vapor, problem.input().componentBasis().componentCount());
-    }
-
-    V3MeshResidualEvaluator withFrozenThermo(ThermoSnapshot snapshot) {
-        return new V3MeshResidualEvaluator(problem, thermo, feedMolarEnthalpyJoulesPerMol, snapshot);
-    }
-
-    boolean usesFrozenThermo() { return frozenThermo != null; }
 
     V3MeshResidual evaluate(V3DryMeshState state, V3ThermoWorkspace workspace) {
         state = Objects.requireNonNull(state, "state");
@@ -158,7 +117,7 @@ final class V3MeshResidualEvaluator {
 
     /** Whether the injected property model can differentiate itself, so {@link #localDerivatives} exists. */
     boolean providesLocalDerivatives() {
-        return frozenThermo == null && thermo instanceof V3ThermoDerivatives;
+        return thermo instanceof V3ThermoDerivatives;
     }
 
     /**
@@ -186,7 +145,7 @@ final class V3MeshResidualEvaluator {
     LocalNodeDerivatives localDerivatives(V3DryMeshState state, int node, V3ThermoWorkspace workspace) {
         state = Objects.requireNonNull(state, "state");
         workspace = Objects.requireNonNull(workspace, "workspace");
-        if (frozenThermo != null || !(thermo instanceof V3ThermoDerivatives differentiable)) {
+        if (!(thermo instanceof V3ThermoDerivatives differentiable)) {
             throw new IllegalArgumentException("V3 local MESH derivatives need a differentiable property model");
         }
         if (state.nodeCount() != problem.topology().nodeCount()
@@ -498,15 +457,13 @@ final class V3MeshResidualEvaluator {
         V3FugacityResult vaporResult = null;
         if (problem.topology().hasVaporPhase(node)) {
             vaporComposition = normalizedPublicPhaseComposition(state, node, false);
-            vaporResult = frozenThermo == null ? thermo.fugacity(temperature, pressure, vaporComposition, Root.VAPOR, workspace)
-                    : frozenThermo.vapor(node, temperature);
+            vaporResult = thermo.fugacity(temperature, pressure, vaporComposition, Root.VAPOR, workspace);
         }
         double[] liquidComposition = null;
         V3FugacityResult liquidResult = null;
         if (problem.topology().hasLiquidPhase(node)) {
             liquidComposition = normalizedPublicPhaseComposition(state, node, true);
-            liquidResult = frozenThermo == null ? thermo.fugacity(temperature, pressure, liquidComposition, Root.LIQUID, workspace)
-                    : frozenThermo.liquid(node, temperature);
+            liquidResult = thermo.fugacity(temperature, pressure, liquidComposition, Root.LIQUID, workspace);
         }
         return new NodeProperties(liquidComposition, vaporComposition, liquidResult, vaporResult,
                 problem.topology().hasVaporPhase(node) ? phaseTotal(state, node, false) : 0.0, new double[2]);
@@ -607,61 +564,6 @@ final class V3MeshResidualEvaluator {
             // {computed flag, value} of the node's water dilution log term: it is the same double for every
             // component row of the node, so it is computed once per node and evaluation instead of once per row.
             double[] waterDilution) {}
-
-    /** Immutable per-node values supplied by the strict outer thermodynamic loop. */
-    static final class ThermoSnapshot {
-        private final Phase[] liquid;
-        private final Phase[] vapor;
-        private final int componentCount;
-
-        private ThermoSnapshot(Phase[] liquid, Phase[] vapor, int componentCount) {
-            this.liquid = liquid.clone();
-            this.vapor = vapor.clone();
-            this.componentCount = componentCount;
-        }
-
-        int nodeCount() { return liquid.length; }
-        int componentCount() { return componentCount; }
-        V3FugacityResult liquid(int node, double temperature) { return liquid[node].result(temperature); }
-        V3FugacityResult vapor(int node, double temperature) { return vapor[node].result(temperature); }
-
-        private static Phase phase(double temperature, double pressure, double[] composition, Root root,
-                V3ThermoModel thermo, V3ThermoWorkspace workspace) {
-            // A temperature-only secant avoids constructing the CxC composition derivative matrix.  The inner
-            // MESH uses this affine property model only as a preconditioner; every candidate is re-evaluated by
-            // strict PR before it can be published.  A one-kelvin step is small compared with the column's
-            // thermal profile and is large enough to dominate floating-point noise in the enthalpy slope.
-            double step = Math.max(1.0, Math.min(5.0, 1.0e-3 * Math.max(temperature, 1.0)));
-            V3FugacityResult reference = thermo.fugacity(temperature, pressure, composition, root, workspace);
-            V3FugacityResult ahead = thermo.fugacity(temperature + step, pressure, composition, root, workspace);
-            int count = thermo.componentBasis().componentCount();
-            double[] logPhi = new double[count];
-            double[] dLogPhi = new double[count];
-            for (int component = 0; component < count; component++) {
-                logPhi[component] = reference.logFugacityCoefficient(component);
-                dLogPhi[component] = (ahead.logFugacityCoefficient(component)
-                        - reference.logFugacityCoefficient(component)) / step;
-            }
-            return new Phase(root, temperature, logPhi, dLogPhi, reference.molarEnthalpyJoulesPerMol(),
-                    (ahead.molarEnthalpyJoulesPerMol() - reference.molarEnthalpyJoulesPerMol()) / step);
-        }
-
-        private record Phase(Root root, double referenceTemperature, double[] logPhi, double[] dLogPhi,
-                             double enthalpy, double enthalpySlope) {
-            V3FugacityResult result(double temperature) {
-                double delta = temperature - referenceTemperature;
-                if (Math.abs(delta) > 25.0) {
-                    // The outer linearisation is a predictor, not a property model.  Reject a trial that leaves
-                    // its local thermal trust region so the inner Armijo step backtracks and the next outer pass
-                    // refreshes PR at the new temperature.
-                    throw new IllegalArgumentException("V3 inside-out temperature trust region exceeded");
-                }
-                double[] values = logPhi.clone();
-                for (int component = 0; component < values.length; component++) values[component] += dLogPhi[component] * delta;
-                return new V3FugacityResult(root, values, 1.0, enthalpy + enthalpySlope * delta, 1, 1.0);
-            }
-        }
-    }
 
     /**
      * Package-local response of one node to a local coordinate perturbation.
