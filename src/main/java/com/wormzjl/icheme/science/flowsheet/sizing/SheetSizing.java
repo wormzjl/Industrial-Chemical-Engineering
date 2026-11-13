@@ -374,7 +374,7 @@ public final class SheetSizing {
                 case "compressor" -> compressor(id, entry);
                 case "drum" -> drum(id, entry);
                 case "storage_tank" -> tank(id, entry);
-                case "ejector" -> ejector(id, entry);
+                case "ejector" -> ejector(id, entry, unit.params().number("motive", EjectorUnit.MOTIVE_PRESSURE));
                 case "vacuum_pump" -> vacuumPump(id, entry, unit.params());
                 case "combustion_engine" -> primeMover(id, entry, com.wormzjl.icheme.science.machine.PrimeMover.Family.ENGINE);
                 case "gas_turbine" -> primeMover(id, entry, com.wormzjl.icheme.science.machine.PrimeMover.Family.GAS_TURBINE);
@@ -500,11 +500,11 @@ public final class SheetSizing {
             return sized(entry, PrimeMoverSizing.Size.class, size -> PrimeMoverSizing.rate(load, size), () -> PrimeMoverSizing.auto(load));
         }
 
-        /** An ejector on its suction's load, with what its law needs and what a wired Motive port brings (W10). */
-        SizedUnit ejector(String id, UnitEntry entry) {
+        /** An ejector on its suction's load, with what its law needs and what a wired Motive port brings, on steam at {@code motive} Pa (W10, P3-01). */
+        SizedUnit ejector(String id, UnitEntry entry, double motive) {
             var readings = readings(id);
             boolean wired = wires.getOrDefault(id, Map.of()).containsKey(EjectorUnit.MOTIVE);
-            var load = EjectorSizing.Load.of(stream(id, EjectorUnit.SUCTION), readings.getOrDefault("need", 0.), wired ? readings.get("motive") : null, basis);
+            var load = EjectorSizing.Load.of(stream(id, EjectorUnit.SUCTION), readings.getOrDefault("need", 0.), wired ? readings.get("motive") : null, motive, basis);
             return ejector(entry, load);
         }
 

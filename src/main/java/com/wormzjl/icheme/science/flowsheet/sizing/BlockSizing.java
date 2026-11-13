@@ -108,7 +108,7 @@ final class BlockSizing {
         } else if (ColumnComponents.ejectorRequired(door.topPressure())) {
             boolean wired = wires.getOrDefault(id, Map.of()).containsKey(EjectorUnit.MOTIVE);
             var vent = thermo.atTemperature(condenser.temperatureKelvin(), condenser.pressurePascal(), sizing.stream(id, ColumnUnit.OVERHEAD).amounts(), SolidInventory.EMPTY);
-            var load = EjectorSizing.Load.of(vent, readings.getOrDefault("ejector_need", 0.), wired ? readings.get("ejector_motive") : null, basis);
+            var load = EjectorSizing.Load.of(vent, readings.getOrDefault("ejector_need", 0.), wired ? readings.get("ejector_motive") : null, door.ejector().motive(), basis);
             out.put(member(id, "ejector"), ejector(entries.unit(member(id, "ejector")), load));
             condensing[thermo.water()] += readings.getOrDefault("ejector_motive", 0.) / thermo.waterMass();
         }

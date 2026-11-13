@@ -480,4 +480,50 @@ final class SheetSizingTest {
         assertEquals(facts, sheet.sizing(), "the sheet it was given stays");
         assertSame(run, all.run(), "no size here moves the run");
     }
+
+    // ---- P3-01: the ejector is sized on the world's capacity at the sheet's motive pressure ----
+
+    /** An ejector tile on nitrogen with a little steam at 20 kPa, to 50 kPa on steam at {@code motive} Pa, its Motive port free. */
+    private static Flowsheet ejector(double motive) {
+        var load = new LinkedHashMap<String, Double>();
+        load.put(FluidMaterialCatalog.NITROGEN, 10.);
+        load.put("Water", .5);
+        var params = new Params(JsonParser.parseString("{\"discharge\":5e4,\"motive\":" + motive + "}").getAsJsonObject());
+        var units = List.of(new Flowsheet.Unit("J", "ejector", "J-101", 0, 0, params));
+        var streams = List.of(new Flowsheet.Stream("load", "load", null, new Flowsheet.End("J", com.wormzjl.icheme.science.flowsheet.unit.EjectorUnit.SUCTION),
+                        new Flowsheet.Feed(323.15, 2e4, load, List.of())),
+                new Flowsheet.Stream("out", "out", new Flowsheet.End("J", com.wormzjl.icheme.science.flowsheet.unit.EjectorUnit.DISCHARGE), null, null));
+        return new Flowsheet(new Flowsheet.Basis(PACKAGE, "test", AXIS), units, streams, FlowsheetSolver.Settings.DEFAULT);
+    }
+
+    /** The world's set of {@code suction} m bore at 20 kPa on steam at {@code motive} Pa, m³/h. */
+    private static double takes(double suction, double motive) {
+        return new com.wormzjl.icheme.science.machine.SteamEjector(suction).capacity(2e4, motive, 1) * 3600;
+    }
+
+    /**
+     * Auto's bore is the smallest whose world set takes the load with its spare at the sheet's motive: on 5 bar steam the set takes
+     * 0.41 of what it takes on the door's 10 bar, so the same load needs a wider suction; at 10 bar the size is the one the area at
+     * the vacuum speed gave before (finding P3-01).
+     */
+    @Test void anEjectorIsSizedOnTheWorldsCapacityAtItsMotive() {
+        assertEquals(.41, Math.round(100 * com.wormzjl.icheme.science.machine.SteamEjector.motiveShare(5e5)) / 100., 1e-9);
+        assertEquals(1, com.wormzjl.icheme.science.machine.SteamEjector.motiveShare(1e6), 1e-12);
+        double[] grid = UnitSize.grid(EquipmentShape.Kind.EJECTOR), bores = new double[2], motives = {1e6, 5e5};
+        for (int k = 0; k < motives.length; k++) {
+            double motive = motives[k];
+            var sheet = ejector(motive);
+            var run = on(() -> run(sheet));
+            var sized = on(() -> SheetSizing.rate(sheet, run, THERMO)).units().get("J");
+            double suction = ((EjectorSizing.Size) sized.size()).suction();
+            double held = Selection.spared(run.streams().get("load").state().volume() * DesignBasis.DEFAULT.designFlow() * 3600);
+            assertTrue(takes(suction, motive) >= held, motive + " Pa: " + suction + " m takes " + takes(suction, motive) + " of the " + held + " m³/h held");
+            for (double smaller : grid)
+                if (smaller < suction) assertTrue(takes(smaller, motive) < held, motive + " Pa: the smallest that holds the spare, not " + smaller);
+            bores[k] = suction;
+        }
+        double speed = Limit.VACUUM_SPEED.value(.2);
+        assertEquals(Math.PI / 4 * bores[0] * bores[0] * speed * 3600, takes(bores[0], 1e6), 1e-9 * takes(bores[0], 1e6), "10 bar: the area at the vacuum speed");
+        assertTrue(bores[1] > bores[0], "5 bar steam needs a wider suction: " + bores[1] + " m against " + bores[0]);
+    }
 }
