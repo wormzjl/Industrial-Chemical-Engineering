@@ -11,7 +11,7 @@ Up: [code guide](README.md)
 - A step's answer states a CO2-rich liquid, a stand-in or one liquid where you expected frost (carried crystals, below).
 - A wet gas condenses its oil late or all at once (the liquid trial's water trace, below).
 
-This chapter covers `science/thermo/phase/**`, the water module `science/thermo/water/**`, `TangentPlaneStability`, `SubstitutionAcceleration`, `NumericalBox` and `IdealGasFunction`. It ends at the engine's public API and at the interfaces it consumes (`IdealGasFunction`, `SolidPhaseEvaluator`, `CrystalFugacity`). The network side is in [fluid-science.md](fluid-science.md): when the network calls the engine, how it turns failures into holds, the "outside data range" status-line notice, `NetworkPhaseEngine` and the implementations it supplies (`SpinePackageData`, `TranslatedPengRobinson.residualOnly`). The records the engine reads (`ReferenceSpine`, `CoefficientIdealGas`, `CrystalReference`, `MaterialCoverage`, `DerivedPairs`), the PR78 kernel, `PairInteractions` and `HuronVidalExcess` are in [thermo-materials.md](thermo-materials.md). The column does not use the engine and refuses crystal packages ([column-v3.md](column-v3.md)).
+This chapter covers `science/thermo/phase/**`, the water module `science/thermo/water/**`, `TangentPlaneStability`, `SubstitutionAcceleration`, `NumericalBox` and `IdealGasFunction`. It ends at the engine's public API and at the interfaces it consumes (`IdealGasFunction`, `SolidPhaseEvaluator`, `CrystalFugacity`). The network side is in [fluid-science.md](fluid-science.md): when the network calls the engine, how it turns failures into holds, the "outside data range" status-line notice, `NetworkPhaseEngine` and the implementations it supplies (`TranslatedPengRobinson.residualOnly`). The records the engine reads (`ReferenceSpine`, `CoefficientIdealGas`, `SpinePackageData`, `CrystalReference`, `MaterialCoverage`, `DerivedPairs`), the PR78 kernel, `PairInteractions` and `HuronVidalExcess` are in [thermo-materials.md](thermo-materials.md). The column does not use the engine and refuses crystal packages ([column-v3.md](column-v3.md)).
 
 ## In one paragraph
 
@@ -419,7 +419,7 @@ flowchart TD
 | Onsets | `depositionTemperature`, `frostTemperature`, `freezingTemperature`, `depositionPressure`, `DepositionOnset` | `GasSolidEquilibriumTest`, `G4F1`, `G4F2`, `G5F2` |
 | Admitted competitions, water chemistry | `PhaseContract` | `FluidTpEquilibriumTest.waterChemistryAndQualifiedCrystalsFollowTheContract`, `GasSolidEquilibriumTest.theCrystalCompetitionIsQualifiedAsAWholeSet`, `SpinePackageEvaluatorTest` |
 | Grades and extrapolation | `graded`, `outsideData`, `PhaseDomain`, `EquilibriumResult.Coverage` | `qualification/G3F9DataRangeBoundaryTest`, `FluidTpEquilibriumPhUvTest.aClosedVesselBeyondThePressureEnvelopeIsAnsweredExtrapolated` |
-| Fluid evaluator and conventions | `CubicPhaseEvaluator` (and fluid `TranslatedPengRobinson.residualOnly`, `SpinePackageData`) | `CubicPhaseEvaluatorTest`, `SpinePackageEvaluatorTest` |
+| Fluid evaluator and conventions | `CubicPhaseEvaluator` (and fluid `TranslatedPengRobinson.residualOnly`, material `SpinePackageData`) | `CubicPhaseEvaluatorTest`, `SpinePackageEvaluatorTest` |
 | Solid contract | `SolidPhaseEvaluator`, `CrystalFugacity` | `SolidPhaseEvaluatorTest`, `CrystalPhaseEvaluatorTest` |
 | Cache identity | `ThermoIdentity`, `PhaseContract.forDerived` | `ThermoIdentityTest`, `SpinePackageEvaluatorTest` |
 | Numerical box | `NumericalBox` | fluid `RangeContinuationGateTest` |

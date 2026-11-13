@@ -4,7 +4,7 @@ import com.wormzjl.icheme.science.math.DeterministicMath;
 
 import com.wormzjl.icheme.science.material.CoefficientIdealGas;
 import com.wormzjl.icheme.science.material.CoefficientTranslations;
-import com.wormzjl.icheme.science.fluid.thermo.SpinePackageData;
+import com.wormzjl.icheme.science.material.SpinePackageData;
 import com.wormzjl.icheme.science.fluid.thermo.TranslatedPengRobinson;
 import com.wormzjl.icheme.science.material.DerivedPairs;
 import com.wormzjl.icheme.science.material.MaterialCatalog;

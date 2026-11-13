@@ -1,6 +1,8 @@
 package com.wormzjl.icheme.science.fluid.thermo;
 
+import com.wormzjl.icheme.science.fluid.state.EnergyReference;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
+import com.wormzjl.icheme.science.material.SpinePackageData;
 import com.wormzjl.icheme.science.thermo.IdealGasFunction;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel;
 import com.wormzjl.icheme.science.thermo.ThermoComponent;
@@ -46,6 +48,8 @@ public final class HydrocarbonModel {
     private final String revision;
     private final FluidDomain domain;
     private final SpinePackageData spine;
+    /** The spine's formation datum (D10) over the package components; null without a spine. */
+    private final EnergyReference formation;
     private final double[] molecularWeights;
 
     public HydrocarbonModel(MaterialCatalog catalog,String packageId) {
@@ -59,6 +63,8 @@ public final class HydrocarbonModel {
         List<ThermoComponent> components=new ArrayList<>(n);
         for(int i=0;i<n;i++)components.add(evaluator.component(i));
         spine=propertyPackage.spine().isEmpty()?null:SpinePackageData.of(catalog,packageId);
+        formation=spine==null?null:new EnergyReference(spine.formationRevision(),
+                spine.components().stream().map(ThermoComponent::id).toList(),spine.formationEnthalpies(),true);
         List<IdealGasFunction> gas=new ArrayList<>(n);double[] offsets=new double[n];
         double[] formation=spine==null?null:spine.formationEnthalpies();
         for(int i=0;i<n;i++) {
@@ -86,6 +92,13 @@ public final class HydrocarbonModel {
     public String revision() { return revision; }
     /** The resolved spine inputs; empty for a package without a spine. */
     public java.util.Optional<SpinePackageData> spine() { return java.util.Optional.ofNullable(spine); }
+    /**
+     * The formation datum of a spine package as an energy reference over the package components, whose offsets are the
+     * spine's formation enthalpies ({@link SpinePackageData#formationEnthalpies()}, revision
+     * {@link SpinePackageData#formationRevision()}, formation data qualified); empty without a spine.
+     * {@code EnergyReference.sensible(basis).rebase(E, n, formation)} is the engine's energy of a network energy {@code E}.
+     */
+    public java.util.Optional<EnergyReference> formationReference() { return java.util.Optional.ofNullable(formation); }
     /** The package's data ranges ({@link FluidDomain}). */
     public FluidDomain domain() { return domain; }
     /** The compounds of this model's list, water not among them: the conserved basis less its last entry. */

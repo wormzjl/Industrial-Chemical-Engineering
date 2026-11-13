@@ -97,7 +97,7 @@ class CrystalFlushBudgetTest {
         totals[CO2] += crystal(inventory);
         double energy = inventory.internalEnergy();
         for (var p : inventory.solids().crystals()) energy += p.massKg() * p.material().crystal().energyOffset();
-        var formation = model.hydrocarbon.spine().orElseThrow().formationReference();
+        var formation = model.hydrocarbon.formationReference().orElseThrow();
         energy = EnergyReference.sensible(formation.components()).rebase(energy, Arrays.copyOf(totals, totals.length - 1), formation);
         var engine = FluidTpEquilibrium.forPackage(CATALOG, PILOT);
         var request = EquilibriumRequest.uv(energy, inventory.volume(), engine.contract().components(), Arrays.copyOf(totals, totals.length - 1), PhaseCompetition.FLUID_AND_CRYSTALS);

@@ -34,7 +34,7 @@ class SpinePackageEvaluatorTest {
         var evaluator = CubicPhaseEvaluator.forPackage(catalog, PILOT);
         var network = FluidTestSupport.model(catalog, PILOT).hydrocarbon;
         assertEquals(network.components(), evaluator.components());
-        var formation = network.spine().orElseThrow().formationReference();
+        var formation = network.formationReference().orElseThrow();
         var sensible = EnergyReference.sensible(network.components());
         int n = network.componentCount();
         double[] offsets = new double[n];

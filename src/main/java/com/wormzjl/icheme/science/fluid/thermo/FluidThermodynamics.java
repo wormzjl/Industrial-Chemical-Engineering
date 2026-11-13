@@ -307,7 +307,7 @@ public final class FluidThermodynamics {
     private double engineEnergy(double energy,double[] totals) {
         var spine=hydrocarbon.spine();
         if(spine.isEmpty())return energy;
-        var formation=spine.get().formationReference();
+        var formation=hydrocarbon.formationReference().orElseThrow();
         return EnergyReference.sensible(formation.components()).rebase(energy,Arrays.copyOf(totals,hydrocarbon.componentCount()),formation);
     }
     private CrystalAnswer crystalAnswer(EquilibriumResult result,double[] totals) {
