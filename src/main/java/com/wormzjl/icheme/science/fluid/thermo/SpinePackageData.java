@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.science.fluid.thermo;
 
 import com.wormzjl.icheme.science.fluid.state.EnergyReference;
+import com.wormzjl.icheme.science.material.CoefficientTranslations;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.material.ReferenceSpine;
 import com.wormzjl.icheme.science.thermo.PairInteractions;
@@ -119,7 +120,7 @@ public final class SpinePackageData {
             double t = point == null ? property.standardTemperature() : point.temperatureKelvin();
             double target = point == null ? property.molecularWeight() / property.density() : point.molarVolumeCubicMetres();
             double p = point == null ? property.standardPressure() : point.pressurePascal();
-            double rawVolume = HydrocarbonModel.pureLiquidCompressibility(components.get(i), constants[i][i], t, p)
+            double rawVolume = CoefficientTranslations.pureLiquidCompressibility(components.get(i), constants[i][i], t, p)
                     * FluidThermodynamics.R * t / p;
             anchors.add(new Anchor(point == null ? AnchorSource.STANDARD_DENSITY : AnchorSource.CALIBRATION_POINT, t, p, target,
                     target - rawVolume));

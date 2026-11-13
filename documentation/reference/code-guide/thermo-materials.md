@@ -68,6 +68,7 @@ results are bitwise identical on every JVM.
 | [`GroupContributionInteractions`](../../../src/main/java/com/wormzjl/icheme/science/material/GroupContributionInteractions.java) | The E-PPR78 pairs of one package, resolved at load (`RULE_EPPR78` = "eppr78", `REFERENCE_TEMPERATURE` 298.15 K); a pair with an explicit constant k_ij is kept out; `science()` is the part of `physicsContent` a package with a rule adds | Load refusals of the rule |
 | [`Eppr78Groups`](../../../src/main/java/com/wormzjl/icheme/science/material/Eppr78Groups.java) | The 40 groups of scheme `SCHEME` = "eppr78-2022" and their sources | Group names a spine may use |
 | [`VolumeTranslation`](../../../src/main/java/com/wormzjl/icheme/science/material/VolumeTranslation.java) | A property's `volume_translation`: the saturated-liquid anchor at a reduced temperature (`TYPE` "saturated_liquid_reduced_temperature"); `shift` is c = v_ref - v_PR,L on the untranslated one-component kernel | Liquid volume anchor of a spine package |
+| [`CoefficientTranslations`](../../../src/main/java/com/wormzjl/icheme/science/material/CoefficientTranslations.java) | The volume translations of a package without a spine (`of`: each component's untranslated pure liquid at its calibration point or standard density moved to that volume) and `pureLiquidCompressibility`, the pure-component PR78 liquid Z they and `SpinePackageData` read (its own root policy, see Traps); moved from the network's `HydrocarbonModel` (C1b) | The engine's evaluator of a spine-less package (`CubicPhaseEvaluator.forPackage`) |
 | [`MaterialCoverage`](../../../src/main/java/com/wormzjl/icheme/science/material/MaterialCoverage.java) | A grade (`qualified`, `estimated_declared_error`, `research_only`, `unavailable`) and its evidence; required on spine and crystal records | Which crystals a package admits (equilibrium-engine.md) |
 | [`CrystalPhasesUnavailable`](../../../src/main/java/com/wormzjl/icheme/science/material/CrystalPhasesUnavailable.java), [`IdealGasFitUnavailable`](../../../src/main/java/com/wormzjl/icheme/science/material/IdealGasFitUnavailable.java) | Typed `IllegalArgumentException` refusals: a consumer without crystal equations given a package with crystals; a consumer of the `shifted_polynomial_5` fits given a spine package | Thrown by `V3CatalogPropertyPackage` (both) and `MaterialCatalog.inferenceView` (crystals on the request's view); see [column-v3.md](column-v3.md) |
 | [`TrainedPhysics`](../../../src/main/java/com/wormzjl/icheme/science/material/TrainedPhysics.java) | The phase physics a neural model was trained on, as values from its sidecar (`read`): each compound's PR78 Tc, Pc, omega and `shifted_polynomial_5` Cp, the constant pairs, the water's Wagner-Pruss, Watson and Shomate values, the trained T range. `compare`/`matches` on the request's active compounds: scalars within `RELATIVE_TOLERANCE` 1 %, functions of T on `GRID_INTERVALS` 200 (201 points), pairs within `PAIR_TOLERANCE` 0.001 (owner decisions E8, E9). No record id or revision takes part | Why a model binds or not; the lens's trained pairs |
@@ -165,7 +166,7 @@ flowchart LR
    - Fluid: `HydrocarbonModel` builds `ThermoComponent`s and one volume shift per species, then
      `TranslatedPengRobinson` evaluates on `PengRobinsonKernel`. A package without a spine uses `Mixing.SPARSE_PAIRS`,
      the `shifted_polynomial_5` fits, and shifts calibrated with its own pure-component PR78 liquid Z
-     (`pureLiquidCompressibility`) at the `MaterialCatalog.FluidData` volume references. For a spine package
+     (`CoefficientTranslations.pureLiquidCompressibility`) at the `MaterialCatalog.FluidData` volume references. For a spine package
      `SpinePackageData` gives the components, a `PairInteractions` model (`TEMPERATURE_DEPENDENT_PAIRS`), the spines as
      the ideal gas, and per species the `volume_translation` shift (`VolumeTranslation.shift`), else the calibration
      point or the standard density through `pureLiquidCompressibility`. Phase decisions come from `NetworkPhaseEngine`
@@ -288,7 +289,7 @@ data); the tjl20-family envelopes and the methane and nitrogen records' `fluid_d
   `TranslatedPengRobinson.Values` gives the mixture's `attraction()`, `attractionTemperatureDerivative()` and
   `attractionAmountDerivative(i)`, and the static `Values.pressureVolumeDerivative(T, v, a, b)` is the untranslated
   cubic's `dP/dv` in closed form; `Workspace.idealGasEnthalpy(i)` is one component's ideal-gas enthalpy.
-- The fluid `HydrocarbonModel.pureLiquidCompressibility` (package-private; volume calibration of one pure component,
+- `CoefficientTranslations.pureLiquidCompressibility` (`science/material`; volume calibration of one pure component,
   also called by `SpinePackageData` for a component without `volume_translation`) differs from the kernel: it checks
   only finite and positive T and P, has no root refinement, a near-ideal shortcut (|A|, |B| < 1e-14 gives Z = 1), and
   the liquid root is "smallest root > B + 1e-12" with a throw if none. These are the rules of the test-tree oracle
@@ -407,7 +408,7 @@ The numerical box (10..6000 K, 1 Pa..1 GPa) is in [equilibrium-engine.md](equili
 <details><summary>Traps</summary>
 
 - One production PR kernel, plus one pure-component copy. `PengRobinsonKernel` serves the column, the fluid network,
-  the engine and `VolumeTranslation.shift`. The fluid `HydrocarbonModel.pureLiquidCompressibility` repeats the same
+  the engine and `VolumeTranslation.shift`. `CoefficientTranslations.pureLiquidCompressibility` repeats the same
   constants and kappa rule for its volume calibration but differs in root policy and bounds (see above). A change to
   one is not a change to the other.
 - The fit's lower end (`idealGasMinimumTemperature`, nitrogen's 273.16 K) is read only by the fluid
@@ -582,7 +583,7 @@ The fluid network's phase model holds water as a compound of the cubic. What the
 | A package one consumer cannot use | `CrystalPhasesUnavailable`, `IdealGasFitUnavailable` (thrown by the column and `inferenceView`) | `science/column/v3/CrystalPackageConsumersTest`, `science/fluid/thermo/SpineNetworkPathTest` |
 | Continuation past a data range | `ViscosityCorrelation`, `ReferenceSpine`, `CrystalReference` | `ViscosityTest`, `ReferenceSpineTest.evaluationOutsideTheSegmentsContinuesOnTheEndsHeatCapacity`, `CrystalReferenceTest.segmentsContinuePastTheirRangeWithValueAndSlope`; fluid `RangeContinuationGateTest`, `DataRangeContinuationTest` |
 | PR78 equation, mixing or root policy | `PengRobinsonKernel` (every engine) | `PengRobinsonKernelRootPrecisionTest`, `PengRobinsonKernelPairInteractionsTest`, `V3PengRobinsonKernelTest` (against the test-tree `PengRobinson78`), column and fluid regressions (see linked chapters) |
-| Fluid volume calibration | `HydrocarbonModel.pureLiquidCompressibility`, `transport/liquid_calibration.json`, property `volume_translation`, `SpinePackageData` | `HydrocarbonModelTest`, `MaterialFluidDataTest` (incl. `aCalibrationPointAnchorsAPackageWithoutASpineWhateverTheRecordTranslates`), `PilotVolumeAnchorTest`, `fluidSolverRegression` exact |
+| Fluid volume calibration | `CoefficientTranslations.pureLiquidCompressibility`, `transport/liquid_calibration.json`, property `volume_translation`, `SpinePackageData` | `HydrocarbonModelTest`, `MaterialFluidDataTest` (incl. `aCalibrationPointAnchorsAPackageWithoutASpineWhateverTheRecordTranslates`), `PilotVolumeAnchorTest`, `fluidSolverRegression` exact |
 | A record's revision; a package or view identity (`scientificRevision`, `fluidRevision`, `spineRevision`) | `MaterialCatalog` (`build`, `Method.identity`, `fluidIdentity`, `physicsContent`), `JsonFields.revision`, `FluidData.revision` | `MaterialCatalogTest` (`everyPackageIdentityListsTheDeclaredRevisionOfEachRecordItNames`, `aViscosityRevisionBumpMovesOnlyTheFluidIdentity`, `aPackageRecordEditAloneMovesNoIdentity`, `aDatasetRevisionBumpMovesEveryViewThatHoldsItsCompoundAndNoOther`, `aRevisionThatIsNotATokenOrIsMissingIsRefusedNamingItsRecord`, `aRecordsRevisionBumpMakesEarlierResultsStaleButNamesDoNot`), `PilotCryogenicCatalogTest` (`spineIdentityIsTheRecordsDeclaredRevisions`), `MaterialFluidDataTest.fluidReferenceEditsMoveTheFluidRevisionNotThePhysicsAndCapturedModelsStayStable`, fluid `FluidFactsCompatTest.aSchemaOneWorldRestatesOnceOntoTheDeclaredRevisions` |
 | Viscosity correlation type | `ViscosityCorrelation` + `MaterialCatalog.readViscosities` | `ViscosityTest` (includes the ambient viscosity case) |
 | Liquid mixture correction | `LiquidMixtureCorrection` | `LiquidMixtureCorrectionTest`, `science/fluid/transport/MixtureViscosityTest` |
@@ -649,7 +650,7 @@ The fluid network's phase model holds water as a compound of the cubic. What the
 
 ## Traps
 
-- `PengRobinsonKernel` is the one production PR78 kernel. The fluid `HydrocarbonModel` has its own package-private static pure-component Z (`pureLiquidCompressibility`) for the volume calibration, a copy of the old `PengRobinson78` rules; `SpinePackageData` calls it too. `PengRobinson78` itself is a test-tree oracle.
+- `PengRobinsonKernel` is the one production PR78 kernel. `science/material/CoefficientTranslations` has its own static pure-component Z (`pureLiquidCompressibility`) for the volume calibration, a copy of the old `PengRobinson78` rules; `SpinePackageData` calls it too. `PengRobinson78` itself is a test-tree oracle.
 - `HydrocarbonModel` is the cubic model of every network package, the pilot's N2 and CO2 included.
 
 **Snapshot:** `4563176e1`, 2026-11-13 (the last commit this chapter was checked against). Earlier snapshots and batch notes: [HISTORY.md](HISTORY.md).

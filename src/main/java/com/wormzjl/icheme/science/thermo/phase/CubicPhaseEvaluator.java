@@ -3,7 +3,7 @@ package com.wormzjl.icheme.science.thermo.phase;
 import com.wormzjl.icheme.science.math.DeterministicMath;
 
 import com.wormzjl.icheme.science.material.CoefficientIdealGas;
-import com.wormzjl.icheme.science.fluid.thermo.HydrocarbonModel;
+import com.wormzjl.icheme.science.material.CoefficientTranslations;
 import com.wormzjl.icheme.science.fluid.thermo.SpinePackageData;
 import com.wormzjl.icheme.science.fluid.thermo.TranslatedPengRobinson;
 import com.wormzjl.icheme.science.material.DerivedPairs;
@@ -110,14 +110,14 @@ public final class CubicPhaseEvaluator {
      * {@code HydrocarbonModel} takes it. A package that declares a reference spine (P3 WP5): the spines as the ideal-gas
      * functions, the E-PPR78 pair interactions and the one-anchor-per-species translations, all from
      * {@link SpinePackageData#of}. A package without one: its {@code shifted_polynomial_5} fits on the network's datum,
-     * its constant interactions and the model's translations ({@link HydrocarbonModel#coefficientEvaluator}).
+     * its constant interactions and the translations of {@link CoefficientTranslations#of}.
      */
     public static CubicPhaseEvaluator forPackage(MaterialCatalog catalog, String packageId) {
         var pack = catalog.requirePackage(packageId);
         if (pack.spine().isEmpty()) {
             List<IdealGasFunction> gas = new java.util.ArrayList<>();
             for (String id : pack.components()) gas.add(CoefficientIdealGas.of(catalog, packageId, id));
-            return fromPackage(pack, pack.components(), HydrocarbonModel.coefficientTranslations(catalog, packageId), gas);
+            return fromPackage(pack, pack.components(), CoefficientTranslations.of(catalog, packageId), gas);
         }
         var data = SpinePackageData.of(catalog, packageId);
         return new CubicPhaseEvaluator(packageId, data.components(), data.interactions(), data.translations(), data.idealGas());
