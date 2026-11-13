@@ -43,6 +43,21 @@ public record V3AcceptanceAudit(List<Check> checks, List<String> advisoryEvidenc
             return new Check(family, value, limit, false, detail);
         }
 
+        /** A passed check of one of the solver's own families, published as the family's text. */
+        public static Check pass(V3AuditFamily family, double value, double limit, String detail) {
+            return pass(family.text(), value, limit, detail);
+        }
+
+        /** A failed check of one of the solver's own families, published as the family's text. */
+        public static Check fail(V3AuditFamily family, double value, double limit, String detail) {
+            return fail(family.text(), value, limit, detail);
+        }
+
+        /** Whether this check's family is {@code family}: its text equals the family's text. */
+        public boolean hasFamily(V3AuditFamily family) {
+            return this.family.equals(family.text());
+        }
+
         private static String bounded(String value, String name, int maximumLength) {
             value = Objects.requireNonNull(value, name);
             if (value.isBlank() || value.length() > maximumLength) {

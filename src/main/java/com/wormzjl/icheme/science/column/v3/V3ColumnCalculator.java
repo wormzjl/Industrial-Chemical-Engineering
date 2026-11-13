@@ -50,10 +50,6 @@ public final class V3ColumnCalculator {
      */
     public static final String HEAT_ASSUMPTIONS_REVISION = "v3-heat-assumptions-r1";
     private static final String HEAT_FORMULATION_SUFFIX = "-stage-heat";
-    private static final String HEAT_RAMP_LABEL = "heat-ramp";
-    /** Steam rungs are labelled by whether a draw ramp follows them; both are the same continuation. */
-    private static final String STEAM_RAMP_LABEL = "steam-ramp";
-    private static final String WET_RAMP_LABEL = "wet-ramp";
     private static final int HEAT_RAMP_STEPS = 4;
     /** Side-draw rungs once a stage heat is authored; a cooled zone needs finer withdrawal increments. */
     private static final int HEAT_BEARING_DRAW_RAMP_STEPS = 8;
@@ -308,7 +304,7 @@ public final class V3ColumnCalculator {
                 neuralControl.checkpoint();
                 if (outcome instanceof V3ColumnOutcome.Success success) {
                     boolean advisory = success.result().acceptanceAudit().checks().stream()
-                            .anyMatch(check -> check.family().equals("WATER_DEW_POINT") && check.value() > check.limit());
+                            .anyMatch(check -> check.hasFamily(V3AuditFamily.WATER_DEW_POINT) && check.value() > check.limit());
                     if (selected == null || !advisory) {
                         selected = success;
                         selectedProfile = acceptedCandidate[0];
@@ -751,7 +747,7 @@ public final class V3ColumnCalculator {
         String summary = boundedSummary(reason);
         return new V3ColumnOutcome.Failure(V3SolverFailureCode.INITIALIZATION_FAILURE, summary,
                 new V3SolverDiagnostics(0, progress.iterations(), 0, 0, progress.lastMaximumScaledResidual(), 0.0,
-                        "initialization/lnn-only", List.of(boundedEvent(summary)), failedAudit("UNAVAILABLE", summary),
+                        "initialization/lnn-only", List.of(boundedEvent(summary)), failedAudit(V3AuditFamily.UNAVAILABLE, summary),
                         V3ConvergenceEvidence.unavailable()));
     }
 
@@ -1177,7 +1173,7 @@ public final class V3ColumnCalculator {
                 if (!operatingDetail.isEmpty() && detail.length() + operatingDetail.length() > 512) {
                     detail = detail.substring(0, Math.max(0, 512 - operatingDetail.length()));
                 }
-                return new V3ColumnOutcome.Failure(failureCode(failure.code()), detail + operatingDetail, diagnostics);
+                return new V3ColumnOutcome.Failure(failureCode(failure.attemptCode()), detail + operatingDetail, diagnostics);
             }
             return new V3ColumnOutcome.Failure(V3SolverFailureCode.ACCEPTANCE_AUDIT_FAILURE,
                     "The fresh V3 acceptance audit rejected the converged candidate"
@@ -1713,7 +1709,7 @@ public final class V3ColumnCalculator {
             // the stalled limit nor cut to the polish budget.
             boolean converged = attempt instanceof V3SimultaneousColumnSolver.Attempt.Converged;
             boolean released = attempt instanceof V3SimultaneousColumnSolver.Attempt.Failure heldFailure
-                    && heldFailure.code().equals("STALLED_SUPPORT_FLOOR");
+                    && heldFailure.attemptCode() == V3AttemptCode.STALLED_SUPPORT_FLOOR;
             boolean floorBudget = refreshes < floorRefreshLimit
                     && (converged || released || stalledRefreshes < MAXIMUM_STALLED_FLOOR_SUPPORT_REFRESHES);
             // The wet set is re-derived only from a state that solved its own equations, and carries its own
@@ -1814,7 +1810,7 @@ public final class V3ColumnCalculator {
 
     private static boolean hasCondenserPhaseMismatch(V3SolvePass pass) {
         return pass.attempt() instanceof V3SimultaneousColumnSolver.Attempt.Converged
-                && pass.audit().checks().stream().anyMatch(check -> check.family().equals("CONDENSER_PHASE") && !check.passed());
+                && pass.audit().checks().stream().anyMatch(check -> check.hasFamily(V3AuditFamily.CONDENSER_PHASE) && !check.passed());
     }
 
     /** Resolve the current branch without carrying an earlier attempt's frozen truncation support. */
@@ -1830,7 +1826,7 @@ public final class V3ColumnCalculator {
         if (!hasCondenserPhaseMismatch(pass)) return new PhaseCorrection(pass, false);
         condenserAttempts.beginPhaseCorrection();
         if (!pass.attempt().evidence().convergenceEvidence().satisfiesGates()
-                || pass.audit().checks().stream().anyMatch(check -> !check.family().equals("CONDENSER_PHASE") && !check.passed())) {
+                || pass.audit().checks().stream().anyMatch(check -> !check.hasFamily(V3AuditFamily.CONDENSER_PHASE) && !check.passed())) {
             return new PhaseCorrection(withPhaseEvents(pass,
                     "condenser phase transition unavailable: other convergence or audit gates also failed"), true);
         }
@@ -1867,7 +1863,7 @@ public final class V3ColumnCalculator {
     /** One immutable authored-feature continuation point. */
     private record RampStep(
             double steamFraction, double heatFraction, double drawFraction, double labelFraction,
-            String pathLabel, String description) {
+            V3RampKind kind, String description) {
         private RampStep {
             if (!Double.isFinite(steamFraction) || steamFraction < 0.0 || steamFraction > 1.0
                     || !Double.isFinite(heatFraction) || heatFraction < 0.0 || heatFraction > 1.0
@@ -1875,14 +1871,19 @@ public final class V3ColumnCalculator {
                     || !Double.isFinite(labelFraction) || labelFraction < 0.0 || labelFraction > 1.0) {
                 throw new IllegalArgumentException("V3 continuation ramp fractions must be finite and within zero to one");
             }
-            pathLabel = Objects.requireNonNull(pathLabel, "pathLabel");
+            kind = Objects.requireNonNull(kind, "kind");
             description = Objects.requireNonNull(description, "description");
         }
 
         /** Heat-free continuation point; the label fraction preserves the historical path strings. */
-        private static RampStep legacy(double steamFraction, double drawFraction, String pathLabel, String description) {
+        private static RampStep legacy(double steamFraction, double drawFraction, V3RampKind kind, String description) {
             return new RampStep(steamFraction, 0.0, drawFraction,
-                    Math.max(steamFraction, drawFraction), pathLabel, description);
+                    Math.max(steamFraction, drawFraction), kind, description);
+        }
+
+        /** The rung's label in the solve path and the energy-shift note. */
+        String pathLabel() {
+            return kind.text();
         }
 
         boolean requested(V3ColumnInput input) {
@@ -1892,11 +1893,11 @@ public final class V3ColumnCalculator {
         }
 
         boolean heatRung() {
-            return pathLabel.equals(HEAT_RAMP_LABEL);
+            return kind == V3RampKind.HEAT;
         }
 
         boolean steamRung() {
-            return pathLabel.equals(STEAM_RAMP_LABEL) || pathLabel.equals(WET_RAMP_LABEL);
+            return kind == V3RampKind.STEAM || kind == V3RampKind.WET;
         }
 
         double progress() {
@@ -1977,7 +1978,7 @@ public final class V3ColumnCalculator {
                 double fraction=step/16.0;
                 rampSteps.add(new RampStep(input.steamFeeds().isEmpty()?0:steamAnchored?1.0:fraction,
                         input.pumparounds().isEmpty()?0:fraction,input.sideDraws().isEmpty()?0:fraction,
-                        fraction,"coupled-ramp","coupled feature ramp"));
+                        fraction,V3RampKind.COUPLED,"coupled feature ramp"));
             }
         }
         HeatSubdivisions subdivisions = new HeatSubdivisions();
@@ -2346,20 +2347,20 @@ public final class V3ColumnCalculator {
         if (!hasSteam) {
             List<RampStep> draws = new ArrayList<>(4);
             for (int step = 1; step <= 4; step++) {
-                draws.add(RampStep.legacy(0.0, step / 4.0, "draw-ramp", "side-draw ramp"));
+                draws.add(RampStep.legacy(0.0, step / 4.0, V3RampKind.DRAW, "side-draw ramp"));
             }
             return List.copyOf(draws);
         }
         List<Double> steamFractions = steamRampFractions(steamRampSteps);
         List<RampStep> steps = new ArrayList<>(steamFractions.size() + 4);
-        String pathLabel = hasDraws ? STEAM_RAMP_LABEL : WET_RAMP_LABEL;
+        V3RampKind kind = hasDraws ? V3RampKind.STEAM : V3RampKind.WET;
         String description = hasDraws ? "steam ramp" : "wet ramp";
         for (double fraction : steamFractions) {
-            steps.add(RampStep.legacy(fraction, 0.0, pathLabel, description));
+            steps.add(RampStep.legacy(fraction, 0.0, kind, description));
         }
         if (hasDraws) {
             for (int step = 1; step <= 4; step++) {
-                steps.add(RampStep.legacy(1.0, step / 4.0, "draw-ramp", "side-draw ramp"));
+                steps.add(RampStep.legacy(1.0, step / 4.0, V3RampKind.DRAW, "side-draw ramp"));
             }
         }
         return List.copyOf(steps);
@@ -2369,16 +2370,16 @@ public final class V3ColumnCalculator {
      * rung; retaining the first rung preserves phase admission while dropping repeated midpoint corrections. */
     private static List<RampStep> fastRampSteps(V3ColumnInput input, List<RampStep> source) {
         List<RampStep> result = new ArrayList<>(source.size());
-        String previousPath = "";
+        V3RampKind previousKind = null;
         for (RampStep step : source) {
-            boolean first = !step.pathLabel().equals(previousPath);
+            boolean first = step.kind() != previousKind;
             boolean requested = step.requested(input);
             // One midpoint is useful when a large authored flow or duty crosses a phase boundary.
-            double fraction = step.pathLabel().equals("draw-ramp") ? step.drawFraction()
-                    : step.pathLabel().equals(HEAT_RAMP_LABEL) ? step.heatFraction() : step.steamFraction();
+            double fraction = step.kind() == V3RampKind.DRAW ? step.drawFraction()
+                    : step.kind() == V3RampKind.HEAT ? step.heatFraction() : step.steamFraction();
             boolean midpoint = Math.abs(fraction - 0.5) < 0.26 && fraction > 0.0 && fraction < 1.0;
             if (first || midpoint || requested) result.add(step);
-            previousPath = step.pathLabel();
+            previousKind = step.kind();
         }
         return List.copyOf(result);
     }
@@ -2423,12 +2424,12 @@ public final class V3ColumnCalculator {
         List<RampStep> steps = new ArrayList<>(steamRampSteps + 2 * HEAT_RAMP_STEPS);
         if (hasSteam) {
             for (double fraction : steamRampFractions(steamRampSteps)) {
-                steps.add(new RampStep(fraction, 0.0, 0.0, fraction, STEAM_RAMP_LABEL, "steam ramp"));
+                steps.add(new RampStep(fraction, 0.0, 0.0, fraction, V3RampKind.STEAM, "steam ramp"));
             }
         }
         for (int step = 1; step <= HEAT_RAMP_STEPS; step++) {
             double fraction = step / (double) HEAT_RAMP_STEPS;
-            steps.add(new RampStep(hasSteam ? 1.0 : 0.0, fraction, 0.0, fraction, HEAT_RAMP_LABEL, "stage-heat ramp"));
+            steps.add(new RampStep(hasSteam ? 1.0 : 0.0, fraction, 0.0, fraction, V3RampKind.HEAT, "stage-heat ramp"));
         }
         if (hasDraws) {
             // Cooling has already changed the liquid traffic arriving at every draw tray, so a quarter of the
@@ -2437,7 +2438,7 @@ public final class V3ColumnCalculator {
             // last of four rungs and converges on eight.
             for (int step = 1; step <= HEAT_BEARING_DRAW_RAMP_STEPS; step++) {
                 double fraction = step / (double) HEAT_BEARING_DRAW_RAMP_STEPS;
-                steps.add(new RampStep(hasSteam ? 1.0 : 0.0, 1.0, fraction, fraction, "draw-ramp", "side-draw ramp"));
+                steps.add(new RampStep(hasSteam ? 1.0 : 0.0, 1.0, fraction, fraction, V3RampKind.DRAW, "side-draw ramp"));
             }
         }
         return List.copyOf(steps);
@@ -2473,7 +2474,7 @@ public final class V3ColumnCalculator {
         double midpoint = steamRampMidpointFraction(acceptedSteamFraction, failed.steamFraction());
         if (Double.isNaN(midpoint)) return null;
         return new RampStep(midpoint, failed.heatFraction(), failed.drawFraction(), midpoint,
-                failed.pathLabel(), failed.description());
+                failed.kind(), failed.description());
     }
 
     /**
@@ -2494,7 +2495,7 @@ public final class V3ColumnCalculator {
         double midpoint = 0.5 * (acceptedHeatFraction + failed.heatFraction());
         if (!(midpoint > acceptedHeatFraction) || !(midpoint < failed.heatFraction())) return null;
         return new RampStep(failed.steamFraction(), midpoint, failed.drawFraction(), midpoint,
-                failed.pathLabel(), failed.description());
+                failed.kind(), failed.description());
     }
 
     /** Bounded midpoint budget: at most two subdivisions of one rung and four in a whole ramp. */
@@ -3388,7 +3389,7 @@ public final class V3ColumnCalculator {
         } catch (CancellationException cancelled) {
             throw cancelled;
         } catch (RuntimeException unavailable) {
-            return failedAudit("UNAVAILABLE", unavailable.getMessage());
+            return failedAudit(V3AuditFamily.UNAVAILABLE, unavailable.getMessage());
         }
     }
 
@@ -3459,7 +3460,7 @@ public final class V3ColumnCalculator {
     private static V3ColumnOutcome.Failure terminalFailure(
             V3SolverFailureCode code, String detail, String solvePath, List<String> advisoryEvidence) {
         String summary = boundedSummary(detail);
-        V3AcceptanceAudit audit = failedAudit("UNAVAILABLE", summary, advisoryEvidence);
+        V3AcceptanceAudit audit = failedAudit(V3AuditFamily.UNAVAILABLE, summary, advisoryEvidence);
         // The summary and the audit detail are bounded at 512, a diagnostic event at 256. Passing the summary
         // straight through threw IllegalArgumentException out of the public calculate() for any detail between
         // the two bounds — reachable as soon as a typed detail grew past 256 characters.
@@ -3468,25 +3469,24 @@ public final class V3ColumnCalculator {
         return new V3ColumnOutcome.Failure(code, summary, diagnostics);
     }
 
-    private static V3AcceptanceAudit failedAudit(String family, String detail) {
+    private static V3AcceptanceAudit failedAudit(V3AuditFamily family, String detail) {
         return failedAudit(family, detail, List.of());
     }
 
-    private static V3AcceptanceAudit failedAudit(String family, String detail, List<String> advisoryEvidence) {
+    private static V3AcceptanceAudit failedAudit(V3AuditFamily family, String detail, List<String> advisoryEvidence) {
         return new V3AcceptanceAudit(List.of(V3AcceptanceAudit.Check.fail(family, 1.0, 0.0, boundedSummary(detail))),
                 advisoryEvidence);
     }
 
     /** Maps a solver attempt code onto the published failure taxonomy; a stopped stall is a nonconvergence. */
-    static V3SolverFailureCode failureCode(String code) {
-        if (code.startsWith("LINEAR_") || code.startsWith("JACOBIAN_")) {
-            return V3SolverFailureCode.LINEAR_SOLVE_FAILURE;
-        }
-        if (code.startsWith("MAX_ITERATIONS") || code.startsWith("LINE_SEARCH") || code.startsWith("STATE_DOMAIN")
-                || code.startsWith("STALLED")) {
-            return V3SolverFailureCode.NONCONVERGENCE;
-        }
-        return V3SolverFailureCode.INTERNAL_ERROR;
+    static V3SolverFailureCode failureCode(V3AttemptCode code) {
+        return switch (code) {
+            case LINEAR_SINGULAR, LINEAR_ILL_CONDITIONED, LINEAR_BACKWARD_ERROR_EXCEEDED, JACOBIAN_BAND_STRUCTURE ->
+                    V3SolverFailureCode.LINEAR_SOLVE_FAILURE;
+            case MAX_ITERATIONS, LINE_SEARCH_EXHAUSTED, STATE_DOMAIN, STALLED, STALLED_SUPPORT_FLOOR ->
+                    V3SolverFailureCode.NONCONVERGENCE;
+            case INTERNAL_INVARIANT -> V3SolverFailureCode.INTERNAL_ERROR;
+        };
     }
 
     private static String boundedSummary(String value) {
