@@ -324,6 +324,7 @@ final class StepEquations implements SparseNewton.Equations {
             heldKept[node]=melting.kept(node,stock).moments().values();
         }
         transfersAt=transfersAt(graph);edgeFlow=new double[graph.pipes().size()];edgeDonor=new Transport[edgeFlow.length];edgeSuction=new Transport[edgeFlow.length];
+        donorMoles=new double[edgeFlow.length][];suctionMoles=new double[edgeFlow.length][];
         energy=new double[count];incomingMass=new double[count];incomingEnergy=new double[count];netMass=new double[count];
         for(int node=0;node<count;node++)if(layout[node]!=null)cachedVariables[node]=new double[layout[node].size()];
         nodeEdges=incidence(graph);
@@ -714,7 +715,12 @@ final class StepEquations implements SparseNewton.Equations {
         return rates;
     }
     private static double densityOf(Transport[] phases,int phase){return phases[phase]==null?0:phases[phase].density;}
-    private Transport drawn(PhaseDraw.Segment segment,int edge,int end,Transport node,double q) {
+    private Transport drawn(PhaseDraw.Segment segment,int edge,int end,Transport node,double q){return drawn(segment,edge,end,node,q,null,edge);}
+    /** {@link #drawn} with a priority mixture's amounts written into {@code pool[slot]} (P-07), cleared to the zeros a new
+     * array holds; a new array where {@code pool} is null. A pooled mixture lives until its slot is filled again, so only a
+     * caller that is done with it by then passes a pool: {@link #assemble}'s edge pre-pass (one slot per connection and
+     * role, read within the evaluation) and the caps, which read no amounts ({@link #capMoles}). */
+    private Transport drawn(PhaseDraw.Segment segment,int edge,int end,Transport node,double q,double[][] pool,int slot) {
         if(segment==null||node.phases==null)return node;
         int marginal=segment.marginalAt(held(node));var pinned=segment.pinned();
         if(pinned.length==0&&!segment.mixed()&&weirOffsets[edge][end]<0)return marginal<0?node:node.phases[marginal];
@@ -722,7 +728,7 @@ final class StepEquations implements SparseNewton.Equations {
         if(pinned.length==1&&marginal<0&&weirOffsets[edge][end]<0)return start[pinned[0]];
         double total=segment.pinnedTotal(),basis=weirOffsets[edge][end]>=0?(q==0?1:Math.abs(q)):segment.mixed()?Math.max(Math.abs(q),1):marginal<0?total:Math.max(Math.abs(q),total);
         var rates=phaseRates(segment,edge,end,node,basis);
-        double[] moles=new double[node.moles.length];double volume=0,viscous=0,heat=0,limit=Double.POSITIVE_INFINITY,solidMass=0,solidVolume=0,solidCapacity=0;
+        double[] moles=pool==null?new double[node.moles.length]:pooled(pool,slot,node.moles.length);double volume=0,viscous=0,heat=0,limit=Double.POSITIVE_INFINITY,solidMass=0,solidVolume=0,solidCapacity=0;
         for(int k=0;k<6;k++) {
             if(!(rates[k]>0)&&!(k<3&&k==marginal))continue;
             var stream=k<3?node.phases[k]:start[k-3];double rate=rates[k],perMass=rate/stream.mass;
@@ -732,6 +738,12 @@ final class StepEquations implements SparseNewton.Equations {
             solidMass+=perMass*stream.solids.mass();solidVolume+=perMass*stream.solids.volume();solidCapacity+=perMass*stream.solids.heatCapacity();
         }
         return new Transport(moles,basis,volume,basis/volume,viscous/volume,heat/basis,limit,new SolidInventory.Moments(solidMass,solidVolume,solidCapacity),null);
+    }
+    /** {@code pool[slot]}, of {@code length} doubles, cleared to zeros; allocated the first time (P-07). */
+    private static double[] pooled(double[][] pool,int slot,int length) {
+        var moles=pool[slot];
+        if(moles==null||moles.length!=length)pool[slot]=moles=new double[length];else Arrays.fill(moles,0);
+        return moles;
     }
     /**
      * The velocity cap (kg/s) of the direction leaving end {@code end} of {@code edge}, on that end's node transport: the
@@ -766,7 +778,7 @@ final class StepEquations implements SparseNewton.Equations {
         var pipe=graph.pipes().get(edge);double limit=capLimit(segment,edge,end,donor);
         // An OVERFLOW end carries at most what stands above its nozzle over the step (OpenVessel).
         if((end==0?pipe.firstPort():pipe.secondPort())==PassiveNetwork.PhasePort.OVERFLOW)limit=Math.min(limit,overflowCap(end==0?pipe.first():pipe.second()));
-        return pipe.filter()==null?limit:filterCapFlow(edge,limit,drawn(segment,edge,end,donor,saturated(y,limit)));
+        return pipe.filter()==null?limit:filterCapFlow(edge,limit,drawn(segment,edge,end,donor,saturated(y,limit),capMoles,0));
     }
     /** The transported flow (kg/s) of connection {@code edge} for its edge unknown {@code y}, the law's flow: its
      * saturation at its cap ({@link PassiveStepSolver#saturated}, {@link #cap}), the flow every booking and actuator row
@@ -777,7 +789,7 @@ final class StepEquations implements SparseNewton.Equations {
         var pipe=graph.pipes().get(edge);
         if(segment==null||node.phases==null)return node.density*pipe.minimumArea()*node.velocityLimit;
         int marginal=segment.marginalAt(held(node));var pinned=segment.pinned();
-        if(segment.mixed()||weirOffsets[edge][end]>=0){var stream=drawn(segment,edge,end,node,1);return stream.density*pipe.minimumArea()*stream.velocityLimit;}
+        if(segment.mixed()||weirOffsets[edge][end]>=0){var stream=drawn(segment,edge,end,node,1,capMoles,0);return stream.density*pipe.minimumArea()*stream.velocityLimit;}
         if(pinned.length==0){var stream=marginal<0?node:node.phases[marginal];return stream.density*pipe.minimumArea()*stream.velocityLimit;}
         var start=startPhases[end==0?pipe.first():pipe.second()];
         double velocity=marginal<0?Double.POSITIVE_INFINITY:node.phases[marginal].velocityLimit,total=segment.pinnedTotal(),pinnedVolume=0;
@@ -1099,8 +1111,9 @@ final class StepEquations implements SparseNewton.Equations {
         // ends are read once here, in the arithmetic every row read them in, and the rows below read them back.
         for(int edge=0;edge<edgeFlow.length;edge++) {
             var pipe=graph.pipes().get(edge);double q=flow(edge,x[edgeOffset+edge],tr);
-            edgeFlow[edge]=q;edgeDonor[edge]=drawn(edge,q>=0?0:1,tr[q>=0?pipe.first():pipe.second()],q);
-            edgeSuction[edge]=q>=0?edgeDonor[edge]:drawn(edge,0,tr[pipe.first()],q);
+            // P-07: a priority mixture's amounts go into this connection's own slots, read only within this evaluation.
+            edgeFlow[edge]=q;int end=q>=0?0:1;edgeDonor[edge]=drawn(segments[edge][end],edge,end,tr[q>=0?pipe.first():pipe.second()],q,donorMoles,edge);
+            edgeSuction[edge]=q>=0?edgeDonor[edge]:drawn(segments[edge][0],edge,0,tr[pipe.first()],q,suctionMoles,edge);
         }
         edgesRead=true;
         try {
@@ -1116,6 +1129,11 @@ final class StepEquations implements SparseNewton.Equations {
      * {@code edgesRead}: the block sweep moves one node or one edge per column and reads its own.
      */
     private final double[] edgeFlow;private final Transport[] edgeDonor,edgeSuction;private boolean edgesRead;
+    /** P-07: per connection, the arrays a priority mixture's amounts are written into by the pre-pass, the donor stream's
+     * and the suction stream's ({@link #drawn(PhaseDraw.Segment,int,int,Transport,double,double[][],int)}); refilled at each
+     * evaluation, read through {@code edgeDonor} and {@code edgeSuction} only while {@code edgesRead}. One slot,
+     * {@code capMoles}, for the mixtures a cap reads its density, velocity limit and solids off (it reads no amounts). */
+    private final double[][] donorMoles,suctionMoles,capMoles=new double[1][];
     /** Per node, the indices of the scheduled transfers that name it, in the graph's order (finding P-14): the node
      * accumulation reads them in place of a scan of every transfer per node and evaluation. */
     private final int[][] transfersAt;
