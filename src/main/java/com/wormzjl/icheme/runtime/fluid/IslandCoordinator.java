@@ -532,6 +532,42 @@ public final class IslandCoordinator {
         if(island.certificate!=null){certificates.materialise(island);return island.clock.committedTick()>=tick;}
         return false;
     }
+    /**
+     * {@link #through} without materialising a certified island: true also where {@code id}'s certificate reaches {@code tick}
+     * (its replay could advance it there). For a reader whose values as of the tick a certified island's replay does not
+     * move (a batch still's: an island at rest books none of them, codebase review R-ST3); a materialisation here would happen
+     * at the moment the reader looks, which follows when workers finished, and would date the replay there. The island is
+     * materialised at its own wakes, its horizon, a fence or a save.
+     */
+    public boolean reached(long id,long tick) {
+        owned();var island=islands.get(id);if(island==null||island.clock.committedTick()>=tick)return true;
+        if(island.held||island.phaseParked||island.suspended||suspension!=null)return true;
+        var certificate=island.certificate;
+        return certificate!=null&&Math.min(Math.min(island.clock.onlineTick(),island.fence()),Math.min(island.holdTick,certificate.horizonTick()))>=tick;
+    }
+    /**
+     * What island {@code id} solves against changed at {@code tick}, a tick the world's ticks fix (a unit's dated value
+     * takes effect there, codebase review R-ST3): its slices from that tick on must solve against it. Whether that is
+     * settled, at a decision point ({@link Ports#decide}):
+     * <ul>
+     * <li>certified and committed at or before the tick: materialised to the tick, not to the moment this runs, and its
+     * certificate ended there, so it solves from the tick however late the call;</li>
+     * <li>certified further on: its certificate stands if the interval it replays started at or after the tick (that slice
+     * read the change), else it ends where it stands;</li>
+     * <li>awake and committed through the tick, held (a hold or a capability limit), parked, suspended or gone: nothing to do
+     * (its next dispatch reads it);</li>
+     * <li>awake and behind the tick: false, ask again at the next decision point (it may certify before it gets there).</li>
+     * </ul>
+     * So what it does depends on the island's own committed ticks, not on when this is called.
+     */
+    public boolean movedAt(long id,long tick) {
+        owned();var island=islands.get(id);if(island==null||stopped||suspension!=null)return true;
+        var certificate=island.certificate;
+        if(certificate==null)return island.held||island.phaseParked||island.suspended||island.capability!=null||island.clock.committedTick()>=tick;
+        if(island.clock.committedTick()<=tick){certificates.materialise(island,tick);if(island.certificate!=null)certificates.end(island);}
+        else if(certificate.interval().startTick()<tick)certificates.end(island);
+        return true;
+    }
     /** O(1): the earliest tick at which a deadline is scheduled, possibly a stale one; see {@link IslandScheduler}. */
     public long nextDue(){owned();return scheduler.nextDue();}
     /** Scheduled deadline entries, live and not yet popped stale ones. */

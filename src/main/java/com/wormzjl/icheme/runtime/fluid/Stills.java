@@ -173,7 +173,7 @@ public final class Stills implements IslandCoordinator.Ports {
     private final Map<Long,Run> runs=new HashMap<>();
     /** By an outlet's, a water side's connection's and a burner's identity: the still's pot. */
     private final Map<Long,Long> outlets=new HashMap<>(),waters=new HashMap<>(),burners=new HashMap<>();
-    /** By tick: the devices whose islands wake there (a certified island ends its certificate at the decision point). */
+    /** By tick: the devices whose islands wake there (a certified island is materialised to that tick and ends its certificate there). */
     private final TreeMap<Long,Set<Long>> wakes=new TreeMap<>();
     private long synced=-1;
 
@@ -317,7 +317,8 @@ public final class Stills implements IslandCoordinator.Ports {
      * water side's island (the reads its condenser's share and its job's outlet take) and for its burners' island (the fire
      * its heat takes, R-ST2); an outlet and a still's burners for its pot's island and the answer due by the fence; a water
      * side for its pot's and both outlets' islands and that answer. Each waits behind the other by a fence, so no two of
-     * them block each other.
+     * them block each other. A certified island is through as far as its certificate reaches, without being materialised
+     * here ({@link #through}, R-ST3).
      */
     @Override public boolean ready(long island,PassiveNetwork graph,long start) {
         sync();if(runs.isEmpty())return true;
@@ -339,8 +340,14 @@ public final class Stills implements IslandCoordinator.Ports {
         if(!waters.isEmpty())for(var pipe:graph.pipes()){Long pot=waters.get(pipe.id());if(pot!=null&&!fenced(island,pot,fence,true))return false;}
         return true;
     }
-    /** Whether device {@code device}'s island has booked through {@code tick}: true for {@code island} itself and for a device in no island. */
-    private boolean through(long island,long device,long tick){Long other=owner.apply(device);return other==null||other==island||coordinator.through(other,tick);}
+    /**
+     * Whether device {@code device}'s island has booked through {@code tick}: true for {@code island} itself and for a device in
+     * no island. A certified island whose certificate reaches the tick is through without being materialised here
+     * ({@link IslandCoordinator#reached}, codebase review R-ST3): at rest it books nothing a read as of the fence takes, every
+     * value it plans from wakes it at a fixed tick ({@link #wakeAt}), and a materialisation at the moment this reader looks
+     * would date its replay by when the workers finished.
+     */
+    private boolean through(long island,long device,long tick){Long other=owner.apply(device);return other==null||other==island||coordinator.reached(other,tick);}
     /**
      * Whether still {@code pot}'s values as of {@code fence} are final for a slice of {@code island}: the column answer due by
      * then arrived and the pot's island booked through it; for its water side ({@code water}) its outlets' islands too.
@@ -430,8 +437,11 @@ public final class Stills implements IslandCoordinator.Ports {
             if(!u.condenser()){double out=0;for(int pipe=0;pipe<result.graph().pipes().size();pipe++){var p=result.graph().pipes().get(pipe);if(p.first()==k)out+=flows[pipe];if(p.second()==k)out-=flows[pipe];}r.ventFlow=Math.max(0,out);}
             status(u,r,node,n,seconds);
             // The slice's heat and cut alarms as its dispatch set them (status keeps the cut bits), dated by its start: what a
-            // read as of a later fence takes (R-ST1 item 2; the burners' cut, R-ST2).
-            r.heats.addLast(new Heat(start,r.heat,r.potTemperature,r.alarms&CUT));
+            // read as of a later fence takes (R-ST1 item 2; the burners' cut, R-ST2). A cut set or lifted reaches the burners'
+            // slices from that start plus the fence and a tick: a certified burners' island wakes there (R-ST3).
+            int cut=r.alarms&CUT;
+            if(u.burners()>0&&cut!=(r.heats.isEmpty()?0:r.heats.peekLast().cut()))wakeAt(start+FENCE_TICKS+1,u.burners());
+            r.heats.addLast(new Heat(start,r.heat,r.potTemperature,cut));
             keepAsOf(r.heats,Heat::start,start-2*FENCE_TICKS-KEEP_TICKS);
             submit(u,r,island,node,start,end);
         }
@@ -485,6 +495,8 @@ public final class Stills implements IslandCoordinator.Ports {
         r.arrivals.addLast(new Arrival(end,division.distillate(),division.vent()));
         // Kept for a fence and the keep window, as the column's (F6): an outlet's read lagging the pot keeps what it subtracts.
         PortAccounts.keep(r.arrivals,Arrival::tick,end-FENCE_TICKS-KEEP_TICKS);
+        // The outlets' slices from the fence after it give it: a certified outlet's island (an empty account rests) wakes there (R-ST3).
+        wakeOutlets(u,end+FENCE_TICKS);
         var head=new Account(plus(u.head().moles(),division.distillate()),u.head().energy()+division.distillateEnergy());
         var vent=new Account(plus(u.venting().moles(),division.vent()),u.venting().energy()+division.ventEnergy());
         return u.withAccounts(head,vent);
@@ -540,7 +552,7 @@ public final class Stills implements IslandCoordinator.Ports {
         }
         r.condensed=share;
         double before=r.shares.isEmpty()?1:r.shares.peekLast().value();
-        if(share!=before){r.shares.addLast(new Share(end,share));keepAsOf(r.shares,Share::tick,end-2*FENCE_TICKS-KEEP_TICKS);}
+        if(share!=before){r.shares.addLast(new Share(end,share));keepAsOf(r.shares,Share::tick,end-2*FENCE_TICKS-KEEP_TICKS);wakeOutlets(u,end+FENCE_TICKS);}
     }
     /**
      * The water side's read of its slice from {@code start} (R-ST1 items 1 and 2): as of its fence, {@code start} less
@@ -601,12 +613,24 @@ public final class Stills implements IslandCoordinator.Ports {
     private static <T> void keepAsOf(ArrayDeque<T> log,java.util.function.ToLongFunction<T> tick,long from) {
         while(log.size()>1){var it=log.iterator();it.next();if(tick.applyAsLong(it.next())>from)return;log.removeFirst();}
     }
-    /** Device {@code device}'s island wakes at {@code tick}: a fixed tick of the world's, not the moment a commit lands (R-ST1 item 5). */
-    private void wakeAt(long tick,long device){wakes.computeIfAbsent(tick,k->new TreeSet<>()).add(device);}
-    /** The wakes due by now, at the engine's decision points (every tick's due deadlines among them): each device's island, certified, ends its certificate. */
+    /** Device {@code device}'s island wakes at {@code tick}: a fixed tick of the world's, not the moment a commit lands (R-ST1 item 5); none for no device. */
+    private void wakeAt(long tick,long device){if(device>0)wakes.computeIfAbsent(tick,k->new TreeSet<>()).add(device);}
+    /** Still {@code u}'s outlets' islands wake at {@code tick}: what they plan from (the account, the answer, the share) changed as of it (R-ST3). */
+    private void wakeOutlets(StillUnit u,long tick){wakeAt(tick,u.distillate());wakeAt(tick,u.vent());}
+    /**
+     * The wakes due by now, at the engine's decision points (every tick's due deadlines among them). Each device's island acts
+     * on the wake as of its own tick ({@link IslandCoordinator#movedAt}, R-ST3): certified, it is materialised to that tick
+     * and ends its certificate there, so a wake acted on late (an answer that landed after its apply tick) still starts its
+     * slices at that tick; awake and behind the tick, the wake waits for it (it may certify on the way).
+     */
     @Override public void decide() {
         if(wakes.isEmpty())return;long now=coordinator.now();
-        while(!wakes.isEmpty()&&wakes.firstKey()<=now)for(long device:wakes.pollFirstEntry().getValue()){Long island=owner.apply(device);if(island!=null)coordinator.controlsMoved(List.of(island));}
+        // By the keys: a materialisation books spans, which add wakes (each past now) to the map.
+        for(long tick:List.copyOf(wakes.headMap(now,true).keySet())) {
+            var devices=wakes.get(tick);if(devices==null)continue;
+            devices.removeIf(device->{Long island=owner.apply(device);return island==null||coordinator.movedAt(island,tick);});
+            if(devices.isEmpty())wakes.remove(tick);
+        }
     }
 
     // ---------------- the column's solves ----------------
@@ -643,7 +667,10 @@ public final class Stills implements IslandCoordinator.Ports {
     }
     /** The column's waiting answer, applied once its tick is reached. */
     private static void promote(Run r,long tick){if(r.next!=null&&r.nextTick<=tick){r.solved=r.next;r.fPerWatt=r.solved.fPerWatt();r.next=null;r.nextTick=Long.MAX_VALUE;}}
-    /** A column job's outcome: the answer applies at {@code apply}, where the pot's island wakes (and the fenced reads find it there). */
+    /**
+     * A column job's outcome: the answer applies at {@code apply}, where the pot's island wakes (and the fenced reads find it
+     * there); the outlets and the burners read it as of their fence, so their islands wake a fence later (R-ST3).
+     */
     private void completed(long pot,long apply,StillHead.Outcome outcome) {
         var r=runs.get(pot);if(r==null)return;
         r.pending=false;r.applyTick=Long.MAX_VALUE;
@@ -651,6 +678,8 @@ public final class Stills implements IslandCoordinator.Ports {
             case StillHead.Solved solved->{
                 r.next=solved;r.nextTick=apply;r.failure=null;
                 r.answers.addLast(new Answer(apply,solved));keepAsOf(r.answers,Answer::tick,apply-2*FENCE_TICKS-KEEP_TICKS);
+                var u=topology.still(pot);
+                if(u!=null){wakeOutlets(u,apply+FENCE_TICKS);wakeAt(apply+FENCE_TICKS,u.burners());}
             }
             case StillHead.Failed failed->r.failure=failed.reason();
         }
