@@ -37,11 +37,11 @@ class ProcessUnitTest {
         var shapes = new ArrayList<EquipmentShape>();
         for (var kind : Kind.values()) {
             if (!kind.unit()) continue;
-            var sizes = ProcessUnit.sizes(kind);
+            var sizes = UnitDesign.of(kind).sizes();
             boolean few = sizes.size() <= 9;
             for (double size : sizes) {
-                boolean end = size == ProcessUnit.minDiameter(kind) || size == ProcessUnit.maxDiameter(kind);
-                int least = ProcessUnit.minLength(kind, size), most = ProcessUnit.maxLength(kind, size);
+                boolean end = size == UnitDesign.of(kind).minSize() || size == UnitDesign.of(kind).maxSize();
+                int least = UnitDesign.of(kind).minLength(size), most = UnitDesign.of(kind).maxLength(size);
                 for (int length : (few || end) && most > least ? new int[]{least, most} : new int[]{least})
                     shapes.add(EquipmentShape.unit(kind, size, length, Heading.NORTH, ProcessUnit.minSupport(kind, size, length)));
             }
@@ -101,11 +101,11 @@ class ProcessUnitTest {
     @Test
     void aStillsPotFollowsItsVolume() {
         // Owner B1 (BATCH_DISTILLER_PLAN.md): 100 to 2000 L, 0.50 m across at 100 L, 0.86 m at 500 L, 1.37 m at 2000 L.
-        assertEquals(List.of(100., 150., 200., 300., 500., 750., 1000., 1500., 2000.), ProcessUnit.sizes(Kind.BATCH_STILL));
+        assertEquals(List.of(100., 150., 200., 300., 500., 750., 1000., 1500., 2000.), UnitDesign.of(Kind.BATCH_STILL).sizes());
         assertEquals(.50, BatchStillDesign.potDiameter(100), 1e-12);
         assertEquals(.86, BatchStillDesign.potDiameter(500), 1e-12);
         assertEquals(1.37, BatchStillDesign.potDiameter(2000), 1e-12);
-        for (double litres : ProcessUnit.sizes(Kind.BATCH_STILL))
+        for (double litres : UnitDesign.of(Kind.BATCH_STILL).sizes())
             assertEquals(litres / 1000, EquipmentShape.unit(Kind.BATCH_STILL, litres, 1, Heading.NORTH, 0).volume(), 1e-12);
         // The options: a column of 2 to 8 stages or none, and only over the built-in condenser; the default on every other kind.
         assertEquals(BatchStillOptions.DEFAULT, EquipmentShape.unit(Kind.BATCH_STILL, 500, 1, Heading.NORTH, 0).still());
@@ -134,7 +134,7 @@ class ProcessUnitTest {
     void aStillNamesItsAnimatedParts() {
         var shapes = new ArrayList<EquipmentShape>();
         for (var shape : everySize()) if (shape.kind() == Kind.BATCH_STILL) shapes.add(shape);
-        assertEquals(ProcessUnit.sizes(Kind.BATCH_STILL).size() + stillOptions().size(), shapes.size());
+        assertEquals(UnitDesign.of(Kind.BATCH_STILL).sizes().size() + stillOptions().size(), shapes.size());
         for (var shape : shapes) {
             var options = shape.still();
             var want = new HashSet<String>(Set.of("spout"));
@@ -198,22 +198,22 @@ class ProcessUnitTest {
                 () -> EquipmentShape.unit(Kind.CABIN_HEATER, 4.5, 8, Heading.NORTH, 3),
                 () -> EquipmentShape.unit(Kind.CABIN_HEATER, 6, 49, Heading.NORTH, 3)))
             assertThrows(IllegalArgumentException.class, bad::run);
-        assertEquals(.3, ProcessUnit.snap(Kind.EJECTOR, .1 + .1 + .1), 0);
+        assertEquals(.3, UnitDesign.of(Kind.EJECTOR).snap(.1 + .1 + .1), 0);
         // A new unit (2026-10-18, NEW_UNITS_PLAN.md) starts at its design's second size and support, inside its ranges at every size.
         for (var kind : Kind.values()) {
             if (!kind.unit()) continue;
-            for (double size : ProcessUnit.sizes(kind)) {
-                int length = ProcessUnit.defaultLength(kind, size), support = ProcessUnit.defaultSupport(kind, size, length);
-                assertTrue(length >= ProcessUnit.minLength(kind, size) && length <= ProcessUnit.maxLength(kind, size), kind + " " + size + " default length " + length);
-                assertTrue(support >= ProcessUnit.minSupport(kind, size, length) && support <= ProcessUnit.maxSupport(kind), kind + " " + size + " default support " + support);
+            for (double size : UnitDesign.of(kind).sizes()) {
+                int length = UnitDesign.of(kind).defaultLength(size), support = ProcessUnit.defaultSupport(kind, size, length);
+                assertTrue(length >= UnitDesign.of(kind).minLength(size) && length <= UnitDesign.of(kind).maxLength(size), kind + " " + size + " default length " + length);
+                assertTrue(support >= ProcessUnit.minSupport(kind, size, length) && support <= UnitDesign.of(kind).maxSupport(), kind + " " + size + " default support " + support);
             }
         }
-        assertEquals(2, ProcessUnit.defaultLength(Kind.ADSORBER, 2));
-        assertEquals(32, ProcessUnit.defaultLength(Kind.FCC_CONVERTER, 9.5));
-        assertEquals(2.5, ProcessUnit.snap(Kind.EXCHANGER, 3), 0);
-        assertEquals(.75, ProcessUnit.snap(Kind.KETTLE, .8), 0);
-        assertEquals(3, ProcessUnit.minLength(Kind.EXCHANGER, .75));
-        assertEquals(2, ProcessUnit.minLength(Kind.EXCHANGER, .5));
+        assertEquals(2, UnitDesign.of(Kind.ADSORBER).defaultLength(2));
+        assertEquals(32, UnitDesign.of(Kind.FCC_CONVERTER).defaultLength(9.5));
+        assertEquals(2.5, UnitDesign.of(Kind.EXCHANGER).snap(3), 0);
+        assertEquals(.75, UnitDesign.of(Kind.KETTLE).snap(.8), 0);
+        assertEquals(3, UnitDesign.of(Kind.EXCHANGER).minLength(.75));
+        assertEquals(2, UnitDesign.of(Kind.EXCHANGER).minLength(.5));
         // Physics of the plan: 1 m shell, 6 m tubes ≈ 450 m²; a kettle's shell 1.6 bundles; fans cover at least 40 % of the
         // bundle face (API 661); an ejector of 0.3 m suction is 2.5 m long.
         assertEquals(450, ProcessUnit.tubeSurface(1, 6), 1e-9);
@@ -228,15 +228,15 @@ class ProcessUnitTest {
             assertTrue(ProcessUnit.coverage(bay[0], bay[1]) >= ProcessUnit.FAN_COVERAGE, bay[0] + " x " + bay[1]);
             EquipmentShape.unit(Kind.AIR_COOLER, bay[0], bay[1], Heading.NORTH, 5);
         }
-        assertEquals(3, ProcessUnit.minLength(Kind.AIR_COOLER, 1.5));
-        assertEquals(4, ProcessUnit.minLength(Kind.AIR_COOLER, 2.5));
-        assertEquals(3, ProcessUnit.minLength(Kind.AIR_COOLER, 2));
-        assertEquals(4, ProcessUnit.minLength(Kind.AIR_COOLER, 3));
+        assertEquals(3, UnitDesign.of(Kind.AIR_COOLER).minLength(1.5));
+        assertEquals(4, UnitDesign.of(Kind.AIR_COOLER).minLength(2.5));
+        assertEquals(3, UnitDesign.of(Kind.AIR_COOLER).minLength(2));
+        assertEquals(4, UnitDesign.of(Kind.AIR_COOLER).minLength(3));
         assertEquals(new ProcessUnit.Fans(2, 1.9), new ProcessUnit.Fans(ProcessUnit.fans(3, 6).count(), Math.round(ProcessUnit.fans(3, 6).diameter() * 100) / 100.0));
         assertEquals(2.49, ProcessUnit.ejectorLength(.3), 1e-9);
         // Owner request 2026-10-16 ("allow smaller ejectors"): suction from 0.05 m; one of 0.2 m or less stands on a single
         // post in the cell behind it, so it takes one cell by two; a larger one keeps its four-post frame.
-        assertEquals(.05, ProcessUnit.minDiameter(Kind.EJECTOR), 0);
+        assertEquals(.05, UnitDesign.of(Kind.EJECTOR).minSize(), 0);
         for (double s : new double[]{.05, .1, .2}) {
             var small = EquipmentShape.unit(Kind.EJECTOR, s, 1, Heading.NORTH, 1);
             assertEquals(1, small.sizeX(), small.toString());
@@ -263,17 +263,17 @@ class ProcessUnitTest {
         assertEquals(93.1, ProcessUnit.heaterDuty(Kind.CABIN_HEATER, 12, 40), .05);
         assertEquals(2 * ProcessUnit.heaterDuty(Kind.CABIN_HEATER, 12, 24), ProcessUnit.heaterDuty(Kind.CABIN_HEATER, 12, 48), 1e-9);
         assertEquals(List.of(1, 2), List.of(ProcessUnit.cabinCells(24), ProcessUnit.cabinCells(25)));
-        assertEquals(48, ProcessUnit.maxLength(Kind.CABIN_HEATER, 12));
-        assertEquals(6, ProcessUnit.minLength(Kind.VERTICAL_HEATER, 4));
-        assertEquals(11, ProcessUnit.maxLength(Kind.VERTICAL_HEATER, 4));
-        assertEquals(20, ProcessUnit.maxLength(Kind.VERTICAL_HEATER, 12));
+        assertEquals(48, UnitDesign.of(Kind.CABIN_HEATER).maxLength(12));
+        assertEquals(6, UnitDesign.of(Kind.VERTICAL_HEATER).minLength(4));
+        assertEquals(11, UnitDesign.of(Kind.VERTICAL_HEATER).maxLength(4));
+        assertEquals(20, UnitDesign.of(Kind.VERTICAL_HEATER).maxLength(12));
         assertEquals(3, ProcessUnit.minSupport(Kind.VERTICAL_HEATER, 4, 8));
-        assertEquals(0, ProcessUnit.maxSupport(Kind.PUMP));
+        assertEquals(0, UnitDesign.of(Kind.PUMP).maxSupport());
         // A compressor's lowest foundation keeps its discharge bottles 0.3 m over grade, and is the lowest that does; its
         // discharge bottles clear the cylinders on the crankshaft's cell centre (batch 2026-11-03-rotating-machinery).
-        for (double b = .15; b <= ProcessUnit.maxDiameter(Kind.COMPRESSOR) + 1e-9; b += .05)
+        for (double b = .15; b <= UnitDesign.of(Kind.COMPRESSOR).maxSize() + 1e-9; b += .05)
             for (int throwsCount = 2; throwsCount <= ProcessUnit.MAX_THROWS; throwsCount += 2) {
-                double bore = ProcessUnit.snap(Kind.COMPRESSOR, b);
+                double bore = UnitDesign.of(Kind.COMPRESSOR).snap(b);
                 var c = ProcessUnit.Compressor.of(bore, throwsCount);
                 int h = ProcessUnit.minSupport(Kind.COMPRESSOR, bore, throwsCount);
                 assertTrue(c.clears(h) && (h == 1 || !c.clears(h - 1)), bore + " x " + throwsCount);
@@ -482,8 +482,8 @@ class ProcessUnitTest {
     void aTrickleBedsEffluentTurnsWhereNoLadderComesDown() {
         var kind = Kind.TRICKLE_BED_REACTOR;
         int built = 0;
-        for (double d = ProcessUnit.minDiameter(kind); d <= ProcessUnit.maxDiameter(kind) + 1e-9; d += ProcessUnit.diameterStep(kind))
-            for (int beds = ProcessUnit.minLength(kind, d); beds <= ProcessUnit.maxLength(kind, d); beds++) {
+        for (double d = UnitDesign.of(kind).minSize(); d <= UnitDesign.of(kind).maxSize() + 1e-9; d += UnitDesign.of(kind).sizeStep())
+            for (int beds = UnitDesign.of(kind).minLength(d); beds <= UnitDesign.of(kind).maxLength(d); beds++) {
                 int least = ProcessUnit.minSupport(kind, d, beds);
                 for (int s : new int[]{least, least + 1}) {
                     var front = EquipmentShape.unit(kind, d, beds, Heading.NORTH, s);
@@ -690,13 +690,13 @@ class ProcessUnitTest {
         for (var entry : cases.entrySet()) {
             var shape = entry.getKey();
             assertEquals(entry.getValue(), ShapeRasterizer.moving(shape).size(), shape.toString());
-            assertEquals(entry.getValue() > 0, ProcessUnit.moves(shape.kind()), shape.toString());
+            assertEquals(entry.getValue() > 0, UnitDesign.of(shape.kind()).moves(), shape.toString());
             if (entry.getValue() > 0) movesAsStill(shape);
         }
         // Every size of every kind (2026-10-18, NEW_UNITS_PLAN.md): a kind that moves has moving parts at every size, each
         // its still parts set going; one that does not has none.
         for (var shape : everySize()) {
-            if (ProcessUnit.moves(shape.kind())) movesAsStill(shape);
+            if (UnitDesign.of(shape.kind()).moves()) movesAsStill(shape);
             else assertTrue(ShapeRasterizer.moving(shape).isEmpty(), shape.toString());
         }
     }
@@ -736,7 +736,7 @@ class ProcessUnitTest {
         // over the whole stroke both of its ends stay inside the crosshead guide and the cylinder, so it never shows a cut
         // end in the windows.
         for (double b : new double[]{.15, .45, .8, 1.2})
-            for (int throwCount : new int[]{ProcessUnit.minLength(Kind.COMPRESSOR, b), ProcessUnit.maxLength(Kind.COMPRESSOR, b)}) {
+            for (int throwCount : new int[]{UnitDesign.of(Kind.COMPRESSOR).minLength(b), UnitDesign.of(Kind.COMPRESSOR).maxLength(b)}) {
                 var shape = EquipmentShape.unit(Kind.COMPRESSOR, b, throwCount, Heading.NORTH, ProcessUnit.minSupport(Kind.COMPRESSOR, b, throwCount));
                 int rods = 0;
                 for (var part : ShapeRasterizer.moving(shape)) {

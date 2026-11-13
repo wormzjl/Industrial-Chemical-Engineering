@@ -321,7 +321,7 @@ public final class ShapeRepair {
                 orientation = Orientation.VERTICAL;
                 repairs.add("orientation " + saved.orientation() + " -> vertical");
             }
-        } else orientation = kind == Kind.COLUMN ? Orientation.VERTICAL : ProcessUnit.orientation(kind);
+        } else orientation = kind == Kind.COLUMN ? Orientation.VERTICAL : UnitDesign.of(kind).orientation();
         ColumnTrays trays = null;
         if (kind == Kind.COLUMN) {
             try {
@@ -372,7 +372,7 @@ public final class ShapeRepair {
             }
         // A condensing turbine saved before shape fields 8 was the steam turbine exhausting to a condenser (owner decision D5).
         if (duty == null && CONDENSING_TURBINE.equalsIgnoreCase(saved.kind()) && Double.isFinite(saved.diameter()))
-            duty = MachineDuty.turbine(1000 * SteamTurbineTrain.power(ProcessUnit.snap(kind, saved.diameter())), SteamTurbineDesign.DEFAULT_STEAM,
+            duty = MachineDuty.turbine(1000 * SteamTurbineTrain.power(UnitDesign.of(kind).snap(saved.diameter())), SteamTurbineDesign.DEFAULT_STEAM,
                     SteamTurbineDesign.CONDENSING_EXHAUST);
         var fields = new Fields(kind, front, orientation, saved.diameter(), saved.length(), saved.support(), trays, connections, saved.boot(), saved.outlet(), bank, duty);
         for (var step : LADDER) {
@@ -400,9 +400,9 @@ public final class ShapeRepair {
     private static Fields sizes(Fields f) {
         double diameter, length;
         if (f.kind.designed()) {
-            diameter = Double.isFinite(f.diameter) ? ProcessUnit.snap(f.kind, f.diameter) : ProcessUnit.minDiameter(f.kind);
-            length = Double.isFinite(f.length) ? clamp(Math.rint(f.length), ProcessUnit.minLength(f.kind, diameter), ProcessUnit.maxLength(f.kind, diameter))
-                    : ProcessUnit.defaultLength(f.kind, diameter);
+            diameter = Double.isFinite(f.diameter) ? UnitDesign.of(f.kind).snap(f.diameter) : UnitDesign.of(f.kind).minSize();
+            length = Double.isFinite(f.length) ? clamp(Math.rint(f.length), UnitDesign.of(f.kind).minLength(diameter), UnitDesign.of(f.kind).maxLength(diameter))
+                    : UnitDesign.of(f.kind).defaultLength(diameter);
         } else {
             double maximum = f.kind == Kind.COLUMN ? EquipmentShape.MAX_COLUMN_DIAMETER : EquipmentShape.MAX_DIAMETER;
             diameter = Double.isFinite(f.diameter) ? clamp(Math.rint(f.diameter * 2) / 2, EquipmentShape.MIN_DIAMETER, maximum) : 2;
@@ -415,7 +415,7 @@ public final class ShapeRepair {
     private static Fields support(Fields f) {
         int support;
         if (f.kind.designed())
-            support = (int) clamp(f.support, ProcessUnit.minSupport(f.kind, f.diameter, f.length), ProcessUnit.maxSupport(f.kind));
+            support = (int) clamp(f.support, ProcessUnit.minSupport(f.kind, f.diameter, f.length), UnitDesign.of(f.kind).maxSupport());
         else if (f.kind == Kind.COLUMN || !f.orientation.horizontal() && f.support != 0)
             support = (int) clamp(f.support, EquipmentShape.minimumSkirt(f.diameter), EquipmentShape.MAX_SUPPORT);
         else support = f.orientation.horizontal() ? (int) clamp(f.support, 1, EquipmentShape.MAX_SUPPORT) : 0;
@@ -437,7 +437,7 @@ public final class ShapeRepair {
     /** The kind's default size, as a new constructor proposes it, with the saved front. */
     private static Fields defaults(Fields f) {
         if (f.kind.designed()) {
-            double diameter = ProcessUnit.minDiameter(f.kind);int length = ProcessUnit.defaultLength(f.kind, diameter);
+            double diameter = UnitDesign.of(f.kind).minSize();int length = UnitDesign.of(f.kind).defaultLength(diameter);
             return new Fields(f.kind, f.front, f.orientation, diameter, length, ProcessUnit.defaultSupport(f.kind, diameter, length), null, List.of(), false, 0, ProcessUnit.Bank.ONE, null);
         }
         if (f.kind == Kind.COLUMN) return new Fields(f.kind, f.front, f.orientation, 2, 1, EquipmentShape.minimumSkirt(2), DEFAULT_TRAYS, List.of(), false, 0, ProcessUnit.Bank.ONE, null);

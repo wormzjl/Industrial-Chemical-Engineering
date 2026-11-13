@@ -16,7 +16,6 @@ import com.wormzjl.icheme.client.gui.common.kit.SkinButton;
 import com.wormzjl.icheme.client.gui.common.kit.SkinField;
 import com.wormzjl.icheme.registry.ModBlocks;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
-import com.wormzjl.icheme.science.equipment.ProcessUnit;
 import com.wormzjl.icheme.science.equipment.ShapeRasterizer;
 import com.wormzjl.icheme.science.equipment.UnitDesign;
 import com.wormzjl.icheme.world.level.block.EquipmentStructure;
@@ -69,7 +68,7 @@ public final class VesselScreen extends Screen {
         super(Component.translatable(KEY + "title." + vessel.shape().kind().name().toLowerCase(Locale.ROOT)));
         sheet = sheet(vessel);
         this.vessel = vessel;
-        moving = vessel.shape().unit() && ProcessUnit.moves(vessel.shape().kind());
+        moving = vessel.shape().unit() && UnitDesign.of(vessel.shape().kind()).moves();
     }
 
     private static Skin skin() {

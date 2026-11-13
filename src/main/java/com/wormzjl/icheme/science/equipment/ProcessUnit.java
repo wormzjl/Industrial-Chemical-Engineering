@@ -115,72 +115,32 @@ public final class ProcessUnit {
 
     // ---- Sizes: each kind's design ({@link UnitDesign}) ---------------------------------------------------------------
 
-    public static double minDiameter(Kind kind) {
-        return UnitDesign.of(kind).minSize();
-    }
-
-    public static double maxDiameter(Kind kind) {
-        return UnitDesign.of(kind).maxSize();
-    }
-
-    public static double diameterStep(Kind kind) {
-        return UnitDesign.of(kind).sizeStep();
-    }
-
-    /** Every main size of the kind, smallest first (a machine's rated powers are a list, not a grid). */
-    public static List<Double> sizes(Kind kind) {
-        return UnitDesign.of(kind).sizes();
-    }
-
-    /** The least second size (tubes, a bay's length, throws, a radiant height or length; 1 where the kind has none). */
-    public static int minLength(Kind kind, double diameter) {
-        return UnitDesign.of(kind).minLength(diameter);
-    }
-
-    public static int maxLength(Kind kind, double diameter) {
-        return UnitDesign.of(kind).maxLength(diameter);
-    }
-
-    public static int defaultLength(Kind kind, double diameter) {
-        return UnitDesign.of(kind).defaultLength(diameter);
-    }
-
-    /** The lowest support, m. */
+    /**
+     * The lowest support, m. It stays beside the design's own (finding E3): it takes the second size as the shape holds
+     * it, a {@code double}, and truncates it to the design's whole number.
+     */
     public static int minSupport(Kind kind, double diameter, double length) {
         return UnitDesign.of(kind).minSupport(diameter, (int) length);
     }
 
-    /** The highest support, m: 0 where it is fixed (a pump's plinth at grade). */
-    public static int maxSupport(Kind kind) {
-        return UnitDesign.of(kind).maxSupport();
-    }
-
+    /** A new unit's support, m; as {@link #minSupport}, it truncates the second size to the design's whole number. */
     public static int defaultSupport(Kind kind, double diameter, double length) {
         return UnitDesign.of(kind).defaultSupport(diameter, (int) length);
-    }
-
-    public static Orientation orientation(Kind kind) {
-        return UnitDesign.of(kind).orientation();
-    }
-
-    /** A diameter on its kind's grid, cleared of rounding (0.30000000000000004 becomes 0.3). */
-    public static double snap(Kind kind, double diameter) {
-        return UnitDesign.of(kind).snap(diameter);
     }
 
     static void validate(Kind kind, double diameter, double length, Orientation orientation, int support, Bank bank) {
         var design = UnitDesign.of(kind);
         String name = kind.name().toLowerCase(Locale.ROOT);
         if (!design.banks() && !bank.equals(Bank.ONE)) throw new IllegalArgumentException("Only air coolers are built in banks");
-        if (!(diameter >= minDiameter(kind) - 1e-9 && diameter <= maxDiameter(kind) + 1e-9) || Math.abs(snap(kind, diameter) - diameter) > 1e-9)
-            throw new IllegalArgumentException("A " + name + "'s size must be one of its sizes from " + minDiameter(kind) + " to " + maxDiameter(kind) + ", not " + diameter);
-        if (length != Math.rint(length) || length < minLength(kind, diameter) || length > maxLength(kind, diameter))
-            throw new IllegalArgumentException("A " + name + "'s " + (design.lengthInMetres() ? "length" : "count") + " must be " + minLength(kind, diameter) + " to "
-                    + maxLength(kind, diameter) + (design.lengthInMetres() ? " whole metres" : "") + ", not " + length);
-        if (orientation != orientation(kind)) throw new IllegalArgumentException("A " + name + " " + (orientation(kind).horizontal() ? "lies" : "stands"));
+        if (!(diameter >= design.minSize() - 1e-9 && diameter <= design.maxSize() + 1e-9) || Math.abs(design.snap(diameter) - diameter) > 1e-9)
+            throw new IllegalArgumentException("A " + name + "'s size must be one of its sizes from " + design.minSize() + " to " + design.maxSize() + ", not " + diameter);
+        if (length != Math.rint(length) || length < design.minLength(diameter) || length > design.maxLength(diameter))
+            throw new IllegalArgumentException("A " + name + "'s " + (design.lengthInMetres() ? "length" : "count") + " must be " + design.minLength(diameter) + " to "
+                    + design.maxLength(diameter) + (design.lengthInMetres() ? " whole metres" : "") + ", not " + length);
+        if (orientation != design.orientation()) throw new IllegalArgumentException("A " + name + " " + (design.orientation().horizontal() ? "lies" : "stands"));
         int lowest = minSupport(kind, diameter, length);
-        if (support < lowest || support > maxSupport(kind))
-            throw new IllegalArgumentException("A " + name + "'s support must be " + lowest + " to " + maxSupport(kind) + " m, not " + support);
+        if (support < lowest || support > design.maxSupport())
+            throw new IllegalArgumentException("A " + name + "'s support must be " + lowest + " to " + design.maxSupport() + " m, not " + support);
         design.check(diameter, (int) length, support, bank);
     }
 
@@ -234,8 +194,8 @@ public final class ProcessUnit {
     /** Every air cooler bay a player may build, {width, length}, the narrowest and shortest first. */
     public static List<double[]> bays() {
         var out = new ArrayList<double[]>();
-        for (double w = minDiameter(Kind.AIR_COOLER); w <= maxDiameter(Kind.AIR_COOLER) + 1e-9; w += diameterStep(Kind.AIR_COOLER))
-            for (int l = minLength(Kind.AIR_COOLER, w); l <= MAX_BAY_LENGTH; l++) if (coverage(w, l) >= FAN_COVERAGE) out.add(new double[]{snap(Kind.AIR_COOLER, w), l});
+        for (double w = UnitDesign.of(Kind.AIR_COOLER).minSize(); w <= UnitDesign.of(Kind.AIR_COOLER).maxSize() + 1e-9; w += UnitDesign.of(Kind.AIR_COOLER).sizeStep())
+            for (int l = UnitDesign.of(Kind.AIR_COOLER).minLength(w); l <= MAX_BAY_LENGTH; l++) if (coverage(w, l) >= FAN_COVERAGE) out.add(new double[]{UnitDesign.of(Kind.AIR_COOLER).snap(w), l});
         return out;
     }
 
@@ -494,11 +454,6 @@ public final class ProcessUnit {
     /** The unit's moving parts in its frame, by index ({@link Mesh#part}): none for an exchanger, a kettle, an ejector or a heater. */
     List<Motion> motions() {
         return List.copyOf(motions);
-    }
-
-    /** Whether units of {@code kind} have moving parts: their datasheet carries the switch. */
-    public static boolean moves(Kind kind) {
-        return UnitDesign.of(kind).moves();
     }
 
     /**

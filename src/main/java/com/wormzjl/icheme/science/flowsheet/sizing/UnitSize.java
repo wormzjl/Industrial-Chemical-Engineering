@@ -29,7 +29,7 @@ public sealed interface UnitSize permits PumpSizing.Size, ExchangerSizing.Size, 
         var design = UnitDesign.of(kind);
         int steps = (int) Math.round((design.maxSize() - design.minSize()) / design.sizeStep());
         double[] sizes = new double[steps + 1];
-        for (int step = 0; step <= steps; step++) sizes[step] = ProcessUnit.snap(kind, design.minSize() + step * design.sizeStep());
+        for (int step = 0; step <= steps; step++) sizes[step] = UnitDesign.of(kind).snap(design.minSize() + step * design.sizeStep());
         return sizes;
     }
 

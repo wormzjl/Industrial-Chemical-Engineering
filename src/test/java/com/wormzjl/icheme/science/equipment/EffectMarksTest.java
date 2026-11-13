@@ -40,7 +40,7 @@ class EffectMarksTest {
 
     @Test void aFlaresTipMarkStandsOnTheWindshieldsMouth() {
         var kind = Kind.FLARE_STACK;
-        for (double tip = ProcessUnit.minDiameter(kind); tip <= ProcessUnit.maxDiameter(kind) + 1e-9; tip += Flare.TIP_STEP)
+        for (double tip = UnitDesign.of(kind).minSize(); tip <= UnitDesign.of(kind).maxSize() + 1e-9; tip += Flare.TIP_STEP)
             for (var heading : Heading.values()) {
                 var shape = EquipmentShape.designed(kind, tip, 1, heading, 0, ProcessUnit.Bank.ONE);
                 var marks = marks(shape, "flare_tip");
@@ -56,9 +56,9 @@ class EffectMarksTest {
     /** A chimney's {@code stack_top} (batch 2026-11-10-chimney): one mouth at the top of the stack (a brick chimney's liner 1 m proud), on its centre line. */
     @Test void aChimneysTopMarkStandsOnItsMouth() {
         for (var kind : List.of(Kind.STEEL_STACK, Kind.BRICK_CHIMNEY))
-            for (double d : new double[] {ProcessUnit.minDiameter(kind), ProcessUnit.maxDiameter(kind)})
+            for (double d : new double[] {UnitDesign.of(kind).minSize(), UnitDesign.of(kind).maxSize()})
                 for (var heading : Heading.values()) {
-                    int height = ProcessUnit.defaultLength(kind, d);
+                    int height = UnitDesign.of(kind).defaultLength(d);
                     var shape = EquipmentShape.designed(kind, d, height, heading, 0, ProcessUnit.Bank.ONE);
                     var marks = marks(shape, "stack_top");
                     assertEquals(1, marks.size(), shape.toString());

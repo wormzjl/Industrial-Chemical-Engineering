@@ -12,7 +12,7 @@ import java.util.Map;
  * One kind of standalone unit (owner request 2026-10-18: eleven new units, built in parallel; batch
  * 2026-10-15-custom-equipment-rendering): its sizes, the constructor's rows, the datasheet's lines and its parts. Each
  * kind's design is its own file; {@link ProcessUnit} keeps the shared drawing kit (parts, solids, nozzles, decks,
- * ladders, moving parts) and the static sizes the game calls, which ask the kind's design.
+ * ladders, moving parts). The game asks a kind's sizes of its design: {@code UnitDesign.of(kind).minSize()}.
  *
  * <p>The sizes a player sets are the shape's {@code diameter} (the unit's main size, on {@link #sizeStep()}),
  * {@code tangentLength} (a second whole number: a length, a height or a count; 1 where the kind has none) and
