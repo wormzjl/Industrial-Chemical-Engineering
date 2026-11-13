@@ -389,12 +389,32 @@ class PairInteractionsTest {
     /**
      * P21 (wave B): the power table gives the direct {@code pow}'s bits, on a table reused across temperatures and
      * shared by every pair, and one {@code pow} per distinct exponent of a preparation in place of one per term. The
-     * network package's own model, on arbitrary positive pure-component values (the identity does not need them physical).
+     * pilot model and a mixed-group model, on arbitrary positive pure-component values (the identity does not need them physical).
      */
     @Test void powerTableKeepsTheBitsAndComputesEachDistinctPowerOnce() {
-        var catalog = MaterialCatalog.bundled();
-        var model = com.wormzjl.icheme.science.fluid.thermo.SpinePackageData.of(catalog,
-                com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(catalog)).interactions();
+        // The pilot spine package (the bundled model with temperature-dependent pairs: single-group molecules, one term
+        // each, every exponent distinct) and twenty molecules of mixed groups over the same table, whose pairs share them.
+        assertPowerTable(pilotModel(), "pilot");
+        double[][] a = new double[4][4];
+        double[][] b = new double[4][4];
+        for (double[] row : PAIRS_A_B) {
+            int k = (int) row[0];
+            int l = (int) row[1];
+            a[k][l] = a[l][k] = row[2];
+            b[k][l] = b[l][k] = row[3];
+        }
+        var random = new java.util.Random(20261113L);
+        int[][] counts = new int[20][4];
+        for (int[] molecule : counts) for (int g = 0; g < 4; g++) molecule[g] = random.nextInt(4);
+        for (int[] molecule : counts) molecule[random.nextInt(4)]++;
+        var builder = PairInteractions.builder(counts.length);
+        for (int i = 0; i < counts.length; i++) {
+            for (int j = i + 1; j < counts.length; j++) groupContribution(builder, i, j, counts[i], counts[j], a, b);
+        }
+        assertPowerTable(builder.build(), "mixed groups");
+    }
+
+    private static void assertPowerTable(PairInteractions model, String name) {
         int n = model.componentCount();
         int pairs = model.pairCount();
         var random = new java.util.Random(20261113L);
@@ -431,7 +451,7 @@ class PairInteractionsTest {
         assertEquals(model.powerCount(), used.cardinality(), "every distinct exponent belongs to a term");
         assertTrue(model.powerCount() <= terms);
         System.out.println(String.format(Locale.ROOT,
-                "P21 network package: %d components, %d pairs, pow calls per full preparation %d (one per term) -> %d (one per distinct exponent)",
-                n, pairs, terms, model.powerCount()));
+                "P21 %s: %d components, %d pairs, pow calls per full preparation %d (one per term) -> %d (one per distinct exponent)",
+                name, n, pairs, terms, model.powerCount()));
     }
 }
