@@ -606,7 +606,7 @@ class PhysicalFluidTopologyTest {
     @Test void anInLineMachineDrawsAsAPumpAlongItsAxisOnly() {
         for(boolean liquid:new boolean[]{true,false}) {
             var machine=new PhysicalFluidTopology.Device(2,new PhysicalFluidTopology.Position("minecraft:overworld",1,0,0),Kind.PIPE,EAST,new PipeResistance.Geometry(1,.05,.000045,0),
-                    com.wormzjl.icheme.science.machine.InlineMachines.design(.05,liquid));
+                    com.wormzjl.icheme.science.fluid.network.InlineMovers.design(.05,liquid));
             var mover=liquid?com.wormzjl.icheme.world.level.block.FluidDeviceBlock.InlineMover.PUMP:com.wormzjl.icheme.world.level.block.FluidDeviceBlock.InlineMover.COMPRESSOR;
             assertEquals(mover,com.wormzjl.icheme.world.level.block.FluidDeviceBlock.InlineMover.of(machine.hydraulicKind()),"the block's fitting is the engine's mover");
             var devices=List.of(tank(5,-1,0),pipe(1,0,0,PhysicalFluidTopology.ALL_FACES),machine,pipe(3,2,0,PhysicalFluidTopology.ALL_FACES),tank(6,3,0),pipe(4,1,1,PhysicalFluidTopology.ALL_FACES));

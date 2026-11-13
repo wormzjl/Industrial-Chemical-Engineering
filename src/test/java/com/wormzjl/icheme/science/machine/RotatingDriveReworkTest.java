@@ -38,12 +38,12 @@ class RotatingDriveReworkTest {
 
     @Test
     void inlineRatingsFollowBoreAreaAndKeepTheRatedHead() {
-        var small = InlineMachines.design(.025, true);
-        var large = InlineMachines.design(.05, true);
+        var small = com.wormzjl.icheme.science.fluid.network.InlineMovers.design(.025, true);
+        var large = com.wormzjl.icheme.science.fluid.network.InlineMovers.design(.05, true);
         assertEquals(4 * small.law().ratedFlow(), large.law().ratedFlow(), 1e-12);
         assertEquals(25, ((CentrifugalPump) large.law()).head(large.law().ratedFlow(), 1), 1e-9);
         assertTrue(
-                InlineMachines.ratedDraw(large)
+                com.wormzjl.icheme.science.fluid.network.InlineMovers.ratedDraw(large)
                         > large.law()
                                 .fluidPower(
                                         large.law().ratedFlow() * 1000,

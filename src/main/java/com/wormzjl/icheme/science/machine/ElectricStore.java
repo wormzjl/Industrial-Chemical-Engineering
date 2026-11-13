@@ -44,29 +44,36 @@ public final class ElectricStore {
         }
     }
 
-    /** The store of a unit drawing {@code ratedDraw} W at rating: two slices of it under {@code time} (40 s at factor 1), J. */
-    public static double capacity(double ratedDraw, com.wormzjl.icheme.science.fluid.SimulationTime time) {
-        return BUFFER_SLICES * time.seconds(SLICE_TICKS) * Math.max(0, ratedDraw);
+    /**
+     * The store of a unit drawing {@code ratedDraw} W at rating: two slices of it, J, where {@code sliceSeconds} is the process
+     * seconds of one slice ({@link #SLICE_TICKS} under the time factor: {@code SimulationTime.seconds(SLICE_TICKS)}; 20 s at
+     * factor 1, so 40 s of rated draw).
+     */
+    public static double capacity(double ratedDraw, double sliceSeconds) {
+        return BUFFER_SLICES * sliceSeconds * Math.max(0, ratedDraw);
     }
 
-    /** A motor's store: two presentation periods of its rated draw under {@code time} (10 s at factor 1), J. */
-    public static double motorCapacity(double ratedDraw, com.wormzjl.icheme.science.fluid.SimulationTime time) {
-        return MOTOR_BUFFER_PERIODS * time.seconds(PERIOD_TICKS) * ratedDraw;
+    /**
+     * A motor's store: two presentation periods of its rated draw, J, where {@code periodSeconds} is the process seconds of one
+     * period ({@link #PERIOD_TICKS} under the time factor; 10 s of rated draw at factor 1).
+     */
+    public static double motorCapacity(double ratedDraw, double periodSeconds) {
+        return MOTOR_BUFFER_PERIODS * periodSeconds * ratedDraw;
     }
 
-    /** The most its port takes or gives per tick, J: twice its rated draw over the process seconds of one tick under {@code time}. */
-    public static double perTick(double ratedDraw, com.wormzjl.icheme.science.fluid.SimulationTime time) {
-        return RATE * Math.max(0, ratedDraw) * time.tickSeconds();
+    /** The most its port takes or gives per tick, J: twice its rated draw over {@code tickSeconds}, the process seconds of one tick. */
+    public static double perTick(double ratedDraw, double tickSeconds) {
+        return RATE * Math.max(0, ratedDraw) * tickSeconds;
     }
 
-    /** What its store must hold for a stopped unit to restart, J: one slice of its rated draw under {@code time} (reading A62). */
-    public static double restart(double ratedDraw, com.wormzjl.icheme.science.fluid.SimulationTime time) {
-        return RESTART_SLICES * time.seconds(SLICE_TICKS) * Math.max(0, ratedDraw);
+    /** What its store must hold for a stopped unit to restart, J: one slice of its rated draw, of {@code sliceSeconds} (reading A62). */
+    public static double restart(double ratedDraw, double sliceSeconds) {
+        return RESTART_SLICES * sliceSeconds * Math.max(0, ratedDraw);
     }
 
-    /** What a stopped motor's store must hold to restart, J: one presentation period of its rated draw under {@code time}. */
-    public static double motorRestart(double ratedDraw, com.wormzjl.icheme.science.fluid.SimulationTime time) {
-        return MOTOR_RESTART_PERIODS * time.seconds(PERIOD_TICKS) * ratedDraw;
+    /** What a stopped motor's store must hold to restart, J: one presentation period of its rated draw, of {@code periodSeconds}. */
+    public static double motorRestart(double ratedDraw, double periodSeconds) {
+        return MOTOR_RESTART_PERIODS * periodSeconds * ratedDraw;
     }
 
     /** {@code joules} in FE at {@code joulesPerFE}. */

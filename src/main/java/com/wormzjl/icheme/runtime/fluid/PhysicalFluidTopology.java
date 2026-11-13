@@ -266,7 +266,7 @@ public final class PhysicalFluidTopology {
         public Device withGeometry(PipeResistance.Geometry value){
             var changed=control;
             if(kind==TopologyCompiler.Kind.PIPE&&control instanceof FlowControl.Machine m&&value.diameter()!=geometry.diameter()) {
-                var fixed=com.wormzjl.icheme.science.machine.InlineMachines.design(value.diameter(),m.liquid());changed=new FlowControl.Machine(fixed.law(),1,m.enabled());
+                var fixed=com.wormzjl.icheme.science.fluid.network.InlineMovers.design(value.diameter(),m.liquid());changed=new FlowControl.Machine(fixed.law(),1,m.enabled());
             }
             return new Device(id,position,kind,facing,value,changed,ports,generatorEnabled,cutoff,inlineFilter,joints,slots,points,heat,suspendedBy,held);
         }

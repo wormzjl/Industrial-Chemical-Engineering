@@ -82,7 +82,7 @@ public final class ElectricStores {
         }
 
         double capacity() {
-            return kind == Kind.MOTOR ? ElectricStore.motorCapacity(ratedDraw, time) : ElectricStore.capacity(ratedDraw, time);
+            return kind == Kind.MOTOR ? ElectricStore.motorCapacity(ratedDraw, time.seconds(ElectricStore.PERIOD_TICKS)) : ElectricStore.capacity(ratedDraw, time.seconds(ElectricStore.SLICE_TICKS));
         }
     }
 
@@ -197,7 +197,7 @@ public final class ElectricStores {
             }
             case INLINE -> {
                 var r=topology.active().get(id);
-                yield r==null?0:com.wormzjl.icheme.science.machine.InlineMachines.ratedDraw((FlowControl.Mover)r.device().control());
+                yield r==null?0:com.wormzjl.icheme.science.fluid.network.InlineMovers.ratedDraw((FlowControl.Mover)r.device().control());
             }
             case FANS -> {
                 var r = topology.active().get(id);
@@ -307,7 +307,7 @@ public final class ElectricStores {
             s.tick = now;
             s.tickJoules = 0;
         }
-        return Math.max(0, ElectricStore.perTick(s.ratedDraw, coordinator.time()) - s.tickJoules);
+        return Math.max(0, ElectricStore.perTick(s.ratedDraw, coordinator.time().tickSeconds()) - s.tickJoules);
     }
 
     /**
@@ -437,7 +437,7 @@ public final class ElectricStores {
     public boolean restart(long id) {
         var s = stores.get(id);
         if (s == null || !s.unpowered) return false;
-        double threshold = s.kind == Kind.MOTOR ? ElectricStore.motorRestart(s.ratedDraw, s.time) : ElectricStore.restart(s.ratedDraw, s.time);
+        double threshold = s.kind == Kind.MOTOR ? ElectricStore.motorRestart(s.ratedDraw, s.time.seconds(ElectricStore.PERIOD_TICKS)) : ElectricStore.restart(s.ratedDraw, s.time.seconds(ElectricStore.SLICE_TICKS));
         if (!free(s) && (s.joules < threshold || s.kind == Kind.MOTOR && !supplied(id,s))) return false;
         s.unpowered = false;
         return true;
@@ -499,7 +499,7 @@ public final class ElectricStores {
                 // heat capacity ratio and wet share as the solve reads them; a set-flow pump over its hydraulic efficiency, a
                 // set-flow compressor's power as it is (already over its own efficiency: the second one is gone).
                 if(rho>0&&mover.enabled()){if(model==null)model=coordinator.model(island);
-                    shaft=com.wormzjl.icheme.science.machine.InlineMachines.shaftPower(mover,average[edge],heads[edge],rho,supply.pressure(),
+                    shaft=com.wormzjl.icheme.science.fluid.network.InlineMovers.shaftPower(mover,average[edge],heads[edge],rho,supply.pressure(),
                             com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.suctionKappa(model,mover,supply),
                             com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.wetShare(model,solved,edge,result.advancedSeconds()));}
                 draw(store,com.wormzjl.icheme.science.machine.InlineMachines.electricPower(shaft),start,end,false);
