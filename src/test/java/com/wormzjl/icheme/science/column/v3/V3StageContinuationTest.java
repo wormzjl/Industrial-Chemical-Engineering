@@ -116,18 +116,18 @@ class V3StageContinuationTest {
             List<Integer> legacy = new java.util.ArrayList<>();
             for (int seed : new int[] {4, 8, 15}) if (seed < request) legacy.add(seed);
             legacy.add(request);
-            assertEquals(legacy, V3ColumnCalculator.continuationStageCounts(request),
+            assertEquals(legacy, V3ContinuationLadder.continuationStageCounts(request),
                     () -> "the schedule of a request at or below 30 stages must not move");
         }
 
-        assertEquals(List.of(4, 8, 15, 30, 31), V3ColumnCalculator.continuationStageCounts(31));
-        assertEquals(List.of(4, 8, 15, 30, 40), V3ColumnCalculator.continuationStageCounts(40));
-        assertEquals(List.of(4, 8, 15, 30, 60), V3ColumnCalculator.continuationStageCounts(60));
-        assertEquals(List.of(4, 8, 15, 30, 60, 61), V3ColumnCalculator.continuationStageCounts(61));
-        assertEquals(List.of(4, 8, 15, 30, 60, 64), V3ColumnCalculator.continuationStageCounts(V3ColumnInput.MAX_STAGE_COUNT));
+        assertEquals(List.of(4, 8, 15, 30, 31), V3ContinuationLadder.continuationStageCounts(31));
+        assertEquals(List.of(4, 8, 15, 30, 40), V3ContinuationLadder.continuationStageCounts(40));
+        assertEquals(List.of(4, 8, 15, 30, 60), V3ContinuationLadder.continuationStageCounts(60));
+        assertEquals(List.of(4, 8, 15, 30, 60, 61), V3ContinuationLadder.continuationStageCounts(61));
+        assertEquals(List.of(4, 8, 15, 30, 60, 64), V3ContinuationLadder.continuationStageCounts(V3ColumnInput.MAX_STAGE_COUNT));
 
         for (int request = V3ColumnInput.MIN_STAGE_COUNT; request <= V3ColumnInput.MAX_STAGE_COUNT; request++) {
-            List<Integer> schedule = V3ColumnCalculator.continuationStageCounts(request);
+            List<Integer> schedule = V3ContinuationLadder.continuationStageCounts(request);
             assertEquals(request, schedule.get(schedule.size() - 1), "the schedule must end on the request");
             for (int index = 1; index < schedule.size(); index++) {
                 assertTrue(schedule.get(index) > schedule.get(index - 1), schedule::toString);

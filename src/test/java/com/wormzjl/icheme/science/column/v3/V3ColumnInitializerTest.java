@@ -76,7 +76,7 @@ class V3ColumnInitializerTest {
         V3DryMeshState materialClosed = V3ColumnInitializer.initialize(
                 problem, thermo, thermo.newWorkspace(), V3ColumnInitializer.Mode.MATERIAL_CLOSED).state();
 
-        assertThrows(CancellationException.class, () -> V3ColumnCalculator.projectedSeedOrPrevious(
+        assertThrows(CancellationException.class, () -> V3ContinuationLadder.projectedSeedOrPrevious(
                 problem, thermo, materialClosed, () -> {
                     throw new CancellationException("test cancellation");
                 }));

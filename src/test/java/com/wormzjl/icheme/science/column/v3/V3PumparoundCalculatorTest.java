@@ -35,7 +35,7 @@ class V3PumparoundCalculatorTest {
         assertEquals(V3ColumnCalculator.ASSUMPTIONS_REVISION, V3ColumnLabels.assumptionsRevision(heatFree));
         assertEquals(V3ColumnCalculator.ASSUMPTIONS_REVISION + "+" + V3ColumnCalculator.HEAT_ASSUMPTIONS_REVISION,
                 V3ColumnLabels.assumptionsRevision(heated));
-        assertEquals(List.of(), V3ColumnCalculator.withStageGeometry(heated, 8).pumparounds());
+        assertEquals(List.of(), V3ContinuationLadder.withStageGeometry(heated, 8).pumparounds());
     }
 
     @Test
