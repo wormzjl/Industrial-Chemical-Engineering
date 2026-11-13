@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class DeviceColumnTest {
     private static final Measure M = Measure.fixed(6);
 
-    /** Every reading the screen shows (FluidDeviceScreen.meters), each once. */
+    /** Every reading the screen shows (DeviceMeters.meters), each once. */
     private static final List<String> METERS = List.of("fans_state", "burners_state", "temperature", "pressure", "top_pressure", "bottom_pressure", "mass",
             "inlet_temperature", "suction_pressure", "inlet_pressure", "net_flow", "throughput", "velocity", "velocity_lowest", "velocity_highest", "gradient",
             "gradient_lowest", "gradient_highest", "filter_load", "captured", "pressure_change", "outlet_temperature", "duty", "bypass", "fans_speed",

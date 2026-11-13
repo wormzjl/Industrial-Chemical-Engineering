@@ -43,7 +43,7 @@ and `SkinField` hold Minecraft classes and belong to the screens.
   their content slots and moves them as the view scrolls: no rebuild on scroll), `SkinButton` (`SkinButton.of` makes a
   column's button), `SkinField`, `KitDoor` (a door's columns: one view, one bar where the window is short, kept
   widgets, drawing and hover; two columns side by side share the view and the bar, `layout(areas, bar, rows, m)`;
-  used by the dialogs, the constructor, the assembly screen and the column calculator).
+  used by the dialogs, the constructor, the assembly screen, the column calculator and the device screen).
 - A loop of fills (a shape drawn dot by dot, row by row or segment by segment) draws inside `Canvas.batch`: one draw
   call in the game, where each fill outside a batch is its own. `DrawCallTest` holds the counts; the render tools'
   `-Dcount` prints each page's draw calls.
