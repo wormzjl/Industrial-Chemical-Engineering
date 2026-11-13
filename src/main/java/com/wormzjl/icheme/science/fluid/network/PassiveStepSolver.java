@@ -404,7 +404,7 @@ public final class PassiveStepSolver {
      * passes refill them; the accepted pass drops them with its decode cache (review 8.7 (c) E2). A test's counter. */
     private long preparedBuilt;
     long preparedBuilt(){return preparedBuilt;}
-    private boolean rateOnly;
+    boolean rateOnly;
     /** Owned by this solver, which the ownership latch confines to one worker at a time. */
     private final com.wormzjl.icheme.science.fluid.transport.MixtureViscosity.Workspace viscosities=
             new com.wormzjl.icheme.science.fluid.transport.MixtureViscosity.Workspace();
@@ -842,7 +842,7 @@ public final class PassiveStepSolver {
                 shown.set(i,ambient());
             }
             if(shown!=null)endStates=shown;
-            var accepted=new Result(endStates,flows,dt,numerical,acceptedModes,heads,projection.pumpWork(),projection.externalMoles(),projection.externalEnergy(),projection.inventories(),projection.boundaries(),PipeTransfer.sample(model,graph,projection.states(),flows,dt,draws),projection.filters(),observe(equations,states,flows,lawFlows,heads,acceptedModes,checkpoint),TowerExchange.readings(original,states,flows,draws,model));
+            var accepted=new Result(endStates,flows,dt,numerical,acceptedModes,heads,projection.pumpWork(),projection.externalMoles(),projection.externalEnergy(),projection.inventories(),projection.boundaries(),PipeTransfer.sample(model,graph,projection.states(),flows,dt,draws),projection.filters(),observations.observe(equations,states,flows,lawFlows,heads,acceptedModes,checkpoint),TowerExchange.readings(original,states,flows,draws,model));
             // The retained last solve keeps its equations and point, not their per-node decode caches (states, transport
             // rows, prepared temperature workspaces): a later reader re-decodes (review 8.7 (c) E2).
             equations.releaseDecodeCache();
@@ -2002,7 +2002,7 @@ public final class PassiveStepSolver {
     }
     /** Whether this solve's suction readings ({@link #readSuctions}) hold connection {@code edge} of {@code graph}: they were
      * read for the control it carries. */
-    private boolean read(PassiveNetwork graph,int edge) {
+    boolean read(PassiveNetwork graph,int edge) {
         var readControls=constants.readControls;
         return edge<readControls.length&&readControls[edge]!=null&&readControls[edge]==graph.pipes().get(edge).control();
     }
@@ -2144,70 +2144,6 @@ public final class PassiveStepSolver {
      * reads an end's pressure through here and nowhere else, because they must agree: a closure decided on one pressure
      * and reopened on another bottles a line for good. The offset is a pressure, so it applies in both directions.
      */
-    /**
-     * The condensed mass share of a steam turbine's own exhaust (code base review N4): the stream it draws ({@code carried},
-     * its amounts and mass in one proportion), at its exhaust node's pressure and at its inlet enthalpy less the shaft work it
-     * gave ({@code work}, J/kg, negative: {@link #moverPower} over the mass flow), by one PH equilibrium of the fluid phases. What the exhaust node
-     * holds does not enter: a turbine on a hotwell full of condensate reads its own steam. NaN where the equilibrium does
-     * not answer (no read, no wear).
-     */
-    private double exhaustMoisture(Equations.Transport carried,double work,FluidThermodynamics.State exhaust,Runnable checkpoint) {
-        double enthalpy=carried.mass*(carried.specificEnthalpy+work);
-        try {
-            var state=model.fluidPH(exhaust.temperature(),exhaust.pressure(),enthalpy,carried.moles,checkpoint);
-            return state==null?Double.NaN:InletPhase.bulk(model,state).condensedMassShare();
-        }catch(IllegalArgumentException unavailable){return Double.NaN;}
-    }
-    private List<PipeObservation> observe(Equations e,List<FluidThermodynamics.State> states,double[] flows,double[] lawFlows,double[] heads,List<FlowControl.Mode> modes,Runnable checkpoint) {
-        var samples=new ArrayList<PipeObservation>();
-        for(int edge=0;edge<e.graph.pipes().size();edge++) {
-            var pipe=e.graph.pipes().get(edge);int a=pipe.first(),b=pipe.second(),donor=flows[edge]>=0?a:b;
-            var carried=e.drawn(edge,flows[edge]>=0?0:1,e.cachedTransport[donor],flows[edge]);
-            var suction=e.drawn(edge,0,e.cachedTransport[a],flows[edge]);
-            double column=pipe.control() instanceof FlowControl.Mover?suction.density:e.columnEnds[edge]==0?PortStreams.columnDensity(model,states.get(a),pipe.firstPort(),pipe.volume()):PortStreams.columnDensity(model,states.get(b),pipe.secondPort(),pipe.volume());
-            double head=pipe.control() instanceof FlowControl.Mover?heads[edge]:-heads[edge];
-            var lengths=new ArrayList<Double>();var losses=new ArrayList<Double>();
-            for(var section:pipe.sections()){lengths.add(section.length());losses.add(PipeResistance.pressureDrop(section,lawFlows[edge],carried.density,carried.viscosity));}
-            var observed=new PipeObservation(pipe.id(),PortStreams.columnEndPressure(model,e.graph.reservoirs().get(a),pipe.firstPort(),states.get(a),column)+head,PortStreams.columnEndPressure(model,e.graph.reservoirs().get(b),pipe.secondPort(),states.get(b),column),e.graph.reservoirs().get(a).elevation(),e.graph.reservoirs().get(b).elevation(),column,states.get(donor).temperature(),Math.abs(flows[edge])>1e-10,lengths,losses,flows[edge],e.drawn(edge,flows[edge]>=0?0:1,e.cachedTransport[donor],flows[edge]).density);
-            if(!pipe.observationPoints().isEmpty()&&!rateOnly){
-                var meters=new ArrayList<FlowSample>();
-                for(var point:pipe.observationPoints()){
-                    boolean inlet=pipe.control() instanceof FlowControl.Valve&&point.fraction()==0;
-                    double pressure=inlet?states.get(a).pressure():observed.pressure(point.fraction(),point.elevation(),point.reversed());
-                    double q=flows[edge]*(point.reversed()?-1:1);Double volume=null;
-                    if(q==0)volume=0.0;
-                    else if(inlet)volume=q/carried.density;
-                    else try{
-                        checkpoint.run();var local=model.flashTP(states.get(donor).temperature(),pressure,carried.moles,checkpoint);
-                        volume=q/carried.mass*(local.volume()+carried.solids.volume());
-                    }catch(IllegalArgumentException unavailable){ /* The measurement is unavailable; the accepted process remains valid. */ }
-                    meters.add(new FlowSample(point.host(),pressure,q,volume));
-                }
-                observed=observed.withFlowSamples(meters);
-            }
-            if(pipe.control() instanceof FlowControl.Mover mover&&mover.liquid()&&mover.targetVolumeFlow()>0&&read(e.graph,edge))
-                observed=observed.withSuction(observations.npshRatio(e,edge,states,flows[edge]),observations.dry(edge,mover,modes.get(edge),flows[edge],states.get(a).pressure()),observations.gasRatio(edge,mover,states.get(a).pressure()),
-                        observations.npshRequired(edge,flows[edge]),constants.vapourShares[edge]);
-            // A running dry screw's suction vapour share (owner V6 B): its wear and liquid noise read its liquid share.
-            else if(pipe.control() instanceof FlowControl.Machine screw&&com.wormzjl.icheme.science.machine.VacuumPump.dryScrew(screw.law())&&screw.targetVolumeFlow()>0&&read(e.graph,edge))
-                observed=observed.withSuction(Double.NaN,false,Double.NaN,Double.NaN,constants.vapourShares[edge]);
-            // A running centrifugal compressor's suction condensed mass share (N2): its wet gas wear reads it.
-            else if(pipe.control() instanceof FlowControl.Machine compressor&&compressor.law() instanceof com.wormzjl.icheme.science.machine.CentrifugalCompressor&&compressor.targetVolumeFlow()>0&&read(e.graph,edge))
-                observed=observed.withCondensed(constants.condensedShares[edge]);
-            // A steam turbine passing steam forward: its own exhaust moisture (N4), which its wet exhaust wear reads.
-            else if(pipe.control() instanceof FlowControl.Turbine&&flows[edge]>0&&carried.mass>0)
-                observed=observed.withCondensed(exhaustMoisture(carried,moverPower(e.graph,edge,flows[edge],heads[edge],suction.density,states.get(a).pressure(),states.get(b).pressure())/flows[edge],states.get(b),checkpoint));
-            if(pipe.control() instanceof FlowControl.PressureValve||pipe.control() instanceof FlowControl.ControlValve) {
-                // The valve stands at the line's first end: its node side is that end's pressure, its line side the row's
-                // first pressure, which includes the valve's drop (the control head).
-                double node=PortStreams.columnEndPressure(model,e.graph.reservoirs().get(a),pipe.firstPort(),states.get(a),column),line=observed.firstPressure();
-                var read=Math.abs(flows[edge])<=1e-10?PipeObservation.Cavitation.NONE:flows[edge]>=0?observations.cavitation(states.get(donor),node,line,checkpoint):observations.cavitation(states.get(donor),line,node,checkpoint);
-                observed=observed.withValve(Math.abs(node-line),read);
-            }
-            samples.add(observed);
-        }
-        return List.copyOf(samples);
-    }
     /**
      * The height a one-block tank's level head is stated over (decision D9, option B): one metre, its own height at the
      * default 1 m3 volume; a prismatic tank of this height over the footprint {@code V/H}. A drum states its own height in
@@ -4316,7 +4252,7 @@ public final class PassiveStepSolver {
          * gas stream (owner decision D33, {@link FluidThermodynamics#bulkDrawsGas}); {@code phases} are its phase streams by
          * phase id (null for a phase it does not hold), built only for a node an end of which is a phase port (decision D11).
          */
-        private record Transport(double[] moles,double mass,double volume,double density,double viscosity,double specificEnthalpy,double velocityLimit,
+        record Transport(double[] moles,double mass,double volume,double density,double viscosity,double specificEnthalpy,double velocityLimit,
                                  SolidInventory.Moments solids,Transport[] phases) {
             /** Which phases this node's state holds (a phase stream is built exactly for a phase it holds). */
             boolean[] held(){return new boolean[]{phases[0]!=null,phases[1]!=null,phases[2]!=null};}
@@ -4932,7 +4868,7 @@ public final class PassiveStepSolver {
         public PipeObservation withValve(double drop,Cavitation c){return new PipeObservation(pipe,firstPressure,secondPressure,firstElevation,secondElevation,columnDensity,temperature,flowing,lengths,losses,massFlow,density,flowSamples,npshRatio,dry,gasRatio,npshRequired,vapourShare,drop,c,condensedShare);}
         /** This row with a wet read (code base review N2, N4): for a running centrifugal compressor the condensed mass share
          * of the supply its suction line delivers, the number its wet efficiency reads ({@link PassiveStepSolver#readSuctions});
-         * for a steam turbine passing steam the condensed mass share of its own exhaust ({@link PassiveStepSolver#exhaustMoisture}). */
+         * for a steam turbine passing steam the condensed mass share of its own exhaust ({@link StepObservations#exhaustMoisture}). */
         public PipeObservation withCondensed(double share){return new PipeObservation(pipe,firstPressure,secondPressure,firstElevation,secondElevation,columnDensity,temperature,flowing,lengths,losses,massFlow,density,flowSamples,npshRatio,dry,gasRatio,npshRequired,vapourShare,valveDrop,cavitation,share);}
         public static List<PipeObservation> atRest(PassiveNetwork graph,com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics model){
             var result=new ArrayList<PipeObservation>();

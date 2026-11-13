@@ -7,6 +7,7 @@ import static com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.liquidE
 import static com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.liquidMoles;
 import com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.Equations;
 import com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.PipeObservation;
+import com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.FlowSample;
 import com.wormzjl.icheme.science.fluid.solver.SparseNewton;
 import com.wormzjl.icheme.science.fluid.state.SolidInventory;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
@@ -15,10 +16,12 @@ import java.util.*;
 
 /**
  * What a converged step reports and the ledger it is accepted on: the valves' cavitation and the movers' suction readings
- * as results ({@link PipeObservation}), and the step's conservation check ({@link #checkConservation}). Observational only:
- * nothing here feeds back into the solve. One per solver ({@code PassiveStepSolver.observations}), built with it; it
- * reads the solve's constants and the solver's suction reads through {@code solver} and holds no state of its own (S-01,
- * batch 2026-11-13-codebase-review, D-S4: moved out of the solver with every body unchanged but its qualifiers).
+ * as results ({@link #observe}: a {@link PipeObservation} per connection, a turbine's exhaust moisture among them), and
+ * the step's conservation check ({@link #checkConservation}). Observational only: nothing here feeds back into the solve.
+ * One per solver ({@code PassiveStepSolver.observations}), built with it; it reads the solve's constants and the solver's
+ * suction reads through {@code solver} and holds no state of its own (S-01, batch 2026-11-13-codebase-review, D-S4: moved
+ * out of the solver with every body unchanged but its qualifiers, and a Transport field read by its accessor in
+ * {@link #observe} and {@link #exhaustMoisture}).
  */
 final class StepObservations {
     /** The solver whose converged points this reads: its solve constants and its suction and phase reads. */
@@ -26,6 +29,70 @@ final class StepObservations {
     /** The solver's thermodynamics, the same object. */
     private final FluidThermodynamics model;
     StepObservations(PassiveStepSolver solver,FluidThermodynamics model){this.solver=solver;this.model=model;}
+    /**
+     * The condensed mass share of a steam turbine's own exhaust (code base review N4): the stream it draws ({@code carried},
+     * its amounts and mass in one proportion), at its exhaust node's pressure and at its inlet enthalpy less the shaft work it
+     * gave ({@code work}, J/kg, negative: {@link PassiveStepSolver#moverPower} over the mass flow), by one PH equilibrium of the fluid phases. What the exhaust node
+     * holds does not enter: a turbine on a hotwell full of condensate reads its own steam. NaN where the equilibrium does
+     * not answer (no read, no wear).
+     */
+    private double exhaustMoisture(Equations.Transport carried,double work,FluidThermodynamics.State exhaust,Runnable checkpoint) {
+        double enthalpy=carried.mass()*(carried.specificEnthalpy()+work);
+        try {
+            var state=model.fluidPH(exhaust.temperature(),exhaust.pressure(),enthalpy,carried.moles(),checkpoint);
+            return state==null?Double.NaN:InletPhase.bulk(model,state).condensedMassShare();
+        }catch(IllegalArgumentException unavailable){return Double.NaN;}
+    }
+    List<PipeObservation> observe(Equations e,List<FluidThermodynamics.State> states,double[] flows,double[] lawFlows,double[] heads,List<FlowControl.Mode> modes,Runnable checkpoint) {
+        var samples=new ArrayList<PipeObservation>();
+        for(int edge=0;edge<e.graph.pipes().size();edge++) {
+            var pipe=e.graph.pipes().get(edge);int a=pipe.first(),b=pipe.second(),donor=flows[edge]>=0?a:b;
+            var carried=e.drawn(edge,flows[edge]>=0?0:1,e.cachedTransport[donor],flows[edge]);
+            var suction=e.drawn(edge,0,e.cachedTransport[a],flows[edge]);
+            double column=pipe.control() instanceof FlowControl.Mover?suction.density():e.columnEnds[edge]==0?PortStreams.columnDensity(model,states.get(a),pipe.firstPort(),pipe.volume()):PortStreams.columnDensity(model,states.get(b),pipe.secondPort(),pipe.volume());
+            double head=pipe.control() instanceof FlowControl.Mover?heads[edge]:-heads[edge];
+            var lengths=new ArrayList<Double>();var losses=new ArrayList<Double>();
+            for(var section:pipe.sections()){lengths.add(section.length());losses.add(PipeResistance.pressureDrop(section,lawFlows[edge],carried.density(),carried.viscosity()));}
+            var observed=new PipeObservation(pipe.id(),PortStreams.columnEndPressure(model,e.graph.reservoirs().get(a),pipe.firstPort(),states.get(a),column)+head,PortStreams.columnEndPressure(model,e.graph.reservoirs().get(b),pipe.secondPort(),states.get(b),column),e.graph.reservoirs().get(a).elevation(),e.graph.reservoirs().get(b).elevation(),column,states.get(donor).temperature(),Math.abs(flows[edge])>1e-10,lengths,losses,flows[edge],e.drawn(edge,flows[edge]>=0?0:1,e.cachedTransport[donor],flows[edge]).density());
+            if(!pipe.observationPoints().isEmpty()&&!solver.rateOnly){
+                var meters=new ArrayList<FlowSample>();
+                for(var point:pipe.observationPoints()){
+                    boolean inlet=pipe.control() instanceof FlowControl.Valve&&point.fraction()==0;
+                    double pressure=inlet?states.get(a).pressure():observed.pressure(point.fraction(),point.elevation(),point.reversed());
+                    double q=flows[edge]*(point.reversed()?-1:1);Double volume=null;
+                    if(q==0)volume=0.0;
+                    else if(inlet)volume=q/carried.density();
+                    else try{
+                        checkpoint.run();var local=model.flashTP(states.get(donor).temperature(),pressure,carried.moles(),checkpoint);
+                        volume=q/carried.mass()*(local.volume()+carried.solids().volume());
+                    }catch(IllegalArgumentException unavailable){ /* The measurement is unavailable; the accepted process remains valid. */ }
+                    meters.add(new FlowSample(point.host(),pressure,q,volume));
+                }
+                observed=observed.withFlowSamples(meters);
+            }
+            if(pipe.control() instanceof FlowControl.Mover mover&&mover.liquid()&&mover.targetVolumeFlow()>0&&solver.read(e.graph,edge))
+                observed=observed.withSuction(npshRatio(e,edge,states,flows[edge]),dry(edge,mover,modes.get(edge),flows[edge],states.get(a).pressure()),gasRatio(edge,mover,states.get(a).pressure()),
+                        npshRequired(edge,flows[edge]),solver.constants.vapourShares[edge]);
+            // A running dry screw's suction vapour share (owner V6 B): its wear and liquid noise read its liquid share.
+            else if(pipe.control() instanceof FlowControl.Machine screw&&com.wormzjl.icheme.science.machine.VacuumPump.dryScrew(screw.law())&&screw.targetVolumeFlow()>0&&solver.read(e.graph,edge))
+                observed=observed.withSuction(Double.NaN,false,Double.NaN,Double.NaN,solver.constants.vapourShares[edge]);
+            // A running centrifugal compressor's suction condensed mass share (N2): its wet gas wear reads it.
+            else if(pipe.control() instanceof FlowControl.Machine compressor&&compressor.law() instanceof com.wormzjl.icheme.science.machine.CentrifugalCompressor&&compressor.targetVolumeFlow()>0&&solver.read(e.graph,edge))
+                observed=observed.withCondensed(solver.constants.condensedShares[edge]);
+            // A steam turbine passing steam forward: its own exhaust moisture (N4), which its wet exhaust wear reads.
+            else if(pipe.control() instanceof FlowControl.Turbine&&flows[edge]>0&&carried.mass()>0)
+                observed=observed.withCondensed(exhaustMoisture(carried,solver.moverPower(e.graph,edge,flows[edge],heads[edge],suction.density(),states.get(a).pressure(),states.get(b).pressure())/flows[edge],states.get(b),checkpoint));
+            if(pipe.control() instanceof FlowControl.PressureValve||pipe.control() instanceof FlowControl.ControlValve) {
+                // The valve stands at the line's first end: its node side is that end's pressure, its line side the row's
+                // first pressure, which includes the valve's drop (the control head).
+                double node=PortStreams.columnEndPressure(model,e.graph.reservoirs().get(a),pipe.firstPort(),states.get(a),column),line=observed.firstPressure();
+                var read=Math.abs(flows[edge])<=1e-10?PipeObservation.Cavitation.NONE:flows[edge]>=0?cavitation(states.get(donor),node,line,checkpoint):cavitation(states.get(donor),line,node,checkpoint);
+                observed=observed.withValve(Math.abs(node-line),read);
+            }
+            samples.add(observed);
+        }
+        return List.copyOf(samples);
+    }
     /** A control valve's incipient cavitation pressure ratio x_Fz (IEC 60534-8-4): it cavitates from ΔP = x_Fz (P1 − Pv). */
     static final double VALVE_INCIPIENT=.3;
     /**
