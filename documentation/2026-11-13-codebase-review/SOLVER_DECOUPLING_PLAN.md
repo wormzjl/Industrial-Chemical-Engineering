@@ -86,25 +86,30 @@ The owner's rule (2026-11-13): an optimization need not keep results byte-identi
 
 ### 6.1 Decisions
 
-- **Order.** Column first, in the stages of RUST_COLUMN_PORT_PLAN: stage 0 (Java), (a) toolchain and math, (b) linear algebra and thermo, (c) one attempt, (d) the whole solve. Then the fluid step, on the same `icheme-math` and `icheme-thermo` crates: flat tables in Java, the kernel half of the network port, one pass per call, the equilibrium engine last.
+- **Order.** Column first, in the stages of RUST_COLUMN_PORT_PLAN: stage 0 (Java), (a) toolchain and math, (b) linear algebra and thermo, (c) one attempt, (d) the whole solve. The thermo kernel is therefore ported with the column, at stage (b). The fluid step is gated (owner, 2026-11-13; PHASE2_PLAN wave F): the Java groundwork F0 always (typed refusals, flat tables, the kernel as one call, the two splits); then an island step is measured again, after F0 and the wave B fluid and thermo batches; the port F1 (the kernel half of the network port native, then one pass per call) goes ahead only if kernel calls, residual and Jacobian assembly and the LU are still the large majority of step time and step cost still limits plant size. The equilibrium engine stays in Java unless the profile says otherwise.
 - **Stage 0 is the largest gain and comes before any Rust.** The column review's count: the finite-difference Jacobian costs 12 C + 12 whole-column property passes (252 at 20 components) where the analytic one needs one. Making the analytic Jacobian authoritative (P1) removes about 700 lines from the port and is expected to save more time than the language change. B1's share of residual and Jacobian time confirms or refutes this before the decision.
 - **No native state, no callbacks, flat arrays, JNI.** As planned. The cancel and deadline signal is a 32-byte direct buffer.
 - **The C++ lane goes at stage (a).** Until then, owner option: switch it off by default now (D1), which restores determinism at once and costs nothing measured.
 - **Packaging, recommended:** Windows x64 from this machine; Linux x64 and arm64 from a container on this machine (Docker and WSL are installed; B1 reports the Rust side); macOS on the Java path until a macOS build exists. A target ships as verified only after the parity gate has run on it once; until then it is guarded by the load-time self-test and the Java audit, or stays on Java (owner decision 3 and 4 of the port plan).
 - **Two implementations.** Java first, same batch or a lower ceiling, fixtures move with the physics, anchors from Java methods to Rust functions, one layout document. Every rule deleted before the port is paid for once instead of twice.
 
-### 6.2 What Java must do first for the fluid side
+### 6.2 The fluid side: groundwork, gate, port
+
+**F0, in Java, always.** It is needed for any port and is expected to give most of the gain by itself.
 
 1. Typed refusals in the kernel, the engine and the step (S07, S-13, S06): a status code and a `FailureKind`, one refusal type without a stack trace.
 2. Flat `IslandTables`, `PassTables` and an evaluation workspace (FLUID_STEP_REVIEW 3.1, 3.5); the kernel boundary as one call with a `want` mask (X37).
 3. The splits of `PassiveStepSolver` and `FluidTpEquilibrium` with explicit inputs (S-01, S-02, S01, S02).
-4. The laws that a native pass must call, as numbers: mover curves, heat curves as tables, vessel head, the tower with its controller planned per step (L-F1).
 
-The sparse LU is EJML's. A native pass either copies its pivot rule bit for bit or takes a stated shift; decided when the stage is planned, from B1's LU share.
+**The gate.** After F0 and the wave B fluid and thermo batches, an island step is measured again on the bench scenarios. The port goes ahead only if (1) kernel calls, residual and Jacobian assembly and the LU are still the large majority of step time, and (2) step cost still limits plant size. PHASE2_PLAN states how each is read.
+
+**F1, only on a passed gate.** The kernel half of the network port native, then one pass per call. For a native pass the laws it calls must cross as numbers: mover curves, heat curves as tables, vessel head, the tower with its controller planned per step (L-F1). The sparse LU is EJML's: a native pass either copies its pivot rule bit for bit or takes a stated shift, decided from the gate's LU share.
+
+**What never moves.** The pass loop, the booking, the interval solver and the device laws stay in Java. The Java booking and the residual gate of the booked point check every Rust pass, so the fluid side has the same safety as the column, where the Java audit publishes. The equilibrium engine is not ported; it is reconsidered only if a profile shows flashes as the top cost after P20, P21, P24 and P25.
 
 ### 6.3 What is expected, and what would change the plan
 
-Expected from the reviews' counts, before B1: most of the CPU and RAM gain comes from the free optimizations and the flat layouts in Java; the Rust port then adds the gain of arrays without bounds checks, no allocation and no JIT warm-up, and makes the cost of a solve predictable. If B1 shows the thermo kernel below about 10 % of a column solve after stage 0 (as the 2026-09-09 measurement did), stage (b) alone will show little, and the measured point is stage (c) or (d). The port goes ahead in any case (owner decision); B1 sets what is promised for it.
+Expected from the reviews' counts, before B1: most of the CPU and RAM gain comes from the free optimizations and the flat layouts in Java; the Rust port then adds the gain of arrays without bounds checks, no allocation and no JIT warm-up, and makes the cost of a solve predictable. If B1 shows the thermo kernel below about 10 % of a column solve after stage 0 (as the 2026-09-09 measurement did), stage (b) alone will show little, and the measured point is stage (c) or (d). The column's port goes ahead in any case (owner decision); B1 sets what is promised for it. The fluid step's port does not: it waits for the gate of 6.2, which is measured on the code as it stands after F0, not on today's.
 
 ## 7. Room for supercritical fluids
 

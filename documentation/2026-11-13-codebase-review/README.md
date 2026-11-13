@@ -15,6 +15,7 @@ Branch `claude/codebase-review-refactor-8a85ef`, base `259d22a2c` (main 0.30.0).
 - "For some difficult tasks, you may want to use fable as subagent."
 - "Approve all": the twelve review subagents and the bench sub-thread of REVIEW_PLAN section 3.
 - "Start A and J": phase 2 begins with wave A (defects) and wave J (documents); PHASE2_PLAN decision 1. The other thirteen decisions are open.
+- Plan update given by the owner on 2026-11-13, which it says came from the owner's question of that day (the question itself was not put in this session, so it is not quoted): the thermo kernel is ported with the column, at wave E stage (b); the fluid step's port is gated (F0 in Java always; a re-measurement of an island step after F0 and the wave B fluid and thermo batches; F1 only if kernel calls, residual and Jacobian assembly and the LU are still the large majority of step time and step cost still limits plant size); the equilibrium engine is not ported unless a profile shows flashes as the top cost after P20, P21, P24 and P25. Recorded as decision 15 of PHASE2_PLAN.
 
 ## History
 
@@ -23,6 +24,7 @@ Branch `claude/codebase-review-refactor-8a85ef`, base `259d22a2c` (main 0.30.0).
 - 2026-11-13: the twelve reviews delivered by subagents (S1, S3, S5 on Fable high; S2, S4, S6, S7, S8 on Opus high; P1, P2, P3 on Opus medium; P4 on Sonnet medium) and committed (375d3c746). The main thread read the cited lines of 28 findings: 20 held in full, 8 in the part read, none refuted. No test run.
 - 2026-11-13: synthesis by the main thread: the six documents below and `documentation/reference/COLLABORATION.md` (f6e2e38d6). No test run.
 - 2026-11-13: owner "Start A and J". The main thread read the code of wave A's findings and wrote [WAVE_A_BRIEFS.md](WAVE_A_BRIEFS.md): six lanes (A1 column, A2 saves, A3 machines, A4 sheet against world, A5 runtime, A6 fluid) and J1 (guide README, history out of the chapters, `FORMATS.md`). M-04 confirmed by reading; C10, C19, D-01, L-F19 moved out of wave A; M-01 and M-07 wait for decision 3. No test run.
+- 2026-11-13: owner's plan update on the Rust ports applied: PHASE2_PLAN wave F in three parts (F0, the gate, F1) with the engine left in Java, its order and decision 15; SOLVER_DECOUPLING_PLAN sections 6.1 to 6.3; CODEBASE_REVIEW section 6 item 8 and the X30 row of SIMPLIFICATIONS_REVIEW aligned. The gate's two readings (two thirds of step time; the bench's pace counters) are the main thread's proposal, to be confirmed when the gate is run. No test run.
 
 ## Documents
 

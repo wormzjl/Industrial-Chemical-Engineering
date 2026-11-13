@@ -145,6 +145,6 @@ REVIEW_PLAN sections 1 and 2 were wrong or incomplete in these points; [SOLVER_D
 5. Islands never enter the shared queue; column and still jobs do, and stills are a third job family (S6, checked).
 6. "No FMA" is the wrong rule: the Java kernel, `EnergyReference` and `SparseLuSolver` call `Math.fma` explicitly (S1, S3, S4, S5; checked). The rule is "no contraction, and a correctly rounded fused multiply-add where Java has one".
 7. Java-path determinism is not only a math question: D1, D2, R5 and the wall-budget holds (R25) break it (S5, S6).
-8. "One call per island step" is not the first fluid boundary; one pass per call is (S3).
+8. "One call per island step" is not the first fluid boundary; one pass per call is (S3). Since the owner's plan update of 2026-11-13 that boundary is built only if the gate of PHASE2_PLAN wave F passes, and the equilibrium engine stays in Java.
 9. Equipment cannot sit above the plant layer as one module: design facts sit below it, geometry above (P1).
 10. Four rows of the draft failure-mode matrix have nothing in the solve to drive them (S7).

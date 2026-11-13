@@ -77,9 +77,44 @@ As [RUST_COLUMN_PORT_PLAN.md](RUST_COLUMN_PORT_PLAN.md), with the decisions of [
 
 Each stage ends with B1's column scenarios measured again. Stages (a) to (d) are very hard by the owner's table: Fable, or Opus xhigh.
 
-## Wave F: the fluid step in Rust
+## Wave F: the fluid step in Rust (gated)
 
-After wave E's stage (b) (the shared crates exist) and D step, D engine: flat `IslandTables` and `PassTables` in Java; the kernel as one call with a `want` mask (X37); the kernel half of the network port native; one pass per call; the equilibrium engine last. Its build plan is written when stage (c) of the column has been measured.
+The thermo kernel itself is ported with the column (wave E stage (b), the `icheme-thermo` crate). What is gated here is the fluid step's use of it. Owner, 2026-11-13.
+
+### F0 (Java, always)
+
+Needed for any port, and expected to give most of the gain by itself. It is not new work beside the other waves: it is the named subset of them, plus two items.
+
+| Item | Findings | Where it lives |
+|---|---|---|
+| Typed refusals: a status code in the kernel, a `FailureKind` on the engine's result, one refusal type in the step | S07, S06, S-13 | wave C6 |
+| The splits of `PassiveStepSolver` and `FluidTpEquilibrium` on explicit inputs | S-01 to S-07, S01, S02, S03 | D step, D engine |
+| Flat `IslandTables` and `PassTables` and an evaluation workspace, shared by every pass | FLUID_STEP_REVIEW 3.1, 3.2, 3.5; P-07 | new, after D step |
+| The kernel as one call with a `want` mask; flat arrays in place of the views and the three-call protocol | X37 | new, with C6 or after D engine |
+
+F0 is done when: the step's residual, Jacobian and Newton read only the flat tables and the workspace; no exception is control flow in a pass; the lane's exact references stand (every F0 item is STRUCTURE or identical PERF).
+
+### The gate
+
+After F0 and the wave B batches of the fluid step and the thermo core (B step, B thermo), measure an island step again with `tools/codebase-review-bench` on B1's fluid scenario, each timed run alone. The port goes ahead only if both hold:
+
+1. **Share.** Kernel calls, residual and Jacobian assembly and the LU together are still the large majority of the step's time. Proposed reading, for the owner to confirm when the gate is run: at least two thirds.
+2. **Need.** The step's cost still limits plant size: on the bench's largest paced scenario the islands do not keep up with online time on the default worker count, by the benchmark's own pace counters.
+
+The gate's review states both numbers and the decision. If the gate fails, wave F ends at F0 and the fluid step stays in Java.
+
+### F1 (only if the gate passes)
+
+1. The kernel half of the network port native: prepare at T; the state at T, P and amounts; tangents; transport properties (FLUID_STEP_REVIEW 3.4), on the column's `icheme-thermo` crate. Function gates are exact, as for the column.
+2. One pass per call: residual, Jacobian, Newton and LU for one frozen active set, on the flat tables. The sparse LU either copies EJML's pivot rule or takes a stated shift, decided from the gate's LU share.
+
+What stays in Java for good: the pass loop and its active-set decisions, the booking (`ConservativeTransport`), the interval solver, the device laws' planning, and the equilibrium engine. **The Java booking and the residual gate of the booked point check every Rust pass**, as they check a Java pass today: a Rust defect can cost a repeated pass or a fall back to Java, never an accepted step the Java checks refuse.
+
+F1's build plan is written after the gate, from its numbers and from what the column's stages (b) and (c) measured.
+
+### The equilibrium engine is not ported
+
+It stays in Java behind the network port. Reconsider only if a profile shows flashes as the top cost of a step after P20, P21, P24 and P25 are in.
 
 ## Wave G: machines
 
@@ -105,7 +140,8 @@ The code guide's restructure, `FORMATS.md`, the map script, `LayeringTest`, the 
 2. Wave B, by B1's order, two lanes at a time.
 3. Waves C and D lane by lane: C1, then C4; D engine and D column may follow in parallel with C5 and D step.
 4. Wave E from stage 0 as soon as A1, B column and D column are in; wave G beside it (machines lane).
-5. Waves F, H and I as their dependencies land.
+5. Wave F's F0 is complete when C6, D step, D engine and its two own items are in; the gate is measured then, with B step and B thermo in. F1 follows only on a passed gate, and after wave E's stage (b) (the shared crates).
+6. Waves H and I as their dependencies land.
 
 ## Decisions for the owner
 
@@ -127,3 +163,4 @@ In the order they unblock work. "Rec." is the main thread's recommendation.
 | 12 | `tools/` cleanup: the 1 MB rule, the vendored dependencies, the dead tasks, the 113 unreferenced folders | yes | wave J |
 | 13 | A standing approval for read-only review subagents inside a named batch | yes | faster reviews |
 | 14 | The rest of SIMPLIFICATIONS_REVIEW, row by row, when its wave comes | per row | wave H |
+| 15 | Fluid step in Rust: gated on a re-measurement after the Java groundwork; equilibrium engine stays in Java | yes | wave F |
