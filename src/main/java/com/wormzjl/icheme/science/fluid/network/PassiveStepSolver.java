@@ -285,10 +285,10 @@ public final class PassiveStepSolver {
     private List<PassiveNetwork.Pipe.Identity> beAcceptedPipes=List.of();
     private long[] beAcceptedNodeIds=new long[0];
     /** The interval solver accepted a step of this structure. */
-    void markBackwardEulerAccepted(PassiveNetwork graph,Result result){beAcceptedPipes=identities(graph);beAcceptedNodeIds=nodeIds(graph);rememberOpenings(graph,result.massFlows(),result.devicePressureChanges(),result.modes());}
+    void markBackwardEulerAccepted(PassiveNetwork graph,Result result){beAcceptedPipes=identitiesOf(graph);beAcceptedNodeIds=nodeIds(graph);rememberOpenings(graph,result.massFlows(),result.devicePressureChanges(),result.modes());}
     /** Whether no step of this structure has been accepted yet: the cold start after compile, a topology change, or a job
      * start with no committed interval on this structure. */
-    boolean backwardEulerCold(PassiveNetwork graph){return !(sameLines(beAcceptedPipes,identities(graph))&&Arrays.equals(beAcceptedNodeIds,nodeIds(graph)));}
+    boolean backwardEulerCold(PassiveNetwork graph){return !(sameLines(beAcceptedPipes,identitiesOf(graph))&&Arrays.equals(beAcceptedNodeIds,nodeIds(graph)));}
     /**
      * Puts this solver, at the start of an island job, in the state a fresh solver would be in given only the island's
      * committed interval {@code committed} (null without one on this structure), so a job's solves depend on the committed
@@ -311,7 +311,7 @@ public final class PassiveStepSolver {
         previousPipes=List.of();previousNodeIds=new long[0];previousModes=List.of();
         keepOpen=Set.of();lastSolve=null;acceptedOpenings.clear();
         if(committed!=null) {
-            var ids=identities(graph);long[] nodes=nodeIds(graph);
+            var ids=identitiesOf(graph);long[] nodes=nodeIds(graph);
             beAcceptedPipes=ids;beAcceptedNodeIds=nodes;acceptedPipes=ids;acceptedNodeIds=nodes;
             previousPipes=ids;previousNodeIds=nodes;previousModes=committed.endpointModes();
             previousFlows=committed.endpointFlows();previousLawFlows=committed.endpointFlows();previousHeads=committed.endpointHeads();
@@ -325,6 +325,8 @@ public final class PassiveStepSolver {
     static boolean sameLines(PassiveNetwork a,PassiveNetwork b){return sameLines(identities(a),identities(b))&&Arrays.equals(nodeIds(a),nodeIds(b));}
     /** The same connections, whatever a flow valve's set point (a column plans one each slice). */
     private static boolean sameLines(List<PassiveNetwork.Pipe.Identity> a,List<PassiveNetwork.Pipe.Identity> b) {
+        // P-05: one list is the same lines as itself (every identity is its own line), without the copies line() makes.
+        if(a==b)return true;
         if(a.size()!=b.size())return false;
         for(int i=0;i<a.size();i++)if(!a.get(i).sameLine(b.get(i)))return false;
         return true;
@@ -332,6 +334,12 @@ public final class PassiveStepSolver {
     /** The last successful solve, for the block Jacobian check; see {@link #acceptedEquations}. */
     record LastSolve(Equations equations,double[] variables) {}
     private LastSolve lastSolve;
+    /** The pass whose node bundles ({@code Equations.cachedPrepared}) the next pass takes over (P-18). */
+    private Equations preparedPass;
+    /** The node bundles the passes of this solver have built new (P-18): a step's first pass builds them and its later
+     * passes refill them; the accepted pass drops them with its decode cache (review 8.7 (c) E2). A test's counter. */
+    private long preparedBuilt;
+    long preparedBuilt(){return preparedBuilt;}
     private boolean rateOnly;
     /** Owned by this solver, which the ownership latch confines to one worker at a time. */
     private final com.wormzjl.icheme.science.fluid.transport.MixtureViscosity.Workspace viscosities=
@@ -393,7 +401,7 @@ public final class PassiveStepSolver {
                 new SparseNewton.Result(new double[0],0,0,0,0,0),List.of(),new double[0],0,new double[model.hydrocarbon.componentCount()+1],0,
                 graph.reservoirs().stream().map(PassiveNetwork.Reservoir::inventory).toList(),List.of(),List.of());
         var modes=new ArrayList<FlowControl.Mode>();
-        boolean carryModes=previousModes.size()==graph.pipes().size()&&sameLines(previousPipes,identities(graph))&&Arrays.equals(previousNodeIds,nodeIds(graph));
+        boolean carryModes=previousModes.size()==graph.pipes().size()&&sameLines(previousPipes,identitiesOf(graph))&&Arrays.equals(previousNodeIds,nodeIds(graph));
         // A mover's start mode reads its own lines only (owner decision D40 A): its setting, and the sealed sides of it
         // (relieveSealedPockets). A connection blocked elsewhere in the island changes neither.
         modes.addAll(initialModes(graph));
@@ -460,7 +468,7 @@ public final class PassiveStepSolver {
         // A run the interval solver reopened is exempt from the start-of-solve closures of this one solve; the pass loop
         // may still close it on a converged point. See {@link #reopenable}.
         boolean[] keep=null;
-        if(!keepOpen.isEmpty()&&!rateOnly){var ids=identities(graph);keep=new boolean[ids.size()];for(int i=0;i<keep.length;i++)keep[i]=keepOpen.contains(ids.get(i));keepOpen=Set.of();}
+        if(!keepOpen.isEmpty()&&!rateOnly){var ids=identitiesOf(graph);keep=new boolean[ids.size()];for(int i=0;i<keep.length;i++)keep[i]=keepOpen.contains(ids.get(i));keepOpen=Set.of();}
         closeDeadHeads(graph,boundaryClosed,keep);
         balanceLawFlows=null;
         if(needsBalance(graph)) {
@@ -489,7 +497,7 @@ public final class PassiveStepSolver {
         var seeds=initialPhaseSeeds(graph,dt,checkpoint,reachable,modes,boundaryClosed);
         var seen=new HashSet<PassKey>();
         // Constant for this solve: every pass keys on the same graph identity and component support.
-        var pipeIdentities=identities(graph);
+        var pipeIdentities=identitiesOf(graph);int pipesHash=pipeIdentities.hashCode();
         long[] nodeIds=nodeIds(graph);byte[] kinds=new byte[nodeIds.length];
         for(int i=0;i<kinds.length;i++)kinds[i]=(byte)graph.reservoirs().get(i).kind().ordinal();
         boolean[] componentMask=componentMask(graph);
@@ -533,9 +541,9 @@ public final class PassiveStepSolver {
             // means the pass sequence cannot make progress. The frozen junction donors, the phase-port segments and the static
             // columns belong to it for the same reason the modes do: they decide which equations this pass states (see
             // {@link PassKey}).
-            var structure=new WorkspaceKey(0,nodeIds,kinds,pipeIdentities,phases,componentMask,supportCodes(supports),modeCodes,boundaryClosed.clone(),equations.junctionDonorFirst);
+            var structure=new WorkspaceKey(0,nodeIds,kinds,pipeIdentities,pipesHash,phases,componentMask,supportCodes(supports),modeCodes,boundaryClosed.clone(),equations.junctionDonorFirst);
             if(!seen.add(new PassKey(structure,equations.segmentCodes(),equations.columnCodes(),foldedPhases.clone(),proposal==null?-1:proposal.node(),proposal==null?0:proposal.phases(),restarts)))throw new SparseNewton.Nonconvergence("Phase/device active-set cycle");
-            var key=new WorkspaceKey(Double.doubleToLongBits(dt),nodeIds,kinds,pipeIdentities,phases,componentMask,structure.supports,modeCodes,structure.boundaryClosed,structure.junctionDonors);
+            var key=new WorkspaceKey(Double.doubleToLongBits(dt),nodeIds,kinds,pipeIdentities,pipesHash,phases,componentMask,structure.supports,modeCodes,structure.boundaryClosed,structure.junctionDonors);
             var workspace=workspaces.get(key);
             SolverDiagnostics.count(workspace==null?SolverDiagnostics.workspaceBuilds:SolverDiagnostics.workspaceReuses);
             if(workspace==null){if(workspaces.size()>=4)workspaces.remove(workspaces.keySet().iterator().next());var previous=structures.get(structure);workspace=previous==null?new SparseNewton.Workspace(ownership):previous.forkPreconditioner();workspaces.put(key,workspace);}
@@ -760,7 +768,7 @@ public final class PassiveStepSolver {
                         &&new PassiveNetwork.Reservoir(node.id(),node.elevation(),endStates.get(i),node.kind(),end).empty();
                 if(!dry)continue;
                 if(shown==null)shown=new ArrayList<>(endStates);
-                shown.set(i,NetworkReduction.ambient(model));
+                shown.set(i,ambient());
             }
             if(shown!=null)endStates=shown;
             var accepted=new Result(endStates,flows,dt,numerical,acceptedModes,heads,projection.pumpWork(),projection.externalMoles(),projection.externalEnergy(),projection.inventories(),projection.boundaries(),PipeTransfer.sample(model,graph,projection.states(),flows,dt,draws),projection.filters(),observe(equations,states,flows,lawFlows,heads,acceptedModes,checkpoint),TowerExchange.readings(original,states,flows,draws,model));
@@ -1269,19 +1277,19 @@ public final class PassiveStepSolver {
      * {@code supports} is the per-node, per-component phase support flattened in node order: it
      * decides how many unknowns and rows each node block has, so the sparsity pattern, the colouring,
      * the ordering and every retained factorization belong to it as much as to the phase code. */
-    private record WorkspaceKey(long stepBits,long[] nodeIds,byte[] kinds,List<PassiveNetwork.Pipe.Identity> pipes,
+    private record WorkspaceKey(long stepBits,long[] nodeIds,byte[] kinds,List<PassiveNetwork.Pipe.Identity> pipes,int pipesHash,
                                 int[] phases,boolean[] componentMask,byte[] supports,byte[] modes,boolean[] boundaryClosed,
                                 boolean[] junctionDonors) {
         @Override public boolean equals(Object other) {
             return other instanceof WorkspaceKey key&&stepBits==key.stepBits&&Arrays.equals(nodeIds,key.nodeIds)
-                    &&Arrays.equals(kinds,key.kinds)&&pipes.equals(key.pipes)&&Arrays.equals(phases,key.phases)
+                    &&Arrays.equals(kinds,key.kinds)&&pipesHash==key.pipesHash&&(pipes==key.pipes||pipes.equals(key.pipes))&&Arrays.equals(phases,key.phases)
                     &&Arrays.equals(componentMask,key.componentMask)&&Arrays.equals(supports,key.supports)
                     &&Arrays.equals(modes,key.modes)&&Arrays.equals(boundaryClosed,key.boundaryClosed)
                     &&Arrays.equals(junctionDonors,key.junctionDonors);
         }
         @Override public int hashCode() {
             int hash=31*Long.hashCode(stepBits)+Arrays.hashCode(nodeIds);
-            hash=31*(31*hash+Arrays.hashCode(kinds))+pipes.hashCode();
+            hash=31*(31*hash+Arrays.hashCode(kinds))+pipesHash;
             hash=31*(31*hash+Arrays.hashCode(phases))+Arrays.hashCode(componentMask);
             hash=31*hash+Arrays.hashCode(supports);
             hash=31*(31*hash+Arrays.hashCode(modes))+Arrays.hashCode(boundaryClosed);
@@ -1375,6 +1383,18 @@ public final class PassiveStepSolver {
         for(var pipe:graph.pipes())identities.add(pipe.identity());
         return List.copyOf(identities);
     }
+    /** {@link #identities} of {@code graph}, built once per graph object (P-05): a solve and its passes ask for the same
+     * graph's identities a dozen times. A graph is immutable, so the list is its own for as long as it is the one asked about;
+     * an equal list is the same list. */
+    private List<PassiveNetwork.Pipe.Identity> identitiesOf(PassiveNetwork graph) {
+        if(graph!=identityGraph) {
+            // A graph of the same connections as the last one (every step's) keeps the last list object, so the workspace keys
+            // stored from earlier solves compare by reference: one list comparison per new graph in place of one per lookup.
+            var list=identities(graph);identityList=list.equals(identityList)?identityList:list;identityGraph=graph;
+        }
+        return identityList;
+    }
+    private PassiveNetwork identityGraph;private List<PassiveNetwork.Pipe.Identity> identityList;
     private static long[] nodeIds(PassiveNetwork graph) {
         long[] ids=new long[graph.reservoirs().size()];
         for(int i=0;i<ids.length;i++)ids[i]=graph.reservoirs().get(i).id();
@@ -1456,7 +1476,7 @@ public final class PassiveStepSolver {
                                                               List<FlowControl.Mode> modes,boolean[] boundaryClosed) {
         int count=model.hydrocarbon.componentCount()+1,nodes=graph.reservoirs().size();
         // The flows every pass reads its statements off ({@link #startPoint}: the balance's or the carried point's).
-        double[] flows=new double[graph.pipes().size()];startPoint(graph,modes,boundaryClosed,identities(graph),null,flows,new double[flows.length],new boolean[flows.length]);
+        double[] flows=new double[graph.pipes().size()];startPoint(graph,modes,boundaryClosed,identitiesOf(graph),null,flows,new double[flows.length],new boolean[flows.length]);
         var seeds=new ArrayList<FluidThermodynamics.State>(nodes);
         for(int nodeIndex=0;nodeIndex<nodes;nodeIndex++) {
             var node=graph.reservoirs().get(nodeIndex);var available=reachable[nodeIndex];
@@ -1549,7 +1569,7 @@ public final class PassiveStepSolver {
                                                            boolean[] boundaryClosed,double dt,Runnable checkpoint) {
         if(rateOnly||graph.reservoirs().stream().noneMatch(node->node.junction()&&!node.fixed()||holdsNoFluidVessel(node)))return seeds;
         int edges=graph.pipes().size();double[] flows=new double[edges];
-        startPoint(graph,modes,boundaryClosed,identities(graph),null,flows,new double[edges],new boolean[edges]);
+        startPoint(graph,modes,boundaryClosed,identitiesOf(graph),null,flows,new double[edges],new boolean[edges]);
         return arrivingPhases(graph,seeds,flows,null,false,modes,boundaryClosed,dt,checkpoint);
     }
     /** {@link #arrivingPhases} at the law flows {@code flows}; {@code vesselsOnly} leaves the junctions, for a converged pass
@@ -3070,10 +3090,10 @@ public final class PassiveStepSolver {
             double drive=staticDrive(graph,pipe,endPressure(graph,pipe,pipe.first())-endPressure(graph,pipe,pipe.second()));
             if(dryA&&drive>0||dryB&&drive<0||dryA&&dryB)boundaryClosed[i]=true;
         }
-        if(!(sameLines(acceptedPipes,identities(graph))&&Arrays.equals(acceptedNodeIds,nodeIds(graph))))return;
+        if(!(sameLines(acceptedPipes,identitiesOf(graph))&&Arrays.equals(acceptedNodeIds,nodeIds(graph))))return;
         int edges=graph.pipes().size();
         double[] start=new double[edges];
-        startPoint(graph,modes,boundaryClosed,identities(graph),null,start,new double[edges],new boolean[edges]);
+        startPoint(graph,modes,boundaryClosed,identitiesOf(graph),null,start,new double[edges],new boolean[edges]);
         for(int i=0;i<edges;i++) {
             var pipe=graph.pipes().get(i);
             if(boundaryClosed[i]||!(pipe.control() instanceof FlowControl.Passive))continue;
@@ -3172,7 +3192,7 @@ public final class PassiveStepSolver {
      * open connection at the balanced ends, the passive connections the one-way law closes, the device modes it decided, and whether it converged. */
     record Start(PassiveNetwork graph,double[] lawFlows,boolean[] closed,List<FlowControl.Mode> modes,boolean converged) {}
     /** Whether this solve starts from a carried point ({@link #startPoint}'s test) or needs the balance. */
-    private boolean needsBalance(PassiveNetwork graph){return !graph.pipes().isEmpty()&&!carriedPoint(graph,identities(graph));}
+    private boolean needsBalance(PassiveNetwork graph){return !graph.pipes().isEmpty()&&!carriedPoint(graph,identitiesOf(graph));}
     /**
      * Whether this solve starts from a carried point: the previous converged solve's structure is this one's (pipe
      * identities, node ids, a flow per connection) and its point is this solve's own. A rate solve warm-starts only on
@@ -4077,8 +4097,7 @@ public final class PassiveStepSolver {
     }
     /** {@link #holdsNoFluid(PassiveNetwork.Reservoir)} for a vessel's {@code inventory} at {@code state}. */
     static boolean holdsNoFluid(PassiveNetwork.Inventory inventory,FluidThermodynamics.State state) {
-        boolean none=true;for(double n:inventory.moles())if(n!=0){none=false;break;}
-        if(none)return true;
+        if(inventory.holdsNoAmounts())return true;
         // A pure-water basin exchanges at its surface until its actual inventory is empty.
         if(inventory.tower()!=null)return false;
         double capacity=inventory.volume(),bag=PhaseLayout.bagVolume(state,inventory.wallCapacity());
@@ -4359,6 +4378,27 @@ public final class PassiveStepSolver {
          */
         final PhaseDraw.Segment[][] segments;
         final FluidThermodynamics.Prepared[] cachedPrepared;
+        /** Per node, the bundle a Jacobian probe at another temperature is prepared in, refilled in place
+         * ({@link FluidThermodynamics#prepare(double,FluidThermodynamics.Prepared)}, finding P-18): the decode's own
+         * ({@link #cachedPrepared}) is the probe's base and stays as it is through the node's columns. */
+        private final FluidThermodynamics.Prepared[] probePrepared;
+        private FluidThermodynamics.Prepared probe(int node,double temperature) {
+            if(probePrepared[node]==null)preparedBuilt++;
+            return probePrepared[node]=model.prepare(temperature,probePrepared[node]);
+        }
+        /**
+         * Takes over the bundles of the solver's previous pass (P-18): a bundle holds one temperature's terms and no node's
+         * state, so any slot serves any node, refilled at its first decode. The previous pass drops its decode cache and
+         * its probe bundles, so it decodes anew with bundles of its own if it is evaluated again (the accepted point's
+         * equations, read after the solve). Each solver runs one pass at a time on one thread.
+         */
+        private void adoptPrepared() {
+            var previous=preparedPass;preparedPass=this;
+            if(previous==null||previous==this)return;
+            System.arraycopy(previous.cachedPrepared,0,cachedPrepared,0,Math.min(cachedPrepared.length,previous.cachedPrepared.length));
+            System.arraycopy(previous.probePrepared,0,probePrepared,0,Math.min(probePrepared.length,previous.probePrepared.length));
+            previous.releaseDecodeCache();
+        }
         /** Whether this island carries the three aggregate solid moment unknowns on every node;
          * the whole-island predicate {@link PhaseLayout} is built with, evaluated once. */
         final boolean solidSupport;
@@ -4485,7 +4525,8 @@ public final class PassiveStepSolver {
             this.graph=graph;this.dt=dt;solidSupport=hasSolids(graph);int count=graph.reservoirs().size();layout=new PhaseLayout[count];offsets=new int[count];oldAmounts=new double[count][];
             this.checkpoint=checkpoint;passCurves=new HeatCurve[graph.pipes().size()][];passKnown=new boolean[graph.pipes().size()][];heldCurves();
             cachedVariables=new double[count][];cachedStates=new FluidThermodynamics.State[count];cachedTransport=new Transport[count];
-            cachedPrepared=new FluidThermodynamics.Prepared[count];
+            cachedPrepared=new FluidThermodynamics.Prepared[count];probePrepared=new FluidThermodynamics.Prepared[count];
+            adoptPrepared();
             drawsPhase=new boolean[count];
             for(int edge=0;edge<graph.pipes().size();edge++)for(int end=0;end<2;end++) {
                 var pipe=graph.pipes().get(edge);
@@ -4544,6 +4585,7 @@ public final class PassiveStepSolver {
                     heldMelt[node][crystal.component()]+=p.massKg()/model.molecularWeight(crystal.component());heldMeltEnergy[node]+=p.massKg()*p.material().crystal().energyOffset();}
                 heldKept[node]=melting.kept(node,stock).moments().values();
             }
+            transfersAt=transfersAt(graph);edgeFlow=new double[graph.pipes().size()];edgeDonor=new Transport[edgeFlow.length];edgeSuction=new Transport[edgeFlow.length];
             energy=new double[count];incomingMass=new double[count];incomingEnergy=new double[count];netMass=new double[count];
             for(int node=0;node<count;node++)if(layout[node]!=null)cachedVariables[node]=new double[layout[node].size()];
             int[] degree=new int[count];
@@ -4878,7 +4920,7 @@ public final class PassiveStepSolver {
             for(int node=0;node<layout.length;node++) {
                 var reservoir=graph.reservoirs().get(node);
                 if(layout[node]==null||reservoir.kind()!=PassiveNetwork.NodeKind.RESERVOIR||dry[node])continue;
-                final int at=node;if(graph.scheduledTransfers().stream().anyMatch(t->t.node()==at))continue;
+                if(transfersAt[node].length>0)continue;
                 double held=0,left=0;for(double n:oldAmounts[node])held+=n;
                 if(!(held>0))continue;
                 for(int local=0;local<layout[node].size();local++)if(layout[node].totalAmountVariable(local)&&!layout[node].solidVariable(local))left+=x[offsets[node]+local];
@@ -5220,7 +5262,7 @@ public final class PassiveStepSolver {
             return states;
         }
         /** Drops the per-node decode cache; the next decode rebuilds every node exactly. */
-        void releaseDecodeCache(){Arrays.fill(cachedStates,null);Arrays.fill(cachedTransport,null);Arrays.fill(cachedPrepared,null);}
+        void releaseDecodeCache(){Arrays.fill(cachedStates,null);Arrays.fill(cachedTransport,null);Arrays.fill(cachedPrepared,null);Arrays.fill(probePrepared,null);}
         /** Brings the per-node decode cache up to {@code x}; the residual reads the arrays directly. */
         private void decode(double[] x) {
             if(hasWeirs)for(int edge=0;edge<weirOffsets.length;edge++)for(int end=0;end<2;end++)if(weirOffsets[edge][end]>=0)weirValues[edge][end]=x[weirOffsets[edge][end]];
@@ -5229,7 +5271,9 @@ public final class PassiveStepSolver {
                 if(same)continue;
                 if(layout[i]!=null) {
                     double temperature=layout[i].temperature(x,offsets[i]);
-                    if(cachedPrepared[i]==null||cachedPrepared[i].temperature()!=temperature)cachedPrepared[i]=model.prepare(temperature);
+                    // Refilled in place (P-18): this node's state and transport are decoded again from it just below.
+                    if(cachedPrepared[i]==null)preparedBuilt++;
+                    cachedPrepared[i]=model.prepare(temperature,cachedPrepared[i]);
                 }
                 FluidThermodynamics.State state;
                 // A trial a typed thermodynamic hold refused names the node it was refused at; see ThermoHold.
@@ -5316,11 +5360,43 @@ public final class PassiveStepSolver {
          * perturbed column, and they are the only place each row's formula exists.
          */
         private void assemble(double[] x,FluidThermodynamics.State[] st,Transport[] tr,FluidThermodynamics.Prepared[] pr,double[] f) {
-            for(int node=0;node<layout.length;node++)if(layout[node]!=null)nodeAccumulate(node,x,st,tr);
-            for(int edge=0;edge<graph.pipes().size();edge++)edgeRows(edge,x,st,tr,f);
-            for(int node=0;node<layout.length;node++)if(layout[node]!=null)nodeRows(node,x,st,pr,f);
-            if(hasWeirs)weirRows(x,st,tr,f);
+            // Finding P-03 (batch 2026-11-13-codebase-review): each connection's transported flow and the streams of its
+            // ends are read once here, in the arithmetic every row read them in, and the rows below read them back.
+            for(int edge=0;edge<edgeFlow.length;edge++) {
+                var pipe=graph.pipes().get(edge);double q=flow(edge,x[edgeOffset+edge],tr);
+                edgeFlow[edge]=q;edgeDonor[edge]=drawn(edge,q>=0?0:1,tr[q>=0?pipe.first():pipe.second()],q);
+                edgeSuction[edge]=q>=0?edgeDonor[edge]:drawn(edge,0,tr[pipe.first()],q);
+            }
+            edgesRead=true;
+            try {
+                for(int node=0;node<layout.length;node++)if(layout[node]!=null)nodeAccumulate(node,x,st,tr);
+                for(int edge=0;edge<graph.pipes().size();edge++)edgeRows(edge,x,st,tr,f);
+                for(int node=0;node<layout.length;node++)if(layout[node]!=null)nodeRows(node,x,st,pr,f);
+                if(hasWeirs)weirRows(x,st,tr,f);
+            } finally {edgesRead=false;}
         }
+        /**
+         * P-03: per connection, what {@link #assemble}'s pre-pass read at its point: the transported flow ({@link #flow}), the
+         * stream of the end the flow leaves and the first end's (suction) stream ({@link #drawn}). Read only while
+         * {@code edgesRead}: the block sweep moves one node or one edge per column and reads its own.
+         */
+        private final double[] edgeFlow;private final Transport[] edgeDonor,edgeSuction;private boolean edgesRead;
+        /** Per node, the indices of the scheduled transfers that name it, in the graph's order (finding P-14): the node
+         * accumulation reads them in place of a scan of every transfer per node and evaluation. */
+        private final int[][] transfersAt;
+        private static int[][] transfersAt(PassiveNetwork graph) {
+            int nodes=graph.reservoirs().size();int[] count=new int[nodes];
+            for(var transfer:graph.scheduledTransfers())count[transfer.node()]++;
+            int[][] at=new int[nodes][];for(int i=0;i<nodes;i++)at[i]=new int[count[i]];Arrays.fill(count,0);
+            for(int t=0;t<graph.scheduledTransfers().size();t++){int node=graph.scheduledTransfers().get(t).node();at[node][count[node]++]=t;}
+            return at;
+        }
+        private double flowAt(int edge,double[] x,Transport[] tr){return edgesRead?edgeFlow[edge]:flow(edge,x[edgeOffset+edge],tr);}
+        private Transport donorAt(int edge,Transport[] tr,double flow) {
+            if(edgesRead)return edgeDonor[edge];
+            var pipe=graph.pipes().get(edge);return drawn(edge,flow>=0?0:1,tr[flow>=0?pipe.first():pipe.second()],flow);
+        }
+        private Transport suctionAt(int edge,Transport[] tr,double flow){return edgesRead?edgeSuction[edge]:drawn(edge,0,tr[graph.pipes().get(edge).first()],flow);}
         /** Projection complementarity: retained water, all-water, or a water/gas split at the weir. */
         private void weirRows(double[] x,FluidThermodynamics.State[] st,Transport[] tr,double[] f){
             for(int edge=0;edge<weirOffsets.length;edge++)for(int end=0;end<2;end++){
@@ -5346,9 +5422,8 @@ public final class PassiveStepSolver {
             System.arraycopy(graph.reservoirs().get(node).inventory().solids().moments().values(),0,solidTargets[node],0,3);Arrays.fill(solidIncoming[node],0);
             System.arraycopy(oldAmounts[node],0,target,0,target.length);Arrays.fill(in,0);
             double stored=graph.reservoirs().get(node).inventory().internalEnergy(),mass=0,heat=0,net=0;
-            for(var transfer:graph.scheduledTransfers()) {
-                if(transfer.node()!=node)continue;
-                var state=st[node];
+            for(int t:transfersAt[node]) {
+                var transfer=graph.scheduledTransfers().get(t);var state=st[node];
                 if(transfer instanceof ScheduledTransfer.Withdrawal withdrawal) {
                     // A module's withdrawal takes the vessel's bulk, its solids at their share of the mass (D23 (6)), on the
                     // state's own amounts: the node's transport is what a connection's bulk end draws (the gas, under D33).
@@ -5372,7 +5447,7 @@ public final class PassiveStepSolver {
             // A kettle's pool (W7): the bundle's heat into the vessel over the step, on its start state.
             double pooled=poolHeat(graph.reservoirs().get(node));stored+=dt*pooled;heat+=pooled;
             if(graph.reservoirs().get(node).inventory().tower()!=null) {
-                var flows=new double[graph.pipes().size()];for(int e=0;e<flows.length;e++)flows[e]=flow(e,x[edgeOffset+e],tr);
+                double[] flows;if(edgesRead)flows=edgeFlow;else{flows=new double[graph.pipes().size()];for(int e=0;e<flows.length;e++)flows[e]=flow(e,x[edgeOffset+e],tr);}
                 // The stream each spray edge delivers, as this point's transport draws it (COOLING_TOWER_PLAN.md 3.1).
                 double[][] drawn=null;
                 for(int edge:nodeEdges[node]){var pipe=graph.pipes().get(edge);boolean first=pipe.first()==node;
@@ -5384,10 +5459,10 @@ public final class PassiveStepSolver {
                 stored-=dt*exchange.energyWatt();heat-=exchange.energyWatt();net-=exchange.massLoss();
             }
             for(int edge:nodeEdges[node]) {
-                var pipe=graph.pipes().get(edge);int a=pipe.first(),b=pipe.second();double flow=flow(edge,x[edgeOffset+edge],tr);
+                var pipe=graph.pipes().get(edge);int a=pipe.first(),b=pipe.second();double flow=flowAt(edge,x,tr);
                 // The donor terms read the stream of the end the flow leaves: the donor's bulk at a BULK end (the same
                 // doubles as its whole state), its drawn phase at a phase port.
-                boolean first=node==a;int donor=flow>=0?a:b;var upstream=st[donor];var transport=drawn(edge,flow>=0?0:1,tr[donor],flow);
+                boolean first=node==a;int donor=flow>=0?a:b;var upstream=st[donor];var transport=donorAt(edge,tr,flow);
                 boolean receiver=node==(flow>=0?b:a);
                 double captureFraction=pipe.filter()==null?0:transport.solids.mass()/transport.mass;
                 double deliveredFlow=Math.abs(flow)*(1-captureFraction);
@@ -5430,7 +5505,7 @@ public final class PassiveStepSolver {
                     // node's pressure at this trial (decision D8: suction properties only). A turbine's work leaves the
                     // stream (negative), its drop read from the trial inlet to the trial exhaust node's pressure; the
                     // sparsity declares this row on both ends' columns and the flow's (buildSparsity).
-                    double power=moverPower(edge,flow,head,drawn(edge,0,tr[a],flow).density,st[a].pressure(),st[b].pressure());
+                    double power=moverPower(edge,flow,head,suctionAt(edge,tr,flow).density,st[a].pressure(),st[b].pressure());
                     stored+=dt*power;heat+=power;
                 }
                 // A heat-exchanging side delivers its donor's stream with the heat it took up crossing the wall, booked like
@@ -5544,9 +5619,9 @@ public final class PassiveStepSolver {
             // The edge unknown is the law's flow; what the connection carries is its saturation at the velocity cap of the
             // end it leaves ({@link #flow}, PassiveStepSolver.saturated), the flow every booking and actuator row reads. The
             // loss is the law's at the law's flow, in the stream of the end the flow leaves.
-            var pipe=graph.pipes().get(edge);int a=pipe.first(),b=pipe.second();double law=x[edgeOffset+edge],flow=flow(edge,law,tr);
-            int donor=flow>=0?a:b;var transport=drawn(edge,flow>=0?0:1,tr[donor],flow);double rho=transport.density;
-            var suction=drawn(edge,0,tr[a],flow);
+            var pipe=graph.pipes().get(edge);int a=pipe.first(),b=pipe.second();double law=x[edgeOffset+edge],flow=flowAt(edge,x,tr);
+            int donor=flow>=0?a:b;var transport=donorAt(edge,tr,flow);double rho=transport.density;
+            var suction=suctionAt(edge,tr,flow);
             double dz=graph.reservoirs().get(b).elevation()-graph.reservoirs().get(a).elevation();
             double loss=pipe.pressureDrop(law,rho,transport.viscosity);
             if(pipe.filter()!=null){
@@ -5634,7 +5709,6 @@ public final class PassiveStepSolver {
         private int differentiate(double[] x,double[] f,double differenceStep,int[] entryOffsets,int[] entryRows,
                                   double[] entries,Runnable checkpoint,boolean tangents) {
             if(hasWeirs)return -1;
-            if(sparsity==null)buildSparsity();
             FluidThermodynamics.State[] st,baseStates;Transport[] tr,baseTransport;FluidThermodynamics.Prepared[] pr,basePrepared;
             double[] trial,perturbed;
             try {
@@ -5657,7 +5731,8 @@ public final class PassiveStepSolver {
                         double step=differenceStep*differenceScale(column,x[column]);
                         trial[column]+=step;
                         double temperature=layout[node].temperature(trial,offsets[node]);
-                        var prepared=basePrepared[node]!=null&&basePrepared[node].temperature()==temperature?basePrepared[node]:model.prepare(temperature);
+                        var prepared=basePrepared[node]!=null&&basePrepared[node].temperature()==temperature?basePrepared[node]
+                                :probe(node,temperature);
                         long exactBefore=SolverDiagnostics.ENABLED&&tangents?SolverDiagnostics.jacobianExactPhases.sum():0;
                         var state=layout[node].decode(trial,offsets[node],prepared,nodeTangents);
                         if(SolverDiagnostics.ENABLED&&tangents&&SolverDiagnostics.jacobianExactPhases.sum()>exactBefore)SolverDiagnostics.jacobianExactColumns.increment();

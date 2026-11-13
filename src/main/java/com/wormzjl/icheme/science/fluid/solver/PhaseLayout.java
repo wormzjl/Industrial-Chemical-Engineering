@@ -637,7 +637,7 @@ public final class PhaseLayout {
             public int[][] columnRows(){int[][] rows=new int[size()][size()];for(int[] column:rows)for(int i=0;i<column.length;i++)column[i]=i;return rows;}
             public double[] residual(double[] x){
                 double temperature=PhaseLayout.this.temperature(x,0);var local=prepared;
-                if(local==null||local.temperature()!=temperature)prepared=local=model.prepare(temperature);
+                if(local==null||local.temperature()!=temperature)prepared=local=model.prepare(temperature,local);
                 var state=decode(x,0,local);
                 if(FluidThermodynamics.vanishing(start,state)!=0)throw new Vanished();
                 double[] f=new double[size()];junctionResidual(state,w,specificEnthalpy,0,pressure,f,0,x,local,1);return f;
@@ -666,7 +666,7 @@ public final class PhaseLayout {
             }
             private FluidThermodynamics.Prepared prepare(double[] x) {
                 double temperature=PhaseLayout.this.temperature(x,0);var local=prepared;
-                if(local==null||local.temperature()!=temperature)prepared=local=model.prepare(temperature);
+                if(local==null||local.temperature()!=temperature)prepared=local=model.prepare(temperature,local);
                 return local;
             }
         };

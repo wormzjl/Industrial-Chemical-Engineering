@@ -1424,6 +1424,17 @@ public final class FluidThermodynamics {
 
     /** The temperature-only property bundle for one exact node temperature. */
     public Prepared prepare(double temperature) { return new Prepared(this,temperature); }
+    /**
+     * {@link #prepare(double)} into {@code reuse}, one of this model's bundles (null: a new one), refilled in place when its
+     * temperature differs (finding P-18, batch 2026-11-13-codebase-review): its Peng-Robinson workspace is prepared again
+     * at the new temperature on the whole list, as a new one is, and gives the same bits. The caller must read nothing it
+     * derived from {@code reuse} at its previous temperature after this call.
+     */
+    public Prepared prepare(double temperature,Prepared reuse) {
+        if(reuse==null)return prepare(temperature);
+        if(own(reuse).temperature==temperature)return reuse;
+        reuse.refill(temperature);return reuse;
+    }
 
     private Prepared own(Prepared prepared) {
         if(prepared.owner!=this)throw new IllegalArgumentException("Prepared temperature belongs to another model");
@@ -1441,12 +1452,27 @@ public final class FluidThermodynamics {
      */
     public static final class Prepared {
         private final FluidThermodynamics owner;
-        private final double temperature;
+        private double temperature;
         private TranslatedPengRobinson.Workspace terms;
+        /** A workspace kept from an earlier temperature, prepared at this one on its first use ({@link #pengRobinson}). */
+        private TranslatedPengRobinson.Workspace kept;
+        /** The Peng-Robinson workspaces bundles have built (each a whole kernel workspace), process-wide: a test's and the
+         * bench's counter (P-18). */
+        private static final java.util.concurrent.atomic.LongAdder BUILT=new java.util.concurrent.atomic.LongAdder();
+        public static long workspacesBuilt(){return BUILT.sum();}
         private MixtureViscosity.Prepared transport;
         private Prepared(FluidThermodynamics owner,double temperature) {
             if(!Double.isFinite(temperature)||temperature<=0)throw new IllegalArgumentException("Invalid prepared temperature");
             this.owner=owner;this.temperature=temperature;
+        }
+        /**
+         * This bundle at {@code temperature}, as a new one is: every member unformed, the carried compounds unnamed, and the
+         * Peng-Robinson workspace kept to be prepared again on its first use (P-18).
+         */
+        private void refill(double temperature) {
+            if(!Double.isFinite(temperature)||temperature<=0)throw new IllegalArgumentException("Invalid prepared temperature");
+            if(terms!=null)kept=terms;
+            terms=null;transport=null;carried=null;this.temperature=temperature;
         }
         public double temperature() { return temperature; }
         /**
@@ -1460,7 +1486,17 @@ public final class FluidThermodynamics {
         /** The prepared Peng-Robinson workspace of this temperature. It is mutable scratch, so a
          * {@code Prepared} - like the node cache that holds it - belongs to one solving thread. */
         TranslatedPengRobinson.Workspace pengRobinson() {
-            return terms==null?terms=owner.hydrocarbon.prepare(temperature):terms;
+            if(terms!=null)return terms;
+            var reuse=kept;kept=null;
+            if(reuse==null){BUILT.increment();return terms=owner.hydrocarbon.prepare(temperature);}
+            // A new workspace is prepared on the whole list. A kept one is prepared on the support its last use left, then
+            // carries the whole list again, which prepares the rest at this temperature: each compound's, pair's and cell's
+            // terms are their own arithmetic at this temperature (the kernel's stamps), so the bits are a new workspace's,
+            // and every term a new one would refuse is refused. A refusal leaves the workspace half prepared under the
+            // kernel's stamps, so it is dropped and the next use builds a new one.
+            owner.hydrocarbon.translated().prepare(temperature,reuse);
+            reuse.carryAll();
+            return terms=reuse;
         }
         /** The pure-component transport terms of this temperature, for the decode's Transport row. */
         public MixtureViscosity.Prepared viscosities() {
