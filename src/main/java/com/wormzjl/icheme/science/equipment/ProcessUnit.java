@@ -810,54 +810,6 @@ public final class ProcessUnit {
         return (long) (x + 1024) << 42 | (long) (y + 1024) << 21 | (z + 1024);
     }
 
-    // ---- Shell-and-tube exchanger -----------------------------------------------------------------------------------
-
-    /**
-     * A TEMA AES exchanger lying along z on two saddles, its bottom {@code support} up: from the front, the channel's
-     * cover, the channel (tube side in at its bottom, out at its top), the tubesheet's flange, the shell (shell side in
-     * on top near the back, out at the bottom near the front), the floating head's flange and its cover.
-     */
-    void exchanger() {
-        double d = shape.diameter(), r = d / 2, y = shape.support() + r, a = centre(1.1 * r);
-        int n = sides(d);
-        // A readable cover pattern at game scale: roughly 0.3 m pitch, in fours, with at least eight bolts.
-        int bolts = Math.max(8, 4 * (int) Math.ceil(Math.PI * d / 1.2));
-        double channel = .5 * d + .2, zn = Math.ceil(.08 + channel / 2 - .5) + .5;
-        double c0 = zn - channel / 2 - .08, ch1 = zn + channel / 2, s0 = ch1 + .1, s1 = s0 + .95 * shape.tangentLength(), end = s1 + .1;
-        var f = new Frame(new double[]{a, y, 0}, new double[]{0, 0, 1}, new double[]{0, 1, 0});
-        mesh.ring(f, 0, 1.1 * r, c0, c0 + .08, n, 3, Material.FLANGE);
-        mesh.bolts(f, d, r, 1.1 * r, c0, -1, bolts, Material.BOLT);
-        mesh.prism(f, r, c0 + .08, ch1, n, Material.SHELL);
-        mesh.ring(f, r, 1.1 * r, ch1, s0, n, 3, Material.FLANGE);
-        mesh.bolts(f, d, r, 1.1 * r, ch1, -1, bolts, Material.BOLT);
-        mesh.bolts(f, d, r, 1.1 * r, s0, 1, bolts, Material.BOLT);
-        mesh.prism(f, r, s0, s1, n, Material.SHELL);
-        mesh.ring(f, r, 1.08 * r, s1, end, n, 3, Material.FLANGE);
-        mesh.bolts(f, d, r, 1.08 * r, s1, -1, bolts, Material.BOLT);
-        mesh.bolts(f, d, r, 1.08 * r, end, 1, bolts, Material.BOLT);
-        mesh.head(f, r, end, d / 4, n, Material.HEAD);
-        solids.add(Solid.rod(new double[]{a, y, 0}, 2, c0, end, 1.05 * r, d / 4));
-        volumes.add(Solid.rod(new double[]{a, y, 0}, 2, c0 + .1, end, .94 * r, .9 * d / 4));
-        round(a, y, c0, end, r);
-
-        double tube = Math.min(PipeSizes.MAX_OUTSIDE, .4 * d), shellOd = Math.min(PipeSizes.MAX_OUTSIDE, d / 2), flange = PipeSizes.flange(shellOd);
-        nozzles.add(radial(Role.TUBE_INLET, a, y, r, n, zn, -1, ColumnStructure.size(.25 * d, tube)));
-        nozzles.add(radial(Role.TUBE_OUTLET, a, y, r, n, zn, 1, ColumnStructure.size(.25 * d, tube)));
-        // The shell nozzles near the tubesheets, two rows at least behind the channel's (one free block between pipes).
-        double zIn = Math.max(Math.floor(s1 - flange / 2 - .1 - .5) + .5, zn + 2), zOut = Math.max(Math.ceil(s0 + flange / 2 + .1 - .5) + .5, zn + 2);
-        var layout=shape.exchangerType().layout();
-        if(layout.transverseShell()) {
-            // TEMA X-shell: distribution and collection are internal; the outer pressure shell stays cylindrical.
-            zIn=zOut=Math.max(zn+2,Math.floor((s0+s1)/2)+.5);
-        }
-        nozzles.add(radial(Role.SHELL_INLET, a, y, r, n, zIn, 1, ColumnStructure.size(.3 * d, shellOd)));
-        nozzles.add(radial(Role.SHELL_OUTLET, a, y, r, n, zOut, -1, ColumnStructure.size(.3 * d, shellOd)));
-        // The saddles a fifth of the shell in from its ends, off the pipe blocks under the tube inlet and the shell outlet.
-        double w = saddleWidth(r), length = s1 - s0;
-        saddle(saddleAt(s0 + .2 * length, w, s0, s1, zn, zOut), a, y, r, w, 0);
-        saddle(saddleAt(s1 - .2 * length, w, s0, s1, zn, zOut), a, y, r, w, 0);
-    }
-
     // ---- Kettle reboiler --------------------------------------------------------------------------------------------
 
     /**
