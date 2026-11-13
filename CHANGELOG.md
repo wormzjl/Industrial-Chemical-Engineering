@@ -15,6 +15,17 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+### Added
+
+- Tutorial (`2026-11-12-tutorial-system`), the mod's own framework (Ponder dropped, owner D1) for players with no chemical engineering: films of the mod's own equipment (a scene a pure function of time, cutaways, dots, labels, fires and liquids; 43 films), 11 interactive cards, and the Field Guide (an item given at first join, key H, a one-line HUD tracker that the client setting `guide_hud` hides) with a welcome and seven chapters (crude oil, the still, pot to tower, the simulator, the crude unit, building, start-up) whose 51 steps are vanilla advancements under `icheme:tutorial/`, earned by the client's report or by ten server criteria fired only where the server already sends or stores the data (protocol `tutorial-1`); a help tour behind a `?` key on every screen page (41 tours); 41 equipment pages with 37 films, an "Equipment guide" reference item for every equipment kind and JEI information pages for every item; numbers from four recordings held to the model by gates; the column template "Small crude tower (Medium crude)" (14 trays, 1.0 m), its feed stream and the simulator example "Small crude unit" with the steam heater H-102. P0 to P6 `112c0dbab` to `09c7e025b` (scene player `112c0dbab`; guide and progress `a78faaed0`, `4ae9e8371`, `41e1e81ae`; chapters 1 and 2 `207577d1f`, `7d1cbd1f1`; items and JEI `a917bf05e`, `8fe18f508`; the small crude tower `d459c8614`, `31e042d62`; chapters 3 and 4 `3a7bb0d1c`, `7cbd240e0`; pages and chapter 5 `51c0c0558`; chapters 6 and 7 `71c7a12db`, `983c789bd`; tours on every page `52d31ab45`; page films `09c7e025b`, `3063488da`); code review fixes `ae47b06ef` to `e6fe48dc8`. No facts schema or state format changed.
+
+### Changed
+
+- The batch still's law (`2026-11-12-still-heat-per-distillate`): the split per mole of distillate, its bracket on the pot balance's own slope, so a wide-boiling charge (medium crude) runs to its overheat cut instead of being refused part way (`f89d733a4`, carried onto the W4 column at `d908aa617`); the condenser's outlet at the cooling water's inlet plus 5 K, partial below the top vapour's bubble point with its gas to the vent, each component by its liquid share, the critical-temperature rule deleted (`cb534629e`, `2eb3c67ea`, `36809c8a1`); a short reflux the trays cannot carry runs them dry (`93a73c92d`); trays that do not solve run as the pot's single stage, and a still that solves a column keeps its fire out until the column's first answer, 200 to 300 ticks after a load or a build (`ab4620e78`, code review findings 2 and 2b of `2026-11-12-tutorial-system`).
+- Translations of the tutorial in zh_cn, fr_fr, es_es and ja_jp `cda7e7129`.
+- Tooling cleanup of the two batches: the client command `/icheme-film` (P0's film viewer) left `src/main` (`cace5dd6d`; `tools/tutorial-renders/README.md` says how to attach it again); the render, recording and small-column tools are in `tools/tutorial-renders/`, `tools/tutorial-recordings/` and `tools/tutorial-column/`. Nothing else left `src/main` or `src/test`.
+- Code guide refreshed for the two batches: the new chapter `tutorial.md`; fluid-science, fluid-runtime, process-simulator, machine-assemblies, client-gui, equipment, verification and the README updated.
+
 ## [0.29.0] - 2026-11-13
 
 ### Changed
