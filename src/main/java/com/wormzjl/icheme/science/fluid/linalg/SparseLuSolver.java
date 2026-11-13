@@ -18,6 +18,10 @@ public final class SparseLuSolver {
     private static final double MAXIMUM_BACKWARD_ERROR = 1.0e-10;
 
     private SparseLuSolver() {}
+    /** A test's view of every matrix handed to the LU (P-17's parity gate, batch 2026-11-13-codebase-review): the
+     * equilibrated, permuted columns with their rows sorted, as copies. Null outside that test. */
+    interface Observer{void factored(int size,int[] columns,int[] rows,double[] values);}
+    static volatile Observer observer;
 
     /** Returns a new solution vector; inputs are never changed. Numerical failure throws {@link SolveFailure}. */
     public static double[] solve(SparseMatrix matrix, double[] rightHandSide) {
@@ -138,6 +142,7 @@ public final class SparseLuSolver {
             }
             a.col_idx[size]=stored;a.nz_length=stored;a.indicesSorted=false;
             a.sortIndices(sorter);
+            var seen=observer;if(seen!=null)seen.factored(size,Arrays.copyOf(a.col_idx,size+1),Arrays.copyOf(a.nz_rows,stored),Arrays.copyOf(a.nz_values,stored));
             if(!solver.setA(a))throw new SolveFailure("Sparse LU rejected a singular matrix");
             return new Factorization(this);
         }
