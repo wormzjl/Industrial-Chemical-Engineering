@@ -14,6 +14,7 @@ import com.wormzjl.icheme.science.thermo.PairInteractions;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel.Root;
 import com.wormzjl.icheme.science.thermo.ThermoComponent;
+import com.wormzjl.icheme.science.thermo.PhaseIdentification;
 import java.util.List;
 import java.util.Objects;
 

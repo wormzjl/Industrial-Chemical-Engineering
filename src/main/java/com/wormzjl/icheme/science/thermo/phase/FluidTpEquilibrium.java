@@ -16,6 +16,7 @@ import com.wormzjl.icheme.science.thermo.phase.EquilibriumRequest.Specification;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult.Classification;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult.Diagnostics;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult.UnsupportedReason;
+import com.wormzjl.icheme.science.thermo.PhaseIdentification;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;

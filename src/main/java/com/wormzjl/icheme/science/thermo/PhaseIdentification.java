@@ -1,6 +1,4 @@
-package com.wormzjl.icheme.science.thermo.phase;
-
-import com.wormzjl.icheme.science.thermo.PengRobinsonKernel;
+package com.wormzjl.icheme.science.thermo;
 
 /**
  * The phase identification parameter of Venkatarathnam and Oellrich (2011, Fluid Phase Equilibria 301, 225-233) on
@@ -35,7 +33,7 @@ import com.wormzjl.icheme.science.thermo.PengRobinsonKernel;
  * <p>so the parameter needs the mixture's {@code a}, {@code b}, {@code da/dT} and the root's volume only, evaluated on
  * the untranslated volume {@code v = Z R T/P} (the label belongs to the root, not to the density correction). It is
  * undefined where {@code (dP/dT)_v = 0} and at a mechanically unstable root; at a pure-component critical point the
- * ratio has a finite limit but separates nothing, which is why the critical band ({@link FluidTpEquilibrium}) grades
+ * ratio has a finite limit but separates nothing, which is why the critical band (the engine's {@code FluidTpEquilibrium}) grades
  * such states research-only whatever their label.</p>
  */
 public final class PhaseIdentification {

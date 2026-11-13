@@ -18,6 +18,7 @@ import com.wormzjl.icheme.science.thermo.ThermoComponent;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult.Classification;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult.CoverageGrade;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult.Status;
+import com.wormzjl.icheme.science.thermo.PhaseIdentification;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;

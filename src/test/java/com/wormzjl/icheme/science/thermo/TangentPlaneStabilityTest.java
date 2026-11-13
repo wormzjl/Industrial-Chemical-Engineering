@@ -357,8 +357,8 @@ class TangentPlaneStabilityTest {
         double shift = Math.log(2.9 / 3.0);
         assertTrue(0.5 * (atVapour.logFugacityCoefficient(0) + atVapour.logFugacityCoefficient(1)) + shift
                 < 0.5 * (atLiquid.logFugacityCoefficient(0) + atLiquid.logFugacityCoefficient(1)));
-        assertTrue(com.wormzjl.icheme.science.thermo.phase.PhaseIdentification.liquidLike(
-                com.wormzjl.icheme.science.thermo.phase.PhaseIdentification.parameter(atVapour, 120.0, 2.9e6)));
+        assertTrue(PhaseIdentification.liquidLike(
+                PhaseIdentification.parameter(atVapour, 120.0, 2.9e6)));
         Result gas = test.test(400.0, 3.0e6, 2.9e6, z, test.newWorkspace());
         assertEquals(Verdict.STABLE, gas.verdict());
         assertEquals(Root.VAPOR, gas.feedRoot());
@@ -381,8 +381,8 @@ class TangentPlaneStabilityTest {
                 double pressure = root == Root.VAPOR ? vaporPressure : liquidPressure;
                 kernel.evaluate(t, pressure, x, root, workspace, evaluation);
                 if (root == Root.VAPOR && evaluation.physicalRootCount() == 1
-                        && !com.wormzjl.icheme.science.thermo.phase.PhaseIdentification.vapourLike(
-                                com.wormzjl.icheme.science.thermo.phase.PhaseIdentification.parameter(evaluation, t, pressure))) {
+                        && !PhaseIdentification.vapourLike(
+                                PhaseIdentification.parameter(evaluation, t, pressure))) {
                     continue;
                 }
                 double value = 0.0;

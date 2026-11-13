@@ -350,7 +350,7 @@ A carried closure is declared at t0 like any other, and the rate solve is tried 
 - **`initialNitrogenCharge` is a placement initializer only.** Persistence restores the inventory and never calls it again. Its first argument is a volume (m3), not an amount.
 - **`FluidMaterialCatalog.conservedCount`/`waterIndex` read `MaterialRuntime.current()`**, a global. They do not read the model you hold.
 - **The coefficient translations have their own PR78 cubic.** `science/material/CoefficientTranslations.pureLiquidCompressibility` (moved from `HydrocarbonModel` in C1b) copies the expressions of the former `PengRobinson78` (now a test-tree oracle) for one pure component, so the volume shifts keep their bits; each translation is anchored at its anchor's own T and P. It is not `PengRobinsonKernel`: no domain bounds, no root refinement. A kernel change does not change the calibration. A spine package takes `SpinePackageData`'s translations instead.
-- **`science/fluid/thermo` and `science/thermo/phase` depend on each other in both directions.** `FluidThermodynamics` and `NetworkPhaseEngine` call the engine; `CubicPhaseEvaluator` imports `SpinePackageData` and `TranslatedPengRobinson`, and `PhaseContract` and `PhaseDomain` import `FluidDomain`. See [equilibrium-engine.md](equilibrium-engine.md).
+- **`science/fluid/thermo` and `science/thermo/phase` depend on each other in both directions.** `FluidThermodynamics` and `NetworkPhaseEngine` call the engine; `CubicPhaseEvaluator` imports `TranslatedPengRobinson` (C1b moved `SpinePackageData` and `CoefficientIdealGas` to `science/material`; `PhaseContract` and `PhaseDomain` no longer import `FluidDomain`). See [equilibrium-engine.md](equilibrium-engine.md).
 
 </details>
 

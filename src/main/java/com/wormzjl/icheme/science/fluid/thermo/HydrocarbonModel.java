@@ -8,7 +8,7 @@ import com.wormzjl.icheme.science.thermo.PengRobinsonKernel;
 import com.wormzjl.icheme.science.thermo.ThermoComponent;
 import com.wormzjl.icheme.science.thermo.phase.CubicPhaseEvaluator;
 import com.wormzjl.icheme.science.thermo.phase.PhaseContract;
-import com.wormzjl.icheme.science.thermo.phase.PhaseIdentification;
+import com.wormzjl.icheme.science.thermo.PhaseIdentification;
 import com.wormzjl.icheme.science.thermo.phase.WaterShare;
 import java.util.ArrayList;
 import java.util.List;
