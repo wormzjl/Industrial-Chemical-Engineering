@@ -2,7 +2,6 @@ package com.wormzjl.icheme.client.gui.common;
 
 import com.wormzjl.icheme.client.gui.common.kit.Measure;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
-import com.wormzjl.icheme.client.gui.screens.inventory.FluidDeviceScreen.FluidGuiLayout;
 import com.wormzjl.icheme.science.equipment.DeviceName;
 import java.io.IOException;
 import java.io.InputStreamReader;

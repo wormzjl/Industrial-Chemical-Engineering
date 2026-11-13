@@ -3,6 +3,7 @@ package com.wormzjl.icheme.client.gui.screens.inventory;
 import com.wormzjl.icheme.client.ClientConfig;
 import com.wormzjl.icheme.client.gui.common.CalculatorColumn;
 import com.wormzjl.icheme.client.gui.common.DialogColumns;
+import com.wormzjl.icheme.client.gui.common.FluidGuiLayout;
 import com.wormzjl.icheme.client.gui.common.HeatControlColumn;
 import com.wormzjl.icheme.client.gui.common.ProcessUi;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
@@ -484,11 +485,11 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
     }
 
     private int doorWidth() {
-        return FluidDeviceScreen.FluidGuiLayout.imageWidth(width);
+        return FluidGuiLayout.imageWidth(width);
     }
 
     private int doorHeight() {
-        return FluidDeviceScreen.FluidGuiLayout.imageHeight(height);
+        return FluidGuiLayout.imageHeight(height);
     }
 
     private void doorWidgets(Door shown) {

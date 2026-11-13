@@ -16,7 +16,7 @@ import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
 import com.wormzjl.icheme.client.gui.common.kit.SkinButton;
 import com.wormzjl.icheme.client.gui.common.kit.SkinField;
-import com.wormzjl.icheme.client.gui.screens.inventory.FluidDeviceScreen.FluidGuiLayout;
+import com.wormzjl.icheme.client.gui.common.FluidGuiLayout;
 import com.wormzjl.icheme.network.MachineNetwork;
 import com.wormzjl.icheme.runtime.fluid.MachineView;
 import com.wormzjl.icheme.runtime.fluid.ShaftUnit;
@@ -139,12 +139,14 @@ public final class MachineScreen extends AbstractContainerScreen<MachineMenu> {
         var overview = push(tr("fluid.overview"), new Rect(tab.x(), 29, tab.width(), 18), () -> {}).latched(true);
         overview.active = false;
         String theme = tr(ClientConfig.theme() == ClientConfig.Theme.DARK ? "fluid.theme.dark" : "fluid.theme.light");
-        push(theme, new Rect(imageWidth - 28, 5, 18, 18), () -> {
+        // The title strip's keys from the shared frame layout (finding C9): the theme key at (width - 28, 5), 18 px.
+        var titleKeys = FluidGuiLayout.titleKeys(imageWidth, true);
+        push(theme, titleKeys.get(0), () -> {
             ClientConfig.toggleTheme();
             rebuildWidgets();
         }).icon(Skin.Icon.THEME).setTooltip(Tooltip.create(Component.literal(theme + "\n").append(Component.translatable("gui.icheme.fluid.theme.hint"))));
         // The help key left of the theme key (P6): a sign, not a word (panel rule 7).
-        var help = tour.key(TitleStrip.keys(imageWidth, 2).get(1).moved(leftPos, topPos), MachineScreen::skin);
+        var help = tour.key(titleKeys.get(1).moved(leftPos, topPos), MachineScreen::skin);
         if (help != null) addRenderableWidget(help);
         var place = strip().name();
         if (place != null && menu.datasheet() && canEdit()) nameBox(place);
