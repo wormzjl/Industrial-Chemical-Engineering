@@ -96,40 +96,129 @@ class V3BandedPivotedSolverTest {
 
     /**
      * The elimination updates a row only out to the last column its pivot rows can hold (P8 of batch
-     * 2026-11-13-codebase-review), also where partial pivoting swaps rows: random bands that are not diagonally dominant
-     * solve as the dense partial-pivot oracle does, in fewer updates than the full fill width.
+     * 2026-11-13-codebase-review), also where partial pivoting swaps rows and so raises that extent: random bands that are
+     * not diagonally dominant give the bits of the full-width elimination, in fewer updates.
      */
     @Test
-    void pivotedBandsUpdateOnlyToTheirPivotRowsExtent() {
+    void pivotedBandsUpdateOnlyToTheirExtentAndKeepTheFullWidthBits() {
         Random random = new Random(0xB0B5L);
         var workspace = new V3BandedPivotedSolver.Workspace();
+        int swaps = 0;
         for (int size = 6; size <= 40; size += 17) {
             V3BandedMatrix matrix = new V3BandedMatrix(size, 3, 2);
             for (int row = 0; row < size; row++)
                 for (int column = Math.max(0, row - 3); column <= Math.min(size - 1, row + 2); column++)
                     matrix.set(row, column, random.nextDouble() * 2.0 - 1.0);
-            double[] expected = vector(size, random);
-            double[] rightHandSide = multiply(matrix, expected);
+            double[] rightHandSide = multiply(matrix, vector(size, random));
             var result = V3BandedPivotedSolver.solve(matrix, rightHandSide, workspace);
             var success = assertInstanceOf(V3BandedPivotedSolver.Result.Success.class, result, result::toString);
-            assertTrue(success.pivotSwaps() > 0, "the case pivots");
-            assertArrayEquals(densePivotedSolve(toDense(matrix), rightHandSide), success.solution(), 1.0e-8);
+            swaps += success.pivotSwaps();
+            assertBitsEqual(fullWidthReference(matrix, rightHandSide), success.solution());
         }
+        assertTrue(swaps > 0, "the cases pivot");
         assertEquals(0, workspace.fullWidthSolves());
         assertTrue(workspace.updatedEntries() < workspace.fullWidthEntries(),
                 workspace.updatedEntries() + " of " + workspace.fullWidthEntries());
     }
 
-    /** A negative entry that row scaling takes to -0.0 sends its solve through the full fill width, which keeps that zero's sign. */
+    /**
+     * A negative entry that row scaling takes to -0.0 (10 and -2^-1074 on one row) sends its solve through the full fill
+     * width, which keeps the sign of that zero: the bits of the full-width elimination.
+     */
     @Test
-    void aNegativeZeroAfterScalingTakesTheFullWidth() {
-        V3BandedMatrix matrix = new V3BandedMatrix(2, 1, 1);
+    void aNegativeZeroAfterScalingTakesTheFullWidthWithItsBits() {
+        V3BandedMatrix matrix = new V3BandedMatrix(4, 1, 1);
         matrix.set(0, 0, 10.0); matrix.set(0, 1, -Double.MIN_VALUE);
-        matrix.set(1, 0, 1.0); matrix.set(1, 1, 1.0);
+        matrix.set(1, 0, 3.0); matrix.set(1, 1, 1.0); matrix.set(1, 2, -2.0);
+        matrix.set(2, 1, 4.0); matrix.set(2, 2, 0.5); matrix.set(2, 3, 1.0);
+        matrix.set(3, 2, -1.0); matrix.set(3, 3, 2.0);
+        double[] rightHandSide = {10.0, -1.0, 0.0, 3.0};
         var workspace = new V3BandedPivotedSolver.Workspace();
-        assertInstanceOf(V3BandedPivotedSolver.Result.Success.class, V3BandedPivotedSolver.solve(matrix, new double[] {10.0, 2.0}, workspace));
+        var success = assertInstanceOf(V3BandedPivotedSolver.Result.Success.class,
+                V3BandedPivotedSolver.solve(matrix, rightHandSide, workspace));
         assertEquals(1, workspace.fullWidthSolves());
         assertEquals(workspace.fullWidthEntries(), workspace.updatedEntries());
+        assertBitsEqual(fullWidthReference(matrix, rightHandSide), success.solution());
+    }
+
+    private static void assertBitsEqual(double[] expected, double[] actual) {
+        assertEquals(expected.length, actual.length);
+        for (int i = 0; i < expected.length; i++)
+            assertEquals(Double.doubleToRawLongBits(expected[i]), Double.doubleToRawLongBits(actual[i]), "entry " + i + ": " + expected[i] + " / " + actual[i]);
+    }
+
+    /**
+     * The solver's arithmetic before P8, on a dense copy and in the same order: zeros stored as +0.0, rows scaled by their
+     * largest entry, columns by theirs, partial pivoting within the lower bandwidth, every candidate row updated out to
+     * {@code pivot + kl + ku}, back substitution over the same width, columns unscaled.
+     */
+    private static double[] fullWidthReference(V3BandedMatrix matrix, double[] rightHandSide) {
+        int size = matrix.size(), lower = matrix.lowerBandwidth(), upper = matrix.upperBandwidth(), fill = lower + upper;
+        double[][] a = new double[size][size];
+        double[] b = rightHandSide.clone();
+        for (int row = 0; row < size; row++)
+            for (int column = Math.max(0, row - lower); column <= Math.min(size - 1, row + upper); column++) {
+                double value = matrix.get(row, column);
+                a[row][column] = value == 0.0 ? 0.0 : value;
+            }
+        for (int row = 0; row < size; row++) {
+            double maximum = 0.0;
+            for (int column = Math.max(0, row - lower); column <= Math.min(size - 1, row + upper); column++) maximum = Math.max(maximum, Math.abs(a[row][column]));
+            if (maximum == 0.0) continue;
+            double scale = 1.0 / maximum;
+            for (int column = Math.max(0, row - lower); column <= Math.min(size - 1, row + upper); column++)
+                a[row][column] = Double.isFinite(scale) ? a[row][column] * scale : a[row][column] / maximum;
+            b[row] = Double.isFinite(scale) ? b[row] * scale : b[row] / maximum;
+        }
+        double[] divisors = new double[size];
+        for (int row = 0; row < size; row++)
+            for (int column = Math.max(0, row - lower); column <= Math.min(size - 1, row + upper); column++)
+                divisors[column] = Math.max(divisors[column], Math.abs(a[row][column]));
+        for (int column = 0; column < size; column++) if (divisors[column] == 0.0) divisors[column] = 1.0;
+        for (int row = 0; row < size; row++)
+            for (int column = Math.max(0, row - lower); column <= Math.min(size - 1, row + upper); column++) {
+                double scale = 1.0 / divisors[column];
+                a[row][column] = Double.isFinite(scale) ? a[row][column] * scale : a[row][column] / divisors[column];
+            }
+        for (int pivot = 0; pivot < size; pivot++) {
+            int lastCandidate = Math.min(size - 1, pivot + lower), pivotRow = pivot;
+            double magnitude = Math.abs(a[pivot][pivot]);
+            for (int row = pivot + 1; row <= lastCandidate; row++)
+                if (Math.abs(a[row][pivot]) > magnitude) {
+                    magnitude = Math.abs(a[row][pivot]);
+                    pivotRow = row;
+                }
+            int lastFilled = Math.min(size - 1, pivot + fill);
+            if (pivotRow != pivot) {
+                for (int column = pivot; column <= lastFilled; column++) {
+                    double t = a[pivot][column];
+                    a[pivot][column] = a[pivotRow][column];
+                    a[pivotRow][column] = t;
+                }
+                double t = b[pivot];
+                b[pivot] = b[pivotRow];
+                b[pivotRow] = t;
+            }
+            double diagonal = a[pivot][pivot];
+            for (int row = pivot + 1; row <= lastCandidate; row++) {
+                double multiplier = a[row][pivot] / diagonal;
+                if (multiplier == 0.0) continue;
+                a[row][pivot] = multiplier;
+                for (int column = pivot + 1; column <= lastFilled; column++) a[row][column] = a[row][column] - multiplier * a[pivot][column];
+                b[row] -= multiplier * b[pivot];
+            }
+        }
+        double[] solution = new double[size];
+        for (int row = size - 1; row >= 0; row--) {
+            double sum = b[row];
+            for (int column = row + 1; column <= Math.min(size - 1, row + fill); column++) sum -= a[row][column] * solution[column];
+            solution[row] = sum / a[row][row];
+        }
+        for (int column = 0; column < size; column++) {
+            double scale = 1.0 / divisors[column];
+            solution[column] = Double.isFinite(scale) ? solution[column] * scale : solution[column] / divisors[column];
+        }
+        return solution;
     }
 
     @Test

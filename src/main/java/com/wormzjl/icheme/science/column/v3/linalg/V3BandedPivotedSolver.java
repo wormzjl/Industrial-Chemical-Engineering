@@ -54,11 +54,14 @@ public final class V3BandedPivotedSolver {
         int lowerBandwidth = work.lowerBandwidth;
         int upperBandwidth = work.upperBandwidth;
         int fillBandwidth = work.fillBandwidth;
-        // The last column any pivot row so far can hold a nonzero in (LAPACK dgbtf2's ju; P8 of batch
-        // 2026-11-13-codebase-review). Past it a pivot row holds the +0.0 its slots started with, so updating a
-        // row there computes x - m * (+0.0), which is x for every x but -0.0. Without a -0.0 in the scaled band no
-        // -0.0 ever arises (a difference is -0.0 only when its minuend is), so those updates are skipped; a band
-        // with one (a negative entry under 2^-1074 of its row's largest, scaled to zero) takes the full width.
+        // The update stops at the last column any pivot row so far can hold a nonzero in (dgbtf2's ju; P8 of batch
+        // 2026-11-13-codebase-review). Why that is exact:
+        // 1. A -0.0 enters the band only by row scaling (a negative entry under 2^-1074 of its row's largest); copyFrom
+        //    stores +0.0 for every zero, and column scaling multiplies by at least one.
+        // 2. A difference a - b is -0.0 only when a is -0.0, so with none after scaling none ever arises.
+        // 3. Past ju the pivot row holds the +0.0 of its unwritten slots, so a skipped update x - m * (+0.0) is x.
+        // 4. Every skipped entry keeps its scaled value, which the initial growth maximum already holds.
+        // A band that holds a -0.0 after scaling takes the full width, as before.
         int extent = -1;
         boolean fullWidth = work.holdsNegativeZero();
         if (fullWidth) workspace.fullWidthSolves++;
