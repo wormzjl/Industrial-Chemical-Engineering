@@ -48,6 +48,10 @@ public final class GuideRender {
         var out = Path.of(args[0]);
         Files.createDirectories(out);
         // P5: "p5" as the second argument renders the equipment pages, the unit map and chapter 5 only.
+        if (args.length > 1 && args[1].equals("p6")) {
+            CoverageRender.render(out);
+            return;
+        }
         if (args.length > 1 && args[1].equals("p5b")) {
             StageBRender.render(out);
             return;

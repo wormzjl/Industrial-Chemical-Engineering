@@ -14,6 +14,7 @@ import com.wormzjl.icheme.science.tutorial.guide.TourFile;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BiFunction;
@@ -26,16 +27,16 @@ import static org.junit.jupiter.api.Assertions.*;
  * size the screen takes, on at least one variant of the page (an editor and a reader, each optional row present and
  * absent), and its first stop, which says what the page is for, on every variant: a frame place or a door row's widget or
  * group ({@link TourAnchors#find}) as the screen places its door. A fixed-width door is tested at its width and that width
- * less the view's bar.
+ * less the view's bar. The variants are public: the tour render ({@code tools/tutorial-renders/CoverageRender}) draws them.
  */
-class ScreenToursTest {
+public class ScreenToursTest {
     private static final Measure M = Measure.fixed(6);
-    private static final HeatControlColumnTest.Recording T = new HeatControlColumnTest.Recording("gui.icheme.");
+    public static final HeatControlColumnTest.Recording T = new HeatControlColumnTest.Recording("gui.icheme.");
     private static final BiFunction<String, Object[], String> TEXT = T::get;
 
-    /** One variant of a page at one size: its frame places and its door's columns. */
-    record Variant(String name, int width, Map<String, Rect> frame, List<Column> door) {
-        Rect at(String anchor) {
+    /** One variant of a page at one size: its frame places, its door's columns and the foot of the door's view. */
+    public record Variant(String name, int width, int height, Map<String, Rect> frame, List<Column> door, int viewBottom) {
+        public Rect at(String anchor) {
             if (anchor.equals("page")) return ScreenTours.page(door);
             return frame.containsKey(anchor) ? frame.get(anchor) : TourAnchors.find(anchor, door, k -> T.get(k));
         }
@@ -70,88 +71,69 @@ class ScreenToursTest {
         return List.of(width - 20, width - 20 - ScrollView.BAR - 4);
     }
 
-    @Test
-    void theGaugesTourStands() {
-        var sizes = new ArrayList<List<Variant>>();
-        for (int door : doors(246)) {
-            var variants = new ArrayList<Variant>();
-            for (boolean pressure : new boolean[]{true, false})
-                for (boolean valid : new boolean[]{true, false}) {
-                    var rows = DialogColumns.gauge(new DialogColumns.Gauge(pressure, List.of("bar", "kPa", "Pa"), 0, true, valid), T);
-                    int height = DialogColumns.TOP + Column.place(rows, 10, DialogColumns.TOP, door, M, Column.Metrics.COMPACT).bounds().h() + DialogColumns.FOOTER;
-                    variants.add(new Variant((pressure ? "pressure" : "temperature") + (valid ? "" : " invalid"), 246, ScreenTours.dialog(246, height, "Pressure gauge", M, List.of("cancel", "save")),
-                            List.of(Column.place(rows, 10, DialogColumns.TOP, door, M, Column.Metrics.COMPACT))));
-                }
-            sizes.add(variants);
+    /** A dialog's variant: its rows on a door {@code door} wide, the panel as tall as the column (as GaugeScreen sizes it). */
+    private static Variant dialog(String name, int width, int door, List<Column.Row> rows, String title, List<String> footer, Measure m) {
+        var column = Column.place(rows, 10, DialogColumns.TOP, door, m, Column.Metrics.COMPACT);
+        int height = DialogColumns.TOP + column.bounds().h() + DialogColumns.FOOTER;
+        return new Variant(name, width, height, ScreenTours.dialog(width, height, title, m, footer), List.of(column), height - DialogColumns.FOOTER);
+    }
+
+    /** The gauge's variants: pressure and temperature, the drafts forming a range or not. */
+    public static List<Variant> gauge(int door, Measure m) {
+        var out = new ArrayList<Variant>();
+        for (boolean pressure : new boolean[]{true, false})
+            for (boolean valid : new boolean[]{true, false})
+                out.add(dialog((pressure ? "pressure" : "temperature") + (valid ? "" : " invalid"), 246, door,
+                        DialogColumns.gauge(new DialogColumns.Gauge(pressure, pressure ? List.of("bar", "kPa", "Pa") : List.of("°C", "K"), 0, true, valid), T),
+                        pressure ? "Pressure gauge" : "Thermometer", List.of("cancel", "save"), m));
+        return out;
+    }
+
+    /** The pipeline tools' variants: the laying tool laying pipe (first), the sizing tool, a bare secondary, a data cable. */
+    public static List<Variant> pipelineTool(int door, Measure m) {
+        var out = new ArrayList<Variant>();
+        var names = List.of("laying pipe", "sizing", "bare secondary", "data cable");
+        var tools = List.of(new DialogColumns.PipelineTool(true, 0, false, true), new DialogColumns.PipelineTool(false, 0, false, true),
+                new DialogColumns.PipelineTool(true, 1, true, false), new DialogColumns.PipelineTool(true, 0, false, true, true));
+        for (int i = 0; i < tools.size(); i++) {
+            var tool = tools.get(i);
+            out.add(dialog(names.get(i), 230, door, DialogColumns.pipelineTool(tool, T), tool.paints() ? "Pipe Laying Tool" : "Pipe Sizing Tool", List.of("cancel", "save"), m));
         }
-        stands(ScreenTours.GAUGE, sizes);
+        return out;
     }
 
-    @Test
-    void thePipelineToolsTourStands() {
-        var sizes = new ArrayList<List<Variant>>();
-        for (int door : doors(230)) {
-            var variants = new ArrayList<Variant>();
-            for (var tool : List.of(new DialogColumns.PipelineTool(false, 0, false, true), new DialogColumns.PipelineTool(true, 0, false, true),
-                    new DialogColumns.PipelineTool(true, 1, true, false), new DialogColumns.PipelineTool(true, 0, false, true, true))) {
-                var rows = DialogColumns.pipelineTool(tool, T);
-                int height = DialogColumns.TOP + Column.place(rows, 10, DialogColumns.TOP, door, M, Column.Metrics.COMPACT).bounds().h() + DialogColumns.FOOTER;
-                variants.add(new Variant(tool.toString(), 230, ScreenTours.dialog(230, height, "Pipe Laying Tool", M, List.of("cancel", "save")),
-                        List.of(Column.place(rows, 10, DialogColumns.TOP, door, M, Column.Metrics.COMPACT))));
-            }
-            sizes.add(variants);
+    /** The datasheet's variants on a panel {@code w} by {@code h}: a unit with moving parts and a vessel, named and not. */
+    public static List<Variant> vessel(int w, int h, Measure m) {
+        var sheet = List.of(new DialogColumns.Size("diameter", "2.0", "m", true), new DialogColumns.Size("length", "6.0", "m", true), new DialogColumns.Size("volume", "20.9", "m³", false));
+        var out = new ArrayList<Variant>();
+        for (boolean moving : new boolean[]{true, false})
+            for (boolean names : new boolean[]{true, false})
+                for (int door : List.of(150, 150 - ScrollView.BAR - 4)) {
+                    var frame = new LinkedHashMap<>(ScreenTours.vessel(w, h, 150, "Vertical drum", m, names));
+                    frame.put("title", TitleStrip.placeKeys(w, 1, "Vertical drum", m).plate());
+                    out.add(new Variant((moving ? "unit" : "vessel") + (names ? " named" : ""), w, h, frame,
+                            List.of(Column.place(DialogColumns.vessel(sheet, moving, true, T), 10, DialogColumns.TOP, door, m, Column.Metrics.COMPACT)), h - DialogColumns.FOOTER));
+                }
+        return out;
+    }
+
+    /** The machine page's variants on an image {@code w} by {@code h}: every kind, editor and reader (MachineColumnSamples). */
+    public static List<Variant> machine(int w, int h, Measure m) {
+        var out = new ArrayList<Variant>();
+        for (var c : MachineColumnSamples.cases(T)) {
+            var frame = new LinkedHashMap<>(ScreenTours.machine(w, h, true, c.in().canEdit() && c.in().kind().settable()));
+            frame.put("title", TitleStrip.placeKeys(w, 2, "Motor", m).plate());
+            out.add(new Variant(c.name(), w, h, frame, List.of(Column.place(MachineColumn.rows(c.in(), T), 10, FluidGuiLayout.DOOR_TOP, FluidGuiLayout.side(w) - 10, m, Column.Metrics.COMPACT)),
+                    h - FluidGuiLayout.DOOR_FOOT));
         }
-        stands(ScreenTours.PIPELINE_TOOL, sizes);
+        return out;
     }
-
-    @Test
-    void theDatasheetsTourStands() {
-        var sizes = new ArrayList<List<Variant>>();
-        var sheet = List.of(new DialogColumns.Size("diameter", "2.0", "m", true), new DialogColumns.Size("volume", "12.6", "m³", false));
-        for (int window = 320; window <= 480; window += 7)
-            for (int tall : new int[]{240, 480}) {
-                int w = Math.min(400, window - 8), h = Math.min(250, tall - 8);
-                var variants = new ArrayList<Variant>();
-                for (boolean moving : new boolean[]{true, false})
-                    for (boolean names : new boolean[]{true, false})
-                        for (int door : List.of(150, 150 - ScrollView.BAR - 4))
-                            variants.add(new Variant((moving ? "unit" : "vessel") + (names ? " named" : ""), w, ScreenTours.vessel(w, h, 150, "Vertical drum", M, names),
-                                    List.of(Column.place(DialogColumns.vessel(sheet, moving, true, T), 10, DialogColumns.TOP, door, M, Column.Metrics.COMPACT))));
-                sizes.add(variants);
-            }
-        stands(ScreenTours.VESSEL, sizes);
-    }
-
-    @Test
-    void theMachinesTourStands() {
-        var sizes = new ArrayList<List<Variant>>();
-        for (int w = 300; w <= 790; w += 7)
-            for (int h : new int[]{FluidGuiLayout.imageHeight(240), FluidGuiLayout.imageHeight(480)}) {
-                var variants = new ArrayList<Variant>();
-                for (var c : MachineColumnSamples.cases(T)) {
-                    var rows = MachineColumn.rows(c.in(), T);
-                    variants.add(new Variant(c.name(), w, ScreenTours.machine(w, h, true, c.in().canEdit() && c.in().kind().settable()),
-                            List.of(Column.place(rows, 10, FluidGuiLayout.DOOR_TOP, FluidGuiLayout.side(w) - 10, M, Column.Metrics.COMPACT))));
-                }
-                // The title strip's plate, as the screen resolves it.
-                for (int i = 0; i < variants.size(); i++) {
-                    var v = variants.get(i);
-                    var frame = new java.util.LinkedHashMap<>(v.frame());
-                    frame.put("title", TitleStrip.placeKeys(w, 2, "Motor", M).plate());
-                    variants.set(i, new Variant(v.name(), w, frame, v.door()));
-                }
-                sizes.add(variants);
-            }
-        stands(ScreenTours.MACHINE, sizes);
-    }
-
-    // ---- The control panel ----
 
     private static ControlColumns.Choice choice(String key, String label, boolean selected) {
         return new ControlColumns.Choice(key, label, selected);
     }
 
-    /** A page's right column, as ControlPanelScreen.right builds it. */
+    /** A control page's own column, as ControlPanelScreen.right builds it. */
     private static List<Column.Row> right(String page, boolean level, int pages) {
         return switch (page) {
             case "input", "output" -> {
@@ -188,65 +170,49 @@ class ScreenToursTest {
         return rows;
     }
 
-    @Test
-    void everyControlPanelPageHasItsTourAndItStands() {
-        for (var page : ScreenTours.CONTROL_PAGES) {
-            var sizes = new ArrayList<List<Variant>>();
-            for (int w = 254; w <= 620; w += 7)
-                for (int h : new int[]{240, 400}) {
-                    var variants = new ArrayList<Variant>();
-                    for (boolean dcs : new boolean[]{true, false}) {
-                        var layout = ControlColumns.layout(w, h, dcs);
-                        if (page.equals("controllers") && (!dcs || layout.split())) continue;
-                        if ((page.equals("column") || page.equals("converter")) && !dcs) continue;
-                        for (boolean level : new boolean[]{true, false})
-                            for (int pages : new int[]{1, 3}) {
-                                var r = right(page, level, pages);
-                                List<List<Column.Row>> rows;
-                                if (!dcs) {
-                                    var all = new ArrayList<>(r);
-                                    if (page.equals("loop")) all.addAll(ControlColumns.alarms(List.of(), TEXT));
-                                    rows = List.of(all);
-                                } else rows = layout.split() ? List.of(list(pages), r) : List.of(page.equals("controllers") ? list(pages) : r);
-                                var columns = new ArrayList<Column>();
-                                for (int i = 0; i < rows.size(); i++) {
-                                    var a = layout.areas().get(i);
-                                    columns.add(Column.place(rows.get(i), a.x(), a.y(), a.w(), M, Column.Metrics.COMPACT));
-                                }
-                                variants.add(new Variant((dcs ? "dcs" : "box") + (level ? " level" : " flow") + " " + pages, layout.width(),
-                                        ScreenTours.controlFrame(layout, dcs ? "Control station" : "Controller box", M), columns));
-                            }
+    /** The control panel's page {@code page} in a window {@code w} by {@code h}: a DCS and a controller box where each shows it, a level and a flow loop, one and three list pages. */
+    public static List<Variant> control(String page, int w, int h, Measure m) {
+        var out = new ArrayList<Variant>();
+        for (boolean dcs : new boolean[]{true, false}) {
+            var layout = ControlColumns.layout(w, h, dcs);
+            if (page.equals("controllers") && (!dcs || layout.split())) continue;
+            if ((page.equals("column") || page.equals("converter")) && !dcs) continue;
+            for (boolean level : new boolean[]{true, false})
+                for (int pages : new int[]{1, 3}) {
+                    var r = right(page, level, pages);
+                    List<List<Column.Row>> rows;
+                    if (!dcs) {
+                        var all = new ArrayList<>(r);
+                        if (page.equals("loop")) all.addAll(ControlColumns.alarms(List.of(), TEXT));
+                        rows = List.of(all);
+                    } else rows = layout.split() ? List.of(list(pages), r) : List.of(page.equals("controllers") ? list(pages) : r);
+                    var columns = new ArrayList<Column>();
+                    for (int i = 0; i < rows.size(); i++) {
+                        var a = layout.areas().get(i);
+                        columns.add(Column.place(rows.get(i), a.x(), a.y(), a.w(), m, Column.Metrics.COMPACT));
                     }
-                    if (!variants.isEmpty()) sizes.add(variants);
+                    var area = layout.areas().getFirst();
+                    out.add(new Variant((dcs ? "dcs" : "box") + (level ? " level" : " flow") + " " + pages, layout.width(), layout.height(),
+                            ScreenTours.controlFrame(layout, dcs ? "Control station" : "Controller box", m), columns, area.bottom()));
                 }
-            stands(ScreenTours.control(page), sizes);
         }
+        return out;
     }
 
-    // ---- The equipment constructor ----
-
-    @Test
-    void everyConstructorPageHasItsTourAndItStands() {
-        for (var page : ScreenTours.Constructor.values()) {
-            var sizes = new ArrayList<List<Variant>>();
-            for (int h : new int[]{240, 254, 360, 480}) {
-                var variants = new ArrayList<Variant>();
-                for (var shown : pages(page)) {
-                    var area = ConstructorColumn.area(h, shown.display());
-                    for (int door : List.of(area.w(), area.w() - ScrollView.BAR - 4))
-                        variants.add(new Variant(page + " " + variants.size(), 464, ScreenTours.constructor(464, h, page, "Vertical drum", M, shown),
-                                List.of(Column.place(shown.rows(), area.x(), area.y(), door, M, Column.Metrics.COMPACT))));
-                }
-                sizes.add(variants);
-            }
-            stands(page.page(), sizes);
+    /** The constructor's page {@code page} on a window {@code height} high (464 wide), for each form and state that page shows. */
+    public static List<Variant> constructor(ScreenTours.Constructor page, int height, Measure m) {
+        var out = new ArrayList<Variant>();
+        for (var shown : pages(page)) {
+            var area = ConstructorColumn.area(height, shown.display());
+            for (int door : List.of(area.w(), area.w() - ScrollView.BAR - 4))
+                out.add(new Variant(page + " " + out.size(), 464, height, ScreenTours.constructor(464, height, page, "Vertical drum", m, shown),
+                        List.of(Column.place(shown.rows(), area.x(), area.y(), door, m, Column.Metrics.COMPACT)), area.bottom()));
         }
-        assertTrue(ScreenTours.CONSTRUCTOR_HELP.right() < ConstructorColumn.TITLE_KEY.x(), "the ? key stands left of Change");
-        assertTrue(6 + ConstructorColumn.TITLE + 8 <= ScreenTours.CONSTRUCTOR_HELP.x(), "the title plate ends before the ? key");
+        return out;
     }
 
     /** The constructor's page as the screen builds it, for each form and state that page shows. */
-    private static List<ConstructorColumn.Page> pages(ScreenTours.Constructor page) {
+    public static List<ConstructorColumn.Page> pages(ScreenTours.Constructor page) {
         var out = new ArrayList<ConstructorColumn.Page>();
         switch (page) {
             case CHOOSE -> {
@@ -275,6 +241,56 @@ class ScreenToursTest {
         }
         assertFalse(out.isEmpty(), page.name());
         return out;
+    }
+
+    @Test
+    void theGaugesTourStands() {
+        stands(ScreenTours.GAUGE, doors(246).stream().map(door -> gauge(door, M)).toList());
+    }
+
+    @Test
+    void thePipelineToolsTourStands() {
+        stands(ScreenTours.PIPELINE_TOOL, doors(230).stream().map(door -> pipelineTool(door, M)).toList());
+    }
+
+    @Test
+    void theDatasheetsTourStands() {
+        var sizes = new ArrayList<List<Variant>>();
+        for (int window = 320; window <= 480; window += 7)
+            for (int tall : new int[]{240, 480}) sizes.add(vessel(Math.min(400, window - 8), Math.min(250, tall - 8), M));
+        stands(ScreenTours.VESSEL, sizes);
+    }
+
+    @Test
+    void theMachinesTourStands() {
+        var sizes = new ArrayList<List<Variant>>();
+        for (int w = 300; w <= 790; w += 7)
+            for (int h : new int[]{FluidGuiLayout.imageHeight(240), FluidGuiLayout.imageHeight(480)}) sizes.add(machine(w, h, M));
+        stands(ScreenTours.MACHINE, sizes);
+    }
+
+    @Test
+    void everyControlPanelPageHasItsTourAndItStands() {
+        for (var page : ScreenTours.CONTROL_PAGES) {
+            var sizes = new ArrayList<List<Variant>>();
+            for (int w = 254; w <= 620; w += 7)
+                for (int h : new int[]{240, 400}) {
+                    var variants = control(page, w, h, M);
+                    if (!variants.isEmpty()) sizes.add(variants);
+                }
+            stands(ScreenTours.control(page), sizes);
+        }
+    }
+
+    @Test
+    void everyConstructorPageHasItsTourAndItStands() {
+        for (var page : ScreenTours.Constructor.values()) {
+            var sizes = new ArrayList<List<Variant>>();
+            for (int h : new int[]{240, 254, 360, 480}) sizes.add(constructor(page, h, M));
+            stands(page.page(), sizes);
+        }
+        assertTrue(ScreenTours.CONSTRUCTOR_HELP.right() < ConstructorColumn.TITLE_KEY.x(), "the ? key stands left of Change");
+        assertTrue(6 + ConstructorColumn.TITLE + 8 <= ScreenTours.CONSTRUCTOR_HELP.x(), "the title plate ends before the ? key");
     }
 
     /** The column's design page builds a column from a form whose kind is a column; another form, the plain design page. */

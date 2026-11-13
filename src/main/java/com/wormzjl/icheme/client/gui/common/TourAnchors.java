@@ -42,7 +42,7 @@ public final class TourAnchors {
 
     /**
      * {@code r} (door coordinates) on the screen through {@code view}: where {@code reveal}, the view is first scrolled a
-     * wheel step at a time until {@code r} shows or the view moves no more.
+     * wheel step at a time until {@code r} shows or the view moves no more. The part the view shows is returned.
      */
     public static Rect reveal(ScrollView view, Rect r, boolean reveal) {
         for (int i = 0; reveal && i < 64 && !view.visible(r); i++) {
@@ -51,6 +51,10 @@ public final class TourAnchors {
             view.wheel(port.x() + 2, port.y() + 2, view.onScreen(r).y() < port.y() ? 1 : -1);
             if (view.offset() == before) break;
         }
-        return view.onScreen(r);
+        // A row taller than the view is lit only where the view shows it, so the light does not cover the footer.
+        var on = view.onScreen(r);
+        var port = view.viewport();
+        int top = Math.max(on.y(), port.y()), bottom = Math.min(on.bottom(), port.bottom());
+        return bottom > top ? new Rect(on.x(), top, on.w(), bottom - top) : on;
     }
 }

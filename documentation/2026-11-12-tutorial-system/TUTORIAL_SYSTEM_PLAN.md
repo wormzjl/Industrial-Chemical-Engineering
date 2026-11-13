@@ -85,6 +85,9 @@ column uses its coarse body (`RenderLod`) when small on screen; translucent cut 
 - **Tour**: the screen dims, one control is lit, one sentence says what it is for. Next, Back, Close; at most 7 stops
   a page. A stop names its control by its row's key, never by pixels. A stop can wait for the player ("Press Run").
   A tour sends nothing to the server. Its last stop offers the page's film or card.
+- **Coverage (P6)**: every screen page has a tour (`FilmScreen` alone is exempt). A screen keeps a `TourHost`; its
+  anchors come from a Minecraft-free map (`DeviceTour`, `ScreenTours`, `AssemblyTour`, `SimulatorTour`) and the door
+  rows through `TourAnchors`. The fluid device screen has one tour a tab and, on its Overview, one a door layout.
 - **Card**: one animated drawing on the kit's canvas with a caption, with a slider or a switch where the idea has one.
 - **Glossary**: a term is defined once in plain words, on the step that first needs it; afterwards it is underlined in
   every tutorial text and its hover shows the definition.
@@ -243,10 +246,14 @@ survival player has no crude until the extraction system exists.
 
 - `TutorialTextTest`: the word limits; every term defined before its use; every key has its English line.
 - `SceneTest`: every film's actors exist, its stops are in order, its series files read, `Scene.at` is the same twice.
-- `HelpCoverageTest`: every screen page has a tour; every stop's key exists in its builder at every width.
+- `HelpCoverageTest`: every screen page has a tour or is exempt; `DeviceTourTest` and `ScreenToursTest`: every stop
+  stands on its page at every width, with optional rows present and absent.
+- `PageFilmsTest`: every equipment page has a film or is picture only; a generic film names every nozzle by its role,
+  cuts open only at its inside stop, gives the same frame twice and frames its body on the glass.
 - `GuideCoverageTest`: every `EquipmentShape.Kind` has an item, a name, its three lines and a page; every objective
   names a registered criterion.
-- Renders: `tools/tutorial-renders` draws every film stop, card frame and tour stop; the owner reviews the sheets.
+- Renders: `tools/tutorial-renders` draws every film stop, card frame and tour stop (P6: `CoverageRender`); the owner
+  reviews the sheets.
 - One in-game check for the scene player (P0), started by the owner; none for content.
 - Text: `en_us.json` only during the batch (about 450 keys in all); one translation commit before the merge.
 
@@ -265,6 +272,9 @@ survival player has no crude until the extraction system exists.
 Built so far (2026-11-12): P0 (P0_SCENE_PLAYER.md), P1 (P1_GUIDE_AND_HELP.md) and P2: chapter 1
 (P2A_CRUDE_CHAPTER.md) and chapter 2 (P2B_STILL_CHAPTER.md). Open in P2: the second recording of the still's run after
 the law's fix. Nothing has been checked in the game yet.
+
+Built since: P3, P4 (P4B_TOWER_AND_SIMULATOR.md), P5 (P5_PART1_UNIT_CHAPTER.md, P5_PART2_BUILD_AND_START.md) and,
+2026-11-13, P6's tours and page films (P6_COVERAGE.md). Open in P6: translation and merge preparation.
 
 P0 to P2 are the first batch (D7): they prove every layer on the first equipment before content is written in bulk.
 P3 touches no file of P0 to P2 but the lang file and can run beside them.

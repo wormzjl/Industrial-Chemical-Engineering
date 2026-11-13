@@ -27,15 +27,15 @@ import static org.junit.jupiter.api.Assertions.*;
  * is for, on every such device: a frame place ({@link DeviceTour#frame}), the title plate, or a door row's widget or group
  * ({@link TourAnchors#find}) as the screen places the column.
  */
-class DeviceTourTest {
+public class DeviceTourTest {
     private static final Measure M = Measure.fixed(6);
     private static final HeatControlColumnTest.Recording T = new HeatControlColumnTest.Recording();
     /** Image heights: the smallest window's (240 GUI px) and a tall one's. */
     private static final int[] HEIGHTS = {FluidGuiLayout.imageHeight(240), FluidGuiLayout.imageHeight(480)};
 
     /** A device as one page shows it: the tab, the tabs shown, whether Apply and Copy stand in the footer, the Control tab's legend, and its door columns at an image width. */
-    record Sample(String name, String tab, DeviceTour.Layout layout, List<String> tabs, boolean apply, boolean copy, boolean legend, IntFunction<List<Column>> door) {
-        String page() {
+    public record Sample(String name, String tab, DeviceTour.Layout layout, List<String> tabs, boolean apply, boolean copy, boolean legend, IntFunction<List<Column>> door) {
+        public String page() {
             return DeviceTour.page(tab, layout);
         }
     }
@@ -77,7 +77,7 @@ class DeviceTourTest {
     }
 
     /** Every page the screen shows, on the devices that show it. */
-    static List<Sample> samples() {
+    public static List<Sample> samples() {
         var out = new ArrayList<Sample>();
         var overview = List.of("overview");
         for (boolean edit : new boolean[]{true, false}) {
@@ -152,7 +152,7 @@ class DeviceTourTest {
     }
 
     /** Where {@code anchor} stands on {@code s}'s page at image width {@code w} and height {@code h}, or null. */
-    private static Rect at(Sample s, String anchor, int w, int h) {
+    public static Rect at(Sample s, String anchor, int w, int h) {
         var frame = DeviceTour.frame(w, h, s.tabs(), s.tab(), s.legend(), s.apply(), s.copy(), false);
         if (frame.containsKey(anchor)) return frame.get(anchor);
         if (anchor.equals("title")) return new Rect(6, 6, 40, 16);

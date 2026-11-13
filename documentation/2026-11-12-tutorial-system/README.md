@@ -124,6 +124,10 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
 - 2026-11-13: main 0.29.0 (aqueous solvents, a182f36f2) merged in (1cfca0ab0). Conflicts: `build.gradle` (the slow gate
   list), `documentation/INDEX.md`. No recording moved: StillRunRecordingTest (5), StillTraysRecordingTest (4),
   SteamHeaterCoilTest (1), SmallCrudeUnitTest (4), SmallUnitRecordingTest (2) pass, run once with `--tests`.
+- 2026-11-13: P6 (P6_COVERAGE.md): a help tour on every screen page (32 tours, `TourHost`, `TourAnchors`, gates
+  DeviceTourTest and ScreenToursTest, `FilmScreen` exempt) and a film on every equipment page (`PageFilms`, 29 films,
+  gate PageFilmsTest; motor, generator, gearbox and the control valve picture only); tour render `CoverageRender`.
+  18 test classes pass, run once with `--tests`.
 
 ## Code areas (proposed)
 

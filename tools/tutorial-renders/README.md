@@ -86,3 +86,7 @@ owner's choice and the default), `-DiconCases=true` (only `icons-cases.png`, the
   screen's two tours stop by stop (`tour-assembly-structure.png`, `tour-assembly-operation.png`, the pages as
   GuiPrototypes and OperationPrototypes draw them, the anchors from `AssemblyTour`), `card-limit.png`, `guide-building.png`
   and `guide-start.png`; the film `unit_build` through `-PtutorialFilms=unit_build`.
+- 2026-11-13, P6: `CoverageRender.java` (run by `renderTutorialGuide -PtutorialGuideOnly=p6`): one sheet a help tour P6
+  added, `tour-<page>.png` (and `-dark` for `fluid_device.vessel` and `control.loop`), stop by stop on the variants the
+  tour gates check (`DeviceTourTest.samples`, `ScreenToursTest`'s builders), the page drawn from the anchor maps. The
+  generic page films (`page_<kind>`) through `-PtutorialFilms`.

@@ -20,6 +20,8 @@ public final class Films {
         ALL.put(CrudeUnit.NAME, CrudeUnit::build);
         ALL.put(CrudeUnit.BUILD_NAME, CrudeUnit::buildOrder);
         for (var name : EquipmentFilms.KINDS.keySet()) ALL.put(name, () -> EquipmentFilms.build(name));
+        // P6: every other equipment page's generic film (PageFilms), built only when its Watch is pressed.
+        for (var name : PageFilms.KINDS.keySet()) ALL.put(name, () -> PageFilms.build(name));
     }
 
     private Films() {
