@@ -1,6 +1,6 @@
 # Tutorial system
 
-Status: **In progress since 2026-11-12**. Branch `claude/tutorial-system-chem-mod-950ca9`.
+Status: **Implemented 2026-11-13 (0.30.0)**; owner: "Merge as 0.30.0". Not checked in the game. Branch `claude/tutorial-system-chem-mod-950ca9`.
 
 ## Scope
 

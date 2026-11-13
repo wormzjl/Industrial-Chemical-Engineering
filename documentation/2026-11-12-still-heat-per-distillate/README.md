@@ -1,6 +1,6 @@
 # Batch still: heat per mole of distillate
 
-Status: **In progress since 2026-11-12**. Branch `claude/still-heat-per-distillate-d5ec04`; carried onto `claude/still-on-aqueous-fdba0c`
+Status: **Implemented 2026-11-13 (0.30.0)**, merged with the tutorial branch. Branch `claude/still-heat-per-distillate-d5ec04`; carried onto `claude/still-on-aqueous-fdba0c`
 (the W4 column) by merge d908aa617, then into `claude/tutorial-system-chem-mod-950ca9` (merge 59f05855f), with which it
 merges to main. Not merged to main, not pushed.
 
