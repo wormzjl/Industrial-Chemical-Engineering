@@ -199,41 +199,13 @@ final class FluidFacts {
      * The topology unit's facts as saved: compositions and totals lie on {@code basis}'s axis. {@code removedMovers}: the
      * saved one-block pumps and compressors this build no longer has (owner decision 2026-10-28, batch
      * 2026-10-28-old-mover-removal), left out of {@code registrations}. A mover holds no stock, so nothing is booked; the
-     * islands are rebuilt from the other facts.
+     * islands are rebuilt from the other facts. A world is built by {@link #builder}, each component at its default for a
+     * world written before it unless set.
      */
     record World(long nextIdentity,WorldTopologyLedger.FluidBasis basis,List<WorldTopologyLedger.Registration> registrations,
                  WorldTopologyLedger.MaterialTotal constructed,WorldTopologyLedger.MaterialTotal destroyed,List<Recovery> recoveries,WorldTopologyLedger.Restated restated,
                  List<String> removedMovers,List<ColumnUnit> columns,List<ShaftUnit> shafts,Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores,Map<Long,Double> health,WorldTopologyLedger.Builds builds,List<StillUnit> stills,List<ConverterUnit> converters) {
-        /** Facts without fluid converters (a world before schema 24). */
-        World(long nextIdentity,WorldTopologyLedger.FluidBasis basis,List<WorldTopologyLedger.Registration> registrations,WorldTopologyLedger.MaterialTotal constructed,
-              WorldTopologyLedger.MaterialTotal destroyed,List<Recovery> recoveries,WorldTopologyLedger.Restated restated,List<String> removedMovers,List<ColumnUnit> columns,
-              List<ShaftUnit> shafts,Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores,Map<Long,Double> health,WorldTopologyLedger.Builds builds,List<StillUnit> stills) {
-            this(nextIdentity,basis,registrations,constructed,destroyed,recoveries,restated,removedMovers,columns,shafts,stores,health,builds,stills,List.of());
-        }
-        /** Facts without batch stills (a world before schema 16). */
-        World(long nextIdentity,WorldTopologyLedger.FluidBasis basis,List<WorldTopologyLedger.Registration> registrations,WorldTopologyLedger.MaterialTotal constructed,
-              WorldTopologyLedger.MaterialTotal destroyed,List<Recovery> recoveries,WorldTopologyLedger.Restated restated,List<String> removedMovers,List<ColumnUnit> columns,
-              List<ShaftUnit> shafts,Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores,Map<Long,Double> health,WorldTopologyLedger.Builds builds) {
-            this(nextIdentity,basis,registrations,constructed,destroyed,recoveries,restated,removedMovers,columns,shafts,stores,health,builds,List.of());
-        }
-        /** Facts without the build facts (a world before schema 15): the blocks teach them at their next bind. */
-        World(long nextIdentity,WorldTopologyLedger.FluidBasis basis,List<WorldTopologyLedger.Registration> registrations,WorldTopologyLedger.MaterialTotal constructed,
-              WorldTopologyLedger.MaterialTotal destroyed,List<Recovery> recoveries,WorldTopologyLedger.Restated restated,List<String> removedMovers,List<ColumnUnit> columns,
-              List<ShaftUnit> shafts,Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores,Map<Long,Double> health) {
-            this(nextIdentity,basis,registrations,constructed,destroyed,recoveries,restated,removedMovers,columns,shafts,stores,health,WorldTopologyLedger.Builds.NONE,List.of());
-        }
-        /** Facts without pump health (a world before schema 12): every pump new. */
-        World(long nextIdentity,WorldTopologyLedger.FluidBasis basis,List<WorldTopologyLedger.Registration> registrations,WorldTopologyLedger.MaterialTotal constructed,
-              WorldTopologyLedger.MaterialTotal destroyed,List<Recovery> recoveries,WorldTopologyLedger.Restated restated,List<String> removedMovers,List<ColumnUnit> columns,
-              List<ShaftUnit> shafts,Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores) {
-            this(nextIdentity,basis,registrations,constructed,destroyed,recoveries,restated,removedMovers,columns,shafts,stores,Map.of());
-        }
         World {health=Map.copyOf(health);stills=List.copyOf(stills);converters=List.copyOf(converters);}
-        /** Facts without shaft units (a world before schema 10). */
-        World(long nextIdentity,WorldTopologyLedger.FluidBasis basis,List<WorldTopologyLedger.Registration> registrations,WorldTopologyLedger.MaterialTotal constructed,
-              WorldTopologyLedger.MaterialTotal destroyed,List<Recovery> recoveries,WorldTopologyLedger.Restated restated,List<String> removedMovers,List<ColumnUnit> columns) {
-            this(nextIdentity,basis,registrations,constructed,destroyed,recoveries,restated,removedMovers,columns,List.of(),null);
-        }
         /**
          * The electric stores (schema 11, W5). A world written before them ({@code stores} null) has a store, unmetered and
          * empty, for each powered unit it holds: an air cooler, an induced-draft tower, a motor, a generator (owner decision
