@@ -208,7 +208,7 @@ In the order they unblock work. "Rec." is the main thread's recommendation.
 
 ### Decided (2026-11-13)
 
-Owner, 2026-11-13: "You have full authority over this subject, drive it end-to-end." The main thread's reading: the rows above, the order of the waves, the merges among this batch's branches and the delegations the waves need are the main thread's to decide; each delegation is still named (type, model and effort, what done looks like) when it starts. Still the owner's: a merge to `main`, a push, the version number, and the global CLAUDE.md.
+Owner, 2026-11-13: "You have full authority over this subject, drive it end-to-end." The main thread's reading: the rows above, the order of the waves and the merges among this batch's branches are the main thread's to decide. Still the owner's: a merge to `main`, a push, the version number, the global CLAUDE.md, and the approval of each delegation (the owner's rule that every subagent and sub-thread, and every new task to a live one, is approved by name; the main thread first read the grant as covering them, a message that gave a thread a wave B task was refused, and the reading was withdrawn the same hour).
 
 | # | Decided | Where it is carried out |
 |---|---|---|
@@ -223,5 +223,5 @@ Owner, 2026-11-13: "You have full authority over this subject, drive it end-to-e
 | 10 | As stated: Windows and Linux first, macOS on the Java path until built; an unverified target is guarded | wave E stage (a) |
 | 11 | Yes: amendments 1 to 7 are applied to AGENTS.md on this branch; they reach `main` with a merge the owner approves | wave J |
 | 12 | Yes, each deletion after its list has been read: nothing a document or a build file names is removed | wave J |
-| 13 | Covered by the grant | |
+| 13 | Not taken: it is an approval rule of the owner's, so it stays the owner's | |
 | 14 | Row by row when its wave comes, each with its numbers in the batch's review | wave H |
