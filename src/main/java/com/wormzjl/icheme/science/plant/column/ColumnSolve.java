@@ -44,8 +44,6 @@ public final class ColumnSolve {
     /** V3's superheat rule for a steam feed, K above saturation at its stage. */
     public static final double SUPERHEAT = 5;
     private static final int TEMPERATURE_ITERATIONS = 40;
-    /** The step of a partial molar enthalpy's difference, a share of the product's moles. */
-    static final double PARTIAL_STEP = 1e-5;
 
     private ColumnSolve() {
     }
@@ -106,9 +104,12 @@ public final class ColumnSolve {
     /**
      * An accepted solve.
      *
-     * @param enthalpy        each product's partial molar enthalpies on the world list, J/mol, network basis, at its solved temperature and
-     *                        pressure: a product of moles n holds the energy sum n_i h_i, exact at its solved composition and
-     *                        first order beside it (plan 5.3: its actual composition, not the solved one's specific enthalpy)
+     * @param enthalpy        each product's prices on the world list, J/mol, network basis: its enthalpy per mass at its solved
+     *                        temperature, pressure and composition times each compound's molar mass (one flash per product; C2 of
+     *                        the 2026-11-13 simplifications). A product of moles n holds the energy sum n_i h_i, exact at its
+     *                        solved composition; beside it the price is out by the compounds' differences in enthalpy per mass,
+     *                        measured in {@code ColumnSolveTest} at the composition band's edge ({@link DriftBands#COMPOSITION});
+     *                        the cycle books the difference at the outlets
      * @param solvedCondenser V3's own condenser duty, W (column sign)
      * @param route           V3's solve path
      * @param note            what the input left out (feed water too cold to enter as steam), the liquids that would settle
@@ -299,16 +300,17 @@ public final class ColumnSolve {
             double n = Arrays.stream(split[k]).sum();
             double[] moles = n > 0 ? split[k] : pooled, own = new double[m];
             for (int i = 0; i < m; i++) own[i] = moles[at[i]];
-            double[] hi = partial(model, product.temperature(), product.pressure(), own, checkpoint);
-            // A compound off the list takes the product's specific enthalpy, as one whose difference does not flash.
-            double held = 0, energy = 0;
+            // One flash per product (C2): its enthalpy per mass at its solved state prices each compound by its molar mass,
+            // exact at the solved composition. A compound off the list takes the product's enthalpy per mole.
+            double held = 0, mass = 0;
             for (int i = 0; i < m; i++) {
                 held += own[i];
-                energy += hi[i] * own[i];
+                mass += own[i] * model.molecularWeight(i);
             }
+            double whole = model.flashTP(product.temperature(), product.pressure(), own.clone(), checkpoint).enthalpy();
             enthalpy[k] = new double[world.size()];
-            Arrays.fill(enthalpy[k], energy / held);
-            for (int i = 0; i < m; i++) enthalpy[k][at[i]] = hi[i];
+            Arrays.fill(enthalpy[k], whole / held);
+            for (int i = 0; i < m; i++) enthalpy[k][at[i]] = whole / mass * model.molecularWeight(i);
             for (int i = 0; i < world.size(); i++) out += enthalpy[k][i] * split[k][i];
         }
         double[] pa = solved.pumparoundPerFeed();
@@ -437,34 +439,6 @@ public final class ColumnSolve {
             h0 = hn;
         }
         return Math.abs(h - h0) > 1e-6 * Math.max(1, Math.abs(h)) ? Double.NaN : t;
-    }
-
-    /**
-     * The partial molar enthalpies of {@code moles} at {@code t}, {@code p}, J/mol per axis component: forward differences of
-     * the model's enthalpy, shifted together so that they sum, weighted by {@code moles}, to its enthalpy exactly (Euler: the
-     * enthalpy at fixed temperature and pressure is homogeneous of degree one in the moles). A component whose difference
-     * does not flash takes the specific enthalpy.
-     */
-    static double[] partial(FluidThermodynamics model, double t, double p, double[] moles, Runnable checkpoint) {
-        double total = Arrays.stream(moles).sum(), h = model.flashTP(t, p, moles.clone(), checkpoint).enthalpy();
-        double delta = PARTIAL_STEP * total;
-        double[] partial = new double[moles.length];
-        double sum = 0;
-        for (int i = 0; i < moles.length; i++) {
-            double[] plus = moles.clone();
-            plus[i] += delta;
-            double hi;
-            try {
-                hi = (model.flashTP(t, p, plus, checkpoint).enthalpy() - h) / delta;
-            } catch (IllegalArgumentException | ArithmeticException noFlash) {
-                hi = Double.NaN;
-            }
-            partial[i] = Double.isFinite(hi) ? hi : h / total;
-            sum += partial[i] * moles[i];
-        }
-        double shift = (h - sum) / total;
-        for (int i = 0; i < partial.length; i++) partial[i] += shift;
-        return partial;
     }
 
     public static double[][] copy(double[][] rows) {

@@ -25,7 +25,7 @@ import java.util.*;
  * The running columns in the network (batch 2026-10-28-column-operation, C4, plan sections 4.3, 4.4, 5 and 9): the islands'
  * ports read their plans here, their bookings land here, and every running column takes a cycle each
  * {@link #CYCLE_TICKS} online ticks. Minecraft-free; the server thread owns it. Arithmetic only: the split table and each
- * product's partial molar enthalpies come from a solve on a worker (C5).
+ * product's prices come from a solve on a worker (C5).
  *
  * <p>Conservation (plan 4.4). An inlet's void books what arrives; the account takes exactly that, as spans of online time,
  * and a cycle takes the spans' shares up to its tick. A cycle takes at most what an account holds and puts the same moles,
@@ -129,7 +129,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         SplitTable table;
         ColumnUnit.Probes probes;
         boolean rebuildProbes;
-        /** Each product's partial molar enthalpies at its solved temperature and pressure, J/mol, in the table's order (ColumnSolve.Solved). */
+        /** Each product's prices at its solved temperature and pressure, J/mol per compound, one row per product in the table's order (ColumnSolve.Solved: its enthalpy per mass times each molar mass). */
         double[][] enthalpy;
         long nextCycle;
         String status="STARTING: waiting for the first solve";
@@ -436,7 +436,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         }
         return Double.isFinite(value)?new InstrumentSample(value,tick):null;
     }
-    /** Installs a solved split table and its products' partial molar enthalpies (J/mol) for unit {@code unit} (C5). */
+    /** Installs a solved split table and its products' prices (J/mol per compound, one row per product) for unit {@code unit} (C5). */
     public void table(long unit,SplitTable table,double[][] enthalpy) {
         var r=runs.get(unit);if(r==null)return;
         if(enthalpy.length!=table.products().size())throw new IllegalArgumentException("One enthalpy row per product");

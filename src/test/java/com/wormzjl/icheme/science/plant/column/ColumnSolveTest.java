@@ -69,6 +69,40 @@ class ColumnSolveTest {
         assertEquals(SplitTable.WATER_ALWAYS, table.waterBelow(), "and every booking difference");
         assertTrue(DriftBands.check(table, step, setpoints.designFeedRate() * SECONDS).isEmpty(), "the reference is inside its own bands");
 
+        // C2 of the 2026-11-13 simplifications: one flash per product; each compound is priced at the product's enthalpy
+        // per mass times its molar mass. Beside the solved composition the price is out by the compounds' differences in
+        // enthalpy per mass: at the composition band's edge (an L1 move of DriftBands.COMPOSITION, taken from the product's
+        // largest compound to its lightest and to its heaviest) the departure is printed and bounded. Pricing per mole
+        // instead (one value per product) is out by 966 J/mol here: a heavy cut carries many times a gas's heat per mole.
+        double[] pooled = feed.clone();
+        for (var st : steam) pooled[water] += st.rate();
+        double[][] split = table.split(pooled);
+        double worst = 0;
+        for (int k = 0; k < h.length; k++) {
+            double n = Arrays.stream(split[k]).sum();
+            if (!(n > 0)) continue;
+            var product = table.products().get(k);
+            double whole = model.whole().flashTP(product.temperature(), product.pressure(), split[k].clone(), () -> {}).enthalpy();
+            assertEquals(whole, dot(h[k], split[k]), 1e-9 * Math.abs(whole), product.port() + " holds its solved enthalpy at its prices");
+            int most = 0, light = -1, heavy = -1;
+            for (int c = 0; c < split[k].length; c++) {
+                if (split[k][c] > split[k][most]) most = c;
+                if (split[k][c] > 0 && light < 0) light = c;
+                if (split[k][c] > 0) heavy = c;
+            }
+            for (int to : new int[]{light, heavy}) {
+                if (to == most) continue;
+                double[] moved = split[k].clone();
+                double shift = .5 * DriftBands.COMPOSITION * n;
+                moved[most] -= shift;
+                moved[to] += shift;
+                double actual = model.whole().flashTP(product.temperature(), product.pressure(), moved, () -> {}).enthalpy();
+                worst = Math.max(worst, Math.abs(actual - dot(h[k], moved)) / n);
+            }
+        }
+        System.out.println("C2_PRICE_DEPARTURE worstJoulePerMole=" + worst);
+        assertTrue(worst < 250, "a product priced by mass is out by " + worst + " J/mol at the composition band's edge");
+
         // The feed 2 K warmer: a band crossed. Tray 1 carries its free water over to the drum (E31 of batch
         // 2026-11-04-open-thermo-data), so the seed is wet and the column re-solves cold (E33). A warm restart from the 8 m
         // tray-hydraulics state does not close tray 1's water balance on the nominal profile, and in a flowsheet it chose
