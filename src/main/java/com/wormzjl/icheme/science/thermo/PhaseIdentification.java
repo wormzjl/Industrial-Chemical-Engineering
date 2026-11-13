@@ -126,4 +126,45 @@ public final class PhaseIdentification {
         return liquidLike(evaluation, temperatureKelvin, pressurePascal)
                 && denserThanCriticalVolume(evaluation, temperatureKelvin, pressurePascal);
     }
+
+    // The label rules on a phase's traits (I-1). The overloads above stay what the engine's label sites call: they take
+    // the evaluation in hand and allocate nothing per iterate.
+
+    /** A label the rules give one fluid phase; the constants are named as the engine's fluid phase kinds. */
+    public enum Label { VAPOR, LIQUID, FLUID }
+
+    /**
+     * {@link #liquidLike(double, double)} of a root's traits: the same comparison on the same two doubles as
+     * {@link #liquidLike(PengRobinsonKernel.Evaluation, double, double)} of the evaluation the traits were formed from.
+     */
+    public static boolean liquidLike(PhaseTraits traits) {
+        return liquidLike(traits.identificationParameter(), traits.compressibility());
+    }
+
+    /**
+     * {@link #denseLiquidLike(PengRobinsonKernel.Evaluation, double, double)} on a root's traits: liquid-like and
+     * {@code v/b <} {@link #VAPOUR_BRANCH_VOLUME_RATIO}. The evaluation's form compares {@code v} with
+     * {@code VAPOUR_BRANCH_VOLUME_RATIO * b}; the two roundings can part only where {@code v/b} is within an ulp or two of
+     * the constant.
+     */
+    public static boolean denseLiquidLike(PhaseTraits traits) {
+        return liquidLike(traits) && traits.volumeRatio() < VAPOUR_BRANCH_VOLUME_RATIO;
+    }
+
+    /**
+     * The label of a single fluid phase (the engine's single-phase rule): on three physical roots the requested root's
+     * ({@code VAPOR} for the vapour root, {@code LIQUID} otherwise); {@code FLUID} for a pure component above its own
+     * critical temperature and pressure; otherwise by the parameter, {@code LIQUID} where {@link #liquidLike(PhaseTraits)},
+     * {@code VAPOR} where not, {@code FLUID} where the parameter is undefined.
+     *
+     * @param root the root the phase was evaluated on
+     * @param pureSupercritical whether the phase is one component above its critical temperature and pressure (the
+     *        caller reads the critical constants)
+     */
+    public static Label singleLabel(PhaseTraits traits, PengRobinsonKernel.Root root, boolean pureSupercritical) {
+        if (traits.physicalRootCount() > 1) return root == PengRobinsonKernel.Root.VAPOR ? Label.VAPOR : Label.LIQUID;
+        if (pureSupercritical) return Label.FLUID;
+        double parameter = traits.identificationParameter();
+        return Double.isNaN(parameter) ? Label.FLUID : liquidLike(parameter, traits.compressibility()) ? Label.LIQUID : Label.VAPOR;
+    }
 }
