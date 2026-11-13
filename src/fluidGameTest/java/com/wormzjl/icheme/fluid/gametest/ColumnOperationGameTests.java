@@ -42,7 +42,8 @@ import java.util.Set;
 public final class ColumnOperationGameTests {
     private ColumnOperationGameTests() {}
 
-    /** A menu open reads what is stored: a resting island's clock stays where it stands, where a live read advances it (merge review, finding 8). */
+    /** A menu open and a view advance no island (merge review, finding 8; code base review R5): a resting island's clock stays
+     * where it stands, and the view shows the island at now, from its certificate. */
     @GameTest(template = "empty", timeoutTicks = 10000, batch = "column-read")
     public static void aMenuReadAdvancesNoIsland(GameTestHelper helper) {
         var level = helper.getLevel();
@@ -58,8 +59,10 @@ public final class ColumnOperationGameTests {
                     long before = committed.getAsLong();
                     FluidNetwork.opening(world, device);
                     helper.assertTrue(committed.getAsLong() == before, "The read advanced the island past " + before);
-                    world.view(device);
-                    helper.assertTrue(committed.getAsLong() > before, "A live read should advance what the stored read left");
+                    // A view previews the resting island at now and changes nothing on it (code base review R5).
+                    var view = world.view(device);
+                    helper.assertTrue(committed.getAsLong() == before, "The view advanced the island past " + before);
+                    helper.assertTrue(view.committedTick() > before, "The view should show the island at now, past its committed " + before + ": " + view.committedTick());
                     level.removeBlock(pos, false);
                 })
                 .thenWaitUntil(() -> helper.assertTrue(!world.capture().world().active().containsKey(device), "Waiting for topology cleanup"))
