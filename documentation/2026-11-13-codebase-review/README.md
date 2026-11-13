@@ -14,13 +14,15 @@ Branch `claude/codebase-review-refactor-8a85ef`, base `259d22a2c` (main 0.30.0).
 - "results does not need to be byte identical with the optimizations (but shouldn't be too far off either, justify)": a reference may move with a stated, justified shift. That each path stays deterministic, and that Rust need not match Java bit for bit, is the main thread's reading.
 - "For some difficult tasks, you may want to use fable as subagent."
 - "Approve all": the twelve review subagents and the bench sub-thread of REVIEW_PLAN section 3.
+- "Start A and J": phase 2 begins with wave A (defects) and wave J (documents); PHASE2_PLAN decision 1. The other thirteen decisions are open.
 
 ## History
 
 - 2026-11-13: survey in the main thread (sizes, import matrix, native lane, wear, documentation and `tools/` sizes); [REVIEW_PLAN.md](REVIEW_PLAN.md) written (042031a03). No test run: documents only.
 - 2026-11-13: plan revised for the owner's notes; [BRIEFS.md](BRIEFS.md) written (5f61d3139). No test run.
 - 2026-11-13: the twelve reviews delivered by subagents (S1, S3, S5 on Fable high; S2, S4, S6, S7, S8 on Opus high; P1, P2, P3 on Opus medium; P4 on Sonnet medium) and committed (375d3c746). The main thread read the cited lines of 28 findings: 20 held in full, 8 in the part read, none refuted. No test run.
-- 2026-11-13: synthesis by the main thread: the six documents below and `documentation/reference/COLLABORATION.md`. No test run.
+- 2026-11-13: synthesis by the main thread: the six documents below and `documentation/reference/COLLABORATION.md` (f6e2e38d6). No test run.
+- 2026-11-13: owner "Start A and J". The main thread read the code of wave A's findings and wrote [WAVE_A_BRIEFS.md](WAVE_A_BRIEFS.md): six lanes (A1 column, A2 saves, A3 machines, A4 sheet against world, A5 runtime, A6 fluid) and J1 (guide README, history out of the chapters, `FORMATS.md`). M-04 confirmed by reading; C10, C19, D-01, L-F19 moved out of wave A; M-01 and M-07 wait for decision 3. No test run.
 
 ## Documents
 
@@ -36,7 +38,7 @@ Synthesis (main thread):
 
 Reviews (subagents): [THERMO_CORE_REVIEW.md](THERMO_CORE_REVIEW.md) (S1), [THERMO_ADAPTERS_REVIEW.md](THERMO_ADAPTERS_REVIEW.md) (S2), [FLUID_STEP_REVIEW.md](FLUID_STEP_REVIEW.md) (S3), [FLUID_LAWS_REVIEW.md](FLUID_LAWS_REVIEW.md) (S4), [COLUMN_REVIEW.md](COLUMN_REVIEW.md) and [RUST_COLUMN_PORT_PLAN.md](RUST_COLUMN_PORT_PLAN.md) (S5), [RUNTIME_REVIEW.md](RUNTIME_REVIEW.md) (S6), [MACHINES_REVIEW.md](MACHINES_REVIEW.md) (S7), [PLANT_COUPLING_REVIEW.md](PLANT_COUPLING_REVIEW.md) (S8), [EQUIPMENT_REVIEW.md](EQUIPMENT_REVIEW.md) (P1), [CLIENT_REVIEW.md](CLIENT_REVIEW.md) (P2), [FLOWSHEET_CONTROL_REVIEW.md](FLOWSHEET_CONTROL_REVIEW.md) (P3), [INVENTORY.md](INVENTORY.md) (P4).
 
-Plan and briefs: [REVIEW_PLAN.md](REVIEW_PLAN.md) (its section 2 is replaced by SOLVER_DECOUPLING_PLAN), [BRIEFS.md](BRIEFS.md).
+Plan and briefs: [REVIEW_PLAN.md](REVIEW_PLAN.md) (its section 2 is replaced by SOLVER_DECOUPLING_PLAN), [BRIEFS.md](BRIEFS.md), [WAVE_A_BRIEFS.md](WAVE_A_BRIEFS.md).
 
 ## Code areas
 
