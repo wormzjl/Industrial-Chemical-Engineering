@@ -33,7 +33,7 @@ public final class SolidPhaseGameTests {
         var source=helper.absolutePos(new BlockPos(0,2,0));var suction=source.east();var pump=source.east(2);var left=source.east(3);var filter=source.east(4);var right=source.east(5);var tank=source.east(6);
         level.setBlock(source,ModBlocks.FLUID_GENERATOR.get().defaultBlockState(),3);
         level.setBlock(suction,ModBlocks.FLUID_PIPE.get().defaultBlockState(),3);
-        level.setBlock(pump,FluidPumpStartupGameTests.inlinePump(Direction.EAST),3);
+        level.setBlock(pump,FluidPumpStartupGameTests.inlinePump(Direction.EAST),3);FluidPumpStartupGameTests.powerInlineMover(level,pump);
         level.setBlock(left,ModBlocks.FLUID_PIPE.get().defaultBlockState(),3);
         level.setBlock(filter,ModBlocks.INLINE_FILTER.get().defaultBlockState().setValue(FluidDeviceBlock.FACING,Direction.EAST),3);
         level.setBlock(right,ModBlocks.FLUID_PIPE.get().defaultBlockState(),3);
@@ -95,7 +95,7 @@ public final class SolidPhaseGameTests {
                 helper.assertTrue(contents.solids().equals(second[0].captured())&&contents.energyJoule()==second[0].energyJoule(),"Break drop lost captured material or energy");
                 helper.assertTrue(!world.registrations().containsKey(filterId),"Broken filter remains registered");
                 drops.forEach(ItemEntity::discard);player.getInventory().clearContent();
-                level.removeBlock(source,false);level.removeBlock(suction,false);level.removeBlock(pump,false);level.removeBlock(tank,false);
+                level.removeBlock(source,false);level.removeBlock(suction,false);level.removeBlock(pump,false);level.removeBlock(pump.above(),false);level.removeBlock(tank,false);
             })
             .thenWaitUntil(()->helper.assertTrue(world.capture().world().events().isEmpty(),"Waiting for cleanup"))
             .thenSucceed();

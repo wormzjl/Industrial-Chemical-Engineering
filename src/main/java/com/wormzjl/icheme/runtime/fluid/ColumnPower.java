@@ -42,6 +42,8 @@ public final class ColumnPower implements ColumnOperation.Power {
     public boolean pump(long mover, double share, long tick) {
         var r = topology.active().get(mover);
         if (r == null || !(r.device().control() instanceof FlowControl.Mover m)) return true;
+        // A held casing has no slice of its own: its column books its rated shaft power (a design figure on the design fluid,
+        // InlineMachines.ratedShaftPower, through the shaft power function every driver's charge reads) at the share it runs.
         double shaft = InlineMachines.ratedShaftPower(m) * Math.max(0, share);
         // A casing books on its train, whose motor draws from its own store; an in-line pump draws through its integral motor.
         if (shafts.unitOf(mover)) return shafts.held(mover, shaft);
