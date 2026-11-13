@@ -160,8 +160,7 @@ final class StructureRegistration {
             return true;
         }
         var origin=vessel.origin();var shape=vessel.shape();
-        for(int x=origin.getX()>>4;x<=(origin.getX()+shape.sizeX()-1)>>4;x++)
-            for(int z=origin.getZ()>>4;z<=(origin.getZ()+shape.sizeZ()-1)>>4;z++)if(!level.hasChunk(x,z))return false;
+        if(!StructureRefresh.loaded(level,origin,StructureRefresh.corner(origin,shape)))return false;
         var layout=ShapeRasterizer.layout(shape);
         for(var cell:layout.shell()) {
             var at=origin.offset(cell.x(),cell.y(),cell.z());
