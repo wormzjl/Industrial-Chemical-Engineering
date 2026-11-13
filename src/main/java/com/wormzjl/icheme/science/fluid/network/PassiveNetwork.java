@@ -254,6 +254,8 @@ public record PassiveNetwork(List<Reservoir> reservoirs,List<Pipe> pipes,List<Sc
         /** The pressure outside this vessel's wall that works on its bag: its {@link #ambient}, none on a rigid wall. */
         public double wallWorkPressure(){return rigid?0:ambient;}
         @Override public double[] moles(){return moles.clone();}
+        /** Whether every amount is zero, read on the field without the copy {@link #moles()} makes (finding P-12, batch 2026-11-13-codebase-review). */
+        public boolean holdsNoAmounts(){for(double n:moles)if(n!=0)return false;return true;}
         @Override public boolean equals(Object other){return other instanceof Inventory value&&geometry.equals(value.geometry)&&open==value.open&&rigid==value.rigid&&Objects.equals(pool,value.pool)&&Objects.equals(tower,value.tower)&&Double.doubleToLongBits(volume)==Double.doubleToLongBits(value.volume)&&Double.doubleToLongBits(levelHeight)==Double.doubleToLongBits(value.levelHeight)&&Double.doubleToLongBits(ambient)==Double.doubleToLongBits(value.ambient)&&blanket==value.blanket&&Double.doubleToLongBits(internalEnergy)==Double.doubleToLongBits(value.internalEnergy)&&Arrays.equals(moles,value.moles)&&solids.equals(value.solids);}
         @Override public int hashCode(){return 31*Objects.hash(volume,levelHeight,internalEnergy,solids,open,rigid,geometry,pool,tower,ambient,blanket)+Arrays.hashCode(moles);}
     }

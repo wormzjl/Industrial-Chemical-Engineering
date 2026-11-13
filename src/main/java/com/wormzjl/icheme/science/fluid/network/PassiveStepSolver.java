@@ -4088,8 +4088,7 @@ public final class PassiveStepSolver {
     }
     /** {@link #holdsNoFluid(PassiveNetwork.Reservoir)} for a vessel's {@code inventory} at {@code state}. */
     static boolean holdsNoFluid(PassiveNetwork.Inventory inventory,FluidThermodynamics.State state) {
-        boolean none=true;for(double n:inventory.moles())if(n!=0){none=false;break;}
-        if(none)return true;
+        if(inventory.holdsNoAmounts())return true;
         // A pure-water basin exchanges at its surface until its actual inventory is empty.
         if(inventory.tower()!=null)return false;
         double capacity=inventory.volume(),bag=PhaseLayout.bagVolume(state,inventory.wallCapacity());
