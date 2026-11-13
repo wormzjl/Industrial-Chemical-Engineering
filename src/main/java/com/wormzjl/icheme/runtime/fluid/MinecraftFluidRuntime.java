@@ -23,7 +23,8 @@ public final class MinecraftFluidRuntime implements AutoCloseable {
         coordinator=new IslandCoordinator(new IslandCoordinator.Dispatcher() {
             public void demand(int eligibleOwners){ProcessSolveServices.fluidWorkerDemand(server,eligibleOwners);}
             public long demandShrinkDelay(){return ProcessSolveServices.fluidDemandShrinkDelay(server);}
-            public int availableWorkers(){var d=ProcessSolveServices.diagnostics(server);return d.readyJobs()>0?0:Math.max(0,d.workerCount()-d.activeWorkers());}
+            // Every free worker: a queued plant job waits for one of the workers islands leave it (code base review R6, option A).
+            public int availableWorkers(){var d=ProcessSolveServices.diagnostics(server);return Math.max(0,d.workerCount()-d.activeWorkers());}
             public long nextRequestId(){return ProcessSolveServices.nextRequestId();}
             public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveServices.FluidIslandCommand command) {
                 var target=new ProcessSolveServices.FluidIslandTarget(Objects.requireNonNull(dimensions.get(attempt.islandId())),attempt.islandId());

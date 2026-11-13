@@ -365,6 +365,68 @@ class BoundedCpuSolveServiceTest {
         } finally {release.countDown();}
     }
 
+    /**
+     * Code base review R6, option A, with a stub kernel and a test clock: two workers, two long plant jobs and ready
+     * islands. While islands are ready, plant jobs hold at most one worker: the second waits and an island is admitted
+     * beside the first; another island finds no free worker and is refused, never queued. The waiting plant job takes the
+     * plant worker when the first ends (an island's freed worker stays the islands'), and its deadline counts from its
+     * start: time in the queue never expires it.
+     */
+    @Test void islandsKeepOneWorkerAndAPlantDeadlineStartsOnTheWorker() throws Exception {
+        var clock=new AtomicLong();long budget=100;
+        var releaseFirst=new CountDownLatch(1);var firstStarted=new CountDownLatch(1);
+        var releaseIsland=new CountDownLatch(1);var islandStarted=new CountDownLatch(1);
+        var secondStarted=new CountDownLatch(1);var firstPoll=new CountDownLatch(1);var firstPolled=new CountDownLatch(1);var secondPoll=new CountDownLatch(1);
+        var service=new BoundedCpuSolveService<Owner,Snapshot,SolveResult>(91,testConfig(2,4,true),clock::get);
+        try {
+            service.setReserve(1);
+            assertEquals(Admission.ACCEPTED,service.trySubmit(stamp(91,1,"plant-1"),new Snapshot("p1"),(s,t)->{firstStarted.countDown();releaseFirst.await();return new SolveResult(s.value());},false,budget));
+            await(firstStarted);
+            assertEquals(Admission.ACCEPTED,service.trySubmit(stamp(91,2,"plant-2"),new Snapshot("p2"),(s,t)->{
+                secondStarted.countDown();firstPoll.await();t.throwIfCancellationRequested();firstPolled.countDown();secondPoll.await();t.throwIfCancellationRequested();return new SolveResult(s.value());},false,budget));
+            assertEquals(1,service.diagnostics().readyJobs(),"the second plant job waits: one worker is the islands'");
+            assertEquals(Admission.ACCEPTED,service.trySubmit(stamp(91,3,"island-1"),new Snapshot("i1"),(s,t)->{islandStarted.countDown();releaseIsland.await();return new SolveResult(s.value());},true,0));
+            await(islandStarted);
+            assertEquals(2,service.diagnostics().activeWorkers(),"an island steps beside the plant job");
+            assertEquals(Admission.QUEUE_FULL,service.trySubmit(stamp(91,4,"island-2"),new Snapshot("i2"),(s,t)->new SolveResult(s.value()),true,0),"an island never queues");
+            // Far past the waiting job's budget counted from its admission: it does not expire in the queue.
+            clock.set(1000);
+            assertTrue(service.drainCompletions(4).isEmpty());assertEquals(1,service.diagnostics().readyJobs());
+            releaseIsland.countDown();
+            var island=awaitCompletions(service,1);assertEquals(TerminalStatus.SUCCESS,island.getFirst().status());
+            assertEquals(1,service.diagnostics().readyJobs(),"the islands' freed worker is not the plant jobs'");
+            releaseFirst.countDown();
+            var first=awaitCompletions(service,1);assertEquals("plant-1",first.getFirst().stamp().owner().value());
+            await(secondStarted);
+            // Half its budget after its start: it runs on.
+            clock.set(1050);firstPoll.countDown();await(firstPolled);
+            // Past its budget after its start: its deadline.
+            clock.set(1101);secondPoll.countDown();
+            var second=awaitCompletions(service,1).getFirst();
+            assertEquals(TerminalStatus.DEADLINE_EXCEEDED,second.status());
+            assertEquals(0,second.enqueuedNanos());assertEquals(1000,second.startedNanos(),"its deadline counts from its start");
+            assertEquals(0,service.diagnostics().outstandingJobs());
+        } finally {
+            releaseFirst.countDown();releaseIsland.countDown();firstPoll.countDown();secondPoll.countDown();service.close();
+        }
+    }
+    /** With one worker nothing is reserved, so a plant job is never starved by ready islands; a reserve lowered to 0 dispatches waiting work. */
+    @Test void aSingleWorkerKeepsNoReserveAndALoweredReserveDispatches() throws Exception {
+        var release=new CountDownLatch(1);var started=new CountDownLatch(2);
+        try(var service=new BoundedCpuSolveService<Owner,Snapshot,SolveResult>(92,testConfig(2,4,true),()->{})) {
+            service.setWorkerLimit(1);service.setReserve(1);
+            assertEquals(Admission.ACCEPTED,service.trySubmit(stamp(92,1,"plant-1"),new Snapshot("p1"),(s,t)->{started.countDown();release.await();return new SolveResult(s.value());},false,0));
+            assertEquals(1,service.diagnostics().activeWorkers(),"one worker: the plant job runs");
+            service.setWorkerLimit(2);
+            assertEquals(Admission.ACCEPTED,service.trySubmit(stamp(92,2,"plant-2"),new Snapshot("p2"),(s,t)->{started.countDown();release.await();return new SolveResult(s.value());},false,0));
+            assertEquals(1,service.diagnostics().readyJobs(),"two workers: one is the islands'");
+            service.setReserve(0);await(started);
+            assertEquals(2,service.diagnostics().activeWorkers(),"no island ready: the waiting plant job runs");
+            org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,()->service.trySubmit(new JobStamp<>(92,3,new Owner("bad"),3,"dataset-v1",5L),new Snapshot("x"),(s,t)->new SolveResult(s.value()),false,10));
+            release.countDown();assertEquals(2,awaitCompletions(service,2).size());
+        } finally {release.countDown();}
+    }
+
     private static Config testConfig(int workerCount, int readyCapacity, boolean daemonThreads) {
         return new Config(
                 workerCount,
