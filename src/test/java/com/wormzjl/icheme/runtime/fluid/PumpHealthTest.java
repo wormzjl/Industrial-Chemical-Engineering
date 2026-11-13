@@ -244,6 +244,40 @@ class PumpHealthTest {
         assertTrue(rig.flow() > 9, "it delivers: " + rig.flow());
     }
 
+    /**
+     * M-02: the kit takes every mover casing and the health decides. A dry screw saved failed (health 0) is repaired; a
+     * compressor, which does not wear, answers {@code NOT_A_PUMP} and takes no kit.
+     */
+    @Test
+    void aFailedDryScrewIsRepairedAndACompressorIsNotAPump() {
+        var rig = new Rig(101325);
+        var at = new PhysicalFluidTopology.Position("minecraft:overworld", 5, 0, 0);
+        var kind = com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.PIPE;
+        var spec = FluidDeviceSpec.nitrogen(EventPathWorld.CATALOG);
+        var screw = new WorldTopologyLedger.Registration(new PhysicalFluidTopology.Device(20, at, kind, PhysicalFluidTopology.Direction.EAST, FAT,
+                new FlowControl.Machine(new com.wormzjl.icheme.science.machine.VacuumPump(com.wormzjl.icheme.science.machine.VacuumPump.Type.DRY_SCREW, 300 / 3600., 2950), 1, true)), spec, 0);
+        var compressor = new WorldTopologyLedger.Registration(new PhysicalFluidTopology.Device(30, at, kind, PhysicalFluidTopology.Direction.EAST, FAT,
+                new FlowControl.Compressor(.1, 3)), spec, 0);
+        var registrations = Map.of(20L, screw, 30L, compressor);
+        assertTrue(PumpHealth.pump(screw), "a dry screw wears");
+        assertFalse(PumpHealth.pump(compressor), "a compressor does not");
+        var ledger = new WorldTopologyLedger(WorldTopologyLedger.Snapshot.empty(EventPathWorld.CATALOG));
+        ledger.health(Map.of(20L, 0.0));
+        var health = new PumpHealth(ledger, device -> null, rig.coordinator, device -> PumpHealth.pump(registrations.get(device)),
+                device -> registrations.containsKey(device) ? registrations.get(device).device().control() : null, () -> FAST);
+        assertTrue(health.failed(20), "saved at 0, it stands failed");
+        assertNull(health.health(30), "a compressor has no health record");
+        var outcome = new ArrayList<PumpHealth.Outcome>();
+        int[] taken = {0};
+        health.queue(new PumpHealth.Repair(20, () -> ++taken[0] > 0, outcome::add));
+        health.queue(new PumpHealth.Repair(30, () -> ++taken[0] > 0, outcome::add));
+        health.apply();
+        assertEquals(List.of(PumpHealth.Outcome.REPAIRED, PumpHealth.Outcome.NOT_A_PUMP), outcome);
+        assertEquals(1, taken[0], "one kit, for the screw");
+        assertFalse(health.failed(20));
+        assertEquals(1, health.health(20), "new again");
+    }
+
     @Test
     void aCleanPumpKeepsItsHealthAndAFullPumpRefusesAKit() {
         var rig = new Rig(101325);
