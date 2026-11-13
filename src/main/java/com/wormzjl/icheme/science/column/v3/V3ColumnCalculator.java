@@ -167,9 +167,7 @@ public final class V3ColumnCalculator {
     private enum ContinuationJacobianPolicy {
         NONE,
         STAGE_LOCAL_BLOCKS,
-        PRESSURE_LOCAL_PREDICTOR,
-        /** Boston-Sullivan outer thermodynamics with a frozen-property inner MESH correction. */
-        INSIDE_OUT
+        PRESSURE_LOCAL_PREDICTOR
     }
 
     private V3ColumnCalculator() {}
@@ -1322,17 +1320,9 @@ public final class V3ColumnCalculator {
                     ? initializeForSolve(stageProblem, thermo, V3ColumnInitializer.Mode.SEQUENTIAL_MATERIAL_VLE)
                     : continuationSeed(stageProblem, previousTopology, previousState, thermo, control);
             V3SolvePass preceding = lastPass;
-            // Only the authored dry cold seed tries the inside-out preconditioner.  Feature-bearing requests use
-            // their dry surrogate later in a bounded ramp, but that surrogate can already be close enough that
-            // the extra property snapshot costs more than it saves on the small seed grids.
-            ContinuationJacobianPolicy stageJacobianPolicy = !featureRampRequired
-                    && input.stageCount() >= 4
-                    && previousState == null
-                    ? ContinuationJacobianPolicy.INSIDE_OUT
-                    : ContinuationJacobianPolicy.STAGE_LOCAL_BLOCKS;
             lastPass = solveSingleProblem(stageProblem, thermo,
                     seed, control, "cold/stage-continuation/" + stagePath + "/fine-fd",
-                    stageJacobianPolicy, policy);
+                    ContinuationJacobianPolicy.STAGE_LOCAL_BLOCKS, policy);
             if (preceding != null) lastPass = withPriorSupportNotes(preceding, lastPass);
             PhaseCorrection phaseCorrection = correctCondenserPhase(lastPass, thermo, control, policy, condenserAttempts);
             lastPass = phaseCorrection.pass();
@@ -1666,7 +1656,7 @@ public final class V3ColumnCalculator {
             V3ColumnProblem attemptProblem = prepared.problem();
             V3MeshResidualEvaluator evaluator = new V3MeshResidualEvaluator(
                     attemptProblem, thermo, feedMolarEnthalpy);
-            telemetry = new SolveTelemetry(attemptProblem, policy.progress(), jacobianPolicy == ContinuationJacobianPolicy.INSIDE_OUT);
+            telemetry = new SolveTelemetry(attemptProblem, policy.progress());
             V3DryMeshCoordinateMap coordinates = new V3DryMeshCoordinateMap(attemptProblem);
             V3DryMeshState attemptSeed = prepared.seed();
             if (policy.progress() != null) {
@@ -1684,9 +1674,6 @@ public final class V3ColumnCalculator {
                         attemptProblem, evaluator, coordinates, attemptSeed, thermo::newWorkspace,
                         nextIterations, policy.closureTolerance(), control, telemetry, budget, extension);
                 case PRESSURE_LOCAL_PREDICTOR -> V3SimultaneousColumnSolver.solveWithOneLocalBlockPredictor(
-                        attemptProblem, evaluator, coordinates, attemptSeed, thermo::newWorkspace,
-                        nextIterations, policy.closureTolerance(), control, telemetry);
-                case INSIDE_OUT -> V3SimultaneousColumnSolver.solveWithInsideOut(
                         attemptProblem, evaluator, coordinates, attemptSeed, thermo::newWorkspace,
                         nextIterations, policy.closureTolerance(), control, telemetry);
             };
@@ -3582,7 +3569,6 @@ public final class V3ColumnCalculator {
         private final V3ColumnProblem problem;
         /** Where a learned pass keeps its in-flight evidence; null on every classical solve. */
         private final NeuralProgress progress;
-        private final boolean insideOut;
         private int acceptedLocalBlockDirections;
         private int rejectedLocalBlockDirections;
         private int freshFiniteDifferenceJacobians;
@@ -3593,10 +3579,9 @@ public final class V3ColumnCalculator {
         private double finalDominantPhysicalResidual;
         private V3DryMeshState finalState;
 
-        private SolveTelemetry(V3ColumnProblem problem, NeuralProgress progress, boolean insideOut) {
+        private SolveTelemetry(V3ColumnProblem problem, NeuralProgress progress) {
             this.problem = Objects.requireNonNull(problem, "problem");
             this.progress = progress;
-            this.insideOut = insideOut;
         }
 
         @Override
@@ -3635,7 +3620,6 @@ public final class V3ColumnCalculator {
 
         List<String> events() {
             List<String> events = new ArrayList<>();
-            if (insideOut) events.add("Boston-Sullivan inside-out: frozen K/H inner predictor with strict PR certification");
             if (Double.isFinite(initialMaximumScaledResidual)) {
                 events.add("scaled residual: initial=" + initialMaximumScaledResidual
                         + ", final=" + finalMaximumScaledResidual);
