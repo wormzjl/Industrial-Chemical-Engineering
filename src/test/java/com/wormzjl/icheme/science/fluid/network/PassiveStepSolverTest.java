@@ -30,6 +30,19 @@ class PassiveStepSolverTest {
             assertEquals(beforeN,afterN,1e-8*beforeN);assertEquals(beforeU,afterU,1e-6*Math.abs(beforeU));
         }
     }
+    /**
+     * Finding P-18 (batch 2026-11-13-codebase-review): a node's prepared bundle is refilled in place at a new temperature
+     * and handed from pass to pass, so an island's steps after its first build no Peng-Robinson workspace.
+     */
+    @Test void stepsAfterAnIslandsFirstBuildNoKernelWorkspace() {
+        for(int component:new int[]{0,model.componentCount()-1}) {
+            var graph=graph(component,false);var solver=new PassiveStepSolver(model);
+            graph=PassiveIntervalSolver.replace(graph,solver.solve(graph,.1,()->{}));
+            long built=FluidThermodynamics.Prepared.workspacesBuilt();
+            for(int step=0;step<3;step++)graph=PassiveIntervalSolver.replace(graph,solver.solve(graph,.1,()->{}));
+            assertEquals(built,FluidThermodynamics.Prepared.workspacesBuilt(),"component "+component);
+        }
+    }
     @Test void endpointOrderOnlyChangesTheFlowSign() {
         var solver=new PassiveStepSolver(model);var forward=solver.solve(graph(0,false),.1,()->{});var backward=solver.solve(graph(0,true),.1,()->{});
         assertEquals(forward.massFlows()[0],-backward.massFlows()[0],1e-8);

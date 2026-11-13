@@ -332,6 +332,8 @@ public final class PassiveStepSolver {
     /** The last successful solve, for the block Jacobian check; see {@link #acceptedEquations}. */
     record LastSolve(Equations equations,double[] variables) {}
     private LastSolve lastSolve;
+    /** The pass whose node bundles ({@code Equations.cachedPrepared}) the next pass takes over (P-18). */
+    private Equations preparedPass;
     private boolean rateOnly;
     /** Owned by this solver, which the ownership latch confines to one worker at a time. */
     private final com.wormzjl.icheme.science.fluid.transport.MixtureViscosity.Workspace viscosities=
@@ -4359,6 +4361,23 @@ public final class PassiveStepSolver {
          */
         final PhaseDraw.Segment[][] segments;
         final FluidThermodynamics.Prepared[] cachedPrepared;
+        /** Per node, the bundle a Jacobian probe at another temperature is prepared in, refilled in place
+         * ({@link FluidThermodynamics#prepare(double,FluidThermodynamics.Prepared)}, finding P-18): the decode's own
+         * ({@link #cachedPrepared}) is the probe's base and stays as it is through the node's columns. */
+        private final FluidThermodynamics.Prepared[] probePrepared;
+        /**
+         * Takes over the bundles of the solver's previous pass (P-18): a bundle holds one temperature's terms and no node's
+         * state, so any slot serves any node, refilled at its first decode. The previous pass drops its decode cache and
+         * its probe bundles, so it decodes anew with bundles of its own if it is evaluated again (the accepted point's
+         * equations, read after the solve). Each solver runs one pass at a time on one thread.
+         */
+        private void adoptPrepared() {
+            var previous=preparedPass;preparedPass=this;
+            if(previous==null||previous==this)return;
+            System.arraycopy(previous.cachedPrepared,0,cachedPrepared,0,Math.min(cachedPrepared.length,previous.cachedPrepared.length));
+            System.arraycopy(previous.probePrepared,0,probePrepared,0,Math.min(probePrepared.length,previous.probePrepared.length));
+            previous.releaseDecodeCache();Arrays.fill(previous.probePrepared,null);
+        }
         /** Whether this island carries the three aggregate solid moment unknowns on every node;
          * the whole-island predicate {@link PhaseLayout} is built with, evaluated once. */
         final boolean solidSupport;
@@ -4485,7 +4504,8 @@ public final class PassiveStepSolver {
             this.graph=graph;this.dt=dt;solidSupport=hasSolids(graph);int count=graph.reservoirs().size();layout=new PhaseLayout[count];offsets=new int[count];oldAmounts=new double[count][];
             this.checkpoint=checkpoint;passCurves=new HeatCurve[graph.pipes().size()][];passKnown=new boolean[graph.pipes().size()][];heldCurves();
             cachedVariables=new double[count][];cachedStates=new FluidThermodynamics.State[count];cachedTransport=new Transport[count];
-            cachedPrepared=new FluidThermodynamics.Prepared[count];
+            cachedPrepared=new FluidThermodynamics.Prepared[count];probePrepared=new FluidThermodynamics.Prepared[count];
+            adoptPrepared();
             drawsPhase=new boolean[count];
             for(int edge=0;edge<graph.pipes().size();edge++)for(int end=0;end<2;end++) {
                 var pipe=graph.pipes().get(edge);
@@ -5229,7 +5249,8 @@ public final class PassiveStepSolver {
                 if(same)continue;
                 if(layout[i]!=null) {
                     double temperature=layout[i].temperature(x,offsets[i]);
-                    if(cachedPrepared[i]==null||cachedPrepared[i].temperature()!=temperature)cachedPrepared[i]=model.prepare(temperature);
+                    // Refilled in place (P-18): this node's state and transport are decoded again from it just below.
+                    cachedPrepared[i]=model.prepare(temperature,cachedPrepared[i]);
                 }
                 FluidThermodynamics.State state;
                 // A trial a typed thermodynamic hold refused names the node it was refused at; see ThermoHold.
@@ -5657,7 +5678,8 @@ public final class PassiveStepSolver {
                         double step=differenceStep*differenceScale(column,x[column]);
                         trial[column]+=step;
                         double temperature=layout[node].temperature(trial,offsets[node]);
-                        var prepared=basePrepared[node]!=null&&basePrepared[node].temperature()==temperature?basePrepared[node]:model.prepare(temperature);
+                        var prepared=basePrepared[node]!=null&&basePrepared[node].temperature()==temperature?basePrepared[node]
+                                :(probePrepared[node]=model.prepare(temperature,probePrepared[node]));
                         long exactBefore=SolverDiagnostics.ENABLED&&tangents?SolverDiagnostics.jacobianExactPhases.sum():0;
                         var state=layout[node].decode(trial,offsets[node],prepared,nodeTangents);
                         if(SolverDiagnostics.ENABLED&&tangents&&SolverDiagnostics.jacobianExactPhases.sum()>exactBefore)SolverDiagnostics.jacobianExactColumns.increment();
