@@ -4,8 +4,6 @@ import com.wormzjl.icheme.science.equipment.LineSelection;
 
 import net.minecraft.world.phys.shapes.*;
 
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Shared, bounded pipe/data/power selection shapes; render tessellation never controls
@@ -14,12 +12,11 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class LineShapes {
     private record Key(int joints, int facing, int outside, long offsets) {}
 
-    private static final Map<Key, VoxelShape> CACHE = new ConcurrentHashMap<>();
+    private static final com.wormzjl.icheme.science.equipment.BoundedCache<Key, VoxelShape> CACHE = new com.wormzjl.icheme.science.equipment.BoundedCache<>(2048);
 
     private LineShapes() {}
 
     public static VoxelShape shape(int joints, int facing, int outside, long offsets) {
-        if (CACHE.size() > 2048) CACHE.clear();
         return CACHE.computeIfAbsent(
                 new Key(LineSelection.joints(joints, facing), 0, outside, offsets),
                 key -> {
