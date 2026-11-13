@@ -583,6 +583,64 @@ class ExchangerCouplingTest {
         assertSettled(rig,seen(rig.island(rig.hotIsland),HOT),"after the wake");
         assertLedger(rig,-5e5,"after the wake");
     }
+    /**
+     * A read never books (code base review R5): two pairs on the same events, one of them read for presentation every tick.
+     * The heat in transit, the ports' bookings, the replayed heat and the committed ticks are the same bits at the end, and
+     * the read pair's views show each certified side at the read tick (its certificate's state there), not the stale
+     * committed one. Saves (materialising reads) on both then book the same spans again.
+     */
+    @Test void aPresentationReadEveryTickBooksNothing() {
+        var plain=waterPair(100,100,CertificatePolicy.defaults());var read=waterPair(100,100,CertificatePolicy.defaults());
+        var plainBookings=new ArrayList<String>();var readBookings=new ArrayList<String>();
+        plain.coordinator.ports(bookings(plainBookings));read.coordinator.ports(bookings(readBookings));
+        for(int i=0;i<240&&!(certified(plain)&&certified(read));i++){plain.run(5);read.run(5);}
+        assertTrue(certified(plain)&&certified(read),"both pairs certify");
+        int previews=0;
+        for(int t=0;t<2_000;t++) {
+            plain.run(.05);read.run(.05);
+            for(long island:new long[]{read.hotIsland,read.coldIsland}) {
+                var stored=read.island(island);var view=read.coordinator.presentation(island);
+                assertEquals(stored.clock(),read.island(island).clock(),"a read moves no clock");
+                if(stored.certificate().isEmpty()){assertEquals(stored.clock(),view.clock());continue;}
+                long expected=Math.min(read.epoch[0],stored.certificate().orElseThrow().horizonTick()-1);
+                assertEquals(expected,view.clock().committedTick(),"the view shows the read tick");
+                if(expected>stored.clock().committedTick())previews++;
+            }
+        }
+        assertTrue(previews>0,"a view ran ahead of a committed tick");
+        assertEquals(plain.coordinator.transits(),read.coordinator.transits(),"the heat in transit");
+        assertEquals(plainBookings,readBookings,"the ports' bookings");
+        assertEquals(plain.heat,read.heat,"the replayed heat");
+        for(long island:new long[]{plain.hotIsland,plain.coldIsland})assertEquals(plain.island(island).clock(),read.island(island).clock(),"island "+island+"'s clock");
+        // The view is the state a materialisation reaches at that tick.
+        for(long island:new long[]{plain.hotIsland,plain.coldIsland}) {
+            var view=read.coordinator.presentation(island);var materialised=plain.coordinator.snapshot(island);
+            assertEquals(materialised.clock().committedTick(),view.clock().committedTick(),"island "+island+"'s tick");
+            assertEquals(bits(materialised.graph()),bits(view.graph()),"island "+island+"'s inventories");
+        }
+        for(long island:new long[]{read.hotIsland,read.coldIsland})read.coordinator.snapshot(island);
+        assertEquals(plain.coordinator.transits(),read.coordinator.transits(),"the heat in transit after a save");
+        assertEquals(plainBookings,readBookings,"the ports' bookings after a save");
+    }
+    private static boolean certified(Rig rig){return rig.island(rig.hotIsland).certificate().isPresent()&&rig.island(rig.coldIsland).certificate().isPresent();}
+    /** Ports that record every span booked to them, its boundary energies, moles and pump work bit for bit. */
+    private static IslandCoordinator.Ports bookings(List<String> into) {
+        return new IslandCoordinator.Ports() {
+            public boolean ready(long island,PassiveNetwork graph,long start){return true;}
+            public Map<Long,PortPlan> plans(long island,PassiveNetwork graph,IslandClock.Slice slice){return Map.of();}
+            public void booked(long island,PassiveNetwork graph,long start,long end,PassiveIntervalSolver.Result result) {
+                var b=new StringBuilder().append(island).append(':').append(start).append('-').append(end);
+                for(var t:result.boundaries()){b.append(',').append(t.nodeId()).append('=').append(Double.doubleToLongBits(t.totalEnergyJoule()));for(double n:t.moles())b.append('/').append(Double.doubleToLongBits(n));}
+                into.add(b.append(",w=").append(Double.doubleToLongBits(result.pumpWorkJoule())).toString());
+            }
+        };
+    }
+    /** Every node's moles and internal energy, bit for bit. */
+    private static String bits(PassiveNetwork graph) {
+        var b=new StringBuilder();
+        for(var node:graph.reservoirs()){b.append('|').append(node.id());for(double n:node.inventory().moles())b.append(',').append(Double.doubleToLongBits(n));b.append(',').append(Double.doubleToLongBits(node.inventory().internalEnergy()));}
+        return b.toString();
+    }
 
     // ---- a fired heater's coils in two islands (the owner's test of 2026-10-28, F1) ----
 

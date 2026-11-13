@@ -205,7 +205,7 @@ public final class FluidPresentationGameTests {
             var replaying=world.deliveries(steady).stream().filter(d->d.status().startsWith("STEADY: replaying")&&d.status().contains("kg/s since")&&d.status().contains(", next check at")).findFirst();
             helper.assertTrue(resting.isPresent(),"Waiting for no flow on the lone tank's menu: "+world.deliveries(rest).stream().map(FluidPresentation.Delivery::status).reduce((x,y)->y).orElse("none"));
             helper.assertTrue(replaying.isPresent(),"Waiting for STEADY on the line's menu: "+world.deliveries(steady).stream().map(FluidPresentation.Delivery::status).reduce((x,y)->y).orElse("none"));
-            // A certified island's view is materialised to its bucket: no lag.
+            // A certified island's view is previewed at its bucket (it materialises nothing): no lag.
             helper.assertTrue(resting.get().viewCommittedTick()==resting.get().tick(),"The resting view lags: "+resting.get());
             close(restPlayer,rest);close(steadyPlayer,steady);level.removeBlock(tank,false);for(var p:line)level.removeBlock(p,false);removed[0]=true;
             helper.assertTrue(false,"Waiting for topology cleanup");

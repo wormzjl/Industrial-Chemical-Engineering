@@ -2419,7 +2419,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         };
     }
     /** A device's view, as a presentation read: queued events are not applied (they apply on the engine's tick), and a
-     * certified island is materialised to now but never woken by it. */
+     * certified island is previewed at now, never materialised, booked or woken by it (code base review R5). */
     /** A device in no island: the column that holds it and runs it (C7, plan section 13), or why it has none. */
     /** The held registrations beside the network ({@link PhysicalRegistry#heldBeside}), derived again when the registry's facts change. */
     private PhysicalRegistry.HeldBeside heldBeside=PhysicalRegistry.HeldBeside.NONE;
@@ -2449,11 +2449,23 @@ public final class FluidWorldAuthority implements AutoCloseable {
         return !topology.active().containsKey(id)?"WAITING: topology event":Objects.requireNonNullElse(registry.diagnostic(id),"NO FLOW: no hydraulic boundary");
     }
     public FluidView view(long id){owned();return view(id,new HashMap<>());}
-    /** Whether {@link #stored} is reading: the islands' stored snapshots stand in for the presentation's. */
-    private boolean storedOnly;
-    /** {@code read} of views and instruments from the islands as they are stored, advancing none: a column's Operation tab, which a menu open reads (a replay runs no engine work). */
-    public <T> T stored(java.util.function.Supplier<T> read){owned();storedOnly=true;try{return read.get();}finally{storedOnly=false;}}
-    private IslandCoordinator.Snapshot presented(long island){return storedOnly?onWorldList(island,runtime.coordinator().observe(island)):presentation(island);}
+    /**
+     * Mover {@code mover}'s status line {@code status} with its health word {@code word} ({@link PumpHealth#status}), for every
+     * mover that wears ({@link PumpHealth#worn}: a liquid mover, and a dry screw, owner V6 B; code base review M-02): FAILED
+     * first while it stands failed, else LIQUID, CAVITATION or GAS last (W10b, W10d, owner decision D37); its health and
+     * suction have their meters (the view's Pump). A mover that does not wear keeps its line.
+     */
+    static String withHealth(String status,FlowControl.Mover mover,String word) {
+        if(!PumpHealth.worn(mover)||word.isEmpty())return status;
+        return word.equals("FAILED")?"FAILED: use a repair kit / "+status:status+" / "+word;
+    }
+    /**
+     * {@code read} of views and instruments: since every presentation read is a preview that advances and books nothing
+     * (code base review R5), this is a plain read. Kept only for its callers in {@code FluidNetwork} (the column's Operation
+     * tab and the still's stop step), which can call the read directly.
+     */
+    public <T> T stored(java.util.function.Supplier<T> read){owned();return read.get();}
+    private IslandCoordinator.Snapshot presented(long island){return presentation(island);}
     /** Island {@code island} as it is stored, materialising nothing: what a watch's replay reads (batch 2026-11-10-custom-shader-system). */
     private IslandCoordinator.Snapshot storedIsland(long island){return onWorldList(island,runtime.coordinator().observe(island));}
     /** Island {@code island} as a presentation reads it, on the world list (V2 stage 5): every view, display and wire vector
@@ -2488,10 +2500,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
                     double delivered=mover instanceof FlowControl.Machine||drawn.empty()||!(mover.targetVolumeFlow()>0)?Double.NaN
                             :q[i]/(drawn.state().mass()/drawn.state().volume())/mover.targetVolumeFlow();
                     if(mover.liquid())status=PipePresentation.pumpStatus(status,mover,mode,inlet,delivered);
-                    // A pump's health (W10b) and suction (W10d, owner decision D37): FAILED first while it stands failed, else
-                    // CAVITATION or GAS last; its health and suction have their meters (the view's Pump).
-                    if(mover.liquid()){var word=health.status(id);if(word.equals("FAILED"))status="FAILED: use a repair kit / "+status;else if(!word.isEmpty())status+=" / "+word;}
-                    else {status+=" / "+mode;if(!inlet.isEmpty())status+=" / "+inlet;var shortfall=PipePresentation.shortfall(mover,mode,delivered);if(!shortfall.isEmpty())status+=" / "+shortfall;}
+                    if(!mover.liquid()){status+=" / "+mode;if(!inlet.isEmpty())status+=" / "+inlet;var shortfall=PipePresentation.shortfall(mover,mode,delivered);if(!shortfall.isEmpty())status+=" / "+shortfall;}
+                    status=withHealth(status,mover,health.status(id));
                     // The limit the mover's law holds: a set-flow pump's setting is the rise for water and scales with its
                     // supply's density, the stream its supply walk ends at (owner decision D11, A2); a compressor's is the ratio over
                     // the suction pressure; a machine's reads the suction stream it draws (decision D4).
