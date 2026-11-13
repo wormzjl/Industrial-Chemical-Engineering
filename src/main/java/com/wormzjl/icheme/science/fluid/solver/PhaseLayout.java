@@ -54,6 +54,15 @@ public final class PhaseLayout {
     private final int solidIndex;
     private final SolidInventory solidBasis;
     private final double[] solidScale,solidReference;
+    /** Row scratch (finding P-07, batch 2026-11-13-codebase-review): the slot sums, fugacity views, slot logarithms and
+     * reference marks of {@link #equilibriumResidual}, a junction's totals and solid target in {@link #junctionRows}. Each
+     * call fills every element it reads before reading it (cleared to the zeros and nulls a new array held) and nothing
+     * keeps one past the call, so they are filled again rather than allocated again. A layout belongs to one pass or one
+     * closure, evaluated by one thread at a time. */
+    private final double[] slotTotals=new double[3],slotLogs=new double[3],junctionSolidTarget=new double[3];
+    private final double[][] slotFugacities=new double[3][];
+    private final int[] slotSeen=new int[3];
+    private double[] junctionTotals;
 
     public PhaseLayout(FluidThermodynamics model,FluidThermodynamics.State seed) {
         this(model,seed,null);
@@ -468,7 +477,7 @@ public final class PhaseLayout {
      */
     public int junctionRows(FluidThermodynamics.State state,double[] incomingMassFractions,double incomingSpecificEnthalpy,
                             double netMassFlow,double retainedPressure,double[] result,int offset,double[] variables,double weight) {
-        var n=state.totals();
+        var n=totals(state);
         int row=offset;
         for(int index=0;index<junctionBasis.length-1;index++) {
             int i=junctionBasis[index];
@@ -479,8 +488,16 @@ public final class PhaseLayout {
         result[row++]=retainedPressure>0?variables[offset+pressureIndex]-DeterministicMath.log(retainedPressure/1e5):netMassFlow;
         result[row++]=weight*(state.enthalpy()/state.mass()-incomingSpecificEnthalpy)/Math.max(1,energyScale/state.mass());
         result[row++]=sum(n)/amountScale-1;
-        if(solidIndex>=0){var target=solidReference.clone();for(int i=0;i<3;i++)target[i]/=state.mass();solidRows(state,variables,offset,target,true,result);row+=3;}
+        if(solidIndex>=0){var target=junctionSolidTarget;System.arraycopy(solidReference,0,target,0,3);for(int i=0;i<3;i++)target[i]/=state.mass();solidRows(state,variables,offset,target,true,result);row+=3;}
         return row;
+    }
+    /** {@link FluidThermodynamics.State#totals} written into this layout's scratch (P-07): the same sums in the same order,
+     * every element written; read by {@link #junctionRows} within the call. */
+    private double[] totals(FluidThermodynamics.State state) {
+        double[] v=state.vaporAmountsView(),l=state.liquidAmountsView(),a=state.aqueousAmountsView();
+        if(junctionTotals==null||junctionTotals.length!=v.length)junctionTotals=new double[v.length];
+        for(int i=0;i<v.length;i++)junctionTotals[i]=v[i]+l[i]+a[i];
+        return junctionTotals;
     }
     /**
      * Three aggregate balances; population identities are reconstructed outside Newton. The moments are read from the
@@ -504,7 +521,7 @@ public final class PhaseLayout {
      */
     private void equilibriumResidual(FluidThermodynamics.State state,double[] result,int row,int offset,double[] variables) {
         if(Integer.bitCount(active)>=2&&components.length>0) {
-            double[] slotTotal=new double[3];double[][] f=new double[3][];
+            double[] slotTotal=slotTotals;Arrays.fill(slotTotal,0);double[][] f=slotFugacities;Arrays.fill(f,null);
             for(int slot=0;slot<3;slot++) {
                 if((active&bit(slot))==0)continue;
                 var phase=state.phase(slot);
@@ -512,7 +529,7 @@ public final class PhaseLayout {
                 slotTotal[slot]=sum(state.amountsView(slot));f[slot]=phase.logFugacityView();
             }
             // Hoisted, not changed: the slot logarithm is the same double for every component.
-            double[] amountLog=new double[3];int[] seen=new int[3];Arrays.fill(seen,-1);
+            double[] amountLog=slotLogs;Arrays.fill(amountLog,0);int[] seen=slotSeen;Arrays.fill(seen,-1);
             for(int i:components) {
                 int ref=referenceSlot[i];
                 for(int slot=0;slot<3;slot++) {
