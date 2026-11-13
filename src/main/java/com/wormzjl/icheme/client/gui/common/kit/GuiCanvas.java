@@ -182,6 +182,17 @@ public final class GuiCanvas implements Canvas {
     }
 
     /**
+     * Sends out what an open batch holds and draws what the buffer holds, before a draw that goes out at once past the canvas
+     * (another mod's blit in a screen event inside a frame batch, finding C4): it then lies over everything drawn before it,
+     * as without a batch. Nothing outside a batch.
+     */
+    public static void drawOut(GuiGraphics g) {
+        if (!HELD.open()) return;
+        HELD.clip();
+        g.flush();
+    }
+
+    /**
      * One linear page, no mip levels: at scale 2 and zoom 1 a texture pixel lies near a screen pixel, and vanilla has no
      * chain for a plain texture. The blit draws at once, so the fills a batch holds go out first.
      */

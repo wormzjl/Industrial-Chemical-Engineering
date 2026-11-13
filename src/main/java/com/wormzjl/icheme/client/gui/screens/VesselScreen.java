@@ -283,6 +283,15 @@ public final class VesselScreen extends Screen {
         int pointerX = mouseX, pointerY = mouseY;
         mouseX = tour.pointer(mouseX);
         mouseY = tour.pointer(mouseY);
+        int mx = mouseX, my = mouseY;
+        // The whole frame, widgets too, in one batch, as the simulator draws its own (finding C4): its fills go out in runs.
+        GuiCanvas.of(g, font).batch(() -> frame(g, mx, my, partialTick));
+        if (tour.isOpen()) tour.render(g, font, width, height, pointerX, pointerY);
+        else KitDoor.hint(g, font, hovered, mouseX, mouseY);
+    }
+
+    /** The screen under the widgets and its door, title and glass over them: one frame batch's body. */
+    private void frame(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         super.render(g, mouseX, mouseY, partialTick);
         var skin = skin();
         var canvas = new GuiCanvas(g, font, left, top);
@@ -311,8 +320,6 @@ public final class VesselScreen extends Screen {
             glassView.drawBar(canvas, skin);
         }
         g.pose().popPose();
-        if (tour.isOpen()) tour.render(g, font, width, height, pointerX, pointerY);
-        else KitDoor.hint(g, font, hovered, mouseX, mouseY);
     }
 
     @Override

@@ -559,7 +559,8 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
         // An open tour takes the pointer: the page under it shows no hover (P5 stage B).
         boolean touring = tour.isOpen();
         int mx = touring ? -1 : mouseX, my = touring ? -1 : mouseY;
-        super.render(g, mx, my, partialTick);
+        // The whole frame, widgets too, in one batch, as the simulator draws its own (finding C4): its fills go out in runs.
+        GuiCanvas.of(g, font).batch(() -> super.render(g, mx, my, partialTick));
         if (touring) {
             tour.render(g, font, width, height, mouseX, mouseY);
             return;

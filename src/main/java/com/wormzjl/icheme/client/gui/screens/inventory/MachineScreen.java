@@ -276,7 +276,9 @@ public final class MachineScreen extends AbstractContainerScreen<MachineMenu> {
         door.place(leftPos, topPos);
         hovered = null;
         // An open tour takes the pointer: the page under it shows no hover.
-        super.render(g, tour.pointer(mouseX), tour.pointer(mouseY), partialTick);
+        int px = tour.pointer(mouseX), py = tour.pointer(mouseY);
+        // The whole frame, widgets too, in one batch, as the simulator draws its own (finding C4): its fills go out in runs.
+        GuiCanvas.of(g, font).batch(() -> super.render(g, px, py, partialTick));
         if (tour.isOpen()) tour.render(g, font, width, height, mouseX, mouseY);
         else KitDoor.hint(g, font, hovered, mouseX, mouseY);
     }

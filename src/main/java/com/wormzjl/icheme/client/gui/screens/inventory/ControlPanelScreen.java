@@ -775,7 +775,9 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
     public void render(GuiGraphics g, int x, int y, float partial) {
         door.place(leftPos, topPos);
         // An open tour takes the pointer: the page under it shows no hover.
-        super.render(g, tour.pointer(x), tour.pointer(y), partial);
+        int px = tour.pointer(x), py = tour.pointer(y);
+        // The whole frame, widgets too, in one batch, as the simulator draws its own (finding C4): its fills go out in runs.
+        GuiCanvas.of(g, font).batch(() -> super.render(g, px, py, partial));
         if (tour.isOpen()) tour.render(g, font, width, height, x, y);
         else KitDoor.hint(g, font, hovered, x, y);
     }
