@@ -1,6 +1,6 @@
 # B-S2 The sparse LU (P-17): report
 
-Branch `claude/review-wave-a6-fluid-18ecaf`, merged from the review branch at 7f4b13fed. Status: code written, tests pending the lane. Meant to be bitwise identical: the LU is EJML's, expression for expression. No facts, state, protocol or shape change.
+Branch `claude/review-wave-a6-fluid-18ecaf`, merged from the review branch at 7f4b13fed. Status: the gate and the named tests pass (2026-11-13); the `build.gradle` move waits for the main thread's reading of the gate. Bitwise identical: the LU is EJML's, expression for expression, and the gate found no differing bit. No facts, state, protocol or shape change.
 
 ## Steps
 1. **EJML 0.44's sources read** (`tmp/ejml-sources/`, from the Gradle cache): `LuUpLooking_DSCC`, `TriangularSolver_DSCC` (`solveColB`, `searchNzRowsInX` and its DFS, `solveL`, `solveU`), `LinearSolverLu_DSCC`, `ApplyFillReductionPermutation_DSCC`, `CommonOps_DSCC.permuteInv`, `DMatrixSparseCSC.sortIndices`.
@@ -21,23 +21,19 @@ Branch `claude/review-wave-a6-fluid-18ecaf`, merged from the review branch at 7f
    - Proof, in the comment: by induction, the reach depends only on A(:,k)'s pattern, L's first k column patterns and the earlier pivots.
    - The gate asserts no search on a repeat, and n - k - 1 searches after a first changed pivot at column k.
 5. **`Storage` on `UpLookingLu`** (f173f6986), behind the present API. `factor0` keeps its arrays and allocates nothing once it has the island's size. The row sort is an insertion sort (rows are unique, so this is EJML's order). Scaling, zero drop, permutation, refinement and its `Math.fma` are unchanged.
-   - **Pending:** `build.gradle` (226 to 231). EJML moves to `testImplementation` only after the gate and the lane pass.
+   - **Pending, on the main thread's word:** `build.gradle` (226 to 231). EJML moves to `testImplementation`.
    - **What the jar then loses:** the three jarJar'd EJML jars (`ejml-core` 269 kB, `ejml-ddense` 411 kB, `ejml-dsparse` 96 kB, 776 kB together) and the runtime classpath entry. Nothing else in `src/main` uses EJML.
 
-## Tests (pending "lane free")
-`compileJava compileTestJava`, then each once with `--max-workers 4`:
-- `UpLookingLuParityTest` (new)
-- `science.fluid.SparseLuSolverTest`
-- `PassiveStepSolverTest`
-- `runtime.fluid.RetainedSolverTest`
-- `BlockJacobianEquivalenceTest`
+## Tests
+`compileJava compileTestJava` once, then one run with `--max-workers 4`, each class once:
+- `UpLookingLuParityTest` 4/4: 13 step matrices (heat side, boiling junction, tower, each matrix run twice and once with a changed pivot), more than 100 random patterns and the three singular ones. Every L, U, pivot and solution bit is EJML's, and the singular ones are rejected at the same column.
+- `science.fluid.SparseLuSolverTest` 6/6, `PassiveStepSolverTest` 10/10, `runtime.fluid.RetainedSolverTest` 2/2, `BlockJacobianEquivalenceTest` 7/7. 0 failed, 0 skipped.
+- After the `build.gradle` move: `compileJava compileTestJava` (no main class needs EJML) and the parity test once more.
 
-Then the `build.gradle` commit, then `compileJava compileTestJava` again (to prove no main class needs EJML) and the parity test once more on the test classpath.
-
-## Counters to read after the tests (`printsTheLuCounters`)
-- Reach searches against columns factored, over five retained solves of a heat side's island. Before: one search per column. After: none while the pivots repeat.
-- Bytes one `Storage.factor` allocates on a step matrix after warm-up. Before (B1): `factor0` at 1.8 GB a minute on mixed100.
-- `luFactorizations` over the same solves. Expected unchanged, because the parity holds the Newton's path.
+## Counters (`printsTheLuCounters`)
+- Five retained solves of a heat side's island (5 unknowns): 1 `luFactorizations` (the Newton keeps its Jacobian), 10 columns factored (the Newton's and the reconstruction's LU), **0 reach searches**. Before: one search per column factored, so 10.
+- `Storage.factor` on that island's step matrix after warm-up: **25 bytes a factorization**, the `Factorization` handle. Before (B1): `factor0` at 1.8 GB a minute on mixed100, through EJML's per-factorization arrays. The bench's mixed100 re-run gives the step-level figure.
+- `luFactorizations` unchanged in kind: the parity holds the Newton's path.
 
 ## For the main thread's lane
 - I expect no value to move in chain-100, the junction lines or the campaign: same L, U, pivots and solutions, so the same iterates.
