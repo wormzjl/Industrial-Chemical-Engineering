@@ -32,6 +32,27 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
     private boolean pending;
     private long ack;
     private String reply = "";
+    /** The page's help tour (batch 2026-11-12-tutorial-system, P6), opened by the ? key at the title row's right; none before the first view. */
+    private final com.wormzjl.icheme.client.gui.tutorial.TourHost tour = new com.wormzjl.icheme.client.gui.tutorial.TourHost(
+            () -> tourReady() ? ScreenTours.control(page) : null, this::anchor);
+
+    /** Whether the page shows what its tour points at: a loop's pages a selected controller, a column's its view, a converter's its tag. */
+    private boolean tourReady() {
+        return switch (page) {
+            case "controllers" -> true;
+            case "column" -> operation != null;
+            case "converter" -> converterTag() != null;
+            default -> draft() != null;
+        };
+    }
+
+    /** A tour's anchor on the screen: the title, the list key, Close or Apply, else a door row's widget or group (ScreenTours.controlFrame). */
+    private com.wormzjl.icheme.client.gui.common.kit.Rect anchor(String key, boolean reveal) {
+        var frame = ScreenTours.controlFrame(layout, title.getString(), GuiCanvas.measure(font));
+        if (key.equals("page") && !door.columns().isEmpty())
+            return com.wormzjl.icheme.client.gui.common.TourAnchors.reveal(door.view(), ScreenTours.page(door.columns()), reveal).moved(leftPos, topPos);
+        return com.wormzjl.icheme.client.gui.tutorial.TourHost.resolve(frame.get(key), door, key, reveal, ControlPanelScreen::tr, leftPos, topPos);
+    }
 
     private static final class Draft {
         String name, target;
@@ -482,6 +503,8 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
                 ? operation != null && operation.editable() && !pending
                 : draft() != null && !pending && !page.equals("controllers");
         addRenderableWidget(apply);
+        var help = tour.key(ScreenTours.help(imageWidth).moved(leftPos, topPos), ControlPanelScreen::skin);
+        if (help != null) addRenderableWidget(help);
         door.place(leftPos, topPos);
         signature = signature();
     }
@@ -751,8 +774,10 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
     @Override
     public void render(GuiGraphics g, int x, int y, float partial) {
         door.place(leftPos, topPos);
-        super.render(g, x, y, partial);
-        KitDoor.hint(g, font, hovered, x, y);
+        // An open tour takes the pointer: the page under it shows no hover.
+        super.render(g, tour.pointer(x), tour.pointer(y), partial);
+        if (tour.isOpen()) tour.render(g, font, width, height, x, y);
+        else KitDoor.hint(g, font, hovered, x, y);
     }
 
     @Override
@@ -768,13 +793,14 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
     @Override
     protected void renderLabels(GuiGraphics g, int x, int y) {
         var canvas = new GuiCanvas(g, font, leftPos, topPos);
-        skin().title(canvas, 10, 10, title.getString());
+        skin().title(canvas, 10, 10, font.plainSubstrByWidth(title.getString(), ScreenTours.titleRoom(imageWidth)));
         door.placeAll(rows(), GuiCanvas.measure(font));
         hovered = door.draw(canvas, skin(), x - leftPos, y - topPos);
     }
 
     @Override
     public boolean mouseClicked(double x, double y, int button) {
+        if (tour.mouseClicked(font, width, height, x, y)) return true;
         SkinField.clickOutside(this, x, y);
         double rx = x - leftPos, ry = y - topPos;
         if (button == 0 && door.view().inside(rx, ry))
@@ -801,11 +827,17 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
 
     @Override
     public boolean mouseScrolled(double x, double y, double h, double v) {
+        if (tour.isOpen()) return true;
         return door.wheel(x - leftPos, y - topPos, v) || super.mouseScrolled(x, y, h, v);
     }
 
     @Override
+    public boolean charTyped(char c, int modifiers) {
+        return tour.isOpen() || super.charTyped(c, modifiers);
+    }
+
+    @Override
     public boolean keyPressed(int key, int scan, int mods) {
-        return ProcessUi.textKeyPressed(this, key, scan, mods) || super.keyPressed(key, scan, mods);
+        return tour.keyPressed(key) || ProcessUi.textKeyPressed(this, key, scan, mods) || super.keyPressed(key, scan, mods);
     }
 }

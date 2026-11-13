@@ -104,8 +104,9 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
     private final SheetGestures gestures;
     private final StreamProps.Fluids fluids;
     private final KitDoor kit = new KitDoor();
-    /** The page's help tour (batch 2026-11-12-tutorial-system, P4b), opened by the ? key left of the theme key. */
-    private final com.wormzjl.icheme.client.gui.tutorial.HelpTour tour = new com.wormzjl.icheme.client.gui.tutorial.HelpTour();
+    /** The page's help tour (batch 2026-11-12-tutorial-system, P4b), opened by the ? key left of the theme key; finishing the sheet tab's completes the guide's reading step of what a flowsheet is. */
+    private final com.wormzjl.icheme.client.gui.tutorial.TourHost tour = new com.wormzjl.icheme.client.gui.tutorial.TourHost(() -> com.wormzjl.icheme.client.gui.flowsheet.SimulatorTour.page(this.tab), this::tourAnchor,
+            () -> this.tab == SimulatorFrame.Tab.FLOWSHEET ? () -> com.wormzjl.icheme.client.gui.tutorial.GuideClient.report(com.wormzjl.icheme.client.gui.flowsheet.SimulatorTour.SHEET_STEP) : null);
     private final ResultsPage.State resultsState = new ResultsPage.State();
     private final SizingPage.State sizingState = new SizingPage.State();
     /** The sheet Size all started from: its edit lands only on that sheet. */
@@ -400,19 +401,8 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
 
     /** The help sign (P4b): the tab's tour, where it has one. A tour sends nothing to the server. */
     private void helpKey(Rect at) {
-        if (com.wormzjl.icheme.client.gui.tutorial.HelpTour.of(com.wormzjl.icheme.client.gui.flowsheet.SimulatorTour.page(tab)) == null) return;
-        String hint = Component.translatable("tutorial.icheme.guide.help").getString();
-        var key = new SkinButton(at.x(), at.y(), at.w(), at.h(), Component.literal(hint), b -> openTour(), ProcessSimulatorScreen::skin).icon(Skin.Icon.HELP);
-        key.setTooltip(Tooltip.create(Component.literal(hint)));
-        addRenderableWidget(key);
-    }
-
-    /** Opens the tab's tour; finishing the sheet tab's completes the guide's reading step of what a flowsheet is. */
-    private void openTour() {
-        var t = com.wormzjl.icheme.client.gui.tutorial.HelpTour.of(com.wormzjl.icheme.client.gui.flowsheet.SimulatorTour.page(tab));
-        if (t == null) return;
-        Runnable done = tab == SimulatorFrame.Tab.FLOWSHEET ? () -> com.wormzjl.icheme.client.gui.tutorial.GuideClient.report(com.wormzjl.icheme.client.gui.flowsheet.SimulatorTour.SHEET_STEP) : null;
-        tour.open(t, this::tourAnchor, done);
+        var key = tour.key(at, ProcessSimulatorScreen::skin);
+        if (key != null) addRenderableWidget(key);
     }
 
     /**
@@ -431,15 +421,7 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
         } catch (IllegalStateException none) {
             return null;
         }
-        if (r == null) return null;
-        var v = kit.view();
-        for (int i = 0; reveal && i < 64 && !v.visible(r); i++) {
-            var port = v.viewport();
-            int before = v.offset();
-            v.wheel(port.x() + 2, port.y() + 2, v.onScreen(r).y() < port.y() ? 1 : -1);
-            if (v.offset() == before) break;
-        }
-        return v.onScreen(r);
+        return r == null ? null : com.wormzjl.icheme.client.gui.common.TourAnchors.reveal(kit.view(), r, reveal);
     }
 
     /** The contrast sign; its hover names the panel shown. */
@@ -974,7 +956,7 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
     // ---- Events ----
 
     @Override public boolean mouseClicked(double x, double y, int button) {
-        if (tour.isOpen() && tour.mouseClicked(font, width, height, x, y)) return true;
+        if (tour.mouseClicked(font, width, height, x, y)) return true;
         SkinField.clickOutside(this, x, y);
         if (dialog != Dialog.NONE) {
             var list = dialog.lists() ? listing(context()) : null;
@@ -1051,8 +1033,13 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
         return true;
     }
 
+    /** An open tour takes the typed characters too: none reaches an entry under it. */
+    @Override public boolean charTyped(char c, int modifiers) {
+        return tour.isOpen() || super.charTyped(c, modifiers);
+    }
+
     @Override public boolean keyPressed(int key, int scan, int modifiers) {
-        if (tour.isOpen()) return tour.keyPressed(key);
+        if (tour.keyPressed(key)) return true;
         if (key == GLFW.GLFW_KEY_ESCAPE) {
             if (dialog != Dialog.NONE) {
                 dialog = Dialog.NONE;

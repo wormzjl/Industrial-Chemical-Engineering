@@ -10,6 +10,7 @@ import com.wormzjl.icheme.client.gui.common.ConstructorColumn.Equipment;
 import com.wormzjl.icheme.client.gui.common.DialogColumns;
 import com.wormzjl.icheme.client.gui.common.PaintSwatch;
 import com.wormzjl.icheme.client.gui.common.ProcessUi;
+import com.wormzjl.icheme.client.gui.common.ScreenTours;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
 import com.wormzjl.icheme.client.gui.common.kit.GuiCanvas;
 import com.wormzjl.icheme.client.gui.common.kit.KitDoor;
@@ -138,6 +139,34 @@ public final class EquipmentConstructorScreen extends Screen {
     private List<String> built = List.of();
     /** The hint under the pointer this frame, drawn after the widgets. */
     private @Nullable String hovered;
+    /** The page's help tour (batch 2026-11-12-tutorial-system, P6), opened by the ? key left of Change or Back. */
+    private final com.wormzjl.icheme.client.gui.tutorial.TourHost tour = new com.wormzjl.icheme.client.gui.tutorial.TourHost(() -> tourPage().page(), this::anchor);
+
+    /** The page as its tour names it: a column's design page has its own (ScreenTours.Constructor). */
+    private ScreenTours.Constructor tourPage() {
+        return switch (page) {
+            case CHOOSE -> ScreenTours.Constructor.CHOOSE;
+            case DESIGN -> form.column() ? ScreenTours.Constructor.DESIGN_COLUMN : ScreenTours.Constructor.DESIGN;
+            case PAINT -> ScreenTours.Constructor.PAINT;
+            case TEMPLATES -> ScreenTours.Constructor.TEMPLATES;
+            case IMPORTS -> ScreenTours.Constructor.IMPORTS;
+        };
+    }
+
+    /** A tour's anchor on the screen: the title, Change or Back, the message display, the footer's keys, a column's schematic (ScreenTours.constructor), else a door row's widget or group. */
+    private @Nullable Rect anchor(String key, boolean reveal) {
+        var m = GuiCanvas.measure(font);
+        var frame = ScreenTours.constructor(width, height, tourPage(), shownTitle(m), m, panel());
+        return com.wormzjl.icheme.client.gui.tutorial.TourHost.resolve(frame.get(key), door, key, reveal, EquipmentConstructorScreen::tr, 0, 0);
+    }
+
+    /** The title the plate shows: the constructor's on the choice page (its short form where the ? key leaves no room), else the design's kind with its name. */
+    private String shownTitle(com.wormzjl.icheme.client.gui.common.kit.Measure m) {
+        var equipment = Equipment.of(form);
+        return page == Page.CHOOSE ? ConstructorColumn.title(this.title.getString(), tr(ConstructorColumn.KEY + "title_short"), m)
+                : ConstructorColumn.title(name, tr(ConstructorColumn.KEY + "equipment." + equipment.key()), tr(ConstructorColumn.KEY + "equipment." + equipment.key() + ".short"), m,
+                (n, kind) -> Component.translatable("gui.icheme.device.named", n, kind).getString());
+    }
     private ShapeRasterizer.Layout layout;
     /** Set by Import until the server answers ({@link #answered}). */
     private boolean importing;
@@ -381,6 +410,8 @@ public final class EquipmentConstructorScreen extends Screen {
             addRenderableWidget(SkinButton.of(spec, ConstructorColumn.TITLE_KEY, this::act, EquipmentConstructorScreen::skin));
         }
         if (build != null) build.active = buildable();
+        var help = tour.key(ScreenTours.CONSTRUCTOR_HELP, EquipmentConstructorScreen::skin);
+        if (help != null) addRenderableWidget(help);
         built = signature(shown);
         door.place(0, 0);
     }
@@ -995,9 +1026,7 @@ public final class EquipmentConstructorScreen extends Screen {
         var m = GuiCanvas.measure(font);
         skin.page(canvas, new Rect(0, 0, ConstructorColumn.PANEL, height));
         var equipment = Equipment.of(form);
-        String title = page == Page.CHOOSE ? this.title.getString()
-                : ConstructorColumn.title(name, tr(ConstructorColumn.KEY + "equipment." + equipment.key()), tr(ConstructorColumn.KEY + "equipment." + equipment.key() + ".short"), m,
-                (n, kind) -> Component.translatable("gui.icheme.device.named", n, kind).getString());
+        String title = shownTitle(m);
         skin.title(canvas, 10, 10, title);
         // Placed again for this frame's texts and values; the widgets keep their slots.
         var shown = panel();
@@ -1023,14 +1052,27 @@ public final class EquipmentConstructorScreen extends Screen {
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         door.place(0, 0);
         hovered = null;
-        super.render(g, mouseX, mouseY, partialTick);
-        KitDoor.hint(g, font, hovered, mouseX, mouseY);
+        // An open tour takes the pointer: the page under it shows no hover.
+        super.render(g, tour.pointer(mouseX), tour.pointer(mouseY), partialTick);
+        if (tour.isOpen()) tour.render(g, font, width, height, mouseX, mouseY);
+        else KitDoor.hint(g, font, hovered, mouseX, mouseY);
     }
 
     @Override
     public boolean mouseClicked(double x, double y, int button) {
+        if (tour.mouseClicked(font, width, height, x, y)) return true;
         SkinField.clickOutside(this, x, y);
         return door.press(x, y, button) || super.mouseClicked(x, y, button);
+    }
+
+    @Override
+    public boolean charTyped(char c, int modifiers) {
+        return tour.isOpen() || super.charTyped(c, modifiers);
+    }
+
+    @Override
+    public boolean keyPressed(int key, int scan, int modifiers) {
+        return tour.keyPressed(key) || super.keyPressed(key, scan, modifiers);
     }
 
     @Override
@@ -1046,6 +1088,7 @@ public final class EquipmentConstructorScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double x, double y, double horizontal, double vertical) {
+        if (tour.isOpen()) return true;
         return door.wheel(x, y, vertical) || super.mouseScrolled(x, y, horizontal, vertical);
     }
 

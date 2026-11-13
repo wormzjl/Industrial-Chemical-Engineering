@@ -186,25 +186,12 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
         return TitleStrip.placeKeys(imageWidth, 2, title.getString(), GuiCanvas.measure(font));
     }
 
-    /** The tab's help tour (batch 2026-11-12-tutorial-system, P5 stage B), opened by the ? key left of the theme key. */
-    private final com.wormzjl.icheme.client.gui.tutorial.HelpTour tour = new com.wormzjl.icheme.client.gui.tutorial.HelpTour();
-
-    /** The help sign: the tab's tour. A tour sends nothing to the server. */
-    private void helpKey(Rect at) {
-        if (com.wormzjl.icheme.client.gui.tutorial.HelpTour.of(AssemblyTour.page(operation())) == null) return;
-        String hint = Component.translatable("tutorial.icheme.guide.help").getString();
-        var key = new SkinButton(leftPos + at.x(), topPos + at.y(), at.w(), at.h(), Component.literal(hint), b -> openTour(), AssemblyScreen::skin).icon(Skin.Icon.HELP);
-        key.setTooltip(Tooltip.create(Component.literal(hint)));
-        addRenderableWidget(key);
-    }
-
-    /** Opens the tab's tour; finishing the Structure tab's completes the guide's reading step of the column's lines. */
-    private void openTour() {
-        var t = com.wormzjl.icheme.client.gui.tutorial.HelpTour.of(AssemblyTour.page(operation()));
-        if (t == null) return;
-        Runnable done = operation() ? null : () -> com.wormzjl.icheme.client.gui.tutorial.GuideClient.report(LINES_STEP);
-        tour.open(t, this::tourAnchor, done);
-    }
+    /**
+     * The tab's help tour (batch 2026-11-12-tutorial-system, P5 stage B), opened by the ? key left of the theme key; finishing
+     * the Structure tab's completes the guide's reading step of the column's lines.
+     */
+    private final com.wormzjl.icheme.client.gui.tutorial.TourHost tour = new com.wormzjl.icheme.client.gui.tutorial.TourHost(() -> AssemblyTour.page(operation()),
+            this::tourAnchor, () -> operation() ? null : () -> com.wormzjl.icheme.client.gui.tutorial.GuideClient.report(LINES_STEP));
 
     /** The guide's reading step the Structure tab's tour completes. */
     public static final String LINES_STEP = "building/lines";
@@ -220,15 +207,7 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
         } catch (IllegalStateException none) {
             return null;
         }
-        if (r == null) return null;
-        var v = door.view();
-        for (int i = 0; reveal && i < 64 && !v.visible(r); i++) {
-            var port = v.viewport();
-            int before = v.offset();
-            v.wheel(port.x() + 2, port.y() + 2, v.onScreen(r).y() < port.y() ? 1 : -1);
-            if (v.offset() == before) break;
-        }
-        return v.onScreen(r).moved(leftPos, topPos);
+        return r == null ? null : com.wormzjl.icheme.client.gui.common.TourAnchors.reveal(door.view(), r, reveal).moved(leftPos, topPos);
     }
 
     /** Saves the typed name by the rename path (N1): Enter in the entry, and Apply. */
@@ -264,10 +243,16 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
         return new OperationColumn.Input(view, commanded, units());
     }
 
+    /** An open tour takes the typed characters too: none reaches an entry under it. */
+    @Override
+    public boolean charTyped(char c, int modifiers) {
+        return tour.isOpen() || super.charTyped(c, modifiers);
+    }
+
     /** A focused entry keeps its keys: the name's letters (the inventory key among them) do not close the screen; Enter saves the name. */
     @Override
     public boolean keyPressed(int key, int scan, int modifiers) {
-        if (tour.isOpen()) return tour.keyPressed(key);
+        if (tour.keyPressed(key)) return true;
         if (ProcessUi.textKeyPressed(this, key, scan, modifiers)) return true;
         return super.keyPressed(key, scan, modifiers);
     }
@@ -297,7 +282,8 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
         }
         // The theme key shows the contrast sign; its hover names the panel shown.
         String theme = lang(ClientConfig.theme() == ClientConfig.Theme.DARK ? "fluid.theme.dark" : "fluid.theme.light");
-        helpKey(TitleStrip.keys(imageWidth, 2).get(1));
+        var help = tour.key(TitleStrip.keys(imageWidth, 2).get(1).moved(leftPos, topPos), AssemblyScreen::skin);
+        if (help != null) addRenderableWidget(help);
         var at = AssemblyColumn.theme(imageWidth);
         var themeKey = new SkinButton(leftPos + at.x(), topPos + at.y(), at.w(), at.h(), Component.literal(theme), b -> {
             ClientConfig.toggleTheme();
@@ -598,7 +584,7 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
 
     @Override
     public boolean mouseClicked(double mx, double my, int button) {
-        if (tour.isOpen() && tour.mouseClicked(font, width, height, mx, my)) return true;
+        if (tour.mouseClicked(font, width, height, mx, my)) return true;
         SkinField.clickOutside(this, mx, my);
         double x = mx - leftPos, y = my - topPos;
         if (door() && door.press(x, y, button) || drawing() && listView.press(x, y, button) || operationView() != null && glassView.press(x, y, button)) return true;

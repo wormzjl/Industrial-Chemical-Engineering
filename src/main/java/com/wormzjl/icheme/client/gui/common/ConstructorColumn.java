@@ -35,8 +35,11 @@ public final class ConstructorColumn {
 
     /** The constructor's keys under {@code gui.icheme.}. */
     public static final String KEY = "equipment_constructor.";
-    /** The door's width; its column's left edge and width; the room the kind's name takes on the title plate before Change. */
-    public static final int PANEL = 200, LEFT = 8, WIDTH = PANEL - 2 * LEFT, TITLE = 122;
+    /**
+     * The door's width; its column's left edge and width; the room the kind's name takes on the title plate before the
+     * {@code ?} key and Change (batch 2026-11-12-tutorial-system, P6: 100 px, was 122 before the key).
+     */
+    public static final int PANEL = 200, LEFT = 8, WIDTH = PANEL - 2 * LEFT, TITLE = 100;
     /** The key right of the title: Change on the design page, Back on the choice page. */
     public static final Rect TITLE_KEY = new Rect(PANEL - 60, 5, 50, 18);
     /** The order a side selector shows its sides in, by word: opposite sides side by side. */

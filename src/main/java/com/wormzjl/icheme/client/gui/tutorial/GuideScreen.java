@@ -36,7 +36,7 @@ public class GuideScreen extends Screen {
     protected int left, top;
     protected GuidePage.Page page;
     /** The page's tour, opened by the {@code ?} key. */
-    private final HelpTour tour = new HelpTour();
+    private final TourHost tour = new TourHost(() -> "guide", this::anchor, () -> () -> GuideClient.report(TOURED));
     /** The step the guide's own tour completes. */
     public static final String TOURED = "welcome/help";
 
@@ -208,7 +208,7 @@ public class GuideScreen extends Screen {
 
     /** What a subclass draws over the page (the tour); here nothing. */
     protected void renderOver(GuiGraphics g, int mouseX, int mouseY) {
-        if (tour.isOpen()) tour.render(g, font, width, height, mouseX, mouseY);
+        tour.render(g, font, width, height, mouseX, mouseY);
     }
 
     /** The action the pointer stands on, for the keys' hover light. */
@@ -229,7 +229,7 @@ public class GuideScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (tour.isOpen() && tour.mouseClicked(font, width, height, mouseX, mouseY)) return true;
+        if (tour.mouseClicked(font, width, height, mouseX, mouseY)) return true;
         if (button != 0) return super.mouseClicked(mouseX, mouseY, button);
         double x = mouseX - left, y = mouseY - top;
         if (page.card() != null && cardView != null && cardView.press(page.card(), x, y)) {
@@ -365,12 +365,11 @@ public class GuideScreen extends Screen {
 
     /** The {@code ?} key: the page's tour, over the steps (an open card closes first); finishing it completes {@link #TOURED}. */
     protected void help() {
-        var guideTour = HelpTour.of("guide");
-        if (guideTour == null) return;
+        if (!tour.has()) return;
         card = null;
         cardView = null;
         place();
-        tour.open(guideTour, this::anchor, () -> GuideClient.report(TOURED));
+        tour.open();
     }
 
     /** An anchor of the page on the screen; a step's scrolls into view first where {@code reveal}. */
@@ -386,7 +385,7 @@ public class GuideScreen extends Screen {
 
     @Override
     public boolean keyPressed(int key, int scan, int modifiers) {
-        if (tour.isOpen()) return tour.keyPressed(key);
+        if (tour.keyPressed(key)) return true;
         // Left and Right step through the open card's places, or its slider.
         if (page.card() != null && cardView != null && (key == GLFW.GLFW_KEY_LEFT || key == GLFW.GLFW_KEY_RIGHT)) {
             cardView.step(key == GLFW.GLFW_KEY_LEFT ? -1 : 1, page.card());

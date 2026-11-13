@@ -1,6 +1,8 @@
 package com.wormzjl.icheme.client.gui.tutorial;
 
 import com.wormzjl.icheme.client.gui.common.DeviceColumn;
+import com.wormzjl.icheme.client.gui.common.DeviceTour;
+import com.wormzjl.icheme.client.gui.common.ScreenTours;
 import com.wormzjl.icheme.client.gui.common.HeatControlColumn;
 import com.wormzjl.icheme.client.gui.common.StillDoor;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
@@ -26,19 +28,33 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * The help tours' coverage (batch 2026-11-12-tutorial-system, P1): every tour has at most 7 stops; every anchor of the
  * still's tour stands in the rows StillDoor and DeviceColumn build, for at least one still, at every width the door takes;
- * every anchor of the guide's tour stands on GuidePage; each screen either has a tour or waits in {@link #LATER}. P4b: the
+ * every anchor of the guide's tour stands on GuidePage; each screen either has a tour or is {@link #EXEMPT} (P6). P4b: the
  * still with a column has its own tour (its reflux valve), whose anchors stand on such a still's page; the simulator's four
  * tabs have theirs (their anchors: SimulatorTourTest). P5 stage B: the column's assembly screen has one for each tab (their
  * anchors: AssemblyTourTest).
  */
 class HelpCoverageTest {
-    /** The screens with a tour, by class, and the tours they host. */
-    static final Map<String, Set<String>> TOURED = Map.of("GuideScreen", Set.of("guide"), "FluidDeviceScreen", Set.of("fluid_device.still", "fluid_device.still_column"),
-            "ProcessSimulatorScreen", Set.of("simulator.sheet", "simulator.results", "simulator.sizing", "simulator.basis"),
-            "AssemblyScreen", Set.of("assembly.structure", "assembly.operation"));
-    /** The screens with no tour yet; phase P6 empties this list (and FluidDeviceScreen's other pages). */
-    static final Set<String> LATER = Set.of("ControlPanelScreen", "EquipmentConstructorScreen", "FilmScreen", "GaugeScreen", "MachineScreen",
-            "PipelineToolScreen", "VesselScreen");
+    /**
+     * The screens with a tour, by class, and the tours they host (P6: every page of every screen). The fluid device screen
+     * hosts one for each tab and one for each Overview door layout (DeviceTour; their anchors: DeviceTourTest); the dialogs,
+     * the machine page, the control panel and the constructor theirs (ScreenTours; their anchors: ScreenToursTest).
+     */
+    static final Map<String, Set<String>> TOURED = Map.ofEntries(Map.entry("GuideScreen", Set.of("guide")), Map.entry("FluidDeviceScreen", devicePages()),
+            Map.entry("ProcessSimulatorScreen", Set.of("simulator.sheet", "simulator.results", "simulator.sizing", "simulator.basis")),
+            Map.entry("AssemblyScreen", Set.of("assembly.structure", "assembly.operation")), Map.entry("GaugeScreen", Set.of(ScreenTours.GAUGE)),
+            Map.entry("PipelineToolScreen", Set.of(ScreenTours.PIPELINE_TOOL)), Map.entry("VesselScreen", Set.of(ScreenTours.VESSEL)),
+            Map.entry("MachineScreen", Set.of(ScreenTours.MACHINE)),
+            Map.entry("ControlPanelScreen", ScreenTours.CONTROL_PAGES.stream().map(ScreenTours::control).collect(java.util.stream.Collectors.toSet())),
+            Map.entry("EquipmentConstructorScreen", java.util.Arrays.stream(ScreenTours.Constructor.values()).map(ScreenTours.Constructor::page).collect(java.util.stream.Collectors.toSet())));
+    /** The screens that need no tour: a film is itself the help, and its three keys (Back, Next, Close) are the film player's standard ones. */
+    static final Set<String> EXEMPT = Set.of("FilmScreen");
+
+    /** The fluid device screen's tours: each tab's, and the Overview's for each door layout. */
+    private static Set<String> devicePages() {
+        var out = new TreeSet<String>();
+        for (var tab : DeviceTour.TABS) for (var layout : DeviceTour.Layout.values()) out.add(DeviceTour.page(tab, layout));
+        return out;
+    }
     /** Anchors a page resolves itself, not from its builder's rows. */
     static final Set<String> FRAME = Set.of("status", "title");
 
@@ -135,7 +151,7 @@ class HelpCoverageTest {
     }
 
     @Test
-    void everyScreenHasATourOrWaitsForOne() throws Exception {
+    void everyScreenHasATourOrIsExempt() throws Exception {
         var screens = new TreeSet<String>();
         var pattern = Pattern.compile("class ([A-Za-z0-9]+) extends [A-Za-z0-9.]*Screen\\b");
         try (Stream<Path> files = Files.walk(Path.of("src/main/java/com/wormzjl/icheme"))) {
@@ -146,7 +162,8 @@ class HelpCoverageTest {
         }
         assertTrue(screens.size() >= 10, "the screens read: " + screens);
         for (var screen : screens)
-            assertTrue(TOURED.containsKey(screen) ^ LATER.contains(screen), screen + ": in exactly one of TOURED and LATER");
-        for (var name : LATER) assertTrue(screens.contains(name), name + " is a screen");
+            assertTrue(TOURED.containsKey(screen) ^ EXEMPT.contains(screen), screen + ": in exactly one of TOURED and EXEMPT");
+        for (var name : EXEMPT) assertTrue(screens.contains(name), name + " is a screen");
+        for (var name : TOURED.keySet()) assertTrue(screens.contains(name), name + " is a screen");
     }
 }
