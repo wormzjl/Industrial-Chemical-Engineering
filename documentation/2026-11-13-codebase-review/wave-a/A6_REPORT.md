@@ -1,6 +1,6 @@
 # A6 Fluid laws and step: report
 
-Branch `claude/review-wave-a6-fluid-18ecaf`, four fix commits. Lane files only; no facts, state, shape or protocol change. Status: code written; tests not run yet (the lane was held for the bench thread).
+Branch `claude/review-wave-a6-fluid-18ecaf`, four fix commits. Lane files only; no facts, state, shape or protocol change. Status: code written, the named tests pass (2026-11-13).
 
 ## F2, the tower calibration (commit 4cfd22e36)
 - `TowerTransfer`: the one static slot is now a map by model, inside a slot for the whole model (`model.whole()`). Each view (an island's compound list) is fitted once (`computeIfAbsent`). A new whole model (a reload, another time factor or package) starts its own map and releases the old fits. The fit itself is unchanged, and `Calibration` drops its unused `model` field.
@@ -35,12 +35,9 @@ Branch `claude/review-wave-a6-fluid-18ecaf`, four fix commits. Lane files only; 
   - no curve was sampled in a residual.
 
 ## Tests (after "lane free")
-`compileJava compileTestJava` once, then each class once, with `--max-workers 4`:
-- `CoolingTowerTest`
-- `ConservativeTransportTest`
-- `PassiveStepSolverTest`
-
-Results: not run yet.
+`compileJava compileTestJava` once, then one `test` run with `--max-workers 4` and three `--tests` filters, each class once:
+- `CoolingTowerTest` 25/25, `ConservativeTransportTest` 4/4, `PassiveStepSolverTest` 7/7; 0 failed, 0 skipped. The three new cases pass.
+- No reference moved: every existing assertion of the three classes (calibration point 298.15 K, the marched-fill references, the ledgers) holds unchanged.
 
 ## Expected effect on the parent's final lane
 - Chain-100 exact and the 33 junction lines: I expect no movement. They have no cooling tower (F2, F20). D-02 keeps every value, and the junction lines read values, not curve counts.
