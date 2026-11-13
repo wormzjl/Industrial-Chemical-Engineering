@@ -100,10 +100,6 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
     private com.wormzjl.icheme.science.plant.column.OperationView operation;
     private final Map<String, String> columnDrafts = new HashMap<>();
 
-    private static OperationColumn.Units units() {
-        return new OperationColumn.Units(ClientConfig.temperature(), ClientConfig.pressure(), ClientConfig.flowTime());
-    }
-
     private String columnLabel() {
         return columns.stream().filter(c -> c.getLong("id") == column).map(c -> c.getString("label")).findFirst().orElse("");
     }
@@ -125,7 +121,7 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
         var rows = new ArrayList<Column.Row>();
         rows.add(new Column.Group(columnLabel(), status.hint(),
                 List.of(new Column.Paragraph(pending ? tr("control.pending") : !reply.isBlank() ? reply : status.text(), note ? Palette.TEXT : status.palette(), status.hint()))));
-        rows.addAll(OperationColumn.rows(new OperationColumn.Input(operation, pending, units()), ControlPanelScreen::tr));
+        rows.addAll(OperationColumn.rows(new OperationColumn.Input(operation, pending, ClientConfig.operationUnits()), ControlPanelScreen::tr));
         return rows;
     }
 
@@ -568,7 +564,7 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
         if (page.equals("column") && operation != null) {
             var box = new SkinField(font, r.x(), r.y(), r.w(), r.h(), Component.literal(f.label()), ControlPanelScreen::skin);
             box.setMaxLength(32);
-            box.setValue(columnDrafts.getOrDefault(f.key(), OperationColumn.values(operation.setpoints(), units()).getOrDefault(f.key(), "")));
+            box.setValue(columnDrafts.getOrDefault(f.key(), OperationColumn.values(operation.setpoints(), ClientConfig.operationUnits()).getOrDefault(f.key(), "")));
             box.setResponder(v -> columnDrafts.put(f.key(), v));
             return addRenderableWidget(box);
         }
@@ -732,7 +728,7 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
         }
         if (page.equals("column")) {
             if (operation == null || pending) return;
-            var values = OperationColumn.parse(operation.setpoints(), columnDrafts, units());
+            var values = OperationColumn.parse(operation.setpoints(), columnDrafts, ClientConfig.operationUnits());
             if (values == null) {
                 reply = tr("control.invalid");
                 return;

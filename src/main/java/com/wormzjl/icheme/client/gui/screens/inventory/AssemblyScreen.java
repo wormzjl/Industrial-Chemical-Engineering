@@ -235,12 +235,8 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
         return operation() ? view().operation() : null;
     }
 
-    private static OperationColumn.Units units() {
-        return new OperationColumn.Units(ClientConfig.temperature(), ClientConfig.pressure(), ClientConfig.flowTime());
-    }
-
     private OperationColumn.Input operationInput(OperationView view) {
-        return new OperationColumn.Input(view, commanded, units());
+        return new OperationColumn.Input(view, commanded, ClientConfig.operationUnits());
     }
 
     /** An open tour takes the typed characters too: none reaches an entry under it. */
@@ -316,7 +312,7 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
         box.setMaxLength(12);
         box.setFilter(text -> text.matches("-?[0-9]*[.,]?[0-9]*"));
         var view = operationView();
-        String shown = view == null ? "" : OperationColumn.values(view.setpoints(), units()).getOrDefault(f.key(), "");
+        String shown = view == null ? "" : OperationColumn.values(view.setpoints(), ClientConfig.operationUnits()).getOrDefault(f.key(), "");
         box.setValue(edited.contains(f.key()) ? drafts.getOrDefault(f.key(), shown) : shown);
         box.setResponder(text -> {
             if (text.equals(drafts.get(f.key()))) return;
@@ -376,7 +372,7 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
                 saveName();
                 var view = operationView();
                 if (view == null || !OperationColumn.applies(operationInput(view), drafts)) break;
-                var values = OperationColumn.parse(view.setpoints(), drafts, units());
+                var values = OperationColumn.parse(view.setpoints(), drafts, ClientConfig.operationUnits());
                 if (values != null) {
                     command(AssemblyNetwork.Action.APPLY, values);
                     sentApply = true;
@@ -460,7 +456,7 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
             return;
         }
         // An entry the player has not edited follows the set points in force; Apply follows what is typed, without a rebuild.
-        var values = OperationColumn.values(operating.setpoints(), units());
+        var values = OperationColumn.values(operating.setpoints(), ClientConfig.operationUnits());
         for (var e : entries.entrySet())
             if (!edited.contains(e.getKey()) && !e.getValue().isFocused() && !e.getValue().getValue().equals(values.get(e.getKey()))) e.getValue().setValue(values.get(e.getKey()));
         if (apply != null) apply.active = OperationColumn.applies(operationInput(operating), drafts) || renames();
@@ -501,11 +497,11 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
             drawingBox = split.drawing();
         } else if (operating != null) {
             // The tables on the glass; where they are taller than it (a large design in a short window), it scrolls.
-            int need = OperationColumn.height(operating, units(), AssemblyScreen::lang);
+            int need = OperationColumn.height(operating, ClientConfig.operationUnits(), AssemblyScreen::lang);
             glassView.layout(box, box.right() - ScrollView.BAR, need);
             var lines = need > box.h() ? new Rect(box.x(), box.y(), box.w() - ScrollView.BAR - 2, box.h()) : box;
             canvas.clip(box);
-            OperationColumn.glass(canvas, lines, glassView.offset(), operating, units(), AssemblyScreen::lang, GuiCanvas.measure(font));
+            OperationColumn.glass(canvas, lines, glassView.offset(), operating, ClientConfig.operationUnits(), AssemblyScreen::lang, GuiCanvas.measure(font));
             canvas.unclip();
             glassView.drawBar(canvas, skin);
         } else AssemblyColumn.note(canvas, lang(view().status() == AssemblyView.Status.NO_DESIGN ? "assembly.no_design" : "assembly.operation"), box);
