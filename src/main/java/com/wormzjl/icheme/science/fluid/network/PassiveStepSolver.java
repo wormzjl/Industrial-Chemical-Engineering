@@ -285,10 +285,10 @@ public final class PassiveStepSolver {
     private List<PassiveNetwork.Pipe.Identity> beAcceptedPipes=List.of();
     private long[] beAcceptedNodeIds=new long[0];
     /** The interval solver accepted a step of this structure. */
-    void markBackwardEulerAccepted(PassiveNetwork graph,Result result){beAcceptedPipes=identities(graph);beAcceptedNodeIds=nodeIds(graph);rememberOpenings(graph,result.massFlows(),result.devicePressureChanges(),result.modes());}
+    void markBackwardEulerAccepted(PassiveNetwork graph,Result result){beAcceptedPipes=identitiesOf(graph);beAcceptedNodeIds=nodeIds(graph);rememberOpenings(graph,result.massFlows(),result.devicePressureChanges(),result.modes());}
     /** Whether no step of this structure has been accepted yet: the cold start after compile, a topology change, or a job
      * start with no committed interval on this structure. */
-    boolean backwardEulerCold(PassiveNetwork graph){return !(sameLines(beAcceptedPipes,identities(graph))&&Arrays.equals(beAcceptedNodeIds,nodeIds(graph)));}
+    boolean backwardEulerCold(PassiveNetwork graph){return !(sameLines(beAcceptedPipes,identitiesOf(graph))&&Arrays.equals(beAcceptedNodeIds,nodeIds(graph)));}
     /**
      * Puts this solver, at the start of an island job, in the state a fresh solver would be in given only the island's
      * committed interval {@code committed} (null without one on this structure), so a job's solves depend on the committed
@@ -311,7 +311,7 @@ public final class PassiveStepSolver {
         previousPipes=List.of();previousNodeIds=new long[0];previousModes=List.of();
         keepOpen=Set.of();lastSolve=null;acceptedOpenings.clear();
         if(committed!=null) {
-            var ids=identities(graph);long[] nodes=nodeIds(graph);
+            var ids=identitiesOf(graph);long[] nodes=nodeIds(graph);
             beAcceptedPipes=ids;beAcceptedNodeIds=nodes;acceptedPipes=ids;acceptedNodeIds=nodes;
             previousPipes=ids;previousNodeIds=nodes;previousModes=committed.endpointModes();
             previousFlows=committed.endpointFlows();previousLawFlows=committed.endpointFlows();previousHeads=committed.endpointHeads();
@@ -325,6 +325,8 @@ public final class PassiveStepSolver {
     static boolean sameLines(PassiveNetwork a,PassiveNetwork b){return sameLines(identities(a),identities(b))&&Arrays.equals(nodeIds(a),nodeIds(b));}
     /** The same connections, whatever a flow valve's set point (a column plans one each slice). */
     private static boolean sameLines(List<PassiveNetwork.Pipe.Identity> a,List<PassiveNetwork.Pipe.Identity> b) {
+        // P-05: one list is the same lines as itself (every identity is its own line), without the copies line() makes.
+        if(a==b)return true;
         if(a.size()!=b.size())return false;
         for(int i=0;i<a.size();i++)if(!a.get(i).sameLine(b.get(i)))return false;
         return true;
@@ -395,7 +397,7 @@ public final class PassiveStepSolver {
                 new SparseNewton.Result(new double[0],0,0,0,0,0),List.of(),new double[0],0,new double[model.hydrocarbon.componentCount()+1],0,
                 graph.reservoirs().stream().map(PassiveNetwork.Reservoir::inventory).toList(),List.of(),List.of());
         var modes=new ArrayList<FlowControl.Mode>();
-        boolean carryModes=previousModes.size()==graph.pipes().size()&&sameLines(previousPipes,identities(graph))&&Arrays.equals(previousNodeIds,nodeIds(graph));
+        boolean carryModes=previousModes.size()==graph.pipes().size()&&sameLines(previousPipes,identitiesOf(graph))&&Arrays.equals(previousNodeIds,nodeIds(graph));
         // A mover's start mode reads its own lines only (owner decision D40 A): its setting, and the sealed sides of it
         // (relieveSealedPockets). A connection blocked elsewhere in the island changes neither.
         modes.addAll(initialModes(graph));
@@ -462,7 +464,7 @@ public final class PassiveStepSolver {
         // A run the interval solver reopened is exempt from the start-of-solve closures of this one solve; the pass loop
         // may still close it on a converged point. See {@link #reopenable}.
         boolean[] keep=null;
-        if(!keepOpen.isEmpty()&&!rateOnly){var ids=identities(graph);keep=new boolean[ids.size()];for(int i=0;i<keep.length;i++)keep[i]=keepOpen.contains(ids.get(i));keepOpen=Set.of();}
+        if(!keepOpen.isEmpty()&&!rateOnly){var ids=identitiesOf(graph);keep=new boolean[ids.size()];for(int i=0;i<keep.length;i++)keep[i]=keepOpen.contains(ids.get(i));keepOpen=Set.of();}
         closeDeadHeads(graph,boundaryClosed,keep);
         balanceLawFlows=null;
         if(needsBalance(graph)) {
@@ -491,7 +493,7 @@ public final class PassiveStepSolver {
         var seeds=initialPhaseSeeds(graph,dt,checkpoint,reachable,modes,boundaryClosed);
         var seen=new HashSet<PassKey>();
         // Constant for this solve: every pass keys on the same graph identity and component support.
-        var pipeIdentities=identities(graph);
+        var pipeIdentities=identitiesOf(graph);int pipesHash=pipeIdentities.hashCode();
         long[] nodeIds=nodeIds(graph);byte[] kinds=new byte[nodeIds.length];
         for(int i=0;i<kinds.length;i++)kinds[i]=(byte)graph.reservoirs().get(i).kind().ordinal();
         boolean[] componentMask=componentMask(graph);
@@ -535,9 +537,9 @@ public final class PassiveStepSolver {
             // means the pass sequence cannot make progress. The frozen junction donors, the phase-port segments and the static
             // columns belong to it for the same reason the modes do: they decide which equations this pass states (see
             // {@link PassKey}).
-            var structure=new WorkspaceKey(0,nodeIds,kinds,pipeIdentities,phases,componentMask,supportCodes(supports),modeCodes,boundaryClosed.clone(),equations.junctionDonorFirst);
+            var structure=new WorkspaceKey(0,nodeIds,kinds,pipeIdentities,pipesHash,phases,componentMask,supportCodes(supports),modeCodes,boundaryClosed.clone(),equations.junctionDonorFirst);
             if(!seen.add(new PassKey(structure,equations.segmentCodes(),equations.columnCodes(),foldedPhases.clone(),proposal==null?-1:proposal.node(),proposal==null?0:proposal.phases(),restarts)))throw new SparseNewton.Nonconvergence("Phase/device active-set cycle");
-            var key=new WorkspaceKey(Double.doubleToLongBits(dt),nodeIds,kinds,pipeIdentities,phases,componentMask,structure.supports,modeCodes,structure.boundaryClosed,structure.junctionDonors);
+            var key=new WorkspaceKey(Double.doubleToLongBits(dt),nodeIds,kinds,pipeIdentities,pipesHash,phases,componentMask,structure.supports,modeCodes,structure.boundaryClosed,structure.junctionDonors);
             var workspace=workspaces.get(key);
             SolverDiagnostics.count(workspace==null?SolverDiagnostics.workspaceBuilds:SolverDiagnostics.workspaceReuses);
             if(workspace==null){if(workspaces.size()>=4)workspaces.remove(workspaces.keySet().iterator().next());var previous=structures.get(structure);workspace=previous==null?new SparseNewton.Workspace(ownership):previous.forkPreconditioner();workspaces.put(key,workspace);}
@@ -1271,19 +1273,19 @@ public final class PassiveStepSolver {
      * {@code supports} is the per-node, per-component phase support flattened in node order: it
      * decides how many unknowns and rows each node block has, so the sparsity pattern, the colouring,
      * the ordering and every retained factorization belong to it as much as to the phase code. */
-    private record WorkspaceKey(long stepBits,long[] nodeIds,byte[] kinds,List<PassiveNetwork.Pipe.Identity> pipes,
+    private record WorkspaceKey(long stepBits,long[] nodeIds,byte[] kinds,List<PassiveNetwork.Pipe.Identity> pipes,int pipesHash,
                                 int[] phases,boolean[] componentMask,byte[] supports,byte[] modes,boolean[] boundaryClosed,
                                 boolean[] junctionDonors) {
         @Override public boolean equals(Object other) {
             return other instanceof WorkspaceKey key&&stepBits==key.stepBits&&Arrays.equals(nodeIds,key.nodeIds)
-                    &&Arrays.equals(kinds,key.kinds)&&pipes.equals(key.pipes)&&Arrays.equals(phases,key.phases)
+                    &&Arrays.equals(kinds,key.kinds)&&pipesHash==key.pipesHash&&(pipes==key.pipes||pipes.equals(key.pipes))&&Arrays.equals(phases,key.phases)
                     &&Arrays.equals(componentMask,key.componentMask)&&Arrays.equals(supports,key.supports)
                     &&Arrays.equals(modes,key.modes)&&Arrays.equals(boundaryClosed,key.boundaryClosed)
                     &&Arrays.equals(junctionDonors,key.junctionDonors);
         }
         @Override public int hashCode() {
             int hash=31*Long.hashCode(stepBits)+Arrays.hashCode(nodeIds);
-            hash=31*(31*hash+Arrays.hashCode(kinds))+pipes.hashCode();
+            hash=31*(31*hash+Arrays.hashCode(kinds))+pipesHash;
             hash=31*(31*hash+Arrays.hashCode(phases))+Arrays.hashCode(componentMask);
             hash=31*hash+Arrays.hashCode(supports);
             hash=31*(31*hash+Arrays.hashCode(modes))+Arrays.hashCode(boundaryClosed);
@@ -1377,6 +1379,13 @@ public final class PassiveStepSolver {
         for(var pipe:graph.pipes())identities.add(pipe.identity());
         return List.copyOf(identities);
     }
+    /** {@link #identities} of {@code graph}, built once per graph object (P-05): a solve and its passes ask for the same
+     * graph's identities a dozen times. A graph is immutable, so the list is its own for as long as it is the one asked about. */
+    private List<PassiveNetwork.Pipe.Identity> identitiesOf(PassiveNetwork graph) {
+        if(graph!=identityGraph){identityList=identities(graph);identityGraph=graph;}
+        return identityList;
+    }
+    private PassiveNetwork identityGraph;private List<PassiveNetwork.Pipe.Identity> identityList;
     private static long[] nodeIds(PassiveNetwork graph) {
         long[] ids=new long[graph.reservoirs().size()];
         for(int i=0;i<ids.length;i++)ids[i]=graph.reservoirs().get(i).id();
@@ -1458,7 +1467,7 @@ public final class PassiveStepSolver {
                                                               List<FlowControl.Mode> modes,boolean[] boundaryClosed) {
         int count=model.hydrocarbon.componentCount()+1,nodes=graph.reservoirs().size();
         // The flows every pass reads its statements off ({@link #startPoint}: the balance's or the carried point's).
-        double[] flows=new double[graph.pipes().size()];startPoint(graph,modes,boundaryClosed,identities(graph),null,flows,new double[flows.length],new boolean[flows.length]);
+        double[] flows=new double[graph.pipes().size()];startPoint(graph,modes,boundaryClosed,identitiesOf(graph),null,flows,new double[flows.length],new boolean[flows.length]);
         var seeds=new ArrayList<FluidThermodynamics.State>(nodes);
         for(int nodeIndex=0;nodeIndex<nodes;nodeIndex++) {
             var node=graph.reservoirs().get(nodeIndex);var available=reachable[nodeIndex];
@@ -1551,7 +1560,7 @@ public final class PassiveStepSolver {
                                                            boolean[] boundaryClosed,double dt,Runnable checkpoint) {
         if(rateOnly||graph.reservoirs().stream().noneMatch(node->node.junction()&&!node.fixed()||holdsNoFluidVessel(node)))return seeds;
         int edges=graph.pipes().size();double[] flows=new double[edges];
-        startPoint(graph,modes,boundaryClosed,identities(graph),null,flows,new double[edges],new boolean[edges]);
+        startPoint(graph,modes,boundaryClosed,identitiesOf(graph),null,flows,new double[edges],new boolean[edges]);
         return arrivingPhases(graph,seeds,flows,null,false,modes,boundaryClosed,dt,checkpoint);
     }
     /** {@link #arrivingPhases} at the law flows {@code flows}; {@code vesselsOnly} leaves the junctions, for a converged pass
@@ -3072,10 +3081,10 @@ public final class PassiveStepSolver {
             double drive=staticDrive(graph,pipe,endPressure(graph,pipe,pipe.first())-endPressure(graph,pipe,pipe.second()));
             if(dryA&&drive>0||dryB&&drive<0||dryA&&dryB)boundaryClosed[i]=true;
         }
-        if(!(sameLines(acceptedPipes,identities(graph))&&Arrays.equals(acceptedNodeIds,nodeIds(graph))))return;
+        if(!(sameLines(acceptedPipes,identitiesOf(graph))&&Arrays.equals(acceptedNodeIds,nodeIds(graph))))return;
         int edges=graph.pipes().size();
         double[] start=new double[edges];
-        startPoint(graph,modes,boundaryClosed,identities(graph),null,start,new double[edges],new boolean[edges]);
+        startPoint(graph,modes,boundaryClosed,identitiesOf(graph),null,start,new double[edges],new boolean[edges]);
         for(int i=0;i<edges;i++) {
             var pipe=graph.pipes().get(i);
             if(boundaryClosed[i]||!(pipe.control() instanceof FlowControl.Passive))continue;
@@ -3174,7 +3183,7 @@ public final class PassiveStepSolver {
      * open connection at the balanced ends, the passive connections the one-way law closes, the device modes it decided, and whether it converged. */
     record Start(PassiveNetwork graph,double[] lawFlows,boolean[] closed,List<FlowControl.Mode> modes,boolean converged) {}
     /** Whether this solve starts from a carried point ({@link #startPoint}'s test) or needs the balance. */
-    private boolean needsBalance(PassiveNetwork graph){return !graph.pipes().isEmpty()&&!carriedPoint(graph,identities(graph));}
+    private boolean needsBalance(PassiveNetwork graph){return !graph.pipes().isEmpty()&&!carriedPoint(graph,identitiesOf(graph));}
     /**
      * Whether this solve starts from a carried point: the previous converged solve's structure is this one's (pipe
      * identities, node ids, a flow per connection) and its point is this solve's own. A rate solve warm-starts only on
