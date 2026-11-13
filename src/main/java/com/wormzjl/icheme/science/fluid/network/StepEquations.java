@@ -242,6 +242,15 @@ final class StepEquations implements SparseNewton.Equations {
      * candidate residual at the same time. */
     final double[][] targets,incoming;
     final double[] energy,incomingMass,incomingEnergy,netMass,fractions;
+    /** Evaluation scratch under the same rule (finding P-07, batch 2026-11-13-codebase-review): the solid moments of the
+     * stream a connection carries and of the one a receiver mixes ({@link #nodeAccumulate}), a junction's solid mixture
+     * ({@link #nodeSolidRows}) and which phases a node transport holds ({@link #held(Transport)}, read at once by
+     * {@link PhaseDraw.Segment#marginalAt}). */
+    private final double[] carriedMoments=new double[3],mixedMoments=new double[3],solidMix=new double[3];
+    private final boolean[] heldScratch=new boolean[3];
+    /** Per node, its solids' moments at the step's start ({@link #startMoments}), worked out at the first evaluation that
+     * reads them and kept for the pass: a function of the graph's inventory, which a pass does not change. Read only. */
+    private final double[][] startMoments;
     /** The weight of the mixing and enthalpy rows the last {@link #junctionInflow} call set: they are stated in
      * amount form over the junction's own mass; see there. */
     double junctionWeight=1;
@@ -306,7 +315,7 @@ final class StepEquations implements SparseNewton.Equations {
         }
         int components=oldAmounts[0].length;
         targets=new double[count][components];incoming=new double[count][components];fractions=new double[components];
-        solidTargets=new double[count][3];solidIncoming=new double[count][3];
+        solidTargets=new double[count][3];solidIncoming=new double[count][3];startMoments=new double[count][];
         melting=solver.rateOnly?null:JunctionCrystals.of(graph,model);heldMelt=new double[count][];heldKept=new double[count][];heldMeltEnergy=new double[count];
         if(melting!=null)for(int node=0;node<count;node++)if(melting.any(node)) {
             var stock=graph.reservoirs().get(node).inventory().solids();heldMelt[node]=new double[components];
@@ -687,11 +696,11 @@ final class StepEquations implements SparseNewton.Equations {
     Transport drawn(int edge,int end,Transport node,double q){return drawn(segments[edge][end],edge,end,node,q);}
     /** {@link #drawn} under {@code segment} in place of this pass's own. */
     private double remainingAfterHc(PhaseDraw.Segment segment,Transport node,double q){
-        var rates=segment.rates(segment.marginalAt(node.held()),q);
+        var rates=segment.rates(segment.marginalAt(held(node)),q);
         return Math.max(0,q-rates[FluidThermodynamics.OIL]-rates[3+FluidThermodynamics.OIL]);
     }
     private double[] phaseRates(PhaseDraw.Segment segment,int edge,int end,Transport node,double q){
-        int marginal=segment.marginalAt(node.held());
+        int marginal=segment.marginalAt(held(node));
         if(weirOffsets[edge][end]<0)return segment.rates(marginal,q,densityOf(node.phases,FluidThermodynamics.OIL),densityOf(node.phases,FluidThermodynamics.AQUEOUS));
         var rates=segment.rates(marginal,q);double remaining=remainingAfterHc(segment,node,q);
         double water=node.phases[FluidThermodynamics.GAS]==null?remaining:Math.min(remaining,Math.max(0,weirValues[edge][end]));
@@ -707,7 +716,7 @@ final class StepEquations implements SparseNewton.Equations {
     private static double densityOf(Transport[] phases,int phase){return phases[phase]==null?0:phases[phase].density;}
     private Transport drawn(PhaseDraw.Segment segment,int edge,int end,Transport node,double q) {
         if(segment==null||node.phases==null)return node;
-        int marginal=segment.marginalAt(node.held());var pinned=segment.pinned();
+        int marginal=segment.marginalAt(held(node));var pinned=segment.pinned();
         if(pinned.length==0&&!segment.mixed()&&weirOffsets[edge][end]<0)return marginal<0?node:node.phases[marginal];
         var pipe=graph.pipes().get(edge);var start=startPhases[end==0?pipe.first():pipe.second()];
         if(pinned.length==1&&marginal<0&&weirOffsets[edge][end]<0)return start[pinned[0]];
@@ -767,7 +776,7 @@ final class StepEquations implements SparseNewton.Equations {
     private double capLimit(PhaseDraw.Segment segment,int edge,int end,Transport node) {
         var pipe=graph.pipes().get(edge);
         if(segment==null||node.phases==null)return node.density*pipe.minimumArea()*node.velocityLimit;
-        int marginal=segment.marginalAt(node.held());var pinned=segment.pinned();
+        int marginal=segment.marginalAt(held(node));var pinned=segment.pinned();
         if(segment.mixed()||weirOffsets[edge][end]>=0){var stream=drawn(segment,edge,end,node,1);return stream.density*pipe.minimumArea()*stream.velocityLimit;}
         if(pinned.length==0){var stream=marginal<0?node:node.phases[marginal];return stream.density*pipe.minimumArea()*stream.velocityLimit;}
         var start=startPhases[end==0?pipe.first():pipe.second()];
@@ -782,7 +791,7 @@ final class StepEquations implements SparseNewton.Equations {
     double drawnCarrierViscosity(int edge,int end,FluidThermodynamics.State state,Transport node,double q) {
         var segment=segments[edge][end];
         if(segment==null||node.phases==null)return solver.carrierViscosity(state);
-        int marginal=segment.marginalAt(node.held());var pinned=segment.pinned();
+        int marginal=segment.marginalAt(held(node));var pinned=segment.pinned();
         if(segment.mixed())return (model.phaseCarrierViscosity(state,FluidThermodynamics.OIL,solver.viscosities)+model.phaseCarrierViscosity(state,FluidThermodynamics.AQUEOUS,solver.viscosities))/2;
         if(pinned.length==0)return marginal<0?solver.carrierViscosity(state):model.phaseCarrierViscosity(state,marginal,solver.viscosities);
         var pipe=graph.pipes().get(edge);int n=end==0?pipe.first():pipe.second();var startState=graph.reservoirs().get(n).state();var start=startPhases[n];
@@ -1016,8 +1025,12 @@ final class StepEquations implements SparseNewton.Equations {
      */
     record Transport(double[] moles,double mass,double volume,double density,double viscosity,double specificEnthalpy,double velocityLimit,
                              SolidInventory.Moments solids,Transport[] phases) {
-        /** Which phases this node's state holds (a phase stream is built exactly for a phase it holds). */
-        boolean[] held(){return new boolean[]{phases[0]!=null,phases[1]!=null,phases[2]!=null};}
+    }
+    /** Which phases node transport {@code node} holds (a phase stream is built exactly for a phase it holds), written into
+     * one scratch (P-07): every caller hands it at once to {@link PhaseDraw.Segment#marginalAt}, which keeps nothing. */
+    private boolean[] held(Transport node) {
+        var held=heldScratch;held[0]=node.phases[0]!=null;held[1]=node.phases[1]!=null;held[2]=node.phases[2]!=null;
+        return held;
     }
     /** This node's transport rows at {@code state}: the bulk stream in the arithmetic it always had (the gas stream where
      * a bulk end draws the gas, D33), plus its phase streams where an end of it is a phase port. The one builder for the
@@ -1141,7 +1154,7 @@ final class StepEquations implements SparseNewton.Equations {
      */
     private void nodeAccumulate(int node,double[] x,FluidThermodynamics.State[] st,Transport[] tr) {
         double[] target=targets[node],in=incoming[node];
-        System.arraycopy(graph.reservoirs().get(node).inventory().solids().moments().values(),0,solidTargets[node],0,3);Arrays.fill(solidIncoming[node],0);
+        System.arraycopy(startMoments(node),0,solidTargets[node],0,3);Arrays.fill(solidIncoming[node],0);
         System.arraycopy(oldAmounts[node],0,target,0,target.length);Arrays.fill(in,0);
         double stored=graph.reservoirs().get(node).inventory().internalEnergy(),mass=0,heat=0,net=0;
         for(int t:transfersAt[node]) {
@@ -1191,7 +1204,7 @@ final class StepEquations implements SparseNewton.Equations {
             net+=receiver?deliveredFlow:-Math.abs(flow);
             var amounts=transport.moles;double moving=dt*flow;
             for(int c=0;c<amounts.length;c++){double moved=moving*amounts[c]/transport.mass;target[c]+=first?-moved:moved;}
-            var moments=transport.solids.values();
+            var moments=momentsOf(transport.solids,carriedMoments);
             for(int c=0;c<3;c++)if(!receiver||pipe.filter()==null)solidTargets[node][c]+=(first?-1:1)*moving*moments[c]/transport.mass;
             stored+=(first?-1:1)*moving*transport.specificEnthalpy;
             // What arrives at this node, on the live upwind: read only by a junction's rows, which mix it into the
@@ -1204,7 +1217,7 @@ final class StepEquations implements SparseNewton.Equations {
                 mass+=Math.abs(flow)*(1-sourceCapture);
                 for(int c=0;c<sourceAmounts.length;c++)in[c]+=Math.abs(flow)*sourceAmounts[c]/carried.mass;
                 heat+=Math.abs(flow)*sourceEnthalpy;
-                var sourceMoments=carried.solids.values();
+                var sourceMoments=momentsOf(carried.solids,mixedMoments);
                 if(pipe.filter()==null&&melting!=null&&melting.any(node)&&carried.solids.mass()>0) {
                     // Owner decision D61: the crystal this junction is above the melting point of arrives as its
                     // component, with its offset (the crystal's enthalpy), and only the solids it keeps mix as solids.
@@ -1236,6 +1249,19 @@ final class StepEquations implements SparseNewton.Equations {
         }
         // An emptying vessel standing as a junction (decision D54, emptyingGraph) passes its stock as well as what arrives.
         energy[node]=stored;incomingMass[node]=mass;incomingEnergy[node]=heat;netMass[node]=solver.emptyings!=null&&solver.emptyings[node]!=null?net+solver.emptyings[node].drain():net;
+    }
+    /** {@code moments.values()} written into {@code into} (P-07): the same three doubles in the same order (mass, volume,
+     * heat capacity), every element written. */
+    private static double[] momentsOf(SolidInventory.Moments moments,double[] into) {
+        into[0]=moments.mass();into[1]=moments.volume();into[2]=moments.heatCapacity();
+        return into;
+    }
+    /** Node {@code node}'s solids' moments at the step's start, {@code inventory().solids().moments().values()} of its graph
+     * node, worked out once per pass (P-07); the caller only reads it. */
+    private double[] startMoments(int node) {
+        var moments=startMoments[node];
+        if(moments==null)startMoments[node]=moments=graph.reservoirs().get(node).inventory().solids().moments().values();
+        return moments;
     }
     /**
      * The heat (W, into the stream) heat-exchanging connection {@code edge} takes up when it carries {@code flow} drawn at
@@ -1556,7 +1582,7 @@ final class StepEquations implements SparseNewton.Equations {
         // holds them at the stock's own (see junctionInflow).
         var inventory=graph.reservoirs().get(node).inventory();
         double retained=(solver.molarMass(oldAmounts[node])+inventory.solids().massKg())/dt,total=incomingMass[node]+retained;
-        var solids=solidIncoming[node].clone();var held=heldKept[node]!=null?heldKept[node]:inventory.solids().moments().values();
+        var solids=solidMix;System.arraycopy(solidIncoming[node],0,solids,0,3);var held=heldKept[node]!=null?heldKept[node]:startMoments(node);
         for(int c=0;c<3;c++)solids[c]=solver.rateOnly?held[c]/(retained*dt):(solids[c]+held[c]/dt)/total;
         layout[node].solidRows(st[node],x,offsets[node],solids,true,f);
     }
