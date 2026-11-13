@@ -5655,7 +5655,6 @@ public final class PassiveStepSolver {
         private int differentiate(double[] x,double[] f,double differenceStep,int[] entryOffsets,int[] entryRows,
                                   double[] entries,Runnable checkpoint,boolean tangents) {
             if(hasWeirs)return -1;
-            if(sparsity==null)buildSparsity();
             FluidThermodynamics.State[] st,baseStates;Transport[] tr,baseTransport;FluidThermodynamics.Prepared[] pr,basePrepared;
             double[] trial,perturbed;
             try {
