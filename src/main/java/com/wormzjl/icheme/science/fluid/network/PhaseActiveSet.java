@@ -3,6 +3,7 @@ package com.wormzjl.icheme.science.fluid.network;
 import static com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.holdsNoFluid;
 import static com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.phaseCode;
 import com.wormzjl.icheme.science.fluid.solver.PhaseLayout;
+import com.wormzjl.icheme.science.fluid.solver.StepPhaseRules;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import java.util.*;
 
@@ -48,7 +49,7 @@ final class PhaseActiveSet {
         return result;
     }
     /**
-     * The outer phase check of a converged pass's point, node by node ({@link FluidThermodynamics#phaseCheck}, owner
+     * The outer phase check of a converged pass's point, node by node ({@link StepPhaseRules#phaseCheck}, owner
      * decisions D25 and D26): a phase leaves a node only when the solve empties it (the trace fold, which the
      * reconstruction has applied, and the vanishing rule of D38 C: under {@link FluidThermodynamics#VANISHING_SHARE} of the
      * node's fluid and at a smaller share than at the step's start, the solve's input states, {@link PassiveStepSolver.SolveConstants}), a phase the node's TP answer
@@ -75,7 +76,7 @@ final class PhaseActiveSet {
         for(int i:order) {
             var state=states.get(i);var node=graph.reservoirs().get(i);if(node.fixed())continue;
             FluidThermodynamics.State checked;
-            try{checked=model.phaseCheck(state,node.junction(),solver.constants.inputStates.get(i),foldedPhases,i,prepared==null?null:prepared[i],
+            try{checked=StepPhaseRules.phaseCheck(model,state,node.junction(),solver.constants.inputStates.get(i),foldedPhases,i,prepared==null?null:prepared[i],
                     node.junction()?null:start->vesselSplit(node,state,start,checkpoint),!node.junction()&&node.inventory().rigid(),!node.junction()&&node.inventory().open(),checkpoint);}
             catch(com.wormzjl.icheme.science.fluid.thermo.ThermoHold hold){throw hold.at(node.id());}
             if(checked==state)continue;

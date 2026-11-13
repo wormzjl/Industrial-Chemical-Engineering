@@ -2,8 +2,6 @@ package com.wormzjl.icheme.science.fluid.thermo;
 
 import com.wormzjl.icheme.science.fluid.SimulationTime;
 import com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics;
-import com.wormzjl.icheme.science.fluid.solver.PhaseLayout;
-import com.wormzjl.icheme.science.fluid.solver.SparseNewton;
 import com.wormzjl.icheme.science.fluid.transport.MixtureViscosity;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.material.SolidMaterialCatalog;
@@ -24,7 +22,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
-import java.util.function.UnaryOperator;
 
 /**
  * Immutable fluid property snapshot and standalone TP initializer; coupled steps consume phase() directly. Phase
@@ -42,6 +39,11 @@ import java.util.function.UnaryOperator;
 public final class FluidThermodynamics {
     public static final double R=8.31446261815324;
     public static final double DEFAULT_MAXIMUM_VELOCITY=100;
+    /**
+     * The game's ambient pressure (Pa): the outside of every vessel's wall, and the pressure of the air the network
+     * reduction's ambient state holds.
+     */
+    public static final double AMBIENT_PRESSURE=101325;
     /**
      * The network's ceiling on the trace cutoff, a thousandth of the column's: the network has no reference to answer to
      * inside a Newton pass, and the energy it can misplace by folding an omitted phase into the retained one is bounded
@@ -915,12 +917,14 @@ public final class FluidThermodynamics {
      * The check of a failed pass's last iterate (owner decisions D28 and D39): {@link #folded(State,boolean)} with the
      * phases vanishing since {@code from} folded too (D38 C, {@link #vanishing}), and nothing else. A failed iterate is not
      * a state, so its check only folds what the iterate empties and proposes nothing. A phase the pass needs appears at a
-     * converged point's check ({@link #phaseCheck}) or at a smaller step.
+     * converged point's check ({@code StepPhaseRules.phaseCheck}) or at a smaller step.
      */
     public State folded(State state,boolean junction,State from){return folded(state,junction,false,from);}
     /** {@link #folded(State,boolean,State)} for a vessel whose wall is rigid ({@code rigid}, {@link #rigidGas}). */
     public State folded(State state,boolean junction,boolean rigid,State from){return folded(state,rigid&&!junction,from==null?0:collapsing(from,state,rigid));}
-    private State folded(State state,boolean rigid,int vanishing) {
+    /** {@link #folded(State)} with the phases {@code vanishing} ({@link #phaseBits}) folded as traces too, a rigid vessel's gas
+     * judged by its volume where {@code rigid} ({@link #rigidGas}): the outer phase check's fold ({@code StepPhaseRules.phaseCheck}). */
+    public State folded(State state,boolean rigid,int vanishing) {
         var result=folded(state,null,rigid,vanishing);
         return result==state||state.solids().empty()?result:result.withSolidState(state.solids(),state.solidMoments());
     }
@@ -951,78 +955,6 @@ public final class FluidThermodynamics {
         return (state.phase(State.LIQUID)!=null?1:0)|(state.phase(State.VAPOR)!=null?2:0)|(state.phase(State.AQUEOUS)!=null?4:0);
     }
     /**
-     * The outer phase check of one node of the fluid network (owner decisions D25 and D26), never inside a residual. A
-     * node at fixed amounts, energy and volume has one equilibrium, which its own rows find once its layout holds every
-     * phase that equilibrium needs; a TP answer at the node's temperature and pressure tells which phases are missing but
-     * not how much of each the node holds. So the check never swaps one populated phase set for another on a TP verdict,
-     * and an added phase starts at the node's own split:
-     * <ul>
-     * <li>a phase leaves only when the solve empties it: the trace fold ({@link #folded}, D34), and a phase held below
-     * {@link #VANISHING_SHARE} and at a smaller share than at {@code from} (owner decision D38 C, {@link #vanishing});</li>
-     * <li>a node holding every phase its material can form has none to add, and no TP answer is formed: a vapour and a
-     * liquid on a list without water, all three slots with water (W3b); a node holding no fluid has none. A stand-in liquid ({@link #standIn}, owner
-     * decision D31 B) is no liquid of the node's own and never makes it complete;</li>
-     * <li>where the TP answer ({@link #flashTP}) holds a phase the node lacks that is not in the solve's record
-     * ({@code record}, A85), the node's own split decides it (D26): a vessel's {@code vesselSplit} closes its inventory
-     * from the vessel's own state at the crossing (owner decision D40 A, {@link #crossing}); a pipe junction's
-     * {@link #junctionSplit} closes its own rows at its pressure and enthalpy from the engine's PH answer there
-     * ({@link #equilibriumPH}; the TP answer with the junction's populated phases, {@link #tpSeed}, where that fails). A
-     * node whose own split has no start, fails or drives a phase to nothing on its way proposes nothing;</li>
-     * <li>the own split decides by where its closure went, converged or not: a proposed phase it drove under the vanishing
-     * share is refused ({@link #nothing}), and the refusal is written to the record so the TP answer does not propose it
-     * again in this solve. A proposed phase that stands seeds the node.</li>
-     * </ul>
-     *
-     * @return {@code state} itself when it keeps its phases and gains none; otherwise the node's new seed
-     */
-    public State phaseCheck(State state,boolean junction,State from,int[] record,int at,Prepared prepared,UnaryOperator<State> vesselSplit,Runnable checkpoint) {
-        return phaseCheck(state,junction,from,record,at,prepared,vesselSplit,false,false,checkpoint);
-    }
-    /**
-     * {@link #phaseCheck}; {@code rigid}: a rigid vessel's (batch 2026-11-10-rigid-reservoir), whose crossing holds its volume
-     * at any pressure; {@code open}: an open vessel's, whose wall is never taut, so its crossing is at its pressure (its ambient).
-     */
-    public State phaseCheck(State state,boolean junction,State from,int[] record,int at,Prepared prepared,UnaryOperator<State> vesselSplit,boolean rigid,boolean open,Runnable checkpoint) {
-        int shrinking=from==null?0:vanishing(from,state,rigid);
-        var kept=folded(state,rigid&&!junction,shrinking);var checked=kept;
-        int excluded=(record==null?0:record[at])|shrinking&phaseBits(state)&~phaseBits(kept),refused=0;
-        double[] totals=kept.totals();
-        int own=ownPhaseBits(kept);
-        // A node holding no fluid (a bed of solids alone) has no phase to add.
-        boolean complete=!(sum(totals)>0)||(totals[totals.length-1]>0?own==7:(own&3)==3);
-        if(!complete) {
-            if(prepared!=null&&prepared.temperature()!=kept.temperature())prepared=null;
-            var equilibrium=folded(equilibriumTP(kept.temperature(),kept.pressure(),totals,checkpoint,prepared).withSolidState(kept.solids(),kept.solidMoments()),junction);
-            int proposed=lacking(kept,equilibrium)&~excluded;
-            if(proposed!=0) {
-                State start,split;
-                if(junction) {
-                    var engine=equilibriumPH(kept.temperature(),kept.pressure(),state.enthalpy()-state.solidMoments().enthalpy(state.temperature(),state.pressure()),totals,checkpoint);
-                    start=engine!=null?engine.withSolidState(kept.solids(),kept.solidMoments()):tpSeed(kept,equilibrium,prepared);
-                    split=junctionSplit(totals,state.enthalpy(),state.mass(),kept.pressure(),start,checkpoint);
-                }
-                else{start=crossing(state,kept,proposed,totals,rigid,open,checkpoint);split=start==null||vesselSplit==null?null:vesselSplit.apply(start);}
-                if(split!=null) {
-                    SolverDiagnostics.count(SolverDiagnostics.phaseSeeds);
-                    var seed=folded(split.withSolidState(kept.solids(),kept.solidMoments()),junction,rigid);
-                    refused=proposed&(~lacking(kept,seed)|nothing(split,rigid));
-                    int added=lacking(kept,seed)&~excluded;
-                    if(added!=0&&(added&refused)==0)checked=seed;
-                }
-                else refused=proposed;
-                if(refused!=0)SolverDiagnostics.count(SolverDiagnostics.phaseRefusals);
-            }
-        }
-        if(record!=null)record[at]|=phaseBits(state)&~phaseBits(checked)|refused;
-        return checked;
-    }
-    /** {@link #phaseBits} of the phases a node holds as its own (owner decision D31 B): a stand-in liquid ({@link #standIn}) is
-     * a crystal's condensed share, no liquid of the node's own. */
-    private int ownPhaseBits(State state){return phaseBits(state)&~standIn(state);}
-    /** The phases ({@link #phaseBits}) of {@code answer} that {@code node} lacks: an own phase the node holds none of, and a
-     * stand-in where the node holds none in that slot. */
-    private int lacking(State node,State answer){return ownPhaseBits(answer)&~ownPhaseBits(node)|phaseBits(answer)&~phaseBits(node);}
-    /**
      * The phases ({@link #phaseBits}) a solve from {@code start} is driving to nothing at {@code end}, its answer or the last
      * iterate it stopped at, in any node: each holds less than {@link #VANISHING_SHARE} of {@code end}'s fluid
      * ({@link #belowShare}) and a smaller share than it held at {@code start}. A phase the solve grows, however small, is
@@ -1037,7 +969,7 @@ public final class FluidThermodynamics {
     }
     /** The phases ({@link #phaseBits}) {@code state} holds below the vanishing share of its fluid ({@link #belowShare}),
      * whatever their direction (owner decision of 2026-10-19). */
-    static int nothing(State state,boolean rigid) {
+    public static int nothing(State state,boolean rigid) {
         double[] e=phaseAmounts(state),ev=phaseVolumes(state);double te=sum(e),tv=sum(ev);int bits=0;
         for(int k=0;k<3;k++)if(e[k]>0&&belowShare(k,e,te,ev,tv,rigid))bits|=1<<k;
         return bits;
@@ -1072,85 +1004,6 @@ public final class FluidThermodynamics {
     }
     /** A state's fluid amount by phase, in {@link #phaseBits} order. */
     private static double[] phaseAmounts(State state){return new double[]{sum(state.liquidAmountsView()),sum(state.vaporAmountsView()),sum(state.aqueousAmountsView())};}
-    /**
-     * The TP-based state of {@link #phaseCheck} (decision D26): the TP answer {@code equilibrium} at {@code kept}'s
-     * temperature and pressure, for {@code kept}'s totals, with the populated phases of {@code kept} it lacks, so that no
-     * TP verdict takes a populated phase away (D25): each component shared between the answer's phases and those kept
-     * phases in proportion to what each holds of it. A junction's seed where its PH answer fails; never a vessel's.
-     */
-    private State tpSeed(State kept,State equilibrium,Prepared prepared) {
-        int answer=phaseBits(equilibrium),lacking=phaseBits(kept)&~answer;
-        if(lacking==0)return equilibrium;
-        int n=componentCount();double[][] out=new double[3][n];int[] bit={2,1,4};
-        for(int c=0;c<n;c++) {
-            double[] share=new double[3];double sum=0;
-            for(int slot=0;slot<3;slot++) {
-                share[slot]=(answer&bit[slot])!=0?equilibrium.amountsView(slot)[c]:(lacking&bit[slot])!=0?kept.amountsView(slot)[c]:0;
-                sum+=share[slot];
-            }
-            double total=kept.vaporAmountsView()[c]+kept.liquidAmountsView()[c]+kept.aqueousAmountsView()[c];
-            if(!(sum>0)){for(int slot=0;slot<3;slot++)if((phaseBits(kept)&bit[slot])!=0){out[slot][c]=total;break;}continue;}
-            for(int slot=0;slot<3;slot++)out[slot][c]=total*(share[slot]/sum);
-        }
-        try{return adoptingState(kept.temperature(),kept.pressure(),out[0],out[1],out[2],prepared).withSolidState(kept.solids(),kept.solidMoments());}
-        catch(IllegalArgumentException unevaluable){return equilibrium;}
-    }
-    /**
-     * A pipe junction's own split (owner decision D26, {@link #phaseCheck}; the arriving-phase seed of
-     * {@code PassiveStepSolver.arrivingPhases}): its own rows ({@link PhaseLayout#junctionResidual}), isolated at the
-     * pressure {@code p} it holds, with the amounts {@code amounts} (the conserved basis, water last), the enthalpy
-     * {@code enthalpy} (J, the network's datum) and the mass {@code mass} its rows weigh them by, closed from {@code start}
-     * in {@code start}'s phase layout. The closed point is restated at exactly {@code p} and {@code amounts}. {@code null}
-     * where the closure fails or drives a phase of {@code start} to nothing on its way ({@link #vanishing}, D38 C).
-     */
-    public State junctionSplit(double[] amounts,double enthalpy,double mass,double p,State start,Runnable checkpoint) {
-        try {
-            var layout=new PhaseLayout(this,start,null,null,PhaseLayout.support(this,start,null,null));
-            int n=componentCount();double[] fractions=new double[n];
-            for(int i=0;i<n;i++)fractions[i]=amounts[i]*molecularWeight(i)/mass;
-            var solved=SparseNewton.solve(layout.junctionClosure(fractions,enthalpy/mass,p,start),layout.encode(start),
-                    new SparseNewton.Settings(SparseNewton.ITERATIONS,1e-10,1e-6,24),checkpoint);
-            var closed=layout.decode(solved.variables(),0);
-            // Exactly what the junction holds: each component split as the closure split it, at exactly the retained pressure.
-            double[][] out=new double[3][n];
-            for(int i=0;i<n;i++) {
-                double v=closed.vaporAmountsView()[i],l=closed.liquidAmountsView()[i],a=closed.aqueousAmountsView()[i],total=v+l+a;
-                if(!(total>0)){int slot=closed.phase(State.LIQUID)!=null?State.LIQUID:closed.phase(State.AQUEOUS)!=null?State.AQUEOUS:State.VAPOR;out[slot][i]=amounts[i];continue;}
-                // The rest of the rounding goes to the slot holding the most of it: put in the liquid slot of a gas and an
-                // aqueous liquid, it was a 1e-15 mol liquid of dissolved nitrogen with no liquid root, or a negative amount,
-                // and the junction's condensate was refused (W3b stage A, a cooling tower's suction line).
-                double[] share={v,l,a};int most=0;for(int k=1;k<3;k++)if(share[k]>share[most])most=k;
-                double placed=0;for(int k=0;k<3;k++)if(k!=most){out[k][i]=amounts[i]*(share[k]/total);placed+=out[k][i];}
-                out[most][i]=amounts[i]-placed;
-            }
-            return adoptingState(closed.temperature(),p,out[0],out[1],out[2],null).withSolidState(start.solids(),start.solidMoments());
-        }
-        catch(PhaseLayout.Vanished|SparseNewton.Nonconvergence|IllegalArgumentException failed){return null;}
-    }
-    /**
-     * A vessel's own state at a crossing (owner decision D40 A), the start of its own split in {@link #phaseCheck}: the
-     * engine's equilibrium of the fluid it holds under its wall's law, the problem its own closure solves
-     * ({@code InventoryEquilibrium}), as a network state ({@link #adopt}) folded as a vessel: a slack bag at its fluid
-     * enthalpy and the ambient pressure ({@link #equilibriumPH}), a taut vessel at its fluid's internal energy and volume
-     * ({@link #equilibriumUV}), warm-started at its temperature and pressure, both under the step's competition. The TP
-     * answer says only which phase is missing: its amounts ignore the vessel's volume and are never the seed. {@code null}
-     * where the engine does not converge, answers a phase set the network cannot carry, or answers none of the phases
-     * {@code proposed} adds (no crossing).
-     */
-    private State crossing(State state,State kept,int proposed,double[] totals,boolean rigid,boolean open,Runnable checkpoint) {
-        double t=kept.temperature(),p=kept.pressure();var solids=state.solidMoments();
-        // An open vessel's wall is never taut (PhaseLayout.wallRow): its surface stands at its own ambient, which falls with
-        // height (batch 2026-11-10-chimney), so the slack branch is its only one at any pressure. A closed bag's slack branch
-        // holds it at the sea-level ambient.
-        var own=!rigid&&(open||p<=PhaseLayout.AMBIENT_PRESSURE*(1+SLACK_PRESSURE))?equilibriumPH(t,p,state.enthalpy()-solids.enthalpy(state.temperature(),state.pressure()),totals,checkpoint)
-                :equilibriumUV(t,p,state.internalEnergy()-solids.internalEnergy(state.temperature()),state.volume()-solids.volume(),totals,checkpoint);
-        if(own==null)return null;
-        var seed=folded(own.withSolidState(kept.solids(),kept.solidMoments()),false,rigid);
-        return (lacking(kept,seed)&proposed)!=0?seed:null;
-    }
-    /** How far above the ambient pressure, relatively, a closed vessel's state still reads as its wall's slack branch in
-     * {@link #crossing}: the slack row holds it at the ambient to the solve's tolerance (a vessel's closure, 1e-11). */
-    private static final double SLACK_PRESSURE=1e-9;
 
     /**
      * Initializer, boundary and outer-check flash; the time-step solver never calls it in a residual evaluation: the
@@ -1190,8 +1043,8 @@ public final class FluidThermodynamics {
         return adopt(t,p,overall,result,given);
     }
     /**
-     * A pipe junction's own split (owner decision D26, {@link #phaseCheck}), the phases of an empty bag's
-     * ({@code PassiveStepSolver.emptyBagSplit}, D54) and a slack vessel's crossing ({@link #crossing}): the engine's PH
+     * A pipe junction's own split (owner decision D26, {@code StepPhaseRules.phaseCheck}), the phases of an empty bag's
+     * ({@code PassiveStepSolver.emptyBagSplit}, D54) and a slack vessel's crossing ({@code StepPhaseRules.crossing}): the engine's PH
      * equilibrium of {@code overall} at the node's pressure {@code p} and its fluid enthalpy {@code h} (J, the network's
      * datum), under the step's competition at {@code t}, as a network state ({@link #adopt}, unfolded); {@code null} where
      * the engine does not converge or answers a phase set the network cannot carry.
@@ -1209,7 +1062,7 @@ public final class FluidThermodynamics {
     }
     /** {@link #equilibriumUV}, for a rigid vessel that flashes (batch 2026-11-10-rigid-reservoir, {@code PassiveStepSolver.flashes}). */
     public State equilibriumAtVolume(double t,double p,double u,double v,double[] overall,Runnable checkpoint){return equilibriumUV(t,p,u,v,overall,checkpoint);}
-    /** A taut vessel's own state at a crossing ({@link #crossing}, owner decision D40 A), the UV twin of {@link #equilibriumPH}. */
+    /** A taut vessel's own state at a crossing ({@code StepPhaseRules.crossing}, owner decision D40 A), the UV twin of {@link #equilibriumPH}. */
     private State equilibriumUV(double t,double p,double u,double v,double[] overall,Runnable checkpoint) {
         checkpoint.run();
         var result=phaseEngine().crystalUv(engineEnergy(u,overall),v,overall,stepCompetition(t,overall),t,p);
@@ -1422,7 +1275,8 @@ public final class FluidThermodynamics {
             };
         }
     }
-    private static double sum(double[] values) {double total=0;for(double value:values){if(value<0||!Double.isFinite(value))throw new IllegalArgumentException("Invalid phase amount");total+=value;}return total;}
+    /** The sum of a node's or a phase's amounts, refusing a negative or non-finite one: every state builder's and the outer phase check's. */
+    public static double sum(double[] values) {double total=0;for(double value:values){if(value<0||!Double.isFinite(value))throw new IllegalArgumentException("Invalid phase amount");total+=value;}return total;}
 
     /** The temperature-only property bundle for one exact node temperature. */
     public Prepared prepare(double temperature) { return new Prepared(this,temperature); }

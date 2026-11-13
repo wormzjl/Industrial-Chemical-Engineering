@@ -169,7 +169,7 @@ public final class InventoryEquilibrium {
     }
     /**
      * The vessel's equilibrium from {@code state}: {@code closure} solved in a phase layout, and the layout decided by the
-     * outer phase check (owner decisions D25 and D26, {@code FluidThermodynamics.phaseCheck}). A phase leaves only when
+     * outer phase check (owner decisions D25 and D26, {@link StepPhaseRules#phaseCheck}). A phase leaves only when
      * the closure empties it (the trace fold of its point, and the vanishing rule of owner decision D38 C: under 1e-6 of
      * the vessel's fluid amount and at a smaller share than in {@code state}); where the TP answer finds a phase missing,
      * the vessel is seeded at its own split, the closure started from the vessel's own state at the crossing (owner
@@ -201,7 +201,7 @@ public final class InventoryEquilibrium {
                 state=checked.withSolids(state.solids());continue;
             }
             if(candidate==state)return state;
-            var checked=model.phaseCheck(candidate,false,from,excluded,0,null,own,closure.rigid(),closure.open(),checkpoint);
+            var checked=StepPhaseRules.phaseCheck(model,candidate,false,from,excluded,0,null,own,closure.rigid(),closure.open(),checkpoint);
             if(checked!=candidate){state=checked;continue;}
             return candidate;
         }
@@ -262,7 +262,7 @@ public final class InventoryEquilibrium {
     }
     /**
      * Owner decision D26: a vessel's own split, the seed of a phase the outer phase check adds
-     * ({@code FluidThermodynamics.phaseCheck}): its closure ({@link #close}) at {@code inventory}, from {@code start} (a
+     * ({@link StepPhaseRules#phaseCheck}): its closure ({@link #close}) at {@code inventory}, from {@code start} (a
      * state holding the phases to lay the vessel out with), the wall's work booked from the bag volume {@code workFrom}:
      * the equilibrium of its energy and volume while the wall is taut, of its enthalpy at the ambient pressure while
      * slack. The split answers by where the closure went: a phase it drove under the trace share is not in it, and the

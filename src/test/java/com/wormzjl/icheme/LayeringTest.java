@@ -73,6 +73,7 @@ class LayeringTest {
             new PackageRule("fluid-free-of-equipment", "science/fluid", "science.equipment", "the network is below the equipment"),
             new PackageRule("fluid-free-of-plant", "science/fluid", "science.plant", "the plant layer is above the solvers"),
             new PackageRule("fluid-free-of-flowsheet", "science/fluid", "science.flowsheet", "the sheet is above the plant"),
+            new PackageRule("fluid-thermo-below-solver", "science/fluid/thermo", "science.fluid.solver", "the thermodynamics port is below the step solver that calls it"),
             new PackageRule("machine-free-of-column", "science/machine", "science.column", "the machines are beside the column solver"),
             new PackageRule("machine-free-of-plant", "science/machine", "science.plant", "the plant layer is above the solvers"),
             new PackageRule("machine-free-of-fluid", "science/machine", "science.fluid", "the machine laws are below the network"),

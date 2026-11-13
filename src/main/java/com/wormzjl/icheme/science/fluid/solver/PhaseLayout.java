@@ -326,11 +326,8 @@ public final class PhaseLayout {
     private boolean hasOther(int i){for(int slot=0;slot<3;slot++)if(slot!=referenceSlot[i]&&slotIndex[i][slot]>=0)return true;return false;}
     /** {@code ln(n_ik/n_i,ref)} of a supported slot: 0 for the reference, its unknown otherwise. */
     private double ratio(double[] variables,int offset,int i,int slot){return slot==referenceSlot[i]?0:variables[offset+slotIndex[i][slot]];}
-    /**
-     * The game's ambient pressure (Pa): the outside of every vessel's wall, and the pressure of the air the network
-     * reduction's ambient state holds.
-     */
-    public static final double AMBIENT_PRESSURE=101325;
+    /** The game's ambient pressure (Pa), {@link FluidThermodynamics#AMBIENT_PRESSURE}: the outside of every vessel's wall. */
+    public static final double AMBIENT_PRESSURE=FluidThermodynamics.AMBIENT_PRESSURE;
     /**
      * Batch 2026-11-10-chimney (owner decision C1 B): the atmosphere falls with height at every boundary open to it. The
      * density of the outside air, kg/m³ (dry air, 298.15 K, 101,325 Pa), and the height, block y, where it stands at
@@ -621,7 +618,7 @@ public final class PhaseLayout {
         Vanished(){super(null,null,false,false);}
     }
     /**
-     * A pipe junction's own rows isolated ({@code FluidThermodynamics.junctionSplit}): {@link #junctionResidual} with the
+     * A pipe junction's own rows isolated ({@link StepPhaseRules#junctionSplit}): {@link #junctionResidual} with the
      * mass fractions {@code massFractions} and specific enthalpy {@code specificEnthalpy} it holds as its inflow, no net
      * flow and {@code pressure} retained, the pressure no connection decides here. Every point it evaluates is read by the
      * vanishing rule against {@code start} ({@code FluidThermodynamics.vanishing}); one that empties a phase of the start

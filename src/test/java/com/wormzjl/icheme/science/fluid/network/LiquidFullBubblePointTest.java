@@ -22,7 +22,7 @@ import com.wormzjl.icheme.science.thermo.phase.PackageBinding;
  * outer check seeded the two-phase layout with the TP split at the single phase's overshot (T, P), several vessel volumes
  * of vapour a rigid vessel cannot hold, and the two-phase Newton's last iterate (a trace of vapour) was one phase again,
  * repeating the first pass's active set. On main the outer phase check of owner decisions D25 and D26 answers it
- * ({@link FluidThermodynamics#phaseCheck}): the vapour enters the liquid-full vessel at the vessel's own split, its closure
+ * ({@code StepPhaseRules.phaseCheck}): the vapour enters the liquid-full vessel at the vessel's own split, its closure
  * of what it holds ({@link InventoryEquilibrium#split}: the small vapour of its energy and volume beside the liquid it
  * keeps), and no TP verdict takes a phase away. Each vessel: 1 L
  * charged liquid-full at 5 MPa, cooled by -200 W through the network's energy input (a 1e-12 mol/s methane trace), 5 s
