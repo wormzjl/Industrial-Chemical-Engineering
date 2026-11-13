@@ -23,8 +23,8 @@ import java.util.*;
  * balance of the island on its start states ({@link #balanceStart}, {@link BalanceNet} with its banded solve) and the
  * mint's round 0, the supplier composition ({@link #supplierSeeds}). One per solver ({@code PassiveStepSolver.balance}),
  * built with it; a {@link BalanceNet} is built per start. It reads the solver's constants, suction readings and laws through
- * {@code solver}; it holds no state of its own (S-01, batch 2026-11-13-codebase-review, D-S4: moved out of the solver
- * with every body unchanged but its qualifiers).
+ * {@code solver}; its only state is the junctions' density tables ({@link #tableCache}) (S-01, batch
+ * 2026-11-13-codebase-review, D-S4: moved out of the solver with every body unchanged but its qualifiers).
  */
 final class BalanceStart {
     /** The solver this start belongs to: its solve constants and the laws and suction readings the balance states. */
@@ -32,6 +32,12 @@ final class BalanceStart {
     /** The solver's thermodynamics, the same object. */
     private final FluidThermodynamics model;
     BalanceStart(PassiveStepSolver solver,FluidThermodynamics model){this.solver=solver;this.model=model;}
+    /** The junctions' density tables ({@link BalanceNet#tableP}) keyed by the junction state they were built for, over one
+     * hull ({low, top, flashFrom} in the fourth row); a liquid junction that does not flash keeps an entry with no table. A
+     * table is a function of its state, its hull and the model alone, so a hit is what a new build would give. One map per
+     * solver (finding P-09, batch 2026-11-13-codebase-review): a mint's throwaway solver builds its own, and the island's
+     * first step builds its tables again. */
+    final Map<FluidThermodynamics.State,double[][]> tableCache=Collections.synchronizedMap(new WeakHashMap<>());
     /**
      * Composition rounds of {@link #balanceStart}, at most: the junctions' upwind mixtures at the balanced flows move their
      * densities and caps, so the balance is solved once more on them; a round that moves no junction pressure by more than
@@ -256,9 +262,6 @@ final class BalanceStart {
          * of a liquid junction that holds no vapour; infinite for a table of a junction stated two-phase or still flashing at
          * its stated pressure. A junction that stays there balances bit for bit as it would with no table. */
         final double[] flashFrom;
-        /** The tables keyed by the junction state they were built for (a mint's state is the first step's), over one hull
-         * ({low, top, flashFrom} in the fourth row); a liquid junction that does not flash keeps an entry with no table. */
-        static final Map<FluidThermodynamics.State,double[][]> TABLE_CACHE=Collections.synchronizedMap(new WeakHashMap<>());
         /** Per pump connection, whether the balance put it on its suction limit: its suction junction is anchored at the
          * liquid's bubble pressure ({@link MoverSuction#suctionFloors}) and the pump passes what the suction line delivers there. */
         final boolean[] suctionLimited,onLaw;final int[][] nodeEdges;final double[][] lastQ;
@@ -302,7 +305,7 @@ final class BalanceStart {
                 // 1.25 MPa bubble point fell to 1 atm still liquid and 40 K superheated, and flashing them one by one stalled
                 // Newton (cold seed 907, whose start the crystal competition's 2 K of heat had made two-phase).
                 double top=liquid?Math.min(high,s.pressure()):high;if(!(top>low))continue;
-                var cached=TABLE_CACHE.get(s);
+                var cached=tableCache.get(s);
                 if(cached!=null&&cached[3][0]==low&&cached[3][1]==top){if(cached[1]!=null){tableP[j]=cached[0];tableRho[j]=cached[1];tableRhoV[j]=cached[2];flashFrom[j]=cached[3][2];}continue;}
                 double[] held=PhaseLayout.totalAmounts(s);double h=s.enthalpy();double[] tp=new double[TABLE],tr=new double[TABLE],tv=new double[TABLE];boolean ok=true;double flash=Double.POSITIVE_INFINITY;
                 for(int k=0;k<TABLE;k++)tp[k]=low*DeterministicMath.exp(DeterministicMath.log(top/low)*k/(TABLE-1));
@@ -319,8 +322,8 @@ final class BalanceStart {
                         if(liquid&&!FluidThermodynamics.holdsPhase(at,FluidThermodynamics.GAS)){flash=tp[k];for(int i=k+1;i<TABLE;i++){tr[i]=tr[k];tv[i]=tv[k];}}}
                     catch(IllegalArgumentException refused){ok=false;}
                 }
-                if(flash==tp[0]){TABLE_CACHE.put(s,new double[][]{tp,null,null,{low,top,flash}});continue;}
-                if(ok){tableP[j]=tp;tableRho[j]=tr;tableRhoV[j]=tv;flashFrom[j]=flash;TABLE_CACHE.put(s,new double[][]{tp,tr,tv,{low,top,flash}});}
+                if(flash==tp[0]){tableCache.put(s,new double[][]{tp,null,null,{low,top,flash}});continue;}
+                if(ok){tableP[j]=tp;tableRho[j]=tr;tableRhoV[j]=tv;flashFrom[j]=flash;tableCache.put(s,new double[][]{tp,tr,tv,{low,top,flash}});}
             }
         }
         /** The held data of open connection {@code e}: each end's density, viscosity, cap, column and end pressure, its one-way
