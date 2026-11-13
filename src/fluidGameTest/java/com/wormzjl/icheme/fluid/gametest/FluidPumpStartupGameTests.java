@@ -21,7 +21,11 @@ public final class FluidPumpStartupGameTests {
      * close holds, M-04): every GameTest whose in-line mover must run calls this. Returns where the source stands, for cleanup.
      */
     static BlockPos powerInlineMover(net.minecraft.server.level.ServerLevel level,BlockPos pump) {
-        var at=pump.above();level.setBlock(at,ModBlocks.CREATIVE_POWER.get().defaultBlockState(),3);return at;
+        return powerInlineMover(level,pump,Direction.UP);
+    }
+    /** {@link #powerInlineMover} with the source on the {@code face} side of the mover. */
+    static BlockPos powerInlineMover(net.minecraft.server.level.ServerLevel level,BlockPos pump,Direction face) {
+        var at=pump.relative(face);level.setBlock(at,ModBlocks.CREATIVE_POWER.get().defaultBlockState(),3);return at;
     }
     static net.minecraft.world.level.block.state.BlockState inlineMover(Direction discharge,FluidDeviceBlock.InlineMover mover) {
         return ModBlocks.FLUID_PIPE.get().defaultBlockState().setValue(FluidDeviceBlock.FACING,discharge).setValue(FluidDeviceBlock.INLINE_MOVER,mover);

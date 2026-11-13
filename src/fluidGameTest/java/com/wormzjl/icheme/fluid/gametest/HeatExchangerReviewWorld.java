@@ -234,6 +234,13 @@ public final class HeatExchangerReviewWorld {
             if (plant.level.getBlockEntity(at) instanceof FluidDeviceBlockEntity entity) entity.refreshGeometry(entity.bore(), true);
             var r = world.registrations().get(id);
             world.edit(id, r.revision(), r.device().withControl(new FlowControl.Pump(volumeFlow, 500_000, true)), r.spec());
+            // Its FE, as a player gives it: a creative source on a free side (a placed in-line mover's store starts empty, M-04).
+            for (var face : java.util.List.of(Direction.UP, Direction.DOWN, towards.getClockWise(), towards.getCounterClockWise())) {
+                var beside = at.relative(face);
+                if (!plant.level.isEmptyBlock(beside) || plant.devices.contains(beside)) continue;
+                plant.devices.add(FluidPumpStartupGameTests.powerInlineMover(plant.level, at, face));
+                break;
+            }
         }
 
         /**
