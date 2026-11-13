@@ -432,7 +432,7 @@ class FluidFactsCompatTest {
      * second (where the corpus has one) failed at 0; every other pump is new and carries no entry.
      */
     private void health(EventPathWorld world) {
-        var pumps=world.ledger.active().values().stream().filter(PumpHealth::pump).map(r->r.device().id()).sorted().toList();
+        var pumps=world.ledger.active().values().stream().filter(MachineHealth::pump).map(r->r.device().id()).sorted().toList();
         var health=new HashMap<Long,Double>();
         health.put(pumps.get(0),.73);
         if(pumps.size()>1)health.put(pumps.get(1),0.);

@@ -29,6 +29,33 @@ class WearTest {
         assertTrue(Wear.intensity(3.99) > 0);
     }
 
+    /**
+     * M-12: every fault has a class; one rule: the largest intensity of a class counts, the classes add. A pump's two
+     * terms (cavitation, dry) are today's two terms in today's order, bit for bit.
+     */
+    @Test
+    void oneRateRuleOverTheFaultTable() {
+        assertEquals(Wear.FaultClass.EROSION, Wear.Fault.CAVITATION.type);
+        assertEquals(Wear.FaultClass.SEIZURE, Wear.Fault.DRY.type);
+        assertEquals(Wear.FaultClass.EROSION, Wear.Fault.LOW_FLOW.type);
+        assertEquals(Wear.FaultClass.EROSION, Wear.Fault.WET_GAS.type);
+        assertEquals(Wear.FaultClass.SEIZURE, Wear.Fault.LIQUID.type);
+        assertEquals(Wear.FaultClass.EROSION, Wear.Fault.WET_EXHAUST.type);
+        var s = Wear.Settings.DEFAULT;
+        for (double sigma : new double[]{Double.NaN, 0, .5, 1, 2.06, 3.5, 3.99, 4, 9})
+            for (boolean dry : new boolean[]{false, true}) {
+                double before = Wear.intensity(sigma) / (s.cavitationHours() * 3600) + (dry ? 1 / (s.dryMinutes() * 60) : 0);
+                assertEquals(Double.doubleToRawLongBits(before), Double.doubleToRawLongBits(Wear.rate(sigma, dry, s)), "sigma " + sigma + " dry " + dry);
+                assertEquals(Wear.intensity(sigma), Wear.Fault.CAVITATION.intensity(sigma));
+            }
+        assertEquals(1, Wear.Fault.DRY.intensity(1));
+        assertEquals(0, Wear.Fault.DRY.intensity(0));
+        // A dry screw: no erosion, its liquid's seizure term as running dry.
+        assertEquals(1 / (s.dryMinutes() * 60), Wear.rate(0, Wear.Fault.LIQUID.intensity(.5), s));
+        assertEquals(0, Wear.rate(0, Wear.Fault.LIQUID.intensity(VacuumPump.LIQUID_TRACE), s));
+        assertEquals(0, Wear.rate(1, 1, new Wear.Settings(false, 8, 40)), "switched off");
+    }
+
     @Test
     void runningDryLastsFortyProcessMinutesAndTheSwitchStopsAllWear() {
         assertEquals(2400, Wear.life(Double.NaN, true, Wear.Settings.DEFAULT), 1e-9);

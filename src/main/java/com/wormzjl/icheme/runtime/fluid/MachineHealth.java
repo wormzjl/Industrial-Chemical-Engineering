@@ -14,12 +14,14 @@ import java.util.function.LongPredicate;
 import java.util.function.Supplier;
 
 /**
- * The pumps' health (batch 2026-11-03-rotating-machinery W10b, build plan revision 2, owner decision D34): every pump,
- * a constructed casing or an in-line pump, keyed by its device identity (the node its mover's connection leaves). Health
+ * The machines' health (batch 2026-11-03-rotating-machinery W10b, build plan revision 2, owner decision D34; one class for
+ * every machine since code base review M-12): every machine with a fault ({@link #faults}), a constructed casing, an
+ * in-line pump or a dry screw, keyed by its device identity (the node its mover's connection leaves). Health
  * is a fact, 1 (new) to 0 (failed); arithmetic on the server thread only:
  * <ul>
- * <li>at each commit and replay its wear rate ({@link Wear#rate}) is read from the slice's committed suction (its
- * {@link PassiveStepSolver.PipeObservation#npshRatio} and {@link PassiveStepSolver.PipeObservation#dry}) and booked over
+ * <li>at each commit and replay its wear rate is read from its faults' intensities at the slice's committed suction (its
+ * {@link PassiveStepSolver.PipeObservation#npshRatio}, {@link PassiveStepSolver.PipeObservation#dry}, a dry screw's liquid
+ * share), by the rule of {@link Wear#rate(double, double, Wear.Settings)}, and booked over
  * the slice's process time, its online ticks times the time factor ({@link #booked});</li>
  * <li>on the presentation cadence a pump not booked for a cadence (a resting island) books its last rate to now, one that
  * reached 0 fails, and the facts go to the ledger ({@link #cadence});</li>
@@ -29,7 +31,7 @@ import java.util.function.Supplier;
  * A failure and a repair wake the pump's island; wear above 0 wakes nothing and changes nothing the solver reads.
  * {@code machines.wear.enabled = false} books nothing and closes nothing.
  */
-public final class PumpHealth {
+public final class MachineHealth {
     /** The presentation cadence, online ticks (as the electric stores'). */
     public static final int CADENCE = ElectricStores.CADENCE;
 
@@ -63,6 +65,9 @@ public final class PumpHealth {
         Suction suction = Suction.NONE;
         /** A dry screw's suction liquid volume share at its last committed slice (owner V6 B); 0 for a pump. */
         double liquid;
+        /** The fault that set the larger class term of its last booking, and its intensity (M-12): state, never saved; null for none. */
+        Wear.Fault fault;
+        double intensity;
         long bookedTick;
         boolean failed;
     }
@@ -83,7 +88,7 @@ public final class PumpHealth {
      * @param registered a device's registered control (null for none): a repaired in-line pump switches back on only where
      *                   its registration is switched on
      */
-    public PumpHealth(WorldTopologyLedger topology, LongFunction<Long> owner, IslandCoordinator coordinator, LongPredicate isPump, LongFunction<FlowControl> registered,
+    public MachineHealth(WorldTopologyLedger topology, LongFunction<Long> owner, IslandCoordinator coordinator, LongPredicate isPump, LongFunction<FlowControl> registered,
                       Supplier<Wear.Settings> settings) {
         this.topology = Objects.requireNonNull(topology);
         this.owner = Objects.requireNonNull(owner);
@@ -102,9 +107,21 @@ public final class PumpHealth {
         });
     }
 
-    /** Whether {@code mover} wears: a liquid mover, or a dry screw vacuum pump, which liquid wears (owner V6 B). */
+    private static final List<Wear.Fault> LIQUID_MOVER = List.of(Wear.Fault.CAVITATION, Wear.Fault.DRY), SCREW = List.of(Wear.Fault.LIQUID);
+
+    /**
+     * The faults {@code mover} reads (M-12): a liquid mover cavitation and running dry; a dry screw vacuum pump liquid at its
+     * suction (owner V6 B); none for another mover.
+     */
+    static List<Wear.Fault> faults(FlowControl.Mover mover) {
+        if (mover.liquid()) return LIQUID_MOVER;
+        if (mover instanceof FlowControl.Machine m && com.wormzjl.icheme.science.machine.VacuumPump.dryScrew(m.law())) return SCREW;
+        return List.of();
+    }
+
+    /** Whether {@code mover} wears: it has a fault ({@link #faults}). */
     static boolean worn(FlowControl.Mover mover) {
-        return mover.liquid() || mover instanceof FlowControl.Machine m && com.wormzjl.icheme.science.machine.VacuumPump.dryScrew(m.law());
+        return !faults(mover).isEmpty();
     }
 
     /** Whether registration {@code r} is a pump: its control a liquid mover (a constructed casing or an in-line pump) or a dry screw. */
@@ -157,17 +174,40 @@ public final class PumpHealth {
             }
             var row = rows.get(pipe.id());
             boolean read = row != null && m.targetVolumeFlow() > 0;
+            // A dry screw's liquid share (owner V6 B): its LIQUID fault's driving quantity, and its liquid noise.
+            double liquid = !m.liquid() && read && Double.isFinite(row.vapourShare()) ? 1 - row.vapourShare() : 0;
+            // The largest intensity of each class, and the fault that set it.
+            double erosion = 0, seizure = 0;
+            Wear.Fault eroding = null, seizing = null;
+            if (read) for (var fault : faults(m)) {
+                double q = switch (fault) {
+                    case CAVITATION -> row.npshRatio();
+                    case DRY -> row.dry() ? 1 : 0;
+                    case LIQUID -> liquid;
+                    case LOW_FLOW, WET_GAS, WET_EXHAUST -> 0;
+                };
+                double i = fault.intensity(q);
+                if (fault.type == Wear.FaultClass.EROSION) {
+                    if (i > erosion) {
+                        erosion = i;
+                        eroding = fault;
+                    }
+                } else if (i > seizure) {
+                    seizure = i;
+                    seizing = fault;
+                }
+            }
+            book(p, Wear.rate(erosion, seizure, s), start, end);
+            boolean seized = seizure / s.dryMinutes() / 60 > erosion / s.cavitationHours() / 3600;
+            p.fault = seized ? seizing : eroding;
+            p.intensity = seized ? seizure : erosion;
             if (!m.liquid()) {
-                // A dry screw (owner V6 B): liquid above the trace wears it as running dry does, and makes its liquid noise.
-                double liquid = read && Double.isFinite(row.vapourShare()) ? 1 - row.vapourShare() : 0;
                 p.liquid = liquid;
-                book(p, Wear.rate(Double.NaN, liquid > com.wormzjl.icheme.science.machine.VacuumPump.LIQUID_TRACE, s), start, end);
                 p.crackle = com.wormzjl.icheme.science.machine.VacuumPump.liquidNoise(liquid);
                 p.churn = 0;
                 p.suction = Suction.NONE;
                 continue;
             }
-            book(p, read ? Wear.rate(row.npshRatio(), row.dry(), s) : 0, start, end);
             p.crackle = read ? (int) Math.round(255 * Wear.intensity(row.npshRatio())) : 0;
             p.churn = read ? (int) Math.round(255 * com.wormzjl.icheme.science.machine.GasEntrainment.churn(row.gasRatio())) : 0;
             p.suction = read ? new Suction(row.npshRatio() * row.npshRequired(), row.npshRequired(), row.vapourShare(), row.npshRatio(), row.gasRatio()) : Suction.NONE;
@@ -301,6 +341,18 @@ public final class PumpHealth {
     public double rate(long id) {
         var p = pumps.get(id);
         return p == null ? 0 : p.rate;
+    }
+
+    /** Machine {@code id}'s standing fault: the one that set the larger class term of its last booking (M-12); null for none. */
+    public Wear.Fault fault(long id) {
+        var p = pumps.get(id);
+        return p == null ? null : p.fault;
+    }
+
+    /** The intensity, 0 to 1, of machine {@code id}'s standing fault at its last booking; 0 for none. */
+    public double intensity(long id) {
+        var p = pumps.get(id);
+        return p == null ? 0 : p.intensity;
     }
 
     /** Pump {@code id}'s suction as its last committed slice read it (W10d); {@link Suction#NONE} for no read and no pump. */
