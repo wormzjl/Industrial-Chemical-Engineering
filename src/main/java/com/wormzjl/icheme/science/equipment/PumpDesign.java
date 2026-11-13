@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.science.equipment;
 
 import com.wormzjl.icheme.science.equipment.EquipmentShape.Orientation;
+import com.wormzjl.icheme.science.equipment.design.UnitRatings;
 
 import java.util.List;
 
@@ -62,18 +63,18 @@ final class PumpDesign extends UnitDesign {
 
     @Override
     public MachineDuty duty(double size, int length) {
-        return MachineDuty.pump(ProcessUnit.pumpFlow(size), DEFAULT_HEAD, DEFAULT_POLES);
+        return MachineDuty.pump(UnitRatings.pumpFlow(size), DEFAULT_HEAD, DEFAULT_POLES);
     }
 
     @Override
     public double size(MachineDuty duty) {
-        return ProcessUnit.pumpDischarge(duty.flow());
+        return UnitRatings.pumpDischarge(duty.flow());
     }
 
     @Override
     void checkDuty(MachineDuty duty) {
-        if (!(duty.flow() >= MIN_FLOW && duty.flow() <= ProcessUnit.pumpFlow(maxSize()) + 1e-6))
-            throw new IllegalArgumentException("A pump's rated flow is " + MIN_FLOW + " to " + whole(ProcessUnit.pumpFlow(maxSize())) + " m³/h, not " + duty.flow());
+        if (!(duty.flow() >= MIN_FLOW && duty.flow() <= UnitRatings.pumpFlow(maxSize()) + 1e-6))
+            throw new IllegalArgumentException("A pump's rated flow is " + MIN_FLOW + " to " + whole(UnitRatings.pumpFlow(maxSize())) + " m³/h, not " + duty.flow());
         if (!(duty.head() >= MIN_HEAD && duty.head() <= MAX_HEAD)) throw new IllegalArgumentException("A pump's rated head is 5 to 300 m, not " + duty.head());
         if (duty.poles() != 2 && duty.poles() != 4) throw new IllegalArgumentException("A pump runs at 2 or 4 poles, not " + duty.poles());
         if (duty.polytropicHead() != 0 || duty.power() != 0 || duty.steam() != null || duty.exhaust() != 0 || duty.drive() != MachineDuty.Drive.FIXED)
@@ -84,7 +85,7 @@ final class PumpDesign extends UnitDesign {
     @Override
     public MachineDuty step(MachineDuty duty, String setting, int steps) {
         return switch (setting) {
-            case "flow" -> MachineDuty.pump(MachineDuty.step(MachineDuty.series(MIN_FLOW, ProcessUnit.pumpFlow(maxSize())), duty.flow(), steps), duty.head(), duty.poles()).withBaseSpeed(duty.baseSpeed());
+            case "flow" -> MachineDuty.pump(MachineDuty.step(MachineDuty.series(MIN_FLOW, UnitRatings.pumpFlow(maxSize())), duty.flow(), steps), duty.head(), duty.poles()).withBaseSpeed(duty.baseSpeed());
             case "head" -> MachineDuty.pump(duty.flow(), MachineDuty.step(MachineDuty.series(MIN_HEAD, MAX_HEAD), duty.head(), steps), duty.poles()).withBaseSpeed(duty.baseSpeed());
             case "base_speed" -> duty.withBaseSpeed(Math.clamp(UnitDesign.designSpeed(EquipmentShape.Kind.PUMP,duty)+steps*100,300,com.wormzjl.icheme.science.machine.Motor.MAXIMUM_RPM));
             default -> duty;
@@ -104,7 +105,7 @@ final class PumpDesign extends UnitDesign {
     @Override
     public Line held(EquipmentShape shape) {
         var duty = shape.duty();
-        return new Line("pump_flow", whole(duty.flow()), whole(duty.head()), whole(ProcessUnit.pumpPower(duty)));
+        return new Line("pump_flow", whole(duty.flow()), whole(duty.head()), whole(UnitRatings.pumpPower(duty)));
     }
 
     @Override
@@ -117,7 +118,7 @@ final class PumpDesign extends UnitDesign {
         double d = shape.diameter();
         var duty = shape.duty();
         return List.of(new Line("pump", size(d), size(ProcessUnit.pumpSuction(d))),
-                new Line("pump_duty", whole(duty.flow()), whole(duty.head()), whole(duty.speed()), whole(ProcessUnit.pumpPower(duty))));
+                new Line("pump_duty", whole(duty.flow()), whole(duty.head()), whole(duty.speed()), whole(UnitRatings.pumpPower(duty))));
     }
 
     @Override

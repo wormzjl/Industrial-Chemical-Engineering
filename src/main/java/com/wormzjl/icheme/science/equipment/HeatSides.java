@@ -8,6 +8,7 @@ import com.wormzjl.icheme.science.fluid.network.HeatCurve;
 import com.wormzjl.icheme.science.fluid.network.HeatLaw;
 import com.wormzjl.icheme.science.fluid.network.HeatSide;
 import com.wormzjl.icheme.science.fluid.network.PipeResistance;
+import com.wormzjl.icheme.science.equipment.design.UnitRatings;
 import java.util.List;
 import org.jetbrains.annotations.Nullable;
 
@@ -84,8 +85,8 @@ public final class HeatSides {
     public static final AirCooled.Air AIR=new AirCooled.Air(AIR_TEMPERATURE,BARE_PER_FACE,AIR_FILM*FINNED_PER_FACE,AIR_CAPACITY,NATURAL_DRAUGHT);
     /**
      * A fired heater's convection coil's mean flux, kW/m² of bare tube (API 560 practice: 10 to 20 for finned and shock
-     * tubes), against the radiant coil's {@link ProcessUnit#RADIANT_FLUX}: the coils take 30 % and 70 % of the duty
-     * ({@link ProcessUnit#RADIANT_SHARE}).
+     * tubes), against the radiant coil's {@link UnitRatings#RADIANT_FLUX}: the coils take 30 % and 70 % of the duty
+     * ({@link UnitRatings#RADIANT_SHARE}).
      */
     static final double CONVECTION_FLUX=15;
     /**
@@ -94,7 +95,7 @@ public final class HeatSides {
      * finned convection tubes run; the owner's test of 2026-10-28, OWNER_TEST_REVIEW.md section 1).
      */
     static final double CONVECTION_U=54.9;
-    /** A fired heater's coil tubes, m: 6" schedule 80, the tubes {@link ProcessUnit#heaterDuty} counts. */
+    /** A fired heater's coil tubes, m: 6" schedule 80, the tubes {@link UnitRatings#heaterDuty} counts. */
     static final double HEATER_TUBE=.168,HEATER_BORE=.146;
     /** A coil's duty per parallel pass, MW (about 2 m/s of oil per pass), its straight tube between return bends, m, and a bend's velocity heads. */
     static final double PASS_DUTY=8,HEATER_STRAIGHT=10,RETURN_BEND=.5;
@@ -117,31 +118,31 @@ public final class HeatSides {
     public static final EquipmentShape.Role BURNER_ROLE=EquipmentShape.Role.FUEL;
     /**
      * A kettle's bundle across, m, in its shell of diameter {@code shell} (W7): the drawn bundle, centred on the shell's axis,
-     * 1/1.6 of it ({@link ProcessUnit#kettleShell}, within the shell's rounding to 0.25 m). Its lowest tubes stand half the
+     * 1/1.6 of it ({@link UnitRatings#kettleShell}, within the shell's rounding to 0.25 m). Its lowest tubes stand half the
      * difference over the shell's bottom; the pool's level wets it from there ({@link com.wormzjl.icheme.science.fluid.network.Pool#wetted}).
      */
     public static double kettleBundle(double shell){return shell/1.6;}
     /**
-     * A kettle's shell as a vessel (W7): a lying drum of the kettle's diameter ({@link ProcessUnit#kettleShell}, 1.6 bundles)
+     * A kettle's shell as a vessel (W7): a lying drum of the kettle's diameter ({@link UnitRatings#kettleShell}, 1.6 bundles)
      * over the drawn shell's cylinder, 0.9 L + 0.3 m ({@link ProcessUnit#kettle}), with two heads' volume for its back head
      * and front cone.
      */
     public static com.wormzjl.icheme.science.fluid.network.VesselGeometry kettleShell(double bundle,double tubes) {
-        return com.wormzjl.icheme.science.fluid.network.VesselGeometry.round(com.wormzjl.icheme.science.fluid.network.VesselGeometry.Form.HORIZONTAL_DRUM,ProcessUnit.kettleShell(bundle),.9*tubes+.3,0,0);
+        return com.wormzjl.icheme.science.fluid.network.VesselGeometry.round(com.wormzjl.icheme.science.fluid.network.VesselGeometry.Form.HORIZONTAL_DRUM,UnitRatings.kettleShell(bundle),.9*tubes+.3,0,0);
     }
     /** {@code shape}'s sides in registration order (the first one's node is the structure's fluid cell); none for other kinds. */
     public static List<Definition> of(EquipmentShape shape) {
         var unit=unit(shape.kind());if(unit==null)return List.of();
         double d=shape.diameter(),l=shape.tangentLength();
         return switch(unit) {
-            case EXCHANGER->{double area=ProcessUnit.tubeSurface(d,l);
+            case EXCHANGER->{double area=UnitRatings.tubeSurface(d,l);
                 yield List.of(new Definition(Side.TUBE,EquipmentShape.Role.TUBE_INLET,EquipmentShape.Role.TUBE_OUTLET,area,shape.exchangerType().tubePassage(d,l)),
                         new Definition(Side.SHELL,EquipmentShape.Role.SHELL_INLET,EquipmentShape.Role.SHELL_OUTLET,area,shape.exchangerType().shellPassage(d,l)));}
             // A kettle's bundle (TEMA AKT): two tube passes as an exchanger's; its shell is a vessel ({@link #pool}).
-            case KETTLE->List.of(new Definition(Side.TUBE,EquipmentShape.Role.TUBE_INLET,EquipmentShape.Role.TUBE_OUTLET,ProcessUnit.tubeSurface(d,l),tubePassage(d,l)));
+            case KETTLE->List.of(new Definition(Side.TUBE,EquipmentShape.Role.TUBE_INLET,EquipmentShape.Role.TUBE_OUTLET,UnitRatings.tubeSurface(d,l),tubePassage(d,l)));
             case AIR_COOLER->List.of(new Definition(Side.PROCESS,EquipmentShape.Role.PROCESS_INLET,EquipmentShape.Role.PROCESS_OUTLET,
                     airCoolerSurface(d,l,shape.bank()),airCoolerPassage(d,l,shape.bank())));
-            case FIRED_HEATER->{double duty=ProcessUnit.heaterDuty(shape.kind(),d,l);
+            case FIRED_HEATER->{double duty=UnitRatings.heaterDuty(shape.kind(),d,l);
                 double convection=coilArea(Side.CONVECTION,duty),radiant=coilArea(Side.RADIANT,duty);
                 yield List.of(new Definition(Side.CONVECTION,EquipmentShape.Role.CONVECTION_INLET,EquipmentShape.Role.CONVECTION_OUTLET,convection,heaterPassage(convection,duty)),
                         new Definition(Side.RADIANT,EquipmentShape.Role.RADIANT_INLET,EquipmentShape.Role.RADIANT_OUTLET,radiant,heaterPassage(radiant,duty)));}
@@ -149,14 +150,14 @@ public final class HeatSides {
         };
     }
     /** An air cooler bank's bare tube surface, m², bays {@code width} by {@code length} m. */
-    public static double airCoolerSurface(double width,double length,ProcessUnit.Bank bank){return BARE_PER_FACE*bank.bays()*ProcessUnit.bundleFace(width,length);}
+    public static double airCoolerSurface(double width,double length,ProcessUnit.Bank bank){return BARE_PER_FACE*bank.bays()*UnitRatings.bundleFace(width,length);}
     /** A fired heater coil's bare tube, m², for the heater's duty {@code duty} (MW): its share of the duty at its mean flux. */
     static double coilArea(Side coil,double duty) {
-        return coil==Side.RADIANT?ProcessUnit.RADIANT_SHARE*duty*1000/ProcessUnit.RADIANT_FLUX:(1-ProcessUnit.RADIANT_SHARE)*duty*1000/CONVECTION_FLUX;
+        return coil==Side.RADIANT?UnitRatings.RADIANT_SHARE*duty*1000/UnitRatings.RADIANT_FLUX:(1-UnitRatings.RADIANT_SHARE)*duty*1000/CONVECTION_FLUX;
     }
     /** A coil's most heat, W, over its bare tube {@code area} (m²) at its mean flux, with the burners at {@code burners} of full firing. */
     public static double coilDuty(Side coil,double area,double burners) {
-        return burners*area*1000*(coil==Side.RADIANT?ProcessUnit.RADIANT_FLUX:CONVECTION_FLUX);
+        return burners*area*1000*(coil==Side.RADIANT?UnitRatings.RADIANT_FLUX:CONVECTION_FLUX);
     }
     /**
      * A fired heater coil's passage, over bare tube {@code area} m² of a heater of duty {@code duty} MW: 6" tubes in
@@ -243,7 +244,7 @@ public final class HeatSides {
     /** An air cooler's fans, each on its own motor (batch 2026-11-03-rotating-machinery W5, reading A70): its bays' fans as drawn; 0 for another kind. */
     public static int fans(EquipmentShape shape) {
         if(shape.kind()!=EquipmentShape.Kind.AIR_COOLER)return 0;
-        return shape.bank().bays()*ProcessUnit.fans(shape.diameter(),shape.tangentLength()).count();
+        return shape.bank().bays()*UnitRatings.fans(shape.diameter(),shape.tangentLength()).count();
     }
     /** An air cooler's fan power, W, over bare tube surface {@code area} (m²) with its fans at {@code fans} of full speed (the fan laws: the cube of the speed). */
     public static double fanPower(double area,double fans){return FAN_POWER*area/BARE_PER_FACE*fans*fans*fans;}

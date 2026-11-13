@@ -122,12 +122,12 @@ class ColumnRunTest {
         long last=steamPort;
         for(long t:tubes) {
             long s=t+1;int z=4+8*(int)((t-tube)/2);last=s;
-            var passage=com.wormzjl.icheme.science.equipment.HeatSides.tubePassage(.5,3);double area=com.wormzjl.icheme.science.equipment.ProcessUnit.tubeSurface(.5,3);
+            var passage=com.wormzjl.icheme.science.equipment.HeatSides.tubePassage(.5,3);double area=com.wormzjl.icheme.science.equipment.design.UnitRatings.tubeSurface(.5,3);
             edits.add(new WorldTopologyLedger.Edit(t,new WorldTopologyLedger.Registration(heatSide(t,z,passage,new HeatUnit(com.wormzjl.icheme.science.equipment.HeatSides.Unit.EXCHANGER,com.wormzjl.icheme.science.equipment.HeatSides.Side.TUBE,area,s)),new FluidDeviceSpec(1,300,300000,water),0)));
             edits.add(new WorldTopologyLedger.Edit(s,new WorldTopologyLedger.Registration(heatSide(s,z+4,passage,new HeatUnit(com.wormzjl.icheme.science.equipment.HeatSides.Unit.EXCHANGER,com.wormzjl.icheme.science.equipment.HeatSides.Side.SHELL,area,t)).withSuspendedBy(unit),FluidDeviceSpec.nitrogen(world.catalog),0)));
         }
         if(utility!=null) {
-            var passage=com.wormzjl.icheme.science.equipment.HeatSides.tubePassage(.5,3);double area=com.wormzjl.icheme.science.equipment.ProcessUnit.tubeSurface(.5,3);
+            var passage=com.wormzjl.icheme.science.equipment.HeatSides.tubePassage(.5,3);double area=com.wormzjl.icheme.science.equipment.design.UnitRatings.tubeSurface(.5,3);
             edits.add(new WorldTopologyLedger.Edit(utilityTube,new WorldTopologyLedger.Registration(heatSide(utilityTube,20,passage,new HeatUnit(com.wormzjl.icheme.science.equipment.HeatSides.Unit.EXCHANGER,com.wormzjl.icheme.science.equipment.HeatSides.Side.TUBE,area,utilityShell)),new FluidDeviceSpec(1,utilityTemperature,utilityPressure,water),0)));
             edits.add(new WorldTopologyLedger.Edit(utilityShell,new WorldTopologyLedger.Registration(heatSide(utilityShell,24,passage,new HeatUnit(com.wormzjl.icheme.science.equipment.HeatSides.Unit.EXCHANGER,com.wormzjl.icheme.science.equipment.HeatSides.Side.SHELL,area,utilityTube)).withSuspendedBy(unit),FluidDeviceSpec.nitrogen(world.catalog),0)));
             last=utilityShell;

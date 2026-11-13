@@ -49,6 +49,7 @@ import com.wormzjl.icheme.world.level.block.entity.ControlPanelBlockEntity;
 import com.wormzjl.icheme.world.level.block.entity.CreativePowerBlockEntity;
 import com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity;
 import com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity;
+import com.wormzjl.icheme.science.equipment.design.UnitRatings;
 import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -219,7 +220,7 @@ public final class ColumnFailureModesReviewWorld {
                 for (int parallel = 1; parallel <= ProcessUnit.Bank.MAX_PARALLEL; parallel++)
                     for (int series = 1; series <= ProcessUnit.Bank.MAX_SERIES; series++) {
                         var bank = new ProcessUnit.Bank(parallel, series);
-                        double surface = HeatSides.airCoolerSurface(bay[0], (int) bay[1], bank), face = bank.bays() * ProcessUnit.bundleFace(bay[0], (int) bay[1]);
+                        double surface = HeatSides.airCoolerSurface(bay[0], (int) bay[1], bank), face = bank.bays() * UnitRatings.bundleFace(bay[0], (int) bay[1]);
                         if (surface >= held / k && (best == null || face < best[1] || face == best[1] && bank.bays() < best[2]))
                             best = new double[]{1, face, bank.bays(), surface, bay[0], bay[1], parallel, series};
                     }

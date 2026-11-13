@@ -3,6 +3,7 @@ package com.wormzjl.icheme.science.flowsheet.sizing;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
 import com.wormzjl.icheme.science.equipment.UnitDesign;
+import com.wormzjl.icheme.science.equipment.design.UnitRatings;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -44,7 +45,7 @@ public final class HeaterSizing {
 
         /** What all of them hold, MW. */
         public double held() {
-            return count * ProcessUnit.heaterDuty(type.kind(), diameter, length);
+            return count * UnitRatings.heaterDuty(type.kind(), diameter, length);
         }
 
         @Override public EquipmentShape shape() {

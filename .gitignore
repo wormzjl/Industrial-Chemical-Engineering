@@ -39,6 +39,8 @@ logs/
 benchmarks/
 scripts/
 design/
+# ...but not the equipment's design package (finding E2, batch 2026-11-13-codebase-review).
+!/src/main/java/com/wormzjl/icheme/science/equipment/design/
 docs/
 
 # Local petroleum research (keep reports, source extracts and screening results off Git)

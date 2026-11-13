@@ -3,6 +3,7 @@ package com.wormzjl.icheme.science.equipment;
 import com.wormzjl.icheme.science.equipment.EquipmentShape.Heading;
 import com.wormzjl.icheme.science.equipment.EquipmentShape.Kind;
 import com.wormzjl.icheme.science.equipment.EquipmentShape.Role;
+import com.wormzjl.icheme.science.equipment.design.UnitRatings;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -216,23 +217,23 @@ class ProcessUnitTest {
         assertEquals(2, UnitDesign.of(Kind.EXCHANGER).minLength(.5));
         // Physics of the plan: 1 m shell, 6 m tubes ≈ 450 m²; a kettle's shell 1.6 bundles; fans cover at least 40 % of the
         // bundle face (API 661); an ejector of 0.3 m suction is 2.5 m long.
-        assertEquals(450, ProcessUnit.tubeSurface(1, 6), 1e-9);
-        assertEquals(1.5, ProcessUnit.kettleShell(1), 0);
-        assertEquals(3.25, ProcessUnit.kettleShell(2), 0);
+        assertEquals(450, UnitRatings.tubeSurface(1, 6), 1e-9);
+        assertEquals(1.5, UnitRatings.kettleShell(1), 0);
+        assertEquals(3.25, UnitRatings.kettleShell(2), 0);
         // Owner request 2026-10-16 ("allow smaller ACs"): every bay from 1.5 m wide, each with fans over 40 % of its bundle
         // face (API 661); 1.5 and 2 m wide from 3 m long, 2.5 and 3 m wide from 4 m (a 3 m bay of 3 m has 28 %). The 3 × 6 m bay keeps two
         // fans of 1.9 m, their rings 2.13 m across (owner report 2026-10-16: the rings of 2.05 m fans overlapped).
         var bays = ProcessUnit.bays();
         assertEquals(14, bays.size());
         for (var bay : bays) {
-            assertTrue(ProcessUnit.coverage(bay[0], bay[1]) >= ProcessUnit.FAN_COVERAGE, bay[0] + " x " + bay[1]);
+            assertTrue(UnitRatings.coverage(bay[0], bay[1]) >= ProcessUnit.FAN_COVERAGE, bay[0] + " x " + bay[1]);
             EquipmentShape.unit(Kind.AIR_COOLER, bay[0], bay[1], Heading.NORTH, 5);
         }
         assertEquals(3, UnitDesign.of(Kind.AIR_COOLER).minLength(1.5));
         assertEquals(4, UnitDesign.of(Kind.AIR_COOLER).minLength(2.5));
         assertEquals(3, UnitDesign.of(Kind.AIR_COOLER).minLength(2));
         assertEquals(4, UnitDesign.of(Kind.AIR_COOLER).minLength(3));
-        assertEquals(new ProcessUnit.Fans(2, 1.9), new ProcessUnit.Fans(ProcessUnit.fans(3, 6).count(), Math.round(ProcessUnit.fans(3, 6).diameter() * 100) / 100.0));
+        assertEquals(new ProcessUnit.Fans(2, 1.9), new ProcessUnit.Fans(UnitRatings.fans(3, 6).count(), Math.round(UnitRatings.fans(3, 6).diameter() * 100) / 100.0));
         assertEquals(2.49, ProcessUnit.ejectorLength(.3), 1e-9);
         // Owner request 2026-10-16 ("allow smaller ejectors"): suction from 0.05 m; one of 0.2 m or less stands on a single
         // post in the cell behind it, so it takes one cell by two; a larger one keeps its four-post frame.
@@ -252,16 +253,16 @@ class ProcessUnitTest {
         assertEquals(.15, ProcessUnit.pumpSuction(.1), 0);
         assertEquals(.55, ProcessUnit.pumpSuction(.4), 0);
         assertEquals(.95, ProcessUnit.pumpSuction(.75), 0);
-        assertEquals(4771, ProcessUnit.pumpFlow(.75), 1);
-        assertEquals(84.8, ProcessUnit.pumpFlow(.1), .1);
-        assertEquals(33.0, ProcessUnit.pumpPower(.1), .1);
-        assertEquals(.46, ProcessUnit.motorDiameter(ProcessUnit.pumpPower(.1)), .01);
-        assertEquals(7238, ProcessUnit.displacement(.4, 4), 1);
-        assertEquals(300, ProcessUnit.compressorSpeed(1.2), 1e-9);
-        assertEquals(6.29, ProcessUnit.heaterDuty(Kind.VERTICAL_HEATER, 4, 8), .01);
-        assertEquals(13.5, ProcessUnit.heaterDuty(Kind.CABIN_HEATER, 6, 12), .05);
-        assertEquals(93.1, ProcessUnit.heaterDuty(Kind.CABIN_HEATER, 12, 40), .05);
-        assertEquals(2 * ProcessUnit.heaterDuty(Kind.CABIN_HEATER, 12, 24), ProcessUnit.heaterDuty(Kind.CABIN_HEATER, 12, 48), 1e-9);
+        assertEquals(4771, UnitRatings.pumpFlow(.75), 1);
+        assertEquals(84.8, UnitRatings.pumpFlow(.1), .1);
+        assertEquals(33.0, UnitRatings.pumpPower(.1), .1);
+        assertEquals(.46, ProcessUnit.motorDiameter(UnitRatings.pumpPower(.1)), .01);
+        assertEquals(7238, UnitRatings.displacement(.4, 4), 1);
+        assertEquals(300, UnitRatings.compressorSpeed(1.2), 1e-9);
+        assertEquals(6.29, UnitRatings.heaterDuty(Kind.VERTICAL_HEATER, 4, 8), .01);
+        assertEquals(13.5, UnitRatings.heaterDuty(Kind.CABIN_HEATER, 6, 12), .05);
+        assertEquals(93.1, UnitRatings.heaterDuty(Kind.CABIN_HEATER, 12, 40), .05);
+        assertEquals(2 * UnitRatings.heaterDuty(Kind.CABIN_HEATER, 12, 24), UnitRatings.heaterDuty(Kind.CABIN_HEATER, 12, 48), 1e-9);
         assertEquals(List.of(1, 2), List.of(ProcessUnit.cabinCells(24), ProcessUnit.cabinCells(25)));
         assertEquals(48, UnitDesign.of(Kind.CABIN_HEATER).maxLength(12));
         assertEquals(6, UnitDesign.of(Kind.VERTICAL_HEATER).minLength(4));
@@ -290,7 +291,7 @@ class ProcessUnitTest {
         // but the beams carrying the motors.
         for (var bay : ProcessUnit.bays()) {
             int lowest = ProcessUnit.minSupport(Kind.AIR_COOLER, bay[0], bay[1]);
-            var fans = ProcessUnit.fans(bay[0], bay[1]);
+            var fans = UnitRatings.fans(bay[0], bay[1]);
             var stack = ProcessUnit.FanStack.of(lowest, fans.diameter());
             assertTrue(stack.inlet() >= .5 * fans.diameter(), bay[0] + " x " + bay[1] + ": inlet " + stack.inlet());
             var unit = ProcessUnit.of(EquipmentShape.unit(Kind.AIR_COOLER, bay[0], bay[1], Heading.NORTH, lowest));
@@ -665,7 +666,7 @@ class ProcessUnitTest {
         for (var bay : ProcessUnit.bays()) {
             var shape = EquipmentShape.unit(Kind.AIR_COOLER, bay[0], bay[1], Heading.NORTH, 4, new ProcessUnit.Bank(2, 2));
             var hubs = ShapeRasterizer.moving(shape).stream().map(part -> part.motion().pivot()).toList();
-            double ring = ProcessUnit.RING_OD * ProcessUnit.fans(bay[0], bay[1]).diameter();
+            double ring = ProcessUnit.RING_OD * UnitRatings.fans(bay[0], bay[1]).diameter();
             assertTrue(ring <= bay[0] - .32 + 1e-9, bay[0] + " x " + bay[1]);
             for (var a : hubs)
                 for (var b : hubs)
@@ -682,7 +683,7 @@ class ProcessUnitTest {
         // unit's box and each part within its reach of it; the parts' polygons have the area of the facets the chunk mesh
         // draws at rest, which it leaves out while they move; they are unpainted, drawn without the cell's tint.
         var bank = new ProcessUnit.Bank(2, 2);
-        var cases = Map.of(EquipmentShape.unit(Kind.AIR_COOLER, 3, 6, Heading.EAST, 4, bank), bank.bays() * ProcessUnit.fans(3, 6).count(),
+        var cases = Map.of(EquipmentShape.unit(Kind.AIR_COOLER, 3, 6, Heading.EAST, 4, bank), bank.bays() * UnitRatings.fans(3, 6).count(),
                 EquipmentShape.unit(Kind.PUMP, .05, 1, Heading.NORTH, 0), 2, EquipmentShape.unit(Kind.PUMP, .25, 1, Heading.EAST, 0), 2,
                 EquipmentShape.unit(Kind.PUMP, .6, 1, Heading.SOUTH, 0), 2, EquipmentShape.unit(Kind.COMPRESSOR, .15, 2, Heading.NORTH, 2), 3,
                 EquipmentShape.unit(Kind.COMPRESSOR, .45, 4, Heading.WEST, ProcessUnit.minSupport(Kind.COMPRESSOR, .45, 4)), 5,
@@ -743,7 +744,7 @@ class ProcessUnitTest {
                     var motion = part.motion();
                     if (!motion.slides()) continue;
                     rods++;
-                    double crank = ProcessUnit.stroke(b) / 2;
+                    double crank = UnitRatings.stroke(b) / 2;
                     assertEquals(crank, motion.crank(), 1e-12);
                     assertEquals(0, motion.offset(.25), 1e-12);
                     // Dead centres a stroke apart, out and in from the still rod (a quarter turn is not quite mid stroke).

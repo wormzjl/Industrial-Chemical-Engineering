@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.science.equipment;
 
 import com.wormzjl.icheme.science.equipment.EquipmentShape.Orientation;
+import com.wormzjl.icheme.science.equipment.design.UnitRatings;
 
 import java.util.List;
 
@@ -86,15 +87,15 @@ final class CompressorDesign extends UnitDesign {
     @Override
     public Line held(EquipmentShape shape) {
         double d = shape.diameter();
-        return new Line("displacement", whole(ProcessUnit.displacement(d, (int) shape.tangentLength())), whole(ProcessUnit.compressorSpeed(d)));
+        return new Line("displacement", whole(UnitRatings.displacement(d, (int) shape.tangentLength())), whole(UnitRatings.compressorSpeed(d)));
     }
 
     @Override
     public List<Line> datasheet(EquipmentShape shape) {
         double d = shape.diameter();
         int throwCount = (int) shape.tangentLength();
-        return List.of(new Line("compressor", throwCount, size(d), size(ProcessUnit.stroke(d))),
-                new Line("displacement", whole(ProcessUnit.displacement(d, throwCount)), whole(ProcessUnit.compressorSpeed(d))));
+        return List.of(new Line("compressor", throwCount, size(d), size(UnitRatings.stroke(d))),
+                new Line("displacement", whole(UnitRatings.displacement(d, throwCount)), whole(UnitRatings.compressorSpeed(d))));
     }
 
     @Override

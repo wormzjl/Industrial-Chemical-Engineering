@@ -21,7 +21,7 @@ class ExchangerCouplingTest {
     private final FluidThermodynamics model=EventPathWorld.timed(FluidTestSupport.networkModel());
     private static final PipeResistance.Geometry STUB=new PipeResistance.Geometry(1,.05,.000045,0);
     /** A 0.5 m shell over 3 m tubes: 56 m² of tube, UA about 56 kW/K with liquid on both sides. */
-    private static final double SHELL=.5,TUBES=3,AREA=com.wormzjl.icheme.science.equipment.ProcessUnit.tubeSurface(SHELL,TUBES);
+    private static final double SHELL=.5,TUBES=3,AREA=com.wormzjl.icheme.science.equipment.design.UnitRatings.tubeSurface(SHELL,TUBES);
     private static final long HOT=10,COLD=11;
     private static PhysicalFluidTopology.Position at(int x,int y,int z){return new PhysicalFluidTopology.Position("minecraft:overworld",x,y,z);}
     private static PhysicalFluidTopology.Device plain(long id,int x,int y,int z,Kind kind){return new PhysicalFluidTopology.Device(id,at(x,y,z),kind,EAST,STUB,new FlowControl.Passive());}

@@ -4,6 +4,7 @@ import com.wormzjl.icheme.science.equipment.EquipmentShape.Kind;
 import com.wormzjl.icheme.science.equipment.EquipmentShape.Nozzle;
 import com.wormzjl.icheme.science.equipment.EquipmentShape.Orientation;
 import com.wormzjl.icheme.science.equipment.EquipmentShape.Role;
+import com.wormzjl.icheme.science.equipment.design.UnitRatings;
 import com.wormzjl.icheme.science.math.DeterministicMath;
 
 import java.util.ArrayList;
@@ -59,9 +60,10 @@ public final class ProcessUnit {
     static final double HEADER = .6, HEADER_HEIGHT = .6, BUNDLE = .5, RING_DEPTH = .9;
     /**
      * A fan ring's widest parts, its top flange and its bellmouth rim, in rotor diameters (the Blender part
-     * {@code ac_fan_ring}); fans are sized so that rings side by side keep apart (owner report 2026-10-16).
+     * {@code ac_fan_ring}); fans are sized so that rings side by side keep apart (owner report 2026-10-16). Public: the
+     * fans' diameter ({@link UnitRatings}) reads it as the drawing does.
      */
-    static final double RING_OD = 1.12;
+    public static final double RING_OD = 1.12;
 
     /**
      * An air cooler bank (owner request 2026-10-16: "AC should be able to be built in series & parallel", decided: one bank
@@ -144,65 +146,23 @@ public final class ProcessUnit {
         design.check(diameter, (int) length, support, bank);
     }
 
-    /** Tube surface of an exchanger or a kettle's bundle of shell {@code shell} and tubes {@code tubes}, m². */
-    public static double tubeSurface(double shell, double tubes) {
-        return 75 * shell * shell * tubes;
-    }
+    // The datasheet and simulator ratings (tube surface, a kettle's shell, a bay's face, fans and coverage, a pump's flow
+    // and power, a compressor's stroke, speed, power and displacement, a fired heater's duty) are UnitRatings' (E2).
 
-    /** A kettle's shell over its bundle: 1.6 times, to 0.25 m. */
-    public static double kettleShell(double bundle) {
-        return Math.round(1.6 * bundle * 4) / 4.0;
-    }
-
-    /** An air cooler bay's header depth along its tubes, m: 0.15 of its length, at most {@link #HEADER}. */
-    static double header(double length) {
+    /**
+     * An air cooler bay's header depth along its tubes, m: 0.15 of its length, at most {@link #HEADER}. Public: the bay's
+     * face and fans ({@link UnitRatings}) read it as the drawing does.
+     */
+    public static double header(double length) {
         return Math.min(HEADER, .15 * length);
-    }
-
-    /** An air cooler bay's bundle face between its headers (centred 0.5 m in from each end), m². */
-    public static double bundleFace(double width, double length) {
-        return (width - .22) * (length - 1 - header(length));
-    }
-
-    /**
-     * An air cooler bay's fans: one to three along its tubes, as many as cover its bundle face best, each the largest whose
-     * ring fits its share of the plenum ({@link #fanDiameter}).
-     */
-    public static Fans fans(double width, double length) {
-        Fans best = null;
-        double covered = -1;
-        for (int k = 1; k <= 3; k++) {
-            double d = fanDiameter(width, length, k), c = d > 0 ? k * Math.PI * d * d / 4 : 0;
-            if (c > covered + 1e-9) {
-                covered = c;
-                best = new Fans(k, d);
-            }
-        }
-        return best;
-    }
-
-    /**
-     * The largest of {@code k} fans whose rings fit a bay, m, on a 0.05 m grid: each ring ({@link #RING_OD} rotor
-     * diameters) inside its share of the bundle along the tubes with 0.02 m to spare, and 0.1 m inside the plenum's
-     * width (the side beams' 0.22 m off the bay width).
-     */
-    static double fanDiameter(double width, double length, int k) {
-        double ring = Math.min(width - .32, (length - 1.1 - header(length)) / k - .02);
-        return Math.floor(ring / RING_OD * 20 + 1e-9) / 20;
     }
 
     /** Every air cooler bay a player may build, {width, length}, the narrowest and shortest first. */
     public static List<double[]> bays() {
         var out = new ArrayList<double[]>();
         for (double w = UnitDesign.of(Kind.AIR_COOLER).minSize(); w <= UnitDesign.of(Kind.AIR_COOLER).maxSize() + 1e-9; w += UnitDesign.of(Kind.AIR_COOLER).sizeStep())
-            for (int l = UnitDesign.of(Kind.AIR_COOLER).minLength(w); l <= MAX_BAY_LENGTH; l++) if (coverage(w, l) >= FAN_COVERAGE) out.add(new double[]{UnitDesign.of(Kind.AIR_COOLER).snap(w), l});
+            for (int l = UnitDesign.of(Kind.AIR_COOLER).minLength(w); l <= MAX_BAY_LENGTH; l++) if (UnitRatings.coverage(w, l) >= FAN_COVERAGE) out.add(new double[]{UnitDesign.of(Kind.AIR_COOLER).snap(w), l});
         return out;
-    }
-
-    /** The share of an air cooler bay's bundle face its fans cover (API 661 asks 0.4 at least). */
-    public static double coverage(double width, double length) {
-        var fans = fans(width, length);
-        return fans.count() * Math.PI * fans.diameter() * fans.diameter() / 4 / bundleFace(width, length);
     }
 
     /** An ejector's length from its steam chest to its diffuser's exit, m: 8.3 suction diameters. */
@@ -212,50 +172,22 @@ public final class ProcessUnit {
 
     // ---- Machines and heaters (owner request 2026-10-17, MACHINES_HEATERS_PLAN.md) ----------------------------------
 
-    /** A pump's design head, m of liquid, and its efficiency, for the datasheet's motor size. */
-    static final double PUMP_HEAD = 100, PUMP_EFFICIENCY = .7;
     /**
      * The largest overhung (API 610 OH2) pump's discharge, m: larger pumps are radially split between bearings (BB2,
      * {@link #betweenBearingsPump}; {@code PUMP_TYPES_REVIEW.md}: by flow, BB2 covers the mod's whole range).
      */
     public static final double OH2_MAX = .4;
     /**
-     * A balanced-opposed compressor's most throws, and its mean piston speed, m/s: process frames reach 1.25 m bore and 10
-     * throws and run at 3 to 4.5 m/s ({@code MACHINES_SCALE_RESEARCH.md}: Siemens HHE-VL, Baker Hughes HE/HF).
+     * A balanced-opposed compressor's most throws: process frames reach 1.25 m bore and 10 throws and run at 3 to 4.5 m/s
+     * ({@code MACHINES_SCALE_RESEARCH.md}: Siemens HHE-VL, Baker Hughes HE/HF; the piston speed is {@link UnitRatings}').
      */
     public static final int MAX_THROWS = 10;
-    static final double PISTON_SPEED = 4;
     /** A vertical heater's tallest radiant section, m. */
     static final int MAX_RADIANT_HEIGHT = 20;
-    /** A fired heater's mean radiant flux, kW/m² of tube, and the radiant section's share of its duty (API 560 practice). */
-    static final double RADIANT_FLUX = 35, RADIANT_SHARE = .7;
 
     /** A centrifugal pump's suction for discharge {@code d}, m: one size up, about 1.25 d, on a 0.05 m grid. */
     public static double pumpSuction(double d) {
         return Math.round((1.25 * d + .025) * 20) / 20.0;
-    }
-
-    /** A centrifugal pump's flow, m³/h: liquid at 3 m/s in its discharge {@code d}. */
-    public static double pumpFlow(double d) {
-        return 3 * Math.PI / 4 * d * d * 3600;
-    }
-
-    /** The shaft power of a pump of discharge {@code d} at {@link #PUMP_HEAD} of water, kW. */
-    public static double pumpPower(double d) {
-        return 1000 * 9.81 * pumpFlow(d) / 3600 * PUMP_HEAD / PUMP_EFFICIENCY / 1000;
-    }
-
-    /**
-     * A centrifugal pump's discharge, m, for rated flow {@code flow}, m³/h: liquid at 3 m/s ({@link #pumpFlow}), up onto the
-     * 0.05 m grid, 0.05 to 0.6 m.
-     */
-    public static double pumpDischarge(double flow) {
-        return UnitDesign.upTo(Math.sqrt(4 * flow / 3600 / (3 * Math.PI)), SUCTION_STEP, SUCTION_STEP, .6);
-    }
-
-    /** A pump's shaft power at its design point, kW: water at its rated flow and head, at {@link #PUMP_EFFICIENCY}. */
-    public static double pumpPower(MachineDuty duty) {
-        return 9.81 * duty.flow() / 3600 * duty.head() / PUMP_EFFICIENCY;
     }
 
     /**
@@ -269,7 +201,7 @@ public final class ProcessUnit {
 
     /** This pump's drawn shaft end radius: its rated power at its speed ({@link #shaftRadius}). */
     double pumpShaft() {
-        return shaftRadius(pumpPower(shape.duty()), shape.duty().speed());
+        return shaftRadius(UnitRatings.pumpPower(shape.duty()), shape.duty().speed());
     }
 
     /** The largest low-voltage TEFC motor, kW; above it a large motor. */
@@ -300,46 +232,13 @@ public final class ProcessUnit {
         return .19 * Math.sqrt(Math.sqrt(kw));
     }
 
-    /** A compressor's stroke for bore {@code b}, m. */
-    public static double stroke(double b) {
-        return .1 + .25 * b;
-    }
-
-    /** A compressor's speed, rev/min: its mean piston speed over twice its stroke (larger frames, longer strokes, run slower). */
-    public static double compressorSpeed(double b) {
-        return 60 * PISTON_SPEED / (2 * stroke(b));
-    }
-
-    /** A compressor's shaft power, MW: about 0.05 + 1.7 b² per throw (a fit to Siemens HHE-VL and the Thai Oil machines, {@code MACHINES_SCALE_RESEARCH.md}). */
-    public static double compressorPower(double b, int throwCount) {
-        return throwCount * (.05 + 1.7 * b * b);
-    }
-
     /** A turbo compressor's inlet flow, m³/h, for impeller {@code d}. */
     public static double turboFlow(double d) {
         return CentrifugalCompressorDesign.flow(d);
     }
 
-    /** A compressor's displacement, m³/h: double-acting cylinders of bore {@code b}, {@code throwCount} of them. */
-    public static double displacement(double b, int throwCount) {
-        return throwCount * 2 * Math.PI / 4 * b * b * stroke(b) * compressorSpeed(b) * 60;
-    }
-
-    /**
-     * A fired heater's duty, MW, from its radiant tubes: 6" tubes at two diameters' pitch (π²/2 m² of tube per metre of
-     * wall run) at {@link #RADIANT_FLUX}, the radiant section taking {@link #RADIANT_SHARE}. A vertical heater's tubes stand
-     * round a circle 0.6 m inside its casing, 0.5 m shorter than its radiant height; a cabin's lie along both side walls of
-     * each of its {@link #cabinCells} (1 m short each way) and a third as much again on its roof.
-     */
-    public static double heaterDuty(Kind kind, double diameter, double length) {
-        int cells = kind == Kind.CABIN_HEATER ? cabinCells(length) : 1;
-        double tubes = kind == Kind.VERTICAL_HEATER ? Math.PI * Math.PI / 2 * (diameter - .6) * (length - .5)
-                : 2 * cells * Math.PI / 2 * (cabinWall(diameter) - 1) * (length / cells - 1) * 1.3;
-        return RADIANT_FLUX * tubes / RADIANT_SHARE / 1000;
-    }
-
-    /** A cabin heater's wall height for width {@code w}, m. */
-    static double cabinWall(double w) {
+    /** A cabin heater's wall height for width {@code w}, m. Public: a fired heater's duty ({@link UnitRatings}) reads it. */
+    public static double cabinWall(double w) {
         return w + 1;
     }
 
@@ -359,7 +258,7 @@ public final class ProcessUnit {
     record Compressor(double bore, int throwCount, double stroke, double cylinder, double cylinderLength, double guide, double guideLength, double piece, double half,
                       double crank, double bottles, double frameTop, double pitch, double out, double suction, double discharge) {
         static Compressor of(double b, int throwCount) {
-            double s = ProcessUnit.stroke(b), c = 1.45 * b + .15, lc = 2.2 * s + .3 + .3 * b, half = .45 + .3 * b, crank = .5, guide = .25 + .2 * b;
+            double s = UnitRatings.stroke(b), c = 1.45 * b + .15, lc = 2.2 * s + .3 + .3 * b, half = .45 + .3 * b, crank = .5, guide = .25 + .2 * b;
             double lg = Math.max(.7, 3.5 * s), out = Math.ceil(half + lg + .5 + .4 * b + lc / 2 - 1e-9), ds = 1.1 * b + .3;
             return new Compressor(b, throwCount, s, c, lc, guide, lg, .8 * guide, half, crank, .5 + .35 * b, .95 + .85 * b, Math.max(.55, (c + .3) / 2), out, ds, .85 * ds);
         }
@@ -383,7 +282,7 @@ public final class ProcessUnit {
 
         /** The depth of the steel table's rails: about W24 (0.6 m) at 2 MW to W36 (0.9 m) at 20 MW, 0.4 m on the smallest. */
         double rail() {
-            return Math.min(.9, .4 + .1 * Math.sqrt(compressorPower(bore, throwCount)));
+            return Math.min(.9, .4 + .1 * Math.sqrt(UnitRatings.compressorPower(bore, throwCount)));
         }
 
         /** The gap between a cylinder and its bottles (survey: 0.2 to 0.5 m). */
@@ -967,7 +866,7 @@ public final class ProcessUnit {
      * (liquid fed low at its front, vapour out on top) and its back head, where the product leaves low behind the weir.
      */
     void kettle() {
-        double db = shape.diameter(), rb = db / 2, dk = kettleShell(db), rk = dk / 2, y = shape.support() + rk, a = centre(rk);
+        double db = shape.diameter(), rb = db / 2, dk = UnitRatings.kettleShell(db), rk = dk / 2, y = shape.support() + rk, a = centre(rk);
         int n = sides(dk), nb = sides(db);
         double channel = .5 * db + .2, zn = Math.ceil(.08 + channel / 2 - .5) + .5;
         double c0 = zn - channel / 2 - .08, ch1 = zn + channel / 2, cone = Math.max(.3, .6 * (dk - db)), s0 = ch1 + .1 + cone, s1 = s0 + .9 * shape.tangentLength() + .3;
@@ -1030,7 +929,7 @@ public final class ProcessUnit {
         int trains = bank.parallel(), rows = bank.series();
         double w = shape.diameter(), length = shape.tangentLength(), hb = shape.support(), h = header(length);
         double low = hb - .05, high = low + HEADER_HEIGHT, a = centre(trains * w / 2), x0 = a - trains * w / 2, x1 = x0 + trains * w, end = rows * length;
-        var fans = fans(w, length);
+        var fans = UnitRatings.fans(w, length);
         var stack = FanStack.of(hb, fans.diameter());
         double d = fans.diameter(), up = stack.up(), bottom = stack.floor(), rotor = stack.rotor();
         double motor = stack.motor(), motorTop = stack.motorTop(), motorBottom = stack.motorBottom();
@@ -2166,7 +2065,7 @@ public final class ProcessUnit {
         nozzles.add(new Nozzle(Role.DISCHARGE, new double[]{a, ydb, start}, 2, -1, start - face, ColumnStructure.size(hd, hd), 0));
         // The shaft end uses the pumps' coupling and guard. A large torque-sized hub needs a shelf below the table top
         // to enclose its underside without raising the crankshaft or moving the existing shaft and process connections.
-        double rpm = compressorSpeed(b), rs = shaftRadius(1000 * compressorPower(b, throwCount), rpm);
+        double rpm = UnitRatings.compressorSpeed(b), rs = shaftRadius(1000 * UnitRatings.compressorPower(b, throwCount), rpm);
         double driveFace = Math.ceil(end + .2 + rs - 1e-9), floor = Math.min(h, yc - couplingHubRadius(rs) - .1);
         double mount = couplingHubRadius(rs) + .13;
         baseplate(a - mount, a + mount, floor - .06, floor, end - .15, driveFace - .01);
@@ -2748,7 +2647,7 @@ public final class ProcessUnit {
         }
         if (1.5 * Math.PI - front > from + .05) railing(new Access.Arc(a, a, r - 1, from, 1.5 * Math.PI - front, r, Access.Arc.step(r)), y1 - Access.DECK, 1);
         // Burners on a circle under the floor, their ring header and its risers.
-        double duty = heaterDuty(Kind.VERTICAL_HEATER, dia, height), circle = .2 * dia, register = .25 + .02 * dia;
+        double duty = UnitRatings.heaterDuty(Kind.VERTICAL_HEATER, dia, height), circle = .2 * dia, register = .25 + .02 * dia;
         int burners = Math.max(3, Math.min(16, Math.min((int) Math.round(duty / 2.5), (int) Math.floor(2 * Math.PI * circle / (2.6 * register + .1)))));
         var at = new double[burners][];
         for (int i = 0; i < burners; i++) {
@@ -2905,7 +2804,7 @@ public final class ProcessUnit {
         if (cells == 2) mesh.flat(List.of(new double[]{a - gap / 2, yr, zs}, new double[]{a + gap / 2, yr, zs}, new double[]{a + gap / 2, yr, ze}, new double[]{a - gap / 2, yr, ze}),
                 new double[]{0, -1, 0}, Material.HEATER);
         // Burners in one row of each cell (two from 7 m wide) under the floor, a header along each row and one across the front.
-        double duty = heaterDuty(Kind.CABIN_HEATER, w, total), register = .25 + .015 * w, yFuel = Math.floor(y0 - 1.2 - .5) + .5, pipe = .05 + .004 * w * Math.sqrt(cells);
+        double duty = UnitRatings.heaterDuty(Kind.CABIN_HEATER, w, total), register = .25 + .015 * w, yFuel = Math.floor(y0 - 1.2 - .5) + .5, pipe = .05 + .004 * w * Math.sqrt(cells);
         var rows = new ArrayList<Double>();
         for (double ac : cellX) {
             if (w <= 6) rows.add(ac);

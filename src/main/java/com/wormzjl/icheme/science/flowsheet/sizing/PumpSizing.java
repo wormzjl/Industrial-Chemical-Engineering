@@ -10,6 +10,7 @@ import com.wormzjl.icheme.science.fluid.network.ReleasePressure;
 import com.wormzjl.icheme.science.machine.CentrifugalPump;
 import com.wormzjl.icheme.science.machine.Motor;
 import com.wormzjl.icheme.science.machine.Npsh;
+import com.wormzjl.icheme.science.equipment.design.UnitRatings;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -149,7 +150,7 @@ public final class PumpSizing {
             if (floor < Double.POSITIVE_INFINITY) readings.add(Limit.PUMP_NPSH_WORLD.against(npsh, floor));
             readings.add(Limit.PUMP_NPSH.against(npsh, required + Limit.PUMP_NPSH.value()));
         }
-        readings.add(Limit.PUMP_RATED.read(100 * load.flow() / ProcessUnit.pumpFlow(size.discharge())));
+        readings.add(Limit.PUMP_RATED.read(100 * load.flow() / UnitRatings.pumpFlow(size.discharge())));
         return new Rating(readings);
     }
 
