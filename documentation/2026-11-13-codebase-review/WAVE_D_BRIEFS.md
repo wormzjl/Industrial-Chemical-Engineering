@@ -256,6 +256,56 @@ Rules: no arithmetic changes and no statement reordered inside a drawing (the or
 
 Tests for the main thread: `equipmentGates`: `EquipmentLayoutGoldenTest`, `ProcessUnitTest`, `ShapeRasterizerTest`, `HeatSidesTest`, `CrossflowEquipmentTest`, `EffectMarksTest`, `EquipmentServicesTest`, `EquipmentShapeCompatTest`, `MachineRpmDesignTest`; `test`: `FlowsheetPaletteCoverageTest`, the sizing tests of D-Q1's list, `StillModelTest`, `LayeringTest`; `compileFluidGameTestJava`. Report: `wave-d/D-Q2_REPORT.md`: lines moved per kind, helpers left in the kit, what stayed and why.
 
+## D-S4 The step solver in files, first slice: the balance start and the observations (subagent, Opus high)
+
+Reviews: FLUID_STEP_REVIEW section 2.2 (the files the solver should become) and row S-01; [wave-d/D-S1_REPORT.md](wave-d/D-S1_REPORT.md), [wave-d/D-S2_REPORT.md](wave-d/D-S2_REPORT.md), [wave-d/D-S3_REPORT.md](wave-d/D-S3_REPORT.md) for the file as it stands (5,793 lines: `PortStreams`, `CarriedPoint`, `SolveConstants`, `PassStart`, the laws stated once, the planners that stay); [wave-d/D-E3_REPORT.md](wave-d/D-E3_REPORT.md) for the form that worked on the equilibrium engine (a package-private final class per stage holding final references given at construction; bodies changed only in qualifiers; a script that proves every removed line reappears). Structure only: chain-100 exact, the junction lines, every counter and poll count unchanged. One commit per moved group.
+
+1. **`BalanceStart`**: the start balance (`balanceStart`, `balanceStarts`, the inner class `BalanceNet` with its banded solve, the supplier seeds, `mixingBracket` if only they call it; the review's old 3148 to 3965, about 800 lines).
+2. **`StepObservations`**: what a converged pass reports (`observe` and the readings it builds: the turbine's exhaust moisture, the movers' suction readings as results, the ledger rows; old 2023 to 2141, 4186 to 4232, 5707 to 5751, about 220 lines).
+3. **`StartSeeds`** (the start point and the flash seeds: `startPoint`, `flashSeeds`, `arrivingPhases`, `initialPhaseSeeds`, `restateFlashFlows`; about 520 lines), only if steps 1 and 2 went through cleanly and the group calls nothing that step 1 moved in a cycle deeper than a plain call.
+
+Form: decide once from the code. `BalanceNet` is a non-static inner class today and reads the solver's fields by simple name; the moved classes hold the solver (and read `solver.constants`, `solver.model` and the rest through it) or final references to what they read, whichever changes no call order and allocates nothing per pass (the holders are built once per solver; a `BalanceNet` is built per start as today). The solver's private members that moved code reads become package-private, each listed. Counters (`SolverDiagnostics` and the solver's own) are incremented at the same places.
+
+Rules: bodies change only in qualifiers; the same floating-point operations and model calls in the same order (poll and checkpoint counts are results); no new allocation on a per-pass path; nothing becomes public. `Equations` stays in the solver in this slice (it is the last slice). Harnesses under `tools/unified-thermo-port-forms/` and `tools/phase-ports-probes/` that the lane compiles must still compile (grep).
+
+Tests for the main thread: the D-S3 list (35 classes in `test` and `holdGates`), chain-100 exact. Report: `wave-d/D-S4_REPORT.md`: the form, what moved per group with lines, members widened, what stayed and why, the order proposed for the remaining groups (`MoverSuction`, `OneWayClosures`, `DeviceModes`, `PhaseActiveSet`, then `Equations` in its three parts).
+
+## D-E4 The equilibrium engine in files, second slice: the dry core, the carried crystals, the onsets, the crystal solves (subagent, Opus high)
+
+[wave-d/D-E3_REPORT.md](wave-d/D-E3_REPORT.md) is the first slice: its form (holders with final references built once per engine at the end of the constructor; constants shared through package-private static imports), its scripts and its proposed order. Reviews: THERMO_CORE_REVIEW section 2.2. `FluidTpEquilibrium.java` is 4,691 lines. Structure only, proved by `EngineDigestTest` unchanged, the engine's test classes and chain-100 exact. One commit per moved stage, in this order:
+
+1. **`DryCore`** with **`CarriedCrystals`** (the stability test and dispatch of the dry solve: `solveDry`, `hydrocarbon`, the single-phase answer, `merged`, the two-phase result and failure; the carried-crystal filter, the restated split, the stand-in). After it, `TwoPhaseFlash` and `ThreeSlotFlash` hold the dry core where they held the engine, if their callbacks all moved (say which did not).
+2. **`CrystalOnsets`** (the onset searches).
+3. **`CrystalEquilibrium`** (crystals at TP: `solveWithCrystals`, the vapour and general solves, two crystals, the feed reduction, the coverage and holds).
+
+Not in this slice: `BalanceSteps`, `SpecificationSearch` and `Search` (the next slice, with the searches' values of D-E2's step 3); `Workspace` and `Feed` stay nested in the façade with their public surface unchanged.
+
+Rules as D-E3: no floating-point operation changes or is reordered; no kernel evaluation added, dropped or moved; no allocation per request; a body changes only in qualifiers; members widened to package-private are listed; nothing becomes public. A stage with a callback cycle into the façade deeper than a plain call of a method that stays is left, with what blocks it.
+
+Tests for the main thread (`test` group): the D-E2 list; chain-100 exact. Report: `wave-d/D-E4_REPORT.md`.
+
+## D-R3 One display for the authority's ten: R9 (subagent, Opus high)
+
+Review: RUNTIME_REVIEW row R9 and section 2. `runtime/fluid/FluidWorldAuthority.java` (2,970 lines) holds ten copies of "watch, validate, replay and publish" for tanks, rotations, drivers, movers, flares, stills, towers, heaters, chimneys and sight glasses, each with its own `published*` map, and two ad-hoc watcher maps beside the `Watchers` class. Structure only: what each client receives, and when, is unchanged (AGENTS.md, "Engine schedule and player-facing updates": a replay on open, then scheduled updates while subscribed; nothing sent to a client with no request).
+
+Method: write the side-by-side table of the ten displays first (in the report): the target check, how the state is read, the cache it compares against, what it sends and to whom, when it replays, when it drops a watcher. Displays that are the same four parts with different types become instances of one generic `Display<S>` (target check, state read, cache, sink) in one registry, in a new file beside the authority; the two ad-hoc watcher maps join `Watchers` if their behaviour is `Watchers`' (else they stay and the difference is named). A display that differs in an order, a guard or a condition keeps its own code, with the difference named. The order in which displays publish within a bucket is unchanged (a registry iterated in declaration order where the code's order was textual).
+
+Rules: no packet type, payload or wire name changes (`network/**` is touched only for a qualifier); equality checks that decide whether to send stay the same comparisons (a record's `equals` where it was; a tolerance where it was); no per-tick work is added (the tick hook only checks what is due).
+
+Not yours: `IslandCoordinator.java`, `ExchangerCoupling.java`, `Stills.java`, `ColumnOperation.java`, `science/**`.
+
+Tests for the main thread: the display GameTests run in the final lane; `test`: `PresentationBucketTest`, `FluidPacketCodecTest`, `IslandSetsPresentedTest`, the watcher and view tests your grep finds (`FluidWorldAuthority*Test`, `*WatchTest`, `*ViewTest`), `LayeringTest`; `compileFluidGameTestJava`. Report: `wave-d/D-R3_REPORT.md`: the table, what merged and what stayed, lines removed.
+
+## D-Q3 The designs' constant overrides as one record: E4 (subagent, Opus high)
+
+Review: EQUIPMENT_REVIEW row E4; [wave-d/D-Q2_REPORT.md](wave-d/D-Q2_REPORT.md) for the designs as they stand (each holds its drawing now). The 32 `*Design` classes override the same constant-returning methods (`minSize`, `maxSize`, `sizeStep`, `orientation`, `sizeRow`, `supportRow` in all; `minLength`, `maxLength`, `lengthRow`, `maxSupport`, `moves` in most): about 500 overrides. Structure only: `EquipmentLayoutGoldenTest`, `FlowsheetPaletteCoverageTest` and the constructor tests bit for bit; no saved name, enum constant or lang key changes. One commit for `UnitDesign`, then one per batch of designs.
+
+A `Sizes` record (the sizes, the lengths, the supports, the orientation, the rows, the moves: the fields that are constants in every design that sets them) is passed to `UnitDesign`'s constructor; `UnitDesign`'s methods return its fields; a design overrides a method only where its value depends on an argument (a size-dependent length, a kind-dependent row). For each design, the report's table gives each method: constant (now a record field, with the value) or computed (override kept). The value of every method for every kind and argument is unchanged: a design whose override returned the base class's default states that default explicitly in its record only if the base default differs from the record's default (say how defaults are handled; prefer no defaults at all: every design states every field, so a missing one fails to compile).
+
+Rules: no arithmetic changes; an override that reads a field of the design or calls another method is computed, not constant, unless that method is itself a constant; the order of static initialisation does not change what `UnitDesign.of(kind)` returns (the registry is built as today).
+
+Tests for the main thread: `equipmentGates`: the D-Q2 list (`EquipmentLayoutGoldenTest`, `ShapeRasterizerTest`, `ProcessUnitTest` and the rest); `test`: `FlowsheetPaletteCoverageTest`, the sizing tests, `SizingCoverageTest`, `LayeringTest`; `compileFluidGameTestJava`. Report: `wave-d/D-Q3_REPORT.md`: the per-design table, lines removed.
+
 ## D-Q1 The drawing kit without forwarders and ratings: E3, E2, E5 with E9 (subagent, Opus high)
 
 Review: EQUIPMENT_REVIEW rows E3, E2, E5, E9 and section 2 (line numbers there are from before wave B's geometry batch: find each thing by name). `science/equipment/ProcessUnit.java` is the drawing kit; it also holds 13 forwarders to `UnitDesign.of(kind)` and the datasheet ratings that sizing reads, and `UnitDesign` doubles as the machine-rating facade. Structure only: `EquipmentLayoutGoldenTest`, the sizing tests and the machine registration tests bit for bit; no saved field, enum name or lang key changes. One commit per step.
