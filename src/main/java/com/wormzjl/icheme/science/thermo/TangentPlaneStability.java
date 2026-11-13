@@ -37,7 +37,7 @@ import java.util.Objects;
  */
 public final class TangentPlaneStability {
     /** How far one extrapolation may move any {@code ln W_i}. */
-    private static final double MAXIMUM_EXTRAPOLATION = 20.0;
+    private static final double MAXIMUM_EXTRAPOLATION = SubstitutionAcceleration.MAXIMUM_EXTRAPOLATION;
     /** Keeps {@code exp(ln W)} a finite, positive normal double. */
     private static final double LOG_AMOUNT_BOUND = 700.0;
     /** A Newton step may shrink any {@code alpha_i} by at most this factor, i.e. {@code W_i} by its square. */
@@ -462,7 +462,7 @@ public final class TangentPlaneStability {
                     }
                     if (denominator > 0.0 && numerator < denominator) {
                         double eigenvalue = numerator / denominator;
-                        double extra = eigenvalue / (1.0 - eigenvalue);
+                        double extra = SubstitutionAcceleration.factor(eigenvalue);
                         if (largest * extra > MAXIMUM_EXTRAPOLATION) extra = MAXIMUM_EXTRAPOLATION / largest;
                         for (int a = 0; a < w.presentCount; a++) {
                             int i = w.present[a];

@@ -10,6 +10,7 @@ import com.wormzjl.icheme.science.thermo.IdealGasFunction;
 import com.wormzjl.icheme.science.thermo.NumericalBox;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel.Root;
+import com.wormzjl.icheme.science.thermo.SubstitutionAcceleration;
 import com.wormzjl.icheme.science.thermo.TangentPlaneStability;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumRequest.Specification;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult.Classification;
@@ -112,8 +113,6 @@ import java.util.Objects;
  * temperatures, recomputed bit-identically) and allocation-light: the iterations allocate nothing.</p>
  */
 public final class FluidTpEquilibrium {
-    /** Largest {@code ln K} change one extrapolation may add. */
-    private static final double MAXIMUM_EXTRAPOLATION = 20.0;
     /** Keeps {@code exp(ln K)} a finite, positive normal double. */
     private static final double LOG_K_BOUND = 700.0;
     private static final int MAXIMUM_RACHFORD_RICE_STEPS = 200;
@@ -4841,10 +4840,9 @@ public final class FluidTpEquilibrium {
                 }
                 double lambda = numerator / denominator;
                 w.lambda = lambda;
-                if (lambda > 0.0 && lambda < 1.0) {
-                    double factor = lambda / (1.0 - lambda);
-                    double largest = change * factor;
-                    double scale = largest > MAXIMUM_EXTRAPOLATION ? MAXIMUM_EXTRAPOLATION / largest : 1.0;
+                if (SubstitutionAcceleration.admissible(lambda)) {
+                    double factor = SubstitutionAcceleration.factor(lambda);
+                    double scale = SubstitutionAcceleration.scale(change, factor);
                     for (int a = 0; a < w.presentCount; a++) {
                         int i = w.present[a];
                         w.logK[i] = w.newLogK[i] + w.delta[i] * factor * scale;
@@ -5614,9 +5612,9 @@ public final class FluidTpEquilibrium {
                 }
                 double lambda = numerator / denominator;
                 w.lambda = lambda;
-                if (lambda > 0.0 && lambda < 1.0) {
-                    double factor = lambda / (1.0 - lambda);
-                    double scale = change * factor > MAXIMUM_EXTRAPOLATION ? MAXIMUM_EXTRAPOLATION / (change * factor) : 1.0;
+                if (SubstitutionAcceleration.admissible(lambda)) {
+                    double factor = SubstitutionAcceleration.factor(lambda);
+                    double scale = SubstitutionAcceleration.scale(change, factor);
                     for (int k = 0; k < SLOT_COUNT; k++) {
                         if (!s.watched[k]) continue;
                         for (int a = 0; a < w.presentCount; a++) {
