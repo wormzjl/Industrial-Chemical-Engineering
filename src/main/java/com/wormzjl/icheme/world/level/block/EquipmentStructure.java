@@ -204,9 +204,17 @@ public final class EquipmentStructure {
         var ids = new ArrayList<Long>();
         for (var node : nodes(vessel)) {
             var held = position(level, node);
-            world.at(held).filter(r -> r.device().position().equals(held) && !r.device().ports().isEmpty()).ifPresent(r -> ids.add(r.device().id()));
+            heldAt(world, held).ifPresent(r -> ids.add(r.device().id()));
         }
         return ids;
+    }
+
+    /**
+     * The registration at {@code at} of the device that stands there with ports: a structure's device at its node, not a
+     * pipe or a one-block device registered at the same cell.
+     */
+    public static java.util.Optional<WorldTopologyLedger.Registration> heldAt(FluidWorldAuthority world, PhysicalFluidTopology.Position at) {
+        return world.at(at).filter(r -> r.device().position().equals(at) && !r.device().ports().isEmpty());
     }
 
     /**

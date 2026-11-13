@@ -264,8 +264,7 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
             EquipmentStructure.restateLater(serverLevel, origin(), shape);
         }
         var here = fluidPosition();
-        FluidWorldAuthority.find(serverLevel.getServer()).ifPresent(world -> world.at(here)
-                .filter(record -> record.device().position().equals(here) && !record.device().ports().isEmpty())
+        FluidWorldAuthority.find(serverLevel.getServer()).ifPresent(world -> EquipmentStructure.heldAt(world, here)
                 .ifPresent(record -> {
                     if (identity != record.device().id()) bindIdentity(record.device().id());
                     else world.deviceLoaded(identity);

@@ -378,8 +378,7 @@ final class StructureRegistration {
         if (vessel.shape().kind().converter()) {
             // A converter's vessel and its hidden ports leave together (W3); its facts follow its vessel's removal.
             var at = EquipmentStructure.position(level, node(vessel));
-            FluidWorldAuthority.find(level.getServer()).ifPresent(world -> world.at(at)
-                    .filter(record -> record.device().position().equals(at) && !record.device().ports().isEmpty())
+            FluidWorldAuthority.find(level.getServer()).ifPresent(world -> EquipmentStructure.heldAt(world, at)
                     .ifPresent(record -> {var ids = new HashSet<>(world.converterDevices(record.device().id()));ids.add(record.device().id());world.removeUnit(List.copyOf(ids));}));
             return;
         }
@@ -390,8 +389,7 @@ final class StructureRegistration {
             return;
         }
         var position = EquipmentStructure.position(level, node(vessel));
-        FluidWorldAuthority.find(level.getServer()).ifPresent(world -> world.at(position)
-                .filter(record -> record.device().position().equals(position) && !record.device().ports().isEmpty())
+        FluidWorldAuthority.find(level.getServer()).ifPresent(world -> EquipmentStructure.heldAt(world, position)
                 .ifPresent(record -> world.remove(record.device().id())));
     }
 
@@ -552,7 +550,7 @@ final class StructureRegistration {
         boolean whole = !cells.isEmpty();long pot = 0;
         for (int i = 0; i < cells.size() && whole; i++) {
             var at = EquipmentStructure.position(level, cells.get(i));
-            var record = world.at(at).filter(r -> r.device().position().equals(at) && !r.device().ports().isEmpty()).orElse(null);
+            var record = EquipmentStructure.heldAt(world, at).orElse(null);
             if (record == null || (i == 0) != record.device().stillPot()) whole = false;
             else if (i == 0) pot = record.device().id();
         }
@@ -606,7 +604,7 @@ final class StructureRegistration {
             var world = FluidWorldAuthority.find(level.getServer()).orElse(null);
             if (world == null) return;
             var held = EquipmentStructure.position(level, oldNode == null ? node(vessel) : oldNode);
-            var record = world.at(held).filter(r -> r.device().position().equals(held) && !r.device().ports().isEmpty()).orElse(null);
+            var record = EquipmentStructure.heldAt(world, held).orElse(null);
             if (oldNode != null && !oldNode.equals(node(vessel)) && record != null && level.getBlockEntity(oldNode) instanceof EquipmentShellBlockEntity old && old.fluidIdentity() == record.device().id()) old.releaseIdentity();
             registerConverter(level, vessel, record == null ? 0 : record.device().id());
             return;
@@ -615,7 +613,7 @@ final class StructureRegistration {
         var world = FluidWorldAuthority.find(level.getServer()).orElse(null);
         if (world == null) return;
         var held = EquipmentStructure.position(level, oldNode == null ? node : oldNode);
-        var record = world.at(held).filter(r -> r.device().position().equals(held) && !r.device().ports().isEmpty()).orElse(null);
+        var record = EquipmentStructure.heldAt(world, held).orElse(null);
         if (record == null) {
             register(level, vessel);
             return;
