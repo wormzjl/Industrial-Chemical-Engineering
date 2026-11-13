@@ -38,12 +38,18 @@ public final class MaterialPresets {
         public Network {fluidPresets=List.copyOf(fluidPresets);}
     }
     private final Map<String,Column> columns;
+    private final Map<String,String> columnOrigins;
     private final Map<String,Fluid> fluids;
     private final Network network;
-    private MaterialPresets(Map<String,Column> columns,Map<String,Fluid> fluids,Network network) {
-        this.columns=Map.copyOf(columns);this.fluids=Map.copyOf(fluids);this.network=network;
+    private MaterialPresets(Map<String,Column> columns,Map<String,String> columnOrigins,Map<String,Fluid> fluids,Network network) {
+        this.columns=Map.copyOf(columns);this.columnOrigins=Collections.unmodifiableMap(new LinkedHashMap<>(columnOrigins));this.fluids=Map.copyOf(fluids);this.network=network;
     }
     public Map<String,Column> columns(){return columns;}
+    /**
+     * Each column preset's id and the file it was read from, in the order the parser read them: the column's check of the
+     * presets ({@code V3ColumnPresets.validate}, run before a catalog is published) names the file the way the parser does.
+     */
+    public Map<String,String> columnOrigins(){return columnOrigins;}
     public Column column(String id){var value=columns.get(id);if(value==null)throw new IllegalArgumentException("Unknown column preset: "+id);return value;}
     public Fluid fluid(String id){var value=fluids.get(id);if(value==null)throw new IllegalArgumentException("Unknown fluid preset: "+id);return value;}
     public Network network(){if(network==null)throw new IllegalArgumentException("No fluid network configuration in material catalog");return network;}
@@ -66,7 +72,7 @@ public final class MaterialPresets {
     }
     static MaterialPresets read(Map<String,JsonObject> records,Map<String,JsonObject> networks,Map<JsonObject,String> origins,
             Map<String,MaterialCatalog.Package> packages,Set<String> components) {
-        var columns=new HashMap<String,Column>();var fluids=new HashMap<String,Fluid>();Network network=null;
+        var columns=new HashMap<String,Column>();var columnOrigins=new LinkedHashMap<String,String>();var fluids=new HashMap<String,Fluid>();Network network=null;
         if(records.size()>MAX_PRESETS*2)throw new IllegalArgumentException("Too many material presets");
         for(var row:records.values())try {
             String id=text(row,"id"),label=text(row,"label"),kind=text(row,"kind");
@@ -84,7 +90,7 @@ public final class MaterialPresets {
                 var p=packages.get(pkg);double t=c.feedTemperature(),bottom=c.pressure()+(c.stages()-1)*c.pressureDrop();
                 if(c.stages()<2||c.stages()>64||c.feedStage()<1||c.feedStage()>c.stages()||t<p.minimumTemperature()||t>p.maximumTemperature()||c.pressure()<p.minimumPressure()||bottom>p.maximumPressure()||c.pressureDrop()<0)
                     throw new IllegalArgumentException("operating: outside package or column domain");
-                columns.put(id,c);
+                columns.put(id,c);columnOrigins.put(id,origins.get(row));
             } else if(kind.equals("fluid")) {
                 if(row.has("component")) {
                     String idComponent=text(row,"component");if(row.has("package")||row.has("assay")||!components.contains(idComponent))throw new IllegalArgumentException("component: unknown or conflicting fluid source");
@@ -104,7 +110,7 @@ public final class MaterialPresets {
             var ids=new ArrayList<String>();for(var value:row.getAsJsonArray("fluid_presets")){String id=value.getAsString();if(!fluids.containsKey(id)||ids.contains(id))throw new IllegalArgumentException("fluid_presets: unknown or duplicate "+id);ids.add(id);}
             network=new Network(pkg,defaultId,ids);
         } catch(RuntimeException invalid){throw new IllegalArgumentException(origins.get(row)+": "+invalid.getMessage(),invalid);}
-        return new MaterialPresets(columns,fluids,network);
+        return new MaterialPresets(columns,columnOrigins,fluids,network);
     }
     private static void requireAssay(Map<String,MaterialCatalog.Package> packages,String pkg,String assay){if(!packages.containsKey(pkg)||!packages.get(pkg).assays().containsKey(assay))throw new IllegalArgumentException("package/assay: unknown "+pkg+"/"+assay);}
 }

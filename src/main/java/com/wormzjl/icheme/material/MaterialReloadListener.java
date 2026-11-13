@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.material;
 
+import com.wormzjl.icheme.science.column.v3.V3ColumnPresets;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.material.MaterialRuntime;
 import net.minecraft.server.packs.resources.ResourceManager;
@@ -21,7 +22,10 @@ public final class MaterialReloadListener extends SimplePreparableReloadListener
                 resources.put("data/"+id.getNamespace()+"/"+id.getPath(),text.toString());
             }catch(IOException e){throw new UncheckedIOException(id.toString(),e);}
         });
-        return MaterialCatalog.parse(resources);
+        var catalog=MaterialCatalog.parse(resources);
+        // The column's check of the column presets, before publication: a preset the column refuses refuses the reload.
+        V3ColumnPresets.validate(catalog);
+        return catalog;
     }
     @Override protected void apply(MaterialCatalog catalog,ResourceManager manager,ProfilerFiller profiler) {
         MaterialRuntime.publish(catalog);

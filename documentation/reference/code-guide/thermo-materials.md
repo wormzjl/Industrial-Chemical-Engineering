@@ -95,7 +95,7 @@ results are bitwise identical on every JVM.
 
 | Class | Role | Read it for |
 |---|---|---|
-| [`MaterialReloadListener`](../../../src/main/java/com/wormzjl/icheme/material/MaterialReloadListener.java) | `SimplePreparableReloadListener`: prepare = read + `parse`, apply = `MaterialRuntime.publish` | Reload transaction; registered in `IChemE` on the game event bus |
+| [`MaterialReloadListener`](../../../src/main/java/com/wormzjl/icheme/material/MaterialReloadListener.java) | `SimplePreparableReloadListener`: prepare = read + `parse` + the column's check of the column presets (`V3ColumnPresets.validate`), apply = `MaterialRuntime.publish` | Reload transaction; registered in `IChemE` on the game event bus |
 
 ## Main flow
 
@@ -105,9 +105,10 @@ flowchart LR
   IDX["materials-index.json"] --> BUN[MaterialCatalog.bundled]
   RL --> P[MaterialCatalog.parse]
   BUN --> P
-  P --> V["components (default datasets, aliases) -> spine / crystals / group_interactions -> properties (sub-records) -> water (ice) -> interactions (rule) -> methods -> transport -> assays -> packages (extends, build: datasets, pairs, spines, crystals, identity) -> presets, solids -> column presets -> network"]
+  P --> V["components (default datasets, aliases) -> spine / crystals / group_interactions -> properties (sub-records) -> water (ice) -> interactions (rule) -> methods -> transport -> assays -> packages (extends, build: datasets, pairs, spines, crystals, identity) -> presets, solids -> network"]
   V --> CAT[(immutable MaterialCatalog)]
-  CAT --> PUB[MaterialRuntime.publish]
+  CAT --> CHK["V3ColumnPresets.validate (reload listener only)"]
+  CHK --> PUB[MaterialRuntime.publish]
   PUB --> CUR["MaterialRuntime.active / current / with"]
   CUR --> COL["column: V3CatalogPropertyPackage (refuses crystal and spine packages) -> V3PengRobinsonSession -> PengRobinsonKernel CLASSICAL"]
   CUR --> FLU["fluid: FluidThermodynamics -> HydrocarbonModel -> TranslatedPengRobinson -> PengRobinsonKernel SPARSE_PAIRS, or TEMPERATURE_DEPENDENT_PAIRS for a spine package (SpinePackageData)"]
@@ -118,14 +119,19 @@ flowchart LR
 1. **Datapack JSON.** Minecraft's resource manager picks the highest-priority file at each path; a replacement is a
    whole record. Bundled files live in [`src/main/resources/data/icheme/materials/`](../../../src/main/resources/data/icheme/materials/).
 2. **Reload listener.** `prepare` lists every `materials/**.json` of every namespace, keys it as
-   `data/<ns>/<path>`, and calls `MaterialCatalog.parse`. A throw aborts the reload before `apply`.
+   `data/<ns>/<path>`, calls `MaterialCatalog.parse`, then the column's check of every column preset
+   (`V3ColumnPresets.validate`: the preset's `V3ColumnInput` and `V3ColumnProblemResolver.validateInput` inside
+   `MaterialRuntime.with`, a refusal named `<file>: <reason>` as the parser names it). A throw aborts the reload before
+   `apply`. The parser imports no solver type (codebase review C2), so a test that parses a catalog and expects a
+   preset's refusal calls the check itself (`MaterialPresetsTest`); the bundled catalog passes it
+   (`MaterialPresetsTest.bundledColumnPresetsPassTheColumnCheck`).
 3. **Catalog.** `parse` groups records by kind (path segment after `materials/`), rejects duplicate IDs per kind and
    an unknown kind (`bases` with a hint), then validates components (each compound's default dataset and its aliases,
    catalog-wide), spines, crystals, group-interaction matrices, properties (with their sub-records), water,
    interactions, methods, transport, assays, packages (their compound lists after `extends`, then `build`: datasets,
-   pairs, spines, crystals, assays, envelope and identities), presets, solids, column presets (by running
-   `V3ColumnProblemResolver.validateInput` inside `MaterialRuntime.with`) and the network record. It returns only a
-   fully valid catalog. Cross-record rules on the way:
+   pairs, spines, crystals, assays, envelope and identities), presets (the parser's own checks: names, assay, feed
+   volume, stage and package domain; the column's checks run in step 2), solids and the network record. It returns
+   only a fully valid catalog. Cross-record rules on the way:
    - a package names `method`, `components` (an id, or an object with `id` and optional `properties`, `spine`),
      optional `extends`, `crystals` and `advisory_evidence`; a field that belongs to the method or a dataset
      (`model`, `basis`, `properties`, `interactions`, `water_model`, ranges, `fluid_domain`, `liquid_mixture`,

@@ -2,12 +2,14 @@ package com.wormzjl.icheme.science.column.v3;
 
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.material.MaterialPresets;
+import com.wormzjl.icheme.science.material.MaterialRuntime;
 import java.util.List;
 
 /**
  * The column's reading of a server column preset. {@link MaterialPresets.Column} holds plain numbers (the catalog imports
  * no column type, codebase review C2, THERMO_ADAPTERS_REVIEW F4); this class builds the {@link V3ColumnInput} a preset
- * stands for and refuses there what the column's records refuse.
+ * stands for and refuses there what the column's records refuse, and runs the column's check of a catalog's presets
+ * before the catalog is published (F5).
  */
 public final class V3ColumnPresets {
     private V3ColumnPresets() {}
@@ -41,6 +43,27 @@ public final class V3ColumnPresets {
         return new V3ColumnInput(1, p.id(), descriptor.assayId(), new V3ComponentBasis(p.components()), fractions,
                 preset.feedTemperature(), preset.stages(), preset.feedStage(), preset.pressure(), preset.pressureDrop(),
                 specifications, draws, steam, pumparounds, preset.diameter());
+    }
+
+    /**
+     * The column's check of every column preset of {@code catalog}, in the order the parser read them: the preset's input
+     * (as {@link #input}) and {@link V3ColumnProblemResolver#validateInput}, pinned to the catalog and the preset's package.
+     * A refusal names the preset's file as the parser names a record's ({@code <file>: <reason>}). Run it where a parsed
+     * catalog is about to become current (the data-pack reload listener, before publication), so a preset the column
+     * refuses still refuses the whole reload.
+     */
+    public static void validate(MaterialCatalog catalog) {
+        for (var entry : catalog.presets().columnOrigins().entrySet()) {
+            var preset = catalog.presets().column(entry.getKey());
+            try {
+                MaterialRuntime.with(catalog, preset.descriptor().packageId(), () -> {
+                    V3ColumnProblemResolver.validateInput(input(preset, catalog));
+                    return null;
+                });
+            } catch (RuntimeException e) {
+                throw new IllegalArgumentException(entry.getValue() + ": " + e.getMessage(), e);
+            }
+        }
     }
 
     /** Whether {@code input} is on the preset's package and assay. */
