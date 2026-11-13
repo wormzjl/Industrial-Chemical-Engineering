@@ -4,7 +4,7 @@ import static com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.GRAVITY
 import static com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.NEWTON_TOLERANCE;
 import static com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.liquidEnthalpy;
 import static com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.liquidMoles;
-import static com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.shutoffBand;
+import static com.wormzjl.icheme.science.fluid.network.DeviceModes.shutoffBand;
 import static com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.wetShare;
 import com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.Equations;
 import com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.SolveConstants;
@@ -120,11 +120,11 @@ final class MoverSuction {
      * Owner decisions D15 and D16 A (batch 2026-11-03-rotating-machinery, D14_HOLDS_REVIEW.md, D15_HOLDS_REVIEW.md): per
      * connection, whether its pump is vapour-locked in this solve, worked out once on the step's start {@code states}, the
      * states its floor is read on ({@link #suctionFloors}). A liquid pump is vapour-locked where its suction head at no flow
-     * ({@link #suctionHead}, the available NPSH) is at or below the band of its mode tests ({@link PassiveStepSolver#shutoffBand} at the
+     * ({@link #suctionHead}, the available NPSH) is at or below the band of its mode tests ({@link DeviceModes#shutoffBand} at the
      * larger end pressure, the Newton's tolerance): its line delivers nothing with the suction at the floor, so it passes
      * nothing and stands closed, not on its suction limit with no flow. Whether it is depends on its supplier at no flow,
-     * never on a point its own law drained: one fact for the start modes ({@link PassiveStepSolver#initialModes}), the carry, the balance
-     * and the pass loop ({@link PassiveStepSolver#nextMode}, {@link PassiveStepSolver#cavitates}), so a locked pump stays closed for the whole solve and any
+     * never on a point its own law drained: one fact for the start modes ({@link DeviceModes#initialModes}), the carry, the balance
+     * and the pass loop ({@link DeviceModes#nextMode}, {@link DeviceModes#cavitates}), so a locked pump stays closed for the whole solve and any
      * other pump the solve finds starved goes on its suction limit. Bundled random 896: a crude drawn through a 1 cm line
      * from a tee at its 214.78 kPa bubble point, anchored at the floor, had no root at any step size. Bundled random 575 (a
      * crude tee 99 to 117 kPa above its 124.18 kPa floor) and cold random 181 (LNG 400 Pa above its 101.32 kPa floor with its
