@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Test;
 
 /**
  * The quasi-steady balance reads a junction's density at the junction's own pressure wherever the junction flashes
- * ({@link PassiveStepSolver.BalanceNet}). The pilot LNG of cold seeds 651 and 907, 150 K and 2.7 % carbon dioxide: bubble
+ * ({@link BalanceStart.BalanceNet}). The pilot LNG of cold seeds 651 and 907, 150 K and 2.7 % carbon dioxide: bubble
  * near 1.1 MPa, sixty times thinner at 1 atm, where the fluid phases alone refuse it (the two-liquid window).
  */
 class BalanceTablesTest {
@@ -24,9 +24,9 @@ class BalanceTablesTest {
                 new PassiveNetwork.Reservoir(2,0,held,PassiveNetwork.NodeKind.JUNCTION),new PassiveNetwork.Reservoir(3,z,NetworkReduction.ambient(model),PassiveNetwork.NodeKind.VOID)),
                 List.of(new PassiveNetwork.Pipe(4,0,1,geometry),new PassiveNetwork.Pipe(5,1,2,geometry)));
     }
-    private PassiveStepSolver.BalanceNet balance(PassiveNetwork graph) {
+    private BalanceStart.BalanceNet balance(PassiveNetwork graph) {
         var modes=new ArrayList<>(Collections.nCopies(graph.pipes().size(),FlowControl.Mode.PASSIVE));
-        return new PassiveStepSolver(model).new BalanceNet(graph,null,modes,new boolean[graph.pipes().size()],()->{},new double[0]);
+        return new PassiveStepSolver(model).balance.new BalanceNet(graph,null,modes,new boolean[graph.pipes().size()],()->{},new double[0]);
     }
     /** A liquid junction under a line the balance lets down past its bubble pressure: read as a liquid it stands halfway, at
      * 726 kPa and superheated; its density falling as it flashes holds it back at 965 kPa. */
