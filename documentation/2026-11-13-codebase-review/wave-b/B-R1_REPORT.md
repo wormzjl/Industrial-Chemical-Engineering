@@ -1,6 +1,6 @@
 # B-R1 Runtime: report
 
-Branch `claude/review-wave-a5-runtime-1a45f8`, merged with the review branch at `1c6dabe3e` (clean fast-forward). Nine commits, one per item, R23 and R24 as the main thread decided. `WorldTopologyLedger`'s shaft and store accessors are untouched (B-M1's). **Tests pending: no Gradle run yet** (waiting for "lane free").
+Branch `claude/review-wave-a5-runtime-1a45f8`, merged with the review branch at `1c6dabe3e` (clean fast-forward). Nine commits, one per item, R23 and R24 as the main thread decided. `WorldTopologyLedger`'s shaft and store accessors are untouched (B-M1's). All named tests pass (see "Tests").
 
 | Item | Commit | Change | Counter before → after (from the code) |
 |---|---|---|---|
@@ -18,6 +18,6 @@ Values: no item moves a booked result. R23 moves the wake test's sum by at most 
 
 New tests: `BoundedCpuSolveServiceTest` (2 new cases: the island reserve and the start-relative deadline with a test clock; one worker keeps no reserve), `IslandSetsPresentedTest`, `ViewIndexTest`, `DisplayCadenceTest`, and `ExchangerCouplingTest.theSettledTransitIsTheSameWhicheverOrderTheSidesAreRegisteredIn` (R23: one run reloaded twice, registered in both orders, bit-equal).
 
-Runs for "lane free", `--max-workers 4`, each once: `compileJava compileTestJava`; then `test --tests` on `BoundedCpuSolveServiceTest`, `IslandSetsPresentedTest`, `ViewIndexTest`, `DisplayCadenceTest`, `PresentationBucketTest`, `ExchangerCouplingTest`, `IslandCertificateTest`, `FluidPacketCodecTest` (MenuData), `WorkerFailureStatusTest`; then `holdGates --tests IslandSchedulerTest` (VERIFY checks R22).
+Tests, after "lane free", `--max-workers 4`, each class once after it last changed: `compileJava compileTestJava` passed. `test --tests` on nine classes ran 92 tests with 2 failures, both test assumptions, fixed in 2c189a127: `DisplayCadenceTest` compared two devices at a tick where neither is due, and `IslandSetsPresentedTest` required boundary transfers that a generator-to-void island does not book. After the fix: BoundedCpuSolveServiceTest 10, IslandSetsPresentedTest 1, ViewIndexTest 1, DisplayCadenceTest 1, PresentationBucketTest 10, ExchangerCouplingTest 17 (with the R23 test), IslandCertificateTest 23, FluidPacketCodecTest 27, WorkerFailureStatusTest 2; `holdGates` IslandSchedulerTest 9 (VERIFY on, checking R22). All pass, 0 skipped. Counters: R1 read `islandSnapshots` = 0 for an instrument read (asserted in IslandSetsPresentedTest). The others are counted from the code, as in the table. No time recorded. No expectation moved; R23 moved none.
 
 GameTests for the main thread's lane: `FluidPresentationGameTests` (views, R2), `ColumnOperationGameTests` (Operation tab openings, the `stored` follow-up), the still and heat-unit GameTests (R2 heat rows), `PumpHealthGameTests` (status lines). No GameTest pins a display publish tick (R10).
