@@ -119,7 +119,7 @@ public final class SolverDiagnostics {
      * solved again because the reconstruction folded a phase the pass had solved. */
     public static final LongAdder traceFolds=new LongAdder();
     public static final LongAdder traceFoldPasses=new LongAdder();
-    /** Outer phase checks that seeded a phase a node lacks at the node's own split ({@code FluidThermodynamics.phaseCheck},
+    /** Outer phase checks that seeded a phase a node lacks at the node's own split ({@code StepPhaseRules.phaseCheck},
      * decision D26: a vessel's closure of its inventory, a junction's closure of its own rows). */
     public static final LongAdder phaseSeeds=new LongAdder();
     /** Outer phase checks whose own split refused a proposed phase, its closure having driven it under the trace share or

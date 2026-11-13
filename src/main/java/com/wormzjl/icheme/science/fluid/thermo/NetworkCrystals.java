@@ -1,6 +1,5 @@
 package com.wormzjl.icheme.science.fluid.thermo;
 
-import com.wormzjl.icheme.science.fluid.solver.PhaseLayout;
 import com.wormzjl.icheme.science.material.SolidMaterialCatalog.SolidMaterial;
 import com.wormzjl.icheme.science.thermo.phase.CrystalFugacity;
 import com.wormzjl.icheme.science.thermo.phase.CrystalPhaseEvaluator;
@@ -23,7 +22,7 @@ import java.util.Objects;
  * {@code c (T - 298.15)} per kg. The crystal's own model varies: CO2-I (Jaeger and Span) from 1654 kg/m3 at 110 K to 1545
  * at its triple point, its heat capacity from 0.94 to 1.34 kJ/(kg K); ice Ih (the R10-06 fit) from 17.3 J/(mol K) at
  * 111.6 K to 37.8 at its melting point. The record takes them where the pure crystal meets its own fluid at the network's
- * ambient pressure ({@link PhaseLayout#AMBIENT_PRESSURE}, the outside of every vessel, D54): the crystal's normal
+ * ambient pressure ({@link FluidThermodynamics#AMBIENT_PRESSURE}, the outside of every vessel, D54): the crystal's normal
  * transition, for CO2-I its normal sublimation point (194.6 K, 1571 kg/m3, 1.255 kJ/(kg K)), the state a slack tank of dry
  * ice sits at, for ice its normal melting point (273.1526 K, 916.7 kg/m3, 2.097 kJ/(kg K)). There the crystal's energy is
  * the model's exactly: {@code u0 = u_s(T_ref, P_amb) - c (T_ref - 298.15)} on the network's datum (an admitted crystal's
@@ -91,7 +90,7 @@ public final class NetworkCrystals {
             double molarMass=model.molecularWeight(component);
             // The pure crystal's transition at the ambient pressure: its normal sublimation (or melting) point.
             double[] pure=new double[species.size()];pure[species.indexOf(anchored.component())]=1;
-            var onset=engine.engine().depositionTemperature(id,PhaseLayout.AMBIENT_PRESSURE,species,pure,engine.engine().newWorkspace());
+            var onset=engine.engine().depositionTemperature(id,FluidThermodynamics.AMBIENT_PRESSURE,species,pure,engine.engine().newWorkspace());
             if(onset.status()!=EquilibriumResult.Status.CONVERGED)
                 throw new IllegalStateException("Crystal "+id+": no transition of the pure crystal at the ambient pressure ("+onset.detail()+")");
             // Its melting line (Crystal.meltingTemperature): the record's triple point and the pure species' melting point at
@@ -110,7 +109,7 @@ public final class NetworkCrystals {
      * the component's formation enthalpy on the anchored model's datum. */
     private static Crystal crystal(CrystalPhaseEvaluator.Anchored anchored,CrystalFugacity fugacity,int component,double molarMass,double t,
                                    double formation,String packageId,double footT,double footP,double slope) {
-        double p=PhaseLayout.AMBIENT_PRESSURE;
+        double p=FluidThermodynamics.AMBIENT_PRESSURE;
         var state=anchored.properties(t,p);
         double internalEnergy=state.enthalpy()-formation-p*state.volume();
         double density=molarMass/state.volume(),heatCapacity=state.heatCapacity()/molarMass;

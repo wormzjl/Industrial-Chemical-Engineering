@@ -13,6 +13,7 @@ import static com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.saturat
 import com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.PassStart;
 import com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.Seeded;
 import com.wormzjl.icheme.science.fluid.solver.PhaseLayout;
+import com.wormzjl.icheme.science.fluid.solver.StepPhaseRules;
 import com.wormzjl.icheme.science.fluid.state.SolidInventory;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import java.util.*;
@@ -111,7 +112,7 @@ final class StartSeeds {
      * floor (an 11 g air buffer receiving about 7 kg/s of water). Each junction's mixture over the step is its stock plus
      * what its connections deliver at the pass's start flows ({@link #startPoint}) over {@code dt}, each the stream its
      * donor end draws ({@link PortStreams#endMoles}), at the seed's pressure and the enthalpy of stock and deliveries, split as the
-     * junction's own split is (D26, {@link FluidThermodynamics#junctionSplit}: its rows closed from the engine's PH answer
+     * junction's own split is (D26, {@link StepPhaseRules#junctionSplit}: its rows closed from the engine's PH answer
      * at the mass-weighted temperature, fluid only, a starting basis booking no crystal, the seed keeping the junction's
      * own solids; from the TP flash there where the engine answers nothing, as for an empty bag; formed only where the
      * engine's answer holds a phase the seed lacks, and nothing taken where the closure fails or empties that phase) and
@@ -201,7 +202,7 @@ final class StartSeeds {
                 boolean stocked=stocked(j,seed,seeds,heldMass,mass);
                 if(!stocked&&laidOutFor(phaseCode(model.folded(engine,true)),phaseCode(seed)))continue;
                 // The engine's answer is the start of the junction's own split, not its verdict (D26): its rows decide the phase.
-                var own=model.junctionSplit(n,enthalpy,solver.molarMass(n),seed.pressure(),engine,checkpoint);
+                var own=StepPhaseRules.junctionSplit(model,n,enthalpy,solver.molarMass(n),seed.pressure(),engine,checkpoint);
                 if(own==null)continue;
                 var mixture=model.folded(own,true);
                 if(!stocked&&laidOutFor(phaseCode(mixture),phaseCode(seed)))continue;
@@ -379,7 +380,7 @@ final class StartSeeds {
      * Junction {@code j}'s flashed seed under the pressure its own balance settles it at, every other node held at
      * {@code states}. The balance is where the net inflow of its connections ({@link #netInflow}) vanishes: each at its
      * own law, saturated at the cap of the end it leaves, the junction the donor of what leaves at its own split there
-     * ({@link FluidThermodynamics#junctionSplit}: its amounts and enthalpy, from the trial below it). The net inflow falls
+     * ({@link StepPhaseRules#junctionSplit}: its amounts and enthalpy, from the trial below it). The net inflow falls
      * as the pressure rises: less arrives at a smaller drive, and what leaves is denser. So the root lies above the seed's
      * pressure where the flashed junction takes in more than it passes, and below the pressure its vapour vanishes at.
      * The march goes up by {@link #FLASH_STEP} (never past the highest pressure of a neighbour) and keeps the last trial
@@ -411,7 +412,7 @@ final class StartSeeds {
      * folded as the pass folds a junction; null where it fails or no longer holds the {@code added} phases. */
     private FluidThermodynamics.State flashAt(double[] n,FluidThermodynamics.State seed,double p,FluidThermodynamics.State start,int added,Runnable checkpoint) {
         FluidThermodynamics.State own;
-        try{own=model.junctionSplit(n,seed.enthalpy(),seed.mass(),p,start,checkpoint);}
+        try{own=StepPhaseRules.junctionSplit(model,n,seed.enthalpy(),seed.mass(),p,start,checkpoint);}
         catch(com.wormzjl.icheme.science.fluid.thermo.ThermoHold outside){return null;}
         if(own==null)return null;
         var folded=model.folded(own.withSolidState(seed.solids(),seed.solidMoments()),true);

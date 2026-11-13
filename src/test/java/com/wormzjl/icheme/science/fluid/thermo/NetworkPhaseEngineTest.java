@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.science.fluid.thermo;
 
 import com.wormzjl.icheme.fluid.support.FluidTestSupport;
+import com.wormzjl.icheme.science.fluid.solver.StepPhaseRules;
 import com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel.Root;
@@ -163,7 +164,7 @@ class NetworkPhaseEngineTest {
 
     /**
      * Owner decisions D25 and D26 where T and P leave the split undetermined. At a pure component's coexistence pressure a
-     * standalone flash states the liquid; the network's outer phase check ({@link FluidThermodynamics#phaseCheck}) keeps a
+     * standalone flash states the liquid; the network's outer phase check ({@link StepPhaseRules#phaseCheck}) keeps a
      * node's populated phases, and a phase that answer finds missing enters at the node's own split, for one component as
      * for any material. A node holding both phases keeps itself. A pipe junction's own split is its PH answer: nitrogen
      * vapour held 1 % above its saturation pressure at 100 K condenses the liquid its enthalpy gives, at the saturation
@@ -183,12 +184,12 @@ class NetworkPhaseEngineTest {
         double[] liquid = new double[n - 1], vapor = new double[n - 1], none = new double[n - 1];
         liquid[nitrogen] = 30;vapor[nitrogen] = 10;
         var both = TestPhases.state(model,t, p, liquid, vapor, 0, 0);
-        assertSame(both, model.phaseCheck(both, false, null, null, 0, null, null, () -> {}), "a node holding both phases keeps its layout");
+        assertSame(both, StepPhaseRules.phaseCheck(model, both, false, null, null, 0, null, null, () -> {}), "a node holding both phases keeps its layout");
         // A junction: the PH answer at its pressure and enthalpy.
         double above = 1.01 * p;
         vapor[nitrogen] = 40;
         var supersaturated = TestPhases.state(model,t, above, none, vapor, 0, 0);
-        var condensed = model.phaseCheck(supersaturated, true, null, null, 0, null, null, () -> {});
+        var condensed = StepPhaseRules.phaseCheck(model, supersaturated, true, null, null, 0, null, null, () -> {});
         System.out.printf("N2 vapour at %.6f Pa, 100 K: junction seed %.6f K, liquid %.6e of 40 mol%n", above, condensed.temperature(), sum(TestPhases.liquid(condensed)));
         assertTrue(sum(TestPhases.liquid(condensed)) > 0 && sum(TestPhases.vapor(condensed)) > 0, "the liquid its enthalpy condenses beside the vapour");
         assertEquals(above, condensed.pressure(), 0, "at the junction's pressure");
@@ -198,7 +199,7 @@ class NetworkPhaseEngineTest {
         // A vessel: its own split starts from its own state at the crossing (D40 A), and a failed closure proposes nothing.
         var answer = model.flashTP(t, above, pure(nitrogen, 40, 0), () -> {});
         var starts = new ArrayList<FluidThermodynamics.State>();int[] record = {0};
-        assertSame(supersaturated, model.phaseCheck(supersaturated, false, null, record, 0, null, start -> {starts.add(start);return null;}, () -> {}),
+        assertSame(supersaturated, StepPhaseRules.phaseCheck(model, supersaturated, false, null, record, 0, null, start -> {starts.add(start);return null;}, () -> {}),
                 "a failed closure proposes nothing");
         assertEquals(1, starts.size(), "the vessel's own split is asked once");
         var crossing = starts.getFirst();
@@ -212,20 +213,20 @@ class NetworkPhaseEngineTest {
         assertEquals(40, sum(TestPhases.liquid(crossing)) + sum(TestPhases.vapor(crossing)), 1e-9, "the vessel's own amount");
         assertEquals(FluidThermodynamics.phaseBits(answer) & ~FluidThermodynamics.phaseBits(supersaturated), record[0], "the liquid is refused for the solve");
         var gas = TestPhases.state(model,t, p, none, vapor, 0, 0);
-        assertSame(gas, model.phaseCheck(gas, false, null, new int[]{FluidThermodynamics.phaseBits(flash)}, 0, null, null, () -> {}),
+        assertSame(gas, StepPhaseRules.phaseCheck(model, gas, false, null, new int[]{FluidThermodynamics.phaseBits(flash)}, 0, null, null, () -> {}),
                 "a phase the trace rule removed in this solve is not added back");
         // W3b: water boils at the cubic's own saturation pressure (41.21 kPa at 350 K, Wagner-Pruss 41.27 kPa).
         double tw = 350, saturation = saturationPressure(water, tw, 1e3, 1e6);
         assertEquals(0, TestPhases.waterLiquid(model.flashTP(tw, .99 * saturation, pure(nitrogen, 0, 1), () -> {})), 0, "the flash: all steam");
         var superheated = TestPhases.state(model,tw, .99 * saturation, none, none, 1, 0);
-        var boiled = model.phaseCheck(superheated, true, null, null, 0, null, null, () -> {});
+        var boiled = StepPhaseRules.phaseCheck(model, superheated, true, null, null, 0, null, null, () -> {});
         System.out.printf("water at %.3f Pa, 350 K: junction seed %.6f K, steam %.6e of 1 mol%n", .99 * saturation, boiled.temperature(), TestPhases.waterVapor(boiled));
         assertTrue(TestPhases.waterLiquid(boiled) > 0 && TestPhases.waterVapor(boiled) > 0, "the liquid stays and the steam its enthalpy gives enters");
         assertEquals(.99 * saturation, saturationPressure(water, boiled.temperature(), 1e3, 1e6), 1e-7 * saturation, "at the saturation temperature");
         assertEquals(superheated.enthalpy(), boiled.enthalpy(), 1e-9 * Math.abs(superheated.enthalpy()), "at the junction's enthalpy");
         assertEquals(1, TestPhases.waterLiquid(boiled) + TestPhases.waterVapor(boiled), 1e-15, "the water its own");
         var barely = TestPhases.state(model,tw, saturation * (1 - 1e-9), none, none, 1, 0);
-        assertSame(barely, model.phaseCheck(barely, true, null, null, 0, null, null, () -> {}), "a trace of steam is not added");
+        assertSame(barely, StepPhaseRules.phaseCheck(model, barely, true, null, null, 0, null, null, () -> {}), "a trace of steam is not added");
     }
 
     /**
