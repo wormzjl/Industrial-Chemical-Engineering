@@ -512,3 +512,20 @@ What it says:
 3. **The sparse LU's kept reach does not reach the server path.** `UpLookingLu.depthFirst` and `search` are still 10.7 % of the step's CPU, and `UpLookingLu.prepare` allocates 1.1 GB a minute (lines 198 and 199: the L and U arrays of a new instance). The LU storage is owned by `ConservativeTransport.Workspace` and `SparseNewton.Shared`, and both are built again for each step, so every step's first factorization searches every column and allocates its arrays. B-S2's gate proved the reuse on a retained solver; the engine's step does not retain one across steps. Follow-up P-17b: the storage (with its kept reach) lives with the island's retained state across steps, keyed by the pattern; then the reach is searched once per island and topology.
 4. **Kernel workspaces are still the largest allocation**: `PengRobinsonKernel$Workspace.<init>` 7.5 GB a minute (21 % of the bytes), then `PhaseLayout.decode` 3.1 GB and `HydrocarbonModel`'s tangents 5.9 GB. These are F0's items (one workspace per worker, flat pass tables).
 5. **The fluid gate's reading does not change**: the same step time, the same share in kernel, residual and LU (about 93 %), and the worker occupancy 0.21 on two workers for 75 awake islands. The need condition is still not met on this scenario.
+
+## The Rust band solve, measured (main thread, 2026-11-13, review branch at d529685af)
+
+Stage (a) of the port puts the column's band solve in the Rust library behind `-Dicheme.native.column=band`. The results are the Java bits (the gate: 1,570 band cases, ten column classes with the ceiling off and on). One 60 + 60 s pair a form, the same build, the machine alone, `ColumnBench` on `medium_crude`:
+
+| Form | Cold: time, bytes a solve | Warm +2 %: time, bytes a solve |
+|---|---|---|
+| Java band solve (after P8, P9) | 0.172 s, 169 MB | 0.080 s, 81 MB |
+| Rust band solve, the shipped build (x86-64 baseline, SSE2) | 0.200 s, 161 MB | 0.092 s, 76 MB |
+| Rust band solve built with `-C target-cpu=x86-64-v3` (AVX2; bit tables pass) | 0.189 s, 161 MB | not run |
+
+What it says:
+
+1. **One kernel behind a call per solve does not pay.** The Rust band solve is 15 to 16 % slower a column solve than Java's at the baseline target and about 10 % slower with AVX2. The bytes fall by 5 %. The earlier C++ outer pass gave no gain either.
+2. **Why (reasoned, not separated by a measurement):** HotSpot compiles the elimination's update loop to the machine's vector width (P9 wrote it for that), so the Rust loop has nothing to add there; each call copies the band in and the solution out through JNI (the band is several MB at 40 trays and 19 components, 21 factorizations a cold solve) and reserves its work rows again.
+3. **So the library's default stays `off`**, and the ceilings `band` and `kernel` are correctness stages, not performance stages. A gain can only come where a whole attempt or a whole solve runs in one call (no copies per linear solve, one arena, no garbage) and from what Rust would shed of the Java bookkeeping (maps, records, the ledger: 20 to 29 % of a solve before wave B, less after P3). The band solve and the kernel are the larger part of a solve and would run at about Java's speed.
+4. **Consequence for the plan (PHASE2_PLAN, wave E):** stage 0 in Java goes on (it serves the Java path and shrinks any port). Stages (b) to (d) of the Rust port, about 12,000 Rust lines with a Java twin to keep, wait for the owner's reading of these numbers: the measurements so far give no performance case for them. If the port goes on, its next measurement is the band solve alone on both sides without JNI (to separate the copy from the loop), then stage (c) as a prototype of one rung before the rest.

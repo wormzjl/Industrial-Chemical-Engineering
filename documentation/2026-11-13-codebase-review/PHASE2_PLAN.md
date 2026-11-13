@@ -110,6 +110,12 @@ Measured on the Java path, 40 stages, 18 or 19 components, three side draws, thr
 2. **The band solver is the port's first target.** The band is the adjacent-stage coupling only (`V3SimultaneousColumnSolver.toBandedMatrix`, 722 to 760), about 83 below and above the diagonal at 42 unknowns a stage, and every call factors again. After stage 0 removes the ledger and the bookkeeping, the solver and the kernel are about four fifths of a solve, and both are in stage (b). Stage (b) is therefore where the port's gain is first measured, not (c) or (d). No factor is promised: the Rust elimination must keep Java's bits (no fused operations), so its gain over the JIT is what stage (b) measures.
 3. **The route costs more than any of the above.** A solve counts its checkpoints (one per flash and solver step). On B1's two inputs changed by 2 %: the learned start takes 27,000 to 30,000; a warm start 8,600; the classical chain 184,000 to 258,000, with either closure. The running column never takes the learned start: `ColumnSolve` 248 calls the classical chain whenever it has no seed, and 239 to 247 drop a seed with free water. The simulator (`ColumnUnit.solve`) keeps a wet seed, which the warm route refuses, and so runs the strict classical chain (the 1.37 s row). Owner decision 16.
 
+### What stage (a) measured (main thread, 2026-11-13)
+
+Stage (a) is built and merged: `icheme-math` (bit-equal with Java), `icheme-jni`, the loader with its handshake, the band solve behind the ceiling `band`, the C++ lane removed. Measured on `medium_crude` ([PROFILE_REVIEW.md](PROFILE_REVIEW.md), "The Rust band solve, measured"): a column solve with the band solve in Rust is 15 to 16 % slower than with Java's (about 10 % with an AVX2 build), for 5 % fewer bytes. The default ceiling is `off`.
+
+Decision of the main thread: stage 0 goes on in Java (E0-1 first). Stages (b), (c) and (d) wait for the owner. The owner decided the port for CPU and memory; the two measurements so far (the C++ pass, the Rust band solve) show no gain from a kernel behind a call, and the larger part of a solve (band solve, kernel) would run at about Java's speed in Rust. What a whole-solve port could still gain is the Java bookkeeping share and the garbage; that needs a prototype of one rung (stage (c)) to measure before the 12,000 lines of stages (b) to (d) are written.
+
 ## Wave F: the fluid step in Rust (gated)
 
 The thermo kernel itself is ported with the column (wave E stage (b), the `icheme-thermo` crate). What is gated here is the fluid step's use of it. Owner, 2026-11-13.
