@@ -83,8 +83,11 @@ public final class V3ColumnCalculator {
     private static final double HYDRAULIC_MISMATCH_TOLERANCE = 0.10;
     /** Measured 3 Newton iterations median, 5 maximum; the cap only bounds a correction that is not working. */
     private static final int HYDRAULIC_CORRECTION_MAXIMUM_ITERATIONS = 64;
-    /** The correction's own wall clock; measured 29 ms median, 1.2 s on the slowest shipped preset. */
-    private static final long HYDRAULIC_CORRECTION_BUDGET_MILLIS = 10_000L;
+    /**
+     * The correction's own allowance in control polls (D2 of batch 2026-11-13-codebase-review): a counter, so the same
+     * request publishes the same profile on any machine, as the learned route's budget. MEASURED_POLLS_PENDING.
+     */
+    static final long HYDRAULIC_CORRECTION_BUDGET_POLLS = 1_000_000L;
     /** Deliberately short: the published solve path is already near its bounded length on a ramped request. */
     private static final String HYDRAULIC_CORRECTION_PATH_SUFFIX = "/hyd";
     private static final int DRAW_RAMP_INTERMEDIATE_MAXIMUM_ITERATIONS = 40;
@@ -453,7 +456,7 @@ public final class V3ColumnCalculator {
      *
      * <p>Nothing here can fail a request. The first pass is already a complete accepted answer, so every way the
      * hydraulic step can end badly — a profile outside the property envelope, a correction that does not
-     * converge or is not audited, its own wall clock, a cancelled request, an internal guard — publishes that
+     * converge or is not audited, its own poll budget, a cancelled request, an internal guard — publishes that
      * answer with a warning instead. That includes cancellation: discarding a solved column to report a deadline
      * that expired while polishing its pressure profile would be strictly worse for the caller.</p>
      */
@@ -461,6 +464,7 @@ public final class V3ColumnCalculator {
             V3PengRobinsonThermo thermo, SolvePolicy policy, V3SolveControl control, String solvePath,
             List<String> solverEvents) {
         HydraulicPublication nominal = new HydraulicPublication(pass, pass.audit(), solvePath, solverEvents, null);
+        List<Long> polls = new ArrayList<>();
         if (!input.usesTrayHydraulics()) return nominal;
         try {
             V3TrayHydraulics hydraulics = V3TrayHydraulics.ofDiameter(input.columnDiameterMetres());
@@ -476,30 +480,30 @@ public final class V3ColumnCalculator {
             }
             double mismatch = V3TrayHydraulics.totalDropMismatch(topology, solved.nodePressuresPascal(), marched);
             if (mismatch <= HYDRAULIC_MISMATCH_TOLERANCE) {
-                return summarised(nominal, hydraulics, solved, traffic, marched, false, mismatch);
+                return summarised(nominal, hydraulics, solved, traffic, marched, false, mismatch, polls);
             }
             // The published inspection carries the pressure profile of its solved problem.  Even on the
             // aggressive interactive route we must therefore apply the marched profile when the authored drop is
             // zero (the common diameter-driven preset): publishing only the hydraulic summary would show a
             // positive column dP while every inspected tray still had the flat nominal pressure.  Keep the same
             // bounded correction path for all routes so the summary and per-tray readings cannot disagree.
-            V3SolvePass corrected = hydraulicCorrection(input, pass, thermo, policy, control, marched);
+            V3SolvePass corrected = hydraulicCorrection(input, pass, thermo, policy, control, marched, polls);
             if (corrected == null) {
                 // One half step, then the full one from the state it reached: a correction that refuses a 20 kPa
                 // jump in sump pressure in one go has been measured to take it in two.
                 V3SolvePass half = hydraulicCorrection(input, pass, thermo, policy, control,
-                        V3TrayHydraulics.halfway(topology, solved.nodePressuresPascal(), marched));
+                        V3TrayHydraulics.halfway(topology, solved.nodePressuresPascal(), marched), polls);
                 if (half != null) {
                     V3ColumnProblem halfProblem = half.prepared().problem();
                     double[] fromHalf = hydraulics.march(halfProblem,
                             V3TrayHydraulics.traffic(halfProblem, half.attempt().state(), constants));
                     if (V3TrayHydraulics.isAdmissible(topology, fromHalf, thermo)) {
-                        corrected = hydraulicCorrection(input, half, thermo, policy, control, fromHalf);
+                        corrected = hydraulicCorrection(input, half, thermo, policy, control, fromHalf, polls);
                     }
                 }
             }
             if (corrected == null) {
-                return advisory(summarised(nominal, hydraulics, solved, traffic, marched, false, mismatch),
+                return advisory(summarised(nominal, hydraulics, solved, traffic, marched, false, mismatch, polls),
                         String.format(Locale.ROOT, "the tray pressure drop of this column is %.1f kPa, which the "
                                 + "authored uniform drop misses by %.0f%%, and the column would not re-solve on it; "
                                 + "the published profile is the authored one",
@@ -516,7 +520,7 @@ public final class V3ColumnCalculator {
                     solvePath + HYDRAULIC_CORRECTION_PATH_SUFFIX,
                     mergedEvents(corrected.solverEvents(), solverEvents), null);
             return summarised(publication, hydraulics, correctedProblem, correctedTraffic,
-                    correctedProblem.nodePressuresPascal(), true, residual);
+                    correctedProblem.nodePressuresPascal(), true, residual, polls);
         } catch (CancellationException expired) {
             return advisory(nominal, "the request ended before the flow-dependent tray pressure profile could be "
                     + "applied; the column was published on the authored uniform drop instead");
@@ -530,16 +534,15 @@ public final class V3ColumnCalculator {
      * One bounded warm correction of the identical request on a supplied per-tray profile.
      *
      * <p>Returns null unless the correction reaches an audited, certified solution of the requested geometry —
-     * the same three gates the first pass passed. It runs under its own wall clock inside the caller's deadline,
+     * the same three gates the first pass passed. It runs under its own poll budget inside the caller's deadline,
      * so a correction that turns out to be expensive costs the request a bounded amount and nothing else.</p>
      */
     private static V3SolvePass hydraulicCorrection(V3ColumnInput input, V3SolvePass pass,
-            V3PengRobinsonThermo thermo, SolvePolicy policy, V3SolveControl control, double[] profile) {
-        long started = System.nanoTime();
+            V3PengRobinsonThermo thermo, SolvePolicy policy, V3SolveControl control, double[] profile, List<Long> polls) {
+        long[] spent = new long[1];
         V3SolveControl correctionControl = () -> {
-            control.checkpoint();
-            if (System.nanoTime() - started >= HYDRAULIC_CORRECTION_BUDGET_MILLIS * 1_000_000L)
-                throw new HydraulicBudgetExceeded();
+            control.checkpoint(); // Whole-request cancellation always wins over the correction's own budget.
+            if (++spent[0] > HYDRAULIC_CORRECTION_BUDGET_POLLS) throw new HydraulicBudgetExceeded();
         };
         V3ColumnProblem solved = pass.prepared().problem();
         try {
@@ -561,6 +564,8 @@ public final class V3ColumnCalculator {
                     ? corrected : null;
         } catch (HydraulicBudgetExceeded | V3ThermoException | IllegalArgumentException refused) {
             return null;
+        } finally {
+            polls.add(spent[0]);
         }
     }
 
@@ -573,16 +578,17 @@ public final class V3ColumnCalculator {
 
     private static HydraulicPublication summarised(HydraulicPublication publication, V3TrayHydraulics hydraulics,
             V3ColumnProblem problem, V3TrayHydraulics.Tray[] traffic, double[] profile, boolean correctionApplied,
-            double residualMismatch) {
+            double residualMismatch, List<Long> polls) {
         V3TrayHydraulicsSummary summary = hydraulics.summarise(problem, traffic, profile, correctionApplied,
                 Math.min(residualMismatch, 1.0));
         String event = String.format(Locale.ROOT,
                 "tray hydraulics: D=%.2f m, %.0f Pa/tray, %.2f kPa total, flood %.2f at tray %d, correction=%s, "
-                        + "residual mismatch %.2f %%",
+                        + "residual mismatch %.2f %%%s",
                 summary.columnDiameterMetres(), summary.meanTrayPressureDropPascal(),
                 summary.totalPressureDropPascal() / 1000.0, summary.maximumFloodFraction(),
                 summary.maximumFloodTray() + 1, correctionApplied ? "applied" : "not needed",
-                100.0 * summary.residualMismatchFraction());
+                100.0 * summary.residualMismatchFraction(), polls.isEmpty() ? "" : ", correction polls "
+                        + String.join("/", polls.stream().map(String::valueOf).toList()));
         HydraulicPublication summarised = new HydraulicPublication(publication.pass(), publication.audit(),
                 publication.solvePath(), mergedEvents(List.of(boundedEvent(event)), publication.solverEvents()),
                 summary);
@@ -606,7 +612,7 @@ public final class V3ColumnCalculator {
                 publication.solvePath(), publication.solverEvents(), publication.summary());
     }
 
-    /** The correction's own wall-clock allowance, inside the caller's request deadline. */
+    /** The correction's own poll allowance ({@link #HYDRAULIC_CORRECTION_BUDGET_POLLS}), inside the caller's request deadline. */
     private static final class HydraulicBudgetExceeded extends RuntimeException {}
 
     /**

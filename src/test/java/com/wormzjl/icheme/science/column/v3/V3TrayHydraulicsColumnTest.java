@@ -193,6 +193,62 @@ class V3TrayHydraulicsColumnTest {
         }
     }
 
+    /**
+     * The correction's budget counts control polls, not time (D2 of batch 2026-11-13-codebase-review): a control whose
+     * checkpoint sleeps 1 ms publishes the same pressure profile, bit for bit, as an unbounded one.
+     */
+    @Test
+    void aSlowControlPublishesTheSameProfileAsAnUnboundedOne() {
+        V3ColumnInput input = smallColumn(0.0, 8.0);
+        V3ColumnOutcome.Success fast = assertInstanceOf(V3ColumnOutcome.Success.class, V3TestInputs.calculate(input));
+        V3SolveControl slow = () -> {
+            try {
+                Thread.sleep(1);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                throw new java.util.concurrent.CancellationException("interrupted");
+            }
+        };
+        V3ColumnOutcome outcome = V3ColumnCalculator.calculate(input, slow, 0.0, 0.0, V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO);
+        V3ColumnOutcome.Success slowed = assertInstanceOf(V3ColumnOutcome.Success.class, outcome, outcome::toString);
+        assertTrue(fast.result().trayHydraulics().orElseThrow().correctionApplied(), "the case runs a correction");
+        double[] expected = fast.result().problem().nodePressuresPascal(), published = slowed.result().problem().nodePressuresPascal();
+        assertEquals(expected.length, published.length);
+        for (int node = 0; node < expected.length; node++)
+            assertEquals(Double.doubleToRawLongBits(expected[node]), Double.doubleToRawLongBits(published[node]), "node " + node);
+        assertEquals(fast.diagnostics().solvePath(), slowed.diagnostics().solvePath());
+    }
+
+    /**
+     * The polls each correction spends on the bundled medium crude, the literature preset and the small literature
+     * column, printed for {@link V3ColumnCalculator#HYDRAULIC_CORRECTION_BUDGET_POLLS}: every one is far inside it.
+     */
+    @Test
+    void theCorrectionsOfTheShippedColumnsSpendFarLessThanTheirBudget() {
+        MaterialCatalog bundled = MaterialCatalog.bundled();
+        V3ColumnInput medium = bundled.presets().column("medium_crude").input(bundled);
+        long largest = 0;
+        for (var entry : List.of(
+                java.util.Map.entry("medium_crude", (java.util.function.Supplier<V3ColumnOutcome>) () -> com.wormzjl.icheme.science.material.MaterialRuntime
+                        .with(bundled, medium.packageId(), () -> V3TestInputs.calculate(medium))),
+                java.util.Map.entry("tia_juana", (java.util.function.Supplier<V3ColumnOutcome>) () -> V3TestInputs.calculate(V3TestInputs.methaneCduInput())),
+                java.util.Map.entry("literature 12 trays", (java.util.function.Supplier<V3ColumnOutcome>) () -> V3TestInputs.calculate(smallColumn(0.0, 8.0))))) {
+            V3ColumnOutcome outcome = entry.getValue().get();
+            V3ColumnOutcome.Success success = assertInstanceOf(V3ColumnOutcome.Success.class, outcome, outcome::toString);
+            String event = success.diagnostics().events().stream().filter(e -> e.startsWith("tray hydraulics: ")).findFirst().orElseThrow();
+            int at = event.indexOf("correction polls ");
+            if (at < 0) {
+                System.out.println("V3 hydraulic correction polls, " + entry.getKey() + ": no correction (" + event + ")");
+                continue;
+            }
+            System.out.println("V3 hydraulic correction polls, " + entry.getKey() + ": " + event.substring(at + 17));
+            for (String polls : event.substring(at + 17).split("/")) largest = Math.max(largest, Long.parseLong(polls.trim()));
+        }
+        assertTrue(largest > 0, "the literature preset runs a correction");
+        assertTrue(10 * largest <= V3ColumnCalculator.HYDRAULIC_CORRECTION_BUDGET_POLLS,
+                "ten times the largest correction, " + largest + " polls, fits the budget");
+    }
+
     private static String digest(V3ColumnInput input) {
         return V3InputDigest.of(V3ColumnProblemResolver.resolve(input, V3CondenserPhaseBranch.TWO_PHASE),
                 V3ColumnCalculator.FORMULATION_REVISION, "test-dataset",
