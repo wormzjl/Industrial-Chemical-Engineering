@@ -491,3 +491,24 @@ mod classes 1.89 MB
 | `column/` | `<phase>.txt` (bench numbers), `<phase>.jfr`, `<phase>.summary.txt`, `machine-<phase>.txt` |
 | `warm-probe/` | `warm-probe.txt` |
 | `machines-cert-true/`, `machines-cert-false/` | `machines.txt`, `machines.jfr`, `summary.txt`, `histo-before.txt`, `histo-after.txt`, `machine.txt` |
+
+## After wave B (main thread, 2026-11-13, review branch at 32350ac1d)
+
+The same harness and inputs, one 60 + 60 s pair a scenario, run from the review branch with B-T1, B-S1, B-R1, B-M1, B-E1, B-C1, B-S2, C1a and G1 part 1 merged. Output: `tmp/codebase-review-bench/after-b/` of the review worktree. The Gradle lanes were idle; the Rust thread ran `cargo test` at some time between 15:20 and 15:30 (its commits are at 15:30), which covers the column phases, so the column times are an upper bound. Bytes and counters do not depend on the load.
+
+| Scenario | Before (B1) | After wave B |
+|---|---|---|
+| Fluid `mixed100`, island step | 28.4 ms median, 45.9 ms p95; 60.7 MB a step | 29.1 ms median, 48.3 ms p95; 39.5 MB a step (35.5 GB in 60 s, 899 steps) |
+| Column `medium_crude`, cold | 0.196 s; 204 MB a solve | 0.174 s; 169 MB |
+| Column `medium_crude`, warm +2 % | 0.095 s; 104 MB | 0.081 s; 81 MB |
+| Column literature, cold | 0.208 s; 229 MB | 0.180 s; 191 MB |
+| Column literature, warm +2 % (classical chain) | 1.370 s; 1,339 MB | 1.208 s; 1,189 MB |
+| 20 shaft trains, certified | 11.1 µs a 100-tick cadence; 62 B a tick | 8.1 µs; 33 B a tick |
+
+What it says:
+
+1. **Column: 11 to 15 % less time and 11 to 22 % fewer bytes a solve**, from the band elimination's extent (P8), the two loops (P9), the ledger on int tables (P3) and the kernel's batch (B-T1). The band solver still carries the solve; the next gains are E0-1 (no finite-difference certificate) and the Rust band solver.
+2. **Fluid step: a third fewer bytes, no less time.** The step's CPU is where it was: thermo kernel 35.7 % of samples (40.9 % before), linear algebra 44.4 % counting `UpLookingLu` (38.1 %), residual and Jacobian 12.7 % (13.6 %), flash 1.4 %. `PengRobinsonKernel.correctExcess` is 12.3 % (16 %).
+3. **The sparse LU's kept reach does not reach the server path.** `UpLookingLu.depthFirst` and `search` are still 10.7 % of the step's CPU, and `UpLookingLu.prepare` allocates 1.1 GB a minute (lines 198 and 199: the L and U arrays of a new instance). The LU storage is owned by `ConservativeTransport.Workspace` and `SparseNewton.Shared`, and both are built again for each step, so every step's first factorization searches every column and allocates its arrays. B-S2's gate proved the reuse on a retained solver; the engine's step does not retain one across steps. Follow-up P-17b: the storage (with its kept reach) lives with the island's retained state across steps, keyed by the pattern; then the reach is searched once per island and topology.
+4. **Kernel workspaces are still the largest allocation**: `PengRobinsonKernel$Workspace.<init>` 7.5 GB a minute (21 % of the bytes), then `PhaseLayout.decode` 3.1 GB and `HydrocarbonModel`'s tangents 5.9 GB. These are F0's items (one workspace per worker, flat pass tables).
+5. **The fluid gate's reading does not change**: the same step time, the same share in kernel, residual and LU (about 93 %), and the worker occupancy 0.21 on two workers for 75 awake islands. The need condition is still not met on this scenario.

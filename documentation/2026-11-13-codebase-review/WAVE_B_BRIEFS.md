@@ -117,3 +117,8 @@ Lane: `client/gui/kit/**` (`GuiCanvas`, `PanelSkin`, `KitDoor`, `Column`, `SkinB
 5. **C20**: one `Measure` per `Font`; the frame's canvas passed to the widgets (no new `GuiCanvas` per button per frame); a sprite keeps its `ResourceLocation`.
 
 One commit per item. Report: `wave-b/B-K1_REPORT.md`, with the draw-call counts and the render comparison. Tests after "lane free": the compile, `DrawCallTest`, `KitLayoutTest`, the column gates of the kit the skill names, and the render tool runs.
+
+## Amendments after the bench re-run (main thread, 2026-11-13)
+
+10. **P-17b, the LU storage lives across steps** (follow-up of B-S2, for `wave-a6`). The bench after wave B ([PROFILE_REVIEW.md](PROFILE_REVIEW.md), "After wave B", item 3) shows the reach search still at 10.7 % of the step's CPU and 1.1 GB a minute in `UpLookingLu.prepare`: `ConservativeTransport.Workspace` and `SparseNewton.Shared` are built for each step, so no step starts with a kept reach. Find where each is constructed on the engine's path (`SolverDiagnostics.luStorages` counts them: read it per step first), and keep the storage with the island's retained solver state across steps, replaced when the pattern changes. Bit for bit: the reach is a function of the pattern and the pivots only. Counters: `luStorages` per step towards 0, `UpLookingLu.reachSearches()` over `columnsFactored()` on `mixed100`, bytes a step.
+11. **EJML leaves the jar** with P-17b's batch: `build.gradle` 226 to 231 to `testImplementation`, `PackagedSparseLuTest` restated (what it proved about the packaged jar), and `META-INF/licenses/ejml-NOTICE.txt` kept and reworded (`UpLookingLu` is derived from EJML under Apache-2.0).
