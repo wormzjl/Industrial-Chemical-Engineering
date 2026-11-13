@@ -42,7 +42,8 @@ public record VacuumPump(Type type, double capacity, double ratedSpeed) implemen
     public static final double SCREW_HEATING = .6;
     /**
      * Owner V6 B: a dry screw wears, as a pump running dry does ({@link Wear}), while liquid takes more than this share of
-     * its suction volume, and its liquid noise rises with the share to full loudness at {@link #LIQUID_LOUD}.
+     * its suction volume; its wear and its liquid noise rise with the share to full at {@link #LIQUID_LOUD} (code base review
+     * N5, M-06: {@link #liquidIntensity}).
      */
     public static final double LIQUID_TRACE = .01, LIQUID_LOUD = .1;
     /** The capacity left when the curve gives none, m³/s: the row needs a displacement above zero. */
@@ -89,9 +90,17 @@ public record VacuumPump(Type type, double capacity, double ratedSpeed) implemen
         return law instanceof VacuumPump v && v.type == Type.DRY_SCREW;
     }
 
-    /** The liquid noise byte, 0 to 255, at a suction liquid volume share {@code liquid} (owner V6 B). */
+    /**
+     * The liquid intensity, 0 to 1, at a suction liquid volume share {@code liquid} (N5): 0 at and below {@link #LIQUID_TRACE},
+     * else {@code liquid / LIQUID_LOUD}, at most 1. The dry screw's {@code LIQUID} fault and its noise read it.
+     */
+    public static double liquidIntensity(double liquid) {
+        return liquid > LIQUID_TRACE ? Math.min(1, liquid / LIQUID_LOUD) : 0;
+    }
+
+    /** The liquid noise byte, 0 to 255, at a suction liquid volume share {@code liquid} (owner V6 B): {@code 255 liquidIntensity}. */
     public static int liquidNoise(double liquid) {
-        return liquid > LIQUID_TRACE ? (int) Math.round(255 * Math.min(1, liquid / LIQUID_LOUD)) : 0;
+        return (int) Math.round(255 * liquidIntensity(liquid));
     }
 
     /** φ, the share of the capacity it takes at suction pressure {@code pressure} Pa: 0 at or below blank-off. */

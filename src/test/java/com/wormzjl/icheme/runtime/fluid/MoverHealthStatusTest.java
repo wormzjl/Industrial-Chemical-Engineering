@@ -15,7 +15,7 @@ class MoverHealthStatusTest {
     private static final FlowControl.Mover PUMP=new FlowControl.Pump(.01,500000);
 
     @Test void aFailedDryScrewReadsFailed() {
-        assertTrue(PumpHealth.worn(DRY_SCREW));
+        assertTrue(MachineHealth.worn(DRY_SCREW));
         assertEquals("FAILED: use a repair kit / RUNNING / NORMAL",FluidWorldAuthority.withHealth("RUNNING / NORMAL",DRY_SCREW,"FAILED"));
         assertEquals("RUNNING / NORMAL / LIQUID",FluidWorldAuthority.withHealth("RUNNING / NORMAL",DRY_SCREW,"LIQUID"));
         assertEquals("RUNNING / NORMAL",FluidWorldAuthority.withHealth("RUNNING / NORMAL",DRY_SCREW,""));
@@ -25,7 +25,7 @@ class MoverHealthStatusTest {
         assertEquals("RUNNING / CAVITATION",FluidWorldAuthority.withHealth("RUNNING",PUMP,"CAVITATION"));
     }
     @Test void aMoverThatDoesNotWearKeepsItsLine() {
-        assertFalse(PumpHealth.worn(LIQUID_RING));
+        assertFalse(MachineHealth.worn(LIQUID_RING));
         assertEquals("RUNNING / NORMAL",FluidWorldAuthority.withHealth("RUNNING / NORMAL",LIQUID_RING,"FAILED"));
     }
 }

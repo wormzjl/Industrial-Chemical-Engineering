@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * commits and, certified, on the cadence, fails at 0, wakes its island and stands closed ({@code FAILED} plan); a repair
  * makes it new and it runs again. Fed at the atmosphere it is clean (σ near 6) and keeps its health.
  */
-class PumpHealthTest {
+class MachineHealthTest {
     private final FluidThermodynamics model = FluidTestSupport.networkModel();
     private static final PipeResistance.Geometry FAT = new PipeResistance.Geometry(1, .1, PipeResistance.DEFAULT_ROUGHNESS_METRES, 0);
     /** The pump's set flow, m³/s: its NPSH3 is 1.68 m at the 2-pole speed (Npsh.forDuty). */
@@ -36,7 +36,7 @@ class PumpHealthTest {
         final Map<Long, IslandCoordinator.Attempt> attempts = new LinkedHashMap<>();
         final Map<Long, ProcessSolveServices.FluidIslandCommand> commands = new HashMap<>();
         final IslandCoordinator coordinator;
-        final PumpHealth health;
+        final MachineHealth health;
         /** The in-line pump's electric store (M-04), or null where the line runs without stores. */
         final ElectricStores electric;
         long requests;
@@ -54,6 +54,11 @@ class PumpHealthTest {
          * {@code metered}: the pump is a registered in-line pump with an empty metered store (M-04).
          */
         Rig(double supply, int factor, Wear.Settings wear, boolean metered) {
+            this(supply, factor, wear, metered, new FlowControl.Pump(FLOW, 5e5), 101325);
+        }
+
+        /** The line with mover {@code control} delivering to a void at {@code discharge} Pa (N1: a centrifugal casing pump). */
+        Rig(double supply, int factor, Wear.Settings wear, boolean metered, FlowControl.Mover control, double discharge) {
             var time = com.wormzjl.icheme.science.fluid.SimulationTime.of(factor);
             coordinator = new IslandCoordinator(new IslandCoordinator.Dispatcher() {
                 public int availableWorkers() {
@@ -78,7 +83,7 @@ class PumpHealthTest {
             var empty = WorldTopologyLedger.Snapshot.empty(EventPathWorld.CATALOG);
             var ledger = new WorldTopologyLedger(metered ? new WorldTopologyLedger.Snapshot(0, 1000, Map.of(1L, inline()), List.of(), empty.constructed(), empty.destroyed(), empty.basis()) : empty);
             var trains = new ShaftTrains(ledger, device -> device == 1 ? 1L : null, coordinator);
-            health = new PumpHealth(ledger, device -> device == 1 ? 1L : null, coordinator, device -> device == 1, device -> device == 1 ? new FlowControl.Pump(FLOW, 5e5) : null, () -> wear);
+            health = new MachineHealth(ledger, device -> device == 1 ? 1L : null, coordinator, device -> device == 1, device -> device == 1 ? new FlowControl.Pump(FLOW, 5e5) : null, () -> wear);
             trains.health(health);
             if (metered) {
                 ledger.stores(Map.of(1L, com.wormzjl.icheme.science.machine.ElectricStore.Facts.EMPTY));
@@ -88,8 +93,8 @@ class PumpHealthTest {
             trains.host(ShaftTrains.Host.NONE);
             coordinator.shafts(trains);
             var line = new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1, 0, water(supply), PassiveNetwork.NodeKind.GENERATOR),
-                    new PassiveNetwork.Reservoir(2, 0, water(101325), PassiveNetwork.NodeKind.VOID)),
-                    List.of(new PassiveNetwork.Pipe(10, 0, 1, FAT, new FlowControl.Pump(FLOW, 5e5))));
+                    new PassiveNetwork.Reservoir(2, 0, water(discharge), PassiveNetwork.NodeKind.VOID)),
+                    List.of(new PassiveNetwork.Pipe(10, 0, 1, FAT, control)));
             coordinator.register(new IslandCoordinator.Snapshot(1, 0, line, new IslandClock.Snapshot(0, 0, 0, 100), Optional.empty(), "READY"), model.withTime(time));
         }
 
@@ -104,7 +109,7 @@ class PumpHealthTest {
                 }
                 coordinator.pump();
             }
-            if (epoch[0] % PumpHealth.CADENCE == 0) {
+            if (epoch[0] % MachineHealth.CADENCE == 0) {
                 health.cadence();
                 if (electric != null) electric.cadence();
             }
@@ -148,11 +153,11 @@ class PumpHealthTest {
         var slow = new Wear.Settings(true, 1, 10);
         for (int factor : new int[]{4, 72}) {
             var rig = new Rig(supplyAt(2.06), factor, slow);
-            for (int i = 0; i < 2 * PumpHealth.CADENCE; i++) rig.tick();
+            for (int i = 0; i < 2 * MachineHealth.CADENCE; i++) rig.tick();
             double rate = rig.health.rate(1), before = rig.health.health(1);
             assertEquals(Wear.rate(rig.ratio(), false, slow), rate, 1e-12, "it books its commit's rate");
-            for (int i = 0; i < 2 * PumpHealth.CADENCE; i++) rig.tick();
-            double lost = before - rig.health.health(1), expected = rate * factor * 2 * PumpHealth.CADENCE / 20.0;
+            for (int i = 0; i < 2 * MachineHealth.CADENCE; i++) rig.tick();
+            double lost = before - rig.health.health(1), expected = rate * factor * 2 * MachineHealth.CADENCE / 20.0;
             assertEquals(expected, lost, 1e-3 * expected, "factor " + factor + ": two cadences of play are " + factor * 10 + " s of process wear");
         }
         assertEquals(8 * 3600, Wear.life(Wear.PEAK, false, Wear.Settings.DEFAULT), 1e-6, "the default life at the peak: 8 h of process, 2 h of play at 4");
@@ -184,6 +189,9 @@ class PumpHealthTest {
         assertEquals(0, suction.gas(), 1e-9, "water below its boiling point carries no vapour");
         assertTrue(Double.isNaN(suction.ratio()), "a set-flow pump has no gas ratio");
         assertEquals("CAVITATION", rig.health.status(1));
+        // M-12: its standing fault is the one that set its rate.
+        assertEquals(Wear.Fault.CAVITATION, rig.health.fault(1));
+        assertEquals(Wear.intensity(rig.ratio()), rig.health.intensity(1), 1e-12);
         // It wears to 0 at about its 60 s life, fails at the next cadence and stands closed.
         for (int i = 0; i < 2400 && !rig.health.failed(1); i++) rig.tick();
         assertTrue(rig.health.failed(1), "it failed: " + rig.health.health(1));
@@ -196,11 +204,11 @@ class PumpHealthTest {
                 "it is switched off with its settings kept: the closure is a slice input");
         assertEquals(Map.of(1L, 0.0), rig.health.facts(), "health is a fact");
         // A repair: accepted, the kit is taken, the pump is new and runs again.
-        var outcome = new ArrayList<PumpHealth.Outcome>();
+        var outcome = new ArrayList<MachineHealth.Outcome>();
         int[] taken = {0};
-        rig.health.queue(new PumpHealth.Repair(1, () -> ++taken[0] > 0, outcome::add));
+        rig.health.queue(new MachineHealth.Repair(1, () -> ++taken[0] > 0, outcome::add));
         rig.tick();
-        assertEquals(List.of(PumpHealth.Outcome.REPAIRED), outcome);
+        assertEquals(List.of(MachineHealth.Outcome.REPAIRED), outcome);
         assertEquals(1, taken[0], "one kit");
         assertFalse(rig.health.failed(1));
         assertEquals(1, rig.health.health(1), "new again");
@@ -261,23 +269,88 @@ class PumpHealthTest {
         var compressor = new WorldTopologyLedger.Registration(new PhysicalFluidTopology.Device(30, at, kind, PhysicalFluidTopology.Direction.EAST, FAT,
                 new FlowControl.Compressor(.1, 3)), spec, 0);
         var registrations = Map.of(20L, screw, 30L, compressor);
-        assertTrue(PumpHealth.pump(screw), "a dry screw wears");
-        assertFalse(PumpHealth.pump(compressor), "a compressor does not");
+        assertTrue(MachineHealth.pump(screw), "a dry screw wears");
+        assertFalse(MachineHealth.pump(compressor), "a compressor does not");
         var ledger = new WorldTopologyLedger(WorldTopologyLedger.Snapshot.empty(EventPathWorld.CATALOG));
         ledger.health(Map.of(20L, 0.0));
-        var health = new PumpHealth(ledger, device -> null, rig.coordinator, device -> PumpHealth.pump(registrations.get(device)),
+        var health = new MachineHealth(ledger, device -> null, rig.coordinator, device -> MachineHealth.pump(registrations.get(device)),
                 device -> registrations.containsKey(device) ? registrations.get(device).device().control() : null, () -> FAST);
         assertTrue(health.failed(20), "saved at 0, it stands failed");
         assertNull(health.health(30), "a compressor has no health record");
-        var outcome = new ArrayList<PumpHealth.Outcome>();
+        var outcome = new ArrayList<MachineHealth.Outcome>();
         int[] taken = {0};
-        health.queue(new PumpHealth.Repair(20, () -> ++taken[0] > 0, outcome::add));
-        health.queue(new PumpHealth.Repair(30, () -> ++taken[0] > 0, outcome::add));
+        health.queue(new MachineHealth.Repair(20, () -> ++taken[0] > 0, outcome::add));
+        health.queue(new MachineHealth.Repair(30, () -> ++taken[0] > 0, outcome::add));
         health.apply();
-        assertEquals(List.of(PumpHealth.Outcome.REPAIRED, PumpHealth.Outcome.NOT_A_PUMP), outcome);
+        assertEquals(List.of(MachineHealth.Outcome.REPAIRED, MachineHealth.Outcome.NOT_A_PUMP), outcome);
         assertEquals(1, taken[0], "one kit, for the screw");
         assertFalse(health.failed(20));
         assertEquals(1, health.health(20), "new again");
+    }
+
+    /** N1: the casing pump of the low-flow cases: 0.01 m³/s at 50 m, 70 %, at its 2,950 rpm (speed share 1). */
+    private static final com.wormzjl.icheme.science.machine.CentrifugalPump CENTRIFUGAL = new com.wormzjl.icheme.science.machine.CentrifugalPump(.01, 50, .7);
+
+    /** The void pressure that holds the centrifugal pump at {@code share} of its rated flow from a supply at {@code supply} Pa. */
+    private double dischargeAt(double supply, double share) {
+        var s = water(supply);
+        return supply + CENTRIFUGAL.rise(share * CENTRIFUGAL.ratedFlow(), 1, s.mass() / s.volume(), supply, 1.4);
+    }
+
+    /** The centrifugal pump's flow over its rated flow, from the last committed slice (its suction is the supply). */
+    private static double share(Rig rig, FluidThermodynamics.State supply) {
+        return Math.max(0, rig.flow()) / (supply.mass() / supply.volume()) / CENTRIFUGAL.ratedFlow();
+    }
+
+    /**
+     * N1: a casing pump against a closed discharge (a void at its shut-off head) recirculates and erodes at the low-flow
+     * rate, 1/(8 h) of health per process second at the default lives, says LOW FLOW, and keeps wearing on the cadence
+     * while its island rests certified.
+     */
+    @Test
+    void aDeadHeadedCasingPumpErodesAtTheLowFlowRateAlsoAtRest() {
+        var rig = new Rig(101325, 1, Wear.Settings.DEFAULT, false, new FlowControl.Machine(CENTRIFUGAL, 1, true), dischargeAt(101325, 0));
+        for (int i = 0; i < 4000 && rig.coordinator.observe(1).certificate().isEmpty(); i++) rig.tick();
+        assertTrue(rig.coordinator.observe(1).certificate().isPresent(), "the dead-headed line rests certified: " + rig.coordinator.certificationRefusal(1));
+        double q = share(rig, water(101325));
+        assertTrue(q < .02, "next to no flow: " + q);
+        assertEquals(Wear.rate(Wear.Fault.LOW_FLOW.intensity(q), 0, Wear.Settings.DEFAULT), rig.health.rate(1), 1e-9 * rig.health.rate(1), "its low-flow rate");
+        assertEquals(1 / (8 * 3600.), rig.health.rate(1), .15 / (8 * 3600.), "about 1/(8 h) a process second");
+        assertEquals(Wear.Fault.LOW_FLOW, rig.health.fault(1));
+        assertEquals("LOW FLOW", rig.health.status(1));
+        // At rest the cadence books its last rate: two cadences of process time at that rate.
+        double before = rig.health.health(1), rate = rig.health.rate(1);
+        for (int i = 0; i < 2 * MachineHealth.CADENCE; i++) rig.tick();
+        assertEquals(rate * 2 * MachineHealth.CADENCE / 20.0, before - rig.health.health(1), 1e-3 * rate * 2 * MachineHealth.CADENCE / 20.0, "it wears at rest");
+    }
+
+    /** N1: a pump at 15 % of its rated flow that also cavitates wears at the larger erosion term, not their sum. */
+    @Test
+    void aPumpAtFifteenPercentThatCavitatesWearsAtTheLargerTerm() {
+        var water = water(101325);
+        double rho = water.mass() / water.volume(), q = .15 * CENTRIFUGAL.ratedFlow();
+        double supply = model.saturationPressure(298.15) + 2.06 * rho * 9.80665 * CENTRIFUGAL.npsh(1).required(q);
+        var rig = new Rig(supply, 1, Wear.Settings.DEFAULT, false, new FlowControl.Machine(CENTRIFUGAL, 1, true), dischargeAt(supply, .15));
+        for (int i = 0; i < 400; i++) rig.tick();
+        double share = share(rig, water(supply)), sigma = rig.ratio();
+        assertTrue(share > .05 && share < .3, "below its minimum flow: " + share);
+        double cavitation = Wear.intensity(sigma), lowFlow = Wear.lowFlow(share);
+        assertTrue(cavitation > 0 && lowFlow > 0, "both erode: " + cavitation + ", " + lowFlow);
+        assertEquals(Wear.rate(Math.max(cavitation, lowFlow), 0, Wear.Settings.DEFAULT), rig.health.rate(1), 1e-9 * rig.health.rate(1), "the larger term");
+        assertEquals(cavitation > lowFlow ? Wear.Fault.CAVITATION : Wear.Fault.LOW_FLOW, rig.health.fault(1));
+        assertEquals("LOW FLOW", rig.health.status(1), "LOW FLOW is said before CAVITATION");
+    }
+
+    /** N1: a stopped casing pump wears nothing; a set-flow pump has no curve and no low-flow fault. */
+    @Test
+    void aStoppedPumpAndASetFlowPumpLoseNoneToLowFlow() {
+        var rig = new Rig(101325, 1, Wear.Settings.DEFAULT, false, new FlowControl.Machine(CENTRIFUGAL, 0, true), dischargeAt(101325, 0));
+        for (int i = 0; i < 600; i++) rig.tick();
+        assertEquals(1, rig.health.health(1), "a stopped pump wears nothing");
+        assertEquals(0, rig.health.rate(1));
+        assertEquals("", rig.health.status(1));
+        assertFalse(MachineHealth.faults(new FlowControl.Pump(FLOW, 5e5)).contains(Wear.Fault.LOW_FLOW), "a set-flow pump has no curve");
+        assertTrue(MachineHealth.faults(new FlowControl.Machine(CENTRIFUGAL, 1, true)).contains(Wear.Fault.LOW_FLOW));
     }
 
     @Test
@@ -292,12 +365,12 @@ class PumpHealthTest {
         assertTrue(rig.health.facts().isEmpty(), "a new pump carries no entry");
         assertEquals("", rig.health.status(1), "a quiet pump says nothing");
         assertTrue(rig.health.suction(1).available() > 4 * rig.health.suction(1).required(), "its NPSHA above the inception curve");
-        var outcome = new ArrayList<PumpHealth.Outcome>();
+        var outcome = new ArrayList<MachineHealth.Outcome>();
         int[] taken = {0};
-        rig.health.queue(new PumpHealth.Repair(1, () -> ++taken[0] > 0, outcome::add));
-        rig.health.queue(new PumpHealth.Repair(2, () -> ++taken[0] > 0, outcome::add));
+        rig.health.queue(new MachineHealth.Repair(1, () -> ++taken[0] > 0, outcome::add));
+        rig.health.queue(new MachineHealth.Repair(2, () -> ++taken[0] > 0, outcome::add));
         rig.tick();
-        assertEquals(List.of(PumpHealth.Outcome.FULL, PumpHealth.Outcome.NOT_A_PUMP), outcome);
+        assertEquals(List.of(MachineHealth.Outcome.FULL, MachineHealth.Outcome.NOT_A_PUMP), outcome);
         assertEquals(0, taken[0], "no kit taken");
     }
 }

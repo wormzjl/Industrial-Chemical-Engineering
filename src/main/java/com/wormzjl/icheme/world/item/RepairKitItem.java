@@ -2,7 +2,7 @@ package com.wormzjl.icheme.world.item;
 
 import com.wormzjl.icheme.registry.ModItems;
 import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
-import com.wormzjl.icheme.runtime.fluid.PumpHealth;
+import com.wormzjl.icheme.runtime.fluid.MachineHealth;
 import com.wormzjl.icheme.science.equipment.ShapeRasterizer;
 import com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity;
 import com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity;
@@ -19,10 +19,10 @@ import net.minecraft.world.item.context.UseOnContext;
 
 /**
  * A pump repair kit (batch 2026-11-03-rotating-machinery W10b, owner decision D34): used on any cell of a mover casing or
- * on an in-line device's pipe block, it queues a repair ({@link PumpHealth.Repair}) that applies on the engine's tick drain.
+ * on an in-line device's pipe block, it queues a repair ({@link MachineHealth.Repair}) that applies on the engine's tick drain.
  * Whether the device wears is the health's decision there: every device with a health record (a pump or a dry screw, M-02)
  * is repaired. The kit is consumed only when the repair is accepted (none in creative mode); a pump at full health, or a
- * device with no health record ({@link PumpHealth.Outcome#NOT_A_PUMP}), refuses it with a chat line.
+ * device with no health record ({@link MachineHealth.Outcome#NOT_A_PUMP}), refuses it with a chat line.
  */
 public final class RepairKitItem extends Item {
     public RepairKitItem(Properties properties) {
@@ -40,7 +40,7 @@ public final class RepairKitItem extends Item {
         if (!server.mayBuild() || !level.mayInteract(server, pos) || !server.canInteractWithBlock(pos, 1.0)) return InteractionResult.FAIL;
         var world = FluidWorldAuthority.find(server.server).orElse(null);
         if (world == null) return InteractionResult.FAIL;
-        world.health().queue(new PumpHealth.Repair(id, () -> take(server), outcome -> reply(server, outcome)));
+        world.health().queue(new MachineHealth.Repair(id, () -> take(server), outcome -> reply(server, outcome)));
         return InteractionResult.CONSUME;
     }
 
@@ -79,7 +79,7 @@ public final class RepairKitItem extends Item {
         return false;
     }
 
-    private static void reply(ServerPlayer player, PumpHealth.Outcome outcome) {
+    private static void reply(ServerPlayer player, MachineHealth.Outcome outcome) {
         if (player.isRemoved() || player.hasDisconnected() || player.connection == null) return;
         String key = switch (outcome) {
             case REPAIRED -> "chat.icheme.repair_kit.repaired";

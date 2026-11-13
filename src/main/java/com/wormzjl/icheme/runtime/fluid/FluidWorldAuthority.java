@@ -64,7 +64,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
     /** The fluid converters (batch 2026-11-12-fluid-conversion, W2): their ports share the port hooks with the columns. */
     private final Converters converters;
     /** The pumps' health (W10b). */
-    private final PumpHealth health;
+    private final MachineHealth health;
     /**
      * Queued topology events apply as one batch at the next tick's hook, or earlier when something reads what they
      * change (a view, a capture, a filter recovery). A run of events inside one tick (a command placing thousands of
@@ -210,7 +210,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         });
         // A control loop's planned column feed (W6.3): the control service's last cadence; the cycle takes it below the set rate.
         columns.feedPlans(unit->controls==null?Double.NaN:controls.columnFeed(unit));
-        health=new PumpHealth(topology,registry::owner,runtime.coordinator(),id->PumpHealth.pump(topology.active().get(id)),id->{var r=topology.active().get(id);return r==null?null:r.device().control();},IChemE::wearSettings);shafts.health(health);
+        health=new MachineHealth(topology,registry::owner,runtime.coordinator(),id->MachineHealth.pump(topology.active().get(id)),id->{var r=topology.active().get(id);return r==null?null:r.device().control();},IChemE::wearSettings);shafts.health(health);
         // Block entities whose chunks loaded before this authority existed never reported themselves: every device
         // in an already loaded chunk is marked once, and its bucket binds and presents it. Nothing is pushed here.
         registry.forEachChunk((name,chunk,devices)->{var level=server.getLevel(dimension(name));var at=new net.minecraft.world.level.ChunkPos(chunk);
@@ -1013,7 +1013,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         return out;
     }
     /** The pumps' health (W10b): a repair kit queues its event here. */
-    public PumpHealth health(){owned();return health;}
+    public MachineHealth health(){owned();return health;}
     /**
      * A shaft-driven machine (batch 2026-11-03-rotating-machinery W3): a pump or compressor casing on its curve
      * ({@code FlowControl.Machine}), a reciprocating frame ({@code Compressor}) or a steam turbine (kind {@code TURBINE},
@@ -1781,7 +1781,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
      * last committed: no solve.
      */
     private FluidView.Pump pump(long id,WorldTopologyLedger.Registration registration){
-        if(!PumpHealth.pump(registration))return null;var h=health.health(id);if(h==null)return null;
+        if(!MachineHealth.pump(registration))return null;var h=health.health(id);if(h==null)return null;
         var s=health.suction(id);
         var curve=registration.device().control() instanceof FlowControl.Machine machine&&machine.law() instanceof com.wormzjl.icheme.science.machine.CentrifugalPump law
                 ?new FluidView.Curve(law.ratedFlow(),law.ratedHead(),law.efficiency(),law.ratedSpeed()):null;
@@ -2474,13 +2474,13 @@ public final class FluidWorldAuthority implements AutoCloseable {
     }
     public FluidView view(long id){owned();return view(id,new HashMap<>());}
     /**
-     * Mover {@code mover}'s status line {@code status} with its health word {@code word} ({@link PumpHealth#status}), for every
-     * mover that wears ({@link PumpHealth#worn}: a liquid mover, and a dry screw, owner V6 B; code base review M-02): FAILED
-     * first while it stands failed, else LIQUID, CAVITATION or GAS last (W10b, W10d, owner decision D37); its health and
+     * Mover {@code mover}'s status line {@code status} with its health word {@code word} ({@link MachineHealth#status}), for every
+     * mover that wears ({@link MachineHealth#worn}: a liquid mover, and a dry screw, owner V6 B; code base review M-02): FAILED
+     * first while it stands failed, else LIQUID, LOW FLOW, CAVITATION or GAS last (W10b, W10d, owner decision D37); its health and
      * suction have their meters (the view's Pump). A mover that does not wear keeps its line.
      */
     static String withHealth(String status,FlowControl.Mover mover,String word) {
-        if(!PumpHealth.worn(mover)||word.isEmpty())return status;
+        if(!MachineHealth.worn(mover)||word.isEmpty())return status;
         return word.equals("FAILED")?"FAILED: use a repair kit / "+status:status+" / "+word;
     }
     /** Island {@code island} as it is stored, materialising nothing: what a watch's replay reads (batch 2026-11-10-custom-shader-system). */

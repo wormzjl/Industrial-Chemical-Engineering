@@ -303,7 +303,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
     }
 
     /** The pumps' health (W10b): books at the islands' commits, closes a failed pump at dispatch. */
-    private PumpHealth health;
+    private MachineHealth health;
 
     /** The fired heaters' burners (batch 2026-11-09-furnace-fuel-power): book at the commits, plan their fuel and limit at dispatch. */
     private FiredHeaters burners;
@@ -355,7 +355,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
     }
 
     /** Installs the pumps' health (W10b). */
-    public void health(PumpHealth value) {
+    public void health(MachineHealth value) {
         health = Objects.requireNonNull(value);
     }
 

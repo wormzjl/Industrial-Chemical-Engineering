@@ -437,7 +437,7 @@ class ShaftCouplingTest {
                 0, 2950, 0, fixed, ShaftUnit.Settings.DEFAULT, trip, null));
         ledger.health(Map.of(1L, 0.0));
         var trains = new ShaftTrains(ledger, device -> device == 1 ? 1L : null, rig.coordinator);
-        var health = new PumpHealth(ledger, device -> device == 1 ? 1L : null, rig.coordinator, device -> device == 1, device -> null,
+        var health = new MachineHealth(ledger, device -> device == 1 ? 1L : null, rig.coordinator, device -> device == 1, device -> null,
                 () -> com.wormzjl.icheme.science.machine.Wear.Settings.DEFAULT);
         trains.health(health);
         rig.coordinator.shafts(trains);
@@ -459,10 +459,10 @@ class ShaftCouplingTest {
         var closed = trains.plans(1, line()).get(1L);
         assertEquals(ShaftPlan.Kind.FAILED, closed.kind(), "the health close wins over the share");
         assertEquals(0, closed.value());
-        var outcome = new ArrayList<PumpHealth.Outcome>();
-        health.queue(new PumpHealth.Repair(1, () -> true, outcome::add));
+        var outcome = new ArrayList<MachineHealth.Outcome>();
+        health.queue(new MachineHealth.Repair(1, () -> true, outcome::add));
         tick.run();
-        assertEquals(List.of(PumpHealth.Outcome.REPAIRED), outcome);
+        assertEquals(List.of(MachineHealth.Outcome.REPAIRED), outcome);
         assertNotEquals("FAILED", trains.view(casing).status(), "repaired, the casing's row returns to its train's word");
         var running = trains.plans(1, line()).get(1L);
         assertTrue(running == null || running.kind() == ShaftPlan.Kind.SPEED, "repaired, no close: the share's plan, if any: " + running);
