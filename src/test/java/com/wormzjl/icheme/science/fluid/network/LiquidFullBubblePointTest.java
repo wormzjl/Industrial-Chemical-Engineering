@@ -13,6 +13,7 @@ import java.util.Locale;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
+import com.wormzjl.icheme.science.thermo.phase.PackageBinding;
 
 /**
  * P6 (batch 2026-09-24-coolprop-low-temperature): a liquid-full vessel of a mixture cooled through its bubble point.
@@ -71,7 +72,7 @@ class LiquidFullBubblePointTest {
         var graph=crossBubblePoint("CH4 + 2 % C2H6",new double[]{0,.98,.02,0,0},172,6);
         var node=graph.reservoirs().getFirst();var inventory=node.inventory();
         // The engine's own UV answer for the vessel's inventory (an independent service, fluid only): the same split.
-        var engine=FluidTpEquilibrium.forPackage(CATALOG,PILOT);
+        var engine=PackageBinding.equilibrium(CATALOG,PILOT);
         double[] totals=inventory.moles();double energy=inventory.internalEnergy();
         var formation=model.hydrocarbon.formationReference().orElseThrow();
         for(int i=0;i<totals.length-1;i++)energy+=totals[i]*formation.offsetJoulesPerMole(i);

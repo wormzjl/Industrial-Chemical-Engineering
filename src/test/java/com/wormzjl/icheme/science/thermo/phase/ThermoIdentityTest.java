@@ -45,20 +45,20 @@ class ThermoIdentityTest {
     void catalogIdentityFollowsThePackageAndTheSpine() {
         var catalog = MaterialCatalog.bundled();
         String network = PhaseTestSupport.NETWORK;
-        var none = ThermoIdentity.of(catalog, network, CubicPhaseEvaluator.FAMILY, ThermoIdentity.NO_SPINE);
+        var none = PackageBinding.identity(catalog, network, CubicPhaseEvaluator.FAMILY, ThermoIdentity.NO_SPINE);
         assertEquals(catalog.fluidRevision(network), none.packageRevision());
         assertEquals(ThermoIdentity.NO_WATER, none.waterModelRevision());
-        var spine = ThermoIdentity.of(catalog, network, CubicPhaseEvaluator.FAMILY, "spine:test-1");
-        var other = ThermoIdentity.of(catalog, "icheme:tjl20_methane", CubicPhaseEvaluator.FAMILY, ThermoIdentity.NO_SPINE);
+        var spine = PackageBinding.identity(catalog, network, CubicPhaseEvaluator.FAMILY, "spine:test-1");
+        var other = PackageBinding.identity(catalog, "icheme:tjl20_methane", CubicPhaseEvaluator.FAMILY, ThermoIdentity.NO_SPINE);
         assertNotEquals(none.revision(), spine.revision());
         assertNotEquals(none.revision(), other.revision());
         // Deterministic across catalog loads.
-        assertEquals(none.revision(), ThermoIdentity.of(MaterialCatalog.bundled(), network, CubicPhaseEvaluator.FAMILY,
+        assertEquals(none.revision(), PackageBinding.identity(MaterialCatalog.bundled(), network, CubicPhaseEvaluator.FAMILY,
                 ThermoIdentity.NO_SPINE).revision());
         // The package's contract carries it with the package's spine.
         String packageSpine = catalog.spineRevision(network);
-        var contract = PhaseContract.forPackage(catalog, network);
-        assertEquals(ThermoIdentity.of(catalog, network, CubicPhaseEvaluator.FAMILY,
+        var contract = PackageBinding.contract(catalog, network);
+        assertEquals(PackageBinding.identity(catalog, network, CubicPhaseEvaluator.FAMILY,
                 packageSpine.isEmpty() ? ThermoIdentity.NO_SPINE : packageSpine), contract.identity());
     }
 }

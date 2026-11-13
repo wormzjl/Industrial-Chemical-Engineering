@@ -114,7 +114,7 @@ final class PhaseTestSupport {
         for (String id : List.of("Methane", "Nitrogen")) {
             gas.add(StubIdealGas.of(pkg.properties().get(pkg.components().indexOf(id)), 50.0, 1500.0));
         }
-        return CubicPhaseEvaluator.fromPackage(pkg, List.of("Methane", "Nitrogen"),
+        return PackageBinding.fromPackage(pkg, List.of("Methane", "Nitrogen"),
                 new double[] {METHANE_TRANSLATION, NITROGEN_TRANSLATION}, gas);
     }
 
@@ -143,12 +143,12 @@ final class PhaseTestSupport {
             var range = catalog.fluidValidity(NETWORK, pkg.components().get(i)).orElseThrow();
             gas.add(StubIdealGas.of(pkg.properties().get(i), range.minimumTemperature(), range.maximumTemperature()));
         }
-        return CubicPhaseEvaluator.fromPackage(pkg, pkg.components(), new double[pkg.components().size()], gas);
+        return PackageBinding.fromPackage(pkg, pkg.components(), new double[pkg.components().size()], gas);
     }
 
     /** The bundled network package's own contract (its PR78 compounds, no water) on {@link #networkEvaluator}. */
     static FluidTpEquilibrium networkService() {
-        return new FluidTpEquilibrium(PhaseContract.forPackage(MaterialCatalog.bundled(), NETWORK), networkEvaluator(),
+        return new FluidTpEquilibrium(PackageBinding.contract(MaterialCatalog.bundled(), NETWORK), networkEvaluator(),
                 FluidTpEquilibrium.Settings.DEFAULT);
     }
 

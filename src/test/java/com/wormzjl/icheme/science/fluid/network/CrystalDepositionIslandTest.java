@@ -18,6 +18,7 @@ import java.util.Locale;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
+import com.wormzjl.icheme.science.thermo.phase.PackageBinding;
 
 /**
  * The fluid network on the crystal competition of the pilot package {@code icheme:pilot_cryogenic} (N2, CH4, C2H6, CO2
@@ -74,7 +75,7 @@ class CrystalDepositionIslandTest {
     }
     /** The engine's UV answer of an inventory under the crystal competition: an independent service, its own crystal model. */
     private EquilibriumResult engineUv(PassiveNetwork.Inventory inventory) {
-        var engine=FluidTpEquilibrium.forPackage(CATALOG,PILOT);
+        var engine=PackageBinding.equilibrium(CATALOG,PILOT);
         double[] totals=species(inventory);
         var formation=model.hydrocarbon.formationReference().orElseThrow();
         double energy=EnergyReference.sensible(formation.components()).rebase(trueEnergy(inventory),Arrays.copyOf(totals,totals.length-1),formation);

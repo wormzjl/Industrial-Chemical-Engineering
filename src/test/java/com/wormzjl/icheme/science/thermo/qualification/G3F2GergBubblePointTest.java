@@ -12,6 +12,7 @@ import com.wormzjl.icheme.science.thermo.IdealGasFunction;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel.Root;
 import com.wormzjl.icheme.science.thermo.phase.CubicPhaseEvaluator;
 import com.wormzjl.icheme.science.thermo.phase.PhaseState;
+import com.wormzjl.icheme.science.thermo.phase.PackageBinding;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -29,7 +30,7 @@ import org.junit.jupiter.api.Test;
  * 20 %, {@code |y_model - y_ref|} at most 0.02, {@code |ln K_model - ln K_ref|} at most 0.15 for species with x or y
  * above 1e-3. Reported, not gated: the {@code near_critical} (rhoL/rhoV below 3) and {@code above_10_MPa} rows, the dew
  * rows, and the zero-kij model beside E-PPR78 (the baseline the rule must beat). The model's bubble point is solved on
- * the engine's evaluator ({@link CubicPhaseEvaluator#forPackage}, bit for bit the network's EOS), from the reference state
+ * the engine's evaluator ({@link PackageBinding#evaluator}, bit for bit the network's EOS), from the reference state
  * as the start; a start is not a result: the solution must pass {@code sum x K = 1} to 1e-12 with both roots distinct.</p>
  */
 class G3F2GergBubblePointTest {
@@ -107,12 +108,12 @@ class G3F2GergBubblePointTest {
     /** The E-PPR78 evaluator and the same package with zero interactions (the rule pairs' constant entries are 0.0). */
     static CubicPhaseEvaluator[] models() {
         var catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
-        var eppr78 = CubicPhaseEvaluator.forPackage(catalog, PILOT);
+        var eppr78 = PackageBinding.evaluator(catalog, PILOT);
         var pkg = catalog.requirePackage(PILOT);
         List<IdealGasFunction> spines = new ArrayList<>();
         for (String id : pkg.components()) spines.add(catalog.requireSpine(PILOT, id));
         for (int i = 0; i < 4; i++) for (int j = 0; j < 4; j++) assertEquals(0.0, pkg.interactions().get(i).get(j), 0.0);
-        var zero = CubicPhaseEvaluator.fromPackage(pkg, pkg.components(), eppr78.translations(), spines);
+        var zero = PackageBinding.fromPackage(pkg, pkg.components(), eppr78.translations(), spines);
         return new CubicPhaseEvaluator[] {eppr78, zero};
     }
 

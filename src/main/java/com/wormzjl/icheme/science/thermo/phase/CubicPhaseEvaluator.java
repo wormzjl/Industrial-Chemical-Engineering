@@ -2,19 +2,13 @@ package com.wormzjl.icheme.science.thermo.phase;
 
 import com.wormzjl.icheme.science.math.DeterministicMath;
 
-import com.wormzjl.icheme.science.material.CoefficientIdealGas;
-import com.wormzjl.icheme.science.material.CoefficientTranslations;
-import com.wormzjl.icheme.science.material.SpinePackageData;
-import com.wormzjl.icheme.science.thermo.TranslatedCubic;
 import com.wormzjl.icheme.science.material.DerivedPairs;
-import com.wormzjl.icheme.science.material.MaterialCatalog;
-import com.wormzjl.icheme.science.material.WaterRecords;
 import com.wormzjl.icheme.science.thermo.IdealGasFunction;
 import com.wormzjl.icheme.science.thermo.PairInteractions;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel.Root;
 import com.wormzjl.icheme.science.thermo.ThermoComponent;
-import com.wormzjl.icheme.science.thermo.PhaseIdentification;
+import com.wormzjl.icheme.science.thermo.TranslatedCubic;
 import java.util.List;
 import java.util.Objects;
 
@@ -28,14 +22,15 @@ import java.util.Objects;
  * constant per-component volume translation), evaluated at the state pressure for every root, so the volume,
  * {@code ln phi} and volumetric derivatives are bit for bit those of a {@link TranslatedCubic} with the same
  * constants, and the fluid network's {@code HydrocarbonModel} agrees with them. The ideal-gas parts are the
- * {@link IdealGasFunction}s given at construction, one per component; {@link #forPackage} takes a spine package's
- * ({@link SpinePackageData}: spines, E-PPR78 pair interactions, the records' {@code volume_translation} anchors).</p>
+ * {@link IdealGasFunction}s given at construction, one per component; {@link PackageBinding#evaluator} takes a spine
+ * package's ({@code SpinePackageData}: spines, E-PPR78 pair interactions, the records' {@code volume_translation}
+ * anchors). The catalog factories are {@link PackageBinding}'s: this class takes arrays and interfaces.</p>
  *
  * <p>The translation {@code c_i} adds {@code P c} to {@code h} and {@code g} and {@code P c_i/(R T)} to
  * {@code ln phi_i}, nothing to {@code s} or {@code c_p}; it cancels from every phase-equilibrium condition.</p>
  *
  * <p>The derived family {@value #DERIVED_FAMILY} (batch 2026-11-11-aqueous-solvents, W3a decisions D1, D2;
- * {@link #derived}): a list whose pairs come from {@link DerivedPairs} (the Huron-Vidal rule, a Mathias-Copeman alpha
+ * {@link PackageBinding#derivedEvaluator}): a list whose pairs come from {@link DerivedPairs} (the Huron-Vidal rule, a Mathias-Copeman alpha
  * per compound), water a component of the cubic with no volume translation, and water's own share of enthalpy,
  * entropy and volume ({@link WaterShare}) on each state's balance book, apart from {@code g} and {@code ln phi}.</p>
  *
@@ -46,7 +41,7 @@ import java.util.Objects;
  */
 public final class CubicPhaseEvaluator {
     public static final String FAMILY = "pr78_translated_v1";
-    /** The family of {@link #derived}: PR78 with the Huron-Vidal rule of derived pairs and water's IF97 share. */
+    /** The family of {@link PackageBinding#derivedEvaluator}: PR78 with the Huron-Vidal rule of derived pairs and water's IF97 share. */
     public static final String DERIVED_FAMILY = "pr78_huron_vidal_water_share_v1";
     /** The water component's id in a derived list. */
     public static final String WATER = "Water";
@@ -77,7 +72,7 @@ public final class CubicPhaseEvaluator {
     }
 
     /** The same evaluator on a pair-interaction model (the kernel's {@code TEMPERATURE_DEPENDENT_PAIRS}). */
-    private CubicPhaseEvaluator(String sourceId, List<ThermoComponent> components, PairInteractions interactions,
+    CubicPhaseEvaluator(String sourceId, List<ThermoComponent> components, PairInteractions interactions,
                                 double[] translations, List<? extends IdealGasFunction> idealGas) {
         this(sourceId, components, TranslatedCubic.residualOnly(List.copyOf(components), interactions, translations),
                 translations, idealGas);
@@ -88,7 +83,8 @@ public final class CubicPhaseEvaluator {
         this(sourceId, components, eos, translations, idealGas, FAMILY, null, -1, null);
     }
 
-    private CubicPhaseEvaluator(String sourceId, List<ThermoComponent> components, TranslatedCubic eos,
+    /** The evaluator on a prebuilt residual cubic, of family {@code family} with water's share where it has one ({@link PackageBinding#derivedEvaluator}). */
+    CubicPhaseEvaluator(String sourceId, List<ThermoComponent> components, TranslatedCubic eos,
                                 double[] translations, List<? extends IdealGasFunction> idealGas, String family,
                                 WaterShare waterShare, int waterIndex, DerivedPairs.Result derivation) {
         this.family = family;
@@ -106,106 +102,10 @@ public final class CubicPhaseEvaluator {
         this.translations = translations.clone();
     }
 
-    /**
-     * The evaluator of a package over its whole component basis in package order, exactly as the network's
-     * {@code HydrocarbonModel} takes it. A package that declares a reference spine (P3 WP5): the spines as the ideal-gas
-     * functions, the E-PPR78 pair interactions and the one-anchor-per-species translations, all from
-     * {@link SpinePackageData#of}. A package without one: its {@code shifted_polynomial_5} fits on the network's datum,
-     * its constant interactions and the translations of {@link CoefficientTranslations#of}.
-     */
-    public static CubicPhaseEvaluator forPackage(MaterialCatalog catalog, String packageId) {
-        var pack = catalog.requirePackage(packageId);
-        if (pack.spine().isEmpty()) {
-            List<IdealGasFunction> gas = new java.util.ArrayList<>();
-            for (String id : pack.components()) gas.add(CoefficientIdealGas.of(catalog, packageId, id));
-            return fromPackage(pack, pack.components(), CoefficientTranslations.of(catalog, packageId), gas);
-        }
-        var data = SpinePackageData.of(catalog, packageId);
-        return new CubicPhaseEvaluator(packageId, data.components(), data.interactions(), data.translations(), data.idealGas());
-    }
-
-    /**
-     * The named components of a catalog package, in the given order, with their PR78 constants and interactions. The
-     * translations are the caller's: their anchoring is a P3 decision (D1: saturated liquid at Tr = 0.8).
-     */
-    public static CubicPhaseEvaluator fromPackage(MaterialCatalog.Package propertyPackage, List<String> componentIds,
-                                                  double[] translations, List<? extends IdealGasFunction> idealGas) {
-        int n = componentIds.size();
-        int[] index = new int[n];
-        List<ThermoComponent> components = new java.util.ArrayList<>(n);
-        for (int a = 0; a < n; a++) {
-            index[a] = propertyPackage.components().indexOf(propertyPackage.canonicalId(componentIds.get(a)));
-            if (index[a] < 0) throw new IllegalArgumentException("Component outside package: " + componentIds.get(a));
-            var property = propertyPackage.properties().get(index[a]);
-            var pr = property.pr();
-            components.add(new ThermoComponent(propertyPackage.components().get(index[a]), pr.criticalTemperature(),
-                    pr.criticalPressure(), pr.acentricFactor(), property.molecularWeight()));
-        }
-        double[][] interactions = new double[n][n];
-        for (int a = 0; a < n; a++) {
-            for (int b = 0; b < n; b++) interactions[a][b] = propertyPackage.interactions().get(index[a]).get(index[b]);
-        }
-        return new CubicPhaseEvaluator(propertyPackage.id(), components, interactions, translations, idealGas);
-    }
-
-    /**
-     * The derived evaluator of package {@code packageId} over {@code componentIds} in that order (W3a D1): the kernel of
-     * {@link DerivedPairs#derive}, one {@link CoefficientIdealGas} per compound (the network's sensible datum; on a package
-     * with a reference spine its spine records, on the spine's formation datum as the crystals' anchors are), water
-     * untranslated and every other compound translated so that its pure liquid on this kernel has its volume anchor's
-     * volume (on a package with a reference spine the spine's own anchors, {@link SpinePackageData#anchors}; else the
-     * catalog's volume reference, else the record's standard density; none where the anchor has no liquid root), and
-     * water's share ({@link WaterShare}) when {@value #WATER} is in the list.
-     */
-    public static CubicPhaseEvaluator derived(MaterialCatalog catalog, String packageId, List<String> componentIds) {
-        var result = DerivedPairs.derive(catalog, packageId, componentIds);
-        var pack = catalog.requirePackage(packageId);
-        List<String> ids = result.components();
-        int n = ids.size();
-        PengRobinsonKernel kernel = result.kernel(Double.MIN_VALUE, Double.MAX_VALUE, Double.MIN_VALUE, Double.MAX_VALUE);
-        double[] tc = result.criticalTemperatures(), pc = result.criticalPressures(), omega = result.acentricFactors();
-        List<ThermoComponent> components = new java.util.ArrayList<>(n);
-        List<IdealGasFunction> idealGas = new java.util.ArrayList<>(n);
-        double[] translations = new double[n];
-        var calibrations = catalog.fluidData().volumeReferences();
-        var scratch = kernel.newWorkspace();
-        var evaluation = kernel.newEvaluation();
-        int water = ids.indexOf(WATER);
-        var spine = pack.spine().isEmpty() ? null : SpinePackageData.of(catalog, packageId);
-        for (int i = 0; i < n; i++) {
-            var property = pack.properties().get(pack.components().indexOf(ids.get(i)));
-            components.add(new ThermoComponent(ids.get(i), tc[i], pc[i], omega[i], property.molecularWeight()));
-            idealGas.add(spine == null ? CoefficientIdealGas.of(catalog, packageId, ids.get(i))
-                    : spine.idealGas().get(pack.components().indexOf(ids.get(i))));
-            if (i == water) continue;
-            if (spine != null) {
-                // The pure liquid does not see the pairs: the spine's anchor translation is this kernel's too.
-                translations[i] = spine.anchors().get(pack.components().indexOf(ids.get(i))).translation();
-                continue;
-            }
-            var point = calibrations.get(property.component());
-            double t = point == null ? property.standardTemperature() : point.temperatureKelvin();
-            double target = point == null ? property.molecularWeight() / property.density() : point.molarVolumeCubicMetres();
-            double p = point == null ? property.standardPressure() : point.pressurePascal();
-            double[] pure = new double[n];
-            pure[i] = 1.0;
-            kernel.prepareTemperature(t, scratch);
-            kernel.evaluate(t, p, pure, Root.LIQUID, scratch, evaluation);
-            double raw = evaluation.compressibility() * R * t / p;
-            boolean liquid = evaluation.physicalRootCount() > 1 || raw < PhaseIdentification.VAPOUR_BRANCH_VOLUME_RATIO * kernel.coVolume(i);
-            translations[i] = liquid ? target - raw : 0.0;
-        }
-        var eos = TranslatedCubic.residualOnly(components, kernel, translations);
-        WaterShare share = null;
-        if (water >= 0) share = new WaterShare(WaterRecords.constants(pack.water()), tc[water], pc[water],
-                omega[water], result.mathiasCopeman()[water]);
-        return new CubicPhaseEvaluator(packageId, components, eos, translations, idealGas, DERIVED_FAMILY, share, water, result);
-    }
-
     public String family() { return family; }
     /** The water component's index in a derived list with water, else -1. */
     public int waterComponent() { return waterShare == null ? -1 : waterIndex; }
-    /** The derivation of a {@link #derived} evaluator, null otherwise. */
+    /** The derivation of a {@link PackageBinding#derivedEvaluator} evaluator, null otherwise. */
     public DerivedPairs.Result derivation() { return derivation; }
     public List<String> components() { return names; }
     public ThermoComponent component(int index) { return components.get(index); }

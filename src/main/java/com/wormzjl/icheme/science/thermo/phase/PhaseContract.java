@@ -1,10 +1,5 @@
 package com.wormzjl.icheme.science.thermo.phase;
 
-import com.wormzjl.icheme.science.material.CrystalReference;
-import com.wormzjl.icheme.science.material.MaterialCatalog;
-import com.wormzjl.icheme.science.material.MaterialCoverage;
-import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -59,111 +54,6 @@ public record PhaseContract(String packageId, ThermoIdentity identity, List<Stri
         if (!domain.components().equals(components)) throw new IllegalArgumentException("Domain basis differs from the contract basis");
         Objects.requireNonNull(fluidCoverage, "fluidCoverage");
         if (!fluidCoverage.grade().answer()) throw new IllegalArgumentException("The fluid coverage must be a grade an answer can have");
-    }
-
-    /**
-     * The package's contract for the equilibrium engine: a package with water in its cubic on its derived contract
-     * ({@link #forDerivedPackage}); any other its PR78 components without water, qualified for fluid-only competition and
-     * for the competition of the fluid phases with every crystal the package admits ({@link #admittedCrystals}), as one
-     * whole set, the package envelope ({@link PhaseDomain}), graded estimated-with-declared-error, its identity with the
-     * package's spine ({@link ThermoIdentity#NO_SPINE} without one) and no water. A package that admits no crystal gets the
-     * fluid-only contract, so a crystal request on it is refused as not qualified.
-     */
-    public static PhaseContract forPackage(MaterialCatalog catalog, String packageId) {
-        var propertyPackage = catalog.requirePackage(packageId);
-        if (propertyPackage.components().contains(CubicPhaseEvaluator.WATER)) return forDerivedPackage(catalog, packageId);
-        List<String> basis = List.copyOf(propertyPackage.components());
-        String spine = catalog.spineRevision(packageId);
-        var identity = ThermoIdentity.of(catalog, packageId, CubicPhaseEvaluator.FAMILY, spine.isEmpty() ? ThermoIdentity.NO_SPINE : spine);
-        var domain = envelopeOf(catalog, packageId, basis);
-        var coverage = new EquilibriumResult.Coverage(EquilibriumResult.CoverageGrade.ESTIMATED_DECLARED_ERROR,
-                "PR78 with constant volume translation, every phase at the state pressure (P1: liquid density within "
-                        + "2.6 % mean per isobar to 10 MPa for N2, CH4, C2H6, CO2 outside the critical band); the "
-                        + "declared critical band is graded research-only by the engine (P3); the package's advisory evidence applies");
-        var competitions = new HashSet<PhaseCompetition>();
-        competitions.add(PhaseCompetition.FLUID_ONLY);
-        List<String> crystals = admittedCrystals(catalog, packageId);
-        if (!crystals.isEmpty()) competitions.add(PhaseCompetition.withCrystals(crystals.toArray(String[]::new)));
-        return new PhaseContract(packageId, identity, basis, WaterParticipation.NONE, null, competitions, Set.of(), domain, coverage);
-    }
-
-    /**
-     * The contract of a package with derived pairs (batch 2026-11-11-aqueous-solvents, W3a decisions D1, D6), the pilot's
-     * kind: the package's compounds other than {@value CubicPhaseEvaluator#WATER} in package order, then water, as
-     * {@link WaterParticipation#IN_EQUATION_OF_STATE} (without water in the package {@link WaterParticipation#NONE});
-     * qualified for fluid-only competition and, when the package admits crystals ({@link #admittedCrystals}), for their
-     * competition as one set (D5); the package envelope; graded estimated-with-declared-error. The identity:
-     * the package revision is {@link MaterialCatalog#fluidRevision} with the derivation's identity
-     * ({@code DerivedPairs.Result.identity}), the family {@link CubicPhaseEvaluator#DERIVED_FAMILY}, the spine revision,
-     * and the water part {@code water-in-eos-v1:<water dataset revision>:<share revision>}.
-     */
-    public static PhaseContract forDerivedPackage(MaterialCatalog catalog, String packageId) {
-        return forDerived(catalog, packageId, CubicPhaseEvaluator.derived(catalog, packageId, derivedBasis(catalog, packageId)));
-    }
-
-    /** The derived basis of a package: its compounds other than water in package order, then water. */
-    public static List<String> derivedBasis(MaterialCatalog catalog, String packageId) {
-        var pack = catalog.requirePackage(packageId);
-        List<String> basis = new ArrayList<>(pack.components());
-        boolean water = basis.remove(CubicPhaseEvaluator.WATER);
-        if (water) basis.add(CubicPhaseEvaluator.WATER);
-        return basis;
-    }
-
-    /** {@link #forDerivedPackage} on an evaluator already built from {@link CubicPhaseEvaluator#derived}. */
-    public static PhaseContract forDerived(MaterialCatalog catalog, String packageId, CubicPhaseEvaluator evaluator) {
-        if (evaluator.derivation() == null) throw new IllegalArgumentException("A derived contract needs a derived evaluator");
-        var pack = catalog.requirePackage(packageId);
-        List<String> basis = evaluator.components();
-        boolean water = basis.contains(CubicPhaseEvaluator.WATER);
-        String spine = catalog.spineRevision(packageId);
-        String waterPart = ThermoIdentity.NO_WATER;
-        if (water) {
-            var property = pack.properties().get(pack.components().indexOf(CubicPhaseEvaluator.WATER));
-            waterPart = ThermoIdentity.WATER_IN_EOS_FORMULATION + ":" + property.id() + "@" + catalog.propertyRevision(property.id())
-                    + ":" + WaterShare.REVISION;
-        }
-        var identity = new ThermoIdentity(catalog.fluidRevision(packageId) + ";" + evaluator.derivation().identity(),
-                CubicPhaseEvaluator.DERIVED_FAMILY, spine.isEmpty() ? ThermoIdentity.NO_SPINE : spine, waterPart);
-        var domain = envelopeOf(catalog, packageId, basis);
-        var coverage = new EquilibriumResult.Coverage(EquilibriumResult.CoverageGrade.ESTIMATED_DECLARED_ERROR,
-                "PR78 with the Huron-Vidal rule of pairs derived from group counts and Henry constants, water a component of the "
-                        + "cubic with its IF97 share of enthalpy, entropy and volume (batch 2026-11-11-aqueous-solvents); "
-                        + "the declared critical band is graded research-only by the engine; the package's advisory evidence applies");
-        // W3a D5: the package's admitted crystals (ice among them) compete as one whole set, as on a network package.
-        var competitions = new HashSet<PhaseCompetition>();
-        competitions.add(PhaseCompetition.FLUID_ONLY);
-        List<String> crystals = admittedCrystals(catalog, packageId);
-        if (!crystals.isEmpty()) competitions.add(PhaseCompetition.withCrystals(crystals.toArray(String[]::new)));
-        return new PhaseContract(packageId, identity, basis, water ? WaterParticipation.IN_EQUATION_OF_STATE : WaterParticipation.NONE,
-                water ? CubicPhaseEvaluator.WATER : null, competitions, Set.of(), domain, coverage);
-    }
-
-    /**
-     * The package envelope over {@code basis}: the hull of its datasets' {@code fluid_domain} ranges. A package with a
-     * compound whose dataset declares none is refused, with the fluid network's words ({@code FluidDomain.of}).
-     */
-    private static PhaseDomain envelopeOf(MaterialCatalog catalog, String packageId, List<String> basis) {
-        var envelope = catalog.fluidValidity(packageId).orElseThrow(() -> new IllegalArgumentException(
-                "Package " + packageId + " has a compound whose dataset declares no fluid_domain; the fluid network cannot read its data range"));
-        return PhaseDomain.of(packageId, basis, envelope.minimumTemperature(), envelope.maximumTemperature(),
-                envelope.minimumPressure(), envelope.maximumPressure());
-    }
-
-    /**
-     * The crystals of a package that may compete (P4 stage 2a): those the package declares whose records are usable
-     * ({@link CrystalReference#usable()}) and graded {@code qualified} or {@code estimated_declared_error}; a
-     * research-only or unavailable record is not admitted. In declaration order.
-     */
-    public static List<String> admittedCrystals(MaterialCatalog catalog, String packageId) {
-        List<String> admitted = new ArrayList<>();
-        for (String id : catalog.requirePackage(packageId).crystals()) {
-            CrystalReference record = catalog.crystals().get(id);
-            if (record == null || !record.usable()) continue;
-            MaterialCoverage.Grade grade = record.coverage().grade();
-            if (grade == MaterialCoverage.Grade.QUALIFIED || grade == MaterialCoverage.Grade.ESTIMATED_DECLARED_ERROR) admitted.add(id);
-        }
-        return admitted;
     }
 
     /**

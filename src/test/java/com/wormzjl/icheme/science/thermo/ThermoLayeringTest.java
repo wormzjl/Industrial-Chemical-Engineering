@@ -25,6 +25,8 @@ import org.junit.jupiter.api.Test;
  * <ul>
  *   <li>No file under {@code science/thermo/**} names {@code science.fluid} or {@code science.column}.</li>
  *   <li>No kernel file names {@code science.material} or {@code science.thermo.phase}.</li>
+ *   <li>In the engine's package only {@code PackageBinding} reads {@code MaterialCatalog} (C1b item 6, S05): the other
+ *   engine classes take arrays, interfaces and the records of {@code science/material}.</li>
  * </ul>
  */
 class ThermoLayeringTest {
@@ -45,6 +47,20 @@ class ThermoLayeringTest {
         kernel.addAll(sources(SCIENCE.resolve("math"), file -> true));
         List<String> found = crossings(kernel, name -> name.startsWith("material") || name.equals("thermo.phase"));
         assertEquals(List.of(), found, "the kernel (science/thermo/*.java, thermo/water, science/math) must not name science.material or science.thermo.phase");
+    }
+
+    @Test
+    void onlyThePackageBindingOfTheEngineReadsTheCatalog() throws IOException {
+        Pattern catalog = Pattern.compile("com\\.wormzjl\\.icheme\\.science\\.material\\.(MaterialCatalog\\b|\\*)");
+        List<String> found = new ArrayList<>();
+        for (Path file : sources(SCIENCE.resolve("thermo/phase"), source -> !source.getFileName().toString().equals("PackageBinding.java"))) {
+            List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
+            for (int i = 0; i < lines.size(); i++) {
+                if (catalog.matcher(lines.get(i)).find()) found.add(SCIENCE.relativize(file) + ":" + (i + 1));
+            }
+        }
+        assertEquals(List.of(), found, "in science/thermo/phase only PackageBinding may read MaterialCatalog");
+        assertTrue(Files.isRegularFile(SCIENCE.resolve("thermo/phase/PackageBinding.java")), "the engine's binding class");
     }
 
     private static boolean directlyInThermo(Path file) {

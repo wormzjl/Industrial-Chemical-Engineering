@@ -528,8 +528,8 @@ class FluidTpEquilibriumPhUvTest {
     void aClosedVesselBeyondThePressureEnvelopeIsAnsweredExtrapolated() {
         var catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
         String pilot = "icheme:pilot_cryogenic";
-        var evaluator = CubicPhaseEvaluator.forPackage(catalog, pilot);
-        var network = new FluidTpEquilibrium(PhaseContract.forPackage(catalog, pilot), evaluator, FluidTpEquilibrium.Settings.DEFAULT);
+        var evaluator = PackageBinding.evaluator(catalog, pilot);
+        var network = new FluidTpEquilibrium(PackageBinding.contract(catalog, pilot), evaluator, FluidTpEquilibrium.Settings.DEFAULT);
         var open = new FluidTpEquilibrium(PhaseTestSupport.openContract(evaluator), evaluator, FluidTpEquilibrium.Settings.DEFAULT);
         double[] z = {0.0, 0.5, 0.5, 0.0};
         double[] zNetwork = {0.0, 0.5, 0.5, 0.0};

@@ -19,7 +19,7 @@ import org.junit.jupiter.api.Test;
 class AqueousEquilibriumTest {
     private static final double R = PengRobinsonKernel.GAS_CONSTANT;
     private static final double ATM = 101325.0;
-    private static final FluidTpEquilibrium ENGINE = FluidTpEquilibrium.forDerivedPackage(PilotAqueousTestCatalog.catalog(),
+    private static final FluidTpEquilibrium ENGINE = PackageBinding.derivedEquilibrium(PilotAqueousTestCatalog.catalog(),
             PilotAqueousTestCatalog.PACKAGE_ID);
     private static final List<String> BASIS = ENGINE.contract().components();
     private static final PhaseCompetition FLUID = PhaseCompetition.FLUID_ONLY;

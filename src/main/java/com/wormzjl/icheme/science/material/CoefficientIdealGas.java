@@ -13,8 +13,8 @@ import com.wormzjl.icheme.science.thermo.PengRobinsonKernel;
  * 2026-10-16), as the network's {@code TranslatedPengRobinson} coefficient path does.
  *
  * <p>The ideal gas of a package without a reference spine, shared by the network ({@code HydrocarbonModel}), the phase
- * engine's evaluator of that package ({@code CubicPhaseEvaluator.forPackage}) and the package's crystals
- * ({@code CrystalPhaseEvaluator.forPackage}). A crystal anchored to this family's liquid at its
+ * engine's evaluator of that package ({@code PackageBinding.evaluator}) and the package's crystals
+ * ({@code PackageBinding.crystal}). A crystal anchored to this family's liquid at its
  * triple point is then on the network's datum itself, as the free water's ice is: its formation offset is 0 (decision
  * E27 of batch 2026-11-04-open-thermo-data).</p>
  */

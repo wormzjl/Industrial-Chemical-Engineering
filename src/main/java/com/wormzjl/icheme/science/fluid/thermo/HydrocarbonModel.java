@@ -7,15 +7,15 @@ import com.wormzjl.icheme.science.thermo.IdealGasFunction;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel;
 import com.wormzjl.icheme.science.thermo.ThermoComponent;
 import com.wormzjl.icheme.science.thermo.phase.CubicPhaseEvaluator;
-import com.wormzjl.icheme.science.thermo.phase.PhaseContract;
 import com.wormzjl.icheme.science.thermo.PhaseIdentification;
 import com.wormzjl.icheme.science.thermo.phase.WaterShare;
+import com.wormzjl.icheme.science.thermo.phase.PackageBinding;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
  * The fluid network's phase model (batch 2026-11-11-aqueous-solvents, W3b step 3): the derived equation of state of the
- * package ({@link CubicPhaseEvaluator#derived}: PR78 with the Huron-Vidal rule of {@code DerivedPairs}, water a component
+ * package ({@link PackageBinding#derivedEvaluator}: PR78 with the Huron-Vidal rule of {@code DerivedPairs}, water a component
  * of the cubic with its Mathias-Copeman alpha), the same one the still and the column use. Every fluid phase of a node,
  * the vapour and up to two liquids, is this cubic evaluated at the state pressure on its own root; the phase's volume and
  * enthalpy are the balance book (the cubic plus water's IF97 share, {@link WaterShare}), its {@code ln phi} the
@@ -55,8 +55,8 @@ public final class HydrocarbonModel {
     public HydrocarbonModel(MaterialCatalog catalog,String packageId) {
         propertyPackage=catalog.requirePackage(packageId);
         domain=FluidDomain.of(catalog,packageId);
-        species=PhaseContract.derivedBasis(catalog,packageId);
-        evaluator=CubicPhaseEvaluator.derived(catalog,packageId,species);
+        species=PackageBinding.derivedBasis(catalog,packageId);
+        evaluator=PackageBinding.derivedEvaluator(catalog,packageId,species);
         water=evaluator.waterComponent();
         var list=new ArrayList<>(species);list.remove(CubicPhaseEvaluator.WATER);compounds=List.copyOf(list);
         int n=species.size();
@@ -83,7 +83,7 @@ public final class HydrocarbonModel {
         for(int i=0;i<compounds.size();i++)molecularWeights[i]=propertyPackage.properties().get(propertyPackage.components().indexOf(compounds.get(i))).molecularWeight();
         int packageWater=propertyPackage.components().indexOf(CubicPhaseEvaluator.WATER);
         molecularWeights[compounds.size()]=packageWater>=0?propertyPackage.properties().get(packageWater).molecularWeight():propertyPackage.water().molarMass();
-        revision=PhaseContract.forDerived(catalog,packageId,evaluator).identity().revision()+":"+FORMULATION;
+        revision=PackageBinding.derivedContract(catalog,packageId,evaluator).identity().revision()+":"+FORMULATION;
     }
 
     /** The engine's evaluator of this model: the same kernel and translations ({@code NetworkPhaseEngine}). */

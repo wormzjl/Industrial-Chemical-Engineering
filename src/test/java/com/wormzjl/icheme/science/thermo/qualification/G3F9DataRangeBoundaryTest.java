@@ -16,6 +16,7 @@ import com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium;
 import com.wormzjl.icheme.science.thermo.phase.PhaseCompetition;
 import com.wormzjl.icheme.science.thermo.phase.PhaseContract;
 import com.wormzjl.icheme.science.thermo.phase.PhaseState;
+import com.wormzjl.icheme.science.thermo.phase.PackageBinding;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -93,14 +94,14 @@ class G3F9DataRangeBoundaryTest {
         continued("melting line, water (network, WP4)", wetModel, "refinery network", netWater, 273.1, 1e6, 273.05, 1e6);
 
         // The spine ranges through the evaluator: methane 90.6941-1200 K (D13), CO2 from 90 K (WP3), N2 to 6000 K.
-        var evaluator = CubicPhaseEvaluator.forPackage(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PILOT);
+        var evaluator = PackageBinding.evaluator(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PILOT);
         spine("methane spine 1200 K (D13)", evaluator, new double[] {0, 1, 0, 0}, Root.VAPOR, 1200, 1200.5, 2e5);
         spine("methane spine 90.6941 K", evaluator, new double[] {0, 1, 0, 0}, Root.LIQUID, 90.7, 90.69, 1e5);
         spine("CO2 spine 90 K (WP3 extension)", evaluator, new double[] {0, 0, 0, 1}, Root.LIQUID, 90.0, 89.9, 1e5);
         spine("N2 spine to 6000 K (envelope 1200 K)", evaluator, new double[] {1, 0, 0, 0}, Root.VAPOR, 1500, 1500.5, 2e5);
 
         // A fluid-only contract of the package: no competition with the CO2-I crystal is qualified on it.
-        var whole = PhaseContract.forPackage(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PILOT);
+        var whole = PackageBinding.contract(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PILOT);
         var engine = new FluidTpEquilibrium(new PhaseContract(whole.packageId(), whole.identity(), whole.components(), whole.water(),
                 whole.waterComponent(), java.util.Set.of(PhaseCompetition.FLUID_ONLY), whole.waterChemistrySpecies(), whole.domain(),
                 whole.fluidCoverage()), evaluator, FluidTpEquilibrium.Settings.DEFAULT);

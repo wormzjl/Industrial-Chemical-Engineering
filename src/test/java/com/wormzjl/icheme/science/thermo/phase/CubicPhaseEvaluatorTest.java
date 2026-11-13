@@ -102,7 +102,7 @@ class CubicPhaseEvaluatorTest {
         var methane = StubIdealGas.of(pkg.properties().get(pkg.components().indexOf("Methane")), 50, 1500).withReference(-74_600.0, 186.3);
         var nitrogen = StubIdealGas.of(pkg.properties().get(pkg.components().indexOf("Nitrogen")), 50, 1500).withReference(0.0, 191.6);
         List<IdealGasFunction> gas = List.of(methane, nitrogen);
-        var evaluator = CubicPhaseEvaluator.fromPackage(pkg, List.of("Methane", "Nitrogen"),
+        var evaluator = PackageBinding.fromPackage(pkg, List.of("Methane", "Nitrogen"),
                 new double[] {PhaseTestSupport.METHANE_TRANSLATION, PhaseTestSupport.NITROGEN_TRANSLATION}, gas);
         var w = evaluator.newWorkspace();
         var wb = base.newWorkspace();
@@ -257,7 +257,7 @@ class CubicPhaseEvaluatorTest {
             translations[i] = (i % 5 - 2) * 1.0e-6;
             gas.add(StubIdealGas.of(pkg.properties().get(i), 50.0, 1500.0));
         }
-        var evaluator = CubicPhaseEvaluator.fromPackage(pkg, pkg.components(), translations, gas);
+        var evaluator = PackageBinding.fromPackage(pkg, pkg.components(), translations, gas);
         var w = evaluator.newWorkspace();
         var d = evaluator.newDerivatives();
         var plus = evaluator.newState();
@@ -350,11 +350,11 @@ class CubicPhaseEvaluatorTest {
     void continuesStatesOutsideTheIdealGasRangeAndRefusesForeignWorkspaces() {
         var pkg = PhaseTestSupport.network();
         List<IdealGasFunction> gas = List.of(StubIdealGas.constant(35.7, 200.0, 1000.0), StubIdealGas.constant(29.1, 60.0, 1000.0));
-        var evaluator = CubicPhaseEvaluator.fromPackage(pkg, List.of("Methane", "Nitrogen"), new double[2], gas);
+        var evaluator = PackageBinding.fromPackage(pkg, List.of("Methane", "Nitrogen"), new double[2], gas);
         var w = evaluator.newWorkspace();
         // Below methane's 200 K data the state is evaluated on the held cp (owner rule of 2026-10-16), not refused: its
         // ideal part is the stub's continuation, so the residual is the same as with a range that reaches 150 K.
-        var wide = CubicPhaseEvaluator.fromPackage(pkg, List.of("Methane", "Nitrogen"), new double[2],
+        var wide = PackageBinding.fromPackage(pkg, List.of("Methane", "Nitrogen"), new double[2],
                 List.of(StubIdealGas.constant(35.7, 100.0, 1000.0), StubIdealGas.constant(29.1, 60.0, 1000.0)));
         var cold = assertDoesNotThrow(() -> evaluator.evaluate(150.0, 1.0e6, new double[] {0.5, 0.5}, Root.VAPOR, w, evaluator.newState()));
         var reference = wide.evaluate(150.0, 1.0e6, new double[] {0.5, 0.5}, Root.VAPOR, wide.newWorkspace(), wide.newState());

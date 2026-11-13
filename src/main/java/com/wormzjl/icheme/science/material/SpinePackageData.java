@@ -10,7 +10,7 @@ import java.util.Objects;
 /**
  * The thermodynamic inputs of a package that declares a reference spine, resolved once from the catalog (P3 WP5, batch
  * 2026-09-24-coolprop-low-temperature, plan {@code P3_PILOT_ENGINE_PLAN.md} section 5, decisions D6 and D10). The fluid
- * network's {@code HydrocarbonModel} and the phase engine's {@code CubicPhaseEvaluator.forPackage} both build from this
+ * network's {@code HydrocarbonModel} and the phase engine's {@code PackageBinding.evaluator} both build from this
  * one object, so the two evaluate the same components, pair interactions and translations and differ only by the
  * energy datum.
  *

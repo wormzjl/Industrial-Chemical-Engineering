@@ -6,14 +6,14 @@ import com.wormzjl.icheme.science.thermo.phase.EquilibriumRequest;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult;
 import com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium;
 import com.wormzjl.icheme.science.thermo.phase.PhaseCompetition;
-import com.wormzjl.icheme.science.thermo.phase.PhaseContract;
+import com.wormzjl.icheme.science.thermo.phase.PackageBinding;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
 /**
  * The equilibrium engine of one network model: {@link FluidTpEquilibrium} on the derived contract of the model's own
- * evaluator ({@link PhaseContract#forDerived}, the very {@link HydrocarbonModel#evaluator}), the one service that decides a
+ * evaluator ({@link PackageBinding#derivedContract}, the very {@link HydrocarbonModel#evaluator}), the one service that decides a
  * node's phases ({@link FluidThermodynamics#equilibriumTP}: the outer active-set check, the inventory refresh, placement and
  * boundary charges) and a pipe junction's own split where the outer check adds a phase ({@link #ph}, D26).
  *
@@ -43,18 +43,18 @@ final class NetworkPhaseEngine {
      * The engine of {@code fluid}'s model with {@code settings} ({@link FluidTpEquilibrium.Settings#DEFAULT} for the
      * network): the derived contract of the model's evaluator, with one evaluator per crystal the contract admits (ice
      * among them on a model with water), anchored to this evaluator's family on either ideal-gas source
-     * ({@link CrystalPhaseEvaluator#forPackage}).
+     * ({@link PackageBinding#crystal}).
      */
     static NetworkPhaseEngine of(FluidThermodynamics fluid,MaterialCatalog catalog,String packageId,FluidTpEquilibrium.Settings settings) {
         var evaluator=fluid.hydrocarbon.evaluator();
-        var contract=PhaseContract.forDerived(catalog,packageId,evaluator);
+        var contract=PackageBinding.derivedContract(catalog,packageId,evaluator);
         var crystals=fluid.crystals();
         List<CrystalPhaseEvaluator> solids=new ArrayList<>();
         if(!crystals.isEmpty()) {
             var competition=contract.crystalCompetition();
             if(competition==null||!competition.crystals().equals(new java.util.TreeSet<>(crystals)))
                 throw new IllegalStateException("Package "+packageId+": the network's crystals "+crystals+" are not the contract's competition "+competition);
-            for(String id:crystals)solids.add(CrystalPhaseEvaluator.forPackage(catalog,packageId,id));
+            for(String id:crystals)solids.add(PackageBinding.crystal(catalog,packageId,id));
         }
         return new NetworkPhaseEngine(new FluidTpEquilibrium(contract,evaluator,settings,solids),fluid.wet(),packageId);
     }

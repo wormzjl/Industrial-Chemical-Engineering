@@ -25,8 +25,8 @@ class SolidCarbonDioxideQualificationTest {
     /** The pilot fluid family and its anchored crystal, with the record's or an edited fusion enthalpy. */
     record Family(CubicPhaseEvaluator fluid, CrystalPhaseEvaluator solid, SolidPhaseEvaluator.TriplePointAnchor anchor) {
         static Family of(MaterialCatalog catalog) {
-            var fluid = CubicPhaseEvaluator.forPackage(catalog, PILOT);
-            var solid = CrystalPhaseEvaluator.forPackage(catalog, PILOT, CRYSTAL);
+            var fluid = PackageBinding.evaluator(catalog, PILOT);
+            var solid = PackageBinding.crystal(catalog, PILOT, CRYSTAL);
             return new Family(fluid, solid, solid.anchor(fluid));
         }
 

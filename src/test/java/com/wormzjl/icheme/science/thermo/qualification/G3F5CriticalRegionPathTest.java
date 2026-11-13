@@ -13,6 +13,7 @@ import com.wormzjl.icheme.science.thermo.phase.PhaseCompetition;
 import com.wormzjl.icheme.science.thermo.phase.PhaseContract;
 import com.wormzjl.icheme.science.thermo.phase.PhaseDerivatives;
 import com.wormzjl.icheme.science.thermo.reference.HelmholtzFluid;
+import com.wormzjl.icheme.science.thermo.phase.PackageBinding;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -51,7 +52,7 @@ class G3F5CriticalRegionPathTest {
 
     static FluidTpEquilibrium engine() {
         var catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
-        return new FluidTpEquilibrium(PhaseContract.forPackage(catalog, PILOT), CubicPhaseEvaluator.forPackage(catalog, PILOT), FluidTpEquilibrium.Settings.DEFAULT);
+        return new FluidTpEquilibrium(PackageBinding.contract(catalog, PILOT), PackageBinding.evaluator(catalog, PILOT), FluidTpEquilibrium.Settings.DEFAULT);
     }
 
     static final class Path {

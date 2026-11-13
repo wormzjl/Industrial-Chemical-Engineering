@@ -444,7 +444,7 @@ class SpineNetworkPathTest {
         var model = pilot();
         // The network's revision is its package's derived identity and the model's formulation (W3b: the derived contract,
         // main keeps the revision, not the identity).
-        var identity = com.wormzjl.icheme.science.thermo.phase.PhaseContract.forDerived(catalog, PILOT, new HydrocarbonModel(catalog, PILOT).evaluator()).identity();
+        var identity = com.wormzjl.icheme.science.thermo.phase.PackageBinding.derivedContract(catalog, PILOT, new HydrocarbonModel(catalog, PILOT).evaluator()).identity();
         assertEquals(identity.revision() + ":" + HydrocarbonModel.FORMULATION, model.revision());
         assertTrue(identity.packageRevision().startsWith(catalog.fluidRevision(PILOT) + ";"), identity.packageRevision());
         assertEquals(com.wormzjl.icheme.science.thermo.phase.CubicPhaseEvaluator.DERIVED_FAMILY, identity.evaluatorFamily());

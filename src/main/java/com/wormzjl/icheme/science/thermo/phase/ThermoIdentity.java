@@ -1,6 +1,5 @@
 package com.wormzjl.icheme.science.thermo.phase;
 
-import com.wormzjl.icheme.science.material.MaterialCatalog;
 import java.util.Objects;
 
 /**
@@ -10,10 +9,10 @@ import java.util.Objects;
  * <p>Parts:</p>
  * <ul>
  *   <li>{@code packageRevision}: the package's data identity, the declared revision of every record its fluid models
- *   read; {@link #of} takes {@link MaterialCatalog#fluidRevision(String)}.</li>
+ *   read; {@link PackageBinding#identity} takes the catalog's {@code MaterialCatalog.fluidRevision(String)}.</li>
  *   <li>{@code evaluatorFamily}: the residual formulation, {@link CubicPhaseEvaluator#family()}.</li>
  *   <li>{@code spineRevision}: the ideal-gas and formation data (the data spine, decision D6),
- *   {@link MaterialCatalog#spineRevision(String)}, the spine and crystal records' declared revisions; {@link #NO_SPINE} for a package without either.</li>
+ *   {@code MaterialCatalog.spineRevision(String)}, the spine and crystal records' declared revisions; {@link #NO_SPINE} for a package without either.</li>
  *   <li>{@code waterModelRevision}: the water model and how it participates ({@link WaterParticipation}).</li>
  * </ul>
  *
@@ -25,7 +24,7 @@ import java.util.Objects;
  * ({@code FluidThermodynamics.thermodynamicRevision}; saved contents keep their amounts and temperature and restate),
  * regression fixtures and pins, and any approximation state (warm starts, factorizations) built on the phase engine. The
  * column's neural models key instead on the values they were trained on ({@link com.wormzjl.icheme.science.material.TrainedPhysics},
- * sidecar schema 4), and compare the request's values with them within a tolerance ({@link MaterialCatalog#inferenceView}).</p>
+ * sidecar schema 4), and compare the request's values with them within a tolerance ({@code MaterialCatalog.inferenceView}).</p>
  *
  * <p>The revision encodes every part length-prefixed, so no two different identities share a revision whatever
  * characters the parts contain.</p>
@@ -56,15 +55,6 @@ public final class ThermoIdentity {
         this.waterModelRevision = requirePart(waterModelRevision, "waterModelRevision");
         this.revision = FORMAT + part(this.packageRevision) + part(this.evaluatorFamily) + part(this.spineRevision)
                 + part(this.waterModelRevision);
-    }
-
-    /**
-     * The identity of a catalog package without water evaluated by {@code evaluatorFamily}; a package with water in its
-     * cubic names its water part itself ({@link PhaseContract#forDerived}).
-     */
-    public static ThermoIdentity of(MaterialCatalog catalog, String packageId, String evaluatorFamily, String spineRevision) {
-        catalog.requirePackage(packageId);
-        return new ThermoIdentity(catalog.fluidRevision(packageId), evaluatorFamily, spineRevision, NO_WATER);
     }
 
     public String packageRevision() { return packageRevision; }

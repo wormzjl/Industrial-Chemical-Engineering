@@ -36,8 +36,8 @@ class RefineryCarbonDioxideCrystalTest {
     record Family(CubicPhaseEvaluator fluid, CrystalPhaseEvaluator solid, SolidPhaseEvaluator.TriplePointAnchor anchor) {
         static Family of(MaterialCatalog catalog) { return of(catalog, REFINERY); }
         static Family of(MaterialCatalog catalog, String packageId) {
-            var fluid = CubicPhaseEvaluator.forPackage(catalog, packageId);
-            var solid = CrystalPhaseEvaluator.forPackage(catalog, packageId, CRYSTAL);
+            var fluid = PackageBinding.evaluator(catalog, packageId);
+            var solid = PackageBinding.crystal(catalog, packageId, CRYSTAL);
             return new Family(fluid, solid, solid.anchor(fluid));
         }
         /** {triple-point T, its pressure, sublimation T at 101325 Pa, worst p_sub error on the grid, its T, dH_sub at 195 K}. */

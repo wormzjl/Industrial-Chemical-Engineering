@@ -15,6 +15,7 @@ import java.util.Locale;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
+import com.wormzjl.icheme.science.thermo.phase.PackageBinding;
 
 /**
  * The pilot world's row E (the branch's P6b failure 2, re-measured for milestone M3 of the unified thermo port): liquid
@@ -99,7 +100,7 @@ class CrystalFlushBudgetTest {
         for (var p : inventory.solids().crystals()) energy += p.massKg() * p.material().crystal().energyOffset();
         var formation = model.hydrocarbon.formationReference().orElseThrow();
         energy = EnergyReference.sensible(formation.components()).rebase(energy, Arrays.copyOf(totals, totals.length - 1), formation);
-        var engine = FluidTpEquilibrium.forPackage(CATALOG, PILOT);
+        var engine = PackageBinding.equilibrium(CATALOG, PILOT);
         var request = EquilibriumRequest.uv(energy, inventory.volume(), engine.contract().components(), Arrays.copyOf(totals, totals.length - 1), PhaseCompetition.FLUID_AND_CRYSTALS);
         var cold = engine.uv(request, engine.newWorkspace());
         var warm = engine.uv(request, engine.newWorkspace(), s.temperature(), s.pressure());
