@@ -21,26 +21,33 @@ Branch `claude/review-wave-a6-fluid-18ecaf`, four fix commits. Lane files only; 
 - No test.
 - Open: the `PassiveNetwork.PhasePort` comment (lines 14-16) still has the old "heavier liquid first" wording. It is outside this lane.
 
-## D-02, heat curves sampled before the Newton (commit e2bf2e92c)
-- Each pass's `Equations` samples, when it is built and under the solver's checkpoint, the curves of both ends of every heat-exchanging connection, closed ones included (a Jacobian probe moves a closed flow off zero).
-- `Equations.sideHeat` reads only those curves. The solver-level `sideHeat` is removed.
-- A refused sample is kept as that end's refusal and is thrown where a residual draws from that end, as the inline sample did. A cancellation from the checkpoint itself ends the pass.
-- I read `HeatCurve.sample` first: 17 TP flashes plus refinement. The shared cache keys a curve by the node's step-start state, so a curve is sampled once per end per step, not per pass. The extra cost is one sample per step for the end the flow does not leave.
-- A lazy sample at the pass's start point would not cover a flow that reverses inside the Newton.
-- I did not use a restart on a missing curve: the workspace carries the previous Jacobian, so a restart would change the Newton's path.
-- Values: identical. The curves are the ones the residual sampled before (same start state, port, span and films).
-- Counters `heatCurveSamples` and `heatCurvesInResidual` (residual flag in `Equations.residual`) guard the rule.
-- Test: `PassiveStepSolverTest.aHeatSideWhoseFlowReversesReadsTheCurvesItsPassSampled` (new). The second step starts from the first step's forward flow, on swapped pressures. The test checks:
-  - the flow is reversed and the side cools the water;
-  - no curve was sampled in a residual.
+## D-02, heat curves sampled between evaluations (commits e2bf2e92c, then 62416ccaa after the parent's review)
+- A pass is built with the curves the solver already keeps (`curveKept`: a curve kept for the stream and span, or an end that draws nothing). No sample at build.
+- `Equations.sideHeat` never samples. An end without its curve is noted (`missingEdge`) and reads zero.
+- `residual` and `differentiateEntries` are evaluations. One that met a missing end is discarded, whatever it returned or threw. That end is then sampled under the solver's checkpoint, and the evaluation is done again from the same x (at most two per heat side). A refusal is kept as the end's and thrown where an evaluation draws from it. A cancellation ends the pass. No exception carries the deferral.
+- The reconstruction reads `bookedHeat`, which samples a missing end first, outside every evaluation. The solver-level `sideHeat` is removed.
+- The start-flow donor ends are not guaranteed by the start balance or the seeds (`delivered` runs only on some branches). The first evaluation's deferral covers them, as the first residual did before. So nothing is sampled at build.
+- Repeatability check (decode + assemble at one x), with what I found:
+  - `cachedStates`, `cachedTransport` and `cachedPrepared` form a per-node cache keyed by x; a redo hits it.
+  - `nodeAccumulate` resets every accumulator.
+  - `junctionWeight` is set before it is read.
+  - `sweepWall` and `builtWall` change only in `linearising`.
+  - `allowedRestart` and `flashRestated` are read only in `buildInitial` and the pass loop.
+  - The viscosity workspace is scratch.
+  - The checkpoint is cancellation plus a wall deadline, with no counter.
+  - `SolverDiagnostics` counters count the redo, but no decision reads them.
+  - Nothing else is carried.
+- Values: identical. The same curve enters the same evaluation at the same x. Each curve is sampled where it was first needed, as before, and no extra sample is made.
+- Tests: `PassiveStepSolverTest`
+  - The reversal case: the forward step samples one curve; the backward step reverses the flow, cools the water and samples no curve inside an evaluation.
+  - New: `aHeatSideThatKeepsItsDirectionSamplesItsDonorsCurveAlone`: one sample per step, none for the junction end.
 
 ## Tests (after "lane free")
-`compileJava compileTestJava` once, then one `test` run with `--max-workers 4` and three `--tests` filters, each class once:
-- `CoolingTowerTest` 25/25, `ConservativeTransportTest` 4/4, `PassiveStepSolverTest` 7/7; 0 failed, 0 skipped. The three new cases pass.
-- No reference moved: every existing assertion of the three classes (calibration point 298.15 K, the marched-fill references, the ledgers) holds unchanged.
+- First run, one `test` run with `--max-workers 4` and a `--tests` filter per class, on the eager D-02 form: `CoolingTowerTest` 25/25, `ConservativeTransportTest` 4/4, `PassiveStepSolverTest` 7/7. These stand for F2 and F20.
+- After 62416ccaa: `PassiveStepSolverTest` 8/8, run once. 0 failed and 0 skipped throughout.
+- No reference moved. Every existing assertion holds unchanged (calibration point 298.15 K, the marched-fill references, the ledgers).
 
 ## Expected effect on the parent's final lane
-- Chain-100 exact and the 33 junction lines: I expect no movement. They have no cooling tower (F2, F20). D-02 keeps every value, and the junction lines read values, not curve counts.
+- Chain-100 exact and the 33 junction lines: I expect no movement. They have no cooling tower, and D-02 keeps every value and every sample.
 - Campaign: values identical except for an emptying tower basin fed through a junction (F20), which I expect to be rare.
-- Campaign counters: flash and state-call counts rise where islands have heat sides (D-02 samples the second end once per step).
-- If a fluid job's checkpoint enforces a work budget, these extra flashes count toward it. A budget-class hold (C or F) on a seed with a heat side would then need a check against this. `MIXED_GAS_COST` moves only if its islands have heat sides.
+- Counters: an evaluation redone after a deferred sample adds to the residual and Jacobian counters only where a flow reaches a new heat-side end, the case that sampled inside the Newton before. Flash counts are unchanged.
