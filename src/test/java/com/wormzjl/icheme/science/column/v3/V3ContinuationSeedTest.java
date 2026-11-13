@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test;
  * A flow seeded eighteen e-folds too high therefore costs eighteen iterations no matter how good the
  * Jacobian is. The stage map ({@link V3ColumnCalculator#sourcePosition}) stops a rectifying node from
  * reading such a flow off the source feed tray, and the cap inside
- * {@code V3ColumnCalculator.liftFloorSupport} removes one wherever it still appears.</p>
+ * {@code V3FloorLift.liftFloorSupport} removes one wherever it still appears.</p>
  *
  * <p>The cap's fixture is the manufactured ternary column of {@link V3TruncationNumericsTest}: four trays,
  * feed on tray two, and a thermodynamic model calibrated on the seed so that every node's {@code K_c V/L} is
@@ -107,7 +107,7 @@ class V3ContinuationSeedTest {
                 {18, 12, 1.0}, {18, 12, 5.0e-7}};
         V3DryMeshState seed = state(problem, liquid, vapor);
 
-        V3DryMeshState lifted = V3ColumnCalculator.liftFloorSupport(problem, thermo(problem, seed), seed);
+        V3DryMeshState lifted = V3FloorLift.liftFloorSupport(problem, thermo(problem, seed), seed);
 
         // Tray four is fed by tray three's liquid and the reboiler's vapour, neither of which the cap touches.
         double delivered = liquid[3][TRACE] + vapor[5][TRACE];
@@ -153,7 +153,7 @@ class V3ContinuationSeedTest {
                 {18, 12, 1.0e-6}, {18, 12, 5.0e-7}};
         V3DryMeshState seed = state(problem, liquid, vapor);
 
-        V3DryMeshState lifted = V3ColumnCalculator.liftFloorSupport(problem, thermo(problem, seed), seed);
+        V3DryMeshState lifted = V3FloorLift.liftFloorSupport(problem, thermo(problem, seed), seed);
 
         assertEquals(10.0, lifted.liquidFlow(2, TRACE));
         assertEquals(10.0, lifted.vaporFlow(2, TRACE));
@@ -176,7 +176,7 @@ class V3ContinuationSeedTest {
                 {18, 12, 1.0e-6}, {18, 12, 5.0e-7}};
         V3DryMeshState seed = state(problem, liquid, vapor);
 
-        V3DryMeshState lifted = V3ColumnCalculator.liftFloorSupport(problem, thermo(problem, seed), seed);
+        V3DryMeshState lifted = V3FloorLift.liftFloorSupport(problem, thermo(problem, seed), seed);
 
         assertEquals(vapor[1][TRACE], lifted.liquidFlow(0, TRACE),
                 "the condenser keeps exactly the trace tray one sends up");
