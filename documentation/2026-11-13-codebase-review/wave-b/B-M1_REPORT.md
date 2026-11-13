@@ -2,7 +2,7 @@
 
 Branch `claude/review-wave-a3-machines-294ed8`, with `claude/codebase-review-refactor-8a85ef` merged in (`85a6fa749`, clean). Brief: `WAVE_B_BRIEFS.md`, section B-M1.
 
-Status: four items committed. M-18 is left out of this round (main thread's decision, option C). **No test has run yet**; the lane is held.
+Status: four items committed. M-18 is left out of this round (main thread's decision, option C). The compile passed and the named classes pass (34 tests, 0 failures, first run).
 
 | Item | Commit | Files | Tests |
 |---|---|---|---|
@@ -34,9 +34,12 @@ The main thread chose C for this round. A is not bit for bit in that corner, and
 ## Counter: bytes per 100 ticks, 20 certified trains
 
 - Before: 62 B a tick, about 6.2 kB per 100 ticks (PROFILE_REVIEW, `machines-cert-true`); 92 % of it is `shafts()`.
-- After: to be read after "lane free" from `MachineBench` (`-Dwarm=10 -Dmeasure=10`), bytes only, no time.
+- After: 33 B a tick, about 3.3 kB per 100 ticks: 3,886.5 MB over 116,320,212 ticks. Read from `MachineBench` with `-Dwarm=10 -Dmeasure=10`, bytes only. It ran beside the wave A final lane, so its times are not claims. All 20 islands were certified, and motors and casings ran at 2,950 rpm, as in the profile.
 
-## Lane plan (after "lane free")
+## What ran
 
-1. `compileJava compileTestJava` once.
-2. `test --tests` `ShaftCouplingTest`, `ShaftPlanTest`, `PumpHealthTest`, `WorldTopologyLedgerTest` `--max-workers 4`.
+1. `./gradlew compileJava compileTestJava --max-workers 4`: passed.
+2. `./gradlew test --tests ...ShaftCouplingTest --tests ...ShaftPlanTest --tests ...PumpHealthTest --tests ...WorldTopologyLedgerTest --max-workers 4`, once: ShaftCouplingTest 10/10, ShaftPlanTest 4/4, PumpHealthTest 5/5, WorldTopologyLedgerTest 15/15.
+3. `tools/codebase-review-bench/run.ps1 MachineBench.java tmp/b-m1/bench-cert-true -JvmArgs "-Dwarm=10 -Dmeasure=10"`: the counter above.
+
+No result moved: every existing test passed unchanged.
