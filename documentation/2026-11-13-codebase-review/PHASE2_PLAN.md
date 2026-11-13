@@ -34,6 +34,23 @@ One batch per lane; the order inside and between them comes from B1's cost table
 
 Proof of each: the lane's exact references, the area's tests, and the counter or the B1 scenario that showed the cost, measured again.
 
+### Order from the profile (B1, 2026-11-13)
+
+B1's report is `PROFILE_REVIEW.md` on `refs/heads/claude/codebase-review-bench-930e08` (42caac27b), with the harness `tools/codebase-review-bench/`. Its numbers are B1's; the main thread read the report and checked the code behind items 1, 3 and the route finding, and ran nothing.
+
+| Order | Batch | First items | What B1 measured |
+|---|---|---|---|
+| 1 | B column | P3 (the degree-of-freedom ledger built once per structure), then P5 and P4, P2, P6; new **P7**: a counter of band factorizations per solve by call site | The ledger is 5 to 17 % of a column solve's CPU and 7 to 10 % of its bytes. A solve allocates 104 to 229 MB (1.3 GB on the classical chain). The band solver is 52 to 63 %: P7 tells which solves P1 and L2 would remove |
+| 2 | B thermo | P20 (one kernel workspace kept, not one per evaluation), P27, P21, P23 | `PengRobinsonKernel$Workspace.<init>` is 34 % of an island step's bytes (about 21 MB a step) and 2.6 % of its CPU; the kernel is 41 % of the step. The software `pow`, `exp` and `log` are about 12 % of the step's samples |
+| 3 | B step | new **P-17**: the sparse triangular solves' reach computed once per factorization pattern, then P-07, P-01, P-03, P-05, P-06 | EJML's `TriangularSolver_DSCC` is 22 % of the step, half of it the symbolic reach (`searchNzRowsInX_DFS`), recomputed at every solve because `SparseLuSolver` 170 and 182 pass the dense right-hand side as a sparse column. A step allocates 60.7 MB |
+| 4 | B runtime | as listed | Not confirmed and not refuted: at 100 islands with no viewer the server thread costs 0.025 ms a tick (median), 0.93 ms at p95. R1 and R2 cost per presented island; the `viewers` profile was not run |
+| 5 | B machines | M-09, M-10 | 20 certified trains cost 11 µs per 100 ticks: negligible today, linear in units. `WorldTopologyLedger.shafts()` (`Map.copyOf`) is 92 % of the rig's bytes |
+| 6 | B equipment, B client, B control | as listed | Not measured by B1 |
+
+P-17 has two forms. Keeping EJML's order and caching the reach is bitwise. The dense forward and backward substitution is simpler and moves a Newton step in its last digits (the solve is refined against the residual at `SparseLuSolver` 182); it is a results option for the owner if the cached form does not give the gain.
+
+RAM, from B1's histograms: an island keeps about 1 MB of solver and thermo workspaces at 47 components (1.4 MB a train with its island; an upper bound of 9 MB an island on `mixed100`, old garbage included). P-10 (one shared workspace per solver) and P20 are the two items that lower it.
+
 ## Wave C: layering (code moves; references exact unless stated)
 
 Order matters: each batch moves files the next one builds on. `LayeringTest` gains a rule at the end of each.
@@ -77,6 +94,22 @@ As [RUST_COLUMN_PORT_PLAN.md](RUST_COLUMN_PORT_PLAN.md), with the decisions of [
 
 Each stage ends with B1's column scenarios measured again. Stages (a) to (d) are very hard by the owner's table: Fable, or Opus xhigh.
 
+### What the profile changes (B1, 2026-11-13)
+
+Measured on the Java path, 40 stages, 18 or 19 components, three side draws, three pumparounds: 0.20 s and 204 to 229 MB for a cold solve on the learned start, 0.095 s warm, 1.37 s on the strict classical chain.
+
+| Share of a solve's CPU | Cold and warm | Classical chain |
+|---|---|---|
+| Band solver (`V3BandedPivotedSolver`, one scale, factorization and substitution per call) | 52 to 57 % | 63 % |
+| Thermo kernel | 13 to 14 % | 17 % |
+| Degree-of-freedom ledger | 12 to 17 % | 5 % |
+| Other bookkeeping (maps, records, streams) | 9 to 12 % | 6.5 % |
+| Residual and Jacobian assembly | 5 to 7 % | 6.5 % |
+
+1. **P1 is not the largest gain.** The plan expected the finite-difference Jacobian to dominate. Residual and Jacobian assembly with the whole kernel are 19 to 24 % of a solve, so the analytic Jacobian saves at most about a fifth directly. Its case is now what it deletes (about 700 lines and the second Jacobian from the port) and the band factorizations it and L2 remove; P7 counts those before the decision.
+2. **The band solver is the port's first target.** The band is the adjacent-stage coupling only (`V3SimultaneousColumnSolver.toBandedMatrix`, 722 to 760), about 83 below and above the diagonal at 42 unknowns a stage, and every call factors again. After stage 0 removes the ledger and the bookkeeping, the solver and the kernel are about four fifths of a solve, and both are in stage (b). Stage (b) is therefore where the port's gain is first measured, not (c) or (d). No factor is promised: the Rust elimination must keep Java's bits (no fused operations), so its gain over the JIT is what stage (b) measures.
+3. **The route costs more than any of the above.** A solve counts its checkpoints (one per flash and solver step). On B1's two inputs changed by 2 %: the learned start takes 27,000 to 30,000; a warm start 8,600; the classical chain 184,000 to 258,000, with either closure. The running column never takes the learned start: `ColumnSolve` 248 calls the classical chain whenever it has no seed, and 239 to 247 drop a seed with free water. The simulator (`ColumnUnit.solve`) keeps a wet seed, which the warm route refuses, and so runs the strict classical chain (the 1.37 s row). Owner decision 16.
+
 ## Wave F: the fluid step in Rust (gated)
 
 The thermo kernel itself is ported with the column (wave E stage (b), the `icheme-thermo` crate). What is gated here is the fluid step's use of it. Owner, 2026-11-13.
@@ -102,6 +135,13 @@ After F0 and the wave B batches of the fluid step and the thermo core (B step, B
 2. **Need.** The step's cost still limits plant size: on the bench's largest paced scenario the islands do not keep up with online time on the default worker count, by the benchmark's own pace counters.
 
 The gate's review states both numbers and the decision. If the gate fails, wave F ends at F0 and the fluid step stays in Java.
+
+Readings on today's code (B1, `mixed100`: 100 islands of 10 to 30 reservoirs, 75 awake, two workers), before F0 and wave B, for comparison only:
+
+1. Share: kernel 41 %, linear algebra 38 %, residual and Jacobian 14 %, together 93 %. Flashes are 1.4 %.
+2. Need: not met. The 75 awake islands complete one interval per cadence each (15.0 a second, the pace of online time) with the two workers 21 % busy; a step takes 28 ms (median) and 61 MB. By the occupancy alone the plant could be about four times larger at this density before two workers fall behind (an estimate; the admission rule, which gives an island only an idle worker, lowers it).
+
+Two things follow for the gate. `mixed100` has no large island, and a step's cost grows faster than its island; the `one` profile (one island of 100 reservoirs and 1,102 devices) certified at rest and gave no step. The bench needs a scenario with one large awake island before the gate is run, and the gate reads both. And wave B's first items for the step (P20, P-17) aim at a third of the step's bytes and about a seventh of its CPU (the reach, 11 %, and the workspace construction, 2.6 %), so the step is expected to be cheaper before the gate is read.
 
 ### F1 (only if the gate passes)
 
@@ -155,12 +195,13 @@ In the order they unblock work. "Rec." is the main thread's recommendation.
 | 4 | Failure modes: which of N1 to N7; the unreachable trips, option A or B | N1, N2, N4, N5, N7 option A; trips A | wave G |
 | 5 | Scheduling: one worker kept for islands, the plant deadline from the worker (R6 option A) | yes | de-correlation step 9 |
 | 6 | Pricing on specific enthalpy (C2) and one column job for the sheet and the world (C5) | yes | wave H, first batch |
-| 7 | The analytic Jacobian authoritative (P1), the inside-out trial (L1), the verification cascade (L2) | P1 yes after B1; L1 by its measure; L2 with P1 | stage 0 |
-| 8 | The running column's closure policy (D3 option A or B) | A | stage 0 fixtures |
+| 7 | The analytic Jacobian authoritative (P1), the inside-out trial (L1), the verification cascade (L2) | P1 yes, for what it deletes; its time gain is at most a fifth of a solve (B1) and is stated after P7's count. L1 by its measure (B1 did not isolate the first rung). L2 with P1 | stage 0 |
+| 8 | The running column's closure policy (D3 option A or B) | decide with 16: B1 shows the closure is not what makes a solve slow, the route is | stage 0 fixtures |
 | 9 | Declared revisions in place of the three hashes (E20, R11, P3-06) | yes | saves coherence |
 | 10 | Rust targets: Windows and Linux first, macOS on the Java path until built; unverified targets guarded or held back | as stated; guarded | stage (a) packaging |
 | 11 | AGENTS.md amendments 1 to 7 | yes | wave J |
 | 12 | `tools/` cleanup: the 1 MB rule, the vendored dependencies, the dead tasks, the 113 unreferenced folders | yes | wave J |
 | 13 | A standing approval for read-only review subagents inside a named batch | yes | faster reviews |
 | 14 | The rest of SIMPLIFICATIONS_REVIEW, row by row, when its wave comes | per row | wave H |
-| 15 | Fluid step in Rust: gated on a re-measurement after the Java groundwork; equilibrium engine stays in Java | yes | wave F |
+| 15 | Fluid step in Rust: gated on a re-measurement after the Java groundwork; equilibrium engine stays in Java | yes (given by the owner, 2026-11-13) | wave F |
+| 16 | The column's route: where a learned model binds, the running column's first solve and a solve whose warm seed is refused take the learned start, at the strict closure, before the classical chain | yes, after the same count on every shipped preset (B1 measured two inputs: 27,000 to 30,000 checkpoints against 184,000 to 258,000). A published state moves from the 1e-3 closure to 1e-8, so inside the old closure; the `-closure1e-3` label goes where a model binds | stage 0 fixtures; settles 8 where a model binds |
