@@ -106,7 +106,7 @@ final class Certificates {
     }
     private void certify(Island island,IslandCertificate certificate) {
         island.certificate=certificate;if(island.certifiedSince<0)island.certifiedSince=certificate.baseTick();
-        island.signature=IslandCertificate.Signature.of(island.model,coordinator.settings.certificates(),certificate.interval().result().graph());island.touch();
+        island.signature=IslandCertificate.Signature.of(island.model,coordinator.settings.certificates());island.touch();
         island.lastInterval=null;island.streak=0;island.refusal=null;
         // Only here, after the terminal completion that produced the qualifying interval, so no worker owns the caches.
         island.retained=null;island.status=certifiedStatus(island);FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.certificatesIssued);

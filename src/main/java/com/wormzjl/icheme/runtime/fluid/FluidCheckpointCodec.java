@@ -367,11 +367,37 @@ public final class FluidCheckpointCodec {
         if(persisted.isEmpty())w.u8(0);
         else {
             var saved=persisted.orElseThrow();var signature=saved.signature();w.u8(1);
-            w.varint(strings.ref(signature.propertyRevision()));w.varint(strings.ref(signature.policy()));w.raw(HexFormat.of().parseHex(signature.graph()));
+            w.varint(strings.ref(signature.propertyRevision()));w.varint(strings.ref(signature.policy()));w.raw(replayField(signature.replay()));
             related(w,saved.interval().before(),graph,main);
         }
         return w.toByteArray();
     }
+    /** The length of a certificate's replay field, the 32 bytes an older save filled with its graph digest. */
+    static final int REPLAY_FIELD=32;
+    /**
+     * A certificate's replay revision ({@link IslandCertificate#REPLAY_REVISION}) as its field holds it: the token's
+     * characters, zero-padded. A 64-digit hexadecimal revision (an older save's graph digest, read back) is its 32 bytes
+     * again. Refuses a revision the field cannot hold or would read back as another one.
+     */
+    static byte[] replayField(String replay) {
+        byte[] field;
+        if(replay.matches("[0-9a-f]{64}"))field=HexFormat.of().parseHex(replay);
+        else {
+            var bytes=replay.getBytes(StandardCharsets.US_ASCII);
+            if(bytes.length>REPLAY_FIELD)throw new IllegalArgumentException("Certificate replay revision "+replay+" is longer than its "+REPLAY_FIELD+"-byte field");
+            field=Arrays.copyOf(bytes,REPLAY_FIELD);
+        }
+        if(!replayRevision(field).equals(replay))throw new IllegalArgumentException("Certificate replay revision "+replay+" does not read back from its field");
+        return field;
+    }
+    /** The replay revision a field holds: its token when it is one, zero-padded; otherwise (an older save's graph digest)
+     * its bytes in hexadecimal, a token that is never a declared revision, so the certificate is discarded on load. */
+    static String replayRevision(byte[] field) {
+        int length=0;while(length<field.length&&replayCharacter(field[length]))length++;
+        boolean padded=length>0;for(int i=length;i<field.length;i++)if(field[i]!=0)padded=false;
+        return padded?new String(field,0,length,StandardCharsets.US_ASCII):HexFormat.of().formatHex(field);
+    }
+    private static boolean replayCharacter(byte b){return b>='a'&&b<='z'||b>='A'&&b<='Z'||b>='0'&&b<='9'||b=='_'||b=='.'||b=='-';}
     /** A graph beside the island's main one: 1 when it is the same graph (same topology and state bytes), 2 when it
      * shares the topology (then its state follows), 3 otherwise (its topology and state follow). */
     private static void related(Writer w,PassiveNetwork other,PassiveNetwork main,Written written) {
@@ -604,8 +630,8 @@ public final class FluidCheckpointCodec {
         IslandCertificate.Signature signature=null;PassiveNetwork certifiedFrom=null;
         if(r.bool()) {
             String revision=strings.get(r.varint(Integer.MAX_VALUE),"certificate of island "+id),policy=strings.get(r.varint(Integer.MAX_VALUE),"certificate of island "+id);
-            String digest=HexFormat.of().formatHex(r.raw(32));
-            try{signature=new IslandCertificate.Signature(revision,policy,digest);}catch(IllegalArgumentException invalid){throw new IllegalArgumentException("Island "+id+": "+invalid.getMessage());}
+            String replay=replayRevision(r.raw(REPLAY_FIELD));
+            try{signature=new IslandCertificate.Signature(revision,policy,replay);}catch(IllegalArgumentException invalid){throw new IllegalArgumentException("Island "+id+": "+invalid.getMessage());}
             certifiedFrom=related(r,r.u8(),graph,topology,model);
         }
         r.end();

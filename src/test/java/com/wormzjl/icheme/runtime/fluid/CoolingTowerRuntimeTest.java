@@ -118,7 +118,7 @@ class CoolingTowerRuntimeTest {
         var solved=new PassiveIntervalSolver(model).solve(before,.1,new PassiveIntervalSolver.Settings(.1,.1,32),()->{});
         assertFalse(NetworkReduction.atRest(before,model),"A wet basin still exchanges with the atmosphere");
         var interval=new IslandCertificate.Interval(0,2,before,solved);
-        var saved=new IslandCertificate.Saved(2,6,interval,IslandCertificate.Signature.of(model,CertificatePolicy.defaults(),solved.graph()));
+        var saved=new IslandCertificate.Saved(2,6,interval,IslandCertificate.Signature.of(model,CertificatePolicy.defaults()));
         // Exercise the saved linear arithmetic independently of the stationarity qualification policy.
         var replayed=IslandCertificate.rebuild(saved,model.molecularWeights()).replay(2,6);
         var initial=solved.graph().reservoirs().getFirst().inventory();

@@ -202,6 +202,21 @@ class FluidCheckpointCodecTest {
         var a=before.islands().getFirst().snapshot();var b=loaded.islands().getFirst().snapshot();
         assertEquals(a.graph().reservoirs().getFirst().inventory(),b.graph().reservoirs().getFirst().inventory());assertEquals(a.clock(),b.clock());assertEquals(a.fences(),b.fences());
     }
+    /** A certificate's replay field (codebase review H-R11): the declared revision round trips in the 32 bytes that held an
+     * older save's graph digest; that digest reads back as its 64 hexadecimal digits, never the declared revision. */
+    @Test void theReplayFieldHoldsTheDeclaredRevisionAndReadsAnOlderDigestAsItsHex() {
+        var field=FluidCheckpointCodec.replayField(IslandCertificate.REPLAY_REVISION);
+        assertEquals(FluidCheckpointCodec.REPLAY_FIELD,field.length);
+        assertEquals(IslandCertificate.REPLAY_REVISION,FluidCheckpointCodec.replayRevision(field));
+        String digest="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+        var old=HexFormat.of().parseHex(digest);
+        assertEquals(digest,FluidCheckpointCodec.replayRevision(old),"an older save's digest reads back as its hexadecimal digits");
+        assertArrayEquals(old,FluidCheckpointCodec.replayField(digest),"and is written back as its own bytes");
+        assertNotEquals(IslandCertificate.REPLAY_REVISION,FluidCheckpointCodec.replayRevision(old));
+        assertDoesNotThrow(()->new IslandCertificate.Signature("revision","policy",digest),"an older digest is a valid replay token");
+        assertThrows(IllegalArgumentException.class,()->FluidCheckpointCodec.replayField("r".repeat(33)),"longer than the field");
+        assertThrows(IllegalArgumentException.class,()->new IslandCertificate.Signature("revision","policy","replay 1"),"not a token");
+    }
 
     // ---------------- format 6: pipe ports and the compressor (phase-ports WP5, plan 4.4) ----------------
 

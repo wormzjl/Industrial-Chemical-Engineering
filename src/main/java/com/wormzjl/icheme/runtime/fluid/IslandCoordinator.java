@@ -84,8 +84,8 @@ public final class IslandCoordinator {
             if(saved.isPresent()){var s=saved.orElseThrow();if(s.sinceTick()!=sinceTick||s.baseTick()!=baseTick||s.horizonTick()!=horizonTick)throw new IllegalArgumentException("Saved certificate disagrees with its island");}
         }
         @Override public String toString(){return "Certified[drift "+drift+", since "+sinceTick+", base "+baseTick+", horizon "+horizonTick+", largest flow "+largestFlow+(saved.isPresent()?"":", held")+"]";}
-        /** Equal when they say the same: the saved form is compared by its interval's ticks and its signature (which
-         * digests the graph), since the graphs and results it carries have no value equality of their own. */
+        /** Equal when they say the same: the saved form is compared by its interval's ticks and its signature, since the
+         * graphs and results it carries have no value equality of their own. */
         @Override public boolean equals(Object other) {
             return other instanceof Certified c&&Double.doubleToLongBits(drift)==Double.doubleToLongBits(c.drift)&&sinceTick==c.sinceTick&&baseTick==c.baseTick&&horizonTick==c.horizonTick
                     &&Double.doubleToLongBits(largestFlow)==Double.doubleToLongBits(c.largestFlow)&&saved.map(Certified::identity).equals(c.saved.map(Certified::identity));

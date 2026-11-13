@@ -167,7 +167,7 @@ final class F3Fixtures {
             var saved=c.saved().orElseThrow();var interval=saved.interval();
             var result2=relabel(interval.result(),nodeOffset,pipeOffset);
             var copy=new IslandCertificate.Saved(saved.kind(),saved.sinceTick(),saved.horizonTick(),new IslandCertificate.Interval(interval.startTick(),interval.endTick(),relabel(interval.before(),nodeOffset,pipeOffset),result2),
-                    IslandCertificate.Signature.of(model,policy,result2.graph()));
+                    IslandCertificate.Signature.of(model,policy));
             return new IslandCoordinator.Certified(c.kind(),c.sinceTick(),c.baseTick(),c.horizonTick(),c.largestFlow(),Optional.of(copy));
         });
         return new IslandCoordinator.Snapshot(id,s.revision(),relabel(s.graph(),nodeOffset,pipeOffset),s.clock(),s.allowance(),anchor,result,s.status(),Map.of(),certificate);
