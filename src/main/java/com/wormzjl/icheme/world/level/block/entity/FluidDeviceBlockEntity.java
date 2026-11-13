@@ -8,6 +8,7 @@ import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler;
 import com.wormzjl.icheme.world.inventory.FluidDeviceMenu;
 import com.wormzjl.icheme.world.level.block.EquipmentStructure;
 import com.wormzjl.icheme.world.level.block.FluidDeviceBlock;
+import com.wormzjl.icheme.world.level.block.Positions;
 import net.minecraft.core.*;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
@@ -186,7 +187,7 @@ public final class FluidDeviceBlockEntity extends ModelledBlockEntity implements
         if(id<=0)throw new IllegalStateException("Invalid fluid identity");
         if(level instanceof ServerLevel serverLevel) {
             var world=FluidWorldAuthority.find(serverLevel.getServer()).orElseThrow();
-            var p=new PhysicalFluidTopology.Position(level.dimension().location().toString(),worldPosition.getX(),worldPosition.getY(),worldPosition.getZ());
+            var p=Positions.of(level,worldPosition);
             var record=world.at(p).orElseThrow();
             if(record.device().id()!=id)throw new IllegalStateException("Fluid identity belongs to a different position");
             if(!standsFor(record.device()))throw new IllegalStateException("Fluid identity belongs to another kind of device");
@@ -202,7 +203,7 @@ public final class FluidDeviceBlockEntity extends ModelledBlockEntity implements
         trackOpenEnds();
         if(!(level instanceof ServerLevel serverLevel))return;
         FluidWorldAuthority.find(serverLevel.getServer()).ifPresent(world->{
-            var p=new PhysicalFluidTopology.Position(level.dimension().location().toString(),worldPosition.getX(),worldPosition.getY(),worldPosition.getZ());
+            var p=Positions.of(level,worldPosition);
             world.at(p).ifPresent(record->{
                 if(!bind(world,record.device()))return;
                 // Drawn geometry: onLoad runs once the chunk is in the level (Level.tickBlockEntities), so its loaded

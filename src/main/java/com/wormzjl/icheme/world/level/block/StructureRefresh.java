@@ -75,7 +75,7 @@ final class StructureRefresh {
     private static void restatePaint(ServerLevel level, BlockPos origin, EquipmentShape shape, Paint paint, String name) {
         var world = FluidWorldAuthority.find(level.getServer()).orElse(null);
         if (world == null) return;
-        var at = EquipmentStructure.position(level, origin);
+        var at = Positions.of(level, origin);
         var held = world.structure(at);
         if (held == null) {
             EquipmentStructure.record(level, origin, shape, paint, name);

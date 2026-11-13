@@ -101,14 +101,13 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
     public static BlockState connectedState(BlockState state,LevelReader level,BlockPos position) {
         if(!(level instanceof ServerLevel server))return state;
         var world=authority(server);if(world==null)return state;
-        int faces=world.drawnFaces(position(server,position));
+        int faces=world.drawnFaces(Positions.of(server,position));
         return faces<0?state:withFaces(state,faces);
     }
     /** {@code state} drawn joined through exactly {@code faces}, a bit per {@link Direction} ordinal. */
     public static BlockState withFaces(BlockState state,int faces){for(var direction:Direction.values())state=state.setValue(CONNECTIONS.get(direction),(faces>>direction.ordinal()&1)!=0);return state;}
     /** The level's fluid authority on the server thread; null off it or before the world opened it. */
     private static @Nullable FluidWorldAuthority authority(ServerLevel level){return level.getServer().isSameThread()?FluidWorldAuthority.find(level.getServer()).orElse(null):null;}
-    private static PhysicalFluidTopology.Position position(Level level,BlockPos position){return new PhysicalFluidTopology.Position(level.dimension().location().toString(),position.getX(),position.getY(),position.getZ());}
     @Override public RenderShape getRenderShape(BlockState state){return RenderShape.MODEL;}
     /**
      * A device's shape: its block less a texel at the sides. A full cube would make the chunk renderer light every flat
@@ -141,7 +140,7 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
         var state=defaultBlockState().setValue(FACING,facing);
         if(!(context.getLevel() instanceof ServerLevel server))return state;
         var world=authority(server);
-        return world==null?state:withFaces(state,world.placedFaces(position(server,context.getClickedPos()),kind,PhysicalFluidTopology.Direction.valueOf(facing.name())));
+        return world==null?state:withFaces(state,world.placedFaces(Positions.of(server,context.getClickedPos()),kind,PhysicalFluidTopology.Direction.valueOf(facing.name())));
     }
     public static BooleanProperty connection(Direction direction){return CONNECTIONS.get(direction);}
     /** Whether a line may meet this block through {@code direction}: a fitting or a filter takes lines only along its axis (the laying tool's ends). */
@@ -214,7 +213,7 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
     @Override protected void onPlace(BlockState state,Level level,BlockPos position,BlockState previous,boolean moved) {
         super.onPlace(state,level,position,previous,moved);if(!(level instanceof ServerLevel serverLevel)||registered)return;
         FluidWorldAuthority.find(serverLevel.getServer()).ifPresent(world->{
-            var p=new PhysicalFluidTopology.Position(level.dimension().location().toString(),position.getX(),position.getY(),position.getZ());
+            var p=Positions.of(level,position);
             if(previous.getBlock()!=this) {
                 var record=world.place(p,kind,PhysicalFluidTopology.Direction.valueOf(state.getValue(FACING).name()),cutoff(state),hasPressureValve(state),hasFilter(state),hasMover(state)?state.getValue(INLINE_MOVER).kind():TopologyCompiler.Kind.PIPE);
                 if(level.getBlockEntity(position) instanceof FluidDeviceBlockEntity entity)entity.bindIdentity(record.device().id());
@@ -226,7 +225,7 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
     @Override public BlockState playerWillDestroy(Level level,BlockPos pos,BlockState state,Player player){if(level.getBlockEntity(pos) instanceof com.wormzjl.icheme.runtime.instrument.Instrument.Holder h)h.instruments().recoverOnBreak(!player.isCreative());return super.playerWillDestroy(level,pos,state,player);}
     @Override protected void onRemove(BlockState state,Level level,BlockPos position,BlockState replacement,boolean moved) {
         if(!registered&&state.getBlock()!=replacement.getBlock()&&level instanceof ServerLevel serverLevel)FluidWorldAuthority.find(serverLevel.getServer()).ifPresent(world->{
-            var p=new PhysicalFluidTopology.Position(level.dimension().location().toString(),position.getX(),position.getY(),position.getZ());world.at(p).ifPresent(r->{boolean drops=!(level.getBlockEntity(position) instanceof com.wormzjl.icheme.runtime.instrument.Instrument.Holder h)||h.instruments().recoverOnBreak();world.instruments().recover(r.device().id(),level,position,com.wormzjl.icheme.runtime.instrument.InstrumentHosts.legacy(state),drops);world.remove(r.device().id());});
+            var p=Positions.of(level,position);world.at(p).ifPresent(r->{boolean drops=!(level.getBlockEntity(position) instanceof com.wormzjl.icheme.runtime.instrument.Instrument.Holder h)||h.instruments().recoverOnBreak();world.instruments().recover(r.device().id(),level,position,com.wormzjl.icheme.runtime.instrument.InstrumentHosts.legacy(state),drops);world.remove(r.device().id());});
         });
         super.onRemove(state,level,position,replacement,moved);
     }

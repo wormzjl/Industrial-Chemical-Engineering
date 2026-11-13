@@ -59,7 +59,7 @@ final class StructureRealignment {
         for (var it = queue.entrySet().iterator(); it.hasNext() && checked < limit && System.nanoTime() - deadline < 0; ) {
             var entry = it.next();
             var origin = entry.getKey();
-            var record = world.structure(EquipmentStructure.position(level, origin));
+            var record = world.structure(Positions.of(level, origin));
             if (record == null) {
                 it.remove();
                 continue;
@@ -159,7 +159,7 @@ final class StructureRealignment {
     private static boolean holdShaft(FluidWorldAuthority world, ServerLevel level, Vessel vessel, boolean on) {
         if (ShaftParts.kind(vessel.shape().kind()) == null) return false;
         var o = vessel.origin();
-        var u = world.shafts().unitAt(new com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Position(level.dimension().location().toString(), o.getX(), o.getY(), o.getZ()));
+        var u = world.shafts().unitAt(Positions.of(level, o));
         if (u == null || u.held() == on) return false;
         world.shafts().queue(new com.wormzjl.icheme.runtime.fluid.ShaftTrains.Hold(u.id(), on));
         return true;

@@ -115,7 +115,7 @@ public final class EquipmentStructure {
             if (level.getBlockEntity(vessel.origin().offset(cell.x(), cell.y(), cell.z())) instanceof EquipmentShellBlockEntity entity) entity.rename(name);
         // The registry's record holds the name too (registry first, W5c C4): a structure placed again takes it.
         var world = FluidWorldAuthority.find(level.getServer()).orElse(null);
-        var at = position(level, vessel.origin());
+        var at = Positions.of(level, vessel.origin());
         var held = world == null ? null : world.structure(at);
         if (held != null) world.structure(at, held.withName(com.wormzjl.icheme.science.equipment.DeviceName.clean(name)));
         return true;
@@ -203,7 +203,7 @@ public final class EquipmentStructure {
     static List<Long> heldAtNodes(FluidWorldAuthority world, ServerLevel level, Vessel vessel) {
         var ids = new ArrayList<Long>();
         for (var node : nodes(vessel)) {
-            var held = position(level, node);
+            var held = Positions.of(level, node);
             heldAt(world, held).ifPresent(r -> ids.add(r.device().id()));
         }
         return ids;
@@ -236,10 +236,6 @@ public final class EquipmentStructure {
         return nodes;
     }
 
-    static PhysicalFluidTopology.Position position(Level level, BlockPos at) {
-        return new PhysicalFluidTopology.Position(level.dimension().location().toString(), at.getX(), at.getY(), at.getZ());
-    }
-
     /**
      * The registry's record of the structure at {@code origin} (batch 2026-11-03-save-corruption, REGISTRY_FIRST_PLAN.md
      * 3.3): its shape and paint, or none when {@code shape} is null. The registry places the structure again from it. The
@@ -248,7 +244,7 @@ public final class EquipmentStructure {
     static void record(ServerLevel level, BlockPos origin, @Nullable EquipmentShape shape, @Nullable Paint paint, String name) {
         var world = FluidWorldAuthority.find(level.getServer()).orElse(null);
         if (world == null) return;
-        var at = position(level, origin);
+        var at = Positions.of(level, origin);
         var held = world.structure(at);
         if (shape == null) {
             if (held != null) world.structure(at, null);
