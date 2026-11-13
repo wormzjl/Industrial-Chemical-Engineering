@@ -625,7 +625,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
             if (d != null && d.kind() == ShaftNetwork.Kind.CREATIVE_MOTOR || d != null && (d.kind() == ShaftNetwork.Kind.CREATE_COUPLING||createDrivers.contains(d.id()))) rpm = driver(d).setSpeed();
             for (var e : run.train.shafts().entrySet()) {
                 double speed = rpm * e.getValue();
-                int pixels = d == null || speed <= 0 ? com.wormzjl.icheme.world.level.block.ShaftBlock.DEFAULT_SIZE
+                int pixels = d == null || speed <= 0 ? com.wormzjl.icheme.science.equipment.ProcessUnit.SHAFT_DEFAULT_SIZE
                         : com.wormzjl.icheme.science.equipment.ProcessUnit.shaftPixels(com.wormzjl.icheme.science.equipment.ProcessUnit.torque(rated / 1000, speed));
                 var u = units.get(e.getKey());
                 if (u != null && !Objects.equals(sizes.put(u.id(), pixels), pixels)) host.resize(u.position(), pixels);
@@ -1206,7 +1206,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
 
     /** The size shaft block {@code unit} was last drawn at, or the default before its train drew it (a read; the re-alignment places a lost block at it). */
     public int drawnSize(long unit) {
-        return sizes.getOrDefault(unit, com.wormzjl.icheme.world.level.block.ShaftBlock.DEFAULT_SIZE);
+        return sizes.getOrDefault(unit, com.wormzjl.icheme.science.equipment.ProcessUnit.SHAFT_DEFAULT_SIZE);
     }
 
     /** Unit {@code unit} as the ledger holds it, or null (a read; W7's pages). */
