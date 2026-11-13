@@ -51,9 +51,13 @@ class MaterialCatalogTest {
         assertFalse(MaterialRuntime.with(science,ID,()->isCurrent(ID,before.scientificRevision())));
         assertTrue(MaterialRuntime.with(names,ID,()->isCurrent(ID,before.scientificRevision())));
         var input=boundCdu();
+        // The column's identity (F1 of batch 2026-11-13-codebase-review: the scientific revision and the pairs' derivation)
+        // moves with the bump and stands through the name edit.
+        assertNotEquals(V3PengRobinsonThermo.columnIdentity(bundled,ID),V3PengRobinsonThermo.columnIdentity(science,ID));
+        assertEquals(V3PengRobinsonThermo.columnIdentity(bundled,ID),V3PengRobinsonThermo.columnIdentity(names,ID));
         // A molar mass is outside what the neural model computes with (O7 of batch 2026-11-04-open-thermo-data): the model
-        // still binds, and its seed names the new identity.
-        assertEquals(science.requirePackage(ID).scientificRevision(),MaterialRuntime.with(science,ID,
+        // still binds, and its seed names the new column identity.
+        assertEquals(V3PengRobinsonThermo.columnIdentity(science,ID),MaterialRuntime.with(science,ID,
                 ()->V3NeuralRegistry.bundled().predict(input,V3SolveControl.UNBOUNDED).orElseThrow().propertyRevision()));
     }
     /**
@@ -350,7 +354,7 @@ class MaterialCatalogTest {
                 try { if(!release.await(10,TimeUnit.SECONDS))throw new AssertionError("test release timeout"); }
                 catch(InterruptedException e){Thread.currentThread().interrupt();throw new AssertionError(e);}
                 assertEquals(.01801528,V3WaterProperties.molarMass());
-                assertEquals(original.requirePackage(ID).scientificRevision(),V3PengRobinsonThermo.fromRegisteredPackage(ID).datasetRevision());
+                assertEquals(V3PengRobinsonThermo.columnIdentity(original,ID),V3PengRobinsonThermo.fromRegisteredPackage(ID).datasetRevision());
                 return MaterialRuntime.current();
             }));
             assertTrue(entered.await(10,TimeUnit.SECONDS));MaterialRuntime.publish(replacement);release.countDown();
