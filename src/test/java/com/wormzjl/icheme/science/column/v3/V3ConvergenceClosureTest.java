@@ -99,8 +99,8 @@ class V3ConvergenceClosureTest {
         }
         V3AcceptanceAudit.Check equilibrium = check(result, "EQUILIBRIUM");
         assertEquals(LOOSE_CLOSURE, equilibrium.limit(), 0.0, "the equilibrium family limit is the closure itself");
-        assertEquals(1.0, check(result, "LOCAL_COMPONENT_BALANCE").limit(), 0.0);
-        assertEquals(1.0, check(result, "ENERGY_BALANCE").limit(), 0.0);
+        assertEquals(LOOSE_CLOSURE, check(result, "LOCAL_COMPONENT_BALANCE").limit(), 0.0, "the residual families share the closure (D4)");
+        assertEquals(LOOSE_CLOSURE, check(result, "ENERGY_BALANCE").limit(), 0.0);
 
         String revision = result.formulationRevision();
         assertTrue(revision.endsWith("-closure1e-3"), () -> label + " revision " + revision);

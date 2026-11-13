@@ -34,10 +34,11 @@ final class V3AcceptanceAuditor {
     /**
      * Audits against the convergence closure the candidate was solved to.
      *
-     * <p>Only the limits that are closure statements move with it: the equilibrium row family, the condenser
-     * phase split, and the two independently recomputed energy closures. The local component and tray energy
-     * row families keep their limit of one, and the two truncation defect budgets are mass budgets of the
-     * flow floor, not of the Newton stop, and keep theirs.</p>
+     * <p>Only the limits that are closure statements move with it: the three residual row families (local
+     * component balance, equilibrium, tray energy: the Newton stop bounds every scaled row by the closure, D4 of
+     * batch 2026-11-13-codebase-review), the condenser phase split, and the two independently recomputed energy
+     * closures. The two truncation defect budgets are mass budgets of the flow floor, not of the Newton stop, and
+     * keep theirs.</p>
      */
     V3AcceptanceAuditor(
             V3ColumnProblem problem, V3ThermoModel thermo, double feedMolarEnthalpyJoulesPerMol,
@@ -51,7 +52,7 @@ final class V3AcceptanceAuditor {
         this.closureTolerance = V3ConvergenceEvidence.requireClosure(closureTolerance);
     }
 
-    /** Equilibrium and condenser-split limit: the frozen absolute floor, loosened only by an authored closure. */
+    /** The residual families' and the condenser split's limit: the frozen absolute floor, loosened only by an authored closure (D4). */
     private double closureLimit() {
         return Math.max(EQUILIBRIUM_LIMIT, closureTolerance);
     }
@@ -83,11 +84,11 @@ final class V3AcceptanceAuditor {
             }
         }
         checks.add(maximumFamily(residual, V3DegreeOfFreedomLedger.EquationFamily.COMPONENT_MATERIAL_BALANCE,
-                "LOCAL_COMPONENT_BALANCE", 1.0));
+                "LOCAL_COMPONENT_BALANCE", closureLimit()));
         checks.add(maximumFamily(residual, V3DegreeOfFreedomLedger.EquationFamily.VAPOR_LIQUID_EQUILIBRIUM,
                 "EQUILIBRIUM", closureLimit()));
         checks.add(maximumFamily(residual, V3DegreeOfFreedomLedger.EquationFamily.ENERGY_BALANCE,
-                "ENERGY_BALANCE", 1.0));
+                "ENERGY_BALANCE", closureLimit()));
         checks.add(interiorPhaseIdentity(state, workspace, control));
         if (problem.truncationSupport().truncatedPointCount() > 0) checks.add(truncationMassDefect(state));
         if (problem.truncationSupport().onePhasePointCount() > 0) {
