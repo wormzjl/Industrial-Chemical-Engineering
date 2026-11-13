@@ -92,7 +92,9 @@ public final class SentDesignTags {
                 continue;
             }
             try {
-                var column = entry.contains("Column", Tag.TAG_COMPOUND) ? ColumnDesignTags.read(entry.getCompound("Column")) : null;
+                int index = i;
+                var column = entry.contains("Column", Tag.TAG_COMPOUND)
+                        ? ColumnDesignTags.read(entry.getCompound("Column"), repair -> repairs.add("design " + index + ": " + repair)) : null;
                 int count = entry.contains("Count", Tag.TAG_INT) ? entry.getInt("Count") : 1;
                 designs.add(new SentDesign(entry.getString("Tag"), entry.getString("Member"), count, shape.shape(), column));
             } catch (IllegalArgumentException invalid) {
