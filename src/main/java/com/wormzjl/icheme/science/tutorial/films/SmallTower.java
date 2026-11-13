@@ -193,7 +193,7 @@ public final class SmallTower {
 
     /** A round plate of radius {@code r} from {@code y0} to {@code y1}, open beyond the chord {@code chord} (signed, along {@code across}). */
     static List<Mesh.Polygon> plate(double x, double z, double r, double chord, double[] across, double[] toCamera, double y0, double y1) {
-        double sign = Math.signum(chord), a0 = Math.acos(Math.abs(chord) / r);
+        double sign = Math.signum(chord), a0 = DeterministicMath.acos(Math.abs(chord) / r);
         var ring = new ArrayList<double[]>();
         int steps = 24;
         // From one chord end round the far side of the circle to the other (the open segment lies beyond the chord).
@@ -225,7 +225,7 @@ public final class SmallTower {
         for (int i = 0; i < n; i++) {
             var a = ccw.get(i);
             var b = ccw.get((i + 1) % n);
-            double nx = b[1] - a[1], nz = -(b[0] - a[0]), l = Math.hypot(nx, nz);
+            double nx = b[1] - a[1], nz = -(b[0] - a[0]), l = Math.sqrt(nx * nx + nz * nz);
             if (!(l > 0)) continue;
             nx /= l;
             nz /= l;
