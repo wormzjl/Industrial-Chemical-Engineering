@@ -621,8 +621,8 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         sizes.keySet().retainAll(units.keySet());
         for (var run : runs.values()) {
             var d = run.train.driver() == 0 ? null : units.get(run.train.driver());
-            double rated = d == null ? 0 : driver(d, false).limit(), rpm = d == null ? 0 : d.designSpeed();
-            if (d != null && d.kind() == ShaftNetwork.Kind.CREATIVE_MOTOR || d != null && (d.kind() == ShaftNetwork.Kind.CREATE_COUPLING||createDrivers.contains(d.id()))) rpm = driver(d, false).setSpeed();
+            double rated = d == null ? 0 : driver(d).limit(), rpm = d == null ? 0 : d.designSpeed();
+            if (d != null && d.kind() == ShaftNetwork.Kind.CREATIVE_MOTOR || d != null && (d.kind() == ShaftNetwork.Kind.CREATE_COUPLING||createDrivers.contains(d.id()))) rpm = driver(d).setSpeed();
             for (var e : run.train.shafts().entrySet()) {
                 double speed = rpm * e.getValue();
                 int pixels = d == null || speed <= 0 ? com.wormzjl.icheme.world.level.block.ShaftBlock.DEFAULT_SIZE
@@ -877,10 +877,13 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         if (prime) run.available = primeMovers.available(d.id());
         var measure = prime ? new ShaftTrain.Measure(demand, run.available, false, Double.NaN, Double.NaN, state.previousSpeed(), state.previousMeasured(), primeMovers.firing(d.id()))
                 : new ShaftTrain.Measure(demand, run.available, steamShort, run.measured, run.target, state.previousSpeed(), state.previousMeasured(), run.available > 0 || idleSupply);
+        // N7: the train's gearboxes limit the driver's power to their ratings (a gearbox rated 0, from an older save, limits nothing).
+        double gear = ShaftNetwork.gearLimit(train, id -> {var u = topology.shaft(id); return u == null ? 0 : u.ratedPower();}, run::power);
+        measure = measure.withGearLimit(gear);
         // A motor needs its live feed and buffered energy: its draw is booked at this step, from its last booking to now, at the
         // power this step decided (reading A59); one that runs short stops here (NO POWER) and restarts on the cadence.
         boolean motor = d.kind() == ShaftNetwork.Kind.MOTOR && electric != null;
-        var driver = driver(d, turbine || valve != null, !motor || electric.powered(d.id()));
+        var driver = driver(d, !motor || electric.powered(d.id()));
         if(Double.isFinite(requestedRpm))driver=driver.atSpeed(Math.clamp(requestedRpm,driver.designSpeed()*com.wormzjl.icheme.science.machine.Motor.LOWEST_SPEED,com.wormzjl.icheme.science.machine.Motor.MAXIMUM_RPM));
         var step = ShaftTrain.step(driver, state.speed(), measure);
         if(automatic!=null&&driver.running()&&driver.powered()&&step.trip()==ShaftTrain.Trip.NONE)
@@ -892,11 +895,12 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
             }
             step=new ShaftTrain.Step(step.speed(),step.trip(),step.status(),step.governorPower(),step.speed()>0?com.wormzjl.icheme.science.machine.Motor.electricPower(actualDemand,d.ratedPower(),d.poles(),true):0);
         }
-        if (motor && electric.draw(d.id(), step.electricPower(), now)) step = ShaftTrain.step(driver(d, valve != null, false), state.speed(), measure);
+        if (motor && electric.draw(d.id(), step.electricPower(), now)) step = ShaftTrain.step(driver(d, false), state.speed(), measure);
         // Publish only finite mechanical capacity left after the internal machines. External demand is booked once above.
         double internal=0;for(var m:train.driven())if(!createLoads.contains(m.id()))internal+=run.power(m.id())/m.efficiency();
         double capacity=driver.drive()==ShaftTrain.Drive.TURBINE?Math.min(driver.limit(),run.available):driver.limit();
         if(driver.drive()==ShaftTrain.Drive.VARIABLE_MOTOR)capacity=com.wormzjl.icheme.science.machine.Motor.availablePower(capacity,driver.designSpeed(),step.speed());
+        capacity=Math.min(capacity,gear);
         for(var m:train.driven())if(createLoads.contains(m.id())){var u=topology.shaft(m.id());if(u!=null)host.output(u.position(),step.speed()*m.ratio(),step.speed()>0?Math.max(0,capacity-internal)*m.efficiency()/Math.max(1,train.driven().stream().filter(part->createLoads.contains(part.id())).count()):0);}
         run.trip = step.trip();
         run.status = step.status();
@@ -975,13 +979,13 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
     }
 
     /** The step's driver for unit {@code d}. */
-    private ShaftTrain.Driver driver(ShaftUnit d, boolean governed) {
-        return driver(d, governed, true);
+    private ShaftTrain.Driver driver(ShaftUnit d) {
+        return driver(d, true);
     }
 
     /** The step's driver for unit {@code d}, with power ({@code powered}) or without. */
-    private ShaftTrain.Driver driver(ShaftUnit d, boolean governed, boolean powered) {
-        var drive = createDrivers.contains(d.id())?ShaftTrain.Drive.CREATE:d.drive(d.drive() == com.wormzjl.icheme.science.equipment.MachineDuty.Drive.VARIABLE);
+    private ShaftTrain.Driver driver(ShaftUnit d, boolean powered) {
+        var drive = createDrivers.contains(d.id())?ShaftTrain.Drive.CREATE:d.trainDrive();
         if (drive == null) drive = ShaftTrain.Drive.CREATIVE;
         double design = d.designSpeed() > 0 ? d.designSpeed() : ShaftTrain.CREATIVE_SPEED;
         var s = d.settings();
@@ -990,9 +994,9 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
             var in = create.get(d.position());
             double rpm = in == null ? 0 : in.rpm(), limit = in == null ? 0 : Math.max(0, in.stress()) * wattsPerStress();
             return new ShaftTrain.Driver(drive, 0, d.designSpeed() > 0 ? d.designSpeed() : com.wormzjl.icheme.science.machine.CreateCoupling.DESIGN_SPEED, 0, true,
-                    ShaftTrain.Mode.SPEED, rpm, limit, ShaftTrain.Trip.NONE, false, true);
+                    ShaftTrain.Mode.SPEED, rpm, limit, ShaftTrain.Trip.NONE, true);
         }
-        return new ShaftTrain.Driver(drive, d.ratedPower(), design, d.poles(), s.running(), s.mode(), s.setPoint(), s.powerLimit(), d.trip(), governed, powered);
+        return new ShaftTrain.Driver(drive, d.ratedPower(), design, d.poles(), s.running(), s.mode(), s.setPoint(), s.powerLimit(), d.trip(), powered);
     }
 
     /**

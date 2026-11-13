@@ -27,5 +27,25 @@ class MoverHealthStatusTest {
     @Test void aMoverThatDoesNotWearKeepsItsLine() {
         assertFalse(MachineHealth.worn(LIQUID_RING));
         assertEquals("RUNNING / NORMAL",FluidWorldAuthority.withHealth("RUNNING / NORMAL",LIQUID_RING,"FAILED"));
+        assertFalse(MachineHealth.worn(FRAME),"a reciprocating frame has no wear mode");
+        assertEquals("RUNNING / NORMAL",FluidWorldAuthority.withHealth("RUNNING / NORMAL",FRAME,"FAILED"));
+    }
+    private static final FlowControl.Mover CENTRIFUGAL_COMPRESSOR=new FlowControl.Machine(new com.wormzjl.icheme.science.machine.CentrifugalCompressor(.02,24400,.78),1,true);
+    private static final FlowControl.Mover FRAME=new FlowControl.Compressor(.1,3);
+    /** N2: a centrifugal compressor wears on wet gas and says so on its line. */
+    @Test void aCentrifugalCompressorReadsWetGas() {
+        assertTrue(MachineHealth.worn(CENTRIFUGAL_COMPRESSOR));
+        assertEquals(java.util.List.of(com.wormzjl.icheme.science.machine.Wear.Fault.WET_GAS),MachineHealth.faults(CENTRIFUGAL_COMPRESSOR));
+        assertEquals("RUNNING / MOVER_LAW / WET GAS",FluidWorldAuthority.withHealth("RUNNING / MOVER_LAW",CENTRIFUGAL_COMPRESSOR,"WET GAS"));
+        assertEquals("FAILED: use a repair kit / RUNNING / MOVER_LAW",FluidWorldAuthority.withHealth("RUNNING / MOVER_LAW",CENTRIFUGAL_COMPRESSOR,"FAILED"));
+    }
+    /** N4: a steam turbine, a control and not a mover, wears on a wet exhaust and says so on its line. */
+    @Test void aSteamTurbineReadsWetExhaust() {
+        var turbine=new FlowControl.Turbine(com.wormzjl.icheme.science.machine.SteamTurbine.rated(55e3));
+        assertTrue(MachineHealth.worn(turbine));
+        assertEquals(java.util.List.of(com.wormzjl.icheme.science.machine.Wear.Fault.WET_EXHAUST),MachineHealth.faults(turbine));
+        assertEquals("RUNNING / VALVE_OPEN / WET EXHAUST",FluidWorldAuthority.withHealth("RUNNING / VALVE_OPEN",turbine,"WET EXHAUST"));
+        assertEquals("FAILED: use a repair kit / RUNNING / VALVE_OPEN",FluidWorldAuthority.withHealth("RUNNING / VALVE_OPEN",turbine,"FAILED"));
+        assertFalse(MachineHealth.worn(new FlowControl.Passive()),"a pipe does not wear");
     }
 }

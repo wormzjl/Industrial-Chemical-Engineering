@@ -17,7 +17,7 @@ class ShaftTrainFuelTest {
     private static final double RATED = 30e6, RPM = 3000;
 
     private static Driver set(double setPoint) {
-        return new Driver(Drive.FUEL, RATED, RPM, 0, true, Mode.SPEED, setPoint, 0, Trip.NONE, true);
+        return new Driver(Drive.FUEL, RATED, RPM, 0, true, Mode.SPEED, setPoint, 0, Trip.NONE);
     }
 
     private static Measure fuel(double demand, double available) {
@@ -50,7 +50,7 @@ class ShaftTrainFuelTest {
     }
 
     @Test void stoppedItStands() {
-        var stopped = new Driver(Drive.FUEL, RATED, RPM, 0, false, Mode.SPEED, 1, 0, Trip.NONE, true);
+        var stopped = new Driver(Drive.FUEL, RATED, RPM, 0, false, Mode.SPEED, 1, 0, Trip.NONE);
         assertEquals(0, ShaftTrain.step(stopped, RPM, fuel(10e6, 30e6)).speed(), 0);
     }
 }

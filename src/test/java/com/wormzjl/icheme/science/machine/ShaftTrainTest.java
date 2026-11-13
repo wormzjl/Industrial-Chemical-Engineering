@@ -15,38 +15,55 @@ class ShaftTrainTest {
     private static final double RHO = 800, RATED = PUMP.shaftPower(100 / 3600.0, 1, RHO);
 
     private static Driver motor(Drive drive, double rated) {
-        return new Driver(drive, rated, 2950, 2, true, Mode.SPEED, 0, 0, Trip.NONE, false);
+        return new Driver(drive, rated, 2950, 2, true, Mode.SPEED, 0, 0, Trip.NONE);
     }
 
-    private static Driver turbine(boolean governed) {
-        return new Driver(Drive.TURBINE, 55e3, 6000, 0, true, Mode.SPEED, 0, 0, Trip.NONE, governed);
+    private static Driver turbine() {
+        return new Driver(Drive.TURBINE, 55e3, 6000, 0, true, Mode.SPEED, 0, 0, Trip.NONE);
     }
 
-    /** Case 1: the pump's 24.9 kW on a 30 kW 2-pole motor, 26.7 kW drawn (534 FE/t at 2.5 J/FE, shown, not booked). */
+    /**
+     * Case 1: the pump's 24.9 kW on a 30 kW 2-pole motor on its variable-speed drive (every motor, M-03): 26.7 kW over the
+     * IE3 93.3 %, over the drive's 97 %, 27.5 kW drawn (550 FE/t at 2.5 J/FE, shown, not booked).
+     */
     @Test
-    void case1APumpOnAFixedMotorRunsAndDrawsItsElectricPower() {
+    void case1APumpOnAVariableSpeedMotorRunsAndDrawsItsElectricPower() {
         assertEquals(24.906e3, RATED, .001 * 24.906e3, "ρ g Q H / η");
-        var step = ShaftTrain.step(motor(Drive.FIXED_MOTOR, 30e3), 2950, Measure.of(RATED));
+        var step = ShaftTrain.step(motor(Drive.VARIABLE_MOTOR, 30e3), 2950, Measure.of(RATED));
         assertEquals(2950, step.speed(), 0);
         assertEquals(Trip.NONE, step.trip());
         assertEquals("RUNNING", step.status());
-        assertEquals(26.694e3, step.electricPower(), .001 * 26.694e3, "24.9 kW over the IE3 93.3 %");
-        assertEquals(534, step.electricPower() / 2.5 / 20, 1, "FE per tick");
+        assertEquals(26.694e3 / Motor.DRIVE_EFFICIENCY, step.electricPower(), .001 * 27.519e3, "24.9 kW over the IE3 93.3 % and the drive's 97 %");
+        assertEquals(550, step.electricPower() / 2.5 / 20, 1, "FE per tick");
     }
 
-    /** At 150 % flow the pump takes 1.325 times its rated power, 33.0 kW: the 30 kW fixed motor trips and stands. */
+    /**
+     * M-03: no step trips any more, but a unit saved tripped (OVERLOAD or OVERSPEED, by name) still shows its trip, stands
+     * whatever its load, and waits for the player's reset; reset, it runs again.
+     */
     @Test
-    void case1AFixedMotorTripsOnOverloadAndStaysTripped() {
+    void aSavedLatchedTripStillShowsAndStandsUntilItsReset() {
+        var overload = new Driver(Drive.VARIABLE_MOTOR, 30e3, 2950, 2, true, Mode.SPEED, 0, 0, Trip.OVERLOAD);
+        var overspeed = new Driver(Drive.TURBINE, 55e3, 6000, 0, true, Mode.SPEED, 0, 0, Trip.OVERSPEED);
+        assertTrue(Trip.OVERLOAD.latched() && Trip.OVERSPEED.latched() && !Trip.NO_POWER.latched());
+        for (double load : List.of(0.0, RATED)) {
+            var stood = ShaftTrain.step(overload, 2950, Measure.of(load));
+            assertEquals(0, stood.speed(), 0);
+            assertEquals(Trip.OVERLOAD, stood.trip());
+            assertEquals("TRIPPED: OVERLOAD", stood.status());
+        }
+        var turbineStood = ShaftTrain.step(overspeed, 6000, new Measure(RATED, RATED, false, Double.NaN, Double.NaN, Double.NaN, Double.NaN));
+        assertEquals(0, turbineStood.speed(), 0);
+        assertEquals("TRIPPED: OVERSPEED", turbineStood.status());
+        assertEquals(0, turbineStood.governorPower(), 0, "a tripped turbine asks no steam");
+        // The reset clears the trip (ShaftTrains.Reset; ShaftCouplingTest): the driver runs again.
+        assertEquals("RUNNING", ShaftTrain.step(motor(Drive.VARIABLE_MOTOR, 30e3), 2950, Measure.of(RATED)).status());
+        // At 150 % flow (33.0 kW) the 30 kW motor's drive limits its current instead of tripping.
         double demand = PUMP.shaftPower(1.5 * 100 / 3600.0, 1, RHO);
         assertEquals(33.000e3, demand, .001 * 33e3);
-        var step = ShaftTrain.step(motor(Drive.FIXED_MOTOR, 30e3), 2950, Measure.of(demand));
-        assertEquals(Trip.OVERLOAD, step.trip());
-        assertEquals(0, step.speed(), 0);
-        assertEquals("TRIPPED: OVERLOAD", step.status());
-        // Latched: a step with the trip set stands at zero whatever the load, until the player resets it.
-        var tripped = new Driver(Drive.FIXED_MOTOR, 30e3, 2950, 2, true, Mode.SPEED, 0, 0, Trip.OVERLOAD, false);
-        assertEquals(0, ShaftTrain.step(tripped, 0, Measure.of(0)).speed(), 0);
-        assertEquals("TRIPPED: OVERLOAD", ShaftTrain.step(tripped, 0, Measure.of(0)).status());
+        var limited = ShaftTrain.step(motor(Drive.VARIABLE_MOTOR, 30e3), 2950, Measure.of(demand));
+        assertEquals(Trip.NONE, limited.trip());
+        assertEquals("CURRENT LIMITED", limited.status());
     }
 
     /** Below base speed the VFD is torque-limited: P_available ∝ s and a friction load P ∝ s³. */
@@ -70,7 +87,7 @@ class ShaftTrainTest {
     void case2AGovernedTurbineFeedsItsDemandForward() {
         var design = SteamTurbine.rated(55e3);
         assertEquals(.45, design.efficiency(), 1e-12);
-        var step = ShaftTrain.step(turbine(true), 6000, new Measure(RATED, RATED, false, Double.NaN, Double.NaN, Double.NaN, Double.NaN));
+        var step = ShaftTrain.step(turbine(), 6000, new Measure(RATED, RATED, false, Double.NaN, Double.NaN, Double.NaN, Double.NaN));
         assertEquals(6000, step.speed(), 0);
         assertEquals("RUNNING", step.status());
         assertEquals(RATED, step.governorPower(), 1e-9 * RATED, "at the set speed, the demand there");
@@ -78,41 +95,46 @@ class ShaftTrainTest {
         assertEquals(.10562, steam, 1e-3 * .10562);
         assertEquals(15.27, steam * 3600 / (RATED / 1000), .01, "kg/kWh");
         // Below its set speed, the governor feeds the demand at the set speed forward: the cube law.
-        assertEquals(RATED, ShaftTrain.step(turbine(true), 5400, new Measure(RATED * cube(.9), RATED, false, Double.NaN, Double.NaN, Double.NaN, Double.NaN)).governorPower(), 1e-9 * RATED);
+        assertEquals(RATED, ShaftTrain.step(turbine(), 5400, new Measure(RATED * cube(.9), RATED, false, Double.NaN, Double.NaN, Double.NaN, Double.NaN)).governorPower(), 1e-9 * RATED);
     }
 
+    /**
+     * No steam work cannot turn an unloaded turbine; booked steam work starts it at its set speed, and its governor holds it
+     * there on any surplus, unloaded too (M-03: every turbine is governed, the ungoverned overspeed is gone).
+     */
     @Test
-    void noSteamWorkCannotTurnOrOverspeedAnUnloadedTurbine() {
-        for (boolean governed : List.of(false, true)) {
-            for (double speed : List.of(0.0, 6000.0, 12000.0)) {
-                var step = ShaftTrain.step(turbine(governed), speed, Measure.of(0));
-                assertEquals(0, step.speed());
-                assertEquals(Trip.NONE, step.trip());
-                assertEquals("STEAM LIMITED", step.status());
-            }
+    void noSteamWorkCannotTurnAnUnloadedTurbineAndASurplusCannotOverspeedIt() {
+        for (double speed : List.of(0.0, 6000.0, 12000.0)) {
+            var step = ShaftTrain.step(turbine(), speed, Measure.of(0));
+            assertEquals(0, step.speed());
+            assertEquals(Trip.NONE, step.trip());
+            assertEquals("STEAM LIMITED", step.status());
         }
-        var startup = ShaftTrain.step(turbine(true), 0, Measure.of(0));
+        var startup = ShaftTrain.step(turbine(), 0, Measure.of(0));
         assertEquals(55e3, startup.governorPower(), "the stopped governor can request steam without claiming rotation");
-        var supplied = ShaftTrain.step(turbine(false), 0, new Measure(0, RATED, false, Double.NaN, Double.NaN, Double.NaN, Double.NaN));
+        var supplied = ShaftTrain.step(turbine(), 0, new Measure(0, RATED, false, Double.NaN, Double.NaN, Double.NaN, Double.NaN));
         assertEquals(6000, supplied.speed(), "booked fluid work permits startup");
-        assertEquals(Trip.OVERSPEED, ShaftTrain.step(turbine(false), supplied.speed(),
-                new Measure(0, RATED, false, Double.NaN, Double.NaN, Double.NaN, Double.NaN)).trip(), "a real unloaded power surplus still trips");
+        var surplus = ShaftTrain.step(turbine(), supplied.speed(), new Measure(0, RATED, false, Double.NaN, Double.NaN, Double.NaN, Double.NaN));
+        assertEquals(6000, surplus.speed(), "an unloaded surplus holds the set speed");
+        assertEquals(Trip.NONE, surplus.trip());
+        assertEquals(0, surplus.governorPower(), "no load asks no steam");
+        assertEquals(5400, SpeedControl.balance(5400, RATED, 0), "without a load the balance holds the speed");
     }
 
     @Test
     void internalGoverningHoldsSpeedOnSurplusAndClosesAdmissionAtNoLoad() {
         for (double available : List.of(RATED, 2 * RATED, 10 * RATED)) {
-            var step = ShaftTrain.step(turbine(true), 6000, new Measure(RATED, available, false, Double.NaN, Double.NaN, Double.NaN, Double.NaN));
+            var step = ShaftTrain.step(turbine(), 6000, new Measure(RATED, available, false, Double.NaN, Double.NaN, Double.NaN, Double.NaN));
             assertEquals(6000, step.speed());
             assertEquals(Trip.NONE, step.trip());
             assertEquals(RATED, step.governorPower(), 1e-9);
         }
-        var unloaded = ShaftTrain.step(turbine(true), 6000, new Measure(0, 0, false, Double.NaN, Double.NaN, Double.NaN, Double.NaN, true));
+        var unloaded = ShaftTrain.step(turbine(), 6000, new Measure(0, 0, false, Double.NaN, Double.NaN, Double.NaN, Double.NaN, true));
         assertEquals(6000, unloaded.speed(), "closed admission holds an established unloaded speed while steam pressure remains available");
         assertEquals(0, unloaded.governorPower(), "no shaft load requests no steam work");
-        assertEquals(0, ShaftTrain.step(turbine(true), 0, new Measure(0, 0, false, Double.NaN, Double.NaN, Double.NaN, Double.NaN, true)).speed(), "supply pressure alone cannot start it before work is booked");
-        assertEquals(0, ShaftTrain.step(turbine(true), 6000, Measure.of(0)).speed(), "loss of admission supply stops it");
-        var limited = ShaftTrain.step(turbine(true), 6000, new Measure(RATED, RATED / 4, false, Double.NaN, Double.NaN, Double.NaN, Double.NaN));
+        assertEquals(0, ShaftTrain.step(turbine(), 0, new Measure(0, 0, false, Double.NaN, Double.NaN, Double.NaN, Double.NaN, true)).speed(), "supply pressure alone cannot start it before work is booked");
+        assertEquals(0, ShaftTrain.step(turbine(), 6000, Measure.of(0)).speed(), "loss of admission supply stops it");
+        var limited = ShaftTrain.step(turbine(), 6000, new Measure(RATED, RATED / 4, false, Double.NaN, Double.NaN, Double.NaN, Double.NaN));
         assertTrue(limited.speed() > 0 && limited.speed() < 6000, "meeting a mass target cannot create missing shaft power");
         assertEquals("STEAM LIMITED", limited.status());
     }
@@ -123,7 +145,7 @@ class ShaftTrainTest {
         double available = .080 * .45 * 524e3, speed = 6000;
         assertEquals(18.864e3, available, 1);
         for (double share : List.of(.95475, .93290)) {
-            var step = ShaftTrain.step(turbine(true), speed, new Measure(RATED * cube(speed / 6000), available, true, Double.NaN, Double.NaN, Double.NaN, Double.NaN));
+            var step = ShaftTrain.step(turbine(), speed, new Measure(RATED * cube(speed / 6000), available, true, Double.NaN, Double.NaN, Double.NaN, Double.NaN));
             assertEquals("STEAM LIMITED", step.status());
             speed = step.speed();
             assertEquals(share, speed / 6000, 1e-3 * share);
@@ -131,22 +153,25 @@ class ShaftTrainTest {
         assertEquals(.91154, DeterministicCube.root(available / RATED), 1e-5, "the balance");
     }
 
-    /** An ungoverned turbine whose pump's discharge closes: demand 8.7 kW (35 %), s' = (24.9/8.7)^(1/6) = 1.19, past 1.10: it trips. */
+    /**
+     * A turbine whose pump's discharge closes: demand 8.7 kW (35 %) against the 24.9 kW its steam gave. The balance would
+     * be s' = (24.9/8.7)^(1/6) = 1.19 of its speed; the governor shuts its admission to the demand and holds its set speed.
+     */
     @Test
-    void case2AnUngovernedTurbineOverspeedsAndTrips() {
+    void case2AGovernedTurbineHoldsItsSetSpeedWhenItsPumpsDischargeCloses() {
         double shutoff = PUMP.shaftPower(0, 1, RHO);
         assertEquals(.35 * RATED, shutoff, 1e-9 * RATED);
-        var step = ShaftTrain.step(turbine(false), 6000, new Measure(shutoff, RATED, false, Double.NaN, Double.NaN, Double.NaN, Double.NaN));
-        assertEquals(Trip.OVERSPEED, step.trip());
-        assertEquals("TRIPPED: OVERSPEED", step.status());
         assertEquals(1.19121, SpeedControl.balance(1, RATED, shutoff), 1e-3 * 1.19121);
-        // A governed one shuts its valve and holds its set speed.
-        var governed = ShaftTrain.step(turbine(true), 6000, new Measure(shutoff, RATED, false, Double.NaN, Double.NaN, Double.NaN, Double.NaN));
+        var governed = ShaftTrain.step(turbine(), 6000, new Measure(shutoff, RATED, false, Double.NaN, Double.NaN, Double.NaN, Double.NaN));
         assertEquals(6000, governed.speed(), 0);
+        assertEquals(Trip.NONE, governed.trip());
         assertEquals(shutoff, governed.governorPower(), 1e-9 * shutoff);
     }
 
-    /** A 796 kW compressor through a 4.27 gearbox at 0.98 demands 812 kW of a 1 MW 2-pole motor, which draws 848 kW. */
+    /**
+     * A 796 kW compressor through a 4.27 gearbox at 0.98 demands 812 kW of a 1 MW 2-pole motor, 848 kW over its 95.8 %, and
+     * through its drive's 97 % it draws 874 kW.
+     */
     @Test
     void aGearboxTrainDemandsItsMachinesPowerOverTheGearEfficiency() {
         var trains = ShaftNetwork.compile(List.of(
@@ -160,15 +185,80 @@ class ShaftTrainTest {
         assertEquals(4.27, driven.ratio(), 0);
         double demand = 796e3 / driven.efficiency();
         assertEquals(812.24e3, demand, .001 * 812.24e3);
-        var step = ShaftTrain.step(new Driver(Drive.FIXED_MOTOR, 1e6, 2950, 2, true, Mode.SPEED, 0, 0, Trip.NONE, false), 2950, Measure.of(demand));
+        var step = ShaftTrain.step(new Driver(Drive.VARIABLE_MOTOR, 1e6, 2950, 2, true, Mode.SPEED, 0, 0, Trip.NONE), 2950, Measure.of(demand));
         assertEquals("RUNNING", step.status());
-        assertEquals(847.85e3, step.electricPower(), .001 * 847.85e3, "over the IE3 95.8 % of a 1 MW motor");
+        assertEquals(847.85e3 / Motor.DRIVE_EFFICIENCY, step.electricPower(), .001 * 874.07e3, "over the IE3 95.8 % of a 1 MW motor and its drive's 97 %");
+    }
+
+    /** The motor, gearbox (4.27) and compressor train above, the gearbox rated {@code rating} W at its input. */
+    private static double gearLimit(double rating, double compressor) {
+        var train = ShaftNetwork.compile(List.of(
+                new ShaftNetwork.Part(1, ShaftNetwork.Kind.MOTOR, null, -1, List.of(new ShaftNetwork.End(new ShaftNetwork.Cell("d", 0, 0, 0), 1, 0, 0, true)), 0, 2950),
+                ShaftNetwork.Part.shaft(2, new ShaftNetwork.Cell("d", 1, 0, 0), 0),
+                new ShaftNetwork.Part(3, ShaftNetwork.Kind.GEARBOX, null, -1, List.of(new ShaftNetwork.End(new ShaftNetwork.Cell("d", 2, 0, 0), -1, 0, 0, false),
+                        new ShaftNetwork.End(new ShaftNetwork.Cell("d", 2, 0, 0), 1, 0, 0, true)), 4.27, 0),
+                ShaftNetwork.Part.shaft(4, new ShaftNetwork.Cell("d", 3, 0, 0), 0),
+                new ShaftNetwork.Part(5, ShaftNetwork.Kind.CASING, null, -1, List.of(new ShaftNetwork.End(new ShaftNetwork.Cell("d", 4, 0, 0), -1, 0, 0, false)), 0, 12597))).getFirst();
+        return ShaftNetwork.gearLimit(train, id -> id == 3 ? rating : 0, id -> id == 5 ? compressor : 0);
+    }
+
+    /**
+     * N7: the 796 kW compressor through a 750 kW gearbox. The gearbox passes all of the motor's 812 kW, so it caps the motor
+     * at 750 kW: the train steps down by the damped power-limited step, halving its error each slice under the cube law,
+     * to 2950 (750/812.2)^(1/3) = 2872.7 rpm, and says GEAR LIMITED. The motor alone (1 MW) would hold 2950 rpm.
+     */
+    @Test
+    void anUnderRatedGearboxHoldsItsTrainGearLimited() {
+        double demand = 796e3 / ShaftNetwork.GEAR_EFFICIENCY;
+        double limit = gearLimit(750e3, 796e3);
+        assertEquals(750e3, limit, 1e-6, "all the motor's power passes the gearbox");
+        var driver = motor(Drive.VARIABLE_MOTOR, 1e6);
+        assertEquals("RUNNING", ShaftTrain.step(driver, 2950, Measure.of(demand)).status(), "the motor alone holds it");
+        double speed = 2950, balance = 2950 * DeterministicCube.root(750e3 / demand);
+        assertEquals(2872.7, balance, .1);
+        double error = Math.log(speed / balance);
+        for (int i = 0; i < 24; i++) {
+            var step = ShaftTrain.step(driver, speed, Measure.of(demand * cube(speed / 2950)).withGearLimit(limit));
+            assertEquals("GEAR LIMITED", step.status(), "slice " + i);
+            assertEquals(Trip.NONE, step.trip(), "protective, no trip");
+            assertTrue(step.speed() < speed && step.speed() > balance * (1 - 1e-12), "slice " + i);
+            double next = Math.log(step.speed() / balance);
+            assertEquals(error / 2, next, 1e-9, "the error halves");
+            error = next;
+            speed = step.speed();
+        }
+        assertEquals(balance, speed, 1e-3, "at the gear limit");
+        // A gearbox rated above the demand changes nothing, bit for bit.
+        assertEquals(ShaftTrain.step(driver, 2950, Measure.of(demand)), ShaftTrain.step(driver, 2950, Measure.of(demand).withGearLimit(gearLimit(1e6, 796e3))));
+    }
+
+    /** N7: a gearbox rated 0 (an older save, a hand-built unit) or one with no load behind it limits nothing. */
+    @Test
+    void anUnratedGearboxLimitsNothing() {
+        assertEquals(Double.POSITIVE_INFINITY, gearLimit(0, 796e3));
+        assertEquals(Double.POSITIVE_INFINITY, gearLimit(750e3, 0), "nothing passes it");
+        var driver = motor(Drive.VARIABLE_MOTOR, 1e6);
+        double demand = 796e3 / ShaftNetwork.GEAR_EFFICIENCY;
+        assertEquals(ShaftTrain.step(driver, 2950, Measure.of(demand)), ShaftTrain.step(driver, 2950, Measure.of(demand).withGearLimit(gearLimit(0, 796e3))));
+    }
+
+    /**
+     * N7: a governed turbine behind a 20 kW gearbox, its pump asking 24.9 kW: GEAR LIMITED, and its governor asks only the
+     * power the gearbox passes at the next speed, not the demand at its set speed.
+     */
+    @Test
+    void aGearLimitedTurbineFeedsForwardOnlyWhatItsGearboxPasses() {
+        var step = ShaftTrain.step(turbine(), 6000, new Measure(RATED, RATED, false, Double.NaN, Double.NaN, Double.NaN, Double.NaN).withGearLimit(20e3));
+        assertEquals("GEAR LIMITED", step.status());
+        assertEquals(6000 * Math.pow(20e3 / RATED, 1 / 6.), step.speed(), 1e-6);
+        assertEquals(RATED * cube(step.speed() / 6000), step.governorPower(), 1e-6);
+        assertTrue(step.governorPower() < RATED);
     }
 
     /** The creative motor holds its set speed up to its limit (default 1 MW), then steps down as a drive at its limit does. */
     @Test
     void theCreativeMotorHoldsItsSpeedUpToItsLimit() {
-        var creative = new Driver(Drive.CREATIVE, 0, ShaftTrain.CREATIVE_SPEED, 0, true, Mode.SPEED, 0, 0, Trip.NONE, false);
+        var creative = new Driver(Drive.CREATIVE, 0, ShaftTrain.CREATIVE_SPEED, 0, true, Mode.SPEED, 0, 0, Trip.NONE);
         assertEquals(2950, creative.setSpeed(), 0);
         assertEquals(1e6, creative.limit(), 0);
         var easy = ShaftTrain.step(creative, 2950, Measure.of(5e5));
@@ -178,7 +268,7 @@ class ShaftTrainTest {
         var hard = ShaftTrain.step(creative, 2950, Measure.of(2e6));
         assertEquals("POWER LIMITED", hard.status());
         assertEquals(2628.15, hard.speed(), .001 * 2628.15, "2950 (1/2)^(1/6)");
-        var set = new Driver(Drive.CREATIVE, 0, ShaftTrain.CREATIVE_SPEED, 0, true, Mode.SPEED, 1500, 5e4, Trip.NONE, false);
+        var set = new Driver(Drive.CREATIVE, 0, ShaftTrain.CREATIVE_SPEED, 0, true, Mode.SPEED, 1500, 5e4, Trip.NONE);
         assertEquals(1500, ShaftTrain.step(set, 1500, Measure.of(1e4)).speed(), 0);
     }
 
@@ -190,7 +280,7 @@ class ShaftTrainTest {
                 ShaftNetwork.Part.shaft(2, new ShaftNetwork.Cell("d", 1, 0, 0), 0),
                 new ShaftNetwork.Part(3, ShaftNetwork.Kind.GENERATOR, null, -1, List.of(new ShaftNetwork.End(new ShaftNetwork.Cell("d", 2, 0, 0), -1, 0, 0, false)), 0, 3000)));
         assertEquals(List.of(new ShaftNetwork.Driven(3, 1, 1)), trains.getFirst().driven());
-        var step = ShaftTrain.step(motor(Drive.FIXED_MOTOR, 30e3), 2950, Measure.of(0));
+        var step = ShaftTrain.step(motor(Drive.VARIABLE_MOTOR, 30e3), 2950, Measure.of(0));
         assertEquals("RUNNING", step.status());
         assertEquals(0, step.electricPower(), 0);
     }
@@ -198,7 +288,7 @@ class ShaftTrainTest {
     /** A stopped driver stands. */
     @Test
     void aStoppedDriverStands() {
-        var stopped = new Driver(Drive.VARIABLE_MOTOR, 30e3, 2950, 2, false, Mode.SPEED, 0, 0, Trip.NONE, false);
+        var stopped = new Driver(Drive.VARIABLE_MOTOR, 30e3, 2950, 2, false, Mode.SPEED, 0, 0, Trip.NONE);
         var step = ShaftTrain.step(stopped, 2950, Measure.of(RATED));
         assertEquals(0, step.speed(), 0);
         assertEquals("STOPPED", step.status());

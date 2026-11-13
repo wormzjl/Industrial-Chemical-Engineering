@@ -59,6 +59,20 @@ class MachineHealthTest {
 
         /** The line with mover {@code control} delivering to a void at {@code discharge} Pa (N1: a centrifugal casing pump). */
         Rig(double supply, int factor, Wear.Settings wear, boolean metered, FlowControl.Mover control, double discharge) {
+            this(supply, factor, wear, metered, control, discharge, null, null);
+        }
+
+        /**
+         * The line with machine {@code control} from a generator holding {@code from} into a void holding {@code to}, at time
+         * factor 1 (N2: a centrifugal compressor on wet nitrogen; N4: a steam turbine into a wet receiver).
+         */
+        Rig(FluidThermodynamics.State from, FluidThermodynamics.State to, FlowControl control, Wear.Settings wear) {
+            this(Double.NaN, 1, wear, false, control, Double.NaN, from, to);
+        }
+
+        /** The line: water at {@code supply} and {@code discharge} Pa where {@code from} and {@code to} are null. */
+        private Rig(double supply, int factor, Wear.Settings wear, boolean metered, FlowControl control, double discharge, FluidThermodynamics.State from,
+                    FluidThermodynamics.State to) {
             var time = com.wormzjl.icheme.science.fluid.SimulationTime.of(factor);
             coordinator = new IslandCoordinator(new IslandCoordinator.Dispatcher() {
                 public int availableWorkers() {
@@ -92,8 +106,8 @@ class MachineHealthTest {
             } else electric = null;
             trains.host(ShaftTrains.Host.NONE);
             coordinator.shafts(trains);
-            var line = new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1, 0, water(supply), PassiveNetwork.NodeKind.GENERATOR),
-                    new PassiveNetwork.Reservoir(2, 0, water(discharge), PassiveNetwork.NodeKind.VOID)),
+            var line = new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1, 0, from != null ? from : water(supply), PassiveNetwork.NodeKind.GENERATOR),
+                    new PassiveNetwork.Reservoir(2, 0, to != null ? to : water(discharge), PassiveNetwork.NodeKind.VOID)),
                     List.of(new PassiveNetwork.Pipe(10, 0, 1, FAT, control)));
             coordinator.register(new IslandCoordinator.Snapshot(1, 0, line, new IslandClock.Snapshot(0, 0, 0, 100), Optional.empty(), "READY"), model.withTime(time));
         }
@@ -351,6 +365,219 @@ class MachineHealthTest {
         assertEquals("", rig.health.status(1));
         assertFalse(MachineHealth.faults(new FlowControl.Pump(FLOW, 5e5)).contains(Wear.Fault.LOW_FLOW), "a set-flow pump has no curve");
         assertTrue(MachineHealth.faults(new FlowControl.Machine(CENTRIFUGAL, 1, true)).contains(Wear.Fault.LOW_FLOW));
+    }
+
+    /** N2: the compressor of the wet gas cases, MachineMoverTest's: 0.02 m³/s at 24.4 kJ/kg, from 150 into 180 kPa. */
+    private static final com.wormzjl.icheme.science.machine.CentrifugalCompressor COMPRESSOR = new com.wormzjl.icheme.science.machine.CentrifugalCompressor(.02, 24400,
+            com.wormzjl.icheme.science.machine.CentrifugalCompressor.DEFAULT_EFFICIENCY);
+
+    /**
+     * Nitrogen at 298.15 K and {@code pressure} with {@code waterVolume} m³ of liquid water in each cubic metre
+     * (TwoPhaseMoverTest's wet suction): 7.7e-5 m³ at 150 kPa is about 3 % liquid by mass (water's vapour pressure takes
+     * 2 % of the gas's moles), 0.2 L about 10 %.
+     */
+    private FluidThermodynamics.State wetNitrogen(double waterVolume, double pressure) {
+        double t = 298.15;
+        var mw = model.molecularWeights();
+        var n = new double[model.componentCount()];
+        int water = n.length - 1;
+        n[water] = waterVolume * 997 / mw[water];
+        n[com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN] = pressure * (1 - waterVolume) / (FluidThermodynamics.R * t);
+        return model.flashTP(t, pressure, n, () -> {
+        });
+    }
+
+    private FluidThermodynamics.State nitrogen(double pressure) {
+        return model.initialNitrogenCharge(1, 298.15, pressure, () -> {
+        });
+    }
+
+    /** The compressor's suction condensed mass share as its last committed slice read it (N2), and checks it is the wet efficiency's. */
+    private double condensed(Rig rig) {
+        var result = rig.coordinator.observe(1).lastResult().orElseThrow();
+        double w = result.observations().getFirst().condensedShare();
+        assertEquals(com.wormzjl.icheme.science.machine.CentrifugalCompressor.wetEfficiency(1, w), PassiveStepSolver.wetShare(model, result.graph(), 0, result.advancedSeconds()), 1e-12,
+                "the row carries the share the solve's wet efficiency reads");
+        return w;
+    }
+
+    /**
+     * N2: a centrifugal compressor on a suction about 3 % liquid by mass erodes at half the erosion intensity, 1/(16 h) of
+     * health per process second at the default lives, and says WET GAS.
+     */
+    @Test
+    void aCentrifugalCompressorOnAThreePercentWetSuctionErodesAndSaysWetGas() {
+        var rig = new Rig(wetNitrogen(7.7e-5, 150_000), nitrogen(180_000), new FlowControl.Machine(COMPRESSOR, 1, true), Wear.Settings.DEFAULT);
+        for (int i = 0; i < 400; i++) rig.tick();
+        assertTrue(rig.flow() > 0, "it compresses: " + rig.flow() + " kg/s");
+        double w = condensed(rig);
+        assertEquals(.03, w, .01, "about 3 % liquid by mass: " + w);
+        double rate = rig.health.rate(1);
+        assertEquals(Wear.rate(Wear.Fault.WET_GAS.intensity(w), 0, Wear.Settings.DEFAULT), rate, 1e-12 * rate, "its wet gas rate");
+        assertEquals(1 / (16 * 3600.), rate, .4 / (16 * 3600.), "about 1/(16 h) a process second");
+        assertEquals(Wear.Fault.WET_GAS, rig.health.fault(1));
+        assertEquals(Wear.wetGas(w), rig.health.intensity(1), 1e-12);
+        assertEquals("WET GAS", rig.health.status(1));
+        assertTrue(rig.health.health(1) < 1, "it has worn");
+    }
+
+    /** N2: on dry nitrogen the same compressor reads no liquid and keeps its health. */
+    @Test
+    void aCentrifugalCompressorOnDryGasLosesNone() {
+        var rig = new Rig(nitrogen(150_000), nitrogen(180_000), new FlowControl.Machine(COMPRESSOR, 1, true), Wear.Settings.DEFAULT);
+        for (int i = 0; i < 400; i++) rig.tick();
+        assertTrue(rig.flow() > 0, "it compresses: " + rig.flow() + " kg/s");
+        assertEquals(0, condensed(rig), 1e-12, "a dry suction");
+        assertEquals(1, rig.health.health(1));
+        assertEquals(0, rig.health.rate(1));
+        assertNull(rig.health.fault(1));
+        assertEquals("", rig.health.status(1));
+        assertTrue(rig.health.facts().isEmpty(), "a new compressor carries no entry");
+    }
+
+    /**
+     * N2: worn to 0 on a wet suction (lives short enough for a test), the compressor fails at the next cadence and is
+     * stopped by its {@code FAILED} plan (a machine at no speed, its law kept); a kit makes it new and lifts the plan.
+     */
+    @Test
+    void aFailedCompressorIsStoppedAndAKitRestoresIt() {
+        var rig = new Rig(wetNitrogen(7.7e-5, 150_000), nitrogen(180_000), new FlowControl.Machine(COMPRESSOR, 1, true), FAST);
+        for (int i = 0; i < 8000 && !rig.health.failed(1); i++) rig.tick();
+        assertTrue(rig.health.failed(1), "it failed: " + rig.health.health(1));
+        assertEquals("FAILED", rig.health.status(1));
+        assertEquals(Map.of(1L, 0.0), rig.health.facts(), "health is a fact");
+        for (int i = 0; i < 300; i++) rig.tick();
+        assertTrue(rig.coordinator.observe(1).graph().pipes().getFirst().control() instanceof FlowControl.Machine m && m.speed() == 0 && m.law().equals(COMPRESSOR),
+                "it stands stopped, its law kept: the closure is a slice input");
+        var plans = new HashMap<Long, ShaftPlan>();
+        rig.health.plans(rig.coordinator.observe(1).graph(), plans);
+        assertEquals(new ShaftPlan(ShaftPlan.Kind.FAILED, 0), plans.get(1L));
+        var outcome = new ArrayList<MachineHealth.Outcome>();
+        rig.health.queue(new MachineHealth.Repair(1, () -> true, outcome::add));
+        rig.tick();
+        assertEquals(List.of(MachineHealth.Outcome.REPAIRED), outcome);
+        assertFalse(rig.health.failed(1));
+        assertEquals(1, rig.health.health(1), "new again");
+        plans.clear();
+        rig.health.plans(rig.coordinator.observe(1).graph(), plans);
+        assertTrue(plans.isEmpty(), "repaired, no close: its train's or its store's speed plan restores it: " + plans);
+    }
+
+    /** N4: one mole of steam at {@code temperature} K and {@code pressure} Pa. */
+    private FluidThermodynamics.State steam(double temperature, double pressure) {
+        var n = new double[model.componentCount()];
+        n[n.length - 1] = 1;
+        return model.flashTP(temperature, pressure, n, () -> {
+        });
+    }
+
+    /** N4: a 1 MW turbine on steam just above saturation at 40 bar (525 K), exhausting into dry nitrogen at 0.1 bar. */
+    private Rig turbineRig(Wear.Settings wear) {
+        return new Rig(steam(525, 4e6), nitrogen(1e4), new FlowControl.Turbine(com.wormzjl.icheme.science.machine.SteamTurbine.rated(1e6)), wear);
+    }
+
+    /** The turbine's own exhaust moisture as its last committed slice read it (N4): its observation row's condensed share. */
+    private double exhaustMoisture(Rig rig) {
+        return rig.coordinator.observe(1).lastResult().orElseThrow().observations().getFirst().condensedShare();
+    }
+
+    /**
+     * N4: a steam turbine expanding nearly saturated steam from 40 bar to 0.1 bar exhausts wet (its own stream at the exhaust
+     * pressure and at its inlet enthalpy less its shaft work), erodes its last blades by the wet exhaust rule and says WET
+     * EXHAUST, although its receiver holds dry nitrogen. Its health is keyed by its fluid device, as a pump's is.
+     */
+    @Test
+    void aSteamTurbineOnSaturatedSteamExhaustsWetErodesAndSaysWetExhaust() {
+        var rig = turbineRig(Wear.Settings.DEFAULT);
+        for (int i = 0; i < 400; i++) rig.tick();
+        assertTrue(rig.flow() > 0, "steam passes: " + rig.flow() + " kg/s");
+        double w = exhaustMoisture(rig);
+        System.out.printf(java.util.Locale.ROOT, "N4 exhaust moisture, 40 bar 525 K to 0.1 bar: %.4f%n", w);
+        assertEquals(.062, w, .005, "about 6 % liquid by mass on the solve's work law: " + w);
+        assertEquals(1, rig.health.intensity(1), 1e-12, "the full wet exhaust intensity");
+        assertEquals(1 / (8 * 3600.), rig.health.rate(1), 1e-9 / 3600, "1/(8 h) a process second");
+        double rate = rig.health.rate(1);
+        assertEquals(Wear.rate(Wear.Fault.WET_EXHAUST.intensity(w), 0, Wear.Settings.DEFAULT), rate, 1e-12 * rate, "its wet exhaust rate");
+        assertEquals(Wear.Fault.WET_EXHAUST, rig.health.fault(1));
+        assertEquals("WET EXHAUST", rig.health.status(1));
+        assertEquals(0, rig.health.crackle(1), "a turbine has no mover noise");
+    }
+
+    /**
+     * N4: steam at 40 bar and 400 °C (SteamTurbineConnectionTest's inlet) expanded to 4 bar stays superheated, so the turbine
+     * keeps its health, although its receiver holds about 16 % liquid by mass (a hotwell): what the receiver holds does not
+     * enter the read.
+     */
+    @Test
+    void aSteamTurbineWithADryExhaustIntoAWetReceiverLosesNone() {
+        var rig = new Rig(steam(673.15, 4e6), wetNitrogen(8.9e-4, 4e5), new FlowControl.Turbine(com.wormzjl.icheme.science.machine.SteamTurbine.rated(1e6)), Wear.Settings.DEFAULT);
+        for (int i = 0; i < 400; i++) rig.tick();
+        assertTrue(rig.flow() > 0, "steam passes: " + rig.flow() + " kg/s");
+        var result = rig.coordinator.observe(1).lastResult().orElseThrow();
+        double held = InletPhase.bulk(rig.coordinator.model(1), result.graph().reservoirs().get(1).state()).condensedMassShare();
+        assertEquals(.16, held, .01, "the receiver holds about 16 % liquid by mass: " + held);
+        assertEquals(0, exhaustMoisture(rig), 1e-12, "a superheated exhaust");
+        assertEquals(1, rig.health.health(1));
+        assertEquals(0, rig.health.rate(1));
+        assertEquals("", rig.health.status(1));
+    }
+
+    /**
+     * N4: worn to 0, the turbine fails at the next cadence and its {@code FAILED} plan shuts its admission (mass target 0,
+     * as a stop shuts it), so no steam passes; a kit makes it new and lifts the plan (its train's governor plan opens it).
+     */
+    @Test
+    void aFailedTurbineIsShutAndAKitRestoresIt() {
+        var rig = turbineRig(FAST);
+        for (int i = 0; i < 8000 && !rig.health.failed(1); i++) rig.tick();
+        assertTrue(rig.health.failed(1), "it failed: " + rig.health.health(1));
+        assertEquals("FAILED", rig.health.status(1));
+        for (int i = 0; i < 300; i++) rig.tick();
+        assertTrue(rig.coordinator.observe(1).graph().pipes().getFirst().control() instanceof FlowControl.Turbine t && t.massTarget() == 0,
+                "its admission is shut: " + rig.coordinator.observe(1).graph().pipes().getFirst().control());
+        assertEquals(0, rig.flow(), 1e-6, "a failed turbine passes no steam");
+        var outcome = new ArrayList<MachineHealth.Outcome>();
+        rig.health.queue(new MachineHealth.Repair(1, () -> true, outcome::add));
+        rig.tick();
+        assertEquals(List.of(MachineHealth.Outcome.REPAIRED), outcome);
+        assertEquals(1, rig.health.health(1), "new again");
+        var plans = new HashMap<Long, ShaftPlan>();
+        rig.health.plans(rig.coordinator.observe(1).graph(), plans);
+        assertTrue(plans.isEmpty(), "repaired, no close: " + plans);
+    }
+
+    /**
+     * N2, N4: the cadence keeps the entries of every machine that wears ({@link MachineHealth#pump}, the predicate the world
+     * passes): a centrifugal compressor's and a steam turbine's saved health stand; a reciprocating frame's, which does not
+     * wear, is dropped.
+     */
+    @Test
+    void theCadenceKeepsACompressorsAndATurbinesHealth() {
+        var rig = new Rig(101325);
+        var at = new PhysicalFluidTopology.Position("minecraft:overworld", 5, 0, 0);
+        var kind = com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.PIPE;
+        var spec = FluidDeviceSpec.nitrogen(EventPathWorld.CATALOG);
+        var compressor = new WorldTopologyLedger.Registration(new PhysicalFluidTopology.Device(40, at, kind, PhysicalFluidTopology.Direction.EAST, FAT,
+                new FlowControl.Machine(COMPRESSOR, 1, true)), spec, 0);
+        var turbine = new WorldTopologyLedger.Registration(new PhysicalFluidTopology.Device(50, at, com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.TURBINE,
+                PhysicalFluidTopology.Direction.EAST, FAT, new FlowControl.Turbine(com.wormzjl.icheme.science.machine.SteamTurbine.rated(55e3)),
+                List.of(new PhysicalFluidTopology.Port(at, PhysicalFluidTopology.Direction.WEST, PassiveNetwork.PhasePort.BULK, PhysicalFluidTopology.ConnectionRole.SUCTION),
+                        new PhysicalFluidTopology.Port(at, PhysicalFluidTopology.Direction.EAST, PassiveNetwork.PhasePort.BULK, PhysicalFluidTopology.ConnectionRole.DISCHARGE)), true), spec, 0);
+        var frame = new WorldTopologyLedger.Registration(new PhysicalFluidTopology.Device(60, at, kind, PhysicalFluidTopology.Direction.EAST, FAT,
+                new FlowControl.Compressor(.1, 3)), spec, 0);
+        var registrations = Map.of(40L, compressor, 50L, turbine, 60L, frame);
+        assertTrue(MachineHealth.pump(compressor), "a centrifugal compressor wears");
+        assertTrue(MachineHealth.pump(turbine), "a steam turbine wears");
+        assertFalse(MachineHealth.pump(frame), "a frame does not");
+        var ledger = new WorldTopologyLedger(WorldTopologyLedger.Snapshot.empty(EventPathWorld.CATALOG));
+        ledger.health(Map.of(40L, .5, 50L, .25, 60L, .75));
+        var health = new MachineHealth(ledger, device -> null, rig.coordinator, device -> MachineHealth.pump(registrations.get(device)),
+                device -> registrations.containsKey(device) ? registrations.get(device).device().control() : null, () -> Wear.Settings.DEFAULT);
+        health.cadence();
+        assertEquals(.5, health.health(40));
+        assertEquals(.25, health.health(50));
+        assertNull(health.health(60), "a frame's entry is dropped");
+        assertEquals(Map.of(40L, .5, 50L, .25), health.facts());
     }
 
     @Test

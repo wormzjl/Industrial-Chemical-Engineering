@@ -99,6 +99,44 @@ class WearTest {
         assertEquals(.25 / (8 * 3600.) + 1 / 2400., Wear.rate(Wear.Fault.LOW_FLOW.intensity(.15), Wear.Fault.DRY.intensity(1), s), 1e-18);
     }
 
+    /**
+     * N2: a centrifugal compressor's impeller erodes on a wet suction, {@code (w − 0.005) / 0.05} of the condensed mass share
+     * w, in the erosion class: none at and below 0.5 %, 16 h of process time at 3 %, 8 h from 5.5 % up. One erosion fault,
+     * alone in its class.
+     */
+    @Test
+    void wetGasErodesACentrifugalCompressorAboveHalfAPercent() {
+        assertEquals(Wear.FaultClass.EROSION, Wear.Fault.WET_GAS.type);
+        for (double w : new double[]{Double.NaN, -1, 0, .005}) assertEquals(0, Wear.Fault.WET_GAS.intensity(w), "w " + w);
+        assertTrue(Wear.Fault.WET_GAS.intensity(.0051) > 0);
+        assertEquals(.5, Wear.Fault.WET_GAS.intensity(.03), 1e-12);
+        assertEquals(1, Wear.Fault.WET_GAS.intensity(.055), 1e-12);
+        assertEquals(1, Wear.Fault.WET_GAS.intensity(.5), 0);
+        var s = Wear.Settings.DEFAULT;
+        assertEquals(16, 1 / Wear.rate(Wear.Fault.WET_GAS.intensity(.03), 0, s) / 3600, 1e-9, "16 h at 3 %");
+        assertEquals(8, 1 / Wear.rate(Wear.Fault.WET_GAS.intensity(.055), 0, s) / 3600, 1e-9, "8 h at 5.5 %");
+        assertEquals(0, Wear.rate(Wear.Fault.WET_GAS.intensity(.005), 0, s), "none at 0.5 %");
+    }
+
+    /**
+     * N4: a steam turbine's last blades erode on a wet exhaust, {@code (w − 0.01) / 0.05} of the condensed mass share w of
+     * its own exhaust on the solve's work law, in the erosion class: none at and below 1 %, 16 h of process time at 3.5 %,
+     * 8 h from 6 % up.
+     */
+    @Test
+    void aWetExhaustErodesASteamTurbineAboveOnePercent() {
+        assertEquals(Wear.FaultClass.EROSION, Wear.Fault.WET_EXHAUST.type);
+        for (double w : new double[]{Double.NaN, 0, .005, .01}) assertEquals(0, Wear.Fault.WET_EXHAUST.intensity(w), "w " + w);
+        assertTrue(Wear.Fault.WET_EXHAUST.intensity(.0101) > 0);
+        assertEquals(.5, Wear.Fault.WET_EXHAUST.intensity(.035), 1e-12);
+        assertEquals(1, Wear.Fault.WET_EXHAUST.intensity(.06), 1e-12);
+        assertEquals(1, Wear.Fault.WET_EXHAUST.intensity(.6), 0);
+        var s = Wear.Settings.DEFAULT;
+        assertEquals(16, 1 / Wear.rate(Wear.Fault.WET_EXHAUST.intensity(.035), 0, s) / 3600, 1e-9, "16 h at 3.5 %");
+        assertEquals(8, 1 / Wear.rate(Wear.Fault.WET_EXHAUST.intensity(.06), 0, s) / 3600, 1e-9, "8 h at 6 %");
+        assertEquals(0, Wear.rate(Wear.Fault.WET_EXHAUST.intensity(.01), 0, s), "none at 1 %");
+    }
+
     @Test
     void runningDryLastsFortyProcessMinutesAndTheSwitchStopsAllWear() {
         assertEquals(2400, Wear.life(Double.NaN, true, Wear.Settings.DEFAULT), 1e-9);

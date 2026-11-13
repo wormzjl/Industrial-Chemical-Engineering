@@ -79,6 +79,32 @@ class ShaftNetworkTest {
         assertEquals(4.27, ShaftNetwork.compile(set).getFirst().driven().getFirst().ratio(), 0);
     }
 
+    /**
+     * N7: two gearboxes in series, motor, gearbox 3, gearbox 6, casing 8. Each lists the casing behind it and the gears'
+     * efficiency at its input (1 and 0.98). Through gearbox 6 passes the casing's power over one gear, the motor's over two:
+     * a 500 kW gearbox 6 caps the motor at 500 / 0.98 = 510.2 kW; gearbox 3 at its own rating.
+     */
+    @Test
+    void eachGearboxCapsItsTrainAtItsRatingThroughTheGearsBetween() {
+        var parts = List.of(machine(1, Kind.MOTOR, 2950, end(0, 1, true)), shaft(2, 1, 0),
+                new Part(3, Kind.GEARBOX, null, -1, List.of(end(2, -1, false), end(2, 1, true)), 2, 0), shaft(4, 3, 0),
+                new Part(6, Kind.GEARBOX, null, -1, List.of(end(4, -1, false), end(4, 1, true)), 2, 0), shaft(7, 5, 0),
+                machine(8, Kind.CASING, 11800, end(6, -1, false)));
+        var t = ShaftNetwork.compile(parts).getFirst();
+        assertEquals(Fault.NONE, t.fault());
+        assertEquals(List.of(new Gear(3, 1, Set.of(8L)), new Gear(6, ShaftNetwork.GEAR_EFFICIENCY, Set.of(8L))), t.gears());
+        double eta = ShaftNetwork.GEAR_EFFICIENCY * ShaftNetwork.GEAR_EFFICIENCY;
+        assertEquals(eta, t.driven().getFirst().efficiency(), 0);
+        java.util.function.LongToDoubleFunction power = id -> id == 8 ? 400e3 : 0;
+        assertEquals(500e3 / ShaftNetwork.GEAR_EFFICIENCY, ShaftNetwork.gearLimit(t, id -> id == 3 ? 1e6 : id == 6 ? 500e3 : 0, power), 1e-6);
+        assertEquals(450e3, ShaftNetwork.gearLimit(t, id -> id == 3 ? 450e3 : id == 6 ? 1e6 : 0, power), 1e-6, "the first gearbox passes all the motor gives");
+        assertEquals(Double.POSITIVE_INFINITY, ShaftNetwork.gearLimit(t, id -> 0, power), "unrated gearboxes limit nothing");
+        // A train without gearboxes has none, and no limit.
+        var plain = ShaftNetwork.compile(line()).getFirst();
+        assertTrue(plain.gears().isEmpty());
+        assertEquals(Double.POSITIVE_INFINITY, ShaftNetwork.gearLimit(plain, id -> 1, id -> 1e6));
+    }
+
     @Test
     void twoDriversOnOneTrainStandIt() {
         var parts = line();
