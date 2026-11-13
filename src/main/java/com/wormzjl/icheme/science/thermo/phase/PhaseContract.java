@@ -1,6 +1,5 @@
 package com.wormzjl.icheme.science.thermo.phase;
 
-import com.wormzjl.icheme.science.fluid.thermo.FluidDomain;
 import com.wormzjl.icheme.science.material.CrystalReference;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.material.MaterialCoverage;
@@ -66,7 +65,7 @@ public record PhaseContract(String packageId, ThermoIdentity identity, List<Stri
      * The package's contract for the equilibrium engine: a package with water in its cubic on its derived contract
      * ({@link #forDerivedPackage}); any other its PR78 components without water, qualified for fluid-only competition and
      * for the competition of the fluid phases with every crystal the package admits ({@link #admittedCrystals}), as one
-     * whole set, the package envelope ({@link FluidDomain}), graded estimated-with-declared-error, its identity with the
+     * whole set, the package envelope ({@link PhaseDomain}), graded estimated-with-declared-error, its identity with the
      * package's spine ({@link ThermoIdentity#NO_SPINE} without one) and no water. A package that admits no crystal gets the
      * fluid-only contract, so a crystal request on it is refused as not qualified.
      */
@@ -76,7 +75,7 @@ public record PhaseContract(String packageId, ThermoIdentity identity, List<Stri
         List<String> basis = List.copyOf(propertyPackage.components());
         String spine = catalog.spineRevision(packageId);
         var identity = ThermoIdentity.of(catalog, packageId, CubicPhaseEvaluator.FAMILY, spine.isEmpty() ? ThermoIdentity.NO_SPINE : spine);
-        var domain = PhaseDomain.of(FluidDomain.of(catalog, packageId), basis);
+        var domain = envelopeOf(catalog, packageId, basis);
         var coverage = new EquilibriumResult.Coverage(EquilibriumResult.CoverageGrade.ESTIMATED_DECLARED_ERROR,
                 "PR78 with constant volume translation, every phase at the state pressure (P1: liquid density within "
                         + "2.6 % mean per isobar to 10 MPa for N2, CH4, C2H6, CO2 outside the critical band); the "
@@ -126,7 +125,7 @@ public record PhaseContract(String packageId, ThermoIdentity identity, List<Stri
         }
         var identity = new ThermoIdentity(catalog.fluidRevision(packageId) + ";" + evaluator.derivation().identity(),
                 CubicPhaseEvaluator.DERIVED_FAMILY, spine.isEmpty() ? ThermoIdentity.NO_SPINE : spine, waterPart);
-        var domain = PhaseDomain.of(FluidDomain.of(catalog, packageId), basis);
+        var domain = envelopeOf(catalog, packageId, basis);
         var coverage = new EquilibriumResult.Coverage(EquilibriumResult.CoverageGrade.ESTIMATED_DECLARED_ERROR,
                 "PR78 with the Huron-Vidal rule of pairs derived from group counts and Henry constants, water a component of the "
                         + "cubic with its IF97 share of enthalpy, entropy and volume (batch 2026-11-11-aqueous-solvents); "
@@ -138,6 +137,17 @@ public record PhaseContract(String packageId, ThermoIdentity identity, List<Stri
         if (!crystals.isEmpty()) competitions.add(PhaseCompetition.withCrystals(crystals.toArray(String[]::new)));
         return new PhaseContract(packageId, identity, basis, water ? WaterParticipation.IN_EQUATION_OF_STATE : WaterParticipation.NONE,
                 water ? CubicPhaseEvaluator.WATER : null, competitions, Set.of(), domain, coverage);
+    }
+
+    /**
+     * The package envelope over {@code basis}: the hull of its datasets' {@code fluid_domain} ranges. A package with a
+     * compound whose dataset declares none is refused, with the fluid network's words ({@code FluidDomain.of}).
+     */
+    private static PhaseDomain envelopeOf(MaterialCatalog catalog, String packageId, List<String> basis) {
+        var envelope = catalog.fluidValidity(packageId).orElseThrow(() -> new IllegalArgumentException(
+                "Package " + packageId + " has a compound whose dataset declares no fluid_domain; the fluid network cannot read its data range"));
+        return PhaseDomain.of(packageId, basis, envelope.minimumTemperature(), envelope.maximumTemperature(),
+                envelope.minimumPressure(), envelope.maximumPressure());
     }
 
     /**
