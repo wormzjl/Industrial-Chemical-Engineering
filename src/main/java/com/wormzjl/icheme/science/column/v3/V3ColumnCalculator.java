@@ -371,20 +371,20 @@ public final class V3ColumnCalculator {
             // Preserve the authored phase layout before trying an auxiliary column. A pot has no
             // smaller tray grid; a zero-reflux tower can lose its dry upper section in that auxiliary.
             if (pass == null && (problem.topology().dryTopTrayCount() > 0 || input.stageCount() < 2)) {
-                pass = solveSingleProblem(problem, thermo,
+                pass = runRung(problem, thermo,
                         initializeForSolve(problem, thermo, V3ColumnInitializer.Mode.MATERIAL_CLOSED), control,
                         "cold/phase-available/fine-fd",
-                        RungOptions.of(ContinuationJacobianPolicy.NONE, MAXIMUM_NEWTON_ITERATIONS), policy);
-                pass = correctCondenserPhase(pass, thermo, control, policy, condenserAttempts).pass();
+                        RungOptions.of(ContinuationJacobianPolicy.NONE, MAXIMUM_NEWTON_ITERATIONS), policy,
+                        condenserAttempts);
                 if (!publishesSuccess(pass.attempt(), pass.audit())
                         && (!input.sideDraws().isEmpty() || !input.pumparounds().isEmpty())) {
                     V3ColumnInput baseInput = withoutPumparounds(withoutSideDraws(input));
                     V3ColumnProblem baseProblem = V3ColumnProblemResolver.resolve(baseInput, condenserBranch);
-                    V3SolvePass base = solveSingleProblem(baseProblem, thermo,
+                    V3SolvePass base = runRung(baseProblem, thermo,
                             initializeForSolve(baseProblem, thermo, V3ColumnInitializer.Mode.MATERIAL_CLOSED), control,
                             "cold/phase-available-base/fine-fd",
-                            RungOptions.of(ContinuationJacobianPolicy.NONE, MAXIMUM_NEWTON_ITERATIONS), policy);
-                    base = correctCondenserPhase(base, thermo, control, policy, condenserAttempts).pass();
+                            RungOptions.of(ContinuationJacobianPolicy.NONE, MAXIMUM_NEWTON_ITERATIONS), policy,
+                            condenserAttempts);
                     if (publishesSuccess(base.attempt(), base.audit())) {
                         V3ColumnProblem target = V3ColumnProblemResolver.resolve(input, base.prepared().problem().topology().condenserPhaseBranch());
                         pass = recoverWithDrawRamp(target, thermo, base, control, policy, condenserAttempts, true);
@@ -1144,6 +1144,21 @@ public final class V3ColumnCalculator {
         return new PhaseCorrection(withPhaseEvents(withPriorSupportNotes(pass, corrected), event), true);
     }
 
+    /**
+     * One rung that starts dry, then its condenser phase correction, on the same policy and attempt history.
+     *
+     * <p>The rungs that take nothing between the two and keep only the corrected pass: the direct and base
+     * solves of a dry-top column or a pot, a feature-ramp rung and the ramp's request retry. The stage grid, the
+     * pressure leg, the material-closed fallback and the coarse recovery do more between them or keep the
+     * correction's verdict, so they run their own steps.</p>
+     */
+    private static V3SolvePass runRung(V3ColumnProblem problem, V3PengRobinsonThermo thermo, V3DryMeshState seed,
+            V3SolveControl control, String solvePath, RungOptions rung, V3SolvePolicy policy,
+            CondenserAttempts condenserAttempts) {
+        V3SolvePass solved = solveSingleProblem(problem, thermo, seed, control, solvePath, rung, policy);
+        return correctCondenserPhase(solved, thermo, control, policy, condenserAttempts).pass();
+    }
+
     private static V3SolvePass withPhaseEvents(V3SolvePass pass, String event) {
         return new V3SolvePass(pass.attempt(), pass.audit(), pass.feedMolarEnthalpyJoulesPerMol(), pass.solvePath(),
                 pass.recoverySeed(), pass.terminalStageCount(), pass.reachedRequestedProblem(),
@@ -1366,12 +1381,11 @@ public final class V3ColumnCalculator {
                     ? DRAW_RAMP_REQUESTED_MAXIMUM_ITERATIONS : DRAW_RAMP_INTERMEDIATE_MAXIMUM_ITERATIONS;
             V3SimultaneousColumnSolver.RungBudget budget =
                     rampRungBudget(rampStep.steamRung(), requestedRung, fullBudgetSteamRungs);
-            V3SolvePass pass = solveSingleProblem(problem, thermo, seed, control,
+            V3SolvePass pass = runRung(problem, thermo, seed, control,
                     rampPath + (fullBudgetSteamRungs ? "/full-budget/" : "/") + rampStep.pathLabel()
                             + "-" + rampStep.progress(),
                     new RungOptions(ContinuationJacobianPolicy.STAGE_LOCAL_BLOCKS, rungIterations, budget,
-                            V3SimultaneousColumnSolver.Extension.NONE), rampPolicy);
-            pass = correctCondenserPhase(pass, thermo, control, rampPolicy, rampAttempts).pass();
+                            V3SimultaneousColumnSolver.Extension.NONE), rampPolicy, rampAttempts);
             if (!publishesSuccess(pass.attempt(), pass.audit())) {
                 if (requestedRung) {
                     // A reduced intermediate budget is a bet that a steam rung either closes cheaply or
@@ -1409,11 +1423,10 @@ public final class V3ColumnCalculator {
                     // Preserve the ordinary ramp and its successful basins exactly. Only a request
                     // that exhausted both schedules gets a bounded fresh correction of its terminal
                     // state; no acceptance limit, physical specification or previous label is changed.
-                    V3SolvePass retry = solveSingleProblem(problem, thermo, pass.recoverySeed(), control,
+                    V3SolvePass retry = runRung(problem, thermo, pass.recoverySeed(), control,
                             rampPath + "/request-retry", RungOptions.of(ContinuationJacobianPolicy.STAGE_LOCAL_BLOCKS,
                                     MAXIMUM_NEWTON_ITERATIONS - DRAW_RAMP_REQUESTED_MAXIMUM_ITERATIONS),
-                            rampPolicy);
-                    retry = correctCondenserPhase(retry, thermo, control, rampPolicy, rampAttempts).pass();
+                            rampPolicy, rampAttempts);
                     rampEvents.add(boundedEvent("requested-state correction retry: " + rampEvidence(retry)));
                     if (publishesSuccess(retry.attempt(), retry.audit()))
                         return withPriorSupportNotes(seedBase, withRampEvents(retry, energyShift.merged(rampEvents)));
