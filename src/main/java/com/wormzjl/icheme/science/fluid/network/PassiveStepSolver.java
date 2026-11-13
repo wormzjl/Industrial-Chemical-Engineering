@@ -67,7 +67,7 @@ public final class PassiveStepSolver {
      * closure that is singular at zero through-flow; with one its mixing and enthalpy rows are the backward-Euler vessel
      * rows {@code (m_J/dt + Q) w = (m_J/dt) w_old + sum q w_e}, regular at Q = 0. The buffer is the row's state, not
      * inventory (owner decision D46): nothing is booked at a mint, and the ledger reports the buffers' change as its own
-     * term ({@link #checkConservation}). A numerical regularisation sized to the flow: its mixing lag at full flow is tau.
+     * term ({@link StepObservations#checkConservation}). A numerical regularisation sized to the flow: its mixing lag at full flow is tau.
      */
     static final double HOLDUP_TAU=.05;
     /**
@@ -412,10 +412,12 @@ public final class PassiveStepSolver {
     private final ConservativeTransport.Workspace transport;
     /** The balance start ({@link BalanceStart}): built with the solver, on its own model. */
     final BalanceStart balance;
+    /** What a converged step reports and its ledger ({@link StepObservations}): built with the solver, on its own model. */
+    final StepObservations observations;
     public PassiveStepSolver(FluidThermodynamics model){this(model,SolverOwnership.confinedToCurrentThread());}
     public PassiveStepSolver(FluidThermodynamics model,SolverOwnership ownership) {
         this.model=Objects.requireNonNull(model);this.ownership=Objects.requireNonNull(ownership);
-        transport=new ConservativeTransport.Workspace(ownership);balance=new BalanceStart(this,this.model);
+        transport=new ConservativeTransport.Workspace(ownership);balance=new BalanceStart(this,this.model);observations=new StepObservations(this,this.model);
     }
     public record Result(List<FluidThermodynamics.State> states,double[] massFlows,double deltaTime,SparseNewton.Result numerical,
                          List<FlowControl.Mode> modes,double[] devicePressureChanges,double pumpWorkJoule,double[] externalMoles,double externalEnergyJoule,
@@ -820,7 +822,7 @@ public final class PassiveStepSolver {
             if(maximumResidual>gate){SolverDiagnostics.count(SolverDiagnostics.equationGateRejections);throw new SparseNewton.Nonconvergence("Conservative reconstruction fails equation gate: "+maximumResidual);}
             // The ledger reads the island as it is: an emptying vessel is a vessel that ends empty, not the junction it stood
             // as in this pass.
-            checkConservation(original,projection);
+            observations.checkConservation(original,projection);
             carry=new CarriedPoint(pipeIdentities,nodeIds,inputStates,projection.states(),rateOnly,flows.clone(),lawFlows,heads.clone(),List.copyOf(modes));
             acceptedPipes=pipeIdentities;acceptedNodeIds=nodeIds;
             var acceptedModes=new ArrayList<>(modes);
@@ -1065,7 +1067,7 @@ public final class PassiveStepSolver {
     /**
      * The vapour pressure of the liquid the pump on connection {@code edge} draws, for the whole solve
      * ({@link #suctionFloors}): its p_v
-     * ({@link #release}). Its wear reads σ against it ({@link #npshRatio}); its suction limit and vapour lock read it with
+     * ({@link #release}). Its wear reads σ against it ({@link StepObservations#npshRatio}); its suction limit and vapour lock read it with
      * the zone edge ({@link #suctionLimitPressure}). Positive infinity where the suction has none (no pump, a VAPOR port, a supplier with no
      * liquid, a liquid that stays one liquid down to the numerical box's floor). The water saturation curve of owner
      * decision D59 (4) was lifted by the owner on 2026-11-11 (W3B_NETWORK_PLAN.md section 17): water is one more liquid.
@@ -1133,7 +1135,7 @@ public final class PassiveStepSolver {
         }
     }
     /** Whether the pump on connection {@code edge} is vapour-locked in this solve ({@link #vapourLocks}). */
-    private boolean vapourLocked(int edge){return edge<constants.vapourLocked.length&&constants.vapourLocked[edge];}
+    boolean vapourLocked(int edge){return edge<constants.vapourLocked.length&&constants.vapourLocked[edge];}
     /**
      * Owner decision D15: the suction head the line of liquid pump connection {@code edge} has at no flow over the floor
      * {@code floor} of the liquid it draws, on the node {@code states} (Pa), the step's start states ({@link #vapourLocks}):
@@ -1285,12 +1287,12 @@ public final class PassiveStepSolver {
     }
     /** The answers of {@link #liquidPH}: liquid alone, a vapour beside the liquid, or anything else (a refusal, a phase set
      * the network cannot carry, no liquid). */
-    private static final int PH_LIQUID=1,PH_VAPOUR=0,PH_OTHER=-1;
+    static final int PH_LIQUID=1,PH_VAPOUR=0,PH_OTHER=-1;
     /** The PH equilibrium of the liquid {@code x} of supplier {@code s} at its enthalpy {@code h} (J) and pressure
      * {@code p}, warm-started at the supplier's temperature, as {@link #releasePressure} reads it. W3b: any liquid counts,
      * water's among them (a single liquid of half water or more is labelled aqueous, so the oil label alone left a water
      * pump with no floor and a water valve with no cavitation). */
-    private int liquidPH(FluidThermodynamics.State s,double[] x,double h,double p,Runnable checkpoint) {
+    int liquidPH(FluidThermodynamics.State s,double[] x,double h,double p,Runnable checkpoint) {
         FluidThermodynamics.State at;
         try{at=model.equilibriumPH(s.temperature(),p,h,x.clone(),checkpoint);}catch(IllegalArgumentException refused){return PH_OTHER;}
         if(at==null||!(FluidThermodynamics.holdsPhase(at,FluidThermodynamics.OIL)||FluidThermodynamics.holdsPhase(at,FluidThermodynamics.AQUEOUS)))return PH_OTHER;
@@ -2184,8 +2186,8 @@ public final class PassiveStepSolver {
                 observed=observed.withFlowSamples(meters);
             }
             if(pipe.control() instanceof FlowControl.Mover mover&&mover.liquid()&&mover.targetVolumeFlow()>0&&read(e.graph,edge))
-                observed=observed.withSuction(npshRatio(e,edge,states,flows[edge]),dry(edge,mover,modes.get(edge),flows[edge],states.get(a).pressure()),gasRatio(edge,mover,states.get(a).pressure()),
-                        npshRequired(edge,flows[edge]),constants.vapourShares[edge]);
+                observed=observed.withSuction(observations.npshRatio(e,edge,states,flows[edge]),observations.dry(edge,mover,modes.get(edge),flows[edge],states.get(a).pressure()),observations.gasRatio(edge,mover,states.get(a).pressure()),
+                        observations.npshRequired(edge,flows[edge]),constants.vapourShares[edge]);
             // A running dry screw's suction vapour share (owner V6 B): its wear and liquid noise read its liquid share.
             else if(pipe.control() instanceof FlowControl.Machine screw&&com.wormzjl.icheme.science.machine.VacuumPump.dryScrew(screw.law())&&screw.targetVolumeFlow()>0&&read(e.graph,edge))
                 observed=observed.withSuction(Double.NaN,false,Double.NaN,Double.NaN,constants.vapourShares[edge]);
@@ -2199,87 +2201,12 @@ public final class PassiveStepSolver {
                 // The valve stands at the line's first end: its node side is that end's pressure, its line side the row's
                 // first pressure, which includes the valve's drop (the control head).
                 double node=PortStreams.columnEndPressure(model,e.graph.reservoirs().get(a),pipe.firstPort(),states.get(a),column),line=observed.firstPressure();
-                var read=Math.abs(flows[edge])<=1e-10?PipeObservation.Cavitation.NONE:flows[edge]>=0?cavitation(states.get(donor),node,line,checkpoint):cavitation(states.get(donor),line,node,checkpoint);
+                var read=Math.abs(flows[edge])<=1e-10?PipeObservation.Cavitation.NONE:flows[edge]>=0?observations.cavitation(states.get(donor),node,line,checkpoint):observations.cavitation(states.get(donor),line,node,checkpoint);
                 observed=observed.withValve(Math.abs(node-line),read);
             }
             samples.add(observed);
         }
         return List.copyOf(samples);
-    }
-    /** A control valve's incipient cavitation pressure ratio x_Fz (IEC 60534-8-4): it cavitates from ΔP = x_Fz (P1 − Pv). */
-    static final double VALVE_INCIPIENT=.3;
-    /**
-     * A flowing valve's cavitation (owner 2026-11-10, option A: the liquid valve's loop by σ = (P1 − Pv) / (P1 − P2), Pv the
-     * vapour pressure of the liquid it passes), from its donor node's state {@code s}, its inlet pressure {@code p1} and its
-     * outlet pressure {@code p2}: FLASHING where p2 lies below Pv (the vapour stays), CAVITATING where σ ≤ 1 / x_Fz
-     * ({@link #VALVE_INCIPIENT}: the vena contracta falls below Pv and the bubbles collapse downstream), else PLAIN. Water
-     * reads its saturation pressure at the donor's temperature. A hydrocarbon liquid is throttled at its own enthalpy, as
-     * {@link #releasePressure} reads it, but tested at two pressures instead of bisected: it flashes if it holds vapour at
-     * p2, and it cavitates if it holds vapour at p1 − (p1 − p2) / x_Fz, where σ = 1 / x_Fz (any Pv cavitates where that
-     * pressure is below the box's floor); a liquid beside vapour stands at its bubble point, its node's pressure. The worse
-     * of the two liquids counts. NONE with no liquid or where the thermodynamics refuses. Observational only.
-     */
-    private PipeObservation.Cavitation cavitation(FluidThermodynamics.State s,double p1,double p2,Runnable checkpoint) {
-        var none=PipeObservation.Cavitation.NONE;
-        if(!(p1>p2)||!Double.isFinite(p1+p2))return FluidThermodynamics.holdsPhase(s,FluidThermodynamics.OIL)||FluidThermodynamics.holdsPhase(s,FluidThermodynamics.AQUEOUS)?PipeObservation.Cavitation.PLAIN:none;
-        double incipient=p1-(p1-p2)/VALVE_INCIPIENT;var worst=none;
-        if(FluidThermodynamics.holdsLiquid(s)) {
-            PipeObservation.Cavitation oil;
-            if(FluidThermodynamics.holdsPhase(s,FluidThermodynamics.GAS))oil=regime(s.pressure(),p2,incipient);
-            else {
-                double[] x=liquidMoles(s);
-                double h=liquidEnthalpy(s);int out=liquidPH(s,x,h,Math.max(p2,NumericalBox.MINIMUM_PRESSURE),checkpoint);
-                if(out==PH_VAPOUR)oil=PipeObservation.Cavitation.FLASHING;
-                else if(out!=PH_LIQUID)oil=none;
-                else if(incipient<=NumericalBox.MINIMUM_PRESSURE)oil=PipeObservation.Cavitation.CAVITATING;
-                else oil=liquidPH(s,x,h,incipient,checkpoint)==PH_VAPOUR?PipeObservation.Cavitation.CAVITATING:PipeObservation.Cavitation.PLAIN;
-            }
-            if(oil.ordinal()>worst.ordinal())worst=oil;
-        }
-        return worst;
-    }
-    /** The regime of a liquid of vapour pressure {@code pv} throttled to {@code p2}, cavitating from {@code incipient} (Pa). */
-    static PipeObservation.Cavitation regime(double pv,double p2,double incipient) {
-        if(!Double.isFinite(pv))return PipeObservation.Cavitation.NONE;
-        return pv>p2?PipeObservation.Cavitation.FLASHING:pv>=incipient?PipeObservation.Cavitation.CAVITATING:PipeObservation.Cavitation.PLAIN;
-    }
-    /**
-     * W10b (owner decision D34): a running liquid pump's σ = NPSHA / NPSH3 at the accepted point, which its wear reads
-     * ({@link com.wormzjl.icheme.science.machine.Wear}): its suction end's pressure over the floor of the liquid it draws
-     * ({@link #vapourPressure}), as a head of that liquid ({@code liquidDensities}), over this solve's NPSH3 at its suction
-     * flow ({@link com.wormzjl.icheme.science.machine.Npsh#required}). NaN where it has no NPSH design (a set-flow
-     * constructed pump), no floor or no liquid. Observational: never fed back into the solve.
-     */
-    private double npshRatio(Equations e,int edge,List<FluidThermodynamics.State> states,double massFlow) {
-        double rho=constants.liquidDensities[edge],required=npshRequired(edge,massFlow);
-        if(!(required>0))return Double.NaN;
-        var pipe=e.graph.pipes().get(edge);int a=pipe.first();double floor;
-        try{floor=vapourPressure(e,edge,states.get(a));}catch(IllegalArgumentException outsideData){return Double.NaN;}
-        if(!(floor<Double.POSITIVE_INFINITY))return Double.NaN;
-        return (PortStreams.endPressure(model,e.graph.reservoirs().get(a),pipe.firstPort(),states.get(a))-floor)/(rho*GRAVITY)/required;
-    }
-    /** W10d: a running liquid pump's NPSH3 (m) at the accepted mass flow, on this solve's NPSH design and liquid density; NaN where it has none. */
-    private double npshRequired(int edge,double massFlow) {
-        var design=constants.npshDesigns[edge];double rho=constants.liquidDensities[edge];
-        return design==null||!(rho>0)?Double.NaN:design.required(Math.max(0,massFlow)/rho);
-    }
-    /**
-     * W10c (owner decision D35): a running centrifugal pump's suction vapour share in Turpin onsets, {@code r = α/α_T} at its
-     * suction node's pressure ({@link com.wormzjl.icheme.science.machine.GasEntrainment#onset}), the share this solve read
-     * ({@link #readSuctions}); NaN for a set-flow pump, which has no head factor, or no suction pressure. Observational.
-     */
-    private double gasRatio(int edge,FlowControl.Mover mover,double suctionPressure) {
-        if(!(mover instanceof FlowControl.Machine)||!(suctionPressure>0))return Double.NaN;
-        return constants.vapourShares[edge]/com.wormzjl.icheme.science.machine.GasEntrainment.onset(suctionPressure);
-    }
-    /**
-     * W10b (owner decision D34): whether a liquid pump whose driver is on runs dry at the accepted point: vapour-locked
-     * ({@link #vapourLocks}), refused for a dry suction ({@code INLET_WRONG_PHASE}, decision D58), or gas-locked (a
-     * centrifugal pump passing nothing with its suction's vapour share past the onset, {@link com.wormzjl.icheme.science.machine.GasEntrainment#onset}).
-     */
-    private boolean dry(int edge,FlowControl.Mover mover,FlowControl.Mode mode,double massFlow,double suctionPressure) {
-        if(vapourLocked(edge)||mode==FlowControl.Mode.INLET_WRONG_PHASE)return true;
-        return mover instanceof FlowControl.Machine&&Math.abs(massFlow)<=1e-10&&suctionPressure>0&&constants.vapourShares[edge]>com.wormzjl.icheme.science.machine.GasEntrainment.onset(suctionPressure);
     }
     /**
      * The height a one-block tank's level head is stated over (decision D9, option B): one metre, its own height at the
@@ -3362,61 +3289,14 @@ public final class PassiveStepSolver {
             if(equations.dry[node]&&!holdsNoFluid(projection.inventories().get(node),projection.states().get(node)))return true;
         return false;
     }
-    /**
-     * The step's ledger (owner decision D46): the change of the vessels and filter cakes equals the boundary transfers plus
-     * the junction term, per component, per solid population and for energy (pump work included). The junction term is
-     * the change of the junctions' buffers (a buffer is the state of its relaxation row, not inventory) plus what a rate
-     * evaluation's frozen junctions held back ({@link ConservativeTransport.HeldJunctions}). Each tolerance is scaled by
-     * the boundaries' turnover and the stocks held. The energy is {@code U + sum h dm}: no stream carries potential energy
-     * (owner decision D37, simplification S1), so a pump's lift work stays in the fluid as heat (0.023 K per 10 m of water).
-     */
-    void checkConservation(PassiveNetwork graph,ConservativeTransport.Projection projection) {
-        int count=model.hydrocarbon.componentCount()+1;double[] before=new double[count],after=new double[count],turnover=new double[count];double eb=0,ea=0,energyScale=0;
-        double[] junction=projection.held().moles(),bufferedBefore=new double[count],bufferedAfter=new double[count];double junctionEnergy=projection.held().energyJoule();
-        for(var boundary:projection.boundaries()){var n=boundary.moles();for(int c=0;c<count;c++)turnover[c]+=Math.abs(n[c]);energyScale+=Math.abs(boundary.totalEnergyJoule());}
-        // A rate evaluation's held accumulation was a pseudo-boundary at each junction before D46 and counts in the turnover
-        // as it did, junction by junction.
-        var gross=projection.held().grossMoles();for(int c=0;c<count;c++)turnover[c]+=gross[c];energyScale+=projection.held().grossEnergyJoule();
-        for(int i=0;i<graph.reservoirs().size();i++) {
-            var reservoir=graph.reservoirs().get(i);var old=reservoir.inventory();var next=projection.inventories().get(i);
-            if(reservoir.fixed())continue;
-            var a=old.moles();var b=next.moles();double ebNode=old.internalEnergy(),eaNode=next.internalEnergy();
-            if(reservoir.junction()){for(int j=0;j<count;j++){junction[j]+=b[j]-a[j];bufferedBefore[j]+=a[j];bufferedAfter[j]+=b[j];}junctionEnergy+=eaNode-ebNode;}
-            else{for(int j=0;j<count;j++){before[j]+=a[j];after[j]+=b[j];}eb+=ebNode;ea+=eaNode;}
-            energyScale+=Math.abs(old.internalEnergy());
-        }
-        // Per population: vessels and cakes before [0] and after [1], boundaries [2], buffers before [3] and after [4], and a
-        // rate evaluation's held accumulation [5] (net, signed as the junction term).
-        var solidBalance=new TreeMap<SolidInventory.Key,double[]>();
-        for(int i=0;i<graph.reservoirs().size();i++)if(!graph.reservoirs().get(i).fixed()){
-            int buffer=graph.reservoirs().get(i).junction()?3:0;
-            for(var p:graph.reservoirs().get(i).inventory().solids().populations())solidBalance.computeIfAbsent(p.key(),k->new double[6])[buffer]+=p.massKg();
-            for(var p:projection.inventories().get(i).solids().populations())solidBalance.computeIfAbsent(p.key(),k->new double[6])[buffer+1]+=p.massKg();
-        }
-        for(var p:projection.held().gained().populations())solidBalance.computeIfAbsent(p.key(),k->new double[6])[5]+=p.massKg();
-        for(var p:projection.held().lost().populations())solidBalance.computeIfAbsent(p.key(),k->new double[6])[5]-=p.massKg();
-        for(var pipe:graph.pipes())if(pipe.filter()!=null){
-            var old=pipe.filter();var next=projection.filters().getOrDefault(pipe.id(),old);eb+=old.energyJoule();ea+=next.energyJoule();energyScale+=Math.abs(old.energyJoule())+Math.abs(next.energyJoule());
-            for(var p:old.captured().populations())solidBalance.computeIfAbsent(p.key(),k->new double[6])[0]+=p.massKg();
-            for(var p:next.captured().populations())solidBalance.computeIfAbsent(p.key(),k->new double[6])[1]+=p.massKg();
-        }
-        for(var boundary:projection.boundaries())for(var p:boundary.solids().populations())solidBalance.computeIfAbsent(p.key(),k->new double[6])[2]+=boundary.solidDirection()*p.massKg();
-        // What the junctions melted (owner decision D61) leaves the solid ledger and enters the component and energy ones.
-        var melted=projection.melted();
-        for(var p:melted.solids().populations())solidBalance.computeIfAbsent(p.key(),k->new double[6])[2]-=p.massKg();
-        for(var b:solidBalance.values())if(Math.abs(b[0]+b[2]-b[1]-(b[4]-b[3]+b[5]))>1e-10+1e-8*Math.max(Math.max(b[0]+b[3],b[1]+b[4]),Math.abs(b[2]-b[5])))throw new SparseNewton.Nonconvergence("Solid population balance failed");
-        var external=projection.externalMoles();var meltedMoles=melted.moles();
-        for(int i=0;i<count;i++)if(Math.abs(before[i]+external[i]+meltedMoles[i]-after[i]-junction[i])>1e-10+1e-8*Math.max(turnover[i],Math.max(before[i]+bufferedBefore[i],after[i]+bufferedAfter[i])))throw new SparseNewton.Nonconvergence("Component balance failed: "+i+" before="+before[i]+" after="+after[i]+" external="+external[i]+" junction="+junction[i]);
-        if(Math.abs(ea-eb+junctionEnergy-projection.pumpWork()-projection.externalEnergy()-melted.energyJoule())>1e-4+1e-6*(energyScale+Math.abs(projection.pumpWork())+Math.abs(melted.energyJoule())))throw new SparseNewton.Nonconvergence("Total energy balance failed");
-    }
     /** The two liquid storage slots of a state. */
     private static final int[] LIQUID_SLOTS={FluidThermodynamics.State.LIQUID,FluidThermodynamics.State.AQUEOUS};
     /** The amounts of the state's liquids together, water last. */
-    private static double[] liquidMoles(FluidThermodynamics.State s) {
+    static double[] liquidMoles(FluidThermodynamics.State s) {
         double[] x=s.liquidAmounts(),a=s.aqueousAmountsView();for(int c=0;c<x.length;c++)x[c]+=a[c];return x;
     }
     /** The enthalpy of the state's liquids together, J. */
-    private static double liquidEnthalpy(FluidThermodynamics.State s) {
+    static double liquidEnthalpy(FluidThermodynamics.State s) {
         double h=0;
         for(int slot:LIQUID_SLOTS){var phase=s.phase(slot);if(phase!=null)h+=PhaseLayout.sum(s.amountsView(slot))*phase.molarEnthalpy();}
         return h;
@@ -5026,7 +4906,7 @@ public final class PassiveStepSolver {
                                   double columnDensity,double temperature,boolean flowing,List<Double> lengths,List<Double> losses,double massFlow,double density,List<FlowSample> flowSamples,
                                   double npshRatio,boolean dry,double gasRatio,double npshRequired,double vapourShare,double valveDrop,Cavitation cavitation,
                                   double condensedShare) {
-        /** A flowing liquid valve's state for its noise (owner 2026-11-10, option A; {@link PassiveStepSolver#cavitation}): NONE
+        /** A flowing liquid valve's state for its noise (owner 2026-11-10, option A; {@link StepObservations#cavitation}): NONE
          * on every other row and where the thermodynamics cannot say. */
         public enum Cavitation { NONE, PLAIN, CAVITATING, FLASHING }
         /** Without a centrifugal compressor's wet suction read (code base review N2): no condensed share (NaN). */
