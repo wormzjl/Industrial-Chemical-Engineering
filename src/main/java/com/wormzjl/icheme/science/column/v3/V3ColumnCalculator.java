@@ -85,9 +85,12 @@ public final class V3ColumnCalculator {
     private static final int HYDRAULIC_CORRECTION_MAXIMUM_ITERATIONS = 64;
     /**
      * The correction's own allowance in control polls (D2 of batch 2026-11-13-codebase-review): a counter, so the same
-     * request publishes the same profile on any machine, as the learned route's budget. MEASURED_POLLS_PENDING.
+     * request publishes the same profile on any machine, as the learned route's budget. Measured 2026-11-13 (one correction
+     * each, V3TrayHydraulicsColumnTest): the shipped presets and tower templates 1,901 to 11,446 polls (heavy crude), the
+     * Tia Juana literature preset 21,282 (the largest), the 12-tray literature column 1,676; median 5,356 of the eight. The
+     * budget is eight times the largest, rounded up to one figure: the margin the 10 s wall clock held over the slowest 1.2 s.
      */
-    static final long HYDRAULIC_CORRECTION_BUDGET_POLLS = 1_000_000L;
+    static final long HYDRAULIC_CORRECTION_BUDGET_POLLS = 200_000L;
     /** Deliberately short: the published solve path is already near its bounded length on a ramped request. */
     private static final String HYDRAULIC_CORRECTION_PATH_SUFFIX = "/hyd";
     private static final int DRAW_RAMP_INTERMEDIATE_MAXIMUM_ITERATIONS = 40;
