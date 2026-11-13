@@ -175,7 +175,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
     private final Map<Long, Double> displacements = new HashMap<>();
     /** Each shaft block's drawn size as last set. */
     private final Map<Long, Integer> sizes = new HashMap<>();
-    /** Statuses a governor binding left on a turbine ({@code NO GOVERNOR VALVE}). */
+    /** Statuses a governor binding left on a turbine ({@code INTERNAL GOVERNOR}: no valve it can work). */
     private final Map<Long, String> bindings = new HashMap<>();
     /** Each Create coupling's last input by its cell (W6b): engine state, rebuilt from the block entity's next report. */
     private final Map<PhysicalFluidTopology.Position, CreateInput> create = new HashMap<>();
@@ -457,8 +457,8 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
     /**
      * A speed sensor installed or removed (build plan section 3, reading A25): installed, the nearest control valve upstream
      * of the turbine's inlet, through unbranched pipes in its island, takes source {@code SHAFT_SPEED} and the sensor; a
-     * valve holding its own sensor refuses ({@code NO GOVERNOR VALVE}). Removed, the bound valve returns to source
-     * {@code NONE} and keeps its last target.
+     * turbine with no such valve, or one whose valve holds its own sensor, keeps its internal admission
+     * ({@code INTERNAL GOVERNOR}). Removed, the bound valve returns to source {@code NONE} and keeps its last target.
      */
     private void bind(Governor g) {
         Long unit = unitOfDevice.get(g.turbine());
@@ -1040,7 +1040,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         Long key = trainOf.get(unit);
         var run = key == null ? null : runs.get(key);
         var store = electric == null ? null : electric.view(unit);
-        if (run == null) return new View(unit, u.kind(), u.held() ? "HELD" : u.kind() == ShaftNetwork.Kind.SHAFT ? "LOOSE" : "NO DRIVER", 0, 0, 0, 0, 0, 0, 0, u.settings(), u.trip(), store);
+        if (run == null) return new View(unit, u.kind(), worn(u, u.held() ? "HELD" : u.kind() == ShaftNetwork.Kind.SHAFT ? "LOOSE" : "NO DRIVER", false), 0, 0, 0, 0, 0, 0, 0, u.settings(), u.trip(), store);
         var train = run.train;
         var d = train.driver() == 0 ? null : topology.shaft(train.driver());
         double driverSpeed = train.fault() == ShaftNetwork.Fault.NONE && d != null && d.state() != null ? d.state().speed() : 0;
@@ -1056,12 +1056,23 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         if (u.kind() == ShaftNetwork.Kind.GENERATOR && train.fault() == ShaftNetwork.Fault.NONE && !u.settings().running()) status = "STOPPED";
         // A motor's or generator's store from a save before W5 runs free until wired (A73): the notice, non-blocking.
         if (store != null && "UNMETERED".equals(store.status()) && u.kind() == ShaftNetwork.Kind.MOTOR) status = status + " / UNMETERED";
+        status = worn(u, status, status.equals(run.status));
         double speed = driverSpeed * factor, share = u.designSpeed() > 0 ? speed / u.designSpeed() : 0;
         double shaft = u.kind().driver() ? demand : run.power.getOrDefault(unit, 0.0);
         double power = u.kind() == ShaftNetwork.Kind.MOTOR ? run.electric : u.kind() == ShaftNetwork.Kind.GENERATOR ? run.output.getOrDefault(unit, 0.0) : 0;
         double jpf = electric == null ? ElectricStores.Settings.DEFAULT.joulesPerFE() : electric.joulesPerFE();
         var trip = u.trip() != ShaftTrain.Trip.NONE || !u.kind().driver() ? u.trip() : run.trip;
         return new View(unit, u.kind(), status, driverSpeed, speed, share, demand, shaft, power, power / jpf / 20, u.settings(), trip, store);
+    }
+
+    /**
+     * Part {@code u}'s {@code status} with its worn device's health word (M-16): {@code FAILED} before every train word, a
+     * fault word ({@code CAVITATION}, {@code GAS}, {@code LIQUID}) in place of the train's own run word only ({@code running}).
+     */
+    private String worn(ShaftUnit u, String status, boolean running) {
+        if (health == null || u.fluid() <= 0) return status;
+        String word = health.status(u.fluid());
+        return "FAILED".equals(word) || running && !word.isEmpty() ? word : status;
     }
 
     /** Every shaft unit as the ledger holds it (a read). */
