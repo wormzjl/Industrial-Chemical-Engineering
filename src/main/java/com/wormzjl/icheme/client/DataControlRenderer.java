@@ -42,6 +42,19 @@ public final class DataControlRenderer {
     private static final com.wormzjl.icheme.science.equipment.BoundedCache<DataPort, PortMesh> PORTS = new com.wormzjl.icheme.science.equipment.BoundedCache<>(2048);
     private static RenderDetail detail = RenderDetail.NORMAL;
 
+    /**
+     * The ports drawn, gathered every {@link #HOST_TICKS} ticks or on a new level, as the instrument renderer gathers its hosts
+     * (finding C13, batch 2026-11-13-codebase-review): a port placed or removed shows up to 5 ticks late. Each keeps its
+     * frustum box, so a frame tests the boxes and draws.
+     */
+    private static final int HOST_TICKS = 5;
+
+    private record Shown(DataPort port, AABB box) {}
+
+    private static List<Shown> shown = List.of();
+    private static long shownAt = Long.MIN_VALUE;
+    private static Level shownIn;
+
     private record RackCable(
             RackGeometry.Rack rack,
             RackGeometry.Lane lane,
@@ -103,6 +116,20 @@ public final class DataControlRenderer {
                             if (p.kind().medium() == medium) result.put(id, p);
                         });
         return Map.copyOf(result);
+    }
+
+    /** The ports within 96 blocks of {@code centre}, with their boxes, gathered again every {@link #HOST_TICKS} ticks or on a new level. */
+    private static List<Shown> shown(Level level, Vec3 centre) {
+        long now = level.getGameTime();
+        if (shownIn != level || now < shownAt || now - shownAt >= HOST_TICKS) {
+            var gathered = new ArrayList<Shown>();
+            for (var port : ports(level, centre, 96).values())
+                gathered.add(new Shown(port, new AABB(port.centre(), port.centre()).inflate(.3)));
+            shown = List.copyOf(gathered);
+            shownAt = now;
+            shownIn = level;
+        }
+        return shown;
     }
 
     static boolean connected(Level level, DataPort port) {
@@ -193,10 +220,11 @@ public final class DataControlRenderer {
                 ClientConfig.lodView(
                         event.getProjectionMatrix().m11(), mc.getWindow().getHeight());
         var frustum = event.getFrustum();
-        for (var port : ports(mc.level, mc.player.position(), 96).values()) {
+        for (var seen : shown(mc.level, mc.player.position())) {
+            var port = seen.port();
             var at = port.centre();
             if (GLANDS.of(port.id(), view.pixels(GLAND, at.distanceToSqr(camera))) != 0
-                    || !frustum.isVisible(new AABB(at, at).inflate(.3))) continue;
+                    || !frustum.isVisible(seen.box())) continue;
             var mesh = PORTS.computeIfAbsent(port, p -> portMesh(mc.level, p));
             draw(pose, buffers, camera, port.centre(), mesh.polygons(), 0, 255);
         }
