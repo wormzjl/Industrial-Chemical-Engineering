@@ -16,11 +16,14 @@ import java.util.Map;
 import static com.wormzjl.icheme.science.equipment.EquipmentShape.drum;
 import static org.junit.jupiter.api.Assertions.*;
 
-/** A placed vessel refreshed to its shape's current layout (owner request 2026-10-18): the stamp and the plan. */
+/**
+ * A placed vessel refreshed to its shape's current layout (owner request 2026-10-18): which saved cells are current (the
+ * declared layout revision, an old save's legacy stamp; batch 2026-11-13-codebase-review, E20) and the plan.
+ */
 class EquipmentRefreshTest {
     @Test
-    void theStampNamesALayoutOnBothSides() {
-        // A cell saves its layout's stamp; an equal shape must give it again (on a dedicated server too), another layout another.
+    void theLegacyStampNamesALayoutOnBothSides() {
+        // An old save's cell holds its layout's stamp; an equal shape must give it again (on a dedicated server too), another layout another.
         var shapes = List.of(drum(3, 6, Orientation.VERTICAL, Heading.NORTH, 4), drum(3, 7, Orientation.VERTICAL, Heading.NORTH, 4),
                 drum(3, 6, Orientation.VERTICAL, Heading.EAST, 4), EquipmentShape.unit(Kind.CYCLONE, 2.0, 1, Heading.NORTH, 8),
                 // The storage kinds (owner request 2026-10-21) refresh as every layout does.
@@ -42,6 +45,52 @@ class EquipmentRefreshTest {
             for (int k = 0; k < shapes.size(); k++) assertEquals(stamps.get(k), ShapeRasterizer.legacyStamp(shapes.get(k)), shapes.get(k).toString());
         } finally {
             ShapeRasterizer.drawing(true);
+        }
+    }
+
+    @Test
+    void everyKindDeclaresOneLayoutRevision() {
+        // One revision per design, read through the kind, 1 or more: 0 is the mark of a cell to refresh, no design's.
+        var revisions = new HashMap<Kind, Integer>();
+        for (var shape : EquipmentLayoutGoldenTest.shapes()) {
+            int revision = ShapeRasterizer.layoutRevision(shape);
+            assertTrue(revision >= 1 && revision != EquipmentRefresh.STALE, shape + ": " + revision);
+            if (shape.kind().designed()) assertEquals(UnitDesign.of(shape.kind()).layoutRevision(), revision, shape.toString());
+            int first = revisions.computeIfAbsent(shape.kind(), k -> revision);
+            assertEquals(first, revision, "one revision for every shape of " + shape.kind());
+        }
+        assertEquals(Kind.values().length, revisions.size(), "a kind the table does not lay out: " + revisions.keySet());
+        assertThrows(IllegalArgumentException.class, () -> new Sizes(1, 2, 1, 1, 1, 0, 0, Orientation.VERTICAL, "row", null, null, false, EquipmentRefresh.STALE));
+    }
+
+    @Test
+    void aSavedRevisionIsCurrentOnlyWhenItIsItsDesignsAndItsShapeNeededNoRepair() {
+        for (var shape : List.of(drum(3, 6, Orientation.VERTICAL, Heading.NORTH, 4), EquipmentShape.unit(Kind.CYCLONE, 2.0, 1, Heading.NORTH, 8),
+                EquipmentShape.storage(Kind.TANK, 12, 8, Heading.NORTH, 0))) {
+            int current = ShapeRasterizer.layoutRevision(shape);
+            assertEquals(current, EquipmentRefresh.placedRevision(shape, false, current), shape.toString());
+            // A cell a blocked refresh wrote, one an older or a newer layout placed, a cell whose shape was repaired on read.
+            assertEquals(EquipmentRefresh.STALE, EquipmentRefresh.placedRevision(shape, false, EquipmentRefresh.STALE), shape.toString());
+            assertEquals(EquipmentRefresh.STALE, EquipmentRefresh.placedRevision(shape, false, current - 1), shape.toString());
+            assertEquals(EquipmentRefresh.STALE, EquipmentRefresh.placedRevision(shape, false, current + 1), shape.toString());
+            assertEquals(EquipmentRefresh.STALE, EquipmentRefresh.placedRevision(shape, true, current), shape.toString());
+        }
+    }
+
+    @Test
+    void anOldSavesStampIsCurrentWhileItsDesignIsAtRevisionOne() {
+        // A cell saved before layout revisions holds only its stamp: current, revision 1, while its design's revision is 1
+        // and the stamp is its shape's; so no placed structure refreshes at the switch, and one an older layout placed does.
+        var shapes = List.of(drum(3, 6, Orientation.VERTICAL, Heading.NORTH, 4), drum(3, 7, Orientation.VERTICAL, Heading.NORTH, 4),
+                EquipmentShape.unit(Kind.CYCLONE, 2.0, 1, Heading.NORTH, 8), EquipmentShape.storage(Kind.TANK, 12, 8, Heading.NORTH, 0),
+                EquipmentShape.column(1.5, ColumnTrays.simple(20, 10), Heading.NORTH, EquipmentShape.minimumSkirt(1.5)));
+        for (int k = 0; k < shapes.size(); k++) {
+            var shape = shapes.get(k);var other = shapes.get((k + 1) % shapes.size());
+            int current = ShapeRasterizer.layoutRevision(shape) == 1 ? 1 : EquipmentRefresh.STALE;
+            assertEquals(current, EquipmentRefresh.legacyRevision(shape, ShapeRasterizer.legacyStamp(shape)), shape.toString());
+            assertEquals(EquipmentRefresh.STALE, EquipmentRefresh.legacyRevision(shape, ShapeRasterizer.legacyStamp(other)), shape + " placed as " + other);
+            // A cell saved before stamps: no stamp.
+            assertEquals(EquipmentRefresh.STALE, EquipmentRefresh.legacyRevision(shape, 0), shape.toString());
         }
     }
 

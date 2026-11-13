@@ -165,6 +165,66 @@ public final class EquipmentCompatGameTests {
     }
 
     /**
+     * A shell cell's layout across a save (batch 2026-11-13-codebase-review, E20). A new cell saves its design's layout
+     * revision under {@code LayoutRevision} and no {@code Layout} stamp, and reads back current; a cell saved with another
+     * revision, or with the 0 a blocked refresh leaves, reads stale. A cell from a save before revisions holds only its
+     * stamp: with its own layout's stamp it reads current while its design is at revision 1 and saves the revision at its
+     * next save; with another layout's stamp, or with none, it reads stale. The cells are read, never loaded into the world,
+     * so nothing refreshes; the drum leaves with its registration.
+     */
+    @GameTest(template="empty",timeoutTicks=200,batch="equipment-compat-revision")
+    public static void aCellReadsItsLayoutRevisionOrAnOldSavesStamp(GameTestHelper helper) {
+        var level=helper.getLevel();var world=FluidWorldAuthority.find(level.getServer()).orElseThrow();
+        var shape=EquipmentShape.drum(3,3,EquipmentShape.Orientation.VERTICAL,EquipmentShape.Heading.NORTH,0);
+        var origin=helper.absolutePos(new BlockPos(1,1,1));var layout=ShapeRasterizer.layout(shape);
+        var node=ShapeRasterizer.fluidCell(shape);var nodeAt=origin.offset(node.x(),node.y(),node.z());
+        var position=new PhysicalFluidTopology.Position(level.dimension().location().toString(),nodeAt.getX(),nodeAt.getY(),nodeAt.getZ());
+        int revision=ShapeRasterizer.layoutRevision(shape);long stamp=ShapeRasterizer.legacyStamp(shape);
+        // An old save's cell with its own layout's stamp is current only until the design's first bump.
+        boolean oldCurrent=revision==1;
+        String[] failure={null};
+        EquipmentStructure.place(level,origin,shape,Paint.DEFAULT,Integer.MAX_VALUE);
+        helper.startSequence().thenWaitUntil(()->helper.assertTrue(world.at(position).isPresent(),"Waiting for the drum's registration"))
+        .thenExecute(()->{
+            var registries=level.registryAccess();
+            for(var c:layout.shell()) {
+                var shell=(EquipmentShellBlockEntity)level.getBlockEntity(origin.offset(c.x(),c.y(),c.z()));
+                var saved=shell.saveWithoutMetadata(registries);
+                if(failure[0]==null&&(!saved.contains("LayoutRevision",net.minecraft.nbt.Tag.TAG_INT)||saved.getInt("LayoutRevision")!=revision||saved.contains("Layout")))
+                    failure[0]="a new cell saves its layout revision "+revision+" and no stamp, at "+c+": "+saved;
+                var another=saved.copy();another.putInt("LayoutRevision",revision+1);
+                var blocked=saved.copy();blocked.putInt("LayoutRevision",0);
+                var unstamped=saved.copy();unstamped.remove("LayoutRevision");
+                var cases=new LinkedHashMap<String,net.minecraft.nbt.CompoundTag>();var stale=new HashMap<String,Boolean>();
+                cases.put("a new cell",saved.copy());stale.put("a new cell",false);
+                cases.put("a cell of another layout revision",another);stale.put("a cell of another layout revision",true);
+                cases.put("a cell a blocked refresh wrote",blocked);stale.put("a cell a blocked refresh wrote",true);
+                cases.put("an old save's cell with another layout's stamp",beforeRevisions(saved,stamp^1));stale.put("an old save's cell with another layout's stamp",true);
+                cases.put("an old save's cell from before stamps",unstamped);stale.put("an old save's cell from before stamps",true);
+                cases.put("an old save's cell with its layout's stamp",beforeRevisions(saved,stamp));stale.put("an old save's cell with its layout's stamp",!oldCurrent);
+                for(var entry:cases.entrySet()) {
+                    shell.loadWithComponents(entry.getValue(),registries);
+                    if(failure[0]==null&&shell.stale()!=stale.get(entry.getKey()))failure[0]=entry.getKey()+" reads "+(shell.stale()?"stale":"current")+", at "+c;
+                }
+                // The last case read, an old save's cell with its own stamp, saves the revision it holds and no stamp.
+                var again=shell.saveWithoutMetadata(registries);
+                if(failure[0]==null&&(again.getInt("LayoutRevision")!=(oldCurrent?revision:0)||again.contains("Layout")))
+                    failure[0]="an old save's cell saves its layout revision and no stamp, at "+c+": "+again;
+                shell.loadWithComponents(saved,registries);
+            }
+            EquipmentTestCleanup.remove(level,nodeAt);
+        }).thenWaitUntil(()->helper.assertTrue(world.at(position).isEmpty(),"Waiting for the drum's registration to leave"))
+        .thenExecute(()->{if(failure[0]!=null)helper.fail(failure[0]);})
+        .thenSucceed();
+    }
+
+    /** {@code saved} as a save from before layout revisions holds it: no {@code LayoutRevision}, the stamp {@code stamp} under {@code Layout}. */
+    private static net.minecraft.nbt.CompoundTag beforeRevisions(net.minecraft.nbt.CompoundTag saved,long stamp) {
+        var tag=saved.copy();tag.remove("LayoutRevision");tag.putLong("Layout",stamp);
+        return tag;
+    }
+
+    /**
      * A skirted drum's interior cells let skylight through, so the floor inside its skirt is lit as the open sky above the
      * drum (owner request 2026-10-27: "Remove the shadow in drum/vessel skirt"). A drum a save from before placed, its
      * interior cells opaque, has the old shadow on that floor; its next load restates the cells and the floor's light
