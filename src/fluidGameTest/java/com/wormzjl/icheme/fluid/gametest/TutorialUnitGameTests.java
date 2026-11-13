@@ -1,6 +1,15 @@
 package com.wormzjl.icheme.fluid.gametest;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.wormzjl.icheme.IChemE;
+import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
+import com.wormzjl.icheme.science.column.v3.V3ColumnSpecification;
+import com.wormzjl.icheme.science.column.v3.V3ColumnTemplate;
+import com.wormzjl.icheme.science.column.v3.V3PumparoundSpec;
+import com.wormzjl.icheme.science.column.v3.V3SideDrawSpec;
+import com.wormzjl.icheme.science.column.v3.V3SteamFeedSpec;
+import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.column.operation.OperationView;
 import com.wormzjl.icheme.science.column.operation.Port;
 import com.wormzjl.icheme.science.equipment.ColumnComponents;
@@ -11,6 +20,9 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -28,15 +40,55 @@ import java.util.Optional;
 public final class TutorialUnitGameTests {
     private TutorialUnitGameTests() {}
 
-    /** The guide's tower template (columnpreset/small_crude.json). */
+    /** The guide's tower template and its crude (assets columnpreset/small_crude.json and mixturepreset/small_crude.json). */
     static final String TEMPLATE = "small_crude";
 
     /** The plant: the template at its whole feed, on the review plant's layout (its first pumparound place) and units. */
     static ColumnOperationReviewWorld.Options options() {
         var r = ColumnOperationReviewWorld.Options.REVIEW;
-        return new ColumnOperationReviewWorld.Options(1, catalog -> catalog.presets().column(TEMPLATE).input(catalog), ColumnComponents.Condenser.EXCHANGER,
+        return new ColumnOperationReviewWorld.Options(1, TutorialUnitGameTests::input, ColumnComponents.Condenser.EXCHANGER,
                 ColumnOperationReviewWorld.exchanger(ColumnOperationReviewWorld.CONDENSER_SIZE), null, AssemblyGameTests.Plant.unit(Kind.EXCHANGER), null,
                 r.feedBore(), r.steamBore(), 0, 0, false, false, r.layout());
+    }
+
+    /**
+     * The guide's tower as the player builds it: its stream template's crude, flow and temperature under its tower template,
+     * on the default column preset's package, as the column tests' {@code V3TestInputs.crude} builds it (the templates are
+     * the client's assets, not the material catalog's presets; final lane 2026-11-13).
+     */
+    static V3ColumnInput input(MaterialCatalog catalog) {
+        var base = catalog.presets().column(catalog.presets().network().defaultColumnPreset()).input(catalog);
+        var stream = asset("mixturepreset/" + TEMPLATE + ".json");
+        double rate = stream.get("flow_kmol_h").getAsDouble();
+        var tower = V3ColumnTemplate.read(asset("columnpreset/" + TEMPLATE + ".json")).scaledTo(rate);
+        var ids = base.componentBasis().componentIds();
+        double[] feed = new double[ids.size()];
+        double total = 0;
+        for (var row : stream.getAsJsonArray("components")) {
+            double amount = row.getAsJsonObject().get("amount").getAsDouble();
+            feed[ids.indexOf(row.getAsJsonObject().get("id").getAsString())] = amount;
+            total += amount;
+        }
+        for (int i = 0; i < feed.length; i++) feed[i] *= rate / 3.6 / total;
+        String assay = catalog.requirePackage(base.packageId()).assays().containsKey("icheme:" + TEMPLATE) ? "icheme:" + TEMPLATE : base.assayId();
+        return new V3ColumnInput(1, base.packageId(), assay, base.componentBasis(), feed, stream.get("temperature_kelvin").getAsDouble(),
+                tower.trays() - 2, tower.feedTray() - 1, tower.topPressure() * 1e5, base.stagePressureDropPascal(),
+                List.of(new V3ColumnSpecification.CondenserOutletTemperature(tower.topTemperature()),
+                        new V3ColumnSpecification.OrganicRefluxRatio(tower.refluxRatio()), new V3ColumnSpecification.ReboilerDuty(tower.reboilerDuty() * 1e6)),
+                tower.draws().stream().map(d -> new V3SideDrawSpec(d.tray() - 1, d.flow() / 3.6)).toList(),
+                tower.steam().stream().map(st -> new V3SteamFeedSpec(st.tray() - 1, st.flow() / 3.6, st.temperature())).toList(),
+                tower.pumparounds().stream().map(q -> new V3PumparoundSpec(q.returnTray() - 1, q.drawTray() - 1, -q.cooling() * 1e6, q.split())).toList(),
+                tower.diameter());
+    }
+
+    /** A file of the mod's {@code assets/icheme/}. */
+    private static JsonObject asset(String path) {
+        try (var in = IChemE.class.getResourceAsStream("/assets/icheme/" + path)) {
+            if (in == null) throw new IllegalStateException("No asset " + path);
+            return JsonParser.parseString(new String(in.readAllBytes(), StandardCharsets.UTF_8)).getAsJsonObject();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     @GameTest(template = "empty", timeoutTicks = 20000, batch = "tutorial-unit")
