@@ -96,11 +96,11 @@ class ProcessOutletTest extends PortFixture {
         assertTrue(FluidThermodynamics.holdsPhase(filmed,FluidThermodynamics.OIL)&&PhaseDraw.mixedLiquids(filmed,PassiveNetwork.PhasePort.LIQUID));
         double oil=FluidThermodynamics.phaseVolume(filmed,FluidThermodynamics.OIL);assertTrue(oil<1e-22);
         assertEquals(oil/line,PhaseDraw.mixedShares(filmed,line)[FluidThermodynamics.OIL],1e-12*oil/line);
-        double rho=PassiveStepSolver.endDensity(model,clean,PassiveNetwork.PhasePort.LIQUID,line);
-        assertEquals(rho,PassiveStepSolver.endDensity(model,filmed,PassiveNetwork.PhasePort.LIQUID,line),1e-12*rho);
+        double rho=PortStreams.endDensity(model,clean,PassiveNetwork.PhasePort.LIQUID,line);
+        assertEquals(rho,PortStreams.endDensity(model,filmed,PassiveNetwork.PhasePort.LIQUID,line),1e-12*rho);
         var scratch=new com.wormzjl.icheme.science.fluid.transport.MixtureViscosity.Workspace();
         double mu=model.phaseViscosity(clean,FluidThermodynamics.AQUEOUS,scratch,null);
-        assertEquals(mu,PassiveStepSolver.mixedViscosity(model,filmed,line,scratch),1e-12*mu);
+        assertEquals(mu,PortStreams.mixedViscosity(model,filmed,line,scratch),1e-12*mu);
         double previous=0;
         boolean half=false;
         for(double moles:new double[]{1e-6,1e-3,.1,1,5,8,10,20,100}){
@@ -121,7 +121,7 @@ class ProcessOutletTest extends PortFixture {
         var inventory=new PassiveNetwork.Inventory(g.capacity(),PhaseLayout.totalAmounts(state),state.internalEnergy(),state.solids(),g.height(),false,g);
         var node=new PassiveNetwork.Reservoir(1,0,state,PassiveNetwork.NodeKind.RESERVOIR,inventory);
         double volume=TestPhases.waterVolume(state)+state.solidMoments().volume(),mass=model.phaseMass(state,FluidThermodynamics.AQUEOUS)+state.solidMoments().mass();
-        double head=PassiveStepSolver.portHead(model,node,PassiveNetwork.PhasePort.LIQUID,state);
+        double head=PortStreams.portHead(model,node,PassiveNetwork.PhasePort.LIQUID,state);
         assertEquals(PassiveStepSolver.GRAVITY*mass/volume*g.heightAt(volume),head,1e-9*head);
         assertTrue(head>PassiveStepSolver.GRAVITY*model.phaseMass(state,FluidThermodynamics.AQUEOUS)/volume*g.heightAt(volume),"the solids' weight is in the head");
     }

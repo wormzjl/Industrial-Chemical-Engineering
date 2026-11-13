@@ -104,7 +104,7 @@ final class PhaseDraw {
      * rest, as the priority stream's last phase takes the rest of a flow. Null when the state holds none of the order's
      * phases. The one fill of both readers: the step's suction intake of a mover ({@link InletPhase}, its target volume
      * shared among the vessel's {@code ends} phase-port outlets) and the static column of a connection
-     * ({@code PassiveStepSolver.columnDensity}, the connection's own volume, one end).
+     * ({@code PortStreams.columnDensity}, the connection's own volume, one end).
      */
     static double[] fill(FluidThermodynamics.State state,int[] order,double volume,int ends) {
         int last=-1;for(int phase:order)if(FluidThermodynamics.holdsPhase(state,phase))last=phase;

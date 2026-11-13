@@ -2432,7 +2432,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
             @Override public WorldTopologyLedger.Registration at(PhysicalFluidTopology.Position position){return registry.at(position).orElse(null);}
             @Override public FluidView view(long device){return FluidWorldAuthority.this.view(device,islands);}
             @Override public double[] weights(){return model.molecularWeights();}
-            @Override public double portPressure(PassiveNetwork.Reservoir node,PassiveNetwork.PhasePort port){return node.state().pressure()+com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.portHead(model,node,port,node.state());}
+            @Override public double portPressure(PassiveNetwork.Reservoir node,PassiveNetwork.PhasePort port){return node.state().pressure()+com.wormzjl.icheme.science.fluid.network.PortStreams.portHead(model,node,port,node.state());}
         };
     }
     /** The status a side's controller adds (W4, plan section 6), ending in " / ", or nothing while it meets its target. */

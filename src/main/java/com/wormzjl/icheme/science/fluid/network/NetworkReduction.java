@@ -83,7 +83,7 @@ public final class NetworkReduction {
     /**
      * The static drive of every connection, in Pa, as {forward, reverse}: the end pressures (a tank's bottom port with its
      * level head) less the column between the ends that the donor end's port stands in the connection
-     * ({@link PassiveStepSolver#columnDensity}, owner decision D34), positive when it pushes that way;
+     * ({@link PortStreams#columnDensity}, owner decision D34), positive when it pushes that way;
      * {@link Double#NEGATIVE_INFINITY} for a direction the one-way rules forbid. The rest step ({@link #atRest}) reads its
      * size against {@link #REST_RESOLUTION}.
      */
@@ -91,13 +91,13 @@ public final class NetworkReduction {
         var drive=new double[graph.pipes().size()][2];
         for(int i=0;i<drive.length;i++) {
             var pipe=graph.pipes().get(i);var a=graph.reservoirs().get(pipe.first());var b=graph.reservoirs().get(pipe.second());
-            double pa=a.state().pressure()+PassiveStepSolver.portHead(model,a,pipe.firstPort(),a.state());
-            double pb=b.state().pressure()+PassiveStepSolver.portHead(model,b,pipe.secondPort(),b.state());
+            double pa=a.state().pressure()+PortStreams.portHead(model,a,pipe.firstPort(),a.state());
+            double pb=b.state().pressure()+PortStreams.portHead(model,b,pipe.secondPort(),b.state());
             double dz=b.elevation()-a.elevation(),difference=pa-pb;
             drive[i][0]=PassiveStepSolver.boundaryAllowed(graph,pipe,1)
-                    ?difference-PassiveStepSolver.columnDensity(model,a.state(),pipe.firstPort(),pipe.volume())*PassiveStepSolver.GRAVITY*dz:Double.NEGATIVE_INFINITY;
+                    ?difference-PortStreams.columnDensity(model,a.state(),pipe.firstPort(),pipe.volume())*PassiveStepSolver.GRAVITY*dz:Double.NEGATIVE_INFINITY;
             drive[i][1]=PassiveStepSolver.boundaryAllowed(graph,pipe,-1)
-                    ?-(difference-PassiveStepSolver.columnDensity(model,b.state(),pipe.secondPort(),pipe.volume())*PassiveStepSolver.GRAVITY*dz):Double.NEGATIVE_INFINITY;
+                    ?-(difference-PortStreams.columnDensity(model,b.state(),pipe.secondPort(),pipe.volume())*PassiveStepSolver.GRAVITY*dz):Double.NEGATIVE_INFINITY;
         }
         return drive;
     }
@@ -231,8 +231,8 @@ public final class NetworkReduction {
         var pipe=graph.pipes().get(edge);double flow=Double.POSITIVE_INFINITY;
         for(int node:new int[]{pipe.first(),pipe.second()}) {
             var s=graph.reservoirs().get(node).state();var port=pipe.portAt(node);
-            double density=PassiveStepSolver.endDensity(model,s,port,pipe.volume());int phase=PhaseDraw.leading(model,s,port);
-            double viscosity=PhaseDraw.mixedLiquids(s,port)?PassiveStepSolver.mixedViscosity(model,s,pipe.volume(),scratch):phase<0?viscosity(model,s,scratch):model.phaseViscosity(s,phase,scratch,null);
+            double density=PortStreams.endDensity(model,s,port,pipe.volume());int phase=PhaseDraw.leading(model,s,port);
+            double viscosity=PhaseDraw.mixedLiquids(s,port)?PortStreams.mixedViscosity(model,s,pipe.volume(),scratch):phase<0?viscosity(model,s,scratch):model.phaseViscosity(s,phase,scratch,null);
             double slope;
             if(pipe.filter()==null)slope=pipe.loss(0,density,viscosity).massFlowDerivative();
             else{double loading=pipe.filter().loading();slope=pipe.filter().cleanResistance()*(viscosity/.001)*(1+99*loading*loading)/density;}

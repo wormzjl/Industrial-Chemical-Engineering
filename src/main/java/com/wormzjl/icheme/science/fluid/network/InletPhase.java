@@ -135,13 +135,13 @@ public final class InletPhase {
     /**
      * The density (kg/m3) of what connection {@code edge}'s suction line delivers, {@link #supply}'s stream on the same
      * arguments: the drawn phase streams' mass over their volume, each at the density a connection's end draws it with
-     * ({@code PassiveStepSolver.endDensity}), the bulk's at a BULK end. What a set-flow pump's relief rise reads (owner
+     * ({@code PortStreams.endDensity}), the bulk's at a BULK end. What a set-flow pump's relief rise reads (owner
      * decision D11, A2).
      */
     public static double density(FluidThermodynamics model,PassiveNetwork graph,int edge,double targetVolumeFlow,double duration) {
         var source=source(model,graph,edge,targetVolumeFlow,duration);var state=graph.reservoirs().get(source.node()).state();
         double mass=0,volume=0;
-        if(source.drawn()!=null)for(int phase=0;phase<3;phase++)if(source.drawn()[phase]>0){mass+=source.drawn()[phase]*PassiveStepSolver.phaseDensity(model,state,phase);volume+=source.drawn()[phase];}
+        if(source.drawn()!=null)for(int phase=0;phase<3;phase++)if(source.drawn()[phase]>0){mass+=source.drawn()[phase]*PortStreams.phaseDensity(model,state,phase);volume+=source.drawn()[phase];}
         return volume>0?mass/volume:state.mass()/state.volume();
     }
     /**
@@ -153,8 +153,8 @@ public final class InletPhase {
     public static double liquidDensity(FluidThermodynamics model,PassiveNetwork graph,int edge,double targetVolumeFlow,double duration) {
         var source=source(model,graph,edge,targetVolumeFlow,duration);var state=graph.reservoirs().get(source.node()).state();
         double mass=0,volume=0;
-        if(source.drawn()!=null)for(int phase:new int[]{OIL,AQUEOUS})if(source.drawn()[phase]>0){mass+=source.drawn()[phase]*PassiveStepSolver.phaseDensity(model,state,phase);volume+=source.drawn()[phase];}
-        if(!(volume>0))for(int phase:new int[]{OIL,AQUEOUS}){double v=FluidThermodynamics.phaseVolume(state,phase);if(v>0){mass+=v*PassiveStepSolver.phaseDensity(model,state,phase);volume+=v;}}
+        if(source.drawn()!=null)for(int phase:new int[]{OIL,AQUEOUS})if(source.drawn()[phase]>0){mass+=source.drawn()[phase]*PortStreams.phaseDensity(model,state,phase);volume+=source.drawn()[phase];}
+        if(!(volume>0))for(int phase:new int[]{OIL,AQUEOUS}){double v=FluidThermodynamics.phaseVolume(state,phase);if(v>0){mass+=v*PortStreams.phaseDensity(model,state,phase);volume+=v;}}
         return volume>0?mass/volume:Double.NaN;
     }
     /** Where a suction walk ends: the node, its end's port there (BULK at a junction) and the phase stream volumes drawn
