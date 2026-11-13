@@ -24,6 +24,56 @@ final class V3SolveScratch {
 
     private static final class Pool {
         private V3SolveScratch free = new V3SolveScratch();
+        /** The calculation's band factorizations by call site ({@link Factorization}). */
+        private final int[] factorizations = new int[Factorization.values().length];
+    }
+
+    /**
+     * Where a calculation factors a band matrix (P7 of batch 2026-11-13-codebase-review): the Newton step on the coloured
+     * finite-difference Jacobian, the local block Jacobian's step, the final Newton certificate's direct correction and its
+     * damped normal-equation corrections, and the damped Gauss-Newton fallback. A count, not a time: it decides how much the
+     * factorization itself is worth reusing.
+     */
+    enum Factorization {
+        NEWTON("newton"), LOCAL_BLOCK("local block"), VERIFY_DIRECT("verify direct"), VERIFY_DAMPED("verify damped"),
+        DAMPED_FALLBACK("damped fallback");
+
+        private final String label;
+
+        Factorization(String label) {
+            this.label = label;
+        }
+    }
+
+    /** Counts one band factorization at {@code site} in the open calculation; outside one it counts nothing. */
+    static void factorized(Factorization site) {
+        var pool = OPEN.get();
+        if (pool != null) pool.factorizations[site.ordinal()]++;
+    }
+
+    /** The open calculation's factorizations so far, by {@link Factorization} ordinal; zeros outside a calculation. */
+    static int[] factorizations() {
+        var pool = OPEN.get();
+        return pool == null ? new int[Factorization.values().length] : pool.factorizations.clone();
+    }
+
+    /** The open calculation's factorizations so far, all sites together. */
+    static int totalFactorizations() {
+        int total = 0;
+        for (int count : factorizations()) total += count;
+        return total;
+    }
+
+    /** The solver event of a calculation's factorizations: each site's count and the total. */
+    static String factorizationEvent() {
+        int[] counts = factorizations();
+        var text = new StringBuilder("band factorizations:");
+        int total = 0;
+        for (var site : Factorization.values()) {
+            text.append(' ').append(site.label).append(' ').append(counts[site.ordinal()]).append(',');
+            total += counts[site.ordinal()];
+        }
+        return text.append(" total ").append(total).toString();
     }
 
     /** Runs {@code body} as one calculation: its attempts share one scratch set, dropped when it returns. */
