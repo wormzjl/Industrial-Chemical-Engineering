@@ -121,19 +121,12 @@ final class EbullatedBedReactorDesign extends UnitDesign {
         return Math.max(2, .6 * d);
     }
 
-    @Override
-    public double minSize() {
-        return 2.5;
-    }
-
-    @Override
-    public double maxSize() {
-        return 6;
-    }
-
-    @Override
-    public double sizeStep() {
-        return .5;
+    EbullatedBedReactorDesign() {
+        // Computed in its overrides: minLength, maxLength, minSupport.
+        super(new Sizes(2.5, 6, .5,
+                Sizes.COMPUTED, Sizes.COMPUTED,
+                Sizes.COMPUTED, EquipmentShape.MAX_SUPPORT,
+                Orientation.VERTICAL, "ebullated_bed_reactor.diameter", "ebullated_bed_reactor.tangent_length", "ebullated_bed_reactor.bay", false));
     }
 
     @Override
@@ -160,28 +153,8 @@ final class EbullatedBedReactorDesign extends UnitDesign {
     }
 
     @Override
-    public Orientation orientation() {
-        return Orientation.VERTICAL;
-    }
-
-    @Override
-    public String sizeRow() {
-        return "ebullated_bed_reactor.diameter";
-    }
-
-    @Override
-    public String lengthRow() {
-        return "ebullated_bed_reactor.tangent_length";
-    }
-
-    @Override
     public boolean lengthInMetres() {
         return true;
-    }
-
-    @Override
-    public String supportRow() {
-        return "ebullated_bed_reactor.bay";
     }
 
     @Override

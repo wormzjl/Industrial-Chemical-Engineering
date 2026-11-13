@@ -57,29 +57,12 @@ final class CycloneDesign extends UnitDesign {
     /** The highest dust outlet, m. */
     static final int MAX_DUST_OUTLET = 8;
 
-    @Override
-    public double minSize() {
-        return .3;
-    }
-
-    @Override
-    public double maxSize() {
-        return 2;
-    }
-
-    @Override
-    public double sizeStep() {
-        return .1;
-    }
-
-    @Override
-    public int minLength(double size) {
-        return 1;
-    }
-
-    @Override
-    public int maxLength(double size) {
-        return 4;
+    CycloneDesign() {
+        // Computed in its overrides: minSupport.
+        super(new Sizes(.3, 2, .1,
+                1, 4,
+                Sizes.COMPUTED, MAX_DUST_OUTLET,
+                Orientation.VERTICAL, "cyclone.body", "cyclone.count", "cyclone.dust_outlet", true));
     }
 
     /** The lowest dust outlet whose solids outlet keeps its pipe block over the ground. */
@@ -89,38 +72,8 @@ final class CycloneDesign extends UnitDesign {
     }
 
     @Override
-    public int maxSupport() {
-        return MAX_DUST_OUTLET;
-    }
-
-    @Override
-    public Orientation orientation() {
-        return Orientation.VERTICAL;
-    }
-
-    @Override
-    public boolean moves() {
-        return true;
-    }
-
-    @Override
-    public String sizeRow() {
-        return "cyclone.body";
-    }
-
-    @Override
-    public String lengthRow() {
-        return "cyclone.count";
-    }
-
-    @Override
     public boolean lengthInMetres() {
         return false;
-    }
-
-    @Override
-    public String supportRow() {
-        return "cyclone.dust_outlet";
     }
 
     @Override

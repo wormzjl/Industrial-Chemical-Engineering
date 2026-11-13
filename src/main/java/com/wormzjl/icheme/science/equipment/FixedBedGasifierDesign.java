@@ -44,50 +44,12 @@ import static com.wormzjl.icheme.science.equipment.ProcessUnit.clamp;
  * the chute 1 m over grade. Moving: the grate drives' couplings turn; the locks' cylinders slide (0.3 to 0.6 m strokes).
  */
 final class FixedBedGasifierDesign extends UnitDesign {
-    @Override
-    public double minSize() {
-        return 2;
-    }
-
-    @Override
-    public double maxSize() {
-        return 5;
-    }
-
-    @Override
-    public double sizeStep() {
-        return .25;
-    }
-
-    /** The ash lock's bottom valve 3 m up at least: the chute and the sluice or conveyor under it. */
-    @Override
-    public int minSupport(double size, int length) {
-        return 3;
-    }
-
-    @Override
-    public int maxSupport() {
-        return 5;
-    }
-
-    @Override
-    public Orientation orientation() {
-        return Orientation.VERTICAL;
-    }
-
-    @Override
-    public boolean moves() {
-        return true;
-    }
-
-    @Override
-    public String sizeRow() {
-        return "fixed_bed_gasifier.diameter";
-    }
-
-    @Override
-    public String supportRow() {
-        return "fixed_bed_gasifier.ash_lock";
+    FixedBedGasifierDesign() {
+        // minSupport: The ash lock's bottom valve 3 m up at least: the chute and the sluice or conveyor under it.
+        super(new Sizes(2, 5, .25,
+                1, 1,
+                3, 5,
+                Orientation.VERTICAL, "fixed_bed_gasifier.diameter", null, "fixed_bed_gasifier.ash_lock", true));
     }
 
     @Override
