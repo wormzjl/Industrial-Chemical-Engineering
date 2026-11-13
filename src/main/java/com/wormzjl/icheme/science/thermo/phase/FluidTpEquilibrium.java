@@ -596,10 +596,8 @@ public final class FluidTpEquilibrium {
         private int kernelEvaluations, derivativeEvaluations, rachfordRiceSteps, iterations, extrapolations,
                 newtonIterations;
         private double lastChange;
-        // Branch pressures of the hydrocarbon core: equal on the dry path.
-        private double liquidPressure, vaporPressure;
-        private boolean branched;
-        private final double[] vaporShifts;
+        // The pressure of the hydrocarbon core.
+        private double pressure;
         // The Newton finish.
         private final double[] vaporMoles, liquidMoles, trialVapor, trialLiquid, step, gradient, scale, reference, trial;
         private final double[] hessian, factor, direction;
@@ -694,7 +692,6 @@ public final class FluidTpEquilibrium {
             phases = owner.evaluator.newWorkspace();
             vaporState = owner.evaluator.newState();
             liquidState = owner.evaluator.newState();
-            vaporShifts = new double[n];
             vaporMoles = new double[n];
             liquidMoles = new double[n];
             trialVapor = new double[n];
@@ -724,9 +721,6 @@ public final class FluidTpEquilibrium {
             threeVapour = owner.evaluator.newState();
             slots = owner.inEquationOfState ? new Slots(owner) : null;
         }
-
-        /** The pressure a root's branch is evaluated at. */
-        private double pressureOf(Root root) { return root == Root.VAPOR ? vaporPressure : liquidPressure; }
     }
 
     /**
@@ -2301,7 +2295,7 @@ public final class FluidTpEquilibrium {
      * answer needs a converged, stability-tested fluid the crystal leaves.
      */
     private boolean splitChemicalPotentialsUsable(EquilibriumResult fluid, Workspace w) {
-        if (fluid.status() != EquilibriumResult.Status.NOT_CONVERGED || w.branched) return false;
+        if (fluid.status() != EquilibriumResult.Status.NOT_CONVERGED) return false;
         String detail = fluid.detail();
         boolean unstableProduct = detail.startsWith(EquilibriumResult.UNSTABLE_PRODUCT)
                 || detail.startsWith(EquilibriumResult.CRITICAL_BAND) && detail.contains("): " + EquilibriumResult.UNSTABLE_PRODUCT);
@@ -4369,7 +4363,7 @@ public final class FluidTpEquilibrium {
     // The dry calculation: hydrocarbon phases at one pressure.
 
     private EquilibriumResult solveDry(double t, double p, PhaseCompetition competition, Workspace w) {
-        setBranches(t, p, p, w);
+        w.pressure = p;
         int outcome = hydrocarbon(t, w);
         return switch (outcome) {
             case SINGLE -> singlePhase(t, p, competition, w);
@@ -4378,17 +4372,6 @@ public final class FluidTpEquilibrium {
             case THREE -> threePhaseResult(t, p, competition, w);
             default -> failed(t, p, competition, w);
         };
-    }
-
-    private void setBranches(double t, double liquidPressure, double vaporPressure, Workspace w) {
-        w.liquidPressure = liquidPressure;
-        w.vaporPressure = vaporPressure;
-        w.branched = liquidPressure != vaporPressure;
-        if (w.branched) {
-            double logRatio = DeterministicMath.log(vaporPressure / liquidPressure);
-            double scale = (vaporPressure - liquidPressure) / (R * t);
-            for (int i = 0; i < count; i++) w.vaporShifts[i] = logRatio + scale * translations[i];
-        }
     }
 
     private EquilibriumResult singlePhase(double t, double p, PhaseCompetition competition, Workspace w) {
@@ -4507,7 +4490,7 @@ public final class FluidTpEquilibrium {
                 detail, diagnostics(w, w.feedResult, band));
     }
 
-    // The hydrocarbon core, at the workspace's branch pressures.
+    // The hydrocarbon core, at the workspace's pressure.
 
     /** Stability test and, for an unstable feed, the split. Returns SINGLE, SPLIT, MERGED or FAILED. */
     private int hydrocarbon(double t, Workspace w) {
@@ -4551,21 +4534,20 @@ public final class FluidTpEquilibrium {
         }
     }
 
-    /** The feed's stability test at the workspace's branch pressures on {@code test}, counted. */
+    /** The feed's stability test at the workspace's pressure on {@code test}, counted. */
     private TangentPlaneStability.Result feedStability(TangentPlaneStability test, double t, Workspace w) {
         w.carriedProduct = false;
         return stabilityOf(test, t, w.feed, w);
     }
 
     /**
-     * The stability test of {@code amounts} at the workspace's branch pressures, counted; filtered when carrying on the
-     * two-slot path. A feed of the three-slot system is not filtered: a crystal's stand-in is a liquid of its own there.
+     * The stability test of {@code amounts} at the workspace's pressure, counted; filtered when carrying on the two-slot
+     * path. A feed of the three-slot system is not filtered: a crystal's stand-in is a liquid of its own there.
      */
     private TangentPlaneStability.Result stabilityOf(TangentPlaneStability test, double t, double[] amounts, Workspace w) {
         TangentPlaneStability.Result result = w.carrying && !threeSlotFeed(w)
-                ? test.test(t, w.liquidPressure, w.vaporPressure, translations, amounts, w.carriedFilter, w.stability)
-                : w.branched ? test.test(t, w.liquidPressure, w.vaporPressure, translations, amounts, w.stability)
-                : test.test(t, w.liquidPressure, amounts, w.stability);
+                ? test.test(t, w.pressure, amounts, w.carriedFilter, w.stability)
+                : test.test(t, w.pressure, amounts, w.stability);
         w.kernelEvaluations += result.kernelEvaluations();
         w.derivativeEvaluations += result.derivativeEvaluations();
         return result;
@@ -4591,14 +4573,13 @@ public final class FluidTpEquilibrium {
             double[] phase = rich || !w.carriedProduct ? tested : w.liquidAmounts;
             if (!rich && !crystalLean(phase, trial, i)) continue;
             if (!denseTrial) {
-                double trialPressure = w.pressureOf(trialRoot);
-                kernel.evaluate(t, trialPressure, trial, trialRoot, w.mixture, w.first);
+                kernel.evaluate(t, w.pressure, trial, trialRoot, w.mixture, w.first);
                 w.kernelEvaluations++;
-                if (!PhaseIdentification.denseLiquidLike(w.first, t, trialPressure)) return false;
+                if (!PhaseIdentification.denseLiquidLike(w.first, t, w.pressure)) return false;
                 denseTrial = true;
             }
             Root root = rich || !w.carriedProduct ? testedRoot : Root.LIQUID;
-            double pressure = w.pressureOf(root);
+            double pressure = w.pressure;
             if (!w.carriedProduct || !rich) {
                 kernel.evaluate(t, pressure, phase, root, w.mixture, w.second);
                 w.kernelEvaluations++;
@@ -4606,7 +4587,7 @@ public final class FluidTpEquilibrium {
             }
             evaluator.evaluate(t, pressure, phase, root, w.phases, w.carriedState);
             w.kernelEvaluations++;
-            if (supersaturated(c, w.carriedState, t, w.liquidPressure)) return true;
+            if (supersaturated(c, w.carriedState, t, w.pressure)) return true;
         }
         return false;
     }
@@ -4635,7 +4616,7 @@ public final class FluidTpEquilibrium {
         double total = 0.0;
         for (int i = 0; i < count; i++) total += amounts[i];
         for (Crystal c : crystals) {
-            if (amounts[c.component()] > CARRIED_SHARE * total && supersaturated(c, state, t, w.liquidPressure)) return true;
+            if (amounts[c.component()] > CARRIED_SHARE * total && supersaturated(c, state, t, w.pressure)) return true;
         }
         return false;
     }
@@ -4656,7 +4637,7 @@ public final class FluidTpEquilibrium {
         boolean denserRich = crystalRich(denser, swapped ? w.vaporState : w.liquidState, t, w);
         boolean lighterRich = crystalRich(lighter, swapped ? w.liquidState : w.vaporState, t, w);
         if (!denserRich && !lighterRich) return SPLIT;
-        boolean band = inBand(t, w.liquidPressure, w) || w.tieLine < BAND_TIE_LINE;
+        boolean band = inBand(t, w.pressure, w) || w.tieLine < BAND_TIE_LINE;
         if (!band && w.liquidProductDenseLiquidLike && w.vapourProductDenseLiquidLike) return SPLIT;
         if (!denserRich) return SPLIT;
         for (int i = 0; i < count; i++) {
@@ -4664,8 +4645,8 @@ public final class FluidTpEquilibrium {
             w.liquidAmounts[i] = held;
             w.vaporAmounts[i] = w.feed[i] - held;
         }
-        evaluator.evaluate(t, w.liquidPressure, w.liquidAmounts, Root.LIQUID, w.phases, w.liquidState);
-        evaluator.evaluate(t, w.vaporPressure, w.vaporAmounts, Root.VAPOR, w.phases, w.vaporState);
+        evaluator.evaluate(t, w.pressure, w.liquidAmounts, Root.LIQUID, w.phases, w.liquidState);
+        evaluator.evaluate(t, w.pressure, w.vaporAmounts, Root.VAPOR, w.phases, w.vaporState);
         w.kernelEvaluations += 2;
         w.liquidProductDenseLiquidLike = false;
         w.vapourProductDenseLiquidLike = false;
@@ -4705,8 +4686,8 @@ public final class FluidTpEquilibrium {
             }
         }
         for (int i = 0; i < count; i++) w.liquidAmounts[i] += held[i];
-        evaluator.evaluate(t, w.liquidPressure, w.liquidAmounts, Root.LIQUID, w.phases, w.liquidState);
-        evaluator.evaluate(t, w.vaporPressure, w.vaporAmounts, Root.VAPOR, w.phases, w.vaporState);
+        evaluator.evaluate(t, w.pressure, w.liquidAmounts, Root.LIQUID, w.phases, w.liquidState);
+        evaluator.evaluate(t, w.pressure, w.vaporAmounts, Root.VAPOR, w.phases, w.vaporState);
         w.kernelEvaluations += 2;
         w.liquidProductDenseLiquidLike = false;
         w.vapourProductDenseLiquidLike = false;
@@ -4715,14 +4696,11 @@ public final class FluidTpEquilibrium {
 
     /**
      * The split of an unstable feed: a first attempt seeded from the stability test's stationary phase, and, when that
-     * fails, one more from Wilson's K. With branch pressures a stationary phase on the feed's own branch (a second
-     * vapour, or a second liquid) cannot seed the network's split of a liquid at {@code P} and a vapour at {@code pc},
-     * so Wilson's K (Raoult with the vapour at {@code pc}, the network's own seed) is the first attempt there.
+     * fails, one more from Wilson's K.
      */
     private int twoPhase(double t, TangentPlaneStability.Result feed, Workspace w) {
-        boolean sameBranch = w.branched && feed.trialRoot() == feed.feedRoot();
-        int outcome = attempt(t, feed, sameBranch, w);
-        if (outcome == FAILED && !sameBranch) {
+        int outcome = attempt(t, feed, false, w);
+        if (outcome == FAILED) {
             String first = w.failure;
             double seed = w.seedDistance;
             outcome = attempt(t, feed, true, w);
@@ -4736,11 +4714,10 @@ public final class FluidTpEquilibrium {
         // The stability test's stationary point seeds one side of the split: the lighter one the vapour.
         double[] trial = feed.trialComposition();
         System.arraycopy(trial, 0, w.trial, 0, count);
-        kernel.evaluate(t, w.pressureOf(feed.trialRoot()), trial, feed.trialRoot(), w.mixture, w.first);
-        kernel.evaluate(t, w.pressureOf(feed.feedRoot()), w.feed, feed.feedRoot(), w.mixture, w.second);
+        kernel.evaluate(t, w.pressure, trial, feed.trialRoot(), w.mixture, w.first);
+        kernel.evaluate(t, w.pressure, w.feed, feed.feedRoot(), w.mixture, w.second);
         w.kernelEvaluations += 2;
-        w.trialIsVapour = w.branched && feed.trialRoot() != feed.feedRoot() ? feed.trialRoot() == Root.VAPOR
-                : w.first.compressibility() > w.second.compressibility();
+        w.trialIsVapour = w.first.compressibility() > w.second.compressibility();
         Arrays.fill(w.logK, 0.0);
         double seedDistance = 0.0;
         for (int a = 0; a < w.presentCount; a++) {
@@ -4752,7 +4729,7 @@ public final class FluidTpEquilibrium {
         w.seedDistance = seedDistance;
         if (wilson || !(seedDistance >= settings.trivialDistance())) {
             // Instability proven by the feed's own curvature with no distinct stationary point: Wilson's K instead.
-            kernel.wilsonK(t, w.vaporPressure, w.k);
+            kernel.wilsonK(t, w.pressure, w.k);
             for (int a = 0; a < w.presentCount; a++) w.logK[w.present[a]] = DeterministicMath.log(w.k[w.present[a]]);
         }
 
@@ -4876,35 +4853,17 @@ public final class FluidTpEquilibrium {
 
     /** States of both products, merging, the product stability re-check and the fugacity residual. */
     private int finishSplit(double t, Workspace w) {
-        PhaseState liquid;
-        PhaseState vapour;
-        if (w.branched) {
-            // The network's slots: the vapour branch must be vapour-like (checked below), so no liquid-liquid split here.
-            w.liquidProductDenseLiquidLike = false;
-            w.vapourProductDenseLiquidLike = false;
-            liquid = evaluator.evaluate(t, w.liquidPressure, w.liquidAmounts, Root.LIQUID, w.phases, w.liquidState);
-            vapour = evaluator.evaluate(t, w.vaporPressure, w.vaporAmounts, Root.VAPOR, w.phases, w.vaporState);
-        } else {
-            // Each product's WP7c label from the root lowerGibbsRoot chose (no further kernel call): both liquid-like and
-            // denser than the cubic's critical volume is a liquid-liquid split (P3 WP7d; the volume guard P3 WP11).
-            Root liquidRoot = lowerGibbsRoot(t, w.liquidAmounts, Root.LIQUID, w.liquidLogPhi, w);
-            w.liquidProductDenseLiquidLike = PhaseIdentification.denseLiquidLike(w.chosen, t, w.liquidPressure);
-            liquid = evaluator.evaluate(t, w.liquidPressure, w.liquidAmounts, liquidRoot, w.phases, w.liquidState);
-            Root vapourRoot = lowerGibbsRoot(t, w.vaporAmounts, Root.VAPOR, w.vaporLogPhi, w);
-            w.vapourProductDenseLiquidLike = PhaseIdentification.denseLiquidLike(w.chosen, t, w.liquidPressure);
-            vapour = evaluator.evaluate(t, w.vaporPressure, w.vaporAmounts, vapourRoot, w.phases, w.vaporState);
-        }
+        // Each product's WP7c label from the root lowerGibbsRoot chose (no further kernel call): both liquid-like and
+        // denser than the cubic's critical volume is a liquid-liquid split (P3 WP7d; the volume guard P3 WP11).
+        Root liquidRoot = lowerGibbsRoot(t, w.liquidAmounts, Root.LIQUID, w.liquidLogPhi, w);
+        w.liquidProductDenseLiquidLike = PhaseIdentification.denseLiquidLike(w.chosen, t, w.pressure);
+        PhaseState liquid = evaluator.evaluate(t, w.pressure, w.liquidAmounts, liquidRoot, w.phases, w.liquidState);
+        Root vapourRoot = lowerGibbsRoot(t, w.vaporAmounts, Root.VAPOR, w.vaporLogPhi, w);
+        w.vapourProductDenseLiquidLike = PhaseIdentification.denseLiquidLike(w.chosen, t, w.pressure);
+        PhaseState vapour = evaluator.evaluate(t, w.pressure, w.vaporAmounts, vapourRoot, w.phases, w.vaporState);
         w.kernelEvaluations += 2;
         double gap = Math.abs(vapour.molarVolume() - liquid.molarVolume()) / (0.5 * (vapour.molarVolume() + liquid.molarVolume()));
         if (w.tieLine < settings.mergeTieLine() && gap < settings.mergeVolumeGap()) return MERGED;
-        if (w.branched && vapour.physicalRootCount() == 1) {
-            kernel.evaluate(t, w.vaporPressure, w.vaporAmounts, Root.VAPOR, w.mixture, w.first);
-            w.kernelEvaluations++;
-            if (!PhaseIdentification.vapourLike(w.first, t, w.vaporPressure)) {
-                w.failure = "the vapour-branch phase is liquid-like at the state pressure";
-                return FAILED;
-            }
-        }
         // Stability of both products: a third phase or another split is not an answer.
         w.carriedProduct = true;
         TangentPlaneStability.Result liquidCheck = stabilityOf(stability, t, w.liquidAmounts, w);
@@ -4928,7 +4887,6 @@ public final class FluidTpEquilibrium {
                     + "): a third phase or another split; three-phase equilibrium is not implemented";
             return FAILED;
         }
-        double logPressureRatio = w.branched ? DeterministicMath.log(w.liquidPressure / w.vaporPressure) : 0.0;
         double residual = 0.0;
         for (int a = 0; a < w.presentCount; a++) {
             int i = w.present[a];
@@ -4936,7 +4894,6 @@ public final class FluidTpEquilibrium {
             double yi = vapour.moleFraction(i);
             if (!(xi > 0.0) || !(yi > 0.0)) continue;
             double difference = DeterministicMath.log(xi) + liquid.logFugacityCoefficient(i) - DeterministicMath.log(yi) - vapour.logFugacityCoefficient(i);
-            if (w.branched) difference += logPressureRatio;
             residual = Math.max(residual, Math.abs(difference));
         }
         w.residual = residual;
@@ -4956,13 +4913,13 @@ public final class FluidTpEquilibrium {
         Arrays.fill(w.liquidMoles, 0.0);
         Arrays.fill(w.trialVapor, 0.0);
         Arrays.fill(w.trialLiquid, 0.0);
-        // d_i = ln f_i of the feed on its stability root, over the liquid pressure.
-        kernel.evaluate(t, w.pressureOf(feed.feedRoot()), w.z, feed.feedRoot(), w.mixture, w.first);
+        // d_i = ln f_i of the feed on its stability root, over the pressure.
+        kernel.evaluate(t, w.pressure, w.z, feed.feedRoot(), w.mixture, w.first);
         w.kernelEvaluations++;
         double[] feedLogPhi = w.first.logFugacityCoefficientsView();
         for (int a = 0; a < w.presentCount; a++) {
             int i = w.present[a];
-            w.reference[i] = DeterministicMath.log(w.z[i]) + feedLogPhi[i] + shift(w, feed.feedRoot() == Root.VAPOR, i);
+            w.reference[i] = DeterministicMath.log(w.z[i]) + feedLogPhi[i];
         }
         double gibbs = Double.NaN;
         if (fromSubstitution) {
@@ -5008,8 +4965,7 @@ public final class FluidTpEquilibrium {
                 int i = w.present[a];
                 double logY = DeterministicMath.log(w.vaporMoles[i] / vapourTotal);
                 double logX = DeterministicMath.log(w.liquidMoles[i] / liquidTotal);
-                w.gradient[i] = logY + vapour.logFugacityCoefficient(i) + shift(w, true, i)
-                        - logX - liquid.logFugacityCoefficient(i);
+                w.gradient[i] = logY + vapour.logFugacityCoefficient(i) - logX - liquid.logFugacityCoefficient(i);
                 largest = Math.max(largest, Math.abs(w.gradient[i]));
                 tie += w.z[i] * (logY - logX) * (logY - logX);
             }
@@ -5110,8 +5066,6 @@ public final class FluidTpEquilibrium {
      */
     private double startFromStationaryPhase(double t, TangentPlaneStability.Result feed, Workspace w) {
         if (!(feed.minimumTangentPlaneDistance() < 0.0)) return Double.NaN;
-        // With branch pressures a stationary phase on the feed's own branch cannot be one side of the network's split.
-        if (w.branched && feed.trialRoot() == feed.feedRoot()) return Double.NaN;
         double largest = Double.POSITIVE_INFINITY;
         for (int a = 0; a < w.presentCount; a++) {
             int i = w.present[a];
@@ -5207,43 +5161,31 @@ public final class FluidTpEquilibrium {
         return false;
     }
 
-    // Phase evaluations at the branch pressures.
+    // Phase evaluations at the workspace's pressure.
 
-    /** {@code ln phi_i} of a composition on its branch (the vapour's shift added with branch pressures) into {@code out}. */
+    /** {@code ln phi_i} of a composition on its lower-Gibbs root (the side's root at a tie) into {@code out}. */
     private Root phaseLogPhi(double t, double[] composition, boolean vapourSide, double[] out, Workspace w) {
-        if (!w.branched) {
-            return lowerGibbsRoot(t, composition, vapourSide ? Root.VAPOR : Root.LIQUID, out, w);
-        }
-        Root root = vapourSide ? Root.VAPOR : Root.LIQUID;
-        kernel.evaluate(t, w.pressureOf(root), composition, root, w.mixture, w.first);
-        w.kernelEvaluations++;
-        double[] logPhi = w.first.logFugacityCoefficientsView();
-        for (int i = 0; i < count; i++) out[i] = vapourSide ? logPhi[i] + w.vaporShifts[i] : logPhi[i];
-        return root;
+        return lowerGibbsRoot(t, composition, vapourSide ? Root.VAPOR : Root.LIQUID, out, w);
     }
 
-    /** Derivatives of one side's phase on its root (the lower-Gibbs root at one pressure, the fixed branch otherwise). */
+    /** Derivatives of one side's phase on its lower-Gibbs root. */
     private PengRobinsonKernel.Evaluation differentiatePhase(double t, double[] amounts, boolean vapourSide,
                                                              PengRobinsonKernel.Derivatives out, Workspace w) {
         Root preferred = vapourSide ? Root.VAPOR : Root.LIQUID;
-        kernel.evaluateDerivatives(t, w.pressureOf(preferred), amounts, preferred, w.mixture, out);
+        kernel.evaluateDerivatives(t, w.pressure, amounts, preferred, w.mixture, out);
         w.kernelEvaluations++;
         w.derivativeEvaluations++;
-        if (!w.branched && out.evaluation().physicalRootCount() > 1) {
+        if (out.evaluation().physicalRootCount() > 1) {
             Root other = vapourSide ? Root.LIQUID : Root.VAPOR;
-            kernel.evaluate(t, w.liquidPressure, amounts, other, w.mixture, w.second);
+            kernel.evaluate(t, w.pressure, amounts, other, w.mixture, w.second);
             w.kernelEvaluations++;
             if (residualGibbs(w.second, amounts) < residualGibbs(out.evaluation(), amounts)) {
-                kernel.evaluateDerivatives(t, w.liquidPressure, amounts, other, w.mixture, out);
+                kernel.evaluateDerivatives(t, w.pressure, amounts, other, w.mixture, out);
                 w.kernelEvaluations++;
                 w.derivativeEvaluations++;
             }
         }
         return out.evaluation();
-    }
-
-    private double shift(Workspace w, boolean vapourSide, int i) {
-        return w.branched && vapourSide ? w.vaporShifts[i] : 0.0;
     }
 
     /**
@@ -5343,7 +5285,7 @@ public final class FluidTpEquilibrium {
 
     /** Evaluates {@code composition} on its lower-Gibbs root (the preferred one at a tie), copying its {@code ln phi}. */
     private Root lowerGibbsRoot(double t, double[] composition, Root preferred, double[] logPhi, Workspace w) {
-        double p = w.liquidPressure;
+        double p = w.pressure;
         kernel.evaluate(t, p, composition, preferred, w.mixture, w.first);
         w.kernelEvaluations++;
         PengRobinsonKernel.Evaluation chosen = w.first;
@@ -5373,15 +5315,14 @@ public final class FluidTpEquilibrium {
     // W3a D3: three fluid phases as one system, for a feed of a derived list holding a polar compound.
 
     /**
-     * Whether an unstable feed takes the three-slot system: water in the equation of state, one pressure, and a polar
-     * compound present. Every other feed keeps the two-slot path bit for bit. Under
-     * {@link PhaseCompetition#FLUID_CARRYING_CRYSTALS} such a feed answers its fluid-only equilibrium, unfiltered: a dense
+     * Whether an unstable feed takes the three-slot system: water in the equation of state and a polar compound present.
+     * Every other feed keeps the two-slot path bit for bit. Under {@link PhaseCompetition#FLUID_CARRYING_CRYSTALS} such a feed answers its fluid-only equilibrium, unfiltered: a dense
      * product rich in a crystal's species is the crystal's stand-in in a liquid slot of its own, for every crystal alike
      * (W3b, option A; the merge of two dense products into one liquid was the one-liquid-slot workaround). Water under oil at
      * 263 K is gas, oil and a supercooled aqueous liquid; a merged liquid at an unstable composition is no equilibrium.
      */
     private boolean threeSlotFeed(Workspace w) {
-        if (!inEquationOfState || w.branched || w.slots == null) return false;
+        if (!inEquationOfState || w.slots == null) return false;
         for (int a = 0; a < w.presentCount; a++) if (polar[w.present[a]]) return true;
         return false;
     }
@@ -5401,7 +5342,7 @@ public final class FluidTpEquilibrium {
     private int threeSlot(double t, TangentPlaneStability.Result feed, Workspace w) {
         Slots s = w.slots;
         int n = count;
-        kernel.wilsonK(t, w.liquidPressure, w.k);
+        kernel.wilsonK(t, w.pressure, w.k);
         int seedPolar = cubicWater >= 0 && w.feed[cubicWater] > 0.0 ? cubicWater : -1;
         if (seedPolar < 0) {
             for (int a = 0; a < w.presentCount; a++) {
@@ -5438,7 +5379,7 @@ public final class FluidTpEquilibrium {
         w.tieLine = Double.NaN;
         w.seedDistance = Double.NaN;
         // d_i of the feed on its stability root: the Newton finish's reference.
-        kernel.evaluate(t, w.liquidPressure, w.z, feed.feedRoot(), w.mixture, w.first);
+        kernel.evaluate(t, w.pressure, w.z, feed.feedRoot(), w.mixture, w.first);
         w.kernelEvaluations++;
         for (int a = 0; a < w.presentCount; a++) {
             int i = w.present[a];
@@ -6012,10 +5953,10 @@ public final class FluidTpEquilibrium {
         w.tieLine = shortest;
         for (int k = 0; k < SLOT_COUNT; k++) {
             if (!s.present[k]) continue;
-            kernel.evaluate(t, w.liquidPressure, s.amounts[k], s.root[k], w.mixture, w.first);
+            kernel.evaluate(t, w.pressure, s.amounts[k], s.root[k], w.mixture, w.first);
             w.kernelEvaluations++;
-            s.dense[k] = PhaseIdentification.denseLiquidLike(w.first, t, w.liquidPressure);
-            evaluator.evaluate(t, w.liquidPressure, s.amounts[k], s.root[k], w.phases, s.states[k]);
+            s.dense[k] = PhaseIdentification.denseLiquidLike(w.first, t, w.pressure);
+            evaluator.evaluate(t, w.pressure, s.amounts[k], s.root[k], w.phases, s.states[k]);
             w.kernelEvaluations++;
         }
         if (present == 3) return THREE;
@@ -6030,8 +5971,8 @@ public final class FluidTpEquilibrium {
         System.arraycopy(s.amounts[vapour], 0, w.vaporAmounts, 0, count);
         w.liquidProductDenseLiquidLike = s.dense[liquid];
         w.vapourProductDenseLiquidLike = s.dense[vapour];
-        evaluator.evaluate(t, w.liquidPressure, w.liquidAmounts, s.root[liquid], w.phases, w.liquidState);
-        evaluator.evaluate(t, w.vaporPressure, w.vaporAmounts, s.root[vapour], w.phases, w.vaporState);
+        evaluator.evaluate(t, w.pressure, w.liquidAmounts, s.root[liquid], w.phases, w.liquidState);
+        evaluator.evaluate(t, w.pressure, w.vaporAmounts, s.root[vapour], w.phases, w.vaporState);
         w.kernelEvaluations += 2;
         double gap = Math.abs(w.vaporState.molarVolume() - w.liquidState.molarVolume())
                 / (0.5 * (w.vaporState.molarVolume() + w.liquidState.molarVolume()));

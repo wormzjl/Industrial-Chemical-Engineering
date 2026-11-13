@@ -273,11 +273,11 @@ class TangentPlaneStabilityTest {
         assertEquals(Verdict.STABLE, three.test(110.0, 0.5e6, new double[] {0.0, 0.0, 1.0}).verdict());
     }
 
-    // (g) Per-branch pressures (P3, the free-water rule's hydrocarbon vapour at its partial pressure).
+    // (g) The filtered call (the carried-crystal competition's trial filter).
 
-    /** With the vapour pressure equal to the liquid's, the per-branch call is the one-pressure test, bit for bit. */
+    /** With no filter the filtered call is the unfiltered test, bit for bit. */
     @Test
-    void equalBranchPressuresAreTheOnePressureTestBitwise() {
+    void theFilteredCallWithoutAFilterIsTheTestBitwise() {
         var binary = new TangentPlaneStability(kernel("Methane", "Nitrogen"), TangentPlaneStability.Settings.DEFAULT);
         var network = new TangentPlaneStability(kernel(), TangentPlaneStability.Settings.DEFAULT);
         var nitrogen = new TangentPlaneStability(kernel("Nitrogen"), TangentPlaneStability.Settings.DEFAULT);
@@ -290,128 +290,12 @@ class TangentPlaneStabilityTest {
                 new Case(network, 900.0, 0.1e6, crudeWithNitrogen()),
                 new Case(nitrogen, 77.355, 90_000.0, new double[] {1.0}));
         for (Case c : cases) {
-            int n = c.test().kernel().componentCount();
-            double[] translations = new double[n];
-            Arrays.fill(translations, -3.5e-6);
             Result one = c.test().test(c.t(), c.p(), c.z(), c.test().newWorkspace());
-            assertBitwiseEqual(one, c.test().test(c.t(), c.p(), c.p(), c.z(), c.test().newWorkspace()));
-            assertBitwiseEqual(one, c.test().test(c.t(), c.p(), c.p(), translations, c.z(), c.test().newWorkspace()));
-            assertEquals(Double.doubleToRawLongBits(one.nearestStationaryDistance()), Double.doubleToRawLongBits(
-                    c.test().test(c.t(), c.p(), c.p(), translations, c.z(), c.test().newWorkspace()).nearestStationaryDistance()));
+            Result filtered = c.test().test(c.t(), c.p(), c.z(), null, c.test().newWorkspace());
+            assertBitwiseEqual(one, filtered);
+            assertEquals(Double.doubleToRawLongBits(one.nearestStationaryDistance()),
+                    Double.doubleToRawLongBits(filtered.nearestStationaryDistance()));
         }
-    }
-
-    /**
-     * Methane/nitrogen with the vapour branch at 0.8 of the liquid's pressure and P1-sized translations: the verdict
-     * agrees with a brute-force minimum of the per-branch tangent-plane distance
-     * {@code sum_i w_i (ln w_i + ln phi_i + s_i - d_i)}, the vapour branch shifted by
-     * {@code s_i = ln(p_V/p_L) + (p_V - p_L) c_i/(R T)} and admitted only as three roots' largest or a vapour-like single
-     * root.
-     */
-    @Test
-    void perBranchVerdictsMatchABruteForceMinimum() {
-        var kernel = kernel("Methane", "Nitrogen");
-        var test = new TangentPlaneStability(kernel, TangentPlaneStability.Settings.DEFAULT);
-        var workspace = test.newWorkspace();
-        double[] translations = {-3.389e-6, -3.519e-6};
-        int states = 0;
-        int unstable = 0;
-        for (double t : new double[] {110.0, 120.0}) {
-            for (double p : new double[] {0.5e6, 1.0e6, 1.5e6, 2.0e6, 2.5e6, 3.0e6}) {
-                for (double nitrogen : new double[] {0.1, 0.3, 0.5, 0.7, 0.9}) {
-                    double[] z = {1.0 - nitrogen, nitrogen};
-                    double vapour = 0.8 * p;
-                    Result result = test.test(t, p, vapour, translations, z, workspace);
-                    double minimum = bruteForceBranchMinimum(kernel, t, p, vapour, translations, z);
-                    String state = t + " K, " + p + " Pa (vapour " + vapour + " Pa), x_N2 " + nitrogen;
-                    boolean bruteUnstable = minimum < -EPSILON;
-                    assertEquals(bruteUnstable ? Verdict.UNSTABLE : Verdict.STABLE, result.verdict(), state + ", minimum " + minimum);
-                    if (bruteUnstable) unstable++;
-                    states++;
-                }
-            }
-        }
-        assertEquals(60, states);
-        assertTrue(unstable >= 10 && states - unstable >= 10, "both verdicts are exercised: " + unstable);
-    }
-
-    /**
-     * A dense single-root liquid is not unstable against itself at the lower vapour pressure (its single root there is
-     * liquid-like, so it is no vapour branch), while a light gas takes the vapour branch at the lower pressure.
-     */
-    @Test
-    void aDenseLiquidIsNoVapourAtTheLowerPressure() {
-        var kernel = kernel("Methane", "Nitrogen");
-        var test = new TangentPlaneStability(kernel, TangentPlaneStability.Settings.DEFAULT);
-        double[] z = {0.5, 0.5};
-        Result dense = test.test(120.0, 3.0e6, 2.9e6, z, test.newWorkspace());
-        assertEquals(Verdict.STABLE, dense.verdict());
-        assertEquals(Root.LIQUID, dense.feedRoot());
-        // Without the phase identification the same root at the lower pressure would have the lower fugacity.
-        var workspace = kernel.newWorkspace();
-        var atLiquid = kernel.newEvaluation();
-        var atVapour = kernel.newEvaluation();
-        kernel.evaluate(120.0, 3.0e6, z, Root.LIQUID, workspace, atLiquid);
-        kernel.evaluate(120.0, 2.9e6, z, Root.VAPOR, workspace, atVapour);
-        assertEquals(1, atVapour.physicalRootCount());
-        double shift = Math.log(2.9 / 3.0);
-        assertTrue(0.5 * (atVapour.logFugacityCoefficient(0) + atVapour.logFugacityCoefficient(1)) + shift
-                < 0.5 * (atLiquid.logFugacityCoefficient(0) + atLiquid.logFugacityCoefficient(1)));
-        assertTrue(PhaseIdentification.liquidLike(
-                PhaseIdentification.parameter(atVapour, 120.0, 2.9e6)));
-        Result gas = test.test(400.0, 3.0e6, 2.9e6, z, test.newWorkspace());
-        assertEquals(Verdict.STABLE, gas.verdict());
-        assertEquals(Root.VAPOR, gas.feedRoot());
-    }
-
-    /** {@link #bruteForceMinimum} with per-branch pressures and shifts, and the vapour branch's admission rule. */
-    static double bruteForceBranchMinimum(PengRobinsonKernel kernel, double t, double liquidPressure, double vaporPressure,
-                                          double[] translations, double[] z) {
-        var workspace = kernel.newWorkspace();
-        var evaluation = kernel.newEvaluation();
-        double[] shift = new double[2];
-        for (int i = 0; i < 2; i++) {
-            shift[i] = Math.log(vaporPressure / liquidPressure)
-                    + (vaporPressure - liquidPressure) * translations[i] / (PengRobinsonKernel.GAS_CONSTANT * t);
-        }
-        // Lowest per-branch value of sum_i x_i (ln phi_i + s_i) and its ln phi_i + s_i, over the admissible branches.
-        java.util.function.BiFunction<double[], double[], Double> lowest = (x, logPhi) -> {
-            double best = Double.POSITIVE_INFINITY;
-            for (Root root : Root.values()) {
-                double pressure = root == Root.VAPOR ? vaporPressure : liquidPressure;
-                kernel.evaluate(t, pressure, x, root, workspace, evaluation);
-                if (root == Root.VAPOR && evaluation.physicalRootCount() == 1
-                        && !PhaseIdentification.vapourLike(
-                                PhaseIdentification.parameter(evaluation, t, pressure))) {
-                    continue;
-                }
-                double value = 0.0;
-                for (int i = 0; i < 2; i++) {
-                    double s = root == Root.VAPOR ? shift[i] : 0.0;
-                    if (x[i] > 0.0) value += x[i] * (evaluation.logFugacityCoefficient(i) + s);
-                }
-                if (value < best) {
-                    best = value;
-                    for (int i = 0; i < 2; i++) logPhi[i] = evaluation.logFugacityCoefficient(i) + (root == Root.VAPOR ? shift[i] : 0.0);
-                }
-            }
-            return best;
-        };
-        double[] feedLogPhi = new double[2];
-        lowest.apply(z, feedLogPhi);
-        double[] reference = {Math.log(z[0]) + feedLogPhi[0], Math.log(z[1]) + feedLogPhi[1]};
-        double minimum = Double.POSITIVE_INFINITY;
-        double[] trial = new double[2];
-        double[] trialLogPhi = new double[2];
-        for (int k = 1; k < 4000; k++) {
-            trial[0] = 1.0 - k / 4000.0;
-            trial[1] = k / 4000.0;
-            lowest.apply(trial, trialLogPhi);
-            double value = 0.0;
-            for (int i = 0; i < 2; i++) value += trial[i] * (Math.log(trial[i]) + trialLogPhi[i] - reference[i]);
-            minimum = Math.min(minimum, value);
-        }
-        return minimum;
     }
 
     /**
