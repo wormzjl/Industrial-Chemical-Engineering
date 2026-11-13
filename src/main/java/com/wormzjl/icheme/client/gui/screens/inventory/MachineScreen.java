@@ -5,6 +5,7 @@ import com.wormzjl.icheme.client.gui.common.DeviceColumn;
 import com.wormzjl.icheme.client.ClientConfig;
 import com.wormzjl.icheme.client.gui.common.MachineColumn;
 import com.wormzjl.icheme.client.gui.common.ProcessUi;
+import com.wormzjl.icheme.client.gui.common.ScreenTours;
 import com.wormzjl.icheme.client.gui.common.TitleStrip;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
 import com.wormzjl.icheme.client.gui.common.kit.Format;
@@ -50,6 +51,15 @@ public final class MachineScreen extends AbstractContainerScreen<MachineMenu> {
     private int sequence;
     private @Nullable String hovered;
     private String signature = "";
+    /** The page's help tour (batch 2026-11-12-tutorial-system, P6), opened by the ? key left of the theme key. */
+    private final com.wormzjl.icheme.client.gui.tutorial.TourHost tour = new com.wormzjl.icheme.client.gui.tutorial.TourHost(() -> ScreenTours.MACHINE, this::anchor);
+
+    /** A tour's anchor on the screen: the title, the tab, the display, the glass, the footer's keys, else a door row's widget or group (ScreenTours.machine). */
+    private @Nullable Rect anchor(String key, boolean reveal) {
+        if (key.equals("title")) return strip().plate().moved(leftPos, topPos);
+        var frame = ScreenTours.machine(imageWidth, imageHeight, menu.datasheet(), canEdit() && kind().settable());
+        return com.wormzjl.icheme.client.gui.tutorial.TourHost.resolve(frame.get(key), door, key, reveal, MachineScreen::tr, leftPos, topPos);
+    }
 
     public MachineScreen(MachineMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
@@ -96,7 +106,7 @@ public final class MachineScreen extends AbstractContainerScreen<MachineMenu> {
     }
 
     private TitleStrip.Strip strip() {
-        return TitleStrip.place(imageWidth, 18, title.getString(), GuiCanvas.measure(font));
+        return TitleStrip.placeKeys(imageWidth, 2, title.getString(), GuiCanvas.measure(font));
     }
 
     @Override
@@ -122,6 +132,9 @@ public final class MachineScreen extends AbstractContainerScreen<MachineMenu> {
             ClientConfig.toggleTheme();
             rebuildWidgets();
         }).icon(Skin.Icon.THEME).setTooltip(Tooltip.create(Component.literal(theme + "\n").append(Component.translatable("gui.icheme.fluid.theme.hint"))));
+        // The help key left of the theme key (P6): a sign, not a word (panel rule 7).
+        var help = tour.key(TitleStrip.keys(imageWidth, 2).get(1).moved(leftPos, topPos), MachineScreen::skin);
+        if (help != null) addRenderableWidget(help);
         var place = strip().name();
         if (place != null && menu.datasheet() && canEdit()) nameBox(place);
         // Close, the Datasheet push button (A89) and Apply, the confirm key, under the footer's divider; a coupling has no Apply (W6b).
@@ -250,8 +263,10 @@ public final class MachineScreen extends AbstractContainerScreen<MachineMenu> {
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         door.place(leftPos, topPos);
         hovered = null;
-        super.render(g, mouseX, mouseY, partialTick);
-        KitDoor.hint(g, font, hovered, mouseX, mouseY);
+        // An open tour takes the pointer: the page under it shows no hover.
+        super.render(g, tour.pointer(mouseX), tour.pointer(mouseY), partialTick);
+        if (tour.isOpen()) tour.render(g, font, width, height, mouseX, mouseY);
+        else KitDoor.hint(g, font, hovered, mouseX, mouseY);
     }
 
     @Override
@@ -332,6 +347,7 @@ public final class MachineScreen extends AbstractContainerScreen<MachineMenu> {
 
     @Override
     public boolean mouseClicked(double x, double y, int button) {
+        if (tour.mouseClicked(font, width, height, x, y)) return true;
         SkinField.clickOutside(this, x, y);
         return door.press(x - leftPos, y - topPos, button) || super.mouseClicked(x, y, button);
     }
@@ -349,11 +365,18 @@ public final class MachineScreen extends AbstractContainerScreen<MachineMenu> {
 
     @Override
     public boolean mouseScrolled(double x, double y, double horizontal, double vertical) {
+        if (tour.isOpen()) return true;
         return door.wheel(x - leftPos, y - topPos, vertical) || super.mouseScrolled(x, y, horizontal, vertical);
     }
 
     @Override
+    public boolean charTyped(char c, int modifiers) {
+        return tour.isOpen() || super.charTyped(c, modifiers);
+    }
+
+    @Override
     public boolean keyPressed(int key, int scan, int modifiers) {
+        if (tour.keyPressed(key)) return true;
         if ((key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER) && canEdit() && kind().settable()) {
             apply();
             return true;

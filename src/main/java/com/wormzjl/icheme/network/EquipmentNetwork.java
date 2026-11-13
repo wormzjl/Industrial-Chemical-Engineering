@@ -506,6 +506,7 @@ public final class EquipmentNetwork {
         }
         try {
             int placed = EquipmentStructure.place(player.serverLevel(), vessel.origin(), vessel.shape(), design.paint(), design.name(), Integer.MAX_VALUE);
+            com.wormzjl.icheme.runtime.tutorial.TutorialTriggers.EQUIPMENT_BUILT.get().trigger(player, vessel.shape());
             var at = vessel.origin().toShortString();
             var kind = Component.translatable("gui.icheme.vessel.title." + vessel.shape().kind().name().toLowerCase(java.util.Locale.ROOT));
             player.sendSystemMessage(!design.name().isEmpty() ? Component.translatable("message.icheme.equipment.built_named", design.name(), kind, placed, at)

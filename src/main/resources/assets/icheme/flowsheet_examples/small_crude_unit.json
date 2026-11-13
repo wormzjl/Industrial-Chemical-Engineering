@@ -1,0 +1,508 @@
+{
+  "format": 2,
+  "basis": {
+    "package": "icheme:refinery",
+    "revision": "method\u003dmodel:pr78,ideal-gas:fit,missing-interactions:zero,pressure-pascal:1000..2000000,liquid-mixture:eccc-cut-pair-r1;properties\u003dicheme:tjl20_methane@tjl20-methane-spine-r3,icheme:tjl19_ethane@tjl19-dwsim-10.2.3-r1,icheme:tjl19_propane@tjl19-dwsim-10.2.3-r1,icheme:tjl19_isobutane@tjl19-dwsim-10.2.3-r1,icheme:tjl19_n_butane@tjl19-dwsim-10.2.3-r1,icheme:tjl19_isopentane@tjl19-dwsim-10.2.3-r1,icheme:tjl19_n_pentane@tjl19-dwsim-10.2.3-r1,icheme:crude_pc01@crude-regrouped-r1,icheme:crude_pc02@crude-regrouped-r1,icheme:crude_pc03@crude-regrouped-r1,icheme:crude_pc04@crude-regrouped-r1,icheme:crude_pc05@crude-regrouped-r1,icheme:crude_pc06@crude-regrouped-r1,icheme:crude_pc07@crude-regrouped-r1,icheme:crude_pc08@crude-regrouped-r1,icheme:crude_pc09@crude-regrouped-r1,icheme:crude_pc10@crude-regrouped-r1,icheme:crude_pc11@crude-regrouped-r1,icheme:crude_pc12@crude-regrouped-r1;interactions\u003dicheme:tjl20@tjl20-frozen-kij-r1;water\u003dicheme:water@water-iapws95-shomate-r4;viscosity\u003dicheme:tjl20_methane/liquid@dwsim-viscosity-api-r1,icheme:tjl20_methane/vapor@dwsim-viscosity-api-ambient-r2,icheme:tjl19_ethane/liquid@dwsim-viscosity-api-r1,icheme:tjl19_ethane/vapor@dwsim-viscosity-api-ambient-r2,icheme:tjl19_propane/liquid@dwsim-viscosity-api-r1,icheme:tjl19_propane/vapor@dwsim-viscosity-api-ambient-r2,icheme:tjl19_isobutane/liquid@dwsim-viscosity-api-r2,icheme:tjl19_isobutane/vapor@dwsim-viscosity-api-ambient-r2,icheme:tjl19_n_butane/liquid@dwsim-viscosity-api-r1,icheme:tjl19_n_butane/vapor@dwsim-viscosity-api-ambient-r2,icheme:tjl19_isopentane/liquid@dwsim-viscosity-api-r2,icheme:tjl19_isopentane/vapor@dwsim-viscosity-api-ambient-r2,icheme:tjl19_n_pentane/liquid@dwsim-viscosity-api-r1,icheme:tjl19_n_pentane/vapor@dwsim-viscosity-api-ambient-r2,icheme:crude_pc01/liquid@twu-1985-d341-r1,icheme:crude_pc01/vapor@dwsim-viscosity-api-ambient-r2,icheme:crude_pc02/liquid@twu-1985-d341-r1,icheme:crude_pc02/vapor@dwsim-viscosity-api-ambient-r2,icheme:crude_pc03/liquid@twu-1985-d341-r1,icheme:crude_pc03/vapor@dwsim-viscosity-api-ambient-r2,icheme:crude_pc04/liquid@twu-1985-d341-r1,icheme:crude_pc04/vapor@dwsim-viscosity-api-ambient-r2,icheme:crude_pc05/liquid@twu-1985-d341-r1,icheme:crude_pc05/vapor@dwsim-viscosity-api-ambient-r2,icheme:crude_pc06/liquid@twu-1985-d341-r1,icheme:crude_pc06/vapor@dwsim-viscosity-api-ambient-r2,icheme:crude_pc07/liquid@twu-1985-d341-r1,icheme:crude_pc07/vapor@dwsim-viscosity-api-ambient-r2,icheme:crude_pc08/liquid@twu-1985-d341-r1,icheme:crude_pc08/vapor@crude-regrouped-r1-vapor,icheme:crude_pc09/liquid@twu-1985-d341-r1,icheme:crude_pc09/vapor@crude-regrouped-r1-vapor,icheme:crude_pc10/liquid@twu-1985-d341-r1,icheme:crude_pc10/vapor@crude-regrouped-r1-vapor,icheme:crude_pc11/liquid@twu-1985-d341-r1,icheme:crude_pc11/vapor@crude-regrouped-r1-vapor,icheme:crude_pc12/liquid@twu-1985-d341-r1,icheme:crude_pc12/vapor@crude-regrouped-r1-vapor,icheme:water/liquid@iapws-sr6-2011-viscosity-r1;ice\u003dicheme:crystal_ice_ih@crystal-ice-ih-r1;fluid-data\u003dconditional_solute_log_tables@dwsim-conditional-solute-ambient-v2,liquid_volume_reference_points@coolprop-8.0.0-liquid-calibration-r1",
+    "components": [
+      "Methane",
+      "Ethane",
+      "Propane",
+      "Isobutane",
+      "N-butane",
+      "Isopentane",
+      "N-pentane",
+      "crude_pc01",
+      "crude_pc02",
+      "crude_pc03",
+      "crude_pc04",
+      "crude_pc05",
+      "crude_pc06",
+      "crude_pc07",
+      "crude_pc08",
+      "crude_pc09",
+      "crude_pc10",
+      "crude_pc11",
+      "crude_pc12",
+      "Nitrogen",
+      "Hydrogen",
+      "HydrogenSulfide",
+      "CarbonMonoxide",
+      "Oxygen",
+      "Ammonia",
+      "SulfurDioxide",
+      "CarbonylSulfide",
+      "Ethylene",
+      "Propylene",
+      "Butene-1",
+      "Isobutene",
+      "Cis-2-butene",
+      "Trans-2-butene",
+      "Butadiene",
+      "N-hexane",
+      "Cyclohexane",
+      "Benzene",
+      "Toluene",
+      "Ethylbenzene",
+      "O-xylene",
+      "M-xylene",
+      "P-xylene",
+      "MethylMercaptan",
+      "EthylMercaptan",
+      "CarbonDioxide",
+      "Ethanol",
+      "Water"
+    ]
+  },
+  "units": [
+    {
+      "id": "P-101",
+      "type": "pump",
+      "name": "P-101",
+      "x": 84,
+      "y": 117,
+      "params": {
+        "target": "outlet",
+        "pressure": 14e5,
+        "rise": 2e5
+      }
+    },
+    {
+      "id": "T-101",
+      "type": "column",
+      "name": "T-101",
+      "x": 372,
+      "y": 20,
+      "params": {
+        "assay": "icheme:medium_crude",
+        "stages": 12,
+        "feed_stage": 10,
+        "top_pressure": 250000.0,
+        "stage_drop": 0.0,
+        "diameter": 1.0,
+        "condenser": "EXCHANGER",
+        "condenser_temperature": 332.15,
+        "reflux": 1.5,
+        "reboiler_duty": 0.0,
+        "draws": [
+          {
+            "id": "1",
+            "tray": 5,
+            "flow": 4.277777777777778
+          }
+        ],
+        "steam": [
+          {
+            "id": "1",
+            "stage": 13,
+            "flow": 3.9916666666666663,
+            "temperature": 533.15
+          }
+        ],
+        "pumparounds": [
+          {
+            "id": "1",
+            "return_tray": 4,
+            "draw_tray": 6,
+            "duty": -590000.0,
+            "split": "UNIFORM",
+            "drop": 30000.0
+          }
+        ],
+        "condenser_drop": 30000.0
+      }
+    },
+    {
+      "id": "E-101",
+      "type": "exchanger",
+      "name": "E-101",
+      "x": 130,
+      "y": 309,
+      "params": {
+        "target": "outlet",
+        "side": "shell",
+        "temperature": 473.15,
+        "duty": 15625.0,
+        "area": 1.5625,
+        "tube_drop": 0.5e5,
+        "shell_drop": 0.3e5
+      }
+    },
+    {
+      "id": "H-101",
+      "type": "fired_heater",
+      "name": "H-101",
+      "x": 214,
+      "y": 257,
+      "params": {
+        "coils": "series",
+        "target": "outlet",
+        "temperature": 663.15,
+        "duty": 156250.0,
+        "limit": 4000000.0,
+        "radiant_drop": 5.1e5,
+        "convection_drop": 2.5e5
+      }
+    },
+    {
+      "id": "V-101",
+      "type": "valve",
+      "name": "V-101",
+      "x": 306,
+      "y": 287,
+      "params": {
+        "target": "outlet",
+        "pressure": 320000.0,
+        "drop": 1e5
+      }
+    },
+    {
+      "id": "H-102",
+      "type": "fired_heater",
+      "name": "H-102",
+      "x": 246,
+      "y": 378,
+      "params": {
+        "coils": "series",
+        "target": "outlet",
+        "temperature": 533.15,
+        "duty": 156250.0,
+        "limit": 4000000.0,
+        "radiant_drop": 1e5,
+        "convection_drop": 0.5e5
+      }
+    },
+    {
+      "id": "E-102",
+      "type": "cooler",
+      "name": "E-102",
+      "x": 40,
+      "y": 359,
+      "params": {
+        "target": "outlet",
+        "temperature": 343.15,
+        "duty": 15625.0,
+        "drop": 0.2e5
+      }
+    },
+    {
+      "id": "P-102",
+      "type": "pump",
+      "name": "P-102",
+      "x": 600,
+      "y": 182,
+      "params": {
+        "target": "outlet",
+        "pressure": 6e5,
+        "rise": 2e5
+      }
+    }
+  ],
+  "streams": [
+    {
+      "id": "CRUDE",
+      "name": "CRUDE",
+      "to": {
+        "unit": "P-101",
+        "port": "in"
+      },
+      "feed": {
+        "temperature": 298.15,
+        "pressure": 800000.0,
+        "amounts": {
+          "Methane": 0.03881768475082441,
+          "Ethane": 0.08284193348647322,
+          "Propane": 0.21183884689245525,
+          "Isobutane": 0.10714397474984186,
+          "N-butane": 0.23571674444965207,
+          "Isopentane": 0.1812592175686275,
+          "N-pentane": 0.23304756544537827,
+          "crude_pc01": 0.7407617347455988,
+          "crude_pc02": 1.3648688576650714,
+          "crude_pc03": 1.4469706196042607,
+          "crude_pc04": 1.3770316079776765,
+          "crude_pc05": 1.2080476303071483,
+          "crude_pc06": 0.9982561778837786,
+          "crude_pc07": 0.8804491528070384,
+          "crude_pc08": 0.7968249670470258,
+          "crude_pc09": 0.6185760659100993,
+          "crude_pc10": 0.3275499358211339,
+          "crude_pc11": 0.1594241711444642,
+          "crude_pc12": 0.08953190971181521
+        }
+      },
+      "route": [
+        {
+          "x": 28,
+          "y": 130
+        }
+      ]
+    },
+    {
+      "id": "S-1",
+      "name": "S-1",
+      "from": {
+        "unit": "P-101",
+        "port": "out"
+      },
+      "to": {
+        "unit": "T-101",
+        "port": "pa/1/a"
+      }
+    },
+    {
+      "id": "S-4",
+      "name": "S-4",
+      "from": {
+        "unit": "T-101",
+        "port": "pa/1/b"
+      },
+      "to": {
+        "unit": "E-101",
+        "port": "tube_a"
+      },
+      "route": [
+        {
+          "x": 362,
+          "y": 258
+        },
+        {
+          "x": 362,
+          "y": 238
+        },
+        {
+          "x": 116,
+          "y": 238
+        },
+        {
+          "x": 116,
+          "y": 323
+        }
+      ]
+    },
+    {
+      "id": "S-5",
+      "name": "S-5",
+      "from": {
+        "unit": "E-101",
+        "port": "tube_b"
+      },
+      "to": {
+        "unit": "H-101",
+        "port": "a"
+      }
+    },
+    {
+      "id": "S-6",
+      "name": "S-6",
+      "from": {
+        "unit": "H-101",
+        "port": "b"
+      },
+      "to": {
+        "unit": "V-101",
+        "port": "a"
+      }
+    },
+    {
+      "id": "S-7",
+      "name": "S-7",
+      "from": {
+        "unit": "V-101",
+        "port": "b"
+      },
+      "to": {
+        "unit": "T-101",
+        "port": "feed"
+      }
+    },
+    {
+      "id": "BFW",
+      "name": "BFW",
+      "to": {
+        "unit": "H-102",
+        "port": "a"
+      },
+      "feed": {
+        "temperature": 298.15,
+        "pressure": 500000.0,
+        "amounts": {
+          "Water": 3.9916666666666663
+        }
+      }
+    },
+    {
+      "id": "STEAM",
+      "name": "STEAM",
+      "from": {
+        "unit": "H-102",
+        "port": "b"
+      },
+      "to": {
+        "unit": "T-101",
+        "port": "steam/1"
+      }
+    },
+    {
+      "id": "CWS",
+      "name": "CWS",
+      "to": {
+        "unit": "T-101",
+        "port": "condenser_a"
+      },
+      "feed": {
+        "temperature": 303.15,
+        "pressure": 400000.0,
+        "amounts": {
+          "Water": 824.6527777777777
+        }
+      },
+      "route": [
+        {
+          "x": 316,
+          "y": 28
+        }
+      ]
+    },
+    {
+      "id": "CWR",
+      "name": "CWR",
+      "from": {
+        "unit": "T-101",
+        "port": "condenser_b"
+      },
+      "route": [
+        {
+          "x": 316,
+          "y": 48
+        }
+      ]
+    },
+    {
+      "id": "OFFGAS",
+      "name": "OFFGAS",
+      "from": {
+        "unit": "T-101",
+        "port": "overhead"
+      },
+      "route": [
+        {
+          "x": 690,
+          "y": 8
+        }
+      ]
+    },
+    {
+      "id": "NAPHTHA",
+      "name": "NAPHTHA",
+      "from": {
+        "unit": "T-101",
+        "port": "distillate"
+      },
+      "route": [
+        {
+          "x": 690,
+          "y": 97
+        }
+      ]
+    },
+    {
+      "id": "WATER",
+      "name": "WATER",
+      "from": {
+        "unit": "T-101",
+        "port": "water"
+      },
+      "route": [
+        {
+          "x": 690,
+          "y": 76
+        }
+      ]
+    },
+    {
+      "id": "S-8",
+      "name": "S-8",
+      "from": {
+        "unit": "T-101",
+        "port": "draw/1"
+      },
+      "to": {
+        "unit": "P-102",
+        "port": "in"
+      }
+    },
+    {
+      "id": "MIDDLE",
+      "name": "MIDDLE",
+      "from": {
+        "unit": "P-102",
+        "port": "out"
+      },
+      "route": [
+        {
+          "x": 690,
+          "y": 195
+        }
+      ]
+    },
+    {
+      "id": "S-9",
+      "name": "S-9",
+      "from": {
+        "unit": "T-101",
+        "port": "bottoms"
+      },
+      "to": {
+        "unit": "E-101",
+        "port": "shell_a"
+      }
+    },
+    {
+      "id": "S-10",
+      "name": "S-10",
+      "from": {
+        "unit": "E-101",
+        "port": "shell_b"
+      },
+      "to": {
+        "unit": "E-102",
+        "port": "a"
+      },
+      "route": [
+        {
+          "x": 146,
+          "y": 343
+        },
+        {
+          "x": 24,
+          "y": 343
+        },
+        {
+          "x": 24,
+          "y": 372
+        }
+      ]
+    },
+    {
+      "id": "RESIDUE",
+      "name": "RESIDUE",
+      "from": {
+        "unit": "E-102",
+        "port": "b"
+      },
+      "route": [
+        {
+          "x": 146,
+          "y": 372
+        }
+      ]
+    }
+  ],
+  "settings": {
+    "flow_tolerance": 1.0E-4,
+    "temperature_tolerance": 0.01,
+    "max_passes": 30,
+    "lowest_factor": -5.0,
+    "highest_factor": 0.0
+  }
+}

@@ -180,4 +180,71 @@ class DrawCallTest {
         System.out.println("sample sheet in a frame batch: " + held.fillDraws() + " fill runs, " + held.textDraws() + " text runs, " + held.spriteDraws() + " sprites");
         assertTrue(held.fillDraws() + held.textDraws() <= FRAME_RUNS, held.fillDraws() + " fill runs and " + held.textDraws() + " text runs against " + FRAME_RUNS);
     }
+
+    /** A help tour's stop over the simulator (batch 2026-11-12-tutorial-system, P4b): the dim, the frame and the bubble with its sentence and keys, in one batch. */
+    private static final int TOUR_DRAWS = 4;
+
+    /**
+     * An open tour adds a few draw calls to the screen's frame (P4b): the stop's fills go in runs and its texts wait for them,
+     * at every stop of the simulator's sheet tour, the last one with its Show me key, at the smallest and the design frame.
+     */
+    @Test
+    void aTourStopIsAFewDraws() {
+        var words = new com.wormzjl.icheme.client.gui.tutorial.TourLayout.Words("Back", "Next", "Done", "Close", "Show me");
+        int most = 0;
+        for (int[] size : new int[][]{{SimulatorFrame.LEAST_W, SimulatorFrame.LEAST_H}, {SimulatorFrame.DOOR_W, SimulatorFrame.DOOR_H}}) {
+            var frame = new SimulatorFrame(size[0], size[1]);
+            for (var lit : List.of(frame.status(), frame.palette(), SimulatorFrame.inner(frame.well()), frame.help()))
+                for (boolean last : new boolean[]{false, true}) {
+                    var layout = com.wormzjl.icheme.client.gui.tutorial.TourLayout.of(size[0], size[1], lit,
+                            "Drag a unit from these tiles onto the sheet to add it, then join its ports with lines.", !last, last, last, words, SheetFixture.M);
+                    var c = new Counting();
+                    layout.draw(c, PanelSkin.DARK, "next");
+                    assertTrue(c.texts > 0 && c.fills > 0);
+                    most = Math.max(most, c.draws());
+                }
+        }
+        System.out.println("a tour stop: at most " + most + " draw calls");
+        assertTrue(most <= TOUR_DRAWS, most + " draw calls against " + TOUR_DRAWS);
+    }
+
+    /**
+     * P5: an equipment page draws no more than the guide's busiest chapter page at the same size (its budget: the page shows in
+     * the chapter's place), and the unit map card no more than the sample sheet's budget.
+     */
+    @Test
+    void anEquipmentPageAndTheUnitMapStayInTheGuidesBudget() {
+        var guide = com.wormzjl.icheme.science.tutorial.guide.GuideFile.load();
+        var pages = com.wormzjl.icheme.science.tutorial.guide.PageFile.load();
+        java.util.function.Function<String, String> tr = key -> key;
+        var state = com.wormzjl.icheme.client.gui.tutorial.cards.Card.State.of(0, 0);
+        for (int[] size : new int[][]{{464, 254}, {312, 232}}) {
+            int budget = 0, most = 0;
+            for (var chapter : guide.chapters()) {
+                var p = com.wormzjl.icheme.client.gui.tutorial.GuidePage.place(new com.wormzjl.icheme.client.gui.tutorial.GuidePage.Input(guide,
+                        com.wormzjl.icheme.science.tutorial.guide.Progress.NONE, chapter.id(), null), size[0], size[1], SheetFixture.M, tr, "theme");
+                var c = new Counting();
+                p.draw(c, PanelSkin.LIGHT, 0, null, state);
+                budget = Math.max(budget, c.draws());
+            }
+            for (var id : pages.pages().keySet()) {
+                var p = com.wormzjl.icheme.client.gui.tutorial.GuidePage.place(new com.wormzjl.icheme.client.gui.tutorial.GuidePage.Input(guide,
+                        com.wormzjl.icheme.science.tutorial.guide.Progress.NONE, "unit", null).withPage(pages, id), size[0], size[1], SheetFixture.M, tr, "theme");
+                var c = new Counting();
+                p.draw(c, PanelSkin.LIGHT, 0, null, state);
+                // Its picture: the game's draws for the still frame (SceneView: the depth clear, an actor each, dots, flames, liquids).
+                var picture = com.wormzjl.icheme.science.tutorial.films.PagePicture.of(java.util.Objects.requireNonNull(p.equipment()).page());
+                assertNotNull(picture, id + ": a picture");
+                most = Math.max(most, c.draws() + com.wormzjl.icheme.science.tutorial.films.PagePicture.draws(picture));
+            }
+            System.out.println(size[0] + " by " + size[1] + ": an equipment page with its picture at most " + most + " draw calls, a chapter page " + budget);
+            assertTrue(most <= budget, most + " draw calls against the chapter pages' " + budget);
+            var map = com.wormzjl.icheme.client.gui.tutorial.GuidePage.place(new com.wormzjl.icheme.client.gui.tutorial.GuidePage.Input(guide,
+                    com.wormzjl.icheme.science.tutorial.guide.Progress.NONE, "unit", "unit/map"), size[0], size[1], SheetFixture.M, tr, "theme");
+            var c = new Counting();
+            map.draw(c, PanelSkin.LIGHT, 0, null, state);
+            System.out.println(size[0] + " by " + size[1] + ": the unit map card " + c.draws() + " draw calls");
+            assertTrue(c.draws() <= SAMPLE_BUDGET, c.draws() + " draw calls against " + SAMPLE_BUDGET);
+        }
+    }
 }

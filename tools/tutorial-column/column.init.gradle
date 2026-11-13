@@ -1,0 +1,69 @@
+// The small crude tower's candidates (batch 2026-11-12-tutorial-system, P4, tools/tutorial-column). No production or test
+// source set changes, no client, no test suite. Usage, from the worktree root:
+//   ./gradlew --offline --init-script tools/tutorial-column/column.init.gradle smallColumnSolve -Dcandidate=A
+//   ./gradlew --offline --init-script tools/tutorial-column/column.init.gradle smallColumnSolve -Dcandidate=REF8
+//   ./gradlew --offline --init-script tools/tutorial-column/column.init.gradle smallColumnDatasheets
+// smallColumnSolve runs each named candidate's sheet once (comma list; REF8 is the bundled 8 m sheet, run only) and writes
+// tmp/tutorial-p4/<id>.json (the template), <id>-sheet.json, <id>-sized-sheet.json and <id>-result.json.
+// smallColumnDatasheets draws tmp/tutorial-renders/p4/ from the result files (-Dcandidates=A,B,C by default).
+gradle.projectsEvaluated {
+    def p = gradle.rootProject
+    def sources = p.sourceSets.create('tutorialColumnTools') {
+        java.srcDir p.file('tools/tutorial-column')
+        compileClasspath += p.sourceSets.main.output + p.sourceSets.main.compileClasspath
+        runtimeClasspath += output + p.sourceSets.main.runtimeClasspath
+    }
+    p.tasks.named(sources.compileJavaTaskName) {
+        dependsOn p.tasks.named('classes')
+        options.compilerArgs.add('-proc:none')
+    }
+    p.tasks.register('smallColumnSolve', JavaExec) {
+        group = 'documentation'
+        description = 'Solves and sizes the small crude tower candidates on the scaled crude unit (SmallColumn).'
+        dependsOn p.tasks.named(sources.classesTaskName)
+        classpath = sources.runtimeClasspath
+        mainClass = 'SmallColumn'
+        workingDir = p.projectDir
+        maxHeapSize = '4g'
+        systemProperty 'candidate', System.getProperty('candidate', 'A')
+        systemProperty 'draft', System.getProperty('draft', 'false')
+        systemProperty 'nosize', System.getProperty('nosize', 'false')
+        systemProperty 'v101', System.getProperty('v101', '3.2')
+        systemProperty 'specs', System.getProperty('specs', 'tools/tutorial-column/candidates.json')
+        args(p.projectDir.absolutePath)
+    }
+    p.tasks.register('smallColumnShape', JavaExec) {
+        group = 'documentation'
+        description = 'Builds a sized candidate column at other diameters and prints why a shape is refused (ShapeCheck).'
+        dependsOn p.tasks.named(sources.classesTaskName)
+        classpath = sources.runtimeClasspath
+        mainClass = 'ShapeCheck'
+        workingDir = p.projectDir
+        systemProperty 'candidate', System.getProperty('candidate', 'A')
+        systemProperty 'diameters', System.getProperty('diameters', '1.0,1.5')
+        systemProperty 'search', System.getProperty('search', 'false')
+        args(p.projectDir.absolutePath)
+    }
+    p.tasks.register('smallColumnPair', JavaExec) {
+        group = 'documentation'
+        description = 'Solves a bundled stream and tower pair in the column calculator and prints the products by mass (PairCheck).'
+        dependsOn p.tasks.named(sources.classesTaskName)
+        classpath = sources.runtimeClasspath
+        mainClass = 'PairCheck'
+        workingDir = p.projectDir
+        maxHeapSize = '4g'
+        systemProperty 'pair', System.getProperty('pair', 'small_crude')
+        systemProperty 'feedK', System.getProperty('feedK', '')
+    }
+    p.tasks.register('smallColumnDatasheets', JavaExec) {
+        group = 'documentation'
+        description = 'Draws the small crude tower datasheets from the result files (Datasheet).'
+        dependsOn p.tasks.named(sources.classesTaskName)
+        classpath = sources.runtimeClasspath
+        mainClass = 'Datasheet'
+        workingDir = p.projectDir
+        systemProperty 'java.awt.headless', 'true'
+        systemProperty 'candidates', System.getProperty('candidates', 'A,B,C')
+        args(p.projectDir.absolutePath)
+    }
+}

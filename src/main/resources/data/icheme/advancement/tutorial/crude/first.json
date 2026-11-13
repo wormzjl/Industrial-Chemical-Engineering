@@ -1,0 +1,30 @@
+{
+  "parent": "icheme:tutorial/crude/parts",
+  "display": {
+    "icon": {
+      "id": "icheme:field_guide",
+      "count": 1
+    },
+    "title": {
+      "translate": "tutorial.icheme.advancement.crude.first"
+    },
+    "description": {
+      "translate": "tutorial.icheme.advancement.crude.first.description"
+    },
+    "show_toast": false,
+    "announce_to_chat": false
+  },
+  "criteria": {
+    "done": {
+      "trigger": "icheme:guide_step",
+      "conditions": {
+        "step": "crude/first"
+      }
+    }
+  },
+  "requirements": [
+    [
+      "done"
+    ]
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "parent": "icheme:tutorial/start/crude",
+  "display": {
+    "icon": {
+      "id": "icheme:field_guide",
+      "count": 1
+    },
+    "title": {
+      "translate": "tutorial.icheme.advancement.start.fuel"
+    },
+    "description": {
+      "translate": "tutorial.icheme.advancement.start.fuel.description"
+    },
+    "show_toast": false,
+    "announce_to_chat": false
+  },
+  "criteria": {
+    "done": {
+      "trigger": "icheme:guide_step",
+      "conditions": {
+        "step": "start/fuel"
+      }
+    }
+  },
+  "requirements": [
+    [
+      "done"
+    ]
+  ]
+}

@@ -31,6 +31,31 @@ public final class TitleStrip {
     public record Strip(Rect plate, String kind, @Nullable Rect name) {
     }
 
+    /** A key's side on the strip (the theme key's, the help key's) and the gap between two keys. */
+    public static final int KEY = HEIGHT, KEY_GAP = Column.BUTTON_GAP;
+
+    /**
+     * The places of {@code count} keys (0 to 2) at the strip's right, the first rightmost: the theme key where it always stood,
+     * then the help key ({@code ?}, batch 2026-11-12-tutorial-system) left of it. A screen with a help key keeps its theme
+     * key where it stood.
+     */
+    public static java.util.List<Rect> keys(int width, int count) {
+        if (count < 0 || count > 2) throw new IllegalArgumentException("Zero to two title keys");
+        var out = new java.util.ArrayList<Rect>();
+        for (int i = 0; i < count; i++) out.add(new Rect(width - 10 - KEY - i * (KEY + KEY_GAP), TOP, KEY, KEY));
+        return java.util.List.copyOf(out);
+    }
+
+    /** The width {@code count} keys take at the strip's right: what {@link #place} keeps for them. */
+    public static int keysWidth(int count) {
+        return count <= 0 ? 0 : count * KEY + (count - 1) * KEY_GAP;
+    }
+
+    /** The strip of a screen {@code width} wide with {@code count} keys at its right ({@link #keys}), for {@code kind}. */
+    public static Strip placeKeys(int width, int count, String kind, Measure m) {
+        return place(width, keysWidth(count), kind, m);
+    }
+
     /** The strip of a screen {@code width} wide whose theme key takes {@code key} px at its right (0: no key), for {@code kind}. */
     public static Strip place(int width, int key, String kind, Measure m) {
         int right = width - 10 - (key > 0 ? key + GAP : 0);

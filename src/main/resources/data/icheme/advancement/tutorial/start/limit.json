@@ -1,0 +1,32 @@
+{
+  "parent": "icheme:tutorial/start/go",
+  "display": {
+    "icon": {
+      "id": "icheme:field_guide",
+      "count": 1
+    },
+    "title": {
+      "translate": "tutorial.icheme.advancement.start.limit"
+    },
+    "description": {
+      "translate": "tutorial.icheme.advancement.start.limit.description"
+    },
+    "show_toast": false,
+    "announce_to_chat": false
+  },
+  "criteria": {
+    "running": {
+      "trigger": "icheme:column_state",
+      "conditions": {
+        "phase": [
+          "RUNNING"
+        ]
+      }
+    }
+  },
+  "requirements": [
+    [
+      "running"
+    ]
+  ]
+}

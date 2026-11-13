@@ -568,6 +568,38 @@ public final class ShapeRasterizer {
         return java.util.Collections.unmodifiableMap(out);
     }
 
+    /**
+     * A batch still's process spaces in the box's coordinates (batch 2026-11-12-tutorial-system, P0: the film "inside the
+     * still" puts its dots there): the pot's box, low corner then high corner, and its tangent line's height; the vapour's
+     * path from the pot's top up the helmet and the gooseneck into the condenser; the condenser shell's box; a pot still's
+     * condensate path along the shell's bottom to its cold end and down to the distillate nozzle. Null for another kind or
+     * a still without its own condenser. Read from the plan {@link ProcessUnit#batchStill} draws, so it adds no number.
+     */
+    public static @Nullable StillParts stillParts(EquipmentShape shape) {
+        if (shape.kind() != EquipmentShape.Kind.BATCH_STILL || !shape.still().condenses()) return null;
+        var p = ProcessUnit.StillPlan.of(shape);
+        var t = shape.transform();
+        double x = ProcessUnit.StillPlan.POT_X, z = ProcessUnit.StillPlan.POT_Z, r = p.d() / 2, cx = ProcessUnit.StillPlan.SPOUT_X;
+        double zc = ProcessUnit.StillPlan.COLD_END, yk = p.condenser(), rk = p.shell(), yg = p.gooseneck();
+        double neck = p.options().column() ? p.columnTop() : p.helmetTop();
+        var out = shape.nozzles().stream().filter(n -> n.role() == EquipmentShape.Role.DISTILLATE).findFirst().orElseThrow().base();
+        java.util.function.Function<double[][], List<double[]>> path = points -> java.util.Arrays.stream(points).map(t::point).toList();
+        return new StillParts(box(t, x - r, p.bottom(), z - r, x + r, p.apex(), z + r), t.point(new double[]{x, p.cylinder(), z})[1],
+                path.apply(new double[][]{{x, p.apex(), z}, {x, neck, z}, {x, yg, z}, {cx, yg, z}, {cx, yk, z}}),
+                box(t, cx - rk, yk - rk, ProcessUnit.StillPlan.SHELL_FRONT, cx + rk, yk + rk, ProcessUnit.StillPlan.SHELL_BACK),
+                path.apply(new double[][]{{cx, yk - .6 * rk, z}, {cx, yk - .6 * rk, zc}, {cx, out[1], zc}, out}));
+    }
+
+    /** A batch still's process spaces ({@link #stillParts}): boxes as low corner then high corner, paths as points. */
+    public record StillParts(double[] pot, double tangent, List<double[]> vapour, double[] condenser, List<double[]> condensate) {
+    }
+
+    private static double[] box(Transform t, double x0, double y0, double z0, double x1, double y1, double z1) {
+        var a = t.point(new double[]{x0, y0, z0});
+        var c = t.point(new double[]{x1, y1, z1});
+        return new double[]{Math.min(a[0], c[0]), Math.min(a[1], c[1]), Math.min(a[2], c[2]), Math.max(a[0], c[0]), Math.max(a[1], c[1]), Math.max(a[2], c[2])};
+    }
+
     /** The cells nozzle {@code k} may reach at its largest size: those whose keys carry its size. */
     public static Set<Cell> nozzleCells(EquipmentShape shape, int k) {
         return geometry(shape).nozzleCells.get(k);

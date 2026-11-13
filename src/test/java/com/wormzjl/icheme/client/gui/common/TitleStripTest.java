@@ -96,4 +96,37 @@ class TitleStripTest {
         t.get("apply_name.hint");
         assertEquals(Set.of(), t.missing);
     }
+
+    /**
+     * The help key (batch 2026-11-12-tutorial-system): one key is the theme key where it always stood, and the strip of one
+     * key is the strip of a theme key's width; with the help key left of it, the theme key and the kind's plate stand where
+     * they stood, and the name keeps its place, ending before the help key.
+     */
+    @Test
+    void theHelpKeyMovesNeitherTheThemeKeyNorTheName() throws IOException {
+        var kinds = kinds();
+        for (int window = 316; window <= 1600; window += 7) {
+            int w = FluidGuiLayout.imageWidth(window);
+            var one = TitleStrip.keys(w, 1);
+            var two = TitleStrip.keys(w, 2);
+            assertEquals(new Rect(w - 10 - 18, 5, 18, 18), one.getFirst(), w + ": the theme key where it stood");
+            assertEquals(one, FluidGuiLayout.titleKeys(w, false), w + ": a page with no tour has the theme key alone");
+            assertEquals(two, FluidGuiLayout.titleKeys(w, true));
+            assertEquals(one.getFirst(), two.getFirst(), w + ": the theme key stays with the help key");
+            var help = two.get(1);
+            assertTrue(help.right() + TitleStrip.KEY_GAP <= two.getFirst().x() && !help.overlaps(two.getFirst()), w + ": help left of theme");
+            assertTrue(TitleStrip.keys(w, 0).isEmpty());
+            for (var kind : kinds) {
+                var old = TitleStrip.place(w, 18, kind, M);
+                assertEquals(old, TitleStrip.placeKeys(w, 1, kind, M), w + ", " + kind + ": one key is the old strip");
+                var helped = TitleStrip.placeKeys(w, 2, kind, M);
+                if (window < 464) continue;
+                assertEquals(old.plate(), helped.plate(), w + ", " + kind + ": the plate stands");
+                if (old.name() == null) continue;
+                assertNotNull(helped.name(), w + ", " + kind);
+                assertEquals(old.name().x(), helped.name().x(), w + ", " + kind + ": the name starts where it did");
+                assertTrue(helped.name().right() + TitleStrip.GAP <= help.x(), w + ", " + kind + ": the name ends before the help key");
+            }
+        }
+    }
 }

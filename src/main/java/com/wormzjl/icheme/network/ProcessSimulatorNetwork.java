@@ -182,6 +182,7 @@ public final class ProcessSimulatorNetwork {
             if (whole == null) return;
             block.accept(player.getUUID(), whole);
             PacketDistributor.sendToPlayer(player, new Answer(part.container, SAVED, ""));
+            com.wormzjl.icheme.runtime.tutorial.TutorialTriggers.sheetStored(player, whole);
         } catch (SheetBody.Refused refused) {
             PacketDistributor.sendToPlayer(player, new Answer(part.container, refused.key(), ""));
         }
@@ -221,6 +222,7 @@ public final class ProcessSimulatorNetwork {
         }
         block.send(read.designs());
         PacketDistributor.sendToPlayer(player, new Answer(designs.container, DESIGNS_SENT, Integer.toString(read.designs().size())));
+        com.wormzjl.icheme.runtime.tutorial.TutorialTriggers.DESIGN_SENT.get().trigger(player);
     }
 
     // ---- Client: none of this names a client class, so a dedicated server loads it ----

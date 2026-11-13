@@ -1,0 +1,31 @@
+{
+  "parent": "icheme:tutorial/tower/tray",
+  "display": {
+    "icon": {
+      "id": "icheme:field_guide",
+      "count": 1
+    },
+    "title": {
+      "translate": "tutorial.icheme.advancement.tower.build"
+    },
+    "description": {
+      "translate": "tutorial.icheme.advancement.tower.build.description"
+    },
+    "show_toast": false,
+    "announce_to_chat": false
+  },
+  "criteria": {
+    "built": {
+      "trigger": "icheme:equipment_built",
+      "conditions": {
+        "kind": "BATCH_STILL",
+        "column": true
+      }
+    }
+  },
+  "requirements": [
+    [
+      "built"
+    ]
+  ]
+}

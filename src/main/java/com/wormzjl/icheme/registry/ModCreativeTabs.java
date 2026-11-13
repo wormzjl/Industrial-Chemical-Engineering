@@ -9,7 +9,7 @@ import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
 /**
- * The mod's creative tab. A holder of its own, as the blocks and items have, so that {@link IChemE}'s static state (its
+ * The mod's creative tabs: the main tab and the equipment guide. A holder of its own, as the blocks and items have, so that {@link IChemE}'s static state (its
  * logger, read by unit tests on repair paths) touches no registry: a registry needs Minecraft bootstrapped.
  */
 public final class ModCreativeTabs {
@@ -18,6 +18,7 @@ public final class ModCreativeTabs {
             .title(Component.translatable("itemGroup.icheme"))
             .icon(() -> ModItems.PRESSURE_CONTROL_VALVE.get().getDefaultInstance())
             .displayItems((parameters, output) -> {
+                output.accept(ModItems.FIELD_GUIDE.get());
                 output.accept(ModItems.PROCESS_SIMULATOR.get());
                 output.accept(ModItems.PRESSURE_PROBE.get());
                 output.accept(ModItems.TEMPERATURE_PROBE.get());
@@ -56,6 +57,15 @@ public final class ModCreativeTabs {
                 output.accept(ModItems.SHAFT.get());
                 output.accept(ModItems.CREATIVE_MOTOR.get());
                 output.accept(ModItems.CREATIVE_POWER.get());
+            })
+            .build());
+    /** The equipment reference items (batch 2026-11-12-tutorial-system, P3), in {@code Kind} order, after the main tab. */
+    public static final DeferredHolder<CreativeModeTab, CreativeModeTab> EQUIPMENT_GUIDE = CREATIVE_TABS.register("equipment_guide", () -> CreativeModeTab.builder()
+            .title(Component.translatable("itemGroup.icheme.equipment_guide"))
+            .withTabsBefore(MAIN.getId())
+            .icon(() -> ModItems.EQUIPMENT_INFO.get(com.wormzjl.icheme.science.equipment.EquipmentShape.Kind.BATCH_STILL).get().getDefaultInstance())
+            .displayItems((parameters, output) -> {
+                for (var item : ModItems.EQUIPMENT_INFO.values()) output.accept(item.get());
             })
             .build());
 

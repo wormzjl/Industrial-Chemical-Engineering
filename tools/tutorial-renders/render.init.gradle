@@ -1,0 +1,61 @@
+// Offline tutorial renders (batch 2026-11-12-tutorial-system, tools/tutorial-renders). No production or test source
+// set changes, no client, no test suite. Usage, from the worktree root:
+//   ./gradlew --offline --init-script tools/tutorial-renders/render.init.gradle renderTutorial -PtutorialRenderOut=tmp/tutorial-renders
+// Optional: -PtutorialFilms=still_inside (a comma list; default every film), -PtutorialFrames=n (n frames between stops).
+// renderTutorialGuide -PtutorialGuideOnly=p5 renders the equipment pages, the unit map and chapter 5 only (PageRender, P5);
+// -PtutorialGuideOnly=p5b the assembly tours, the limit card and chapters 6 and 7 (StageBRender, P5 stage B).
+// -PtutorialGuideOnly=p6 the help tours P6 added, one sheet a tour (CoverageRender, P6).
+// renderTutorial draws the film stops (TutorialRender), then the guide, tours and cards (GuideRender, P1). Both are
+// compiled with tools/heat-gui-renders (its game font, canvas and page frame) against the main and test outputs.
+// renderTutorialIcons (P3) bakes the equipment reference items' icons into src/main/resources/assets/icheme/textures/item
+// and writes their contact sheet to <out>/p3/icons-sheet.png (IconRender).
+gradle.projectsEvaluated {
+    def p = gradle.rootProject
+    def out = p.providers.gradleProperty('tutorialRenderOut')
+    def films = p.providers.gradleProperty('tutorialFilms')
+    def frames = p.providers.gradleProperty('tutorialFrames')
+    def guideOnly = p.providers.gradleProperty('tutorialGuideOnly')
+    def target = p.file(out.getOrElse('tmp/tutorial-renders')).absolutePath
+    def guide = p.sourceSets.create('tutorialGuideRenderTools') {
+        java.srcDir p.file('tools/heat-gui-renders')
+        java.srcDir p.file('tools/tutorial-renders')
+        java.exclude 'FieldGuideIcon.java'
+        compileClasspath += p.sourceSets.main.output + p.sourceSets.test.output + p.sourceSets.test.compileClasspath
+        runtimeClasspath += output + p.sourceSets.main.output + p.sourceSets.test.output + p.sourceSets.test.runtimeClasspath
+    }
+    p.tasks.named(guide.compileJavaTaskName) {
+        dependsOn p.tasks.named('classes'), p.tasks.named('testClasses')
+        options.compilerArgs.add('-proc:none')
+    }
+    def renderGuide = p.tasks.register('renderTutorialGuide', JavaExec) {
+        group = 'documentation'
+        description = 'Software renders of the field guide, its tours and its cards in the game font (GuideRender).'
+        dependsOn p.tasks.named(guide.classesTaskName)
+        classpath = guide.runtimeClasspath
+        mainClass = 'GuideRender'
+        workingDir = p.projectDir
+        args(guideOnly.isPresent() ? [target, guideOnly.get()] : [target])
+        jvmArgs '-Djava.awt.headless=true', '-Duser.language=en'
+    }
+    p.tasks.register('renderTutorial', JavaExec) {
+        group = 'documentation'
+        description = 'Software renders of every tutorial film stop with the mod sprites (TutorialRender), then the guide (GuideRender).'
+        dependsOn p.tasks.named(guide.classesTaskName)
+        finalizedBy renderGuide
+        classpath = guide.runtimeClasspath
+        mainClass = 'TutorialRender'
+        workingDir = p.projectDir
+        args(films.isPresent() ? [target, films.get()] : [target])
+        jvmArgs '-Djava.awt.headless=true', '-Duser.language=en', '-Dframes=' + frames.getOrElse('0')
+    }
+    p.tasks.register('renderTutorialIcons', JavaExec) {
+        group = 'documentation'
+        description = 'Bakes the icons of the equipment reference items and their contact sheet (IconRender, P3).'
+        dependsOn p.tasks.named(guide.classesTaskName)
+        classpath = guide.runtimeClasspath
+        mainClass = 'IconRender'
+        workingDir = p.projectDir
+        args(p.file('src/main/resources/assets/icheme/textures/item').absolutePath, new File(target, 'p3').absolutePath)
+        jvmArgs '-Djava.awt.headless=true', '-Duser.language=en'
+    }
+}

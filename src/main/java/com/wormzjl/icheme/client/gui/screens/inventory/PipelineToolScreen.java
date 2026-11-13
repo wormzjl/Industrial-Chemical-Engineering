@@ -4,6 +4,7 @@ import com.wormzjl.icheme.client.ClientConfig;
 import com.wormzjl.icheme.client.gui.common.DialogColumns;
 import com.wormzjl.icheme.client.gui.common.PaintSwatch;
 import com.wormzjl.icheme.client.gui.common.ProcessUi;
+import com.wormzjl.icheme.client.gui.common.ScreenTours;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
 import com.wormzjl.icheme.client.gui.common.kit.GuiCanvas;
 import com.wormzjl.icheme.client.gui.common.kit.KitDoor;
@@ -47,6 +48,8 @@ public final class PipelineToolScreen extends AbstractContainerScreen<PipelineTo
     private @Nullable EditBox custom;
     private @Nullable SkinButton bare, save;
     private @Nullable String hovered;
+    /** The page's help tour (batch 2026-11-12-tutorial-system, P6), opened by the ? key at the title row's right. */
+    private final com.wormzjl.icheme.client.gui.tutorial.TourHost tour = new com.wormzjl.icheme.client.gui.tutorial.TourHost(() -> ScreenTours.PIPELINE_TOOL, this::anchor);
 
     public PipelineToolScreen(PipelineToolMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
@@ -99,7 +102,15 @@ public final class PipelineToolScreen extends AbstractContainerScreen<PipelineTo
         addRenderableWidget(push(CommonComponents.GUI_CANCEL.getString(), footer.get(0), this::onClose));
         save = addRenderableWidget(push(tr("pipeline_tool.save"), footer.get(1), this::save).primary(true));
         validate();
+        var help = tour.key(ScreenTours.help(imageWidth).moved(leftPos, topPos), PipelineToolScreen::skin);
+        if (help != null) addRenderableWidget(help);
         door.place(leftPos, topPos);
+    }
+
+    /** A tour's anchor on the screen: the title, Cancel or Save, else a door row's widget or group (ScreenTours.dialog). */
+    private @Nullable Rect anchor(String key, boolean reveal) {
+        var frame = ScreenTours.dialog(imageWidth, imageHeight, title.getString(), GuiCanvas.measure(font), List.of("cancel", "save"));
+        return com.wormzjl.icheme.client.gui.tutorial.TourHost.resolve(frame.get(key), door, key, reveal, PipelineToolScreen::tr, leftPos, topPos);
     }
 
     private SkinButton push(String text, Rect at, Runnable run) {
@@ -182,8 +193,10 @@ public final class PipelineToolScreen extends AbstractContainerScreen<PipelineTo
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         door.place(leftPos, topPos);
         hovered = null;
-        super.render(g, mouseX, mouseY, partialTick);
-        KitDoor.hint(g, font, hovered, mouseX, mouseY);
+        // An open tour takes the pointer: the page under it shows no hover.
+        super.render(g, tour.pointer(mouseX), tour.pointer(mouseY), partialTick);
+        if (tour.isOpen()) tour.render(g, font, width, height, mouseX, mouseY);
+        else KitDoor.hint(g, font, hovered, mouseX, mouseY);
     }
 
     @Override
@@ -198,7 +211,7 @@ public final class PipelineToolScreen extends AbstractContainerScreen<PipelineTo
     protected void renderLabels(GuiGraphics g, int mouseX, int mouseY) {
         var skin = skin();
         var canvas = new GuiCanvas(g, font, leftPos, topPos);
-        skin.title(canvas, 10, 10, font.plainSubstrByWidth(title.getString(), imageWidth - 30));
+        skin.title(canvas, 10, 10, font.plainSubstrByWidth(title.getString(), ScreenTours.titleRoom(imageWidth)));
         // Placed again for this frame's texts: the warning line follows the bore; the widgets keep their slots.
         door.place(rows(parsed != null), GuiCanvas.measure(font));
         hovered = door.draw(canvas, skin, mouseX - leftPos, mouseY - topPos);
@@ -206,6 +219,7 @@ public final class PipelineToolScreen extends AbstractContainerScreen<PipelineTo
 
     @Override
     public boolean mouseClicked(double x, double y, int button) {
+        if (tour.mouseClicked(font, width, height, x, y)) return true;
         SkinField.clickOutside(this, x, y);
         return door.press(x - leftPos, y - topPos, button) || super.mouseClicked(x, y, button);
     }
@@ -223,11 +237,18 @@ public final class PipelineToolScreen extends AbstractContainerScreen<PipelineTo
 
     @Override
     public boolean mouseScrolled(double x, double y, double horizontal, double vertical) {
+        if (tour.isOpen()) return true;
         return door.wheel(x - leftPos, y - topPos, vertical) || super.mouseScrolled(x, y, horizontal, vertical);
     }
 
     @Override
+    public boolean charTyped(char c, int modifiers) {
+        return tour.isOpen() || super.charTyped(c, modifiers);
+    }
+
+    @Override
     public boolean keyPressed(int key, int scan, int modifiers) {
+        if (tour.keyPressed(key)) return true;
         if (key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER) {
             save();
             return true;

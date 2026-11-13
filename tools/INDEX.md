@@ -8,6 +8,9 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 
 | Folder | Purpose | Batch | Status |
 |---|---|---|---|
+| [tutorial-recordings/](tutorial-recordings/README.md) | Writes the tutorial's four recordings from the mod's data and models | `2026-11-12-tutorial-system` | In use since 2026-11-12 |
+| [tutorial-renders/](tutorial-renders/README.md) | Software renders of the tutorial's films, guide pages, tours, cards, equipment pages and item icons; the detached `/icheme-film` command | `2026-11-12-tutorial-system` | In use since 2026-11-12 |
+| [tutorial-column/](tutorial-column/README.md) | Small crude tower candidates on the crude unit at 1/64, their datasheets, the bundled preset writer | `2026-11-12-tutorial-system` | In use since 2026-11-12 |
 | [psv-flare/](psv-flare/README.md) | The PSV-to-flare GameTest alone on the review server | `2026-11-11-gas-blanketing` | In use since 2026-11-11 |
 | [conversion-rules/](conversion-rules/README.md) | Generator of the bundled fluid conversion rules | `2026-11-12-fluid-conversion` | In use since 2026-11-12 |
 | [converter-gametest/](converter-gametest/README.md) | The fluid converter's GameTests alone on the review server | `2026-11-12-fluid-conversion` | In use since 2026-11-12 |

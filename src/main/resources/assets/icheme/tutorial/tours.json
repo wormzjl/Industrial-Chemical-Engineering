@@ -1,0 +1,376 @@
+{
+  "guide": {
+    "stops": [
+      { "anchor": "chapters" },
+      { "anchor": "step" },
+      { "anchor": "media" }
+    ]
+  },
+  "fluid_device.still": {
+    "film": "still_inside",
+    "stops": [
+      { "anchor": "still_firing:on" },
+      { "anchor": "stillFiring" },
+      { "anchor": "still_fuel:load" },
+      { "anchor": "reading:still_pot_temperature" },
+      { "anchor": "reading:still_level" },
+      { "anchor": "reading:still_distillate" },
+      { "anchor": "status" }
+    ]
+  },
+  "fluid_device.still_column": {
+    "film": "still_tray",
+    "stops": [
+      { "anchor": "still_firing:on" },
+      { "anchor": "stillFiring" },
+      { "anchor": "still_fuel:load" },
+      { "anchor": "still_reflux:open" },
+      { "anchor": "reading:still_pot_temperature" },
+      { "anchor": "reading:still_distillate" },
+      { "anchor": "status" }
+    ]
+  },
+  "simulator.sheet": {
+    "show": "simulator/balance",
+    "stops": [
+      { "anchor": "file/open" },
+      { "anchor": "palette" },
+      { "anchor": "canvas" },
+      { "anchor": "run" },
+      { "anchor": "status" },
+      { "anchor": "tab/1" },
+      { "anchor": "tab/2" }
+    ]
+  },
+  "simulator.results": {
+    "stops": [
+      { "anchor": "view/0" },
+      { "anchor": "view/1" },
+      { "anchor": "view/2" },
+      { "anchor": "glass" },
+      { "anchor": "export" }
+    ]
+  },
+  "simulator.sizing": {
+    "stops": [
+      { "anchor": "size_all" },
+      { "anchor": "glass" },
+      { "anchor": "send" },
+      { "anchor": "status" }
+    ]
+  },
+  "simulator.basis": {
+    "stops": [
+      { "anchor": "package" },
+      { "anchor": "tolerance" },
+      { "anchor": "passes" },
+      { "anchor": "glass" }
+    ]
+  },
+  "assembly.structure": {
+    "stops": [
+      { "anchor": "drawing" },
+      { "anchor": "list" },
+      { "anchor": "check" },
+      { "anchor": "status" },
+      { "anchor": "open" },
+      { "anchor": "tab:operation" }
+    ]
+  },
+  "assembly.operation": {
+    "stops": [
+      { "anchor": "start" },
+      { "anchor": "status" },
+      { "anchor": "glass" },
+      { "anchor": "tab:structure" }
+    ]
+  },
+  "fluid_device.converter": {
+    "stops": [
+      { "anchor": "group:converter_group.mode" },
+      { "anchor": "converterRate" },
+      { "anchor": "group:converter_group.levels" },
+      { "anchor": "group:converter_group.tanks" },
+      { "anchor": "group:converter_group.rule" },
+      { "anchor": "apply" },
+      { "anchor": "status" }
+    ]
+  },
+  "fluid_device.tower": {
+    "stops": [
+      { "anchor": "title" },
+      { "anchor": "tower:manual" },
+      { "anchor": "towerSpeed" },
+      { "anchor": "towerTemperature" },
+      { "anchor": "group:device_group.readings" },
+      { "anchor": "status" }
+    ]
+  },
+  "fluid_device.heat": {
+    "stops": [
+      { "anchor": "title" },
+      { "anchor": "side:0" },
+      { "anchor": "glass" },
+      { "anchor": "group:device_group.phases" },
+      { "anchor": "group:device_group.readings" },
+      { "anchor": "tab:control" },
+      { "anchor": "status" }
+    ]
+  },
+  "fluid_device.pump_curve": {
+    "stops": [
+      { "anchor": "glass" },
+      { "anchor": "power:on" },
+      { "anchor": "volumeFlow" },
+      { "anchor": "pressure" },
+      { "anchor": "open_driver" },
+      { "anchor": "group:device_group.suction" },
+      { "anchor": "status" }
+    ]
+  },
+  "fluid_device.mover": {
+    "stops": [
+      { "anchor": "title" },
+      { "anchor": "power:on" },
+      { "anchor": "volumeFlow" },
+      { "anchor": "maximumAddedPressure" },
+      { "anchor": "maximumPressureRatio" },
+      { "anchor": "group:inline.rating" },
+      { "anchor": "status" }
+    ]
+  },
+  "fluid_device.valve": {
+    "stops": [
+      { "anchor": "group:device_group.valve" },
+      { "anchor": "group:heat_group.set_point" },
+      { "anchor": "group:device_group.readings" },
+      { "anchor": "apply" },
+      { "anchor": "status" }
+    ]
+  },
+  "fluid_device.pipe": {
+    "stops": [
+      { "anchor": "title" },
+      { "anchor": "diameter" },
+      { "anchor": "group:device_group.readings" },
+      { "anchor": "glass" },
+      { "anchor": "tab:connections" },
+      { "anchor": "status" }
+    ]
+  },
+  "fluid_device.vessel": {
+    "stops": [
+      { "anchor": "title" },
+      { "anchor": "power:on" },
+      { "anchor": "group:heat_group.set_point" },
+      { "anchor": "recover" },
+      { "anchor": "group:device_group.level" },
+      { "anchor": "glass" },
+      { "anchor": "status" }
+    ]
+  },
+  "fluid_device.control": {
+    "stops": [
+      { "anchor": "glass" },
+      { "anchor": "power:on" },
+      { "anchor": "group:heat_group.target" },
+      { "anchor": "group:heat_group.set_point" },
+      { "anchor": "group:heat_group.manual" },
+      { "anchor": "check_lines" },
+      { "anchor": "apply" }
+    ]
+  },
+  "fluid_device.composition": {
+    "stops": [
+      { "anchor": "load_mixture" },
+      { "anchor": "new_mixture" },
+      { "anchor": "search" },
+      { "anchor": "glass" },
+      { "anchor": "apply" },
+      { "anchor": "status" }
+    ]
+  },
+  "fluid_device.solids": {
+    "stops": [
+      { "anchor": "solidFraction" },
+      { "anchor": "glass" },
+      { "anchor": "apply" }
+    ]
+  },
+  "fluid_device.connections": {
+    "stops": [
+      { "anchor": "glass" },
+      { "anchor": "units" },
+      { "anchor": "status" }
+    ]
+  },
+  "fluid_device.outlets": {
+    "stops": [
+      { "anchor": "glass" },
+      { "anchor": "units" }
+    ]
+  },
+  "fluid_device.datasheet": {
+    "stops": [
+      { "anchor": "glass" },
+      { "anchor": "tab:overview" }
+    ]
+  },
+  "fluid_device.accessory": {
+    "stops": [
+      { "anchor": "glass" },
+      { "anchor": "group:accessory.blanket.group" },
+      { "anchor": "blanket" },
+      { "anchor": "group:accessory.relief.group" },
+      { "anchor": "relief" },
+      { "anchor": "apply" }
+    ]
+  },
+  "fluid_device.safety_valve": {
+    "stops": [
+      { "anchor": "group:accessory.relief.group" },
+      { "anchor": "relief" },
+      { "anchor": "glass" },
+      { "anchor": "apply" }
+    ]
+  },
+  "gauge.settings": {
+    "stops": [
+      { "anchor": "group:gauge.range" },
+      { "anchor": "minimum" },
+      { "anchor": "maximum" },
+      { "anchor": "unit:0" },
+      { "anchor": "reading:gauge" },
+      { "anchor": "save" }
+    ]
+  },
+  "pipeline_tool.settings": {
+    "stops": [
+      { "anchor": "title" },
+      { "anchor": "mode:pipe" },
+      { "anchor": "bore" },
+      { "anchor": "channel:0" },
+      { "anchor": "custom" },
+      { "anchor": "bare" },
+      { "anchor": "save" }
+    ]
+  },
+  "vessel.datasheet": {
+    "stops": [
+      { "anchor": "title" },
+      { "anchor": "group:vessel.size" },
+      { "anchor": "glass" },
+      { "anchor": "motion:running" },
+      { "anchor": "apply" }
+    ]
+  },
+  "machine.overview": {
+    "stops": [
+      { "anchor": "title" },
+      { "anchor": "power:on" },
+      { "anchor": "group:machine.regulate" },
+      { "anchor": "powerLimit" },
+      { "anchor": "ratio" },
+      { "anchor": "glass" },
+      { "anchor": "status" }
+    ]
+  },
+  "control.loop": {
+    "stops": [
+      { "anchor": "group:control.settings" },
+      { "anchor": "on" },
+      { "anchor": "target" },
+      { "anchor": "input" },
+      { "anchor": "output" },
+      { "anchor": "group:control.action" },
+      { "anchor": "group:control.status" }
+    ]
+  },
+  "control.input": {
+    "stops": [
+      { "anchor": "group:control.input" },
+      { "anchor": "devices:next" },
+      { "anchor": "back" }
+    ]
+  },
+  "control.output": {
+    "stops": [
+      { "anchor": "group:control.output" },
+      { "anchor": "devices:next" },
+      { "anchor": "back" }
+    ]
+  },
+  "control.controllers": {
+    "stops": [
+      { "anchor": "group:control.controllers" },
+      { "anchor": "group:control.columns" },
+      { "anchor": "group:control.converters" },
+      { "anchor": "group:control.alarms" },
+      { "anchor": "controller_list" }
+    ]
+  },
+  "control.column": {
+    "stops": [
+      { "anchor": "page" },
+      { "anchor": "start" },
+      { "anchor": "apply" }
+    ]
+  },
+  "control.converter": {
+    "stops": [
+      { "anchor": "page" },
+      { "anchor": "group:fluid.converter_group.mode" },
+      { "anchor": "converterRate" },
+      { "anchor": "group:fluid.converter_group.levels" },
+      { "anchor": "apply" }
+    ]
+  },
+  "constructor.choose": {
+    "stops": [
+      { "anchor": "group:equipment_constructor.group.equipment" },
+      { "anchor": "import" },
+      { "anchor": "title_key" }
+    ]
+  },
+  "constructor.design": {
+    "stops": [
+      { "anchor": "title" },
+      { "anchor": "group:equipment_constructor.group.size" },
+      { "anchor": "group:equipment_constructor.connections" },
+      { "anchor": "group:equipment_constructor.group.place" },
+      { "anchor": "paint" },
+      { "anchor": "build" },
+      { "anchor": "status" }
+    ]
+  },
+  "constructor.design_column": {
+    "stops": [
+      { "anchor": "glass" },
+      { "anchor": "import" },
+      { "anchor": "templates" },
+      { "anchor": "group:equipment_constructor.column_nozzles" },
+      { "anchor": "group:equipment_constructor.group.place" },
+      { "anchor": "build" },
+      { "anchor": "status" }
+    ]
+  },
+  "constructor.paint": {
+    "stops": [
+      { "anchor": "group:equipment_constructor.paint" },
+      { "anchor": "default" },
+      { "anchor": "back" }
+    ]
+  },
+  "constructor.templates": {
+    "stops": [
+      { "anchor": "group:equipment_constructor.group.templates" },
+      { "anchor": "title_key" }
+    ]
+  },
+  "constructor.imports": {
+    "stops": [
+      { "anchor": "group:equipment_constructor.group.imports" },
+      { "anchor": "title_key" }
+    ]
+  }
+}

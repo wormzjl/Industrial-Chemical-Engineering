@@ -1,0 +1,117 @@
+{
+  "terms": {
+    "hydrocarbon": "crude/what",
+    "gas": "crude/barrel",
+    "naphtha": "crude/barrel",
+    "kerosene": "crude/barrel",
+    "diesel": "crude/barrel",
+    "gas_oil": "crude/barrel",
+    "residue": "crude/barrel",
+    "still": "crude/first",
+    "vapour": "still/build",
+    "condenser": "still/build",
+    "distillate": "still/watch",
+    "cut": "still/cut",
+    "tray": "tower/tray",
+    "reflux": "tower/reflux",
+    "tower": "tower/many",
+    "flowsheet": "simulator/sheet",
+    "stream": "simulator/sheet",
+    "side_draw": "simulator/balance",
+    "heat_duty": "simulator/heat",
+    "pumparound": "unit/tower"
+  },
+  "chapters": [
+    {
+      "id": "welcome",
+      "steps": [
+        { "id": "guide" },
+        { "id": "units", "media": "units" },
+        { "id": "help" }
+      ]
+    },
+    {
+      "id": "crude",
+      "steps": [
+        { "id": "what", "media": "card:chain" },
+        { "id": "barrel", "media": "card:barrel" },
+        { "id": "why", "media": "card:products" },
+        { "id": "road", "media": "card:road" },
+        { "id": "parts", "media": "card:three_parts" },
+        { "id": "first", "media": "film:still_inside" }
+      ]
+    },
+    {
+      "id": "still",
+      "steps": [
+        { "id": "build", "media": "film:still_build", "check": "server", "criterion": "equipment_built" },
+        { "id": "charge", "check": "server", "criterion": "still_state" },
+        { "id": "water", "media": "read" },
+        { "id": "watch", "media": "film:still_run" },
+        { "id": "fire", "check": "server", "criterion": "still_state" },
+        { "id": "first", "check": "server", "criterion": "still_state" },
+        { "id": "cut", "media": "card:pot_temperature", "check": "server", "criterion": "still_state" },
+        { "id": "switch", "check": "server", "criterion": "diverter_switched" },
+        { "id": "stop", "check": "server", "criterion": "still_stopped" }
+      ]
+    },
+    {
+      "id": "tower",
+      "steps": [
+        { "id": "tray", "media": "film:still_tray" },
+        { "id": "build", "check": "server", "criterion": "equipment_built" },
+        { "id": "reflux", "media": "card:reflux", "check": "server", "criterion": "still_state" },
+        { "id": "compare", "media": "card:compare", "check": "server", "criterion": "still_state" },
+        { "id": "many", "media": "film:small_tower" }
+      ]
+    },
+    {
+      "id": "simulator",
+      "steps": [
+        { "id": "open" },
+        { "id": "sheet", "media": "read" },
+        { "id": "run", "check": "server", "criterion": "sheet_run" },
+        { "id": "balance", "media": "card:balance" },
+        { "id": "heat", "check": "server", "criterion": "sheet_run" },
+        { "id": "size" },
+        { "id": "send", "check": "server", "criterion": "design_sent" }
+      ]
+    },
+    {
+      "id": "unit",
+      "steps": [
+        { "id": "whole", "media": "film:crude_unit" },
+        { "id": "map", "media": "card:unit_map" },
+        { "id": "tower", "media": "page:equipment_column" },
+        { "id": "next", "media": "read" }
+      ]
+    },
+    {
+      "id": "building",
+      "steps": [
+        { "id": "site", "media": "film:unit_build" },
+        { "id": "tower", "check": "server", "criterion": "equipment_built" },
+        { "id": "top", "check": "server", "criterion": "equipment_built" },
+        { "id": "pumps", "media": "page:equipment_combustion_engine" },
+        { "id": "loop", "media": "page:equipment_exchanger" },
+        { "id": "lines", "media": "read" },
+        { "id": "parts", "check": "server", "criterion": "assembly_state" }
+      ]
+    },
+    {
+      "id": "start",
+      "steps": [
+        { "id": "crude", "media": "page:equipment_fluid_converter" },
+        { "id": "fuel", "media": "page:equipment_vertical_heater" },
+        { "id": "power", "media": "page:equipment_generator" },
+        { "id": "cooling", "media": "page:equipment_exchanger" },
+        { "id": "steam", "media": "page:equipment_vertical_heater" },
+        { "id": "tanks", "media": "page:equipment_flare_stack" },
+        { "id": "go", "check": "server", "criterion": "column_state" },
+        { "id": "limit", "media": "card:limit", "check": "server", "criterion": "column_state" },
+        { "id": "products", "check": "server", "criterion": "column_state" },
+        { "id": "end", "media": "read" }
+      ]
+    }
+  ]
+}

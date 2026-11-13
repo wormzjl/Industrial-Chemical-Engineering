@@ -598,7 +598,8 @@ def equipmentGates = gateGroup('equipment', 'science/equipment',
 // and the gate groups; `check` (so `build`) and the final lane run it with `test`.
 def slowGateClasses = ['runtime.fluid.HoldClassWorldsTest', 'runtime.fluid.JunctionSeedingGateTest', 'runtime.fluid.IslandSchedulerTest',
         'runtime.fluid.ExtremeTopologyIslandTest', 'science.flowsheet.FlowsheetColumnTest', 'science.flowsheet.ColumnEjectorTest',
-        'client.gui.flowsheet.CrudeUnitSampleTest', 'client.gui.flowsheet.UtilityRegulationTest'].collect { "com.wormzjl.icheme.${it}" }
+        'client.gui.flowsheet.CrudeUnitSampleTest', 'client.gui.flowsheet.UtilityRegulationTest',
+        'client.gui.flowsheet.SmallCrudeUnitTest', 'client.gui.flowsheet.SmallUnitRecordingTest'].collect { "com.wormzjl.icheme.${it}" }
 // A class of @Nested groups needs its nested classes named too (CrudeUnitSampleTest$SimulatorRunTest and the like).
 slowGateClasses += ['com.wormzjl.icheme.client.gui.flowsheet.CrudeUnitSampleTest$*']
 tasks.named('test', Test) {

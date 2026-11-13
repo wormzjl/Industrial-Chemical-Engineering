@@ -1,0 +1,61 @@
+// Tutorial recordings (batch 2026-11-12-tutorial-system, tools/tutorial-recordings). No production or test source set
+// changes, no client, no test suite. Usage, from the worktree root:
+//   ./gradlew --offline --init-script tools/tutorial-recordings/record.init.gradle recordCrudeBarrel
+//   ./gradlew --offline --init-script tools/tutorial-recordings/record.init.gradle recordStillRun
+//   ./gradlew --offline --init-script tools/tutorial-recordings/record.init.gradle recordStillTrays [-Pwrite]
+//   ./gradlew --offline --init-script tools/tutorial-recordings/record.init.gradle recordSmallUnit [-Pwrite] [-Ptries=643.15,653.15] [-Psecond=K]
+// recordCrudeBarrel writes src/main/resources/assets/icheme/tutorial/recordings/crude_barrel.json from the material data.
+// recordStillRun writes src/main/resources/assets/icheme/tutorial/recordings/still_run.json from the still law
+// (StillRunRecorder lives in the test sources, so StillRunRecordingTest reruns the same code).
+gradle.projectsEvaluated {
+    def p = gradle.rootProject
+    def sources = p.sourceSets.create('tutorialRecordingTools') {
+        java.srcDir p.file('tools/tutorial-recordings')
+        compileClasspath += p.sourceSets.main.output + p.sourceSets.main.compileClasspath + p.sourceSets.test.output + p.sourceSets.test.compileClasspath
+        runtimeClasspath += output + p.sourceSets.main.runtimeClasspath + p.sourceSets.test.output + p.sourceSets.test.runtimeClasspath
+    }
+    p.tasks.named(sources.compileJavaTaskName) {
+        dependsOn p.tasks.named('classes'), p.tasks.named('testClasses')
+        options.compilerArgs.add('-proc:none')
+    }
+    p.tasks.register('recordCrudeBarrel', JavaExec) {
+        group = 'documentation'
+        description = 'Records the crude barrels of the tutorial cards barrel and products from the material data (CrudeBarrel).'
+        dependsOn p.tasks.named(sources.classesTaskName)
+        classpath = sources.runtimeClasspath
+        mainClass = 'CrudeBarrel'
+        workingDir = p.projectDir
+        args(p.projectDir.absolutePath)
+    }
+    p.tasks.register('recordStillRun', JavaExec) {
+        group = 'documentation'
+        description = 'Records the still run of tutorial chapter 2 from the still law (StillRun).'
+        dependsOn p.tasks.named(sources.classesTaskName)
+        classpath = sources.runtimeClasspath
+        mainClass = 'StillRun'
+        workingDir = p.projectDir
+        args(p.projectDir.absolutePath)
+    }
+    p.tasks.register('recordStillTrays', JavaExec) {
+        group = 'documentation'
+        description = 'Measures and (with -Pwrite) records the still with a column of tutorial chapter 3 from the still law (StillTrays).'
+        dependsOn p.tasks.named(sources.classesTaskName)
+        classpath = sources.runtimeClasspath
+        mainClass = 'StillTrays'
+        workingDir = p.projectDir
+        args(p.projectDir.absolutePath)
+        if (p.hasProperty('write')) args('-write')
+    }
+    p.tasks.register('recordSmallUnit', JavaExec) {
+        group = 'documentation'
+        description = 'Measures and (with -Pwrite) records the Small crude unit runs of tutorial chapter 4 on the simulator path (SmallUnit).'
+        dependsOn p.tasks.named(sources.classesTaskName)
+        classpath = sources.runtimeClasspath
+        mainClass = 'SmallUnit'
+        workingDir = p.projectDir
+        args(p.projectDir.absolutePath)
+        if (p.hasProperty('write')) args('-write')
+        if (p.hasProperty('tries')) args('-tries=' + p.property('tries'))
+        if (p.hasProperty('second')) systemProperty 'icheme.tutorial.second', p.property('second')
+    }
+}

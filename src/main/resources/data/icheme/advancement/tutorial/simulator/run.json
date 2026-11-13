@@ -1,0 +1,27 @@
+{
+  "parent": "icheme:tutorial/simulator/sheet",
+  "display": {
+    "icon": {
+      "id": "icheme:field_guide",
+      "count": 1
+    },
+    "title": {
+      "translate": "tutorial.icheme.advancement.simulator.run"
+    },
+    "description": {
+      "translate": "tutorial.icheme.advancement.simulator.run.description"
+    },
+    "show_toast": false,
+    "announce_to_chat": false
+  },
+  "criteria": {
+    "ran": {
+      "trigger": "icheme:sheet_run"
+    }
+  },
+  "requirements": [
+    [
+      "ran"
+    ]
+  ]
+}

@@ -118,6 +118,8 @@ class StillRuntimeTest {
         final ElectricStores stores;
         final Stills stills;
         int items, taken, solves;
+        /** Each column job as it was queued: its tick and its condenser outlet floor, K. */
+        final List<double[]> jobs = new ArrayList<>();
         boolean feeding;
         long requests;
 
@@ -162,6 +164,7 @@ class StillRuntimeTest {
             });
             stills.solves((pot, island, job, done) -> {
                 solves++;
+                jobs.add(new double[]{epoch[0], job.outlet()});
                 solved.add(() -> done.accept(StillHead.run(job, model, () -> {
                 })));
                 return true;
@@ -230,6 +233,24 @@ class StillRuntimeTest {
 
         Stills.View view() {
             return stills.view(POT);
+        }
+
+        /**
+         * An inlet step: generator {@code node}'s island replaced at its committed tick, through a topology event, by its own
+         * graph with that generator delivering {@code state} (as {@code ExchangerCouplingTest}'s step).
+         */
+        void step(long node, FluidThermodynamics.State state) {
+            long id = owners.get(node);
+            var island = coordinator.snapshot(id);
+            var event = UUID.randomUUID();
+            long tick = island.clock().committedTick();
+            coordinator.fence(event, tick, Set.of(id));
+            var nodes = new ArrayList<>(island.graph().reservoirs());
+            for (int i = 0; i < nodes.size(); i++)
+                if (nodes.get(i).id() == node) nodes.set(i, new PassiveNetwork.Reservoir(node, nodes.get(i).elevation(), state, PassiveNetwork.NodeKind.GENERATOR));
+            var graph = new PassiveNetwork(nodes, island.graph().pipes(), island.graph().scheduledTransfers());
+            coordinator.topology(Set.of(event), Set.of(id), List.of(new IslandCoordinator.Replacement(id, graph)), model, tick, island.clock().onlineTick(), Map.of(), Set.of(), Map.of(), () -> {
+            });
         }
 
         StillUnit unit() {
@@ -379,8 +400,8 @@ class StillRuntimeTest {
      * is cooler than the pot, the distillate richer in isopentane than the charge, the water takes the condenser's duty, and
      * every mole stands in the pot, the head's accounts or what the outlets gave.
      */
-    @Test
-    void aPentanePotWithItsColumnDistilsIsopentaneFirst() {
+    /** A solid-fired still of 100 L with a 4-tray column and its condenser on 15 °C water, 60 % full of a 50/50 pentane charge at 300 K, reflux 2. */
+    private static Rig pentanes() {
         var model = FluidThermodynamics.forNetwork(CATALOG, "icheme:refinery").on(List.of("Isopentane", "N-pentane", "Nitrogen"));
         // A fluid basis holds nitrogen, and water last (WorldTopologyLedger.FluidBasis).
         assertEquals(List.of("Isopentane", "N-pentane", "Nitrogen", "Water"), model.components());
@@ -403,6 +424,12 @@ class StillRuntimeTest {
         var unit = StillUnit.built(POT, WATER, DISTILLATE, VENT, 0, design, model.componentCount()).withFiring(1).withReflux(2);
         var rig = new Rig(model, basis, devices, states, unit);
         rig.items = Integer.MAX_VALUE;
+        return rig;
+    }
+
+    @Test
+    void aPentanePotWithItsColumnDistilsIsopentaneFirst() {
+        var rig = pentanes();
         double[] start = rig.pot();
         rig.run(240);
         print("pentanes", rig);
@@ -423,6 +450,114 @@ class StillRuntimeTest {
             double total = now[c] + head[c] + vent[c] + dGave[c] + vGave[c];
             assertEquals(start[c], total, 1e-6 * start[c], "component " + c + " conserved");
         }
+    }
+
+    /**
+     * Code review finding 2b: a still that solves a column keeps its fire out until the column's first answer. The boiling
+     * pentane still loses its engine state, as at a load: until the first answer the pot takes no heat, the fire's total
+     * stands, no mole reaches the head's accounts (which would all go to the vent: the condenser returns its headspace gas)
+     * and the still reads HEATING (DISTILLING while its outlet gives what its account held); the slice after the answer the
+     * heat is back.
+     */
+    @Test
+    void aBoilingStillsFireWaitsForItsColumnsFirstAnswerAfterALoad() {
+        var rig = pentanes();
+        rig.run(240);
+        assertEquals(BatchStill.Status.DISTILLING, rig.view().status(), () -> rig.stills.statusLine(POT));
+        rig.stills.removed(POT);
+        int solves = rig.solves;
+        double heated = rig.unit().heated();
+        double[] head = rig.unit().head().moles(), vent = rig.unit().venting().moles();
+        boolean heating = false;
+        long waited = 0, limit = 4 * (Stills.SOLVE_TICKS + Stills.APPLY_TICKS);
+        while (Double.isNaN(rig.view().headTemperature())) {
+            assertTrue(++waited < limit, "the first answer arrives within " + limit + " ticks");
+            rig.run(.05);
+            if (!Double.isNaN(rig.view().headTemperature())) break;
+            var v = rig.view();
+            assertEquals(0, v.heat(), 0, "no heat before the first answer");
+            assertEquals(heated, rig.unit().heated(), 0, "the fire's total stands");
+            double[] h = rig.unit().head().moles(), n = rig.unit().venting().moles();
+            for (int c = 0; c < n.length; c++) {
+                assertTrue(n[c] <= vent[c] * (1 + 1e-12), "component " + c + " reaches no vent account: " + n[c] + " after " + vent[c]);
+                assertTrue(h[c] <= head[c] * (1 + 1e-12), "component " + c + " reaches no distillate account");
+            }
+            head = h;
+            vent = n;
+            // Before its first commit IDLE; then HEATING, or DISTILLING while its outlet still gives what its account held.
+            if (v.status() != BatchStill.Status.IDLE) {
+                heating = true;
+                assertTrue(v.status() == BatchStill.Status.HEATING || v.status() == BatchStill.Status.DISTILLING && v.distillateFlow() > 0, rig.stills.statusLine(POT));
+            }
+        }
+        assertTrue(heating, "the waiting still does not read IDLE");
+        assertTrue(rig.solves > solves, "the waiting still asked its column");
+        System.out.printf(Locale.ROOT, "finding 2b: the first answer after %d ticks%n", waited);
+        rig.run(Stills.CYCLE_TICKS / 20.0);
+        assertTrue(rig.view().heat() > 0, "the heat is back after the answer: " + rig.stills.statusLine(POT));
+        assertTrue(rig.unit().heated() > heated, "the fire burns again");
+    }
+
+    /**
+     * The condenser with light ends (CONDENSER_LIGHT_ENDS_REVIEW.md, option c): a pot still with its condenser on 15 °C water,
+     * charged with a light oil holding propane. The condenser's outlet stands at the water's inlet plus the approach; the
+     * propane it cannot hold there goes to the vent account, richer in it than the distillate; every mole stands in the pot,
+     * the head's accounts or what the outlets gave. A warmer water, stepped through a topology event, reaches the next queued
+     * job only: the step itself forces no solve, the jobs before it kept the old outlet and those after it take the new.
+     */
+    @Test
+    void aLightOilsGasGoesToTheVentAndTheNextJobTakesTheWatersStep() {
+        var model = FluidThermodynamics.forNetwork(CATALOG, "icheme:refinery").on(List.of("Propane", "N-pentane", "N-hexane", "Nitrogen"));
+        assertEquals(List.of("Propane", "N-pentane", "Nitrogen", "N-hexane", "Water"), model.components());
+        int n = model.componentCount();
+        var design = new BatchStill.Design(VOLUME, BatchStill.Heater.SOLID, true, 0);
+        var devices = List.of(pot(design),
+                plain(1, 0, 10, Kind.GENERATOR), plain(101, 1, 10, Kind.PIPE), water(design), plain(201, 5, 10, Kind.PIPE), plain(2, 6, 10, Kind.VOID),
+                outlet(DISTILLATE, 20), plain(301, 1, 20, Kind.PIPE), plain(3, 2, 20, Kind.VOID),
+                outlet(VENT, 30), plain(302, 1, 30, Kind.PIPE), plain(4, 2, 30, Kind.VOID));
+        var charge = per(model, new double[]{.05, .5, 0, .45, 0}, 300, 150_000);
+        var states = new HashMap<Long, PassiveNetwork.Reservoir>();
+        states.put(POT, contents(model, charge, .6, true));
+        states.put(1L, new PassiveNetwork.Reservoir(1, 0, water(model, 288.15, 300_000), PassiveNetwork.NodeKind.GENERATOR));
+        states.put(2L, new PassiveNetwork.Reservoir(2, 0, water(model, 300, 101_325), PassiveNetwork.NodeKind.VOID));
+        for (long id : new long[]{DISTILLATE, VENT})
+            states.put(id, new PassiveNetwork.Reservoir(id, 0, per(model, new double[]{0, 1, 0, 0, 0}, 298.15, 150_000), PassiveNetwork.NodeKind.GENERATOR));
+        for (long id : new long[]{3, 4})
+            states.put(id, new PassiveNetwork.Reservoir(id, 0, water(model, 300, 101_325), PassiveNetwork.NodeKind.VOID));
+        var basis = new WorldTopologyLedger.FluidBasis("icheme:refinery", model.components(), "still-test");
+        var unit = StillUnit.built(POT, WATER, DISTILLATE, VENT, 0, design, n).withFiring(1);
+        var rig = new Rig(model, basis, devices, states, unit);
+        rig.items = Integer.MAX_VALUE;
+        double[] start = rig.pot();
+        rig.run(240);
+        print("light oil", rig);
+        assertTrue(rig.solves > 0, "the column solved");
+        for (var job : rig.jobs)
+            assertTrue(job[1] == StillColumn.TOTAL_CONDENSER || Math.abs(job[1] - (288.15 + BatchStill.OUTLET_APPROACH)) < .1,
+                    "the outlet: the total condenser's before the water's first record, then the water's inlet (its pipe warms it a little) plus the approach: " + job[1]);
+        assertEquals(288.15 + BatchStill.OUTLET_APPROACH, rig.jobs.getLast()[1], .1, "the water's inlet plus the approach");
+        var dGave = rig.given.getOrDefault(DISTILLATE, new double[n]);
+        double[] vented = rig.unit().venting().moles().clone(), vGave = rig.given.getOrDefault(VENT, new double[n]);
+        for (int c = 0; c < n; c++) vented[c] += vGave[c];
+        double ventTotal = Arrays.stream(vented).sum(), distilled = Arrays.stream(dGave).sum() + Arrays.stream(rig.unit().head().moles()).sum();
+        System.out.printf(Locale.ROOT, "light oil: vented %s, distillate %s, status %s%n", Arrays.toString(vented), Arrays.toString(dGave), rig.view().status());
+        assertTrue(vented[0] > 0, "the propane the outlet cannot hold went to the vent account");
+        assertTrue(distilled > 0, "the condenser's liquid reached the spout's account");
+        assertTrue(vented[0] / ventTotal > dGave[0] / Arrays.stream(dGave).sum(), "the vent is richer in propane than the distillate");
+        double[] now = rig.pot(), head = rig.unit().head().moles(), vent = rig.unit().venting().moles();
+        for (int c : new int[]{0, 1, 3})
+            assertEquals(start[c], now[c] + head[c] + vent[c] + dGave[c] + vGave[c], 1e-6 * start[c], "component " + c + " conserved");
+        // The water's step: no solve forced, the next queued job takes it.
+        int solves = rig.solves, queued = rig.jobs.size();
+        long stepped = rig.epoch[0];
+        rig.step(1, water(model, 298.15, 300_000));
+        assertEquals(solves, rig.solves, "the step forces no solve");
+        rig.run(60);
+        assertTrue(rig.jobs.size() > queued, "jobs were queued after the step");
+        for (int k = 0; k < queued; k++) assertTrue(rig.jobs.get(k)[1] < 298.15, "a job before the step kept its outlet");
+        assertEquals(298.15 + BatchStill.OUTLET_APPROACH, rig.jobs.getLast()[1], .1, "a job after the step: the new water's inlet plus the approach");
+        for (var job : rig.jobs.subList(queued, rig.jobs.size()))
+            assertTrue(job[0] > stepped, "every later job was queued on the schedule, after the step");
     }
 
     /** An open still of {@code stages} trays at reflux {@code reflux} on the pilot's ethanol and water, charged with 60 L of a wash at 364 K. */
@@ -503,8 +638,10 @@ class StillRuntimeTest {
      * The merge of main 0.27.1 (MAIN_MERGE_PLAN section 5): the wash of {@link #aWashInAnOpenPotBoilsAtItsBubblePoint} under
      * time factor 4 is fired on process time, so in a quarter of the ticks it takes the heat and boils off what it does in
      * 180 s at factor 1; the view keeps its compounds and its water (withTime on a view). The heat booked trails the run by
-     * one cadence (100 ticks of play: 5 s of process time at factor 1, 20 s at 4), so each runs 5 s of play past 180 s of
-     * process time: 3600 ticks at factor 1 and 900 at 4 are booked. The boil-off agrees within the coarser slices' 5 %.
+     * one cadence (100 ticks of play: 5 s of process time at factor 1, 20 s at 4). The fire waits for the condenser's first
+     * answer (code review finding 2b), which comes in the same ticks of play at either factor and takes effect at a slice's
+     * dispatch: the pot takes no heat before it, and from the tick the answer shows, the slice already dispatched included,
+     * 180 s of process time are booked (3600 ticks at factor 1, 900 at 4). The boil-off agrees within the coarser slices' 5 %.
      */
     @Test
     void aWashAtTimeFactorFourBoilsInAQuarterOfTheTicks() {
@@ -517,8 +654,12 @@ class StillRuntimeTest {
             var rig = washStill(catalog, id, 0, 0, factors[k]);
             assertEquals(List.of("Ethanol", "Nitrogen", "Water"), rig.model.components());
             rating = rig.unit().design().rating();
+            while (Double.isNaN(rig.view().headTemperature()) && rig.epoch[0] < 4 * (Stills.SOLVE_TICKS + Stills.APPLY_TICKS)) rig.run(.05);
+            assertFalse(Double.isNaN(rig.view().headTemperature()), "the condenser answered");
+            assertEquals(0, rig.heat.getOrDefault(PhysicalFluidTopology.sideIdentity(POT), 0.), 0, "no heat before the first answer");
+            System.out.printf(Locale.ROOT, "wash at factor %d: the first answer at tick %d%n", factors[k], rig.epoch[0]);
             double start = Arrays.stream(rig.potNode().inventory().moles()).sum();
-            rig.run(180.0 / factors[k] + 5);
+            rig.run(180.0 / factors[k]);
             heat[k] = rig.heat.getOrDefault(PhysicalFluidTopology.sideIdentity(POT), 0.);
             gone[k] = start - Arrays.stream(rig.potNode().inventory().moles()).sum();
         }

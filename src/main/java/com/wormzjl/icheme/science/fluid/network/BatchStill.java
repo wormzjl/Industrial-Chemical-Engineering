@@ -67,6 +67,16 @@ public final class BatchStill {
     public static final double EXCESS = 1.2;
     /** The design water rise through the condenser, K, and water's heat capacity, J/kgK, for its design flow. */
     public static final double DESIGN_WATER_RISE = 10, WATER_HEAT_CAPACITY = 4186;
+    /**
+     * The condenser's outlet stands this far over its water's inlet, K (owner, 2026-11-12, CONDENSER_LIGHT_ENDS_REVIEW.md option
+     * c): what the head vapour holds as gas there leaves by the vent; the sheet's still and the world's alike.
+     */
+    public static final double OUTLET_APPROACH = 5;
+
+    /** The condenser's outlet floor for the column, K: the water's inlet plus {@link #OUTLET_APPROACH}; with no water a total condenser. */
+    public static double outlet(Cooling cooling) {
+        return cooling == null ? StillColumn.TOTAL_CONDENSER : cooling.waterTemperature() + OUTLET_APPROACH;
+    }
     /** The column's F-factor at the full design boil-up, Pa^0.5, on a naphtha's latent heat (J/kg) and vapour density (kg/m³). */
     public static final double DESIGN_F_FACTOR = 1.5, DESIGN_LATENT = 330e3, DESIGN_VAPOUR_DENSITY = 3.3;
     /** The F-factor at which the column floods, Pa^0.5: its design load with the design excess. */
@@ -221,7 +231,8 @@ public final class BatchStill {
 
     /**
      * What the still shows, most severe first: an alarm stands before the run's state. IDLE is a pot with no heat asked
-     * for; HEATING below its bubble point; BOILING at it with nothing distilled (a closed valve); DISTILLING otherwise.
+     * for; HEATING below its bubble point; BOILING at it with no liquid to the spout (a closed valve, or a partial condenser
+     * that vents its gas alone); DISTILLING otherwise (with no condenser, its vapour is the product).
      */
     public enum Status {
         NO_FUEL, OVERHEAT, BOIL_DRY, FLOODING, COOLING_LIMITED, DISTILLING, BOILING, HEATING, IDLE;
@@ -308,23 +319,32 @@ public final class BatchStill {
         }
         int raised = alarms | boil.alarms;
         double[] liquid = new double[n], vapour = new double[n];
-        double removed = 0;
+        var split = boil.split;
+        // Each component's liquid share of the net top product at the outlet (1 where the head condenses whole; a partial
+        // condenser's gas leaves by the vent), times the condenser's share of the product (COOLING LIMITED: the rest at H1).
+        double[] shares = split.liquidShares();
+        double removed = 0, condensable = 0, spout = 0;
         for (int i = 0; i < n; i++) {
-            liquid[i] = boil.liquidShare * boil.removal[i];
+            double product = shares[i] * boil.removal[i];
+            liquid[i] = boil.liquidShare * product;
             vapour[i] = boil.removal[i] - liquid[i];
             removed += boil.removal[i];
+            condensable += product;
+            spout += liquid[i];
         }
-        var split = boil.split;
         double liquidEnthalpy = 0, vapourEnthalpy = 0, condenser = boil.used;
         if (removed > 0) {
-            // Out of the column per mole of distillate: e = (R + 1) H1 - R hR; the distillate leaves at its own hD (h0 with one
-            // liquid; of two layers what the reflux leaves), the vented vapour at H1, and the condenser takes the rest.
-            liquidEnthalpy = boil.liquidShare * removed * split.distillateEnthalpy();
-            vapourEnthalpy = (1 - boil.liquidShare) * removed * split.headEnthalpy();
+            // Out of the column per mole of distillate: e = (R + 1) H1 - R hR; the liquid leaves at its own hD at the outlet (h0
+            // with one liquid; of two layers what the reflux leaves), a partial condenser's gas at its own enthalpy there, the
+            // part the condenser could not take at H1, and the condenser takes the rest.
+            liquidEnthalpy = boil.liquidShare * condensable * split.distillateEnthalpy();
+            vapourEnthalpy = (1 - boil.liquidShare) * condensable * split.headEnthalpy() + (removed - condensable) * split.gasEnthalpy();
             condenser = removed * split.energyPerDistillate() - liquidEnthalpy - vapourEnthalpy;
         }
         double heat = sensible + boil.used;
-        return new Step(boil.end, primary(raised, removed > 0, true, true), raised, heat, sensible + boil.warming, design.heater().drawn(heat),
+        // A condenser's still distils where liquid reaches the spout; its vented gas alone is boiling. Without one the vapour is the product.
+        boolean condenses = design.condenser() && inputs.cooling() != null;
+        return new Step(boil.end, primary(raised, condenses ? spout > 0 : removed > 0, true, true), raised, heat, sensible + boil.warming, design.heater().drawn(heat),
                 liquid, liquidEnthalpy, vapour, vapourEnthalpy, condenser, split.headTemperature(), boil.flood, boil.condensed, split, boil.failure);
     }
 
@@ -346,8 +366,11 @@ public final class BatchStill {
         Pot end;
         StillColumn.Split split;
         double[] removal;
-        /** Heat used (J), the pot's warming in it (J), the column's boil-up heat rate (W), its F-factor. */
-        double used, warming, boilUp, flood;
+        /**
+         * Heat used (J), the pot's warming in it (J), the moles a second of the split's basis (the distillate's, or a closed
+         * valve's top vapour's), the column's F-factor.
+         */
+        double used, warming, rate, flood;
         /** The share of the distillate that leaves as liquid, and of the top vapour the condenser takes. */
         double liquidShare = 1, condensed = 1;
         int alarms;
@@ -371,17 +394,20 @@ public final class BatchStill {
         boolean condenser = design.condenser() && inputs.cooling() != null;
         // A column with no condenser has no reflux: its trays run dry and pass the pot's vapour, one stage.
         double nominal = condenser && design.refluxes() ? inputs.reflux() : 0, condensed = 1;
+        // The condenser's outlet floor: its water's inlet plus the approach; a still that condenses nothing at the total condenser's.
+        double outlet = outlet(condenser ? inputs.cooling() : null);
         var warm = last;
         Boil boil = null;
         for (int pass = 0; pass < 6; pass++) {
             double reflux = effectiveReflux(nominal, condensed);
             String failure = null;
-            var split = column.solve(n0, design.stages(), reflux, 1, warm != null ? warm.profile() : null);
+            var split = column.solve(n0, design.stages(), reflux, outlet, warm != null ? warm.profile() : null);
             if (!split.converged()) {
-                // A refused solve keeps the column's last answer at the same setting (state), else one equilibrium stage.
+                // A refused solve keeps the column's last answer at the same setting (state), else one equilibrium stage, its
+                // condenser returning the reflux asked (all of its liquid where short: the trays run dry).
                 failure = split.failure();
                 split = last != null && last.stages() == split.stages() && last.refluxRatio() == split.refluxRatio() && last.closed() == split.closed()
-                        ? last : column.solve(n0, 0, 0, 1, null);
+                        ? last : column.solve(n0, 0, design.refluxes() ? reflux : 0, outlet, null);
             }
             if (!split.converged()) {
                 boil = new Boil();
@@ -403,7 +429,7 @@ public final class BatchStill {
                 boil.liquidShare = 0;
                 return boil;
             }
-            double need = boil.boilUp * split.topVapourRate() * (split.headEnthalpy() - split.condensateEnthalpy());
+            double need = boil.rate * split.condenserDuty();
             double capacity = condenserCapacity(design.condenserArea(), (split.headTemperature() + split.condensateTemperature()) / 2, inputs.cooling());
             double next = need > capacity ? capacity / need : 1;
             if (Math.abs(next - condensed) <= 1e-6) break;
@@ -413,6 +439,9 @@ public final class BatchStill {
         return boil;
     }
 
+    /** The share of the pot's distillable moles at which the balance's slope is first taken. */
+    private static final double TRIAL_SHARE = 1e-3;
+
     /** The moles distilled on {@code budget} J with {@code split}: the pot's energy balance closed by its end state. */
     private static Boil boiled(StillColumn column, Design design, double[] n0, double total, double start, double hStart, double budget,
                                double dry, StillColumn.Split split, double dt) {
@@ -421,17 +450,22 @@ public final class BatchStill {
         int n = n0.length;
         double e = split.energyPerDistillate();
         if (split.closed() || !Double.isFinite(e) || !(budget > 0)) {
-            // Total reflux: the pot stays as it is and all the heat goes up to the condenser.
+            // Total reflux: the pot stays as it is and all the heat goes up to the condenser, H1 - hC a mole of top vapour.
             boil.end = new Pot(n0, start, split);
             boil.removal = new double[n];
             boil.used = Math.max(0, budget);
-            boil.boilUp = boil.used / dt;
-            boil.flood = flood(column, design, split, boil.boilUp);
+            boil.rate = boil.used / dt / split.condenserDuty();
+            boil.flood = flood(column, design, split, boil.rate);
             return boil;
         }
         var g = new Balance(column, n0, split.distillate(), total, hStart, e, start);
         double most = total - dry;
-        double low = 0, gLow = g.used(0), high = Math.min(most, budget / (e - hStart)), gHigh = g.used(high);
+        // The bracket starts where the balance's own slope at a small trial meets the budget: the heat a mole distilled takes,
+        // the pot's warming in it. No difference of enthalpies sizes it (the light vapour's against the heavy pot's falls
+        // through zero on a wide charge; a vapour with light ends has no condensate at the condenser). The doubling and the
+        // regula falsi need only that the heat used rises with the moles distilled, which the balance gives.
+        double low = 0, gLow = g.used(0), trial = TRIAL_SHARE * most, gTrial = g.used(trial), slope = (gTrial - gLow) / trial;
+        double high = slope > 0 ? Math.min(most, budget / slope) : trial, gHigh = high == trial ? gTrial : g.used(high);
         while (gHigh < budget && high < most) {
             low = high;
             gLow = gHigh;
@@ -477,8 +511,8 @@ public final class BatchStill {
         boil.removal = g.removal.clone();
         boil.end = new Pot(g.remaining, g.temperature, split);
         boil.warming = g.warming();
-        boil.boilUp = g.removed * split.boilUpHeat() / dt;
-        boil.flood = flood(column, design, split, boil.boilUp);
+        boil.rate = g.removed / dt;
+        boil.flood = flood(column, design, split, boil.rate);
         return boil;
     }
 
@@ -524,6 +558,7 @@ public final class BatchStill {
         }
     }
 
+    /** The column's F-factor at {@code rate} moles a second of the split's basis. */
     private static double flood(StillColumn column, Design design, StillColumn.Split split, double rate) {
         if (split.stages() == 0 || !(rate > 0)) return 0;
         double d = design.columnDiameter();

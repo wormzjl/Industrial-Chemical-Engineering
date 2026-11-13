@@ -1,0 +1,33 @@
+{
+  "display": {
+    "icon": {
+      "id": "icheme:field_guide",
+      "count": 1
+    },
+    "title": {
+      "translate": "tutorial.icheme.advancement.root"
+    },
+    "description": {
+      "translate": "tutorial.icheme.advancement.root.description"
+    },
+    "show_toast": false,
+    "announce_to_chat": false,
+    "background": "minecraft:textures/gui/advancements/backgrounds/stone.png"
+  },
+  "criteria": {
+    "joined": {
+      "trigger": "minecraft:tick",
+      "conditions": {}
+    }
+  },
+  "requirements": [
+    [
+      "joined"
+    ]
+  ],
+  "rewards": {
+    "loot": [
+      "icheme:tutorial/field_guide"
+    ]
+  }
+}

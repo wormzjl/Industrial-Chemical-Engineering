@@ -14,7 +14,9 @@ Status words:
 
 | Batch | Purpose | Status |
 |---|---|---|
+| [2026-11-12-tutorial-system/](2026-11-12-tutorial-system/README.md) | Tutorial for new players: own films, help tours on every GUI, a field guide to a first small crude unit, equipment items and JEI pages | Implemented 2026-11-13 (0.30.0) |
 | [2026-11-12-fluid-conversion/](2026-11-12-fluid-conversion/README.md) | Converter between Forge fluids and IChemE fluids | Implemented 2026-11-12 (0.28.0) |
+| [2026-11-12-still-heat-per-distillate/](2026-11-12-still-heat-per-distillate/README.md) | Batch still refused part way through a wide-boiling (crude) charge: split per mole of distillate, bracket on the balance's slope | Implemented 2026-11-13 (0.30.0) |
 | [2026-11-11-aqueous-solvents](2026-11-11-aqueous-solvents/README.md) | Water-miscible solvents: a Huron-Vidal mixing rule in the PR78 kernel, pairs derived from group counts, one water in the equation of state, three fluid phases, gas solubility; ethanol first | Implemented 2026-11-13 (0.29.0) |
 | [2026-11-11-drum-operation-holds/](2026-11-11-drum-operation-holds/README.md) | Drum operation defects at factor 1: column re-entry crash, worker-failure status, drop-leg cold start, gas-vent hold, liquid-full drum | Implemented 2026-11-11 |
 | [2026-11-11-gas-blanketing/](2026-11-11-gas-blanketing/README.md) | Gas blanketing valve on drums (pad from a gas line, vent to atmosphere); pressure safety valve on drums and pipes; flare flow by back pressure | Implemented 2026-11-11 |

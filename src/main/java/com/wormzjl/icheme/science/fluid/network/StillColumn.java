@@ -22,11 +22,13 @@ import java.util.List;
  * every converged answer stands on the energy balance.</p>
  *
  * <p>In pot mode the compositions and temperatures do not depend on the boil-up: every flow is proportional to D. So the
- * solve is per mole of distillate, and the boil-up duty only scales the rates. The energy that leaves the pot and the column
- * per mole of distillate is the top envelope's, e = (R + 1) H1 - R h0: H1 the head vapour's enthalpy (its composition the
- * distillate's, at the top tray's temperature), h0 the condensate's at its bubble point. The boil-up heat per mole of
- * distillate is e - h_pot. With no column (N = 0) or no reflux the still is one equilibrium stage: the distillate is the
- * pot's bubble vapour, e its enthalpy.</p>
+ * solve and its rates are per mole of distillate; the pot's energy balance ({@link BatchStill}) sets how many moles a step
+ * distils. The energy that leaves the pot and the column per mole of distillate is the top envelope's, e = (R + 1) H1 - R h0:
+ * H1 the head vapour's enthalpy (its composition the distillate's, at the top tray's temperature), h0 the condensate's at its
+ * bubble point. With no column (N = 0) or no reflux the still is one equilibrium stage: the distillate is the pot's bubble
+ * vapour, e its enthalpy. No heat per mole is taken as e less the pot liquid's enthalpy: that is a difference of two
+ * mixtures, the light vapour and the heavy pot liquid, and on a wide-boiling charge it falls through zero while the pot
+ * still distils (batch 2026-11-12-still-heat-per-distillate).</p>
  *
  * <p>Water (batch 2026-11-11-aqueous-solvents, W4_STILL_PLAN.md section 3). Where the model carries water
  * ({@link HydrocarbonModel#wet}) the column's basis is the model's conserved basis, water last, and water is one more
@@ -47,7 +49,8 @@ import java.util.List;
  * ({@link Split#settlingTrays}, D4), never a failure. A liquid without water is never sent to the engine; a refused split
  * reads as one liquid.</p>
  *
- * <p>A closed valve (R infinite, total reflux) solves at {@link #CLOSED_REFLUX} for its profile and sends no distillate.
+ * <p>A closed valve (R infinite, total reflux) solves at {@link #CLOSED_REFLUX} for its profile and sends no distillate, so
+ * its rates are per mole of top vapour; that vapour's heat is H1 - hC, the head vapour against its own condensate.
  * Numerical guards only: the bubble search's box and a phase with no equation-of-state root, both a refused trial. One
  * instance belongs to one thread at a time; it keeps no state between solves (a warm start passes its {@link Profile}).</p>
  */
@@ -73,6 +76,12 @@ public final class StillColumn {
     public static final double CLOSED_REFLUX = 1e4;
     /** The bubble search's numerical box, K. */
     static final double LOWEST = 60, HIGHEST = 1400;
+    /**
+     * The outlet temperature (K) of a condenser that takes the top vapour whole to its bubble point, wherever that stands in the
+     * search's box: a column on its own, a still with no water. A bubble point is still one only where the liquid has its own
+     * root, so the light ends' trivial root (every K = 1) is no answer here either: the bracket from this floor finds the true one.
+     */
+    public static final double TOTAL_CONDENSER = LOWEST;
 
     private final FluidThermodynamics thermo;
     private final HydrocarbonModel model;
@@ -82,6 +91,15 @@ public final class StillColumn {
     private final double[] tc, pc, omega, molarMass;
     /** The engine splits of the solve under way (one thread at a time). */
     private int flashes;
+    /** The condenser's outlet temperature floor of the solve under way, K. */
+    private double outlet = TOTAL_CONDENSER;
+    /**
+     * The solve's ratio asked of the condenser (the valve's, at most {@link #CLOSED_REFLUX}; 0 with none), whether the valve
+     * is closed, and whether the outlet's liquid was short of that ratio at the last iteration (the trays then run dry where
+     * the column cannot carry it).
+     */
+    private double asked;
+    private boolean closedAsked, shortOfReflux;
 
     /** The column on {@code thermo}'s model at {@code pressure} Pa on every stage; its engine states the liquids that hold water. */
     public StillColumn(FluidThermodynamics thermo, double pressure) {
@@ -162,43 +180,66 @@ public final class StillColumn {
     }
 
     /**
-     * The column's answer for a boil-up duty. Rates in mol/s, enthalpies in J/mol, temperatures in K, compositions in
-     * mole fractions.
+     * The column's answer. Its rates are per mole of distillate (D = 1), or with a closed valve, which distils nothing, per
+     * mole of top vapour (V1 = 1); times the moles a second of that basis they are mol/s. Enthalpies in J/mol, temperatures
+     * in K, compositions in mole fractions.
      *
      * @param distillate            the distillate's composition (the head vapour's and the condensate's)
      * @param headTemperature       the vapour at the head, the top tray's temperature (the pot's bubble point with no column)
-     * @param condensateTemperature the condensate's bubble point (the total condenser's outlet)
+     * @param condensateTemperature the condenser's outlet: the condensate's bubble point where the head condenses whole at
+     *                              or above the outlet temperature the solve was given, else that temperature (partial)
      * @param potTemperature        the pot's bubble point
-     * @param distillateRate        D (0 with a closed valve)
+     * @param distillateRate        D: 1, or 0 with a closed valve
      * @param vapourRate            the vapour from the pot, of {@code vapour}, at {@code vapourEnthalpy}
      * @param liquidRate            the liquid back to the pot, of {@code liquid}, at {@code liquidEnthalpy}
-     * @param topVapourRate         the vapour into the condenser, (R + 1) D, of the distillate's composition
+     * @param topVapourRate         the vapour into the condenser, (R + 1) D, of the head vapour's composition (1 with a closed valve)
      * @param headEnthalpy          H1, the head vapour's
-     * @param condensateEnthalpy    hC, the whole condensate's at its bubble point (both layers; h0 with one liquid)
+     * @param condensateEnthalpy    hC, the whole outlet's a mole of top vapour (both layers and the gas; h0 with one liquid)
      * @param potEnthalpy           the pot liquid's at its bubble point (both layers where it holds two)
-     * @param boilUpHeat            the boil-up heat per mole of distillate, (R + 1) H1 - R hR - h_pot (infinite with a closed valve)
+     * @param energyPerDistillate   the energy that leaves the pot and the column per mole of distillate, (R + 1) H1 - R hR
+     *                              (the vapour's H for one stage; infinite with a closed valve)
      * @param refluxRatio           the reflux ratio solved (0 for one stage, {@link #CLOSED_REFLUX} for a closed valve)
      * @param refluxEnthalpy        hR, the reflux's (h0 with one liquid; the condensate's with no reflux)
-     * @param distillateEnthalpy    hD, the distillate's, ((R + 1) hC - R hR) from the layers (h0 with one liquid)
+     * @param distillateEnthalpy    hD, the liquid product's a mole of liquid, from the layers the reflux leaves (h0 with one liquid)
      * @param twoLiquidPot          the pot's liquid settles into two liquids at its bubble point
      * @param twoLiquidCondensate   the condensate settles into two layers
      * @param settlingTrays         the trays (1..N) whose liquid would settle into two liquids (D4): a notice, not a failure
      * @param flashes               the engine splits the solve made (0 where no liquid holds water)
      * @param notice                {@link #POT_STILL} where a wet column fell back to the pot's single stage, else null
+     * @param liquidShares          each component's share of the net top product that leaves the outlet as liquid: 1 where
+     *                              the head condenses whole, less with a partial condenser, whose gas leaves by the vent
+     * @param gasEnthalpy           the partial condenser's gas's molar enthalpy at the outlet (H1 where no gas leaves)
      */
     public record Split(boolean converged, int iterations, String failure, int stages, double refluxRatio, boolean closed,
                         double[] distillate, double headTemperature, double condensateTemperature, double potTemperature,
                         double distillateRate, double vapourRate, double[] vapour, double vapourEnthalpy,
                         double liquidRate, double[] liquid, double liquidEnthalpy,
                         double topVapourRate, double headEnthalpy, double condensateEnthalpy, double potEnthalpy,
-                        double boilUpHeat, Profile profile, double refluxEnthalpy, double distillateEnthalpy,
-                        boolean twoLiquidPot, boolean twoLiquidCondensate, int[] settlingTrays, int flashes, String notice) {
-        /** The energy that leaves the pot and the column per mole of distillate, J/mol: (R + 1) H1 - R hR. */
-        public double energyPerDistillate() {
-            return potEnthalpy + boilUpHeat;
+                        double energyPerDistillate, Profile profile, double refluxEnthalpy, double distillateEnthalpy,
+                        boolean twoLiquidPot, boolean twoLiquidCondensate, int[] settlingTrays, int flashes, String notice,
+                        double[] liquidShares, double gasEnthalpy) {
+        @Override
+        public double[] liquidShares() {
+            return liquidShares.clone();
         }
 
-        /** The condenser's duty at this boil-up, W: all of the top vapour condensed to its bubble point, both layers. */
+        /** Whether the condenser is partial: some of the net top product leaves as gas at the outlet. */
+        public boolean partial() {
+            for (int i = 0; i < liquidShares.length; i++) if (liquidShares[i] < 1 && distillate[i] > 0) return true;
+            return false;
+        }
+
+        /** The liquid product's composition: the distillate's where the head condenses whole, else its liquid part's. */
+        public double[] liquidComposition() {
+            if (!partial()) return distillate.clone();
+            double[] out = new double[distillate.length];
+            double sum = 0;
+            for (int i = 0; i < out.length; i++) sum += out[i] = liquidShares[i] * distillate[i];
+            if (sum > 0) for (int i = 0; i < out.length; i++) out[i] /= sum;
+            return out;
+        }
+
+        /** The condenser's duty per mole of the rates' basis, J/mol: all of the top vapour condensed to its bubble point, both layers. */
         public double condenserDuty() {
             return topVapourRate * (headEnthalpy - condensateEnthalpy);
         }
@@ -208,7 +249,7 @@ public final class StillColumn {
             return settlingTrays.clone();
         }
 
-        /** Per component, mol/s: the vapour up from the pot, the liquid back, the distillate; up = back + distillate exactly. */
+        /** Per component, per mole of the rates' basis: the vapour up from the pot, the liquid back, the distillate; up = back + distillate exactly. */
         public double[] vapourFlows() {
             double[] up = new double[vapour.length];
             for (int i = 0; i < up.length; i++) up[i] = Math.max(vapourRate * vapour[i], distillateRate * distillate[i]);
@@ -252,31 +293,65 @@ public final class StillColumn {
     }
 
     /**
-     * The condensate of two layers returned oil first (D3), per mole of distillate: each component's share s_i back to the
-     * column, the reflux's, the whole condensate's and the distillate's enthalpies, the distillate's composition and the
-     * condensate's bubble point. A condensate of one liquid has none (null).
+     * The condenser's outlet where it is not one liquid at its bubble point (that one has none, null), per mole of the net top
+     * product: of two layers returned oil first (D3), or partial at the outlet temperature, its gas to the vent. Each
+     * component's share s_i of the top vapour back to the column; the reflux's enthalpy, the whole outlet's a mole of top
+     * vapour, the liquid product's a mole of liquid; the net product's composition; the outlet's temperature; the bubble
+     * point's layers (a warm start; null where partial); the reflux ratio the shares return (the one asked, or less where the
+     * liquid is short of it); the ratio the outlet's liquid gives returned whole (liquid over gas, infinite with no gas); the
+     * reflux's composition where that is short of the ratio asked (null otherwise, and where the outlet has no liquid to give one);
+     * each component's liquid share of the net product; the gas's molar enthalpy; whether the outlet is partial and whether
+     * its liquid settles into two layers.
      */
     private record Decanter(double temperature, double[] shares, double reflux, double whole, double distillate, double[] composition,
-                            Boiling condensate) {
+                            Boiling condensate, double ratio, double available, double[] drawn, double[] liquidShares, double gas, boolean partial,
+                            boolean settled) {
+    }
+
+    /**
+     * The top vapour at the condenser's outlet temperature, per mole of it: the gas's share, composition and molar enthalpy, the
+     * oil (or the one) liquid's and the aqueous layer's, each with its share, composition and molar enthalpy (a share 0 where
+     * the phase is absent).
+     */
+    private record Outlet(double gasShare, double[] gasPhase, double gasEnthalpy, double oilShare, double[] oilLayer, double oilEnthalpy,
+                          double aqueousShare, double[] aqueousLayer, double aqueousEnthalpy) {
     }
 
     /**
      * The column for pot liquid {@code pot} (any amounts) under {@code stages} trays (0: none) at reflux ratio
-     * {@code reflux} (0: no reflux, the trays dry; {@link Double#POSITIVE_INFINITY}: a closed valve) and boil-up
-     * {@code duty} W, warm from {@code warm} (null for a cold start, or a profile of another stage count).
+     * {@code reflux} (0: no reflux, the trays dry; {@link Double#POSITIVE_INFINITY}: a closed valve), its condenser's outlet no
+     * colder than {@code outlet} K ({@link #TOTAL_CONDENSER}: the top vapour condenses whole at its bubble point), warm from
+     * {@code warm} (null for a cold start, or a profile of another stage count).
+     *
+     * <p>The condenser (batch 2026-11-12-still-heat-per-distillate, CONDENSER_LIGHT_ENDS_REVIEW.md, option c): its outlet is at
+     * the top vapour's bubble point where that stands at or above T_out = min(the head's temperature, {@code outlet}), else
+     * partial at T_out, its gas to the vent. A bubble point counts only where the liquid has a root of its own (a cubic with one
+     * real root gives K = 1 for every component: no liquid, not a bubble point); a search that lands on none, or under T_out,
+     * is bracketed between T_out and the head where the liquid has its root at T_out, and is partial where it has none or is
+     * above its bubble point there. The reflux is drawn from the liquid only: the valve's ratio while the liquid covers it,
+     * all of the liquid where it does not, at the ratio that liquid gives. That ratio follows the top vapour, which follows
+     * the ratio the other way, so it is solved as one unknown: it holds while the stages move more than it misses, then steps
+     * by a secant on its residual inside its bracket, the reflux meanwhile in the liquid's own composition. Where the pot's own
+     * vapour has no liquid at the outlet either, the trays run dry and the still is the pot's single stage.</p>
      */
-    public Split solve(double[] pot, int stages, double reflux, double duty, Profile warm) {
+    public Split solve(double[] pot, int stages, double reflux, double outlet, Profile warm) {
         if (stages < 0 || stages > MAX_STAGES) throw new IllegalArgumentException("Still column stages must be 0 to " + MAX_STAGES);
-        if (!(reflux >= 0) || !(duty >= 0) || !Double.isFinite(duty)) throw new IllegalArgumentException("Invalid still reflux or duty");
+        if (!(reflux >= 0)) throw new IllegalArgumentException("Invalid still reflux");
+        if (!(outlet > 0)) throw new IllegalArgumentException("Invalid still condenser outlet");
         flashes = 0;
+        this.outlet = Math.max(outlet, LOWEST);
         double[] z = fractions(pot);
-        if (stages == 0 || reflux == 0) return single(z, duty, warm);
-        boolean closed = reflux > CLOSED_REFLUX;
-        double ratio = Math.min(reflux, CLOSED_REFLUX);
+        boolean closedValve = reflux > CLOSED_REFLUX;
+        double nominal = Math.min(reflux, CLOSED_REFLUX), ratio = nominal;
+        asked = nominal;
+        closedAsked = closedValve;
+        shortOfReflux = false;
+        // No trays: the pot's single stage, its condenser returning the ratio asked (none, or all of its liquid where short).
+        if (stages == 0 || reflux == 0) return single(z, warm);
         int m = stages + 2, r = m - 1;
         boolean seeded = warm != null && warm.temperatures().length == m && warm.liquids().length == m;
         var potBoiling = boiling(fractions(z), seeded ? warm.potTemperature() : Double.NaN, null);
-        if (potBoiling == null) return failed(stages, ratio, closed, "no bubble point of the pot liquid");
+        if (potBoiling == null) return failed(stages, ratio, closedValve, "no bubble point of the pot liquid");
         var start = potBoiling.bubble();
         // A pot that settles starts its stages on its oil layer (W4 plan section 12): at the answer each tray is the oil layer
         // at saturation, where one liquid's K is smooth through the edge of the gap; the pot's whole liquid read as one is not.
@@ -314,15 +389,22 @@ public final class StillColumn {
         // The stall rule: the least change since the flows last changed form; STALL_ITERATIONS with no new least end it.
         double least = Double.POSITIVE_INFINITY;
         int sinceLeast = 0, iteration = 0;
-        // The condensate's layers on the top vapour (D2, D3): the shares of this iteration are the last one's.
-        var decanter = decanter(y[1], t[0], ratio, null);
+        // Where the outlet's liquid is short of the reflux: the bracket of the ratio, and its last update and residual.
+        double shortLow = 0, shortHigh = nominal, lastRatio = Double.NaN, lastResidual = Double.NaN;
+        // The condenser's outlet on the top vapour (D2, D3, partial): the shares of this iteration are the last one's.
+        var decanter = condenser(y[1], t[0], nominal, null, true, t[1]);
+        if (decanter != null) ratio = Math.min(nominal, decanter.available());
+        if (!(ratio > 0)) {
+            shortOfReflux = true;
+            return single(z, potBoiling, null, 0, asked);
+        }
         while (++iteration <= MAX_ITERATIONS) {
             if (energy) {
                 if (!energyFlows(ratio, t, x, y, vapour, liquid, decanter))
-                    return failedOrPot(failed(stages, ratio, closed, "no enthalpy on a stage"), z, duty, potBoiling, decanter, t, x, stages, iteration);
+                    return failedOrPot(failed(stages, ratio, closedValve, "no enthalpy on a stage"), z, potBoiling, decanter, t, x, stages, iteration);
                 for (int j = 0; j < m; j++)
                     if ((j > 0 && !(vapour[j] > 0)) || (j < r && !(liquid[j] > 0)))
-                        return failedOrPot(failed(stages, ratio, closed, "no positive flow on stage " + j), z, duty, potBoiling, decanter, t, x, stages, iteration);
+                        return failedOrPot(failed(stages, ratio, closedValve, "no positive flow on stage " + j), z, potBoiling, decanter, t, x, stages, iteration);
             } else {
                 for (int j = 0; j < m; j++) {
                     vapour[j] = ratio + 1;
@@ -330,14 +412,17 @@ public final class StillColumn {
                 }
             }
             double[][] raw = new double[r][n];
+            // The outlet's liquid short of the ratio run: the reflux, R of it, has the liquid's composition (the last one's where
+            // the outlet has none) while the ratio settles.
+            double[] drawn = decanter == null || !(decanter.available() < ratio) ? null : decanter.drawn() != null ? decanter.drawn() : x[0].clone();
             for (int i = 0; i < n; i++) {
                 a[0] = 0;
                 // The condenser: the reflux R x0 is the share s_i of the top vapour V1 y1 (R / (R + 1) with one liquid).
                 double share = decanter == null ? Double.NaN : decanter.shares()[i];
                 if (decanter == null) b[0] = -(liquid[0] + 1);
-                else b[0] = share > 0 ? -(liquid[0] / share) : 1;
-                c[0] = decanter == null || share > 0 ? vapour[1] * k[1][i] : 0;
-                rhs[0] = 0;
+                else b[0] = drawn != null || !(share > 0) ? 1 : -(liquid[0] / share);
+                c[0] = drawn == null && (decanter == null || share > 0) ? vapour[1] * k[1][i] : 0;
+                rhs[0] = drawn != null ? drawn[i] : 0;
                 for (int j = 1; j < r; j++) {
                     a[j] = liquid[j - 1];
                     b[j] = -(liquid[j] + vapour[j] * k[j][i]);
@@ -352,25 +437,69 @@ public final class StillColumn {
                 for (int j = 0; j < r; j++) raw[j][i] = Math.max(0, solution[j]);
             }
             double change = 0;
+            // Whether the top vapour condenses whole at its bubble point, at or above the outlet (stage 0 is then that point).
+            boolean whole = true;
             for (int j = 0; j < r; j++) {
                 double sum = sum(raw[j]);
                 if (!(sum > 0) || !Double.isFinite(sum))
-                    return failedOrPot(failed(stages, ratio, closed, "no liquid on stage " + j), z, duty, potBoiling, decanter, t, x, stages, iteration);
+                    return failedOrPot(failed(stages, ratio, closedValve, "no liquid on stage " + j), z, potBoiling, decanter, t, x, stages, iteration);
                 x[j] = fractions(raw[j]);
-                var bubble = bubble(x[j], t[j], y[j]);
-                if (bubble == null) return failedOrPot(failed(stages, ratio, closed, "no bubble point on stage " + j), z, duty, potBoiling, decanter, t, x, stages, iteration);
+                if (j == 0 && decanter != null && decanter.partial()) {
+                    // A partial condenser's stage 0 is its outlet: the reflux is its liquid at the outlet's temperature.
+                    t[0] = decanter.temperature();
+                    continue;
+                }
+                var bubble = j == 0 && decanter == null ? condensing(x[0], t[0], y[0], Math.min(outlet, t[1]), t[1]) : bubble(x[j], t[j], y[j]);
+                if (bubble == null && j == 0 && decanter == null) {
+                    whole = false;
+                    continue;
+                }
+                if (bubble == null) return failedOrPot(failed(stages, ratio, closedValve, "no bubble point on stage " + j), z, potBoiling, decanter, t, x, stages, iteration);
                 change = Math.max(change, Math.abs(bubble.temperature() - t[j]));
                 t[j] = bubble.temperature();
                 y[j] = bubble.vapour();
                 k[j] = bubble.k();
             }
-            decanter = decanter(y[1], t[0], ratio, decanter);
+            decanter = condenser(y[1], t[0], ratio, decanter, whole, t[1]);
+            if (!whole && decanter == null) return failedOrPot(failed(stages, ratio, closedValve, "no outlet of the condenser"), z, potBoiling, null, t, x, stages, iteration);
+            if (decanter != null && decanter.partial()) t[0] = decanter.temperature();
+            double target = decanter == null ? nominal : Math.min(nominal, decanter.available()), next = target;
+            shortOfReflux = target < nominal;
+            // No liquid at the outlet even with no reflux (the column is then the pot's own stage): the trays run dry and the
+            // still is the pot's single stage. With some there the ratio falls toward it.
+            if (!(target > 0) && dry(potBoiling)) return single(z, potBoiling, null, iteration, asked);
+            double residual = target - ratio, missed = SWITCH_KELVIN * Math.abs(residual) / (target + ratio);
+            if (target < nominal || ratio < nominal) {
+                // The outlet's liquid is short of the reflux: the ratio is what that liquid gives (all of it returns), and the
+                // liquid follows the ratio the other way (less reflux, a heavier top vapour, more liquid). The ratio holds while
+                // the stages move more than it misses, then steps by a secant on the residual, kept inside its bracket.
+                if (change > missed) next = ratio;
+                else {
+                    if (residual > 0) shortLow = Math.max(shortLow, ratio);
+                    else shortHigh = Math.min(shortHigh, ratio);
+                    next = Double.isFinite(lastResidual) && residual != lastResidual ? ratio - residual * (ratio - lastRatio) / (residual - lastResidual) : target;
+                    if (next >= nominal && shortHigh >= nominal) next = nominal;
+                    else if (!(next > shortLow && next < shortHigh)) next = (shortLow + shortHigh) / 2;
+                    lastRatio = ratio;
+                    lastResidual = residual;
+                }
+            }
+            change = Math.max(change, missed);
+            if (next != ratio) {
+                least = Double.POSITIVE_INFINITY;
+                sinceLeast = 0;
+            }
+            ratio = next;
             if (energy && change < TOLERANCE) {
                 // A wet tray colder than the tray above it is the miscibility gap's sign: where a liquid of the still settles,
                 // the column does not rectify (W4 plan section 12).
-                if (coldWetTray(t, x, stages) && settles(potBoiling, decanter, t, x, stages)) return single(z, duty, potBoiling, POT_STILL, iteration);
-                var answer = answer(stages, ratio, closed, iteration, t, x, y, duty, potBoiling, decanter);
-                return answer.converged() ? answer : failedOrPot(answer, z, duty, potBoiling, decanter, t, x, stages, iteration);
+                if (coldWetTray(t, x, stages) && settles(potBoiling, decanter, t, x, stages))
+                    return single(z, potBoiling, POT_STILL, iteration, shortOfReflux ? asked : 0);
+                // Converged short of the valve's ratio: all of the outlet's liquid returns, the net product is its gas alone (the
+                // ratio settles within its tolerance of the one the liquid gives; no sliver of liquid is left over from that).
+                if (target < nominal && decanter != null && decanter.partial()) decanter = condenser(y[1], t[0], nominal, decanter, whole, t[1]);
+                var answer = answer(stages, ratio, closedValve && ratio >= CLOSED_REFLUX, iteration, t, x, y, potBoiling, decanter);
+                return answer.converged() ? answer : failedOrPot(answer, z, potBoiling, decanter, t, x, stages, iteration);
             }
             if (change < least) {
                 least = change;
@@ -383,16 +512,26 @@ public final class StillColumn {
             }
         }
         int done = Math.min(iteration, MAX_ITERATIONS);
-        return failedOrPot(failed(stages, ratio, closed, "no convergence in " + done + " iterations"), z, duty, potBoiling, decanter, t, x, stages, done);
+        return failedOrPot(failed(stages, ratio, closedValve, "no convergence in " + done + " iterations"), z, potBoiling, decanter, t, x, stages, done);
     }
 
     /**
      * A failure of the iteration (W4 plan section 12): where a liquid of the still settles (the pot, the condensate or a wet
      * tray), a tray holds free water the one-liquid trays cannot carry, and the answer is the pot's single stage with
-     * {@link #POT_STILL}; a dry solve fails as {@code failure} (no flash: {@link #settles} splits wet trays only).
+     * {@link #POT_STILL}; a dry solve fails as {@code failure} (no flash: {@link #settles} splits wet trays only). Where the
+     * outlet's liquid was short of the valve's ratio, the reflux it gives cannot wet the trays: they run dry, and the answer is
+     * the pot's single stage, its condenser returning all of its liquid (CONDENSER_LIGHT_ENDS_REVIEW.md section 5, option A).
      */
-    private Split failedOrPot(Split failure, double[] z, double duty, Boiling pot, Decanter decanter, double[] t, double[][] x, int stages, int iterations) {
-        return settles(pot, decanter, t, x, stages) ? single(z, duty, pot, POT_STILL, iterations) : failure;
+    private Split failedOrPot(Split failure, double[] z, Boiling pot, Decanter decanter, double[] t, double[][] x, int stages, int iterations) {
+        boolean settling = settles(pot, decanter, t, x, stages);
+        if (shortOfReflux) return single(z, pot, settling ? POT_STILL : null, iterations, asked);
+        return settling ? single(z, pot, POT_STILL, iterations) : failure;
+    }
+
+    /** Whether the pot's own vapour (the top vapour with no reflux) has no liquid at the condenser's outlet. */
+    private boolean dry(Boiling pot) {
+        var at = outletAt(pot.bubble().vapour(), Math.min(outlet, pot.temperature()));
+        return at == null || !(at.oilShare() + at.aqueousShare() > 0);
     }
 
     /** A tray j (2..N) whose liquid holds water and stands more than {@link #SWITCH_KELVIN} under tray j - 1. */
@@ -404,14 +543,14 @@ public final class StillColumn {
 
     /** Whether a liquid of the still settles: the pot, the condensate, or a wet tray the engine splits (one split a tray). */
     private boolean settles(Boiling pot, Decanter decanter, double[] t, double[][] x, int stages) {
-        if (pot.two() || decanter != null) return true;
+        if (pot.two() || decanter != null && decanter.settled()) return true;
         if (water < 0) return false;
         for (int j = 1; j <= stages; j++) if (x[j][water] > 0 && layers(x[j], t[j]) != null) return true;
         return false;
     }
 
-    /** The converged column's answer: its flows from the energy balance on the final profile, scaled to {@code duty}. */
-    private Split answer(int stages, double ratio, boolean closed, int iterations, double[] t, double[][] x, double[][] y, double duty,
+    /** The converged column's answer: its flows from the energy balance on the final profile, per mole of its basis. */
+    private Split answer(int stages, double ratio, boolean closed, int iterations, double[] t, double[][] x, double[][] y,
                          Boiling pot, Decanter decanter) {
         int m = t.length, r = m - 1;
         double[] vapour = new double[m], liquid = new double[m];
@@ -426,55 +565,184 @@ public final class StillColumn {
         } catch (RuntimeException absent) {
             return failed(stages, ratio, closed, "no enthalpy on a stage");
         }
-        // One liquid: hR = hC = hD = h0. Two layers: the decanter's (D3).
+        // One liquid: hR = hC = hD = h0. Two layers or a partial outlet: the decanter's (D3).
         double hR = decanter == null ? h0 : decanter.reflux(), hC = decanter == null ? h0 : decanter.whole();
         double hD = decanter == null ? h0 : decanter.distillate();
-        double perDistillate = (ratio + 1) * headVapour - ratio * hR - hPot;
-        if (!(perDistillate > 0)) return failed(stages, ratio, closed, "no positive boil-up heat");
-        // The rates per mole of distillate (D = 1) scale with the duty: D = duty / boil-up heat per mole.
-        double d = duty / perDistillate;
+        // The flows are per mole of distillate (D = 1); a closed valve's per mole of top vapour (V1 = 1).
+        double d = closed ? 1 / vapour[1] : 1;
         var profile = new Profile(t.clone(), copy(x));
         // The head vapour leaves tray 1 at its dew point; a total condenser gives its composition, x0, to the distillate; of
-        // two layers the distillate is what the reflux leaves, (R + 1) y1 (1 - s).
+        // two layers or a partial outlet the net product is what the reflux leaves, (R + 1) y1 (1 - s).
         double[] distillate = decanter == null ? x[0].clone() : decanter.composition().clone();
         double condensing = decanter == null ? t[0] : decanter.temperature();
         int[] settling = settling(t, x, stages);
         return new Split(true, iterations, null, stages, ratio, closed, distillate, t[1], condensing, t[r], closed ? 0 : d,
                 vapour[r] * d, y[r].clone(), hUp, closed ? vapour[r] * d : liquid[r - 1] * d, closed ? y[r].clone() : x[r - 1].clone(),
-                hBack, vapour[1] * d, headVapour, hC, hPot, closed ? Double.POSITIVE_INFINITY : perDistillate, profile, hR, hD,
-                pot.two(), decanter != null, settling, flashes, null);
+                hBack, vapour[1] * d, headVapour, hC, hPot, closed ? Double.POSITIVE_INFINITY : (ratio + 1) * headVapour - ratio * hR, profile, hR, hD,
+                pot.two(), decanter != null && decanter.settled(), settling, flashes, null,
+                decanter == null ? ones() : decanter.liquidShares().clone(), decanter == null || !decanter.partial() ? headVapour : decanter.gas());
     }
 
     /** One equilibrium stage: the pot's bubble vapour is the distillate. */
-    private Split single(double[] z, double duty, Profile warm) {
+    private Split single(double[] z, Profile warm) {
         var potBoiling = boiling(fractions(z), warm != null ? warm.potTemperature() : Double.NaN, null);
         if (potBoiling == null) return failed(0, 0, false, "no bubble point of the pot liquid");
-        return single(z, duty, potBoiling, null, 0);
+        return single(z, potBoiling, null, 0, asked);
     }
 
-    /** One equilibrium stage on the pot's {@code potBoiling}, with {@code notice} on its answer, after {@code iterations} of a column. */
-    private Split single(double[] z, double duty, Boiling potBoiling, String notice, int iterations) {
+    /** {@link #single(double[], Boiling, String, int, double)} with no reflux. */
+    private Split single(double[] z, Boiling potBoiling, String notice, int iterations) {
+        return single(z, potBoiling, notice, iterations, 0);
+    }
+
+    /**
+     * One equilibrium stage on the pot's {@code potBoiling}, with {@code notice} on its answer, after {@code iterations} of a
+     * column: the pot's bubble vapour goes up, its condensate at its bubble point at or above the outlet, else partial at the
+     * outlet. The condenser returns the ratio {@code asked} of its liquid to the pot (all of it where the liquid is short; a
+     * closed valve's at {@link #CLOSED_REFLUX}); with none the whole condensate is the net product.
+     */
+    private Split single(double[] z, Boiling potBoiling, String notice, int iterations, double asked) {
         var pot = potBoiling.bubble();
         double[] y = pot.vapour();
-        var condensing = boiling(fractions(y), pot.temperature() - 1, null);
-        if (condensing == null) return failed(0, 0, false, "no bubble point of the condensate");
-        var condensate = condensing.bubble();
-        double hPot, hVapour, h0;
+        double head = pot.temperature(), cold = Math.min(outlet, head);
+        var condensing = boiling(fractions(y), head - 1, null);
+        boolean whole = condensing != null && (condensing.two() ? condensing.temperature() >= cold : real(condensing.bubble(), y, cold));
+        if (!whole && (condensing == null || !condensing.two())) {
+            var bracketed = bracketed(y, cold, head);
+            if (bracketed != null) {
+                condensing = new Boiling(bracketed, Double.NaN, false, 1, y, null, Double.NaN, Double.NaN, Double.NaN, Double.NaN);
+                whole = true;
+            }
+        }
+        double hPot, hVapour;
         try {
             hPot = potBoiling.two() ? potBoiling.enthalpy() : liquidEnthalpy(pot.temperature(), z);
             hVapour = vapourEnthalpy(pot.temperature(), y);
+        } catch (RuntimeException absent) {
+            return failed(0, 0, false, "no enthalpy of the pot or its vapour");
+        }
+        if (!whole) {
+            // Partial at the outlet: no reflux, the whole outlet (its liquid and its gas) is the net product.
+            var at = outletAt(fractions(y), cold);
+            if (at == null) return failed(0, 0, false, "no outlet of the condenser");
+            var partial = partial(fractions(y), at, asked, cold);
+            if (partial.ratio() > 0)
+                return refluxed(iterations, notice, potBoiling, z, y, hPot, hVapour, partial.ratio(), cold, partial.composition().clone(), partial.reflux(),
+                        partial.whole(), partial.distillate(), partial.settled(), partial.liquidShares().clone(), partial.gas(),
+                        partial.drawn() != null ? partial.drawn() : y);
+            var profile = new Profile(new double[]{cold, pot.temperature()}, new double[][]{y.clone(), z.clone()});
+            return new Split(true, iterations, null, 0, 0, false, partial.composition().clone(), pot.temperature(), cold, pot.temperature(), 1, 1, y.clone(),
+                    hVapour, 0, z.clone(), hPot, 1, hVapour, partial.whole(), hPot, hVapour, profile, partial.whole(), partial.distillate(), potBoiling.two(),
+                    partial.settled(), NO_TRAYS, flashes, notice, partial.liquidShares().clone(), partial.gas());
+        }
+        var condensate = condensing.bubble();
+        double h0;
+        try {
             h0 = condensing.two() ? condensing.enthalpy() : liquidEnthalpy(condensate.temperature(), y);
         } catch (RuntimeException absent) {
             return failed(0, 0, false, "no enthalpy of the pot or its vapour");
         }
-        double perDistillate = hVapour - hPot;
-        if (!(perDistillate > 0)) return failed(0, 0, false, "no positive latent heat");
-        double d = duty / perDistillate;
+        if (asked > 0) {
+            // The pot's vapour condenses whole: the ratio asked returns (of two layers oil first, D3), the rest is the distillate.
+            var layers = condensing.two() ? decanter(y, condensate.temperature(), asked, null, cold) : null;
+            if (layers == null || !layers.partial())
+                return refluxed(iterations, notice, potBoiling, z, y, hPot, hVapour, asked, condensate.temperature(), layers == null ? y.clone() : layers.composition().clone(),
+                        layers == null ? h0 : layers.reflux(), layers == null ? h0 : layers.whole(), layers == null ? h0 : layers.distillate(), condensing.two(), ones(),
+                        hVapour, y);
+        }
         var profile = new Profile(new double[]{condensate.temperature(), pot.temperature()}, new double[][]{y.clone(), z.clone()});
         // No reflux: the whole condensate, both layers, is the distillate.
-        return new Split(true, iterations, null, 0, 0, false, y.clone(), pot.temperature(), condensate.temperature(), pot.temperature(), d, d, y.clone(),
-                hVapour, 0, z.clone(), hPot, d, hVapour, h0, hPot, perDistillate, profile, h0, h0, potBoiling.two(), condensing.two(),
-                NO_TRAYS, flashes, notice);
+        return new Split(true, iterations, null, 0, 0, false, y.clone(), pot.temperature(), condensate.temperature(), pot.temperature(), 1, 1, y.clone(),
+                hVapour, 0, z.clone(), hPot, 1, hVapour, h0, hPot, hVapour, profile, h0, h0, potBoiling.two(), condensing.two(),
+                NO_TRAYS, flashes, notice, ones(), hVapour);
+    }
+
+    /**
+     * The pot's single stage with its condenser returning {@code ratio} moles a mole of net product to the pot (at {@code hR}
+     * a mole, composition {@code reflux}): its flows per mole of distillate, a closed valve's per mole of top vapour.
+     */
+    private Split refluxed(int iterations, String notice, Boiling potBoiling, double[] z, double[] y, double hPot, double hVapour, double ratio,
+                           double condensing, double[] distillate, double hR, double hC, double hD, boolean settled, double[] liquidShares,
+                           double hGas, double[] reflux) {
+        double head = potBoiling.temperature();
+        boolean closed = closedAsked && ratio >= CLOSED_REFLUX;
+        double d = closed ? 1 / (ratio + 1) : 1;
+        var profile = new Profile(new double[]{condensing, head}, new double[][]{y.clone(), z.clone()});
+        return new Split(true, iterations, null, 0, ratio, closed, distillate, head, condensing, head, closed ? 0 : d, (ratio + 1) * d, y.clone(), hVapour,
+                ratio * d, reflux.clone(), hR, (ratio + 1) * d, hVapour, hC, hPot, closed ? Double.POSITIVE_INFINITY : (ratio + 1) * hVapour - ratio * hR,
+                profile, hR, hD, potBoiling.two(), settled, NO_TRAYS, flashes, notice, liquidShares, hGas);
+    }
+
+    private double[] ones() {
+        double[] out = new double[n];
+        java.util.Arrays.fill(out, 1);
+        return out;
+    }
+
+    /**
+     * The bubble point of liquid {@code x} as the condenser's outlet (stage 0), from {@code guess} K: the search's own answer
+     * where it is real and at or above {@code cold} K, else the bracketed one between {@code cold} and {@code head} (the top vapour's dew point);
+     * null where the liquid has no bubble point at or above {@code cold} (the condenser is partial).
+     */
+    private Bubble condensing(double[] x, double guess, double[] yGuess, double cold, double head) {
+        var found = bubble(x, guess, yGuess);
+        if (real(found, x, cold)) return found;
+        return bracketed(x, cold, head);
+    }
+
+    /** Whether {@code found} is a bubble point of {@code x} at or above {@code cold} K where the liquid has a root of its own. */
+    private boolean real(Bubble found, double[] x, double cold) {
+        return found != null && found.temperature() >= cold && liquidRoot(x, found.temperature());
+    }
+
+    /** Whether liquid {@code x} has a root of its own at {@code t} K, apart from the vapour root (the cubic's roots themselves). */
+    private boolean liquidRoot(double[] x, double t) {
+        try {
+            double liquid = model.phase(t, pressure, conserved(x), PengRobinsonKernel.Root.LIQUID).molarVolume();
+            double vapour = model.phase(t, pressure, conserved(x), PengRobinsonKernel.Root.VAPOR).molarVolume();
+            return liquid < vapour * (1 - 1e-9);
+        } catch (RuntimeException absent) {
+            return false;
+        }
+    }
+
+    /** ln Σ K x at {@code t} where the liquid has a root of its own there, else null (a trial above the bubble point). */
+    private Eval rooted(double[] x, double t, double[] yStart) {
+        return liquidRoot(x, t) ? eval(x, t, yStart) : null;
+    }
+
+    /**
+     * Liquid {@code x}'s bubble point between {@code low} K, where it must have its root and f = ln Σ K x &lt; 0, and
+     * {@code high} K: Illinois regula falsi, a trial with no liquid root counted above (bisection beside it). Null where
+     * {@code low} is not below the bubble point.
+     */
+    private Bubble bracketed(double[] x, double low, double high) {
+        var eLow = rooted(x, low, wilsonVapour(x, low));
+        if (eLow == null || !(eLow.f() < 0)) return null;
+        double fLow = eLow.f(), fHigh = Double.NaN;
+        Eval below = eLow;
+        double belowT = low;
+        int side = 0;
+        for (int iteration = 0; iteration < 100 && high - low > 1e-7; iteration++) {
+            double t = Double.isFinite(fHigh) ? (low * fHigh - high * fLow) / (fHigh - fLow) : (low + high) / 2;
+            if (!(t > low && t < high)) t = (low + high) / 2;
+            var e = rooted(x, t, below.y());
+            if (e != null && Math.abs(e.f()) < 1e-10) return new Bubble(t, e.y(), e.k());
+            if (e != null && e.f() < 0) {
+                low = t;
+                fLow = e.f();
+                below = e;
+                belowT = t;
+                if (side == 1 && Double.isFinite(fHigh)) fHigh /= 2;
+                side = 1;
+            } else {
+                high = t;
+                fHigh = e == null ? Double.NaN : e.f();
+                if (side == -1) fLow /= 2;
+                side = -1;
+            }
+        }
+        return new Bubble(belowT, below.y(), below.k());
     }
 
     private static final int[] NO_TRAYS = new int[0];
@@ -617,14 +885,180 @@ public final class StillColumn {
     }
 
     /**
-     * The condensate of top vapour {@code y1} (D2, D3): null for one liquid (no water in it, a refused split, one layer);
-     * else its layers at its bubble point (from {@code guess} K) and the reflux R drawn from the oil layer first. With the
-     * last iteration's two layers ({@code last}) one split at their temperature states them (D7: one a iteration).
+     * The condenser's outlet on top vapour {@code y1} for the next iteration: null where it condenses whole to one liquid at
+     * its bubble point at or above T_out = min(outlet, {@code head}) ({@code whole}: stage 0's search found that point); its
+     * two layers at their bubble point where it settles there (W4 D2, D3, oil first); else partial at T_out (its gas to the
+     * vent). A partial outlet stays partial while it holds gas; one with none condenses whole again, its bubble point then
+     * stage 0's next search.
      */
-    private Decanter decanter(double[] y1, double guess, double ratio, Decanter last) {
+    private Decanter condenser(double[] y1, double guess, double nominal, Decanter last, boolean whole, double head) {
+        double cold = Math.min(outlet, head);
+        boolean wasPartial = last != null && last.partial();
+        if (!whole || wasPartial) {
+            var at = outletAt(fractions(y1), cold);
+            if (at == null) return null;
+            if (at.gasShare() > 0 || !whole) return partial(fractions(y1), at, nominal, cold);
+        }
+        return decanter(y1, guess, nominal, wasPartial ? null : last, cold);
+    }
+
+    /**
+     * Top vapour {@code z} (mole fractions) at {@code t} K, the condenser's outlet: where it holds water, the engine's TP split
+     * (gas, oil, aqueous; one flash); else, or where the engine refuses, a Rachford-Rice on the column's own phases from
+     * Wilson's K (successive substitution on the fugacities). Null where a phase has no root.
+     */
+    private Outlet outletAt(double[] z, double t) {
+        if (water >= 0 && z[water] > 0) {
+            flashes++;
+            try {
+                var state = thermo.flashTP(t, pressure, conserved(z), NO_CHECKPOINT);
+                double[] g = java.util.Arrays.copyOf(state.labelAmountsView(FluidThermodynamics.GAS), n);
+                double[] o = java.util.Arrays.copyOf(state.labelAmountsView(FluidThermodynamics.OIL), n);
+                double[] a = java.util.Arrays.copyOf(state.labelAmountsView(FluidThermodynamics.AQUEOUS), n);
+                double sg = sum(g), so = sum(o), sa = sum(a), all = sg + so + sa;
+                if (all > 0) {
+                    double[] gas = normalized(g), oil = normalized(o), aqueous = normalized(a);
+                    return new Outlet(sg / all, gas, gas == null ? Double.NaN : vapourEnthalpy(t, gas), so / all, oil,
+                            oil == null ? Double.NaN : liquidEnthalpy(t, oil), sa / all, aqueous, aqueous == null ? Double.NaN : liquidEnthalpy(t, aqueous));
+                }
+            } catch (RuntimeException refused) {
+                // A refused split reads as one liquid: the column's own flash below.
+            }
+        }
+        try {
+            var terms = model.prepare(t);
+            double[] k = new double[n], liquid = z.clone(), gas = z.clone();
+            // A component the top vapour does not hold stays out (K 1, no amount in either phase).
+            for (int i = 0; i < n; i++) k[i] = z[i] > 0 ? bounded(wilson(i, t)) : 1;
+            double beta = rachfordRice(z, k);
+            for (int pass = 0; pass < OUTLET_PASSES; pass++) {
+                split(z, k, beta, liquid, gas);
+                double[] lnL = model.phase(t, pressure, conserved(liquid), PengRobinsonKernel.Root.LIQUID, terms, false).logFugacityView();
+                double[] lnV = model.phase(t, pressure, conserved(gas), PengRobinsonKernel.Root.VAPOR, terms, false).logFugacityView();
+                double moved = 0;
+                for (int i = 0; i < n; i++) {
+                    if (!(z[i] > 0)) continue;
+                    double next = bounded(DeterministicMath.exp(lnL[i] - lnV[i]));
+                    moved = Math.max(moved, Math.abs(DeterministicMath.log(next / k[i])));
+                    k[i] = next;
+                }
+                beta = rachfordRice(z, k);
+                if (moved < 1e-10) break;
+            }
+            split(z, k, beta, liquid, gas);
+            double most = 0;
+            for (int i = 0; i < n; i++) if (z[i] > 0) most = Math.max(most, Math.abs(DeterministicMath.log(k[i])));
+            // K = 1 for every component: one phase, liquid where it has a root of its own.
+            if (most < 1e-6) beta = liquidRoot(z, t) ? 0 : 1;
+            double hGas = beta > 0 ? vapourEnthalpy(t, beta < 1 ? gas : z) : Double.NaN;
+            double hLiquid = beta < 1 ? liquidEnthalpy(t, beta > 0 ? liquid : z) : Double.NaN;
+            return new Outlet(beta, beta < 1 ? gas : z.clone(), hGas, 1 - beta, beta > 0 ? liquid : z.clone(), hLiquid, 0, null, Double.NaN);
+        } catch (RuntimeException absent) {
+            return null;
+        }
+    }
+
+    /** The most successive-substitution passes of the condenser's own flash. */
+    static final int OUTLET_PASSES = 100;
+
+    /**
+     * K held inside 1e-250 to 1e250: a numerical guard where the mathematics fails (a heavy component's K under the doubles'
+     * range at the outlet makes its incipient liquid z / K infinite); no value it holds moves an answer.
+     */
+    private static double bounded(double k) {
+        return Math.clamp(k, 1e-250, 1e250);
+    }
+
+    /** The liquid and the gas of {@code z} at K values {@code k} and gas share {@code beta}, normalized, into the two arrays. */
+    private void split(double[] z, double[] k, double beta, double[] liquid, double[] gas) {
+        double sl = 0, sg = 0;
+        for (int i = 0; i < n; i++) {
+            // (1 - beta) + beta K, not 1 + beta (K - 1): at beta = 1 the second rounds a heavy K to nothing.
+            liquid[i] = z[i] > 0 ? z[i] / ((1 - beta) + beta * k[i]) : 0;
+            gas[i] = k[i] * liquid[i];
+            sl += liquid[i];
+            sg += gas[i];
+        }
+        for (int i = 0; i < n; i++) {
+            liquid[i] /= sl;
+            gas[i] /= sg;
+        }
+    }
+
+    /** The gas share of {@code z} at K values {@code k}: Rachford-Rice, 0 or 1 outside the two-phase range; bisection. */
+    private static double rachfordRice(double[] z, double[] k) {
+        double f0 = 0, f1 = 0;
+        for (int i = 0; i < z.length; i++) {
+            if (!(z[i] > 0)) continue;
+            f0 += z[i] * (k[i] - 1);
+            f1 += z[i] * (k[i] - 1) / k[i];
+        }
+        if (!(f0 > 0)) return 0;
+        if (!(f1 < 0)) return 1;
+        double low = 0, high = 1;
+        for (int iteration = 0; iteration < 200 && high - low > 1e-15; iteration++) {
+            double mid = (low + high) / 2, f = 0;
+            for (int i = 0; i < z.length; i++) if (z[i] > 0) f += z[i] * (k[i] - 1) / ((1 - mid) + mid * k[i]);
+            if (f > 0) low = mid;
+            else high = mid;
+        }
+        return (low + high) / 2;
+    }
+
+    /**
+     * A partial outlet {@code at} (temperature {@code cold}) of top vapour {@code y1}, per mole of the net top product: the
+     * reflux drawn from its liquid only, oil first (D3), at the ratio asked ({@code nominal}, a share R / (R + 1) of the top
+     * vapour) while the liquid covers it, else all of the liquid (the ratio it gives, {@code available}); the rest of the
+     * liquid and all of the gas the net product. Where the liquid is short of the ratio asked, the reflux's composition is
+     * the liquid's (its incipient liquid where it has none), which the column's ratio returns while it settles on the one the
+     * liquid gives. Continuous where the liquid runs short and where the gas vanishes.
+     */
+    private Decanter partial(double[] y1, Outlet at, double nominal, double cold) {
+        double beta = at.gasShare(), liquidShare = at.oilShare() + at.aqueousShare();
+        double available = beta > 0 ? liquidShare / beta : Double.POSITIVE_INFINITY, ratio = Math.min(nominal, available);
+        double total = ratio + 1, oil = at.oilShare() * total, aqueous = at.aqueousShare() * total;
+        // Short of the ratio asked, all of the liquid returns.
+        boolean all = nominal > 0 && nominal >= available;
+        double fromOil = all || !(oil > 0) ? 1 : Math.min(1, ratio / oil), fromAqueous = all ? 1 : aqueous > 0 ? Math.clamp((ratio - oil) / aqueous, 0, 1) : 0;
+        double[] shares = new double[n], out = new double[n], liquidShares = new double[n];
+        double[] drawn = available < nominal ? new double[n] : null;
+        double sum = 0;
+        for (int i = 0; i < n; i++) {
+            double g = beta > 0 ? beta * at.gasPhase()[i] : 0, o = at.oilShare() > 0 ? at.oilShare() * at.oilLayer()[i] : 0;
+            double a = at.aqueousShare() > 0 ? at.aqueousShare() * at.aqueousLayer()[i] : 0, whole = g + o + a;
+            if (!(whole > 0)) continue;
+            shares[i] = (fromOil * o + fromAqueous * a) / whole;
+            if (drawn != null) drawn[i] = o + a;
+            double liquid = ((1 - fromOil) * o + (1 - fromAqueous) * a) / whole, gas = g / whole;
+            sum += out[i] = (liquid + gas) * y1[i];
+            liquidShares[i] = liquid + gas > 0 ? liquid / (liquid + gas) : 0;
+        }
+        if (sum > 0) for (int i = 0; i < n; i++) out[i] /= sum;
+        if (drawn != null) drawn = liquidShare > 0 ? normalized(drawn) : at.oilLayer() != null ? at.oilLayer().clone() : at.aqueousLayer() != null ? at.aqueousLayer().clone() : null;
+        double hOil = at.oilEnthalpy(), hAqueous = at.aqueousEnthalpy(), hGas = at.gasEnthalpy();
+        double whole = (beta > 0 ? beta * hGas : 0) + (at.oilShare() > 0 ? at.oilShare() * hOil : 0) + (at.aqueousShare() > 0 ? at.aqueousShare() * hAqueous : 0);
+        double returned = (fromOil > 0 && oil > 0 ? fromOil * oil * hOil : 0) + (fromAqueous > 0 && aqueous > 0 ? fromAqueous * aqueous * hAqueous : 0);
+        double kept = (fromOil < 1 && oil > 0 ? (1 - fromOil) * oil * hOil : 0) + (fromAqueous < 1 && aqueous > 0 ? (1 - fromAqueous) * aqueous * hAqueous : 0);
+        double liquidMoles = (oil > 0 ? (1 - fromOil) * oil : 0) + (aqueous > 0 ? (1 - fromAqueous) * aqueous : 0);
+        double hLiquid = liquidMoles > 0 ? kept / liquidMoles : at.oilShare() > 0 ? hOil : at.aqueousShare() > 0 ? hAqueous : whole;
+        return new Decanter(cold, shares, ratio > 0 ? returned / ratio : whole, whole, hLiquid, out, null, ratio, available, drawn, liquidShares,
+                beta > 0 ? hGas : whole, true, at.oilShare() > 0 && at.aqueousShare() > 0);
+    }
+
+    /**
+     * The condensate of top vapour {@code y1} (D2, D3): null for one liquid (no water in it, a refused split, one layer);
+     * else its layers at its bubble point (from {@code guess} K) and the reflux R drawn from the oil layer first; partial at
+     * {@code cold} K where that bubble point stands under it. With the last iteration's two layers ({@code last}) one split
+     * at their temperature states them (D7: one a iteration).
+     */
+    private Decanter decanter(double[] y1, double guess, double ratio, Decanter last, double cold) {
         if (water < 0 || !(y1[water] > 0)) return null;
         var condensate = boiling(fractions(y1), guess, null, last != null ? last.condensate() : null);
         if (condensate == null || !condensate.two()) return null;
+        if (condensate.temperature() < cold) {
+            var at = outletAt(fractions(y1), cold);
+            return at == null ? null : partial(fractions(y1), at, ratio, cold);
+        }
         double beta = condensate.oil(), total = ratio + 1, oil = beta * total, aqueous = total - oil;
         double fromOil = oil > 0 ? Math.min(1, ratio / oil) : 1, fromAqueous = aqueous > 0 ? Math.max(0, (ratio - oil) / aqueous) : 0;
         double[] xo = condensate.oilLayer(), xa = condensate.aqueousLayer(), shares = new double[n], out = new double[n];
@@ -639,7 +1073,9 @@ public final class StillColumn {
         double hOil = condensate.oilEnthalpy(), hAqueous = condensate.aqueousEnthalpy();
         double reflux = (fromOil * oil * hOil + fromAqueous * aqueous * hAqueous) / ratio;
         double distillate = (1 - fromOil) * oil * hOil + (1 - fromAqueous) * aqueous * hAqueous;
-        return new Decanter(condensate.temperature(), shares, reflux, beta * hOil + (1 - beta) * hAqueous, distillate, out, condensate);
+        double whole = beta * hOil + (1 - beta) * hAqueous;
+        return new Decanter(condensate.temperature(), shares, reflux, whole, distillate, out, condensate, ratio, Double.POSITIVE_INFINITY, null, ones(), whole,
+                false, true);
     }
 
     /** The trays (1..N) whose liquid, with water in it, the engine splits into two liquids at the tray's temperature (D4). */
@@ -851,6 +1287,6 @@ public final class StillColumn {
     private Split failed(int stages, double ratio, boolean closed, String why) {
         return new Split(false, 0, why, stages, ratio, closed, new double[n], Double.NaN, Double.NaN, Double.NaN, 0, 0, new double[n], Double.NaN,
                 0, new double[n], Double.NaN, 0, Double.NaN, Double.NaN, Double.NaN, Double.NaN, null, Double.NaN, Double.NaN, false, false,
-                NO_TRAYS, flashes, null);
+                NO_TRAYS, flashes, null, new double[n], Double.NaN);
     }
 }

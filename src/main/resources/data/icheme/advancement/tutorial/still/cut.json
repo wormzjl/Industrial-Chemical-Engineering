@@ -1,0 +1,31 @@
+{
+  "parent": "icheme:tutorial/still/first",
+  "display": {
+    "icon": {
+      "id": "icheme:field_guide",
+      "count": 1
+    },
+    "title": {
+      "translate": "tutorial.icheme.advancement.still.cut"
+    },
+    "description": {
+      "translate": "tutorial.icheme.advancement.still.cut.description"
+    },
+    "show_toast": false,
+    "announce_to_chat": false
+  },
+  "criteria": {
+    "hot": {
+      "trigger": "icheme:still_state",
+      "conditions": {
+        "liquid": true,
+        "min_pot_temperature": 506
+      }
+    }
+  },
+  "requirements": [
+    [
+      "hot"
+    ]
+  ]
+}

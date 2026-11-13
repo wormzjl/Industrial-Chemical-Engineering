@@ -40,6 +40,7 @@ public final class ClientConfig {
     public static final ModConfigSpec.EnumValue<FlowRateUnit> FLOW_TIME;
     public static final ModConfigSpec.EnumValue<Basis> BASIS;
     public static final ModConfigSpec.BooleanValue STREAM_CONDITIONS;
+    public static final ModConfigSpec.BooleanValue GUIDE_HUD;
     public static final ModConfigSpec.ConfigValue<List<? extends String>> EQUIPMENT_PAINTS;
     public static final ModConfigSpec.BooleanValue LOW_POLYGON_MODE;
     public static final ModConfigSpec.DoubleValue LOD_SCALE;
@@ -55,6 +56,8 @@ public final class ClientConfig {
                 .defineEnum("theme", Theme.LIGHT);
         STREAM_CONDITIONS = builder.comment("Whether the process simulator's canvas shows each stream's temperature and pressure under its name. The P, T key at the simulator's foot switches it too.")
                 .define("stream_conditions", false);
+        GUIDE_HUD = builder.comment("Whether the Field Guide's current step stands on one line at the top left while no screen is open.")
+                .define("guide_hud", true);
         builder.pop();
         builder.comment("The units every process screen shows; the unit keys at a screen's foot switch them too. Display only: the server keeps SI.").push("units");
         TEMPERATURE = builder.comment("CELSIUS or KELVIN.").defineEnum("temperature", TemperatureUnit.CELSIUS);
@@ -139,6 +142,11 @@ public final class ClientConfig {
 
     public static void streamConditions(boolean shown) {
         set(STREAM_CONDITIONS, shown);
+    }
+
+    /** Whether the Field Guide's one-line tracker shows; on before the config has loaded. */
+    public static boolean guideHud() {
+        return get(GUIDE_HUD, true);
     }
 
     public static com.wormzjl.icheme.science.equipment.RenderDetail renderDetail() {

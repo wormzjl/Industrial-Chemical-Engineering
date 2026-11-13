@@ -1,0 +1,30 @@
+{
+  "parent": "icheme:tutorial/still/build",
+  "display": {
+    "icon": {
+      "id": "icheme:field_guide",
+      "count": 1
+    },
+    "title": {
+      "translate": "tutorial.icheme.advancement.still.charge"
+    },
+    "description": {
+      "translate": "tutorial.icheme.advancement.still.charge.description"
+    },
+    "show_toast": false,
+    "announce_to_chat": false
+  },
+  "criteria": {
+    "charged": {
+      "trigger": "icheme:still_state",
+      "conditions": {
+        "min_filled": 0.5
+      }
+    }
+  },
+  "requirements": [
+    [
+      "charged"
+    ]
+  ]
+}

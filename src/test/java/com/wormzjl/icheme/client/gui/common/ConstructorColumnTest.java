@@ -71,7 +71,7 @@ class ConstructorColumnTest {
     private record Case(String name, ConstructorColumn.Page page) {
     }
 
-    private static ConstructorColumn.Design design(Form form, double diameter, int length, int support, int forward, int right, int up) {
+    static ConstructorColumn.Design design(Form form, double diameter, int length, int support, int forward, int right, int up) {
         return design(form, diameter, length, support, forward, right, up, false);
     }
 
@@ -98,7 +98,7 @@ class ConstructorColumnTest {
     }
 
     /** Every form at its least and its largest sizes and places, the right and up shifts at their least. */
-    private static List<ConstructorColumn.Design> designs() {
+    static List<ConstructorColumn.Design> designs() {
         var out = new ArrayList<ConstructorColumn.Design>();
         for (var form : Form.values()) {
             if (form.designed()) {
@@ -118,13 +118,13 @@ class ConstructorColumnTest {
                 new ConstructorColumn.Outlet(outlets, 1, STANDING));
     }
 
-    private static List<ConstructorColumn.Connections> connectionCases() {
+    static List<ConstructorColumn.Connections> connectionCases() {
         return List.of(connections(0, 0, false, 0, null, false, false, 1), connections(0, 0, true, 0, null, true, false, 1),
                 connections(2, 1, false, 0, null, false, false, 0b1011), connections(6, 5, false, -3, "left", false, false, 1),
                 connections(3, 0, true, 2, "bottom", true, true, 1), connections(3, 2, true, -2, "front", false, false, 1));
     }
 
-    private static ConstructorColumn.Nozzles nozzles(String role, boolean placed, boolean turned, int count) {
+    static ConstructorColumn.Nozzles nozzles(String role, boolean placed, boolean turned, int count) {
         var shown = new ConstructorColumn.Nozzle(role, 9, placed, "41.5", new UnitDesign.Line("nozzle.sump_in", 53), turned, 3, 1);
         return new ConstructorColumn.Nozzles(count, count - 1, shown, STANDING, turned ? 3 : 0);
     }
@@ -172,7 +172,7 @@ class ConstructorColumnTest {
         return out;
     }
 
-    private static List<ConstructorColumn.Listed> imports(HeatControlColumn.Texts t) {
+    static List<ConstructorColumn.Listed> imports(HeatControlColumn.Texts t) {
         return sent().stream().map(s -> ConstructorColumn.listed(s, t)).toList();
     }
 
@@ -207,7 +207,7 @@ class ConstructorColumnTest {
     }
 
     /** The Templates page as the screen fills it: the bundled crude templates and the pot (off), then one of the player's. */
-    private static final List<ConstructorColumn.Template> TEMPLATES = List.of(new ConstructorColumn.Template("Heavy crude", true, "Heavy crude, bundled"),
+    static final List<ConstructorColumn.Template> TEMPLATES = List.of(new ConstructorColumn.Template("Heavy crude", true, "Heavy crude, bundled"),
             new ConstructorColumn.Template("Medium crude (default)", true, "bundled"), new ConstructorColumn.Template("Light crude", true, "bundled"),
             new ConstructorColumn.Template("Two-tray pot", false, "builds no column"), new ConstructorColumn.Template("My column", true, "yours"));
 

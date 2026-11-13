@@ -1,0 +1,30 @@
+{
+  "parent": "icheme:tutorial/welcome/units",
+  "display": {
+    "icon": {
+      "id": "icheme:field_guide",
+      "count": 1
+    },
+    "title": {
+      "translate": "tutorial.icheme.advancement.welcome.help"
+    },
+    "description": {
+      "translate": "tutorial.icheme.advancement.welcome.help.description"
+    },
+    "show_toast": false,
+    "announce_to_chat": false
+  },
+  "criteria": {
+    "done": {
+      "trigger": "icheme:guide_step",
+      "conditions": {
+        "step": "welcome/help"
+      }
+    }
+  },
+  "requirements": [
+    [
+      "done"
+    ]
+  ]
+}

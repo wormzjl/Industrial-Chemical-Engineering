@@ -69,9 +69,10 @@ class ColumnTemplatesTest {
     void everyBundledCrudeTemplateBuildsAColumnAndThePotIsOff() {
         var library = templates();
         assertEquals(0, library.unreadable());
-        assertEquals(Set.of("Crude tower (Heavy crude)", "Crude tower (Light crude)", "Crude tower (Medium crude)", "Crude tower (Oil sand dilbit)", "Two-tray pot"),
+        assertEquals(Set.of("Crude tower (Heavy crude)", "Crude tower (Light crude)", "Crude tower (Medium crude)", "Crude tower (Oil sand dilbit)", "Small crude tower (Medium crude)",
+                "Two-tray pot"),
                 library.templates().stream().map(ColumnTemplates.Template::name).collect(Collectors.toSet()));
-        assertEquals(5, library.templates().size());
+        assertEquals(6, library.templates().size());
         for (var template : library.templates()) {
             assertTrue(template.bundled(), template.name());
             if (template.name().equals("Two-tray pot")) {
@@ -80,10 +81,10 @@ class ColumnTemplatesTest {
                 continue;
             }
             assertTrue(template.usable(), template.name() + ": " + template.problem());
-            // As the server makes it: 40 trays between the condenser and the reboiler, at the template's 8 m.
+            // As the server makes it: the template's own trays between the condenser and the reboiler, at its own diameter.
             var design = ColumnDesign.of(template.input(), ColumnTemplates.choices(template.input()));
-            assertEquals(40, design.trays().trays(), template.name());
-            assertEquals(8.0, design.diameter(), template.name());
+            assertEquals(template.input().stageCount(), design.trays().trays(), template.name());
+            assertEquals(template.input().columnDiameterMetres(), design.diameter(), template.name());
             assertEquals(template.input().pumparounds().size(), design.components().pumparoundPumps().size(), template.name() + ": a pump each pumparound");
         }
     }

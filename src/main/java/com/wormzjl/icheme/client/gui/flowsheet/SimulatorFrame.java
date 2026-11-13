@@ -57,6 +57,11 @@ public final class SimulatorFrame {
         return CalculatorColumn.theme(w);
     }
 
+    /** The help key ({@code ?}, batch 2026-11-12-tutorial-system, P4b) left of the theme key, as {@code TitleStrip.keys} sets it on every screen. */
+    public Rect help() {
+        return com.wormzjl.icheme.client.gui.common.TitleStrip.keys(w, 2).get(1);
+    }
+
     public List<Rect> tabs() {
         int tw = tabWidth(wideKeys());
         var tabs = new ArrayList<Rect>();
@@ -185,11 +190,11 @@ public final class SimulatorFrame {
     /**
      * The recesses pressed into the door under the top rows' key groups (the owner, 2026-11-04: "Need to change style of other
      * button layout as well so they look homogeneous", the footer kept as it was): the tabs, the tab's two pairs, the file keys
-     * and the theme key, {@link #RECESS} px round each.
+     * and the help and theme keys, {@link #RECESS} px round each.
      */
     public List<Rect> recesses(Tab tab) {
         var keys = keys(third(tab));
-        return List.of(around(tabs()), around(keys.subList(1, 3)), around(keys.subList(3, 5)), around(fileKeys()), around(List.of(theme())));
+        return List.of(around(tabs()), around(keys.subList(1, 3)), around(keys.subList(3, 5)), around(fileKeys()), around(List.of(help(), theme())));
     }
 
     private static Rect around(List<Rect> keys) {

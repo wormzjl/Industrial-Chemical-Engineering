@@ -1,0 +1,27 @@
+{
+  "parent": "icheme:tutorial/still/cut",
+  "display": {
+    "icon": {
+      "id": "icheme:field_guide",
+      "count": 1
+    },
+    "title": {
+      "translate": "tutorial.icheme.advancement.still.switch"
+    },
+    "description": {
+      "translate": "tutorial.icheme.advancement.still.switch.description"
+    },
+    "show_toast": false,
+    "announce_to_chat": false
+  },
+  "criteria": {
+    "switched": {
+      "trigger": "icheme:diverter_switched"
+    }
+  },
+  "requirements": [
+    [
+      "switched"
+    ]
+  ]
+}

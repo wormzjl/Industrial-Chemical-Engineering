@@ -69,7 +69,7 @@ class HeatControlColumnTest {
         }
     }
 
-    private static FluidView.Heat heat(String unit, String side, boolean paired, String actuator, @Nullable Double effort, @Nullable FluidView.Lines lines, List<FluidView.Port> ports) {
+    static FluidView.Heat heat(String unit, String side, boolean paired, String actuator, @Nullable Double effort, @Nullable FluidView.Lines lines, List<FluidView.Port> ports) {
         boolean fans = unit.equals("AIR_COOLER"), burners = unit.equals("FIRED_HEATER");
         return new FluidView.Heat(unit, side, paired, 320, -1e6, fans ? 0.5 : null, fans ? 1e4 : null, burners ? 1.0 : null, burners ? 473.15 : null, burners ? 2e6 : null,
                 unit.equals("EXCHANGER") ? 0.25 : null).with(actuator, effort, "NONE", ports, lines);
@@ -79,11 +79,11 @@ class HeatControlColumnTest {
         return new FluidView.Port(role, 330.0, 2e5, flow, new double[3][2], new double[3]);
     }
 
-    private record Case(String name, HeatControlColumn.Input in) {
+    record Case(String name, HeatControlColumn.Input in) {
     }
 
     /** Every unit and side, every mode its list holds, as an editor and as a reader. */
-    private static List<Case> cases() {
+    static List<Case> cases() {
         var out = new ArrayList<Case>();
         for (boolean edit : new boolean[]{true, false}) {
             for (var mode : HeatUnit.Mode.values()) {
@@ -142,7 +142,7 @@ class HeatControlColumnTest {
     }
 
     /** Layout C's two columns, or one on a narrow screen, as FluidDeviceScreen.buildControl places them. */
-    private static List<Column> place(HeatControlColumn.Input in, HeatControlColumn.Texts texts, FluidGuiLayout.ControlSlots slots) {
+    static List<Column> place(HeatControlColumn.Input in, HeatControlColumn.Texts texts, FluidGuiLayout.ControlSlots slots) {
         if (!slots.split()) return List.of(Column.place(HeatControlColumn.rows(in, texts), slots.rightX(), 74, slots.rightWidth(), M, Column.Metrics.COMPACT));
         var two = HeatControlColumn.columns(in, texts);
         return List.of(Column.place(two.left(), slots.leftX(), 74, slots.leftWidth(), M, Column.Metrics.COMPACT),

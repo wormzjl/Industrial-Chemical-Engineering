@@ -1,0 +1,926 @@
+{
+ "B-t1": {
+  "note": "B tuning 1: draws at the barrel targets (kerosene 11 %, diesel 24 % by mass), heater outlet 365 C",
+  "tray_count": 20,
+  "feed_tray": 16,
+  "draws": [
+   {
+    "tray": 6,
+    "flow_kmol_h": 7.9
+   },
+   {
+    "tray": 11,
+    "flow_kmol_h": 11.3
+   }
+  ],
+  "steam": [
+   {
+    "tray": 20,
+    "flow_kmol_h": 14.37,
+    "temperature_kelvin": 533.15
+   }
+  ],
+  "pumparounds": [
+   {
+    "draw_tray": 10,
+    "return_tray": 8,
+    "cooling_mw": 0.5328832,
+    "split": "UNIFORM"
+   },
+   {
+    "draw_tray": 13,
+    "return_tray": 12,
+    "cooling_mw": 0.2068507,
+    "split": "UNIFORM"
+   }
+  ],
+  "heater_outlet_kelvin": 638.15
+ },
+ "C-t1": {
+  "note": "C tuning 1: middle draw at 35 % by mass, PA 7 to 5, heater outlet 365 C",
+  "tray_count": 14,
+  "feed_tray": 11,
+  "draws": [
+   {
+    "tray": 6,
+    "flow_kmol_h": 19
+   }
+  ],
+  "steam": [
+   {
+    "tray": 14,
+    "flow_kmol_h": 14.37,
+    "temperature_kelvin": 533.15
+   }
+  ],
+  "pumparounds": [
+   {
+    "draw_tray": 7,
+    "return_tray": 5,
+    "cooling_mw": 0.7397339,
+    "split": "UNIFORM"
+   }
+  ],
+  "heater_outlet_kelvin": 638.15
+ },
+ "B-t2": {
+  "note": "B tuning 2: draws at the barrel targets (kerosene 11 %, diesel 24 % by mass), heater outlet 390 C",
+  "tray_count": 20,
+  "feed_tray": 16,
+  "draws": [
+   {
+    "tray": 6,
+    "flow_kmol_h": 7.9
+   },
+   {
+    "tray": 11,
+    "flow_kmol_h": 11.3
+   }
+  ],
+  "steam": [
+   {
+    "tray": 20,
+    "flow_kmol_h": 14.37,
+    "temperature_kelvin": 533.15
+   }
+  ],
+  "pumparounds": [
+   {
+    "draw_tray": 10,
+    "return_tray": 8,
+    "cooling_mw": 0.5328832,
+    "split": "UNIFORM"
+   },
+   {
+    "draw_tray": 13,
+    "return_tray": 12,
+    "cooling_mw": 0.2068507,
+    "split": "UNIFORM"
+   }
+  ],
+  "heater_outlet_kelvin": 663.15
+ },
+ "C-t2": {
+  "note": "C tuning 2: middle draw at 35 % by mass, PA 7 to 5, heater outlet 390 C",
+  "tray_count": 14,
+  "feed_tray": 11,
+  "draws": [
+   {
+    "tray": 6,
+    "flow_kmol_h": 19
+   }
+  ],
+  "steam": [
+   {
+    "tray": 14,
+    "flow_kmol_h": 14.37,
+    "temperature_kelvin": 533.15
+   }
+  ],
+  "pumparounds": [
+   {
+    "draw_tray": 7,
+    "return_tray": 5,
+    "cooling_mw": 0.7397339,
+    "split": "UNIFORM"
+   }
+  ],
+  "heater_outlet_kelvin": 663.15
+ },
+ "B-t3": {
+  "note": "B tuning 3: draws at the barrel targets (kerosene 11 %, diesel 24 % by mass), heater outlet 410 C",
+  "tray_count": 20,
+  "feed_tray": 16,
+  "draws": [
+   {
+    "tray": 6,
+    "flow_kmol_h": 7.9
+   },
+   {
+    "tray": 11,
+    "flow_kmol_h": 11.3
+   }
+  ],
+  "steam": [
+   {
+    "tray": 20,
+    "flow_kmol_h": 14.37,
+    "temperature_kelvin": 533.15
+   }
+  ],
+  "pumparounds": [
+   {
+    "draw_tray": 10,
+    "return_tray": 8,
+    "cooling_mw": 0.5328832,
+    "split": "UNIFORM"
+   },
+   {
+    "draw_tray": 13,
+    "return_tray": 12,
+    "cooling_mw": 0.2068507,
+    "split": "UNIFORM"
+   }
+  ],
+  "heater_outlet_kelvin": 683.15
+ },
+ "C-t3": {
+  "note": "C tuning 3: middle draw at 35 % by mass, PA 7 to 5, heater outlet 410 C",
+  "tray_count": 14,
+  "feed_tray": 11,
+  "draws": [
+   {
+    "tray": 6,
+    "flow_kmol_h": 19
+   }
+  ],
+  "steam": [
+   {
+    "tray": 14,
+    "flow_kmol_h": 14.37,
+    "temperature_kelvin": 533.15
+   }
+  ],
+  "pumparounds": [
+   {
+    "draw_tray": 7,
+    "return_tray": 5,
+    "cooling_mw": 0.7397339,
+    "split": "UNIFORM"
+   }
+  ],
+  "heater_outlet_kelvin": 683.15
+ },
+ "B-t4": {
+  "note": "B tuning 4: heater 410 C, pumparounds x0.5, draws 7.4 and 11.0 kmol/h",
+  "tray_count": 20,
+  "feed_tray": 16,
+  "draws": [
+   {
+    "tray": 6,
+    "flow_kmol_h": 7.4
+   },
+   {
+    "tray": 11,
+    "flow_kmol_h": 11
+   }
+  ],
+  "steam": [
+   {
+    "tray": 20,
+    "flow_kmol_h": 14.37,
+    "temperature_kelvin": 533.15
+   }
+  ],
+  "pumparounds": [
+   {
+    "draw_tray": 10,
+    "return_tray": 8,
+    "cooling_mw": 0.2664416,
+    "split": "UNIFORM"
+   },
+   {
+    "draw_tray": 13,
+    "return_tray": 12,
+    "cooling_mw": 0.10342535,
+    "split": "UNIFORM"
+   }
+  ],
+  "heater_outlet_kelvin": 683.15
+ },
+ "C-t4": {
+  "note": "C tuning 4: heater 410 C, pumparound x0.5, middle 18.5 kmol/h",
+  "tray_count": 14,
+  "feed_tray": 11,
+  "draws": [
+   {
+    "tray": 6,
+    "flow_kmol_h": 18.5
+   }
+  ],
+  "steam": [
+   {
+    "tray": 14,
+    "flow_kmol_h": 14.37,
+    "temperature_kelvin": 533.15
+   }
+  ],
+  "pumparounds": [
+   {
+    "draw_tray": 7,
+    "return_tray": 5,
+    "cooling_mw": 0.36986695,
+    "split": "UNIFORM"
+   }
+  ],
+  "heater_outlet_kelvin": 683.15
+ },
+ "B-t5": {
+  "note": "B tuning 5: heater 410 C, pumparounds x0.25, draws 7.4 and 11.0 kmol/h",
+  "tray_count": 20,
+  "feed_tray": 16,
+  "draws": [
+   {
+    "tray": 6,
+    "flow_kmol_h": 7.4
+   },
+   {
+    "tray": 11,
+    "flow_kmol_h": 11
+   }
+  ],
+  "steam": [
+   {
+    "tray": 20,
+    "flow_kmol_h": 14.37,
+    "temperature_kelvin": 533.15
+   }
+  ],
+  "pumparounds": [
+   {
+    "draw_tray": 10,
+    "return_tray": 8,
+    "cooling_mw": 0.1332208,
+    "split": "UNIFORM"
+   },
+   {
+    "draw_tray": 13,
+    "return_tray": 12,
+    "cooling_mw": 0.051712675,
+    "split": "UNIFORM"
+   }
+  ],
+  "heater_outlet_kelvin": 683.15
+ },
+ "C-t5": {
+  "note": "C tuning 5: heater 410 C, pumparound x0.25, middle 18.5 kmol/h",
+  "tray_count": 14,
+  "feed_tray": 11,
+  "draws": [
+   {
+    "tray": 6,
+    "flow_kmol_h": 18.5
+   }
+  ],
+  "steam": [
+   {
+    "tray": 14,
+    "flow_kmol_h": 14.37,
+    "temperature_kelvin": 533.15
+   }
+  ],
+  "pumparounds": [
+   {
+    "draw_tray": 7,
+    "return_tray": 5,
+    "cooling_mw": 0.184933475,
+    "split": "UNIFORM"
+   }
+  ],
+  "heater_outlet_kelvin": 683.15
+ },
+ "B-t6": {
+  "note": "B tuning 6: heater 440 C, pumparounds x0.5, draws 7.4 and 11.0 kmol/h",
+  "tray_count": 20,
+  "feed_tray": 16,
+  "draws": [
+   {
+    "tray": 6,
+    "flow_kmol_h": 7.4
+   },
+   {
+    "tray": 11,
+    "flow_kmol_h": 11
+   }
+  ],
+  "steam": [
+   {
+    "tray": 20,
+    "flow_kmol_h": 14.37,
+    "temperature_kelvin": 533.15
+   }
+  ],
+  "pumparounds": [
+   {
+    "draw_tray": 10,
+    "return_tray": 8,
+    "cooling_mw": 0.2664416,
+    "split": "UNIFORM"
+   },
+   {
+    "draw_tray": 13,
+    "return_tray": 12,
+    "cooling_mw": 0.10342535,
+    "split": "UNIFORM"
+   }
+  ],
+  "heater_outlet_kelvin": 713.15
+ },
+ "C-t6": {
+  "note": "C tuning 6: heater 440 C, pumparound x0.5, middle 18.5 kmol/h",
+  "tray_count": 14,
+  "feed_tray": 11,
+  "draws": [
+   {
+    "tray": 6,
+    "flow_kmol_h": 18.5
+   }
+  ],
+  "steam": [
+   {
+    "tray": 14,
+    "flow_kmol_h": 14.37,
+    "temperature_kelvin": 533.15
+   }
+  ],
+  "pumparounds": [
+   {
+    "draw_tray": 7,
+    "return_tray": 5,
+    "cooling_mw": 0.36986695,
+    "split": "UNIFORM"
+   }
+  ],
+  "heater_outlet_kelvin": 713.15
+ },
+ "B-t7": {
+  "note": "B tuning 7: heater 440 C, pumparounds x0.25, draws 7.4 and 11.0 kmol/h",
+  "tray_count": 20,
+  "feed_tray": 16,
+  "draws": [
+   {
+    "tray": 6,
+    "flow_kmol_h": 7.4
+   },
+   {
+    "tray": 11,
+    "flow_kmol_h": 11
+   }
+  ],
+  "steam": [
+   {
+    "tray": 20,
+    "flow_kmol_h": 14.37,
+    "temperature_kelvin": 533.15
+   }
+  ],
+  "pumparounds": [
+   {
+    "draw_tray": 10,
+    "return_tray": 8,
+    "cooling_mw": 0.1332208,
+    "split": "UNIFORM"
+   },
+   {
+    "draw_tray": 13,
+    "return_tray": 12,
+    "cooling_mw": 0.051712675,
+    "split": "UNIFORM"
+   }
+  ],
+  "heater_outlet_kelvin": 713.15
+ },
+ "C-t7": {
+  "note": "C tuning 7: heater 440 C, pumparound x0.25, middle 18.5 kmol/h",
+  "tray_count": 14,
+  "feed_tray": 11,
+  "draws": [
+   {
+    "tray": 6,
+    "flow_kmol_h": 18.5
+   }
+  ],
+  "steam": [
+   {
+    "tray": 14,
+    "flow_kmol_h": 14.37,
+    "temperature_kelvin": 533.15
+   }
+  ],
+  "pumparounds": [
+   {
+    "draw_tray": 7,
+    "return_tray": 5,
+    "cooling_mw": 0.184933475,
+    "split": "UNIFORM"
+   }
+  ],
+  "heater_outlet_kelvin": 713.15
+ },
+ "B-t8": {
+  "note": "B tuning 8: reflux 1.5, heater 390 C (limit 4 MW), draws 7.4 and 11.0 kmol/h",
+  "tray_count": 20,
+  "feed_tray": 16,
+  "draws": [
+   {
+    "tray": 6,
+    "flow_kmol_h": 7.4
+   },
+   {
+    "tray": 11,
+    "flow_kmol_h": 11
+   }
+  ],
+  "steam": [
+   {
+    "tray": 20,
+    "flow_kmol_h": 14.37,
+    "temperature_kelvin": 533.15
+   }
+  ],
+  "pumparounds": [
+   {
+    "draw_tray": 10,
+    "return_tray": 8,
+    "cooling_mw": 0.5328832,
+    "split": "UNIFORM"
+   },
+   {
+    "draw_tray": 13,
+    "return_tray": 12,
+    "cooling_mw": 0.2068507,
+    "split": "UNIFORM"
+   }
+  ],
+  "reflux_ratio": 1.5,
+  "heater_outlet_kelvin": 663.15,
+  "heater_limit_mw": 4
+ },
+ "C-t8": {
+  "note": "C tuning 8: reflux 1.5, heater 390 C (limit 4 MW), middle 18.5 kmol/h",
+  "tray_count": 14,
+  "feed_tray": 11,
+  "draws": [
+   {
+    "tray": 6,
+    "flow_kmol_h": 18.5
+   }
+  ],
+  "steam": [
+   {
+    "tray": 14,
+    "flow_kmol_h": 14.37,
+    "temperature_kelvin": 533.15
+   }
+  ],
+  "pumparounds": [
+   {
+    "draw_tray": 7,
+    "return_tray": 5,
+    "cooling_mw": 0.7397339,
+    "split": "UNIFORM"
+   }
+  ],
+  "reflux_ratio": 1.5,
+  "heater_outlet_kelvin": 663.15,
+  "heater_limit_mw": 4
+ },
+ "B-t9": {
+  "note": "B tuning 9: reflux 1.5, heater 410 C (limit 4 MW), draws 7.4 and 11.0 kmol/h",
+  "tray_count": 20,
+  "feed_tray": 16,
+  "draws": [
+   {
+    "tray": 6,
+    "flow_kmol_h": 7.4
+   },
+   {
+    "tray": 11,
+    "flow_kmol_h": 11
+   }
+  ],
+  "steam": [
+   {
+    "tray": 20,
+    "flow_kmol_h": 14.37,
+    "temperature_kelvin": 533.15
+   }
+  ],
+  "pumparounds": [
+   {
+    "draw_tray": 10,
+    "return_tray": 8,
+    "cooling_mw": 0.5328832,
+    "split": "UNIFORM"
+   },
+   {
+    "draw_tray": 13,
+    "return_tray": 12,
+    "cooling_mw": 0.2068507,
+    "split": "UNIFORM"
+   }
+  ],
+  "reflux_ratio": 1.5,
+  "heater_outlet_kelvin": 683.15,
+  "heater_limit_mw": 4
+ },
+ "C-t9": {
+  "note": "C tuning 9: reflux 1.5, heater 410 C (limit 4 MW), middle 18.5 kmol/h",
+  "tray_count": 14,
+  "feed_tray": 11,
+  "draws": [
+   {
+    "tray": 6,
+    "flow_kmol_h": 18.5
+   }
+  ],
+  "steam": [
+   {
+    "tray": 14,
+    "flow_kmol_h": 14.37,
+    "temperature_kelvin": 533.15
+   }
+  ],
+  "pumparounds": [
+   {
+    "draw_tray": 7,
+    "return_tray": 5,
+    "cooling_mw": 0.7397339,
+    "split": "UNIFORM"
+   }
+  ],
+  "reflux_ratio": 1.5,
+  "heater_outlet_kelvin": 683.15,
+  "heater_limit_mw": 4
+ },
+ "B-t10": {
+  "note": "B tuning 10: reflux 1.5, heater 430 C (limit 4 MW), draws 7.4 and 11.0 kmol/h",
+  "tray_count": 20,
+  "feed_tray": 16,
+  "draws": [
+   {
+    "tray": 6,
+    "flow_kmol_h": 7.4
+   },
+   {
+    "tray": 11,
+    "flow_kmol_h": 11
+   }
+  ],
+  "steam": [
+   {
+    "tray": 20,
+    "flow_kmol_h": 14.37,
+    "temperature_kelvin": 533.15
+   }
+  ],
+  "pumparounds": [
+   {
+    "draw_tray": 10,
+    "return_tray": 8,
+    "cooling_mw": 0.5328832,
+    "split": "UNIFORM"
+   },
+   {
+    "draw_tray": 13,
+    "return_tray": 12,
+    "cooling_mw": 0.2068507,
+    "split": "UNIFORM"
+   }
+  ],
+  "reflux_ratio": 1.5,
+  "heater_outlet_kelvin": 703.15,
+  "heater_limit_mw": 4
+ },
+ "C-t10": {
+  "note": "C tuning 10: reflux 1.5, heater 430 C (limit 4 MW), middle 18.5 kmol/h",
+  "tray_count": 14,
+  "feed_tray": 11,
+  "draws": [
+   {
+    "tray": 6,
+    "flow_kmol_h": 18.5
+   }
+  ],
+  "steam": [
+   {
+    "tray": 14,
+    "flow_kmol_h": 14.37,
+    "temperature_kelvin": 533.15
+   }
+  ],
+  "pumparounds": [
+   {
+    "draw_tray": 7,
+    "return_tray": 5,
+    "cooling_mw": 0.7397339,
+    "split": "UNIFORM"
+   }
+  ],
+  "reflux_ratio": 1.5,
+  "heater_outlet_kelvin": 703.15,
+  "heater_limit_mw": 4
+ },
+ "B-t11": {
+  "note": "B tuning 11: reflux 1.5, heater 390 C (limit 4 MW), draws 6.6 and 9.8 kmol/h",
+  "tray_count": 20,
+  "feed_tray": 16,
+  "draws": [
+   {
+    "tray": 6,
+    "flow_kmol_h": 6.6
+   },
+   {
+    "tray": 11,
+    "flow_kmol_h": 9.8
+   }
+  ],
+  "steam": [
+   {
+    "tray": 20,
+    "flow_kmol_h": 14.37,
+    "temperature_kelvin": 533.15
+   }
+  ],
+  "pumparounds": [
+   {
+    "draw_tray": 10,
+    "return_tray": 8,
+    "cooling_mw": 0.5328832,
+    "split": "UNIFORM"
+   },
+   {
+    "draw_tray": 13,
+    "return_tray": 12,
+    "cooling_mw": 0.2068507,
+    "split": "UNIFORM"
+   }
+  ],
+  "reflux_ratio": 1.5,
+  "heater_outlet_kelvin": 663.15,
+  "heater_limit_mw": 4
+ },
+ "C-t11": {
+  "note": "C tuning 11: reflux 1.5, heater 390 C (limit 4 MW), middle 15.8 kmol/h",
+  "tray_count": 14,
+  "feed_tray": 11,
+  "draws": [
+   {
+    "tray": 6,
+    "flow_kmol_h": 15.8
+   }
+  ],
+  "steam": [
+   {
+    "tray": 14,
+    "flow_kmol_h": 14.37,
+    "temperature_kelvin": 533.15
+   }
+  ],
+  "pumparounds": [
+   {
+    "draw_tray": 7,
+    "return_tray": 5,
+    "cooling_mw": 0.7397339,
+    "split": "UNIFORM"
+   }
+  ],
+  "reflux_ratio": 1.5,
+  "heater_outlet_kelvin": 663.15,
+  "heater_limit_mw": 4
+ },
+ "B-t12": {
+  "note": "B tuning 12: reflux 1.5, heater 380 C (limit 4 MW), draws 6.6 and 9.8 kmol/h",
+  "tray_count": 20,
+  "feed_tray": 16,
+  "draws": [
+   {
+    "tray": 6,
+    "flow_kmol_h": 6.6
+   },
+   {
+    "tray": 11,
+    "flow_kmol_h": 9.8
+   }
+  ],
+  "steam": [
+   {
+    "tray": 20,
+    "flow_kmol_h": 14.37,
+    "temperature_kelvin": 533.15
+   }
+  ],
+  "pumparounds": [
+   {
+    "draw_tray": 10,
+    "return_tray": 8,
+    "cooling_mw": 0.5328832,
+    "split": "UNIFORM"
+   },
+   {
+    "draw_tray": 13,
+    "return_tray": 12,
+    "cooling_mw": 0.2068507,
+    "split": "UNIFORM"
+   }
+  ],
+  "reflux_ratio": 1.5,
+  "heater_outlet_kelvin": 653.15,
+  "heater_limit_mw": 4
+ },
+ "C-t12": {
+  "note": "C tuning 12: reflux 1.5, heater 380 C (limit 4 MW), middle 15.8 kmol/h",
+  "tray_count": 14,
+  "feed_tray": 11,
+  "draws": [
+   {
+    "tray": 6,
+    "flow_kmol_h": 15.8
+   }
+  ],
+  "steam": [
+   {
+    "tray": 14,
+    "flow_kmol_h": 14.37,
+    "temperature_kelvin": 533.15
+   }
+  ],
+  "pumparounds": [
+   {
+    "draw_tray": 7,
+    "return_tray": 5,
+    "cooling_mw": 0.7397339,
+    "split": "UNIFORM"
+   }
+  ],
+  "reflux_ratio": 1.5,
+  "heater_outlet_kelvin": 653.15,
+  "heater_limit_mw": 4
+ },
+ "B-t13": {
+  "note": "B tuning 13: reflux 1.5, heater 390 C, draws 6.6 and 9.8 kmol/h, pumparounds 0.533 and 0.107 MW",
+  "tray_count": 20,
+  "feed_tray": 16,
+  "draws": [
+   {
+    "tray": 6,
+    "flow_kmol_h": 6.6
+   },
+   {
+    "tray": 11,
+    "flow_kmol_h": 9.8
+   }
+  ],
+  "steam": [
+   {
+    "tray": 20,
+    "flow_kmol_h": 14.37,
+    "temperature_kelvin": 533.15
+   }
+  ],
+  "pumparounds": [
+   {
+    "draw_tray": 10,
+    "return_tray": 8,
+    "cooling_mw": 0.533,
+    "split": "UNIFORM"
+   },
+   {
+    "draw_tray": 13,
+    "return_tray": 12,
+    "cooling_mw": 0.107,
+    "split": "UNIFORM"
+   }
+  ],
+  "reflux_ratio": 1.5,
+  "heater_outlet_kelvin": 663.15,
+  "heater_limit_mw": 4
+ },
+ "C-t13": {
+  "note": "C tuning 13: reflux 1.5, heater 390 C, middle 16.8 kmol/h, pumparound 0.64 MW",
+  "tray_count": 14,
+  "feed_tray": 11,
+  "draws": [
+   {
+    "tray": 6,
+    "flow_kmol_h": 16.8
+   }
+  ],
+  "steam": [
+   {
+    "tray": 14,
+    "flow_kmol_h": 14.37,
+    "temperature_kelvin": 533.15
+   }
+  ],
+  "pumparounds": [
+   {
+    "draw_tray": 7,
+    "return_tray": 5,
+    "cooling_mw": 0.64,
+    "split": "UNIFORM"
+   }
+  ],
+  "reflux_ratio": 1.5,
+  "heater_outlet_kelvin": 663.15,
+  "heater_limit_mw": 4
+ },
+ "B-t14": {
+  "note": "B tuning 14: reflux 1.5, heater 390 C, draws 6.6 and 9.8 kmol/h, pumparounds 0.483 and 0.107 MW",
+  "tray_count": 20,
+  "feed_tray": 16,
+  "draws": [
+   {
+    "tray": 6,
+    "flow_kmol_h": 6.6
+   },
+   {
+    "tray": 11,
+    "flow_kmol_h": 9.8
+   }
+  ],
+  "steam": [
+   {
+    "tray": 20,
+    "flow_kmol_h": 14.37,
+    "temperature_kelvin": 533.15
+   }
+  ],
+  "pumparounds": [
+   {
+    "draw_tray": 10,
+    "return_tray": 8,
+    "cooling_mw": 0.483,
+    "split": "UNIFORM"
+   },
+   {
+    "draw_tray": 13,
+    "return_tray": 12,
+    "cooling_mw": 0.107,
+    "split": "UNIFORM"
+   }
+  ],
+  "reflux_ratio": 1.5,
+  "heater_outlet_kelvin": 663.15,
+  "heater_limit_mw": 4
+ },
+ "C-t14": {
+  "note": "C tuning 14: reflux 1.5, heater 390 C, middle 16.8 kmol/h, pumparound 0.59 MW",
+  "tray_count": 14,
+  "feed_tray": 11,
+  "draws": [
+   {
+    "tray": 6,
+    "flow_kmol_h": 16.8
+   }
+  ],
+  "steam": [
+   {
+    "tray": 14,
+    "flow_kmol_h": 14.37,
+    "temperature_kelvin": 533.15
+   }
+  ],
+  "pumparounds": [
+   {
+    "draw_tray": 7,
+    "return_tray": 5,
+    "cooling_mw": 0.59,
+    "split": "UNIFORM"
+   }
+  ],
+  "reflux_ratio": 1.5,
+  "heater_outlet_kelvin": 663.15,
+  "heater_limit_mw": 4
+ }
+}

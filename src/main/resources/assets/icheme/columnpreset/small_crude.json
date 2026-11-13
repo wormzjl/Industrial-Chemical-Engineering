@@ -1,0 +1,35 @@
+{
+  "schema_version": 3,
+  "kind": "column",
+  "name": "Small crude tower (Medium crude)",
+  "translation_key": "gui.icheme.column_template.small_crude",
+  "tray_count": 14,
+  "feed_tray": 11,
+  "design_feed_kmol_h": 39.95625167268611,
+  "top_temperature_kelvin": 332.15,
+  "reboiler_duty_mw": 0,
+  "reflux_ratio": 1.5,
+  "top_pressure_bar": 2.5,
+  "diameter_m": 1,
+  "draws": [
+    {
+      "tray": 6,
+      "flow_kmol_h": 15.4
+    }
+  ],
+  "steam": [
+    {
+      "tray": 14,
+      "flow_kmol_h": 14.37,
+      "temperature_kelvin": 533.15
+    }
+  ],
+  "pumparounds": [
+    {
+      "draw_tray": 7,
+      "return_tray": 5,
+      "cooling_mw": 0.59,
+      "split": "UNIFORM"
+    }
+  ]
+}

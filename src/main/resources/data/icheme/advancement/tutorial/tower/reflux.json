@@ -1,0 +1,31 @@
+{
+  "parent": "icheme:tutorial/tower/build",
+  "display": {
+    "icon": {
+      "id": "icheme:field_guide",
+      "count": 1
+    },
+    "title": {
+      "translate": "tutorial.icheme.advancement.tower.reflux"
+    },
+    "description": {
+      "translate": "tutorial.icheme.advancement.tower.reflux.description"
+    },
+    "show_toast": false,
+    "announce_to_chat": false
+  },
+  "criteria": {
+    "reflux": {
+      "trigger": "icheme:still_state",
+      "conditions": {
+        "column": true,
+        "min_reflux": 2
+      }
+    }
+  },
+  "requirements": [
+    [
+      "reflux"
+    ]
+  ]
+}

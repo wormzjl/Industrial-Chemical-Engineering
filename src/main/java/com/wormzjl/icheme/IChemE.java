@@ -203,6 +203,8 @@ public final class IChemE {
         if (net.neoforged.fml.ModList.get().isLoaded("create")) com.wormzjl.icheme.compat.create.CreateCompat.register(modEventBus);
         ModBlockEntities.register(modEventBus);
         ModMenus.register(modEventBus);
+        com.wormzjl.icheme.runtime.tutorial.TutorialTriggers.register(modEventBus);
+        modEventBus.addListener(com.wormzjl.icheme.network.TutorialNetwork::register);
         modEventBus.addListener(ProcessSimulatorNetwork::register);
         modEventBus.addListener(com.wormzjl.icheme.network.FluidNetwork::register);
         modEventBus.addListener(com.wormzjl.icheme.network.EquipmentNetwork::register);
@@ -230,6 +232,7 @@ public final class IChemE {
         gameEventBus.addListener(IChemE::onFluidChunkLoaded);
         gameEventBus.addListener(IChemE::onPlayerLoggedIn);
         gameEventBus.addListener(IChemE::onPlayerLoggedOut);
+        gameEventBus.addListener(com.wormzjl.icheme.network.TutorialNetwork::earned);
         gameEventBus.addListener(IChemE::onLevelTickPost);
     }
     /**

@@ -46,6 +46,28 @@ public final class SimulatorResults {
     private SimulatorResults() {
     }
 
+    /**
+     * Whether {@code bytes} are results that ran on the sheet stored beside them (batch 2026-11-12-tutorial-system, P4b: the
+     * guide's sheet_run criterion): a read of their head on the server, which never builds a run; false for none or damaged.
+     */
+    public static boolean ranOnBody(byte[] bytes) {
+        if (bytes.length == 0) return false;
+        var b = new RegistryFriendlyByteBuf(Unpooled.wrappedBuffer(bytes), RegistryAccess.EMPTY);
+        try {
+            if (b.readVarInt() != FORMAT) return false;
+            for (int i = count(b); i > 0; i--) {
+                b.readUtf(MAX_TEXT);
+                b.readUtf(MAX_TOKEN);
+            }
+            b.readDouble();
+            return b.readByte() == SAME_SHEET;
+        } catch (RuntimeException damaged) {
+            return false;
+        } finally {
+            b.release();
+        }
+    }
+
     /** What can stand on the block beside {@code sheet}: empty if nothing fits. */
     public static byte[] fitted(SimulatorHost.@Nullable Finished finished, Flowsheet sheet, byte[] sheetBytes) {
         if (finished == null) return new byte[0];

@@ -3,6 +3,7 @@ package com.wormzjl.icheme.client.gui.screens;
 import com.wormzjl.icheme.client.ClientConfig;
 import com.wormzjl.icheme.client.MachineAnimation;
 import com.wormzjl.icheme.client.gui.common.DialogColumns;
+import com.wormzjl.icheme.client.gui.common.ScreenTours;
 import com.wormzjl.icheme.client.gui.common.TitleStrip;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
 import com.wormzjl.icheme.client.gui.common.kit.GuiCanvas;
@@ -51,6 +52,15 @@ public final class VesselScreen extends Screen {
     private int left, top, panelWidth, panelHeight;
     private @Nullable Rect glassBox;
     private @Nullable String hovered;
+    /** The datasheet's help tour (batch 2026-11-12-tutorial-system, P6), opened by the ? key at the title strip's right. */
+    private final com.wormzjl.icheme.client.gui.tutorial.TourHost tour = new com.wormzjl.icheme.client.gui.tutorial.TourHost(() -> ScreenTours.VESSEL, this::anchor);
+
+    /** A tour's anchor on the screen: the title, the glass, Done or Apply, else a door row's widget or group (ScreenTours.vessel). */
+    private @Nullable Rect anchor(String key, boolean reveal) {
+        var frame = ScreenTours.vessel(panelWidth, panelHeight, DOOR, title.getString(), GuiCanvas.measure(font), names());
+        if (key.equals("title")) return strip().plate().moved(left, top);
+        return com.wormzjl.icheme.client.gui.tutorial.TourHost.resolve(frame.get(key), door, key, reveal, VesselScreen::tr, left, top);
+    }
 
     /** The structure shown, whose name (N1) the title reads from the client's cells. */
     private final EquipmentStructure.Vessel vessel;
@@ -155,7 +165,7 @@ public final class VesselScreen extends Screen {
 
     /** The title strip (N1, the owner 2026-11-03: "You can put the equipment name here"): the kind's plate, the name after it; the datasheet has no theme key. */
     private TitleStrip.Strip strip() {
-        return TitleStrip.place(panelWidth, 0, title.getString(), GuiCanvas.measure(font));
+        return TitleStrip.placeKeys(panelWidth, 1, title.getString(), GuiCanvas.measure(font));
     }
 
     /** Whether this player may name the structure: the server checks the same, and its reach (EquipmentNetwork.Rename). */
@@ -213,6 +223,8 @@ public final class VesselScreen extends Screen {
             box.setTooltip(Tooltip.create(Component.literal(tr("fluid.name") + "\n" + tr("fluid.name.hint"))));
             nameBox = addRenderableWidget(box);
         }
+        var help = tour.key(ScreenTours.help(panelWidth).moved(left, top), VesselScreen::skin);
+        if (help != null) addRenderableWidget(help);
         door.place(left, top);
     }
 
@@ -267,6 +279,10 @@ public final class VesselScreen extends Screen {
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         door.place(left, top);
+        // An open tour takes the pointer: the page under it shows no hover.
+        int pointerX = mouseX, pointerY = mouseY;
+        mouseX = tour.pointer(mouseX);
+        mouseY = tour.pointer(mouseY);
         super.render(g, mouseX, mouseY, partialTick);
         var skin = skin();
         var canvas = new GuiCanvas(g, font, left, top);
@@ -295,13 +311,25 @@ public final class VesselScreen extends Screen {
             glassView.drawBar(canvas, skin);
         }
         g.pose().popPose();
-        KitDoor.hint(g, font, hovered, mouseX, mouseY);
+        if (tour.isOpen()) tour.render(g, font, width, height, pointerX, pointerY);
+        else KitDoor.hint(g, font, hovered, mouseX, mouseY);
     }
 
     @Override
     public boolean mouseClicked(double x, double y, int button) {
+        if (tour.mouseClicked(font, width, height, x, y)) return true;
         SkinField.clickOutside(this, x, y);
         return door.press(x - left, y - top, button) || glassView.press(x - left, y - top, button) || super.mouseClicked(x, y, button);
+    }
+
+    @Override
+    public boolean charTyped(char c, int modifiers) {
+        return tour.isOpen() || super.charTyped(c, modifiers);
+    }
+
+    @Override
+    public boolean keyPressed(int key, int scan, int modifiers) {
+        return tour.keyPressed(key) || super.keyPressed(key, scan, modifiers);
     }
 
     @Override
@@ -318,6 +346,7 @@ public final class VesselScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double x, double y, double horizontal, double vertical) {
+        if (tour.isOpen()) return true;
         return door.wheel(x - left, y - top, vertical) || glassView.wheel(x - left, y - top, vertical) || super.mouseScrolled(x, y, horizontal, vertical);
     }
 }

@@ -1227,6 +1227,11 @@ public final class IslandCoordinator {
     }
     /** The real valve side connection {@code side}'s control works (W8), or null for none. */
     public @org.jetbrains.annotations.Nullable ExchangerRelay.Operation operation(long side){owned();return operations.get(side);}
+    /**
+     * The temperature (K) of the stream coupled side {@code side} last recorded at or before {@code tick} (what its other side
+     * reads: its inlet), NaN with no record. A read of committed state; it asks for no solve.
+     */
+    public double sideTemperature(long side,long tick){owned();var c=coupled.get(side);var stream=c==null?null:c.asOf(tick);return stream==null?Double.NaN:stream.donor().temperature();}
     /** The heat each exchanger holds in transit, J (the energy owed to its streams), by pair key: the lower of its two sides' connection ids. */
     public Map<Long,Double> transits(){owned();return Map.copyOf(transits);}
     /**
