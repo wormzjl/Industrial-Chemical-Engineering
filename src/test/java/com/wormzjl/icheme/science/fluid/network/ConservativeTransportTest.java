@@ -66,4 +66,32 @@ class ConservativeTransportTest {
         // Its next interval finds the tank empty, a receiver at the ambient: not a dry-solids vessel.
         assertTrue(new PassiveNetwork.Reservoir(2,0,projection.states().get(1),PassiveNetwork.NodeKind.RESERVOIR,kept).empty());
     }
+    /**
+     * F20 (batch 2026-11-13-codebase-review): an emptying cooling tower basin is solved as a junction that keeps its tower
+     * ({@code PassiveStepSolver.emptyingGraph}). Its sprays are fed through a pipe junction whose Newton row closed only to a
+     * residual (1.0 kg/s in, 1.001 out), so the pinning books the junction's outflow down to 1.0. The basin passes what its
+     * sprays deliver less what they lose to the air, that loss read on the booked spray flow, as the booking reads it.
+     */
+    @Test void aTowerBasinSolvedAsAJunctionPassesItsBookedSprayLessItsLossOnThatSpray() {
+        var model=FluidTestSupport.networkModel();int water=model.componentCount()-1;
+        var amounts=new double[model.componentCount()];amounts[water]=1000/model.waterMolecularWeight;
+        var hot=model.flashTP(308.15,101325,amounts,()->{});
+        var tower=CoolingTower.induced(8,2,1,1);
+        var basin=new PassiveNetwork.Inventory(tower.basinVolume(),PhaseLayout.totalAmounts(hot),hot.internalEnergy(),hot.solids(),CoolingTower.BASIN_DEPTH,true).withTower(tower);
+        var line=new PipeResistance.Geometry(10,.05,.000045,0);
+        var graph=new PassiveNetwork(List.of(
+                new PassiveNetwork.Reservoir(1,0,hot,PassiveNetwork.NodeKind.GENERATOR),
+                new PassiveNetwork.Reservoir(2,0,hot,PassiveNetwork.NodeKind.JUNCTION),
+                new PassiveNetwork.Reservoir(3,0,hot,PassiveNetwork.NodeKind.JUNCTION,basin),
+                new PassiveNetwork.Reservoir(4,0,hot,PassiveNetwork.NodeKind.VOID)),
+            List.of(new PassiveNetwork.Pipe(5,0,1,line),
+                new PassiveNetwork.Pipe(6,1,2,line).withPorts(PassiveNetwork.PhasePort.BULK,PassiveNetwork.PhasePort.SPRAY),
+                new PassiveNetwork.Pipe(7,2,3,line)));
+        var states=graph.reservoirs().stream().map(PassiveNetwork.Reservoir::state).toList();
+        var booked=ConservativeTransport.pinnedFlows(graph,states,new double[]{1,1.001,.98},model,null,null);
+        assertEquals(1,booked[1],1e-15,"the pipe junction passes what it receives");
+        double loss=TowerExchange.at(graph,2,states,booked,null,model).massLoss();
+        assertTrue(loss>0,"the sprays lose water to the air: "+loss);
+        assertEquals(booked[1]-loss,booked[2],1e-14,"the basin passes its booked spray less the loss on that spray");
+    }
 }
