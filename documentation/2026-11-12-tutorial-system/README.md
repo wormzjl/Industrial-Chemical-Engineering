@@ -35,6 +35,11 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
   power), the start-up order, chapters 6 "Building" and 7 "Start-up", the limit card, the assembly tours, the proofs.
 - [SMALL_COLUMN_CANDIDATES_REVIEW.md](SMALL_COLUMN_CANDIDATES_REVIEW.md): P4, the three small crude tower candidates
   solved and sized on the crude unit at 1/64, the acceptance rules, the steam source, the recommendation (D4).
+- [P6_COVERAGE.md](P6_COVERAGE.md): phase P6, a help tour on every screen page and a film on every equipment page, the
+  owner's rule for an inside stop, gates, renders.
+- [CODE_REVIEW.md](CODE_REVIEW.md): the code review of the branch at e135ebcdc (tutorial and still law), findings 1 to 9
+  and the unconfirmed item.
+- [MERGE_PREP.md](MERGE_PREP.md): the merge preparation: changelog, version proposal, code guide, tooling cleanup.
 
 ## History
 
@@ -140,13 +145,31 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
   stop, gated (dots on the body, leaders on drawn nozzles), the 14 stop-2 sentences removed (P6_COVERAGE.md). Films and
   page sheets rendered again in `tmp/tutorial-renders/p6/` (the render tools compile after the cards' move).
   PageFilms 3, TutorialText 6, GuideFile 10, GuideCoverage 12, EquipmentInfoCoverage 6, GuidePage 6, HelpCoverage 6 pass.
+- 2026-11-13: translation commit cda7e7129 (zh_cn, fr_fr, es_es, ja_jp brought up to en_us).
+- 2026-11-13: merge preparation (MERGE_PREP.md), on the owner's word: CHANGELOG lines for both batches, version proposal,
+  code guide chapter `tutorial.md` and seven chapters updated, tool READMEs and `tools/INDEX.md` rows, the detached
+  `/icheme-film` command stored in `tools/tutorial-renders/film-command/`. Documents and tools only, no test run.
 
-## Code areas (proposed)
+## Code areas
 
-- `science/tutorial/` (guide, tours, scenes, films, the cards' data), `client/gui/tutorial/` and the GUI kit (`?` key,
-  scene view, tours, the cards, guide screen), `runtime/tutorial/` (advancement criteria), `compat/jei/`, the equipment items,
-  `assets/icheme/tutorial/`, `assets/icheme/columnpreset/` (the small crude tower), `tools/tutorial-renders/`,
-  `tools/tutorial-recordings/`.
+Code guide chapter: `documentation/reference/code-guide/tutorial.md`. Paths under `src/main/java/com/wormzjl/icheme/`:
+
+- `science/tutorial/`: `scene/` (the scene player), `films/` (43 films), `guide/` (guide, tours, pages, progress, the
+  criteria's conditions), `cards/` (the recordings' readers), `equipment/` (`EquipmentInfo`, `ReferenceShapes`).
+- `client/gui/tutorial/` (guide screen and page, HUD line, film screen and view, labels, tours: `HelpTour`, `TourHost`,
+  `TourLayout`) and `client/gui/tutorial/cards/` (11 cards); the anchor maps `client/gui/common/{TourAnchors,DeviceTour,
+  ScreenTours,AssemblyTour}` and `client/gui/flowsheet/SimulatorTour`; the `?` key in `TitleStrip`, `Skin`, `SimulatorFrame`
+  and every screen.
+- `runtime/tutorial/TutorialTriggers` (ten criteria) and `network/TutorialNetwork` (`tutorial-1`); the criteria fired from
+  `network/{AssemblyNetwork,EquipmentNetwork,FluidNetwork,ProcessSimulatorNetwork}` and `world/level/block/FluidDeviceBlock`;
+  `network/SimulatorResults.ranOnBody`.
+- `world/item/{FieldGuideItem,EquipmentInfoItem}`, `registry/{ModItems,ModCreativeTabs}`, `compat/jei/IChemEJeiPlugin`,
+  `science/equipment/ShapeRasterizer.stillParts`, `ProcessUnit.StillPlan`.
+- Resources: `assets/icheme/tutorial/` (`guide.json`, `tours.json`, `pages.json`, `recordings/`),
+  `data/icheme/advancement/tutorial/`, `data/icheme/loot_table/tutorial/field_guide.json`, the item models and textures,
+  `columnpreset/small_crude.json`, `mixturepreset/small_crude.json`, `flowsheet_examples/small_crude_unit.json`.
+- Tools: `tools/tutorial-renders/` (with the detached `/icheme-film` command), `tools/tutorial-recordings/`,
+  `tools/tutorial-column/`, `tools/heat-gui-renders/SimulatorRender.java -Donly=tours`.
 
 ## Open items
 

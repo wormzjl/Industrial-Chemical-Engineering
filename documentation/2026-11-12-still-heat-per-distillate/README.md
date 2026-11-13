@@ -1,7 +1,8 @@
 # Batch still: heat per mole of distillate
 
 Status: **In progress since 2026-11-12**. Branch `claude/still-heat-per-distillate-d5ec04`; carried onto `claude/still-on-aqueous-fdba0c`
-(the W4 column) by merge d908aa617. Not merged to main, not pushed.
+(the W4 column) by merge d908aa617, then into `claude/tutorial-system-chem-mod-950ca9` (merge 59f05855f), with which it
+merges to main. Not merged to main, not pushed.
 
 ## Scope
 
@@ -41,6 +42,9 @@ charge. Fix: the split's rates per mole of distillate; the law's bracket on the 
   load or a build. StillHeadTest 6 (new: crude at 115 °C, 4 trays, reflux 1), StillRuntimeTest 13 (new: the fire waits
   after a reload; the factor-4 wash times its 180 s from the first answer), all pass. Recordings untouched (`BatchStill`
   unchanged); no GameTest runs a still.
+- 2026-11-13: merge preparation with the tutorial batch (`2026-11-12-tutorial-system/MERGE_PREP.md`): the CHANGELOG line,
+  the code guide's still sections (the critical-temperature line in `fluid-science.md` was stale and is corrected).
+  Documents only, no test run.
 
 ## Documents
 
@@ -72,5 +76,7 @@ charge. Fix: the split's rates per mole of distillate; the law's bracket on the 
 3. Final lane: the runtime classes that load `StillHead` or `BatchStill` through the coordinator (58 by
    `tools/merge-lane/affected.mjs`, 2 of them in `holdGates`) and the fluid GameTests (`BatchStill.java` changed; no
    GameTest runs a still).
-4. Merge preparation (CHANGELOG, version, code guide `fluid-science.md` still section, `BATCH_STILL_LAW.md`'s column
-   line): not started, by instruction.
+4. Merge preparation: done with the tutorial batch (its MERGE_PREP.md): the CHANGELOG line, the code guide's still
+   sections in `fluid-science.md`, `fluid-runtime.md` and `process-simulator.md`. `BATCH_STILL_LAW.md` (batch
+   `2026-11-09-batch-distiller`) is left as written: it records W1 (e = (R + 1) H1 − R h0, a total condenser); the code
+   guide holds the current law.
