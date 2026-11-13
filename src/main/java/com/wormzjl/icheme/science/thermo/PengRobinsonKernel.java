@@ -501,8 +501,9 @@ public final class PengRobinsonKernel {
             if (workspace.pairStamp[pair] == bits) continue;
             int m = pairModel[pair];
             if (m >= 0) {
-                interactions.evaluatePair(m, temperatureKelvin, workspace.sqrtA, workspace.interactionRootDt,
-                        workspace.interactionRootDt2, coVolumes, workspace.modelK, workspace.modelKDt, workspace.modelKDt2);
+                interactions.evaluatePair(m, temperatureKelvin, bits, workspace.powers, workspace.powerStamp, workspace.sqrtA,
+                        workspace.interactionRootDt, workspace.interactionRootDt2, coVolumes,
+                        workspace.modelK, workspace.modelKDt, workspace.modelKDt2);
                 workspace.pairK[pair] = workspace.modelK[m];
                 workspace.pairKDt[pair] = workspace.modelKDt[m];
                 workspace.pairKDt2[pair] = workspace.modelKDt2[m];
@@ -1812,6 +1813,12 @@ public final class PengRobinsonKernel {
         private final long[] compoundStamp;
         private final long[] pairStamp;
         private final long[] cellStamp;
+        /**
+         * The model's group-term powers {@code (298.15/T)^e} by distinct exponent, each stamped with the temperature it
+         * belongs to: the pairs of one preparation share them ({@link PairInteractions#evaluatePair}).
+         */
+        private final double[] powers;
+        private final long[] powerStamp;
 
         private Workspace(PengRobinsonKernel kernel) {
             this.kernel = kernel;
@@ -1832,6 +1839,10 @@ public final class PengRobinsonKernel {
             Arrays.fill(compoundStamp, Long.MIN_VALUE);
             Arrays.fill(pairStamp, Long.MIN_VALUE);
             Arrays.fill(cellStamp, Long.MIN_VALUE);
+            int powerCount = kernel.interactions == null ? 0 : kernel.interactions.powerCount();
+            powers = new double[powerCount];
+            powerStamp = new long[powerCount];
+            Arrays.fill(powerStamp, Long.MIN_VALUE);
             Arrays.fill(inSupport, true);
             composition = new double[count];
             a = new double[count];
@@ -1990,6 +2001,7 @@ public final class PengRobinsonKernel {
             Arrays.fill(compoundStamp, Long.MIN_VALUE);
             Arrays.fill(pairStamp, Long.MIN_VALUE);
             Arrays.fill(cellStamp, Long.MIN_VALUE);
+            Arrays.fill(powerStamp, Long.MIN_VALUE);
             Arrays.fill(composition, 0.0);
         }
     }

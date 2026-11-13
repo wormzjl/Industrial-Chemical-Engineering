@@ -385,4 +385,53 @@ class PairInteractionsTest {
         assertEquals(1, identical.pairCount());
         assertTrue(identical.temperatureDependent());
     }
+
+    /**
+     * P21 (wave B): the power table gives the direct {@code pow}'s bits, on a table reused across temperatures and
+     * shared by every pair, and one {@code pow} per distinct exponent of a preparation in place of one per term. The
+     * network package's own model, on arbitrary positive pure-component values (the identity does not need them physical).
+     */
+    @Test void powerTableKeepsTheBitsAndComputesEachDistinctPowerOnce() {
+        var catalog = MaterialCatalog.bundled();
+        var model = com.wormzjl.icheme.science.fluid.thermo.SpinePackageData.of(catalog,
+                com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(catalog)).interactions();
+        int n = model.componentCount();
+        int pairs = model.pairCount();
+        var random = new java.util.Random(20261113L);
+        double[] s = new double[n], sDt = new double[n], sDt2 = new double[n], b = new double[n];
+        for (int i = 0; i < n; i++) {
+            s[i] = 1.0 + 9.0 * random.nextDouble();
+            sDt[i] = -1.0e-2 * random.nextDouble();
+            sDt2[i] = 1.0e-5 * random.nextDouble();
+            b[i] = 1.0e-5 * (1.0 + random.nextDouble());
+        }
+        double[] expected = new double[pairs], expectedDt = new double[pairs], expectedDt2 = new double[pairs];
+        double[] value = new double[pairs], valueDt = new double[pairs], valueDt2 = new double[pairs];
+        double[] powers = new double[model.powerCount()];
+        long[] stamp = new long[model.powerCount()];
+        java.util.Arrays.fill(stamp, Long.MIN_VALUE);
+        int terms = 0;
+        java.util.BitSet used = new java.util.BitSet();
+        for (int pair = 0; pair < pairs; pair++) {
+            terms += model.termCount(pair);
+            for (int at = 0; at < model.termCount(pair); at++) used.set(model.termPower(pair, at));
+        }
+        for (double t : new double[] {150.0, 298.15, 298.15, 371.3, 650.0, 150.0}) {
+            long bits = Double.doubleToLongBits(t);
+            model.evaluate(t, s, sDt, sDt2, b, expected, expectedDt, expectedDt2);
+            for (int pair = 0; pair < pairs; pair++) {
+                model.evaluatePair(pair, t, bits, powers, stamp, s, sDt, sDt2, b, value, valueDt, valueDt2);
+            }
+            for (int pair = 0; pair < pairs; pair++) {
+                assertEquals(Double.doubleToRawLongBits(expected[pair]), Double.doubleToRawLongBits(value[pair]), "k at " + t);
+                assertEquals(Double.doubleToRawLongBits(expectedDt[pair]), Double.doubleToRawLongBits(valueDt[pair]), "k' at " + t);
+                assertEquals(Double.doubleToRawLongBits(expectedDt2[pair]), Double.doubleToRawLongBits(valueDt2[pair]), "k'' at " + t);
+            }
+        }
+        assertEquals(model.powerCount(), used.cardinality(), "every distinct exponent belongs to a term");
+        assertTrue(model.powerCount() <= terms);
+        System.out.println(String.format(Locale.ROOT,
+                "P21 network package: %d components, %d pairs, pow calls per full preparation %d (one per term) -> %d (one per distinct exponent)",
+                n, pairs, terms, model.powerCount()));
+    }
 }

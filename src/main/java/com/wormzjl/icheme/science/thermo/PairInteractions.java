@@ -2,6 +2,9 @@ package com.wormzjl.icheme.science.thermo;
 
 import com.wormzjl.icheme.science.math.DeterministicMath;
 
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -49,6 +52,13 @@ public final class PairInteractions {
     private final double[] termCoefficient;
     /** {@code B_kl/A_kl - 1}. */
     private final double[] termExponent;
+    /**
+     * The distinct exponents of all terms (by their bits, in order of first use) and, per term, the index of its own:
+     * pairs that touch the same group pair share one {@code pow} per temperature ({@link #evaluatePair(int, double, long,
+     * double[], long[], double[], double[], double[], double[], double[], double[], double[])}).
+     */
+    private final double[] distinctExponent;
+    private final int[] termPower;
     private final boolean temperatureDependent;
 
     private PairInteractions(int componentCount, int[] first, int[] second, double[] constantValue, boolean[] groupPair,
@@ -61,6 +71,20 @@ public final class PairInteractions {
         this.termStart = termStart;
         this.termCoefficient = termCoefficient;
         this.termExponent = termExponent;
+        this.termPower = new int[termExponent.length];
+        Map<Long, Integer> seen = new HashMap<>();
+        double[] distinct = new double[termExponent.length];
+        for (int term = 0; term < termExponent.length; term++) {
+            long key = Double.doubleToRawLongBits(termExponent[term]);
+            Integer index = seen.get(key);
+            if (index == null) {
+                index = seen.size();
+                seen.put(key, index);
+                distinct[index] = termExponent[term];
+            }
+            termPower[term] = index;
+        }
+        this.distinctExponent = Arrays.copyOf(distinct, seen.size());
         boolean dependent = false;
         for (boolean value : groupPair) dependent |= value;
         this.temperatureDependent = dependent;
@@ -77,6 +101,12 @@ public final class PairInteractions {
     public int second(int pair) { return second[pair]; }
     /** True when at least one pair follows the group-contribution rule. */
     public boolean temperatureDependent() { return temperatureDependent; }
+    /** The number of distinct group-term exponents: the size of a caller's power table. */
+    public int powerCount() { return distinctExponent.length; }
+    /** The number of group terms of {@code pair} (zero for a constant pair). */
+    public int termCount(int pair) { return termStart[pair + 1] - termStart[pair]; }
+    /** The power-table index of term {@code at} of {@code pair}. */
+    public int termPower(int pair, int at) { return termPower[termStart[pair] + at]; }
 
     /**
      * Fills {@code k_ij(T)}, {@code dk_ij/dT} and {@code d^2k_ij/dT^2} per declared pair.
@@ -106,6 +136,21 @@ public final class PairInteractions {
      */
     public void evaluatePair(int pair, double temperatureKelvin, double[] sqrtA, double[] sqrtADt, double[] sqrtADt2,
                              double[] coVolumes, double[] value, double[] firstDerivative, double[] secondDerivative) {
+        evaluatePair(pair, temperatureKelvin, 0L, null, null, sqrtA, sqrtADt, sqrtADt2, coVolumes,
+                value, firstDerivative, secondDerivative);
+    }
+
+    /**
+     * {@link #evaluatePair(int, double, double[], double[], double[], double[], double[], double[], double[])} on a
+     * caller-owned power table of {@link #powerCount()} entries: entry {@code d} holds {@code (298.15/T)^e_d} once its
+     * stamp equals {@code temperatureBits} ({@link Double#doubleToLongBits} of {@code temperatureKelvin}), and is filled
+     * by the first term that needs it otherwise. The same {@code pow} call on the same arguments, so the same bits; a
+     * table shared by pairs at one temperature computes each distinct power once. A stamp the caller initialises to a
+     * value no temperature has ({@link Long#MIN_VALUE}) marks an entry as empty.
+     */
+    public void evaluatePair(int pair, double temperatureKelvin, long temperatureBits, double[] powers, long[] powerStamp,
+                             double[] sqrtA, double[] sqrtADt, double[] sqrtADt2, double[] coVolumes,
+                             double[] value, double[] firstDerivative, double[] secondDerivative) {
         if (!groupPair[pair]) {
             value[pair] = constantValue[pair];
             firstDerivative[pair] = 0.0;
@@ -119,7 +164,18 @@ public final class PairInteractions {
         double energyDt2 = 0.0;
         for (int term = termStart[pair]; term < termStart[pair + 1]; term++) {
             double exponent = termExponent[term];
-            double contribution = termCoefficient[term] * DeterministicMath.pow(ratio, exponent);
+            double power;
+            if (powers == null) {
+                power = DeterministicMath.pow(ratio, exponent);
+            } else {
+                int d = termPower[term];
+                if (powerStamp[d] != temperatureBits) {
+                    powers[d] = DeterministicMath.pow(ratio, exponent);
+                    powerStamp[d] = temperatureBits;
+                }
+                power = powers[d];
+            }
+            double contribution = termCoefficient[term] * power;
             energy += contribution;
             energyDt -= exponent * contribution * inverseT;
             energyDt2 += exponent * (exponent + 1.0) * contribution * inverseT * inverseT;
