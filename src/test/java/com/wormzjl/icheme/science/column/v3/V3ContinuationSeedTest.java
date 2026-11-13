@@ -52,17 +52,17 @@ class V3ContinuationSeedTest {
             V3ColumnTopology target = grid(SCHEDULE.get(index));
             String pair = SCHEDULE.get(index - 1) + "-to-" + SCHEDULE.get(index);
 
-            assertEquals(0.0, V3ColumnCalculator.sourcePosition(target.condenserNode(), source, target),
+            assertEquals(0.0, V3ContinuationLadder.sourcePosition(target.condenserNode(), source, target),
                     pair + ": the condenser is a fixed point");
             assertEquals(source.reboilerNode(),
-                    V3ColumnCalculator.sourcePosition(target.reboilerNode(), source, target),
+                    V3ContinuationLadder.sourcePosition(target.reboilerNode(), source, target),
                     pair + ": the reboiler is a fixed point");
 
             // Monotone rather than strictly monotone: a clamped run of rectifying nodes shares one source
             // node, which is the whole cost of the clamp.
             double previous = Double.NEGATIVE_INFINITY;
             for (int node = 0; node <= target.reboilerNode(); node++) {
-                double position = V3ColumnCalculator.sourcePosition(node, source, target);
+                double position = V3ContinuationLadder.sourcePosition(node, source, target);
                 assertTrue(position >= previous, pair + ": node " + node + " must not walk back up the profile");
                 assertTrue(position >= 0.0 && position <= source.reboilerNode(),
                         pair + ": node " + node + " read outside the source column at " + position);
@@ -75,7 +75,7 @@ class V3ContinuationSeedTest {
         }
         // The rung the plateau was measured on: tray 36 of the 40-tray grid is the tray above its feed, and
         // the unclamped map gave it position 27.22 — 22 % of the 30-tray grid's feed tray, node 28.
-        assertEquals(27.0, V3ColumnCalculator.sourcePosition(36, grid(30), grid(40)));
+        assertEquals(27.0, V3ContinuationLadder.sourcePosition(36, grid(30), grid(40)));
     }
 
     /** A ramp rung maps a grid onto itself, and it must do so exactly: every position is its own node. */
@@ -83,7 +83,7 @@ class V3ContinuationSeedTest {
     void aGridMapsOntoItselfAsTheIdentity() {
         V3ColumnTopology grid = grid(REQUESTED_STAGES);
         for (int node = 0; node <= grid.reboilerNode(); node++) {
-            assertEquals((double) node, V3ColumnCalculator.sourcePosition(node, grid, grid));
+            assertEquals((double) node, V3ContinuationLadder.sourcePosition(node, grid, grid));
         }
     }
 
@@ -194,7 +194,7 @@ class V3ContinuationSeedTest {
                 new V3ColumnSpecification.CondenserOutletTemperature(400.0),
                 new V3ColumnSpecification.OrganicRefluxRatio(1.0),
                 new V3ColumnSpecification.ReboilerDuty(0.0)));
-        V3ColumnInput grid = V3ColumnCalculator.withStageGeometry(input, stageCount);
+        V3ColumnInput grid = V3ContinuationLadder.withStageGeometry(input, stageCount);
         assertEquals(stageCount, grid.stageCount());
         return V3ColumnTopology.twoPhase(grid.stageCount(), grid.feedStageNumber());
     }

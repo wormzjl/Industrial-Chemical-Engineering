@@ -71,7 +71,7 @@ class V3VacuumStartupTest {
         var input = input(fixture,8,6,150000,0.5,1878930.312805997,List.of(),List.of());
         var problem = V3ColumnProblemResolver.resolve(input,V3CondenserPhaseBranch.LIQUID_ONLY);
         var seed = state(problem,fixture.getAsJsonObject("interpolated"));
-        assertSame(seed,V3ColumnCalculator.projectedSeedOrPrevious(problem,
+        assertSame(seed,V3ContinuationLadder.projectedSeedOrPrevious(problem,
                 V3PengRobinsonThermo.fromRegisteredPackage(input.packageId()),seed,V3SolveControl.UNBOUNDED));
     }
 
