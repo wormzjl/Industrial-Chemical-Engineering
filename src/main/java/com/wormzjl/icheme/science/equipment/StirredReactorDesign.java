@@ -38,19 +38,14 @@ final class StirredReactorDesign extends UnitDesign {
     /** An impeller's tip speed, m/s, for the datasheet's speed: glass-lined impellers run at about 3 to 5. */
     static final double TIP_SPEED = 3.5;
 
-    @Override
-    public double minSize() {
-        return 1;
-    }
-
-    @Override
-    public double maxSize() {
-        return 4;
-    }
-
-    @Override
-    public double sizeStep() {
-        return .2;
+    StirredReactorDesign() {
+        // minSupport: The bottom valve's clearance: 1 m keeps 2.1 m under the deck's beams at every size; the survey's
+        // 0.9 to 3 m.
+        // Computed in its overrides: minLength, maxLength.
+        super(new Sizes(1, 4, .2,
+                Sizes.COMPUTED, Sizes.COMPUTED,
+                1, 3,
+                Orientation.VERTICAL, "stirred_reactor.diameter", "stirred_reactor.straight_side", "stirred_reactor.clearance", true));
     }
 
     /** The straight side, whole metres: 0.7 D at least (DIN 28136 small reactors are squat, 0.65 to 1.2 D), 1 m at least. */
@@ -68,42 +63,6 @@ final class StirredReactorDesign extends UnitDesign {
     @Override
     public int defaultLength(double size) {
         return Math.max(minLength(size), Math.min(maxLength(size), (int) Math.round(1.1 * size)));
-    }
-
-    /** The bottom valve's clearance: 1 m keeps 2.1 m under the deck's beams at every size; the survey's 0.9 to 3 m. */
-    @Override
-    public int minSupport(double size, int length) {
-        return 1;
-    }
-
-    @Override
-    public int maxSupport() {
-        return 3;
-    }
-
-    @Override
-    public Orientation orientation() {
-        return Orientation.VERTICAL;
-    }
-
-    @Override
-    public boolean moves() {
-        return true;
-    }
-
-    @Override
-    public String sizeRow() {
-        return "stirred_reactor.diameter";
-    }
-
-    @Override
-    public String lengthRow() {
-        return "stirred_reactor.straight_side";
-    }
-
-    @Override
-    public String supportRow() {
-        return "stirred_reactor.clearance";
     }
 
     @Override

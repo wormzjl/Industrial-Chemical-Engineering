@@ -26,40 +26,12 @@ final class PumpDesign extends UnitDesign {
     static final double DEFAULT_HEAD = 100;
     static final int DEFAULT_POLES = 2;
 
-    @Override
-    public double minSize() {
-        return ProcessUnit.SUCTION_STEP;
-    }
-
-    @Override
-    public double maxSize() {
-        // The largest discharge whose suction, one size larger (ProcessUnit.pumpSuction), is a pipe's largest.
-        return .6;
-    }
-
-    @Override
-    public double sizeStep() {
-        return ProcessUnit.SUCTION_STEP;
-    }
-
-    @Override
-    public int minSupport(double size, int length) {
-        return 0;
-    }
-
-    @Override
-    public int maxSupport() {
-        return 0;
-    }
-
-    @Override
-    public Orientation orientation() {
-        return Orientation.HORIZONTAL;
-    }
-
-    @Override
-    public boolean moves() {
-        return true;
+    PumpDesign() {
+        // maxSize: The largest discharge whose suction, one size larger (ProcessUnit.pumpSuction), is a pipe's largest.
+        super(new Sizes(ProcessUnit.SUCTION_STEP, .6, ProcessUnit.SUCTION_STEP,
+                1, 1,
+                0, 0,
+                Orientation.HORIZONTAL, "pump_discharge", null, null, true));
     }
 
     @Override
@@ -96,16 +68,6 @@ final class PumpDesign extends UnitDesign {
             case "base_speed" -> duty.withBaseSpeed(Math.clamp(UnitDesign.designSpeed(EquipmentShape.Kind.PUMP,duty)+steps*100,300,com.wormzjl.icheme.science.machine.Motor.MAXIMUM_RPM));
             default -> duty;
         };
-    }
-
-    @Override
-    public String sizeRow() {
-        return "pump_discharge";
-    }
-
-    @Override
-    public String supportRow() {
-        return null;
     }
 
     @Override

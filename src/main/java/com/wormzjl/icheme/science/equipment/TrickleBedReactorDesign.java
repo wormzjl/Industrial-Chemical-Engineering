@@ -79,29 +79,12 @@ final class TrickleBedReactorDesign extends UnitDesign {
         return beds * bed(d) * Math.PI * d * d / 4;
     }
 
-    @Override
-    public double minSize() {
-        return 1;
-    }
-
-    @Override
-    public double maxSize() {
-        return 5;
-    }
-
-    @Override
-    public double sizeStep() {
-        return .5;
-    }
-
-    @Override
-    public int minLength(double size) {
-        return 1;
-    }
-
-    @Override
-    public int maxLength(double size) {
-        return 4;
+    TrickleBedReactorDesign() {
+        // Computed in its overrides: minSupport.
+        super(new Sizes(1, 5, .5,
+                1, 4,
+                Sizes.COMPUTED, EquipmentShape.MAX_SUPPORT,
+                Orientation.VERTICAL, "trickle_bed_reactor.diameter", "trickle_bed_reactor.beds", "trickle_bed_reactor.skirt", false));
     }
 
     /**
@@ -150,28 +133,8 @@ final class TrickleBedReactorDesign extends UnitDesign {
     }
 
     @Override
-    public Orientation orientation() {
-        return Orientation.VERTICAL;
-    }
-
-    @Override
-    public String sizeRow() {
-        return "trickle_bed_reactor.diameter";
-    }
-
-    @Override
-    public String lengthRow() {
-        return "trickle_bed_reactor.beds";
-    }
-
-    @Override
     public boolean lengthInMetres() {
         return false;
-    }
-
-    @Override
-    public String supportRow() {
-        return "trickle_bed_reactor.skirt";
     }
 
     @Override

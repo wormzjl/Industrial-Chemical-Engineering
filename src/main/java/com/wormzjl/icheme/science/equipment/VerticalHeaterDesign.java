@@ -20,19 +20,13 @@ import java.util.List;
  * to 2.75 diameters high (API 560's slenderness) and at most {@link ProcessUnit#MAX_RADIANT_HEIGHT} m.
  */
 final class VerticalHeaterDesign extends UnitDesign {
-    @Override
-    public double minSize() {
-        return 2.5;
-    }
-
-    @Override
-    public double maxSize() {
-        return 12;
-    }
-
-    @Override
-    public double sizeStep() {
-        return .5;
+    VerticalHeaterDesign() {
+        // minSupport: The floor 3 m up: room to stand under the burners.
+        // Computed in its overrides: minLength, maxLength.
+        super(new Sizes(2.5, 12, .5,
+                Sizes.COMPUTED, Sizes.COMPUTED,
+                3, EquipmentShape.MAX_SUPPORT,
+                Orientation.VERTICAL, "radiant_diameter", "radiant_height", "heater_floor", false));
     }
 
     @Override
@@ -43,32 +37,6 @@ final class VerticalHeaterDesign extends UnitDesign {
     @Override
     public int maxLength(double size) {
         return Math.min(ProcessUnit.MAX_RADIANT_HEIGHT, (int) Math.floor(2.75 * size + 1e-9));
-    }
-
-    /** The floor 3 m up: room to stand under the burners. */
-    @Override
-    public int minSupport(double size, int length) {
-        return 3;
-    }
-
-    @Override
-    public Orientation orientation() {
-        return Orientation.VERTICAL;
-    }
-
-    @Override
-    public String sizeRow() {
-        return "radiant_diameter";
-    }
-
-    @Override
-    public String lengthRow() {
-        return "radiant_height";
-    }
-
-    @Override
-    public String supportRow() {
-        return "heater_floor";
     }
 
     @Override

@@ -36,17 +36,6 @@ public abstract class UnitDesign {
         this.stated = java.util.Objects.requireNonNull(sizes, "sizes");
     }
 
-    /**
-     * Today's defaults for a design that does not state its sizes yet (removed in this batch when the last one does): the
-     * fields of the methods that were abstract are never read, since every such design overrides them.
-     */
-    private static final Sizes UNSTATED = new Sizes(Sizes.COMPUTED, Sizes.COMPUTED, Sizes.COMPUTED, 1, 1, Sizes.COMPUTED,
-            EquipmentShape.MAX_SUPPORT, null, null, null, null, false);
-
-    UnitDesign() {
-        this(UNSTATED);
-    }
-
     public double minSize() {
         return stated.minSize();
     }

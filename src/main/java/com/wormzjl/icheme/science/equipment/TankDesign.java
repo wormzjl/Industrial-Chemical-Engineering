@@ -68,67 +68,19 @@ final class TankDesign extends UnitDesign {
     /** Small-tank access stands on the right side (frame -x), clear of the centered front/back pipe lanes. */
     static final double LADDER = Math.PI;
 
-    @Override
-    public double minSize() {
-        return 4;
-    }
-
-    @Override
-    public double maxSize() {
-        return 40;
-    }
-
-    @Override
-    public double sizeStep() {
-        return 1;
-    }
-
-    /** The shell's height: 4 to 24 m (photo survey: large crude tanks stand 15 to 22 m). */
-    @Override
-    public int minLength(double size) {
-        return 4;
-    }
-
-    @Override
-    public int maxLength(double size) {
-        return 24;
+    TankDesign() {
+        // minLength: The shell's height: 4 to 24 m (photo survey: large crude tanks stand 15 to 22 m).
+        // minSupport: At grade on its ringwall.
+        super(new Sizes(4, 40, 1,
+                4, 24,
+                0, 0,
+                Orientation.VERTICAL, "tank.diameter", "tank.shell", null, false));
     }
 
     /** A new tank's shell: 0.6 D (the concept sheet's 20 m tank on a 12 m shell), within its range. */
     @Override
     public int defaultLength(double size) {
         return Math.max(minLength(size), Math.min(maxLength(size), (int) Math.round(.6 * size)));
-    }
-
-    /** At grade on its ringwall. */
-    @Override
-    public int minSupport(double size, int length) {
-        return 0;
-    }
-
-    @Override
-    public int maxSupport() {
-        return 0;
-    }
-
-    @Override
-    public Orientation orientation() {
-        return Orientation.VERTICAL;
-    }
-
-    @Override
-    public String sizeRow() {
-        return "tank.diameter";
-    }
-
-    @Override
-    public String lengthRow() {
-        return "tank.shell";
-    }
-
-    @Override
-    public String supportRow() {
-        return null;
     }
 
     @Override
