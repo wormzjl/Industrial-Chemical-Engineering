@@ -46,11 +46,20 @@ public final class TowerTransfer {
     /** The lowest temperature the nozzle's flash searches, K. */
     private static final double COLDEST = 150;
     /** The fill coefficient, kg dry air/(s m³) at 2 kg dry air/(s m²), the ambient air, and utility water. */
-    private record Calibration(FluidThermodynamics model,double coefficient,Liquid water) {
-        Calibration with(double fitted){return new Calibration(model,fitted,water);}
+    private record Calibration(double coefficient,Liquid water) {
+        Calibration with(double fitted){return new Calibration(fitted,water);}
     }
-    // A single immutable record is safely published. A reload or another package cannot borrow its predecessor's fit.
-    private static volatile Calibration calibration;
+    /**
+     * The fits of one whole model's views, by model identity: each island's compound list has its own view
+     * ({@link FluidThermodynamics#on}), and each view is fitted once, however the islands' calls interleave. A new whole
+     * model (a reload, another time factor or package) starts its own map and releases its predecessor's fits; it never
+     * borrows them.
+     */
+    private record Fits(FluidThermodynamics whole,java.util.concurrent.ConcurrentHashMap<FluidThermodynamics,Calibration> byModel) {}
+    private static volatile Fits fits;
+    /** The fits made since the class loaded (a test's count). */
+    private static final java.util.concurrent.atomic.AtomicInteger FITTED=new java.util.concurrent.atomic.AtomicInteger();
+    static int fitted(){return FITTED.get();}
 
     /**
      * What a tower's sprays deliver, per second (COOLING_TOWER_PLAN.md 3.1): mol/s per component on the conserved basis of
@@ -342,14 +351,19 @@ public final class TowerTransfer {
         return b;
     }
     private static Calibration calibration(FluidThermodynamics model) {
-        var cached=calibration;
-        if(cached!=null&&cached.model()==model)return cached;
-        var base=new Calibration(model,0,utilityWater(model,308.15));
+        var whole=model.whole();var slot=fits;
+        if(slot==null||slot.whole()!=whole)synchronized(TowerTransfer.class) {
+            slot=fits;
+            if(slot==null||slot.whole()!=whole)fits=slot=new Fits(whole,new java.util.concurrent.ConcurrentHashMap<>());
+        }
+        return slot.byModel().computeIfAbsent(model,TowerTransfer::fit);
+    }
+    private static Calibration fit(FluidThermodynamics model) {
+        FITTED.incrementAndGet();
+        var base=new Calibration(0,utilityWater(model,308.15));
         DoubleUnaryOperator excess=log->contact(base.with(DeterministicMath.exp(log)),base.water(),2,2,2,1).outletTemperature()-298.15;
         double lo=DeterministicMath.log(.0001),hi=DeterministicMath.log(100);
-        var fitted=base.with(DeterministicMath.exp(root(excess,lo,excess.applyAsDouble(lo),hi,excess.applyAsDouble(hi),1e-10)));
-        calibration=fitted;
-        return fitted;
+        return base.with(DeterministicMath.exp(root(excess,lo,excess.applyAsDouble(lo),hi,excess.applyAsDouble(hi),1e-10)));
     }
     static double referenceOutlet(FluidThermodynamics model){var fit=calibration(model);return contact(fit,fit.water(),2,2,2,1).outletTemperature();}
     /** The calibration point as a fill's result: one square metre, 2 kg/s of utility water from 35 °C against 2 kg/s of dry air (L/G 1). */
