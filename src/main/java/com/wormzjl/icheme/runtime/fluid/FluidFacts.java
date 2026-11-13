@@ -162,10 +162,10 @@ final class FluidFacts {
         /** A custom solid's ledger key, as {@link WorldTopologyLedger.MaterialTotal#plus} books it. */
         String key(){return id+"@"+size;}
     }
-    private static void solids(Fields f,List<Solid> solids) {
+    static void solids(Fields f,List<Solid> solids) {
         f.list(solids,(s,p)->s.text(p.id).text(p.revision).f64(p.density).f64(p.heatCapacity).text(p.size).f64(p.mass));
     }
-    private static List<Solid> solids(Record r) {
+    static List<Solid> solids(Record r) {
         return r.list(List.of(),s->new Solid(s.text(""),s.text(""),s.f64(0),s.f64(0),s.text(""),s.f64(0)));
     }
     /** The saved populations as the records {@code record} names; a population it names no record for (null) is left out. */
@@ -178,16 +178,16 @@ final class FluidFacts {
         if(inventory.populations().size()!=populations.size())throw new IllegalArgumentException("Saved solid populations not in canonical form");
         return inventory;
     }
-    private static void uuid(Fields f,UUID id){f.record(u->u.i64(id.getMostSignificantBits()).i64(id.getLeastSignificantBits()));}
-    private static UUID uuid(Record r){return r.record(null,u->new UUID(u.i64(0),u.i64(0)));}
+    static void uuid(Fields f,UUID id){f.record(u->u.i64(id.getMostSignificantBits()).i64(id.getLeastSignificantBits()));}
+    static UUID uuid(Record r){return r.record(null,u->new UUID(u.i64(0),u.i64(0)));}
     /** A rack lane is written only when there is one: a block's position keeps its schema-1 record. */
-    private static void position(Fields f,PhysicalFluidTopology.Position p){f.record(q->{q.text(p.dimension()).i32(p.x()).i32(p.y()).i32(p.z());if(p.lane()!=0)q.i32(p.lane());});}
-    private static PhysicalFluidTopology.Position position(Record r) {
+    static void position(Fields f,PhysicalFluidTopology.Position p){f.record(q->{q.text(p.dimension()).i32(p.x()).i32(p.y()).i32(p.z());if(p.lane()!=0)q.i32(p.lane());});}
+    static PhysicalFluidTopology.Position position(Record r) {
         return r.record(null,q->{var dimension=q.text("");int x=q.i32(0),y=q.i32(0),z=q.i32(0),lane=q.i32(0);
             try{return new PhysicalFluidTopology.Position(dimension,x,y,z,lane);}catch(IllegalArgumentException invalid){throw q.invalid(invalid.getMessage());}});
     }
-    private static <T> T required(T value,Record r,String what){if(value==null)throw r.invalid("missing "+what);return value;}
-    private static <T> T valid(Record r,String what,java.util.function.Supplier<T> build) {
+    static <T> T required(T value,Record r,String what){if(value==null)throw r.invalid("missing "+what);return value;}
+    static <T> T valid(Record r,String what,java.util.function.Supplier<T> build) {
         try{return build.get();}catch(IllegalArgumentException|NullPointerException invalid){throw r.invalid(what+": "+invalid.getMessage());}
     }
 
@@ -258,132 +258,53 @@ final class FluidFacts {
             var snapshot=new WorldTopologyLedger.Snapshot(onlineTick,nextIdentity,active,events,constructed,destroyed,basis,pending,restated,units,parts,electricStores(),health,builds,batch,converting);
             new WorldTopologyLedger(snapshot);return snapshot;
         }
+        /**
+         * A builder of these facts (batch 2026-11-13-codebase-review, D-R5): each component starts at the default its read gives
+         * a world written before it; the identity counter, the basis and the two totals have none (the read requires them).
+         */
+        static Builder builder(){return new Builder();}
+        /** The facts of a world as its {@link FactsSection sections} read them: one setter per component. */
+        static final class Builder {
+            private long nextIdentity;private WorldTopologyLedger.FluidBasis basis;private List<WorldTopologyLedger.Registration> registrations=List.of();
+            private WorldTopologyLedger.MaterialTotal constructed,destroyed;private List<Recovery> recoveries=List.of();private WorldTopologyLedger.Restated restated=WorldTopologyLedger.Restated.NONE;
+            private List<String> removedMovers=List.of();private List<ColumnUnit> columns=List.of();private List<ShaftUnit> shafts=List.of();
+            private Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores;private Map<Long,Double> health=Map.of();
+            private WorldTopologyLedger.Builds builds=WorldTopologyLedger.Builds.NONE;private List<StillUnit> stills=List.of();private List<ConverterUnit> converters=List.of();
+            private Builder(){}
+            Builder nextIdentity(long value){nextIdentity=value;return this;}
+            Builder basis(WorldTopologyLedger.FluidBasis value){basis=value;return this;}
+            Builder registrations(List<WorldTopologyLedger.Registration> value){registrations=value;return this;}
+            Builder constructed(WorldTopologyLedger.MaterialTotal value){constructed=value;return this;}
+            Builder destroyed(WorldTopologyLedger.MaterialTotal value){destroyed=value;return this;}
+            Builder recoveries(List<Recovery> value){recoveries=value;return this;}
+            Builder restated(WorldTopologyLedger.Restated value){restated=value;return this;}
+            Builder removedMovers(List<String> value){removedMovers=value;return this;}
+            Builder columns(List<ColumnUnit> value){columns=value;return this;}
+            Builder shafts(List<ShaftUnit> value){shafts=value;return this;}
+            /** Null: a world written before schema 11, read as unmetered stores for its powered units ({@link World#electricStores}). */
+            Builder stores(Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> value){stores=value;return this;}
+            Builder health(Map<Long,Double> value){health=value;return this;}
+            Builder builds(WorldTopologyLedger.Builds value){builds=value;return this;}
+            Builder stills(List<StillUnit> value){stills=value;return this;}
+            Builder converters(List<ConverterUnit> value){converters=value;return this;}
+            World build(){return new World(nextIdentity,basis,registrations,constructed,destroyed,recoveries,restated,removedMovers,columns,shafts,stores,health,builds,stills,converters);}
+        }
     }
-    static byte[] world(WorldTopologyLedger.Snapshot s) {
-        return section(f->{
-            var b=s.basis();f.count(s.nextIdentity()).record(q->q.text(b.packageId()).list(b.components(),(c,id)->c.text(id)).text("").text(b.revision()));
-            var active=new ArrayList<>(s.active().values());active.sort(Comparator.comparingLong(r->r.device().id()));
-            f.list(active,FluidFacts::registration);
-            f.record(t->total(t,s.constructed())).record(t->total(t,s.destroyed()));
-            var recoveries=new TreeMap<>(s.recoveries());
-            f.list(recoveries.entrySet(),(q,e)->{var r=e.getValue();uuid(q,e.getKey());position(q,r.position());q.list(r.player()==null?List.<UUID>of():List.of(r.player()),FluidFacts::uuid);
-                solids(q,Solid.of(r.solids()));q.f64(r.energyJoule());});
-            var restated=s.restated();
-            f.record(q->q.f64(restated.energy()).list(new TreeMap<>(restated.removedMoles()).entrySet(),(e,m)->e.text(m.getKey()).f64(m.getValue()))
-                    .list(new TreeMap<>(restated.removedSolids()).entrySet(),(e,m)->e.text(m.getKey()).f64(m.getValue())));
-            // Schema 6: the column units, by identity.
-            f.list(new TreeMap<>(s.columns()).values(),FluidFacts::column);
-            // Schema 10: the shaft units, by identity.
-            f.list(new TreeMap<>(s.shafts()).values(),FluidFacts::shaft);
-            // Schema 11: the electric stores, by unit identity: content (J) and whether metered.
-            f.list(new TreeMap<>(s.stores()).entrySet(),(q,e)->q.count(e.getKey()).f64(e.getValue().joules()).bool(e.getValue().metered()));
-            // Schema 12: the pumps' health, by device identity, only pumps below 1 (a pump without an entry is new).
-            f.list(new TreeMap<>(s.health()).entrySet(),(q,e)->q.count(e.getKey()).f64(e.getValue()));
-            // Schema 15: the build facts, line paints by identity and structures by origin. A structure's shape is its
-            // shell's own SNBT, made once when it was recorded.
-            var builds=s.builds();
-            f.list(new TreeMap<>(builds.paints()).entrySet(),(q,e)->q.count(e.getKey()).i32(e.getValue().primary()).i32(e.getValue().secondary()));
-            var structures=new ArrayList<>(builds.structures().entrySet());structures.sort(Map.Entry.comparingByKey(ORIGIN_ORDER));
-            f.list(structures,(q,e)->{position(q,e.getKey());var t=e.getValue();q.text(t.text()).i32(t.paint().body()).i32(t.paint().structure()).text(t.name());});
-            // Schema 15: each rack lane's rack frame, by identity.
-            f.list(new TreeMap<>(builds.racks()).entrySet(),(q,e)->q.count(e.getKey()).name(e.getValue().facing()).name(e.getValue().shape()));
-            // Schema 15: each named one-block device's name (N1), by identity.
-            f.list(new TreeMap<>(builds.names()).entrySet(),(q,e)->q.count(e.getKey()).text(e.getValue()));
-            // Schema 16: the batch stills, by their pots' identities.
-            f.list(new TreeMap<>(s.stills()).values(),FluidFacts::still);
-            // Schema 24, last: the fluid converters, by their vessels' identities.
-            f.list(new TreeMap<>(s.converters()).values(),FluidFacts::converter);
-        });
-    }
-    private static final Comparator<PhysicalFluidTopology.Position> ORIGIN_ORDER=Comparator.comparing(PhysicalFluidTopology.Position::dimension)
-            .thenComparingInt(PhysicalFluidTopology.Position::x).thenComparingInt(PhysicalFluidTopology.Position::y).thenComparingInt(PhysicalFluidTopology.Position::z);
     /**
-     * Schema 8: a structure's record. Its shape reads through the shell's own reader and repairs ({@code ShapeRepair}),
-     * repairs logged as a shell logs them. A shape of a kind this build retired is dropped: the shell's load removes the
-     * structure whole (backward-compat decision D6), and the registry cannot place it again. Returns null for that.
+     * The topology unit's facts: one root record, whose fields are the runs of the {@link FactsSection sections} in the
+     * order of {@link FactsSection#ALL}. Each section writes and reads its own fields; the record's required fields are
+     * checked once every section has read.
      */
-    private static WorldTopologyLedger.Structure structure(Record q,PhysicalFluidTopology.Position origin,String text,int body,int structure,String name) {
-        net.minecraft.nbt.CompoundTag tag;
-        try{tag=net.minecraft.nbt.TagParser.parseTag(text);}
-        catch(com.mojang.brigadier.exceptions.CommandSyntaxException invalid){throw q.invalid("structure at "+origin+": its shape does not read: "+invalid.getMessage());}
-        var read=com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity.readShape(tag);
-        if(read.retired()!=null){warn("structure at "+origin+" is a retired "+read.retired()+"; the registry drops it");return null;}
-        if(read.shape()==null)throw q.invalid("structure at "+origin+": no shape");
-        for(var repair:read.repairs())IChemE.LOGGER.warn("equipment_compat kind={} at={} repair={}",read.shape().kind().name().toLowerCase(Locale.ROOT),origin,repair);
-        var paint=valid(q,"structure paint at "+origin,()->new com.wormzjl.icheme.science.equipment.Paint(body,structure));
-        if(!name.isEmpty()&&!WorldTopologyLedger.named(name))throw q.invalid("structure name at "+origin);
-        return WorldTopologyLedger.Structure.of(read.shape(),paint,name);
+    static byte[] world(WorldTopologyLedger.Snapshot s) {
+        return section(f->{for(var part:FactsSection.ALL)part.write(f,s);});
     }
     static World world(byte[] data,int offset,int length) {
         return read(data,offset,length,"facts of the topology unit",f->{
-            long next=f.count(0);
-            // The third field is retired (schema 1's hash of the package data, owner decision 2026-10-26): written empty,
-            // read as empty or as that hash, never used. A schema 1 basis has no revision: "" restates the world once.
-            var basis=f.record(null,q->{var id=q.text("");var components=q.list(List.of(),c->c.text(""));var retired=q.text("");var revision=q.text("");
-                if(!retired.isEmpty()&&!retired.matches("[0-9a-f]{64}:[0-9a-f]{64}"))throw q.invalid("basis: invalid retired fingerprint");
-                return valid(q,"basis",()->new WorldTopologyLedger.FluidBasis(id,components,revision));});
-            var removedMovers=new ArrayList<String>();
-            var registrations=new ArrayList<>(f.list(List.of(),q->registration(q,removedMovers)));registrations.removeIf(Objects::isNull);
-            if(!removedMovers.isEmpty())warn("one-block movers removed (batch 2026-10-28-old-mover-removal): "+removedMovers);
-            var constructed=f.record(null,FluidFacts::total);var destroyed=f.record(null,FluidFacts::total);
-            var recoveries=f.list(List.of(),q->{var id=required(uuid(q),q,"recovery identity");var position=required(position(q),q,"recovery position");
-                var player=q.list(List.of(),FluidFacts::uuid);var solids=solids(q);double energy=q.f64(0);
-                return new Recovery(id,position,player.isEmpty()?null:player.getFirst(),solids,energy);});
-            var restated=f.record(WorldTopologyLedger.Restated.NONE,q->{double energy=q.f64(0);
-                var moles=new HashMap<String,Double>();for(var e:q.list(List.of(),e->Map.entry(e.text(""),e.f64(0))))moles.put(e.getKey(),e.getValue());
-                var solids=new HashMap<String,Double>();for(var e:q.list(List.of(),e->Map.entry(e.text(""),e.f64(0))))solids.put(e.getKey(),e.getValue());
-                return valid(q,"restated totals",()->new WorldTopologyLedger.Restated(energy,moles,solids));});
-            var columns=f.list(List.<ColumnUnit>of(),FluidFacts::column);
-            // A world written before schema 10 has no shaft units: no part turned before them.
-            var shafts=f.list(List.<ShaftUnit>of(),FluidFacts::shaft);
-            // A world written before schema 11 has no electric stores: null, read as unmetered stores for its powered units.
-            var saved=f.list(null,q->{long id=q.count(0);double joules=q.f64(0);boolean metered=q.bool(true);
-                return valid(q,"electric store "+id,()->Map.entry(id,new com.wormzjl.icheme.science.machine.ElectricStore.Facts(joules,metered)));});
-            Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores=null;
-            if(saved!=null){stores=new HashMap<>();for(var e:saved)if(stores.put(e.getKey(),e.getValue())!=null)throw f.invalid("duplicate electric store "+e.getKey());}
-            // A world written before schema 12 has no pump health: every pump is new (health 1).
-            var health=new HashMap<Long,Double>();
-            for(var e:f.list(List.<Map.Entry<Long,Double>>of(),q->{long id=q.count(0);double value=q.f64(1);
-                if(!(value>=0&&value<=1))throw q.invalid("pump health "+id+": "+value);return Map.entry(id,value);}))
-                if(health.put(e.getKey(),e.getValue())!=null)throw f.invalid("duplicate pump health "+e.getKey());
-            // Schema 15: the build facts. A record written before them holds none, and the blocks teach them later.
-            var paints=new HashMap<Long,WorldTopologyLedger.LinePaint>();
-            for(var e:f.list(List.<Map.Entry<Long,WorldTopologyLedger.LinePaint>>of(),q->{long id=q.count(0);int primary=q.i32(com.wormzjl.icheme.science.equipment.Paint.BARE),secondary=q.i32(primary);
-                    var paint=valid(q,"line paint of "+id,()->new WorldTopologyLedger.LinePaint(primary,secondary));if(id<=0||paint.bare())throw q.invalid("line paint of "+id);return Map.entry(id,paint);}))
-                if(paints.put(e.getKey(),e.getValue())!=null)throw f.invalid("duplicate line paint "+e.getKey());
-            var structures=new HashMap<PhysicalFluidTopology.Position,WorldTopologyLedger.Structure>();var origins=new HashSet<PhysicalFluidTopology.Position>();
-            for(var e:f.list(List.<Map.Entry<PhysicalFluidTopology.Position,Optional<WorldTopologyLedger.Structure>>>of(),q->{var origin=required(position(q),q,"structure origin");var text=q.text("");
-                    int body=q.i32(0),structure=q.i32(0);var name=q.text("");if(origin.lane()!=0||text.isEmpty())throw q.invalid("structure at "+origin);
-                    return Map.entry(origin,Optional.ofNullable(structure(q,origin,text,body,structure,name)));})) {
-                if(!origins.add(e.getKey()))throw f.invalid("duplicate structure at "+e.getKey());
-                e.getValue().ifPresent(s->structures.put(e.getKey(),s));
-            }
-            // Schema 15: the rack frames. A record written before them holds none, and the racks teach them at bind.
-            var racks=new HashMap<Long,WorldTopologyLedger.RackFrame>();
-            for(var e:f.list(List.<Map.Entry<Long,WorldTopologyLedger.RackFrame>>of(),q->{long id=q.count(0);var facing=q.name(PhysicalFluidTopology.Direction.class,null);var shape=q.name(WorldTopologyLedger.RackShape.class,null);
-                    if(id<=0||facing==null||shape==null)throw q.invalid("rack frame of "+id);return Map.entry(id,valid(q,"rack frame of "+id,()->new WorldTopologyLedger.RackFrame(facing,shape)));}))
-                if(racks.put(e.getKey(),e.getValue())!=null)throw f.invalid("duplicate rack frame "+e.getKey());
-            // Schema 15: the device names. A record written before them holds none, and the blocks teach them at bind.
-            var names=new HashMap<Long,String>();
-            for(var e:f.list(List.<Map.Entry<Long,String>>of(),q->{long id=q.count(0);var name=q.text("");
-                    if(id<=0||!WorldTopologyLedger.named(name))throw q.invalid("device name of "+id);return Map.entry(id,name);}))
-                if(names.put(e.getKey(),e.getValue())!=null)throw f.invalid("duplicate device name "+e.getKey());
-            // Schema 16: the batch stills. A world written before schema 16 has none.
-            var stills=f.list(List.<StillUnit>of(),FluidFacts::still);
-            // Schema 24: the fluid converters. A world written before schema 24 has none.
-            var converters=f.list(List.<ConverterUnit>of(),FluidFacts::converter);
-            required(basis,f,"basis");required(constructed,f,"constructed total");required(destroyed,f,"destroyed total");
-            return new World(next,basis,registrations,constructed,destroyed,recoveries,restated,List.copyOf(removedMovers),columns,shafts,stores,health,
-                    new WorldTopologyLedger.Builds(paints,structures,racks,names),stills,converters);
+            var world=World.builder();
+            for(var part:FactsSection.ALL)part.read(f,world);
+            required(world.basis,f,"basis");required(world.constructed,f,"constructed total");required(world.destroyed,f,"destroyed total");
+            return world.build();
         });
-    }
-    private static void total(Fields f,WorldTopologyLedger.MaterialTotal t) {
-        f.doubles(t.moles()).f64(t.totalEnergy()).list(new TreeMap<>(t.solidMasses()).entrySet(),(e,m)->e.text(m.getKey()).f64(m.getValue()));
-    }
-    private static WorldTopologyLedger.MaterialTotal total(Record f) {
-        var moles=f.doubles(null);double energy=f.f64(0);var solids=new HashMap<String,Double>();
-        for(var e:f.list(List.of(),e->Map.entry(e.text(""),e.f64(0))))if(solids.put(e.getKey(),e.getValue())!=null)throw f.invalid("duplicate solid total");
-        required(moles,f,"total moles");return valid(f,"total",()->new WorldTopologyLedger.MaterialTotal(moles,energy,solids));
     }
     private static void tower(Fields f,com.wormzjl.icheme.science.fluid.network.CoolingTower t) {
         f.name(t.draft()).f64(t.width()).f64(t.fillDepth()).f64(t.height()).count(t.columns()).count(t.rows())
@@ -396,7 +317,7 @@ final class FluidFacts {
         double speed=f.f64(0),target=f.f64(298.15);
         return valid(f,"cooling tower",()->new com.wormzjl.icheme.science.fluid.network.CoolingTower(draft,w,fill,height,columns,rows,mode,speed,target));
     }
-    private static void registration(Fields f,WorldTopologyLedger.Registration r) {
+    static void registration(Fields f,WorldTopologyLedger.Registration r) {
         var d=r.device();var g=d.geometry();var s=r.spec();
         f.count(d.id());position(f,d.position());f.name(d.kind()).name(d.facing())
                 .record(q->q.f64(g.length()).f64(g.diameter()).f64(g.roughness()).f64(g.minorLoss()).count(g.channels()))
@@ -413,7 +334,7 @@ final class FluidFacts {
      * A saved registration. A one-block pump or compressor (portless) is gone: with {@code removed} it is read whole, named
      * there and returned as null; without (a queued event's replacement, which is state) it does not read.
      */
-    private static WorldTopologyLedger.Registration registration(Record f,List<String> removed) {
+    static WorldTopologyLedger.Registration registration(Record f,List<String> removed) {
         long id=f.count(0);var position=position(f);
         var kind=f.name(TopologyCompiler.Kind.class,null);var facing=f.name(PhysicalFluidTopology.Direction.class,null);
         var geometry=f.record(null,q->{double length=q.f64(0),diameter=q.f64(0),roughness=q.f64(0),minorLoss=q.f64(0);
@@ -452,136 +373,19 @@ final class FluidFacts {
         }
         return valid(f,"registration "+id,()->new WorldTopologyLedger.Registration(new PhysicalFluidTopology.Device(id,position,kind,facing,geometry,control,ports,generatorEnabled,cutoff,filter,(int)joints,(int)slots,points,heat.isEmpty()?null:heat.getFirst(),suspendedBy,false),spec,revision));
     }
-    /**
-     * A column unit (schema 6, batch 2026-10-28-column-operation): its identity, origin, run switch, setpoints, stations
-     * (each a port by name, which one, its port device, its valve, its account and its solids) and totals; its further
-     * condenser water sides (schema 8), its air condenser surface (schema 9) and its utility sides (schema 21).
-     */
-    private static void column(Fields f,ColumnUnit u) {
-        var s=u.setpoints();var t=u.totals();
-        f.count(u.id());position(f,u.master());f.bool(u.running())
-                .record(q->setpoints(q,s))
-                .list(u.stations(),(q,st)->{q.name(st.port()).count(st.index()).count(st.device()).count(st.valve()).record(a->account(a,st.account()));solids(q,Solid.of(st.solids()));})
-                .record(q->q.record(a->account(a,t.taken())).record(a->account(a,t.produced())).f64(t.reboiler()).f64(t.condenser()).f64(t.pumparounds()))
-                .count(u.condenser()).bool(u.leaving())
-                // Schema 8 (S3b): the condenser's further water sides, one a shell in parallel.
-                .list(u.condensers().isEmpty()?List.<Long>of():u.condensers().subList(1,u.condensers().size()),(q,side)->q.count(side))
-                // Schema 9 (U2): the air condenser's bare tube, m².
-                .f64(u.airSurface())
-                // Schema 21 (W4): the utility sides of the reboiler and of each pumparound's cooler.
-                .record(q->q.list(u.utilities().reboiler(),(p,side)->p.count(side)).list(u.utilities().pumparounds(),(p,sides)->p.list(sides,(e,side)->e.count(side))))
-                // Schema 21 (W5): the powered members, the fan sides, the reflux pump's movers and each pumparound pump's.
-                .record(q->q.list(u.members().fans(),(p,m)->p.count(m)).list(u.members().reflux(),(p,m)->p.count(m)).list(u.members().pumparounds(),(p,ms)->p.list(ms,(e,m)->e.count(m))));
-    }
-    private static ColumnUnit column(Record f) {
-        long id=f.count(0);var master=position(f);boolean running=f.bool(false);
-        var setpoints=f.record(null,FluidFacts::setpoints);
-        var stations=f.list(List.of(),q->{var port=q.name(com.wormzjl.icheme.science.plant.column.Port.class,null);long index=q.count(0),device=q.count(0),valve=q.count(0);
-            var account=q.record(null,FluidFacts::account);required(port,q,"station port");required(account,q,"station account");var held=solids(q);
-            if(index>=ColumnUnit.MAXIMUM_STATIONS)throw q.invalid("station index "+index);
-            // Crystals melt where they arrive, so what an account holds is inert: its saved record is the whole material.
-            return valid(q,"column station",()->new ColumnUnit.Station(port,(int)index,device,valve,account,inventory(held,s->new SolidMaterial(s.id,s.revision,s.density,s.heatCapacity,null))));});
-        var totals=f.record(null,q->{var taken=q.record(null,FluidFacts::account);var produced=q.record(null,FluidFacts::account);double reboiler=q.f64(0),condenser=q.f64(0),pumparounds=q.f64(0);
-            required(taken,q,"taken total");required(produced,q,"produced total");
-            return valid(q,"column totals",()->new ColumnUnit.Totals(taken,produced,reboiler,condenser,pumparounds));});
-        long condenser=f.count(0);boolean leaving=f.bool(false);
-        // A unit written before schema 8 has one water side at most.
-        var further=f.list(List.<Long>of(),q->q.count(0));
-        var condensers=new ArrayList<Long>();if(condenser!=0)condensers.add(condenser);condensers.addAll(further);
-        if(condenser==0&&!further.isEmpty())throw f.invalid("column condenser sides");
-        // A unit written before schema 9 has no air condenser surface: its air takes any duty, as before.
-        double air=f.f64(0);
-        // A unit written before schema 21 has no utility sides: its reboiler and pumparound duties stay free until its next Start.
-        var utilities=f.record(ColumnUnit.Utilities.NONE,q->{var reboiler=q.list(List.<Long>of(),p->p.count(0));var pumparounds=q.list(List.<List<Long>>of(),p->p.list(List.<Long>of(),s->s.count(0)));
-            return valid(q,"column utilities",()->new ColumnUnit.Utilities(reboiler,pumparounds));});
-        // A unit written before schema 21 has no members: none draws power until its next Start.
-        var members=f.record(ColumnUnit.Members.NONE,q->{var fans=q.list(List.<Long>of(),p->p.count(0));var reflux=q.list(List.<Long>of(),p->p.count(0));var pumparounds=q.list(List.<List<Long>>of(),p->p.list(List.<Long>of(),s->s.count(0)));
-            return valid(q,"column members",()->new ColumnUnit.Members(fans,reflux,pumparounds));});
-        required(master,f,"column origin");required(setpoints,f,"column setpoints");required(totals,f,"column totals");
-        return valid(f,"column unit "+id,()->new ColumnUnit(id,master,running,setpoints,stations,totals,condensers,null,leaving,air,utilities,members));
-    }
-    private static Fields setpoints(Fields q,com.wormzjl.icheme.science.plant.column.Setpoints s) {
+    static Fields setpoints(Fields q,com.wormzjl.icheme.science.plant.column.Setpoints s) {
         return q.f64(s.designFeedRate()).f64(s.feedRate()).f64(s.condenserTemperature()).f64(s.refluxRatio()).f64(s.reboilerPerFeed())
                 .doubles(s.steamPerFeed()).doubles(s.drawsPerFeed()).doubles(s.pumparoundsPerFeed());
     }
-    private static com.wormzjl.icheme.science.plant.column.Setpoints setpoints(Record q) {
+    static com.wormzjl.icheme.science.plant.column.Setpoints setpoints(Record q) {
         double design=q.f64(0),rate=q.f64(0),condenser=q.f64(0),reflux=q.f64(0),reboiler=q.f64(0);
         var steam=q.doubles(new double[0]);var draws=q.doubles(new double[0]);var pumparounds=q.doubles(new double[0]);
         return valid(q,"column setpoints",()->new com.wormzjl.icheme.science.plant.column.Setpoints(design,rate,condenser,reflux,reboiler,steam,draws,pumparounds));
     }
-    /**
-     * A batch still (schema 16, batch 2026-11-09-batch-distiller): its pot's identity, its water side, distillate, vent and
-     * burners (0 for none), its design (pot volume, heater by name, built-in condenser, trays), its head's two accounts, the
-     * heat left in its burning item (J), its firing (0 to 1), its reflux valve (the ratio, then whether it is closed: a closed
-     * valve's ratio is +Infinity, which a facts number cannot hold, so it is written as the default ratio and the flag) and its
-     * totals (J).
-     */
-    private static void still(Fields f,StillUnit u) {
-        f.count(u.id()).count(u.water()).count(u.distillate()).count(u.vent()).count(u.burners())
-                .f64(u.volume()).name(u.heater()).bool(u.condenser()).count(u.stages())
-                .record(a->account(a,u.head())).record(a->account(a,u.venting()))
-                .f64(u.burning()).f64(u.firing()).f64(u.closedValve()?StillUnit.DEFAULT_REFLUX:u.reflux()).bool(u.closedValve()).f64(u.heated()).f64(u.condensed());
-    }
-    private static StillUnit still(Record f) {
-        long id=f.count(0),water=f.count(0),distillate=f.count(0),vent=f.count(0),burners=f.count(0);
-        double volume=f.f64(0);var heater=f.name(com.wormzjl.icheme.science.plant.still.BatchStill.Heater.class,null);boolean condenser=f.bool(false);long stages=f.count(0);
-        var head=f.record(null,FluidFacts::account);var venting=f.record(null,FluidFacts::account);
-        double burning=f.f64(0),firing=f.f64(StillUnit.DEFAULT_FIRING),valve=f.f64(StillUnit.DEFAULT_REFLUX);double reflux=f.bool(false)?Double.POSITIVE_INFINITY:valve;double heated=f.f64(0),condensed=f.f64(0);
-        required(heater,f,"still heater");required(head,f,"still head account");required(venting,f,"still vent account");
-        if(stages>com.wormzjl.icheme.science.column.still.StillColumn.MAX_STAGES)throw f.invalid("still trays "+stages);
-        return valid(f,"batch still "+id,()->new StillUnit(id,water,distillate,vent,burners,volume,heater,condenser,(int)stages,head,venting,burning,firing,reflux,heated,condensed));
-    }
-    /**
-     * A fluid converter (schema 24, batch 2026-11-12-fluid-conversion): its vessel's identity, its drain port and valve, its
-     * fill port and valve (0 for none), whether it is the closed variant, its mode by name, its rate (L per process second),
-     * deadband and four level thresholds (fill fractions; a facts number is finite, so none is written -1), its Forge tank's capacity, fluid id and contents
-     * (mB), its remainder (L), and its account's fluid id and litres. Every field absent reads as a converter built empty and off.
-     */
-    private static void converter(Fields f,ConverterUnit u) {
-        f.count(u.id()).count(u.drain()).count(u.drainValve()).count(u.fill()).count(u.fillValve()).bool(u.closed())
-                .name(u.mode()).f64(u.maxRate()).f64(u.deadband()).list(Arrays.stream(u.thresholds()).boxed().toList(),(q,t)->q.f64(Double.isNaN(t)?-1:t))
-                .count(u.capacity()).text(u.fluid()).count(u.stored()).f64(u.remainder()).text(u.accountFluid()).f64(u.account());
-    }
-    private static ConverterUnit converter(Record f) {
-        long id=f.count(0),drain=f.count(0),drainValve=f.count(0),fill=f.count(0),fillValve=f.count(0);boolean closed=f.bool(false);
-        var mode=f.name(ConverterUnit.Mode.class,ConverterUnit.Mode.OFF);double rate=f.f64(0),deadband=f.f64(ConverterUnit.DEFAULT_DEADBAND);
-        var none=new double[ConverterUnit.THRESHOLDS];Arrays.fill(none,Double.NaN);
-        var saved=f.list(Arrays.stream(none).boxed().toList(),q->{double t=q.f64(-1);return t<0?Double.NaN:t;});
-        if(saved.size()!=ConverterUnit.THRESHOLDS)throw f.invalid("fluid converter "+id+": "+saved.size()+" level thresholds");
-        var thresholds=saved.stream().mapToDouble(Double::doubleValue).toArray();
-        long capacity=f.count(0);var fluid=f.text("");long stored=f.count(0);double remainder=f.f64(0);var accountFluid=f.text("");double account=f.f64(0);
-        return valid(f,"fluid converter "+id,()->new ConverterUnit(id,drain,drainValve,fill,fillValve,closed,mode,rate,deadband,thresholds,capacity,fluid,stored,remainder,accountFluid,account));
-    }
-    private static void account(Fields f,com.wormzjl.icheme.science.plant.column.ColumnCycle.Account a){f.doubles(a.moles()).f64(a.energy());}
-    private static com.wormzjl.icheme.science.plant.column.ColumnCycle.Account account(Record f) {
+    static void account(Fields f,com.wormzjl.icheme.science.plant.column.ColumnCycle.Account a){f.doubles(a.moles()).f64(a.energy());}
+    static com.wormzjl.icheme.science.plant.column.ColumnCycle.Account account(Record f) {
         var moles=f.doubles(null);double energy=f.f64(0);required(moles,f,"account moles");
         return valid(f,"column account",()->new com.wormzjl.icheme.science.plant.column.ColumnCycle.Account(moles,energy));
-    }
-    /**
-     * A shaft unit (schema 10, batch 2026-11-03-rotating-machinery W3): its identity, kind by name, position, axis, ends (each a
-     * cell, its step and whether power leaves), fluid device, rated power, design speed, poles, drive by name, settings
-     * (running, mode by name, set point, power limit, ratio) and trip by name. Its engine state is in the topology state.
-     */
-    private static void shaft(Fields f,ShaftUnit u) {
-        var s=u.settings();
-        f.count(u.id()).name(u.kind());position(f,u.position());f.count(u.axis())
-                .list(u.ends(),(q,e)->{position(q,e.cell());q.i32(e.dx()).i32(e.dy()).i32(e.dz()).bool(e.output());})
-                .count(u.fluid()).f64(u.ratedPower()).f64(u.designSpeed()).count(u.poles()).name(u.drive())
-                .record(q->q.bool(s.running()).name(s.mode()).f64(s.setPoint()).f64(s.powerLimit()).f64(s.ratio()))
-                .name(u.trip());
-    }
-    private static ShaftUnit shaft(Record f) {
-        long id=f.count(0);var kind=f.name(com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.class,null);var position=position(f);long axis=f.count(0);
-        var ends=f.list(List.<ShaftUnit.End>of(),q->{var cell=required(position(q),q,"shaft end cell");int dx=q.i32(0),dy=q.i32(0),dz=q.i32(0);boolean output=q.bool(false);
-            return valid(q,"shaft end",()->new ShaftUnit.End(cell,dx,dy,dz,output));});
-        long fluid=f.count(0);double power=f.f64(0),speed=f.f64(0);long poles=f.count(0);
-        var drive=f.name(com.wormzjl.icheme.science.equipment.MachineDuty.Drive.class,com.wormzjl.icheme.science.equipment.MachineDuty.Drive.FIXED);
-        var settings=f.record(ShaftUnit.Settings.DEFAULT,q->{boolean running=q.bool(true);var mode=q.name(com.wormzjl.icheme.science.machine.ShaftTrain.Mode.class,com.wormzjl.icheme.science.machine.ShaftTrain.Mode.SPEED);
-            double set=q.f64(0),limit=q.f64(0),ratio=q.f64(0);return valid(q,"shaft settings",()->new ShaftUnit.Settings(running,mode,set,limit,ratio));});
-        var trip=f.name(com.wormzjl.icheme.science.machine.ShaftTrain.Trip.class,com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE);
-        required(kind,f,"shaft unit kind");required(position,f,"shaft unit position");
-        if(axis>2||poles>12||ends.size()>ShaftUnit.MAXIMUM_ENDS)throw f.invalid("shaft unit "+id);
-        return valid(f,"shaft unit "+id,()->new ShaftUnit(id,kind,position,(int)axis,ends,fluid,power,speed,(int)poles,drive,settings,trip,null));
     }
     /** A heat side's unit (schema 5): its unit and side by name, area, partner, control and heat in transit; an air cooler's fans (schema 11). */
     private static void heatUnit(Fields f,HeatUnit h) {
@@ -1098,7 +902,7 @@ final class FluidFacts {
         if(!s.revision.equals(record.revision())||s.density!=record.density()||s.heatCapacity!=record.heatCapacity())warn("solid "+s.id+" is read as its current record "+record.revision());
         return record;
     }
-    private static void warn(String detail){IChemE.LOGGER.warn("fluid_checkpoint status=FACTS detail={}",detail);}
+    static void warn(String detail){IChemE.LOGGER.warn("fluid_checkpoint status=FACTS detail={}",detail);}
     /** What the new data no longer has, booked: component moles and solid masses by id. */
     private static final class Removed {
         final Map<String,Double> moles=new TreeMap<>(),solids=new TreeMap<>();
