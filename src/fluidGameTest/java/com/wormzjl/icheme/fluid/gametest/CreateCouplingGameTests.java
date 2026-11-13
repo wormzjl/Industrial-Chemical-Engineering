@@ -46,10 +46,14 @@ public final class CreateCouplingGameTests {
         CreateSide.run(helper);
     }
 
-    /** A gearbox at its smallest size, headed {@code heading}. */
+    /**
+     * A 30 kW gearbox, headed {@code heading}: above the pump's shaft power at its geared speed (its smallest casing, about
+     * 8 kW rated), so the gearbox does not limit the train (code base review N7: a train passes no more than its gearboxes'
+     * ratings; the smallest, 0.75 kW, would hold it GEAR LIMITED).
+     */
     private static EquipmentShape gearbox(EquipmentShape.Heading heading) {
         var d = UnitDesign.of(EquipmentShape.Kind.GEARBOX);
-        double size = d.minSize();
+        double size = d.snap(30);
         int length = d.defaultLength(size);
         return EquipmentShape.designed(EquipmentShape.Kind.GEARBOX, size, length, heading, d.defaultSupport(size, length), ProcessUnit.Bank.ONE);
     }

@@ -88,11 +88,21 @@ public final class ShaftTrain {
      * wide open); {@code measured} and {@code target} the regulated quantity (flow m³/s or discharge pressure Pa, NaN for
      * none), with the slice before's speed and measure ({@code previousSpeed} rpm, NaN for none).
      * {@code admissionAvailable} also covers a pressurized but closed internal inlet at an established zero-load speed.
+     * {@code gearLimit} the most power the driver may give through its train's gearboxes, W ({@link ShaftNetwork#gearLimit},
+     * code base review N7; +∞ for none).
      */
     public record Measure(double demand, double available, boolean steamShort, double measured, double target, double previousSpeed, double previousMeasured,
-                          boolean admissionAvailable) {
+                          boolean admissionAvailable, double gearLimit) {
+        public Measure(double demand, double available, boolean steamShort, double measured, double target, double previousSpeed, double previousMeasured,
+                       boolean admissionAvailable) {
+            this(demand, available, steamShort, measured, target, previousSpeed, previousMeasured, admissionAvailable, Double.POSITIVE_INFINITY);
+        }
         public Measure(double demand, double available, boolean steamShort, double measured, double target, double previousSpeed, double previousMeasured) {
             this(demand, available, steamShort, measured, target, previousSpeed, previousMeasured, available > 0);
+        }
+        /** This measure with the train's gear limit {@code watts}. */
+        public Measure withGearLimit(double watts) {
+            return new Measure(demand, available, steamShort, measured, target, previousSpeed, previousMeasured, admissionAvailable, watts);
         }
         public static Measure of(double demand) {
             return new Measure(demand, 0, false, Double.NaN, Double.NaN, Double.NaN, Double.NaN);
@@ -113,6 +123,25 @@ public final class ShaftTrain {
             return new Step(0, Trip.NO_POWER, tripped(Trip.NO_POWER), 0, 0);
         double demand = Math.max(0, measure.demand());
         double set = regulated(driver, speed, measure);
+        return geared(drive(driver, speed, measure, demand, set), speed, measure.gearLimit(), demand, set);
+    }
+
+    /**
+     * A train's gearboxes limit its power (code base review N7: protective, no wear): where the drive's next speed would ask
+     * more than the gear limit (its demand there by the cube law), the speed takes the damped power-limited step to the
+     * limit instead ({@link SpeedControl#powerLimited}), and the train says {@code GEAR LIMITED} while that holds it below its
+     * set speed; a governor's feed-forward asks the power at that speed. A train below its gear limit keeps the drive's step.
+     */
+    private static Step geared(Step step, double speed, double gear, double demand, double set) {
+        if (step.trip() != Trip.NONE || !(step.speed() > 0) || !(speed > 0) || !(demand > 0) || !(gear > 0) || gear == Double.POSITIVE_INFINITY) return step;
+        if (demand * cube(step.speed() / speed) < gear * (1 - 1e-9)) return step;
+        double capped = SpeedControl.powerLimited(speed, gear, demand, step.speed());
+        if (!(capped < set * (1 - 1e-9))) return step;
+        return new Step(capped, Trip.NONE, "GEAR LIMITED", Math.min(step.governorPower(), demand * cube(capped / speed)), step.electricPower());
+    }
+
+    /** The drive's own step, before its train's gearboxes. */
+    private static Step drive(Driver driver, double speed, Measure measure, double demand, double set) {
         return switch (driver.drive()) {
             case FIXED_MOTOR -> demand > driver.ratedPower() * (1 + 1e-9)
                     ? new Step(0, Trip.OVERLOAD, "TRIPPED: OVERLOAD", 0, 0)

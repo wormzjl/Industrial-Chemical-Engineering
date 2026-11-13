@@ -877,6 +877,9 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         if (prime) run.available = primeMovers.available(d.id());
         var measure = prime ? new ShaftTrain.Measure(demand, run.available, false, Double.NaN, Double.NaN, state.previousSpeed(), state.previousMeasured(), primeMovers.firing(d.id()))
                 : new ShaftTrain.Measure(demand, run.available, steamShort, run.measured, run.target, state.previousSpeed(), state.previousMeasured(), run.available > 0 || idleSupply);
+        // N7: the train's gearboxes limit the driver's power to their ratings (a gearbox rated 0, from an older save, limits nothing).
+        double gear = ShaftNetwork.gearLimit(train, id -> {var u = topology.shaft(id); return u == null ? 0 : u.ratedPower();}, run::power);
+        measure = measure.withGearLimit(gear);
         // A motor needs its live feed and buffered energy: its draw is booked at this step, from its last booking to now, at the
         // power this step decided (reading A59); one that runs short stops here (NO POWER) and restarts on the cadence.
         boolean motor = d.kind() == ShaftNetwork.Kind.MOTOR && electric != null;
@@ -897,6 +900,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         double internal=0;for(var m:train.driven())if(!createLoads.contains(m.id()))internal+=run.power(m.id())/m.efficiency();
         double capacity=driver.drive()==ShaftTrain.Drive.TURBINE?Math.min(driver.limit(),run.available):driver.limit();
         if(driver.drive()==ShaftTrain.Drive.VARIABLE_MOTOR)capacity=com.wormzjl.icheme.science.machine.Motor.availablePower(capacity,driver.designSpeed(),step.speed());
+        capacity=Math.min(capacity,gear);
         for(var m:train.driven())if(createLoads.contains(m.id())){var u=topology.shaft(m.id());if(u!=null)host.output(u.position(),step.speed()*m.ratio(),step.speed()>0?Math.max(0,capacity-internal)*m.efficiency()/Math.max(1,train.driven().stream().filter(part->createLoads.contains(part.id())).count()):0);}
         run.trip = step.trip();
         run.status = step.status();

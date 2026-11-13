@@ -165,6 +165,71 @@ class ShaftTrainTest {
         assertEquals(847.85e3, step.electricPower(), .001 * 847.85e3, "over the IE3 95.8 % of a 1 MW motor");
     }
 
+    /** The motor, gearbox (4.27) and compressor train above, the gearbox rated {@code rating} W at its input. */
+    private static double gearLimit(double rating, double compressor) {
+        var train = ShaftNetwork.compile(List.of(
+                new ShaftNetwork.Part(1, ShaftNetwork.Kind.MOTOR, null, -1, List.of(new ShaftNetwork.End(new ShaftNetwork.Cell("d", 0, 0, 0), 1, 0, 0, true)), 0, 2950),
+                ShaftNetwork.Part.shaft(2, new ShaftNetwork.Cell("d", 1, 0, 0), 0),
+                new ShaftNetwork.Part(3, ShaftNetwork.Kind.GEARBOX, null, -1, List.of(new ShaftNetwork.End(new ShaftNetwork.Cell("d", 2, 0, 0), -1, 0, 0, false),
+                        new ShaftNetwork.End(new ShaftNetwork.Cell("d", 2, 0, 0), 1, 0, 0, true)), 4.27, 0),
+                ShaftNetwork.Part.shaft(4, new ShaftNetwork.Cell("d", 3, 0, 0), 0),
+                new ShaftNetwork.Part(5, ShaftNetwork.Kind.CASING, null, -1, List.of(new ShaftNetwork.End(new ShaftNetwork.Cell("d", 4, 0, 0), -1, 0, 0, false)), 0, 12597))).getFirst();
+        return ShaftNetwork.gearLimit(train, id -> id == 3 ? rating : 0, id -> id == 5 ? compressor : 0);
+    }
+
+    /**
+     * N7: the 796 kW compressor through a 750 kW gearbox. The gearbox passes all of the motor's 812 kW, so it caps the motor
+     * at 750 kW: the train steps down by the damped power-limited step, halving its error each slice under the cube law,
+     * to 2950 (750/812.2)^(1/3) = 2872.7 rpm, and says GEAR LIMITED. The motor alone (1 MW) would hold 2950 rpm.
+     */
+    @Test
+    void anUnderRatedGearboxHoldsItsTrainGearLimited() {
+        double demand = 796e3 / ShaftNetwork.GEAR_EFFICIENCY;
+        double limit = gearLimit(750e3, 796e3);
+        assertEquals(750e3, limit, 1e-6, "all the motor's power passes the gearbox");
+        var driver = motor(Drive.VARIABLE_MOTOR, 1e6);
+        assertEquals("RUNNING", ShaftTrain.step(driver, 2950, Measure.of(demand)).status(), "the motor alone holds it");
+        double speed = 2950, balance = 2950 * DeterministicCube.root(750e3 / demand);
+        assertEquals(2872.7, balance, .1);
+        double error = Math.log(speed / balance);
+        for (int i = 0; i < 24; i++) {
+            var step = ShaftTrain.step(driver, speed, Measure.of(demand * cube(speed / 2950)).withGearLimit(limit));
+            assertEquals("GEAR LIMITED", step.status(), "slice " + i);
+            assertEquals(Trip.NONE, step.trip(), "protective, no trip");
+            assertTrue(step.speed() < speed && step.speed() > balance * (1 - 1e-12), "slice " + i);
+            double next = Math.log(step.speed() / balance);
+            assertEquals(error / 2, next, 1e-9, "the error halves");
+            error = next;
+            speed = step.speed();
+        }
+        assertEquals(balance, speed, 1e-3, "at the gear limit");
+        // A gearbox rated above the demand changes nothing, bit for bit.
+        assertEquals(ShaftTrain.step(driver, 2950, Measure.of(demand)), ShaftTrain.step(driver, 2950, Measure.of(demand).withGearLimit(gearLimit(1e6, 796e3))));
+    }
+
+    /** N7: a gearbox rated 0 (an older save, a hand-built unit) or one with no load behind it limits nothing. */
+    @Test
+    void anUnratedGearboxLimitsNothing() {
+        assertEquals(Double.POSITIVE_INFINITY, gearLimit(0, 796e3));
+        assertEquals(Double.POSITIVE_INFINITY, gearLimit(750e3, 0), "nothing passes it");
+        var driver = motor(Drive.VARIABLE_MOTOR, 1e6);
+        double demand = 796e3 / ShaftNetwork.GEAR_EFFICIENCY;
+        assertEquals(ShaftTrain.step(driver, 2950, Measure.of(demand)), ShaftTrain.step(driver, 2950, Measure.of(demand).withGearLimit(gearLimit(0, 796e3))));
+    }
+
+    /**
+     * N7: a governed turbine behind a 20 kW gearbox, its pump asking 24.9 kW: GEAR LIMITED, and its governor asks only the
+     * power the gearbox passes at the next speed, not the demand at its set speed.
+     */
+    @Test
+    void aGearLimitedTurbineFeedsForwardOnlyWhatItsGearboxPasses() {
+        var step = ShaftTrain.step(turbine(true), 6000, new Measure(RATED, RATED, false, Double.NaN, Double.NaN, Double.NaN, Double.NaN).withGearLimit(20e3));
+        assertEquals("GEAR LIMITED", step.status());
+        assertEquals(6000 * Math.pow(20e3 / RATED, 1 / 6.), step.speed(), 1e-6);
+        assertEquals(RATED * cube(step.speed() / 6000), step.governorPower(), 1e-6);
+        assertTrue(step.governorPower() < RATED);
+    }
+
     /** The creative motor holds its set speed up to its limit (default 1 MW), then steps down as a drive at its limit does. */
     @Test
     void theCreativeMotorHoldsItsSpeedUpToItsLimit() {
