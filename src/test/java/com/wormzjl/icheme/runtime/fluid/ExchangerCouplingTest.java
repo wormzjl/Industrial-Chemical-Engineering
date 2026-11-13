@@ -88,11 +88,14 @@ class ExchangerCouplingTest {
         }
         /** A save and load: a new coordinator at this one's epoch, its islands decoded from this one's checkpoint image and
          * the heat in transit as the facts carry it (the transit as booked). */
-        Rig reloaded() {
+        Rig reloaded(){return reloaded(false);}
+        /** {@code reversed}: the islands registered in the reverse of the image's order (code base review R23). */
+        Rig reloaded(boolean reversed) {
             var saved=coordinator.snapshots();
             var image=FluidCheckpointCodec.encode(new FluidCheckpointCodec.Checkpoint(saved.stream().map(x->new FluidCheckpointCodec.IslandEntry("minecraft:overworld",model.domain().packageId(),x)).toList()),key->key.on(model));
             var copy=new Rig(policy);copy.epoch[0]=epoch[0];copy.hotIsland=hotIsland;copy.coldIsland=coldIsland;copy.heat.putAll(heat);
-            for(var entry:FluidCheckpointCodec.decode(image,key->key.on(model)).islands()){copy.coordinator.register(entry.snapshot(),model);copy.committed.put(entry.snapshot().id(),entry.snapshot().clock().committedTick());}
+            var entries=new ArrayList<>(FluidCheckpointCodec.decode(image,key->key.on(model)).islands());if(reversed)Collections.reverse(entries);
+            for(var entry:entries){copy.coordinator.register(entry.snapshot(),model);copy.committed.put(entry.snapshot().id(),entry.snapshot().clock().committedTick());}
             copy.coordinator.transit(PhysicalFluidTopology.sideIdentity(Math.min(HOT,COLD)),booked());
             return copy;
         }
@@ -621,6 +624,18 @@ class ExchangerCouplingTest {
         for(long island:new long[]{read.hotIsland,read.coldIsland})read.coordinator.snapshot(island);
         assertEquals(plain.coordinator.transits(),read.coordinator.transits(),"the heat in transit after a save");
         assertEquals(plainBookings,readBookings,"the ports' bookings after a save");
+    }
+    /**
+     * Code base review R23: the settled transit adds the heat each side booked past the side behind in a canonical order (the
+     * lower island's side first), so the same coupled pairs registered in either order read it bit for bit alike. At 29 s
+     * the sides on 5 s and 3 s cadences stand apart (500 and 540 ticks), so a side's booked heat past the other enters it.
+     */
+    @Test void theSettledTransitIsTheSameWhicheverOrderTheSidesAreRegisteredIn() {
+        var rig=waterPair(100,60,CertificatePolicy.disabled());rig.run(29);
+        var forward=rig.reloaded(false);var reversed=rig.reloaded(true);
+        assertNotEquals(forward.island(forward.hotIsland).clock().committedTick(),forward.island(forward.coldIsland).clock().committedTick(),"the sides stand apart");
+        assertNotEquals(Double.doubleToLongBits(forward.booked()),Double.doubleToLongBits(forward.transit()),"booked heat past the side behind enters the sum");
+        assertEquals(Double.doubleToLongBits(forward.transit()),Double.doubleToLongBits(reversed.transit()),"the settled transit");
     }
     private static boolean certified(Rig rig){return rig.island(rig.hotIsland).certificate().isPresent()&&rig.island(rig.coldIsland).certificate().isPresent();}
     /** Ports that record every span booked to them, its boundary energies, moles and pump work bit for bit. */

@@ -241,6 +241,9 @@ public final class IslandCoordinator {
      * exchanger holds in transit by its pair key (the lower of its two sides' connection ids), and the certified islands a
      * partner's commit woke, discarded at the engine's next decision point (plan section 5.2, form C). */
     private final Map<Long,Coupled> coupled=new HashMap<>();
+    /** The coupled sides by pair key, in the order they were first coupled (code base review R23): a pair's two sides
+     * without a scan of every side. */
+    private final Map<Long,List<Coupled>> pairSides=new HashMap<>();
     private final Map<Long,Long> sideOwners=new HashMap<>();
     private final Map<Long,Double> transits=new HashMap<>();
     private final Set<Long> toWake=new LinkedHashSet<>();
@@ -979,6 +982,7 @@ public final class IslandCoordinator {
         for(var island:staged){islands.put(island.id,island);ready.register(island.id,false);index(island);indexStock(island);reconsider(island);}
         // A side no island holds any more keeps no relay state; its unit's heat in transit stays until the unit is removed.
         coupled.keySet().removeIf(pipe->!sideOwners.containsKey(pipe));
+        pairSides.values().removeIf(sides->{sides.removeIf(side->coupled.get(side.pipe)!=side);return sides.isEmpty();});
         publisher.published(staged.stream().map(Island::snapshot).toList());
     }
     /** Whether vessel inventory {@code b} on {@code to} holds exactly what {@code a} on {@code from} holds, compared by compound id. */
@@ -1287,10 +1291,14 @@ public final class IslandCoordinator {
      */
     public double settledTransit(long pair) {
         owned();double joule=transits.getOrDefault(pair,0.);
-        Coupled a=null,b=null;for(var side:coupled.values())if(side.pair()==pair){if(a==null)a=side;else b=side;}
-        if(a==null||b==null)return joule;
+        var sides=pairSides.get(pair);if(sides==null||sides.size()<2)return joule;
+        Coupled a=sides.get(0),b=sides.get(1);
         var ia=other(b);var ib=other(a);if(ia==null||ib==null)return joule;
         long behind=Math.min(ia.clock.committedTick(),ib.clock.committedTick());
+        // A canonical order (code base review R23): the side of the lower island first, then the lower side identity. The scan
+        // this replaces added them in the order of a hash map's iteration, which a map's history can change (a loaded world
+        // against one that ran on), so the last bit of this sum, read only by the wake test (D4), depended on it.
+        if(ia.id>ib.id||ia.id==ib.id&&a.pipe>b.pipe){var t=a;a=b;b=t;}
         return joule+a.bookedPast(behind)+b.bookedPast(behind);
     }
     /** Restores an exchanger's heat in transit, J, from the world's facts (a load). */
@@ -1451,7 +1459,7 @@ public final class IslandCoordinator {
         for(var node:island.graph.reservoirs())if(node.kind()==PassiveNetwork.NodeKind.RESERVOIR)stockOwners.put(node.id(),island.id);
         for(long pipe:island.sides) {
             sideOwners.put(pipe,island.id);
-            var side=coupled.computeIfAbsent(pipe,p->new Coupled(p,partnerOf(island.graph,p),kindOf(island.graph,p)));
+            var side=coupled.computeIfAbsent(pipe,p->{var made=new Coupled(p,partnerOf(island.graph,p),kindOf(island.graph,p));pairSides.computeIfAbsent(made.pair(),k->new ArrayList<>(2)).add(made);return made;});
             if(side.current==null){
                 double rate=island.lastResult.map(last->last.advancedSeconds()>0?heat(last,pipe)/last.advancedSeconds():0.).orElse(0.);
                 side.record(new SideRecord(island.clock.committedTick(),stream(island.graph,island.lastResult.map(PassiveIntervalSolver.Result::endpointFlows).orElse(null),pipe,island.model),rate));
