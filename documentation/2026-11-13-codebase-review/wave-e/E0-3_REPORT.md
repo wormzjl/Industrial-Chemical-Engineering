@@ -2,6 +2,48 @@
 
 Brief: [WAVE_E_BRIEFS.md](../WAVE_E_BRIEFS.md), section "E0-3". Review row: [COLUMN_REVIEW.md](../COLUMN_REVIEW.md) S2.
 Subagent (Opus high), 2026-11-13. Structure only: no solve path, digest, published text, wire byte or saved string changes.
+Written without a compile or a test run; the main thread runs both (see "Tests for the main thread").
+
+## Summary
+
+1. **Survey** (step 1, tables below): 27 compare sites in the lane: 8 on attempt codes, 3 on audit families, 6 on ramp
+   kinds, 10 on open texts (event prefixes, a detail prefix, exception messages). All three typed groups are done whole.
+2. **Enums** (step 2), each constant carrying its old text as `text()`, and `toString()` returning that text too, so an
+   accidental concatenation still prints the old characters:
+   - `V3AttemptCode` (package-private, 10 constants): `STATE_DOMAIN`, `MAX_ITERATIONS`, `STALLED`,
+     `STALLED_SUPPORT_FLOOR`, `JACOBIAN_BAND_STRUCTURE`, `LINEAR_SINGULAR`, `LINEAR_ILL_CONDITIONED`,
+     `LINEAR_BACKWARD_ERROR_EXCEEDED`, `LINE_SEARCH_EXHAUSTED`, `INTERNAL_INVARIANT` (texts equal the names).
+     `linear(FailureCode)` replaces `"LINEAR_" + failure.code()` by an exhaustive switch over the band solver's three codes.
+     `Attempt.Failure` now holds `attemptCode()`; its `code()` stays, as the text. `failureCode(V3AttemptCode)` is an
+     exhaustive switch with no default (a new constant fails the compile) and maps every producer as the prefixes did.
+   - `V3AuditFamily` (public, 17 constants: the 16 auditor families and `UNAVAILABLE`; texts equal the names).
+     `Check` keeps `String family`: `V3InspectionCodec` decodes it from text (wire and NBT), the client shows it, and
+     fixtures build checks with families of their own (`"material"`, `"TEST"`, `"HOLLAND_BENCHMARK"`). Producers in
+     `src/main` call the new overloads `Check.pass/fail(V3AuditFamily, ...)`; the calculator's three compares read
+     `check.hasFamily(V3AuditFamily)`, which is `family.equals(text())`, the old test character for character.
+   - `V3RampKind` (package-private): `STEAM` `steam-ramp`, `WET` `wet-ramp`, `HEAT` `heat-ramp`, `DRAW` `draw-ramp`,
+     `COUPLED` `coupled-ramp`. `RampStep` holds `kind()`; `pathLabel()` stays, as the text, and is the only thing the
+     solve path and the energy-shift note concatenate. The first-rung test compares kinds, starting from `null` where it
+     started from `""` (no label was empty, so the first rung is still always "first"). The three `*_RAMP_LABEL`
+     constants are gone.
+3. **Open sets stay strings** (step 3, no code change): the event prefixes (`stage-trace support:`, `condenser phase
+   transition`, `flash-trace `, `stage-trace cutoff=`) and the event de-duplication `contains`; the `warning: ` detail
+   prefix; the off-band exception messages. Each is text with data after a fixed head. The compares do read the head
+   alone, so a split is allowed by the brief, but the events are a public `List<String>` that tests match by `contains`
+   and `startsWith` and that `V3TruncationFallback` re-publishes; a typed event record is a change of
+   `V3SolverDiagnostics`, not of a compare. The off-band messages are an identity test on an `IllegalStateException`'s
+   message against a named constant; a typed exception is a change of `V3NormalEquations` and the solver's catch
+   blocks. Left for the Rust result block's design.
+4. **Dead comparison removed** (step 4): the `CONVERGENCE_EVIDENCE` prefix in `failureCode`; no producer in `src/main`,
+   `src/test` or `tools/` emits it (its own commit, before the enums).
+5. **Lines changed** (`src/main`): +242 -101 over 8 files, of which +122 the three new enum files; `src/test`: +72 -3
+   (the new `V3ColumnCodesTest`, three lines of `V3StageContinuationTest`). Code guide `column-v3.md`: three lines.
+6. **What moves**: nothing a test reads. Every branch takes the same side (the text-to-constant map is one to one, and
+   each compare tests the same set of producers). Every published, hashed, sent or saved string keeps its characters:
+   `Check.family` is still the same text, `code()` and `pathLabel()` give the old texts, `solvePath` and the events are
+   built from them. One text changes, in no output: the `toString` of the package-private `Attempt.Failure` record
+   reads `attemptCode=` where it read `code=` (assertion messages only; no test or digest reads it).
+7. **Batch README**: no history line written here; the main thread owns `README.md` and `documentation/INDEX.md`.
 
 ## Step 1: survey
 
@@ -68,3 +110,24 @@ published event (`audit=<family>`); tests and tool fixtures build checks with th
 | any event text | (the list above) | calculator 2735 (`contains`: de-duplication) | diagnostics events |
 | check detail `warning: <text>` | auditor 597 | auditor 556 (`startsWith`) | result audit detail |
 | exception message `NEWTON_OFF_BAND_MESSAGE`, `DAMPED_NORMAL_OFF_BAND_MESSAGE` | solver 757; `V3NormalEquations` 161 | solver 521, 872, 885 (`equals`) | no (rethrown otherwise) |
+
+## Tests for the main thread
+
+The calculator, the solver and the auditor changed, and every column test loads them, so the affected set of
+`columnGates` is the whole group; the run below is the brief's list plus the readers of a changed accessor. What
+each run proves: the code compiles, every reference stays exact (no reference is re-recorded; any moved digest,
+printed line or count is a defect of this change, not a move), and the typed codes give the old texts.
+
+| Gradle task | Classes | Why |
+|---|---|---|
+| `columnGates --tests` | `V3ColumnCodesTest` (new) | the enum texts, `failureCode` on every code, `linear` on every band code, the `Check` overloads and `hasFamily` |
+| `columnGates --tests` | `V3BoundedSolvePathTest`, `V3StageContinuationTest`, `V3ColdStartTest`, `V3ColumnCalculatorTest`, `V3ConvergenceClosureTest`, `V3StageTraceCalculatorTest`, `V3LiteraturePresetTest`, `V3PumparoundSteamCalculatorTest`, `V3VacuumStartupTest`, `V3PathDependentInfeasibilityTest`, `V3SimultaneousColumnSolverTest`, `V3BandFactorizationCountTest`, `V3LearnedRecoveryTest` | the brief's list: solve paths, digests, events, failure codes, `Attempt.Failure.code()` |
+| `columnGates --tests` | `V3TruncationFallbackTest`, `V3CondenserPhaseAuditTest`, `V3AcceptanceAuditorLimitsTest`, `V3CarryOverEntrainmentTest`, `V3SideDrawAuditTest`, `V3PhaseTruncationTest`, `V3FreeWaterTrayTest`, `V3GradePresetCarryOverTest`, `V3TraceFloorSupportTest`, `V3PumparoundCalculatorTest`, `V3SideDrawCalculatorTest` | read audit families the auditor now sets through the enum, or the fallback's `audit=` event |
+| `columnGates --tests` (or `v3HollandBenchmark`) | `HollandExample32BenchmarkTest` | reads `Attempt.Failure.code()` |
+| `test --tests` | `com.wormzjl.icheme.network.ColumnWireTest`, `com.wormzjl.icheme.network.V3InspectionCodecTest`, `com.wormzjl.icheme.runtime.fluid.ColumnProbeTest`, `com.wormzjl.icheme.client.gui.flowsheet.FlowsheetExamplesTest` | the wire and NBT form of the audit (family as text), checks built from strings, the examples' column solves |
+| `holdGates --tests` | `FlowsheetColumnTest`, `ColumnEjectorTest`, `CrudeUnitSampleTest`, `SmallCrudeUnitTest`, `SmallUnitRecordingTest` | the indirect loaders that solve columns (sample sizing) |
+
+`equipmentGates` is not affected: its inputs hold none of the changed classes. `tools/` sources that compile against
+the changed classes and still compile unchanged: `tools/neural/V3WetQualificationProbe.java` and
+`tools/v3-cold-core-benchmark/.../V3ColdCoreBenchmarkWorker.java` (`family()` stays a `String`),
+`tools/neural-budget/java/V3BudgetTraceProbe.java` (the progress listener still takes the code as a `String`).
