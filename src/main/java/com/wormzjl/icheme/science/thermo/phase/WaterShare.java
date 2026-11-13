@@ -312,12 +312,13 @@ public final class WaterShare {
         double logPhi = (z - 1.0) - DeterministicMath.log(z - reducedB) - reducedA / (2.0 * SQRT_TWO * Math.max(reducedB, 1.0e-300))
                 * DeterministicMath.log((z + (1.0 + SQRT_TWO) * reducedB) / (z + (1.0 - SQRT_TWO) * reducedB));
         double rt = R * t, v = z * rt / p;
-        double den = v * v + 2.0 * b * v - b * b;
-        double dpdv = -rt / ((v - b) * (v - b)) + 2.0 * a * (v + b) / (den * den);
-        double dpdt = R / (v - b) - a1 / den;
+        double den = PengRobinsonKernel.cubicDenominator(v, b);
+        // The kernel's volumetric block: -rt is (-R) t and 2 rt is (2 R) t exactly, so these are the same doubles.
+        double dpdv = PengRobinsonKernel.pressureVolumeDerivative(t, v, a, b);
+        double dpdt = PengRobinsonKernel.pressureTemperatureDerivative(v, b, a1);
         if (!(dpdv < 0.0)) throw new IllegalArgumentException("Mechanically unstable pure-water root of the water share");
-        double dpdvv = 2.0 * rt / ((v - b) * (v - b) * (v - b)) + 2.0 * a / (den * den) - 8.0 * a * (v + b) * (v + b) / (den * den * den);
-        double dpdtv = -R / ((v - b) * (v - b)) + 2.0 * a1 * (v + b) / (den * den);
+        double dpdvv = PengRobinsonKernel.pressureSecondVolumeDerivative(t, v, a, b);
+        double dpdtv = PengRobinsonKernel.pressureTemperatureVolumeDerivative(v, b, a1);
         double vT = -dpdt / dpdv, vP = 1.0 / dpdv;
         double vTT = -(-a2 / den + 2.0 * dpdtv * vT + dpdvv * vT * vT) / dpdv;
         double vTP = -(dpdtv + dpdvv * vT) / (dpdv * dpdv);

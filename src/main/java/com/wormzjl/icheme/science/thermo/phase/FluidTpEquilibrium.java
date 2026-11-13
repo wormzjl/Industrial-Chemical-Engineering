@@ -1552,10 +1552,8 @@ public final class FluidTpEquilibrium {
         double a = w.first.aMix();
         double b = w.first.bMix();
         if (!(volume > b)) return Double.NaN;
-        double free = volume - b;
-        double denominator = volume * volume + 2.0 * b * volume - b * b;
-        double pressure = R * t / free - a / denominator;
-        double slope = -R * t / (free * free) + 2.0 * a * (volume + b) / (denominator * denominator);
+        double pressure = PengRobinsonKernel.cubicPressure(t, volume, a, b);
+        double slope = PengRobinsonKernel.pressureVolumeDerivative(t, volume, a, b);
         return pressure > 0.0 && slope < 0.0 && Double.isFinite(pressure) ? pressure : Double.NaN;
     }
 
