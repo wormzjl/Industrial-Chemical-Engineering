@@ -14,6 +14,7 @@ import com.wormzjl.icheme.science.thermo.PengRobinsonKernel.Root;
 import com.wormzjl.icheme.science.thermo.phase.CrystalSet.Crystal;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumRequest.Specification;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult.Classification;
+import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult.FailureKind;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult.UnsupportedReason;
 import com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium.Feed;
 import com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium.Settings;
@@ -176,10 +177,8 @@ final class CrystalEquilibrium {
      */
     private boolean splitChemicalPotentialsUsable(EquilibriumResult fluid, Feed material, Workspace w) {
         if (fluid.status() != EquilibriumResult.Status.NOT_CONVERGED) return false;
-        String detail = fluid.detail();
-        boolean unstableProduct = detail.startsWith(EquilibriumResult.UNSTABLE_PRODUCT)
-                || detail.startsWith(EquilibriumResult.CRITICAL_BAND) && detail.contains("): " + EquilibriumResult.UNSTABLE_PRODUCT);
-        if (!unstableProduct) return false;
+        // The kind, inside the critical band too (where the detail starts with CRITICAL_BAND before the product's failure).
+        if (fluid.failureKind() != FailureKind.UNSTABLE_PRODUCT) return false;
         if (!w.ownSplit) return false;
         for (int a = 0; a < material.presentCount; a++) {
             int i = material.present[a];
@@ -366,7 +365,7 @@ final class CrystalEquilibrium {
         while (true) {
             if (reduced != null && iterations > 0 && worst <= DEPOSITION_TOLERANCE) break;
             if (iterations >= CRYSTAL_ITERATIONS) {
-                return EquilibriumResult.notConverged(Specification.TP, contract.identity(), competition, "the crystal solve of " + c.id()
+                return EquilibriumResult.notConverged(Specification.TP, contract.identity(), competition, FailureKind.CRYSTAL_SOLVE, false, "the crystal solve of " + c.id()
                         + " did not converge in " + iterations + " re-flashes (|mu_i - mu_s|/RT = " + Math.abs(f) + ", the fluid "
                         + (reduced == null ? "a split with a product proved unstable" : reduced.classification()) + ")",
                         diagnostics(w, w.feedResult, false));
@@ -377,7 +376,7 @@ final class CrystalEquilibrium {
                 if (reduced == null) {
                     return crystalPhasesHold(fluid, c.id() + " forms and the fluid it leaves has three fluid phases (" + forces + ")", competition, w);
                 }
-                return EquilibriumResult.notConverged(Specification.TP, contract.identity(), competition, "the crystal solve of " + c.id()
+                return EquilibriumResult.notConverged(Specification.TP, contract.identity(), competition, FailureKind.CRYSTAL_SOLVE, false, "the crystal solve of " + c.id()
                         + " closed its bracket on a jump of the chemical potential (|mu_i - mu_s|/RT = " + Math.abs(f) + ", the fluid "
                         + reduced.classification() + ")", diagnostics(w, w.feedResult, false));
             }
@@ -470,7 +469,7 @@ final class CrystalEquilibrium {
             }
         }
         if (classification == null) {
-            return EquilibriumResult.notConverged(Specification.TP, contract.identity(), competition, "the fluid left by the crystal "
+            return EquilibriumResult.notConverged(Specification.TP, contract.identity(), competition, FailureKind.CRYSTAL_SOLVE, false, "the fluid left by the crystal "
                     + c.id() + " is " + reduced.classification() + ", which a crystal answer does not carry", diagnostics(w, w.feedResult,
                     reduced.diagnostics().criticalBand()));
         }
@@ -572,7 +571,7 @@ final class CrystalEquilibrium {
             converged = change <= TWO_CRYSTAL_CHANGE;
         }
         if (!converged) {
-            return EquilibriumResult.notConverged(Specification.TP, contract.identity(), competition, "the two crystals " + first.id()
+            return EquilibriumResult.notConverged(Specification.TP, contract.identity(), competition, FailureKind.CRYSTAL_SOLVE, false, "the two crystals " + first.id()
                     + " and " + second.id() + " did not converge in " + sweeps + " sweeps (solids " + solid[0] + " and " + solid[1] + " mol)",
                     diagnostics(w, w.feedResult, false));
         }
@@ -604,7 +603,7 @@ final class CrystalEquilibrium {
         EquilibriumResult last = answers[1];
         if (last == null || !last.converged()) {
             return crystalPhasesHold(answers[0] != null ? answers[0] : last != null ? last : EquilibriumResult.notConverged(Specification.TP,
-                    contract.identity(), competition, "two crystals", diagnostics(w, w.feedResult, false)),
+                    contract.identity(), competition, FailureKind.CRYSTAL_SOLVE, false, "two crystals", diagnostics(w, w.feedResult, false)),
                     "two crystals form and the fluid they leave is not one the engine answers (" + forces + ")", competition, w);
         }
         if (solid[0] == 0.0 || solid[1] == 0.0) {
@@ -621,7 +620,7 @@ final class CrystalEquilibrium {
         }
         boolean firstGone = solid[0] == w.request.amounts[first.component()];
         if (!firstGone && !(worst <= 10.0 * DEPOSITION_TOLERANCE)) {
-            return EquilibriumResult.notConverged(Specification.TP, contract.identity(), competition, "the two crystals " + first.id()
+            return EquilibriumResult.notConverged(Specification.TP, contract.identity(), competition, FailureKind.CRYSTAL_SOLVE, false, "the two crystals " + first.id()
                     + " and " + second.id() + " left the first off its chemical potential (|mu_i - mu_s|/RT = " + worst + ")",
                     diagnostics(w, w.feedResult, false));
         }
@@ -759,6 +758,6 @@ final class CrystalEquilibrium {
         return new EquilibriumResult(Specification.TP, EquilibriumResult.Status.UNSUPPORTED, UnsupportedReason.NOT_IMPLEMENTED, detail,
                 contract.identity(), competition, Classification.NONE, List.of(), List.of(),
                 new EquilibriumResult.Coverage(EquilibriumResult.CoverageGrade.UNAVAILABLE, detail),
-                diagnostics(w, w.feedResult, fluid.diagnostics().criticalBand()), null);
+                diagnostics(w, w.feedResult, fluid.diagnostics().criticalBand()), null, FailureKind.CRYSTAL_PHASES, false);
     }
 }

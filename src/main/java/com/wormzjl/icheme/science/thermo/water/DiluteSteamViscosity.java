@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.science.thermo.water;
 
 import com.wormzjl.icheme.science.math.DeterministicMath;
+import com.wormzjl.icheme.science.thermo.ThermoRefusal;
 
 /**
  * The IAPWS 2008 dilute-gas viscosity term of water (Pa.s); not a liquid or dense-steam correlation. Moved from
@@ -22,7 +23,7 @@ public final class DiluteSteamViscosity {
      */
     public static double viscosity(double temperatureKelvin) {
         if (!(temperatureKelvin > 0) || !Double.isFinite(temperatureKelvin))
-            throw new IllegalArgumentException("Vapor viscosity temperature must be positive and finite: " + temperatureKelvin);
+            throw new ThermoRefusal("Vapor viscosity temperature must be positive and finite: ", temperatureKelvin, "");
         if (temperatureKelvin < LOW)
             return AT_LOW * DeterministicMath.pow(temperatureKelvin / LOW, EXPONENT_AT_LOW);
         return formula(temperatureKelvin / 647.096);

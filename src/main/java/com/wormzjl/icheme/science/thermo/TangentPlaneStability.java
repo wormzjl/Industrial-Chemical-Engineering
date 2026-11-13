@@ -175,11 +175,11 @@ public final class TangentPlaneStability {
      * proved instability or ran out of its budget. With a filter and no surviving trial the result reports distance 0 and
      * the feed, as a trivial trial does.
      *
-     * @throws IllegalArgumentException for a pressure that is not positive and finite, and as the unfiltered test
+     * @throws ThermoRefusal for a pressure that is not positive and finite, and as the unfiltered test
      */
     public Result test(double temperatureKelvin, double pressurePascal, double[] feed, TrialFilter filter, Workspace workspace) {
         if (!(pressurePascal > 0.0) || !Double.isFinite(pressurePascal)) {
-            throw new IllegalArgumentException("The pressure must be positive and finite");
+            throw new ThermoRefusal("The pressure must be positive and finite");
         }
         Objects.requireNonNull(workspace, "workspace");
         return run(temperatureKelvin, pressurePascal, feed, filter, workspace);
@@ -698,10 +698,10 @@ public final class TangentPlaneStability {
             if (amounts.length != count) throw new IllegalArgumentException("Feed has invalid length");
             double total = 0.0;
             for (double amount : amounts) {
-                if (!Double.isFinite(amount) || amount < 0.0) throw new IllegalArgumentException("Invalid feed amount");
+                if (!Double.isFinite(amount) || amount < 0.0) throw new ThermoRefusal("Invalid feed amount");
                 total += amount;
             }
-            if (!(total > 0.0) || !Double.isFinite(total)) throw new IllegalArgumentException("Feed has no material");
+            if (!(total > 0.0) || !Double.isFinite(total)) throw new ThermoRefusal("Feed has no material");
             presentCount = 0;
             for (int i = 0; i < count; i++) {
                 feed[i] = amounts[i] / total;
@@ -712,7 +712,7 @@ public final class TangentPlaneStability {
                     logFeed[i] = Double.NEGATIVE_INFINITY;
                 }
             }
-            if (presentCount == 0) throw new IllegalArgumentException("Feed has no material");
+            if (presentCount == 0) throw new ThermoRefusal("Feed has no material");
         }
 
         /** {@code sum_i x_i ln phi_i}: the part of the molar Gibbs energy that differs between two roots. */

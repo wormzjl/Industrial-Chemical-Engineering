@@ -4,6 +4,7 @@ import com.wormzjl.icheme.science.math.DeterministicMath;
 import com.wormzjl.icheme.science.thermo.HuronVidalExcess;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel.Root;
+import com.wormzjl.icheme.science.thermo.ThermoRefusal;
 import com.wormzjl.icheme.science.thermo.water.Iapws97Region1;
 import com.wormzjl.icheme.science.thermo.water.Iapws97Region2Ideal;
 import com.wormzjl.icheme.science.thermo.water.SteamVirial;
@@ -245,7 +246,7 @@ public final class WaterShare {
         double vTT = state.volumeSecondTemperatureDerivative(), vTP = state.volumeTemperaturePressureDerivative();
         double vPP = state.volumeSecondPressureDerivative();
         if (!(v > 0.0) || !(cp > 0.0) || !(vP < 0.0) || !Double.isFinite(h) || !Double.isFinite(s))
-            throw new IllegalArgumentException("Invalid Region 1 state of the water share at " + t + " K, " + p + " Pa");
+            throw new ThermoRefusal("Invalid Region 1 state of the water share at ", t, " K, ", p, " Pa");
         double[] r = w.region;
         if (temperature < triplePoint) {
             double step = temperature - triplePoint, logRatio = DeterministicMath.log(temperature / triplePoint);
@@ -273,7 +274,7 @@ public final class WaterShare {
         }
         // One compound: the cubic's liquid root and ln phi in closed form on the prepared temperature, the same doubles
         // as the kernel's one-component evaluation (x = 1, a_mix = s s, b_mix = b, no excess cells), with no mixture work.
-        if (!Double.isFinite(p) || !(p > 0.0)) throw new IllegalArgumentException("Invalid pressure of the water share");
+        if (!Double.isFinite(p) || !(p > 0.0)) throw new ThermoRefusal("Invalid pressure of the water share");
         double root = w.mixture.attractionRootsView()[0], r1 = w.rootDt[0], r2 = w.rootDt2[0];
         double a = root * root, a1 = 2.0 * root * r1, a2 = 2.0 * (r1 * r1 + root * r2), b = coVolume;
         double reducedA = a * p / (R * R * t * t), reducedB = b * p / (R * t);
@@ -285,7 +286,7 @@ public final class WaterShare {
         // The kernel's volumetric block: -rt is (-R) t and 2 rt is (2 R) t exactly, so these are the same doubles.
         double dpdv = PengRobinsonKernel.pressureVolumeDerivative(t, v, a, b);
         double dpdt = PengRobinsonKernel.pressureTemperatureDerivative(v, b, a1);
-        if (!(dpdv < 0.0)) throw new IllegalArgumentException("Mechanically unstable pure-water root of the water share");
+        if (!(dpdv < 0.0)) throw new ThermoRefusal("Mechanically unstable pure-water root of the water share");
         double dpdvv = PengRobinsonKernel.pressureSecondVolumeDerivative(t, v, a, b);
         double dpdtv = PengRobinsonKernel.pressureTemperatureVolumeDerivative(v, b, a1);
         double vT = -dpdt / dpdv, vP = 1.0 / dpdv;

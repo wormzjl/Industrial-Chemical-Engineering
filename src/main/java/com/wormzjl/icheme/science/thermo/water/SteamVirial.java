@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.science.thermo.water;
 
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel;
+import com.wormzjl.icheme.science.thermo.ThermoRefusal;
 
 /**
  * Steam as a second-virial gas (2026-10-28; option B of
@@ -105,6 +106,6 @@ public final class SteamVirial {
     }
 
     private static void require(double t) {
-        if (!(t > 0.0) || !Double.isFinite(t)) throw new IllegalArgumentException("Steam temperature must be positive and finite: " + t);
+        if (!(t > 0.0) || !Double.isFinite(t)) throw new ThermoRefusal("Steam temperature must be positive and finite: ", t, "");
     }
 }

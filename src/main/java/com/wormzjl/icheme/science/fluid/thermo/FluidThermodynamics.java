@@ -324,12 +324,12 @@ public final class FluidThermodynamics {
         switch(result.status()) {
             case CONVERGED->{}
             case UNSUPPORTED->{
-                if(result.detail().startsWith(EquilibriumResult.CRYSTAL_PHASES))throw new UnsupportedPhases(domain.packageId(),Double.NaN,Double.NaN,
+                if(result.failureKind()==EquilibriumResult.FailureKind.CRYSTAL_PHASES)throw new UnsupportedPhases(domain.packageId(),Double.NaN,Double.NaN,
                         UnsupportedPhases.Kind.CRYSTAL_PHASES,"a crystal beside a phase set the engine does not implement ("+result.detail()+")");
                 throw new IllegalStateException("The network's equilibrium engine refused a crystal request it must answer: "+result.detail());
             }
             case NOT_CONVERGED->{
-                if(result.detail().startsWith(EquilibriumResult.CRYSTAL_STEP))throw new UnsupportedPhases(domain.packageId(),Double.NaN,Double.NaN,
+                if(result.failureKind()==EquilibriumResult.FailureKind.CRYSTAL_STEP&&!result.failedInCriticalBand())throw new UnsupportedPhases(domain.packageId(),Double.NaN,Double.NaN,
                         UnsupportedPhases.Kind.CRYSTAL_STEP,"a near-pure feed's crystal step the pure species' step does not answer ("+result.detail()+")");
                 if(result.diagnostics().criticalBand())throw new CriticalBandHold(domain.packageId(),Double.NaN,Double.NaN,result.detail());
                 throw new IllegalArgumentException("Crystal equilibrium did not converge: "+result.detail());
@@ -935,8 +935,8 @@ public final class FluidThermodynamics {
                 if(result.diagnostics().criticalBand())throw new CriticalBandHold(domain.packageId(),t,p,result.detail());
                 // A converged split with a product proved unstable, or left unresolved: a further fluid phase is indicated
                 // or not excluded, which a node cannot carry beyond three; a typed hold, never adopted with fewer phases.
-                boolean unstable=result.detail().startsWith(EquilibriumResult.UNSTABLE_PRODUCT);
-                if(unstable||result.detail().startsWith(EquilibriumResult.UNRESOLVED_PRODUCT))throw new UnsupportedPhases(domain.packageId(),t,p,
+                boolean unstable=result.failureKind()==EquilibriumResult.FailureKind.UNSTABLE_PRODUCT;
+                if(unstable||result.failureKind()==EquilibriumResult.FailureKind.UNRESOLVED_PRODUCT)throw new UnsupportedPhases(domain.packageId(),t,p,
                         UnsupportedPhases.Kind.THREE_PHASES,"a further fluid phase is "+(unstable?"indicated":"not excluded")+" ("+result.detail()
                         +"); the fluid network carries a vapour and two liquids");
                 throw new IllegalArgumentException("Fluid TP equilibrium did not converge: "+result.detail());

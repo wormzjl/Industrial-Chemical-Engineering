@@ -7,9 +7,11 @@ import com.wormzjl.icheme.science.thermo.NumericalBox;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel.Root;
 import com.wormzjl.icheme.science.thermo.TangentPlaneStability;
+import com.wormzjl.icheme.science.thermo.ThermoRefusal;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumRequest.Specification;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult.Classification;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult.Diagnostics;
+import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult.FailureKind;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult.UnsupportedReason;
 import com.wormzjl.icheme.science.thermo.phase.CrystalSet.Crystal;
 import com.wormzjl.icheme.science.thermo.phase.ThreeSlotFlash.Slots;
@@ -412,7 +414,9 @@ public final class FluidTpEquilibrium {
         // Outcome of the hydrocarbon core.
         TangentPlaneStability.Result feedResult;
         Root singleRoot;
+        // The failed core's detail and its kind, written together.
         String failure;
+        FailureKind failureKind;
         double residual, productDistance;
         // The request's material, set before any calculation.
         double hydrocarbonTotal;
@@ -431,6 +435,7 @@ public final class FluidTpEquilibrium {
         EquilibriumResult innerResult;
         boolean innerCoexistence;
         String innerFailure;
+        FailureKind innerFailureKind;
         // The nested UV search's pressure solves: accepted residual, whether the last was inexact, the last secant (of one
         // classification), whether the last answer was one phase.
         double innerLooseness, innerSlope;
@@ -628,7 +633,7 @@ public final class FluidTpEquilibrium {
      */
     private EquilibriumResult outsideBox(Specification specification, double t, double p, PhaseCompetition competition) {
         if (NumericalBox.contains(t, p)) return null;
-        return EquilibriumResult.notConverged(specification, contract.identity(), competition, "the state " + t + " K, " + p
+        return EquilibriumResult.notConverged(specification, contract.identity(), competition, FailureKind.OUTSIDE_BOX, false, "the state " + t + " K, " + p
                 + " Pa lies outside the numerical box " + NumericalBox.MINIMUM_TEMPERATURE + " .. " + NumericalBox.MAXIMUM_TEMPERATURE
                 + " K, " + NumericalBox.MINIMUM_PRESSURE + " .. " + NumericalBox.MAXIMUM_PRESSURE + " Pa", Diagnostics.NONE);
     }
@@ -649,11 +654,22 @@ public final class FluidTpEquilibrium {
         w.fluidEquilibria = 0;
         try {
             return w.activeCount > 0 ? crystalEquilibrium.solveWithCrystals(t, p, competition, w) : dryCore.solveDry(t, p, competition, w.request, w);
-        } catch (IllegalArgumentException | IllegalStateException | ArithmeticException refusedByModel) {
-            // The equation of state refused a state (no physical root, a mechanically unstable root): no answer.
-            return EquilibriumResult.notConverged(Specification.TP, contract.identity(), competition,
-                    "evaluation refused: " + refusedByModel.getMessage(), diagnostics(w, w.feedResult, false));
+        } catch (ThermoRefusal | PengRobinsonKernel.NoPhysicalRoot | PengRobinsonKernel.RootCoalescence refusedByModel) {
+            // The equation of state or a property model refused a state (no physical root, a root too close to coalescence
+            // to differentiate, a mechanically unstable root, a state outside a model's range): no answer.
+            return refusedEvaluation(FailureKind.REFUSED, refusedByModel, competition, w);
+        } catch (IllegalArgumentException | IllegalStateException | ArithmeticException internal) {
+            // Not a refusal (an argument, layout or invariant failure inside the solve): still answered, with the same
+            // text, so that a defect does not take down the caller's solve; typed INTERNAL so that it is not read as a
+            // refusal.
+            return refusedEvaluation(FailureKind.INTERNAL, internal, competition, w);
         }
+    }
+
+    /** The answer of an evaluation an exception ended: not converged, of {@code kind}, the detail as before the kind existed. */
+    private EquilibriumResult refusedEvaluation(FailureKind kind, RuntimeException refused, PhaseCompetition competition, Workspace w) {
+        return EquilibriumResult.notConverged(Specification.TP, contract.identity(), competition, kind, false,
+                "evaluation refused: " + refused.getMessage(), diagnostics(w, w.feedResult, false));
     }
 
     // Data ranges (owner rule of 2026-10-16).
