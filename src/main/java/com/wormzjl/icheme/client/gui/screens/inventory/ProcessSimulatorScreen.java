@@ -40,6 +40,7 @@ import com.wormzjl.icheme.client.gui.flowsheet.StreamProps;
 import com.wormzjl.icheme.client.gui.flowsheet.UnitDoors;
 import com.wormzjl.icheme.network.ProcessSimulatorNetwork;
 import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
+import com.wormzjl.icheme.science.column.v3.V3ColumnPresets;
 import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.flowsheet.Flowsheet;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetFailure;
@@ -221,7 +222,7 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
     private static Params columnDefaults() {
         var catalog = MaterialRuntime.active();
         var network = catalog.presets().network();
-        V3ColumnInput input = catalog.presets().column(network.defaultColumnPreset()).input(catalog);
+        V3ColumnInput input = V3ColumnPresets.input(catalog.presets().column(network.defaultColumnPreset()), catalog);
         return ColumnDoor.from(input, ColumnComponents.Choices.DEFAULT.condenser());
     }
 

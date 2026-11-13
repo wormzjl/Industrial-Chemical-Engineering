@@ -139,7 +139,7 @@ public final class ProcessSimulatorGameTests {
 
     private static ColumnDesign design() {
         var catalog = MaterialRuntime.active();
-        return ColumnDesign.of(catalog.presets().column(catalog.presets().network().defaultColumnPreset()).input(catalog), ColumnComponents.Choices.DEFAULT);
+        return ColumnDesign.of(com.wormzjl.icheme.science.column.v3.V3ColumnPresets.input(catalog.presets().column(catalog.presets().network().defaultColumnPreset()), catalog),ColumnComponents.Choices.DEFAULT);
     }
 
     /** What Send to block sends on the sample's crude unit: the column, its condenser's five shells, and a lying drum with a boot. */
@@ -163,7 +163,7 @@ public final class ProcessSimulatorGameTests {
         helper.assertTrue(constructor.simulator(4).orElseThrow().listed().isEmpty(), "A design found where none is saved");
         var near = player(helper, "editor", AT);
         open(near, block, 1);
-        ProcessSimulatorNetwork.receive(near, new ProcessSimulatorNetwork.SaveDesign(1, MaterialRuntime.active().presets().column(MaterialRuntime.active().presets().network().defaultColumnPreset()).input(MaterialRuntime.active()), ColumnComponents.Choices.DEFAULT));
+        ProcessSimulatorNetwork.receive(near, new ProcessSimulatorNetwork.SaveDesign(1, com.wormzjl.icheme.science.column.v3.V3ColumnPresets.input(MaterialRuntime.active().presets().column(MaterialRuntime.active().presets().network().defaultColumnPreset()), MaterialRuntime.active()), ColumnComponents.Choices.DEFAULT));
         ProcessSimulatorNetwork.receive(near, ProcessSimulatorNetwork.SendDesigns.of(1, sent()));
         close(near);
         helper.assertTrue(block.savedDesign().isPresent(), "Save design was not stored");
@@ -192,7 +192,7 @@ public final class ProcessSimulatorGameTests {
         var body = body();
         send(reader, body);
         helper.assertTrue(block.store().body().length == 0, "A reader's upload was stored");
-        ProcessSimulatorNetwork.receive(reader, new ProcessSimulatorNetwork.SaveDesign(2, MaterialRuntime.active().presets().column(MaterialRuntime.active().presets().network().defaultColumnPreset()).input(MaterialRuntime.active()), ColumnComponents.Choices.DEFAULT));
+        ProcessSimulatorNetwork.receive(reader, new ProcessSimulatorNetwork.SaveDesign(2, com.wormzjl.icheme.science.column.v3.V3ColumnPresets.input(MaterialRuntime.active().presets().column(MaterialRuntime.active().presets().network().defaultColumnPreset()), MaterialRuntime.active()), ColumnComponents.Choices.DEFAULT));
         helper.assertTrue(block.savedDesign().isEmpty(), "A reader's design was stored");
         ProcessSimulatorNetwork.receive(reader, ProcessSimulatorNetwork.SendDesigns.of(2, sent()));
         helper.assertTrue(block.listed().isEmpty(), "A reader's Send to block was stored");

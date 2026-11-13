@@ -30,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 final class ColumnEjectorTest {
     private static final MaterialCatalog CATALOG = MaterialCatalog.bundled();
     private static final String NETWORK = CATALOG.presets().network().packageId();
-    private static final V3ColumnInput BASE = CATALOG.presets().column(CATALOG.presets().network().defaultColumnPreset()).input(CATALOG);
+    private static final V3ColumnInput BASE = com.wormzjl.icheme.science.column.v3.V3ColumnPresets.input(CATALOG.presets().column(CATALOG.presets().network().defaultColumnPreset()), CATALOG);
     private static final List<String> AXIS = FluidThermodynamics.forNetwork(CATALOG, NETWORK).components();
     private static final FlowThermo THERMO = new FlowThermo(MaterialRuntime.with(CATALOG, NETWORK, () -> FluidThermodynamics.forNetwork(CATALOG, NETWORK)), CATALOG, NETWORK, () -> {
     });

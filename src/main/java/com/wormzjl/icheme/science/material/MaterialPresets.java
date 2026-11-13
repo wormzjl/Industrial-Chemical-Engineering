@@ -1,7 +1,6 @@
 package com.wormzjl.icheme.science.material;
 
 import com.google.gson.*;
-import com.wormzjl.icheme.science.column.v3.*;
 import java.util.*;
 import static com.wormzjl.icheme.science.material.JsonFields.*;
 
@@ -14,23 +13,25 @@ public final class MaterialPresets {
                     ||translationKey==null||translationKey.length()>128||packageId==null||packageId.length()>128||assayId==null||assayId.length()>128)
                 throw new IllegalArgumentException("Invalid preset naming descriptor");
         }
-        public boolean matches(V3ColumnInput input){return packageId.equals(input.packageId())&&assayId.equals(input.assayId());}
     }
-    /** {@code diameter} (required, above 0) is the sieve-tray hydraulics input; {@code pressureDrop} is the first solve's guess. */
+    /**
+     * {@code diameter} (required, above 0) is the sieve-tray hydraulics input; {@code pressureDrop} is the first solve's guess.
+     * Plain numbers only: the column builds its input from them and refuses there what its own records refuse (a tray or
+     * stage below 1, a rate not above 0, an unknown split, the diameter's bound; {@code V3ColumnPresets}).
+     */
     public record Column(Descriptor descriptor,int order,boolean visible,double feedVolume,double feedTemperature,
-            int stages,int feedStage,double pressure,double pressureDrop,List<V3ColumnSpecification> specifications,
-            List<V3SideDrawSpec> draws,List<V3SteamFeedSpec> steam,List<V3PumparoundSpec> pumparounds,double diameter) {
-        public Column {specifications=List.copyOf(specifications);draws=List.copyOf(draws);steam=List.copyOf(steam);pumparounds=List.copyOf(pumparounds);}
-        public V3ColumnInput input(MaterialCatalog catalog) {
-            var p=catalog.requirePackage(descriptor.packageId());double[] fractions=moleFractions(p,descriptor.assayId());
-            double volumePerMole=0;
-            for(int i=0;i<fractions.length;i++)volumePerMole+=fractions[i]*p.properties().get(i).molecularWeight()/p.properties().get(i).density();
-            double rate=feedVolume/volumePerMole;
-            for(int i=0;i<fractions.length;i++)fractions[i]*=rate;
-            return new V3ColumnInput(1,p.id(),descriptor.assayId(),new V3ComponentBasis(p.components()),fractions,
-                    feedTemperature,stages,feedStage,pressure,pressureDrop,specifications,draws,steam,pumparounds,diameter);
-        }
+            int stages,int feedStage,double pressure,double pressureDrop,Specifications specifications,
+            List<Draw> draws,List<Steam> steam,List<Pumparound> pumparounds,double diameter) {
+        public Column {Objects.requireNonNull(specifications);draws=List.copyOf(draws);steam=List.copyOf(steam);pumparounds=List.copyOf(pumparounds);}
     }
+    /** The three set points: condenser outlet temperature (K), organic reflux ratio, reboiler duty (W). */
+    public record Specifications(double condenserTemperature,double refluxRatio,double reboilerDuty) {}
+    /** A liquid side draw: one-based tray and molar flow (mol/s). */
+    public record Draw(int tray,double rate) {}
+    /** A steam feed: one-based stage ({@code stages + 1} is the sump), molar flow (mol/s) and temperature (K). */
+    public record Steam(int stage,double rate,double temperature) {}
+    /** A pumparound: return tray, draw tray, signed duty (W, a cooler negative) and the name of its duty split. */
+    public record Pumparound(int returnTray,int drawTray,double duty,String split) {}
     /** A pure {@code component} (a network compound or Water) or an {@code assay}, always resolved on the network package. */
     public record Fluid(String id,String label,String component,String assayId) {}
     public record Network(String packageId,String defaultColumnPreset,List<String> fluidPresets) {
@@ -73,19 +74,16 @@ public final class MaterialPresets {
             if(kind.equals("column")) {
                 String pkg=text(row,"package"),assay=text(row,"assay");requireAssay(packages,pkg,assay);
                 var d=new Descriptor(id,label,text(row,"translation_key"),pkg,assay);var o=row.getAsJsonObject("operating");
-                var specs=List.<V3ColumnSpecification>of(new V3ColumnSpecification.CondenserOutletTemperature(number(o,"condenserTemperatureKelvin")),
-                        new V3ColumnSpecification.OrganicRefluxRatio(number(o,"organicRefluxRatio")),new V3ColumnSpecification.ReboilerDuty(number(o,"reboilerDutyWatts")));
-                var draws=new ArrayList<V3SideDrawSpec>();for(var v:o.getAsJsonArray("sideDraws")){var x=v.getAsJsonObject();draws.add(new V3SideDrawSpec(integer(x,"trayNumber"),number(x,"molarFlowMolPerSecond")));}
-                var steam=new ArrayList<V3SteamFeedSpec>();for(var v:o.getAsJsonArray("steamFeeds")){var x=v.getAsJsonObject();steam.add(new V3SteamFeedSpec(integer(x,"stageNumber"),number(x,"molarFlowMolPerSecond"),number(x,"temperatureKelvin")));}
-                var coolers=new ArrayList<V3PumparoundSpec>();for(var v:o.getAsJsonArray("pumparounds")){var x=v.getAsJsonObject();coolers.add(new V3PumparoundSpec(integer(x,"returnTray"),integer(x,"drawTray"),number(x,"dutyWatts"),V3PumparoundSpec.Split.valueOf(text(x,"split"))));}
+                var specs=new Specifications(number(o,"condenserTemperatureKelvin"),number(o,"organicRefluxRatio"),number(o,"reboilerDutyWatts"));
+                var draws=new ArrayList<Draw>();for(var v:o.getAsJsonArray("sideDraws")){var x=v.getAsJsonObject();draws.add(new Draw(integer(x,"trayNumber"),number(x,"molarFlowMolPerSecond")));}
+                var steam=new ArrayList<Steam>();for(var v:o.getAsJsonArray("steamFeeds")){var x=v.getAsJsonObject();steam.add(new Steam(integer(x,"stageNumber"),number(x,"molarFlowMolPerSecond"),number(x,"temperatureKelvin")));}
+                var coolers=new ArrayList<Pumparound>();for(var v:o.getAsJsonArray("pumparounds")){var x=v.getAsJsonObject();coolers.add(new Pumparound(integer(x,"returnTray"),integer(x,"drawTray"),number(x,"dutyWatts"),text(x,"split")));}
                 double volume=number(o,"feedStandardVolumeCubicMetresPerSecond");if(volume<=0)throw new IllegalArgumentException("operating.feedStandardVolumeCubicMetresPerSecond: positive required");
                 var c=new Column(d,integer(row,"order"),bool(row,"visible"),volume,number(o,"feedTemperatureKelvin"),integer(o,"stageCount"),integer(o,"feedStageNumber"),number(o,"topPressurePascal"),number(o,"stagePressureDropPascal"),specs,draws,steam,coolers,
                         number(o,"columnDiameterMetres"));
                 var p=packages.get(pkg);double t=c.feedTemperature(),bottom=c.pressure()+(c.stages()-1)*c.pressureDrop();
                 if(c.stages()<2||c.stages()>64||c.feedStage()<1||c.feedStage()>c.stages()||t<p.minimumTemperature()||t>p.maximumTemperature()||c.pressure()<p.minimumPressure()||bottom>p.maximumPressure()||c.pressureDrop()<0)
                     throw new IllegalArgumentException("operating: outside package or column domain");
-                if(!(c.diameter()>0)||c.diameter()>V3ColumnInput.MAX_COLUMN_DIAMETER_METRES)
-                    throw new IllegalArgumentException("operating.columnDiameterMetres: not above 0 and at most "+V3ColumnInput.MAX_COLUMN_DIAMETER_METRES+" m");
                 columns.put(id,c);
             } else if(kind.equals("fluid")) {
                 if(row.has("component")) {

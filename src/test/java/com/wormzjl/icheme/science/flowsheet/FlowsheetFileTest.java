@@ -353,7 +353,7 @@ final class FlowsheetFileTest {
         assertEquals(new ExchangerSizing.Size(false, 3, 1.25, 5), sheet.sizing().unit("T-1/trim").size());
         assertEquals(tree(bytes), tree(FlowsheetFile.write(sheet)), "the count and the key write back");
         // A whole door reads the count, one where absent; a count past a member step's most is refused by name.
-        var whole = com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor.from(CATALOG.presets().column(CATALOG.presets().network().defaultColumnPreset()).input(CATALOG), com.wormzjl.icheme.science.equipment.ColumnComponents.Condenser.AIR_THEN_WATER);
+        var whole = com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor.from(com.wormzjl.icheme.science.column.v3.V3ColumnPresets.input(CATALOG.presets().column(CATALOG.presets().network().defaultColumnPreset()), CATALOG),com.wormzjl.icheme.science.equipment.ColumnComponents.Condenser.AIR_THEN_WATER);
         assertEquals(1, com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor.of(whole).units().trim(), "one shell where absent");
         whole.json().addProperty("trim_units", 3);
         assertEquals(3, com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor.of(whole).units().trim());

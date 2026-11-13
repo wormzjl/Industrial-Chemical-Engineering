@@ -36,7 +36,7 @@ class PipeTransferTest {
     @Test void allCrudeGeneratorsSupplyFiniteFlowAtTheExactAmbientLimit() {
         var catalog=MaterialCatalog.bundled();
         for(var preset:crudes(catalog)) {
-            var input=preset.input(catalog);var feed=input.feedComponentMolarFlowsMolPerSecond();
+            var input=com.wormzjl.icheme.science.column.v3.V3ColumnPresets.input(preset,catalog);var feed=input.feedComponentMolarFlowsMolPerSecond();
             var amounts=new double[model.componentCount()];
             for(int i=0;i<feed.length;i++)amounts[model.components().indexOf(input.componentBasis().componentIds().get(i))]=feed[i];
             for(double temperature:new double[]{293.15,298.15,350}) {
@@ -63,7 +63,7 @@ class PipeTransferTest {
             try {
             var nodes=new ArrayList<PassiveNetwork.Reservoir>();
             for(int donor=0;donor<2;donor++) {
-                var input=presets.get((crude+donor)%presets.size()).input(catalog);
+                var input=com.wormzjl.icheme.science.column.v3.V3ColumnPresets.input(presets.get((crude+donor)%presets.size()),catalog);
                 var source=input.feedComponentMolarFlowsMolPerSecond();var amounts=new double[model.componentCount()];
                 for(int i=0;i<source.length;i++)amounts[model.components().indexOf(input.componentBasis().componentIds().get(i))]=source[i];
                 double pressure=150000-1000*donor;

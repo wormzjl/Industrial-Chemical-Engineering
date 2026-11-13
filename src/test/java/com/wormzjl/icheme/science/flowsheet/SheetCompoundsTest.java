@@ -34,7 +34,7 @@ final class SheetCompoundsTest {
     private static final Map<String, Double> CRUDE = crude();
 
     private static Map<String, Double> crude() {
-        var input = CATALOG.presets().column(CATALOG.presets().network().defaultColumnPreset()).input(CATALOG);
+        var input = com.wormzjl.icheme.science.column.v3.V3ColumnPresets.input(CATALOG.presets().column(CATALOG.presets().network().defaultColumnPreset()), CATALOG);
         var ids = input.componentBasis().componentIds();
         double[] flows = input.feedComponentMolarFlowsMolPerSecond();
         var amounts = new LinkedHashMap<String, Double>();

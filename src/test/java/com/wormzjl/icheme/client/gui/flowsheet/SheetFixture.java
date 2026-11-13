@@ -125,7 +125,7 @@ final class SheetFixture {
     }
 
     static Params column() {
-        return ColumnDoor.from(CATALOG.presets().column(CATALOG.presets().network().defaultColumnPreset()).input(CATALOG), ColumnComponents.Condenser.EXCHANGER);
+        return ColumnDoor.from(com.wormzjl.icheme.science.column.v3.V3ColumnPresets.input(CATALOG.presets().column(CATALOG.presets().network().defaultColumnPreset()), CATALOG),ColumnComponents.Condenser.EXCHANGER);
     }
 
     static SheetEditor editor(Flowsheet sheet) {

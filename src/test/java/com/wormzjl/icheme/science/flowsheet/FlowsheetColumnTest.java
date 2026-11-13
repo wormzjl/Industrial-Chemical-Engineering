@@ -36,8 +36,9 @@ final class FlowsheetColumnTest {
      * to the column, and the classical start does not close the medium grade at every feed temperature they reach
      * (CRUDE_GRADES_APPLY_REVIEW.md). The door carries the assay as a label, so the sheet runs on the bundled catalog.
      */
-    private static final V3ColumnInput BASE = com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog().presets().column("tia_juana")
-            .input(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog());
+    private static final V3ColumnInput BASE = com.wormzjl.icheme.science.column.v3.V3ColumnPresets.input(
+            com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog().presets().column("tia_juana"),
+            com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog());
     private static final List<String> AXIS = FluidThermodynamics.forNetwork(CATALOG, NETWORK).components();
     private static final double FEED_TRAY = BASE.topPressurePascal() + (BASE.feedStageNumber() - 1) * BASE.stagePressureDropPascal();
 

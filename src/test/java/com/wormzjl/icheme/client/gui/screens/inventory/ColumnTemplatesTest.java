@@ -58,7 +58,7 @@ class ColumnTemplatesTest {
 
     private static V3ColumnInput base() {
         var c = MaterialCatalog.bundled();
-        return c.presets().column(c.presets().network().defaultColumnPreset()).input(c);
+        return com.wormzjl.icheme.science.column.v3.V3ColumnPresets.input(c.presets().column(c.presets().network().defaultColumnPreset()), c);
     }
 
     private ColumnTemplates.Library templates() {

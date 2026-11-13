@@ -3,6 +3,7 @@ package com.wormzjl.icheme.science.plant.column;
 import com.wormzjl.icheme.science.plant.column.ColumnCycle.Account;
 import com.wormzjl.icheme.science.column.v3.V3ColumnCalculator;
 import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
+import com.wormzjl.icheme.science.column.v3.V3ColumnPresets;
 import com.wormzjl.icheme.science.column.v3.V3PumparoundSpec;
 import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.equipment.ColumnDesign;
@@ -28,7 +29,7 @@ class ColumnSolveTest {
 
     @Test void aStartSolvesTheDesignAndItsTableClosesACycleOnTheNetworksBasis() {
         var catalog = com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog();
-        V3ColumnInput design = catalog.presets().column("tia_juana_nitrogen").input(catalog);
+        V3ColumnInput design = V3ColumnPresets.input(catalog.presets().column("tia_juana_nitrogen"), catalog);
         var model = column(catalog, design);
         var axis = model.whole().components();
         double[] feed = feedOnTheNetwork(model, design);
@@ -87,7 +88,7 @@ class ColumnSolveTest {
      */
     @Test void aDryColumnsFeedTwoKelvinWarmerSolvesWarmFromItsSeed() {
         var catalog = com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog();
-        V3ColumnInput preset = catalog.presets().column("tia_juana_nitrogen").input(catalog);
+        V3ColumnInput preset = V3ColumnPresets.input(catalog.presets().column("tia_juana_nitrogen"), catalog);
         var pumparounds = new ArrayList<>(preset.pumparounds());
         var top = pumparounds.getFirst();
         pumparounds.set(0, new V3PumparoundSpec(top.returnTray(), top.drawTray(), top.dutyWatts() / 2, top.split()));
@@ -125,7 +126,7 @@ class ColumnSolveTest {
      */
     @Test void feedWaterIsASteamFeedExactlyWhereV3AdmitsItAsSteam() {
         var catalog = com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog();
-        V3ColumnInput preset = catalog.presets().column("tia_juana_nitrogen").input(catalog);
+        V3ColumnInput preset = V3ColumnPresets.input(catalog.presets().column("tia_juana_nitrogen"), catalog);
         var water = catalog.requirePackage(preset.packageId()).water();
         V3ColumnInput vacuum = at(preset, 20_000.0), pressured = at(preset, 200_000.0);
         assertTrue(ColumnSolve.steamAtFeedTray(water, vacuum, 680), "above the critical temperature: steam");
@@ -149,7 +150,7 @@ class ColumnSolveTest {
     /** A wet feed of the default column at its own 638 K: its water enters as a steam feed at the feed tray, no note (C4). */
     @Test void aHotWetFeedsWaterEntersAsASteamFeedAtTheFeedTray() {
         var catalog = com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog();
-        V3ColumnInput design = catalog.presets().column("tia_juana_nitrogen").input(catalog);
+        V3ColumnInput design = V3ColumnPresets.input(catalog.presets().column("tia_juana_nitrogen"), catalog);
         var model = column(catalog, design);
         double[] feed = feedOnTheNetwork(model, design);
         int water = model.whole().components().indexOf(SplitTable.WATER);
@@ -209,7 +210,7 @@ class ColumnSolveTest {
      */
     @Test void aNetworkPackageAbove64CompoundsSolvesOnItsFeedIslandsList() {
         var bundled = com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog();
-        V3ColumnInput design = bundled.presets().column("tia_juana_nitrogen").input(bundled);
+        V3ColumnInput design = V3ColumnPresets.input(bundled.presets().column("tia_juana_nitrogen"), bundled);
         var wide = MaterialCatalog.parse(widened(4));
         var narrow = column(bundled, design);
         var whole = FluidThermodynamics.forNetwork(wide, com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(wide));
@@ -298,7 +299,7 @@ class ColumnSolveTest {
      */
     @Test void atAPrescribedDropHalfTheFeedSolvesToTheSameTable() {
         var catalog = com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog();
-        var d = catalog.presets().column("tia_juana_nitrogen").input(catalog);
+        var d = V3ColumnPresets.input(catalog.presets().column("tia_juana_nitrogen"), catalog);
         var design = new V3ColumnInput(d.schemaVersion(), d.packageId(), d.assayId(), d.componentBasis(), d.feedComponentMolarFlowsMolPerSecond(), d.feedTemperatureKelvin(),
                 d.stageCount(), d.feedStageNumber(), d.topPressurePascal(), 700.0, d.specifications(), d.sideDraws(), d.steamFeeds(), d.pumparounds(), 0.0);
         var model = column(catalog, design);
@@ -329,7 +330,7 @@ class ColumnSolveTest {
      */
     @Test void aSavedPointOnARemovedPackageStarts() {
         var catalog = com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog();
-        V3ColumnInput design = catalog.presets().column("tia_juana_nitrogen").input(catalog);
+        V3ColumnInput design = V3ColumnPresets.input(catalog.presets().column("tia_juana_nitrogen"), catalog);
         assertNull(catalog.packages().get("icheme:retired_crude_tjl20"), "the package this point names is gone");
         var built = ColumnDesign.of(design, ColumnComponents.Choices.DEFAULT.fit(design.pumparounds().size()));
         var p = ColumnOperatingPoint.of(design);
@@ -376,7 +377,7 @@ class ColumnSolveTest {
      */
     @Test void anAirThenWaterCondensersWaterTakesTheTrimsShare() {
         var catalog = com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog();
-        V3ColumnInput design = catalog.presets().column("tia_juana_nitrogen").input(catalog);
+        V3ColumnInput design = V3ColumnPresets.input(catalog.presets().column("tia_juana_nitrogen"), catalog);
         var model = column(catalog, design);
         var axis = model.whole().components();
         double[] feed = new double[axis.size()];
@@ -420,7 +421,7 @@ class ColumnSolveTest {
      */
     @Test void theCondensersUtilitiesOnTheDefaultColumn() {
         var catalog = com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog();
-        V3ColumnInput design = catalog.presets().column("tia_juana_nitrogen").input(catalog);
+        V3ColumnInput design = V3ColumnPresets.input(catalog.presets().column("tia_juana_nitrogen"), catalog);
         var model = column(catalog, design);
         var axis = model.whole().components();
         double[] feed = new double[axis.size()];
@@ -473,7 +474,7 @@ class ColumnSolveTest {
      */
     @Test void theFloodPerFeedIsLinearInTheThroughputBand() {
         var catalog = com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog();
-        V3ColumnInput design = catalog.presets().column("tia_juana_nitrogen").input(catalog);
+        V3ColumnInput design = V3ColumnPresets.input(catalog.presets().column("tia_juana_nitrogen"), catalog);
         var model = column(catalog, design);
         double[] feed = feedOnTheNetwork(model, design);
         var setpoints = Setpoints.of(ColumnOperatingPoint.of(design));

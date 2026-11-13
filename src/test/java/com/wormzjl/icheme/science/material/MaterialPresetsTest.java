@@ -65,7 +65,7 @@ class MaterialPresetsTest {
         preset.addProperty("id","custom_crude");preset.addProperty("label","Server crude");preset.addProperty("translation_key","server.crude");
         preset.getAsJsonObject("operating").addProperty("feedTemperatureKelvin",650);resources.put(path,preset.toString());
         var changed=MaterialCatalog.parse(resources);var choice=changed.presets().column("custom_crude");
-        assertEquals(650,choice.input(changed).feedTemperatureKelvin());
+        assertEquals(650,com.wormzjl.icheme.science.column.v3.V3ColumnPresets.input(choice,changed).feedTemperatureKelvin());
         assertThrows(IllegalArgumentException.class,()->original.presets().column("custom_crude"));
         assertEquals(original.physicsContent("icheme:tjl20_methane",original.requirePackage("icheme:tjl20_methane").components()),changed.physicsContent("icheme:tjl20_methane",changed.requirePackage("icheme:tjl20_methane").components()));
         preset.getAsJsonObject("operating").addProperty("stageCount",2);resources.put(path,preset.toString());

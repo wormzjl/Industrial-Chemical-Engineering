@@ -50,6 +50,7 @@ Paths are under `src/main/java/com/wormzjl/icheme/`. "pp" = package-private.
 | [V3ColumnInput][input] | Immutable SI request (schema 1) | Units, limits, `usesTrayHydraulics` |
 | [V3ColumnSpecification][spec] (nested `ControlledQuantity`) | The three controls: condenser outlet T, organic reflux ratio, reboiler duty | Sign/units |
 | [V3SideDrawSpec][draw-spec], [V3SteamFeedSpec][steam-spec], [V3PumparoundSpec][pa-spec] | Feature rows, plus their pp static arithmetic: draw withdrawal, steam node feeds and upward vapour profile, pumparound stage heat | Index rules, `Split`; the same numbers in residual, audit, streams |
+| [V3ColumnPresets][presets] | The column's reading of a server column preset (`MaterialPresets.Column`, plain numbers): builds its `V3ColumnInput` (assay mole fractions scaled to the standard feed volume) and refuses what the V3 records and the diameter bound refuse, with the texts the parser once raised; `matches(descriptor, input)` | `input(preset, catalog)` |
 | [V3ColumnProblemResolver][resolver] | Validates input, builds topology and pressure profile, proves the DOF ledger | `validateInput`, `resolve(input, branch[, profile])` |
 | [V3ColumnProblem][problem] | Resolved immutable numerical problem (pressures, support, wet set, water profile); nested `WaterCondenserRegime` | `waterVaporFlow`, `nodePressurePascal` |
 | [V3ColumnTopology][topology] | Node map and condenser branch | Which node has which unknowns/rows |
@@ -311,6 +312,7 @@ Gradle tasks (from `build.gradle`; not run for this chapter): `test` runs everyt
 [draw-spec]: ../../../src/main/java/com/wormzjl/icheme/science/column/v3/V3SideDrawSpec.java
 [steam-spec]: ../../../src/main/java/com/wormzjl/icheme/science/column/v3/V3SteamFeedSpec.java
 [pa-spec]: ../../../src/main/java/com/wormzjl/icheme/science/column/v3/V3PumparoundSpec.java
+[presets]: ../../../src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnPresets.java
 [resolver]: ../../../src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnProblemResolver.java
 [problem]: ../../../src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnProblem.java
 [topology]: ../../../src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnTopology.java

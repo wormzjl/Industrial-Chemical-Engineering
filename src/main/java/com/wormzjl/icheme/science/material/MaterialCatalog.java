@@ -775,7 +775,7 @@ public final class MaterialCatalog {
                 propertyValidity,packageValidity,spines,crystals,combustion,formulas,SolidMaterialCatalog.parse(resources),SolidFuelCatalog.parse(resources),records,definitions,
                 new GroupData(groupCounts,henry,activityTables,homomorphs),new DerivedPairs.Cache());
         for(var row:group(groups,"presets").values())if(text(row,"kind").equals("column"))checked(origins,row,()->
-                MaterialRuntime.with(result,text(row,"package"),()->{com.wormzjl.icheme.science.column.v3.V3ColumnProblemResolver.validateInput(result.presets().column(text(row,"id")).input(result));return null;}));
+                MaterialRuntime.with(result,text(row,"package"),()->{com.wormzjl.icheme.science.column.v3.V3ColumnProblemResolver.validateInput(com.wormzjl.icheme.science.column.v3.V3ColumnPresets.input(result.presets().column(text(row,"id")),result));return null;}));
         for(var row:group(groups,"networks").values())checked(origins,row,()->{
             var config=result.presets().network();var network=result.requirePackage(config.packageId());
             for(String id:config.fluidPresets()) {
