@@ -161,14 +161,15 @@ public final class V3ColumnCalculator {
     public static V3ColumnOutcome calculate(V3ColumnInput input, V3SolveControl control,
             double cutoff, double closureFraction, V3InitializationOptions options, V3NeuralInitializer model,
             double liquidSupplyScreenRatio) {
-        return calculate(input, control, cutoff, closureFraction, options, model, null, liquidSupplyScreenRatio);
+        return calculate(input, control, cutoff, closureFraction, options, model, null, liquidSupplyScreenRatio,
+                NewtonTrace.NONE);
     }
 
     /** Offline export after native seed correction; intermediate or parametric states are never exported. */
     public static V3ColumnOutcome calculateWithAcceptedProfile(V3ColumnInput input, V3SolveControl control,
             V3InitializationOptions options, V3NeuralInitializer model, java.util.function.Consumer<V3NeuralSeed> observer) {
         return calculate(input, control, 0, 0, options, model, Objects.requireNonNull(observer, "observer"),
-                DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO);
+                DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO, NewtonTrace.NONE);
     }
 
     /**
@@ -186,13 +187,6 @@ public final class V3ColumnCalculator {
         // The seam observes the production learned entry, so it screens on the same terms as that entry.
         return calculate(input, control, 0, 0, options, model, observer, DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO,
                 Objects.requireNonNull(trace, "trace"));
-    }
-
-    private static V3ColumnOutcome calculate(V3ColumnInput input, V3SolveControl control,
-            double cutoff, double closureFraction, V3InitializationOptions options, V3NeuralInitializer model,
-            java.util.function.Consumer<V3NeuralSeed> observer, double liquidSupplyScreenRatio) {
-        return calculate(input, control, cutoff, closureFraction, options, model, observer,
-                liquidSupplyScreenRatio, NewtonTrace.NONE);
     }
 
     private static V3ColumnOutcome calculate(V3ColumnInput input, V3SolveControl control,
@@ -377,18 +371,20 @@ public final class V3ColumnCalculator {
             // Preserve the authored phase layout before trying an auxiliary column. A pot has no
             // smaller tray grid; a zero-reflux tower can lose its dry upper section in that auxiliary.
             if (pass == null && (problem.topology().dryTopTrayCount() > 0 || input.stageCount() < 2)) {
-                pass = solveSingleProblem(problem, thermo,
+                pass = runRung(problem, thermo,
                         initializeForSolve(problem, thermo, V3ColumnInitializer.Mode.MATERIAL_CLOSED), control,
-                        "cold/phase-available/fine-fd", policy);
-                pass = correctCondenserPhase(pass, thermo, control, policy, condenserAttempts).pass();
+                        "cold/phase-available/fine-fd",
+                        RungOptions.of(ContinuationJacobianPolicy.NONE, MAXIMUM_NEWTON_ITERATIONS), policy,
+                        condenserAttempts);
                 if (!publishesSuccess(pass.attempt(), pass.audit())
                         && (!input.sideDraws().isEmpty() || !input.pumparounds().isEmpty())) {
                     V3ColumnInput baseInput = withoutPumparounds(withoutSideDraws(input));
                     V3ColumnProblem baseProblem = V3ColumnProblemResolver.resolve(baseInput, condenserBranch);
-                    V3SolvePass base = solveSingleProblem(baseProblem, thermo,
+                    V3SolvePass base = runRung(baseProblem, thermo,
                             initializeForSolve(baseProblem, thermo, V3ColumnInitializer.Mode.MATERIAL_CLOSED), control,
-                            "cold/phase-available-base/fine-fd", policy);
-                    base = correctCondenserPhase(base, thermo, control, policy, condenserAttempts).pass();
+                            "cold/phase-available-base/fine-fd",
+                            RungOptions.of(ContinuationJacobianPolicy.NONE, MAXIMUM_NEWTON_ITERATIONS), policy,
+                            condenserAttempts);
                     if (publishesSuccess(base.attempt(), base.audit())) {
                         V3ColumnProblem target = V3ColumnProblemResolver.resolve(input, base.prepared().problem().topology().condenserPhaseBranch());
                         pass = recoverWithDrawRamp(target, thermo, base, control, policy, condenserAttempts, true);
@@ -420,7 +416,8 @@ public final class V3ColumnCalculator {
                 V3DryMeshState fallbackSeed = initializeForSolve(
                         problem, thermo, V3ColumnInitializer.Mode.MATERIAL_CLOSED);
                 pass = withPriorSupportNotes(pass, solveSingleProblem(problem, thermo, fallbackSeed,
-                        control, "cold/material-closed-fallback/fine-fd", policy));
+                        control, "cold/material-closed-fallback/fine-fd",
+                        RungOptions.of(ContinuationJacobianPolicy.NONE, MAXIMUM_NEWTON_ITERATIONS), policy));
                 PhaseCorrection fallbackPhase = correctCondenserPhase(pass, thermo, control, policy, condenserAttempts);
                 pass = fallbackPhase.pass();
                 if (!publishesSuccess(pass.attempt(), pass.audit())
@@ -447,7 +444,7 @@ public final class V3ColumnCalculator {
                         && !pass.prepared().problem().hasPumparounds()) {
                     V3ColumnProblem requested = V3ColumnProblemResolver.resolve(input,
                             pass.prepared().problem().topology().condenserPhaseBranch());
-                    pass = recoverWithDrawRamp(requested, thermo, pass, control, policy, condenserAttempts);
+                    pass = recoverWithDrawRamp(requested, thermo, pass, control, policy, condenserAttempts, false);
                 }
             }
             V3SimultaneousColumnSolver.Attempt attempt = pass.attempt();
@@ -504,7 +501,7 @@ public final class V3ColumnCalculator {
             List<String> solverEvents = !selected.support().isIdentity()
                     ? mergedEvents(List.of(stageTraceEvent(selected.support(), attempt.state(), selected.problem())), pass.solverEvents())
                     : pass.solverEvents();
-            V3SolverDiagnostics diagnostics = diagnostics(attempt, audit, solvePath, solverEvents, policy);
+            V3SolverDiagnostics diagnostics = diagnostics(attempt, audit, solvePath, solverEvents, policy, null);
             if (pass.reachedRequestedProblem() && publishesRequestedGeometry(pass, input)
                     && attempt instanceof V3SimultaneousColumnSolver.Attempt.Converged converged && audit.accepted()
                     && converged.evidence().convergenceEvidence().satisfiesGates(policy.closureTolerance())) {
@@ -569,7 +566,7 @@ public final class V3ColumnCalculator {
             int iterations = strategy == V3SolveStrategy.AGGRESSIVE ? 8 : 16;
             V3SolvePass pass = solveSingleProblem(problem, thermo, seed, control,
                     strategy == V3SolveStrategy.AGGRESSIVE ? "warm/aggressive" : "warm/drift-spec",
-                    ContinuationJacobianPolicy.STAGE_LOCAL_BLOCKS, iterations, policy);
+                    RungOptions.of(ContinuationJacobianPolicy.STAGE_LOCAL_BLOCKS, iterations), policy);
             if (publishesSuccess(pass.attempt(), pass.audit())) return pass;
         } catch (V3ThermoException | IllegalArgumentException | IllegalStateException ignored) {
             // Warm starts are an optional cache. Any shape, property or trust-region mismatch uses cold recovery.
@@ -677,7 +674,7 @@ public final class V3ColumnCalculator {
             V3SolvePass preceding = lastPass;
             lastPass = solveSingleProblem(stageProblem, thermo,
                     seed, control, "cold/stage-continuation/" + stagePath + "/fine-fd",
-                    ContinuationJacobianPolicy.STAGE_LOCAL_BLOCKS, policy);
+                    RungOptions.of(ContinuationJacobianPolicy.STAGE_LOCAL_BLOCKS, MAXIMUM_NEWTON_ITERATIONS), policy);
             if (preceding != null) lastPass = withPriorSupportNotes(preceding, lastPass);
             PhaseCorrection phaseCorrection = correctCondenserPhase(lastPass, thermo, control, policy, condenserAttempts);
             lastPass = phaseCorrection.pass();
@@ -703,7 +700,7 @@ public final class V3ColumnCalculator {
         if (featureRampRequired) {
             V3ColumnProblem requested = V3ColumnProblemResolver.resolve(input,
                     lastPass.prepared().problem().topology().condenserPhaseBranch());
-            lastPass = recoverWithDrawRamp(requested, thermo, lastPass, control, policy, condenserAttempts);
+            lastPass = recoverWithDrawRamp(requested, thermo, lastPass, control, policy, condenserAttempts, false);
             if (!publishesSuccess(lastPass.attempt(), lastPass.audit())) {
                 return new V3SolvePass(lastPass.attempt(), lastPass.audit(), lastPass.feedMolarEnthalpyJoulesPerMol(),
                         "cold/stage-continuation/" + stagePath + "/failed-stage-" + input.stageCount(),
@@ -758,8 +755,8 @@ public final class V3ColumnCalculator {
             String stepPath = "cold/pressure-continuation/" + pressurePath + "/top-"
                     + Math.round(pressure / 1_000.0) + "kpa/fine-fd";
             pass = withPriorSupportNotes(pass, solveSingleProblem(stepProblem, thermo, seed, control, stepPath,
-                    ContinuationJacobianPolicy.PRESSURE_LOCAL_PREDICTOR,
-                    PRESSURE_CONTINUATION_CORRECTOR_MAXIMUM_ITERATIONS, policy));
+                    RungOptions.of(ContinuationJacobianPolicy.PRESSURE_LOCAL_PREDICTOR,
+                            PRESSURE_CONTINUATION_CORRECTOR_MAXIMUM_ITERATIONS), policy));
             pressureEvents.add(pressureEvent(pressure, "predictor", pass));
             PhaseCorrection phaseCorrection = correctCondenserPhase(pass, thermo, control, policy, condenserAttempts);
             pass = phaseCorrection.pass();
@@ -786,7 +783,7 @@ public final class V3ColumnCalculator {
         if (steamRampRequired) {
             V3ColumnProblem requested = V3ColumnProblemResolver.resolve(input,
                     pass.prepared().problem().topology().condenserPhaseBranch());
-            pass = recoverWithDrawRamp(requested, thermo, pass, control, policy, condenserAttempts);
+            pass = recoverWithDrawRamp(requested, thermo, pass, control, policy, condenserAttempts, false);
             if (!publishesSuccess(pass.attempt(), pass.audit())) {
                 return new V3SolvePass(pass.attempt(), pass.audit(), pass.feedMolarEnthalpyJoulesPerMol(),
                         "cold/pressure-continuation/" + pressurePath + "/wet-ramp-failed", pass.recoverySeed(),
@@ -906,74 +903,27 @@ public final class V3ColumnCalculator {
             V3SolvePolicy policy) {
         control.checkpoint();
         V3DryMeshState projected = projectedSeedOrPrevious(problem, thermo, projectionSource, control);
-        return solveSingleProblem(problem, thermo, projected, control, solvePath, jacobianPolicy, maximumIterations, policy);
+        return solveSingleProblem(problem, thermo, projected, control, solvePath,
+                RungOptions.of(jacobianPolicy, maximumIterations), policy);
     }
 
-    private static V3SolvePass solveSingleProblem(
-            V3ColumnProblem problem,
-            V3PengRobinsonThermo thermo,
-            V3DryMeshState seed,
-            V3SolveControl control,
-            String solvePath,
-            V3SolvePolicy policy) {
-        return solveSingleProblem(problem, thermo, seed, control, solvePath, ContinuationJacobianPolicy.NONE, policy);
-    }
-
-    private static V3SolvePass solveSingleProblem(
-            V3ColumnProblem problem,
-            V3PengRobinsonThermo thermo,
-            V3DryMeshState seed,
-            V3SolveControl control,
-            String solvePath,
-            ContinuationJacobianPolicy jacobianPolicy,
-            V3SolvePolicy policy) {
-        return solveSingleProblem(problem, thermo, seed, control, solvePath, jacobianPolicy,
-                MAXIMUM_NEWTON_ITERATIONS, policy);
-    }
-
-    private static V3SolvePass solveSingleProblem(
-            V3ColumnProblem problem,
-            V3PengRobinsonThermo thermo,
-            V3DryMeshState seed,
-            V3SolveControl control,
-            String solvePath,
-            ContinuationJacobianPolicy jacobianPolicy,
-            int maximumIterations,
-            V3SolvePolicy policy) {
-        return solveSingleProblem(problem, thermo, seed, control, solvePath, jacobianPolicy, maximumIterations, policy,
-                V3SimultaneousColumnSolver.RungBudget.DEFAULT);
-    }
-
-    private static V3SolvePass solveSingleProblem(
-            V3ColumnProblem problem,
-            V3PengRobinsonThermo thermo,
-            V3DryMeshState seed,
-            V3SolveControl control,
-            String solvePath,
-            ContinuationJacobianPolicy jacobianPolicy,
-            int maximumIterations,
-            V3SolvePolicy policy,
-            V3SimultaneousColumnSolver.RungBudget budget) {
-        return solveSingleProblem(problem, thermo, seed, control, solvePath, jacobianPolicy, maximumIterations,
-                policy, budget, V3WetTraySet.dry(problem.topology()));
+    /** One rung's solve that starts dry: the wet set is the solved problem's own dry one. */
+    private static V3SolvePass solveSingleProblem(V3ColumnProblem problem, V3PengRobinsonThermo thermo,
+            V3DryMeshState seed, V3SolveControl control, String solvePath, RungOptions rung, V3SolvePolicy policy) {
+        return solveSingleProblem(problem, thermo, seed, control, solvePath, rung, policy,
+                V3WetTraySet.dry(problem.topology()));
     }
 
     static V3SolvePass solveSingleProblem(V3ColumnProblem problem, V3PengRobinsonThermo thermo,
-            V3DryMeshState seed, V3SolveControl control, String solvePath, ContinuationJacobianPolicy jacobianPolicy,
-            int maximumIterations, V3SolvePolicy policy, V3SimultaneousColumnSolver.RungBudget budget,
+            V3DryMeshState seed, V3SolveControl control, String solvePath, RungOptions rung, V3SolvePolicy policy,
             V3WetTraySet initialWetTrays) {
-        return solveSingleProblem(problem, thermo, seed, control, solvePath, jacobianPolicy, maximumIterations,
-                policy, budget, initialWetTrays, V3SimultaneousColumnSolver.Extension.NONE);
-    }
-
-    static V3SolvePass solveSingleProblem(V3ColumnProblem problem, V3PengRobinsonThermo thermo,
-            V3DryMeshState seed, V3SolveControl control, String solvePath, ContinuationJacobianPolicy jacobianPolicy,
-            int maximumIterations, V3SolvePolicy policy, V3SimultaneousColumnSolver.RungBudget budget,
-            V3WetTraySet initialWetTrays, V3SimultaneousColumnSolver.Extension extension) {
+        int maximumIterations = rung.maximumIterations();
+        V3SimultaneousColumnSolver.RungBudget budget = rung.budget();
+        V3SimultaneousColumnSolver.Extension extension = rung.extension();
         if (maximumIterations < 1 || maximumIterations > MAXIMUM_NEWTON_ITERATIONS) {
             throw new IllegalArgumentException("V3 simultaneous solve iteration limit is invalid");
         }
-        jacobianPolicy = Objects.requireNonNull(jacobianPolicy, "jacobianPolicy");
+        ContinuationJacobianPolicy jacobianPolicy = Objects.requireNonNull(rung.jacobianPolicy(), "jacobianPolicy");
         // Only the continuation path has rungs whose failure a caller absorbs; a reduced budget anywhere else
         // would silently weaken a solve that has nothing to fall back on.
         if ((!Objects.requireNonNull(budget, "budget").equals(V3SimultaneousColumnSolver.RungBudget.DEFAULT)
@@ -1188,10 +1138,25 @@ public final class V3ColumnCalculator {
                 + "; overhead flash vapor fraction=" + transition.vaporFraction();
         V3SolvePass corrected = solveSingleProblem(transition.problem(), thermo, transition.seed(), control,
                 pass.solvePath() + "/condenser-phase-correction",
-                ContinuationJacobianPolicy.PRESSURE_LOCAL_PREDICTOR,
-                CONDENSER_PHASE_CORRECTOR_MAXIMUM_ITERATIONS, policy);
+                RungOptions.of(ContinuationJacobianPolicy.PRESSURE_LOCAL_PREDICTOR,
+                        CONDENSER_PHASE_CORRECTOR_MAXIMUM_ITERATIONS), policy);
         condenserAttempts.finishPhaseCorrection(publishesSuccess(corrected.attempt(), corrected.audit()));
         return new PhaseCorrection(withPhaseEvents(withPriorSupportNotes(pass, corrected), event), true);
+    }
+
+    /**
+     * One rung that starts dry, then its condenser phase correction, on the same policy and attempt history.
+     *
+     * <p>The rungs that take nothing between the two and keep only the corrected pass: the direct and base
+     * solves of a dry-top column or a pot, a feature-ramp rung and the ramp's request retry. The stage grid, the
+     * pressure leg, the material-closed fallback and the coarse recovery do more between them or keep the
+     * correction's verdict, so they run their own steps.</p>
+     */
+    private static V3SolvePass runRung(V3ColumnProblem problem, V3PengRobinsonThermo thermo, V3DryMeshState seed,
+            V3SolveControl control, String solvePath, RungOptions rung, V3SolvePolicy policy,
+            CondenserAttempts condenserAttempts) {
+        V3SolvePass solved = solveSingleProblem(problem, thermo, seed, control, solvePath, rung, policy);
+        return correctCondenserPhase(solved, thermo, control, policy, condenserAttempts).pass();
     }
 
     private static V3SolvePass withPhaseEvents(V3SolvePass pass, String event) {
@@ -1271,13 +1236,10 @@ public final class V3ColumnCalculator {
         }
     }
 
-    /** Bounded authored-parameter ramp from a dry surrogate seed to liquid draws and free-water steam. */
-    private static V3SolvePass recoverWithDrawRamp(
-            V3ColumnProblem requested, V3PengRobinsonThermo thermo, V3SolvePass seedBase,
-            V3SolveControl control, V3SolvePolicy policy, CondenserAttempts condenserAttempts) {
-        return recoverWithDrawRamp(requested,thermo,seedBase,control,policy,condenserAttempts,false);
-    }
-
+    /**
+     * Bounded authored-parameter ramp from a dry surrogate seed to liquid draws and free-water steam; {@code coupled}
+     * runs the one 16-rung coupled homotopy instead of the sequential schedule.
+     */
     private static V3SolvePass recoverWithDrawRamp(
             V3ColumnProblem requested, V3PengRobinsonThermo thermo, V3SolvePass seedBase,
             V3SolveControl control, V3SolvePolicy policy, CondenserAttempts condenserAttempts, boolean coupled) {
@@ -1419,11 +1381,11 @@ public final class V3ColumnCalculator {
                     ? DRAW_RAMP_REQUESTED_MAXIMUM_ITERATIONS : DRAW_RAMP_INTERMEDIATE_MAXIMUM_ITERATIONS;
             V3SimultaneousColumnSolver.RungBudget budget =
                     rampRungBudget(rampStep.steamRung(), requestedRung, fullBudgetSteamRungs);
-            V3SolvePass pass = solveSingleProblem(problem, thermo, seed, control,
+            V3SolvePass pass = runRung(problem, thermo, seed, control,
                     rampPath + (fullBudgetSteamRungs ? "/full-budget/" : "/") + rampStep.pathLabel()
                             + "-" + rampStep.progress(),
-                    ContinuationJacobianPolicy.STAGE_LOCAL_BLOCKS, rungIterations, rampPolicy, budget);
-            pass = correctCondenserPhase(pass, thermo, control, rampPolicy, rampAttempts).pass();
+                    new RungOptions(ContinuationJacobianPolicy.STAGE_LOCAL_BLOCKS, rungIterations, budget,
+                            V3SimultaneousColumnSolver.Extension.NONE), rampPolicy, rampAttempts);
             if (!publishesSuccess(pass.attempt(), pass.audit())) {
                 if (requestedRung) {
                     // A reduced intermediate budget is a bet that a steam rung either closes cheaply or
@@ -1461,11 +1423,10 @@ public final class V3ColumnCalculator {
                     // Preserve the ordinary ramp and its successful basins exactly. Only a request
                     // that exhausted both schedules gets a bounded fresh correction of its terminal
                     // state; no acceptance limit, physical specification or previous label is changed.
-                    V3SolvePass retry = solveSingleProblem(problem, thermo, pass.recoverySeed(), control,
-                            rampPath + "/request-retry", ContinuationJacobianPolicy.STAGE_LOCAL_BLOCKS,
-                            MAXIMUM_NEWTON_ITERATIONS - DRAW_RAMP_REQUESTED_MAXIMUM_ITERATIONS,
-                            rampPolicy, V3SimultaneousColumnSolver.RungBudget.DEFAULT);
-                    retry = correctCondenserPhase(retry, thermo, control, rampPolicy, rampAttempts).pass();
+                    V3SolvePass retry = runRung(problem, thermo, pass.recoverySeed(), control,
+                            rampPath + "/request-retry", RungOptions.of(ContinuationJacobianPolicy.STAGE_LOCAL_BLOCKS,
+                                    MAXIMUM_NEWTON_ITERATIONS - DRAW_RAMP_REQUESTED_MAXIMUM_ITERATIONS),
+                            rampPolicy, rampAttempts);
                     rampEvents.add(boundedEvent("requested-state correction retry: " + rampEvidence(retry)));
                     if (publishesSuccess(retry.attempt(), retry.audit()))
                         return withPriorSupportNotes(seedBase, withRampEvents(retry, energyShift.merged(rampEvents)));
@@ -2300,16 +2261,7 @@ public final class V3ColumnCalculator {
                 && converged.evidence().convergenceEvidence().satisfiesGates() && audit.accepted();
     }
 
-    static V3SolverDiagnostics diagnostics(
-            V3SimultaneousColumnSolver.Attempt attempt,
-            V3AcceptanceAudit audit,
-            String solvePath,
-            List<String> solverEvents,
-            V3SolvePolicy policy) {
-        return diagnostics(attempt, audit, solvePath, solverEvents, policy, null);
-    }
-
-    /** As above, with {@code trailer} (the calculation's band factorizations, P7) after the termination where there is room. */
+    /** A pass's bounded evidence; {@code trailer} (the calculation's band factorizations, P7, or null) follows the termination where there is room. */
     static V3SolverDiagnostics diagnostics(
             V3SimultaneousColumnSolver.Attempt attempt,
             V3AcceptanceAudit audit,
