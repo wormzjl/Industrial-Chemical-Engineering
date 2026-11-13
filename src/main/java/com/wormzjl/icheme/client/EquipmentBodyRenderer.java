@@ -4,6 +4,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.*;
 import com.wormzjl.icheme.IChemE;
 import com.wormzjl.icheme.client.model.EquipmentShellModel;
+import com.wormzjl.icheme.client.model.PolygonBake;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.Mesh;
 import com.wormzjl.icheme.science.equipment.Paint;
@@ -44,10 +45,6 @@ public final class EquipmentBodyRenderer {
     private static final int LIGHT_TICKS=20;
 
     private record Key(EquipmentShape shape,Paint paint,RenderDetail detail) {}
-    /** One body's triangles from its origin, without light: positions, colours (ARGB), atlas UVs and normals per vertex. */
-    private record Body(float[] positions,int[] colours,float[] uvs,float[] normals) {
-        int vertices(){return colours.length;}
-    }
     /** A structure in a region, as its region's mesh holds it. */
     private record Member(BlockPos origin,EquipmentShape shape,Paint paint,int light) {}
     private static final class Region {
@@ -62,9 +59,12 @@ public final class EquipmentBodyRenderer {
     }
     private static final class Light {int value;long due=Long.MIN_VALUE;}
 
-    /** Bodies by shape, paint and detail; equal structures share one. Bounded: a region merge rebuilds what it misses. */
-    private static final Map<Key,Body> BODIES=new LinkedHashMap<>(16,.75f,true){
-        @Override protected boolean removeEldestEntry(Map.Entry<Key,Body> eldest){return size()>32;}
+    /**
+     * Bodies by shape, paint and detail, each one's triangles from its origin without light ({@link PolygonBake}); equal
+     * structures share one. Bounded: a region merge rebuilds what it misses.
+     */
+    private static final Map<Key,PolygonBake.Triangles> BODIES=new LinkedHashMap<>(16,.75f,true){
+        @Override protected boolean removeEldestEntry(Map.Entry<Key,PolygonBake.Triangles> eldest){return size()>32;}
     };
     private static final Map<Long,Region> REGIONS=new HashMap<>();
     private static final Map<LoadedEquipment.Structure,Light> LIGHTS=new WeakHashMap<>();
@@ -160,7 +160,7 @@ public final class EquipmentBodyRenderer {
     /** One region's mesh from its members' bodies, offset from the region's corner, each lit at its own top. */
     private static void merge(Region region,RenderDetail detail){
         region.dirty=false;
-        var bodies=new ArrayList<Body>(region.members.size());int vertices=0;
+        var bodies=new ArrayList<PolygonBake.Triangles>(region.members.size());int vertices=0;
         double x0=Double.MAX_VALUE,y0=Double.MAX_VALUE,z0=Double.MAX_VALUE,x1=-Double.MAX_VALUE,y1=-Double.MAX_VALUE,z1=-Double.MAX_VALUE;
         for(var m:region.members){
             var body=BODIES.get(new Key(m.shape(),m.paint(),detail));
@@ -188,25 +188,17 @@ public final class EquipmentBodyRenderer {
         }
     }
 
-    /** A body's triangles as the shell model shades and tints them; null while a sprite is missing. */
-    private static Body body(EquipmentShape shape,Paint paint,RenderDetail detail){
-        var polygons=detail==RenderDetail.NORMAL?ShapeRasterizer.towerShell(shape):ShapeRasterizer.renderBody(shape,detail);int vertices=0;
-        for(var polygon:polygons)vertices+=3*(polygon.size()-2);
+    /**
+     * A body's triangles as the shell model shades and tints them ({@link PolygonBake#triangles}), each corner's shade
+     * weathered by {@link ShapeRasterizer#towerStain} (1 for all but a natural tower); null while a sprite is missing.
+     */
+    private static PolygonBake.Triangles body(EquipmentShape shape,Paint paint,RenderDetail detail){
+        var polygons=detail==RenderDetail.NORMAL?ShapeRasterizer.towerShell(shape):ShapeRasterizer.renderBody(shape,detail);
         int[] tints={Paint.tint(paint.body()),Paint.tint(paint.structure())};
-        float[] positions=new float[3*vertices],uvs=new float[2*vertices],normals=new float[3*vertices];int[] colours=new int[vertices];int v=0;
-        for(var polygon:polygons){
-            var sprite=EquipmentShellModel.sprite(polygon.material());if(sprite==null)return null;
-            int channel=polygon.material().channel(),tint=channel<0||channel>=tints.length?0xFFFFFF:tints[channel];
-            var p=polygon.positions();var n=polygon.normals();var uv=polygon.uvs();
-            for(int corner=1;corner+1<polygon.size();corner++)for(int index:new int[]{0,corner,corner+1}){
-                int shade=(int)Math.min(255,EquipmentShellModel.shade(polygon,index)*ShapeRasterizer.towerStain(shape,new double[]{p[3*index],p[3*index+1],p[3*index+2]}));
-                for(int a=0;a<3;a++){positions[3*v+a]=(float)p[3*index+a];normals[3*v+a]=(float)n[3*index+a];}
-                uvs[2*v]=sprite.getU((float)uv[2*index]);uvs[2*v+1]=sprite.getV((float)uv[2*index+1]);
-                colours[v]=0xFF000000|shade*(tint>>16&255)/255<<16|shade*(tint>>8&255)/255<<8|shade*(tint&255)/255;
-                v++;
-            }
-        }
-        return new Body(positions,colours,uvs,normals);
+        return PolygonBake.triangles(polygons,tints,EquipmentShellModel.ATLAS,(polygon,index)->{
+            var p=polygon.positions();
+            return (int)Math.min(255,EquipmentShellModel.shade(polygon,index)*ShapeRasterizer.towerStain(shape,new double[]{p[3*index],p[3*index+1],p[3*index+2]}));
+        });
     }
 
     public static void release(){REGIONS.values().forEach(Region::close);REGIONS.clear();BODIES.clear();seenCount=-1;}
