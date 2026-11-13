@@ -229,6 +229,8 @@ class PumpHealthTest {
             closed++;
             assertFalse(rig.open(), "dispatch " + closed + ": the unpowered pump stands closed");
             assertEquals(0, rig.flow(), 1e-9, "dispatch " + closed + ": it passes nothing");
+            // A closed line rests after two slices; a wake (as a store's change gives) asks for the next dispatch.
+            rig.coordinator.shaftsMoved(Set.of(1L));
         }
         assertEquals(3, closed, "three dispatches seen");
         // Power restored: FE every tick; the store restarts at a cadence and wakes the island.
