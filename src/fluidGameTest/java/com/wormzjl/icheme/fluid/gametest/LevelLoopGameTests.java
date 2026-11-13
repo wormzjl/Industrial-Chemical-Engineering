@@ -349,11 +349,12 @@ public final class LevelLoopGameTests {
                     state.high = Math.max(state.high, l);
                     var gasState = world.view(state.drum).state();
                     if (gasState != null) {state.lowPressure = Math.min(state.lowPressure, gasState.pressure());state.highPressure = Math.max(state.highPressure, gasState.pressure());}
+                    state.decided(world.controls().levelDecision(state.licBox.identity()));
                     if (cycles > state.logged) {
                         state.logged = cycles;
                         var out = world.instrumentPipeReading(levelValveId);
-                        log("cycle={} level={} % flow={} kg/s outletReading={} m3/s lag={} lic={} island={} residual={} mol {} J", cycles, fmt(l), fmt(state.flow(world, meter, plant)),
-                                out == null || out.volumeFlow() == null ? "none" : fmt(out.volumeFlow()), world.onlineTick() - tick, state.lic(), world.view(state.drum).status(), fmt(state.massResidual), fmt(state.energyResidual));
+                        log("cycle={} level={} % flow={} kg/s outletReading={} m3/s lag={} {} lic={} island={} residual={} mol {} J", cycles, fmt(l), fmt(state.flow(world, meter, plant)),
+                                out == null || out.volumeFlow() == null ? "none" : fmt(out.volumeFlow()), world.onlineTick() - tick, state.decision(cadence), state.lic(), world.view(state.drum).status(), fmt(state.massResidual), fmt(state.energyResidual));
                     }
                     if (cycles >= HALF && !state.stepped) {
                         state.firstHalf = l;
@@ -369,9 +370,9 @@ public final class LevelLoopGameTests {
                     if (state.operator != null) state.operator.player.closeContainer();
                     if (state.watcher != null) state.watcher.player.closeContainer();
                     if (state.ficWatcher != null) state.ficWatcher.player.closeContainer();
-                    log("result factor={} cycles={} blanket={} direct={} pressure={} to {} Pa low={} % high={} % levelAtStep={} % levelAtEnd={} % held={} failure={} molesResidual={} mol of {} mol energyResidual={} J of {} J intervals={} ticks={} unread={} setupResidual={} mol {} J",
+                    log("result factor={} cycles={} blanket={} direct={} pressure={} to {} Pa low={} % high={} % levelAtStep={} % levelAtEnd={} % held={} failure={} molesResidual={} mol of {} mol energyResidual={} J of {} J intervals={} ticks={} unread={} setupResidual={} mol {} J deadMax={} ticks",
                             time.factor(), state.cycles, state.blanket, state.direct, fmt(state.lowPressure), fmt(state.highPressure), fmt(state.low), fmt(state.high), fmt(state.firstHalf), fmt(state.secondHalf), state.held, state.failure,
-                            fmt(state.massResidual), fmt(state.massThrough), fmt(state.energyResidual), fmt(state.energyThrough), state.intervals, world.onlineTick() - state.applied, state.unread, fmt(state.setupMoles), fmt(state.setupEnergy));
+                            fmt(state.massResidual), fmt(state.massThrough), fmt(state.energyResidual), fmt(state.energyThrough), state.intervals, world.onlineTick() - state.applied, state.unread, fmt(state.setupMoles), fmt(state.setupEnergy), state.deadMax);
                     plant.remove();
                 })
                 .thenWaitUntil(() -> helper.assertTrue(plant.removed(), "Waiting for the plant to leave"))
@@ -438,6 +439,34 @@ public final class LevelLoopGameTests {
         double massResidual, energyResidual, massThrough, energyThrough, massOrigin = Double.NaN, energyOrigin, massIn, energyIn;
         int intervals;
         final Map<Long, Long> seen = new HashMap<>();
+        /** The drum island's solved intervals as published: the online tick each was dispatched at and its start tick. */
+        final List<long[]> slices = new ArrayList<>();
+        /** LIC-1's decisions over the loop, one per online tick it decided at. */
+        final List<com.wormzjl.icheme.runtime.control.ControlService.LevelDecision> decisions = new ArrayList<>();
+        /** The longest dead time the cycle lines reported, ticks (from a decision's sample to the first slice that ran its output); -1 for none. */
+        long deadMax = -1;
+
+        void decided(com.wormzjl.icheme.runtime.control.ControlService.LevelDecision d) {
+            if (d != null && (decisions.isEmpty() || decisions.getLast().onlineTick() != d.onlineTick())) decisions.add(d);
+        }
+
+        /**
+         * The last decision whose output has reached a solve: its dead time (ticks and cadences) from the sample it read to
+         * the start of the first slice dispatched after it (a dispatch in its own tick ran before it), its horizon, and
+         * whether it held the output in force or balanced on the booked valve volume.
+         */
+        String decision(long cadence) {
+            for (int i = decisions.size() - 1; i >= 0; i--) {
+                var d = decisions.get(i);
+                for (var s : slices)
+                    if (s[0] > d.onlineTick()) {
+                        long dead = Math.max(0, s[1] - d.sampleTick());
+                        deadMax = Math.max(deadMax, dead);
+                        return "dead=" + dead + " (" + fmt(dead / (double) cadence) + " cadence) H=" + fmt(d.horizonSeconds()) + " s held=" + d.held() + " booked=" + d.booked();
+                    }
+            }
+            return "dead=none";
+        }
 
         /** The drum's level, % of its height, from its condensed volume. */
         double level(FluidWorldAuthority world) {
@@ -480,6 +509,7 @@ public final class LevelLoopGameTests {
                 if (timing == null || seen.getOrDefault(island.id(), -1L) >= timing.sequence()) continue;
                 seen.put(island.id(), timing.sequence());
                 if (!timing.accepted() || island.lastResult().isEmpty()) continue;
+                if (timing.advance() == IslandCoordinator.Advance.SOLVED) slices.add(new long[] {timing.dispatchedAtTick(), timing.startTick()});
                 var result = island.lastResult().get();
                 double mass = 0, energy = 0;
                 for (var node : island.graph().reservoirs()) {

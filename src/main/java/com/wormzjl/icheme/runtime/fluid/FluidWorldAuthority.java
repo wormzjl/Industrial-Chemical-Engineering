@@ -2351,6 +2351,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
         for(var observed:last.get().observations())for(var sample:observed.flowSamples())if(sample.host()==id)
             return new InstrumentReading(sample.pressure(),observed.temperature(),observed.flowing(),sample.massFlow(),sample.volumeFlow());
         for(var mapping:registry.pipeViews(id)){if(!Double.isFinite(mapping.tap()))continue;for(var observed:last.get().observations())if(observed.pipe()==mapping.pipeId())return new InstrumentReading(observed.pressure(mapping.tap(),r.device().position().y(),!mapping.forward()),observed.temperature(),observed.flowing(),observed.massFlow()*(mapping.forward()?1:-1),observed.density()>0?observed.massFlow()/observed.density()*(mapping.forward()?1:-1):0);}return null;}
+    /** The volume actuator {@code id}'s controlled pipes carried, as its island booked it, through the tick a view shows; null
+     * where none is booked (IslandCoordinator.transported). A read of cached state: it never wakes or advances an island. */
+    public IslandCoordinator.Transported transported(long id){owned();Long owner=registry.owner(id);if(owner==null)return null;return runtime.coordinator().transported(owner,id).orElse(null);}
     public InstrumentReading instrumentAt(PhysicalFluidTopology.Position position){owned();var r=at(position).orElse(null);return r==null?null:instrumentPipeReading(r.device().id());}
     /** The accepted mover inlet/outlet, using the same node-to-stream reduction as heat-unit nozzles. */
     public FluidView.Port instrumentMoverPort(long id,boolean outlet){

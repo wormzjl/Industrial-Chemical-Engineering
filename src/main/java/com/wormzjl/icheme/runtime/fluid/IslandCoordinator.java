@@ -471,6 +471,37 @@ public final class IslandCoordinator {
         var rates=new HashMap<>(accepted);window.volumeRates(online).forEach((pipe,rate)->rates.merge(pipe,g*rate,Double::sum));
         return Map.copyOf(rates);
     }
+    /**
+     * The volume an actuator's controlled pipes carried, m³ gross, from the totaliser's {@code origin} through {@code tick}
+     * (the tick a view of the island shows); {@code island}, {@code revision} and {@code origin} say which history it counts,
+     * {@code sliceTicks} the island's cadence. A level loop takes the difference of two as its valve's mean flow between two
+     * samples (LEVEL_LOOP_REVIEW.md option A2).
+     */
+    public record Transported(long island,long revision,long origin,long tick,double volume,int sliceTicks) {
+        /** Whether {@code earlier} counts the same history, so the two differ by what flowed between their ticks. */
+        public boolean continues(Transported earlier){return earlier!=null&&island==earlier.island&&revision==earlier.revision&&origin==earlier.origin&&tick>=earlier.tick;}
+    }
+    /**
+     * Device {@code device}'s controlled pipes (those leaving its node with a law, as {@link PipePresentation#actuatorMappings}
+     * finds them) as island {@code id}'s accepted intervals booked them, through the tick its {@link #presentation} shows: for
+     * a certified island the preview's span past its committed tick at the certificate's recorded rate, as
+     * {@link #bulkVolumeRates} adds it. Empty with no such pipe or no unbroken history. A read: it never wakes, advances,
+     * materialises or books anything.
+     */
+    public Optional<Transported> transported(long id,long device) {
+        owned();var island=require(id);var window=island.pipeSpeed;
+        long committed=island.clock.committedTick(),target=previewTarget(island);
+        if(window.origin()<0||window.through()!=committed)return Optional.empty();
+        var pipes=new HashSet<Long>();
+        for(var pipe:island.graph.pipes())if(island.graph.reservoirs().get(pipe.first()).id()==device&&!(pipe.control() instanceof FlowControl.Passive))pipes.add(pipe.id());
+        if(pipes.isEmpty())return Optional.empty();
+        double volume=0;for(long pipe:pipes)volume+=window.total(pipe);
+        if(target>committed) {
+            var summary=island.certificate.summary();double g=(target-committed)/(double)summary.durationTicks;
+            for(var t:summary.result.pipeTransfers())if(pipes.contains(t.pipeId()))volume+=g*(PipePresentation.volume(t.forward())+PipePresentation.volume(t.reverse()));
+        }
+        return Optional.of(new Transported(island.id,island.revision,window.origin(),target,volume,island.clock.snapshot().cadenceTicks()));
+    }
 
     /** Every island, certified ones materialised first; see {@link #snapshot(long)}. */
     public List<Snapshot> snapshots(){owned();for(var island:List.copyOf(islands.values()))materialise(island);return islands.values().stream().map(Island::snapshot).toList();}

@@ -69,7 +69,7 @@ public final class PipePresentation {
             c.pressureDropPascalPerMetre(),c.reverse())).toList();
         return new FluidView.PipeInfo(info.contents(),connections,info.junction(),info.changedDirection());
     }
-    private static double volume(PipeTransfer.Stream stream){return Arrays.stream(stream.phaseVolumes()).sum()+stream.solids().volume();}
+    static double volume(PipeTransfer.Stream stream){return Arrays.stream(stream.phaseVolumes()).sum()+stream.solids().volume();}
     private static final class Sum {
         private double mass;
         private final double[][] moles;
@@ -91,19 +91,48 @@ public final class PipePresentation {
         private final ArrayDeque<Span> spans = new ArrayDeque<>();
         private long cachedAt = Long.MIN_VALUE;
         private Map<Long, Double> cached = Map.of();
+        /**
+         * Each pipe's gross volume (forward plus reverse, m³) over every interval accepted since {@link #origin}, through
+         * {@link #through}: a level loop's totaliser of its valve (code base review, LEVEL_LOOP_REVIEW.md option A2). State,
+         * never a fact: it starts again with the window.
+         */
+        private final Map<Long, Double> totals = new HashMap<>();
+        private long origin = -1, through = -1;
 
         void accepted(long start, long end, List<PipeTransfer> transfers) {
             if (end <= start) throw new IllegalArgumentException("Empty transport interval");
             if (!spans.isEmpty() && start < spans.getLast().end())
                 throw new IllegalArgumentException("Overlapping transport intervals");
+            // A gap (an interval not booked here) breaks the totaliser: it starts again at this interval.
+            if (origin < 0 || start != through) {
+                totals.clear();
+                origin = start;
+            }
             var rates = new HashMap<Long, Double>();
             for (var transfer : transfers) {
                 double volume = volume(transfer.forward()) + volume(transfer.reverse());
                 rates.put(transfer.pipeId(), volume / (end - start));
+                totals.merge(transfer.pipeId(), volume, Double::sum);
             }
+            through = end;
             spans.addLast(new Span(start, end, Map.copyOf(rates)));
             prune(end);
             cachedAt = Long.MIN_VALUE;
+        }
+
+        /** The tick the totaliser started from, or -1 before the first accepted interval. */
+        long origin() {
+            return origin;
+        }
+
+        /** The tick the totaliser stands at: the end of the last accepted interval, or -1. */
+        long through() {
+            return through;
+        }
+
+        /** Pipe {@code pipe}'s gross volume from {@link #origin} through {@link #through}, m³. */
+        double total(long pipe) {
+            return totals.getOrDefault(pipe, 0.0);
         }
 
         /** Accepted gross volume within the previous 100 online ticks, divided by five seconds.

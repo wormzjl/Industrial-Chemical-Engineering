@@ -8,7 +8,17 @@
 
 ## Level loop, starved valves and self-acting valves
 
-- **Level loop (owner choice A).** `InventoryControl.target(volume, desired, actual, previous, elapsed, horizon, …)`: `previous` NaN is a first decision (no earlier sample of that sensor and output), whose balance flow is 0, so it acts on the level error alone; a sample that has not advanced (`elapsed` 0) keeps the actuated flow; otherwise the actuated flow corrected by the change between samples. `ControlLaw` gives the sample gap and the horizon (`ControlService.CADENCE`) in process seconds (`world.time().seconds`). Test: `ControlSystemTest.aFirstDecisionActsOnTheLevelErrorAlone`.
+- **Level loop (owner choice A; balance and horizon from LEVEL_LOOP_REVIEW.md options A1 and A2).**
+  - `InventoryControl.target(volume, desired, meanFlow, previous, elapsed, horizon, …)` returns the balance flow plus the inventory error over the horizon.
+  - The balance flow is the actuated stream's mean flow over the interval between two samples, corrected by the volume change over the same interval.
+  - `previous` NaN is a first decision (no earlier sample of that sensor and output). Its balance flow is 0, so it acts on the level error alone.
+  - The horizon is `InventoryControl.horizon`: the larger of the cadence (`ControlService.CADENCE`), the process time between the last two samples and the island's slice. All times are in process seconds (`world.time().seconds`).
+  - `ControlLaw.level` serves the valve's loop and the column feed loop. It takes the mean flow from the volume the island booked through the actuator's controlled pipes. That volume is `FluidWorldAuthority.transported`, then `IslandCoordinator.transported`, a totaliser in `PipePresentation.SpeedWindow`. It is state, a read that never wakes or advances an island, and it carries a certified island's preview span at its recorded rate.
+  - Where that history does not span the two samples, the mean flow is the flow at the reading. This happens on a new or rebuilt island, after a gap, or for an actuator on another clock.
+  - A reading that has not advanced since the last decision holds that decision. A zero interval has no balance.
+  - Why: the flow at a sample's end biases the balance by the part of the interval the earlier output still ran. With that bias, the loop is stable only below 0.38 cadence of dead time. With the mean flow its poles are z² - f z + f.
+  - `ControlService.levelDecision(panel)` is a read of the last decision for a run's record: sample tick, horizon, held, booked.
+  - Tests: `ControlSystemTest.aFirstDecisionActsOnTheLevelErrorAlone`; `InventoryControlLoopTest`, which closes the law on a drum integrator with dead time and hold and checks the peak and the pole bounds.
 - **Starved regulating valve (option 1).** A regulating flow valve whose supply holds nothing past the pass (`InletPhase.starved`) starts open and is re-solved open (`PassiveStepSolver.openStarved`): it passes what reaches it ([fluid-science.md](fluid-science.md)). Test: `StarvedRegulatingValveTest`.
 - **Gas blanketing valve.** `FlowControl.ValveSource.BLANKET` (sensor `BLANKET_SENSOR`, `ControlValve.blanket()`): a mass valve the interval solver plans at every step (`planned()`, `GasBlanket.plan`); its set pressure is the vessel's (`Inventory.blanket`). It is a fitting, not a controller: no sensor, no loop.
 - **Pressure safety valve.** The run out of the guarded node carries the existing `FlowControl.PressureValve` at the valve's set pressure (`FluidDeviceSpec.relief`); no new law ([fluid-runtime.md](fluid-runtime.md)).
