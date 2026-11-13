@@ -306,6 +306,78 @@ Rules: no arithmetic changes; an override that reads a field of the design or ca
 
 Tests for the main thread: `equipmentGates`: the D-Q2 list (`EquipmentLayoutGoldenTest`, `ShapeRasterizerTest`, `ProcessUnitTest` and the rest); `test`: `FlowsheetPaletteCoverageTest`, the sizing tests, `SizingCoverageTest`, `LayeringTest`; `compileFluidGameTestJava`. Report: `wave-d/D-Q3_REPORT.md`: the per-design table, lines removed.
 
+## D-S5 The step solver in files, second slice: the start seeds, the movers' suction, the one-way closures, the device modes, the phase active set (subagent, Opus high)
+
+[wave-d/D-S4_REPORT.md](wave-d/D-S4_REPORT.md) is the first slice: its form (a package-private final class per group holding the solver and its model, built once in the solver's constructor; `solver.` qualifiers; single static imports of the solver's statics), its scripts, what stayed and the order it proposes. Reviews: FLUID_STEP_REVIEW section 2.2. `PassiveStepSolver.java` is 4,891 lines. Structure only: chain-100 exact, the junction lines, every counter and poll count unchanged. One commit per group, in this order, each only if the one before went through cleanly:
+
+1. **`StartSeeds`** (`startPoint`, `flashSeeds`, `arrivingPhases`, `initialPhaseSeeds`, `restateFlashFlows`, `settledFlash` and what only they call; the records `PassStart`, `Seeded` and `CarriedPoint` become package-private where the moved code names them).
+2. **`MoverSuction`** (the suction floors and readings: `suctionFloors`, `readSuctions`, `vapourLocks`, `zoneEdge`, `riseDensity`, the NPSH and gas-share readings the solve takes of a mover's suction).
+3. **`OneWayClosures`** (the one-way devices' closures and reopen logic: `closeIllegalStarts`, `allowedRestart`, `reopen`, the `keepOpen` handling that the solver's methods own).
+4. **`DeviceModes`** (the device active set: the mode transitions and `initialModes`).
+5. **`PhaseActiveSet`** (the folds, the corrections, the dry and emptying vessels).
+
+Rules as D-S4: bodies change only in qualifiers (a record's fields read from another file through its accessors is the one allowed exception, listed); the same floating-point operations and model calls in the same order; counters at the same places; no new allocation on a per-pass path; members widened to package-private are listed; nothing becomes public. A group whose methods are called from `Equations` in a cycle deeper than a plain call, or that writes solver state another group also writes, stays, with what blocks it. `Equations` stays in the solver (the last slice). `PassiveIntervalSolver`'s calls on the solver (`reopenNext`, `markBackwardEulerAccepted`, `replayStart`, the planners) keep their signatures on the solver.
+
+Tests for the main thread: the D-S4 list (41 classes in `test` and `holdGates`), chain-100 exact. Report: `wave-d/D-S5_REPORT.md`.
+
+## D-E5 The equilibrium engine in files, last slice: the specification searches and the balance steps (subagent, Opus high)
+
+[wave-d/D-E4_REPORT.md](wave-d/D-E4_REPORT.md) is the second slice (the form, the construction order, what stayed); [wave-d/D-E2_REPORT.md](wave-d/D-E2_REPORT.md) says why the searches' out-parameters were left. `FluidTpEquilibrium.java` is 3,363 lines: the façade (about 900), the PH and UV searches with `Search` (about 1,150) and the balance steps (about 1,300). Structure only, proved by `EngineDigestTest` unchanged, the engine's test classes and chain-100 exact. One commit per stage:
+
+1. **`BalanceSteps`** (the steps TP leaves undetermined: `pureCoexistence`; the crystal steps of PH and UV: the pure step, the triple point, the binary three-phase step, the lever rule, the binary vapour-liquid-liquid step, and what only they call).
+2. **`SpecificationSearch`** (the PH and UV outer searches: the window, the starts, `solvePh`, `solveUv`, `newtonUv`, `nestedUv`, `innerUv`, the search answers and failures), with `Search` moving beside it as `BracketSearch` (package-private; `Workspace` keeps holding its instances).
+3. **The searches' values** (D-E2's step 3), only if it is a workspace-owned holder passed as a value with no allocation per iterate and no change of what NaN means; otherwise leave it and say so.
+
+After this slice the engine is the façade: the request entry points (`tp`, `ph`, `uv`, the onsets' public functions), the checks, `evaluateTp`, the grading, the answer builders, `Workspace`, `Feed`, `Settings`. `Workspace` stays nested and public with its surface unchanged (moving it is an owner-visible API change of the network's and tests' code: not in this batch).
+
+Rules as D-E3 and D-E4.
+
+Tests for the main thread (`test` group): the D-E4 list (35 classes); chain-100 exact. Report: `wave-d/D-E5_REPORT.md`: what moved, the façade's contents and length, anything left for a later batch.
+
+## D-R4 The fluid world authority in files: R8 (subagent, Opus high)
+
+Review: RUNTIME_REVIEW section 2 (the module map and the authority's fourteen responsibilities) and row R8; [wave-d/D-R2_REPORT.md](wave-d/D-R2_REPORT.md) for how the coordinator was split (parts holding the owner, public methods kept as forwarders, fields that two parts write staying in the owner, the scripts) and [wave-d/D-R3_REPORT.md](wave-d/D-R3_REPORT.md) for the displays as they stand (`Display`, the two position-keyed displays). `runtime/fluid/FluidWorldAuthority.java` is 2,827 lines with about 60 dependents. Structure only: what the engine receives and what clients receive is unchanged, in the same order within a tick. One commit per part.
+
+Parts, in this order, each a package-private class beside the authority holding the authority (or the narrow state it reads), with the authority's public methods kept as forwarders so that no dependent changes:
+
+1. **`Displays`**: the display fields, the watch entry points' bodies, the publication passes and the rotations' and drivers' own maps (everything D-R3's table lists).
+2. **`Placement`**: what a placed, changed or removed device does to the ledger (the registration and unregistration bodies, the per-kind registration helpers).
+3. **`ViewBuilder`**: the views and status lines the presentation host reads (the read-only builders of `FluidView` and the status texts).
+4. **`ChunkBinding`**: chunk load and unload, the level binding.
+
+The plant and machine code inside the authority (columns, stills, heat units, shaft trains: about 800 lines per the review) stays in this slice: it moves with the plant layer's runtime classes in a later batch.
+
+Rules: bodies change only in qualifiers; `owned()` and the closed check stay first in every public entry point, on the authority; fields that two parts write stay in the authority (package-private, listed); no new allocation on a per-tick path; the order of calls inside `tick`, `present` and the commit hooks is unchanged. The GameTest source set and the tests call the authority's public methods: none of those signatures changes.
+
+Not yours: `IslandCoordinator.java` and its parts, `Stills.java`, `ColumnOperation.java`, `network/**` beyond a qualifier, `science/**`, `client/**`.
+
+Tests for the main thread: `compileFluidGameTestJava`; `test`: `PresentationBucketTest`, `ViewIndexTest`, `OpenTankRuntimeTest`, `DisplayCadenceTest`, `CoolingTowerRuntimeTest`, `ColumnRunTest`, `StillRuntimeTest`, `FluidFactsCompatTest`, `PhysicalRegistryTest`, `LayeringTest`, and the classes your grep finds that build an authority (list them with their task); the fluid GameTests run in the final lane. Report: `wave-d/D-R4_REPORT.md`.
+
+## D-K1 The client's shared layout and units out of the screens: C9, C16, C8 (subagent, Opus high)
+
+Review: CLIENT_REVIEW section 2 and rows C9, C16, C8. Read `.claude/skills/gui-creation/SKILL.md` first (AGENTS.md requires it before any GUI work) and the reference it names for layout classes and units. Structure only: every screen draws the same pixels and reads the same input; the software renders and the column tests are the proof (`tools/heat-gui-renders` is not run by you; the main thread runs the tests). One commit per item.
+
+1. **C9.** `FluidGuiLayout` (a builder-level layout with no Minecraft class, nested at the end of `client/gui/screens/inventory/FluidDeviceScreen.java`) becomes a top-level class in the package the skill names for shared frame layout (or `client/gui/kit`), and its seven builder importers import it there. `MachineScreen`'s hard-coded theme key and footer read the shared frame layout if the values are the same numbers (say each); if a value differs, leave it and report it.
+2. **C16.** The client has three formatters for one set of unit choices (`client/gui/flowsheet/SheetUnits`, `common/OperationColumn.Units`, `FluidDeviceScreen`'s `value`, `temperatureValue`, `pressureValue`, `quantity`, `displayPressure`, `ControlPanelScreen`'s) and two `Basis` enums mapped by name. Write the side-by-side table (what each formats, the rounding, the unit text, the basis); functions that give the same text for every input become one, in one class (where the skill puts units); functions that differ in rounding or text stay, with the difference named. No lang key and no displayed text changes (`UnitTextTest` and `LanguageFilesTest` are not run before the translation commit: no key may change).
+3. **C8.** The screens' rebuild signatures: the constructor's and the machine's are the same (slot rectangles, then each button's key, text, active, latched, hint): one `Column.signature()` (a record compared with `equals`) used by both; the others stay unless identical.
+
+Rules: no behaviour change; no new per-frame allocation (a signature built once per rebuild as today); nothing in `runtime/**`, `network/**` or `science/**` changes; `client` code stays out of common classes (`LayeringTest`).
+
+Tests for the main thread (`test` unless your grep says otherwise): `HeatControlColumnTest`, `DeviceColumnTest`, the kit and column tests (`ColumnTest`, `KitDoorTest`, `ScrollViewTest` or the present names), the sheet's unit tests (`SheetUnitsTest` or the present name), `SizingPageTest`, `GuiPrototypes` render tests if a test class runs them, `LayeringTest`; `compileJava` of the client classes. Report: `wave-d/D-K1_REPORT.md`: what moved, the units table, what stayed and why, and what only an in-game look can confirm.
+
+## D-F1 The sheet's and the wire's small structures: P3-08, P3-25, P3-23, P3-22 (subagent, Opus high)
+
+Review: FLOWSHEET_CONTROL_REVIEW section 2 and rows P3-08, P3-25, P3-23, P3-22. One commit per item.
+
+1. **P3-08** (structure only). The cycles between the sheet's core and its sizing (`Flowsheet`, `FlowsheetCompiler`, `SizingFactsFile`; `unit/ColumnDoor`): a `SizingFacts` record in the core, `SizingFactsFile` in the sizing package, the `TRIM` and `PumparoundMember` names as a core constant; saved names and bytes unchanged (the sheet's facts are facts: `FluidFactsCompatTest` and the sheet's codec tests).
+2. **P3-25** (structure only). `network/ProcessSolveCoordinator` (a runtime completion router) moves to `runtime/`; its callers follow.
+3. **P3-23** (structure only for valid input). Six count guards in the wire codecs, half throwing `IllegalArgumentException` where the others throw `DecoderException`, and three identical position-list watch payloads beside the generic one: one `Wire` helper (a count with its minimum bytes, doubles, positions, finite values) used by all six; a guard that threw `IllegalArgumentException` on malformed input now throws `DecoderException` (say each: malformed input is refused either way; a test that expects the old exception type changes with a comment). The three identical watch payloads become the generic one only if their wire bytes and registration are the same; otherwise they stay.
+4. **P3-22** (a wire change; wire protocols need no compatibility, AGENTS.md). Fifteen protocol strings, four inline, one without a prefix: one `NetworkProtocol.VERSION` that every registrar reads (`"icheme-" + VERSION` or the form that keeps each registrar's own channel names distinct: channels are named by payload type, the protocol string is the version the client and server must share: read how `registrar(String)` uses it and say what a mismatch does). `documentation/reference/FORMATS.md` lists each protocol with the constant that declares it: its rows change in the same commit (`FormatsTableTest` reads the table). CHANGELOG: one line under Changed.
+
+Not yours: `runtime/fluid/FluidWorldAuthority.java` (another subagent is splitting it: do not edit it; a qualifier there for P3-25 is the one exception, one line), `client/**` beyond an import of a moved class, `science/column/**`, `science/thermo/**`, `science/fluid/**`.
+
+Tests for the main thread (`test` unless your grep says otherwise): `SheetSizingTest`, `FlowsheetExamplesTest`, the sheet's codec and facts tests, `AssemblyNetworkCodecTest`, `ColumnWireTest`, `V3InspectionCodecTest`, `FluidPacketCodecTest`, `EquipmentNetworkCodecTest`, `FormatsTableTest`, `LayeringTest`, `ProcessSolveServicesRequestTest`, `CompletionWakeupTest`; `compileFluidGameTestJava`; the GameTests (client and server on one protocol) run in the final lane. Report: `wave-d/D-F1_REPORT.md`.
+
 ## D-Q1 The drawing kit without forwarders and ratings: E3, E2, E5 with E9 (subagent, Opus high)
 
 Review: EQUIPMENT_REVIEW rows E3, E2, E5, E9 and section 2 (line numbers there are from before wave B's geometry batch: find each thing by name). `science/equipment/ProcessUnit.java` is the drawing kit; it also holds 13 forwarders to `UnitDesign.of(kind)` and the datasheet ratings that sizing reads, and `UnitDesign` doubles as the machine-rating facade. Structure only: `EquipmentLayoutGoldenTest`, the sizing tests and the machine registration tests bit for bit; no saved field, enum name or lang key changes. One commit per step.
