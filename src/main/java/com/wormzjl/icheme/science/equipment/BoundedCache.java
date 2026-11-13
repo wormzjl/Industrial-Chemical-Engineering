@@ -1,10 +1,8 @@
 package com.wormzjl.icheme.science.equipment;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiPredicate;
 import java.util.function.Function;
@@ -12,21 +10,39 @@ import java.util.function.ToLongFunction;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * A cache bounded by its entry count and by a weight, which drops the least recently used entries when full (finding E13,
- * batch 2026-11-13-codebase-review). It replaces caches that cleared everything when full, so one shape too many no longer
- * rebuilds every other one. A cache changes only when a value is built, never the value.
+ * A cache bounded by its entry count and by a weight, which drops entries when full, least recently used approximately
+ * (finding E13, batch 2026-11-13-codebase-review): the second-chance rule. An entry used since the last eviction pass
+ * survives it; an unused one goes, eldest first. It replaces caches that cleared everything when full, so one shape too many
+ * no longer rebuilds every other one. A cache changes only when a value is built, never the value.
  *
- * <p>Thread safe. A value is built once per key at a time, as {@link ConcurrentHashMap#computeIfAbsent} builds it: a second
+ * <p>Thread safe. A hit takes no monitor: a {@link ConcurrentHashMap} read, and a write of the entry's used flag only when
+ * it is clear. A value is built once per key at a time, as {@link ConcurrentHashMap#computeIfAbsent} builds it: a second
  * caller for the same key waits for the first, callers for other keys build in parallel. The builder must not use this
- * cache. A builder's null is not kept. The newest entry stays even when it alone is heavier than the bound.
+ * cache. A builder's null is not kept. The monitor guards only admission and eviction, and values are removed after it is
+ * released. The newest entry stays even when it alone is heavier than the bound.
  */
 public final class BoundedCache<K, V> {
-    private final ConcurrentHashMap<K, V> values = new ConcurrentHashMap<>();
-    /** The admitted keys, least recently used first, and the weight of each; guarded by {@code this}. */
-    private final LinkedHashMap<K, Long> order = new LinkedHashMap<>(16, .75f, true);
+    /** A kept value, its weight and whether it was used since the last eviction pass reached it. */
+    private static final class Entry<K, V> {
+        final K key;
+        final V value;
+        final long weight;
+        volatile boolean used;
+
+        Entry(K key, V value, long weight) {
+            this.key = key;
+            this.value = value;
+            this.weight = weight;
+        }
+    }
+
+    private final ConcurrentHashMap<K, Entry<K, V>> values = new ConcurrentHashMap<>();
+    /** The admitted entries, eldest first (insertion order, an entry given a second chance moved to the tail); guarded by {@code this}. */
+    private final ArrayDeque<Entry<K, V>> order = new ArrayDeque<>();
     private final int maxEntries;
     private final long maxWeight;
     private final ToLongFunction<? super V> weigher;
+    /** The summed weight of the entries in {@link #order}; guarded by {@code this}. */
     private long weight;
 
     /** A cache of at most {@code maxEntries} entries. */
@@ -44,46 +60,44 @@ public final class BoundedCache<K, V> {
 
     /** The value of {@code key}, or null; a hit counts as a use. */
     public @Nullable V get(K key) {
-        var value = values.get(key);
-        if (value != null) touch(key);
-        return value;
+        var entry = values.get(key);
+        return entry == null ? null : use(entry);
     }
 
     /** The value of {@code key}, built by {@code builder} and kept when absent. */
     public @Nullable V computeIfAbsent(K key, Function<? super K, ? extends V> builder) {
-        var value = values.get(key);
-        if (value != null) {
-            touch(key);
-            return value;
-        }
+        var entry = values.get(key);
+        if (entry != null) return use(entry);
         boolean[] built = {false};
-        value = values.computeIfAbsent(key, k -> {
+        entry = values.computeIfAbsent(key, k -> {
+            V value = builder.apply(k);
+            if (value == null) return null;
             built[0] = true;
-            return builder.apply(k);
+            return new Entry<>(k, value, weigher.applyAsLong(value));
         });
-        if (value == null) return null;
-        if (built[0]) admit(key, value);
-        else touch(key);
-        return value;
+        if (entry == null) return null;
+        if (!built[0]) return use(entry);
+        admit(entry, null);
+        return entry.value;
     }
 
     /** Keeps {@code value} for {@code key}, in place of any value it had. */
     public void put(K key, V value) {
-        values.put(key, value);
-        admit(key, value);
+        var entry = new Entry<>(key, value, weigher.applyAsLong(value));
+        admit(entry, values.put(key, entry));
     }
 
     /** Drops every entry for which {@code test} holds. */
     public void removeIf(BiPredicate<? super K, ? super V> test) {
-        var dropped = new ArrayList<Map.Entry<K, V>>();
+        var dropped = new ArrayList<Entry<K, V>>();
         synchronized (this) {
-            for (Iterator<Map.Entry<K, Long>> it = order.entrySet().iterator(); it.hasNext(); ) {
+            for (var it = order.iterator(); it.hasNext(); ) {
                 var entry = it.next();
-                var value = values.get(entry.getKey());
-                if (value != null && !test.test(entry.getKey(), value)) continue;
-                weight -= entry.getValue();
+                boolean kept = values.get(entry.key) == entry;
+                if (kept && !test.test(entry.key, entry.value)) continue;
+                weight -= entry.weight;
                 it.remove();
-                if (value != null) dropped.add(Map.entry(entry.getKey(), value));
+                if (kept) dropped.add(entry);
             }
         }
         drop(dropped);
@@ -106,35 +120,46 @@ public final class BoundedCache<K, V> {
         return weight;
     }
 
-    private synchronized void touch(K key) {
-        order.get(key);
+    /** A hit: the flag is written only when it is clear, so a repeated hit writes nothing. */
+    private static <K, V> V use(Entry<K, V> entry) {
+        if (!entry.used) entry.used = true;
+        return entry.value;
     }
 
     /**
-     * Admits {@code value} and drops the least recently used entries past the bounds. The monitor guards only the order:
-     * the values are removed after it is released, so a builder holding a bin of {@link #values} can still read the cache.
+     * Admits {@code entry} (in place of {@code replaced}, when a put replaced one) and drops entries past the bounds: from
+     * the eldest, an entry used since the last pass is given a second chance (its flag cleared, moved to the tail), an unused
+     * one is dropped. One pass clears every flag, so a second pass drops without a second chance.
      */
-    private void admit(K key, V value) {
-        var dropped = new ArrayList<Map.Entry<K, V>>();
+    private void admit(Entry<K, V> entry, @Nullable Entry<K, V> replaced) {
+        var dropped = new ArrayList<Entry<K, V>>();
         synchronized (this) {
+            if (replaced != null && order.remove(replaced)) weight -= replaced.weight;
             // A value cleared or dropped between its build and here is not admitted.
-            if (values.get(key) != value) return;
-            long w = weigher.applyAsLong(value);
-            var previous = order.put(key, w);
-            weight += w - (previous == null ? 0 : previous);
-            for (var it = order.entrySet().iterator(); (order.size() > maxEntries || weight > maxWeight) && order.size() > 1 && it.hasNext(); ) {
-                var eldest = it.next();
-                if (eldest.getKey().equals(key)) continue;
-                weight -= eldest.getValue();
-                it.remove();
-                var old = values.get(eldest.getKey());
-                if (old != null) dropped.add(Map.entry(eldest.getKey(), old));
+            if (values.get(entry.key) != entry) return;
+            order.addLast(entry);
+            weight += entry.weight;
+            int chances = order.size();
+            while ((order.size() > maxEntries || weight > maxWeight) && order.size() > 1) {
+                var eldest = order.pollFirst();
+                if (eldest == entry) {
+                    order.addLast(eldest);
+                    continue;
+                }
+                boolean kept = values.get(eldest.key) == eldest;
+                if (kept && eldest.used && chances-- > 0) {
+                    eldest.used = false;
+                    order.addLast(eldest);
+                    continue;
+                }
+                weight -= eldest.weight;
+                if (kept) dropped.add(eldest);
             }
         }
         drop(dropped);
     }
 
-    private void drop(List<Map.Entry<K, V>> dropped) {
-        for (var entry : dropped) values.remove(entry.getKey(), entry.getValue());
+    private void drop(List<Entry<K, V>> dropped) {
+        for (var entry : dropped) values.remove(entry.key, entry);
     }
 }
