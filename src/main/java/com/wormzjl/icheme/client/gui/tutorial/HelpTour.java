@@ -35,11 +35,19 @@ public final class HelpTour {
     private Resolver resolver = (a, reveal) -> null;
     private int stop;
     private @Nullable Runnable onFinished;
+    /** The open stop's layout and what it was laid out for (code review finding 4): the stop, the screen's size, its control's rectangle, the language. */
+    private @Nullable TourLayout laid;
+    private @Nullable java.util.List<Object> laidFor;
 
     /** The tour of {@code page}, or null where it has none. */
     public static @Nullable Tour of(String page) {
-        if (tours == null) tours = TourFile.load();
+        if (tours == null) tours = TourFile.load(GuideClient.guide());
         return tours.get(page);
+    }
+
+    /** Drops the tours read (a resource reload, {@link GuideClient#reloaded}). */
+    static void forget() {
+        tours = null;
     }
 
     public boolean isOpen() {
@@ -100,13 +108,21 @@ public final class HelpTour {
         return Component.translatable(key).getString();
     }
 
-    /** The stop as laid out on a screen {@code width} by {@code height}, or null where its control is gone. */
+    /**
+     * The stop as laid out on a screen {@code width} by {@code height}, or null where its control is gone. A frame resolves
+     * the open stop's anchor alone (one lookup on the host's map); the other stops' anchors (first, last), the words and the
+     * layout only when the stop, the size, the control's place (a scroll) or the language change.
+     */
     private @Nullable TourLayout layout(Font font, int width, int height) {
         var control = at(stop, true);
         if (tour == null || control == null) return null;
+        var key = java.util.List.<Object>of(tour, stop, width, height, control, GuideClient.generation(), GuideClient.language());
+        if (key.equals(laidFor) && laid != null) return laid;
         boolean last = last();
         var words = new TourLayout.Words(tr(Tour.KEY + "back"), tr(Tour.KEY + "next"), tr(Tour.KEY + "done"), tr(Tour.KEY + "close"), tr(Tour.KEY + "show_me"));
-        return TourLayout.of(width, height, control, tr(tour.key(stop)), first(), last, last && tour.shows(), words, GuiCanvas.measure(font));
+        laid = TourLayout.of(width, height, control, tr(tour.key(stop)), first(), last, last && tour.shows(), words, GuiCanvas.measure(font));
+        laidFor = key;
+        return laid;
     }
 
     /** Draws the open stop over the whole screen. */

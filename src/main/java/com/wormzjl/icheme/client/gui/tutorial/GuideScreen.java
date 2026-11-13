@@ -160,15 +160,34 @@ public class GuideScreen extends Screen {
         }
     }
 
+    /** What the page was laid out for (code review finding 4): render lays it out again only when one of these changes. */
+    private java.util.List<Object> placedFor;
+
+    private java.util.List<Object> placing() {
+        return java.util.Arrays.asList(GuideClient.generation(), GuideClient.language(), GuideClient.progress(), open, card, pageId, width, height, ClientConfig.temperature(),
+                ClientConfig.theme());
+    }
+
+    /** The page laid out again where the progress (the server's may have arrived), the open page, the size or a setting changed. */
+    private void placeIfChanged() {
+        if (page == null || !placing().equals(placedFor)) place();
+        else read();
+    }
+
     /** The page as the guide, the progress and the open chapter or card stand now. */
     protected void place() {
+        placedFor = placing();
         int w = Math.min(GuidePage.DESIGN_WIDTH, width - 8), h = Math.min(GuidePage.DESIGN_HEIGHT, height - 8);
         left = (width - w) / 2;
         top = (height - h) / 2;
         page = GuidePage.place(new GuidePage.Input(guide(), GuideClient.progress(), open, card, com.wormzjl.icheme.science.tutorial.cards.Card.temperature(ClientConfig.temperature()))
                 .withPage(GuideClient.pages(), pageId), w, h, GuiCanvas.measure(font), GuideScreen::tr, themeHint());
+        read();
+    }
+
+    /** The offset kept on the page; P5: a page step is done once its page was read to its end (at once where it needs no scrolling). */
+    private void read() {
         offset = Math.clamp(offset, 0, page.maxOffset());
-        // P5: a page step is done once its page was read to its end (at once where it needs no scrolling).
         if (reading != null && page.equipment() != null && offset >= page.maxOffset()) {
             GuideClient.report(reading);
             reading = null;
@@ -179,7 +198,7 @@ public class GuideScreen extends Screen {
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         super.render(g, mouseX, mouseY, partialTick);
         // The server's progress may have arrived: the page follows it.
-        place();
+        placeIfChanged();
         if (cardView != null) cardView.advance(System.nanoTime());
         double x = mouseX - left, y = mouseY - top;
         String hover = hoverAction(x, y);
@@ -319,7 +338,7 @@ public class GuideScreen extends Screen {
                 }).fromFirstStop());
             }
             case GuidePage.PAGE_TOUR -> {
-                var tour = p.tour() == null ? null : com.wormzjl.icheme.science.tutorial.guide.TourFile.load().get(p.tour());
+                var tour = p.tour() == null ? null : HelpTour.of(p.tour());
                 if (tour != null && tour.film() != null) film(tour.film());
             }
             default -> {

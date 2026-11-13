@@ -17,6 +17,8 @@ import java.util.Set;
 public final class GuideClient {
     private static Guide guide;
     private static Progress progress = Progress.NONE;
+    /** Counts the resource reloads: the guide's, its pages' and its tours' caches, and every laid-out page, drop at each. */
+    private static int generation;
 
     private GuideClient() {
     }
@@ -30,7 +32,7 @@ public final class GuideClient {
 
     /** P5: the equipment pages, read once from the mod's assets. */
     public static com.wormzjl.icheme.science.tutorial.guide.Pages pages() {
-        if (pages == null) pages = com.wormzjl.icheme.science.tutorial.guide.PageFile.load();
+        if (pages == null) pages = com.wormzjl.icheme.science.tutorial.guide.PageFile.load(name -> HelpTour.of(name) != null);
         return pages;
     }
 
@@ -38,6 +40,27 @@ public final class GuideClient {
     public static void openPage(String id) {
         var mc = net.minecraft.client.Minecraft.getInstance();
         mc.tell(() -> mc.setScreen(GuideScreen.page(id)));
+    }
+
+    /**
+     * A resource reload (a language change is one): the guide, its pages and its tours are read again when next asked, and
+     * every cached layout keyed on {@link #generation} is laid out again (code review finding 4).
+     */
+    public static void reloaded() {
+        guide = null;
+        pages = null;
+        HelpTour.forget();
+        generation++;
+    }
+
+    /** The reload count the guide's cached layouts are keyed on. */
+    public static int generation() {
+        return generation;
+    }
+
+    /** The language the client shows, for the cached layouts' keys. */
+    public static String language() {
+        return net.minecraft.client.Minecraft.getInstance().getLanguageManager().getSelected();
     }
 
     public static Progress progress() {

@@ -32,6 +32,11 @@ public final class Films {
         return ALL.keySet();
     }
 
+    /** Whether a film is named {@code name}: a name's check, nothing built. */
+    public static boolean has(String name) {
+        return ALL.containsKey(name);
+    }
+
     /** The film named {@code name}, built anew; null for none. */
     public static Scene build(String name) {
         var film = ALL.get(name);

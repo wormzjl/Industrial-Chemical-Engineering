@@ -23,25 +23,36 @@ public final class TourFile {
     private TourFile() {
     }
 
-    /** The tours on the class path, by page. */
+    /** The tours on the class path, by page, their steps to show checked against the guide on the class path. */
     public static Map<String, Tour> load() {
+        return load(GuideFile.load());
+    }
+
+    /** The tours on the class path, by page, their steps to show checked against {@code guide} (the client's, read once). */
+    public static Map<String, Tour> load(Guide guide) {
         try (InputStream in = TourFile.class.getResourceAsStream(PATH)) {
             if (in == null) throw new IllegalStateException("No " + PATH);
-            return read(JsonParser.parseReader(new InputStreamReader(in, StandardCharsets.UTF_8)).getAsJsonObject());
+            return read(JsonParser.parseReader(new InputStreamReader(in, StandardCharsets.UTF_8)).getAsJsonObject(), Films::has, step -> guide.step(step) != null);
         } catch (IOException e) {
             throw new IllegalStateException("Unreadable " + PATH, e);
         }
     }
 
     public static Map<String, Tour> read(JsonObject json) {
+        var guide = GuideFile.load();
+        return read(json, Films::has, step -> guide.step(step) != null);
+    }
+
+    /** The tours in {@code json}, their films and steps to show checked by name (code review finding 5: no film is built). */
+    public static Map<String, Tour> read(JsonObject json, java.util.function.Predicate<String> films, java.util.function.Predicate<String> steps) {
         var tours = new LinkedHashMap<String, Tour>();
         for (var e : json.entrySet()) {
             var t = GuideFile.object(e.getValue(), "tour " + e.getKey());
             GuideFile.only(t, "tour " + e.getKey(), "film", "stops", "show");
             String film = t.has("film") ? t.get("film").getAsString() : null;
-            if (film != null && Films.build(film) == null) throw new IllegalArgumentException("Unknown film: " + film);
+            if (film != null && !films.test(film)) throw new IllegalArgumentException("Unknown film: " + film);
             String show = t.has("show") ? t.get("show").getAsString() : null;
-            if (show != null && GuideFile.load().step(show) == null) throw new IllegalArgumentException("Unknown step to show: " + show);
+            if (show != null && !steps.test(show)) throw new IllegalArgumentException("Unknown step to show: " + show);
             var stops = new ArrayList<Tour.Stop>();
             for (var element : t.getAsJsonArray("stops")) {
                 var s = GuideFile.object(element, "stop of " + e.getKey());

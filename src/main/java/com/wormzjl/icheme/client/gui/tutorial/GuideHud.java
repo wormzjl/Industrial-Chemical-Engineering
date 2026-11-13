@@ -20,6 +20,10 @@ public final class GuideHud {
     public static final int X = 4, Y = 4, MAX_WIDTH = 300;
     public static final String ELLIPSIS = "…";
 
+    /** The line and what it was cut for (code review finding 4): the step, the width, the language, the temperature unit, the reload. */
+    private static String line;
+    private static java.util.List<Object> lineFor;
+
     private GuideHud() {
     }
 
@@ -43,7 +47,13 @@ public final class GuideHud {
         var step = guide.step(current);
         if (chapter == null || step == null) return;
         var m = GuiCanvas.measure(mc.font);
-        String text = line(Marked.parse(chapter.text(step, k -> Component.translatable(k).getString(), com.wormzjl.icheme.science.tutorial.cards.Card.temperature(ClientConfig.temperature()))).text(), Math.min(MAX_WIDTH, g.guiWidth() - 2 * X - 4), m);
+        int width = Math.min(MAX_WIDTH, g.guiWidth() - 2 * X - 4);
+        var key = java.util.List.<Object>of(current, width, GuideClient.language(), ClientConfig.temperature(), GuideClient.generation());
+        if (!key.equals(lineFor)) {
+            line = line(Marked.parse(chapter.text(step, k -> Component.translatable(k).getString(), com.wormzjl.icheme.science.tutorial.cards.Card.temperature(ClientConfig.temperature()))).text(), width, m);
+            lineFor = key;
+        }
+        String text = line;
         var canvas = new GuiCanvas(g, mc.font, 0, 0);
         canvas.batch(() -> {
             canvas.fill(X - 2, Y - 2, X + m.width(text) + 2, Y + 10, 0x90000000);

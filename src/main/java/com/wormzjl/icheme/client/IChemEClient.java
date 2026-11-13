@@ -31,6 +31,12 @@ public final class IChemEClient {
         com.wormzjl.icheme.client.gui.tutorial.FilmCommand.register(event);
     }
 
+    /** The field guide's files and laid-out pages drop at a resource reload, a language change included (code review finding 4). */
+    @SubscribeEvent
+    public static void registerReloadListeners(net.neoforged.neoforge.client.event.RegisterClientReloadListenersEvent event) {
+        event.registerReloadListener((net.minecraft.server.packs.resources.ResourceManagerReloadListener) manager -> com.wormzjl.icheme.client.gui.tutorial.GuideClient.reloaded());
+    }
+
     /** The field guide's key (batch 2026-11-12-tutorial-system, P1): default H. */
     @SubscribeEvent
     public static void registerKeys(net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent event) {

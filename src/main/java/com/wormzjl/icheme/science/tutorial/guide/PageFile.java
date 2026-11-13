@@ -40,9 +40,14 @@ public final class PageFile {
 
     /** The pages on the class path. */
     public static Pages load() {
+        return load(TourFile.load().keySet()::contains);
+    }
+
+    /** The pages on the class path, their tours checked by {@code tours} (the client's tours, read once). */
+    public static Pages load(Predicate<String> tours) {
         try (InputStream in = PageFile.class.getResourceAsStream(PATH)) {
             if (in == null) throw new IllegalStateException("No " + PATH);
-            return read(JsonParser.parseReader(new InputStreamReader(in, StandardCharsets.UTF_8)).getAsJsonObject());
+            return read(JsonParser.parseReader(new InputStreamReader(in, StandardCharsets.UTF_8)).getAsJsonObject(), Films::has, tours);
         } catch (IOException e) {
             throw new IllegalStateException("Unreadable " + PATH, e);
         }
@@ -50,9 +55,7 @@ public final class PageFile {
 
     /** The pages in {@code json}, their films checked against {@code Films} and their tours against {@code tours.json}. */
     public static Pages read(JsonObject json) {
-        var films = new HashSet<String>();
-        Films.names().forEach(films::add);
-        return read(json, films::contains, TourFile.load().keySet()::contains);
+        return read(json, Films::has, TourFile.load().keySet()::contains);
     }
 
     public static Pages read(JsonObject json, Predicate<String> films, Predicate<String> tours) {
