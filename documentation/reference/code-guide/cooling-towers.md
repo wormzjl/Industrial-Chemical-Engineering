@@ -59,7 +59,7 @@ Optional client Low detail caps the shell's angular samples at 24 and uses the s
 ## Plume and sounds
 
 - `TowerTransfer.exhaust(model, fill)`: a read of the air a fill leaves (no search of the fill): the fill's own leaving air (`Result.airTemperature`, `airHumidity`, since batch 2026-11-11-aqueous-solvents); returns temperature, humidity and its ratio to saturation; the ambient below `NO_AIR` 1e-3 kg/s of dry air. `TowerTransfer.reference` gives the calibration point as a fill's result.
-- `FluidWorldAuthority.publishTowers` sends it on `Watch.TOWERS` (`TowerPlume`, protocol `fluid-21`) to watchers only; a reversed draught sends no plume. Marks `fan_exhaust_<i>` (induced draft) and `throat` (natural draft) in `CoolingTowerDesign`. The plume itself is drawn by the client ([effects.md](effects.md)).
+- `FluidWorldAuthority.publishTowers` sends it on `Watch.TOWERS` (`TowerPlume`, on the fluid protocol, [FORMATS.md](../FORMATS.md)) to watchers only; a reversed draught sends no plume. Marks `fan_exhaust_<i>` (induced draft) and `throat` (natural draft) in `CoolingTowerDesign`. The plume itself is drawn by the client ([effects.md](effects.md)).
 - Noise sources (`runtime/fluid/Noise`): each fan cell `TOWER_FAN` 100 dB at full speed (50 log10 of the speed share), falling water at the air inlets 72 + 10 log10 of the water flow (kg/s).
 
 ## Factory instrument locations
