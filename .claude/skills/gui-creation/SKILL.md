@@ -42,8 +42,11 @@ and `SkinField` hold Minecraft classes and belong to the screens.
 - In the game: `GuiCanvas` (the canvas), `ScrollView` (a viewport with its own bar), `KitWidgets` (keeps widgets at
   their content slots and moves them as the view scrolls: no rebuild on scroll), `SkinButton` (`SkinButton.of` makes a
   column's button), `SkinField`, `KitDoor` (a door's columns: one view, one bar where the window is short, kept
-  widgets, drawing and hover; two columns side by side share the view and the bar, `layout(areas, bar, rows, m)`;
-  used by the dialogs, the constructor, the assembly screen, the column calculator and the device screen).
+  widgets, drawing and hover, `action(x, y)` for a press on a `Choice`; two columns side by side share the view and the
+  bar, `layout(areas, bar, rows, m)`; used by the dialogs, the constructor, the assembly screen, the column calculator
+  and the device screen), `DoorInput` (the shared input order: the help tour, `SkinField.clickOutside`, the door; the
+  tour over the page, else the hint; a screen's own handlers go after it, before `super`).
+- The name's entry in a title strip: `NameEntry` beside `TitleStrip` (draft, follow on tick, `renames()`, `box`, `draw`).
 - A loop of fills (a shape drawn dot by dot, row by row or segment by segment) draws inside `Canvas.batch`: one draw
   call in the game, where each fill outside a batch is its own. `DrawCallTest` holds the counts; the render tools'
   `-Dcount` prints each page's draw calls.

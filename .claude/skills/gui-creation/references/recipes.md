@@ -130,8 +130,9 @@ Worked example: `GaugeScreen` with `DialogColumns.gauge`.
    ```
 
 3. Nothing sets or restores the GUI scale: the screen keeps the player's (`fit-and-scale.md`).
-4. Each frame place the rows again for their texts, draw the door, take its hover, and draw it with `KitDoor.hint`.
-   Pass the wheel, press, drag and release to `door`.
+4. Each frame place the rows again for their texts, draw the door, take its hover, and draw it with
+   `DoorInput.overlay` (the open tour, else `KitDoor.hint`). Route the press and the wheel through `DoorInput.press` and
+   `DoorInput.wheel` (`|| super...`), and pass the drag and release to `door`.
 5. A dialog has no `signature`. A key that changes a widget calls `rebuildWidgets()` itself (`switchDisplay`).
 6. Opening it: a menu screen registers in `IChemEClient.registerScreens` (`ModMenus`); a screen with no menu opens with
    `mc.setScreen` (`EquipmentClient`). `GaugeScreen` and `PipelineToolScreen` edit a held item, whose menu has its own
