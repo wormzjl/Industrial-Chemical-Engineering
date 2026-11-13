@@ -33,3 +33,16 @@ The family's trajectories depend on the engine's lag already at the baseline (te
 - The unit and gate suites, chain-100, the junction lines and the campaigns stand for the code at `a0b157325`.
 - The GameTest step stands for 96 of 97; the level-loop test needs its diagnosis and one run after the fix.
 - Not covered by any gate: the five screens' frame batch in the game (B-K1), the Rust library on the Java side (part 2b is not merged).
+
+## Second run, at the unit's final code (`4563176e1`)
+
+After the first run the Rust library's Java side (part 2b: the C++ lane removed, the band solve behind a ceiling that is off by default) and the level law's fix were merged, so the lane ran once more, alone, at `4563176e1`. **Green.** Output: `tmp/merge-lane/head/` (the first run's is kept in `tmp/review-verify/lane-a0b157325-head/`); console `tmp/review-verify/lane-console-2.txt`.
+
+- **test.** Selection: 287/450 `test`, 10/10 `holdGates`, 76/86 `columnGates`, 6/29 `equipmentGates`, `fluidSolverRegression` 1/1. 3,454 tests, 0 skipped, 0 errors, 0 failures. 541 load sets saved, none failing.
+- **regression (chain-100).** Exact.
+- **gametest.** 97 of 97. The three level loops end at 50.00 %; post-step peaks 62.49 %, 87.06 % and 66.71 %; the largest dead time of a decision 80 to 81 ticks, so the run was inside the condition that failed before.
+- **campaign** against the baseline: cold random 992 → 992 (newtonSolves 327588 → 327675), bundled random 994 → 994 (134674 → 133291; seed 431 moved F → E9; no new hold), bundled defaults 1000 → 1000. No new budget-class hold.
+- **Junction lines:** 33/33 identical with the baseline, floats included; counters identical; `MIXED_GAS_COST` newtonSolves 313 → 313.
+- Run beside the lane by the main thread on the same code: `nativeSmoke` 4 of 4 with the built Rust library, and ten column classes with `-PnativeColumn=band` (no digest moved).
+
+What stands for the unit: every gate above at `4563176e1`. Not covered by any gate: the five screens' frame batch in the game (B-K1). Known residual: a level loop's first correction after a large feed step can come two cadences late on a loaded machine; the two-cycle drum of `LevelLoopGameTests` has two cadences of headroom at +50 % (peak 87 % in this run).
