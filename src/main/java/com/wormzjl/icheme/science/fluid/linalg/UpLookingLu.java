@@ -75,7 +75,8 @@ public final class UpLookingLu {
         boolean sameStructure=kept&&n==size&&Arrays.equals(columns,0,n+1,keptColumns,0,n+1)&&Arrays.equals(rows,0,nonzeros,keptRows,0,nonzeros);
         prepare(n,nonzeros);
         if(!sameStructure){kept=false;keepPattern(n,columns,rows,nonzeros);}
-        boolean reuse=false;
+        // The kept reach (see the class comment): every column reuses its last reach while every earlier pivot repeated.
+        boolean reuse=sameStructure;
         failedColumn=-1;lLength=0;uLength=0;
         for(int k=0;k<n;k++) {
             lColumns[k]=lLength;uColumns[k]=uLength;
