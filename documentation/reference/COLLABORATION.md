@@ -41,7 +41,7 @@ Rules:
 
 ## 3. Numbers
 
-Facts schemas, state formats, shape fields, the graph identity and protocol versions are single counters that parallel batches would otherwise both take.
+Facts schemas, state formats, shape fields, the certificate replay revision and protocol versions are single counters that parallel batches would otherwise both take.
 
 - The current value of each is in `documentation/reference/FORMATS.md` (to be created by the documentation batch; until then, in the constant the code declares).
 - A batch that needs a new number reserves it before its first code commit: a documentation-only commit on `main` that adds a row "reserved by `<batch>`" to the table. The next batch takes the next number.
