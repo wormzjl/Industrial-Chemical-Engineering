@@ -31,8 +31,8 @@ import java.util.Arrays;
  * and the lower-Gibbs root of a composition, which the three-slot system shares ({@link ThreeSlotFlash}). The dry core
  * hands it the feed and the workspace and reads the outcome (SPLIT, MERGED or FAILED) and the products the workspace
  * holds. It reads the engine's kernel, evaluator, settings, stability test and crystal species, given once at
- * construction, and calls back into the engine only for the counted stability test ({@code stabilityOf}) and the
- * carried path's crystal-rich test ({@code crystalRich}). Immutable; one instance per engine.
+ * construction, and calls back only into the dry core for the counted stability test ({@code stabilityOf}) and into
+ * the carried crystals for the carried path's crystal-rich test ({@code crystalRich}). Immutable; one instance per engine.
  */
 final class TwoPhaseFlash {
     /** Keeps {@code exp(ln K)} a finite, positive normal double. */
@@ -41,7 +41,8 @@ final class TwoPhaseFlash {
     /** Halvings of the amount of the stationary phase when a Newton start is built from the stability test. */
     private static final int START_HALVINGS = 60;
 
-    private final FluidTpEquilibrium engine;
+    private final DryCore dryCore;
+    private final CarriedCrystals carried;
     private final PengRobinsonKernel kernel;
     private final CubicPhaseEvaluator evaluator;
     private final Settings settings;
@@ -50,9 +51,10 @@ final class TwoPhaseFlash {
     /** Per component, whether a crystal of the engine is of that species (the engine's list). */
     private final boolean[] crystalSpecies;
 
-    TwoPhaseFlash(FluidTpEquilibrium engine, PengRobinsonKernel kernel, CubicPhaseEvaluator evaluator, Settings settings,
-                  TangentPlaneStability stability, int count, boolean[] crystalSpecies) {
-        this.engine = engine;
+    TwoPhaseFlash(DryCore dryCore, CarriedCrystals carried, PengRobinsonKernel kernel, CubicPhaseEvaluator evaluator,
+                  Settings settings, TangentPlaneStability stability, int count, boolean[] crystalSpecies) {
+        this.dryCore = dryCore;
+        this.carried = carried;
         this.kernel = kernel;
         this.evaluator = evaluator;
         this.settings = settings;
@@ -234,8 +236,8 @@ final class TwoPhaseFlash {
         if (w.tieLine < settings.mergeTieLine() && gap < settings.mergeVolumeGap()) return MERGED;
         // Stability of both products: a third phase or another split is not an answer.
         w.carriedProduct = true;
-        TangentPlaneStability.Result liquidCheck = engine.stabilityOf(stability, t, w.liquidAmounts, material, w);
-        TangentPlaneStability.Result vapourCheck = engine.stabilityOf(stability, t, w.vaporAmounts, material, w);
+        TangentPlaneStability.Result liquidCheck = dryCore.stabilityOf(stability, t, w.liquidAmounts, material, w);
+        TangentPlaneStability.Result vapourCheck = dryCore.stabilityOf(stability, t, w.vaporAmounts, material, w);
         w.productDistance = Math.min(liquidCheck.minimumTangentPlaneDistance(), vapourCheck.minimumTangentPlaneDistance());
         if (liquidCheck.verdict() != TangentPlaneStability.Verdict.STABLE
                 || vapourCheck.verdict() != TangentPlaneStability.Verdict.STABLE) {
@@ -246,7 +248,7 @@ final class TwoPhaseFlash {
                     || vapourCheck.verdict() == TangentPlaneStability.Verdict.UNSTABLE;
             if (w.carrying && vapourCheck.verdict() == TangentPlaneStability.Verdict.UNSTABLE
                     && liquidCheck.verdict() == TangentPlaneStability.Verdict.STABLE
-                    && liquid.molarVolume() < vapour.molarVolume() && engine.crystalRich(w.liquidAmounts, liquid, t, w)) {
+                    && liquid.molarVolume() < vapour.molarVolume() && carried.crystalRich(w.liquidAmounts, liquid, t, w)) {
                 w.standInHeld = true;
                 for (int i = 0; i < count; i++) w.standIn[i] = crystalSpecies[i] ? w.liquidAmounts[i] : 0.0;
             }

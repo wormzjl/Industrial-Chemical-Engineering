@@ -30,9 +30,9 @@ import java.util.Arrays;
 /**
  * The three-slot system of {@link FluidTpEquilibrium} (W3a D3, S01): three fluid phases as one system, for an unstable
  * feed of a derived list holding a polar compound with water in the equation of state. The dry core hands it the feed
- * and the workspace ({@link FluidTpEquilibrium#threeSlotFeed} decides); it answers the core's outcome (SINGLE, SPLIT,
+ * and the workspace ({@link DryCore#threeSlotFeed} decides); it answers the core's outcome (SINGLE, SPLIT,
  * MERGED, THREE or FAILED) and leaves the products in the workspace as the two-slot path does. It reads the engine's
- * kernel, evaluator, settings and stability test, given once at construction, and calls back into the engine only for
+ * kernel, evaluator, settings and stability test, given once at construction, and calls back into the dry core only for
  * the counted stability test ({@code stabilityOf}); the lower-Gibbs root of a composition is the two-phase flash's
  * ({@link TwoPhaseFlash#lowerGibbsRoot}, {@link TwoPhaseFlash#differentiatePhase}). Immutable; one instance per engine.
  */
@@ -57,7 +57,7 @@ final class ThreeSlotFlash {
     private static final int RACHFORD_RICE_SLOTS_ITERATIONS = 100;
     private static final double SLOT_FRACTION_TOLERANCE = 1.0e-13;
 
-    private final FluidTpEquilibrium engine;
+    private final DryCore dryCore;
     private final TwoPhaseFlash twoPhase;
     private final PengRobinsonKernel kernel;
     private final CubicPhaseEvaluator evaluator;
@@ -69,9 +69,9 @@ final class ThreeSlotFlash {
     /** The cubic's water component, -1 without one. */
     private final int cubicWater;
 
-    ThreeSlotFlash(FluidTpEquilibrium engine, TwoPhaseFlash twoPhase, PengRobinsonKernel kernel, CubicPhaseEvaluator evaluator,
+    ThreeSlotFlash(DryCore dryCore, TwoPhaseFlash twoPhase, PengRobinsonKernel kernel, CubicPhaseEvaluator evaluator,
                    Settings settings, TangentPlaneStability stability, int count, boolean[] polar, int cubicWater) {
-        this.engine = engine;
+        this.dryCore = dryCore;
         this.twoPhase = twoPhase;
         this.kernel = kernel;
         this.evaluator = evaluator;
@@ -151,7 +151,7 @@ final class ThreeSlotFlash {
             w.productDistance = Double.POSITIVE_INFINITY;
             for (int k = 0; k < SLOT_COUNT; k++) {
                 if (!s.present[k]) continue;
-                TangentPlaneStability.Result check = engine.stabilityOf(stability, t, s.moles[k], material, w);
+                TangentPlaneStability.Result check = dryCore.stabilityOf(stability, t, s.moles[k], material, w);
                 w.productDistance = Math.min(w.productDistance, check.minimumTangentPlaneDistance());
                 if (check.verdict() != TangentPlaneStability.Verdict.STABLE) {
                     if (worst != TangentPlaneStability.Verdict.UNSTABLE) worst = check.verdict();
@@ -663,8 +663,8 @@ final class ThreeSlotFlash {
 
     /**
      * The converged slots as the core's outcome: one present slot is the feed (SINGLE on its root); two fill the two-slot
-     * workspace (the denser the liquid) for {@link FluidTpEquilibrium#twoPhaseResult}, merged where the split is below the model's
-     * resolution; three are THREE for {@link FluidTpEquilibrium#threePhaseResult}. Each component's amounts: every share but the largest by
+     * workspace (the denser the liquid) for {@link DryCore#twoPhaseResult}, merged where the split is below the model's
+     * resolution; three are THREE for {@link DryCore#threePhaseResult}. Each component's amounts: every share but the largest by
      * its own mole number, the largest by difference, so each component conserves to rounding.
      */
     private int slotOutcome(double t, int present, Feed material, Workspace w) {
