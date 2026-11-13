@@ -43,6 +43,36 @@ class PassiveStepSolverTest {
             assertEquals(built,FluidThermodynamics.Prepared.workspacesBuilt(),"component "+component);
         }
     }
+    /**
+     * Wave B lane S1's counters (batch 2026-11-13-codebase-review), printed for its report: per step of a retained solver,
+     * after one warm step, the bytes the thread allocates, the Peng-Robinson workspaces bundles build and the LU
+     * factorizations; on two water tanks, and on a generator's water through a cooled heat side into a junction and a void.
+     * A count, not a time; it asserts only that each island steps.
+     */
+    @Test void printsTheStepCountersOfAnIslandWithAndWithoutAHeatSide() {
+        int water=model.componentCount()-1;var run=new PipeResistance.Geometry(10,.05,.000045,0);
+        var tanks=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,fill(300000,water)),new PassiveNetwork.Reservoir(2,0,fill(150000,water))),
+                List.of(new PassiveNetwork.Pipe(3,0,1,run)));
+        var source=fill(300000,water);
+        var heated=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,source,PassiveNetwork.NodeKind.GENERATOR),
+                new PassiveNetwork.Reservoir(2,0,source,PassiveNetwork.NodeKind.JUNCTION),new PassiveNetwork.Reservoir(3,0,fill(101325,water),PassiveNetwork.NodeKind.VOID)),
+            List.of(new PassiveNetwork.Pipe(5,0,1,run).withHeat(new HeatSide(2,HeatCurve.Films.DEFAULT,new double[]{300},0,0)),new PassiveNetwork.Pipe(6,1,2,run)));
+        var threads=(com.sun.management.ThreadMXBean)java.lang.management.ManagementFactory.getThreadMXBean();
+        boolean enabled=com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics.ENABLED;
+        try {
+            com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics.ENABLED=true;
+            for(var island:List.of(java.util.Map.entry("two tanks",tanks),java.util.Map.entry("heat side",heated))) {
+                var graph=island.getValue();var solver=new PassiveStepSolver(model);
+                graph=PassiveIntervalSolver.replace(graph,solver.solve(graph,.1,()->{}));
+                int steps=5;long bytes=threads.getCurrentThreadAllocatedBytes(),built=FluidThermodynamics.Prepared.workspacesBuilt();
+                long factorizations=com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics.luFactorizations.sum();
+                for(int step=0;step<steps;step++){var result=solver.solve(graph,.1,()->{});assertNotNull(result);graph=PassiveIntervalSolver.replace(graph,result);}
+                System.out.printf(java.util.Locale.ROOT,"S1 counters, %s: %d bytes a step, %.2f kernel workspaces a step, %.2f LU factorizations a step%n",island.getKey(),
+                        (threads.getCurrentThreadAllocatedBytes()-bytes)/steps,(FluidThermodynamics.Prepared.workspacesBuilt()-built)/(double)steps,
+                        (com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics.luFactorizations.sum()-factorizations)/(double)steps);
+            }
+        } finally {com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics.ENABLED=enabled;}
+    }
     @Test void endpointOrderOnlyChangesTheFlowSign() {
         var solver=new PassiveStepSolver(model);var forward=solver.solve(graph(0,false),.1,()->{});var backward=solver.solve(graph(0,true),.1,()->{});
         assertEquals(forward.massFlows()[0],-backward.massFlows()[0],1e-8);
