@@ -47,7 +47,7 @@ Synthesis (main thread):
 
 Reviews (subagents): [THERMO_CORE_REVIEW.md](THERMO_CORE_REVIEW.md) (S1), [THERMO_ADAPTERS_REVIEW.md](THERMO_ADAPTERS_REVIEW.md) (S2), [FLUID_STEP_REVIEW.md](FLUID_STEP_REVIEW.md) (S3), [FLUID_LAWS_REVIEW.md](FLUID_LAWS_REVIEW.md) (S4), [COLUMN_REVIEW.md](COLUMN_REVIEW.md) and [RUST_COLUMN_PORT_PLAN.md](RUST_COLUMN_PORT_PLAN.md) (S5), [RUNTIME_REVIEW.md](RUNTIME_REVIEW.md) (S6), [MACHINES_REVIEW.md](MACHINES_REVIEW.md) (S7), [PLANT_COUPLING_REVIEW.md](PLANT_COUPLING_REVIEW.md) (S8), [EQUIPMENT_REVIEW.md](EQUIPMENT_REVIEW.md) (P1), [CLIENT_REVIEW.md](CLIENT_REVIEW.md) (P2), [FLOWSHEET_CONTROL_REVIEW.md](FLOWSHEET_CONTROL_REVIEW.md) (P3), [INVENTORY.md](INVENTORY.md) (P4).
 
-Plan and briefs: [REVIEW_PLAN.md](REVIEW_PLAN.md) (its section 2 is replaced by SOLVER_DECOUPLING_PLAN), [BRIEFS.md](BRIEFS.md), [WAVE_A_BRIEFS.md](WAVE_A_BRIEFS.md).
+Plan and briefs: [REVIEW_PLAN.md](REVIEW_PLAN.md) (its section 2 is replaced by SOLVER_DECOUPLING_PLAN), [BRIEFS.md](BRIEFS.md), [WAVE_A_BRIEFS.md](WAVE_A_BRIEFS.md), [WAVE_B_BRIEFS.md](WAVE_B_BRIEFS.md) (first round: column, fluid step, thermo kernel, runtime).
 
 Profile (bench sub-thread B1): [PROFILE_REVIEW.md](PROFILE_REVIEW.md): the Java baseline (wall, CPU, allocation, GC, retained heap, time share by kind) of an island step, a column solve and 20 shaft trains; harness `tools/codebase-review-bench/`.
 
