@@ -38,7 +38,7 @@ class PresentationBucketTest {
 
     private double[] pure(int component){var n=new double[components];n[component]=1;return n;}
     private static PhysicalFluidTopology.Device device(long id,int x,Kind kind) {
-        return new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position("minecraft:overworld",x,0,0),kind,PhysicalFluidTopology.Direction.EAST,BLOCK,new FlowControl.Passive());
+        return PhysicalFluidTopology.Device.builder(id,new PhysicalFluidTopology.Position("minecraft:overworld",x,0,0),kind,PhysicalFluidTopology.Direction.EAST,BLOCK,new FlowControl.Passive()).build();
     }
     private PassiveNetwork line(Map<Long,FluidDeviceSpec> specs,Kind... kinds) {
         var devices=new ArrayList<PhysicalFluidTopology.Device>();for(int i=0;i<kinds.length;i++)devices.add(device(i+1,i,kinds[i]));

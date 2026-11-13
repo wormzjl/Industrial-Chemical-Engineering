@@ -91,19 +91,38 @@ public final class PhysicalFluidTopology {
     public record Device(long id,Position position,TopologyCompiler.Kind kind,Direction facing,
                          PipeResistance.Geometry geometry,FlowControl control,List<Port> ports,boolean generatorEnabled,Cutoff cutoff,boolean inlineFilter,int joints,int slots,long points,HeatUnit heat,
                          long suspendedBy,boolean held) {
-        /** A device the registry has placed ({@code held} false). */
-        public Device(long id,Position position,TopologyCompiler.Kind kind,Direction facing,PipeResistance.Geometry geometry,FlowControl control,List<Port> ports,boolean generatorEnabled,Cutoff cutoff,boolean inlineFilter,int joints,int slots,long points,HeatUnit heat,long suspendedBy){this(id,position,kind,facing,geometry,control,ports,generatorEnabled,cutoff,inlineFilter,joints,slots,points,heat,suspendedBy,false);}
-        /** A device no running column holds ({@code suspendedBy} 0). */
-        public Device(long id,Position position,TopologyCompiler.Kind kind,Direction facing,PipeResistance.Geometry geometry,FlowControl control,List<Port> ports,boolean generatorEnabled,Cutoff cutoff,boolean inlineFilter,int joints,int slots,long points,HeatUnit heat){this(id,position,kind,facing,geometry,control,ports,generatorEnabled,cutoff,inlineFilter,joints,slots,points,heat,0);}
-        /** A device without a heat unit: every kind but {@link TopologyCompiler.Kind#HEAT_SIDE} and a kettle's shell. */
-        public Device(long id,Position position,TopologyCompiler.Kind kind,Direction facing,PipeResistance.Geometry geometry,FlowControl control,List<Port> ports,boolean generatorEnabled,Cutoff cutoff,boolean inlineFilter,int joints,int slots,long points){this(id,position,kind,facing,geometry,control,ports,generatorEnabled,cutoff,inlineFilter,joints,slots,points,null);}
-        public Device(long id,Position position,TopologyCompiler.Kind kind,Direction facing,PipeResistance.Geometry geometry,FlowControl control,List<Port> ports,boolean generatorEnabled,Cutoff cutoff,boolean inlineFilter,int joints){this(id,position,kind,facing,geometry,control,ports,generatorEnabled,cutoff,inlineFilter,joints,0,0);}
-        public Device(long id,Position position,TopologyCompiler.Kind kind,Direction facing,PipeResistance.Geometry geometry,FlowControl control,List<Port> ports,boolean generatorEnabled,Cutoff cutoff,boolean inlineFilter){this(id,position,kind,facing,geometry,control,ports,generatorEnabled,cutoff,inlineFilter,ALL_FACES);}
-        public Device(long id,Position position,TopologyCompiler.Kind kind,Direction facing,PipeResistance.Geometry geometry,FlowControl control,List<Port> ports,boolean generatorEnabled,Cutoff cutoff){this(id,position,kind,facing,geometry,control,ports,generatorEnabled,cutoff,false);}
-        public Device(long id,Position position,TopologyCompiler.Kind kind,Direction facing,PipeResistance.Geometry geometry,FlowControl control,List<Port> ports,boolean generatorEnabled){this(id,position,kind,facing,geometry,control,ports,generatorEnabled,Cutoff.NONE);}
-        /** Authoring convenience; world placement explicitly creates generators switched off. */
-        public Device(long id,Position position,TopologyCompiler.Kind kind,Direction facing,PipeResistance.Geometry geometry,FlowControl control,List<Port> ports){this(id,position,kind,facing,geometry,control,ports,true);}
-        public Device(long id,Position position,TopologyCompiler.Kind kind,Direction facing,PipeResistance.Geometry geometry,FlowControl control){this(id,position,kind,facing,geometry,control,List.of());}
+        /**
+         * A device built from the six fields every device states; each other field keeps its default unless set: no ports,
+         * a generator switched on (an authoring convenience: world placement switches a generator off explicitly), no
+         * cutoff, no inline filter, every face a joint ({@link #ALL_FACES}), no rack lane (0 slots, 0 points), no heat unit
+         * (every kind but {@link TopologyCompiler.Kind#HEAT_SIDE}, a burner, a kettle's shell and a still's pot), no running
+         * column holding it ({@code suspendedBy} 0) and placed ({@code held} false). The facts codec states every field and
+         * uses the canonical constructor.
+         */
+        public static Builder builder(long id,Position position,TopologyCompiler.Kind kind,Direction facing,PipeResistance.Geometry geometry,FlowControl control) {
+            return new Builder(id,position,kind,facing,geometry,control);
+        }
+        /** {@link #build} calls the canonical constructor once, so a device is checked whole, never field by field. */
+        public static final class Builder {
+            private final long id;private final Position position;private final TopologyCompiler.Kind kind;private final Direction facing;
+            private final PipeResistance.Geometry geometry;private final FlowControl control;
+            private List<Port> ports=List.of();private boolean generatorEnabled=true;private Cutoff cutoff=Cutoff.NONE;private boolean inlineFilter;
+            private int joints=ALL_FACES,slots;private long points;private HeatUnit heat;private long suspendedBy;private boolean held;
+            private Builder(long id,Position position,TopologyCompiler.Kind kind,Direction facing,PipeResistance.Geometry geometry,FlowControl control) {
+                this.id=id;this.position=position;this.kind=kind;this.facing=facing;this.geometry=geometry;this.control=control;
+            }
+            public Builder ports(List<Port> value){ports=value;return this;}
+            public Builder generatorEnabled(boolean value){generatorEnabled=value;return this;}
+            public Builder cutoff(Cutoff value){cutoff=value;return this;}
+            public Builder inlineFilter(boolean value){inlineFilter=value;return this;}
+            public Builder joints(int value){joints=value;return this;}
+            public Builder slots(int value){slots=value;return this;}
+            public Builder points(long value){points=value;return this;}
+            public Builder heat(HeatUnit value){heat=value;return this;}
+            public Builder suspendedBy(long value){suspendedBy=value;return this;}
+            public Builder held(boolean value){held=value;return this;}
+            public Device build(){return new Device(id,position,kind,facing,geometry,control,ports,generatorEnabled,cutoff,inlineFilter,joints,slots,points,heat,suspendedBy,held);}
+        }
         public Device {
             if(id<=0)throw new IllegalArgumentException("Physical identities must be positive");
             Objects.requireNonNull(position);Objects.requireNonNull(kind);Objects.requireNonNull(facing);Objects.requireNonNull(geometry);Objects.requireNonNull(control);

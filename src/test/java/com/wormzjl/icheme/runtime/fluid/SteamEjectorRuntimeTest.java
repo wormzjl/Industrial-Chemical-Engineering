@@ -39,8 +39,8 @@ class SteamEjectorRuntimeTest {
         var ports=List.of(new PhysicalFluidTopology.Port(suction,WEST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.SUCTION),
                 new PhysicalFluidTopology.Port(new PhysicalFluidTopology.Position(EventPathWorld.DIM,3,64,0),WEST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.INLET),
                 new PhysicalFluidTopology.Port(new PhysicalFluidTopology.Position(EventPathWorld.DIM,3,64,4),WEST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.DISCHARGE));
-        var device=new PhysicalFluidTopology.Device(id,suction,Kind.EJECTOR,NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),
-                new FlowControl.Ejector(SET),ports,true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES);
+        var device=PhysicalFluidTopology.Device.builder(id,suction,Kind.EJECTOR,NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),
+                new FlowControl.Ejector(SET)).ports(ports).build();
         w.registry.submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,FluidDeviceSpec.nitrogen(EventPathWorld.CATALOG),0))),id+1,null);
         return new Plant(w,id);
     }

@@ -131,23 +131,23 @@ class EventPathWorld {
      */
     long place(int x,int y,int z,Kind kind,PhysicalFluidTopology.Direction facing,FlowControl control,FluidDeviceSpec spec,double bore) {
         long id=ledger.nextIdentity();
-        var device=new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position(DIM,x,y,z),FluidTestSupport.mechanical(kind),facing,new PipeResistance.Geometry(1,bore,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),control);
+        var device=PhysicalFluidTopology.Device.builder(id,new PhysicalFluidTopology.Position(DIM,x,y,z),FluidTestSupport.mechanical(kind),facing,new PipeResistance.Geometry(1,bore,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),control).build();
         registry.submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,spec!=null?spec:FluidDeviceSpec.nitrogen(catalog),0))),id+1,null);
         return id;
     }
     /** A laid pipe: it connects only through {@code joints} (a bit per direction ordinal). */
     long placeLaid(int x,int y,int z,PhysicalFluidTopology.Direction facing,double bore,int joints) {
         long id=ledger.nextIdentity();
-        var device=new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position(DIM,x,y,z),Kind.PIPE,facing,new PipeResistance.Geometry(1,bore,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),
-                new FlowControl.Passive(),List.of(),true,PhysicalFluidTopology.Cutoff.NONE,false,joints);
+        var device=PhysicalFluidTopology.Device.builder(id,new PhysicalFluidTopology.Position(DIM,x,y,z),Kind.PIPE,facing,new PipeResistance.Geometry(1,bore,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),
+                new FlowControl.Passive()).joints(joints).build();
         registry.submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,FluidDeviceSpec.nitrogen(catalog),0))),id+1,null);
         return id;
     }
     /** A rack lane: a laid pipe on option {@code lane - 1} of a rack cell, {@code slots} positions wide, meeting its neighbours at {@code points} (PhysicalFluidTopology.Device). */
     long placeLane(int x,int y,int z,int lane,int slots,long points,PhysicalFluidTopology.Direction facing,double bore,int joints) {
         long id=ledger.nextIdentity();
-        var device=new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position(DIM,x,y,z,lane),Kind.PIPE,facing,new PipeResistance.Geometry(1,bore,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),
-                new FlowControl.Passive(),List.of(),true,PhysicalFluidTopology.Cutoff.NONE,false,joints,slots,points);
+        var device=PhysicalFluidTopology.Device.builder(id,new PhysicalFluidTopology.Position(DIM,x,y,z,lane),Kind.PIPE,facing,new PipeResistance.Geometry(1,bore,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),
+                new FlowControl.Passive()).joints(joints).slots(slots).points(points).build();
         registry.submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,FluidDeviceSpec.nitrogen(catalog),0))),id+1,null);
         return id;
     }
@@ -165,7 +165,7 @@ class EventPathWorld {
     /** {@link #placeVessel} open to the atmosphere when {@code open} (a floating-roof tank). */
     long placeVessel(PhysicalFluidTopology.Position node,List<PhysicalFluidTopology.Port> ports,double volume,double levelHeight,boolean open) {
         long id=ledger.nextIdentity();
-        var device=new PhysicalFluidTopology.Device(id,node,Kind.RESERVOIR,PhysicalFluidTopology.Direction.NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive(),ports);
+        var device=PhysicalFluidTopology.Device.builder(id,node,Kind.RESERVOIR,PhysicalFluidTopology.Direction.NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive()).ports(ports).build();
         var spec=new FluidDeviceSpec(volume,298.15,101325,FluidDeviceSpec.nitrogen(catalog).composition(),SlurryFeed.NONE,levelHeight,open);
         registry.submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,spec,0))),id+1,null);
         return id;

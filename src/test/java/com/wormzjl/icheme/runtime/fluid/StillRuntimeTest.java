@@ -46,7 +46,7 @@ class StillRuntimeTest {
     }
 
     private static PhysicalFluidTopology.Device plain(long id, int x, int z, Kind kind) {
-        return new PhysicalFluidTopology.Device(id, at(x, 0, z), kind, EAST, STUB, new FlowControl.Passive());
+        return PhysicalFluidTopology.Device.builder(id, at(x, 0, z), kind, EAST, STUB, new FlowControl.Passive()).build();
     }
 
     private static PhysicalFluidTopology.Port port(PhysicalFluidTopology.Position cell, PhysicalFluidTopology.Direction face, PassiveNetwork.PhasePort phase, PhysicalFluidTopology.ConnectionRole role) {
@@ -56,31 +56,28 @@ class StillRuntimeTest {
     /** The pot at (0, 0, 0) as {@code FluidWorldAuthority.placeStill} places it: closed with its VAPOUR nozzle east, or open (its head). */
     private static PhysicalFluidTopology.Device pot(BatchStill.Design design) {
         var ports = design.condenser() ? List.<PhysicalFluidTopology.Port>of() : List.of(port(at(0, 0, 0), EAST, PassiveNetwork.PhasePort.VAPOR, PhysicalFluidTopology.ConnectionRole.VESSEL));
-        return new PhysicalFluidTopology.Device(POT, at(0, 0, 0), Kind.RESERVOIR, NORTH, STUB, new FlowControl.Passive(), ports, true, PhysicalFluidTopology.Cutoff.NONE, false,
-                PhysicalFluidTopology.ALL_FACES, 0, 0, new HeatUnit(HeatSides.Unit.STILL, HeatSides.Side.POT, design.heatedArea(), 0));
+        return PhysicalFluidTopology.Device.builder(POT, at(0, 0, 0), Kind.RESERVOIR, NORTH, STUB, new FlowControl.Passive()).ports(ports).heat(new HeatUnit(HeatSides.Unit.STILL, HeatSides.Side.POT, design.heatedArea(), 0)).build();
     }
 
     /** The condenser's water side, its inlet at (2, 0, 10) and its outlet at (4, 0, 10), partnered with the pot. */
     private static PhysicalFluidTopology.Device water(BatchStill.Design design) {
         var ports = List.of(port(at(2, 0, 10), WEST, PassiveNetwork.PhasePort.BULK, PhysicalFluidTopology.ConnectionRole.INLET),
                 port(at(4, 0, 10), EAST, PassiveNetwork.PhasePort.BULK, PhysicalFluidTopology.ConnectionRole.OUTLET));
-        return new PhysicalFluidTopology.Device(WATER, at(2, 0, 10), Kind.HEAT_SIDE, NORTH, new PipeResistance.Geometry(1, .1, PipeResistance.DEFAULT_ROUGHNESS_METRES, 0),
-                new FlowControl.Passive(), ports, true, PhysicalFluidTopology.Cutoff.NONE, false, PhysicalFluidTopology.ALL_FACES, 0, 0,
-                new HeatUnit(HeatSides.Unit.STILL, HeatSides.Side.WATER, design.condenserArea(), POT));
+        return PhysicalFluidTopology.Device.builder(WATER, at(2, 0, 10), Kind.HEAT_SIDE, NORTH, new PipeResistance.Geometry(1, .1, PipeResistance.DEFAULT_ROUGHNESS_METRES, 0),
+                new FlowControl.Passive()).ports(ports)
+                .heat(new HeatUnit(HeatSides.Unit.STILL, HeatSides.Side.WATER, design.condenserArea(), POT)).build();
     }
 
     /** A liquid still's burners at (3, 0, 40), fed from the west, as {@code FluidWorldAuthority.placeStill} places them: a void carrying the still's fuel valve. */
     private static PhysicalFluidTopology.Device burners() {
-        return new PhysicalFluidTopology.Device(BURNERS, at(3, 0, 40), Kind.VOID, NORTH, STUB, FlowControl.ControlValve.still(),
-                List.of(port(at(3, 0, 40), WEST, PassiveNetwork.PhasePort.BULK, PhysicalFluidTopology.ConnectionRole.VESSEL)), true, PhysicalFluidTopology.Cutoff.NONE, false,
-                PhysicalFluidTopology.ALL_FACES, 0, 0, null);
+        return PhysicalFluidTopology.Device.builder(BURNERS, at(3, 0, 40), Kind.VOID, NORTH, STUB, FlowControl.ControlValve.still())
+                .ports(List.of(port(at(3, 0, 40), WEST, PassiveNetwork.PhasePort.BULK, PhysicalFluidTopology.ConnectionRole.VESSEL))).build();
     }
 
     /** A still outlet at (0, 0, {@code z}): a generator carrying the still's valve, its one port east. */
     private static PhysicalFluidTopology.Device outlet(long id, int z) {
-        return new PhysicalFluidTopology.Device(id, at(0, 0, z), Kind.GENERATOR, NORTH, STUB, FlowControl.ControlValve.still(),
-                List.of(port(at(0, 0, z), EAST, PassiveNetwork.PhasePort.BULK, PhysicalFluidTopology.ConnectionRole.VESSEL)), true, PhysicalFluidTopology.Cutoff.NONE, false,
-                PhysicalFluidTopology.ALL_FACES, 0, 0, null);
+        return PhysicalFluidTopology.Device.builder(id, at(0, 0, z), Kind.GENERATOR, NORTH, STUB, FlowControl.ControlValve.still())
+                .ports(List.of(port(at(0, 0, z), EAST, PassiveNetwork.PhasePort.BULK, PhysicalFluidTopology.ConnectionRole.VESSEL))).build();
     }
 
     private static FluidThermodynamics.State per(FluidThermodynamics model, double[] fractions, double temperature, double pressure) {
@@ -987,13 +984,12 @@ class StillRuntimeTest {
         for (int k = 0; k < 3; k++) {
             int joints = PhysicalFluidTopology.diverterJoints(WEST, k);
             assertEquals(k, PhysicalFluidTopology.diverterOutlet(WEST, joints));
-            var diverter = new PhysicalFluidTopology.Device(5, at(1, 0, 0), Kind.DIVERTER_VALVE, WEST, STUB, new FlowControl.Passive(), List.of(), true,
-                    PhysicalFluidTopology.Cutoff.NONE, false, joints);
+            var diverter = PhysicalFluidTopology.Device.builder(5, at(1, 0, 0), Kind.DIVERTER_VALVE, WEST, STUB, new FlowControl.Passive()).joints(joints).build();
             assertEquals(Kind.PIPE, diverter.hydraulicKind(), "a diverter is a pipe through its open pair");
             var devices = List.of(plain(1, 0, 0, Kind.GENERATOR), diverter,
                     plain(6, 2, 0, Kind.PIPE), plain(7, 3, 0, Kind.VOID),
-                    new PhysicalFluidTopology.Device(8, at(1, 0, 1), Kind.PIPE, SOUTH, STUB, new FlowControl.Passive()), new PhysicalFluidTopology.Device(9, at(1, 0, 2), Kind.VOID, SOUTH, STUB, new FlowControl.Passive()),
-                    new PhysicalFluidTopology.Device(10, at(1, 0, -1), Kind.PIPE, NORTH, STUB, new FlowControl.Passive()), new PhysicalFluidTopology.Device(11, at(1, 0, -2), Kind.VOID, NORTH, STUB, new FlowControl.Passive()));
+                    PhysicalFluidTopology.Device.builder(8, at(1, 0, 1), Kind.PIPE, SOUTH, STUB, new FlowControl.Passive()).build(), PhysicalFluidTopology.Device.builder(9, at(1, 0, 2), Kind.VOID, SOUTH, STUB, new FlowControl.Passive()).build(),
+                    PhysicalFluidTopology.Device.builder(10, at(1, 0, -1), Kind.PIPE, NORTH, STUB, new FlowControl.Passive()).build(), PhysicalFluidTopology.Device.builder(11, at(1, 0, -2), Kind.VOID, NORTH, STUB, new FlowControl.Passive()).build());
             var compiled = PhysicalFluidTopology.compile(devices, states);
             var fed = compiled.islands().stream().map(PhysicalFluidTopology.Island::graph).filter(g -> g.reservoirs().stream().anyMatch(r -> r.id() == 1)).findFirst().orElseThrow();
             for (int j = 0; j < 3; j++) {
@@ -1001,8 +997,7 @@ class StillRuntimeTest {
                 assertEquals(j == k, fed.reservoirs().stream().anyMatch(r -> r.id() == sink), "outlet " + k + ": void " + sink);
             }
         }
-        assertThrows(IllegalArgumentException.class, () -> new PhysicalFluidTopology.Device(5, at(1, 0, 0), Kind.DIVERTER_VALVE, WEST, STUB, new FlowControl.Passive(), List.of(), true,
-                PhysicalFluidTopology.Cutoff.NONE, false, PhysicalFluidTopology.ALL_FACES), "a diverter has one outlet open");
+        assertThrows(IllegalArgumentException.class, () -> PhysicalFluidTopology.Device.builder(5, at(1, 0, 0), Kind.DIVERTER_VALVE, WEST, STUB, new FlowControl.Passive()).build(), "a diverter has one outlet open");
     }
 
     /** The still's facts survive the fluid facts' write and read: its devices, design, accounts, fire, settings and totals. */
@@ -1018,8 +1013,7 @@ class StillRuntimeTest {
                 new Account(held, -4.5e4), new Account(vented, 1.5e3), 0, .65, Double.POSITIVE_INFINITY, 3.2e7, 2.9e7);
         var still = new StillUnit(30, 0, 0, 0, 0, .1, BatchStill.Heater.SOLID, false, 0, Account.empty(m), Account.empty(m), 1.75e6, .4, StillUnit.DEFAULT_REFLUX, 1e5, 0);
         var active = new TreeMap<Long, WorldTopologyLedger.Registration>();
-        for (var d : List.of(pot(design), new PhysicalFluidTopology.Device(30, at(0, 5, 0), Kind.RESERVOIR, NORTH, STUB, new FlowControl.Passive(), List.of(), true,
-                PhysicalFluidTopology.Cutoff.NONE, false, PhysicalFluidTopology.ALL_FACES, 0, 0, new HeatUnit(HeatSides.Unit.STILL, HeatSides.Side.POT, .4, 0))))
+        for (var d : List.of(pot(design), PhysicalFluidTopology.Device.builder(30, at(0, 5, 0), Kind.RESERVOIR, NORTH, STUB, new FlowControl.Passive()).heat(new HeatUnit(HeatSides.Unit.STILL, HeatSides.Side.POT, .4, 0)).build()))
             active.put(d.id(), new WorldTopologyLedger.Registration(d, FluidDeviceSpec.nitrogen(CATALOG), 0));
         var empty = WorldTopologyLedger.Snapshot.empty(CATALOG);
         var ledger = new WorldTopologyLedger(new WorldTopologyLedger.Snapshot(0, 1000, active, List.of(), empty.constructed(), empty.destroyed(), empty.basis()));

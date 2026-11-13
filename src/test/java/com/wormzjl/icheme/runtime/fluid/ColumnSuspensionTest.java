@@ -58,8 +58,8 @@ class ColumnSuspensionTest {
         // Start: the column holds the inside pipe and the tank; its feed port, a void at 1.5 bar, stands inside the valve.
         long unit=world.ledger.reserve(1);long port=world.ledger.nextIdentity();int m=world.model.componentCount();
         var at=new PhysicalFluidTopology.Position(EventPathWorld.DIM,3,64,0,PhysicalFluidTopology.PORT_LANE);
-        var feed=new PhysicalFluidTopology.Device(port,at,Kind.VOID,Direction.WEST,world.registry.registrations().get(valve).device().geometry(),new FlowControl.Passive(),
-                List.of(new PhysicalFluidTopology.Port(at,Direction.WEST,PassiveNetwork.PhasePort.BULK)),true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,null,0);
+        var feed=PhysicalFluidTopology.Device.builder(port,at,Kind.VOID,Direction.WEST,world.registry.registrations().get(valve).device().geometry(),new FlowControl.Passive())
+                .ports(List.of(new PhysicalFluidTopology.Port(at,Direction.WEST,PassiveNetwork.PhasePort.BULK))).build();
         var setpoints=new Setpoints(1,1,320,1,0,new double[0],new double[0],new double[0]);
         world.ledger.column(new ColumnUnit(unit,new PhysicalFluidTopology.Position(EventPathWorld.DIM,4,70,0),true,setpoints,
                 List.of(new ColumnUnit.Station(Port.FEED,0,port,valve,Account.empty(m))),ColumnUnit.Totals.empty(m)));

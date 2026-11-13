@@ -31,7 +31,7 @@ class PumpBottomPortDrainTest {
     final FluidThermodynamics model=FluidTestSupport.networkModel();
 
     static PhysicalFluidTopology.Device device(long id,int x,int y,Kind kind,PhysicalFluidTopology.Direction facing,FlowControl control) {
-        return new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position(DIMENSION,x,y,0),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kind),facing,BLOCK,control);
+        return PhysicalFluidTopology.Device.builder(id,new PhysicalFluidTopology.Position(DIMENSION,x,y,0),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kind),facing,BLOCK,control).build();
     }
     static PhysicalFluidTopology.Device device(long id,int x,int y,Kind kind) {
         return device(id,x,y,kind,PhysicalFluidTopology.Direction.NORTH,new FlowControl.Passive());

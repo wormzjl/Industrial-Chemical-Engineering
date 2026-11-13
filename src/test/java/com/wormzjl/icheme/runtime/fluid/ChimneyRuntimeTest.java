@@ -31,14 +31,13 @@ class ChimneyRuntimeTest {
     }
 
     private static PhysicalFluidTopology.Device plain(long id, int x, Kind kind) {
-        return new PhysicalFluidTopology.Device(id, at(x, 0), kind, EAST, LINE, new FlowControl.Passive());
+        return PhysicalFluidTopology.Device.builder(id, at(x, 0), kind, EAST, LINE, new FlowControl.Passive()).build();
     }
 
     /** The steel stack's tip at (3, 30, 0), its inlet at (3, 0, 0) from the west. */
     private static PhysicalFluidTopology.Device chimney() {
-        return new PhysicalFluidTopology.Device(TIP, at(3, TOP), Kind.VOID, UP, new PipeResistance.Geometry(TOP + .5, D, PipeResistance.DEFAULT_ROUGHNESS_METRES, Chimney.STACK_LOSS),
-                new FlowControl.Passive(), List.of(new PhysicalFluidTopology.Port(at(3, 0), WEST, PassiveNetwork.PhasePort.BULK, PhysicalFluidTopology.ConnectionRole.VESSEL)), true,
-                PhysicalFluidTopology.Cutoff.NONE, false, PhysicalFluidTopology.ALL_FACES, 0, 0, null);
+        return PhysicalFluidTopology.Device.builder(TIP, at(3, TOP), Kind.VOID, UP, new PipeResistance.Geometry(TOP + .5, D, PipeResistance.DEFAULT_ROUGHNESS_METRES, Chimney.STACK_LOSS),
+                new FlowControl.Passive()).ports(List.of(new PhysicalFluidTopology.Port(at(3, 0), WEST, PassiveNetwork.PhasePort.BULK, PhysicalFluidTopology.ConnectionRole.VESSEL))).build();
     }
 
     private FluidThermodynamics.State gas(String name, double temperature, double pressure) {

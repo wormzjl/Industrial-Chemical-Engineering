@@ -90,8 +90,8 @@ class FluidFactsCompatTest {
         long port=world.ledger.nextIdentity();int m=model.componentCount();
         var held=new double[m];held[0]=3.5;held[m-1]=.25;
         var at=new PhysicalFluidTopology.Position(EventPathWorld.DIM,40,64,0,PhysicalFluidTopology.PORT_LANE);
-        var feed=new PhysicalFluidTopology.Device(port,at,Kind.VOID,Direction.EAST,world.registry.registrations().get(feedValve).device().geometry(),new FlowControl.Passive(),
-                List.of(new PhysicalFluidTopology.Port(at,Direction.EAST,PassiveNetwork.PhasePort.BULK)),true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,null,0);
+        var feed=PhysicalFluidTopology.Device.builder(port,at,Kind.VOID,Direction.EAST,world.registry.registrations().get(feedValve).device().geometry(),new FlowControl.Passive())
+                .ports(List.of(new PhysicalFluidTopology.Port(at,Direction.EAST,PassiveNetwork.PhasePort.BULK))).build();
         var setpoints=new com.wormzjl.icheme.science.plant.column.Setpoints(10,8,320,2.5,1e4,new double[]{.3},new double[]{.1},new double[]{-2e4});
         var account=new com.wormzjl.icheme.science.plant.column.ColumnCycle.Account(held,-1.2e6);
         world.ledger.column(new ColumnUnit(unit,new PhysicalFluidTopology.Position(EventPathWorld.DIM,40,70,0),true,setpoints,
@@ -173,7 +173,7 @@ class FluidFactsCompatTest {
             var ports=List.of(new PhysicalFluidTopology.Port(node,Direction.WEST,PassiveNetwork.PhasePort.LIQUID),
                     new PhysicalFluidTopology.Port(new PhysicalFluidTopology.Position(EventPathWorld.DIM,3,68,z),Direction.EAST,PassiveNetwork.PhasePort.VAPOR,PhysicalFluidTopology.ConnectionRole.BLANKET),
                     new PhysicalFluidTopology.Port(new PhysicalFluidTopology.Position(EventPathWorld.DIM,3,68,z+3),Direction.UP,PassiveNetwork.PhasePort.VAPOR,PhysicalFluidTopology.ConnectionRole.RELIEF));
-            var device=new PhysicalFluidTopology.Device(id,node,Kind.RESERVOIR,Direction.EAST,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive(),ports);
+            var device=PhysicalFluidTopology.Device.builder(id,node,Kind.RESERVOIR,Direction.EAST,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive()).ports(ports).build();
             var spec=new FluidDeviceSpec(g.capacity(),298.15,101325,nitrogen,SlurryFeed.NONE,g.height(),false,g,null,135000).withRelief(450000,null);
             world.registry.submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,spec,0))),id+1,null);
             guardedOil=id;
@@ -274,14 +274,13 @@ class FluidFactsCompatTest {
         var gt=com.wormzjl.icheme.science.machine.PrimeMover.models(com.wormzjl.icheme.science.machine.PrimeMover.Family.GAS_TURBINE).getLast();
         var ms=com.wormzjl.icheme.science.machine.PrimeMover.models(com.wormzjl.icheme.science.machine.PrimeMover.Family.ENGINE).getLast();
         var voidAt=(java.util.function.Function<Integer,PhysicalFluidTopology.Device>)z->{var p=new PhysicalFluidTopology.Position(EventPathWorld.DIM,120,64,z);
-            return new PhysicalFluidTopology.Device(z==0?fuel:engine,p,Kind.VOID,Direction.NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),FlowControl.ControlValve.engine(),
-                    List.of(new PhysicalFluidTopology.Port(p,Direction.WEST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.VESSEL)),true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,null);};
+            return PhysicalFluidTopology.Device.builder(z==0?fuel:engine,p,Kind.VOID,Direction.NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),FlowControl.ControlValve.engine())
+                    .ports(List.of(new PhysicalFluidTopology.Port(p,Direction.WEST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.VESSEL))).build();};
         var cold=new PhysicalFluidTopology.Position(EventPathWorld.DIM,124,64,0); var hot=new PhysicalFluidTopology.Position(EventPathWorld.DIM,124,64,3);
-        var side=new PhysicalFluidTopology.Device(coil,cold,Kind.HEAT_SIDE,Direction.NORTH,new PipeResistance.Geometry(30,.9,1.5e-6,0),new FlowControl.Passive(),
-                List.of(new PhysicalFluidTopology.Port(cold,Direction.WEST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.INLET),
-                        new PhysicalFluidTopology.Port(hot,Direction.WEST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.OUTLET)),
-                true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,
-                new HeatUnit(com.wormzjl.icheme.science.equipment.HeatSides.Unit.PRIME_MOVER,com.wormzjl.icheme.science.equipment.HeatSides.Side.EXHAUST,53000,0));
+        var side=PhysicalFluidTopology.Device.builder(coil,cold,Kind.HEAT_SIDE,Direction.NORTH,new PipeResistance.Geometry(30,.9,1.5e-6,0),new FlowControl.Passive())
+                .ports(List.of(new PhysicalFluidTopology.Port(cold,Direction.WEST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.INLET),
+                        new PhysicalFluidTopology.Port(hot,Direction.WEST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.OUTLET)))
+                .heat(new HeatUnit(com.wormzjl.icheme.science.equipment.HeatSides.Unit.PRIME_MOVER,com.wormzjl.icheme.science.equipment.HeatSides.Side.EXHAUST,53000,0)).build();
         var air=FluidDeviceSpec.nitrogen(CATALOG).composition();
         world.registry.submit(List.of(
                 new WorldTopologyLedger.Edit(fuel,new WorldTopologyLedger.Registration(voidAt.apply(0),new FluidDeviceSpec(1,298.15,gt.combustor(),air),0)),
@@ -339,8 +338,8 @@ class FluidFactsCompatTest {
         var ports=List.of(new PhysicalFluidTopology.Port(suction,Direction.WEST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.SUCTION),
                 new PhysicalFluidTopology.Port(new PhysicalFluidTopology.Position(EventPathWorld.DIM,100,64,0),Direction.WEST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.INLET),
                 new PhysicalFluidTopology.Port(new PhysicalFluidTopology.Position(EventPathWorld.DIM,100,64,4),Direction.WEST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.DISCHARGE));
-        var device=new PhysicalFluidTopology.Device(id,suction,Kind.EJECTOR,Direction.NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),
-                new FlowControl.Ejector(new com.wormzjl.icheme.science.machine.SteamEjector(.1)),ports,true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES);
+        var device=PhysicalFluidTopology.Device.builder(id,suction,Kind.EJECTOR,Direction.NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),
+                new FlowControl.Ejector(new com.wormzjl.icheme.science.machine.SteamEjector(.1))).ports(ports).build();
         world.registry.submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,FluidDeviceSpec.nitrogen(CATALOG),0))),id+1,null);
     }
     /** The steam ejectors, each its identity and rated load (kg/s), in identity order: what schema 17 carries. */
@@ -350,7 +349,7 @@ class FluidFactsCompatTest {
         var g=VesselGeometry.round(VesselGeometry.Form.HORIZONTAL_DRUM,2,6,2.0/3,.7);
         var ports=List.of(new PhysicalFluidTopology.Port(node,Direction.NORTH,PassiveNetwork.PhasePort.LIQUID),
                 new PhysicalFluidTopology.Port(new PhysicalFluidTopology.Position(EventPathWorld.DIM,90,68,8),Direction.WEST,PassiveNetwork.PhasePort.VAPOR,PhysicalFluidTopology.ConnectionRole.BLANKET));
-        var device=new PhysicalFluidTopology.Device(id,node,Kind.RESERVOIR,Direction.NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive(),ports);
+        var device=PhysicalFluidTopology.Device.builder(id,node,Kind.RESERVOIR,Direction.NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive()).ports(ports).build();
         var spec=new FluidDeviceSpec(g.capacity(),298.15,101325,FluidDeviceSpec.nitrogen(CATALOG).composition(),SlurryFeed.NONE,g.height(),false,g,null,135000);
         world.registry.submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,spec,0))),id+1,null);
     }
@@ -361,7 +360,7 @@ class FluidFactsCompatTest {
         var ports=List.of(new PhysicalFluidTopology.Port(node,Direction.NORTH,PassiveNetwork.PhasePort.LIQUID),
                 new PhysicalFluidTopology.Port(new PhysicalFluidTopology.Position(EventPathWorld.DIM,96,68,8),Direction.WEST,PassiveNetwork.PhasePort.VAPOR,PhysicalFluidTopology.ConnectionRole.BLANKET),
                 new PhysicalFluidTopology.Port(new PhysicalFluidTopology.Position(EventPathWorld.DIM,96,68,11),Direction.UP,PassiveNetwork.PhasePort.VAPOR,PhysicalFluidTopology.ConnectionRole.RELIEF));
-        var device=new PhysicalFluidTopology.Device(id,node,Kind.RESERVOIR,Direction.NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive(),ports);
+        var device=PhysicalFluidTopology.Device.builder(id,node,Kind.RESERVOIR,Direction.NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive()).ports(ports).build();
         var spec=new FluidDeviceSpec(g.capacity(),298.15,101325,FluidDeviceSpec.nitrogen(CATALOG).composition(),SlurryFeed.NONE,g.height(),false,g,null,135000).withRelief(450000,null);
         world.registry.submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,spec,0))),id+1,null);
         world.place(100,64,8,Kind.PIPE,Direction.EAST,FluidDeviceSpec.nitrogen(CATALOG).withRelief(250000,Direction.UP),.05);
@@ -412,8 +411,7 @@ class FluidFactsCompatTest {
         long water=world.ledger.reserve(1),pot=world.ledger.nextIdentity();int m=model.componentCount();
         var design=new BatchStill.Design(.5,BatchStill.Heater.SOLID,true,4);
         var at=new PhysicalFluidTopology.Position(EventPathWorld.DIM,90,64,0);double height=1.1*design.diameter();
-        var device=new PhysicalFluidTopology.Device(pot,at,Kind.RESERVOIR,Direction.NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive(),List.of(),true,
-                PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,new HeatUnit(HeatSides.Unit.STILL,HeatSides.Side.POT,design.heatedArea(),0));
+        var device=PhysicalFluidTopology.Device.builder(pot,at,Kind.RESERVOIR,Direction.NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive()).heat(new HeatUnit(HeatSides.Unit.STILL,HeatSides.Side.POT,design.heatedArea(),0)).build();
         var spec=new FluidDeviceSpec(design.volume(),298.15,101325,FluidDeviceSpec.nitrogen(CATALOG).composition(),SlurryFeed.NONE,height,true,VesselGeometry.prism(design.volume(),height),null);
         world.registry.submit(List.of(new WorldTopologyLedger.Edit(pot,new WorldTopologyLedger.Registration(device,spec,0))),pot+1,null);
         world.runTo(870);
@@ -423,9 +421,9 @@ class FluidFactsCompatTest {
                 new com.wormzjl.icheme.science.plant.column.ColumnCycle.Account(held,-4.5e4),new com.wormzjl.icheme.science.plant.column.ColumnCycle.Account(vented,1.5e3),
                 1.75e6,.65,Double.POSITIVE_INFINITY,3.2e7,2.9e7));
         long diverter=world.ledger.nextIdentity();
-        var valve=new PhysicalFluidTopology.Device(diverter,new PhysicalFluidTopology.Position(EventPathWorld.DIM,94,64,0),Kind.DIVERTER_VALVE,Direction.WEST,
-                new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive(),List.of(),true,PhysicalFluidTopology.Cutoff.NONE,false,
-                PhysicalFluidTopology.diverterJoints(Direction.WEST,2));
+        var valve=PhysicalFluidTopology.Device.builder(diverter,new PhysicalFluidTopology.Position(EventPathWorld.DIM,94,64,0),Kind.DIVERTER_VALVE,Direction.WEST,
+                new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive())
+                .joints(PhysicalFluidTopology.diverterJoints(Direction.WEST,2)).build();
         world.registry.submit(List.of(new WorldTopologyLedger.Edit(diverter,new WorldTopologyLedger.Registration(valve,FluidDeviceSpec.nitrogen(CATALOG),0))),diverter+1,null);
     }
     /**
@@ -505,13 +503,13 @@ class FluidFactsCompatTest {
         var inlet=new PhysicalFluidTopology.Position(EventPathWorld.DIM,x,64,z);var outlet=new PhysicalFluidTopology.Position(EventPathWorld.DIM,x+2,64,z);
         var ports=List.of(new PhysicalFluidTopology.Port(inlet,Direction.WEST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.SUCTION),
                 new PhysicalFluidTopology.Port(outlet,Direction.EAST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.DISCHARGE));
-        return new PhysicalFluidTopology.Device(id,inlet,kind,Direction.NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),control,ports,true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES);
+        return PhysicalFluidTopology.Device.builder(id,inlet,kind,Direction.NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),control).ports(ports).build();
     }
     private static PhysicalFluidTopology.Device heatSide(long id,int x,int z,PipeResistance.Geometry passage,HeatUnit heat) {
         var inlet=new PhysicalFluidTopology.Position(EventPathWorld.DIM,x,64,z);var outlet=new PhysicalFluidTopology.Position(EventPathWorld.DIM,x+2,64,z);
         var ports=List.of(new PhysicalFluidTopology.Port(inlet,Direction.WEST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.INLET),
                 new PhysicalFluidTopology.Port(outlet,Direction.EAST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.OUTLET));
-        return new PhysicalFluidTopology.Device(id,inlet,Kind.HEAT_SIDE,Direction.NORTH,passage,new FlowControl.Passive(),ports,true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,heat);
+        return PhysicalFluidTopology.Device.builder(id,inlet,Kind.HEAT_SIDE,Direction.NORTH,passage,new FlowControl.Passive()).ports(ports).heat(heat).build();
     }
     private FluidCheckpointCodec.Image image(EventPathWorld world) {
         var checkpoint=new FluidCheckpointCodec.Checkpoint(world.entries());

@@ -146,8 +146,8 @@ class MachineHealthTest {
 
     /** The in-line pump's registration (M-04): a pipe block at the supply carrying the pump, switched on. */
     private static WorldTopologyLedger.Registration inline() {
-        var device = new PhysicalFluidTopology.Device(1, new PhysicalFluidTopology.Position("minecraft:overworld", 0, 0, 0), com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.PIPE,
-                PhysicalFluidTopology.Direction.EAST, FAT, new FlowControl.Pump(FLOW, 5e5));
+        var device = PhysicalFluidTopology.Device.builder(1, new PhysicalFluidTopology.Position("minecraft:overworld", 0, 0, 0), com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.PIPE,
+                PhysicalFluidTopology.Direction.EAST, FAT, new FlowControl.Pump(FLOW, 5e5)).build();
         return new WorldTopologyLedger.Registration(device, FluidDeviceSpec.nitrogen(EventPathWorld.CATALOG), 0);
     }
 
@@ -278,10 +278,10 @@ class MachineHealthTest {
         var at = new PhysicalFluidTopology.Position("minecraft:overworld", 5, 0, 0);
         var kind = com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.PIPE;
         var spec = FluidDeviceSpec.nitrogen(EventPathWorld.CATALOG);
-        var screw = new WorldTopologyLedger.Registration(new PhysicalFluidTopology.Device(20, at, kind, PhysicalFluidTopology.Direction.EAST, FAT,
-                new FlowControl.Machine(new com.wormzjl.icheme.science.machine.VacuumPump(com.wormzjl.icheme.science.machine.VacuumPump.Type.DRY_SCREW, 300 / 3600., 2950), 1, true)), spec, 0);
-        var compressor = new WorldTopologyLedger.Registration(new PhysicalFluidTopology.Device(30, at, kind, PhysicalFluidTopology.Direction.EAST, FAT,
-                new FlowControl.Compressor(.1, 3)), spec, 0);
+        var screw = new WorldTopologyLedger.Registration(PhysicalFluidTopology.Device.builder(20, at, kind, PhysicalFluidTopology.Direction.EAST, FAT,
+                new FlowControl.Machine(new com.wormzjl.icheme.science.machine.VacuumPump(com.wormzjl.icheme.science.machine.VacuumPump.Type.DRY_SCREW, 300 / 3600., 2950), 1, true)).build(), spec, 0);
+        var compressor = new WorldTopologyLedger.Registration(PhysicalFluidTopology.Device.builder(30, at, kind, PhysicalFluidTopology.Direction.EAST, FAT,
+                new FlowControl.Compressor(.1, 3)).build(), spec, 0);
         var registrations = Map.of(20L, screw, 30L, compressor);
         assertTrue(MachineHealth.pump(screw), "a dry screw wears");
         assertFalse(MachineHealth.pump(compressor), "a compressor does not");
@@ -557,14 +557,14 @@ class MachineHealthTest {
         var at = new PhysicalFluidTopology.Position("minecraft:overworld", 5, 0, 0);
         var kind = com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.PIPE;
         var spec = FluidDeviceSpec.nitrogen(EventPathWorld.CATALOG);
-        var compressor = new WorldTopologyLedger.Registration(new PhysicalFluidTopology.Device(40, at, kind, PhysicalFluidTopology.Direction.EAST, FAT,
-                new FlowControl.Machine(COMPRESSOR, 1, true)), spec, 0);
-        var turbine = new WorldTopologyLedger.Registration(new PhysicalFluidTopology.Device(50, at, com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.TURBINE,
-                PhysicalFluidTopology.Direction.EAST, FAT, new FlowControl.Turbine(com.wormzjl.icheme.science.machine.SteamTurbine.rated(55e3)),
-                List.of(new PhysicalFluidTopology.Port(at, PhysicalFluidTopology.Direction.WEST, PassiveNetwork.PhasePort.BULK, PhysicalFluidTopology.ConnectionRole.SUCTION),
-                        new PhysicalFluidTopology.Port(at, PhysicalFluidTopology.Direction.EAST, PassiveNetwork.PhasePort.BULK, PhysicalFluidTopology.ConnectionRole.DISCHARGE)), true), spec, 0);
-        var frame = new WorldTopologyLedger.Registration(new PhysicalFluidTopology.Device(60, at, kind, PhysicalFluidTopology.Direction.EAST, FAT,
-                new FlowControl.Compressor(.1, 3)), spec, 0);
+        var compressor = new WorldTopologyLedger.Registration(PhysicalFluidTopology.Device.builder(40, at, kind, PhysicalFluidTopology.Direction.EAST, FAT,
+                new FlowControl.Machine(COMPRESSOR, 1, true)).build(), spec, 0);
+        var turbine = new WorldTopologyLedger.Registration(PhysicalFluidTopology.Device.builder(50, at, com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.TURBINE,
+                PhysicalFluidTopology.Direction.EAST, FAT, new FlowControl.Turbine(com.wormzjl.icheme.science.machine.SteamTurbine.rated(55e3)))
+                .ports(List.of(new PhysicalFluidTopology.Port(at, PhysicalFluidTopology.Direction.WEST, PassiveNetwork.PhasePort.BULK, PhysicalFluidTopology.ConnectionRole.SUCTION),
+                        new PhysicalFluidTopology.Port(at, PhysicalFluidTopology.Direction.EAST, PassiveNetwork.PhasePort.BULK, PhysicalFluidTopology.ConnectionRole.DISCHARGE))).build(), spec, 0);
+        var frame = new WorldTopologyLedger.Registration(PhysicalFluidTopology.Device.builder(60, at, kind, PhysicalFluidTopology.Direction.EAST, FAT,
+                new FlowControl.Compressor(.1, 3)).build(), spec, 0);
         var registrations = Map.of(40L, compressor, 50L, turbine, 60L, frame);
         assertTrue(MachineHealth.pump(compressor), "a centrifugal compressor wears");
         assertTrue(MachineHealth.pump(turbine), "a steam turbine wears");

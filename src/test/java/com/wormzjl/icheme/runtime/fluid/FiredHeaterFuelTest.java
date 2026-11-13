@@ -30,7 +30,7 @@ class FiredHeaterFuelTest {
     }
 
     private static PhysicalFluidTopology.Device plain(long id, int x, int z, Kind kind) {
-        return new PhysicalFluidTopology.Device(id, at(x, 0, z), kind, EAST, STUB, new FlowControl.Passive());
+        return PhysicalFluidTopology.Device.builder(id, at(x, 0, z), kind, EAST, STUB, new FlowControl.Passive()).build();
     }
 
     private static PhysicalFluidTopology.Port port(PhysicalFluidTopology.Position cell, PhysicalFluidTopology.Direction face, PhysicalFluidTopology.ConnectionRole role) {
@@ -43,15 +43,13 @@ class FiredHeaterFuelTest {
 
     private static PhysicalFluidTopology.Device side(long id, int z, HeatUnit heat) {
         var ports = List.of(port(at(2, 0, z), WEST, PhysicalFluidTopology.ConnectionRole.INLET), port(at(4, 0, z), EAST, PhysicalFluidTopology.ConnectionRole.OUTLET));
-        return new PhysicalFluidTopology.Device(id, at(2, 0, z), Kind.HEAT_SIDE, NORTH, HeatSides.heaterPassage(100, 3), new FlowControl.Passive(), ports, true,
-                PhysicalFluidTopology.Cutoff.NONE, false, PhysicalFluidTopology.ALL_FACES, 0, 0, heat);
+        return PhysicalFluidTopology.Device.builder(id, at(2, 0, z), Kind.HEAT_SIDE, NORTH, HeatSides.heaterPassage(100, 3), new FlowControl.Passive()).ports(ports).heat(heat).build();
     }
 
     /** The burners at the firebox cell (3, 0, 20), fed from the west, as {@code FluidWorldAuthority.burnerRecord} places them. */
     private static PhysicalFluidTopology.Device burners() {
-        return new PhysicalFluidTopology.Device(BURNERS, at(3, 0, 20), Kind.VOID, NORTH, STUB, FlowControl.ControlValve.burner(),
-                List.of(port(at(3, 0, 20), WEST, PhysicalFluidTopology.ConnectionRole.VESSEL)), true, PhysicalFluidTopology.Cutoff.NONE, false,
-                PhysicalFluidTopology.ALL_FACES, 0, 0, new HeatUnit(HeatSides.Unit.FIRED_HEATER, HeatSides.Side.BURNER, 100, RADIANT));
+        return PhysicalFluidTopology.Device.builder(BURNERS, at(3, 0, 20), Kind.VOID, NORTH, STUB, FlowControl.ControlValve.burner())
+                .ports(List.of(port(at(3, 0, 20), WEST, PhysicalFluidTopology.ConnectionRole.VESSEL))).heat(new HeatUnit(HeatSides.Unit.FIRED_HEATER, HeatSides.Side.BURNER, 100, RADIANT)).build();
     }
 
     private List<PhysicalFluidTopology.Device> devices() {

@@ -254,7 +254,7 @@ public final class LevelLoopGameTests {
                     // Direct: the design feed and the 50 % setpoint from the empty drum.
                     double first = state.direct ? 1 : FILL, level0 = state.direct ? SETPOINT : FILLED;
                     var law = new FlowControl.ControlValve(FlowControl.ValveSource.MASS_FLOW, first * state.feed, state.flowSensor, 1);
-                    world.edit(feedValveId, old.revision(), new com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Device(d.id(), d.position(), d.kind(), d.facing(), d.geometry(), law, d.ports(), true, d.cutoff(), d.inlineFilter()), old.spec());
+                    world.edit(feedValveId, old.revision(), com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Device.builder(d.id(), d.position(), d.kind(), d.facing(), d.geometry(), law).ports(d.ports()).cutoff(d.cutoff()).inlineFilter(d.inlineFilter()).build(), old.spec());
                     TankCharge.run(world, generatorId, new FluidDeviceSpec(1, 300, 300_000, water));
                     // The fill: a tenth of the feed to a 25 % level (a placed vessel is empty, and the full feed into a near-empty
                     // drum is the start's own transient, not the loop's).

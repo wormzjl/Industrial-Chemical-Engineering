@@ -325,7 +325,7 @@ public final class FluidServerBenchmark {
             long next=1;int pipes;Ladder ladder;int network=-1;final Map<Integer,Map<Kind,Long>> firstOf=new HashMap<>();
             void add(int x,int z,Kind kind,double pressure){add(x,z,kind,pressure,1,.05,1);}
             void add(int x,int z,Kind kind,double pressure,double length,double diameter,double volume) {
-                long id=next++;var device=new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position("minecraft:overworld",1024+x,80,1024+z),kind,PhysicalFluidTopology.Direction.EAST,new PipeResistance.Geometry(length,diameter,.000045,0),new FlowControl.Passive());devices.add(device);
+                long id=next++;var device=PhysicalFluidTopology.Device.builder(id,new PhysicalFluidTopology.Position("minecraft:overworld",1024+x,80,1024+z),kind,PhysicalFluidTopology.Direction.EAST,new PipeResistance.Geometry(length,diameter,.000045,0),new FlowControl.Passive()).build();devices.add(device);
                 if(ladder!=null)ladderOf.put(id,ladder);
                 if(network>=0)firstOf.computeIfAbsent(network,ignored->new EnumMap<>(Kind.class)).putIfAbsent(kind,id);
                 var spec=new FluidDeviceSpec(volume,350,pressure,composition);registrations.put(id,new WorldTopologyLedger.Registration(device,spec,0));

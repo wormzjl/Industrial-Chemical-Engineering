@@ -16,10 +16,10 @@ class HeatSideTopologyTest {
     private static final PipeResistance.Geometry STUB=new PipeResistance.Geometry(1,.05,.000045,0);
     private static final HeatUnit TUBE=new HeatUnit(HeatSides.Unit.EXCHANGER,HeatSides.Side.TUBE,450,0);
     private static PhysicalFluidTopology.Position at(int x,int y,int z){return new PhysicalFluidTopology.Position("minecraft:overworld",x,y,z);}
-    private static PhysicalFluidTopology.Device plain(long id,int x,int y,int z,Kind kind){return new PhysicalFluidTopology.Device(id,at(x,y,z),kind,EAST,STUB,new FlowControl.Passive());}
+    private static PhysicalFluidTopology.Device plain(long id,int x,int y,int z,Kind kind){return PhysicalFluidTopology.Device.builder(id,at(x,y,z),kind,EAST,STUB,new FlowControl.Passive()).build();}
     private static PhysicalFluidTopology.Port port(PhysicalFluidTopology.Position cell,PhysicalFluidTopology.Direction face,PhysicalFluidTopology.ConnectionRole role){return new PhysicalFluidTopology.Port(cell,face,PassiveNetwork.PhasePort.BULK,role);}
     private static PhysicalFluidTopology.Device side(long id,List<PhysicalFluidTopology.Port> ports,PipeResistance.Geometry passage,HeatUnit heat) {
-        return new PhysicalFluidTopology.Device(id,ports.getFirst().cell(),Kind.HEAT_SIDE,NORTH,passage,new FlowControl.Passive(),ports,true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,heat);
+        return PhysicalFluidTopology.Device.builder(id,ports.getFirst().cell(),Kind.HEAT_SIDE,NORTH,passage,new FlowControl.Passive()).ports(ports).heat(heat).build();
     }
     private PassiveNetwork.Reservoir nitrogenAt(long id,int y,PassiveNetwork.NodeKind kind,double pressure){return new PassiveNetwork.Reservoir(id,y,model.initialNitrogenCharge(1,298.15,pressure,()->{}),kind);}
 
@@ -170,7 +170,7 @@ class HeatSideTopologyTest {
         for(int c=0;c<coils.length;c++) {
             var to=at(c*5,0,0);
             devices.add(side(10+c,List.of(port(from,WEST,PhysicalFluidTopology.ConnectionRole.INLET),port(to,EAST,PhysicalFluidTopology.ConnectionRole.OUTLET)),COIL,coils[c]));
-            devices.add(new PhysicalFluidTopology.Device(30+c,at(c*5+1,0,0),Kind.PIPE,EAST,OUTLET,new FlowControl.Passive()));
+            devices.add(PhysicalFluidTopology.Device.builder(30+c,at(c*5+1,0,0),Kind.PIPE,EAST,OUTLET,new FlowControl.Passive()).build());
             from=at(c*5+2,0,0);
         }
         devices.add(plain(2,from.x(),0,0,Kind.VOID));
@@ -258,7 +258,7 @@ class HeatSideTopologyTest {
         assertThrows(IllegalArgumentException.class,()->side(5,List.of(ports.getLast(),ports.getFirst()),STUB,TUBE),"its node is its first inlet's cell");
         assertThrows(IllegalArgumentException.class,()->side(5,List.of(ports.getFirst()),STUB,TUBE),"an inlet without an outlet");
         assertThrows(IllegalArgumentException.class,()->side(5,ports,STUB,TUBE.withPartner(5)),"its own partner");
-        assertThrows(IllegalArgumentException.class,()->new PhysicalFluidTopology.Device(6,at(0,0,0),Kind.PUMP,NORTH,STUB,new FlowControl.Pump(.01,500000),ports),"a pump with inlet and outlet ports");
-        assertThrows(IllegalArgumentException.class,()->new PhysicalFluidTopology.Device(7,at(0,0,0),Kind.PIPE,NORTH,STUB,new FlowControl.Passive(),List.of(),true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,TUBE),"a pipe with a unit");
+        assertThrows(IllegalArgumentException.class,()->PhysicalFluidTopology.Device.builder(6,at(0,0,0),Kind.PUMP,NORTH,STUB,new FlowControl.Pump(.01,500000)).ports(ports).build(),"a pump with inlet and outlet ports");
+        assertThrows(IllegalArgumentException.class,()->PhysicalFluidTopology.Device.builder(7,at(0,0,0),Kind.PIPE,NORTH,STUB,new FlowControl.Passive()).heat(TUBE).build(),"a pipe with a unit");
     }
 }

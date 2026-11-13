@@ -57,6 +57,6 @@ class VesselStateFollowsContentsTest {
         System.out.println("VESSEL_CLOSURE grid-10 uncapped 5 s x 12: worst lag "+worstLag+", highest tank "+worstAbove+" Pa from the highest generator");
     }
     private static PhysicalFluidTopology.Device device(long id,int x,int z,Kind kind){
-        return new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position("minecraft:overworld",x,64,z),kind,PhysicalFluidTopology.Direction.EAST,BLOCK,new FlowControl.Passive());
+        return PhysicalFluidTopology.Device.builder(id,new PhysicalFluidTopology.Position("minecraft:overworld",x,64,z),kind,PhysicalFluidTopology.Direction.EAST,BLOCK,new FlowControl.Passive()).build();
     }
 }

@@ -24,11 +24,11 @@ class ExchangerCouplingTest {
     private static final double SHELL=.5,TUBES=3,AREA=com.wormzjl.icheme.science.equipment.design.UnitRatings.tubeSurface(SHELL,TUBES);
     private static final long HOT=10,COLD=11;
     private static PhysicalFluidTopology.Position at(int x,int y,int z){return new PhysicalFluidTopology.Position("minecraft:overworld",x,y,z);}
-    private static PhysicalFluidTopology.Device plain(long id,int x,int y,int z,Kind kind){return new PhysicalFluidTopology.Device(id,at(x,y,z),kind,EAST,STUB,new FlowControl.Passive());}
+    private static PhysicalFluidTopology.Device plain(long id,int x,int y,int z,Kind kind){return PhysicalFluidTopology.Device.builder(id,at(x,y,z),kind,EAST,STUB,new FlowControl.Passive()).build();}
     private static PhysicalFluidTopology.Port port(PhysicalFluidTopology.Position cell,PhysicalFluidTopology.Direction face,PhysicalFluidTopology.ConnectionRole role){return new PhysicalFluidTopology.Port(cell,face,PassiveNetwork.PhasePort.BULK,role);}
     private static PhysicalFluidTopology.Device side(long id,PhysicalFluidTopology.Position in,PhysicalFluidTopology.Position out,PipeResistance.Geometry passage,HeatUnit heat) {
         var ports=List.of(port(in,WEST,PhysicalFluidTopology.ConnectionRole.INLET),port(out,EAST,PhysicalFluidTopology.ConnectionRole.OUTLET));
-        return new PhysicalFluidTopology.Device(id,in,Kind.HEAT_SIDE,NORTH,passage,new FlowControl.Passive(),ports,true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,heat);
+        return PhysicalFluidTopology.Device.builder(id,in,Kind.HEAT_SIDE,NORTH,passage,new FlowControl.Passive()).ports(ports).heat(heat).build();
     }
     private FluidThermodynamics.State water(double temperature,double pressure) {
         double[] n=new double[model.componentCount()];n[n.length-1]=1;
@@ -233,10 +233,9 @@ class ExchangerCouplingTest {
         var devices=new ArrayList<PhysicalFluidTopology.Device>(line(1,KETTLE_TUBES,2,0,HeatSides.tubePassage(SHELL,TUBES),
                 new HeatUnit(HeatSides.Unit.KETTLE,HeatSides.Side.TUBE,AREA,KETTLE_SHELL).withControl(control)));
         var node=at(10,0,10);
-        devices.add(new PhysicalFluidTopology.Device(KETTLE_SHELL,node,Kind.RESERVOIR,NORTH,STUB,new FlowControl.Passive(),
-                List.of(new PhysicalFluidTopology.Port(node,EAST,PassiveNetwork.PhasePort.VAPOR,PhysicalFluidTopology.ConnectionRole.VESSEL)),true,PhysicalFluidTopology.Cutoff.NONE,false,
-                PhysicalFluidTopology.ALL_FACES,0,0,new HeatUnit(HeatSides.Unit.KETTLE,HeatSides.Side.SHELL,AREA,KETTLE_TUBES)));
-        devices.add(new PhysicalFluidTopology.Device(300,at(11,0,10),Kind.PIPE,EAST,new PipeResistance.Geometry(1,.3,.000045,0),new FlowControl.Passive()));
+        devices.add(PhysicalFluidTopology.Device.builder(KETTLE_SHELL,node,Kind.RESERVOIR,NORTH,STUB,new FlowControl.Passive())
+                .ports(List.of(new PhysicalFluidTopology.Port(node,EAST,PassiveNetwork.PhasePort.VAPOR,PhysicalFluidTopology.ConnectionRole.VESSEL))).heat(new HeatUnit(HeatSides.Unit.KETTLE,HeatSides.Side.SHELL,AREA,KETTLE_TUBES)).build());
+        devices.add(PhysicalFluidTopology.Device.builder(300,at(11,0,10),Kind.PIPE,EAST,new PipeResistance.Geometry(1,.3,.000045,0),new FlowControl.Passive()).build());
         devices.add(plain(4,12,0,10,Kind.VOID));
         PassiveNetwork.Reservoir pool;
         if(fill>0) {
@@ -492,11 +491,11 @@ class ExchangerCouplingTest {
             devices.add(plain(INLET_TEE,2,0,5,Kind.PIPE));devices.add(plain(112,3,0,5,Kind.PIPE));
             devices.add(side(COLD,at(4,0,5),at(6,0,5),HeatSides.shellPassage(SHELL,TUBES),shell));
             devices.add(plain(113,7,0,5,Kind.PIPE));devices.add(plain(OUTLET_TEE,8,0,5,Kind.PIPE));devices.add(plain(114,9,0,5,Kind.PIPE));devices.add(plain(4,10,0,5,Kind.VOID));
-            devices.add(new PhysicalFluidTopology.Device(115,at(2,0,6),Kind.PIPE,EAST,WIDE,new FlowControl.Passive()));
-            devices.add(new PhysicalFluidTopology.Device(BYPASS_VALVE,at(3,0,6),Kind.VALVE,EAST,WIDE,valve));
-            for(int x=4;x<=8;x++)devices.add(new PhysicalFluidTopology.Device(130+x,at(x,0,6),Kind.PIPE,EAST,WIDE,new FlowControl.Passive()));
+            devices.add(PhysicalFluidTopology.Device.builder(115,at(2,0,6),Kind.PIPE,EAST,WIDE,new FlowControl.Passive()).build());
+            devices.add(PhysicalFluidTopology.Device.builder(BYPASS_VALVE,at(3,0,6),Kind.VALVE,EAST,WIDE,valve).build());
+            for(int x=4;x<=8;x++)devices.add(PhysicalFluidTopology.Device.builder(130+x,at(x,0,6),Kind.PIPE,EAST,WIDE,new FlowControl.Passive()).build());
         } else {
-            devices.add(new PhysicalFluidTopology.Device(FEED_VALVE,at(2,0,5),Kind.VALVE,EAST,STUB,valve));devices.add(plain(112,3,0,5,Kind.PIPE));
+            devices.add(PhysicalFluidTopology.Device.builder(FEED_VALVE,at(2,0,5),Kind.VALVE,EAST,STUB,valve).build());devices.add(plain(112,3,0,5,Kind.PIPE));
             devices.add(side(COLD,at(4,0,5),at(6,0,5),HeatSides.shellPassage(SHELL,TUBES),shell));
             devices.add(plain(113,7,0,5,Kind.PIPE));devices.add(plain(4,8,0,5,Kind.VOID));
         }

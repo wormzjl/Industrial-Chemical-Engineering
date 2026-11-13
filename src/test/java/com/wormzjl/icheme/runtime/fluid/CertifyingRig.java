@@ -99,7 +99,7 @@ final class CertifyingRig {
         /** A line of blocks along x in row z, identities first, first + 1, ...; pipes between the ends. */
         static List<PhysicalFluidTopology.Device> line(long first,int z,Kind... kinds) {
             var devices=new ArrayList<PhysicalFluidTopology.Device>();
-            for(int i=0;i<kinds.length;i++)devices.add(new PhysicalFluidTopology.Device(first+i,new PhysicalFluidTopology.Position("minecraft:overworld",i,0,z),kinds[i],PhysicalFluidTopology.Direction.EAST,BLOCK,new FlowControl.Passive()));
+            for(int i=0;i<kinds.length;i++)devices.add(PhysicalFluidTopology.Device.builder(first+i,new PhysicalFluidTopology.Position("minecraft:overworld",i,0,z),kinds[i],PhysicalFluidTopology.Direction.EAST,BLOCK,new FlowControl.Passive()).build());
             return devices;
         }
         PassiveNetwork island(List<PhysicalFluidTopology.Device> devices,Map<Long,FluidDeviceSpec> specs) {

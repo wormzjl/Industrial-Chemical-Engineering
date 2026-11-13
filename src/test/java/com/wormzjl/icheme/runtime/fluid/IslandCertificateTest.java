@@ -38,7 +38,7 @@ class IslandCertificateTest {
     private double[] pure(int component){var n=new double[components];n[component]=1;return n;}
     private double[] mix(double methaneFraction){var n=new double[components];n[methane]=methaneFraction;n[nitrogen]=1-methaneFraction;return n;}
     private static PhysicalFluidTopology.Device device(long id,int x,int z,Kind kind,FlowControl control) {
-        return new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position("minecraft:overworld",x,0,z),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kind),PhysicalFluidTopology.Direction.EAST,BLOCK,control);
+        return PhysicalFluidTopology.Device.builder(id,new PhysicalFluidTopology.Position("minecraft:overworld",x,0,z),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kind),PhysicalFluidTopology.Direction.EAST,BLOCK,control).build();
     }
     private static PhysicalFluidTopology.Device device(long id,int x,int z,Kind kind){return device(id,x,z,kind,new FlowControl.Passive());}
     /** The one island the world would compile from these blocks, its boundaries freshly initialised. */
@@ -629,8 +629,8 @@ class IslandCertificateTest {
             boolean keep;
             void add(int x,int z,Kind kind,double pressure) {
                 long id=next[0]++;if(!keep)return;
-                var device=new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position("minecraft:overworld",1024+x,80,1024+z),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kind),PhysicalFluidTopology.Direction.EAST,
-                        new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Passive());
+                var device=PhysicalFluidTopology.Device.builder(id,new PhysicalFluidTopology.Position("minecraft:overworld",1024+x,80,1024+z),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kind),PhysicalFluidTopology.Direction.EAST,
+                        new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Passive()).build();
                 devices.add(device);
                 if(kind==Kind.PIPE)return;
                 if(kind==Kind.RESERVOIR) {
