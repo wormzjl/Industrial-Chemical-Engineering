@@ -96,7 +96,10 @@ public final class Stills implements IslandCoordinator.Ports {
 
     /** A still's fuel: the heat (J) of one item taken from its slot, 0 when it is empty or its block is not loaded. */
     public interface Fuel {double take(long pot);}
-    /** A still's column solve submitted to the worker: false when it was not accepted. */
+    /**
+     * A still's column solve submitted to the worker: false when it was not accepted (the service at capacity); the still
+     * then holds the job and asks again at each decision point until it is (R-ST3).
+     */
     public interface Solves {boolean submit(long pot,long island,StillHead.Job job,java.util.function.Consumer<StillHead.Outcome> done);}
     /**
      * The data network's setpoints for a still's pot (owner decision O1): its firing (0 to 1) and its reflux ratio (+Infinity
@@ -142,6 +145,8 @@ public final class Stills implements IslandCoordinator.Ports {
      */
     private static final class Run {
         StillHead.Solved solved,next;long nextTick=Long.MAX_VALUE,applyTick=Long.MAX_VALUE;boolean pending;long lastSubmit=Long.MIN_VALUE/2;
+        /** The pending job the solve service refused, asked again at each decision point (R-ST3); null once it is taken. */
+        StillHead.Job heldJob;
         double condensed=1,heat,boiling,perKilogram,fPerWatt,spout;String failure;
         /** The fire is set and nothing cuts it (OVERHEAT, BOIL DRY, NO FUEL): the column is asked, lit or waiting. */
         boolean asked;
@@ -175,6 +180,8 @@ public final class Stills implements IslandCoordinator.Ports {
     private final Map<Long,Long> outlets=new HashMap<>(),waters=new HashMap<>(),burners=new HashMap<>();
     /** By tick: the devices whose islands wake there (a certified island is materialised to that tick and ends its certificate there). */
     private final TreeMap<Long,Set<Long>> wakes=new TreeMap<>();
+    /** The pots whose pending column job the solve service refused ({@link Run#heldJob}), in a fixed order. */
+    private final Set<Long> held=new TreeSet<>();
     private long synced=-1;
 
     public Stills(WorldTopologyLedger topology,LongFunction<Long> owner,IslandCoordinator coordinator,LongFunction<com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics> models,ElectricStores electric,List<String> axis,double[] weights,double[] heatingValues) {
@@ -624,6 +631,7 @@ public final class Stills implements IslandCoordinator.Ports {
      * slices at that tick; awake and behind the tick, the wake waits for it (it may certify on the way).
      */
     @Override public void decide() {
+        if(!held.isEmpty())resend();
         if(wakes.isEmpty())return;long now=coordinator.now();
         // By the keys: a materialisation books spans, which add wakes (each past now) to the map.
         for(long tick:List.copyOf(wakes.headMap(now,true).keySet())) {
@@ -652,8 +660,26 @@ public final class Stills implements IslandCoordinator.Ports {
         var warm=r.solved==null?null:r.solved.profile();
         var job=new StillHead.Job(node.inventory().moles(),node.state().temperature(),BatchStill.ATMOSPHERIC,u.stages(),reflux,warm,u.design().columnDiameter(),outlet(r,start-FENCE_TICKS));
         long pot=u.id(),apply=end+APPLY_TICKS;
-        if(!solves.submit(pot,island,job,outcome->completed(pot,apply,outcome)))return;
+        // In flight before the submission (a solver may answer at once). A job the service refuses (at capacity) is not
+        // skipped: it is held and asked again at each decision point until it is taken ({@link #resend}), and the slices
+        // that need its answer wait for it ({@link #ready}), so the answer applied is the one asked at this commit on a quiet
+        // machine (R-ST3).
         r.pending=true;r.applyTick=apply;r.lastSubmit=end;
+        if(!solves.submit(pot,island,job,outcome->completed(pot,apply,outcome))){r.heldJob=job;held.add(pot);}
+    }
+    /**
+     * Asks again for each column job the solve service refused (R-ST3): the same job, for the same apply tick, until it is
+     * taken. The service's room is freed by the completions of the jobs it holds, none of which waits for a still's island,
+     * so the wait ends; meanwhile the pot's island waits at the first slice that needs the answer.
+     */
+    private void resend() {
+        for(long pot:List.copyOf(held)) {
+            var r=runs.get(pot);
+            if(r==null||r.heldJob==null||!r.pending){held.remove(pot);if(r!=null)r.heldJob=null;continue;}
+            Long island=owner.apply(pot);if(island==null)continue;
+            var job=r.heldJob;long apply=r.applyTick;
+            if(solves.submit(pot,island,job,outcome->completed(pot,apply,outcome))){r.heldJob=null;held.remove(pot);}
+        }
     }
     /**
      * The condenser's outlet floor for a job queued by the pot slice whose fence is {@code fence}, K (R-ST1 item 5): the water

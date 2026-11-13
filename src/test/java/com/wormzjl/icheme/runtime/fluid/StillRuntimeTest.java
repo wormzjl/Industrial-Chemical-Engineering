@@ -152,6 +152,11 @@ class StillRuntimeTest {
         final Map<UUID, Long> offsets = new LinkedHashMap<>();
         /** By island: each span a certificate's replay booked (its committed tick before and after), in the order they were booked. */
         final Map<Long, List<List<Long>>> replays = new TreeMap<>();
+        /** The solve service refuses every still job asked from {@link #refuseFrom} to before {@link #refuseUntil} (at capacity, a machine's load); never by default. */
+        long refuseFrom = Long.MAX_VALUE, refuseUntil = Long.MIN_VALUE;
+        int refused;
+        /** Each column job the service took, by its contents: the pot's moles, its temperature, the reflux and the condenser outlet. */
+        final List<List<Object>> asked = new ArrayList<>();
 
         Rig(FluidThermodynamics model, WorldTopologyLedger.FluidBasis basis, List<PhysicalFluidTopology.Device> devices, Map<Long, PassiveNetwork.Reservoir> states, StillUnit unit) {
             this(model, basis, devices, states, unit, new double[model.componentCount()]);
@@ -207,7 +212,12 @@ class StillRuntimeTest {
                 return ITEM;
             });
             stills.solves((pot, island, job, done) -> {
+                if (epoch[0] >= refuseFrom && epoch[0] < refuseUntil) {
+                    refused++;
+                    return false;
+                }
                 solves++;
+                asked.add(List.<Object>of(Arrays.toString(job.pot()), job.temperature(), job.reflux(), job.outlet()));
                 jobs.add(new double[]{epoch[0], job.outlet(), coordinator.observe(island).clock().committedTick()});
                 solved.add(new Solve(epoch[0], () -> done.accept(StillHead.run(job, model, () -> {
                 }))));
@@ -762,6 +772,55 @@ class StillRuntimeTest {
         assertArrayEquals(a.pot(), b.pot(), "the pot");
         assertEquals(a.coordinator.transits(), b.coordinator.transits(), "the heat in transit");
         assertEquals(a.jobs.stream().map(j -> List.of(j[2], j[1])).toList(), b.jobs.stream().map(j -> List.of(j[2], j[1])).toList(), "the jobs: the slice that asked each and its condenser outlet");
+        assertEquals(a.view().condensed(), b.view().condensed(), "the condenser's share");
+        assertEquals(a.view().reflux(), b.view().reflux(), "the reflux it leaves");
+    }
+
+    /**
+     * The refused job's determinism gate (codebase review R-ST3, in the form of the ones above): the pentane still run twice,
+     * the second time on a loaded machine whose solve service refuses every still job asked from tick 1950 to 2229. A job
+     * is asked at every second pot commit, so the window holds one job's commit (at 2000 or 2100), and the pot's commit at
+     * 2200 asks none (with a job at 2000) or is outside the window's jobs (with one at 2100).
+     * <ul>
+     * <li>Before R-ST3 the refused job was skipped and a later commit asked one of its own pot. The jobs, their answers and
+     * everything after them differed.</li>
+     * <li>Now the job is held and asked again at each decision point until the service takes it (at 2230), for the same
+     * slice and the same apply tick. The pot's slice that needs its answer waits for it in {@code ready} (with a job at 2000
+     * the slice from 2100, due at 2200, is dispatched at 2230), so the second run asks and applies what the first did.</li>
+     * </ul>
+     * At 4820 ticks the jobs (by their contents), the accounts, totals, bookings, the transits and the share are the same
+     * bit for bit.
+     */
+    @Test
+    void aColumnJobTheSolveServiceRefusesIsAskedAgainForTheSameSlice() {
+        var a = pentanes();
+        var b = pentanes();
+        b.refuseFrom = 1950;
+        b.refuseUntil = 2230;
+        a.run(241);
+        b.run(241);
+        System.out.printf(Locale.ROOT, "refused job gate: %d refusals, %d jobs, the water took %.1f J%n",
+                b.refused, b.solves, a.heat.getOrDefault(PhysicalFluidTopology.sideIdentity(WATER), 0.));
+        assertTrue(b.refused > 0, "the service refused a job in the second run");
+        assertEquals(0, a.refused, "and none in the first");
+        assertEquals(a.asked, b.asked, "the jobs: each pot, temperature, reflux and outlet as its commit asked it");
+        assertEquals(a.solves, b.solves, "the jobs asked");
+        assertEquals(BatchStill.Status.DISTILLING, a.view().status(), () -> a.stills.statusLine(POT));
+        var ua = a.unit();
+        var ub = b.unit();
+        assertArrayEquals(ua.head().moles(), ub.head().moles(), "the distillate's account");
+        assertEquals(ua.head().energy(), ub.head().energy(), "the distillate's account's energy");
+        assertArrayEquals(ua.venting().moles(), ub.venting().moles(), "the vent's account");
+        assertEquals(ua.venting().energy(), ub.venting().energy(), "the vent's account's energy");
+        assertEquals(ua.heated(), ub.heated(), "the heat into the pot");
+        assertEquals(ua.condensed(), ub.condensed(), "the condenser's duty");
+        assertEquals(ua.burning(), ub.burning(), "the fire");
+        assertEquals(a.heat, b.heat, "the heat each side booked");
+        assertEquals(a.energies, b.energies, "every boundary's energy");
+        assertEquals(a.given.keySet(), b.given.keySet());
+        for (var e : a.given.entrySet()) assertArrayEquals(e.getValue(), b.given.get(e.getKey()), "what " + e.getKey() + " gave");
+        assertArrayEquals(a.pot(), b.pot(), "the pot");
+        assertEquals(a.coordinator.transits(), b.coordinator.transits(), "the heat in transit");
         assertEquals(a.view().condensed(), b.view().condensed(), "the condenser's share");
         assertEquals(a.view().reflux(), b.view().reflux(), "the reflux it leaves");
     }
