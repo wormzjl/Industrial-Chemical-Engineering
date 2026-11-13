@@ -1,6 +1,6 @@
 # A5 Runtime: report
 
-Branch `claude/review-wave-a5-runtime-1a45f8`. Three commits; tests written, not run yet (the lane is held for the bench thread; see "Tests" below).
+Branch `claude/review-wave-a5-runtime-1a45f8`. Three fix commits, one test fix after the run, this report. All named test classes pass (see "Tests" below).
 
 ## R5, a read never books (2828ae388)
 
@@ -33,6 +33,24 @@ Files: `FluidWorldAuthority`; new test `MoverHealthStatusTest`. The health claus
 
 ## Tests
 
-To run once the lane is free, `--max-workers 4`, each once: `compileJava compileTestJava`, then `test --tests` for `ExchangerCouplingTest`, `PresentationBucketTest`, `IslandCertificateTest`, `CrystalIslandRuntimeTest`, `WorkerFailureStatusTest`, `ColumnRunTest` (they read `presentation` or count materialisations), `PhysicalRegistryTest`, `MoverHealthStatusTest`; and `holdGates --tests IslandSchedulerTest` (counts materialisations; a slow gate).
+Ran after "lane free", `--max-workers 4`: `compileJava compileTestJava` (passed); `test --tests` the eight classes below (119 tests, 1 failure); after the fix, `PresentationBucketTest` again; `holdGates --tests IslandSchedulerTest`.
+
+| Class | Tests | Result |
+|---|---|---|
+| ExchangerCouplingTest (new determinism test) | 16 | pass |
+| PresentationBucketTest | 10 | 1 failure, fixed, then pass |
+| IslandCertificateTest | 23 | pass |
+| CrystalIslandRuntimeTest / WorkerFailureStatusTest | 3 / 2 | pass |
+| ColumnRunTest | 50 | pass |
+| PhysicalRegistryTest (new R26 test) | 12 | pass |
+| MoverHealthStatusTest (new) | 3 | pass |
+| IslandSchedulerTest (holdGates) | 9 | pass |
+
+Expectations that moved (tests that rested on the defect), all in `PresentationBucketTest`:
+- `scientificProgressIsIdenticalWithAndWithoutViewers`: viewed replays `> quiet` became `==`; boundary totals within 1e-12 became bit-equal (`assertArrayEquals`); "islands 2 and 3 replayed" now checked after the final `snapshot` reads, the engine's read that materialises them (island 3, the closed pair, had replayed only because views materialised it: the run's one failure).
+- `presentationCostsNothingPerTickUnlessABucketHasWork`: materialisations of the resting island under one menu over 10,000 ticks, 100 became 0; the view still shows the bucket tick (now the preview), and the stored committed tick stays behind it (new check).
+- `aPresentationReadStopsShortOfAWakeAndNeverWakesTheIsland`: unchanged and passing (the preview keeps the one-tick-short rule).
+
+No production caller outside the lane relied on a view materialising: `ColumnOperation.water`, `ShaftTrains.governorValve` and `FluidWorldAuthority.plannedTarget` read only the graph's pipe controls, which the preview carries unchanged.
 
 GameTests for the parent's final lane: `FluidPresentationGameTests` (a certified view at its bucket), `FluidCheckpointGameTests`, `ColumnOperationGameTests`, `CreateCouplingGameTests` (read certified islands), `PumpHealthGameTests` (pump status line).
