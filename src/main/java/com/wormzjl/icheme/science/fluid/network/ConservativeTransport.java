@@ -773,8 +773,13 @@ public final class ConservativeTransport {
      * scale) it stays unpinned. Applies to every reconstruction. Exact: every edge still books one amount at both ends,
      * so the change of the vessels plus the junction term equals the boundaries per component, solid population and
      * energy; only the booking moves, the flows, states and pipe histories are unchanged.
+     *
+     * <p>A junction can be a cooling tower's basin: an emptying vessel is solved as a junction holding its stock
+     * ({@code PassiveStepSolver.emptyingGraph}), and it keeps its tower. What its sprays lose to the air leaves its balance,
+     * read on the sprays' booked flows, as the booking reads it (finding F20, batch 2026-11-13-codebase-review): when a
+     * junction is taken in flow order its inflows carry their final factors (an upstream junction's is set).</p>
      */
-    private static double[] pinnedFlows(PassiveNetwork graph,List<FluidThermodynamics.State> candidate,double[] flows,FluidThermodynamics model,double[][] draws,
+    static double[] pinnedFlows(PassiveNetwork graph,List<FluidThermodynamics.State> candidate,double[] flows,FluidThermodynamics model,double[][] draws,
                                         Emptying[] emptying) {
         int nodes=graph.reservoirs().size();boolean[] junction=new boolean[nodes];boolean any=false;
         for(int node=0;node<nodes;node++)any|=junction[node]=graph.reservoirs().get(node).junction();
@@ -792,7 +797,11 @@ public final class ConservativeTransport {
                 if(donor==node)out+=rate;
             }
             // An emptying vessel (decision D54) passes what reaches it and its whole stock: dt (In' - Out') = -m_stock.
-            double atmospheric=graph.reservoirs().get(node).inventory().tower()==null?0:TowerExchange.at(graph,node,candidate,flows,draws,model).massLoss();
+            double atmospheric=0;
+            if(graph.reservoirs().get(node).inventory().tower()!=null) {
+                var booked=flows.clone();for(int edge=0;edge<flows.length;edge++)booked[edge]*=factor[edge];
+                atmospheric=TowerExchange.at(graph,node,candidate,booked,draws,model).massLoss();
+            }
             double outflow=fromJunctions+fromOthers-atmospheric+(emptying!=null&&emptying[node]!=null?emptying[node].drain():0),inflow=out-fromJunctions+atmospheric;
             if(out>0&&Double.isFinite(outflow)){double f=outflow/out;for(int edge=0;edge<flows.length;edge++){if(flows[edge]==0)continue;var pipe=graph.pipes().get(edge);if((flows[edge]>0?pipe.first():pipe.second())==node)factor[edge]=f;}}
             else if(fromOthers>0&&inflow>=0&&inflow<=fromOthers){double g=inflow/fromOthers;for(int edge=0;edge<flows.length;edge++){if(flows[edge]==0)continue;var pipe=graph.pipes().get(edge);int donor=flows[edge]>0?pipe.first():pipe.second(),receiver=flows[edge]>0?pipe.second():pipe.first();if(receiver==node&&!junction[donor])factor[edge]=g;}}
