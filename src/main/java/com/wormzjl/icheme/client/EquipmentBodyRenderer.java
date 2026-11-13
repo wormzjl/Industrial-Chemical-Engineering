@@ -71,6 +71,9 @@ public final class EquipmentBodyRenderer {
     private static final Matrix4f POSE=new Matrix4f();
     private static TextureAtlasSprite atlasMarker;
     private static RenderDetail builtDetail;
+    /** What the last region map was built from: the frame's hash of every member and its count; -1 after {@link #release} (C14). */
+    private static long seenHash;
+    private static int seenCount=-1;
     private EquipmentBodyRenderer() {}
 
     @SubscribeEvent public static void render(RenderLevelStageEvent event){
@@ -81,9 +84,12 @@ public final class EquipmentBodyRenderer {
         if(marker!=atlasMarker||detail!=builtDetail){release();atlasMarker=marker;builtDetail=detail;}
         long tick=mc.level.getGameTime();
 
-        // This frame's members of each region, and a signature that changes with any of them.
-        var now=new HashMap<Long,List<Member>>();
-        for(var structure:EquipmentShellBlockEntity.clientStructures(mc.level)){
+        // Each structure's light on its timer, and a hash of what the region map is built from: the level, every member's
+        // origin, shape and paint objects and light. A frame whose hash and count are the last ones allocates nothing and
+        // keeps the map (finding C14, batch 2026-11-13-codebase-review): the members, and so every region signature, are equal.
+        var structures=EquipmentShellBlockEntity.clientStructures(mc.level);
+        long hash=System.identityHashCode(mc.level);int count=0;
+        for(var structure:structures){
             var shape=structure.shape();var origin=structure.origin();
             if(shape==null||detail==RenderDetail.NORMAL&&!shape.kind().coolingTower())continue;
             var light=LIGHTS.computeIfAbsent(structure,s->new Light());
@@ -91,18 +97,10 @@ public final class EquipmentBodyRenderer {
                 light.value=LevelRenderer.getLightColor(mc.level,BlockPos.containing(origin.getX()+shape.sizeX()/2.0,origin.getY()+shape.sizeY(),origin.getZ()+shape.sizeZ()/2.0));
                 light.due=tick+LIGHT_TICKS+Math.floorMod(origin.hashCode(),LIGHT_TICKS);
             }
-            long id=(long)Math.floorDiv(origin.getX(),REGION)<<32^Math.floorDiv(origin.getZ(),REGION)&0xffffffffL;
-            now.computeIfAbsent(id,k->new ArrayList<>()).add(new Member(origin,shape,structure.paint(),light.value));
+            hash=(((hash*31+origin.asLong())*31+System.identityHashCode(shape))*31+System.identityHashCode(structure.paint()))*31+light.value;
+            count++;
         }
-        var gone=REGIONS.entrySet().iterator();
-        while(gone.hasNext()){var e=gone.next();if(!now.containsKey(e.getKey())){e.getValue().close();gone.remove();}}
-        for(var e:now.entrySet()){
-            long id=e.getKey();
-            var region=REGIONS.get(id);
-            if(region==null){region=new Region(new BlockPos((int)(id>>32)*REGION,0,(int)id*REGION));region.dirty=true;REGIONS.put(id,region);}
-            long signature=signature(e.getValue());
-            if(region.dirty||signature!=region.signature){region.signature=signature;region.members=e.getValue();region.dirty=true;}
-        }
+        if(hash!=seenHash||count!=seenCount){seenHash=hash;seenCount=count;regions(structures,detail);}
 
         // Merge at most one changed region this frame, one in view first.
         var frustum=event.getFrustum();Region next=null;
@@ -130,6 +128,26 @@ public final class EquipmentBodyRenderer {
             shader.MODEL_VIEW_MATRIX.upload();region.buffer.bind();region.buffer.draw();
         }
         if(shader!=null){shader.clear();VertexBuffer.unbind();type.clearRenderState();}
+    }
+
+    /** This frame's members of each region, from the structures as they are now; a region whose signature changed is marked to merge. */
+    private static void regions(java.util.Collection<LoadedEquipment.Structure> structures,RenderDetail detail){
+        var now=new HashMap<Long,List<Member>>();
+        for(var structure:structures){
+            var shape=structure.shape();var origin=structure.origin();
+            if(shape==null||detail==RenderDetail.NORMAL&&!shape.kind().coolingTower())continue;
+            long id=(long)Math.floorDiv(origin.getX(),REGION)<<32^Math.floorDiv(origin.getZ(),REGION)&0xffffffffL;
+            now.computeIfAbsent(id,k->new ArrayList<>()).add(new Member(origin,shape,structure.paint(),LIGHTS.get(structure).value));
+        }
+        var gone=REGIONS.entrySet().iterator();
+        while(gone.hasNext()){var e=gone.next();if(!now.containsKey(e.getKey())){e.getValue().close();gone.remove();}}
+        for(var e:now.entrySet()){
+            long id=e.getKey();
+            var region=REGIONS.get(id);
+            if(region==null){region=new Region(new BlockPos((int)(id>>32)*REGION,0,(int)id*REGION));region.dirty=true;REGIONS.put(id,region);}
+            long signature=signature(e.getValue());
+            if(region.dirty||signature!=region.signature){region.signature=signature;region.members=e.getValue();region.dirty=true;}
+        }
     }
 
     /** Changes with a member's origin, shape object, paint object or light (identities: a frame hashes no shape). */
@@ -191,5 +209,5 @@ public final class EquipmentBodyRenderer {
         return new Body(positions,colours,uvs,normals);
     }
 
-    public static void release(){REGIONS.values().forEach(Region::close);REGIONS.clear();BODIES.clear();}
+    public static void release(){REGIONS.values().forEach(Region::close);REGIONS.clear();BODIES.clear();seenCount=-1;}
 }
