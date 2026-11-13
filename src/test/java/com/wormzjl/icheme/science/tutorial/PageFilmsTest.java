@@ -20,9 +20,9 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * The equipment pages' films (batch 2026-11-12-tutorial-system, P6): every page has a film or stands in the picture-only
- * set, and every generic film ({@link PageFilms}) names every nozzle of its reference shape at stop 1, cuts its body open
- * with dots from its inlet to its outlet at stop 2 where it has one, reads at every stop ({@link FilmChecks}), gives the
- * same frame twice and frames its body on the design glass.
+ * set, and every generic film ({@link PageFilms}) is one stop that names every nozzle of its reference shape, reads
+ * ({@link FilmChecks}), gives the same frame twice and frames its body on the design glass; any stop of any page film keeps
+ * its dots on the body and its leaders on drawn nozzles.
  */
 class PageFilmsTest {
     /**
@@ -57,7 +57,7 @@ class PageFilmsTest {
             var shape = Objects.requireNonNull(ReferenceShapes.of(e.getValue()), name);
             Scene scene = Objects.requireNonNull(PageFilms.build(name), name);
             assertEquals(scene.stops(), Objects.requireNonNull(Films.build(name)).stops(), name + ": the page opens it by its name");
-            assertEquals(PageFilms.stops(name), scene.stops().size(), name);
+            assertEquals(1, scene.stops().size(), name + ": one stop, the outside");
             for (int k = 1; k < scene.stops().size(); k++) assertTrue(scene.stops().get(k) > scene.stops().get(k - 1), name + ": stops in order");
             FilmChecks.everyStopReads(scene);
             // Every track names an actor the scene has.
@@ -70,15 +70,7 @@ class PageFilmsTest {
             assertEquals(shape.nozzles().size(), first.labels().size(), name + ": every nozzle named");
             var roles = shape.nozzles().stream().map(n -> PageFilms.label(n.role())).sorted().toList();
             assertEquals(roles, first.labels().stream().map(Frame.LabelFrame::key).sorted().toList(), name + ": by role");
-            // Stop 2 where the inside is shown: the body cut open, dots from the inlet to the outlet, both named.
-            boolean inside = PageFilms.INSIDE.containsKey(e.getValue());
-            assertEquals(inside, scene.tracks().stream().anyMatch(t -> t instanceof Track.Cut c && c.actor().equals("body")), name + ": cut open only at an inside stop");
-            if (inside) {
-                var second = scene.at(scene.stops().get(1));
-                assertFalse(second.dots().isEmpty(), name + ": dots run through it");
-                var flow = PageFilms.INSIDE.get(e.getValue());
-                assertEquals(Set.of(PageFilms.label(flow[0]), PageFilms.label(flow[1])), Set.copyOf(second.labels().stream().map(Frame.LabelFrame::key).toList()), name);
-            }
+            assertTrue(scene.tracks().stream().noneMatch(t -> t instanceof Track.Cut || t instanceof Track.Dots), name + ": no cut, no dots");
             for (int k = 0; k < scene.stops().size(); k++) {
                 double t = scene.stops().get(k);
                 assertEquals(summary(scene.at(t)), summary(scene.at(t)), name + ": the same frame twice at stop " + (k + 1));
@@ -104,6 +96,90 @@ class PageFilmsTest {
             }
         }
         assertEquals(EquipmentFilms.GLASS_W, glass.w());
+    }
+
+    /**
+     * A stop shows its way where it has one (owner's rule for an inside stop, 2026-11-13): at every sampled time of a stop, at the
+     * design glass and at 320 by 240, every dot stands on the body as drawn (inside a drawn polygon on the glass), and every
+     * label's leader ends on its nozzle as drawn: its anchor on a drawn polygon and on the kept side of the cut. Stop 1's
+     * labels the same, uncut. Whether the cut face is seen (a quarter of the body's drawn area, inside geometry) is judged
+     * from the sheets, kind by kind (P6_COVERAGE.md).
+     */
+    @Test
+    void anInsideStopKeepsItsDotsOnTheBodyAndItsLeadersOnDrawnNozzles() {
+        var lang = TutorialText.english();
+        var failures = new java.util.ArrayList<String>();
+        int checked = 0;
+        for (var e : PageFilms.KINDS.entrySet()) {
+            String name = e.getKey();
+            var scene = Objects.requireNonNull(PageFilms.build(name), name);
+            var cut = scene.tracks().stream().filter(t -> t instanceof Track.Cut).map(t -> (Track.Cut) t).findFirst().orElse(null);
+            var captions = new java.util.ArrayList<String>();
+            for (var key : scene.captionKeys()) captions.add(lang.getOrDefault(key, key));
+            for (var size : List.of(new int[]{FilmLayout.DESIGN_WIDTH, FilmLayout.DESIGN_HEIGHT}, new int[]{320, 240})) {
+                var layout = FilmLayout.of(size[0], size[1], scene.stops().size(), FilmLayout.captionLines(captions, size[0], FilmChecks.M));
+                var glass = FilmLayout.glass(com.wormzjl.icheme.client.gui.common.kit.PanelSkin.LIGHT, layout.scene());
+                for (int k = 0; k < scene.stops().size(); k++) {
+                    double stop = scene.stops().get(k), from = k == 0 ? stop : scene.stops().get(k - 1) + .8;
+                    for (int i = 0; i <= 8; i++) {
+                        double t = from + (stop - from) * i / 8;
+                        var frame = scene.at(t);
+                        var projection = FilmChecks.projection(frame, glass);
+                        var drawn = drawn(frame, projection);
+                        String where = name + " stop " + (k + 1) + " at " + size[0] + " by " + size[1] + ", t " + Math.round(t * 100) / 100.0;
+                        for (var d : frame.dots()) {
+                            checked++;
+                            if (!on(drawn, projection.screen(d.x(), d.y(), d.z()), 0)) failures.add(where + ": a dot off the body");
+                        }
+                        if (i < 8) continue;
+                        for (var l : frame.labels()) {
+                            checked++;
+                            if (!on(drawn, projection.screen(l.x(), l.y(), l.z()), 2)) failures.add(where + ": " + l.key() + "'s leader ends on nothing drawn");
+                            if (k > 0 && cut != null) {
+                                var q = cut.point();
+                                var n = cut.normal();
+                                if ((l.x() - q[0]) * n[0] + (l.y() - q[1]) * n[1] + (l.z() - q[2]) * n[2] > 1e-6) failures.add(where + ": " + l.key() + "'s nozzle is cut away");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        failures.forEach(System.out::println);
+        System.out.println("page films: " + PageFilms.KINDS.size() + ", " + checked + " dots and leaders checked, " + failures.size() + " off");
+        assertEquals(List.of(), failures);
+    }
+
+    /** The body's drawn polygons of {@code frame} on the glass, each a ring of screen points. */
+    private static List<double[][]> drawn(Frame frame, com.wormzjl.icheme.science.tutorial.scene.Projection projection) {
+        var out = new java.util.ArrayList<double[][]>();
+        for (var a : frame.actors())
+            if (a.id().equals("body") && a.alpha() > 0)
+                for (var poly : a.polygons()) {
+                    var ring = new double[poly.size()][];
+                    for (int i = 0; i < poly.size(); i++) ring[i] = projection.screen(poly.positions()[3 * i], poly.positions()[3 * i + 1], poly.positions()[3 * i + 2]);
+                    out.add(ring);
+                }
+        return out;
+    }
+
+    /** Whether screen point {@code p} stands inside one of {@code rings}, or within {@code slack} px of one's edge. */
+    private static boolean on(List<double[][]> rings, double[] p, double slack) {
+        for (var ring : rings) {
+            boolean in = false;
+            for (int i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+                double[] a = ring[i], b = ring[j];
+                if ((a[1] > p[1]) != (b[1] > p[1]) && p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0]) in = !in;
+                if (slack > 0) {
+                    double dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy;
+                    double u = l2 > 0 ? Math.clamp(((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2, 0, 1) : 0;
+                    double ex = a[0] + u * dx - p[0], ey = a[1] + u * dy - p[1];
+                    if (ex * ex + ey * ey <= slack * slack) return true;
+                }
+            }
+            if (in) return true;
+        }
+        return false;
     }
 
     /** A frame's camera, captions, labels, dots and actors' ids and alphas, as text. */

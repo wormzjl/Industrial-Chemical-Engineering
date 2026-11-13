@@ -23,18 +23,25 @@ Status: built 2026-11-13 on `claude/tutorial-system-chem-mod-950ca9`. Not checke
 
 ## Page films (part 2)
 
-- `PageFilms` (beside `EquipmentFilms`, which stays at 446 lines): `page_<kind>` for 29 kinds on their reference shapes.
-  Stop 1: the outside, every nozzle named by its role (36 new `tutorial.icheme.film.part.*` words, the unit films'
-  where they fit). Stop 2 for 14 kinds whose inside holds the process and that have an inlet and an outlet: the body
-  cut through the middle between them (the body's centre where that cut would keep under 35 % of it), dots from inlet to
-  outlet. One stop for machines' casings, stacks and the flare (no outlet nozzle), the sphere and the gas converter (no
-  inlet), the batch still (the cut takes its pot and fire) and the adsorber (its nozzles stand on headers beside its
-  vessels). Nothing new modelled; `ShapeRasterizer` and the models untouched.
+- `PageFilms` (beside `EquipmentFilms`, which stays at 446 lines): `page_<kind>` for 29 kinds on their reference shapes,
+  one stop each: the outside, every nozzle named by its role (36 new `tutorial.icheme.film.part.*` words, the unit films'
+  where they fit). Nothing new modelled; `ShapeRasterizer` and the models untouched.
+- No kind has an inside stop (correction 2026-11-13, the owner's rule: the cut face seen, a quarter of the drawn body
+  taken and inside geometry uncovered; every dot on the body; every leader on a drawn nozzle). The first build gave 14
+  kinds a stop 2; the gate (`PageFilmsTest.anInsideStopKeepsItsDotsOnTheBodyAndItsLeadersOnDrawnNozzles`) failed all
+  14 (1,121 of 2,652 dots and leaders off: the dots began on the pipe outside the body, and the cut through the middle
+  took a named nozzle away in 13). One shared rule tried (the cut in front of both named nozzles, the dots from face to
+  face) passed the leaders everywhere but kept the dots on the body only for the cabin heater and the tall cooling
+  tower, and their sheets failed (1): the heater's cut uncovers nothing, its dots run down its outer wall; the tower is
+  not seen cut, its dots hide at its foot. The others: kettle, stirred reactor, trickle-bed and ebullated-bed reactors,
+  cyclone, cracking converter, coker, both boilers, both gasifiers and the fan cooling tower have empty shells or a cut
+  that misses the process. Their stop-2 sentences left `en_us.json`; the cut and dots code left `PageFilms`.
 - `pages.json` names each film; `Films.build` builds it only when Watch is pressed. Picture only (gate
   `PageFilmsTest.PICTURE_ONLY`): the motor, the generator, the gearbox (no nozzle, no inside) and the control valve.
-- Gate `PageFilmsTest` (2): every page has a film or is picture only; every nozzle named at stop 1 by its role; the cut
-  and the dots only at an inside stop; `FilmChecks` (one sentence, English lines, labels placed at both sizes); the
-  same frame twice; the body within the glass and filling 60 % of a side.
+- Gate `PageFilmsTest` (3): every page has a film or is picture only; every nozzle named by its role in one stop, no cut
+  and no dots; `FilmChecks` (one sentence, English lines, labels placed at both sizes); the same frame twice; the body
+  within the glass and filling 60 % of a side; every dot of any stop on the body and every leader on a drawn, uncut
+  nozzle at both glass sizes (29 films, 236 checked, 0 off).
 - Renders: the 29 films' sheets and `pages-1..6.png`, `pages-dark.png` in `tmp/tutorial-renders/p6/`, all read.
 
 ## Tests (once each, `--tests`, on the final code)

@@ -136,6 +136,10 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
   picture was already built once a page: sound); 6 and 7 one Hello a player a second, `/icheme-film` removed
   (cace5dd6d); 8 and 9 the cards and `Labels` in `client/gui/tutorial/`, `TutorialNetworkCodecTest`'s loader gate
   (e6fe48dc8). Unconfirmed item checked, not changed (open item below). Every changed test class run once with `--tests`.
+- 2026-11-13: P6 page films corrected (owner's rule for an inside stop): no kind keeps stop 2; all 29 page films are one
+  stop, gated (dots on the body, leaders on drawn nozzles), the 14 stop-2 sentences removed (P6_COVERAGE.md). Films and
+  page sheets rendered again in `tmp/tutorial-renders/p6/` (the render tools compile after the cards' move).
+  PageFilms 3, TutorialText 6, GuideFile 10, GuideCoverage 12, EquipmentInfoCoverage 6, GuidePage 6, HelpCoverage 6 pass.
 
 ## Code areas (proposed)
 
