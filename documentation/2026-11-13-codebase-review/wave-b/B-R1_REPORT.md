@@ -1,0 +1,23 @@
+# B-R1 Runtime: report
+
+Branch `claude/review-wave-a5-runtime-1a45f8`, merged with the review branch at `1c6dabe3e` (clean fast-forward). Seven commits. Two items are stopped: R23 (not bit-identical) and R24 (premise failed; decision sent to the main thread). **Tests pending: no Gradle run yet** (waiting for "lane free").
+
+| Item | Commit | Change | Counter before → after (from the code) |
+|---|---|---|---|
+| R6 A | c3aaea2f4 | `BoundedCpuSolveService` gets a reserved lane and a start budget. Islands run on a free worker or are refused, never queued. While an island is ready, ordinary (plant) jobs hold at most the worker limit less one; with one worker nothing is reserved. The plant 45 s deadline starts when a worker starts the job. `submitFluidIsland` and `availableWorkers` no longer refuse islands because a plant job waits. | Scheduling only. With 2 workers and 2 plant jobs, islands got 0 workers and now get 1. Queue time no longer counts toward the plant deadline |
+| `stored` | 660571187 | `FluidNetwork.opening` and the still's stop step read the view directly; `stored(read)` and the `presented` alias are deleted | none (same reads) |
+| R1 | a299bfaf8 | `instrumentPipeReading` reads the stored last result (new `IslandCoordinator.lastResult`). The observations carry no amounts and are the same object the padded presentation carries. `sensorReadings` reads the pipe only where the host has a sensor. `IslandSets.presented` builds one axis map per island | `islandSnapshots` per plain pipe per bucket: 2 calls × 2 to 3 snapshots → 0. Axis `HashMap`s per presented island: N + B + 2T → 1 |
+| R2 | 8924bd335 | `ViewIndex`, once per presented island per bucket: nodes and pipes by id, incident pipes in order, histories by pipe, HEAT sums by node (from 0.0, in booking order), constraint sets | Per device view: about 14 graph scans and 2 constraint builds per actuator → map lookups and O(degree) loops |
+| R4 | a8a583c96 | The material name map and the boxed weights are built once in the constructor; `MenuData`'s copies return the same instances | 1 `LinkedHashMap`, 1 map copy and 1 boxed list per menu per bucket → 0 |
+| R22 | a34147b5d | An island keeps its nearest fence and a frozen fence copy, updated where fences change; VERIFY checks both | `fence()` was an O(F) stream per readiness test and an O(F) copy per snapshot → O(1) |
+| R23 | stopped | `settledTransit` adds the two sides' booked heat in `coupled` (HashMap) iteration order, `joule + a + b`. An index by pair cannot reproduce that order (it depends on the table's capacity), so the result would not be bit-identical. Its only caller is the D4 wake test against threshold + 1 J. Option: a canonical order (lower id first) moves only the last bit of that comparison | not done |
+| R24 | stopped | The 100-tick `bindMotor` scan also re-puts a motor's data port on a cell that a structure refresh replaced, and refreshes it after wiring changes (`DataPorts.refresh`, `facts::wired`). Binding on chunk load and on unit creation misses both. The column's equivalent is in `EquipmentShellBlockEntity.onLoad` (world/, outside the lane). Options sent: A keep the scan, iterating only motors (recommended); B event-driven with a world/ hook and a wiring hook; C drop | not done |
+| R10 | e86717855 | Flares, stills, towers, heaters and chimneys publish at their device id's slot mod 100, as buckets do; each publisher replaces only its due devices' stored states. Drivers, rotations, silhouettes and noise are per watcher and stay on `% 100` | Wire timing only. Publishes on one tick per 100 → spread over the 100 |
+
+Values: no item moves a result. R6 and R10 change timing only (completion order, publish tick). R2's and R1's sums and copies keep their order. No facts schema, state format, protocol or shape-field change.
+
+New tests: `BoundedCpuSolveServiceTest` (2 new cases: the island reserve and the start-relative deadline with a test clock; one worker keeps no reserve), `IslandSetsPresentedTest`, `ViewIndexTest`, `DisplayCadenceTest`.
+
+Runs for "lane free", `--max-workers 4`, each once: `compileJava compileTestJava`; then `test --tests` on `BoundedCpuSolveServiceTest`, `IslandSetsPresentedTest`, `ViewIndexTest`, `DisplayCadenceTest`, `PresentationBucketTest`, `ExchangerCouplingTest`, `IslandCertificateTest`, `FluidPacketCodecTest` (MenuData), `WorkerFailureStatusTest`; then `holdGates --tests IslandSchedulerTest` (VERIFY checks R22).
+
+GameTests for the main thread's lane: `FluidPresentationGameTests` (views, R2), `ColumnOperationGameTests` (Operation tab openings, the `stored` follow-up), the still and heat-unit GameTests (R2 heat rows), `PumpHealthGameTests` (status lines). No GameTest pins a display publish tick (R10).
