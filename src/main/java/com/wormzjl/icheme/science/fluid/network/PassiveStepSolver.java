@@ -4572,7 +4572,7 @@ public final class PassiveStepSolver {
                     heldMelt[node][crystal.component()]+=p.massKg()/model.molecularWeight(crystal.component());heldMeltEnergy[node]+=p.massKg()*p.material().crystal().energyOffset();}
                 heldKept[node]=melting.kept(node,stock).moments().values();
             }
-            edgeFlow=new double[graph.pipes().size()];edgeDonor=new Transport[edgeFlow.length];edgeSuction=new Transport[edgeFlow.length];
+            transfersAt=transfersAt(graph);edgeFlow=new double[graph.pipes().size()];edgeDonor=new Transport[edgeFlow.length];edgeSuction=new Transport[edgeFlow.length];
             energy=new double[count];incomingMass=new double[count];incomingEnergy=new double[count];netMass=new double[count];
             for(int node=0;node<count;node++)if(layout[node]!=null)cachedVariables[node]=new double[layout[node].size()];
             int[] degree=new int[count];
@@ -4907,7 +4907,7 @@ public final class PassiveStepSolver {
             for(int node=0;node<layout.length;node++) {
                 var reservoir=graph.reservoirs().get(node);
                 if(layout[node]==null||reservoir.kind()!=PassiveNetwork.NodeKind.RESERVOIR||dry[node])continue;
-                final int at=node;if(graph.scheduledTransfers().stream().anyMatch(t->t.node()==at))continue;
+                if(transfersAt[node].length>0)continue;
                 double held=0,left=0;for(double n:oldAmounts[node])held+=n;
                 if(!(held>0))continue;
                 for(int local=0;local<layout[node].size();local++)if(layout[node].totalAmountVariable(local)&&!layout[node].solidVariable(local))left+=x[offsets[node]+local];
@@ -5367,6 +5367,16 @@ public final class PassiveStepSolver {
          * {@code edgesRead}: the block sweep moves one node or one edge per column and reads its own.
          */
         private final double[] edgeFlow;private final Transport[] edgeDonor,edgeSuction;private boolean edgesRead;
+        /** Per node, the indices of the scheduled transfers that name it, in the graph's order (finding P-14): the node
+         * accumulation reads them in place of a scan of every transfer per node and evaluation. */
+        private final int[][] transfersAt;
+        private static int[][] transfersAt(PassiveNetwork graph) {
+            int nodes=graph.reservoirs().size();int[] count=new int[nodes];
+            for(var transfer:graph.scheduledTransfers())count[transfer.node()]++;
+            int[][] at=new int[nodes][];for(int i=0;i<nodes;i++)at[i]=new int[count[i]];Arrays.fill(count,0);
+            for(int t=0;t<graph.scheduledTransfers().size();t++){int node=graph.scheduledTransfers().get(t).node();at[node][count[node]++]=t;}
+            return at;
+        }
         private double flowAt(int edge,double[] x,Transport[] tr){return edgesRead?edgeFlow[edge]:flow(edge,x[edgeOffset+edge],tr);}
         private Transport donorAt(int edge,Transport[] tr,double flow) {
             if(edgesRead)return edgeDonor[edge];
@@ -5398,9 +5408,8 @@ public final class PassiveStepSolver {
             System.arraycopy(graph.reservoirs().get(node).inventory().solids().moments().values(),0,solidTargets[node],0,3);Arrays.fill(solidIncoming[node],0);
             System.arraycopy(oldAmounts[node],0,target,0,target.length);Arrays.fill(in,0);
             double stored=graph.reservoirs().get(node).inventory().internalEnergy(),mass=0,heat=0,net=0;
-            for(var transfer:graph.scheduledTransfers()) {
-                if(transfer.node()!=node)continue;
-                var state=st[node];
+            for(int t:transfersAt[node]) {
+                var transfer=graph.scheduledTransfers().get(t);var state=st[node];
                 if(transfer instanceof ScheduledTransfer.Withdrawal withdrawal) {
                     // A module's withdrawal takes the vessel's bulk, its solids at their share of the mass (D23 (6)), on the
                     // state's own amounts: the node's transport is what a connection's bulk end draws (the gas, under D33).
