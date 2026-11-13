@@ -146,14 +146,14 @@ class V3StageContinuationTest {
      */
     @Test
     void theSteamRampDoublesFromItsSmallestIncrementAndAlwaysEndsOnTheAuthoredRate() {
-        assertEquals(List.of(1.0), V3ColumnCalculator.steamRampFractions(1));
-        assertEquals(List.of(0.25, 0.75, 1.0), V3ColumnCalculator.steamRampFractions(4));
-        assertEquals(List.of(1.0 / 12.0, 3.0 / 12.0, 7.0 / 12.0, 1.0), V3ColumnCalculator.steamRampFractions(12));
+        assertEquals(List.of(1.0), V3FeatureRamp.steamRampFractions(1));
+        assertEquals(List.of(0.25, 0.75, 1.0), V3FeatureRamp.steamRampFractions(4));
+        assertEquals(List.of(1.0 / 12.0, 3.0 / 12.0, 7.0 / 12.0, 1.0), V3FeatureRamp.steamRampFractions(12));
         assertEquals(List.of(1.0 / 24.0, 3.0 / 24.0, 7.0 / 24.0, 15.0 / 24.0, 1.0),
-                V3ColumnCalculator.steamRampFractions(24));
+                V3FeatureRamp.steamRampFractions(24));
 
         for (int resolution = 1; resolution <= 24; resolution++) {
-            List<Double> fractions = V3ColumnCalculator.steamRampFractions(resolution);
+            List<Double> fractions = V3FeatureRamp.steamRampFractions(resolution);
             assertEquals(1.0, fractions.get(fractions.size() - 1), 0.0,
                     () -> "the ramp must end on the authored rate exactly: " + fractions);
             assertEquals(1.0 / resolution, fractions.get(0), 0.0,
@@ -163,18 +163,18 @@ class V3StageContinuationTest {
             }
             assertTrue(fractions.size() <= 1 + (int) (Math.log(resolution) / Math.log(2.0)) + 1, fractions::toString);
         }
-        assertThrows(IllegalArgumentException.class, () -> V3ColumnCalculator.steamRampFractions(0));
+        assertThrows(IllegalArgumentException.class, () -> V3FeatureRamp.steamRampFractions(0));
     }
 
     /** Only an intermediate steam rung runs reduced; the rung that publishes keeps every fallback. */
     @Test
     void onlyAnIntermediateSteamRungGivesUpItsFallbacksAndItsCertificateCascade() {
         V3SimultaneousColumnSolver.RungBudget full = V3SimultaneousColumnSolver.RungBudget.DEFAULT;
-        assertEquals(full, V3ColumnCalculator.rampRungBudget(true, true, false), "the requested steam rung publishes");
-        assertEquals(full, V3ColumnCalculator.rampRungBudget(false, false, false), "a heat or draw rung is never reduced");
-        assertEquals(full, V3ColumnCalculator.rampRungBudget(false, true, false));
+        assertEquals(full, V3FeatureRamp.rampRungBudget(true, true, false), "the requested steam rung publishes");
+        assertEquals(full, V3FeatureRamp.rampRungBudget(false, false, false), "a heat or draw rung is never reduced");
+        assertEquals(full, V3FeatureRamp.rampRungBudget(false, true, false));
 
-        V3SimultaneousColumnSolver.RungBudget reduced = V3ColumnCalculator.rampRungBudget(true, false, false);
+        V3SimultaneousColumnSolver.RungBudget reduced = V3FeatureRamp.rampRungBudget(true, false, false);
         assertEquals(2, reduced.maximumDampingSteps());
         assertFalse(reduced.gradientFallback());
         assertEquals(0, reduced.verificationDampingSteps(),
@@ -190,7 +190,7 @@ class V3StageContinuationTest {
 
         for (boolean steamRung : new boolean[] {true, false}) {
             for (boolean requested : new boolean[] {true, false}) {
-                assertEquals(full, V3ColumnCalculator.rampRungBudget(steamRung, requested, true),
+                assertEquals(full, V3FeatureRamp.rampRungBudget(steamRung, requested, true),
                         () -> "the resumed sweep exists to spend the fallbacks the first sweep declined, so"
                                 + " every rung in it runs on the full budget: steamRung=" + steamRung
                                 + " requested=" + requested);
@@ -208,24 +208,24 @@ class V3StageContinuationTest {
      */
     @Test
     void aResumedSteamRungHalvingOnlyEverQueuesAFractionStrictlyInsideItsInterval() {
-        assertEquals(0.375, V3ColumnCalculator.steamRampMidpointFraction(0.25, 0.5), 0.0);
+        assertEquals(0.375, V3FeatureRamp.steamRampMidpointFraction(0.25, 0.5), 0.0);
         // The literature preset's own halving: the doubling schedule's 7/24 and 15/24 rungs meet at 11/24,
         // which is the 0.4583333333333334 the recovered condenser +5 K case actually solves.
-        assertEquals(11.0 / 24.0, V3ColumnCalculator.steamRampMidpointFraction(7.0 / 24.0, 15.0 / 24.0), 1.0e-15);
-        assertEquals(0.5, V3ColumnCalculator.steamRampMidpointFraction(0.0, 1.0), 0.0);
+        assertEquals(11.0 / 24.0, V3FeatureRamp.steamRampMidpointFraction(7.0 / 24.0, 15.0 / 24.0), 1.0e-15);
+        assertEquals(0.5, V3FeatureRamp.steamRampMidpointFraction(0.0, 1.0), 0.0);
 
-        assertTrue(Double.isNaN(V3ColumnCalculator.steamRampMidpointFraction(0.5, 0.5)),
+        assertTrue(Double.isNaN(V3FeatureRamp.steamRampMidpointFraction(0.5, 0.5)),
                 "a zero-width interval has no interior rung");
-        assertTrue(Double.isNaN(V3ColumnCalculator.steamRampMidpointFraction(0.75, 0.25)),
+        assertTrue(Double.isNaN(V3FeatureRamp.steamRampMidpointFraction(0.75, 0.25)),
                 "an inverted interval has no interior rung");
-        assertTrue(Double.isNaN(V3ColumnCalculator.steamRampMidpointFraction(0.5, Math.nextUp(0.5))),
+        assertTrue(Double.isNaN(V3FeatureRamp.steamRampMidpointFraction(0.5, Math.nextUp(0.5))),
                 "an interval one ulp wide has no interior rung in double arithmetic");
 
         double accepted = 1.0 / 24.0;
         double failed = 3.0 / 24.0;
         for (int halving = 0; halving < 8; halving++) {
             double upper = failed;
-            double midpoint = V3ColumnCalculator.steamRampMidpointFraction(accepted, upper);
+            double midpoint = V3FeatureRamp.steamRampMidpointFraction(accepted, upper);
             if (Double.isNaN(midpoint)) break;
             assertTrue(midpoint > accepted && midpoint < upper,
                     () -> "halving " + accepted + " -> " + upper + " produced " + midpoint);

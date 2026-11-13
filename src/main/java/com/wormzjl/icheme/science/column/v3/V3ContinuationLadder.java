@@ -13,9 +13,9 @@ import static com.wormzjl.icheme.science.column.v3.V3ColumnCalculator.MAXIMUM_NE
 import static com.wormzjl.icheme.science.column.v3.V3ColumnCalculator.correctCondenserPhase;
 import static com.wormzjl.icheme.science.column.v3.V3ColumnCalculator.feedFlash;
 import static com.wormzjl.icheme.science.column.v3.V3ColumnCalculator.publishesSuccess;
-import static com.wormzjl.icheme.science.column.v3.V3ColumnCalculator.recoverWithDrawRamp;
 import static com.wormzjl.icheme.science.column.v3.V3ColumnCalculator.solveSingleProblem;
 import static com.wormzjl.icheme.science.column.v3.V3ColumnCalculator.withPriorSupportNotes;
+import static com.wormzjl.icheme.science.column.v3.V3FeatureRamp.recoverWithDrawRamp;
 import static com.wormzjl.icheme.science.column.v3.V3SolveReport.boundedSummary;
 import static com.wormzjl.icheme.science.column.v3.V3SolveReport.mergedEvents;
 
@@ -28,7 +28,7 @@ import static com.wormzjl.icheme.science.column.v3.V3SolveReport.mergedEvents;
  * <p>Moved out of {@link V3ColumnCalculator} unchanged (batch 2026-11-13-codebase-review, D-C4). The calculator's
  * {@code calculateBranch} calls the two continuations, the recoveries and the input transforms. Each grid and each
  * leg is one single-problem solve with its condenser phase correction, and a ladder whose request carries draws,
- * steam or stage heat hands its last accepted state to the feature ramp ({@code recoverWithDrawRamp}).</p>
+ * steam or stage heat hands its last accepted state to {@link V3FeatureRamp#recoverWithDrawRamp}.</p>
  */
 final class V3ContinuationLadder {
     private static final double PRESSURE_CONTINUATION_TRIGGER_PASCAL = 100_000.0;
