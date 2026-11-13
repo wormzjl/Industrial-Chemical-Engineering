@@ -120,9 +120,9 @@ class SolidRuntimeTest {
         resources.put("data/icheme/materials/solids/another.json","{\"schema_version\":1,\"id\":\"icheme:another\",\"revision\":\"v1\",\"density_kg_per_m3\":1500,\"heat_capacity_j_per_kg_kelvin\":900}");
         var extended=MaterialCatalog.parse(resources);
         assertEquals(WorldTopologyLedger.FluidBasis.capture(catalog),WorldTopologyLedger.FluidBasis.capture(extended));
-        extended.solids().validate(stock(1));
+        stock(1).validate(extended.solids());
         var changed=new HashMap<>(catalog.resources());var key="data/icheme/materials/solids/demo_particle.json";
         var record=JsonParser.parseString(changed.get(key)).getAsJsonObject();record.addProperty("density_kg_per_m3",2600);changed.put(key,record.toString());
-        assertThrows(IllegalArgumentException.class,()->MaterialCatalog.parse(changed).solids().validate(stock(1)));
+        assertThrows(IllegalArgumentException.class,()->stock(1).validate(MaterialCatalog.parse(changed).solids()));
     }
 }

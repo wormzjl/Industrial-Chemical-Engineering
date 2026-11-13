@@ -316,7 +316,7 @@ public final class PhysicalRegistry {
             if(edit.replacement()==null)proposed.put(edit.id(),Optional.empty());
             else {
                 var record=edit.replacement();starts.add(record.device().position());proposed.put(edit.id(),Optional.of(record));for(var cell:record.device().cells())proposedAt.put(cell,record);
-                if(record.device().boundary()&&(old==null||!record.spec().equals(old.spec()))){var node=initialize(record);MaterialRuntime.active().solids().validate(node.inventory().solids());built.put(edit.id(),new Initialized(record,node));}
+                if(record.device().boundary()&&(old==null||!record.spec().equals(old.spec()))){var node=initialize(record);node.inventory().solids().validate(MaterialRuntime.active().solids());built.put(edit.id(),new Initialized(record,node));}
             }
         }
         // The registry this event proposes: the queued one with these edits on top.

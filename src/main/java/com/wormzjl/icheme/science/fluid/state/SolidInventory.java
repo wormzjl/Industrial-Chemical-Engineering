@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.science.fluid.state;
 
+import com.wormzjl.icheme.science.material.SolidMaterialCatalog;
 import com.wormzjl.icheme.science.material.SolidMaterialCatalog.SolidMaterial;
 import java.math.BigDecimal;
 import java.math.MathContext;
@@ -59,6 +60,16 @@ public record SolidInventory(List<Population> populations) {
             throw new IllegalArgumentException("Solid inventory overflow/underflow");
     }
     public boolean empty() { return populations.isEmpty(); }
+    /**
+     * Refuses a custom population whose saved properties differ from {@code catalog}'s loaded data (no migration). A crystal
+     * population ({@link SolidMaterial#crystal()}) is not a record of the catalog: its material is built from the property
+     * package's crystal record ({@code NetworkCrystals}), which the package's own identity checks. Moved from
+     * {@code SolidMaterialCatalog} (codebase review C2, F7 and L-F8): the catalog imports no network type.
+     */
+    public void validate(SolidMaterialCatalog catalog) {
+        for (var p : populations)
+            if (p.material().crystal() == null && !catalog.require(p.material().id()).equals(p.material())) throw new IllegalArgumentException("Saved solid properties differ from the loaded data (no migration; create a fresh world): " + p.material().id());
+    }
     public Moments moments() {
         double mass = 0, volume = 0, capacity = 0;
         for (var p : populations) { mass += p.massKg(); volume += p.volume(); capacity += p.massKg() * p.material().heatCapacity(); }
