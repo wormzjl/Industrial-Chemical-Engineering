@@ -121,6 +121,9 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
   power, cooling, steam, tanks, each opening its kind's page), the tanks before On, an end that names only what runs
   (no vacuum tower). Gate: the supplies come before On. GuideFile, GuideCoverage (11), GuidePage, TutorialText, CardView,
   DrawCall tests pass, run once with `--tests`.
+- 2026-11-13: main 0.29.0 (aqueous solvents, a182f36f2) merged in (1cfca0ab0). Conflicts: `build.gradle` (the slow gate
+  list), `documentation/INDEX.md`. No recording moved: StillRunRecordingTest (5), StillTraysRecordingTest (4),
+  SteamHeaterCoilTest (1), SmallCrudeUnitTest (4), SmallUnitRecordingTest (2) pass, run once with `--tests`.
 
 ## Code areas (proposed)
 
@@ -131,7 +134,8 @@ equipment serves; Ponder only if it is sufficient, an own framework otherwise.
 
 ## Open items
 
-- Merge order (owner, 2026-11-12): this branch merges after `claude/ethanol-compound-matrix-4b318d`. It now holds that
+- Merge order: the aqueous batch reached main as 0.29.0 and this branch holds main (1cfca0ab0, 2026-11-13). Before that
+  (owner, 2026-11-12): this branch merges after `claude/ethanol-compound-matrix-4b318d`. It held that
   branch (at 6b8d03389, with main 0.28.0) and the still branch `claude/still-on-aqueous-fdba0c` (at 1b1ad1d07); when the
   aqueous branch changes again, merge it again. The still branch has had no code review and no final lane.
 - After the merges: done. The tutorial compiles, is recorded and gated on the merged base; the still law's own classes
