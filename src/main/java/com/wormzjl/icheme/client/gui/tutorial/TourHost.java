@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.client.gui.tutorial;
 
 import com.wormzjl.icheme.client.gui.common.TourAnchors;
+import com.wormzjl.icheme.client.gui.common.kit.DoorInput;
 import com.wormzjl.icheme.client.gui.common.kit.KitDoor;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
@@ -22,7 +23,7 @@ import java.util.function.Supplier;
  * and the resolver are the screen's: a page with no tour has no key, and a stop whose anchor this page lacks is skipped.
  * A tour sends nothing to the server and reads only what the screen already shows.
  */
-public final class TourHost {
+public final class TourHost implements DoorInput.Overlay {
     private final HelpTour tour = new HelpTour();
     private final Supplier<@Nullable String> page;
     private final HelpTour.Resolver resolver;
@@ -50,6 +51,7 @@ public final class TourHost {
         return tour() != null;
     }
 
+    @Override
     public boolean isOpen() {
         return tour.isOpen();
     }
@@ -79,6 +81,7 @@ public final class TourHost {
     }
 
     /** A press: true where the open tour takes it (all but the lit control of a stop that waits). */
+    @Override
     public boolean mouseClicked(Font font, int width, int height, double x, double y) {
         return tour.isOpen() && tour.mouseClicked(font, width, height, x, y);
     }
@@ -103,6 +106,7 @@ public final class TourHost {
     }
 
     /** Draws the open tour over the whole screen, after the page. */
+    @Override
     public void render(GuiGraphics g, Font font, int width, int height, int mouseX, int mouseY) {
         if (tour.isOpen()) tour.render(g, font, width, height, mouseX, mouseY);
     }

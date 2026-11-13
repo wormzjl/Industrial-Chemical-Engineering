@@ -774,8 +774,7 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
         int px = tour.pointer(x), py = tour.pointer(y);
         // The whole frame, widgets too, in one batch, as the simulator draws its own (finding C4): its fills go out in runs.
         GuiCanvas.of(g, font).batch(() -> super.render(g, px, py, partial));
-        if (tour.isOpen()) tour.render(g, font, width, height, x, y);
-        else KitDoor.hint(g, font, hovered, x, y);
+        DoorInput.overlay(this, g, font, tour, hovered, x, y);
     }
 
     @Override
@@ -800,15 +799,15 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
     public boolean mouseClicked(double x, double y, int button) {
         if (tour.mouseClicked(font, width, height, x, y)) return true;
         SkinField.clickOutside(this, x, y);
+        // A choice first, then the door's bar: this screen's own order (DoorInput.press tries the bar first).
         double rx = x - leftPos, ry = y - topPos;
-        if (button == 0 && door.view().inside(rx, ry))
-            for (var column : door.columns()) {
-                var action = column.action(rx, door.view().contentY(ry));
-                if (action != null) {
-                    act(action);
-                    return true;
-                }
+        if (button == 0) {
+            var action = door.action(rx, ry);
+            if (action != null) {
+                act(action);
+                return true;
             }
+        }
         return door.press(rx, ry, button) || super.mouseClicked(x, y, button);
     }
 
@@ -825,8 +824,7 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
 
     @Override
     public boolean mouseScrolled(double x, double y, double h, double v) {
-        if (tour.isOpen()) return true;
-        return door.wheel(x - leftPos, y - topPos, v) || super.mouseScrolled(x, y, h, v);
+        return DoorInput.wheel(tour, door, x, y, leftPos, topPos, v) || super.mouseScrolled(x, y, h, v);
     }
 
     @Override

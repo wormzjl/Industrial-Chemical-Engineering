@@ -1225,7 +1225,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         // The door column's view on every page: its bar, then a choice it places (a mode, a valve's target); then the table's scroll.
         double rx=x-leftPos,ry=y-topPos;
         if(door.press(rx,ry,button))return true;
-        if(button==0&&door.view().inside(rx,ry))for(var column:door.columns()){var action=column.action(rx,door.view().contentY(ry));if(action!=null){if(page==Page.CONTROL)controlAction(action);else deviceAction(action);return true;}}
+        if(button==0){var action=door.action(rx,ry);if(action!=null){if(page==Page.CONTROL)controlAction(action);else deviceAction(action);return true;}}
         if(page!=Page.CONTROL&&scroll.click(x,y,button)){rebuildNext=true;return true;}
         return super.mouseClicked(x,y,button);
     }

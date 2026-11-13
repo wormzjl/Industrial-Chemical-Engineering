@@ -6,6 +6,7 @@ import com.wormzjl.icheme.client.gui.common.DialogColumns;
 import com.wormzjl.icheme.client.gui.common.ScreenTours;
 import com.wormzjl.icheme.client.gui.common.TitleStrip;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
+import com.wormzjl.icheme.client.gui.common.kit.DoorInput;
 import com.wormzjl.icheme.client.gui.common.kit.GuiCanvas;
 import com.wormzjl.icheme.client.gui.common.kit.KitDoor;
 import com.wormzjl.icheme.client.gui.common.kit.Palette;
@@ -323,9 +324,7 @@ public final class VesselScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double x, double y, int button) {
-        if (tour.mouseClicked(font, width, height, x, y)) return true;
-        SkinField.clickOutside(this, x, y);
-        return door.press(x - left, y - top, button) || glassView.press(x - left, y - top, button) || super.mouseClicked(x, y, button);
+        return DoorInput.press(this, font, tour, door, x, y, left, top, button) || glassView.press(x - left, y - top, button) || super.mouseClicked(x, y, button);
     }
 
     @Override
@@ -352,7 +351,6 @@ public final class VesselScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double x, double y, double horizontal, double vertical) {
-        if (tour.isOpen()) return true;
-        return door.wheel(x - left, y - top, vertical) || glassView.wheel(x - left, y - top, vertical) || super.mouseScrolled(x, y, horizontal, vertical);
+        return DoorInput.wheel(tour, door, x, y, left, top, vertical) || glassView.wheel(x - left, y - top, vertical) || super.mouseScrolled(x, y, horizontal, vertical);
     }
 }

@@ -5,6 +5,7 @@ import com.wormzjl.icheme.client.gui.common.DialogColumns;
 import com.wormzjl.icheme.client.gui.common.ProcessUi;
 import com.wormzjl.icheme.client.gui.common.ScreenTours;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
+import com.wormzjl.icheme.client.gui.common.kit.DoorInput;
 import com.wormzjl.icheme.client.gui.common.kit.GuiCanvas;
 import com.wormzjl.icheme.client.gui.common.kit.KitDoor;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
@@ -164,8 +165,7 @@ public final class GaugeScreen extends AbstractContainerScreen<GaugeMenu> {
         int px = tour.pointer(mouseX), py = tour.pointer(mouseY);
         // The whole frame, widgets too, in one batch, as the simulator draws its own (finding C4): its fills go out in runs.
         GuiCanvas.of(g, font).batch(() -> super.render(g, px, py, partialTick));
-        if (tour.isOpen()) tour.render(g, font, width, height, mouseX, mouseY);
-        else KitDoor.hint(g, font, hovered, mouseX, mouseY);
+        DoorInput.overlay(this, g, font, tour, hovered, mouseX, mouseY);
     }
 
     @Override
@@ -188,9 +188,7 @@ public final class GaugeScreen extends AbstractContainerScreen<GaugeMenu> {
 
     @Override
     public boolean mouseClicked(double x, double y, int button) {
-        if (tour.mouseClicked(font, width, height, x, y)) return true;
-        SkinField.clickOutside(this, x, y);
-        return door.press(x - leftPos, y - topPos, button) || super.mouseClicked(x, y, button);
+        return DoorInput.press(this, font, tour, door, x, y, leftPos, topPos, button) || super.mouseClicked(x, y, button);
     }
 
     @Override
@@ -206,8 +204,7 @@ public final class GaugeScreen extends AbstractContainerScreen<GaugeMenu> {
 
     @Override
     public boolean mouseScrolled(double x, double y, double horizontal, double vertical) {
-        if (tour.isOpen()) return true;
-        return door.wheel(x - leftPos, y - topPos, vertical) || super.mouseScrolled(x, y, horizontal, vertical);
+        return DoorInput.wheel(tour, door, x, y, leftPos, topPos, vertical) || super.mouseScrolled(x, y, horizontal, vertical);
     }
 
     @Override
