@@ -72,8 +72,8 @@ class KeptLuStorageTest {
         // The same work: the kept storages change which arrays hold a factorization, not which factorizations run.
         for(int i=1;i<COUNTERS.length;i++)if(i!=2)assertEquals(fresh[i],carried[i],COUNTERS[i]+", kept against fresh");
         assertEquals(0,carried[0],"no storage is built after the warm-up on an unchanged structure");
-        // A column searches again only from the first changed pivot of its factorization on; the values move between jobs,
-        // so some pivots change (16 searches against 30 on this network). Fewer than fresh, never more.
-        assertTrue(carried[2]<fresh[2],"the kept reaches save searches: "+carried[2]+" against "+fresh[2]+" ("+carried[1]+" columns factored)");
+        // Each storage keeps the reaches of its last patterns (exact zeros are dropped, so a storage sees a few in turn:
+        // with one kept pattern this counted 16 searches of 30), and the pivots repeat on this network.
+        assertEquals(0,carried[2],"no reach is searched while the patterns are kept and the pivots repeat ("+carried[1]+" columns factored)");
     }
 }

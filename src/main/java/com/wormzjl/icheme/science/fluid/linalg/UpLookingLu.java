@@ -52,7 +52,13 @@ import java.util.Arrays;
  * patterns, {@code pinv} marks the same rows with the same columns, and the search, deterministic on these inputs alone,
  * returns the last reach of column k, in the same order. So each column's reach is kept, and reused while every earlier
  * pivot repeated; from the first column whose pivot differs, every later column searches again (and keeps its new reach).
- * A matrix of another pattern searches every column. Values never enter the search.</p>
+ * Values never enter the search.</p>
+ *
+ * <p><b>Several kept patterns.</b> The caller drops exact zeros before it factors ({@link SparseLuSolver}), so one storage
+ * sees a few patterns in turn (a transport matrix with a pipe at rest, then flowing). The instance keeps the pattern, pivot
+ * rows and reaches of the last completed factorization of each of its last {@value #KEPT_PATTERNS} patterns, the least
+ * recently used replaced. The induction above reads only the matrix's pattern and the pivots of this factorization, so it
+ * holds per pattern, whatever was factored in between. A pattern not among the kept ones searches every column.</p>
  *
  * <p><b>Reuse across factorizations</b> (P-17b: an island keeps its instances across steps). Nothing numeric carries from
  * one factorization to the next, whatever matrix came before: {@code pinv} is set to -1 over n; the dense column is cleared
@@ -70,9 +76,10 @@ public final class UpLookingLu {
     private int lLength,uLength;
     private int[] pinv=new int[0],xi=new int[0],marks=new int[0];
     private double[] dense=new double[0];
-    /** The last factorization's pattern, pivot rows and reaches (P-17); {@code kept} false until one completed. */
-    private int[] keptColumns=new int[1],keptRows=new int[0],keptPivots=new int[0],reachStart=new int[1],reachRows=new int[0];
-    private boolean kept;
+    /** The patterns kept, each with the pivot rows and reaches of its last completed factorization (P-17, P-17c). */
+    static final int KEPT_PATTERNS=4;
+    private final Kept[] keptPatterns=new Kept[KEPT_PATTERNS];
+    private long clock;
     private long searches;
     private int failedColumn=-1;
 
@@ -82,22 +89,23 @@ public final class UpLookingLu {
      */
     public boolean factor(int n,int[] columns,int[] rows,double[] values) {
         int nonzeros=columns[n];
-        boolean sameStructure=kept&&n==size&&Arrays.equals(columns,0,n+1,keptColumns,0,n+1)&&Arrays.equals(rows,0,nonzeros,keptRows,0,nonzeros);
+        Kept slot=keptPattern(n,columns,rows,nonzeros);
         prepare(n,nonzeros);
-        if(!sameStructure){kept=false;keepPattern(n,columns,rows,nonzeros);}
         // The kept reach (see the class comment): every column reuses its last reach while every earlier pivot repeated.
-        boolean reuse=sameStructure;
+        boolean reuse=slot.complete;
+        slot.complete=false;slot.used=++clock;
+        int[] reachStart=slot.reachStart,keptPivots=slot.pivots;
         failedColumn=-1;lLength=0;uLength=0;long searchedBefore=searches;
         for(int k=0;k<n;k++) {
             lColumns[k]=lLength;uColumns[k]=uLength;
             int top,end;int[] reach;
-            if(reuse){reach=reachRows;top=reachStart[k];end=reachStart[k+1];}
+            if(reuse){reach=slot.reachRows;top=reachStart[k];end=reachStart[k+1];}
             else {
                 searches++;
                 int found=search(columns,rows,k);
-                int length=n-found;ensureReach(reachStart[k]+length);
-                System.arraycopy(xi,found,reachRows,reachStart[k],length);reachStart[k+1]=reachStart[k]+length;
-                reach=reachRows;top=reachStart[k];end=reachStart[k+1];
+                int length=n-found;slot.ensureReach(reachStart[k]+length);
+                System.arraycopy(xi,found,slot.reachRows,reachStart[k],length);reachStart[k+1]=reachStart[k]+length;
+                reach=slot.reachRows;top=reachStart[k];end=reachStart[k+1];
             }
             ensureCapacity(end-top);
             // solveColB's numeric part: clear on the reach, scatter A(:,k), eliminate in reach order.
@@ -121,7 +129,7 @@ public final class UpLookingLu {
                     uRows[uLength]=pinv[i];uValues[uLength++]=dense[i];
                 }
             }
-            if(ipiv==-1||a<=0){failedColumn=k;kept=false;count(k+1,searches-searchedBefore);return false;}
+            if(ipiv==-1||a<=0){failedColumn=k;count(k+1,searches-searchedBefore);return false;}
             double pivot=dense[ipiv];
             uRows[uLength]=k;uValues[uLength++]=pivot;
             pinv[ipiv]=k;
@@ -136,7 +144,7 @@ public final class UpLookingLu {
         }
         lColumns[n]=lLength;uColumns[n]=uLength;
         for(int p=0;p<lLength;p++)lRows[p]=pinv[lRows[p]];
-        kept=true;count(n,searches-searchedBefore);
+        slot.complete=true;count(n,searches-searchedBefore);
         return true;
     }
 
@@ -198,7 +206,7 @@ public final class UpLookingLu {
 
     private void prepare(int n,int nonzeros) {
         if(pinv.length<n) {
-            pinv=new int[n];dense=new double[n];xi=new int[n];marks=new int[2*n];keptPivots=new int[n];
+            pinv=new int[n];dense=new double[n];xi=new int[n];marks=new int[2*n];
         }
         if(lColumns.length<n+1){lColumns=new int[n+1];uColumns=new int[n+1];}
         size=n;
@@ -208,18 +216,44 @@ public final class UpLookingLu {
         if(lValues.length<capacity){lRows=new int[capacity];lValues=new double[capacity];}
         if(uValues.length<capacity){uRows=new int[capacity];uValues=new double[capacity];}
     }
-    private void keepPattern(int n,int[] columns,int[] rows,int nonzeros) {
-        if(keptColumns.length<n+1){keptColumns=new int[n+1];reachStart=new int[n+1];}
-        if(keptRows.length<nonzeros)keptRows=new int[nonzeros];
-        System.arraycopy(columns,0,keptColumns,0,n+1);System.arraycopy(rows,0,keptRows,0,nonzeros);
-        reachStart[0]=0;
+    /** The kept slot of this pattern; where none holds it, the least recently used slot takes it, with nothing complete. */
+    private Kept keptPattern(int n,int[] columns,int[] rows,int nonzeros) {
+        int oldest=0;
+        for(int i=0;i<KEPT_PATTERNS;i++) {
+            Kept slot=keptPatterns[i];
+            if(slot==null){oldest=i;break;}
+            if(slot.holds(n,columns,rows,nonzeros))return slot;
+            if(slot.used<keptPatterns[oldest].used)oldest=i;
+        }
+        Kept slot=keptPatterns[oldest];
+        if(slot==null)slot=keptPatterns[oldest]=new Kept();
+        slot.keep(n,columns,rows,nonzeros);
+        SolverDiagnostics.count(SolverDiagnostics.luPatternSearches,n);
+        return slot;
+    }
+    /** One pattern with its last pivot rows and reaches; {@code complete} false until a factorization of it completed,
+     * and again after a rejected one. */
+    private static final class Kept {
+        private int size=-1,nonzeros;
+        private int[] columns=new int[1],rows=new int[0],pivots=new int[0],reachStart=new int[1],reachRows=new int[0];
+        private boolean complete;private long used;
+        private boolean holds(int n,int[] c,int[] r,int nz) {
+            return n==size&&nz==nonzeros&&Arrays.equals(c,0,n+1,columns,0,n+1)&&Arrays.equals(r,0,nz,rows,0,nz);
+        }
+        private void keep(int n,int[] c,int[] r,int nz) {
+            if(columns.length<n+1){columns=new int[n+1];reachStart=new int[n+1];}
+            if(rows.length<nz)rows=new int[nz];
+            if(pivots.length<n)pivots=new int[n];
+            System.arraycopy(c,0,columns,0,n+1);System.arraycopy(r,0,rows,0,nz);
+            size=n;nonzeros=nz;complete=false;reachStart[0]=0;
+        }
+        private void ensureReach(int length){if(reachRows.length<length)reachRows=Arrays.copyOf(reachRows,Math.max(2*reachRows.length,length));}
     }
     /** Room for {@code more} entries in L and U each (a column stores at most its reach in each). */
     private void ensureCapacity(int more) {
         if(lLength+more>lValues.length){int grown=Math.max(2*lValues.length,lLength+more);lRows=Arrays.copyOf(lRows,grown);lValues=Arrays.copyOf(lValues,grown);}
         if(uLength+more>uValues.length){int grown=Math.max(2*uValues.length,uLength+more);uRows=Arrays.copyOf(uRows,grown);uValues=Arrays.copyOf(uValues,grown);}
     }
-    private void ensureReach(int length){if(reachRows.length<length)reachRows=Arrays.copyOf(reachRows,Math.max(2*reachRows.length,length));}
 
     /** Columns factored and reach searches, into the solver's diagnostics (behind its switch). */
     private static void count(int columns,long searched) {

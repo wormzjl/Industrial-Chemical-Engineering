@@ -39,4 +39,12 @@ Branch `worktree-agent-a93054b0e549a58c9`, from the review branch `claude/codeba
 In the subagent's worktree, then on the merge: `UpLookingLuParityTest` 4, `SparseLuSolverTest` 6, `PassiveStepSolverTest` 10, `BlockJacobianEquivalenceTest` 7, `RetainedSolverTest` 2, `PackagedSparseLuTest` 1, `SparseNewtonTest` 7, `KeptLuStorageTest` 1: 38 of 38.
 
 - `KeptLuStorageTest` printed, over three one-step jobs: kept handle `luStorages 0, luColumnsFactored 30, luReachSearches 16`; fresh handles `luStorages 6, luColumnsFactored 30, luReachSearches 30`; every other counter equal; flows, inventories, pressures and temperatures bit for bit.
-- The assertion "0 reach searches on the kept handle" did not hold and was restated by the main thread: the values move between jobs, so some pivots change, and every column after a changed pivot searches again (the rule of `UpLookingLu`). What holds is "fewer than fresh" (16 against 30 here), which the test now asserts. The storages are kept as written (0 against 6).
+- The assertion "0 reach searches on the kept handle" did not hold at first (16 of 30). The main thread first read it as changed pivots; the counters of `mixed100` showed otherwise (next section), and with several kept patterns the assertion holds as the subagent wrote it: 0 searches, 0 storages.
+
+## P-17c: several kept patterns (main thread, 2026-11-13)
+
+The bench after the merge: `luStorages` 0.11 an accepted interval (the storages are kept) and `UpLookingLu.prepare` gone from the allocation profile, but the step time did not move and `luReachSearches` was 2,048,677 of 2,142,438 columns factored (96 %). A new counter, `luPatternSearches`, attributed every one of them to a pattern that was not the storage's last one, and none to a changed pivot.
+
+- **Cause.** `SparseLuSolver.Storage.factor0` drops exact zeros when it permutes the matrix (as EJML's caller did), so the pattern the LU sees depends on the values: one declared structure gives a few patterns in turn (19,341 of the 20,934 factorizations are the transport's, about 21 an interval).
+- **Change.** `UpLookingLu` keeps the pattern, pivot rows and reaches of the last completed factorization of each of its last four patterns (`KEPT_PATTERNS`), the least recently used replaced. Bit for bit by the same induction: a reach is a function of the matrix's pattern and of this factorization's earlier pivots, whatever was factored in between. RAM: up to four patterns and reach sets a storage (ints, about the size of L and U's row arrays each).
+- **Gate.** `UpLookingLuParityTest.alternatingPatternsKeepTheirReaches`: six patterns through one instance against a fresh EJML each time; the kept ones search nothing, a replaced one and one after a rejection search every column.

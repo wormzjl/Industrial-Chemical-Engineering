@@ -115,6 +115,32 @@ class UpLookingLuParityTest {
         }
         assertTrue(cases>100);
     }
+    /** One instance, several patterns in turn (the caller drops exact zeros, so a storage sees a few): each of the last
+     * {@link UpLookingLu#KEPT_PATTERNS} keeps its reaches, whatever was factored in between; every result is EJML's. */
+    @Test void alternatingPatternsKeepTheirReaches() {
+        int n=40;var patterns=new Matrix[UpLookingLu.KEPT_PATTERNS+2];
+        for(int i=0;i<patterns.length;i++)patterns[i]=random(n,.1+.03*i,false,7000+i);
+        var lu=new UpLookingLu();
+        for(int i=0;i<UpLookingLu.KEPT_PATTERNS;i++)assertParity(lu,patterns[i],"pattern "+i+", first");
+        assertEquals((long)UpLookingLu.KEPT_PATTERNS*n,lu.searches(),"each new pattern searches every column");
+        long searches=lu.searches();
+        for(int round=0;round<3;round++)for(int i=UpLookingLu.KEPT_PATTERNS-1;i>=0;i--)assertParity(lu,patterns[i],"pattern "+i+", round "+round);
+        assertEquals(searches,lu.searches(),"the kept patterns search nothing while their pivots repeat");
+        // Two more patterns replace the two least recently used (3 and 2, by the order above); 0 and 1 are still kept.
+        assertParity(lu,patterns[UpLookingLu.KEPT_PATTERNS],"fifth pattern");assertParity(lu,patterns[UpLookingLu.KEPT_PATTERNS+1],"sixth pattern");
+        searches=lu.searches();
+        assertParity(lu,patterns[0],"pattern 0, kept");assertParity(lu,patterns[1],"pattern 1, kept");
+        assertEquals(searches,lu.searches(),"the patterns still kept search nothing");
+        assertParity(lu,patterns[UpLookingLu.KEPT_PATTERNS-1],"the replaced pattern");
+        assertEquals(searches+n,lu.searches(),"a replaced pattern searches every column again");
+        // A rejected factorization leaves its pattern without kept reaches: the next one searches every column.
+        var singular=patterns[0].values().clone();
+        for(int p=patterns[0].columns()[n/2];p<patterns[0].columns()[n/2+1];p++)singular[p]=0;
+        assertParity(lu,new Matrix(n,patterns[0].columns(),patterns[0].rows(),singular),"pattern 0, a zero column");
+        searches=lu.searches();
+        assertParity(lu,patterns[0],"pattern 0 after the rejection");
+        assertEquals(searches+n,lu.searches(),"after a rejection the pattern searches every column");
+    }
     @Test void singularColumnsAreRejectedByBothAtTheSameColumn() {
         // An empty column, a column on rows already pivoted, and an exact zero pivot.
         var empty=new Matrix(3,new int[]{0,1,1,2},new int[]{0,2},new double[]{2,3});
