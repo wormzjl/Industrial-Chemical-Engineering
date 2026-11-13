@@ -31,6 +31,11 @@ final class VacuumPumpDesign extends UnitDesign {
     private final boolean ring;
 
     VacuumPumpDesign(boolean ring) {
+        // Computed in its overrides: maxSize, maxLength, lengthRow.
+        super(new Sizes(1, Sizes.COMPUTED, 1,
+                1, Sizes.COMPUTED,
+                0, 0,
+                Orientation.HORIZONTAL, "vacuum_pump.model", null, null, true));
         this.ring = ring;
     }
 
@@ -59,45 +64,13 @@ final class VacuumPumpDesign extends UnitDesign {
         return PipeSizes.od(Math.sqrt(4 * m.capacity() / 3600 / (Math.PI * NOZZLE_SPEED)), .05, .4);
     }
 
-    @Override public double minSize() {
-        return 1;
-    }
-
     @Override public double maxSize() {
         return models().size();
-    }
-
-    @Override public double sizeStep() {
-        return 1;
-    }
-
-    @Override public int minLength(double size) {
-        return 1;
     }
 
     /** A ring of one or two stages, the largest single stage only; a screw has none. */
     @Override public int maxLength(double size) {
         return ring && Math.round(size) < VacuumPump.RINGS.size() ? 2 : 1;
-    }
-
-    @Override public int minSupport(double size, int length) {
-        return 0;
-    }
-
-    @Override public int maxSupport() {
-        return 0;
-    }
-
-    @Override public Orientation orientation() {
-        return Orientation.HORIZONTAL;
-    }
-
-    @Override public boolean moves() {
-        return true;
-    }
-
-    @Override public String sizeRow() {
-        return "vacuum_pump.model";
     }
 
     /** A model reads as its capacity, the unit beside the box (the box holds the number only); its name is on the datasheet. */
@@ -115,10 +88,6 @@ final class VacuumPumpDesign extends UnitDesign {
 
     @Override public boolean lengthInMetres() {
         return false;
-    }
-
-    @Override public String supportRow() {
-        return null;
     }
 
     @Override public Line held(EquipmentShape shape) {

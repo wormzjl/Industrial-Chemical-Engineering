@@ -19,19 +19,14 @@ import java.util.List;
  * bay and the bank on rows of their own.
  */
 final class AirCoolerDesign extends UnitDesign {
-    @Override
-    public double minSize() {
-        return 1.5;
-    }
-
-    @Override
-    public double maxSize() {
-        return 3;
-    }
-
-    @Override
-    public double sizeStep() {
-        return .5;
+    AirCoolerDesign() {
+        // minSupport: The bundle 3 m up (owner request 2026-10-16) keeps the fans' ring inlets at least 0.6 fan
+        // diameters above grade, more than the half diameter of free air a forced-draft fan usually takes.
+        // Computed in its overrides: minLength.
+        super(new Sizes(1.5, 3, .5,
+                Sizes.COMPUTED, ProcessUnit.MAX_BAY_LENGTH,
+                3, EquipmentShape.MAX_SUPPORT,
+                Orientation.HORIZONTAL, "bay", null, "bundle_height", true));
     }
 
     /** The shortest bay of width {@code size} whose fans cover {@link ProcessUnit#FAN_COVERAGE} of its bundle face. */
@@ -42,29 +37,10 @@ final class AirCoolerDesign extends UnitDesign {
         return length;
     }
 
-    @Override
-    public int maxLength(double size) {
-        return ProcessUnit.MAX_BAY_LENGTH;
-    }
-
-    /**
-     * The bundle 3 m up (owner request 2026-10-16) keeps the fans' ring inlets at least 0.6 fan diameters above grade,
-     * more than the half diameter of free air a forced-draft fan usually takes.
-     */
-    @Override
-    public int minSupport(double size, int length) {
-        return 3;
-    }
-
     /** A new bank's bundle 4 m up (owner request 2026-10-16), 1.68 m or more under its motor beams. */
     @Override
     public int defaultSupport(double size, int length) {
         return 4;
-    }
-
-    @Override
-    public Orientation orientation() {
-        return Orientation.HORIZONTAL;
     }
 
     @Override
@@ -73,24 +49,9 @@ final class AirCoolerDesign extends UnitDesign {
     }
 
     @Override
-    public boolean moves() {
-        return true;
-    }
-
-    @Override
     void check(double size, int length, int support, ProcessUnit.Bank bank) {
         if (UnitRatings.coverage(size, length) < ProcessUnit.FAN_COVERAGE)
             throw new IllegalArgumentException("An air cooler bay of " + size + " × " + length + " m has no room for fans covering " + ProcessUnit.FAN_COVERAGE + " of its bundle");
-    }
-
-    @Override
-    public String sizeRow() {
-        return "bay";
-    }
-
-    @Override
-    public String supportRow() {
-        return "bundle_height";
     }
 
     @Override

@@ -21,29 +21,17 @@ final class FccConverterDesign extends UnitDesign {
     /** Fresh feed at a 9.6 m regenerator, m³/h: 50,000 barrels a day of 0.159 m³ (survey). */
     static final double FEED_AT_9_6 = 50_000 * .159 / 24;
 
-    @Override
-    public double minSize() {
-        return 4;
-    }
-
-    @Override
-    public double maxSize() {
-        return 17;
-    }
-
-    @Override
-    public double sizeStep() {
-        return .5;
+    FccConverterDesign() {
+        // Computed in its overrides: minLength, minSupport.
+        super(new Sizes(4, 17, .5,
+                Sizes.COMPUTED, FccConverterLayout.MAX_RISER,
+                Sizes.COMPUTED, FccConverterLayout.MAX_BOTTOM,
+                Orientation.VERTICAL, "fcc_converter.regenerator", "fcc_converter.riser", "fcc_converter.regenerator_bottom", false));
     }
 
     @Override
     public int minLength(double size) {
         return FccConverterLayout.minLength(size);
-    }
-
-    @Override
-    public int maxLength(double size) {
-        return FccConverterLayout.MAX_RISER;
     }
 
     /** A new converter's riser: 32 m (survey default; modern risers 30 to 40 m), or the least that fits a larger regenerator. */
@@ -55,31 +43,6 @@ final class FccConverterDesign extends UnitDesign {
     @Override
     public int minSupport(double size, int length) {
         return Math.min(FccConverterLayout.MAX_BOTTOM, FccConverterLayout.minSupport(size, Math.max(length, minLength(size))));
-    }
-
-    @Override
-    public int maxSupport() {
-        return FccConverterLayout.MAX_BOTTOM;
-    }
-
-    @Override
-    public Orientation orientation() {
-        return Orientation.VERTICAL;
-    }
-
-    @Override
-    public String sizeRow() {
-        return "fcc_converter.regenerator";
-    }
-
-    @Override
-    public String lengthRow() {
-        return "fcc_converter.riser";
-    }
-
-    @Override
-    public String supportRow() {
-        return "fcc_converter.regenerator_bottom";
     }
 
     /** The fresh feed, m³/h, for a regenerator of {@code d}. */

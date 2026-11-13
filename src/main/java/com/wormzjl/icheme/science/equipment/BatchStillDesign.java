@@ -56,10 +56,13 @@ final class BatchStillDesign extends UnitDesign {
         return POTS.getLast();
     }
 
-    /** A notional step; the sizes are the list ({@link #sizes()}). */
-    @Override
-    public double sizeStep() {
-        return 50;
+    BatchStillDesign() {
+        // sizeStep: A notional step; the sizes are the list ({@link #sizes()}).
+        // Computed in its overrides: minSize, maxSize.
+        super(new Sizes(Sizes.COMPUTED, Sizes.COMPUTED, 50,
+                1, 1,
+                0, 0,
+                Orientation.VERTICAL, "still_pot", null, null, false));
     }
 
     @Override
@@ -85,31 +88,6 @@ final class BatchStillDesign extends UnitDesign {
     @Override
     public String sizeText(double size) {
         return whole(size);
-    }
-
-    @Override
-    public int minSupport(double size, int length) {
-        return 0;
-    }
-
-    @Override
-    public int maxSupport() {
-        return 0;
-    }
-
-    @Override
-    public Orientation orientation() {
-        return Orientation.VERTICAL;
-    }
-
-    @Override
-    public String sizeRow() {
-        return "still_pot";
-    }
-
-    @Override
-    public String supportRow() {
-        return null;
     }
 
     @Override

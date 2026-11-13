@@ -22,20 +22,13 @@ final class GearboxDesign extends UnitDesign {
     /** The plinth at grade and the baseplate, m. */
     static final double PLINTH = .2, BASEPLATE = .08;
 
-    @Override
-    public double minSize() {
-        return MachineDuty.MOTOR_POWERS.getFirst();
-    }
-
-    @Override
-    public double maxSize() {
-        return MachineDuty.MOTOR_POWERS.getLast();
-    }
-
-    /** A notional step; the sizes are the IEC list ({@link #sizes()}). */
-    @Override
-    public double sizeStep() {
-        return .05;
+    GearboxDesign() {
+        // sizeStep: A notional step; the sizes are the IEC list ({@link #sizes()}).
+        // moves: The couplings' hubs turn.
+        super(new Sizes(MachineDuty.MOTOR_POWERS.getFirst(), MachineDuty.MOTOR_POWERS.getLast(), .05,
+                1, 1,
+                0, 8,
+                Orientation.HORIZONTAL, "gearbox.power", null, "machine_table", true));
     }
 
     @Override
@@ -64,27 +57,6 @@ final class GearboxDesign extends UnitDesign {
     }
 
     @Override
-    public int minSupport(double size, int length) {
-        return 0;
-    }
-
-    @Override
-    public int maxSupport() {
-        return 8;
-    }
-
-    @Override
-    public Orientation orientation() {
-        return Orientation.HORIZONTAL;
-    }
-
-    /** The couplings' hubs turn. */
-    @Override
-    public boolean moves() {
-        return true;
-    }
-
-    @Override
     public boolean hasDuty() {
         return true;
     }
@@ -110,16 +82,6 @@ final class GearboxDesign extends UnitDesign {
     @Override
     public MachineDuty step(MachineDuty duty, String setting, int steps) {
         return setting.equals("power") ? MachineDuty.gearbox(MachineDuty.step(MachineDuty.MOTOR_POWERS, duty.power(), steps)) : duty;
-    }
-
-    @Override
-    public String sizeRow() {
-        return "gearbox.power";
-    }
-
-    @Override
-    public String supportRow() {
-        return "machine_table";
     }
 
     @Override

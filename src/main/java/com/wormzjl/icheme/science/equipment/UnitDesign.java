@@ -13,7 +13,9 @@ import java.util.Map;
  * One kind of standalone unit (owner request 2026-10-18: eleven new units, built in parallel; batch
  * 2026-10-15-custom-equipment-rendering): its sizes, the constructor's rows, the datasheet's lines and its parts. Each
  * kind's design is its own file; {@link ProcessUnit} keeps the shared drawing kit (parts, solids, nozzles, decks,
- * ladders, moving parts). The game asks a kind's sizes of its design: {@code UnitDesign.of(kind).minSize()}.
+ * ladders, moving parts). The game asks a kind's sizes of its design: {@code UnitDesign.of(kind).minSize()}. A design
+ * states its constant sizes, rows and moving parts in one {@link Sizes} record, passed to this class's constructor; it
+ * overrides a method only where the value is computed.
  *
  * <p>The sizes a player sets are the shape's {@code diameter} (the unit's main size, on {@link #sizeStep()}),
  * {@code tangentLength} (a second whole number: a length, a height or a count; 1 where the kind has none) and
@@ -26,11 +28,25 @@ public abstract class UnitDesign {
 
     // ---- Sizes ------------------------------------------------------------------------------------------------------
 
-    public abstract double minSize();
+    /** The sizes, rows and moving parts the design states as constants ({@link Sizes}); the methods below return them. */
+    private final Sizes stated;
 
-    public abstract double maxSize();
+    /** A design passes its constant sizes; a value it computes it overrides ({@link Sizes}). */
+    UnitDesign(Sizes sizes) {
+        this.stated = java.util.Objects.requireNonNull(sizes, "sizes");
+    }
 
-    public abstract double sizeStep();
+    public double minSize() {
+        return stated.minSize();
+    }
+
+    public double maxSize() {
+        return stated.maxSize();
+    }
+
+    public double sizeStep() {
+        return stated.sizeStep();
+    }
 
     /** Every main size a unit of the kind may take, smallest first: the grid from {@link #minSize()} by {@link #sizeStep()}. */
     public List<Double> sizes() {
@@ -116,11 +132,11 @@ public abstract class UnitDesign {
 
     /** The least second size (length, height or count) at main size {@code size}; 1 where the kind has none. */
     public int minLength(double size) {
-        return 1;
+        return stated.minLength();
     }
 
     public int maxLength(double size) {
-        return 1;
+        return stated.maxLength();
     }
 
     /** A new unit's second size at main size {@code size}: the least by default (a set of adsorbers starts at two beds). */
@@ -133,10 +149,12 @@ public abstract class UnitDesign {
         return 1;
     }
 
-    public abstract int minSupport(double size, int length);
+    public int minSupport(double size, int length) {
+        return stated.minSupport();
+    }
 
     public int maxSupport() {
-        return EquipmentShape.MAX_SUPPORT;
+        return stated.maxSupport();
     }
 
     /** A new unit's support, m: the least by default. */
@@ -144,7 +162,9 @@ public abstract class UnitDesign {
         return minSupport(size, length);
     }
 
-    public abstract Orientation orientation();
+    public Orientation orientation() {
+        return stated.orientation();
+    }
 
     /** Whether the kind is built in banks of bays ({@link ProcessUnit.Bank}): only air coolers. */
     public boolean banks() {
@@ -166,13 +186,15 @@ public abstract class UnitDesign {
 
     /** Whether units of the kind have moving parts: their datasheet carries the switch. */
     public boolean moves() {
-        return false;
+        return stated.moves();
     }
 
     // ---- Constructor and datasheet ----------------------------------------------------------------------------------
 
     /** The constructor's row for the main size (its translation key under the constructor's prefix). */
-    public abstract String sizeRow();
+    public String sizeRow() {
+        return stated.sizeRow();
+    }
 
     /** The main size's unit on the constructor's row: metres, or a machine's kilowatts. */
     public String sizeUnit() {
@@ -186,7 +208,7 @@ public abstract class UnitDesign {
 
     /** The constructor's row for the second size, or {@code null} where the kind has none. */
     public String lengthRow() {
-        return null;
+        return stated.lengthRow();
     }
 
     /** Whether the second size is shown in metres (a length or a height) rather than as a count. */
@@ -195,7 +217,9 @@ public abstract class UnitDesign {
     }
 
     /** The constructor's row for the support, or {@code null} where it is fixed ({@link #maxSupport()} 0). */
-    public abstract String supportRow();
+    public String supportRow() {
+        return stated.supportRow();
+    }
 
     /** The constructor's middle line: what the unit holds or does. */
     public abstract Line held(EquipmentShape shape);

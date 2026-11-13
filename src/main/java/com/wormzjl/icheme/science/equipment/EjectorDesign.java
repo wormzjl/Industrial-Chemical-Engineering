@@ -12,45 +12,17 @@ import java.util.List;
 
 /** A steam ejector standing on its frame ({@link #build}): suction 0.05 to 1 m, 8.3 suctions long. */
 final class EjectorDesign extends UnitDesign {
-    @Override
-    public double minSize() {
-        return ProcessUnit.SUCTION_STEP;
-    }
-
-    @Override
-    public double maxSize() {
-        return PipeSizes.MAX_OUTSIDE;
-    }
-
-    @Override
-    public double sizeStep() {
-        return ProcessUnit.SUCTION_STEP;
-    }
-
-    /** The discharge flange 1 m up at least; a new ejector's 2 m. */
-    @Override
-    public int minSupport(double size, int length) {
-        return 1;
+    EjectorDesign() {
+        // minSupport: The discharge flange 1 m up at least; a new ejector's 2 m.
+        super(new Sizes(ProcessUnit.SUCTION_STEP, PipeSizes.MAX_OUTSIDE, ProcessUnit.SUCTION_STEP,
+                1, 1,
+                1, EquipmentShape.MAX_SUPPORT,
+                Orientation.VERTICAL, "suction", null, "discharge", false));
     }
 
     @Override
     public int defaultSupport(double size, int length) {
         return 2;
-    }
-
-    @Override
-    public Orientation orientation() {
-        return Orientation.VERTICAL;
-    }
-
-    @Override
-    public String sizeRow() {
-        return "suction";
-    }
-
-    @Override
-    public String supportRow() {
-        return "discharge";
     }
 
     @Override

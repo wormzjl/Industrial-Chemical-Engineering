@@ -32,69 +32,16 @@ final class CentrifugalCompressorDesign extends UnitDesign {
     static final double PLINTH = .25, GROUT = .04, BASEPLATE = .16;
     static final int MAX_SUPPORT = 7;
 
-    @Override
-    public double minSize() {
-        return .3;
-    }
-
-    @Override
-    public double maxSize() {
-        return 1.5;
-    }
-
-    @Override
-    public double sizeStep() {
-        return .1;
-    }
-
-    @Override
-    public int minLength(double size) {
-        return 2;
-    }
-
-    @Override
-    public int maxLength(double size) {
-        return 9;
-    }
-
-    @Override
-    public int minSupport(double size, int length) {
-        return 0;
-    }
-
-    @Override
-    public int maxSupport() {
-        return MAX_SUPPORT;
-    }
-
-    @Override
-    public Orientation orientation() {
-        return Orientation.HORIZONTAL;
-    }
-
-    @Override
-    public boolean moves() {
-        return true;
-    }
-
-    @Override
-    public String sizeRow() {
-        return "centrifugal_compressor.impeller";
-    }
-
-    @Override
-    public String lengthRow() {
-        return "centrifugal_compressor.impellers";
+    CentrifugalCompressorDesign() {
+        super(new Sizes(.3, 1.5, .1,
+                2, 9,
+                0, MAX_SUPPORT,
+                Orientation.HORIZONTAL, "centrifugal_compressor.impeller", "centrifugal_compressor.impellers", "centrifugal_compressor.table", true));
     }
 
     @Override
     public boolean lengthInMetres() {
         return false;
-    }
-
-    @Override
-    public String supportRow() {
-        return "centrifugal_compressor.table";
     }
 
     @Override

@@ -42,19 +42,12 @@ final class FluidizedBedBoilerDesign extends UnitDesign {
         return Math.min(MAX_INPUT, GRID_RELEASE * w * depth(w));
     }
 
-    @Override
-    public double minSize() {
-        return 3;
-    }
-
-    @Override
-    public double maxSize() {
-        return 26;
-    }
-
-    @Override
-    public double sizeStep() {
-        return 1;
+    FluidizedBedBoilerDesign() {
+        // Computed in its overrides: minLength, maxLength.
+        super(new Sizes(3, 26, 1,
+                Sizes.COMPUTED, Sizes.COMPUTED,
+                5, 8,
+                Orientation.VERTICAL, "fluidized_bed_boiler.width", "fluidized_bed_boiler.cyclones", "fluidized_bed_boiler.grid", true));
     }
 
     /** The fewest cyclones none of which is wider than 8.7 m or than a quarter of the furnace's height. */
@@ -83,43 +76,8 @@ final class FluidizedBedBoilerDesign extends UnitDesign {
     }
 
     @Override
-    public int minSupport(double size, int length) {
-        return 5;
-    }
-
-    @Override
-    public int maxSupport() {
-        return 8;
-    }
-
-    @Override
     public int defaultSupport(double size, int length) {
         return 6;
-    }
-
-    @Override
-    public Orientation orientation() {
-        return Orientation.VERTICAL;
-    }
-
-    @Override
-    public boolean moves() {
-        return true;
-    }
-
-    @Override
-    public String sizeRow() {
-        return "fluidized_bed_boiler.width";
-    }
-
-    @Override
-    public String lengthRow() {
-        return "fluidized_bed_boiler.cyclones";
-    }
-
-    @Override
-    public String supportRow() {
-        return "fluidized_bed_boiler.grid";
     }
 
     @Override
