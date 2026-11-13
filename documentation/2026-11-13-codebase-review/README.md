@@ -28,6 +28,9 @@ Branch `claude/codebase-review-refactor-8a85ef`, base `259d22a2c` (main 0.30.0).
 - 2026-11-13: three wave A briefs amended after the threads asked for a decision, each claim checked in the code by the main thread first (6d054cf9f): C4 is an inverted superheat test (`ColumnSolve.java:218`), not only a fault above 647 K; F1 has four more readers of the column identity (the learned route would have fallen to the classical backup without a failure); P3-01 needs its two callers. See WAVE_A_BRIEFS, "Amendments". No test run.
 - 2026-11-13: J1 delivered and checked by the main thread: `code-guide/README.md` 397 to 112 lines (99 to 32 KB), new `code-guide/HISTORY.md` and `documentation/reference/FORMATS.md`, stale texts corrected in `fluid-runtime.md` and `rotating-machinery.md`. Checks: of 5,111 old non-blank guide lines, 30 changed (all the brief's corrections) and 126 headings lost their date, none dropped; all 30 rows of FORMATS.md read against their constants; 490 relative links of the touched files resolve. The chapters did not shrink (about 105 dated sections hold the only description of a current behaviour and stayed, without their date). No test run.
 - 2026-11-13: B1 delivered `PROFILE_REVIEW.md` and `tools/codebase-review-bench/` on `refs/heads/claude/codebase-review-bench-930e08` (42caac27b), not merged here. The main thread read it, checked the code behind the band solver, the route and the sparse solve findings, and folded it into PHASE2_PLAN (wave B order with new items P7 and P-17, wave E "What the profile changes", the gate's readings on today's code, decisions 7, 8 and new 16) and SOLVER_DECOUPLING_PLAN (6.1, 6.3). Three plan statements changed: the analytic Jacobian is not the column's largest gain (the band solver is 52 to 63 % of a solve); the running column never takes the learned start, which costs a ninth of the classical chain in checkpoints; on `mixed100` the islands keep pace with the workers 21 % busy, so the fluid gate's need is not met on today's code. The wave A threads were then given the Gradle lane two at a time. No test run in this worktree.
+- 2026-11-13: owner "Yes, merge": B1's branch merged into this branch (documents and `tools/` only).
+
+- 2026-11-13: B1 profile (sub-thread, branch `claude/codebase-review-bench-930e08`): [PROFILE_REVIEW.md](PROFILE_REVIEW.md), JFR CPU and allocation of the fluid step (`fluidServerBenchmark` on `mixed100`, 60 + 60 s; the default `one` stops collecting once its island certifies), the column cold and warm (`medium_crude`, literature) and 20 shaft trains; harness `tools/codebase-review-bench/`. Timed runs alone; no suite run.
 
 ## Documents
 
@@ -45,6 +48,8 @@ Reviews (subagents): [THERMO_CORE_REVIEW.md](THERMO_CORE_REVIEW.md) (S1), [THERM
 
 Plan and briefs: [REVIEW_PLAN.md](REVIEW_PLAN.md) (its section 2 is replaced by SOLVER_DECOUPLING_PLAN), [BRIEFS.md](BRIEFS.md), [WAVE_A_BRIEFS.md](WAVE_A_BRIEFS.md).
 
+Profile (bench sub-thread B1): [PROFILE_REVIEW.md](PROFILE_REVIEW.md): the Java baseline (wall, CPU, allocation, GC, retained heap, time share by kind) of an island step, a column solve and 20 shaft trains; harness `tools/codebase-review-bench/`.
+
 ## Code areas
 
 None changed.
@@ -52,7 +57,7 @@ None changed.
 ## Open items
 
 - Running threads (owner: "Approve all seven", 2026-11-13), each on its own branch and worktree cut from this branch, none merged here: `wave-a1` (column, Opus high), `wave-a2` (saves, Opus medium), `wave-a3` (machines, Opus medium), `wave-a4` (sheet against world, Opus medium), `wave-a5` (runtime, Opus high), `wave-a6` (fluid, Opus high). The wave A threads run no Gradle until the main thread sends "lane free" (after the bench thread's timed runs; then two at a time). Their reports: `wave-a/A<n>_REPORT.md` on their branches.
-- B1's branch `refs/heads/claude/codebase-review-bench-930e08` (the profile report and the bench harness, documents and `tools/` only) is not merged into this branch: the owner's word is needed. Not measured by B1: the `viewers` profile (R1, R2), one large awake island, the native column path, the first rung with and without the inside-out trial (L1).
+- Not measured by B1: the `viewers` profile (R1, R2), one large awake island, the native column path, the first rung with and without the inside-out trial (L1).
 - Code guide, left by J1: the chapters still carry their batch sections (shrinking them needs the chapter split that follows waves C and D); old format numbers stated as current outside `fluid-runtime.md` (`process-control.md` "formats are 14/4/3", `equipment.md` `equipment-21`, `cooling-towers.md` `fluid-21`); `verification.md` links `LegacyNetworkPathPinTest.java`, which does not exist, and names an old lane baseline (`891c8acf5`); the items of DOCS_AND_COLLABORATION_PLAN 2.5 outside the guide (the gui-creation skill, the `PumpHealth`, `PhaseDraw` and `ProcessSolveServices` comments).
 - Shape fields (12) have no production constant, only `EquipmentShapeCompatTest.SHAPE_FIELDS`; the planned `FormatsTableTest` needs one or reads the test constant.
 - Owner: decisions 2 to 14 and 16 of PHASE2_PLAN's last section (1 and 15 are given).
