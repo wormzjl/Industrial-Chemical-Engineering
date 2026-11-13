@@ -225,6 +225,29 @@ class PhysicalRegistryTest {
     }
 
     /**
+     * A placed or respecified generator is flashed once, by its submit's validation; its event's apply takes that reservoir
+     * (code base review R26, option A), which is the one a flash at apply would build, bit for bit.
+     */
+    @Test void aGeneratorEditIsFlashedOnceAndAppliesTheValidatedStock() {
+        var w=new World(0);long before=w.registry.initializations();
+        long generator=w.place(16,16,Kind.GENERATOR);
+        assertEquals(before+1,w.registry.initializations(),"a placed generator: one flash");
+        w.place(17,16,Kind.PIPE);w.place(18,16,Kind.RESERVOIR);
+        var old=w.registry.registrations().get(generator);
+        var spec=old.spec().withCharge(318.15,old.spec().pressure(),old.spec().composition());
+        before=w.registry.initializations();
+        w.registry.submit(List.of(new WorldTopologyLedger.Edit(generator,new WorldTopologyLedger.Registration(old.device(),spec,old.revision()+1))),w.ledger.nextIdentity(),null);
+        assertEquals(before+1,w.registry.initializations(),"the submit validates with one flash");
+        w.apply();
+        assertEquals(before+1,w.registry.initializations(),"the apply flashes no more");
+        var node=w.island(generator).graph().reservoirs().stream().filter(n->n.id()==generator).findFirst().orElseThrow();
+        var fresh=spec.initialize(old.device(),w.model,()->{});
+        assertEquals(Double.doubleToLongBits(fresh.state().temperature()),Double.doubleToLongBits(node.state().temperature()),"temperature");
+        assertEquals(Double.doubleToLongBits(fresh.state().pressure()),Double.doubleToLongBits(node.state().pressure()),"pressure");
+        assertEquals(Double.doubleToLongBits(fresh.inventory().internalEnergy()),Double.doubleToLongBits(node.inventory().internalEnergy()),"energy");
+        assertArrayEquals(fresh.inventory().moles(),node.inventory().moles(),"moles");
+    }
+    /**
      * A device placed at the end of a dead-end branch reaches the island through devices no island owns: its touched set
      * follows the branch to the island and fences it, so the tank joins that island at the event's tick.
      */
