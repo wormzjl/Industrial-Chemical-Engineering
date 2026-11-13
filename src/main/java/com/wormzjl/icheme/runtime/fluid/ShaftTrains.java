@@ -137,15 +137,16 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
      */
     private static final class Duty {
         final double flow, pressure, setFlow, setPressure;
-        /** A machine's law (null for a frame), a frame's law (null for a machine), the booking's head, density and suction pressure. */
+        /** A machine's law (null for a frame), a frame's law (null for a machine), the booking's head, density and suction
+         * pressure, and the heat capacity ratio the solve reads on that suction (M-07: {@code PassiveStepSolver.suctionKappa}). */
         private final com.wormzjl.icheme.science.machine.MachineLaw law;
         private final com.wormzjl.icheme.science.machine.PositiveDisplacement frame;
-        private final double head, density, suction;
+        private final double head, density, suction, kappa;
         private double flowSpeed, pressureSpeed;
         private boolean flowSolved, pressureSolved;
 
         private Duty(double flow, double pressure, double setFlow, double setPressure, com.wormzjl.icheme.science.machine.MachineLaw law,
-                     com.wormzjl.icheme.science.machine.PositiveDisplacement frame, double head, double density, double suction) {
+                     com.wormzjl.icheme.science.machine.PositiveDisplacement frame, double head, double density, double suction, double kappa) {
             this.flow = flow;
             this.pressure = pressure;
             this.setFlow = setFlow;
@@ -155,14 +156,15 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
             this.head = head;
             this.density = density;
             this.suction = suction;
+            this.kappa = kappa;
         }
 
-        static Duty machine(double flow, double pressure, double setFlow, double setPressure, com.wormzjl.icheme.science.machine.MachineLaw law, double head, double density, double suction) {
-            return new Duty(flow, pressure, setFlow, setPressure, law, null, head, density, suction);
+        static Duty machine(double flow, double pressure, double setFlow, double setPressure, com.wormzjl.icheme.science.machine.MachineLaw law, double head, double density, double suction, double kappa) {
+            return new Duty(flow, pressure, setFlow, setPressure, law, null, head, density, suction, kappa);
         }
 
         static Duty frame(double flow, double pressure, double setFlow, double setPressure, com.wormzjl.icheme.science.machine.PositiveDisplacement law, double head, double suction) {
-            return new Duty(flow, pressure, setFlow, setPressure, null, law, head, Double.NaN, suction);
+            return new Duty(flow, pressure, setFlow, setPressure, null, law, head, Double.NaN, suction, Double.NaN);
         }
 
         double flow() { return flow; }
@@ -174,7 +176,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         double flowSpeed() {
             if (!flowSolved) {
                 flowSpeed = !(setFlow > 0) ? Double.NaN : frame != null ? com.wormzjl.icheme.science.machine.SpeedControl.requiredSpeed(frame, setFlow, head, .1, 1.5)
-                        : com.wormzjl.icheme.science.machine.SpeedControl.requiredSpeed(law, setFlow, head, density, suction, 1.4, com.wormzjl.icheme.science.machine.Motor.LOWEST_SPEED, com.wormzjl.icheme.science.machine.SpeedControl.MAXIMUM_CURVE_SPEED);
+                        : com.wormzjl.icheme.science.machine.SpeedControl.requiredSpeed(law, setFlow, head, density, suction, kappa, com.wormzjl.icheme.science.machine.Motor.LOWEST_SPEED, com.wormzjl.icheme.science.machine.SpeedControl.MAXIMUM_CURVE_SPEED);
                 flowSolved = true;
             }
             return flowSpeed;
@@ -184,7 +186,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         double pressureSpeed() {
             if (!pressureSolved) {
                 pressureSpeed = !(setPressure > 0) ? Double.NaN : frame != null ? com.wormzjl.icheme.science.machine.SpeedControl.requiredSpeed(frame, flow, setPressure - suction, .1, 1.5)
-                        : com.wormzjl.icheme.science.machine.SpeedControl.requiredSpeed(law, flow, setPressure - suction, density, suction, 1.4, com.wormzjl.icheme.science.machine.Motor.LOWEST_SPEED, com.wormzjl.icheme.science.machine.SpeedControl.MAXIMUM_CURVE_SPEED);
+                        : com.wormzjl.icheme.science.machine.SpeedControl.requiredSpeed(law, flow, setPressure - suction, density, suction, kappa, com.wormzjl.icheme.science.machine.Motor.LOWEST_SPEED, com.wormzjl.icheme.science.machine.SpeedControl.MAXIMUM_CURVE_SPEED);
                 pressureSolved = true;
             }
             return pressureSpeed;
@@ -748,7 +750,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
                     double kappa = com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.suctionKappa(model, m, suction);
                     double wet = com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.wetShare(model, solved, e, result.advancedSeconds());
                     run.power(unit, com.wormzjl.icheme.science.machine.InlineMachines.shaftPower(m, average[e], heads[e], density, suction.pressure(), kappa, wet));
-                    run.duty(unit,Duty.machine(q,solved.reservoirs().get(pipe.second()).state().pressure(),m.setFlow(),m.setPressure(),m.law(),heads[e],density,suction.pressure()));
+                    run.duty(unit,Duty.machine(q,solved.reservoirs().get(pipe.second()).state().pressure(),m.setFlow(),m.setPressure(),m.law(),heads[e],density,suction.pressure(),kappa));
                     if (first(run, unit)) {
                         run.measured = q;
                         run.target = m.setFlow() > 0 ? m.setFlow() : m.setPressure() > 0 ? m.setPressure() : Double.NaN;
@@ -761,7 +763,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
                     var registration=topology.latest().get(node.id());
                     if(density>0&&registration!=null&&registration.device().control() instanceof FlowControl.Compressor design&&design.requestedVolumeFlow()>0){
                         double q=Math.max(0,flows[e])/density,pressure=solved.reservoirs().get(pipe.second()).state().pressure();
-                        var law=new com.wormzjl.icheme.science.machine.PositiveDisplacement(design.requestedVolumeFlow(),design.riseLimit(density,suction.pressure(),density,1.4));
+                        var law=new com.wormzjl.icheme.science.machine.PositiveDisplacement(design.requestedVolumeFlow(),design.riseLimit(density,suction.pressure(),density,kappa));
                         run.duty(unit,Duty.frame(q,pressure,design.setFlow(),design.setPressure(),law,heads[e],suction.pressure()));
                     }
                 }
