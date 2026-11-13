@@ -26,6 +26,47 @@ final class V3SolveScratch {
         private V3SolveScratch free = new V3SolveScratch();
         /** The calculation's band factorizations by call site ({@link Factorization}). */
         private final int[] factorizations = new int[Factorization.values().length];
+        /** The calculation's untruncated feed flashes, most recent last (P6). */
+        private final java.util.ArrayList<FeedFlash> feedFlashes = new java.util.ArrayList<>();
+        private int feedFlashesComputed, feedFlashesReused;
+    }
+
+    /**
+     * One untruncated feed flash and what it depends on: the package's column identity (its records, F1), the feed's
+     * temperature and flows, the feed tray's pressure.
+     */
+    private record FeedFlash(String identity, double temperature, double pressure, double[] feed,
+            com.wormzjl.icheme.science.column.v3.thermo.V3FlashResult result) {
+        boolean answers(String identity, double temperature, double pressure, double[] feed) {
+            return this.identity.equals(identity) && Double.compare(this.temperature, temperature) == 0
+                    && Double.compare(this.pressure, pressure) == 0 && Arrays.equals(this.feed, feed);
+        }
+    }
+
+    /** The most feed flashes a calculation keeps: one per feed-tray pressure its ramps and corrections visit. */
+    private static final int FEED_FLASHES = 16;
+
+    /**
+     * The untruncated flash of the feed at the feed tray, computed once per calculation for each feed-tray pressure (P6 of
+     * batch 2026-11-13-codebase-review). It depends on the package, the feed and that pressure only, takes no control (so
+     * no checkpoint is skipped) and its result is immutable, so a repeat is the same object. Outside a calculation it is
+     * computed each time; a refusal is never kept.
+     */
+    static com.wormzjl.icheme.science.column.v3.thermo.V3FlashResult feedFlash(String identity, double temperature, double pressure,
+            double[] feed, Supplier<com.wormzjl.icheme.science.column.v3.thermo.V3FlashResult> flash) {
+        var pool = OPEN.get();
+        if (pool == null) return flash.get();
+        for (var held : pool.feedFlashes) {
+            if (held.answers(identity, temperature, pressure, feed)) {
+                pool.feedFlashesReused++;
+                return held.result();
+            }
+        }
+        var result = flash.get();
+        pool.feedFlashesComputed++;
+        if (pool.feedFlashes.size() == FEED_FLASHES) pool.feedFlashes.removeFirst();
+        pool.feedFlashes.add(new FeedFlash(identity, temperature, pressure, feed.clone(), result));
+        return result;
     }
 
     /**
@@ -76,6 +117,8 @@ final class V3SolveScratch {
         text.append(" total ").append(total);
         // The pooled workspace's elimination (P8): an attempt nested in another works in a fresh set this leaves out.
         var pool = OPEN.get();
+        if (pool != null) text.append("; feed flashes ").append(pool.feedFlashesComputed).append(" computed, ")
+                .append(pool.feedFlashesReused).append(" reused");
         if (pool != null && pool.free != null) {
             var linear = pool.free.linear;
             text.append("; elimination updates ").append(linear.updatedEntries()).append(" of ").append(linear.fullWidthEntries())

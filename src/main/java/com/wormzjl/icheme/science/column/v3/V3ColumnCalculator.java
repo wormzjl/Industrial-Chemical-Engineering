@@ -1800,9 +1800,16 @@ public final class V3ColumnCalculator {
                         problem.nodePressurePascal(problem.topology().feedTrayNumber()),
                         problem.input().feedComponentMolarFlowsMolPerSecond(), TraceTruncationPolicy.of(policy.attemptCutoff()),
                         thermo.newWorkspace(), control::checkpoint)
-                : thermo.flashTP(problem.input().feedTemperatureKelvin(),
-                        problem.nodePressurePascal(problem.topology().feedTrayNumber()),
-                        problem.input().feedComponentMolarFlowsMolPerSecond(), thermo.newWorkspace());
+                : untruncatedFeedFlash(problem, thermo);
+    }
+
+    /** The untruncated feed flash, once per calculation and feed-tray pressure (P6): it polls nothing, so caching skips no poll. */
+    private static V3FlashResult untruncatedFeedFlash(V3ColumnProblem problem, V3PengRobinsonThermo thermo) {
+        double temperature = problem.input().feedTemperatureKelvin();
+        double pressure = problem.nodePressurePascal(problem.topology().feedTrayNumber());
+        double[] feed = problem.input().feedComponentMolarFlowsMolPerSecond();
+        return V3SolveScratch.feedFlash(thermo.datasetRevision(), temperature, pressure, feed,
+                () -> thermo.flashTP(temperature, pressure, feed, thermo.newWorkspace()));
     }
 
     private static boolean hasCondenserPhaseMismatch(V3SolvePass pass) {
