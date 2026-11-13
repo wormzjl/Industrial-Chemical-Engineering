@@ -55,8 +55,9 @@ public final class ShapeRasterizer {
     private static final int GEOMETRY_CACHE = 64, GEOMETRY_FACETS = 300_000;
     /** A unit's shell tables: {@link EquipmentShape#facets}'s fewest, since a unit has no vessel. */
     private static final int MIN_UNIT_FACETS = 12;
-    private static final Map<EquipmentShape, Geometry> GEOMETRIES = new ConcurrentHashMap<>();
-    private static final Map<EquipmentShape, Geometry> LOW_GEOMETRIES = new ConcurrentHashMap<>();
+    /** Geometries by shape, the least recently used dropped past 64 or 300,000 facets (a large column holds tens of thousands, about 750 bytes each; E13). */
+    private static final BoundedCache<EquipmentShape, Geometry> GEOMETRIES = new BoundedCache<>(GEOMETRY_CACHE, GEOMETRY_FACETS, g -> g.mesh.facets().size());
+    private static final BoundedCache<EquipmentShape, Geometry> LOW_GEOMETRIES = new BoundedCache<>(16, GEOMETRY_FACETS, g -> g.mesh.facets().size());
     /**
      * Whether geometries keep their facets to draw cells ({@link #surface}, {@link #facetArea}). A dedicated server never draws:
      * once a vessel's layout is known it keeps only the cell tables, the ports and the solid test ({@link #serverOnly}).
@@ -234,10 +235,6 @@ public final class ShapeRasterizer {
     private static Geometry geometry(EquipmentShape shape, RenderDetail detail) {
         if (detail == RenderDetail.NORMAL) return geometry(shape);
         if (!drawing) throw new IllegalStateException("A dedicated server keeps no drawing geometry");
-        var cached = LOW_GEOMETRIES.get(shape);
-        if (cached != null) return cached;
-        long facets = LOW_GEOMETRIES.values().stream().mapToLong(g -> g.mesh.facets().size()).sum();
-        if (LOW_GEOMETRIES.size() >= 16 || facets >= GEOMETRY_FACETS) LOW_GEOMETRIES.clear();
         return LOW_GEOMETRIES.computeIfAbsent(shape, k -> new Geometry(k, detail));
     }
 
@@ -331,11 +328,10 @@ public final class ShapeRasterizer {
     public static List<Polygon> reliefValve(EquipmentShape shape){return reliefValve(shape,-1,0);}
     /** The same with its outlet toward horizontal axis {@code axis} and {@code sign} (-1: the default direction); none where that cell is taken. */
     public static List<Polygon> reliefValve(EquipmentShape shape,int axis,int sign){if(!drawing)throw new IllegalStateException("A dedicated server keeps no accessory surfaces");return geometry(shape).reliefValve(axis,sign);}
-    private static final Map<List<Object>,List<Polygon>> PIPE_RELIEF=new ConcurrentHashMap<>();
+    private static final BoundedCache<List<Object>,List<Polygon>> PIPE_RELIEF=new BoundedCache<>(64);
     /** A pipe's pressure safety valve's faces in its block, its outlet out of face {@code face} (axis, sign), standing along the pipe's {@code axis}, on a pipe of outside diameter {@code outside} ({@link ReliefValveGeometry#onPipe}). */
     public static List<Polygon> reliefValveOnPipe(int face,int faceSign,int axis,double outside){
         if(!drawing)throw new IllegalStateException("A dedicated server keeps no accessory surfaces");
-        if(PIPE_RELIEF.size()>64)PIPE_RELIEF.clear();
         return PIPE_RELIEF.computeIfAbsent(List.of(face,faceSign,axis,outside),k->{
             var place=ReliefValveGeometry.onPipe(face,faceSign,axis,outside);var mesh=new Mesh();place.build(mesh,outside/2);
             var polygons=new ArrayList<Polygon>();var pieces=new ArrayList<Polygon>();
@@ -697,12 +693,7 @@ public final class ShapeRasterizer {
     }
 
     private static Geometry geometry(EquipmentShape shape) {
-        var g = GEOMETRIES.get(shape);
-        if (g != null) return g;
         // A large column holds tens of thousands of facets (about 750 bytes each): the cache is bounded by facets too.
-        long facets = 0;
-        for (var cached : GEOMETRIES.values()) facets += cached.mesh.facets().size();
-        if (GEOMETRIES.size() >= GEOMETRY_CACHE || facets >= GEOMETRY_FACETS) GEOMETRIES.clear();
         return GEOMETRIES.computeIfAbsent(shape, Geometry::new);
     }
 
@@ -713,12 +704,11 @@ public final class ShapeRasterizer {
     public static InstrumentWiring.Drawing instrumentWiring(EquipmentShape shape,Set<String> installed,RenderDetail detail,List<Integer> codes){
         if(codes.size()!=shape.nozzles().size())throw new IllegalArgumentException("One size code per nozzle");
         var g=geometry(shape,detail);var key=new WiringKey(installed,codes);
-        if(g.wiring.size()>16)g.wiring.clear();
         return g.wiring.computeIfAbsent(key,k->{var carriers=new ArrayList<>(g.mesh.facets().stream().filter(f->f.part()<0).map(Mesh::whole).toList());for(int n=0;n<g.nozzles.size();n++)for(var f:g.nozzle(n,k.codes().get(n)).facets())carriers.add(Mesh.whole(f));var plan=shape.kind()==EquipmentShape.Kind.EXCHANGER?EquipmentInstruments.build(shape,carriers,g.unit):g.instruments;return InstrumentWiring.build(shape,carriers,g.services,plan,k.installed(),detail);});
     }
     /** Per-shape tables (facet directions, head rings, plate and saddle layout), the static mesh, nozzles and layout. */
     private static final class Geometry {
-        private final Map<WiringKey,InstrumentWiring.Drawing> wiring=new ConcurrentHashMap<>();
+        private final BoundedCache<WiringKey,InstrumentWiring.Drawing> wiring=new BoundedCache<>(16);
         private final EquipmentShape shape;
         private final Transform transform;
         private final int n, contact;

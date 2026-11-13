@@ -12,7 +12,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
 import static com.wormzjl.icheme.science.equipment.Mesh.*;
@@ -39,7 +38,7 @@ import static com.wormzjl.icheme.science.equipment.Mesh.*;
  */
 public final class ProcessUnit {
     private static final int CACHE = 64;
-    private static final Map<EquipmentShape, ProcessUnit> BUILT = new ConcurrentHashMap<>();
+    private static final BoundedCache<EquipmentShape, ProcessUnit> BUILT = new BoundedCache<>(CACHE);
 
     /**
      * Steps of an exchanger's shell and a kettle's bundle, and of an ejector's suction, m; the largest suction of an
@@ -509,9 +508,6 @@ public final class ProcessUnit {
      */
     static ProcessUnit of(EquipmentShape shape) {
         var key = shape.front() == EquipmentShape.Heading.NORTH ? shape : shape.withFront(EquipmentShape.Heading.NORTH);
-        var built = BUILT.get(key);
-        if (built != null) return built;
-        if (BUILT.size() >= CACHE) BUILT.clear();
         return BUILT.computeIfAbsent(key, s -> new ProcessUnit(s, UnitDesign.of(s.kind())::build, false));
     }
 

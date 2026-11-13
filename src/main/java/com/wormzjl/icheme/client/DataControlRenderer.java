@@ -39,7 +39,7 @@ public final class DataControlRenderer {
 
     private record PortMesh(List<Mesh.Polygon> polygons, net.minecraft.core.Direction outward) {}
 
-    private static final Map<DataPort, PortMesh> PORTS = new HashMap<>();
+    private static final com.wormzjl.icheme.science.equipment.BoundedCache<DataPort, PortMesh> PORTS = new com.wormzjl.icheme.science.equipment.BoundedCache<>(2048);
     private static RenderDetail detail = RenderDetail.NORMAL;
 
     private record RackCable(
@@ -48,18 +48,18 @@ public final class DataControlRenderer {
             ConduitGeometry.Key geometry,
             boolean marked) {}
 
-    private static final Map<RackCable, List<Mesh.Polygon>> CABLES = new HashMap<>();
+    private static final com.wormzjl.icheme.science.equipment.BoundedCache<RackCable, List<Mesh.Polygon>> CABLES = new com.wormzjl.icheme.science.equipment.BoundedCache<>(2048);
 
     private record LeadMesh(Direction outward, Vec3 end, CableMedium medium) {}
 
-    private static final Map<LeadMesh, List<Mesh.Polygon>> LEADS = new HashMap<>();
+    private static final com.wormzjl.icheme.science.equipment.BoundedCache<LeadMesh, List<Mesh.Polygon>> LEADS = new com.wormzjl.icheme.science.equipment.BoundedCache<>(2048);
 
     private record CableMesh(
             com.wormzjl.icheme.client.model.ConduitModel.Finish finish,
             List<Mesh.Polygon> polygons) {}
 
-    private static final Map<CableMesh, List<net.minecraft.client.renderer.block.model.BakedQuad>>
-            BAKED = new HashMap<>();
+    private static final com.wormzjl.icheme.science.equipment.BoundedCache<CableMesh, List<net.minecraft.client.renderer.block.model.BakedQuad>>
+            BAKED = new com.wormzjl.icheme.science.equipment.BoundedCache<>(2048);
 
     /**
      * Level of detail (batch 2026-11-09-lod-rendering, A3): a gland while its 0.15 m covers 2 px (58 m at 1080 lines),
@@ -189,10 +189,6 @@ public final class DataControlRenderer {
         var pose = event.getPoseStack();
         var camera = event.getCamera().getPosition();
         var buffers = mc.renderBuffers().bufferSource();
-        if (PORTS.size() > 2048) PORTS.clear();
-        if (CABLES.size() > 2048) CABLES.clear();
-        if (LEADS.size() > 2048) LEADS.clear();
-        if (BAKED.size() > 2048) BAKED.clear();
         var view =
                 ClientConfig.lodView(
                         event.getProjectionMatrix().m11(), mc.getWindow().getHeight());

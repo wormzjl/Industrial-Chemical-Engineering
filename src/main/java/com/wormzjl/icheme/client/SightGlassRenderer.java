@@ -36,7 +36,7 @@ public final class SightGlassRenderer {
     private static final RenderType LIQUID=RenderType.entityTranslucentCull(InventoryMenu.BLOCK_ATLAS);
     private static final ResourceLocation WHITE=ResourceLocation.withDefaultNamespace("block/white_concrete");
     private record Surface(List<Mesh.Polygon> liquid,SightGlassGeometry.Window window){}
-    private static final Map<SightGlassGeometry.Key,Surface> SURFACES=new HashMap<>();
+    private static final com.wormzjl.icheme.science.equipment.BoundedCache<SightGlassGeometry.Key,Surface> SURFACES=new com.wormzjl.icheme.science.equipment.BoundedCache<>(256);
     /**
      * Level of detail (batch 2026-11-09-lod-rendering, A3), by the window's diameter in pixels: liquid and bubbles at
      * 12 px or more (a bubble is a tenth of the window, a pixel there), liquid alone down to 2 px, then nothing.
@@ -75,7 +75,6 @@ public final class SightGlassRenderer {
                     ||pos.distToCenterSqr(camera)>128*128||!event.getFrustum().isVisible(new AABB(pos).inflate(.15)))continue;
             var key=FluidDeviceModel.sightGlassKey(entity.getBlockState(),entity.getModelData());
             if(!SightGlassGeometry.supports(key.pipe().connections()))continue;
-            if(SURFACES.size()>=256)SURFACES.clear();
             var surface=SURFACES.computeIfAbsent(key,k->new Surface(SightGlassGeometry.build(k,false,selected).liquid(),SightGlassGeometry.window(k)));
             int tier=GLASSES.of(pos,view.pixels(2*surface.window().radius(),pos.distToCenterSqr(camera)));
             if(tier==GLASSES.hidden())continue;
