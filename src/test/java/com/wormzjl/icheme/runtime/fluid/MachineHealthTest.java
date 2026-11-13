@@ -463,6 +463,113 @@ class MachineHealthTest {
         assertTrue(plans.isEmpty(), "repaired, no close: its train's or its store's speed plan restores it: " + plans);
     }
 
+    /** N4: one mole of steam at 40 bar and 400 °C, SteamTurbineConnectionTest's inlet. */
+    private FluidThermodynamics.State steam() {
+        var n = new double[model.componentCount()];
+        n[n.length - 1] = 1;
+        return model.flashTP(673.15, 4e6, n, () -> {
+        });
+    }
+
+    /** N4: a 1 MW turbine from the steam into a 4 bar receiver about 16 % liquid by mass (8.9e-4 m³ of water in each m³). */
+    private Rig turbineRig(Wear.Settings wear) {
+        return new Rig(steam(), wetNitrogen(8.9e-4, 4e5), new FlowControl.Turbine(com.wormzjl.icheme.science.machine.SteamTurbine.rated(1e6)), wear);
+    }
+
+    /** The condensed mass share of the turbine's receiver as the last committed slice left it, on the island's model. */
+    private double receiverMoisture(Rig rig) {
+        var result = rig.coordinator.observe(1).lastResult().orElseThrow();
+        return InletPhase.bulk(rig.coordinator.model(1), result.graph().reservoirs().get(1).state()).condensedMassShare();
+    }
+
+    /**
+     * N4: a steam turbine exhausting into a receiver about 16 % wet erodes its last blades at half the erosion intensity,
+     * 1/(16 h) of health per process second at the default lives, and says WET EXHAUST; its health is keyed by its fluid
+     * device, the node its connection leaves, as a pump's is.
+     */
+    @Test
+    void aSteamTurbineIntoASixteenPercentWetReceiverErodesAndSaysWetExhaust() {
+        var rig = turbineRig(Wear.Settings.DEFAULT);
+        for (int i = 0; i < 400; i++) rig.tick();
+        assertTrue(rig.flow() > 0, "steam passes: " + rig.flow() + " kg/s");
+        double w = receiverMoisture(rig);
+        assertEquals(.16, w, .01, "about 16 % liquid by mass: " + w);
+        double rate = rig.health.rate(1);
+        assertEquals(Wear.rate(Wear.Fault.WET_EXHAUST.intensity(w), 0, Wear.Settings.DEFAULT), rate, 1e-12 * rate, "its wet exhaust rate");
+        assertEquals(1 / (16 * 3600.), rate, .3 / (16 * 3600.), "about 1/(16 h) a process second");
+        assertEquals(Wear.Fault.WET_EXHAUST, rig.health.fault(1));
+        assertEquals("WET EXHAUST", rig.health.status(1));
+        assertEquals(0, rig.health.crackle(1), "a turbine has no mover noise");
+    }
+
+    /** N4: into a dry receiver (nitrogen at 4 bar) the turbine keeps its health. */
+    @Test
+    void aSteamTurbineIntoADryReceiverLosesNone() {
+        var rig = new Rig(steam(), nitrogen(4e5), new FlowControl.Turbine(com.wormzjl.icheme.science.machine.SteamTurbine.rated(1e6)), Wear.Settings.DEFAULT);
+        for (int i = 0; i < 400; i++) rig.tick();
+        assertTrue(rig.flow() > 0, "steam passes: " + rig.flow() + " kg/s");
+        assertEquals(0, receiverMoisture(rig), 1e-12);
+        assertEquals(1, rig.health.health(1));
+        assertEquals(0, rig.health.rate(1));
+        assertEquals("", rig.health.status(1));
+    }
+
+    /**
+     * N4: worn to 0, the turbine fails at the next cadence and its {@code FAILED} plan shuts its admission (mass target 0,
+     * as a stop shuts it), so no steam passes; a kit makes it new and lifts the plan (its train's governor plan opens it).
+     */
+    @Test
+    void aFailedTurbineIsShutAndAKitRestoresIt() {
+        var rig = turbineRig(FAST);
+        for (int i = 0; i < 8000 && !rig.health.failed(1); i++) rig.tick();
+        assertTrue(rig.health.failed(1), "it failed: " + rig.health.health(1));
+        assertEquals("FAILED", rig.health.status(1));
+        for (int i = 0; i < 300; i++) rig.tick();
+        assertTrue(rig.coordinator.observe(1).graph().pipes().getFirst().control() instanceof FlowControl.Turbine t && t.massTarget() == 0,
+                "its admission is shut: " + rig.coordinator.observe(1).graph().pipes().getFirst().control());
+        assertEquals(0, rig.flow(), 1e-6, "a failed turbine passes no steam");
+        var outcome = new ArrayList<MachineHealth.Outcome>();
+        rig.health.queue(new MachineHealth.Repair(1, () -> true, outcome::add));
+        rig.tick();
+        assertEquals(List.of(MachineHealth.Outcome.REPAIRED), outcome);
+        assertEquals(1, rig.health.health(1), "new again");
+        var plans = new HashMap<Long, ShaftPlan>();
+        rig.health.plans(rig.coordinator.observe(1).graph(), plans);
+        assertTrue(plans.isEmpty(), "repaired, no close: " + plans);
+    }
+
+    /**
+     * N2, N4: the cadence keeps the entries of every machine that wears ({@link MachineHealth#pump}, the predicate the world
+     * passes): a centrifugal compressor's and a steam turbine's saved health stand; a reciprocating frame's, which does not
+     * wear, is dropped.
+     */
+    @Test
+    void theCadenceKeepsACompressorsAndATurbinesHealth() {
+        var rig = new Rig(101325);
+        var at = new PhysicalFluidTopology.Position("minecraft:overworld", 5, 0, 0);
+        var kind = com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.PIPE;
+        var spec = FluidDeviceSpec.nitrogen(EventPathWorld.CATALOG);
+        var compressor = new WorldTopologyLedger.Registration(new PhysicalFluidTopology.Device(40, at, kind, PhysicalFluidTopology.Direction.EAST, FAT,
+                new FlowControl.Machine(COMPRESSOR, 1, true)), spec, 0);
+        var turbine = new WorldTopologyLedger.Registration(new PhysicalFluidTopology.Device(50, at, com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.TURBINE,
+                PhysicalFluidTopology.Direction.EAST, FAT, new FlowControl.Turbine(com.wormzjl.icheme.science.machine.SteamTurbine.rated(55e3))), spec, 0);
+        var frame = new WorldTopologyLedger.Registration(new PhysicalFluidTopology.Device(60, at, kind, PhysicalFluidTopology.Direction.EAST, FAT,
+                new FlowControl.Compressor(.1, 3)), spec, 0);
+        var registrations = Map.of(40L, compressor, 50L, turbine, 60L, frame);
+        assertTrue(MachineHealth.pump(compressor), "a centrifugal compressor wears");
+        assertTrue(MachineHealth.pump(turbine), "a steam turbine wears");
+        assertFalse(MachineHealth.pump(frame), "a frame does not");
+        var ledger = new WorldTopologyLedger(WorldTopologyLedger.Snapshot.empty(EventPathWorld.CATALOG));
+        ledger.health(Map.of(40L, .5, 50L, .25, 60L, .75));
+        var health = new MachineHealth(ledger, device -> null, rig.coordinator, device -> MachineHealth.pump(registrations.get(device)),
+                device -> registrations.containsKey(device) ? registrations.get(device).device().control() : null, () -> Wear.Settings.DEFAULT);
+        health.cadence();
+        assertEquals(.5, health.health(40));
+        assertEquals(.25, health.health(50));
+        assertNull(health.health(60), "a frame's entry is dropped");
+        assertEquals(Map.of(40L, .5, 50L, .25), health.facts());
+    }
+
     @Test
     void aCleanPumpKeepsItsHealthAndAFullPumpRefusesAKit() {
         var rig = new Rig(101325);

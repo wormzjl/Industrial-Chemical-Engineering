@@ -2477,14 +2477,14 @@ public final class FluidWorldAuthority implements AutoCloseable {
     }
     public FluidView view(long id){owned();return view(id,new HashMap<>());}
     /**
-     * Mover {@code mover}'s status line {@code status} with its health word {@code word} ({@link MachineHealth#status}), for every
-     * mover that wears ({@link MachineHealth#worn}: a liquid mover, a dry screw, owner V6 B, code base review M-02, and a
-     * centrifugal compressor, N2): FAILED first while it stands failed, else LIQUID, LOW FLOW, CAVITATION, GAS or WET GAS last
-     * (W10b, W10d, owner decision D37); its health and
-     * suction have their meters (the view's Pump). A mover that does not wear keeps its line.
+     * Machine {@code control}'s status line {@code status} with its health word {@code word} ({@link MachineHealth#status}), for
+     * every machine that wears ({@link MachineHealth#worn}: a liquid mover, a dry screw, owner V6 B, code base review M-02, a
+     * centrifugal compressor, N2, and a steam turbine, N4): FAILED first while it stands failed, else LIQUID, LOW FLOW,
+     * CAVITATION, GAS, WET GAS or WET EXHAUST last (W10b, W10d, owner decision D37); its health and
+     * suction have their meters (the view's Pump). A control that does not wear keeps its line.
      */
-    static String withHealth(String status,FlowControl.Mover mover,String word) {
-        if(!MachineHealth.worn(mover)||word.isEmpty())return status;
+    static String withHealth(String status,FlowControl control,String word) {
+        if(!MachineHealth.worn(control)||word.isEmpty())return status;
         return word.equals("FAILED")?"FAILED: use a repair kit / "+status:status+" / "+word;
     }
     /** Island {@code island} as it is stored, materialising nothing: what a watch's replay reads (batch 2026-11-10-custom-shader-system). */
@@ -2572,7 +2572,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
                         double density=mover instanceof FlowControl.Pump?InletPhase.density(model,NetworkReduction.reopened(snapshot.graph()),i,mover.targetVolumeFlow(),result.advancedSeconds()):suction.mass()/suction.volume();
                         double limit=mover.riseLimit(density,suction.pressure(),model.pumpReferenceDensity(),mover.liquid()?1.4:model.heatCapacityRatio(suction));
                         status+=String.format(java.util.Locale.ROOT,mover.liquid()?" (limit %.0f Pa on this fluid)":" (limit %.0f Pa at this suction)",limit);}
-                }else status+=" / "+mode;}}
+                }else{status+=" / "+mode;
+                    // A steam turbine's health word (N4): WET EXHAUST, or FAILED first.
+                    if(pipe.control() instanceof FlowControl.Turbine)status=withHealth(status,pipe.control(),health.status(id));}}}
         }
         // A generator or a void in several islands (owner decision D17) reads the status of its owner (the lowest island) and
         // the net flow of all of them.

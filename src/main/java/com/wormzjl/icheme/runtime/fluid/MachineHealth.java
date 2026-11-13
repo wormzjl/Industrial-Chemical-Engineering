@@ -16,13 +16,13 @@ import java.util.function.Supplier;
 /**
  * The machines' health (batch 2026-11-03-rotating-machinery W10b, build plan revision 2, owner decision D34; one class for
  * every machine since code base review M-12): every machine with a fault ({@link #faults}), a constructed casing, an
- * in-line pump or compressor or a dry screw, keyed by its device identity (the node its mover's connection leaves). Health
- * is a fact, 1 (new) to 0 (failed); arithmetic on the server thread only:
+ * in-line pump or compressor, a dry screw or a steam turbine, keyed by its device identity (the node its connection leaves).
+ * Health is a fact, 1 (new) to 0 (failed); arithmetic on the server thread only:
  * <ul>
  * <li>at each commit and replay its wear rate is read from its faults' intensities at the slice's committed suction (its
  * {@link PassiveStepSolver.PipeObservation#npshRatio}, {@link PassiveStepSolver.PipeObservation#dry}, a dry screw's liquid
- * share, a centrifugal compressor's {@link PassiveStepSolver.PipeObservation#condensedShare}), by the rule of
- * {@link Wear#rate(double, double, Wear.Settings)}, and booked over
+ * share, a centrifugal compressor's {@link PassiveStepSolver.PipeObservation#condensedShare}) or, for a steam turbine, its
+ * receiver's committed moisture, by the rule of {@link Wear#rate(double, double, Wear.Settings)}, and booked over
  * the slice's process time, its online ticks times the time factor ({@link #booked});</li>
  * <li>on the presentation cadence a pump not booked for a cadence (a resting island) books its last rate to now, one that
  * reached 0 fails, and the facts go to the ledger ({@link #cadence});</li>
@@ -73,6 +73,8 @@ public final class MachineHealth {
         double lowFlow;
         /** A centrifugal compressor's wet gas intensity at its last committed slice (N2): its {@code WET GAS} word while above 0. */
         double wetGas;
+        /** A steam turbine's wet exhaust intensity at its last committed slice (N4): its {@code WET EXHAUST} word while above 0. */
+        double wetExhaust;
         long bookedTick;
         boolean failed;
     }
@@ -113,29 +115,37 @@ public final class MachineHealth {
     }
 
     private static final List<Wear.Fault> LIQUID_MOVER = List.of(Wear.Fault.CAVITATION, Wear.Fault.DRY), SCREW = List.of(Wear.Fault.LIQUID),
-            CENTRIFUGAL = List.of(Wear.Fault.CAVITATION, Wear.Fault.DRY, Wear.Fault.LOW_FLOW), COMPRESSOR = List.of(Wear.Fault.WET_GAS);
+            CENTRIFUGAL = List.of(Wear.Fault.CAVITATION, Wear.Fault.DRY, Wear.Fault.LOW_FLOW), COMPRESSOR = List.of(Wear.Fault.WET_GAS),
+            TURBINE = List.of(Wear.Fault.WET_EXHAUST);
 
     /**
-     * The faults {@code mover} reads (M-12): a liquid mover cavitation and running dry, and a centrifugal pump on its curve
+     * The faults {@code control} reads (M-12): a liquid mover cavitation and running dry, and a centrifugal pump on its curve
      * also low flow (N1; a set-flow pump has no curve); a dry screw vacuum pump liquid at its suction (owner V6 B); a
      * centrifugal compressor on its curve wet gas (N2: a constructed casing and an in-line compressor; a reciprocating frame
-     * is a set-flow compressor and has none); none for another mover.
+     * is a set-flow compressor and has none); a steam turbine, a control and not a mover, wet exhaust (N4); none for
+     * another control.
      */
-    static List<Wear.Fault> faults(FlowControl.Mover mover) {
+    static List<Wear.Fault> faults(FlowControl control) {
+        if (control instanceof FlowControl.Turbine) return TURBINE;
+        if (!(control instanceof FlowControl.Mover mover)) return List.of();
         if (mover.liquid()) return mover instanceof FlowControl.Machine m && m.law() instanceof com.wormzjl.icheme.science.machine.CentrifugalPump ? CENTRIFUGAL : LIQUID_MOVER;
         if (mover instanceof FlowControl.Machine m && com.wormzjl.icheme.science.machine.VacuumPump.dryScrew(m.law())) return SCREW;
         if (mover instanceof FlowControl.Machine m && m.law() instanceof com.wormzjl.icheme.science.machine.CentrifugalCompressor) return COMPRESSOR;
         return List.of();
     }
 
-    /** Whether {@code mover} wears: it has a fault ({@link #faults}). */
-    static boolean worn(FlowControl.Mover mover) {
-        return !faults(mover).isEmpty();
+    /** Whether {@code control} wears: it has a fault ({@link #faults}). */
+    static boolean worn(FlowControl control) {
+        return !faults(control).isEmpty();
     }
 
-    /** Whether registration {@code r} is a pump: its control a liquid mover (a constructed casing or an in-line pump) or a dry screw. */
+    /**
+     * Whether registration {@code r} is a machine that wears, "a pump" in this class's words: its control a liquid mover (a
+     * constructed casing or an in-line pump), a dry screw, a centrifugal compressor or a steam turbine. The cadence keeps the
+     * entries of these devices only.
+     */
     public static boolean pump(WorldTopologyLedger.Registration r) {
-        return r != null && r.device().control() instanceof FlowControl.Mover m && worn(m);
+        return r != null && worn(r.device().control());
     }
 
     private Wear.Settings settings() {
@@ -175,7 +185,8 @@ public final class MachineHealth {
         var flows = result.endpointFlows();
         for (int e = 0; e < solved.pipes().size(); e++) {
             var pipe = solved.pipes().get(e);
-            if (!(pipe.control() instanceof FlowControl.Mover m) || !worn(m)) continue;
+            var control = pipe.control();
+            if (!worn(control)) continue;
             long id = solved.reservoirs().get(pipe.first()).id();
             var p = pump(id);
             if (p == null) continue;
@@ -184,9 +195,11 @@ public final class MachineHealth {
                 for (var row : result.observations()) rows.put(row.pipe(), row);
             }
             var row = rows.get(pipe.id());
-            boolean read = row != null && m.targetVolumeFlow() > 0;
+            // A mover reads while it runs (a set or curve flow above 0); a steam turbine while steam passes forward through it.
+            var m = control instanceof FlowControl.Mover mover ? mover : null;
+            boolean read = row != null && (m != null ? m.targetVolumeFlow() > 0 : flows[e] > 0);
             // A dry screw's liquid share (owner V6 B): its LIQUID fault's driving quantity, and its liquid noise.
-            double liquid = !m.liquid() && read && Double.isFinite(row.vapourShare()) ? 1 - row.vapourShare() : 0;
+            double liquid = m != null && !m.liquid() && read && Double.isFinite(row.vapourShare()) ? 1 - row.vapourShare() : 0;
             // A centrifugal pump's flow over its rated flow at its speed (N1): its suction volume flow, the committed endpoint
             // flow over the suction node's density (as the trains book its shaft power; the row's density is the drawn stream's).
             double share = Double.NaN;
@@ -200,17 +213,22 @@ public final class MachineHealth {
             // carried by its observation row (NaN on every other row).
             double wet = read ? row.condensedShare() : Double.NaN;
             p.wetGas = Wear.wetGas(wet);
+            // A steam turbine's exhaust moisture (N4): the condensed mass share of the receiver it discharges into, as the
+            // slice committed it. A simplification the owner accepted: the receiver may mix other streams with the exhaust;
+            // the exhaust's own quality, at h_in - W/m, would need a PH flash per commit.
+            double exhaust = read && control instanceof FlowControl.Turbine ? exhaustWetness(island, solved.reservoirs().get(pipe.second()).state()) : Double.NaN;
+            p.wetExhaust = Wear.wetExhaust(exhaust);
             // The largest intensity of each class, and the fault that set it.
             double erosion = 0, seizure = 0;
             Wear.Fault eroding = null, seizing = null;
-            if (read) for (var fault : faults(m)) {
+            if (read) for (var fault : faults(control)) {
                 double q = switch (fault) {
                     case CAVITATION -> row.npshRatio();
                     case DRY -> row.dry() ? 1 : 0;
                     case LIQUID -> liquid;
                     case LOW_FLOW -> share;
                     case WET_GAS -> wet;
-                    case WET_EXHAUST -> 0;
+                    case WET_EXHAUST -> exhaust;
                 };
                 double i = fault.intensity(q);
                 if (fault.type == Wear.FaultClass.EROSION) {
@@ -227,7 +245,7 @@ public final class MachineHealth {
             boolean seized = seizure / s.dryMinutes() / 60 > erosion / s.cavitationHours() / 3600;
             p.fault = seized ? seizing : eroding;
             p.intensity = seized ? seizure : erosion;
-            if (!m.liquid()) {
+            if (m == null || !m.liquid()) {
                 p.liquid = liquid;
                 p.crackle = com.wormzjl.icheme.science.machine.VacuumPump.liquidNoise(liquid);
                 p.churn = 0;
@@ -240,19 +258,25 @@ public final class MachineHealth {
         }
     }
 
+    /** The condensed mass share of {@code state}, a node of {@code island} (its phases as flashed: no flash here). */
+    private double exhaustWetness(long island, com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.State state) {
+        return com.wormzjl.icheme.science.fluid.network.InletPhase.bulk(coordinator.model(island), state).condensedMassShare();
+    }
+
     /**
-     * The plans of {@code graph}'s failed pumps: each closed for the slice ({@link ShaftPlan.Kind#FAILED} 0). An in-line pump
+     * The plans of {@code graph}'s failed machines: each closed for the slice ({@link ShaftPlan.Kind#FAILED} 0: a machine at
+     * no speed, a set-flow mover switched off, a steam turbine's admission shut). An in-line pump
      * that stands closed as a failure closed it (switched off with its registration on, the same settings) and is no longer
      * failed is switched back on (1): an island keeps the controls its last slice solved with.
      */
     void plans(PassiveNetwork graph, Map<Long, ShaftPlan> out) {
         boolean enabled = settings().enabled();
         for (var pipe : graph.pipes()) {
-            if (!(pipe.control() instanceof FlowControl.Mover m) || !worn(m)) continue;
+            if (!worn(pipe.control())) continue;
             long id = graph.reservoirs().get(pipe.first()).id();
             var p = pumps.get(id);
             if (enabled && p != null && p.failed) out.put(id, new ShaftPlan(ShaftPlan.Kind.FAILED, 0));
-            else if (m instanceof FlowControl.Pump pump && !pump.enabled() && registered.apply(id) instanceof FlowControl.Pump on && on.enabled()
+            else if (pipe.control() instanceof FlowControl.Pump pump && !pump.enabled() && registered.apply(id) instanceof FlowControl.Pump on && on.enabled()
                     && on.requestedVolumeFlow() == pump.requestedVolumeFlow() && on.maximumAddedPressure() == pump.maximumAddedPressure())
                 out.put(id, new ShaftPlan(ShaftPlan.Kind.FAILED, 1));
         }
@@ -392,8 +416,9 @@ public final class MachineHealth {
      * health 0, which takes precedence; else {@code LIQUID} while a dry screw takes liquid; else {@code LOW FLOW} while a
      * centrifugal pump runs below its minimum flow (N1, {@link Wear#lowFlow} above 0); else {@code CAVITATION} while σ is below inception ({@link Wear#INCEPTION}: while it
      * crackles); else {@code GAS} while its gas ratio is above half the Turpin onset (while it churns); else {@code WET GAS}
-     * while a centrifugal compressor takes a wet suction (N2, {@link Wear#wetGas} above 0); else empty. Its health has its
-     * meter. The words after {@code GAS} belong to machines that read none of the words before them.
+     * while a centrifugal compressor takes a wet suction (N2, {@link Wear#wetGas} above 0); else {@code WET EXHAUST} while a
+     * steam turbine exhausts wet (N4, {@link Wear#wetExhaust} above 0); else empty. Its health has its meter. The words after
+     * {@code GAS} belong to machines that read none of the words before them, so the order of today's words is kept.
      */
     public String status(long id) {
         if (failed(id)) return "FAILED";
@@ -404,6 +429,7 @@ public final class MachineHealth {
         if (s.sigma() < Wear.INCEPTION) return "CAVITATION";
         if (s.ratio() > GAS_RATIO) return "GAS";
         if (screw != null && screw.wetGas > 0) return "WET GAS";
+        if (screw != null && screw.wetExhaust > 0) return "WET EXHAUST";
         return "";
     }
 

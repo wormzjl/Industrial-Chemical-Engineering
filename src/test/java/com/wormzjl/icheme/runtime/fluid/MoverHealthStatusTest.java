@@ -39,4 +39,13 @@ class MoverHealthStatusTest {
         assertEquals("RUNNING / MOVER_LAW / WET GAS",FluidWorldAuthority.withHealth("RUNNING / MOVER_LAW",CENTRIFUGAL_COMPRESSOR,"WET GAS"));
         assertEquals("FAILED: use a repair kit / RUNNING / MOVER_LAW",FluidWorldAuthority.withHealth("RUNNING / MOVER_LAW",CENTRIFUGAL_COMPRESSOR,"FAILED"));
     }
+    /** N4: a steam turbine, a control and not a mover, wears on a wet exhaust and says so on its line. */
+    @Test void aSteamTurbineReadsWetExhaust() {
+        var turbine=new FlowControl.Turbine(com.wormzjl.icheme.science.machine.SteamTurbine.rated(55e3));
+        assertTrue(MachineHealth.worn(turbine));
+        assertEquals(java.util.List.of(com.wormzjl.icheme.science.machine.Wear.Fault.WET_EXHAUST),MachineHealth.faults(turbine));
+        assertEquals("RUNNING / VALVE_OPEN / WET EXHAUST",FluidWorldAuthority.withHealth("RUNNING / VALVE_OPEN",turbine,"WET EXHAUST"));
+        assertEquals("FAILED: use a repair kit / RUNNING / VALVE_OPEN",FluidWorldAuthority.withHealth("RUNNING / VALVE_OPEN",turbine,"FAILED"));
+        assertFalse(MachineHealth.worn(new FlowControl.Passive()),"a pipe does not wear");
+    }
 }

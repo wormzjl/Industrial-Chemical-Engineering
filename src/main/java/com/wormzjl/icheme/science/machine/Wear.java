@@ -38,6 +38,11 @@ public final class Wear {
      * impeller does not erode, and the span above it to full intensity (0.5 % to 5.5 %).
      */
     public static final double WET_GAS_ONSET = .005, WET_GAS_SPAN = .05;
+    /**
+     * A steam turbine's wet exhaust (N4): the condensed mass share of its exhaust at and below which its last blades do not
+     * erode (about 12 % moisture), and the span above it to full intensity (12 % to 20 %).
+     */
+    public static final double WET_EXHAUST_ONSET = .12, WET_EXHAUST_SPAN = .08;
     /** The σ of the erosion peak, and the inception σ above which nothing erodes. */
     public static final double PEAK = 2.06, INCEPTION = 4;
 
@@ -62,8 +67,8 @@ public final class Wear {
      * {@code CAVITATION} from σ = NPSHA/NPSH3 ({@link #intensity}); {@code DRY} 1 for {@code q > 0} (the pump runs dry);
      * {@code LIQUID} from a dry screw's suction liquid volume share ({@link VacuumPump#liquidIntensity}, N5);
      * {@code LOW_FLOW} from a centrifugal pump's flow over its rated flow at its speed ({@link #lowFlow}, N1);
-     * {@code WET_GAS} from a centrifugal compressor's suction condensed mass share ({@link #wetGas}, N2); the others wear
-     * nothing yet.
+     * {@code WET_GAS} from a centrifugal compressor's suction condensed mass share ({@link #wetGas}, N2);
+     * {@code WET_EXHAUST} from a steam turbine's exhaust condensed mass share ({@link #wetExhaust}, N4).
      */
     public enum Fault {
         CAVITATION(FaultClass.EROSION), DRY(FaultClass.SEIZURE), LOW_FLOW(FaultClass.EROSION), WET_GAS(FaultClass.EROSION),
@@ -83,9 +88,19 @@ public final class Wear {
                 case LIQUID -> VacuumPump.liquidIntensity(q);
                 case LOW_FLOW -> lowFlow(q);
                 case WET_GAS -> wetGas(q);
-                case WET_EXHAUST -> 0;
+                case WET_EXHAUST -> wetExhaust(q);
             };
         }
+    }
+
+    /**
+     * A steam turbine's wet exhaust erosion intensity at {@code share}, the condensed mass share of its exhaust (N4): the
+     * moisture of the last stages erodes their blades. {@code (share − 0.12) / 0.08}, between 0 and 1: 0 at and below 12 %
+     * and for NaN, one from 20 % up. In the erosion class: at the default lives 8 h of process time from 20 %, 16 h at 16 %.
+     */
+    public static double wetExhaust(double share) {
+        if (!(share > WET_EXHAUST_ONSET)) return 0;
+        return Math.min(1, (share - WET_EXHAUST_ONSET) / WET_EXHAUST_SPAN);
     }
 
     /**

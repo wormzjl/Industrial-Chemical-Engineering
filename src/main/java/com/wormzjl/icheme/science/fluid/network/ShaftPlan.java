@@ -11,8 +11,9 @@ import java.util.Map;
  * {@code DISPLACEMENT}: a reciprocating frame's displacement at its train's speed, m³/s (reading A32); {@code GOVERNOR}: a
  * governor valve's mass target, kg/s (owner decision D27); {@code FANS} (W5): the most of full speed an air cooler's or
  * an induced-draft tower's fans may turn, 0 when its electric store ran empty, 1 otherwise (reading A61: the player's
- * fan setting and control stay as they were); {@code FAILED} (W10b, owner decision D34): 0 for a pump whose health reached
- * 0, closed as a stopped mover is (a machine at no speed, a set-flow pump switched off), its settings kept; 1 for an in-line
+ * fan setting and control stay as they were); {@code FAILED} (W10b, owner decision D34): 0 for a machine whose health reached
+ * 0, closed as a stopped mover is (a machine at no speed, a set-flow pump switched off; a steam turbine's admission shut,
+ * code base review N4), its settings kept; 1 for an in-line
  * pump repaired since, switched back on (an island keeps the controls its last slice solved with, and a machine's speed
  * plan restores a casing by itself). {@code BURNERS} (batch 2026-11-09-furnace-fuel-power): a radiant coil's limit
  * ({@link FiredCoil#limit}), keyed by the coil's device; {@code FUEL}: a fired heater's fuel valve's mass target, kg/s, keyed
@@ -109,6 +110,9 @@ public record ShaftPlan(Kind kind, double value, double second) {
                 case FlowControl.Machine machine when plan.kind == Kind.FAILED -> plan.value == 0 ? machine.withSpeed(0) : machine;
                 case FlowControl.Compressor c when plan.kind == Kind.FAILED -> c.withEnabled(plan.value>0);
                 case FlowControl.Pump pump when plan.kind == Kind.FAILED -> pump.enabled() == (plan.value > 0) ? pump : new FlowControl.Pump(pump.requestedVolumeFlow(), pump.maximumAddedPressure(), plan.value > 0);
+                // A failed steam turbine (code base review N4): its admission shut, as a stop or a trip shuts it; its train's
+                // governor plan opens it again once it is repaired.
+                case FlowControl.Turbine turbine when plan.kind == Kind.FAILED -> plan.value == 0 && turbine.massTarget() != 0 ? turbine.withMassTarget(0) : turbine;
                 case FlowControl.Machine machine when plan.kind == Kind.SPEED -> machine.withSpeed(plan.value);
                 case FlowControl.Compressor compressor when plan.kind == Kind.DISPLACEMENT -> {
                     double flow = Math.min(FlowControl.Mover.MAXIMUM_VOLUME_FLOW, plan.value);
