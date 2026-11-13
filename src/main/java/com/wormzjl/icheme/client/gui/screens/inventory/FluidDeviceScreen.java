@@ -51,7 +51,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private PhaseRatioBasis phaseBasis=preferredPhaseBasis;
     private String[][] particles=new String[64][3];
     private long revision=Long.MIN_VALUE,messageRevision;
-    private int page,phase=2;
+    private Page page=Page.OVERVIEW;private int phase=2;
     private boolean hasBlanket;
     private boolean templates,rebuildNext,hasConnections,powerOn=true,phaseSelected;
     private String search="",message="",hovered;
@@ -69,7 +69,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     // The help tour (batch 2026-11-12-tutorial-system, P1; P6: every page has one): a ? key beside the theme key. The tour
     // changes no widget and is not in the signature, so a rebuild under it keeps it at its stop.
     private final com.wormzjl.icheme.client.gui.tutorial.TourHost tour=new com.wormzjl.icheme.client.gui.tutorial.TourHost(this::tourPage,this::anchor);
-    private List<String> tabIds=List.of();private List<Integer> tabPages=List.of();
+    private List<String> tabIds=List.of();private List<Page> tabPages=List.of();
     /**
      * This page's tour's name (DeviceTour, P6: every tab has one, the Overview one for each door layout), or null before the
      * first view arrived, whose rows its anchors need.
@@ -89,12 +89,12 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     /** A tour's anchor on the screen (Tour): a frame place (DeviceTour.frame); the title; a door widget's or meter's slot or a group by its plate, scrolled into view where {@code reveal}. */
     private Rect anchor(String key,boolean reveal){
         var data=menu.clientData();if(data==null)return null;int i=tabPages.indexOf(page);
-        boolean legend=page==CONTROL&&heat()!=null&&flowsheet().diagram.parts().stream().anyMatch(HeatDiagram.Part::line);
+        boolean legend=page==Page.CONTROL&&heat()!=null&&flowsheet().diagram.parts().stream().anyMatch(HeatDiagram.Part::line);
         var at=DeviceTour.frame(imageWidth,imageHeight,tabIds,i<0?"overview":tabIds.get(i),legend,canEdit()&&(controlsApply()||names()&&!copies()),copies(),templates).get(key);
         if(at!=null)return at.moved(leftPos,topPos);
         if(key.equals("title"))return strip().plate().moved(leftPos,topPos);
         String slot=key;
-        if(key.startsWith("reading:")){slot=null;var readings=page==ACCESSORY?List.<DeviceColumn.Meter>of():deviceInput().readings();for(int k=0;k<readings.size();k++)if(readings.get(k).key().equals(key.substring(8)))slot="meter:"+k;}
+        if(key.startsWith("reading:")){slot=null;var readings=page==Page.ACCESSORY?List.<DeviceColumn.Meter>of():deviceInput().readings();for(int k=0;k<readings.size();k++)if(readings.get(k).key().equals(key.substring(8)))slot="meter:"+k;}
         var r=slot==null?null:com.wormzjl.icheme.client.gui.common.TourAnchors.find(slot,doorColumns,k->tr(k));
         return r==null?null:com.wormzjl.icheme.client.gui.common.TourAnchors.reveal(doorView,r,reveal).moved(leftPos,topPos);
     }
@@ -131,7 +131,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     /** Saves the typed name by the rename path (N1), as Apply does: Enter in the entry; a tank with contents has Copy in Apply's slot. */
     private void saveName(){if(canEdit()&&renames())com.wormzjl.icheme.network.EquipmentNetwork.rename(menu.position(),nameDraft);}
     /** Whether Apply sends this device's controls: every kind but a tank (an induced-draught tower's aside), a filter, and a heat side off its Control tab or with nothing to control. */
-    private boolean controlsApply(){var data=menu.clientData();return data!=null&&(data.kind()!=TopologyCompiler.Kind.RESERVOIR||blanket()||relief()||tower()&&data.controls().tower().draft()==com.wormzjl.icheme.science.fluid.network.CoolingTower.Draft.INDUCED||still()!=null||converter()!=null)&&data.kind()!=TopologyCompiler.Kind.FILTER&&(data.kind()!=TopologyCompiler.Kind.HEAT_SIDE||page==CONTROL&&(fans()||burners()||controllable()));}
+    private boolean controlsApply(){var data=menu.clientData();return data!=null&&(data.kind()!=TopologyCompiler.Kind.RESERVOIR||blanket()||relief()||tower()&&data.controls().tower().draft()==com.wormzjl.icheme.science.fluid.network.CoolingTower.Draft.INDUCED||still()!=null||converter()!=null)&&data.kind()!=TopologyCompiler.Kind.FILTER&&(data.kind()!=TopologyCompiler.Kind.HEAT_SIDE||page==Page.CONTROL&&(fans()||burners()||controllable()));}
     private boolean constructedMover(){var data=menu.clientData();return data!=null&&datasheet!=null&&(data.kind()==TopologyCompiler.Kind.PUMP||data.kind()==TopologyCompiler.Kind.COMPRESSOR);}
     /** An air cooler's side: its fans switch as a mover does (batch 2026-10-27-heat-exchanger-design). */
     private boolean fans(){var data=menu.clientData();return data!=null&&data.view().heat()!=null&&data.view().heat().fans()!=null;}
@@ -253,10 +253,28 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private HeatUnit.Mode heatTarget=HeatUnit.Mode.OUTLET_TEMPERATURE;
     /** The door column's Off and On switch: a generator's or a built mover's. A heat unit's fans and burners are on its Control tab. */
     private boolean switchable(){return generator()||constructedMover();}
-    /** The Control tab (HEAT_GUI_PLAN.md section 2): every heat unit's sides and a kettle's pool. */
-    private static final int CONTROL=6;
-    /** A drum's accessory page (batch 2026-11-11-gas-blanketing): its gas blanketing valve and its pressure safety valve; a pipe's safety valve's own screen. */
-    private static final int ACCESSORY=7;
+    /**
+     * The screen's pages, in the order of the integers they replace (finding C1, batch 2026-11-13-codebase-review). Client
+     * state only: no page is saved, sent or read from the menu, and no ordinal is used.
+     */
+    private enum Page{
+        /** The Overview: the door column and the contents' tables, or a pump's curve. */
+        OVERVIEW,
+        /** A generator's feed: its composition. */
+        COMPOSITION,
+        /** A generator's feed: its solids. */
+        SOLIDS,
+        /** A pipe's connections, where it has more than one. */
+        CONNECTIONS,
+        /** A tank's connections by face. */
+        OUTLETS,
+        /** A structure's equipment datasheet. */
+        DATASHEET,
+        /** The Control tab (HEAT_GUI_PLAN.md section 2): every heat unit's sides and a kettle's pool. */
+        CONTROL,
+        /** A drum's accessory page (batch 2026-11-11-gas-blanketing): its gas blanketing valve and its pressure safety valve; a pipe's safety valve's own screen. */
+        ACCESSORY
+    }
     private boolean blanket(){return tank()&&menu.clientData().controls().blanket()>0;}
     /** A drum's or a pipe's pressure safety valve. */
     private boolean relief(){return menu.clientData()!=null&&menu.clientData().controls().relief()>0;}
@@ -265,7 +283,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     /** A pipe's pressure safety valve: the pipe's screen is the valve's own, its one page (owner: "PSV on pipe get a standalone GUI"). */
     private boolean valveOnly(){return pipe()&&relief();}
     /** The page a heat unit's screen opens on: the one last chosen this client session (the side selector keeps it). */
-    private static int preferredHeatPage=0;
+    private static Page preferredHeatPage=Page.OVERVIEW;
     private boolean heatPageSet;
     private com.wormzjl.icheme.runtime.fluid.FluidView.Heat heat(){var data=menu.clientData();return data==null?null:data.view().heat();}
     private com.wormzjl.icheme.science.equipment.HeatSides.Unit unitKind(){return com.wormzjl.icheme.science.equipment.HeatSides.Unit.valueOf(heat().unit());}
@@ -285,20 +303,20 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     // and did not fit below about 323 scaled pixels of height). Page 5 is an equipment datasheet, scrolled the same way.
     private boolean tank(){return menu.clientData()!=null&&menu.clientData().kind()==TopologyCompiler.Kind.RESERVOIR;}
     // A heat unit's Overview has its stream switch and the stream's line above the phase tabs (HEAT_GUI_PLAN.md section 2).
-    private int tableTop(){return page==0?(heat()!=null?164:130):page==1?166:page==3?116:page==4||page==5?100:142;}
-    private int rowHeight(){return page==0||page==3?18:page==4?24:page==5?com.wormzjl.icheme.client.gui.common.DialogColumns.PITCH:25;}
+    private int tableTop(){return page==Page.OVERVIEW?(heat()!=null?164:130):page==Page.COMPOSITION?166:page==Page.CONNECTIONS?116:page==Page.OUTLETS||page==Page.DATASHEET?100:142;}
+    private int rowHeight(){return page==Page.OVERVIEW||page==Page.CONNECTIONS?18:page==Page.OUTLETS?24:page==Page.DATASHEET?com.wormzjl.icheme.client.gui.common.DialogColumns.PITCH:25;}
     private int visibleRows(){return Math.max(1,(imageHeight-64-tableTop())/rowHeight());}
     private void refresh(){
         if(menu.messageRevision()!=messageRevision){messageRevision=menu.messageRevision();message=menu.message();}
         var data=menu.clientData();if(data==null)return;
         // A heat unit opens on the page last chosen on one, so the side selector lands on the other side's Control tab.
-        if(!heatPageSet&&data.view().heat()!=null){heatPageSet=true;if(page==0&&preferredHeatPage==CONTROL){page=CONTROL;rebuildNext=true;}}
+        if(!heatPageSet&&data.view().heat()!=null){heatPageSet=true;if(page==Page.OVERVIEW&&preferredHeatPage==Page.CONTROL){page=Page.CONTROL;rebuildNext=true;}}
         boolean connected=pipe()&&data.view().pipeInfo().connections().size()>1;
-        if(connected!=hasConnections){hasConnections=connected;if(!connected&&page==3)page=0;rebuildNext=true;}
+        if(connected!=hasConnections){hasConnections=connected;if(!connected&&page==Page.CONNECTIONS)page=Page.OVERVIEW;rebuildNext=true;}
         // A valve fitted or removed while the screen is open: its tab comes and goes, and its page closes with it.
         boolean fitted=accessory()||valveOnly();
-        if(fitted!=hasBlanket){hasBlanket=fitted;if(!hasBlanket&&page==ACCESSORY)page=0;rebuildNext=true;}
-        if(valveOnly()&&page!=ACCESSORY){page=ACCESSORY;rebuildNext=true;}
+        if(fitted!=hasBlanket){hasBlanket=fitted;if(!hasBlanket&&page==Page.ACCESSORY)page=Page.OVERVIEW;rebuildNext=true;}
+        if(valveOnly()&&page!=Page.ACCESSORY){page=Page.ACCESSORY;rebuildNext=true;}
         // An initially empty publication must not leave a newly flowing void on an absent default phase.
         // Once the player chooses a phase, retain that choice across later publications.
         if(!phaseSelected){
@@ -373,7 +391,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         box.setTooltip(Tooltip.create(Component.literal(label)));box.setEditable(canEdit());editors.put(key,addRenderableWidget(box));
         return box;
     }
-    private void changePage(int target){if(heat()!=null&&(target==0||target==CONTROL))preferredHeatPage=target;page=target;templates=false;scroll.reset();doorView.reset();rebuild();}
+    private void changePage(Page target){if(heat()!=null&&(target==Page.OVERVIEW||target==Page.CONTROL))preferredHeatPage=target;page=target;templates=false;scroll.reset();doorView.reset();rebuild();}
     private void toggleBasis(){
         try{if(composition!=null){composition.toggleBasis();mass=composition.mass();}else mass=!mass;ClientConfig.basis(mass?ClientConfig.Basis.MASS:ClientConfig.Basis.MOLE);rebuild();}
         catch(IllegalArgumentException e){message=tr("invalid_composition");}
@@ -402,16 +420,16 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         boolean dropdownOpen=componentDropdown!=null&&componentDropdown.expanded();
         clearWidgets();editors.clear();labels.clear();componentDropdown=null;doorWidgets.clear();doorColumns=List.of();
         var data=menu.clientData();
-        var tabs=new ArrayList<String>();var pages=new ArrayList<Integer>();tabs.add("overview");pages.add(0);
-        if(heat()!=null){tabs.add("control");pages.add(CONTROL);}
-        if(generator()&&canEdit()){tabs.add("composition");pages.add(1);tabs.add("solids");pages.add(2);}
-        if(pipe()&&data.view().pipeInfo().connections().size()>1){tabs.add("connections");pages.add(3);}
-        if(tank()){tabs.add("outlets");pages.add(4);}
-        if(datasheet!=null){tabs.add("datasheet");pages.add(5);}
-        if(accessory()&&tabs.size()<4){tabs.add("accessory");pages.add(ACCESSORY);}
-        if(valveOnly()){tabs.clear();pages.clear();tabs.add("safety_valve");pages.add(ACCESSORY);}
+        var tabs=new ArrayList<String>();var pages=new ArrayList<Page>();tabs.add("overview");pages.add(Page.OVERVIEW);
+        if(heat()!=null){tabs.add("control");pages.add(Page.CONTROL);}
+        if(generator()&&canEdit()){tabs.add("composition");pages.add(Page.COMPOSITION);tabs.add("solids");pages.add(Page.SOLIDS);}
+        if(pipe()&&data.view().pipeInfo().connections().size()>1){tabs.add("connections");pages.add(Page.CONNECTIONS);}
+        if(tank()){tabs.add("outlets");pages.add(Page.OUTLETS);}
+        if(datasheet!=null){tabs.add("datasheet");pages.add(Page.DATASHEET);}
+        if(accessory()&&tabs.size()<4){tabs.add("accessory");pages.add(Page.ACCESSORY);}
+        if(valveOnly()){tabs.clear();pages.clear();tabs.add("safety_valve");pages.add(Page.ACCESSORY);}
         var tabSlots=FluidGuiLayout.tabs(imageWidth,tabs.size());
-        for(int i=0;i<tabs.size();i++){int target=pages.get(i);var slot=tabSlots.get(i);doorAction(tabs.get(i),slot.x(),29,slot.width(),()->changePage(target)).latched(true).active=page!=target;}
+        for(int i=0;i<tabs.size();i++){Page target=pages.get(i);var slot=tabSlots.get(i);doorAction(tabs.get(i),slot.x(),29,slot.width(),()->changePage(target)).latched(true).active=page!=target;}
         tabIds=List.copyOf(tabs);tabPages=List.copyOf(pages);
         // The theme key shows the contrast sign; its hover names the panel shown, its message stays for narration.
         String theme=tr(ClientConfig.theme()==ClientConfig.Theme.DARK?"theme.dark":"theme.light");
@@ -440,14 +458,14 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         // A heat side applies its control from its Control tab only.
         // Apply sends the controls, and the name typed in the title strip (N1): a filter or a heat side with nothing to control applies the name alone; a tank with contents shows Copy there, and Enter saves its name.
         if(canEdit()&&(controlsApply()||names()&&!copies())){var apply=footer.get(1);var key=doorAction("apply",apply.x(),by,apply.width(),this::apply).primary(true);if(!controlsApply())key.setTooltip(Tooltip.create(Component.translatable("gui.icheme.fluid.apply_name.hint")));}
-        if(page==CONTROL){
+        if(page==Page.CONTROL){
             buildControl();
             if(focused!=null&&editors.containsKey(focused)){setFocused(editors.get(focused));editors.get(focused).setCursorPosition(cursor);}
             return;
         }
         buildDevice();
-        if(page==0&&curve())configureScroll(0);else if(page==0)buildContents();else if(page==1)buildComposition();else if(page==2)buildSolids();
-        else if(page==4)configureScroll(data.view().outlets().size());else if(page==5)configureScroll(datasheetGlass().lines().size());
+        if(page==Page.OVERVIEW&&curve())configureScroll(0);else if(page==Page.OVERVIEW)buildContents();else if(page==Page.COMPOSITION)buildComposition();else if(page==Page.SOLIDS)buildSolids();
+        else if(page==Page.OUTLETS)configureScroll(data.view().outlets().size());else if(page==Page.DATASHEET)configureScroll(datasheetGlass().lines().size());
         else configureScroll(data.view().pipeInfo().connections().size());
         if(focused!=null&&editors.containsKey(focused)){setFocused(editors.get(focused));editors.get(focused).setCursorPosition(cursor);}
         if(componentDropdown!=null&&"search".equals(focused))componentDropdown.expanded(dropdownOpen);
@@ -461,7 +479,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     }
     /** The port the Overview shows, or null for the node's own contents (and on every other page). */
     private com.wormzjl.icheme.runtime.fluid.FluidView.Port selectedPort(){
-        if(page!=0)return null;var list=streams();return stream>=0&&stream<list.size()?list.get(stream):null;
+        if(page!=Page.OVERVIEW)return null;var list=streams();return stream>=0&&stream<list.size()?list.get(stream):null;
     }
     private String portName(String role){return Component.translatable(HeatDiagram.KEY+"port."+role.toLowerCase(Locale.ROOT)).getString();}
     private void buildContents(){
@@ -580,7 +598,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         if(!controlsApply())return;
         if(!canEdit())return;
         // A converter's page sends its settings by their own edit (W5); its accessory page sends the valves as a drum's.
-        if(converter()!=null&&page!=ACCESSORY){converterApply();return;}
+        if(converter()!=null&&page!=Page.ACCESSORY){converterApply();return;}
         // A compressor's ratio outside its bounds is named with them (the bounds Controls validates with), not the generic message.
         if(menu.clientData().kind()==TopologyCompiler.Kind.COMPRESSOR){
             double ratio;try{ratio=fields.get("maximumPressureRatio").value();}catch(IllegalArgumentException e){ratio=Double.NaN;}
@@ -693,7 +711,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         skin.page(canvas,new Rect(0,0,imageWidth,imageHeight));
         // The HMI screen goes under the widgets that sit on it.
         var data=menu.clientData();
-        if(data!=null){if(page==CONTROL&&data.view().heat()!=null)drawingBox=skin.well(canvas,controlWell());else pageBox=skin.well(canvas,pageWell());}
+        if(data!=null){if(page==Page.CONTROL&&data.view().heat()!=null)drawingBox=skin.well(canvas,controlWell());else pageBox=skin.well(canvas,pageWell());}
         skin.softKeys(canvas,FluidGuiLayout.softKeys(imageWidth,imageHeight));
         g.pose().popPose();
     }
@@ -721,7 +739,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         skin.hDivider(canvas,8,imageWidth-8,imageHeight-49);
         // A message only (waiting, an invalid input); the view's time is gone (owner, 2026-10-28).
         if(!message.isBlank())doorText(canvas,skin,message,10,imageHeight-42,WARN,imageWidth-20);
-        if(page==CONTROL&&view.heat()!=null){
+        if(page==Page.CONTROL&&view.heat()!=null){
             // The status in words, in the player's unit; the engine's own line on hover.
             doorStatus(canvas,skin,controlStatus(),warning(view.status())?WARN:ACCENT);
             if(hoverX>=10&&hoverX<imageWidth-10&&hoverY>=55&&hoverY<69)hovered=view.status();
@@ -736,13 +754,13 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         for(var label:labels)text(g,label.text(),label.x(),label.y(),MUTED,label.width());
         renderDevice(canvas,skin);
         // A constructed centrifugal pump's Overview draws its curve on the glass (W10d); every other device its contents.
-        if(page==0&&curve()){var box=pageBox!=null?pageBox:skin.well(canvas,pageWell());canvas.clip(box);PumpCurve.draw(canvas,box,curveInput(),FluidDeviceScreen::tr);canvas.unclip();}
-        else if(page==0)renderContents(g,mouseX-leftPos,mouseY-topPos);
-        else if(page==1)renderComposition(g,mouseX-leftPos,mouseY-topPos);
-        else if(page==3)renderConnections(g,mouseX-leftPos,mouseY-topPos);
-        else if(page==4)renderOutlets(g,mouseX-leftPos,mouseY-topPos);
-        else if(page==5)renderDatasheet(g,mouseX-leftPos,mouseY-topPos);
-        else if(page==ACCESSORY)renderAccessory(g,mouseX-leftPos,mouseY-topPos);
+        if(page==Page.OVERVIEW&&curve()){var box=pageBox!=null?pageBox:skin.well(canvas,pageWell());canvas.clip(box);PumpCurve.draw(canvas,box,curveInput(),FluidDeviceScreen::tr);canvas.unclip();}
+        else if(page==Page.OVERVIEW)renderContents(g,mouseX-leftPos,mouseY-topPos);
+        else if(page==Page.COMPOSITION)renderComposition(g,mouseX-leftPos,mouseY-topPos);
+        else if(page==Page.CONNECTIONS)renderConnections(g,mouseX-leftPos,mouseY-topPos);
+        else if(page==Page.OUTLETS)renderOutlets(g,mouseX-leftPos,mouseY-topPos);
+        else if(page==Page.DATASHEET)renderDatasheet(g,mouseX-leftPos,mouseY-topPos);
+        else if(page==Page.ACCESSORY)renderAccessory(g,mouseX-leftPos,mouseY-topPos);
         else {
             int w=tableWidth();text(g,tr("solid_col.0"),tableX(),128,TEXT,w/2);
             text(g,tr("solid_col.1"),tableX()+w/2,128,TEXT,w/4);text(g,tr("solid_col.2"),tableX()+3*w/4,128,TEXT,w/4);
@@ -1222,7 +1240,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     /** The device's page's column at an image width: from x 10 to {@code FluidGuiLayout.side}. */
     private Column deviceColumn(int width){
         var state=menu.clientData().view().state();
-        var rows=new ArrayList<>(page==ACCESSORY?accessoryRows():DeviceColumn.rows(deviceInput(),FluidDeviceScreen::tr));
+        var rows=new ArrayList<>(page==Page.ACCESSORY?accessoryRows():DeviceColumn.rows(deviceInput(),FluidDeviceScreen::tr));
         var ids=new ArrayList<>(com.wormzjl.icheme.client.InstrumentRenderer.identities(minecraft.level,menu.position()));
         if(menu.clientData().valve()!=null)ids.add(String.format(Locale.ROOT,"CV-%04d",menu.identity()));
         rows.addAll(DeviceColumn.instrumentIds(ids,FluidDeviceScreen::tr));
@@ -1457,14 +1475,14 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         // The door column's view on every page: its bar, then a choice it places (a mode, a valve's target); then the table's scroll.
         double rx=x-leftPos,ry=y-topPos;
         if(doorView.press(rx,ry,button))return true;
-        if(button==0&&doorView.inside(rx,ry))for(var column:doorColumns){var action=column.action(rx,doorView.contentY(ry));if(action!=null){if(page==CONTROL)controlAction(action);else deviceAction(action);return true;}}
-        if(page!=CONTROL&&scroll.click(x,y,button)){rebuildNext=true;return true;}
+        if(button==0&&doorView.inside(rx,ry))for(var column:doorColumns){var action=column.action(rx,doorView.contentY(ry));if(action!=null){if(page==Page.CONTROL)controlAction(action);else deviceAction(action);return true;}}
+        if(page!=Page.CONTROL&&scroll.click(x,y,button)){rebuildNext=true;return true;}
         return super.mouseClicked(x,y,button);
     }
     @Override public boolean mouseDragged(double x,double y,int button,double dx,double dy){
         if(componentDropdown!=null&&componentDropdown.popupDrag(y))return true;
         if(doorView.drag(y-topPos))return true;
-        if(page!=CONTROL&&scroll.drag(y)){rebuildNext=true;return true;}
+        if(page!=Page.CONTROL&&scroll.drag(y)){rebuildNext=true;return true;}
         return super.mouseDragged(x,y,button,dx,dy);
     }
     @Override public boolean mouseReleased(double x,double y,int button){if(componentDropdown!=null)componentDropdown.popupRelease();scroll.release();doorView.release();return super.mouseReleased(x,y,button);}
@@ -1472,7 +1490,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         if(tour.isOpen())return true;
         if(componentDropdown!=null&&componentDropdown.popupScroll(x,y,vertical))return true;
         if(doorView.wheel(x-leftPos,y-topPos,vertical))return true;
-        if(page!=CONTROL&&x>=leftPos+tableX()&&scroll.wheel(vertical)){rebuildNext=true;return true;}
+        if(page!=Page.CONTROL&&x>=leftPos+tableX()&&scroll.wheel(vertical)){rebuildNext=true;return true;}
         return super.mouseScrolled(x,y,horizontal,vertical);
     }
 
