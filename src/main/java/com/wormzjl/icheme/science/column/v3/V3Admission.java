@@ -56,7 +56,7 @@ final class V3Admission {
      * the third evaluates one feed flash, and answers {@code ADMITTED} when the property package is
      * unavailable, so a caller never gets a cooling verdict it could not compute. The state-dependent heat
      * bounds are deliberately absent: they are measured on a continuation state and publish
-     * {@code NONCONVERGENCE}. See {@code V3ColumnCalculator.PathDependentHeatBound}.</p>
+     * {@code NONCONVERGENCE}. See {@code PathDependentHeatBound}.</p>
      *
      * @throws IllegalArgumentException if the screen ratio is nonfinite or outside [0, 1]
      */

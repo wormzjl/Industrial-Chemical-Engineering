@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Test;
  * and once {@code a·e^z} dominates the delivered material {@code I} the exact Newton step is
  * {@code −1 + I/(a·e^z)}: one e-fold per iteration, on a scaled residual that sits at exactly one throughout.
  * A flow seeded eighteen e-folds too high therefore costs eighteen iterations no matter how good the
- * Jacobian is. The stage map ({@link V3ColumnCalculator#sourcePosition}) stops a rectifying node from
+ * Jacobian is. The stage map ({@link V3ContinuationLadder#sourcePosition}) stops a rectifying node from
  * reading such a flow off the source feed tray, and the cap inside
  * {@code V3FloorLift.liftFloorSupport} removes one wherever it still appears.</p>
  *
@@ -43,7 +43,7 @@ class V3ContinuationSeedTest {
      *
      * <p>Below the feed the map is deliberately left alone, so the assertions stop at the feed tray. The
      * symmetric clamp was measured and costs two of the three cold total-condenser pilot cases their
-     * convergence; {@link V3ColumnCalculator#sourcePosition} records that measurement.</p>
+     * convergence; {@link V3ContinuationLadder#sourcePosition} records that measurement.</p>
      */
     @Test
     void noRectifyingNodeOfAStageGridReadsThePreviousGridsFeedTray() {

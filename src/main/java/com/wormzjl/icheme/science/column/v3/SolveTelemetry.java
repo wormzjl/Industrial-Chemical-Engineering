@@ -8,7 +8,7 @@ import java.util.Objects;
 /**
  * Bounded per-solve direction counters, surfaced through the existing diagnostics event contract.
  *
- * <p>One per Newton attempt of {@code V3ColumnCalculator.solveSingleProblem}; it holds only its own counters and
+ * <p>One per Newton attempt of {@code V3AttemptLoop.solveSingleProblem}; it holds only its own counters and
  * forwards to the learned pass's recorder. Moved out of {@link V3ColumnCalculator} unchanged (batch
  * 2026-11-13-codebase-review, D-C1).</p>
  */

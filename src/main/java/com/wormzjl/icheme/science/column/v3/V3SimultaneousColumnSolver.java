@@ -65,7 +65,7 @@ final class V3SimultaneousColumnSolver {
     /**
      * The stall rule: a solve whose maximum scaled residual has not fallen to {@link #STALL_FACTOR} of its value
      * {@code STALL_WINDOW_ITERATIONS} iterations ago is not converging. The intermediate steam rungs' stall stop
-     * ({@code V3ColumnCalculator.INTERMEDIATE_RUNG_BUDGET}) and the held-point release below are this one rule.
+     * ({@code V3FeatureRamp.INTERMEDIATE_RUNG_BUDGET}) and the held-point release below are this one rule.
      *
      * <p>The release: a solve whose accepted steps have held a point for the window in a row without halving the
      * residual over them is handed to the support refresh ({@code STALLED_SUPPORT_FLOOR}): the held point is what
