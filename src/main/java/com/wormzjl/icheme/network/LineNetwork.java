@@ -126,7 +126,7 @@ public final class LineNetwork {
     }
 
     public static void register(RegisterPayloadHandlersEvent event) {
-        var r = event.registrar("lines-1").executesOn(HandlerThread.MAIN);
+        var r = event.registrar(NetworkProtocol.VERSION).executesOn(HandlerThread.MAIN);
         r.playToServer(
                 Command.TYPE,
                 Command.CODEC,

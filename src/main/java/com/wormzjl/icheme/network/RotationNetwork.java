@@ -87,7 +87,7 @@ public final class RotationNetwork {
     }
 
     public static void register(RegisterPayloadHandlersEvent event) {
-        var channel = event.registrar("rotation-1").executesOn(HandlerThread.MAIN);
+        var channel = event.registrar(NetworkProtocol.VERSION).executesOn(HandlerThread.MAIN);
         channel.playToServer(
                 Watch.TYPE,
                 Watch.CODEC,

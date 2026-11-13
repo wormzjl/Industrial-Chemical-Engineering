@@ -28,7 +28,8 @@ import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 import java.util.*;
 
 /**
- * Menu protocol {@value #PROTOCOL}: position/identity/revision-bound controls; clients never send inventory or
+ * The fluid menu payloads, on the mod's protocol {@link NetworkProtocol#VERSION} (before it: fluid-24; the fluid-N
+ * numbers below are that string's history): position/identity/revision-bound controls; clients never send inventory or
  * solver results. Opening a GUI immediately receives the last published server snapshot, when available.
  * Subsequent menu updates receive a static payload (kind, components,
  * presets, material names) and a live payload (view, controls, the engine's reply) on its island's
@@ -67,7 +68,6 @@ import java.util.*;
  * ({@link FluidView.Converter}), and its page's settings travel as their own edit ({@link ConverterEditPayload}).</p>
  */
 public final class FluidNetwork {
-    public static final String PROTOCOL="fluid-24";
     private static final Gson JSON=new Gson();
     public static final int MAX_JSON=262144;
     public static final int MAX_EDIT_JSON=4096;
@@ -258,7 +258,7 @@ public final class FluidNetwork {
         @Override public Type<? extends CustomPacketPayload> type(){return TYPE;}
     }
     public static void register(RegisterPayloadHandlersEvent event) {
-        var registrar=event.registrar(PROTOCOL).executesOn(HandlerThread.MAIN);
+        var registrar=event.registrar(NetworkProtocol.VERSION).executesOn(HandlerThread.MAIN);
         registrar.playToServer(EditPayload.TYPE,EditPayload.STREAM_CODEC,FluidNetwork::edit);
         registrar.playToServer(RecoverPayload.TYPE,RecoverPayload.STREAM_CODEC,FluidNetwork::recover);
         registrar.playToServer(ConverterEditPayload.TYPE,ConverterEditPayload.STREAM_CODEC,(payload,context)->{if(context.player() instanceof ServerPlayer player)converterEdit(payload,player);});
@@ -497,8 +497,8 @@ public final class FluidNetwork {
     }
 
     // ---- requested world-space displays and item settings ----
-    // Each requested display keeps its own payload ids and protocol version string: the open tanks' display path rides on
-    // PROTOCOL, the others on their own registrars (registerDisplays), so their wire registration is unchanged.
+    // Each requested display keeps its own payload ids and its own registrar (registerDisplays): the open tanks' display
+    // path rides on the menu's registrar, the others on theirs. Every registrar carries NetworkProtocol.VERSION.
 
     /** How far from a watcher an open tank's node cell or a sight glass may stand, blocks. */
     public static final double WATCH_RANGE=128;
@@ -850,14 +850,14 @@ public final class FluidNetwork {
             if(context.player() instanceof ServerPlayer player)FluidWorldAuthority.find(player.server).ifPresent(world->world.watchTanks(player,payload.watch,payload.unwatch));
         });
         fluid.playToClient(TankDisplayPayload.TYPE,TankDisplayPayload.STREAM_CODEC,(payload,context)->com.wormzjl.icheme.client.TankRenderer.accept(payload.node,payload.glide));
-        var sightGlass=event.registrar("sight-glass-3").executesOn(HandlerThread.MAIN);
+        var sightGlass=event.registrar(NetworkProtocol.VERSION).executesOn(HandlerThread.MAIN);
         sightGlass.playToServer(Watch.SIGHT_GLASSES,Watch.codec(Watch.SIGHT_GLASSES),(payload,context)->{
             if(context.player() instanceof ServerPlayer player)FluidWorldAuthority.find(player.server).ifPresent(world->world.watchSightGlasses(player,payload.watch,payload.unwatch));
         });
         sightGlass.playToClient(SightGlassPayload.TYPE,SightGlassPayload.STREAM_CODEC,(payload,context)->com.wormzjl.icheme.client.SightGlassRenderer.accept(payload.target,payload.sample));
         // mover-2 (W3, reading A36): the mover state carries its speed share; the drivers' watch and state ride beside it.
         // mover-3 (W10c): and a pump's crackle and churn bytes; mover-4: an in-line pump's rated rpm for the pitch.
-        var mover=event.registrar("mover-4").executesOn(HandlerThread.MAIN);
+        var mover=event.registrar(NetworkProtocol.VERSION).executesOn(HandlerThread.MAIN);
         mover.playToServer(Watch.MOVERS,Watch.codec(Watch.MOVERS),(p,context)->{
             if(context.player() instanceof ServerPlayer player)FluidWorldAuthority.find(player.server).ifPresent(world->world.watchMovers(player,p.watch,p.unwatch));
         });
@@ -887,23 +887,23 @@ public final class FluidNetwork {
         fluid.playToClient(NoiseSources.TYPE,NoiseSources.STREAM_CODEC,(p,context)->com.wormzjl.icheme.client.fx.sound.FxSounds.accept(p.sources()));
         // flare-1 (batch 2026-11-09-flare-stack, W5): the flares' watch and their flame state; flare-2 (batch
         // 2026-11-10-custom-shader-system, W3): the state carries the soot index and the exit velocity.
-        var flare=event.registrar("flare-2").executesOn(HandlerThread.MAIN);
+        var flare=event.registrar(NetworkProtocol.VERSION).executesOn(HandlerThread.MAIN);
         flare.playToServer(Watch.FLARES,Watch.codec(Watch.FLARES),(p,context)->{
             if(context.player() instanceof ServerPlayer player)FluidWorldAuthority.find(player.server).ifPresent(world->world.watchFlares(player,p.watch,p.unwatch));
         });
         flare.playToClient(FlareState.TYPE,FlareState.STREAM_CODEC,(p,context)->com.wormzjl.icheme.client.fx.state.ProcessStates.accept(p));
         // still-1 (batch 2026-11-09-batch-distiller, W6): the stills' watch and their fire state, and the page's fuel slot.
-        var still=event.registrar("still-1").executesOn(HandlerThread.MAIN);
+        var still=event.registrar(NetworkProtocol.VERSION).executesOn(HandlerThread.MAIN);
         still.playToServer(Watch.STILLS,Watch.codec(Watch.STILLS),(p,context)->{
             if(context.player() instanceof ServerPlayer player)FluidWorldAuthority.find(player.server).ifPresent(world->world.watchStills(player,p.watch,p.unwatch));
         });
         still.playToClient(StillState.TYPE,StillState.STREAM_CODEC,(p,context)->com.wormzjl.icheme.client.fx.state.ProcessStates.accept(p));
         still.playToServer(StillFuelPayload.TYPE,StillFuelPayload.STREAM_CODEC,(p,context)->{if(context.player() instanceof ServerPlayer player)stillFuel(p,player);});
-        var instruments=event.registrar("instruments-1").executesOn(HandlerThread.MAIN);
+        var instruments=event.registrar(NetworkProtocol.VERSION).executesOn(HandlerThread.MAIN);
         instruments.playToServer(InstrumentWatch.TYPE,InstrumentWatch.CODEC,(p,c)->{if(c.player() instanceof ServerPlayer player)FluidWorldAuthority.find(player.server).ifPresent(w->w.instruments().watch(player,p.watch,p.unwatch));});
         instruments.playToClient(InstrumentDisplay.TYPE,InstrumentDisplay.CODEC,(p,c)->com.wormzjl.icheme.client.InstrumentRenderer.accept(p));
         instruments.playToServer(GaugeSave.TYPE,GaugeSave.CODEC,(p,c)->{if(c.player() instanceof ServerPlayer player&&player.containerMenu instanceof GaugeMenu menu&&menu.containerId==p.menu&&menu.stillValid(player)&&menu.initial().kind()==p.settings.kind()){menu.save(p.settings);player.inventoryMenu.broadcastChanges();}});
-        var tools=event.registrar("pipeline-tool-5").executesOn(HandlerThread.MAIN);
+        var tools=event.registrar(NetworkProtocol.VERSION).executesOn(HandlerThread.MAIN);
         tools.playToServer(PipelineToolSave.TYPE,PipelineToolSave.STREAM_CODEC,(payload,context)->{
             if(!(context.player() instanceof ServerPlayer player)||!(player.containerMenu instanceof PipelineToolMenu menu)
                     ||menu.containerId!=payload.menuId()||!menu.stillValid(player)||!PipelineToolItem.Settings.valid(payload.diameter())||!com.wormzjl.icheme.science.equipment.Paint.line(payload.paint())||!com.wormzjl.icheme.science.equipment.Paint.line(payload.secondary()))return;

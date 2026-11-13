@@ -169,7 +169,7 @@ public final class ControlNetwork {
 
     public static void register(RegisterPayloadHandlersEvent event) {
         // control-5: the converter command (batch 2026-11-12-fluid-conversion, W4).
-        var r = event.registrar("control-5").executesOn(HandlerThread.MAIN);
+        var r = event.registrar(NetworkProtocol.VERSION).executesOn(HandlerThread.MAIN);
         r.playToServer(
                 Edit.TYPE,
                 Edit.CODEC,

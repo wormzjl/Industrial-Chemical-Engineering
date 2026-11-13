@@ -36,7 +36,8 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Equipment protocol {@value #PROTOCOL}: the constructor screen sends its design with what to do with it: keep it (the
+ * The equipment payloads, on the mod's protocol {@link NetworkProtocol#VERSION} (before it: equipment-23; the protocol
+ * numbers below are those strings' history): the constructor screen sends its design with what to do with it: keep it (the
  * screen closes) or build it (Build). Placing a vessel is a world edit, like placing blocks; it involves no process state,
  * so the server answers at once in chat. Import (protocol 16, batch 2026-11-02-process-simulator S5) lists the designs the
  * nearest process simulator holds ({@link ImportList}, answered by {@link ImportListAnswer}), then lands the chosen one on
@@ -50,7 +51,6 @@ import java.util.Optional;
  * protocol 23, batch 2026-11-10-custom-shader-system, W10).
  */
 public final class EquipmentNetwork {
-    public static final String PROTOCOL = "equipment-23";
     /** A player edits or builds only within this distance of the constructor, blocks. */
     private static final double REACH = 8;
     /** A process simulator's designs are imported from within this many blocks of the constructor. */
@@ -322,7 +322,7 @@ public final class EquipmentNetwork {
     }
 
     public static void register(RegisterPayloadHandlersEvent event) {
-        var registrar = event.registrar(PROTOCOL).executesOn(HandlerThread.MAIN);
+        var registrar = event.registrar(NetworkProtocol.VERSION).executesOn(HandlerThread.MAIN);
         registrar.playToServer(ConstructorPayload.TYPE, ConstructorPayload.STREAM_CODEC, EquipmentNetwork::constructor);
         registrar.playToServer(TemplatePayload.TYPE, TemplatePayload.STREAM_CODEC, EquipmentNetwork::template);
         registrar.playToServer(ImportList.TYPE, ImportList.STREAM_CODEC, EquipmentNetwork::importList);

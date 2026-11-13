@@ -45,7 +45,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.*;
 
 /**
- * Assembly protocol {@value #PROTOCOL} (batch 2026-10-26-multi-machine-framework, plan sections 6, 8 and 10). The server
+ * The assembly payloads, on the mod's protocol {@link NetworkProtocol#VERSION} (before it: assembly-6; batch 2026-10-26-multi-machine-framework, plan sections 6, 8 and 10). The server
  * decides what a click on a structure opens: a column's GUI; for a unit that a column's report holds, that column's GUI
  * with the unit selected; otherwise the structure's own screen ({@link #datasheet} for a unit with no fluid screen).
  * An open GUI is a session of the engine's presentation: it gets the stored view at once, a press of "Validate
@@ -54,7 +54,6 @@ import java.util.*;
  * {@link WatchPayload}, which replays their stored views, and their changes come with the buckets ({@link WatchedPayload}).
  */
 public final class AssemblyNetwork {
-    public static final String PROTOCOL = "assembly-6";
     /** Bounds a view's read checks: slots, ports, members, characters of a slot's name or detail. */
     static final int MAX_SLOTS = 256, MAX_PORTS = 1024, MAX_MEMBERS = 256, MAX_TEXT = 1024;
 
@@ -361,7 +360,7 @@ public final class AssemblyNetwork {
     }
 
     public static void register(RegisterPayloadHandlersEvent event) {
-        var registrar = event.registrar(PROTOCOL).executesOn(HandlerThread.MAIN);
+        var registrar = event.registrar(NetworkProtocol.VERSION).executesOn(HandlerThread.MAIN);
         registrar.playToServer(ValidatePayload.TYPE, ValidatePayload.STREAM_CODEC, AssemblyNetwork::validate);
         registrar.playToServer(OpenUnitPayload.TYPE, OpenUnitPayload.STREAM_CODEC, AssemblyNetwork::openUnit);
         registrar.playToServer(OperationPayload.TYPE, OperationPayload.STREAM_CODEC, AssemblyNetwork::operate);
