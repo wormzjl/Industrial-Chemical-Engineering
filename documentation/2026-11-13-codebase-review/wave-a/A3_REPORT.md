@@ -2,14 +2,14 @@
 
 Branch `claude/review-wave-a3-machines-294ed8`, from `ba35da565`. Brief: `WAVE_A_BRIEFS.md`, section A3. Review: `MACHINES_REVIEW.md`.
 
-Status: code and tests written and committed; **tests not run yet** (the lane is held for the bench thread).
+Status: done. The compile passed and the three named classes pass: 21 tests, 0 failures, after one fix to a test (below).
 
 | Finding | Commit | Files | Test (new case) | Result |
 |---|---|---|---|---|
-| M-04 | `be8cf5658` | `runtime/fluid/ShaftTrains.java` (`failures`) | `PumpHealthTest.anUnpoweredInlinePumpStaysClosedAndOpensWhenPowered` | pending |
-| M-02 | `fb0588863` | `world/item/RepairKitItem.java` (`pumpAt`) | `PumpHealthTest.aFailedDryScrewIsRepairedAndACompressorIsNotAPump` | pending |
-| M-19 | `8f5856fe5` | `science/machine/Motor.java` | `MotorTest.twelvePolesReadTheEightPoleRow` | pending |
-| M-16, M-17 | `1f51fb914` | `runtime/fluid/ShaftTrains.java` (`view`, comments), `runtime/fluid/PumpHealth.java` (javadoc) | `ShaftCouplingTest.aFailedPumpsCasingShowsFailed` | pending |
+| M-04 | `be8cf5658` | `runtime/fluid/ShaftTrains.java` (`failures`) | `PumpHealthTest.anUnpoweredInlinePumpStaysClosedAndOpensWhenPowered` | pass |
+| M-02 | `fb0588863` | `world/item/RepairKitItem.java` (`pumpAt`) | `PumpHealthTest.aFailedDryScrewIsRepairedAndACompressorIsNotAPump` | pass |
+| M-19 | `8f5856fe5` | `science/machine/Motor.java` | `MotorTest.twelvePolesReadTheEightPoleRow` | pass |
+| M-16, M-17 | `1f51fb914` | `runtime/fluid/ShaftTrains.java` (`view`, comments), `runtime/fluid/PumpHealth.java` (javadoc) | `ShaftCouplingTest.aFailedPumpsCasingShowsFailed` | pass |
 
 ## What changed
 
@@ -28,13 +28,14 @@ Status: code and tests written and committed; **tests not run yet** (the lane is
 
 - None in the physics. A 12-pole motor now gets the 8-pole IE3 efficiency instead of throwing. A failed casing's row reads `FAILED` instead of its train's word.
 
-## Lane commands (after "lane free")
+## What ran (all in `test`; no gate group holds these classes)
 
-1. `./gradlew compileJava compileTestJava`
-2. `./gradlew test --tests com.wormzjl.icheme.runtime.fluid.PumpHealthTest --tests com.wormzjl.icheme.runtime.fluid.ShaftCouplingTest --tests com.wormzjl.icheme.science.machine.MotorTest --max-workers 4` (check first in `build.gradle` which task holds each class)
+1. `./gradlew compileJava compileTestJava --max-workers 4`: passed.
+2. `./gradlew test --tests ...PumpHealthTest --tests ...ShaftCouplingTest --tests ...MotorTest --max-workers 4`: ShaftCouplingTest 9/9, MotorTest 7/7, PumpHealthTest 4/5. The M-04 case failed the assertion `three dispatches seen`: it saw 2. The pump was closed at both dispatches, and then the island went to rest (the risk this report named). Fix `0a1f05d55` is in the test only: after each closed dispatch, the test wakes the island with `shaftsMoved`, as a store change does. The production code did not change.
+3. `./gradlew test --tests ...PumpHealthTest --max-workers 4`: 5/5.
 
 ## Open items, outside this lane
 
 - `MachineColumn.warns` (client) does not include `FAILED`, so the casing's page shows `FAILED` in the normal tone. It is a one-line follow-up in the client lane.
 - `FluidWorldAuthority` 2493 reads `health.status` for liquid movers only (the second half of M-02). That file belongs to A5.
-- Risk in the M-04 test: it needs three dispatches of the closed island within 2000 ticks. If the island certifies rest before that, the assertion `three dispatches seen` fails, and the fix is to the test, not to the code.
+- The M-04 test forces its later dispatches with wakes. Without a wake, the island of a closed in-line pump goes to rest after two slices.
