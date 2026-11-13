@@ -49,6 +49,11 @@ public final class V3BandedMatrix {
         Arrays.fill(values, 0.0);
     }
 
+    /** The storage itself, not a copy: entry (r, c) at {@code r (kl + ku + 1) + c - r + kl}; the library copies it in. */
+    double[] storage() {
+        return values;
+    }
+
     int firstStoredColumn(int row) {
         return Math.max(0, row - lowerBandwidth);
     }

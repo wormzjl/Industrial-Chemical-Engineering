@@ -17,14 +17,11 @@ final class V3PengRobinsonSession {
     private final V3PropertyPackage propertyPackage;
     private final PengRobinsonKernel kernel;
     private final V3ComponentBasis componentBasis;
-    /** {@link #constantClassicalInteractions}, formed once; null where the kernel is not a constant classical one. */
-    private final double[][] constantMatrix;
 
     private V3PengRobinsonSession(V3PropertyPackage propertyPackage) {
         this.propertyPackage = Objects.requireNonNull(propertyPackage, "propertyPackage");
         this.kernel = kernelFor(propertyPackage);
         this.componentBasis = propertyPackage.componentBasis();
-        this.constantMatrix = constantMatrix(propertyPackage);
     }
 
     /**
@@ -95,31 +92,6 @@ final class V3PengRobinsonSession {
 
     double[][] binaryInteractions() {
         return propertyPackage.binaryInteractions();
-    }
-
-    /**
-     * The constant classical matrix the kernel evaluates, or null where the kernel is not one: an activity pair, a
-     * {@code k_ij(T)}, or a Mathias-Copeman alpha. The native outer pass computes PR78 on a constant matrix only.
-     */
-    double[][] constantClassicalInteractions() {
-        return constantMatrix;
-    }
-
-    private static double[][] constantMatrix(V3PropertyPackage propertyPackage) {
-        var derived = propertyPackage.derivedPairs();
-        if (derived == null) return propertyPackage.binaryInteractions();
-        var excess = derived.excess();
-        if (excess.nrtlPairCount() > 0) return null;
-        for (double[] alpha : derived.mathiasCopeman()) if (alpha != null) return null;
-        int n = excess.componentCount();
-        double[][] matrix = new double[n][n];
-        for (int i = 0; i < n; i++) {
-            for (int j = i + 1; j < n; j++) {
-                if (excess.interactionPair(i, j) >= 0 || excess.interactionSlope(i, j) != 0.0) return null;
-                matrix[i][j] = matrix[j][i] = excess.interaction(i, j);
-            }
-        }
-        return matrix;
     }
 
     private V3PropertyComponent requireComponent(int publicComponent) {
