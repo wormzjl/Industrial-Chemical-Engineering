@@ -37,8 +37,8 @@ public final class NativeColumnSolver {
     /** The layout and signature generation; {@code icheme-jni/src/layout.rs} {@code ABI} must equal it. */
     public static final int ABI = 1;
     /** The equations the library must compute; compared with the library's own token at load. */
-    static final String FORMULATION = V3ColumnCalculator.FORMULATION_REVISION + ";"
-            + V3ColumnCalculator.WET_ASSUMPTIONS_REVISION + ";" + V3ColumnCalculator.HEAT_ASSUMPTIONS_REVISION;
+    static final String FORMULATION = V3ColumnLabels.FORMULATION_REVISION + ";"
+            + V3ColumnLabels.WET_ASSUMPTIONS_REVISION + ";" + V3ColumnLabels.HEAT_ASSUMPTIONS_REVISION;
     static final String CEILING_PROPERTY = "icheme.native.column";
     /** {@code nativeSelfTest}'s output length, and the slots Java checks: 128 to 255 are reserved for stage (b). */
     static final int SELF_TEST_SLOTS = 256, SELF_TEST_CHECKED = 128;

@@ -4,7 +4,7 @@ import com.wormzjl.icheme.science.column.v3.linalg.V3BandedPivotedSolver;
 
 /**
  * Why one Newton attempt stopped without converging ({@link V3SimultaneousColumnSolver.Attempt.Failure}). The
- * calculator maps it onto the published {@link V3SolverFailureCode} ({@code V3ColumnCalculator.failureCode}); the
+ * calculator maps it onto the published {@link V3SolverFailureCode} ({@code V3SolveReport.failureCode}); the
  * text is what progress observers and test prints read, the same characters the attempt carried as a string.
  */
 enum V3AttemptCode {

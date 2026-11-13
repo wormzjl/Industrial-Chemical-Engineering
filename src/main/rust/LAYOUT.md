@@ -26,7 +26,7 @@ Returns the ABI number.
 
 ## `String nativeFormulation()`
 
-The bytes of `V3ColumnCalculator.FORMULATION_REVISION + ";" + WET_ASSUMPTIONS_REVISION + ";" +
+The bytes of `V3ColumnLabels.FORMULATION_REVISION + ";" + WET_ASSUMPTIONS_REVISION + ";" +
 HEAT_ASSUMPTIONS_REVISION`, as compiled into the library (today
 `v3-dry-mesh-r24-flash-trace-phase-r1-derived-pairs-r1;v3-wet-assumptions-r3;v3-heat-assumptions-r1`). Java
 builds the same string and compares with `equals`; null (the JVM could not make the string) is a mismatch.

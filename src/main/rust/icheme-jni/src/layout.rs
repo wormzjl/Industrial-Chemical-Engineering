@@ -6,7 +6,7 @@ use icheme_math::banded::{self, BandError, BandedMatrix, Outcome, Workspace};
 /// Rises with any change of a block layout or a signature; `NativeColumnSolver.ABI` must equal it.
 pub const ABI: i32 = 1;
 
-/// The Java formulation this library computes: `V3ColumnCalculator.FORMULATION_REVISION`, `WET_ASSUMPTIONS_REVISION`
+/// The Java formulation this library computes: `V3ColumnLabels.FORMULATION_REVISION`, `WET_ASSUMPTIONS_REVISION`
 /// and `HEAT_ASSUMPTIONS_REVISION`, joined by `;`. Written in the source, not passed in at build time, so a library
 /// whose equations lag the Java ones is refused; Java compares the bytes. The test `formulation_is_the_java_token`
 /// reads the Java constants and fails when they move without this line.
@@ -194,8 +194,8 @@ mod tests {
     #[test]
     fn formulation_is_the_java_token() {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../java/com/wormzjl/icheme/science/column/v3/V3ColumnCalculator.java");
-        let source = std::fs::read_to_string(&path).expect("V3ColumnCalculator.java is readable");
+            .join("../../java/com/wormzjl/icheme/science/column/v3/V3ColumnLabels.java");
+        let source = std::fs::read_to_string(&path).expect("V3ColumnLabels.java is readable");
         let constant = |name: &str| {
             let start = source.find(&format!("String {name} = \"")).unwrap_or_else(|| panic!("{name} not found"));
             let rest = &source[start + name.len() + 11..];

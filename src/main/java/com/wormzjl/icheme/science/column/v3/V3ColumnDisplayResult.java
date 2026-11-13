@@ -52,7 +52,7 @@ public record V3ColumnDisplayResult(
         return new V3ColumnDisplayResult(
                 result.inputDigest().hexadecimalSha256(),
                 result.formulationRevision(),
-                V3ColumnCalculator.assumptionsRevision(result.problem().input()),
+                V3ColumnLabels.assumptionsRevision(result.problem().input()),
                 result.datasetRevision(),
                 success.diagnostics().newtonIterations(),
                 success.diagnostics().maximumScaledResidual(),

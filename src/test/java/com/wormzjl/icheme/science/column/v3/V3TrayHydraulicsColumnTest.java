@@ -281,7 +281,7 @@ class V3TrayHydraulicsColumnTest {
     private static String digest(V3ColumnInput input) {
         return V3InputDigest.of(V3ColumnProblemResolver.resolve(input, V3CondenserPhaseBranch.TWO_PHASE),
                 V3ColumnCalculator.FORMULATION_REVISION, "test-dataset",
-                V3ColumnCalculator.assumptionsRevision(input)).hexadecimalSha256();
+                V3ColumnLabels.assumptionsRevision(input)).hexadecimalSha256();
     }
 
     /** A twelve-tray feature-free literature column; cheap enough to solve three times in one test class. */

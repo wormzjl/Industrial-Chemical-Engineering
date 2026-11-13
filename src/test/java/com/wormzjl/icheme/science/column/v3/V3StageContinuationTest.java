@@ -331,9 +331,9 @@ class V3StageContinuationTest {
     /** A stopped stall is a nonconvergence, like every other bounded Newton stop. */
     @Test
     void aStoppedStallIsPublishedAsANonconvergence() {
-        assertEquals(V3SolverFailureCode.NONCONVERGENCE, V3ColumnCalculator.failureCode(V3AttemptCode.STALLED));
-        assertEquals(V3SolverFailureCode.NONCONVERGENCE, V3ColumnCalculator.failureCode(V3AttemptCode.MAX_ITERATIONS));
-        assertEquals(V3SolverFailureCode.LINEAR_SOLVE_FAILURE, V3ColumnCalculator.failureCode(V3AttemptCode.LINEAR_SINGULAR));
+        assertEquals(V3SolverFailureCode.NONCONVERGENCE, V3SolveReport.failureCode(V3AttemptCode.STALLED));
+        assertEquals(V3SolverFailureCode.NONCONVERGENCE, V3SolveReport.failureCode(V3AttemptCode.MAX_ITERATIONS));
+        assertEquals(V3SolverFailureCode.LINEAR_SOLVE_FAILURE, V3SolveReport.failureCode(V3AttemptCode.LINEAR_SINGULAR));
     }
 
     /**

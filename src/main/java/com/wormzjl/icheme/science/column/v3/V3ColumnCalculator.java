@@ -1,10 +1,8 @@
 package com.wormzjl.icheme.science.column.v3;
 
 import com.wormzjl.icheme.science.column.v3.V3SimultaneousColumnSolver.NewtonTrace;
-import com.wormzjl.icheme.science.math.DeterministicMath;
 
 import com.wormzjl.icheme.science.column.v3.thermo.V3FlashResult;
-import com.wormzjl.icheme.science.column.v3.thermo.V3FlashTruncationEvidence;
 import com.wormzjl.icheme.science.column.v3.thermo.V3FeedPhase;
 import com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo;
 import com.wormzjl.icheme.science.column.v3.thermo.V3ThermoException;
@@ -18,6 +16,18 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.CancellationException;
 
+import static com.wormzjl.icheme.science.column.v3.V3SolveReport.boundedEvent;
+import static com.wormzjl.icheme.science.column.v3.V3SolveReport.boundedSolvePath;
+import static com.wormzjl.icheme.science.column.v3.V3SolveReport.boundedSummary;
+import static com.wormzjl.icheme.science.column.v3.V3SolveReport.failedAudit;
+import static com.wormzjl.icheme.science.column.v3.V3SolveReport.failureCode;
+import static com.wormzjl.icheme.science.column.v3.V3SolveReport.flashTraceEvent;
+import static com.wormzjl.icheme.science.column.v3.V3SolveReport.mergedEvents;
+import static com.wormzjl.icheme.science.column.v3.V3SolveReport.sideDrawDiagnostic;
+import static com.wormzjl.icheme.science.column.v3.V3SolveReport.stageTraceEvent;
+import static com.wormzjl.icheme.science.column.v3.V3SolveReport.terminalFailure;
+import static com.wormzjl.icheme.science.column.v3.V3SolveReport.waterDiagnostic;
+
 /**
  * Stateless dry-V3 calculation façade for a fully immutable input snapshot.
  *
@@ -26,30 +36,14 @@ import java.util.concurrent.CancellationException;
  * {@link V3ColumnOutcome.Success} can be returned.</p>
  */
 public final class V3ColumnCalculator {
-    /** Cutoff-enabled publication identity, including physical phase admission and dry upper sections. */
-    public static final String FORMULATION_REVISION = "v3-dry-mesh-r24-flash-trace-phase-r1-derived-pairs-r1";
-    /**
-     * Every label's derived-pairs suffix (batch 2026-11-11-aqueous-solvents, W5 D1): the kernel takes the network's
-     * pairs ({@code DerivedPairs}) instead of the package's authored matrix, so an accepted state with a gas beside a
-     * cut moves. The learned starts are matched on the label without it: they are seeds, and their physics binding
-     * reads the authored pairs ({@code TrainedPhysics.matches}).
-     */
-    static final String DERIVED_PAIRS_SUFFIX = "-derived-pairs-r1";
-    private static final String LEGACY_FORMULATION_REVISION = "v3-dry-mesh-r23";
-    public static final String ASSUMPTIONS_REVISION = "v3-dry-assumptions-r4";
-    /**
-     * r2: free water is allowed on a tray, is immiscible with the hydrocarbon liquid, and is not side-drawn.
-     * r3 (E31): under a drum that decants free water, tray one's free water is carried over to the drum as entrained
-     * liquid instead of falling to tray two; with a column diameter the carried water is read against an
-     * entrainment limit of flood fraction times vapour mass.
-     */
-    public static final String WET_ASSUMPTIONS_REVISION = "v3-wet-assumptions-r3";
-    /**
-     * Prescribed stage heat: a signed duty with positive adding heat, no circulating pumparound stream,
-     * no return-temperature specification, and the {@link V3PumparoundSpec.Split} tray placement rule.
-     */
-    public static final String HEAT_ASSUMPTIONS_REVISION = "v3-heat-assumptions-r1";
-    private static final String HEAT_FORMULATION_SUFFIX = "-stage-heat";
+    /** Alias of {@link V3ColumnLabels#FORMULATION_REVISION}, kept for its readers (tests). */
+    public static final String FORMULATION_REVISION = V3ColumnLabels.FORMULATION_REVISION;
+    /** Alias of {@link V3ColumnLabels#ASSUMPTIONS_REVISION}, kept for its readers (tests). */
+    public static final String ASSUMPTIONS_REVISION = V3ColumnLabels.ASSUMPTIONS_REVISION;
+    /** Alias of {@link V3ColumnLabels#WET_ASSUMPTIONS_REVISION}, kept for its readers (tests). */
+    public static final String WET_ASSUMPTIONS_REVISION = V3ColumnLabels.WET_ASSUMPTIONS_REVISION;
+    /** Alias of {@link V3ColumnLabels#HEAT_ASSUMPTIONS_REVISION}, kept for its readers (tests). */
+    public static final String HEAT_ASSUMPTIONS_REVISION = V3ColumnLabels.HEAT_ASSUMPTIONS_REVISION;
     private static final int HEAT_RAMP_STEPS = 4;
     /** Side-draw rungs once a stage heat is authored; a cooled zone needs finer withdrawal increments. */
     private static final int HEAT_BEARING_DRAW_RAMP_STEPS = 8;
@@ -262,9 +256,9 @@ public final class V3ColumnCalculator {
                     "initialization/admission", List.of());
         }
         // Request-only, so it must be answered the same way on both routes and before any candidate is built.
-        V3ColumnOutcome.Failure unsuppliedDraws = liquidSupplyScreen(input, liquidSupplyScreenRatio);
+        V3ColumnOutcome.Failure unsuppliedDraws = V3Admission.liquidSupplyScreen(input, liquidSupplyScreenRatio);
         if (unsuppliedDraws != null) return unsuppliedDraws;
-        V3ColumnOutcome.Failure coolingFailure = staticCoolingAdmission(input);
+        V3ColumnOutcome.Failure coolingFailure = V3Admission.staticCoolingAdmission(input);
         if (coolingFailure != null) return coolingFailure;
         // The learned route spends at most options.budgetPolls() control polls (owner decision D2, batch
         // 2026-11-05-neural-retrain): a counter, so the same request takes the same route on any machine.
@@ -423,9 +417,9 @@ public final class V3ColumnCalculator {
         V3SolvePass published = publication.pass();
         V3ColumnProblem selected = published.prepared().problem();
         V3DryMeshState corrected = published.attempt().state();
-        String revision = formulationRevision(input, policy.requestedCutoff(), policy.closureTolerance());
+        String revision = V3ColumnLabels.formulationRevision(input, policy.requestedCutoff(), policy.closureTolerance());
         V3ColumnResult result = V3ColumnResult.accepted(selected,
-                V3InputDigest.of(selected, revision, thermo.datasetRevision(), assumptionsRevision(input),
+                V3InputDigest.of(selected, revision, thermo.datasetRevision(), V3ColumnLabels.assumptionsRevision(input),
                         policy.requestedCutoff(), policy.closureTolerance()),
                 publication.audit(), published.attempt().evidence().convergenceEvidence(), corrected, thermo, revision,
                 V3ColumnDutyLedger.fromAccepted(selected, corrected, thermo, published.feedMolarEnthalpyJoulesPerMol()),
@@ -665,7 +659,7 @@ public final class V3ColumnCalculator {
      * <p>It is written only from the request's own thread, only on the learned path, and it is read only
      * after the pass has ended. No step, support, budget, tolerance or acceptance decision consults it.</p>
      */
-    private static final class NeuralProgress implements NewtonTrace {
+    static final class NeuralProgress implements NewtonTrace {
         private final NewtonTrace observer;
         private int attempts;
         private int iterations;
@@ -842,7 +836,7 @@ public final class V3ColumnCalculator {
             V3SolveStrategy strategy, V3NeuralSeed warmStart) {
         Objects.requireNonNull(input, "input");
         Objects.requireNonNull(control, "control");
-        RequestAdmission admission = requestOnlyAdmission(input, liquidSupplyScreenRatio);
+        V3Admission.RequestAdmission admission = V3Admission.requestOnlyAdmission(input, liquidSupplyScreenRatio);
         if (admission.typed()) return admission.failure();
         CondenserAttempts condenserAttempts = new CondenserAttempts();
         V3CondenserPhaseBranch preferred = warmStart != null
@@ -863,114 +857,9 @@ public final class V3ColumnCalculator {
         return alternative instanceof V3ColumnOutcome.Success ? alternative : outcome;
     }
 
-    /**
-     * The verdict of the request-only admission, naming the gate that typed the request.
-     *
-     * <p>{@code gate} is {@code null} exactly when {@code failure} is, i.e. when the request is admitted.</p>
-     */
-    record RequestAdmission(String gate, V3ColumnOutcome.Failure failure) {
-        /** The gate names published by {@link #requestOnlyAdmission}, in the order the solver applies them. */
-        static final String TOTAL_DRAW_AT_LEAST_TOTAL_FEED = "totalDrawAtLeastTotalFeed";
-        static final String LIQUID_SUPPLY_SCREEN = "liquidSupplyScreen";
-        static final String STATIC_COOLING_ADMISSION = "staticCoolingAdmission";
-
-        static final RequestAdmission ADMITTED = new RequestAdmission(null, null);
-
-        /** Whether the request is typed {@code INFEASIBLE_SPECIFICATION} from the specification alone. */
-        boolean typed() {
-            return failure != null;
-        }
-    }
-
-    /**
-     * Every gate that types a request {@code INFEASIBLE_SPECIFICATION} from the specification alone.
-     *
-     * <p>This is the whole of the solver's request-only admission and the only place it is evaluated: the
-     * ordinary {@code calculate} path calls exactly this method, so an offline population screen that calls it
-     * reproduces production's verdict by construction rather than by a second implementation that can drift.
-     * The gates run in the order a request meets them:</p>
-     *
-     * <ol>
-     *   <li>{@code totalDraw >= totalFeed}, the column's overall material balance;</li>
-     *   <li>{@link V3LiquidSupplyScreen}, the same balance per tray, at the authored calibrated ratio;</li>
-     *   <li>{@link #staticCoolingAdmission}, the necessary bound on authored pumparound cooling.</li>
-     * </ol>
-     *
-     * <p>No solve, continuation or Newton step is performed. The first two gates read nothing but the request;
-     * the third evaluates one feed flash, and answers {@code ADMITTED} when the property package is
-     * unavailable, so a caller never gets a cooling verdict it could not compute. The state-dependent heat
-     * bounds are deliberately absent: they are measured on a continuation state and publish
-     * {@code NONCONVERGENCE}. See {@link PathDependentHeatBound}.</p>
-     *
-     * @throws IllegalArgumentException if the screen ratio is nonfinite or outside [0, 1]
-     */
-    static RequestAdmission requestOnlyAdmission(V3ColumnInput input, double liquidSupplyScreenRatio) {
-        Objects.requireNonNull(input, "input");
-        V3LiquidSupplyScreen.requireRatio(liquidSupplyScreenRatio);
-        double totalDraw = input.sideDraws().stream().mapToDouble(V3SideDrawSpec::molarFlowMolPerSecond).sum();
-        double totalFeed = java.util.Arrays.stream(input.feedComponentMolarFlowsMolPerSecond()).sum();
-        if (totalDraw >= totalFeed) {
-            return new RequestAdmission(RequestAdmission.TOTAL_DRAW_AT_LEAST_TOTAL_FEED,
-                    terminalFailure(V3SolverFailureCode.INFEASIBLE_SPECIFICATION,
-                            "V3 total side draw rate must be less than the feed rate",
-                            "input/draws-" + input.sideDraws().size(), List.of()));
-        }
-        // Generalises the gate above from the column's total balance to each tray's own liquid supply, on the
-        // same request-only terms and still before any flash or property evaluation.
-        V3ColumnOutcome.Failure unsuppliedDraws = liquidSupplyScreen(input, liquidSupplyScreenRatio);
-        if (unsuppliedDraws != null) return new RequestAdmission(RequestAdmission.LIQUID_SUPPLY_SCREEN, unsuppliedDraws);
-        V3ColumnOutcome.Failure inadmissibleCooling = staticCoolingAdmission(input);
-        if (inadmissibleCooling != null) {
-            return new RequestAdmission(RequestAdmission.STATIC_COOLING_ADMISSION, inadmissibleCooling);
-        }
-        return RequestAdmission.ADMITTED;
-    }
-
-    /**
-     * Request-only liquid-supply screen, evaluated before any flash or property evaluation.
-     *
-     * <p>Returns {@code null} when the request is admitted. A published failure reports zero Newton
-     * iterations on the admission path, because none were spent: the statistic is a few dozen floating-point
-     * operations on the authored draws, feed, steam, reflux and pumparound duties. See
-     * {@link V3LiquidSupplyScreen} for the two tiers and for what "calibrated" does and does not claim.</p>
-     */
-    private static V3ColumnOutcome.Failure liquidSupplyScreen(V3ColumnInput input, double liquidSupplyScreenRatio) {
-        V3LiquidSupplyScreen.Verdict verdict = V3LiquidSupplyScreen.evaluate(input);
-        // The measured wet-tray startup envelope does not cover the dry upper section of a zero-reflux
-        // column. Its exact liquid-supply bound still applies; the newly supported topology is solved.
-        if (specValue(input, V3ColumnSpecification.OrganicRefluxRatio.class) == 0.0) liquidSupplyScreenRatio = 0.0;
-        if (!verdict.fires(liquidSupplyScreenRatio)) return null;
-        return terminalFailure(V3SolverFailureCode.INFEASIBLE_SPECIFICATION,
-                V3LiquidSupplyScreen.detail(verdict, liquidSupplyScreenRatio),
-                "input/liquid-supply-" + input.sideDraws().size(), List.of());
-    }
-
-    /**
-     * Necessary static bound on the authored cooling, evaluated with one feed flash before any solve.
-     *
-     * <p>Returns {@code null} when the input is admissible or when the property package is unavailable; in the
-     * latter case the ordinary admission path publishes the typed property failure instead.</p>
-     *
-     * <p>The bound is on the <em>net</em> authored heat: an authored stage heater adds enthalpy the coolers
-     * below it can remove again, so its duty is credited to the heat-free column's budget. Without that
-     * credit a cooler paired with an equal heater — no net stage heat anywhere — is rejected here.</p>
-     */
-    private static V3ColumnOutcome.Failure staticCoolingAdmission(V3ColumnInput input) {
-        if (input.pumparounds().isEmpty()) return null;
-        double cooling = -V3PumparoundSpec.totalCoolingWatts(input);
-        if (!(cooling > 0.0)) return null;
-        double heating = V3HeatFeasibility.heatingCreditWatts(input);
-        double available;
-        try {
-            available = V3HeatFeasibility.availableCoolingWatts(
-                    input, V3PengRobinsonThermo.fromRegisteredPackage(input.packageId()));
-        } catch (V3ThermoException | IllegalArgumentException unavailableProperties) {
-            return null;
-        }
-        if (!Double.isFinite(available) || cooling <= available + heating) return null;
-        return terminalFailure(V3SolverFailureCode.INFEASIBLE_SPECIFICATION,
-                V3HeatFeasibility.staticAdmissionDetail(cooling, available, heating),
-                "input/heat-" + input.pumparounds().size(), List.of());
+    /** Alias of {@link V3Admission#requestOnlyAdmission} for the offline population screens in {@code tools/}. */
+    static V3Admission.RequestAdmission requestOnlyAdmission(V3ColumnInput input, double liquidSupplyScreenRatio) {
+        return V3Admission.requestOnlyAdmission(input, liquidSupplyScreenRatio);
     }
 
     /** A seed flash only orders the branch attempts; the solved liquid outlet is independently audited. */
@@ -1268,7 +1157,7 @@ public final class V3ColumnCalculator {
         return true;
     }
 
-    private static double specValue(V3ColumnInput input,
+    static double specValue(V3ColumnInput input,
             Class<? extends V3ColumnSpecification> type) {
         return input.specifications().stream().filter(type::isInstance).findFirst()
                 .map(spec -> spec instanceof V3ColumnSpecification.CondenserOutletTemperature t ? t.kelvin()
@@ -2573,144 +2462,15 @@ public final class V3ColumnCalculator {
                 mergedEvents(events, pass.solverEvents()), pass.prepared());
     }
 
-    private static String boundedEvent(String event) {
-        return event.length() <= 256 ? event : event.substring(0, 256);
-    }
-
     private static String rampEvidence(V3SolvePass pass) {
         V3SimultaneousColumnSolver.Evidence evidence = pass.attempt().evidence();
         return evidence.termination() + ", iterations=" + evidence.iterations()
                 + ", residual=" + evidence.maximumScaledResidual();
     }
 
-    private static String legacyFormulationRevision(double requestedCutoff) {
-        V3TruncationSupport.requireCutoff(requestedCutoff);
-        return requestedCutoff == 0.0 ? LEGACY_FORMULATION_REVISION : "v3-dry-mesh-r24-flash-trace";
-    }
-
-    /**
-     * Formulation label of one authored input.
-     *
-     * <p>r9 to r15 replaced r2 to r8 across every family: component material balances are scaled by their own
-     * local throughput instead of by the component's feed flow, and every stage point whose flow is below
-     * {@link V3TruncationSupport#TRACE_FLOOR_FRACTION} of that component's feed is removed from the unknowns
-     * and equations. r16 to r22 made that presence per phase. r23 to r29 retire the forced product-path
-     * band: the trays between the feed tray and a side draw are decided by the flow like any other tray, and
-     * a draw tray keeps the liquid it receives from above. Accepted trace profiles differ at each step, so
-     * the digest must differ.</p>
-     */
-    static String formulationRevision(V3ColumnInput input, double requestedCutoff) {
-        return formulationRevision(input, requestedCutoff, V3ConvergenceEvidence.MAXIMUM_LOG_FLOW_CHANGE);
-    }
-
-    /**
-     * Formulation label of one authored input solved at {@code closureTolerance}.
-     *
-     * <p>A closure above the frozen default appends {@code -closure<mantissa>e<exponent>} (for example
-     * {@code -closure1e-3}). Accepted states differ between closures — the whole point of the knob is that a
-     * looser one accepts a state the default rejects — so the label, and therefore the digest, must differ.
-     * The physical phase revision precedes this optional closure suffix.</p>
-     */
+    /** Alias of {@link V3ColumnLabels#formulationRevision(V3ColumnInput, double, double)} for the learned-start tools in {@code tools/}. */
     static String formulationRevision(V3ColumnInput input, double requestedCutoff, double closureTolerance) {
-        return formulationRevisionWithoutClosure(input, requestedCutoff) + "-phase-r1" + DERIVED_PAIRS_SUFFIX
-                + closureSuffix(closureTolerance);
-    }
-
-    /** The trained wet-stage seed equations are unchanged; dry-stage layouts need a newly qualified model. */
-    static String initializationFormulationRevision(V3ColumnInput input) {
-        return specValue(input, V3ColumnSpecification.OrganicRefluxRatio.class) > 0.0
-                ? formulationRevisionWithoutClosure(input, 0.0) : seedFormulationRevision(input);
-    }
-
-    /** The label a learned start was trained on: {@link #formulationRevision} at no cutoff, without the derived-pairs suffix. */
-    static String seedFormulationRevision(V3ColumnInput input) {
-        return formulationRevisionWithoutClosure(input, 0.0) + "-phase-r1";
-    }
-
-    /** Canonical {@code -closureMeN} suffix, or the empty string at the frozen default closure. */
-    static String closureSuffix(double closureTolerance) {
-        V3ConvergenceEvidence.requireClosure(closureTolerance);
-        if (closureTolerance <= V3ConvergenceEvidence.MAXIMUM_LOG_FLOW_CHANGE) return "";
-        int exponent = (int) Math.floor(DeterministicMath.log10(closureTolerance));
-        double mantissa = closureTolerance / DeterministicMath.pow(10.0, exponent);
-        String digits = new java.math.BigDecimal(mantissa)
-                .round(new java.math.MathContext(6)).stripTrailingZeros().toPlainString();
-        return "-closure" + digits + "e" + exponent;
-    }
-
-    private static String formulationRevisionWithoutClosure(V3ColumnInput input, double requestedCutoff) {
-        V3TruncationSupport.requireCutoff(requestedCutoff);
-        boolean heat = !input.pumparounds().isEmpty();
-        String trace = requestedCutoff > 0.0 ? "-flash-trace" : "";
-        if (!input.steamFeeds().isEmpty()) {
-            // r30/r31: a tray below the water dew point carries a free-water phase. Water vapour is a
-            // function of the state rather than a parameter, wet trays gain a free-water unknown and a
-            // saturation row, and the tray energy rows carry the aqueous liquid in and out.
-            // r32/r33 (E30 of batch 2026-11-04-open-thermo-data): the water is the fluid network's, the steam its
-            // second-virial gas at the steam's partial pressure and the liquid IF97 Region 1 at the tray's
-            // pressure, so accepted wet states move by the steam's residual and the liquid's enthalpy difference.
-            // r34/r35 (E31 of the same batch): condenser carry-over. Under a drum that decants free water, tray
-            // one's free water leaves upward to the drum as entrained liquid, its vapour carries the steam less
-            // that water, and its saturation row has a lever, so a top tray below its water dew point is solved
-            // wet instead of published dry with the WATER_DEW_POINT warning; the condenser duty falls by the
-            // carried water's latent heat.
-            return (heat ? "v3-wet-mesh-r35-steam" : "v3-wet-mesh-r34-steam")
-                    + (!input.sideDraws().isEmpty() ? "-side-draws" : "") + trace
-                    + (heat ? HEAT_FORMULATION_SUFFIX : "");
-        }
-        if (!input.sideDraws().isEmpty()) {
-            return (heat ? "v3-dry-mesh-r26-side-draws" : "v3-dry-mesh-r25-side-draws") + trace
-                    + (heat ? HEAT_FORMULATION_SUFFIX : "");
-        }
-        if (!heat) return legacyFormulationRevision(requestedCutoff);
-        return "v3-dry-mesh-r27" + trace + HEAT_FORMULATION_SUFFIX;
-    }
-
-    static String assumptionsRevision(V3ColumnInput input) {
-        String base = input.steamFeeds().isEmpty() ? ASSUMPTIONS_REVISION : WET_ASSUMPTIONS_REVISION;
-        return input.pumparounds().isEmpty() ? base : base + "+" + HEAT_ASSUMPTIONS_REVISION;
-    }
-
-    private static String sideDrawDiagnostic(
-            V3ColumnProblem problem, V3DryMeshState state, int requestedStageCount) {
-        V3SideDrawSpec worst = null;
-        double worstLiquid = 0.0;
-        double largestFraction = -1.0;
-        for (V3SideDrawSpec draw : problem.input().sideDraws()) {
-            double liquid = V3SideDrawSpec.liquidTotal(state, draw.trayNumber());
-            double fraction = liquid > 0.0 && Double.isFinite(liquid)
-                    ? draw.molarFlowMolPerSecond() / liquid : Double.MAX_VALUE;
-            if (fraction > largestFraction) {
-                worst = draw;
-                worstLiquid = liquid;
-                largestFraction = fraction;
-            }
-        }
-        if (worst == null) return "";
-        String geometry = problem.topology().trayCount() == requestedStageCount
-                ? "authored tray " + (worst.trayNumber() + 1)
-                : "tray " + (worst.trayNumber() + 1) + " at the " + (problem.topology().trayCount() + 2)
-                        + "-tray continuation grid (requested " + (requestedStageCount + 2) + " trays)";
-        return String.format(Locale.ROOT,
-                "; side draw on %s requests %.6g kmol/h; final internal liquid %.6g kmol/h (withdrawal %.5g)",
-                geometry, worst.molarFlowMolPerSecond() * 3.6, worstLiquid * 3.6, largestFraction);
-    }
-
-    private static String waterDiagnostic(V3ColumnProblem problem, V3DryMeshState state) {
-        if (!problem.hasSteamFeeds()) return "";
-        double maximumRatio = 0.0;
-        for (int node = 1; node <= problem.topology().reboilerNode(); node++) {
-            double water = problem.waterVaporFlow(state, node);
-            double temperature = state.temperatureKelvin(node);
-            if (water == 0.0 || temperature >= 640.0 || temperature < V3WaterProperties.triplePoint()) continue;
-            double hydrocarbon = 0.0;
-            for (int component = 0; component < state.componentCount(); component++) hydrocarbon += state.vaporFlow(node, component);
-            maximumRatio = Math.max(maximumRatio, problem.nodePressurePascal(node) * water / (hydrocarbon + water)
-                    / V3WaterProperties.saturationPressurePascal(temperature));
-        }
-        // A wet tray sits exactly on the saturation line, so this ratio reads one there by construction.
-        return String.format(Locale.ROOT, "; water dew-point saturation ratio %.5g (wet trays: %d)",
-                maximumRatio, problem.wetTraySet().wetTrayCount());
+        return V3ColumnLabels.formulationRevision(input, requestedCutoff, closureTolerance);
     }
 
     private static V3SolvePass withPriorSupportNotes(V3SolvePass previous, V3SolvePass next) {
@@ -3044,36 +2804,6 @@ public final class V3ColumnCalculator {
         if (implied < V3TruncationSupport.FLOOR_REINSERTION_FACTOR * floor) return;
         if (liquidAbove) vapor[node][component] = Math.max(vapor[node][component], implied);
         else liquid[node][component] = Math.max(liquid[node][component], implied);
-    }
-
-    private static String stageTraceEvent(V3TruncationSupport support, V3DryMeshState state, V3ColumnProblem problem) {
-        String defect;
-        try {
-            defect = String.format(Locale.ROOT, "%.6g", support.massDefectMolPerSecond(state)
-                    / problem.activeComponentBasis().totalFeedFlowMolPerSecond());
-        } catch (IllegalArgumentException unavailable) {
-            defect = "unavailable";
-        }
-        String event = "stage-trace cutoff=" + support.cutoffMoleFraction() + "; truncated="
-                + support.truncatedPointCount() + "/" + support.totalPointCount() + "; one-phase="
-                + support.onePhasePointCount() + "; closure-pruned="
-                + support.closurePrunedCount() + "; defect/feed=" + defect
-                + (support.note().isEmpty() ? "" : "; " + support.note());
-        return event.length() <= 256 ? event : event.substring(0, 256);
-    }
-
-    private static String flashTraceEvent(V3FlashResult flash) {
-        V3FlashTruncationEvidence evidence = flash.truncationEvidence();
-        String event = String.format(Locale.ROOT,
-                "flash-trace cutoff=%.6g; status=%s; omitted=%dL/%dV; it=%d/%d",
-                evidence.cutoffMoleFraction(), evidence.status(), evidence.omittedLiquidComponents(),
-                evidence.omittedVaporComponents(), evidence.referenceIterations(), evidence.reducedIterations());
-        event += evidence.errorsEvaluated() ? String.format(Locale.ROOT,
-                "; alloc=%.3g; beta=%.3g; x/y=%.3g; mass=%.3g; dH=%.3g J/mol",
-                evidence.allocationError(), evidence.betaError(), evidence.maxPhaseCompositionError(),
-                evidence.maxMaterialClosureError(), evidence.enthalpyErrorJoulesPerMol()) : "; errors=not-evaluated";
-        event += "; feed-H=reference";
-        return event.length() <= 256 ? event : event.substring(0, 256);
     }
 
     /** Immutable per-chain policy separates scientific request provenance from an untruncated retry. */
@@ -3412,75 +3142,6 @@ public final class V3ColumnCalculator {
                 boundedSolvePath(solvePath), events, audit, evidence.convergenceEvidence(), policy.closureTolerance());
     }
 
-    /**
-     * Fits a solve path into the diagnostics contract without losing where the solve started or ended.
-     *
-     * <p>A low-pressure request that also ramps draws, steam and stage heat writes a path longer than the
-     * diagnostics record accepts. The record's rejection is an {@link IllegalArgumentException}, which the branch
-     * boundary reports as {@code INVALID_INPUT}: a completed solve was discarded and its real outcome replaced by
-     * a claim about the request. The pressure ladder is the long part and carries the least, so it is reduced to
-     * its two ends first; anything still too long keeps its head and its tail.</p>
-     */
-    static String boundedSolvePath(String solvePath) {
-        int limit = V3SolverDiagnostics.MAX_SOLVE_PATH_LENGTH;
-        if (solvePath == null || solvePath.isBlank() || solvePath.length() <= limit) return solvePath;
-        String ladderPrefix = "cold/pressure-continuation/";
-        int ladderStart = solvePath.indexOf(ladderPrefix);
-        if (ladderStart >= 0) {
-            ladderStart += ladderPrefix.length();
-            int ladderEnd = solvePath.indexOf('/', ladderStart);
-            if (ladderEnd < 0) ladderEnd = solvePath.length();
-            String ladder = solvePath.substring(ladderStart, ladderEnd);
-            int first = ladder.indexOf('-'), last = ladder.lastIndexOf('-');
-            if (first > 0 && last > first) {
-                solvePath = solvePath.substring(0, ladderStart) + ladder.substring(0, first) + ".."
-                        + ladder.substring(last + 1) + solvePath.substring(ladderEnd);
-            }
-        }
-        if (solvePath.length() <= limit) return solvePath;
-        String elision = "/.../";
-        int headLength = 80;
-        return solvePath.substring(0, headLength) + elision
-                + solvePath.substring(solvePath.length() - (limit - headLength - elision.length()));
-    }
-
-    private static V3ColumnOutcome.Failure terminalFailure(
-            V3SolverFailureCode code, String detail, String solvePath, List<String> advisoryEvidence) {
-        String summary = boundedSummary(detail);
-        V3AcceptanceAudit audit = failedAudit(V3AuditFamily.UNAVAILABLE, summary, advisoryEvidence);
-        // The summary and the audit detail are bounded at 512, a diagnostic event at 256. Passing the summary
-        // straight through threw IllegalArgumentException out of the public calculate() for any detail between
-        // the two bounds — reachable as soon as a typed detail grew past 256 characters.
-        V3SolverDiagnostics diagnostics = new V3SolverDiagnostics(0, 0, 0, 0, 0.0, 0.0, boundedSolvePath(solvePath),
-                List.of(boundedEvent(summary)), audit, V3ConvergenceEvidence.unavailable());
-        return new V3ColumnOutcome.Failure(code, summary, diagnostics);
-    }
-
-    private static V3AcceptanceAudit failedAudit(V3AuditFamily family, String detail) {
-        return failedAudit(family, detail, List.of());
-    }
-
-    private static V3AcceptanceAudit failedAudit(V3AuditFamily family, String detail, List<String> advisoryEvidence) {
-        return new V3AcceptanceAudit(List.of(V3AcceptanceAudit.Check.fail(family, 1.0, 0.0, boundedSummary(detail))),
-                advisoryEvidence);
-    }
-
-    /** Maps a solver attempt code onto the published failure taxonomy; a stopped stall is a nonconvergence. */
-    static V3SolverFailureCode failureCode(V3AttemptCode code) {
-        return switch (code) {
-            case LINEAR_SINGULAR, LINEAR_ILL_CONDITIONED, LINEAR_BACKWARD_ERROR_EXCEEDED, JACOBIAN_BAND_STRUCTURE ->
-                    V3SolverFailureCode.LINEAR_SOLVE_FAILURE;
-            case MAX_ITERATIONS, LINE_SEARCH_EXHAUSTED, STATE_DOMAIN, STALLED, STALLED_SUPPORT_FLOOR ->
-                    V3SolverFailureCode.NONCONVERGENCE;
-            case INTERNAL_INVARIANT -> V3SolverFailureCode.INTERNAL_ERROR;
-        };
-    }
-
-    private static String boundedSummary(String value) {
-        if (value == null || value.isBlank()) return "V3 calculation failed without a detail string";
-        return value.length() <= 512 ? value : value.substring(0, 512);
-    }
-
     private record V3SolvePass(
             V3SimultaneousColumnSolver.Attempt attempt,
             V3AcceptanceAudit audit,
@@ -3527,7 +3188,7 @@ public final class V3ColumnCalculator {
      *
      * <p>So these are published as {@link V3SolverFailureCode#NONCONVERGENCE} carrying the bound's own
      * diagnostic plus the path hint, and {@code INFEASIBLE_SPECIFICATION} is left to the request-only gates
-     * ({@code totalDraw >= totalFeed} and {@link #staticCoolingAdmission}), which are computable from the
+     * ({@code totalDraw >= totalFeed} and {@link V3Admission#staticCoolingAdmission}), which are computable from the
      * specification alone.</p>
      */
     private static final class PathDependentHeatBound extends RuntimeException {
@@ -3553,100 +3214,5 @@ public final class V3ColumnCalculator {
         return "pressure " + Math.round(pressurePascal / 1_000.0) + " kPa " + phase
                 + ": " + evidence.termination() + ", iterations=" + evidence.iterations()
                 + ", residual=" + evidence.maximumScaledResidual();
-    }
-
-    private static List<String> mergedEvents(List<String> continuationEvents, List<String> solverEvents) {
-        List<String> result = new ArrayList<>(continuationEvents);
-        for (String event : solverEvents) {
-            if (result.size() >= V3SolverDiagnostics.MAX_EVENTS) break;
-            result.add(event);
-        }
-        return List.copyOf(result);
-    }
-
-    /** Bounded per-solve direction counters, surfaced through the existing diagnostics event contract. */
-    private static final class SolveTelemetry implements NewtonTrace {
-        private final V3ColumnProblem problem;
-        /** Where a learned pass keeps its in-flight evidence; null on every classical solve. */
-        private final NeuralProgress progress;
-        private int acceptedLocalBlockDirections;
-        private int rejectedLocalBlockDirections;
-        private int freshFiniteDifferenceJacobians;
-        private int reusedFiniteDifferenceJacobians;
-        private double initialMaximumScaledResidual = Double.NaN;
-        private double finalMaximumScaledResidual = Double.NaN;
-        private V3DegreeOfFreedomLedger.EquationId finalDominantEquation;
-        private double finalDominantPhysicalResidual;
-        private V3DryMeshState finalState;
-
-        private SolveTelemetry(V3ColumnProblem problem, NeuralProgress progress) {
-            this.problem = Objects.requireNonNull(problem, "problem");
-            this.progress = progress;
-        }
-
-        @Override
-        public void sampledIteration(int iteration, V3MeshResidual residual, double scaledMerit) {
-            // The state-bearing callback below owns production telemetry. This method preserves lambda compatibility.
-        }
-
-        @Override
-        public void sampledState(int iteration, V3DryMeshState state, V3MeshResidual residual, double scaledMerit) {
-            if (progress != null) progress.sampledState(iteration, state, residual, scaledMerit);
-            double maximum = residual.maximumAbsoluteScaledResidual();
-            if (Double.isNaN(initialMaximumScaledResidual)) initialMaximumScaledResidual = maximum;
-            finalMaximumScaledResidual = maximum;
-            finalState = state;
-            int dominant = 0;
-            for (int row = 1; row < residual.size(); row++) {
-                if (Math.abs(residual.scaledValue(row)) > Math.abs(residual.scaledValue(dominant))) dominant = row;
-            }
-            finalDominantEquation = residual.equation(dominant);
-            finalDominantPhysicalResidual = residual.physicalValue(dominant);
-        }
-
-        @Override
-        public void localBlockDirection(int iteration, boolean accepted) {
-            if (progress != null) progress.localBlockDirection(iteration, accepted);
-            if (accepted) acceptedLocalBlockDirections++;
-            else rejectedLocalBlockDirections++;
-        }
-
-        @Override
-        public void finiteDifferenceJacobian(int iteration, boolean reused) {
-            if (progress != null) progress.finiteDifferenceJacobian(iteration, reused);
-            if (reused) reusedFiniteDifferenceJacobians++;
-            else freshFiniteDifferenceJacobians++;
-        }
-
-        List<String> events() {
-            List<String> events = new ArrayList<>();
-            if (Double.isFinite(initialMaximumScaledResidual)) {
-                events.add("scaled residual: initial=" + initialMaximumScaledResidual
-                        + ", final=" + finalMaximumScaledResidual);
-            }
-            if (finalDominantEquation != null) {
-                events.add("dominant residual: " + finalDominantEquation + ", physical="
-                        + finalDominantPhysicalResidual);
-                if (finalState != null && finalDominantEquation.family()
-                        == V3DegreeOfFreedomLedger.EquationFamily.VAPOR_LIQUID_EQUILIBRIUM) {
-                    int activeComponent = finalDominantEquation.component();
-                    int publicComponent = problem.activeComponentBasis().publicIndex(activeComponent);
-                    int node = finalDominantEquation.node();
-                    events.add("dominant VLE state: component=" + problem.input().componentBasis().componentId(publicComponent)
-                            + ", node=" + node + ", temperature=" + finalState.temperatureKelvin(node)
-                            + ", liquid-flow=" + finalState.liquidFlow(node, activeComponent)
-                            + ", vapor-flow=" + finalState.vaporFlow(node, activeComponent));
-                }
-            }
-            if (acceptedLocalBlockDirections + rejectedLocalBlockDirections > 0) {
-                events.add("local-block directions: accepted=" + acceptedLocalBlockDirections
-                        + ", rejected=" + rejectedLocalBlockDirections);
-            }
-            if (freshFiniteDifferenceJacobians + reusedFiniteDifferenceJacobians > 0) {
-                events.add("fine finite-difference Jacobians: fresh=" + freshFiniteDifferenceJacobians
-                        + ", reused=" + reusedFiniteDifferenceJacobians);
-            }
-            return List.copyOf(events);
-        }
     }
 }

@@ -55,4 +55,4 @@ The JNI layout between Java and the Rust column library `icheme_column` (`src/ma
 | Format | Value | Declared at | What a mismatch does |
 |---|---|---|---|
 | Native column ABI | 1 | [`science/column/v3/NativeColumnSolver.java`](../../src/main/java/com/wormzjl/icheme/science/column/v3/NativeColumnSolver.java), `NativeColumnSolver#ABI`; its twin `src/main/rust/icheme-jni/src/layout.rs` line 7, `ABI` | The library is refused (one log line) and the column runs on its Java path; the copy in the game folder is named `icheme_column-<ABI>`, so another ABI is never picked up |
-| Native formulation token | `FORMULATION_REVISION;WET_ASSUMPTIONS_REVISION;HEAT_ASSUMPTIONS_REVISION` of `V3ColumnCalculator` | `NativeColumnSolver.java` line 40, `FORMULATION`; its twin `layout.rs` line 13, `FORMULATION` | The same: refused, Java path |
+| Native formulation token | `FORMULATION_REVISION;WET_ASSUMPTIONS_REVISION;HEAT_ASSUMPTIONS_REVISION` of `V3ColumnLabels` | `NativeColumnSolver.java` line 40, `FORMULATION`; its twin `layout.rs` line 13, `FORMULATION` | The same: refused, Java path |

@@ -41,7 +41,7 @@ class FormatsTableTest {
 
     /** Rows whose value is a description, not a literal. */
     private static final Set<String> DESCRIBED = Set.of(
-            // The value names three revisions of V3ColumnCalculator joined by ';'; NativeColumnSolverTest checks it.
+            // The value names three revisions of V3ColumnLabels joined by ';'; NativeColumnSolverTest checks it.
             "Native formulation token");
 
     private static final Pattern FIELD = Pattern.compile("`([A-Z]\\w*)#([A-Za-z_]\\w*)`");
