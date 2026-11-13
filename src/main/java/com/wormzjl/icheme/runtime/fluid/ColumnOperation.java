@@ -11,6 +11,7 @@ import com.wormzjl.icheme.science.plant.column.Setpoints;
 import com.wormzjl.icheme.science.plant.column.DriftBands;
 import com.wormzjl.icheme.science.plant.column.Port;
 import com.wormzjl.icheme.science.plant.column.SplitTable;
+import com.wormzjl.icheme.science.plant.port.PortAccounts;
 import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
 import com.wormzjl.icheme.science.column.v3.V3NeuralSeed;
 import com.wormzjl.icheme.science.fluid.network.ConservativeTransport;
@@ -36,10 +37,10 @@ import java.util.*;
  * an inert solid waits at its inlet, a cycle moves what arrived by its tick to the bottoms, and the bottoms' generator gives it.</p>
  */
 public final class ColumnOperation implements IslandCoordinator.Ports {
-    /** A cycle each 5 s of online time (plan section 5). */
-    public static final int CYCLE_TICKS=100;
-    /** The outlet fence L (owner Q4): a slice plans from the credits booked through its start less this. */
-    public static final long FENCE_TICKS=440;
+    /** A cycle each 5 s of online time (plan section 5; {@link PortAccounts#CYCLE_TICKS}). */
+    public static final int CYCLE_TICKS=PortAccounts.CYCLE_TICKS;
+    /** The outlet fence L (owner Q4): a slice plans from the credits booked through its start less this ({@link PortAccounts#FENCE_TICKS}). */
+    public static final long FENCE_TICKS=PortAccounts.FENCE_TICKS;
     /**
      * An inlet's account aims at this many cycles of its set rate; an outlet holds this many cycles of design production (plan
      * 4.2): 30 s and 120 s at factor 1. Counts of cycles (batch 2026-11-11-minecraft-time-delta, W3, owner T6), so the
@@ -859,7 +860,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         long fence=slice.startTick()-FENCE_TICKS;
         var available=s.account().moles();var solids=s.solids();var log=r==null?null:r.credits.get(s.device());
         var made=r==null?null:asOf(log,Credit::tick,fence);
-        if(log!=null)for(var c:log)if(c.tick()>fence){var n=c.product().moles();for(int i=0;i<available.length;i++)available[i]=Math.max(0,available[i]-n[i]);solids=solids.less(c.solids());}
+        if(log!=null)for(var c:log)if(c.tick()>fence){PortAccounts.less(available,c.product().moles());solids=solids.less(c.solids());}
         double total=0;for(double n:available)total+=n;
         if(!(mass(available)>TRACE_KG))total=0;
         double temperature=node.state().temperature();
@@ -869,7 +870,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         // the island (a topology event, queued on the engine's tick, grow), and the account holds the moles until then.
         var mine=total>0?onIsland(island,available):null;
         if(total>0&&mine==null)growth.add(s.device());
-        if(!(total>0)||mine==null)return new PortPlan(node.id(),s.valve(),0,node.state().temperature(),com.wormzjl.icheme.science.fluid.solver.PhaseLayout.totalAmounts(node.state()));
+        if(!(total>0)||mine==null)return PortAccounts.idle(node,s.valve());
         double mass=mass(available),cap=mass/slice.seconds(time())*TAKE_MARGIN,rate=cap;
         if(made!=null) {
             double produced=mass(made.product().moles())/cycleSeconds(),aim=produced*bufferSeconds()/2;
@@ -904,20 +905,10 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         return found;
     }
     /** {@code moles} on the world list on island {@code island}'s own list, or null where it holds a compound the island does not carry. */
-    private double[] onIsland(long island,double[] moles) {
-        var own=coordinator.model(island).components();if(own.equals(axis))return moles;
-        var result=new double[own.size()];
-        for(int i=0;i<moles.length;i++){if(moles[i]==0)continue;int j=own.indexOf(axis.get(i));if(j<0)return null;result[j]=moles[i];}
-        return result;
-    }
+    private double[] onIsland(long island,double[] moles){return PortAccounts.onIsland(coordinator.model(island).components(),axis,moles);}
     /** {@code moles} on island {@code island}'s own list on the world list (the accounts'). */
-    private double[] onWorld(long island,double[] moles) {
-        var own=coordinator.model(island).components();if(own.equals(axis))return moles;
-        var result=new double[axis.size()];
-        for(int i=0;i<moles.length;i++){if(moles[i]==0)continue;int j=axis.indexOf(own.get(i));if(j<0)throw new IllegalStateException("Island "+island+" carries "+own.get(i)+", which the world list does not");result[j]=moles[i];}
-        return result;
-    }
-    private double mass(double[] moles){double m=0;for(int i=0;i<moles.length;i++)m+=moles[i]*weights[i];return m;}
+    private double[] onWorld(long island,double[] moles){return PortAccounts.onWorld(island,coordinator.model(island).components(),axis,moles);}
+    private double mass(double[] moles){return PortAccounts.mass(weights,moles);}
     private double molar(double[] moles){double t=0;for(double n:moles)t+=n;return t>0?mass(moles)/t:0;}
     /** What the island's ports gave and took over {@code start} to {@code end} (plan 4.4). */
     @Override public void booked(long island,PassiveNetwork graph,long start,long end,PassiveIntervalSolver.Result result) {
@@ -953,10 +944,9 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
                 if(r!=null)r.spans.computeIfAbsent(device,d->new ArrayDeque<>()).addLast(new Span(start,end,account,inert));
             } else {
                 // A generator gives: debit exactly that, component by component; the energy by the same share of the account.
-                var held=s.account().moles();double before=s.account().total(),given=0;
-                for(int i=0;i<n.length;i++){double g=Math.max(0,n[i]);if(g>held[i]*(1+1e-9)+1e-12)com.wormzjl.icheme.IChemE.LOGGER.error("column status=OVERDRAWN unit={} port={} component={} held={} given={}",unit,s.port(),i,held[i],g);held[i]=Math.max(0,held[i]-g);given+=g;}
-                double share=before>0?Math.min(1,given/before):0,debited=share*s.account().energy();
-                var account=new Account(held,s.account().energy()-debited);
+                var port=s.port();
+                var debit=PortAccounts.debit(s.account(),n,(i,held,g)->com.wormzjl.icheme.IChemE.LOGGER.error("column status=OVERDRAWN unit={} port={} component={} held={} given={}",unit,port,i,held,g));
+                double given=debit.moles(),debited=debit.energy();var account=debit.account();
                 var t=u.totals();u=withPort(u,s,account,s.solids().less(solid)).withTotals(new ColumnUnit.Totals(t.taken(),t.produced(),t.reboiler(),t.condenser()+(joule-debited),t.pumparounds()));
                 topology.column(u);
                 if(r!=null)r.gifts.computeIfAbsent(device,d->new ArrayDeque<>()).addLast(new Gift(start,end,given));
@@ -1067,7 +1057,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         var sides=sides(u,utility);if(sides.isEmpty())return;
         var rates=r.debt(utility).rates;
         rates.addLast(new Duty(tick,Math.max(0,utility.sign()*joule)/cycleSeconds()/sides.size()));
-        while(rates.size()>1&&rates.peekFirst().tick()<tick-FENCE_TICKS-KEEP_TICKS)rates.removeFirst();
+        PortAccounts.keep(rates,Duty::tick,tick-FENCE_TICKS-KEEP_TICKS);
     }
     /**
      * Books {@code joule} (J) into the transit of {@code utility}'s sides at {@code tick}, an equal share into each (S3b:
@@ -1084,7 +1074,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         }
         var owed=r.debt(utility).owed;
         owed.addLast(new Owed(tick,share,booked));
-        while(owed.size()>1&&owed.peekFirst().tick()<tick-FENCE_TICKS-KEEP_TICKS)owed.removeFirst();
+        PortAccounts.keep(owed,Owed::tick,tick-FENCE_TICKS-KEEP_TICKS);
     }
     /**
      * A coupled side whose partner a running column holds (C6b, W4): a utility side reads the heat the column owes it as of

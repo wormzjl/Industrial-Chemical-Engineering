@@ -12,6 +12,7 @@ import com.wormzjl.icheme.science.fluid.network.Pool;
 import com.wormzjl.icheme.science.fluid.network.PortPlan;
 import com.wormzjl.icheme.science.fluid.network.StillHead;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
+import com.wormzjl.icheme.science.plant.port.PortAccounts;
 import java.util.*;
 import java.util.function.LongFunction;
 
@@ -45,14 +46,14 @@ import java.util.function.LongFunction;
  * resume when it stops.
  */
 public final class Stills implements IslandCoordinator.Ports {
-    /** An outlet's slice reads its account as of this many ticks before its start: the pot's commits through then. */
-    public static final long FENCE_TICKS=440;
+    /** An outlet's slice reads its account as of this many ticks before its start: the pot's commits through then ({@link PortAccounts#FENCE_TICKS}). */
+    public static final long FENCE_TICKS=PortAccounts.FENCE_TICKS;
     /** The column solves at most this often while the pot boils, ticks. */
     public static final long SOLVE_TICKS=100;
     /** A solve's answer applies this many ticks after the commit that asked for it. */
     public static final long APPLY_TICKS=100;
-    /** The engine's cycle, ticks (5 s of play): the still's windows are counted in it. */
-    public static final long CYCLE_TICKS=100;
+    /** The engine's cycle, ticks (5 s of play): the still's windows are counted in it ({@link PortAccounts#CYCLE_TICKS}). */
+    public static final long CYCLE_TICKS=PortAccounts.CYCLE_TICKS;
     /**
      * An outlet gives its account over this many cycles, and the condenser keeps up while it owes at most this many cycles of
      * the pot's heat (10 s at factor 1); a solid still takes its next item while its fire holds less than {@link #REFILL_CYCLES}
@@ -273,10 +274,10 @@ public final class Stills implements IslandCoordinator.Ports {
     private PortPlan outletPlan(long island,StillUnit u,Run r,PassiveNetwork.Reservoir node,IslandClock.Slice slice,boolean distillate) {
         long fence=slice.startTick()-FENCE_TICKS;
         var available=(distillate?u.head():u.venting()).moles();
-        for(var a:r.arrivals)if(a.tick()>fence){var n=distillate?a.distillate():a.vent();for(int i=0;i<available.length;i++)available[i]=Math.max(0,available[i]-n[i]);}
+        for(var a:r.arrivals)if(a.tick()>fence)PortAccounts.less(available,distillate?a.distillate():a.vent());
         double total=0;for(double n:available)total+=n;
         var mine=total>0?onIsland(island,available):null;
-        if(!(total>0)||mine==null)return new PortPlan(node.id(),node.id(),0,node.state().temperature(),com.wormzjl.icheme.science.fluid.solver.PhaseLayout.totalAmounts(node.state()));
+        if(!(total>0)||mine==null)return PortAccounts.idle(node,node.id());
         // The distillate leaves at the condenser's outlet; the vent at the outlet too where the condenser took all (a partial
         // condenser's gas), else at the head (COOLING LIMITED: the vapour it could not take).
         double temperature=r.solved==null?r.potTemperature:distillate||r.condensed>=1?r.solved.condensateTemperature():r.solved.headTemperature();
@@ -373,7 +374,7 @@ public final class Stills implements IslandCoordinator.Ports {
             return owe(u,r,energy,end);
         }
         r.arrivals.addLast(new Arrival(end,division.distillate(),division.vent()));
-        while(r.arrivals.size()>1&&r.arrivals.peekFirst().tick()<end-2*FENCE_TICKS)r.arrivals.removeFirst();
+        PortAccounts.keep(r.arrivals,Arrival::tick,end-2*FENCE_TICKS);
         var head=new Account(plus(u.head().moles(),division.distillate()),u.head().energy()+division.distillateEnergy());
         var vent=new Account(plus(u.venting().moles(),division.vent()),u.venting().energy()+division.ventEnergy());
         return u.withAccounts(head,vent);
@@ -382,10 +383,9 @@ public final class Stills implements IslandCoordinator.Ports {
     private void give(long device,double[] moles,double joule,double seconds,long end) {
         Long pot=outlets.get(device);var u=pot==null?null:topology.still(pot);var r=pot==null?null:runs.get(pot);if(u==null||r==null)return;
         boolean distillate=device==u.distillate();var account=distillate?u.head():u.venting();
-        var held=account.moles();double before=account.total(),gave=0;
-        for(int i=0;i<held.length;i++){double g=moles[i];if(g>held[i]*(1+1e-9)+1e-12)com.wormzjl.icheme.IChemE.LOGGER.error("still status=OVERDRAWN pot={} outlet={} component={} held={} given={}",pot,device,i,held[i],g);held[i]=Math.max(0,held[i]-g);gave+=g;}
-        double share=before>0?Math.min(1,gave/before):0,debited=share*account.energy();
-        var next=new Account(held,account.energy()-debited);
+        // The gifts were summed of non-negative entries (booked), so the debit's clamp at 0 leaves them as they are.
+        var debit=PortAccounts.debit(account,moles,(i,held,given)->com.wormzjl.icheme.IChemE.LOGGER.error("still status=OVERDRAWN pot={} outlet={} component={} held={} given={}",pot,device,i,held,given));
+        double debited=debit.energy();var next=debit.account();
         u=distillate?u.withAccounts(next,u.venting()):u.withAccounts(u.head(),next);
         if(distillate)r.distillateFlow=mass(moles)/seconds;else r.ventFlow=mass(moles)/seconds;
         topology.still(owe(u,r,debited-joule,end));
@@ -411,13 +411,13 @@ public final class Stills implements IslandCoordinator.Ports {
         for(var p:r.paid){if(p.tick()<now-FENCE_TICKS)continue;owed+=p.owed();if(Double.isNaN(first)&&!Double.isNaN(p.transit())){first=p.transit();from=p.tick();}}
         double span=Math.max(1,coordinator.time().seconds(now-from)),took=Double.isNaN(first)?0:Math.max(0,owed-(r.transit-first));
         r.condensed=Math.max(0,Math.min(1,took/span/need));
-        while(r.paid.size()>1&&r.paid.peekFirst().tick()<now-2*FENCE_TICKS)r.paid.removeFirst();
+        PortAccounts.keep(r.paid,Paid::tick,now-2*FENCE_TICKS);
     }
     @Override public ExchangerRelay.Read heatRead(long side,long partner,long start,double seconds,double transit) {
         sync();Long pot=waters.get(side);if(pot==null)return null;
         var u=topology.still(pot);var r=runs.get(pot);if(u==null||r==null)return null;
         r.transit=transit;r.paid.addLast(new Paid(start,0,transit));
-        while(r.paid.size()>1&&r.paid.peekFirst().tick()<start-2*FENCE_TICKS)r.paid.removeFirst();
+        PortAccounts.keep(r.paid,Paid::tick,start-2*FENCE_TICKS);
         // Before the pot's first slice its temperature is unknown (NaN, which Math.max passes on): the water reads 300 K. The
         // condensing side stands at the mean of the head and the outlet, as the sheet's condenser capacity takes it (a partial
         // condenser's outlet is its water's inlet plus the approach).
@@ -539,18 +539,8 @@ public final class Stills implements IslandCoordinator.Ports {
 
     // ---------------- the basis ----------------
 
-    private double[] onIsland(long island,double[] moles) {
-        var own=models.apply(island).components();if(own.equals(axis))return moles;
-        var result=new double[own.size()];
-        for(int i=0;i<moles.length;i++){if(moles[i]==0)continue;int j=own.indexOf(axis.get(i));if(j<0)return null;result[j]=moles[i];}
-        return result;
-    }
-    private double[] onWorld(long island,double[] moles) {
-        var own=models.apply(island).components();if(own.equals(axis))return moles;
-        var result=new double[axis.size()];
-        for(int i=0;i<moles.length;i++){if(moles[i]==0)continue;int j=axis.indexOf(own.get(i));if(j<0)throw new IllegalStateException("Island "+island+" carries "+own.get(i)+", which the world list does not");result[j]=moles[i];}
-        return result;
-    }
+    private double[] onIsland(long island,double[] moles){return PortAccounts.onIsland(models.apply(island).components(),axis,moles);}
+    private double[] onWorld(long island,double[] moles){return PortAccounts.onWorld(island,models.apply(island).components(),axis,moles);}
     /**
      * Each world component's liquid share at the condenser's outlet, from the column's answer on the pot island's own list; a
      * component that list does not carry, none; null (all vents) for a still that solves no column (the fire of one that
@@ -564,6 +554,6 @@ public final class Stills implements IslandCoordinator.Ports {
         for(int i=0;i<shares.length;i++){int j=axis.indexOf(own.get(i));if(j>=0)result[j]=shares[i];}
         return result;
     }
-    private double mass(double[] moles){double m=0;for(int i=0;i<moles.length;i++)m+=moles[i]*weights[i];return m;}
+    private double mass(double[] moles){return PortAccounts.mass(weights,moles);}
     private static double[] plus(double[] a,double[] b){var c=a.clone();for(int i=0;i<c.length;i++)c[i]+=b[i];return c;}
 }
