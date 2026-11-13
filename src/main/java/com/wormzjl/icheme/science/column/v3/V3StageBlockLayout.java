@@ -12,8 +12,9 @@ final class V3StageBlockLayout {
         problem = Objects.requireNonNull(problem, "problem");
         V3ColumnTopology topology = problem.topology();
         List<V3DegreeOfFreedomLedger.Unknown> unknowns = problem.degreeOfFreedomLedger().unknowns();
-        List<V3DegreeOfFreedomLedger.Equation> equations = problem.degreeOfFreedomLedger().equations();
-        if (unknowns.size() != equations.size()) throw new IllegalArgumentException("V3 MESH block layout requires square DOF");
+        // The equation ids only: the records with their references are built for the contract tests and diagnostics (P3).
+        V3DegreeOfFreedomLedger.EquationId[] equations = problem.degreeOfFreedomLedger().equationIds();
+        if (unknowns.size() != equations.length) throw new IllegalArgumentException("V3 MESH block layout requires square DOF");
         starts = new int[topology.nodeCount()];
         sizes = new int[topology.nodeCount()];
         int offset = 0;
@@ -74,9 +75,9 @@ final class V3StageBlockLayout {
     }
 
     private static void validateEquationBlock(
-            List<V3DegreeOfFreedomLedger.Equation> equations, V3ColumnProblem problem, int node, int start, int size) {
+            V3DegreeOfFreedomLedger.EquationId[] equations, V3ColumnProblem problem, int node, int start, int size) {
         for (int index = start; index < start + size; index++) {
-            if (equations.get(index).id().node() != node) {
+            if (equations[index].node() != node) {
                 throw new IllegalArgumentException("V3 MESH equation ledger is not contiguous by node");
             }
         }
@@ -86,7 +87,7 @@ final class V3StageBlockLayout {
             boolean foundMaterial = false;
             boolean foundVle = false;
             for (int index = start; index < start + size; index++) {
-                var id = equations.get(index).id();
+                var id = equations[index];
                 if (id.component() != component) continue;
                 foundMaterial |= id.family() == V3DegreeOfFreedomLedger.EquationFamily.COMPONENT_MATERIAL_BALANCE;
                 foundVle |= id.family() == V3DegreeOfFreedomLedger.EquationFamily.VAPOR_LIQUID_EQUILIBRIUM;
@@ -97,7 +98,7 @@ final class V3StageBlockLayout {
         }
         boolean foundSaturation = false;
         for (int index = start; index < start + size; index++) {
-            foundSaturation |= equations.get(index).id().family() == V3DegreeOfFreedomLedger.EquationFamily.WATER_SATURATION;
+            foundSaturation |= equations[index].family() == V3DegreeOfFreedomLedger.EquationFamily.WATER_SATURATION;
         }
         if (foundSaturation != problem.hasFreeWaterUnknown(node)) {
             throw new IllegalArgumentException("V3 MESH equation ledger disagrees with the free-water tray set");

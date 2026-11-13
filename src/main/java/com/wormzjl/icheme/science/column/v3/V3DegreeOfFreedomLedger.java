@@ -1,16 +1,12 @@
 package com.wormzjl.icheme.science.column.v3;
 
 import com.wormzjl.icheme.science.column.v3.V3ColumnSpecification.ControlledQuantity;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.EnumSet;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 
 /**
  * Independently enumerates the V3 unknowns, residuals, controls, and structural-rank evidence.
@@ -25,15 +21,20 @@ public final class V3DegreeOfFreedomLedger {
     private final V3WetTraySet wetTraySet;
     private final List<V3ColumnSpecification> specifications;
     private final List<Unknown> unknowns;
-    private final List<Equation> equations;
     /** The equations' ids in ledger order, shared by every residual of this ledger and never written. */
     private final EquationId[] equationIds;
+    /**
+     * Each equation's referenced unknowns as indexes into {@link #unknowns}, in {@link UnknownId} order (the order the
+     * matching visits them). The {@link Equation} records are built from these only when {@link #equations} is read.
+     */
+    private final int[][] references;
+    private volatile List<Equation> equations;
     private final List<ContractDiagnostic> diagnostics;
     private final int structuralRank;
 
     private V3DegreeOfFreedomLedger(
             V3ColumnTopology topology, int componentCount, List<V3ColumnSpecification> specifications,
-            List<Unknown> unknowns, List<Equation> equations,
+            List<Unknown> unknowns, EquationId[] equationIds, int[][] references,
             List<ContractDiagnostic> diagnostics, int structuralRank, V3TruncationSupport truncationSupport,
             V3WetTraySet wetTraySet) {
         this.topology = topology;
@@ -42,8 +43,8 @@ public final class V3DegreeOfFreedomLedger {
         this.wetTraySet = wetTraySet;
         this.specifications = List.copyOf(specifications);
         this.unknowns = List.copyOf(unknowns);
-        this.equations = List.copyOf(equations);
-        this.equationIds = this.equations.stream().map(Equation::id).toArray(EquationId[]::new);
+        this.equationIds = equationIds;
+        this.references = references;
         this.diagnostics = List.copyOf(diagnostics);
         this.structuralRank = structuralRank;
     }
@@ -95,19 +96,31 @@ public final class V3DegreeOfFreedomLedger {
         }
 
         List<ContractDiagnostic> diagnostics = specificationDiagnostics(topology, specifications);
+        UnknownIndex index = new UnknownIndex(topology.nodeCount(), componentCount);
         List<Unknown> unknowns = enumerateUnknowns(topology, componentCount, condenserComponentPhases,
-                truncationSupport, wetTraySet);
-        List<Equation> equations = enumerateEquations(topology, componentCount, unknowns, diagnostics,
-                condenserComponentPhases, truncationSupport, sideDraws, wetTraySet);
-        int structuralRank = maximumBipartiteMatching(equations, unknowns);
-        if (unknowns.size() != equations.size()) {
+                truncationSupport, wetTraySet, index);
+        List<EquationId> ids = new ArrayList<>();
+        List<int[]> rows = new ArrayList<>();
+        enumerateEquations(topology, componentCount, index, ids, rows, condenserComponentPhases, truncationSupport,
+                sideDraws, wetTraySet);
+        EquationId[] equationIds = ids.toArray(EquationId[]::new);
+        int[][] references = rows.toArray(int[][]::new);
+        // Every reference is an active unknown by construction, so only an empty row can fail the reference check.
+        for (int equation = 0; equation < equationIds.length; equation++) {
+            if (references[equation].length == 0) {
+                diagnostics.add(new ContractDiagnostic("EQUATION_WITHOUT_UNKNOWN",
+                        "V3 equation " + equationIds[equation] + " does not reference an active unknown"));
+            }
+        }
+        int structuralRank = maximumBipartiteMatching(references, unknowns.size());
+        if (unknowns.size() != equationIds.length) {
             diagnostics.add(new ContractDiagnostic("DOF_COUNT_MISMATCH", "V3 unknown and equation counts differ"));
         }
-        if (structuralRank != equations.size()) {
+        if (structuralRank != equationIds.length) {
             diagnostics.add(new ContractDiagnostic("STRUCTURAL_RANK_DEFICIENT",
                     "V3 equation-to-unknown sparsity matching is rank deficient"));
         }
-        return new V3DegreeOfFreedomLedger(topology, componentCount, specifications, unknowns, equations,
+        return new V3DegreeOfFreedomLedger(topology, componentCount, specifications, unknowns, equationIds, references,
                 diagnostics, structuralRank, truncationSupport, wetTraySet);
     }
 
@@ -123,8 +136,22 @@ public final class V3DegreeOfFreedomLedger {
         return unknowns;
     }
 
+    /**
+     * The equations with their referenced unknowns, built on the first read (contract tests and diagnostic text read
+     * them; the solve reads {@link #equationIds} and {@link #equationCount}).
+     */
     public List<Equation> equations() {
-        return equations;
+        List<Equation> built = equations;
+        if (built == null) {
+            List<Equation> list = new ArrayList<>(equationIds.length);
+            for (int equation = 0; equation < equationIds.length; equation++) {
+                List<UnknownId> referenced = new ArrayList<>(references[equation].length);
+                for (int unknown : references[equation]) referenced.add(unknowns.get(unknown).id());
+                list.add(new Equation(equationIds[equation], referenced));
+            }
+            equations = built = List.copyOf(list);
+        }
+        return built;
     }
 
     /** The equations' ids in ledger order: the shared array, which a caller never writes. */
@@ -141,7 +168,7 @@ public final class V3DegreeOfFreedomLedger {
     }
 
     public int equationCount() {
-        return equations.size();
+        return equationIds.length;
     }
 
     public int structuralRank() {
@@ -191,123 +218,173 @@ public final class V3DegreeOfFreedomLedger {
 
     private static List<Unknown> enumerateUnknowns(
             V3ColumnTopology topology, int componentCount, V3CondenserComponentPhases condenserComponentPhases,
-            V3TruncationSupport truncationSupport, V3WetTraySet wetTraySet) {
+            V3TruncationSupport truncationSupport, V3WetTraySet wetTraySet, UnknownIndex index) {
         List<Unknown> unknowns = new ArrayList<>();
         for (int node = 0; node < topology.nodeCount(); node++) {
             for (int component = 0; component < componentCount; component++) {
                 if (truncationSupport.hasLiquidUnknown(condenserComponentPhases, node, component)) {
+                    index.put(UnknownFamily.LIQUID_COMPONENT_FLOW, node, component, unknowns.size());
                     unknowns.add(new Unknown(new UnknownId(UnknownFamily.LIQUID_COMPONENT_FLOW, node, component)));
                 }
                 if (truncationSupport.hasVaporUnknown(node, component)) {
+                    index.put(UnknownFamily.VAPOR_COMPONENT_FLOW, node, component, unknowns.size());
                     unknowns.add(new Unknown(new UnknownId(UnknownFamily.VAPOR_COMPONENT_FLOW, node, component)));
                 }
             }
             if (topology.hasTemperatureUnknown(node)) {
+                index.put(UnknownFamily.TEMPERATURE, node, -1, unknowns.size());
                 unknowns.add(new Unknown(new UnknownId(UnknownFamily.TEMPERATURE, node, -1)));
             }
             // Last in the node's block, so the contiguous stage layout gains exactly one unknown here and
             // exactly one row (the saturation equation) in the matching equation block.
             if (wetTraySet.hasFreeWaterUnknown(node)) {
+                index.put(UnknownFamily.FREE_WATER_FLOW, node, -1, unknowns.size());
                 unknowns.add(new Unknown(new UnknownId(UnknownFamily.FREE_WATER_FLOW, node, -1)));
             }
         }
         return unknowns;
     }
 
-    private static List<Equation> enumerateEquations(
-            V3ColumnTopology topology, int componentCount, List<Unknown> unknowns,
-            List<ContractDiagnostic> diagnostics, V3CondenserComponentPhases condenserComponentPhases,
-            V3TruncationSupport truncationSupport, List<V3SideDrawSpec> sideDraws, V3WetTraySet wetTraySet) {
+    /**
+     * Each unknown's index in the ledger, by its {@link UnknownId} order key (P3 of batch 2026-11-13-codebase-review): the
+     * key orders as {@link UnknownId#compareTo} does (family, then node, then component), so sorting keys sorts ids.
+     */
+    private static final class UnknownIndex {
+        private final int nodeCount;
+        private final int componentSlots;
+        private final int[] indexes;
+
+        UnknownIndex(int nodeCount, int componentCount) {
+            this.nodeCount = nodeCount;
+            this.componentSlots = componentCount + 1;
+            this.indexes = new int[UnknownFamily.values().length * nodeCount * componentSlots];
+            java.util.Arrays.fill(indexes, -1);
+        }
+
+        int key(UnknownFamily family, int node, int component) {
+            return (family.ordinal() * nodeCount + node) * componentSlots + component + 1;
+        }
+
+        void put(UnknownFamily family, int node, int component, int index) {
+            indexes[key(family, node, component)] = index;
+        }
+
+        int index(int key) {
+            return indexes[key];
+        }
+    }
+
+    /** One equation's references while it is enumerated: order keys of active unknowns, then sorted and made unique. */
+    private static final class References {
+        private final UnknownIndex index;
+        private int[] keys = new int[64];
+        private int size;
+
+        References(UnknownIndex index) {
+            this.index = index;
+        }
+
+        References clear() {
+            size = 0;
+            return this;
+        }
+
+        /** Adds the unknown if it is active, as the record set's {@code addIfActive} did. */
+        void addIfActive(UnknownFamily family, int node, int component) {
+            if (node < 0 || node >= index.nodeCount || component + 1 >= index.componentSlots) return;
+            int key = index.key(family, node, component);
+            if (index.index(key) < 0) return;
+            if (size == keys.length) keys = java.util.Arrays.copyOf(keys, 2 * size);
+            keys[size++] = key;
+        }
+
+        /** The unknown indexes in {@link UnknownId} order, each once: the sorted set the records held. */
+        int[] ordered() {
+            java.util.Arrays.sort(keys, 0, size);
+            int unique = 0;
+            for (int i = 0; i < size; i++) if (i == 0 || keys[i] != keys[i - 1]) keys[unique++] = keys[i];
+            int[] result = new int[unique];
+            for (int i = 0; i < unique; i++) result[i] = index.index(keys[i]);
+            return result;
+        }
+    }
+
+    private static void enumerateEquations(
+            V3ColumnTopology topology, int componentCount, UnknownIndex index, List<EquationId> ids, List<int[]> rows,
+            V3CondenserComponentPhases condenserComponentPhases, V3TruncationSupport truncationSupport,
+            List<V3SideDrawSpec> sideDraws, V3WetTraySet wetTraySet) {
         boolean[] drawTrays = new boolean[topology.nodeCount()];
         for (V3SideDrawSpec draw : sideDraws) drawTrays[draw.trayNumber()] = true;
-        Set<UnknownId> activeUnknowns = new HashSet<>(unknowns.stream().map(Unknown::id).toList());
-        List<Equation> equations = new ArrayList<>();
+        References references = new References(index);
         for (int node = 0; node < topology.nodeCount(); node++) {
             for (int component = 0; component < componentCount; component++) {
                 if (!truncationSupport.retains(node, component)) continue;
                 // A one-phase point keeps its material row: the component is conserved into the phase that
                 // is present, and only its equilibrium row goes away with the absent phase.
-                equations.add(new Equation(new EquationId(EquationFamily.COMPONENT_MATERIAL_BALANCE, node, component),
-                        materialReferences(topology, node, component, componentCount, drawTrays, activeUnknowns)));
+                ids.add(new EquationId(EquationFamily.COMPONENT_MATERIAL_BALANCE, node, component));
+                rows.add(materialReferences(topology, node, component, componentCount, drawTrays, references.clear()));
                 if (truncationSupport.hasEquilibriumRow(condenserComponentPhases, node, component)) {
-                    equations.add(new Equation(new EquationId(EquationFamily.VAPOR_LIQUID_EQUILIBRIUM, node, component),
-                            equilibriumReferences(topology, node, component, componentCount, activeUnknowns)));
+                    ids.add(new EquationId(EquationFamily.VAPOR_LIQUID_EQUILIBRIUM, node, component));
+                    rows.add(equilibriumReferences(node, componentCount, references.clear()));
                 }
             }
             if (topology.hasEnergyEquation(node)) {
-                equations.add(new Equation(new EquationId(EquationFamily.ENERGY_BALANCE, node, -1),
-                        energyReferences(topology, node, componentCount, activeUnknowns)));
+                ids.add(new EquationId(EquationFamily.ENERGY_BALANCE, node, -1));
+                rows.add(energyReferences(topology, node, componentCount, references.clear()));
             }
             if (wetTraySet.hasFreeWaterUnknown(node)) {
-                equations.add(new Equation(new EquationId(EquationFamily.WATER_SATURATION, node, -1),
-                        waterSaturationReferences(node, componentCount, activeUnknowns)));
+                ids.add(new EquationId(EquationFamily.WATER_SATURATION, node, -1));
+                rows.add(waterSaturationReferences(node, componentCount, references.clear()));
             }
         }
-        for (Equation equation : equations) {
-            if (equation.referencedUnknowns().isEmpty()) {
-                diagnostics.add(new ContractDiagnostic("EQUATION_WITHOUT_UNKNOWN",
-                        "V3 equation " + equation.id() + " does not reference an active unknown"));
-            }
-            for (UnknownId referencedUnknown : equation.referencedUnknowns()) {
-                if (!activeUnknowns.contains(referencedUnknown)) {
-                    diagnostics.add(new ContractDiagnostic("EQUATION_REFERENCES_REMOVED_PHASE",
-                            "V3 equation " + equation.id() + " references " + referencedUnknown));
-                }
-            }
-        }
-        return equations;
     }
 
-    private static List<UnknownId> materialReferences(
+    private static int[] materialReferences(
             V3ColumnTopology topology, int node, int component, int componentCount, boolean[] drawTrays,
-            Set<UnknownId> activeUnknowns) {
-        Set<UnknownId> references = new HashSet<>();
-        addIfActive(references, activeUnknowns, UnknownFamily.LIQUID_COMPONENT_FLOW, node, component);
-        addIfActive(references, activeUnknowns, UnknownFamily.VAPOR_COMPONENT_FLOW, node, component);
+            References references) {
+        references.addIfActive(UnknownFamily.LIQUID_COMPONENT_FLOW, node, component);
+        references.addIfActive(UnknownFamily.VAPOR_COMPONENT_FLOW, node, component);
         if (node > topology.condenserNode()) {
-            addIfActive(references, activeUnknowns, UnknownFamily.LIQUID_COMPONENT_FLOW, node - 1, component);
+            references.addIfActive(UnknownFamily.LIQUID_COMPONENT_FLOW, node - 1, component);
             if (drawTrays[node - 1]) {
                 for (int k = 0; k < componentCount; k++) {
-                    addIfActive(references, activeUnknowns, UnknownFamily.LIQUID_COMPONENT_FLOW, node - 1, k);
+                    references.addIfActive(UnknownFamily.LIQUID_COMPONENT_FLOW, node - 1, k);
                 }
             }
         }
         if (node < topology.reboilerNode()) {
-            addIfActive(references, activeUnknowns, UnknownFamily.VAPOR_COMPONENT_FLOW, node + 1, component);
+            references.addIfActive(UnknownFamily.VAPOR_COMPONENT_FLOW, node + 1, component);
         }
-        return ordered(references);
+        return references.ordered();
     }
 
-    private static List<UnknownId> equilibriumReferences(
-            V3ColumnTopology topology, int node, int component, int componentCount, Set<UnknownId> activeUnknowns) {
-        Set<UnknownId> references = new HashSet<>();
+    private static int[] equilibriumReferences(int node, int componentCount, References references) {
         for (int phaseComponent = 0; phaseComponent < componentCount; phaseComponent++) {
-            addIfActive(references, activeUnknowns, UnknownFamily.LIQUID_COMPONENT_FLOW, node, phaseComponent);
-            addIfActive(references, activeUnknowns, UnknownFamily.VAPOR_COMPONENT_FLOW, node, phaseComponent);
+            references.addIfActive(UnknownFamily.LIQUID_COMPONENT_FLOW, node, phaseComponent);
+            references.addIfActive(UnknownFamily.VAPOR_COMPONENT_FLOW, node, phaseComponent);
         }
-        addIfActive(references, activeUnknowns, UnknownFamily.TEMPERATURE, node, -1);
+        references.addIfActive(UnknownFamily.TEMPERATURE, node, -1);
         // The water-dilution term of a wet column reads this node's water vapour, which is the authored
         // steam profile plus the free water the tray above sheds, and on tray one less the free water a
         // decanting drum takes as carry-over (a structural superset: the ledger does not see the drum's regime).
-        if (node > 0) addIfActive(references, activeUnknowns, UnknownFamily.FREE_WATER_FLOW, node - 1, -1);
-        if (node == 1) addIfActive(references, activeUnknowns, UnknownFamily.FREE_WATER_FLOW, 1, -1);
-        return ordered(references);
+        if (node > 0) references.addIfActive(UnknownFamily.FREE_WATER_FLOW, node - 1, -1);
+        if (node == 1) references.addIfActive(UnknownFamily.FREE_WATER_FLOW, 1, -1);
+        return references.ordered();
     }
 
-    private static List<UnknownId> energyReferences(
-            V3ColumnTopology topology, int node, int componentCount, Set<UnknownId> activeUnknowns) {
-        Set<UnknownId> references = new HashSet<>();
+    private static int[] energyReferences(
+            V3ColumnTopology topology, int node, int componentCount, References references) {
         for (int relatedNode = Math.max(topology.condenserNode(), node - 1);
                 relatedNode <= Math.min(topology.reboilerNode(), node + 1); relatedNode++) {
             for (int component = 0; component < componentCount; component++) {
-                addIfActive(references, activeUnknowns, UnknownFamily.LIQUID_COMPONENT_FLOW, relatedNode, component);
-                addIfActive(references, activeUnknowns, UnknownFamily.VAPOR_COMPONENT_FLOW, relatedNode, component);
+                references.addIfActive(UnknownFamily.LIQUID_COMPONENT_FLOW, relatedNode, component);
+                references.addIfActive(UnknownFamily.VAPOR_COMPONENT_FLOW, relatedNode, component);
             }
             // Free water in from above, out below, and the water vapour of both this node and the one below.
-            addIfActive(references, activeUnknowns, UnknownFamily.FREE_WATER_FLOW, relatedNode, -1);
+            references.addIfActive(UnknownFamily.FREE_WATER_FLOW, relatedNode, -1);
         }
-        addIfActive(references, activeUnknowns, UnknownFamily.TEMPERATURE, node, -1);
-        return ordered(references);
+        references.addIfActive(UnknownFamily.TEMPERATURE, node, -1);
+        return references.ordered();
     }
 
     /**
@@ -318,43 +395,27 @@ public final class V3DegreeOfFreedomLedger {
      * free water, which a decanting drum takes as carry-over ({@link V3ColumnProblem#carriesTopTrayWaterOver});
      * the reference is a structural superset where the drum cannot decant.
      */
-    private static List<UnknownId> waterSaturationReferences(
-            int node, int componentCount, Set<UnknownId> activeUnknowns) {
-        Set<UnknownId> references = new HashSet<>();
+    private static int[] waterSaturationReferences(int node, int componentCount, References references) {
         for (int component = 0; component < componentCount; component++) {
-            addIfActive(references, activeUnknowns, UnknownFamily.VAPOR_COMPONENT_FLOW, node, component);
+            references.addIfActive(UnknownFamily.VAPOR_COMPONENT_FLOW, node, component);
         }
-        addIfActive(references, activeUnknowns, UnknownFamily.TEMPERATURE, node, -1);
-        if (node > 0) addIfActive(references, activeUnknowns, UnknownFamily.FREE_WATER_FLOW, node - 1, -1);
-        if (node == 1) addIfActive(references, activeUnknowns, UnknownFamily.FREE_WATER_FLOW, 1, -1);
-        return ordered(references);
+        references.addIfActive(UnknownFamily.TEMPERATURE, node, -1);
+        if (node > 0) references.addIfActive(UnknownFamily.FREE_WATER_FLOW, node - 1, -1);
+        if (node == 1) references.addIfActive(UnknownFamily.FREE_WATER_FLOW, 1, -1);
+        return references.ordered();
     }
 
-    private static void addIfActive(
-            Set<UnknownId> references, Set<UnknownId> activeUnknowns, UnknownFamily family, int node, int component) {
-        UnknownId candidate = new UnknownId(family, node, component);
-        if (activeUnknowns.contains(candidate)) references.add(candidate);
-    }
-
-    private static List<UnknownId> ordered(Set<UnknownId> references) {
-        return references.stream().sorted().toList();
-    }
-
-    private static int maximumBipartiteMatching(List<Equation> equations, List<Unknown> unknowns) {
-        Map<UnknownId, Integer> unknownIndexes = new HashMap<>();
-        for (int index = 0; index < unknowns.size(); index++) unknownIndexes.put(unknowns.get(index).id(), index);
-        // Preserve reference order while resolving identifiers once, outside recursive matching.
-        int[][] references = new int[equations.size()][];
-        for (int equation = 0; equation < equations.size(); equation++) {
-            List<UnknownId> ids = equations.get(equation).referencedUnknowns();
-            references[equation] = new int[ids.size()];
-            for (int index = 0; index < ids.size(); index++) references[equation][index] = unknownIndexes.get(ids.get(index));
-        }
-        int[] equationForUnknown = new int[unknowns.size()];
+    /**
+     * Kuhn's maximum matching of equations to unknowns: equations in ledger order, each visiting its references in
+     * {@link UnknownId} order. The references arrive as unknown indexes in that order (P3 of batch
+     * 2026-11-13-codebase-review), so the augmenting order and the matching are those the records gave.
+     */
+    private static int maximumBipartiteMatching(int[][] references, int unknownCount) {
+        int[] equationForUnknown = new int[unknownCount];
         java.util.Arrays.fill(equationForUnknown, -1);
-        int[] visitedAt = new int[unknowns.size()];
+        int[] visitedAt = new int[unknownCount];
         int matched = 0;
-        for (int equation = 0; equation < equations.size(); equation++) {
+        for (int equation = 0; equation < references.length; equation++) {
             if (augment(equation, references, equationForUnknown, visitedAt, equation + 1)) matched++;
         }
         return matched;
