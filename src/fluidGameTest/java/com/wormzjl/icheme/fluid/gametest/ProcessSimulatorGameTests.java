@@ -139,7 +139,7 @@ public final class ProcessSimulatorGameTests {
 
     private static ColumnDesign design() {
         var catalog = MaterialRuntime.active();
-        return ColumnDesign.of(com.wormzjl.icheme.science.column.v3.V3ColumnPresets.input(catalog.presets().column(catalog.presets().network().defaultColumnPreset()), catalog),ColumnComponents.Choices.DEFAULT);
+        return ColumnDesign.of(com.wormzjl.icheme.science.column.v3.V3ColumnPresets.input(catalog.presets().column(catalog.presets().network().defaultColumnPreset()), catalog), ColumnComponents.Choices.DEFAULT);
     }
 
     /** What Send to block sends on the sample's crude unit: the column, its condenser's five shells, and a lying drum with a boot. */

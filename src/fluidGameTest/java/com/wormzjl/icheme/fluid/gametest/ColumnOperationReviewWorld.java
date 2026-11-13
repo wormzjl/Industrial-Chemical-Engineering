@@ -237,7 +237,7 @@ public final class ColumnOperationReviewWorld {
         void layout(boolean openFeed) {
             plant.hold();
             MaterialCatalog catalog = MaterialRuntime.active();
-            var base = options.design() == null ? com.wormzjl.icheme.science.column.v3.V3ColumnPresets.input(catalog.presets().column(catalog.presets().network().defaultColumnPreset()), catalog) :options.design().apply(catalog);
+            var base = options.design() == null ? com.wormzjl.icheme.science.column.v3.V3ColumnPresets.input(catalog.presets().column(catalog.presets().network().defaultColumnPreset()), catalog) : options.design().apply(catalog);
             input = scaled(base, options.scale());
             var layout = options.layout();
             int pumparounds = input.pumparounds().size();
