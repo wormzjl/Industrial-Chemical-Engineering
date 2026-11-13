@@ -25,8 +25,9 @@ import java.util.List;
  * {@link FluidTpEquilibrium#frostTemperature}, {@link FluidTpEquilibrium#freezingTemperature},
  * {@link FluidTpEquilibrium#depositionPressure}); each fluid answer is the engine's TP answer with the crystals left out.
  * It reads the engine's contract and evaluator, given once at construction, and calls back into the engine for the
- * request's checks, its TP answer, the crystal step's temperature and pressure (the partial-pressure approximation) and
- * the grading; the solids-assessed answer is the crystal equilibrium's. Immutable; one instance per engine.
+ * request's checks, its TP answer and the grading; the crystal step's temperature and pressure (the partial-pressure
+ * approximation) are the balance steps', the solids-assessed answer is the crystal equilibrium's. Immutable; one
+ * instance per engine.
  */
 final class CrystalOnsets {
     /** Fluid TP equilibria of an onset search before NOT_CONVERGED. */
@@ -34,13 +35,15 @@ final class CrystalOnsets {
 
     private final FluidTpEquilibrium engine;
     private final CrystalEquilibrium crystalEquilibrium;
+    private final BalanceSteps balanceSteps;
     private final PhaseContract contract;
     private final CubicPhaseEvaluator evaluator;
 
-    CrystalOnsets(FluidTpEquilibrium engine, CrystalEquilibrium crystalEquilibrium, PhaseContract contract,
-                  CubicPhaseEvaluator evaluator) {
+    CrystalOnsets(FluidTpEquilibrium engine, CrystalEquilibrium crystalEquilibrium, BalanceSteps balanceSteps,
+                  PhaseContract contract, CubicPhaseEvaluator evaluator) {
         this.engine = engine;
         this.crystalEquilibrium = crystalEquilibrium;
+        this.balanceSteps = balanceSteps;
         this.contract = contract;
         this.evaluator = evaluator;
     }
@@ -100,11 +103,11 @@ final class CrystalOnsets {
         double approximation = Double.NaN;
         if (temperatureSearch) {
             if (y * pressure <= anchor.pressure()) {
-                double estimate = engine.crystalStepTemperature(y * pressure, Double.NaN, c, Root.VAPOR, w);
+                double estimate = balanceSteps.crystalStepTemperature(y * pressure, Double.NaN, c, Root.VAPOR, w);
                 if (estimate <= anchor.temperature()) approximation = estimate;
             }
         } else if (temperature <= anchor.temperature()) {
-            double sublimation = engine.crystalStepPressure(temperature, Double.NaN, c, Root.VAPOR, w);
+            double sublimation = balanceSteps.crystalStepPressure(temperature, Double.NaN, c, Root.VAPOR, w);
             if (sublimation > 0.0) approximation = sublimation / y;
         }
         double xLow = temperatureSearch ? 1.0 / tHigh : DeterministicMath.log(pLow);
