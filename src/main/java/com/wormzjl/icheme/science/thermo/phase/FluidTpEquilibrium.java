@@ -319,6 +319,8 @@ public final class FluidTpEquilibrium {
     private final TwoPhaseFlash twoPhaseFlash;
     /** The three-slot system (W3a D3, S01), built once at construction. */
     private final ThreeSlotFlash threeSlotFlash;
+    /** The declared critical band (S01), built once at construction. */
+    private final CriticalBand criticalBand;
 
     /** @param evaluator its basis must be the contract's basis, in the same order, and its family the contract identity's */
     public FluidTpEquilibrium(PhaseContract contract, CubicPhaseEvaluator evaluator, Settings settings) {
@@ -367,6 +369,7 @@ public final class FluidTpEquilibrium {
         crystalSet = new CrystalSet(contract, evaluator, count, cubicWater, convergedCoverage, crystalEvaluators);
         twoPhaseFlash = new TwoPhaseFlash(this, kernel, evaluator, settings, stability, count, crystalSet.crystalSpecies);
         threeSlotFlash = new ThreeSlotFlash(this, twoPhaseFlash, kernel, evaluator, settings, stability, count, polar, cubicWater);
+        criticalBand = new CriticalBand(evaluator);
     }
 
     /**
@@ -989,7 +992,7 @@ public final class FluidTpEquilibrium {
         w.outerKernel += w.kernelEvaluations;
         w.outerDerivative += w.derivativeEvaluations;
         if (result.status() == EquilibriumResult.Status.NOT_CONVERGED && !result.diagnostics().criticalBand()
-                && w.hydrocarbonTotal > 0.0 && inBand(t, p, w.request)) {
+                && w.hydrocarbonTotal > 0.0 && criticalBand.inBand(t, p, w.request)) {
             Diagnostics d = result.diagnostics();
             result = EquilibriumResult.notConverged(Specification.TP, contract.identity(), competition,
                     EquilibriumResult.CRITICAL_BAND + " (critical band: pure fluid near its critical point): " + result.detail(),
@@ -1876,8 +1879,8 @@ public final class FluidTpEquilibrium {
             return null;
         }
         beta = Math.clamp(beta, 0.0, 1.0);
-        boolean band = inBand(t, p, w.request);
-        String why = band ? bandReason(t, p, w.request, w, Double.NaN) : null;
+        boolean band = criticalBand.inBand(t, p, w.request);
+        String why = band ? criticalBand.bandReason(t, p, w.request, w, Double.NaN) : null;
         String note = "pure coexistence at the equal-fugacity point (" + t + " K, " + p + " Pa): vapour fraction " + beta
                 + " from the " + (energy ? "energy" : "volume") + " balance";
         List<PhaseAmounts> phases;
@@ -4241,8 +4244,8 @@ public final class FluidTpEquilibrium {
 
     private EquilibriumResult singlePhase(double t, double p, PhaseCompetition competition, Feed material, Workspace w) {
         TangentPlaneStability.Result feed = w.feedResult;
-        boolean band = inBand(t, p, material) || feed.nearestStationaryDistance() < BAND_STATIONARY_DISTANCE && material.presentCount > 1;
-        String why = band ? bandReason(t, p, material, w, feed.nearestStationaryDistance()) : null;
+        boolean band = criticalBand.inBand(t, p, material) || feed.nearestStationaryDistance() < BAND_STATIONARY_DISTANCE && material.presentCount > 1;
+        String why = band ? criticalBand.bandReason(t, p, material, w, feed.nearestStationaryDistance()) : null;
         if (material.presentCount == 1) {
             int only = material.present[0];
             kernel.evaluate(t, p, material.amounts, Root.VAPOR, w.mixture, w.first);
@@ -4337,20 +4340,20 @@ public final class FluidTpEquilibrium {
         PhaseState liquid = w.liquidState;
         PhaseState vapour = w.vaporState;
         boolean swapped = vapour.molarVolume() < liquid.molarVolume();
-        boolean band = inBand(t, p, material) || w.tieLine < BAND_TIE_LINE;
+        boolean band = criticalBand.inBand(t, p, material) || w.tieLine < BAND_TIE_LINE;
         boolean liquidLiquid = !band && w.liquidProductDenseLiquidLike && w.vapourProductDenseLiquidLike;
         PhaseAmounts lighter = new PhaseAmounts(liquidLiquid ? PhaseKind.LIQUID : PhaseKind.VAPOR, null, t, p,
                 expand(swapped ? w.liquidAmounts : w.vaporAmounts), (swapped ? liquid : vapour).copy());
         PhaseAmounts denser = new PhaseAmounts(PhaseKind.LIQUID, null, t, p,
                 expand(swapped ? w.vaporAmounts : w.liquidAmounts), (swapped ? vapour : liquid).copy());
         return converged(competition, liquidLiquid ? Classification.LIQUID_LIQUID : Classification.VAPOR_LIQUID,
-                List.of(lighter, denser), List.of(), diagnostics(w, w.feedResult, band), band ? bandReason(t, p, material, w, Double.NaN) : null);
+                List.of(lighter, denser), List.of(), diagnostics(w, w.feedResult, band), band ? criticalBand.bandReason(t, p, material, w, Double.NaN) : null);
     }
 
     private EquilibriumResult failed(double t, double p, PhaseCompetition competition, Feed material, Workspace w) {
         double seed = w.feedResult == null ? Double.NaN : w.seedDistance;
-        boolean band = inBand(t, p, material) || w.tieLine < BAND_TIE_LINE || seed < BAND_STATIONARY_DISTANCE;
-        String detail = band ? EquilibriumResult.CRITICAL_BAND + " (" + bandReason(t, p, material, w, seed) + "): " + w.failure : w.failure;
+        boolean band = criticalBand.inBand(t, p, material) || w.tieLine < BAND_TIE_LINE || seed < BAND_STATIONARY_DISTANCE;
+        String detail = band ? EquilibriumResult.CRITICAL_BAND + " (" + criticalBand.bandReason(t, p, material, w, seed) + "): " + w.failure : w.failure;
         return EquilibriumResult.notConverged(Specification.TP, contract.identity(), competition,
                 detail, diagnostics(w, w.feedResult, band));
     }
@@ -4506,7 +4509,7 @@ public final class FluidTpEquilibrium {
         boolean denserRich = crystalRich(denser, swapped ? w.vaporState : w.liquidState, t, w);
         boolean lighterRich = crystalRich(lighter, swapped ? w.liquidState : w.vaporState, t, w);
         if (!denserRich && !lighterRich) return SPLIT;
-        boolean band = inBand(t, w.pressure, material) || w.tieLine < BAND_TIE_LINE;
+        boolean band = criticalBand.inBand(t, w.pressure, material) || w.tieLine < BAND_TIE_LINE;
         if (!band && w.liquidProductDenseLiquidLike && w.vapourProductDenseLiquidLike) return SPLIT;
         if (!denserRich) return SPLIT;
         for (int i = 0; i < count; i++) {
@@ -4610,27 +4613,12 @@ public final class FluidTpEquilibrium {
             int k = order[a];
             phases.add(new PhaseAmounts(a == 0 ? PhaseKind.VAPOR : PhaseKind.LIQUID, null, t, p, expand(s.amounts[k]), s.states[k].copy()));
         }
-        boolean band = inBand(t, p, material) || w.tieLine < BAND_TIE_LINE;
+        boolean band = criticalBand.inBand(t, p, material) || w.tieLine < BAND_TIE_LINE;
         return converged(competition, Classification.VAPOR_LIQUID_LIQUID, phases, List.of(), diagnostics(w, w.feedResult, band),
-                band ? bandReason(t, p, material, w, Double.NaN) : null);
+                band ? criticalBand.bandReason(t, p, material, w, Double.NaN) : null);
     }
 
     // The critical band.
-
-    /**
-     * The pure-fluid band: one component at least 0.95 of the amount, at reduced temperature and pressure (its own
-     * critical constants) inside one of the declared boxes, closed intervals ({@link #pureBandBox}).
-     */
-    private boolean inBand(double t, double p, Feed material) {
-        int dominant = -1;
-        for (int a = 0; a < material.presentCount; a++) {
-            int i = material.present[a];
-            if (material.z[i] >= 0.95) dominant = i;
-        }
-        if (dominant < 0) return false;
-        var constants = evaluator.component(dominant);
-        return pureBandBox(t / constants.criticalTemperatureKelvin(), p / constants.criticalPressurePascal()) != 0;
-    }
 
     /**
      * The declared critical band of a pure fluid at reduced temperature {@code tr} and pressure {@code pr} (closed
@@ -4645,12 +4633,6 @@ public final class FluidTpEquilibrium {
         if (tr >= 1.05 && tr <= 1.2 && pr >= 2.0 && pr <= 3.0) return 3;
         if (tr >= 1.0 && tr <= 1.1 && pr >= 1.5 && pr <= 2.0) return 4;
         return 0;
-    }
-
-    private String bandReason(double t, double p, Feed material, Workspace w, double stationary) {
-        if (inBand(t, p, material)) return "critical band: pure fluid near its critical point";
-        if (w.tieLine < BAND_TIE_LINE) return "critical band: short tie line (sum z ln K^2 = " + w.tieLine + ")";
-        return "critical band: incipient phase next to the feed (sum (ln w - ln z)^2 = " + stationary + ")";
     }
 
     // Results.
