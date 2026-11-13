@@ -29,7 +29,7 @@ class LevelLoopBlanketStartTest {
         long id=w.ledger.nextIdentity();
         var g=VesselGeometry.round(VesselGeometry.Form.HORIZONTAL_DRUM,1.5,4,0,0);
         var ports=List.of(new PhysicalFluidTopology.Port(at(0,0,0),DOWN,PassiveNetwork.PhasePort.LIQUID),new PhysicalFluidTopology.Port(at(0,1,0),UP,PassiveNetwork.PhasePort.BULK));
-        var device=new PhysicalFluidTopology.Device(id,at(0,0,0),Kind.RESERVOIR,NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive(),ports);
+        var device=PhysicalFluidTopology.Device.builder(id,at(0,0,0),Kind.RESERVOIR,NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive()).ports(ports).build();
         var spec=new FluidDeviceSpec(g.capacity(),298.15,101325,FluidDeviceSpec.nitrogen(EventPathWorld.CATALOG).composition(),SlurryFeed.NONE,g.height(),false,g,null,0);
         w.registry.submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,spec,0))),id+1,null);
         return id;

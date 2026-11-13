@@ -76,7 +76,7 @@ class VesselRebuildTest {
         long pump=w.ledger.nextIdentity();
         var ports=List.of(new PhysicalFluidTopology.Port(at(10,64,0),WEST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.SUCTION),
                 new PhysicalFluidTopology.Port(at(11,64,0),EAST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.DISCHARGE));
-        var device=new PhysicalFluidTopology.Device(pump,at(10,64,0),Kind.PUMP,EAST,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Pump(.02,400000),ports);
+        var device=PhysicalFluidTopology.Device.builder(pump,at(10,64,0),Kind.PUMP,EAST,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Pump(.02,400000)).ports(ports).build();
         w.registry.submit(List.of(new WorldTopologyLedger.Edit(pump,new WorldTopologyLedger.Registration(device,EventPathWorld.nitrogen(),0))),pump+1,null);w.runTo(20);
         var movedPorts=List.of(new PhysicalFluidTopology.Port(at(20,64,0),WEST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.SUCTION),
                 new PhysicalFluidTopology.Port(at(21,64,0),EAST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.DISCHARGE));

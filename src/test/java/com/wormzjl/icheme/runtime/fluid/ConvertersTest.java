@@ -72,8 +72,7 @@ class ConvertersTest {
     }
     private static PhysicalFluidTopology.Device port(long id,int x,int y,Kind kind,Direction toward,PipeResistance.Geometry g) {
         var at=new PhysicalFluidTopology.Position(EventPathWorld.DIM,x,y,0,PhysicalFluidTopology.PORT_LANE);
-        return new PhysicalFluidTopology.Device(id,at,kind,toward,g,new FlowControl.Passive(),List.of(new PhysicalFluidTopology.Port(at,toward,PassiveNetwork.PhasePort.BULK)),
-                true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,null,0);
+        return PhysicalFluidTopology.Device.builder(id,at,kind,toward,g,new FlowControl.Passive()).ports(List.of(new PhysicalFluidTopology.Port(at,toward,PassiveNetwork.PhasePort.BULK))).build();
     }
     /** The open tank, its two lines and the converter (a Forge tank of {@code capacity} mB), off. */
     static Rig rig(long capacity) throws IOException {

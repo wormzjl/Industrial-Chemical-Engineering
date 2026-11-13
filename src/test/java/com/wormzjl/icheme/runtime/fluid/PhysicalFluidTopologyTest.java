@@ -14,13 +14,13 @@ import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 class PhysicalFluidTopologyTest {
     private final FluidThermodynamics model=FluidTestSupport.networkModel();
     private PhysicalFluidTopology.Device device(long id,int x,int z,Kind kind,PhysicalFluidTopology.Direction facing) {
-        return new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position("minecraft:overworld",x,0,z),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kind),facing,new PipeResistance.Geometry(1,.05,.000045,0),
-                kind==Kind.PUMP?new FlowControl.Pump(.00001,500000):kind==Kind.COMPRESSOR?new FlowControl.Compressor(.00001,3):kind==Kind.VALVE?new FlowControl.PressureValve(150000):new FlowControl.Passive());
+        return PhysicalFluidTopology.Device.builder(id,new PhysicalFluidTopology.Position("minecraft:overworld",x,0,z),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kind),facing,new PipeResistance.Geometry(1,.05,.000045,0),
+                kind==Kind.PUMP?new FlowControl.Pump(.00001,500000):kind==Kind.COMPRESSOR?new FlowControl.Compressor(.00001,3):kind==Kind.VALVE?new FlowControl.PressureValve(150000):new FlowControl.Passive()).build();
     }
     private PassiveNetwork.Reservoir reservoir(long id){return new PassiveNetwork.Reservoir(id,0,model.initialNitrogenCharge(1,298.15,101325,()->{}));}
     @Test void valveCharacteristicKeepsTheRegisteredBoreAcrossNarrowerRuns(){
         var valve=device(3,2,0,Kind.VALVE,EAST);
-        valve=new PhysicalFluidTopology.Device(valve.id(),valve.position(),valve.kind(),valve.facing(),new PipeResistance.Geometry(1,.08,.000045,0),valve.control());
+        valve=PhysicalFluidTopology.Device.builder(valve.id(),valve.position(),valve.kind(),valve.facing(),new PipeResistance.Geometry(1,.08,.000045,0),valve.control()).build();
         var compiled=PhysicalFluidTopology.compile(List.of(device(1,0,0,Kind.RESERVOIR,EAST),device(2,1,0,Kind.PIPE,EAST),valve,device(4,3,0,Kind.PIPE,EAST),device(5,4,0,Kind.RESERVOIR,EAST)),Map.of(1L,reservoir(1),5L,reservoir(5)));
         var pipe=compiled.islands().getFirst().graph().pipes().stream().filter(p->p.control() instanceof FlowControl.Valve).findFirst().orElseThrow();
         assertEquals(Math.PI*.08*.08/4,pipe.controlArea());assertTrue(pipe.controlArea()>pipe.minimumArea());
@@ -81,7 +81,7 @@ class PhysicalFluidTopologyTest {
         var discharge=new PhysicalFluidTopology.Position("minecraft:overworld",0,2,0);
         var ports=List.of(new PhysicalFluidTopology.Port(suction,WEST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.SUCTION),
                 new PhysicalFluidTopology.Port(discharge,EAST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.DISCHARGE));
-        var mover=new PhysicalFluidTopology.Device(10,suction,Kind.COMPRESSOR,NORTH,new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Compressor(.05,3),ports);
+        var mover=PhysicalFluidTopology.Device.builder(10,suction,Kind.COMPRESSOR,NORTH,new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Compressor(.05,3)).ports(ports).build();
         var devices=List.of(at(1,8,0,10,Kind.GENERATOR,NORTH),at(20,9,0,10,Kind.PIPE,NORTH),mover,
                 at(30,1,2,0,Kind.PIPE,NORTH),at(2,2,2,0,Kind.VOID,NORTH));
         var compiled=PhysicalFluidTopology.compile(devices,Map.of(1L,nitrogenAt(1,0,PassiveNetwork.NodeKind.GENERATOR,150000),
@@ -106,7 +106,7 @@ class PhysicalFluidTopologyTest {
         var compiled=PhysicalFluidTopology.compile(devices,Map.of(1L,reservoir(1)));
         assertTrue(compiled.diagnostics().get(3L).contains("ERROR"));assertTrue(compiled.diagnostics().containsKey(4L));
         var unanchored=PhysicalFluidTopology.compile(List.of(device(9,0,0,Kind.PIPE,facing),device(10,1,0,Kind.PIPE,facing)),Map.of());assertTrue(unanchored.islands().isEmpty());
-        var a=device(20,0,0,Kind.RESERVOIR,facing);var b=new PhysicalFluidTopology.Device(21,new PhysicalFluidTopology.Position("minecraft:the_nether",1,0,0),Kind.RESERVOIR,facing,a.geometry(),new FlowControl.Passive());
+        var a=device(20,0,0,Kind.RESERVOIR,facing);var b=PhysicalFluidTopology.Device.builder(21,new PhysicalFluidTopology.Position("minecraft:the_nether",1,0,0),Kind.RESERVOIR,facing,a.geometry(),new FlowControl.Passive()).build();
         var separate=PhysicalFluidTopology.compile(List.of(a,b),Map.of(20L,reservoir(20),21L,reservoir(21)));assertEquals(2,separate.islands().size());
     }
     @Test void zeroStoragePumpBypassDisablesThePumpButStillAllowsPassiveEqualization() {
@@ -136,16 +136,16 @@ class PhysicalFluidTopologyTest {
         var result=new PassiveIntervalSolver(model).solve(graph,.05,PassiveIntervalSolver.Settings.defaults(),()->{});
         assertEquals(0,result.averageMassFlows()[graph.pipes().indexOf(compressor)],1e-12);
         assertTrue(Arrays.stream(result.averageMassFlows()).anyMatch(q->Math.abs(q)>1e-6));
-        assertThrows(IllegalArgumentException.class,()->new PhysicalFluidTopology.Device(9,new PhysicalFluidTopology.Position("minecraft:overworld",9,0,0),Kind.COMPRESSOR,facing,
-                new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Pump(.01,500000)),"a compressor without ports is an in-line mover, a pipe");
+        assertThrows(IllegalArgumentException.class,()->PhysicalFluidTopology.Device.builder(9,new PhysicalFluidTopology.Position("minecraft:overworld",9,0,0),Kind.COMPRESSOR,facing,
+                new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Pump(.01,500000)).build(),"a compressor without ports is an in-line mover, a pipe");
     }
 
     // ---------------- faces to ports (phase-ports WP5, plan 4.1, default A1) ----------------
 
     private static final PhysicalFluidTopology.Direction N=PhysicalFluidTopology.Direction.NORTH;
     private PhysicalFluidTopology.Device at(long id,int x,int y,int z,Kind kind,PhysicalFluidTopology.Direction facing) {
-        return new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position("minecraft:overworld",x,y,z),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kind),facing,new PipeResistance.Geometry(1,.05,.000045,0),
-                kind==Kind.PUMP?new FlowControl.Pump(.001,500000):kind==Kind.COMPRESSOR?new FlowControl.Compressor(.00001,3):new FlowControl.Passive());
+        return PhysicalFluidTopology.Device.builder(id,new PhysicalFluidTopology.Position("minecraft:overworld",x,y,z),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kind),facing,new PipeResistance.Geometry(1,.05,.000045,0),
+                kind==Kind.PUMP?new FlowControl.Pump(.001,500000):kind==Kind.COMPRESSOR?new FlowControl.Compressor(.00001,3):new FlowControl.Passive()).build();
     }
     private PassiveNetwork.Reservoir nitrogenAt(long id,int y,PassiveNetwork.NodeKind kind,double pressure){return new PassiveNetwork.Reservoir(id,y,model.initialNitrogenCharge(1,298.15,pressure,()->{}),kind);}
     private int component(String name){int i=model.components().indexOf(name);assertTrue(i>=0,name);return i;}
@@ -353,7 +353,7 @@ class PhysicalFluidTopologyTest {
      */
     private static PhysicalFluidTopology.Device at(long id,int x,Kind kind,PhysicalFluidTopology.Direction facing) {
         var control=switch(kind){case PUMP->new FlowControl.Pump(.01,500000);case COMPRESSOR->new FlowControl.Compressor(.05,3);case VALVE->new FlowControl.PressureValve(200000);default->new FlowControl.Passive();};
-        return new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position("minecraft:overworld",x,0,0),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kind),facing,new PipeResistance.Geometry(1,.05,.000045,0),control);
+        return PhysicalFluidTopology.Device.builder(id,new PhysicalFluidTopology.Position("minecraft:overworld",x,0,0),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kind),facing,new PipeResistance.Geometry(1,.05,.000045,0),control).build();
     }
     private PhysicalFluidTopology.Compiled compile(String layout) {
         var devices=new ArrayList<PhysicalFluidTopology.Device>();var boundaries=new LinkedHashMap<Long,PassiveNetwork.Reservoir>();
@@ -425,7 +425,7 @@ class PhysicalFluidTopologyTest {
         }
     }
     private static PhysicalFluidTopology.Device bore(PhysicalFluidTopology.Device d,double diameter) {
-        return new PhysicalFluidTopology.Device(d.id(),d.position(),d.kind(),d.facing(),new PipeResistance.Geometry(1,diameter,.000045,0),d.control());
+        return PhysicalFluidTopology.Device.builder(d.id(),d.position(),d.kind(),d.facing(),new PipeResistance.Geometry(1,diameter,.000045,0),d.control()).build();
     }
 
     @Test void theRegistryWalksFollowTheSameRule() {
@@ -448,11 +448,11 @@ class PhysicalFluidTopologyTest {
      */
     private static final int ALONG_X=1<<WEST.ordinal()|1<<EAST.ordinal();
     private PhysicalFluidTopology.Device pipe(long id,int x,int z,int joints) {
-        return new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position("minecraft:overworld",x,0,z),Kind.PIPE,EAST,new PipeResistance.Geometry(1,.05,.000045,0),
-                new FlowControl.Passive(),List.of(),true,PhysicalFluidTopology.Cutoff.NONE,false,joints);
+        return PhysicalFluidTopology.Device.builder(id,new PhysicalFluidTopology.Position("minecraft:overworld",x,0,z),Kind.PIPE,EAST,new PipeResistance.Geometry(1,.05,.000045,0),
+                new FlowControl.Passive()).joints(joints).build();
     }
     private PhysicalFluidTopology.Device tank(long id,int x,int z) {
-        return new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position("minecraft:overworld",x,0,z),Kind.RESERVOIR,EAST,new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Passive());
+        return PhysicalFluidTopology.Device.builder(id,new PhysicalFluidTopology.Position("minecraft:overworld",x,0,z),Kind.RESERVOIR,EAST,new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Passive()).build();
     }
     /** Two lines of four pipes, at z 0 and z 1, each between two tanks; {@code joints} is every pipe's joint set. */
     private PhysicalFluidTopology.Compiled twoLines(int joints,int teeAt) {
@@ -485,8 +485,8 @@ class PhysicalFluidTopologyTest {
 
     @Test void onlyALaidPipeHasExplicitJointsAndEveryCopyKeepsThem() {
         assertThrows(IllegalArgumentException.class,()->pipe(1,0,0,64),"past the six faces");
-        assertThrows(IllegalArgumentException.class,()->new PhysicalFluidTopology.Device(1,new PhysicalFluidTopology.Position("minecraft:overworld",0,0,0),Kind.RESERVOIR,EAST,
-                new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Passive(),List.of(),true,PhysicalFluidTopology.Cutoff.NONE,false,ALONG_X),"a tank has every face");
+        assertThrows(IllegalArgumentException.class,()->PhysicalFluidTopology.Device.builder(1,new PhysicalFluidTopology.Position("minecraft:overworld",0,0,0),Kind.RESERVOIR,EAST,
+                new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Passive()).joints(ALONG_X).build(),"a tank has every face");
         var laid=pipe(1,0,0,ALONG_X);
         assertEquals(ALONG_X,laid.withGeometry(new PipeResistance.Geometry(1,.1,.000045,0)).joints());
         assertEquals(ALONG_X,laid.withCutoff(EAST,PhysicalFluidTopology.Cutoff.OPEN).joints());
@@ -501,8 +501,8 @@ class PhysicalFluidTopologyTest {
         return lane(id,x,z,lane,slots,joints,points);
     }
     private PhysicalFluidTopology.Device lane(long id,int x,int z,int lane,int slots,int joints,long points) {
-        return new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position("minecraft:overworld",x,0,z,lane),Kind.PIPE,EAST,new PipeResistance.Geometry(1,.05,.000045,0),
-                new FlowControl.Passive(),List.of(),true,PhysicalFluidTopology.Cutoff.NONE,false,joints,slots,points);
+        return PhysicalFluidTopology.Device.builder(id,new PhysicalFluidTopology.Position("minecraft:overworld",x,0,z,lane),Kind.PIPE,EAST,new PipeResistance.Geometry(1,.05,.000045,0),
+                new FlowControl.Passive()).joints(joints).slots(slots).points(points).build();
     }
     private int islands(List<PhysicalFluidTopology.Device> devices,long... tanks) {
         var boundaries=new HashMap<Long,PassiveNetwork.Reservoir>();for(long tank:tanks)boundaries.put(tank,reservoir(tank));
@@ -544,8 +544,8 @@ class PhysicalFluidTopologyTest {
      * whose run can bend to the lane's off-centre point. A hand-placed pipe, a tee and a valve beside the rack meet none.
      */
     @Test void aLaneMeetsOnlyATransitionPipe() {
-        var valve=new PhysicalFluidTopology.Device(10,new PhysicalFluidTopology.Position("minecraft:overworld",0,0,0),Kind.PIPE,EAST,new PipeResistance.Geometry(1,.05,.000045,0),
-                new FlowControl.Passive(),List.of(),true,PhysicalFluidTopology.Cutoff.OPEN,false,ALONG_X);
+        var valve=PhysicalFluidTopology.Device.builder(10,new PhysicalFluidTopology.Position("minecraft:overworld",0,0,0),Kind.PIPE,EAST,new PipeResistance.Geometry(1,.05,.000045,0),
+                new FlowControl.Passive()).cutoff(PhysicalFluidTopology.Cutoff.OPEN).joints(ALONG_X).build();
         for(var beside:List.of(pipe(10,0,0,PhysicalFluidTopology.ALL_FACES),pipe(10,0,0,ALONG_X|1<<UP.ordinal()),valve))
             assertEquals(2,islands(List.of(tank(1,-1,0),beside,lane(11,1,0,2,1,ALONG_X),pipe(12,2,0,ALONG_X),tank(2,3,0)),1,2),"beside the rack: "+beside);
         assertEquals(1,islands(List.of(tank(1,0,1),pipe(10,0,0,1<<SOUTH.ordinal()|1<<EAST.ordinal()),lane(11,1,0,2,1,ALONG_X),pipe(12,2,0,ALONG_X),tank(2,3,0)),1,2),
@@ -605,8 +605,8 @@ class PhysicalFluidTopologyTest {
      */
     @Test void anInLineMachineDrawsAsAPumpAlongItsAxisOnly() {
         for(boolean liquid:new boolean[]{true,false}) {
-            var machine=new PhysicalFluidTopology.Device(2,new PhysicalFluidTopology.Position("minecraft:overworld",1,0,0),Kind.PIPE,EAST,new PipeResistance.Geometry(1,.05,.000045,0),
-                    com.wormzjl.icheme.science.fluid.network.InlineMovers.design(.05,liquid));
+            var machine=PhysicalFluidTopology.Device.builder(2,new PhysicalFluidTopology.Position("minecraft:overworld",1,0,0),Kind.PIPE,EAST,new PipeResistance.Geometry(1,.05,.000045,0),
+                    com.wormzjl.icheme.science.fluid.network.InlineMovers.design(.05,liquid)).build();
             var mover=liquid?com.wormzjl.icheme.world.level.block.FluidDeviceBlock.InlineMover.PUMP:com.wormzjl.icheme.world.level.block.FluidDeviceBlock.InlineMover.COMPRESSOR;
             assertEquals(mover,com.wormzjl.icheme.world.level.block.FluidDeviceBlock.InlineMover.of(machine.hydraulicKind()),"the block's fitting is the engine's mover");
             var devices=List.of(tank(5,-1,0),pipe(1,0,0,PhysicalFluidTopology.ALL_FACES),machine,pipe(3,2,0,PhysicalFluidTopology.ALL_FACES),tank(6,3,0),pipe(4,1,1,PhysicalFluidTopology.ALL_FACES));
@@ -631,9 +631,9 @@ class PhysicalFluidTopologyTest {
 
     /** Mechanical joints: a closed valve and a generator switched off stay bolted on, though no flow passes. */
     @Test void aClosedValveAndAGeneratorSwitchedOffStayDrawnJoined() {
-        var off=new PhysicalFluidTopology.Device(1,new PhysicalFluidTopology.Position("minecraft:overworld",0,0,0),Kind.GENERATOR,EAST,new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Passive(),List.of(),false);
-        var closed=new PhysicalFluidTopology.Device(2,new PhysicalFluidTopology.Position("minecraft:overworld",1,0,0),Kind.PIPE,EAST,new PipeResistance.Geometry(1,.05,.000045,0),
-                new FlowControl.Passive(),List.of(),true,PhysicalFluidTopology.Cutoff.CLOSED,false);
+        var off=PhysicalFluidTopology.Device.builder(1,new PhysicalFluidTopology.Position("minecraft:overworld",0,0,0),Kind.GENERATOR,EAST,new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Passive()).generatorEnabled(false).build();
+        var closed=PhysicalFluidTopology.Device.builder(2,new PhysicalFluidTopology.Position("minecraft:overworld",1,0,0),Kind.PIPE,EAST,new PipeResistance.Geometry(1,.05,.000045,0),
+                new FlowControl.Passive()).cutoff(PhysicalFluidTopology.Cutoff.CLOSED).build();
         var devices=List.of(off,closed,pipe(3,2,0,PhysicalFluidTopology.ALL_FACES));
         assertEquals(FACE_E,drawn(devices,1),"a generator switched off");
         assertEquals(FACE_W|FACE_E,drawn(devices,2),"a closed valve");

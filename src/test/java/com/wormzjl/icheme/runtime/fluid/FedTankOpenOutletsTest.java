@@ -31,7 +31,7 @@ class FedTankOpenOutletsTest {
     final FluidThermodynamics model=FluidTestSupport.networkModel();
 
     static PhysicalFluidTopology.Device device(long id,int x,int y,int z,Kind kind) {
-        return new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position(DIMENSION,x,y,z),kind,PhysicalFluidTopology.Direction.NORTH,BLOCK,new FlowControl.Passive());
+        return PhysicalFluidTopology.Device.builder(id,new PhysicalFluidTopology.Position(DIMENSION,x,y,z),kind,PhysicalFluidTopology.Direction.NORTH,BLOCK,new FlowControl.Passive()).build();
     }
     static int node(PassiveNetwork graph,long id){for(int i=0;i<graph.reservoirs().size();i++)if(graph.reservoirs().get(i).id()==id)return i;throw new AssertionError(id);}
 

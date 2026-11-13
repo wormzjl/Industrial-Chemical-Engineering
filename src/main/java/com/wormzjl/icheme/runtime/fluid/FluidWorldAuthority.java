@@ -529,7 +529,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
      */
     public int placedFaces(PhysicalFluidTopology.Position position,TopologyCompiler.Kind kind,PhysicalFluidTopology.Direction facing){
         owned();
-        var placed=new PhysicalFluidTopology.Device(Long.MAX_VALUE,position,kind,facing,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive(),List.of(),kind!=TopologyCompiler.Kind.GENERATOR);
+        var placed=PhysicalFluidTopology.Device.builder(Long.MAX_VALUE,position,kind,facing,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive()).generatorEnabled(kind!=TopologyCompiler.Kind.GENERATOR).build();
         return PhysicalFluidTopology.builtFaces(p->p.equals(position)?placed:latestDevice(p),placed);
     }
     private PhysicalFluidTopology.Device latestDevice(PhysicalFluidTopology.Position position){var record=topology.latestAt(position);return record==null?null:record.device();}
@@ -565,8 +565,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
         long first=topology.nextIdentity();var edits=new ArrayList<WorldTopologyLedger.Edit>();var placed=new ArrayList<WorldTopologyLedger.Registration>();
         for(int i=0;i<cells.size();i++) {
             var cell=cells.get(i);
-            var device=new PhysicalFluidTopology.Device(first+i,cell.position(),TopologyCompiler.Kind.PIPE,cell.facing(),new PipeResistance.Geometry(1,diameter,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),
-                    new FlowControl.Passive(),List.of(),true,PhysicalFluidTopology.Cutoff.NONE,false,cell.joints(),cell.slots(),cell.points());
+            var device=PhysicalFluidTopology.Device.builder(first+i,cell.position(),TopologyCompiler.Kind.PIPE,cell.facing(),new PipeResistance.Geometry(1,diameter,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),
+                    new FlowControl.Passive()).joints(cell.joints()).slots(cell.slots()).points(cell.points()).build();
             var record=new WorldTopologyLedger.Registration(device,FluidDeviceSpec.nitrogen(catalog),0);placed.add(record);edits.add(new WorldTopologyLedger.Edit(first+i,record));
         }
         for(var host:new TreeMap<>(hosts).entrySet()) {
@@ -581,8 +581,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
     /** A rack lane registered again from its rack's copy (a chunk load after the D4 reset): its joints, width, face points and bore. */
     public WorldTopologyLedger.Registration placeLane(PhysicalFluidTopology.Position position,PhysicalFluidTopology.Direction facing,int joints,int slots,long points,double diameter) {
         owned();long id=topology.nextIdentity();
-        var device=new PhysicalFluidTopology.Device(id,position,TopologyCompiler.Kind.PIPE,facing,new PipeResistance.Geometry(1,diameter,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),
-                new FlowControl.Passive(),List.of(),true,PhysicalFluidTopology.Cutoff.NONE,false,joints,slots,points);
+        var device=PhysicalFluidTopology.Device.builder(id,position,TopologyCompiler.Kind.PIPE,facing,new PipeResistance.Geometry(1,diameter,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),
+                new FlowControl.Passive()).joints(joints).slots(slots).points(points).build();
         var record=new WorldTopologyLedger.Registration(device,FluidDeviceSpec.nitrogen(catalog),0);
         submit(List.of(new WorldTopologyLedger.Edit(id,record)),Math.addExact(id,1));return record;
     }
@@ -614,9 +614,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
      */
     public WorldTopologyLedger.Registration placeFlare(PhysicalFluidTopology.Position node,List<PhysicalFluidTopology.Port> ports,double tip) {
         owned();long id=topology.nextIdentity();
-        var device=new PhysicalFluidTopology.Device(id,node,TopologyCompiler.Kind.VOID,PhysicalFluidTopology.Direction.NORTH,
-                new PipeResistance.Geometry(1,tip,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),FlowControl.ControlValve.flare(),ports,true,PhysicalFluidTopology.Cutoff.NONE,false,
-                PhysicalFluidTopology.ALL_FACES,0,0,null);
+        var device=PhysicalFluidTopology.Device.builder(id,node,TopologyCompiler.Kind.VOID,PhysicalFluidTopology.Direction.NORTH,
+                new PipeResistance.Geometry(1,tip,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),FlowControl.ControlValve.flare()).ports(ports).build();
         var record=new WorldTopologyLedger.Registration(device,new FluidDeviceSpec(1,com.wormzjl.icheme.science.fluid.network.Flare.AMBIENT,101325,FluidDeviceSpec.nitrogen(catalog).composition()),0);
         submit(List.of(new WorldTopologyLedger.Edit(id,record)),Math.addExact(id,1));return record;
     }
@@ -631,9 +630,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
         // From the inlet's centre line, half a block up its port's cell, to the top of the tip's cell.
         double rise=Math.max(1,node.y()-ports.getFirst().cell().y()+.5);
         var facing=shape.kind()==com.wormzjl.icheme.science.equipment.EquipmentShape.Kind.BRICK_CHIMNEY?PhysicalFluidTopology.Direction.DOWN:PhysicalFluidTopology.Direction.UP;
-        var device=new PhysicalFluidTopology.Device(id,node,TopologyCompiler.Kind.VOID,facing,
-                new PipeResistance.Geometry(rise,shape.diameter(),PipeResistance.DEFAULT_ROUGHNESS_METRES,com.wormzjl.icheme.science.fluid.network.Chimney.STACK_LOSS),new FlowControl.Passive(),ports,true,PhysicalFluidTopology.Cutoff.NONE,false,
-                PhysicalFluidTopology.ALL_FACES,0,0,null);
+        var device=PhysicalFluidTopology.Device.builder(id,node,TopologyCompiler.Kind.VOID,facing,
+                new PipeResistance.Geometry(rise,shape.diameter(),PipeResistance.DEFAULT_ROUGHNESS_METRES,com.wormzjl.icheme.science.fluid.network.Chimney.STACK_LOSS),new FlowControl.Passive()).ports(ports).build();
         var record=new WorldTopologyLedger.Registration(device,new FluidDeviceSpec(1,298.15,com.wormzjl.icheme.science.fluid.solver.PhaseLayout.atmosphere(node.y()),FluidDeviceSpec.nitrogen(catalog).composition()),0);
         submit(List.of(new WorldTopologyLedger.Edit(id,record)),Math.addExact(id,1));return record;
     }
@@ -644,14 +642,13 @@ public final class FluidWorldAuthority implements AutoCloseable {
      */
     public List<WorldTopologyLedger.Registration> placePrimeMover(PhysicalFluidTopology.Position fuel,List<PhysicalFluidTopology.Port> ports,double pressure,@org.jetbrains.annotations.Nullable UnitSide coil) {
         owned();long first=topology.nextIdentity();var edits=new ArrayList<WorldTopologyLedger.Edit>();var placed=new ArrayList<WorldTopologyLedger.Registration>();
-        var device=new PhysicalFluidTopology.Device(first,fuel,TopologyCompiler.Kind.VOID,PhysicalFluidTopology.Direction.NORTH,
-                new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),FlowControl.ControlValve.engine(),ports,true,PhysicalFluidTopology.Cutoff.NONE,false,
-                PhysicalFluidTopology.ALL_FACES,0,0,null);
+        var device=PhysicalFluidTopology.Device.builder(first,fuel,TopologyCompiler.Kind.VOID,PhysicalFluidTopology.Direction.NORTH,
+                new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),FlowControl.ControlValve.engine()).ports(ports).build();
         var record=new WorldTopologyLedger.Registration(device,new FluidDeviceSpec(1,298.15,pressure,FluidDeviceSpec.nitrogen(catalog).composition()),0);
         placed.add(record);edits.add(new WorldTopologyLedger.Edit(first,record));
         if(coil!=null) {
-            var side=new PhysicalFluidTopology.Device(first+1,coil.node(),TopologyCompiler.Kind.HEAT_SIDE,PhysicalFluidTopology.Direction.NORTH,coil.passage(),new FlowControl.Passive(),
-                    coil.ports(),true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,coil.heat());
+            var side=PhysicalFluidTopology.Device.builder(first+1,coil.node(),TopologyCompiler.Kind.HEAT_SIDE,PhysicalFluidTopology.Direction.NORTH,coil.passage(),new FlowControl.Passive())
+                    .ports(coil.ports()).heat(coil.heat()).build();
             var r=new WorldTopologyLedger.Registration(side,FluidDeviceSpec.nitrogen(catalog),0);placed.add(r);edits.add(new WorldTopologyLedger.Edit(first+1,r));
         }
         submit(edits,Math.addExact(first,placed.size()));return placed;
@@ -665,9 +662,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
         return r!=null&&r.device().heat()!=null&&r.device().heat().unit()==com.wormzjl.icheme.science.equipment.HeatSides.Unit.PRIME_MOVER?r.device().id():0;
     }
     private WorldTopologyLedger.Registration burnerRecord(long id,UnitBurners burners,long radiant) {
-        var device=new PhysicalFluidTopology.Device(id,burners.node(),TopologyCompiler.Kind.VOID,PhysicalFluidTopology.Direction.NORTH,
-                new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),FlowControl.ControlValve.burner(),burners.ports(),true,PhysicalFluidTopology.Cutoff.NONE,false,
-                PhysicalFluidTopology.ALL_FACES,0,0,burners.heat().withPartner(radiant));
+        var device=PhysicalFluidTopology.Device.builder(id,burners.node(),TopologyCompiler.Kind.VOID,PhysicalFluidTopology.Direction.NORTH,
+                new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),FlowControl.ControlValve.burner()).ports(burners.ports()).heat(burners.heat().withPartner(radiant)).build();
         return new WorldTopologyLedger.Registration(device,new FluidDeviceSpec(1,com.wormzjl.icheme.science.fluid.network.Burners.AIR,com.wormzjl.icheme.science.fluid.network.Burners.PRESSURE,FluidDeviceSpec.nitrogen(catalog).composition()),0);
     }
     /**
@@ -684,15 +680,14 @@ public final class FluidWorldAuthority implements AutoCloseable {
         int pair=sides.size()+(vessel==null?0:1),count=pair+(burners==null?0:1);
         for(int i=0;i<sides.size();i++) {
             var side=sides.get(i);long partner=pair==2?first+1-i:0;
-            var device=new PhysicalFluidTopology.Device(first+i,side.node(),TopologyCompiler.Kind.HEAT_SIDE,PhysicalFluidTopology.Direction.NORTH,side.passage(),new FlowControl.Passive(),
-                    side.ports(),true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,side.heat().withPartner(partner));
+            var device=PhysicalFluidTopology.Device.builder(first+i,side.node(),TopologyCompiler.Kind.HEAT_SIDE,PhysicalFluidTopology.Direction.NORTH,side.passage(),new FlowControl.Passive())
+                    .ports(side.ports()).heat(side.heat().withPartner(partner)).build();
             var record=new WorldTopologyLedger.Registration(device,FluidDeviceSpec.nitrogen(catalog),0);placed.add(record);edits.add(new WorldTopologyLedger.Edit(first+i,record));
         }
         if(vessel!=null) {
             long id=first+1;
-            var device=new PhysicalFluidTopology.Device(id,vessel.node(),TopologyCompiler.Kind.RESERVOIR,PhysicalFluidTopology.Direction.NORTH,
-                    new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive(),vessel.ports(),true,PhysicalFluidTopology.Cutoff.NONE,false,
-                    PhysicalFluidTopology.ALL_FACES,0,0,vessel.heat().withPartner(first));
+            var device=PhysicalFluidTopology.Device.builder(id,vessel.node(),TopologyCompiler.Kind.RESERVOIR,PhysicalFluidTopology.Direction.NORTH,
+                    new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive()).ports(vessel.ports()).heat(vessel.heat().withPartner(first)).build();
             var spec=new FluidDeviceSpec(vessel.volume(),298.15,com.wormzjl.icheme.science.fluid.solver.PhaseLayout.AMBIENT_PRESSURE,FluidDeviceSpec.nitrogen(catalog).composition(),SlurryFeed.NONE,vessel.levelHeight(),false,vessel.geometry(),null);
             var record=new WorldTopologyLedger.Registration(device,spec,0);placed.add(record);edits.add(new WorldTopologyLedger.Edit(id,record));
         }
@@ -847,8 +842,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
             return placed;
         }
         long next=topology.nextIdentity();long vessel=next++,drain=next++,fill=next++;
-        var device=new PhysicalFluidTopology.Device(vessel,d.node(),TopologyCompiler.Kind.RESERVOIR,PhysicalFluidTopology.Direction.NORTH,
-                new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive(),d.all());
+        var device=PhysicalFluidTopology.Device.builder(vessel,d.node(),TopologyCompiler.Kind.RESERVOIR,PhysicalFluidTopology.Direction.NORTH,
+                new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive()).ports(d.all()).build();
         var spec=new FluidDeviceSpec(d.volume(),298.15,com.wormzjl.icheme.science.fluid.solver.PhaseLayout.AMBIENT_PRESSURE,nitrogen,SlurryFeed.NONE,d.levelHeight(),!d.closed(),d.geometry(),null,d.blanket(),d.relief(),d.reliefFace());
         var placed=List.of(new WorldTopologyLedger.Registration(device,spec,0),converterPort(drain,d.drain(),TopologyCompiler.Kind.VOID,d.rate(),d.closed(),nitrogen),
                 converterPort(fill,d.fill(),TopologyCompiler.Kind.GENERATOR,d.rate(),d.closed(),nitrogen));
@@ -860,9 +855,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
     private static WorldTopologyLedger.Registration converterPort(long id,PhysicalFluidTopology.Port contact,TopologyCompiler.Kind kind,double rate,boolean closed,double[] nitrogen) {
         var back=PhysicalFluidTopology.opposite(contact.face());var cell=contact.cell().offset(contact.face()).withLane(PhysicalFluidTopology.PORT_LANE);
         double bore=Math.max(.05,Math.sqrt(4*rate/1000/(Math.PI*CONVERTER_LINE_VELOCITY)));
-        var device=new PhysicalFluidTopology.Device(id,cell,kind,back,new PipeResistance.Geometry(1,bore,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),FlowControl.ControlValve.converter(),
-                List.of(new PhysicalFluidTopology.Port(cell,back,com.wormzjl.icheme.science.fluid.network.PassiveNetwork.PhasePort.BULK)),true,
-                PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,null,0);
+        var device=PhysicalFluidTopology.Device.builder(id,cell,kind,back,new PipeResistance.Geometry(1,bore,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),FlowControl.ControlValve.converter())
+                .ports(List.of(new PhysicalFluidTopology.Port(cell,back,com.wormzjl.icheme.science.fluid.network.PassiveNetwork.PhasePort.BULK))).build();
         double pressure=kind==TopologyCompiler.Kind.VOID?CONVERTER_DRAIN_PRESSURE:closed?CONVERTER_FILL_GAS:CONVERTER_FILL_LIQUID;
         return new WorldTopologyLedger.Registration(device,new FluidDeviceSpec(1,298.15,pressure,nitrogen),0);
     }
@@ -917,28 +911,25 @@ public final class FluidWorldAuthority implements AutoCloseable {
         long pot=next++;
         if(d.water()!=null) {
             var side=d.water();
-            var device=new PhysicalFluidTopology.Device(water,side.node(),TopologyCompiler.Kind.HEAT_SIDE,PhysicalFluidTopology.Direction.NORTH,side.passage(),new FlowControl.Passive(),
-                    side.ports(),true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,side.heat().withPartner(pot));
+            var device=PhysicalFluidTopology.Device.builder(water,side.node(),TopologyCompiler.Kind.HEAT_SIDE,PhysicalFluidTopology.Direction.NORTH,side.passage(),new FlowControl.Passive())
+                    .ports(side.ports()).heat(side.heat().withPartner(pot)).build();
             var record=new WorldTopologyLedger.Registration(device,FluidDeviceSpec.nitrogen(catalog),0);placed.add(record);edits.add(new WorldTopologyLedger.Edit(water,record));
         }
         var vessel=d.pot();
-        var potDevice=new PhysicalFluidTopology.Device(pot,vessel.node(),TopologyCompiler.Kind.RESERVOIR,PhysicalFluidTopology.Direction.NORTH,
-                new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive(),vessel.ports(),true,PhysicalFluidTopology.Cutoff.NONE,false,
-                PhysicalFluidTopology.ALL_FACES,0,0,vessel.heat().withPartner(0));
+        var potDevice=PhysicalFluidTopology.Device.builder(pot,vessel.node(),TopologyCompiler.Kind.RESERVOIR,PhysicalFluidTopology.Direction.NORTH,
+                new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive()).ports(vessel.ports()).heat(vessel.heat().withPartner(0)).build();
         var potSpec=new FluidDeviceSpec(vessel.volume(),298.15,com.wormzjl.icheme.science.fluid.solver.PhaseLayout.AMBIENT_PRESSURE,FluidDeviceSpec.nitrogen(catalog).composition(),SlurryFeed.NONE,vessel.levelHeight(),design.condenser(),vessel.geometry(),null);
         var potRecord=new WorldTopologyLedger.Registration(potDevice,potSpec,0);placed.add(potRecord);edits.add(new WorldTopologyLedger.Edit(pot,potRecord));
         for(var port:new PhysicalFluidTopology.Port[]{d.distillate(),d.vent()}) {
             if(port==null)continue;long id=next++;if(port==d.distillate())distillate=id;else vent=id;
-            var device=new PhysicalFluidTopology.Device(id,port.cell(),TopologyCompiler.Kind.GENERATOR,PhysicalFluidTopology.Direction.NORTH,
-                    new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),FlowControl.ControlValve.still(),List.of(port),true,PhysicalFluidTopology.Cutoff.NONE,false,
-                    PhysicalFluidTopology.ALL_FACES,0,0,null);
+            var device=PhysicalFluidTopology.Device.builder(id,port.cell(),TopologyCompiler.Kind.GENERATOR,PhysicalFluidTopology.Direction.NORTH,
+                    new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),FlowControl.ControlValve.still()).ports(List.of(port)).build();
             var record=new WorldTopologyLedger.Registration(device,new FluidDeviceSpec(1,298.15,STILL_OUTLET_PRESSURE,FluidDeviceSpec.nitrogen(catalog).composition()),0);placed.add(record);edits.add(new WorldTopologyLedger.Edit(id,record));
         }
         if(d.burners()!=null) {
             fired=next++;var port=d.burners();
-            var device=new PhysicalFluidTopology.Device(fired,port.cell(),TopologyCompiler.Kind.VOID,PhysicalFluidTopology.Direction.NORTH,
-                    new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),FlowControl.ControlValve.still(),List.of(port),true,PhysicalFluidTopology.Cutoff.NONE,false,
-                    PhysicalFluidTopology.ALL_FACES,0,0,null);
+            var device=PhysicalFluidTopology.Device.builder(fired,port.cell(),TopologyCompiler.Kind.VOID,PhysicalFluidTopology.Direction.NORTH,
+                    new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),FlowControl.ControlValve.still()).ports(List.of(port)).build();
             var record=new WorldTopologyLedger.Registration(device,new FluidDeviceSpec(1,com.wormzjl.icheme.science.fluid.network.Burners.AIR,com.wormzjl.icheme.science.fluid.network.Burners.PRESSURE,FluidDeviceSpec.nitrogen(catalog).composition()),0);
             placed.add(record);edits.add(new WorldTopologyLedger.Edit(fired,record));
         }
@@ -962,8 +953,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
         if(d.water()!=null) {
             var side=d.water();
             var device=held!=null?held.device().withPlacement(side.node(),side.ports()).withGeometry(side.passage()).withHeat(held.device().heat().withArea(side.heat().area()))
-                    :new PhysicalFluidTopology.Device(next,side.node(),TopologyCompiler.Kind.HEAT_SIDE,PhysicalFluidTopology.Direction.NORTH,side.passage(),new FlowControl.Passive(),
-                            side.ports(),true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,side.heat().withPartner(pot));
+                    :PhysicalFluidTopology.Device.builder(next,side.node(),TopologyCompiler.Kind.HEAT_SIDE,PhysicalFluidTopology.Direction.NORTH,side.passage(),new FlowControl.Passive())
+                            .ports(side.ports()).heat(side.heat().withPartner(pot)).build();
             water=held!=null?held.device().id():next++;
             waterRecord=held!=null&&device.equals(held.device())?held:new WorldTopologyLedger.Registration(device,held!=null?held.spec():FluidDeviceSpec.nitrogen(catalog),held!=null?Math.addExact(held.revision(),1):0);
         }else if(held!=null)edits.add(new WorldTopologyLedger.Edit(held.device().id(),null));
@@ -980,9 +971,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
                 moved=device.equals(record.device())?record:new WorldTopologyLedger.Registration(device,record.spec(),Math.addExact(record.revision(),1));
             }else {
                 ids[k]=next++;
-                var device=new PhysicalFluidTopology.Device(ids[k],port.cell(),k<2?TopologyCompiler.Kind.GENERATOR:TopologyCompiler.Kind.VOID,PhysicalFluidTopology.Direction.NORTH,
-                        new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),FlowControl.ControlValve.still(),List.of(port),true,PhysicalFluidTopology.Cutoff.NONE,false,
-                        PhysicalFluidTopology.ALL_FACES,0,0,null);
+                var device=PhysicalFluidTopology.Device.builder(ids[k],port.cell(),k<2?TopologyCompiler.Kind.GENERATOR:TopologyCompiler.Kind.VOID,PhysicalFluidTopology.Direction.NORTH,
+                        new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),FlowControl.ControlValve.still()).ports(List.of(port)).build();
                 moved=k<2?new WorldTopologyLedger.Registration(device,new FluidDeviceSpec(1,298.15,STILL_OUTLET_PRESSURE,FluidDeviceSpec.nitrogen(catalog).composition()),0)
                         :new WorldTopologyLedger.Registration(device,new FluidDeviceSpec(1,com.wormzjl.icheme.science.fluid.network.Burners.AIR,com.wormzjl.icheme.science.fluid.network.Burners.PRESSURE,FluidDeviceSpec.nitrogen(catalog).composition()),0);
             }
@@ -1024,7 +1014,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         owned();
         if(kind!=TopologyCompiler.Kind.PUMP&&kind!=TopologyCompiler.Kind.COMPRESSOR&&kind!=TopologyCompiler.Kind.TURBINE&&kind!=TopologyCompiler.Kind.EJECTOR||ports.isEmpty())throw new IllegalArgumentException("Expected a shaft-driven machine or an ejector");
         long id=topology.nextIdentity();
-        var device=new PhysicalFluidTopology.Device(id,suction,kind,PhysicalFluidTopology.Direction.NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),control,ports,true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES);
+        var device=PhysicalFluidTopology.Device.builder(id,suction,kind,PhysicalFluidTopology.Direction.NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),control).ports(ports).build();
         var record=new WorldTopologyLedger.Registration(device,FluidDeviceSpec.nitrogen(catalog),0);
         submit(List.of(new WorldTopologyLedger.Edit(id,record)),Math.addExact(id,1));return record;
     }
@@ -1048,7 +1038,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         double diameter=kind==TopologyCompiler.Kind.PIPE||kind==TopologyCompiler.Kind.DIVERTER_VALVE?placedPipeDiameter(position):.05;
         // A diverter valve is placed open to its straight outlet (batch 2026-11-09-batch-distiller).
         if(kind==TopologyCompiler.Kind.DIVERTER_VALVE&&joints==PhysicalFluidTopology.ALL_FACES)joints=PhysicalFluidTopology.diverterJoints(facing,0);
-        var device=new PhysicalFluidTopology.Device(id,position,kind,facing,new PipeResistance.Geometry(1,diameter,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),control,ports,kind!=TopologyCompiler.Kind.GENERATOR,cutoff,filter,joints);
+        var device=PhysicalFluidTopology.Device.builder(id,position,kind,facing,new PipeResistance.Geometry(1,diameter,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),control).ports(ports).generatorEnabled(kind!=TopologyCompiler.Kind.GENERATOR).cutoff(cutoff).inlineFilter(filter).joints(joints).build();
         var spec=kind==TopologyCompiler.Kind.GENERATOR?FluidDeviceSpec.water(catalog):FluidDeviceSpec.nitrogen(catalog);
         // A reservoir is placed empty (decision D54): of its settings only the capacity means anything.
         if(kind==TopologyCompiler.Kind.RESERVOIR)spec=new FluidDeviceSpec(options.volume(),298.15,com.wormzjl.icheme.science.fluid.solver.PhaseLayout.AMBIENT_PRESSURE,spec.composition());
@@ -1083,8 +1073,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public WorldTopologyLedger.Registration placeVessel(PhysicalFluidTopology.Position node,List<PhysicalFluidTopology.Port> ports,double volume,double levelHeight,boolean open,com.wormzjl.icheme.science.fluid.network.VesselGeometry geometry,com.wormzjl.icheme.science.fluid.network.CoolingTower tower) {
         owned();
         long id=topology.nextIdentity();
-        var device=new PhysicalFluidTopology.Device(id,node,TopologyCompiler.Kind.RESERVOIR,PhysicalFluidTopology.Direction.NORTH,
-                new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive(),ports);
+        var device=PhysicalFluidTopology.Device.builder(id,node,TopologyCompiler.Kind.RESERVOIR,PhysicalFluidTopology.Direction.NORTH,
+                new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive()).ports(ports).build();
         var spec=new FluidDeviceSpec(volume,298.15,com.wormzjl.icheme.science.fluid.solver.PhaseLayout.AMBIENT_PRESSURE,FluidDeviceSpec.nitrogen(catalog).composition(),SlurryFeed.NONE,levelHeight,open,geometry,tower);
         var record=new WorldTopologyLedger.Registration(device,spec,0);
         submit(List.of(new WorldTopologyLedger.Edit(id,record)),Math.addExact(id,1));return record;
@@ -1241,9 +1231,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
         for(var s:request.spots()) {
             var cell=s.cell().withLane(PhysicalFluidTopology.PORT_LANE);var valve=registrations().get(s.valve()).device();
             var kind=s.port().inlet()?TopologyCompiler.Kind.VOID:TopologyCompiler.Kind.GENERATOR;
-            var device=new PhysicalFluidTopology.Device(id,cell,kind,s.toward(),valve.geometry(),new com.wormzjl.icheme.science.fluid.network.FlowControl.Passive(),
-                    List.of(new PhysicalFluidTopology.Port(cell,s.toward(),com.wormzjl.icheme.science.fluid.network.PassiveNetwork.PhasePort.BULK)),true,
-                    PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,null,0);
+            var device=PhysicalFluidTopology.Device.builder(id,cell,kind,s.toward(),valve.geometry(),new com.wormzjl.icheme.science.fluid.network.FlowControl.Passive())
+                    .ports(List.of(new PhysicalFluidTopology.Port(cell,s.toward(),com.wormzjl.icheme.science.fluid.network.PassiveNetwork.PhasePort.BULK))).build();
             edits.add(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,new FluidDeviceSpec(1,s.temperature(),s.pressure(),nitrogen),0)));
             var kept=existing==null?null:existing.station(s.port(),s.index());
             stations.add(kept==null?new ColumnUnit.Station(s.port(),s.index(),id,s.valve(),com.wormzjl.icheme.science.plant.column.ColumnCycle.Account.empty(m)):new ColumnUnit.Station(s.port(),s.index(),id,s.valve(),kept.account(),kept.solids()));

@@ -37,7 +37,7 @@ class SteamHeaterCoilTest {
     }
 
     private static PhysicalFluidTopology.Device plain(long id, int x, int z, Kind kind, FlowControl control) {
-        return new PhysicalFluidTopology.Device(id, at(x, 0, z), kind, EAST, STUB, control);
+        return PhysicalFluidTopology.Device.builder(id, at(x, 0, z), kind, EAST, STUB, control).build();
     }
 
     private static PhysicalFluidTopology.Port port(PhysicalFluidTopology.Position cell, PhysicalFluidTopology.Direction face, PhysicalFluidTopology.ConnectionRole role) {
@@ -54,14 +54,12 @@ class SteamHeaterCoilTest {
     private static PhysicalFluidTopology.Device coil(long id, int x, HeatSides.Definition def, long partner) {
         var heat = new HeatUnit(HeatSides.Unit.FIRED_HEATER, def.side(), def.area(), partner).withControl(new HeatUnit.Control(HeatUnit.Mode.FIRING, SET, 0, 1));
         var ports = List.of(port(at(x, 0, 0), WEST, PhysicalFluidTopology.ConnectionRole.INLET), port(at(x + 2, 0, 0), EAST, PhysicalFluidTopology.ConnectionRole.OUTLET));
-        return new PhysicalFluidTopology.Device(id, at(x, 0, 0), Kind.HEAT_SIDE, NORTH, def.passage(), new FlowControl.Passive(), ports, true,
-                PhysicalFluidTopology.Cutoff.NONE, false, PhysicalFluidTopology.ALL_FACES, 0, 0, heat);
+        return PhysicalFluidTopology.Device.builder(id, at(x, 0, 0), Kind.HEAT_SIDE, NORTH, def.passage(), new FlowControl.Passive()).ports(ports).heat(heat).build();
     }
 
     private static PhysicalFluidTopology.Device burners() {
-        return new PhysicalFluidTopology.Device(BURNERS, at(3, 0, 20), Kind.VOID, NORTH, STUB, FlowControl.ControlValve.burner(),
-                List.of(port(at(3, 0, 20), WEST, PhysicalFluidTopology.ConnectionRole.VESSEL)), true, PhysicalFluidTopology.Cutoff.NONE, false,
-                PhysicalFluidTopology.ALL_FACES, 0, 0, new HeatUnit(HeatSides.Unit.FIRED_HEATER, HeatSides.Side.BURNER, 100, RADIANT));
+        return PhysicalFluidTopology.Device.builder(BURNERS, at(3, 0, 20), Kind.VOID, NORTH, STUB, FlowControl.ControlValve.burner())
+                .ports(List.of(port(at(3, 0, 20), WEST, PhysicalFluidTopology.ConnectionRole.VESSEL))).heat(new HeatUnit(HeatSides.Unit.FIRED_HEATER, HeatSides.Side.BURNER, 100, RADIANT)).build();
     }
 
     /** The water's way: converter, flow valve, convection coil, radiant coil, the tower's foot; and the fuel line. */

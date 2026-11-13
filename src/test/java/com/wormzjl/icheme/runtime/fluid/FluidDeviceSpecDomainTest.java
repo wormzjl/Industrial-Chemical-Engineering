@@ -23,8 +23,8 @@ class FluidDeviceSpecDomainTest {
     /** Pure nitrogen on this model's axis (the package's own list, not the network's). */
     private double[] nitrogen(){double[] n=new double[model.componentCount()];n[model.components().indexOf("Nitrogen")]=1;return n;}
     private PhysicalFluidTopology.Device device(TopologyCompiler.Kind kind) {
-        return new PhysicalFluidTopology.Device(1,new PhysicalFluidTopology.Position("minecraft:overworld",0,64,0),kind,PhysicalFluidTopology.Direction.EAST,
-                new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Passive());
+        return PhysicalFluidTopology.Device.builder(1,new PhysicalFluidTopology.Position("minecraft:overworld",0,64,0),kind,PhysicalFluidTopology.Direction.EAST,
+                new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Passive()).build();
     }
 
     /** A void holds nitrogen at its settings; a reservoir is placed empty (owner decision D54), so its settings name no

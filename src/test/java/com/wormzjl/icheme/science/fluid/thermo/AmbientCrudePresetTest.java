@@ -29,8 +29,8 @@ class AmbientCrudePresetTest {
         var catalog=MaterialCatalog.bundled();
         var model=FluidThermodynamics.forNetwork(catalog,FluidPresetCatalog.NETWORK_PACKAGE);
         var geometry=new PipeResistance.Geometry(1,.05,.000045,0);
-        var device=new PhysicalFluidTopology.Device(1,new PhysicalFluidTopology.Position("minecraft:overworld",0,0,0),
-                TopologyCompiler.Kind.GENERATOR,PhysicalFluidTopology.Direction.EAST,geometry,new FlowControl.Passive());
+        var device=PhysicalFluidTopology.Device.builder(1,new PhysicalFluidTopology.Position("minecraft:overworld",0,0,0),
+                TopologyCompiler.Kind.GENERATOR,PhysicalFluidTopology.Direction.EAST,geometry,new FlowControl.Passive()).build();
         for(var preset:FluidPresetCatalog.resolve(catalog).subList(2,6)) {
             var generator=new FluidDeviceSpec(1,298,200000,preset.moleFractions()).initialize(device,model,()->{});
             assertEquals(298,generator.state().temperature());

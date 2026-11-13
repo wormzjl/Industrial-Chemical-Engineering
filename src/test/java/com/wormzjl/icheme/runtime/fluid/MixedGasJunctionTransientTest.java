@@ -114,11 +114,11 @@ class MixedGasJunctionTransientTest {
         int[][] positions={{-1,0,0},{1,0,0},{0,0,-1},{0,0,1},{0,1,0},{0,-1,0}};
         var geometry=new PipeResistance.Geometry(1,bore,PipeResistance.DEFAULT_ROUGHNESS_METRES,0);
         var devices=new ArrayList<PhysicalFluidTopology.Device>();
-        devices.add(new PhysicalFluidTopology.Device(100,new PhysicalFluidTopology.Position("minecraft:overworld",0,0,0),Kind.PIPE,PhysicalFluidTopology.Direction.EAST,geometry,new FlowControl.Passive()));
+        devices.add(PhysicalFluidTopology.Device.builder(100,new PhysicalFluidTopology.Position("minecraft:overworld",0,0,0),Kind.PIPE,PhysicalFluidTopology.Direction.EAST,geometry,new FlowControl.Passive()).build());
         var boundaries=new HashMap<Long,PassiveNetwork.Reservoir>();
         for(int i=0;i<ports;i++){
             int[] at=positions[i];var kind=i<2?Kind.RESERVOIR:Kind.VOID;
-            var d=new PhysicalFluidTopology.Device(i+1,new PhysicalFluidTopology.Position("minecraft:overworld",at[0],at[1],at[2]),kind,PhysicalFluidTopology.Direction.EAST,geometry,new FlowControl.Passive());devices.add(d);
+            var d=PhysicalFluidTopology.Device.builder(i+1,new PhysicalFluidTopology.Position("minecraft:overworld",at[0],at[1],at[2]),kind,PhysicalFluidTopology.Direction.EAST,geometry,new FlowControl.Passive()).build();devices.add(d);
             double pressure=i==0?150000:i==1?(unequal?90000:150000):101325;
             double temperature=i==1&&unequal?400:350;
             double[] n=new double[mw.length];n[i==0?0:MaterialTestBasis.NITROGEN]=1;

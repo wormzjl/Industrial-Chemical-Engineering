@@ -230,9 +230,9 @@ class HoldFuzzTest {
             PhysicalFluidTopology.Device device;
             if(b.kind==Kind.PUMP||b.kind==Kind.COMPRESSOR) {
                 int axis=1<<b.facing.ordinal()|1<<opposite(b.facing).ordinal();
-                device=new PhysicalFluidTopology.Device(id,b.position(),Kind.PIPE,b.facing,geometry,b.facing.y==0?b.control:new FlowControl.Passive()).withJoints(axis);
+                device=PhysicalFluidTopology.Device.builder(id,b.position(),Kind.PIPE,b.facing,geometry,b.facing.y==0?b.control:new FlowControl.Passive()).build().withJoints(axis);
             }
-            else device=new PhysicalFluidTopology.Device(id,b.position(),b.kind,b.facing,geometry,b.control);
+            else device=PhysicalFluidTopology.Device.builder(id,b.position(),b.kind,b.facing,geometry,b.control).build();
             var spec=b.spec!=null?b.spec:FluidDeviceSpec.nitrogen(CATALOG);
             registry.submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,spec,0))),id+1,null);
         }

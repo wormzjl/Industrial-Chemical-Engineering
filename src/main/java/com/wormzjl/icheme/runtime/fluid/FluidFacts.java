@@ -450,7 +450,7 @@ final class FluidFacts {
             if(removed==null)throw f.invalid("registration "+id+": a one-block "+kind.name().toLowerCase(Locale.ROOT)+", which this build no longer has");
             removed.add(kind.name().toLowerCase(Locale.ROOT)+" "+id+" at "+position.x()+", "+position.y()+", "+position.z());return null;
         }
-        return valid(f,"registration "+id,()->new WorldTopologyLedger.Registration(new PhysicalFluidTopology.Device(id,position,kind,facing,geometry,control,ports,generatorEnabled,cutoff,filter,(int)joints,(int)slots,points,heat.isEmpty()?null:heat.getFirst(),suspendedBy),spec,revision));
+        return valid(f,"registration "+id,()->new WorldTopologyLedger.Registration(new PhysicalFluidTopology.Device(id,position,kind,facing,geometry,control,ports,generatorEnabled,cutoff,filter,(int)joints,(int)slots,points,heat.isEmpty()?null:heat.getFirst(),suspendedBy,false),spec,revision));
     }
     /**
      * A column unit (schema 6, batch 2026-10-28-column-operation): its identity, origin, run switch, setpoints, stations

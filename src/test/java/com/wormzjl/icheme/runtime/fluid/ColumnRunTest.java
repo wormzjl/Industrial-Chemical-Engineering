@@ -50,14 +50,13 @@ class ColumnRunTest {
     private static PhysicalFluidTopology.Device port(long id,int x,Kind kind,Direction toward,PipeResistanceGeometry g){return port(id,x,0,kind,toward,g);}
     private static PhysicalFluidTopology.Device port(long id,int x,int z,Kind kind,Direction toward,PipeResistanceGeometry g) {
         var at=new PhysicalFluidTopology.Position(EventPathWorld.DIM,x,64,z,PhysicalFluidTopology.PORT_LANE);
-        return new PhysicalFluidTopology.Device(id,at,kind,toward,g.geometry,new FlowControl.Passive(),List.of(new PhysicalFluidTopology.Port(at,toward,PassiveNetwork.PhasePort.BULK)),
-                true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,null,0);
+        return PhysicalFluidTopology.Device.builder(id,at,kind,toward,g.geometry,new FlowControl.Passive()).ports(List.of(new PhysicalFluidTopology.Port(at,toward,PassiveNetwork.PhasePort.BULK))).build();
     }
     /** A heat side from x = 2 to 4 along row {@code z}. */
     private static PhysicalFluidTopology.Device heatSide(long id,int z,com.wormzjl.icheme.science.fluid.network.PipeResistance.Geometry passage,HeatUnit heat) {
         var in=new PhysicalFluidTopology.Position(EventPathWorld.DIM,2,64,z);var out=new PhysicalFluidTopology.Position(EventPathWorld.DIM,4,64,z);
         var ports=List.of(new PhysicalFluidTopology.Port(in,Direction.WEST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.INLET),new PhysicalFluidTopology.Port(out,Direction.EAST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.OUTLET));
-        return new PhysicalFluidTopology.Device(id,in,Kind.HEAT_SIDE,Direction.NORTH,passage,new FlowControl.Passive(),ports,true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,heat);
+        return PhysicalFluidTopology.Device.builder(id,in,Kind.HEAT_SIDE,Direction.NORTH,passage,new FlowControl.Passive()).ports(ports).heat(heat).build();
     }
     private record PipeResistanceGeometry(com.wormzjl.icheme.science.fluid.network.PipeResistance.Geometry geometry) {}
     private static double sum(double[] n){double s=0;for(double v:n)s+=v;return s;}
@@ -142,7 +141,7 @@ class ColumnRunTest {
         if(pumpMember){pump=last+1;last=pump;members=new ColumnUnit.Members(members.fans(),List.of(pump),List.of());
             var in=new PhysicalFluidTopology.Position(EventPathWorld.DIM,2,64,32);var out=new PhysicalFluidTopology.Position(EventPathWorld.DIM,4,64,32);
             var ports=List.of(new PhysicalFluidTopology.Port(in,Direction.WEST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.SUCTION),new PhysicalFluidTopology.Port(out,Direction.EAST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.DISCHARGE));
-            var casing=new PhysicalFluidTopology.Device(pump,in,Kind.PUMP,Direction.EAST,com.wormzjl.icheme.science.equipment.HeatSides.tubePassage(.5,3),new FlowControl.Machine(REFLUX_PUMP,1,true),ports,true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,null);
+            var casing=PhysicalFluidTopology.Device.builder(pump,in,Kind.PUMP,Direction.EAST,com.wormzjl.icheme.science.equipment.HeatSides.tubePassage(.5,3),new FlowControl.Machine(REFLUX_PUMP,1,true)).ports(ports).build();
             edits.add(new WorldTopologyLedger.Edit(pump,new WorldTopologyLedger.Registration(casing.withSuspendedBy(unit),FluidDeviceSpec.nitrogen(world.catalog),0)));}
         world.ledger.column(new ColumnUnit(unit,new PhysicalFluidTopology.Position(EventPathWorld.DIM,6,70,0),true,setpoints,stations,ColumnUnit.Totals.empty(m),tubes,null,false,airSurface,utilities,members));
         world.registry.submit(edits,last+1,null);

@@ -135,7 +135,7 @@ class ExtremeTopologyIslandTest {
     }
     private record Placement(List<PhysicalFluidTopology.Device> devices,Map<Long,Double> pressures) {}
     private static PhysicalFluidTopology.Device device(long id,int x,int z,Kind kind){
-        return new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position(DIMENSION,x,Y,z),kind,PhysicalFluidTopology.Direction.EAST,BLOCK,new FlowControl.Passive());
+        return PhysicalFluidTopology.Device.builder(id,new PhysicalFluidTopology.Position(DIMENSION,x,Y,z),kind,PhysicalFluidTopology.Direction.EAST,BLOCK,new FlowControl.Passive()).build();
     }
     /** The blocks of a case, in the layouts of the class comment; generators and tanks carry their pressures. */
     private static Placement place(Case c) {

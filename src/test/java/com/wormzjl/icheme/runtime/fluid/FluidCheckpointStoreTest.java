@@ -93,7 +93,7 @@ class FluidCheckpointStoreTest extends CertifyingRig.Islands {
         var checkpoint=new FluidCheckpointCodec.Checkpoint(entries);
         // A queued topology event, pending in the world ledger at the save.
         var topology=new WorldTopologyLedger(world(0));for(int i=0;i<1_234;i++)topology.tick();
-        var device=new PhysicalFluidTopology.Device(5_000,new PhysicalFluidTopology.Position("minecraft:overworld",40,0,40),Kind.RESERVOIR,PhysicalFluidTopology.Direction.EAST,BLOCK,new FlowControl.Passive());
+        var device=PhysicalFluidTopology.Device.builder(5_000,new PhysicalFluidTopology.Position("minecraft:overworld",40,0,40),Kind.RESERVOIR,PhysicalFluidTopology.Direction.EAST,BLOCK,new FlowControl.Passive()).build();
         topology.commit(topology.queue(List.of(new WorldTopologyLedger.Edit(5_000,new WorldTopologyLedger.Registration(device,new FluidDeviceSpec(1,298.15,101325,pure(nitrogen)),0))),Set.of(5_000L),5_001));
         var world=topology.snapshot();assertEquals(1,world.events().size());
 

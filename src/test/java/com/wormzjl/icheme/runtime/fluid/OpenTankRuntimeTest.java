@@ -70,8 +70,8 @@ class OpenTankRuntimeTest {
 
     @Test void anOpenTanksRegistrationRoundTripsItsFlagAndOverflowPort() {
         var empty=WorldTopologyLedger.Snapshot.empty(EventPathWorld.CATALOG);
-        var device=new PhysicalFluidTopology.Device(1,at(1,0,1),com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.RESERVOIR,NORTH,
-                new com.wormzjl.icheme.science.fluid.network.PipeResistance.Geometry(1,.05,.000045,0),new com.wormzjl.icheme.science.fluid.network.FlowControl.Passive(),PORTS);
+        var device=PhysicalFluidTopology.Device.builder(1,at(1,0,1),com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.RESERVOIR,NORTH,
+                new com.wormzjl.icheme.science.fluid.network.PipeResistance.Geometry(1,.05,.000045,0),new com.wormzjl.icheme.science.fluid.network.FlowControl.Passive()).ports(PORTS).build();
         var spec=new FluidDeviceSpec(28_000,298.15,101325,EventPathWorld.nitrogen().composition(),SlurryFeed.NONE,23,true);
         var world=new WorldTopologyLedger.Snapshot(5,2,Map.of(1L,new WorldTopologyLedger.Registration(device,spec,0)),List.of(),empty.constructed(),empty.destroyed(),empty.basis(),Map.of());
         var bytes=FluidCheckpointCodec.encodeTopology(world);var decoded=FluidCheckpointCodec.decodeTopology(bytes,5,key->{throw new AssertionError("no recovery, no model");});

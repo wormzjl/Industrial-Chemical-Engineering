@@ -21,7 +21,7 @@ class LevelGroundTest {
     private static final PipeResistance.Geometry BORE = new PipeResistance.Geometry(1, .05, .000045, 0);
 
     private static PhysicalFluidTopology.Device pipe(FlowControl control, PhysicalFluidTopology.Cutoff cutoff, boolean filter) {
-        return new PhysicalFluidTopology.Device(1, AT, Kind.PIPE, PhysicalFluidTopology.Direction.NORTH, BORE, control, List.of(), true, cutoff, filter);
+        return PhysicalFluidTopology.Device.builder(1, AT, Kind.PIPE, PhysicalFluidTopology.Direction.NORTH, BORE, control).cutoff(cutoff).inlineFilter(filter).build();
     }
 
     private static Fitting fitting(FlowControl control) {
