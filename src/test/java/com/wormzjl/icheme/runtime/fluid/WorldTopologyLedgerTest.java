@@ -125,6 +125,32 @@ class WorldTopologyLedgerTest {
      * A held shaft part (W5c C1) is state too: the topology unit carries it beside the held devices, by identity, through
      * an exact load, and the facts never carry it.
      */
+    /**
+     * M-09: the shaft units are a read-only live view (no copy a read) and an index by cell follows every write: a put, a
+     * part rebuilt at another cell under its identity, a removal; a second part at a taken cell is refused.
+     */
+    @Test void theShaftUnitsAreALiveViewWithAnIndexByCell() {
+        var ledger=new WorldTopologyLedger(new WorldTopologyLedger.Snapshot(0,3,Map.of(1L,at(1,0),2L,at(2,20)),List.of(),WorldTopologyLedger.MaterialTotal.empty(),WorldTopologyLedger.MaterialTotal.empty()));
+        String dim=at(1,0).device().position().dimension();
+        var a=new PhysicalFluidTopology.Position(dim,5,70,5);var b=new PhysicalFluidTopology.Position(dim,6,70,5);var c=new PhysicalFluidTopology.Position(dim,7,70,5);
+        var view=ledger.shafts();
+        assertSame(view,ledger.shafts(),"one view, no copy a read");
+        assertThrows(UnsupportedOperationException.class,()->view.put(9L,ShaftUnit.shaft(9,a,0)));
+        long first=ledger.reserve(1),second=ledger.reserve(1);
+        ledger.shaft(ShaftUnit.shaft(first,a,0));ledger.shaft(ShaftUnit.shaft(second,b,0));
+        assertEquals(Set.of(first,second),view.keySet(),"the view sees later writes");
+        assertEquals(first,ledger.shaftAt(a).id());assertEquals(second,ledger.shaftAt(b).id());assertNull(ledger.shaftAt(c));
+        assertThrows(IllegalArgumentException.class,()->ledger.shaft(ShaftUnit.shaft(second,a,0)),"a taken cell");
+        ledger.shaft(ShaftUnit.shaft(first,c,0));
+        assertNull(ledger.shaftAt(a),"rebuilt elsewhere, its old cell is free");assertEquals(first,ledger.shaftAt(c).id());
+        ledger.shaft(ShaftUnit.shaft(second,a,0));
+        assertEquals(second,ledger.shaftAt(a).id());assertNull(ledger.shaftAt(b));
+        ledger.removeShaft(first);
+        assertNull(ledger.shaftAt(c));assertEquals(Set.of(second),view.keySet());
+        var reloaded=new WorldTopologyLedger(ledger.snapshot());
+        assertEquals(second,reloaded.shaftAt(a).id(),"a load builds the index");assertNull(reloaded.shaftAt(c));
+    }
+
     @Test void aHeldShaftPartIsStateTheTopologyUnitCarries() {
         var ledger=new WorldTopologyLedger(new WorldTopologyLedger.Snapshot(0,3,Map.of(1L,at(1,0),2L,at(2,20)),List.of(),WorldTopologyLedger.MaterialTotal.empty(),WorldTopologyLedger.MaterialTotal.empty()));
         var cell=new PhysicalFluidTopology.Position(at(1,0).device().position().dimension(),5,70,5);

@@ -381,8 +381,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
     }
 
     private ShaftUnit at(PhysicalFluidTopology.Position position) {
-        for (var u : topology.shafts().values()) if (u.position().equals(position)) return u;
-        return null;
+        return topology.shaftAt(position);
     }
 
     private void fresh(long unit) {
@@ -490,7 +489,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         return upstreamValve(graph, turbine);
     }
 
-    /** {@link #governorValve} on {@code graph}: the walk, Minecraft-free (tested by ShaftTrainsTest). */
+    /** {@link #governorValve} on {@code graph}: the walk, Minecraft-free (tested by ShaftCouplingTest). */
     static long upstreamValve(PassiveNetwork graph, long turbine) {
         int node = -1;
         PassiveNetwork.Pipe from = null;
@@ -728,7 +727,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         if (run.stepped != now) {
             run.fresh = false;
             run.stepped = now;
-            if (step(run)) publish();
+            if (step(run)) publish(List.of(run));
         }
         if (run.train.fault() != ShaftNetwork.Fault.NONE) return false;
         var d = topology.shaft(run.train.driver());
@@ -743,14 +742,17 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
     @Override
     public void decide() {
         long now = coordinator.now();
-        boolean moved = false;
+        List<Run> moved = null;
         for (var run : runs.values()) {
             if (!run.fresh || run.stepped == now) continue;
             run.fresh = false;
             run.stepped = now;
-            moved |= step(run);
+            if (step(run)) {
+                if (moved == null) moved = new ArrayList<>();
+                moved.add(run);
+            }
         }
-        if (moved) publish();
+        if (moved != null) publish(moved);
     }
 
     /** One driver step; true when the train's speed or trip changed. */
@@ -925,11 +927,30 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         host.stress(u.position(), impact);
     }
 
-    /** Sends each driven device its new share, and wakes the islands whose share or governor target moved. */
+    /** Sends each driven device its new share, and wakes the islands whose share or governor target moved: every unit (after events and a compile). */
     private void publish() {
+        publish(null);
+    }
+
+    /**
+     * {@link #publish()} for the members of {@code stepped} only, or of every unit when null (M-09). A step that changes what
+     * this reads (a driver's speed or trip, a turbine's admission, a governor valve's target, a fuel target) returns true and
+     * its train is published at once, so a train not stepped holds what the last publication left: its shares and targets,
+     * recomputed, would wake nothing. The unit set changes only through events, whose publication covers every unit.
+     */
+    private void publish(List<Run> stepped) {
         var units = topology.shafts();
+        Collection<ShaftUnit> members = units.values();
+        if (stepped != null) {
+            var some = new ArrayList<ShaftUnit>();
+            for (var run : stepped) for (long id : run.train.parts()) {
+                var u = units.get(id);
+                if (u != null) some.add(u);
+            }
+            members = some;
+        }
         var next = new HashMap<Long, Double>();
-        for (var u : units.values()) {
+        for (var u : members) {
             if (u.kind() != ShaftNetwork.Kind.CASING || u.fluid() == 0) continue;
             next.put(u.fluid(), share(u, units));
         }
@@ -938,11 +959,13 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
             Double old = shares.get(e.getKey());
             if (old == null || Math.abs(old - e.getValue()) > ShaftTrain.SPEED_DEADBAND || (old == 0) != (e.getValue() == 0)) owners(e.getKey(), wake);
         }
-        for (long gone : shares.keySet()) if (!next.containsKey(gone)) owners(gone, wake);
-        shares.clear();
+        if (stepped == null) {
+            for (long gone : shares.keySet()) if (!next.containsKey(gone)) owners(gone, wake);
+            shares.clear();
+        }
         shares.putAll(next);
-        var governors = new HashSet<>(turbineOfValve.keySet());
-        for (var u : units.values()) {
+        var governors = new HashSet<Long>();
+        for (var u : members) {
             if (u.kind() != ShaftNetwork.Kind.STEAM_TURBINE || u.fluid() == 0) continue;
             var key = trainOf.get(u.id());
             var run = key == null ? null : runs.get(key);
@@ -950,14 +973,27 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
             governorTargets.put(u.fluid(), open ? run.admission : 0);
             governors.add(u.fluid());
         }
-        governorTargets.keySet().retainAll(governors);
-        woken.keySet().retainAll(governorTargets.keySet());
-        for (var e : governorTargets.entrySet()) {
+        Collection<Long> targets;
+        if (stepped == null) {
+            governors.addAll(turbineOfValve.keySet());
+            governorTargets.keySet().retainAll(governors);
+            woken.keySet().retainAll(governorTargets.keySet());
+            targets = List.copyOf(governorTargets.keySet());
+        } else {
+            // The stepped turbines' targets, and the valves their drivers' steps set.
+            for (var run : stepped) {
+                Long valve = valveOfTurbine.get(run.train.driver());
+                if (valve != null && governorTargets.containsKey(valve)) governors.add(valve);
+            }
+            targets = governors;
+        }
+        for (long k : targets) {
             // A governor target outside the valve's deadband of the one its island was last woken for wakes it (reading A26).
-            Double old = woken.get(e.getKey());
-            if (old != null && !outsideDeadband(old, e.getValue())) continue;
-            woken.put(e.getKey(), e.getValue());
-            owners(e.getKey(), wake);
+            double target = governorTargets.get(k);
+            Double old = woken.get(k);
+            if (old != null && !outsideDeadband(old, target)) continue;
+            woken.put(k, target);
+            owners(k, wake);
         }
         // The prime movers (batch 2026-11-10-prime-movers): a fuel target past the valve's deadband wakes its fuel island; a
         // coil's gas past it wakes the coil's. A set off its train, stopped or faulted, asks for no fuel.
