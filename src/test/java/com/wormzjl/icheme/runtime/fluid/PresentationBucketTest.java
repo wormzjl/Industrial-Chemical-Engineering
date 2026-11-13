@@ -267,8 +267,6 @@ class PresentationBucketTest {
         for(int i=0;i<12_000;i++){quiet.tick();world.tick();}
         assertTrue(world.viewsOf.values().stream().mapToInt(Integer::intValue).sum()>=16*100,"the viewers really viewed");
         assertTrue(viewed.coordinator.observe(1).certificate().isPresent(),"the dead-headed line rests");
-        for(long island:new long[]{2,3})assertTrue(viewed.replayed.stream().anyMatch(r->r.id()==island),"island "+island+" replayed a steady certificate");
-        assertEquals(quiet.replayed.size(),viewed.replayed.size(),"views materialise no certified island");
         assertEquals(quiet.solves,viewed.solves,"solves");
         assertEquals(IslandCertificateTest.publications(quiet.published),IslandCertificateTest.publications(viewed.published),"solved publications");
         for(long island=1;island<=4;island++) {
@@ -277,6 +275,9 @@ class PresentationBucketTest {
             // Replayed boundary accounting: the same spans, so the same bits.
             assertArrayEquals(replayedBoundary(quiet.replayed,island),replayedBoundary(viewed.replayed,island),"replayed boundary totals of island "+island);
         }
+        // The final reads materialised the certified islands (the engine's read, a save's): both rigs replayed the same spans.
+        for(long island:new long[]{2,3})assertTrue(viewed.replayed.stream().anyMatch(r->r.id()==island),"island "+island+" replayed a steady certificate");
+        assertEquals(quiet.replayed.size(),viewed.replayed.size(),"views materialise no certified island");
         for(var menu:menus)assertTrue(menu.received.size()>=119,"menu on "+menu.device+" received "+menu.received.size());
     }
     /** Clock and every node's inventory, energy and state, bit for bit. */
