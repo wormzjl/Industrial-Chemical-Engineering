@@ -2478,8 +2478,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public FluidView view(long id){owned();return view(id,new HashMap<>());}
     /**
      * Mover {@code mover}'s status line {@code status} with its health word {@code word} ({@link MachineHealth#status}), for every
-     * mover that wears ({@link MachineHealth#worn}: a liquid mover, and a dry screw, owner V6 B; code base review M-02): FAILED
-     * first while it stands failed, else LIQUID, LOW FLOW, CAVITATION or GAS last (W10b, W10d, owner decision D37); its health and
+     * mover that wears ({@link MachineHealth#worn}: a liquid mover, a dry screw, owner V6 B, code base review M-02, and a
+     * centrifugal compressor, N2): FAILED first while it stands failed, else LIQUID, LOW FLOW, CAVITATION, GAS or WET GAS last
+     * (W10b, W10d, owner decision D37); its health and
      * suction have their meters (the view's Pump). A mover that does not wear keeps its line.
      */
     static String withHealth(String status,FlowControl.Mover mover,String word) {

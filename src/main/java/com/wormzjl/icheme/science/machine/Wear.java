@@ -33,6 +33,11 @@ public final class Wear {
      * continuous stable flow): below it the pump recirculates at its suction and discharge and its vanes erode.
      */
     public static final double MINIMUM_FLOW = .3;
+    /**
+     * A centrifugal compressor's wet gas (N2): the condensed mass share of its suction stream at and below which its
+     * impeller does not erode, and the span above it to full intensity (0.5 % to 5.5 %).
+     */
+    public static final double WET_GAS_ONSET = .005, WET_GAS_SPAN = .05;
     /** The σ of the erosion peak, and the inception σ above which nothing erodes. */
     public static final double PEAK = 2.06, INCEPTION = 4;
 
@@ -56,8 +61,9 @@ public final class Wear {
      * A machine's faults (M-12), each with its class and its intensity, 0 to 1, from its driving quantity {@code q}:
      * {@code CAVITATION} from σ = NPSHA/NPSH3 ({@link #intensity}); {@code DRY} 1 for {@code q > 0} (the pump runs dry);
      * {@code LIQUID} from a dry screw's suction liquid volume share ({@link VacuumPump#liquidIntensity}, N5);
-     * {@code LOW_FLOW} from a centrifugal pump's flow over its rated flow at its speed ({@link #lowFlow}, N1); the others
-     * wear nothing yet.
+     * {@code LOW_FLOW} from a centrifugal pump's flow over its rated flow at its speed ({@link #lowFlow}, N1);
+     * {@code WET_GAS} from a centrifugal compressor's suction condensed mass share ({@link #wetGas}, N2); the others wear
+     * nothing yet.
      */
     public enum Fault {
         CAVITATION(FaultClass.EROSION), DRY(FaultClass.SEIZURE), LOW_FLOW(FaultClass.EROSION), WET_GAS(FaultClass.EROSION),
@@ -76,9 +82,20 @@ public final class Wear {
                 case DRY -> q > 0 ? 1 : 0;
                 case LIQUID -> VacuumPump.liquidIntensity(q);
                 case LOW_FLOW -> lowFlow(q);
-                case WET_GAS, WET_EXHAUST -> 0;
+                case WET_GAS -> wetGas(q);
+                case WET_EXHAUST -> 0;
             };
         }
+    }
+
+    /**
+     * A centrifugal compressor's wet gas erosion intensity at {@code share}, the condensed mass share of its suction stream
+     * (N2): droplets erode its impeller. {@code (share − 0.005) / 0.05}, between 0 and 1: 0 at and below 0.5 % and for NaN,
+     * one from 5.5 % up. In the erosion class: at the default lives 8 h of process time from 5.5 %, 16 h at 3 %.
+     */
+    public static double wetGas(double share) {
+        if (!(share > WET_GAS_ONSET)) return 0;
+        return Math.min(1, (share - WET_GAS_ONSET) / WET_GAS_SPAN);
     }
 
     /**

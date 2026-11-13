@@ -20,8 +20,8 @@ import net.minecraft.world.item.context.UseOnContext;
 /**
  * A pump repair kit (batch 2026-11-03-rotating-machinery W10b, owner decision D34): used on any cell of a mover casing or
  * on an in-line device's pipe block, it queues a repair ({@link MachineHealth.Repair}) that applies on the engine's tick drain.
- * Whether the device wears is the health's decision there: every device with a health record (a pump or a dry screw, M-02)
- * is repaired. The kit is consumed only when the repair is accepted (none in creative mode); a pump at full health, or a
+ * Whether the device wears is the health's decision there: every device with a health record (a pump, a dry screw, M-02, or
+ * a centrifugal compressor, N2) is repaired. The kit is consumed only when the repair is accepted (none in creative mode); a pump at full health, or a
  * device with no health record ({@link MachineHealth.Outcome#NOT_A_PUMP}), refuses it with a chat line.
  */
 public final class RepairKitItem extends Item {
@@ -47,7 +47,7 @@ public final class RepairKitItem extends Item {
     /**
      * The fluid device behind the block at {@code pos}: a casing's fluid cell or an in-line device's pipe block; 0 for none.
      * Any mover casing (a block that holds no mover keeps its own use): the queued repair answers {@code NOT_A_PUMP} where
-     * the device has no health record, a compressor for one (M-02).
+     * the device has no health record, a reciprocating compressor for one (M-02).
      */
     private static long pumpAt(net.minecraft.world.level.Level level, BlockPos pos) {
         var entity = level.getBlockEntity(pos);

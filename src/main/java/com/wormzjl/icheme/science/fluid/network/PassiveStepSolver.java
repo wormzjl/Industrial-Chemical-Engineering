@@ -268,7 +268,7 @@ public final class PassiveStepSolver {
      * centrifugal compressor's wet efficiency as a share of its dry one (one elsewhere). */
     private FlowControl[] readControls=new FlowControl[0];private FlowControl.Mover[] suctionMovers=new FlowControl.Mover[0];
     private com.wormzjl.icheme.science.machine.Npsh[] npshDesigns=new com.wormzjl.icheme.science.machine.Npsh[0];
-    private double[] liquidDensities=new double[0],wetShares=new double[0],vapourShares=new double[0];
+    private double[] liquidDensities=new double[0],wetShares=new double[0],vapourShares=new double[0],condensedShares=new double[0];
     private static double boreArea(PassiveNetwork.Pipe pipe){return pipe.controlArea();}
     private void rememberOpenings(PassiveNetwork graph,double[] flows,double[] heads,List<FlowControl.Mode> modes){
         for(int e=0;e<graph.pipes().size();e++){var p=graph.pipes().get(e);if(!(p.control() instanceof FlowControl.Valve))continue;
@@ -1969,6 +1969,7 @@ public final class PassiveStepSolver {
         int edges=graph.pipes().size();
         readControls=new FlowControl[edges];suctionMovers=new FlowControl.Mover[edges];npshDesigns=new com.wormzjl.icheme.science.machine.Npsh[edges];
         liquidDensities=new double[edges];wetShares=new double[edges];vapourShares=new double[edges];drawnStreams=new InletPhase.Drawn[edges];
+        condensedShares=new double[edges];java.util.Arrays.fill(condensedShares,Double.NaN);
         for(int edge=0;edge<edges;edge++) {
             var pipe=graph.pipes().get(edge);
             if(!(pipe.control() instanceof FlowControl.Mover mover))continue;
@@ -1985,7 +1986,8 @@ public final class PassiveStepSolver {
                 // A vacuum pump (batch 2026-11-10-vacuum-pump) counts the suction mixture's volume as a set-flow mover does; a dry
                 // screw keeps its vapour share for its wear and liquid noise (owner V6 B).
                 else if(machine.law() instanceof com.wormzjl.icheme.science.machine.VacuumPump){if(com.wormzjl.icheme.science.machine.VacuumPump.dryScrew(machine.law()))vapourShares[edge]=supply.vapourVolumeShare();}
-                else wetShares[edge]=wetShare(supply);
+                // A centrifugal compressor keeps the condensed mass share its wet efficiency reads, for its wet gas wear (N2).
+                else{wetShares[edge]=wetShare(supply);condensedShares[edge]=supply.condensedMassShare();}
             }
             // W10d: a set-flow pump's suction vapour share, for its page's gas reading only (its law counts the mixture already).
             else if(mover.liquid())vapourShares[edge]=(duration>0?InletPhase.supply(model,graph,edge,mover.targetVolumeFlow(),duration):drawnStreams[edge].supply()).vapourVolumeShare();
@@ -2104,6 +2106,9 @@ public final class PassiveStepSolver {
             // A running dry screw's suction vapour share (owner V6 B): its wear and liquid noise read its liquid share.
             else if(pipe.control() instanceof FlowControl.Machine screw&&com.wormzjl.icheme.science.machine.VacuumPump.dryScrew(screw.law())&&screw.targetVolumeFlow()>0&&read(e.graph,edge))
                 observed=observed.withSuction(Double.NaN,false,Double.NaN,Double.NaN,vapourShares[edge]);
+            // A running centrifugal compressor's suction condensed mass share (N2): its wet gas wear reads it.
+            else if(pipe.control() instanceof FlowControl.Machine compressor&&compressor.law() instanceof com.wormzjl.icheme.science.machine.CentrifugalCompressor&&compressor.targetVolumeFlow()>0&&read(e.graph,edge))
+                observed=observed.withCondensed(condensedShares[edge]);
             if(pipe.control() instanceof FlowControl.PressureValve||pipe.control() instanceof FlowControl.ControlValve) {
                 // The valve stands at the line's first end: its node side is that end's pressure, its line side the row's
                 // first pressure, which includes the valve's drop (the control head).
@@ -5903,10 +5908,13 @@ public final class PassiveStepSolver {
     public record FlowSample(long host,double pressure,double massFlow,Double volumeFlow){public FlowSample{if(host<=0||!Double.isFinite(pressure)||!Double.isFinite(massFlow)||volumeFlow!=null&&!Double.isFinite(volumeFlow))throw new IllegalArgumentException("Invalid flow sample");}}
     public record PipeObservation(long pipe,double firstPressure,double secondPressure,double firstElevation,double secondElevation,
                                   double columnDensity,double temperature,boolean flowing,List<Double> lengths,List<Double> losses,double massFlow,double density,List<FlowSample> flowSamples,
-                                  double npshRatio,boolean dry,double gasRatio,double npshRequired,double vapourShare,double valveDrop,Cavitation cavitation) {
+                                  double npshRatio,boolean dry,double gasRatio,double npshRequired,double vapourShare,double valveDrop,Cavitation cavitation,
+                                  double condensedShare) {
         /** A flowing liquid valve's state for its noise (owner 2026-11-10, option A; {@link PassiveStepSolver#cavitation}): NONE
          * on every other row and where the thermodynamics cannot say. */
         public enum Cavitation { NONE, PLAIN, CAVITATING, FLASHING }
+        /** Without a centrifugal compressor's wet suction read (code base review N2): no condensed share (NaN). */
+        public PipeObservation(long pipe,double firstPressure,double secondPressure,double firstElevation,double secondElevation,double columnDensity,double temperature,boolean flowing,List<Double> lengths,List<Double> losses,double massFlow,double density,List<FlowSample> flowSamples,double npshRatio,boolean dry,double gasRatio,double npshRequired,double vapourShare,double valveDrop,Cavitation cavitation){this(pipe,firstPressure,secondPressure,firstElevation,secondElevation,columnDensity,temperature,flowing,lengths,losses,massFlow,density,flowSamples,npshRatio,dry,gasRatio,npshRequired,vapourShare,valveDrop,cavitation,Double.NaN);}
         /** Without a valve's read: no valve drop (NaN), no cavitation. The pressures of a valve's row include its drop (the
          * control head): {@code firstPressure} stands after the valve, so the drop is its own component. */
         public PipeObservation(long pipe,double firstPressure,double secondPressure,double firstElevation,double secondElevation,double columnDensity,double temperature,boolean flowing,List<Double> lengths,List<Double> losses,double massFlow,double density,List<FlowSample> flowSamples,double npshRatio,boolean dry,double gasRatio,double npshRequired,double vapourShare){this(pipe,firstPressure,secondPressure,firstElevation,secondElevation,columnDensity,temperature,flowing,lengths,losses,massFlow,density,flowSamples,npshRatio,dry,gasRatio,npshRequired,vapourShare,Double.NaN,Cavitation.NONE);}
@@ -5919,13 +5927,16 @@ public final class PassiveStepSolver {
         public PipeObservation(long pipe,double firstPressure,double secondPressure,double firstElevation,double secondElevation,double columnDensity,double temperature,boolean flowing,List<Double> lengths,List<Double> losses,double massFlow,double density){this(pipe,firstPressure,secondPressure,firstElevation,secondElevation,columnDensity,temperature,flowing,lengths,losses,massFlow,density,List.of());}
         public PipeObservation(long pipe,double firstPressure,double secondPressure,double firstElevation,double secondElevation,double columnDensity,double temperature,boolean flowing,List<Double> lengths,List<Double> losses){this(pipe,firstPressure,secondPressure,firstElevation,secondElevation,columnDensity,temperature,flowing,lengths,losses,0,0);}
         public PipeObservation{flowSamples=List.copyOf(flowSamples);lengths=List.copyOf(lengths);losses=List.copyOf(losses);if(lengths.isEmpty()||lengths.size()!=losses.size())throw new IllegalArgumentException("Missing observed sections");}
-        public PipeObservation withFlowSamples(List<FlowSample> samples){return new PipeObservation(pipe,firstPressure,secondPressure,firstElevation,secondElevation,columnDensity,temperature,flowing,lengths,losses,massFlow,density,samples,npshRatio,dry,gasRatio,npshRequired,vapourShare,valveDrop,cavitation);}
+        public PipeObservation withFlowSamples(List<FlowSample> samples){return new PipeObservation(pipe,firstPressure,secondPressure,firstElevation,secondElevation,columnDensity,temperature,flowing,lengths,losses,massFlow,density,samples,npshRatio,dry,gasRatio,npshRequired,vapourShare,valveDrop,cavitation,condensedShare);}
         /** This row with a liquid pump's suction read (W10b, W10c, W10d): its NPSHA over NPSH3 (NaN: none), whether it runs dry,
          * its suction's vapour share in Turpin onsets, {@code r = α/α_T} (NaN: none), its NPSH3 at the accepted flow (m; NaN:
          * none) and its suction's vapour volume share α (NaN: none). The pump page reads the last two. */
-        public PipeObservation withSuction(double ratio,boolean value,double gas,double required,double share){return new PipeObservation(pipe,firstPressure,secondPressure,firstElevation,secondElevation,columnDensity,temperature,flowing,lengths,losses,massFlow,density,flowSamples,ratio,value,gas,required,share,valveDrop,cavitation);}
+        public PipeObservation withSuction(double ratio,boolean value,double gas,double required,double share){return new PipeObservation(pipe,firstPressure,secondPressure,firstElevation,secondElevation,columnDensity,temperature,flowing,lengths,losses,massFlow,density,flowSamples,ratio,value,gas,required,share,valveDrop,cavitation,condensedShare);}
         /** This row with a valve's read: its own pressure drop (Pa) and, for a flowing liquid, its cavitation. */
-        public PipeObservation withValve(double drop,Cavitation c){return new PipeObservation(pipe,firstPressure,secondPressure,firstElevation,secondElevation,columnDensity,temperature,flowing,lengths,losses,massFlow,density,flowSamples,npshRatio,dry,gasRatio,npshRequired,vapourShare,drop,c);}
+        public PipeObservation withValve(double drop,Cavitation c){return new PipeObservation(pipe,firstPressure,secondPressure,firstElevation,secondElevation,columnDensity,temperature,flowing,lengths,losses,massFlow,density,flowSamples,npshRatio,dry,gasRatio,npshRequired,vapourShare,drop,c,condensedShare);}
+        /** This row with a running centrifugal compressor's wet suction read (code base review N2): the condensed mass share
+         * of the supply its suction line delivers, the number its wet efficiency reads ({@link PassiveStepSolver#readSuctions}). */
+        public PipeObservation withCondensed(double share){return new PipeObservation(pipe,firstPressure,secondPressure,firstElevation,secondElevation,columnDensity,temperature,flowing,lengths,losses,massFlow,density,flowSamples,npshRatio,dry,gasRatio,npshRequired,vapourShare,valveDrop,cavitation,share);}
         public static List<PipeObservation> atRest(PassiveNetwork graph,com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics model){
             var result=new ArrayList<PipeObservation>();
             for(var pipe:graph.pipes()){

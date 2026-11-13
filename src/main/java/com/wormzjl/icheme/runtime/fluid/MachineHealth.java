@@ -16,12 +16,13 @@ import java.util.function.Supplier;
 /**
  * The machines' health (batch 2026-11-03-rotating-machinery W10b, build plan revision 2, owner decision D34; one class for
  * every machine since code base review M-12): every machine with a fault ({@link #faults}), a constructed casing, an
- * in-line pump or a dry screw, keyed by its device identity (the node its mover's connection leaves). Health
+ * in-line pump or compressor or a dry screw, keyed by its device identity (the node its mover's connection leaves). Health
  * is a fact, 1 (new) to 0 (failed); arithmetic on the server thread only:
  * <ul>
  * <li>at each commit and replay its wear rate is read from its faults' intensities at the slice's committed suction (its
  * {@link PassiveStepSolver.PipeObservation#npshRatio}, {@link PassiveStepSolver.PipeObservation#dry}, a dry screw's liquid
- * share), by the rule of {@link Wear#rate(double, double, Wear.Settings)}, and booked over
+ * share, a centrifugal compressor's {@link PassiveStepSolver.PipeObservation#condensedShare}), by the rule of
+ * {@link Wear#rate(double, double, Wear.Settings)}, and booked over
  * the slice's process time, its online ticks times the time factor ({@link #booked});</li>
  * <li>on the presentation cadence a pump not booked for a cadence (a resting island) books its last rate to now, one that
  * reached 0 fails, and the facts go to the ledger ({@link #cadence});</li>
@@ -70,6 +71,8 @@ public final class MachineHealth {
         double intensity;
         /** Its low-flow intensity at its last committed slice (N1): its {@code LOW FLOW} word while above 0. */
         double lowFlow;
+        /** A centrifugal compressor's wet gas intensity at its last committed slice (N2): its {@code WET GAS} word while above 0. */
+        double wetGas;
         long bookedTick;
         boolean failed;
     }
@@ -110,16 +113,18 @@ public final class MachineHealth {
     }
 
     private static final List<Wear.Fault> LIQUID_MOVER = List.of(Wear.Fault.CAVITATION, Wear.Fault.DRY), SCREW = List.of(Wear.Fault.LIQUID),
-            CENTRIFUGAL = List.of(Wear.Fault.CAVITATION, Wear.Fault.DRY, Wear.Fault.LOW_FLOW);
+            CENTRIFUGAL = List.of(Wear.Fault.CAVITATION, Wear.Fault.DRY, Wear.Fault.LOW_FLOW), COMPRESSOR = List.of(Wear.Fault.WET_GAS);
 
     /**
      * The faults {@code mover} reads (M-12): a liquid mover cavitation and running dry, and a centrifugal pump on its curve
-     * also low flow (N1; a set-flow pump has no curve); a dry screw vacuum pump liquid at its suction (owner V6 B); none for
-     * another mover.
+     * also low flow (N1; a set-flow pump has no curve); a dry screw vacuum pump liquid at its suction (owner V6 B); a
+     * centrifugal compressor on its curve wet gas (N2: a constructed casing and an in-line compressor; a reciprocating frame
+     * is a set-flow compressor and has none); none for another mover.
      */
     static List<Wear.Fault> faults(FlowControl.Mover mover) {
         if (mover.liquid()) return mover instanceof FlowControl.Machine m && m.law() instanceof com.wormzjl.icheme.science.machine.CentrifugalPump ? CENTRIFUGAL : LIQUID_MOVER;
         if (mover instanceof FlowControl.Machine m && com.wormzjl.icheme.science.machine.VacuumPump.dryScrew(m.law())) return SCREW;
+        if (mover instanceof FlowControl.Machine m && m.law() instanceof com.wormzjl.icheme.science.machine.CentrifugalCompressor) return COMPRESSOR;
         return List.of();
     }
 
@@ -191,6 +196,10 @@ public final class MachineHealth {
                 if (density > 0) share = Math.max(0, flows[e]) / density / (law.ratedFlow() * machine.speed());
             }
             p.lowFlow = Wear.lowFlow(share);
+            // A centrifugal compressor's suction condensed mass share (N2): the number its wet efficiency read in the solve,
+            // carried by its observation row (NaN on every other row).
+            double wet = read ? row.condensedShare() : Double.NaN;
+            p.wetGas = Wear.wetGas(wet);
             // The largest intensity of each class, and the fault that set it.
             double erosion = 0, seizure = 0;
             Wear.Fault eroding = null, seizing = null;
@@ -200,7 +209,8 @@ public final class MachineHealth {
                     case DRY -> row.dry() ? 1 : 0;
                     case LIQUID -> liquid;
                     case LOW_FLOW -> share;
-                    case WET_GAS, WET_EXHAUST -> 0;
+                    case WET_GAS -> wet;
+                    case WET_EXHAUST -> 0;
                 };
                 double i = fault.intensity(q);
                 if (fault.type == Wear.FaultClass.EROSION) {
@@ -381,8 +391,9 @@ public final class MachineHealth {
      * Pump {@code id}'s status word on its page's message display, said once (W10d, owner decision D37): {@code FAILED} at
      * health 0, which takes precedence; else {@code LIQUID} while a dry screw takes liquid; else {@code LOW FLOW} while a
      * centrifugal pump runs below its minimum flow (N1, {@link Wear#lowFlow} above 0); else {@code CAVITATION} while σ is below inception ({@link Wear#INCEPTION}: while it
-     * crackles); else {@code GAS} while its gas ratio is above half the Turpin onset (while it churns); else empty. Its
-     * health has its meter.
+     * crackles); else {@code GAS} while its gas ratio is above half the Turpin onset (while it churns); else {@code WET GAS}
+     * while a centrifugal compressor takes a wet suction (N2, {@link Wear#wetGas} above 0); else empty. Its health has its
+     * meter. The words after {@code GAS} belong to machines that read none of the words before them.
      */
     public String status(long id) {
         if (failed(id)) return "FAILED";
@@ -392,6 +403,7 @@ public final class MachineHealth {
         var s = suction(id);
         if (s.sigma() < Wear.INCEPTION) return "CAVITATION";
         if (s.ratio() > GAS_RATIO) return "GAS";
+        if (screw != null && screw.wetGas > 0) return "WET GAS";
         return "";
     }
 
