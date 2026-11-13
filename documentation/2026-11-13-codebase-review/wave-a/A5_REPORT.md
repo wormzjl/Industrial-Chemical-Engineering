@@ -35,21 +35,11 @@ Files: `FluidWorldAuthority`; new test `MoverHealthStatusTest`. The health claus
 
 Ran after "lane free", `--max-workers 4`: `compileJava compileTestJava` (passed); `test --tests` the eight classes below (119 tests, 1 failure); after the fix, `PresentationBucketTest` again; `holdGates --tests IslandSchedulerTest`.
 
-| Class | Tests | Result |
-|---|---|---|
-| ExchangerCouplingTest (new determinism test) | 16 | pass |
-| PresentationBucketTest | 10 | 1 failure, fixed, then pass |
-| IslandCertificateTest | 23 | pass |
-| CrystalIslandRuntimeTest / WorkerFailureStatusTest | 3 / 2 | pass |
-| ColumnRunTest | 50 | pass |
-| PhysicalRegistryTest (new R26 test) | 12 | pass |
-| MoverHealthStatusTest (new) | 3 | pass |
-| IslandSchedulerTest (holdGates) | 9 | pass |
+Results: ExchangerCouplingTest 16 (with the new determinism test), PresentationBucketTest 10 (1 failure, fixed, then all pass), IslandCertificateTest 23, CrystalIslandRuntimeTest 3, WorkerFailureStatusTest 2, ColumnRunTest 50, PhysicalRegistryTest 12 (with the new R26 test), MoverHealthStatusTest 3, IslandSchedulerTest 9 (holdGates): all pass.
 
 Expectations that moved (tests that rested on the defect), all in `PresentationBucketTest`:
 - `scientificProgressIsIdenticalWithAndWithoutViewers`: viewed replays `> quiet` became `==`; boundary totals within 1e-12 became bit-equal (`assertArrayEquals`); "islands 2 and 3 replayed" now checked after the final `snapshot` reads, the engine's read that materialises them (island 3, the closed pair, had replayed only because views materialised it: the run's one failure).
 - `presentationCostsNothingPerTickUnlessABucketHasWork`: materialisations of the resting island under one menu over 10,000 ticks, 100 became 0; the view still shows the bucket tick (now the preview), and the stored committed tick stays behind it (new check).
-- `aPresentationReadStopsShortOfAWakeAndNeverWakesTheIsland`: unchanged and passing (the preview keeps the one-tick-short rule).
 
 No production caller outside the lane relied on a view materialising: `ColumnOperation.water`, `ShaftTrains.governorValve` and `FluidWorldAuthority.plannedTarget` read only the graph's pipe controls, which the preview carries unchanged.
 
