@@ -69,6 +69,13 @@ class MotorTest {
         }
     }
 
+    /** M-19: a 12-pole motor (MachineDuty.POLES allows it) reads the 8-pole row, as a 12-pole generator does; no throw. */
+    @Test void twelvePolesReadTheEightPoleRow() {
+        for (double rating : RATINGS) assertEquals(Motor.efficiency(rating, 8), Motor.efficiency(rating, 12), 0, "at " + rating + " W");
+        assertEquals(Motor.electricPower(24.2e3, 30e3, 8, false), Motor.electricPower(24.2e3, 30e3, 12, false), 0);
+        assertEquals(Motor.generatorEfficiency(5e6, 8), Motor.generatorEfficiency(5e6, 12), 0, "the generator's mapping is the same row");
+    }
+
     @Test void electricPowerOfThePlanExamples() {
         assertEquals(25.94e3, Motor.electricPower(24.2e3, 30e3, 2, false), 10, "the 24 kW pump takes 26 kW");
         assertEquals(866.4e3, Motor.electricPower(830e3, 1e6, 2, false), 100, "the compressor's motor takes 865 kW");
