@@ -2419,7 +2419,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         };
     }
     /** A device's view, as a presentation read: queued events are not applied (they apply on the engine's tick), and a
-     * certified island is materialised to now but never woken by it. */
+     * certified island is previewed at now, never materialised, booked or woken by it (code base review R5). */
     /** A device in no island: the column that holds it and runs it (C7, plan section 13), or why it has none. */
     /** The held registrations beside the network ({@link PhysicalRegistry#heldBeside}), derived again when the registry's facts change. */
     private PhysicalRegistry.HeldBeside heldBeside=PhysicalRegistry.HeldBeside.NONE;
@@ -2449,11 +2449,13 @@ public final class FluidWorldAuthority implements AutoCloseable {
         return !topology.active().containsKey(id)?"WAITING: topology event":Objects.requireNonNullElse(registry.diagnostic(id),"NO FLOW: no hydraulic boundary");
     }
     public FluidView view(long id){owned();return view(id,new HashMap<>());}
-    /** Whether {@link #stored} is reading: the islands' stored snapshots stand in for the presentation's. */
-    private boolean storedOnly;
-    /** {@code read} of views and instruments from the islands as they are stored, advancing none: a column's Operation tab, which a menu open reads (a replay runs no engine work). */
-    public <T> T stored(java.util.function.Supplier<T> read){owned();storedOnly=true;try{return read.get();}finally{storedOnly=false;}}
-    private IslandCoordinator.Snapshot presented(long island){return storedOnly?onWorldList(island,runtime.coordinator().observe(island)):presentation(island);}
+    /**
+     * {@code read} of views and instruments: since every presentation read is a preview that advances and books nothing
+     * (code base review R5), this is a plain read. Kept only for its callers in {@code FluidNetwork} (the column's Operation
+     * tab and the still's stop step), which can call the read directly.
+     */
+    public <T> T stored(java.util.function.Supplier<T> read){owned();return read.get();}
+    private IslandCoordinator.Snapshot presented(long island){return presentation(island);}
     /** Island {@code island} as it is stored, materialising nothing: what a watch's replay reads (batch 2026-11-10-custom-shader-system). */
     private IslandCoordinator.Snapshot storedIsland(long island){return onWorldList(island,runtime.coordinator().observe(island));}
     /** Island {@code island} as a presentation reads it, on the world list (V2 stage 5): every view, display and wire vector

@@ -253,8 +253,8 @@ class PresentationBucketTest {
     /**
      * The same islands with and without viewers: sixteen menus and every device loaded and presented, against no
      * presentation at all. Solved publications are bit for bit the same (the WP2 publication fingerprint), so are
-     * the solve counts and the state a final read materialises; replayed accounting splits into more spans with
-     * viewers (a view materialises a certified island) and sums to the same totals.
+     * the solve counts and the state a final read materialises; a view previews a certified island and materialises
+     * nothing (code base review R5), so the replayed spans and their accounting are the same bits too.
      */
     @Test void scientificProgressIsIdenticalWithAndWithoutViewers() {
         // Exact rest, steady through-flow, a settled pair revalidated at short horizons, and a transient fill.
@@ -268,15 +268,14 @@ class PresentationBucketTest {
         assertTrue(world.viewsOf.values().stream().mapToInt(Integer::intValue).sum()>=16*100,"the viewers really viewed");
         assertTrue(viewed.coordinator.observe(1).certificate().isPresent(),"the dead-headed line rests");
         for(long island:new long[]{2,3})assertTrue(viewed.replayed.stream().anyMatch(r->r.id()==island),"island "+island+" replayed a steady certificate");
-        assertTrue(viewed.replayed.size()>quiet.replayed.size(),"views materialised certified islands: "+viewed.replayed.size()+" against "+quiet.replayed.size());
+        assertEquals(quiet.replayed.size(),viewed.replayed.size(),"views materialise no certified island");
         assertEquals(quiet.solves,viewed.solves,"solves");
         assertEquals(IslandCertificateTest.publications(quiet.published),IslandCertificateTest.publications(viewed.published),"solved publications");
         for(long island=1;island<=4;island++) {
             var a=quiet.coordinator.snapshot(island);var b=viewed.coordinator.snapshot(island);
             assertEquals(state(a),state(b),"state of island "+island);assertEquals(a.certificate(),b.certificate());
-            // Replayed boundary accounting: the same totals, in more pieces.
-            double[] x=replayedBoundary(quiet.replayed,island),y=replayedBoundary(viewed.replayed,island);
-            for(int c=0;c<x.length;c++)assertEquals(x[c],y[c],1e-12*Math.max(1,Math.abs(x[c])),"replayed boundary total "+c+" of island "+island);
+            // Replayed boundary accounting: the same spans, so the same bits.
+            assertArrayEquals(replayedBoundary(quiet.replayed,island),replayedBoundary(viewed.replayed,island),"replayed boundary totals of island "+island);
         }
         for(var menu:menus)assertTrue(menu.received.size()>=119,"menu on "+menu.device+" received "+menu.received.size());
     }
@@ -331,10 +330,11 @@ class PresentationBucketTest {
         assertEquals(Long.MAX_VALUE,world.presentation.nextDue());
         var menu=world.open(701);countFromHere();world.run(10_000);
         assertEquals(100,counter("bucketFlushes"));assertEquals(100,menu.received.size());
-        assertEquals(100,counter("materialisations"),"one materialisation of the resting island per bucket, for its menu");
+        assertEquals(0,counter("materialisations"),"a menu previews the resting island: it materialises nothing");
         assertEquals(0,counter("solvesDispatched"));
         assertTrue(menu.received.getLast().view().status().startsWith("STEADY: no flow since"),menu.received.getLast().view().status());
-        assertEquals(menu.received.getLast().tick(),menu.received.getLast().view().committedTick(),"the view reads the island materialised to its bucket");
+        assertEquals(menu.received.getLast().tick(),menu.received.getLast().view().committedTick(),"the view reads the island previewed at its bucket");
+        assertTrue(rig.coordinator.observe(7).clock().committedTick()<menu.received.getLast().tick(),"while the island stays where it was committed");
     }
     /** A topology change moves a menu with its device to the replacement island's bucket. */
     @Test void aMenuFollowsItsDeviceToItsNewIslandsBucket() {

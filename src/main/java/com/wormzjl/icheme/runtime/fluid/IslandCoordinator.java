@@ -406,21 +406,56 @@ public final class IslandCoordinator {
     public FluidThermodynamics model(long id){owned();return require(id).model;}
     /** Snapshot {@code s} of a live island as a checkpoint entry: on the island's own compound list, named in full, so a compound added to the package later moves no island's model (V3). */
     public FluidCheckpointCodec.IslandEntry entry(String dimension,String packageId,Snapshot s){var model=model(s.id());return new FluidCheckpointCodec.IslandEntry(dimension,packageId,model.compounds(),model.wet(),s);}
-    /** A certified island is materialised first, so what is read (a view, a save) is current. */
+    /** A certified island is materialised first, so what the engine reads (a save, an event's base) is current; a view takes {@link #presentation}. */
     public Snapshot snapshot(long id){owned();var island=require(id);materialise(island);return island.snapshot();}
     public Optional<Metrics> metrics(long id){owned();return Optional.ofNullable(require(id).metrics);}
     /**
-     * A presentation read, for a view of a loaded device or an open menu: a certified island is materialised as by
-     * {@link #snapshot(long)}, but never onto a wake it has not acted on yet (its horizon), so a
-     * view can never move an island's schedule. The island's own deadline acts on the wake at the same tick with or
-     * without viewers, and the materialised state is the certificate's state at that tick whatever the reads
-     * before it: presentation cadence never drives scientific progress.
+     * A presentation read, for a view of a loaded device, an open menu or an instrument: a preview that changes nothing on
+     * the island (code base review R5). A certified island behind its {@link #previewTarget} is shown as its certificate's
+     * state at that tick ({@link IslandCertificate#graphAt}), with its taps and a clock that reads the target committed;
+     * every other island as it is stored. Its clock, graph, accounts, bookings, metrics and payload stay as they are, so
+     * the bookings and the heat in transit are the same bits whoever looks and whenever: only the engine's own
+     * materialisations (deadlines, fences, {@link #through}, saves, coupling reads) book a replayed span.
      */
-    public Snapshot presentation(long id){owned();var island=require(id);materialise(island,true);return island.snapshot();}
-    /** Reads only transport already accepted/materialised by the engine; never wakes or advances an island. */
+    public Snapshot presentation(long id) {
+        owned();var island=require(id);long committed=island.clock.committedTick(),target=previewTarget(island);
+        if(target<=committed)return island.snapshot();
+        var stored=island.snapshot();var clock=stored.clock();
+        var graph=observedAs(island.certificate.graphAt(target),observationPoints(island.graph));
+        // The status a materialisation to the target would leave: the certified line, or event alignment at the fence.
+        String status=suspension!=null?island.status:certifiedStatus(island);
+        if(!island.suspended&&!island.clock.busy()&&island.fence()==target)status="WAITING: event alignment";
+        // Payload generation 0: a preview is never a checkpoint unit.
+        return new Snapshot(stored.id(),stored.revision(),graph,new IslandClock.Snapshot(clock.onlineTick(),target,0,clock.cadenceTicks()),
+                stored.lastResult(),status,stored.fences(),stored.certificate(),0);
+    }
+    /**
+     * The tick a certified island's preview shows: {@code min(online, nearest fence, hold tick, horizon)}, one tick short
+     * of a horizon not acted on yet, so a view never shows a wake; its committed tick for an island with no certificate.
+     */
+    private static long previewTarget(Island island) {
+        var certificate=island.certificate;if(certificate==null)return island.clock.committedTick();
+        long wake=certificate.horizonTick();
+        long target=Math.min(Math.min(island.clock.onlineTick(),island.fence()),Math.min(island.holdTick,wake));
+        return target==wake?wake-1:target;
+    }
+    /**
+     * The pipes' bulk speeds over the last 100 online ticks, from transport the engine accepted or materialised and, for a
+     * certified island, the span its preview shows past its committed tick, at the certificate's recorded rate. A read:
+     * it never wakes, advances or books anything.
+     */
     public Map<Long,Double> bulkVolumeRates(long id) {
-        owned();var island=require(id);
-        return island.pipeSpeed.volumeRates(island.clock.onlineTick());
+        owned();var island=require(id);long online=island.clock.onlineTick();
+        var accepted=island.pipeSpeed.volumeRates(online);
+        long committed=island.clock.committedTick(),target=previewTarget(island);
+        if(target<=committed)return accepted;
+        // The recorded interval's transfers over [committed, target]: a window of that span alone reads them at
+        // volume / (target - committed) per tick; scaled by (target - committed) / duration they run at the recorded rate.
+        var summary=island.certificate.summary();var window=new PipePresentation.SpeedWindow();
+        window.accepted(committed,target,summary.result.pipeTransfers());
+        double g=(target-committed)/(double)summary.durationTicks;
+        var rates=new HashMap<>(accepted);window.volumeRates(online).forEach((pipe,rate)->rates.merge(pipe,g*rate,Double::sum));
+        return Map.copyOf(rates);
     }
 
     /** Every island, certified ones materialised first; see {@link #snapshot(long)}. */
@@ -1270,19 +1305,16 @@ public final class IslandCoordinator {
 
     /**
      * Advances a certified island to {@code target = min(online, nearest fence, hold tick, horizon)} and acts on
-     * what it reached: the horizon wakes it to solve one revalidating slice. On demand only: a fence or event
-     * alignment, a read of its snapshot (a save), a view (a presentation read, which never wakes), its own deadline. Each
-     * advance is reported to the replay listener with
+     * what it reached: the horizon wakes it to solve one revalidating slice. On the engine's demand only: a fence or event
+     * alignment, a read of its snapshot (a save), {@link #through}, a coupled side's read, its own deadline; never a view
+     * (a presentation read takes a {@link #presentation preview}). Each advance is reported to the replay listener with
      * the replayed span as the island's last result, so boundary and pump accounting stays exact.
      */
-    private void materialise(Island island){materialise(island,false);}
-    /** {@code presentation}: a view's read, which stops one tick short of a wake not yet acted on and never wakes. */
-    private void materialise(Island island,boolean presentation) {
+    private void materialise(Island island) {
         var certificate=island.certificate;if(certificate==null)return;
         long committed=island.clock.committedTick(),online=island.clock.onlineTick();
         long wake=certificate.horizonTick();
         long target=Math.min(Math.min(online,island.fence()),Math.min(island.holdTick,wake));
-        if(presentation&&target==wake)target=wake-1;
         if(target>committed) {
             // The island keeps its last solved interval as its result (what a save records and a view reads, whose
             // rates replay repeats); the replayed span with its scaled accounting goes to the replay listener only.
@@ -1301,7 +1333,7 @@ public final class IslandCoordinator {
             var stored=island.snapshot();
             replayed.published(List.of(new Snapshot(stored.id(),stored.revision(),stored.graph(),stored.clock(),Optional.of(replay),stored.status(),stored.fences(),stored.certificate(),stored.payloadGeneration())));
         }
-        if(presentation||stopped||suspension!=null)return;
+        if(stopped||suspension!=null)return;
         if(target==wake)revalidate(island,certificate);
     }
     /** Ends a certificate at its horizon: fresh solver caches, no evidence; the island keeps the certificate its first
