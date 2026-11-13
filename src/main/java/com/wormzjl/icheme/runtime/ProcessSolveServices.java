@@ -103,9 +103,10 @@ public final class ProcessSolveServices {
         if(state!=null) {
             var diagnostics=Diagnostics.from(state.service.diagnostics());
             if(state.requestsBySequence.values().stream().anyMatch(context->context.request().target().equals(request.target())))return new AdmissionResult(Admission.OWNER_BUSY,diagnostics);
-            // Fluid readiness stays in the coordinator's owner set. Fill all idle workers, but do not
-            // occupy every queue slot with catch-up jobs ahead of newly arriving calculator work.
-            if(diagnostics.readyJobs()>0||diagnostics.activeWorkers()>=diagnostics.workerCount())return new AdmissionResult(Admission.QUEUE_FULL,diagnostics);
+            // Fluid readiness stays in the coordinator's owner set: an island runs now on a free worker or waits there, never
+            // in the service's queue. A plant job waiting for a worker does not hold it back (code base review R6, option A):
+            // while an island is ready, plant jobs leave it one worker.
+            if(diagnostics.activeWorkers()>=diagnostics.workerCount())return new AdmissionResult(Admission.QUEUE_FULL,diagnostics);
         }
         return submit(server,request,command,command.model().hydrocarbon.revision()+":"+command.model().viscosity.revision());
     }
@@ -118,8 +119,10 @@ public final class ProcessSolveServices {
     public static void fluidWorkerDemand(MinecraftServer server,int eligibleOwners) {
         requireServerThread(server);if(eligibleOwners<0)throw new IllegalArgumentException("Negative fluid demand");
         var state=STATES.get(server);if(state==null||state.stopResult!=null)return;
-        state.fluidDemand=eligibleOwners;allocateWorkers(server,state,0);
+        state.fluidDemand=eligibleOwners;allocateWorkers(server,state,0);reserve(state);
     }
+    /** One worker kept for islands while any island is ready (code base review R6, option A; the service keeps none with one worker). */
+    private static void reserve(ServerState state){state.service.setReserve(state.fluidDemand>0?1:0);}
     /** Ticks until the automatic allocator would apply its pending lower-demand shrink when observed, or -1 when
      * none is pending or the pool is fixed. The fluid scheduler answers it with one deadline instead of
      * observing demand on every tick. */
@@ -162,22 +165,23 @@ public final class ProcessSolveServices {
         }
 
         allocateWorkers(server,state,request instanceof FluidIslandRequest&&state.fluidDemand>0?0:1);
-        long now = System.nanoTime();
-        long deadline = request instanceof FluidIslandRequest?BoundedCpuSolveService.NO_DEADLINE:now + state.config.solveDeadline().toNanos();
+        // An island's wall budget is its own (it starts on the worker); a plant job's solve deadline starts when a worker
+        // starts it, so time spent waiting behind islands never times it out (code base review R6, option A).
+        boolean island=request instanceof FluidIslandRequest;
         var stamp = new BoundedCpuSolveService.JobStamp<SolveTarget>(
                 state.service.serverEpoch(),
                 request.requestId(),
                 request.target(),
                 request.inputRevision(),
                 datasetRevision,
-                deadline);
+                BoundedCpuSolveService.NO_DEADLINE);
         BoundedCpuSolveService.Admission serviceAdmission = state.service.trySubmit(
-                stamp, command, ProcessSolveServices::solveCommand);
+                stamp, command, ProcessSolveServices::solveCommand, island, island?0L:state.config.solveDeadline().toNanos());
         BoundedCpuSolveService.Diagnostics serviceDiagnostics = state.service.diagnostics();
         Diagnostics diagnostics = Diagnostics.from(serviceDiagnostics);
         Admission admission = Admission.from(serviceAdmission);
         if (admission == Admission.ACCEPTED) {
-            if(request instanceof FluidIslandRequest&&state.fluidDemand>0)state.fluidDemand--;
+            if(request instanceof FluidIslandRequest&&state.fluidDemand>0){state.fluidDemand--;reserve(state);}
             RequestContext old = state.requestsBySequence.put(
                     request.requestId(), new RequestContext(request, diagnostics, stamp));
             if (old != null) {

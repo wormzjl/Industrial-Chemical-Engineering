@@ -282,11 +282,10 @@ public final class FluidNetwork {
         if(view.identity()!=record.device().id()||view.inputRevision()!=record.revision())
             throw new IllegalArgumentException("Presentation snapshot registration mismatch");
         return new MenuData(record.device().hydraulicKind(),view,Controls.from(record),world.components(),world.presets(),"",
-            world.materialNames(),Arrays.stream(world.model().molecularWeights()).boxed().toList(),world.instruments().sensorReadings(record.device().id(),view),valveData(world,record,view));
+            world.materialNames(),world.molecularWeights(),world.instruments().sensorReadings(record.device().id(),view),valveData(world,record,view));
     }
     /** The opening of valve {@code id} as its screen reads it, 0 to 1, or NaN where it has none or no signal (the column's Operation tab, C7). */
-    public static double opening(FluidWorldAuthority world,long id){return world.stored(()->storedOpening(world,id));}
-    private static double storedOpening(FluidWorldAuthority world,long id){var record=world.registrations().get(id);if(record==null)return Double.NaN;var data=valveData(world,record,world.view(id));return data==null||!data.configured()?Double.NaN:data.opening();}
+    public static double opening(FluidWorldAuthority world,long id){var record=world.registrations().get(id);if(record==null)return Double.NaN;var data=valveData(world,record,world.view(id));return data==null||!data.configured()?Double.NaN:data.opening();}
     private static ValveData valveData(FluidWorldAuthority world,WorldTopologyLedger.Registration record,FluidView view){
         if(!(record.device().control() instanceof FlowControl.Valve valve)||valve instanceof FlowControl.Turbine)return null;
         if(valve.bare())return new ValveData(false,1,"Lacking components");
@@ -431,9 +430,9 @@ public final class FluidNetwork {
                     case RESERVOIR->{
                         // A batch still's pot (W6): its firing and reflux valve, a fact its islands read at their next slice.
                         if(d.stillPot()&&controls.still!=null){
-                            // The field guide's stop step (P2b): the fire set off, read against the still's view as its island is
-                            // stored (code review finding 1: a packet handler materialises no island).
-                            var shown=controls.still.firing()==0?world.stored(()->world.view(d.id())).still():null;
+                            // The field guide's stop step (P2b): the fire set off, read against the still's view (a preview: a
+                            // packet handler materialises no island, code review finding 1 and code base review R5).
+                            var shown=controls.still.firing()==0?world.view(d.id()).still():null;
                             String refused=world.stillSettings(d.id(),controls.still.firing(),controls.still.ratio());
                             if(refused!=null)throw new IllegalArgumentException(refused);
                             com.wormzjl.icheme.runtime.tutorial.TutorialTriggers.stillFiringOff(player,shown);

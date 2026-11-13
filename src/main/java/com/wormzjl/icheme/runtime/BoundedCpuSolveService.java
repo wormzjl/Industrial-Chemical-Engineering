@@ -59,6 +59,10 @@ public final class BoundedCpuSolveService<O, S, R> implements AutoCloseable {
     private boolean accepting = true;
     private int activeWorkers;
     private int workerLimit;
+    /** Workers ordinary jobs leave free for the reserved lane (code base review R6, option A); see {@link #setReserve}. */
+    private int reserve;
+    /** Dispatched jobs of the ordinary lane: they hold at most {@link #ordinaryLimit()} workers. */
+    private int activeOrdinary;
 
     /** Creates a service owned by the calling thread. The signal may run on a worker or owner; it must only enqueue a
      * bounded owner-thread wakeup. */
@@ -113,7 +117,21 @@ public final class BoundedCpuSolveService<O, S, R> implements AutoCloseable {
      * forcibly terminated. A completed job still owns its capacity and owner slot until the completion is drained.</p>
      */
     public Admission trySubmit(JobStamp<O> stamp, S snapshot, SolveKernel<S, R> kernel) {
+        return trySubmit(stamp, snapshot, kernel, false, 0L);
+    }
+
+    /**
+     * Admits a job on a lane (code base review R6, option A). A {@code reserved} job (a fluid island's slice) never waits:
+     * it runs now on a free worker, ahead of queued ordinary jobs, or is refused {@link Admission#QUEUE_FULL}. An ordinary
+     * job takes a worker only while ordinary jobs hold fewer than {@link #ordinaryLimit()}, else it waits in the ready
+     * queue. {@code startBudgetNanos > 0}: the job's deadline is that long after a worker starts it, so time in the queue
+     * never counts (the stamp's own deadline must then be {@link #NO_DEADLINE}); 0 keeps the stamp's deadline.
+     */
+    public Admission trySubmit(JobStamp<O> stamp, S snapshot, SolveKernel<S, R> kernel, boolean reserved, long startBudgetNanos) {
         requireOwnerThread();
+        if (startBudgetNanos < 0L || startBudgetNanos > 0L && stamp.deadlineNanos() != NO_DEADLINE) {
+            throw new IllegalArgumentException("A start budget replaces the stamp's deadline");
+        }
         Objects.requireNonNull(stamp, "stamp");
         Objects.requireNonNull(snapshot, "snapshot");
         Objects.requireNonNull(kernel, "kernel");
@@ -134,14 +152,17 @@ public final class BoundedCpuSolveService<O, S, R> implements AutoCloseable {
             return Admission.QUEUE_FULL;
         }
 
-        JobControl control = new JobControl(stamp, snapshot, kernel, nanoTime.getAsLong());
+        if (reserved && activeWorkers >= workerLimit) {
+            return Admission.QUEUE_FULL;
+        }
+        JobControl control = new JobControl(stamp, snapshot, kernel, nanoTime.getAsLong(), reserved, startBudgetNanos);
         jobsByOwner.put(stamp.owner(), control);
         if (control.token.isDeadlineExceeded()) {
             control.publish(deadlineCompletion(control, nanoTime.getAsLong()));
             return Admission.ACCEPTED;
         }
 
-        if (readyJobs.isEmpty() && activeWorkers < workerLimit) {
+        if (reserved || readyJobs.isEmpty() && activeWorkers < workerLimit && activeOrdinary < ordinaryLimit()) {
             DispatchResult dispatched = dispatch(control);
             if (dispatched == DispatchResult.DISPATCHED) {
                 return Admission.ACCEPTED;
@@ -150,6 +171,10 @@ public final class BoundedCpuSolveService<O, S, R> implements AutoCloseable {
                 jobsByOwner.remove(stamp.owner(), control);
                 accepting = false;
                 return Admission.STOPPING;
+            }
+            if (reserved) {
+                jobsByOwner.remove(stamp.owner(), control);
+                return Admission.QUEUE_FULL;
             }
         }
 
@@ -213,7 +238,10 @@ public final class BoundedCpuSolveService<O, S, R> implements AutoCloseable {
             }
             if (control.dispatched) {
                 activeWorkers--;
-                if (activeWorkers < 0) {
+                if (!control.reserved) {
+                    activeOrdinary--;
+                }
+                if (activeWorkers < 0 || activeOrdinary < 0) {
                     throw new IllegalStateException("Active worker count became negative");
                 }
             }
@@ -246,6 +274,30 @@ public final class BoundedCpuSolveService<O, S, R> implements AutoCloseable {
         if(!accepting||workers==workerLimit)return;
         workerLimit=workers;executor.setCorePoolSize(workers);
         dispatchReadyJobs();
+    }
+
+    /**
+     * Keeps {@code workers} workers free of ordinary jobs for the reserved lane (code base review R6, option A: one while
+     * any fluid island is ready). At most the worker limit less one is kept, so an ordinary job always has a worker: with a
+     * limit of one, nothing is reserved. Running jobs are never stopped; a lower reserve dispatches waiting jobs.
+     */
+    public void setReserve(int workers) {
+        requireOwnerThread();
+        if (workers < 0) {
+            throw new IllegalArgumentException("Negative reserve");
+        }
+        if (workers == reserve) {
+            return;
+        }
+        reserve = workers;
+        if (accepting) {
+            dispatchReadyJobs();
+        }
+    }
+
+    /** The workers ordinary jobs may hold: the limit less the reserve, never below one. */
+    private int ordinaryLimit() {
+        return workerLimit - Math.min(reserve, workerLimit - 1);
     }
 
     /** Catastrophic worker errors are retained even though ordinary task failures arrive as completions. */
@@ -331,7 +383,7 @@ public final class BoundedCpuSolveService<O, S, R> implements AutoCloseable {
     }
 
     private void dispatchReadyJobs() {
-        while (activeWorkers < workerLimit && !readyJobs.isEmpty()) {
+        while (activeWorkers < workerLimit && activeOrdinary < ordinaryLimit() && !readyJobs.isEmpty()) {
             JobControl control = readyJobs.removeFirst();
             if (control.token.isDeadlineExceeded()) {
                 control.publish(deadlineCompletion(control, nanoTime.getAsLong()));
@@ -354,12 +406,18 @@ public final class BoundedCpuSolveService<O, S, R> implements AutoCloseable {
     private DispatchResult dispatch(JobControl control) {
         control.dispatched = true;
         activeWorkers++;
+        if (!control.reserved) {
+            activeOrdinary++;
+        }
         try {
             executor.execute(new WorkerTask(control));
             return DispatchResult.DISPATCHED;
         } catch (RejectedExecutionException exception) {
             control.dispatched = false;
             activeWorkers--;
+            if (!control.reserved) {
+                activeOrdinary--;
+            }
             return executor.isShutdown()
                     ? DispatchResult.STOPPED
                     : DispatchResult.TEMPORARILY_UNAVAILABLE;
@@ -672,12 +730,20 @@ public final class BoundedCpuSolveService<O, S, R> implements AutoCloseable {
 
         private long startedNanos = NOT_STARTED;
         private boolean dispatched;
+        private final boolean reserved;
+        private final long startBudgetNanos;
+        /** The deadline in force: the stamp's or, with a start budget, the budget after the worker's start, set by the worker
+         * before it first polls (until then {@link #NO_DEADLINE}: a waiting job never expires). */
+        private volatile long deadlineNanos;
 
-        private JobControl(JobStamp<O> stamp, S snapshot, SolveKernel<S, R> kernel, long enqueuedNanos) {
+        private JobControl(JobStamp<O> stamp, S snapshot, SolveKernel<S, R> kernel, long enqueuedNanos, boolean reserved, long startBudgetNanos) {
             this.stamp = stamp;
             this.snapshot = snapshot;
             this.kernel = kernel;
             this.enqueuedNanos = enqueuedNanos;
+            this.reserved = reserved;
+            this.startBudgetNanos = startBudgetNanos;
+            this.deadlineNanos = stamp.deadlineNanos();
         }
 
         private CancellationResult requestCancellation(CancelReason reason) {
@@ -718,7 +784,7 @@ public final class BoundedCpuSolveService<O, S, R> implements AutoCloseable {
 
         private final class Token implements CancellationToken {
             boolean isDeadlineExceeded() {
-                return deadlineReached(nanoTime.getAsLong(), stamp.deadlineNanos());
+                return deadlineReached(nanoTime.getAsLong(), deadlineNanos);
             }
 
             @Override
@@ -749,6 +815,9 @@ public final class BoundedCpuSolveService<O, S, R> implements AutoCloseable {
             Thread worker = Thread.currentThread();
             control.runner.set(worker);
             control.startedNanos = nanoTime.getAsLong();
+            if (control.startBudgetNanos > 0L) {
+                control.deadlineNanos = control.startedNanos + control.startBudgetNanos;
+            }
             Completion<O, R> completion;
             Error fatalError = null;
             try {

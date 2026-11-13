@@ -38,6 +38,10 @@ public final class FluidWorldAuthority implements AutoCloseable {
     private final IChemE.FluidOptions options;
     private final List<FluidPresetCatalog.Preset> presetCache;
     private final List<String> componentNames;
+    /** The menus' static part, constant for the server (its catalog and model are captured at start): the component names
+     * and the boxed molecular weights, built once (code base review R4). */
+    private final Map<String,MaterialName> materialNames;
+    private final List<Double> molecularWeights;
     private final FluidSavedData data;
     private final WorldTopologyLedger topology;
     private final MinecraftFluidRuntime runtime;
@@ -135,6 +139,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
         data=FluidSavedData.open(server,this::model,catalog);
         propertyReload=new FluidPropertyReloadGuard(catalog,com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(catalog),model);
         presetCache=FluidPresetCatalog.resolve(catalog);componentNames=model.components();
+        {var names=new LinkedHashMap<String,MaterialName>();for(String id:componentNames)names.put(id,catalog.name(id));materialNames=Map.copyOf(names);}
+        molecularWeights=Arrays.stream(model.molecularWeights()).boxed().toList();
         var savedTopology=data.world().orElseGet(()->WorldTopologyLedger.Snapshot.empty(catalog));savedTopology.basis().requireCurrent(catalog);
         FluidPropertyReloadGuard.validateSolids(catalog.solids(),data.checkpoint(),savedTopology);observedSolidData=catalog;
         topology=new WorldTopologyLedger(savedTopology);
@@ -271,7 +277,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public FluidThermodynamics model(){owned();return model;}
     /** The server's time factor ({@code fluid.timeScale}), captured at server start: the world model's. */
     public com.wormzjl.icheme.science.fluid.SimulationTime time(){return model.time();}
-    public Map<String,MaterialName> materialNames(){owned();var result=new LinkedHashMap<String,MaterialName>();for(String id:componentNames)result.put(id,catalog.name(id));return Map.copyOf(result);}
+    public Map<String,MaterialName> materialNames(){owned();return materialNames;}
+    /** The world model's molecular weights, boxed for a menu's static part (code base review R4). */
+    public List<Double> molecularWeights(){owned();return molecularWeights;}
     public long onlineTick(){owned();return topology.onlineTick();}
     /** Optional read-only diagnostics; all values are immutable and callbacks run on the server thread. */
     public void observe(java.util.function.BiConsumer<List<IslandCoordinator.Snapshot>,Map<Long,IslandCoordinator.Metrics>> observer){owned();this.observer=observer;}
@@ -1504,7 +1512,12 @@ public final class FluidWorldAuthority implements AutoCloseable {
         // Repair kits (W10b): queued engine events, applied after the devices they name; a repaired failed pump wakes its island.
         if(health.hasEvents()&&propertyHold==null){health.apply();runtime.coordinator().pumpIfUseful();}
         instruments.tick(topology.onlineTick());
-        if(topology.onlineTick()%100==0) for(var motor:shafts.units()) if(motor.kind()==com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR) {
+        // Every 100 ticks each loaded motor is bound again (code base review R24, owner option A: kept). The pass does more than
+        // a first bind: it puts the motor's data port back on a cell a structure refresh replaced, and refreshes the port after
+        // a wiring change (ControlHosts.bindMotor, DataPorts.refresh): binding on chunk load and on unit creation would miss
+        // both. It reads the ledger's shaft map (one copy, as before) without ShaftTrains.units()'s second copy, in the same
+        // order; only the motors act. A motor-only index belongs with the ledger's shaft accessors (machines lane, B-M1).
+        if(topology.onlineTick()%100==0) for(var motor:topology.shafts().values()) if(motor.kind()==com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR) {
             var motorLevel=server.getLevel(dimension(motor.position().dimension()));
             var pos=new BlockPos(motor.position().x(),motor.position().y(),motor.position().z());
             if(motorLevel!=null&&motorLevel.hasChunkAt(pos)&&motorLevel.getBlockEntity(pos) instanceof com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity cell)controls().bindMotor(cell,motor);
@@ -1514,10 +1527,11 @@ public final class FluidWorldAuthority implements AutoCloseable {
         // The watched drivers' states at the presentation cadence (W3): a read of what the trains last decided.
         if(!driverWatchers.isEmpty()&&topology.onlineTick()%100==0)publishDrivers();
         if(!rotationWatchers.isEmpty()&&topology.onlineTick()%100==0)publishRotations();
-        if(topology.onlineTick()%100==0)publishFlares();
-        if(topology.onlineTick()%100==0)publishStills();
-        // The towers' plumes, the fired heaters' flues, the far silhouettes and the noise levels (batch 2026-11-10-custom-shader-system): reads only.
-        if(topology.onlineTick()%100==0){publishTowers();publishHeaters();publishChimneys();publishSilhouettes();publishNoise();}
+        // The device displays publish at their device's slot of the 100-tick cadence, as presentation buckets do (code base
+        // review R10): flares, stills, towers' plumes, fired heaters' flues and chimneys. Reads only.
+        publishFlares();publishStills();publishTowers();publishHeaters();publishChimneys();
+        // The far silhouettes and the noise levels (batch 2026-11-10-custom-shader-system), by watcher: reads only.
+        if(topology.onlineTick()%100==0){publishSilhouettes();publishNoise();}
         if(topology.onlineTick()%ElectricStores.CADENCE==0&&propertyHold==null)health.cadence();
         // A generator's port pushes FE to its neighbours (the FE protocol, reading A65): stored FE only, nothing solves.
         pushGenerators();
@@ -1947,9 +1961,13 @@ public final class FluidWorldAuthority implements AutoCloseable {
         return new com.wormzjl.icheme.network.FluidNetwork.FlareState(target,view.status().ordinal(),flame?Math.max(share,.02f):0,plume,soot,Float.isFinite(exit)?exit:0);
     }
     /** The presentation cadence's flare states: one per watched flare, to its watchers only. */
+    /** Whether device {@code id} publishes its display at online tick {@code tick}: its slot of the
+     * {@value FluidPresentation#BUCKET_TICKS}-tick cadence, by identity, as a presentation bucket (code base review R10). */
+    static boolean displayDue(long id,long tick){return Math.floorMod(id,(long)FluidPresentation.BUCKET_TICKS)==Math.floorMod(tick,(long)FluidPresentation.BUCKET_TICKS);}
     private void publishFlares() {
-        publishedFlares.clear();
+        long now=topology.onlineTick();publishedFlares.keySet().removeIf(id->displayDue(id,now));
         for(long id:flareWatchers.devices()) {
+            if(!displayDue(id,now))continue;
             var record=registrations().get(id);
             if(record==null||!record.device().flare()){flareWatchers.remove(id);continue;}
             var pos=cell(record);var state=flareState(new com.wormzjl.icheme.network.FluidNetwork.Target(pos,id));if(state==null)continue;
@@ -1991,8 +2009,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
     }
     /** The presentation cadence's still states: one per watched still, to its watchers only. */
     private void publishStills() {
-        publishedStills.clear();
+        long now=topology.onlineTick();publishedStills.keySet().removeIf(id->displayDue(id,now));
         for(long id:stillWatchers.devices()) {
+            if(!displayDue(id,now))continue;
             var record=registrations().get(id);
             if(record==null||!record.device().stillPot()){stillWatchers.remove(id);continue;}
             var pos=cell(record);var state=stillState(new com.wormzjl.icheme.network.FluidNetwork.Target(pos,id));if(state==null)continue;
@@ -2062,8 +2081,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
     }
     /** The presentation cadence's chimney plumes: one per watched chimney, to its watchers only. */
     private void publishChimneys() {
-        publishedChimneys.clear();if(chimneyWatchers.devices().isEmpty())return;
+        long now=topology.onlineTick();publishedChimneys.keySet().removeIf(id->displayDue(id,now));if(chimneyWatchers.devices().isEmpty())return;
         for(long id:chimneyWatchers.devices()) {
+            if(!displayDue(id,now))continue;
             var record=registrations().get(id);
             if(record==null||!record.device().chimney()){chimneyWatchers.remove(id);continue;}
             var pos=cell(record);var state=chimneyState(new com.wormzjl.icheme.network.FluidNetwork.Target(pos,id));if(state==null)continue;
@@ -2146,11 +2166,12 @@ public final class FluidWorldAuthority implements AutoCloseable {
     }
     /** The presentation cadence's tower plumes: one per watched tower, to its watchers only. */
     private void publishTowers() {
-        publishedTowers.clear();if(towerWatchers.devices().isEmpty())return;var islands=new HashMap<Long,IslandCoordinator.Snapshot>();
+        long now=topology.onlineTick();publishedTowers.keySet().removeIf(id->displayDue(id,now));if(towerWatchers.devices().isEmpty())return;var islands=new HashMap<Long,IslandCoordinator.Snapshot>();
         for(long id:towerWatchers.devices()) {
+            if(!displayDue(id,now))continue;
             var record=registrations().get(id);
             if(record==null||record.spec().tower()==null){towerWatchers.remove(id);continue;}
-            var pos=cell(record);var state=towerPlume(new com.wormzjl.icheme.network.FluidNetwork.Target(pos,id),islands,this::presented);if(state==null)continue;
+            var pos=cell(record);var state=towerPlume(new com.wormzjl.icheme.network.FluidNetwork.Target(pos,id),islands,this::presentation);if(state==null)continue;
             publishedTowers.put(id,state);
             for(var uuid:towerWatchers.watchers(id)) {
                 var player=server.getPlayerList().getPlayer(uuid);
@@ -2161,11 +2182,12 @@ public final class FluidWorldAuthority implements AutoCloseable {
     }
     /** The presentation cadence's heater flues: one per watched heater, to its watchers only. */
     private void publishHeaters() {
-        publishedHeaters.clear();if(heaterWatchers.devices().isEmpty())return;var islands=new HashMap<Long,IslandCoordinator.Snapshot>();
+        long now=topology.onlineTick();publishedHeaters.keySet().removeIf(id->displayDue(id,now));if(heaterWatchers.devices().isEmpty())return;var islands=new HashMap<Long,IslandCoordinator.Snapshot>();
         for(long id:heaterWatchers.devices()) {
+            if(!displayDue(id,now))continue;
             var record=registrations().get(id);
             if(record==null||!flued(record)){heaterWatchers.remove(id);continue;}
-            var pos=cell(record);var state=heaterFlue(new com.wormzjl.icheme.network.FluidNetwork.Target(pos,id),islands,this::presented);if(state==null)continue;
+            var pos=cell(record);var state=heaterFlue(new com.wormzjl.icheme.network.FluidNetwork.Target(pos,id),islands,this::presentation);if(state==null)continue;
             publishedHeaters.put(id,state);
             for(var uuid:heaterWatchers.watchers(id)) {
                 var player=server.getPlayerList().getPlayer(uuid);
@@ -2323,20 +2345,22 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public void flowmeter(long id,boolean installed){owned();registry.flowmeter(id,installed);}
     public boolean removePipeAccessory(long id){owned();return registry.removePipeAccessory(id);}
     public record InstrumentReading(double pressure,double temperature,boolean flowing,double massFlow,Double volumeFlow){public InstrumentReading(double pressure,double temperature,boolean flowing){this(pressure,temperature,flowing,0,0.0);}}
-    public InstrumentReading instrumentPipeReading(long id){owned();Long owner=registry.owner(id);if(owner==null)return null;var r=registrations().get(id);if(r==null)return null;var snapshot=presented(owner);if(snapshot.lastResult().isEmpty())return null;
-        for(var observed:snapshot.lastResult().get().observations())for(var sample:observed.flowSamples())if(sample.host()==id)
+    /** A pipe's instrument reading: its observations in its island's last solved interval, which carry no compound amounts, so
+     * they are read as stored, with no island snapshot, preview or world-list padding (code base review R1). */
+    public InstrumentReading instrumentPipeReading(long id){owned();Long owner=registry.owner(id);if(owner==null)return null;var r=registrations().get(id);if(r==null)return null;var last=runtime.coordinator().lastResult(owner);if(last.isEmpty())return null;
+        for(var observed:last.get().observations())for(var sample:observed.flowSamples())if(sample.host()==id)
             return new InstrumentReading(sample.pressure(),observed.temperature(),observed.flowing(),sample.massFlow(),sample.volumeFlow());
-        for(var mapping:registry.pipeViews(id)){if(!Double.isFinite(mapping.tap()))continue;for(var observed:snapshot.lastResult().get().observations())if(observed.pipe()==mapping.pipeId())return new InstrumentReading(observed.pressure(mapping.tap(),r.device().position().y(),!mapping.forward()),observed.temperature(),observed.flowing(),observed.massFlow()*(mapping.forward()?1:-1),observed.density()>0?observed.massFlow()/observed.density()*(mapping.forward()?1:-1):0);}return null;}
+        for(var mapping:registry.pipeViews(id)){if(!Double.isFinite(mapping.tap()))continue;for(var observed:last.get().observations())if(observed.pipe()==mapping.pipeId())return new InstrumentReading(observed.pressure(mapping.tap(),r.device().position().y(),!mapping.forward()),observed.temperature(),observed.flowing(),observed.massFlow()*(mapping.forward()?1:-1),observed.density()>0?observed.massFlow()/observed.density()*(mapping.forward()?1:-1):0);}return null;}
     public InstrumentReading instrumentAt(PhysicalFluidTopology.Position position){owned();var r=at(position).orElse(null);return r==null?null:instrumentPipeReading(r.device().id());}
     /** The accepted mover inlet/outlet, using the same node-to-stream reduction as heat-unit nozzles. */
     public FluidView.Port instrumentMoverPort(long id,boolean outlet){
-        owned();Long owner=registry.owner(id);if(owner==null)return null;var snapshot=presented(owner);var result=snapshot.lastResult().orElse(null);if(result==null)return null;
+        owned();Long owner=registry.owner(id);if(owner==null)return null;var snapshot=presentation(owner);var result=snapshot.lastResult().orElse(null);if(result==null)return null;
         var graph=snapshot.graph();for(int i=0;i<graph.pipes().size();i++){var pipe=graph.pipes().get(i);if(graph.reservoirs().get(pipe.first()).id()!=id||!(pipe.control() instanceof FlowControl.Mover||pipe.control() instanceof FlowControl.Turbine))continue;
             var port=HeatPresentation.port(outlet?"outlet":"inlet",graph.reservoirs().get(outlet?pipe.second():pipe.first()),result.averageMassFlows()[i],heatSource(new HashMap<>()));if(outlet)for(var observation:result.observations())if(observation.pipe()==pipe.id())return new FluidView.Port(port.role(),port.temperature(),observation.firstPressure(),port.massFlow(),port.phaseMoles(),port.phaseVolumes());return port;}
         return null;
     }
     /** Accepted inlet/outlet readings for a basin; no inferred temperature or fresh property evaluation. */
-    public List<FluidView.Port> instrumentVesselPorts(long id){owned();Long owner=registry.owner(id);if(owner==null)return List.of();var snapshot=presented(owner);return snapshot.lastResult().isEmpty()?List.of():HeatPresentation.poolPorts(id,snapshot,heatSource(new HashMap<>()));}
+    public List<FluidView.Port> instrumentVesselPorts(long id){owned();Long owner=registry.owner(id);if(owner==null)return List.of();var snapshot=presentation(owner);return snapshot.lastResult().isEmpty()?List.of():HeatPresentation.poolPorts(id,snapshot,heatSource(new HashMap<>()));}
     /** Structural ID allocation shares the world's existing identity namespace, without a process edit or solve. */
     public long reserveControlIdentity(){owned();long id=topology.reserve(1);data.setDirty();return id;}
     public void markViewDirty(long id){owned();presentation.markDirty(id);}
@@ -2459,13 +2483,6 @@ public final class FluidWorldAuthority implements AutoCloseable {
         if(!PumpHealth.worn(mover)||word.isEmpty())return status;
         return word.equals("FAILED")?"FAILED: use a repair kit / "+status:status+" / "+word;
     }
-    /**
-     * {@code read} of views and instruments: since every presentation read is a preview that advances and books nothing
-     * (code base review R5), this is a plain read. Kept only for its callers in {@code FluidNetwork} (the column's Operation
-     * tab and the still's stop step), which can call the read directly.
-     */
-    public <T> T stored(java.util.function.Supplier<T> read){owned();return read.get();}
-    private IslandCoordinator.Snapshot presented(long island){return presentation(island);}
     /** Island {@code island} as it is stored, materialising nothing: what a watch's replay reads (batch 2026-11-10-custom-shader-system). */
     private IslandCoordinator.Snapshot storedIsland(long island){return onWorldList(island,runtime.coordinator().observe(island));}
     /** Island {@code island} as a presentation reads it, on the world list (V2 stage 5): every view, display and wire vector
@@ -2473,26 +2490,68 @@ public final class FluidWorldAuthority implements AutoCloseable {
     private IslandCoordinator.Snapshot presentation(long island){return onWorldList(island,runtime.coordinator().presentation(island));}
     private IslandCoordinator.Snapshot onWorldList(long island,IslandCoordinator.Snapshot snapshot){return IslandSets.presented(snapshot,runtime.coordinator().model(island),model);}
     /** {@code islands} caches island reads, so one bucket reads each island once however many of its devices it presents. */
+    /**
+     * One presented island's lookups for a bucket's views (code base review R2): its nodes and pipes by identity, each node's
+     * pipes in order, the interval's pipe histories by pipe and HEAT bookings by node, and the control constraint sets. Built
+     * once per island per bucket; every lookup gives what the scan it replaces found (identities are unique in a graph, and
+     * sums run in the same order).
+     */
+    static final class ViewIndex {
+        final IslandCoordinator.Snapshot snapshot;
+        final Map<Long,Integer> nodes=new HashMap<>(),pipes=new HashMap<>();
+        /** Per node index, the pipes that touch it, in ascending order. */
+        final List<List<Integer>> incident;
+        final Map<Long,List<PipeTransfer>> transfers=new HashMap<>();
+        private final Map<Long,Double> heat=new HashMap<>();
+        private BitSet dependent,standing;
+        ViewIndex(IslandCoordinator.Snapshot snapshot) {
+            this.snapshot=snapshot;var graph=snapshot.graph();
+            incident=new ArrayList<>(graph.reservoirs().size());
+            for(int i=0;i<graph.reservoirs().size();i++){nodes.put(graph.reservoirs().get(i).id(),i);incident.add(new ArrayList<>(2));}
+            for(int i=0;i<graph.pipes().size();i++){var p=graph.pipes().get(i);pipes.put(p.id(),i);incident.get(p.first()).add(i);incident.get(p.second()).add(i);}
+            snapshot.lastResult().ifPresent(r->{
+                for(var t:r.pipeTransfers())transfers.computeIfAbsent(t.pipeId(),k->new ArrayList<>()).add(t);
+                // From 0.0, in booking order: the sum the scan made (0.0 + -0.0 is 0.0, as there).
+                for(var b:r.boundaries())if(b.kind()==com.wormzjl.icheme.science.fluid.network.ConservativeTransport.BoundaryTransfer.Kind.HEAT)heat.put(b.nodeId(),heat.getOrDefault(b.nodeId(),0.0)+b.totalEnergyJoule());
+            });
+        }
+        /** The pipes touching node {@code node}, or none for -1 (a device not in the graph). */
+        List<Integer> incident(int node){return node<0?List.of():incident.get(node);}
+        /** The heat node {@code node}'s HEAT boundaries booked over the interval, J (0 for none). */
+        double heat(long node){return heat.getOrDefault(node,0.0);}
+        BitSet dependent(){if(dependent==null)dependent=ControlConstraints.dependent(snapshot.graph());return dependent;}
+        BitSet standing(){if(standing==null)standing=ControlConstraints.standing(snapshot.graph());return standing;}
+    }
+    /** The bucket the indexes belong to (its island cache, by identity), and the indexes. */
+    private Map<Long,IslandCoordinator.Snapshot> indexedFor;
+    private final Map<Long,ViewIndex> viewIndexes=new HashMap<>();
+    /** Island {@code island} as {@code islands} presents it, with its index: built once per bucket (code base review R2). */
+    private ViewIndex index(long island,Map<Long,IslandCoordinator.Snapshot> islands) {
+        var snapshot=islands.computeIfAbsent(island,this::presentation);
+        if(indexedFor!=islands){indexedFor=islands;viewIndexes.clear();}
+        var index=viewIndexes.get(island);
+        if(index==null||index.snapshot!=snapshot){index=new ViewIndex(snapshot);viewIndexes.put(island,index);}
+        return index;
+    }
     private FluidView view(long id,Map<Long,IslandCoordinator.Snapshot> islands) {
         FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.viewBuilds);var registration=registrations().get(id);if(registration==null)return new FluidView(id,0,0,topology.onlineTick(),"REMOVED",null,0,List.of());
         Long owner=registry.owner(id);if(owner==null)return new FluidView(id,registration.revision(),0,topology.onlineTick(),heldClause(id,null)+islandless(registration.device(),id),null,0,List.of(),null,0,List.of(),null);
-        var snapshot=islands.computeIfAbsent(owner,this::presented);FluidView.State state=null;int nodeIndex=-1;boolean empty=false;
-        for(int i=0;i<snapshot.graph().reservoirs().size();i++)if(snapshot.graph().reservoirs().get(i).id()==id){nodeIndex=i;var node=snapshot.graph().reservoirs().get(i);empty=node.empty();if(!empty)state=FluidView.State.from(node.state(),node.kind()==PassiveNetwork.NodeKind.RESERVOIR?node.inventory().volume():node.state().volume());break;}
-        InlineFilter filter=null;if(registration.device().filter()){state=null;for(var p:snapshot.graph().pipes())if(p.id()==PhysicalFluidTopology.filterIdentity(id))filter=p.filter();}
+        var ix=index(owner,islands);var snapshot=ix.snapshot;FluidView.State state=null;int nodeIndex=-1;boolean empty=false;
+        Integer at=ix.nodes.get(id);
+        if(at!=null){nodeIndex=at;var node=snapshot.graph().reservoirs().get(at);empty=node.empty();if(!empty)state=FluidView.State.from(node.state(),node.kind()==PassiveNetwork.NodeKind.RESERVOIR?node.inventory().volume():node.state().volume());}
+        InlineFilter filter=null;if(registration.device().filter()){state=null;Integer p=ix.pipes.get(PhysicalFluidTopology.filterIdentity(id));if(p!=null)filter=snapshot.graph().pipes().get(p).filter();}
         var mappings=registration.device().actuator()?PipePresentation.actuatorMappings(registration.device(),snapshot.graph()):registry.pipeViews(id);
         var history=new ArrayList<PipeTransfer>();double flow=0;Double devicePressureChange=null;String status=snapshot.status();
         // Decision D54: a placed tank holds nothing until something fills it.
         if(empty)status="EMPTY: holds nothing / "+status;
         if(snapshot.lastResult().isPresent()) {
             var result=snapshot.lastResult().orElseThrow();var q=result.averageMassFlows();
-            for(int i=0;i<snapshot.graph().pipes().size();i++){var pipe=snapshot.graph().pipes().get(i);if(pipe.first()==nodeIndex)flow+=q[i];if(pipe.second()==nodeIndex)flow-=q[i];}
-            for(var mapping:mappings)for(var value:result.pipeTransfers())if(value.pipeId()==mapping.pipeId()) {
-                history.add(value);
-            }
+            for(int i:ix.incident(nodeIndex)){var pipe=snapshot.graph().pipes().get(i);if(pipe.first()==nodeIndex)flow+=q[i];if(pipe.second()==nodeIndex)flow-=q[i];}
+            for(var mapping:mappings){var values=ix.transfers.get(mapping.pipeId());if(values!=null)history.addAll(values);}
             if(!history.isEmpty())flow=(history.getFirst().forward().massKg()-history.getFirst().reverse().massKg())/result.advancedSeconds();
-            if(registration.device().actuator())for(int i=0;i<snapshot.graph().pipes().size();i++){var pipe=snapshot.graph().pipes().get(i);if(pipe.first()==nodeIndex&&!(pipe.control() instanceof FlowControl.Passive)){flow=q[i];devicePressureChange=result.endpointHeads()[i];var mode=result.endpointModes().get(i);
-                if(pipe.control() instanceof FlowControl.Valve&&ControlConstraints.dependent(snapshot.graph()).get(i))status+=" / CONTROL_CONFLICT: dependent control constraints; holding last accepted opening";
-                else if(pipe.control() instanceof FlowControl.Valve&&ControlConstraints.standing(snapshot.graph()).get(i))status+=" / STANDING_OPEN: a lower flow target on this line regulates";
+            if(registration.device().actuator())for(int i:ix.incident(nodeIndex)){var pipe=snapshot.graph().pipes().get(i);if(pipe.first()==nodeIndex&&!(pipe.control() instanceof FlowControl.Passive)){flow=q[i];devicePressureChange=result.endpointHeads()[i];var mode=result.endpointModes().get(i);
+                if(pipe.control() instanceof FlowControl.Valve&&ix.dependent().get(i))status+=" / CONTROL_CONFLICT: dependent control constraints; holding last accepted opening";
+                else if(pipe.control() instanceof FlowControl.Valve&&ix.standing().get(i))status+=" / STANDING_OPEN: a lower flow target on this line regulates";
                 if(pipe.control() instanceof FlowControl.Mover mover) {
                     String inlet=mode==FlowControl.Mode.INLET_WRONG_PHASE?inletReason(snapshot.graph(),i,result.advancedSeconds()):"";
                     // The share of its set flow a set-flow mover moved, on its suction's density; a machine has no set flow.
@@ -2514,32 +2573,33 @@ public final class FluidWorldAuthority implements AutoCloseable {
         // A generator or a void in several islands (owner decision D17) reads the status of its owner (the lowest island) and
         // the net flow of all of them.
         if(registration.device().fixed())for(long other:registry.islands(id))if(other!=owner) {
-            var shared=islands.computeIfAbsent(other,this::presentation);if(shared.lastResult().isEmpty())continue;var q=shared.lastResult().orElseThrow().averageMassFlows();
-            int index=-1;for(int i=0;i<shared.graph().reservoirs().size();i++)if(shared.graph().reservoirs().get(i).id()==id)index=i;
-            for(int i=0;i<shared.graph().pipes().size();i++){var pipe=shared.graph().pipes().get(i);if(pipe.first()==index)flow+=q[i];if(pipe.second()==index)flow-=q[i];}
+            var sharedIndex=index(other,islands);var shared=sharedIndex.snapshot;if(shared.lastResult().isEmpty())continue;var q=shared.lastResult().orElseThrow().averageMassFlows();
+            Integer found=sharedIndex.nodes.get(id);int index=found==null?-1:found;
+            for(int i:sharedIndex.incident(index)){var pipe=shared.graph().pipes().get(i);if(pipe.first()==index)flow+=q[i];if(pipe.second()==index)flow-=q[i];}
         }
         // A filter's and a heat side's own pipe (batch 2026-10-27-heat-exchanger-design): the drop across the cake or the passage.
         long own=filter!=null?PhysicalFluidTopology.filterIdentity(id):registration.device().kind()==TopologyCompiler.Kind.HEAT_SIDE?PhysicalFluidTopology.sideIdentity(id):0;
-        if(own!=0)for(var pipe:snapshot.graph().pipes())if(pipe.id()==own)devicePressureChange=snapshot.graph().reservoirs().get(pipe.first()).state().pressure()-snapshot.graph().reservoirs().get(pipe.second()).state().pressure();
+        Integer ownAt=own==0?null:ix.pipes.get(own);var ownPipe=ownAt==null?null:snapshot.graph().pipes().get(ownAt);
+        if(ownPipe!=null)devicePressureChange=snapshot.graph().reservoirs().get(ownPipe.first()).state().pressure()-snapshot.graph().reservoirs().get(ownPipe.second()).state().pressure();
         // A fired heater's radiant coil firing at its maximum short of what it should do (batch 2026-10-27-heat-exchanger-design,
         // owner Q11): it names its outlet's shortfall from the set point. The convection coil takes the flue gas as it comes (F1).
-        if(own!=0)for(var pipe:snapshot.graph().pipes())if(pipe.id()==own&&pipe.heat() instanceof com.wormzjl.icheme.science.fluid.network.FiredCoil coil&&coil.firing()>0&&coil.firing()<1) {
-            double shortfall=coil.setTemperature()-snapshot.graph().reservoirs().get(pipe.second()).state().temperature();
+        if(ownPipe!=null&&ownPipe.heat() instanceof com.wormzjl.icheme.science.fluid.network.FiredCoil coil&&coil.firing()>0&&coil.firing()<1) {
+            double shortfall=coil.setTemperature()-snapshot.graph().reservoirs().get(ownPipe.second()).state().temperature();
             status=(shortfall>0?String.format(java.util.Locale.ROOT,"DUTY INSUFFICIENT: outlet %.1f K below the set point / ",shortfall):"")+status;
         }
         // A side's controller short of its target (W4, plan section 6): its actuator at an end, or held back by its low limit.
-        if(own!=0)for(var pipe:snapshot.graph().pipes())if(pipe.id()==own)status=controlStatus(pipe.heat(),registration.device().heat())+status;
+        if(ownPipe!=null)status=controlStatus(ownPipe.heat(),registration.device().heat())+status;
         // A side's lines (W8): whether its control works the real valves.
         if(registration.device().heat()!=null)status=linesStatus(id,registration.device().heat())+status;
         if(filter!=null&&filter.clogged())status="filter clogged / "+status;
         var closures=snapshot.lastResult().map(PassiveIntervalSolver.Result::rejectionReasons).orElse(Map.of());
-        for(var mapping:mappings)for(var pipe:snapshot.graph().pipes())if(pipe.id()==mapping.pipeId()&&pipe.blockedDirections()!=0&&pipe.filter()==null)status=solidClosure(mapping.pipeId(),closures)+" / "+status;
+        for(var mapping:mappings){Integer p=ix.pipes.get(mapping.pipeId());if(p==null)continue;var pipe=snapshot.graph().pipes().get(p);if(pipe.blockedDirections()!=0&&pipe.filter()==null)status=solidClosure(mapping.pipeId(),closures)+" / "+status;}
         if(registry.diagnostic(id)!=null)status=registry.diagnostic(id)+" / "+status;
         var active=topology.active().get(id);if(active==null||active.revision()!=registration.revision())status="WAITING: configuration event / "+status;
         if(unboundBindings.contains(id))status="UNBOUND: saved inventory retained / "+status;
         status=heldClause(id,owner)+status;
         var routes=new ArrayList<FluidView.PipeRoute>();
-        for(var historyEntry:history)for(var pipe:snapshot.graph().pipes())if(pipe.id()==historyEntry.pipeId()) {
+        for(var historyEntry:history){Integer p=ix.pipes.get(historyEntry.pipeId());if(p==null)continue;var pipe=snapshot.graph().pipes().get(p);
             routes.add(new FluidView.PipeRoute(pipe.id(),nodeLabel(snapshot.graph().reservoirs().get(pipe.first()).id()),nodeLabel(snapshot.graph().reservoirs().get(pipe.second()).id())));
         }
         double seconds=snapshot.lastResult().map(PassiveIntervalSolver.Result::advancedSeconds).orElse(0.0);
@@ -2566,10 +2626,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
         // booked over the interval, an air cooler's fans and an exchanger side's bypass as planned, a fired heater's burners,
         // set point and most heat.
         var heat=registration.device().heat();
-        if(heat!=null)for(var pipe:snapshot.graph().pipes())if(pipe.id()==own) {
-            double joule=0;
-            for(var boundary:snapshot.lastResult().map(PassiveIntervalSolver.Result::boundaries).orElse(List.of()))
-                if(boundary.kind()==com.wormzjl.icheme.science.fluid.network.ConservativeTransport.BoundaryTransfer.Kind.HEAT&&boundary.nodeId()==own)joule+=boundary.totalEnergyJoule();
+        if(heat!=null&&ownPipe!=null) {
+            var pipe=ownPipe;double joule=ix.heat(own);
             double share=heat.control().share(),outlet=snapshot.graph().reservoirs().get(pipe.second()).state().temperature();
             var coil=pipe.heat() instanceof com.wormzjl.icheme.science.fluid.network.FiredCoil fired?fired:null;
             if(pipe.heat() instanceof com.wormzjl.icheme.science.fluid.network.AirCooled cooled)share=cooled.fans();
@@ -2591,16 +2649,13 @@ public final class FluidWorldAuthority implements AutoCloseable {
         }
         // A kettle's shell (W7): the heat its pool took over the interval, booked at its key, at the pool's temperature.
         if(heat!=null&&heat.pool()&&nodeIndex>=0) {
-            long key=PhysicalFluidTopology.sideIdentity(id);double joule=0;
-            for(var boundary:snapshot.lastResult().map(PassiveIntervalSolver.Result::boundaries).orElse(List.of()))
-                if(boundary.kind()==com.wormzjl.icheme.science.fluid.network.ConservativeTransport.BoundaryTransfer.Kind.HEAT&&boundary.nodeId()==key)joule+=boundary.totalEnergyJoule();
+            long key=PhysicalFluidTopology.sideIdentity(id);double joule=ix.heat(key);
             view=view.withHeat(new FluidView.Heat(heat.unit().name(),heat.side().name(),true,snapshot.graph().reservoirs().get(nodeIndex).state().temperature(),seconds>0?joule/seconds:0,
                     null,null,null,null,null,null));
         }
         // The heat GUI (HEAT_GUI_PLAN.md section 1): the actuator, the unit's ports and its lines.
         if(heat!=null&&view.heat()!=null) {
-            com.wormzjl.icheme.science.fluid.network.HeatLaw law=null;
-            for(var pipe:snapshot.graph().pipes())if(own!=0&&pipe.id()==own)law=pipe.heat();
+            com.wormzjl.icheme.science.fluid.network.HeatLaw law=ownPipe==null?null:ownPipe.heat();
             view=view.withHeat(HeatPresentation.complete(view.heat(),id,heat,law,heatSource(islands)));
         }
         // A batch still's pot (batch 2026-11-09-batch-distiller, W3): its status and alarms on the status line, an electric one's power.
@@ -2638,8 +2693,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
         // that run is the open stub to the atmosphere.
         if(registration.spec().relief()>0) {
             double relieved=0;boolean open=true;var q=snapshot.lastResult().map(PassiveIntervalSolver.Result::averageMassFlows).orElse(null);
-            for(int i=0;i<snapshot.graph().pipes().size();i++){var pipe=snapshot.graph().pipes().get(i);
-                if(pipe.control() instanceof FlowControl.PressureValve&&snapshot.graph().reservoirs().get(pipe.first()).id()==id){open=pipe.id()==PhysicalFluidTopology.reliefIdentity(id);if(q!=null)relieved=Math.max(0,q[i]);}}
+            for(int i:ix.incident(nodeIndex)){var pipe=snapshot.graph().pipes().get(i);
+                if(pipe.control() instanceof FlowControl.PressureValve&&pipe.first()==nodeIndex){open=pipe.id()==PhysicalFluidTopology.reliefIdentity(id);if(q!=null)relieved=Math.max(0,q[i]);}}
             view=view.withRelief(new FluidView.Relief(relieved,open));
         }
         // A plain pipe's line reading (OWNER_TEST_REVIEW.md section 6): the stream it carries, as its gauge reads it.
