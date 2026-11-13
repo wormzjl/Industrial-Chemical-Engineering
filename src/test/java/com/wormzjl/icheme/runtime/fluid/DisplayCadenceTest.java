@@ -12,6 +12,7 @@ class DisplayCadenceTest {
             assertEquals(1,due,"device "+id);
             assertEquals(Math.floorMod(id,(long)FluidPresentation.BUCKET_TICKS),Math.floorMod(at,(long)FluidPresentation.BUCKET_TICKS),"device "+id);
         }
-        assertNotEquals(FluidWorldAuthority.displayDue(1,100),FluidWorldAuthority.displayDue(2,100),"devices spread over the cadence");
+        assertTrue(FluidWorldAuthority.displayDue(1,101),"device 1 at its slot");
+        assertFalse(FluidWorldAuthority.displayDue(2,101),"device 2 not at device 1's slot: devices spread over the cadence");
     }
 }

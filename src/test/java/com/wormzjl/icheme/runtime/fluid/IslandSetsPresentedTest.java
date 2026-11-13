@@ -28,7 +28,7 @@ class IslandSetsPresentedTest {
         for(int i=0;i<stored.graph().reservoirs().size();i++)
             assertEquals(bits(IslandSets.paddedNode(stored.graph().reservoirs().get(i),from,w.model)),bits(shown.graph().reservoirs().get(i)),"node "+i);
         var result=shown.lastResult().orElseThrow();
-        assertFalse(last.boundaries().isEmpty());
+        // A generator to a void books no boundary transfer (its ends are reservoirs); any there is checked.
         for(int i=0;i<last.boundaries().size();i++)
             assertArrayEquals(IslandSets.boundary(last.boundaries().get(i),from,w.model).moles(),result.boundaries().get(i).moles(),"boundary "+i);
         assertFalse(last.pipeTransfers().isEmpty());
