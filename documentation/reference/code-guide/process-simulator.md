@@ -38,6 +38,7 @@ Paths are under `src/main/java/com/wormzjl/icheme/`. "pp" = package-private.
 | `Passage` (record: `a`, `b`, `in`, `out`; `THROUGH`, `named`), `Wiring` | A reversible passage's two ends and the roles its model reads them by; a sheet's ends read as roles: the first stream on either end decides which is the inlet ([ports and passages](#ports-and-passages)) | Port sides |
 | `Passages` | A unit's passage drop laws: typed drops while it has no size, sized laws (`SizedPassages`) once it has one | Drops in the run |
 | `FlowsheetFailure` | A law's refusal, carrying a note key | Failing units |
+| `Members` | A block's member names, saved names: `member` (`T-101/condenser`), `TRIM`, `COOLER`, `Pumparound` (`pa <id> <part>`); the tiles (`ColumnDoor`) read them here and `SheetSizing` forwards to them, so `unit/` names nothing of `sizing/` (P3-08) | Member keys |
 | `SheetBody`, `SheetStore` | One gzip body (sheet and results) in parts, with its bounds; the block's body, kept unreadable bodies and the holder | The block's storage |
 | `RevisionNotice` | Client and server catalog revision tokens; a mismatch is a notice, never a block. `tokens(sheet, catalog)`: the token of the sheet's view (its results and column warm starts stand on it); `data`, `stamped` (Save, autosave, the clipboard export and a new sheet write the view's identity into the file's basis `revision`) and `moved` (the file-open notice, read once by `FileColumns.changes`) | Dedicated servers; the data notice on opening a file |
 | **Units (`science/flowsheet/unit/`)** | | |
@@ -55,7 +56,7 @@ Paths are under `src/main/java/com/wormzjl/icheme/`. "pp" = package-private.
 | `LineSizing`, `Service` (enum) | A line's bore, speed and drop (pipe resistance on the network's viscosity); the service picks its rows | Line sizes |
 | `PressurePath` (record) | From a set pressure through every step to its taker: available, lost, spare (bar) | Path rows |
 | `Selection` | Auto: the smallest size that rates well, those holding the need with the spare first | Auto |
-| `SheetSizing`, `Proposal`, `BlockSizing` (pp), `PathWalk` (pp), `SizedPassages` | The whole sheet: `SheetSizing.rate` (cheap, no trial columns), `pass`, `designs` (the list Send to block hands over), the entries and results, `PumparoundMember` (`pa <id> <part>`, one builder and parser); `Proposal.sizeAll` (proposes, applies, re-runs once warm where a size moves the run), `applied`, `pruned`; `BlockSizing` a column and its members (its first trial warm from the run's `Report.Warm`); `PathWalk` the pressure paths; `SizedPassages` each passage's drop rule, sizers and run alike | Size all, Send to block |
+| `SheetSizing`, `Proposal`, `BlockSizing` (pp), `PathWalk` (pp), `SizedPassages` | The whole sheet: `SheetSizing.rate` (cheap, no trial columns), `pass`, `designs` (the list Send to block hands over), the entries and results, `PumparoundMember` (`pa <id> <part>`, forwarding to the core's `Members`); `Proposal.sizeAll` (proposes, applies, re-runs once warm where a size moves the run), `applied`, `pruned`; `BlockSizing` a column and its members (its first trial warm from the run's `Report.Warm`); `PathWalk` the pressure paths; `SizedPassages` each passage's drop rule, sizers and run alike | Size all, Send to block |
 | `DesignBasis` (record, `DEFAULT` 1.10 design flow, 50 m line length, 60 K pumparound fall), `SizingFacts`, `UnitType` | The sheet's sizing basis and each item's chosen size and type | Sizing facts |
 | **Client (`client/gui/flowsheet/`, Minecraft-free)** | | |
 | `SimulatorRunner`, `SimulatorHost` (`NONE`) | Runs one job at a time on the thread "IChemE simulator run" (daemon, lowest priority): Run, Solve alone, Size all, the quiet rate; Stop sets a flag the next checkpoint throws on and drops the columns' warm starts (`FlowsheetRun.cold`); `steady`, the last steady run, starts the next Run; `restore` sets it from a block's stored steady run | Threads and Stop |
@@ -123,7 +124,7 @@ flowchart TD
 
 - Save design (`simulator_save_design`) stores the column door's `ColumnDesign.of(input, choices)` on the block; a refusal names its reason.
 - Send to block (`simulator_send_designs`) carries `SheetSizing.designs`: one `SentDesign` per sized unit (valves left out, at most 64). The server takes it only from the holder, whole; it replaces the earlier list.
-- The constructor's Import (`EquipmentNetwork`, protocol `equipment-18`) asks the nearest simulator within `EquipmentNetwork.IMPORT_REACH` (16 blocks, `EquipmentConstructorBlockEntity.simulator`) for its list: the saved column design first, then the sent designs. The player picks one; the constructor lands it. See [equipment.md](equipment.md).
+- The constructor's Import (`EquipmentNetwork`) asks the nearest simulator within `EquipmentNetwork.IMPORT_REACH` (16 blocks, `EquipmentConstructorBlockEntity.simulator`) for its list: the saved column design first, then the sent designs. The player picks one; the constructor lands it. See [equipment.md](equipment.md).
 
 </details>
 
@@ -137,8 +138,7 @@ flowchart TD
 | Run results | `SimulatorResults.FORMAT` = 4 (2: a report's time series, batch 2026-11-09-batch-distiller; 3: a column display's tray hydraulics carry their total dry drop, batch 2026-11-10-column-failure-modes; 4: a stream's state is written as its vapour, oil and aqueous amounts, read back by `adoptingState`, batch 2026-11-11-aqueous-solvents) | `network/SimulatorResults` | State: dropped on a mismatch, rebuilt by a run |
 | Sent designs | `SentDesignTags` (fields 2) | `world/level/block/entity/SentDesignTags` | Fact: corpus `compat/simulator/designs-<n>.snbt` (`SentDesignTagsTest`) |
 | Column wire | No number of its own: it rides in the simulator and constructor packets | `network/ColumnWire` | Wire |
-| Simulator packets | `ProcessSimulatorNetwork.PROTOCOL` = "2" | `network/ProcessSimulatorNetwork` | Wire |
-| Constructor packets | `EquipmentNetwork.PROTOCOL` = "equipment-18" | `network/EquipmentNetwork` | Wire |
+| Simulator and constructor packets | `NetworkProtocol.VERSION` = "icheme-1", the mod's one protocol (P3-22) | `network/ProcessSimulatorNetwork`, `network/EquipmentNetwork` | Wire |
 
 The file keeps fields it does not know and refuses a newer format and an older one, which it would misread: a sheet file needs no compatibility (owner 2026-11-04), so a format change re-records the corpus and the block keeps an old body as unreadable (`KeptSheets`). `SheetLayout` reads a stream's `route`, so a change to it is a format change.
 
@@ -207,7 +207,7 @@ The file keeps fields it does not know and refuses a newer format and an older o
 
 ## Packets and protocol
 
-`network/ProcessSimulatorNetwork`, protocol `"2"`, handlers on the server thread (`HandlerThread.MAIN`). Wire formats get no compatibility work (AGENTS.md).
+`network/ProcessSimulatorNetwork`, on the mod's protocol `NetworkProtocol.VERSION` ([FORMATS.md](../FORMATS.md)), handlers on the server thread (`HandlerThread.MAIN`). Wire formats get no compatibility work (AGENTS.md).
 
 | Payload | Direction | Carries | Server rule |
 | --- | --- | --- | --- |
@@ -306,7 +306,7 @@ The screen retains the player's GUI scale; `WindowScale` is removed. Layout and 
 
 `SizingPage` keeps **Sizing method** (Auto/Manual) separate from **Equipment** (type, count and size). Manual freezes the displayed build choices and uses constructor-style size controls. Auto may choose again on Size all; dormant manual choices remain saved. Build requirements emphasise unit counts and dimensions rather than a material bill. Constructor defaults begin within their design range; a player's paint scheme is remembered locally.
 
-Type follows `SizingChoice`, `SizingFacts`, sent designs, constructor import and column member choices, including condensers, water trims and pumparound coolers. It does not create another flowsheet tile. `FlowsheetFile` remains format 2 with optional appended fields; missing type is Standard. Wire simulator protocol is `3`; it is not a saved-data migration. See [heat-exchangers.md](heat-exchangers.md).
+Type follows `SizingChoice`, `SizingFacts`, sent designs, constructor import and column member choices, including condensers, water trims and pumparound coolers. It does not create another flowsheet tile. `FlowsheetFile` remains format 2 with optional appended fields; missing type is Standard. The wire rides on `NetworkProtocol.VERSION`; it is not a saved-data migration. See [heat-exchangers.md](heat-exchangers.md).
 
 Tests: `UnitSizingTest`, `CrossflowSizingTest`, `SizingPageTest`, `CrudeUnitSampleTest.ColumnSizingSampleTest`, sent-design and constructor compatibility tests.
 
