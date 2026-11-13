@@ -205,7 +205,7 @@ has a film, a card, the `?` tour of its screen, its JEI lines, and "next in the 
 
 ### Chapters 6 and 7, building and start-up, as built (P5_PART2_BUILD_AND_START.md)
 
-- `building` "Building": site (film `unit_build`), tower, top, pumps, loop, lines, parts. `start` "Start-up": crude, fuel,
+- `building` "Building": site (film `unit_build`, watched to its end; code review finding 3), tower, top, pumps, loop, lines, parts. `start` "Start-up": crude, fuel,
   power, cooling, steam, tanks, go, limit (card `limit`), products, end. Criteria `assembly_state` and `column_state`; tours on the assembly screen's two tabs.
 - Start-up order: everything lined up, then On; no crude or water passes the column's boundary valves before it.
 

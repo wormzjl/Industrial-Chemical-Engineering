@@ -89,6 +89,24 @@ class GuideCoverageTest {
     }
 
     /**
+     * No two steps listen to the same trigger with the same conditions (code review finding 3: the simulator's Send also
+     * completed the next chapter's site step): one event completes one step.
+     */
+    @Test
+    void noTwoStepsShareATriggerAndItsConditions() throws IOException {
+        var seen = new java.util.HashMap<String, String>();
+        for (var chapter : GuideFile.load().chapters())
+            for (var step : chapter.steps()) {
+                String id = chapter.id(step);
+                for (var criterion : criteria(read(ADVANCEMENTS.resolve(id + ".json")))) {
+                    String key = criterion.get("trigger").getAsString() + " " + (criterion.has("conditions") ? criterion.get("conditions").toString() : "{}");
+                    String other = seen.putIfAbsent(key, id);
+                    assertNull(other, id + " and " + other + " both listen to " + key);
+                }
+            }
+    }
+
+    /**
      * A client step with no media has only a screen to report it: each is one a screen names (P5 stage B: the start-up
      * chapter's feed, fire and water steps had none, and would never have completed). The constants are compile-time, so
      * no screen class loads.

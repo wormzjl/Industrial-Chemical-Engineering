@@ -89,7 +89,7 @@
     {
       "id": "building",
       "steps": [
-        { "id": "site", "media": "film:unit_build", "check": "server", "criterion": "design_sent" },
+        { "id": "site", "media": "film:unit_build" },
         { "id": "tower", "check": "server", "criterion": "equipment_built" },
         { "id": "top", "check": "server", "criterion": "equipment_built" },
         { "id": "pumps", "media": "page:equipment_combustion_engine" },

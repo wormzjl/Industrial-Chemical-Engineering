@@ -23,7 +23,7 @@ leave; the line names any limit.
 ## What was built
 
 - **Chapters** (8 keys fit the 320 by 240 window; one thing to build a step): `building` site (film `unit_build`,
-  `design_sent`), tower (COLUMN built), top (the condenser and drum; DRUM built), pumps (driver's page), loop (exchanger's
+  watched to its end: code review finding 3, `design_sent` was the simulator's Send step's too), tower (COLUMN built), top (the condenser and drum; DRUM built), pumps (driver's page), loop (exchanger's
   page), lines (read; the Structure tour reports it too), parts (`assembly_state` COMPLETE). `start` crude, fuel, power,
   cooling, steam, tanks (each opens its kind's page; the server sends nothing checkable before On), go (`column_state`
   started), limit (card, RUNNING), products (a product leaving), end (names templates and the controller box, not vacuum).
