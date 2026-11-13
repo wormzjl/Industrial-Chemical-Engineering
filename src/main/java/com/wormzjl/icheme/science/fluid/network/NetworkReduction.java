@@ -235,7 +235,7 @@ public final class NetworkReduction {
             double viscosity=PhaseDraw.mixedLiquids(s,port)?PortStreams.mixedViscosity(model,s,pipe.volume(),scratch):phase<0?viscosity(model,s,scratch):model.phaseViscosity(s,phase,scratch,null);
             double slope;
             if(pipe.filter()==null)slope=pipe.loss(0,density,viscosity).massFlowDerivative();
-            else{double loading=pipe.filter().loading();slope=pipe.filter().cleanResistance()*(viscosity/.001)*(1+99*loading*loading)/density;}
+            else{double loading=pipe.filter().loading();slope=PassiveStepSolver.cakeResistance(pipe.filter(),viscosity,loading)/density;}
             flow=Math.min(flow,REST_RESOLUTION/slope);
         }
         return flow;
