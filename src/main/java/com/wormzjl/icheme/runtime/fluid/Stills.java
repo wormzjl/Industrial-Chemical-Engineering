@@ -1,7 +1,7 @@
 package com.wormzjl.icheme.runtime.fluid;
 
 import com.wormzjl.icheme.science.plant.column.ColumnCycle.Account;
-import com.wormzjl.icheme.science.fluid.network.BatchStill;
+import com.wormzjl.icheme.science.plant.still.BatchStill;
 import com.wormzjl.icheme.science.fluid.network.Burners;
 import com.wormzjl.icheme.science.fluid.network.ConservativeTransport;
 import com.wormzjl.icheme.science.fluid.network.ExchangerRelay;
@@ -10,7 +10,7 @@ import com.wormzjl.icheme.science.fluid.network.PassiveIntervalSolver;
 import com.wormzjl.icheme.science.fluid.network.PassiveNetwork;
 import com.wormzjl.icheme.science.fluid.network.Pool;
 import com.wormzjl.icheme.science.fluid.network.PortPlan;
-import com.wormzjl.icheme.science.fluid.network.StillHead;
+import com.wormzjl.icheme.science.plant.still.StillHead;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import java.util.*;
 import java.util.function.LongFunction;
@@ -448,7 +448,7 @@ public final class Stills implements IslandCoordinator.Ports {
      */
     private double outlet(StillUnit u,long tick) {
         double water=u.water()>0?coordinator.sideTemperature(PhysicalFluidTopology.sideIdentity(u.water()),tick):Double.NaN;
-        return water>0?water+BatchStill.OUTLET_APPROACH:com.wormzjl.icheme.science.fluid.network.StillColumn.TOTAL_CONDENSER;
+        return water>0?water+BatchStill.OUTLET_APPROACH:com.wormzjl.icheme.science.column.still.StillColumn.TOTAL_CONDENSER;
     }
     /** The column's waiting answer, applied once its tick is reached. */
     private static void promote(Run r,long tick){if(r.next!=null&&r.nextTick<=tick){r.solved=r.next;r.fPerWatt=r.solved.fPerWatt();r.next=null;r.nextTick=Long.MAX_VALUE;}}

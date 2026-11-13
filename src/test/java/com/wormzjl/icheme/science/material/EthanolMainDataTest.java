@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.wormzjl.icheme.runtime.fluid.FluidPresetCatalog;
-import com.wormzjl.icheme.science.fluid.network.StillColumn;
+import com.wormzjl.icheme.science.column.still.StillColumn;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import java.util.List;
 import java.util.Locale;

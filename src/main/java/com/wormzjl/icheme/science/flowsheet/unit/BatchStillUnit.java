@@ -10,8 +10,8 @@ import com.wormzjl.icheme.science.flowsheet.Port;
 import com.wormzjl.icheme.science.flowsheet.Report;
 import com.wormzjl.icheme.science.flowsheet.UnitModel;
 import com.wormzjl.icheme.science.flowsheet.WiredUnit;
-import com.wormzjl.icheme.science.fluid.network.BatchStill;
-import com.wormzjl.icheme.science.fluid.network.StillColumn;
+import com.wormzjl.icheme.science.plant.still.BatchStill;
+import com.wormzjl.icheme.science.column.still.StillColumn;
 
 import java.util.ArrayList;
 import java.util.Arrays;

@@ -166,7 +166,7 @@ public final class ElectricStores {
 
     /** Whether batch still {@code u} is a powered unit: an electric one (batch 2026-11-09-batch-distiller, W4). */
     public static boolean powered(StillUnit u) {
-        return u.heater() == com.wormzjl.icheme.science.fluid.network.BatchStill.Heater.ELECTRIC;
+        return u.heater() == com.wormzjl.icheme.science.plant.still.BatchStill.Heater.ELECTRIC;
     }
 
     /** Whether shaft unit {@code u} is a powered unit: a motor or a generator. */
@@ -210,7 +210,7 @@ public final class ElectricStores {
             case BURNERS -> burnerDraw(topology.active().get(id), FiredHeaters.designFired(topology.active().get(id)));
             case STILL -> {
                 var u = topology.still(id);
-                yield u == null ? 0 : com.wormzjl.icheme.science.fluid.network.BatchStill.Heater.ELECTRIC.drawn(u.design().rating());
+                yield u == null ? 0 : com.wormzjl.icheme.science.plant.still.BatchStill.Heater.ELECTRIC.drawn(u.design().rating());
             }
         };
     }

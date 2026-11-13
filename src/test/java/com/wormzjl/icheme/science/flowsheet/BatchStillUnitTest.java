@@ -253,7 +253,7 @@ final class BatchStillUnitTest {
         assertFalse(noted(usual, "still.full"), "the usual charge, " + fill);
         var full = still("{}", feed(300, 1.5e5, NAPHTHA, FLOW * .72 / fill));
         double fuller = reading(full, "fill");
-        assertTrue(fuller > com.wormzjl.icheme.science.fluid.network.BatchStill.FILL && fuller < .75, "a charge between the two numbers: " + fuller);
+        assertTrue(fuller > com.wormzjl.icheme.science.plant.still.BatchStill.FILL && fuller < .75, "a charge between the two numbers: " + fuller);
         assertTrue(noted(full, "still.full"), () -> "log " + full.log());
     }
 

@@ -487,8 +487,8 @@ public final class UnitDoors {
         var rows = json.getAsJsonArray("cuts");
         switch (key) {
             case "stages-", "stages+" -> {
-                int stages = unit.params().integer("stages", 0), most = com.wormzjl.icheme.science.fluid.network.StillColumn.MAX_STAGES;
-                int least = com.wormzjl.icheme.science.fluid.network.BatchStill.MIN_STAGES;
+                int stages = unit.params().integer("stages", 0), most = com.wormzjl.icheme.science.column.still.StillColumn.MAX_STAGES;
+                int least = com.wormzjl.icheme.science.plant.still.BatchStill.MIN_STAGES;
                 int next = key.endsWith("+") ? (stages == 0 ? least : Math.min(most, stages + 1)) : (stages <= least ? 0 : stages - 1);
                 json.addProperty("stages", next);
             }

@@ -723,11 +723,11 @@ public final class EquipmentStructure {
         var shape = vessel.shape();var options = shape.still();
         var cells = nodes(vessel);if (cells.isEmpty()) return;
         var heater = switch (options.heater()) {
-            case SOLID -> com.wormzjl.icheme.science.fluid.network.BatchStill.Heater.SOLID;
-            case LIQUID -> com.wormzjl.icheme.science.fluid.network.BatchStill.Heater.LIQUID;
-            case ELECTRIC -> com.wormzjl.icheme.science.fluid.network.BatchStill.Heater.ELECTRIC;
+            case SOLID -> com.wormzjl.icheme.science.plant.still.BatchStill.Heater.SOLID;
+            case LIQUID -> com.wormzjl.icheme.science.plant.still.BatchStill.Heater.LIQUID;
+            case ELECTRIC -> com.wormzjl.icheme.science.plant.still.BatchStill.Heater.ELECTRIC;
         };
-        var design = new com.wormzjl.icheme.science.fluid.network.BatchStill.Design(shape.volume(), heater, options.condenses(), options.stages());
+        var design = new com.wormzjl.icheme.science.plant.still.BatchStill.Design(shape.volume(), heater, options.condenses(), options.stages());
         // The pot's liquid stands over its straight side and its head: 1.1 diameters (ProcessUnit.StillPlan).
         double height = 1.1 * design.diameter();
         var potPorts = stillPorts(level, vessel, java.util.Set.of(EquipmentShape.Role.CHARGE, EquipmentShape.Role.DRAIN, EquipmentShape.Role.VAPOUR_OUTLET), PhysicalFluidTopology.ConnectionRole.VESSEL);
@@ -745,7 +745,7 @@ public final class EquipmentStructure {
         }
         var distillate = stillPort(level, vessel, EquipmentShape.Role.DISTILLATE);
         var vent = stillPort(level, vessel, EquipmentShape.Role.VENT);
-        var burners = heater == com.wormzjl.icheme.science.fluid.network.BatchStill.Heater.LIQUID ? stillPort(level, vessel, EquipmentShape.Role.FUEL) : null;
+        var burners = heater == com.wormzjl.icheme.science.plant.still.BatchStill.Heater.LIQUID ? stillPort(level, vessel, EquipmentShape.Role.FUEL) : null;
         var devices = new FluidWorldAuthority.StillDevices(pot, water, design.condenser() ? distillate : null, design.condenser() ? vent : null, burners, design);
         FluidWorldAuthority.find(level.getServer()).ifPresent(world -> {
             var records = world.placeStill(devices, former);

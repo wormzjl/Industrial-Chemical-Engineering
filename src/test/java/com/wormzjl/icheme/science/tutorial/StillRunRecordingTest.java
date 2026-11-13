@@ -42,7 +42,7 @@ class StillRunRecordingTest {
             assertTrue(distilled.value(k) >= distilled.value(k - 1), "distilled falls at " + k);
             if (status.get(k).equals("DISTILLING")) assertTrue(pot.value(k) >= pot.value(k - 1), "the pot cools while distilling at " + k);
         }
-        for (var word : status) assertDoesNotThrow(() -> com.wormzjl.icheme.science.fluid.network.BatchStill.Status.valueOf(word));
+        for (var word : status) assertDoesNotThrow(() -> com.wormzjl.icheme.science.plant.still.BatchStill.Status.valueOf(word));
     }
 
     @Test

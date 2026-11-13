@@ -2,7 +2,7 @@ package com.wormzjl.icheme.science.flowsheet.sizing;
 
 import com.wormzjl.icheme.science.equipment.BatchStillOptions;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
-import com.wormzjl.icheme.science.fluid.network.BatchStill;
+import com.wormzjl.icheme.science.plant.still.BatchStill;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;

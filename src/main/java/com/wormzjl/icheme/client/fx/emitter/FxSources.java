@@ -15,7 +15,7 @@ import com.wormzjl.icheme.network.FluidNetwork;
 import com.wormzjl.icheme.network.FluidNetwork.Target;
 import com.wormzjl.icheme.runtime.fluid.Flares;
 import com.wormzjl.icheme.science.equipment.ShapeRasterizer;
-import com.wormzjl.icheme.science.fluid.network.BatchStill;
+import com.wormzjl.icheme.science.plant.still.BatchStill;
 import com.wormzjl.icheme.science.fluid.network.Burners;
 import com.wormzjl.icheme.science.fluid.network.Flare;
 import com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity;

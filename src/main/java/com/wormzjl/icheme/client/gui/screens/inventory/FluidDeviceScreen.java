@@ -229,7 +229,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
                 var known=id==null?null:net.minecraft.core.registries.BuiltInRegistries.ITEM.getOptional(id).orElse(null);
                 item=known==null?s.fuel():new net.minecraft.world.item.ItemStack(known).getHoverName().getString();}
             // The fire left: the slot's heat and the burning item's, at the heat it fires now over its efficiency.
-            double heat=s.fuelCount()*s.fuelEnergy()+s.burning(),draw=s.heat()/com.wormzjl.icheme.science.fluid.network.BatchStill.Heater.SOLID.efficiency();
+            double heat=s.fuelCount()*s.fuelEnergy()+s.burning(),draw=s.heat()/com.wormzjl.icheme.science.plant.still.BatchStill.Heater.SOLID.efficiency();
             fuel=new StillDoor.Fuel(item,Integer.toString(s.fuelCount()),draw>0?value(heat/draw/60):"—",value(heat/1e9));
         }
         return new StillDoor.Input(heater,canEdit(),stillFiring,s.stages()>0&&s.condenser(),stillOpen,heldFiring,heldReflux,fuel);

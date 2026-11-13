@@ -1,4 +1,4 @@
-package com.wormzjl.icheme.science.fluid.network;
+package com.wormzjl.icheme.science.column.still;
 
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.fluid.thermo.HydrocarbonModel;
@@ -22,7 +22,7 @@ import java.util.List;
  * every converged answer stands on the energy balance.</p>
  *
  * <p>In pot mode the compositions and temperatures do not depend on the boil-up: every flow is proportional to D. So the
- * solve and its rates are per mole of distillate; the pot's energy balance ({@link BatchStill}) sets how many moles a step
+ * solve and its rates are per mole of distillate; the pot's energy balance ({@code BatchStill}) sets how many moles a step
  * distils. The energy that leaves the pot and the column per mole of distillate is the top envelope's, e = (R + 1) H1 - R h0:
  * H1 the head vapour's enthalpy (its composition the distillate's, at the top tray's temperature), h0 the condensate's at its
  * bubble point. With no column (N = 0) or no reflux the still is one equilibrium stage: the distillate is the pot's bubble
@@ -1244,7 +1244,7 @@ public final class StillColumn {
     }
 
     /** Amounts as mole fractions; refused for no amount or the wrong basis. */
-    double[] fractions(double[] amounts) {
+    public double[] fractions(double[] amounts) {
         if (amounts.length != n) throw new IllegalArgumentException("Still basis mismatch");
         double sum = 0;
         for (double e : amounts) {

@@ -90,7 +90,7 @@ public final class ProcessSolveServices {
         return submit(server,request,command,command.model().hydrocarbon.revision());
     }
 
-    /** A batch still's column solve (batch 2026-11-09-batch-distiller, W3): {@link com.wormzjl.icheme.science.fluid.network.StillHead#run} under the solve deadline. */
+    /** A batch still's column solve (batch 2026-11-09-batch-distiller, W3): {@link com.wormzjl.icheme.science.plant.still.StillHead#run} under the solve deadline. */
     public static AdmissionResult submitStill(MinecraftServer server,StillRequest request,StillCommand command) {
         requireServerThread(server);Objects.requireNonNull(request);Objects.requireNonNull(command);
         return submit(server,request,command,command.model().hydrocarbon.revision());
@@ -301,7 +301,7 @@ public final class ProcessSolveServices {
                 result.add(new ColumnUnitCompletion(columnRequest,outcome));
             } else if(context.request() instanceof StillRequest stillRequest) {
                 var outcome=completion.result().map(value->{if(!(value instanceof StillSolveResult still))throw new IllegalStateException("Still request completed with a different result family");return still.outcome();})
-                        .orElseGet(()->new com.wormzjl.icheme.science.fluid.network.StillHead.Failed(completion.status().name()+(completion.detail()==null?"":": "+completion.detail())));
+                        .orElseGet(()->new com.wormzjl.icheme.science.plant.still.StillHead.Failed(completion.status().name()+(completion.detail()==null?"":": "+completion.detail())));
                 result.add(new StillCompletion(stillRequest,outcome));
             } else {
                 throw new IllegalStateException("Unknown process-solve request family");
@@ -467,20 +467,20 @@ public final class ProcessSolveServices {
         public StillTarget {Objects.requireNonNull(dimension);if(pot<=0)throw new IllegalArgumentException("Invalid still identity");}
     }
     /** Server-only delivery context of a still's column solve; the handler gets the outcome, a failed one for a worker failure or a shutdown. */
-    public record StillRequest(long requestId,StillTarget target,long inputRevision,java.util.function.Consumer<com.wormzjl.icheme.science.fluid.network.StillHead.Outcome> handler) implements ProcessSolveRequest {
+    public record StillRequest(long requestId,StillTarget target,long inputRevision,java.util.function.Consumer<com.wormzjl.icheme.science.plant.still.StillHead.Outcome> handler) implements ProcessSolveRequest {
         public StillRequest {Objects.requireNonNull(target);Objects.requireNonNull(handler);if(requestId<=0||inputRevision<0)throw new IllegalArgumentException("Invalid still request stamp");}
     }
     /** A still's column solve: the job and its pot island's model, read on the server at admission. */
-    public record StillCommand(com.wormzjl.icheme.science.fluid.network.StillHead.Job job,FluidThermodynamics model) implements ProcessSolveCommand {
+    public record StillCommand(com.wormzjl.icheme.science.plant.still.StillHead.Job job,FluidThermodynamics model) implements ProcessSolveCommand {
         public StillCommand {Objects.requireNonNull(job);Objects.requireNonNull(model);}
         @Override public ProcessSolveResult solve(BoundedCpuSolveService.CancellationToken cancellationToken) {
-            return new StillSolveResult(com.wormzjl.icheme.science.fluid.network.StillHead.run(job,model,cancellationToken::throwIfCancellationRequested));
+            return new StillSolveResult(com.wormzjl.icheme.science.plant.still.StillHead.run(job,model,cancellationToken::throwIfCancellationRequested));
         }
     }
-    public record StillSolveResult(com.wormzjl.icheme.science.fluid.network.StillHead.Outcome outcome) implements ProcessSolveResult {
+    public record StillSolveResult(com.wormzjl.icheme.science.plant.still.StillHead.Outcome outcome) implements ProcessSolveResult {
         public StillSolveResult {Objects.requireNonNull(outcome);}
     }
-    public record StillCompletion(StillRequest request,com.wormzjl.icheme.science.fluid.network.StillHead.Outcome outcome) implements ProcessSolveCompletion {
+    public record StillCompletion(StillRequest request,com.wormzjl.icheme.science.plant.still.StillHead.Outcome outcome) implements ProcessSolveCompletion {
         public StillCompletion {Objects.requireNonNull(request);Objects.requireNonNull(outcome);}
     }
 
