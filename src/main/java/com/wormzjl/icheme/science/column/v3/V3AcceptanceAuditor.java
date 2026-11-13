@@ -122,6 +122,7 @@ final class V3AcceptanceAuditor {
                 }
             }
         }
+        if (problem.hasSteamFeeds()) advisoryEvidence = withSteamContinuationAdvisory(advisoryEvidence, state);
         if (problem.hasPumparounds()) advisoryEvidence = withCooledTrayAdvisory(advisoryEvidence, state);
         advisoryEvidence = withWetTrayAdvisory(advisoryEvidence, state);
         advisoryEvidence = withCheckWarnings(advisoryEvidence, checks);
@@ -309,6 +310,32 @@ final class V3AcceptanceAuditor {
     }
 
     /** Advisory only: a cooled tray that condenses nearly all of its arriving vapor is at its physical cap. */
+    /**
+     * One notice where the state carries steam past the water data (F3 of batch 2026-11-13-codebase-review): the steam's
+     * enthalpy is continued at its end heat capacity above the data's top temperature and below the triple point, its
+     * saturation pressure is Wagner-Pruss continued below the triple point. A notice, never a hold (AGENTS.md, thermo validity).
+     */
+    private List<String> withSteamContinuationAdvisory(List<String> advisoryEvidence, V3DryMeshState state) {
+        if (advisoryEvidence.size() >= 16) return advisoryEvidence;
+        var water = com.wormzjl.icheme.science.material.MaterialRuntime.water();
+        for (int node = 0; node < state.nodeCount(); node++) {
+            double temperature = state.temperatureKelvin(node);
+            if (!V3WaterProperties.steamContinued(water, temperature)) continue;
+            double steam;
+            try {
+                steam = problem.waterVaporFlow(state, node);
+            } catch (IllegalArgumentException invalidSplit) {
+                continue; // the water checks above report a split that is not one
+            }
+            if (!(steam > 0.0)) continue;
+            List<String> evidence = new ArrayList<>(advisoryEvidence);
+            evidence.add(String.format(Locale.ROOT, "Warning: the steam on tray %d at %.1f K uses water properties continued "
+                    + "past their data (%.2f to %.0f K)", node + 1, temperature, water.triplePoint(), water.maximumTemperature()));
+            return List.copyOf(evidence);
+        }
+        return advisoryEvidence;
+    }
+
     private List<String> withCooledTrayAdvisory(List<String> advisoryEvidence, V3DryMeshState state) {
         int cappedTray = 0;
         double smallestRatio = Double.MAX_VALUE;

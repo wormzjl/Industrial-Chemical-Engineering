@@ -126,17 +126,54 @@ class V3WaterPropertyDerivativesTest {
         }
     }
 
-    /** Every derivative refuses exactly the envelope its value refuses. */
+    /**
+     * Past the steam's data (273.16 to 900 K) its enthalpy holds the end heat capacity, as the network's does, so value and
+     * slope are continuous at either end (F3 of batch 2026-11-13-codebase-review).
+     */
+    @Test
+    void steamEnthalpyContinuesPastItsDataAtTheEndHeatCapacity() {
+        double top = V3WaterProperties.maximumTemperature(), triple = V3WaterProperties.triplePoint();
+        assertEquals(900.0, top, 0.0, "the record's top temperature");
+        double expected = V3WaterProperties.vaporMolarEnthalpy(top) + V3WaterProperties.dVaporMolarEnthalpyDT(top) * 50.0;
+        assertEquals(expected, V3WaterProperties.vaporMolarEnthalpy(950.0), 1.0e-12 * Math.abs(expected), "h(950 K)");
+        assertEquals(V3WaterProperties.dVaporMolarEnthalpyDT(top), V3WaterProperties.dVaporMolarEnthalpyDT(950.0), 0.0, "held c_p");
+        double below = V3WaterProperties.vaporMolarEnthalpy(triple) + V3WaterProperties.dVaporMolarEnthalpyDT(triple) * (260.0 - triple);
+        assertEquals(below, V3WaterProperties.vaporMolarEnthalpy(260.0), 1.0e-12 * Math.abs(below), "h(260 K)");
+        for (double end : new double[] {triple, top}) {
+            double left = (V3WaterProperties.vaporMolarEnthalpy(end) - V3WaterProperties.vaporMolarEnthalpy(end - STEP_KELVIN)) / STEP_KELVIN;
+            double right = (V3WaterProperties.vaporMolarEnthalpy(end + STEP_KELVIN) - V3WaterProperties.vaporMolarEnthalpy(end)) / STEP_KELVIN;
+            assertEquals(left, right, 1.0e-6 * Math.abs(left), "slope continuous at " + end + " K");
+            assertEquals(V3WaterProperties.dVaporMolarEnthalpyDT(end), right, 1.0e-6 * Math.abs(right), "c_p at " + end + " K");
+        }
+        assertEquals(V3WaterProperties.vaporMolarEnthalpy(950.0) + com.wormzjl.icheme.science.thermo.phase.SteamVirial.residualEnthalpy(950.0, 1.0e5),
+                V3WaterProperties.steamMolarEnthalpy(950.0, 1.0e5), 0.0, "the virial steam at 950 K evaluates");
+    }
+
+    /** Below the triple point the column's saturation pressure is Wagner-Pruss continued, as the network's (F3). */
+    @Test
+    void saturationPressureBelowTheTriplePointIsWagnerPruss() {
+        var water = com.wormzjl.icheme.science.material.MaterialRuntime.water();
+        assertEquals(V3WaterProperties.wagnerPruss(water, 263.0), V3WaterProperties.saturationPressurePascal(263.0), 0.0);
+        double difference = (Math.log(V3WaterProperties.saturationPressurePascal(263.0 + STEP_KELVIN))
+                - Math.log(V3WaterProperties.saturationPressurePascal(263.0 - STEP_KELVIN))) / (2.0 * STEP_KELVIN);
+        assertEquals(difference, V3WaterProperties.dLogSaturationPressureDT(263.0), TOLERANCE * Math.abs(difference));
+    }
+
+    /**
+     * Every derivative refuses exactly the envelope its value refuses: the steam only a temperature that is not one, the
+     * saturation above the critical point (nothing saturates there) and at no positive temperature.
+     */
     @Test
     void derivativesShareTheDomainChecksOfTheirValues() {
-        for (double outside : new double[] {273.0, 901.0, Double.NaN}) {
+        for (double outside : new double[] {Double.NaN, Double.POSITIVE_INFINITY}) {
             assertThrows(IllegalArgumentException.class, () -> V3WaterProperties.vaporMolarEnthalpy(outside));
             assertThrows(IllegalArgumentException.class, () -> V3WaterProperties.dVaporMolarEnthalpyDT(outside));
-            assertThrows(IllegalArgumentException.class, () -> V3WaterProperties.vaporizationEnthalpy(outside));
             assertThrows(IllegalArgumentException.class, () -> V3WaterProperties.steamMolarEnthalpy(outside, 1.0e5));
             assertThrows(IllegalArgumentException.class, () -> V3WaterProperties.dSteamMolarEnthalpyDT(outside, 1.0e5));
         }
-        for (double outside : new double[] {273.0, 648.0, Double.NaN}) {
+        for (double outside : new double[] {273.0, 901.0, Double.NaN})
+            assertThrows(IllegalArgumentException.class, () -> V3WaterProperties.vaporizationEnthalpy(outside));
+        for (double outside : new double[] {0.0, 648.0, Double.NaN}) {
             assertThrows(IllegalArgumentException.class, () -> V3WaterProperties.saturationPressurePascal(outside));
             assertThrows(IllegalArgumentException.class, () -> V3WaterProperties.dLogSaturationPressureDT(outside));
         }
