@@ -105,10 +105,14 @@ public final class V3BandedPivotedSolver {
                 // Each entry is written once per pivot, so these values survive to its end.
                 // Including the L multiplier preserves the former whole-matrix growth scan.
                 maximumDuringFactorization = Math.max(maximumDuringFactorization, Math.abs(multiplier));
+                // The update alone, so the loop can run as vector arithmetic (P9 of batch 2026-11-13-codebase-review);
+                // Java evaluates a - m * b with two roundings and never fuses it. The growth maximum then reads the
+                // same written values in a pass of its own: the same number, a NaN or an infinity included.
                 for (int column = pivot + 1; column <= lastUpdatedColumn; column++) {
-                    double updated = band[rowBase + column] - multiplier * band[pivotBase + column];
-                    band[rowBase + column] = updated;
-                    maximumDuringFactorization = Math.max(maximumDuringFactorization, Math.abs(updated));
+                    band[rowBase + column] -= multiplier * band[pivotBase + column];
+                }
+                for (int column = pivot + 1; column <= lastUpdatedColumn; column++) {
+                    maximumDuringFactorization = Math.max(maximumDuringFactorization, Math.abs(band[rowBase + column]));
                 }
                 rightHandSide[row] -= multiplier * rightHandSide[pivot];
             }
