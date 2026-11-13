@@ -163,7 +163,7 @@ public final class HeatCurve {
     /**
      * The curve of a fluid of total amounts {@code amounts} (mol, the order {@link FluidThermodynamics#flashTP} reads) at
      * {@code pressure} Pa, from {@code low} to {@code high} K. Knots start evenly in temperature (16 divisions), a phase
-     * change is bisected to 1e-5 K, other segments are refined while the midpoint's temperature lies more than 0.2 K off
+     * change is bisected to {@link #BOUNDARY_KELVIN}, other segments are refined while the midpoint's temperature lies more than 0.2 K off
      * the chord, and knots at the vapour fractions {@link #LIQUID_UNTIL} and {@link #GAS_FROM} are placed along h, where
      * the vapour fraction is linear: a pure component's plateau, which has no other inner knot, so takes the two-phase
      * film between them. Solids, if any, are not on the curve.
@@ -196,6 +196,9 @@ public final class HeatCurve {
         return new HeatCurve(hs,ts,fs,xs);
     }
     private static final int DIVISIONS=16,MAXIMUM_KNOTS=512;
+    /** How closely a phase boundary is bisected, K: the plateau's edge is then out by cp times this, about 4 J/kg against a
+     * latent heat of megajoules per kilogram (L-F11 of the 2026-11-13 simplifications; 1e-5 K before, seven more flashes per boundary). */
+    static final double BOUNDARY_KELVIN=1e-3;
     private record Point(double t,double h,double vapour) {}
     private static Point point(FluidThermodynamics model,double[] amounts,double pressure,double temperature,Runnable checkpoint) {
         checkpoint.run();
@@ -203,7 +206,7 @@ public final class HeatCurve {
         return new Point(temperature,state.enthalpy()/state.mass(),model.vaporMass(state)/state.mass());
     }
     private static void refine(FluidThermodynamics model,double[] amounts,double pressure,Point a,Point b,TreeMap<Double,Point> points,int depth,Runnable checkpoint) {
-        if(depth>=24||b.t-a.t<1e-5||points.size()>=MAXIMUM_KNOTS)return;
+        if(depth>=24||b.t-a.t<BOUNDARY_KELVIN||points.size()>=MAXIMUM_KNOTS)return;
         boolean phase=Math.abs(a.vapour-b.vapour)>.1;
         var mid=point(model,amounts,pressure,(a.t+b.t)/2,checkpoint);
         if(!phase) {
