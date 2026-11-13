@@ -124,7 +124,7 @@ public final class HeatSides {
     public static double kettleBundle(double shell){return shell/1.6;}
     /**
      * A kettle's shell as a vessel (W7): a lying drum of the kettle's diameter ({@link UnitRatings#kettleShell}, 1.6 bundles)
-     * over the drawn shell's cylinder, 0.9 L + 0.3 m ({@link ProcessUnit#kettle}), with two heads' volume for its back head
+     * over the drawn shell's cylinder, 0.9 L + 0.3 m ({@link KettleDesign#build}), with two heads' volume for its back head
      * and front cone.
      */
     public static com.wormzjl.icheme.science.fluid.network.VesselGeometry kettleShell(double bundle,double tubes) {
