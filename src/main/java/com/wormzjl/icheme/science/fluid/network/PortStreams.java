@@ -181,7 +181,7 @@ public final class PortStreams {
     }
     /**
      * What a phase-port outflow the pass drew carries per kilogram of fluid ({@code rates}, the six entries of
-     * {@link PassiveStepSolver.Equations#draws}): each drawn phase's {@link #fluidMoles} over its {@link #fluidMass}, and its
+     * {@link StepEquations#draws}): each drawn phase's {@link #fluidMoles} over its {@link #fluidMass}, and its
      * {@link #fluidSpecificEnthalpy}, weighted by its mass flow and read where the booking reads it, on {@code end} or, for a
      * pinned entry, on the step's start state {@code start}; the specific enthalpy (J/kg) is the last entry. A full tank
      * holding a 1.2e-22 m3 nitrogen bubble draws water through its top port, though the bubble leads the port at a vanishing

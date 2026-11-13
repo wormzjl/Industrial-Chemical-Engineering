@@ -5,7 +5,6 @@ import static com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.PH_LIQU
 import static com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.PH_VAPOUR;
 import static com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.liquidEnthalpy;
 import static com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.liquidMoles;
-import com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.Equations;
 import com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.PipeObservation;
 import com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.FlowSample;
 import com.wormzjl.icheme.science.fluid.solver.SparseNewton;
@@ -36,14 +35,14 @@ final class StepObservations {
      * holds does not enter: a turbine on a hotwell full of condensate reads its own steam. NaN where the equilibrium does
      * not answer (no read, no wear).
      */
-    private double exhaustMoisture(Equations.Transport carried,double work,FluidThermodynamics.State exhaust,Runnable checkpoint) {
+    private double exhaustMoisture(StepEquations.Transport carried,double work,FluidThermodynamics.State exhaust,Runnable checkpoint) {
         double enthalpy=carried.mass()*(carried.specificEnthalpy()+work);
         try {
             var state=model.fluidPH(exhaust.temperature(),exhaust.pressure(),enthalpy,carried.moles(),checkpoint);
             return state==null?Double.NaN:InletPhase.bulk(model,state).condensedMassShare();
         }catch(IllegalArgumentException unavailable){return Double.NaN;}
     }
-    List<PipeObservation> observe(Equations e,List<FluidThermodynamics.State> states,double[] flows,double[] lawFlows,double[] heads,List<FlowControl.Mode> modes,Runnable checkpoint) {
+    List<PipeObservation> observe(StepEquations e,List<FluidThermodynamics.State> states,double[] flows,double[] lawFlows,double[] heads,List<FlowControl.Mode> modes,Runnable checkpoint) {
         var samples=new ArrayList<PipeObservation>();
         for(int edge=0;edge<e.graph.pipes().size();edge++) {
             var pipe=e.graph.pipes().get(edge);int a=pipe.first(),b=pipe.second(),donor=flows[edge]>=0?a:b;
@@ -137,7 +136,7 @@ final class StepObservations {
      * flow ({@link com.wormzjl.icheme.science.machine.Npsh#required}). NaN where it has no NPSH design (a set-flow
      * constructed pump), no floor or no liquid. Observational: never fed back into the solve.
      */
-    double npshRatio(Equations e,int edge,List<FluidThermodynamics.State> states,double massFlow) {
+    double npshRatio(StepEquations e,int edge,List<FluidThermodynamics.State> states,double massFlow) {
         double rho=solver.constants.liquidDensities[edge],required=npshRequired(edge,massFlow);
         if(!(required>0))return Double.NaN;
         var pipe=e.graph.pipes().get(edge);int a=pipe.first();double floor;

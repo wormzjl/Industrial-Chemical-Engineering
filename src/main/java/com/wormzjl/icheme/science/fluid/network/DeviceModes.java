@@ -2,7 +2,6 @@ package com.wormzjl.icheme.science.fluid.network;
 
 import static com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.GRAVITY;
 import static com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.forwardForbidden;
-import com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.Equations;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import java.util.*;
 
@@ -15,7 +14,7 @@ import java.util.*;
  * ({@code PassiveStepSolver.devices}), built with it; it reads the solve constants, the suction readings and the movers'
  * laws through {@code solver} and holds no state of its own: the modes are the solve's (S-01, batch
  * 2026-11-13-codebase-review, D-S5: moved out of the solver with every body unchanged but its qualifiers, and two
- * {@code Equations.Transport} density reads by the record's accessor).
+ * {@code StepEquations.Transport} density reads by the record's accessor).
  */
 final class DeviceModes {
     /** The solver whose devices these are: its solve constants, its suction readings and its movers' laws. */
@@ -53,8 +52,8 @@ final class DeviceModes {
     static boolean regulating(PassiveNetwork graph,int e,FlowControl.Mode mode) {
         return graph.pipes().get(e).control() instanceof FlowControl.Valve?mode==FlowControl.Mode.VALVE_REGULATING:mode==FlowControl.Mode.CLOSED||mode==FlowControl.Mode.INLET_WRONG_PHASE;
     }
-    FlowControl.Mode nextMode(Equations equations,int i,FlowControl.Mode mode,double flow,double head,List<FluidThermodynamics.State> states,
-                                      FluidThermodynamics.State up,Equations.Transport suction,double tolerance) {
+    FlowControl.Mode nextMode(StepEquations equations,int i,FlowControl.Mode mode,double flow,double head,List<FluidThermodynamics.State> states,
+                                      FluidThermodynamics.State up,StepEquations.Transport suction,double tolerance) {
         var graph=equations.graph;var pipe=graph.pipes().get(i);double rho=suction.density();var next=mode;
         // Owner decision of 2026-11-10 (option A, batch 2026-11-10-custom-shader-system): a closed device never reopens toward
         // a flow its own end forbids, a discharge into a generator or a suction from a void: it can never deliver there, so it
@@ -114,7 +113,7 @@ final class DeviceModes {
      * supplier below its floor and closed a pump the closed point then reopened); a vapour-locked pump ({@link MoverSuction#vapourLocks})
      * is closed for the whole solve and never on its law here.
      */
-    boolean cavitates(Equations equations,double[] last,List<FlowControl.Mode> modes,boolean[] boundaryClosed,double tolerance) {
+    boolean cavitates(StepEquations equations,double[] last,List<FlowControl.Mode> modes,boolean[] boundaryClosed,double tolerance) {
         List<FluidThermodynamics.State> states=null;
         for(int i=0;i<modes.size();i++) {
             var mode=modes.get(i);
@@ -165,7 +164,7 @@ final class DeviceModes {
     /**
      * How much head margin this edge's own rows can resolve, and so the band around the shutoff corner inside which a
      * device's mode may not be decided by the sign of a flow. The pressure-dimensioned rows of an edge are stated in
-     * {@link Equations#pressureScales}, so a solve converged to {@code tolerance} has decided them to
+     * {@link StepEquations#pressureScales}, so a solve converged to {@code tolerance} has decided them to
      * {@code tolerance*scale} Pa (1e-4 Pa on an atmospheric island, 6e-4 Pa at 6 bar), a flow resolution of order
      * 1e-5 kg/s. The floor of 0.01 Pa keeps the reopening test bit for bit what it was at or below 1e5 Pa (every island
      * of the regression reference). A mover's suction limit reads the same band, against its law's residual and its
