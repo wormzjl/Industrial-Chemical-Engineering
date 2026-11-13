@@ -44,6 +44,14 @@ public final class PassiveStepSolver {
      */
     private static final double FILTER_CAPACITY_MARGIN=1e-12;
     /**
+     * The inline filter's cake law, the one statement of it (S-08): the cake's resistance at {@code loading} (its retained
+     * share of capacity) in a carrier of {@code viscosity} (Pa s), the clean resistance scaled from water's 1 mPa s and by
+     * 1 + 99 L^2. Its readers finish it on their own operands: per density, the slope at zero flow (the balance's
+     * {@link BalanceNet#prepare}, {@link NetworkReduction#resolutionFlow}); per kilogram of the drawn stream's fluid volume
+     * times the law's flow, the row's loss ({@link Equations#edgeRows}).
+     */
+    static double cakeResistance(InlineFilter filter,double viscosity,double loading){return filter.cleanResistance()*(viscosity/.001)*(1+99*loading*loading);}
+    /**
      * The share of a row's gap a chord step may leave before it is not worth taking ({@link Equations#linearisationHolds}):
      * a reused Jacobian stating slope s where the row's own is t leaves |1 - t/s| of the gap; past one half either way the
      * chord step does no better than the halving a fresh step makes.
@@ -118,18 +126,10 @@ public final class PassiveStepSolver {
      * its own rule admits. */
     private record Runs(boolean[] interior,int[][] nodeEdges) {
         static Runs of(PassiveNetwork graph) {
-            int edges=graph.pipes().size(),nodes=graph.reservoirs().size();
-            int[] degree=new int[nodes];boolean[] actuated=new boolean[nodes];
-            for(var pipe:graph.pipes()) {
-                degree[pipe.first()]++;degree[pipe.second()]++;
-                if(!(pipe.control() instanceof FlowControl.Passive)){actuated[pipe.first()]=true;actuated[pipe.second()]=true;}
-            }
+            int nodes=graph.reservoirs().size();int[][] nodeEdges=incidence(graph);boolean[] actuated=new boolean[nodes];
+            for(var pipe:graph.pipes())if(!(pipe.control() instanceof FlowControl.Passive)){actuated[pipe.first()]=true;actuated[pipe.second()]=true;}
             boolean[] interior=new boolean[nodes];
-            for(int i=0;i<nodes;i++)interior[i]=graph.reservoirs().get(i).junction()&&degree[i]==2&&!actuated[i];
-            int[][] nodeEdges=new int[nodes][];
-            for(int i=0;i<nodes;i++)nodeEdges[i]=new int[degree[i]];
-            Arrays.fill(degree,0);
-            for(int edge=0;edge<edges;edge++){var pipe=graph.pipes().get(edge);nodeEdges[pipe.first()][degree[pipe.first()]++]=edge;nodeEdges[pipe.second()][degree[pipe.second()]++]=edge;}
+            for(int i=0;i<nodes;i++)interior[i]=graph.reservoirs().get(i).junction()&&nodeEdges[i].length==2&&!actuated[i];
             return new Runs(interior,nodeEdges);
         }
         /** Walks the run through {@code edge} both ways over the connections {@code walkable} admits, marking them
@@ -1828,15 +1828,7 @@ public final class PassiveStepSolver {
         }
         if(passStart.flashRestated()!=null&&seeds!=null)restateFlashFlows(graph,modes,boundaryClosed,seeds,flows,passStart.flashRestated());
         if(!hasSolids(graph)&&graph.pipes().stream().noneMatch(pipe->pipe.filter()!=null))return;
-        int nodes=graph.reservoirs().size();int[] degree=new int[nodes];
-        for(var pipe:graph.pipes()){degree[pipe.first()]++;degree[pipe.second()]++;}
-        int[][] nodeEdges=new int[nodes][];
-        for(int i=0;i<nodes;i++)nodeEdges[i]=new int[degree[i]];
-        Arrays.fill(degree,0);
-        for(int edge=0;edge<graph.pipes().size();edge++) {
-            var pipe=graph.pipes().get(edge);
-            nodeEdges[pipe.first()][degree[pipe.first()]++]=edge;nodeEdges[pipe.second()][degree[pipe.second()]++]=edge;
-        }
+        int nodes=graph.reservoirs().size();int[][] nodeEdges=incidence(graph);
         boolean[] known=new boolean[graph.pipes().size()];
         for(int i=0;i<known.length;i++)known[i]=boundaryClosed[i]||modes.get(i)==FlowControl.Mode.CLOSED;
         for(int pass=0;pass<known.length;pass++) {
@@ -2451,17 +2443,17 @@ public final class PassiveStepSolver {
                 double own=PortStreams.endSpecificEnthalpy(model,start,port,pipe.volume()),low=start.temperature(),high=low;
                 // A kettle's tube side reads its pool (W7): the vessel's contents, isothermal, no stream.
                 boolean pool=partner!=null&&partner.pool();
-                boolean drawn=partner!=null&&(pool||PortStreams.endMass(reading(partner).model,partner.donor(),partner.port(),partner.volume())>0);
+                boolean drawn=partner!=null&&(pool||PortStreams.endMass(partnerModel(partner),partner.donor(),partner.port(),partner.volume())>0);
                 if(drawn){low=Math.min(low,partner.donor().temperature());high=Math.max(high,partner.donor().temperature());}
                 // A column's heating side (W4) gives its heat down to its floor, through its condensation: the curve spans it.
                 if(read.gives())low=Math.min(low,read.ceiling());
                 low=Math.max(NumericalBox.MINIMUM_TEMPERATURE,low-10);high=Math.min(NumericalBox.MAXIMUM_TEMPERATURE,high+10);
-                var curve=spanned(start,port,pipe.volume(),low,high,side.films(),checkpoint);
-                var other=!drawn||pool?null:reading(partner).spanned(partner.donor(),partner.port(),partner.volume(),low,high,partner.law().films(),checkpoint);
+                var curve=PortStreams.spanned(model,start,port,pipe.volume(),low,high,side.films(),checkpoint);
+                var other=!drawn||pool?null:PortStreams.spanned(partnerModel(partner),partner.donor(),partner.port(),partner.volume(),low,high,partner.law().films(),checkpoint);
                 var stream=curve==null?null:new ExchangerRelay.Stream(curve,own,flow,side,true);
                 if(stream!=null&&pool)planned=ExchangerRelay.plan(side,stream,partner.bath(),read);
                 else if(stream!=null)planned=ExchangerRelay.plan(side,stream,
-                        other==null?null:new ExchangerRelay.Stream(other,PortStreams.endSpecificEnthalpy(reading(partner).model,partner.donor(),partner.port(),partner.volume()),partner.massFlow(),partner.law(),false),read,seconds);
+                        other==null?null:new ExchangerRelay.Stream(other,PortStreams.endSpecificEnthalpy(partnerModel(partner),partner.donor(),partner.port(),partner.volume()),partner.massFlow(),partner.law(),false),read,seconds);
                 // A column's water side (U2): the flow that carries the heat the column asks for, the water rising its range but
                 // staying under the ceiling; water at or over the ceiling can take nothing, and its valve holds. A column's heating
                 // side (W4, a reboiler's tubes) gives its heat down to the floor: the flow is the heat rate over h(inlet) − h(floor);
@@ -2573,11 +2565,11 @@ public final class PassiveStepSolver {
             else {
                 var bath=new ExchangerRelay.Bath(contents.temperature(),pool.film(contents,node.inventory().geometry()));
                 ExchangerRelay.Stream stream=null;
-                if(tube!=null&&!tube.pool()&&PortStreams.endMass(reading(tube).model,tube.donor(),tube.port(),tube.volume())>0) {
+                if(tube!=null&&!tube.pool()&&PortStreams.endMass(partnerModel(tube),tube.donor(),tube.port(),tube.volume())>0) {
                     double low=Math.max(NumericalBox.MINIMUM_TEMPERATURE,Math.min(contents.temperature(),tube.donor().temperature())-10);
                     double high=Math.min(NumericalBox.MAXIMUM_TEMPERATURE,Math.max(contents.temperature(),tube.donor().temperature())+10);
-                    var curve=reading(tube).spanned(tube.donor(),tube.port(),tube.volume(),low,high,tube.law().films(),checkpoint);
-                    if(curve!=null)stream=new ExchangerRelay.Stream(curve,PortStreams.endSpecificEnthalpy(reading(tube).model,tube.donor(),tube.port(),tube.volume()),tube.massFlow(),tube.law(),true);
+                    var curve=PortStreams.spanned(partnerModel(tube),tube.donor(),tube.port(),tube.volume(),low,high,tube.law().films(),checkpoint);
+                    if(curve!=null)stream=new ExchangerRelay.Stream(curve,PortStreams.endSpecificEnthalpy(partnerModel(tube),tube.donor(),tube.port(),tube.volume()),tube.massFlow(),tube.law(),true);
                 }
                 planned=ExchangerRelay.planPool(pool,bath,stream,read,seconds);
             }
@@ -2587,19 +2579,12 @@ public final class PassiveStepSolver {
         }
         return nodes==null?graph:new PassiveNetwork(nodes,graph.pipes(),graph.scheduledTransfers());
     }
-    /** The solver a coupled side's other stream is read on: this one, or one on the model of the island that stream is in (batch
-     * 2026-11-04-refinery-compounds, V2: each island carries its own compound list). */
-    private PassiveStepSolver reading(ExchangerRelay.Partner partner) {
+    /** The model a coupled side's other stream is read on ({@link PortStreams#spanned}, {@link PortStreams#endMass}): this
+     * solver's, or that of the island that stream is in (batch 2026-11-04-refinery-compounds, V2: each island carries its own
+     * compound list). The stream functions read nothing else, so no second solver is built to read it (S-06). */
+    private FluidThermodynamics partnerModel(ExchangerRelay.Partner partner) {
         var other=partner.model();
-        if(other==null||other==model)return this;
-        if(partnerReader==null||partnerReader.model!=other)partnerReader=new PassiveStepSolver(other,ownership);
-        return partnerReader;
-    }
-    private PassiveStepSolver partnerReader;
-    /** The heat curve of the stream drawn through {@code port} from state {@code s} over {@code [low, high]} K, or null where it draws nothing. */
-    private HeatCurve spanned(FluidThermodynamics.State s,PassiveNetwork.PhasePort port,double volume,double low,double high,HeatCurve.Films films,Runnable checkpoint) {
-        double[] amounts=PortStreams.endMoles(model,s,port,volume);double total=0;for(double n:amounts)total+=n;
-        return total>0&&PortStreams.endMass(model,s,port,volume)>0?HeatCurve.sample(model,amounts,s.pressure(),low,high,films,checkpoint):null;
+        return other==null?model:other;
     }
     /**
      * The head this connection demands of its device at the point one active-set pass converged to: the discharge
@@ -3200,15 +3185,26 @@ public final class PassiveStepSolver {
      * False, the junction left as it was, where a flash is refused. */
     private boolean seedAt(List<FluidThermodynamics.State> states,int j,double[] amounts,double mass,double heat,double tLow,double tHigh,double pressure,Runnable checkpoint) {
         double[] y=new double[amounts.length];for(int c=0;c<y.length;c++)y[c]=amounts[c]/mass;
-        double lower=Math.max(tLow-20,NumericalBox.MINIMUM_TEMPERATURE),upper=Math.min(tHigh+20,NumericalBox.MAXIMUM_TEMPERATURE);
         try {
-            for(int k=0;k<60&&upper-lower>1e-9;k++) {
-                double t=.5*(lower+upper);var point=model.flashTP(t,pressure,y.clone(),checkpoint);
-                if(point.enthalpy()/point.mass()<heat/mass)lower=t;else upper=t;
-            }
-            states.set(j,model.flashTP(.5*(lower+upper),pressure,y.clone(),checkpoint));
+            var bracket=mixingBracket(model,y,heat,mass,tLow,tHigh,pressure,checkpoint);
+            states.set(j,model.flashTP(.5*(bracket[0]+bracket[1]),pressure,y.clone(),checkpoint));
         } catch(IllegalArgumentException refused){return false;} // a rejected state: the numerical box, a phase hold
         return true;
+    }
+    /**
+     * The mixing-enthalpy bisection, the one statement of it (S-08): the temperature bracket {lower, upper} (K) within 20 K of
+     * the streams' temperatures {@code tLow}, {@code tHigh}, inside the numerical box, in which the mixture {@code y} (moles per
+     * kilogram) at {@code pressure} has the specific enthalpy {@code heat/mass}: 60 halvings at most, to 1e-9 K. Each reader
+     * ends it its own way: {@link #seedAt} flashes the midpoint, {@link BalanceNet#mixed} the nearer side. A refused flash
+     * throws through.
+     */
+    private static double[] mixingBracket(FluidThermodynamics model,double[] y,double heat,double mass,double tLow,double tHigh,double pressure,Runnable checkpoint) {
+        double lower=Math.max(tLow-20,NumericalBox.MINIMUM_TEMPERATURE),upper=Math.min(tHigh+20,NumericalBox.MAXIMUM_TEMPERATURE);
+        for(int k=0;k<60&&upper-lower>1e-9;k++) {
+            double t=.5*(lower+upper);var point=model.flashTP(t,pressure,y.clone(),checkpoint);
+            if(point.enthalpy()/point.mass()<heat/mass)lower=t;else upper=t;
+        }
+        return new double[]{lower,upper};
     }
     /**
      * The flow (kg/s, at least zero) supplier {@code supplier} sends into the junction at the other end of {@code pipe}
@@ -3401,7 +3397,7 @@ public final class PassiveStepSolver {
                 rho[e][dir]=PortStreams.endDensity(model,s,port,pipe.volume());mu[e][dir]=endViscosity(s,port,pipe.volume());cap[e][dir]=massFlowLimit(pipe,s,port);
                 column[e][dir]=PortStreams.columnDensity(model,s,port,pipe.volume());allowed[e][dir]=boundaryAllowed(graph,pipe,dir==0?1:-1);
                 endP[e][dir]=PortStreams.endPressure(model,graph,pipe,donor);
-                if(pipe.filter()!=null){double loading=pipe.filter().loading();filterR[e][dir]=pipe.filter().cleanResistance()*(carrierViscosity(s)/.001)*(1+99*loading*loading)/rho[e][dir];}
+                if(pipe.filter()!=null){double loading=pipe.filter().loading();filterR[e][dir]=cakeResistance(pipe.filter(),carrierViscosity(s),loading)/rho[e][dir];}
                 rhoMax=Math.max(rhoMax,column[e][dir]);scale=Math.max(scale,cap[e][dir]);
                 if(!node.junction()){low=Math.min(low,endP[e][dir]);high=Math.max(high,endP[e][dir]);}
             }
@@ -3795,11 +3791,7 @@ public final class PassiveStepSolver {
             double hydrocarbon=0;for(int c=0;c<y.length-1;c++)hydrocarbon+=y[c];
             var answer=hydrocarbon>0?model.equilibriumPH(tMix,pressure,heat/mass,y,checkpoint):null;
             if(answer!=null&&FluidThermodynamics.holdsFluid(answer))return model.folded(answer,true);
-            double lower=Math.max(tLow-20,NumericalBox.MINIMUM_TEMPERATURE),upper=Math.min(tHigh+20,NumericalBox.MAXIMUM_TEMPERATURE);
-            for(int k=0;k<60&&upper-lower>1e-9;k++) {
-                double t=.5*(lower+upper);var point=model.flashTP(t,pressure,y.clone(),checkpoint);
-                if(point.enthalpy()/point.mass()<heat/mass)lower=t;else upper=t;
-            }
+            var bracket=mixingBracket(model,y,heat,mass,tLow,tHigh,pressure,checkpoint);double lower=bracket[0],upper=bracket[1];
             var below=model.flashTP(lower,pressure,y.clone(),checkpoint);var above=model.flashTP(upper,pressure,y.clone(),checkpoint);
             double target=heat/mass;
             return model.folded(Math.abs(below.enthalpy()/below.mass()-target)<=Math.abs(above.enthalpy()/above.mass()-target)?below:above,true);
@@ -4465,14 +4457,7 @@ public final class PassiveStepSolver {
             transfersAt=transfersAt(graph);edgeFlow=new double[graph.pipes().size()];edgeDonor=new Transport[edgeFlow.length];edgeSuction=new Transport[edgeFlow.length];
             energy=new double[count];incomingMass=new double[count];incomingEnergy=new double[count];netMass=new double[count];
             for(int node=0;node<count;node++)if(layout[node]!=null)cachedVariables[node]=new double[layout[node].size()];
-            int[] degree=new int[count];
-            for(var pipe:graph.pipes()){degree[pipe.first()]++;degree[pipe.second()]++;}
-            nodeEdges=new int[count][];for(int node=0;node<count;node++)nodeEdges[node]=new int[degree[node]];
-            Arrays.fill(degree,0);
-            for(int edge=0;edge<graph.pipes().size();edge++) {
-                var pipe=graph.pipes().get(edge);
-                nodeEdges[pipe.first()][degree[pipe.first()]++]=edge;nodeEdges[pipe.second()][degree[pipe.second()]++]=edge;
-            }
+            nodeEdges=incidence(graph);
             suctionSuppliers=new int[graph.pipes().size()];suctionLinks=new int[graph.pipes().size()];Arrays.fill(suctionSuppliers,-1);Arrays.fill(suctionLinks,-1);
             int[] remote=new int[count];
             for(int edge=0;edge<graph.pipes().size();edge++) {
@@ -5506,7 +5491,7 @@ public final class PassiveStepSolver {
                 // carrier's viscosity and its solids.
                 var state=st[donor];double fluidVolume=transport.volume-transport.solids.volume();double carrier=drawnCarrierViscosity(edge,flow>=0?0:1,state,tr[donor],flow);
                 double loading=x[filterOffsets[edge]];
-                loss=pipe.filter().cleanResistance()*(carrier/.001)*(1+99*loading*loading)*fluidVolume/transport.mass*law;
+                loss=cakeResistance(pipe.filter(),carrier,loading)*fluidVolume/transport.mass*law;
                 double volume=pipe.filter().captured().volume()+(rateOnly?0:dt)*Math.abs(flow)*transport.solids.volume()/transport.mass;
                 f[filterOffsets[edge]]=loading-volume/pipe.filter().capacity();
             }

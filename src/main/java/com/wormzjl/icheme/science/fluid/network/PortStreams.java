@@ -173,6 +173,12 @@ public final class PortStreams {
         if(PhaseDraw.mixedLiquids(s,port)){var mixed=mixedLiquidStream(model,s,volume);return mixed.enthalpy()/mixed.mass();}
         return fluidSpecificEnthalpy(model,s,PhaseDraw.leading(model,s,port));
     }
+    /** The heat curve of the stream drawn through {@code port} from state {@code s} over {@code [low, high]} K, or null where it
+     * draws nothing: a coupled exchanger side's and a kettle's tubes, on the model of the island the stream is in (S-06). */
+    static HeatCurve spanned(FluidThermodynamics model,FluidThermodynamics.State s,PassiveNetwork.PhasePort port,double volume,double low,double high,HeatCurve.Films films,Runnable checkpoint) {
+        double[] amounts=endMoles(model,s,port,volume);double total=0;for(double n:amounts)total+=n;
+        return total>0&&endMass(model,s,port,volume)>0?HeatCurve.sample(model,amounts,s.pressure(),low,high,films,checkpoint):null;
+    }
     /**
      * What a phase-port outflow the pass drew carries per kilogram of fluid ({@code rates}, the six entries of
      * {@link PassiveStepSolver.Equations#draws}): each drawn phase's {@link #fluidMoles} over its {@link #fluidMass}, and its
