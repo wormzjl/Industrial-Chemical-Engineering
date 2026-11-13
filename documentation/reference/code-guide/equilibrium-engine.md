@@ -39,7 +39,7 @@ Paths are under [`src/main/java/com/wormzjl/icheme/science/thermo/`](../../../sr
 
 | Class | Role | Read it for |
 |---|---|---|
-| [`phase/FluidTpEquilibrium`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/FluidTpEquilibrium.java) (6156) | The engine: `tp`, `ph`, `uv` (also warm-started `uv(request, workspace, hintT, hintP)`); onsets `depositionTemperature`, `frostTemperature`, `freezingTemperature`, `depositionPressure`; `anchoredCrystal`, `pureBandBox`; the three-slot system (`threeSlot`, `slotFractions`, `slotNewton`); carried crystals (`carriedTrial`, `crystalLean`, `carriedSplit`, `beyondStandIn`); nested `Settings` (12 components, `DEFAULT`) and `Workspace` | Every algorithm; public constants |
+| [`phase/FluidTpEquilibrium`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/FluidTpEquilibrium.java) (6188) | The engine: `tp`, `ph`, `uv` (also warm-started `uv(request, workspace, hintT, hintP)`); onsets `depositionTemperature`, `frostTemperature`, `freezingTemperature`, `depositionPressure`; `anchoredCrystal`, `pureBandBox`; the three-slot system (`threeSlot`, `slotFractions`, `slotNewton`); carried crystals (`carriedTrial`, `crystalLean`, `carriedSplit`, `beyondStandIn`); nested `Settings` (12 components, `DEFAULT`) and `Workspace` | Every algorithm; public constants |
 | [`phase/EquilibriumRequest`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/EquilibriumRequest.java) (71) | Record: `Specification` {TP, PH, UV}, two values (K and Pa; Pa and J; J and m3), species list (the contract basis, in order), amounts, competition | Input validation |
 | [`phase/EquilibriumResult`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/EquilibriumResult.java) (427) | Answer: `Status`, `UnsupportedReason`, `Classification` (15 values), `PhaseAmounts` list, `coexisting`, `Coverage`/`CoverageGrade`, `Deposition`, `Diagnostics`; detail prefixes; aggregates (`enthalpy`, `internalEnergy`, `volume`, `conservationDefect`) | Status rules, grades, typed failures |
 | [`phase/PhaseContract`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/PhaseContract.java) (193) | What a package promises: basis, `WaterParticipation`, qualified competitions, water-chemistry species, `PhaseDomain`, fluid coverage, `ThermoIdentity`; `resolve`; `qualifies` (the carried request wherever a crystal competition is) | Which requests are refused and why |
@@ -97,7 +97,7 @@ flowchart TD
    becomes the package's crystal set); one the contract does not qualify is `PHASE_COMPETITION_NOT_QUALIFIED`.
    `FLUID_CARRYING_CRYSTALS` qualifies wherever the contract has a crystal competition (`qualifies`).
 3. **`implementationChecks`.** A competing crystal without its evaluator here is `NOT_IMPLEMENTED`. Then the request's
-   material goes into the workspace (feed and total).
+   material goes into the workspace's `request` feed (its amounts and total), which no solve overwrites.
 4. **TP.** `outsideBox` answers `NOT_CONVERGED` for a state outside the box. `evaluateTp` dispatches to `solveDry` or
    `solveWithCrystals`. An exception from the model (no physical root, a mechanically unstable root) becomes
    `NOT_CONVERGED` "evaluation refused: ...". The carried request competes no crystal, so it takes `solveDry`, with its
@@ -336,6 +336,14 @@ flowchart TD
 - Fixed arithmetic order and a fixed trial order; elementary functions through `DeterministicMath`.
 - The engine is immutable after construction. A `Workspace` is per thread and belongs to one engine (`own` refuses
   another engine's). The network keeps one per thread in a `ThreadLocal` of `NetworkPhaseEngine`.
+- The dry core solves the feed it is handed. `solveDry`, `hydrocarbon` and every function under them (the result
+  builders, the flash, the Newton finish, the three-slot system, `inBand`) take a `Feed` (the cubic's amounts, the
+  basis amounts, and the composition and present list `hydrocarbon` sets at its entry) and read no feed of the
+  workspace. The workspace holds four, preallocated: `request`, the request's material, never overwritten;
+  `reducedFeed`, the fluid a crystal leaves (`depositFromVapour`, `depositFromFluid`: the base feed with the
+  crystal's species at the step's amount); `pairFeed`, the request less the partner crystal's solid (`twoCrystals`,
+  built by `reduceFeed`); `standInFeed`, a feed less its crystal's stand-in (`beyondStandIn`). Nothing is saved or
+  restored.
 - Kernel support ([thermo-materials.md](thermo-materials.md)): at every entry (`tp`, `ph`, `uv`, through
   `implementationChecks`) the engine names the request's feed on its kernel workspace and on its phase evaluator's
   workspace (`CubicPhaseEvaluator.Workspace.carry`, both kernel workspaces), so every phase and trial of the solve lives
@@ -380,7 +388,12 @@ flowchart TD
   `science/material` nor `phase/`; nothing under `science/thermo/**` imports `science/fluid` or `science/column`;
   `science/fluid/thermo` imports the engine. The network's `TranslatedPengRobinson` extends the kernel's `TranslatedCubic`.
 - `hydrocarbonTotal` in the workspace is the whole feed's amount, water included: the name is from the free-water
-  rule.
+  rule. It stays the request's while a crystal solve flashes a reduced feed.
+- `liquidState` and `vaporState` in the workspace are the split's outcome (written by `finishSplit`, `slotOutcome`,
+  `carriedSplit`, `beyondStandIn`) and scratch of `pureCoexistence`, `pureCrystalStep`, `stepFluid`,
+  `singlePhaseDrive`, `singlePhase` and `merged`. A three-slot failure typed `UNSTABLE_PRODUCT` writes neither, and
+  `splitChemicalPotentialsUsable` then judges what the last writer left there, in this request or an earlier one on
+  the workspace (an open item of the codebase review, D-E1).
 - `PackageBinding.contract` of a package without water qualifies the admitted crystals as well as fluid-only; the
   network uses `PackageBinding.derivedContract` on its own evaluator. The carried request is in no `qualifiedCompetitions` list:
   `qualifies` answers it wherever a crystal competition is.
