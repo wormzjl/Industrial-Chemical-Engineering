@@ -48,3 +48,16 @@ The bench after the merge: `luStorages` 0.11 an accepted interval (the storages 
 - **Cause.** `SparseLuSolver.Storage.factor0` drops exact zeros when it permutes the matrix (as EJML's caller did), so the pattern the LU sees depends on the values: one declared structure gives a few patterns in turn (19,341 of the 20,934 factorizations are the transport's, about 21 an interval).
 - **Change.** `UpLookingLu` keeps the pattern, pivot rows and reaches of the last completed factorization of each of its last four patterns (`KEPT_PATTERNS`), the least recently used replaced. Bit for bit by the same induction: a reach is a function of the matrix's pattern and of this factorization's earlier pivots, whatever was factored in between. RAM: up to four patterns and reach sets a storage (ints, about the size of L and U's row arrays each).
 - **Gate.** `UpLookingLuParityTest.alternatingPatternsKeepTheirReaches`: six patterns through one instance against a fresh EJML each time; the kept ones search nothing, a replaced one and one after a rejection search every column.
+
+### What P-17c measured on `mixed100` (main thread)
+
+| Kept patterns a storage | Reach searches of 2,142,438 columns factored | Step, median |
+|---|---|---|
+| 1 (P-17b) | 2,048,677 (96 %) | 29.6 ms |
+| 4 (P-17c, merged) | 1,955,932 (91 %) | 29.7 ms |
+| 16 (tried, not kept) | 1,745,973 (81 %) | not timed |
+
+- Every search is a pattern miss (`luPatternSearches` equals `luReachSearches`); none follows a changed pivot.
+- The recording puts 95 % of the search samples in the step's own Newton (`PassiveStepSolver.solve` to `SparseNewton.factor`) and 5 % in vessel closures. That Jacobian is a coloured finite difference (`SparseNewton` 407), and `Pattern.numericMatrix` drops its exact zeros so that the LU does not fill on them (its comment). An entry that is zero or 1e-20 by rounding makes the pattern differ from one factorization to the next, so a pattern seldom comes back.
+- **So no cache of reaches removes the search on a loaded island.** P-17c serves the cases where the zeros are stable (the transport systems, a quiet network: `KeptLuStorageTest` 0 searches). The search (about 10 % of the step's CPU) goes only with a Jacobian whose pattern does not depend on rounding: analytic entries on the flat tables of F0, not a change to the LU. Factoring the declared pattern instead was not tried: its comment records why (fill on thousands of structural zeros), and it would move every result in the last digits.
+- What P-17b did deliver: `UpLookingLu.prepare` left the allocation profile (1.1 GB a minute), 35.5 to 33.3 GB a minute in all, `luStorages` 0.11 an interval.

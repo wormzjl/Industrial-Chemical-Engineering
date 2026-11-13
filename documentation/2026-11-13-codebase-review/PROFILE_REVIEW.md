@@ -529,3 +529,23 @@ What it says:
 2. **Why (reasoned, not separated by a measurement):** HotSpot compiles the elimination's update loop to the machine's vector width (P9 wrote it for that), so the Rust loop has nothing to add there; each call copies the band in and the solution out through JNI (the band is several MB at 40 trays and 19 components, 21 factorizations a cold solve) and reserves its work rows again.
 3. **So the library's default stays `off`**, and the ceilings `band` and `kernel` are correctness stages, not performance stages. A gain can only come where a whole attempt or a whole solve runs in one call (no copies per linear solve, one arena, no garbage) and from what Rust would shed of the Java bookkeeping (maps, records, the ledger: 20 to 29 % of a solve before wave B, less after P3). The band solve and the kernel are the larger part of a solve and would run at about Java's speed.
 4. **Consequence for the plan (PHASE2_PLAN, wave E):** stage 0 in Java goes on (it serves the Java path and shrinks any port). Stages (b) to (d) of the Rust port, about 12,000 Rust lines with a Java twin to keep, wait for the owner's reading of these numbers: the measurements so far give no performance case for them. If the port goes on, its next measurement is the band solve alone on both sides without JNI (to separate the copy from the loop), then stage (c) as a prototype of one rung before the rest.
+
+## After the kept LU storages (main thread, 2026-11-13, review branch at 81101690e)
+
+Item 3 of "After wave B" named the wrong cause. `ConservativeTransport.Workspace` and the step Newton's `SparseNewton.Shared` were already kept by the island's `RetainedSolver`; the storages built at every step were those of the solves that make a workspace of their own (a vessel's closure, a junction's split, a crystal's closure). P-17b keeps those with the island, and P-17c keeps the reaches of a storage's last four patterns ([wave-b/B-S2B_REPORT.md](wave-b/B-S2B_REPORT.md)). One 60 + 60 s pair on `mixed100`, the machine alone; output `tmp/codebase-review-bench/after-p17b/` and `after-p17c/`.
+
+| | After wave B | After P-17b | After P-17c |
+|---|---|---|---|
+| Island step, median / p95 | 29.1 / 48.3 ms | 29.6 / 49.3 ms | 29.7 / 48.7 ms |
+| Bytes in 60 s (899 steps) | 35.5 GB | 33.3 GB | 33.5 GB |
+| `UpLookingLu.prepare` | 1.1 GB | off the list | off the list |
+| `UpLookingLu.depthFirst` and `search`, CPU | 10.7 % | 9.7 % | 10.9 % |
+| New LU storages an accepted interval | not counted | 0.11 | 0.11 |
+| Reach searches of columns factored | not counted | 96 % | 91 % |
+
+What it says:
+
+1. **The storages are kept and the bytes fell by 6 %; the time did not move.** The step is where it was, inside the run-to-run spread.
+2. **The reach search stays, and no cache removes it.** Every search is a pattern miss, none a changed pivot. 95 % of them are the step's own Newton: its Jacobian is a coloured finite difference whose exact zeros are dropped before the LU, and an entry that is zero or 1e-20 by rounding changes the pattern from one factorization to the next (16 kept patterns still miss 81 %).
+3. **What would remove it** is a Jacobian whose pattern does not depend on rounding: analytic entries, which F0's flat tables prepare. It is about 10 % of the step's CPU. Factoring the declared pattern instead would fill on thousands of structural zeros and move every result in the last digits; not pursued.
+4. **The fluid gate's reading is unchanged** (share about 93 %, need not met).
