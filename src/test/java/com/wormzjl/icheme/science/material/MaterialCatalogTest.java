@@ -133,7 +133,7 @@ class MaterialCatalogTest {
     /** A column the bundled model covers: the game's medium-crude preset (steam, side draws and pumparounds, batch 2026-11-05-neural-retrain). */
     private static V3ColumnInput boundCdu() {
         var bundled=MaterialCatalog.bundled();
-        return bundled.presets().column("medium_crude").input(bundled);
+        return V3ColumnPresets.input(bundled.presets().column("medium_crude"), bundled);
     }
     /** A package's compounds and their datasets: its parent's first, then its own, each its default dataset unless the entry names one. */
     private static List<String[]> members(JsonObject record,Map<String,JsonObject> packages,Map<String,JsonObject> components) {

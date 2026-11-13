@@ -57,7 +57,7 @@ public final class TutorialUnitGameTests {
      * the client's assets, not the material catalog's presets; final lane 2026-11-13).
      */
     static V3ColumnInput input(MaterialCatalog catalog) {
-        var base = catalog.presets().column(catalog.presets().network().defaultColumnPreset()).input(catalog);
+        var base = com.wormzjl.icheme.science.column.v3.V3ColumnPresets.input(catalog.presets().column(catalog.presets().network().defaultColumnPreset()), catalog);
         var stream = asset("mixturepreset/" + TEMPLATE + ".json");
         double rate = stream.get("flow_kmol_h").getAsDouble();
         var tower = V3ColumnTemplate.read(asset("columnpreset/" + TEMPLATE + ".json")).scaledTo(rate);

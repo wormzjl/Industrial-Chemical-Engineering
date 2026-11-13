@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class V3ClientPresetsTest {
     @TempDir Path game;
     private V3ClientPresets library(){return new V3ClientPresets(game,n->getClass().getClassLoader().getResourceAsStream(n));}
-    private static V3ColumnInput reference(){var c=MaterialCatalog.bundled();return c.presets().column(c.presets().network().defaultColumnPreset()).input(c);}
+    private static V3ColumnInput reference(){var c=MaterialCatalog.bundled();return V3ColumnPresets.input(c.presets().column(c.presets().network().defaultColumnPreset()),c);}
     private static V3EditorDraft draft(){
         var input=reference();return new V3EditorDraft(input,weights(input));
     }

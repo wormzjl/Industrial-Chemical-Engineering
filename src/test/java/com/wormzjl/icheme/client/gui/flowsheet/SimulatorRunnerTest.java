@@ -335,7 +335,7 @@ class SimulatorRunnerTest {
 
     /** A steady run whose column report carries a warm start: a stand-in seed on the default preset's input. */
     private static FlowsheetRun warmRun() {
-        var input = SheetFixture.CATALOG.presets().column(SheetFixture.CATALOG.presets().network().defaultColumnPreset()).input(SheetFixture.CATALOG);
+        var input = com.wormzjl.icheme.science.column.v3.V3ColumnPresets.input(SheetFixture.CATALOG.presets().column(SheetFixture.CATALOG.presets().network().defaultColumnPreset()), SheetFixture.CATALOG);
         int nodes = input.stageCount() + 2, components = input.componentBasis().componentCount();
         var temperatures = new double[nodes];
         java.util.Arrays.fill(temperatures, 400);

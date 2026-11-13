@@ -142,7 +142,7 @@ public final class ColumnFailureModesReviewWorld {
 
     /** The network's default column template with its receiver at {@link #RECEIVER}. */
     static V3ColumnInput crude(MaterialCatalog catalog) {
-        var t = catalog.presets().column(catalog.presets().network().defaultColumnPreset()).input(catalog);
+        var t = com.wormzjl.icheme.science.column.v3.V3ColumnPresets.input(catalog.presets().column(catalog.presets().network().defaultColumnPreset()), catalog);
         var specs = t.specifications().stream().map(s -> s instanceof V3ColumnSpecification.CondenserOutletTemperature
                 ? (V3ColumnSpecification) new V3ColumnSpecification.CondenserOutletTemperature(RECEIVER) : s).toList();
         return new V3ColumnInput(t.schemaVersion(), t.packageId(), t.assayId(), t.componentBasis(), t.feedComponentMolarFlowsMolPerSecond(), t.feedTemperatureKelvin(),
@@ -156,7 +156,7 @@ public final class ColumnFailureModesReviewWorld {
      * an {@link #B_REBOILER} W reboiler; no draws, no steam, no pumparounds.
      */
     static V3ColumnInput reboiled(MaterialCatalog catalog) {
-        var t = catalog.presets().column(catalog.presets().network().defaultColumnPreset()).input(catalog);
+        var t = com.wormzjl.icheme.science.column.v3.V3ColumnPresets.input(catalog.presets().column(catalog.presets().network().defaultColumnPreset()), catalog);
         var specs = List.<V3ColumnSpecification>of(new V3ColumnSpecification.CondenserOutletTemperature(B_RECEIVER),
                 new V3ColumnSpecification.OrganicRefluxRatio(B_REFLUX), new V3ColumnSpecification.ReboilerDuty(B_REBOILER));
         return new V3ColumnInput(t.schemaVersion(), t.packageId(), t.assayId(), t.componentBasis(), t.feedComponentMolarFlowsMolPerSecond(), t.feedTemperatureKelvin(),

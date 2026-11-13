@@ -77,11 +77,11 @@ results are bitwise identical on every JVM.
 | [`JsonFields`](../../../src/main/java/com/wormzjl/icheme/science/material/JsonFields.java) | Package-private: the one reader of typed JSON fields (`MAX_TEXT` = 2048); every error message starts with the field label; `revision`/`token`: a declared revision is a token `[A-Za-z0-9][A-Za-z0-9_.-]{0,63}` (at most 64 characters, so the separators `@ , ; / =` of an identity read back unambiguously) | Used by `MaterialCatalog`, `MaterialPresets`, `LiquidMixtureCorrection`, `ReferenceSpine`, `CrystalReference`, `JaegerSpanGibbsFunction`, `GroupInteractionMatrix`, `VolumeTranslation`, `MaterialCoverage`, `SolidMaterialCatalog` |
 | [`MaterialAxis`](../../../src/main/java/com/wormzjl/icheme/science/material/MaterialAxis.java) | Ordered identity axis, `MAX_CONSERVED_COMPONENTS` 100 (a world list of 99 compounds and water; an island carries at most 64 and water, the V3 column 64); `project` refuses to drop nonzero material | Moving vectors between axes |
 | [`MaterialRuntime`](../../../src/main/java/com/wormzjl/icheme/science/material/MaterialRuntime.java) | Volatile published catalog + ThreadLocal pinned (catalog, package) context | `active()` vs `current()` vs `with(...)`; freshness checks |
-| [`MaterialPresets`](../../../src/main/java/com/wormzjl/icheme/science/material/MaterialPresets.java) | Column and fluid presets, the single `networks` record, assay to mole-fraction conversion; a fluid preset names a `component` or an `assay`, resolved on the network package (a `package` field is refused) | Preset schema, preset limits, `moleFractions` |
+| [`MaterialPresets`](../../../src/main/java/com/wormzjl/icheme/science/material/MaterialPresets.java) | Column and fluid presets, the single `networks` record, assay to mole-fraction conversion; a fluid preset names a `component` or an `assay`, resolved on the network package (a `package` field is refused). A column preset holds plain numbers (nested `Specifications`, `Draw`, `Steam`, `Pumparound` with the split's name); the column builds its input from them (`V3ColumnPresets.input`, [column-v3.md](column-v3.md)) | Preset schema, preset limits, `moleFractions` |
 | [`MaterialName`](../../../src/main/java/com/wormzjl/icheme/science/material/MaterialName.java) | Label descriptor: id, translation key, fallback, kind, NBP cut bounds | Petroleum-fraction labels |
 | [`ViscosityCorrelation`](../../../src/main/java/com/wormzjl/icheme/science/material/ViscosityCorrelation.java) | Pure-phase mu(T) with `ANDRADE`/`SUTHERLAND`/`POWER_SUM`/`LOG_TABLE`; `dynamicViscosityPascalSeconds(T, Phase)` continues past the declared T range; results capped at `MAXIMUM_VISCOSITY` = 1e12 Pa s | Transport data and its continuation |
 | [`LiquidMixtureCorrection`](../../../src/main/java/com/wormzjl/icheme/science/material/LiquidMixtureCorrection.java) | A method's `cut_pair_v1` term (nested `Rule`): delta = G ((Σ_C x)² − Σ_C x²) added to Σ x ln mu over the listed compounds C, O(n); `crude_pr78`: G = 1.0956 on `crude_pc01..12`, revision `eccc-cut-pair-r1` (owner decision E12); a method without one has none | Crude liquid viscosity mixing |
-| [`SolidMaterialCatalog`](../../../src/main/java/com/wormzjl/icheme/science/material/SolidMaterialCatalog.java) | `solids` records, separate from the fluid axis; validates saved solid inventories (crystal populations skipped: `NetworkCrystals` builds them from the package's crystal record); nested `SolidMaterial(id, revision, density, heatCapacity, Crystal crystal)`, an incompressible solid whose stored U = cp (T - 298.15 K), and `Crystal(component, energyOffset)`, a crystal formed from the fluid (true u = c (T - 298.15) + u0) | Solid identity; solid-phase energy |
+| [`SolidMaterialCatalog`](../../../src/main/java/com/wormzjl/icheme/science/material/SolidMaterialCatalog.java) | `solids` records, separate from the fluid axis (a saved inventory is checked against it by `SolidInventory.validate(catalog)` in `fluid/state`, [fluid-science.md](fluid-science.md)); nested `SolidMaterial(id, revision, density, heatCapacity, Crystal crystal)`, an incompressible solid whose stored U = cp (T - 298.15 K), and `Crystal(component, energyOffset)`, a crystal formed from the fluid (true u = c (T - 298.15) + u0) | Solid identity; solid-phase energy |
 
 **`science/math`** ([source](../../../src/main/java/com/wormzjl/icheme/science/math/))
 
@@ -95,7 +95,7 @@ results are bitwise identical on every JVM.
 
 | Class | Role | Read it for |
 |---|---|---|
-| [`MaterialReloadListener`](../../../src/main/java/com/wormzjl/icheme/material/MaterialReloadListener.java) | `SimplePreparableReloadListener`: prepare = read + `parse`, apply = `MaterialRuntime.publish` | Reload transaction; registered in `IChemE` on the game event bus |
+| [`MaterialReloadListener`](../../../src/main/java/com/wormzjl/icheme/material/MaterialReloadListener.java) | `SimplePreparableReloadListener`: prepare = read + `parse` + the column's check of the column presets (`V3ColumnPresets.validate`), apply = `MaterialRuntime.publish` | Reload transaction; registered in `IChemE` on the game event bus |
 
 ## Main flow
 
@@ -105,9 +105,10 @@ flowchart LR
   IDX["materials-index.json"] --> BUN[MaterialCatalog.bundled]
   RL --> P[MaterialCatalog.parse]
   BUN --> P
-  P --> V["components (default datasets, aliases) -> spine / crystals / group_interactions -> properties (sub-records) -> water (ice) -> interactions (rule) -> methods -> transport -> assays -> packages (extends, build: datasets, pairs, spines, crystals, identity) -> presets, solids -> column presets -> network"]
+  P --> V["components (default datasets, aliases) -> spine / crystals / group_interactions -> properties (sub-records) -> water (ice) -> interactions (rule) -> methods -> transport -> assays -> packages (extends, build: datasets, pairs, spines, crystals, identity) -> presets, solids -> network"]
   V --> CAT[(immutable MaterialCatalog)]
-  CAT --> PUB[MaterialRuntime.publish]
+  CAT --> CHK["V3ColumnPresets.validate (reload listener only)"]
+  CHK --> PUB[MaterialRuntime.publish]
   PUB --> CUR["MaterialRuntime.active / current / with"]
   CUR --> COL["column: V3CatalogPropertyPackage (refuses crystal and spine packages) -> V3PengRobinsonSession -> PengRobinsonKernel CLASSICAL"]
   CUR --> FLU["fluid: FluidThermodynamics -> HydrocarbonModel -> TranslatedPengRobinson -> PengRobinsonKernel SPARSE_PAIRS, or TEMPERATURE_DEPENDENT_PAIRS for a spine package (SpinePackageData)"]
@@ -118,14 +119,19 @@ flowchart LR
 1. **Datapack JSON.** Minecraft's resource manager picks the highest-priority file at each path; a replacement is a
    whole record. Bundled files live in [`src/main/resources/data/icheme/materials/`](../../../src/main/resources/data/icheme/materials/).
 2. **Reload listener.** `prepare` lists every `materials/**.json` of every namespace, keys it as
-   `data/<ns>/<path>`, and calls `MaterialCatalog.parse`. A throw aborts the reload before `apply`.
+   `data/<ns>/<path>`, calls `MaterialCatalog.parse`, then the column's check of every column preset
+   (`V3ColumnPresets.validate`: the preset's `V3ColumnInput` and `V3ColumnProblemResolver.validateInput` inside
+   `MaterialRuntime.with`, a refusal named `<file>: <reason>` as the parser names it). A throw aborts the reload before
+   `apply`. The parser imports no solver type (codebase review C2), so a test that parses a catalog and expects a
+   preset's refusal calls the check itself (`MaterialPresetsTest`); the bundled catalog passes it
+   (`MaterialPresetsTest.bundledColumnPresetsPassTheColumnCheck`).
 3. **Catalog.** `parse` groups records by kind (path segment after `materials/`), rejects duplicate IDs per kind and
    an unknown kind (`bases` with a hint), then validates components (each compound's default dataset and its aliases,
    catalog-wide), spines, crystals, group-interaction matrices, properties (with their sub-records), water,
    interactions, methods, transport, assays, packages (their compound lists after `extends`, then `build`: datasets,
-   pairs, spines, crystals, assays, envelope and identities), presets, solids, column presets (by running
-   `V3ColumnProblemResolver.validateInput` inside `MaterialRuntime.with`) and the network record. It returns only a
-   fully valid catalog. Cross-record rules on the way:
+   pairs, spines, crystals, assays, envelope and identities), presets (the parser's own checks: names, assay, feed
+   volume, stage and package domain; the column's checks run in step 2), solids and the network record. It returns
+   only a fully valid catalog. Cross-record rules on the way:
    - a package names `method`, `components` (an id, or an object with `id` and optional `properties`, `spine`),
      optional `extends`, `crystals` and `advisory_evidence`; a field that belongs to the method or a dataset
      (`model`, `basis`, `properties`, `interactions`, `water_model`, ranges, `fluid_domain`, `liquid_mixture`,

@@ -189,7 +189,7 @@ class V3TrayHydraulicsColumnTest {
         MaterialCatalog catalog = MaterialCatalog.bundled();
         for (var preset : catalog.presets().columns().values()) {
             assertEquals(V3ColumnInput.DEFAULT_COLUMN_DIAMETER_METRES,
-                    preset.input(catalog).columnDiameterMetres(), preset.descriptor().id());
+                    V3ColumnPresets.input(preset, catalog).columnDiameterMetres(), preset.descriptor().id());
         }
     }
 
@@ -229,7 +229,7 @@ class V3TrayHydraulicsColumnTest {
         MaterialCatalog bundled = MaterialCatalog.bundled();
         var cases = new java.util.LinkedHashMap<String, java.util.function.Supplier<V3ColumnOutcome>>();
         for (var preset : bundled.presets().columns().values()) {
-            V3ColumnInput input = preset.input(bundled);
+            V3ColumnInput input = V3ColumnPresets.input(preset, bundled);
             cases.put(preset.descriptor().id(), () -> com.wormzjl.icheme.science.material.MaterialRuntime
                     .with(bundled, input.packageId(), () -> V3TestInputs.calculate(input)));
         }

@@ -36,9 +36,9 @@ public final class FluidPropertyReloadGuard {
     /** Validates the solid materials a saved world owns or references against {@code catalog}, never an unrelated added definition. */
     static void validateSolids(com.wormzjl.icheme.science.material.SolidMaterialCatalog catalog,FluidCheckpointCodec.Checkpoint checkpoint,WorldTopologyLedger.Snapshot world) {
         for(var island:checkpoint.islands()) {
-            for(var node:island.snapshot().graph().reservoirs())catalog.validate(node.inventory().solids());
-            for(var pipe:island.snapshot().graph().pipes())if(pipe.filter()!=null)catalog.validate(pipe.filter().captured());
+            for(var node:island.snapshot().graph().reservoirs())node.inventory().solids().validate(catalog);
+            for(var pipe:island.snapshot().graph().pipes())if(pipe.filter()!=null)pipe.filter().captured().validate(catalog);
         }
-        for(var recovery:world.recoveries().values())catalog.validate(recovery.solids());
+        for(var recovery:world.recoveries().values())recovery.solids().validate(catalog);
     }
 }

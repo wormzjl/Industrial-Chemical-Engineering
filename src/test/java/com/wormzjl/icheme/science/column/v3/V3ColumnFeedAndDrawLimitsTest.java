@@ -21,7 +21,7 @@ class V3ColumnFeedAndDrawLimitsTest {
      */
     @Test void aTwoPercentNitrogenFeedSolvesAndLeavesOverhead() {
         var catalog = com.wormzjl.icheme.science.material.MaterialRuntime.current();
-        var preset = catalog.presets().column("tia_juana_nitrogen").input(catalog);
+        var preset = V3ColumnPresets.input(catalog.presets().column("tia_juana_nitrogen"), catalog);
         assertEquals("icheme:tjl20_methane_nitrogen", preset.packageId());
         int nitrogen = preset.componentBasis().componentIds().indexOf("Nitrogen");
         assertTrue(nitrogen >= 0, "the nitrogen package's axis carries Nitrogen");

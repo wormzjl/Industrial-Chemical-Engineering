@@ -1,7 +1,6 @@
 package com.wormzjl.icheme.science.material;
 
 import com.google.gson.*;
-import com.wormzjl.icheme.science.column.v3.*;
 import java.util.*;
 import static com.wormzjl.icheme.science.material.JsonFields.*;
 
@@ -14,35 +13,43 @@ public final class MaterialPresets {
                     ||translationKey==null||translationKey.length()>128||packageId==null||packageId.length()>128||assayId==null||assayId.length()>128)
                 throw new IllegalArgumentException("Invalid preset naming descriptor");
         }
-        public boolean matches(V3ColumnInput input){return packageId.equals(input.packageId())&&assayId.equals(input.assayId());}
     }
-    /** {@code diameter} (required, above 0) is the sieve-tray hydraulics input; {@code pressureDrop} is the first solve's guess. */
+    /**
+     * {@code diameter} (required, above 0) is the sieve-tray hydraulics input; {@code pressureDrop} is the first solve's guess.
+     * Plain numbers only: the column builds its input from them and refuses there what its own records refuse (a tray or
+     * stage below 1, a rate not above 0, an unknown split, the diameter's bound; {@code V3ColumnPresets}).
+     */
     public record Column(Descriptor descriptor,int order,boolean visible,double feedVolume,double feedTemperature,
-            int stages,int feedStage,double pressure,double pressureDrop,List<V3ColumnSpecification> specifications,
-            List<V3SideDrawSpec> draws,List<V3SteamFeedSpec> steam,List<V3PumparoundSpec> pumparounds,double diameter) {
-        public Column {specifications=List.copyOf(specifications);draws=List.copyOf(draws);steam=List.copyOf(steam);pumparounds=List.copyOf(pumparounds);}
-        public V3ColumnInput input(MaterialCatalog catalog) {
-            var p=catalog.requirePackage(descriptor.packageId());double[] fractions=moleFractions(p,descriptor.assayId());
-            double volumePerMole=0;
-            for(int i=0;i<fractions.length;i++)volumePerMole+=fractions[i]*p.properties().get(i).molecularWeight()/p.properties().get(i).density();
-            double rate=feedVolume/volumePerMole;
-            for(int i=0;i<fractions.length;i++)fractions[i]*=rate;
-            return new V3ColumnInput(1,p.id(),descriptor.assayId(),new V3ComponentBasis(p.components()),fractions,
-                    feedTemperature,stages,feedStage,pressure,pressureDrop,specifications,draws,steam,pumparounds,diameter);
-        }
+            int stages,int feedStage,double pressure,double pressureDrop,Specifications specifications,
+            List<Draw> draws,List<Steam> steam,List<Pumparound> pumparounds,double diameter) {
+        public Column {Objects.requireNonNull(specifications);draws=List.copyOf(draws);steam=List.copyOf(steam);pumparounds=List.copyOf(pumparounds);}
     }
+    /** The three set points: condenser outlet temperature (K), organic reflux ratio, reboiler duty (W). */
+    public record Specifications(double condenserTemperature,double refluxRatio,double reboilerDuty) {}
+    /** A liquid side draw: one-based tray and molar flow (mol/s). */
+    public record Draw(int tray,double rate) {}
+    /** A steam feed: one-based stage ({@code stages + 1} is the sump), molar flow (mol/s) and temperature (K). */
+    public record Steam(int stage,double rate,double temperature) {}
+    /** A pumparound: return tray, draw tray, signed duty (W, a cooler negative) and the name of its duty split. */
+    public record Pumparound(int returnTray,int drawTray,double duty,String split) {}
     /** A pure {@code component} (a network compound or Water) or an {@code assay}, always resolved on the network package. */
     public record Fluid(String id,String label,String component,String assayId) {}
     public record Network(String packageId,String defaultColumnPreset,List<String> fluidPresets) {
         public Network {fluidPresets=List.copyOf(fluidPresets);}
     }
     private final Map<String,Column> columns;
+    private final Map<String,String> columnOrigins;
     private final Map<String,Fluid> fluids;
     private final Network network;
-    private MaterialPresets(Map<String,Column> columns,Map<String,Fluid> fluids,Network network) {
-        this.columns=Map.copyOf(columns);this.fluids=Map.copyOf(fluids);this.network=network;
+    private MaterialPresets(Map<String,Column> columns,Map<String,String> columnOrigins,Map<String,Fluid> fluids,Network network) {
+        this.columns=Map.copyOf(columns);this.columnOrigins=Collections.unmodifiableMap(new LinkedHashMap<>(columnOrigins));this.fluids=Map.copyOf(fluids);this.network=network;
     }
     public Map<String,Column> columns(){return columns;}
+    /**
+     * Each column preset's id and the file it was read from, in the order the parser read them: the column's check of the
+     * presets ({@code V3ColumnPresets.validate}, run before a catalog is published) names the file the way the parser does.
+     */
+    public Map<String,String> columnOrigins(){return columnOrigins;}
     public Column column(String id){var value=columns.get(id);if(value==null)throw new IllegalArgumentException("Unknown column preset: "+id);return value;}
     public Fluid fluid(String id){var value=fluids.get(id);if(value==null)throw new IllegalArgumentException("Unknown fluid preset: "+id);return value;}
     public Network network(){if(network==null)throw new IllegalArgumentException("No fluid network configuration in material catalog");return network;}
@@ -65,7 +72,7 @@ public final class MaterialPresets {
     }
     static MaterialPresets read(Map<String,JsonObject> records,Map<String,JsonObject> networks,Map<JsonObject,String> origins,
             Map<String,MaterialCatalog.Package> packages,Set<String> components) {
-        var columns=new HashMap<String,Column>();var fluids=new HashMap<String,Fluid>();Network network=null;
+        var columns=new HashMap<String,Column>();var columnOrigins=new LinkedHashMap<String,String>();var fluids=new HashMap<String,Fluid>();Network network=null;
         if(records.size()>MAX_PRESETS*2)throw new IllegalArgumentException("Too many material presets");
         for(var row:records.values())try {
             String id=text(row,"id"),label=text(row,"label"),kind=text(row,"kind");
@@ -73,20 +80,17 @@ public final class MaterialPresets {
             if(kind.equals("column")) {
                 String pkg=text(row,"package"),assay=text(row,"assay");requireAssay(packages,pkg,assay);
                 var d=new Descriptor(id,label,text(row,"translation_key"),pkg,assay);var o=row.getAsJsonObject("operating");
-                var specs=List.<V3ColumnSpecification>of(new V3ColumnSpecification.CondenserOutletTemperature(number(o,"condenserTemperatureKelvin")),
-                        new V3ColumnSpecification.OrganicRefluxRatio(number(o,"organicRefluxRatio")),new V3ColumnSpecification.ReboilerDuty(number(o,"reboilerDutyWatts")));
-                var draws=new ArrayList<V3SideDrawSpec>();for(var v:o.getAsJsonArray("sideDraws")){var x=v.getAsJsonObject();draws.add(new V3SideDrawSpec(integer(x,"trayNumber"),number(x,"molarFlowMolPerSecond")));}
-                var steam=new ArrayList<V3SteamFeedSpec>();for(var v:o.getAsJsonArray("steamFeeds")){var x=v.getAsJsonObject();steam.add(new V3SteamFeedSpec(integer(x,"stageNumber"),number(x,"molarFlowMolPerSecond"),number(x,"temperatureKelvin")));}
-                var coolers=new ArrayList<V3PumparoundSpec>();for(var v:o.getAsJsonArray("pumparounds")){var x=v.getAsJsonObject();coolers.add(new V3PumparoundSpec(integer(x,"returnTray"),integer(x,"drawTray"),number(x,"dutyWatts"),V3PumparoundSpec.Split.valueOf(text(x,"split"))));}
+                var specs=new Specifications(number(o,"condenserTemperatureKelvin"),number(o,"organicRefluxRatio"),number(o,"reboilerDutyWatts"));
+                var draws=new ArrayList<Draw>();for(var v:o.getAsJsonArray("sideDraws")){var x=v.getAsJsonObject();draws.add(new Draw(integer(x,"trayNumber"),number(x,"molarFlowMolPerSecond")));}
+                var steam=new ArrayList<Steam>();for(var v:o.getAsJsonArray("steamFeeds")){var x=v.getAsJsonObject();steam.add(new Steam(integer(x,"stageNumber"),number(x,"molarFlowMolPerSecond"),number(x,"temperatureKelvin")));}
+                var coolers=new ArrayList<Pumparound>();for(var v:o.getAsJsonArray("pumparounds")){var x=v.getAsJsonObject();coolers.add(new Pumparound(integer(x,"returnTray"),integer(x,"drawTray"),number(x,"dutyWatts"),text(x,"split")));}
                 double volume=number(o,"feedStandardVolumeCubicMetresPerSecond");if(volume<=0)throw new IllegalArgumentException("operating.feedStandardVolumeCubicMetresPerSecond: positive required");
                 var c=new Column(d,integer(row,"order"),bool(row,"visible"),volume,number(o,"feedTemperatureKelvin"),integer(o,"stageCount"),integer(o,"feedStageNumber"),number(o,"topPressurePascal"),number(o,"stagePressureDropPascal"),specs,draws,steam,coolers,
                         number(o,"columnDiameterMetres"));
                 var p=packages.get(pkg);double t=c.feedTemperature(),bottom=c.pressure()+(c.stages()-1)*c.pressureDrop();
                 if(c.stages()<2||c.stages()>64||c.feedStage()<1||c.feedStage()>c.stages()||t<p.minimumTemperature()||t>p.maximumTemperature()||c.pressure()<p.minimumPressure()||bottom>p.maximumPressure()||c.pressureDrop()<0)
                     throw new IllegalArgumentException("operating: outside package or column domain");
-                if(!(c.diameter()>0)||c.diameter()>V3ColumnInput.MAX_COLUMN_DIAMETER_METRES)
-                    throw new IllegalArgumentException("operating.columnDiameterMetres: not above 0 and at most "+V3ColumnInput.MAX_COLUMN_DIAMETER_METRES+" m");
-                columns.put(id,c);
+                columns.put(id,c);columnOrigins.put(id,origins.get(row));
             } else if(kind.equals("fluid")) {
                 if(row.has("component")) {
                     String idComponent=text(row,"component");if(row.has("package")||row.has("assay")||!components.contains(idComponent))throw new IllegalArgumentException("component: unknown or conflicting fluid source");
@@ -106,7 +110,7 @@ public final class MaterialPresets {
             var ids=new ArrayList<String>();for(var value:row.getAsJsonArray("fluid_presets")){String id=value.getAsString();if(!fluids.containsKey(id)||ids.contains(id))throw new IllegalArgumentException("fluid_presets: unknown or duplicate "+id);ids.add(id);}
             network=new Network(pkg,defaultId,ids);
         } catch(RuntimeException invalid){throw new IllegalArgumentException(origins.get(row)+": "+invalid.getMessage(),invalid);}
-        return new MaterialPresets(columns,fluids,network);
+        return new MaterialPresets(columns,columnOrigins,fluids,network);
     }
     private static void requireAssay(Map<String,MaterialCatalog.Package> packages,String pkg,String assay){if(!packages.containsKey(pkg)||!packages.get(pkg).assays().containsKey(assay))throw new IllegalArgumentException("package/assay: unknown "+pkg+"/"+assay);}
 }

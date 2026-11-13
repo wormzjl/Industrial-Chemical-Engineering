@@ -41,7 +41,7 @@ class V3GradePresetCarryOverTest {
         var resources = new LinkedHashMap<>(MaterialCatalog.bundled().resources());
         resources.put("data/icheme/materials/presets/column_" + grade + ".json", fixture(grade));
         MaterialCatalog catalog = MaterialCatalog.parse(resources);
-        V3ColumnInput input = catalog.presets().column(grade).input(catalog);
+        V3ColumnInput input = V3ColumnPresets.input(catalog.presets().column(grade), catalog);
         AtomicLong polls = new AtomicLong();
         AtomicReference<V3NeuralSeed> profile = new AtomicReference<>();
         V3SolveControl control = () -> {
