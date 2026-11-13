@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.science.thermo;
 
+import com.wormzjl.icheme.science.math.SmallDenseSolve;
 import com.wormzjl.icheme.science.math.DeterministicMath;
 
 import com.wormzjl.icheme.science.thermo.phase.PhaseIdentification;
@@ -520,8 +521,8 @@ public final class TangentPlaneStability {
                 h[a * m + b] = a == b ? 1.0 + 0.5 * p.gradient[i] + coupling : coupling;
             }
         }
-        if (!cholesky(h, m)) return -1.0;
-        solveCholesky(h, m, w.step);
+        if (!SmallDenseSolve.cholesky(h, m)) return -1.0;
+        SmallDenseSolve.solveCholesky(h, m, w.step);
         double length = 1.0;
         for (int attempt = 0; attempt <= LINE_SEARCH_HALVINGS; attempt++, length *= 0.5) {
             Point c = w.candidate;
@@ -571,7 +572,7 @@ public final class TangentPlaneStability {
                         w.hessian[a * m + b] = a == b ? 1.0 + coupling : coupling;
                     }
                 }
-                w.localStability = cholesky(w.hessian, m) ? LOCALLY_STABLE : LOCALLY_UNSTABLE;
+                w.localStability = SmallDenseSolve.cholesky(w.hessian, m) ? LOCALLY_STABLE : LOCALLY_UNSTABLE;
             } catch (IllegalStateException coalescing) {
                 w.evaluations++;
                 w.derivativeEvaluations++;
@@ -709,36 +710,6 @@ public final class TangentPlaneStability {
 
     private static PengRobinsonKernel.Root opposite(PengRobinsonKernel.Root root) {
         return root == PengRobinsonKernel.Root.VAPOR ? PengRobinsonKernel.Root.LIQUID : PengRobinsonKernel.Root.VAPOR;
-    }
-
-    /** In-place lower Cholesky factor of the leading {@code m x m} block; false unless positive definite. */
-    public static boolean cholesky(double[] a, int m) {
-        for (int j = 0; j < m; j++) {
-            double pivot = a[j * m + j];
-            for (int k = 0; k < j; k++) pivot -= a[j * m + k] * a[j * m + k];
-            if (!(pivot > 0.0) || !Double.isFinite(pivot)) return false;
-            double root = Math.sqrt(pivot);
-            a[j * m + j] = root;
-            for (int i = j + 1; i < m; i++) {
-                double value = a[i * m + j];
-                for (int k = 0; k < j; k++) value -= a[i * m + k] * a[j * m + k];
-                a[i * m + j] = value / root;
-            }
-        }
-        return true;
-    }
-
-    public static void solveCholesky(double[] factor, int m, double[] rhs) {
-        for (int i = 0; i < m; i++) {
-            double value = rhs[i];
-            for (int k = 0; k < i; k++) value -= factor[i * m + k] * rhs[k];
-            rhs[i] = value / factor[i * m + i];
-        }
-        for (int i = m - 1; i >= 0; i--) {
-            double value = rhs[i];
-            for (int k = i + 1; k < m; k++) value -= factor[k * m + i] * rhs[k];
-            rhs[i] = value / factor[i * m + i];
-        }
     }
 
     /** One trial point: its amounts, the root it was evaluated on and the kernel storage that evaluated it. */

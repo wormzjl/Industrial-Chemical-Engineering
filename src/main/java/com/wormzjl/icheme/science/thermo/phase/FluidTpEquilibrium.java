@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.science.thermo.phase;
 
+import com.wormzjl.icheme.science.math.SmallDenseSolve;
 import com.wormzjl.icheme.science.math.DeterministicMath;
 
 import com.wormzjl.icheme.science.material.CrystalReference;
@@ -3368,7 +3369,7 @@ public final class FluidTpEquilibrium {
      * Otherwise null.
      */
     private static double[] insideTriangle(double[] a, double[] b, double t) {
-        double[] solved = solve3(a, b);
+        double[] solved = SmallDenseSolve.solve3(a, b);
         if (solved == null) return null;
         double n = b[0];
         double nv = Math.max(solved[0], 0.0);
@@ -3404,7 +3405,7 @@ public final class FluidTpEquilibrium {
     private static boolean nearTriangle(double u, double v, double n, Crystal c) {
         double[] m = c.triangle();
         if (m == null) return false;
-        double[] amounts = solve3(tripleBalances(m), new double[] {n, u, v});
+        double[] amounts = SmallDenseSolve.solve3(tripleBalances(m), new double[] {n, u, v});
         if (amounts == null) return false;
         for (double amount : amounts) if (!(amount >= -TRIANGLE_SCREEN * n)) return false;
         return true;
@@ -3455,17 +3456,6 @@ public final class FluidTpEquilibrium {
         double[] amounts = new double[basis];
         amounts[slot] = amount;
         return amounts;
-    }
-
-    /** Solves the 3x3 system {@code a x = b} ({@code a} row-major) by Cramer's rule; null when it is singular. */
-    private static double[] solve3(double[] a, double[] b) {
-        double det = a[0] * (a[4] * a[8] - a[5] * a[7]) - a[1] * (a[3] * a[8] - a[5] * a[6]) + a[2] * (a[3] * a[7] - a[4] * a[6]);
-        if (!(Math.abs(det) > 0.0) || !Double.isFinite(det)) return null;
-        double x0 = (b[0] * (a[4] * a[8] - a[5] * a[7]) - a[1] * (b[1] * a[8] - a[5] * b[2]) + a[2] * (b[1] * a[7] - a[4] * b[2])) / det;
-        double x1 = (a[0] * (b[1] * a[8] - a[5] * b[2]) - b[0] * (a[3] * a[8] - a[5] * a[6]) + a[2] * (a[3] * b[2] - b[1] * a[6])) / det;
-        double x2 = (a[0] * (a[4] * b[2] - b[1] * a[7]) - a[1] * (a[3] * b[2] - b[1] * a[6]) + b[0] * (a[3] * a[7] - a[4] * a[6])) / det;
-        if (!Double.isFinite(x0) || !Double.isFinite(x1) || !Double.isFinite(x2)) return null;
-        return new double[] {x0, x1, x2};
     }
 
     /**
@@ -3555,7 +3545,7 @@ public final class FluidTpEquilibrium {
                 if (!threePhaseResidual(energy, energy ? p : t, shifted, c, i, j, trial, w)) return null;
                 for (int row = 0; row < 3; row++) jacobian[3 * row + col] = (trial[row] - r[row]) / h;
             }
-            double[] step = solve3(jacobian, new double[] {-r[0], -r[1], -r[2]});
+            double[] step = SmallDenseSolve.solve3(jacobian, new double[] {-r[0], -r[1], -r[2]});
             if (step == null) return null;
             double scale = 1.0;
             scale = Math.min(scale, (energy ? 0.02 * Math.abs(u[0]) : 0.2) / Math.max(Math.abs(step[0]), 1.0e-300));
@@ -3586,7 +3576,7 @@ public final class FluidTpEquilibrium {
         double solidValue = energy ? solid.balanceEnthalpy() : solid.balanceVolume();
         // Rows: species i, species j, the third balance.
         double[] a = {y3, x3, 1.0, 1.0 - y3, 1.0 - x3, 0.0, vapourValue, liquidValue, solidValue};
-        double[] amounts = solve3(a, new double[] {ni, nj, target});
+        double[] amounts = SmallDenseSolve.solve3(a, new double[] {ni, nj, target});
         if (amounts == null) return null;
         double n = ni + nj;
         double allowance = SPECIFICATION_TOLERANCE * n;
@@ -3923,7 +3913,7 @@ public final class FluidTpEquilibrium {
                 for (int row = 0; row < 4; row++) jacobian[4 * row + col] = (trial[row] - r[row]) / h;
             }
             for (int a = 0; a < 4; a++) step[a] = -r[a];
-            if (!solveSmall(jacobian, step, 4)) return null;
+            if (!SmallDenseSolve.solvePivoted(jacobian, step, 4)) return null;
             double scale = Math.min(1.0, (energy ? 0.02 * Math.abs(u[0]) : 0.2) / Math.max(Math.abs(step[0]), 1.0e-300));
             for (int a = 1; a < 4; a++) scale = Math.min(scale, 2.0 / Math.max(Math.abs(step[a]), 1.0e-300));
             for (int a = 0; a < 4; a++) u[a] += scale * step[a];
@@ -3951,7 +3941,7 @@ public final class FluidTpEquilibrium {
             a[3 + c] = states[c].moleFraction(j);
             a[6 + c] = energy ? states[c].balanceEnthalpy() : states[c].balanceVolume();
         }
-        double[] amounts = solve3(a, new double[] {ni, nj, target});
+        double[] amounts = SmallDenseSolve.solve3(a, new double[] {ni, nj, target});
         if (amounts == null) return null;
         // The direction that keeps both species' balances: the cross product of their rows.
         double[] d = {a[1] * a[5] - a[2] * a[4], a[2] * a[3] - a[0] * a[5], a[0] * a[4] - a[1] * a[3]};
@@ -4063,39 +4053,6 @@ public final class FluidTpEquilibrium {
         } catch (IllegalArgumentException | IllegalStateException | ArithmeticException refused) {
             return false;
         }
-    }
-
-    /** Solves {@code a x = b} in place ({@code a} row-major {@code n x n}, overwritten) by partial pivoting; false when singular. */
-    private static boolean solveSmall(double[] a, double[] b, int n) {
-        for (int col = 0; col < n; col++) {
-            int pivot = col;
-            for (int row = col + 1; row < n; row++) if (Math.abs(a[n * row + col]) > Math.abs(a[n * pivot + col])) pivot = row;
-            double top = a[n * pivot + col];
-            if (!(Math.abs(top) > 0.0) || !Double.isFinite(top)) return false;
-            if (pivot != col) {
-                for (int k = 0; k < n; k++) {
-                    double swap = a[n * col + k];
-                    a[n * col + k] = a[n * pivot + k];
-                    a[n * pivot + k] = swap;
-                }
-                double swap = b[col];
-                b[col] = b[pivot];
-                b[pivot] = swap;
-            }
-            for (int row = col + 1; row < n; row++) {
-                double factor = a[n * row + col] / top;
-                if (factor == 0.0) continue;
-                for (int k = col; k < n; k++) a[n * row + k] -= factor * a[n * col + k];
-                b[row] -= factor * b[col];
-            }
-        }
-        for (int row = n - 1; row >= 0; row--) {
-            double sum = b[row];
-            for (int k = row + 1; k < n; k++) sum -= a[n * row + k] * b[k];
-            b[row] = sum / a[n * row + row];
-            if (!Double.isFinite(b[row])) return false;
-        }
-        return true;
     }
 
     /**
@@ -5259,10 +5216,6 @@ public final class FluidTpEquilibrium {
         return sum;
     }
 
-    /**
-     * Solves {@code (H + mu I) s = -s g} in place into {@code step} for the scaled Hessian in {@code hessian}, with
-     * {@code mu} zero or the first of {@code 1e-8, 1e-7, ..., 1e4} that makes it positive definite.
-     */
     /** The 14 shifts of an attempt loop: zero, then {@code 10^(attempt - offset)}. */
     private static double[] shifts(int offset) {
         double[] shifts = new double[14];
@@ -5270,16 +5223,20 @@ public final class FluidTpEquilibrium {
         return shifts;
     }
 
+    /**
+     * Solves {@code (H + mu I) s = -s g} in place into {@code step} for the scaled Hessian in {@code hessian}, with
+     * {@code mu} zero or the first of {@code 1e-8, 1e-7, ..., 1e4} that makes it positive definite.
+     */
     private static boolean shiftedSolve(Workspace w, int m) {
         double[] h = w.hessian;
         for (int attempt = 0; attempt < 14; attempt++) {
             double mu = SHIFTS_FROM_1E8[attempt];
-            if (factorShifted(h, m, mu, w.factor)) {
+            if (SmallDenseSolve.factorShifted(h, m, mu, w.factor)) {
                 for (int a = 0; a < m; a++) {
                     int i = w.present[a];
                     w.step[a] = -w.scale[i] * w.gradient[i];
                 }
-                TangentPlaneStability.solveCholesky(w.factor, m, w.step);
+                SmallDenseSolve.solveCholesky(w.factor, m, w.step);
                 return true;
             }
         }
@@ -5805,10 +5762,10 @@ public final class FluidTpEquilibrium {
                 factored = false;
                 for (int attempt = 0; attempt < 14 && !factored; attempt++) {
                     double mu = SHIFTS_FROM_1E13[attempt];
-                    factored = factorShifted(s.rrMatrix, free, mu, s.rrFactor);
+                    factored = SmallDenseSolve.factorShifted(s.rrMatrix, free, mu, s.rrFactor);
                 }
                 if (!factored) break;
-                TangentPlaneStability.solveCholesky(s.rrFactor, free, s.rrStep);
+                SmallDenseSolve.solveCholesky(s.rrFactor, free, s.rrStep);
                 int kept = 0;
                 for (int a = 0; a < free; a++) if (s.beta[s.freeSlots[a]] > 0.0 || s.rrStep[a] >= 0.0) s.freeSlots[kept++] = s.freeSlots[a];
                 if (kept == free || kept == 0) break;
@@ -5958,10 +5915,10 @@ public final class FluidTpEquilibrium {
             boolean factored = false;
             for (int attempt = 0; attempt < 14 && !factored; attempt++) {
                 double mu = SHIFTS_FROM_1E8[attempt];
-                factored = factorShifted(s.newtonHessian, dimension, mu, s.newtonFactor);
+                factored = SmallDenseSolve.factorShifted(s.newtonHessian, dimension, mu, s.newtonFactor);
             }
             if (!factored) return false;
-            TangentPlaneStability.solveCholesky(s.newtonFactor, dimension, s.newtonStep);
+            SmallDenseSolve.solveCholesky(s.newtonFactor, dimension, s.newtonStep);
             double slope = 0.0, length = 1.0;
             for (int v = 0; v < dimension; v++) {
                 s.newtonStep[v] *= s.newtonScale[v];
@@ -6290,13 +6247,5 @@ public final class FluidTpEquilibrium {
         if (Objects.requireNonNull(request, "request").specification() != expected) {
             throw new IllegalArgumentException("Expected a " + expected + " request, got " + request.specification());
         }
-    }
-
-    /** Lower Cholesky factor of {@code a + mu I} into {@code factor} ({@link TangentPlaneStability#cholesky}); false unless positive definite. */
-    private static boolean factorShifted(double[] a, int m, double mu, double[] factor) {
-        for (int j = 0; j < m; j++) {
-            for (int i = j; i < m; i++) factor[i * m + j] = a[i * m + j] + (i == j ? mu : 0.0);
-        }
-        return TangentPlaneStability.cholesky(factor, m);
     }
 }
