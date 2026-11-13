@@ -12,15 +12,15 @@ import static com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.PipeObs
  */
 class ValveCavitationTest extends PortFixture {
     @Test void theRegimeFollowsSigma() {
-        double p1=1e6,pv=3170,x=PassiveStepSolver.VALVE_INCIPIENT;
+        double p1=1e6,pv=3170,x=StepObservations.VALVE_INCIPIENT;
         // σ = 5: plain; σ = 1.66: cavitating; the outlet below Pv: flashing.
-        assertEquals(PLAIN,PassiveStepSolver.regime(pv,8e5,p1-(p1-8e5)/x));
-        assertEquals(CAVITATING,PassiveStepSolver.regime(pv,4e5,p1-(p1-4e5)/x));
-        assertEquals(FLASHING,PassiveStepSolver.regime(pv,2e3,p1-(p1-2e3)/x));
-        assertEquals(NONE,PassiveStepSolver.regime(Double.POSITIVE_INFINITY,4e5,0),"no vapour pressure, no read");
+        assertEquals(PLAIN,StepObservations.regime(pv,8e5,p1-(p1-8e5)/x));
+        assertEquals(CAVITATING,StepObservations.regime(pv,4e5,p1-(p1-4e5)/x));
+        assertEquals(FLASHING,StepObservations.regime(pv,2e3,p1-(p1-2e3)/x));
+        assertEquals(NONE,StepObservations.regime(Double.POSITIVE_INFINITY,4e5,0),"no vapour pressure, no read");
         // The onset: σ = 1 / x_Fz exactly cavitates.
         double p2=p1-x*(p1-pv);
-        assertEquals(CAVITATING,PassiveStepSolver.regime(pv,p2,p1-(p1-p2)/x));
+        assertEquals(CAVITATING,StepObservations.regime(pv,p2,p1-(p1-p2)/x));
     }
 
     @Test void aWaterValveReadsItsDropAndItsTemperature() {
