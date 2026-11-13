@@ -386,7 +386,7 @@ final class V3SimultaneousColumnSolver {
                 String detail = invalidState.getMessage();
                 if (detail == null || detail.isBlank()) detail = "V3 MESH state is outside the logarithmic phase-flow domain";
                 if (detail.length() > 192) detail = detail.substring(0, 192);
-                return new Attempt.Failure("STATE_DOMAIN", state,
+                return new Attempt.Failure(V3AttemptCode.STATE_DOMAIN, state,
                         new Evidence(iteration, 0.0, 0.0, 0.0, 0.0, detail,
                                 lastConvergenceEvidence));
             }
@@ -421,7 +421,7 @@ final class V3SimultaneousColumnSolver {
                     maximumIterations = extended;
                     extensionBlocks++;
                 } else {
-                    return new Attempt.Failure("MAX_ITERATIONS", state,
+                    return new Attempt.Failure(V3AttemptCode.MAX_ITERATIONS, state,
                             new Evidence(iteration, maximumResidual, merit, 0.0, 0.0,
                                     extensionBlocks == 0 ? "iteration budget exhausted"
                                             : "iteration budget exhausted after " + extensionBlocks + " progress extension(s)",
@@ -443,7 +443,7 @@ final class V3SimultaneousColumnSolver {
                 int earlier = iteration - budget.stallWindow();
                 if (budget.stallWindow() > 0 && earlier >= 0 && maximumResidual > budget.stallResidualFloor()
                         && maximumResidual > budget.stallFactor() * stallResiduals[earlier]) {
-                    return new Attempt.Failure("STALLED", state, new Evidence(iteration, maximumResidual, merit,
+                    return new Attempt.Failure(V3AttemptCode.STALLED, state, new Evidence(iteration, maximumResidual, merit,
                             0.0, 0.0, "maximum scaled residual " + stallResiduals[earlier] + " at iteration "
                                     + earlier + " and " + maximumResidual + " now", lastConvergenceEvidence));
                 }
@@ -452,7 +452,7 @@ final class V3SimultaneousColumnSolver {
             if (heldIterations >= STALL_WINDOW_ITERATIONS) {
                 double earlier = heldResiduals[(iteration - STALL_WINDOW_ITERATIONS) % heldResiduals.length];
                 if (maximumResidual > STALL_FACTOR * earlier) {
-                    return new Attempt.Failure("STALLED_SUPPORT_FLOOR", state, new Evidence(iteration, maximumResidual,
+                    return new Attempt.Failure(V3AttemptCode.STALLED_SUPPORT_FLOOR, state, new Evidence(iteration, maximumResidual,
                             merit, 0.0, 0.0, "a point held at its support floor for " + heldIterations
                                     + " iterations; maximum scaled residual " + earlier + " then and "
                                     + maximumResidual + " now", lastConvergenceEvidence));
@@ -519,7 +519,7 @@ final class V3SimultaneousColumnSolver {
                     continue;
                 }
                 if (!NEWTON_OFF_BAND_MESSAGE.equals(unavailable.getMessage())) throw unavailable;
-                return new Attempt.Failure("JACOBIAN_BAND_STRUCTURE", state,
+                return new Attempt.Failure(V3AttemptCode.JACOBIAN_BAND_STRUCTURE, state,
                         new Evidence(iteration, maximumResidual, merit, 0.0, 0.0, unavailable.getMessage(),
                                 lastConvergenceEvidence));
             }
@@ -534,7 +534,7 @@ final class V3SimultaneousColumnSolver {
                 double[] baseCoordinates = coordinates.encode(state);
                 // See HELD_POINT_LOG_FLOW: a free point that sank is not an unknown, so the refresh removes it.
                 if (points.sank(baseCoordinates)) {
-                    return new Attempt.Failure("STALLED_SUPPORT_FLOOR", state, new Evidence(iteration, maximumResidual,
+                    return new Attempt.Failure(V3AttemptCode.STALLED_SUPPORT_FLOOR, state, new Evidence(iteration, maximumResidual,
                             merit, 0.0, failure.pivotGrowth(),
                             "a point that sank below its support floor left the Newton system singular",
                             lastConvergenceEvidence));
@@ -548,7 +548,7 @@ final class V3SimultaneousColumnSolver {
                             maximumLineSearchSteps, control, points);
                 }
                 if (descentTrial == null) {
-                    return new Attempt.Failure("LINEAR_" + failure.code(), state,
+                    return new Attempt.Failure(V3AttemptCode.linear(failure.code()), state,
                             new Evidence(iteration, maximumResidual, merit, 0.0, failure.pivotGrowth(), failure.detail(),
                                     lastConvergenceEvidence));
                 }
@@ -570,7 +570,7 @@ final class V3SimultaneousColumnSolver {
                 continue;
             }
             if (usedDescentFallback && points.sank(baseCoordinates)) {
-                return new Attempt.Failure("STALLED_SUPPORT_FLOOR", state, new Evidence(iteration, maximumResidual,
+                return new Attempt.Failure(V3AttemptCode.STALLED_SUPPORT_FLOOR, state, new Evidence(iteration, maximumResidual,
                         merit, 0.0, linearSuccess.pivotGrowth(),
                         "a point that sank below its support floor left no Armijo step along the Newton direction",
                         lastConvergenceEvidence));
@@ -586,7 +586,7 @@ final class V3SimultaneousColumnSolver {
                 }
             }
             if (acceptedTrial == null) {
-                return new Attempt.Failure("LINE_SEARCH_EXHAUSTED", state,
+                return new Attempt.Failure(V3AttemptCode.LINE_SEARCH_EXHAUSTED, state,
                         new Evidence(iteration, maximumResidual, merit, 0.0, linearSuccess.pivotGrowth(),
                                 "no admissible Armijo-reducing Newton or descent step", lastConvergenceEvidence));
             }
@@ -607,7 +607,7 @@ final class V3SimultaneousColumnSolver {
             }
             double acceptedStep = acceptedTrial.step();
             if (!Double.isFinite(lastMerit)) {
-                return new Attempt.Failure("INTERNAL_INVARIANT", state,
+                return new Attempt.Failure(V3AttemptCode.INTERNAL_INVARIANT, state,
                         new Evidence(iteration, maximumResidual, merit, acceptedStep, linearSuccess.pivotGrowth(),
                                 "accepted Newton merit is not finite", lastConvergenceEvidence));
             }
@@ -1196,11 +1196,16 @@ final class V3SimultaneousColumnSolver {
             }
         }
 
-        record Failure(String code, V3DryMeshState state, Evidence evidence) implements Attempt {
+        record Failure(V3AttemptCode attemptCode, V3DryMeshState state, Evidence evidence) implements Attempt {
             public Failure {
-                if (code == null || code.isBlank() || code.length() > 64) throw new IllegalArgumentException("V3 Newton failure code is invalid");
+                if (attemptCode == null) throw new IllegalArgumentException("V3 Newton failure code is invalid");
                 state = Objects.requireNonNull(state, "state");
                 evidence = Objects.requireNonNull(evidence, "evidence");
+            }
+
+            /** The code's published text. */
+            public String code() {
+                return attemptCode.text();
             }
         }
     }

@@ -84,11 +84,11 @@ final class V3AcceptanceAuditor {
             }
         }
         checks.add(maximumFamily(residual, V3DegreeOfFreedomLedger.EquationFamily.COMPONENT_MATERIAL_BALANCE,
-                "LOCAL_COMPONENT_BALANCE", closureLimit()));
+                V3AuditFamily.LOCAL_COMPONENT_BALANCE, closureLimit()));
         checks.add(maximumFamily(residual, V3DegreeOfFreedomLedger.EquationFamily.VAPOR_LIQUID_EQUILIBRIUM,
-                "EQUILIBRIUM", closureLimit()));
+                V3AuditFamily.EQUILIBRIUM, closureLimit()));
         checks.add(maximumFamily(residual, V3DegreeOfFreedomLedger.EquationFamily.ENERGY_BALANCE,
-                "ENERGY_BALANCE", closureLimit()));
+                V3AuditFamily.ENERGY_BALANCE, closureLimit()));
         checks.add(interiorPhaseIdentity(state, workspace, control));
         if (problem.truncationSupport().truncatedPointCount() > 0) checks.add(truncationMassDefect(state));
         if (problem.truncationSupport().onePhasePointCount() > 0) {
@@ -188,8 +188,8 @@ final class V3AcceptanceAuditor {
         String detail = String.format(Locale.ROOT,
                 "fresh boundary closure %.6g W; condenser=%.6g W, stage heat=%.6g W", closure, condenser, stageHeatTotal);
         return Double.isFinite(magnitude) && magnitude <= limit
-                ? V3AcceptanceAudit.Check.pass("GLOBAL_ENERGY_BALANCE", magnitude, limit, detail)
-                : V3AcceptanceAudit.Check.fail("GLOBAL_ENERGY_BALANCE",
+                ? V3AcceptanceAudit.Check.pass(V3AuditFamily.GLOBAL_ENERGY_BALANCE, magnitude, limit, detail)
+                : V3AcceptanceAudit.Check.fail(V3AuditFamily.GLOBAL_ENERGY_BALANCE,
                         Double.isFinite(magnitude) ? magnitude : Double.MAX_VALUE, limit, detail);
     }
 
@@ -243,8 +243,8 @@ final class V3AcceptanceAuditor {
                 "fresh condenser-node closure %.6g W vs published %.6g W; water vapor out=%.6g W, free water out=%.6g W",
                 expected, publishedCondenserWatts, waterVaporOut, freeWaterOut);
         return Double.isFinite(magnitude) && magnitude <= limit
-                ? V3AcceptanceAudit.Check.pass("CONDENSER_ENERGY_BALANCE", magnitude, limit, detail)
-                : V3AcceptanceAudit.Check.fail("CONDENSER_ENERGY_BALANCE",
+                ? V3AcceptanceAudit.Check.pass(V3AuditFamily.CONDENSER_ENERGY_BALANCE, magnitude, limit, detail)
+                : V3AcceptanceAudit.Check.fail(V3AuditFamily.CONDENSER_ENERGY_BALANCE,
                         Double.isFinite(magnitude) ? magnitude : Double.MAX_VALUE, limit, detail);
     }
 
@@ -283,12 +283,12 @@ final class V3AcceptanceAuditor {
                 V3FlashResult flash = thermo.flashTP(t, p, overall, workspace);
                 control.checkpoint();
                 if (flash.phase() == V3FeedPhase.TWO_PHASE) continue;
-                return V3AcceptanceAudit.Check.fail("INTERIOR_PHASE_IDENTITY", 1.0, 0.0,
+                return V3AcceptanceAudit.Check.fail(V3AuditFamily.INTERIOR_PHASE_IDENTITY, 1.0, 0.0,
                         "tray " + (node + 1) + " carries the same phase as both liquid and vapor; x-y=" + distance
                                 + ", Z separation=" + separation);
             }
         }
-        return V3AcceptanceAudit.Check.pass("INTERIOR_PHASE_IDENTITY", 0.0, 0.0,
+        return V3AcceptanceAudit.Check.pass(V3AuditFamily.INTERIOR_PHASE_IDENTITY, 0.0, 0.0,
                 "no interior liquid/vapor pair collapses to the same composition and EOS root");
     }
 
@@ -387,9 +387,9 @@ final class V3AcceptanceAuditor {
         double freeWater = split.freeWaterFlowMolPerSecond();
         maximum = Math.max(maximum, relativeDifference(waterAtCondenser, waterSlip + freeWater));
         return maximum <= 1.0e-12
-                ? V3AcceptanceAudit.Check.pass("WATER_PROFILE", maximum, 1.0e-12,
+                ? V3AcceptanceAudit.Check.pass(V3AuditFamily.WATER_PROFILE, maximum, 1.0e-12,
                         "known free-water profile and overhead split recomputed from authored steam feeds")
-                : V3AcceptanceAudit.Check.fail("WATER_PROFILE", maximum, 1.0e-12,
+                : V3AcceptanceAudit.Check.fail(V3AuditFamily.WATER_PROFILE, maximum, 1.0e-12,
                         "known free-water profile or overhead split differs from authored steam feeds");
     }
 
@@ -455,17 +455,17 @@ final class V3AcceptanceAuditor {
             }
         }
         if (emptyWetTray >= 0) {
-            return V3AcceptanceAudit.Check.fail("WATER_DEW_POINT", maximum, 1.0,
+            return V3AcceptanceAudit.Check.fail(V3AuditFamily.WATER_DEW_POINT, maximum, 1.0,
                     "tray " + (emptyWetTray + 1) + " is in the free-water set but sheds no free water");
         }
         // A wet tray that is not on the saturation line is a claim the state does not support, whatever any dry
         // stage reports; its own normalized error is what the check publishes.
         if (worstWetNode >= 0) {
-            return V3AcceptanceAudit.Check.fail("WATER_DEW_POINT", worstWet, 1.0,
+            return V3AcceptanceAudit.Check.fail(V3AuditFamily.WATER_DEW_POINT, worstWet, 1.0,
                     waterDewPointDetail(state, worstWetNode, worstWetPartialPressure));
         }
         if (dryValid) {
-            return V3AcceptanceAudit.Check.pass("WATER_DEW_POINT", maximum, 1.0,
+            return V3AcceptanceAudit.Check.pass(V3AuditFamily.WATER_DEW_POINT, maximum, 1.0,
                     problem.hasWetTrays()
                             ? "every dry stage is above the free-water dew point and every wet tray sits on it"
                             : "all water-bearing stages remain above the free-water dew point");
@@ -473,7 +473,7 @@ final class V3AcceptanceAuditor {
         // A dry stage below its water dew point is an operating condition the column can be in, not a modelling
         // failure: the steam-laden vapour is supersaturated there and water will condense on the tray. The column
         // is published, and the condition is reported as a warning (see withCheckWarnings).
-        return V3AcceptanceAudit.Check.pass("WATER_DEW_POINT", worstDry, 1.0,
+        return V3AcceptanceAudit.Check.pass(V3AuditFamily.WATER_DEW_POINT, worstDry, 1.0,
                 "warning: " + waterDewPointDetail(state, worstDryNode, worstDryPartialPressure));
     }
 
@@ -515,7 +515,7 @@ final class V3AcceptanceAuditor {
         V3ColumnTopology topology = problem.topology();
         double totalSteam = authoredWaterAtCondenser();
         if (!(totalSteam > 0.0)) {
-            return V3AcceptanceAudit.Check.pass("WATER_BALANCE", 0.0, 1.0e-8, "no authored steam to balance");
+            return V3AcceptanceAudit.Check.pass(V3AuditFamily.WATER_BALANCE, 0.0, 1.0e-8, "no authored steam to balance");
         }
         double maximum = 0.0;
         for (int node = 1; node <= topology.reboilerNode(); node++) {
@@ -541,8 +541,8 @@ final class V3AcceptanceAuditor {
                 bottomsFreeWater * 3.6);
         if (carried != 0.0) detail += String.format(Locale.ROOT, "; carried over from tray 2 %.6g kmol/h", carried * 3.6);
         return Double.isFinite(maximum) && maximum <= 1.0e-8
-                ? V3AcceptanceAudit.Check.pass("WATER_BALANCE", maximum, 1.0e-8, detail)
-                : V3AcceptanceAudit.Check.fail("WATER_BALANCE",
+                ? V3AcceptanceAudit.Check.pass(V3AuditFamily.WATER_BALANCE, maximum, 1.0e-8, detail)
+                : V3AcceptanceAudit.Check.fail(V3AuditFamily.WATER_BALANCE,
                         Double.isFinite(maximum) ? maximum : Double.MAX_VALUE, 1.0e-8, detail);
     }
 
@@ -576,7 +576,7 @@ final class V3AcceptanceAuditor {
         String reading = String.format(Locale.ROOT,
                 "tray 2 carries %.1f kmol/h of free water over to the condenser drum", carried * 3.6);
         if (!problem.input().usesTrayHydraulics() || !(thermo instanceof V3PengRobinsonThermo registered)) {
-            return V3AcceptanceAudit.Check.pass("CARRY_OVER", 0.0, 0.0,
+            return V3AcceptanceAudit.Check.pass(V3AuditFamily.CARRY_OVER, 0.0, 0.0,
                     reading + "; no entrainment limit without a column diameter");
         }
         V3TrayHydraulics hydraulics = V3TrayHydraulics.ofDiameter(problem.input().columnDiameterMetres());
@@ -588,13 +588,13 @@ final class V3AcceptanceAuditor {
         double value = limit > 0.0 && Double.isFinite(limit) ? carried / limit : Double.MAX_VALUE;
         double reported = Double.isFinite(limit) && limit >= 0.0 ? limit : 0.0;
         if (value <= 1.0) {
-            return V3AcceptanceAudit.Check.pass("CARRY_OVER", value, 1.0, reading + String.format(Locale.ROOT,
+            return V3AcceptanceAudit.Check.pass(V3AuditFamily.CARRY_OVER, value, 1.0, reading + String.format(Locale.ROOT,
                     ", %.0f%% of the %.1f kmol/h its vapor can lift at %.0f%% of flood", 100.0 * value,
                     reported * 3.6, 100.0 * flood));
         }
         // The consequence of carry-over above the limit, in one place. Owner decision E31 (2026-11-05, option (a)):
         // publish with a warning. The rejected option (b), a flooding failure, would be Check.fail on this line.
-        return V3AcceptanceAudit.Check.pass("CARRY_OVER", value, 1.0,
+        return V3AcceptanceAudit.Check.pass(V3AuditFamily.CARRY_OVER, value, 1.0,
                 "warning: " + hydraulics.carryOverWarning(1, carried, reported, flood));
     }
 
@@ -612,15 +612,15 @@ final class V3AcceptanceAuditor {
         double total = problem.waterVaporFlowMolPerSecond(1);
         double fraction = total > 0.0 ? freeWater / total : 0.0;
         if (freeWater > 0.0 && Double.isFinite(freeWater)) {
-            return V3AcceptanceAudit.Check.pass("FREE_WATER_SPLIT", fraction, 0.0,
+            return V3AcceptanceAudit.Check.pass(V3AuditFamily.FREE_WATER_SPLIT, fraction, 0.0,
                     "saturated condenser drum decants a positive free-water boot");
         }
         if (Double.isFinite(freeWater) && Double.isFinite(split.vaporFlowMolPerSecond())
                 && split.vaporFlowMolPerSecond() >= total) {
-            return V3AcceptanceAudit.Check.pass("FREE_WATER_SPLIT", 0.0, 0.0,
+            return V3AcceptanceAudit.Check.pass(V3AuditFamily.FREE_WATER_SPLIT, 0.0, 0.0,
                     "available steam is insufficient to saturate the overhead; all water remains in mixed vapor");
         }
-        return V3AcceptanceAudit.Check.fail("FREE_WATER_SPLIT", !Double.isFinite(freeWater) ? Double.MAX_VALUE
+        return V3AcceptanceAudit.Check.fail(V3AuditFamily.FREE_WATER_SPLIT, !Double.isFinite(freeWater) ? Double.MAX_VALUE
                 : Math.max(0.0, -freeWater) / Math.max(1.0, total), 0.0,
                 "condenser water split is not a finite, nonnegative vapor/free-water allocation");
     }
@@ -639,8 +639,8 @@ final class V3AcceptanceAuditor {
                 maximum = Double.MAX_VALUE;
             }
         }
-        return valid ? V3AcceptanceAudit.Check.pass("SIDE_DRAW_SPLIT", maximum, 1.0, "all side draws leave positive liquid downflow")
-                : V3AcceptanceAudit.Check.fail("SIDE_DRAW_SPLIT", maximum, 1.0, "side draw exhausts the tray liquid; positive downflow required");
+        return valid ? V3AcceptanceAudit.Check.pass(V3AuditFamily.SIDE_DRAW_SPLIT, maximum, 1.0, "all side draws leave positive liquid downflow")
+                : V3AcceptanceAudit.Check.fail(V3AuditFamily.SIDE_DRAW_SPLIT, maximum, 1.0, "side draw exhausts the tray liquid; positive downflow required");
     }
 
     private V3AcceptanceAudit.Check finitenessAndTopology(V3DryMeshState state) {
@@ -659,8 +659,8 @@ final class V3AcceptanceAuditor {
             }
         }
         double value = valid ? 0.0 : 1.0;
-        return valid ? V3AcceptanceAudit.Check.pass("FINITE_TOPOLOGY", value, 0.0, "all active flows and topology phases are finite")
-                : V3AcceptanceAudit.Check.fail("FINITE_TOPOLOGY", value, 0.0, "candidate violates a finite flow or absent-phase invariant");
+        return valid ? V3AcceptanceAudit.Check.pass(V3AuditFamily.FINITE_TOPOLOGY, value, 0.0, "all active flows and topology phases are finite")
+                : V3AcceptanceAudit.Check.fail(V3AuditFamily.FINITE_TOPOLOGY, value, 0.0, "candidate violates a finite flow or absent-phase invariant");
     }
 
     /** Recomputes the carried sink edges from the candidate, never from a solver-cached defect or a new mask. */
@@ -684,8 +684,8 @@ final class V3AcceptanceAuditor {
         double limit = TRUNCATION_DEFECT_BUDGET * problem.truncationSupport().cutoffMoleFraction()
                 + problem.truncationSupport().floorDefectBoundFraction();
         return fraction >= 0.0 && fraction <= limit
-                ? V3AcceptanceAudit.Check.pass("TRUNCATION_MASS_DEFECT", fraction, limit, "fresh sink-edge defect as a fraction of authored feed")
-                : V3AcceptanceAudit.Check.fail("TRUNCATION_MASS_DEFECT", Double.isFinite(fraction) ? Math.max(0.0, fraction) : Double.MAX_VALUE,
+                ? V3AcceptanceAudit.Check.pass(V3AuditFamily.TRUNCATION_MASS_DEFECT, fraction, limit, "fresh sink-edge defect as a fraction of authored feed")
+                : V3AcceptanceAudit.Check.fail(V3AuditFamily.TRUNCATION_MASS_DEFECT, Double.isFinite(fraction) ? Math.max(0.0, fraction) : Double.MAX_VALUE,
                         limit, "sink-edge defect is negative or exceeds the stage-trace mass budget");
     }
 
@@ -711,7 +711,7 @@ final class V3AcceptanceAuditor {
                 V3TruncationSupport.PointPhases point = support.pointPhases(node, component);
                 if (!point.isOnePhase()) continue;
                 if (ratios == null) {
-                    return V3AcceptanceAudit.Check.fail("PHASE_TRUNCATION_DEFECT", Double.MAX_VALUE, limit,
+                    return V3AcceptanceAudit.Check.fail(V3AuditFamily.PHASE_TRUNCATION_DEFECT, Double.MAX_VALUE, limit,
                             "candidate has no evaluable equilibrium ratio for a one-phase stage point");
                 }
                 double implied = point == V3TruncationSupport.PointPhases.LIQUID_ONLY
@@ -722,9 +722,9 @@ final class V3AcceptanceAuditor {
             }
         }
         return Double.isFinite(worst) && worst >= 0.0 && worst <= limit
-                ? V3AcceptanceAudit.Check.pass("PHASE_TRUNCATION_DEFECT", worst, limit,
+                ? V3AcceptanceAudit.Check.pass(V3AuditFamily.PHASE_TRUNCATION_DEFECT, worst, limit,
                         "largest equilibrium-implied absent-phase flow as a fraction of its component feed")
-                : V3AcceptanceAudit.Check.fail("PHASE_TRUNCATION_DEFECT",
+                : V3AcceptanceAudit.Check.fail(V3AuditFamily.PHASE_TRUNCATION_DEFECT,
                         Double.isFinite(worst) ? Math.max(0.0, worst) : Double.MAX_VALUE, limit,
                         "a one-phase stage point implies more absent-phase flow than the reinsertion threshold");
     }
@@ -739,9 +739,9 @@ final class V3AcceptanceAuditor {
                 ? independentCondenserFlash(state, liquid, liquid, liquid, workspace).phase()
                 : thermo.flashTP(state.temperatureKelvin(node), problem.nodePressurePascal(node), liquid, workspace).phase();
         return phase == V3FeedPhase.LIQUID
-                ? V3AcceptanceAudit.Check.pass("CONDENSER_PHASE", 0.0, 0.0,
+                ? V3AcceptanceAudit.Check.pass(V3AuditFamily.CONDENSER_PHASE, 0.0, 0.0,
                         "water-adjusted outlet TP flash confirms liquid only")
-                : V3AcceptanceAudit.Check.fail("CONDENSER_PHASE", 1.0, 0.0,
+                : V3AcceptanceAudit.Check.fail(V3AuditFamily.CONDENSER_PHASE, 1.0, 0.0,
                         "water-adjusted outlet TP flash requires a vapor phase");
     }
 
@@ -761,7 +761,7 @@ final class V3AcceptanceAuditor {
             vaporTotal += vapor[publicComponent];
         }
         if (!(total > 0.0) || !Double.isFinite(total) || !Double.isFinite(vaporTotal)) {
-            return V3AcceptanceAudit.Check.fail("CONDENSER_PHASE", 1.0, closureLimit(),
+            return V3AcceptanceAudit.Check.fail(V3AuditFamily.CONDENSER_PHASE, 1.0, closureLimit(),
                     "combined condenser outlet has no finite positive total flow");
         }
         double[] overall = new double[publicComponents];
@@ -773,13 +773,13 @@ final class V3AcceptanceAuditor {
             return fallbackTwoPhaseCondenserPhase(state, overall, workspace);
         }
         if (flash.phase() != V3FeedPhase.TWO_PHASE) {
-            return V3AcceptanceAudit.Check.fail("CONDENSER_PHASE", 1.0, closureLimit(),
+            return V3AcceptanceAudit.Check.fail(V3AuditFamily.CONDENSER_PHASE, 1.0, closureLimit(),
                     "combined outlet TP flash is " + flash.phase() + ", not two-phase");
         }
         double[] flashLiquid = flash.liquidComposition();
         double[] flashVapor = flash.vaporComposition();
         if (flashLiquid.length != publicComponents || flashVapor.length != publicComponents) {
-            return V3AcceptanceAudit.Check.fail("CONDENSER_PHASE", 1.0, closureLimit(),
+            return V3AcceptanceAudit.Check.fail(V3AuditFamily.CONDENSER_PHASE, 1.0, closureLimit(),
                     "combined outlet TP flash has a different component basis");
         }
         double beta = flash.vaporFraction();
@@ -790,8 +790,8 @@ final class V3AcceptanceAuditor {
         }
         String detail = "fresh water-adjusted scaled-K combined-outlet flash; beta=" + beta;
         return maximum <= closureLimit()
-                ? V3AcceptanceAudit.Check.pass("CONDENSER_PHASE", maximum, closureLimit(), detail)
-                : V3AcceptanceAudit.Check.fail("CONDENSER_PHASE", maximum, closureLimit(), detail);
+                ? V3AcceptanceAudit.Check.pass(V3AuditFamily.CONDENSER_PHASE, maximum, closureLimit(), detail)
+                : V3AcceptanceAudit.Check.fail(V3AuditFamily.CONDENSER_PHASE, maximum, closureLimit(), detail);
     }
 
     /**
@@ -814,14 +814,14 @@ final class V3AcceptanceAuditor {
             hydrocarbonPressure = Double.NaN;
         }
         if (!Double.isFinite(hydrocarbonPressure) || hydrocarbonPressure <= 0.0) {
-            return V3AcceptanceAudit.Check.fail("CONDENSER_PHASE", 1.0, closureLimit(),
+            return V3AcceptanceAudit.Check.fail(V3AuditFamily.CONDENSER_PHASE, 1.0, closureLimit(),
                     "water-adjusted fallback condenser pressure is not finite and positive");
         }
         V3FlashResult flash = thermo.flashTP(state.temperatureKelvin(condenser), hydrocarbonPressure, overall, workspace);
         return flash.phase() == V3FeedPhase.TWO_PHASE
-                ? V3AcceptanceAudit.Check.pass("CONDENSER_PHASE", 0.0, closureLimit(),
+                ? V3AcceptanceAudit.Check.pass(V3AuditFamily.CONDENSER_PHASE, 0.0, closureLimit(),
                         "independent water-adjusted TP phase fallback; component split separately audited")
-                : V3AcceptanceAudit.Check.fail("CONDENSER_PHASE", 1.0, closureLimit(),
+                : V3AcceptanceAudit.Check.fail(V3AuditFamily.CONDENSER_PHASE, 1.0, closureLimit(),
                         "water-adjusted fallback TP flash is " + flash.phase() + ", not two-phase");
     }
 
@@ -1068,7 +1068,7 @@ final class V3AcceptanceAuditor {
     }
 
     private static V3AcceptanceAudit.Check maximumFamily(
-            V3MeshResidual residual, V3DegreeOfFreedomLedger.EquationFamily family, String auditFamily, double limit) {
+            V3MeshResidual residual, V3DegreeOfFreedomLedger.EquationFamily family, V3AuditFamily auditFamily, double limit) {
         double maximum = 0.0;
         boolean found = false;
         for (int row = 0; row < residual.size(); row++) {
