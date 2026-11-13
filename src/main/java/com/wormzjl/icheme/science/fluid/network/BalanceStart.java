@@ -260,7 +260,7 @@ final class BalanceStart {
          * ({low, top, flashFrom} in the fourth row); a liquid junction that does not flash keeps an entry with no table. */
         static final Map<FluidThermodynamics.State,double[][]> TABLE_CACHE=Collections.synchronizedMap(new WeakHashMap<>());
         /** Per pump connection, whether the balance put it on its suction limit: its suction junction is anchored at the
-         * liquid's bubble pressure ({@link PassiveStepSolver#suctionFloors}) and the pump passes what the suction line delivers there. */
+         * liquid's bubble pressure ({@link MoverSuction#suctionFloors}) and the pump passes what the suction line delivers there. */
         final boolean[] suctionLimited,onLaw;final int[][] nodeEdges;final double[][] lastQ;
         /** Closed for this solve by a start closure, a blocked way or a refused inlet, never to reopen; {@code closed} also holds
          * the device modes the balance may revise (a closed valve). */
@@ -351,36 +351,36 @@ final class BalanceStart {
                 else if(mode==FlowControl.Mode.VALVE_REGULATING&&!valve.pressureControl())prescribed[e]=valve.targetMassFlow(rho[e][0]);
             }
         }
-        /** The suction limit of the pump on connection {@code e} with no flow ({@link PassiveStepSolver#suctionLimitPressure},
+        /** The suction limit of the pump on connection {@code e} with no flow ({@link MoverSuction#suctionLimitPressure},
          * owner decision D14 as W3B_NETWORK_PLAN.md section 17 restates it: p_v and the clean zone's edge); infinite where it
          * has none. One statement for a pump the balance puts on its suction limit and for one that arrives there, worked out
          * once per connection. The NPSH the pump's flow adds is {@link #cavitationFloor}'s. The water curve D59 (4) put beside it where
          * the junction held free water (BalanceNet.waterFloor) was lifted by the owner on 2026-11-11: every liquid's floor
-         * is at its own enthalpy ({@link PassiveStepSolver#releasePressure}), so water's is no longer a second one. */
+         * is at its own enthalpy ({@link MoverSuction#releasePressure}), so water's is no longer a second one. */
         private double suctionFloor(int e,Runnable checkpoint) {
             if(!Double.isNaN(floors[e]))return floors[e];
-            return floors[e]=solver.suctionLimitPressure(graph,e,0);
+            return floors[e]=solver.suctions.suctionLimitPressure(graph,e,0);
         }
         /** Owner decision D20 Q11 A in the balance: the suction limit of pump connection {@code e}
-         * ({@link PassiveStepSolver#suctionLimitPressure}) with its breakdown NPSH ({@link PassiveStepSolver#breakdown}) at mass flow {@code massFlow}
+         * ({@link MoverSuction#suctionLimitPressure}) with its breakdown NPSH ({@link MoverSuction#breakdown}) at mass flow {@code massFlow}
          * (kg/s) on its suction end's density: the flow the balance gives it, its law's at the balanced pressures where it
          * decides the mode, its prescribed flow on its suction limit, none where it arrives there. The Newton's row reads the
-         * same floor at its trial flow ({@link PassiveStepSolver#suctionLimit}). */
+         * same floor at its trial flow ({@link MoverSuction#suctionLimit}). */
         private double cavitationFloor(int e,double massFlow) {
-            return solver.suctionLimitPressure(graph,e,solver.breakdown(graph,e,Math.max(0,massFlow)/rho[e][0]));
+            return solver.suctions.suctionLimitPressure(graph,e,solver.suctions.breakdown(graph,e,Math.max(0,massFlow)/rho[e][0]));
         }
         /** Owner decision D17 in the balance: the pressure the suction junction of pump connection {@code e}, on its suction
          * limit, is anchored at on the balance's pressures {@code p}: the lesser of its floor at its prescribed flow
          * ({@link #cavitationFloor}) and what
-         * the supplier its suction walk ends at gives at no flow ({@link PassiveStepSolver#suctionSupply}, its static column
+         * the supplier its suction walk ends at gives at no flow ({@link MoverSuction#suctionSupply}, its static column
          * from the start state, as the balance holds every column). The Newton's row states the same on its trial
-         * ({@link PassiveStepSolver#suctionLimit}). */
+         * ({@link MoverSuction#suctionLimit}). */
         private double suctionAnchor(int e,double[] p,Runnable checkpoint) {
             double floor=cavitationFloor(e,Double.isNaN(prescribed[e])?0:prescribed[e]);var walk=InletPhase.walk(graph,e);
             if(!(floor<Double.POSITIVE_INFINITY)||walk.via()<0)return floor;
             int s=walk.node();var link=graph.pipes().get(walk.via());
             double end=unknown[s]>=0?p[s]:!Double.isNaN(anchor[s])?anchor[s]:PortStreams.endPressure(model,graph,link,s);
-            return Math.min(floor,solver.suctionSupply(graph,e,s,walk.via(),end,graph.reservoirs().get(s).state()));
+            return Math.min(floor,solver.suctions.suctionSupply(graph,e,s,walk.via(),end,graph.reservoirs().get(s).state()));
         }
         /** Whether junction {@code node} reads its table at {@code pressure}, not its stated data. */
         private boolean tabled(int node,double pressure){return tableP[node]!=null&&pressure<flashFrom[node];}
@@ -526,7 +526,7 @@ final class BalanceStart {
             double[] p=solveOnce(checkpoint);
             // The pump modes the balance starts the step in: a pump on its law whose suction junction stands below the bubble
             // pressure of the liquid it draws goes to its suction limit, the junction anchored there and the pump passing
-            // what arrives. A vapour-locked pump (owner decision D16 A, {@link PassiveStepSolver#vapourLocks}) arrives closed
+            // what arrives. A vapour-locked pump (owner decision D16 A, {@link MoverSuction#vapourLocks}) arrives closed
             // and the balance never reads one on its own pressures, which its law drained (D15's reading there started
             // cold random 181's pump closed with its supplier pulled 20 kPa below the floor).
             for(int round=0;round<4;round++) {
@@ -716,7 +716,7 @@ final class BalanceStart {
          * temperature bisection inside the streams' window (20 K either side, inside the numerical box: no data range narrows a seed, owner rule of 2026-10-16).
          * The bisection ends on the bracket side whose state is nearer the delivered enthalpy. Water alone (no engine answer) has
          * no two-phase TP state at its own vapour pressure: its enthalpy jumps by the latent heat across the saturation, and the
-         * midpoint's side is round-off. A pump suction the balance holds at its own liquid's vapour pressure ({@link PassiveStepSolver#releasePressure})
+         * midpoint's side is round-off. A pump suction the balance holds at its own liquid's vapour pressure ({@link MoverSuction#releasePressure})
          * is delivered the saturated liquid's enthalpy to round-off: the liquid side is that round-off away, the steam side the
          * latent heat. Bundled fuzz seed 889, while the floor read the junction's stated temperature: water arriving 0.06 K
          * warmer from the friction of its 309 kPa descent (1e-4 of it flashes there) was stated all steam, and the step's

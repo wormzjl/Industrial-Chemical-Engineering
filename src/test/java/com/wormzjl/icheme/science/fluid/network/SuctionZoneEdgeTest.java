@@ -36,8 +36,8 @@ class SuctionZoneEdgeTest {
         for(double p=bubble*.999;p>.5*bubble;p*=.995){s=model.flashTP(t,p,lng.clone(),()->{});if(share(s)>GasEntrainment.cleanShare(p))break;}
         assertNotNull(s);double p=s.pressure();
         assertTrue(share(s)>GasEntrainment.cleanShare(p),"the junction's vapour is past the edge: "+share(s)+" at "+p+" Pa");
-        assertEquals(p,solver.zoneEdge(InletPhase.of(model,s,null),()->{}),0,"the mixture's edge is the junction's own pressure");
-        double liquidOnly=solver.zoneEdge(InletPhase.of(model,s,liquid(s,FluidThermodynamics.OIL)),()->{});
+        assertEquals(p,solver.suctions.zoneEdge(InletPhase.of(model,s,null),()->{}),0,"the mixture's edge is the junction's own pressure");
+        double liquidOnly=solver.suctions.zoneEdge(InletPhase.of(model,s,liquid(s,FluidThermodynamics.OIL)),()->{});
         assertTrue(liquidOnly<p,"its liquid alone has its edge below the junction's pressure: "+liquidOnly);
     }
 
@@ -46,10 +46,10 @@ class SuctionZoneEdgeTest {
     @Test void aLiquidDrawnFromUnderItsGasKeepsItsEdgeBelowTheVesselsPressure() {
         var s=model.flashTP(298.15,101325,feed("Water",55.3,"Nitrogen",40.0),()->{});
         assertTrue(FluidThermodynamics.holdsPhase(s,FluidThermodynamics.GAS)&&FluidThermodynamics.holdsLiquid(s));
-        double e=solver.zoneEdge(InletPhase.of(model,s,liquid(s,FluidThermodynamics.AQUEOUS)),()->{});
+        double e=solver.suctions.zoneEdge(InletPhase.of(model,s,liquid(s,FluidThermodynamics.AQUEOUS)),()->{});
         assertEquals(69.9e3,e,.5e3,"section 17's E for water under nitrogen");
         assertTrue(e<s.pressure());
-        assertEquals(s.pressure(),solver.zoneEdge(InletPhase.of(model,s,null),()->{}),0,"the whole blanketed contents are past the edge");
+        assertEquals(s.pressure(),solver.suctions.zoneEdge(InletPhase.of(model,s,null),()->{}),0,"the whole blanketed contents are past the edge");
     }
 
     /** A carried crystal (2 kg of a dry-ice-like solid) in the same water under nitrogen, and in air-free water drawn whole:
@@ -58,12 +58,12 @@ class SuctionZoneEdgeTest {
         var crystal=new SolidInventory.Moments(2.0,2.0/1560,2.0*850);
         var blanketed=model.flashTP(298.15,101325,feed("Water",55.3,"Nitrogen",40.0),()->{});
         var withCrystal=blanketed.withSolidState(blanketed.solids(),crystal);
-        double plain=solver.zoneEdge(InletPhase.of(model,blanketed,liquid(blanketed,FluidThermodynamics.AQUEOUS)),()->{});
-        assertEquals(plain,solver.zoneEdge(InletPhase.of(model,withCrystal,liquid(withCrystal,FluidThermodynamics.AQUEOUS)),()->{}),0,"through the liquid port");
+        double plain=solver.suctions.zoneEdge(InletPhase.of(model,blanketed,liquid(blanketed,FluidThermodynamics.AQUEOUS)),()->{});
+        assertEquals(plain,solver.suctions.zoneEdge(InletPhase.of(model,withCrystal,liquid(withCrystal,FluidThermodynamics.AQUEOUS)),()->{}),0,"through the liquid port");
         var water=model.flashTP(298.15,101325,feed("Water",55.3),()->{});
-        double bulk=solver.zoneEdge(InletPhase.of(model,water,null),()->{});
+        double bulk=solver.suctions.zoneEdge(InletPhase.of(model,water,null),()->{});
         assertTrue(bulk<water.pressure(),"air-free water drawn whole has its edge below its pressure: "+bulk);
-        double carried=solver.zoneEdge(InletPhase.of(model,water.withSolidState(water.solids(),crystal),null),()->{});
+        double carried=solver.suctions.zoneEdge(InletPhase.of(model,water.withSolidState(water.solids(),crystal),null),()->{});
         assertEquals(bulk,carried,2e-6*bulk,"through a BULK end");
     }
 
