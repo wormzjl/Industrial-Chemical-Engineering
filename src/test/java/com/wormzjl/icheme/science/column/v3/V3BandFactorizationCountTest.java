@@ -45,8 +45,9 @@ class V3BandFactorizationCountTest {
         int at = hydraulics.indexOf("correction band factorizations ");
         System.out.println("V3 " + label + " (" + success.diagnostics().solvePath() + "): " + counts
                 + (at < 0 ? "; no hydraulic correction" : "; hydraulic correction " + hydraulics.substring(at + 31)));
-        int total = Integer.parseInt(counts.substring(counts.lastIndexOf(' ') + 1));
-        assertTrue(total > 0, counts);
+        var total = java.util.regex.Pattern.compile(" total (\\d+)").matcher(counts);
+        assertTrue(total.find(), counts);
+        assertTrue(Integer.parseInt(total.group(1)) > 0, counts);
     }
 
     /** Every extensive input times {@code alpha}, as the bench's warm case: feed, steam, draws, pumparound duties. */
