@@ -15,6 +15,14 @@ public final class FluidPumpStartupGameTests {
     private FluidPumpStartupGameTests() {}
     /** An In-line Pump on a pipe, discharging towards {@code discharge} (a horizontal direction), as the item installs it. */
     static net.minecraft.world.level.block.state.BlockState inlinePump(Direction discharge){return inlineMover(discharge,FluidDeviceBlock.InlineMover.PUMP);}
+    /**
+     * Powers the in-line mover at {@code pump} as a player does: a creative power source on the block above it, whose FE reaches
+     * the mover's port. A placed in-line mover's store starts empty, and the mover stays closed until FE arrives (the store's
+     * close holds, M-04): every GameTest whose in-line mover must run calls this. Returns where the source stands, for cleanup.
+     */
+    static BlockPos powerInlineMover(net.minecraft.server.level.ServerLevel level,BlockPos pump) {
+        var at=pump.above();level.setBlock(at,ModBlocks.CREATIVE_POWER.get().defaultBlockState(),3);return at;
+    }
     static net.minecraft.world.level.block.state.BlockState inlineMover(Direction discharge,FluidDeviceBlock.InlineMover mover) {
         return ModBlocks.FLUID_PIPE.get().defaultBlockState().setValue(FluidDeviceBlock.FACING,discharge).setValue(FluidDeviceBlock.INLINE_MOVER,mover);
     }
@@ -25,7 +33,7 @@ public final class FluidPumpStartupGameTests {
         var source=helper.absolutePos(new BlockPos(0,1,0));var inlet=source.east();var pump=inlet.east();var outlet=pump.east();var tank=outlet.east();
         level.setBlock(source,ModBlocks.FLUID_GENERATOR.get().defaultBlockState(),3);
         level.setBlock(tank,ModBlocks.FLUID_RESERVOIR.get().defaultBlockState(),3);
-        level.setBlock(pump,inlinePump(Direction.EAST),3);
+        level.setBlock(pump,inlinePump(Direction.EAST),3);var power=powerInlineMover(level,pump);
         long sourceId=((FluidDeviceBlockEntity)level.getBlockEntity(source)).fluidIdentity(),tankId=((FluidDeviceBlockEntity)level.getBlockEntity(tank)).fluidIdentity();
         var feed=world.presets().stream().filter(p->p.id().equals("icheme:medium_crude")).findFirst().orElseThrow();
         // A liquid-only pump (decision D1 of the phase-ports batch; gas refuses nothing since request 11) refused the crude
@@ -56,7 +64,7 @@ public final class FluidPumpStartupGameTests {
             int component=world.components().indexOf("crude_pc12");double delivered=0;
             for(var phase:view.state().phaseMoles())delivered+=phase[component];
             helper.assertTrue(delivered>0,"Requested fluid did not reach the reservoir");
-            done[0]=true;for(var pos:java.util.List.of(source,inlet,pump,outlet,tank))level.removeBlock(pos,false);helper.succeed();
+            done[0]=true;for(var pos:java.util.List.of(source,inlet,pump,outlet,tank,power))level.removeBlock(pos,false);helper.succeed();
         });
     }
 }
