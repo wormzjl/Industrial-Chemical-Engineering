@@ -4564,6 +4564,7 @@ public final class PassiveStepSolver {
                     heldMelt[node][crystal.component()]+=p.massKg()/model.molecularWeight(crystal.component());heldMeltEnergy[node]+=p.massKg()*p.material().crystal().energyOffset();}
                 heldKept[node]=melting.kept(node,stock).moments().values();
             }
+            edgeFlow=new double[graph.pipes().size()];edgeDonor=new Transport[edgeFlow.length];edgeSuction=new Transport[edgeFlow.length];
             energy=new double[count];incomingMass=new double[count];incomingEnergy=new double[count];netMass=new double[count];
             for(int node=0;node<count;node++)if(layout[node]!=null)cachedVariables[node]=new double[layout[node].size()];
             int[] degree=new int[count];
@@ -5337,11 +5338,33 @@ public final class PassiveStepSolver {
          * perturbed column, and they are the only place each row's formula exists.
          */
         private void assemble(double[] x,FluidThermodynamics.State[] st,Transport[] tr,FluidThermodynamics.Prepared[] pr,double[] f) {
-            for(int node=0;node<layout.length;node++)if(layout[node]!=null)nodeAccumulate(node,x,st,tr);
-            for(int edge=0;edge<graph.pipes().size();edge++)edgeRows(edge,x,st,tr,f);
-            for(int node=0;node<layout.length;node++)if(layout[node]!=null)nodeRows(node,x,st,pr,f);
-            if(hasWeirs)weirRows(x,st,tr,f);
+            // Finding P-03 (batch 2026-11-13-codebase-review): each connection's transported flow and the streams of its
+            // ends are read once here, in the arithmetic every row read them in, and the rows below read them back.
+            for(int edge=0;edge<edgeFlow.length;edge++) {
+                var pipe=graph.pipes().get(edge);double q=flow(edge,x[edgeOffset+edge],tr);
+                edgeFlow[edge]=q;edgeDonor[edge]=drawn(edge,q>=0?0:1,tr[q>=0?pipe.first():pipe.second()],q);
+                edgeSuction[edge]=q>=0?edgeDonor[edge]:drawn(edge,0,tr[pipe.first()],q);
+            }
+            edgesRead=true;
+            try {
+                for(int node=0;node<layout.length;node++)if(layout[node]!=null)nodeAccumulate(node,x,st,tr);
+                for(int edge=0;edge<graph.pipes().size();edge++)edgeRows(edge,x,st,tr,f);
+                for(int node=0;node<layout.length;node++)if(layout[node]!=null)nodeRows(node,x,st,pr,f);
+                if(hasWeirs)weirRows(x,st,tr,f);
+            } finally {edgesRead=false;}
         }
+        /**
+         * P-03: per connection, what {@link #assemble}'s pre-pass read at its point: the transported flow ({@link #flow}), the
+         * stream of the end the flow leaves and the first end's (suction) stream ({@link #drawn}). Read only while
+         * {@code edgesRead}: the block sweep moves one node or one edge per column and reads its own.
+         */
+        private final double[] edgeFlow;private final Transport[] edgeDonor,edgeSuction;private boolean edgesRead;
+        private double flowAt(int edge,double[] x,Transport[] tr){return edgesRead?edgeFlow[edge]:flow(edge,x[edgeOffset+edge],tr);}
+        private Transport donorAt(int edge,Transport[] tr,double flow) {
+            if(edgesRead)return edgeDonor[edge];
+            var pipe=graph.pipes().get(edge);return drawn(edge,flow>=0?0:1,tr[flow>=0?pipe.first():pipe.second()],flow);
+        }
+        private Transport suctionAt(int edge,Transport[] tr,double flow){return edgesRead?edgeSuction[edge]:drawn(edge,0,tr[graph.pipes().get(edge).first()],flow);}
         /** Projection complementarity: retained water, all-water, or a water/gas split at the weir. */
         private void weirRows(double[] x,FluidThermodynamics.State[] st,Transport[] tr,double[] f){
             for(int edge=0;edge<weirOffsets.length;edge++)for(int end=0;end<2;end++){
@@ -5393,7 +5416,7 @@ public final class PassiveStepSolver {
             // A kettle's pool (W7): the bundle's heat into the vessel over the step, on its start state.
             double pooled=poolHeat(graph.reservoirs().get(node));stored+=dt*pooled;heat+=pooled;
             if(graph.reservoirs().get(node).inventory().tower()!=null) {
-                var flows=new double[graph.pipes().size()];for(int e=0;e<flows.length;e++)flows[e]=flow(e,x[edgeOffset+e],tr);
+                double[] flows;if(edgesRead)flows=edgeFlow;else{flows=new double[graph.pipes().size()];for(int e=0;e<flows.length;e++)flows[e]=flow(e,x[edgeOffset+e],tr);}
                 // The stream each spray edge delivers, as this point's transport draws it (COOLING_TOWER_PLAN.md 3.1).
                 double[][] drawn=null;
                 for(int edge:nodeEdges[node]){var pipe=graph.pipes().get(edge);boolean first=pipe.first()==node;
@@ -5405,10 +5428,10 @@ public final class PassiveStepSolver {
                 stored-=dt*exchange.energyWatt();heat-=exchange.energyWatt();net-=exchange.massLoss();
             }
             for(int edge:nodeEdges[node]) {
-                var pipe=graph.pipes().get(edge);int a=pipe.first(),b=pipe.second();double flow=flow(edge,x[edgeOffset+edge],tr);
+                var pipe=graph.pipes().get(edge);int a=pipe.first(),b=pipe.second();double flow=flowAt(edge,x,tr);
                 // The donor terms read the stream of the end the flow leaves: the donor's bulk at a BULK end (the same
                 // doubles as its whole state), its drawn phase at a phase port.
-                boolean first=node==a;int donor=flow>=0?a:b;var upstream=st[donor];var transport=drawn(edge,flow>=0?0:1,tr[donor],flow);
+                boolean first=node==a;int donor=flow>=0?a:b;var upstream=st[donor];var transport=donorAt(edge,tr,flow);
                 boolean receiver=node==(flow>=0?b:a);
                 double captureFraction=pipe.filter()==null?0:transport.solids.mass()/transport.mass;
                 double deliveredFlow=Math.abs(flow)*(1-captureFraction);
@@ -5451,7 +5474,7 @@ public final class PassiveStepSolver {
                     // node's pressure at this trial (decision D8: suction properties only). A turbine's work leaves the
                     // stream (negative), its drop read from the trial inlet to the trial exhaust node's pressure; the
                     // sparsity declares this row on both ends' columns and the flow's (buildSparsity).
-                    double power=moverPower(edge,flow,head,drawn(edge,0,tr[a],flow).density,st[a].pressure(),st[b].pressure());
+                    double power=moverPower(edge,flow,head,suctionAt(edge,tr,flow).density,st[a].pressure(),st[b].pressure());
                     stored+=dt*power;heat+=power;
                 }
                 // A heat-exchanging side delivers its donor's stream with the heat it took up crossing the wall, booked like
@@ -5565,9 +5588,9 @@ public final class PassiveStepSolver {
             // The edge unknown is the law's flow; what the connection carries is its saturation at the velocity cap of the
             // end it leaves ({@link #flow}, PassiveStepSolver.saturated), the flow every booking and actuator row reads. The
             // loss is the law's at the law's flow, in the stream of the end the flow leaves.
-            var pipe=graph.pipes().get(edge);int a=pipe.first(),b=pipe.second();double law=x[edgeOffset+edge],flow=flow(edge,law,tr);
-            int donor=flow>=0?a:b;var transport=drawn(edge,flow>=0?0:1,tr[donor],flow);double rho=transport.density;
-            var suction=drawn(edge,0,tr[a],flow);
+            var pipe=graph.pipes().get(edge);int a=pipe.first(),b=pipe.second();double law=x[edgeOffset+edge],flow=flowAt(edge,x,tr);
+            int donor=flow>=0?a:b;var transport=donorAt(edge,tr,flow);double rho=transport.density;
+            var suction=suctionAt(edge,tr,flow);
             double dz=graph.reservoirs().get(b).elevation()-graph.reservoirs().get(a).elevation();
             double loss=pipe.pressureDrop(law,rho,transport.viscosity);
             if(pipe.filter()!=null){
