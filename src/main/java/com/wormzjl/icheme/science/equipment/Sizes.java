@@ -28,10 +28,18 @@ import com.wormzjl.icheme.science.equipment.EquipmentShape.Orientation;
  * @param lengthRow  the constructor's row for the second size, or {@code null} where the kind has none
  * @param supportRow the constructor's row for the support, or {@code null} where it is fixed
  * @param moves      whether units of the kind have moving parts
+ * @param layoutRevision the revision of the cells the design places ({@link UnitDesign#layoutRevision()}), 1 or more:
+ *                   1 for every design when it was declared (batch 2026-11-13-codebase-review, E20). A change of the
+ *                   design's box, shell or interior cells or nozzles at any size bumps it, so its placed structures refresh
  */
 record Sizes(double minSize, double maxSize, double sizeStep, int minLength, int maxLength, int minSupport,
              int maxSupport, Orientation orientation, String sizeRow, String lengthRow, String supportRow,
-             boolean moves) {
+             boolean moves, int layoutRevision) {
     /** A number field whose method the design overrides: never read. */
     static final int COMPUTED = 0;
+
+    Sizes {
+        if (layoutRevision < 1)
+            throw new IllegalArgumentException("A design's layout revision is 1 or more (0 marks a cell for a refresh): " + layoutRevision);
+    }
 }

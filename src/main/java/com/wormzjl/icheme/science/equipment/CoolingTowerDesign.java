@@ -15,7 +15,8 @@ final class CoolingTowerDesign extends UnitDesign {
         super(new Sizes(Sizes.COMPUTED, Sizes.COMPUTED, Sizes.COMPUTED,
                 Sizes.COMPUTED, Sizes.COMPUTED,
                 0, 0,
-                Orientation.VERTICAL, null, null, null, false));
+                Orientation.VERTICAL, null, null, null, false,
+                1));
         this.natural=natural;
     }
     @Override public double minSize(){return natural?40:8;}

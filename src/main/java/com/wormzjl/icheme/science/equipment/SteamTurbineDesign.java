@@ -49,7 +49,8 @@ final class SteamTurbineDesign extends UnitDesign {
         super(new Sizes(.3, 3, .1,
                 1, 1,
                 0, EquipmentShape.MAX_SUPPORT,
-                Orientation.HORIZONTAL, "steam_turbine.casing", null, "steam_turbine.table", true));
+                Orientation.HORIZONTAL, "steam_turbine.casing", null, "steam_turbine.table", true,
+                1));
     }
 
     @Override

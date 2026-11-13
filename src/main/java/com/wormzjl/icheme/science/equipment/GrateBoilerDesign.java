@@ -64,7 +64,8 @@ final class GrateBoilerDesign extends UnitDesign {
         super(new Sizes(2, 12, .5,
                 3, 10,
                 3, 6,
-                Orientation.VERTICAL, "grate_boiler.width", "grate_boiler.length", "grate_boiler.grate", true));
+                Orientation.VERTICAL, "grate_boiler.width", "grate_boiler.length", "grate_boiler.grate", true,
+                1));
     }
 
     /** A new grate's length: 1.1 times its width (survey default clamp(1.1 Wg, 3, 10)). */

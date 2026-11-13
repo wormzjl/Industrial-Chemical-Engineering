@@ -58,7 +58,8 @@ final class FluidizedBedGasifierDesign extends UnitDesign {
         super(new Sizes(1.5, 6, .25,
                 1, 1,
                 Sizes.COMPUTED, EquipmentShape.MAX_SUPPORT,
-                Orientation.VERTICAL, "fluidized_bed_gasifier.diameter", null, "fluidized_bed_gasifier.elevation", true));
+                Orientation.VERTICAL, "fluidized_bed_gasifier.diameter", null, "fluidized_bed_gasifier.elevation", true,
+                1));
     }
 
     /**

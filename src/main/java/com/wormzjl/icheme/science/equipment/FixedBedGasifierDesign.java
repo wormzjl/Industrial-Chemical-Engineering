@@ -49,7 +49,8 @@ final class FixedBedGasifierDesign extends UnitDesign {
         super(new Sizes(2, 5, .25,
                 1, 1,
                 3, 5,
-                Orientation.VERTICAL, "fixed_bed_gasifier.diameter", null, "fixed_bed_gasifier.ash_lock", true));
+                Orientation.VERTICAL, "fixed_bed_gasifier.diameter", null, "fixed_bed_gasifier.ash_lock", true,
+                1));
     }
 
     @Override

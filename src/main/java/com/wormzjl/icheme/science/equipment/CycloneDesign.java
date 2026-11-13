@@ -62,7 +62,8 @@ final class CycloneDesign extends UnitDesign {
         super(new Sizes(.3, 2, .1,
                 1, 4,
                 Sizes.COMPUTED, MAX_DUST_OUTLET,
-                Orientation.VERTICAL, "cyclone.body", "cyclone.count", "cyclone.dust_outlet", true));
+                Orientation.VERTICAL, "cyclone.body", "cyclone.count", "cyclone.dust_outlet", true,
+                1));
     }
 
     /** The lowest dust outlet whose solids outlet keeps its pipe block over the ground. */

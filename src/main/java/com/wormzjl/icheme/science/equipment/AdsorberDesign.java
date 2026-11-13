@@ -43,7 +43,8 @@ final class AdsorberDesign extends UnitDesign {
         super(new Sizes(1, 4.6, .2,
                 1, 4,
                 Sizes.COMPUTED, 4,
-                Orientation.VERTICAL, "adsorber.diameter", "adsorber.beds", "adsorber.skirt", false));
+                Orientation.VERTICAL, "adsorber.diameter", "adsorber.beds", "adsorber.skirt", false,
+                1));
     }
 
     /** A new set: two beds, one adsorbing while the other regenerates (survey default 1 + 1). */

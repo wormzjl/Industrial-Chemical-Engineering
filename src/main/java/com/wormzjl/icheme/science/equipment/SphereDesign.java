@@ -63,7 +63,8 @@ final class SphereDesign extends UnitDesign {
         super(new Sizes(4, 24, 1,
                 1, 1,
                 2, 8,
-                Orientation.VERTICAL, "sphere.diameter", null, "sphere.support", false));
+                Orientation.VERTICAL, "sphere.diameter", null, "sphere.support", false,
+                1));
     }
 
     @Override

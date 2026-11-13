@@ -47,7 +47,8 @@ final class FluidizedBedBoilerDesign extends UnitDesign {
         super(new Sizes(3, 26, 1,
                 Sizes.COMPUTED, Sizes.COMPUTED,
                 5, 8,
-                Orientation.VERTICAL, "fluidized_bed_boiler.width", "fluidized_bed_boiler.cyclones", "fluidized_bed_boiler.grid", true));
+                Orientation.VERTICAL, "fluidized_bed_boiler.width", "fluidized_bed_boiler.cyclones", "fluidized_bed_boiler.grid", true,
+                1));
     }
 
     /** The fewest cyclones none of which is wider than 8.7 m or than a quarter of the furnace's height. */

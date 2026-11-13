@@ -84,7 +84,8 @@ final class TrickleBedReactorDesign extends UnitDesign {
         super(new Sizes(1, 5, .5,
                 1, 4,
                 Sizes.COMPUTED, EquipmentShape.MAX_SUPPORT,
-                Orientation.VERTICAL, "trickle_bed_reactor.diameter", "trickle_bed_reactor.beds", "trickle_bed_reactor.skirt", false));
+                Orientation.VERTICAL, "trickle_bed_reactor.diameter", "trickle_bed_reactor.beds", "trickle_bed_reactor.skirt", false,
+                1));
     }
 
     /**

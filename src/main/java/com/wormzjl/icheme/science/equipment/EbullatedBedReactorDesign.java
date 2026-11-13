@@ -126,7 +126,8 @@ final class EbullatedBedReactorDesign extends UnitDesign {
         super(new Sizes(2.5, 6, .5,
                 Sizes.COMPUTED, Sizes.COMPUTED,
                 Sizes.COMPUTED, EquipmentShape.MAX_SUPPORT,
-                Orientation.VERTICAL, "ebullated_bed_reactor.diameter", "ebullated_bed_reactor.tangent_length", "ebullated_bed_reactor.bay", false));
+                Orientation.VERTICAL, "ebullated_bed_reactor.diameter", "ebullated_bed_reactor.tangent_length", "ebullated_bed_reactor.bay", false,
+                1));
     }
 
     @Override

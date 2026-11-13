@@ -26,7 +26,8 @@ final class FccConverterDesign extends UnitDesign {
         super(new Sizes(4, 17, .5,
                 Sizes.COMPUTED, FccConverterLayout.MAX_RISER,
                 Sizes.COMPUTED, FccConverterLayout.MAX_BOTTOM,
-                Orientation.VERTICAL, "fcc_converter.regenerator", "fcc_converter.riser", "fcc_converter.regenerator_bottom", false));
+                Orientation.VERTICAL, "fcc_converter.regenerator", "fcc_converter.riser", "fcc_converter.regenerator_bottom", false,
+                1));
     }
 
     @Override

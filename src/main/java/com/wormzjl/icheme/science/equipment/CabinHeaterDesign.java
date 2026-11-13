@@ -24,7 +24,8 @@ final class CabinHeaterDesign extends UnitDesign {
         super(new Sizes(4, 12, 1,
                 Sizes.COMPUTED, 2 * ProcessUnit.MAX_CABIN_CELL,
                 3, EquipmentShape.MAX_SUPPORT,
-                Orientation.HORIZONTAL, "radiant_width", "radiant_length", "heater_floor", false));
+                Orientation.HORIZONTAL, "radiant_width", "radiant_length", "heater_floor", false,
+                1));
     }
 
     @Override

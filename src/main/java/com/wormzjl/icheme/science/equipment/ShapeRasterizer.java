@@ -497,6 +497,25 @@ public final class ShapeRasterizer {
     }
 
     /**
+     * The layout revisions of the two kinds no {@link UnitDesign} draws, a drum and a column, declared as a design's are
+     * ({@link UnitDesign#layoutRevision()}): 1 when declared (batch 2026-11-13-codebase-review, E20), bumped by a change
+     * of their box, shell or interior cells or nozzles at any size.
+     */
+    public static final int DRUM_LAYOUT_REVISION = 1, COLUMN_LAYOUT_REVISION = 1;
+
+    /**
+     * The declared revision of the layout the code places for {@code shape} (owner request 2026-10-18: a placed vessel
+     * follows its kind's current drawing), read through its kind: its design's ({@link UnitDesign#layoutRevision()}), a
+     * drum's or a column's constant above; 1 or more. Each shell cell saves the revision it was placed by; another one on
+     * load means the cells in the world no longer match the layout the code places, and the structure is rebuilt to it.
+     */
+    public static int layoutRevision(EquipmentShape shape) {
+        var kind = shape.kind();
+        if (kind.designed()) return UnitDesign.of(kind).layoutRevision();
+        return kind == EquipmentShape.Kind.COLUMN ? COLUMN_LAYOUT_REVISION : DRUM_LAYOUT_REVISION;
+    }
+
+    /**
      * The stamp of the shape's layout (owner request 2026-10-18: a placed vessel follows its kind's current drawing):
      * a 64-bit FNV-1a hash of its box, its shell and interior cells and its ports, never 0. A shell cell keeps the stamp
      * it was placed with; another one on load means the vessel's cells in the world no longer match the layout the code

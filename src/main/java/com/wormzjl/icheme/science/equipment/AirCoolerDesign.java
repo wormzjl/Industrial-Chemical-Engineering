@@ -26,7 +26,8 @@ final class AirCoolerDesign extends UnitDesign {
         super(new Sizes(1.5, 3, .5,
                 Sizes.COMPUTED, ProcessUnit.MAX_BAY_LENGTH,
                 3, EquipmentShape.MAX_SUPPORT,
-                Orientation.HORIZONTAL, "bay", null, "bundle_height", true));
+                Orientation.HORIZONTAL, "bay", null, "bundle_height", true,
+                1));
     }
 
     /** The shortest bay of width {@code size} whose fans cover {@link ProcessUnit#FAN_COVERAGE} of its bundle face. */

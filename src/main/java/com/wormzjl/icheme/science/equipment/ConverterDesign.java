@@ -42,7 +42,8 @@ final class ConverterDesign extends UnitDesign {
         super(new Sizes(1, 20, 1,
                 2, 24,
                 0, 0,
-                Orientation.VERTICAL, "converter.diameter", "converter.shell", null, false));
+                Orientation.VERTICAL, "converter.diameter", "converter.shell", null, false,
+                1));
         this.gas = gas;
     }
 

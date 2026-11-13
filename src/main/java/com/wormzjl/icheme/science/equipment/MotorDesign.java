@@ -38,7 +38,8 @@ final class MotorDesign extends UnitDesign {
         super(new Sizes(Sizes.COMPUTED, Sizes.COMPUTED, .05,
                 1, 1,
                 0, 8,
-                Orientation.HORIZONTAL, null, null, "machine_table", true));
+                Orientation.HORIZONTAL, null, null, "machine_table", true,
+                1));
         this.generator = generator;
     }
 

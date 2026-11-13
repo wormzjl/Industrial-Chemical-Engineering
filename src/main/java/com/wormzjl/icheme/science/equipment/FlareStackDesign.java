@@ -20,7 +20,8 @@ final class FlareStackDesign extends UnitDesign {
         super(new Sizes(Flare.MIN_TIP, Flare.MAX_TIP, Flare.TIP_STEP,
                 1, 1,
                 0, 0,
-                Orientation.VERTICAL, "flare_tip", null, null, false));
+                Orientation.VERTICAL, "flare_tip", null, null, false,
+                1));
     }
 
     @Override
