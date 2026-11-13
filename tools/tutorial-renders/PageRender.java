@@ -1,7 +1,7 @@
 import com.wormzjl.icheme.client.gui.common.kit.PanelSkin;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
 import com.wormzjl.icheme.client.gui.tutorial.GuidePage;
-import com.wormzjl.icheme.science.tutorial.cards.Card;
+import com.wormzjl.icheme.client.gui.tutorial.cards.Card;
 import com.wormzjl.icheme.science.tutorial.guide.GuideFile;
 import com.wormzjl.icheme.science.tutorial.guide.PageFile;
 import com.wormzjl.icheme.science.tutorial.guide.Progress;

@@ -61,9 +61,9 @@ class StillInsideFilmTest {
             });
             var rect = loader.loadClass(com.wormzjl.icheme.client.gui.common.kit.Rect.class.getName());
             var area = rect.getConstructor(int.class, int.class, int.class, int.class).newInstance(20, 40, 300, 150);
-            var card = loader.loadClass(com.wormzjl.icheme.science.tutorial.cards.Cards.class.getName()).getMethod("build", String.class).invoke(null, "unit_map");
-            var cardType = loader.loadClass(com.wormzjl.icheme.science.tutorial.cards.Card.class.getName());
-            var stateType = loader.loadClass(com.wormzjl.icheme.science.tutorial.cards.Card.State.class.getName());
+            var card = loader.loadClass(com.wormzjl.icheme.client.gui.tutorial.cards.Cards.class.getName()).getMethod("build", String.class).invoke(null, "unit_map");
+            var cardType = loader.loadClass(com.wormzjl.icheme.client.gui.tutorial.cards.Card.class.getName());
+            var stateType = loader.loadClass(com.wormzjl.icheme.client.gui.tutorial.cards.Card.State.class.getName());
             var skin = loader.loadClass(com.wormzjl.icheme.client.gui.common.kit.PanelSkin.class.getName());
             var skinType = loader.loadClass(com.wormzjl.icheme.client.gui.common.kit.Skin.class.getName());
             cardType.getMethod("draw", canvas, rect, stateType, skinType, java.util.function.Function.class).invoke(card, c, area,

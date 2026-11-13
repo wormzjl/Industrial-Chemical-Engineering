@@ -1,7 +1,7 @@
-package com.wormzjl.icheme.science.tutorial;
+package com.wormzjl.icheme.client.gui.tutorial;
 
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
-import com.wormzjl.icheme.science.tutorial.scene.Labels;
+import com.wormzjl.icheme.client.gui.tutorial.Labels;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;

@@ -36,7 +36,7 @@ public final class FilmScreen extends Screen {
     private Rect glass;
     private SkinButton back, replay, next;
     /** The client's temperature format for the readouts. */
-    private final java.util.function.DoubleFunction<String> temperature = com.wormzjl.icheme.science.tutorial.cards.Card.temperature(ClientConfig.temperature());
+    private final java.util.function.DoubleFunction<String> temperature = com.wormzjl.icheme.client.gui.tutorial.cards.Card.temperature(ClientConfig.temperature());
 
     /** The screen a close returns to (null: none), and what runs once when the last stop is first reached (null: nothing). */
     private final Screen parent;

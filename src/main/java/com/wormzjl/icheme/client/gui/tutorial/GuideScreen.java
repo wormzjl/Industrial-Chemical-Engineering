@@ -4,8 +4,8 @@ import com.wormzjl.icheme.client.ClientConfig;
 import com.wormzjl.icheme.client.gui.common.kit.GuiCanvas;
 import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
 import com.wormzjl.icheme.science.display.DisplayUnit;
-import com.wormzjl.icheme.science.tutorial.cards.Card;
-import com.wormzjl.icheme.science.tutorial.cards.Cards;
+import com.wormzjl.icheme.client.gui.tutorial.cards.Card;
+import com.wormzjl.icheme.client.gui.tutorial.cards.Cards;
 import com.wormzjl.icheme.science.tutorial.films.Films;
 import com.wormzjl.icheme.science.tutorial.guide.Guide;
 import net.minecraft.client.gui.GuiGraphics;
@@ -180,7 +180,7 @@ public class GuideScreen extends Screen {
         int w = Math.min(GuidePage.DESIGN_WIDTH, width - 8), h = Math.min(GuidePage.DESIGN_HEIGHT, height - 8);
         left = (width - w) / 2;
         top = (height - h) / 2;
-        page = GuidePage.place(new GuidePage.Input(guide(), GuideClient.progress(), open, card, com.wormzjl.icheme.science.tutorial.cards.Card.temperature(ClientConfig.temperature()))
+        page = GuidePage.place(new GuidePage.Input(guide(), GuideClient.progress(), open, card, com.wormzjl.icheme.client.gui.tutorial.cards.Card.temperature(ClientConfig.temperature()))
                 .withPage(GuideClient.pages(), pageId), w, h, GuiCanvas.measure(font), GuideScreen::tr, themeHint());
         read();
     }

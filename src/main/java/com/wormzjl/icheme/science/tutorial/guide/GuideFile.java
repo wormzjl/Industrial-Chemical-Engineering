@@ -3,7 +3,6 @@ package com.wormzjl.icheme.science.tutorial.guide;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.wormzjl.icheme.science.tutorial.cards.Cards;
 import com.wormzjl.icheme.science.tutorial.films.Films;
 
 import java.io.IOException;
@@ -39,21 +38,32 @@ public final class GuideFile {
     private GuideFile() {
     }
 
-    /** The guide on the class path (the mod's jar; the tests' and the render tool's class path). */
+    /** The guide on the class path (the mod's jar; the tests' and the render tool's class path), its cards checked as names. */
     public static Guide load() {
+        return load(GuideFile::cardName);
+    }
+
+    /** The guide on the class path, its cards checked by {@code cards} (the client's cards, {@code Cards.has}). */
+    public static Guide load(Predicate<String> cards) {
         try (InputStream in = GuideFile.class.getResourceAsStream(PATH)) {
             if (in == null) throw new IllegalStateException("No " + PATH);
-            return read(JsonParser.parseReader(new InputStreamReader(in, StandardCharsets.UTF_8)).getAsJsonObject());
+            return read(JsonParser.parseReader(new InputStreamReader(in, StandardCharsets.UTF_8)).getAsJsonObject(), Films::has, cards);
         } catch (IOException e) {
             throw new IllegalStateException("Unreadable " + PATH, e);
         }
     }
 
-    /** The guide in {@code json}, its films and cards checked against {@code Films} and {@code Cards}. */
+    /**
+     * The guide in {@code json}, its films checked against {@code Films} and its cards as names: the cards are drawn on the
+     * client (code review finding 8), which checks them against its own {@code Cards}; {@code GuideCoverageTest} builds each.
+     */
     public static Guide read(JsonObject json) {
-        var films = new java.util.HashSet<String>();
-        Films.names().forEach(films::add);
-        return read(json, films::contains, Set.copyOf(Cards.names())::contains);
+        return read(json, Films::has, GuideFile::cardName);
+    }
+
+    /** A card's name as the guide writes one: a lower-case word with underscores. */
+    static boolean cardName(String name) {
+        return name.matches("[a-z][a-z0-9_]*");
     }
 
     public static Guide read(JsonObject json, Predicate<String> films, Predicate<String> cards) {

@@ -217,7 +217,7 @@ class DrawCallTest {
         var guide = com.wormzjl.icheme.science.tutorial.guide.GuideFile.load();
         var pages = com.wormzjl.icheme.science.tutorial.guide.PageFile.load();
         java.util.function.Function<String, String> tr = key -> key;
-        var state = com.wormzjl.icheme.science.tutorial.cards.Card.State.of(0, 0);
+        var state = com.wormzjl.icheme.client.gui.tutorial.cards.Card.State.of(0, 0);
         for (int[] size : new int[][]{{464, 254}, {312, 232}}) {
             int budget = 0, most = 0;
             for (var chapter : guide.chapters()) {

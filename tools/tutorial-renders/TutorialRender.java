@@ -6,7 +6,7 @@ import com.wormzjl.icheme.client.gui.tutorial.FilmLayout;
 import com.wormzjl.icheme.client.gui.tutorial.FilmOverlay;
 import com.wormzjl.icheme.science.equipment.Mesh;
 import com.wormzjl.icheme.science.equipment.Paint;
-import com.wormzjl.icheme.science.tutorial.cards.Card;
+import com.wormzjl.icheme.client.gui.tutorial.cards.Card;
 import com.wormzjl.icheme.science.tutorial.films.Films;
 import com.wormzjl.icheme.science.tutorial.scene.Bodies;
 import com.wormzjl.icheme.science.tutorial.scene.Frame;

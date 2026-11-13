@@ -10,8 +10,8 @@ import com.wormzjl.icheme.client.gui.common.kit.PanelSkin;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
-import com.wormzjl.icheme.science.tutorial.cards.Card;
-import com.wormzjl.icheme.science.tutorial.cards.Cards;
+import com.wormzjl.icheme.client.gui.tutorial.cards.Card;
+import com.wormzjl.icheme.client.gui.tutorial.cards.Cards;
 import com.wormzjl.icheme.science.tutorial.guide.Glossary;
 import com.wormzjl.icheme.science.tutorial.guide.Guide;
 import com.wormzjl.icheme.science.tutorial.guide.Marked;
@@ -54,7 +54,7 @@ public final class GuidePage {
                         @Nullable String page) {
         /** In °C: the render tool's and the tests' page. */
         public Input(Guide guide, Progress progress, String open, @Nullable String card) {
-            this(guide, progress, open, card, com.wormzjl.icheme.science.tutorial.cards.Card.CELSIUS);
+            this(guide, progress, open, card, com.wormzjl.icheme.client.gui.tutorial.cards.Card.CELSIUS);
         }
 
         /** With no equipment page open. */

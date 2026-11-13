@@ -1,4 +1,4 @@
-package com.wormzjl.icheme.science.tutorial.cards;
+package com.wormzjl.icheme.client.gui.tutorial.cards;
 
 import org.jetbrains.annotations.Nullable;
 
@@ -31,6 +31,11 @@ public final class Cards {
     /** Every card's name, in order. */
     public static List<String> names() {
         return List.copyOf(ALL.keySet());
+    }
+
+    /** Whether a card is named {@code name}: the guide's check on the client (GuideClient), nothing built. */
+    public static boolean has(String name) {
+        return ALL.containsKey(name);
     }
 
     /** The card named {@code name}, built anew; null for none. */

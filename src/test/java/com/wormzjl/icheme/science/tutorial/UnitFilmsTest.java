@@ -1,7 +1,7 @@
 package com.wormzjl.icheme.science.tutorial;
 
 import com.wormzjl.icheme.science.flowsheet.Flowsheet;
-import com.wormzjl.icheme.science.tutorial.cards.UnitMap;
+import com.wormzjl.icheme.client.gui.tutorial.cards.UnitMap;
 import com.wormzjl.icheme.science.tutorial.films.CrudeUnit;
 import com.wormzjl.icheme.science.tutorial.films.EquipmentFilms;
 import com.wormzjl.icheme.science.tutorial.films.Films;

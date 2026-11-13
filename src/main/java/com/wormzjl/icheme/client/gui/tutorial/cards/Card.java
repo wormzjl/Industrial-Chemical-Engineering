@@ -1,4 +1,4 @@
-package com.wormzjl.icheme.science.tutorial.cards;
+package com.wormzjl.icheme.client.gui.tutorial.cards;
 
 import com.wormzjl.icheme.client.gui.common.kit.Canvas;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
@@ -60,11 +60,11 @@ public interface Card {
 
     /** Kelvin in whole degrees of {@code unit}, with its symbol. */
     static DoubleFunction<String> temperature(DisplayUnit.TemperatureUnit unit) {
-        return kelvin -> String.format(Locale.ROOT, "%d %s", Math.round(unit.display(kelvin)), unit.symbol());
+        return com.wormzjl.icheme.science.tutorial.guide.Guide.temperature(unit);
     }
 
     /** Whole degrees Celsius: the render tool's format, and the client's default. */
-    DoubleFunction<String> CELSIUS = temperature(DisplayUnit.TemperatureUnit.CELSIUS);
+    DoubleFunction<String> CELSIUS = com.wormzjl.icheme.science.tutorial.guide.Guide.CELSIUS;
 
     /** A mass flow (kg/s) in {@code unit}'s time: three significant figures, thousands apart, and its unit (kg/h, kg/min, kg/s). */
     static DoubleFunction<String> massFlow(DisplayUnit.FlowRateUnit unit) {

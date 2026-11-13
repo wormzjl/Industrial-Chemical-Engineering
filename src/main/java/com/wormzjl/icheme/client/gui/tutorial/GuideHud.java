@@ -50,7 +50,7 @@ public final class GuideHud {
         int width = Math.min(MAX_WIDTH, g.guiWidth() - 2 * X - 4);
         var key = java.util.List.<Object>of(current, width, GuideClient.language(), ClientConfig.temperature(), GuideClient.generation());
         if (!key.equals(lineFor)) {
-            line = line(Marked.parse(chapter.text(step, k -> Component.translatable(k).getString(), com.wormzjl.icheme.science.tutorial.cards.Card.temperature(ClientConfig.temperature()))).text(), width, m);
+            line = line(Marked.parse(chapter.text(step, k -> Component.translatable(k).getString(), com.wormzjl.icheme.client.gui.tutorial.cards.Card.temperature(ClientConfig.temperature()))).text(), width, m);
             lineFor = key;
         }
         String text = line;

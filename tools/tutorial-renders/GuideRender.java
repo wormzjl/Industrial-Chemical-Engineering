@@ -12,7 +12,7 @@ import com.wormzjl.icheme.client.gui.screens.inventory.FluidDeviceScreen.FluidGu
 import com.wormzjl.icheme.client.gui.tutorial.GuidePage;
 import com.wormzjl.icheme.client.gui.tutorial.TourLayout;
 import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind;
-import com.wormzjl.icheme.science.tutorial.cards.Card;
+import com.wormzjl.icheme.client.gui.tutorial.cards.Card;
 import com.wormzjl.icheme.science.tutorial.guide.GuideFile;
 import com.wormzjl.icheme.science.tutorial.guide.Progress;
 import com.wormzjl.icheme.science.tutorial.guide.Tour;
@@ -361,7 +361,7 @@ public final class GuideRender {
         var chain = new ArrayList<Frame>();
         for (int carbons : new int[]{1, 5, 16, 40}) {
             int at = 0;
-            while (com.wormzjl.icheme.science.tutorial.cards.Chain.CARBONS[at] != carbons) at++;
+            while (com.wormzjl.icheme.client.gui.tutorial.cards.Chain.CARBONS[at] != carbons) at++;
             chain.add(Frame.of(carbons + " carbons", 0, at / 12.0));
         }
         sheet(out, "crude/what", "chain", chain);
@@ -381,7 +381,7 @@ public final class GuideRender {
                 new Frame("Break pressed", 0, 0, 4, Set.of(0, 2, 3, 4))));
         sheet(out, "crude/parts", "three_parts", List.of(Frame.of("heat 0", 0, 0), Frame.of("heat 0.5", 0, .5), Frame.of("heat 1", 0, 1)));
         // P2b: the pot's temperature along the run, at five places: the start, the first drops, before the cut, past it, the end.
-        var pot = new com.wormzjl.icheme.science.tutorial.cards.PotTemperature();
+        var pot = new com.wormzjl.icheme.client.gui.tutorial.cards.PotTemperature();
         double cut = pot.cuts()[0] / pot.share(1);
         sheet(out, "still/cut", "pot_temperature", List.of(Frame.of("start", 0, 0), Frame.of("early", 0, .15), Frame.of("before the cut", 0, cut * .9),
                 Frame.of("past the cut", 0, (cut + 1) / 2), Frame.of("the end", 0, 1)));

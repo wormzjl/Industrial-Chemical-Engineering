@@ -16,6 +16,14 @@ import java.util.regex.Pattern;
  * across the guide is {@code <chapter>/<step>}, its advancement {@code icheme:tutorial/<chapter>/<step>}. No Minecraft type.
  */
 public record Guide(List<Chapter> chapters, Map<String, String> terms) {
+    /** Kelvin in whole degrees of {@code unit}, with its symbol: the guide's temperatures, and the cards'. */
+    public static java.util.function.DoubleFunction<String> temperature(com.wormzjl.icheme.science.display.DisplayUnit.TemperatureUnit unit) {
+        return kelvin -> String.format(Locale.ROOT, "%d %s", Math.round(unit.display(kelvin)), unit.symbol());
+    }
+
+    /** Whole degrees Celsius: the render tool's format, and the client's default. */
+    public static final java.util.function.DoubleFunction<String> CELSIUS = temperature(com.wormzjl.icheme.science.display.DisplayUnit.TemperatureUnit.CELSIUS);
+
     public static final String KEY = "tutorial.icheme.guide.";
     /** An id: lower-case letters, digits and {@code _}, 1 to 32 characters. */
     static final Pattern ID = Pattern.compile("[a-z0-9_]{1,32}");
@@ -105,7 +113,7 @@ public record Guide(List<Chapter> chapters, Map<String, String> terms) {
 
         /** {@code step}'s sentence as {@code tr} gives it, a {@code %s} in it filled with the chapter's source line, temperatures in °C. */
         public String text(Step step, java.util.function.Function<String, String> tr) {
-            return text(step, tr, com.wormzjl.icheme.science.tutorial.cards.Card.CELSIUS);
+            return text(step, tr, CELSIUS);
         }
 
         /**

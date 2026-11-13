@@ -4,9 +4,9 @@ import com.wormzjl.icheme.client.gui.common.kit.Canvas;
 import com.wormzjl.icheme.client.gui.common.kit.Measure;
 import com.wormzjl.icheme.client.gui.common.kit.Palette;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
-import com.wormzjl.icheme.science.tutorial.cards.ThreeParts;
+import com.wormzjl.icheme.client.gui.tutorial.cards.ThreeParts;
 import com.wormzjl.icheme.science.tutorial.scene.Frame;
-import com.wormzjl.icheme.science.tutorial.scene.Labels;
+import com.wormzjl.icheme.client.gui.tutorial.Labels;
 import com.wormzjl.icheme.science.tutorial.scene.Projection;
 import com.wormzjl.icheme.science.tutorial.scene.Track;
 

@@ -76,16 +76,16 @@ class GuideFileTest {
             assertNotSame(GuideFile.class, file);
             assertNotNull(file.getMethod("load").invoke(null));
             for (var name : List.of("com.wormzjl.icheme.science.tutorial.guide.Progress", "com.wormzjl.icheme.science.tutorial.guide.Glossary",
-                    "com.wormzjl.icheme.science.tutorial.guide.Marked", "com.wormzjl.icheme.science.tutorial.cards.ThreeParts", "com.wormzjl.icheme.science.tutorial.cards.Chain",
-                    "com.wormzjl.icheme.science.tutorial.cards.BarrelData", "com.wormzjl.icheme.science.tutorial.cards.Barrel", "com.wormzjl.icheme.science.tutorial.cards.Products",
-                    "com.wormzjl.icheme.science.tutorial.cards.Road", "com.wormzjl.icheme.science.tutorial.cards.PotTemperature",
+                    "com.wormzjl.icheme.science.tutorial.guide.Marked", "com.wormzjl.icheme.client.gui.tutorial.cards.ThreeParts", "com.wormzjl.icheme.client.gui.tutorial.cards.Chain",
+                    "com.wormzjl.icheme.science.tutorial.cards.BarrelData", "com.wormzjl.icheme.client.gui.tutorial.cards.Barrel", "com.wormzjl.icheme.client.gui.tutorial.cards.Products",
+                    "com.wormzjl.icheme.client.gui.tutorial.cards.Road", "com.wormzjl.icheme.client.gui.tutorial.cards.PotTemperature",
                     "com.wormzjl.icheme.science.tutorial.guide.StillCondition",
                     "com.wormzjl.icheme.science.tutorial.guide.SheetCondition", "com.wormzjl.icheme.science.tutorial.films.StillTray", "com.wormzjl.icheme.science.tutorial.films.SmallTower",
                     "com.wormzjl.icheme.science.tutorial.guide.PageFile", "com.wormzjl.icheme.science.tutorial.films.EquipmentFilms", "com.wormzjl.icheme.science.tutorial.films.CrudeUnit",
                     "com.wormzjl.icheme.science.tutorial.equipment.ReferenceShapes"))
                 Class.forName(name, true, loader);
             // Every card builds, its recording read, with no Minecraft class.
-            var cards = loader.loadClass("com.wormzjl.icheme.science.tutorial.cards.Cards");
+            var cards = loader.loadClass("com.wormzjl.icheme.client.gui.tutorial.cards.Cards");
             for (var name : (List<?>) cards.getMethod("names").invoke(null)) assertNotNull(cards.getMethod("build", String.class).invoke(null, name), String.valueOf(name));
             // P5: the pages read, and every film builds, with no Minecraft class.
             assertNotNull(loader.loadClass("com.wormzjl.icheme.science.tutorial.guide.PageFile").getMethod("load").invoke(null));

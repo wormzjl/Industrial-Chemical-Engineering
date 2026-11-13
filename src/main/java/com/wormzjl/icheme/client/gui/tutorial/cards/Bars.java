@@ -1,5 +1,6 @@
-package com.wormzjl.icheme.science.tutorial.cards;
+package com.wormzjl.icheme.client.gui.tutorial.cards;
 
+import com.wormzjl.icheme.science.tutorial.cards.BarrelData;
 import com.wormzjl.icheme.client.gui.common.kit.Canvas;
 import com.wormzjl.icheme.client.gui.common.kit.Palette;
 

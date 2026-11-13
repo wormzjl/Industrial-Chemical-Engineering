@@ -1,4 +1,4 @@
-package com.wormzjl.icheme.science.tutorial.cards;
+package com.wormzjl.icheme.client.gui.tutorial.cards;
 
 import com.wormzjl.icheme.science.tutorial.films.StillRunData;
 import org.junit.jupiter.api.Test;

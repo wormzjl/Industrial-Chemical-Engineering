@@ -24,7 +24,7 @@ public final class GuideClient {
     }
 
     public static Guide guide() {
-        if (guide == null) guide = GuideFile.load();
+        if (guide == null) guide = GuideFile.load(com.wormzjl.icheme.client.gui.tutorial.cards.Cards::has);
         return guide;
     }
 

@@ -1,6 +1,6 @@
 package com.wormzjl.icheme.client.gui.tutorial;
 
-import com.wormzjl.icheme.science.tutorial.cards.Card;
+import com.wormzjl.icheme.client.gui.tutorial.cards.Card;
 
 import java.util.Set;
 import java.util.TreeSet;

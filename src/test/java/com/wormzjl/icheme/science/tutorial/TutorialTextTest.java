@@ -1,6 +1,6 @@
 package com.wormzjl.icheme.science.tutorial;
 
-import com.wormzjl.icheme.science.tutorial.cards.Cards;
+import com.wormzjl.icheme.client.gui.tutorial.cards.Cards;
 import com.wormzjl.icheme.science.tutorial.films.Films;
 import com.wormzjl.icheme.science.tutorial.guide.Glossary;
 import com.wormzjl.icheme.science.tutorial.guide.GuideFile;
@@ -185,6 +185,6 @@ class TutorialTextTest {
             if (fixed.matcher(line).find()) faults.add(e.getKey() + ": " + e.getValue());
         }
         assertEquals(List.of(), faults);
-        assertEquals("Set it to 370 °C.", com.wormzjl.icheme.science.tutorial.guide.Guide.temperatures("Set it to {643.15 K}.", com.wormzjl.icheme.science.tutorial.cards.Card.CELSIUS));
+        assertEquals("Set it to 370 °C.", com.wormzjl.icheme.science.tutorial.guide.Guide.temperatures("Set it to {643.15 K}.", com.wormzjl.icheme.client.gui.tutorial.cards.Card.CELSIUS));
     }
 }

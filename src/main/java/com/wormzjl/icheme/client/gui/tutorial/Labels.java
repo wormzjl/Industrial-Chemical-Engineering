@@ -1,4 +1,4 @@
-package com.wormzjl.icheme.science.tutorial.scene;
+package com.wormzjl.icheme.client.gui.tutorial;
 
 import com.wormzjl.icheme.science.math.DeterministicMath;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
