@@ -90,8 +90,25 @@ public final class TutorialNetwork {
         TutorialTriggers.GUIDE_STEP.get().trigger(player, payload.step());
     }
 
+    /** Each player's last answered Hello, server tick (code review finding 6); a player object is one login, so its first Hello always passes. */
+    private static final java.util.Map<ServerPlayer, Integer> HEARD = new java.util.WeakHashMap<>();
+    /** At most one Hello answered a player a second (20 ticks), as the fluid edits' admission. */
+    static final int HELLO_TICKS = 20;
+
+    /**
+     * A client's Hello: its progress, at most once a second. The client sends one a login ({@code GuideClient.hello}), so a
+     * dropped one follows an answered one; every advancement earned sends the progress again ({@link #earned}).
+     */
     private static void hello(Hello payload, IPayloadContext context) {
-        if (context.player() instanceof ServerPlayer player) send(player);
+        if (context.player() instanceof ServerPlayer player && admit(HEARD, player, player.server.getTickCount())) send(player);
+    }
+
+    /** Whether {@code player}'s Hello at {@code tick} is answered: none answered in the last {@link #HELLO_TICKS}. */
+    static <P> boolean admit(java.util.Map<P, Integer> heard, P player, int tick) {
+        Integer last = heard.get(player);
+        if (last != null && tick - last < HELLO_TICKS) return false;
+        heard.put(player, tick);
+        return true;
     }
 
     /** A tutorial advancement earned: the player's client hears its progress again. */

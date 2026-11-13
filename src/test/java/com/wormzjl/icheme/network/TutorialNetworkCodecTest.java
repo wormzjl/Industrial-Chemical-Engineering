@@ -31,6 +31,16 @@ class TutorialNetworkCodecTest {
         assertEquals(new TutorialNetwork.Progress(Set.of()), roundTrip(TutorialNetwork.Progress.STREAM_CODEC, new TutorialNetwork.Progress(Set.of())));
     }
 
+    /** Code review finding 6: one Hello a player a second is answered; another player, or the next second, is. */
+    @Test
+    void aHelloIsAnsweredAtMostOnceASecond() {
+        var heard = new java.util.HashMap<String, Integer>();
+        assertTrue(TutorialNetwork.admit(heard, "a", 100), "the first");
+        assertFalse(TutorialNetwork.admit(heard, "a", 100 + TutorialNetwork.HELLO_TICKS - 1), "within the second");
+        assertTrue(TutorialNetwork.admit(heard, "b", 101), "another player");
+        assertTrue(TutorialNetwork.admit(heard, "a", 100 + TutorialNetwork.HELLO_TICKS), "the next second");
+    }
+
     @Test
     void theNetworkNamesNoClientClassButItsHandlersLambda() throws Exception {
         var source = Files.readString(Path.of("src/main/java/com/wormzjl/icheme/network/TutorialNetwork.java"));

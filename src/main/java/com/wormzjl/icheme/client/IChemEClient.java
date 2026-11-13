@@ -25,12 +25,6 @@ public final class IChemEClient {
         event.register(ModMenus.PIPELINE_TOOL.get(), com.wormzjl.icheme.client.gui.screens.inventory.PipelineToolScreen::new);
     }
 
-    /** The P0 film command (batch 2026-11-12-tutorial-system); the field guide replaces it in P1. */
-    @SubscribeEvent
-    public static void registerCommands(net.neoforged.neoforge.client.event.RegisterClientCommandsEvent event) {
-        com.wormzjl.icheme.client.gui.tutorial.FilmCommand.register(event);
-    }
-
     /** The field guide's files and laid-out pages drop at a resource reload, a language change included (code review finding 4). */
     @SubscribeEvent
     public static void registerReloadListeners(net.neoforged.neoforge.client.event.RegisterClientReloadListenersEvent event) {
