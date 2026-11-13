@@ -729,7 +729,7 @@ public final class EquipmentStructure {
             case ELECTRIC -> com.wormzjl.icheme.science.plant.still.BatchStill.Heater.ELECTRIC;
         };
         var design = new com.wormzjl.icheme.science.plant.still.BatchStill.Design(shape.volume(), heater, options.condenses(), options.stages());
-        // The pot's liquid stands over its straight side and its head: 1.1 diameters (ProcessUnit.StillPlan).
+        // The pot's liquid stands over its straight side and its head: 1.1 diameters (BatchStillDesign.StillPlan).
         double height = 1.1 * design.diameter();
         var potPorts = stillPorts(level, vessel, java.util.Set.of(EquipmentShape.Role.CHARGE, EquipmentShape.Role.DRAIN, EquipmentShape.Role.VAPOUR_OUTLET), PhysicalFluidTopology.ConnectionRole.VESSEL);
         var pot = new FluidWorldAuthority.UnitVessel(position(level, cells.getFirst()), potPorts, shape.volume(), height,

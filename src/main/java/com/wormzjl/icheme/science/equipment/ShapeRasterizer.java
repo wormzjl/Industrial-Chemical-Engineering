@@ -569,20 +569,20 @@ public final class ShapeRasterizer {
      * still" puts its dots there): the pot's box, low corner then high corner, and its tangent line's height; the vapour's
      * path from the pot's top up the helmet and the gooseneck into the condenser; the condenser shell's box; a pot still's
      * condensate path along the shell's bottom to its cold end and down to the distillate nozzle. Null for another kind or
-     * a still without its own condenser. Read from the plan {@link ProcessUnit#batchStill} draws, so it adds no number.
+     * a still without its own condenser. Read from the plan {@link BatchStillDesign#build} draws, so it adds no number.
      */
     public static @Nullable StillParts stillParts(EquipmentShape shape) {
         if (shape.kind() != EquipmentShape.Kind.BATCH_STILL || !shape.still().condenses()) return null;
-        var p = ProcessUnit.StillPlan.of(shape);
+        var p = BatchStillDesign.StillPlan.of(shape);
         var t = shape.transform();
-        double x = ProcessUnit.StillPlan.POT_X, z = ProcessUnit.StillPlan.POT_Z, r = p.d() / 2, cx = ProcessUnit.StillPlan.SPOUT_X;
-        double zc = ProcessUnit.StillPlan.COLD_END, yk = p.condenser(), rk = p.shell(), yg = p.gooseneck();
+        double x = BatchStillDesign.StillPlan.POT_X, z = BatchStillDesign.StillPlan.POT_Z, r = p.d() / 2, cx = BatchStillDesign.StillPlan.SPOUT_X;
+        double zc = BatchStillDesign.StillPlan.COLD_END, yk = p.condenser(), rk = p.shell(), yg = p.gooseneck();
         double neck = p.options().column() ? p.columnTop() : p.helmetTop();
         var out = shape.nozzles().stream().filter(n -> n.role() == EquipmentShape.Role.DISTILLATE).findFirst().orElseThrow().base();
         java.util.function.Function<double[][], List<double[]>> path = points -> java.util.Arrays.stream(points).map(t::point).toList();
         return new StillParts(box(t, x - r, p.bottom(), z - r, x + r, p.apex(), z + r), t.point(new double[]{x, p.cylinder(), z})[1],
                 path.apply(new double[][]{{x, p.apex(), z}, {x, neck, z}, {x, yg, z}, {cx, yg, z}, {cx, yk, z}}),
-                box(t, cx - rk, yk - rk, ProcessUnit.StillPlan.SHELL_FRONT, cx + rk, yk + rk, ProcessUnit.StillPlan.SHELL_BACK),
+                box(t, cx - rk, yk - rk, BatchStillDesign.StillPlan.SHELL_FRONT, cx + rk, yk + rk, BatchStillDesign.StillPlan.SHELL_BACK),
                 path.apply(new double[][]{{cx, yk - .6 * rk, z}, {cx, yk - .6 * rk, zc}, {cx, out[1], zc}, out}));
     }
 
