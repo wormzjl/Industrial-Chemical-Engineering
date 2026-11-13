@@ -1,0 +1,52 @@
+diff --git a/src/main/java/com/wormzjl/icheme/client/IChemEClient.java b/src/main/java/com/wormzjl/icheme/client/IChemEClient.java
+index e5b5f9b20..4a6a9fb09 100644
+--- a/src/main/java/com/wormzjl/icheme/client/IChemEClient.java
++++ b/src/main/java/com/wormzjl/icheme/client/IChemEClient.java
+@@ -25,6 +25,12 @@ public final class IChemEClient {
+         event.register(ModMenus.PIPELINE_TOOL.get(), com.wormzjl.icheme.client.gui.screens.inventory.PipelineToolScreen::new);
+     }
+ 
++    /** The P0 film command (batch 2026-11-12-tutorial-system); the field guide replaces it in P1. */
++    @SubscribeEvent
++    public static void registerCommands(net.neoforged.neoforge.client.event.RegisterClientCommandsEvent event) {
++        com.wormzjl.icheme.client.gui.tutorial.FilmCommand.register(event);
++    }
++
+     /** The field guide's files and laid-out pages drop at a resource reload, a language change included (code review finding 4). */
+     @SubscribeEvent
+     public static void registerReloadListeners(net.neoforged.neoforge.client.event.RegisterClientReloadListenersEvent event) {
+diff --git a/src/main/java/com/wormzjl/icheme/client/gui/tutorial/FilmCommand.java b/src/main/java/com/wormzjl/icheme/client/gui/tutorial/FilmCommand.java
+new file mode 100644
+index 000000000..9490787b1
+--- /dev/null
++++ b/src/main/java/com/wormzjl/icheme/client/gui/tutorial/FilmCommand.java
+@@ -0,0 +1,29 @@
++package com.wormzjl.icheme.client.gui.tutorial;
++
++import com.wormzjl.icheme.science.tutorial.films.Films;
++import net.minecraft.client.Minecraft;
++import net.minecraft.commands.Commands;
++import net.neoforged.neoforge.client.event.RegisterClientCommandsEvent;
++
++/**
++ * The client command {@code /icheme-film <name>} that opens a film's screen (batch 2026-11-12-tutorial-system). For
++ * phase P0 only, so the owner can open the first film; the field guide (P1) opens films from its pages and replaces it.
++ * It runs on the client and sends nothing.
++ */
++public final class FilmCommand {
++    private FilmCommand() {
++    }
++
++    public static void register(RegisterClientCommandsEvent event) {
++        var root = Commands.literal("icheme-film");
++        for (var name : Films.names())
++            root.then(Commands.literal(name).executes(context -> {
++                var scene = Films.build(name);
++                // After the chat screen has closed.
++                var mc = Minecraft.getInstance();
++                mc.tell(() -> mc.setScreen(new FilmScreen(scene)));
++                return 1;
++            }));
++        event.getDispatcher().register(root);
++    }
++}

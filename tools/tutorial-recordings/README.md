@@ -1,7 +1,14 @@
 # Tutorial recordings
 
-Batch `2026-11-12-tutorial-system` (P2a). Offline tools that record, from the mod's own data, what a tutorial card
-draws, so a card reads one small asset once and computes nothing while it draws.
+Batch `2026-11-12-tutorial-system` (P2a, P2b, P4b). Offline tools that record, from the mod's own data, what a tutorial
+card or film draws, so it reads one small asset once and computes nothing while it draws.
+
+Entry points: `record.init.gradle` adds the source set `tutorialRecordingTools` (this folder, against the main and test
+outputs) and the tasks `recordCrudeBarrel` (`CrudeBarrel.java`), `recordStillRun` (`StillRun.java`), `recordStillTrays`
+(`StillTrays.java`) and `recordSmallUnit` (`SmallUnit.java`). The recorders the gates rerun stay in the test sources:
+`science/tutorial/StillRunRecorder`, `StillTraysRecorder`, `client/gui/flowsheet/SmallUnitRecorder`. The readers are in
+`src/main`: `science/tutorial/cards/BarrelData`, `StillTraysData`, `SmallUnitData`, `science/tutorial/films/StillRunData`.
+Each run is one Gradle invocation: check the machine's lane count first.
 
 ## CrudeBarrel
 
@@ -65,3 +72,13 @@ outlets only. `SmallUnitRecordingTest` (holdGates) reruns both and holds the fil
 ./gradlew --offline --init-script tools/tutorial-recordings/record.init.gradle recordSmallUnit           # print only
 ./gradlew --offline --init-script tools/tutorial-recordings/record.init.gradle recordSmallUnit -Pwrite   # and write
 ```
+
+## History
+
+- 2026-11-12, P2a: CrudeBarrel and `crude_barrel.json` (3450240c6).
+- 2026-11-12, P2b: StillRun and `still_run.json` (5e5d3e25a); recorded again on the still law per mole of distillate
+  (97e1a949f) and on the merged base with the partial condenser (c074b11a9): OVERHEAT at 350 °C, 145 steps.
+- 2026-11-12, P4b: StillTrays and `still_trays.json` (66ed0baa4), SmallUnit and `small_unit.json` (7cbd240e0).
+- 2026-11-13, P5 stage B: `small_unit.json` with the steam heater H-102 (e5b1c6ac9); main 0.29.0 merged in, no
+  recording moved (1cfca0ab0).
+- 2026-11-13, merge preparation: entry points and this history.

@@ -63,12 +63,25 @@ properties (`JAVA_TOOL_OPTIONS`): `-DiconPreview=true` (the sheet only, textures
 `-DiconCap=r`, `-DkettleTurn=deg`, `-DiconCase=none|plate|blueprint|brackets` (the case behind the body; blueprint is the
 owner's choice and the default), `-DiconCases=true` (only `icons-cases.png`, the cases side by side in slots).
 
-## History
+## Entry points
 
-Removed: the P0 client command `/icheme-film <name>` (`client/gui/tutorial/FilmCommand.java` and its registration in
-`IChemEClient.registerCommands`), code review finding 7, commit cace5dd6d. To attach it again for a look in the game:
-`git show cace5dd6d^:src/main/java/com/wormzjl/icheme/client/gui/tutorial/FilmCommand.java` into that path, and the
-`RegisterClientCommandsEvent` handler from `git show cace5dd6d -- src/main/java/com/wormzjl/icheme/client/IChemEClient.java`.
+- `render.init.gradle`: tasks `renderTutorial` (`TutorialRender`), `renderTutorialGuide` (`GuideRender`, and with
+  `-PtutorialGuideOnly=p5|p5b|p6` `PageRender`, `StageBRender`, `CoverageRender`), `renderTutorialIcons` (`IconRender`).
+  The source set compiles this folder and `tools/heat-gui-renders` (less `FieldGuideIcon.java`) against the main and
+  test outputs; the cards are `client/gui/tutorial/cards` since e6fe48dc8.
+- `FieldGuideIcon.java`: a single-file program (`java tools/tutorial-renders/FieldGuideIcon.java <png>`).
+- `film-command/`: the detached `/icheme-film` command (below); `.txt` and `.patch`, so the source set does not compile it.
+
+## Detached code: the `/icheme-film` command
+
+The P0 client command `/icheme-film <name>` (`client/gui/tutorial/FilmCommand.java` and its registration
+`IChemEClient.registerCommands`) was removed in cace5dd6d (code review finding 7). Stored copies:
+`film-command/FilmCommand.java.txt` is `git show cace5dd6d^:src/main/java/com/wormzjl/icheme/client/gui/tutorial/FilmCommand.java`;
+`film-command/attach.patch` is `git diff cace5dd6d cace5dd6d^` of that file and `IChemEClient.java`. To attach it again for
+a look in the game, from the worktree root: `git apply tools/tutorial-renders/film-command/attach.patch`, then
+`./gradlew compileJava`. Do not merge it: the guide opens every film.
+
+## History
 
 - 2026-11-12, P0: the tool, for the film `still_inside`.
 - 2026-11-12, P1: GuideRender (guide, tours, card) and FieldGuideIcon.
@@ -95,3 +108,8 @@ Removed: the P0 client command `/icheme-film <name>` (`client/gui/tutorial/FilmC
   added, `tour-<page>.png` (and `-dark` for `fluid_device.vessel` and `control.loop`), stop by stop on the variants the
   tour gates check (`DeviceTourTest.samples`, `ScreenToursTest`'s builders), the page drawn from the anchor maps. The
   generic page films (`page_<kind>`) through `-PtutorialFilms`.
+- 2026-11-13, code review: the `/icheme-film` command detached (cace5dd6d, `film-command/`); the tools follow the cards
+  and `Labels` to `client/gui/tutorial/` (e6fe48dc8).
+- 2026-11-13, P6 correction (3063488da): every page film is one stop; films and page sheets rendered again in
+  `tmp/tutorial-renders/p6/`.
+- 2026-11-13, merge preparation: entry points, the detached command's stored copies.

@@ -2,7 +2,8 @@
 
 Batch `2026-11-12-tutorial-system` (P4, decision D4). It solves and sizes the candidates for the "Small crude tower
 (Medium crude)" on the bundled crude unit scaled to 1/64. Then it draws one datasheet per candidate for the owner. It
-registers no preset and writes nothing under `src/`.
+registers no preset and its Gradle tasks write nothing under `src/`; only `bundle.js`, run by hand, writes the three
+bundled files (below).
 
 ## What it does
 
@@ -80,3 +81,19 @@ write the three files with `node tools/tutorial-column/bundle.js` (it also keeps
   - `<id>-sheet.json` and `<id>-sized-sheet.json`, which open in the simulator from the clipboard;
   - `<id>-result.json`.
 - In `tmp/tutorial-renders/p4/`: the PNGs.
+
+## Entry points
+
+- `column.init.gradle`: tasks `smallColumnSolve` (`SmallColumn`), `smallColumnShape` (`ShapeCheck`), `smallColumnPair`
+  (`PairCheck`) and `smallColumnDatasheets` (`Datasheet`), compiled against the main and test outputs.
+- `Boiling.java`: the barrel's boiling rule, used by `SmallColumn` for each product's boiling points.
+- `bundle.js` (node): writes the bundled preset, stream and example from `tmp/tutorial-p4/`.
+- `candidates.json`, `tuning.json`: the candidates' rows and the tuning solves.
+
+## History
+
+- 2026-11-12, P4: the tool and the three candidates (77da9a788, 65d67b469); V-101's outlet and the tuning options on the
+  parent's decisions (6214bc4a4, 0509f1f98).
+- 2026-11-12, P4 as built: candidate C, variation 1 (owner D4): `small_crude.json` and the example (d459c8614), the
+  paired stream and `PairCheck` (31e042d62), the gate `SmallCrudeUnitTest` (4409876ee).
+- 2026-11-13, merge preparation: entry points and this history. The tool registers no preset and changes no source set.
