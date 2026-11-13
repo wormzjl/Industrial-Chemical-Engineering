@@ -44,7 +44,7 @@ The current placement catalog is `EquipmentInstruments`: vessel roof/top-platfor
 
 ## Wired controller boxes and DCS
 
-[Wired control and FE power](wired-control-power.md) owns `runtime/control` and `runtime/power`: boxes run native ideal loops, DCS edits/monitors linked boxes, sensors have stable human IDs, and the common pipe/rack framework lays data/power lines. Structural sensor installation/removal is immediate without a solver; measurements and loop plans remain on the 100-online-tick engine cadence. The turbine also has internal admission regulation, so an external speed-sensor valve is optional. Current fluid/accessory/control formats are 14/4/3; older format introductions below are history.
+[Wired control and FE power](wired-control-power.md) owns `runtime/control` and `runtime/power`: boxes run native ideal loops, DCS edits/monitors linked boxes, sensors have stable human IDs, and the common pipe/rack framework lays data/power lines. Structural sensor installation/removal is immediate without a solver; measurements and loop plans remain on the 100-online-tick engine cadence. The turbine also has internal admission regulation, so an external speed-sensor valve is optional. Current fluid/accessory/control format numbers are in [FORMATS.md](../FORMATS.md); older format introductions below are history.
 
 
 Sensor installation is a saved fact. A measurement and an accepted controller regime/opening are disposable state. The fluid worker regulates directly on its trial state, independent of GUI requests. There is no PID, tuning or actuator lag.
