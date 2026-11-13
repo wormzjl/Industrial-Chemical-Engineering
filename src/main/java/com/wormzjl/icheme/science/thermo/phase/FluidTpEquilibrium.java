@@ -2,7 +2,6 @@ package com.wormzjl.icheme.science.thermo.phase;
 
 import com.wormzjl.icheme.science.math.DeterministicMath;
 
-import com.wormzjl.icheme.science.material.CrystalReference;
 import com.wormzjl.icheme.science.thermo.IdealGasFunction;
 import com.wormzjl.icheme.science.thermo.NumericalBox;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel;
@@ -814,8 +813,6 @@ public final class FluidTpEquilibrium {
                                               Workspace workspace) {
         return crystalOnsets.onset(false, null, crystal, temperature, species, amounts, own(workspace));
     }
-
-    private String species(int component) { return evaluator.components().get(component); }
 
     // Contract checks.
 
