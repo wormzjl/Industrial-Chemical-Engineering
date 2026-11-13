@@ -2150,7 +2150,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         for(long id:towerWatchers.devices()) {
             var record=registrations().get(id);
             if(record==null||record.spec().tower()==null){towerWatchers.remove(id);continue;}
-            var pos=cell(record);var state=towerPlume(new com.wormzjl.icheme.network.FluidNetwork.Target(pos,id),islands,this::presented);if(state==null)continue;
+            var pos=cell(record);var state=towerPlume(new com.wormzjl.icheme.network.FluidNetwork.Target(pos,id),islands,this::presentation);if(state==null)continue;
             publishedTowers.put(id,state);
             for(var uuid:towerWatchers.watchers(id)) {
                 var player=server.getPlayerList().getPlayer(uuid);
@@ -2165,7 +2165,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         for(long id:heaterWatchers.devices()) {
             var record=registrations().get(id);
             if(record==null||!flued(record)){heaterWatchers.remove(id);continue;}
-            var pos=cell(record);var state=heaterFlue(new com.wormzjl.icheme.network.FluidNetwork.Target(pos,id),islands,this::presented);if(state==null)continue;
+            var pos=cell(record);var state=heaterFlue(new com.wormzjl.icheme.network.FluidNetwork.Target(pos,id),islands,this::presentation);if(state==null)continue;
             publishedHeaters.put(id,state);
             for(var uuid:heaterWatchers.watchers(id)) {
                 var player=server.getPlayerList().getPlayer(uuid);
@@ -2323,20 +2323,20 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public void flowmeter(long id,boolean installed){owned();registry.flowmeter(id,installed);}
     public boolean removePipeAccessory(long id){owned();return registry.removePipeAccessory(id);}
     public record InstrumentReading(double pressure,double temperature,boolean flowing,double massFlow,Double volumeFlow){public InstrumentReading(double pressure,double temperature,boolean flowing){this(pressure,temperature,flowing,0,0.0);}}
-    public InstrumentReading instrumentPipeReading(long id){owned();Long owner=registry.owner(id);if(owner==null)return null;var r=registrations().get(id);if(r==null)return null;var snapshot=presented(owner);if(snapshot.lastResult().isEmpty())return null;
+    public InstrumentReading instrumentPipeReading(long id){owned();Long owner=registry.owner(id);if(owner==null)return null;var r=registrations().get(id);if(r==null)return null;var snapshot=presentation(owner);if(snapshot.lastResult().isEmpty())return null;
         for(var observed:snapshot.lastResult().get().observations())for(var sample:observed.flowSamples())if(sample.host()==id)
             return new InstrumentReading(sample.pressure(),observed.temperature(),observed.flowing(),sample.massFlow(),sample.volumeFlow());
         for(var mapping:registry.pipeViews(id)){if(!Double.isFinite(mapping.tap()))continue;for(var observed:snapshot.lastResult().get().observations())if(observed.pipe()==mapping.pipeId())return new InstrumentReading(observed.pressure(mapping.tap(),r.device().position().y(),!mapping.forward()),observed.temperature(),observed.flowing(),observed.massFlow()*(mapping.forward()?1:-1),observed.density()>0?observed.massFlow()/observed.density()*(mapping.forward()?1:-1):0);}return null;}
     public InstrumentReading instrumentAt(PhysicalFluidTopology.Position position){owned();var r=at(position).orElse(null);return r==null?null:instrumentPipeReading(r.device().id());}
     /** The accepted mover inlet/outlet, using the same node-to-stream reduction as heat-unit nozzles. */
     public FluidView.Port instrumentMoverPort(long id,boolean outlet){
-        owned();Long owner=registry.owner(id);if(owner==null)return null;var snapshot=presented(owner);var result=snapshot.lastResult().orElse(null);if(result==null)return null;
+        owned();Long owner=registry.owner(id);if(owner==null)return null;var snapshot=presentation(owner);var result=snapshot.lastResult().orElse(null);if(result==null)return null;
         var graph=snapshot.graph();for(int i=0;i<graph.pipes().size();i++){var pipe=graph.pipes().get(i);if(graph.reservoirs().get(pipe.first()).id()!=id||!(pipe.control() instanceof FlowControl.Mover||pipe.control() instanceof FlowControl.Turbine))continue;
             var port=HeatPresentation.port(outlet?"outlet":"inlet",graph.reservoirs().get(outlet?pipe.second():pipe.first()),result.averageMassFlows()[i],heatSource(new HashMap<>()));if(outlet)for(var observation:result.observations())if(observation.pipe()==pipe.id())return new FluidView.Port(port.role(),port.temperature(),observation.firstPressure(),port.massFlow(),port.phaseMoles(),port.phaseVolumes());return port;}
         return null;
     }
     /** Accepted inlet/outlet readings for a basin; no inferred temperature or fresh property evaluation. */
-    public List<FluidView.Port> instrumentVesselPorts(long id){owned();Long owner=registry.owner(id);if(owner==null)return List.of();var snapshot=presented(owner);return snapshot.lastResult().isEmpty()?List.of():HeatPresentation.poolPorts(id,snapshot,heatSource(new HashMap<>()));}
+    public List<FluidView.Port> instrumentVesselPorts(long id){owned();Long owner=registry.owner(id);if(owner==null)return List.of();var snapshot=presentation(owner);return snapshot.lastResult().isEmpty()?List.of():HeatPresentation.poolPorts(id,snapshot,heatSource(new HashMap<>()));}
     /** Structural ID allocation shares the world's existing identity namespace, without a process edit or solve. */
     public long reserveControlIdentity(){owned();long id=topology.reserve(1);data.setDirty();return id;}
     public void markViewDirty(long id){owned();presentation.markDirty(id);}
@@ -2459,13 +2459,6 @@ public final class FluidWorldAuthority implements AutoCloseable {
         if(!PumpHealth.worn(mover)||word.isEmpty())return status;
         return word.equals("FAILED")?"FAILED: use a repair kit / "+status:status+" / "+word;
     }
-    /**
-     * {@code read} of views and instruments: since every presentation read is a preview that advances and books nothing
-     * (code base review R5), this is a plain read. Kept only for its callers in {@code FluidNetwork} (the column's Operation
-     * tab and the still's stop step), which can call the read directly.
-     */
-    public <T> T stored(java.util.function.Supplier<T> read){owned();return read.get();}
-    private IslandCoordinator.Snapshot presented(long island){return presentation(island);}
     /** Island {@code island} as it is stored, materialising nothing: what a watch's replay reads (batch 2026-11-10-custom-shader-system). */
     private IslandCoordinator.Snapshot storedIsland(long island){return onWorldList(island,runtime.coordinator().observe(island));}
     /** Island {@code island} as a presentation reads it, on the world list (V2 stage 5): every view, display and wire vector
@@ -2476,7 +2469,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
     private FluidView view(long id,Map<Long,IslandCoordinator.Snapshot> islands) {
         FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.viewBuilds);var registration=registrations().get(id);if(registration==null)return new FluidView(id,0,0,topology.onlineTick(),"REMOVED",null,0,List.of());
         Long owner=registry.owner(id);if(owner==null)return new FluidView(id,registration.revision(),0,topology.onlineTick(),heldClause(id,null)+islandless(registration.device(),id),null,0,List.of(),null,0,List.of(),null);
-        var snapshot=islands.computeIfAbsent(owner,this::presented);FluidView.State state=null;int nodeIndex=-1;boolean empty=false;
+        var snapshot=islands.computeIfAbsent(owner,this::presentation);FluidView.State state=null;int nodeIndex=-1;boolean empty=false;
         for(int i=0;i<snapshot.graph().reservoirs().size();i++)if(snapshot.graph().reservoirs().get(i).id()==id){nodeIndex=i;var node=snapshot.graph().reservoirs().get(i);empty=node.empty();if(!empty)state=FluidView.State.from(node.state(),node.kind()==PassiveNetwork.NodeKind.RESERVOIR?node.inventory().volume():node.state().volume());break;}
         InlineFilter filter=null;if(registration.device().filter()){state=null;for(var p:snapshot.graph().pipes())if(p.id()==PhysicalFluidTopology.filterIdentity(id))filter=p.filter();}
         var mappings=registration.device().actuator()?PipePresentation.actuatorMappings(registration.device(),snapshot.graph()):registry.pipeViews(id);
