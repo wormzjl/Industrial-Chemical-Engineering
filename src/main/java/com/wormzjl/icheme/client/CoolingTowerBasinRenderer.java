@@ -12,14 +12,12 @@ import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /** Render thread only. One cached surface per shape, driven entirely by scheduled open-basin snapshots. */
 @EventBusSubscriber(modid=IChemE.MOD_ID,value=Dist.CLIENT)
 public final class CoolingTowerBasinRenderer {
-    private static final Map<EquipmentShape,List<CoolingTowerBasin.Triangle>> SURFACES=new HashMap<>();
+    private static final com.wormzjl.icheme.science.equipment.BoundedCache<EquipmentShape,List<CoolingTowerBasin.Triangle>> SURFACES=new com.wormzjl.icheme.science.equipment.BoundedCache<>(64);
     private static com.wormzjl.icheme.science.equipment.RenderDetail detail;
     private CoolingTowerBasinRenderer() {}
 
@@ -37,7 +35,6 @@ public final class CoolingTowerBasinRenderer {
             var display=TankRenderer.get(cell.getBlockPos(),ticks);if(display==null||display.waterLevel()<=0)continue;
             double height=CoolingTowerBasin.height(display.waterLevel());
             if(!event.getFrustum().isVisible(new AABB(origin.getX(),origin.getY(),origin.getZ(),origin.getX()+shape.sizeX(),origin.getY()+3,origin.getZ()+shape.sizeZ())))continue;
-            if(SURFACES.size()>64)SURFACES.clear();
             var selected=com.wormzjl.icheme.client.model.EquipmentShellModel.detail();
             if(selected!=detail){SURFACES.clear();detail=selected;}
             var surface=SURFACES.computeIfAbsent(shape,k->CoolingTowerBasin.surface(k,selected));

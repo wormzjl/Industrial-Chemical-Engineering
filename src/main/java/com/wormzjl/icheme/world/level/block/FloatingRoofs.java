@@ -66,8 +66,8 @@ public final class FloatingRoofs {
     private static final Map<Level, FloatingRoofs> LEVELS = Collections.synchronizedMap(new WeakHashMap<>());
     /** The roof's shapes in shell cells by voxel columns ({@link #rim}) and their joins with the cells' own ({@link #join}), each cleared at this many. */
     private static final int RIM_CACHE = 4096;
-    private static final Map<Long, VoxelShape[]> RIMS = new ConcurrentHashMap<>();
-    private static final Map<Join, VoxelShape> JOINS = new ConcurrentHashMap<>();
+    private static final com.wormzjl.icheme.science.equipment.BoundedCache<Long, VoxelShape[]> RIMS = new com.wormzjl.icheme.science.equipment.BoundedCache<>(RIM_CACHE);
+    private static final com.wormzjl.icheme.science.equipment.BoundedCache<Join, VoxelShape> JOINS = new com.wormzjl.icheme.science.equipment.BoundedCache<>(RIM_CACHE);
 
     /** One loaded tank: its node cell, box, roof and the glide its display gives. */
     static final class Tank {
@@ -234,7 +234,6 @@ public final class FloatingRoofs {
         int step = height >= 1 ? STEPS : (int) Math.round(Math.max(0, height) * STEPS);
         if (columns == 0 || step == 0) return null;
         if (columns == -1L) return SLABS[step];
-        if (RIMS.size() >= RIM_CACHE) RIMS.clear();
         var shapes = RIMS.computeIfAbsent(columns, k -> new VoxelShape[STEPS + 1]);
         var shape = shapes[step];
         if (shape == null) shapes[step] = shape = columns(columns, (double) step / STEPS);
@@ -259,7 +258,6 @@ public final class FloatingRoofs {
     /** A shell cell's collision ({@code solid}, its parts) and the roof's in it ({@link #rim}), joined once per pair. */
     static VoxelShape join(VoxelShape solid, @Nullable VoxelShape rim) {
         if (rim == null) return solid;
-        if (JOINS.size() >= RIM_CACHE) JOINS.clear();
         return JOINS.computeIfAbsent(new Join(solid, rim), j -> Shapes.or(j.solid(), j.rim()));
     }
 

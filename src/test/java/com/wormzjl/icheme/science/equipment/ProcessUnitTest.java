@@ -1338,4 +1338,51 @@ class ProcessUnitTest {
             return best;
         }
     }
+
+    /**
+     * A unit is drawn in its frame and no design reads its front, so the four headings share one unit built facing north
+     * (finding E12, batch 2026-11-13-codebase-review): one cache entry per shape, and its drawing equals, bit for bit,
+     * the drawing built afresh for the turned shape.
+     */
+    @Test
+    void everyHeadingSharesTheUnitBuiltFacingNorth() {
+        var seen = EnumSet.noneOf(Kind.class);
+        for (var shape : everySize()) {
+            if (!seen.add(shape.kind())) continue;
+            for (var heading : Heading.values()) {
+                var turned = shape.withFront(heading);
+                var cached = ProcessUnit.of(turned);
+                assertEquals(Heading.NORTH, cached.shape.front(), turned.toString());
+                var fresh = ProcessUnit.of(turned, UnitDesign.of(turned.kind())::build);
+                assertEquals(fingerprint(fresh.drawing().mesh), fingerprint(cached.drawing().mesh), turned.toString());
+            }
+        }
+    }
+
+    /** Every facet of {@code mesh} as raw bits: positions, the shading at each, normal, material, texture axes and part. */
+    private static List<Object> fingerprint(Mesh mesh) {
+        var out = new ArrayList<Object>();
+        for (var f : mesh.facets()) {
+            for (var point : f.positions()) {
+                out.add(bits(point));
+                out.add(bits(f.shading().at(point)));
+            }
+            out.add(bits(f.normal()));
+            out.add(f.material());
+            for (var uv : List.of(f.u(), f.v())) {
+                out.add(bits(uv.origin()));
+                out.add(bits(uv.axis()));
+                out.add(List.of(Double.doubleToRawLongBits(uv.offset()), Double.doubleToRawLongBits(uv.period())));
+            }
+            out.add(f.part());
+        }
+        return out;
+    }
+
+    private static List<Long> bits(double[] values) {
+        if (values == null) return List.of();
+        var out = new ArrayList<Long>(values.length);
+        for (double v : values) out.add(Double.doubleToRawLongBits(v));
+        return out;
+    }
 }

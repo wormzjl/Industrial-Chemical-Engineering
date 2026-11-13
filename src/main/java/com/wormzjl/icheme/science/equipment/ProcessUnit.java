@@ -12,7 +12,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
 import static com.wormzjl.icheme.science.equipment.Mesh.*;
@@ -39,7 +38,7 @@ import static com.wormzjl.icheme.science.equipment.Mesh.*;
  */
 public final class ProcessUnit {
     private static final int CACHE = 64;
-    private static final Map<EquipmentShape, ProcessUnit> BUILT = new ConcurrentHashMap<>();
+    private static final BoundedCache<EquipmentShape, ProcessUnit> BUILT = new BoundedCache<>(CACHE);
 
     /**
      * Steps of an exchanger's shell and a kettle's bundle, and of an ejector's suction, m; the largest suction of an
@@ -502,11 +501,14 @@ public final class ProcessUnit {
         return UnitDesign.of(kind).moves();
     }
 
+    /**
+     * The unit of {@code shape}, built once for every heading: it is drawn in its frame, and no design reads the front
+     * (only {@link EquipmentShape#transform()}, {@link Nameplate} and {@link ShapeRepair} do), so the four headings share
+     * the unit built facing north (finding E12, batch 2026-11-13-codebase-review).
+     */
     static ProcessUnit of(EquipmentShape shape) {
-        var built = BUILT.get(shape);
-        if (built != null) return built;
-        if (BUILT.size() >= CACHE) BUILT.clear();
-        return BUILT.computeIfAbsent(shape, s -> new ProcessUnit(s, UnitDesign.of(s.kind())::build, false));
+        var key = shape.front() == EquipmentShape.Heading.NORTH ? shape : shape.withFront(EquipmentShape.Heading.NORTH);
+        return BUILT.computeIfAbsent(key, s -> new ProcessUnit(s, UnitDesign.of(s.kind())::build, false));
     }
 
     // ---- Collision parts --------------------------------------------------------------------------------------------

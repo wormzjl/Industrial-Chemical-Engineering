@@ -57,7 +57,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.WeakHashMap;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
@@ -81,7 +80,7 @@ public final class EquipmentStructure {
     }
 
     private static final int SHAPE_CACHE = 4096;
-    private static final Map<ShapeRasterizer.CellKey, VoxelShape> SHAPES = new ConcurrentHashMap<>();
+    private static final com.wormzjl.icheme.science.equipment.BoundedCache<ShapeRasterizer.CellKey, VoxelShape> SHAPES = new com.wormzjl.icheme.science.equipment.BoundedCache<>(SHAPE_CACHE);
     /** Set while a vessel is being removed, so the cells it removes do not start removals of their own (server thread only). */
     private static boolean dismantling;
     /**
@@ -124,9 +123,6 @@ public final class EquipmentStructure {
 
     /** Collision and outline shape of a shell cell: its solid at 1/8 block. Both sides compute the same shape. */
     public static VoxelShape collision(ShapeRasterizer.CellKey key) {
-        var shape = SHAPES.get(key);
-        if (shape != null) return shape;
-        if (SHAPES.size() >= SHAPE_CACHE) SHAPES.clear();
         return SHAPES.computeIfAbsent(key, k -> {
             double s = ShapeRasterizer.SOLID_RESOLUTION;
             VoxelShape union = Shapes.empty();
