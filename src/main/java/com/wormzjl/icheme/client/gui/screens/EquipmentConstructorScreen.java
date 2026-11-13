@@ -12,6 +12,7 @@ import com.wormzjl.icheme.client.gui.common.PaintSwatch;
 import com.wormzjl.icheme.client.gui.common.ProcessUi;
 import com.wormzjl.icheme.client.gui.common.ScreenTours;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
+import com.wormzjl.icheme.client.gui.common.kit.DoorInput;
 import com.wormzjl.icheme.client.gui.common.kit.GuiCanvas;
 import com.wormzjl.icheme.client.gui.common.kit.KitDoor;
 import com.wormzjl.icheme.client.gui.common.kit.Palette;
@@ -1054,15 +1055,13 @@ public final class EquipmentConstructorScreen extends Screen {
         hovered = null;
         // An open tour takes the pointer: the page under it shows no hover.
         super.render(g, tour.pointer(mouseX), tour.pointer(mouseY), partialTick);
-        if (tour.isOpen()) tour.render(g, font, width, height, mouseX, mouseY);
-        else KitDoor.hint(g, font, hovered, mouseX, mouseY);
+        DoorInput.overlay(this, g, font, tour, hovered, mouseX, mouseY);
     }
 
     @Override
     public boolean mouseClicked(double x, double y, int button) {
-        if (tour.mouseClicked(font, width, height, x, y)) return true;
-        SkinField.clickOutside(this, x, y);
-        return door.press(x, y, button) || super.mouseClicked(x, y, button);
+        // The door stands at the screen's corner: its points are the screen's.
+        return DoorInput.press(this, font, tour, door, x, y, 0, 0, button) || super.mouseClicked(x, y, button);
     }
 
     @Override
@@ -1088,8 +1087,7 @@ public final class EquipmentConstructorScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double x, double y, double horizontal, double vertical) {
-        if (tour.isOpen()) return true;
-        return door.wheel(x, y, vertical) || super.mouseScrolled(x, y, horizontal, vertical);
+        return DoorInput.wheel(tour, door, x, y, 0, 0, vertical) || super.mouseScrolled(x, y, horizontal, vertical);
     }
 
     /**

@@ -156,6 +156,19 @@ public final class KitDoor {
         return null;
     }
 
+    /**
+     * The action of the choice at door point ({@code x}, {@code y}): the first a column places there, read at the view's
+     * offset; null outside the view or where no choice stands (finding C6, batch 2026-11-13-codebase-review).
+     */
+    public @Nullable String action(double x, double y) {
+        if (!view.inside(x, y)) return null;
+        for (var column : columns) {
+            var action = column.action(x, view.contentY(y));
+            if (action != null) return action;
+        }
+        return null;
+    }
+
     public boolean wheel(double x, double y, double delta) {
         return view.wheel(x, y, delta);
     }

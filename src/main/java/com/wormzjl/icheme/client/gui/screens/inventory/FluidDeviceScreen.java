@@ -103,14 +103,12 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     /** Whether this device takes a name (N1): a structure, or a one-block device with a screen of its own (FluidDeviceBlockEntity.nameable). */
     private boolean nameable(){var level=minecraft==null?null:minecraft.level;if(level==null)return false;
         return level.getBlockEntity(menu.position()) instanceof com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity device?device.nameable():com.wormzjl.icheme.world.level.block.EquipmentStructure.find(level,menu.position())!=null;}
-    /** The name as typed (N1, the owner's pick A), sent with Apply, and the device's name it last followed: the draft follows the device's name while the player has not changed it. */
-    private String nameDraft,nameShown;
-    /** Whether Apply has a name to send: the typed name, cleaned, differs from the device's. */
-    private boolean renames(){return nameDraft!=null&&nameable()&&!com.wormzjl.icheme.science.equipment.DeviceName.clean(nameDraft).equals(currentName());}
+    /** The name's entry (N1, the owner's pick A; NameEntry): the name as typed, sent with Apply where the device takes a name, following the device's name while the player has not changed it. */
+    private final NameEntry nameEntry=new NameEntry(this::currentName,this::nameable);
     @Override protected void init(){
         imageWidth=FluidGuiLayout.imageWidth(width);imageHeight=FluidGuiLayout.imageHeight(height);
         super.init();titleLabelY=inventoryLabelY=-1000;
-        if(nameDraft==null)nameDraft=nameShown=currentName();
+        nameEntry.seed();
         if(library==null)library=new V3ClientPresets(minecraft.gameDirectory.toPath(),name->{
             try{return minecraft.getResourceManager().getResource(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("icheme",name.substring("assets/icheme/".length()))).orElseThrow().open();}
             catch(java.io.IOException|NoSuchElementException e){return null;}
@@ -129,7 +127,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     /** Whether the title strip holds the name's entry: an editor of a device that takes a name. Enter saves it, Apply sends it with the controls. */
     private boolean names(){return canEdit()&&nameable();}
     /** Saves the typed name by the rename path (N1), as Apply does: Enter in the entry; a tank with contents has Copy in Apply's slot. */
-    private void saveName(){if(canEdit()&&renames())com.wormzjl.icheme.network.EquipmentNetwork.rename(menu.position(),nameDraft);}
+    private void saveName(){if(canEdit()&&nameEntry.renames())com.wormzjl.icheme.network.EquipmentNetwork.rename(menu.position(),nameEntry.draft());}
     /** Whether Apply sends this device's controls: every kind but a tank (an induced-draught tower's aside), a filter, and a heat side off its Control tab or with nothing to control. */
     private boolean controlsApply(){var data=menu.clientData();return data!=null&&(data.kind()!=TopologyCompiler.Kind.RESERVOIR||blanket()||relief()||tower()&&data.controls().tower().draft()==com.wormzjl.icheme.science.fluid.network.CoolingTower.Draft.INDUCED||still()!=null||converter()!=null)&&data.kind()!=TopologyCompiler.Kind.FILTER&&(data.kind()!=TopologyCompiler.Kind.HEAT_SIDE||page==Page.CONTROL&&(fans()||burners()||controllable()));}
     private boolean constructedMover(){var data=menu.clientData();return data!=null&&datasheet!=null&&(data.kind()==TopologyCompiler.Kind.PUMP||data.kind()==TopologyCompiler.Kind.COMPRESSOR);}
@@ -369,7 +367,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         rebuildNext=false;String focused=editors.entrySet().stream().filter(e->e.getValue()==getFocused()).map(Map.Entry::getKey).findFirst().orElse(null);
         int cursor=focused==null?0:editors.get(focused).getCursorPosition();
         boolean dropdownOpen=componentDropdown!=null&&componentDropdown.expanded();
-        clearWidgets();editors.clear();labels.clear();componentDropdown=null;
+        clearWidgets();editors.clear();nameEntry.forget();labels.clear();componentDropdown=null;
         var data=menu.clientData();
         var tabs=new ArrayList<String>();var pages=new ArrayList<Page>();tabs.add("overview");pages.add(Page.OVERVIEW);
         if(heat()!=null){tabs.add("control");pages.add(Page.CONTROL);}
@@ -660,8 +658,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         var skin=skin();var canvas=new GuiCanvas(g,font,leftPos,topPos);
         var strip=strip();skin.title(canvas,TitleStrip.TITLE_X,TitleStrip.TITLE_Y,strip.kind());
         if(strip.kind().length()<title.getString().length()&&strip.plate().contains(hoverX,hoverY))hovered=title.getString();
-        if(strip.name()!=null&&!editors.containsKey("name")){String name=currentName(),shown=TitleStrip.text(name,strip.name(),GuiCanvas.measure(font));int[] at=TitleStrip.textAt(strip.name());
-            skin.text(canvas,shown,at[0],at[1],Palette.TEXT);if(shown.length()<name.length()&&strip.name().contains(hoverX,hoverY))hovered=name;}
+        var nameHover=nameEntry.draw(canvas,skin,strip,font,hoverX,hoverY);if(nameHover!=null)hovered=nameHover;
         var data=menu.clientData();
         if(data==null){doorStatus(canvas,skin,tr("waiting"),MUTED);return;}
         // A refused mover's reason ("ERROR: pump inlet dry ...") and a hold read in the warning colour.
@@ -951,13 +948,8 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private HeatFlowsheet flowsheet;private String flowsheetKey="";
     private int controlTop(){return FluidGuiLayout.DOOR_TOP;}
     private int controlBottom(){return imageHeight-FluidGuiLayout.DOOR_FOOT;}
-    @Override protected void containerTick(){super.containerTick();followName();}
     /** The name entry follows the device's name (another player's rename, this one's answered) while the player has not changed it. */
-    private void followName(){
-        String now=currentName();if(nameShown==null||now.equals(nameShown))return;
-        var box=editors.get("name");if(nameDraft.equals(nameShown)&&(box==null||!box.isFocused())){nameDraft=now;if(box!=null)box.setValue(now);}
-        nameShown=now;
-    }
+    @Override protected void containerTick(){super.containerTick();nameEntry.follow();}
     private FluidGuiLayout.ControlSlots controlSlots(){return FluidGuiLayout.control(imageWidth);}
     private int drawingRight(){return controlSlots().drawingRight();}
     private HeatControlColumn.Input controlInput(){return new HeatControlColumn.Input(heat(),menu.clientData().controls().heat(),canEdit(),controllable(),heatMode,powerOn,temperatureUnit.symbol(),deviceMeters().power());}
@@ -1051,9 +1043,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     }
     /** The name's entry in the title strip (N1): the name as typed, at most DeviceName.MAX characters, sent with Apply; its hint while empty. */
     private EditBox nameBox(Rect slot){
-        var box=new SkinField(font,leftPos+slot.x(),topPos+slot.y(),slot.w(),slot.h(),Component.literal(tr("name")),FluidDeviceScreen::skin);
-        box.setMaxLength(com.wormzjl.icheme.science.equipment.DeviceName.MAX);box.setValue(nameDraft==null?"":nameDraft);box.setResponder(v->nameDraft=v);box.setHint(Component.literal(tr("name")));box.onEnter(this::saveName);
-        box.setTooltip(Tooltip.create(Component.literal(tr("name")+"\n"+tr("name.hint"))));
+        var box=nameEntry.box(font,slot.moved(leftPos,topPos),FluidDeviceScreen::skin,this::saveName);
         editors.put("name",addRenderableWidget(box));return box;
     }
     /** A field of a door column: a panel's LCD entry at rest, the game's text field while edited. */
@@ -1225,7 +1215,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         // The door column's view on every page: its bar, then a choice it places (a mode, a valve's target); then the table's scroll.
         double rx=x-leftPos,ry=y-topPos;
         if(door.press(rx,ry,button))return true;
-        if(button==0&&door.view().inside(rx,ry))for(var column:door.columns()){var action=column.action(rx,door.view().contentY(ry));if(action!=null){if(page==Page.CONTROL)controlAction(action);else deviceAction(action);return true;}}
+        if(button==0){var action=door.action(rx,ry);if(action!=null){if(page==Page.CONTROL)controlAction(action);else deviceAction(action);return true;}}
         if(page!=Page.CONTROL&&scroll.click(x,y,button)){rebuildNext=true;return true;}
         return super.mouseClicked(x,y,button);
     }
