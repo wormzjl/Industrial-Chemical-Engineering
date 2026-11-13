@@ -4,7 +4,7 @@ import static com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium.CONVERG
 import static com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium.R;
 import static com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium.SPECIFICATION_TOLERANCE;
 import static com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium.diagnostics;
-import static com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium.outerAnswer;
+import static com.wormzjl.icheme.science.thermo.phase.SpecificationSearch.outerAnswer;
 
 import com.wormzjl.icheme.science.math.DeterministicMath;
 import com.wormzjl.icheme.science.math.SmallDenseSolve;
@@ -15,7 +15,6 @@ import com.wormzjl.icheme.science.thermo.PhaseIdentification;
 import com.wormzjl.icheme.science.thermo.phase.CrystalSet.Crystal;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumRequest.Specification;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult.Classification;
-import com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium.Search;
 import com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium.Workspace;
 import com.wormzjl.icheme.science.thermo.phase.ThreeSlotFlash.Slots;
 import java.util.ArrayList;
@@ -33,8 +32,9 @@ import java.util.Objects;
  * answer, or null with the step's end on the target's side in the workspace's {@code coexistenceX} and
  * {@code coexistenceResidual}. It reads the engine's contract, evaluator, kernel, critical band, crystal set, basis
  * maps and converged coverage, given once at construction, and calls back into the engine only for {@code converged},
- * {@code single} and the static {@code outerAnswer} and {@code diagnostics}; a crystal answer's coverage is the crystal
- * equilibrium's. The onsets take the crystal step's temperature and pressure from it. Immutable; one instance per engine.
+ * {@code single} and the static {@code diagnostics}, and into the search for its static {@code outerAnswer}; a crystal
+ * answer's coverage is the crystal equilibrium's. The onsets take the crystal step's temperature and pressure from it.
+ * Immutable; one instance per engine.
  */
 final class BalanceSteps {
     private static final int COEXISTENCE_ITERATIONS = 100;
@@ -338,7 +338,7 @@ final class BalanceSteps {
         boolean energy = specification == Specification.PH;
         // The step's fluid by the triple point (a crystal denser than its liquid melts above T_t at every pressure), and a
         // liquid where the bracket's fluid end is one (ice, lighter than water, also melts below T_t above P_t, W3a D5).
-        Search s = energy ? w.search : w.inner;
+        BracketSearch s = energy ? w.search : w.inner;
         boolean liquidEnd = holdsKind(s.lowerResult, PhaseKind.LIQUID) || holdsKind(s.upperResult, PhaseKind.LIQUID);
         boolean vapourEnd = holdsKind(s.lowerResult, PhaseKind.VAPOR) || holdsKind(s.upperResult, PhaseKind.VAPOR);
         boolean melting = (energy ? p > c.triplePressure() : t > c.tripleTemperature()) || liquidEnd && !vapourEnd;
@@ -713,7 +713,7 @@ final class BalanceSteps {
      * least one end the crystal. At fixed T and P a binary has the three phases only on its three-phase line, so
      * {@code H(T)} at fixed pressure and {@code V(P)} at fixed temperature step there, like a pure fluid's coexistence.
      */
-    static boolean straddlesThreePhase(Search s) {
+    static boolean straddlesThreePhase(BracketSearch s) {
         if (s.lowerResult == null || s.upperResult == null) return false;
         boolean vapour = false, liquid = false, solid = false;
         for (EquilibriumResult end : new EquilibriumResult[] {s.lowerResult, s.upperResult}) {
@@ -741,7 +741,7 @@ final class BalanceSteps {
      * null with the step's end in {@code coexistenceX} and {@code coexistenceResidual}, NaN when no three-phase point
      * lies in the bracket. The liquid's other species and the crystal are taken by difference, so both species conserve.
      */
-    EquilibriumResult binaryThreePhase(Specification specification, Search s, double t, double p, double target,
+    EquilibriumResult binaryThreePhase(Specification specification, BracketSearch s, double t, double p, double target,
                                        boolean clamp, PhaseCompetition competition, Workspace w) {
         w.coexistenceX = Double.NaN;
         Crystal c = binaryCrystal(w);
@@ -918,7 +918,7 @@ final class BalanceSteps {
      * melting under oil at 273.15 K is the step between gas, oil and ice and gas, oil and water. Null where the ends do not
      * differ so or the specification lies outside them.
      */
-    EquilibriumResult leverStep(Specification specification, Search s, double target, PhaseCompetition competition, Workspace w) {
+    EquilibriumResult leverStep(Specification specification, BracketSearch s, double target, PhaseCompetition competition, Workspace w) {
         EquilibriumResult low = s.lowerResult, high = s.upperResult;
         if (low == null || high == null || !low.converged() || !high.converged()) return null;
         boolean energy = specification == Specification.PH;
@@ -1052,7 +1052,7 @@ final class BalanceSteps {
      * Whether a bracket of a {@link #binaryFluid} feed straddles its vapour-liquid-liquid step: both ends converged, one
      * holding two liquids, one a vapour, none a crystal.
      */
-    static boolean straddlesFluidThree(Search s) {
+    static boolean straddlesFluidThree(BracketSearch s) {
         if (s.lowerResult == null || s.upperResult == null) return false;
         boolean vapour = false, twoLiquids = false;
         for (EquilibriumResult end : new EquilibriumResult[] {s.lowerResult, s.upperResult}) {
@@ -1083,7 +1083,7 @@ final class BalanceSteps {
      * {@code coexistenceResidual}, or null, as {@link #binaryThreePhase}. Each species' rounding goes to the phase holding
      * most of it; a trace splits over the phases by {@code n_p / phi_p}, equal fugacities to first order.
      */
-    EquilibriumResult binaryFluidThreePhase(Specification specification, Search s, double t, double p, double target,
+    EquilibriumResult binaryFluidThreePhase(Specification specification, BracketSearch s, double t, double p, double target,
                                             boolean clamp, PhaseCompetition competition, Workspace w) {
         w.coexistenceX = Double.NaN;
         int i = binaryFluid(w);
