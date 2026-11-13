@@ -81,10 +81,8 @@ public final class V3InspectionCodec {
         } finally { buffer.release(); }
     }
 
+    /** A list's length: at most {@code max}, each element at least one byte. */
     private static int boundedCount(RegistryFriendlyByteBuf buffer, int max) {
-        int count = buffer.readVarInt();
-        if (count < 0 || count > max || count > buffer.readableBytes())
-            throw new DecoderException("Invalid inspection list length");
-        return count;
+        return Wire.count(buffer, max, 1, "inspection");
     }
 }

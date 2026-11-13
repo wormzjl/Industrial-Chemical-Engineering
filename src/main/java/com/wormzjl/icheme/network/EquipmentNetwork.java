@@ -412,8 +412,8 @@ public final class EquipmentNetwork {
         public static final StreamCodec<RegistryFriendlyByteBuf, SilhouetteBatch> STREAM_CODEC = new StreamCodec<>() {
             public SilhouetteBatch decode(RegistryFriendlyByteBuf b) {
                 boolean reset = b.readBoolean();
-                int n = b.readVarInt();
-                if (n < 0 || n > SILHOUETTES_PER_BATCH) throw new IllegalArgumentException("Too many silhouettes in one batch");
+                // A placement: its origin (8 bytes), its shape tag (a type byte at least) and its paint (a VarInt length at least).
+                int n = Wire.count(b, SILHOUETTES_PER_BATCH, Long.BYTES + 2, "silhouette");
                 var placed = new java.util.ArrayList<com.wormzjl.icheme.runtime.fluid.Silhouettes.Placement>(n);
                 for (int i = 0; i < n; i++) {
                     var origin = b.readBlockPos();
@@ -422,10 +422,7 @@ public final class EquipmentNetwork {
                     if (read == null || read.shape() == null) throw new IllegalArgumentException("A silhouette needs a current shape");
                     placed.add(new com.wormzjl.icheme.runtime.fluid.Silhouettes.Placement(origin, read.shape(), Paint.decode(b.readVarIntArray(2))));
                 }
-                int m = b.readVarInt();
-                if (m < 0 || m > com.wormzjl.icheme.runtime.fluid.Silhouettes.MAXIMUM_STRUCTURES) throw new IllegalArgumentException("Too many silhouette removals");
-                var removed = new java.util.ArrayList<BlockPos>(m);
-                for (int i = 0; i < m; i++) removed.add(b.readBlockPos());
+                var removed = Wire.positions(b, com.wormzjl.icheme.runtime.fluid.Silhouettes.MAXIMUM_STRUCTURES, "silhouette removal");
                 return new SilhouetteBatch(reset, placed, removed);
             }
 
@@ -439,8 +436,7 @@ public final class EquipmentNetwork {
                     b.writeNbt(tag);
                     b.writeVarIntArray(s.paint().encode());
                 }
-                b.writeVarInt(p.removed.size());
-                for (var origin : p.removed) b.writeBlockPos(origin);
+                Wire.positions(b, p.removed);
             }
         };
         @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }

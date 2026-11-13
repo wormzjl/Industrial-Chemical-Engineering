@@ -367,17 +367,11 @@ public final class ColumnWire {
      */
     private static int readCount(
             RegistryFriendlyByteBuf buffer, int maximum, String description, int minimumBytesPerElement) {
-        int count = buffer.readVarInt();
-        if (count < 0 || count > maximum) throw new DecoderException("Invalid V3 " + description + " count");
-        if (buffer.readableBytes() < (long) count * minimumBytesPerElement) {
-            throw new DecoderException("Truncated V3 " + description + " list");
-        }
-        return count;
+        return Wire.count(buffer, maximum, minimumBytesPerElement, description);
     }
 
     private static double finite(double value, String description) {
-        if (!Double.isFinite(value)) throw new DecoderException("Non-finite V3 " + description);
-        return value;
+        return Wire.finite(value, description);
     }
 
 }

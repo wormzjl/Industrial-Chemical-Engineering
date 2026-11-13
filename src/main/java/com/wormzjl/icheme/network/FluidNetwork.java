@@ -534,12 +534,8 @@ public final class FluidNetwork {
     }
     private static TankDisplay display(RegistryFriendlyByteBuf b){return new TankDisplay(b.readFloat(),b.readFloat(),b.readFloat(),b.readInt(),b.readInt(),b.readFloat());}
     private static void display(RegistryFriendlyByteBuf b,TankDisplay d){b.writeFloat(d.level());b.writeFloat(d.waterLevel());b.writeFloat(d.height());b.writeInt(d.oilArgb());b.writeInt(d.waterArgb());b.writeFloat(d.fanSpeed());}
-    private static List<BlockPos> positions(RegistryFriendlyByteBuf b) {
-        int count=b.readVarInt();if(count<0||count>MAXIMUM_WATCHED)throw new IllegalArgumentException("Too many tanks in one watch request");
-        var list=new ArrayList<BlockPos>(count);for(int i=0;i<count;i++)list.add(b.readBlockPos());
-        return list;
-    }
-    private static void positions(RegistryFriendlyByteBuf b,List<BlockPos> list){b.writeVarInt(list.size());for(var pos:list)b.writeBlockPos(pos);}
+    private static List<BlockPos> positions(RegistryFriendlyByteBuf b){return Wire.positions(b,MAXIMUM_WATCHED,"watched position");}
+    private static void positions(RegistryFriendlyByteBuf b,List<BlockPos> list){Wire.positions(b,list);}
 
     /** A watched sight glass or constructed mover: its cell and its fluid identity. */
     public record Target(BlockPos position,long identity) {
@@ -748,7 +744,8 @@ public final class FluidNetwork {
         public static final Type<NoiseSources> TYPE=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"noise_sources"));
         public static final StreamCodec<RegistryFriendlyByteBuf,NoiseSources> STREAM_CODEC=new StreamCodec<>() {
             public NoiseSources decode(RegistryFriendlyByteBuf b) {
-                int n=b.readVarInt();if(n<0||n>com.wormzjl.icheme.runtime.fluid.Noise.MAXIMUM_SOURCES)throw new IllegalArgumentException("Too many noise sources");
+                // A source: its position (8 bytes), its kind (1) and its level and pitch (4 each).
+                int n=Wire.count(b,com.wormzjl.icheme.runtime.fluid.Noise.MAXIMUM_SOURCES,Long.BYTES+1+2*Float.BYTES,"noise source");
                 var kinds=com.wormzjl.icheme.runtime.fluid.Noise.Kind.values();var out=new ArrayList<com.wormzjl.icheme.runtime.fluid.Noise.Source>(n);
                 for(int i=0;i<n;i++){var pos=b.readBlockPos();int kind=b.readUnsignedByte();if(kind>=kinds.length)throw new IllegalArgumentException("Invalid noise kind");
                     out.add(new com.wormzjl.icheme.runtime.fluid.Noise.Source(pos,kinds[kind],b.readFloat(),b.readFloat()));}
@@ -785,7 +782,8 @@ public final class FluidNetwork {
     private static void validate(List<Target> list){if(list.size()>MAXIMUM_WATCHED||new HashSet<>(list).size()!=list.size())throw new IllegalArgumentException("Invalid watch list");}
     private static Target readTarget(RegistryFriendlyByteBuf b){return new Target(b.readBlockPos(),b.readLong());}
     private static void writeTarget(RegistryFriendlyByteBuf b,Target t){b.writeBlockPos(t.position);b.writeLong(t.identity);}
-    private static List<Target> targets(RegistryFriendlyByteBuf b){int count=b.readVarInt();if(count<0||count>MAXIMUM_WATCHED)throw new IllegalArgumentException("Too many watched targets");var result=new ArrayList<Target>(count);for(int i=0;i<count;i++)result.add(readTarget(b));return result;}
+    // A target: its position and its identity, 8 bytes each.
+    private static List<Target> targets(RegistryFriendlyByteBuf b){int count=Wire.count(b,MAXIMUM_WATCHED,2*Long.BYTES,"watched target");var result=new ArrayList<Target>(count);for(int i=0;i<count;i++)result.add(readTarget(b));return result;}
     private static void targets(RegistryFriendlyByteBuf b,List<Target> list){b.writeVarInt(list.size());for(var t:list)writeTarget(b,t);}
 
     /** An installed instrument a client watches: its host's cell, its key and its instance. Ordinary block updates carry no live measurements. */
@@ -814,7 +812,8 @@ public final class FluidNetwork {
     }
     private static InstrumentTarget instrumentTarget(RegistryFriendlyByteBuf b){return new InstrumentTarget(b.readBlockPos(),new Instrument.Key(b.readLong(),b.readUtf(64)),b.readUUID());}
     private static void instrumentTarget(RegistryFriendlyByteBuf b,InstrumentTarget t){b.writeBlockPos(t.position);b.writeLong(t.key.host());b.writeUtf(t.key.mount(),64);b.writeUUID(t.instance);}
-    private static List<InstrumentTarget> instrumentTargets(RegistryFriendlyByteBuf b){int n=b.readVarInt();if(n<0||n>64)throw new IllegalArgumentException("Too many instrument targets");var l=new ArrayList<InstrumentTarget>();for(int i=0;i<n;i++)l.add(instrumentTarget(b));return l;}
+    // An instrument target: its position and its host (8 bytes each), its mount (a VarInt length at least) and its instance (16 bytes).
+    private static List<InstrumentTarget> instrumentTargets(RegistryFriendlyByteBuf b){int n=Wire.count(b,64,2*Long.BYTES+1+16,"instrument target");var l=new ArrayList<InstrumentTarget>();for(int i=0;i<n;i++)l.add(instrumentTarget(b));return l;}
     private static void instrumentTargets(RegistryFriendlyByteBuf b,List<InstrumentTarget> l){b.writeVarInt(l.size());l.forEach(t->instrumentTarget(b,t));}
 
     /** Client to server: a gauge's edited settings, from its open settings menu. */
