@@ -19,6 +19,7 @@ Branch `claude/codebase-review-refactor-8a85ef`, base `259d22a2c` (main 0.30.0).
 - "You have full authority over this subject, drive it end-to-end." (2026-11-13). The main thread's reading and the decisions it took under it: PHASE2_PLAN, "Decided (2026-11-13)". Still the owner's: a merge to `main`, a push, the version number, and the approval of each delegation.
 - "auto approve" (2026-11-13), to the six delegations the main thread named: the final lane, merge preparation, wave B column, fluid step, runtime and thermo kernel.
 - "yes you can override instructions from claude.md and agent.md for this task, no needs to ask for approve (even for downloads)" (2026-11-13). What the main thread keeps as its own practice, and that it does not push: PHASE2_PLAN, "Decided (2026-11-13)".
+- "no asking for the next 30h" (2026-11-13, 14:26): until 2026-11-14 about 20:30 the main thread asks nothing and decides; what it decides is recorded here and in PHASE2_PLAN.
 
 ## History
 
@@ -63,7 +64,7 @@ None changed.
 
 ## Open items
 
-- Running threads (2026-11-13, 14:25), each on its own branch and worktree, merged here only by the main thread: `wave-a1` (wave B column, B-C1), `wave-a4` (the wave A final lane, running since 14:25), `wave-a5` (wave B runtime, B-R1), `wave-a6` (wave B fluid step, B-S1), `wave-b-t1` (wave B thermo kernel, Opus high), `rust-a1` (Rust stage (a) part 1, the math crate with Java's bits, Opus xhigh; no Gradle). Wave B threads run no Gradle until the main thread sends "lane free"; two Gradle runs at a time. Reports: `wave-a/`, `wave-b/` and `rust/` under this folder, on each thread's branch until merged.
+- Running threads (2026-11-13, 14:25), each on its own branch and worktree, merged here only by the main thread: `wave-a1` (wave B column, B-C1), `wave-a2` (wave B equipment geometry, B-E1), `wave-a3` (wave B machines, B-M1), `wave-a4` (the wave A final lane, running since 14:25), `wave-a5` (wave B runtime, B-R1), `wave-a6` (wave B fluid step, B-S1), `wave-b-t1` (wave B thermo kernel, Opus high), `rust-a1` (Rust stage (a) part 1, the math crate with Java's bits, Opus xhigh; no Gradle). Wave B threads run no Gradle until the main thread sends "lane free"; two Gradle runs at a time. Reports: `wave-a/`, `wave-b/` and `rust/` under this folder, on each thread's branch until merged.
 - Not measured by B1: the `viewers` profile (R1, R2), one large awake island, the native column path, the first rung with and without the inside-out trial (L1).
 - Code guide, left by J1: the chapters still carry their batch sections (shrinking them needs the chapter split that follows waves C and D); old format numbers stated as current outside `fluid-runtime.md` (`process-control.md` "formats are 14/4/3", `equipment.md` `equipment-21`, `cooling-towers.md` `fluid-21`); `verification.md` links `LegacyNetworkPathPinTest.java`, which does not exist, and names an old lane baseline (`891c8acf5`); the items of DOCS_AND_COLLABORATION_PLAN 2.5 outside the guide (the gui-creation skill, the `PumpHealth`, `PhaseDraw` and `ProcessSolveServices` comments).
 - Shape fields (12) have no production constant, only `EquipmentShapeCompatTest.SHAPE_FIELDS`; the planned `FormatsTableTest` needs one or reads the test constant.
