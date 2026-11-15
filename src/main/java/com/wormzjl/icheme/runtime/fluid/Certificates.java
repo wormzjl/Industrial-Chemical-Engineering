@@ -28,8 +28,9 @@ final class Certificates {
     /**
      * Advances a certified island to {@code target = min(online, nearest fence, hold tick, horizon)} and acts on
      * what it reached: the horizon wakes it to solve one revalidating slice. On the engine's demand only: a fence or event
-     * alignment, a read of its snapshot (a save), the coupling's wakes, its own deadline, a property hold ({@link
-     * IslandCoordinator#through} and a coupled side's read materialise to their tick: {@link #materialise(Island,long)}); never a view
+     * alignment, a read of its snapshot (a save), a control, shaft or port change's wake, its own deadline, a property hold
+     * ({@link IslandCoordinator#through}, a coupled side's read and the dated wakes materialise to their tick: {@link
+     * #materialise(Island,long)}); never a view
      * (a presentation read takes a {@link IslandCoordinator#presentation preview}). Each advance is reported to the replay listener with
      * the replayed span as the island's last result, so boundary and pump accounting stays exact.
      */
