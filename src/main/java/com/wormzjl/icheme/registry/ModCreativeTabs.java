@@ -49,6 +49,8 @@ public final class ModCreativeTabs {
                 output.accept(ModItems.PRESSURE_CONTROL_VALVE.get());
                 output.accept(ModItems.FLUID_GENERATOR.get());
                 output.accept(ModItems.GAS_INTAKE.get());
+                // The placeholder crude oil, unless another mod's crude is in c:crude_oil (batch 2026-11-15-fluid-interfaces, D9).
+                if(!ModFluids.otherCrude())output.accept(ModFluids.CRUDE_OIL_BUCKET.get());
                 output.accept(ModItems.DIVERTER_VALVE.get());
                 output.accept(ModItems.FLUID_VOID.get());
                 output.accept(ModItems.INLINE_FILTER.get());

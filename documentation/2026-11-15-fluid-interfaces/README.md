@@ -43,6 +43,7 @@ The owner accepted the plan's decisions D1 to D12 on 2026-11-15: "Liquid hopper 
   - Plan correction: a boundary's own geometry never reached its link (the link is half the joined pipe's), so the planned "minorLoss 3" on the intake did nothing. `PhysicalFluidTopology.boundaryHalf` adds a generator's own minor loss to its link; every existing generator has 0, so every other link is bit-identical.
   - `GasIntakeTest` (4): the air's fractions; intake, two pipes, a set-flow compressor (0.05 m³/s, ratio 3), a pipe and a 2 m³ drum: the drum rests at 303 975 Pa (3.000 × the suction) and 422 K after 37 intervals, holding the air to 1e-15 in each fraction, the intake's exchanges equal to the island's gain within 1e-9; the same behind a centrifugal machine (rated 0.02 m³/s, 24.4 kJ/kg): rest at 137.7 kPa after 30 intervals; a drum at 3 bar sends nothing out through an intake. Counters of the compressor run, air against dry nitrogen: 518 against 503 Newton iterations, 48 against 46 LU factorisations. `GasIntakeGameTests` (one: the block registers the atmosphere, stands again as itself, leaves with its block): compiled, not run (final lane).
   - Pins: `FluidCheckpointCodecTest`'s per-device budget 2 045 to 2 051 bytes (2 046 at schema 26: the ambient flag on five specs and one field count). Tests: GasIntakeTest, FluidFactsCompatTest (22), FluidCheckpointCodecTest, FluidCheckpointFormatTest, FluidDeviceSpecDomainTest, PhysicalFluidTopologyTest, EquipmentInfoCoverageTest, GuideCoverageTest, TutorialTextTest: all pass.
+- 2026-11-15: W3, the placeholder crude oil. `registry/ModFluids`: the fluid type `crude_oil` (870 kg/m³, viscosity 5 000, 300 K), its source and flowing fluids, liquid block and bucket (`neoforge:fluid_container` model on the vanilla bucket), tinted water sprites (`0xFF1B1611`, no texture of its own), the tags `c:crude_oil` (both fluids) and `c:buckets/crude_oil`. Hidden from the creative tab and from JEI (`IChemEJeiPlugin.onRuntimeAvailable`) when another mod's fluid is in `c:crude_oil`. `CrudeOilGameTests` (registered, tagged, the bucket holds it, the bundled `#c:crude_oil` rule answers it): compiled, not run (final lane). Tests: EquipmentInfoCoverageTest, TutorialTextTest, GuideCoverageTest pass.
 
 ## Documents
 
@@ -54,7 +55,8 @@ The owner accepted the plan's decisions D1 to D12 on 2026-11-15: "Liquid hopper 
 
 ## Open items
 
-- W3 to W8 to build.
+- W4 to W8 to build.
+- Not checked in game: the crude oil's colour, its bucket model and its hiding beside another mod's crude.
 - Not checked in game: the intake's look and its screen (no switch, no fields).
 - `V3AcceptanceAuditor` adds its out-of-range notice without the 16-entry cap: a package with 16 evidence lines fails every column solve that reaches the notice. Proposal: cap it like the other notices, or keep the package's evidence out of the notice budget (owner choice).
 - Not run for W1: the fluid GameTests and chain-100 (final lane).

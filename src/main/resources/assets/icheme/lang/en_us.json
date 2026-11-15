@@ -4521,5 +4521,9 @@
   "material.icheme.krypton": "Krypton",
   "material.icheme.xenon": "Xenon",
   "block.icheme.gas_intake": "Gas Intake",
-  "tutorial.icheme.item.gas_intake.serves": "Draws outside air into the network; a compressor behind it moves the air."
+  "tutorial.icheme.item.gas_intake.serves": "Draws outside air into the network; a compressor behind it moves the air.",
+  "fluid_type.icheme.crude_oil": "Crude Oil",
+  "block.icheme.crude_oil": "Crude Oil",
+  "item.icheme.crude_oil_bucket": "Crude Oil Bucket",
+  "tutorial.icheme.item.crude_oil_bucket.serves": "Crude oil to pour into a converter, which turns it into medium crude."
 }

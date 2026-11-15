@@ -32,6 +32,18 @@ public final class EquipmentClient {
     private EquipmentClient() {
     }
 
+    /** The placeholder crude oil (batch 2026-11-15-fluid-interfaces, W3): water's still and flowing sprites, tinted near black; no texture of its own. */
+    @SubscribeEvent
+    public static void registerFluids(net.neoforged.neoforge.client.extensions.common.RegisterClientExtensionsEvent event) {
+        event.registerFluidType(new net.neoforged.neoforge.client.extensions.common.IClientFluidTypeExtensions() {
+            private static final net.minecraft.resources.ResourceLocation STILL = net.minecraft.resources.ResourceLocation.withDefaultNamespace("block/water_still");
+            private static final net.minecraft.resources.ResourceLocation FLOWING = net.minecraft.resources.ResourceLocation.withDefaultNamespace("block/water_flow");
+            @Override public net.minecraft.resources.ResourceLocation getStillTexture(){return STILL;}
+            @Override public net.minecraft.resources.ResourceLocation getFlowingTexture(){return FLOWING;}
+            @Override public int getTintColor(){return 0xFF1B1611;}
+        }, com.wormzjl.icheme.registry.ModFluids.CRUDE_OIL_TYPE.get());
+    }
+
     @SubscribeEvent
     public static void registerGeometryLoaders(ModelEvent.RegisterGeometryLoaders event) {
         event.register(EquipmentShellModel.LOADER_ID, EquipmentShellModel.LOADER);

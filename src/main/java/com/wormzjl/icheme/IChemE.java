@@ -199,6 +199,7 @@ public final class IChemE {
     public IChemE(IEventBus modEventBus, ModContainer modContainer) {
         ModBlocks.register(modEventBus);
         ModItems.register(modEventBus);
+        com.wormzjl.icheme.registry.ModFluids.register(modEventBus);
         com.wormzjl.icheme.registry.ModCreativeTabs.register(modEventBus);
         // The Create coupling (W6b, D40): its only entry point, guarded; no class outside compat/create names a Create type.
         if (net.neoforged.fml.ModList.get().isLoaded("create")) com.wormzjl.icheme.compat.create.CreateCompat.register(modEventBus);
