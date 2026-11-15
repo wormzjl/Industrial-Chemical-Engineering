@@ -100,7 +100,8 @@ public final class IslandSets {
             for(int i=0;i<source.length-1;i++)if(map[i]>=0&&map[i]<carried.length)carried[map[i]]=p.carries(i);
             if(carried.length==width+1)carried[width]=p.carries(source.length-1);
         }
-        return new HydrocarbonModel.Phase(p.molarVolume(),p.molarEnthalpy(),p.molarInternalEnergy(),p.volumePressureDerivative(),cut,p.vaporLike(),carried);
+        // The traits are the mixture's root's, not a per-compound list: they carry over unchanged.
+        return new HydrocarbonModel.Phase(p.molarVolume(),p.molarEnthalpy(),p.molarInternalEnergy(),p.volumePressureDerivative(),cut,p.vaporLike(),carried,p.traits());
     }
     /**
      * {@code pool} on {@code to}'s list: a still's head (batch 2026-11-09-batch-distiller, W3) is a slice input on the island's

@@ -1211,6 +1211,33 @@ public final class FluidThermodynamics {
         public double slotVolume(int slot){return slot==VAPOR?vaporVolume:slot==LIQUID?liquidSlotVolume:aqueousSlotVolume;}
         /** The volume of both liquids. */
         public double condensedVolume(){return liquidSlotVolume+aqueousSlotVolume;}
+        /**
+         * The one slot that holds fluid, when exactly one of the three has a positive volume; else -1 (two or three phases,
+         * or none). S2a of batch 2026-11-15-supercritical-fluids.
+         */
+        public int oneFluidSlot() {
+            boolean v=vaporVolume>0,l=liquidSlotVolume>0,a=aqueousSlotVolume>0;
+            if(v&&!l&&!a)return VAPOR;
+            if(l&&!v&&!a)return LIQUID;
+            if(a&&!v&&!l)return AQUEOUS;
+            return -1;
+        }
+        /**
+         * Whether the state is one fluid on a supercritical isotherm of its own composition ({@link #oneFluidSlot()} and its
+         * phase's {@link com.wormzjl.icheme.science.thermo.PhaseTraits#supercriticalIsotherm()}): a fluid whose density runs
+         * from a gas's to a liquid's with no phase change, whichever slot it sits in.
+         */
+        public boolean dense() {
+            int slot=oneFluidSlot();
+            var traits=slot<0||phase(slot)==null?null:phase(slot).traits();
+            return traits!=null&&traits.supercriticalIsotherm();
+        }
+        /** The one fluid's reduced density {@code v_c / v} on the untranslated cubic; NaN unless {@link #oneFluidSlot()} holds one. */
+        public double reducedDensity() {
+            int slot=oneFluidSlot();
+            var traits=slot<0||phase(slot)==null?null:phase(slot).traits();
+            return traits==null?Double.NaN:traits.reducedDensity();
+        }
         /** Each component's amount over the three slots, water last. */
         public double[] totals() {
             double[] n=new double[vaporAmounts.length];
