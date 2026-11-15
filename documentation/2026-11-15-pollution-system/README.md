@@ -50,6 +50,8 @@ Lane: new packages `science/pollution` and `runtime/pollution`. Hot files touche
 
 - 2026-11-16, GameTest run (sub-thread, `runFluidGameTestServer -PfluidGameTestRunId=pollution1`, once): 106 tests, 105 passed, 1 failed. Of the eight pollution tests seven pass (effects on a creative and a survival player, the meter, ignition at the limit, no ignition below it, the chain, the monitor's lamp, a breach and its repair); no test outside the pollution batches failed; no start-up warning names pollution, its damage types, tags, monitor assets or sounds; the log has `pollution status=STARTED`, 6 `BLAST` lines and 1 `BREACHED` line (strength 2.78). The failure, `toxicCubeKillsACowAndSparesAZombie` (index 0.0 until its timeout), is the fixture's: the meter test ran in the same batch and its `service.clear` wiped the cow test's pending release. Fixed by the main thread: the meter test moved to its own batch `pollution_meter`; `compileFluidGameTestJava` passes; not run again (the next final lane's). Logs: `tmp/gametest-run/`.
 
+- 2026-11-16, owner: "Keep it instant". A breached vessel stays on the open-vessel law as built (all its gas vents within the first process second); the stepped blowdown is not built. The 20 bar and superheated-liquid cases stay unexercised (open item).
+
 ## Documents
 
 - [POLLUTION_PLAN.md](POLLUTION_PLAN.md): the standard, the release sources, the field and its step, the schedule, effects, ignition and blasts, saves, work packages WP1 to WP7, owner decisions.
@@ -57,7 +59,7 @@ Lane: new packages `science/pollution` and `runtime/pollution`. Hot files touche
 
 ## Open items
 
-- For the owner, WP6b physics: the open-vessel law keeps no gas, so a breached 10 m3 vessel of methane at 20 bar (about 8.3 kmol, 130 kg) vents all of it within the first process second, where a real blowdown keeps about 0.4 kmol at 1 atm and takes longer; the restatement to ambient is one closure from the 20 bar state (`InventoryEquilibrium.refresh`), books no expansion work, and a superheated liquid (LPG) must flash in it. A failed closure would hold the island. Option not built: breach in steps through a fixed hole (as the open relief-outlet stub) until near ambient, then stand open.
+- WP6b, decided "keep it instant" (owner, 2026-11-16); still unexercised in a live island: a breached vessel at 20 bar (one closure from the 20 bar state in `InventoryEquilibrium.refresh`, no expansion work booked) and a superheated liquid (LPG) that must flash in that closure. A hold there goes to the owner as options.
 - WP6b's notes: the repair kit used on any fluid structure now takes the click (no GUI opens with a kit in hand) and its tooltip still says pumps; a relief valve stays compiled on a breached vessel (untested); the client may show a breached drum with the floating-roof tank view.
 - Sound candidates for the owner to hear and pick: gas alarm A (installed), B, C in `tmp/wp10/sounds/`; pipe-burst rupture A (installed), B, C in `tmp/wp6/sounds/`; the meter ticks have one set only.
 - WP6a's notes: a burn too small to blast still starts the chain; a pipe whose island re-forms before the next burst is read may release nothing; the tag entry `required: false`, the blaze burner's `blaze` property and `Detonate` are proved only in game.
