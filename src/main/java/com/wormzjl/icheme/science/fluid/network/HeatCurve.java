@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.science.fluid.network;
 
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
+import com.wormzjl.icheme.science.fluid.transport.MixtureViscosity;
 import com.wormzjl.icheme.science.math.DeterministicMath;
 
 import java.util.ArrayList;
@@ -27,15 +28,27 @@ public final class HeatCurve {
     /** A vapour mass fraction below this is all liquid film, above {@link #GAS_FROM} all gas film; between the two blends
      * and the plateau the boiling or condensing film holds. */
     public static final double LIQUID_UNTIL=.05,GAS_FROM=.95;
+    /**
+     * The reduced densities {@code v_c / v} of one fluid between which its film goes from the gas film to the liquid film
+     * (S2b of batch 2026-11-15-supercritical-fluids): the gas film at or below {@link #FILM_GAS_UNTIL}, the liquid film from
+     * {@link #FILM_LIQUID_FROM}, a {@link MixtureViscosity#smoothstep} between, never the two-phase film. An ordinary liquid
+     * ({@code v/b} 1.1 to 1.5, so 2.6 to 3.6) and an ordinary gas (below 0.5 up to {@code Tr} 0.97 at saturation) keep their
+     * film to the bit. An owner option (S2_NETWORK_REVIEW.md); a dense fluid's film follows its density, with no line.
+     */
+    public static final double FILM_GAS_UNTIL=.5,FILM_LIQUID_FROM=1.5;
     private final double[] h,t,film;
     /** Each knot's vapour mass fraction where the curve was sampled ({@link #sample}), so {@link #withFilms} can give it
      * other films without a flash; null for a curve given its films directly. */
     private final double[] vapour;
+    /** Each knot's liquid-like weight ({@link #liquidLikeWeight}), NaN for a knot of more than one phase; null with
+     * {@link #vapour}. */
+    private final double[] liquidLike;
 
-    public HeatCurve(double[] h,double[] t,double[] film){this(h,t,film,null);}
-    private HeatCurve(double[] h,double[] t,double[] film,double[] vapour) {
-        if(h.length<2||h.length!=t.length||h.length!=film.length||vapour!=null&&vapour.length!=h.length)throw new IllegalArgumentException("At least two matching knots required");
-        this.h=h.clone();this.t=t.clone();this.film=film.clone();this.vapour=vapour==null?null:vapour.clone();
+    public HeatCurve(double[] h,double[] t,double[] film){this(h,t,film,null,null);}
+    private HeatCurve(double[] h,double[] t,double[] film,double[] vapour,double[] liquidLike) {
+        if(h.length<2||h.length!=t.length||h.length!=film.length||vapour!=null&&vapour.length!=h.length
+                ||(vapour==null)!=(liquidLike==null)||liquidLike!=null&&liquidLike.length!=h.length)throw new IllegalArgumentException("At least two matching knots required");
+        this.h=h.clone();this.t=t.clone();this.film=film.clone();this.vapour=vapour==null?null:vapour.clone();this.liquidLike=liquidLike==null?null:liquidLike.clone();
         for(int i=0;i<h.length;i++)if(!Double.isFinite(this.h[i])||!Double.isFinite(this.t[i])||this.t[i]<=0||!Double.isFinite(this.film[i])||this.film[i]<=0
                 ||i>0&&(this.h[i]<=this.h[i-1]||this.t[i]<this.t[i-1]))
             throw new IllegalArgumentException("A heat curve needs increasing enthalpy, nondecreasing temperature and positive films");
@@ -44,8 +57,17 @@ public final class HeatCurve {
      * W4: an air cooler's fans change its films from step to step). Only a sampled curve knows its vapour fractions. */
     public HeatCurve withFilms(Films films) {
         if(vapour==null)throw new IllegalStateException("A heat curve given its films directly has no vapour fractions");
-        double[] value=new double[h.length];for(int i=0;i<h.length;i++)value[i]=films.at(vapour[i]);
-        return new HeatCurve(h,t,value,vapour);
+        double[] value=new double[h.length];for(int i=0;i<h.length;i++)value[i]=films.at(vapour[i],liquidLike[i]);
+        return new HeatCurve(h,t,value,vapour,liquidLike);
+    }
+    /**
+     * The liquid-like weight of a state of one fluid ({@link FluidThermodynamics.State#oneFluidSlot()}): 0 (gas film) at or
+     * below reduced density {@link #FILM_GAS_UNTIL}, 1 (liquid film) from {@link #FILM_LIQUID_FROM}, a smoothstep between;
+     * NaN for any other state (its film is by vapour fraction).
+     */
+    public static double liquidLikeWeight(FluidThermodynamics.State state) {
+        if(state.oneFluidSlot()<0)return Double.NaN;
+        return MixtureViscosity.smoothstep((state.reducedDensity()-FILM_GAS_UNTIL)/(FILM_LIQUID_FROM-FILM_GAS_UNTIL));
     }
 
     /** The films of the three phase regimes (W/m2K), each with its share of the wall and fouling (plan section 4). */
@@ -60,6 +82,17 @@ public final class HeatCurve {
             if(x<=GAS_FROM)return twoPhase;
             if(x<1)return twoPhase+(gas-twoPhase)*(x-GAS_FROM)/(1-GAS_FROM);
             return gas;
+        }
+        /**
+         * The film of a point of vapour fraction {@code x} and liquid-like weight {@code w} ({@link #liquidLikeWeight}): with
+         * no weight (NaN, a point of two phases) {@link #at(double)}; else the gas film at {@code w <= 0}, the liquid film at
+         * {@code w >= 1}, {@code gas + w (liquid - gas)} between: one fluid never takes the two-phase film.
+         */
+        public double at(double x,double w) {
+            if(Double.isNaN(w))return at(x);
+            if(w<=0)return gas;
+            if(w>=1)return liquid;
+            return gas+w*(liquid-gas);
         }
     }
 
@@ -182,7 +215,11 @@ public final class HeatCurve {
                 if(x>lo&&x<hi) {
                     double share=(x-previous.vapour)/(point.vapour-previous.vapour);
                     double value=previous.h+share*(point.h-previous.h);
-                    if(value>previous.h&&value<point.h)knots.add(new Point(previous.t+share*(point.t-previous.t),value,x));
+                    // Between two points of one continuous fluid (the same slot, or both dense) the weight is interpolated as the
+                    // vapour coordinate is (it is 1 - w); between a liquid and a vapour point a phase change lies (a pure
+                    // component's plateau), so the knot has no weight and takes the two-phase film.
+                    double weight=continuous(previous,point)?previous.w+share*(point.w-previous.w):Double.NaN;
+                    if(value>previous.h&&value<point.h)knots.add(new Point(previous.t+share*(point.t-previous.t),value,x,weight,-1,false));
                 }
             }
             knots.add(point);previous=point;
@@ -190,20 +227,29 @@ public final class HeatCurve {
         knots.sort((a,c)->Double.compare(a.h,c.h));
         var kept=new ArrayList<Point>();
         for(var point:knots)if(kept.isEmpty()||point.h>kept.getLast().h)kept.add(point);
-        double[] hs=new double[kept.size()],ts=new double[kept.size()],fs=new double[kept.size()],xs=new double[kept.size()];
+        double[] hs=new double[kept.size()],ts=new double[kept.size()],fs=new double[kept.size()],xs=new double[kept.size()],ws=new double[kept.size()];
         double floor=0;
-        for(int i=0;i<kept.size();i++){var point=kept.get(i);hs[i]=point.h;ts[i]=floor=Math.max(floor,point.t);xs[i]=point.vapour;fs[i]=films.at(point.vapour);}
-        return new HeatCurve(hs,ts,fs,xs);
+        for(int i=0;i<kept.size();i++){var point=kept.get(i);hs[i]=point.h;ts[i]=floor=Math.max(floor,point.t);xs[i]=point.vapour;ws[i]=point.w;fs[i]=films.at(point.vapour,point.w);}
+        return new HeatCurve(hs,ts,fs,xs,ws);
     }
     private static final int DIVISIONS=16,MAXIMUM_KNOTS=512;
     /** How closely a phase boundary is bisected, K: the plateau's edge is then out by cp times this, about 4 J/kg against a
      * latent heat of megajoules per kilogram (L-F11 of the 2026-11-13 simplifications; 1e-5 K before, seven more flashes per boundary). */
     static final double BOUNDARY_KELVIN=1e-3;
-    private record Point(double t,double h,double vapour) {}
+    /** A sampled point: its vapour coordinate is the vapour mass fraction, or {@code 1 - w} for a point of one fluid of
+     * liquid-like weight {@code w} (NaN for a point of more than one phase), so one fluid is never bisected as a phase change;
+     * {@code slot} its one fluid slot (-1 for none or an inserted knot) and {@code dense} whether that fluid is
+     * {@link FluidThermodynamics.State#dense()}. */
+    private record Point(double t,double h,double vapour,double w,int slot,boolean dense) {}
+    /** Whether one fluid runs continuously from {@code a} to {@code b}: both of one fluid, in the same slot or both dense. */
+    private static boolean continuous(Point a,Point b) {
+        return !Double.isNaN(a.w)&&!Double.isNaN(b.w)&&(a.slot>=0&&a.slot==b.slot||a.dense&&b.dense);
+    }
     private static Point point(FluidThermodynamics model,double[] amounts,double pressure,double temperature,Runnable checkpoint) {
         checkpoint.run();
         var state=model.flashTP(temperature,pressure,amounts,checkpoint);
-        return new Point(temperature,state.enthalpy()/state.mass(),model.vaporMass(state)/state.mass());
+        double w=liquidLikeWeight(state);
+        return new Point(temperature,state.enthalpy()/state.mass(),Double.isNaN(w)?model.vaporMass(state)/state.mass():1-w,w,state.oneFluidSlot(),state.dense());
     }
     private static void refine(FluidThermodynamics model,double[] amounts,double pressure,Point a,Point b,TreeMap<Double,Point> points,int depth,Runnable checkpoint) {
         if(depth>=24||b.t-a.t<BOUNDARY_KELVIN||points.size()>=MAXIMUM_KNOTS)return;
