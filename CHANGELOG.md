@@ -15,6 +15,8 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+## [0.31.0] - 2026-11-15
+
 ### Added
 
 - A centrifugal pump run below 30 % of its rated flow recirculates and wears (`2026-11-13-codebase-review`, G1 part 1, N1): 8 h of process time against a closed discharge, 32 h at 15 % of rated flow (2 h and 8 h of play at the default time factor 4); its device page and its shaft row say LOW FLOW. To stop it, open the discharge, add a minimum-flow recycle or switch the pump off. A set-flow pump does not wear this way (`b04de810e`, merged at `bba0c9354`).
