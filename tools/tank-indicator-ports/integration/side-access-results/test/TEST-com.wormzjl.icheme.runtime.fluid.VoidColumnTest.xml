@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.runtime.fluid.VoidColumnTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-10-24T14:24:17.964Z" hostname="WORMZ-PC" time="0.054">
-  <properties/>
-  <testcase name="waterAboveAnOutletFallsIntoIt()" classname="com.wormzjl.icheme.runtime.fluid.VoidColumnTest" time="0.054"/>
-  <system-out><![CDATA[VOID_COLUMN island 45 status=STEADY: replaying 17.43 kg/s since 119.0 s, next check at 86519.0 s flows=[-0.4221049250199753, 0.10488673238595272, 0.05473015748050377, 0.2624880351535188, 0.1596168898664565, 0.4221049250199753, -8.449623737290072, 0.0, -8.982382293713425, 5.504347274372508, 3.4780350193409175, 17.432006031003496, -0.8974566384546236, -4.491191536987612, 4.491191536987612, -4.491190756725812, -1.3195615634745987, 8.982382293713425, 2.1584734558663192]
-VOID_COLUMN upperVoidReceives=8.449623737290072
-]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.science.column.v3.ColumnInputPresetTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-24T13:23:59.987Z" hostname="WORMZ-PC" time="0.024">
-  <properties/>
-  <testcase name="everySelectablePresetIsValidAndSurvivesSaving()" classname="com.wormzjl.icheme.science.column.v3.ColumnInputPresetTest" time="0.004"/>
-  <testcase name="loadingPresetUsesTheSuppliedServerCatalogIncludingOverrides()" classname="com.wormzjl.icheme.science.column.v3.ColumnInputPresetTest" time="0.018"/>
-  <testcase name="newCrudesKeepEditableCurrentColumnConditionsAndDistinctFeeds()" classname="com.wormzjl.icheme.science.column.v3.ColumnInputPresetTest" time="0.002"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

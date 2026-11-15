@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.runtime.fluid.PipePresentationTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-24T09:09:10.868Z" hostname="WORMZ-PC" time="0.046">
-  <properties/>
-  <testcase name="aStraightPipeAutomaticallyShowsReverseFlowAndPreservesBothDirectionsOfAReversal()" classname="com.wormzjl.icheme.runtime.fluid.PipePresentationTest" time="0.017"/>
-  <testcase name="fourFiveAndSixEquipmentConnectionsBalanceWithoutDuplicatingDisplayedThroughput()" classname="com.wormzjl.icheme.runtime.fluid.PipePresentationTest" time="0.008"/>
-  <testcase name="anUnsolvedPipeHasZeroTransportButStillHasAPressureReading()" classname="com.wormzjl.icheme.runtime.fluid.PipePresentationTest" time="0.002"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

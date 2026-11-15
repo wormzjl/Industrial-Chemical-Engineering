@@ -32,6 +32,8 @@ import os
 from pathlib import Path
 from typing import NamedTuple
 
+from research_path import locate  # the populations live in the main checkout's research/ (AGENTS.md)
+
 ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ROOT / 'tools/benchmark-population/v1/manifest.json'
 ENVIRONMENT_VARIABLE = 'CREATECHEME_BENCHMARK_POPULATION'
@@ -81,12 +83,12 @@ def resolve(default: Path, argument=None) -> Population:
     """Return the population to measure.  With no argument and no environment override, the default."""
     requested = argument or os.environ.get(ENVIRONMENT_VARIABLE)
     if not requested:
-        default = Path(default)
+        default = locate(default)
         if not default.exists():
             raise SystemExit(f"This study's archived population {default} is not staged yet; run its "
                              'registration step first, or pass --population.')
         return Population(default, ARCHIVED, _rows(default), _digest(default), None)
-    path = Path(requested).resolve()
+    path = locate(Path(requested).resolve())
     if not path.exists():
         raise SystemExit(f'Population {path} does not exist')
     digest = _digest(path)

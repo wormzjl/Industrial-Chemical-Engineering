@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.runtime.fluid.WorkerAllocationTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-25T02:32:25.762Z" hostname="WORMZ-PC" time="0.005">
-  <properties/>
-  <testcase name="shrinkingNeverRequestsZeroWorkersAndRejectsInvalidDemandClocks()" classname="com.wormzjl.icheme.runtime.fluid.WorkerAllocationTest" time="0.001"/>
-  <testcase name="growsImmediatelyAndPreservesCapacityAcrossFiveSecondBursts()" classname="com.wormzjl.icheme.runtime.fluid.WorkerAllocationTest" time="0.0"/>
-  <testcase name="automaticSizingLeavesHeadroomAndCapsTheSharedPool()" classname="com.wormzjl.icheme.runtime.fluid.WorkerAllocationTest" time="0.004"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

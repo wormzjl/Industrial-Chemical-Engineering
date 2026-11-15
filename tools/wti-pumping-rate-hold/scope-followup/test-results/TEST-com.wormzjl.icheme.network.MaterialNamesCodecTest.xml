@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.network.MaterialNamesCodecTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-24T01:37:43.326Z" hostname="WORMZ-PC" time="0.007">
-  <properties/>
-  <testcase name="descriptorsRejectInvalidBoundsAndOversizeLabels()" classname="com.wormzjl.icheme.network.MaterialNamesCodecTest" time="0.001"/>
-  <testcase name="serverNamingDescriptorsRoundTripWithoutClientCatalogLookup()" classname="com.wormzjl.icheme.network.MaterialNamesCodecTest" time="0.005"/>
-  <testcase name="retiredAxesAreRejectedByTheActualNbtReader()" classname="com.wormzjl.icheme.network.MaterialNamesCodecTest" time="0.0"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

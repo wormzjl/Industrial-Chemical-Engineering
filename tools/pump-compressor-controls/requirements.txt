@@ -1,0 +1,10 @@
+# Authoring environment of the sound scripts (tools/pump-compressor-controls, tools/machine-sounds, tools/process-sounds).
+# Not a dependency of the mod. Install from the repository root:
+#   <python> -m pip install --target tools/pump-compressor-controls/python-deps -r tools/pump-compressor-controls/requirements.txt
+# The packages were built for CPython 3.12 win_amd64; the last vendored copy is in the main checkout's
+# research/tools/pump-compressor-controls/python-deps/.
+soundfile==0.14.0
+numpy==2.5.4
+cffi==2.1.1
+pycparser==3.12
+typing_extensions==4.16.0

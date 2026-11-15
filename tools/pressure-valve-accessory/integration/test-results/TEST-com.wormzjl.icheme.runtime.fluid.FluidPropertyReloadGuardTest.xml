@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.runtime.fluid.FluidPropertyReloadGuardTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-24T09:09:05.527Z" hostname="WORMZ-PC" time="0.19">
-  <properties/>
-  <testcase name="metadataOnlyReloadKeepsQualifiedScienceAndNumericalChangeWithoutRevisionBumpHolds()" classname="com.wormzjl.icheme.runtime.fluid.FluidPropertyReloadGuardTest" time="0.09"/>
-  <testcase name="aChangedCrystalRecordHoldsTheWorld()" classname="com.wormzjl.icheme.runtime.fluid.FluidPropertyReloadGuardTest" time="0.058"/>
-  <testcase name="viscosityOnlyChangeInvalidatesThePinnedFluidModel()" classname="com.wormzjl.icheme.runtime.fluid.FluidPropertyReloadGuardTest" time="0.04"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.science.fluid.network.ConservativeTransportTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-24T01:21:28.667Z" hostname="WORMZ-PC" time="0.035">
-  <properties/>
-  <testcase name="aVesselNothingReachesKeepsWhatItHoldsItsSolidsIncluded()" classname="com.wormzjl.icheme.science.fluid.network.ConservativeTransportTest" time="0.007"/>
-  <testcase name="simultaneousBranchTransfersRemainPositiveAndCannotInventAnAbsentComponent()" classname="com.wormzjl.icheme.science.fluid.network.ConservativeTransportTest" time="0.01"/>
-  <testcase name="repeatedStepsKeepTheDeclaredVolumeBitForBitWhileCheckingTheDerivedVolume()" classname="com.wormzjl.icheme.science.fluid.network.ConservativeTransportTest" time="0.018"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

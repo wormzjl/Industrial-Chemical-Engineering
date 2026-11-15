@@ -43,7 +43,7 @@ final model card and case/zone maps contain the full denominators, raw-versus-
 corrected errors, timing and memory evidence.
 
 The [model card](generalized-model-card.json) retains all measurements and hashes.
-The [compressed case map](generalized-case-map.jsonl.gz) archives every one of
+The [compressed case map](../../research/tools/neural/generalized-case-map.jsonl.gz) archives every one of
 the 2,809 finite-design inputs, all 48 latent coordinates, exclusions and observed
 outcomes. Cases not sent to the neural model are explicitly marked unevaluated.
 The uncompressed working maps are `build/neural-generalized/analysis/summary-cases.csv`

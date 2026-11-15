@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.science.column.v3.V3BundledRegroupedModelTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-10-24T14:24:22.948Z" hostname="WORMZ-PC" time="0.23">
-  <properties/>
-  <testcase name="packagedWeightsAndDecoderMatchIndependentFloat64Fixtures()" classname="com.wormzjl.icheme.science.column.v3.V3BundledRegroupedModelTest" time="0.198"/>
-  <testcase name="aFourthSideDrawIsAValidInputTheBundledModelDeclines()" classname="com.wormzjl.icheme.science.column.v3.V3BundledRegroupedModelTest" time="0.032"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

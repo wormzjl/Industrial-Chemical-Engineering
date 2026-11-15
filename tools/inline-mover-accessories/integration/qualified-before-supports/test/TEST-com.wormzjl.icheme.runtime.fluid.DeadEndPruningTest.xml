@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.runtime.fluid.DeadEndPruningTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-10-25T04:53:46.940Z" hostname="WORMZ-PC" time="0.117">
-  <properties/>
-  <testcase name="aFilterBranchOnATanksJunctionIsPrunedKeepsItsCakeAndRejoinsWithADestination()" classname="com.wormzjl.icheme.runtime.fluid.DeadEndPruningTest" time="0.087"/>
-  <testcase name="aFilterWithNothingPastItLeavesTheCrudeGeneratorsIslandAlone()" classname="com.wormzjl.icheme.runtime.fluid.DeadEndPruningTest" time="0.03"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>
