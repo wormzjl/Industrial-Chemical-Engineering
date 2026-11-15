@@ -302,6 +302,43 @@ class MachineHealthTest {
         assertEquals(1, health.health(20), "new again");
     }
 
+    /**
+     * WP6b of batch 2026-11-15-pollution-system: a blast's breach of a machine casing is a queued event; at the drain a new dry
+     * screw falls to health 0 and stands failed, a compressor (no health record) is untouched, and one kit makes the screw new.
+     */
+    @Test
+    void aBreachedCasingFailsUntilAKitRepairsIt() {
+        var rig = new Rig(101325);
+        var at = new PhysicalFluidTopology.Position("minecraft:overworld", 5, 0, 0);
+        var kind = com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.PIPE;
+        var spec = FluidDeviceSpec.nitrogen(EventPathWorld.CATALOG);
+        var screw = new WorldTopologyLedger.Registration(PhysicalFluidTopology.Device.builder(20, at, kind, PhysicalFluidTopology.Direction.EAST, FAT,
+                new FlowControl.Machine(new com.wormzjl.icheme.science.machine.VacuumPump(com.wormzjl.icheme.science.machine.VacuumPump.Type.DRY_SCREW, 300 / 3600., 2950), 1, true)).build(), spec, 0);
+        var compressor = new WorldTopologyLedger.Registration(PhysicalFluidTopology.Device.builder(30, at, kind, PhysicalFluidTopology.Direction.EAST, FAT,
+                new FlowControl.Compressor(.1, 3)).build(), spec, 0);
+        var registrations = Map.of(20L, screw, 30L, compressor);
+        var ledger = new WorldTopologyLedger(WorldTopologyLedger.Snapshot.empty(EventPathWorld.CATALOG));
+        var health = new MachineHealth(ledger, device -> null, rig.coordinator, device -> MachineHealth.pump(registrations.get(device)),
+                device -> registrations.containsKey(device) ? registrations.get(device).device().control() : null, () -> FAST);
+        assertEquals(1, health.health(20), "a new screw");
+        health.breach(20);
+        health.breach(30);
+        assertTrue(health.hasEvents(), "the breach is queued");
+        assertFalse(health.failed(20), "nothing changes before the drain");
+        health.apply();
+        assertTrue(health.failed(20), "breached: failed");
+        assertEquals(0, health.health(20), "at health 0");
+        assertEquals(Map.of(20L, 0.0), health.facts(), "the health is the fact");
+        assertNull(health.health(30), "a compressor has no health record, and gets none");
+        assertEquals("FAILED", health.status(20));
+        var outcome = new ArrayList<MachineHealth.Outcome>();
+        health.queue(new MachineHealth.Repair(20, () -> true, outcome::add));
+        health.apply();
+        assertEquals(List.of(MachineHealth.Outcome.REPAIRED), outcome);
+        assertFalse(health.failed(20));
+        assertEquals(1, health.health(20), "new again");
+    }
+
     /** N1: the casing pump of the low-flow cases: 0.01 m³/s at 50 m, 70 %, at its 2,950 rpm (speed share 1). */
     private static final com.wormzjl.icheme.science.machine.CentrifugalPump CENTRIFUGAL = new com.wormzjl.icheme.science.machine.CentrifugalPump(.01, 50, .7);
 

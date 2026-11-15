@@ -36,8 +36,11 @@ public final class MachineHealth {
     /** The presentation cadence, online ticks (as the electric stores'). */
     public static final int CADENCE = ElectricStores.CADENCE;
 
-    /** What a repair came to: the item is consumed only for {@code REPAIRED}. */
-    public enum Outcome { REPAIRED, FULL, NOT_A_PUMP, NO_KIT }
+    /**
+     * What a repair came to: the item is consumed only for {@code REPAIRED} and {@code BREACH_REPAIRED} (a breached vessel's
+     * wall closed, {@code FluidWorldAuthority#queueBreachRepair}, batch 2026-11-15-pollution-system WP6b).
+     */
+    public enum Outcome { REPAIRED, FULL, NOT_A_PUMP, NO_KIT, BREACH_REPAIRED }
 
     /**
      * A repair kit used on a pump: {@code take} consumes the kit at acceptance (false when it can no longer, the player
@@ -87,6 +90,8 @@ public final class MachineHealth {
     private final Supplier<Wear.Settings> settings;
     private final Map<Long, Pump> pumps = new TreeMap<>();
     private final ArrayDeque<Repair> events = new ArrayDeque<>();
+    /** The machines a blast breached since the last drain (WP6b). */
+    private final ArrayDeque<Long> breaches = new ArrayDeque<>();
     private final Set<Long> wake = new TreeSet<>();
 
     /**
@@ -311,13 +316,36 @@ public final class MachineHealth {
         events.add(Objects.requireNonNull(repair));
     }
 
-    public boolean hasEvents() {
-        return !events.isEmpty();
+    /**
+     * Queues a blast's breach of machine {@code id}'s casing (batch 2026-11-15-pollution-system, WP6b): at the next tick drain,
+     * before the repairs, its health falls to 0 and it fails as a worn-out machine does (closed by its {@link ShaftPlan.Kind#FAILED}
+     * plan, its island woken); a repair kit makes it new again. Nothing for a device with no health record, nor while
+     * {@code machines.wear.enabled} is false. The health is the fact; no other field is saved.
+     */
+    public void breach(long id) {
+        breaches.add(id);
     }
 
-    /** Applies the queued repairs: a worn pump takes its kit and is new again, and a failed one wakes its island. */
+    public boolean hasEvents() {
+        return !events.isEmpty() || !breaches.isEmpty();
+    }
+
+    /** Applies the queued breaches, then the queued repairs: a worn pump takes its kit and is new again, and a failed one wakes its island. */
     public void apply() {
         long now = coordinator.now();
+        boolean enabled = settings().enabled();
+        while (!breaches.isEmpty()) {
+            long id = breaches.poll();
+            // machines.wear.enabled = false: no machine fails, so a blast leaves it running.
+            var p = enabled ? pump(id) : null;
+            if (p == null) continue;
+            book(p, p.rate, p.bookedTick, now);
+            p.health = 0;
+            if (!p.failed) {
+                p.failed = true;
+                wake(id);
+            }
+        }
         while (!events.isEmpty()) {
             var r = events.poll();
             var p = pump(r.device());

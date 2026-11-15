@@ -226,4 +226,20 @@ class PollutionDataTest {
             assertTrue(Files.isRegularFile(ogg) && Files.size(ogg) > 1000, "missing or empty " + ogg);
         }
     }
+
+    /** A breach (WP6b): the chat lines at the breach, named or by position, and the repair kit's answer. */
+    @Test
+    void breachLinesAreInEnglish() throws IOException {
+        var english = read(ASSETS.resolve("lang/en_us.json"));
+        for (var key : List.of("chat.icheme.breach", "chat.icheme.breach.unnamed", "chat.icheme.repair_kit.breach_repaired")) {
+            assertTrue(english.has(key), key);
+        }
+        assertTrue(english.get("chat.icheme.breach").getAsString().contains("%s"), "the line names the equipment");
+        assertTrue(english.get("chat.icheme.breach.unnamed").getAsString().contains("%3$s"), "the line gives the position");
+        // Every repair outcome has its line (RepairKitItem.reply).
+        for (var outcome : com.wormzjl.icheme.runtime.fluid.MachineHealth.Outcome.values()) {
+            String key = "chat.icheme.repair_kit." + outcome.name().toLowerCase(java.util.Locale.ROOT);
+            assertTrue(english.has(key), key);
+        }
+    }
 }

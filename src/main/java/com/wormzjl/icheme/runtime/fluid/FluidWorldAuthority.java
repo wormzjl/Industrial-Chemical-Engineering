@@ -770,7 +770,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
             var edits=new ArrayList<WorldTopologyLedger.Edit>();var placed=new ArrayList<WorldTopologyLedger.Registration>();
             var s=formerVessel.spec();long next=topology.nextIdentity();
             var vessel=new WorldTopologyLedger.Registration(formerVessel.device().withPlacement(d.node(),d.all()),
-                    new FluidDeviceSpec(d.volume(),s.temperature(),s.pressure(),s.composition(),s.solids(),d.levelHeight(),!d.closed(),d.geometry(),null,d.blanket(),d.relief(),d.reliefFace()),Math.addExact(formerVessel.revision(),1));
+                    new FluidDeviceSpec(d.volume(),s.temperature(),s.pressure(),s.composition(),s.solids(),d.levelHeight(),!d.closed(),d.geometry(),null,d.blanket(),d.relief(),d.reliefFace(),s.breached()),Math.addExact(formerVessel.revision(),1));
             placed.add(vessel);edits.add(new WorldTopologyLedger.Edit(former,vessel));
             long[] ids={u==null?0:u.drain(),u==null?0:u.fill()};
             for(int k=0;k<2;k++) {
@@ -891,7 +891,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         long pot=u.id(),next=topology.nextIdentity();var edits=new ArrayList<WorldTopologyLedger.Edit>();var placed=new ArrayList<WorldTopologyLedger.Registration>();
         var old=potRecord.spec();var vessel=d.pot();
         var potDevice=potRecord.device().withPlacement(vessel.node(),vessel.ports()).withHeat(potRecord.device().heat().withArea(vessel.heat().area()));
-        var potSpec=new FluidDeviceSpec(vessel.volume(),old.temperature(),old.pressure(),old.composition(),old.solids(),vessel.levelHeight(),design.condenser(),vessel.geometry(),old.tower());
+        var potSpec=new FluidDeviceSpec(vessel.volume(),old.temperature(),old.pressure(),old.composition(),old.solids(),vessel.levelHeight(),design.condenser(),vessel.geometry(),old.tower()).withBreached(old.breached());
         // A side, outlet or burner the still has moves; one the layout adds registers; one it no longer has leaves.
         long water=0;WorldTopologyLedger.Registration waterRecord=null;
         var held=u.water()>0?registrations().get(u.water()):null;
@@ -1033,6 +1033,52 @@ public final class FluidWorldAuthority implements AutoCloseable {
     }
     /** The pumps' health (W10b): a repair kit queues its event here. */
     public MachineHealth health(){owned();return health;}
+    /**
+     * Breaches vessel {@code id}'s wall (batch 2026-11-15-pollution-system, WP6b, plan section 7 proposal A): its spec is
+     * queued again {@link FluidDeviceSpec#withBreached breached}, as a settings change is ({@link #edit}), so the island
+     * applies it at its next topology batch, keeps what the vessel holds and stands it open ({@link FluidDeviceSpec#vented}).
+     * False, and nothing queued, for a device that is not a breachable vessel ({@link #breachable}) or is breached already.
+     * Server thread; solves nothing; never throws (a failure is logged {@code pollution status=BREACH_FAILED}).
+     */
+    public boolean breach(long id){return breached(id,true);}
+    /** Repairs a breached vessel {@code id} (the repair kit): the same queued edit back to a whole wall. False for a vessel that is not breached. */
+    public boolean repair(long id){return breached(id,false);}
+    /** Whether device {@code id} is a breached vessel. */
+    public boolean isBreached(long id){owned();var r=registrations().get(id);return r!=null&&r.spec().breached();}
+    /** Repair kits used on breached vessels, applied at the next tick drain (WP6b). */
+    private final ArrayDeque<MachineHealth.Repair> mends=new ArrayDeque<>();
+    /**
+     * Queues a repair kit's repair of breached vessel {@code repair.device()} (WP6b): at the next tick drain, beside the
+     * machines' repairs, a vessel still breached takes the kit ({@code take}) and its breach is repaired ({@link #repair});
+     * {@code reply} hears {@link MachineHealth.Outcome#BREACH_REPAIRED} or {@code NO_KIT}. A vessel no longer breached then
+     * passes the kit on to the machines' repair, as any other device.
+     */
+    public void queueBreachRepair(MachineHealth.Repair repair){owned();mends.add(Objects.requireNonNull(repair));}
+    private void applyMends() {
+        while(!mends.isEmpty()) {
+            var r=mends.poll();
+            if(!isBreached(r.device())){health.queue(r);continue;}
+            if(!r.take().getAsBoolean()){r.reply().accept(MachineHealth.Outcome.NO_KIT);continue;}
+            repair(r.device());r.reply().accept(MachineHealth.Outcome.BREACH_REPAIRED);
+        }
+    }
+    /**
+     * Whether a blast can breach registration {@code r}: a vessel (kind {@code RESERVOIR}) built closed, with no heat unit
+     * (a still's pot, whose vent goes to its head, and a kettle's shell keep their walls) and held by no running column.
+     */
+    public static boolean breachable(WorldTopologyLedger.Registration r){return r!=null&&r.device().kind()==TopologyCompiler.Kind.RESERVOIR&&!r.spec().open()&&r.device().heat()==null&&r.device().suspendedBy()==0&&!r.device().port();}
+    private boolean breached(long id,boolean value) {
+        try {
+            owned();if(closed)return false;
+            var r=registrations().get(id);
+            // A breach needs a breachable whole vessel; a repair any breached one.
+            if(value?!breachable(r)||r.spec().breached():r==null||!r.spec().breached())return false;
+            return edit(id,r.revision(),r.device(),r.spec().withBreached(value))!=null;
+        } catch(RuntimeException failure) {
+            IChemE.LOGGER.warn("pollution status=BREACH_FAILED device={} breached={} detail={}",id,value,String.valueOf(failure));
+            return false;
+        }
+    }
     /**
      * A shaft-driven machine (batch 2026-11-03-rotating-machinery W3): a pump or compressor casing on its curve
      * ({@code FlowControl.Machine}), a reciprocating frame ({@code Compressor}) or a steam turbine (kind {@code TURBINE},
@@ -1405,6 +1451,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
         // Shaft events apply after the devices they name (W3), then their trains recompile and wake what moved.
         if(shafts.hasEvents()&&propertyHold==null){shafts.apply();if(topology.hasPendingEvents())applyPending();runtime.coordinator().pumpIfUseful();}
         // Repair kits (W10b): queued engine events, applied after the devices they name; a repaired failed pump wakes its island.
+        // Repair kits on breached vessels (WP6b): their repair is a queued topology edit, as the breach was; a vessel no longer
+        // breached passes its kit on to the machines' repairs below.
+        if(!mends.isEmpty()&&propertyHold==null)applyMends();
         if(health.hasEvents()&&propertyHold==null){health.apply();runtime.coordinator().pumpIfUseful();}
         instruments.tick(topology.onlineTick());
         // Every 100 ticks each loaded motor is bound again (code base review R24, owner option A: kept). The pass does more than

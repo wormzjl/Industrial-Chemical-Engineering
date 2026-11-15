@@ -1,6 +1,6 @@
 # 2026-11-15 pollution system
 
-Status: In progress since 2026-11-15. D1 to D6 decided; WP1 to WP5, WP6a, WP8 and WP10 built and unit-tested (GameTests not run); WP6b in work (subagent); WP7 and WP9 not started. Branch `claude/pollution-system-a8e213`, cut from `main` at `e9edc974b` (0.31.0).
+Status: In progress since 2026-11-15. D1 to D6 decided; WP1 to WP5, WP6a, WP8 and WP10 built and unit-tested (GameTests not run); WP6b built and unit-tested; WP7 and WP9 not started. Branch `claude/pollution-system-a8e213`, cut from `main` at `e9edc974b` (0.31.0).
 
 Purpose: air pollution in 16 × 16 × 16 cubes: toxic, combustible, corrosive and particulate hazard indices from what the fluid network releases, spreading and decaying on the 5 s engine, with effects on players and mobs and vapour cloud explosions at flame sources.
 
@@ -44,12 +44,16 @@ Lane: new packages `science/pollution` and `runtime/pollution`. Hot files touche
 
 - 2026-11-15, owner: "Start WP6b first", then "Approve both". Fluid facts schema 26 reserved on `main` (`2be307e58`, a row in `FORMATS.md`). WP6b started as an Opus high subagent: a blast of strength 2 or more at a cell of constructed equipment sets a saved `breached` flag on its vessel's `FluidDeviceSpec` (appended, default false); the graph then sees the vessel as open (`open || breached`), through the registry's existing respecify event, so the open-vessel law vents and spills it and WP4's releases follow; no block is lost; a machine with a health record fails; the repair kit clears the breach. Risk named to the owner: a pressurised closed vessel that becomes open is a state the open-vessel law has not been exercised on; a hold there goes to the owner as options.
 
+- 2026-11-16, WP6b built by the main thread: all four source sets compiled at the first build; 235 tests in 25 classes pass (`VesselBreachTest`, `FluidFactsCompatTest` with the new image `compat/fluid/schema-26`, `MachineHealthTest`, `FluidCheckpointCodecTest`, `FormatsTableTest`, `ExplosionLawTest`, the pollution packages, `ReleasesTest`, `PhysicalFluidTopologyTest`, the valve and still world tests). `FluidDeviceSpec.breached` (last component, `vented()`), `FluidFacts.SCHEMA` 26, `FluidWorldAuthority.breach` and `repair` on `Placement.edit`, `runtime/pollution/Breaches`, `MachineHealth.breach`, `ExplosionLaw.strengthAt` and `reach`, `RepairKitItem` (outcome `BREACH_REPAIRED`), the status clause `BREACHED`, config `pollution.equipmentBreach`. What the code refuted in the brief: equipment cells have resistance 3.6e6, so `onBlockExploded` never fires for vanilla blasts; the hook is a `Detonate` listener that scans shell block entities within the blast's reach. Breach: closed drums, tanks, spheres, converter vessels; not still pots, kettle shells or members of a running column; a machine with a health record fails. Layout refreshes keep the flag. Not run: `PollutionBreachGameTests` (batch `pollution_breach`); the other classes that load `FluidWorldAuthority`, `equipmentGates` (the final lane's).
+
 ## Documents
 
 - [POLLUTION_PLAN.md](POLLUTION_PLAN.md): the standard, the release sources, the field and its step, the schedule, effects, ignition and blasts, saves, work packages WP1 to WP7, owner decisions.
 
 ## Open items
 
+- For the owner, WP6b physics: the open-vessel law keeps no gas, so a breached 10 m3 vessel of methane at 20 bar (about 8.3 kmol, 130 kg) vents all of it within the first process second, where a real blowdown keeps about 0.4 kmol at 1 atm and takes longer; the restatement to ambient is one closure from the 20 bar state (`InventoryEquilibrium.refresh`), books no expansion work, and a superheated liquid (LPG) must flash in it. A failed closure would hold the island. Option not built: breach in steps through a fixed hole (as the open relief-outlet stub) until near ambient, then stand open.
+- WP6b's notes: the repair kit used on any fluid structure now takes the click (no GUI opens with a kit in hand) and its tooltip still says pumps; a relief valve stays compiled on a breached vessel (untested); the client may show a breached drum with the floating-roof tank view.
 - Sound candidates for the owner to hear and pick: gas alarm A (installed), B, C in `tmp/wp10/sounds/`; pipe-burst rupture A (installed), B, C in `tmp/wp6/sounds/`; the meter ticks have one set only.
 - WP6a's notes: a burn too small to blast still starts the chain; a pipe whose island re-forms before the next burst is read may release nothing; the tag entry `required: false`, the blaze burner's `blaze` property and `Detonate` are proved only in game.
 - WP10's notes: a DCS with no controller box on the bus shows only the alarm line; the code guide's `wired-control-power.md` does not name the monitor yet (WP7).

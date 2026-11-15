@@ -157,6 +157,8 @@ public final class PollutionService {
         PollutionMeters.tick(server, service);
         // The sounds of the pipes blasts destroyed this tick (WP6a): one per cube; never throws.
         BurstPipes.flush(server);
+        // The constructed equipment this tick's blasts breached (WP6b): one queued edit per vessel; never throws.
+        Breaches.flush(server);
     }
 
     /** No pass starts after this; a pass the stopping pool abandons gives its releases back without counting. Never throws. */
@@ -177,6 +179,7 @@ public final class PollutionService {
             SERVERS.remove(server);
             PollutionMeters.forget(server);
             BurstPipes.forget(server);
+            Breaches.forget(server);
         } catch (RuntimeException failure) {
             IChemE.LOGGER.error("pollution status=FORGET_FAILED detail={}", String.valueOf(failure));
         }

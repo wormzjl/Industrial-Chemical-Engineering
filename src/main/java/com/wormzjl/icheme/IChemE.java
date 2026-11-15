@@ -60,7 +60,7 @@ public final class IChemE {
     private static final ModConfigSpec.BooleanValue POLLUTION_ENABLED, POLLUTION_EFFECTS, POLLUTION_PARTICLES;
     private static final ModConfigSpec.DoubleValue POLLUTION_HALF_LIFE_OPEN_MINUTES, POLLUTION_HALF_LIFE_ENCLOSED_MINUTES, POLLUTION_CUTOFF;
     private static final ModConfigSpec.IntValue POLLUTION_MAX_ACTIVE_CUBES;
-    private static final ModConfigSpec.BooleanValue POLLUTION_EXPLOSIONS, POLLUTION_BLOCK_DAMAGE;
+    private static final ModConfigSpec.BooleanValue POLLUTION_EXPLOSIONS, POLLUTION_BLOCK_DAMAGE, POLLUTION_EQUIPMENT_BREACH;
     private static final ModConfigSpec.DoubleValue POLLUTION_EXPLOSION_POWER_CAP;
 
     static {
@@ -218,8 +218,11 @@ public final class IChemE {
         // WP6a: a flammable cube (combustible index at least 1, the LFL) explodes at a flame, with a chain into flammable neighbours.
         POLLUTION_EXPLOSIONS = builder.comment("Whether a cube whose combustible gas reaches its lower flammability limit explodes at an ignition source (fire, a torch, a lit furnace, a burning mob, an explosion, a flare, a firing burner or engine), and its flammable neighbours after it. False: flammable cubes never ignite. Captured on server start.")
                 .define("explosions", true);
-        POLLUTION_BLOCK_DAMAGE = builder.comment("Whether those explosions break blocks (pipes and one-block devices among them, which then release what they held). Constructed equipment ignores them. Captured on server start.")
+        POLLUTION_BLOCK_DAMAGE = builder.comment("Whether those explosions break blocks (pipes and one-block devices among them, which then release what they held). Constructed equipment is never broken (see equipmentBreach). Captured on server start.")
                 .define("blockDamage", true);
+        // WP6b: a blast breaches constructed equipment instead of destroying it.
+        POLLUTION_EQUIPMENT_BREACH = builder.comment("Whether an explosion (any: TNT, a creeper, a burning cloud) of strength 2 or more at constructed equipment breaches it: a closed vessel then stands open to the air, venting its gas and spilling what overflows, and a pump, compressor or turbine fails, until a player repairs it with a repair kit. Its blocks stay. False: constructed equipment ignores blasts. Read at each explosion.")
+                .define("equipmentBreach", true);
         POLLUTION_EXPLOSION_POWER_CAP = builder.comment("The highest explosion power of a burning cube (TNT is 4; an open cube at its flammability limit is about 4, a 200 m3 room about 1.4). Captured on server start.")
                 .defineInRange("explosionPowerCap", 8.0, 1.0, 32.0);
         builder.pop();
@@ -267,6 +270,8 @@ public final class IChemE {
         gameEventBus.addListener(IChemE::onLevelTickPost);
         // An explosion inside a flammable cube ignites it at the next ignition pass (pollution WP6a); the handler only queues.
         gameEventBus.addListener(com.wormzjl.icheme.runtime.pollution.Ignition::detonated);
+        // And breaches the constructed equipment it reaches (WP6b); the handler only collects, the pollution tick applies.
+        gameEventBus.addListener(com.wormzjl.icheme.runtime.pollution.Breaches::detonated);
     }
     /**
      * An operator who joins while parts are held (fluid devices, shaft parts, cables, controllers) is told how many, once
@@ -351,6 +356,11 @@ public final class IChemE {
     /** Whether those explosions break blocks (WP6a; true before the config loads). */
     public static boolean pollutionBlockDamage() {
         return !CONFIG_SPEC.isLoaded() || POLLUTION_BLOCK_DAMAGE.get();
+    }
+
+    /** Whether a blast breaches constructed equipment (WP6b; true before the config loads). */
+    public static boolean pollutionEquipmentBreach() {
+        return !CONFIG_SPEC.isLoaded() || POLLUTION_EQUIPMENT_BREACH.get();
     }
 
     /** The highest power of a burning cube's explosion (WP6a; 8 before the config loads). */

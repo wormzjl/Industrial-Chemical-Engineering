@@ -141,7 +141,40 @@ class FluidFactsCompatTest {
         world.runTo(930);
         converted(world);
         world.runTo(940);
+        breached(world);
+        world.runTo(945);
         phases(world);return world;
+    }
+    /** Facts schema 26 (batch 2026-11-15-pollution-system, WP6b): a closed 4 m3 vessel a blast breached, standing open to the air. */
+    private static long breached(EventPathWorld world) {
+        return world.place(130,64,0,Kind.RESERVOIR,Direction.EAST,new FluidDeviceSpec(4,298.15,101325,FluidDeviceSpec.nitrogen(CATALOG).composition()).withBreached(true),.05);
+    }
+    /** The breached vessels' identities, in identity order: what schema 26 carries. */
+    private static String breached(WorldTopologyLedger.Snapshot world) {
+        var text=new StringBuilder();
+        for(var r:new TreeMap<>(world.active()).values())if(r.spec().breached()){if(!text.isEmpty())text.append(";");text.append(r.device().id());}
+        return text.toString();
+    }
+    /**
+     * Facts schema 26 (WP6b): a breached vessel's spec survives an exact load and a facts-only rebuild, its rebuilt vessel
+     * open, not rigid and without a gas blanket, while it stays built closed; its registration round-trips the facts record;
+     * and the schema-25 image, written before the field, reads every vessel whole.
+     */
+    @Test void aBreachedVesselSurvivesBothLoadsAndAnOlderImageReadsWhole() throws IOException {
+        var world=corpusWorld();var saved=image(world);var active=world.ledger.snapshot().active();
+        var registration=active.values().stream().filter(r->r.spec().breached()).findFirst().orElseThrow();long id=registration.device().id();
+        for(var restored:List.of(load(saved,key->key.on(model),CATALOG),load(edited(saved,tag->tag.putInt("StateFormat",Integer.MAX_VALUE)),key->key.on(model),CATALOG))) {
+            var r=restored.world().orElseThrow().active().get(id);
+            assertTrue(r.spec().breached()&&!r.spec().open()&&r.spec().vented(),"the breach is a fact: "+restored.route());
+            var node=restored.checkpoint().islands().stream().flatMap(e->e.snapshot().graph().reservoirs().stream()).filter(n->n.id()==id).findFirst().orElseThrow();
+            assertTrue(node.inventory().open()&&!node.inventory().rigid()&&node.inventory().blanket()==0,"the breached vessel stands open: "+restored.route());
+        }
+        var section=FluidFacts.section(f->FluidFacts.registration(f,registration));
+        var read=FluidFacts.read(section,0,section.length,"a breached registration",r->FluidFacts.registration(r,null));
+        assertEquals(registration.spec(),read.spec());assertTrue(read.spec().breached());
+        assertNotEquals(registration.spec(),registration.spec().withBreached(false),"the breach is part of the spec's identity");
+        var older=load(read(CORPUS.resolve("schema-25")),key->key.on(model),CATALOG).world().orElseThrow();
+        assertTrue(older.active().values().stream().noneMatch(r->r.spec().breached()),"a spec written before schema 26 is whole");
     }
     /** The vessels {@link #phases} fills: nitrogen over water, oil over water under their gas, boiling water, and oil over water in a blanketed drum with a pressure safety valve. */
     private long wetNitrogen,oilOverWater,boiling,guardedOil;
@@ -1083,6 +1116,8 @@ class FluidFactsCompatTest {
                 assertEquals(expected.getProperty("relieved",""),relieved(ledger),folder+": pressure safety valves");
                 // Schema 24 wrote the fluid converters; an older image has none.
                 assertEquals(expected.getProperty("converters",""),converted(ledger),folder+": fluid converters");
+                // Schema 26 wrote the breached vessels; an older image has none.
+                assertEquals(expected.getProperty("breached",""),breached(ledger),folder+": breached vessels");
                 long vessels=rebuilt.checkpoint().islands().stream().flatMap(e->e.snapshot().graph().reservoirs().stream()).filter(n->n.kind()==PassiveNetwork.NodeKind.RESERVOIR).count();
                 // Schema 18 wrote whether a vessel's wall is rigid; an older image reads every vessel a bag.
                 assertEquals(Long.parseLong(expected.getProperty("rigid","0")),rigid(rebuilt.checkpoint()),folder+": rigid vessels");
@@ -1228,6 +1263,7 @@ class FluidFactsCompatTest {
         props.setProperty("blanketed",blanketed(loaded.world().orElseThrow()));
         props.setProperty("relieved",relieved(loaded.world().orElseThrow()));
         props.setProperty("converters",converted(loaded.world().orElseThrow()));
+        props.setProperty("breached",breached(loaded.world().orElseThrow()));
         props.setProperty("vessels",Long.toString(contents(loaded.checkpoint()).values().stream().filter(v->v instanceof PassiveNetwork.Inventory).count()));
         props.setProperty("rigid",Long.toString(rigid(loaded.checkpoint())));
         props.setProperty("vacuumPumps",vacuumPumps(loaded.world().orElseThrow()));

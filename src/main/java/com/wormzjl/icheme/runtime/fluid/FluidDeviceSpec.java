@@ -14,24 +14,38 @@ import java.util.*;
  * vessel's gas blanketing valve, Pa absolute ({@code GasBlanket}); 0 for a device without one. {@code relief} (same
  * batch, the pressure safety valve): the set pressure of the device's pressure safety valve, Pa absolute, on a closed
  * vessel's relief port or on a pipe; 0 for a device without one. {@code reliefFace}: a pipe's valve's outlet face; null
- * for a vessel (its outlet is its relief port) and for a device without one.
+ * for a vessel (its outlet is its relief port) and for a device without one. {@code breached} (batch
+ * 2026-11-15-pollution-system, WP6b): a blast breached the vessel's wall; it stands open to the atmosphere
+ * ({@link #vented}) until a repair kit closes it again. {@code open} stays what the vessel was built as.
  */
-public record FluidDeviceSpec(double volume,double temperature,double pressure,double[] composition,SlurryFeed solids,double levelHeight,boolean open,com.wormzjl.icheme.science.fluid.network.VesselGeometry geometry, com.wormzjl.icheme.science.fluid.network.CoolingTower tower,double blanket,double relief,PhysicalFluidTopology.Direction reliefFace) {
+public record FluidDeviceSpec(double volume,double temperature,double pressure,double[] composition,SlurryFeed solids,double levelHeight,boolean open,com.wormzjl.icheme.science.fluid.network.VesselGeometry geometry, com.wormzjl.icheme.science.fluid.network.CoolingTower tower,double blanket,double relief,PhysicalFluidTopology.Direction reliefFace,boolean breached) {
+    /** A device no blast has breached ({@code breached} false), as every device was before the field existed. */
+    public FluidDeviceSpec(double volume,double temperature,double pressure,double[] composition,SlurryFeed solids,double levelHeight,boolean open,com.wormzjl.icheme.science.fluid.network.VesselGeometry geometry,com.wormzjl.icheme.science.fluid.network.CoolingTower tower,double blanket,double relief,PhysicalFluidTopology.Direction reliefFace){this(volume,temperature,pressure,composition,solids,levelHeight,open,geometry,tower,blanket,relief,reliefFace,false);}
+    /** These settings with the wall breached ({@code value} true) or whole again. */
+    public FluidDeviceSpec withBreached(boolean value){return value==breached?this:new FluidDeviceSpec(volume,temperature,pressure,composition,solids,levelHeight,open,geometry,tower,blanket,relief,reliefFace,value);}
+    /**
+     * Whether the vessel's inventory stands open to the atmosphere ({@code PassiveNetwork.Inventory#open}): built open, or
+     * breached. Every place a registration's settings become a graph inventory reads this; a breached vessel carries no
+     * gas blanket there ({@link #ventedBlanket}) and is never rigid.
+     */
+    public boolean vented(){return open||breached;}
+    /** The blanketing valve's set pressure the graph inventory carries: none while the vessel is {@link #vented}. */
+    public double ventedBlanket(){return vented()?0:blanket;}
     /** A device without a gas blanketing valve ({@code blanket} 0), as every device was before the field existed. */
     public FluidDeviceSpec(double volume,double temperature,double pressure,double[] composition,SlurryFeed solids,double levelHeight,boolean open,com.wormzjl.icheme.science.fluid.network.VesselGeometry geometry,com.wormzjl.icheme.science.fluid.network.CoolingTower tower){this(volume,temperature,pressure,composition,solids,levelHeight,open,geometry,tower,0);}
     /** A device without a pressure safety valve ({@code relief} 0), as every device was before the field existed. */
     public FluidDeviceSpec(double volume,double temperature,double pressure,double[] composition,SlurryFeed solids,double levelHeight,boolean open,com.wormzjl.icheme.science.fluid.network.VesselGeometry geometry,com.wormzjl.icheme.science.fluid.network.CoolingTower tower,double blanket){this(volume,temperature,pressure,composition,solids,levelHeight,open,geometry,tower,blanket,0,null);}
-    public FluidDeviceSpec withTower(com.wormzjl.icheme.science.fluid.network.CoolingTower value) {return new FluidDeviceSpec(volume,temperature,pressure,composition,solids,levelHeight,open,geometry,value,blanket,relief,reliefFace);}
+    public FluidDeviceSpec withTower(com.wormzjl.icheme.science.fluid.network.CoolingTower value) {return new FluidDeviceSpec(volume,temperature,pressure,composition,solids,levelHeight,open,geometry,value,blanket,relief,reliefFace,breached);}
     /** These settings with a gas blanketing valve set to {@code value} Pa absolute, or without one (0). */
-    public FluidDeviceSpec withBlanket(double value){return value==blanket?this:new FluidDeviceSpec(volume,temperature,pressure,composition,solids,levelHeight,open,geometry,tower,value,relief,reliefFace);}
+    public FluidDeviceSpec withBlanket(double value){return value==blanket?this:new FluidDeviceSpec(volume,temperature,pressure,composition,solids,levelHeight,open,geometry,tower,value,relief,reliefFace,breached);}
     /** These settings with a pressure safety valve set to {@code value} Pa absolute, its outlet at {@code face} (a pipe's; null on a vessel), or without one (0, null). */
     /** These settings with both valves' set pressures at once (either 0 without that valve), the safety valve's outlet kept. */
-    public FluidDeviceSpec withValves(double blanket,double relief){return blanket==this.blanket&&relief==this.relief?this:new FluidDeviceSpec(volume,temperature,pressure,composition,solids,levelHeight,open,geometry,tower,blanket,relief,relief>0?reliefFace:null);}
-    public FluidDeviceSpec withRelief(double value,PhysicalFluidTopology.Direction face){return value==relief&&face==reliefFace?this:new FluidDeviceSpec(volume,temperature,pressure,composition,solids,levelHeight,open,geometry,tower,blanket,value,face);}
+    public FluidDeviceSpec withValves(double blanket,double relief){return blanket==this.blanket&&relief==this.relief?this:new FluidDeviceSpec(volume,temperature,pressure,composition,solids,levelHeight,open,geometry,tower,blanket,relief,relief>0?reliefFace:null,breached);}
+    public FluidDeviceSpec withRelief(double value,PhysicalFluidTopology.Direction face){return value==relief&&face==reliefFace?this:new FluidDeviceSpec(volume,temperature,pressure,composition,solids,levelHeight,open,geometry,tower,blanket,value,face,breached);}
     public FluidDeviceSpec(double volume,double temperature,double pressure,double[] composition,SlurryFeed solids,double levelHeight,boolean open){this(volume,temperature,pressure,composition,solids,levelHeight,open,com.wormzjl.icheme.science.fluid.network.VesselGeometry.prism(volume,levelHeight),null);}
-    public FluidDeviceSpec withGeometry(com.wormzjl.icheme.science.fluid.network.VesselGeometry geometry){return new FluidDeviceSpec(volume,temperature,pressure,composition,solids,levelHeight,open,geometry,tower,blanket,relief,reliefFace);}
+    public FluidDeviceSpec withGeometry(com.wormzjl.icheme.science.fluid.network.VesselGeometry geometry){return new FluidDeviceSpec(volume,temperature,pressure,composition,solids,levelHeight,open,geometry,tower,blanket,relief,reliefFace,breached);}
     /** These settings with the charge (temperature, pressure, composition) of a restate, every valve kept. */
-    public FluidDeviceSpec withCharge(double temperature,double pressure,double[] composition){return new FluidDeviceSpec(volume,temperature,pressure,composition,solids,levelHeight,open,geometry,tower,blanket,relief,reliefFace);}
+    public FluidDeviceSpec withCharge(double temperature,double pressure,double[] composition){return new FluidDeviceSpec(volume,temperature,pressure,composition,solids,levelHeight,open,geometry,tower,blanket,relief,reliefFace,breached);}
     /**
      * A pressure safety valve's set pressure, Pa absolute (decision D3 of the plan): from 10 kPa over the game's ambient to
      * 10 MPa over it; 300 kPa over it when fitted.
@@ -88,7 +102,8 @@ public record FluidDeviceSpec(double volume,double temperature,double pressure,d
     /**
      * Whether {@code other} differs from these settings at most in the vessel's geometry (its volume, level height and
      * opening): the only edit a placed vessel takes, a layout refresh rebuilding it to another size (batch
-     * 2026-10-26-backward-compat), which keeps what it holds.
+     * 2026-10-26-backward-compat), which keeps what it holds. A breach and its repair (WP6b) are such edits too: they change
+     * only {@code breached}.
      */
     public boolean sameCharge(FluidDeviceSpec other) {
         return temperature==other.temperature&&pressure==other.pressure&&Arrays.equals(composition,other.composition)&&solids.equals(other.solids);
@@ -98,7 +113,7 @@ public record FluidDeviceSpec(double volume,double temperature,double pressure,d
         validate(model,device.kind());
         var kind=switch(device.kind()) {case RESERVOIR->PassiveNetwork.NodeKind.RESERVOIR;case GENERATOR->PassiveNetwork.NodeKind.GENERATOR;case VOID->PassiveNetwork.NodeKind.VOID;default->throw new IllegalArgumentException("Pipes and actuators have no owned reservoir");};
         // Decision D54: a placed reservoir holds nothing; it fills from what its connections deliver.
-        if(kind==PassiveNetwork.NodeKind.RESERVOIR){var n=PassiveNetwork.emptyVessel(device.id(),device.position().y(),volume,levelHeight,open,model);return new PassiveNetwork.Reservoir(n.id(),n.elevation(),n.state(),n.kind(),new PassiveNetwork.Inventory(volume,n.inventory().moles(),0,n.inventory().solids(),levelHeight,open,geometry,null,tower).withBlanket(blanket));}
+        if(kind==PassiveNetwork.NodeKind.RESERVOIR){var n=PassiveNetwork.emptyVessel(device.id(),device.position().y(),volume,levelHeight,vented(),model);return new PassiveNetwork.Reservoir(n.id(),n.elevation(),n.state(),n.kind(),new PassiveNetwork.Inventory(volume,n.inventory().moles(),0,n.inventory().solids(),levelHeight,vented(),geometry,null,tower).withBlanket(ventedBlanket()));}
         FluidThermodynamics.State state;
         // C1 B (batch 2026-11-10-chimney): a sink open to the air stands at the atmosphere of its own height, whatever its spec says.
         if(kind==PassiveNetwork.NodeKind.VOID)state=model.initialNitrogenCharge(volume,temperature,device.atmospheric()?com.wormzjl.icheme.science.fluid.solver.PhaseLayout.atmosphere(device.position().y()):pressure,checkpoint);
@@ -112,6 +127,6 @@ public record FluidDeviceSpec(double volume,double temperature,double pressure,d
         }
         return new PassiveNetwork.Reservoir(device.id(),device.position().y(),state,kind,new PassiveNetwork.Inventory(volume,com.wormzjl.icheme.science.fluid.solver.PhaseLayout.totalAmounts(state),state.internalEnergy(),state.solids()));
     }
-    @Override public boolean equals(Object value){return value instanceof FluidDeviceSpec other&&Objects.equals(tower,other.tower)&&blanket==other.blanket&&relief==other.relief&&reliefFace==other.reliefFace&&geometry.equals(other.geometry)&&volume==other.volume&&levelHeight==other.levelHeight&&open==other.open&&temperature==other.temperature&&pressure==other.pressure&&Arrays.equals(composition,other.composition)&&solids.equals(other.solids);}
-    @Override public int hashCode(){return 31*Objects.hash(volume,levelHeight,open,temperature,pressure,solids,geometry,tower,blanket,relief,reliefFace)+Arrays.hashCode(composition);}
+    @Override public boolean equals(Object value){return value instanceof FluidDeviceSpec other&&Objects.equals(tower,other.tower)&&blanket==other.blanket&&relief==other.relief&&reliefFace==other.reliefFace&&breached==other.breached&&geometry.equals(other.geometry)&&volume==other.volume&&levelHeight==other.levelHeight&&open==other.open&&temperature==other.temperature&&pressure==other.pressure&&Arrays.equals(composition,other.composition)&&solids.equals(other.solids);}
+    @Override public int hashCode(){return 31*Objects.hash(volume,levelHeight,open,temperature,pressure,solids,geometry,tower,blanket,relief,reliefFace,breached)+Arrays.hashCode(composition);}
 }

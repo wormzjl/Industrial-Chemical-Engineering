@@ -37,4 +37,20 @@ class ExplosionLawTest {
         double power = ExplosionLaw.power(ExplosionLaw.tntKilograms(ExplosionLaw.energy(1.0, 200.0 / 4096.0)), 8.0);
         assertTrue(power > 1.3 && power < 1.7, "power " + power);
     }
+
+    /** WP6b: the strength at a cell falls linearly to nothing at twice the power; a TNT block breaches equipment within 4 m. */
+    @Test
+    void theStrengthAtACellFallsToNothingAtTwiceThePower() {
+        assertEquals(4.0, ExplosionLaw.strengthAt(4.0, 0.0), 1e-12, "power 4 at the centre");
+        assertEquals(2.0, ExplosionLaw.strengthAt(4.0, 4.0), 1e-12, "power 4 at 4 m");
+        assertEquals(0.0, ExplosionLaw.strengthAt(4.0, 8.0), 1e-12, "power 4 at 8 m");
+        assertEquals(0.0, ExplosionLaw.strengthAt(4.0, 20.0), 1e-12, "nothing beyond");
+        assertEquals(0.0, ExplosionLaw.strengthAt(0.0, 0.0), 1e-12, "no blast");
+        assertEquals(0.0, ExplosionLaw.strengthAt(4.0, Double.NaN), 1e-12, "an unknown distance reaches nothing");
+        assertTrue(ExplosionLaw.strengthAt(4.0, 4.0) >= ExplosionLaw.BREACH_POWER);
+        assertTrue(ExplosionLaw.strengthAt(4.0, 4.01) < ExplosionLaw.BREACH_POWER);
+        assertEquals(4.0, ExplosionLaw.reach(4.0, ExplosionLaw.BREACH_POWER), 1e-12, "a TNT block breaches within 4 m");
+        assertEquals(12.0, ExplosionLaw.reach(8.0, ExplosionLaw.BREACH_POWER), 1e-12, "the cap's blast within 12 m");
+        assertEquals(0.0, ExplosionLaw.reach(1.5, ExplosionLaw.BREACH_POWER), 1e-12, "a weak blast breaches nothing");
+    }
 }

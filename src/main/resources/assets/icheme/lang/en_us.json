@@ -4561,5 +4561,8 @@
   "pollution.icheme.monitor.level.extreme": "extreme",
   "gui.icheme.control.alarm.gas": "GAS",
   "gui.icheme.control.alarm.gas_high": "GAS HIGH",
-  "subtitles.icheme.gas_alarm": "Gas alarm sounds"
+  "subtitles.icheme.gas_alarm": "Gas alarm sounds",
+  "chat.icheme.breach": "%s was breached by an explosion.",
+  "chat.icheme.breach.unnamed": "The equipment at %1$s, %2$s, %3$s was breached by an explosion.",
+  "chat.icheme.repair_kit.breach_repaired": "Breach repaired."
 }

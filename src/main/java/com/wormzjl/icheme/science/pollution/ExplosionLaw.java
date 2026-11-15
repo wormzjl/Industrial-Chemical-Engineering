@@ -53,4 +53,27 @@ public final class ExplosionLaw {
     public static boolean flammable(double index) {
         return index >= 1.0;
     }
+
+    /**
+     * The least blast strength at a cell that breaches constructed equipment (WP6b, plan section 7, proposal A): half a TNT
+     * block's power.
+     */
+    public static final double BREACH_POWER = 2.0;
+
+    /**
+     * A blast's strength at {@code distance} m from its centre: {@code power × max(0, 1 − distance / (2 × power))}, the
+     * vanilla exposure falloff over twice the power without its ray casting. Power 4 gives 4 at the centre, 2 at 4 m and 0
+     * from 8 m.
+     */
+    public static double strengthAt(double power, double distance) {
+        if (!(power > 0.0) || !(distance >= 0.0)) {
+            return 0.0;
+        }
+        return power * Math.max(0.0, 1.0 - distance / (2.0 * power));
+    }
+
+    /** The farthest distance, m, at which a blast of {@code power} still reaches {@code strength}: {@code 2 (power − strength)}. */
+    public static double reach(double power, double strength) {
+        return power > strength ? 2.0 * (power - strength) : 0.0;
+    }
 }
