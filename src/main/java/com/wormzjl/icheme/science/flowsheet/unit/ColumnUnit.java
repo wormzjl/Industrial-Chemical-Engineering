@@ -1,12 +1,6 @@
 package com.wormzjl.icheme.science.flowsheet.unit;
 
 import com.wormzjl.icheme.science.column.v3.V3ColumnCalculator;
-import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
-import com.wormzjl.icheme.science.column.v3.V3ColumnOutcome;
-import com.wormzjl.icheme.science.column.v3.V3InitializationOptions;
-import com.wormzjl.icheme.science.column.v3.V3NeuralRegistry;
-import com.wormzjl.icheme.science.column.v3.V3NeuralSeed;
-import com.wormzjl.icheme.science.column.v3.V3SolveStrategy;
 import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.flowsheet.Calculation;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetFailure;
@@ -17,14 +11,12 @@ import com.wormzjl.icheme.science.flowsheet.Port;
 import com.wormzjl.icheme.science.flowsheet.UnitModel;
 import com.wormzjl.icheme.science.flowsheet.WiredUnit;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
-import com.wormzjl.icheme.science.material.MaterialRuntime;
-import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The column as one block (batch 2026-11-02-process-simulator, plan sections 3.3 and 3.11): the calculator's own solve, with its
+ * The column as one block (batch 2026-11-02-process-simulator, plan sections 3.3 and 3.11): the running column's own solve ({@code ColumnSolve.calculate}), with its
  * ports a pure function of its door. The block's solve reads its inlets and writes its products, so a loop tears there, and each
  * pass after the first starts from the last state. A heat side is a calculation of its own. A pumparound or the reboiler has its
  * duty on the door, so what passes through its cold side depends on nothing the column solves, and heating the feed of the same
@@ -38,7 +30,8 @@ import java.util.List;
  *
  * <p>V3 has no feed pressure, so the stream is flashed at its own enthalpy to the feed tray's solved pressure, which gives V3's
  * feed temperature. V3's feed is hydrocarbons: water joins as steam if it is vapour there. The products come back through the world's
- * flash at V3's temperature and pressure; what the two thermo models then differ by is read out as the block's energy gap.
+ * flash at V3's temperature and pressure, and the condenser's duty is the running column's closure on them ({@code ColumnSolve.closure}),
+ * so the block's heat balance closes; V3's own duty, on its package, differs by the two thermo models' basis gap and stays on the display.
  *
  * <p>Where the top is under ambient pressure, an ejector set stands on the vapour line (main plan W10). It is not modelled apart: its
  * load is what the condenser cannot condense, V3's vapour product at the condenser's temperature and pressure (W10b), and its Motive
@@ -55,8 +48,11 @@ public final class ColumnUnit implements UnitModel {
     public static final String CONDENSER_DROP = "condenser_drop", REBOILER_DROP = "reboiler_drop";
     /** Liquid water up to this share of a stream's moles is a trace, not a phase. */
     static final double TRACE = 1e-9;
-    /** The calculator's learned start, on the budget the game ships with. */
-    private static final V3InitializationOptions START = new V3InitializationOptions(V3InitializationOptions.Mode.LNN_FIRST, V3InitializationOptions.WetStart.AUTO, 16, V3InitializationOptions.DEFAULT_BUDGET_POLLS, V3InitializationOptions.Correction.PROGRESS);
+    /**
+     * The liquid-supply screen ratio the sheet's column solves at ({@code ColumnSolve.calculate}): V3's default, the running
+     * column's unless a server sets its own; the simulator runs on the client and reads no server setting.
+     */
+    public static final double SCREEN = V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO;
 
     public static String drawPort(ColumnDoor.Draw draw) {
         return DRAW + draw.id();
@@ -194,18 +190,5 @@ public final class ColumnUnit implements UnitModel {
     /** {@link #catalogFor(com.wormzjl.icheme.science.flowsheet.FlowThermo, boolean)} of a column solved on {@code basis}. */
     public static MaterialCatalog catalogFor(com.wormzjl.icheme.science.flowsheet.FlowThermo thermo, com.wormzjl.icheme.science.column.v3.V3ComponentBasis basis) {
         return catalogFor(thermo, basis.componentIds().contains(com.wormzjl.icheme.science.plant.column.ColumnWater.WATER));
-    }
-
-    /**
-     * One solve of {@code input}: warm from {@code seed} when there is one, and from the learned start if that does not answer, as a
-     * pass's change can leave the warm start behind. The block's solve and the sizing stage's trial diameters both take it.
-     */
-    public static V3ColumnOutcome solve(V3ColumnInput input, @Nullable V3NeuralSeed seed, MaterialCatalog catalog, Runnable checkpoint) {
-        double screen = V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO;
-        return MaterialRuntime.with(catalog, input.packageId(), () -> {
-            var outcome = seed == null ? null : V3ColumnCalculator.calculateWithStrategy(input, checkpoint::run, V3SolveStrategy.AGGRESSIVE, seed, screen);
-            if (!(outcome instanceof V3ColumnOutcome.Success)) outcome = V3ColumnCalculator.calculate(input, checkpoint::run, 0, 0, START, V3NeuralRegistry.bundled().bind(catalog, input), screen);
-            return outcome;
-        });
     }
 }

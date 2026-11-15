@@ -6,9 +6,6 @@ import com.wormzjl.icheme.science.column.v3.V3ColumnCalculator;
 import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
 import com.wormzjl.icheme.science.column.v3.V3ColumnOutcome;
 import com.wormzjl.icheme.science.column.v3.V3ColumnResult;
-import com.wormzjl.icheme.science.column.v3.V3InitializationOptions;
-import com.wormzjl.icheme.science.column.v3.V3NeuralRegistry;
-import com.wormzjl.icheme.science.column.v3.V3SolveControl;
 import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
@@ -130,9 +127,10 @@ final class FlowsheetColumnTest {
         return calculator(BASE);
     }
 
+    /** The block's cold solve of {@code input}: the shared solve ({@code ColumnSolve.calculate}) from the learned start. */
     private static V3ColumnResult calculator(V3ColumnInput input) {
-        var options = new V3InitializationOptions(V3InitializationOptions.Mode.LNN_FIRST, V3InitializationOptions.WetStart.AUTO, 16, V3InitializationOptions.DEFAULT_BUDGET_POLLS, V3InitializationOptions.Correction.PROGRESS);
-        var outcome = MaterialRuntime.with(CATALOG, input.packageId(), () -> V3ColumnCalculator.calculate(input, V3SolveControl.UNBOUNDED, 0, 0, options, V3NeuralRegistry.bundled().bind(CATALOG, input), V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO));
+        var outcome = ColumnSolve.calculate(input, null, CATALOG, V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO, ColumnSolve.ColdStart.LEARNED, () -> {
+        });
         return ((V3ColumnOutcome.Success) outcome).result();
     }
 
@@ -149,9 +147,14 @@ final class FlowsheetColumnTest {
             for (var fraction : stream.moleFractions()) assertEquals(fraction.moleFraction() * stream.molarFlowMolPerSecond(), amounts[AXIS.indexOf(fraction.componentId())], 0, fraction.componentId());
         }
         var ledger = direct.dutyLedger().orElseThrow();
-        assertEquals(-ledger.condenserWatts(), run.reports().get("T").readings().get("condenser"), 0);
-        assertEquals(ledger.reboilerWatts(), run.reports().get("T").readings().get("reboiler"), 0);
-        assertEquals(run.reports().get("T").readings().get("energy_gap"), run.heatGap(), 1, "free sides book their heat: what is left is what the two thermo models differ by");
+        var readings = run.reports().get("T").readings();
+        assertEquals(ledger.reboilerWatts(), readings.get("reboiler"), 0);
+        // The condenser's duty is the running column's closure on the sheet's streams (C5 of the 2026-11-13 simplifications), so the
+        // sheet's heat closes on it. V3's own duty, on its package, differs by the basis gap (under 2e-3 of the duty on this column at
+        // the strict closure) and by V3's own energy rows at the gameplay closure of a first solve.
+        assertEquals(0, run.heatGap(), 1, "free sides book their heat, the condenser the closure: the sheet's heat closes");
+        assertTrue(readings.get("condenser") > 0 && Math.abs(readings.get("condenser") + ledger.condenserWatts()) < 1e-2 * readings.get("condenser"),
+                () -> "V3's own duty " + ledger.condenserWatts() + " W beside the closure: " + readings);
     }
 
     /**
@@ -190,7 +193,7 @@ final class FlowsheetColumnTest {
         assertEquals(FlowsheetRun.Status.STEADY, run.status(), () -> "log " + run.log());
         var readings = run.reports().get("T").readings();
         assertTrue(readings.get("feed_temperature") < run.streams().get("feed").temperature(), "a let-down to the tray flashes and cools");
-        assertTrue(Math.abs(readings.get("energy_gap")) < 2e-3 * readings.get("condenser"), () -> "the block keeps the stream's energy: " + readings);
+        assertTrue(Math.abs(run.heatGap()) < 2e-3 * readings.get("condenser"), () -> "the block keeps the stream's energy: heat gap " + run.heatGap() + ", " + readings);
     }
 
     private static String name(String id) {
@@ -273,7 +276,8 @@ final class FlowsheetColumnTest {
         assertEquals(in.mass(), out.mass(), 1e-9, "the water stays on its side");
         assertEquals(40 + 273.15, out.temperature(), 1e-3);
         assertEquals(Math.abs(BASE.pumparounds().get(1).dutyWatts()), out.enthalpy() - in.enthalpy(), 1e3, "the duty as set");
-        // V3 values its steam by temperature: the steam valve's 1.2 K of Joule-Thomson cooling is some 14 kW the two models differ by (U1b).
+        // V3 values its steam by temperature: the steam valve's 1.2 K of Joule-Thomson cooling is some 14 kW the two models differ by (U1b),
+        // which the condenser's closure now takes (C5): the heat gap is the loop's.
         assertTrue(Math.abs(run.heatGap()) < 65e3, () -> "heat gap " + run.heatGap());
         assertEquals(102.48 + 273.15, run.streams().get("S-4").temperature(), .05, "the crude reaches E-101 two coolers warm, not three");
         var limit = run.reports().get("H-101").notes().stream().filter(note -> note.key().equals("heater.limit")).findFirst().orElseThrow();
@@ -345,7 +349,7 @@ final class FlowsheetColumnTest {
         assertEquals(FlowsheetRun.Status.STEADY, run.status(), () -> "log " + run.log());
         assertEquals(-5e6, run.streams().get("condensate").enthalpy() - run.streams().get("steam").enthalpy(), .1, "the steam gives what the column takes");
         assertEquals(99.5e5, run.streams().get("condensate").pressure(), 1e-6);
-        assertEquals(run.reports().get("T").readings().get("energy_gap"), run.heatGap(), 1, "a wired kettle books no duty");
+        assertEquals(0, run.heatGap(), 1, "a wired kettle books no duty: the sheet's heat closes on the condenser's closure");
         assertTrue(run.reports().values().stream().flatMap(report -> report.notes().stream()).anyMatch(note -> note.key().equals("column.reboiler_cold")), "80 mol/s of steam cannot give 5 MW above the bottoms");
     }
 

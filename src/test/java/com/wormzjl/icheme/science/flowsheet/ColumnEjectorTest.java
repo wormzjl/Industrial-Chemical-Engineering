@@ -76,16 +76,15 @@ final class ColumnEjectorTest {
     }
 
     /**
-     * Steady; what entered left, mass to the flash's digits; the block's own energy gap is the sheet's, as with no ejector. That gap is
-     * what V3's thermo and the world's differ by, measured against V3's own condenser duty: 0.26 % at this 80 kPa top (W10b), where
-     * W10's bound read it against the duty with the whole overhead's steam in it.
+     * Steady; what entered left, mass to the flash's digits; and heat: the condenser's duty is the running column's closure on the
+     * block's streams, the motive steam with them (C5 of the 2026-11-13 simplifications), so the sheet's heat closes, as with no
+     * ejector. Before C5 the duty was V3's own, and the heat gap the two thermo models' basis gap: 0.26 % of V3's duty at this
+     * 80 kPa top (W10b).
      */
     private static void closes(FlowsheetRun run) {
         assertEquals(FlowsheetRun.Status.STEADY, run.status(), () -> "log " + run.log());
         assertEquals(0, run.massGap(), 1e-9 * run.massIn(), "mass");
-        assertEquals(reading(run, "energy_gap"), run.heatGap(), 1, "the steam's heat is booked on the condenser: what is left is what the two thermo models differ by");
-        double duty = reading(run, "condenser") - reading(run, "ejector_heat");
-        assertTrue(Math.abs(run.heatGap()) < 3e-3 * duty, () -> "heat gap " + run.heatGap() + " of V3's " + duty);
+        assertEquals(0, run.heatGap(), 1, "the steam's heat is booked on the condenser's closure: the sheet's heat closes");
     }
 
     @Test void theMotivePortClosesFreeAndWired() {

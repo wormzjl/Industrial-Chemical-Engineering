@@ -5,6 +5,9 @@ import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
 import com.wormzjl.icheme.science.column.v3.V3ColumnOutcome;
 import com.wormzjl.icheme.science.column.v3.V3ColumnProblemResolver;
 import com.wormzjl.icheme.science.column.v3.V3ColumnSpecification;
+import com.wormzjl.icheme.science.column.v3.V3ComponentBasis;
+import com.wormzjl.icheme.science.column.v3.V3InitializationOptions;
+import com.wormzjl.icheme.science.column.v3.V3NeuralRegistry;
 import com.wormzjl.icheme.science.column.v3.V3NeuralSeed;
 import com.wormzjl.icheme.science.column.v3.V3PumparoundSpec;
 import com.wormzjl.icheme.science.column.v3.V3SideDrawSpec;
@@ -168,6 +171,69 @@ public final class ColumnSolve {
     }
 
     /**
+     * One V3 solve of a column's input, for the running column ({@link #run}) and the process simulator's column block and its
+     * sizing trials alike (C5 of the 2026-11-13 simplifications), so a design the sheet solves is one the world solves: V3's
+     * repeat-request strategy {@link V3SolveStrategy#AGGRESSIVE}, warm from {@code seed} where {@link #warm} keeps it (a short
+     * warm pass at the strict closure), on {@code catalog} for the input's package. {@code screen} is V3's liquid-supply
+     * screen ratio: the server's setting in the world, its default on the sheet, which runs on the client. What a solve
+     * with no seed, or one whose warm pass does not answer, starts from is {@code cold}, the one thing the two callers
+     * still choose.
+     *
+     * @param seed the last accepted seed, or null: cold
+     */
+    public static V3ColumnOutcome calculate(V3ColumnInput input, V3NeuralSeed seed, MaterialCatalog catalog, double screen, ColdStart cold, Runnable checkpoint) {
+        var warm = warm(seed, input.componentBasis());
+        return MaterialRuntime.with(catalog, input.packageId(), () -> {
+            if (cold == ColdStart.CLASSICAL) return V3ColumnCalculator.calculateWithStrategy(input, checkpoint::run, V3SolveStrategy.AGGRESSIVE, warm, screen);
+            var outcome = warm == null ? null : V3ColumnCalculator.calculateWithStrategy(input, checkpoint::run, V3SolveStrategy.AGGRESSIVE, warm, screen);
+            if (!(outcome instanceof V3ColumnOutcome.Success)) outcome = V3ColumnCalculator.calculate(input, checkpoint::run, 0, 0, LEARNED_START, V3NeuralRegistry.bundled().bind(catalog, input), screen);
+            return outcome;
+        });
+    }
+
+    /**
+     * How a column solve with no usable seed starts ({@link #calculate}).
+     * <ul>
+     * <li>{@code CLASSICAL}: V3's fast first solve, the classical chain at the gameplay closure, and V3's own cold chain after
+     * a warm pass that does not answer: the running column's.</li>
+     * <li>{@code LEARNED}: the learned start at the strict closure, also after a warm pass that does not answer: the process
+     * simulator's, which solves a cold column in a sixth to a ninth of the classical chain's checkpoints (B1 of the
+     * 2026-11-13 review).</li>
+     * </ul>
+     * One choice for both (the learned start where a model binds) is decision 16 of that review's plan; it moves the running
+     * column's published states from the gameplay closure to the strict one, so it is taken with its own measurement.
+     */
+    public enum ColdStart { CLASSICAL, LEARNED }
+
+    /** The learned start, on the budget the game ships with. */
+    private static final V3InitializationOptions LEARNED_START = new V3InitializationOptions(V3InitializationOptions.Mode.LNN_FIRST,
+            V3InitializationOptions.WetStart.AUTO, 16, V3InitializationOptions.DEFAULT_BUDGET_POLLS, V3InitializationOptions.Correction.PROGRESS);
+
+    /**
+     * A column's condenser duty, W (column sign: removed is negative), as the closure of its energy on one basis (C5 of the
+     * 2026-11-13 simplifications): what leaves ({@code out}) less what enters ({@code in}), the reboiler's duty and the
+     * pumparounds' (each W, column sign). The running column closes on the network's enthalpies of the feed it took and the
+     * products it prices; the simulator's column block on its streams, which are the same network flashes, so the sheet's heat
+     * balance closes on the duty the block reports. V3's own duty differs from it by the two property packages' basis gap and
+     * stays beside it ({@code Solved.solvedCondenser}, the block's display).
+     */
+    public static double closure(double out, double in, double reboiler, double pumparounds) {
+        return out - in - reboiler - pumparounds;
+    }
+
+    /**
+     * {@code seed} where the warm route can take it, else null. A seed with modelled free water is refused by the warm route and
+     * sends a seeded solve down the strict cold chain (C1 review, section 3): such an input solves with no seed, the fast first
+     * solve. A seed on another compound list (the feed island grew since, or the sheet's feed crossed the water rule) is dropped
+     * too: it is state, and the warm route needs the same basis.
+     */
+    static V3NeuralSeed warm(V3NeuralSeed seed, V3ComponentBasis basis) {
+        if (seed == null || !seed.input().componentBasis().equals(basis)) return null;
+        for (boolean wet : seed.wetTrays()) if (wet) return null;
+        return seed;
+    }
+
+    /**
      * Whether feed water at {@code t} K enters as a steam feed at the feed tray (Q9; C4 of batch 2026-11-13-codebase-review):
      * V3's own steam admission ({@code V3ColumnProblemResolver}), on its curve (Wagner-Pruss) at its injection pressure on
      * the nominal profile, inside the water data, at least {@link #SUPERHEAT} above saturation. Above the critical pressure,
@@ -255,16 +321,7 @@ public final class ColumnSolve {
                         new V3ColumnSpecification.OrganicRefluxRatio(setpoints.refluxRatio()),
                         new V3ColumnSpecification.ReboilerDuty(setpoints.reboilerPerFeed() * rate)),
                 draws, steamFeeds, pumparounds, design.columnDiameterMetres());
-        // A seed with modelled free water is refused by the warm route and sends a seeded solve down the strict cold chain
-        // (C1 review, section 3): such a table solves with no seed, the fast first solve. A seed on another compound list
-        // (the feed island grew since) is dropped too: it is state, and the warm route needs the same basis.
-        var seed = job.seed();
-        if (seed != null && !seed.input().componentBasis().equals(basis)) seed = null;
-        if (seed != null) for (boolean wet : seed.wetTrays()) if (wet) {
-            seed = null;
-            break;
-        }
-        var outcome = V3ColumnCalculator.calculateWithStrategy(input, checkpoint::run, V3SolveStrategy.AGGRESSIVE, seed, screen);
+        var outcome = calculate(input, job.seed(), catalog, screen, ColdStart.CLASSICAL, checkpoint);
         if (outcome instanceof V3ColumnOutcome.Failure failure) return new Failed(failure.code().name() + ": " + failure.summary());
         var success = (V3ColumnOutcome.Success) outcome;
         // A liquid that would settle into two is a notice, never a failure (W5 D5).
@@ -316,7 +373,7 @@ public final class ColumnSolve {
         double[] pa = solved.pumparoundPerFeed();
         double paTotal = 0;
         for (double q : pa) paTotal += q * rate;
-        double condenser = (out - in - solved.reboilerPerFeed() * rate - paTotal) / rate;
+        double condenser = closure(out, in, solved.reboilerPerFeed() * rate, paTotal) / rate;
         double cooled = switch (job.condenser()) {
             case EXCHANGER -> condenser;
             case AIR_COOLER -> 0;
