@@ -1513,8 +1513,29 @@ final class StepEquations implements SparseNewton.Equations {
      * next node may overwrite them; the pass's sweeps run one at a time on its thread.
      */
     private final com.wormzjl.icheme.science.fluid.thermo.HydrocarbonModel.Tangent[] tangentStorage=new com.wormzjl.icheme.science.fluid.thermo.HydrocarbonModel.Tangent[3];
+    /**
+     * Batch 2026-11-15-fluid-step-cost, S1 F2: per declared entry, whether the last block build recomputed its row for its
+     * column ({@link #keptEntries}); allocated at the first block build, sized to the declared entries, and filled again by
+     * each. {@code keptValid}: whether the last build returned a count. {@code rowNode}: the node each row belongs to, -1 for
+     * a connection's row (flow, actuator, filter, weir). {@code recomputedAt}: per node, the column whose sweep last
+     * recomputed its rows, -1 before the first in a build.
+     */
+    private boolean[] keptMask;private boolean keptValid;private int[] rowNode,recomputedAt;
+    /**
+     * The entries of the last block build whose row the sweep recomputed for their column, not merely seeded from the base
+     * residual (S1 F2): for a node's column every declared row of its own block, every declared row of a connection (the
+     * incident ones' flow, actuator and filter rows, the remote suctions' actuator rows), and the inflow rows of a node
+     * across a connection where that connection carries the column's node's state there ({@link #carries}; with two
+     * parallel connections, either); for a connection's flow, actuator or filter column every declared row. The factorization
+     * keeps these entries even where they are exactly zero, so its pattern changes only when a flow turns or a donor
+     * changes. Every entry outside the mask is exactly 0: its row is a neighbour's, seeded from the base residual for the
+     * column, so its difference is {@code (f - f) / step}, and the mask never drops a nonzero. Null where the last build
+     * returned -1 (a weir, a trial outside the domain).
+     */
+    @Override public boolean[] keptEntries(){return keptValid?keptMask:null;}
     private int differentiate(double[] x,double[] f,double differenceStep,int[] entryOffsets,int[] entryRows,
                               double[] entries,Runnable checkpoint,boolean tangents) {
+        keptValid=false;
         if(hasWeirs)return -1;
         FluidThermodynamics.State[] st,baseStates;Transport[] tr,baseTransport;FluidThermodynamics.Prepared[] pr,basePrepared;
         double[] trial,perturbed;
@@ -1527,6 +1548,12 @@ final class StepEquations implements SparseNewton.Equations {
             SolverDiagnostics.count(SolverDiagnostics.jacobianBlockFallbacks);return -1;
         }
         int columns=0;
+        if(keptMask==null||keptMask.length!=entryOffsets[size])keptMask=new boolean[entryOffsets[size]];
+        if(rowNode==null) {
+            rowNode=new int[size];Arrays.fill(rowNode,-1);recomputedAt=new int[layout.length];
+            for(int node=0;node<layout.length;node++)Arrays.fill(rowNode,offsets[node],offsets[node]+nodeSize(node),node);
+        }
+        Arrays.fill(recomputedAt,-1);
         try {
             for(int node=0;node<layout.length;node++) {
                 if(layout[node]==null)continue;
@@ -1535,7 +1562,7 @@ final class StepEquations implements SparseNewton.Equations {
                 var nodeTangents=tangents?model.tangents(baseStates[node],basePrepared[node],tangentStorage):null;
                 for(int local=0;local<layout[node].size();local++) {
                     checkpoint.run();columns++;
-                    int column=offsets[node]+local;
+                    int column=offsets[node]+local;recomputedAt[node]=column;
                     double step=differenceStep*differenceScale(column,x[column]);
                     trial[column]+=step;
                     double temperature=layout[node].temperature(trial,offsets[node]);
@@ -1554,7 +1581,7 @@ final class StepEquations implements SparseNewton.Equations {
                         edgeRows(edge,trial,st,tr,perturbed);
                         int other=other(edge,node);
                         if(layout[other]!=null&&carries(edge,node,trial)) {
-                            nodeAccumulate(other,trial,st,tr);nodeTargetRows(other,trial,st,perturbed);
+                            nodeAccumulate(other,trial,st,tr);nodeTargetRows(other,trial,st,perturbed);recomputedAt[other]=column;
                         }
                     }
                     // The suction limits this node supplies from beyond their ends (owner decision D17): only their
@@ -1581,7 +1608,7 @@ final class StepEquations implements SparseNewton.Equations {
                     edgeRows(edge,trial,st,tr,perturbed);
                     // No node is decoded again, so only the two endpoints' inflow rows move.
                     if(which<2)for(int node:new int[]{pipe.first(),pipe.second()})if(layout[node]!=null) {
-                        seed(node,perturbed,f);nodeAccumulate(node,trial,st,tr);nodeTargetRows(node,trial,st,perturbed);
+                        seed(node,perturbed,f);nodeAccumulate(node,trial,st,tr);nodeTargetRows(node,trial,st,perturbed);recomputedAt[node]=column;
                     }
                     write(entryOffsets,entryRows,entries,column,perturbed,f,step);
                     trial[column]=x[column];
@@ -1593,6 +1620,7 @@ final class StepEquations implements SparseNewton.Equations {
             SolverDiagnostics.count(SolverDiagnostics.jacobianBlockFallbacks);return -1;
         }
         SolverDiagnostics.count(SolverDiagnostics.jacobianBlockColumns,columns);
+        keptValid=true;
         return columns;
     }
     private int other(int edge,int node) {
@@ -1602,9 +1630,12 @@ final class StepEquations implements SparseNewton.Equations {
     private void seed(int node,double[] perturbed,double[] f) {
         if(layout[node]!=null)System.arraycopy(f,offsets[node],perturbed,offsets[node],layout[node].size());
     }
+    /** The column's entries, and whether the sweep recomputed each one's row for it ({@link #keptEntries}): a connection's
+     * row always, a node's row where that node's rows were recomputed for this column ({@code recomputedAt}). */
     private void write(int[] entryOffsets,int[] entryRows,double[] entries,int column,double[] perturbed,double[] f,double step) {
         for(int entry=entryOffsets[column];entry<entryOffsets[column+1];entry++) {
             int row=entryRows[entry];entries[entry]=(perturbed[row]-f[row])/step;
+            int node=rowNode[row];keptMask[entry]=node<0||recomputedAt[node]==column;
         }
     }
     /** The balance, energy, volume, equilibrium and closure rows this node owns. */
