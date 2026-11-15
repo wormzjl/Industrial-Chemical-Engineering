@@ -6,6 +6,7 @@ import com.wormzjl.icheme.science.column.v3.V3SideDrawSpec;
 import com.wormzjl.icheme.science.column.v3.V3SteamFeedSpec;
 import com.wormzjl.icheme.science.column.v3.V3TestInputs;
 import com.wormzjl.icheme.science.flowsheet.unit.ColumnUnit;
+import com.wormzjl.icheme.science.plant.column.ColumnSolve;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.material.MaterialRuntime;
 import com.wormzjl.icheme.science.material.TiaJuanaTestCatalog;
@@ -22,8 +23,8 @@ import jdk.jfr.Recording;
 /**
  * B1 column scenario (batch 2026-11-13-codebase-review, PROFILE_REVIEW.md). One phase per JVM:
  * <ul>
- * <li>{@code cold:<case>}: {@code ColumnUnit.solve(input, null, ...)} again and again, the block's cold route (learned start);</li>
- * <li>{@code warm:<case>}: one cold base solve, then {@code ColumnUnit.solve(input * 1.02, baseSeed, ...)} again and again,
+ * <li>{@code cold:<case>}: {@code ColumnSolve.calculate(input, null, ...)} again and again, the block's cold route (learned start);</li>
+ * <li>{@code warm:<case>}: one cold base solve, then {@code ColumnSolve.calculate(input * 1.02, baseSeed, ...)} again and again,
  * the block's warm route after a 2 % feed change (every extensive input times 1.02).</li>
  * </ul>
  * Cases: {@code medium} (the medium_crude stream under its tower template, as V3TestInputs.crude builds it) and
@@ -101,7 +102,7 @@ public final class ColumnBench {
         lines.add("stages " + c.input().stageCount() + " components " + c.input().componentBasis().componentIds().size() + " draws " + c.input().sideDraws().size()
                 + " steam " + c.input().steamFeeds().size() + " pumparounds " + c.input().pumparounds().size());
         long t0 = System.nanoTime(), a0 = allocated();
-        V3ColumnOutcome base = ColumnUnit.solve(c.input(), null, c.catalog(), () -> {});
+        V3ColumnOutcome base = ColumnSolve.calculate(c.input(), null, c.catalog(), ColumnUnit.SCREEN, ColumnSolve.ColdStart.LEARNED, () -> {});
         double firstWall = (System.nanoTime() - t0) / 1e9;
         long firstBytes = allocated() - a0;
         lines.add(String.format(Locale.ROOT, "first cold solve in a fresh JVM: %s, %.3f s wall, %.1f MB", describe(base), firstWall, firstBytes / 1e6));
@@ -119,7 +120,7 @@ public final class ColumnBench {
         int warmups = 0;
         String status = null;
         while (System.nanoTime() < end || warmups == 0) {
-            status = describe(ColumnUnit.solve(ftarget, fseed, c.catalog(), () -> {}));
+            status = describe(ColumnSolve.calculate(ftarget, fseed, c.catalog(), ColumnUnit.SCREEN, ColumnSolve.ColdStart.LEARNED, () -> {}));
             warmups++;
         }
         lines.add("warm-up solves " + warmups + " last " + status);
@@ -136,7 +137,7 @@ public final class ColumnBench {
         List<Double> walls = new ArrayList<>();
         while (System.nanoTime() < end || solves == 0) {
             long s0 = System.nanoTime();
-            var outcome = ColumnUnit.solve(ftarget, fseed, c.catalog(), () -> {});
+            var outcome = ColumnSolve.calculate(ftarget, fseed, c.catalog(), ColumnUnit.SCREEN, ColumnSolve.ColdStart.LEARNED, () -> {});
             walls.add((System.nanoTime() - s0) / 1e9);
             if (outcome instanceof V3ColumnOutcome.Success) successes++;
             status = describe(outcome);

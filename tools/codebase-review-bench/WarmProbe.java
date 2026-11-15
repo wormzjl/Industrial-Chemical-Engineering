@@ -10,6 +10,7 @@ import com.wormzjl.icheme.science.column.v3.V3TestInputs;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.material.TiaJuanaTestCatalog;
 import com.wormzjl.icheme.science.flowsheet.unit.ColumnUnit;
+import com.wormzjl.icheme.science.plant.column.ColumnSolve;
 import com.wormzjl.icheme.science.material.MaterialRuntime;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -23,11 +24,11 @@ import java.util.function.Supplier;
  * wet trays), then three solves of the +2 % input and their path, Newton iterations, closure and checkpoint count (every flash
  * and solver step calls the checkpoint):
  * <ol>
- * <li>{@code ColumnUnit.solve(target, seed)}: the simulator's warm route (what ColumnBench's warm phase times);</li>
+ * <li>{@code ColumnSolve.calculate(target, seed)}: the simulator's warm route (what ColumnBench's warm phase times);</li>
  * <li>{@code calculateWithStrategy(target, AGGRESSIVE, seed)}: the strategy entry with the seed (strict policy {@code OFF});</li>
  * <li>{@code calculateWithStrategy(target, AGGRESSIVE, null)}: the same entry with no seed ({@code OFF_FAST}), as
  * {@code ColumnSolve} runs a wet seed (it drops wet seeds);</li>
- * <li>{@code ColumnUnit.solve(target, null)}: the learned cold route ColumnBench's cold phase times.</li>
+ * <li>{@code ColumnSolve.calculate(target, null)}: the learned cold route ColumnBench's cold phase times.</li>
  * </ol>
  * Uses ColumnBench's cases and scaling. Counters, with wall times for orientation only.
  */
@@ -85,7 +86,7 @@ public final class WarmProbe {
         for (String name : new String[] {"medium", "literature"}) {
             var c = of(name);
             V3ColumnInput target = scaled(c.input(), 1.02);
-            var base = (V3ColumnOutcome.Success) ColumnUnit.solve(c.input(), null, c.catalog(), () -> counter[0]++);
+            var base = (V3ColumnOutcome.Success) ColumnSolve.calculate(c.input(), null, c.catalog(), ColumnUnit.SCREEN, ColumnSolve.ColdStart.LEARNED, () -> counter[0]++);
             V3NeuralSeed seed = base.result().warmSeed().orElseThrow();
             double water = 0;
             for (double w : seed.freeWater()) water += Math.abs(w);
@@ -94,14 +95,14 @@ public final class WarmProbe {
             lines.add(String.format(Locale.ROOT, "%s: cold base path %s n=%d; seed free water sum %.3g, wet trays %d", name,
                     base.diagnostics().solvePath(), base.diagnostics().newtonIterations(), water, wet));
             for (int round = 0; round < 4; round++) {
-                Run unit = run(() -> ColumnUnit.solve(target, seed, c.catalog(), () -> counter[0]++));
+                Run unit = run(() -> ColumnSolve.calculate(target, seed, c.catalog(), ColumnUnit.SCREEN, ColumnSolve.ColdStart.LEARNED, () -> counter[0]++));
                 Run seeded = run(() -> MaterialRuntime.with(c.catalog(), target.packageId(), () -> V3ColumnCalculator.calculateWithStrategy(target,
                         () -> counter[0]++, V3SolveStrategy.AGGRESSIVE, seed, screen)));
                 Run unseeded = run(() -> MaterialRuntime.with(c.catalog(), target.packageId(), () -> V3ColumnCalculator.calculateWithStrategy(target,
                         () -> counter[0]++, V3SolveStrategy.AGGRESSIVE, null, screen)));
-                Run learned = run(() -> ColumnUnit.solve(target, null, c.catalog(), () -> counter[0]++));
+                Run learned = run(() -> ColumnSolve.calculate(target, null, c.catalog(), ColumnUnit.SCREEN, ColumnSolve.ColdStart.LEARNED, () -> counter[0]++));
                 if (round < 3) continue; // rounds 0-2 warm the JIT
-                for (var e : new Object[][] {{"ColumnUnit.solve(seed)", unit}, {"strategy AGGRESSIVE + seed", seeded}, {"strategy AGGRESSIVE, no seed", unseeded}, {"ColumnUnit.solve(no seed)", learned}}) {
+                for (var e : new Object[][] {{"ColumnSolve.calculate(seed)", unit}, {"strategy AGGRESSIVE + seed", seeded}, {"strategy AGGRESSIVE, no seed", unseeded}, {"ColumnSolve.calculate(no seed)", learned}}) {
                     Run r = (Run) e[1];
                     lines.add(String.format(Locale.ROOT, "  %-30s %s path %s, Newton %d, closure %.0e, checkpoints %d, %.3f s", e[0], r.status(), r.path(), r.newton(), r.closure(), r.checkpoints(), r.seconds()));
                 }
