@@ -19,7 +19,7 @@ import java.util.Arrays;
  * A sparse LU with pivoting by rows, {@code P A = L U}, computed column by column ("up-looking", Gilbert-Peierls), under
  * one of two pivot rules fixed at construction. EJML's rule ({@link #UpLookingLu()}, partial pivoting) is bit for bit EJML
  * 0.44's {@code LuUpLooking_DSCC} on the same compressed-column matrix (finding P-17, batch 2026-11-13-codebase-review);
- * the threshold rule ({@link #UpLookingLu(double,boolean)}, the Newton's: batch 2026-11-15-fluid-step-cost, S5) differs from it
+ * the threshold rule ({@link #UpLookingLu(double)}, the Newton's: batch 2026-11-15-fluid-step-cost, S5) differs from it
  * only in which row is a column's pivot (item 2). Plain arrays, kept and grown by the instance; one worker at a time.
  *
  * <p>What "bit for bit" rests on, read from EJML's sources:</p>
@@ -36,14 +36,11 @@ import java.util.Arrays;
  * {@code >}, starting from {@code -Double.MAX_VALUE}: the first of equal magnitudes wins, NaN never wins. No pivot, or a
  * largest magnitude {@code <= 0}, rejects the matrix (singular) at that column. Under EJML's rule this row is the pivot:
  * no threshold or diagonal preference (EJML's tolerance line is commented out). Under the threshold rule, with {@code a}
- * that largest magnitude and the same rejection, a row without a pivot whose {@code |x[i]|} is at least
- * {@code threshold * a} and above 0 is acceptable (the largest always is). With the diagonal preferred, the pivot is row
- * k where it is in the reach, without a pivot and acceptable ({@code SparseLuSolver} permutes rows and columns together,
- * so row k is the equation paired with unknown k); otherwise, and without the preference, it is the first acceptable row
- * of the reach, front to back. Both are a second pass over the reach that only reads; row k is judged where that pass
- * meets it, never by reading {@code x[k]} outside the reach. The rule reads the column's values and {@code pinv}, never
- * an earlier factorization's pivots, so it is a function of the matrix alone. At {@code threshold = 1} without the
- * preference it is EJML's rule; with it, it is not (row k wins a tie).</li>
+ * that largest magnitude and the same rejection, the pivot is the first row of the reach, front to back, without a
+ * pivot whose {@code |x[i]|} is at least {@code threshold * a} and above 0 (the first acceptable row; the largest is
+ * always acceptable): a second pass over the reach that only reads. It reads the column's values and {@code pinv}, never
+ * an earlier factorization's pivots, so it is a function of the matrix alone. At {@code threshold = 1} it is EJML's
+ * rule.</li>
  * <li><b>The storage of L and U</b>, column k: U(:,k) holds, in reach order, every reach row with a pivot (as row
  * {@code pinv[i]}, value x[i]), then the diagonal (row k, the pivot value) last. L(:,k) holds the pivot row first (value 1)
  * then, in reach order, every row without a pivot, value {@code x[i] / pivot}. Every reached row is stored, whatever its
@@ -101,17 +98,14 @@ public final class UpLookingLu {
     /** The pivot rule (class comment, item 2): 0 for EJML's, else the threshold rule's fraction of a column's largest
      * candidate magnitude, in (0, 1]. */
     private final double threshold;
-    /** The threshold rule's preference for row k in column k where it is acceptable. */
-    private final boolean preferDiagonal;
 
     /** EJML's rule: the largest candidate, the first of equals (partial pivoting; the transport's, the parity gate's). */
-    public UpLookingLu(){threshold=0;preferDiagonal=false;}
-    /** The threshold rule: a candidate whose magnitude is at least {@code threshold} times the column's largest,
-     * {@code 0 < threshold <= 1}; with {@code preferDiagonal} row k in column k where it is one, else (and without) the
-     * first in reach order. */
-    public UpLookingLu(double threshold,boolean preferDiagonal) {
+    public UpLookingLu(){threshold=0;}
+    /** The threshold rule: the first candidate in reach order whose magnitude is at least {@code threshold} times the
+     * column's largest, {@code 0 < threshold <= 1}. */
+    public UpLookingLu(double threshold) {
         if(!(threshold>0&&threshold<=1))throw new IllegalArgumentException("Pivot threshold outside (0, 1]: "+threshold);
-        this.threshold=threshold;this.preferDiagonal=preferDiagonal;
+        this.threshold=threshold;
     }
 
     /**
@@ -162,7 +156,7 @@ public final class UpLookingLu {
             }
             if(ipiv==-1||a<=0){failedColumn=k;count(k+1,searches-searchedBefore);return false;}
             // The threshold rule chooses among the acceptable rows; EJML's keeps the largest.
-            if(threshold>0)ipiv=acceptable(reach,top,end,k,threshold*a,ipiv);
+            if(threshold>0)ipiv=acceptable(reach,top,end,threshold*a,ipiv);
             double pivot=dense[ipiv];
             uRows[uLength]=k;uValues[uLength++]=pivot;
             pinv[ipiv]=k;
@@ -182,24 +176,16 @@ public final class UpLookingLu {
     }
 
     /**
-     * The threshold rule's pivot of column k (class comment, item 2): among the rows of {@code reach[top..end)} without a
-     * pivot whose magnitude is at least {@code bound} and above 0 (above 0 by itself: {@code bound} may underflow to 0),
-     * row k where {@link #preferDiagonal} and row k is one of them, else the first in reach order. Row k is judged only
-     * where this pass meets it in the reach: {@code dense[k]} outside the reach is stale. The largest candidate,
-     * {@code largest}, always qualifies, so the fallback is never taken; it is there so the choice is a row.
+     * The threshold rule's pivot (class comment, item 2): the first row of {@code reach[top..end)} without a pivot whose
+     * magnitude is at least {@code bound} and above 0 (above 0 by itself: {@code bound} may underflow to 0). The largest
+     * candidate, {@code largest}, always qualifies, so the fallback is never taken; it is there so the choice is a row.
      */
-    private int acceptable(int[] reach,int top,int end,int k,double bound,int largest) {
-        int first=-1;
+    private int acceptable(int[] reach,int top,int end,double bound,int largest) {
         for(int p=top;p<end;p++) {
             int i=reach[p];
-            if(pinv[i]>=0)continue;
-            double t=Math.abs(dense[i]);
-            if(t>=bound&&t>0) {
-                if(!preferDiagonal||i==k)return i;
-                if(first<0)first=i;
-            }
+            if(pinv[i]<0){double t=Math.abs(dense[i]);if(t>=bound&&t>0)return i;}
         }
-        return first>=0?first:largest;
+        return largest;
     }
     /** EJML's {@code searchNzRowsInX} and its {@code _DFS} on L's first k columns: the reach's start, {@code xi[top..n)}. */
     private int search(int[] columns,int[] rows,int k) {

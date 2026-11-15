@@ -14,9 +14,7 @@ import org.junit.jupiter.api.Test;
  * {@link SparseLuSolver#NEWTON_PIVOT_THRESHOLD}), beside {@link UpLookingLuParityTest}, which holds EJML's rule to EJML:
  * no pivot below the threshold times its column's largest candidate; solutions within 1e-10 of EJML's rule's; the pivots,
  * and so the kept reaches, repeat when every value moves by up to 5 %; a singular matrix rejected at EJML's rule's column;
- * the diagonal preferred where it is acceptable, else the first acceptable row (PB); a reused instance gives a fresh one's
- * bits. Each case runs under both threshold rules, the first acceptable row in reach order (PA) and the diagonal
- * preferred (PB, the Newton's).
+ * a reused instance gives a fresh one's bits.
  */
 class ThresholdPivotTest {
     private static final double THRESHOLD=SparseLuSolver.NEWTON_PIVOT_THRESHOLD;
@@ -24,9 +22,8 @@ class ThresholdPivotTest {
         Matrix times(double[] factors){double[] v=values.clone();for(int i=0;i<v.length;i++)v[i]*=factors[i];return new Matrix(size,columns,rows,v);}
     }
     private record Rule(String name,Supplier<UpLookingLu> lu) {}
-    /** The threshold rules under test: PA, and PB (the Newton's). */
-    private static final List<Rule> RULES=List.of(new Rule("first acceptable",()->new UpLookingLu(THRESHOLD,false)),
-            new Rule("diagonal preferred",()->new UpLookingLu(THRESHOLD,true)));
+    /** The threshold rules under test. */
+    private static final List<Rule> RULES=List.of(new Rule("first acceptable",()->new UpLookingLu(THRESHOLD)));
 
     private static boolean factor(UpLookingLu lu,Matrix m){return lu.factor(m.size(),m.columns(),m.rows(),m.values());}
     private static Matrix matrix(int n,int[] columns,List<Integer> rows,List<Double> values) {
@@ -185,60 +182,8 @@ class ThresholdPivotTest {
             assertBits(expected,actual,name+": solution");
         }
     }
-    /** Block upper triangular with the given diagonal blocks (dense, every entry stored) and random entries above them: a
-     * block's candidates are its own entries, eliminated within the block only (see {@link #blocks}). */
-    private static Matrix blockMatrix(List<double[][]> diagonal,long seed) {
-        int n=0;for(var block:diagonal)n+=block.length;
-        var random=new Random(seed);int[] columns=new int[n+1];var rows=new ArrayList<Integer>();var values=new ArrayList<Double>();
-        int start=0,c=0;
-        for(var block:diagonal) {
-            for(int j=0;j<block.length;j++,c++) {
-                for(int r=0;r<start;r++)if(random.nextDouble()<.1){rows.add(r);values.add(random.nextGaussian());}
-                for(int i=0;i<block.length;i++){rows.add(start+i);values.add(block[i][j]);}
-                columns[c+1]=rows.size();
-            }
-            start+=block.length;
-        }
-        return matrix(n,columns,rows,values);
-    }
-    /** {@code [[a, b], [c, d]]}: the diagonal a at 0.3 to 0.7, acceptable and not the largest of its column (c at 0.9 to
-     * 1.1); b at 0.9 to 1.1, d at -1.1 to -0.9, so the second column's one candidate, {@code d - c b / a}, is at most -2. */
-    private static double[][] weakDiagonalBlock(Random random) {
-        return new double[][]{{.3+.4*random.nextDouble(),.9+.2*random.nextDouble()},{.9+.2*random.nextDouble(),-(.9+.2*random.nextDouble())}};
-    }
-    /**
-     * Test 5, PB: where the diagonal is acceptable but not the largest, it is the pivot (every pivot on the diagonal, where
-     * EJML's rule takes the largest); where it is below the threshold, the pivot is PA's choice. The fallback block's first
-     * column holds 0.01 (row 0, the diagonal), 1 (row 1) and 0.5 (row 2); its reach, front to back, is rows 2, 1, 0 (the
-     * search pushes each start row in front of the last), so PA's choice is row 2 and EJML's rule's is row 1.
-     */
-    @Test void theDiagonalIsThePivotWhereItIsAcceptable() {
-        var random=new Random(11);
-        for(int count:new int[]{3,20,100}) {
-            var diagonal=new ArrayList<double[][]>();for(int i=0;i<count;i++)diagonal.add(weakDiagonalBlock(random));
-            var m=blockMatrix(diagonal,count);int n=m.size();
-            var lu=new UpLookingLu(THRESHOLD,true);assertTrue(factor(lu,m));
-            int[] identity=new int[n];for(int i=0;i<n;i++)identity[i]=i;
-            assertArrayEquals(identity,lu.rowPivots(),count+" blocks: every pivot on the diagonal");
-            var ejml=new UpLookingLu();assertTrue(factor(ejml,m));
-            for(int j=0;j<count;j++)assertEquals(2*j,ejml.rowPivots()[2*j+1],count+" blocks: EJML's rule pivots column "+2*j+" on the largest, row "+(2*j+1));
-        }
-        var diagonal=new ArrayList<double[][]>();diagonal.add(new double[][]{{.01,1,1},{1,1,2},{.5,1,-1}});
-        for(int i=0;i<5;i++)diagonal.add(weakDiagonalBlock(random));
-        var m=blockMatrix(diagonal,5);int n=m.size();
-        var preferred=new UpLookingLu(THRESHOLD,true);assertTrue(factor(preferred,m));int[] pivots=preferred.rowPivots();
-        var first=new UpLookingLu(THRESHOLD,false);assertTrue(factor(first,m));
-        var ejml=new UpLookingLu();assertTrue(factor(ejml,m));
-        assertEquals(0,first.rowPivots()[2],"PA pivots column 0 on row 2, the first acceptable in reach order");
-        assertEquals(0,ejml.rowPivots()[1],"EJML's rule pivots column 0 on row 1, the largest");
-        assertEquals(0,pivots[2],"column 0's diagonal (0.01) is below 0.1 of its largest (1): PA's choice, row 2");
-        // Column 1: rows 1 (-1, the diagonal) and 0 (0.98) after the elimination; column 2: row 0 alone.
-        assertEquals(1,pivots[1],"column 1 on its diagonal");assertEquals(2,pivots[0],"column 2 on the row left");
-        for(int i=3;i<n;i++)assertEquals(i,pivots[i],"row "+i+" on the diagonal");
-    }
     @Test void theThresholdIsValidated() {
-        for(double bad:new double[]{0,-.1,1.5,Double.NaN})for(boolean preferred:new boolean[]{false,true})
-            assertThrows(IllegalArgumentException.class,()->new UpLookingLu(bad,preferred));
-        assertNotNull(new UpLookingLu(1,true),"a threshold of 1 is valid");
+        for(double bad:new double[]{0,-.1,1.5,Double.NaN})assertThrows(IllegalArgumentException.class,()->new UpLookingLu(bad));
+        assertDoesNotThrow(()->new UpLookingLu(1));
     }
 }

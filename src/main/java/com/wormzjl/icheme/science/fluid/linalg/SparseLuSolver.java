@@ -115,12 +115,11 @@ public final class SparseLuSolver {
          * A storage that factors every entry a matrix stores, an explicit zero as a structural entry the LU keeps in its
          * reach (batch 2026-11-15-fluid-step-cost, S1 F2): the Newton's, whose matrix holds exactly the entries it means the LU
          * to see ({@code SparseNewton}'s numeric matrix: its nonzeros, and after a block build the zeros its equations keep).
-         * Its LU pivots by the threshold rule at {@link SparseLuSolver#NEWTON_PIVOT_THRESHOLD} (S5), the diagonal preferred
-         * where it is acceptable, so that its pivot rows, and with them the kept reaches, repeat while the values drift, and
-         * the elimination stays the one the symmetric ordering was chosen for; the rule reads the matrix alone, so a kept
-         * storage still gives a new one's bits.
+         * Its LU pivots by the threshold rule at {@link SparseLuSolver#NEWTON_PIVOT_THRESHOLD} (S5), so that its pivot rows, and with them
+         * the kept reaches, repeat while the values drift; the rule reads the matrix alone, so a kept storage still gives a
+         * new one's bits.
          */
-        public static Storage storedPattern(SolverOwnership ownership){return new Storage(ownership,true,new UpLookingLu(NEWTON_PIVOT_THRESHOLD,true));}
+        public static Storage storedPattern(SolverOwnership ownership){return new Storage(ownership,true,new UpLookingLu(NEWTON_PIVOT_THRESHOLD));}
         public Factorization factor(SparseMatrix matrix,Ordering ordering) {
             if(!SolverDiagnostics.ENABLED)return factor0(matrix,ordering);
             long started=System.nanoTime();boolean completed=false;
