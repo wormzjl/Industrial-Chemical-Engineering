@@ -16,6 +16,8 @@ Lane: new packages `science/pollution` and `runtime/pollution`. Hot files touche
 
 - 2026-11-15, owner: "Pipe does not release under normal circumstance, unless they are destroyed by explosion (they don't get a damage meter for the sake of simplicity)". Plan S5 and section 7: a pipe releases its contents only when a blast destroys it, and a blast destroys it outright; breaking or dismantling by a player releases nothing (read by the main thread to hold for vessels too). S5 moves from WP4 to WP6.
 
+- 2026-11-15, owner: "need a damaged pipe SFX as well". Plan section 7: a pipe a blast destroys plays `icheme:pipe_burst` (rupture, then hiss or gush by what it released), in WP6, by the `models-and-sfx` skill.
+
 ## Documents
 
 - [POLLUTION_PLAN.md](POLLUTION_PLAN.md): the standard, the release sources, the field and its step, the schedule, effects, ignition and blasts, saves, work packages WP1 to WP7, owner decisions.
