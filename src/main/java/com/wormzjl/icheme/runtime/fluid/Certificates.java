@@ -32,11 +32,16 @@ final class Certificates {
      * (a presentation read takes a {@link IslandCoordinator#presentation preview}). Each advance is reported to the replay listener with
      * the replayed span as the island's last result, so boundary and pump accounting stays exact.
      */
-    void materialise(Island island) {
+    void materialise(Island island){materialise(island,Long.MAX_VALUE);}
+    /**
+     * As {@link #materialise(Island)}, but not past {@code cap}: a wake at a fixed tick of the world's ({@link
+     * IslandCoordinator#movedAt}) replays to that tick however late it is acted on (codebase review R-ST3).
+     */
+    void materialise(Island island,long cap) {
         var certificate=island.certificate;if(certificate==null)return;
         long committed=island.clock.committedTick(),online=island.clock.onlineTick();
         long wake=certificate.horizonTick();
-        long target=Math.min(Math.min(online,island.fence()),Math.min(island.holdTick,wake));
+        long target=Math.min(Math.min(Math.min(online,cap),island.fence()),Math.min(island.holdTick,wake));
         if(target>committed) {
             // The island keeps its last solved interval as its result (what a save records and a view reads, whose
             // rates replay repeats); the replayed span with its scaled accounting goes to the replay listener only.
@@ -57,6 +62,15 @@ final class Certificates {
         }
         if(coordinator.stopped||coordinator.suspension!=null)return;
         if(target==wake)revalidate(island,certificate);
+    }
+    /**
+     * Ends a certified island's certificate where it stands (its committed tick) because something it solves against changed:
+     * fresh solver caches, no evidence, awake from there. The coupling's wakes and {@link IslandCoordinator#movedAt}.
+     */
+    void end(Island island) {
+        island.certificate=null;island.revalidating=null;island.certifiedSince=-1;island.signature=null;island.retained=new RetainedSolver();
+        island.lastInterval=null;island.streak=0;island.status="WAITING: an exchanger's other side changed";island.touch();
+        FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.couplingWakes);coordinator.reconsider(island);
     }
     /** Ends a certificate at its horizon: fresh solver caches, no evidence; the island keeps the certificate its first
      * slice is compared with. */

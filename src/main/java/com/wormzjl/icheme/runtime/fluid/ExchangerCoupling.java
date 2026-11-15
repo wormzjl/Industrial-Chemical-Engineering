@@ -231,9 +231,7 @@ final class ExchangerCoupling {
                 var island=coordinator.islands.get(id);if(island==null||island.certificate==null||coordinator.stopped||coordinator.suspension!=null)continue;
                 // Its replay up to now first (which books its heat); that may reach its horizon, which ends it anyway.
                 coordinator.certificates.materialise(island);if(island.certificate==null)continue;
-                island.certificate=null;island.revalidating=null;island.certifiedSince=-1;island.signature=null;island.retained=new RetainedSolver();
-                island.lastInterval=null;island.streak=0;island.status="WAITING: an exchanger's other side changed";island.touch();
-                FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.couplingWakes);coordinator.reconsider(island);
+                coordinator.certificates.end(island);
             }
         } finally{waking=false;}
     }
