@@ -44,9 +44,15 @@ public final class ReleasePressure {
         for(int k=0;k<200&&hi>lo*(1+width);k++){double mid=Math.sqrt(lo*hi),at=trial.applyAsDouble(mid);if(at<=share.applyAsDouble(mid))hi=mid;else{lo=mid;vapour|=at>0;}}
         return vapour?hi:Double.POSITIVE_INFINITY;
     }
-    /** The vapour volume share of trial state {@code at}: 0 for liquid alone, the smallest positive double for a vapour
-     * too small to have a volume, NaN for no state and for one that holds no liquid. */
+    /**
+     * The vapour volume share of trial state {@code at}: 0 for liquid alone, the smallest positive double for a vapour
+     * too small to have a volume, NaN for no state and for one that holds no liquid. One dense fluid, in either slot,
+     * reads {@code 1 - w} on its liquid-like weight ({@link FluidThermodynamics#liquidLikeWeight}; S4 of batch
+     * 2026-11-15-supercritical-fluids): 0 from reduced density 1.5, as the liquid slot gave; 1 at or below 0.5, where the
+     * vapour slot gave NaN. So above the critical pressure E is where the fluid thins to the clean share, a density.
+     */
     public static double vapourVolumeShare(FluidThermodynamics.State at) {
+        if(at!=null&&at.dense()){double w=FluidThermodynamics.liquidLikeWeight(at);return w>=1?0:Math.max(1-w,Double.MIN_VALUE);}
         if(at==null||!(FluidThermodynamics.holdsPhase(at,FluidThermodynamics.OIL)||FluidThermodynamics.holdsPhase(at,FluidThermodynamics.AQUEOUS)))return Double.NaN;
         if(!FluidThermodynamics.holdsPhase(at,FluidThermodynamics.GAS))return 0;
         double v=at.vaporVolume(),total=v+at.condensedVolume();

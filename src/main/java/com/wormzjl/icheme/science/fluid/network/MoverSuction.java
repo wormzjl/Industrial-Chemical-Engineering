@@ -188,7 +188,9 @@ final class MoverSuction {
             var walk=InletPhase.walk(graph,edge);boolean direct=walk.via()<0;
             int supplier=direct?pipe.first():walk.node();var s=states.get(supplier);
             int label=drawnLiquid(s,direct?pipe.firstPort():graph.pipes().get(walk.via()).portAt(supplier));
-            if(label<0)continue;
+            // One dense fluid is drawn as a liquid while it is liquid-like at all, in either slot (S4 of batch
+            // 2026-11-15-supercritical-fluids): its E is read; its p_v is the liquid slot's (release), none in the vapour slot.
+            if(label<0&&!(s.dense()&&FluidThermodynamics.liquidLikeWeight(s)>0))continue;
             floors[edge]=release(s,checkpoint);zoneEdges[edge]=Double.NaN;
         }
     }

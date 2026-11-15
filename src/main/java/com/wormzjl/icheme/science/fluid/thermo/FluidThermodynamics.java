@@ -174,7 +174,9 @@ public final class FluidThermodynamics {
         // changes no property data, so a saved island's inventory and energy stay readable across a change of it.
         // line-cap-saturation-v1 names the cap law of every throttling line (PassiveStepSolver.saturated, 2026-10-18): the
         // smooth saturation of the law's flow at the stream's velocity limit, max= the configured limit it is built from.
-        revision=thermodynamicRevision+":line-cap-saturation-v1:trace-relative-v1:max="+Double.toHexString(maximumVelocity)
+        // dense-movers-v1: a pump's vapour share and a compressor's condensed share of one dense fluid, and its pump's
+        // suction limit, follow its liquid-like weight (S4 of batch 2026-11-15-supercritical-fluids).
+        revision=thermodynamicRevision+":line-cap-saturation-v1:dense-movers-v1:trace-relative-v1:max="+Double.toHexString(maximumVelocity)
                 +":trace="+Double.toHexString(tracePolicy.cutoffMoleFraction())+":solids-v1:"+solidSettings
                 // time= the time factor (batch 2026-11-11-minecraft-time-delta): a solved interval, a certificate and a
                 // junction buffer describe process seconds per tick, so a changed factor drops them and the islands

@@ -29,7 +29,12 @@ import static com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.AQUEOU
  * device would move in one slice reads the gas it would break through to; with no target volume it is the port's
  * leading phase. A BULK end supplies the node's bulk. Measures: for a pump the vapour share of the supply's fluid
  * volume (solids excluded); for a compressor the condensed share of its mass and the largest solid population's share
- * of its volume.</p>
+ * of its volume. One dense fluid ({@link FluidThermodynamics.State#dense()}) has no second phase: a machine feels its
+ * density, so its vapour share is {@code 1 - w} and its condensed share {@code w}, its liquid-like weight
+ * ({@link FluidThermodynamics#liquidLikeWeight}), whichever slot holds it (S4 of batch 2026-11-15-supercritical-fluids):
+ * exactly the vapour slot's 1 and 0 at or below reduced density 0.5, the liquid slot's 0 and 1 from 1.5. A port's
+ * stream drawn from such a state is that fluid. Neither share enters the refusal ({@link #decide}): a dry suction and
+ * a compressor's solids only.</p>
  *
  * <p>A dry suction (owner decision D58, A1): a pump or compressor with nothing at its suction runs dry. What can feed
  * the suction is what stands upstream of it ({@link #held}): the device's first node if it is not a junction, else
@@ -120,7 +125,7 @@ public final class InletPhase {
     /** The stream of {@code state} that phase volumes {@code drawn} (m3 by phase, {@link FluidThermodynamics#phaseVolume};
      * null for the bulk) take, as {@link Drawn} states it. */
     private static Drawn stream(Supply supply,FluidThermodynamics.State state,double[] drawn) {
-        if(drawn==null)return new Drawn(supply,state,PhaseLayout.totalAmounts(state),state.fluidEnthalpy(),FluidThermodynamics.holdsLiquid(state));
+        if(drawn==null)return new Drawn(supply,state,PhaseLayout.totalAmounts(state),state.fluidEnthalpy(),state.dense()?liquidLike(state):FluidThermodynamics.holdsLiquid(state));
         double[] amounts=new double[state.componentCount()];double enthalpy=0;
         for(int phase=0;phase<3;phase++) {
             if(!(drawn[phase]>0))continue;
@@ -130,8 +135,12 @@ public final class InletPhase {
             for(int c=0;c<amounts.length;c++){amounts[c]+=share*own[c];moles+=share*own[c];}
             enthalpy+=moles*state.phase(slot).molarEnthalpy();
         }
+        // One dense fluid holds a liquid in a pump's sense while it is liquid-like at all, in either slot (S4).
+        if(state.dense())return new Drawn(supply,state,amounts,enthalpy,liquidLike(state)&&(drawn[GAS]>0||drawn[OIL]>0||drawn[AQUEOUS]>0));
         return new Drawn(supply,state,amounts,enthalpy,drawn[OIL]>0||drawn[AQUEOUS]>0);
     }
+    /** Whether one dense fluid is liquid-like at all: its weight above zero, reduced density above 0.5 (S4). */
+    private static boolean liquidLike(FluidThermodynamics.State state){return FluidThermodynamics.liquidLikeWeight(state)>0;}
     /**
      * The density (kg/m3) of what connection {@code edge}'s suction line delivers, {@link #supply}'s stream on the same
      * arguments: the drawn phase streams' mass over their volume, each at the density a connection's end draws it with
@@ -149,12 +158,15 @@ public final class InletPhase {
      * the same arguments: its hydrocarbon liquid and free water streams' mass over their volume, at the densities a
      * connection's end draws them with; where the stream holds no liquid, the liquid of the node it is drawn from; NaN where
      * that holds none. What a pump's NPSH floor reads ({@code PassiveStepSolver.readSuctions}, owner decision D20 Q11 A).
+     * One dense fluid that is liquid-like at all ({@link FluidThermodynamics#liquidLikeWeight} above zero) is its liquid in
+     * the vapour slot too (S4): its own density, continuous across the slot line.
      */
     public static double liquidDensity(FluidThermodynamics model,PassiveNetwork graph,int edge,double targetVolumeFlow,double duration) {
         var source=source(model,graph,edge,targetVolumeFlow,duration);var state=graph.reservoirs().get(source.node()).state();
         double mass=0,volume=0;
         if(source.drawn()!=null)for(int phase:new int[]{OIL,AQUEOUS})if(source.drawn()[phase]>0){mass+=source.drawn()[phase]*PortStreams.phaseDensity(model,state,phase);volume+=source.drawn()[phase];}
         if(!(volume>0))for(int phase:new int[]{OIL,AQUEOUS}){double v=FluidThermodynamics.phaseVolume(state,phase);if(v>0){mass+=v*PortStreams.phaseDensity(model,state,phase);volume+=v;}}
+        if(!(volume>0)&&state.dense()&&liquidLike(state))return PortStreams.phaseDensity(model,state,GAS);
         return volume>0?mass/volume:Double.NaN;
     }
     /** Where a suction walk ends: the node, its end's port there (BULK at a junction) and the phase stream volumes drawn
@@ -270,7 +282,10 @@ public final class InletPhase {
         double fluid=gas+oil+water;
         double largestSolid=0;
         if(total>0)for(var population:state.solids().populations())largestSolid=Math.max(largestSolid,population.volume()*solidScale/total);
-        return new Supply(node,id,port,fluid>0?gas/fluid:0,gasMass+condensedMass>0?condensedMass/(gasMass+condensedMass):0,largestSolid,held);
+        double vapourShare=fluid>0?gas/fluid:0,condensedShare=gasMass+condensedMass>0?condensedMass/(gasMass+condensedMass):0;
+        // One dense fluid: the shares follow its density, not its slot (S4); the weight is exactly 0 or 1 outside 0.5 to 1.5.
+        if(fluid>0&&state.dense()){double w=FluidThermodynamics.liquidLikeWeight(state);vapourShare=1-w;condensedShare=w;}
+        return new Supply(node,id,port,vapourShare,condensedShare,largestSolid,held);
     }
 
     /**
