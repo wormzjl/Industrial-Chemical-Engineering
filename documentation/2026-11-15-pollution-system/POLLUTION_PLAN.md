@@ -200,8 +200,9 @@ Lane: new packages `science/pollution`, `runtime/pollution`; touches of hot file
 | 7 | Documents: code guide chapter `pollution.md` and its README rows, `FORMATS.md`, the batch README | `documentation/**` | none |
 | 8 | Pollution meter item (section 11) | `world/item/PollutionMeterItem.java`, registries, model, texture, sound, lang | `PollutionReadingTest`, one GameTest |
 | 9 | FTB Chunks map overlay (section 12), optional mod | `compat/ftbchunks/**`, `network/` (one payload pair, `NetworkProtocol` version), `build.gradle` (compile-only dependency) | the column summary as a pure function; the look by the owner's in-game check |
+| 10 | Fixed pollution monitor on the data network (section 11, "Fixed pollution monitor") | the block and entity, registries, `runtime/control/BuiltInInputs`, `DataPorts`, `SensorId`, `Sensor.Unit`, `ControlPublication` (flowsheet and control lane), model, sound, lang | the channels as a pure function, a `ControlSystemTest` case, one GameTest; a corpus image if `ControlFacts` moves |
 
-Order: 1 → 2 → 3 → 4 → 5 → 8 → 6 → 9 → 7. WP1 and WP2 share no file and may run side by side.
+Order: 1 → 2 → 3 → 4 → 5 → 8 → 10 → 6 → 9 → 7. WP1 and WP2 share no file and may run side by side.
 
 Pitfalls for every package: `ShaftTrains.booked` also runs on a replayed span (`Flares` says "committed or replayed"), so a release must be counted once: collect only where the ledger books, and prove it with a test that replays a span. The blanket's vent and the open vessel's vent have the same `Kind`. The `equipmentGates` and `columnGates` class lists in `build.gradle` see only what their tests load. `en_us.json` only; the other languages wait for the translation commit. No dev client; GameTests need a fresh `fluidGameTestRunId` and must remove what they register.
 
@@ -228,6 +229,18 @@ A handheld item, `icheme:pollution_meter` (WP8).
 - **Files.** `world/item/PollutionMeterItem.java`, `registry/ModItems`, `ModCreativeTabs`, the item model and texture (`models-and-sfx`), `en_us.json` keys, a recipe; the server side in `runtime/pollution/PollutionEffects` (the world pass already runs each second). No menu, no screen, so no GUI work; one action-bar payload is vanilla's (`displayClientMessage`), so no wire format changes.
 - **Tests.** The reading's words as a pure function (`PollutionReadingTest`); a GameTest: a player holding the meter in a cube at toxic 1.2 receives LETHAL, a player without it receives nothing.
 
+### Fixed pollution monitor (owner, 2026-11-15: "Add a fixed pollution meter that can be connected to data cables and can be read with the DCS as well")
+
+A one-block device, `icheme:pollution_monitor` (WP10): a wall or post box with a sample inlet, a lamp and a data gland.
+
+- **What it measures.** The four indices of the cube it stands in, read from the installed field at the control cadence (a read of cached data; nothing steps). Toxic with particulate added, as the handheld meter.
+- **On the data network.** It follows the chimney's and the alarm channels' pattern ([wired-control-power.md](../reference/code-guide/wired-control-power.md), "The chimney's data channels", "Physical interfaces and accepted channel catalog"): a data socket (`DataPorts`), a stable human ID (`SensorId`, label `AT-%04d`: analyser transmitter), and built-in channels through `BuiltInInputs.Binding` with deterministic channel UUIDs: `TOXIC`, `COMBUSTIBLE`, `CORROSIVE`, `PARTICULATE` (a new `Sensor.Unit.INDEX`, appended, saved by name) and one alarm channel `GAS` (active at any index ≥ 0.1; HIGH at ≥ 1). A data cable to a controller or a DCS console lists it among that bus's instruments, by ID, as every other sensor; the DCS shows the four values and the alarm on its existing instrument list and alarm line. No new DCS page in this batch.
+- **Not a loop input in this batch.** A controller loop acts on valves and heat units; a gas reading as a loop's measured value (an interlock that shuts a valve on gas) is a follow-up, so `ControlLaw` is not touched.
+- **On the block.** A lamp by blockstate: green (all < 0.1), amber (≥ 0.1), red (≥ 1), dark while its cube's cell is unknown or pollution is disabled. Red sounds a horn loop near the block (`icheme:gas_alarm`, by the `models-and-sfx` skill, on the `Noise` sources so it follows the sound settings). Right-click prints its ID and reading, as the handheld meter's chat line. No menu and no screen.
+- **Facts.** Its socket and ID are `ControlFacts` facts, as every data host's. If a new host kind needs a field there, the format goes from 4 to 5 with a corpus image `compat/control/control-5.snbt`; WP10 reserves the number first (COLLABORATION.md, "Numbers"). The lamp state is state.
+- **Files.** `world/level/block/PollutionMonitorBlock.java` and its block entity, `registry/ModBlocks`/`ModItems`/`ModBlockEntities`, `runtime/control/BuiltInInputs`, `DataPorts`, `SensorId`, `Sensor.Unit`, `ControlPublication` (the values on the instrument list), the model, texture and sound (`models-and-sfx`), `en_us.json`, a recipe. Before it builds, the package reads how the chimney's junction box registers its channels and whether the instrument list of `ControlPanelScreen` shows a built-in channel's value without GUI work; if it needs a row or a unit text there, the `gui-creation` skill applies.
+- **Tests.** The channel values and the alarm thresholds as a pure function; `ControlSystemTest`-style: a monitor on a bus is listed by the console only over its data link; the corpus image if the format moves; a GameTest: a monitor in a cube at toxic 1.2 turns red and its `TOXIC` channel reads 1.2 at the console.
+
 ## 12. Map overlay on FTB Chunks (owner, 2026-11-15: "research if you can add pollution overlay to ftb chunk map")
 
 **Finding: possible with FTB Chunks' public client API, without mixins.** Read at the `1.21.1/main` branch of `FTBTeam/FTB-Chunks`, 2026-11-15 (`common/src/main/java/dev/ftb/mods/ftbchunks/`):
@@ -248,4 +261,4 @@ A handheld item, `icheme:pollution_meter` (WP8).
 
 ## 13. Follow-ups outside this batch
 
-A fixed gas alarm on the data network; a gas mask; a haze shader in the effects system; equipment corrosion from the corrosive index; soil and water pollution from the `ground` total; solid-fuel smoke; wind.
+A gas reading as a controller loop's input (an interlock that shuts a valve on gas); a gas mask; a haze shader in the effects system; equipment corrosion from the corrosive index; soil and water pollution from the `ground` total; solid-fuel smoke; wind.

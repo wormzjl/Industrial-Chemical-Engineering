@@ -23,6 +23,9 @@ Lane: new packages `science/pollution` and `runtime/pollution`. Hot files touche
 
 - 2026-11-15, WP1 and WP2 built by the main thread: both compiled at the first build; 58 tests in 9 classes pass (`science.pollution.*`, `MaterialHazardTest`, `MaterialThermochemistryTest`, `MaterialCatalogTest`, `DeterministicMathSourceTest`, `LayeringTest`). One test assertion was wrong and was corrected (a particulate source 8 cubes over the bottom thins out below the cutoff before it reaches the ground). WP1: `MaterialCatalog.Hazard`, the per-package arrays, 33 dataset records read from NIOSH, `HazardStandard`. WP2: `PollutionField` (amounts in doubles), `PollutionLedger`, `CubeKey`, `Environment`, `ExplosionLaw`. Not run: `columnGates` and `equipmentGates`, which load the material data (the final lane's).
 
+- 2026-11-15, owner: "Yes, start WP3" (WP3 as an Opus high subagent, then WP4). WP3 started. Read for WP4 meanwhile: a safety valve's outlet is a relief port into a pipe run, never the open air (S9 is no source of its own); `ShaftTrains.booked` runs for committed and replayed spans, each its own stretch of time, so a release is a rate times the span; whether a fired heater's flue gas is a real stream is still open (S8).
+- 2026-11-15, owner: "Add a fixed pollution meter that can be connected to data cables and can be read with the DCS as well". Plan section 11, "Fixed pollution monitor" (WP10): a one-block monitor with a data socket, four index channels and a gas alarm channel on the chimney's built-in channel pattern, a lamp and a horn; read on the DCS's instrument list; not a loop input in this batch.
+
 ## Documents
 
 - [POLLUTION_PLAN.md](POLLUTION_PLAN.md): the standard, the release sources, the field and its step, the schedule, effects, ignition and blasts, saves, work packages WP1 to WP7, owner decisions.
