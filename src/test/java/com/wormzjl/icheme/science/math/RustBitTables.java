@@ -21,7 +21,8 @@ import java.util.stream.DoubleStream;
  * pseudo-random arguments per function ({@link #RANDOM_ROWS}) from SplitMix64 with a fixed seed, spread over the exponent
  * range or over the function's domain.
  *
- * <p>Run without Gradle (JDK 21), from the repository root:
+ * <p>The tables are not tracked: {@code gradlew rustTables} (task {@code rustBitTables}) writes them from this build,
+ * and {@code rustTest} runs it first. Without Gradle (JDK 21), from the repository root:
  * <pre>
  * javac -d tmp/rust-a1/classes src/main/java/com/wormzjl/icheme/science/math/DeterministicMath.java \
  *     src/main/java/com/wormzjl/icheme/science/math/DeterministicPow.java \

@@ -61,12 +61,16 @@ stops at the first difference with its file, line, arguments and both bit patter
 of any bits: neither Java nor Rust specifies the bits of a NaN made by arithmetic, and Java itself returns different
 NaN bits for the same call (interpreter and intrinsics). Every other value requires the same 64 bits.
 
-The tables come from `src/test/java/com/wormzjl/icheme/science/math/RustBitTables.java`, run without Gradle with
-JDK 21 (the commands are in its class comment). `banded.txt` and `icheme-jni/tests/data/self_test.txt` come from
+The tables are not tracked (6 MB of generated rows; `.gitignore`). `./gradlew rustTables` writes them from this build's
+own Java classes, and `rustTest` runs it first; before the tests by hand, run `./gradlew rustTables` once. They come
+from `src/test/java/com/wormzjl/icheme/science/math/RustBitTables.java` (task `rustBitTables`); `banded.txt` (task
+`rustBandTable`) and the tracked `icheme-jni/tests/data/self_test.txt` come from
 `src/test/java/com/wormzjl/icheme/science/column/v3/linalg/RustNativeTables.java` (the self-test answers are
 `NativeColumnSolver.expectedSelfTest()`, the vector the loader checks): a band row names a case that
 `tests/banded_tables.rs` rebuilds with the twin of the Java case generator, checks by an input fingerprint, solves
-and compares output by output. Regenerate the tables only when the Java functions they prove change.
+and compares output by output. A table follows the Java of the build that wrote it, so a change of a Java function
+shows as a failing Rust test until its Rust twin follows. Regenerate `self_test.txt` (the class comment of
+`RustNativeTables`) only when the self-test vector changes.
 
 ## The determinism rules (plan section 6)
 

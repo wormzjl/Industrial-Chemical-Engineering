@@ -532,7 +532,7 @@ What it says:
 
 ## After the kept LU storages (main thread, 2026-11-13, review branch at 81101690e)
 
-Item 3 of "After wave B" named the wrong cause. `ConservativeTransport.Workspace` and the step Newton's `SparseNewton.Shared` were already kept by the island's `RetainedSolver`; the storages built at every step were those of the solves that make a workspace of their own (a vessel's closure, a junction's split, a crystal's closure). P-17b keeps those with the island, and P-17c keeps the reaches of a storage's last four patterns ([wave-b/B-S2B_REPORT.md](wave-b/B-S2B_REPORT.md)). One 60 + 60 s pair on `mixed100`, the machine alone; output `tmp/codebase-review-bench/after-p17b/` and `after-p17c/`.
+Item 3 of "After wave B" named the wrong cause. `ConservativeTransport.Workspace` and the step Newton's `SparseNewton.Shared` were already kept by the island's `RetainedSolver`; the storages built at every step were those of the solves that make a workspace of their own (a vessel's closure, a junction's split, a crystal's closure). P-17b keeps those with the island, and P-17c keeps the reaches of a storage's last four patterns ([wave-b/B-S2B_REPORT.md](../../research/2026-11-13-codebase-review/wave-b/B-S2B_REPORT.md)). One 60 + 60 s pair on `mixed100`, the machine alone; output `tmp/codebase-review-bench/after-p17b/` and `after-p17c/`.
 
 | | After wave B | After P-17b | After P-17c |
 |---|---|---|---|

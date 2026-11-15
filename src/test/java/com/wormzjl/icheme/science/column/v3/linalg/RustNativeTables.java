@@ -28,7 +28,8 @@ import java.util.List;
  * writes it out. {@link #specs()} gives the band cases to {@code NativeColumnSolverTest}, which replays them through
  * the library.
  *
- * <p>Run without Gradle (JDK 21), from the repository root, on the classes of a Gradle build ({@code compileJava
+ * <p>{@code banded.txt} is not tracked: {@code gradlew rustTables} (task {@code rustBandTable}) writes it from this
+ * build, and {@code rustTest} runs it first; {@code self_test.txt} is tracked. Without Gradle (JDK 21), from the repository root, on the classes of a Gradle build ({@code compileJava
  * compileTestJava}) and with no {@code icheme.native.column} property, so every solve runs on the Java path. To prove
  * another solver version, compile it with {@code -cp build/classes/java/main} into a folder under {@code tmp/} and put
  * that folder first on the class path:

@@ -69,7 +69,7 @@ A brief is complete without the conversation. It holds, in this order:
 7. What done looks like, and the output's format.
 8. For a sub-thread: what it waits on, how long, and the reporting cadence.
 
-Keep the briefs of one batch in one tracked file in the batch folder (`BRIEFS.md`), with the common rules once at the top. The call that starts a thread then names the file and the section.
+Keep the briefs of one batch in one file, with the common rules once at the top. Briefs and subagent reports are working records, not tracked (owner, 2026-11-15): write them in the main checkout, `research/<batch>/` (`BRIEFS.md`, one folder per wave for the reports); the batch's tracked documents are its README, reviews, plans and lane reports. The call that starts a thread then names the file and the section.
 
 For a review:
 

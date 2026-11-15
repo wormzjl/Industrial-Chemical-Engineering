@@ -2,7 +2,7 @@
 
 Purpose: package B1 of the code base review: a CPU, allocation and heap profile, with JFR, of the fluid network step, the V3 column (cold and warm) and 20 shaft trains. It is the Java baseline the Rust column port is measured against. Not a gate.
 
-Batch: `documentation/2026-11-13-codebase-review/` (`PROFILE_REVIEW.md`, brief B1 in `BRIEFS.md`).
+Batch: `documentation/2026-11-13-codebase-review/` (`PROFILE_REVIEW.md`, brief B1 in the main checkout's `research/2026-11-13-codebase-review/BRIEFS.md`).
 
 ## How to run
 
