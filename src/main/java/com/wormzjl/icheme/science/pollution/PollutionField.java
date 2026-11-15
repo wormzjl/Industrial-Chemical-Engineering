@@ -81,6 +81,43 @@ public final class PollutionField {
         return new PollutionField(keys.clone(), amounts.clone());
     }
 
+    /**
+     * This field capped at a dimension's height (owner, 2026-11-15: "cap at world height"): a cube above
+     * {@code maximumY} or below {@code minimumY} gives its amounts to the highest or lowest cube of its column, so
+     * nothing is lost and the ledger still closes. The same field when every cube is inside.
+     */
+    public PollutionField capped(int minimumY, int maximumY) {
+        if (minimumY > maximumY) {
+            throw new IllegalArgumentException("height " + minimumY + " to " + maximumY);
+        }
+        boolean outside = false;
+        for (long key : keys) {
+            if (CubeKey.capped(key, minimumY, maximumY) != key) {
+                outside = true;
+                break;
+            }
+        }
+        if (!outside) {
+            return this;
+        }
+        var merged = new java.util.TreeMap<Long, double[]>();
+        for (int i = 0; i < keys.length; i++) {
+            double[] sum = merged.computeIfAbsent(CubeKey.capped(keys[i], minimumY, maximumY), k -> new double[CHANNELS]);
+            for (int c = 0; c < CHANNELS; c++) {
+                sum[c] += amounts[i * CHANNELS + c];
+            }
+        }
+        long[] cappedKeys = new long[merged.size()];
+        double[] cappedAmounts = new double[merged.size() * CHANNELS];
+        int o = 0;
+        for (var entry : merged.entrySet()) {
+            cappedKeys[o] = entry.getKey();
+            System.arraycopy(entry.getValue(), 0, cappedAmounts, o * CHANNELS, CHANNELS);
+            o++;
+        }
+        return new PollutionField(cappedKeys, cappedAmounts);
+    }
+
     public int size() {
         return keys.length;
     }

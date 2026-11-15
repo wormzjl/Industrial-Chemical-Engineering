@@ -26,6 +26,12 @@ public final class CubeKey {
         return (int) (key << 22 >> 42);
     }
 
+    /** The cube with its y brought into {@code minimumY..maximumY} (the dimension's lowest and highest cube): the same key when it is inside. */
+    public static long capped(long key, int minimumY, int maximumY) {
+        int y = y(key);
+        return y < minimumY ? of(x(key), minimumY, z(key)) : y > maximumY ? of(x(key), maximumY, z(key)) : key;
+    }
+
     public static long offset(long key, int dx, int dy, int dz) {
         return of(x(key) + dx, y(key) + dy, z(key) + dz);
     }

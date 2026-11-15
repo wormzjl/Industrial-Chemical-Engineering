@@ -385,8 +385,8 @@ public final class PollutionStore extends SavedData {
     /**
      * Opens the overworld's store; never throws. A store {@link #read} set aside, or a file the storage could not read
      * at all (it logs the failure and answers nothing), is copied to {@code icheme_pollution.damaged-<n>.dat} first and
-     * the store starts empty. If that copy fails, nothing is registered, so the file stays as it is, and the answer is
-     * null: the service then runs disabled for the session.
+     * the store starts empty. If that copy fails, the damaged store is erased all the same (owner, 2026-11-15): the
+     * empty store replaces its file at the next save.
      */
     static PollutionStore open(MinecraftServer server) {
         Path file = file(server);
@@ -406,14 +406,14 @@ public final class PollutionStore extends SavedData {
             reason = String.join("; ", existing.notes());
         }
         if (reason != null) {
-            Path copy;
             try {
-                copy = setAside(file);
+                Path copy = setAside(file);
+                IChemE.LOGGER.warn("pollution_store status=SET_ASIDE file={} detail={}", copy == null ? file : copy, reason);
             } catch (IOException | RuntimeException failure) {
-                IChemE.LOGGER.error("pollution_store status=SET_ASIDE_FAILED file={} detail={} copy={}", file, reason, String.valueOf(failure));
-                return null;
+                // No copy could be made: the damaged store is erased (owner, 2026-11-15: "erase instead"); the empty store
+                // below replaces its file at the next save, and pollution runs on.
+                IChemE.LOGGER.error("pollution_store status=ERASED file={} detail={} copy={}", file, reason, String.valueOf(failure));
             }
-            IChemE.LOGGER.warn("pollution_store status=SET_ASIDE file={} detail={}", copy == null ? file : copy, reason);
             var fresh = new PollutionStore();
             storage.set(DATA_NAME, fresh);
             fresh.setDirty();

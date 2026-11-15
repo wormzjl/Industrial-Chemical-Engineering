@@ -180,7 +180,7 @@ public final class PollutionService {
             if (disabled || dimension == null || channel == null) {
                 return;
             }
-            dimension(dimension).engine.release(cube, channel, amount);
+            dimension(dimension).engine.release(capped(dimension, cube), channel, amount);
             if (store != null) {
                 store.setDirty();
             }
@@ -299,10 +299,39 @@ public final class PollutionService {
         d = new Dimension(key);
         var saved = store == null ? null : store.carried().get(key.location().toString());
         if (saved != null) {
-            d.engine.restore(saved.field(), saved.ledger(), saved.pending());
+            // Capped at the world's height (owner, 2026-11-15): a saved cube outside it joins its column's highest or
+            // lowest cube, so a world whose height changed, or a damaged key, loses nothing.
+            var field = saved.field();
+            var pending = saved.pending();
+            ServerLevel level = server.getLevel(key);
+            if (level != null) {
+                int minimumY = level.getMinSection();
+                int maximumY = level.getMaxSection() - 1;
+                var capped = field.capped(minimumY, maximumY);
+                var moved = new java.util.ArrayList<com.wormzjl.icheme.science.pollution.Release>(pending.size());
+                boolean changed = capped != field;
+                for (var release : pending) {
+                    long cube = CubeKey.capped(release.key(), minimumY, maximumY);
+                    changed |= cube != release.key();
+                    moved.add(cube == release.key() ? release : new com.wormzjl.icheme.science.pollution.Release(cube, release.channel(), release.amount()));
+                }
+                if (changed) {
+                    IChemE.LOGGER.warn("pollution_store status=CAPPED dimension={} detail=cubes outside the world's height joined its highest or lowest cube", key.location());
+                    store.setDirty();
+                }
+                field = capped;
+                pending = moved;
+            }
+            d.engine.restore(field, saved.ledger(), pending);
         }
         dimensions.put(key, d);
         return d;
+    }
+
+    /** {@code cube} capped at the dimension's height; the same cube when the dimension is no level. */
+    private long capped(ResourceKey<Level> dimension, long cube) {
+        ServerLevel level = server.getLevel(dimension);
+        return level == null ? cube : CubeKey.capped(cube, level.getMinSection(), level.getMaxSection() - 1);
     }
 
     /** Every dimension's facts as a save writes them, by id. */
