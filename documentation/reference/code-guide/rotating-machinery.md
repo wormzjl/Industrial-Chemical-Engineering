@@ -1,195 +1,185 @@
-# Rotating machinery: machine laws, shaft trains, drivers, electricity, wear and the Create coupling
+# Rotating machinery: the machine laws
 
-Up: [code guide](README.md)
+Up: [code guide](README.md). The trains, drivers, electric stores, health, pages and the Create coupling in the world:
+[shaft-trains.md](shaft-trains.md). The movers' rows in the step: [fluid-laws.md](fluid-laws.md) and
+[fluid-step.md](fluid-step.md); the machine shapes and design points: [equipment-designs.md](equipment-designs.md); the
+simulator's tiles: [simulator-units.md](simulator-units.md).
 
 ## Read this when
 
-- A pump or compressor delivers the wrong flow or head, cavitates (`PUMP_SUCTION_LIMIT`), runs on gas or wet gas, or a casing stands while its driver runs.
-- A motor, steam turbine, generator, gearbox, creative motor or Create coupling does not turn, trips (`TRIPPED: NO POWER`, the only trip a step sets; a saved `TRIPPED: OVERLOAD` or `TRIPPED: OVERSPEED` still shows and resets), says `CURRENT LIMITED`, `STEAM LIMITED`, `POWER LIMITED`, `GEAR LIMITED`, `NO ROTATION`, or a train stands with `NO DRIVER`, `TWO DRIVERS` or `GEAR LOOP`.
-- A unit's FE port takes or gives the wrong energy, an air cooler or induced tower says `NO POWER` or `UNMETERED`, or a config key under `energy`, `create` or `machines.wear` misbehaves.
-- A pump, a dry screw, a centrifugal compressor or a steam turbine loses health, fails (`FAILED`), or a repair kit is refused.
-- A machine's page, a casing's Drive group, a pump's Suction and Health groups or its curve show the wrong numbers.
-- You add a driver kind, a machine law, a shaft part or a Create-facing class.
+- A pump or compressor delivers the wrong flow or head for its speed, cavitates too early or too late
+  (`PUMP_SUCTION_LIMIT`), runs on gas or wet gas wrongly, or its shaft power is off.
+- A set-flow pump or compressor, a reciprocating frame, a vacuum pump or an ejector delivers the wrong capacity.
+- A steam turbine's work, a motor's rating, efficiency or available power, a prime mover's fuel or exhaust is wrong.
+- A machine wears too fast or too slowly for its fault (cavitation, running dry, low flow, wet gas, liquid at a dry
+  screw, wet exhaust).
+- A driver's next speed, trip or status word is wrong for the power its machines ask (`ShaftTrain.step`).
+- You add a machine law, a driver kind or a fault.
 
-The solver's rows and booking are in [fluid-step.md](fluid-step.md) and [fluid-interval.md](fluid-interval.md); the islands, checkpoints and buckets in [runtime-engine.md](runtime-engine.md), [runtime-saves.md](runtime-saves.md) and [runtime-presentation.md](runtime-presentation.md); the machine shapes in [equipment-designs.md](equipment-designs.md); the screens in [client-screens.md](client-screens.md); the simulator's tiles in [process-simulator.md](process-simulator.md).
+## What it does
 
-## In one paragraph
-
-Physically, a centrifugal pump or compressor makes a head that falls with flow along its curve, scaled by speed through the affinity laws; a positive-displacement machine delivers its displacement less slip up to its relief valve; a VFD motor follows manual speed or a data-linked machine demand within its torque/power envelope and draws power over its motor/drive efficiency; a steam turbine gives `ṁ η_is Δh_is`; a gearbox joins two shafts at a ratio and 98 %. In code, the laws are pure records in `science/machine` (Minecraft-free, `DeterministicMath`; the package imports only `science/math`: no network, sheet, geometry, plant or column type, `LayeringTest`'s `machine-free-of-*` rules). A constructed casing is a fluid mover whose connection carries `FlowControl.Machine` (its law at a speed share) or a set-flow `Pump`/`Compressor` (form F2e, `PositiveDisplacement`); every mover runs on its law in mode `MOVER_LAW`. Machines and drivers are joined by **shaft blocks** into **trains** (`ShaftNetwork.compile`): one driver per train, gearboxes join lines. A train's driver steps once per slice, quasi-steady, from the shaft power its machines booked (`ShaftTrain.step`); the engine sends each machine's speed share, a frame's displacement, a governor valve's target, a fan unit's power limit and a failed pump's closure into the next dispatch as `ShaftPlan`s. Drivers, fans and generators have **electric stores** in joules behind an FE port at their terminal box (`ElectricStores`, `TerminalEnergy`). Pumps keep a **health** fact that cavitation and running dry wear down (`Wear`, `MachineHealth`). With Create installed, a **Create coupling** drives a train at Create's speed up to the stress its network spares (`compat/create`). Nothing here runs on the tick loop: parts change by queued events, drivers step at the coordinator's decision points, stores and health book at commits and on the presentation cadence.
+Physically, a centrifugal pump or compressor makes a head that falls with flow along its curve, scaled by speed through
+the affinity laws; a positive-displacement machine delivers its displacement less slip up to its relief valve; a vacuum
+pump's capacity follows its suction; a steam turbine gives `ṁ η_is Δh_is`; a motor on its variable-speed drive gives
+constant torque below its base speed and constant power above it, and draws its power over its motor and drive
+efficiencies; a fuelled prime mover burns fuel on a Willans line; a gearbox joins two shafts at a ratio. Each is a pure
+record in `science/machine`, Minecraft-free and on `DeterministicMath`; the package imports only `science/math`
+(`LayeringTest`'s `machine-free-of-*` rules: no network, sheet, geometry, plant or column type). The step reads the laws
+as rows (`FlowControl.Machine` in mode `MOVER_LAW`), the shaft trains step their drivers on them once per slice, and the
+health books the wear their faults cause ([shaft-trains.md](shaft-trains.md)).
 
 ## Class map
 
-Paths are relative to `src/main/java/com/wormzjl/icheme/`.
+Paths are relative to `src/main/java/com/wormzjl/icheme/science/machine/`.
 
-| Class | Role | Read it for |
+| Class | Role | Lines |
 |---|---|---|
-| **Laws (`science/machine`, Minecraft-free)** | | |
-| [`MachineLaw`](../../../src/main/java/com/wormzjl/icheme/science/machine/MachineLaw.java) | Sealed (`CentrifugalPump`, `CentrifugalCompressor`, `VacuumPump`): `rise(flow, speed, ρ, P, k)`, `riseSlope`, `residual` (the MOVER_LAW row; a head form by default, a flow form for a vacuum pump), `fluidPower`, `shaftPower`, rated flow, head, efficiency | The contract a curve keeps |
-| [`CentrifugalPump`](../../../src/main/java/com/wormzjl/icheme/science/machine/CentrifugalPump.java) | `H = H_r (1.21 s² − 0.05 q s − 0.15 q\|q\| − 0.01 q)`; shaft power `P_r (0.35 s³ + 0.65 q s²)`; `rated(Q, H)` with `bestEfficiency(Q)` (Corripio); `ratedSpeed` (rpm, default the 2-pole speed); `npsh(speed)`; `withHeadShare` (gas) | The curve's slope bound (−0.01 H_r/Q_r) |
-| [`CentrifugalCompressor`](../../../src/main/java/com/wormzjl/icheme/science/machine/CentrifugalCompressor.java) | `H_p/H_r = s² (0.645 + 1.244 x − 0.889 x²)`, `x = q/s`; `SURGE` 0.75 (recycle holds the machine flow, the net law a straight line past it); `DEFAULT_EFFICIENCY` 0.78; `ratio`, `pressureRise`, `polytropicHead`, `sigma`; `wetEfficiency` | Head to pressure ratio (PTC 10) |
-| [`VacuumPump`](../../../src/main/java/com/wormzjl/icheme/science/machine/VacuumPump.java) | Batch 2026-11-10-vacuum-pump: a displacement row (form F2e) whose capacity follows the suction, `S = s·S_n·φ(P_s)`. Liquid ring: `φ = (1 − P_v/P_s)^n`, `n` 2 for one stage, 1 for two, `P_v` 3169.9 Pa (the internal 25 °C ring, V2 B); shaft `friction·s³ + P_s·Q·ln(P_atm/P_s)/0.45`, no heat to the gas. Dry screw: `φ = 1 − 1 Pa/P_s`, shaft `19 W per m³/h·(0.6 s² + 0.4 s (P/P_atm)^0.3)`, 0.6 of the adiabatic rise booked as heat (V9). Relief rise to 130 kPa; `maximumShaftPower` scans 400 suctions for `Motor.ratingFor`. Liquid at a dry screw wears it (`MachineHealth`, LIQUID status) and plays the cavitation layer (`liquidNoise`). The catalogue: `Model` (name, m³/h, rpm, drawn width), `RINGS` (150 to 5000 m³/h), `SCREWS` (DS-100 to DS-2500), `model(models, number)`, `of(model, dryScrew, stages)` (the geometry's `VacuumPumpDesign` draws them) | Vacuum pumps |
-| [`EjectorLaw`](../../../src/main/java/com/wormzjl/icheme/science/machine/EjectorLaw.java), [`SteamEjector`](../../../src/main/java/com/wormzjl/icheme/science/machine/SteamEjector.java) | The vacuum set's steam law S1 (`K` 1.6, `asAir`, `motiveFactor`), which the sheet's `EjectorUnit` and the world's `Ejectors` read; the world's set: `speed(P)` (`SPEED` 60 m/s from `SPEED_EDGE` 0.05 bara, `SPEED_EXPONENT` 0.25 below; the sheet's `Limit.VACUUM_SPEED` row reads these), `RATED_MOTIVE` 10 bar and `RATED_DISCHARGE` 120 kPa (`EjectorUnit`'s defaults read them), `capacity`, `maximumDischarge` | Ejector steam and capacity |
-| [`PositiveDisplacement`](../../../src/main/java/com/wormzjl/icheme/science/machine/PositiveDisplacement.java) | Form F2e: slip line `u = 1 − SLIP v` (`SLIP` 0.004), relief line `u = m (1 − v) + δ` (`RELIEF_SLOPE` 10), smooth minimum `ROUNDING` 0.02; `flow`, `rise`, `riseSlope`, `residual` | Set-flow pumps and compressors, the reciprocating frame |
-| [`Npsh`](../../../src/main/java/com/wormzjl/icheme/science/machine/Npsh.java) | `NPSH3 = NPSH3_r (0.4 s² + 0.6 q²)`; `SUCTION_SPECIFIC_SPEED` 200; `BREAKDOWN` 0.85 (the floor is `p_v + 0.85 ρ g NPSH3`, `breakdownPressure`); `DUTY_NPSH3` 3.3 m, `dutySpeed`, `forDuty` (an in-line mover's design, D21) | The cavitation floor |
-| [`GasEntrainment`](../../../src/main/java/com/wormzjl/icheme/science/machine/GasEntrainment.java) | Turpin's onset `α_T` from suction pressure; head share `M = 1/(1 + (α/1.6 α_T)^4)`; `churn` (the gas sound's loudness, `CHURN_PEAK` 0.568); the clean zone `CLEAN_ONSETS` 0.5 (batch 2026-11-11-aqueous-solvents, `e3238449d`): below half the onset a suction's vapour does no harm (no wear, status word, sound or cavitation count; `MachineHealth.GAS_RATIO`), and `cleanShare(p)` is the share the suction limit's zone edge and the sheet's pump sizing read | Gas in a centrifugal pump |
-| [`SteamTurbine`](../../../src/main/java/com/wormzjl/icheme/science/machine/SteamTurbine.java) | `isentropicDrop` from the inlet's real `P/ρ`; `work = ṁ η_is Δh_is`; `typicalEfficiency` (0.45 single stage to 0.76 multistage, log blend 0.3 to 3 MW) | Turbine power |
-| [`Motor`](../../../src/main/java/com/wormzjl/icheme/science/machine/Motor.java) | IEC ratings 0.75 kW to 20 MW (`standardRating`, `ratingFor` with `SPARE` 1.2), `ratedSpeed(poles)`, IE3 `efficiency` (2, 4, 6 or 8 poles; 12 poles read the 8-pole row, motors and generators alike), `electricPower` (VSD `DRIVE_EFFICIENCY` 0.97), `LOWEST_SPEED` 0.1 | A motor's draw and a proposed rating |
-| [`SpeedControl`](../../../src/main/java/com/wormzjl/icheme/science/machine/SpeedControl.java) | Once per slice, never in a Newton: `regulate` (secant or affinity guess, `LARGEST_STEP` 0.2), `powerLimited` and `balance` (`s (available/demand)^(1/6)`; `balance` uncapped for the governor, the speed held without a load) | Why a speed settles in 2 to 4 slices |
-| [`ShaftNetwork`](../../../src/main/java/com/wormzjl/icheme/science/machine/ShaftNetwork.java) | `Kind` SHAFT, MOTOR, GENERATOR, GEARBOX, STEAM_TURBINE, CASING, CREATIVE_MOTOR, CREATE_COUPLING; `Part`, `End`, `Cell`; `compile(parts)` → `Train` (key, driver, `Driven` ratio and efficiency, `Fault` NONE/NO_DRIVER/TWO_DRIVERS/GEAR_LOOP, shaft speed shares, ratios, `Gear`s: each gearbox's input efficiency and the members behind it); `gearLimit(train, rating, power)`: the least over the gearboxes rated above 0 of `R_g D / T_g` (`D = Σ P_m/η_m`, `T_g = Σ_behind P_m η_g/η_m`, the power at its input), +∞ for none; `GEAR_EFFICIENCY` 0.98, `MAXIMUM_RATIO` 20, `CREATE_RATIO` 64 | How parts join |
-| [`ShaftTrain`](../../../src/main/java/com/wormzjl/icheme/science/machine/ShaftTrain.java) | `Drive` VARIABLE_MOTOR (every motor, `ShaftUnit.trainDrive`), TURBINE (governed), CREATIVE, CREATE, FUEL (never saved); `Mode` SPEED, REGULATE_FLOW, REGULATE_PRESSURE; `Trip` NONE, NO_POWER (not latched, never saved; the only trip a step sets), OVERLOAD, OVERSPEED (saved by name, latched: a unit saved tripped shows its trip and stands until its reset; no step sets them); `Driver`, `Measure` (with `gearLimit`, +∞ for none), `step` → `Step` (speed, trip, status, governor feed-forward, electric draw): the drive's own step, then its gearboxes' limit (`GEAR LIMITED`); `CREATIVE_SPEED` 2950 rpm, `CREATIVE_LIMIT` 1 MW, `SPEED_DEADBAND` 1e-3 | A driver's next speed and status word |
-| [`ElectricStore`](../../../src/main/java/com/wormzjl/icheme/science/machine/ElectricStore.java) | `Facts(joules, metered)` (`EMPTY`, `UNMETERED`); `BUFFER_SLICES` 2 slices (`SLICE_TICKS` 400) of rated draw, `RATE` 2× rated per tick, restart at `RESTART_SLICES` 1; a motor `MOTOR_BUFFER_PERIODS` 2 and `MOTOR_RESTART_PERIODS` 1 (`PERIOD_TICKS` 100), each given its window's process seconds (`SimulationTime.seconds(SLICE_TICKS)`, `seconds(PERIOD_TICKS)`, `tickSeconds()`: `ElectricStores` reads them, so the machine package reads no network type); `draw`, `accepted`, `generatorLoad`, `onSpeed` (`SPEED_WINDOW` 5 %), `motorDraw`, `fanEfficiency` (`FAN_POLES` 4) | A store's arithmetic |
-| [`Wear`](../../../src/main/java/com/wormzjl/icheme/science/machine/Wear.java) | The fault table and the rate rule: `Fault` (CAVITATION, DRY, LOW_FLOW, WET_GAS, LIQUID, WET_EXHAUST), each with its `FaultClass` (EROSION spends the erosion life `cavitationHours`, SEIZURE the seizure life `dryMinutes`) and an `intensity(q)`, 0 to 1, from its driving quantity: Gülich's `intensity(σ)` (peak at σ 2.06, none from `INCEPTION` 4), DRY 1 while dry, LIQUID `VacuumPump.liquidIntensity`, LOW_FLOW `lowFlow(Q/(Q_r s))` = `((0.3 − share)/0.3)²` below 30 %, WET_GAS `wetGas(w)` = `(w − 0.005)/0.05` of a compressor suction's condensed mass share (erosion; 16 h at 3 %, 8 h from 5.5 %), WET_EXHAUST `wetExhaust(w)` = `(w − 0.01)/0.05` of a turbine's own exhaust on the solve's work law, which reads about a third of the steam tables' moisture (erosion; 16 h at 3.5 %, 8 h from 6 %: saturated inlet steam). `rate(erosion, seizure, Settings)`: the largest intensity of each class, the two classes added; `rate(σ, dry, Settings)` the pump form on the same bits; lives in process time `CAVITATION_PROCESS_HOURS` 8, `DRY_PROCESS_MINUTES` 40; `Settings` (config `machines.wear.*`) | How fast a machine wears |
-| [`CreateCoupling`](../../../src/main/java/com/wormzjl/icheme/science/machine/CreateCoupling.java) | `STRESS_PER_FE` 34.13, `wattsPerStress` (1.465 W at the defaults), `impact`, deadbands (`moved`, `impactMoved`), `SPARE_SHARE`, `DESIGN_SPEED` 256 rpm | Create stress to watts |
-| **Solver side (`science/fluid/network`)** | | |
-| `FlowControl.Machine`, `Pump`, `Compressor`, `Turbine` | The movers' laws as rows; the turbine passes on its own resistance (`VALVE_OPEN`) and takes `shaftPower` out as a `SHAFT` boundary transfer ([fluid-laws.md](fluid-laws.md)) | |
-| [`ShaftPlan`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/ShaftPlan.java) | A slice input keyed by device identity: `Kind` SPEED (share of rated), DISPLACEMENT (m³/s), GOVERNOR (kg/s), FANS (0 or 1), FAILED (0 closes, 1 reopens an in-line pump); `apply(graph, plans)`, `planned` | What the trains change in a dispatch |
-| **Runtime (`runtime/fluid`)** | | |
-| [`ShaftTrains`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/ShaftTrains.java) | The world's trains, `IslandCoordinator.Shafts`: `plans` (at dispatch, reads), `booked` (at commit and replay, records), `decide` (one driver step per train per tick for the trains that booked; `shaftsMoved` wakes the driven islands); `Event` Put, Remove, Configure, Reset, Governor, CreateInput (at most `MAXIMUM_EVENTS` 65536), applied at the tick drain; `STEAM_K` 1.3. `plans` fills one map per dispatch in a fixed order (fans, burners, prime movers, flares, shares and governors, then health); a train's `Run` holds power, output and duty as arrays aligned with `train.driven()`; `Duty` solves each speed share on the step's first read; `publish` after `decide` or `held` walks only the stepped trains' parts. The units are `WorldTopologyLedger.shafts()`, a read-only live view, with a cell index (`shaftAt`, used by `at` and the duplicate-cell check). A new in-line mover takes a metered, empty store and stands closed with NO POWER until it receives FE (`ElectricStores.plans`; `machinesNeedPower` false runs it free) | The engine loop of a train |
-| [`ShaftUnit`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/ShaftUnit.java) | A part as saved (facts schema 10): id, kind, position, axis, `End`s, fluid device, rated power, design speed, poles, drive, `Settings(running, mode, setPoint, powerLimit, ratio)`, trip; `State(speed, previousSpeed, previousMeasured)` in the topology state; `held` (registry first, W5c C1): engine state, saved in the topology state's held list, never a fact | A train's facts and state |
-| [`ElectricStores`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/ElectricStores.java) | One store per powered unit (motor, generator, air cooler side, induced tower basin): `receive`/`extract` (FE now, nothing wakes), `draw`/`give` (at a train's step), `booked` (fans at commit), cadence every `CADENCE` 100 ticks (rest booking, restart, facts to the ledger); `fanDraw`, `towerDraw`; `Settings(joulesPerFE, needPower)` | Why a unit says NO POWER |
-| [`MachineHealth`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/MachineHealth.java) | Health per machine device (facts schema 12, only below 1), one class for every machine with a fault: `faults(control)` (a centrifugal pump CAVITATION, DRY, LOW_FLOW; another liquid mover CAVITATION, DRY; a dry screw LIQUID; a centrifugal compressor, casing or in-line, WET_GAS; a steam turbine, a `FlowControl.Turbine`, WET_EXHAUST; `worn`, `pump(registration)` the cadence's keep test), `booked` (at commit and replay, each fault's intensity at the committed slice: `PipeObservation.npshRatio`, `dry`, the screw's liquid share, for LOW_FLOW the committed endpoint flow over the suction node's density against the rated flow at the speed share, for WET_GAS `PipeObservation.condensedShare` (the share the solve's wet efficiency read, NaN on other rows), for WET_EXHAUST the condensed mass share of the turbine's own exhaust, the same row field, which the solve fills by one PH equilibrium of the stream it draws at the exhaust pressure and at its inlet enthalpy less its shaft work (`PassiveStepSolver.exhaustMoisture`; what the exhaust node holds does not enter; no read where the equilibrium does not answer), read while steam passes forward; by `Wear.rate`), `cadence`, `plans` (FAILED), `queue`/`apply` (a repair); each device's standing fault and its intensity (state, never saved); `status` words `FAILED`, `LIQUID`, `LOW FLOW`, `CAVITATION`, `GAS`, `WET GAS`, `WET EXHAUST` (raw words, no lang key); `GAS_RATIO` 0.5 | A machine's wear and repair |
-| [`MachineView`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/MachineView.java), [`MachinePresentation`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/MachinePresentation.java) | One part's page view (status, speed, shaft power, electric power and FE/t, settings, trip, rating, store share and seconds left, governor valve, gearbox ratio, turbine steam, `Coupling`); sessions: replay on open, the buckets after, one unanswered edit per session | What a machine page receives |
-| **World and wire** | | |
-| `world/level/block/ShaftBlock`, `ShaftParts`, `ShaftCommand`, `CreativeMotorBlock` | The `shaft` block (drawn size 2 to 8 px from the train's torque, `ProcessUnit.shaftPixels`; before its train draws it `ProcessUnit.SHAFT_DEFAULT_SIZE` 4, which `DEFAULT_SIZE` and `ShaftTrains` read; no block entity); the queued part events; `/icheme shaft` (operators: list, settings, start, stop, reset, ratio); the `creative_motor` block | Placing and removing parts |
-| `world/level/block/entity/TerminalEnergy` | The FE capability on a structure's terminal cell, every face; consumers receive, a generator extracts | The FE port |
-| `world/item/RepairKitItem` | `repair_kit`: queues `MachineHealth.Repair` on a mover casing cell, a steam turbine cell or an in-line device; consumed only when accepted | Repairs |
-| [`network/MachineNetwork`](../../../src/main/java/com/wormzjl/icheme/network/MachineNetwork.java) | On the mod's protocol `NetworkProtocol.VERSION` (was `machine-4`): `machine_state`, `machine_edit` (checked at receipt, queued as a shaft event), `machine_open_driver` (a casing's or turbine's page opens its driver's), `machine_datasheet`; `world/inventory/MachineMenu` | The page's wire |
-| **Create (`compat/create`, loaded only with Create)** | | |
-| `CreateCompat`, `CreateCouplingBlock`, `CreateCouplingBlockEntity`, `CreateCouplingRenderer`, `CreateCompatClient` | The only package that names a Create, Ponder, Flywheel or Catnip type; `IChemE` calls `CreateCompat.register` only when `create` is loaded. The coupling is a `KineticBlockEntity` stress consumer: Create's speed and spare stress reach the engine as `CreateInput` events; the engine's impact comes back and is cut to the spare when it lands; it saves nothing of its own | The Create boundary |
+| [`MachineLaw`](../../../src/main/java/com/wormzjl/icheme/science/machine/MachineLaw.java) | Sealed (`CentrifugalPump`, `CentrifugalCompressor`, `VacuumPump`): `rise(flow, speed, ρ, P, k)`, `riseSlope`, `residual` (the `MOVER_LAW` row; a head form by default, a flow form for a vacuum pump), `fluidPower`, `shaftPower`, rated flow, head, efficiency | 39 |
+| [`CentrifugalPump`](../../../src/main/java/com/wormzjl/icheme/science/machine/CentrifugalPump.java) | The pump's curve and shaft power; `rated(Q, H)` with `bestEfficiency(Q)` (Corripio); `ratedSpeed`; `npsh(speed)`; `withHeadShare` (gas) | 118 |
+| [`CentrifugalCompressor`](../../../src/main/java/com/wormzjl/icheme/science/machine/CentrifugalCompressor.java) | The polytropic head curve, `SURGE` (recycle below it), `DEFAULT_EFFICIENCY`; `ratio`, `pressureRise`, `polytropicHead`, `sigma`; `wetEfficiency` | 144 |
+| [`PositiveDisplacement`](../../../src/main/java/com/wormzjl/icheme/science/machine/PositiveDisplacement.java) | Form F2e: slip line and relief line joined by a smooth minimum (`SLIP`, `RELIEF_SLOPE`, `ROUNDING`); `flow`, `rise`, `riseSlope`, `residual` | 88 |
+| [`VacuumPump`](../../../src/main/java/com/wormzjl/icheme/science/machine/VacuumPump.java) | Liquid ring and dry screw: capacity by the suction, shaft power, heat to the gas; `maximumShaftPower` (for `Motor.ratingFor`); `liquidIntensity`, `liquidNoise`; the catalogue `Model`, `RINGS`, `SCREWS`, `model(models, number)`, `of(model, dryScrew, stages)` | 215 |
+| [`EjectorLaw`](../../../src/main/java/com/wormzjl/icheme/science/machine/EjectorLaw.java), [`SteamEjector`](../../../src/main/java/com/wormzjl/icheme/science/machine/SteamEjector.java) | The vacuum set's steam law (`K`, `asAir`, `motiveFactor`), read by the sheet's `EjectorUnit` and the world's `Ejectors`; the world's set: `speed(P)` (`SPEED`, `SPEED_EDGE`, `SPEED_EXPONENT`; the sheet's `Limit.VACUUM_SPEED` reads them), `RATED_MOTIVE`, `RATED_DISCHARGE`, `capacity`, `maximumDischarge` | 75, 75 |
+| [`Npsh`](../../../src/main/java/com/wormzjl/icheme/science/machine/Npsh.java) | NPSH3 by flow and speed; `SUCTION_SPECIFIC_SPEED`; `BREAKDOWN` (`breakdownPressure`); `DUTY_NPSH3`, `dutySpeed`, `forDuty` (an in-line mover's design) | 82 |
+| [`GasEntrainment`](../../../src/main/java/com/wormzjl/icheme/science/machine/GasEntrainment.java) | Turpin's onset `α_T` from suction pressure; the head share; `churn` (`CHURN_PEAK`); the clean zone `CLEAN_ONSETS` and `cleanShare(p)` | 68 |
+| [`SteamTurbine`](../../../src/main/java/com/wormzjl/icheme/science/machine/SteamTurbine.java) | `isentropicDrop` from the inlet's real `P/ρ`; `work`; `typicalEfficiency` (single stage to multistage, a log blend by power) | 56 |
+| [`Motor`](../../../src/main/java/com/wormzjl/icheme/science/machine/Motor.java) | IEC ratings (`standardRating`, `ratingFor` with `SPARE`), `ratedSpeed(poles)`, IE3 `efficiency`, `electricPower` (`DRIVE_EFFICIENCY`), `availablePower(ratedPower, baseRpm, rpm)`, `MAXIMUM_RPM`, `LOWEST_SPEED`; generator ratings | 119 |
+| [`InlineMachines`](../../../src/main/java/com/wormzjl/icheme/science/machine/InlineMachines.java) | An in-line pump's or compressor's FE demand (`electricPower`), line-size design values (`inletFlow`, `law`), `SET_FLOW_PUMP_EFFICIENCY` | 47 |
+| [`PrimeMover`](../../../src/main/java/com/wormzjl/icheme/science/machine/PrimeMover.java) | Combustion engines and gas turbines: `MODELS`; fuel on a Willans line, exhaust (`EXHAUST_CP` from `AIR`), an engine's radiator fans (`FAN_PER_COOLING`), `LOSS`; `supplyShare` under the required fuel pressure | 214 |
+| [`SpeedControl`](../../../src/main/java/com/wormzjl/icheme/science/machine/SpeedControl.java) | Once per slice, never in a Newton: `regulate` (secant or affinity guess, `LARGEST_STEP`), `powerLimited`, `balance` | 79 |
+| [`ShaftNetwork`](../../../src/main/java/com/wormzjl/icheme/science/machine/ShaftNetwork.java) | `Kind` (SHAFT, MOTOR, GENERATOR, GEARBOX, STEAM_TURBINE, CASING, CREATIVE_MOTOR, CREATE_COUPLING, COMBUSTION_ENGINE, GAS_TURBINE; `driver()`, `primeMover()`); `Part`, `End`, `Cell`; `compile(parts)` → `Train` (key, driver, `Driven` ratio and efficiency, `Fault` NONE, NO_DRIVER, TWO_DRIVERS, GEAR_LOOP, speed shares, ratios, `Gear`s); `gearLimit(train, rating, power)`; `GEAR_EFFICIENCY`, `MAXIMUM_RATIO`, `CREATE_RATIO` | 360 |
+| [`ShaftTrain`](../../../src/main/java/com/wormzjl/icheme/science/machine/ShaftTrain.java) | `Drive` VARIABLE_MOTOR, TURBINE, CREATIVE, CREATE, FUEL (never saved); `Mode` SPEED, REGULATE_FLOW, REGULATE_PRESSURE; `Trip` NONE, OVERLOAD, OVERSPEED, NO_POWER (`latched`); `Driver`, `Measure` (with `gearLimit`), `step` → `Step` (speed, trip, status, governor feed-forward, electric draw); `CREATIVE_SPEED`, `CREATIVE_LIMIT`, `SPEED_DEADBAND` | 248 |
+| [`ElectricStore`](../../../src/main/java/com/wormzjl/icheme/science/machine/ElectricStore.java) | A store's arithmetic: `Facts(joules, metered)` (`EMPTY`, `UNMETERED`); windows `SLICE_TICKS`, `PERIOD_TICKS` with `BUFFER_SLICES`, `RESTART_SLICES`, `MOTOR_BUFFER_PERIODS`, `MOTOR_RESTART_PERIODS`, `RATE`; `capacity`, `motorCapacity`, `perTick`, `restart`, `motorRestart` (each given its window's process seconds); `draw`, `accepted`, `generatorLoad`, `onSpeed` (`SPEED_WINDOW`), `motorDraw`, `fanEfficiency` (`FAN_POLES`) | 139 |
+| [`Wear`](../../../src/main/java/com/wormzjl/icheme/science/machine/Wear.java) | The fault table and the rate rule: `Fault` CAVITATION, DRY, LOW_FLOW, WET_GAS, LIQUID, WET_EXHAUST, each with its `FaultClass` (EROSION, SEIZURE) and `intensity(q)`; `INCEPTION`, `lowFlow`, `wetGas`, `wetExhaust`; `rate(erosion, seizure, Settings)`, `rate(σ, dry, Settings)`; `CAVITATION_PROCESS_HOURS`, `DRY_PROCESS_MINUTES`; `Settings` (config `machines.wear.*`) | 162 |
+| [`CreateCoupling`](../../../src/main/java/com/wormzjl/icheme/science/machine/CreateCoupling.java) | Create stress to watts: `STRESS_PER_FE`, `wattsPerStress`, `impact`, deadbands (`moved`, `impactMoved`), `SPARE_SHARE`, `DESIGN_SPEED` | 60 |
 
 ## Main flow
 
-```mermaid
-flowchart TD
-  P[Place shaft / machine / creative motor / coupling] --> E[ShaftParts: queued ShaftTrains.Event]
-  E --> D[Tick drain: ShaftTrains.apply, ShaftNetwork.compile]
-  D --> DIS[Island dispatch: ShaftTrains.plans -> ShaftPlan.apply on the graph]
-  DIS --> W[Worker: PassiveStepSolver on MOVER_LAW rows]
-  W --> C[Commit / replay: ShaftTrains.booked, ElectricStores.booked, MachineHealth.booked]
-  C --> DEC[Decision point: ShaftTrains.decide -> ShaftTrain.step per train]
-  DEC -->|speed past deadband, trip, start, reset| WAKE[IslandCoordinator.shaftsMoved: driven islands wake]
-  DEC --> ST[ElectricStores.draw / give; MachinePresentation on the buckets]
-  CAD[Presentation cadence] --> RB[ElectricStores.cadence, MachineHealth.cadence: rest booking, restart, failure, facts to the ledger]
-```
+The laws are called, never call:
 
-1. A placed structure with shaft ends, a shaft block, a creative motor or a Create coupling queues a `Put` (`ShaftParts`); a removal a `Remove`. They apply at the tick drain, and only then do trains recompile. A train is state; its key is its lowest part identity.
-2. At an island's dispatch, `ShaftTrains.plans` gives each driven machine its speed share (from the driver's speed and the gear ratios), a reciprocating frame its displacement, a governor valve its mass target, a fan unit its limit and a failed machine its closure. `ShaftPlan.apply` writes them into the graph; a connection that differs from the dispatched one only by its plan is the same control (`ShaftPlan.planned`), and a train whose speed moves wakes its islands through `shaftsMoved` (step 4).
-3. The solve runs every mover on its law ([fluid-laws.md](fluid-laws.md)). At the commit, `booked` records each machine's shaft power and a turbine's `SHAFT` transfer; fan units book their draw; pumps book their wear from the slice's suction read.
-4. At the coordinator's decision points, `decide` steps each train that booked: demand is the driven machines' booked shaft power over their gears; `ShaftTrain.step` gives the next speed, trip and status. A motor draws from its store (`ElectricStores.draw`; an empty store gives `NO_POWER` and steps again stopped), a generator gives into its own (`give`, within `SPEED_WINDOW` of its rated speed). A Create coupling's step sets the stress impact sent back to Create.
-5. On the presentation cadence a resting unit books its last power, a stopped unit whose store holds one slice of rated draw restarts, a machine at 0 health fails, and the stores' and health facts go to the ledger. Pages and the Drive, Power, Suction and Health groups read what was decided; no read solves.
+1. The step states a mover's row from its law (`FlowControl.Machine` → `MachineLaw.residual`, `rise`, `riseSlope`; a
+   set-flow mover `PositiveDisplacement`); once per solve it reads the suction's vapour share into
+   `GasEntrainment.headShare` and the liquid share into `CentrifugalCompressor.wetEfficiency`; the suction floor is
+   `Npsh.breakdownPressure` ([fluid-laws.md](fluid-laws.md)).
+2. At a commit the shaft trains book each machine's `shaftPower`; at a decision point `ShaftTrain.step` turns the booked
+   demand into the next speed, trip and status (`SpeedControl.regulate`, `powerLimited`, `balance`; `ShaftNetwork.gearLimit`);
+   `ElectricStore.draw` and `generatorLoad` settle the electricity ([shaft-trains.md](shaft-trains.md)).
+3. At a commit the health books `Wear.rate` over the machine's faults' intensities.
 
-<details><summary>Contracts: drivers, governors, regulation</summary>
+## Contracts
 
-- **Motor** (every one on its variable-speed drive, whatever its duty's saved drive) and **creative motor**: the set speed (share of design, or rpm for the creative motor), or regulating the train's first machine's flow (`REGULATE_FLOW`, exponent 1) or discharge pressure (`REGULATE_PRESSURE`, exponent 2) through `SpeedControl.regulate`; over the power limit they slow by `powerLimited` (`CURRENT LIMITED`, `POWER LIMITED`): a drive limits its current and never trips on a load.
-- **Steam turbine:** an internal admission governor follows requested speed and available shaft demand, limiting admitted work rather than letting higher available steam accelerate the train, so its speed never passes its set speed and it has no overspeed trip. Delivered steam still bounds its work. An external speed-sensor valve remains supported for a plant steam supply; it is not required to provide the internal limiter. With no delivered steam the train remains at zero speed. A failed turbine (health 0) has its admission shut by its `FAILED 0` plan (mass target 0, as a stop); after a repair its train's `GOVERNOR` plan opens it again.
-- **Trips**: a step sets only `NO_POWER` (a motor on an empty store, not latched). `OVERLOAD` and `OVERSPEED` remain as saved names: a unit saved with one shows `TRIPPED: …`, stands, and runs again after the player's reset (`ShaftTrains.Reset`).
-- **Gearbox limit** (protective, no wear): a gearbox passes at most its rating (`ShaftUnit.ratedPower`, 1000 × its duty's kW, at its input). `ShaftTrains.step` passes `ShaftNetwork.gearLimit` in the `Measure`; where the drive's next speed would ask more (its demand there by the cube law), `ShaftTrain.step` takes the damped `powerLimited` step to the limit instead and says `GEAR LIMITED`, and a governor feeds forward only the power the gearbox passes at that speed. A gearbox rated 0 (none from a shape; a hand-built unit) limits nothing. A Create coupling's published capacity is capped by the gear limit too.
-- **Create coupling** (D40, form A): set speed = Create's |rpm|, limit = the power the network spares (`wattsPerStress` × spare stress × `SPARE_SHARE`); Create at rest gives `NO ROTATION`; the coupling's design speed is `DESIGN_SPEED` 256 rpm, which an auto gearbox behind it matches, up to `CREATE_RATIO` 64.
-- **Faults**: two drivers, no driver, or a loop of gears stand the train with its fault word (`NO DRIVER`, `TWO DRIVERS`, `GEAR LOOP`); a lone shaft run makes no train (its page reads `LOOSE`).
-- **Status words** go on the page and the casing's Drive group: `RUNNING`, `STOPPED`, `CURRENT LIMITED`, `POWER LIMITED`, `STEAM LIMITED`, `GEAR LIMITED`, `NO ROTATION`, `TRIPPED: …`.
-</details>
+**Pumps and compressors.**
 
-<details><summary>Contracts: electricity (W5, D30)</summary>
+- Centrifugal pump: `H = H_r (1.21 s² − 0.05 q s − 0.15 q|q| − 0.01 q)`, shaft power `P_r (0.35 s³ + 0.65 q s²)`, with
+  `s` the speed share and `q` the flow share; the curve's slope stays below −0.01 H_r/Q_r. A rated speed defaults to the
+  2-pole speed.
+- Centrifugal compressor: `H_p/H_r = s² (0.645 + 1.244 x − 0.889 x²)`, `x = q/s`; below `SURGE` a recycle holds the
+  machine's flow and the net law is a straight line; head to pressure ratio after PTC 10.
+- Positive displacement (set-flow pumps and compressors, the reciprocating frame): slip line `u = 1 − SLIP v`, relief
+  line `u = RELIEF_SLOPE (1 − v) + δ`, joined by a smooth minimum of width `ROUNDING`. A set-flow pump's set flow is its
+  displacement and its "maximum added pressure" the relief rise on its supply's density; a flow valve above its set flow
+  cannot regulate (`ControlConstraints.moverBounds`).
+- NPSH3 `= NPSH3_r (0.4 s² + 0.6 q²)`; the suction floor is `p_v + BREAKDOWN ρ g NPSH3`; an in-line pump's NPSH3 is
+  its duty design's (`Npsh.forDuty`).
+- No mover refuses gas or liquid: a centrifugal pump's head is `M = 1/(1 + (α/1.6 α_T)^4)` of its curve, with `α` the
+  suction's vapour share and `α_T` Turpin's onset; below `CLEAN_ONSETS` of the onset the vapour does no harm (no wear,
+  status word, sound or cavitation count). A centrifugal compressor's efficiency reads `wetEfficiency` of its liquid
+  share; a set-flow pump delivers `(1 − α)` of its displacement as liquid, a frame the displacement less the liquid's
+  volume. Only a dry suction and, at a compressor, solids above the trace refuse.
 
-- 1 FE = `energy.joulesPerFE` J (default 2.5); stores keep joules, so a config change keeps the energy they hold. `energy.machinesNeedPower` false books nothing and stops nothing.
-- Powered units: a motor or generator (shaft unit), an air cooler's process side (its `HeatUnit.fanCount` fans, one 4-pole motor each, facts schema 11), an induced-draft tower's basin (one store for every cell's fan). Terminal cells: `ProcessUnit.terminal` (a motor's terminal box; the air cooler's and the tower's basin rim, `CoolingTowerDesign`).
-- A non-motor unit from before schema 11 retains its legacy `UNMETERED` behaviour. Motors require live FE supply under the current motor-specific policy, while all saved energy remains preserved.
-- An empty store stops a motor (`TRIPPED: NO POWER`, not latched) and holds a fan unit's fans at `fanLimit` 0 (`AirCooled.withFanLimit`, `CoolingTower.withFanLimit`): the louvers stay open and the air falls to natural draught; the controller reports what it cannot reach. The fan limit is a dispatch input, never a fact.
-- A generator's load is the room its store has left (`generatorLoad`), so a full store sheds load.
-</details>
+**Vacuum pumps and ejectors.** `S = s·S_n·φ(P_s)`. Liquid ring: `φ = (1 − P_v/P_s)^n` (`n` 2 for one stage, 1 for two;
+`P_v` = `SEAL_VAPOUR_PRESSURE`, the ring's at `SEAL_TEMPERATURE`); shaft `friction·s³ + P_s·Q·ln(P_atm/P_s)/η_iso`
+(`ISOTHERMAL_EFFICIENCY`), no heat to the gas. Dry screw: `φ = 1 − SCREW_ULTIMATE/P_s`, shaft `SCREW_POWER` per m³/h ·
+`(0.6 s² + 0.4 s (P/P_atm)^0.3)`, `SCREW_HEATING` of the adiabatic rise booked as heat; liquid at a dry screw wears it.
+The relief rise is `MAXIMUM_DISCHARGE` less the suction (`reliefRise`). The ejector's steam law and the world's set
+(`SteamEjector.speed`, `capacity`, `maximumDischarge`) are shared by the sheet and the world.
 
-<details><summary>Contracts: two-phase suction, wear and repair (W10a-W10d)</summary>
+**Turbines, motors, prime movers.**
 
-- No mover refuses gas or liquid any more (request 11, D19): a centrifugal pump's head reads `GasEntrainment.headShare` of its suction's vapour share once per solve (`PassiveStepSolver.readSuctions`), a centrifugal compressor's efficiency `wetEfficiency` of its liquid share; a set-flow pump delivers `(1 − α)` of its displacement as liquid, a frame the displacement less the liquid's volume. Only a dry suction (D58) and, at a compressor, solids above the trace refuse.
-- Cavitation: a pump's suction floor is its liquid's bubble pressure plus `0.85 ρ g NPSH3(Q, s)`; an in-line pump's NPSH3 is its duty design's (`Npsh.forDuty`, D21).
-- Wear (D34; one rule since M-12): `Wear.rate` over the machine's faults (`MachineHealth.faults`): cavitation from `σ = NPSHA/NPSH3` (`PipeObservation.npshRatio`) and running dry (`dry`), in their two classes; a centrifugal pump running below 30 % of its rated flow at its speed wears in the erosion class (LOW_FLOW: 8 h of process time against a closed discharge, 32 h at 15 % at the default lives; a set-flow pump and a stopped pump do not); a dry screw's suction liquid in the seizure class, its intensity the noise ramp (0 up to 1 % by volume, then `liquid / 10 %`, at most 1: 400 min of process time just above 1 %, 40 min from 10 %); a running centrifugal compressor's wet suction in the erosion class (WET_GAS: none to 0.5 % condensed by mass, 16 h at 3 %, 8 h from 5.5 %; a reciprocating frame has no fault); a steam turbine's wet exhaust in the erosion class (WET_EXHAUST: none to 1 % moisture of its own exhaust, 16 h at 3.5 %, 8 h from 6 %). Booked over the committed slice's process time (online ticks times the time factor); nothing wears from clean running. Health 0 fails the machine: a `FAILED` plan closes it (a machine at no speed, a set-flow pump switched off, a turbine's admission shut), its settings kept. `ShaftTrains.failures` merges the health plans into the trains': a health `FAILED 1` (switch a repaired pump back on) never replaces a `FAILED 0` already planned (an unpowered in-line pump's store close), a health `FAILED 0` replaces anything. A repair kit, used on any mover casing (`Kind.mover()`), a steam turbine or an in-line device's pipe block, queues `MachineHealth.Repair`; the health decides: every device with a health record (`MachineHealth.worn`: a liquid mover, a dry screw, a centrifugal compressor or a steam turbine) is repaired, another answers `NOT_A_PUMP`. A failure and a repair wake the island. `machines.wear.enabled` false books nothing and closes nothing.
-- Sound (D35, D36): `MoverState` (`mover-4`) carries the speed share, a pump's crackle and churn bytes (0 to 255) and an in-line pump's rpm; loops `pump_cavitation`, `pump_gas` over the casing loop; drivers play `motor_running`, `generator_running`, `turbine_running` (`DriverSounds`, watched by `driver_watch`/`driver_state`); pitch = rpm over the loop's authored rpm (`UnitDesign.PUMP_LOOP_RPM` 2950, `MOTOR_LOOP_RPM` 1500), within 0.5 to 2.
-- Readings (D37, D38): `FluidView.Pump` (NPSH available and required, gas share, health, a casing's `Curve`); the device screen's Suction and Health groups and the pump curve (`PumpCurve`: H(Q), NPSH3(Q), 4 × NPSH3 dashed, NPSHA); status words `FAILED` > `LIQUID` (a dry screw) > `LOW FLOW` > `CAVITATION` > `GAS` > `WET GAS` (a centrifugal compressor) > `WET EXHAUST` (a steam turbine) on the message display, for every machine that wears (`FluidWorldAuthority.withHealth`); a compressor's and a turbine's health meter shows on their page, their NPSH rows read "—". On the casing's shaft row (`ShaftTrains.view`, `worn`) `FAILED` replaces every train word, `NO DRIVER` included, and a fault word replaces only the train's own run word.
-</details>
+- Steam turbine: `work = ṁ η_is Δh_is`, the isentropic drop from the inlet's real `P/ρ`; `typicalEfficiency` blends by
+  power on a log scale.
+- Motor: IEC ratings with `SPARE` on the duty (`ratingFor`), IE3 efficiency by poles (12 poles read the 8-pole row,
+  motors and generators alike), the drive's `DRIVE_EFFICIENCY` in `electricPower`. Every motor runs on its variable-speed
+  drive: constant torque below its base speed and constant power above it (`availablePower`), at most `MAXIMUM_RPM`;
+  over its power limit it slows (`powerLimited`) and never trips on a load.
+- Prime mover: fuel heat `Q_f = Q_r (c₀ + (1 − c₀) x)` on the load share `x`; heat out as shaft work, exhaust from `AIR`
+  to the model's exhaust temperature at `EXHAUST_CP`, an engine's radiator (fans `FAN_PER_COOLING` off its own shaft) and
+  `LOSS`. Under the required supply pressure the most fuel falls as `√((P_s − P_c)/(P_req − P_c))` (`supplyShare`). An
+  engine takes liquid fuel, a gas turbine gas.
+- In-line movers: `InlineMachines.inletFlow` (a liquid's and a gas's design velocity) and `law` (a design head, an air
+  ratio) size an in-line `FlowControl.Machine` (`InlineMovers.design`, [fluid-laws.md](fluid-laws.md)).
 
-<details><summary>Formats and versions</summary>
+**Drivers** (`ShaftTrain.step`).
 
-- Fluid facts (`FluidFacts.SCHEMA` 15; 15 adds the registry's build facts, no shaft field, [runtime-saves.md](runtime-saves.md)): 10 adds the machine and turbine controls, device kind `TURBINE`, valve source `SHAFT_SPEED` and the shaft units (after the column units); 11 the electric stores (after the shaft units) and an air cooler side's fan count; 12 the pumps' health (only pumps below 1). Corpus images `src/test/resources/compat/fluid/schema-10/` to `schema-12/`. A world before 10 has no shaft units; before 11, unmetered stores for its powered units; before 12, every pump new.
-- Checkpoint state format 39 (`FluidCheckpointCodec.VERSION`): control tag 5 a machine on its curve (law, a pump's rated speed, speed, enabled, set flow and set pressure), tag 6 a steam turbine; the endpoint modes lost `PUMP_TARGET` and `PUMP_HEAD_LIMIT` and gained `MOVER_LAW`; a driver's `ShaftUnit.State` in the topology state.
-- Registry first (batch 2026-11-03-save-corruption, W5c C1): a chunk load queues its shaft parts (`WorldTopologyLedger.shaftsIn`). The re-alignment (`RegistryRealignment.shaft`) places a lost shaft block on its unit's axis at the size its train drew it (`ShaftTrains.drawnSize`), a creative motor facing its end, a Create coupling with its shaft side at its end (only with Create: `ShaftParts.couplingState`, installed by `CreateCompat`), and turns one standing another way back. A part whose cell another block holds is held (`ShaftTrains.Hold`, a queued event): it leaves its train, which splits there (option Q1), its page says HELD, and its identity joins the topology state's held list. A held structure holds its unit (`EquipmentStructure.holdShaft`). A player's placement in the cell rebuilds the part, released. `ShaftBlock`, `CreativeMotorBlock` and `CreateCouplingBlock` queue nothing while `FluidDeviceBlock.quiet()`. A world opened without Create still forgets its coupling units (`ShaftTrains.forget`; owner, 2026-11-09).
-- Accessory facts schema 4 (earlier schema 3 introduced sensor kind `SPEED`, mount `speed_pickup`, no new field); current sensor/accessory metadata has its schema-4 image.
-- Wire (no compatibility work): `machine-4`, `mover-4`, `fluid-19` (a casing's `FluidView.Drive`, a fan unit's `FluidView.Power`, a pump's `FluidView.Pump`), `equipment-21` (the constructor's `MachineDuty` and deconstruction requests).
-- Config (`icheme-common.toml`): `energy.joulesPerFE` 2.5, `energy.machinesNeedPower` true, `create.stressPerFE` 34.13, `machines.wear.enabled` true, `machines.wear.cavitationProcessHours` 8.0, `machines.wear.dryProcessMinutes` 40.0 (process time; the keys `cavitationHours` and `dryMinutes` before 2026-11-11) (`IChemE.joulesPerFE`, `machinesNeedPower`, `stressPerFE`, `wearSettings`).
-- Create is optional (`neoforge.mods.toml` `optional`); Create, Ponder, Flywheel, Registrate and KubeJS are `compileOnly` plus `optionalModRuntime`; `-PwithoutCreate` drops them from the dev, test and GameTest runtimes ([verification.md](verification.md)).
-</details>
+- A motor and the creative motor hold their set speed (a share of design, or rpm for the creative motor), or regulate
+  the train's first machine's flow (`REGULATE_FLOW`, exponent 1) or discharge pressure (`REGULATE_PRESSURE`, exponent 2)
+  through `SpeedControl.regulate`; over the power limit they slow by `powerLimited` (`CURRENT LIMITED`, `POWER LIMITED`).
+- A steam turbine's internal admission governor follows the requested speed and the shaft demand, limiting admitted work
+  so its speed never passes its set speed; it has no overspeed trip. Delivered steam bounds its work (`STEAM LIMITED`);
+  with none the train stands.
+- A fuelled prime mover (`Drive.FUEL`) is always governed on the net shaft power its fuel gave, its set speed at most its
+  rated speed, no overspeed and no trip; a lost load cuts the fuel in the same step.
+- A Create coupling (`Drive.CREATE`): set speed = Create's |rpm|, limit = `wattsPerStress` × spare stress ×
+  `SPARE_SHARE`; Create at rest gives `NO ROTATION`; its design speed is `DESIGN_SPEED`, which an auto gearbox behind it
+  matches up to `CREATE_RATIO`.
+- **Trips**: a step sets only `NO_POWER` (a motor on an empty store, not latched, cleared when the store holds a slice
+  again). `OVERLOAD` and `OVERSPEED` are latched names no step sets: a unit saved with one shows `TRIPPED: …`, stands,
+  and runs again after the player's reset.
+- **Gearbox limit** (protective, no wear): a gearbox passes at most its rating at its input. `gearLimit` is the least
+  over the gearboxes rated above 0 of `R_g D / T_g` (`D = Σ P_m/η_m`, `T_g = Σ_behind P_m η_g/η_m`), +∞ for none; where the
+  drive's next speed would ask more (by the cube law), `step` takes the damped `powerLimited` step to the limit and says
+  `GEAR LIMITED`, and a governor feeds forward only what the gearbox passes. A gearbox rated 0 limits nothing.
+- **Faults**: two drivers, no driver, or a loop of gears stand the train (`NO DRIVER`, `TWO DRIVERS`, `GEAR LOOP`).
+- Status words: `RUNNING`, `STOPPED`, `CURRENT LIMITED`, `POWER LIMITED`, `STEAM LIMITED`, `GEAR LIMITED`,
+  `NO ROTATION`, `TRIPPED: …`.
 
-<details><summary>Traps</summary>
+**Wear** (`Wear.rate`): the largest intensity in each class, the two classes added; lives in process time
+(`CAVITATION_PROCESS_HOURS` for erosion, `DRY_PROCESS_MINUTES` for seizure, config `machines.wear.*`). Nothing wears from
+clean running.
 
-- **A casing's speed is not a fact.** `FlowControl.Machine.speed` is the train's slice input; saved facts carry none; a change of speed reaches a certified island only through `IslandCoordinator.shaftsMoved`, and a connection differing only by its plan compares equal (`ShaftPlan.planned`).
-- **A set-flow pump is positive displacement now.** Its set flow is the displacement, its "maximum added pressure" the relief rise read on its supply's density (D11, A2); it is not a curve, and a flow valve above its set flow cannot regulate (`ControlConstraints.moverBounds`).
-- **The pump booking is still the ideal work** (S1): `FlowControl.Pump.power` and a `Machine` pump give `Q Δp` to the fluid; a compressor gives polytropic work over 0.78. What the driver pays is `InlineMovers.shaftPower(mover, massFlow, head, density, pressure, kappa, wetShare)`, the solve's own function at the slice's average flow, the booked head and the suction's heat capacity ratio and wet share (`PassiveStepSolver.suctionKappa`, `wetShare`): a machine its law's shaft power over the wet share; a set-flow pump its ideal work over `InlineMachines.SET_FLOW_PUMP_EFFICIENCY` 0.65; any other mover its power (a set-flow compressor's is over its efficiency already, an ejector's zero). `ShaftTrains.booked` (machines, compressors) and `ElectricStores.booked` (in-line movers) charge it; `Duty` keeps the suction's k for `requiredSpeed` and a frame's rise limit. Electricity in = work to the fluid + three stated losses the fluid does not get: a pump's hydraulic loss (curve shaft power over ideal work, η about 0.7 at a typical rated point; a set-flow pump's 1/0.65), a centrifugal compressor's recycle work below surge, and the motor's and drive's efficiency (`Motor.electricPower`, `InlineMachines.electricPower`). Test: `ShaftPowerBookingTest`.
-- **`ShaftTrain.Step.electricPower` is booked** since W5 (`ShaftTrains` → `ElectricStores.draw`), although its javadoc (reading A14) still says "shown, not booked".
-- **Nothing outside `compat/create` may name a Create type**: a pack without Create must load. `client/Outlines` replaced Catnip's outliner for that reason.
-</details>
-
-## Casing-cover nuts and Low detail
-
-Normal casing-cover nuts are raised geometry over a plain cover sprite, recessed within the existing envelope. Optional client Low detail uses textured flat nuts and capped round meshes while retaining all mechanical frames, hex shafts, published RPM and animation clocks. See [equipment-structure.md](equipment-structure.md).
-
-## Machines under the time factor
-
-- Process time runs `fluid.timeScale` times play time (`SimulationTime`, [fluid-interval.md](fluid-interval.md)); the shaft trains, prime movers and stores read the factor from the coordinator (`ShaftTrains.time()`, `IslandCoordinator.time()`).
-- FE (owner T2): one FE carries `joulesPerFE × factor` J of process energy (`ElectricStores.feJoules`), so a machine draws the same FE per tick at any factor (a 1 MW motor 20 000 FE/t at the defaults); a store still keeps joules. Draws and bookings integrate `ticks × time.tickSeconds()`.
-- Store windows as counts of cycles (W3), the same play time at any factor: `ElectricStore.SLICE_TICKS` 400, `PERIOD_TICKS` 100; `BUFFER_SLICES` 2, `RESTART_SLICES` 1, `MOTOR_BUFFER_PERIODS` 2, `MOTOR_RESTART_PERIODS` 1 (40 s, 20 s, 10 s and 5 s of process at factor 1); `capacity`, `motorCapacity`, `perTick`, `restart`, `motorRestart` take the window's process seconds under the factor (a slice's, a period's or a tick's), which `ElectricStores` reads from its `SimulationTime`. `TICK_SECONDS`, `BUFFER_SECONDS`, `SLICE_SECONDS`, `MOTOR_BUFFER_SECONDS` and `MOTOR_RESTART_SECONDS` are gone. A motor's time left on its store is in play seconds.
-- Wear (owner T3): booked over process time (`MachineHealth.book`: `time.seconds(rate × ticks)`); default lives `Wear.CAVITATION_PROCESS_HOURS` 8 and `DRY_PROCESS_MINUTES` 40 (four times the old online lives, so the same play life at the default factor 4); new config keys `machines.wear.cavitationProcessHours`, `dryProcessMinutes` (the old keys are not read). `FluidView.Pump.lifePlaySeconds` and the suction table's `life` row (minutes of play, "—" while it does not wear).
-- Fuel: `FiredHeaters`, `PrimeMovers.booked(..., time)` and the stills burn over process time; an item's heat is conserved, so a still takes `factor` times the items per play minute.
-- Tests: `TimeFactorElectricTest` (2), `ElectricStoreTest`, `WearTest`, `MachineHealthTest`, `ShaftCouplingTest`.
-
-## A running column's members
-
-- A running column holds its pumps and air-cooler fan sides, so no island commit books them. The column books them at each cycle instead ([column-operation.md](column-operation.md), "The members' power"; `MEMBER_POWER_NOTE.md` in the batch folder):
-  - `ShaftTrains.held(device, shaftPower)`: a held casing's shaft power stands for its island's booking (`run.power`, `booked`); the train steps at once, at most once a tick, its motor drawing from its own store as at any step. True when the train's driver turns with no fault and no trip; false with no train, a faulted one or a driver that stands.
-  - `ElectricStores.member(id, power, to)`: a fan side or an in-line pump draws `power` W from its last booking to `to` (`draw`), then reports `powered`. No store, or a generator's, runs free.
-  - `InlineMovers.ratedShaftPower(mover)`: a machine law's shaft power at its rated flow and full speed, another mover's `shaftPower` at its set flow and its rise limit (a set-flow pump's over 0.65, a set-flow compressor's power alone), on the design fluids: water at 1000 kg/m³, or dry air at 1 bar and 300 K with k 1.4, no wet share; `ratedDraw` is its `InlineMachines.electricPower`. A held pump books this times the cycle's share of the set feed, so a hydrocarbon reflux books about 1.4 times its real shaft power (batch README).
-  - `ColumnPower` routes a casing (`ShaftTrains.unitOf`) to its train and an in-line pump to its own store; `undriven` finds a casing whose train has no driver (`driverOf` null): Start refuses it while `energy.machinesNeedPower` is on.
-- Only under `energy.machinesNeedPower`; off, nothing books and nothing changes.
-
-## Prime movers, vacuum pumps and larger machines
-
-- [`PrimeMover`](../../../src/main/java/com/wormzjl/icheme/science/machine/PrimeMover.java) (batch 2026-11-10-prime-movers, Minecraft-free): `MODELS`, engines HS-500 to MS-20000 (0.5 to 20 MW; 1500, 750 or 500 rpm; η 0.41 to 0.48) and gas turbines IND-1 to HD-300 (1.2 to 300 MW, 3000 rpm, η 0.25 to 0.41, pressure ratio 7 to 31). Fuel heat on a Willans line `Q_f = Q_r (c₀ + (1 − c₀) x)`; heat out as shaft work, exhaust (`EXHAUST_CP` 1120 J/kg K from `AIR` 298.15 K to the model's exhaust temperature), an engine's radiator (its fans `FAN_PER_COOLING` off its own shaft) and `LOSS` 0.02. Fuel enters a void at the combustor pressure (an engine's at the atmosphere) behind a valve; under the required supply the most fuel falls as `√((P_s − P_c)/(P_req − P_c))` (`supplyShare`, owner P5 A). An engine takes liquid fuel, a gas turbine gas (P6 B).
-- `ShaftNetwork.Kind` `COMBUSTION_ENGINE`, `GAS_TURBINE`; `ShaftTrain.Drive.FUEL`: always governed on the net shaft power its fuel gave (`available`), the set speed at most the rated speed, no overspeed and no trip (owner P11); a lost load cuts the fuel in the same step.
-- [`runtime/fluid/PrimeMovers`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/PrimeMovers.java) (server thread, driven by `ShaftTrains`): the heat fired from the fuel void's inflow times its LHV (`Burners.perKilogram`); the governor's fuel target (`ShaftPlan.Kind.FUEL`, with `Burners.MARGIN`) and a gas turbine's coil gas (`ShaftPlan.Kind.EXHAUST`); a target past the valve deadband wakes the fuel island. Status words `NO FUEL`, `WRONG FUEL`, `FUEL NOT COMBUSTIBLE`, `LOW FUEL PRESSURE`, `LOW FUEL`. State only: a load starts every set unfired and it lights itself (P10 A). The control valve source `ENGINE`; the heat unit `PRIME_MOVER` with side `EXHAUST` ([heat-exchangers.md](heat-exchangers.md)).
-- `MachineView.Fuel` (fired heat, fuel flow, supply and required pressure, exhaust temperature and flow, radiator and coil heat, stack temperature) on the `machine-4` page view; `MachineColumn` shows it. The wire gained it without a protocol bump (see the batch's MERGE_PREP_REVIEW.md).
-- Generators: `MachineDuty.MAX_GENERATOR` 400 MW, 12 poles allowed; a two-pole generator above `ProcessUnit.TURBO_GENERATOR` 20 MW is drawn as a turbo-generator, its shaft at the gas turbine's height (`ProcessUnit.generatorShaft`; the motor frame `ProcessUnit.motorFrame`). Steam turbines: `MachineDuty.MAX_TURBINE` 300 MW, one unit per inlet class, drawn as tandem sections above 45 MW (`SteamTurbineDesign.sections`; the physics unchanged).
-- Vacuum pumps (batch 2026-11-10-vacuum-pump): `VacuumPump` on the `MOVER_LAW` row in its flow form (class map below); a dry screw's suction liquid wears it (`MachineHealth`, owner V6 B) and plays the cavitation layer. Steam ejector (batch 2026-11-10-steam-ejector-flow): `SteamEjector` and `FlowControl.Ejector` ([fluid-laws.md](fluid-laws.md)).
-- Sounds: `MoverSounds` and `DriverSounds` keep their watches and hand their loops to the one budget (`FxSounds`, [effects.md](effects.md)). Engine loops by family (`engine_running` authored at 1500 rpm, `engine_running_medium` at 600 rpm for sets of 750 rpm and under, `UnitDesign.mediumSpeedEngine`), `gas_turbine_running`; start and stop one-shots on a speed crossing zero. `ProcessUnit.loadShaft` (a spool and disc pack in an open guard) and an engine's `damper` turn with the shaft.
-
-## Service side, factory probes and RPM controls
-
-Constructed rotating equipment uses internal inlet/outlet P/T, flow and shaft-speed channels rather than manual sensor mounts. `EquipmentServices.serviceSide` derives the DATA side from shaft power flow, so connected driver/driven machines present it on the same service side; FE is opposite. Small pump/compressor cases fit the drive-end deck, large motor/generator enclosures are matched, and turbine sockets reuse its governor housing. Case/cover finishes follow equipment body paint.
-
-Constructor controls expose rated/design RPM and no longer offer a 2/4-pole selector. Internal/saved pole fields are not a user-facing design choice. Motors remain frequency-controlled with the 3000 rpm ceiling. The governor and accepted shaft/runtime power laws are unchanged by the interface work; instrumentation is read-only. `VisualRotation` remains the common nonlinear visual-speed law, independent of process RPM.
-
-## VFD demand, supply and shared rotation
-
-All newly constructed motors use VFD control: no pole choice in the design, maximum 3000 rpm, constant torque below saved base speed and constant power above it (`Motor.availablePower`). Legacy pole/drive facts still round-trip. Manual sets speed; Auto requires exactly one data-linked pump/compressor on the same shaft train and follows its native flow/discharge target. Motor sizing includes the existing 20% spare. Generator housing/appearance differs from motor.
-
-`ElectricStores` keeps a motor-specific 10 s rated buffer with 5 s restart threshold. A live FE source must also be available: losing its cable/source stops RPM and animation at the next engine decision even if stored joules remain. Old energy above the new capacity is retained. `PowerNetwork`/`PowerGrid` check source availability without transferring power; other store capacities remain unchanged.
-
-`InlineMachines` (`science/machine`) gives inline pump/compressor finite FE demand (`electricPower`) and line-size design values (`inletFlow`: liquid 2 m/s, gas 10 m/s; `law`: 25 m head, air ratio 1.5 at 300 K); `science/fluid/network/InlineMovers` builds the in-line `FlowControl.Machine` from them (`design`, the flow capped at `Mover.MAXIMUM_VOLUME_FLOW`) and holds the mover shaft power functions (`shaftPower`, `ratedShaftPower`, `ratedDraw`). Native Create shafts can exchange rotation bidirectionally; the legacy coupling block still works. Creative RF exposes standard FE on all six faces.
-
-`VisualRotation` maps physical RPM nonlinearly: x = |rpm|/1500, displayed turns/s = sign(rpm) × 12 / (1 + 6/[x(1+x)²]), with zero handled separately. 1500/3000 rpm display 4.8/9 turns/s, tending to 12. `RotationAnimation` preserves phase on updates/stops; pumps, motors, turbines, generators, shafts and other rotating equipment use it. Hex shaft orientation follows the connection axis/phase; stopped or newly unpowered parts publish zero speed. This visual mapping does not change mechanical power.
-
-The compact centrifugal compressor has top inlet/outlet and no coolant port, matching the owner-approved rebuild. Common guarded couplings, steel/bolt treatments and motor/generator end-face separation address model alignment and z-fighting. See [wired-control-power.md](wired-control-power.md) for control/FE ownership and [equipment-structure.md](equipment-structure.md) for layout contracts.
-
-## Change the layer that owns it
-
-| Symptom | Layer | Tests |
+| Fault | Class | Intensity |
 |---|---|---|
-| Wrong head, power, NPSH3, gas share, wear rate, turbine work, motor rating | `science/machine/*` | `CentrifugalPumpTest`, `CentrifugalCompressorTest`, `PositiveDisplacementTest`, `NpshTest`, `GasEntrainmentTest`, `SteamTurbineTest`, `MotorTest`, `WearTest`, `SpeedControlTest` |
-| Parts join wrongly, a fault, a ratio | `ShaftNetwork.compile` | `ShaftNetworkTest` |
-| A driver's speed, trip, status | `ShaftTrain.step`, `ShaftTrains.decide` | `ShaftTrainTest`, runtime `ShaftCouplingTest`, GameTest `ShaftTrainGameTests` |
-| A mover's row, cavitation, gas, turbine connection | `FlowControl`, `PassiveStepSolver` ([fluid-laws.md](fluid-laws.md)) | `MachineMoverTest`, `TwoPhaseMoverTest`, `SteamTurbineConnectionTest`, `ShaftPlanTest`, runtime `PumpCavitationTest` |
-| FE stores, NO POWER, generator | `ElectricStore`, `ElectricStores`, `TerminalEnergy` | `ElectricStoreTest`, runtime `HeatUnitPowerTest`, GameTest `ElectricGameTests` |
-| Health, failure, repair | `Wear`, `MachineHealth`, `RepairKitItem` | `WearTest` (the rate rule over the fault table, bit for bit; low flow; the dry screw's liquid; wet gas; wet exhaust), runtime `MachineHealthTest`, `MoverHealthStatusTest`, `VacuumPumpTest`, GameTest `PumpHealthGameTests` |
-| What a driver pays for its machines | `InlineMovers.shaftPower`, `ShaftTrains.booked`, `ElectricStores.booked` | `ShaftPowerBookingTest` |
-| Create coupling | `CreateCoupling`, `compat/create/*` | `CreateCouplingTest`, GameTest `CreateCouplingGameTests` (with and without Create) |
-| Saved shaft units, stores, health | `FluidFacts`, `WorldTopologyLedger` | `FluidFactsCompatTest`, `FluidCheckpointCodecTest` |
-| Page and group data | `MachineView`, `MachinePresentation`, `MachineNetwork`, `client/gui/common/MachineColumn`, `PumpCurve` | `MachineColumnTest`, `PumpCurveTest`, `DeviceColumnTest`, `FluidPacketCodecTest` |
+| CAVITATION | erosion | Gülich's `intensity(σ)`, `σ = NPSHA/NPSH3`: a peak at σ 2.06, none from `INCEPTION` |
+| DRY | seizure | 1 while dry |
+| LOW_FLOW | erosion | `lowFlow(share) = ((0.3 − share)/0.3)²` below 30 % of the rated flow at the speed (a centrifugal pump only) |
+| WET_GAS | erosion | `wetGas(w) = (w − 0.005)/0.05` of a compressor suction's condensed mass share |
+| LIQUID | seizure | `VacuumPump.liquidIntensity`: none up to 1 % liquid by volume, then `liquid / 10 %`, at most 1 (a dry screw) |
+| WET_EXHAUST | erosion | `wetExhaust(w) = (w − 0.01)/0.05` of a steam turbine's own exhaust moisture |
 
-**Snapshot:** `4563176e1`, 2026-11-13 (the last commit this chapter was checked against). Earlier snapshots and batch notes: [HISTORY.md](HISTORY.md).
+## Laws and constants
+
+Each law is in its class above, once; the constants are named there. The notable fixed numbers in formulas (not
+constants): the pump's and compressor's curve coefficients, the shaft power split 0.35/0.65, NPSH3's 0.4/0.6, the
+entrainment's 1.6 and power 4, the dry screw's 0.6/0.4 split, the low-flow 30 %.
+
+## Formats
+
+The laws carry no saved form. The saved names they own are enums saved by name: `ShaftTrain.Mode`, `ShaftTrain.Trip`
+(the units' facts, [shaft-trains.md](shaft-trains.md); numbers in [FORMATS.md](../FORMATS.md#saves)). `Drive` is never
+saved.
+
+## Tests and gates
+
+| Rule | Owner | Test |
+|---|---|---|
+| Head, power, NPSH3, gas share, turbine work, motor rating, speed regulation | `science/machine/*` | `CentrifugalPumpTest`, `CentrifugalCompressorTest`, `PositiveDisplacementTest`, `NpshTest`, `GasEntrainmentTest`, `SteamTurbineTest`, `MotorTest`, `SpeedControlTest` |
+| Parts join, a fault, a ratio | `ShaftNetwork.compile` | `ShaftNetworkTest` |
+| A driver's speed, trip, status, gear limit | `ShaftTrain.step` | `ShaftTrainTest` |
+| The wear rate over the fault table, bit for bit | `Wear` | `WearTest` |
+| A vacuum pump's capacity, power and wear | `VacuumPump` | `VacuumPumpTest` |
+| A store's arithmetic | `ElectricStore` | `ElectricStoreTest` |
+| Create stress to watts | `CreateCoupling` | `CreateCouplingTest` |
+
+All under `test`: `--tests 'com.wormzjl.icheme.science.machine.*'`.
+
+## Traps
+
+- **The pump booking is the ideal work.** `FlowControl.Pump.power` and a `Machine` pump give `Q Δp` to the fluid; a
+  compressor gives polytropic work over its efficiency. What the driver pays is the law's shaft power
+  (`InlineMovers.shaftPower`, [shaft-trains.md](shaft-trains.md)).
+- **`ShaftTrain.Step.electricPower` is booked**: `ShaftTrains` charges it to the motor's store (`ElectricStores.draw`).
+- `OVERLOAD` and `OVERSPEED` look like live protection; no step sets them.
+- `science/machine` may not import the equipment or the network: a law that needs a shape's number takes it as an
+  argument (`science/plant/machine/MachineRatings` maps a shape to the law's inputs).
+
+**Snapshot:** `9d6d0d82e`, 2026-11-15.

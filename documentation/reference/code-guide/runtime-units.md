@@ -1,6 +1,6 @@
 # The fluid runtime's units: columns, stills, converters, ejectors, fired equipment, shafts
 
-Up: [code guide](README.md). Beside it: [runtime-engine.md](runtime-engine.md) (the `Ports` and `Shafts` hooks), [runtime-registry.md](runtime-registry.md). The units' own logic: [column-operation.md](column-operation.md) (the running column), [rotating-machinery.md](rotating-machinery.md) (shafts, drivers, stores, wear), [heat-exchangers.md](heat-exchangers.md) (heat units), [effects.md](effects.md) (the published effects).
+Up: [code guide](README.md). Beside it: [runtime-engine.md](runtime-engine.md) (the `Ports` and `Shafts` hooks), [runtime-registry.md](runtime-registry.md). The units' own logic: [column-operation.md](column-operation.md) (the running column), [shaft-trains.md](shaft-trains.md) (shafts, drivers, stores, wear), [heat-exchangers.md](heat-exchangers.md) (heat units), [effects.md](effects.md) (the published effects).
 
 <!-- j2a-packages: runtime/fluid/ColumnOperation.java runtime/fluid/ColumnUnit.java runtime/fluid/ColumnPower.java runtime/fluid/Stills.java runtime/fluid/StillUnit.java runtime/fluid/Converters.java runtime/fluid/ConverterUnit.java runtime/fluid/Ejectors.java runtime/fluid/Chimneys.java runtime/fluid/Flares.java runtime/fluid/FiredHeaters.java runtime/fluid/PrimeMovers.java runtime/fluid/ShaftTrains.java runtime/fluid/ShaftUnit.java runtime/fluid/ElectricStores.java runtime/fluid/MachineHealth.java runtime/fluid/HeatUnit.java runtime/fluid/EquipmentAlarm.java -->
 
@@ -33,7 +33,7 @@ Under `src/main/java/com/wormzjl/icheme/runtime/fluid/`. Lines at `d6f721b94`.
 | [`Flares`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/Flares.java) | A flare's tip plan at dispatch; what it received, burnt and released at commit | 144 |
 | [`Chimneys`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/Chimneys.java) | A chimney's span readings (flow, solids, gas temperature, exit velocity, opacity, status) from each committed or replayed span | 96 |
 | [`PrimeMovers`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/PrimeMovers.java) | The fuel and exhaust coupling between a combustion engine's or gas turbine's train, its fuel island and its steam coil's island | 232 |
-| [`ShaftTrains`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/ShaftTrains.java) | The `Shafts` hook: shaft trains and their drivers (`plans`, `booked`, `decide`, `held`), `Event`, `Hold` ([rotating-machinery.md](rotating-machinery.md)) | 1297 |
+| [`ShaftTrains`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/ShaftTrains.java) | The `Shafts` hook: shaft trains and their drivers (`plans`, `booked`, `decide`, `held`), `Event`, `Hold` ([shaft-trains.md](shaft-trains.md)) | 1297 |
 | [`ShaftUnit`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/ShaftUnit.java) | A shaft unit's facts and `Settings`; its driver's `State` | 90 |
 | [`ElectricStores`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/ElectricStores.java) | Motors', generators' and fans' electric stores and FE ports: `draw`, `member`, `plans` | 607 |
 | [`MachineHealth`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/MachineHealth.java) | Pump and machine wear in process time (`book`, `worn`, `status`) and repair | 432 |
@@ -102,7 +102,7 @@ Each unit on the coordinator's hooks ([runtime-engine.md](runtime-engine.md)):
 | Controllers on the units | `ControlSystemTest` |
 | Port accounts | `PortAccountsTest` |
 | Facts of the units | `FluidFactsCompatTest` |
-| Ejectors, chimneys, prime movers | `SteamEjectorConnectionTest`, `ChimneyTest`, [rotating-machinery.md](rotating-machinery.md) |
+| Ejectors, chimneys, prime movers | `SteamEjectorConnectionTest`, `ChimneyTest`, [shaft-trains.md](shaft-trains.md) |
 
 ## Traps
 

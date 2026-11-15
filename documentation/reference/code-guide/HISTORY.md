@@ -978,3 +978,172 @@ Kept text, lightly trimmed, from the six chapters of scope J2-C (batch `2026-11-
 - The gas turbine's steam coil came with batch 2026-11-10-prime-movers (owner P8 A). The heat review world was batch `review-heat`; `documentation/2026-10-27-heat-exchanger-design/REVIEW_WORLD.md` says how to copy it into a client's saves. Design background: `documentation/2026-10-27-heat-exchanger-design/` (`HEAT_EXCHANGER_PLAN.md` section 10, `OWNER_TEST_REVIEW.md`, `HX_TIMING_STUDY_REVIEW.md` for the fence).
 - The chapter named `Equations.sideHeat` (now `StepEquations.sideHeat`, D-S6) and `ColumnOperation.waterSides` (the condenser's sides are `ColumnUnit.condensers`, read through `ColumnOperation.heatRead`).
 - Test counts at `0f0993162`: `HeatControlColumnTest` 6, `HeatDiagramTest` 32 cases.
+
+## From the chapters of scope J2-I
+
+Scope J2-I of the 2026-11-13 codebase review (the integration of the J2 split). Kept, not maintained.
+
+### machine-assemblies.md
+
+Split into [machine-assemblies.md](machine-assemblies.md) (the check: blueprints, walk, matcher, report) and
+[assembly-service.md](assembly-service.md) (when a check runs, store, reverts, screens, watch, Start). Cut from the old
+chapter as history or provenance:
+
+- Protocol `assembly-6` (`assembly-4` before batch 2026-11-10-column-failure-modes, which changed only the operation
+  view; `assembly-5` added the conditions list, `assembly-6` the accepted set points and tray readings). Now one
+  `NetworkProtocol.VERSION`.
+- The trap "`assembly-4` names two view codecs": the slots' `parallel` list (S3b) entered the `VIEW` codec without a
+  protocol bump, so a client and a server built on either side of it agreed on the protocol and misread each other's
+  views.
+- `AssemblyStore.FORMAT` 2 (1 had no units in parallel). Constants stated as numbers at snapshot `3063488da`:
+  `MAX_WALK` 8192, `EXTERNAL_REACH` 16, `MAX_MANIFOLD_RUNS` 64, `AssemblyWatch.RANGE` 48, `AssemblyMenu.REACH` 8; the
+  store bounds `MAX_MASTERS` 4096, `MAX_SLOTS` 256, `MAX_PORTS` 1024, `MAX_FOOTPRINT` 2 · `MAX_WALK`; the wire bounds
+  `MAX_SLOTS` 256, `MAX_PORTS` 1024, `MAX_MEMBERS` 256, `MAX_TEXT` 1024, `MAX_STREAMS` 32, `MAX_VALUES` 64; the frame
+  0.4 across; `PresentationMailbox` buckets of 100 ticks.
+- Member counts came with batch 2026-11-02-process-simulator (S3b), the trim with C1; the vacuum pump on the receiver
+  with batch 2026-11-10-vacuum-pump (shape fields 12, owner V5: "placed on the drum vapor outlet"); decision D15 (the
+  condenser's two kinds), D20 (only pipes join), the owner's answers Q2 (the reflux line also at a zero reflux ratio) and
+  Q9 (a) (no vapour return without a kettle).
+- "Since batch 2026-11-10-column-failure-modes a column that has not run yet takes set points on its design's".
+- "Columns without components have no assembly: every column built before this batch" (2026-10-26-multi-machine-framework).
+- Test counts at `3063488da`: `ColumnBlueprintTest` 4, `AssemblyParallelTest` 6, `AssemblyMatcherTest` 18,
+  `ExchangerBlueprintTest` 4, `AssemblyWalkerTest` 5, `LevelGroundTest` 1, `AssemblyStoreTest` 4,
+  `AssemblyPresentationTest` 4, `AssemblyToolWatchTest` 4, `AssemblyNetworkCodecTest` 4, `AssemblyDiagramTest` 5,
+  `AssemblyColumnTest` 8, `AssemblyBlockTest` 3, `PortMarkingsTest` 6, GameTests `AssemblyGameTests` 7; the review
+  world's column (2 m, 20 trays, feed on tray 12, a draw on tray 9, a pumparound from tray 7 to 5, a kettle and sump
+  steam, an ejector, an air cooler, a lying receiver with a boot, the pumps and the PA cooler, a valve and a tank on every
+  boundary line) and the heat review world's row (an exchanger held by its internal bypass, the same with a real bypass
+  left unchecked and its valve without a flowmeter, an air cooler, a vertical fired heater raising steam, a kettle).
+- Design background: `documentation/2026-10-26-multi-machine-framework/` (the plan's sections 4 to 11, the owner's
+  answers Q1 to Q9, findings F2 and F3, the column assembly cases); the exchanger's lines:
+  `documentation/2026-10-27-heat-exchanger-design/` (the plan's section 7, W8).
+- The "Terms" section (not in the template).
+- Snapshot of the old chapter: `3063488da`, 2026-11-13.
+
+The old chapter's batch-appended sections, as they stood (their contents are carried into the two chapters except where
+noted):
+
+#### Help tours and the guide's criteria
+
+- `AssemblyScreen` holds a `TourHost`: the Structure tab's tour `assembly.structure` and the Operation tab's `assembly.operation`; its anchors (`AssemblyTour`: `tab:structure`, `tab:operation`, `status`, `glass`, `drawing`, `list`, and the door rows `check`, `open`, `start`) in the screen's own coordinates. Finishing the Structure tour reports the guide's client step `building/lines` (`AssemblyScreen.LINES_STEP`). Gate `AssemblyTourTest`; renders `tools/tutorial-renders/StageBRender.java`.
+- `AssemblyNetwork`'s presentation `send`, the scheduled view to an open assembly screen, also fires `TutorialTriggers.assemblyShown`: `assembly_state` with the view's status and, when it carries an Operation view, `column_state` ([tutorial.md](tutorial.md)). A read of the view sent anyway; protocol `assembly-6` unchanged.
+
+#### Utilities, members and set points at Start
+
+- `ColumnStarts.build` now also gives `FluidWorldAuthority.ColumnStart` the heat sides of every unit in slot `REBOILER` and in each `pumparoundCooler(i)` (`heatSides`, one unit after another), the air condenser's fan sides (an AIR_COOLER member's sides whose heat unit has fans) and the pumps' movers of `REFLUX_PUMP` and each `pumparoundPump(i)` (`movers`: a casing's through `EquipmentStructure.movers`, or the registration of an in-line pump at the slot's place), as `ColumnUnit.Members`. The ledger keeps those that qualify ([column-operation.md](column-operation.md)).
+- Refusal texts come from `Refusal` (`NO_DESIGN`, `NO_SAVED_POINT`, `VACUUM`, `INCOMPLETE`, `VALVE_UNREGISTERED`); the words are unchanged.
+- `AssemblyService.setpoints` takes set points on a column that never ran, on its design's (it refuses with "the column has no operating point" or `Refusal.VACUUM`); `operation` marks the idle view editable unless the column is a vacuum column.
+- `ExchangerLines` gives lines to an EXCHANGER and to a KETTLE (whose tubes a column may set, mode COLUMN), each side by its registration's own side.
+- Protocol `assembly-6` (`assembly-5`: the conditions list; `assembly-6`: accepted set points and tray readings in the operation view). `AssemblyNetwork.encodeOperation`/`decodeOperation` give the view's bytes to the DCS's column page.
+
+#### The vacuum pump on the receiver
+
+- With `ColumnComponents.Vacuum` `LIQUID_RING` or `DRY_SCREW` (shape fields 12; owner V5: "placed on the drum vapor outlet") the blueprint asks for the vacuum pump of the design's type on the receiver's VAPOUR_OUTLET before the offgas valve, and a water pump (of the reflux pump's kind) on its BOOT_DRAIN before the water valve, in place of the ejector on the overhead (table below). `AssemblyDiagram` draws both parts. A vacuum column still refuses to start in the world (open item of the batch).
+
+#### Column C1 instrumentation
+
+`ControlHosts.refreshColumnMembers`, which each `ControlService` cadence calls before it validates edits, reads the accepted cached `AssemblyReport` and loaded member registration identities. It does not walk or validate pipes from a GUI request, load chunks, or run the column solver. Stable member/slot/channel identities expose accepted member process and utility readings through the column's physical C1. Existing assembly/column ownership still reserves its outputs; monitoring does not replace its duty/energy-transfer controller. Line placement/edit notifications now come through the shared `LineLaying` owners.
+
+#### Exchanger configuration and shared laying
+
+`ColumnComponents` and blueprint member choices carry `ExchangerType`. The match compares the built exchanger's selected sub-type as well as kind/count/dimensions and reports a configuration mismatch when Standard and Crossflow differ. Missing saved type means Standard. `AssemblyNetwork` now uses `assembly-4` for these choices; wire payloads are tested on fresh data, not migrated.
+
+Assembly pipe laying and previews use the same selected layout/nozzle definition as constructor rendering and occupied cells. Crossflow applies to standalone exchangers and column condensers, trims and pumparound coolers; the kettle pool is unchanged. This does not redesign column operation: the existing duty/energy transfer contract still determines the running column's heat work. Assembly registration/reversion remains event-driven, preserving physical equipment and stored settings.
+
+
+### rotating-machinery.md
+
+Split into [rotating-machinery.md](rotating-machinery.md) (the laws, `science/machine`) and
+[shaft-trains.md](shaft-trains.md) (trains, stores, health, pages, Create in the world). Cut from the old chapter:
+
+- Numbers that constants declare, at snapshot `4563176e1`: `SURGE` 0.75, `DEFAULT_EFFICIENCY` 0.78, `SLIP` 0.004,
+  `RELIEF_SLOPE` 10, `ROUNDING` 0.02, `SUCTION_SPECIFIC_SPEED` 200, `BREAKDOWN` 0.85, `DUTY_NPSH3` 3.3 m, `CHURN_PEAK`
+  0.568, `CLEAN_ONSETS` 0.5, `SPARE` 1.2, `DRIVE_EFFICIENCY` 0.97, `LOWEST_SPEED` 0.1, `LARGEST_STEP` 0.2,
+  `GEAR_EFFICIENCY` 0.98, `MAXIMUM_RATIO` 20, `CREATE_RATIO` 64, `CREATIVE_SPEED` 2950 rpm, `CREATIVE_LIMIT` 1 MW,
+  `SPEED_DEADBAND` 1e-3, `SLICE_TICKS` 400, `PERIOD_TICKS` 100, `BUFFER_SLICES` 2, `RESTART_SLICES` 1,
+  `MOTOR_BUFFER_PERIODS` 2, `MOTOR_RESTART_PERIODS` 1, `RATE` 2× rated per tick, `SPEED_WINDOW` 5 %, `FAN_POLES` 4,
+  `INCEPTION` 4, `CAVITATION_PROCESS_HOURS` 8, `DRY_PROCESS_MINUTES` 40, `STRESS_PER_FE` 34.13 (1.465 W per stress at the
+  defaults), `DESIGN_SPEED` 256 rpm, `MAXIMUM_EVENTS` 65536, `STEAM_K` 1.3, `CADENCE` 100, `GAS_RATIO` 0.5, the ejector's
+  `K` 1.6, `SPEED` 60 m/s from `SPEED_EDGE` 0.05 bara, `SPEED_EXPONENT` 0.25, `RATED_MOTIVE` 10 bar, `RATED_DISCHARGE`
+  120 kPa, the vacuum pumps' `SEAL_VAPOUR_PRESSURE` 3169.9 Pa, relief to 130 kPa, `RINGS` 150 to 5000 m³/h, `SCREWS`
+  DS-100 to DS-2500, `SET_FLOW_PUMP_EFFICIENCY` 0.65, `PUMP_LOOP_RPM` 2950, `MOTOR_LOOP_RPM` 1500,
+  `SHAFT_DEFAULT_SIZE` 4, the config defaults (`energy.joulesPerFE` 2.5, `energy.machinesNeedPower` true,
+  `create.stressPerFE` 34.13, `machines.wear.enabled` true, `cavitationProcessHours` 8.0, `dryProcessMinutes` 40.0).
+- Formats at that snapshot: fluid facts `FluidFacts.SCHEMA` 15 (10 added the machine and turbine controls, device kind
+  `TURBINE`, valve source `SHAFT_SPEED` and the shaft units after the column units; 11 the electric stores and an air
+  cooler side's fan count; 12 the pumps' health; 15 the registry's build facts); corpus `schema-10` to `schema-12`; a world
+  before 10 had no shaft units, before 11 unmetered stores, before 12 every pump new; checkpoint state format 39 (control
+  tag 5 a machine on its curve, tag 6 a steam turbine; the endpoint modes lost `PUMP_TARGET` and `PUMP_HEAD_LIMIT` and
+  gained `MOVER_LAW`); accessory facts schema 4 (3 introduced sensor kind `SPEED`, mount `speed_pickup`); wire
+  `machine-4`, `mover-4`, `fluid-19`, `equipment-21`; the config keys `cavitationHours` and `dryMinutes` before 2026-11-11.
+- Provenance: batches 2026-11-10-vacuum-pump (owner V2 B, V6 B, V9), 2026-11-11-aqueous-solvents (`e3238449d`, the clean
+  zone), 2026-11-10-prime-movers (owner P5 A, P6 B, P10 A, P11), 2026-11-10-steam-ejector-flow, 2026-11-03-save-corruption
+  (W5c C1, option Q1; owner 2026-11-09 on forgetting coupling units without Create); decisions D11, A2, D19, D21, D27,
+  D30, D34 (one rule since M-12), D35 to D38, D40 (form A), D58; requests W5, W10a to W10d, request 11; owner T2, T3 (the
+  time factor); reading A14 (the `electricPower` javadoc, since fixed); `MEMBER_POWER_NOTE.md` and the batch README on a
+  held hydrocarbon reflux booking about 1.4 times its real shaft power.
+- The `TICK_SECONDS`, `BUFFER_SECONDS`, `SLICE_SECONDS`, `MOTOR_BUFFER_SECONDS` and `MOTOR_RESTART_SECONDS` constants
+  "are gone"; wear lives "four times the old online lives, so the same play life at the default factor 4"; a fuelled still
+  "takes factor times the items per play minute".
+- `MachineView.Fuel` "gained it without a protocol bump (see the batch's MERGE_PREP_REVIEW.md)".
+- Not carried into the two chapters (they belong to other chapters' modules): the generator and turbine size limits
+  (`MachineDuty.MAX_GENERATOR` 400 MW with 12 poles, `ProcessUnit.TURBO_GENERATOR` 20 MW, `ProcessUnit.generatorShaft`,
+  `motorFrame`; `MachineDuty.MAX_TURBINE` 300 MW, tandem sections above 45 MW, `SteamTurbineDesign.sections`: see
+  [equipment-designs.md](equipment-designs.md)); the casing-cover nuts, `VisualRotation` and `RotationAnimation`
+  ([client-rendering.md](client-rendering.md)); `EquipmentServices.serviceSide` and the constructor's rpm controls
+  ([equipment-geometry.md](equipment-geometry.md)); `ProcessUnit.loadShaft` and an engine's `damper`. Verbatim below.
+- The "Change the layer that owns it" table became each chapter's "Tests and gates"; the "In one paragraph" became
+  "What it does".
+- Snapshot of the old chapter: `4563176e1`, 2026-11-13.
+
+The old chapter's batch-appended sections, as they stood:
+
+#### Casing-cover nuts and Low detail
+
+Normal casing-cover nuts are raised geometry over a plain cover sprite, recessed within the existing envelope. Optional client Low detail uses textured flat nuts and capped round meshes while retaining all mechanical frames, hex shafts, published RPM and animation clocks. See [equipment-structure.md](equipment-structure.md).
+
+#### Machines under the time factor
+
+- Process time runs `fluid.timeScale` times play time (`SimulationTime`, [fluid-interval.md](fluid-interval.md)); the shaft trains, prime movers and stores read the factor from the coordinator (`ShaftTrains.time()`, `IslandCoordinator.time()`).
+- FE (owner T2): one FE carries `joulesPerFE × factor` J of process energy (`ElectricStores.feJoules`), so a machine draws the same FE per tick at any factor (a 1 MW motor 20 000 FE/t at the defaults); a store still keeps joules. Draws and bookings integrate `ticks × time.tickSeconds()`.
+- Store windows as counts of cycles (W3), the same play time at any factor: `ElectricStore.SLICE_TICKS` 400, `PERIOD_TICKS` 100; `BUFFER_SLICES` 2, `RESTART_SLICES` 1, `MOTOR_BUFFER_PERIODS` 2, `MOTOR_RESTART_PERIODS` 1 (40 s, 20 s, 10 s and 5 s of process at factor 1); `capacity`, `motorCapacity`, `perTick`, `restart`, `motorRestart` take the window's process seconds under the factor (a slice's, a period's or a tick's), which `ElectricStores` reads from its `SimulationTime`. `TICK_SECONDS`, `BUFFER_SECONDS`, `SLICE_SECONDS`, `MOTOR_BUFFER_SECONDS` and `MOTOR_RESTART_SECONDS` are gone. A motor's time left on its store is in play seconds.
+- Wear (owner T3): booked over process time (`MachineHealth.book`: `time.seconds(rate × ticks)`); default lives `Wear.CAVITATION_PROCESS_HOURS` 8 and `DRY_PROCESS_MINUTES` 40 (four times the old online lives, so the same play life at the default factor 4); new config keys `machines.wear.cavitationProcessHours`, `dryProcessMinutes` (the old keys are not read). `FluidView.Pump.lifePlaySeconds` and the suction table's `life` row (minutes of play, "—" while it does not wear).
+- Fuel: `FiredHeaters`, `PrimeMovers.booked(..., time)` and the stills burn over process time; an item's heat is conserved, so a still takes `factor` times the items per play minute.
+- Tests: `TimeFactorElectricTest` (2), `ElectricStoreTest`, `WearTest`, `MachineHealthTest`, `ShaftCouplingTest`.
+
+#### A running column's members
+
+- A running column holds its pumps and air-cooler fan sides, so no island commit books them. The column books them at each cycle instead ([column-operation.md](column-operation.md), "The members' power"; `MEMBER_POWER_NOTE.md` in the batch folder):
+  - `ShaftTrains.held(device, shaftPower)`: a held casing's shaft power stands for its island's booking (`run.power`, `booked`); the train steps at once, at most once a tick, its motor drawing from its own store as at any step. True when the train's driver turns with no fault and no trip; false with no train, a faulted one or a driver that stands.
+  - `ElectricStores.member(id, power, to)`: a fan side or an in-line pump draws `power` W from its last booking to `to` (`draw`), then reports `powered`. No store, or a generator's, runs free.
+  - `InlineMovers.ratedShaftPower(mover)`: a machine law's shaft power at its rated flow and full speed, another mover's `shaftPower` at its set flow and its rise limit (a set-flow pump's over 0.65, a set-flow compressor's power alone), on the design fluids: water at 1000 kg/m³, or dry air at 1 bar and 300 K with k 1.4, no wet share; `ratedDraw` is its `InlineMachines.electricPower`. A held pump books this times the cycle's share of the set feed, so a hydrocarbon reflux books about 1.4 times its real shaft power (batch README).
+  - `ColumnPower` routes a casing (`ShaftTrains.unitOf`) to its train and an in-line pump to its own store; `undriven` finds a casing whose train has no driver (`driverOf` null): Start refuses it while `energy.machinesNeedPower` is on.
+- Only under `energy.machinesNeedPower`; off, nothing books and nothing changes.
+
+#### Prime movers, vacuum pumps and larger machines
+
+- [`PrimeMover`](../../../src/main/java/com/wormzjl/icheme/science/machine/PrimeMover.java) (batch 2026-11-10-prime-movers, Minecraft-free): `MODELS`, engines HS-500 to MS-20000 (0.5 to 20 MW; 1500, 750 or 500 rpm; η 0.41 to 0.48) and gas turbines IND-1 to HD-300 (1.2 to 300 MW, 3000 rpm, η 0.25 to 0.41, pressure ratio 7 to 31). Fuel heat on a Willans line `Q_f = Q_r (c₀ + (1 − c₀) x)`; heat out as shaft work, exhaust (`EXHAUST_CP` 1120 J/kg K from `AIR` 298.15 K to the model's exhaust temperature), an engine's radiator (its fans `FAN_PER_COOLING` off its own shaft) and `LOSS` 0.02. Fuel enters a void at the combustor pressure (an engine's at the atmosphere) behind a valve; under the required supply the most fuel falls as `√((P_s − P_c)/(P_req − P_c))` (`supplyShare`, owner P5 A). An engine takes liquid fuel, a gas turbine gas (P6 B).
+- `ShaftNetwork.Kind` `COMBUSTION_ENGINE`, `GAS_TURBINE`; `ShaftTrain.Drive.FUEL`: always governed on the net shaft power its fuel gave (`available`), the set speed at most the rated speed, no overspeed and no trip (owner P11); a lost load cuts the fuel in the same step.
+- [`runtime/fluid/PrimeMovers`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/PrimeMovers.java) (server thread, driven by `ShaftTrains`): the heat fired from the fuel void's inflow times its LHV (`Burners.perKilogram`); the governor's fuel target (`ShaftPlan.Kind.FUEL`, with `Burners.MARGIN`) and a gas turbine's coil gas (`ShaftPlan.Kind.EXHAUST`); a target past the valve deadband wakes the fuel island. Status words `NO FUEL`, `WRONG FUEL`, `FUEL NOT COMBUSTIBLE`, `LOW FUEL PRESSURE`, `LOW FUEL`. State only: a load starts every set unfired and it lights itself (P10 A). The control valve source `ENGINE`; the heat unit `PRIME_MOVER` with side `EXHAUST` ([heat-exchangers.md](heat-exchangers.md)).
+- `MachineView.Fuel` (fired heat, fuel flow, supply and required pressure, exhaust temperature and flow, radiator and coil heat, stack temperature) on the `machine-4` page view; `MachineColumn` shows it. The wire gained it without a protocol bump (see the batch's MERGE_PREP_REVIEW.md).
+- Generators: `MachineDuty.MAX_GENERATOR` 400 MW, 12 poles allowed; a two-pole generator above `ProcessUnit.TURBO_GENERATOR` 20 MW is drawn as a turbo-generator, its shaft at the gas turbine's height (`ProcessUnit.generatorShaft`; the motor frame `ProcessUnit.motorFrame`). Steam turbines: `MachineDuty.MAX_TURBINE` 300 MW, one unit per inlet class, drawn as tandem sections above 45 MW (`SteamTurbineDesign.sections`; the physics unchanged).
+- Vacuum pumps (batch 2026-11-10-vacuum-pump): `VacuumPump` on the `MOVER_LAW` row in its flow form (class map below); a dry screw's suction liquid wears it (`MachineHealth`, owner V6 B) and plays the cavitation layer. Steam ejector (batch 2026-11-10-steam-ejector-flow): `SteamEjector` and `FlowControl.Ejector` ([fluid-laws.md](fluid-laws.md)).
+- Sounds: `MoverSounds` and `DriverSounds` keep their watches and hand their loops to the one budget (`FxSounds`, [effects.md](effects.md)). Engine loops by family (`engine_running` authored at 1500 rpm, `engine_running_medium` at 600 rpm for sets of 750 rpm and under, `UnitDesign.mediumSpeedEngine`), `gas_turbine_running`; start and stop one-shots on a speed crossing zero. `ProcessUnit.loadShaft` (a spool and disc pack in an open guard) and an engine's `damper` turn with the shaft.
+
+#### Service side, factory probes and RPM controls
+
+Constructed rotating equipment uses internal inlet/outlet P/T, flow and shaft-speed channels rather than manual sensor mounts. `EquipmentServices.serviceSide` derives the DATA side from shaft power flow, so connected driver/driven machines present it on the same service side; FE is opposite. Small pump/compressor cases fit the drive-end deck, large motor/generator enclosures are matched, and turbine sockets reuse its governor housing. Case/cover finishes follow equipment body paint.
+
+Constructor controls expose rated/design RPM and no longer offer a 2/4-pole selector. Internal/saved pole fields are not a user-facing design choice. Motors remain frequency-controlled with the 3000 rpm ceiling. The governor and accepted shaft/runtime power laws are unchanged by the interface work; instrumentation is read-only. `VisualRotation` remains the common nonlinear visual-speed law, independent of process RPM.
+
+#### VFD demand, supply and shared rotation
+
+All newly constructed motors use VFD control: no pole choice in the design, maximum 3000 rpm, constant torque below saved base speed and constant power above it (`Motor.availablePower`). Legacy pole/drive facts still round-trip. Manual sets speed; Auto requires exactly one data-linked pump/compressor on the same shaft train and follows its native flow/discharge target. Motor sizing includes the existing 20% spare. Generator housing/appearance differs from motor.
+
+`ElectricStores` keeps a motor-specific 10 s rated buffer with 5 s restart threshold. A live FE source must also be available: losing its cable/source stops RPM and animation at the next engine decision even if stored joules remain. Old energy above the new capacity is retained. `PowerNetwork`/`PowerGrid` check source availability without transferring power; other store capacities remain unchanged.
+
+`InlineMachines` (`science/machine`) gives inline pump/compressor finite FE demand (`electricPower`) and line-size design values (`inletFlow`: liquid 2 m/s, gas 10 m/s; `law`: 25 m head, air ratio 1.5 at 300 K); `science/fluid/network/InlineMovers` builds the in-line `FlowControl.Machine` from them (`design`, the flow capped at `Mover.MAXIMUM_VOLUME_FLOW`) and holds the mover shaft power functions (`shaftPower`, `ratedShaftPower`, `ratedDraw`). Native Create shafts can exchange rotation bidirectionally; the legacy coupling block still works. Creative RF exposes standard FE on all six faces.
+
+`VisualRotation` maps physical RPM nonlinearly: x = |rpm|/1500, displayed turns/s = sign(rpm) × 12 / (1 + 6/[x(1+x)²]), with zero handled separately. 1500/3000 rpm display 4.8/9 turns/s, tending to 12. `RotationAnimation` preserves phase on updates/stops; pumps, motors, turbines, generators, shafts and other rotating equipment use it. Hex shaft orientation follows the connection axis/phase; stopped or newly unpowered parts publish zero speed. This visual mapping does not change mechanical power.
+
+The compact centrifugal compressor has top inlet/outlet and no coolant port, matching the owner-approved rebuild. Common guarded couplings, steel/bolt treatments and motor/generator end-face separation address model alignment and z-fighting. See [wired-control-power.md](wired-control-power.md) for control/FE ownership and [equipment-structure.md](equipment-structure.md) for layout contracts.
