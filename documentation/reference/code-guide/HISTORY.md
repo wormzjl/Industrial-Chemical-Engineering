@@ -1147,3 +1147,95 @@ All newly constructed motors use VFD control: no pole choice in the design, maxi
 `VisualRotation` maps physical RPM nonlinearly: x = |rpm|/1500, displayed turns/s = sign(rpm) × 12 / (1 + 6/[x(1+x)²]), with zero handled separately. 1500/3000 rpm display 4.8/9 turns/s, tending to 12. `RotationAnimation` preserves phase on updates/stops; pumps, motors, turbines, generators, shafts and other rotating equipment use it. Hex shaft orientation follows the connection axis/phase; stopped or newly unpowered parts publish zero speed. This visual mapping does not change mechanical power.
 
 The compact centrifugal compressor has top inlet/outlet and no coolant port, matching the owner-approved rebuild. Common guarded couplings, steel/bolt treatments and motor/generator end-face separation address model alignment and z-fighting. See [wired-control-power.md](wired-control-power.md) for control/FE ownership and [equipment-structure.md](equipment-structure.md) for layout contracts.
+
+### cooling-towers.md
+
+- "The rating replaced an eight-segment marched counterflow fill, whose air sweeps were the wall-deadline blocker.
+  `tools/cooling-towers/fill-forms/` keeps that fill, its 1840-point table and a measured correlation form; the batch's
+  branch review has the errors."
+- "Since batch 2026-11-11-aqueous-solvents `PhasePort.SPRAY` admits any stream: the `TowerExchange.liquidWater` gate, the
+  spray refusal and `InletPhase.priming` are gone." The chapter named `Equations.kept` (now `StepEquations.kept`) and
+  `FluidWorldAuthority.publishTowers` (the tower display is in `Displays`).
+- Formats as they stood: "State format 30 and facts schema 7 include optional `CoolingTower` geometry/controls and basin
+  contents; equipment shape fields 5 append `TowerBank`. [...] The batch's protocols were `fluid-17` and `equipment-15`; a
+  tower's cell bank still rides on the constructor's form, now on `equipment-17` (batch 2026-11-02-process-simulator:
+  Import and device names). Facts schemas 8 and 9 of that batch add column fields only; a tower's facts are unchanged.
+  Batch 2026-11-03-rotating-machinery (facts schema 11, state format 35, `equipment-18`): an induced tower holds one
+  electric store [...]; a tower from a save before schema 11 is `UNMETERED` until its port first receives FE. [...]
+  Historical images use the existing exact/facts routes; the current `compat/fluid/schema-6/` image was regenerated for
+  the smaller basin, without a legacy-basin migration by owner decision. Tower shapes are in
+  `compat/equipment/shapes-5.snbt` and repeated in the later shape images (`shapes-6`, `shapes-7`, whose new fields are a
+  column's)." The losses' checkpoint at state format 48; `NO_AIR` 1e-3 kg/s; the exhaust read "since batch
+  2026-11-11-aqueous-solvents".
+- "Measurements: `documentation/2026-11-11-aqueous-solvents/COOLING_TOWER_PLAN.md` section 9."
+- "now also serve", "now own": dropped.
+
+### effects.md
+
+- "Allocation-free per frame (bench 2026-11-10)."
+- The watches' protocols `flare-2`, `still-1`, fluid-21, fluid-23; "Replaces `FlareFlames` and `StillFires` (deleted
+  with their particles)"; the silhouettes on `equipment-23`. Now one `NetworkProtocol.VERSION`.
+- Numbers at snapshot `971dd8346`: `MAXIMUM_WATCHED` 64, `MERGE` 6 blocks, `LOOPS` 12, `HYSTERESIS` 3 dB, `AUDIBLE` 30 dB,
+  `FULL` 110 dB (owner: "too loud", was 100), `REQUEST_TICKS` 100, `MAXIMUM_STRUCTURES` 256, `MOVE` 64 blocks.
+
+### instrument-accessories.md
+
+- "(owner decision 2026-10-26, "aliases only")" on unknown gauge fields.
+- The fitting record named `Legacy` (it is `Instrument.Fitting`, read by `Store.legacy`).
+- Corpus: "schema 1 written by 0.13.0, schema 2 by the process-control batch, schema 3 by batch
+  2026-11-03-rotating-machinery: the sensor kind `SPEED` and its mount `speed_pickup`, no new field"; "Store facts schema 2
+  adds `sensors` and `modular_valves` tombstones; old lists default empty"; "accessory facts schema 6 (5 the type
+  `BLANKET_VALVE` on mount `blanket_valve`, 6 `SAFETY_VALVE` on `safety_valve`), state 1; corpora `schema-5.snbt`,
+  `schema-6.snbt`".
+- Provenance: "Registry first (batch 2026-11-03-save-corruption, W5 step 8)"; the sight glass's axis "owner decision
+  open"; "Process control (batch 2026-10-26-process-control, 0.14.1)"; `InstrumentWiring` "(batch
+  2026-11-10-custom-shader-system, plan 4.4, W2; still no blocks, nodes or collision)", owner X9 A, X10 A, X1; the
+  blanketing valve and PSV "placed since batch 2026-11-11-gas-blanketing". Numbers: `GLAND` 0.045 m, `DROP` 0.09 m,
+  `TRAY_MAX` 6, `PERIOD` 0.5 m.
+- `FluidWorldAuthority.installPipe{Cutoff,Valve,PressureValve,Filter,Mover}` written out by name.
+
+### pipe-laying.md
+
+- "`LineLaying` also holds the common refusal/message vocabulary (the former `PipeLaying`); the old server `CableLaying`
+  and `ConduitLaying` command engines are gone."
+- Protocols `lines-1`, `pipeline-tool-5`, `control-3` (now `NetworkProtocol.VERSION`); the rack lane copy `rack-3` (now
+  named by `PipeRackBlockEntity.FORMAT`).
+- "Registry first (batch 2026-11-03-save-corruption)"; the rack's shape "RACK_JUNCTION_PLAN J1 and J2", "owner
+  2026-10-26: "strictly based on player facing"".
+- "Historical route/rack design decisions and prior captures: `documentation/2026-10-26-pipe-laying-system/`."
+
+### process-control.md
+
+- Cut at step 2 of this scope (stale since W3b, no trace is omitted from a step's layout): "A hydrocarbon trace in a
+  water-full vessel is omitted from its step layout ([fluid-science.md], "Omitted traces")."
+- "Level loop (owner choice A; balance and horizon from LEVEL_LOOP_REVIEW.md options A1 and A2)."
+- "Schema-3 (since batch 2026-11-03-rotating-machinery: sensor kind `SPEED`)"; source `SHAFT_SPEED` "(batch
+  2026-11-03-rotating-machinery W3, D27)".
+- Formats as they stood: "Fluid facts schema 3 (`FluidFacts.SCHEMA`) appends, after main's schema 2 (pipe joints and rack
+  lanes), a device spec's vessel geometry record [...]; schemas 1 and 2 still read. Schema 4 (0.15.0) retires the basis
+  hash and appends the basis revision. State format 22 can rebuild. Accessory facts schema 2 appends sensors and modular
+  conversion markers. [...] `compat/fluid/schema-3/` (11 registrations, 3 vessels, 1 shaped vessel, 1 control valve, 2
+  laid pipes, 1 rack lane)."
+- The whole paragraph "Later work: [data-system contract](../../2026-10-26-process-control/DATA_SYSTEM_CONTRACT.md). One
+  unbranched cable component connects one sensor and one valve in the same fluid island; no fanout or second source.
+  `ControlBinding` defines height/height-percent target and Outlet/Inlet actions. Broken signals hold the accepted opening
+  or default fully open. Level constraints must enter end-of-step inventory equations and use stationary balances on
+  rate/certificate paths. Neither cables nor remote level regulation ships in this batch." (`ControlBinding` does not
+  exist; cables are in [wired-control-power.md](wired-control-power.md).)
+- "Release 0.14.1 (`CHANGELOG.md` `[0.14.1]`). Verification: [batch review](../../2026-10-26-process-control/PROCESS_CONTROL_REVIEW.md);
+  the second-reader review and its fixes: [PROCESS_CONTROL_CODE_REVIEW.md](../../2026-10-26-process-control/PROCESS_CONTROL_CODE_REVIEW.md),
+  [SEED236_FIX_REVIEW.md](../../2026-10-26-process-control/SEED236_FIX_REVIEW.md)."
+
+### tutorial.md
+
+- "owner D1: Ponder dropped", "owner D2" (progress as advancements).
+
+### wired-control-power.md
+
+- Formats as they stood: `ControlFacts` "format 4 (a rack lane's frame)"; "formats 1–4 and accessory facts schema 4 have
+  corpus images (format 4: `compat/control/control-4.snbt`); missing old conduit medium means the original data medium";
+  "Format 4 appends a rack lane's frame"; "a frame before format 4 refused"; "`ControlFacts` and its format 4 are
+  unchanged" (by the DCS column page).
+- Protocols: `control-4` (`control-3` before batch 2026-11-10-column-failure-modes), `lines-1`, `pipeline-tool-5`.
+- Provenance: "Registry first (batch 2026-11-03-save-corruption, W5c C2 and C3)", "option Q1"; "Historical CPU/RAM and
+  draw probes [...]; the batch merge review records final verification"; "now register BlockItems".
