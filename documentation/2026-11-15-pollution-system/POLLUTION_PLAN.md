@@ -198,8 +198,10 @@ Lane: new packages `science/pollution`, `runtime/pollution`; touches of hot file
 | 5 | Effects: the world pass, damage types, tags, particles, `en_us.json` keys | `runtime/pollution/PollutionEffects.java`, `data/icheme/damage_type/*`, `data/icheme/tags/**`, `en_us.json` | `PollutionEffectsTest` (the threshold table as a pure function); a GameTest: a zombie is immune, a cow dies in a cube at index 3 |
 | 6 | Ignition, blasts, chain, block damage; then equipment under a blast per D1 | `runtime/pollution/Ignition.java`, `Blasts.java`, `FluidDeviceBlock`, `EquipmentShellBlock`, `EquipmentInteriorBlock`, `EquipmentStructure` (hot, equipment lane), the facts field, the `pipe_burst` sound (`sounds.json`, the ogg, its subtitle key) | `ExplosionLawTest` (48 kg and power 4 at the LFL in an open cube); a GameTest: a torch in a cube at index 1.2 explodes and two flammable neighbours follow within 10 ticks; a cube at 0.9 does not |
 | 7 | Documents: code guide chapter `pollution.md` and its README rows, `FORMATS.md`, the batch README | `documentation/**` | none |
+| 8 | Pollution meter item (section 11) | `world/item/PollutionMeterItem.java`, registries, model, texture, sound, lang | `PollutionReadingTest`, one GameTest |
+| 9 | FTB Chunks map overlay (section 12), optional mod | `compat/ftbchunks/**`, `network/` (one payload pair, `NetworkProtocol` version), `build.gradle` (compile-only dependency) | the column summary as a pure function; the look by the owner's in-game check |
 
-Order: 1 → 2 → 3 → 4 → 5 → 6 → 7. WP1 and WP2 share no file and may run side by side.
+Order: 1 → 2 → 3 → 4 → 5 → 8 → 6 → 9 → 7. WP1 and WP2 share no file and may run side by side.
 
 Pitfalls for every package: `ShaftTrains.booked` also runs on a replayed span (`Flares` says "committed or replayed"), so a release must be counted once: collect only where the ledger books, and prove it with a test that replays a span. The blanket's vent and the open vessel's vent have the same `Kind`. The `equipmentGates` and `columnGates` class lists in `build.gradle` see only what their tests load. `en_us.json` only; the other languages wait for the translation commit. No dev client; GameTests need a fresh `fluidGameTestRunId` and must remove what they register.
 
@@ -216,6 +218,34 @@ Decided 2026-11-15 (owner: "Yes, start"): D1 to D6 as recommended.
 | D5 | Decay half-life: 5 process minutes in the open, 60 enclosed (with `fluid.timeScale` 4: 75 s and 15 min of play) | Yes; in the config |
 | D6 | Simple asphyxiants (nitrogen, methane, CO2 displacing oxygen) | Not in version 1 |
 
-## 11. Follow-ups outside this batch
+## 11. Pollution meter (owner, 2026-11-15: "also add a pollution meter item")
 
-A gas detector instrument and a fixed gas alarm on the data network; a gas mask; a haze shader in the effects system; equipment corrosion from the corrosive index; soil and water pollution from the `ground` total; solid-fuel smoke; wind.
+A handheld item, `icheme:pollution_meter` (WP8).
+
+- **Reading.** The four indices of the cube the player stands in, each with a word: SAFE (< 0.1), WARNING (≥ 0.1), DANGER (≥ 0.3), LETHAL (≥ 1; FLAMMABLE for combustible). Toxic is shown with particulate added, as the effects count it, and particulate again on its own line.
+- **On request only** (AGENTS.md, engine schedule): holding the meter in either hand is the request. While it is held the server sends that player the reading on the action bar once a second, from the installed field (a read; nothing steps). Using the item prints the full reading in chat, with the cube's air share and whether it is open or enclosed. No other client receives anything.
+- **Warning tick.** While held, a short click whose rate rises with the largest index (none below 0.1), so a player hears a cloud before walking into it. Built by the `models-and-sfx` skill; one sound event `icheme:meter_tick`.
+- **Files.** `world/item/PollutionMeterItem.java`, `registry/ModItems`, `ModCreativeTabs`, the item model and texture (`models-and-sfx`), `en_us.json` keys, a recipe; the server side in `runtime/pollution/PollutionEffects` (the world pass already runs each second). No menu, no screen, so no GUI work; one action-bar payload is vanilla's (`displayClientMessage`), so no wire format changes.
+- **Tests.** The reading's words as a pure function (`PollutionReadingTest`); a GameTest: a player holding the meter in a cube at toxic 1.2 receives LETHAL, a player without it receives nothing.
+
+## 12. Map overlay on FTB Chunks (owner, 2026-11-15: "research if you can add pollution overlay to ftb chunk map")
+
+**Finding: possible with FTB Chunks' public client API, without mixins.** Read at the `1.21.1/main` branch of `FTBTeam/FTB-Chunks`, 2026-11-15 (`common/src/main/java/dev/ftb/mods/ftbchunks/`):
+
+- There is no layer or overlay API. There is `api/client/event/MapIconEvent`: `LARGE_MAP` (fired when the full-screen map gathers its icons) and `MINIMAP` (fired often; "handlers should run quickly"), each taking `MapIcon`s through `add`, with `getDimension()`.
+- A `MapIcon` (`api/client/icon/MapIcon`) has a world position, `isZoomDependant`, `getIconScale`, `getPriority`, `addTooltip` and `draw(mapType, graphics, x, y, w, h, …)` with a plain `GuiGraphics`, so it can draw any quad.
+- Sizing (`client/gui/RegionMapPanel`, `MapIconWidget`): a zoom-dependent icon is `regionTileSize / 128 × getIconScale` pixels wide and is centred on its position; a region tile is 512 blocks. So `getIconScale = 4` is exactly one chunk (16 blocks) at every zoom.
+- `FTBChunksClientAPI.registerMinimapComponent(MinimapInfoComponent)` adds a text line under the minimap.
+
+**Design (WP9, optional mod, as `compat/create`).**
+
+- Large map: one translucent square per polluted chunk column, centred on the chunk, coloured by its worst channel (green toxic, orange combustible, yellow corrosive, grey particulate), its opacity by the index (0.1 faint, ≥ 1 strong), low priority so waypoints stay on top. The tooltip lists the four indices. The map is flat, so a column shows the largest index over its cubes.
+- Minimap: an info line "Pollution: toxic 0.4" for the player's own cube through `registerMinimapComponent`; no squares there (the event is hot, and squares do not turn with a rotating minimap).
+- Data, on request only: opening the large map sends one request for the map's dimension; the server answers with the column summary (chunk x, z, 4 bytes) of the cubes within 512 blocks of the player and repeats it each pass (5 s) while the map stays open; closing ends it. One new payload pair on `NetworkProtocol`, so the protocol version is bumped. At the 8192 cube cap a full answer is under 100 kB; a usual one is a few hundred bytes.
+- A config switch `pollution.mapOverlay` (server: who may see it: everyone, or only players carrying a pollution meter; default: meter).
+
+**Open points for WP9, read before it builds:** FTB Chunks' licence and Maven coordinates for a compile-only dependency (with FTB Library and Architectury, which it needs); whether `MapIconEvent`'s `Consumer` runs while the map is open or once at its opening (it decides how the squares refresh; `RegionMapPanel` gathers icons in `addWidgets`); a dev-client check is needed to judge the look, so the owner starts it (AGENTS.md, in-game checks).
+
+## 13. Follow-ups outside this batch
+
+A fixed gas alarm on the data network; a gas mask; a haze shader in the effects system; equipment corrosion from the corrosive index; soil and water pollution from the `ground` total; solid-fuel smoke; wind.

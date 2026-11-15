@@ -18,6 +18,9 @@ Lane: new packages `science/pollution` and `runtime/pollution`. Hot files touche
 
 - 2026-11-15, owner: "need a damaged pipe SFX as well". Plan section 7: a pipe a blast destroys plays `icheme:pipe_burst` (rupture, then hiss or gush by what it released), in WP6, by the `models-and-sfx` skill.
 
+- 2026-11-15, owner: "also add a pollution meter item. Also research if you can add pollution overlay to ftb chunk map". Plan section 11: the meter (WP8; held = the request, action bar each second, a warning tick). Plan section 12: the research; FTB Chunks 1.21.1 has no layer API, but `MapIconEvent.LARGE_MAP` with zoom-dependent `MapIcon`s of scale 4 draws one square per chunk, and `registerMinimapComponent` a minimap line; proposed as WP9, an optional compat.
+- 2026-11-15, WP2 reported: files written, not built. Its dense-grid estimate corrects the plan's plume numbers (source 0.9 after a pass and 2.1 at its peak, face neighbour 0.49, second ring 0.14); to carry into section 4 once the tests confirm them.
+
 ## Documents
 
 - [POLLUTION_PLAN.md](POLLUTION_PLAN.md): the standard, the release sources, the field and its step, the schedule, effects, ignition and blasts, saves, work packages WP1 to WP7, owner decisions.
