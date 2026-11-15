@@ -36,6 +36,12 @@ public final class ModItems {
 
     public static final DeferredHolder<DataComponentType<?>,DataComponentType<Boolean>> PIPE_LAYING_POWER = COMPONENTS.register("pipe_laying_power",
             ()->DataComponentType.<Boolean>builder().persistent(com.mojang.serialization.Codec.BOOL).networkSynchronized(net.minecraft.network.codec.ByteBufCodecs.BOOL).build());
+    /** An orifice plate's bore ratio (batch 2026-11-15-fluid-interfaces, W6): 0.20 to 0.80 in steps of 0.05; absent: 0.50. */
+    public static final DeferredHolder<DataComponentType<?>, DataComponentType<Double>> ORIFICE_SETTINGS = COMPONENTS.register("orifice_settings",
+            () -> DataComponentType.<Double>builder().persistent(com.mojang.serialization.Codec.DOUBLE.validate(beta -> com.wormzjl.icheme.science.fluid.network.Orifice.valid(beta)
+                            ? com.mojang.serialization.DataResult.success(com.wormzjl.icheme.science.fluid.network.Orifice.snap(beta))
+                            : com.mojang.serialization.DataResult.error(() -> "An orifice plate's bore ratio is 0.20 to 0.80 in steps of 0.05, not " + beta)))
+                    .networkSynchronized(net.minecraft.network.codec.ByteBufCodecs.DOUBLE).build());
     private static DeferredHolder<DataComponentType<?>, DataComponentType<Integer>> linePaint(String name) {
         return COMPONENTS.register(name, () -> DataComponentType.<Integer>builder()
                 .persistent(com.mojang.serialization.Codec.INT.validate(rgb -> com.wormzjl.icheme.science.equipment.Paint.line(rgb) ? com.mojang.serialization.DataResult.success(rgb)
@@ -71,6 +77,9 @@ public final class ModItems {
     public static final DeferredItem<PipelineFittingItem> PIPELINE_SIGHT_GLASS=fitting("pipeline_sight_glass",Instrument.Type.SIGHT_GLASS);
     public static final DeferredItem<PipelineFittingItem> PIPELINE_SHUTOFF_VALVE=fitting("pipeline_shutoff_valve",Instrument.Type.SHUTOFF);
     public static final DeferredItem<PipelineFittingItem> PIPELINE_CHECK_VALVE=fitting("pipeline_check_valve",Instrument.Type.CHECK);
+    // Batch 2026-11-15-fluid-interfaces, pipe fittings (W6, W7).
+    /** A restriction orifice plate (W6): its bore ratio on the item ({@link #ORIFICE_SETTINGS}). */
+    public static final DeferredItem<PipelineFittingItem> ORIFICE_PLATE=fitting("orifice_plate",Instrument.Type.ORIFICE);
 
     public static final DeferredItem<BlockItem> PROCESS_SIMULATOR = ITEMS.registerSimpleBlockItem(
             "process_simulator",

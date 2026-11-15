@@ -19,15 +19,21 @@ public final class Instrument {
         /** A drum's gas blanketing valve (batch 2026-11-11-gas-blanketing), on its first reserved top flange. */
         BLANKET_VALVE,
         /** A pressure safety valve (same batch): on a drum's second reserved top flange, or on a pipe, the pipe's only fitting. */
-        SAFETY_VALVE;
+        SAFETY_VALVE,
+        /** A restriction orifice plate (batch 2026-11-15-fluid-interfaces, W6): a pipe's fixed loss, its bore ratio on the fitting record. */
+        ORIFICE;
         /** Whether this is a fitting placed where its host's shape gives it, through the accessory request: a tank's level gauge, a drum's gas blanketing valve, a pressure safety valve. */
         public boolean vessel(){return this==LEVEL_GAUGE||this==BLANKET_VALVE||this==SAFETY_VALVE;}
     }
     /** Every mount name; saved by name, like an enum constant. */
     public static final Set<String> MOUNTS=Set.of("pipe_north","pipe_south","pipe_east","pipe_west","pipe_accessory","pressure_top","pressure_bottom","temperature_top","temperature_bottom","level_body","level_boot","valve_sensor",Sensor.SPEED_PICKUP,"tank_level","blanket_valve","safety_valve");
-    /** One non-dial accessory. Tank instruments and pipe fittings share persistence, revisions and recovery. */
-    public record Fitting(Key key,UUID instance,long revision,Type type) {
-        public Fitting{Objects.requireNonNull(key);Objects.requireNonNull(instance);Objects.requireNonNull(type);if(revision<=0||type==Type.PRESSURE||type==Type.TEMPERATURE||!key.mount().equals(mount(type)))throw new IllegalArgumentException("Invalid accessory fitting");}
+    /**
+     * One non-dial accessory. Tank instruments and pipe fittings share persistence, revisions and recovery. {@code ratio}
+     * (accessory facts schema 7): an orifice plate's bore ratio, 0 for every other type.
+     */
+    public record Fitting(Key key,UUID instance,long revision,Type type,double ratio) {
+        public Fitting{Objects.requireNonNull(key);Objects.requireNonNull(instance);Objects.requireNonNull(type);if(revision<=0||type==Type.PRESSURE||type==Type.TEMPERATURE||!key.mount().equals(mount(type))||(type==Type.ORIFICE?!com.wormzjl.icheme.science.fluid.network.Orifice.valid(ratio):ratio!=0))throw new IllegalArgumentException("Invalid accessory fitting");}
+        public Fitting(Key key,UUID instance,long revision,Type type){this(key,instance,revision,type,0);}
         public static String mount(Type type){return type==Type.LEVEL_GAUGE?"tank_level":type==Type.BLANKET_VALVE?"blanket_valve":type==Type.SAFETY_VALVE?"safety_valve":"pipe_accessory";}
     }
     public record Key(long host,String mount) {

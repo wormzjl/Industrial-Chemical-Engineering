@@ -43,9 +43,15 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
     public static final EnumProperty<InlineMover> INLINE_MOVER=EnumProperty.create("inline_mover",InlineMover.class);
     public static final BooleanProperty INLINE_FILTER=BooleanProperty.create("inline_filter");
     public static final BooleanProperty PRESSURE_CONTROL=BooleanProperty.create("pressure_control");
-    /** Committed lever position; a newly installed accessory initially draws open. */
+    /**
+     * The pipe's in-line body: a hand valve's committed lever position (a newly installed accessory initially draws open),
+     * a check valve, or (batch 2026-11-15-fluid-interfaces) an orifice plate, which cuts nothing off. The fittings share this
+     * one slot, as only one fits a pipe: a property of their own would multiply the pipe's block states again.
+     */
     public enum Shutoff implements net.minecraft.util.StringRepresentable {
-        NONE(PhysicalFluidTopology.Cutoff.NONE),OPEN(PhysicalFluidTopology.Cutoff.OPEN),CLOSED(PhysicalFluidTopology.Cutoff.CLOSED),CHECK(PhysicalFluidTopology.Cutoff.CHECK);
+        NONE(PhysicalFluidTopology.Cutoff.NONE),OPEN(PhysicalFluidTopology.Cutoff.OPEN),CLOSED(PhysicalFluidTopology.Cutoff.CLOSED),CHECK(PhysicalFluidTopology.Cutoff.CHECK),
+        /** A restriction orifice plate (W6): drawn from its fitting record, the store's fact; the pipe stays passive. */
+        ORIFICE(PhysicalFluidTopology.Cutoff.NONE);
         private final PhysicalFluidTopology.Cutoff cutoff;
         Shutoff(PhysicalFluidTopology.Cutoff cutoff){this.cutoff=cutoff;}
         public PhysicalFluidTopology.Cutoff cutoff(){return cutoff;}
@@ -83,9 +89,20 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
     public static boolean hasMover(BlockState s){return s.hasProperty(INLINE_MOVER)&&s.getValue(INLINE_MOVER)!=InlineMover.NONE;}
     public static boolean hasPump(BlockState s){return hasMover(s)&&s.getValue(INLINE_MOVER)==InlineMover.PUMP;}
     public static boolean hasCompressor(BlockState s){return hasMover(s)&&s.getValue(INLINE_MOVER)==InlineMover.COMPRESSOR;}
-    public static boolean hasAxialAccessory(BlockState s){return hasPipeValve(s)||hasFilter(s)||hasMover(s);}
+    public static boolean hasAxialAccessory(BlockState s){return hasPipeValve(s)||hasFilter(s)||hasMover(s)||hasOrifice(s);}
     public static boolean hasShutoff(BlockState state){return hasPipeValve(state)&&(state.getValue(SHUTOFF)==Shutoff.OPEN||state.getValue(SHUTOFF)==Shutoff.CLOSED);}
-    public static boolean hasPipeValve(BlockState state){return state.getBlock() instanceof FluidDeviceBlock block&&block.kind==TopologyCompiler.Kind.PIPE&&(state.getValue(SHUTOFF)!=Shutoff.NONE||state.getValue(PRESSURE_CONTROL));}
+    public static boolean hasPipeValve(BlockState state){return state.getBlock() instanceof FluidDeviceBlock block&&block.kind==TopologyCompiler.Kind.PIPE&&(state.getValue(SHUTOFF)!=Shutoff.NONE&&state.getValue(SHUTOFF)!=Shutoff.ORIFICE||state.getValue(PRESSURE_CONTROL));}
+    /** A pipe carrying a restriction orifice plate (batch 2026-11-15-fluid-interfaces, W6). */
+    public static boolean hasOrifice(BlockState state){return state.getBlock() instanceof FluidDeviceBlock block&&block.kind==TopologyCompiler.Kind.PIPE&&state.getValue(SHUTOFF)==Shutoff.ORIFICE;}
+    /**
+     * The in-line body pipe {@code state} draws for registration {@code d}: its cutoff where it has one; else an orifice
+     * plate {@code state} already shows on a pipe that stays passive (the plate comes from its fitting record, never from
+     * the registration); else none.
+     */
+    public static Shutoff body(BlockState state,PhysicalFluidTopology.Device d){
+        if(d.cutoff()!=PhysicalFluidTopology.Cutoff.NONE)return Shutoff.of(d.cutoff());
+        return state.getValue(SHUTOFF)==Shutoff.ORIFICE&&!d.inlineFilter()&&d.control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.Passive?Shutoff.ORIFICE:Shutoff.NONE;
+    }
     public static PhysicalFluidTopology.Cutoff cutoff(BlockState state){return state.getBlock() instanceof FluidDeviceBlock block&&block.kind==TopologyCompiler.Kind.PIPE?state.getValue(SHUTOFF).cutoff():PhysicalFluidTopology.Cutoff.NONE;}
     public static boolean hasFitting(BlockState state){return hasSightGlass(state)||hasAxialAccessory(state);}
     /** Small movers carry compact internal joints; larger movers flange at the block faces. */
@@ -198,7 +215,7 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
      */
     public static BlockState fittings(BlockState state,PhysicalFluidTopology.Device d) {
         state=state.setValue(FACING,Direction.valueOf(d.facing().name()));
-        return state.hasProperty(INLINE_MOVER)?fitted(state,d).setValue(SHUTOFF,Shutoff.of(d.cutoff())):state;
+        return state.hasProperty(INLINE_MOVER)?fitted(state,d).setValue(SHUTOFF,body(state,d)):state;
     }
     /**
      * A pipe {@code state} with the pressure valve, filter and mover that registration {@code d} compiles as
@@ -246,6 +263,13 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
                         turned(level,position,player,cutoff==PhysicalFluidTopology.Cutoff.CLOSED?1:0);
                 });
             else if(level.isClientSide()&&com.wormzjl.icheme.client.ValveTurnRenderer.clicked(level,position,state))turnSound(level,position,player);
+            return InteractionResult.sidedSuccess(level.isClientSide());
+        }
+        // An orifice plate (batch 2026-11-15-fluid-interfaces, W6): a use reads its stamped handle, its bore ratio and K, from its record.
+        if(hasOrifice(state)) {
+            if(player instanceof ServerPlayer serverPlayer&&level.getBlockEntity(position) instanceof FluidDeviceBlockEntity entity)
+                FluidWorldAuthority.find(serverPlayer.server).ifPresent(world->{double beta=world.instruments().orificeRatio(entity.fluidIdentity());
+                    if(beta>0)serverPlayer.displayClientMessage(net.minecraft.network.chat.Component.translatable("message.icheme.orifice_plate.reads",String.format(java.util.Locale.ROOT,"%.2f",beta),String.format(java.util.Locale.ROOT,"%.3g",com.wormzjl.icheme.science.fluid.network.Orifice.loss(beta))),true);});
             return InteractionResult.sidedSuccess(level.isClientSide());
         }
         // A diverter valve (batch 2026-11-09-batch-distiller): an empty hand turns it to its next outlet; a sneak opens its menu.

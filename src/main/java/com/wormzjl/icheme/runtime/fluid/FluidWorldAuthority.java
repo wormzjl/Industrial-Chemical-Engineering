@@ -1226,6 +1226,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public boolean installPipePressureValve(long id,PhysicalFluidTopology.Direction facing) {
         owned();return registry.installPipePressureValve(id,facing);
     }
+    // Batch 2026-11-15-fluid-interfaces, pipe fittings (W6, W7).
+    /** A restriction orifice plate of bore ratio {@code beta} on pipe {@code id}: see {@link PhysicalRegistry#installPipeOrifice}. */
+    public boolean installPipeOrifice(long id,PhysicalFluidTopology.Direction facing,double beta){owned();return registry.installPipeOrifice(id,facing,beta);}
     /** Rapid clicks toggle the latest queued value, never the older drawn lever. */
     public void togglePipeCutoff(long id) {
         owned();registry.togglePipeCutoff(id);
@@ -1577,6 +1580,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public boolean flowmeterOn(long id){owned();return registry.flowmeterOn(id);}
     public void flowmeter(long id,boolean installed){owned();registry.flowmeter(id,installed);}
     public boolean removePipeAccessory(long id){owned();return registry.removePipeAccessory(id);}
+    /** {@link #removePipeAccessory(long)}, the pipe's minor loss less {@code plate} (an orifice plate's K): see {@link PhysicalRegistry#removePipeAccessory(long,double)}. */
+    public boolean removePipeAccessory(long id,double plate){owned();return registry.removePipeAccessory(id,plate);}
     public record InstrumentReading(double pressure,double temperature,boolean flowing,double massFlow,Double volumeFlow){public InstrumentReading(double pressure,double temperature,boolean flowing){this(pressure,temperature,flowing,0,0.0);}}
     /** A pipe's instrument reading: its observations in its island's last solved interval, which carry no compound amounts, so
      * they are read as stored, with no island snapshot, preview or world-list padding (code base review R1). */

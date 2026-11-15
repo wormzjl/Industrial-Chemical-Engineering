@@ -213,11 +213,28 @@ public final class PhysicalRegistry {
         if(!edits.isEmpty())submit(edits,topology.nextIdentity(),null);
         return line.size();
     }
+    /**
+     * A restriction orifice plate of bore ratio {@code beta} on pipe {@code id} (batch 2026-11-15-fluid-interfaces, W6): the
+     * pipe's geometry with its minor loss plus the plate's K ({@link com.wormzjl.icheme.science.fluid.network.Orifice#loss}),
+     * one queued edit; its control, joints, lane and spec kept. The plate is no device: the pipe stays a passive pipe.
+     */
+    public boolean installPipeOrifice(long id,PhysicalFluidTopology.Direction axis,double beta) {
+        var r=registrations().get(id);if(!canInstallFitting(r,axis))return false;
+        var g=r.device().geometry();double k=com.wormzjl.icheme.science.fluid.network.Orifice.loss(beta);
+        var d=r.device().withGeometry(new PipeResistance.Geometry(g.length(),g.diameter(),g.roughness(),g.minorLoss()+k,g.channels())).withFacing(axis);
+        submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(d,r.spec(),Math.addExact(r.revision(),1)))),topology.nextIdentity(),null);return true;
+    }
     /** Removal composes with the latest projected geometry, controls and spec. */
-    public boolean removePipeAccessory(long id) {
+    public boolean removePipeAccessory(long id){return removePipeAccessory(id,0);}
+    /**
+     * {@link #removePipeAccessory(long)}, the pipe's minor loss less {@code plate}: the loss coefficient the fitting added
+     * (an orifice plate's K, else 0), never below 0.
+     */
+    public boolean removePipeAccessory(long id,double plate) {
         var r=registrations().get(id);if(r==null||r.device().kind()!=TopologyCompiler.Kind.PIPE)return false;
-        var d=r.device();if(!d.inlineFilter()&&d.cutoff()==PhysicalFluidTopology.Cutoff.NONE&&d.control() instanceof FlowControl.Passive)return true;
-        var device=PhysicalFluidTopology.Device.builder(d.id(),d.position(),d.kind(),d.facing(),d.geometry(),new FlowControl.Passive()).ports(d.ports()).generatorEnabled(d.generatorEnabled()).joints(d.joints()).build();
+        var d=r.device();if(plate==0&&!d.inlineFilter()&&d.cutoff()==PhysicalFluidTopology.Cutoff.NONE&&d.control() instanceof FlowControl.Passive)return true;
+        var g=d.geometry();var geometry=plate==0?g:new PipeResistance.Geometry(g.length(),g.diameter(),g.roughness(),Math.max(0,g.minorLoss()-plate),g.channels());
+        var device=PhysicalFluidTopology.Device.builder(d.id(),d.position(),d.kind(),d.facing(),geometry,new FlowControl.Passive()).ports(d.ports()).generatorEnabled(d.generatorEnabled()).joints(d.joints()).build();
         submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,r.spec(),Math.addExact(r.revision(),1)))),topology.nextIdentity(),d.inlineFilter()?new WorldTopologyLedger.Recovery(id,null):null);return true;
     }
     private boolean canInstallFitting(WorldTopologyLedger.Registration record,PhysicalFluidTopology.Direction axis) {

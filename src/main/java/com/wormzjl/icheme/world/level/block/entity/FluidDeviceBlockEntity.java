@@ -233,7 +233,7 @@ public final class FluidDeviceBlockEntity extends ModelledBlockEntity implements
                 // The fitting as the engine classifies it (batch 2026-11-09-drawn-connections): an in-line machine draws
                 // as the pump or compressor it is, whatever law it runs.
                 updated=FluidDeviceBlock.fitted(updated,d);
-                if(d.cutoff()==PhysicalFluidTopology.Cutoff.NONE)updated=updated.setValue(FluidDeviceBlock.SHUTOFF,FluidDeviceBlock.Shutoff.NONE);
+                if(d.cutoff()==PhysicalFluidTopology.Cutoff.NONE)updated=updated.setValue(FluidDeviceBlock.SHUTOFF,FluidDeviceBlock.body(updated,d));
                 else if(committed!=null&&committed.cutoff()!=PhysicalFluidTopology.Cutoff.NONE)
                     updated=updated.setValue(FluidDeviceBlock.SHUTOFF,FluidDeviceBlock.Shutoff.of(committed.cutoff()));
                 if(d.inlineFilter()||d.control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.Mover||d.control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.Valve||d.cutoff()!=PhysicalFluidTopology.Cutoff.NONE)
