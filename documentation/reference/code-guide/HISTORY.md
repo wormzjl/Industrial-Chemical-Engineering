@@ -537,3 +537,62 @@ Sections that stayed in the chapter, their dates removed from the heading; their
 - The chimney's data channels (0.25.0)
 - Fan power, the still's terminal and alarm channels (0.24.0)
 - Physical interfaces and accepted channel catalog (0.22.0)
+
+## From the chapters of scope J2-B
+
+Kept as they stood in the chapters at `d6f721b94`, before scope J2-B of batch 2026-11-13-codebase-review restructured them into module chapters; not maintained. New history goes to `CHANGELOG.md` and the batch README.
+
+### client-gui.md
+
+Sentences of history from the chapter's tables and paragraphs:
+
+- `FluidGuiLayout` was nested in `FluidDeviceScreen` until batch 2026-11-13-codebase-review, C9.
+- `WindowScale` was removed; current doors use viewport layout, scrolling and paging.
+- The process simulator (since batch 2026-11-02-process-simulator) replaced the Column Calculator V3 screen and block; since the calculator's screen went (W8), only `ColumnTemplates` and `V3ClientPresets` use `V3EditorDraft`.
+- The Holland 3-2 snap to the fixed benchmark is gone with its presets; the benchmark stays in the solver's tests.
+- The ExxonMobil and Tia Juana templates left with batch 2026-11-04-open-thermo-data (O3); the presets corpus `compat/presets/` was rebuilt.
+- Before 0.12.3 the moving-parts switch called `levelRenderer.allChanged`, the F3+A reload.
+- Flow arrows on every kind's nozzles since 0.15.0; before it only a constructed mover's, `MoverPortMarkings`.
+- Since 0.8.0 the GUI names the hydrocarbon liquid "Organic phase" and free water "Aqueous phase"; since batch 2026-11-11-aqueous-solvents (`1059ece75`) the aqueous liquid reads "Water" while water is at least 99 % of it by moles.
+- Since 0.25.0 the driver and mover loops play through the one sound budget (`emitters`).
+- The fluid menu protocol was `fluid-17` and later `fluid-24`, equipment `equipment-17` to `equipment-23`; all are `NetworkProtocol.VERSION` (`icheme-1`) since D-F1.
+- There was no tray-drop field since batch 2026-10-28-gui-toolkit (owner choices (a) and (b)).
+- Lang files held 2589 keys at batch 2026-11-03-localization and 2949 at the simulator-sizing batch.
+
+Sections and paragraphs, as they stood:
+
+**Port colours** (since `645e203d`, 2026-10-29; the screen's drawing removed in batch 2026-11-02-process-simulator): the pipe laying tool colours an assembly's nozzles by `PortColours.assembly`, matching a slot, nozzle role and ordinal to `AssemblyDiagram`'s fixed port order (negative mark ordinals accept any nozzle of that role). Colours spread hues and vary brightness/saturation. The tool resolves a column's own nozzles without validation and other equipment from its watched report; matched world squares keep the colour with grey connected frames or yellow misplaced frames, other nozzles use class colours. A design edit can reorder colours. The assembly screen no longer draws ports: `AssemblyFlowsheet` and `AssemblyPortColoursTest` are gone, and its drawing is `AssemblyBlock` (below). `AssemblyDiagramTest.everyPortHasItsOwnColourForTheLayingTool` keeps the colours distinct. No live world-marker check.
+
+- The 0.24.0 `StillFires` and `FlareFlames` below are gone: `client/fx/state/ProcessStates` holds their watches and `FxSources` draws them.
+
+- `StillFires` and `FlareFlames`: client-only particles from published state (watches `STILLS` and `FLARES`); they infer no process state. Replaced in 0.25.0 (above).
+
+- Translations zh_cn, fr_fr, es_es and ja_jp for 0.24.0; status and alarm words in English.
+
+Shared GUI text placement aligns transformed text origins to physical pixels; the scale calculation is independent of the selected Unicode font. This addresses the blurred machinery Drive group and the smaller Unicode layout through the common drawing/scale path. Dynamic text must keep the same alignment path as static labels. Software renders and gates qualify layout; live GPU/text filtering still belongs to owner acceptance.
+
+All five language files have 2949 ordered keys; the four locales include shared line feedback, sensor location/EQ hover and rated-speed wording. Protocols are `equipment-21`, simulator `3`, `machine-3`, `fluid-19`, `control-3`, `rotation-1` and `assembly-4`. GUI replay/subscription remains request-only; drawing a menu never advances the process.
+
+**Creative tab (commit `188fba66`, 2026-10-27):** all registered IChemE items are listed in the mod creative tab; the mod no longer injects items into vanilla Functional Blocks. Since batch 2026-10-28-main-test-repair the tab is registered by `registry/ModCreativeTabs` (`MAIN`), not in `IChemE`'s static state: a registry needs Minecraft bootstrapped, and unit tests read `IChemE.LOGGER`.
+
+**Process control (batch 2026-10-26-process-control, 0.14.1):** sensor rows and the Control Valve on the fluid screen; the contracts are in [process-control.md](process-control.md).
+
+`FluidDeviceScreen` shows cached sensor readings as LED meters in its Readings group (`DeviceMeters.meters`; since batch 2026-10-28-gui-toolkit): pressure and temperature in the player's units, a flowmeter's signed mass flow in kg per the flow time unit with its volume flow on hover, a level gauge's percent of span with its height in metres (and overrange) on hover. A bare Control Valve's Valve group says “Lacking components” and offers no set point; a configured one shows the set point of its controls' `valveSource`: a pressure, or a flow with its target, mass or volume flow, chosen above it in the Set point group (a draft until Apply). The Valve group shows the accepted opening as a bar and the controller's regulation, limit, conflict or signal words. `MenuData`/`LiveData` carry readings and `ValveData`; registry item IDs retain `pressure_control_valve` while its visible name is Control Valve. `InstrumentRenderer` renders the cached blank housings/connectors and placement ghosts without requesting live sensor data.
+
+**Feature branch:** `b1477c09` (`codex/liquid-gauge-accessory`), 2026-10-26, based on main `600549d9`. Floating-roof tank level gauge is an optional item/accessory;24 focused checks/package and8 native views pass. Ported into this 0.22.0 branch; the batch is not merged. [Contracts](../../2026-10-26-liquid-level-gauge-accessory/LEVEL_GAUGE_CONTRACTS.md).
+
+**Constructor import and earlier history** (to `dbefe7f4`, main, mod 0.15.3, 2026-10-27): batch 2026-10-27-constructor-import: the constructor's Import sends its draft and waits for the server's answer, `EquipmentConstructorScreen.answered`; a refusal on its status line (since batch 2026-11-02-process-simulator Import first lists the nearest process simulator's designs and the chosen one lands with its name; the header is kept as built) · earlier: 2026-10-27 (batch 2026-10-26-multi-machine-framework: the column screen's Components page and Save design, its dataset shown by label; the constructor's import-only column and its Nozzles page; the assembly screen, `AssemblyDiagram`, `PortColours` and the laying tool's assembly marks (`AssemblyToolClient`), see [machine-assemblies.md](machine-assemblies.md), and its port label's limit from the nozzle (`67343274`); the datasheet sent by the server; the `tia_juana_residue` mixture preset) · earlier: 2026-10-27 (batch 2026-10-26-process-control: sensor rows, the Control Valve's modules, opening and status on `FluidDeviceScreen`, `ValveData`, sensor housings and ghosts in `InstrumentRenderer`; no client change in the review fixes or the merge of main 0.14.0) · earlier: 2026-10-27 (batch 2026-10-26-pipe-laying-system: the pipe tools' settings screen with line paints, the shared `PaintSwatch`, `PipeLayingClient`, `PipeRackModel`, painted pipe and rack tints, transition pipes in `FluidDeviceModel`; the tool and racks are in [pipe-laying.md](pipe-laying.md)) · earlier: 2026-10-26 (batch 2026-10-26-backward-compat: the datasheet's "N cells blocked" line, counted on the client; a stale `MachineAnimation.toggle` trap removed) · earlier: 2026-10-26 (batch 2026-10-16-minecraft-mcp-mouse-input: the MCP lane pins the official bridge v0.4.18 with `mcp.background_input=true`, compat range `[0.4.18,0.5.0)`, `BackgroundCursorMixin`) · earlier: 2026-10-26 (batch 2026-10-26-air-cooler-chunk-rendering: the Moving parts switch stops parts without re-meshing a chunk; one layer set per shell cell) · earlier: 2026-10-25 (batch 2026-10-21-floating-roof-tanks: display units and phase bases on the fluid screen, power switch, gauge and pipeline-tool screens, world-space renderers for open tanks, sight glasses, gauges and mover sounds, glass layers and mover markings in the shell model, fitting models) · earlier: 2026-10-21 (0.11.1 test review; mod rename to IChemE, 0.11.0); 2026-10-20 (the equipment client)
+
+**GUI verification through the MCP bridge.** The procedure is in the `minecraft-mcp` skill (`.claude/skills/minecraft-mcp/SKILL.md`). **It is not on `main` or in the main checkout.** It exists only on branch `claude/minecraft-mcp-skill-c3f0f0` (commits 20b1587c and 03952fd3, worktree `.claude/worktrees/cleanup-unused-branches-deee8e`). Read it with `git show 03952fd3:.claude/skills/minecraft-mcp/SKILL.md`. The skill gives these steps:
+
+1. Two launch lanes. The first is `gradlew runMcpClient --offline`: game directory `run/mcp-client/`, a window of 854×480 by default, and the mods `icheme` plus `icheme_mcp_compat`. `prepareMcpControlMod` copies `run/mcp-client-mods/minecraft-mcp-1.21.1-neoforge-v0.4.18.jar` into `run/mcp-client/mods` after a SHA-256 check (`e9359fce…25f0`), and deletes every other `minecraft-mcp-*.jar` there. The jar is the official release v0.4.18. The `mcpClient` run sets `mcp.background_input=true` (the bridge's background input mode): the bridge's own tools never move the OS cursor, and `BackgroundCursorMixin` skips vanilla's `InputConstants.grabOrReleaseMouse` while the window is not the foreground window, so a world join or screen close leaves it alone too. The jar and its notes are in the main checkout's `tools/minecraft-mcp-bridge/`. The skill at `03952fd3` still names the 0.3.0 jar; the build file wins. The second is `gradlew runClient`, which uses `run/mods/`; on this lane text entry needs the skill's `robot.ps1`. Write `run/options.txt` first (`pauseOnLostFocus:false`, `guiScale:2`).
+2. Talk HTTP to `127.0.0.1:9876/api/cmd` through `scripts/bridge.js`, one call at a time. Call `enter_control_mode` first. Send commands through chat, and check each one in `latest.log`.
+3. Create a creative superflat world and place the devices with `/setblock` (y = −59). Aim with `/tp ... facing` and open the screen with `right_click`/`use_item`. Confirm the screen class with `enumerate_widgets`.
+4. Edit fields, Apply, then wait 3 to 8 s for the engine bucket, or reopen the screen. "Waiting for the engine" on a first open is expected.
+5. Take screenshots with `bridge.js shot` (it flattens the alpha). Store them under `documentation/<batch>/screenshots/` with `client-latest.log`. Record a table of sub-check, evidence, quoted text and PASS/FAIL in the batch review.
+
+What `src/mcpCompat` adds: `ScreenInputMixin` forwards the bridge's `guiClick`, `guiCharType` and `pasteText` to the real focused widget. Its class comment and the mod description say that MCP 0.4.x (the dependency range `[0.4.18,0.5.0)`) otherwise misses the inherited `charTyped` and inserts nothing. A left click with no screen open goes to the normal attack path. `HotkeyMixin` makes Ctrl+A select all in the focused `EditBox`. Helper copies of the skill's scripts are in the main checkout under `tools/mcp-gui-helpers/` and `tools/column-gui-mcp/` (not opened for this chapter); the bridge jar is in `tools/minecraft-mcp-bridge/`. When the jar is missing, the `prepareMcpControlMod` error text reads "Copy minecraft-mcp-1.21.1-neoforge-v0.4.18.jar from tools/minecraft-mcp-bridge/ (main checkout) into run/mcp-client-mods/ first."
+
+#### Optional tank level-gauge accessory
+
+InstrumentRenderer adds level-gauge item ghosts and height-only hover using TankRenderer cached published TankDisplay. InstrumentHosts loaded index includes fitting-only hosts and long-bound selection. TankRenderer Part.GAUGE caches metal in its native VBO cache; fitting metadata gates the metal, bands, float and separate clear-sleeve pass. A bare tank draws no gauge. No new GUI/live payload/process calculation.
