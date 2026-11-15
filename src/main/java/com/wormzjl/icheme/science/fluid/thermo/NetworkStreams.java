@@ -43,11 +43,14 @@ final class NetworkStreams {
     /**
      * The gas's ideal-gas heat capacity ratio {@code k = c_p/(c_p − R)} at the state's temperature, for a compressor's
      * polytropic exponent (batch 2026-11-03-rotating-machinery, plan section 3.2): the vapour's components on the
-     * package's own ideal-gas data (water's from its cubic record on a list with water). 1.4 for a state that holds no gas.
+     * package's own ideal-gas data (water's from its cubic record on a list with water). A state with no gas that is one
+     * dense fluid ({@link State#dense()}) takes the same formula on that fluid's amounts (S2b of batch
+     * 2026-11-15-supercritical-fluids); 1.4 for any other state that holds no gas.
      */
     public double heatCapacityRatio(State state) {
         double t=state.temperature(),moles=0,cp=0;
         double[] vapor=state.vaporAmountsView();int n=model.hydrocarbon.componentCount();
+        if(!(state.vaporVolume()>0)&&state.dense())vapor=state.amountsView(state.oneFluidSlot());
         double total=0;for(double x:vapor)total+=x;
         if(!(total>0))return 1.4;
         var terms=model.hydrocarbon.prepare(t);
@@ -191,9 +194,16 @@ final class NetworkStreams {
         return h/phaseMass(state,phase);
     }
     /** A phase stream's velocity limit: {@link #vaporVelocityLimit} for the gas, the configured maximum for a liquid
-     * with its solids (a liquid's own isothermal sound speed is 900 to 1500 m/s at the network's states, D37 S5). */
+     * with its solids (a liquid's own isothermal sound speed is 900 to 1500 m/s at the network's states, D37 S5). A liquid
+     * slot that holds a state's one dense fluid ({@link State#dense()}) takes the vapour's law on its own slot, its solids'
+     * mass with it: such a fluid's sound speed falls below 100 m/s near its critical point (S2b of batch
+     * 2026-11-15-supercritical-fluids). */
     public double phaseVelocityLimit(State state,int phase) {
-        return phase==GAS?vaporVelocityLimit(state):model.maximumVelocity;
+        if(phase==GAS)return vaporVelocityLimit(state);
+        int slot=state.slot(phase);
+        if(slot<0||slot!=state.oneFluidSlot()||!state.dense())return model.maximumVelocity;
+        double volume=state.slotVolume(slot);
+        return Math.min(model.maximumVelocity,acoustic(volume,phaseMass(state,phase),volume*state.phase(slot).isothermalCompressibility()));
     }
     /** A phase stream's viscosity: {@link #vaporViscosity} for the gas; a liquid's own viscosity (one log-mixing rule over
      * its components, water among them) with the slurry correction for its share of the solids, over the stream's volume. */
