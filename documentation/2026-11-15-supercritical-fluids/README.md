@@ -26,6 +26,9 @@ simulator: continuous properties, no label-driven jumps, no critical-band hold.
   tolerance widened). Liquids hold G3F1's bounds to 30 MPa for CO2, N2, C3H8 and toluene, to 20 MPa for n-hexane;
   ethylene misses cp at 141 K at every pressure. With the supercritical evidence: 30 MPa for CO2, N2, CH4, C2H6, C3H8;
   C2H4 2 (or 20 with two cp declarations); n-hexane 4.57, toluene 6.19 MPa. Test and fixture code only.
+- 2026-11-15: the main thread checked M8 (stored results: `G3F11SupercriticalRegionTest` 9 of 9; the parity test's 26 passed in
+  the run after the new `compressed_liquid` rows, its tolerances unchanged; no file under `src/main` changed). The plan's
+  section 2a states O4's ranges with the liquid evidence.
 
 ## Documents
 
