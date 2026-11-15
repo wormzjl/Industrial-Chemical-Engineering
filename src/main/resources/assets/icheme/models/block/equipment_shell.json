@@ -66,6 +66,10 @@
     "stainless_line": "icheme:block/still_stainless_line",
     "brick": "icheme:block/still_brick",
     "iron": "icheme:block/still_iron",
+    "motor_louvre": "icheme:block/motor_louvre",
+    "bolt_face_flat": "icheme:block/equipment_bolt_face_flat",
+    "cladding_flat": "icheme:block/painted_cladding_flat",
+    "motor_louvre_flat": "icheme:block/motor_louvre_flat",
     "particle": "icheme:block/vessel_shell"
   }
 }
