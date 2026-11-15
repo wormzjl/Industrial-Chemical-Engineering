@@ -96,13 +96,28 @@ Purpose: make the implemented equipment look better and less bare (owner request
   - Tests (equipmentGates): `SteamTurbineSectionsTest`, `ProcessUnitTest`, `ShapeRasterizerTest`,
     `EquipmentLayoutGoldenTest`, `EquipmentShapeCompatTest`. All pass.
 
+- 2026-11-15, relief sprites (branch `claude/relief-sprites-10dd59`, R-W1 to R-W4): build notes in
+  [RELIEF_SPRITES_PLAN.md](RELIEF_SPRITES_PLAN.md) sections 9 and 11. Owner: solid nuts on pipe flanges, a darker relief
+  nut (R-W4). Polygons of the 81 references: 304,279 before, 291,151 after.
+
+- 2026-11-15, merges into the batch branch (owner: yes): the relief sprites (`dc8117352`, `e7073c878`) and the combined
+  steam turbine (`55b548730`). In the turbine merge its three nozzle flanges take `Mesh.flangeBolts`. Tests on the
+  merged tree (equipmentGates, the classes that load both changes): `SteamTurbineSectionsTest`, `ProcessUnitTest`,
+  `ShapeRasterizerTest`, `EquipmentLayoutGoldenTest`, `EquipmentShapeCompatTest`, `RenderDetailTest`,
+  `ConstructorDefaultsTest`, `MachineRpmDesignTest`. All pass.
+
+- 2026-11-15, later findings in the review: N1 (a column's nozzle keeps its default size; the fix is a batch of its
+  own from `main`, `2026-11-15-nozzle-joints`) and K16 (the air cooler's largest bay;
+  [AIR_COOLER_BAY_PLAN.md](AIR_COOLER_BAY_PLAN.md), not built).
+
 ## Documents
 
 - [VISUAL_REVIEW.md](VISUAL_REVIEW.md): the findings and the proposed order.
 - [RELIEF_SPRITES_PLAN.md](RELIEF_SPRITES_PLAN.md): relief sprites for shells, nuts and louvres out of polygons, decisions R1 to R3,
   work packages R-W1 to R-W3.
 - [STEAM_TURBINE_SECTIONS_PLAN.md](STEAM_TURBINE_SECTIONS_PLAN.md): the combined steam turbine, decisions T1 to T4,
-  work packages W1 to W4.
+  work packages W1 to W6.
+- [AIR_COOLER_BAY_PLAN.md](AIR_COOLER_BAY_PLAN.md): the larger air cooler bay (6 m by 12 m), work packages A-W1 to A-W3.
 - Contact sheets (main checkout): `research/2026-11-15-equipment-visual-design/review/`.
 
 ## Code areas
