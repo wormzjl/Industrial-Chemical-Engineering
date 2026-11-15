@@ -72,6 +72,10 @@ import org.junit.jupiter.api.Test;
  *   bounds (follow-up of S0).</li>
  * </ul>
  *
+ * <p>Band boxes: {@link G3Support#boxBeforeS1}, the engine's four pure-fluid boxes as they stood when S0 measured
+ * (boxes 3 and 4 were removed from the engine by S1); they mark where the declared errors are larger, and keep the
+ * tables and {@link #DECLARED} as recorded.</p>
+ *
  * <p>Enthalpies are compared as departures {@code h(T, P) - h(T, 1 Pa)} (model, vapour root) and {@code h - h(T, rho -> 0)}
  * (oracle), so the two data do not meet. Above Tc the oracle has one root and the model is asked on its vapour root.</p>
  */
@@ -438,7 +442,7 @@ class G3F11SupercriticalRegionTest {
                 double kelvin = dh / ref.isobaricHeatCapacity();
                 double sound = 100 * (Math.sqrt(e.pressureDensityDerivative() / molar) / Math.sqrt(ref.pressureDensityDerivative() / referenceMolar) - 1);
                 double tr = t / fluid.criticalTemperature(), pr = p / fluid.criticalPressure();
-                int box = FluidTpEquilibrium.pureBandBox(t / critical[0], p / critical[1]);
+                int box = G3Support.boxBeforeS1(t / critical[0], p / critical[1]);
                 String at = f("%.1f K %.2f MPa", t, p / 1e6);
                 Quad q = box == 0 ? outside : inside;
                 q.density.add(rho, at);
@@ -814,7 +818,7 @@ class G3F11SupercriticalRegionTest {
                 double cpResidualRef = ref.isobaricHeatCapacity() - fluid.state(t, 1e-10).isobaricHeatCapacity();
                 double cpDev = 100 * (values.heatCapacity() - cpResidualRef) / ref.isobaricHeatCapacity();
                 double dh = values.molarEnthalpy() - zero.molarEnthalpy() - referenceDeparture(fluid, t, ref.enthalpy());
-                int box = FluidTpEquilibrium.pureBandBox(t / tc, p / pc);
+                int box = G3Support.boxBeforeS1(t / tc, p / pc);
                 String at = f("%.1f K %.2f MPa", t, p / 1e6);
                 if (box == 0) {
                     q.density.add(rho, at);
@@ -847,7 +851,7 @@ class G3F11SupercriticalRegionTest {
             List<Double> pressures = new ArrayList<>();
             for (double[] state : grid(fluid, s[0])) {
                 double t = state[0], p = state[1];
-                if (FluidTpEquilibrium.pureBandBox(t / critical[0], p / critical[1]) != 0 || t < critical[0]) continue;
+                if (G3Support.boxBeforeS1(t / critical[0], p / critical[1]) != 0 || t < critical[0]) continue;
                 var ref = reference(fluid, t, p);
                 var e = point(model, t, p, x, Root.VAPOR);
                 String at = f("%.1f K %.2f MPa", t, p / 1e6);

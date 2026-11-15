@@ -192,6 +192,18 @@ final class G3Support {
     }
 
     /**
+     * The engine's four pure-fluid boxes as {@code FluidTpEquilibrium.pureBandBox} stated them before batch
+     * 2026-11-15-supercritical-fluids removed boxes 3 and 4 (S1, owner decision O3 B): {@link #bandBox}, and box 4
+     * {@code Tr 1.0-1.1 x Pr 1.5-2} closed, the lower number on a shared edge. The engine no longer bands there; the
+     * qualification tests keep these boxes as the regions where their declared errors are larger.
+     */
+    static int boxBeforeS1(double tr, double pr) {
+        int box = bandBox(tr, pr);
+        if (box != 0) return box;
+        return tr >= 1.0 && tr <= 1.1 && pr >= 1.5 && pr <= 2.0 ? 4 : 0;
+    }
+
+    /**
      * Melting pressure of the reference file's melting line ({@code ANCILLARIES.melting_line}, CoolProp {@code ae81610e}):
      * N2 Span et al. 2000 and C2H6 Buecker and Wagner 2006 ({@code polynomial_in_Tr}), CH4 Abramson 2011 (Simon), CO2
      * Span and Wagner 1996 ({@code polynomial_in_Theta}). A liquid state above it is solid-stable: the P1 grid dropped

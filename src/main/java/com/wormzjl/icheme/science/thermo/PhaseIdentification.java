@@ -104,6 +104,17 @@ public final class PhaseIdentification {
     public static final double VAPOUR_BRANCH_VOLUME_RATIO = 3.9513730355914;
 
     /**
+     * The kernel's {@code Omega_a / Omega_b = 0.45724 / 0.07780} ({@link PengRobinsonKernel}'s critical attraction and
+     * co-volume constants), the value of {@code a / (b R T)} of a pure component at its critical temperature, where its
+     * alpha function is one: below it ({@link PhaseTraits#supercriticalIsotherm()}) a pure component is above its
+     * {@code Tc}. The exact PR constants give {@code 0.457235528921 / 0.0777960739039 = 5.8773599486044}, the ratio at
+     * which the cubic's isotherm first has three roots at some pressure; the kernel's rounded constants give
+     * 5.8771208226, 4.1e-5 lower, so every isotherm below this one has one root at every pressure, and a pure
+     * component's {@code T > Tc} holds exactly.
+     */
+    public static final double SUPERCRITICAL_ATTRACTION_RATIO = 0.45724 / 0.07780;
+
+    /**
      * Whether a root is denser than the cubic's critical volume: {@code v < }{@link #VAPOUR_BRANCH_VOLUME_RATIO}
      * {@code b} with the untranslated {@code v = Z R T / P} and the mixture co-volume {@code b} of the evaluation.
      */

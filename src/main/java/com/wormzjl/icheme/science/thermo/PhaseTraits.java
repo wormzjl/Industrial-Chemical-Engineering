@@ -17,8 +17,11 @@ package com.wormzjl.icheme.science.thermo;
  * @param volumeRatio the untranslated molar volume over the mixture co-volume, {@code v / b} (the cubic's critical volume
  *        is {@link PhaseIdentification#VAPOUR_BRANCH_VOLUME_RATIO})
  * @param identificationParameter the phase identification parameter of the root; {@code NaN} where it is undefined
+ * @param attraction the mixture's {@code a / (b R T)} at the state's temperature (dimensionless; constant along an
+ *        isotherm of a fixed composition, and the one number that decides how many roots the cubic can have there)
  */
-public record PhaseTraits(int physicalRootCount, double compressibility, double volumeRatio, double identificationParameter) {
+public record PhaseTraits(int physicalRootCount, double compressibility, double volumeRatio, double identificationParameter,
+                          double attraction) {
     private static final double R = PengRobinsonKernel.GAS_CONSTANT;
 
     /** The traits of a kernel evaluation's root at its temperature and pressure. */
@@ -36,6 +39,25 @@ public record PhaseTraits(int physicalRootCount, double compressibility, double 
                                  double temperatureKelvin, double pressurePascal) {
         double volume = compressibility * R * temperatureKelvin / pressurePascal;
         return new PhaseTraits(physicalRootCount, compressibility, volume / b,
-                PhaseIdentification.parameter(temperatureKelvin, volume, a, b, dadt));
+                PhaseIdentification.parameter(temperatureKelvin, volume, a, b, dadt), a / (b * R * temperatureKelvin));
+    }
+
+    /**
+     * Whether the root's isotherm is supercritical for its composition: {@link #attraction()} below
+     * {@link PhaseIdentification#SUPERCRITICAL_ATTRACTION_RATIO}. The cubic then has one root at every pressure; for a
+     * pure component it is {@code T > Tc} (up to rounding at {@code Tc}). For a mixture it is the isotherm of the
+     * mixture's own {@code a} and {@code b}, not a mixture critical point.
+     */
+    public boolean supercriticalIsotherm() {
+        return attraction < PhaseIdentification.SUPERCRITICAL_ATTRACTION_RATIO;
+    }
+
+    /**
+     * The reduced density {@code v_c / v} on the untranslated cubic:
+     * {@link PhaseIdentification#VAPOUR_BRANCH_VOLUME_RATIO} over {@link #volumeRatio()}, 1 at the cubic's critical
+     * volume, above 1 on the dense side.
+     */
+    public double reducedDensity() {
+        return PhaseIdentification.VAPOUR_BRANCH_VOLUME_RATIO / volumeRatio;
     }
 }

@@ -36,9 +36,11 @@ import org.junit.jupiter.api.Test;
  *
  * The network-level reference is WP7's {@code science.fluid.network.NearCriticalNitrogenIslandTest} (a nitrogen island
  * crossing the band, only typed holds allowed inside it; none occurred), run with this family in the G3 Gradle
- * invocation. Since P3 WP7d the engine's band carries D14's corner box (Tr 1.0-1.1 x Pr 1.5-2) and D15's widening of box
- * 2 (Tr 0.95-0.97 below Pr 0.8): every corner state of the paths (by the oracle's reduced variables) must lie in the
- * engine's band and be graded research-only; the liquid between boxes 1 and 2 is in the band (not scored).
+ * invocation. Since P3 WP7d the engine's band carries D15's widening of box 2 (Tr 0.95-0.97 below Pr 0.8): the liquid
+ * between boxes 1 and 2 is in the band (not scored). D14's corner (Tr 1.0-1.1 x Pr 1.5-2) was the engine's box 4 from P3
+ * WP7d until owner decision O3 B removed it (batch 2026-11-15-supercritical-fluids, S1: a pure fluid there has one root
+ * and cannot split): every corner state of the paths (by the oracle's reduced variables) must now lie outside the
+ * engine's band, graded as the contract grades, and is scored at D14's 9 % declared density error.
  */
 class G3F5CriticalRegionPathTest {
     /**
@@ -57,7 +59,7 @@ class G3F5CriticalRegionPathTest {
 
     static final class Path {
         final String name;
-        int states, converged, bandConverged, bandTyped, outsideFailed, coexistence, twoPhase, corner, cornerResearch;
+        int states, converged, bandConverged, bandTyped, outsideFailed, coexistence, twoPhase, corner, cornerOutside;
         int derivatives, derivativeRefusals, scored, gradeErrors;
         final Worst density = new Worst();
         final List<String> failures = new ArrayList<>();
@@ -80,9 +82,9 @@ class G3F5CriticalRegionPathTest {
                 var fluid = oracle(pureSpecies);
                 if (d14Corner(t / fluid.criticalTemperature(), p / fluid.criticalPressure())) {
                     path.corner++;
-                    // D14: the corner is in the band (P3 WP7d encodes it as the engine's box 4).
-                    if (band) path.cornerResearch++;
-                    else path.failures.add(at + ": D14 corner state outside the engine's band");
+                    // D14: the corner left the band with box 4 (O3 B, S1); it is scored at its 9 % declared error.
+                    if (!band) path.cornerOutside++;
+                    else path.failures.add(at + ": D14 corner state inside the engine's band (box 4 was removed)");
                 }
             }
             if (!result.converged()) {
@@ -137,7 +139,7 @@ class G3F5CriticalRegionPathTest {
     void pathsThroughTheCriticalRegionAreConvergedOrTyped() {
         var engine = engine();
         var table = new Table("G3 F5", "Path", "States", "Converged (in band)", "Typed CRITICAL_BAND", "NOT_CONVERGED outside", "Two-phase",
-                "Pure coexistence", "Grade errors", "Derivatives present / refused", "D14 corner (in engine band)", "Scored density, worst %");
+                "Pure coexistence", "Grade errors", "Derivatives present / refused", "D14 corner (outside the engine band)", "Scored density, worst %");
         List<String> failures = new ArrayList<>();
         for (int s : new int[] {0, 3}) {
             double tc = oracle(s).criticalTemperature();
@@ -148,7 +150,7 @@ class G3F5CriticalRegionPathTest {
             for (double dt : new double[] {-5, -2, 0, 2, 5}) {
                 var path = run(engine, f("%s Tc%+.0f K", SHORT[s], dt), amounts, tc + dt, pressures, s);
                 table.row(path.name, path.states, path.converged + " (" + path.bandConverged + ")", path.bandTyped, path.outsideFailed, path.twoPhase,
-                        path.coexistence, path.gradeErrors, path.derivatives + " / " + path.derivativeRefusals, path.corner + " (" + path.cornerResearch + ")",
+                        path.coexistence, path.gradeErrors, path.derivatives + " / " + path.derivativeRefusals, path.corner + " (" + path.cornerOutside + ")",
                         path.scored + ", " + path.density.signed("%+.2f"));
                 failures.addAll(path.failures.stream().map(failure -> path.name + " " + failure).toList());
             }
