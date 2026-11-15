@@ -658,12 +658,34 @@ public final class PhaseLayout {
             }
         };
     }
-    /** A vessel's closure at what it holds: the amounts, the energy and the wall ({@link #balanceRows}; {@code workFrom} as
-     * there). */
+    /**
+     * A vessel's closure at what it holds: the amounts, the energy and the wall ({@link #balanceRows}; {@code workFrom} as
+     * there).
+     *
+     * <p>Its Jacobian is swept column by column on the node's phase tangents about the point it is built at
+     * ({@link FluidThermodynamics#tangents}, one derivative evaluation per phase), as the step's own sweep does for a node
+     * ({@code StepEquations.differentiateEntries}): each column's trial is decoded to first-order phases
+     * ({@link #decode(double[], int, FluidThermodynamics.Prepared, com.wormzjl.icheme.science.fluid.thermo.HydrocarbonModel.Tangent[])})
+     * and the closure's own rows are differenced over it, one-sided, by the coloured sweep's arithmetic. An entry is the
+     * row's derivative without the phases' curvature inside the step, and differs from the equation of state's
+     * difference near its sixth digit. A phase whose composition the column moves by more than
+     * {@link FluidThermodynamics#TANGENT_COMPOSITION_STEP}, and a phase without a tangent, is evaluated on the equation of
+     * state for that column. Every trial row is stated on the wall's branches at the point (decision A423), as the
+     * coloured sweep's are. A trial the property domain refuses (outside the numerical box, a refused phase, a row that
+     * is not finite) hands the whole build back to the coloured sweep and its bounded one-sided stencil
+     * (batch 2026-11-15-fluid-step-cost, S4).</p>
+     */
     public SparseNewton.Equations wallClosure(double[] amounts,double energy,double capacity,double workFrom) {
         double[] target=amounts.clone();
         return new SparseNewton.Equations(){
             private volatile FluidThermodynamics.Prepared prepared;
+            /** The bundle a Jacobian column at another temperature than the build's point is prepared in, refilled in place
+             * ({@link FluidThermodynamics#prepare(double, FluidThermodynamics.Prepared)}): {@link #prepared} stays at the
+             * point's temperature through the sweep, for its tangents and its other columns. */
+            private FluidThermodynamics.Prepared probe;
+            /** The phase tangents of the point a Jacobian is built at, one per storage slot, filled again at each build (as
+             * {@code StepEquations.tangentStorage}): read only by that build's column decodes. */
+            private final com.wormzjl.icheme.science.fluid.thermo.HydrocarbonModel.Tangent[] tangentStorage=new com.wormzjl.icheme.science.fluid.thermo.HydrocarbonModel.Tangent[3];
             /** The wall's branches at the point the Jacobian in use was built at (decision A423): {@code sweeping} is read by
              * the sweep's trials while the build is bracketed, {@code built} by the chord test. */
             private Wall sweeping,built;
@@ -677,6 +699,38 @@ public final class PhaseLayout {
             public double[] residual(double[] x){
                 var local=prepare(x);
                 double[] f=new double[size()];PhaseLayout.this.residual(decode(x,0,local),target,energy,capacity,workFrom,f,0,x,local,sweeping);return f;
+            }
+            /** Called inside the bracket ({@link #linearising}), so {@code sweeping} holds the point's branches; {@code residual}
+             * is the point's own, evaluated outside it, as the coloured sweep's base is. */
+            public int differentiateEntries(double[] x,double[] residual,double differenceStep,int[] entryOffsets,int[] entryRows,
+                                            double[] entries,Runnable checkpoint) {
+                int size=size();
+                try {
+                    var base=prepare(x);
+                    var tangents=model.tangents(decode(x,0,base),base,tangentStorage);
+                    double[] trial=x.clone(),rows=new double[size];
+                    for(int column=0;column<size;column++) {
+                        checkpoint.run();
+                        double step=differenceStep*differenceScale(column,x[column]);
+                        trial[column]+=step;
+                        double temperature=PhaseLayout.this.temperature(trial,0);
+                        var bundle=temperature==base.temperature()?base:(probe=model.prepare(temperature,probe));
+                        long exactBefore=SolverDiagnostics.ENABLED?SolverDiagnostics.jacobianExactPhases.sum():0;
+                        var state=decode(trial,0,bundle,tangents);
+                        if(SolverDiagnostics.ENABLED&&SolverDiagnostics.jacobianExactPhases.sum()>exactBefore)SolverDiagnostics.jacobianExactColumns.increment();
+                        // The solids' rows read the unknowns: the trial's.
+                        PhaseLayout.this.residual(state,target,energy,capacity,workFrom,rows,0,trial,bundle,sweeping);
+                        // A row the coloured sweep would refuse (SparseNewton's trial evaluation) refuses this build too.
+                        for(double value:rows)if(!Double.isFinite(value))throw new IllegalArgumentException("Nonfinite trial residual");
+                        for(int entry=entryOffsets[column];entry<entryOffsets[column+1];entry++){int row=entryRows[entry];entries[entry]=(rows[row]-residual[row])/step;}
+                        trial[column]=x[column];
+                    }
+                }catch(IllegalArgumentException outsideDomain) {
+                    // A trial left the property domain: the coloured sweep has a bounded one-sided stencil for exactly that.
+                    SolverDiagnostics.count(SolverDiagnostics.jacobianBlockFallbacks);return -1;
+                }
+                SolverDiagnostics.count(SolverDiagnostics.jacobianBlockColumns,size);
+                return size;
             }
             private FluidThermodynamics.Prepared prepare(double[] x) {
                 double temperature=PhaseLayout.this.temperature(x,0);var local=prepared;
