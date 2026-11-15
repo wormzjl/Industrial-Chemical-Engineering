@@ -12,6 +12,7 @@ import com.wormzjl.icheme.runtime.fluid.FluidPresetCatalog;
 import com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.fluid.thermo.HydrocarbonValues;
+import com.wormzjl.icheme.science.fluid.transport.MixtureViscosity;
 import com.wormzjl.icheme.science.material.CoefficientTranslations;
 import com.wormzjl.icheme.science.material.DerivedPairs;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
@@ -113,6 +114,8 @@ class G3F11SupercriticalRegionTest {
         m.put("M4 dilute %", 88.0);
         m.put("M4 JST reference rho_c %", 16.0);
         m.put("M4 JST cubic v_c %", 29.0);
+        // S3 (2026-11-15): the production MixtureViscosity.dense on each dataset's critical volume, |worst| rounded up.
+        m.put("M4 dense dataset v_c %", 16.0);
         m.put("M5 n-Hexane density %", 6.0);
         m.put("M5 n-Hexane residual cp %", 3.0);
         m.put("M5 n-Heptane density %", 6.0);
@@ -733,14 +736,6 @@ class G3F11SupercriticalRegionTest {
      * (1.0230, 0.23364, ...) are these times ten, which holds with mu in micropoise and {@code + 1} on the left; with cP and
      * {@code + 1e-4} as the brief wrote them the residual would not vanish at zero density.
      */
-    static double jossiStielThodos(double reducedDensity, double tc, double pc, double molarMass) {
-        double r = reducedDensity;
-        double xi = Math.pow(tc, 1.0 / 6) / (Math.sqrt(molarMass * 1000) * Math.pow(pc / 101325, 2.0 / 3));
-        double right = 0.1023 + r * (0.023364 + r * (0.058533 + r * (-0.040758 + r * 0.0093324)));
-        double centipoise = (Math.pow(right, 4) - 1e-4) / xi;
-        return centipoise * 1e-3;
-    }
-
     @Test
     void m4DenseViscosity() {
         var model = G3Support.bundledNetwork();
@@ -749,8 +744,9 @@ class G3F11SupercriticalRegionTest {
         Map<String, String> ids = Map.of("CarbonDioxide", "CarbonDioxide", "Nitrogen", "Nitrogen", "Methane", "Methane", "Ethane", "Ethane",
                 "n-Propane", "Propane");
         var table = new G3Support.Table("G3 F11 M4", "Fluid", "Tr", "P MPa", "rho_ref / rho_c,ref", "delta (model rho, cubic v_c)",
-                "mu_ref uPa s", "dilute model / ref", "model dilute / CoolProp dilute", "JST (ref rho_c) / ref", "JST (cubic v_c) / ref");
-        Stat dilute = new Stat(), referenceCritical = new Stat(), cubicCritical = new Stat();
+                "mu_ref uPa s", "dilute model / ref", "model dilute / CoolProp dilute", "JST (ref rho_c) / ref", "JST (cubic v_c) / ref",
+                "dense (dataset v_c) / ref");
+        Stat dilute = new Stat(), referenceCritical = new Stat(), cubicCritical = new Stat(), production = new Stat();
         int states = 0;
         for (JsonElement entry : fixture.getAsJsonArray("fluids")) {
             JsonObject fluid = entry.getAsJsonObject();
@@ -768,25 +764,29 @@ class G3F11SupercriticalRegionTest {
                 double mu0 = model.viscosity.vapor(t, x);
                 var e = point(model, t, p, x, Root.VAPOR);
                 double delta = 3.9513730355914 * b * e.density();
-                double withReference = mu0 + jossiStielThodos(rhoRef / criticalDensity, critical[0], critical[1], molar);
-                double withCubic = mu0 + jossiStielThodos(delta, critical[0], critical[1], molar);
+                double withReference = mu0 + MixtureViscosity.jossiStielThodos(rhoRef / criticalDensity, critical[0], critical[1], molar);
+                double withCubic = mu0 + MixtureViscosity.jossiStielThodos(delta, critical[0], critical[1], molar);
+                // The production function: the model's dilute viscosity plus the residual on the dataset's critical volume.
+                double dense = model.viscosity.dense(t, x, e.density(), null, null);
                 String at = file + f(" Tr %.2f %.0f MPa", state.get("Tr").getAsDouble(), p / 1e6);
                 dilute.add(100 * (mu0 / mu - 1), at);
                 referenceCritical.add(100 * (withReference / mu - 1), at);
                 cubicCritical.add(100 * (withCubic / mu - 1), at);
+                production.add(100 * (dense / mu - 1), at);
                 assertTrue(Double.isFinite(mu0) && mu0 > 0, "dilute viscosity at " + at);
                 states++;
                 table.row(file, f("%.2f", state.get("Tr").getAsDouble()), f("%.0f", p / 1e6), f("%.3f", rhoRef / criticalDensity),
                         f("%.3f", delta), f("%.2f", mu * 1e6), f("%.3f", mu0 / mu), f("%.3f", mu0 / state.get("viscosity_dilute").getAsDouble()),
-                        f("%.3f", withReference / mu), f("%.3f", withCubic / mu));
+                        f("%.3f", withReference / mu), f("%.3f", withCubic / mu), f("%.3f", dense / mu));
             }
         }
         table.print("dense-fluid viscosity against CoolProp 8.0.0 (" + states + " states)");
-        System.out.println(f("G3 F11 M4 summary | dilute %% worst / p95 %s | JST on the reference rho_c %s | JST on the cubic v_c %s",
-                dilute.text("%+.1f"), referenceCritical.text("%+.1f"), cubicCritical.text("%+.1f")));
+        System.out.println(f("G3 F11 M4 summary | dilute %% worst / p95 %s | JST on the reference rho_c %s | JST on the cubic v_c %s | dense on the dataset v_c %s",
+                dilute.text("%+.1f"), referenceCritical.text("%+.1f"), cubicCritical.text("%+.1f"), production.text("%+.1f")));
         hold("M4 dilute %", dilute.worst);
         hold("M4 JST reference rho_c %", referenceCritical.worst);
         hold("M4 JST cubic v_c %", cubicCritical.worst);
+        hold("M4 dense dataset v_c %", production.worst);
         assertHeld();
     }
 

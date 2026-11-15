@@ -9,6 +9,53 @@ import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
 
 class MixtureViscosityTest {
+    /**
+     * The declared error of the dense viscosity against CoolProp 8.0.0 on its pure-fluid table (CoolProp's own dilute
+     * viscosity plus the residual at CoolProp's density), percent: the first run's worst (2026-11-15), rounded up to the
+     * next whole unit.
+     */
+    static final double DENSE_DECLARED_PERCENT = 16;
+
+    /**
+     * The dense-fluid residual viscosity (batch 2026-11-15-supercritical-fluids, S3, owner decision O5 A): exactly zero at
+     * zero density (a gas keeps its dilute viscosity, so {@code dense} is {@code vapor} there), increasing in the reduced
+     * density from 0 to 3 for pure carbon dioxide, and, added to CoolProp's dilute viscosity at CoolProp's density, within
+     * {@link #DENSE_DECLARED_PERCENT} of CoolProp's viscosity on the five fluids of {@code viscosity-reference.json} (Tr 1.05
+     * to 1.5, 5 to 30 MPa).
+     */
+    @Test void theDenseResidualIsZeroAtZeroDensityIncreasingAndWithinItsDeclaredError() throws Exception {
+        String id=com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.NETWORK_PACKAGE;var catalog=MaterialCatalog.bundled();
+        var model=new MixtureViscosity(catalog,id);var basis=catalog.conservedComponents(id);var p=catalog.requirePackage(id);
+        double[] co2=new double[basis.size()];co2[basis.indexOf("CarbonDioxide")]=1;
+        double[] mixture=new double[basis.size()];mixture[basis.indexOf("Methane")]=.7;mixture[basis.indexOf("crude_pc05")]=.2;mixture[basis.size()-1]=.1;
+        for(double[] n:java.util.List.of(co2,mixture)) {
+            assertEquals(0.0,model.residual(0,n),"zero at zero density");
+            assertEquals(model.vapor(300,n),model.dense(300,n,0,null,null),"dense is dilute at zero density");
+        }
+        double vc=p.properties().get(p.components().indexOf("CarbonDioxide")).criticalMolarVolume();
+        double last=-1;
+        for(int k=0;k<=300;k++) {
+            double r=model.residual(k*0.01/vc,co2);
+            assertTrue(r>last,"increasing at rho_r "+k*0.01);last=r;
+        }
+        java.util.Map<String,String> ids=java.util.Map.of("CarbonDioxide","CarbonDioxide","Nitrogen","Nitrogen","Methane","Methane","Ethane","Ethane","n-Propane","Propane");
+        double worst=0;String at="-";int states=0;
+        try(var input=getClass().getResourceAsStream("/science/thermo/coolprop/viscosity-reference.json")) {
+            var json=JsonParser.parseReader(new InputStreamReader(input,StandardCharsets.UTF_8)).getAsJsonObject();
+            for(var value:json.getAsJsonArray("fluids")) {
+                var fluid=value.getAsJsonObject();double[] n=new double[basis.size()];n[basis.indexOf(ids.get(fluid.get("fluid").getAsString()))]=1;
+                for(var s:fluid.getAsJsonArray("states")) {
+                    var state=s.getAsJsonObject();
+                    double mu=state.get("viscosity_dilute").getAsDouble()+model.residual(state.get("Dmolar").getAsDouble(),n);
+                    double deviation=100*(mu/state.get("viscosity").getAsDouble()-1);states++;
+                    if(Math.abs(deviation)>Math.abs(worst)){worst=deviation;at=fluid.get("fluid").getAsString()+" "+state.get("T").getAsDouble()+" K "+state.get("P").getAsDouble()+" Pa";}
+                }
+            }
+        }
+        System.out.println(String.format(java.util.Locale.ROOT,"dense viscosity against CoolProp: %d states, worst %+.2f %% at %s",states,worst,at));
+        assertEquals(60,states);
+        assertTrue(Math.abs(worst)<=DENSE_DECLARED_PERCENT,"worst "+worst+" % at "+at);
+    }
     @Test void dissolvedReferencesMatchIndependentApiCheckpointsWithoutExtrapolatingPureLiquidTables() throws Exception {
         String id=com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.NETWORK_PACKAGE;var catalog=MaterialCatalog.bundled();
         var model=new MixtureViscosity(catalog,id);var p=catalog.requirePackage(id);

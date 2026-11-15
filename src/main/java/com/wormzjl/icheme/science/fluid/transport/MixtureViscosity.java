@@ -20,6 +20,8 @@ public final class MixtureViscosity {
     private final java.util.List<String> compounds;
     private final int[] packageIndex,correctionParticipants;
     private final double[][] wilkeMassQuarter,wilkeDenominator;
+    /** Per conserved component (water last), the residual's constants: Tc (K), Pc (Pa), molar mass (kg/mol), critical volume (m3/mol). */
+    private final double[] criticalTemperature,criticalPressure,molarMass,criticalVolume;
 
     public MixtureViscosity(MaterialCatalog catalog,String packageId) {
         propertyPackage=catalog.requirePackage(packageId);
@@ -29,7 +31,7 @@ public final class MixtureViscosity {
         // formulation labels; nothing is hashed (owner decision 2026-10-26).
         // W3b (owner, 2026-11-11): one log-mixing rule over a liquid's components on the conserved basis, water last with its
         // own liquid viscosity; the vapour's Wilke rule over the same basis.
-        revision=catalog.fluidRevision(packageId)+":log-liquid-pair-groups-wilke-v2:catalog-conditional-solute-v1:supercritical-liquid-slot-dilute-v1:range-continuation-v1:water-in-liquid-log-v1";
+        revision=catalog.fluidRevision(packageId)+":log-liquid-pair-groups-wilke-v2:catalog-conditional-solute-v1:supercritical-liquid-slot-dilute-v1:range-continuation-v1:water-in-liquid-log-v1:dense-residual-jst-v1";
         var list=new java.util.ArrayList<>(propertyPackage.components());list.remove("Water");compounds=java.util.List.copyOf(list);
         int count=compounds.size();liquidCorrelations=new ViscosityCorrelation[count];vaporCorrelations=new ViscosityCorrelation[count];packageIndex=new int[count];
         double[] mw=new double[count+1];
@@ -43,11 +45,83 @@ public final class MixtureViscosity {
         for(int i=0;i<count;i++)if(liquidMixture.participants().contains(packageIndex[i]))participants.add(i);
         correctionParticipants=participants.stream().mapToInt(Integer::intValue).toArray();
         mw[count]=propertyPackage.water().molarMass();waterLiquidCorrelation=catalog.viscosity(packageId,"Water",ViscosityCorrelation.Phase.LIQUID).orElse(null);
+        criticalTemperature=new double[count+1];criticalPressure=new double[count+1];molarMass=mw.clone();criticalVolume=new double[count+1];
+        for(int i=0;i<count;i++)residualConstants(i,propertyPackage.properties().get(packageIndex[i]));
+        // Water: its dataset where the package names it (the network's cubic water), else the water model's constants with
+        // the cubic's own critical volume.
+        int waterIndex=propertyPackage.components().indexOf("Water");
+        if(waterIndex>=0)residualConstants(count,propertyPackage.properties().get(waterIndex));
+        else {
+            var water=propertyPackage.water();
+            criticalTemperature[count]=water.criticalTemperature();criticalPressure[count]=water.criticalPressure();
+            criticalVolume[count]=MaterialCatalog.CriticalVolume.CUBIC_RATIO*0.07780*com.wormzjl.icheme.science.thermo.PengRobinsonKernel.GAS_CONSTANT
+                    *water.criticalTemperature()/water.criticalPressure();
+        }
         wilkeMassQuarter=new double[count+1][count+1];wilkeDenominator=new double[count+1][count+1];
         for(int i=0;i<=count;i++)for(int j=0;j<=count;j++){wilkeMassQuarter[i][j]=Math.sqrt(Math.sqrt(mw[j]/mw[i]));wilkeDenominator[i][j]=1/Math.sqrt(8*(1+mw[i]/mw[j]));}
     }
+    private void residualConstants(int i,MaterialCatalog.Property property) {
+        var pr=property.pr();
+        criticalTemperature[i]=pr==null?Double.NaN:pr.criticalTemperature();criticalPressure[i]=pr==null?Double.NaN:pr.criticalPressure();
+        molarMass[i]=property.molecularWeight();criticalVolume[i]=property.criticalMolarVolume();
+    }
     public String revision() {
         return revision;
+    }
+
+    /** One standard atmosphere, Pa: the Jossi-Stiel-Thodos correlation takes Pc in atm. */
+    private static final double ATMOSPHERE=101325.0;
+    /** The Jossi-Stiel-Thodos polynomial in the reduced density, as Lohrenz, Bray and Clark state it. */
+    private static final double JST_0=0.1023,JST_1=0.023364,JST_2=0.058533,JST_3=-0.040758,JST_4=0.0093324;
+
+    /**
+     * The dense-fluid residual viscosity, Pa s, of one fluid of conserved {@code amounts} (water last) at molar density
+     * {@code molarDensity} (mol/m3): the Jossi-Stiel-Thodos form as Lohrenz, Bray and Clark state it (J. Pet. Technol. 16
+     * (1964) 1171, after Jossi, Stiel and Thodos, AIChE J. 8 (1962) 59), on mole-fraction pseudo-critical constants
+     * ({@link #jossiStielThodos}): {@code rho_r = rho sum(x_i Vc_i)} with each dataset's critical volume
+     * ({@link MaterialCatalog.Property#criticalMolarVolume}), {@code Tc}, {@code Pc} and the molar mass averaged the same way.
+     * Zero at zero density, exactly. Owner decision O5 A (batch 2026-11-15-supercritical-fluids, S3); nothing calls it in
+     * the network yet (S2 wires it for dense one-fluid nodes).
+     */
+    public double residual(double molarDensity,double[] amounts) {
+        checkBasis(amounts);
+        if(!(molarDensity>=0)||!Double.isFinite(molarDensity))throw new IllegalArgumentException("Invalid molar density");
+        double sum=0,t=0,p=0,m=0,v=0;
+        for(int i=0;i<amounts.length;i++) {
+            double n=amounts[i];if(n==0)continue;
+            sum+=n;t+=n*criticalTemperature[i];p+=n*criticalPressure[i];m+=n*molarMass[i];v+=n*criticalVolume[i];
+        }
+        if(!(sum>0))throw new IllegalArgumentException("Invalid transport amount");
+        double result=jossiStielThodos(molarDensity*v/sum,t/sum,p/sum,m/sum);
+        if(!(result>=0)||!Double.isFinite(result))throw new IllegalArgumentException("PROPERTY_UNAVAILABLE: residual viscosity");
+        return result;
+    }
+
+    /**
+     * The Jossi-Stiel-Thodos residual viscosity, Pa s, at reduced density {@code reducedDensity} of a fluid with critical
+     * temperature (K), critical pressure (Pa) and molar mass (kg/mol): {@code (f(rho_r)^4 - f(0)^4) / xi} cP,
+     * {@code f(rho_r) = 0.1023 + 0.023364 rho_r + 0.058533 rho_r^2 - 0.040758 rho_r^3 + 0.0093324 rho_r^4},
+     * {@code xi = Tc^(1/6) M^(-1/2) Pc^(-2/3)} in K, g/mol and atm. The published form subtracts {@code 1e-4}; {@code f(0)^4}
+     * is {@code 1.0952e-4}, so the published residual is {@code 9.52e-6 / xi} cP at zero density (carbon dioxide: 0.42
+     * uPa s, 3 % of its 15 uPa s dilute viscosity at 300 K). Subtracting {@code f(0)^4} makes it exactly zero there, so a gas keeps
+     * its dilute viscosity. Increasing in {@code rho_r} from 0 to beyond 3. Elementary functions through
+     * {@link DeterministicMath}.
+     */
+    public static double jossiStielThodos(double reducedDensity,double criticalTemperature,double criticalPressure,double molarMass) {
+        double r=reducedDensity;
+        double xi=DeterministicMath.exp(DeterministicMath.log(criticalTemperature)/6-2.0/3*DeterministicMath.log(criticalPressure/ATMOSPHERE))
+                /Math.sqrt(molarMass*1000);
+        double f=JST_0+r*(JST_1+r*(JST_2+r*(JST_3+r*JST_4)));
+        double f2=f*f,f02=JST_0*JST_0;
+        return (f2*f2-f02*f02)/xi*1e-3;
+    }
+
+    /**
+     * The dense-fluid viscosity, Pa s: the vapour's Wilke dilute viscosity ({@link #vapor}) plus the residual at the
+     * fluid's molar density ({@link #residual}). Equal to the dilute value at zero density.
+     */
+    public double dense(double temperature,double[] amounts,double molarDensity,Workspace workspace,Prepared prepared) {
+        return vapor(temperature,amounts,workspace,prepared)+residual(molarDensity,amounts);
     }
 
     /**
