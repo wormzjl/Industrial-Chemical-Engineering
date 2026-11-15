@@ -162,6 +162,15 @@ public final class FluidWorldAuthority implements AutoCloseable {
         burners=new FiredHeaters(topology,runtime.coordinator(),electric,heatingValues(catalog,model),model.molecularWeights(),formulas(catalog,model));shafts.burners(burners);electric.moved(burners::powerMoved);
         flares=new Flares(topology,heatingValues(catalog,model),model.molecularWeights(),formulas(catalog,model));shafts.flares(flares);
         chimneys=new Chimneys(topology,model.molecularWeights());shafts.chimneys(chimneys);
+        // The pollution releases (batch 2026-11-15-pollution-system, WP4): the hazard standard in the network's conserved order;
+        // each island's transfers on its own list are mapped onto it by name. A standard that cannot be built leaves them off.
+        try {
+            var hazards=hazardColumns(catalog,model);var atoms=formulas(catalog,model);
+            shafts.releases(new Releases(topology,model.components(),new com.wormzjl.icheme.science.pollution.HazardStandard(hazards[0],hazards[1],hazards[2],hazards[3],hazards[4],hazards[5]),
+                    atoms,Releases.so2Reference(hazards[1],atoms),flares,id->runtime.coordinator().model(id).components(),runtime.coordinator()::time,this::releasePollution));
+        } catch(RuntimeException failure) {
+            IChemE.LOGGER.error("pollution status=RELEASES_OFF detail={}",String.valueOf(failure));
+        }
         // The prime movers (batch 2026-11-10-prime-movers): their fuel's heat; a gas turbine's coil at its structure's FEEDWATER cell.
         shafts.primeMovers(new PrimeMovers(heatingValues(catalog,model),model.molecularWeights()),this::coilOf);
         // The batch stills (batch 2026-11-09-batch-distiller): their pots, heads and outlets share the port hooks with the columns.
@@ -935,6 +944,30 @@ public final class FluidWorldAuthority implements AutoCloseable {
         var out=new double[model.componentCount()];var components=model.components();
         for(int c=0;c<out.length;c++){int i=names.indexOf(components.get(c));out[c]=i<0?0:values[i];}
         return out;
+    }
+    /**
+     * The network package's hazard columns (batch 2026-11-15-pollution-system, WP4) in {@code model}'s conserved order, by
+     * component name, in {@code HazardStandard}'s constructor order: toxic and corrosive references, lower flammability limits,
+     * critical temperatures, critical pressures and acentric factors. A component the package lacks has no hazard and no
+     * critical constants (NaN: its whole liquid counts as volatile).
+     */
+    static double[][] hazardColumns(MaterialCatalog catalog,FluidThermodynamics model) {
+        String id=com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(catalog);
+        var names=catalog.conservedComponents(id);var components=model.components();
+        return new double[][]{onModel(catalog.toxicReferences(id),names,components,0),onModel(catalog.corrosiveReferences(id),names,components,0),
+                onModel(catalog.lowerFlammabilityLimits(id),names,components,0),onModel(catalog.criticalTemperatures(id),names,components,Double.NaN),
+                onModel(catalog.criticalPressures(id),names,components,Double.NaN),onModel(catalog.acentricFactors(id),names,components,Double.NaN)};
+    }
+    /** {@code values} on the package's conserved list {@code names}, on {@code components} by name; {@code missing} where a component is not on it. */
+    private static double[] onModel(double[] values,List<String> names,List<String> components,double missing) {
+        var out=new double[components.size()];
+        for(int c=0;c<out.length;c++){int i=names.indexOf(components.get(c));out[c]=i<0?missing:values[i];}
+        return out;
+    }
+    /** A pollution release (WP4) to the pollution service of this server; nothing while the service is off. */
+    private void releasePollution(PhysicalFluidTopology.Position at,com.wormzjl.icheme.science.pollution.Channel channel,double amount) {
+        var service=com.wormzjl.icheme.runtime.pollution.PollutionService.find(server);
+        if(service.isPresent())service.get().release(dimension(at.dimension()),new BlockPos(at.x(),at.y(),at.z()),channel,amount);
     }
     /** The pumps' health (W10b): a repair kit queues its event here. */
     public MachineHealth health(){owned();return health;}
