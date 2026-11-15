@@ -33,6 +33,18 @@ Purpose: make the implemented equipment look better and less bare (owner request
   `ShapeRasterizerTest`, `EquipmentLayoutGoldenTest`, `MachineRpmDesignTest`, `EquipmentShapeCompatTest`,
   `ConstructorDefaultsTest`; `ConstructorColumnTest` (test). All pass.
 
+- 2026-11-15, W3: tandem casings above 45 MW. Each casing is split along the shaft line by its joint flange. The MP
+  casing is a cone from 0.8 of its exhaust radius. The LP hood is a box under a half-round top (`Mesh.vault`) closed at
+  both ends, with a centre ring when double-flow. The crossover is in legs (front exhaust to the next inlet, MP exhaust
+  at its back end to the LP inlet, a double flow's at its middle). Pedestals have a base block, a body and a bearing
+  cap inside the old box. An LP-class turbine above 45 MW is the LP hood alone behind the front standard, on a wider
+  frame. No new bolts; the girth ribs keep one section's count. Layout rows: only HP 300 MW to 10 kPa moved (shell
+  587 to 588, the double-flow inlet at its middle; nozzles unchanged); turbine layout revision 2, table updated.
+  Polygons before/after: STEAM_TURBINE 1774/1818, MP 1600/1600, LP 1504/1504, LP_TANDEM 2052/1508, TANDEM_80
+  2342/2345, TANDEM_300 2590/2634. Views: `tmp/turbine-sections/views/` (worktree). Tests (equipmentGates):
+  `SteamTurbineSectionsTest`, `ProcessUnitTest`, `ShapeRasterizerTest`, `EquipmentLayoutGoldenTest`,
+  `EquipmentShapeCompatTest`. All pass.
+
 ## Documents
 
 - [VISUAL_REVIEW.md](VISUAL_REVIEW.md): the findings and the proposed order.

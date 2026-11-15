@@ -44,6 +44,8 @@ final class SteamTurbineTrain {
     }
 
     final double d, hp, casing, rise, flange;
+    /** An LP hood's half width where the casing is an LP hood (an LP turbine above one casing), else 0. */
+    final double hood;
     final int stages, valves;
     final boolean vacuum;
     /** Stations along z from the front standard's front face: its back, the casing's HP end wall, the HP barrel's end, the cone's end, the exhaust end wall, the rear pedestal. */
@@ -60,7 +62,7 @@ final class SteamTurbineTrain {
 
     /** A turbine of one section ({@link #SteamTurbineTrain(double, int, boolean, double, double[])}). */
     SteamTurbineTrain(double d, int stages, boolean vacuum, double rise) {
-        this(d, stages, vacuum, rise, new double[]{1});
+        this(d, stages, vacuum, rise, new double[]{1}, 0);
     }
 
     /**
@@ -72,11 +74,20 @@ final class SteamTurbineTrain {
      * section put it: the end walls, {@link #coneEnd} and {@link #exhaust}.
      */
     SteamTurbineTrain(double d, int stages, boolean vacuum, double rise, double[] drops) {
+        this(d, stages, vacuum, rise, drops, 0);
+    }
+
+    /**
+     * A turbine whose casing is an LP hood {@code hood} either side of its shaft ({@link #hood}): an LP turbine above one
+     * casing (owner: "LP=LP"), the steam chest and the trip-and-throttle valve over and beside the hood. 0 for barrels.
+     */
+    SteamTurbineTrain(double d, int stages, boolean vacuum, double rise, double[] drops, double hood) {
+        this.hood = hood;
         this.d = d;
         this.stages = stages;
         this.vacuum = vacuum;
         this.rise = rise;
-        hp = (vacuum ? .65 : .8) * d;
+        hp = hood > 0 ? 2 * hood : (vacuum ? .65 : .8) * d;
         casing = (.5 + .15 * stages) * d;
         flange = .08 * d;
         valves = Math.max(1, Math.min(5, (stages - 1) / 2));
@@ -183,7 +194,7 @@ final class SteamTurbineTrain {
 
     /** How far the turbine reaches to -x from its shaft: the governor's servo, the split flange. */
     double leftReach() {
-        return Math.max(.63 * d + .02, .5 * d + flange + .02);
+        return Math.max(Math.max(.63 * d + .02, .5 * d + flange + .02), hood + .04 * d + .02);
     }
 
     // ---- Drawing ----------------------------------------------------------------------------------------------------
@@ -208,9 +219,32 @@ final class SteamTurbineTrain {
         u.serviceHousing=new double[]{a-ga,shaft+.02,z0-.8*ga,a+ga,shaft+.02+1.8*ga,z0};
         m.cylinder(Frame.of(new double[]{a + .55 * sx, shaft - .05 * d - .05, 0}, 2, 1), .04 * d + .02, z0 - .05 * d - .03, z0, 10, Material.MACHINE);
 
-        // The casing: the clad HP end wall, the clad barrels of the sections before the last and the cones between them,
-        // the bare exhaust barrel and its end wall; the cladding's edge over the bare casing, the exhaust barrel's girth
-        // ribs; the glands at both ends.
+        if (hood > 0) {
+            // An LP turbine above one casing: its casing the LP hood between the end walls, the glands at both ends.
+            hood(u, a, base, shaft, zh, ze, hood, 2 * hood > SteamTurbineDesign.LP_WIDTH * d + 1e-9, d);
+            m.prism(f, .1 * d + .02, zs, zh, n, Material.MACHINE);
+            m.prism(f, .1 * d + .02, ze, z0 + pedestal0, n, Material.MACHINE);
+            u.volumes.add(ProcessUnit.Solid.rod(new double[]{a, shaft, 0}, 2, zh + .05, ze - .05, .9 * hood, 0));
+        } else casing(u, a, base, z0, shaft, f, n);
+
+        // The rear bearing pedestal and its cap.
+        double px = Math.max(.15, .25 * d), p0 = z0 + pedestal0, p1 = z0 + pedestal1, pt = shaft + .15 * d;
+        u.box(new double[]{a - px, base, p0}, new double[]{a + px, pt, p1}, Material.MACHINE, true);
+        u.box(new double[]{a - .6 * px, pt, p0 + .2 * (p1 - p0)}, new double[]{a + .6 * px, pt + .02 + .03 * d, p1 - .2 * (p1 - p0)}, Material.MACHINE, false);
+
+        steamChest(u, a, base + chestAxis(), z0 + chest);
+        tripThrottle(u, a, xv, yv, zv, base + chestAxis(), z0 + chest);
+    }
+
+    /**
+     * The barrels' casing on the shaft at (a, shaft), its front standard's front at {@code z0}: the clad HP end wall, the
+     * clad barrels of the sections before the last and the cones between them, the bare exhaust barrel and its end wall;
+     * the cladding's edge over the bare casing, the exhaust barrel's girth ribs; the glands at both ends; the split flange,
+     * its studs and the casing's feet.
+     */
+    private void casing(ProcessUnit u, double a, double base, double z0, double shaft, Frame f, int n) {
+        var m = u.mesh;
+        double r = d / 2, e = flange, zs = z0 + standard, zh = z0 + hpEnd, ze = z0 + exhaustEnd, z2;
         int last = barrelStart.length - 1;
         z2 = z0 + lastBarrel();
         m.annulus(f, 0, hp / 2, zh, n, -1, Material.CLADDING);
@@ -224,7 +258,7 @@ final class SteamTurbineTrain {
         m.annulus(f, 0, r, ze, n, 1, Material.MACHINE);
         m.hoop(f, r, r + .02 + .01 * d, z2, z2 + .04, n, Material.CLADDING);
         if (d >= 1) {
-            int ribs = Math.max(1, (int) Math.round((ze - z2) / (.35 * d)));
+            int ribs = Math.max(1, (int) Math.round((exhaustEnd - coneEnd) / (.35 * d))); // as many as one section's exhaust barrel had
             for (int k = 1; k <= ribs; k++) {
                 double z = z2 + (ze - z2) * k / (ribs + 1), w = .02 + .005 * d;
                 m.hoop(f, r, r + .025 * d, z - w, z + w, n, Material.MACHINE);
@@ -256,14 +290,32 @@ final class SteamTurbineTrain {
             double zf1 = z0 + coneEnd - .06, zf0 = Math.max(zh + .02, zf1 - .2 * d), x = a + side * (oneSection((zf0 + zf1) / 2 - z0) + .55 * e), w = .02 + .02 * d;
             u.box(new double[]{x - w, base, zf0}, new double[]{x + w, shaft - th / 2, zf1}, Material.MACHINE, true);
         }
+    }
 
-        // The rear bearing pedestal and its cap.
-        double px = Math.max(.15, .25 * d), p0 = z0 + pedestal0, p1 = z0 + pedestal1, pt = shaft + .15 * d;
-        u.box(new double[]{a - px, base, p0}, new double[]{a + px, pt, p1}, Material.MACHINE, true);
-        u.box(new double[]{a - .6 * px, pt, p0 + .2 * (p1 - p0)}, new double[]{a + .6 * px, pt + .02 + .03 * d, p1 - .2 * (p1 - p0)}, Material.MACHINE, false);
-
-        steamChest(u, a, base + chestAxis(), z0 + chest);
-        tripThrottle(u, a, xv, yv, zv, base + chestAxis(), z0 + chest);
+    /**
+     * An LP casing's exhaust hood along z at (a, shaft) from {@code z1} to {@code z2} (batch 2026-11-15-equipment-visual-design):
+     * a box {@code half} either side from {@code base} to the shaft line under a half-round top, its top closed at both
+     * ends, split along the shaft line by its joint flange (0.04 Dc proud, as deep as the casing's split flange); a double
+     * flow's centre ring between its two exhaust hoods. It collides as the box and the round body.
+     */
+    static void hood(ProcessUnit u, double a, double base, double shaft, double z1, double z2, double half, boolean doubleFlow, double d) {
+        var m = u.mesh;
+        var axis = Frame.of(new double[]{a, shaft, 0}, 2, 1);
+        int n = ProcessUnit.sides(2 * half);
+        u.box(new double[]{a - half, base, z1}, new double[]{a + half, shaft, z2}, Material.MACHINE, true);
+        m.vault(axis, half, z1, z2, n, 0, Math.PI, Material.MACHINE);
+        u.solids.add(ProcessUnit.Solid.rod(new double[]{a, shaft, 0}, 2, z1, z2, half, 0));
+        int count = Math.max(1, (int) Math.round(n / 2.0));
+        for (double z : new double[]{z1, z2}) {
+            var cap = new java.util.ArrayList<double[]>();
+            for (int i = 0; i <= count; i++) cap.add(axis.at(Math.PI * i / count, half, z));
+            m.flat(cap, new double[]{0, 0, z == z1 ? -1 : 1}, Material.MACHINE);
+        }
+        double th = Math.max(.05, .1 * d), e = .04 * d;
+        for (int side = -1; side <= 1; side += 2)
+            ProcessUnit.ledge(m, a, side, z1, half, z2, half, shaft - th / 2, shaft + th / 2, e, true, true, Material.MACHINE);
+        if (doubleFlow) m.hoop(axis, half, half + .04 * d, (z1 + z2) / 2 - .05 * d, (z1 + z2) / 2 + .05 * d, n, Material.CLADDING);
+        u.round(a, shaft, z1, z2, half);
     }
 
     /** A casing of one section's radius at station {@code z} from the front standard's front: the HP barrel's, the cone's, the exhaust barrel's. */
