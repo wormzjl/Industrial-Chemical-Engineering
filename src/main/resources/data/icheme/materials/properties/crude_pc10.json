@@ -66,6 +66,12 @@
     "source": "Hess's law on this record's thermochemistry (cragoe-1929-chx-r1): the formula burnt to CO2, H2O (gas), SO2 and N2 on the ideal-gas heats of formation at 298.15 K of icheme:chemsep_carbon_dioxide (chemsep-8.3-hf-r1), icheme:water (chemsep-8.3-hf-r1) and icheme:chemsep_sulfur_dioxide (chemsep-8.3-hf-r1). Computed by tools/heating-values/heating-values.mjs. Read by a fired heater's burners.",
     "revision": "hess-lhv-r1"
   },
+  "critical_volume": {
+    "volume_m3_per_mol": 0.002559844204484504,
+    "estimated": true,
+    "source": "Estimated: Z_RA R Tc / Pc with the Rackett compressibility Z_RA 0.239920 that reproduces the record's standard liquid density 971.1402046434567 kg/m3 at 288.7055555556 K in the modified Rackett equation of Spencer and Danner (J. Chem. Eng. Data 17 (1972) 236), V_s = (R Tc / Pc) Z_RA^(1 + (1 - T/Tc)^(2/7)), on the record's own Tc, Pc and molar mass. Read by the dense-fluid residual viscosity. Written by tools/compound-import/critical-volume.mjs.",
+    "revision": "rackett-standard-density-r1"
+  },
   "viscosity": {
     "liquid": {
       "type": "log_table",

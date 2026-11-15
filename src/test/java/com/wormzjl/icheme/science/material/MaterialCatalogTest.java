@@ -64,7 +64,8 @@ class MaterialCatalogTest {
      * The identities an owner reads off the files (owner decision 2026-10-26). The column's: every record the package names
      * for its phase physics, each with its declared revision, and not the package record itself (option B, 2026-11-04). The
      * fluid network's adds what only it reads: each viscosity by its own revision, the water's ice and the fluid reference
-     * records that hold an entry for one of its compounds or the water. Rebuilt here from the raw JSON, not through the parser.
+     * records that hold an entry for one of its compounds or the water, and each dataset's critical volume by its own revision
+     * (batch 2026-11-15-supercritical-fluids, S3). Rebuilt here from the raw JSON, not through the parser.
      */
     @Test void everyPackageIdentityListsTheDeclaredRevisionOfEachRecordItNames() {
         var catalog=MaterialCatalog.bundled();var records=new HashMap<String,Map<String,JsonObject>>();var transport=new TreeMap<String,Set<String>>();
@@ -119,7 +120,10 @@ class MaterialCatalogTest {
             assertEquals(identity,catalog.requirePackage(id).scientificRevision(),id);
             var transportParts=new ArrayList<String>();for(String ref:properties)transportParts.addAll(viscosities.apply("properties",ref));
             transportParts.addAll(viscosities.apply("water",water));var waterRecord=records.get("water").get(water);
+            var criticalVolumes=properties.stream().filter(ref->records.get("properties").get(ref).has("critical_volume"))
+                    .map(ref->ref+"@"+records.get("properties").get(ref).getAsJsonObject("critical_volume").get("revision").getAsString()).toList();
             assertEquals(identity+";viscosity="+String.join(",",transportParts)
+                    +(criticalVolumes.isEmpty()?"":";critical-volume="+String.join(",",criticalVolumes))
                     +(waterRecord.has("ice")?";ice="+declared.apply("crystals",waterRecord.getAsJsonObject("ice").get("crystal").getAsString()):"")
                     +";fluid-data="+String.join(",",transport.entrySet().stream().filter(e->e.getValue().contains("Water")||e.getValue().stream().anyMatch(components::contains)).map(Map.Entry::getKey).toList()),
                     catalog.fluidRevision(id),id);
@@ -221,6 +225,48 @@ class MaterialCatalogTest {
             var error=assertThrows(IllegalArgumentException.class,()->MaterialCatalog.parse(changed(pc07,o->edit.accept(o.getAsJsonObject("freezing")))));
             assertTrue(error.getMessage().contains(pc07)&&error.getMessage().contains("freezing."),error.getMessage());
         }
+    }
+    /**
+     * A dataset's {@code critical_volume} sub-record (batch 2026-11-15-supercritical-fluids, S3, owner decision O10 A): every
+     * bundled dataset carries one and it parses to its value; without it the property gives the cubic's own
+     * {@code 3.9513730355914 x 0.07780 R Tc / Pc}; a malformed one is refused naming its record and its key; a bump of its
+     * revision moves the fluid identity of the packages that hold the record and no other, and moves no column identity or
+     * physics content (the column does not read it).
+     */
+    @Test void aCriticalVolumeSubRecordParsesFallsBackToTheCubicsAndMovesOnlyTheFluidIdentity() {
+        var bundled=MaterialCatalog.bundled();String co2="properties/chemsep_carbon_dioxide.json",id="icheme:chemsep_carbon_dioxide";
+        int datasets=0;
+        for(var entry:bundled.resources().entrySet())if(entry.getKey().startsWith(ROOT+"properties/")) {
+            assertTrue(JsonParser.parseString(entry.getValue()).getAsJsonObject().has("critical_volume"),entry.getKey());datasets++;
+        }
+        assertEquals(47,datasets,"26 ChemSep datasets, 6 TJL19 light ends, nitrogen, TJL20 methane, the cubic water and 12 cuts");
+        var co2Volume=dataset(bundled,id).criticalVolume();
+        assertEquals(0.094e-3,co2Volume.volume(),1e-15,"ChemSep's 0.094 m3/kmol");
+        assertFalse(co2Volume.estimated());assertEquals("chemsep-8.3-vc-r1",co2Volume.revision());
+        assertEquals(co2Volume.volume(),dataset(bundled,id).criticalMolarVolume());
+        assertTrue(dataset(bundled,"icheme:crude_pc05").criticalVolume().estimated(),"a cut's is estimated");
+        var bare=dataset(MaterialCatalog.parse(changed(co2,o->o.remove("critical_volume"))),id);
+        assertNull(bare.criticalVolume());
+        double cubic=3.9513730355914*0.07780*com.wormzjl.icheme.science.thermo.PengRobinsonKernel.GAS_CONSTANT*bare.pr().criticalTemperature()/bare.pr().criticalPressure();
+        assertEquals(cubic,bare.criticalMolarVolume(),0.0);
+        for(var edit:List.<java.util.function.Consumer<JsonObject>>of(c->c.addProperty("volume_m3_per_mol",-1),c->c.addProperty("volume_m3_per_mol","x"),
+                c->c.remove("volume_m3_per_mol"),c->c.remove("estimated"),c->c.remove("source"),c->c.addProperty("revision","chemsep vc"),c->c.remove("revision"))) {
+            var error=assertThrows(IllegalArgumentException.class,()->MaterialCatalog.parse(changed(co2,o->edit.accept(o.getAsJsonObject("critical_volume")))));
+            assertTrue(error.getMessage().contains(co2)&&error.getMessage().contains("critical_volume."),error.getMessage());
+        }
+        var bumped=MaterialCatalog.parse(changed(co2,o->{var c=o.getAsJsonObject("critical_volume");c.addProperty("revision",c.get("revision").getAsString()+"-edited");}));
+        int moved=0;
+        for(var p:bundled.packages().values()) {
+            boolean holds=p.properties().stream().anyMatch(property->property.id().equals(id));
+            assertEquals(p.scientificRevision(),bumped.requirePackage(p.id()).scientificRevision(),p.id());
+            assertEquals(bundled.physicsContent(p.id(),p.components()),bumped.physicsContent(p.id(),p.components()),p.id());
+            assertEquals(!holds,bundled.fluidRevision(p.id()).equals(bumped.fluidRevision(p.id())),p.id());
+            if(holds)moved++;
+        }
+        assertTrue(moved>0,"some package holds the CO2 dataset");
+    }
+    private static MaterialCatalog.Property dataset(MaterialCatalog catalog,String id) {
+        return catalog.packages().values().stream().flatMap(p->p.properties().stream()).filter(p->p.id().equals(id)).findFirst().orElseThrow();
     }
     /**
      * A package is a method and a compound list, and its identity names those records, not the package record (option B,
