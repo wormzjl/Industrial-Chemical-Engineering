@@ -137,6 +137,40 @@ class WearTest {
         assertEquals(0, Wear.rate(Wear.Fault.WET_EXHAUST.intensity(.01), 0, s), "none at 1 %");
     }
 
+    /**
+     * W5 (batch 2026-11-15-equipment-visual-design; owner: "you need to change the wear rules instead"): the onset rises as
+     * the exhaust pressure falls, from 1 % at 150 kPa to 4.8 % at 20 kPa and 5.6 % at 10 kPa (the classes' design moisture
+     * on the game's scale, plus 0.1 %), linear in ln P, flat below 10 kPa, the span still 5 %. From 150 kPa up every number
+     * is today's, bit for bit; NaN wears none.
+     */
+    @Test
+    void theWetExhaustOnsetRisesTowardsVacuum() {
+        assertEquals(.01, Wear.wetOnset(150e3), 0);
+        assertEquals(.048, Wear.wetOnset(20e3), 1e-15);
+        assertEquals(.056, Wear.wetOnset(10e3), 1e-15);
+        assertEquals(.056, Wear.wetOnset(5e3), 0, "flat below 10 kPa");
+        assertEquals(.01, Wear.wetOnset(Double.NaN), 0);
+        double mid = Math.sqrt(150e3 * 20e3);
+        assertEquals((.01 + .048) / 2, Wear.wetOnset(mid), 1e-12, "linear in ln P");
+        // Continuous at its points: no step at the vacuum limit.
+        for (double p : new double[]{150e3, 20e3, 10e3})
+            assertEquals(Wear.wetOnset(p * (1 - 1e-9)), Wear.wetOnset(p * (1 + 1e-9)), 1e-9, "at " + p);
+        for (double p = 5e3; p < 3e5; p *= 1.1) assertTrue(Wear.wetOnset(p) >= Wear.wetOnset(p * 1.1), "falls with the pressure at " + p);
+        // From 150 kPa up: today's rule exactly.
+        for (double p : new double[]{150e3, 250e3, 350e3, 1e6, 4.2e6})
+            for (double w : new double[]{Double.NaN, 0, .005, .01, .0101, .035, .06, .6}) {
+                assertEquals(Wear.wetExhaust(w), Wear.wetExhaust(w, p), 0, "w " + w + " at " + p);
+                assertEquals(Double.doubleToLongBits(w), Double.doubleToLongBits(Wear.wetExcess(w, p)), "the share itself at " + p);
+            }
+        // Below it: the same span from the risen onset.
+        assertEquals(0, Wear.wetExhaust(.056, 10e3), 0);
+        assertEquals(.5, Wear.wetExhaust(.081, 10e3), 1e-12);
+        assertEquals(1, Wear.wetExhaust(.106, 10e3), 1e-12);
+        assertEquals(0, Wear.wetExhaust(.048, 20e3), 0);
+        assertEquals(0, Wear.wetExhaust(Double.NaN, 10e3), 0);
+        assertEquals(Wear.wetExhaust(.07, 10e3), Wear.Fault.WET_EXHAUST.intensity(Wear.wetExcess(.07, 10e3)), 1e-12, "the fault reads the reduced share");
+    }
+
     @Test
     void runningDryLastsFortyProcessMinutesAndTheSwitchStopsAllWear() {
         assertEquals(2400, Wear.life(Double.NaN, true, Wear.Settings.DEFAULT), 1e-9);

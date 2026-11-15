@@ -48,7 +48,7 @@ Paths under [`src/main/java/com/wormzjl/icheme/science/equipment/`](../../../src
 | `VerticalHeaterDesign`, `CabinHeaterDesign` | API 560 fired heaters | 203, 258 |
 | **Machines** | | |
 | `PumpDesign`, `CompressorDesign`, `CentrifugalCompressorDesign` | Casings by design point: an OH2 or BB2 pump, an API 618 frame, an API 617 barrel | 319, 296, 228 |
-| `SteamTurbineDesign`, `SteamTurbineTrain` | The one steam turbine kind (`sections`, `DEFAULT_STEAM`, `CONDENSING_EXHAUST`) and its drawing | 297, 292 |
+| `SteamTurbineDesign`, `SteamTurbineTrain` | The one steam turbine kind (`front`, `sections`, `drops`, `DEFAULT_STEAM`, `CONDENSING_EXHAUST`, `DRAFT_STEAM`, `DRAFT_EXHAUST`) and its drawing (stepped barrels, `hood`, `pedestal`, the LP casing) | 404, 578 |
 | `MotorDesign`, `GearboxDesign` | Motor and generator (terminal box = FE port); a parallel-shaft gearbox | 223, 161 |
 | `VacuumPumpDesign`, `EjectorDesign` | Liquid ring and dry screw vacuum pumps (models from `VacuumPump`); a steam ejector | 286, 119 |
 | `PrimeMoverDesign` | A combustion engine or a gas turbine package (models from `PrimeMover`), its own exhaust stack and coil | 563 |
@@ -91,7 +91,7 @@ Paths under [`src/main/java/com/wormzjl/icheme/science/equipment/`](../../../src
 - Motion (`ProcessUnit`): `FAN_SPEED`, `PUMP_SPEED`, `CRANK_SPEED`; `MOTION_PERIOD` holds whole turns of every speed. Kinds whose `moves` is true have parts the client turns ([client-rendering.md](client-rendering.md)).
 - `ConverterDesign.rated` is one tank's volume in `TURNOVER` seconds.
 - Machine design point lists: `MachineDuty.POWERS`, `MOTOR_POWERS` (IEC), `EXHAUSTS`; `speed` is 50 Hz synchronous.
-- Machine size limits (kW in the code): `MachineDuty.MAX_GENERATOR` 400 MW (`GENERATOR_POWERS`); `MachineDuty.MAX_TURBINE` 300 MW (`TURBINE_POWERS`, from 55 kW), one casing to `SteamTurbineDesign.SINGLE_CASING` 45 MW and tandem sections above; a two-pole generator above `ProcessUnit.TURBO_GENERATOR` 20 MW is drawn as a turbo-generator.
+- Machine size limits (kW in the code): `MachineDuty.MAX_GENERATOR` 400 MW (`GENERATOR_POWERS`); `MachineDuty.MAX_TURBINE` 300 MW (`TURBINE_POWERS`, from 55 kW), one casing to `SteamTurbineDesign.SINGLE_CASING` 45 MW and tandem casings above. A turbine expands straight through its sections (`SteamTurbineDesign.front`, `sections`; batch 2026-11-15-equipment-visual-design): HP or VHP steam through HP, MP and LP, MP through MP and LP, LP (`MachineDuty.Steam.LP`, 4.5 bar) through LP, to an exhaust of `MachineDuty.TURBINE_EXHAUSTS` (10 to 350 kPa, below the LP header); a saved back pressure keeps loading with fewer sections by the same rule. Up to 45 MW the sections are barrels of one casing (`SteamTurbineTrain.barrelStart`, each as long as its share of `drops`); above it, separate casings on one shaft joined by crossover legs. An LP-class turbine above 45 MW has no HP steam chest or trip-and-throttle valve: a single flow is an inlet belt and a casing flaring to 0.6 Dc with the exhaust hood (`SteamTurbineTrain.hood`: a ribbed box under an arched cover) at the rear only, a double flow the hood over its whole length; one inlet riser with a butterfly valve on the shaft line and a short exhaust neck on the hood's top (`SteamTurbineDesign.lpNozzles`). A unit's cells are the cells its facets reach, so a drawing change can move a layout row although no solid changed; a two-pole generator above `ProcessUnit.TURBO_GENERATOR` 20 MW is drawn as a turbo-generator.
 
 ## Formats
 

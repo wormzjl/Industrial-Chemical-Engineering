@@ -484,20 +484,24 @@ class MachineHealthTest {
     /**
      * N4: a steam turbine expanding nearly saturated steam from 40 bar to 0.1 bar exhausts wet (its own stream at the exhaust
      * pressure and at its inlet enthalpy less its shaft work), erodes its last blades by the wet exhaust rule and says WET
-     * EXHAUST, although its receiver holds dry nitrogen. Its health is keyed by its fluid device, as a pump's is.
+     * EXHAUST, although its receiver holds dry nitrogen. Its health is keyed by its fluid device, as a pump's is. Its rule
+     * reads the onset at its exhaust pressure (W5, batch 2026-11-15-equipment-visual-design): 5.6 % at 10 kPa, a condensing
+     * last stage's design moisture, so this inlet that lost its superheat wears at about a tenth of the full intensity.
      */
     @Test
     void aSteamTurbineOnSaturatedSteamExhaustsWetErodesAndSaysWetExhaust() {
         var rig = turbineRig(Wear.Settings.DEFAULT);
         for (int i = 0; i < 400; i++) rig.tick();
         assertTrue(rig.flow() > 0, "steam passes: " + rig.flow() + " kg/s");
-        double w = exhaustMoisture(rig);
-        System.out.printf(java.util.Locale.ROOT, "N4 exhaust moisture, 40 bar 525 K to 0.1 bar: %.4f%n", w);
+        double w = exhaustMoisture(rig), p = rig.coordinator.observe(1).lastResult().orElseThrow().observations().getFirst().secondPressure();
+        System.out.printf(java.util.Locale.ROOT, "N4 exhaust moisture, 40 bar 525 K to 0.1 bar: %.4f at %.0f Pa, onset %.4f%n", w, p, Wear.wetOnset(p));
         assertEquals(.062, w, .005, "about 6 % liquid by mass on the solve's work law: " + w);
-        assertEquals(1, rig.health.intensity(1), 1e-12, "the full wet exhaust intensity");
-        assertEquals(1 / (8 * 3600.), rig.health.rate(1), 1e-9 / 3600, "1/(8 h) a process second");
+        assertEquals(1e4, p, 500, "the row's second end is the exhaust");
+        double intensity = Wear.wetExhaust(w, p);
+        assertTrue(intensity > 0 && intensity < .3, "above the 10 kPa onset, well under the full intensity: " + intensity);
+        assertEquals(intensity, rig.health.intensity(1), 1e-12, "the wet exhaust intensity at its exhaust's onset");
         double rate = rig.health.rate(1);
-        assertEquals(Wear.rate(Wear.Fault.WET_EXHAUST.intensity(w), 0, Wear.Settings.DEFAULT), rate, 1e-12 * rate, "its wet exhaust rate");
+        assertEquals(Wear.rate(intensity, 0, Wear.Settings.DEFAULT), rate, 1e-12 * rate, "its wet exhaust rate");
         assertEquals(Wear.Fault.WET_EXHAUST, rig.health.fault(1));
         assertEquals("WET EXHAUST", rig.health.status(1));
         assertEquals(0, rig.health.crackle(1), "a turbine has no mover noise");
@@ -528,7 +532,8 @@ class MachineHealthTest {
      */
     @Test
     void aFailedTurbineIsShutAndAKitRestoresIt() {
-        var rig = turbineRig(FAST);
+        // A tenth of FAST's erosion life: at 10 kPa's onset (W5) this exhaust wears at about a tenth of the full intensity.
+        var rig = turbineRig(new Wear.Settings(true, 1 / 600.0, .5));
         for (int i = 0; i < 8000 && !rig.health.failed(1); i++) rig.tick();
         assertTrue(rig.health.failed(1), "it failed: " + rig.health.health(1));
         assertEquals("FAILED", rig.health.status(1));

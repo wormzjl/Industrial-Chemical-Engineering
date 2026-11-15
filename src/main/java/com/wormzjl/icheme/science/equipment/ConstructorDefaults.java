@@ -28,7 +28,7 @@ public final class ConstructorDefaults {
         if (design.lengthInMetres() && (length == low || length == high))
             length = low + ((high - low) / design.lengthStep() + 1) / 2 * design.lengthStep();
         if (design.hasDuty()) {
-            var duty = design.duty(diameter, length);
+            var duty = design.draft(diameter, length);
             return new Sizes(design.size(duty), design.length(duty));
         }
         return new Sizes(diameter, length);

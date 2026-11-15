@@ -122,7 +122,8 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
   intensity at the committed slice: `PipeObservation.npshRatio`, `dry`, the screw's liquid share, for LOW_FLOW the
   committed flow over the suction's density against the rated flow at the speed share, for WET_GAS
   `PipeObservation.condensedShare`, for WET_EXHAUST the condensed mass share of the turbine's own exhaust (one PH
-  equilibrium at the exhaust pressure and the inlet enthalpy less the shaft work, `PassiveStepSolver.exhaustMoisture`; no
+  equilibrium at the exhaust pressure and the inlet enthalpy less the shaft work, `PassiveStepSolver.exhaustMoisture`, less the
+  onset's rise at the row's second-end pressure, `Wear.wetExcess`; no
   read where it does not answer). Booked over the slice's process time (`MachineHealth.book`).
 - A repair kit on any mover casing (`Kind.mover()`), a steam turbine or an in-line device's pipe block queues
   `MachineHealth.Repair`: every device with a health record (`worn`) is repaired, another answers `NOT_A_PUMP`. A failure

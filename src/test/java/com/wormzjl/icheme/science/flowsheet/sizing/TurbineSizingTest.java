@@ -38,10 +38,27 @@ final class TurbineSizingTest {
         assertSame(Limit.TURBINE_INLET, TurbineSizing.rate(LOAD, new TurbineSizing.Size(1120, MachineDuty.Steam.MP, 350)).closest().limit());
         assertEquals(350, TurbineSizing.exhaust(300), 0, "nearer 350 than 250 by ratio");
         assertEquals(10, TurbineSizing.exhaust(8), 0);
-        // 16 bar fits MP, but MP builds no exhaust over 8.5 bar: Auto goes up to HP for a 10 bar exhaust.
-        var mp = TurbineSizing.auto(new TurbineSizing.Load(850, 1600, 1000));
-        assertEquals(new TurbineSizing.Size(1120, MachineDuty.Steam.HP, 1000), mp.size());
+        assertEquals(350, TurbineSizing.exhaust(1000), 0, "no exhaust at or above the LP header is offered");
         assertEquals(new TurbineSizing.Size(1120, MachineDuty.Steam.MP, 350), TurbineSizing.auto(new TurbineSizing.Load(850, 1600, 350)).size(), "the lowest class that holds");
+        // 4 bar steam fits the LP class, which exhausts at most to 150 kPa (half its 4.5 bar).
+        assertEquals(new TurbineSizing.Size(1120, MachineDuty.Steam.LP, 150), TurbineSizing.auto(new TurbineSizing.Load(850, 400, 150)).size());
+        assertEquals(Lamp.GREEN, TurbineSizing.auto(new TurbineSizing.Load(850, 400, 150)).rating().lamp());
+    }
+
+    /**
+     * Straight through (batch 2026-11-15-equipment-visual-design): a tile exhausting at or above the LP header reads red on
+     * {@link Limit#TURBINE_EXHAUST}, for any size, since no turbine is built for back pressure; Auto still proposes the size
+     * that holds the rest, at the highest exhaust below the header.
+     */
+    @Test void anExhaustAtOrAboveTheLpHeaderIsRed() {
+        var back = new TurbineSizing.Load(850, 4000, 1000);
+        var choice = TurbineSizing.auto(back);
+        assertEquals(new TurbineSizing.Size(1120, MachineDuty.Steam.HP, 350), choice.size());
+        assertEquals(Lamp.RED, choice.rating().lamp());
+        assertSame(Limit.TURBINE_EXHAUST, choice.rating().closest().limit());
+        assertEquals(Lamp.RED, TurbineSizing.rate(new TurbineSizing.Load(850, 4000, 450), choice.size()).lamp(), "at the header itself");
+        assertEquals(Lamp.GREEN, TurbineSizing.rate(new TurbineSizing.Load(850, 4000, 449), choice.size()).lamp(), "just below it");
+        assertEquals(Limit.Kind.MUST, Limit.TURBINE_EXHAUST.kind());
     }
 
     @Test void whatTheConstructorRefusesIsRed() {
