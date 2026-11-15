@@ -71,3 +71,5 @@ Status: Concluded 2026-10-26 (batch in 0.12.0). Index: [../INDEX.md](../INDEX.md
 ### Notes
 
 - status corrected 2026-10-26: the batch reached `main`; the folder is kept as its evidence.
+
+Large files (AGENTS.md, batch 2026-11-15-tools-large-files): the 24 images, Gradle results, worlds and other large files of this folder are git-ignored here; their copies are in the main checkout's `research/tools/storage-vessel-renders/`, at the same relative paths.
