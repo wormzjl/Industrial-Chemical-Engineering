@@ -60,6 +60,15 @@ final class G3Support {
 
     static FluidThermodynamics network() { return model(NETWORK); }
 
+    /**
+     * The bundled network model: the game's catalog and its network package ({@code FluidMaterialCatalog.NETWORK_PACKAGE},
+     * the derived cubic with water), not the pilot catalog of {@link #model} (batch 2026-11-15-supercritical-fluids, S0).
+     */
+    static synchronized FluidThermodynamics bundledNetwork() {
+        String id = com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.NETWORK_PACKAGE;
+        return MODELS.computeIfAbsent("bundled|" + id, key -> FluidTestSupport.model(MaterialCatalog.bundled(), id));
+    }
+
     /** A pure-component amount vector over the model's hydrocarbon basis. */
     static double[] pure(FluidThermodynamics model, String component) {
         double[] x = new double[model.hydrocarbon.componentCount()];
