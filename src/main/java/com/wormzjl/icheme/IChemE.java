@@ -57,6 +57,9 @@ public final class IChemE {
     private static final ModConfigSpec.DoubleValue CREATE_STRESS_PER_FE;
     private static final ModConfigSpec.BooleanValue WEAR_ENABLED;
     private static final ModConfigSpec.DoubleValue WEAR_CAVITATION_HOURS, WEAR_DRY_MINUTES;
+    private static final ModConfigSpec.BooleanValue POLLUTION_ENABLED;
+    private static final ModConfigSpec.DoubleValue POLLUTION_HALF_LIFE_OPEN_MINUTES, POLLUTION_HALF_LIFE_ENCLOSED_MINUTES, POLLUTION_CUTOFF;
+    private static final ModConfigSpec.IntValue POLLUTION_MAX_ACTIVE_CUBES;
 
     static {
         ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
@@ -193,6 +196,19 @@ public final class IChemE {
                 .defineInRange("dryProcessMinutes", com.wormzjl.icheme.science.machine.Wear.DRY_PROCESS_MINUTES, 0.01, 1e6);
         builder.pop();
         builder.pop();
+        // Pollution (batch 2026-11-15-pollution-system, WP3): the field of released gases and particulate, per dimension.
+        builder.push("pollution");
+        POLLUTION_ENABLED = builder.comment("Whether released gases and particulate spread, decay and act on the world. False: the saved field is kept as it is, nothing moves, and every reading is 0. Captured on server start.")
+                .define("enabled", true);
+        POLLUTION_HALF_LIFE_OPEN_MINUTES = builder.comment("Half-life of pollution in a cube at or above the surface, in process minutes (5 min is 75 s of play at the default fluid.timeScale 4). Rain shortens it 4 times for corrosive gas and particulate. Captured on server start.")
+                .defineInRange("halfLifeOpenMinutes", 5.0, 0.1, 1000.0);
+        POLLUTION_HALF_LIFE_ENCLOSED_MINUTES = builder.comment("Half-life of pollution in an enclosed cube (indoors, underground), in process minutes. Captured on server start.")
+                .defineInRange("halfLifeEnclosedMinutes", 60.0, 0.1, 10000.0);
+        POLLUTION_CUTOFF = builder.comment("The smallest index a cube keeps (1 is the reference: the IDLH of a toxic or corrosive gas, the LFL of a combustible one). Below it a channel is dropped, so a release reaches at most its total index over this many cubes. Captured on server start.")
+                .defineInRange("cutoff", 1e-3, 1e-6, 0.05);
+        POLLUTION_MAX_ACTIVE_CUBES = builder.comment("The most 16 m cubes a dimension's field holds; above it the faintest are dropped first. Captured on server start.")
+                .defineInRange("maxActiveCubes", 8192, 64, 262_144);
+        builder.pop();
         CONFIG_SPEC = builder.build();
     }
 
@@ -301,6 +317,19 @@ public final class IChemE {
         return new com.wormzjl.icheme.science.machine.Wear.Settings(WEAR_ENABLED.get(), WEAR_CAVITATION_HOURS.get(), WEAR_DRY_MINUTES.get());
     }
 
+    /** Whether pollution runs (batch 2026-11-15-pollution-system, WP3; true before the config loads). */
+    public static boolean pollutionEnabled() {
+        return !CONFIG_SPEC.isLoaded() || POLLUTION_ENABLED.get();
+    }
+
+    /** The pollution field's settings: the defaults with the config's half-lives (process minutes), cutoff and cube cap; the defaults before the config loads. */
+    public static com.wormzjl.icheme.science.pollution.PollutionSettings pollutionSettings() {
+        var d = com.wormzjl.icheme.science.pollution.PollutionSettings.DEFAULT;
+        if (!CONFIG_SPEC.isLoaded()) return d;
+        return new com.wormzjl.icheme.science.pollution.PollutionSettings(d.faceShare(), d.nominalSeconds(), 60.0 * POLLUTION_HALF_LIFE_OPEN_MINUTES.get(),
+                60.0 * POLLUTION_HALF_LIFE_ENCLOSED_MINUTES.get(), d.washout(), d.settlingShare(), POLLUTION_CUTOFF.get(), POLLUTION_MAX_ACTIVE_CUBES.get(), d.closedAirShare());
+    }
+
     /** Create stress units per FE per tick (W6b; default 34.13 before the config loads). */
     public static double stressPerFE() {
         return CONFIG_SPEC.isLoaded() ? CREATE_STRESS_PER_FE.get() : com.wormzjl.icheme.science.machine.CreateCoupling.STRESS_PER_FE;
@@ -362,6 +391,12 @@ public final class IChemE {
             LOGGER.error("process_solver lifecycle=START_FAILED", exception);
             throw exception;
         }
+        // Pollution never refuses a world (owner, 2026-11-15): its own guard, after the fluid authority, never rethrown.
+        try {
+            com.wormzjl.icheme.runtime.pollution.PollutionService.start(server);
+        } catch (RuntimeException exception) {
+            LOGGER.error("pollution status=START_FAILED detail={}", String.valueOf(exception));
+        }
     }
 
     private static void onServerTickPost(ServerTickEvent.Post event) {
@@ -378,9 +413,21 @@ public final class IChemE {
         } finally {
             com.wormzjl.icheme.runtime.fluid.FluidRuntimeDiagnostics.Meter.exit(event.getServer());
         }
+        // The pollution pass deadline: its own guard, outside the one above, so nothing of it reaches the rethrow.
+        try {
+            com.wormzjl.icheme.runtime.pollution.PollutionService.tick(event.getServer());
+        } catch (RuntimeException exception) {
+            LOGGER.error("pollution status=TICK_FAILED detail={}", String.valueOf(exception));
+        }
     }
 
     private static void onServerStopping(ServerStoppingEvent event) {
+        // Before the pool stops: a pollution pass it abandons then gives its releases back without counting a failure.
+        try {
+            com.wormzjl.icheme.runtime.pollution.PollutionService.stop(event.getServer());
+        } catch (RuntimeException exception) {
+            LOGGER.error("pollution status=STOP_FAILED detail={}", String.valueOf(exception));
+        }
         try {
             com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.stop(event.getServer());
             ProcessSolveCoordinator.stopCalculations(event.getServer());
@@ -392,6 +439,11 @@ public final class IChemE {
 
 
     private static void onServerStopped(ServerStoppedEvent event) {
+        try {
+            com.wormzjl.icheme.runtime.pollution.PollutionService.forget(event.getServer());
+        } catch (RuntimeException exception) {
+            LOGGER.error("pollution status=FORGET_FAILED detail={}", String.valueOf(exception));
+        }
         try {
             // ServerStopped can still fire after an abnormal lifecycle path that skipped ServerStopping.
             com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.forget(event.getServer());

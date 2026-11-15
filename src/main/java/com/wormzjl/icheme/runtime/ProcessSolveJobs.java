@@ -11,7 +11,7 @@ import java.util.Optional;
 
 /**
  * The worker side of the shared pool's protocol: the command each job family runs and the result it returns (a fluid
- * island's slice, a running column unit's solve, a batch still's column solve). No Minecraft type: the targets,
+ * island's slice, a running column unit's solve, a batch still's column solve, a dimension's pollution pass). No Minecraft type: the targets,
  * requests and completions that bind a job to a world stay in the server-thread adapter {@link ProcessSolveServices}.
  * Moved from {@code ProcessSolveServices} unchanged (codebase review R13); in memory only, never saved or sent.
  */
@@ -19,12 +19,12 @@ public final class ProcessSolveJobs {
     private ProcessSolveJobs() {}
 
     /** Immutable worker envelope. Adding a job family extends this sealed protocol, never the executor count. */
-    public sealed interface ProcessSolveCommand permits FluidIslandCommand,ColumnUnitCommand,StillCommand {
+    public sealed interface ProcessSolveCommand permits FluidIslandCommand,ColumnUnitCommand,StillCommand,PollutionCommand {
         ProcessSolveResult solve(BoundedCpuSolveService.CancellationToken cancellationToken);
     }
 
     /** Immutable worker result envelope routed only after main-thread completion draining. */
-    public sealed interface ProcessSolveResult permits FluidIslandSolveResult,ColumnUnitSolveResult,StillSolveResult {}
+    public sealed interface ProcessSolveResult permits FluidIslandSolveResult,ColumnUnitSolveResult,StillSolveResult,PollutionSolveResult {}
 
     /** Contains no live level, block entity, callback, or mutable server-owned collection. {@code reads}: each coupled
      * exchanger side's read of its other side, by connection id, made on the server at the dispatch (plan section 5.2). */
@@ -129,5 +129,25 @@ public final class ProcessSolveJobs {
     }
     public record StillSolveResult(com.wormzjl.icheme.science.plant.still.StillHead.Outcome outcome) implements ProcessSolveResult {
         public StillSolveResult {Objects.requireNonNull(outcome);}
+    }
+    /**
+     * One pass of a dimension's pollution field (batch 2026-11-15-pollution-system, WP3): the step over an immutable
+     * snapshot taken on the server. A step that throws (a non-finite amount, a bad snapshot) is a failed result, so the
+     * service keeps its last field; a cancellation still ends the job as cancelled.
+     */
+    public record PollutionCommand(com.wormzjl.icheme.runtime.pollution.PollutionEngine.Pass pass) implements ProcessSolveCommand {
+        public PollutionCommand {Objects.requireNonNull(pass);}
+        @Override public ProcessSolveResult solve(BoundedCpuSolveService.CancellationToken cancellationToken) {
+            cancellationToken.throwIfCancellationRequested();
+            try{return new PollutionSolveResult(Optional.of(pass.run()),"");}
+            catch(RuntimeException failed){
+                cancellationToken.throwIfCancellationRequested();
+                return new PollutionSolveResult(Optional.empty(),failed.getClass().getSimpleName()+": "+failed.getMessage());
+            }
+        }
+    }
+    /** {@code result}: the next field and ledger, empty when the step failed; {@code detail} names the failure. */
+    public record PollutionSolveResult(Optional<com.wormzjl.icheme.science.pollution.PollutionField.Result> result,String detail) implements ProcessSolveResult {
+        public PollutionSolveResult {Objects.requireNonNull(result);Objects.requireNonNull(detail);}
     }
 }
