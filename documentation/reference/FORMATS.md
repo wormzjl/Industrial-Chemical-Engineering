@@ -46,6 +46,7 @@ Every payload registrar of the mod carries one version, [`network/NetworkProtoco
 | Shaft speeds | `icheme-1` (was `rotation-1`) | `NetworkProtocol#VERSION` | `RotationNetwork.register` (called from `FluidNetwork.registerDisplays`) |
 | Tutorial | `icheme-1` (was `tutorial-1`) | `NetworkProtocol#VERSION` | `TutorialNetwork.register` |
 | Process simulator | `icheme-1` (was `3`) | `NetworkProtocol#VERSION` | `ProcessSimulatorNetwork.register` |
+| Protocol version `icheme-2` | reserved by `2026-11-15-pollution-system` (WP9: the pollution map request and answer) | not on `main` yet | `NetworkProtocol#VERSION` |
 
 Fifteen registrars in nine classes, one version. A new payload joins one of them; a new registrar gets a row here.
 
