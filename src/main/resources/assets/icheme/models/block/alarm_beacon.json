@@ -1,0 +1,235 @@
+{
+  "parent": "minecraft:block/block",
+  "textures": {
+    "particle": "icheme:block/alarm_housing",
+    "housing": "icheme:block/alarm_housing",
+    "base_top": "icheme:block/alarm_base_top",
+    "guard": "icheme:block/alarm_guard",
+    "gland": "icheme:block/alarm_gland",
+    "mouth": "icheme:block/alarm_horn_mouth",
+    "lens": "icheme:block/alarm_lens"
+  },
+  "elements": [
+    {
+      "name": "base plate",
+      "from": [3, 0, 3],
+      "to": [13, 3, 13],
+      "faces": {
+        "north": { "uv": [3, 13, 13, 16], "texture": "#housing" },
+        "east": { "uv": [3, 13, 13, 16], "texture": "#housing" },
+        "south": { "uv": [3, 13, 13, 16], "texture": "#housing" },
+        "west": { "uv": [3, 13, 13, 16], "texture": "#housing" },
+        "up": { "uv": [3, 3, 13, 13], "texture": "#base_top" },
+        "down": { "uv": [3, 3, 13, 13], "texture": "#housing" }
+      }
+    },
+    {
+      "name": "socket gland",
+      "from": [6, 0.5, 1.5],
+      "to": [10, 2.5, 3],
+      "faces": {
+        "north": { "uv": [0, 0, 16, 16], "texture": "#gland" },
+        "east": { "uv": [13, 13.5, 14.5, 15.5], "texture": "#guard" },
+        "south": { "uv": [6, 13.5, 10, 15.5], "texture": "#guard" },
+        "west": { "uv": [1.5, 13.5, 3, 15.5], "texture": "#guard" },
+        "up": { "uv": [6, 1.5, 10, 3], "texture": "#guard" },
+        "down": { "uv": [6, 13, 10, 14.5], "texture": "#guard" }
+      }
+    },
+    {
+      "name": "neck",
+      "from": [6, 3, 6],
+      "to": [10, 5, 10],
+      "faces": {
+        "north": { "uv": [6, 11, 10, 13], "texture": "#housing" },
+        "east": { "uv": [6, 11, 10, 13], "texture": "#housing" },
+        "south": { "uv": [6, 11, 10, 13], "texture": "#housing" },
+        "west": { "uv": [6, 11, 10, 13], "texture": "#housing" },
+        "up": { "uv": [6, 6, 10, 10], "texture": "#housing" },
+        "down": { "uv": [6, 6, 10, 10], "texture": "#housing" }
+      }
+    },
+    {
+      "name": "lamp collar",
+      "from": [5, 5, 5],
+      "to": [11, 6, 11],
+      "faces": {
+        "north": { "uv": [5, 10, 11, 11], "texture": "#housing" },
+        "east": { "uv": [5, 10, 11, 11], "texture": "#housing" },
+        "south": { "uv": [5, 10, 11, 11], "texture": "#housing" },
+        "west": { "uv": [5, 10, 11, 11], "texture": "#housing" },
+        "up": { "uv": [5, 5, 11, 11], "texture": "#housing" },
+        "down": { "uv": [5, 5, 11, 11], "texture": "#housing" }
+      }
+    },
+    {
+      "name": "lens",
+      "from": [5.5, 6, 5.5],
+      "to": [10.5, 10.5, 10.5],
+      "faces": {
+        "north": { "uv": [5.5, 5.5, 10.5, 10], "texture": "#lens" },
+        "east": { "uv": [5.5, 5.5, 10.5, 10], "texture": "#lens" },
+        "south": { "uv": [5.5, 5.5, 10.5, 10], "texture": "#lens" },
+        "west": { "uv": [5.5, 5.5, 10.5, 10], "texture": "#lens" },
+        "up": { "uv": [5.5, 5.5, 10.5, 10.5], "texture": "#lens" },
+        "down": { "uv": [5.5, 5.5, 10.5, 10.5], "texture": "#lens" }
+      }
+    },
+    {
+      "name": "lens crown",
+      "from": [6.5, 10.5, 6.5],
+      "to": [9.5, 11.5, 9.5],
+      "faces": {
+        "north": { "uv": [6.5, 4.5, 9.5, 5.5], "texture": "#lens" },
+        "east": { "uv": [6.5, 4.5, 9.5, 5.5], "texture": "#lens" },
+        "south": { "uv": [6.5, 4.5, 9.5, 5.5], "texture": "#lens" },
+        "west": { "uv": [6.5, 4.5, 9.5, 5.5], "texture": "#lens" },
+        "up": { "uv": [6.5, 6.5, 9.5, 9.5], "texture": "#lens" },
+        "down": { "uv": [6.5, 6.5, 9.5, 9.5], "texture": "#lens" }
+      }
+    },
+    {
+      "name": "guard post",
+      "from": [5, 6, 5],
+      "to": [5.6, 11.5, 5.6],
+      "faces": {
+        "north": { "uv": [10.4, 4.5, 11, 10], "texture": "#guard" },
+        "east": { "uv": [10.4, 4.5, 11, 10], "texture": "#guard" },
+        "south": { "uv": [5, 4.5, 5.6, 10], "texture": "#guard" },
+        "west": { "uv": [5, 4.5, 5.6, 10], "texture": "#guard" },
+        "up": { "uv": [5, 5, 5.6, 5.6], "texture": "#guard" },
+        "down": { "uv": [5, 10.4, 5.6, 11], "texture": "#guard" }
+      }
+    },
+    {
+      "name": "guard post",
+      "from": [10.4, 6, 5],
+      "to": [11, 11.5, 5.6],
+      "faces": {
+        "north": { "uv": [5, 4.5, 5.6, 10], "texture": "#guard" },
+        "east": { "uv": [10.4, 4.5, 11, 10], "texture": "#guard" },
+        "south": { "uv": [10.4, 4.5, 11, 10], "texture": "#guard" },
+        "west": { "uv": [5, 4.5, 5.6, 10], "texture": "#guard" },
+        "up": { "uv": [10.4, 5, 11, 5.6], "texture": "#guard" },
+        "down": { "uv": [10.4, 10.4, 11, 11], "texture": "#guard" }
+      }
+    },
+    {
+      "name": "guard post",
+      "from": [5, 6, 10.4],
+      "to": [5.6, 11.5, 11],
+      "faces": {
+        "north": { "uv": [10.4, 4.5, 11, 10], "texture": "#guard" },
+        "east": { "uv": [5, 4.5, 5.6, 10], "texture": "#guard" },
+        "south": { "uv": [5, 4.5, 5.6, 10], "texture": "#guard" },
+        "west": { "uv": [10.4, 4.5, 11, 10], "texture": "#guard" },
+        "up": { "uv": [5, 10.4, 5.6, 11], "texture": "#guard" },
+        "down": { "uv": [5, 5, 5.6, 5.6], "texture": "#guard" }
+      }
+    },
+    {
+      "name": "guard post",
+      "from": [10.4, 6, 10.4],
+      "to": [11, 11.5, 11],
+      "faces": {
+        "north": { "uv": [5, 4.5, 5.6, 10], "texture": "#guard" },
+        "east": { "uv": [5, 4.5, 5.6, 10], "texture": "#guard" },
+        "south": { "uv": [10.4, 4.5, 11, 10], "texture": "#guard" },
+        "west": { "uv": [10.4, 4.5, 11, 10], "texture": "#guard" },
+        "up": { "uv": [10.4, 10.4, 11, 11], "texture": "#guard" },
+        "down": { "uv": [10.4, 5, 11, 5.6], "texture": "#guard" }
+      }
+    },
+    {
+      "name": "guard bow",
+      "from": [5, 11.5, 7.7],
+      "to": [11, 12.1, 8.3],
+      "faces": {
+        "north": { "uv": [5, 3.9000000000000004, 11, 4.5], "texture": "#guard" },
+        "east": { "uv": [7.699999999999999, 3.9000000000000004, 8.3, 4.5], "texture": "#guard" },
+        "south": { "uv": [5, 3.9000000000000004, 11, 4.5], "texture": "#guard" },
+        "west": { "uv": [7.7, 3.9000000000000004, 8.3, 4.5], "texture": "#guard" },
+        "up": { "uv": [5, 7.7, 11, 8.3], "texture": "#guard" },
+        "down": { "uv": [5, 7.699999999999999, 11, 8.3], "texture": "#guard" }
+      }
+    },
+    {
+      "name": "guard bow",
+      "from": [7.7, 11.5, 5],
+      "to": [8.3, 12.1, 11],
+      "faces": {
+        "north": { "uv": [7.699999999999999, 3.9000000000000004, 8.3, 4.5], "texture": "#guard" },
+        "east": { "uv": [5, 3.9000000000000004, 11, 4.5], "texture": "#guard" },
+        "south": { "uv": [7.7, 3.9000000000000004, 8.3, 4.5], "texture": "#guard" },
+        "west": { "uv": [5, 3.9000000000000004, 11, 4.5], "texture": "#guard" },
+        "up": { "uv": [7.7, 5, 8.3, 11], "texture": "#guard" },
+        "down": { "uv": [7.7, 5, 8.3, 11], "texture": "#guard" }
+      }
+    },
+    {
+      "name": "guard cap",
+      "from": [7.4, 12.1, 7.4],
+      "to": [8.6, 12.5, 8.6],
+      "faces": {
+        "north": { "uv": [7.4, 3.5, 8.6, 3.9000000000000004], "texture": "#guard" },
+        "east": { "uv": [7.4, 3.5, 8.6, 3.9000000000000004], "texture": "#guard" },
+        "south": { "uv": [7.4, 3.5, 8.6, 3.9000000000000004], "texture": "#guard" },
+        "west": { "uv": [7.4, 3.5, 8.6, 3.9000000000000004], "texture": "#guard" },
+        "up": { "uv": [7.4, 7.4, 8.6, 8.6], "texture": "#guard" },
+        "down": { "uv": [7.4, 7.4, 8.6, 8.6], "texture": "#guard" }
+      }
+    },
+    {
+      "name": "horn throat",
+      "from": [10, 3, 6.5],
+      "to": [11.5, 5.5, 9.5],
+      "faces": {
+        "north": { "uv": [4.5, 10.5, 6, 13], "texture": "#housing" },
+        "east": { "uv": [6.5, 10.5, 9.5, 13], "texture": "#housing" },
+        "south": { "uv": [10, 10.5, 11.5, 13], "texture": "#housing" },
+        "west": { "uv": [6.5, 10.5, 9.5, 13], "texture": "#housing" },
+        "up": { "uv": [10, 6.5, 11.5, 9.5], "texture": "#housing" },
+        "down": { "uv": [10, 6.5, 11.5, 9.5], "texture": "#housing" }
+      }
+    },
+    {
+      "name": "horn body",
+      "from": [11.5, 2.5, 5.75],
+      "to": [13, 6, 10.25],
+      "faces": {
+        "north": { "uv": [3, 10, 4.5, 13.5], "texture": "#housing" },
+        "east": { "uv": [5.75, 10, 10.25, 13.5], "texture": "#housing" },
+        "south": { "uv": [11.5, 10, 13, 13.5], "texture": "#housing" },
+        "west": { "uv": [5.75, 10, 10.25, 13.5], "texture": "#housing" },
+        "up": { "uv": [11.5, 5.75, 13, 10.25], "texture": "#housing" },
+        "down": { "uv": [11.5, 5.75, 13, 10.25], "texture": "#housing" }
+      }
+    },
+    {
+      "name": "horn bell",
+      "from": [13, 2, 5],
+      "to": [14.5, 6.5, 11],
+      "faces": {
+        "north": { "uv": [1.5, 9.5, 3, 14], "texture": "#housing" },
+        "east": { "uv": [5, 9.5, 11, 14], "texture": "#housing" },
+        "south": { "uv": [13, 9.5, 14.5, 14], "texture": "#housing" },
+        "west": { "uv": [5, 9.5, 11, 14], "texture": "#housing" },
+        "up": { "uv": [13, 5, 14.5, 11], "texture": "#housing" },
+        "down": { "uv": [13, 5, 14.5, 11], "texture": "#housing" }
+      }
+    },
+    {
+      "name": "horn mouth",
+      "from": [14.5, 2.3, 5.3],
+      "to": [14.6, 6.2, 10.7],
+      "faces": {
+        "north": { "uv": [1.4000000000000004, 9.8, 1.5, 13.7], "texture": "#housing" },
+        "east": { "uv": [0, 0, 16, 16], "texture": "#mouth" },
+        "south": { "uv": [14.5, 9.8, 14.6, 13.7], "texture": "#housing" },
+        "west": { "uv": [5.3, 9.8, 10.7, 13.7], "texture": "#housing" },
+        "up": { "uv": [14.5, 5.3, 14.6, 10.7], "texture": "#housing" },
+        "down": { "uv": [14.5, 5.300000000000001, 14.6, 10.7], "texture": "#housing" }
+      }
+    }
+  ]
+}

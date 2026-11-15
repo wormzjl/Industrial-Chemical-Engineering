@@ -31,6 +31,8 @@ public final class ControlService {
     private final ControlLaw law;
     private final ControlPlans plans;
     private final ControlPublication publication;
+    /** The alarm beacons (batch 2026-11-15-fluid-interfaces, W9). */
+    private final ControlAlarms alarms;
     private long driveRevision = -1;
     private final ArrayDeque<Edit> edits = new ArrayDeque<>();
 
@@ -52,6 +54,7 @@ public final class ControlService {
         law = new ControlLaw(world, hosts);
         plans = new ControlPlans(world);
         publication = new ControlPublication(world, facts, hosts);
+        alarms = new ControlAlarms(world, facts, hosts);
     }
 
     public ControlFacts facts() {
@@ -91,6 +94,9 @@ public final class ControlService {
         for (var site : facts.cablesIn(dimension, chunk))
             if (cableQueued.add(site)) cableQueue.computeIfAbsent(dimension, k -> new ArrayDeque<>()).add(site);
         for (var id : facts.panelsIn(dimension, chunk))
+            if (panelQueued.add(id)) panelQueue.computeIfAbsent(dimension, k -> new ArrayDeque<>()).add(id);
+        // The alarm beacons (W9) share the controllers' queue: the re-alignment tells them apart by their facts.
+        for (var id : facts.alarmsIn(dimension, chunk))
             if (panelQueued.add(id)) panelQueue.computeIfAbsent(dimension, k -> new ArrayDeque<>()).add(id);
     }
 
@@ -176,6 +182,8 @@ public final class ControlService {
 
     public void loaded(ControlPanelBlockEntity box) {
         var dim = box.getLevel().dimension().location().toString();
+        // An alarm beacon's facts hold the cell (W9): the controller there stays unregistered, as a beacon in a controller's cell.
+        if (alarms.standsAt(dim, box.getBlockPos())) return;
         var panel =
                 facts.panels().stream()
                         .filter(
@@ -214,6 +222,33 @@ public final class ControlService {
         facts.removePanel(id);
         law.forget(id);
         publication.forget(id);
+    }
+
+    // The alarm beacons (batch 2026-11-15-fluid-interfaces, W9): their duties are ControlAlarms'.
+    public void loaded(AlarmBeaconBlockEntity beacon) {
+        alarms.loaded(beacon);
+    }
+
+    public void removeAlarm(UUID id) {
+        alarms.remove(id);
+    }
+
+    /** A hand's acknowledgement of beacon {@code id}, queued for the next cadence (decision A5). */
+    public void acknowledge(UUID id) {
+        alarms.acknowledge(id);
+    }
+
+    public void watch(com.wormzjl.icheme.world.inventory.AlarmBeaconMenu menu) {
+        alarms.watch(menu);
+    }
+
+    public void unwatch(com.wormzjl.icheme.world.inventory.AlarmBeaconMenu menu) {
+        alarms.unwatch(menu);
+    }
+
+    /** A beacon screen's settings, queued and revision-checked as a controller's. */
+    public void edit(com.wormzjl.icheme.world.inventory.AlarmBeaconMenu menu, UUID id, long revision, AlarmSettings settings) {
+        alarms.edit(menu, id, revision, settings);
     }
 
     public void bind(InstrumentHosts.Host host) {
@@ -285,7 +320,7 @@ public final class ControlService {
      */
     public void tick(long tick) {
         if (tick % CADENCE != 0) return;
-        if (facts.panels().isEmpty() && publication.idle() && edits.isEmpty() && columnCommands.isEmpty() && converterCommands.isEmpty() && plans.isEmpty())
+        if (facts.panels().isEmpty() && publication.idle() && edits.isEmpty() && columnCommands.isEmpty() && converterCommands.isEmpty() && plans.isEmpty() && alarms.idle())
             return;
         long busRevision = hosts.busRevision();
         if (driveRevision != busRevision) {
@@ -295,11 +330,14 @@ public final class ControlService {
         hosts.refreshColumnMembers();
         var sensors = hosts.inputs();
         applyEdits(sensors);
+        alarms.applyEdits(sensors);
         applyColumnCommands();
         applyConverterCommands();
         var readings = readings(sensors);
         runControllers(sensors, readings);
+        alarms.run(sensors, readings);
         publication.publish(sensors, readings);
+        alarms.publish(sensors, readings);
     }
 
     private void applyEdits(Map<UUID, ControlInput> sensors) {
@@ -411,6 +449,7 @@ public final class ControlService {
                     needed.add(s.key().host());
             }
         publication.watchedHosts(needed);
+        alarms.neededHosts(sensors, needed);
         // A pure read of accepted engine presentation; no replay invokes a solve or advances time.
         var views = new HashMap<Long, FluidView>();
         for (long host : needed)

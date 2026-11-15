@@ -302,7 +302,7 @@ public final class ControlLoopGameTests {
     }
 
     /** Why a flowmeter request found nothing to fit on {@code pipe}: the aim and the mounts. */
-    private static String fitting(ServerLevel level, ServerPlayer fitter, BlockPos pipe) {
+    static String fitting(ServerLevel level, ServerPlayer fitter, BlockPos pipe) {
         var hit = fitter.pick(fitter.blockInteractionRange(), 0, false);
         var aimed =
                 hit instanceof BlockHitResult block && hit.getType() == HitResult.Type.BLOCK
@@ -331,7 +331,7 @@ public final class ControlLoopGameTests {
     }
 
     /** The accepted mass flow through pipe {@code id}; waits while it has no reading. */
-    private static double flow(GameTestHelper helper, FluidWorldAuthority world, long id) {
+    static double flow(GameTestHelper helper, FluidWorldAuthority world, long id) {
         var reading = world.instrumentPipeReading(id);
         helper.assertTrue(reading != null, "Waiting for a reading of pipe " + id);
         return reading.massFlow();
@@ -341,11 +341,11 @@ public final class ControlLoopGameTests {
         return Math.abs(value - expected) <= .02 * expected;
     }
 
-    private static long identity(ServerLevel level, BlockPos pos) {
+    static long identity(ServerLevel level, BlockPos pos) {
         return ((FluidDeviceBlockEntity) level.getBlockEntity(pos)).fluidIdentity();
     }
 
-    private static DataPort port(ServerLevel level, BlockPos pipe) {
+    static DataPort port(ServerLevel level, BlockPos pipe) {
         return ((FluidDeviceBlockEntity) level.getBlockEntity(pipe)).instruments().dataPort();
     }
 
@@ -408,7 +408,7 @@ public final class ControlLoopGameTests {
      * laid line leaves them: one cable per cell, centred joints between neighbours and each port's
      * socket joint in its cell. The bus reads only these facts. Returns their sites.
      */
-    private static List<DataBus.Site> wire(
+    static List<DataBus.Site> wire(
             ServerLevel level, FluidWorldAuthority world, List<DataPort> ports) {
         var path = new ArrayList<BlockPos>();
         for (int i = 0; i + 1 < ports.size(); i++) {

@@ -45,6 +45,8 @@ public final class ModCreativeTabs {
                 // Batch 2026-11-15-fluid-interfaces, pipe fittings (W6, W7).
                 output.accept(ModItems.ORIFICE_PLATE.get());
                 output.accept(ModItems.AUTOMATED_SHUTOFF_VALVE.get());
+                // Batch 2026-11-15-fluid-interfaces, the alarm beacon (W9).
+                output.accept(ModItems.ALARM_BEACON.get());
                 output.accept(ModItems.FLUID_RESERVOIR.get());
                 output.accept(ModItems.FLUID_PIPE.get());
                 output.accept(ModItems.FLUID_PUMP.get());

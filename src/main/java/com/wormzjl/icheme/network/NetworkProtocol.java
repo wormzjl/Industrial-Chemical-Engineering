@@ -17,8 +17,8 @@ package com.wormzjl.icheme.network;
  * {@code pipeline-tool-5} and the process simulator's {@code 3}); the first value differs from all of them.
  * {@code icheme-2}: a steam turbine's inlet class gained LP, declared first, so every class's ordinal on the wire moved
  * (batch 2026-11-15-equipment-visual-design).
- * {@code icheme-3}: the conversion rules sync, {@code FluidNetwork.ConversionRulesSync} (batch 2026-11-15-fluid-interfaces, W5);
- * other batches of that date that change a payload take the same value.</p>
+ * {@code icheme-3}: the conversion rules sync, {@code FluidNetwork.ConversionRulesSync} (batch 2026-11-15-fluid-interfaces, W5), and the alarm beacon's
+ * edit and view (same batch, W9).</p>
  */
 public final class NetworkProtocol {
     /** The version every registrar of the mod carries. */

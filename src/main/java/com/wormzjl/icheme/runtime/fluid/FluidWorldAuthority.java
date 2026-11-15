@@ -247,6 +247,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
         return saved.on(model);
     }
     static ResourceKey<Level> dimension(String name){return ResourceKey.create(Registries.DIMENSION,ResourceLocation.parse(name));}
+    /** The loaded level of dimension {@code name}, or null (batch 2026-11-15-fluid-interfaces, W9: where an alarm beacon stands). */
+    public net.minecraft.server.level.ServerLevel serverLevel(String name){var id=ResourceLocation.tryParse(name);return id==null?null:server.getLevel(ResourceKey.create(Registries.DIMENSION,id));}
     public List<FluidPresetCatalog.Preset> presets(){owned();return presetCache;}
     public List<String> components(){owned();return componentNames;}
     /** The world's network property model; its {@code domain()} is where a state may be evaluated. */

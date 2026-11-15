@@ -14,8 +14,8 @@ import java.util.*;
  * Connectivity is rebuilt.
  */
 public final class ControlFacts extends SavedData {
-    /** 4: a rack lane's frame (W5c C2); 3 and 2 read as before, their lanes with no frame. */
-    public static final int FORMAT = 4;
+    /** 5: the alarm beacons (batch 2026-11-15-fluid-interfaces, W9); 4 a rack lane's frame (W5c C2), read with no beacons; 3 and 2 read as before, their lanes with no frame. */
+    public static final int FORMAT = 5;
     public static final String NAME = "icheme_control";
 
     public record Panel(
@@ -81,9 +81,63 @@ public final class ControlFacts extends SavedData {
         }
     }
 
+    /**
+     * An alarm beacon (batch 2026-11-15-fluid-interfaces, W9, decision A6): its identity, which its data socket shares
+     * ({@link DataPort.Kind#ALARM}), its cell and its settings, revision-checked as a panel's. Its active and acknowledged
+     * state is engine state, never saved.
+     */
+    public record Alarm(UUID id, String dimension, BlockPos position, long revision, AlarmSettings settings) {
+        private static final Set<String> FIELDS = Set.of("id", "dimension", "position", "revision", "settings");
+
+        public Alarm {
+            Objects.requireNonNull(id);
+            Objects.requireNonNull(dimension);
+            Objects.requireNonNull(position);
+            Objects.requireNonNull(settings);
+            position = position.immutable();
+            if (net.minecraft.resources.ResourceLocation.tryParse(dimension) == null
+                    || dimension.isBlank()
+                    || dimension.length() > 128
+                    || revision < 0)
+                throw new IllegalArgumentException("Invalid alarm beacon");
+        }
+
+        public Alarm edit(AlarmSettings next) {
+            return new Alarm(id, dimension, position, Math.addExact(revision, 1), next);
+        }
+
+        public CompoundTag save() {
+            var t = new CompoundTag();
+            t.putUUID("id", id);
+            t.putString("dimension", dimension);
+            t.putLong("position", position.asLong());
+            t.putLong("revision", revision);
+            t.put("settings", settings.save());
+            return t;
+        }
+
+        public static Alarm load(CompoundTag t) {
+            if (!t.getAllKeys().equals(FIELDS)
+                    || !t.hasUUID("id")
+                    || !t.contains("dimension", 8)
+                    || !t.contains("position", 4)
+                    || !t.contains("revision", 4)
+                    || !t.contains("settings", 10))
+                throw new IllegalArgumentException("Damaged alarm beacon facts");
+            return new Alarm(
+                    t.getUUID("id"),
+                    t.getString("dimension"),
+                    BlockPos.of(t.getLong("position")),
+                    t.getLong("revision"),
+                    AlarmSettings.load(t.getCompound("settings")));
+        }
+    }
+
     private final Map<DataBus.Site, DataBus.Cable> cables = new HashMap<>();
     private final Map<UUID, DataPort> ports = new HashMap<>();
     private final Map<UUID, Panel> panels = new HashMap<>();
+    /** The alarm beacons (W9), by identity. */
+    private final Map<UUID, Alarm> alarms = new HashMap<>();
     /** The cable sites by dimension and chunk: an index of the facts, never saved (registry first, W5c C2). */
     private final Map<String, Map<Long, Set<DataBus.Site>>> cableChunks = new HashMap<>();
     /**
@@ -310,6 +364,41 @@ public final class ControlFacts extends SavedData {
         }
     }
 
+    // Batch 2026-11-15-fluid-interfaces, the alarm beacon (W9).
+    public Collection<Alarm> alarms() {
+        return List.copyOf(alarms.values());
+    }
+
+    public Alarm alarm(UUID id) {
+        return alarms.get(id);
+    }
+
+    /** Registers or edits alarm beacon {@code alarm}; a cell holds one panel or one beacon. */
+    public void alarm(Alarm alarm) {
+        for (var p : panels.values())
+            if (p.dimension().equals(alarm.dimension()) && p.position().equals(alarm.position()))
+                throw new IllegalArgumentException("A controller stands in the alarm beacon's cell");
+        var before = alarms.put(alarm.id(), alarm);
+        if (alarm.equals(before)) return;
+        if (before == null) changed();
+        else setDirty();
+    }
+
+    /** Removes alarm beacon {@code id} and its socket. */
+    public void removeAlarm(UUID id) {
+        if (alarms.remove(id) != null) {
+            removePort(id);
+            changed();
+        }
+    }
+
+    /** The alarm beacons whose cell is in chunk {@code chunk} of {@code dimension} (a scan). */
+    public List<UUID> alarmsIn(String dimension, long chunk) {
+        var out = new ArrayList<UUID>();
+        for (var a : alarms.values()) if (a.dimension().equals(dimension) && chunk(a.position()) == chunk) out.add(a.id());
+        return out;
+    }
+
     private void changed() {
         topologyRevision = Math.addExact(topologyRevision, 1);
         setDirty();
@@ -339,16 +428,25 @@ public final class ControlFacts extends SavedData {
                 .forEach(id -> ids.add(id.save()));
         tag.put("sensorIds", ids);
         tag.putLong("nextSensorId", nextSensorId);
+        var beacons = new ListTag();
+        alarms.values().stream()
+                .sorted(Comparator.comparing(a -> a.id().toString()))
+                .forEach(a -> beacons.add(a.save()));
+        tag.put("alarms", beacons);
         return tag;
     }
 
     public static ControlFacts load(CompoundTag tag) {
         boolean legacy = tag.contains("format", 3) && tag.getInt("format") == 1;
+        // Format 5 (W9) adds the alarm beacons' list; formats 1 to 4 read with none.
+        boolean beacons = tag.contains("format", 3) && tag.getInt("format") >= 5;
         if (!tag.getAllKeys()
                         .equals(
                                 legacy
                                         ? Set.of("format", "cables", "ports", "panels")
-                                        : Set.of(
+                                        : beacons
+                                                ? Set.of("format", "cables", "ports", "panels", "sensorIds", "nextSensorId", "alarms")
+                                                : Set.of(
                                                 "format",
                                                 "cables",
                                                 "ports",
@@ -359,7 +457,9 @@ public final class ControlFacts extends SavedData {
                 || !legacy
                         && tag.getInt("format") != 2
                         && tag.getInt("format") != 3
+                        && tag.getInt("format") != 4
                         && tag.getInt("format") != FORMAT
+                || beacons && !tag.contains("alarms", 9)
                 || !tag.contains("cables", 9)
                 || !tag.contains("ports", 9)
                 || !tag.contains("panels", 9))
@@ -422,6 +522,24 @@ public final class ControlFacts extends SavedData {
                     || !port.owner().equals(panel.position())
                     || !port.dimension().equals(panel.dimension()))
                 throw new IllegalArgumentException("Missing or mismatched controller socket");
+        }
+        if (beacons) {
+            var list = (ListTag) tag.get("alarms");
+            if (!list.isEmpty() && list.getElementType() != 10 || list.size() > 100_000)
+                throw new IllegalArgumentException("Invalid control facts list: alarms");
+            for (var value : list) {
+                var alarm = Alarm.load((CompoundTag) value);
+                var port = facts.port(alarm.id());
+                if (facts.alarms.put(alarm.id(), alarm) != null
+                        || facts.panels.containsKey(alarm.id())
+                        || !positions.add(alarm.dimension() + ":" + alarm.position()))
+                    throw new IllegalArgumentException("Duplicate alarm beacon facts");
+                if (port == null
+                        || port.kind() != DataPort.Kind.ALARM
+                        || !port.owner().equals(alarm.position())
+                        || !port.dimension().equals(alarm.dimension()))
+                    throw new IllegalArgumentException("Missing or mismatched alarm beacon socket");
+            }
         }
         return facts;
     }

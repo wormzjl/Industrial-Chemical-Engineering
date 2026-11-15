@@ -14,6 +14,7 @@
     "icheme:fluid_void",
     "icheme:diverter_valve",
     "icheme:equipment_shell",
-    "icheme:equipment_interior"
+    "icheme:equipment_interior",
+    "icheme:alarm_beacon"
   ]
 }
