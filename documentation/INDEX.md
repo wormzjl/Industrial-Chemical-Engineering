@@ -14,7 +14,7 @@ Status words:
 
 | Batch | Purpose | Status |
 |---|---|---|
-| [2026-11-15-tools-large-files/](2026-11-15-tools-large-files/README.md) | Large files out of `tools/`: images, worlds, Gradle results and files over 1 MB to `research/tools/`, `/tools/**` ignore lines | Planned (phase 1 2026-11-15) |
+| [2026-11-15-tools-large-files/](2026-11-15-tools-large-files/README.md) | Large files out of `tools/`: images, worlds, Gradle results and files over 1 MB to `research/tools/`, `/tools/**` ignore lines | In progress since 2026-11-15 |
 | [2026-11-13-codebase-review/](2026-11-13-codebase-review/README.md) | Whole code base review and revamp: defect fixes, free performance, the water module, machine shaft power and wear modes, the Rust column library (stage a), the largest classes split into files, timing-independent stills, columns and exchangers, the code guide per module, documentation and collaboration | Implemented 2026-11-15 (0.31.0) |
 | [2026-11-12-tutorial-system/](2026-11-12-tutorial-system/README.md) | Tutorial for new players: own films, help tours on every GUI, a field guide to a first small crude unit, equipment items and JEI pages | Implemented 2026-11-13 (0.30.0) |
 | [2026-11-12-fluid-conversion/](2026-11-12-fluid-conversion/README.md) | Converter between Forge fluids and IChemE fluids | Implemented 2026-11-12 (0.28.0) |
