@@ -20,14 +20,15 @@ Paths under [`src/main/java/com/wormzjl/icheme/client/`](../../../src/main/java/
 | Class | Role | Lines |
 |---|---|---|
 | **Chunk models (`model/`)** | | |
-| `EquipmentShellModel` | A shell cell's chunk model: quads per `CellKey` from `ShapeRasterizer.fixedSurface`, moving parts left out, baked shade and sheen, paint channel as tint index, `Layers` (solid, glass, all), flow arrows baked in; `ATLAS`; shared with the line models: `bake`, `paintedLines`, `painted`, `lineTints` | 305 |
+| `EquipmentShellModel` | A shell cell's chunk model: quads per (`ShellVariant`, `CellKey`) from `ShapeRasterizer.fixedSurface`, moving parts left out, baked shade and sheen (BAKED) or flat sprites and unshaded colour (FLAT), paint channel as tint index, `Layers` (solid, glass, all), flow arrows baked in; `ATLAS`, `sprite` (current variant); shared with the line models: `bake`, `paintedLines`, `painted`, `lineTints` | 350 |
+| `ShellVariant` | No Minecraft class: BAKED or FLAT (`of(pbrTextures, packInUse)`), the cache `Key`, the flat sprites' fallback (`flatSprites`) | 43 |
 | `FluidDeviceModel` | A pipe or fitting: key = block state + `FluidDeviceBlockEntity.Drawn` (bore, faces, flanges, spool, transition offsets) + a `Look` (fitting, paint mask); polygons from `LineGeometry` and the fitting geometries | 183 |
 | `PipeRackModel` | A rack cell: the frame and each lane on painted sprites, tint index 2 × option + channel; key `Look` | 147 |
 | `ConduitModel` | A data or FE conduit block's model from its cable facts | 171 |
 | `ShaftModel` | The immutable hexagonal shaft model (`ShaftGeometry`) | 147 |
 | `PolygonBake` | No Minecraft class: convex polygons to coloured triangle fans (positions, normals, sprite UVs, shade × paint tint); used by `EquipmentBodyRenderer.body` and the film actors | 61 |
 | **Equipment client** | | |
-| `EquipmentClient` | Registers the shell, fluid-device and rack geometry loaders; the block tints (`registerBlockColours`: paint channel, line paints, lane paints); the vessel outline in place of per-cell boxes (`highlight`); `openConstructor`, `openVessel`; `renderConfigReloaded` | 117 |
+| `EquipmentClient` | Registers the shell, fluid-device and rack geometry loaders; the block tints (`registerBlockColours`: paint channel, line paints, lane paints); the vessel outline in place of per-cell boxes (`highlight`); `openConstructor`, `openVessel`; `renderConfigReloaded` (detail: reload; shell variant moved: re-mesh) | 120 |
 | `EquipmentGhost` | The ghost of every loaded constructor's design within `RANGE` until its vessel stands (the open screen's draft instead), blocked cells of the focused ghost outlined red, rechecked every 10 ticks; `blockedCount` | 237 |
 | `EquipmentPaints` | The constructor's paint, remembered per account on the client | 54 |
 | `EquipmentBodyRenderer` | Coarse equipment bodies (and the natural tower shells) drawn whole: bodies whose origins share a 32-block square merged into one static mesh, one call per square in view; cached by shape, paint and detail | 205 |
@@ -66,6 +67,8 @@ Paths under [`src/main/java/com/wormzjl/icheme/client/`](../../../src/main/java/
 - **Outline**: the selection box of any shell or interior cell is the whole vessel's silhouette from the camera plus fixed edges (`ShapeRasterizer.outline`).
 - **Glass** (a tank gauge's sleeve) bakes in the translucent pass; the liquid bands behind it are drawn after block entities by `TankRenderer.renderGlass`. A sight glass's metal and glass are baked; the renderer adds only liquid and bubbles.
 - **Flow arrows** on every kind's IN and OUT nozzle necks are baked with the shell (`PortMarkings.surface`); no renderer draws them.
+- **Relief sprites, two variants** (decision X5 A; `2026-11-15-equipment-visual-design`, `RELIEF_SPRITES_PLAN.md`): detail too small for polygons (nuts, louvres, cladding straps) is relief in a sprite (`tools/pbr-textures/equipment_textures.py`). A shell cell bakes BAKED (the relief lit into the albedo, today's shade and sheen in the vertex colour) unless a shader pack is in use and `pbr_textures` is on; then FLAT: the `<material>_flat` sprite of the shell model JSON (the baked one where none), vertex colour 255 and `setShade(true)`, so the pack lights it from the flat sprite's `_n` and `_s`. The variant is read once per cell bake and keys the quad cache. A baked sprite has no `_n`. The line models (`FluidDeviceModel`, `PipeRackModel`, ...) bake only BAKED. `EquipmentClient.renderConfigReloaded` re-meshes chunks when a `pbr_textures` change moves the variant; a shader pack toggle relies on Iris re-meshing the chunks (it changes the chunk vertex format), else F3+T.
+- **Nuts** below `Mesh.SOLID_NUT` (60 mm across their flats) are one flush `BOLT_FACE` hexagon 0.4 mm proud at every detail (`Mesh.reliefNut`; on lines too while `RELIEF_NUTS_ON_LINES`); larger ones are prisms at normal detail.
 - **Detail**: `ClientConfig.renderDetail` (low polygon mode) is drawing only; mixed-detail clients share the server's facts, collision and layout. `EquipmentClient.renderConfigReloaded` reloads resources only when drawing detail changes. Each renderer keeps its old range as the upper bound of its tiers.
 - **Watches**: a renderer watches only what it draws, asks once a second, and drops what left; it never infers process state. A tank with no display draws its roof on its legs and an empty glass.
 - **Distant Horizons**: without model data a shell cell's model is empty and its particle sprite gives its colour.
@@ -87,6 +90,8 @@ Models read the block entities' update tags (fields in [equipment-structure.md](
 |---|---|
 | `client/RenderLodTest` | Detail tiers and their switch distances |
 | `client/model/PolygonBakeTest` | `PolygonBake` bit for bit against the loops it replaced |
+| `client/model/ShellVariantTest` | The shell variant's choice, its cache key and the flat sprites' fallback |
+| `client/fx/EquipmentTexturesTest` | The relief sprites: sizes, LabPBR channels, no `_n` beside a baked sprite, baked mean colours kept, painted sprites neutral, the model's flat keys |
 | `science/equipment/PaintTest` (`equipmentGates`) | The tint shows the paint on the neutral sprite |
 | `ShapeRasterizerTest.outlineFollowsTheViewer` (`equipmentGates`) | The vessel outline |
 | `ProcessUnitTest.movingPartsAreTheStillOnesSetGoing` (`equipmentGates`) | Moving parts are the still parts set going (geometry) |

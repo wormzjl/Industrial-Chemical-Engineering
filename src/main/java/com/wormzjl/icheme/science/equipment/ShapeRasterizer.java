@@ -804,7 +804,7 @@ public final class ShapeRasterizer {
         Geometry(EquipmentShape shape, RenderDetail detail) {
             this.shape = shape;
             this.detail = detail;
-            mesh = new Mesh(detail);
+            mesh = new Mesh(detail).equipment();
             transform = shape.transform();
             mesh.transform(transform);
             unit = shape.designed() ? ProcessUnit.of(shape) : null;
