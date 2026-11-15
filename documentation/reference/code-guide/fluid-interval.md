@@ -24,7 +24,7 @@ Under `src/main/java/com/wormzjl/icheme/science/fluid/`. Lines at `d6f721b94`.
 
 | Class | Role | Lines |
 |---|---|---|
-| [`network/PassiveIntervalSolver`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/PassiveIntervalSolver.java) | The adaptive BE controller over one interval: `solve` (with the coupled reads and port plans), `run`, `replayStart`, `coldRateSeed`, `carriedModes`, `carriedFlows`, `settlesWithin`, `flushTraces`; `Settings` (`defaults(time)`), `StageGuard`, `Result` | 553 |
+| [`network/PassiveIntervalSolver`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/PassiveIntervalSolver.java) | The adaptive BE controller over one interval: `solve` (with the coupled reads and port plans), `run`, `replayStart`, `coldRateSeed`, `carriedModes`, `carriedFlows`, `settlesWithin`, `flushTraces`; `Settings` (`defaults(time)`), `StageGuard`, `Result` | 554 |
 | [`network/SolidEventIntegrator`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/SolidEventIntegrator.java) | The interval driver of an island monitored for solid events: settled beds and clogged filters as located transitions (`Transition`), still pipes (`still`), the closure carry (`carried`, `carriedWithoutRate`, `drawnThrough`), `mobility`, `failed` | 398 |
 | [`network/ConservativeTransport`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/ConservativeTransport.java) | Exact booking from solved flows (`reconstruct`, `reconstruct0`): `BoundaryTransfer` with its `Kind`, `EdgeHeat`, the junction pin (`pinnedFlows`), emptying vessels, the melt (`Melted`, `Projection.melted`, `reach`, `melt`, `meltingSolve`), the rigid flag, `Workspace` | 881 |
 | [`network/InventoryEquilibrium`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/InventoryEquilibrium.java) | A vessel's T, P, phases and crystals restated from its inventory: `refresh`, `conversions`, `completed`, `passes`, `close`, `split`; `Refreshed`; `CLOSURE` | 304 |
@@ -127,4 +127,4 @@ Shared helpers: `FluidTestSupport`, `ConservationAssertions`, `PortFixture`. Gra
 - **`ScheduledTransfer` has no runtime producer**; only tests create one.
 - **`initialNitrogenCharge` takes a volume (m³) first**, not an amount; it is a placement initializer only.
 
-**Snapshot:** `d6f721b94`, 2026-11-15.
+**Snapshot:** `cdb2833e1`, 2026-11-15.

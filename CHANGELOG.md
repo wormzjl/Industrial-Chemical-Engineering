@@ -15,6 +15,14 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+### Changed
+
+- The fluid step costs a fifth less (`2026-11-15-fluid-step-cost`): on the `mixed100` bench an island's step takes 27.1 ms in place of 34.0 (median of the measured minute's sixths) and allocates 20.7 GB a minute in place of 35.6. A solver keeps its nodes' kernel workspaces across steps (S2, `dafb95278`) and an evaluation with no bundle takes its thread's kept one (S2b, `bb771a9eb`), both bit for bit; a vessel closure's Jacobian comes from the base state's tangents (S4, `2b35cbdb4`), which moves results in the last digits where a closure iterates. No player-facing behaviour changes. Measured and not kept: three Jacobian pattern forms (S1) and a threshold pivot rule (S5). The bench gains a `mixed400` profile and the worker count switch (S3, `1818c2fb4`): the default sizing carries 300 awake islands in real time on a fifth of the workers' time.
+
+### Removed
+
+- The pattern census's observer hook (`SolverDiagnostics.PatternObserver`, its call in `SparseNewton.factor`) left `src/main` (`cdb2833e1`); it is a patch under `tools/fluid-step-cost/`, with the batch's bench scripts and readers.
+
 ## [0.31.0] - 2026-11-15
 
 ### Added

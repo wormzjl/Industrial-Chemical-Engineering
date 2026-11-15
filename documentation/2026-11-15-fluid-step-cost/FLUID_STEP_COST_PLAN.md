@@ -91,7 +91,7 @@ Expected (est.), to be measured: F2 removes the reach search on a running plant 
 
 ## 4c. S2 measured, and the profile by stack (2026-11-15)
 
-One bench pair each (`mixed100`, 60 s warm-up and 60 s measured, alone, 899 island steps, two workers): the baseline on `509d15e9d` (0.31.0 and the S0 counters) and S2 on `dafb95278`. Reports: `tmp/pattern-census/bench-base/`, `bench-s2/`; read with `tmp/pattern-census/bench-read.mjs` and `tools/fluid-step-cost/JfrAncestors.java`.
+One bench pair each (`mixed100`, 60 s warm-up and 60 s measured, alone, 899 island steps, two workers): the baseline on `509d15e9d` (0.31.0 and the S0 counters) and S2 on `dafb95278`. Reports: `tmp/pattern-census/bench-base/`, `bench-s2/`; read with `tools/fluid-step-cost/bench/bench-read.mjs` and `tools/fluid-step-cost/JfrAncestors.java`.
 
 | | Baseline | S2 | Change |
 |---|---|---|---|
@@ -304,7 +304,7 @@ The three forms were built by one subagent on F1 and F2 applied again (`12dc90fd
 
 At best the rule saved a fifth to a quarter of the reach searches, about 2 to 3 % of the step's CPU (est.), which the timing here cannot resolve, for a new hold or a loss of accuracy. The linear algebra stays as S4 has it. What would give the reach search back is a finer rule for which columns to search again after one pivot differs (today: all later ones); that is a change to `UpLookingLu`'s kept reach and its proof, not attempted.
 
-**The timing by sixths.** `tmp/pattern-census/bench-sixths.mjs` splits a run's measured minute into six by dispatch tick (the workload is the same at the same tick in every run). The S4 code was run a second time alone (`bench-s4b`, `bench-quiet.sh`, the machine check logged inside the measured minute):
+**The timing by sixths.** `tools/fluid-step-cost/bench/bench-sixths.mjs` splits a run's measured minute into six by dispatch tick (the workload is the same at the same tick in every run). The S4 code was run a second time alone (`bench-s4b`, `bench-quiet.sh`, the machine check logged inside the measured minute):
 
 | Mean island step by sixth (ms) | 1 | 2 | 3 | 4 | 5 | 6 | Median of the six |
 |---|---|---|---|---|---|---|---|
@@ -318,7 +318,7 @@ The second S4 run agrees with the first within 1 % over four sixths; its last tw
 
 ## 4h. S3 measured (2026-11-15): the workers loaded fully
 
-**The fixture.** A new bench profile `mixed400` (`FluidServerBenchmark`): 400 ladders, the first 100 are `mixed100`'s; 7,942 reservoirs, 300 islands awake (the 100 closed ladders rest). `-PfluidBenchmarkWorkers=<n>` sets the worker count (2 by default; 0 is a world's automatic sizing, 12 on this machine of 8 cores and 16 threads). All runs on the S4 code (`023b5711a`), 60 s warm-up and 60 s measured, JFR on (`tmp/pattern-census/s3-run.sh`, readers `s3-read.mjs`, `s3-cohorts.mjs`, `s3-islands.mjs`, `s3-jfr.mjs`).
+**The fixture.** A new bench profile `mixed400` (`FluidServerBenchmark`): 400 ladders, the first 100 are `mixed100`'s; 7,942 reservoirs, 300 islands awake (the 100 closed ladders rest). `-PfluidBenchmarkWorkers=<n>` sets the worker count (2 by default; 0 is a world's automatic sizing, 12 on this machine of 8 cores and 16 threads). All runs on the S4 code (`023b5711a`), 60 s warm-up and 60 s measured, JFR on (`tools/fluid-step-cost/bench/s3-run.sh`, readers `s3-read.mjs`, `s3-cohorts.mjs`, `s3-islands.mjs`, `s3-jfr.mjs`).
 
 | | `mixed100`, 2 workers | `mixed100`, 12 | `mixed400`, 1 | `mixed400`, 2 | `mixed400`, 12 |
 |---|---|---|---|---|---|
