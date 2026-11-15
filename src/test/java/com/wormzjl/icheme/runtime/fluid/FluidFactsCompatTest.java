@@ -147,7 +147,7 @@ class FluidFactsCompatTest {
         world.runTo(world.ledger.onlineTick()+20);
         pipeFittings(world);return world;
     }
-    /** Facts schema 26 (batch 2026-11-15-fluid-interfaces, W2): a gas intake, the atmosphere as a generator ({@code ambient}), on a dead-end pipe. */
+    /** Facts schema 27 (batch 2026-11-15-fluid-interfaces, W2): a gas intake, the atmosphere as a generator ({@code ambient}), on a dead-end pipe. */
     private static void intake(EventPathWorld world) {
         long id=world.ledger.nextIdentity();
         var record=Placement.intake(id,new PhysicalFluidTopology.Position(EventPathWorld.DIM,0,64,-40),Direction.EAST,.05,world.model);
@@ -155,7 +155,7 @@ class FluidFactsCompatTest {
         world.place(1,64,-40,Kind.PIPE,Direction.EAST,.05);
     }
     /**
-     * Facts schema 26 (batch 2026-11-15-fluid-interfaces, W4): a liquid hopper, a converter's fill port on its own
+     * Facts schema 27 (batch 2026-11-15-fluid-interfaces, W4): a liquid hopper, a converter's fill port on its own
      * ({@link ConverterUnit#hopper}), on a dead-end pipe, its Forge tank holding 2 500 mB of water.
      */
     private static void hopper(EventPathWorld world) {

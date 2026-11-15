@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.runtime.fluid.WorkerTrajectoryEquivalenceTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-10-24T09:09:14.041Z" hostname="WORMZ-PC" time="0.098">
-  <properties/>
-  <testcase name="realBoundedExecutorPreservesClosedPhysicalTrajectoriesAtOneTwoAndAutomaticTwelveWorkers()" classname="com.wormzjl.icheme.runtime.fluid.WorkerTrajectoryEquivalenceTest" time="0.098"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

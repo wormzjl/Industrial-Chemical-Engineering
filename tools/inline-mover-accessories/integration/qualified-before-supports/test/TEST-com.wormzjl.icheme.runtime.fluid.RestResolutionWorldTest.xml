@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.runtime.fluid.RestResolutionWorldTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-25T04:53:59.038Z" hostname="WORMZ-PC" time="0.062">
-  <properties/>
-  <testcase name="aLoopWithNoNetDriveIsAtRest()" classname="com.wormzjl.icheme.runtime.fluid.RestResolutionWorldTest" time="0.012"/>
-  <testcase name="cardE9sWorldIsAtRest()" classname="com.wormzjl.icheme.runtime.fluid.RestResolutionWorldTest" time="0.015"/>
-  <testcase name="twoIdenticalGeneratorsOnOneJunctionComeToRestAtTheGauge()" classname="com.wormzjl.icheme.runtime.fluid.RestResolutionWorldTest" time="0.034"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

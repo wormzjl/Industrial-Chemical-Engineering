@@ -158,6 +158,8 @@ batches. The owner judges models on rendered drawings and judges sounds by ear, 
 - Run them with the authoring Python, isolated:
   `C:/Users/wormz/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe -I <script> <output folder>`.
   The scripts add `tools/pump-compressor-controls/python-deps` (numpy, soundfile, which also reads MP3) to their path.
+  That folder is git-ignored: install it from `tools/pump-compressor-controls/requirements.txt` (the command is in the file),
+  or copy it from the main checkout's `research/tools/pump-compressor-controls/python-deps/`.
 - Write output only under `<worktree>/tmp/<name>/`, with a row in `tmp/INDEX.md`.
 
 ### Verify a sound

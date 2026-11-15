@@ -79,10 +79,10 @@ final class FluidFacts {
      *  25 (batch 2026-11-11-aqueous-solvents, W3b step 6; numbered 25 at the merge of main 0.28.0): a vessel's oil-liquid and
      *  aqueous-liquid amounts, after its {@code rigid}; absent means the pre-W3b reading of its liquid fields (the compounds'
      *  liquid and the water as two liquids).
-     *  26 (batch 2026-11-15-fluid-interfaces): a device spec's {@code ambient}, after its relief face (absent: false, not the
+     *  26: reserved on main by batch 2026-11-15-pollution-system (a vessel's breach flag), not merged at this schema.
+     *  27 (batch 2026-11-15-fluid-interfaces): a device spec's {@code ambient}, after its relief face (absent: false, not the
      *  atmosphere), a gas intake's. A liquid hopper's converter facts (W4) use the schema-24 fields: its fill port is its own
-     *  identity, with no drain.
-     *  27 (batch 2026-11-15-fluid-interfaces, W7): the control valve source {@code ON_OFF}, an automated shutoff valve. */
+     *  identity, with no drain. The control valve source {@code ON_OFF} (W7), an automated shutoff valve. */
     static final int SCHEMA=27;
     /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 27. */
     private static final Map<Class<?>,Map<String,String>> ALIASES=Map.of();

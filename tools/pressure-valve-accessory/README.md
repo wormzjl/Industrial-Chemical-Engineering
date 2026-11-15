@@ -30,3 +30,5 @@ Status: Archived 2026-10-24. Index: [../INDEX.md](../INDEX.md).
 ### History
 
 - Archived 2026-10-24 (integrated `4ad6dc97`; 18 focused checks, five known full-suite failures/no new failure, ten local files preserved including clean ProcessUnit combination; target jar/client running)
+
+Large files (AGENTS.md, batch 2026-11-15-tools-large-files): the 283 images, Gradle results, worlds and other large files of this folder are git-ignored here; their copies are in the main checkout's `research/tools/pressure-valve-accessory/`, at the same relative paths.

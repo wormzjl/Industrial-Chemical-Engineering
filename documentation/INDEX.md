@@ -16,6 +16,8 @@ Status words:
 |---|---|---|
 | [2026-11-15-fluid-interfaces/](2026-11-15-fluid-interfaces/README.md) | Orifice plate, automated shutoff valve, liquid hopper, gas intake with the rare gases, placeholder crude oil, JEI for the fluid converter | In progress since 2026-11-15 |
 | [2026-11-15-equipment-visual-design/](2026-11-15-equipment-visual-design/README.md) | Better-looking, less bare equipment: review of every kind, then trim, finishes and shading | In progress since 2026-11-15 |
+| [2026-11-15-fluid-step-cost/](2026-11-15-fluid-step-cost/README.md) | Fluid step cost: kept workspaces and the vessel closure's Jacobian from tangents; pattern and pivot forms measured and not kept | Implemented 2026-11-15 (0.31.1) |
+| [2026-11-15-tools-large-files/](2026-11-15-tools-large-files/README.md) | Large files out of `tools/`: images, worlds, Gradle results and files over 1 MB to `research/tools/`, `/tools/**` ignore lines | Implemented 2026-11-16 |
 | [2026-11-13-codebase-review/](2026-11-13-codebase-review/README.md) | Whole code base review and revamp: defect fixes, free performance, the water module, machine shaft power and wear modes, the Rust column library (stage a), the largest classes split into files, timing-independent stills, columns and exchangers, the code guide per module, documentation and collaboration | Implemented 2026-11-15 (0.31.0) |
 | [2026-11-12-tutorial-system/](2026-11-12-tutorial-system/README.md) | Tutorial for new players: own films, help tours on every GUI, a field guide to a first small crude unit, equipment items and JEI pages | Implemented 2026-11-13 (0.30.0) |
 | [2026-11-12-fluid-conversion/](2026-11-12-fluid-conversion/README.md) | Converter between Forge fluids and IChemE fluids | Implemented 2026-11-12 (0.28.0) |

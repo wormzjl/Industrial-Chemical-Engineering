@@ -43,3 +43,5 @@ README.md, probe.init.gradle, *Probe.java, candidate-*.patch, XML/text results
 
 - Concluded 2026-09-25 (investigation)
 - full fix pending
+
+Large files (AGENTS.md, batch 2026-11-15-tools-large-files): the 10 images, Gradle results, worlds and other large files of this folder are git-ignored here; their copies are in the main checkout's `research/tools/pipe-junction-probe/`, at the same relative paths.

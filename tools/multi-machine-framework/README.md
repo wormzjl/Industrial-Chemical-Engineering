@@ -144,3 +144,5 @@ Eight empty logs were left out (six in `w1/`, two in `w4/`).
 ## History
 
 - 2026-10-27: created at the merge of 0.15.0 (batch `2026-10-26-multi-machine-framework`, tip `7f03b072`), from the worktree's `tmp/` folders `w1`, `w3`, `w4`, `q9`, `review-world`, `line-resize`, `steam-port`, `pc-adapt`, `merge-0141` and `w7`; `nozzle-bore/` from `f3-reflux` (the final lane's gate failure); `logs/final-lane-logs-2026-10-27.tar.gz` from `final-lane` at `ce71b45c`; `merge-docs/` at the merge (main fast-forwarded to `ce71b45c`, 0.15.0).
+
+Large files (AGENTS.md, batch 2026-11-15-tools-large-files): the 14 images, Gradle results, worlds and other large files of this folder are git-ignored here; their copies are in the main checkout's `research/tools/multi-machine-framework/`, at the same relative paths.

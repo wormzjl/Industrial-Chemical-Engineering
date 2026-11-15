@@ -193,6 +193,17 @@ public final class HydrocarbonModel {
      * refusals of {@link #phase} are this entry's too.
      */
     public Tangent tangent(double t,double p,double[] amounts,PengRobinsonKernel.Root root,TranslatedPengRobinson.Workspace terms,boolean vaporCoexists) {
+        return tangent(t,p,amounts,root,terms,vaporCoexists,null);
+    }
+    /**
+     * {@link #tangent(double, double, double[], PengRobinsonKernel.Root, TranslatedPengRobinson.Workspace, boolean)} filled
+     * into {@code reuse}'s arrays where it is one of this model's tangents (null, or another model's: new arrays), and
+     * returned; or null as there, {@code reuse}'s arrays then holding no tangent (batch 2026-11-15-fluid-step-cost, S2).
+     * Every array element the tangent reads is written here before it is returned, by the same arithmetic as into new
+     * arrays, so the tangent is the same to the bit. The caller must read nothing of {@code reuse}'s previous fill after
+     * this call: the Jacobian sweep keeps one per storage slot, filled again for each node.
+     */
+    public Tangent tangent(double t,double p,double[] amounts,PengRobinsonKernel.Root root,TranslatedPengRobinson.Workspace terms,boolean vaporCoexists,Tangent reuse) {
         if(!Double.isFinite(t)||!Double.isFinite(p))throw new IllegalArgumentException("Fluid state is not finite");
         double[] kernel=kernelAmounts(amounts);int n=kernel.length;
         TranslatedPengRobinson.Values values=values(t,p,kernel,root,terms,vaporCoexists);
@@ -203,18 +214,25 @@ public final class HydrocarbonModel {
         double v=values.molarVolume(),h=values.molarEnthalpy(),dvdt=values.volumeTemperatureDerivative(),dvdp=values.volumePressureDerivative();
         double cp=values.heatCapacity(),dhdp=values.enthalpyPressureDerivative(),raw=values.untranslatedVolume(),b=values.coVolume();
         double attraction=values.attraction(),attractionT=values.attractionTemperatureDerivative();
-        double[] attractionN=new double[n];
+        double[] partialVolumeView=values.partialMolarVolumesView(),logPhiView=values.logFugacityCoefficientsView();
+        // A reused tangent's arrays have the lengths new ones get: n, and the partial volumes the view's (its clone's before).
+        Tangent out=reuse!=null&&reuse.model==this&&reuse.n0.length==n&&reuse.partialVolume.length==partialVolumeView.length?reuse:new Tangent(this,n,partialVolumeView.length);
+        double[] attractionN=out.attractionN;
         for(int i=0;i<n;i++)attractionN[i]=values.attractionAmountDerivative(i)/total;
-        double[] partialVolume=values.partialMolarVolumesView().clone();
-        double[] logPhi=java.util.Arrays.copyOf(values.logFugacityCoefficientsView(),n);
+        double[] partialVolume=out.partialVolume;
+        System.arraycopy(partialVolumeView,0,partialVolume,0,partialVolumeView.length);
+        // Arrays.copyOf(view, n): the view's first n, zeros past its end.
+        double[] logPhi=out.logPhi;int copied=Math.min(n,logPhiView.length);
+        System.arraycopy(logPhiView,0,logPhi,0,copied);java.util.Arrays.fill(logPhi,copied,n,0.0);
         TangentScratch scratch=tangentScratch.get();
         // The same root on the kernel's own workspace, on the same support: d ln phi/dn per mole of phase, the untranslated d ln phi/dT.
         terms.carryOnto(scratch.mixture);
         try{evaluator.kernel().evaluateDerivatives(t,p,kernel,root,scratch.mixture,scratch.derivatives);}
         catch(IllegalStateException coalescing){return null;}
         double[] kernelDt=scratch.derivatives.dLogPhiDtView(),residual=scratch.derivatives.partialMolarResidualEnthalpyView();
-        double[] logPhiT=new double[n],logPhiP=new double[n],partialEnthalpy=new double[n],rawPartialVolume=new double[n],coVolumes=new double[n];
-        double[][] logPhiN=new double[n][n];
+        // Each of these is written whole below: every row i, in both branches, every column j of logPhiN.
+        double[] logPhiT=out.logPhiT,logPhiP=out.logPhiP,partialEnthalpy=out.partialEnthalpy,rawPartialVolume=out.rawPartialVolume,coVolumes=out.coVolumes;
+        double[][] logPhiN=out.logPhiN;
         double outside=PengRobinsonKernel.outsideSupportFill();
         for(int i=0;i<n;i++) {
             coVolumes[i]=evaluator.kernel().coVolume(i);
@@ -234,8 +252,10 @@ public final class HydrocarbonModel {
             for(int j=0;j<n;j++)logPhiN[i][j]=row[j]/total;
             if(!Double.isFinite(logPhiT[i])||!Double.isFinite(logPhiP[i])||!Double.isFinite(partialEnthalpy[i]))throw new IllegalArgumentException("Nonfinite chemical-potential derivative");
         }
-        return new Tangent(this,base,t,p,kernel.clone(),total,v,h,raw,b,total*dvdt,total*dvdp,total*cp,total*dhdp,dvdt,dvdp,attraction,attractionT,attractionN,
-                partialVolume,partialEnthalpy,rawPartialVolume,coVolumes,logPhi,logPhiT,logPhiP,logPhiN);
+        // The tangent's own copy of the base amounts (the clone it took before), the caller's array never kept.
+        System.arraycopy(kernel,0,out.n0,0,n);
+        out.set(base,t,p,total,v,h,raw,b,total*dvdt,total*dvdp,total*cp,total*dhdp,dvdt,dvdp,attraction,attractionT);
+        return out;
     }
 
     /** One thread's scratch for {@link #tangent}: the kernel's own workspace and derivative bundle. */
@@ -258,19 +278,26 @@ public final class HydrocarbonModel {
      */
     public static final class Tangent {
         private final HydrocarbonModel model;
-        private final Phase base;
-        private final double t0,p0,total,v0,h0,raw0,b0,volumeT,volumeP,enthalpyT,enthalpyP,dvdt,dvdp,attraction,attractionT;
+        private Phase base;
+        private double t0,p0,total,v0,h0,raw0,b0,volumeT,volumeP,enthalpyT,enthalpyP,dvdt,dvdp,attraction,attractionT;
+        /** The tangent's storage, kept by a caller that fills it again ({@link HydrocarbonModel#tangent(double, double,
+         * double[], PengRobinsonKernel.Root, TranslatedPengRobinson.Workspace, boolean, Tangent)}); written whole by each fill
+         * and read only by this tangent's methods, so no array leaves it. */
         private final double[] n0,attractionN,partialVolume,partialEnthalpy,rawPartialVolume,coVolumes,logPhi,logPhiT,logPhiP;
         private final double[][] logPhiN;
-        private Tangent(HydrocarbonModel model,Phase base,double t0,double p0,double[] n0,double total,double v0,double h0,double raw0,double b0,
-                        double volumeT,double volumeP,double enthalpyT,double enthalpyP,double dvdt,double dvdp,
-                        double attraction,double attractionT,double[] attractionN,double[] partialVolume,double[] partialEnthalpy,double[] rawPartialVolume,double[] coVolumes,
-                        double[] logPhi,double[] logPhiT,double[] logPhiP,double[][] logPhiN) {
-            this.model=model;this.base=base;this.t0=t0;this.p0=p0;this.n0=n0;this.total=total;this.v0=v0;this.h0=h0;this.raw0=raw0;this.b0=b0;
+        /** {@link #at}'s water share, read there at once ({@link WaterShare#phase} zero-fills it first). */
+        private final double[] share=new double[WaterShare.SIZE];
+        /** Storage for {@code n} kernel compounds and {@code volumes} partial volumes, filled by {@link HydrocarbonModel#tangent}. */
+        private Tangent(HydrocarbonModel model,int n,int volumes) {
+            this.model=model;n0=new double[n];attractionN=new double[n];partialVolume=new double[volumes];
+            partialEnthalpy=new double[n];rawPartialVolume=new double[n];coVolumes=new double[n];
+            logPhi=new double[n];logPhiT=new double[n];logPhiP=new double[n];logPhiN=new double[n][n];
+        }
+        private void set(Phase base,double t0,double p0,double total,double v0,double h0,double raw0,double b0,
+                         double volumeT,double volumeP,double enthalpyT,double enthalpyP,double dvdt,double dvdp,double attraction,double attractionT) {
+            this.base=base;this.t0=t0;this.p0=p0;this.total=total;this.v0=v0;this.h0=h0;this.raw0=raw0;this.b0=b0;
             this.volumeT=volumeT;this.volumeP=volumeP;this.enthalpyT=enthalpyT;this.enthalpyP=enthalpyP;this.dvdt=dvdt;this.dvdp=dvdp;
-            this.attraction=attraction;this.attractionT=attractionT;this.attractionN=attractionN;
-            this.partialVolume=partialVolume;this.partialEnthalpy=partialEnthalpy;this.rawPartialVolume=rawPartialVolume;this.coVolumes=coVolumes;
-            this.logPhi=logPhi;this.logPhiT=logPhiT;this.logPhiP=logPhiP;this.logPhiN=logPhiN;
+            this.attraction=attraction;this.attractionT=attractionT;
         }
         /** The exact phase at the base point. */
         public Phase base() { return base; }
@@ -322,7 +349,7 @@ public final class HydrocarbonModel {
                     -1/TranslatedPengRobinson.Values.pressureVolumeDerivative(t0,raw0,attraction,b0);
             double phaseSlope=slope;
             if(model.water>=0&&amounts[model.water]>0) {
-                double[] share=new double[WaterShare.SIZE];
+                double[] share=this.share;
                 model.share.phase(t,p,amounts[model.water]/sum,raw,b,dvdt,slope,model.shareScratch.get(),share);
                 v+=share[WaterShare.V];h+=share[WaterShare.H];phaseSlope+=share[WaterShare.V_P];
             }

@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.science.fluid.thermo.TranslatedPengRobinsonTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-25T08:27:25.680Z" hostname="WORMZ-PC" time="0.001">
-  <properties/>
-  <testcase name="analyticDerivativesAndEnergyIdentityMatchIndependentDifferences()" classname="com.wormzjl.icheme.science.fluid.thermo.TranslatedPengRobinsonTest" time="0.001"/>
-  <testcase name="constantTranslationChangesDensityButNotRawPressureSlope()" classname="com.wormzjl.icheme.science.fluid.thermo.TranslatedPengRobinsonTest" time="0.0"/>
-  <testcase name="mixturePartialVolumesAndSecondTemperatureDerivativeClose()" classname="com.wormzjl.icheme.science.fluid.thermo.TranslatedPengRobinsonTest" time="0.0"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

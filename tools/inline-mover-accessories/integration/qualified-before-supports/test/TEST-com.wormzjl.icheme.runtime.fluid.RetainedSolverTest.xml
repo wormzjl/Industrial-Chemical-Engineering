@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.runtime.fluid.RetainedSolverTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-10-25T04:53:59.100Z" hostname="WORMZ-PC" time="0.019">
-  <properties/>
-  <testcase name="aRetainedSolverIsExclusiveAndIsHandedBackAfterEveryOutcome()" classname="com.wormzjl.icheme.runtime.fluid.RetainedSolverTest" time="0.012"/>
-  <testcase name="aRetainedSolverReusesItsStructureAcrossTheIntervalBoundary()" classname="com.wormzjl.icheme.runtime.fluid.RetainedSolverTest" time="0.007"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.science.fluid.network.PressureValveContinuationTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-24T14:24:56.965Z" hostname="WORMZ-PC" time="1.44">
-  <properties/>
-  <testcase name="anInterruptedAttemptCannotChangeDeterministicAcceptedEndpointReplay()" classname="com.wormzjl.icheme.science.fluid.network.PressureValveContinuationTest" time="0.318"/>
-  <testcase name="changedValveSettingsDiscardTheOldAcceptedRegime()" classname="com.wormzjl.icheme.science.fluid.network.PressureValveContinuationTest" time="0.083"/>
-  <testcase name="equalSetpointOutletsContinueMixedDischargeWithoutLosingMaterialOrEnergy()" classname="com.wormzjl.icheme.science.fluid.network.PressureValveContinuationTest" time="1.03"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

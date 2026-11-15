@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.runtime.fluid.VesselStateFollowsContentsTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-10-24T07:55:05.604Z" hostname="WORMZ-PC" time="0.128">
-  <properties/>
-  <testcase name="everyTankOfTheExtremeGridIsStatedAtItsContentsAfterEveryInterval()" classname="com.wormzjl.icheme.runtime.fluid.VesselStateFollowsContentsTest" time="0.128"/>
-  <system-out><![CDATA[VESSEL_CLOSURE grid-10 uncapped 5 s x 12: worst lag 1.872717891854047E-14, highest tank -0.009972562140319496 Pa from the highest generator
-]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

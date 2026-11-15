@@ -191,7 +191,7 @@ class FluidCheckpointCodecTest {
         // face list (1 byte, empty) on each spec, 45 bytes for the five devices. The rare gases (batch 2026-11-15-fluid-interfaces,
         // W1): the 52-entry list, 2,017 bytes at 47 entries and 2,040 at 52, each id's text-table length and index (3 bytes)
         // and a seventh mask byte on each of the eight sparse compositions; the list grows them, not the devices. Fluid facts
-        // schema 26 (the same batch, W2): a spec's ambient flag (1 byte) on each of the five specs and one more field count.
+        // schema 27 (the same batch, W2): a spec's ambient flag (1 byte) on each of the five specs and one more field count.
         assertTrue(perDevice<2_051,"the facts and events of five devices: "+bytes.length+" bytes with the basis, "+perDevice+" without the basis and the two full compositions, "+count+" entries");
         assertTrue(assertThrows(IllegalArgumentException.class,()->FluidCheckpointCodec.decodeTopology(Arrays.copyOf(bytes,bytes.length+1),0,key->key.on(model))).getMessage().contains("trailing bytes"));
         assertThrows(IllegalArgumentException.class,()->FluidCheckpointCodec.decodeTopology(Arrays.copyOf(bytes,bytes.length/2),0,key->key.on(model)));

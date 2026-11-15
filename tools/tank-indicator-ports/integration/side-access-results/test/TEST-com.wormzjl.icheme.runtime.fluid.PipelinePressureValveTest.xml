@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.runtime.fluid.PipelinePressureValveTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-24T14:24:15.223Z" hostname="WORMZ-PC" time="0.08">
-  <properties/>
-  <testcase name="directBoundaryConnectionsAreOrientedAndPressureSetpointClosesFlow()" classname="com.wormzjl.icheme.runtime.fluid.PipelinePressureValveTest" time="0.006"/>
-  <testcase name="allSixDirectionsUseExistingPressureControlAndPreservePipeAndReservoirs()" classname="com.wormzjl.icheme.runtime.fluid.PipelinePressureValveTest" time="0.048"/>
-  <testcase name="pendingInstallResizeAndPressureEditsRoundTripWithoutAnotherFormatField()" classname="com.wormzjl.icheme.runtime.fluid.PipelinePressureValveTest" time="0.02"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

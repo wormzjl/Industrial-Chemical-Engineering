@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.runtime.fluid.RestGaugeTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-10-25T08:26:42.655Z" hostname="WORMZ-PC" time="0.037">
-  <properties/>
-  <testcase name="twoGeneratorsBelowVoidsAndATankRest()" classname="com.wormzjl.icheme.runtime.fluid.RestGaugeTest" time="0.019"/>
-  <testcase name="aGeneratorBelowTwoVoidsRests()" classname="com.wormzjl.icheme.runtime.fluid.RestGaugeTest" time="0.018"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

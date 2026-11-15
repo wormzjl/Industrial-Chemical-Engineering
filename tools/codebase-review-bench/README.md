@@ -19,7 +19,7 @@ Build once (not timed): `./gradlew jar compileTestJava compileFluidGameTestJava 
 ### Fluid (the paced server benchmark)
 
 ```text
-./gradlew fluidServerBenchmark -PfluidBenchmarkRunId=<fresh id> -PfluidStressProfile=true -PfluidBenchmarkMemory=true [-PfluidBenchmarkProfile=mixed100]
+./gradlew fluidServerBenchmark -PfluidBenchmarkRunId=<fresh id> -PfluidStressProfile=true -PfluidBenchmarkMemory=true [-PfluidBenchmarkProfile=mixed100|mixed400] [-PfluidBenchmarkWorkers=<n>]
 ```
 
 `-PfluidStressProfile=true` makes `FluidServerBenchmark` record JFR ("profile" settings) from the fixture's start to the report: `build/reports/fluid/M9/<id>/stress.jfr` beside `report.json`. Copy both to `tmp/codebase-review-bench/<run>/`. The default profile `one` (one island of 100 reservoirs) warms 2,400 ticks and measures until 200 intervals; once its island certifies at rest the count stops and the run ends only at the GameTest timeout (B1 stopped it at 33 min). Use a timed profile (`mixed100`, `stress100`, ...): 60 s + 60 s on 100 islands. `report.json` gives `measuredStartEpochMillis` for `JfrSummary.java -Dfrom`. Heap histograms of the game JVM: `jcmd <pid> GC.class_histogram` after the window (see `PROFILE_REVIEW.md` for when they were taken).

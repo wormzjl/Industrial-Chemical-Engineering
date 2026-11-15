@@ -13,3 +13,5 @@ README.md, `2026-09-26-phase-ports/main-session.jsonl.gz`, `subagents/*.jsonl.gz
 ## History
 
 - Concluded 2026-09-27 (reference material)
+
+Large files (AGENTS.md, batch 2026-11-15-tools-large-files): the 13 images, Gradle results, worlds and other large files of this folder are git-ignored here; their copies are in the main checkout's `research/tools/session-transcripts/`, at the same relative paths.

@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.science.fluid.thermo.WaterRegion1Test" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-24T01:38:36.340Z" hostname="WORMZ-PC" time="0.001">
-  <properties/>
-  <testcase name="continuesPastItsRegionAndRefusesOnlyAStateThatIsNotPositive()" classname="com.wormzjl.icheme.science.fluid.thermo.WaterRegion1Test" time="0.001"/>
-  <testcase name="verifiesAnalyticPressureAndTemperatureDerivatives()" classname="com.wormzjl.icheme.science.fluid.thermo.WaterRegion1Test" time="0.0"/>
-  <testcase name="matchesOfficialRegionOneCheckpoints()" classname="com.wormzjl.icheme.science.fluid.thermo.WaterRegion1Test" time="0.0"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>
