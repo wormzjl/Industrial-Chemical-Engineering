@@ -6,22 +6,12 @@ import java.util.*;
 
 /**
  * Sequential sparse LU with row equilibration, refinement, and a backward-error check.
- * A {@link Storage} owns one {@link UpLookingLu} (EJML's pivot rule, or the threshold rule for the Newton's
- * {@link Storage#storedPattern}) and its buffers and is refilled in place by successive factorizations of
+ * A {@link Storage} owns one {@link UpLookingLu} and its buffers and is refilled in place by successive factorizations of
  * the same solver; it is never shared across threads and never promises a locked structure.
  * This verifies a linear solve, not convergence or conditioning of the calling nonlinear problem.
  */
 public final class SparseLuSolver {
     private static final double MAXIMUM_BACKWARD_ERROR = 1.0e-10;
-    /**
-     * The Newton's pivot threshold ({@link Storage#storedPattern}; batch 2026-11-15-fluid-step-cost, S5): threshold partial
-     * pivoting, a column's pivot is an acceptable candidate, at least this fraction of the column's largest, so that the
-     * pivot rows repeat while the values drift. An acceptable pivot bounds the growth of a column's entries by
-     * {@code 1 + 1/threshold} = 11 per elimination, where partial pivoting bounds it by 2. 0.1 is the usual value for sparse
-     * LU (UMFPACK's default, MA48's {@code u}); every solve's componentwise backward-error check and refinement stand
-     * behind it ({@code checkResidual}). One constant, not tuned (plan section 4f).
-     */
-    public static final double NEWTON_PIVOT_THRESHOLD = 0.1;
 
     private SparseLuSolver() {}
     /** A test's view of every matrix handed to the LU (P-17's parity gate, batch 2026-11-13-codebase-review): the
@@ -77,8 +67,7 @@ public final class SparseLuSolver {
     }
 
     /**
-     * One worker's reusable sparse-LU workspace: the LU ({@link UpLookingLu}: EJML 0.44's up-looking LU bit for bit, or the
-     * Newton's threshold rule, {@link #storedPattern}), the
+     * One worker's reusable sparse-LU workspace: the LU ({@link UpLookingLu}, EJML 0.44's up-looking LU bit for bit), the
      * CSC copy of the equilibrated matrix handed to it, and the scaling, solve and refinement buffers. Successive
      * factorizations refill it in place and grow its arrays only while the island grows. Of the same structure, they reuse
      * each column's reach while the pivot rows repeat (finding P-17, batch 2026-11-13-codebase-review): the symbolic
@@ -97,29 +86,14 @@ public final class SparseLuSolver {
         private int[] permutation=new int[0],inverse=new int[0];
         private double[] rowScale=NO_VALUES,scaledValues=NO_VALUES,rowNorm=NO_VALUES;
         private double[] rhsWorkspace=NO_VALUES,residualWorkspace=NO_VALUES,magnitudeWorkspace=NO_VALUES;
-        /** The LU (finding P-17: the up-looking LU, with each column's reach kept; EJML's rule bit for bit, or the
-         * threshold rule for {@link #storedPattern}) and the columns handed to it, the permuted right-hand side and
-         * solution: all kept and grown, so a factorization allocates nothing once the storage has the island's size. */
-        private final UpLookingLu lu;
+        /** The LU (finding P-17: EJML's up-looking LU, bit for bit, with each column's reach kept) and the columns handed to
+         * it, the permuted right-hand side and solution: all kept and grown, so a factorization allocates nothing once the
+         * storage has the island's size. */
+        private final UpLookingLu lu=new UpLookingLu();
         private int[] aColumns=new int[1],aRows=new int[0];private double[] aValues=NO_VALUES,permutedRhs=NO_VALUES,permutedSolution=NO_VALUES;
-        /** Whether this storage hands the LU every entry its matrices store, an explicit zero included ({@link #storedPattern});
-         * otherwise it drops the exact zeros first. */
-        private final boolean keepsZeros;
-        /** A storage that drops a matrix's exact zeros before it factors (a transport matrix stores the zeros of a pipe at
-         * rest), under EJML's pivot rule. */
-        public Storage(SolverOwnership ownership){this(ownership,false,new UpLookingLu());}
-        private Storage(SolverOwnership ownership,boolean keepsZeros,UpLookingLu lu) {
-            this.ownership=Objects.requireNonNull(ownership,"ownership");this.keepsZeros=keepsZeros;this.lu=lu;SolverDiagnostics.count(SolverDiagnostics.luStorages);
+        public Storage(SolverOwnership ownership) {
+            this.ownership=Objects.requireNonNull(ownership,"ownership");SolverDiagnostics.count(SolverDiagnostics.luStorages);
         }
-        /**
-         * A storage that factors every entry a matrix stores, an explicit zero as a structural entry the LU keeps in its
-         * reach (batch 2026-11-15-fluid-step-cost, S1 F2): the Newton's, whose matrix holds exactly the entries it means the LU
-         * to see ({@code SparseNewton}'s numeric matrix: its nonzeros, and after a block build the zeros its equations keep).
-         * Its LU pivots by the threshold rule at {@link SparseLuSolver#NEWTON_PIVOT_THRESHOLD} (S5), so that its pivot rows, and with them
-         * the kept reaches, repeat while the values drift; the rule reads the matrix alone, so a kept storage still gives a
-         * new one's bits.
-         */
-        public static Storage storedPattern(SolverOwnership ownership){return new Storage(ownership,true,new UpLookingLu(NEWTON_PIVOT_THRESHOLD));}
         public Factorization factor(SparseMatrix matrix,Ordering ordering) {
             if(!SolverDiagnostics.ENABLED)return factor0(matrix,ordering);
             long started=System.nanoTime();boolean completed=false;
@@ -156,7 +130,7 @@ public final class SparseLuSolver {
             int stored=0;
             for(int column=0;column<size;column++) {
                 int original=inverse[column];aColumns[column]=stored;
-                for(int entry=matrix.columnStart(original);entry<matrix.columnEnd(original);entry++)if(keepsZeros||matrix.valueAt(entry)!=0) {
+                for(int entry=matrix.columnStart(original);entry<matrix.columnEnd(original);entry++)if(matrix.valueAt(entry)!=0) {
                     int row=matrix.rowAt(entry);aRows[stored]=permutation[row];aValues[stored++]=scaledValues[entry];
                 }
             }

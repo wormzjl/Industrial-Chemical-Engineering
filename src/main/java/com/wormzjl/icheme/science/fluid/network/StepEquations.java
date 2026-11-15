@@ -851,32 +851,18 @@ final class StepEquations implements SparseNewton.Equations {
     /** This node's transport rows at {@code state} with no prepared temperature bundle (for a point other than the
      * pass's decoded one: the reconstruction's, the error probe's). */
     Transport transportAt(int node,FluidThermodynamics.State state){return transport(node,state,null);}
-    /**
-     * The declared Jacobian pattern ({@link #columnRows}). A node's column declares its own block whole, every row of each
-     * incident connection, and the inflow rows ({@link PhaseLayout#inflowRows}) of the node at each such connection's other
-     * end; a connection's flow and control columns declare the connection's rows and both ends' inflow rows. Batch
-     * 2026-11-15-fluid-step-cost, S1 F1: a column used to declare the other end's whole block, but a node's wall row, its
-     * normalization row and its equilibrium rows read its own decoded state alone (the whole-island residual and the block
-     * sweep's {@link #nodeTargetRows} alike), so no column but the node's own moves them, and those entries were exactly
-     * zero at every point (31 % of the declared entries in the census). Weir rows and columns, the remote suctions, the
-     * filter column and the structural zeros below are as they were.
-     */
     private void buildSparsity() {
         int count=layout.length;
         BitSet[] columns=new BitSet[size];for(int i=0;i<size;i++)columns[i]=new BitSet(size);
-        int[][] inflow=new int[count][];
-        for(int node=0;node<count;node++) {
-            inflow[node]=layout[node]==null?new int[0]:layout[node].inflowRows();
-            for(int i=0;i<inflow[node].length;i++)inflow[node][i]+=offsets[node];
-        }
         for(int node=0;node<count;node++)for(int c=offsets[node];c<offsets[node]+nodeSize(node);c++)columns[c].set(offsets[node],offsets[node]+nodeSize(node));
         for(int edge=0;edge<graph.pipes().size();edge++) {
             var pipe=graph.pipes().get(edge);int er=edgeOffset+edge;
             for(int node:new int[]{pipe.first(),pipe.second()}) {
-                set(columns[er],inflow[node]);
-                // The own block is declared whole above; across the connection only the other end's inflow rows.
-                int[] across=inflow[other(edge,node)];
-                for(int c=offsets[node];c<offsets[node]+nodeSize(node);c++){columns[c].set(er);set(columns[c],across);}
+                columns[er].set(offsets[node],offsets[node]+nodeSize(node));
+                for(int c=offsets[node];c<offsets[node]+nodeSize(node);c++) {
+                    columns[c].set(er);
+                    for(int receiver:new int[]{pipe.first(),pipe.second()})columns[c].set(offsets[receiver],offsets[receiver]+nodeSize(receiver));
+                }
             }
             columns[er].set(er);
             int filter=filterOffsets[edge];if(filter>=0){columns[filter].set(er);columns[filter].set(filter);columns[er].set(filter);for(int node:new int[]{pipe.first(),pipe.second()})for(int c=offsets[node];c<offsets[node]+nodeSize(node);c++)columns[c].set(filter);}
@@ -884,7 +870,7 @@ final class StepEquations implements SparseNewton.Equations {
             if(control>=0) {
                 columns[control].set(er);columns[control].set(control);columns[er].set(control);
                 for(int node:new int[]{pipe.first(),pipe.second()}) {
-                    set(columns[control],inflow[node]);
+                    columns[control].set(offsets[node],offsets[node]+nodeSize(node));
                     for(int c=offsets[node];c<offsets[node]+nodeSize(node);c++)columns[c].set(control);
                 }
             }
@@ -916,7 +902,6 @@ final class StepEquations implements SparseNewton.Equations {
             if(!layout[node].totalAmountVariable(local))columns[offsets[node]+local].andNot(materialRows);
         sparsity=new int[size][];for(int c=0;c<size;c++)sparsity[c]=columns[c].stream().toArray();
     }
-    private static void set(BitSet column,int[] rows){for(int row:rows)column.set(row);}
     public int size(){return size;}
     /** {@link PhaseLayout#differenceStepScale} for a node's amount column (an amount below the trace guard at its value and
      * its seed is differenced relative to its own size; bitwise the old {@code max(floor, |value|)} otherwise), and
@@ -1472,9 +1457,8 @@ final class StepEquations implements SparseNewton.Equations {
     /**
      * The Jacobian from per-node block perturbations instead of a coloured whole-island sweep: one local column at a
      * time, the node decoded at the perturbed point and only the rows that can see it re-assembled (its own block, the
-     * inflow rows of each neighbour across an incident edge that carries its state there, and the hydraulic, actuator
-     * and filter-loading rows of those edges; the flow, actuator and filter columns sweep the same way over their own
-     * edge). Every such row is produced
+     * block of each neighbour across an incident edge, and the hydraulic, actuator and filter-loading rows of those
+     * edges; the flow, actuator and filter columns sweep the same way over their own edge). Every such row is produced
      * by the same {@link #nodeAccumulate}, {@link #edgeRows} and {@link #nodeRows} the whole-island residual uses, in the
      * same accumulation order. The cost this removes is the assembly: the coloured sweep paid a complete island residual
      * for each of its 143 to 191 colour groups.
@@ -1513,29 +1497,8 @@ final class StepEquations implements SparseNewton.Equations {
      * next node may overwrite them; the pass's sweeps run one at a time on its thread.
      */
     private final com.wormzjl.icheme.science.fluid.thermo.HydrocarbonModel.Tangent[] tangentStorage=new com.wormzjl.icheme.science.fluid.thermo.HydrocarbonModel.Tangent[3];
-    /**
-     * Batch 2026-11-15-fluid-step-cost, S1 F2: per declared entry, whether the last block build recomputed its row for its
-     * column ({@link #keptEntries}); allocated at the first block build, sized to the declared entries, and filled again by
-     * each. {@code keptValid}: whether the last build returned a count. {@code rowNode}: the node each row belongs to, -1 for
-     * a connection's row (flow, actuator, filter, weir). {@code recomputedAt}: per node, the column whose sweep last
-     * recomputed its rows, -1 before the first in a build.
-     */
-    private boolean[] keptMask;private boolean keptValid;private int[] rowNode,recomputedAt;
-    /**
-     * The entries of the last block build whose row the sweep recomputed for their column, not merely seeded from the base
-     * residual (S1 F2): for a node's column every declared row of its own block, every declared row of a connection (the
-     * incident ones' flow, actuator and filter rows, the remote suctions' actuator rows), and the inflow rows of a node
-     * across a connection where that connection carries the column's node's state there ({@link #carries}; with two
-     * parallel connections, either); for a connection's flow, actuator or filter column every declared row. The factorization
-     * keeps these entries even where they are exactly zero, so its pattern changes only when a flow turns or a donor
-     * changes. Every entry outside the mask is exactly 0: its row is a neighbour's, seeded from the base residual for the
-     * column, so its difference is {@code (f - f) / step}, and the mask never drops a nonzero. Null where the last build
-     * returned -1 (a weir, a trial outside the domain).
-     */
-    @Override public boolean[] keptEntries(){return keptValid?keptMask:null;}
     private int differentiate(double[] x,double[] f,double differenceStep,int[] entryOffsets,int[] entryRows,
                               double[] entries,Runnable checkpoint,boolean tangents) {
-        keptValid=false;
         if(hasWeirs)return -1;
         FluidThermodynamics.State[] st,baseStates;Transport[] tr,baseTransport;FluidThermodynamics.Prepared[] pr,basePrepared;
         double[] trial,perturbed;
@@ -1548,12 +1511,6 @@ final class StepEquations implements SparseNewton.Equations {
             SolverDiagnostics.count(SolverDiagnostics.jacobianBlockFallbacks);return -1;
         }
         int columns=0;
-        if(keptMask==null||keptMask.length!=entryOffsets[size])keptMask=new boolean[entryOffsets[size]];
-        if(rowNode==null) {
-            rowNode=new int[size];Arrays.fill(rowNode,-1);recomputedAt=new int[layout.length];
-            for(int node=0;node<layout.length;node++)Arrays.fill(rowNode,offsets[node],offsets[node]+nodeSize(node),node);
-        }
-        Arrays.fill(recomputedAt,-1);
         try {
             for(int node=0;node<layout.length;node++) {
                 if(layout[node]==null)continue;
@@ -1562,7 +1519,7 @@ final class StepEquations implements SparseNewton.Equations {
                 var nodeTangents=tangents?model.tangents(baseStates[node],basePrepared[node],tangentStorage):null;
                 for(int local=0;local<layout[node].size();local++) {
                     checkpoint.run();columns++;
-                    int column=offsets[node]+local;recomputedAt[node]=column;
+                    int column=offsets[node]+local;
                     double step=differenceStep*differenceScale(column,x[column]);
                     trial[column]+=step;
                     double temperature=layout[node].temperature(trial,offsets[node]);
@@ -1581,7 +1538,7 @@ final class StepEquations implements SparseNewton.Equations {
                         edgeRows(edge,trial,st,tr,perturbed);
                         int other=other(edge,node);
                         if(layout[other]!=null&&carries(edge,node,trial)) {
-                            nodeAccumulate(other,trial,st,tr);nodeTargetRows(other,trial,st,perturbed);recomputedAt[other]=column;
+                            nodeAccumulate(other,trial,st,tr);nodeTargetRows(other,trial,st,perturbed);
                         }
                     }
                     // The suction limits this node supplies from beyond their ends (owner decision D17): only their
@@ -1608,7 +1565,7 @@ final class StepEquations implements SparseNewton.Equations {
                     edgeRows(edge,trial,st,tr,perturbed);
                     // No node is decoded again, so only the two endpoints' inflow rows move.
                     if(which<2)for(int node:new int[]{pipe.first(),pipe.second()})if(layout[node]!=null) {
-                        seed(node,perturbed,f);nodeAccumulate(node,trial,st,tr);nodeTargetRows(node,trial,st,perturbed);recomputedAt[node]=column;
+                        seed(node,perturbed,f);nodeAccumulate(node,trial,st,tr);nodeTargetRows(node,trial,st,perturbed);
                     }
                     write(entryOffsets,entryRows,entries,column,perturbed,f,step);
                     trial[column]=x[column];
@@ -1620,7 +1577,6 @@ final class StepEquations implements SparseNewton.Equations {
             SolverDiagnostics.count(SolverDiagnostics.jacobianBlockFallbacks);return -1;
         }
         SolverDiagnostics.count(SolverDiagnostics.jacobianBlockColumns,columns);
-        keptValid=true;
         return columns;
     }
     private int other(int edge,int node) {
@@ -1630,12 +1586,9 @@ final class StepEquations implements SparseNewton.Equations {
     private void seed(int node,double[] perturbed,double[] f) {
         if(layout[node]!=null)System.arraycopy(f,offsets[node],perturbed,offsets[node],layout[node].size());
     }
-    /** The column's entries, and whether the sweep recomputed each one's row for it ({@link #keptEntries}): a connection's
-     * row always, a node's row where that node's rows were recomputed for this column ({@code recomputedAt}). */
     private void write(int[] entryOffsets,int[] entryRows,double[] entries,int column,double[] perturbed,double[] f,double step) {
         for(int entry=entryOffsets[column];entry<entryOffsets[column+1];entry++) {
             int row=entryRows[entry];entries[entry]=(perturbed[row]-f[row])/step;
-            int node=rowNode[row];keptMask[entry]=node<0||recomputedAt[node]==column;
         }
     }
     /** The balance, energy, volume, equilibrium and closure rows this node owns. */
@@ -1646,12 +1599,10 @@ final class StepEquations implements SparseNewton.Equations {
         nodeSolidRows(node,x,st,f);
     }
     /**
-     * The rows a change of this node's inflow can move ({@link PhaseLayout#balanceRows} or {@link PhaseLayout#junctionRows},
-     * and the solid rows). A block sweep that perturbs one of this node's <em>neighbours</em> leaves the decoded state here
-     * untouched, so the equilibrium rows are the base residual's own doubles and the sweep seeds them from it rather than
-     * recomputing them; the wall row and the amount normalization this writes read that state alone too and come out as
-     * the base's doubles. So of this node's rows only its inflow rows ({@link PhaseLayout#inflowRows}) are declared on a
-     * neighbour's columns and on its connections' flow and control columns ({@link #buildSparsity}).
+     * Only the rows a change of this node's inflow can move. A block sweep that perturbs one of
+     * this node's <em>neighbours</em> leaves the decoded state here untouched, so the volume
+     * closure, the equilibrium rows and the amount normalization are the base residual's own
+     * doubles and the sweep seeds them from it rather than recomputing them.
      */
     private void nodeTargetRows(int node,double[] x,FluidThermodynamics.State[] st,double[] f) {
         if(!graph.reservoirs().get(node).junction())
