@@ -15,7 +15,7 @@ Up: [code guide](README.md)
 
 The PR78 arithmetic and the water formulas are in [thermo-kernel.md](thermo-kernel.md); phase answers in
 [equilibrium-engine.md](equilibrium-engine.md); the network's use of the property models in
-[fluid-science.md](fluid-science.md).
+[fluid-thermo-port.md](fluid-thermo-port.md).
 
 ## What it does
 
@@ -73,7 +73,7 @@ model continues, value and slope continuous.
 | Class | Role | Lines |
 |---|---|---|
 | [`MaterialReloadListener`](../../../src/main/java/com/wormzjl/icheme/material/MaterialReloadListener.java) | prepare = read every `materials/**.json` + `parse` + the column's preset check (`V3ColumnPresets.validate`); apply = `MaterialRuntime.publish`; registered in `IChemE` | |
-| [`ConversionReloadListener`](../../../src/main/java/com/wormzjl/icheme/material/ConversionReloadListener.java) | Reads `data/<ns>/icheme/fluid_conversion/**/*.json` after the materials, on the catalog they published; a rule whose fluid's mod is absent is skipped, a refused rule logged alone. The rules: [fluid-science.md](fluid-science.md) | |
+| [`ConversionReloadListener`](../../../src/main/java/com/wormzjl/icheme/material/ConversionReloadListener.java) | Reads `data/<ns>/icheme/fluid_conversion/**/*.json` after the materials, on the catalog they published; a rule whose fluid's mod is absent is skipped, a refused rule logged alone. The rules: [fluid-laws.md](fluid-laws.md) | |
 
 ## Main flow
 
@@ -96,7 +96,7 @@ model continues, value and slope continuous.
      ([column-v3.md](column-v3.md)). Its kernel is derived like the network's.
    - Network: `FluidThermodynamics.on` runs each island on the network package restricted to its compounds
      (`restrict`), with water in the cubic (`withWater`) and pairs from `DerivedPairs`; a spine package takes
-     `SpinePackageData` ([fluid-science.md](fluid-science.md)).
+     `SpinePackageData` ([fluid-thermo-port.md](fluid-thermo-port.md)).
    - Engine: `PackageBinding` is its one reader of the catalog ([equilibrium-engine.md](equilibrium-engine.md)).
    - Process simulator: a sheet runs on the network package restricted to its feeds' compounds (`SheetCompounds`) and
      shows `RevisionNotice` when the data differ from the identity its file holds ([process-simulator.md](process-simulator.md)).

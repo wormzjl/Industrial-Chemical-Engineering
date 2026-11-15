@@ -8,14 +8,14 @@ Up: [code guide](README.md) · the split table, the cycle's arithmetic, conditio
 - A column's status reads `NOT READY` or `STARTING`, or a device says `COLUMN: part of the column at …, running`.
 - Start refuses, or a port stands in the wrong place; Stop or a dismantle leaves something behind.
 - A running column's rates or accounts look wrong, or one of its boundary lines holds (the solver side of that:
-  [fluid-science.md](fluid-science.md)).
+  [fluid-step.md](fluid-step.md)).
 - A running column reads `LIMITED: condenser`, `reboiler`, `pumparound` or `power`, or its cooling water flow, its
   water's outlet, its air fans or a utility's valve look wrong.
 - A solve is late, applied at the wrong tick, or not asked again.
 - You change a column unit's facts (`ColumnUnit`), its engine state, the operating point in a saved design
   (`ColumnOperatingPoint`), the Operation tab or the DCS's column page, or rebuild a review plant.
 
-The island scheduler, the coupling and the certificates themselves: [fluid-runtime.md](fluid-runtime.md). The
+The island scheduler, the coupling and the certificates themselves: [runtime-engine.md](runtime-engine.md). The
 exchanger's wall and the heat in transit: [heat-exchangers.md](heat-exchangers.md).
 
 ## What it does
@@ -42,10 +42,10 @@ Paths under `src/main/java/com/wormzjl/icheme/`. Lines at the snapshot.
 | [`runtime/fluid/ColumnFacts`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/ColumnFacts.java) | The running columns' facts section (a `FactsSection`): the column units by identity | 79 |
 | [`runtime/fluid/ColumnPower`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/ColumnPower.java) | `ColumnOperation.Power` over `ElectricStores` and `ShaftTrains`: fan sides on their store (`ElectricStores.member`), a casing's rated shaft power on its train (`ShaftTrains.held`), an in-line pump on its own store; `undriven` | 68 |
 | [`runtime/assembly/ColumnStarts`](../../../src/main/java/com/wormzjl/icheme/runtime/assembly/ColumnStarts.java) | From a complete assembly report to a start request (`build`, `port`): ports, the condenser's water sides, the air condenser's surface, the reboiler's and pumparound coolers' heat sides, the fan sides and the pumps' movers | 149 |
-| `runtime/fluid/FluidWorldAuthority` (`startColumn`, `stopColumn`, `editColumn`, `columnRemoved`, `columnView`, `columnCondenser`, `columnAlarms`, `columnLoop`, `columnInstrument`) | Start and Stop as one queued ledger event each; utility sides (`utilitySides`), held members; [fluid-runtime.md](fluid-runtime.md) | |
+| `runtime/fluid/FluidWorldAuthority` (`startColumn`, `stopColumn`, `editColumn`, `columnRemoved`, `columnView`, `columnCondenser`, `columnAlarms`, `columnLoop`, `columnInstrument`) | Start and Stop as one queued ledger event each; utility sides (`utilitySides`), held members; [runtime-registry.md](runtime-registry.md) | |
 | [`science/fluid/network/PortPlan`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/PortPlan.java), `PassiveStepSolver.ports` | One slice's mass target on a port's valve; an outlet's generator stated at its product | 32 |
 | [`science/equipment/ColumnOperatingPoint`](../../../src/main/java/com/wormzjl/icheme/science/equipment/ColumnOperatingPoint.java) | The design's solved input, a shape field of `ColumnTrays` (`operating`): package, assay, components, feed, pressures, condenser, reflux, reboiler, steam, draws, pumparounds; `of(input)`, `fits`, `input(trays, diameter)` | 123 |
-| [`client/gui/common/OperationColumn`](../../../src/main/java/com/wormzjl/icheme/client/gui/common/OperationColumn.java) | The Operation page ([client-gui.md](client-gui.md)) | 465 |
+| [`client/gui/common/OperationColumn`](../../../src/main/java/com/wormzjl/icheme/client/gui/common/OperationColumn.java) | The Operation page ([client-equipment-screens.md](client-equipment-screens.md)) | 465 |
 
 ## Main flow
 
@@ -97,15 +97,24 @@ Paths under `src/main/java/com/wormzjl/icheme/`. Lines at the snapshot.
 **The fence.** A column and its islands advance on the online clock but not together:
 
 - A cycle at tick t waits until each inlet's island is through t, and each outlet's and the water side's through
-  t − fence (`portsThrough`; `IslandCoordinator.through` is true for a committed, certified, held, parked or suspended
-  island, and with no island). It sees an arrival only up to t: `available` is the account less later arrivals, and a
+  t − fence (`portsThrough`; `IslandCoordinator.through` is true for a committed, held, parked or suspended island, and
+  with no island; a certified island is materialised to the tick asked, not to the moment the cycle looks, so its replay
+  is dated by the cycle's tick however late the other ports' jobs complete). It sees an arrival only up to t: `available` is the account less later arrivals, and a
   span across t is shared by time.
 - A slice starting at s reads a port's level as of s − fence (`Level` logs) and waits (`ready`) until the run has
   cycled past s − fence. An outlet's temperature is the table in force at the fence (`Run.tableAt`).
 - A cycle already due runs from a booking; `schedule` also looks a cycle later, because an island that holds books
   nothing. A cycle's first tick is the next multiple of `CYCLE_TICKS`, staggered by the unit's id; it is scheduled on
   `IslandScheduler.Kind.COLUMN_CYCLE`. `booked` only records that a port's island booked while a cycle was due; a cycle
-  never runs inside an island's materialisation. (The waits and wakes are being changed by R-ST4: WAVE_D_BRIEFS.)
+  never runs inside an island's materialisation.
+- A cycle or an owe that moves a port's or a utility side's plan wakes its island at the tick the new plan starts (the
+  cycle's or the owe's tick plus the fence; `wakes`, keyed by tick). `due` acts on the wakes first, and so does every
+  `decide`: each through `IslandCoordinator.movedAt`, which materialises a certified island to the wake's tick and ends
+  its certificate there; a wake for an awake island behind its tick is kept until the island gets there.
+  `schedule` takes the next wake after now (`higherKey`).
+- A solve the service refuses (its queue full) is held (`Run.heldJob`, the unit in `refusedSolves`) and asked again at
+  every decision point (`resend`) until it is taken; the cycle at its apply tick waits in `applied`, as it waits for a
+  slow solve.
 
 **A cycle** (`cycle`): the set points in force are the accepted ones (`running`: the table's reference set points at the
 unit's feed rate, or a control loop's plan below it, `feedRate`; the requested ones before any table). Room in each
@@ -251,7 +260,7 @@ stopped unit with no stations when its set points are applied. A DCS sends the s
 |---|---|---|
 | Conservation, the fence, plans, booking, solves' timing, rules A and B in the world, Stop and dismantle, utilities, power, reloads | `ColumnOperation` | `ColumnRunTest` (with `aColumnsProductsDoNotDependOnWhenItsIslandsJobsComplete`, `aHorizonPassedBeforeItsDeadlineFiresWithACycleDueBehindIt`, `aStoppedUnitWithNoStationsSurvivesTheFacts`) |
 | Held devices, ports | `startColumn`, `PhysicalFluidTopology` | `ColumnSuspensionTest` |
-| A boundary line's regulation | `PortPlan`, `PassiveStepSolver.ports` | `RegulatingValveHoldTest` ([fluid-science.md](fluid-science.md)) |
+| A boundary line's regulation | `PortPlan`, `PassiveStepSolver.ports` | `RegulatingValveHoldTest` ([fluid-step.md](fluid-step.md)) |
 | Probes, the live drop | `ColumnUnit.Probes`, `drop` | `ColumnProbeTest` (`theLiveDropIsTheSolvedOneAtTheTablesFeedAndItsDryPartGoesWithTheSquare`) |
 | Facts, shapes, the wire, the page | `ColumnFacts`, `ColumnUnit`, `OperationView`, `OperationColumn` | `FluidFactsCompatTest`, `EquipmentShapeCompatTest` (`equipmentGates`), `AssemblyNetworkCodecTest`, `AssemblyPresentationTest`, `OperationColumnTest` |
 | DCS and loops | `ColumnCommands`, `ControlLaw.column`, `ControlPlans.columnFeed`, `feedRate` | `ControlSystemTest`, `BuiltInInputsTest` |
@@ -273,11 +282,13 @@ Off-line tools: `tools/column-operation/`, `tools/valve-hold-probes/`, `tools/co
 - `ScheduledTransfer` is not a port; it has no runtime producer.
 - A vacuum column (one with an ejector) does not run: `ColumnStarts` and `AssemblyService.operation` refuse it.
 - A running column is mechanically still joined: read `suspendedBy` first when you walk the registry.
-- `portsThrough` materialises a certified island when the reader looks, and `request` drops a solve the service refuses
-  (named in `wave-c/R-ST3_REPORT.md` as the same class as the still's fixed readings).
+- A refusal that never ends (a stopped service, or the world's lambda refusing because the feed port is in no island)
+  holds the cycle at the solve's apply tick until the port's island forms or the unit stops.
+- The column's wakes are dated; `Converters`' port wakes (`portsMoved`) and the controls', shafts' and valves' wakes
+  are not, and still materialise to the moment they are acted on.
 - `Refusal.NO_DRIVER` is an assumption the owner may veto (batch `2026-11-10-column-failure-modes`).
 - Member designs carry the Standard and Low-dP crossflow choices through sizing, sent designs, Import and assembly
   matching; the running column's solve and duty contract do not depend on them, and a layout or type mismatch is an
   assembly issue.
 
-**Snapshot:** `d6f721b94`, 2026-11-15.
+**Snapshot:** `9d6d0d82e`, 2026-11-15.

@@ -1,6 +1,6 @@
 # The fluid network's thermo port and state
 
-Up: [code guide](README.md). The engine behind it: [equilibrium-engine.md](equilibrium-engine.md); the kernel and the catalog: [thermo-materials.md](thermo-materials.md); who calls it: [fluid-step.md](fluid-step.md), [fluid-interval.md](fluid-interval.md).
+Up: [code guide](README.md). The engine behind it: [equilibrium-engine.md](equilibrium-engine.md); the kernel and the catalog: [thermo-kernel.md](thermo-kernel.md), [materials.md](materials.md); who calls it: [fluid-step.md](fluid-step.md), [fluid-interval.md](fluid-interval.md).
 
 <!-- j2a-packages: science/fluid/thermo/ science/fluid/state/ -->
 

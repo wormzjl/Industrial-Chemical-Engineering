@@ -1,10 +1,10 @@
 # Fluid, data and power line placement
 
-Up: [code guide](README.md). Related: [equipment](equipment.md), [fluid runtime](fluid-runtime.md), [wired control/power](wired-control-power.md), [GUI](client-gui.md).
+Up: [code guide](README.md). Related: [equipment geometry](equipment-geometry.md), [fluid registry](runtime-registry.md), [wired control/power](wired-control-power.md), [client rendering](client-rendering.md).
 
 ## Contract and ownership
 
-The pipe laying tool selects Fluid, Data or Power. These modes share the interaction state machine, targeting, route search, spatial admission, immutable layout, server command, inventory/permission checks, collision/picking, open-end marks and structural refresh. `PipeLayingClient` and `CableLayingClient` are domain adapters, not independent placement engines. `LineLaying` also holds the common refusal/message vocabulary (the former `PipeLaying`); the old server `CableLaying` and `ConduitLaying` command engines are gone.
+The pipe laying tool selects Fluid, Data or Power. These modes share the interaction state machine, targeting, route search, spatial admission, immutable layout, server command, inventory/permission checks, collision/picking, open-end marks and structural refresh. `PipeLayingClient` and `CableLayingClient` are domain adapters, not independent placement engines. `LineLaying` also holds the common refusal/message vocabulary; there is one server command engine for the three modes.
 
 | Decision | Owner | Domain adapter |
 |---|---|---|
@@ -17,7 +17,7 @@ The pipe laying tool selects Fluid, Data or Power. These modes share the interac
 | Permissions, inventory and applying physical edits | `LinePlacement.commit/apply` | `FluidLineBackend` / `ConduitLineBackend` prepare registration/work |
 | Socket leads crossing cells, collision, picking and derived refresh | `LinePieces`, `LineShapes`, `LinePieceBlock` | Same physical pieces for data and power |
 | Process registration vs structural network | `FluidWorldAuthority` / `DataBus` and FE power grid | Necessary medium-specific facts, not separate routing rules |
-| Packet bounds, request correlation and replies | `network/LineNetwork` | One `lines-1` protocol for all three modes |
+| Packet bounds, request correlation and replies | `network/LineNetwork` | One set of line packets for all three modes |
 
 ## End-to-end flow
 
@@ -27,7 +27,7 @@ The pipe laying tool selects Fluid, Data or Power. These modes share the interac
 4. `LineLaying.execute` validates the tool/profile, build rights, loaded endpoints, 64-block start range and end interaction reach. It resolves both targets again and checks the supplied path; **the server never searches**. `LineLayout.build` merges both ends' edits to the same host before checking joint constraints. `ATTACH` retains an existing entry block and checks the same socket lead and host-merge owners.
 5. The selected backend validates existing registrations/bindings. `LinePlacement.commit` rechecks the whole spatial plan and every touched cell's permissions, including socket owner/entry and crossed lead cells, before taking inventory. It applies the prepared edits and refresh work, then flushes derived `LinePieces`. Collected Minecraft cell cursors are made immutable before use, so preflight and derived collision visit every crossed cell. An ordinary validation refusal writes nothing; this is not an exception rollback mechanism.
 6. Fluid registrations/host joint edits are one queued ledger event; process changes take effect on the engine schedule. Data/power record structural bindings for `DataBus`/standard FE. Placement, menus and packets never run a process solve. `handPlaced`, existing-stub attachment and `breakPiece` use the same layout/backend/physical owners.
-7. Registry first (batch 2026-11-03-save-corruption): `FluidLineBackend.register` lays the line with its paint (`FluidWorldAuthority.lay`) and records each rack lane's frame from its cell (`rackFrame`), and `ConduitLineBackend.register` records a cable lane's frame in its control fact (`DataBus.Cable.withFrame`). `LinePlacement.apply` places the blocks under `FluidDeviceBlock.registered` (the quiet flag), so a block placed for a registration registers nothing again, and the re-alignment later sets these blocks back from the same facts ([fluid-runtime.md](fluid-runtime.md)).
+7. Registry first: `FluidLineBackend.register` lays the line with its paint (`FluidWorldAuthority.lay`) and records each rack lane's frame from its cell (`rackFrame`), and `ConduitLineBackend.register` records a cable lane's frame in its control fact (`DataBus.Cable.withFrame`). `LinePlacement.apply` places the blocks under `FluidDeviceBlock.registered` (the quiet flag), so a block placed for a registration registers nothing again, and the re-alignment later sets these blocks back from the same facts ([runtime-registry.md](runtime-registry.md)).
 
 ## Spatial rules and cross-cell geometry
 
@@ -41,15 +41,15 @@ The pipe laying tool selects Fluid, Data or Power. These modes share the interac
 
 `ConduitGeometry` uses the shared line sweep/finish path, steel housing, blue DATA and orange FE bands/symbols, opaque closed ends and `floorMod(x+y+z,4)==0` marking (about every four cells on a straight run). The cache includes finish and marking; neither is a saved layout change. Low-polygon clients simplify round meshes and flange fasteners independently of the server's physical geometry, route or connection keys.
 
-`RackGeometry` owns slot positions, crossing levels, beam/steel clearance, lane face points and the drawn spool. `PipeRackBlockEntity` stores the fluid lane copy (`rack-3`) and refreshes model data; conduit lanes retain their structural control/power records. `LineLayout` uses `RackGeometry.facePoint`, including retained host offsets. Adjacent parallel lines connect only through explicit compatible joints; a rack lane is option + 1 in the fluid position, not a globally meaningful network number.
+`RackGeometry` owns slot positions, crossing levels, beam/steel clearance, lane face points and the drawn spool. `PipeRackBlockEntity` stores the fluid lane copy (`PipeRackBlockEntity.FORMAT`) and refreshes model data; conduit lanes retain their structural control/power records. `LineLayout` uses `RackGeometry.facePoint`, including retained host offsets. Adjacent parallel lines connect only through explicit compatible joints; a rack lane is option + 1 in the fluid position, not a globally meaningful network number.
 
 | Format / protocol | Current contract |
 |---|---|
-| `lines-1` | `line_command` / `line_answer`; bounded path/options, UUID correlation, LAY/ATTACH/DISMANTLE |
-| `pipeline-tool-5` (`FluidNetwork`) | Tool open/settings, including mode; no separate fluid lay/dismantle packet engine |
-| `control-3` (`ControlNetwork`) | Controller/DCS/menu commands and requested presentation |
+| `NetworkProtocol.VERSION` (`LineNetwork`; [FORMATS.md](../FORMATS.md#wire-protocols)) | `line_command` / `line_answer`; bounded path/options, UUID correlation, LAY/ATTACH/DISMANTLE |
+| `NetworkProtocol.VERSION` (`FluidNetwork`) | Tool open/settings, including mode; no separate fluid lay/dismantle packet engine |
+| `NetworkProtocol.VERSION` (`ControlNetwork`) | Controller/DCS/menu commands and requested presentation |
 | Pipe block fields | Append-only `Joints`, `Paint`, `Secondary`; absent values preserve original behaviour; drawn offsets are derived |
-| Fluid rack lane copy | `rack-3`; identity, option, width, arms, joints, bore, paints; damaged drawing copies are logged/rebuilt from registrations |
+| Fluid rack lane copy | `PipeRackBlockEntity.FORMAT` ([FORMATS.md](../FORMATS.md#saves)); identity, option, width, arms, joints, bore, paints; damaged drawing copies are logged/rebuilt from registrations |
 | Fluid / control facts | Append-only device/joint/lane facts and data/power UUID bindings; see subsystem chapters for current owning schemas |
 
 Wire protocols have no save migration. Corpus images under `compat/pipes`, `compat/racks`, `compat/fluid` and `compat/control` qualify saved facts. Use fresh dedicated-server worlds for protocol tests, never player worlds.
@@ -89,7 +89,7 @@ Wire protocols have no save migration. Corpus images under `compat/pipes`, `comp
 
 <details><summary>Rack placement, steel, flanges, drawing and picking</summary>
 
-- **Shape at placement** (`placed(around, look, sneaking)`, RACK_JUNCTION_PLAN J1 and J2; decided once, never changed after). The rack faces the look (owner 2026-10-26: "strictly based on player facing"). Its feeds are the neighbouring racks whose run passes through the face towards the cell; a rack beside a run, side on, never feeds it. Sneaking: straight along the look. No feed: straight. One: straight where it lies on the look's axis, else a corner from it towards the look. Two in line: straight where the look runs along them, else a tee whose branch opens towards the look. Two at a corner: that corner. Three: the tee joining them, which faces its branch (the feed with none across from it), the one exception to facing the look. Four: straight (X1: runs cross at two heights, one stacked on the other).
+- **Shape at placement** (`placed(around, look, sneaking)`; decided once, never changed after). The rack faces the look. Its feeds are the neighbouring racks whose run passes through the face towards the cell; a rack beside a run, side on, never feeds it. Sneaking: straight along the look. No feed: straight. One: straight where it lies on the look's axis, else a corner from it towards the look. Two in line: straight where the look runs along them, else a tee whose branch opens towards the look. Two at a corner: that corner. Three: the tee joining them, which faces its branch (the feed with none across from it), the one exception to facing the look. Four: straight (X1: runs cross at two heights, one stacked on the other).
 - **Steel** (`steel(around, rack, along, previous)`, bits `BENT_BACK` 1, `BENT_FRONT` 2, `STACKED` 4, `LEFT_JOINED` 8, `RIGHT_JOINED` 16, `GROUNDED` 32, `END_BACK` 64, `END_FRONT` 128, `RISING` 256): drawn state, from loaded neighbours; a neighbour not known (unloaded chunk) keeps its bit from `previous`. A straight cell stands a bent every third block face along its run (`along` in world coordinates), half in each cell's face plane; a whole bent at each end where no straight rack of its axis continues the run (nothing, a junction, or a rack across); its columns run on up under a rack stacked on it; a side with a straight rack of its axis beside it joins it (no column there, beams through). Every cell: pedestals where no rack stands under it (`GROUNDED`); side braces rising from the back on even blocks (`RISING`). A junction (corner or tee) has no bents of its own: H columns at its outer corners only, and the straight racks next to it stand a whole bent against it. `PipeRackBlockEntity.BARE` (bents and whole ends both sides, grounded) is the steel of the item and of a cell not yet redrawn.
 - **Frame** (`steelwork`, RACK_FRAME_PLAN 3a, "sturdy", in 1/32 m): H columns 3.75 wide, I beams 4 deep under the lines, knee braces, concrete pedestals and base plates; a shared bent is 2 deep in each cell, a whole one 4; a light frame (posts and an angle) at a low face without a bent; side channels at the beam; diagonal and plan braces alternating by block, left out where a lane passes. Steel over the beam's top stays within 3.75/32 of the sides. `polygons(rack, lanes)` draws it; `members(rack)` gives its solid boxes (braces are drawn only).
 - **A lane drawn** (`lane(rack, lane, spool)`): a straight pipe; a corner's bend about the inner corner, so a corner's bends nest and keep their order (I4); a turn up, down or out at mid-block as a transition pipe draws its bends, at most `BEND` 7/16 m radius so a bend starts clear of the bents' planes (I11). Welded where a line next door continues it (`joined`: the lane's joins on the registry, `FluidWorldAuthority.drawnFaces`, so by the saved points as the network joins them; before the authority opens, the lanes keep what they showed); else a blind flange set in off the steel at that face (`setback`: past every member its plate and nuts would reach), or capped at the face where that would pass the cell's middle (21"+ lines in a stacked rack); a corner's bend is capped at an open end, never flanged. `lane(rack, lane)` (no spool) is the ghost's.
@@ -109,6 +109,6 @@ Wire protocols have no save migration. Corpus images under `compat/pipes`, `comp
 
 Change workflow in `LineToolSession`, command/admission in `LineLaying`/`LinePlacement`, retained geometry/host edits in `LineLayout`, physical lead lifecycle in `LinePieces`, and only medium facts in the backend. Calling a shared helper while a second class owns the same decision is not consolidation. Software meshes cannot prove live chunk sync; dedicated-server tests and owner acceptance cover that boundary.
 
-Historical route/rack design decisions and prior captures: `documentation/2026-10-26-pipe-laying-system/`. Offline render/probe tools live under `tools/pipe-laying-renders`, `tools/pipe-laying-system` and `tools/simulator-sizing`; generated evidence remains local.
+Offline render/probe tools live under `tools/pipe-laying-renders`, `tools/pipe-laying-system` and `tools/simulator-sizing`; generated evidence remains local.
 
 **Snapshot:** `2f86539b0`, 2026-11-09 (the last commit this chapter was checked against). Earlier snapshots and batch notes: [HISTORY.md](HISTORY.md).

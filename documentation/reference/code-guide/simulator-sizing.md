@@ -40,7 +40,7 @@ the snapshot. "pp" = package-private.
 | [`UnitSize`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/UnitSize.java), [`UnitType`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/UnitType.java) | A unit's size, Auto's or the player's (`shape`: what the constructor can build); what a tile with one function is built as | 56, 33 |
 | [`SizingFacts`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/SizingFacts.java), [`DesignBasis`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/DesignBasis.java) | What the player keeps of sizing (facts of the sheet): the design basis, each item's mode, type and size; the basis's three entries (`DEFAULT`: 1.10 design flow, 50 m line length, 60 K pumparound fall) | 166, 23 |
 | [`LineSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/LineSizing.java), [`Service`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/Service.java) | A line's bore and runs (`rate`, `auto`), its drop on the network's viscosity; what a line carries, which picks its rows (the stream gives it, the player may choose) | 188, 108 |
-| [`ColumnSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/ColumnSizing.java) | A column's diameter in the world's half metres, each rated by the real solver | 216 |
+| [`ColumnSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/ColumnSizing.java) | A column's diameter in the world's half metres, each rated by the real solver (`ColumnSolve.calculate`, the sheet's `ColdStart.LEARNED`) | 216 |
 | [`PumpSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/PumpSizing.java) | The smallest discharge whose rated flow fits the window; `Duty` (flow, head, shaft power, NPSH3, proposed motor), `Load` (`npsh`, `edge`, `boils`) | 171 |
 | [`CompressorSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/CompressorSizing.java) | The type by its inlet flow, then the smallest frame; stages here alone; the discharge one stage's polytropic estimate on the world's exponent | 135 |
 | [`TurbineSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/TurbineSizing.java) | A steam turbine's design point, rated power, inlet steam class and exhaust | 103 |
@@ -73,7 +73,7 @@ Outside the package: [`science/equipment/SentDesign`](../../../src/main/java/com
    `simulator_send_designs`; the server takes the list whole from the holder and replaces the earlier one.
 5. **Import**: the constructor asks the nearest simulator within `EquipmentNetwork.IMPORT_REACH`
    (`EquipmentConstructorBlockEntity.simulator`) for its list: the saved column design first, then the sent designs; the
-   player picks one and the constructor lands it ([equipment.md](equipment.md)).
+   player picks one and the constructor lands it ([equipment-structure.md](equipment-structure.md)).
 
 ## Contracts
 
@@ -127,7 +127,7 @@ Outside the package: [`science/equipment/SentDesign`](../../../src/main/java/com
 
 Every limit's value is a `Limit` constant (its `Bound`, its unit, its source text); `DesignBasis.DEFAULT` holds the
 design flow factor, the line length and the pumparound fall. The physics of each law is the world's
-([fluid-science.md](fluid-science.md), [rotating-machinery.md](rotating-machinery.md),
+([fluid-laws.md](fluid-laws.md), [rotating-machinery.md](rotating-machinery.md),
 [heat-exchangers.md](heat-exchangers.md)); sizing reads it through `SizedPassages` and the units' own models.
 
 ## Formats

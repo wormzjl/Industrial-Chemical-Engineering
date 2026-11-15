@@ -13,9 +13,9 @@ Up: [code guide](README.md) · the heat laws, the curve, the relay and the contr
 - The Control tab or the stream switch shows the wrong actuator, effort, limit, port or line.
 - You rebuild the heat review world (`HeatExchangerReviewWorld`).
 
-Islands, certificates, checkpoints and packets in general: [fluid-runtime.md](fluid-runtime.md). The walk and the matcher
+Islands, certificates, checkpoints and packets in general: [runtime-engine.md](runtime-engine.md), [runtime-saves.md](runtime-saves.md), [runtime-presentation.md](runtime-presentation.md). The walk and the matcher
 that check an exchanger's lines: [machine-assemblies.md](machine-assemblies.md). A running column's condenser and
-utilities: [column-run.md](column-run.md). The Control tab's layout: [client-gui.md](client-gui.md).
+utilities: [column-run.md](column-run.md). The Control tab's layout: [client-screens.md](client-screens.md).
 
 ## What it does
 
@@ -38,16 +38,16 @@ Paths under `src/main/java/com/wormzjl/icheme/`. Lines at the snapshot.
 | [`runtime/fluid/HeatUnit`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/HeatUnit.java) | A side's facts on its registration (`PhysicalFluidTopology.Device.heat`): `unit`, `side`, `area`, `partner`, `Control(mode, target, lowLimit, share)`, `transitJoule`, `fanCount` (at most `MAXIMUM_FANS`), the exchanger type (`withExchangerType`); `Mode` OFF, OUTLET_TEMPERATURE, DUTY, FIRING, RATIO, COLUMN; `FIRING` (the default firing control); `heatSide()`, `controller()`, `controllable()`, `lines()`, `pool()`, `fans()`, `burners()`, `kettleTubes` | 134 |
 | [`runtime/fluid/ExchangerCoupling`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/ExchangerCoupling.java) | The coupling of sides across islands, on the coordinator's thread: `Coupled` (relay state per side, its booked spans, at most 64), `SideKind` EXCHANGER, RADIANT, CONVECTION; `coupledSides`, `partners`, `coupledThrough` (the fence), `reads`, `booked`, `moved`, `flushWakes`, `operations`, `settledTransit`, `owe`, `transitAsOf`; `WAKE_TEMPERATURE`, `WAKE_FLOW`, `WAKE_TRANSIT`, `KEEP_UNREAD_TICKS` | 277 |
 | [`runtime/fluid/HeatPresentation`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/HeatPresentation.java) | Completes a side's `FluidView.Heat` where its view is built: the actuator (`FluidView.Heat.ACTUATORS`) and its effort, the controller's limit, every port of the unit with its stream, an exchanger's lines part by part | 199 |
-| `runtime/fluid/FluidWorldAuthority` (heat parts) | `placeUnit(sides, vessel)` and `removeUnit(ids)` (one ledger event each, the pair whole; `UnitSide`, `UnitVessel`); a fired heater's coil edit moves its partner in the same event; `Lines` (`Status` NOT_VALIDATED, CHECKED, UNMETERED, COMPLETE), `lines`, `operate`, `holdValves`; `controlStatus`, `linesStatus`; the transit loaded from and written to the facts ([fluid-runtime.md](fluid-runtime.md)) | |
-| `runtime/fluid/IslandCoordinator` | Holds the relay states and the side index; calls `ExchangerCoupling` from its steps (`sameControl` accepts a planned valve target) ([fluid-runtime.md](fluid-runtime.md)) | |
+| `runtime/fluid/FluidWorldAuthority` (heat parts) | `placeUnit(sides, vessel)` and `removeUnit(ids)` (one ledger event each, the pair whole; `UnitSide`, `UnitVessel`); a fired heater's coil edit moves its partner in the same event; `Lines` (`Status` NOT_VALIDATED, CHECKED, UNMETERED, COMPLETE), `lines`, `operate`, `holdValves`; `controlStatus`, `linesStatus`; the transit loaded from and written to the facts ([runtime-saves.md](runtime-saves.md)) | |
+| `runtime/fluid/IslandCoordinator` | Holds the relay states and the side index; calls `ExchangerCoupling` from its steps (`sameControl` accepts a planned valve target) ([runtime-engine.md](runtime-engine.md)) | |
 | [`science/assembly/ExchangerBlueprint`](../../../src/main/java/com/wormzjl/icheme/science/assembly/ExchangerBlueprint.java) | `Lines` NONE, BYPASS, RATIO, FEED; `Design(tube, shell)`; slots `<side>_inlet_tee`, `_bypass_valve`, `_outlet_tee`, `_feed_valve`, `_meter`, `_feed_meter`; `operated(side, lines)`; `of(design)` | 148 |
 | [`runtime/assembly/ExchangerLines`](../../../src/main/java/com/wormzjl/icheme/runtime/assembly/ExchangerLines.java) | `design` (from the sides' registered controls), `publish` (a report as each side's `Lines`, with the valve its control works) | 94 |
-| [`client/gui/common/HeatControlColumn`](../../../src/main/java/com/wormzjl/icheme/client/gui/common/HeatControlColumn.java), [`HeatDiagram`](../../../src/main/java/com/wormzjl/icheme/client/gui/common/HeatDiagram.java), [`HeatFlowsheet`](../../../src/main/java/com/wormzjl/icheme/client/gui/common/HeatFlowsheet.java) | The Control tab (`targets`, `columnTexts`), the unit's flowsheet on a design grid with its lines' slots, the stream switch ([client-gui.md](client-gui.md)) | 258, 380, 358 |
+| [`client/gui/common/HeatControlColumn`](../../../src/main/java/com/wormzjl/icheme/client/gui/common/HeatControlColumn.java), [`HeatDiagram`](../../../src/main/java/com/wormzjl/icheme/client/gui/common/HeatDiagram.java), [`HeatFlowsheet`](../../../src/main/java/com/wormzjl/icheme/client/gui/common/HeatFlowsheet.java) | The Control tab (`targets`, `columnTexts`), the unit's flowsheet on a design grid with its lines' slots, the stream switch ([client-screens.md](client-screens.md)) | 258, 380, 358 |
 
 ## Main flow
 
 1. **Build.** A whole exchanger, kettle, air cooler, fired heater or gas turbine registers through
-   `EquipmentStructure` ([equipment.md](equipment.md)): one `UnitSide` per `HeatSides.of(shape)` entry at its first
+   `EquipmentStructure` ([equipment-structure.md](equipment-structure.md)): one `UnitSide` per `HeatSides.of(shape)` entry at its first
    inlet's cell (`ShapeRasterizer.fluidCells`), its nozzles as `INLET` and `OUTLET` ports, its passage geometry and a new
    `HeatUnit`; a kettle adds its shell as a `UnitVessel`. `FluidWorldAuthority.placeUnit` places them in one ledger event
    and names the partners. A refresh moves or restates the sides with their identities, partner, control and transit; a
@@ -61,19 +61,24 @@ Paths under `src/main/java/com/wormzjl/icheme/`. Lines at the snapshot.
    fluid, so its ends are sized on their lines.
 3. **The fence.** `ExchangerCoupling.coupledThrough` is a readiness condition of the coordinator (in `reconsider`, the
    pump's predicate and `verify`): each of the island's coupled sides' partners has committed through the island's
-   committed tick, or is certified (materialised at dispatch), or is stopped (held, phase-parked or suspended: never
-   from lag), or has no island, or is in this island. The side furthest behind can always go, so the fence cannot
+   committed tick, or is certified and can be materialised there with no dated wake before it (`wokenBefore`), or is
+   stopped (held, phase-parked or suspended: never from lag), or has no island, or is in this island. A pure read:
+   nothing is materialised in the fence. The side furthest behind can always go, so the fence cannot
    deadlock; a fast side runs up to one partner cadence behind online time.
-4. **The reads.** At dispatch `reads(island, slice)` gives each coupled side its `ExchangerRelay.Read` (the partner as of
+4. **The reads.** At dispatch `reads(island, slice)` first materialises a certified other side behind the slice start
+   to the start (not to the dispatch tick), then gives each coupled side its `ExchangerRelay.Read` (the partner as of
    the slice start: the later of its two records at or before that tick, after a load only the current one), carried by
    `FluidIslandCommand` to the worker. A running column's water and utility sides take the column's read first
    (`Ports.heatRead`), with the side's own operation added (`withOperation`).
 5. **The worker** plans and steps the laws ([heat-exchangers.md](heat-exchangers.md)).
 6. **Commit.** At a commit or a certificate replay, `booked` takes each side's heat (its `HEAT` boundaries) out of the
    pair's transit, keeps the span for its partner's as-of reads, records the sit-out, and moves the side's record to the
-   span's end with its heat rate. `moved` decides whether a certified partner must solve again; `flushWakes` ends those
-   certificates at the engine's next decision point, never inside a presentation read (counter
-   `FluidRuntimeDiagnostics.couplingWakes`).
+   span's end with its heat rate. `moved` decides whether a certified partner must solve again; that wake is dated by
+   the end of the partner's span that moved (`ExchangerCoupling.dated`, by island, in tick order). `flushWakes` acts on
+   each at the engine's decision points, never inside a presentation read (counter `FluidRuntimeDiagnostics.couplingWakes`):
+   once every partner of the woken island has booked through the tick (`reached`), `IslandCoordinator.movedAt`
+   materialises it to that tick and ends its certificate there; until then the fence holds its partners whose start is
+   past the tick. The undated wakes (`toWake`: controls, shafts, ports) still materialise to now.
 7. **Presentation.** At the side's bucket the authority builds its view: the status line prefixed with the lines'
    status, the controller's limit and, for a radiant coil short of its set point, `DUTY INSUFFICIENT`;
    `HeatPresentation.complete` adds the actuator, its effort, the ports and the lines. Opening the screen replays the
@@ -187,9 +192,13 @@ studies: `tools/heat-exchanger-design/`.
   outlet and held the fired heater.
 - **A bare control valve stands open**: a complete bypass whose valve has no flowmeter is UNMETERED and does not operate.
 - A pipe gauge downstream of a side reads the outlet junction; a gauge on the unit itself reads its inlet node.
-- `ExchangerCoupling.reads` materialises a certified island when the reader looks, and the coupling's wakes materialise
-  to now (`wave-c/R-ST3_REPORT.md`; being changed by R-ST4).
+- A dated wake waits for the woken island's slowest partner: a partner ahead of the wake's tick waits at the fence in
+  wall time, not in ticks.
+- The undated wakes (`toWake`) end a certificate where the island stands when they are acted on: from the server tick
+  that is deterministic, from a commit's decision point it follows when the job completed.
+- The pair's transit is a sum in commit order; commits of two islands in different rounds can land in a
+  machine-dependent order, so its last bits can differ.
 - Not built: the split-range pass valve, a LIMITED status for a saturated real valve, operating a valve outside the
   side's own island.
 
-**Snapshot:** `d6f721b94`, 2026-11-15.
+**Snapshot:** `9d6d0d82e`, 2026-11-15.

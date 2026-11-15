@@ -48,7 +48,7 @@ Paths under [`src/main/java/com/wormzjl/icheme/client/`](../../../src/main/java/
 | `MoverSounds`, `DriverSounds` | The movers' and drivers' running loops through the one sound budget ([effects.md](effects.md)) | 117, 135 |
 | `ValveTurns`, `ValveTurnRenderer` | A hand valve's turn and its drawing ([effects.md](effects.md)) | 138, 164 |
 | `PipeLayingClient`, `CableLayingClient`, `LineToolSession`, `LayingToolAim`, `LineToolMarkers` | The laying tools' client ([pipe-laying.md](pipe-laying.md)) | 411, 602, 365, 150, 80 |
-| `AssemblyToolClient`, `PortColours` | The laying tool's view of column assemblies and the port colours ([machine-assemblies.md](machine-assemblies.md)) | 157, 55 |
+| `AssemblyToolClient`, `PortColours` | The laying tool's view of column assemblies and the port colours ([assembly-service.md](assembly-service.md)) | 157, 55 |
 
 ## Main flow
 

@@ -1,6 +1,6 @@
 # The fluid runtime's registry: the authority, placement, topology and the ledger
 
-Up: [code guide](README.md). Beside it: [runtime-engine.md](runtime-engine.md), [runtime-saves.md](runtime-saves.md), [runtime-presentation.md](runtime-presentation.md), [runtime-units.md](runtime-units.md). The equipment that registers here: [equipment.md](equipment.md); the laying tool and racks: [pipe-laying.md](pipe-laying.md); fittings as items: [instrument-accessories.md](instrument-accessories.md).
+Up: [code guide](README.md). Beside it: [runtime-engine.md](runtime-engine.md), [runtime-saves.md](runtime-saves.md), [runtime-presentation.md](runtime-presentation.md), [runtime-units.md](runtime-units.md). The equipment that registers here: [equipment-structure.md](equipment-structure.md); the laying tool and racks: [pipe-laying.md](pipe-laying.md); fittings as items: [instrument-accessories.md](instrument-accessories.md).
 
 <!-- j2a-packages: runtime/fluid/FluidWorldAuthority.java runtime/fluid/Placement.java runtime/fluid/ChunkBinding.java runtime/fluid/PhysicalRegistry.java runtime/fluid/PhysicalFluidTopology.java runtime/fluid/WorldTopologyLedger.java runtime/fluid/TopologyChange.java runtime/fluid/FluidDeviceSpec.java runtime/fluid/FluidPresetCatalog.java runtime/fluid/HeldDevicesCommand.java runtime/fluid/SlurryFeed.java -->
 
@@ -53,7 +53,7 @@ A block is placed, to replacement islands:
 3. Next tick: `FluidWorldAuthority.tick` → `applyPending` → `PhysicalRegistry.applyPending` batches the events of one tick and one dimension whose owners are aligned (committed tick = fence tick, no attempt in flight); a certified owner is materialised to the fence first, a held one accepts at its committed tick (`acceptAtFence`). A burst of 1024 unapplied events applies at once.
 4. The batch compiles only the touched components (`PhysicalFluidTopology.compile`) and calls `MinecraftFluidRuntime.topology` → `TopologyChange.topology`: the affected islands are replaced with new ids in one change. Each vessel keeps what its original island committed, bit for bit (`Inventory.sameContents`), its geometry and elevation following the registry. A replacement of one original's structure (`PassiveNetwork.sameStructure`) carries that island's junction states (`withJunctionStates`, each buffer resized) and its last interval; any other starts with none. A new island starts at `fluid.initialIntervalSeconds` cadence, or the merged islands' largest.
 5. `RegistryHost.committed(removed, recompiled)` drops the cached menu data of removed and recompiled devices, marks each recompiled device for its next bucket, re-keys the presentation, and redraws each loaded recompiled device (`FluidDeviceBlockEntity.refreshGeometry`, then its neighbours' faces).
-6. `listen`: each `submit` tells every listener its `DeviceChange`s (position, device before and after; a moved device stands at two positions), after it submits ([machine-assemblies.md](machine-assemblies.md)).
+6. `listen`: each `submit` tells every listener its `DeviceChange`s (position, device before and after; a moved device stands at two positions), after it submits ([assembly-service.md](assembly-service.md)).
 
 ## Contracts
 

@@ -1,6 +1,6 @@
 # Client: the constructor, the datasheet, the assembly screen and the column door
 
-Up: [code guide](README.md). The kit: [client-kit.md](client-kit.md). The server side of the constructor, the names and Import: [equipment-structure.md](equipment-structure.md); the shapes they draw: [equipment-geometry.md](equipment-geometry.md), [equipment-designs.md](equipment-designs.md). Assemblies: [machine-assemblies.md](machine-assemblies.md); the running column: [column-operation.md](column-operation.md); the process simulator, whose column door this chapter's `CalculatorColumn` is: [process-simulator.md](process-simulator.md). GUI rules: the `gui-creation` skill ([SKILL.md](../../../.claude/skills/gui-creation/SKILL.md)).
+Up: [code guide](README.md). The kit: [client-kit.md](client-kit.md). The server side of the constructor, the names and Import: [equipment-structure.md](equipment-structure.md); the shapes they draw: [equipment-geometry.md](equipment-geometry.md), [equipment-designs.md](equipment-designs.md). Assemblies: [machine-assemblies.md](machine-assemblies.md), [assembly-service.md](assembly-service.md); the running column: [column-operation.md](column-operation.md); the process simulator, whose column door this chapter's `CalculatorColumn` is: [process-simulator.md](process-simulator.md). GUI rules: the `gui-creation` skill ([SKILL.md](../../../.claude/skills/gui-creation/SKILL.md)).
 
 ## Read this when
 
@@ -37,7 +37,7 @@ Paths under [`src/main/java/com/wormzjl/icheme/client/gui/`](../../../src/main/j
 | `OperationColumn` | The Operation page and the DCS column page: `HEIGHT`, `Units`, `Input`; `rows`, `fields`, `values`, `parse`, `applies`, `footerButtons`, `status`; the glass's `tables` (`ports`, `duties`, `solve`, `conditions`, `absolutes`), `glass`, `height` | 465 |
 | `CalculatorColumn` | The column door (the simulator's): `Page` (COLUMN, FEED, RESULTS, EQUIPMENT), `View`, `Metric`; `column`, `feed`, `results`, `equipment` (condenser kind and counts, kettle, coolers, `pumpDuties`, `PumpDuty`), `status`, `footer`, `door`, the frame (`width`, `height`, `split`), the drawing (`pitch`, `drawingHeight`, `drawing`, `Hit`) | 1191 |
 
-`AssemblyBlock` (the built column's drawing, `client/gui/flowsheet/`) is in [process-simulator.md](process-simulator.md) and [machine-assemblies.md](machine-assemblies.md); `ColumnDiagram` and `TitleStrip` in [client-kit.md](client-kit.md).
+`AssemblyBlock` (the built column's drawing, `client/gui/flowsheet/`) is in [process-simulator.md](process-simulator.md) and [assembly-service.md](assembly-service.md); `ColumnDiagram` and `TitleStrip` in [client-kit.md](client-kit.md).
 
 ## Main flow
 

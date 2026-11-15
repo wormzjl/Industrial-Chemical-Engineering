@@ -11,8 +11,8 @@ the screen): [heat-units.md](heat-units.md)
 - You change a heat law, the films, the curve, the wall solve, the give-back, a unit's surface or passage, the
   controller, the kettle's pool, the fired heater's coils, or the crossflow routing.
 
-The step's equations, junctions and booking: [fluid-science.md](fluid-science.md). The units' shapes and nozzles:
-[equipment.md](equipment.md). A running column's utilities: [column-run.md](column-run.md).
+The step's equations, junctions and booking: [fluid-step.md](fluid-step.md), [fluid-interval.md](fluid-interval.md). The units' shapes and nozzles:
+[equipment-geometry.md](equipment-geometry.md). A running column's utilities: [column-run.md](column-run.md).
 
 ## What it does
 
@@ -54,7 +54,8 @@ Paths under `src/main/java/com/wormzjl/icheme/`. Lines at the snapshot.
 
 One coupled exchanger side in one slice (the engine side is in [heat-units.md](heat-units.md)):
 
-1. **Read** (at dispatch, on the server): the side's `ExchangerRelay.Read`: the partner as of the slice start, whether it
+1. **Read** (at dispatch, on the server; a certified partner behind the slice start materialised to the start first,
+   `ExchangerCoupling.reads`): the side's `ExchangerRelay.Read`: the partner as of the slice start, whether it
    is stopped, the transit due, the partner's slice length, the sit-out share, an `Operation` where the side's lines are
    complete, and for a convection coil whose radiant coil is in another island the radiant coil's heat rate.
 2. **Slice plan** (worker, once per interval, `PassiveStepSolver.couple`): `ExchangerRelay.plan` gives the side its
@@ -184,4 +185,4 @@ The laws' facts are a heat unit's registration facts; their slice inputs and the
 - The air is a constant 25 °C (no weather, biome or altitude).
 - The curve's extension past its end knots raises no notice: the property models' own data-range notices do.
 
-**Snapshot:** `d6f721b94`, 2026-11-15.
+**Snapshot:** `9d6d0d82e`, 2026-11-15.

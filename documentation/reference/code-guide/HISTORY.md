@@ -12,23 +12,23 @@ Kept for reference, not maintained. New history goes to `CHANGELOG.md` and the b
 
 **Water cooling towers:** Induced-draft banks of parallel fan cells and hollow natural-draft towers, with a Merkel rating fill, real open basins and conserved exchange with the air. Details: [cooling-towers.md](cooling-towers.md).
 
-**Fired equipment (0.24.0):** fired heaters burn the fuel their FUEL nozzle delivers and draw FE for their air fans; a scalable flare stack burns vent gas while its flame holds; a batch still (solid, liquid or electric heat; a worm tub or a top condenser with a small column) runs in the world and in the process simulator; equipment alarms reach the control system. Details: [fluid-science.md](fluid-science.md), [fluid-runtime.md](fluid-runtime.md), [equipment.md](equipment.md).
+**Fired equipment (0.24.0):** fired heaters burn the fuel their FUEL nozzle delivers and draw FE for their air fans; a scalable flare stack burns vent gas while its flame holds; a batch still (solid, liquid or electric heat; a worm tub or a top condenser with a small column) runs in the world and in the process simulator; equipment alarms reach the control system. Details: [fluid-laws.md](fluid-laws.md), [runtime-units.md](runtime-units.md), [equipment-designs.md](equipment-designs.md).
 
-**Effects, sounds and new equipment (0.25.0):** flames, smoke, plumes and heat haze drawn from published state (own shaders without a shader pack, vanilla render types under one), normal-mapped instrument wiring, one budget of 12 loops for every process sound, a hand valve's turn, painted silhouettes in Distant Horizons; rigid closed vessels once filled; the steam ejector as a flow element; chimneys; liquid ring and dry screw vacuum pumps; combustion engines and gas turbines to 300 MW, generators to 400 MW. Details: [effects.md](effects.md), [fluid-science.md](fluid-science.md), [fluid-runtime.md](fluid-runtime.md), [rotating-machinery.md](rotating-machinery.md), [equipment.md](equipment.md).
+**Effects, sounds and new equipment (0.25.0):** flames, smoke, plumes and heat haze drawn from published state (own shaders without a shader pack, vanilla render types under one), normal-mapped instrument wiring, one budget of 12 loops for every process sound, a hand valve's turn, painted silhouettes in Distant Horizons; rigid closed vessels once filled; the steam ejector as a flow element; chimneys; liquid ring and dry screw vacuum pumps; combustion engines and gas turbines to 300 MW, generators to 400 MW. Details: [effects.md](effects.md), [fluid-laws.md](fluid-laws.md), [runtime-units.md](runtime-units.md), [rotating-machinery.md](rotating-machinery.md), [equipment-designs.md](equipment-designs.md).
 
 **Column failure modes and control (0.26.0):** one condition record for the running column (notice, limit, off table, trip; the lowest limit share binds, no solve), a refused solve not asked again inside its bands, flooding from the solve's tray hydraulics as a limit and the live tray drop, the reboiler's and pumparound coolers' utilities owed their duties, the members' power (fans and pumps), the column's alarms and `differential_pressure` on the control system, the DCS's column page with Start, Stop and Apply, a feed-rate loop on a column; fluid facts schema 21. Details: [column-operation.md](column-operation.md), [process-control.md](process-control.md), [wired-control-power.md](wired-control-power.md), [heat-exchangers.md](heat-exchangers.md).
 
-**Time factor, drum holds, gas blanketing and the safety valve (2026-11-11, merged as 0.27.0):** process time runs `fluid.timeScale` (default 4, 1 to 72) times play time (`SimulationTime`; the engine's schedule stays in play ticks; FE per tick, store windows and pump lives keep their play time); a held island names its worker's failure, a column's waiting cycle runs at the decision point, a still junction rests at its own pressure; a closed vessel's gas blanketing valve pads from a gas line and vents above its band; a pressure safety valve on a drum or a pipe relieves on the upstream pressure valve law, piped or to the air; a flare's flow follows its back pressure (rating and stable velocity are status only); fluid facts schema 23, state format 47, accessory facts schema 6. Details: [fluid-science.md](fluid-science.md), [fluid-runtime.md](fluid-runtime.md), [instrument-accessories.md](instrument-accessories.md), [equipment.md](equipment.md), [rotating-machinery.md](rotating-machinery.md).
+**Time factor, drum holds, gas blanketing and the safety valve (2026-11-11, merged as 0.27.0):** process time runs `fluid.timeScale` (default 4, 1 to 72) times play time (`SimulationTime`; the engine's schedule stays in play ticks; FE per tick, store windows and pump lives keep their play time); a held island names its worker's failure, a column's waiting cycle runs at the decision point, a still junction rests at its own pressure; a closed vessel's gas blanketing valve pads from a gas line and vents above its band; a pressure safety valve on a drum or a pipe relieves on the upstream pressure valve law, piped or to the air; a flare's flow follows its back pressure (rating and stable velocity are status only); fluid facts schema 23, state format 47, accessory facts schema 6. Details: [fluid-laws.md](fluid-laws.md), [runtime-registry.md](runtime-registry.md), [instrument-accessories.md](instrument-accessories.md), [equipment-geometry.md](equipment-geometry.md), [rotating-machinery.md](rotating-machinery.md).
 
-**Water-miscible solvents (batch 2026-11-11-aqueous-solvents):** water is a compound of the PR78 cubic for the fluid network, the batch still and the V3 column (one equation of state), with water's IF97 share of enthalpy and volume on the balance book; the Huron-Vidal mixing rule with every pair derived at load from the compounds' own data (`DerivedPairs`: libraries, Henry constants, Dortmund group fits, homomorphs, E-PPR78); up to three fluid phases, a gas and two liquids, from the physics; ethanol in `icheme:refinery`; the free-water rule deleted. Fluid facts schema 25 (a vessel's oil and aqueous amounts), state format 50. Details: [equilibrium-engine.md](equilibrium-engine.md), [thermo-materials.md](thermo-materials.md), [fluid-science.md](fluid-science.md), [fluid-runtime.md](fluid-runtime.md), [column-v3.md](column-v3.md), [column-operation.md](column-operation.md), [process-simulator.md](process-simulator.md), [cooling-towers.md](cooling-towers.md).
+**Water-miscible solvents (batch 2026-11-11-aqueous-solvents):** water is a compound of the PR78 cubic for the fluid network, the batch still and the V3 column (one equation of state), with water's IF97 share of enthalpy and volume on the balance book; the Huron-Vidal mixing rule with every pair derived at load from the compounds' own data (`DerivedPairs`: libraries, Henry constants, Dortmund group fits, homomorphs, E-PPR78); up to three fluid phases, a gas and two liquids, from the physics; ethanol in `icheme:refinery`; the free-water rule deleted. Fluid facts schema 25 (a vessel's oil and aqueous amounts), state format 50. Details: [equilibrium-engine.md](equilibrium-engine.md), [materials.md](materials.md), [fluid-thermo-port.md](fluid-thermo-port.md), [runtime-saves.md](runtime-saves.md), [column-v3.md](column-v3.md), [column-operation.md](column-operation.md), [process-simulator.md](process-simulator.md), [cooling-towers.md](cooling-towers.md).
 
-**Fluid conversion (batch 2026-11-12-fluid-conversion):** a fluid converter and a gas converter (kinds `FLUID_CONVERTER`, `GAS_CONVERTER`) convert between other mods' Forge fluids (1 mB = 1 L) and IChemE streams through a Forge port and two hidden ports (a void and a generator) on their process vessel, by datapack rules (`data/<ns>/icheme/fluid_conversion/`: forward a composition at T and P, reverse composition, T and P windows with a 2 % hysteresis; 26 bundled), in Off, Balance, To IChemE or To Forge at a set rate, with level alarms, channels and DCS commands; settings are queued engine events; fluid facts schema 24, protocol `fluid-24`, `control-5`. Details: [fluid-runtime.md](fluid-runtime.md), [fluid-science.md](fluid-science.md), [equipment.md](equipment.md), [process-control.md](process-control.md), [client-gui.md](client-gui.md).
+**Fluid conversion (batch 2026-11-12-fluid-conversion):** a fluid converter and a gas converter (kinds `FLUID_CONVERTER`, `GAS_CONVERTER`) convert between other mods' Forge fluids (1 mB = 1 L) and IChemE streams through a Forge port and two hidden ports (a void and a generator) on their process vessel, by datapack rules (`data/<ns>/icheme/fluid_conversion/`: forward a composition at T and P, reverse composition, T and P windows with a 2 % hysteresis; 26 bundled), in Off, Balance, To IChemE or To Forge at a set rate, with level alarms, channels and DCS commands; settings are queued engine events; fluid facts schema 24, protocol `fluid-24`, `control-5`. Details: [runtime-units.md](runtime-units.md), [fluid-laws.md](fluid-laws.md), [equipment-designs.md](equipment-designs.md), [process-control.md](process-control.md), [client-screens.md](client-screens.md).
 
-**Tutorial (batch 2026-11-12-tutorial-system):** the mod's own tutorial framework: films (a scene as a pure function of time, drawn by the game and by an offline render tool), cards, the Field Guide (item, key H, a HUD line) with chapter 0 and seven chapters whose 51 steps are vanilla advancements under `icheme:tutorial/` fired by ten criteria (protocol `tutorial-1`), a help tour (`?` key) on every screen page, an equipment page and a reference item for every kind with JEI pages, recordings written offline and held to the model; the small crude tower preset and the "Small crude unit" example. Details: [tutorial.md](tutorial.md), [process-simulator.md](process-simulator.md), [client-gui.md](client-gui.md), [machine-assemblies.md](machine-assemblies.md).
+**Tutorial (batch 2026-11-12-tutorial-system):** the mod's own tutorial framework: films (a scene as a pure function of time, drawn by the game and by an offline render tool), cards, the Field Guide (item, key H, a HUD line) with chapter 0 and seven chapters whose 51 steps are vanilla advancements under `icheme:tutorial/` fired by ten criteria (protocol `tutorial-1`), a help tour (`?` key) on every screen page, an equipment page and a reference item for every kind with JEI pages, recordings written offline and held to the model; the small crude tower preset and the "Small crude unit" example. Details: [tutorial.md](tutorial.md), [process-simulator.md](process-simulator.md), [client-kit.md](client-kit.md), [machine-assemblies.md](machine-assemblies.md).
 
-**Still law (batch 2026-11-12-still-heat-per-distillate):** the batch still's split per mole of distillate, a partial condenser at the cooling water's inlet plus 5 K splitting each component by its liquid share, a closed valve on dry trays, trays that do not solve run as the pot's single stage, and a still that solves a column keeps its fire out until the column's first answer. Details: [fluid-science.md](fluid-science.md), [fluid-runtime.md](fluid-runtime.md), [process-simulator.md](process-simulator.md).
+**Still law (batch 2026-11-12-still-heat-per-distillate):** the batch still's split per mole of distillate, a partial condenser at the cooling water's inlet plus 5 K splitting each component by its liquid share, a closed valve on dry trays, trays that do not solve run as the pot's single stage, and a still that solves a column keeps its fire out until the column's first answer. Details: [column-v3-solver.md](column-v3-solver.md), [runtime-units.md](runtime-units.md), [process-simulator.md](process-simulator.md).
 
-**Merged:** stale column-result presentation fix, release 0.16.1, main `1b31ddf3`, 2026-10-27; persisted results marked `STALE` are hidden until a fresh accepted solve. [Client GUI](client-gui.md). Before: aggressive distillation pressure-profile publication fix plus the creative-tab and solver-performance batches, release 0.16.0, main `f588f56b`; the published tray-pressure profile now matches the hydraulic summary on the aggressive route. [Column V3](column-v3.md).
+**Merged:** stale column-result presentation fix, release 0.16.1, main `1b31ddf3`, 2026-10-27; persisted results marked `STALE` are hidden until a fresh accepted solve. [Client GUI](client-equipment-screens.md). Before: aggressive distillation pressure-profile publication fix plus the creative-tab and solver-performance batches, release 0.16.0, main `f588f56b`; the published tray-pressure profile now matches the hydraulic summary on the aggressive route. [Column V3](column-v3.md).
 
 **Merged before it:** process control (`codex/process-control` to `8523595a`, its review fixes and main 0.14.0 merged in), release 0.14.1, main `0e697177`, 2026-10-27; sensors, ideal local regulation and shared vessel geometry. [Process control](process-control.md).
 
@@ -96,12 +96,12 @@ Batch `documentation/2026-10-15-code-consolidation/` (branch `claude/code-consol
 
 Batch `documentation/2026-10-15-fluid-tank-column-gui-fixes/` (branch `claude/fluid-tank-column-gui-fixes-3f0fc3`, fast-forward over `26ec48de`, release 0.8.0 at `ffeafe8a`). No format changed: column wire schema 16, `DATA_VERSION` 12, fluid checkpoint 8, protocol `fluid-9`; client mixture files stay schema 1. Detached material: `tools/fluid-tank-column-gui-fixes/`.
 
-- **Fluid screen.** The tank rail has the pipe's phase ratio and "Status / errors" blocks (`renderPhaseRatio`, `renderStatus`); amount tables show kmol and kg (or kmol/h and kg/h) side by side; phases are named organic and aqueous. See [client-gui.md](client-gui.md).
+- **Fluid screen.** The tank rail has the pipe's phase ratio and "Status / errors" blocks (`renderPhaseRatio`, `renderStatus`); amount tables show kmol and kg (or kmol/h and kg/h) side by side; phases are named organic and aqueous. See [client-screens.md](client-screens.md).
 - **Generator mixtures.** Every choice loads through `loadMixture`, solids included; client mixture files take an optional `solids` block (`V3ClientPresets.Mixture.solids`).
 - **Column screen.** Products show both rates; the composition tab adds the other-basis rate on a wide panel (`bothRates()`).
 - **Side draws.** `V3ColumnInput.MAX_SIDE_DRAWS` = 4 and `V3ColumnStreamProperties.MAX_STREAMS` = 4 + draws = 8. The bundled model keeps 3 draw slots, so a 4-draw input is solved from the classical seed. See [column-v3.md](column-v3.md).
-- **Nitrogen feed.** The column preset `tia_juana_nitrogen` and the bundled mixture of the same name use `tjl20_methane_nitrogen`; the model declines that package; nitrogen kij are zero. See [thermo-materials.md](thermo-materials.md).
-- **Fluid runtime.** A topology commit marks recompiled devices for their next bucket (`Host.committed(removed, recompiled)`); a held island accepts a fenced topology event at its committed tick (`IslandCoordinator.acceptAtFence`, owner decision); an event fences only neighbours it joins. See [fluid-runtime.md](fluid-runtime.md).
+- **Nitrogen feed.** The column preset `tia_juana_nitrogen` and the bundled mixture of the same name use `tjl20_methane_nitrogen`; the model declines that package; nitrogen kij are zero. See [materials.md](materials.md).
+- **Fluid runtime.** A topology commit marks recompiled devices for their next bucket (`Host.committed(removed, recompiled)`); a held island accepts a fenced topology event at its committed tick (`IslandCoordinator.acceptAtFence`, owner decision); an event fences only neighbours it joins. See [runtime-engine.md](runtime-engine.md).
 
 ### Unified thermo stack 2026-10-19 (release 0.9.0)
 
@@ -114,7 +114,7 @@ Four batches merged together onto main `ffeafe8a`: release 0.9.0 at `5b49f940`, 
   - Leaving a data range never holds an island (`DataRangeNotices`). A phase hold reads `HELD (phases): `.
   - Column: it refuses crystal and spine packages. GUI: the Solids tab shows one row per solid, a crystal reads "<component> (solid)", and the notice follows the status. The MCP lane pins bridge 0.4.7-osguard.
   - Fix `15220a07` (D32): a pipe joining a lone boundary ends its island of one.
-  - See [client-gui.md](client-gui.md) and [column-v3.md](column-v3.md).
+  - See [client-equipment-screens.md](client-equipment-screens.md) and [column-v3.md](column-v3.md).
 - **Consolidation** (batch `documentation/2026-10-18-unified-thermo-consolidation/`, `8ca973e6..74785ddb`, changelog `688f4cd7`).
   - Behaviour-free.
   - `EquilibriumService` and `PhaseEvaluator` were folded into their implementations (`phase/` 22 → 20 files, main 230 → 228).
@@ -135,16 +135,16 @@ Four batches merged together onto main `ffeafe8a`: release 0.9.0 at `5b49f940`, 
 
 Batch `documentation/2026-10-19-post-release-followups/` (branch `claude/post-0.9.0`, release `a08c7134`). No format changed: fluid checkpoint 11, unit format 4, protocol `fluid-10`; column wire schema 16. Detached material: `tools/post-release-followups/`.
 
-- **One buffer sizing** (`a313400b`): a junction carried across a same-structure replacement has its buffer sized on its carried state by the mint's rule (`PassiveNetwork.withJunctionStates(graph, from, model)` → `sizeJunctionHoldups`). Gate: bundled 145. See [fluid-science.md](fluid-science.md) and [fluid-runtime.md](fluid-runtime.md).
+- **One buffer sizing** (`a313400b`): a junction carried across a same-structure replacement has its buffer sized on its carried state by the mint's rule (`PassiveNetwork.withJunctionStates(graph, from, model)` → `sizeJunctionHoldups`). Gate: bundled 145. See [fluid-interval.md](fluid-interval.md) and [runtime-engine.md](runtime-engine.md).
 - **Still pipes** (`235d69bb`, replacing `50fd053f`): still is roundoff, a flow within `PassiveStepSolver.NEWTON_TOLERANCE` of the island's largest at the interval-start rate solve (`SolidEventIntegrator.still`). It is decided once, where closures are decided, and a still pipe raises no solid transition for the interval. D42's resolution flow serves the rest test only. Gates: cold 850 and 829 (`HoldClassWorldsTest`).
-- **Materials:** the network water model's `ice` is checked at loading, so `/reload` refuses such data (`340e43da`); the fluid fingerprint anchors calibration points where the model reads them (`MaterialCatalog.fluidThermoFingerprint`); a solid record's error names its file and field; the material-override example follows the bundled record. The `cdu17-reference` test fixture's water carries its ice (`987db979`). See [thermo-materials.md](thermo-materials.md).
+- **Materials:** the network water model's `ice` is checked at loading, so `/reload` refuses such data (`340e43da`); the fluid fingerprint anchors calibration points where the model reads them (`MaterialCatalog.fluidThermoFingerprint`); a solid record's error names its file and field; the material-override example follows the bundled record. The `cdu17-reference` test fixture's water carries its ice (`987db979`). See [materials.md](materials.md).
 - **D46 gate** (`73fbe48c`): bundled 188 (`JunctionSeedingGateTest`, `D46_GATE`).
 - Comment-only fixes in `FluidCheckpointCodec`, `PassiveIntervalSolver`, `FluidTpEquilibrium.forPackage` and `ThermoIdentity`.
 - Built and reverted on the owner's options: option 1 (every buffer sized at each interval start; it missed the cost gate) and option 3 form A (a still pipe keeps its closure; it closed `PumpCavitationTest`'s suction line). Option 3 is deferred to the next batch.
 
 ### Crystal and junction holds 2026-10-20 (release 0.9.2)
 
-Batch `documentation/2026-10-20-crystal-junction-holds/` (branch `claude/crystal-junction-holds`, base `a08c7134`, release `449d398c`; code tip `34c79758`, changelog `9dd51fd4` and `bb9de943`). No format changed: fluid checkpoint 11, unit format 4, protocol `fluid-10`; column wire schema 16. Detached material: `tools/crystal-junction-holds/`. All changes are in [fluid-science.md](fluid-science.md); the gates are in [verification.md](verification.md).
+Batch `documentation/2026-10-20-crystal-junction-holds/` (branch `claude/crystal-junction-holds`, base `a08c7134`, release `449d398c`; code tip `34c79758`, changelog `9dd51fd4` and `bb9de943`). No format changed: fluid checkpoint 11, unit format 4, protocol `fluid-10`; column wire schema 16. Detached material: `tools/crystal-junction-holds/`. All changes are in [fluid-interval.md](fluid-interval.md); the gates are in [verification.md](verification.md).
 
 - **D61, a crystal melts on arrival in a warm junction** (`30b11f2f`, `09e215c3`; amends D23 for junctions). New class `JunctionCrystals`: above a pure crystal's melting temperature (`NetworkCrystals.Crystal.meltingTemperature`), what a junction receives or holds of the crystal melts, as its component with the crystal's enthalpy. It is decided once per step on the junction's start state and read by the Newton's junction rows and by `ConservativeTransport`. The ledger books it as a conversion (`ConservativeTransport.Melted`). A rate solve melts nothing. Gate: cold 778.
 - **A sealed junction keeps its pressure** in the balance's Gauss-Seidel sweep (`be5c9101`, `BalanceNet.sealed`). Gate: cold 743, 14 blocks.
@@ -155,17 +155,17 @@ Batch `documentation/2026-10-20-crystal-junction-holds/` (branch `claude/crystal
 
 ### Custom equipment rendering 2026-10-20 (0.10.0, 2e28a20a)
 
-Batch `documentation/2026-10-15-custom-equipment-rendering/` (branch `claude/custom-equipment-rendering-805e7d`, main 0.9.2 merged in at `6cd0d020`; released as 0.10.0 at `2e28a20a`, a fast-forward of main; OD4 hold fixes `f983306b`, `8fd61a13`, `9de0d85f` (owner decision E5)). New chapter [equipment.md](equipment.md). Formats: fluid checkpoint 11 → 12, island and topology unit format 4 → 5; equipment protocol `equipment-9` (new); fluid protocol `fluid-10` and column wire schema 16 unchanged. Detached material: `tools/new-units/`, `tools/custom-equipment-rendering-poc/` (with `frame-time-probe/`, detached at `03be157b`), `tools/equipment-geometry-estimate/`.
+Batch `documentation/2026-10-15-custom-equipment-rendering/` (branch `claude/custom-equipment-rendering-805e7d`, main 0.9.2 merged in at `6cd0d020`; released as 0.10.0 at `2e28a20a`, a fast-forward of main; OD4 hold fixes `f983306b`, `8fd61a13`, `9de0d85f` (owner decision E5)). New chapter [equipment-structure.md](equipment-structure.md). Formats: fluid checkpoint 11 → 12, island and topology unit format 4 → 5; equipment protocol `equipment-9` (new); fluid protocol `fluid-10` and column wire schema 16 unchanged. Detached material: `tools/new-units/`, `tools/custom-equipment-rendering-poc/` (with `frame-time-probe/`, detached at `03be157b`), `tools/equipment-geometry-estimate/`.
 
-- **Equipment** (new package `science/equipment`, 48 files; world side `EquipmentStructure` and the shell, interior and constructor blocks; `network/EquipmentNetwork`): drums, columns and 22 unit kinds placed whole as shell and interior cells, drawn per cell in the chunk mesh, 1/8-block collision, nozzles at the connected pipe's size, one free block between pipe blocks (owner rule 2026-10-17), and the old-save layout refresh (the AGENTS.md exception of 2026-10-18). See [equipment.md](equipment.md).
-- **Drums in the fluid network**: one RESERVOIR registration per drum at its node cell with a port per nozzle, its design volume and its own level height (`FluidWorldAuthority.placeVessel`, `PhysicalFluidTopology.Port`, `FluidDeviceSpec.levelHeight`). A pump's, compressor's or valve's half link takes the joined pipe's bore (owner decision 2026-10-16). See [fluid-runtime.md](fluid-runtime.md).
-- **Level head over the vessel's own height**: `PassiveNetwork.Inventory.levelHeight` (1 m for a one-block tank), read by `PassiveStepSolver.portHead` and `TankOutlets`; every inventory rebuild keeps it (`Inventory.with`). See [fluid-science.md](fluid-science.md).
-- **Client**: the constructor screen, the datasheet (`VesselScreen`, and page 5 of a drum's tank screen), ghosts, the shell and pipe chunk models, moving parts, `ColumnDiagram` shared with the column screen. See [client-gui.md](client-gui.md).
-- `DeterministicMath` gains `sin`, `asin` and `atan2` for the equipment geometry ([thermo-materials.md](thermo-materials.md)).
+- **Equipment** (new package `science/equipment`, 48 files; world side `EquipmentStructure` and the shell, interior and constructor blocks; `network/EquipmentNetwork`): drums, columns and 22 unit kinds placed whole as shell and interior cells, drawn per cell in the chunk mesh, 1/8-block collision, nozzles at the connected pipe's size, one free block between pipe blocks (owner rule 2026-10-17), and the old-save layout refresh (the AGENTS.md exception of 2026-10-18). See [equipment-structure.md](equipment-structure.md).
+- **Drums in the fluid network**: one RESERVOIR registration per drum at its node cell with a port per nozzle, its design volume and its own level height (`FluidWorldAuthority.placeVessel`, `PhysicalFluidTopology.Port`, `FluidDeviceSpec.levelHeight`). A pump's, compressor's or valve's half link takes the joined pipe's bore (owner decision 2026-10-16). See [runtime-registry.md](runtime-registry.md).
+- **Level head over the vessel's own height**: `PassiveNetwork.Inventory.levelHeight` (1 m for a one-block tank), read by `PassiveStepSolver.portHead` and `TankOutlets`; every inventory rebuild keeps it (`Inventory.with`). See [fluid-laws.md](fluid-laws.md).
+- **Client**: the constructor screen, the datasheet (`VesselScreen`, and page 5 of a drum's tank screen), ghosts, the shell and pipe chunk models, moving parts, `ColumnDiagram` shared with the column screen. See [client-rendering.md](client-rendering.md).
+- `DeterministicMath` gains `sin`, `asin` and `atan2` for the equipment geometry ([thermo-kernel.md](thermo-kernel.md)).
 
 ### OD4 holds after 0.10.0, 2026-10-21 (0.10.1, 144321e7)
 
-Batch `documentation/2026-10-15-custom-equipment-rendering/` (branch `claude/stoic-bell-ae6019` from `2e28a20a`; released as 0.10.1 at `144321e7`, a fast-forward of main; code tip `c7b883cb`, which reverts the sweep-first form `d139fe93` by owner decision; reviews `OD4_COLD285_GATE889_REVIEW.md` to `FINAL_LANE_C7B883CB_REVIEW.md`). No format changed: fluid checkpoint 12, unit format 5. Detached material: `tools/new-units/od4-holds/` (rounds 1 to 12, lane scripts in `scripts-2026-10-21/`). All changes are in [fluid-science.md](fluid-science.md).
+Batch `documentation/2026-10-15-custom-equipment-rendering/` (branch `claude/stoic-bell-ae6019` from `2e28a20a`; released as 0.10.1 at `144321e7`, a fast-forward of main; code tip `c7b883cb`, which reverts the sweep-first form `d139fe93` by owner decision; reviews `OD4_COLD285_GATE889_REVIEW.md` to `FINAL_LANE_C7B883CB_REVIEW.md`). No format changed: fluid checkpoint 12, unit format 5. Detached material: `tools/new-units/od4-holds/` (rounds 1 to 12, lane scripts in `scripts-2026-10-21/`). All changes are in [fluid-step.md](fluid-step.md).
 
 - **A junction's own split** (`a6a305a1`): `FluidThermodynamics.junctionSplit` closes the junction's rows (`PhaseLayout.junctionClosure`) from the engine's PH answer, for the outer phase check and the arriving seed (cold 285).
 - **Flash seeds** (`48fb5678`, `ca21bab8`): `PassiveStepSolver.flashSeeds`/`settledFlash`/`restateFlashFlows` seed a vapour newly appearing in a junction where its connections settle it (cold 509, 170, 592, 757).
@@ -179,20 +179,20 @@ Batch `documentation/2026-10-15-custom-equipment-rendering/` (branch `claude/sto
 
 Batch `documentation/2026-10-21-floating-roof-tanks/` (branch `claude/floating-roof-tanks-81d68b`, from 0.11.2 `ef64bd06`), with the batch folders it absorbed (`2026-10-23-*` to `2026-10-25-*`). Formats: fluid checkpoint 12 → 19 (unit format 5 → 12), protocol `fluid-10` → `fluid-14`, equipment `equipment-9` → `equipment-11`; a world of another checkpoint format is reset on open and rebuilt from its placed blocks.
 
-- **Open vessels**: floating-roof tanks and spheres in the constructor; an open tank vents, overflows and spills (`OpenVessel`, `Inventory.open`); its roof and level glass glide on the client and its roof collides on the server. See [fluid-science.md](fluid-science.md), [equipment.md](equipment.md), [client-gui.md](client-gui.md).
-- **Constructed movers**: a constructed pump or compressor registers one directed device (SUCTION and DISCHARGE ports) with a power switch, a running sound and moving parts that turn only while it runs. See [fluid-runtime.md](fluid-runtime.md).
-- **Pipe fittings**: shutoff, check and pressure valves, the Y-strainer, inline pumps and compressors and the sight glass are items applied to a pipe; the pressure-control-valve block is gone, and the pump, compressor and filter blocks have no block item (their item ids are the fittings). A check valve is a permanent one-way mask on its run. See [instrument-accessories.md](instrument-accessories.md) and [fluid-runtime.md](fluid-runtime.md).
+- **Open vessels**: floating-roof tanks and spheres in the constructor; an open tank vents, overflows and spills (`OpenVessel`, `Inventory.open`); its roof and level glass glide on the client and its roof collides on the server. See [fluid-laws.md](fluid-laws.md), [equipment-designs.md](equipment-designs.md), [client-rendering.md](client-rendering.md).
+- **Constructed movers**: a constructed pump or compressor registers one directed device (SUCTION and DISCHARGE ports) with a power switch, a running sound and moving parts that turn only while it runs. See [runtime-registry.md](runtime-registry.md).
+- **Pipe fittings**: shutoff, check and pressure valves, the Y-strainer, inline pumps and compressors and the sight glass are items applied to a pipe; the pressure-control-valve block is gone, and the pump, compressor and filter blocks have no block item (their item ids are the fittings). A check valve is a permanent one-way mask on its run. See [instrument-accessories.md](instrument-accessories.md) and [runtime-registry.md](runtime-registry.md).
 - **Gauges**: pressure and temperature gauges on pipes and vessel sockets read the accepted interval (new chapter [instrument-accessories.md](instrument-accessories.md)).
 - **Requested world-space displays**: open tanks, sight glasses, constructed movers and gauges are watched by nearby clients and published on the engine's bucket; nothing is sent unasked.
-- **Fluid screen**: display units (pressure, flow time basis), phase-ratio bases, readings on every device, the datasheet for every multi-cell device. See [client-gui.md](client-gui.md).
-- **Solver**: an accepted pressure-valve mode carries into the next step; a pump's carried limit keeps its rate root's phase basis. See [fluid-science.md](fluid-science.md).
+- **Fluid screen**: display units (pressure, flow time basis), phase-ratio bases, readings on every device, the datasheet for every multi-cell device. See [client-kit.md](client-kit.md).
+- **Solver**: an accepted pressure-valve mode carries into the next step; a pump's carried limit keeps its rate root's phase basis. See [fluid-step.md](fluid-step.md).
 
 ### Backward compatibility 2026-10-26 (0.13.0, 8d4c8df6)
 
 Batch `documentation/2026-10-26-backward-compat/` (branch `claude/backward-compat-system-design-11f7e0`, commits `97a8a714`, `a470b3bd`, `b432efc4`, `7f058499`, `c7e8f4e8`; main 0.12.4 merged in at `17d2673d`). AGENTS.md "Saves and data formats" now says: saved fluid and equipment data holds facts and state; a change never discards a fact; state formats change freely. Formats: fluid checkpoint 19 → envelope 1, state format 20, facts schema 1; protocols `fluid-14` and `equipment-11` and column wire schema 16 unchanged.
 
-- **Fluid checkpoint**: every unit holds a facts section (registry, ledger totals, recoveries, vessel contents, filter cakes) beside its state. The load is EXACT or rebuilds from the FACTS (`FluidFacts.rebuild`); a changed property basis restates contents at their amounts and temperature and books the energy difference, and a component the data no longer has is booked as removed and named on the status line. A running world's `/reload` of changed property data still holds; the hold now says to save and reopen the world. See [fluid-runtime.md](fluid-runtime.md) and [fluid-science.md](fluid-science.md).
-- **Equipment**: saved shapes are read by name and repaired (`ShapeRepair`); a structure of a kind this build no longer has is removed whole (owner decision D6); the layout refresh keeps nozzles on their pipes first and retries a blocked layout at the next load; a refreshed vessel or mover keeps its identity, controls and contents through one edit (decision D7, `relocateMover` deleted); the datasheet counts blocked cells. See [equipment.md](equipment.md) and [client-gui.md](client-gui.md).
+- **Fluid checkpoint**: every unit holds a facts section (registry, ledger totals, recoveries, vessel contents, filter cakes) beside its state. The load is EXACT or rebuilds from the FACTS (`FluidFacts.rebuild`); a changed property basis restates contents at their amounts and temperature and books the energy difference, and a component the data no longer has is booked as removed and named on the status line. A running world's `/reload` of changed property data still holds; the hold now says to save and reopen the world. See [runtime-engine.md](runtime-engine.md) and [fluid-thermo-port.md](fluid-thermo-port.md).
+- **Equipment**: saved shapes are read by name and repaired (`ShapeRepair`); a structure of a kind this build no longer has is removed whole (owner decision D6); the layout refresh keeps nozzles on their pipes first and retries a blocked layout at the next load; a refreshed vessel or mover keeps its identity, controls and contents through one edit (decision D7, `relocateMover` deleted); the datasheet counts blocked cells. See [equipment-structure.md](equipment-structure.md) and [client-equipment-screens.md](client-equipment-screens.md).
 - **Gates**: `FluidFactsCompatTest`, `VesselRebuildTest`, `EquipmentShapeCompatTest`, `EquipmentLayoutGoldenTest`, `EquipmentCompatGameTests` and the corpus under `src/test/resources/compat/`. Suite counts at c7e8f4e8: `test` 1437, `slowGates` 187, fluid GameTests 21. See [verification.md](verification.md).
 
 ### Pipe laying tool and pipe racks 2026-10-27 (0.14.0, 4a7c807b)
@@ -200,31 +200,31 @@ Batch `documentation/2026-10-26-backward-compat/` (branch `claude/backward-compa
 Batch `documentation/2026-10-26-pipe-laying-system/` (branch `claude/pipe-laying-system-092ac8` from main 0.13.2 `600549d9`; work packages W1-W4, the layered rack R1-R4, junctions, the sturdy frame, flanges and slot aim, three owner-reported fixes, consolidation `32de136e`..`71ad53ef`). New chapter [pipe-laying.md](pipe-laying.md). Formats: fluid facts schema 1 → 2 (appended joints, lane width, face points and the position's lane; corpus `compat/fluid/schema-2/`); new pipe block entity fields `Joints`, `Paint`, `Secondary` (corpus `compat/pipes/`) and the rack lane copy `rack-3` (corpus `compat/racks/`); registrar `pipeline-tool-1` → `pipeline-tool-2`; state format 20, protocols `fluid-14` and `equipment-11` unchanged.
 
 - **Laying tool** (`pipe_laying_tool`, survival too: one `fluid_pipe` item per cell): two clicks lay a line along a route the client searches (A*, costs favour racks); the server re-resolves both clicks, checks the route it was sent and lays it whole as one ledger event or not at all; Shift + use dismantles one pipe block or one lane. The old `pipeline_tool` is the creative "Pipe Sizing Tool". See [pipe-laying.md](pipe-laying.md) and [instrument-accessories.md](instrument-accessories.md).
-- **Explicit joints**: a laid pipe joins only through the faces its route uses (hand-placed pipes and other devices keep every face, D3), so lines laid side by side stay apart. See [fluid-runtime.md](fluid-runtime.md).
-- **Pipe racks** (`pipe_rack`): four positions on one tier with crossing levels above and below; straight, corner and tee shapes decided once at placement from the feeds and the look; lanes registered at the rack's position with a lane number and meeting where their face points coincide; a plain pipe beside a lane is a transition pipe bent to its point. A rack with lanes is not broken (D9). See [pipe-laying.md](pipe-laying.md) and [equipment.md](equipment.md).
-- **Line paints**: a primary (pipe) and a secondary (flanges) paint on the tool, bare steel by default; chosen in the settings screen (`PaintSwatch`), drawn through the block tint. See [client-gui.md](client-gui.md).
+- **Explicit joints**: a laid pipe joins only through the faces its route uses (hand-placed pipes and other devices keep every face, D3), so lines laid side by side stay apart. See [runtime-registry.md](runtime-registry.md).
+- **Pipe racks** (`pipe_rack`): four positions on one tier with crossing levels above and below; straight, corner and tee shapes decided once at placement from the feeds and the look; lanes registered at the rack's position with a lane number and meeting where their face points coincide; a plain pipe beside a lane is a transition pipe bent to its point. A rack with lanes is not broken (D9). See [pipe-laying.md](pipe-laying.md) and [equipment-geometry.md](equipment-geometry.md).
+- **Line paints**: a primary (pipe) and a secondary (flanges) paint on the tool, bare steel by default; chosen in the settings screen (`PaintSwatch`), drawn through the block tint. See [client-screens.md](client-screens.md).
 - **Gates**: `PipeRouteTest` (24), `PipeRackGeometryTest` (30), `PipeLineCompatTest` (8), nine new `PhysicalFluidTopologyTest` cases, `PipeLayingGameTests` (3). At 71ad53ef: `test` 1520, `slowGates` 187, fluid GameTests 26; the final lane was waived by the owner. See [verification.md](verification.md).
 
 ### Process sensors and control valves 2026-10-27 (0.14.1, 0e697177)
 
 Batch `documentation/2026-10-26-process-control/` (branch `codex/process-control` to `8523595a`, from main 0.13.2 `600549d9`; on `claude/process-control-merge` the review fixes `fa62fd81`, `8b91a822`, `ab8cb8ba`, `3ed2351c`, the merge of main 0.14.0 `6445a3b8` and the release prep `0e697177`; main fast-forwarded to `0e697177` on 2026-10-27). New chapter [process-control.md](process-control.md). Formats: fluid facts schema 2 → 3 (a device spec's vessel geometry, the `control_valve` control; corpus `compat/fluid/schema-3/`), state format 20 → 22, protocol `fluid-14` → `fluid-15`, accessory store facts schema 1 → 2 (`sensors`, `modular_valves`; corpus `compat/accessories/schema-2.snbt`); envelope 1, `equipment-11` and `pipeline-tool-2` unchanged.
 
-- **Sensors**: pressure and temperature probes, flowmeters (mass and local actual volume) and body and boot level meters, installed through queued transactions; their readings come from the accepted interval and show only in the fluid screen. See [process-control.md](process-control.md), [instrument-accessories.md](instrument-accessories.md) and [client-gui.md](client-gui.md).
-- **Control valves**: a bare valve is an open pipe; one pressure or one flow module regulates inside the coupled solve, with no PID (`FlowControl.ControlValve`, `ControlConstraints`, `VALVE_CONFLICT`); a legacy pressure valve converts once. See [fluid-science.md](fluid-science.md).
-- **Vessel geometry**: `VesselGeometry` (cylinder, sphere, 2:1-head drums, boot) gives levels, the hydrostatic head and the boot weir; boot drains and mixed bottom draws. See [fluid-science.md](fluid-science.md) and [equipment.md](equipment.md).
-- **Review fixes**: the head stands over the body bottom and weighs the solids, and a LIQUID end holding both liquids draws `PhaseDraw.mixedShares` of its connection (findings 2-4, `fa62fd81`); a water-full vessel omits a hydrocarbon trace below its resolution (D41 for vessels, bundled seed 236, `8b91a822`); flowmeter taps are attached to restored islands and recompiled after an installation (finding 5, `ab8cb8ba`); an island with a flow valve rests when nothing drives through it (finding 6, `3ed2351c`); a sensor-configured valve keeps a laid pipe's joints (`Device.withControl`, `6445a3b8`). See [fluid-science.md](fluid-science.md) and [fluid-runtime.md](fluid-runtime.md).
+- **Sensors**: pressure and temperature probes, flowmeters (mass and local actual volume) and body and boot level meters, installed through queued transactions; their readings come from the accepted interval and show only in the fluid screen. See [process-control.md](process-control.md), [instrument-accessories.md](instrument-accessories.md) and [client-screens.md](client-screens.md).
+- **Control valves**: a bare valve is an open pipe; one pressure or one flow module regulates inside the coupled solve, with no PID (`FlowControl.ControlValve`, `ControlConstraints`, `VALVE_CONFLICT`); a legacy pressure valve converts once. See [fluid-laws.md](fluid-laws.md).
+- **Vessel geometry**: `VesselGeometry` (cylinder, sphere, 2:1-head drums, boot) gives levels, the hydrostatic head and the boot weir; boot drains and mixed bottom draws. See [fluid-laws.md](fluid-laws.md) and [equipment-designs.md](equipment-designs.md).
+- **Review fixes**: the head stands over the body bottom and weighs the solids, and a LIQUID end holding both liquids draws `PhaseDraw.mixedShares` of its connection (findings 2-4, `fa62fd81`); a water-full vessel omits a hydrocarbon trace below its resolution (D41 for vessels, bundled seed 236, `8b91a822`); flowmeter taps are attached to restored islands and recompiled after an installation (finding 5, `ab8cb8ba`); an island with a flow valve rests when nothing drives through it (finding 6, `3ed2351c`); a sensor-configured valve keeps a laid pipe's joints (`Device.withControl`, `6445a3b8`). See [fluid-laws.md](fluid-laws.md) and [runtime-registry.md](runtime-registry.md).
 - **Gates**: `VesselGeometryTest`, `ProcessOutletTest`, `FlowmeterObservationTest`, `SensorReadingTest`, `SensorStoreTest`, the flow-valve, flowmeter-tap and omitted-trace cases, `ProcessControlGameTests` (1). In the source at 0e697177: 332 test files, 27 fluid GameTests; the batch review records the lanes. See [verification.md](verification.md).
 
 ### Multi-machine framework, first stage 2026-10-27 (0.15.0, ce71b45c)
 
 Batch `documentation/2026-10-26-multi-machine-framework/` (branch `claude/distillation-column-framework-922ec9` from main 0.13.2 `600549d9`; commits `660650cd` to `23d8a19d`, the nozzle bore limit `67343274`, main 0.14.1 merged in at `e69cec50`, release prep `7f03b072` and `ce71b45c`; plan `MULTI_MACHINE_FRAMEWORK_PLAN.md`, reviews `COLUMN_NOZZLE_ROWS_REVIEW.md`, `PROCESS_CONTROL_ADAPTATION_REVIEW.md`, `NOZZLE_ROOM_GATE_REVIEW.md`). New chapter [machine-assemblies.md](machine-assemblies.md). Formats: fluid facts schema 3 → 4 (the world basis keeps the package's declared-revision identity; schemas 1 to 3 still read; corpus `compat/fluid/schema-4/`); equipment shape fields 1 → 3 (a column's `Components`, its `Turns`; corpus `shapes-2.snbt`, `shapes-3.snbt`), protocol `equipment-11` → `equipment-12`; column wire schema 16 → 17, protocol `"11"` → `"13"`, the block's NBT gains `Design` (`DATA_VERSION` stays 12); new protocol `assembly-2` and store `icheme_assemblies` (format 1, state); `layouts.txt` re-recorded at F3 (`ef0ae447`). State format 22, `fluid-15` and `pipeline-tool-2` unchanged.
 
-- **Declared revisions, no hashing** (owner decisions 2026-10-26): every material record and package declares its `revision`; `scientificRevision`, `fluidRevision` and `spineRevision` are composed from them; `ThermoIdentity` v2; the crude packages' column floor is 1 kPa. See [thermo-materials.md](thermo-materials.md), [equilibrium-engine.md](equilibrium-engine.md) and [fluid-science.md](fluid-science.md).
-- **Save design and import**: the column calculator's Components page and Save design (structure checks only, `ColumnDesign.of`); the constructor builds a column only from an imported design, and the column carries its components. See [column-v3.md](column-v3.md), [equipment.md](equipment.md) and [client-gui.md](client-gui.md).
-- **Column nozzles (F3, F2, Q9)**: side nozzles at their stages on home sides, turned by the player on the constructor's Nozzles page; the access fitted round them; the vapour return only with a kettle; the constructor keeps every form's fields. A column's nozzle takes the largest pipe its place clears (`NozzleBore`, `67343274`). See [equipment.md](equipment.md).
-- **Port markings**: `PortMarkings` (flow in or out per role, arrows on every kind) replaces `MoverPortMarkings`. See [equipment.md](equipment.md).
-- **Assemblies**: "Validate structure" walks the pipes from the column and matches what it finds to the design's blueprint (missing red, misplaced yellow; valves by their hydraulic law); a change reverts the report through the registry and structure hooks, without polling. See [machine-assemblies.md](machine-assemblies.md) and [fluid-runtime.md](fluid-runtime.md).
-- **Laying tool and sizing tool**: the laying tool frames the remaining ports of the column assemblies within 48 blocks and names their line (W7); the client judges holding the tool. The sizing tool's sneak-use resizes a whole line as one event (a lane too narrow or a nozzle that takes less refuses it). See [pipe-laying.md](pipe-laying.md), [instrument-accessories.md](instrument-accessories.md) and [fluid-runtime.md](fluid-runtime.md).
+- **Declared revisions, no hashing** (owner decisions 2026-10-26): every material record and package declares its `revision`; `scientificRevision`, `fluidRevision` and `spineRevision` are composed from them; `ThermoIdentity` v2; the crude packages' column floor is 1 kPa. See [materials.md](materials.md), [equilibrium-engine.md](equilibrium-engine.md) and [fluid-thermo-port.md](fluid-thermo-port.md).
+- **Save design and import**: the column calculator's Components page and Save design (structure checks only, `ColumnDesign.of`); the constructor builds a column only from an imported design, and the column carries its components. See [column-v3.md](column-v3.md), [equipment-structure.md](equipment-structure.md) and [client-equipment-screens.md](client-equipment-screens.md).
+- **Column nozzles (F3, F2, Q9)**: side nozzles at their stages on home sides, turned by the player on the constructor's Nozzles page; the access fitted round them; the vapour return only with a kettle; the constructor keeps every form's fields. A column's nozzle takes the largest pipe its place clears (`NozzleBore`, `67343274`). See [equipment-geometry.md](equipment-geometry.md).
+- **Port markings**: `PortMarkings` (flow in or out per role, arrows on every kind) replaces `MoverPortMarkings`. See [equipment-geometry.md](equipment-geometry.md).
+- **Assemblies**: "Validate structure" walks the pipes from the column and matches what it finds to the design's blueprint (missing red, misplaced yellow; valves by their hydraulic law); a change reverts the report through the registry and structure hooks, without polling. See [machine-assemblies.md](machine-assemblies.md) and [runtime-registry.md](runtime-registry.md).
+- **Laying tool and sizing tool**: the laying tool frames the remaining ports of the column assemblies within 48 blocks and names their line (W7); the client judges holding the tool. The sizing tool's sneak-use resizes a whole line as one event (a lane too narrow or a nozzle that takes less refuses it). See [pipe-laying.md](pipe-laying.md), [instrument-accessories.md](instrument-accessories.md) and [runtime-registry.md](runtime-registry.md).
 - **Review world**: `runReviewWorldServer` builds a full column plant to review by hand; it is not a gate.
 - **Gates**: all new tests run under `test`; the 18 slow gate classes are unchanged (`ProcessUnitTest` gained the nozzle bore case). 34 fluid GameTests in the source (`AssemblyGameTests` 6, a fourth `PipeLayingGameTests`). In the source at `ce71b45c`: 346 test files. Suite counts from the final lane at `ce71b45c`: `test` 1643 tests in 288 classes, `slowGates` 188 in 18 classes, 0 failures; chain-100 exact; fluid GameTests 34/34; campaign as at 0.14.1 (cold random 975, bundled random 994, bundled defaults 1000). See [verification.md](verification.md).
 
@@ -232,12 +232,12 @@ Batch `documentation/2026-10-26-multi-machine-framework/` (branch `claude/distil
 
 Batch `documentation/2026-10-27-heat-exchanger-design/` (work packages W1 to W8, the owner-test fixes, F1; W9 deferred), with the water steam from `claude/water-steam-virial` and the GUI toolkit batch `documentation/2026-10-28-gui-toolkit/` merged into the branch. New chapter [heat-exchangers.md](heat-exchangers.md). Formats: fluid state format 22 → 29 (23 a pipe's channels, 24 the heat side, 25 the tagged law, 26 the partner and active share, 27 the controller and limit and the air cooler, 28 the pool, 29 the radiant coil's partner, the convection coil and the draught), facts schema 4 → 5 (a heat side's `HeatUnit` on its registration; corpus `compat/fluid/schema-5/`, and `steam-v2/` for the steam restatement), certificate graph identity 8, protocol `fluid-16` (the partner and check-lines payloads); `separate-free-water-v3`, so worlds restate onto the virial steam; `PortGraph.Fitting.FLOWMETER` appended. Equipment shape fields, `equipment-13`, `assembly-2` and the column wire schema unchanged.
 
-- **Heat sides**: each passage of an exchanger, kettle, air cooler or fired heater is a `HEAT_SIDE` device compiled as one pipe carrying a `HeatLaw`; a unit's sides register, restate and leave together. See [heat-exchangers.md](heat-exchangers.md), [equipment.md](equipment.md) and [fluid-runtime.md](fluid-runtime.md).
-- **Coupling**: two sides in two islands are fenced as a pair; each step reads the partner's settled state at dispatch and books the heat in transit as a fact of the sides. See [fluid-runtime.md](fluid-runtime.md) and [fluid-science.md](fluid-science.md).
+- **Heat sides**: each passage of an exchanger, kettle, air cooler or fired heater is a `HEAT_SIDE` device compiled as one pipe carrying a `HeatLaw`; a unit's sides register, restate and leave together. See [heat-exchangers.md](heat-exchangers.md), [equipment-geometry.md](equipment-geometry.md) and [heat-units.md](heat-units.md).
+- **Coupling**: two sides in two islands are fenced as a pair; each step reads the partner's settled state at dispatch and books the heat in transit as a fact of the sides. See [runtime-engine.md](runtime-engine.md) and [fluid-interval.md](fluid-interval.md).
 - **Control and lines**: built-in outlet temperature, duty, firing and ratio control with a low limit; an exchanger's bypass or ratio station checked as an assembly, after which its control works the real valve. See [heat-exchangers.md](heat-exchangers.md) and [machine-assemblies.md](machine-assemblies.md).
 - **Water steam**: a second-virial gas from IF97 Region 2 (`SteamVirial`); chain-100 re-captured. See [equilibrium-engine.md](equilibrium-engine.md).
 - **Column calculator**: the Holland preset left the game (a benchmark only), and the server refuses a column without a diameter. See [column-v3.md](column-v3.md).
-- **GUI kit**: panel doors, rows, skins and the flowsheet painter under every screen; "Validate structure" became "Check parts". See [client-gui.md](client-gui.md).
+- **GUI kit**: panel doors, rows, skins and the flowsheet painter under every screen; "Validate structure" became "Check parts". See [client-kit.md](client-kit.md).
 - **Review world**: `runReviewWorldServer` also builds a row of running heat units (`HeatExchangerReviewWorld`); it is not a gate.
 - **Gates**: all new tests run under `test`; the 18 slow gate classes are unchanged. 36 fluid GameTests in the source (`AssemblyGameTests` 7). In the source: 371 test files, 22 GameTest files. Suite counts: `test` 1796, `slowGates` 188, fluid GameTests 36/36 (the merge lane, `MERGE_REVIEW.md`). See [verification.md](verification.md).
 
@@ -246,7 +246,7 @@ Batch `documentation/2026-10-27-heat-exchanger-design/` (work packages W1 to W8,
 Batches `documentation/2026-10-28-column-operation/`, `2026-10-28-native-column-default/`, `2026-10-28-vacuum-column/` and `2026-11-02-valve-hold/` at 548456d5. New chapter [column-operation.md](column-operation.md). Formats: fluid facts schema 5 → 6 (a registration's column unit, the column units), shape fields 3 → 4 (`ColumnTrays.operating`), protocol `assembly-2` → `assembly-3`. State format 29, `fluid-16`, `equipment-14`, column wire schema 17 and protocol `"13"` unchanged. Detached material: `tools/column-operation/`, `tools/heat-gui-renders/`, `tools/native-column-default/`, `tools/vacuum-column-test/`, `tools/valve-hold-probes/`.
 
 - **Running column**: Start in the Operation tab holds what stands inside the boundary valves and adds a port at each one; cycles split the feed by a table from one V3 solve. See [column-operation.md](column-operation.md) and [machine-assemblies.md](machine-assemblies.md).
-- **Solver** (valve-hold): a flow valve's target no longer changes its line's identity (`PassiveNetwork.Pipe.Identity.line`, `PassiveStepSolver.sameLines`); a flow valve that starts regulating restarts the pass on the balance's law flows and keeps the seeds; the junction closure stands on the largest component. See [fluid-science.md](fluid-science.md).
+- **Solver** (valve-hold): a flow valve's target no longer changes its line's identity (`PassiveNetwork.Pipe.Identity.line`, `PassiveStepSolver.sameLines`); a flow valve that starts regulating restarts the pass on the balance's law flows and keeps the seeds; the junction closure stands on the largest component. See [fluid-step.md](fluid-step.md).
 - **Condenser**: the water side of a running column's condenser takes the duty through the heat in transit (`ExchangerRelay.Read.column`). See [heat-exchangers.md](heat-exchangers.md).
 - **Column V3**: the C++ outer pass is the default, and vacuum columns converge from dry stages, as [column-v3.md](column-v3.md) describes. A vacuum column does not run in the plant yet.
 - **Gates**: all new unit tests run under `test`; the 18 slow gate classes are unchanged. `ColumnOperationGameTests` joins the fluid GameTests; `ColumnOperationReviewWorld` is a review world, not a gate.
@@ -257,19 +257,19 @@ Batch `documentation/2026-11-02-process-simulator/` (W1 to W10b, sizing S1 to S5
 
 - **Simulator**: a client-side flowsheet run, sizing and the block's store; `process_simulator` took `column_calculator_v3`'s id. See [process-simulator.md](process-simulator.md).
 - **Column V3**: the calculator block, its packets, presentation and editor catalog are gone; `ColumnWire` carries a column; `V3ColumnTemplate` is a column with no feed. See [column-v3.md](column-v3.md).
-- **Materials**: the five per-crude packages and their presets are gone; their assays stand on `tjl20_methane`. See [thermo-materials.md](thermo-materials.md).
+- **Materials**: the five per-crude packages and their presets are gone; their assays stand on `tjl20_methane`. See [materials.md](materials.md).
 - **Plant**: member counts, the air-then-water condenser, the regulated condenser water and air fans, device names and nameplates. See the chapters the other thread of the batch updated (listed in the batch's `MERGE_REVIEW.md`).
 - **Gates**: eight simulator classes join `slowGateClasses`; `ProcessSimulatorGameTests` on `runColumnGameTestServer`; `FlowsheetCatalog` and `SizingCoverage` in `src/test`. See [verification.md](verification.md).
-- **After the cleanup** (`6bf2205bf` to `f96f1e01b`): reversible passages and sheet format 2, the bundled crude example, a click outside an entry ends its edit (`EditFocus`), the GUI kit batches fills and text (`HeldDraws`), V3 solve scratch reused across trials (P4), a run starts from the steady one before it (P2, `Report.Warm`). See [process-simulator.md](process-simulator.md), [client-gui.md](client-gui.md) and [column-v3.md](column-v3.md).
+- **After the cleanup** (`6bf2205bf` to `f96f1e01b`): reversible passages and sheet format 2, the bundled crude example, a click outside an entry ends its edit (`EditFocus`), the GUI kit batches fills and text (`HeldDraws`), V3 solve scratch reused across trials (P4), a run starts from the steady one before it (P2, `Report.Warm`). See [process-simulator.md](process-simulator.md), [simulator-screen.md](simulator-screen.md) and [column-v3.md](column-v3.md).
 
 ### Rotating machinery 2026-11-03 (branch `claude/realistic-pump-compressor-6fdfd9`, not merged)
 
 Batch `documentation/2026-11-03-rotating-machinery/` (W1 to W10d, W6a and W6b, W8; decisions D1 to D44), rebased on main 0.20.0 and with main `fb9607dad` merged in. New chapter [rotating-machinery.md](rotating-machinery.md). Formats: fluid facts schema 9 → 12 (shaft units, electric stores, pump health; corpus images `schema-10/` to `schema-12/`), state format 30 → 35, accessory facts schema 2 → 3, shape fields 7 → 8 (`MachineDuty`, `shapes-8.snbt`); `fluid-17` → `fluid-18`, `mover-1` → `mover-4`, new `machine-2`, `equipment-17` → `equipment-18`. Detached material: `tools/rotating-machinery/`, `tools/machine-nozzle-probe/`, `tools/machine-sounds/`, `tools/pump-sprites/`, `tools/machine-parts/`.
 
-- **Solver**: every mover on its law (`MOVER_LAW`; form F2e for set-flow movers, curves for casings), the NPSH3 suction floor and the vapour lock per solve, no gas or liquid refusal, the steam turbine connection and the `SHAFT` boundary, `ShaftPlan` dispatch inputs. See [fluid-science.md](fluid-science.md).
-- **Runtime**: shaft trains, electric stores and FE ports, pump health, machine pages, config `energy.*`, `create.*`, `machines.wear.*`. See [fluid-runtime.md](fluid-runtime.md) and [rotating-machinery.md](rotating-machinery.md).
-- **Equipment**: casings without drivers, one steam turbine kind (`CONDENSING_TURBINE` aliased), motor, generator and gearbox, shaft ends, terminal cells, the BB2 pump. See [equipment.md](equipment.md).
-- **GUI and simulator**: machine pages, the Drive, Power, Suction and Health groups and the pump curve; the simulator's pump efficiencies, the modelled turbine tile and the column door's pump duty table. See [client-gui.md](client-gui.md) and [process-simulator.md](process-simulator.md).
+- **Solver**: every mover on its law (`MOVER_LAW`; form F2e for set-flow movers, curves for casings), the NPSH3 suction floor and the vapour lock per solve, no gas or liquid refusal, the steam turbine connection and the `SHAFT` boundary, `ShaftPlan` dispatch inputs. See [fluid-laws.md](fluid-laws.md).
+- **Runtime**: shaft trains, electric stores and FE ports, pump health, machine pages, config `energy.*`, `create.*`, `machines.wear.*`. See [runtime-units.md](runtime-units.md) and [rotating-machinery.md](rotating-machinery.md).
+- **Equipment**: casings without drivers, one steam turbine kind (`CONDENSING_TURBINE` aliased), motor, generator and gearbox, shaft ends, terminal cells, the BB2 pump. See [equipment-designs.md](equipment-designs.md).
+- **GUI and simulator**: machine pages, the Drive, Power, Suction and Health groups and the pump curve; the simulator's pump efficiencies, the modelled turbine tile and the column door's pump duty table. See [client-screens.md](client-screens.md) and [process-simulator.md](process-simulator.md).
 - **Build and gates**: Create and KubeJS optional (`-PwithoutCreate`), eight new fluid GameTests (45), every new unit test inside `test`. See [verification.md](verification.md).
 
 ### Open items for the owner
@@ -648,7 +648,7 @@ Crossflow routing is selected by heat-unit facts and 64 wall cells are accepted 
   - [2026-10-28-column-operation](../../2026-10-28-column-operation/): the column running in the plant, its unit in the ledger, ports and held devices, facts schema 6 ([column-operation.md](column-operation.md)).
   - [2026-10-27-heat-exchanger-design](../../2026-10-27-heat-exchanger-design/): heat units as fluid devices, the exchanger coupling across islands (form C, the fence), facts schema 5, state formats 23 to 29, certificate graph identity 8, protocol `fluid-16` ([heat-exchangers.md](heat-exchangers.md)).
   - [2026-11-03-save-corruption](../../2026-11-03-save-corruption/): registry first: the build facts (facts schema 15), the re-alignment after a chunk load, held devices and parts, `/icheme devices held` (W5, W5c).
-  - [2026-11-02-process-simulator](../../2026-11-02-process-simulator/): the column calculator block and its V3 jobs removed from the pool; a column's condenser shells in parallel (facts schema 8) and its regulated condenser water and air fans (facts schema 9, mode COLUMN); device names in block-entity NBT ([column-operation.md](column-operation.md), [equipment.md](equipment.md)).
+  - [2026-11-02-process-simulator](../../2026-11-02-process-simulator/): the column calculator block and its V3 jobs removed from the pool; a column's condenser shells in parallel (facts schema 8) and its regulated condenser water and air fans (facts schema 9, mode COLUMN); device names in block-entity NBT ([column-operation.md](column-operation.md), [equipment-structure.md](equipment-structure.md)).
 
 ## From the chapters of scope J2-B
 
@@ -978,3 +978,264 @@ Kept text, lightly trimmed, from the six chapters of scope J2-C (batch `2026-11-
 - The gas turbine's steam coil came with batch 2026-11-10-prime-movers (owner P8 A). The heat review world was batch `review-heat`; `documentation/2026-10-27-heat-exchanger-design/REVIEW_WORLD.md` says how to copy it into a client's saves. Design background: `documentation/2026-10-27-heat-exchanger-design/` (`HEAT_EXCHANGER_PLAN.md` section 10, `OWNER_TEST_REVIEW.md`, `HX_TIMING_STUDY_REVIEW.md` for the fence).
 - The chapter named `Equations.sideHeat` (now `StepEquations.sideHeat`, D-S6) and `ColumnOperation.waterSides` (the condenser's sides are `ColumnUnit.condensers`, read through `ColumnOperation.heatRead`).
 - Test counts at `0f0993162`: `HeatControlColumnTest` 6, `HeatDiagramTest` 32 cases.
+
+## From the chapters of scope J2-I
+
+Scope J2-I of the 2026-11-13 codebase review (the integration of the J2 split). Kept, not maintained.
+
+### machine-assemblies.md
+
+Split into [machine-assemblies.md](machine-assemblies.md) (the check: blueprints, walk, matcher, report) and
+[assembly-service.md](assembly-service.md) (when a check runs, store, reverts, screens, watch, Start). Cut from the old
+chapter as history or provenance:
+
+- Protocol `assembly-6` (`assembly-4` before batch 2026-11-10-column-failure-modes, which changed only the operation
+  view; `assembly-5` added the conditions list, `assembly-6` the accepted set points and tray readings). Now one
+  `NetworkProtocol.VERSION`.
+- The trap "`assembly-4` names two view codecs": the slots' `parallel` list (S3b) entered the `VIEW` codec without a
+  protocol bump, so a client and a server built on either side of it agreed on the protocol and misread each other's
+  views.
+- `AssemblyStore.FORMAT` 2 (1 had no units in parallel). Constants stated as numbers at snapshot `3063488da`:
+  `MAX_WALK` 8192, `EXTERNAL_REACH` 16, `MAX_MANIFOLD_RUNS` 64, `AssemblyWatch.RANGE` 48, `AssemblyMenu.REACH` 8; the
+  store bounds `MAX_MASTERS` 4096, `MAX_SLOTS` 256, `MAX_PORTS` 1024, `MAX_FOOTPRINT` 2 · `MAX_WALK`; the wire bounds
+  `MAX_SLOTS` 256, `MAX_PORTS` 1024, `MAX_MEMBERS` 256, `MAX_TEXT` 1024, `MAX_STREAMS` 32, `MAX_VALUES` 64; the frame
+  0.4 across; `PresentationMailbox` buckets of 100 ticks.
+- Member counts came with batch 2026-11-02-process-simulator (S3b), the trim with C1; the vacuum pump on the receiver
+  with batch 2026-11-10-vacuum-pump (shape fields 12, owner V5: "placed on the drum vapor outlet"); decision D15 (the
+  condenser's two kinds), D20 (only pipes join), the owner's answers Q2 (the reflux line also at a zero reflux ratio) and
+  Q9 (a) (no vapour return without a kettle).
+- "Since batch 2026-11-10-column-failure-modes a column that has not run yet takes set points on its design's".
+- "Columns without components have no assembly: every column built before this batch" (2026-10-26-multi-machine-framework).
+- Test counts at `3063488da`: `ColumnBlueprintTest` 4, `AssemblyParallelTest` 6, `AssemblyMatcherTest` 18,
+  `ExchangerBlueprintTest` 4, `AssemblyWalkerTest` 5, `LevelGroundTest` 1, `AssemblyStoreTest` 4,
+  `AssemblyPresentationTest` 4, `AssemblyToolWatchTest` 4, `AssemblyNetworkCodecTest` 4, `AssemblyDiagramTest` 5,
+  `AssemblyColumnTest` 8, `AssemblyBlockTest` 3, `PortMarkingsTest` 6, GameTests `AssemblyGameTests` 7; the review
+  world's column (2 m, 20 trays, feed on tray 12, a draw on tray 9, a pumparound from tray 7 to 5, a kettle and sump
+  steam, an ejector, an air cooler, a lying receiver with a boot, the pumps and the PA cooler, a valve and a tank on every
+  boundary line) and the heat review world's row (an exchanger held by its internal bypass, the same with a real bypass
+  left unchecked and its valve without a flowmeter, an air cooler, a vertical fired heater raising steam, a kettle).
+- Design background: `documentation/2026-10-26-multi-machine-framework/` (the plan's sections 4 to 11, the owner's
+  answers Q1 to Q9, findings F2 and F3, the column assembly cases); the exchanger's lines:
+  `documentation/2026-10-27-heat-exchanger-design/` (the plan's section 7, W8).
+- The "Terms" section (not in the template).
+- Snapshot of the old chapter: `3063488da`, 2026-11-13.
+
+The old chapter's batch-appended sections, as they stood (their contents are carried into the two chapters except where
+noted):
+
+#### Help tours and the guide's criteria
+
+- `AssemblyScreen` holds a `TourHost`: the Structure tab's tour `assembly.structure` and the Operation tab's `assembly.operation`; its anchors (`AssemblyTour`: `tab:structure`, `tab:operation`, `status`, `glass`, `drawing`, `list`, and the door rows `check`, `open`, `start`) in the screen's own coordinates. Finishing the Structure tour reports the guide's client step `building/lines` (`AssemblyScreen.LINES_STEP`). Gate `AssemblyTourTest`; renders `tools/tutorial-renders/StageBRender.java`.
+- `AssemblyNetwork`'s presentation `send`, the scheduled view to an open assembly screen, also fires `TutorialTriggers.assemblyShown`: `assembly_state` with the view's status and, when it carries an Operation view, `column_state` ([tutorial.md](tutorial.md)). A read of the view sent anyway; protocol `assembly-6` unchanged.
+
+#### Utilities, members and set points at Start
+
+- `ColumnStarts.build` now also gives `FluidWorldAuthority.ColumnStart` the heat sides of every unit in slot `REBOILER` and in each `pumparoundCooler(i)` (`heatSides`, one unit after another), the air condenser's fan sides (an AIR_COOLER member's sides whose heat unit has fans) and the pumps' movers of `REFLUX_PUMP` and each `pumparoundPump(i)` (`movers`: a casing's through `EquipmentStructure.movers`, or the registration of an in-line pump at the slot's place), as `ColumnUnit.Members`. The ledger keeps those that qualify ([column-operation.md](column-operation.md)).
+- Refusal texts come from `Refusal` (`NO_DESIGN`, `NO_SAVED_POINT`, `VACUUM`, `INCOMPLETE`, `VALVE_UNREGISTERED`); the words are unchanged.
+- `AssemblyService.setpoints` takes set points on a column that never ran, on its design's (it refuses with "the column has no operating point" or `Refusal.VACUUM`); `operation` marks the idle view editable unless the column is a vacuum column.
+- `ExchangerLines` gives lines to an EXCHANGER and to a KETTLE (whose tubes a column may set, mode COLUMN), each side by its registration's own side.
+- Protocol `assembly-6` (`assembly-5`: the conditions list; `assembly-6`: accepted set points and tray readings in the operation view). `AssemblyNetwork.encodeOperation`/`decodeOperation` give the view's bytes to the DCS's column page.
+
+#### The vacuum pump on the receiver
+
+- With `ColumnComponents.Vacuum` `LIQUID_RING` or `DRY_SCREW` (shape fields 12; owner V5: "placed on the drum vapor outlet") the blueprint asks for the vacuum pump of the design's type on the receiver's VAPOUR_OUTLET before the offgas valve, and a water pump (of the reflux pump's kind) on its BOOT_DRAIN before the water valve, in place of the ejector on the overhead (table below). `AssemblyDiagram` draws both parts. A vacuum column still refuses to start in the world (open item of the batch).
+
+#### Column C1 instrumentation
+
+`ControlHosts.refreshColumnMembers`, which each `ControlService` cadence calls before it validates edits, reads the accepted cached `AssemblyReport` and loaded member registration identities. It does not walk or validate pipes from a GUI request, load chunks, or run the column solver. Stable member/slot/channel identities expose accepted member process and utility readings through the column's physical C1. Existing assembly/column ownership still reserves its outputs; monitoring does not replace its duty/energy-transfer controller. Line placement/edit notifications now come through the shared `LineLaying` owners.
+
+#### Exchanger configuration and shared laying
+
+`ColumnComponents` and blueprint member choices carry `ExchangerType`. The match compares the built exchanger's selected sub-type as well as kind/count/dimensions and reports a configuration mismatch when Standard and Crossflow differ. Missing saved type means Standard. `AssemblyNetwork` now uses `assembly-4` for these choices; wire payloads are tested on fresh data, not migrated.
+
+Assembly pipe laying and previews use the same selected layout/nozzle definition as constructor rendering and occupied cells. Crossflow applies to standalone exchangers and column condensers, trims and pumparound coolers; the kettle pool is unchanged. This does not redesign column operation: the existing duty/energy transfer contract still determines the running column's heat work. Assembly registration/reversion remains event-driven, preserving physical equipment and stored settings.
+
+
+### rotating-machinery.md
+
+Split into [rotating-machinery.md](rotating-machinery.md) (the laws, `science/machine`) and
+[shaft-trains.md](shaft-trains.md) (trains, stores, health, pages, Create in the world). Cut from the old chapter:
+
+- Numbers that constants declare, at snapshot `4563176e1`: `SURGE` 0.75, `DEFAULT_EFFICIENCY` 0.78, `SLIP` 0.004,
+  `RELIEF_SLOPE` 10, `ROUNDING` 0.02, `SUCTION_SPECIFIC_SPEED` 200, `BREAKDOWN` 0.85, `DUTY_NPSH3` 3.3 m, `CHURN_PEAK`
+  0.568, `CLEAN_ONSETS` 0.5, `SPARE` 1.2, `DRIVE_EFFICIENCY` 0.97, `LOWEST_SPEED` 0.1, `LARGEST_STEP` 0.2,
+  `GEAR_EFFICIENCY` 0.98, `MAXIMUM_RATIO` 20, `CREATE_RATIO` 64, `CREATIVE_SPEED` 2950 rpm, `CREATIVE_LIMIT` 1 MW,
+  `SPEED_DEADBAND` 1e-3, `SLICE_TICKS` 400, `PERIOD_TICKS` 100, `BUFFER_SLICES` 2, `RESTART_SLICES` 1,
+  `MOTOR_BUFFER_PERIODS` 2, `MOTOR_RESTART_PERIODS` 1, `RATE` 2× rated per tick, `SPEED_WINDOW` 5 %, `FAN_POLES` 4,
+  `INCEPTION` 4, `CAVITATION_PROCESS_HOURS` 8, `DRY_PROCESS_MINUTES` 40, `STRESS_PER_FE` 34.13 (1.465 W per stress at the
+  defaults), `DESIGN_SPEED` 256 rpm, `MAXIMUM_EVENTS` 65536, `STEAM_K` 1.3, `CADENCE` 100, `GAS_RATIO` 0.5, the ejector's
+  `K` 1.6, `SPEED` 60 m/s from `SPEED_EDGE` 0.05 bara, `SPEED_EXPONENT` 0.25, `RATED_MOTIVE` 10 bar, `RATED_DISCHARGE`
+  120 kPa, the vacuum pumps' `SEAL_VAPOUR_PRESSURE` 3169.9 Pa, relief to 130 kPa, `RINGS` 150 to 5000 m³/h, `SCREWS`
+  DS-100 to DS-2500, `SET_FLOW_PUMP_EFFICIENCY` 0.65, `PUMP_LOOP_RPM` 2950, `MOTOR_LOOP_RPM` 1500,
+  `SHAFT_DEFAULT_SIZE` 4, the config defaults (`energy.joulesPerFE` 2.5, `energy.machinesNeedPower` true,
+  `create.stressPerFE` 34.13, `machines.wear.enabled` true, `cavitationProcessHours` 8.0, `dryProcessMinutes` 40.0).
+- Formats at that snapshot: fluid facts `FluidFacts.SCHEMA` 15 (10 added the machine and turbine controls, device kind
+  `TURBINE`, valve source `SHAFT_SPEED` and the shaft units after the column units; 11 the electric stores and an air
+  cooler side's fan count; 12 the pumps' health; 15 the registry's build facts); corpus `schema-10` to `schema-12`; a world
+  before 10 had no shaft units, before 11 unmetered stores, before 12 every pump new; checkpoint state format 39 (control
+  tag 5 a machine on its curve, tag 6 a steam turbine; the endpoint modes lost `PUMP_TARGET` and `PUMP_HEAD_LIMIT` and
+  gained `MOVER_LAW`); accessory facts schema 4 (3 introduced sensor kind `SPEED`, mount `speed_pickup`); wire
+  `machine-4`, `mover-4`, `fluid-19`, `equipment-21`; the config keys `cavitationHours` and `dryMinutes` before 2026-11-11.
+- Provenance: batches 2026-11-10-vacuum-pump (owner V2 B, V6 B, V9), 2026-11-11-aqueous-solvents (`e3238449d`, the clean
+  zone), 2026-11-10-prime-movers (owner P5 A, P6 B, P10 A, P11), 2026-11-10-steam-ejector-flow, 2026-11-03-save-corruption
+  (W5c C1, option Q1; owner 2026-11-09 on forgetting coupling units without Create); decisions D11, A2, D19, D21, D27,
+  D30, D34 (one rule since M-12), D35 to D38, D40 (form A), D58; requests W5, W10a to W10d, request 11; owner T2, T3 (the
+  time factor); reading A14 (the `electricPower` javadoc, since fixed); `MEMBER_POWER_NOTE.md` and the batch README on a
+  held hydrocarbon reflux booking about 1.4 times its real shaft power.
+- The `TICK_SECONDS`, `BUFFER_SECONDS`, `SLICE_SECONDS`, `MOTOR_BUFFER_SECONDS` and `MOTOR_RESTART_SECONDS` constants
+  "are gone"; wear lives "four times the old online lives, so the same play life at the default factor 4"; a fuelled still
+  "takes factor times the items per play minute".
+- `MachineView.Fuel` "gained it without a protocol bump (see the batch's MERGE_PREP_REVIEW.md)".
+- Not carried into the two chapters (they belong to other chapters' modules): the generator and turbine size limits
+  (`MachineDuty.MAX_GENERATOR` 400 MW with 12 poles, `ProcessUnit.TURBO_GENERATOR` 20 MW, `ProcessUnit.generatorShaft`,
+  `motorFrame`; `MachineDuty.MAX_TURBINE` 300 MW, tandem sections above 45 MW, `SteamTurbineDesign.sections`: see
+  [equipment-designs.md](equipment-designs.md)); the casing-cover nuts, `VisualRotation` and `RotationAnimation`
+  ([client-rendering.md](client-rendering.md)); `EquipmentServices.serviceSide` and the constructor's rpm controls
+  ([equipment-geometry.md](equipment-geometry.md)); `ProcessUnit.loadShaft` and an engine's `damper`. Verbatim below.
+- The "Change the layer that owns it" table became each chapter's "Tests and gates"; the "In one paragraph" became
+  "What it does".
+- Snapshot of the old chapter: `4563176e1`, 2026-11-13.
+
+The old chapter's batch-appended sections, as they stood:
+
+#### Casing-cover nuts and Low detail
+
+Normal casing-cover nuts are raised geometry over a plain cover sprite, recessed within the existing envelope. Optional client Low detail uses textured flat nuts and capped round meshes while retaining all mechanical frames, hex shafts, published RPM and animation clocks. See [equipment-structure.md](equipment-structure.md).
+
+#### Machines under the time factor
+
+- Process time runs `fluid.timeScale` times play time (`SimulationTime`, [fluid-interval.md](fluid-interval.md)); the shaft trains, prime movers and stores read the factor from the coordinator (`ShaftTrains.time()`, `IslandCoordinator.time()`).
+- FE (owner T2): one FE carries `joulesPerFE × factor` J of process energy (`ElectricStores.feJoules`), so a machine draws the same FE per tick at any factor (a 1 MW motor 20 000 FE/t at the defaults); a store still keeps joules. Draws and bookings integrate `ticks × time.tickSeconds()`.
+- Store windows as counts of cycles (W3), the same play time at any factor: `ElectricStore.SLICE_TICKS` 400, `PERIOD_TICKS` 100; `BUFFER_SLICES` 2, `RESTART_SLICES` 1, `MOTOR_BUFFER_PERIODS` 2, `MOTOR_RESTART_PERIODS` 1 (40 s, 20 s, 10 s and 5 s of process at factor 1); `capacity`, `motorCapacity`, `perTick`, `restart`, `motorRestart` take the window's process seconds under the factor (a slice's, a period's or a tick's), which `ElectricStores` reads from its `SimulationTime`. `TICK_SECONDS`, `BUFFER_SECONDS`, `SLICE_SECONDS`, `MOTOR_BUFFER_SECONDS` and `MOTOR_RESTART_SECONDS` are gone. A motor's time left on its store is in play seconds.
+- Wear (owner T3): booked over process time (`MachineHealth.book`: `time.seconds(rate × ticks)`); default lives `Wear.CAVITATION_PROCESS_HOURS` 8 and `DRY_PROCESS_MINUTES` 40 (four times the old online lives, so the same play life at the default factor 4); new config keys `machines.wear.cavitationProcessHours`, `dryProcessMinutes` (the old keys are not read). `FluidView.Pump.lifePlaySeconds` and the suction table's `life` row (minutes of play, "—" while it does not wear).
+- Fuel: `FiredHeaters`, `PrimeMovers.booked(..., time)` and the stills burn over process time; an item's heat is conserved, so a still takes `factor` times the items per play minute.
+- Tests: `TimeFactorElectricTest` (2), `ElectricStoreTest`, `WearTest`, `MachineHealthTest`, `ShaftCouplingTest`.
+
+#### A running column's members
+
+- A running column holds its pumps and air-cooler fan sides, so no island commit books them. The column books them at each cycle instead ([column-operation.md](column-operation.md), "The members' power"; `MEMBER_POWER_NOTE.md` in the batch folder):
+  - `ShaftTrains.held(device, shaftPower)`: a held casing's shaft power stands for its island's booking (`run.power`, `booked`); the train steps at once, at most once a tick, its motor drawing from its own store as at any step. True when the train's driver turns with no fault and no trip; false with no train, a faulted one or a driver that stands.
+  - `ElectricStores.member(id, power, to)`: a fan side or an in-line pump draws `power` W from its last booking to `to` (`draw`), then reports `powered`. No store, or a generator's, runs free.
+  - `InlineMovers.ratedShaftPower(mover)`: a machine law's shaft power at its rated flow and full speed, another mover's `shaftPower` at its set flow and its rise limit (a set-flow pump's over 0.65, a set-flow compressor's power alone), on the design fluids: water at 1000 kg/m³, or dry air at 1 bar and 300 K with k 1.4, no wet share; `ratedDraw` is its `InlineMachines.electricPower`. A held pump books this times the cycle's share of the set feed, so a hydrocarbon reflux books about 1.4 times its real shaft power (batch README).
+  - `ColumnPower` routes a casing (`ShaftTrains.unitOf`) to its train and an in-line pump to its own store; `undriven` finds a casing whose train has no driver (`driverOf` null): Start refuses it while `energy.machinesNeedPower` is on.
+- Only under `energy.machinesNeedPower`; off, nothing books and nothing changes.
+
+#### Prime movers, vacuum pumps and larger machines
+
+- [`PrimeMover`](../../../src/main/java/com/wormzjl/icheme/science/machine/PrimeMover.java) (batch 2026-11-10-prime-movers, Minecraft-free): `MODELS`, engines HS-500 to MS-20000 (0.5 to 20 MW; 1500, 750 or 500 rpm; η 0.41 to 0.48) and gas turbines IND-1 to HD-300 (1.2 to 300 MW, 3000 rpm, η 0.25 to 0.41, pressure ratio 7 to 31). Fuel heat on a Willans line `Q_f = Q_r (c₀ + (1 − c₀) x)`; heat out as shaft work, exhaust (`EXHAUST_CP` 1120 J/kg K from `AIR` 298.15 K to the model's exhaust temperature), an engine's radiator (its fans `FAN_PER_COOLING` off its own shaft) and `LOSS` 0.02. Fuel enters a void at the combustor pressure (an engine's at the atmosphere) behind a valve; under the required supply the most fuel falls as `√((P_s − P_c)/(P_req − P_c))` (`supplyShare`, owner P5 A). An engine takes liquid fuel, a gas turbine gas (P6 B).
+- `ShaftNetwork.Kind` `COMBUSTION_ENGINE`, `GAS_TURBINE`; `ShaftTrain.Drive.FUEL`: always governed on the net shaft power its fuel gave (`available`), the set speed at most the rated speed, no overspeed and no trip (owner P11); a lost load cuts the fuel in the same step.
+- [`runtime/fluid/PrimeMovers`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/PrimeMovers.java) (server thread, driven by `ShaftTrains`): the heat fired from the fuel void's inflow times its LHV (`Burners.perKilogram`); the governor's fuel target (`ShaftPlan.Kind.FUEL`, with `Burners.MARGIN`) and a gas turbine's coil gas (`ShaftPlan.Kind.EXHAUST`); a target past the valve deadband wakes the fuel island. Status words `NO FUEL`, `WRONG FUEL`, `FUEL NOT COMBUSTIBLE`, `LOW FUEL PRESSURE`, `LOW FUEL`. State only: a load starts every set unfired and it lights itself (P10 A). The control valve source `ENGINE`; the heat unit `PRIME_MOVER` with side `EXHAUST` ([heat-exchangers.md](heat-exchangers.md)).
+- `MachineView.Fuel` (fired heat, fuel flow, supply and required pressure, exhaust temperature and flow, radiator and coil heat, stack temperature) on the `machine-4` page view; `MachineColumn` shows it. The wire gained it without a protocol bump (see the batch's MERGE_PREP_REVIEW.md).
+- Generators: `MachineDuty.MAX_GENERATOR` 400 MW, 12 poles allowed; a two-pole generator above `ProcessUnit.TURBO_GENERATOR` 20 MW is drawn as a turbo-generator, its shaft at the gas turbine's height (`ProcessUnit.generatorShaft`; the motor frame `ProcessUnit.motorFrame`). Steam turbines: `MachineDuty.MAX_TURBINE` 300 MW, one unit per inlet class, drawn as tandem sections above 45 MW (`SteamTurbineDesign.sections`; the physics unchanged).
+- Vacuum pumps (batch 2026-11-10-vacuum-pump): `VacuumPump` on the `MOVER_LAW` row in its flow form (class map below); a dry screw's suction liquid wears it (`MachineHealth`, owner V6 B) and plays the cavitation layer. Steam ejector (batch 2026-11-10-steam-ejector-flow): `SteamEjector` and `FlowControl.Ejector` ([fluid-laws.md](fluid-laws.md)).
+- Sounds: `MoverSounds` and `DriverSounds` keep their watches and hand their loops to the one budget (`FxSounds`, [effects.md](effects.md)). Engine loops by family (`engine_running` authored at 1500 rpm, `engine_running_medium` at 600 rpm for sets of 750 rpm and under, `UnitDesign.mediumSpeedEngine`), `gas_turbine_running`; start and stop one-shots on a speed crossing zero. `ProcessUnit.loadShaft` (a spool and disc pack in an open guard) and an engine's `damper` turn with the shaft.
+
+#### Service side, factory probes and RPM controls
+
+Constructed rotating equipment uses internal inlet/outlet P/T, flow and shaft-speed channels rather than manual sensor mounts. `EquipmentServices.serviceSide` derives the DATA side from shaft power flow, so connected driver/driven machines present it on the same service side; FE is opposite. Small pump/compressor cases fit the drive-end deck, large motor/generator enclosures are matched, and turbine sockets reuse its governor housing. Case/cover finishes follow equipment body paint.
+
+Constructor controls expose rated/design RPM and no longer offer a 2/4-pole selector. Internal/saved pole fields are not a user-facing design choice. Motors remain frequency-controlled with the 3000 rpm ceiling. The governor and accepted shaft/runtime power laws are unchanged by the interface work; instrumentation is read-only. `VisualRotation` remains the common nonlinear visual-speed law, independent of process RPM.
+
+#### VFD demand, supply and shared rotation
+
+All newly constructed motors use VFD control: no pole choice in the design, maximum 3000 rpm, constant torque below saved base speed and constant power above it (`Motor.availablePower`). Legacy pole/drive facts still round-trip. Manual sets speed; Auto requires exactly one data-linked pump/compressor on the same shaft train and follows its native flow/discharge target. Motor sizing includes the existing 20% spare. Generator housing/appearance differs from motor.
+
+`ElectricStores` keeps a motor-specific 10 s rated buffer with 5 s restart threshold. A live FE source must also be available: losing its cable/source stops RPM and animation at the next engine decision even if stored joules remain. Old energy above the new capacity is retained. `PowerNetwork`/`PowerGrid` check source availability without transferring power; other store capacities remain unchanged.
+
+`InlineMachines` (`science/machine`) gives inline pump/compressor finite FE demand (`electricPower`) and line-size design values (`inletFlow`: liquid 2 m/s, gas 10 m/s; `law`: 25 m head, air ratio 1.5 at 300 K); `science/fluid/network/InlineMovers` builds the in-line `FlowControl.Machine` from them (`design`, the flow capped at `Mover.MAXIMUM_VOLUME_FLOW`) and holds the mover shaft power functions (`shaftPower`, `ratedShaftPower`, `ratedDraw`). Native Create shafts can exchange rotation bidirectionally; the legacy coupling block still works. Creative RF exposes standard FE on all six faces.
+
+`VisualRotation` maps physical RPM nonlinearly: x = |rpm|/1500, displayed turns/s = sign(rpm) × 12 / (1 + 6/[x(1+x)²]), with zero handled separately. 1500/3000 rpm display 4.8/9 turns/s, tending to 12. `RotationAnimation` preserves phase on updates/stops; pumps, motors, turbines, generators, shafts and other rotating equipment use it. Hex shaft orientation follows the connection axis/phase; stopped or newly unpowered parts publish zero speed. This visual mapping does not change mechanical power.
+
+The compact centrifugal compressor has top inlet/outlet and no coolant port, matching the owner-approved rebuild. Common guarded couplings, steel/bolt treatments and motor/generator end-face separation address model alignment and z-fighting. See [wired-control-power.md](wired-control-power.md) for control/FE ownership and [equipment-structure.md](equipment-structure.md) for layout contracts.
+
+### cooling-towers.md
+
+- "The rating replaced an eight-segment marched counterflow fill, whose air sweeps were the wall-deadline blocker.
+  `tools/cooling-towers/fill-forms/` keeps that fill, its 1840-point table and a measured correlation form; the batch's
+  branch review has the errors."
+- "Since batch 2026-11-11-aqueous-solvents `PhasePort.SPRAY` admits any stream: the `TowerExchange.liquidWater` gate, the
+  spray refusal and `InletPhase.priming` are gone." The chapter named `Equations.kept` (now `StepEquations.kept`) and
+  `FluidWorldAuthority.publishTowers` (the tower display is in `Displays`).
+- Formats as they stood: "State format 30 and facts schema 7 include optional `CoolingTower` geometry/controls and basin
+  contents; equipment shape fields 5 append `TowerBank`. [...] The batch's protocols were `fluid-17` and `equipment-15`; a
+  tower's cell bank still rides on the constructor's form, now on `equipment-17` (batch 2026-11-02-process-simulator:
+  Import and device names). Facts schemas 8 and 9 of that batch add column fields only; a tower's facts are unchanged.
+  Batch 2026-11-03-rotating-machinery (facts schema 11, state format 35, `equipment-18`): an induced tower holds one
+  electric store [...]; a tower from a save before schema 11 is `UNMETERED` until its port first receives FE. [...]
+  Historical images use the existing exact/facts routes; the current `compat/fluid/schema-6/` image was regenerated for
+  the smaller basin, without a legacy-basin migration by owner decision. Tower shapes are in
+  `compat/equipment/shapes-5.snbt` and repeated in the later shape images (`shapes-6`, `shapes-7`, whose new fields are a
+  column's)." The losses' checkpoint at state format 48; `NO_AIR` 1e-3 kg/s; the exhaust read "since batch
+  2026-11-11-aqueous-solvents".
+- "Measurements: `documentation/2026-11-11-aqueous-solvents/COOLING_TOWER_PLAN.md` section 9."
+- "now also serve", "now own": dropped.
+
+### effects.md
+
+- "Allocation-free per frame (bench 2026-11-10)."
+- The watches' protocols `flare-2`, `still-1`, fluid-21, fluid-23; "Replaces `FlareFlames` and `StillFires` (deleted
+  with their particles)"; the silhouettes on `equipment-23`. Now one `NetworkProtocol.VERSION`.
+- Numbers at snapshot `971dd8346`: `MAXIMUM_WATCHED` 64, `MERGE` 6 blocks, `LOOPS` 12, `HYSTERESIS` 3 dB, `AUDIBLE` 30 dB,
+  `FULL` 110 dB (owner: "too loud", was 100), `REQUEST_TICKS` 100, `MAXIMUM_STRUCTURES` 256, `MOVE` 64 blocks.
+
+### instrument-accessories.md
+
+- "(owner decision 2026-10-26, "aliases only")" on unknown gauge fields.
+- The fitting record named `Legacy` (it is `Instrument.Fitting`, read by `Store.legacy`).
+- Corpus: "schema 1 written by 0.13.0, schema 2 by the process-control batch, schema 3 by batch
+  2026-11-03-rotating-machinery: the sensor kind `SPEED` and its mount `speed_pickup`, no new field"; "Store facts schema 2
+  adds `sensors` and `modular_valves` tombstones; old lists default empty"; "accessory facts schema 6 (5 the type
+  `BLANKET_VALVE` on mount `blanket_valve`, 6 `SAFETY_VALVE` on `safety_valve`), state 1; corpora `schema-5.snbt`,
+  `schema-6.snbt`".
+- Provenance: "Registry first (batch 2026-11-03-save-corruption, W5 step 8)"; the sight glass's axis "owner decision
+  open"; "Process control (batch 2026-10-26-process-control, 0.14.1)"; `InstrumentWiring` "(batch
+  2026-11-10-custom-shader-system, plan 4.4, W2; still no blocks, nodes or collision)", owner X9 A, X10 A, X1; the
+  blanketing valve and PSV "placed since batch 2026-11-11-gas-blanketing". Numbers: `GLAND` 0.045 m, `DROP` 0.09 m,
+  `TRAY_MAX` 6, `PERIOD` 0.5 m.
+- `FluidWorldAuthority.installPipe{Cutoff,Valve,PressureValve,Filter,Mover}` written out by name.
+
+### pipe-laying.md
+
+- "`LineLaying` also holds the common refusal/message vocabulary (the former `PipeLaying`); the old server `CableLaying`
+  and `ConduitLaying` command engines are gone."
+- Protocols `lines-1`, `pipeline-tool-5`, `control-3` (now `NetworkProtocol.VERSION`); the rack lane copy `rack-3` (now
+  named by `PipeRackBlockEntity.FORMAT`).
+- "Registry first (batch 2026-11-03-save-corruption)"; the rack's shape "RACK_JUNCTION_PLAN J1 and J2", "owner
+  2026-10-26: "strictly based on player facing"".
+- "Historical route/rack design decisions and prior captures: `documentation/2026-10-26-pipe-laying-system/`."
+
+### process-control.md
+
+- Cut at step 2 of this scope (stale since W3b, no trace is omitted from a step's layout): "A hydrocarbon trace in a
+  water-full vessel is omitted from its step layout ([fluid-science.md], "Omitted traces")."
+- "Level loop (owner choice A; balance and horizon from LEVEL_LOOP_REVIEW.md options A1 and A2)."
+- "Schema-3 (since batch 2026-11-03-rotating-machinery: sensor kind `SPEED`)"; source `SHAFT_SPEED` "(batch
+  2026-11-03-rotating-machinery W3, D27)".
+- Formats as they stood: "Fluid facts schema 3 (`FluidFacts.SCHEMA`) appends, after main's schema 2 (pipe joints and rack
+  lanes), a device spec's vessel geometry record [...]; schemas 1 and 2 still read. Schema 4 (0.15.0) retires the basis
+  hash and appends the basis revision. State format 22 can rebuild. Accessory facts schema 2 appends sensors and modular
+  conversion markers. [...] `compat/fluid/schema-3/` (11 registrations, 3 vessels, 1 shaped vessel, 1 control valve, 2
+  laid pipes, 1 rack lane)."
+- The whole paragraph "Later work: [data-system contract](../../2026-10-26-process-control/DATA_SYSTEM_CONTRACT.md). One
+  unbranched cable component connects one sensor and one valve in the same fluid island; no fanout or second source.
+  `ControlBinding` defines height/height-percent target and Outlet/Inlet actions. Broken signals hold the accepted opening
+  or default fully open. Level constraints must enter end-of-step inventory equations and use stationary balances on
+  rate/certificate paths. Neither cables nor remote level regulation ships in this batch." (`ControlBinding` does not
+  exist; cables are in [wired-control-power.md](wired-control-power.md).)
+- "Release 0.14.1 (`CHANGELOG.md` `[0.14.1]`). Verification: [batch review](../../2026-10-26-process-control/PROCESS_CONTROL_REVIEW.md);
+  the second-reader review and its fixes: [PROCESS_CONTROL_CODE_REVIEW.md](../../2026-10-26-process-control/PROCESS_CONTROL_CODE_REVIEW.md),
+  [SEED236_FIX_REVIEW.md](../../2026-10-26-process-control/SEED236_FIX_REVIEW.md)."
+
+### tutorial.md
+
+- "owner D1: Ponder dropped", "owner D2" (progress as advancements).
+
+### wired-control-power.md
+
+- Formats as they stood: `ControlFacts` "format 4 (a rack lane's frame)"; "formats 1–4 and accessory facts schema 4 have
+  corpus images (format 4: `compat/control/control-4.snbt`); missing old conduit medium means the original data medium";
+  "Format 4 appends a rack lane's frame"; "a frame before format 4 refused"; "`ControlFacts` and its format 4 are
+  unchanged" (by the DCS column page).
+- Protocols: `control-4` (`control-3` before batch 2026-11-10-column-failure-modes), `lines-1`, `pipeline-tool-5`.
+- Provenance: "Registry first (batch 2026-11-03-save-corruption, W5c C2 and C3)", "option Q1"; "Historical CPU/RAM and
+  draw probes [...]; the batch merge review records final verification"; "now register BlockItems".
