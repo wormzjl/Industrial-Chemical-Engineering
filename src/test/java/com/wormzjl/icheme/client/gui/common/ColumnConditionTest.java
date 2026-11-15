@@ -1,6 +1,6 @@
 package com.wormzjl.icheme.client.gui.common;
 
-import com.wormzjl.icheme.science.column.operation.OperationView;
+import com.wormzjl.icheme.science.plant.column.OperationView;
 import com.wormzjl.icheme.science.tutorial.guide.AssemblyCondition;
 import com.wormzjl.icheme.science.tutorial.guide.ColumnCondition;
 import org.junit.jupiter.api.Test;

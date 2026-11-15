@@ -94,7 +94,7 @@ public final class SkinField extends EditBox {
         if (!isVisible()) return;
         var s = skin.get();
         boolean editing = isFocused();
-        s.field(new GuiCanvas(g, font, 0, 0), new Rect(getX(), getY(), width, height), getValue(), hint, editing);
+        s.field(GuiCanvas.of(g, font), new Rect(getX(), getY(), width, height), getValue(), hint, editing);
         if (!editing) return;
         // The vanilla text below draws past the canvas: what a batch holds goes out first, under it.
         GuiCanvas.release();

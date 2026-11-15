@@ -43,13 +43,16 @@ public final class Report {
         }
 
         /**
-         * Whether its package on {@code catalog} still stands at the revision it was solved on: a new revision starts from the learned
+         * Whether its package on {@code catalog} still stands at the column identity it was solved on (the scientific revision and the
+         * derivation of the pairs the column evaluates, F1 of batch 2026-11-13-codebase-review): a new identity starts from the learned
          * start. A run offers it on the network's view of the sheet's compounds ({@code SheetCompounds}), whose identity names only
-         * those compounds' records, so another compound's edit keeps it, and a sheet whose list changed starts from the learned start.
+         * those compounds' records, the derivation's among them, so another compound's edit keeps it, and a sheet whose list changed
+         * starts from the learned start.
          */
         public boolean current(MaterialCatalog catalog) {
             var pack = catalog.packages().get(seed.input().packageId());
-            return pack != null && pack.scientificRevision().equals(seed.propertyRevision());
+            return pack != null && com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo
+                    .columnIdentity(catalog, seed.input().packageId()).equals(seed.propertyRevision());
         }
     }
 

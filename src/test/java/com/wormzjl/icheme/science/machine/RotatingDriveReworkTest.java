@@ -29,8 +29,7 @@ class RotatingDriveReworkTest {
                                 mode,
                                 10,
                                 0,
-                                ShaftTrain.Trip.NONE,
-                                false);
+                                ShaftTrain.Trip.NONE);
                 var measure = new ShaftTrain.Measure(0, 0, false, 1, 100, Double.NaN, Double.NaN);
                 assertEquals(3000, ShaftTrain.step(driver, 2950, measure).speed(), 1e-9);
                 assertTrue(driver.setSpeed() <= Motor.MAXIMUM_RPM);
@@ -39,12 +38,12 @@ class RotatingDriveReworkTest {
 
     @Test
     void inlineRatingsFollowBoreAreaAndKeepTheRatedHead() {
-        var small = InlineMachines.design(.025, true);
-        var large = InlineMachines.design(.05, true);
+        var small = com.wormzjl.icheme.science.fluid.network.InlineMovers.design(.025, true);
+        var large = com.wormzjl.icheme.science.fluid.network.InlineMovers.design(.05, true);
         assertEquals(4 * small.law().ratedFlow(), large.law().ratedFlow(), 1e-12);
         assertEquals(25, ((CentrifugalPump) large.law()).head(large.law().ratedFlow(), 1), 1e-9);
         assertTrue(
-                InlineMachines.ratedDraw(large)
+                com.wormzjl.icheme.science.fluid.network.InlineMovers.ratedDraw(large)
                         > large.law()
                                 .fluidPower(
                                         large.law().ratedFlow() * 1000,

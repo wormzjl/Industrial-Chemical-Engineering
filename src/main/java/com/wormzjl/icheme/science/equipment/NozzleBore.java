@@ -3,8 +3,6 @@ package com.wormzjl.icheme.science.equipment;
 import com.wormzjl.icheme.science.math.DeterministicMath;
 
 import java.util.Arrays;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import org.jetbrains.annotations.Nullable;
 
@@ -26,7 +24,7 @@ public final class NozzleBore {
     /** The step along the neck at which {@link #leaves} looks for where a ring has left the solid, m. */
     private static final double ALONG = .02;
     private static final int CACHE = 64;
-    private static final Map<EquipmentShape, double[]> BORES = new ConcurrentHashMap<>();
+    private static final BoundedCache<EquipmentShape, double[]> BORES = new BoundedCache<>(CACHE);
     /** The last proposed shape searched and its solid: a shape's nozzles are asked one after another, and only one geometry stays. */
     private static volatile @Nullable Probe probe;
 
@@ -63,7 +61,6 @@ public final class NozzleBore {
         }
         var bores = BORES.get(shape);
         if (bores == null) {
-            if (BORES.size() >= CACHE) BORES.clear();
             var fresh = new double[shape.nozzles().size()];
             Arrays.fill(fresh, Double.NaN);
             bores = BORES.computeIfAbsent(shape, s -> fresh);

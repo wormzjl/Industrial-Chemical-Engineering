@@ -9,6 +9,7 @@ import com.wormzjl.icheme.science.column.v3.V3ColumnStreamProperties;
 import com.wormzjl.icheme.science.column.v3.V3NeuralSeed;
 import com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo;
 import com.wormzjl.icheme.science.flowsheet.unit.ColumnUnit;
+import com.wormzjl.icheme.science.plant.column.ColumnSolve;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.material.MaterialRuntime;
 import java.io.IOException;
@@ -222,7 +223,7 @@ class BatchColumnComparisonTest {
         double condenserT = reference.converged() ? reference.temperatures()[0] - 1 : feedT - 30;
         var input = v3Input(thermo, n, reflux, duty, pot, feedT, condenserT);
         t0 = System.nanoTime();
-        var v3 = ColumnUnit.solve(input, null, catalog, () -> {
+        var v3 = ColumnSolve.calculate(input, null, catalog, ColumnUnit.SCREEN, ColumnSolve.ColdStart.LEARNED, () -> {
         });
         double v3ColdMs = (System.nanoTime() - t0) / 1e6;
         boolean v3Ok = v3 instanceof V3ColumnOutcome.Success;
@@ -233,7 +234,7 @@ class BatchColumnComparisonTest {
         double[] warmXd = null;
         if (seed != null) {
             t0 = System.nanoTime();
-            var again = ColumnUnit.solve(input, seed, catalog, () -> {
+            var again = ColumnSolve.calculate(input, seed, catalog, ColumnUnit.SCREEN, ColumnSolve.ColdStart.LEARNED, () -> {
             });
             v3WarmMs = (System.nanoTime() - t0) / 1e6;
             v3Warm = again instanceof V3ColumnOutcome.Success;
@@ -299,7 +300,7 @@ class BatchColumnComparisonTest {
                     if (!Double.isFinite(condenserT)) condenserT = feedT - 30;
                     var v3Problem = v3Input(thermo, n, reflux, BOIL_UP * lambda, z, feedT, condenserT);
                     long t0 = System.nanoTime();
-                    var outcome = ColumnUnit.solve(v3Problem, seed, catalog, () -> {
+                    var outcome = ColumnSolve.calculate(v3Problem, seed, catalog, ColumnUnit.SCREEN, ColumnSolve.ColdStart.LEARNED, () -> {
                     });
                     spent += System.nanoTime() - t0;
                     if (outcome instanceof V3ColumnOutcome.Success s) {

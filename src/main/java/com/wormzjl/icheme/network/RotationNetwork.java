@@ -33,12 +33,12 @@ public final class RotationNetwork {
         public static final StreamCodec<RegistryFriendlyByteBuf, Watch> CODEC =
                 new StreamCodec<>() {
                     public Watch decode(RegistryFriendlyByteBuf b) {
-                        return new Watch(read(b), read(b));
+                        return new Watch(Wire.positions(b, MAXIMUM_WATCHED, "watched rotation"), Wire.positions(b, MAXIMUM_WATCHED, "watched rotation"));
                     }
 
                     public void encode(RegistryFriendlyByteBuf b, Watch p) {
-                        write(b, p.watch);
-                        write(b, p.unwatch);
+                        Wire.positions(b, p.watch);
+                        Wire.positions(b, p.unwatch);
                     }
                 };
 
@@ -86,22 +86,8 @@ public final class RotationNetwork {
         }
     }
 
-    private static List<BlockPos> read(RegistryFriendlyByteBuf b) {
-        int count = b.readVarInt();
-        if (count < 0 || count > MAXIMUM_WATCHED)
-            throw new IllegalArgumentException("Too many watched rotations");
-        var positions = new java.util.ArrayList<BlockPos>(count);
-        for (int i = 0; i < count; i++) positions.add(b.readBlockPos());
-        return positions;
-    }
-
-    private static void write(RegistryFriendlyByteBuf b, List<BlockPos> positions) {
-        b.writeVarInt(positions.size());
-        positions.forEach(b::writeBlockPos);
-    }
-
     public static void register(RegisterPayloadHandlersEvent event) {
-        var channel = event.registrar("rotation-1").executesOn(HandlerThread.MAIN);
+        var channel = event.registrar(NetworkProtocol.VERSION).executesOn(HandlerThread.MAIN);
         channel.playToServer(
                 Watch.TYPE,
                 Watch.CODEC,

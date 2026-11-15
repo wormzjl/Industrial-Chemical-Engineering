@@ -50,8 +50,8 @@ class FluidPumpedFillLineTest {
         for(int i=0;i<layout.length();i++) {
             var kind=switch(layout.charAt(i)){case 'G'->TopologyCompiler.Kind.GENERATOR;case 'U'->TopologyCompiler.Kind.PUMP;case 'C'->TopologyCompiler.Kind.COMPRESSOR;case 'P','W'->TopologyCompiler.Kind.PIPE;
                 case 'R'->TopologyCompiler.Kind.RESERVOIR;case 'V'->TopologyCompiler.Kind.VOID;default->throw new IllegalArgumentException(layout);};
-            var device=new PhysicalFluidTopology.Device(i+1,new PhysicalFluidTopology.Position("minecraft:overworld",i,64,0),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kind),PhysicalFluidTopology.Direction.EAST,layout.charAt(i)=='W'||"UC".indexOf(layout.charAt(i))>=0&&i>0&&layout.charAt(i-1)=='W'?WIDE:BLOCK,
-                    kind==TopologyCompiler.Kind.PUMP?new FlowControl.Pump(.01,500000):kind==TopologyCompiler.Kind.COMPRESSOR?new FlowControl.Compressor(.01,COMPRESSOR_RATIO):new FlowControl.Passive());
+            var device=PhysicalFluidTopology.Device.builder(i+1,new PhysicalFluidTopology.Position("minecraft:overworld",i,64,0),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kind),PhysicalFluidTopology.Direction.EAST,layout.charAt(i)=='W'||"UC".indexOf(layout.charAt(i))>=0&&i>0&&layout.charAt(i-1)=='W'?WIDE:BLOCK,
+                    kind==TopologyCompiler.Kind.PUMP?new FlowControl.Pump(.01,500000):kind==TopologyCompiler.Kind.COMPRESSOR?new FlowControl.Compressor(.01,COMPRESSOR_RATIO):new FlowControl.Passive()).build();
             devices.add(device);
             if(kind==TopologyCompiler.Kind.GENERATOR)boundaries.put(device.id(),new FluidDeviceSpec(1,298.15,101325,pure(MaterialTestBasis.NETWORK)).initialize(device,model,()->{}));
             else if(kind==TopologyCompiler.Kind.RESERVOIR||kind==TopologyCompiler.Kind.VOID)boundaries.put(device.id(),com.wormzjl.icheme.fluid.support.FluidTestSupport.chargedBoundary(new FluidDeviceSpec(1,298.15,101325,pure(MaterialTestBasis.NITROGEN)),device,model));
@@ -74,14 +74,14 @@ class FluidPumpedFillLineTest {
     /** One placed line under the real coordinator; see the class comment. */
     private final class Rig {
         final Map<Long,IslandCoordinator.Attempt> attempts=new LinkedHashMap<>();
-        final Map<Long,ProcessSolveServices.FluidIslandCommand> commands=new HashMap<>();
+        final Map<Long,ProcessSolveJobs.FluidIslandCommand> commands=new HashMap<>();
         final IslandCoordinator coordinator;
         long requests,jobs,work,online;
         Rig(String layout) {
             coordinator=new IslandCoordinator(new IslandCoordinator.Dispatcher() {
                 public int availableWorkers(){return 1-attempts.size();}
                 public long nextRequestId(){return ++requests;}
-                public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveServices.FluidIslandCommand command){attempts.put(attempt.slice().requestId(),attempt);commands.put(attempt.slice().requestId(),command);return true;}
+                public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveJobs.FluidIslandCommand command){attempts.put(attempt.slice().requestId(),attempt);commands.put(attempt.slice().requestId(),command);return true;}
                 public void cancel(long request){}
             },changed->{},()->0L,new IslandCoordinator.Settings(2_000_000_000L,1_500_000_000L,64,false,100,CertificatePolicy.defaults()));
             coordinator.register(new IslandCoordinator.Snapshot(1,0,line(layout),new IslandClock.Snapshot(0,0,0,100),Optional.empty(),"READY"),model);
@@ -92,7 +92,7 @@ class FluidPumpedFillLineTest {
                 coordinator.tick();online++;
                 for(long request:List.copyOf(attempts.keySet())) {
                     var attempt=attempts.remove(request);var command=commands.remove(request);long[] clock={0};
-                    var result=(ProcessSolveServices.FluidIslandSolveResult)command.solve(FluidTestSupport.NEVER,()->clock[0]+=NANOS_PER_CHECKPOINT);
+                    var result=(ProcessSolveJobs.FluidIslandSolveResult)command.solve(FluidTestSupport.NEVER,()->clock[0]+=NANOS_PER_CHECKPOINT);
                     jobs++;work+=clock[0];coordinator.completed(attempt,Optional.of(result));
                 }
                 coordinator.pump();

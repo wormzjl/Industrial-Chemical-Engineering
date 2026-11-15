@@ -18,7 +18,7 @@ import java.util.Objects;
  * published as {@code INFEASIBLE_SPECIFICATION}. {@link #condensationCapacityWatts} and the base-condenser
  * bound behind {@link #condenserBoundDetail} are evaluated on the last accepted continuation state, so their
  * verdict belongs to the initializer's path rather than to the specification; they are published as
- * {@code NONCONVERGENCE} carrying their detail as a hint. See {@code V3ColumnCalculator.PathDependentHeatBound}.</p>
+ * {@code NONCONVERGENCE} carrying their detail as a hint. See {@code PathDependentHeatBound}.</p>
  */
 final class V3HeatFeasibility {
     private V3HeatFeasibility() {}

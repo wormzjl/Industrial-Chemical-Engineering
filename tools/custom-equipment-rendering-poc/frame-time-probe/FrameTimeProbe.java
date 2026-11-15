@@ -593,7 +593,7 @@ public final class FrameTimeProbe {
     // The synthetic feed (client thread only).
     private static boolean feeding, noiseFeed;
     private static Object[] watches;
-    private static Field watchedField, noiseField;
+    private static Field watchField, watchedField, noiseField;
     private static final Map<FluidNetwork.Target, Object> SYNTHETIC = new HashMap<>();
     private static List<com.wormzjl.icheme.runtime.fluid.Noise.Source> noiseSources = List.of();
     private static Object noiseSeen;
@@ -809,7 +809,10 @@ public final class FrameTimeProbe {
                     f.setAccessible(true);
                     watches[k] = f.get(null);
                 }
-                watchedField = com.wormzjl.icheme.client.fx.state.CellWatch.class.getDeclaredField("watched");
+                // A CellWatch holds its watched set in its ClientWatch (C11, batch 2026-11-13-codebase-review).
+                watchField = com.wormzjl.icheme.client.fx.state.CellWatch.class.getDeclaredField("watch");
+                watchField.setAccessible(true);
+                watchedField = com.wormzjl.icheme.client.fx.state.ClientWatch.class.getDeclaredField("watched");
                 watchedField.setAccessible(true);
                 noiseField = com.wormzjl.icheme.client.fx.sound.FxSounds.class.getDeclaredField("noise");
                 noiseField.setAccessible(true);
@@ -820,7 +823,7 @@ public final class FrameTimeProbe {
                 FluidNetwork.Target nearest = null;
                 if (solo) { // the solo feeds the structure nearest the listener only
                     double best = Double.MAX_VALUE;
-                    for (Object o : (Set<?>) watchedField.get(watch)) {
+                    for (Object o : (Set<?>) watchedField.get(watchField.get(watch))) {
                         double d = ((FluidNetwork.Target) o).position().distSqr(mc.player.blockPosition());
                         if (d < best) {
                             best = d;
@@ -828,7 +831,7 @@ public final class FrameTimeProbe {
                         }
                     }
                 }
-                for (Object o : (Set<?>) watchedField.get(watch)) {
+                for (Object o : (Set<?>) watchedField.get(watchField.get(watch))) {
                     var target = (FluidNetwork.Target) o;
                     if (solo && target != nearest) continue;
                     Object s = SYNTHETIC.get(target);
@@ -875,7 +878,7 @@ public final class FrameTimeProbe {
         var marks = com.wormzjl.icheme.science.equipment.ShapeRasterizer.marks(shape);
         return switch (kind) {
             case 0 -> new FluidNetwork.FlareState(target, com.wormzjl.icheme.runtime.fluid.Flares.Status.FLARING.ordinal(), 1f, 0f, .7f, 80f);
-            case 1 -> new FluidNetwork.StillState(target, shape.still().heater().ordinal(), com.wormzjl.icheme.science.fluid.network.BatchStill.Status.DISTILLING.ordinal(), 1f, true, true);
+            case 1 -> new FluidNetwork.StillState(target, shape.still().heater().ordinal(), com.wormzjl.icheme.science.plant.still.BatchStill.Status.DISTILLING.ordinal(), 1f, true, true);
             case 2 -> {
                 boolean natural = shape.kind() == com.wormzjl.icheme.science.equipment.EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER;
                 float w = .036f, air = (float) (1.1 * (natural ? 4 : 9) * area(marks, natural ? "throat" : "fan_exhaust_") / (1 + w));
@@ -995,7 +998,7 @@ public final class FrameTimeProbe {
             try {
                 for (int k = 0; k < watches.length; k++) {
                     var watch = (com.wormzjl.icheme.client.fx.state.CellWatch<?>) watches[k];
-                    var watched = (Set<?>) watchedField.get(watch);
+                    var watched = (Set<?>) watchedField.get(watchField.get(watch));
                     int fed = 0;
                     for (Object o : watched) {
                         var s = SYNTHETIC.get((FluidNetwork.Target) o);

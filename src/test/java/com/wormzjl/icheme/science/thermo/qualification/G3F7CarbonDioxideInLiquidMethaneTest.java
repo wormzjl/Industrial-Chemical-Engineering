@@ -15,6 +15,7 @@ import com.wormzjl.icheme.science.thermo.phase.PhaseCompetition;
 import com.wormzjl.icheme.science.thermo.phase.PhaseContract;
 import org.junit.jupiter.api.Test;
 import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
+import com.wormzjl.icheme.science.thermo.phase.PackageBinding;
 
 /**
  * G3 fixture family F7 (plan {@code P3_PILOT_ENGINE_PLAN.md} sections 5 and 8.2; D2, D8): CO2 in liquid methane, the
@@ -34,9 +35,9 @@ class G3F7CarbonDioxideInLiquidMethaneTest {
     @Test
     void fluidStatesOfCarbonDioxideInLiquidMethaneAreResearchOnly() {
         var catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
-        var evaluator = CubicPhaseEvaluator.forPackage(catalog, PILOT);
+        var evaluator = PackageBinding.evaluator(catalog, PILOT);
         FluidTpEquilibrium research = researchEngine(evaluator, "pilot-co2-in-liquid-methane");
-        var production = new FluidTpEquilibrium(PhaseContract.forPackage(catalog, PILOT), evaluator, FluidTpEquilibrium.Settings.DEFAULT);
+        var production = new FluidTpEquilibrium(PackageBinding.contract(catalog, PILOT), evaluator, FluidTpEquilibrium.Settings.DEFAULT);
         var ws = research.newWorkspace();
         var productionWs = production.newWorkspace();
         var spine = catalog.requireSpine(PILOT, "CarbonDioxide");
@@ -101,7 +102,7 @@ class G3F7CarbonDioxideInLiquidMethaneTest {
 
     /** P5: the pilot's crystal competition answers every F7 state; its own bound (class comment). */
     static void crystalCompetitionAnswersEveryState() {
-        var engine = FluidTpEquilibrium.forPackage(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PILOT);
+        var engine = PackageBinding.equilibrium(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PILOT);
         var ws = engine.newWorkspace();
         var basis = engine.contract().components();
         var table = new Table("G3 F7 crystal competition (P5)", "T K", "P MPa", "x_CO2", "Classification", "crystal mol", "liquid x_CO2",

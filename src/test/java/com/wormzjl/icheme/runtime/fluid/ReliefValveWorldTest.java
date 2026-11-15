@@ -28,7 +28,7 @@ class ReliefValveWorldTest {
         ports.add(new PhysicalFluidTopology.Port(node,Direction.WEST,PassiveNetwork.PhasePort.LIQUID));
         ports.add(new PhysicalFluidTopology.Port(at(10,66,z),Direction.EAST,PassiveNetwork.PhasePort.VAPOR));
         if(relief>0)ports.add(new PhysicalFluidTopology.Port(at(10,66,z),Direction.UP,PassiveNetwork.PhasePort.VAPOR,PhysicalFluidTopology.ConnectionRole.RELIEF));
-        var device=new PhysicalFluidTopology.Device(id,node,Kind.RESERVOIR,Direction.NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive(),ports);
+        var device=PhysicalFluidTopology.Device.builder(id,node,Kind.RESERVOIR,Direction.NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive()).ports(ports).build();
         var spec=new FluidDeviceSpec(DRUM.capacity(),298.15,101325,FluidDeviceSpec.nitrogen(EventPathWorld.CATALOG).composition(),SlurryFeed.NONE,DRUM.height(),false,DRUM,null,0).withRelief(relief,null);
         world.registry.submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,spec,0))),id+1,null);
         return id;
@@ -95,7 +95,7 @@ class ReliefValveWorldTest {
         long second=world.ledger.nextIdentity();
         var ports=List.of(new PhysicalFluidTopology.Port(at(10,66,2),Direction.UP,PassiveNetwork.PhasePort.VAPOR));
         var big=VesselGeometry.round(VesselGeometry.Form.HORIZONTAL_DRUM,2,6,0,0);
-        world.registry.submit(List.of(new WorldTopologyLedger.Edit(second,new WorldTopologyLedger.Registration(new PhysicalFluidTopology.Device(second,at(10,64,2),Kind.RESERVOIR,Direction.NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive(),ports),
+        world.registry.submit(List.of(new WorldTopologyLedger.Edit(second,new WorldTopologyLedger.Registration(PhysicalFluidTopology.Device.builder(second,at(10,64,2),Kind.RESERVOIR,Direction.NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive()).ports(ports).build(),
                 new FluidDeviceSpec(big.capacity(),298.15,101325,FluidDeviceSpec.nitrogen(EventPathWorld.CATALOG).composition(),SlurryFeed.NONE,big.height(),false,big,null),0))),second+1,null);
         world.runTo(800);
         world.assertKeptUp("piped relief");
@@ -181,7 +181,7 @@ class ReliefValveWorldTest {
         long id=world.ledger.nextIdentity();var node=at(10,64,0);
         var ports=List.of(new PhysicalFluidTopology.Port(node,Direction.WEST,PassiveNetwork.PhasePort.LIQUID),new PhysicalFluidTopology.Port(at(10,66,0),Direction.EAST,PassiveNetwork.PhasePort.VAPOR),
                 new PhysicalFluidTopology.Port(at(10,66,0),Direction.UP,PassiveNetwork.PhasePort.VAPOR,PhysicalFluidTopology.ConnectionRole.RELIEF));
-        var device=new PhysicalFluidTopology.Device(id,node,Kind.RESERVOIR,Direction.NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive(),ports);
+        var device=PhysicalFluidTopology.Device.builder(id,node,Kind.RESERVOIR,Direction.NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive()).ports(ports).build();
         var spec=new FluidDeviceSpec(DRUM.capacity(),298.15,101325,gas,SlurryFeed.NONE,DRUM.height(),false,DRUM,null,0).withRelief(SET,null);
         world.registry.submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,spec,0))),id+1,null);
         world.place(11,66,0,Kind.PIPE,Direction.EAST,.1);world.place(12,66,0,Kind.PIPE,Direction.EAST,.1);
@@ -195,8 +195,8 @@ class ReliefValveWorldTest {
     private static long flare(EventPathWorld world,double tip) {
         world.place(10,67,0,Kind.PIPE,Direction.UP,.15);world.place(10,68,0,Kind.PIPE,Direction.SOUTH,.15);
         long id=world.ledger.nextIdentity();
-        var device=new PhysicalFluidTopology.Device(id,at(10,68,1),Kind.VOID,Direction.NORTH,new PipeResistance.Geometry(1,tip,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),FlowControl.ControlValve.flare().withMassTarget(1),
-                List.of(new PhysicalFluidTopology.Port(at(10,68,1),Direction.NORTH,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.VESSEL)),true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,null);
+        var device=PhysicalFluidTopology.Device.builder(id,at(10,68,1),Kind.VOID,Direction.NORTH,new PipeResistance.Geometry(1,tip,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),FlowControl.ControlValve.flare().withMassTarget(1))
+                .ports(List.of(new PhysicalFluidTopology.Port(at(10,68,1),Direction.NORTH,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.VESSEL))).build();
         world.registry.submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,EventPathWorld.nitrogen(),0))),id+1,null);
         return id;
     }
@@ -293,8 +293,8 @@ class ReliefValveWorldTest {
     /** A sink valve of the run's end at (10,68,1), as a firebox's burners or a prime mover's fuel void: {@code control} its valve. */
     private static void valvedSink(EventPathWorld world,FlowControl control,HeatUnit heat) {
         long id=world.ledger.nextIdentity();
-        var device=new PhysicalFluidTopology.Device(id,at(10,68,1),Kind.VOID,Direction.NORTH,new PipeResistance.Geometry(1,.15,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),control,
-                List.of(new PhysicalFluidTopology.Port(at(10,68,1),Direction.NORTH,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.VESSEL)),true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,heat);
+        var device=PhysicalFluidTopology.Device.builder(id,at(10,68,1),Kind.VOID,Direction.NORTH,new PipeResistance.Geometry(1,.15,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),control)
+                .ports(List.of(new PhysicalFluidTopology.Port(at(10,68,1),Direction.NORTH,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.VESSEL))).heat(heat).build();
         world.registry.submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,EventPathWorld.nitrogen(),0))),id+1,null);
     }
     /** A second drum blanketed at 150 kPa, its BLANKET port the run's end, its own gas drawn off by a flow valve at {@code draw} kg/s through a line of {@code bore} m to a void. */
@@ -303,7 +303,7 @@ class ReliefValveWorldTest {
         long id=world.ledger.nextIdentity();var node=at(10,64,2);
         var ports=List.of(new PhysicalFluidTopology.Port(at(10,66,2),Direction.UP,PassiveNetwork.PhasePort.VAPOR,PhysicalFluidTopology.ConnectionRole.BLANKET),
                 new PhysicalFluidTopology.Port(at(10,66,2),Direction.EAST,PassiveNetwork.PhasePort.VAPOR));
-        var device=new PhysicalFluidTopology.Device(id,node,Kind.RESERVOIR,Direction.NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive(),ports);
+        var device=PhysicalFluidTopology.Device.builder(id,node,Kind.RESERVOIR,Direction.NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive()).ports(ports).build();
         var spec=new FluidDeviceSpec(DRUM.capacity(),298.15,101325,nitrogen(),SlurryFeed.NONE,DRUM.height(),false,DRUM,null,1.5e5);
         world.registry.submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,spec,0))),id+1,null);
         world.place(11,66,2,Kind.PIPE,Direction.EAST,new FlowControl.ControlValve(FlowControl.ValveSource.MASS_FLOW,draw,new UUID(7,1),1),null,bore);

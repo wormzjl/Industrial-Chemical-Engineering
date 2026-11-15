@@ -55,8 +55,9 @@ public final class ShapeRasterizer {
     private static final int GEOMETRY_CACHE = 64, GEOMETRY_FACETS = 300_000;
     /** A unit's shell tables: {@link EquipmentShape#facets}'s fewest, since a unit has no vessel. */
     private static final int MIN_UNIT_FACETS = 12;
-    private static final Map<EquipmentShape, Geometry> GEOMETRIES = new ConcurrentHashMap<>();
-    private static final Map<EquipmentShape, Geometry> LOW_GEOMETRIES = new ConcurrentHashMap<>();
+    /** Geometries by shape, the least recently used dropped past 64 or 300,000 facets (a large column holds tens of thousands, about 750 bytes each; E13). */
+    private static final BoundedCache<EquipmentShape, Geometry> GEOMETRIES = new BoundedCache<>(GEOMETRY_CACHE, GEOMETRY_FACETS, g -> g.mesh.facets().size());
+    private static final BoundedCache<EquipmentShape, Geometry> LOW_GEOMETRIES = new BoundedCache<>(16, GEOMETRY_FACETS, g -> g.mesh.facets().size());
     /**
      * Whether geometries keep their facets to draw cells ({@link #surface}, {@link #facetArea}). A dedicated server never draws:
      * once a vessel's layout is known it keeps only the cell tables, the ports and the solid test ({@link #serverOnly}).
@@ -234,10 +235,6 @@ public final class ShapeRasterizer {
     private static Geometry geometry(EquipmentShape shape, RenderDetail detail) {
         if (detail == RenderDetail.NORMAL) return geometry(shape);
         if (!drawing) throw new IllegalStateException("A dedicated server keeps no drawing geometry");
-        var cached = LOW_GEOMETRIES.get(shape);
-        if (cached != null) return cached;
-        long facets = LOW_GEOMETRIES.values().stream().mapToLong(g -> g.mesh.facets().size()).sum();
-        if (LOW_GEOMETRIES.size() >= 16 || facets >= GEOMETRY_FACETS) LOW_GEOMETRIES.clear();
         return LOW_GEOMETRIES.computeIfAbsent(shape, k -> new Geometry(k, detail));
     }
 
@@ -331,11 +328,10 @@ public final class ShapeRasterizer {
     public static List<Polygon> reliefValve(EquipmentShape shape){return reliefValve(shape,-1,0);}
     /** The same with its outlet toward horizontal axis {@code axis} and {@code sign} (-1: the default direction); none where that cell is taken. */
     public static List<Polygon> reliefValve(EquipmentShape shape,int axis,int sign){if(!drawing)throw new IllegalStateException("A dedicated server keeps no accessory surfaces");return geometry(shape).reliefValve(axis,sign);}
-    private static final Map<List<Object>,List<Polygon>> PIPE_RELIEF=new ConcurrentHashMap<>();
+    private static final BoundedCache<List<Object>,List<Polygon>> PIPE_RELIEF=new BoundedCache<>(64);
     /** A pipe's pressure safety valve's faces in its block, its outlet out of face {@code face} (axis, sign), standing along the pipe's {@code axis}, on a pipe of outside diameter {@code outside} ({@link ReliefValveGeometry#onPipe}). */
     public static List<Polygon> reliefValveOnPipe(int face,int faceSign,int axis,double outside){
         if(!drawing)throw new IllegalStateException("A dedicated server keeps no accessory surfaces");
-        if(PIPE_RELIEF.size()>64)PIPE_RELIEF.clear();
         return PIPE_RELIEF.computeIfAbsent(List.of(face,faceSign,axis,outside),k->{
             var place=ReliefValveGeometry.onPipe(face,faceSign,axis,outside);var mesh=new Mesh();place.build(mesh,outside/2);
             var polygons=new ArrayList<Polygon>();var pieces=new ArrayList<Polygon>();
@@ -501,14 +497,34 @@ public final class ShapeRasterizer {
     }
 
     /**
-     * The stamp of the shape's layout (owner request 2026-10-18: a placed vessel follows its kind's current drawing):
-     * a 64-bit FNV-1a hash of its box, its shell and interior cells and its ports, never 0. A shell cell keeps the stamp
-     * it was placed with; another one on load means the vessel's cells in the world no longer match the layout the code
-     * draws ({@link EquipmentRefresh}). The drawing of a cell needs no stamp: it follows the code at every load.
+     * The layout revisions of the two kinds no {@link UnitDesign} draws, a drum and a column, declared as a design's are
+     * ({@link UnitDesign#layoutRevision()}): 1 when declared (batch 2026-11-13-codebase-review, E20), bumped by a change
+     * of their box, shell or interior cells or nozzles at any size.
      */
-    public static long stamp(EquipmentShape shape) {
+    public static final int DRUM_LAYOUT_REVISION = 1, COLUMN_LAYOUT_REVISION = 1;
+
+    /**
+     * The declared revision of the layout the code places for {@code shape} (owner request 2026-10-18: a placed vessel
+     * follows its kind's current drawing), read through its kind: its design's ({@link UnitDesign#layoutRevision()}), a
+     * drum's or a column's constant above; 1 or more. Each shell cell saves the revision it was placed by; another one on
+     * load means the cells in the world no longer match the layout the code places, and the structure is rebuilt to it.
+     */
+    public static int layoutRevision(EquipmentShape shape) {
+        var kind = shape.kind();
+        if (kind.designed()) return UnitDesign.of(kind).layoutRevision();
+        return kind == EquipmentShape.Kind.COLUMN ? COLUMN_LAYOUT_REVISION : DRUM_LAYOUT_REVISION;
+    }
+
+    /**
+     * The legacy stamp of the shape's layout: a 64-bit FNV-1a hash of its box, its shell and interior cells and its ports,
+     * never 0. Only the reader of old saves, as an alias reader is: a shell cell saved before the layout revision (batch
+     * 2026-11-13-codebase-review, E20) holds the stamp it was placed with under {@code Layout}, and it is current when its
+     * design's {@link #layoutRevision} is still 1 and the stamp equals this one ({@link EquipmentRefresh#placedRevision}).
+     * Nothing new saves it; {@code EquipmentLayoutGoldenTest} prints it as its digest of the recorded cells.
+     */
+    public static long legacyStamp(EquipmentShape shape) {
         var g = geometry(shape);
-        long stamp = g.stamp;
+        long stamp = g.legacyStamp;
         if (stamp != 0) return stamp;
         long h = 0xcbf29ce484222325L;
         h = mix(mix(mix(h, shape.sizeX()), shape.sizeY()), shape.sizeZ());
@@ -518,7 +534,7 @@ public final class ShapeRasterizer {
         }
         for (var port : g.ports)
             h = mix(mix(mix(mix(mix(mix(mix(mix(h, port.cell().x()), port.cell().y()), port.cell().z()), port.dx()), port.dy()), port.dz()), port.port().ordinal()), port.nozzle());
-        g.stamp = stamp = h == 0 ? 1 : h;
+        g.legacyStamp = stamp = h == 0 ? 1 : h;
         return stamp;
     }
 
@@ -573,20 +589,20 @@ public final class ShapeRasterizer {
      * still" puts its dots there): the pot's box, low corner then high corner, and its tangent line's height; the vapour's
      * path from the pot's top up the helmet and the gooseneck into the condenser; the condenser shell's box; a pot still's
      * condensate path along the shell's bottom to its cold end and down to the distillate nozzle. Null for another kind or
-     * a still without its own condenser. Read from the plan {@link ProcessUnit#batchStill} draws, so it adds no number.
+     * a still without its own condenser. Read from the plan {@link BatchStillDesign#build} draws, so it adds no number.
      */
     public static @Nullable StillParts stillParts(EquipmentShape shape) {
         if (shape.kind() != EquipmentShape.Kind.BATCH_STILL || !shape.still().condenses()) return null;
-        var p = ProcessUnit.StillPlan.of(shape);
+        var p = BatchStillDesign.StillPlan.of(shape);
         var t = shape.transform();
-        double x = ProcessUnit.StillPlan.POT_X, z = ProcessUnit.StillPlan.POT_Z, r = p.d() / 2, cx = ProcessUnit.StillPlan.SPOUT_X;
-        double zc = ProcessUnit.StillPlan.COLD_END, yk = p.condenser(), rk = p.shell(), yg = p.gooseneck();
+        double x = BatchStillDesign.StillPlan.POT_X, z = BatchStillDesign.StillPlan.POT_Z, r = p.d() / 2, cx = BatchStillDesign.StillPlan.SPOUT_X;
+        double zc = BatchStillDesign.StillPlan.COLD_END, yk = p.condenser(), rk = p.shell(), yg = p.gooseneck();
         double neck = p.options().column() ? p.columnTop() : p.helmetTop();
         var out = shape.nozzles().stream().filter(n -> n.role() == EquipmentShape.Role.DISTILLATE).findFirst().orElseThrow().base();
         java.util.function.Function<double[][], List<double[]>> path = points -> java.util.Arrays.stream(points).map(t::point).toList();
         return new StillParts(box(t, x - r, p.bottom(), z - r, x + r, p.apex(), z + r), t.point(new double[]{x, p.cylinder(), z})[1],
                 path.apply(new double[][]{{x, p.apex(), z}, {x, neck, z}, {x, yg, z}, {cx, yg, z}, {cx, yk, z}}),
-                box(t, cx - rk, yk - rk, ProcessUnit.StillPlan.SHELL_FRONT, cx + rk, yk + rk, ProcessUnit.StillPlan.SHELL_BACK),
+                box(t, cx - rk, yk - rk, BatchStillDesign.StillPlan.SHELL_FRONT, cx + rk, yk + rk, BatchStillDesign.StillPlan.SHELL_BACK),
                 path.apply(new double[][]{{cx, yk - .6 * rk, z}, {cx, yk - .6 * rk, zc}, {cx, out[1], zc}, out}));
     }
 
@@ -697,12 +713,7 @@ public final class ShapeRasterizer {
     }
 
     private static Geometry geometry(EquipmentShape shape) {
-        var g = GEOMETRIES.get(shape);
-        if (g != null) return g;
         // A large column holds tens of thousands of facets (about 750 bytes each): the cache is bounded by facets too.
-        long facets = 0;
-        for (var cached : GEOMETRIES.values()) facets += cached.mesh.facets().size();
-        if (GEOMETRIES.size() >= GEOMETRY_CACHE || facets >= GEOMETRY_FACETS) GEOMETRIES.clear();
         return GEOMETRIES.computeIfAbsent(shape, Geometry::new);
     }
 
@@ -713,12 +724,11 @@ public final class ShapeRasterizer {
     public static InstrumentWiring.Drawing instrumentWiring(EquipmentShape shape,Set<String> installed,RenderDetail detail,List<Integer> codes){
         if(codes.size()!=shape.nozzles().size())throw new IllegalArgumentException("One size code per nozzle");
         var g=geometry(shape,detail);var key=new WiringKey(installed,codes);
-        if(g.wiring.size()>16)g.wiring.clear();
         return g.wiring.computeIfAbsent(key,k->{var carriers=new ArrayList<>(g.mesh.facets().stream().filter(f->f.part()<0).map(Mesh::whole).toList());for(int n=0;n<g.nozzles.size();n++)for(var f:g.nozzle(n,k.codes().get(n)).facets())carriers.add(Mesh.whole(f));var plan=shape.kind()==EquipmentShape.Kind.EXCHANGER?EquipmentInstruments.build(shape,carriers,g.unit):g.instruments;return InstrumentWiring.build(shape,carriers,g.services,plan,k.installed(),detail);});
     }
     /** Per-shape tables (facet directions, head rings, plate and saddle layout), the static mesh, nozzles and layout. */
     private static final class Geometry {
-        private final Map<WiringKey,InstrumentWiring.Drawing> wiring=new ConcurrentHashMap<>();
+        private final BoundedCache<WiringKey,InstrumentWiring.Drawing> wiring=new BoundedCache<>(16);
         private final EquipmentShape shape;
         private final Transform transform;
         private final int n, contact;
@@ -787,8 +797,8 @@ public final class ShapeRasterizer {
         private final Cell fluidCell;
         /** One node cell per registration: the fluid cell, or each heat side's first inlet cell (batch 2026-10-27-heat-exchanger-design). */
         private final List<Cell> fluidCells;
-        /** The layout's {@link #stamp}, 0 until first asked. */
-        private volatile long stamp;
+        /** The layout's {@link ShapeRasterizer#legacyStamp}, 0 until first asked. */
+        private volatile long legacyStamp;
 
         Geometry(EquipmentShape shape) { this(shape, RenderDetail.NORMAL); }
         Geometry(EquipmentShape shape, RenderDetail detail) {
@@ -859,8 +869,11 @@ public final class ShapeRasterizer {
 
             if (unit != null) {
                 // The design's facets one for one: those from its irregular index on cross its body rows (a tank's stair).
-                mesh.include(unit.mesh(detail));
+                // Drawn once at this detail (finding E11): a floating-roof tank keeps the drawing for its client-drawn parts.
+                var drawn = unit.drawing(detail);
+                mesh.include(drawn.mesh);
                 irregularFrom = unit.irregularFrom;
+                if (drawing && unit.floating != null) floatingDrawing = drawn;
             } else {
                 build();
                 if (shape.skirt()) skirtBase();
@@ -1722,6 +1735,8 @@ public final class ShapeRasterizer {
             return tankGauge=List.copyOf(polygons);
         }
         private volatile Floating floating;
+        /** A floating-roof tank's drawing at this detail, kept from the layout until {@link #floating} cuts it; null otherwise. */
+        private volatile ProcessUnit floatingDrawing;
         private volatile Roof roof;
 
         /** A floating-roof tank's roof in the box, from its layout (no surfaces); null for any other shape. */
@@ -1739,7 +1754,9 @@ public final class ShapeRasterizer {
         @Nullable Floating floating() {
             var out = floating;
             if (out != null || unit == null || unit.floating == null) return out;
-            var drawn = unit.drawing(detail);
+            // The drawing the layout made (E11), released once its parts are cut; drawn afresh where none was kept.
+            var kept = floatingDrawing;
+            var drawn = kept != null ? kept : unit.drawing(detail);
             var f = drawn.floating;
             var pivot = transform.point(f.pivot());
             var roof = new ArrayList<Polygon>();
@@ -1751,6 +1768,7 @@ public final class ShapeRasterizer {
                 cut(m, m.facets(), part == drawn.roof ? new double[3] : pivot, part == drawn.roof ? roof : ladder);
             }
             var glass = transform.point(new double[]{f.glass()[0], 0, f.glass()[1]});
+            floatingDrawing = null;
             return floating = new Floating(List.copyOf(roof), List.copyOf(ladder), f.landed(), f.top(), f.deck(), pivot, transform.direction(f.along()),
                     transform.direction(f.axis()), f.length(), f.runway(), new double[]{glass[0], glass[2]}, f.glassLow(), f.glassHigh(), transform.direction(f.facing()));
         }

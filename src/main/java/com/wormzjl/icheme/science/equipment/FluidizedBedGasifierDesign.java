@@ -53,19 +53,13 @@ final class FluidizedBedGasifierDesign extends UnitDesign {
         return Math.max(1, Math.min(2.5, .5 * id));
     }
 
-    @Override
-    public double minSize() {
-        return 1.5;
-    }
-
-    @Override
-    public double maxSize() {
-        return 6;
-    }
-
-    @Override
-    public double sizeStep() {
-        return .25;
+    FluidizedBedGasifierDesign() {
+        // Computed in its overrides: minSupport.
+        super(new Sizes(1.5, 6, .25,
+                1, 1,
+                Sizes.COMPUTED, EquipmentShape.MAX_SUPPORT,
+                Orientation.VERTICAL, "fluidized_bed_gasifier.diameter", null, "fluidized_bed_gasifier.elevation", true,
+                1));
     }
 
     /**
@@ -77,26 +71,6 @@ final class FluidizedBedGasifierDesign extends UnitDesign {
     public int minSupport(double size, int length) {
         double under = shell(size) / 4 + .4 + ashScrew(size) + .3 + .5 + 1.6 * ashLock(size) + .5 + .3 + 1 + ProcessUnit.NECK;
         return (int) Math.ceil(under - 1e-9);
-    }
-
-    @Override
-    public Orientation orientation() {
-        return Orientation.VERTICAL;
-    }
-
-    @Override
-    public boolean moves() {
-        return true;
-    }
-
-    @Override
-    public String sizeRow() {
-        return "fluidized_bed_gasifier.diameter";
-    }
-
-    @Override
-    public String supportRow() {
-        return "fluidized_bed_gasifier.elevation";
     }
 
     @Override

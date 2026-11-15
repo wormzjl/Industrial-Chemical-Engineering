@@ -125,9 +125,17 @@ public final class SparseNewton {
          * refactorization by any of them supersedes the older factors, which is the same event a
          * modified-Newton refresh already handles. */
         private static final class Shared {
-            private final SparseLuSolver.Storage factors;
+            /** Null until the first factorization of a workspace that takes its storage from {@link #kept}. */
+            private SparseLuSolver.Storage factors;
+            private final KeptFactors kept;private KeptFactors.Key key;
             private double[] derivatives=new double[0],steps=new double[0];
-            private Shared(SolverOwnership ownership){factors=new SparseLuSolver.Storage(ownership);}
+            private Shared(SolverOwnership ownership){factors=new SparseLuSolver.Storage(ownership);kept=null;}
+            private Shared(KeptFactors kept){this.kept=kept;}
+            private SparseLuSolver.Storage factors(Pattern pattern) {
+                if(factors==null){key=new KeptFactors.Key(pattern.offsets,pattern.rows);factors=kept.borrow(key);}
+                return factors;
+            }
+            private void giveBack(){if(key!=null)kept.giveBack(key,factors);}
         }
         private final SolverOwnership ownership;
         private final Shared shared;
@@ -140,6 +148,9 @@ public final class SparseNewton {
         public Workspace(SolverOwnership ownership) {
             this.ownership=Objects.requireNonNull(ownership);shared=new Shared(ownership);
         }
+        /** One solve's workspace, confined to this thread, whose LU storage is borrowed from {@code kept} at its first
+         * factorization and given back after the solve ({@link #solve(Equations,double[],Settings,Runnable)}). */
+        private Workspace(KeptFactors kept){ownership=SolverOwnership.confinedToCurrentThread();shared=new Shared(kept);}
         private Workspace(Workspace parent){ownership=parent.ownership;shared=parent.shared;}
         private void owned(){ownership.check("Newton workspace belongs to the worker holding its solver latch");}
         /** The point the current factorization was differenced at ({@link Equations#linearisationHolds}). */
@@ -168,8 +179,65 @@ public final class SparseNewton {
         }
     }
 
+    /**
+     * A solve on its own workspace (a vessel's closure, a junction's split, a crystal's joint closure). Inside a job of an
+     * island with {@link KeptFactors} ({@link KeptFactors#around}), its LU storage is the island's kept one for this
+     * Jacobian pattern, given back when the solve ends; nothing numeric crosses from one solve to the next (see
+     * {@link KeptFactors}).
+     */
     public static Result solve(Equations equations,double[] initial,Settings settings,Runnable checkpoint) {
-        return solve(equations,initial,settings,checkpoint,new Workspace());
+        var kept=KeptFactors.BOUND.get();
+        if(kept==null||!kept.ownership.heldByCurrentThread())return solve(equations,initial,settings,checkpoint,new Workspace());
+        var workspace=new Workspace(kept);
+        try{return solve(equations,initial,settings,checkpoint,workspace);}
+        finally{workspace.shared.giveBack();}
+    }
+    /**
+     * An island's kept LU storages for the Newton solves that run on a workspace of their own
+     * ({@link #solve(Equations,double[],Settings,Runnable)}): one {@link SparseLuSolver.Storage} per declared Jacobian
+     * pattern ({@link Equations#columnRows}), kept across the island's steps and jobs, so a closure of a structure the
+     * island has seen opens on the arrays and the kept reach of its last factorization (finding P-17b, batch
+     * 2026-11-13-codebase-review: such a solve built a new storage, searched every column and allocated its L and U each
+     * time, once per vessel per reconstruction).
+     *
+     * <p>State, never saved: dropped with the island's solver and rebuilt freely. Bit for bit: a storage carries nothing
+     * numeric from one factorization to the next ({@link com.wormzjl.icheme.science.fluid.linalg.UpLookingLu}: only the
+     * arrays' capacity and the reach, a function of the pattern and the pivots); each solve has its own workspace (pattern,
+     * colouring, ordering, Jacobian, derivative buffers: all new, as before), and the factorizations it makes in the
+     * borrowed storage are consumed inside it. A storage is out of the cache while a solve holds it, so a nested solve of
+     * the same pattern gets another one. The cache is bound to the worker thread for one job ({@link #around}) and used only
+     * while that thread holds the island's latch; elsewhere a solve builds its own storage as before.</p>
+     */
+    public static final class KeptFactors {
+        /** The patterns kept; the least recently used goes first. */
+        private static final int RETAINED_PATTERNS=8;
+        private static final ThreadLocal<KeptFactors> BOUND=new ThreadLocal<>();
+        private final SolverOwnership ownership;
+        private final LinkedHashMap<Key,SparseLuSolver.Storage> idle=new LinkedHashMap<>();
+        public KeptFactors(SolverOwnership ownership){this.ownership=Objects.requireNonNull(ownership);}
+        /** Runs {@code work} on this thread with these storages bound, and restores what was bound before. */
+        public <T> T around(java.util.function.Supplier<T> work) {
+            var previous=BOUND.get();BOUND.set(this);
+            try{return work.get();}
+            finally{if(previous==null)BOUND.remove();else BOUND.set(previous);}
+        }
+        /** A storage for {@code key}: the kept one, out of the cache until given back; a new one owned by the island's
+         * latch where none is kept. */
+        private SparseLuSolver.Storage borrow(Key key) {
+            var storage=idle.remove(key);
+            return storage!=null?storage:new SparseLuSolver.Storage(ownership);
+        }
+        private void giveBack(Key key,SparseLuSolver.Storage storage) {
+            idle.remove(key);idle.put(key,storage);
+            if(idle.size()>RETAINED_PATTERNS)idle.remove(idle.keySet().iterator().next());
+        }
+        /** A declared Jacobian pattern, by value: a {@link Pattern}'s arrays, which nothing writes after construction. */
+        private static final class Key {
+            private final int[] offsets,rows;private final int hash;
+            private Key(int[] offsets,int[] rows){this.offsets=offsets;this.rows=rows;hash=31*Arrays.hashCode(offsets)+Arrays.hashCode(rows);}
+            @Override public boolean equals(Object other){return other instanceof Key key&&hash==key.hash&&Arrays.equals(offsets,key.offsets)&&Arrays.equals(rows,key.rows);}
+            @Override public int hashCode(){return hash;}
+        }
     }
     public static Result solve(Equations equations,double[] initial,Settings settings,Runnable checkpoint,Workspace workspace) {
         Objects.requireNonNull(equations);Objects.requireNonNull(settings);Objects.requireNonNull(checkpoint);
@@ -297,7 +365,7 @@ public final class SparseNewton {
     /** The ordering, numeric matrix and factorization are the same whichever sweep filled the entries. */
     private static int factor(double[] x,double[] derivatives,Workspace workspace,Pattern pattern,int calls) {
         var numeric=pattern.numericMatrix(derivatives);
-        try{if(workspace.ordering==null)workspace.ordering=SparseLuSolver.prepareOrdering(pattern.symbolicMatrix());workspace.factorization=workspace.shared.factors.factor(numeric,workspace.ordering);workspace.matrix=numeric;workspace.jacobianPoint=x.clone();}
+        try{if(workspace.ordering==null)workspace.ordering=SparseLuSolver.prepareOrdering(pattern.symbolicMatrix());workspace.factorization=workspace.shared.factors(pattern).factor(numeric,workspace.ordering);workspace.matrix=numeric;workspace.jacobianPoint=x.clone();}
         catch(SparseLuSolver.SolveFailure failure){workspace.invalidate();throw new Nonconvergence("Singular Newton Jacobian: "+failure.getMessage(),x);}
         return calls;
     }

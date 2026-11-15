@@ -65,6 +65,18 @@ public final class PhysicalRegistry {
     private final Map<Long,List<Long>> members=new HashMap<>();
     private final Map<ChunkKey,Set<Long>> chunkMembers=new HashMap<>();
     private int unapplied;
+    /**
+     * The stock a submitted edit's validation built for a respecified boundary (code base review R26, option A), by event
+     * and device: the event's apply uses it instead of flashing the same spec again (the registry's model is fixed, so it
+     * is the same reservoir). Server-thread memory, never saved: an event restored from a save, or an edit whose
+     * registration at apply is not the one validated, is initialised at apply. An event's entries leave when it applies.
+     */
+    private final Map<UUID,Map<Long,Initialized>> validatedStock=new HashMap<>();
+    private record Initialized(WorldTopologyLedger.Registration registration,PassiveNetwork.Reservoir reservoir) {}
+    /** Boundary initialisations (a TP flash each, but for an empty vessel or a void) this registry ran. For tests. */
+    private long initializations;
+    long initializations(){return initializations;}
+    private PassiveNetwork.Reservoir initialize(WorldTopologyLedger.Registration record){initializations++;return record.spec().initialize(record.device(),model,()->{});}
 
     private final Set<Long> flowmeters=new HashSet<>();
     /** The installed flowmeters a load compiles taps for: set before {@link #load()}. */
@@ -155,7 +167,7 @@ public final class PhysicalRegistry {
     /** Uses the existing pressure-valve control on the same host pipe and projected revision. */
     public boolean installPipePressureValve(long id,PhysicalFluidTopology.Direction axis) {
         var record=registrations().get(id);if(!canInstallFitting(record,axis))return false;
-        var d=record.device();var device=new PhysicalFluidTopology.Device(d.id(),d.position(),d.kind(),axis,d.geometry(),FlowControl.ControlValve.unconfigured(),d.ports(),d.generatorEnabled(),d.cutoff(),false,d.joints());
+        var d=record.device();var device=PhysicalFluidTopology.Device.builder(d.id(),d.position(),d.kind(),axis,d.geometry(),FlowControl.ControlValve.unconfigured()).ports(d.ports()).generatorEnabled(d.generatorEnabled()).cutoff(d.cutoff()).joints(d.joints()).build();
         submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,record.spec(),Math.addExact(record.revision(),1)))),topology.nextIdentity(),null);
         return true;
     }
@@ -163,9 +175,9 @@ public final class PhysicalRegistry {
     public boolean installPipeMover(long id,PhysicalFluidTopology.Direction axis,TopologyCompiler.Kind kind){
         var record=registrations().get(id);
         if(record==null)return false;
-        var control=com.wormzjl.icheme.science.machine.InlineMachines.design(record.device().geometry().diameter(),kind==TopologyCompiler.Kind.PUMP);
+        var control=com.wormzjl.icheme.science.fluid.network.InlineMovers.design(record.device().geometry().diameter(),kind==TopologyCompiler.Kind.PUMP);
         if(axis==null||axis.y!=0||!canInstallFitting(record,axis))return false;
-        var d=record.device();var replacement=new PhysicalFluidTopology.Device(d.id(),d.position(),d.kind(),axis,d.geometry(),control,d.ports(),d.generatorEnabled(),d.cutoff(),d.inlineFilter(),d.joints());
+        var d=record.device();var replacement=PhysicalFluidTopology.Device.builder(d.id(),d.position(),d.kind(),axis,d.geometry(),control).ports(d.ports()).generatorEnabled(d.generatorEnabled()).cutoff(d.cutoff()).inlineFilter(d.inlineFilter()).joints(d.joints()).build();
         submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(replacement,record.spec(),Math.addExact(record.revision(),1)))),topology.nextIdentity(),null);return true;
     }
     public boolean installPipeFilter(long id,PhysicalFluidTopology.Direction axis) {
@@ -205,7 +217,7 @@ public final class PhysicalRegistry {
     public boolean removePipeAccessory(long id) {
         var r=registrations().get(id);if(r==null||r.device().kind()!=TopologyCompiler.Kind.PIPE)return false;
         var d=r.device();if(!d.inlineFilter()&&d.cutoff()==PhysicalFluidTopology.Cutoff.NONE&&d.control() instanceof FlowControl.Passive)return true;
-        var device=new PhysicalFluidTopology.Device(d.id(),d.position(),d.kind(),d.facing(),d.geometry(),new FlowControl.Passive(),d.ports(),d.generatorEnabled(),PhysicalFluidTopology.Cutoff.NONE,false,d.joints());
+        var device=PhysicalFluidTopology.Device.builder(d.id(),d.position(),d.kind(),d.facing(),d.geometry(),new FlowControl.Passive()).ports(d.ports()).generatorEnabled(d.generatorEnabled()).joints(d.joints()).build();
         submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,r.spec(),Math.addExact(r.revision(),1)))),topology.nextIdentity(),d.inlineFilter()?new WorldTopologyLedger.Recovery(id,null):null);return true;
     }
     private boolean canInstallFitting(WorldTopologyLedger.Registration record,PhysicalFluidTopology.Direction axis) {
@@ -296,7 +308,7 @@ public final class PhysicalRegistry {
      */
     public WorldTopologyLedger.Event submit(List<WorldTopologyLedger.Edit> edits,long nextId,WorldTopologyLedger.Recovery recovery) {
         var latest=topology.latest();var proposed=new HashMap<Long,Optional<WorldTopologyLedger.Registration>>();var proposedAt=new HashMap<PhysicalFluidTopology.Position,WorldTopologyLedger.Registration>();
-        var starts=new LinkedHashSet<PhysicalFluidTopology.Position>();var touched=new HashSet<Long>();
+        var starts=new LinkedHashSet<PhysicalFluidTopology.Position>();var touched=new HashSet<Long>();var built=new HashMap<Long,Initialized>();
         for(var edit:edits) {
             var change=proposed.get(edit.id());var old=change!=null?change.orElse(null):latest.get(edit.id());
             if(old!=null){starts.add(old.device().position());for(var cell:old.device().cells())proposedAt.remove(cell,old);}
@@ -304,7 +316,7 @@ public final class PhysicalRegistry {
             if(edit.replacement()==null)proposed.put(edit.id(),Optional.empty());
             else {
                 var record=edit.replacement();starts.add(record.device().position());proposed.put(edit.id(),Optional.of(record));for(var cell:record.device().cells())proposedAt.put(cell,record);
-                if(record.device().boundary()&&(old==null||!record.spec().equals(old.spec()))){var initialized=record.spec().initialize(record.device(),model,()->{});MaterialRuntime.active().solids().validate(initialized.inventory().solids());}
+                if(record.device().boundary()&&(old==null||!record.spec().equals(old.spec()))){var node=initialize(record);node.inventory().solids().validate(MaterialRuntime.active().solids());built.put(edit.id(),new Initialized(record,node));}
             }
         }
         // The registry this event proposes: the queued one with these edits on top.
@@ -333,6 +345,7 @@ public final class PhysicalRegistry {
         var edited=new HashSet<Long>();for(var edit:edits)edited.add(edit.id());
         var prepared=topology.queue(edits,touched,nextId,recovery);var affected=new HashSet<Long>();for(long id:touched)affected.addAll(standsFor(id,edited));
         host.coordinator().fence(prepared.event().id(),prepared.event().tick(),affected);topology.commit(prepared);unapplied++;
+        if(!built.isEmpty())validatedStock.put(prepared.event().id(),built);
         return prepared.event();
     }
     private static boolean joined(WorldTopologyLedger.Registration a,WorldTopologyLedger.Registration b,PhysicalFluidTopology.Contact contact){return a!=null&&b!=null&&a.device().joins(b.device(),contact.cell(),contact.direction());}
@@ -424,11 +437,14 @@ public final class PhysicalRegistry {
                     }
                 } else if(moved&&replacement.device().boundary()&&!respecified&&stock.containsKey(edit.id())){var node=stock.get(edit.id());stock.put(edit.id(),new PassiveNetwork.Reservoir(node.id(),replacement.device().position().y(),node.state(),node.kind(),node.inventory()));}
                 else if(replacement.device().boundary()&&respecified) {
-                    var initialized=replacement.spec().initialize(replacement.device(),model,()->{});stock.put(edit.id(),initialized);models.put(edit.id(),model);
+                    // The reservoir the submit validated, where it validated this registration; otherwise a flash here.
+                    var validated=validatedStock.containsKey(event.id())?validatedStock.get(event.id()).remove(edit.id()):null;
+                    var initialized=validated!=null&&validated.registration().equals(replacement)?validated.reservoir():initialize(replacement);stock.put(edit.id(),initialized);models.put(edit.id(),model);
                     if(initialized.kind()==PassiveNetwork.NodeKind.RESERVOIR){constructed.add(initialized);additions.put(edit.id(),initialized);}
                 }
             }
         }
+        for(var event:events)validatedStock.remove(event.id());
         var changedAt=new HashMap<PhysicalFluidTopology.Position,WorldTopologyLedger.Registration>();for(var change:changed.values())change.ifPresent(r->{for(var cell:r.device().cells())changedAt.put(cell,r);});
         java.util.function.Function<PhysicalFluidTopology.Position,WorldTopologyLedger.Registration> at=p->{
             var mine=changedAt.get(p);if(mine!=null)return mine;var record=topology.activeAt(p);return record==null||changed.containsKey(record.device().id())?null:record;

@@ -10,7 +10,15 @@ import java.util.List;
 /** Parametric repeated fan cells and a hollow hyperbolic chimney. No air is a solid volume. */
 final class CoolingTowerDesign extends UnitDesign {
     private final boolean natural;
-    CoolingTowerDesign(boolean natural) { this.natural=natural; }
+    CoolingTowerDesign(boolean natural) {
+        // Computed in its overrides: minSize, maxSize, sizeStep, minLength, maxLength, sizeRow, lengthRow, moves.
+        super(new Sizes(Sizes.COMPUTED, Sizes.COMPUTED, Sizes.COMPUTED,
+                Sizes.COMPUTED, Sizes.COMPUTED,
+                0, 0,
+                Orientation.VERTICAL, null, null, null, false,
+                1));
+        this.natural=natural;
+    }
     @Override public double minSize(){return natural?40:8;}
     @Override public double maxSize(){return natural?80:14;}
     @Override public double sizeStep(){return natural?10:2;}
@@ -18,13 +26,9 @@ final class CoolingTowerDesign extends UnitDesign {
     @Override public int maxLength(double d){return natural?CoolingTower.naturalHeight(d):3;}
     @Override public int defaultLength(double d){return natural?CoolingTower.naturalHeight(d):2;}
     @Override public int lengthStep(){return natural?10:1;}
-    @Override public int minSupport(double d,int l){return 0;}
-    @Override public int maxSupport(){return 0;}
-    @Override public Orientation orientation(){return Orientation.VERTICAL;}
     @Override public boolean moves(){return !natural;}
     @Override public String sizeRow(){return natural?"tower_diameter":"tower_cell_width";}
     @Override public String lengthRow(){return natural?"tower_height":"tower_fill_depth";}
-    @Override public String supportRow(){return null;}
     @Override void check(double d,int l,int s,ProcessUnit.Bank bank){
         if(natural)CoolingTower.natural(d,l);
         else CoolingTower.induced(d,l,1,1);

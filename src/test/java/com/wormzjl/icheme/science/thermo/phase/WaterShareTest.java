@@ -26,7 +26,7 @@ class WaterShareTest {
     private static final double[] N0 = {-0.96927686500217e1, 0.10086655968018e2, -0.56087911283020e-2, 0.71452738081455e-1,
             -0.40710498223928, 0.14240819171444e1, -0.43839511319450e1, -0.28408632460772, 0.21268463753307e-1};
 
-    private static final FluidTpEquilibrium ENGINE = FluidTpEquilibrium.forDerivedPackage(PilotAqueousTestCatalog.catalog(),
+    private static final FluidTpEquilibrium ENGINE = PackageBinding.derivedEquilibrium(PilotAqueousTestCatalog.catalog(),
             PilotAqueousTestCatalog.PACKAGE_ID);
 
     /** IF97's ideal-gas enthalpy of steam, J/kg, on the formulation's own reference. */
@@ -156,7 +156,8 @@ class WaterShareTest {
         pure[ev.waterComponent()] = 1.0;
         var ws = ev.newWorkspace();
         var d = ev.newDerivatives();
-        double t = 350, saturation = WaterShare.saturationPressure(t);
+        double t = 350, saturation = com.wormzjl.icheme.science.thermo.water.WagnerPruss.pressure(
+                com.wormzjl.icheme.science.material.WaterRecords.constants(PilotAqueousTestCatalog.catalog().requirePackage(PilotAqueousTestCatalog.PACKAGE_ID).water()), t);
         for (double p : new double[] {1.0e4, saturation * (1 - 1e-6), saturation * (1 + 1e-6), 101325}) {
             ev.derivatives(t, p, pure, Root.LIQUID, ws, d);
             var s = d.state();

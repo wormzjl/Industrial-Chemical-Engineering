@@ -1,0 +1,208 @@
+package com.wormzjl.icheme.science.fluid.thermo;
+
+import static com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.AQUEOUS;
+import static com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.GAS;
+import static com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.OIL;
+import static com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.R;
+import static com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.total;
+
+import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.PhaseStream;
+import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.Prepared;
+import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.State;
+import com.wormzjl.icheme.science.fluid.state.SolidInventory;
+import com.wormzjl.icheme.science.fluid.transport.MixtureViscosity;
+
+/**
+ * The stream functions of a network model (finding F8 of batch 2026-11-13-codebase-review): a node's hydraulic velocity
+ * limits and the streams a vessel port draws (decision D11), with their masses, volumes, densities, enthalpies and
+ * viscosities, read off a state with no flash. One per {@link FluidThermodynamics}, built in its constructor; the
+ * model's public methods of the same names forward here.
+ */
+final class NetworkStreams {
+    private final FluidThermodynamics model;
+    NetworkStreams(FluidThermodynamics model){this.model=model;}
+    /** A hydraulic rate bound only; temperature and phase allocation still come from the EOS/energy equations. */
+    public double velocityLimit(State state){return Math.min(model.maximumVelocity,isothermalAcousticBound(state));}
+    /**
+     * Frozen-phase isothermal acoustic bound used by the configured hydraulic velocity clamp: the node's compliance is
+     * {@code sum_phases V_phase kappa_phase}, each phase's own isothermal compressibility at the state.
+     */
+    public double isothermalAcousticBound(State state) {
+        double compliance=0;
+        for(int slot=0;slot<3;slot++) {
+            var phase=state.phase(slot);
+            if(phase!=null&&state.slotVolume(slot)>0)compliance+=state.slotVolume(slot)*phase.isothermalCompressibility();
+        }
+        // Solids are incompressible here: a state holding no fluid (a vessel holding only solids, D33) has no acoustic
+        // bound, and the configured clamp alone limits what would leave it (nothing does: its ends are dry).
+        if(compliance==0&&!holdsFluid(state))return Double.POSITIVE_INFINITY;
+        double speed=state.volume()/Math.sqrt(state.mass()*compliance);
+        if(!Double.isFinite(speed)||speed<=0)throw new IllegalArgumentException("Invalid acoustic flow-domain bound");
+        return speed;
+    }
+    /**
+     * The gas's ideal-gas heat capacity ratio {@code k = c_p/(c_p − R)} at the state's temperature, for a compressor's
+     * polytropic exponent (batch 2026-11-03-rotating-machinery, plan section 3.2): the vapour's components on the
+     * package's own ideal-gas data (water's from its cubic record on a list with water). 1.4 for a state that holds no gas.
+     */
+    public double heatCapacityRatio(State state) {
+        double t=state.temperature(),moles=0,cp=0;
+        double[] vapor=state.vaporAmountsView();int n=model.hydrocarbon.componentCount();
+        double total=0;for(double x:vapor)total+=x;
+        if(!(total>0))return 1.4;
+        var terms=model.hydrocarbon.prepare(t);
+        for(int i=0;i<vapor.length;i++) {
+            if(!(vapor[i]>0))continue;
+            // Water on a list without water cannot be in a phase (HydrocarbonModel.kernelAmounts).
+            cp+=vapor[i]*terms.idealGasHeatCapacity(i<n||model.hydrocarbon.wet()?i:0);moles+=vapor[i];
+        }
+        cp/=moles;
+        return cp/(cp-R);
+    }
+    /** Whether the state holds a gas phase to draw. */
+    public static boolean holdsVapor(State state){return state.vaporVolume()>0;}
+    /** Whether the state holds a liquid to draw (solids alone do not flow as a liquid). */
+    public static boolean holdsLiquid(State state){return state.condensedVolume()>0;}
+    /** Mass of a slot's fluid, kg. */
+    public double slotMass(State state,int slot) {
+        double mass=0;var amounts=state.amountsView(slot);
+        for(int i=0;i<amounts.length;i++)mass+=amounts[i]*model.molecularWeight(i);
+        return mass;
+    }
+    /** Mass of the vapour stream. */
+    public double vaporMass(State state){return slotMass(state,State.VAPOR);}
+    /** Mass of the condensed phase: both liquids, then every solid (the level head's mass). */
+    public double liquidMass(State state){return slotMass(state,State.LIQUID)+slotMass(state,State.AQUEOUS)+state.solidMoments().mass();}
+    /** Volume of the condensed phase: the two liquid volumes and the solid volume. */
+    public static double liquidStreamVolume(State state){return state.condensedVolume()+state.solidMoments().volume();}
+    /** The vapour stream's density, for a state that {@link #holdsVapor}. */
+    public double vaporDensity(State state){return vaporMass(state)/state.vaporVolume();}
+    /** The condensed phase's density (its mass over its volume), for a state that {@link #holdsLiquid}. */
+    public double liquidDensity(State state){return liquidMass(state)/liquidStreamVolume(state);}
+    /** The vapour stream's specific enthalpy (J/kg). */
+    public double vaporSpecificEnthalpy(State state,Prepared prepared) {
+        var gas=state.phase(State.VAPOR);
+        return gas==null?0:total(state.vaporAmountsView())*gas.molarEnthalpy()/vaporMass(state);
+    }
+    /** The vapour stream's velocity limit: {@code min(maximum, V_v/sqrt(M_v V_v kappa_v))}. */
+    public double vaporVelocityLimit(State state) {
+        var gas=state.phase(State.VAPOR);
+        double compliance=gas==null?0:state.vaporVolume()*gas.isothermalCompressibility();
+        return Math.min(model.maximumVelocity,acoustic(state.vaporVolume(),vaporMass(state),compliance));
+    }
+    /**
+     * {@code V / sqrt(M C)}. The product of a phase's mass and compliance goes subnormal for a trace phase (a vanishing
+     * nitrogen vapour below about 2e-150 mol) and is zero below about 2e-158 mol, the bound then infinite; such a product
+     * is evaluated as {@code sqrt(V/M) sqrt(V/C)}, ratios of like-sized quantities, and every product at or above
+     * {@link Double#MIN_NORMAL} takes the original expression, bit for bit.
+     */
+    private static double acoustic(double volume,double mass,double compliance) {
+        double product=mass*compliance;
+        double speed=product>=Double.MIN_NORMAL?volume/Math.sqrt(product):Math.sqrt(volume/mass)*Math.sqrt(volume/compliance);
+        if(!Double.isFinite(speed)||speed<=0)throw new IllegalArgumentException("Invalid acoustic flow-domain bound");
+        return speed;
+    }
+    /** The vapour stream's viscosity (Wilke over its components, water among them). */
+    public double vaporViscosity(State state,MixtureViscosity.Workspace scratch,Prepared prepared) {
+        var terms=prepared==null?null:model.match(prepared,state.temperature()).viscosities();
+        return model.viscosity.vapor(state.temperature(),state.vaporAmountsView(),scratch,terms);
+    }
+    /** The vapour stream of {@code state}, or null when it holds no gas. */
+    public PhaseStream vaporStream(State state,Prepared prepared,MixtureViscosity.Workspace scratch) {
+        if(!holdsVapor(state))return null;
+        return new PhaseStream(state.vaporAmounts(),vaporMass(state),state.vaporVolume(),vaporViscosity(state,scratch,prepared),
+                vaporSpecificEnthalpy(state,prepared),vaporVelocityLimit(state),SolidInventory.Moments.ZERO);
+    }
+    /** Whether {@code state} holds the phase labelled {@code phase} ({@link FluidThermodynamics#GAS}, {@link FluidThermodynamics#OIL} or {@link FluidThermodynamics#AQUEOUS}). */
+    public static boolean holdsPhase(State state,int phase){return state.slot(phase)>=0;}
+    /** Whether the state holds any fluid phase: not a vessel holding only solids ({@link FluidThermodynamics#solidState}). */
+    public static boolean holdsFluid(State state){return state.vaporVolume()>0||state.condensedVolume()>0;}
+    /**
+     * Owner decision D33: solids ride the liquid. A connection's BULK end draws a uniform share of what its donor holds,
+     * the solids carried by the liquid at {@code solids * liquid drawn / liquid held}; where no liquid is held nothing
+     * carries them (frost on a tank's walls, a dry bed), so the end draws the donor's gas exactly where that differs from
+     * its bulk: a gas beside solids with no liquid (a stand-in liquid, D29 A, is a liquid here).
+     */
+    public static boolean bulkDrawsGas(State state) {
+        return !(state.condensedVolume()>0)&&state.vaporVolume()>0&&!state.solids().empty();
+    }
+    /** The share of the state's solids a phase stream carries: none in the gas, the liquids' in proportion to their
+     * volumes ({@code 1.0} exactly for the only liquid held). */
+    public static double phaseSolidShare(State state,int phase) {
+        if(phase==GAS)return 0;
+        int slot=state.slot(phase);double condensed=state.condensedVolume();
+        if(slot<0||!(condensed>0))return 0;
+        return state.slotVolume(slot)==condensed?1.0:state.slotVolume(slot)/condensed;
+    }
+    /** The own density (no solids) of a liquid phase the state holds: its fluid mass over its volume. */
+    public double liquidPhaseDensity(State state,int phase) {
+        int slot=state.slot(phase);
+        return slotMass(state,slot)/state.slotVolume(slot);
+    }
+    /** The heavier of the state's two liquids by their own densities: {@link FluidThermodynamics#OIL} only when both are held and the oil is
+     * the denser, {@link FluidThermodynamics#AQUEOUS} otherwise (which one is named when at most one is held does not matter to a priority
+     * order: an absent phase is skipped). */
+    public int heavierLiquid(State state) {
+        return holdsPhase(state,OIL)&&holdsPhase(state,AQUEOUS)&&liquidPhaseDensity(state,OIL)>liquidPhaseDensity(state,AQUEOUS)?OIL:AQUEOUS;
+    }
+    /** Mass of a phase stream, its solid share included; {@link #vaporMass} for the gas. */
+    public double phaseMass(State state,int phase) {
+        if(phase==GAS)return vaporMass(state);
+        int slot=state.slot(phase);
+        return (slot<0?0:slotMass(state,slot))+phaseSolidShare(state,phase)*state.solidMoments().mass();
+    }
+    /** Volume of a phase stream: the gas volume, or the liquid's volume plus its share of the solid volume. */
+    public static double phaseVolume(State state,int phase) {
+        if(phase==GAS)return state.vaporVolume();
+        int slot=state.slot(phase);
+        return (slot<0?0:state.slotVolume(slot))+phaseSolidShare(state,phase)*state.solidMoments().volume();
+    }
+    /** The conserved amounts (water last) of a phase stream. */
+    public static double[] phaseMoles(State state,int phase) {
+        int slot=state.slot(phase);
+        return slot<0?new double[state.componentCount()]:state.amounts(slot);
+    }
+    /** The solid moments a phase stream carries: its share of the state's. */
+    public static SolidInventory.Moments phaseSolidMoments(State state,int phase) {
+        double share=phaseSolidShare(state,phase);if(share==0)return SolidInventory.Moments.ZERO;
+        var m=state.solidMoments();return new SolidInventory.Moments(share*m.mass(),share*m.volume(),share*m.heatCapacity());
+    }
+    /** A phase stream's specific enthalpy (J/kg), its solid share included; {@code prepared} as for {@link FluidThermodynamics#state}. */
+    public double phaseSpecificEnthalpy(State state,int phase,Prepared prepared) {
+        if(phase==GAS)return vaporSpecificEnthalpy(state,prepared);
+        int slot=state.slot(phase);double h=0;
+        if(slot>=0&&state.phase(slot)!=null)h+=total(state.amountsView(slot))*state.phase(slot).molarEnthalpy();
+        h+=phaseSolidShare(state,phase)*state.solidMoments().enthalpy(state.temperature(),state.pressure());
+        return h/phaseMass(state,phase);
+    }
+    /** A phase stream's velocity limit: {@link #vaporVelocityLimit} for the gas, the configured maximum for a liquid
+     * with its solids (a liquid's own isothermal sound speed is 900 to 1500 m/s at the network's states, D37 S5). */
+    public double phaseVelocityLimit(State state,int phase) {
+        return phase==GAS?vaporVelocityLimit(state):model.maximumVelocity;
+    }
+    /** A phase stream's viscosity: {@link #vaporViscosity} for the gas; a liquid's own viscosity (one log-mixing rule over
+     * its components, water among them) with the slurry correction for its share of the solids, over the stream's volume. */
+    public double phaseViscosity(State state,int phase,MixtureViscosity.Workspace scratch,Prepared prepared) {
+        if(phase==GAS)return vaporViscosity(state,scratch,prepared);
+        var terms=prepared==null?null:model.match(prepared,state.temperature()).viscosities();
+        int slot=state.slot(phase);
+        double liquid=state.slotVolume(slot),value=liquid*model.viscosity.liquid(state.temperature(),state.amountsView(slot),terms).pascalSeconds();
+        double solid=phaseSolidShare(state,phase)*state.solidMoments().volume();
+        if(solid>0){double phi=solid/(liquid+solid);value=com.wormzjl.icheme.science.fluid.transport.SlurryTransport.effectiveViscosity(value/liquid,Math.min(phi,0.62-1e-9))*(liquid+solid);}
+        return value/(liquid+solid);
+    }
+    /** The carrier viscosity of a phase stream (no slurry correction), which an inline filter's cake resistance scales
+     * with: the gas's own, or the liquid's own. */
+    public double phaseCarrierViscosity(State state,int phase,MixtureViscosity.Workspace scratch) {
+        if(phase==GAS)return vaporViscosity(state,scratch,null);
+        return model.viscosity.liquid(state.temperature(),state.amountsView(state.slot(phase))).pascalSeconds();
+    }
+    /** The stream of one phase of {@code state}, or null when it does not hold that phase; {@link #vaporStream} for the
+     * gas. */
+    public PhaseStream phaseStream(State state,int phase,Prepared prepared,MixtureViscosity.Workspace scratch) {
+        if(!holdsPhase(state,phase))return null;
+        if(phase==GAS)return vaporStream(state,prepared,scratch);
+        return new PhaseStream(phaseMoles(state,phase),phaseMass(state,phase),phaseVolume(state,phase),phaseViscosity(state,phase,scratch,prepared),
+                phaseSpecificEnthalpy(state,phase,prepared),phaseVelocityLimit(state,phase),phaseSolidMoments(state,phase));
+    }
+}

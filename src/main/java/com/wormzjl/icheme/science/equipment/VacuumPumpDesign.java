@@ -7,6 +7,7 @@ import com.wormzjl.icheme.science.equipment.Mesh.Material;
 import com.wormzjl.icheme.science.equipment.ProcessUnit.Solid;
 import com.wormzjl.icheme.science.machine.Motor;
 import com.wormzjl.icheme.science.machine.VacuumPump;
+import com.wormzjl.icheme.science.machine.VacuumPump.Model;
 
 import java.util.List;
 
@@ -20,16 +21,9 @@ import java.util.List;
  * its two port heads; its seal is internal (owner V2 B). A dry screw is a ribbed, water-jacketed box.
  */
 final class VacuumPumpDesign extends UnitDesign {
-    /** One model: its name, nominal capacity (m³/h), design speed (rpm) and its rotor's or housing's width (m). */
-    record Model(String name, double capacity, double speed, double width) {
-    }
+    // The catalogue (RINGS, SCREWS, Model) and the law of a model are VacuumPump's (science/machine; codebase review E6), as
+    // PrimeMover.MODELS is; this design picks a shape's model and draws it.
 
-    /** The liquid ring's models by number: its name takes the stage count, its 5000 m³/h ring is single stage. */
-    static final List<Model> RINGS = List.of(new Model("150", 150, 1450, .3), new Model("500", 500, 1450, .45),
-            new Model("1500", 1500, 980, .7), new Model("5000", 5000, 590, 1.1));
-    /** The dry screw's models by number. */
-    static final List<Model> SCREWS = List.of(new Model("DS-100", 100, 2950, .35), new Model("DS-300", 300, 2950, .45),
-            new Model("DS-650", 650, 2950, .55), new Model("DS-2500", 2500, 2950, .8));
     /** The nozzles' line speed at the nominal capacity, m/s (the vendors' flange sizes); below {@code VACUUM_SPEED} at every duty. */
     static final double NOZZLE_SPEED = 25;
     static final double PLINTH = .25, GROUT = .04, BASEPLATE = .16;
@@ -37,77 +31,47 @@ final class VacuumPumpDesign extends UnitDesign {
     private final boolean ring;
 
     VacuumPumpDesign(boolean ring) {
+        // Computed in its overrides: maxSize, maxLength, lengthRow.
+        super(new Sizes(1, Sizes.COMPUTED, 1,
+                1, Sizes.COMPUTED,
+                0, 0,
+                Orientation.HORIZONTAL, "vacuum_pump.model", null, null, true,
+                1));
         this.ring = ring;
     }
 
     private List<Model> models() {
-        return ring ? RINGS : SCREWS;
+        return ring ? VacuumPump.RINGS : VacuumPump.SCREWS;
     }
 
     /** The model of {@code shape}. */
     static Model model(EquipmentShape shape) {
-        var list = shape.kind() == EquipmentShape.Kind.LIQUID_RING_PUMP ? RINGS : SCREWS;
-        return list.get((int) Math.max(0, Math.min(list.size() - 1, Math.round(shape.diameter()) - 1)));
+        return VacuumPump.model(shape.kind() == EquipmentShape.Kind.LIQUID_RING_PUMP ? VacuumPump.RINGS : VacuumPump.SCREWS, shape.diameter());
     }
 
     /** The law of {@code shape}: its type, capacity and design speed. */
     static VacuumPump law(EquipmentShape shape) {
-        var m = model(shape);
-        var type = shape.kind() == EquipmentShape.Kind.DRY_SCREW_PUMP ? VacuumPump.Type.DRY_SCREW
-                : shape.tangentLength() >= 2 ? VacuumPump.Type.LIQUID_RING_TWO_STAGE : VacuumPump.Type.LIQUID_RING_ONE_STAGE;
-        return new VacuumPump(type, m.capacity / 3600, m.speed);
+        return VacuumPump.of(model(shape), shape.kind() == EquipmentShape.Kind.DRY_SCREW_PUMP, shape.tangentLength());
     }
 
     /** The model's name: {@code LR1-500}, {@code LR2-150}, {@code DS-650}. */
     static String name(EquipmentShape shape) {
         var m = model(shape);
-        return shape.kind() == EquipmentShape.Kind.LIQUID_RING_PUMP ? "LR" + Math.max(1, (int) shape.tangentLength()) + "-" + m.name : m.name;
+        return shape.kind() == EquipmentShape.Kind.LIQUID_RING_PUMP ? "LR" + Math.max(1, (int) shape.tangentLength()) + "-" + m.name() : m.name();
     }
 
     /** The nozzles' outside diameter, m: the nominal capacity at {@link #NOZZLE_SPEED}, to the nearest 0.05 m. */
     static double nozzle(Model m) {
-        return PipeSizes.od(Math.sqrt(4 * m.capacity / 3600 / (Math.PI * NOZZLE_SPEED)), .05, .4);
-    }
-
-    @Override public double minSize() {
-        return 1;
+        return PipeSizes.od(Math.sqrt(4 * m.capacity() / 3600 / (Math.PI * NOZZLE_SPEED)), .05, .4);
     }
 
     @Override public double maxSize() {
         return models().size();
     }
 
-    @Override public double sizeStep() {
-        return 1;
-    }
-
-    @Override public int minLength(double size) {
-        return 1;
-    }
-
     /** A ring of one or two stages, the largest single stage only; a screw has none. */
     @Override public int maxLength(double size) {
-        return ring && Math.round(size) < RINGS.size() ? 2 : 1;
-    }
-
-    @Override public int minSupport(double size, int length) {
-        return 0;
-    }
-
-    @Override public int maxSupport() {
-        return 0;
-    }
-
-    @Override public Orientation orientation() {
-        return Orientation.HORIZONTAL;
-    }
-
-    @Override public boolean moves() {
-        return true;
-    }
-
-    @Override public String sizeRow() {
-        return "vacuum_pump.model";
+        return ring && Math.round(size) < VacuumPump.RINGS.size() ? 2 : 1;
     }
 
     /** A model reads as its capacity, the unit beside the box (the box holds the number only); its name is on the datasheet. */
@@ -116,8 +80,7 @@ final class VacuumPumpDesign extends UnitDesign {
     }
 
     @Override public String sizeText(double size) {
-        var m = models().get((int) Math.max(0, Math.min(models().size() - 1, Math.round(size) - 1)));
-        return whole(m.capacity);
+        return whole(VacuumPump.model(models(), size).capacity());
     }
 
     @Override public String lengthRow() {
@@ -128,16 +91,12 @@ final class VacuumPumpDesign extends UnitDesign {
         return false;
     }
 
-    @Override public String supportRow() {
-        return null;
-    }
-
     @Override public Line held(EquipmentShape shape) {
         var law = law(shape);
         // The middle display's line fits 180 px (UnitTextTest): the shaft power stays on the datasheet, a whole motor rating
         // reads without its decimal (200 kW, 7.5 kW).
         double motor = Motor.ratingFor(law.maximumShaftPower()) / 1e3;
-        return new Line("vacuum_pump.held", name(shape), whole(model(shape).capacity), motor == Math.rint(motor) ? whole(motor) : number(motor));
+        return new Line("vacuum_pump.held", name(shape), whole(model(shape).capacity()), motor == Math.rint(motor) ? whole(motor) : number(motor));
     }
 
     @Override public List<Line> datasheet(EquipmentShape shape) {
@@ -145,7 +104,7 @@ final class VacuumPumpDesign extends UnitDesign {
         var m = model(shape);
         double blank = law.type().blankOff();
         var lines = new java.util.ArrayList<Line>();
-        lines.add(new Line("vacuum_pump." + law.type().key(), name(shape), whole(m.capacity), whole(m.speed)));
+        lines.add(new Line("vacuum_pump." + law.type().key(), name(shape), whole(m.capacity()), whole(m.speed())));
         lines.add(new Line("vacuum_pump.limits", blank >= 100 ? number(blank / 1e3) + " kPa" : whole(blank) + " Pa", number(VacuumPump.MAXIMUM_DISCHARGE / 1e3)));
         lines.add(new Line("vacuum_pump.power", number(law.maximumShaftPower() / 1e3), number(Motor.ratingFor(law.maximumShaftPower()) / 1e3)));
         // The internal seal's heat and water (owner V2 B): all the shaft power at a 5 K rise.
@@ -166,7 +125,7 @@ final class VacuumPumpDesign extends UnitDesign {
         var law = law(shape);
         int h = shape.support();
         boolean two = shape.tangentLength() >= 2;
-        double w = m.width, ax = .5, od = nozzle(m);
+        double w = m.width(), ax = .5, od = nozzle(m);
         double r = .7 * w + .1, rh = r + .05, th = Math.max(.12 + .12 * w, od + .08);
         double housing = two ? 1.8 * r : 1.2 * r;
         double bearingRadius = .2 * w + .06, bearing = .15 + .15 * w;
@@ -242,9 +201,9 @@ final class VacuumPumpDesign extends UnitDesign {
         u.solids.add(Solid.rod(new double[]{ax, 0, suction}, 1, low, sNeck, rn, 0));
         u.pumpNozzle(Role.SUCTION, new double[]{ax, 0, suction}, 1, 1, sNeck, Math.ceil(ys + rh + .07 + PipeSizes.flangeThickness(od) + EquipmentShape.STAND_OUT), od, od / 2);
         // The shaft end and its coupling at the back; the skid under it all.
-        double shaft = ProcessUnit.shaftRadius(law.maximumShaftPower() / 1e3, m.speed), face = Math.ceil(zb1 + .2 + shaft - 1e-9);
+        double shaft = ProcessUnit.shaftRadius(law.maximumShaftPower() / 1e3, m.speed()), face = Math.ceil(zb1 + .2 + shaft - 1e-9);
         double half = Math.max(rh, rs) + .15, x0 = ax - half, x1 = ax + half, z0 = sepZ - rs - .12, z1 = face - .01;
-        u.coupling(ax, ys, zb1, face, 1, shaft, deck, ProcessUnit.shown(m.speed), EquipmentShape.ShaftEnd.Role.DRIVEN_INPUT);
+        u.coupling(ax, ys, zb1, face, 1, shaft, deck, ProcessUnit.shown(m.speed()), EquipmentShape.ShaftEnd.Role.DRIVEN_INPUT);
         u.baseplate(x0, x1, base + GROUT, deck, z0, z1);
         u.box(new double[]{x0 + .02, base, z0 + .02}, new double[]{x1 - .02, base + GROUT, z1 - .02}, Material.CONCRETE, false);
         u.driverBase(x0 - .08, x1 + .08, z0 - .08, z1, base, h);
@@ -259,7 +218,7 @@ final class VacuumPumpDesign extends UnitDesign {
         var m = model(shape);
         var law = law(shape);
         int h = shape.support();
-        double w = m.width, ax = .5;
+        double w = m.width(), ax = .5;
         // The body: a ring's casing 1.3 rotor diameters across, a screw's housing as wide as its rotors' pair; the port heads
         // or the jacket's ends at both ends; the port rows two cells apart at least.
         double r = ring ? .65 * w + .05 : .5 * w + .05, cap = r + .06 + .05 * w, capLength = .08 + .06 * w;
@@ -317,9 +276,9 @@ final class VacuumPumpDesign extends UnitDesign {
                     neck, Math.ceil(ys + r + .07 + PipeSizes.flangeThickness(od) + EquipmentShape.STAND_OUT), od, od / 2);
         }
         // The shaft end and its coupling at the back; the baseplate on its grout and plinth.
-        double rs = ProcessUnit.shaftRadius(law.maximumShaftPower() / 1e3, m.speed), face = Math.ceil(zb1 + .2 + rs - 1e-9);
+        double rs = ProcessUnit.shaftRadius(law.maximumShaftPower() / 1e3, m.speed()), face = Math.ceil(zb1 + .2 + rs - 1e-9);
         double half = cap + .2, x0 = ax - half, x1 = ax + half, z0 = cover - .15, z1 = face - .01;
-        u.coupling(ax, ys, zb1, face, 1, rs, deck, ProcessUnit.shown(m.speed), EquipmentShape.ShaftEnd.Role.DRIVEN_INPUT);
+        u.coupling(ax, ys, zb1, face, 1, rs, deck, ProcessUnit.shown(m.speed()), EquipmentShape.ShaftEnd.Role.DRIVEN_INPUT);
         u.baseplate(x0, x1, base + GROUT, deck, z0, z1);
         u.box(new double[]{x0 + .02, base, z0 + .02}, new double[]{x1 - .02, base + GROUT, z1 - .02}, Material.CONCRETE, false);
         u.driverBase(x0 - .08, x1 + .08, z0 - .08, z1, base, h);

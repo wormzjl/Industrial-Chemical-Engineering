@@ -37,8 +37,8 @@ class SolidRuntimeTest {
     @Test void generatorUsesSlurryVolumeFractionWithoutChangingTheFluidAxis(){
         var water=FluidDeviceSpec.water(catalog);
         var spec=new FluidDeviceSpec(1,298.15,101325,water.composition(),SlurryFeed.demo());
-        var device=new PhysicalFluidTopology.Device(1,new PhysicalFluidTopology.Position("minecraft:overworld",0,0,0),TopologyCompiler.Kind.GENERATOR,
-                PhysicalFluidTopology.Direction.EAST,new PipeResistance.Geometry(1,.05,0,0),new FlowControl.Passive());
+        var device=PhysicalFluidTopology.Device.builder(1,new PhysicalFluidTopology.Position("minecraft:overworld",0,0,0),TopologyCompiler.Kind.GENERATOR,
+                PhysicalFluidTopology.Direction.EAST,new PipeResistance.Geometry(1,.05,0,0),new FlowControl.Passive()).build();
         var source=spec.initialize(device,model,()->{}).state();
         assertEquals(1,source.volume(),1e-10);
         assertEquals(.1,source.solidMoments().volume()/(TestPhases.liquidVolume(source)+TestPhases.waterVolume(source)+source.solidMoments().volume()),1e-12);
@@ -71,8 +71,8 @@ class SolidRuntimeTest {
         assertEquals(0,result.graph().reservoirs().getFirst().state().vaporVolume());
     }
     @Test void disconnectedFilterRetainsItsCakeInAZeroFlowIsland(){
-        var device=new PhysicalFluidTopology.Device(1,new PhysicalFluidTopology.Position("minecraft:overworld",0,0,0),TopologyCompiler.Kind.FILTER,
-                PhysicalFluidTopology.Direction.EAST,new PipeResistance.Geometry(1,.05,0,0),new FlowControl.Passive());
+        var device=PhysicalFluidTopology.Device.builder(1,new PhysicalFluidTopology.Position("minecraft:overworld",0,0,0),TopologyCompiler.Kind.FILTER,
+                PhysicalFluidTopology.Direction.EAST,new PipeResistance.Geometry(1,.05,0,0),new FlowControl.Passive()).build();
         var cake=new InlineFilter(.01,1e6,stock(4),1234);
         var compiled=PhysicalFluidTopology.compile(List.of(device),Map.of(),Map.of(1L,cake),model.initialNitrogenCharge(1,298.15,101325,()->{}));
         assertEquals(1,compiled.islands().size());
@@ -83,7 +83,7 @@ class SolidRuntimeTest {
     @Test void physicalPumpFilterAndNitrogenReceiverStartTogether(){
         var devices=new ArrayList<PhysicalFluidTopology.Device>();
         var kinds=new TopologyCompiler.Kind[]{TopologyCompiler.Kind.GENERATOR,TopologyCompiler.Kind.PIPE,TopologyCompiler.Kind.PUMP,TopologyCompiler.Kind.PIPE,TopologyCompiler.Kind.FILTER,TopologyCompiler.Kind.PIPE,TopologyCompiler.Kind.RESERVOIR};
-        for(int i=0;i<kinds.length;i++)devices.add(new PhysicalFluidTopology.Device(i+1,new PhysicalFluidTopology.Position("minecraft:overworld",i,-60,0),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kinds[i]),PhysicalFluidTopology.Direction.EAST,new PipeResistance.Geometry(1,.05,.000045,0),i==2?new FlowControl.Pump(.01,500000):new FlowControl.Passive()));
+        for(int i=0;i<kinds.length;i++)devices.add(PhysicalFluidTopology.Device.builder(i+1,new PhysicalFluidTopology.Position("minecraft:overworld",i,-60,0),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kinds[i]),PhysicalFluidTopology.Direction.EAST,new PipeResistance.Geometry(1,.05,.000045,0),i==2?new FlowControl.Pump(.01,500000):new FlowControl.Passive()).build());
         var spec=new FluidDeviceSpec(1,298.15,101325,FluidDeviceSpec.water(catalog).composition(),SlurryFeed.demo());
         var source=spec.initialize(devices.getFirst(),model,()->{});
         var sink=FluidTestSupport.chargedBoundary(FluidDeviceSpec.nitrogen(catalog),devices.getLast(),model);
@@ -120,9 +120,9 @@ class SolidRuntimeTest {
         resources.put("data/icheme/materials/solids/another.json","{\"schema_version\":1,\"id\":\"icheme:another\",\"revision\":\"v1\",\"density_kg_per_m3\":1500,\"heat_capacity_j_per_kg_kelvin\":900}");
         var extended=MaterialCatalog.parse(resources);
         assertEquals(WorldTopologyLedger.FluidBasis.capture(catalog),WorldTopologyLedger.FluidBasis.capture(extended));
-        extended.solids().validate(stock(1));
+        stock(1).validate(extended.solids());
         var changed=new HashMap<>(catalog.resources());var key="data/icheme/materials/solids/demo_particle.json";
         var record=JsonParser.parseString(changed.get(key)).getAsJsonObject();record.addProperty("density_kg_per_m3",2600);changed.put(key,record.toString());
-        assertThrows(IllegalArgumentException.class,()->MaterialCatalog.parse(changed).solids().validate(stock(1)));
+        assertThrows(IllegalArgumentException.class,()->stock(1).validate(MaterialCatalog.parse(changed).solids()));
     }
 }

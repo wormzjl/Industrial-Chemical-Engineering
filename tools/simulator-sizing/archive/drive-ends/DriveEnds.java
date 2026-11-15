@@ -7,7 +7,7 @@ public class DriveEnds {
         for(var kind:List.of(EquipmentShape.Kind.MOTOR,EquipmentShape.Kind.GENERATOR))
             for(double power:UnitDesign.of(kind).sizes())for(var heading:EquipmentShape.Heading.values())for(int support:new int[]{0,8}){
                 var s=EquipmentShape.unit(kind,power,1,heading,support);var l=ShapeRasterizer.layout(s);
-                records.add(kind+" "+power+" "+heading+" "+support+" | "+s.sizeX()+" "+s.sizeY()+" "+s.sizeZ()+" | "+l.shell().size()+" "+l.interior().size()+" "+Long.toHexString(ShapeRasterizer.stamp(s))+" | "+ShapeRasterizer.shafts(s)+" | "+ShapeRasterizer.terminal(s));
+                records.add(kind+" "+power+" "+heading+" "+support+" | "+s.sizeX()+" "+s.sizeY()+" "+s.sizeZ()+" | "+l.shell().size()+" "+l.interior().size()+" "+Long.toHexString(ShapeRasterizer.legacyStamp(s))+" | "+ShapeRasterizer.shafts(s)+" | "+ShapeRasterizer.terminal(s));
                 if(heading==EquipmentShape.Heading.NORTH&&support==0){
                     var faces=ProcessUnit.of(s).mesh().facets().stream().filter(f->f.part()<0&&Math.abs(f.normal()[2])>.999999&&f.material().name().startsWith("MOTOR")||f.part()<0&&Math.abs(f.normal()[2])>.999999&&f.material()==Mesh.Material.GENERATOR_PANEL).toList();
                     int n=0;double area=0;

@@ -3,14 +3,10 @@ package com.wormzjl.icheme.science.fluid.linalg;
 import com.wormzjl.icheme.science.fluid.SolverOwnership;
 import com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics;
 import java.util.*;
-import org.ejml.data.DMatrixRMaj;
-import org.ejml.data.DMatrixSparseCSC;
-import org.ejml.sparse.FillReducing;
-import org.ejml.sparse.csc.factory.LinearSolverFactory_DSCC;
 
 /**
  * Sequential sparse LU with row equilibration, refinement, and a backward-error check.
- * A {@link Storage} owns one EJML workspace and is refilled in place by successive factorizations of
+ * A {@link Storage} owns one {@link UpLookingLu} and its buffers and is refilled in place by successive factorizations of
  * the same solver; it is never shared across threads and never promises a locked structure.
  * This verifies a linear solve, not convergence or conditioning of the calling nonlinear problem.
  */
@@ -18,6 +14,10 @@ public final class SparseLuSolver {
     private static final double MAXIMUM_BACKWARD_ERROR = 1.0e-10;
 
     private SparseLuSolver() {}
+    /** A test's view of every matrix handed to the LU (P-17's parity gate, batch 2026-11-13-codebase-review): the
+     * equilibrated, permuted columns with their rows sorted, as copies. Null outside that test. */
+    interface Observer{void factored(int size,int[] columns,int[] rows,double[] values);}
+    static volatile Observer observer;
 
     /** Returns a new solution vector; inputs are never changed. Numerical failure throws {@link SolveFailure}. */
     public static double[] solve(SparseMatrix matrix, double[] rightHandSide) {
@@ -67,19 +67,15 @@ public final class SparseLuSolver {
     }
 
     /**
-     * One worker's reusable sparse-LU workspace: the EJML solver instance, the CSC copy of the
-     * equilibrated matrix handed to it, and the scaling, solve and refinement buffers. Successive
-     * factorizations of the same structure refill it in place, which is what keeps EJML's L/U
-     * capacity: {@code LuUpLooking_DSCC.initialize} reshapes its own {@code L}/{@code U} to
-     * {@code 4*nnz+n} on every {@code decompose}, and that only allocates while the capacity still
-     * has to grow. The refill supersedes every {@link Factorization} handed out before it - a
-     * modified-Newton holder of one must build its own, which is exactly what a refresh does.
-     *
-     * <p>EJML 0.44's sparse LU cannot take the review's other suggestion:
-     * {@code LuUpLooking_DSCC.setStructureLocked(true)} throws ("Pivots change depending on
-     * numerical values and not just the matrix's structure") and {@code isStructureLocked()} is
-     * hard-coded false, so there is no symbolic phase to keep and no reason to feed the LU explicit
-     * structural zeros.
+     * One worker's reusable sparse-LU workspace: the LU ({@link UpLookingLu}, EJML 0.44's up-looking LU bit for bit), the
+     * CSC copy of the equilibrated matrix handed to it, and the scaling, solve and refinement buffers. Successive
+     * factorizations refill it in place and grow its arrays only while the island grows. Of the same structure, they reuse
+     * each column's reach while the pivot rows repeat (finding P-17, batch 2026-11-13-codebase-review): the symbolic
+     * phase EJML could not keep ({@code LuUpLooking_DSCC.setStructureLocked(true)} throws). The refill supersedes every
+     * {@link Factorization} handed out before it - a modified-Newton holder of one must build its own, which is exactly
+     * what a refresh does. An island keeps its storages across steps and jobs, one per matrix role and structure (the
+     * Newton's fork family, the transport's structures, the kept closure storages: P-17b); a refill carries nothing numeric
+     * from the factorization before, so a kept storage and a new one give the same bits.
      */
     public static final class Storage {
         private static final double[] NO_VALUES=new double[0];
@@ -90,10 +86,11 @@ public final class SparseLuSolver {
         private int[] permutation=new int[0],inverse=new int[0];
         private double[] rowScale=NO_VALUES,scaledValues=NO_VALUES,rowNorm=NO_VALUES;
         private double[] rhsWorkspace=NO_VALUES,residualWorkspace=NO_VALUES,magnitudeWorkspace=NO_VALUES;
-        private DMatrixRMaj b,x;
-        private DMatrixSparseCSC a;
-        private org.ejml.ops.SortCoupledArray_F64 sorter;
-        private org.ejml.interfaces.linsol.LinearSolverSparse<DMatrixSparseCSC,DMatrixRMaj> solver;
+        /** The LU (finding P-17: EJML's up-looking LU, bit for bit, with each column's reach kept) and the columns handed to
+         * it, the permuted right-hand side and solution: all kept and grown, so a factorization allocates nothing once the
+         * storage has the island's size. */
+        private final UpLookingLu lu=new UpLookingLu();
+        private int[] aColumns=new int[1],aRows=new int[0];private double[] aValues=NO_VALUES,permutedRhs=NO_VALUES,permutedSolution=NO_VALUES;
         public Storage(SolverOwnership ownership) {
             this.ownership=Objects.requireNonNull(ownership,"ownership");SolverDiagnostics.count(SolverDiagnostics.luStorages);
         }
@@ -124,21 +121,26 @@ public final class SparseLuSolver {
             for(int entry=0;entry<nonzeros;entry++){int row=matrix.rowAt(entry);rowScale[row]=Math.max(rowScale[row],Math.abs(matrix.valueAt(entry)));}
             for(int row=0;row<size;row++)if(rowScale[row]==0)throw new SolveFailure("Singular matrix: empty or zero row "+row);
             for(int e=0;e<nonzeros;e++){int row=matrix.rowAt(e);scaledValues[e]=matrix.valueAt(e)/rowScale[row];rowNorm[row]+=Math.abs(scaledValues[e]);}
-            if(solver==null) {
-                b=new DMatrixRMaj(size,1);x=new DMatrixRMaj(size,1);a=new DMatrixSparseCSC(size,size,nonzeros);
-                sorter=new org.ejml.ops.SortCoupledArray_F64();solver=LinearSolverFactory_DSCC.lu(FillReducing.NONE);
-            }else{b.reshape(size,1);x.reshape(size,1);a.reshape(size,size,nonzeros);}
+            if(aColumns.length<size+1)aColumns=new int[size+1];
+            if(aRows.length<nonzeros){aRows=new int[nonzeros];aValues=new double[nonzeros];}
+            if(permutedRhs.length<size){permutedRhs=new double[size];permutedSolution=new double[size];}
             for(int old=0;old<size;old++)inverse[permutation[old]]=old;
             int stored=0;
             for(int column=0;column<size;column++) {
-                int original=inverse[column];a.col_idx[column]=stored;
+                int original=inverse[column];aColumns[column]=stored;
                 for(int entry=matrix.columnStart(original);entry<matrix.columnEnd(original);entry++)if(matrix.valueAt(entry)!=0) {
-                    int row=matrix.rowAt(entry);a.nz_rows[stored]=permutation[row];a.nz_values[stored++]=scaledValues[entry];
+                    int row=matrix.rowAt(entry);aRows[stored]=permutation[row];aValues[stored++]=scaledValues[entry];
                 }
             }
-            a.col_idx[size]=stored;a.nz_length=stored;a.indicesSorted=false;
-            a.sortIndices(sorter);
-            if(!solver.setA(a))throw new SolveFailure("Sparse LU rejected a singular matrix");
+            aColumns[size]=stored;
+            // Each column's rows ascending, as EJML's sortIndices left them (rows are unique, so the order is the only one).
+            for(int column=0;column<size;column++)for(int p=aColumns[column]+1;p<aColumns[column+1];p++) {
+                int row=aRows[p];double value=aValues[p];int q=p-1;
+                while(q>=aColumns[column]&&aRows[q]>row){aRows[q+1]=aRows[q];aValues[q+1]=aValues[q];q--;}
+                aRows[q+1]=row;aValues[q+1]=value;
+            }
+            var seen=observer;if(seen!=null)seen.factored(size,Arrays.copyOf(aColumns,size+1),Arrays.copyOf(aRows,stored),Arrays.copyOf(aValues,stored));
+            if(!lu.factor(size,aColumns,aRows,aValues))throw new SolveFailure("Sparse LU rejected a singular matrix");
             return new Factorization(this);
         }
         private void verify(double[] rightHandSide,double[] solution) {
@@ -164,11 +166,11 @@ public final class SparseLuSolver {
                 double[] rhs=rhsWorkspace,input=rightHandSides[vector];boolean nonzero=false;
                 for(int row=0;row<size;row++) {
                     rhs[row]=input[row]/rowScale[row];if(!Double.isFinite(rhs[row]))throw new SolveFailure("Right-hand side overflow during scaling");
-                    b.set(permutation[row],0,rhs[row]);nonzero|=rhs[row]!=0;
+                    permutedRhs[permutation[row]]=rhs[row];nonzero|=rhs[row]!=0;
                 }
                 if(!nonzero){solutions[vector]=new double[size];continue;}
-                solver.solve(b,x);double[] result=new double[size];
-                for(int row=0;row<size;row++){result[row]=x.get(permutation[row],0);if(!Double.isFinite(result[row]))throw new SolveFailure("Sparse LU produced a nonfinite solution");}
+                lu.solve(permutedRhs,permutedSolution);double[] result=new double[size];
+                for(int row=0;row<size;row++){result[row]=permutedSolution[permutation[row]];if(!Double.isFinite(result[row]))throw new SolveFailure("Sparse LU produced a nonfinite solution");}
                 if(verification==Verification.NONE||verification==Verification.UNTIL_VERIFIED&&verified){solutions[vector]=result;continue;}
                 for(int refinement=0;refinement<4;refinement++) {
                     SolverDiagnostics.count(SolverDiagnostics.luChecks);
@@ -179,8 +181,8 @@ public final class SparseLuSolver {
                         for(int column=0;column<size;column++)for(int entry=matrix.columnStart(column);entry<matrix.columnEnd(column);entry++) {
                             int row=matrix.rowAt(entry);residual[row]=Math.fma(-scaledValues[entry],result[column],residual[row]);
                         }
-                        for(int row=0;row<size;row++)b.set(permutation[row],0,residual[row]);solver.solve(b,x);
-                        for(int row=0;row<size;row++){result[row]+=x.get(permutation[row],0);if(!Double.isFinite(result[row]))throw new SolveFailure("Nonfinite refined solution");}
+                        for(int row=0;row<size;row++)permutedRhs[permutation[row]]=residual[row];lu.solve(permutedRhs,permutedSolution);
+                        for(int row=0;row<size;row++){result[row]+=permutedSolution[permutation[row]];if(!Double.isFinite(result[row]))throw new SolveFailure("Nonfinite refined solution");}
                     }
                 }
                 solutions[vector]=result;

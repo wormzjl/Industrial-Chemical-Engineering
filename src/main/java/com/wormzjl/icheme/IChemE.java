@@ -2,11 +2,11 @@ package com.wormzjl.icheme;
 
 import com.mojang.logging.LogUtils;
 import com.wormzjl.icheme.network.ProcessSimulatorNetwork;
-import com.wormzjl.icheme.network.ProcessSolveCoordinator;
 import com.wormzjl.icheme.registry.ModBlockEntities;
 import com.wormzjl.icheme.registry.ModBlocks;
 import com.wormzjl.icheme.registry.ModItems;
 import com.wormzjl.icheme.registry.ModMenus;
+import com.wormzjl.icheme.runtime.ProcessSolveCoordinator;
 import com.wormzjl.icheme.runtime.ProcessSolveServices;
 import com.wormzjl.icheme.runtime.WorkerAllocation;
 import com.wormzjl.icheme.science.column.v3.V3ColumnCalculator;
@@ -171,7 +171,7 @@ public final class IChemE {
         // Solid fuel without a fuel record (batch 2026-11-09-batch-distiller, owner B1 B).
         ENERGY_JOULES_PER_BURN_TICK = builder.comment("Joules of heat per burn tick for a firebox item without a fuel record (materials/fuels): its furnace burn time times this. Default 1.45e6, the coal anchor: a coal item of 92.6 kg at 25 MJ/kg over its 1600 ticks. Items with a record burn at their mass times their heating value.",
                         "An item's heat is conserved: it burns over process time, so a still takes fluid.timeScale times the items per play minute.")
-                .defineInRange("joulesPerBurnTick", com.wormzjl.icheme.science.fluid.network.BatchStill.JOULES_PER_BURN_TICK, 1.0, 1e12);
+                .defineInRange("joulesPerBurnTick", com.wormzjl.icheme.science.plant.still.BatchStill.JOULES_PER_BURN_TICK, 1.0, 1e12);
         builder.pop();
         // The Create coupling (batch 2026-11-03-rotating-machinery W6b, decision D7): read only with Create installed.
         builder.push("create");
@@ -181,14 +181,15 @@ public final class IChemE {
         // Pump wear (batch 2026-11-03-rotating-machinery W10b, owner decision D34).
         builder.push("machines");
         builder.push("wear");
-        WEAR_ENABLED = builder.comment("Whether pumps wear from cavitation and from running dry, and fail at 0 % health until a repair kit restores them. False: nothing wears and no pump stands failed.")
+        WEAR_ENABLED = builder.comment("Whether machines wear and fail at 0 % health until a repair kit restores them: a pump from cavitation, low flow and running dry, a dry screw from liquid, a centrifugal compressor from wet gas, a steam turbine from a wet exhaust. False: nothing wears and no machine stands failed.")
                 .define("enabled", true);
         // In process time (batch 2026-11-11-minecraft-time-delta, owner T3): new keys, so a stored online life does not carry over as a shorter one.
         WEAR_CAVITATION_HOURS = builder.comment("A pump's life in process hours at the worst cavitation (its NPSH available about twice its NPSH3). Longer elsewhere: 20.4 h at NPSH3, 75.6 h at 3.5 times it, none from 4 times it up.",
+                        "Low flow, wet gas and a wet exhaust spend the same life: each lasts this long at its full intensity.",
                         "Process time runs fluid.timeScale times faster than play: the default 8 h is 2 h of play at the default factor 4.")
                 .defineInRange("cavitationProcessHours", com.wormzjl.icheme.science.machine.Wear.CAVITATION_PROCESS_HOURS, 0.001, 1e6);
         WEAR_DRY_MINUTES = builder.comment("A pump's life in process minutes running dry: its driver on while it is gas- or vapour-locked or its suction holds no liquid.",
-                        "The default 40 min is 10 min of play at the default factor 4.")
+                        "A dry screw taking liquid spends the same life. The default 40 min is 10 min of play at the default factor 4.")
                 .defineInRange("dryProcessMinutes", com.wormzjl.icheme.science.machine.Wear.DRY_PROCESS_MINUTES, 0.01, 1e6);
         builder.pop();
         builder.pop();
@@ -291,7 +292,7 @@ public final class IChemE {
 
     /** Joules per burn tick of a firebox item without a fuel record (batch 2026-11-09-batch-distiller; default before the config loads). */
     public static double joulesPerBurnTick() {
-        return CONFIG_SPEC.isLoaded() ? ENERGY_JOULES_PER_BURN_TICK.get() : com.wormzjl.icheme.science.fluid.network.BatchStill.JOULES_PER_BURN_TICK;
+        return CONFIG_SPEC.isLoaded() ? ENERGY_JOULES_PER_BURN_TICK.get() : com.wormzjl.icheme.science.plant.still.BatchStill.JOULES_PER_BURN_TICK;
     }
 
     /** The pumps' wear settings (W10b; the defaults before the config loads). */
@@ -341,7 +342,7 @@ public final class IChemE {
     private static void onServerStarting(ServerStartingEvent event) {
         MinecraftServer server = event.getServer();
         try {
-            // Parse the bundled model before admitting work, as the default config did: the simulator's column starts from it (ColumnUnit.START).
+            // Parse the bundled model before admitting work, as the default config did: the simulator's column starts from it (ColumnSolve.ColdStart.LEARNED).
             V3NeuralRegistry.bundled();
             ProcessSolveServices.ServerStarted started =
                     ProcessSolveServices.startServer(server, solveServiceConfig());

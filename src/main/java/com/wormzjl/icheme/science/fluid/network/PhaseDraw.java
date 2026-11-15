@@ -9,9 +9,12 @@ import static com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.AQUEOU
 
 /**
  * What a vessel's phase port draws (decision D11: ports carry mixed phases by priority). Priority: a bottom
- * ({@link PassiveNetwork.PhasePort#LIQUID}) port draws the heavier of the vessel's two liquids
- * ({@link FluidThermodynamics#heavierLiquid}), then the lighter, then the gas; a top ({@link PassiveNetwork.PhasePort#VAPOR})
- * port the gas, then the lighter liquid, then the heavier; each liquid carries its volume share of the solids
+ * ({@link PassiveNetwork.PhasePort#LIQUID}) port draws the vessel's two liquids at equal volume rates while the seed holds
+ * both and neither reaches its capacity ({@link Segment#mixed}); otherwise the liquid that runs out first at its capacity,
+ * then the other, then the gas, and with one liquid held the oil, then the water, then the gas. A top
+ * ({@link PassiveNetwork.PhasePort#VAPOR}) port draws the gas, then the lighter liquid ({@link FluidThermodynamics#heavierLiquid}),
+ * then the heavier; a boot's water port the heavier liquid first, its hydrocarbon port the oil first; an overflow the
+ * lighter liquid first ({@link #order}). Each liquid carries its volume share of the solids
  * ({@link FluidThermodynamics#phaseSolidShare}). A BULK end draws the bulk, except on a donor holding solids but no
  * liquid, whose bulk end draws its gas (owner decision D33, {@link FluidThermodynamics#bulkDrawsGas}).
  *
@@ -101,7 +104,7 @@ final class PhaseDraw {
      * rest, as the priority stream's last phase takes the rest of a flow. Null when the state holds none of the order's
      * phases. The one fill of both readers: the step's suction intake of a mover ({@link InletPhase}, its target volume
      * shared among the vessel's {@code ends} phase-port outlets) and the static column of a connection
-     * ({@code PassiveStepSolver.columnDensity}, the connection's own volume, one end).
+     * ({@code PortStreams.columnDensity}, the connection's own volume, one end).
      */
     static double[] fill(FluidThermodynamics.State state,int[] order,double volume,int ends) {
         int last=-1;for(int phase:order)if(FluidThermodynamics.holdsPhase(state,phase))last=phase;

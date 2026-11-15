@@ -2,6 +2,7 @@ package com.wormzjl.icheme.science.machine;
 
 import com.wormzjl.icheme.science.math.DeterministicMath;
 
+import java.util.List;
 import java.util.Locale;
 
 /**
@@ -42,11 +43,37 @@ public record VacuumPump(Type type, double capacity, double ratedSpeed) implemen
     public static final double SCREW_HEATING = .6;
     /**
      * Owner V6 B: a dry screw wears, as a pump running dry does ({@link Wear}), while liquid takes more than this share of
-     * its suction volume, and its liquid noise rises with the share to full loudness at {@link #LIQUID_LOUD}.
+     * its suction volume; its wear and its liquid noise rise with the share to full at {@link #LIQUID_LOUD} (code base review
+     * N5, M-06: {@link #liquidIntensity}).
      */
     public static final double LIQUID_TRACE = .01, LIQUID_LOUD = .1;
     /** The capacity left when the curve gives none, m³/s: the row needs a displacement above zero. */
     private static final double NONE = 1e-12;
+
+    /**
+     * One catalogue model (batch 2026-11-10-vacuum-pump, owner "Both types & different models"): its name, nominal capacity
+     * (m³/h), design speed (rpm) and its rotor's or housing's width (m), which the casing's drawing scales by.
+     */
+    public record Model(String name, double capacity, double speed, double width) {
+    }
+
+    /** The liquid ring's models by number: its name takes the stage count, its 5000 m³/h ring is single stage. */
+    public static final List<Model> RINGS = List.of(new Model("150", 150, 1450, .3), new Model("500", 500, 1450, .45),
+            new Model("1500", 1500, 980, .7), new Model("5000", 5000, 590, 1.1));
+    /** The dry screw's models by number. */
+    public static final List<Model> SCREWS = List.of(new Model("DS-100", 100, 2950, .35), new Model("DS-300", 300, 2950, .45),
+            new Model("DS-650", 650, 2950, .55), new Model("DS-2500", 2500, 2950, .8));
+
+    /** Model {@code number} of {@code models} (1 up, rounded; below the first the first, past the last the last). */
+    public static Model model(List<Model> models, double number) {
+        return models.get((int) Math.max(0, Math.min(models.size() - 1, Math.round(number) - 1)));
+    }
+
+    /** The law of model {@code m}: a dry screw, or a liquid ring of two stages from {@code stages} 2 up, else one. */
+    public static VacuumPump of(Model m, boolean dryScrew, double stages) {
+        var type = dryScrew ? Type.DRY_SCREW : stages >= 2 ? Type.LIQUID_RING_TWO_STAGE : Type.LIQUID_RING_ONE_STAGE;
+        return new VacuumPump(type, m.capacity() / 3600, m.speed());
+    }
 
     public enum Type {
         /** Liquid ring, one stage: {@code n} 2, ring friction 9 W per m³/h. */
@@ -89,9 +116,17 @@ public record VacuumPump(Type type, double capacity, double ratedSpeed) implemen
         return law instanceof VacuumPump v && v.type == Type.DRY_SCREW;
     }
 
-    /** The liquid noise byte, 0 to 255, at a suction liquid volume share {@code liquid} (owner V6 B). */
+    /**
+     * The liquid intensity, 0 to 1, at a suction liquid volume share {@code liquid} (N5): 0 at and below {@link #LIQUID_TRACE},
+     * else {@code liquid / LIQUID_LOUD}, at most 1. The dry screw's {@code LIQUID} fault and its noise read it.
+     */
+    public static double liquidIntensity(double liquid) {
+        return liquid > LIQUID_TRACE ? Math.min(1, liquid / LIQUID_LOUD) : 0;
+    }
+
+    /** The liquid noise byte, 0 to 255, at a suction liquid volume share {@code liquid} (owner V6 B): {@code 255 liquidIntensity}. */
     public static int liquidNoise(double liquid) {
-        return liquid > LIQUID_TRACE ? (int) Math.round(255 * Math.min(1, liquid / LIQUID_LOUD)) : 0;
+        return (int) Math.round(255 * liquidIntensity(liquid));
     }
 
     /** φ, the share of the capacity it takes at suction pressure {@code pressure} Pa: 0 at or below blank-off. */

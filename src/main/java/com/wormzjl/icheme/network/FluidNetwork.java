@@ -28,7 +28,8 @@ import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 import java.util.*;
 
 /**
- * Menu protocol {@value #PROTOCOL}: position/identity/revision-bound controls; clients never send inventory or
+ * The fluid menu payloads, on the mod's protocol {@link NetworkProtocol#VERSION} (before it: fluid-24; the fluid-N
+ * numbers below are that string's history): position/identity/revision-bound controls; clients never send inventory or
  * solver results. Opening a GUI immediately receives the last published server snapshot, when available.
  * Subsequent menu updates receive a static payload (kind, components,
  * presets, material names) and a live payload (view, controls, the engine's reply) on its island's
@@ -67,7 +68,6 @@ import java.util.*;
  * ({@link FluidView.Converter}), and its page's settings travel as their own edit ({@link ConverterEditPayload}).</p>
  */
 public final class FluidNetwork {
-    public static final String PROTOCOL="fluid-24";
     private static final Gson JSON=new Gson();
     public static final int MAX_JSON=262144;
     public static final int MAX_EDIT_JSON=4096;
@@ -258,7 +258,7 @@ public final class FluidNetwork {
         @Override public Type<? extends CustomPacketPayload> type(){return TYPE;}
     }
     public static void register(RegisterPayloadHandlersEvent event) {
-        var registrar=event.registrar(PROTOCOL).executesOn(HandlerThread.MAIN);
+        var registrar=event.registrar(NetworkProtocol.VERSION).executesOn(HandlerThread.MAIN);
         registrar.playToServer(EditPayload.TYPE,EditPayload.STREAM_CODEC,FluidNetwork::edit);
         registrar.playToServer(RecoverPayload.TYPE,RecoverPayload.STREAM_CODEC,FluidNetwork::recover);
         registrar.playToServer(ConverterEditPayload.TYPE,ConverterEditPayload.STREAM_CODEC,(payload,context)->{if(context.player() instanceof ServerPlayer player)converterEdit(payload,player);});
@@ -282,11 +282,10 @@ public final class FluidNetwork {
         if(view.identity()!=record.device().id()||view.inputRevision()!=record.revision())
             throw new IllegalArgumentException("Presentation snapshot registration mismatch");
         return new MenuData(record.device().hydraulicKind(),view,Controls.from(record),world.components(),world.presets(),"",
-            world.materialNames(),Arrays.stream(world.model().molecularWeights()).boxed().toList(),world.instruments().sensorReadings(record.device().id(),view),valveData(world,record,view));
+            world.materialNames(),world.molecularWeights(),world.instruments().sensorReadings(record.device().id(),view),valveData(world,record,view));
     }
     /** The opening of valve {@code id} as its screen reads it, 0 to 1, or NaN where it has none or no signal (the column's Operation tab, C7). */
-    public static double opening(FluidWorldAuthority world,long id){return world.stored(()->storedOpening(world,id));}
-    private static double storedOpening(FluidWorldAuthority world,long id){var record=world.registrations().get(id);if(record==null)return Double.NaN;var data=valveData(world,record,world.view(id));return data==null||!data.configured()?Double.NaN:data.opening();}
+    public static double opening(FluidWorldAuthority world,long id){var record=world.registrations().get(id);if(record==null)return Double.NaN;var data=valveData(world,record,world.view(id));return data==null||!data.configured()?Double.NaN:data.opening();}
     private static ValveData valveData(FluidWorldAuthority world,WorldTopologyLedger.Registration record,FluidView view){
         if(!(record.device().control() instanceof FlowControl.Valve valve)||valve instanceof FlowControl.Turbine)return null;
         if(valve.bare())return new ValveData(false,1,"Lacking components");
@@ -431,9 +430,9 @@ public final class FluidNetwork {
                     case RESERVOIR->{
                         // A batch still's pot (W6): its firing and reflux valve, a fact its islands read at their next slice.
                         if(d.stillPot()&&controls.still!=null){
-                            // The field guide's stop step (P2b): the fire set off, read against the still's view as its island is
-                            // stored (code review finding 1: a packet handler materialises no island).
-                            var shown=controls.still.firing()==0?world.stored(()->world.view(d.id())).still():null;
+                            // The field guide's stop step (P2b): the fire set off, read against the still's view (a preview: a
+                            // packet handler materialises no island, code review finding 1 and code base review R5).
+                            var shown=controls.still.firing()==0?world.view(d.id()).still():null;
                             String refused=world.stillSettings(d.id(),controls.still.firing(),controls.still.ratio());
                             if(refused!=null)throw new IllegalArgumentException(refused);
                             com.wormzjl.icheme.runtime.tutorial.TutorialTriggers.stillFiringOff(player,shown);
@@ -498,8 +497,8 @@ public final class FluidNetwork {
     }
 
     // ---- requested world-space displays and item settings ----
-    // Each requested display keeps its own payload ids and protocol version string: the open tanks' display path rides on
-    // PROTOCOL, the others on their own registrars (registerDisplays), so their wire registration is unchanged.
+    // Each requested display keeps its own payload ids and its own registrar (registerDisplays): the open tanks' display
+    // path rides on the menu's registrar, the others on theirs. Every registrar carries NetworkProtocol.VERSION.
 
     /** How far from a watcher an open tank's node cell or a sight glass may stand, blocks. */
     public static final double WATCH_RANGE=128;
@@ -535,12 +534,8 @@ public final class FluidNetwork {
     }
     private static TankDisplay display(RegistryFriendlyByteBuf b){return new TankDisplay(b.readFloat(),b.readFloat(),b.readFloat(),b.readInt(),b.readInt(),b.readFloat());}
     private static void display(RegistryFriendlyByteBuf b,TankDisplay d){b.writeFloat(d.level());b.writeFloat(d.waterLevel());b.writeFloat(d.height());b.writeInt(d.oilArgb());b.writeInt(d.waterArgb());b.writeFloat(d.fanSpeed());}
-    private static List<BlockPos> positions(RegistryFriendlyByteBuf b) {
-        int count=b.readVarInt();if(count<0||count>MAXIMUM_WATCHED)throw new IllegalArgumentException("Too many tanks in one watch request");
-        var list=new ArrayList<BlockPos>(count);for(int i=0;i<count;i++)list.add(b.readBlockPos());
-        return list;
-    }
-    private static void positions(RegistryFriendlyByteBuf b,List<BlockPos> list){b.writeVarInt(list.size());for(var pos:list)b.writeBlockPos(pos);}
+    private static List<BlockPos> positions(RegistryFriendlyByteBuf b){return Wire.positions(b,MAXIMUM_WATCHED,"watched position");}
+    private static void positions(RegistryFriendlyByteBuf b,List<BlockPos> list){Wire.positions(b,list);}
 
     /** A watched sight glass or constructed mover: its cell and its fluid identity. */
     public record Target(BlockPos position,long identity) {
@@ -749,7 +744,8 @@ public final class FluidNetwork {
         public static final Type<NoiseSources> TYPE=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"noise_sources"));
         public static final StreamCodec<RegistryFriendlyByteBuf,NoiseSources> STREAM_CODEC=new StreamCodec<>() {
             public NoiseSources decode(RegistryFriendlyByteBuf b) {
-                int n=b.readVarInt();if(n<0||n>com.wormzjl.icheme.runtime.fluid.Noise.MAXIMUM_SOURCES)throw new IllegalArgumentException("Too many noise sources");
+                // A source: its position (8 bytes), its kind (1) and its level and pitch (4 each).
+                int n=Wire.count(b,com.wormzjl.icheme.runtime.fluid.Noise.MAXIMUM_SOURCES,Long.BYTES+1+2*Float.BYTES,"noise source");
                 var kinds=com.wormzjl.icheme.runtime.fluid.Noise.Kind.values();var out=new ArrayList<com.wormzjl.icheme.runtime.fluid.Noise.Source>(n);
                 for(int i=0;i<n;i++){var pos=b.readBlockPos();int kind=b.readUnsignedByte();if(kind>=kinds.length)throw new IllegalArgumentException("Invalid noise kind");
                     out.add(new com.wormzjl.icheme.runtime.fluid.Noise.Source(pos,kinds[kind],b.readFloat(),b.readFloat()));}
@@ -786,7 +782,8 @@ public final class FluidNetwork {
     private static void validate(List<Target> list){if(list.size()>MAXIMUM_WATCHED||new HashSet<>(list).size()!=list.size())throw new IllegalArgumentException("Invalid watch list");}
     private static Target readTarget(RegistryFriendlyByteBuf b){return new Target(b.readBlockPos(),b.readLong());}
     private static void writeTarget(RegistryFriendlyByteBuf b,Target t){b.writeBlockPos(t.position);b.writeLong(t.identity);}
-    private static List<Target> targets(RegistryFriendlyByteBuf b){int count=b.readVarInt();if(count<0||count>MAXIMUM_WATCHED)throw new IllegalArgumentException("Too many watched targets");var result=new ArrayList<Target>(count);for(int i=0;i<count;i++)result.add(readTarget(b));return result;}
+    // A target: its position and its identity, 8 bytes each.
+    private static List<Target> targets(RegistryFriendlyByteBuf b){int count=Wire.count(b,MAXIMUM_WATCHED,2*Long.BYTES,"watched target");var result=new ArrayList<Target>(count);for(int i=0;i<count;i++)result.add(readTarget(b));return result;}
     private static void targets(RegistryFriendlyByteBuf b,List<Target> list){b.writeVarInt(list.size());for(var t:list)writeTarget(b,t);}
 
     /** An installed instrument a client watches: its host's cell, its key and its instance. Ordinary block updates carry no live measurements. */
@@ -815,7 +812,8 @@ public final class FluidNetwork {
     }
     private static InstrumentTarget instrumentTarget(RegistryFriendlyByteBuf b){return new InstrumentTarget(b.readBlockPos(),new Instrument.Key(b.readLong(),b.readUtf(64)),b.readUUID());}
     private static void instrumentTarget(RegistryFriendlyByteBuf b,InstrumentTarget t){b.writeBlockPos(t.position);b.writeLong(t.key.host());b.writeUtf(t.key.mount(),64);b.writeUUID(t.instance);}
-    private static List<InstrumentTarget> instrumentTargets(RegistryFriendlyByteBuf b){int n=b.readVarInt();if(n<0||n>64)throw new IllegalArgumentException("Too many instrument targets");var l=new ArrayList<InstrumentTarget>();for(int i=0;i<n;i++)l.add(instrumentTarget(b));return l;}
+    // An instrument target: its position and its host (8 bytes each), its mount (a VarInt length at least) and its instance (16 bytes).
+    private static List<InstrumentTarget> instrumentTargets(RegistryFriendlyByteBuf b){int n=Wire.count(b,64,2*Long.BYTES+1+16,"instrument target");var l=new ArrayList<InstrumentTarget>();for(int i=0;i<n;i++)l.add(instrumentTarget(b));return l;}
     private static void instrumentTargets(RegistryFriendlyByteBuf b,List<InstrumentTarget> l){b.writeVarInt(l.size());l.forEach(t->instrumentTarget(b,t));}
 
     /** Client to server: a gauge's edited settings, from its open settings menu. */
@@ -852,14 +850,14 @@ public final class FluidNetwork {
             if(context.player() instanceof ServerPlayer player)FluidWorldAuthority.find(player.server).ifPresent(world->world.watchTanks(player,payload.watch,payload.unwatch));
         });
         fluid.playToClient(TankDisplayPayload.TYPE,TankDisplayPayload.STREAM_CODEC,(payload,context)->com.wormzjl.icheme.client.TankRenderer.accept(payload.node,payload.glide));
-        var sightGlass=event.registrar("sight-glass-3").executesOn(HandlerThread.MAIN);
+        var sightGlass=event.registrar(NetworkProtocol.VERSION).executesOn(HandlerThread.MAIN);
         sightGlass.playToServer(Watch.SIGHT_GLASSES,Watch.codec(Watch.SIGHT_GLASSES),(payload,context)->{
             if(context.player() instanceof ServerPlayer player)FluidWorldAuthority.find(player.server).ifPresent(world->world.watchSightGlasses(player,payload.watch,payload.unwatch));
         });
         sightGlass.playToClient(SightGlassPayload.TYPE,SightGlassPayload.STREAM_CODEC,(payload,context)->com.wormzjl.icheme.client.SightGlassRenderer.accept(payload.target,payload.sample));
         // mover-2 (W3, reading A36): the mover state carries its speed share; the drivers' watch and state ride beside it.
         // mover-3 (W10c): and a pump's crackle and churn bytes; mover-4: an in-line pump's rated rpm for the pitch.
-        var mover=event.registrar("mover-4").executesOn(HandlerThread.MAIN);
+        var mover=event.registrar(NetworkProtocol.VERSION).executesOn(HandlerThread.MAIN);
         mover.playToServer(Watch.MOVERS,Watch.codec(Watch.MOVERS),(p,context)->{
             if(context.player() instanceof ServerPlayer player)FluidWorldAuthority.find(player.server).ifPresent(world->world.watchMovers(player,p.watch,p.unwatch));
         });
@@ -889,23 +887,23 @@ public final class FluidNetwork {
         fluid.playToClient(NoiseSources.TYPE,NoiseSources.STREAM_CODEC,(p,context)->com.wormzjl.icheme.client.fx.sound.FxSounds.accept(p.sources()));
         // flare-1 (batch 2026-11-09-flare-stack, W5): the flares' watch and their flame state; flare-2 (batch
         // 2026-11-10-custom-shader-system, W3): the state carries the soot index and the exit velocity.
-        var flare=event.registrar("flare-2").executesOn(HandlerThread.MAIN);
+        var flare=event.registrar(NetworkProtocol.VERSION).executesOn(HandlerThread.MAIN);
         flare.playToServer(Watch.FLARES,Watch.codec(Watch.FLARES),(p,context)->{
             if(context.player() instanceof ServerPlayer player)FluidWorldAuthority.find(player.server).ifPresent(world->world.watchFlares(player,p.watch,p.unwatch));
         });
         flare.playToClient(FlareState.TYPE,FlareState.STREAM_CODEC,(p,context)->com.wormzjl.icheme.client.fx.state.ProcessStates.accept(p));
         // still-1 (batch 2026-11-09-batch-distiller, W6): the stills' watch and their fire state, and the page's fuel slot.
-        var still=event.registrar("still-1").executesOn(HandlerThread.MAIN);
+        var still=event.registrar(NetworkProtocol.VERSION).executesOn(HandlerThread.MAIN);
         still.playToServer(Watch.STILLS,Watch.codec(Watch.STILLS),(p,context)->{
             if(context.player() instanceof ServerPlayer player)FluidWorldAuthority.find(player.server).ifPresent(world->world.watchStills(player,p.watch,p.unwatch));
         });
         still.playToClient(StillState.TYPE,StillState.STREAM_CODEC,(p,context)->com.wormzjl.icheme.client.fx.state.ProcessStates.accept(p));
         still.playToServer(StillFuelPayload.TYPE,StillFuelPayload.STREAM_CODEC,(p,context)->{if(context.player() instanceof ServerPlayer player)stillFuel(p,player);});
-        var instruments=event.registrar("instruments-1").executesOn(HandlerThread.MAIN);
+        var instruments=event.registrar(NetworkProtocol.VERSION).executesOn(HandlerThread.MAIN);
         instruments.playToServer(InstrumentWatch.TYPE,InstrumentWatch.CODEC,(p,c)->{if(c.player() instanceof ServerPlayer player)FluidWorldAuthority.find(player.server).ifPresent(w->w.instruments().watch(player,p.watch,p.unwatch));});
         instruments.playToClient(InstrumentDisplay.TYPE,InstrumentDisplay.CODEC,(p,c)->com.wormzjl.icheme.client.InstrumentRenderer.accept(p));
         instruments.playToServer(GaugeSave.TYPE,GaugeSave.CODEC,(p,c)->{if(c.player() instanceof ServerPlayer player&&player.containerMenu instanceof GaugeMenu menu&&menu.containerId==p.menu&&menu.stillValid(player)&&menu.initial().kind()==p.settings.kind()){menu.save(p.settings);player.inventoryMenu.broadcastChanges();}});
-        var tools=event.registrar("pipeline-tool-5").executesOn(HandlerThread.MAIN);
+        var tools=event.registrar(NetworkProtocol.VERSION).executesOn(HandlerThread.MAIN);
         tools.playToServer(PipelineToolSave.TYPE,PipelineToolSave.STREAM_CODEC,(payload,context)->{
             if(!(context.player() instanceof ServerPlayer player)||!(player.containerMenu instanceof PipelineToolMenu menu)
                     ||menu.containerId!=payload.menuId()||!menu.stillValid(player)||!PipelineToolItem.Settings.valid(payload.diameter())||!com.wormzjl.icheme.science.equipment.Paint.line(payload.paint())||!com.wormzjl.icheme.science.equipment.Paint.line(payload.secondary()))return;

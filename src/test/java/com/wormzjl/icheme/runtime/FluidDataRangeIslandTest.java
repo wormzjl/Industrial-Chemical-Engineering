@@ -37,8 +37,8 @@ class FluidDataRangeIslandTest {
         String layout="RPCPR";
         for(int i=0;i<layout.length();i++) {
             var kind=switch(layout.charAt(i)){case 'C'->TopologyCompiler.Kind.COMPRESSOR;case 'P'->TopologyCompiler.Kind.PIPE;default->TopologyCompiler.Kind.RESERVOIR;};
-            var device=new PhysicalFluidTopology.Device(i+1,new PhysicalFluidTopology.Position("minecraft:overworld",i,64,0),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kind),PhysicalFluidTopology.Direction.EAST,block,
-                    kind==TopologyCompiler.Kind.COMPRESSOR?new FlowControl.Compressor(.01,1.05):new FlowControl.Passive());
+            var device=PhysicalFluidTopology.Device.builder(i+1,new PhysicalFluidTopology.Position("minecraft:overworld",i,64,0),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kind),PhysicalFluidTopology.Direction.EAST,block,
+                    kind==TopologyCompiler.Kind.COMPRESSOR?new FlowControl.Compressor(.01,1.05):new FlowControl.Passive()).build();
             devices.add(device);
             if(kind==TopologyCompiler.Kind.RESERVOIR)boundaries.put(device.id(),FluidTestSupport.chargedBoundary(new FluidDeviceSpec(1,298.15,101325,nitrogen),device,model));
         }
@@ -48,16 +48,16 @@ class FluidDataRangeIslandTest {
     /** The coordinator of one island with an inline worker; {@link #run} solves every dispatched attempt at once. */
     static final class Rig {
         final IslandCoordinator coordinator;
-        final List<ProcessSolveServices.FluidIslandSolveResult> results=new ArrayList<>();
+        final List<ProcessSolveJobs.FluidIslandSolveResult> results=new ArrayList<>();
         final List<String> warnings=new ArrayList<>();
         private final LinkedHashMap<Long,IslandCoordinator.Attempt> attempts=new LinkedHashMap<>();
-        private final HashMap<Long,ProcessSolveServices.FluidIslandCommand> commands=new HashMap<>();
+        private final HashMap<Long,ProcessSolveJobs.FluidIslandCommand> commands=new HashMap<>();
         Rig(FluidThermodynamics model,PassiveNetwork graph,java.util.function.LongFunction<String> names) {
             long[] requests={0};
             coordinator=new IslandCoordinator(new IslandCoordinator.Dispatcher() {
                 public int availableWorkers(){return 1-attempts.size();}
                 public long nextRequestId(){return ++requests[0];}
-                public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveServices.FluidIslandCommand command){attempts.put(attempt.slice().requestId(),attempt);commands.put(attempt.slice().requestId(),command);return true;}
+                public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveJobs.FluidIslandCommand command){attempts.put(attempt.slice().requestId(),attempt);commands.put(attempt.slice().requestId(),command);return true;}
                 public void cancel(long request){}
             },changed->{},()->0L,new IslandCoordinator.Settings(2_000_000_000L,1_500_000_000L,64,false,100,CertificatePolicy.defaults()));
             coordinator.onPhaseHold((island,v,where,parked)->warnings.add(v.getMessage()+" | "+where));
@@ -69,7 +69,7 @@ class FluidDataRangeIslandTest {
                 coordinator.tick();
                 for(long request:List.copyOf(attempts.keySet())) {
                     var attempt=attempts.remove(request);var command=commands.remove(request);long[] clock={0};
-                    var result=(ProcessSolveServices.FluidIslandSolveResult)command.solve(FluidTestSupport.NEVER,()->clock[0]+=1_000);
+                    var result=(ProcessSolveJobs.FluidIslandSolveResult)command.solve(FluidTestSupport.NEVER,()->clock[0]+=1_000);
                     results.add(result);coordinator.completed(attempt,Optional.of(result));
                 }
                 coordinator.pump();

@@ -44,13 +44,13 @@ public final class SpeedControl {
     }
 
     /**
-     * A driver that cannot cut its power (an ungoverned turbine, batch 2026-11-03-rotating-machinery reading A22): the same
-     * damped step {@code s (available/demand)^(1/6)} as {@link #powerLimited}, without the cap at the set speed, so a surplus
-     * accelerates the shaft and the overspeed trip can act. With no demand, any power is a surplus without bound (+∞); with
-     * neither, the speed holds.
+     * The speed where a governed turbine's steam power {@code available} would meet its load {@code demand} (above 0), by the
+     * same damped step {@code s (available/demand)^(1/6)} as {@link #powerLimited}, without the cap at the set speed: the
+     * governor caps it itself. A load of nothing is the governor's own case, which never asks; without a load the speed
+     * holds (code base review M-03: the unbounded answer for no load served the ungoverned turbine, which is gone).
      */
     public static double balance(double speed, double available, double demand) {
-        if (!(demand > 0)) return available > 0 ? Double.POSITIVE_INFINITY : speed;
+        if (!(demand > 0)) return speed;
         return speed * DeterministicMath.cbrt(Math.sqrt(Math.max(0, available) / demand));
     }
 

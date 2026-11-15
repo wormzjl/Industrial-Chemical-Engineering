@@ -6,7 +6,7 @@ import com.wormzjl.icheme.runtime.ProcessSolveServices;
 import com.wormzjl.icheme.runtime.assembly.AssemblyService;
 import com.wormzjl.icheme.runtime.assembly.AssemblyStore;
 import com.wormzjl.icheme.runtime.fluid.FluidDeviceSpec;
-import com.wormzjl.icheme.science.column.operation.OperationView;
+import com.wormzjl.icheme.science.plant.column.OperationView;
 import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
 import com.wormzjl.icheme.science.column.v3.V3PumparoundSpec;
 import com.wormzjl.icheme.science.column.v3.V3SideDrawSpec;
@@ -237,7 +237,7 @@ public final class ColumnOperationReviewWorld {
         void layout(boolean openFeed) {
             plant.hold();
             MaterialCatalog catalog = MaterialRuntime.active();
-            var base = options.design() == null ? catalog.presets().column(catalog.presets().network().defaultColumnPreset()).input(catalog) : options.design().apply(catalog);
+            var base = options.design() == null ? com.wormzjl.icheme.science.column.v3.V3ColumnPresets.input(catalog.presets().column(catalog.presets().network().defaultColumnPreset()), catalog) : options.design().apply(catalog);
             input = scaled(base, options.scale());
             var layout = options.layout();
             int pumparounds = input.pumparounds().size();

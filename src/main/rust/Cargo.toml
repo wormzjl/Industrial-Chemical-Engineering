@@ -1,0 +1,24 @@
+# The Rust workspace of the column port (RUST_COLUMN_PORT_PLAN.md section 4). Stage (a) part 1: icheme-math only.
+[workspace]
+resolver = "3"
+members = ["icheme-math", "icheme-jni"]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.99"
+license = "MIT"
+publish = false
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+disallowed_methods = "deny"
+
+# Section 6 of the plan: no fast-math, no CPU dispatch, panics stay catchable at the JNI boundary.
+[profile.release]
+opt-level = 3
+codegen-units = 1
+panic = "unwind"
+debug-assertions = false
+overflow-checks = false

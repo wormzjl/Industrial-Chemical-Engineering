@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.science.thermo.phase;
 
+import com.wormzjl.icheme.science.thermo.PhaseTraits;
 import java.util.Objects;
 
 /**
@@ -13,17 +14,24 @@ import java.util.Objects;
  * {@link PhaseState#kind()} of {@link #state()} keeps the root situation the evaluator met, which can be
  * {@link PhaseKind#FLUID} for a phase the result labels liquid.</p>
  *
+ * <p>{@link #traits()} (I-1) are the numbers the label rules of
+ * {@link com.wormzjl.icheme.science.thermo.PhaseIdentification} read, of the root the state was evaluated on: a consumer
+ * may map a phase by them instead of by its label.</p>
+ *
  * @param amounts mole numbers over the contract basis: finite, nonnegative, some positive
  * @param state a frozen state at the same temperature and pressure
+ * @param traits the fluid phase's traits ({@link PhaseState#traits()} of its state); {@code null} for a crystal, and
+ *        for a fluid phase built without them
  */
 public record PhaseAmounts(PhaseKind kind, String crystal, double temperature, double pressure, double[] amounts,
-                           PhaseState state) {
+                           PhaseState state, PhaseTraits traits) {
     public PhaseAmounts {
         Objects.requireNonNull(kind, "kind");
         Objects.requireNonNull(state, "state");
         if ((kind == PhaseKind.SOLID) != (crystal != null)) {
             throw new IllegalArgumentException("A solid phase names its crystal and a fluid phase names none");
         }
+        if (kind == PhaseKind.SOLID && traits != null) throw new IllegalArgumentException("A crystal phase carries no traits");
         if (!state.frozen()) throw new IllegalArgumentException("A result holds frozen phase states");
         if ((kind == PhaseKind.SOLID) != (state.kind() == PhaseKind.SOLID)
                 || kind == PhaseKind.SOLID && !crystal.equals(state.crystal())) {

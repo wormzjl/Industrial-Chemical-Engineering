@@ -189,14 +189,99 @@ class V3TrayHydraulicsColumnTest {
         MaterialCatalog catalog = MaterialCatalog.bundled();
         for (var preset : catalog.presets().columns().values()) {
             assertEquals(V3ColumnInput.DEFAULT_COLUMN_DIAMETER_METRES,
-                    preset.input(catalog).columnDiameterMetres(), preset.descriptor().id());
+                    V3ColumnPresets.input(preset, catalog).columnDiameterMetres(), preset.descriptor().id());
         }
+    }
+
+    /**
+     * The correction's budget counts control polls, not time (D2 of batch 2026-11-13-codebase-review): a control whose
+     * checkpoint sleeps 1 ms publishes the same pressure profile, bit for bit, as an unbounded one.
+     */
+    @Test
+    void aSlowControlPublishesTheSameProfileAsAnUnboundedOne() {
+        V3ColumnInput input = smallColumn(0.0, 8.0);
+        V3ColumnOutcome.Success fast = assertInstanceOf(V3ColumnOutcome.Success.class, V3TestInputs.calculate(input));
+        V3SolveControl slow = () -> {
+            try {
+                Thread.sleep(1);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                throw new java.util.concurrent.CancellationException("interrupted");
+            }
+        };
+        V3ColumnOutcome outcome = V3ColumnCalculator.calculate(input, slow, 0.0, 0.0, V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO);
+        V3ColumnOutcome.Success slowed = assertInstanceOf(V3ColumnOutcome.Success.class, outcome, outcome::toString);
+        assertTrue(fast.result().trayHydraulics().orElseThrow().correctionApplied(), "the case runs a correction");
+        double[] expected = fast.result().problem().nodePressuresPascal(), published = slowed.result().problem().nodePressuresPascal();
+        assertEquals(expected.length, published.length);
+        for (int node = 0; node < expected.length; node++)
+            assertEquals(Double.doubleToRawLongBits(expected[node]), Double.doubleToRawLongBits(published[node]), "node " + node);
+        assertEquals(fast.diagnostics().solvePath(), slowed.diagnostics().solvePath());
+    }
+
+    /**
+     * The polls each correction spends on every shipped column preset and tower template (all author a diameter, so all march
+     * their tray pressure profile), the literature preset and the small literature column, printed for
+     * {@link V3ColumnCalculator#HYDRAULIC_CORRECTION_BUDGET_POLLS}: the budget holds eight times the largest.
+     */
+    @Test
+    void theCorrectionsOfTheShippedColumnsSpendFarLessThanTheirBudget() {
+        MaterialCatalog bundled = MaterialCatalog.bundled();
+        var cases = new java.util.LinkedHashMap<String, java.util.function.Supplier<V3ColumnOutcome>>();
+        for (var preset : bundled.presets().columns().values()) {
+            V3ColumnInput input = V3ColumnPresets.input(preset, bundled);
+            cases.put(preset.descriptor().id(), () -> com.wormzjl.icheme.science.material.MaterialRuntime
+                    .with(bundled, input.packageId(), () -> V3TestInputs.calculate(input)));
+        }
+        // The shipped tower templates under their crudes, as a player builds them (V3TestInputs.crude; the pot has no crude of its own).
+        for (String name : List.of("small_crude", "medium_crude", "light_crude", "heavy_crude", "oil_sand_dilbit")) {
+            cases.put("template " + name, () -> {
+                V3ColumnInput input = V3TestInputs.crude(bundled, name);
+                return com.wormzjl.icheme.science.material.MaterialRuntime.with(bundled, input.packageId(), () -> V3TestInputs.calculate(input));
+            });
+        }
+        cases.put("tia_juana (literature preset)", () -> V3TestInputs.calculate(V3TestInputs.methaneCduInput()));
+        cases.put("literature 12 trays", () -> V3TestInputs.calculate(smallColumn(0.0, 8.0)));
+        var counts = new java.util.ArrayList<Long>();
+        String largestCase = "";
+        long largest = 0;
+        for (var entry : cases.entrySet()) {
+            V3ColumnOutcome outcome = entry.getValue().get();
+            if (!(outcome instanceof V3ColumnOutcome.Success success)) {
+                System.out.println("V3 hydraulic correction polls, " + entry.getKey() + ": no success (" + outcome + ")");
+                continue;
+            }
+            String event = success.diagnostics().events().stream().filter(e -> e.startsWith("tray hydraulics: ")).findFirst().orElse("no hydraulics event");
+            int at = event.indexOf("correction polls ");
+            if (at < 0) {
+                System.out.println("V3 hydraulic correction polls, " + entry.getKey() + ": no correction (" + event + ")");
+                continue;
+            }
+            String polls = event.substring(at + 17);
+            int factorizations = polls.indexOf(", correction band factorizations ");
+            if (factorizations >= 0) polls = polls.substring(0, factorizations);
+            System.out.println("V3 hydraulic correction polls, " + entry.getKey() + ": " + polls);
+            for (String count : polls.split("/")) {
+                long value = Long.parseLong(count.trim());
+                counts.add(value);
+                if (value > largest) {
+                    largest = value;
+                    largestCase = entry.getKey();
+                }
+            }
+        }
+        java.util.Collections.sort(counts);
+        assertTrue(largest > 0, "the literature preset runs a correction");
+        System.out.println("V3 hydraulic correction polls: " + counts.size() + " corrections, median " + counts.get(counts.size() / 2)
+                + ", largest " + largest + " (" + largestCase + "), budget " + V3ColumnCalculator.HYDRAULIC_CORRECTION_BUDGET_POLLS);
+        assertTrue(8 * largest <= V3ColumnCalculator.HYDRAULIC_CORRECTION_BUDGET_POLLS,
+                "eight times the largest correction, " + largest + " polls, fits the budget");
     }
 
     private static String digest(V3ColumnInput input) {
         return V3InputDigest.of(V3ColumnProblemResolver.resolve(input, V3CondenserPhaseBranch.TWO_PHASE),
                 V3ColumnCalculator.FORMULATION_REVISION, "test-dataset",
-                V3ColumnCalculator.assumptionsRevision(input)).hexadecimalSha256();
+                V3ColumnLabels.assumptionsRevision(input)).hexadecimalSha256();
     }
 
     /** A twelve-tray feature-free literature column; cheap enough to solve three times in one test class. */

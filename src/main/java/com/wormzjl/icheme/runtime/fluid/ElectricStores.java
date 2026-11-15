@@ -82,7 +82,7 @@ public final class ElectricStores {
         }
 
         double capacity() {
-            return kind == Kind.MOTOR ? ElectricStore.motorCapacity(ratedDraw, time) : ElectricStore.capacity(ratedDraw, time);
+            return kind == Kind.MOTOR ? ElectricStore.motorCapacity(ratedDraw, time.seconds(ElectricStore.PERIOD_TICKS)) : ElectricStore.capacity(ratedDraw, time.seconds(ElectricStore.SLICE_TICKS));
         }
     }
 
@@ -166,7 +166,7 @@ public final class ElectricStores {
 
     /** Whether batch still {@code u} is a powered unit: an electric one (batch 2026-11-09-batch-distiller, W4). */
     public static boolean powered(StillUnit u) {
-        return u.heater() == com.wormzjl.icheme.science.fluid.network.BatchStill.Heater.ELECTRIC;
+        return u.heater() == com.wormzjl.icheme.science.plant.still.BatchStill.Heater.ELECTRIC;
     }
 
     /** Whether shaft unit {@code u} is a powered unit: a motor or a generator. */
@@ -197,7 +197,7 @@ public final class ElectricStores {
             }
             case INLINE -> {
                 var r=topology.active().get(id);
-                yield r==null?0:com.wormzjl.icheme.science.machine.InlineMachines.ratedDraw((FlowControl.Mover)r.device().control());
+                yield r==null?0:com.wormzjl.icheme.science.fluid.network.InlineMovers.ratedDraw((FlowControl.Mover)r.device().control());
             }
             case FANS -> {
                 var r = topology.active().get(id);
@@ -210,7 +210,7 @@ public final class ElectricStores {
             case BURNERS -> burnerDraw(topology.active().get(id), FiredHeaters.designFired(topology.active().get(id)));
             case STILL -> {
                 var u = topology.still(id);
-                yield u == null ? 0 : com.wormzjl.icheme.science.fluid.network.BatchStill.Heater.ELECTRIC.drawn(u.design().rating());
+                yield u == null ? 0 : com.wormzjl.icheme.science.plant.still.BatchStill.Heater.ELECTRIC.drawn(u.design().rating());
             }
         };
     }
@@ -307,7 +307,7 @@ public final class ElectricStores {
             s.tick = now;
             s.tickJoules = 0;
         }
-        return Math.max(0, ElectricStore.perTick(s.ratedDraw, coordinator.time()) - s.tickJoules);
+        return Math.max(0, ElectricStore.perTick(s.ratedDraw, coordinator.time().tickSeconds()) - s.tickJoules);
     }
 
     /**
@@ -437,7 +437,7 @@ public final class ElectricStores {
     public boolean restart(long id) {
         var s = stores.get(id);
         if (s == null || !s.unpowered) return false;
-        double threshold = s.kind == Kind.MOTOR ? ElectricStore.motorRestart(s.ratedDraw, s.time) : ElectricStore.restart(s.ratedDraw, s.time);
+        double threshold = s.kind == Kind.MOTOR ? ElectricStore.motorRestart(s.ratedDraw, s.time.seconds(ElectricStore.PERIOD_TICKS)) : ElectricStore.restart(s.ratedDraw, s.time.seconds(ElectricStore.SLICE_TICKS));
         if (!free(s) && (s.joules < threshold || s.kind == Kind.MOTOR && !supplied(id,s))) return false;
         s.unpowered = false;
         return true;
@@ -489,14 +489,19 @@ public final class ElectricStores {
     void booked(long island, long start, long end, PassiveIntervalSolver.Result result) {
         if (stores.isEmpty() || end <= start) return;
         var solved = result.graph();
-        var average=result.averageMassFlows();var heads=result.endpointHeads();
+        var average=result.averageMassFlows();var heads=result.endpointHeads();com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics model=null;
         for(int edge=0;edge<solved.pipes().size();edge++) {
             var pipe=solved.pipes().get(edge);var node=solved.reservoirs().get(pipe.first());var supply=node.state();
             var store=stores.get(node.id());
             if(store!=null&&store.kind==Kind.INLINE&&pipe.control() instanceof FlowControl.Mover mover) {
-                double rho=supply.volume()>0?supply.mass()/supply.volume():0;
-                double q=rho>0?Math.max(0,average[edge])/rho:0,shaft=0;
-                if(rho>0&&mover.enabled())shaft=mover instanceof FlowControl.Machine m?m.law().shaftPower(q,m.speed(),rho,supply.pressure(),1.4):mover.power(Math.max(0,average[edge]),heads[edge],rho,supply.pressure(),1.4)/.65;
+                double rho=supply.volume()>0?supply.mass()/supply.volume():0,shaft=0;
+                // The shaft power the solve's own function gives (code base review M-01, owner decisions A2 and B1): the suction's
+                // heat capacity ratio and wet share as the solve reads them; a set-flow pump over its hydraulic efficiency, a
+                // set-flow compressor's power as it is (already over its own efficiency: the second one is gone).
+                if(rho>0&&mover.enabled()){if(model==null)model=coordinator.model(island);
+                    shaft=com.wormzjl.icheme.science.fluid.network.InlineMovers.shaftPower(mover,average[edge],heads[edge],rho,supply.pressure(),
+                            com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.suctionKappa(model,mover,supply),
+                            com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.wetShare(model,solved,edge,result.advancedSeconds()));}
                 draw(store,com.wormzjl.icheme.science.machine.InlineMachines.electricPower(shaft),start,end,false);
                 continue;
             }

@@ -60,70 +60,18 @@ final class GrateBoilerDesign extends UnitDesign {
     /** The widest grate under a bi-drum boiler, m: 60 m² of grate at most, about 100 t/h (survey), a furnace up to 23 m. */
     static final double BI_DRUM_WIDTH = 6;
 
-    @Override
-    public double minSize() {
-        return 2;
-    }
-
-    @Override
-    public double maxSize() {
-        return 12;
-    }
-
-    @Override
-    public double sizeStep() {
-        return .5;
-    }
-
-    @Override
-    public int minLength(double size) {
-        return 3;
-    }
-
-    @Override
-    public int maxLength(double size) {
-        return 10;
+    GrateBoilerDesign() {
+        super(new Sizes(2, 12, .5,
+                3, 10,
+                3, 6,
+                Orientation.VERTICAL, "grate_boiler.width", "grate_boiler.length", "grate_boiler.grate", true,
+                1));
     }
 
     /** A new grate's length: 1.1 times its width (survey default clamp(1.1 Wg, 3, 10)). */
     @Override
     public int defaultLength(double size) {
         return Math.max(minLength(size), Math.min(maxLength(size), (int) Math.round(1.1 * size)));
-    }
-
-    @Override
-    public int minSupport(double size, int length) {
-        return 3;
-    }
-
-    @Override
-    public int maxSupport() {
-        return 6;
-    }
-
-    @Override
-    public Orientation orientation() {
-        return Orientation.VERTICAL;
-    }
-
-    @Override
-    public boolean moves() {
-        return true;
-    }
-
-    @Override
-    public String sizeRow() {
-        return "grate_boiler.width";
-    }
-
-    @Override
-    public String lengthRow() {
-        return "grate_boiler.length";
-    }
-
-    @Override
-    public String supportRow() {
-        return "grate_boiler.grate";
     }
 
     @Override

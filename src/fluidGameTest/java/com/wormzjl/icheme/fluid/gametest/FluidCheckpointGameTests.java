@@ -2,6 +2,7 @@ package com.wormzjl.icheme.fluid.gametest;
 
 import com.wormzjl.icheme.registry.ModBlocks;
 import com.wormzjl.icheme.runtime.ProcessSolveServices;
+import com.wormzjl.icheme.runtime.ProcessSolveJobs;
 import com.wormzjl.icheme.runtime.fluid.*;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.material.MaterialRuntime;
@@ -68,7 +69,7 @@ public final class FluidCheckpointGameTests {
                 var dispatcher=new IslandCoordinator.Dispatcher() {
                     public int availableWorkers(){return 64;}
                     public long nextRequestId(){return ProcessSolveServices.nextRequestId();}
-                    public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveServices.FluidIslandCommand command){submitted[0]++;return false;}
+                    public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveJobs.FluidIslandCommand command){submitted[0]++;return false;}
                     public void cancel(long requestId){}
                 };
                 restarted[0]=new IslandCoordinator(dispatcher,changed->{},System::nanoTime,new IslandCoordinator.Settings(options.wallBudgetNanos(),options.wallBudgetNanos()*3/4,64,false,options.initialCadenceTicks(),world.certificates()).withTime(options.time()));

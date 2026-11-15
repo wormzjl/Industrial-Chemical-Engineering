@@ -30,6 +30,55 @@ class PassiveStepSolverTest {
             assertEquals(beforeN,afterN,1e-8*beforeN);assertEquals(beforeU,afterU,1e-6*Math.abs(beforeU));
         }
     }
+    /**
+     * Finding P-18 (batch 2026-11-13-codebase-review): a node's prepared bundle is refilled in place at a new temperature
+     * and handed from pass to pass, so a step builds at most a decode and a probe bundle a node, whatever its trials, where
+     * each trial temperature built one (and its kernel workspace) before. The accepted pass drops them with its decode cache
+     * (review 8.7 (c) E2: the retained last solve keeps no kernel workspace), so each step builds its set again. The
+     * closures made anew per call outside the passes (a vessel's wall closure in the reconstruction, a junction's split)
+     * are in the process-wide count and not in the solver's.
+     */
+    @Test void aStepBuildsAtMostADecodeAndAProbeBundleANode() {
+        for(int component:new int[]{0,model.componentCount()-1}) {
+            var graph=graph(component,false);var solver=new PassiveStepSolver(model);
+            for(int step=0;step<4;step++) {
+                long before=solver.preparedBuilt();
+                graph=PassiveIntervalSolver.replace(graph,solver.solve(graph,.1,()->{}));
+                long built=solver.preparedBuilt()-before;
+                assertTrue(built>0&&built<=2L*graph.reservoirs().size(),"component "+component+", step "+step+": "+built);
+            }
+        }
+    }
+    /**
+     * Wave B lane S1's counters (batch 2026-11-13-codebase-review), printed for its report: per step of a retained solver,
+     * after one warm step, the bytes the thread allocates, the Peng-Robinson workspaces bundles build and the LU
+     * factorizations; on two water tanks, and on a generator's water through a cooled heat side into a junction and a void.
+     * A count, not a time; it asserts only that each island steps.
+     */
+    @Test void printsTheStepCountersOfAnIslandWithAndWithoutAHeatSide() {
+        int water=model.componentCount()-1;var run=new PipeResistance.Geometry(10,.05,.000045,0);
+        var tanks=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,fill(300000,water)),new PassiveNetwork.Reservoir(2,0,fill(150000,water))),
+                List.of(new PassiveNetwork.Pipe(3,0,1,run)));
+        var source=fill(300000,water);
+        var heated=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,source,PassiveNetwork.NodeKind.GENERATOR),
+                new PassiveNetwork.Reservoir(2,0,source,PassiveNetwork.NodeKind.JUNCTION),new PassiveNetwork.Reservoir(3,0,fill(101325,water),PassiveNetwork.NodeKind.VOID)),
+            List.of(new PassiveNetwork.Pipe(5,0,1,run).withHeat(new HeatSide(2,HeatCurve.Films.DEFAULT,new double[]{300},0,0)),new PassiveNetwork.Pipe(6,1,2,run)));
+        var threads=(com.sun.management.ThreadMXBean)java.lang.management.ManagementFactory.getThreadMXBean();
+        boolean enabled=com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics.ENABLED;
+        try {
+            com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics.ENABLED=true;
+            for(var island:List.of(java.util.Map.entry("two tanks",tanks),java.util.Map.entry("heat side",heated))) {
+                var graph=island.getValue();var solver=new PassiveStepSolver(model);
+                graph=PassiveIntervalSolver.replace(graph,solver.solve(graph,.1,()->{}));
+                int steps=5;long bytes=threads.getCurrentThreadAllocatedBytes(),built=FluidThermodynamics.Prepared.workspacesBuilt();
+                long factorizations=com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics.luFactorizations.sum();
+                for(int step=0;step<steps;step++){var result=solver.solve(graph,.1,()->{});assertNotNull(result);graph=PassiveIntervalSolver.replace(graph,result);}
+                System.out.printf(java.util.Locale.ROOT,"S1 counters, %s: %d bytes a step, %.2f kernel workspaces a step, %.2f LU factorizations a step%n",island.getKey(),
+                        (threads.getCurrentThreadAllocatedBytes()-bytes)/steps,(FluidThermodynamics.Prepared.workspacesBuilt()-built)/(double)steps,
+                        (com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics.luFactorizations.sum()-factorizations)/(double)steps);
+            }
+        } finally {com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics.ENABLED=enabled;}
+    }
     @Test void endpointOrderOnlyChangesTheFlowSign() {
         var solver=new PassiveStepSolver(model);var forward=solver.solve(graph(0,false),.1,()->{});var backward=solver.solve(graph(0,true),.1,()->{});
         assertEquals(forward.massFlows()[0],-backward.massFlows()[0],1e-8);
@@ -93,5 +142,47 @@ class PassiveStepSolverTest {
         var result=new PassiveStepSolver(model).solve(graph,.01,()->{});
         assertTrue(TestPhases.vapor(result.states().get(1))[0]>0);assertTrue(result.massFlows()[0]>0);
         assertEquals(0,TestPhases.vapor(result.states().get(0))[1],1e-10);
+    }
+    /**
+     * Finding D-02 (batch 2026-11-13-codebase-review): a heat side between two water tanks at 350 K, cooled by a 300 K wall.
+     * The first step runs forward (3 bar to 1.5 bar); the second starts from that flow on swapped pressures, so its Newton
+     * reverses the flow through zero onto the other end's stream. The first step samples its donor's curve alone; in the
+     * second, the evaluation that first draws from the other end has that end sampled between two evaluations and is done
+     * again: the step converges backward, its side books the cooling of the other end's water, and no curve is sampled
+     * inside a residual or a Jacobian.
+     */
+    @Test void aHeatSideWhoseFlowReversesReadsTheCurvesItsPassSampled() {
+        int water=model.componentCount()-1;
+        var side=new HeatSide(2,HeatCurve.Films.DEFAULT,new double[]{300},0,0);
+        var pipe=new PassiveNetwork.Pipe(3,0,1,new PipeResistance.Geometry(10,.05,.000045,0)).withHeat(side);
+        var solver=new PassiveStepSolver(model);
+        var forward=solver.solve(new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,fill(300000,water)),new PassiveNetwork.Reservoir(2,0,fill(150000,water))),List.of(pipe)),.1,()->{});
+        assertTrue(forward.massFlows()[0]>0);
+        long first=solver.heatCurveSamples();
+        assertEquals(1,first,"the forward step samples its donor's end alone");
+        var backward=solver.solve(new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,fill(150000,water)),new PassiveNetwork.Reservoir(2,0,fill(300000,water))),List.of(pipe)),.1,()->{});
+        assertTrue(backward.massFlows()[0]<0,"the flow reversed: "+backward.massFlows()[0]);
+        assertTrue(solver.heatCurveSamples()>first,"the second tank's end, on its new start state");
+        assertTrue(solver.heatCurveSamples()<=first+2,"at most both ends once on the new start states: "+solver.heatCurveSamples());
+        double heat=0;for(var b:backward.boundaries())if(b.kind()==ConservativeTransport.BoundaryTransfer.Kind.HEAT)heat+=b.totalEnergyJoule();
+        assertTrue(heat<0,"the wall cools the water arriving from the second tank: "+heat);
+        assertEquals(0,solver.heatCurvesInResidual(),"no curve sampled inside an evaluation");
+    }
+    /**
+     * Finding D-02: a heat side whose flow does not reverse costs what it cost before the fix. Water from a 3 bar generator
+     * through a cooled side into a junction, then a plain run to a 1 atm void: over the step one curve is sampled, the
+     * generator's end's, and none for the junction's end it never draws from.
+     */
+    @Test void aHeatSideThatKeepsItsDirectionSamplesItsDonorsCurveAlone() {
+        int water=model.componentCount()-1;var source=fill(300000,water);
+        var run=new PipeResistance.Geometry(10,.05,.000045,0);
+        var graph=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,source,PassiveNetwork.NodeKind.GENERATOR),
+                new PassiveNetwork.Reservoir(2,0,source,PassiveNetwork.NodeKind.JUNCTION),new PassiveNetwork.Reservoir(3,0,fill(101325,water),PassiveNetwork.NodeKind.VOID)),
+            List.of(new PassiveNetwork.Pipe(5,0,1,run).withHeat(new HeatSide(2,HeatCurve.Films.DEFAULT,new double[]{300},0,0)),new PassiveNetwork.Pipe(6,1,2,run)));
+        var solver=new PassiveStepSolver(model);
+        var result=solver.solve(graph,.1,()->{});
+        assertTrue(result.massFlows()[0]>0);
+        assertEquals(1,solver.heatCurveSamples(),"the donor's end alone");
+        assertEquals(0,solver.heatCurvesInResidual());
     }
 }

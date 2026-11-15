@@ -27,7 +27,7 @@ class WorldTopologyLedgerTest {
         return ledger.applyBatch(List.of(ledger.events().getFirst().id()),additions,removals,weights,nextIdentity);
     }
     private WorldTopologyLedger.Registration at(long id,int x) {
-        var old=record(id,Kind.PIPE);var d=old.device();return new WorldTopologyLedger.Registration(new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position("minecraft:overworld",x,12,0),d.kind(),d.facing(),d.geometry(),d.control()),old.spec(),0);
+        var old=record(id,Kind.PIPE);var d=old.device();return new WorldTopologyLedger.Registration(PhysicalFluidTopology.Device.builder(id,new PhysicalFluidTopology.Position("minecraft:overworld",x,12,0),d.kind(),d.facing(),d.geometry(),d.control()).build(),old.spec(),0);
     }
     @Test void independentLaterEventCanCommitWithoutAdvancingTheBlockedEventsTimestamp() {
         var ledger=new WorldTopologyLedger(WorldTopologyLedger.Snapshot.empty());ledger.tick();
@@ -51,7 +51,7 @@ class WorldTopologyLedgerTest {
         assertEquals(List.of(a.event()),ready(ledger));assertThrows(IllegalStateException.class,()->ledger.applyBatch(List.of(b.event().id()),List.of(),List.of(),new double[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1],4));
     }
     private WorldTopologyLedger.Registration record(long id,Kind kind) {
-        var device=new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position("minecraft:overworld",0,12,0),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kind),PhysicalFluidTopology.Direction.EAST,new PipeResistance.Geometry(1,.05,.000045,0),kind==Kind.PUMP?new FlowControl.Pump(.01,500000):new FlowControl.Passive());
+        var device=PhysicalFluidTopology.Device.builder(id,new PhysicalFluidTopology.Position("minecraft:overworld",0,12,0),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kind),PhysicalFluidTopology.Direction.EAST,new PipeResistance.Geometry(1,.05,.000045,0),kind==Kind.PUMP?new FlowControl.Pump(.01,500000):new FlowControl.Passive()).build();
         return new WorldTopologyLedger.Registration(device,FluidDeviceSpec.nitrogen(),0);
     }
     @Test void pendingPhysicalEventsRoundTripWithControlSettingsAndTheirOriginalTimestamps() {
@@ -125,6 +125,32 @@ class WorldTopologyLedgerTest {
      * A held shaft part (W5c C1) is state too: the topology unit carries it beside the held devices, by identity, through
      * an exact load, and the facts never carry it.
      */
+    /**
+     * M-09: the shaft units are a read-only live view (no copy a read) and an index by cell follows every write: a put, a
+     * part rebuilt at another cell under its identity, a removal; a second part at a taken cell is refused.
+     */
+    @Test void theShaftUnitsAreALiveViewWithAnIndexByCell() {
+        var ledger=new WorldTopologyLedger(new WorldTopologyLedger.Snapshot(0,3,Map.of(1L,at(1,0),2L,at(2,20)),List.of(),WorldTopologyLedger.MaterialTotal.empty(),WorldTopologyLedger.MaterialTotal.empty()));
+        String dim=at(1,0).device().position().dimension();
+        var a=new PhysicalFluidTopology.Position(dim,5,70,5);var b=new PhysicalFluidTopology.Position(dim,6,70,5);var c=new PhysicalFluidTopology.Position(dim,7,70,5);
+        var view=ledger.shafts();
+        assertSame(view,ledger.shafts(),"one view, no copy a read");
+        assertThrows(UnsupportedOperationException.class,()->view.put(9L,ShaftUnit.shaft(9,a,0)));
+        long first=ledger.reserve(1),second=ledger.reserve(1);
+        ledger.shaft(ShaftUnit.shaft(first,a,0));ledger.shaft(ShaftUnit.shaft(second,b,0));
+        assertEquals(Set.of(first,second),view.keySet(),"the view sees later writes");
+        assertEquals(first,ledger.shaftAt(a).id());assertEquals(second,ledger.shaftAt(b).id());assertNull(ledger.shaftAt(c));
+        assertThrows(IllegalArgumentException.class,()->ledger.shaft(ShaftUnit.shaft(second,a,0)),"a taken cell");
+        ledger.shaft(ShaftUnit.shaft(first,c,0));
+        assertNull(ledger.shaftAt(a),"rebuilt elsewhere, its old cell is free");assertEquals(first,ledger.shaftAt(c).id());
+        ledger.shaft(ShaftUnit.shaft(second,a,0));
+        assertEquals(second,ledger.shaftAt(a).id());assertNull(ledger.shaftAt(b));
+        ledger.removeShaft(first);
+        assertNull(ledger.shaftAt(c));assertEquals(Set.of(second),view.keySet());
+        var reloaded=new WorldTopologyLedger(ledger.snapshot());
+        assertEquals(second,reloaded.shaftAt(a).id(),"a load builds the index");assertNull(reloaded.shaftAt(c));
+    }
+
     @Test void aHeldShaftPartIsStateTheTopologyUnitCarries() {
         var ledger=new WorldTopologyLedger(new WorldTopologyLedger.Snapshot(0,3,Map.of(1L,at(1,0),2L,at(2,20)),List.of(),WorldTopologyLedger.MaterialTotal.empty(),WorldTopologyLedger.MaterialTotal.empty()));
         var cell=new PhysicalFluidTopology.Position(at(1,0).device().position().dimension(),5,70,5);
@@ -161,8 +187,8 @@ class WorldTopologyLedgerTest {
     @Test void aRackFrameIsALanesAndLeavesWhenItsRemovalApplies() {
         var along=1<<PhysicalFluidTopology.Direction.WEST.ordinal()|1<<PhysicalFluidTopology.Direction.EAST.ordinal();
         var old=at(2,20);
-        var lane=new WorldTopologyLedger.Registration(new PhysicalFluidTopology.Device(1,new PhysicalFluidTopology.Position("minecraft:overworld",0,12,0,3),Kind.PIPE,PhysicalFluidTopology.Direction.EAST,
-                old.device().geometry(),old.device().control(),List.of(),true,PhysicalFluidTopology.Cutoff.NONE,false,along,2,0),old.spec(),0);
+        var lane=new WorldTopologyLedger.Registration(PhysicalFluidTopology.Device.builder(1,new PhysicalFluidTopology.Position("minecraft:overworld",0,12,0,3),Kind.PIPE,PhysicalFluidTopology.Direction.EAST,
+                old.device().geometry(),old.device().control()).joints(along).slots(2).build(),old.spec(),0);
         var ledger=new WorldTopologyLedger(new WorldTopologyLedger.Snapshot(0,3,Map.of(1L,lane,2L,old),List.of(),WorldTopologyLedger.MaterialTotal.empty(),WorldTopologyLedger.MaterialTotal.empty()));
         var tee=new WorldTopologyLedger.RackFrame(PhysicalFluidTopology.Direction.NORTH,WorldTopologyLedger.RackShape.TEE);
         assertThrows(IllegalArgumentException.class,()->ledger.rack(2,tee),"a block takes no rack frame");
@@ -191,7 +217,7 @@ class WorldTopologyLedgerTest {
         var broken=new PassiveIntervalSolver(pilot).solve(new PassiveNetwork(List.of(placed),List.of()),5,PassiveIntervalSolver.Settings.defaults(),()->{}).graph().reservoirs().getFirst();
         var crystals=broken.inventory().solids().crystals();assertEquals(1,crystals.size(),"the refresh deposited CO2-I: "+broken.inventory().solids());
         var ledger=new WorldTopologyLedger(WorldTopologyLedger.Snapshot.empty(catalog));var weights=pilot.molecularWeights();
-        var device=new PhysicalFluidTopology.Device(1,new PhysicalFluidTopology.Position("minecraft:overworld",0,12,0),Kind.RESERVOIR,PhysicalFluidTopology.Direction.EAST,new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Passive());
+        var device=PhysicalFluidTopology.Device.builder(1,new PhysicalFluidTopology.Position("minecraft:overworld",0,12,0),Kind.RESERVOIR,PhysicalFluidTopology.Direction.EAST,new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Passive()).build();
         ledger.commit(ledger.queue(List.of(new WorldTopologyLedger.Edit(1,new WorldTopologyLedger.Registration(device,new FluidDeviceSpec(.1,170,1e6,z),0))),Set.of(1L),2));
         ledger.commit(applyFirst(ledger,List.of(placed),List.of(),weights,2));
         ledger.commit(ledger.queue(List.of(new WorldTopologyLedger.Edit(1,null)),Set.of(1L),2));ledger.commit(applyFirst(ledger,List.of(),List.of(broken),weights,2));

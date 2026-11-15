@@ -59,7 +59,8 @@ class EquipmentNetworkCodecTest {
     }
 
     @Test void deconstructionRequestsRoundTrip() {
-        assertEquals("equipment-23", EquipmentNetwork.PROTOCOL);
+        // One protocol for every registrar since icheme-1 (codebase review P3-22); the equipment payloads were equipment-23.
+        assertEquals("icheme-1", NetworkProtocol.VERSION);
         var request = new EquipmentNetwork.Deconstruct(AT, AT.north(5), 12345, 99);
         assertEquals(request, roundTrip(EquipmentNetwork.Deconstruct.STREAM_CODEC, request));
 
@@ -81,7 +82,7 @@ class EquipmentNetworkCodecTest {
     @Test
     void aColumnTemplateCrossesWithItsNameAndInput() {
         var c = com.wormzjl.icheme.science.material.MaterialCatalog.bundled();
-        var input = c.presets().column(c.presets().network().defaultColumnPreset()).input(c);
+        var input = com.wormzjl.icheme.science.column.v3.V3ColumnPresets.input(c.presets().column(c.presets().network().defaultColumnPreset()), c);
         var read = roundTrip(EquipmentNetwork.TemplatePayload.STREAM_CODEC, new EquipmentNetwork.TemplatePayload(AT, "Medium crude (default)", input));
         assertEquals(AT, read.position());
         assertEquals("Medium crude (default)", read.name());

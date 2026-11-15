@@ -18,6 +18,7 @@ import java.util.Locale;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
+import com.wormzjl.icheme.science.thermo.phase.PackageBinding;
 
 /**
  * The fluid network on the crystal competition of the pilot package {@code icheme:pilot_cryogenic} (N2, CH4, C2H6, CO2
@@ -74,9 +75,9 @@ class CrystalDepositionIslandTest {
     }
     /** The engine's UV answer of an inventory under the crystal competition: an independent service, its own crystal model. */
     private EquilibriumResult engineUv(PassiveNetwork.Inventory inventory) {
-        var engine=FluidTpEquilibrium.forPackage(CATALOG,PILOT);
+        var engine=PackageBinding.equilibrium(CATALOG,PILOT);
         double[] totals=species(inventory);
-        var formation=model.hydrocarbon.spine().orElseThrow().formationReference();
+        var formation=model.hydrocarbon.formationReference().orElseThrow();
         double energy=EnergyReference.sensible(formation.components()).rebase(trueEnergy(inventory),Arrays.copyOf(totals,totals.length-1),formation);
         return engine.uv(EquilibriumRequest.uv(energy,inventory.volume(),engine.contract().components(),Arrays.copyOf(totals,totals.length-1),PhaseCompetition.FLUID_AND_CRYSTALS),engine.newWorkspace());
     }
@@ -117,7 +118,7 @@ class CrystalDepositionIslandTest {
      */
     @Test void theCrystalsEnergyOnTheNetworkDatumCarriesTheFamilysSublimationEnthalpy() {
         var crystal=co2();var material=crystal.material();
-        double offset=model.hydrocarbon.spine().orElseThrow().formationReference().offsetJoulesPerMole(CO2);
+        double offset=model.hydrocarbon.formationReference().orElseThrow().offsetJoulesPerMole(CO2);
         double t=194.466712376,p=1e5;double[] none=new double[4];
         var vapour=TestPhases.state(model,t,p,none,new double[]{0,0,0,1},0,0);
         double sublimation=vapour.enthalpy()-enthalpy(material,crystal.molarMass(),t,p);

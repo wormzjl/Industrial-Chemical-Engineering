@@ -18,7 +18,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 /**
- * The field guide's wire (batch 2026-11-12-tutorial-system, P1), protocol {@value #PROTOCOL}. The client reports a CLIENT
+ * The field guide's wire (batch 2026-11-12-tutorial-system, P1), on the mod's protocol {@link NetworkProtocol#VERSION} (before it: tutorial-1). The client reports a CLIENT
  * step done ({@link StepDone}): the server fires {@code icheme:guide_step} with that step for that player, so only an
  * advancement that listens to that criterion with that step can complete; a SERVER step's advancement listens to another
  * criterion and a client cannot complete it. The client says {@link Hello} at login and the server answers with
@@ -30,7 +30,6 @@ import java.util.Set;
  * loads a client class.
  */
 public final class TutorialNetwork {
-    public static final String PROTOCOL = "tutorial-1";
     /** The longest step id the server reads; longer ones are ignored. */
     public static final int STEP_MAX = 64;
     /** The tutorial advancements' folder under the {@code icheme} namespace. */
@@ -78,7 +77,7 @@ public final class TutorialNetwork {
     }
 
     public static void register(RegisterPayloadHandlersEvent event) {
-        var registrar = event.registrar(PROTOCOL).executesOn(HandlerThread.MAIN);
+        var registrar = event.registrar(NetworkProtocol.VERSION).executesOn(HandlerThread.MAIN);
         registrar.playToServer(StepDone.TYPE, StepDone.STREAM_CODEC, TutorialNetwork::stepDone);
         registrar.playToServer(Hello.TYPE, Hello.STREAM_CODEC, TutorialNetwork::hello);
         registrar.playToClient(Progress.TYPE, Progress.STREAM_CODEC,

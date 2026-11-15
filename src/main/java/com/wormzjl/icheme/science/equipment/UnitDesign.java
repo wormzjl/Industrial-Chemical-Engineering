@@ -2,6 +2,7 @@ package com.wormzjl.icheme.science.equipment;
 
 import com.wormzjl.icheme.science.equipment.EquipmentShape.Kind;
 import com.wormzjl.icheme.science.equipment.EquipmentShape.Orientation;
+import com.wormzjl.icheme.science.equipment.design.UnitRatings;
 
 import java.util.EnumMap;
 import java.util.List;
@@ -12,7 +13,9 @@ import java.util.Map;
  * One kind of standalone unit (owner request 2026-10-18: eleven new units, built in parallel; batch
  * 2026-10-15-custom-equipment-rendering): its sizes, the constructor's rows, the datasheet's lines and its parts. Each
  * kind's design is its own file; {@link ProcessUnit} keeps the shared drawing kit (parts, solids, nozzles, decks,
- * ladders, moving parts) and the static sizes the game calls, which ask the kind's design.
+ * ladders, moving parts). The game asks a kind's sizes of its design: {@code UnitDesign.of(kind).minSize()}. A design
+ * states its constant sizes, rows and moving parts in one {@link Sizes} record, passed to this class's constructor; it
+ * overrides a method only where the value is computed.
  *
  * <p>The sizes a player sets are the shape's {@code diameter} (the unit's main size, on {@link #sizeStep()}),
  * {@code tangentLength} (a second whole number: a length, a height or a count; 1 where the kind has none) and
@@ -25,11 +28,25 @@ public abstract class UnitDesign {
 
     // ---- Sizes ------------------------------------------------------------------------------------------------------
 
-    public abstract double minSize();
+    /** The sizes, rows and moving parts the design states as constants ({@link Sizes}); the methods below return them. */
+    private final Sizes stated;
 
-    public abstract double maxSize();
+    /** A design passes its constant sizes; a value it computes it overrides ({@link Sizes}). */
+    UnitDesign(Sizes sizes) {
+        this.stated = java.util.Objects.requireNonNull(sizes, "sizes");
+    }
 
-    public abstract double sizeStep();
+    public double minSize() {
+        return stated.minSize();
+    }
+
+    public double maxSize() {
+        return stated.maxSize();
+    }
+
+    public double sizeStep() {
+        return stated.sizeStep();
+    }
 
     /** Every main size a unit of the kind may take, smallest first: the grid from {@link #minSize()} by {@link #sizeStep()}. */
     public List<Double> sizes() {
@@ -104,19 +121,22 @@ public abstract class UnitDesign {
             throw new IllegalArgumentException("A machine's sizes follow its design point: " + size(duty) + " and " + length(duty) + ", not " + size + " and " + length);
     }
 
-    /** {@code value} rounded up onto a grid of {@code step} (a micrometre's rounding error kept on its step), within lo..hi. */
-    static double upTo(double value, double step, double lo, double hi) {
+    /**
+     * {@code value} rounded up onto a grid of {@code step} (a micrometre's rounding error kept on its step), within lo..hi.
+     * Public: a pump's discharge ({@code UnitRatings.pumpDischarge}) reads it.
+     */
+    public static double upTo(double value, double step, double lo, double hi) {
         double k = Math.ceil(value / step - 1e-6);
         return Math.max(lo, Math.min(hi, Math.round(k * step * 1000) / 1000.0));
     }
 
     /** The least second size (length, height or count) at main size {@code size}; 1 where the kind has none. */
     public int minLength(double size) {
-        return 1;
+        return stated.minLength();
     }
 
     public int maxLength(double size) {
-        return 1;
+        return stated.maxLength();
     }
 
     /** A new unit's second size at main size {@code size}: the least by default (a set of adsorbers starts at two beds). */
@@ -129,10 +149,12 @@ public abstract class UnitDesign {
         return 1;
     }
 
-    public abstract int minSupport(double size, int length);
+    public int minSupport(double size, int length) {
+        return stated.minSupport();
+    }
 
     public int maxSupport() {
-        return EquipmentShape.MAX_SUPPORT;
+        return stated.maxSupport();
     }
 
     /** A new unit's support, m: the least by default. */
@@ -140,7 +162,9 @@ public abstract class UnitDesign {
         return minSupport(size, length);
     }
 
-    public abstract Orientation orientation();
+    public Orientation orientation() {
+        return stated.orientation();
+    }
 
     /** Whether the kind is built in banks of bays ({@link ProcessUnit.Bank}): only air coolers. */
     public boolean banks() {
@@ -162,13 +186,25 @@ public abstract class UnitDesign {
 
     /** Whether units of the kind have moving parts: their datasheet carries the switch. */
     public boolean moves() {
-        return false;
+        return stated.moves();
+    }
+
+    /**
+     * The revision of the cells this design places, as its {@link Sizes} states it (AGENTS.md: an identity is a declared
+     * revision): each shell cell saves it, and a cell saved with another one is rebuilt to the current layout at its load
+     * ({@link ShapeRasterizer#layoutRevision}). Bumped by a change of the box, the shell or interior cells or the nozzles
+     * at any size; {@code EquipmentLayoutGoldenTest} fails when the recorded cells change and it does not.
+     */
+    public int layoutRevision() {
+        return stated.layoutRevision();
     }
 
     // ---- Constructor and datasheet ----------------------------------------------------------------------------------
 
     /** The constructor's row for the main size (its translation key under the constructor's prefix). */
-    public abstract String sizeRow();
+    public String sizeRow() {
+        return stated.sizeRow();
+    }
 
     /** The main size's unit on the constructor's row: metres, or a machine's kilowatts. */
     public String sizeUnit() {
@@ -182,7 +218,7 @@ public abstract class UnitDesign {
 
     /** The constructor's row for the second size, or {@code null} where the kind has none. */
     public String lengthRow() {
-        return null;
+        return stated.lengthRow();
     }
 
     /** Whether the second size is shown in metres (a length or a height) rather than as a count. */
@@ -191,7 +227,9 @@ public abstract class UnitDesign {
     }
 
     /** The constructor's row for the support, or {@code null} where it is fixed ({@link #maxSupport()} 0). */
-    public abstract String supportRow();
+    public String supportRow() {
+        return stated.supportRow();
+    }
 
     /** The constructor's middle line: what the unit holds or does. */
     public abstract Line held(EquipmentShape shape);
@@ -393,7 +431,7 @@ public abstract class UnitDesign {
         return switch (shape.kind()) {
             case MOTOR, PUMP, GENERATOR -> designSpeed(shape.kind(),duty);
             case CENTRIFUGAL_COMPRESSOR -> CentrifugalCompressorDesign.speed(shape.diameter());
-            case COMPRESSOR -> ProcessUnit.compressorSpeed(shape.diameter());
+            case COMPRESSOR -> UnitRatings.compressorSpeed(shape.diameter());
             case STEAM_TURBINE -> SteamTurbineTrain.speed(shape.diameter());
             case LIQUID_RING_PUMP, DRY_SCREW_PUMP -> VacuumPumpDesign.model(shape).speed();
             case COMBUSTION_ENGINE, GAS_TURBINE -> PrimeMoverDesign.model(shape).speed();
@@ -423,7 +461,7 @@ public abstract class UnitDesign {
     /** A pump casing's rated flow, m³/s, and head, m (W3): its duty, or without one its discharge's flow at {@code PUMP_HEAD}. */
     public static double[] pumpRating(EquipmentShape shape) {
         var duty = shape.duty();
-        return new double[]{(duty.flow() > 0 ? duty.flow() : ProcessUnit.pumpFlow(shape.diameter())) / 3600, duty.head() > 0 ? duty.head() : ProcessUnit.PUMP_HEAD};
+        return new double[]{(duty.flow() > 0 ? duty.flow() : UnitRatings.pumpFlow(shape.diameter())) / 3600, duty.head() > 0 ? duty.head() : UnitRatings.PUMP_HEAD};
     }
 
     /** A vacuum pump casing's law, its model's type, capacity and design speed (batch 2026-11-10-vacuum-pump). */
@@ -457,7 +495,7 @@ public abstract class UnitDesign {
 
     /** A reciprocating frame's displacement at its design speed, m³/s (W3). */
     public static double displacement(EquipmentShape shape) {
-        return ProcessUnit.displacement(shape.diameter(), (int) shape.tangentLength()) / 3600;
+        return UnitRatings.displacement(shape.diameter(), (int) shape.tangentLength()) / 3600;
     }
 
     /** A centrifugal compressor's rated polytropic head, J/kg, and inlet flow, m³/s, from its design point (W3). */

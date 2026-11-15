@@ -1,7 +1,7 @@
 package com.wormzjl.icheme.runtime.fluid;
 
 import com.wormzjl.icheme.fluid.support.FluidTestSupport;
-import com.wormzjl.icheme.runtime.ProcessSolveServices;
+import com.wormzjl.icheme.runtime.ProcessSolveJobs;
 import com.wormzjl.icheme.science.fluid.network.*;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.machine.CentrifugalPump;
@@ -63,7 +63,7 @@ class ShaftCouplingTest {
     private final class Rig {
         final long[] epoch = {0};
         final Map<Long, IslandCoordinator.Attempt> attempts = new LinkedHashMap<>();
-        final Map<Long, ProcessSolveServices.FluidIslandCommand> commands = new HashMap<>();
+        final Map<Long, ProcessSolveJobs.FluidIslandCommand> commands = new HashMap<>();
         final IslandCoordinator coordinator;
         long requests;
 
@@ -77,7 +77,7 @@ class ShaftCouplingTest {
                     return ++requests;
                 }
 
-                public boolean submit(IslandCoordinator.Attempt attempt, ProcessSolveServices.FluidIslandCommand command) {
+                public boolean submit(IslandCoordinator.Attempt attempt, ProcessSolveJobs.FluidIslandCommand command) {
                     attempts.put(attempt.slice().requestId(), attempt);
                     commands.put(attempt.slice().requestId(), command);
                     return true;
@@ -95,7 +95,7 @@ class ShaftCouplingTest {
                 for (long request : List.copyOf(attempts.keySet())) {
                     var attempt = attempts.remove(request);
                     var command = commands.remove(request);
-                    coordinator.completed(attempt, Optional.of((ProcessSolveServices.FluidIslandSolveResult) command.solve(FluidTestSupport.NEVER)));
+                    coordinator.completed(attempt, Optional.of((ProcessSolveJobs.FluidIslandSolveResult) command.solve(FluidTestSupport.NEVER)));
                 }
                 coordinator.pump();
             }
@@ -202,7 +202,7 @@ class ShaftCouplingTest {
         var trip=com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE;
         ledger.shaft(new ShaftUnit(id,kind,cell(0),0,List.of(new ShaftUnit.End(cell(0),1,0,0,true)),0,11e3,3000,2,
                 com.wormzjl.icheme.science.equipment.MachineDuty.Drive.VARIABLE,ShaftUnit.Settings.DEFAULT,trip,null));
-        double saved=com.wormzjl.icheme.science.machine.ElectricStore.capacity(com.wormzjl.icheme.science.machine.ElectricStore.motorDraw(11e3,2,true),com.wormzjl.icheme.science.fluid.SimulationTime.ONLINE);
+        double saved=com.wormzjl.icheme.science.machine.ElectricStore.capacity(com.wormzjl.icheme.science.machine.ElectricStore.motorDraw(11e3,2,true),com.wormzjl.icheme.science.fluid.SimulationTime.ONLINE.seconds(com.wormzjl.icheme.science.machine.ElectricStore.SLICE_TICKS));
         ledger.stores(Map.of(id,new com.wormzjl.icheme.science.machine.ElectricStore.Facts(saved,true)));
         var stores=new ElectricStores(ledger,device->null,rig.coordinator,()->ElectricStores.Settings.DEFAULT);
         boolean[] live={false};stores.supply(motor->live[0]);
@@ -417,6 +417,100 @@ class ShaftCouplingTest {
         assertEquals("NO ROTATION", trains.view(coupling).status());
         assertEquals(0, trains.share(1));
         assertEquals(0, sent.getLast(), 0);
+    }
+
+    /**
+     * M-16: a casing whose pump failed shows FAILED on its own row, not its train's word; its motor's row keeps the train's.
+     * Repaired, the casing's row returns to the train's word.
+     */
+    @Test
+    void aFailedPumpsCasingShowsFailed() {
+        var rig = new Rig();
+        var ledger = new WorldTopologyLedger(WorldTopologyLedger.Snapshot.empty(EventPathWorld.CATALOG));
+        long first = ledger.reserve(3);
+        var fixed = com.wormzjl.icheme.science.equipment.MachineDuty.Drive.FIXED;
+        var trip = com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE;
+        ledger.shaft(new ShaftUnit(first, com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR, cell(0), 0, List.of(new ShaftUnit.End(cell(0), 1, 0, 0, true)), 0,
+                11e3, 2950, 2, fixed, ShaftUnit.Settings.DEFAULT, trip, null));
+        ledger.shaft(ShaftUnit.shaft(first + 1, cell(1), 0));
+        ledger.shaft(new ShaftUnit(first + 2, com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.CASING, cell(2), 0, List.of(new ShaftUnit.End(cell(2), -1, 0, 0, false)), 1,
+                0, 2950, 0, fixed, ShaftUnit.Settings.DEFAULT, trip, null));
+        ledger.health(Map.of(1L, 0.0));
+        var trains = new ShaftTrains(ledger, device -> device == 1 ? 1L : null, rig.coordinator);
+        var health = new MachineHealth(ledger, device -> device == 1 ? 1L : null, rig.coordinator, device -> device == 1, device -> null,
+                () -> com.wormzjl.icheme.science.machine.Wear.Settings.DEFAULT);
+        trains.health(health);
+        rig.coordinator.shafts(trains);
+        trains.host(ShaftTrains.Host.NONE);
+        rig.coordinator.register(new IslandCoordinator.Snapshot(1, 0, line(), new IslandClock.Snapshot(0, 0, 0, 100), Optional.empty(), "READY"), model);
+        Runnable tick = () -> {
+            rig.epoch[0]++;
+            rig.coordinator.tick();
+            rig.drain();
+            if (rig.epoch[0] % ElectricStores.CADENCE == 0) trains.cadence();
+            if (health.hasEvents()) health.apply();
+        };
+        for (int i = 0; i < 300; i++) tick.run();
+        long casing = first + 2, motor = first;
+        assertTrue(health.failed(1), "saved at 0, the pump stands failed");
+        assertEquals("FAILED", trains.view(casing).status(), "the casing's row says its pump failed");
+        assertNotEquals("FAILED", trains.view(motor).status(), "the motor's row keeps its train's word");
+        // M-08: one plan map in a fixed order; the health's close overwrites the casing's speed share.
+        var closed = trains.plans(1, line()).get(1L);
+        assertEquals(ShaftPlan.Kind.FAILED, closed.kind(), "the health close wins over the share");
+        assertEquals(0, closed.value());
+        var outcome = new ArrayList<MachineHealth.Outcome>();
+        health.queue(new MachineHealth.Repair(1, () -> true, outcome::add));
+        tick.run();
+        assertEquals(List.of(MachineHealth.Outcome.REPAIRED), outcome);
+        assertNotEquals("FAILED", trains.view(casing).status(), "repaired, the casing's row returns to its train's word");
+        var running = trains.plans(1, line()).get(1L);
+        assertTrue(running == null || running.kind() == ShaftPlan.Kind.SPEED, "repaired, no close: the share's plan, if any: " + running);
+    }
+
+    /**
+     * M-11: a variable-speed motor in flow regulation, linked to its pump's casing, reads the casing's duty (the speed share
+     * that meets the set flow, solved when the step first reads it) and runs the pump at its set flow.
+     */
+    @Test
+    void aRegulatingMotorRunsItsPumpAtTheSetFlow() {
+        var rig = new Rig();
+        var ledger = new WorldTopologyLedger(WorldTopologyLedger.Snapshot.empty(EventPathWorld.CATALOG));
+        long first = ledger.reserve(3);
+        var trip = com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE;
+        ledger.shaft(new ShaftUnit(first, com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR, cell(0), 0, List.of(new ShaftUnit.End(cell(0), 1, 0, 0, true)), 0,
+                11e3, 2950, 2, com.wormzjl.icheme.science.equipment.MachineDuty.Drive.VARIABLE,
+                new ShaftUnit.Settings(true, com.wormzjl.icheme.science.machine.ShaftTrain.Mode.REGULATE_FLOW, 0, 0, 0), trip, null));
+        ledger.shaft(ShaftUnit.shaft(first + 1, cell(1), 0));
+        ledger.shaft(new ShaftUnit(first + 2, com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.CASING, cell(2), 0, List.of(new ShaftUnit.End(cell(2), -1, 0, 0, false)), 1,
+                0, 2950, 0, com.wormzjl.icheme.science.equipment.MachineDuty.Drive.FIXED, ShaftUnit.Settings.DEFAULT, trip, null));
+        var trains = new ShaftTrains(ledger, device -> device == 1 ? 1L : null, rig.coordinator);
+        rig.coordinator.shafts(trains);
+        trains.host(new ShaftTrains.Host() {
+            public void edit(long device, FlowControl.ControlValve control) {
+            }
+
+            public UUID speedSensor(long turbine) {
+                return null;
+            }
+
+            public void resize(PhysicalFluidTopology.Position shaft, int pixels) {
+            }
+
+            public Set<Long> linked(long motor) {
+                return Set.of(1L);
+            }
+        });
+        double setFlow = .006;
+        var base = line();
+        var line = new PassiveNetwork(base.reservoirs(), List.of(base.pipes().getFirst().withControl(new FlowControl.Machine(PUMP, 0, true, setFlow, 0))));
+        rig.coordinator.register(new IslandCoordinator.Snapshot(1, 0, line, new IslandClock.Snapshot(0, 0, 0, 100), Optional.empty(), "READY"), model);
+        rig.run(120);
+        var status = trains.view(first).status();
+        for (var word : List.of("NO DATA LINK", "MULTIPLE DUTIES", "NO DUTY TARGET", "LAST SPEED")) assertFalse(status.contains(word), status);
+        var supply = water(101325);
+        double target = setFlow * supply.mass() / supply.volume(), flow = rig.coordinator.observe(1).lastResult().orElseThrow().endpointFlows()[0];
+        assertEquals(target, flow, .05 * target, "the motor holds the set flow: " + status);
     }
 
     /** The governor walk: from a turbine's inlet upstream through unbranched pipes to the nearest control valve. */

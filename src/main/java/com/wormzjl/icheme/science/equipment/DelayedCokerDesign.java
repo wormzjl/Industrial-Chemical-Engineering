@@ -16,35 +16,14 @@ import java.util.List;
  * {@link DelayedCokerStructure} and {@link DelayedCokerDerrick}.
  */
 final class DelayedCokerDesign extends UnitDesign {
-    @Override
-    public double minSize() {
-        return 4;
-    }
-
-    @Override
-    public double maxSize() {
-        return 10;
-    }
-
-    @Override
-    public double sizeStep() {
-        return .5;
-    }
-
-    @Override
-    public int minLength(double size) {
-        return 1;
-    }
-
-    @Override
-    public int maxLength(double size) {
-        return 2;
-    }
-
-    /** The bottom flanges 8 m up at least: the unheading valves, the switch deck and the chutes hang under the table. */
-    @Override
-    public int minSupport(double size, int length) {
-        return 8;
+    DelayedCokerDesign() {
+        // minSupport: The bottom flanges 8 m up at least: the unheading valves, the switch deck and the chutes hang
+        // under the table.
+        super(new Sizes(4, 10, .5,
+                1, 2,
+                8, EquipmentShape.MAX_SUPPORT,
+                Orientation.VERTICAL, "delayed_coker.drum", "delayed_coker.pairs", "delayed_coker.flange", true,
+                1));
     }
 
     @Override
@@ -53,33 +32,8 @@ final class DelayedCokerDesign extends UnitDesign {
     }
 
     @Override
-    public Orientation orientation() {
-        return Orientation.VERTICAL;
-    }
-
-    @Override
-    public boolean moves() {
-        return true;
-    }
-
-    @Override
-    public String sizeRow() {
-        return "delayed_coker.drum";
-    }
-
-    @Override
-    public String lengthRow() {
-        return "delayed_coker.pairs";
-    }
-
-    @Override
     public boolean lengthInMetres() {
         return false;
-    }
-
-    @Override
-    public String supportRow() {
-        return "delayed_coker.flange";
     }
 
     @Override

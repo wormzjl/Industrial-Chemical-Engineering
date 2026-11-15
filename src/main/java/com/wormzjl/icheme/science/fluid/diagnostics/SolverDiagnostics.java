@@ -77,8 +77,15 @@ public final class SolverDiagnostics {
     public static final LongAdder luRefinements=new LongAdder();
     public static final LongAdder luOrderings=new LongAdder();
     public static final LongAdder luOrderingNanos=new LongAdder();
-    /** Reusable factorization workspaces allocated; every further factorization refills one. */
+    /** Reusable factorization workspaces allocated; every further factorization refills one. An island keeps its storages
+     * across steps and jobs (P-17b, batch 2026-11-13-codebase-review), so this counts new structures, not steps. */
     public static final LongAdder luStorages=new LongAdder();
+    /** Columns the sparse LU factored (Newton and transport side together), and the columns whose reach it searched
+     * again: one per column of a new pattern, or of a column after a changed pivot; none while a kept reach serves. */
+    public static final LongAdder luColumnsFactored=new LongAdder(),luReachSearches=new LongAdder();
+    /** Of {@link #luReachSearches}: the columns of factorizations whose pattern (exact zeros dropped) was not among
+     * the ones their storage keeps. The rest searched again after a changed pivot or a rejected factorization. */
+    public static final LongAdder luPatternSearches=new LongAdder();
     /** Newton workspaces that found their preconditioner superseded by a sibling's refactorization. */
     public static final LongAdder luSupersededFactorizations=new LongAdder();
     // ---- sparse linear algebra, conservative transport side ----
@@ -112,7 +119,7 @@ public final class SolverDiagnostics {
      * solved again because the reconstruction folded a phase the pass had solved. */
     public static final LongAdder traceFolds=new LongAdder();
     public static final LongAdder traceFoldPasses=new LongAdder();
-    /** Outer phase checks that seeded a phase a node lacks at the node's own split ({@code FluidThermodynamics.phaseCheck},
+    /** Outer phase checks that seeded a phase a node lacks at the node's own split ({@code StepPhaseRules.phaseCheck},
      * decision D26: a vessel's closure of its inventory, a junction's closure of its own rows). */
     public static final LongAdder phaseSeeds=new LongAdder();
     /** Outer phase checks whose own split refused a proposed phase, its closure having driven it under the trace share or
@@ -232,6 +239,7 @@ public final class SolverDiagnostics {
         map.put("luChecks",luChecks);map.put("luRefinements",luRefinements);
         map.put("luOrderings",luOrderings);map.put("luOrderingNanos",luOrderingNanos);
         map.put("luStorages",luStorages);map.put("luSupersededFactorizations",luSupersededFactorizations);
+        map.put("luColumnsFactored",luColumnsFactored);map.put("luReachSearches",luReachSearches);map.put("luPatternSearches",luPatternSearches);
         map.put("transportFactorizations",transportFactorizations);map.put("transportFactorNanos",transportFactorNanos);
         map.put("transportSolves",transportSolves);map.put("transportSolveNanos",transportSolveNanos);
         map.put("transportOrderings",transportOrderings);map.put("transportOrderingNanos",transportOrderingNanos);

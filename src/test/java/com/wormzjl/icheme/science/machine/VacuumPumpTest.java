@@ -87,4 +87,15 @@ class VacuumPumpTest {
     @Test void aStoppedPumpTakesNoPower() {
         assertEquals(0, pump(DRY_SCREW, 100).shaftPower(1, 0, 1, 1e4, 1.4));
     }
+
+    /** N5: the liquid noise reads the liquid intensity and keeps its bytes (the step at the trace, the ramp to 10 %). */
+    @Test void theLiquidNoiseKeepsItsBytes() {
+        for (double liquid = -.01; liquid <= 1; liquid += .0005) {
+            int before = liquid > VacuumPump.LIQUID_TRACE ? (int) Math.round(255 * Math.min(1, liquid / VacuumPump.LIQUID_LOUD)) : 0;
+            assertEquals(before, VacuumPump.liquidNoise(liquid), "at " + liquid);
+        }
+        assertEquals(0, VacuumPump.liquidIntensity(VacuumPump.LIQUID_TRACE));
+        assertEquals(.5, VacuumPump.liquidIntensity(.05), 1e-12);
+        assertEquals(1, VacuumPump.liquidIntensity(.3));
+    }
 }

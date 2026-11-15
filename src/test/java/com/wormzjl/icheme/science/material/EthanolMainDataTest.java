@@ -5,8 +5,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.wormzjl.icheme.runtime.fluid.FluidPresetCatalog;
-import com.wormzjl.icheme.science.fluid.network.StillColumn;
+import com.wormzjl.icheme.science.column.still.StillColumn;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
+import com.wormzjl.icheme.science.plant.still.NetworkStageThermo;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -26,8 +27,9 @@ final class EthanolMainDataTest {
     private static final double WASH = .0332;
 
     private static StillColumn column(FluidThermodynamics thermo) {
-        var column = new StillColumn(thermo.on(List.of("Ethanol")), ATM);
-        assertEquals(List.of("Ethanol"), column.model().components(), "the cubic's compounds");
+        var stage = new NetworkStageThermo(thermo.on(List.of("Ethanol")));
+        var column = new StillColumn(stage, ATM);
+        assertEquals(List.of("Ethanol"), stage.model().components(), "the cubic's compounds");
         assertEquals(1, column.water(), "water in the cubic, last");
         return column;
     }

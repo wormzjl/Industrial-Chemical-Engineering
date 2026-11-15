@@ -1,8 +1,8 @@
 package com.wormzjl.icheme.client.gui.tutorial.cards;
 
-import com.wormzjl.icheme.science.column.operation.ColumnStatus;
-import com.wormzjl.icheme.science.column.operation.Condition;
-import com.wormzjl.icheme.science.column.operation.OperationView;
+import com.wormzjl.icheme.science.plant.column.ColumnStatus;
+import com.wormzjl.icheme.science.plant.column.Condition;
+import com.wormzjl.icheme.science.plant.column.OperationView;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;

@@ -6,9 +6,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 import java.util.TreeSet;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.IntFunction;
 
 import static com.wormzjl.icheme.science.equipment.Access.*;
@@ -70,7 +68,7 @@ final class ColumnStructure {
 
     private static final int CACHE = 64;
     /** The nozzle layout of each shape: every box and transform reads it, and placing the nozzles tests the structure row by row. */
-    private static final Map<EquipmentShape, Layout> LAYOUTS = new ConcurrentHashMap<>();
+    private static final BoundedCache<EquipmentShape, Layout> LAYOUTS = new BoundedCache<>(CACHE);
 
     private final EquipmentShape shape;
     private final Plan plan;
@@ -254,12 +252,7 @@ final class ColumnStructure {
     }
 
     private static Layout layout(EquipmentShape s) {
-        var cached = LAYOUTS.get(s);
-        if (cached == null) {
-            if (LAYOUTS.size() >= CACHE) LAYOUTS.clear();
-            cached = LAYOUTS.computeIfAbsent(s, ColumnStructure::place);
-        }
-        return cached;
+        return LAYOUTS.computeIfAbsent(s, ColumnStructure::place);
     }
 
     private static Layout place(EquipmentShape s) {

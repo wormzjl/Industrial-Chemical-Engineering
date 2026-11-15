@@ -249,7 +249,7 @@ class V3PhaseTruncationTest {
         V3TruncationNumericsTest.ManufacturedThermo thermo =
                 new V3TruncationNumericsTest.ManufacturedThermo(original.input().componentBasis(), removed);
 
-        V3DryMeshState lifted = V3ColumnCalculator.liftFloorSupport(original, thermo, removed);
+        V3DryMeshState lifted = V3FloorLift.liftFloorSupport(original, thermo, removed);
 
         double floor = TRACE_FEED * V3TruncationSupport.TRACE_FLOOR_FRACTION;
         for (int node = 0; node < 6; node++) {
@@ -299,7 +299,7 @@ class V3PhaseTruncationTest {
         V3DryMeshState onePhase = new V3DryMeshState(original.topology(), 3, liquid, vapor,
                 V3TruncationNumericsTest.temperatures());
 
-        V3DryMeshState lifted = V3ColumnCalculator.liftFloorSupport(original, thermo, onePhase);
+        V3DryMeshState lifted = V3FloorLift.liftFloorSupport(original, thermo, onePhase);
 
         // The calibrated ratio carries the calibration state's own vapour total, which held 0.004 mol/s of
         // trace that the lifted state does not, so the implied flow reproduces it to one part in ten thousand.

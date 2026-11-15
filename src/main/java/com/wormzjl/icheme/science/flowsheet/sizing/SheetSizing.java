@@ -11,6 +11,7 @@ import com.wormzjl.icheme.science.flowsheet.FlowStream;
 import com.wormzjl.icheme.science.flowsheet.FlowThermo;
 import com.wormzjl.icheme.science.flowsheet.Flowsheet;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetRun;
+import com.wormzjl.icheme.science.flowsheet.Members;
 import com.wormzjl.icheme.science.flowsheet.SheetCompounds;
 import com.wormzjl.icheme.science.flowsheet.Wiring;
 import com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor;
@@ -43,8 +44,8 @@ import java.util.function.Supplier;
  */
 public final class SheetSizing {
     static final String OIL = "oil", WATER = "water", GAS = "gas", COLUMN = "column";
-    /** An air-then-water condenser's water exchanger, a member beside its air cooler, {@code condenser} (C2). */
-    public static final String TRIM = "trim";
+    /** An air-then-water condenser's water exchanger, a member beside its air cooler, {@code condenser} (C2): {@link Members#TRIM}. */
+    public static final String TRIM = Members.TRIM;
 
     private SheetSizing() {
     }
@@ -161,32 +162,32 @@ public final class SheetSizing {
     public record SizeAll(Flowsheet sheet, FlowsheetRun run, Sized sized) {
     }
 
-    /** A member's key: its block's id, a slash and its own. */
+    /** A member's key: its block's id, a slash and its own ({@link Members#member}). */
     public static String member(String block, String member) {
-        return block + "/" + member;
+        return Members.member(block, member);
     }
 
     /**
      * A pumparound's member, {@code pa 2 cooler}: its pumparound's id and its part, {@code cooler}, {@code pump}, {@code draw} or
-     * {@code return}. Its own name is the lang line {@code sizing.member.pa_<part>} with the id as its argument.
+     * {@code return}, named as {@link Members.Pumparound} names it. Its own name is the lang line {@code sizing.member.pa_<part>}
+     * with the id as its argument.
      */
     public record PumparoundMember(String pumparound, String part) {
-        public static final String COOLER = "cooler";
-        private static final String HEAD = "pa";
+        public static final String COOLER = Members.COOLER;
 
         public static String name(String pumparound, String part) {
-            return HEAD + " " + pumparound + " " + part;
+            return Members.Pumparound.name(pumparound, part);
         }
 
         /** The pumparound member {@code member} names, or null for a member of none. */
         public static @Nullable PumparoundMember of(String member) {
-            String[] words = member.split(" ");
-            return words.length == 3 && words[0].equals(HEAD) ? new PumparoundMember(words[1], words[2]) : null;
+            var named = Members.Pumparound.of(member);
+            return named == null ? null : new PumparoundMember(named.pumparound(), named.part());
         }
 
         /** The tail of its own name's lang key, after {@code sizing.member.}. */
         public String key() {
-            return HEAD + "_" + part;
+            return Members.PUMPAROUND + "_" + part;
         }
     }
 
@@ -374,7 +375,7 @@ public final class SheetSizing {
                 case "compressor" -> compressor(id, entry);
                 case "drum" -> drum(id, entry);
                 case "storage_tank" -> tank(id, entry);
-                case "ejector" -> ejector(id, entry);
+                case "ejector" -> ejector(id, entry, unit.params().number("motive", EjectorUnit.MOTIVE_PRESSURE));
                 case "vacuum_pump" -> vacuumPump(id, entry, unit.params());
                 case "combustion_engine" -> primeMover(id, entry, com.wormzjl.icheme.science.machine.PrimeMover.Family.ENGINE);
                 case "gas_turbine" -> primeMover(id, entry, com.wormzjl.icheme.science.machine.PrimeMover.Family.GAS_TURBINE);
@@ -500,11 +501,11 @@ public final class SheetSizing {
             return sized(entry, PrimeMoverSizing.Size.class, size -> PrimeMoverSizing.rate(load, size), () -> PrimeMoverSizing.auto(load));
         }
 
-        /** An ejector on its suction's load, with what its law needs and what a wired Motive port brings (W10). */
-        SizedUnit ejector(String id, UnitEntry entry) {
+        /** An ejector on its suction's load, with what its law needs and what a wired Motive port brings, on steam at {@code motive} Pa (W10, P3-01). */
+        SizedUnit ejector(String id, UnitEntry entry, double motive) {
             var readings = readings(id);
             boolean wired = wires.getOrDefault(id, Map.of()).containsKey(EjectorUnit.MOTIVE);
-            var load = EjectorSizing.Load.of(stream(id, EjectorUnit.SUCTION), readings.getOrDefault("need", 0.), wired ? readings.get("motive") : null, basis);
+            var load = EjectorSizing.Load.of(stream(id, EjectorUnit.SUCTION), readings.getOrDefault("need", 0.), wired ? readings.get("motive") : null, motive, basis);
             return ejector(entry, load);
         }
 

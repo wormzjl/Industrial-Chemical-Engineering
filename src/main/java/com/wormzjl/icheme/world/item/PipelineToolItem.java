@@ -11,6 +11,7 @@ import com.wormzjl.icheme.science.fluid.network.PipeResistance;
 import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler;
 import com.wormzjl.icheme.world.inventory.PipelineToolMenu;
 import com.wormzjl.icheme.world.level.block.FluidDeviceBlock;
+import com.wormzjl.icheme.world.level.block.Positions;
 import com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity;
 import com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity;
 import net.minecraft.ChatFormatting;
@@ -61,7 +62,7 @@ public final class PipelineToolItem extends Item {
         if (player instanceof ServerPlayer serverPlayer
                 && level.getBlockEntity(pos) instanceof FluidDeviceBlockEntity entity) {
             FluidWorldAuthority.find(serverPlayer.server).ifPresent(world -> {
-                var position = new PhysicalFluidTopology.Position(level.dimension().location().toString(), pos.getX(), pos.getY(), pos.getZ());
+                var position = Positions.of(level, pos);
                 world.at(position).filter(record -> record.device().id() == entity.fluidIdentity()
                         && record.device().kind() == TopologyCompiler.Kind.PIPE).ifPresent(record -> {
                     var device = record.device();

@@ -3,7 +3,6 @@ package com.wormzjl.icheme.client.gui.common;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
 import com.wormzjl.icheme.client.gui.common.kit.Measure;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
-import com.wormzjl.icheme.client.gui.screens.inventory.FluidDeviceScreen.FluidGuiLayout;
 import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -23,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class DeviceColumnTest {
     private static final Measure M = Measure.fixed(6);
 
-    /** Every reading the screen shows (FluidDeviceScreen.meters), each once. */
+    /** Every reading the screen shows (DeviceMeters.meters), each once. */
     private static final List<String> METERS = List.of("fans_state", "burners_state", "temperature", "pressure", "top_pressure", "bottom_pressure", "mass",
             "inlet_temperature", "suction_pressure", "inlet_pressure", "net_flow", "throughput", "velocity", "velocity_lowest", "velocity_highest", "gradient",
             "gradient_lowest", "gradient_highest", "filter_load", "captured", "pressure_change", "outlet_temperature", "duty", "bypass", "fans_speed",

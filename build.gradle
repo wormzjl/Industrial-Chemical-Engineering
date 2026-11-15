@@ -222,14 +222,9 @@ def prepareMcpControlMod = tasks.register('prepareMcpControlMod', Copy) {
 tasks.matching { it.name == 'runMcpClient' }.configureEach { dependsOn prepareMcpControlMod }
 
 dependencies {
-    // Sequential sparse LU for the fluid solver; package its runtime graph with the mod.
-    implementation('org.ejml:ejml-dsparse:0.44.0')
-    additionalRuntimeClasspath('org.ejml:ejml-dsparse:0.44.0')
-    ['ejml-core', 'ejml-ddense', 'ejml-dsparse'].each { module ->
-        jarJar("org.ejml:${module}:[0.44.0,0.45.0)") {
-            version { prefer '0.44.0' }
-        }
-    }
+    // EJML 0.44's sparse LU is the reference of the fluid solver's own LU (UpLookingLu, derived from it): the parity gate
+    // UpLookingLuParityTest alone needs it. The mod neither ships nor loads it.
+    testImplementation('org.ejml:ejml-dsparse:0.44.0')
     // Create (with its libraries Ponder, Catnip inside Ponder, Flywheel and Registrate) and KubeJS are optional mods: compiled
     // against, loaded in dev runs, GameTests and tests through optionalModRuntime. -PwithoutCreate drops all five from
     // those runtimes, for the check without Create. Create's slim development jar excludes its companion libraries.
@@ -329,18 +324,21 @@ tasks.withType(Test).configureEach {
     maxParallelForks = configuredTestForks
     if (providers.gradleProperty('nativeLibraryPath').isPresent())
         systemProperty 'icheme.native.path', providers.gradleProperty('nativeLibraryPath').get()
-    if (providers.gradleProperty('nativeThermoBatch').isPresent())
-        systemProperty 'icheme.native.thermo.batch', providers.gradleProperty('nativeThermoBatch').get()
+    // The Rust column library's ceiling (NativeColumnSolver): off (the default) or band.
+    if (providers.gradleProperty('nativeColumn').isPresent())
+        systemProperty 'icheme.native.column', providers.gradleProperty('nativeColumn').get()
 }
 
-// The C++ column library. CMake builds a platform shared library (DLL/SO/DYLIB), never an executable, and the jar
-// carries it under natives/<os>-<arch>/, where NativeColumnSolver loads it by default. CMake comes from
-// -PnativeCmake, the PATH or a Visual Studio installation; without one the jar carries no library and the column
-// runs on its Java path.
-def nativeSourceDirectory = layout.projectDirectory.dir('src/main/cpp')
-def nativeBuildDirectory = layout.buildDirectory.dir('native').get().asFile
-def nativeBuildDirectoryPath = nativeBuildDirectory.absolutePath
-def nativeLibraryName = System.mapLibraryName('icheme_column_solver')
+// The Rust column library icheme_column (src/main/rust, batch 2026-11-13-codebase-review). Cargo builds a platform
+// shared library (DLL/SO/DYLIB), never an executable, and the jar carries it under natives/<os>-<arch>/, where
+// NativeColumnSolver loads it when its ceiling (-PnativeColumn, default off) asks for it. Cargo comes from -Pcargo, the
+// PATH or ~/.cargo/bin; without one the jar carries no library and the column runs on its Java path. Cargo runs in
+// src/main/rust, whose .cargo/config.toml sets 4 jobs, the vendored crates and the static C runtime; a cargo run is
+// part of its Gradle invocation's lane (AGENTS.md "Gradle, measurement and verification", "Native code").
+def rustDirectory = layout.projectDirectory.dir('src/main/rust')
+def nativeCargoDirectory = layout.buildDirectory.dir('native/cargo').get().asFile
+def nativeLibraryName = System.mapLibraryName('icheme_column')
+def nativeLibraryDirectory = new File(nativeCargoDirectory, 'release')
 // The folder name NativeColumnSolver.platform() gives at run time.
 def nativePlatform = {
     def os = System.getProperty('os.name').toLowerCase(Locale.ROOT)
@@ -350,80 +348,75 @@ def nativePlatform = {
     def machine = arch in ['amd64', 'x86_64'] ? 'x86_64' : arch in ['aarch64', 'arm64'] ? 'aarch64' : arch
     "${system}-${machine}".toString()
 }()
-def nativeCmake = {
-    if (providers.gradleProperty('nativeCmake').isPresent()) return providers.gradleProperty('nativeCmake').get()
-    def windows = nativePlatform.startsWith('windows')
+def nativeCargo = {
+    if (providers.gradleProperty('cargo').isPresent()) return providers.gradleProperty('cargo').get()
+    def executable = nativePlatform.startsWith('windows') ? 'cargo.exe' : 'cargo'
     def onPath = providers.environmentVariable('PATH').getOrElse('').split(File.pathSeparator)
-            .collect { new File(it, windows ? 'cmake.exe' : 'cmake') }.find { it.isFile() }
-    if (onPath != null || !windows) return onPath?.absolutePath
-    // Visual Studio, Build Tools included, carries its own CMake beside the MSVC compiler.
-    def roots = [providers.environmentVariable('ProgramFiles').getOrElse('C:/Program Files'),
-                 providers.environmentVariable('ProgramFiles(x86)').getOrElse('C:/Program Files (x86)')]
-    return roots.collectMany { root -> ['2022', '2019'].collectMany { year ->
-        ['BuildTools', 'Community', 'Professional', 'Enterprise'].collect { edition -> new File(root,
-                "Microsoft Visual Studio/${year}/${edition}/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe")
-        } } }.find { it.isFile() }?.absolutePath
+            .findAll { !it.isEmpty() }.collect { new File(it, executable) }.find { it.isFile() }
+    if (onPath != null) return onPath.absolutePath
+    def home = new File(System.getProperty('user.home'), ".cargo/bin/${executable}")
+    return home.isFile() ? home.absolutePath : null
 }()
-tasks.register('nativeConfigure', Exec) {
-    group = 'native'
-    description = 'Configures the C++ column shared library.'
-    inputs.file(nativeSourceDirectory.file('CMakeLists.txt'))
-    outputs.file(new File(nativeBuildDirectory, 'CMakeCache.txt'))
-    doFirst {
-        nativeBuildDirectory.mkdirs()
-        commandLine nativeCmake ?: 'cmake', '-S', nativeSourceDirectory.asFile.absolutePath,
-                '-B', nativeBuildDirectory.absolutePath,
-                '-DCMAKE_BUILD_TYPE=Release', '-DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY',
-                "-DICHEME_JAVA_HOME=${System.getProperty('java.home')}"
+def nativeCargoCommand = nativeCargo ?: 'cargo'
+def nativeNoCargo = 'No cargo found: pass -Pcargo=<path to cargo>, or put cargo on the PATH or in ~/.cargo/bin'
+// rustCheck: the formatting, clippy with warnings as errors, and cargo's tests (the bit tables, the band LU, the JNI
+// layout). Each step leaves a stamp, so it runs again only when src/main/rust (or the Java token it reads) changed.
+def rustCheckStamps = layout.buildDirectory.dir('native/checks').get().asFile
+def rustCheckSteps = [
+        rustFmtCheck: [['fmt', '--all', '--check'], 'Checks the Rust formatting (cargo fmt --check).'],
+        rustClippy  : [['clippy', '--locked', '--offline', '--all-targets', '--', '-D', 'warnings'],
+                       'Runs clippy on the Rust workspace with every warning an error.'],
+        rustTest    : [['test', '--locked', '--offline'],
+                       'Runs the Rust tests: the Java bit tables, the band LU and the JNI layout and self-test.']]
+def previousRustStep = null
+rustCheckSteps.each { stepName, step ->
+    def stamp = new File(rustCheckStamps, "${stepName}.ok")
+    def after = previousRustStep
+    tasks.register(stepName, Exec) {
+        group = 'verification'
+        description = step[1]
+        workingDir rustDirectory.asFile
+        commandLine([nativeCargoCommand] + step[0])
+        inputs.files(fileTree(rustDirectory)).withPropertyName('rustWorkspace').withPathSensitivity(PathSensitivity.RELATIVE)
+        // icheme-jni's formulation test reads the Java constants of the token.
+        if (stepName == 'rustTest') inputs.file('src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnLabels.java')
+                .withPropertyName('formulationSource').withPathSensitivity(PathSensitivity.RELATIVE)
+        outputs.file(stamp)
+        if (after != null) mustRunAfter after
+        doFirst { if (nativeCargo == null) throw new GradleException(nativeNoCargo) }
+        doLast { stamp.text = 'passed\n' }
     }
+    previousRustStep = stepName
 }
-tasks.register('nativeBuild', Exec) {
+tasks.register('rustCheck') {
+    group = 'verification'
+    description = 'Checks the Rust workspace: cargo fmt --check, clippy -D warnings, cargo test --locked --offline.'
+    dependsOn rustCheckSteps.keySet().toList()
+}
+def nativeBuild = tasks.register('nativeBuild', Exec) {
     group = 'native'
-    description = 'Builds the C++ column shared library; no executable is produced.'
-    dependsOn tasks.named('nativeConfigure')
-    inputs.dir(nativeSourceDirectory)
-    outputs.file(new File(nativeBuildDirectory, nativeLibraryName))
-    doFirst { commandLine nativeCmake ?: 'cmake', '--build', nativeBuildDirectory.absolutePath, '--config', 'Release' }
+    description = 'Builds the Rust column library (cargo build --release -p icheme-jni); no executable is produced.'
+    workingDir rustDirectory.asFile
+    commandLine nativeCargoCommand, 'build', '--release', '--locked', '--offline', '-p', 'icheme-jni',
+            '--target-dir', nativeCargoDirectory.absolutePath
+    inputs.files(fileTree(rustDirectory) { exclude 'vendor/**', '**/tests/data/**' })
+            .withPropertyName('rustSources').withPathSensitivity(PathSensitivity.RELATIVE)
+    outputs.file(new File(nativeLibraryDirectory, nativeLibraryName))
+    doFirst { if (nativeCargo == null) throw new GradleException(nativeNoCargo) }
 }
 def nativeResources = tasks.register('nativeResources', Sync) {
     group = 'native'
-    description = 'Puts the C++ column library where the jar carries it, natives/<os>-<arch>/.'
-    dependsOn tasks.named('nativeBuild')
-    from(nativeBuildDirectory) {
-        include nativeLibraryName
+    description = 'Puts the Rust column library where the jar carries it, natives/<os>-<arch>/.'
+    from(nativeBuild) {
         into "natives/${nativePlatform}"
     }
     into layout.buildDirectory.dir('generated/nativeResources')
 }
-if (nativeCmake != null) sourceSets.main.resources.srcDir nativeResources
-else logger.lifecycle('No CMake found: the jar carries no C++ column library, and the column runs on its Java path.')
-tasks.withType(Test).configureEach { systemProperty 'icheme.native.packaged', nativeCmake != null }
-tasks.register('nativeSmoke', Test) {
-    group = 'verification'
-    description = 'Loads the C++ column library from build/native and checks it through JNI; no executable is run.'
-    dependsOn tasks.named('nativeBuild'), tasks.named('testClasses')
-    testClassesDirs = sourceSets.test.output.classesDirs
-    classpath = sourceSets.test.runtimeClasspath
-    filter { includeTestsMatching 'com.wormzjl.icheme.science.column.v3.NativeColumnSolverTest' }
-    systemProperty 'icheme.native.path', nativeBuildDirectory.absolutePath
-    maxParallelForks = 1
-    doLast {
-        def nativeFiles = java.nio.file.Files.walk(java.nio.file.Path.of(nativeBuildDirectoryPath))
-        try {
-            def productExecutable = nativeFiles
-                    .filter { java.nio.file.Files.isRegularFile(it) }
-                    .filter { it.toString().toLowerCase(java.util.Locale.ROOT).endsWith('.exe') }
-                    .filter { !it.toString().replace('\\', '/').contains('/CMakeFiles/') }
-                    .findFirst()
-            if (productExecutable.isPresent()) {
-                throw new GradleException("Native solver build unexpectedly produced executable: ${productExecutable.get()}")
-            }
-        } finally {
-            nativeFiles.close()
-        }
-    }
-}
-// Only PackagedSparseLuTest reads the packaged jar; it runs under test and fluidScienceTest.
+if (nativeCargo != null) sourceSets.main.resources.srcDir nativeResources
+else logger.lifecycle('No cargo found: the jar carries no column library, and the column runs on its Java path.')
+tasks.withType(Test).configureEach { systemProperty 'icheme.native.packaged', nativeCargo != null }
+// Only PackagedSparseLuTest reads the packaged jar (the jar alone solves a sparse system; no EJML inside); it runs under
+// test and fluidScienceTest.
 tasks.withType(Test).matching { it.name in ['test', 'fluidScienceTest'] }.configureEach {
     dependsOn tasks.named('jar')
     systemProperty 'fluid.modJar', tasks.named('jar', Jar).flatMap { it.archiveFile }.get().asFile.absolutePath
@@ -521,10 +514,9 @@ tasks.register('fluidSolverRegression', Test) {
         systemProperty 'fluid.regression.traceCutoff', providers.gradleProperty('fluidRegressionTraceCutoff').get()
     outputs.upToDateWhen { false }
 }
-// An MSVC build stamps its DLL, so the C++ library counts by its sources, not its bytes: otherwise every rebuild reruns
-// every test, and two worktrees of one tree never share a result.
+// The column library is no input of a test task's class path: a relink can stamp the DLL, and with the ceiling off (the
+// default) no test reads it. Only nativeSmoke, the native tests' task, declares the built library as its input.
 normalization { runtimeClasspath { ignore 'natives/**' } }
-tasks.withType(Test).configureEach { inputs.dir(nativeSourceDirectory).withPropertyName('nativeSources').withPathSensitivity(PathSensitivity.RELATIVE) }
 
 // A gate group loads a small part of the mod (by -Xlog:class+load, batch 2026-11-02-test-suite-optimization: 115 of the
 // source files for the column, 113 for equipment). Its task sees only that part, so a change anywhere else leaves it up to
@@ -561,9 +553,9 @@ def gateGroup = { String name, String tests, List<String> main, List<String> hel
 }
 def columnGates = gateGroup('column', 'science/column/v3',
         ['science/material', 'science/math', 'science/equipment/ColumnDesign*', 'science/fluid/transport/MixtureViscosity*',
-         'science/fluid/thermo/WaterRegion1*', 'science/thermo/phase/SteamVirial*',
-         'science/thermo/IdealGasFunction*', 'science/thermo/PairInteractions*', 'science/thermo/PengRobinsonKernel*', 'science/thermo/HuronVidalExcess*',
-         'science/thermo/ThermoComponent*', 'science/thermo/TraceTruncationPolicy*', 'network/ColumnWire*',
+         'science/fluid/thermo/WaterRegion1*', 'science/thermo/water',
+         'science/thermo/IdealGasFunction*', 'science/thermo/PairInteractions*', 'science/thermo/PengRobinsonKernel*', 'science/thermo/ThermoRefusal*', 'science/thermo/HuronVidalExcess*',
+         'science/thermo/ThermoComponent*', 'science/thermo/TraceTruncationPolicy*', 'network/ColumnWire*', 'network/Wire*',
          'science/equipment/ColumnComponents*', 'science/equipment/ExchangerType*',
          'science/fluid/network/HeatRouting*', 'science/fluid/network/PipeResistance*'],
         ['network/ColumnCodecs*', 'science/material/CatalogScopedExtension*', 'science/material/Cdu17FixtureExtension*',
@@ -573,13 +565,14 @@ def columnGates = gateGroup('column', 'science/column/v3',
         ['column/**', 'materials/**', 'science/column/**', 'compat/presets/**'], ['data/icheme/neural/**', 'natives/**', 'assets/icheme/columnpreset/**', 'assets/icheme/mixturepreset/**'])
 def equipmentGates = gateGroup('equipment', 'science/equipment',
         ['science/material', 'science/math', 'science/machine', 'science/fluid/topology/TopologyCompiler*', 'science/thermo/IdealGasFunction*',
-         'science/thermo/PengRobinsonKernel*', 'runtime/fluid/FluidView*', 'runtime/instrument/Instrument*', 'runtime/control/DataPort*',
+         'science/thermo/PengRobinsonKernel*', 'science/thermo/ThermoRefusal*', 'runtime/fluid/FluidView*', 'runtime/instrument/Instrument*', 'runtime/control/DataPort*',
          'science/column/v3/V3ColumnInput*',
+         'science/column/v3/V3ColumnPresets*',
          'science/column/v3/V3ColumnOutcome*', 'science/column/v3/V3ColumnProblemResolver*', 'science/column/v3/V3ColumnSpecification*',
          'science/column/v3/V3ComponentBasis*', 'science/column/v3/V3InitializationOptions*',
          'science/column/v3/V3PumparoundSpec*', 'science/column/v3/V3SideDrawSpec*', 'science/column/v3/V3SteamFeedSpec*',
          'science/column/v3/thermo/V3ThermoModel*', 'science/column/v3/thermo/V3WaterProperties*',
-         'science/fluid/thermo/WaterRegion1*', 'science/thermo/phase/SteamVirial*',
+         'science/fluid/thermo/WaterRegion1*', 'science/thermo/water',
          'science/fluid/network/CoolingTower*', 'science/fluid/network/AirCooled*', 'science/fluid/network/ConvectionCoil*', 'science/fluid/network/FiredCoil*', 'science/fluid/network/Flare*', 'science/fluid/network/Chimney*',
          'science/fluid/network/HeatControl*', 'science/fluid/network/HeatCurve*', 'science/fluid/network/HeatLaw*',
          'science/fluid/network/HeatSide*', 'science/fluid/network/HeatRouting*', 'science/fluid/network/PipeResistance*', 'science/fluid/network/VesselGeometry*',
@@ -621,11 +614,34 @@ def holdGates = tasks.register('holdGates', Test) {
     }
     systemProperty 'icheme.fluid.scheduler.verify', 'true'
 }
+// The Rust column library's tests (NativeColumnSolverTest: the handshake, the band solve bit for bit, a column with the
+// ceiling off and at band) run here and not in columnGates, on the column group's copy of what they load and on the
+// library as built in build/native/cargo/release, which is their declared input. They skip where no library is built.
+def nativeTestClasses = ['com.wormzjl.icheme.science.column.v3.NativeColumnSolverTest']
+tasks.named('columnGates', Test) { filter { nativeTestClasses.each { excludeTestsMatching it } } }
+def nativeSmoke = tasks.register('nativeSmoke', Test) {
+    group = 'verification'
+    description = 'Loads the Rust column library from build/native/cargo/release and runs its tests through JNI; no executable is run.'
+    def gateInputs = tasks.named('columnGateInputs')
+    def gateDirectory = layout.buildDirectory.dir('gate-inputs/column')
+    testClassesDirs = files(gateDirectory.map { it.dir('tests') }).builtBy(gateInputs)
+    classpath = files(gateDirectory.map { it.dir('tests') }, gateDirectory.map { it.dir('lib') }).builtBy(gateInputs) +
+            configurations.testRuntimeClasspath + configurations.runtimeClasspath
+    maxHeapSize = '1g'
+    filter {
+        nativeTestClasses.each { includeTestsMatching it }
+        failOnNoMatchingTests = true
+    }
+    systemProperty 'icheme.native.path', nativeLibraryDirectory.absolutePath
+    inputs.files(nativeBuild).withPropertyName('nativeLibrary')
+    maxParallelForks = 1
+}
 // No task of its own, so the groups run side by side: a Test task that depended on them would wait for them.
 def slowGates = tasks.register('slowGates') {
     group = 'verification'
-    description = 'Runs what the everyday test leaves out: the hold gates and the gate groups.'
+    description = 'Runs what the everyday test leaves out: the hold gates, the gate groups and, where cargo is found, the native tests.'
     dependsOn holdGates, columnGates, equipmentGates
+    if (nativeCargo != null) dependsOn nativeSmoke
 }
 tasks.named('check') { dependsOn slowGates }
 

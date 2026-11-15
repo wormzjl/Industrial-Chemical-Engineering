@@ -12,6 +12,7 @@ Batch: `documentation/2026-11-10-agent-instructions-review/` (finding 3).
 | `git add -f` / `--force` | Git and worktrees: never stage ignored files |
 | Gradle with `--rerun-tasks`, `--no-build-cache`, `cleanTest` | No repeated tests: do not force a result again |
 | `rm -r build` / `Remove-Item -Recurse build` | No repeated tests: no deleted `build/` |
+| `cargo build`, `test`, `clippy`, `run`, `bench` outside `src/main/rust`, or with `-j`, `--jobs` or `CARGO_BUILD_JOBS` above 4 | Native code: a cargo build uses at most 4 jobs (`src/main/rust/.cargo/config.toml` sets 4, so cargo runs from that folder: the session's folder, or a `cd` earlier in the command) |
 
 Text inside quotes, heredocs and PowerShell here-strings is ignored, so commit messages and file bodies that name these commands pass. `--rerun` on one filtered test task (the replay AGENTS.md allows) passes.
 
@@ -29,9 +30,10 @@ Text inside quotes, heredocs and PowerShell here-strings is ignored, so commit m
 
 ## Entry points
 
-- `guard.js`: `check(command)` returns the block reason or `null`; run as a script it reads the hook JSON on stdin.
-- `guard.test.js`: blocked and allowed command lists.
+- `guard.js`: `check(command, cwd)` returns the block reason or `null`; run as a script it reads the hook JSON on stdin and takes `cwd` from it (else its own folder).
+- `guard.test.js`: blocked and allowed command lists; an entry `[command, cwd]` runs in that folder.
 
 ## History
 
 - 2026-11-10: created; checked through bash (Claude Code), `cmd.exe /d /s /c` and `powershell -Command` (Codex on Windows) spawns.
+- 2026-11-13: the cargo rule (batch 2026-11-13-codebase-review, Rust part 2b; plan pitfall 18).

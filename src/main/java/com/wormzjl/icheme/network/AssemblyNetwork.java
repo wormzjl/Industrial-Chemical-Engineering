@@ -12,11 +12,11 @@ import com.wormzjl.icheme.science.assembly.AssemblyReport.SlotReport;
 import com.wormzjl.icheme.science.assembly.AssemblyReport.State;
 import com.wormzjl.icheme.science.assembly.AssemblyView;
 import com.wormzjl.icheme.science.assembly.Blueprint.Slot;
-import com.wormzjl.icheme.science.column.operation.Condition;
-import com.wormzjl.icheme.science.column.operation.DriftBands;
-import com.wormzjl.icheme.science.column.operation.OperationView;
-import com.wormzjl.icheme.science.column.operation.Port;
-import com.wormzjl.icheme.science.column.operation.Setpoints;
+import com.wormzjl.icheme.science.plant.column.Condition;
+import com.wormzjl.icheme.science.plant.column.DriftBands;
+import com.wormzjl.icheme.science.plant.column.OperationView;
+import com.wormzjl.icheme.science.plant.column.Port;
+import com.wormzjl.icheme.science.plant.column.Setpoints;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.EquipmentShape.Role;
 import com.wormzjl.icheme.science.equipment.ShapeRasterizer;
@@ -45,7 +45,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.*;
 
 /**
- * Assembly protocol {@value #PROTOCOL} (batch 2026-10-26-multi-machine-framework, plan sections 6, 8 and 10). The server
+ * The assembly payloads, on the mod's protocol {@link NetworkProtocol#VERSION} (before it: assembly-6; batch 2026-10-26-multi-machine-framework, plan sections 6, 8 and 10). The server
  * decides what a click on a structure opens: a column's GUI; for a unit that a column's report holds, that column's GUI
  * with the unit selected; otherwise the structure's own screen ({@link #datasheet} for a unit with no fluid screen).
  * An open GUI is a session of the engine's presentation: it gets the stored view at once, a press of "Validate
@@ -54,7 +54,6 @@ import java.util.*;
  * {@link WatchPayload}, which replays their stored views, and their changes come with the buckets ({@link WatchedPayload}).
  */
 public final class AssemblyNetwork {
-    public static final String PROTOCOL = "assembly-6";
     /** Bounds a view's read checks: slots, ports, members, characters of a slot's name or detail. */
     static final int MAX_SLOTS = 256, MAX_PORTS = 1024, MAX_MEMBERS = 256, MAX_TEXT = 1024;
 
@@ -190,7 +189,7 @@ public final class AssemblyNetwork {
         try {
             var phase = b.readEnum(OperationView.Phase.class);
             var conditions = new ArrayList<Condition.Active>();
-            for (int i = 0, n = count(b, MAX_STREAMS); i < n; i++)
+            for (int i = 0, n = Wire.count(b, MAX_STREAMS, 11, "assembly condition"); i < n; i++)
                 conditions.add(new Condition.Active(b.readEnum(Condition.class), b.readDouble(), b.readVarInt() - 1, b.readUtf(Condition.MAX_TEXT)));
             double alpha = b.readDouble();
             var resolving = b.readBoolean() ? b.readEnum(DriftBands.Trigger.class) : null;
@@ -199,10 +198,10 @@ public final class AssemblyNetwork {
             var setpoints = readSetpoints(b);
             var accepted = b.readBoolean() ? readSetpoints(b) : null;
             var streams = new ArrayList<OperationView.Stream>();
-            for (int i = 0, n = count(b, MAX_STREAMS); i < n; i++)
+            for (int i = 0, n = Wire.count(b, MAX_STREAMS, 42, "assembly stream"); i < n; i++)
                 streams.add(new OperationView.Stream(b.readEnum(Port.class), b.readVarInt(), b.readDouble(), b.readDouble(), b.readDouble(), b.readDouble(), b.readDouble()));
             var duties = new ArrayList<OperationView.Duty>();
-            for (int i = 0, n = count(b, MAX_STREAMS); i < n; i++)
+            for (int i = 0, n = Wire.count(b, MAX_STREAMS, 18, "assembly duty"); i < n; i++)
                 duties.add(new OperationView.Duty(b.readEnum(OperationView.DutyKind.class), b.readVarInt(), b.readDouble(), b.readDouble()));
             var trays = new OperationView.Trays(b.readDouble(), b.readDouble(), b.readDouble(), b.readDouble(), b.readVarInt());
             OperationView.Solve solve = null;
@@ -222,23 +221,13 @@ public final class AssemblyNetwork {
         b.writeDouble(s.condenserTemperature());
         b.writeDouble(s.refluxRatio());
         b.writeDouble(s.reboilerPerFeed());
-        for (double[] values : List.of(s.steamPerFeed(), s.drawsPerFeed(), s.pumparoundsPerFeed())) writeDoubles(b, values);
+        for (double[] values : List.of(s.steamPerFeed(), s.drawsPerFeed(), s.pumparoundsPerFeed())) Wire.doubles(b, values);
     }
 
     private static Setpoints readSetpoints(RegistryFriendlyByteBuf b) {
         double design = b.readDouble(), feed = b.readDouble(), condenser = b.readDouble(), reflux = b.readDouble(), reboiler = b.readDouble();
-        return new Setpoints(design, feed, condenser, reflux, reboiler, readDoubles(b), readDoubles(b), readDoubles(b));
-    }
-
-    private static void writeDoubles(RegistryFriendlyByteBuf b, double[] values) {
-        b.writeVarInt(values.length);
-        for (double v : values) b.writeDouble(v);
-    }
-
-    private static double[] readDoubles(RegistryFriendlyByteBuf b) {
-        var out = new double[count(b, MAX_VALUES)];
-        for (int i = 0; i < out.length; i++) out[i] = b.readDouble();
-        return out;
+        return new Setpoints(design, feed, condenser, reflux, reboiler, Wire.doubles(b, MAX_VALUES, "set point"), Wire.doubles(b, MAX_VALUES, "set point"),
+                Wire.doubles(b, MAX_VALUES, "set point"));
     }
 
     private static AssemblyView read(RegistryFriendlyByteBuf b) {
@@ -246,18 +235,18 @@ public final class AssemblyNetwork {
         long changedAt = b.readLong();
         if (status != AssemblyView.Status.CHECKED && status != AssemblyView.Status.COMPLETE) return new AssemblyView(status, null, changedAt);
         var slots = new ArrayList<SlotReport>();
-        for (int i = 0, n = count(b, MAX_SLOTS); i < n; i++) {
+        for (int i = 0, n = Wire.count(b, MAX_SLOTS, 21, "assembly slot"); i < n; i++) {
             String part = b.readUtf(MAX_TEXT);
             int index = b.readVarInt();
             var state = b.readEnum(State.class);
             long member = b.readLong(), at = b.readLong();
             var detail = b.readUtf(MAX_TEXT);
             var parallel = new ArrayList<Long>();
-            for (int k = 0, m = count(b, com.wormzjl.icheme.science.equipment.ColumnComponents.MAX_UNITS - 1); k < m; k++) parallel.add(b.readLong());
+            for (int k = 0, m = Wire.count(b, com.wormzjl.icheme.science.equipment.ColumnComponents.MAX_UNITS - 1, Long.BYTES, "parallel member"); k < m; k++) parallel.add(b.readLong());
             slots.add(new SlotReport(new Slot(part, index), state, member, at, detail, parallel));
         }
         var ports = new ArrayList<PortReport>();
-        for (int i = 0, n = count(b, MAX_PORTS); i < n; i++) {
+        for (int i = 0, n = Wire.count(b, MAX_PORTS, 11, "assembly port"); i < n; i++) {
             long unit = b.readLong();
             var role = b.readEnum(Role.class);
             int ordinal = b.readVarInt();
@@ -265,18 +254,12 @@ public final class AssemblyNetwork {
             ports.add(new PortReport(unit, role, ordinal, b.readEnum(PortState.class)));
         }
         var members = new ArrayList<Long>();
-        for (int i = 0, n = count(b, MAX_MEMBERS); i < n; i++) members.add(b.readLong());
+        for (int i = 0, n = Wire.count(b, MAX_MEMBERS, Long.BYTES, "assembly member"); i < n; i++) members.add(b.readLong());
         try {
             return new AssemblyView(status, new AssemblyReport(slots, ports, Set.of(), members), changedAt);
         } catch (IllegalArgumentException invalid) {
             throw new DecoderException(invalid.getMessage());
         }
-    }
-
-    private static int count(RegistryFriendlyByteBuf b, int max) {
-        int n = b.readVarInt();
-        if (n < 0 || n > max) throw new DecoderException("count " + n + " out of range 0.." + max);
-        return n;
     }
 
     /** Server to client: the view of the column whose GUI is open in container {@code container}. */
@@ -377,7 +360,7 @@ public final class AssemblyNetwork {
     }
 
     public static void register(RegisterPayloadHandlersEvent event) {
-        var registrar = event.registrar(PROTOCOL).executesOn(HandlerThread.MAIN);
+        var registrar = event.registrar(NetworkProtocol.VERSION).executesOn(HandlerThread.MAIN);
         registrar.playToServer(ValidatePayload.TYPE, ValidatePayload.STREAM_CODEC, AssemblyNetwork::validate);
         registrar.playToServer(OpenUnitPayload.TYPE, OpenUnitPayload.STREAM_CODEC, AssemblyNetwork::openUnit);
         registrar.playToServer(OperationPayload.TYPE, OperationPayload.STREAM_CODEC, AssemblyNetwork::operate);

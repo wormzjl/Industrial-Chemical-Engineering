@@ -27,13 +27,13 @@ public final class V3TestInputs {
      */
     public static V3ColumnInput literatureCduInput() {
         var catalog = tiaJuana("literature_tia_juana");
-        return catalog.presets().column("literature_tia_juana").input(catalog);
+        return V3ColumnPresets.input(catalog.presets().column("literature_tia_juana"), catalog);
     }
 
     /** The methane-enriched Tia Juana CDU preset ({@code tia_juana}). */
     public static V3ColumnInput methaneCduInput() {
         var catalog = tiaJuana("tia_juana");
-        return catalog.presets().column("tia_juana").input(catalog);
+        return V3ColumnPresets.input(catalog.presets().column("tia_juana"), catalog);
     }
 
     /**
@@ -50,7 +50,7 @@ public final class V3TestInputs {
      * temperature under its tower template, on the default preset's package. {@code name} names both files; the assay is the crude's where it has its own.
      */
     public static V3ColumnInput crude(com.wormzjl.icheme.science.material.MaterialCatalog catalog, String name) {
-        var base = catalog.presets().column(catalog.presets().network().defaultColumnPreset()).input(catalog);
+        var base = V3ColumnPresets.input(catalog.presets().column(catalog.presets().network().defaultColumnPreset()), catalog);
         var stream = bundled("assets/icheme/mixturepreset/" + name + ".json");
         double rate = stream.get("flow_kmol_h").getAsDouble();
         var tower = V3ColumnTemplate.read(bundled("assets/icheme/columnpreset/" + name + ".json")).scaledTo(rate);
@@ -131,7 +131,7 @@ public final class V3TestInputs {
     static V3ColumnResult stateless(V3ColumnProblem problem, V3InputDigest digest, V3AcceptanceAudit audit,
             V3ConvergenceEvidence evidence) {
         return new V3ColumnResult(problem, digest, audit, evidence, List.of(),
-                V3ColumnCalculator.formulationRevision(problem.input(), problem.truncationSupport().cutoffMoleFraction()),
+                V3ColumnLabels.formulationRevision(problem.input(), problem.truncationSupport().cutoffMoleFraction()),
                 null, null, null);
     }
 }

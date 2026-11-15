@@ -1,12 +1,12 @@
 package com.wormzjl.icheme.science.thermo.phase;
 
-import com.wormzjl.icheme.science.fluid.thermo.FluidDomain;
 import java.util.List;
 import java.util.Objects;
 
 /**
  * The envelope of a package for the equilibrium engine: the package's data range as a whole, its {@code fluid_domain}
- * ({@link FluidDomain#envelope()}). Leaving it never refuses a state (owner rule of 2026-10-16): the engine searches the
+ * (the catalog's {@code fluidValidity}, the network's {@code FluidDomain.envelope()}). Leaving it never refuses a state
+ * (owner rule of 2026-10-16): the engine searches the
  * numerical box ({@link com.wormzjl.icheme.science.thermo.NumericalBox}) and grades a converged answer outside the
  * envelope {@link EquilibriumResult.CoverageGrade#EXTRAPOLATED}. An open domain (for research and tests on a sub-basis,
  * like the open-domain kernels of the stability test) covers every state and must be declared as such.
@@ -31,11 +31,14 @@ public final class PhaseDomain {
         maximumP = envelope[3];
     }
 
-    /** The fluid network's envelope of a package over {@code components}, the network basis (the EOS components, water). */
-    public static PhaseDomain of(FluidDomain fluid, List<String> components) {
-        var envelope = fluid.envelope();
-        return new PhaseDomain(fluid.packageId(), components, false, new double[] {envelope.minimumTemperature(),
-                envelope.maximumTemperature(), envelope.minimumPressure(), envelope.maximumPressure()});
+    /**
+     * The envelope of package {@code packageId} over {@code components}, the network basis (the EOS components, water):
+     * its {@code fluid_domain} hull, K and Pa, built by the caller that reads it from the catalog.
+     */
+    public static PhaseDomain of(String packageId, List<String> components, double minimumTemperature,
+                                 double maximumTemperature, double minimumPressure, double maximumPressure) {
+        return new PhaseDomain(packageId, components, false, new double[] {minimumTemperature, maximumTemperature,
+                minimumPressure, maximumPressure});
     }
 
     /** A declared open domain: every positive finite state is covered. For research and test contracts only. */

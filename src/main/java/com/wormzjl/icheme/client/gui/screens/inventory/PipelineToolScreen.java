@@ -6,6 +6,7 @@ import com.wormzjl.icheme.client.gui.common.PaintSwatch;
 import com.wormzjl.icheme.client.gui.common.ProcessUi;
 import com.wormzjl.icheme.client.gui.common.ScreenTours;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
+import com.wormzjl.icheme.client.gui.common.kit.DoorInput;
 import com.wormzjl.icheme.client.gui.common.kit.GuiCanvas;
 import com.wormzjl.icheme.client.gui.common.kit.KitDoor;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
@@ -195,8 +196,7 @@ public final class PipelineToolScreen extends AbstractContainerScreen<PipelineTo
         hovered = null;
         // An open tour takes the pointer: the page under it shows no hover.
         super.render(g, tour.pointer(mouseX), tour.pointer(mouseY), partialTick);
-        if (tour.isOpen()) tour.render(g, font, width, height, mouseX, mouseY);
-        else KitDoor.hint(g, font, hovered, mouseX, mouseY);
+        DoorInput.overlay(this, g, font, tour, hovered, mouseX, mouseY);
     }
 
     @Override
@@ -219,9 +219,7 @@ public final class PipelineToolScreen extends AbstractContainerScreen<PipelineTo
 
     @Override
     public boolean mouseClicked(double x, double y, int button) {
-        if (tour.mouseClicked(font, width, height, x, y)) return true;
-        SkinField.clickOutside(this, x, y);
-        return door.press(x - leftPos, y - topPos, button) || super.mouseClicked(x, y, button);
+        return DoorInput.press(this, font, tour, door, x, y, leftPos, topPos, button) || super.mouseClicked(x, y, button);
     }
 
     @Override
@@ -237,8 +235,7 @@ public final class PipelineToolScreen extends AbstractContainerScreen<PipelineTo
 
     @Override
     public boolean mouseScrolled(double x, double y, double horizontal, double vertical) {
-        if (tour.isOpen()) return true;
-        return door.wheel(x - leftPos, y - topPos, vertical) || super.mouseScrolled(x, y, horizontal, vertical);
+        return DoorInput.wheel(tour, door, x, y, leftPos, topPos, vertical) || super.mouseScrolled(x, y, horizontal, vertical);
     }
 
     @Override

@@ -37,7 +37,7 @@ class DeadHeadBesideFlowingBranchTest {
     private final FluidThermodynamics model=FluidTestSupport.networkModel();
 
     private PhysicalFluidTopology.Device device(long id,int x,int z,TopologyCompiler.Kind kind) {
-        return new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position(DIMENSION,x,BOTTOM,z),kind,kind==TopologyCompiler.Kind.FILTER?PhysicalFluidTopology.Direction.EAST:PhysicalFluidTopology.Direction.NORTH,BLOCK,new FlowControl.Passive());
+        return PhysicalFluidTopology.Device.builder(id,new PhysicalFluidTopology.Position(DIMENSION,x,BOTTOM,z),kind,kind==TopologyCompiler.Kind.FILTER?PhysicalFluidTopology.Direction.EAST:PhysicalFluidTopology.Direction.NORTH,BLOCK,new FlowControl.Passive()).build();
     }
     private double[] only(int component){double[] n=new double[MaterialTestBasis.NETWORK+1];n[component]=1;return n;}
 

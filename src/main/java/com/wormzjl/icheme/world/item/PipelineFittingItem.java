@@ -6,6 +6,7 @@ import com.wormzjl.icheme.runtime.instrument.Instrument;
 import com.wormzjl.icheme.science.equipment.SightGlassGeometry;
 import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler;
 import com.wormzjl.icheme.world.level.block.FluidDeviceBlock;
+import com.wormzjl.icheme.world.level.block.Positions;
 import com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity;
 import java.util.List;
 import net.minecraft.ChatFormatting;
@@ -58,7 +59,7 @@ public final class PipelineFittingItem extends Item {
             if(world==null||entity.fluidIdentity()==0)return InteractionResult.FAIL;
             if(world.instruments().occupied(entity.fluidIdentity()))return InteractionResult.FAIL;
             var record=world.registrations().get(entity.fluidIdentity());
-            var at=new PhysicalFluidTopology.Position(level.dimension().location().toString(),pos.getX(),pos.getY(),pos.getZ());
+            var at=Positions.of(level,pos);
             if(record==null||record.device().kind()!=TopologyCompiler.Kind.PIPE||!record.device().position().equals(at))return InteractionResult.FAIL;
             if(record.device().cutoff()!=PhysicalFluidTopology.Cutoff.NONE||!(record.device().control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.Passive))return InteractionResult.SUCCESS;
             var facing=mask==0?state.getValue(FluidDeviceBlock.FACING):Direction.values()[Integer.numberOfTrailingZeros(mask)];

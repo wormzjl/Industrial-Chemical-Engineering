@@ -19,11 +19,6 @@ final class V3SimultaneousColumnSolver {
     private static final int MAXIMUM_FROZEN_FINE_JACOBIAN_STEPS = 1;
     private static final int UNLIMITED_LOCAL_BLOCK_ATTEMPTS = Integer.MAX_VALUE;
     private static final int LOCAL_BLOCK_JACOBIAN_MINIMUM_COORDINATES = 96;
-    /**
-     * A continuation seed below this residual is already in the strict Newton basin.  Taking a PR derivative
-     * snapshot there costs more than it can save, so the inside-out trial is reserved for genuinely cold seeds.
-     */
-    private static final double INSIDE_OUT_TRIGGER_RESIDUAL = 5.0e-2;
     /** Stop rebuilding a local predictor after two consecutive Armijo rejections in one attempt. */
     private static final int MAXIMUM_CONSECUTIVE_LOCAL_BLOCK_REJECTIONS = 2;
     private static final double FALLBACK_MAXIMUM_LOG_FLOW_CHANGE = 0.25;
@@ -70,7 +65,7 @@ final class V3SimultaneousColumnSolver {
     /**
      * The stall rule: a solve whose maximum scaled residual has not fallen to {@link #STALL_FACTOR} of its value
      * {@code STALL_WINDOW_ITERATIONS} iterations ago is not converging. The intermediate steam rungs' stall stop
-     * ({@code V3ColumnCalculator.INTERMEDIATE_RUNG_BUDGET}) and the held-point release below are this one rule.
+     * ({@code V3FeatureRamp.INTERMEDIATE_RUNG_BUDGET}) and the held-point release below are this one rule.
      *
      * <p>The release: a solve whose accepted steps have held a point for the window in a row without halving the
      * residual over them is handed to the support refresh ({@code STALLED_SUPPORT_FLOOR}): the held point is what
@@ -214,81 +209,6 @@ final class V3SimultaneousColumnSolver {
                 control, trace, MAXIMUM_FROZEN_FINE_JACOBIAN_STEPS, 1, RungBudget.DEFAULT, Extension.NONE);
     }
 
-    /**
-     * Boston-Sullivan inside-out trial: strict PR properties are refreshed outside a few cheap frozen-property
-     * MESH sweeps, then the ordinary strict solver certifies the best inner state.  The frozen evaluator is never
-     * used for publication or auditing; if it does not lower the fresh residual, the caller receives the ordinary
-     * strict solve from the original seed.
-     */
-    static Attempt solveWithInsideOut(
-            V3ColumnProblem problem, V3MeshResidualEvaluator evaluator, V3DryMeshCoordinateMap coordinates,
-            V3DryMeshState initialState, V3FiniteDifferenceJacobian.V3ThermoWorkspaceFactory workspaceFactory,
-            int maximumIterations, double scaledTolerance, V3SolveControl control, NewtonTrace trace) {
-        Objects.requireNonNull(problem, "problem");
-        Objects.requireNonNull(evaluator, "evaluator");
-        Objects.requireNonNull(coordinates, "coordinates");
-        Objects.requireNonNull(initialState, "initialState");
-        Objects.requireNonNull(workspaceFactory, "workspaceFactory");
-        Objects.requireNonNull(control, "control");
-        Objects.requireNonNull(trace, "trace");
-        if (evaluator.usesFrozenThermo()) throw new IllegalArgumentException("V3 inside-out outer solve needs a strict evaluator");
-        if (!problem.hasSideDraws() && !problem.hasSteamFeeds()
-                && !problem.hasPumparounds() && !problem.hasWetTrays()) {
-            V3DryMeshState bestState = initialState;
-            double bestResidual;
-            try {
-                bestResidual = evaluator.evaluate(bestState, workspaceFactory.newWorkspace())
-                        .maximumAbsoluteScaledResidual();
-            } catch (IllegalArgumentException | V3ThermoException unavailable) {
-                return solve(problem, evaluator, coordinates, initialState, workspaceFactory,
-                        V3ConvergenceEvidence.unavailable(), maximumIterations, scaledTolerance,
-                        V3FiniteDifferenceJacobian.DifferenceScale.FINE, control, trace);
-            }
-            if (!(bestResidual > INSIDE_OUT_TRIGGER_RESIDUAL)) {
-                return solve(problem, evaluator, coordinates, initialState, workspaceFactory,
-                        V3ConvergenceEvidence.unavailable(), maximumIterations, scaledTolerance,
-                        V3FiniteDifferenceJacobian.DifferenceScale.FINE, control, trace);
-            }
-            for (int outer = 0; outer < 2; outer++) {
-                control.checkpoint();
-                V3MeshResidualEvaluator.ThermoSnapshot snapshot;
-                try {
-                    snapshot = evaluator.captureThermoSnapshot(bestState, workspaceFactory.newWorkspace());
-                } catch (IllegalArgumentException | V3ThermoException unavailable) {
-                    break;
-                }
-                V3MeshResidualEvaluator frozenEvaluator = evaluator.withFrozenThermo(snapshot);
-                Attempt inner = solve(problem, frozenEvaluator, coordinates, bestState, workspaceFactory,
-                        V3ConvergenceEvidence.unavailable(), Math.min(12, Math.max(4, maximumIterations / 8)),
-                        Math.max(1.0e-6, scaledTolerance * 100.0), V3FiniteDifferenceJacobian.DifferenceScale.FINE,
-                        control, trace);
-                V3MeshResidual fresh;
-                try {
-                    fresh = evaluator.evaluate(inner.state(), workspaceFactory.newWorkspace());
-                } catch (IllegalArgumentException | V3ThermoException unavailable) {
-                    break;
-                }
-                double residual = fresh.maximumAbsoluteScaledResidual();
-                if (!(residual < bestResidual) || !Double.isFinite(residual)) break;
-                bestState = inner.state();
-                bestResidual = residual;
-                if (bestResidual <= scaledTolerance) break;
-            }
-            if (bestState != initialState) {
-                Attempt accelerated = solve(problem, evaluator, coordinates, bestState, workspaceFactory,
-                        V3ConvergenceEvidence.unavailable(), maximumIterations, scaledTolerance,
-                        V3FiniteDifferenceJacobian.DifferenceScale.FINE, control, trace);
-                if (accelerated instanceof Attempt.Converged) return accelerated;
-                // A frozen-property predictor is only a preconditioner.  If the strict corrector cannot certify
-                // that state, preserve the ordinary cold-start behaviour instead of returning a failure whose
-                // basin was chosen by the approximate inner model.
-            }
-        }
-        return solve(problem, evaluator, coordinates, initialState, workspaceFactory,
-                V3ConvergenceEvidence.unavailable(), maximumIterations, scaledTolerance,
-                V3FiniteDifferenceJacobian.DifferenceScale.FINE, control, trace);
-    }
-
     private static Attempt solve(
             V3ColumnProblem problem,
             V3MeshResidualEvaluator evaluator,
@@ -386,7 +306,7 @@ final class V3SimultaneousColumnSolver {
                 String detail = invalidState.getMessage();
                 if (detail == null || detail.isBlank()) detail = "V3 MESH state is outside the logarithmic phase-flow domain";
                 if (detail.length() > 192) detail = detail.substring(0, 192);
-                return new Attempt.Failure("STATE_DOMAIN", state,
+                return new Attempt.Failure(V3AttemptCode.STATE_DOMAIN, state,
                         new Evidence(iteration, 0.0, 0.0, 0.0, 0.0, detail,
                                 lastConvergenceEvidence));
             }
@@ -421,7 +341,7 @@ final class V3SimultaneousColumnSolver {
                     maximumIterations = extended;
                     extensionBlocks++;
                 } else {
-                    return new Attempt.Failure("MAX_ITERATIONS", state,
+                    return new Attempt.Failure(V3AttemptCode.MAX_ITERATIONS, state,
                             new Evidence(iteration, maximumResidual, merit, 0.0, 0.0,
                                     extensionBlocks == 0 ? "iteration budget exhausted"
                                             : "iteration budget exhausted after " + extensionBlocks + " progress extension(s)",
@@ -443,7 +363,7 @@ final class V3SimultaneousColumnSolver {
                 int earlier = iteration - budget.stallWindow();
                 if (budget.stallWindow() > 0 && earlier >= 0 && maximumResidual > budget.stallResidualFloor()
                         && maximumResidual > budget.stallFactor() * stallResiduals[earlier]) {
-                    return new Attempt.Failure("STALLED", state, new Evidence(iteration, maximumResidual, merit,
+                    return new Attempt.Failure(V3AttemptCode.STALLED, state, new Evidence(iteration, maximumResidual, merit,
                             0.0, 0.0, "maximum scaled residual " + stallResiduals[earlier] + " at iteration "
                                     + earlier + " and " + maximumResidual + " now", lastConvergenceEvidence));
                 }
@@ -452,7 +372,7 @@ final class V3SimultaneousColumnSolver {
             if (heldIterations >= STALL_WINDOW_ITERATIONS) {
                 double earlier = heldResiduals[(iteration - STALL_WINDOW_ITERATIONS) % heldResiduals.length];
                 if (maximumResidual > STALL_FACTOR * earlier) {
-                    return new Attempt.Failure("STALLED_SUPPORT_FLOOR", state, new Evidence(iteration, maximumResidual,
+                    return new Attempt.Failure(V3AttemptCode.STALLED_SUPPORT_FLOOR, state, new Evidence(iteration, maximumResidual,
                             merit, 0.0, 0.0, "a point held at its support floor for " + heldIterations
                                     + " iterations; maximum scaled residual " + earlier + " then and "
                                     + maximumResidual + " now", lastConvergenceEvidence));
@@ -466,6 +386,7 @@ final class V3SimultaneousColumnSolver {
                 try {
                     V3BlockJacobian localJacobian = V3BlockJacobianAssembler.assembleLocal(
                             problem, evaluator, coordinates, state, workspaceFactory, differenceScale, control, scratch);
+                    V3SolveScratch.factorized(V3SolveScratch.Factorization.LOCAL_BLOCK);
                     V3BandedPivotedSolver.Result localLinear = V3BandedPivotedSolver.solve(
                             localJacobian.toBandedMatrix(linearWorkspace), negativeScaledResidual(residual), linearWorkspace);
                     if (localLinear instanceof V3BandedPivotedSolver.Result.Success localSuccess) {
@@ -507,6 +428,7 @@ final class V3SimultaneousColumnSolver {
             }
             V3BandedPivotedSolver.Result linearResult;
             try {
+                V3SolveScratch.factorized(V3SolveScratch.Factorization.NEWTON);
                 linearResult = V3BandedPivotedSolver.solve(
                         toBandedMatrix(jacobian, layout, linearWorkspace), negativeScaledResidual(residual), linearWorkspace);
             } catch (IllegalStateException unavailable) {
@@ -517,7 +439,7 @@ final class V3SimultaneousColumnSolver {
                     continue;
                 }
                 if (!NEWTON_OFF_BAND_MESSAGE.equals(unavailable.getMessage())) throw unavailable;
-                return new Attempt.Failure("JACOBIAN_BAND_STRUCTURE", state,
+                return new Attempt.Failure(V3AttemptCode.JACOBIAN_BAND_STRUCTURE, state,
                         new Evidence(iteration, maximumResidual, merit, 0.0, 0.0, unavailable.getMessage(),
                                 lastConvergenceEvidence));
             }
@@ -532,7 +454,7 @@ final class V3SimultaneousColumnSolver {
                 double[] baseCoordinates = coordinates.encode(state);
                 // See HELD_POINT_LOG_FLOW: a free point that sank is not an unknown, so the refresh removes it.
                 if (points.sank(baseCoordinates)) {
-                    return new Attempt.Failure("STALLED_SUPPORT_FLOOR", state, new Evidence(iteration, maximumResidual,
+                    return new Attempt.Failure(V3AttemptCode.STALLED_SUPPORT_FLOOR, state, new Evidence(iteration, maximumResidual,
                             merit, 0.0, failure.pivotGrowth(),
                             "a point that sank below its support floor left the Newton system singular",
                             lastConvergenceEvidence));
@@ -546,7 +468,7 @@ final class V3SimultaneousColumnSolver {
                             maximumLineSearchSteps, control, points);
                 }
                 if (descentTrial == null) {
-                    return new Attempt.Failure("LINEAR_" + failure.code(), state,
+                    return new Attempt.Failure(V3AttemptCode.linear(failure.code()), state,
                             new Evidence(iteration, maximumResidual, merit, 0.0, failure.pivotGrowth(), failure.detail(),
                                     lastConvergenceEvidence));
                 }
@@ -568,7 +490,7 @@ final class V3SimultaneousColumnSolver {
                 continue;
             }
             if (usedDescentFallback && points.sank(baseCoordinates)) {
-                return new Attempt.Failure("STALLED_SUPPORT_FLOOR", state, new Evidence(iteration, maximumResidual,
+                return new Attempt.Failure(V3AttemptCode.STALLED_SUPPORT_FLOOR, state, new Evidence(iteration, maximumResidual,
                         merit, 0.0, linearSuccess.pivotGrowth(),
                         "a point that sank below its support floor left no Armijo step along the Newton direction",
                         lastConvergenceEvidence));
@@ -584,7 +506,7 @@ final class V3SimultaneousColumnSolver {
                 }
             }
             if (acceptedTrial == null) {
-                return new Attempt.Failure("LINE_SEARCH_EXHAUSTED", state,
+                return new Attempt.Failure(V3AttemptCode.LINE_SEARCH_EXHAUSTED, state,
                         new Evidence(iteration, maximumResidual, merit, 0.0, linearSuccess.pivotGrowth(),
                                 "no admissible Armijo-reducing Newton or descent step", lastConvergenceEvidence));
             }
@@ -605,7 +527,7 @@ final class V3SimultaneousColumnSolver {
             }
             double acceptedStep = acceptedTrial.step();
             if (!Double.isFinite(lastMerit)) {
-                return new Attempt.Failure("INTERNAL_INVARIANT", state,
+                return new Attempt.Failure(V3AttemptCode.INTERNAL_INVARIANT, state,
                         new Evidence(iteration, maximumResidual, merit, acceptedStep, linearSuccess.pivotGrowth(),
                                 "accepted Newton merit is not finite", lastConvergenceEvidence));
             }
@@ -645,6 +567,7 @@ final class V3SimultaneousColumnSolver {
             control.checkpoint();
             V3FiniteDifferenceJacobian.Jacobian jacobian = V3FiniteDifferenceJacobian.evaluateCompact(
                     evaluator, coordinates, state, workspaceFactory, V3FiniteDifferenceJacobian.DifferenceScale.FINE, control);
+            V3SolveScratch.factorized(V3SolveScratch.Factorization.VERIFY_DIRECT);
             V3BandedPivotedSolver.Result linear = V3BandedPivotedSolver.solve(
                     toBandedMatrix(jacobian, layout, linearWorkspace), negativeScaledResidual(residual), linearWorkspace);
             if (linear instanceof V3BandedPivotedSolver.Result.Success success) {
@@ -658,6 +581,7 @@ final class V3SimultaneousColumnSolver {
             double damping = INITIAL_GAUSS_NEWTON_DAMPING;
             for (int attempt = 0; attempt < budget.verificationDampingSteps(); attempt++) {
                 control.checkpoint();
+                V3SolveScratch.factorized(V3SolveScratch.Factorization.VERIFY_DAMPED);
                 V3BandedPivotedSolver.Result regularized = V3BandedPivotedSolver.solve(
                         normal.dampedMatrix(damping, control, linearWorkspace), normal.negativeGradient(), linearWorkspace);
                 if (regularized instanceof V3BandedPivotedSolver.Result.Success success) {
@@ -874,6 +798,7 @@ final class V3SimultaneousColumnSolver {
             control.checkpoint();
             V3BandedPivotedSolver.Result result;
             try {
+                V3SolveScratch.factorized(V3SolveScratch.Factorization.DAMPED_FALLBACK);
                 result = V3BandedPivotedSolver.solve(
                         normal.dampedMatrix(damping, control, linearWorkspace), normal.negativeGradient(), linearWorkspace);
             } catch (IllegalStateException unavailable) {
@@ -1191,11 +1116,16 @@ final class V3SimultaneousColumnSolver {
             }
         }
 
-        record Failure(String code, V3DryMeshState state, Evidence evidence) implements Attempt {
+        record Failure(V3AttemptCode attemptCode, V3DryMeshState state, Evidence evidence) implements Attempt {
             public Failure {
-                if (code == null || code.isBlank() || code.length() > 64) throw new IllegalArgumentException("V3 Newton failure code is invalid");
+                if (attemptCode == null) throw new IllegalArgumentException("V3 Newton failure code is invalid");
                 state = Objects.requireNonNull(state, "state");
                 evidence = Objects.requireNonNull(evidence, "evidence");
+            }
+
+            /** The code's published text. */
+            public String code() {
+                return attemptCode.text();
             }
         }
     }

@@ -115,6 +115,11 @@ public final class HeldDraws {
         hold(x0, y0, x1, y1, true);
     }
 
+    /** A text drawn at once outside a batch: one draw call, as {@link #text} counts it there. */
+    public void textNow() {
+        if (depth == 0) textDraws++;
+    }
+
     /** The draw calls made so far. */
     public int draws() {
         return fillDraws + textDraws + spriteDraws;

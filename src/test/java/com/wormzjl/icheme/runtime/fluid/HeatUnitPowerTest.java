@@ -25,7 +25,7 @@ class HeatUnitPowerTest {
     }
 
     private static PhysicalFluidTopology.Device plain(long id, int x, int y, int z, Kind kind) {
-        return new PhysicalFluidTopology.Device(id, at(x, y, z), kind, EAST, STUB, new FlowControl.Passive());
+        return PhysicalFluidTopology.Device.builder(id, at(x, y, z), kind, EAST, STUB, new FlowControl.Passive()).build();
     }
 
     private static PhysicalFluidTopology.Port port(PhysicalFluidTopology.Position cell, PhysicalFluidTopology.Direction face, PhysicalFluidTopology.ConnectionRole role) {
@@ -47,8 +47,7 @@ class HeatUnitPowerTest {
                 com.wormzjl.icheme.science.equipment.EquipmentShape.Heading.SOUTH, 4);
         var definition = HeatSides.of(shape).getFirst();
         var ports = List.of(port(at(10, 0, 10), WEST, PhysicalFluidTopology.ConnectionRole.INLET), port(at(0, 0, 0), EAST, PhysicalFluidTopology.ConnectionRole.OUTLET));
-        var side = new PhysicalFluidTopology.Device(10, ports.getFirst().cell(), Kind.HEAT_SIDE, NORTH, definition.passage(), new FlowControl.Passive(), ports, true,
-                PhysicalFluidTopology.Cutoff.NONE, false, PhysicalFluidTopology.ALL_FACES, 0, 0, unit.withArea(definition.area()).withFans(HeatSides.fans(shape)));
+        var side = PhysicalFluidTopology.Device.builder(10, ports.getFirst().cell(), Kind.HEAT_SIDE, NORTH, definition.passage(), new FlowControl.Passive()).ports(ports).heat(unit.withArea(definition.area()).withFans(HeatSides.fans(shape))).build();
         var devices = List.of(plain(1, 8, 0, 10, Kind.GENERATOR), plain(20, 9, 0, 10, Kind.PIPE), side, plain(30, 1, 0, 0, Kind.PIPE), plain(2, 2, 0, 0, Kind.VOID));
         return PhysicalFluidTopology.compile(devices, Map.of(1L, new PassiveNetwork.Reservoir(1, 0, water(360, 130_000), PassiveNetwork.NodeKind.GENERATOR),
                 2L, new PassiveNetwork.Reservoir(2, 0, water(300, 101_325), PassiveNetwork.NodeKind.VOID))).islands().getFirst().graph();

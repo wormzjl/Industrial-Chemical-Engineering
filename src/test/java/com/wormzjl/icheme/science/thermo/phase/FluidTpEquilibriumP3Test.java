@@ -18,6 +18,7 @@ import com.wormzjl.icheme.science.thermo.ThermoComponent;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult.Classification;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult.CoverageGrade;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult.Status;
+import com.wormzjl.icheme.science.thermo.PhaseIdentification;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -294,7 +295,7 @@ class FluidTpEquilibriumP3Test {
         var catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
         String pilotId = "icheme:pilot_cryogenic";
         var network = PhaseTestSupport.networkService();
-        var pilot = new FluidTpEquilibrium(PhaseContract.forPackage(catalog, pilotId), CubicPhaseEvaluator.forPackage(catalog, pilotId), FluidTpEquilibrium.Settings.DEFAULT);
+        var pilot = new FluidTpEquilibrium(PackageBinding.contract(catalog, pilotId), PackageBinding.evaluator(catalog, pilotId), FluidTpEquilibrium.Settings.DEFAULT);
         record Grid(String name, FluidTpEquilibrium service, String species, double from, double to) {}
         List<Grid> grids = List.of(
                 new Grid("network", network, "Nitrogen", 300.0, 900.0),
@@ -479,7 +480,7 @@ class FluidTpEquilibriumP3Test {
     /** The pilot package's engine on its network contract (the G3 families' engine). */
     private static FluidTpEquilibrium pilot() {
         var catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
-        return new FluidTpEquilibrium(PhaseContract.forPackage(catalog, PILOT), CubicPhaseEvaluator.forPackage(catalog, PILOT), FluidTpEquilibrium.Settings.DEFAULT);
+        return new FluidTpEquilibrium(PackageBinding.contract(catalog, PILOT), PackageBinding.evaluator(catalog, PILOT), FluidTpEquilibrium.Settings.DEFAULT);
     }
 
     /** A TP request on {@code engine}'s contract basis; {@code amounts} in basis order (missing trailing entries zero). */
@@ -674,7 +675,7 @@ class FluidTpEquilibriumP3Test {
     @Test
     void twoLiquidLikePhasesOutsideTheBandAreLiquidLiquid() {
         var catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
-        var evaluator = CubicPhaseEvaluator.forPackage(catalog, PILOT);
+        var evaluator = PackageBinding.evaluator(catalog, PILOT);
         var research = new FluidTpEquilibrium(PhaseTestSupport.openContract(evaluator), evaluator, FluidTpEquilibrium.Settings.DEFAULT);
         for (double[] s : new double[][] {{91.0, 2.0e6}, {95.0, 0.5e6}, {100.0, 2.0e6}}) {
             var q = request(research, s[0], s[1], 0.0, 0.99, 0.0, 0.01);
@@ -768,7 +769,7 @@ class FluidTpEquilibriumP3Test {
         assertEquals(0.307401 / 0.0777960739, PhaseIdentification.VAPOUR_BRANCH_VOLUME_RATIO, 1.0e-5,
                 "the constant is PR78's critical Z_c / Omega_b");
         var catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
-        var evaluator = CubicPhaseEvaluator.forPackage(catalog, PILOT);
+        var evaluator = PackageBinding.evaluator(catalog, PILOT);
         var engine = pilot();
         // {T, P, amounts in basis order N2, CH4, C2H6, CO2}
         double[][] states = {{195.0, 10.0e6, 0.55, 0.0, 0.45, 0.0}, {195.0, 10.0e6, 0.35, 0.0, 0.65, 0.0},

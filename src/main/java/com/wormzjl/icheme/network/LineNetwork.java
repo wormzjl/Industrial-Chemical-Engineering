@@ -54,9 +54,8 @@ public final class LineNetwork {
                             var action = b.readEnum(LineLaying.Action.class);
                             var a = readTarget(b);
                             var z = readTarget(b);
-                            int count = b.readVarInt();
-                            if (count < 0 || count > PipeRoute.Limits.DEFAULT.cells())
-                                throw new IllegalArgumentException("Line route too long");
+                            // A cell: its position (8 bytes) and its option (a VarInt, one byte at least).
+                            int count = Wire.count(b, PipeRoute.Limits.DEFAULT.cells(), Long.BYTES + 1, "line route cell");
                             var cells = new ArrayList<BlockPos>(count);
                             var options = new ArrayList<Integer>(count);
                             for (int i = 0; i < count; i++) {
@@ -127,7 +126,7 @@ public final class LineNetwork {
     }
 
     public static void register(RegisterPayloadHandlersEvent event) {
-        var r = event.registrar("lines-1").executesOn(HandlerThread.MAIN);
+        var r = event.registrar(NetworkProtocol.VERSION).executesOn(HandlerThread.MAIN);
         r.playToServer(
                 Command.TYPE,
                 Command.CODEC,

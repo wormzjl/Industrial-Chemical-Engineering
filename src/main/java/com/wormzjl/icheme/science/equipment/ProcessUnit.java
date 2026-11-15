@@ -4,6 +4,7 @@ import com.wormzjl.icheme.science.equipment.EquipmentShape.Kind;
 import com.wormzjl.icheme.science.equipment.EquipmentShape.Nozzle;
 import com.wormzjl.icheme.science.equipment.EquipmentShape.Orientation;
 import com.wormzjl.icheme.science.equipment.EquipmentShape.Role;
+import com.wormzjl.icheme.science.equipment.design.UnitRatings;
 import com.wormzjl.icheme.science.math.DeterministicMath;
 
 import java.util.ArrayList;
@@ -12,7 +13,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
 import static com.wormzjl.icheme.science.equipment.Mesh.*;
@@ -39,7 +39,7 @@ import static com.wormzjl.icheme.science.equipment.Mesh.*;
  */
 public final class ProcessUnit {
     private static final int CACHE = 64;
-    private static final Map<EquipmentShape, ProcessUnit> BUILT = new ConcurrentHashMap<>();
+    private static final BoundedCache<EquipmentShape, ProcessUnit> BUILT = new BoundedCache<>(CACHE);
 
     /**
      * Steps of an exchanger's shell and a kettle's bundle, and of an ejector's suction, m; the largest suction of an
@@ -60,9 +60,10 @@ public final class ProcessUnit {
     static final double HEADER = .6, HEADER_HEIGHT = .6, BUNDLE = .5, RING_DEPTH = .9;
     /**
      * A fan ring's widest parts, its top flange and its bellmouth rim, in rotor diameters (the Blender part
-     * {@code ac_fan_ring}); fans are sized so that rings side by side keep apart (owner report 2026-10-16).
+     * {@code ac_fan_ring}); fans are sized so that rings side by side keep apart (owner report 2026-10-16). Public: the
+     * fans' diameter ({@link UnitRatings}) reads it as the drawing does.
      */
-    static final double RING_OD = 1.12;
+    public static final double RING_OD = 1.12;
 
     /**
      * An air cooler bank (owner request 2026-10-16: "AC should be able to be built in series & parallel", decided: one bank
@@ -116,134 +117,52 @@ public final class ProcessUnit {
 
     // ---- Sizes: each kind's design ({@link UnitDesign}) ---------------------------------------------------------------
 
-    public static double minDiameter(Kind kind) {
-        return UnitDesign.of(kind).minSize();
-    }
-
-    public static double maxDiameter(Kind kind) {
-        return UnitDesign.of(kind).maxSize();
-    }
-
-    public static double diameterStep(Kind kind) {
-        return UnitDesign.of(kind).sizeStep();
-    }
-
-    /** Every main size of the kind, smallest first (a machine's rated powers are a list, not a grid). */
-    public static List<Double> sizes(Kind kind) {
-        return UnitDesign.of(kind).sizes();
-    }
-
-    /** The least second size (tubes, a bay's length, throws, a radiant height or length; 1 where the kind has none). */
-    public static int minLength(Kind kind, double diameter) {
-        return UnitDesign.of(kind).minLength(diameter);
-    }
-
-    public static int maxLength(Kind kind, double diameter) {
-        return UnitDesign.of(kind).maxLength(diameter);
-    }
-
-    public static int defaultLength(Kind kind, double diameter) {
-        return UnitDesign.of(kind).defaultLength(diameter);
-    }
-
-    /** The lowest support, m. */
+    /**
+     * The lowest support, m. It stays beside the design's own (finding E3): it takes the second size as the shape holds
+     * it, a {@code double}, and truncates it to the design's whole number.
+     */
     public static int minSupport(Kind kind, double diameter, double length) {
         return UnitDesign.of(kind).minSupport(diameter, (int) length);
     }
 
-    /** The highest support, m: 0 where it is fixed (a pump's plinth at grade). */
-    public static int maxSupport(Kind kind) {
-        return UnitDesign.of(kind).maxSupport();
-    }
-
+    /** A new unit's support, m; as {@link #minSupport}, it truncates the second size to the design's whole number. */
     public static int defaultSupport(Kind kind, double diameter, double length) {
         return UnitDesign.of(kind).defaultSupport(diameter, (int) length);
-    }
-
-    public static Orientation orientation(Kind kind) {
-        return UnitDesign.of(kind).orientation();
-    }
-
-    /** A diameter on its kind's grid, cleared of rounding (0.30000000000000004 becomes 0.3). */
-    public static double snap(Kind kind, double diameter) {
-        return UnitDesign.of(kind).snap(diameter);
     }
 
     static void validate(Kind kind, double diameter, double length, Orientation orientation, int support, Bank bank) {
         var design = UnitDesign.of(kind);
         String name = kind.name().toLowerCase(Locale.ROOT);
         if (!design.banks() && !bank.equals(Bank.ONE)) throw new IllegalArgumentException("Only air coolers are built in banks");
-        if (!(diameter >= minDiameter(kind) - 1e-9 && diameter <= maxDiameter(kind) + 1e-9) || Math.abs(snap(kind, diameter) - diameter) > 1e-9)
-            throw new IllegalArgumentException("A " + name + "'s size must be one of its sizes from " + minDiameter(kind) + " to " + maxDiameter(kind) + ", not " + diameter);
-        if (length != Math.rint(length) || length < minLength(kind, diameter) || length > maxLength(kind, diameter))
-            throw new IllegalArgumentException("A " + name + "'s " + (design.lengthInMetres() ? "length" : "count") + " must be " + minLength(kind, diameter) + " to "
-                    + maxLength(kind, diameter) + (design.lengthInMetres() ? " whole metres" : "") + ", not " + length);
-        if (orientation != orientation(kind)) throw new IllegalArgumentException("A " + name + " " + (orientation(kind).horizontal() ? "lies" : "stands"));
+        if (!(diameter >= design.minSize() - 1e-9 && diameter <= design.maxSize() + 1e-9) || Math.abs(design.snap(diameter) - diameter) > 1e-9)
+            throw new IllegalArgumentException("A " + name + "'s size must be one of its sizes from " + design.minSize() + " to " + design.maxSize() + ", not " + diameter);
+        if (length != Math.rint(length) || length < design.minLength(diameter) || length > design.maxLength(diameter))
+            throw new IllegalArgumentException("A " + name + "'s " + (design.lengthInMetres() ? "length" : "count") + " must be " + design.minLength(diameter) + " to "
+                    + design.maxLength(diameter) + (design.lengthInMetres() ? " whole metres" : "") + ", not " + length);
+        if (orientation != design.orientation()) throw new IllegalArgumentException("A " + name + " " + (design.orientation().horizontal() ? "lies" : "stands"));
         int lowest = minSupport(kind, diameter, length);
-        if (support < lowest || support > maxSupport(kind))
-            throw new IllegalArgumentException("A " + name + "'s support must be " + lowest + " to " + maxSupport(kind) + " m, not " + support);
+        if (support < lowest || support > design.maxSupport())
+            throw new IllegalArgumentException("A " + name + "'s support must be " + lowest + " to " + design.maxSupport() + " m, not " + support);
         design.check(diameter, (int) length, support, bank);
     }
 
-    /** Tube surface of an exchanger or a kettle's bundle of shell {@code shell} and tubes {@code tubes}, m². */
-    public static double tubeSurface(double shell, double tubes) {
-        return 75 * shell * shell * tubes;
-    }
+    // The datasheet and simulator ratings (tube surface, a kettle's shell, a bay's face, fans and coverage, a pump's flow
+    // and power, a compressor's stroke, speed, power and displacement, a fired heater's duty) are UnitRatings' (E2).
 
-    /** A kettle's shell over its bundle: 1.6 times, to 0.25 m. */
-    public static double kettleShell(double bundle) {
-        return Math.round(1.6 * bundle * 4) / 4.0;
-    }
-
-    /** An air cooler bay's header depth along its tubes, m: 0.15 of its length, at most {@link #HEADER}. */
-    static double header(double length) {
+    /**
+     * An air cooler bay's header depth along its tubes, m: 0.15 of its length, at most {@link #HEADER}. Public: the bay's
+     * face and fans ({@link UnitRatings}) read it as the drawing does.
+     */
+    public static double header(double length) {
         return Math.min(HEADER, .15 * length);
-    }
-
-    /** An air cooler bay's bundle face between its headers (centred 0.5 m in from each end), m². */
-    public static double bundleFace(double width, double length) {
-        return (width - .22) * (length - 1 - header(length));
-    }
-
-    /**
-     * An air cooler bay's fans: one to three along its tubes, as many as cover its bundle face best, each the largest whose
-     * ring fits its share of the plenum ({@link #fanDiameter}).
-     */
-    public static Fans fans(double width, double length) {
-        Fans best = null;
-        double covered = -1;
-        for (int k = 1; k <= 3; k++) {
-            double d = fanDiameter(width, length, k), c = d > 0 ? k * Math.PI * d * d / 4 : 0;
-            if (c > covered + 1e-9) {
-                covered = c;
-                best = new Fans(k, d);
-            }
-        }
-        return best;
-    }
-
-    /**
-     * The largest of {@code k} fans whose rings fit a bay, m, on a 0.05 m grid: each ring ({@link #RING_OD} rotor
-     * diameters) inside its share of the bundle along the tubes with 0.02 m to spare, and 0.1 m inside the plenum's
-     * width (the side beams' 0.22 m off the bay width).
-     */
-    static double fanDiameter(double width, double length, int k) {
-        double ring = Math.min(width - .32, (length - 1.1 - header(length)) / k - .02);
-        return Math.floor(ring / RING_OD * 20 + 1e-9) / 20;
     }
 
     /** Every air cooler bay a player may build, {width, length}, the narrowest and shortest first. */
     public static List<double[]> bays() {
         var out = new ArrayList<double[]>();
-        for (double w = minDiameter(Kind.AIR_COOLER); w <= maxDiameter(Kind.AIR_COOLER) + 1e-9; w += diameterStep(Kind.AIR_COOLER))
-            for (int l = minLength(Kind.AIR_COOLER, w); l <= MAX_BAY_LENGTH; l++) if (coverage(w, l) >= FAN_COVERAGE) out.add(new double[]{snap(Kind.AIR_COOLER, w), l});
+        for (double w = UnitDesign.of(Kind.AIR_COOLER).minSize(); w <= UnitDesign.of(Kind.AIR_COOLER).maxSize() + 1e-9; w += UnitDesign.of(Kind.AIR_COOLER).sizeStep())
+            for (int l = UnitDesign.of(Kind.AIR_COOLER).minLength(w); l <= MAX_BAY_LENGTH; l++) if (UnitRatings.coverage(w, l) >= FAN_COVERAGE) out.add(new double[]{UnitDesign.of(Kind.AIR_COOLER).snap(w), l});
         return out;
-    }
-
-    /** The share of an air cooler bay's bundle face its fans cover (API 661 asks 0.4 at least). */
-    public static double coverage(double width, double length) {
-        var fans = fans(width, length);
-        return fans.count() * Math.PI * fans.diameter() * fans.diameter() / 4 / bundleFace(width, length);
     }
 
     /** An ejector's length from its steam chest to its diffuser's exit, m: 8.3 suction diameters. */
@@ -253,64 +172,22 @@ public final class ProcessUnit {
 
     // ---- Machines and heaters (owner request 2026-10-17, MACHINES_HEATERS_PLAN.md) ----------------------------------
 
-    /** A pump's design head, m of liquid, and its efficiency, for the datasheet's motor size. */
-    static final double PUMP_HEAD = 100, PUMP_EFFICIENCY = .7;
     /**
      * The largest overhung (API 610 OH2) pump's discharge, m: larger pumps are radially split between bearings (BB2,
-     * {@link #betweenBearingsPump}; {@code PUMP_TYPES_REVIEW.md}: by flow, BB2 covers the mod's whole range).
+     * {@link PumpDesign#betweenBearingsPump}; {@code PUMP_TYPES_REVIEW.md}: by flow, BB2 covers the mod's whole range).
      */
     public static final double OH2_MAX = .4;
     /**
-     * A balanced-opposed compressor's most throws, and its mean piston speed, m/s: process frames reach 1.25 m bore and 10
-     * throws and run at 3 to 4.5 m/s ({@code MACHINES_SCALE_RESEARCH.md}: Siemens HHE-VL, Baker Hughes HE/HF).
+     * A balanced-opposed compressor's most throws: process frames reach 1.25 m bore and 10 throws and run at 3 to 4.5 m/s
+     * ({@code MACHINES_SCALE_RESEARCH.md}: Siemens HHE-VL, Baker Hughes HE/HF; the piston speed is {@link UnitRatings}').
      */
     public static final int MAX_THROWS = 10;
-    static final double PISTON_SPEED = 4;
     /** A vertical heater's tallest radiant section, m. */
     static final int MAX_RADIANT_HEIGHT = 20;
-    /** A fired heater's mean radiant flux, kW/m² of tube, and the radiant section's share of its duty (API 560 practice). */
-    static final double RADIANT_FLUX = 35, RADIANT_SHARE = .7;
 
     /** A centrifugal pump's suction for discharge {@code d}, m: one size up, about 1.25 d, on a 0.05 m grid. */
     public static double pumpSuction(double d) {
         return Math.round((1.25 * d + .025) * 20) / 20.0;
-    }
-
-    /** A centrifugal pump's flow, m³/h: liquid at 3 m/s in its discharge {@code d}. */
-    public static double pumpFlow(double d) {
-        return 3 * Math.PI / 4 * d * d * 3600;
-    }
-
-    /** The shaft power of a pump of discharge {@code d} at {@link #PUMP_HEAD} of water, kW. */
-    public static double pumpPower(double d) {
-        return 1000 * 9.81 * pumpFlow(d) / 3600 * PUMP_HEAD / PUMP_EFFICIENCY / 1000;
-    }
-
-    /**
-     * A centrifugal pump's discharge, m, for rated flow {@code flow}, m³/h: liquid at 3 m/s ({@link #pumpFlow}), up onto the
-     * 0.05 m grid, 0.05 to 0.6 m.
-     */
-    public static double pumpDischarge(double flow) {
-        return UnitDesign.upTo(Math.sqrt(4 * flow / 3600 / (3 * Math.PI)), SUCTION_STEP, SUCTION_STEP, .6);
-    }
-
-    /** A pump's shaft power at its design point, kW: water at its rated flow and head, at {@link #PUMP_EFFICIENCY}. */
-    public static double pumpPower(MachineDuty duty) {
-        return 9.81 * duty.flow() / 3600 * duty.head() / PUMP_EFFICIENCY;
-    }
-
-    /**
-     * This pump's impeller, m: from its design point's head and speed, {@code D = 60/(π n) √(2 g H)} (plan section 6), at
-     * least {@code least}, the casing that takes its discharge's throat (the drawing's proportions before the design point).
-     */
-    double impeller(double least) {
-        var duty = shape.duty();
-        return Math.max(least, 60 / (Math.PI * duty.speed()) * Math.sqrt(2 * 9.81 * duty.head()));
-    }
-
-    /** This pump's drawn shaft end radius: its rated power at its speed ({@link #shaftRadius}). */
-    double pumpShaft() {
-        return shaftRadius(pumpPower(shape.duty()), shape.duty().speed());
     }
 
     /** The largest low-voltage TEFC motor, kW; above it a large motor. */
@@ -341,46 +218,13 @@ public final class ProcessUnit {
         return .19 * Math.sqrt(Math.sqrt(kw));
     }
 
-    /** A compressor's stroke for bore {@code b}, m. */
-    public static double stroke(double b) {
-        return .1 + .25 * b;
-    }
-
-    /** A compressor's speed, rev/min: its mean piston speed over twice its stroke (larger frames, longer strokes, run slower). */
-    public static double compressorSpeed(double b) {
-        return 60 * PISTON_SPEED / (2 * stroke(b));
-    }
-
-    /** A compressor's shaft power, MW: about 0.05 + 1.7 b² per throw (a fit to Siemens HHE-VL and the Thai Oil machines, {@code MACHINES_SCALE_RESEARCH.md}). */
-    public static double compressorPower(double b, int throwCount) {
-        return throwCount * (.05 + 1.7 * b * b);
-    }
-
     /** A turbo compressor's inlet flow, m³/h, for impeller {@code d}. */
     public static double turboFlow(double d) {
         return CentrifugalCompressorDesign.flow(d);
     }
 
-    /** A compressor's displacement, m³/h: double-acting cylinders of bore {@code b}, {@code throwCount} of them. */
-    public static double displacement(double b, int throwCount) {
-        return throwCount * 2 * Math.PI / 4 * b * b * stroke(b) * compressorSpeed(b) * 60;
-    }
-
-    /**
-     * A fired heater's duty, MW, from its radiant tubes: 6" tubes at two diameters' pitch (π²/2 m² of tube per metre of
-     * wall run) at {@link #RADIANT_FLUX}, the radiant section taking {@link #RADIANT_SHARE}. A vertical heater's tubes stand
-     * round a circle 0.6 m inside its casing, 0.5 m shorter than its radiant height; a cabin's lie along both side walls of
-     * each of its {@link #cabinCells} (1 m short each way) and a third as much again on its roof.
-     */
-    public static double heaterDuty(Kind kind, double diameter, double length) {
-        int cells = kind == Kind.CABIN_HEATER ? cabinCells(length) : 1;
-        double tubes = kind == Kind.VERTICAL_HEATER ? Math.PI * Math.PI / 2 * (diameter - .6) * (length - .5)
-                : 2 * cells * Math.PI / 2 * (cabinWall(diameter) - 1) * (length / cells - 1) * 1.3;
-        return RADIANT_FLUX * tubes / RADIANT_SHARE / 1000;
-    }
-
-    /** A cabin heater's wall height for width {@code w}, m. */
-    static double cabinWall(double w) {
+    /** A cabin heater's wall height for width {@code w}, m. Public: a fired heater's duty ({@link UnitRatings}) reads it. */
+    public static double cabinWall(double w) {
         return w + 1;
     }
 
@@ -400,7 +244,7 @@ public final class ProcessUnit {
     record Compressor(double bore, int throwCount, double stroke, double cylinder, double cylinderLength, double guide, double guideLength, double piece, double half,
                       double crank, double bottles, double frameTop, double pitch, double out, double suction, double discharge) {
         static Compressor of(double b, int throwCount) {
-            double s = ProcessUnit.stroke(b), c = 1.45 * b + .15, lc = 2.2 * s + .3 + .3 * b, half = .45 + .3 * b, crank = .5, guide = .25 + .2 * b;
+            double s = UnitRatings.stroke(b), c = 1.45 * b + .15, lc = 2.2 * s + .3 + .3 * b, half = .45 + .3 * b, crank = .5, guide = .25 + .2 * b;
             double lg = Math.max(.7, 3.5 * s), out = Math.ceil(half + lg + .5 + .4 * b + lc / 2 - 1e-9), ds = 1.1 * b + .3;
             return new Compressor(b, throwCount, s, c, lc, guide, lg, .8 * guide, half, crank, .5 + .35 * b, .95 + .85 * b, Math.max(.55, (c + .3) / 2), out, ds, .85 * ds);
         }
@@ -424,7 +268,7 @@ public final class ProcessUnit {
 
         /** The depth of the steel table's rails: about W24 (0.6 m) at 2 MW to W36 (0.9 m) at 20 MW, 0.4 m on the smallest. */
         double rail() {
-            return Math.min(.9, .4 + .1 * Math.sqrt(compressorPower(bore, throwCount)));
+            return Math.min(.9, .4 + .1 * Math.sqrt(UnitRatings.compressorPower(bore, throwCount)));
         }
 
         /** The gap between a cylinder and its bottles (survey: 0.2 to 0.5 m). */
@@ -497,16 +341,14 @@ public final class ProcessUnit {
         return List.copyOf(motions);
     }
 
-    /** Whether units of {@code kind} have moving parts: their datasheet carries the switch. */
-    public static boolean moves(Kind kind) {
-        return UnitDesign.of(kind).moves();
-    }
-
+    /**
+     * The unit of {@code shape}, built once for every heading: it is drawn in its frame, and no design reads the front
+     * (only {@link EquipmentShape#transform()}, {@link Nameplate} and {@link ShapeRepair} do), so the four headings share
+     * the unit built facing north (finding E12, batch 2026-11-13-codebase-review).
+     */
     static ProcessUnit of(EquipmentShape shape) {
-        var built = BUILT.get(shape);
-        if (built != null) return built;
-        if (BUILT.size() >= CACHE) BUILT.clear();
-        return BUILT.computeIfAbsent(shape, s -> new ProcessUnit(s, UnitDesign.of(s.kind())::build, false));
+        var key = shape.front() == EquipmentShape.Heading.NORTH ? shape : shape.withFront(EquipmentShape.Heading.NORTH);
+        return BUILT.computeIfAbsent(key, s -> new ProcessUnit(s, UnitDesign.of(s.kind())::build, false));
     }
 
     // ---- Collision parts --------------------------------------------------------------------------------------------
@@ -954,240 +796,7 @@ public final class ProcessUnit {
         return (long) (x + 1024) << 42 | (long) (y + 1024) << 21 | (z + 1024);
     }
 
-    // ---- Shell-and-tube exchanger -----------------------------------------------------------------------------------
-
-    /**
-     * A TEMA AES exchanger lying along z on two saddles, its bottom {@code support} up: from the front, the channel's
-     * cover, the channel (tube side in at its bottom, out at its top), the tubesheet's flange, the shell (shell side in
-     * on top near the back, out at the bottom near the front), the floating head's flange and its cover.
-     */
-    void exchanger() {
-        double d = shape.diameter(), r = d / 2, y = shape.support() + r, a = centre(1.1 * r);
-        int n = sides(d);
-        // A readable cover pattern at game scale: roughly 0.3 m pitch, in fours, with at least eight bolts.
-        int bolts = Math.max(8, 4 * (int) Math.ceil(Math.PI * d / 1.2));
-        double channel = .5 * d + .2, zn = Math.ceil(.08 + channel / 2 - .5) + .5;
-        double c0 = zn - channel / 2 - .08, ch1 = zn + channel / 2, s0 = ch1 + .1, s1 = s0 + .95 * shape.tangentLength(), end = s1 + .1;
-        var f = new Frame(new double[]{a, y, 0}, new double[]{0, 0, 1}, new double[]{0, 1, 0});
-        mesh.ring(f, 0, 1.1 * r, c0, c0 + .08, n, 3, Material.FLANGE);
-        mesh.bolts(f, d, r, 1.1 * r, c0, -1, bolts, Material.BOLT);
-        mesh.prism(f, r, c0 + .08, ch1, n, Material.SHELL);
-        mesh.ring(f, r, 1.1 * r, ch1, s0, n, 3, Material.FLANGE);
-        mesh.bolts(f, d, r, 1.1 * r, ch1, -1, bolts, Material.BOLT);
-        mesh.bolts(f, d, r, 1.1 * r, s0, 1, bolts, Material.BOLT);
-        mesh.prism(f, r, s0, s1, n, Material.SHELL);
-        mesh.ring(f, r, 1.08 * r, s1, end, n, 3, Material.FLANGE);
-        mesh.bolts(f, d, r, 1.08 * r, s1, -1, bolts, Material.BOLT);
-        mesh.bolts(f, d, r, 1.08 * r, end, 1, bolts, Material.BOLT);
-        mesh.head(f, r, end, d / 4, n, Material.HEAD);
-        solids.add(Solid.rod(new double[]{a, y, 0}, 2, c0, end, 1.05 * r, d / 4));
-        volumes.add(Solid.rod(new double[]{a, y, 0}, 2, c0 + .1, end, .94 * r, .9 * d / 4));
-        round(a, y, c0, end, r);
-
-        double tube = Math.min(PipeSizes.MAX_OUTSIDE, .4 * d), shellOd = Math.min(PipeSizes.MAX_OUTSIDE, d / 2), flange = PipeSizes.flange(shellOd);
-        nozzles.add(radial(Role.TUBE_INLET, a, y, r, n, zn, -1, ColumnStructure.size(.25 * d, tube)));
-        nozzles.add(radial(Role.TUBE_OUTLET, a, y, r, n, zn, 1, ColumnStructure.size(.25 * d, tube)));
-        // The shell nozzles near the tubesheets, two rows at least behind the channel's (one free block between pipes).
-        double zIn = Math.max(Math.floor(s1 - flange / 2 - .1 - .5) + .5, zn + 2), zOut = Math.max(Math.ceil(s0 + flange / 2 + .1 - .5) + .5, zn + 2);
-        var layout=shape.exchangerType().layout();
-        if(layout.transverseShell()) {
-            // TEMA X-shell: distribution and collection are internal; the outer pressure shell stays cylindrical.
-            zIn=zOut=Math.max(zn+2,Math.floor((s0+s1)/2)+.5);
-        }
-        nozzles.add(radial(Role.SHELL_INLET, a, y, r, n, zIn, 1, ColumnStructure.size(.3 * d, shellOd)));
-        nozzles.add(radial(Role.SHELL_OUTLET, a, y, r, n, zOut, -1, ColumnStructure.size(.3 * d, shellOd)));
-        // The saddles a fifth of the shell in from its ends, off the pipe blocks under the tube inlet and the shell outlet.
-        double w = saddleWidth(r), length = s1 - s0;
-        saddle(saddleAt(s0 + .2 * length, w, s0, s1, zn, zOut), a, y, r, w, 0);
-        saddle(saddleAt(s1 - .2 * length, w, s0, s1, zn, zOut), a, y, r, w, 0);
-    }
-
-    // ---- Kettle reboiler --------------------------------------------------------------------------------------------
-
-    /**
-     * A kettle reboiler (TEMA AKT) lying along z, its kettle's bottom {@code support} up: the channel at the front (steam
-     * in at its top, condensate out at its bottom), a cone up to the kettle's shell (1.6 times the bundle), the shell
-     * (liquid fed low at its front, vapour out on top) and its back head, where the product leaves low behind the weir.
-     */
-    void kettle() {
-        double db = shape.diameter(), rb = db / 2, dk = kettleShell(db), rk = dk / 2, y = shape.support() + rk, a = centre(rk);
-        int n = sides(dk), nb = sides(db);
-        double channel = .5 * db + .2, zn = Math.ceil(.08 + channel / 2 - .5) + .5;
-        double c0 = zn - channel / 2 - .08, ch1 = zn + channel / 2, cone = Math.max(.3, .6 * (dk - db)), s0 = ch1 + .1 + cone, s1 = s0 + .9 * shape.tangentLength() + .3;
-        var f = new Frame(new double[]{a, y, 0}, new double[]{0, 0, 1}, new double[]{0, 1, 0});
-        mesh.ring(f, 0, 1.1 * rb, c0, c0 + .08, nb, 3, Material.FLANGE);
-        mesh.bolts(f, db, rb, 1.1 * rb, c0, -1, Material.BOLT);
-        mesh.prism(f, rb, c0 + .08, ch1, nb, Material.SHELL);
-        mesh.ring(f, rb, 1.12 * rb, ch1, ch1 + .1, nb, 3, Material.FLANGE);
-        mesh.bolts(f, db, rb, 1.12 * rb, ch1, -1, Material.BOLT);
-        mesh.frustum(f, 1.05 * rb, rk, ch1 + .1, s0, n, Material.SHELL);
-        mesh.prism(f, rk, s0, s1, n, Material.SHELL);
-        mesh.head(f, rk, s1, dk / 4, n, Material.HEAD);
-        // Channel, cone and kettle collide as drawn and enclose their insides.
-        var axis = new double[]{a, y, 0};
-        solids.add(Solid.rod(axis, 2, c0, ch1 + .1, 1.12 * rb, 0));
-        solids.add(Solid.cone(axis, 2, ch1 + .1, s0, 1.05 * rb, rk, 0));
-        solids.add(Solid.rod(axis, 2, s0, s1, rk, dk / 4));
-        volumes.add(Solid.rod(axis, 2, c0 + .1, ch1 + .1, .94 * rb, 0));
-        volumes.add(Solid.cone(axis, 2, ch1 + .1, s0 + .02, .94 * 1.05 * rb, .94 * rk, 0));
-        volumes.add(Solid.rod(axis, 2, s0 + .02, s1, .94 * rk, .9 * dk / 4));
-        round(a, y, c0, ch1 + .1, rb);
-        round(a, y, s0, s1, rk);
-        // The shell's pool node (W7): its lowest inside cell, under the back of its cylinder, clear of the feed.
-        fluidPoint = new double[]{a, y - rk + .01, s1 - .25};
-
-        double tube = Math.min(PipeSizes.MAX_OUTSIDE, .4 * db), liquid = Math.min(PipeSizes.MAX_OUTSIDE, db / 2), vapour = Math.min(PipeSizes.MAX_OUTSIDE, dk / 2), flange = PipeSizes.flange(liquid);
-        nozzles.add(radial(Role.TUBE_INLET, a, y, rb, nb, zn, 1, ColumnStructure.size(.25 * db, tube)));
-        nozzles.add(radial(Role.TUBE_OUTLET, a, y, rb, nb, zn, -1, ColumnStructure.size(.15 * db, tube)));
-        // The feed near the cone, two rows at least behind the channel's outlet (one free block between pipes).
-        double zFeed = Math.max(Math.ceil(s0 + flange / 2 + .1 - .5) + .5, zn + 2);
-        nozzles.add(radial(Role.FEED, a, y, rk, n, zFeed, -1, ColumnStructure.size(.15 * db, liquid)));
-        nozzles.add(radial(Role.VAPOUR_OUTLET, a, y, rk, n, Math.floor((s0 + s1) / 2) + .5, 1, ColumnStructure.size(.3 * dk, vapour)));
-        // The product: low on the back head, at the lowest cell centre 0.3 m over the shell's bottom, its default size
-        // within 0.85 of the head's radius from the axis; its neck rooted under the head where a pipe's largest neck's
-        // edge meets it (owner decision 2026-10-21: a 1 m pipe has a 1 m root).
-        double yP = Math.ceil(shape.support() + .3 - .5) + .5, e = y - yP, depth = dk / 4;
-        double od = Math.min(liquid, 2 * (.85 * rk - Math.abs(e)));
-        double edge = (Math.abs(e) + PipeSizes.MAX_OUTSIDE / 2) / rk, under = depth * Math.sqrt(Math.max(0, 1 - edge * edge)), start = s1 + under - .03;
-        nozzles.add(new Nozzle(Role.LIQUID_OUTLET, new double[]{a, yP, start}, 2, 1, Math.ceil(s1 + depth + NECK) - start,
-                ColumnStructure.size(.15 * db, od), 0));
-        double w = saddleWidth(rk), length = s1 - s0;
-        saddle(saddleAt(s0 + .2 * length, w, s0, s1, zFeed), a, y, rk, w, 0);
-        saddle(saddleAt(s1 - .2 * length, w, s0, s1, zFeed), a, y, rk, w, 0);
-    }
-
     // ---- Air cooler -------------------------------------------------------------------------------------------------
-
-    /**
-     * An air cooler bank of forced-draft single-pass bays ({@link Bank}), their tubes along z. Per bay: the inlet header at
-     * its front and the outlet header at its back (each centred half a metre in from its end), the finned bundle between
-     * them {@code support} up, a plenum under it tapering to its fans' floor, each fan (a Blender rotor in its ring and
-     * guard) with its motor under it on a beam, and legs under the headers' ends (one shared where trains meet). Bays in
-     * series join back header to front header by crossover spools. Trains in parallel take the process from an inlet
-     * manifold over their first front headers, the bank's inlet on its top, and give it to an outlet manifold behind their
-     * last back headers, the outlet under it where the condensate drains; a single train's inlet is on its first header and
-     * its outlet under a stub behind its last.
-     */
-    void airCooler() {
-        var bank = shape.bank();
-        int trains = bank.parallel(), rows = bank.series();
-        double w = shape.diameter(), length = shape.tangentLength(), hb = shape.support(), h = header(length);
-        double low = hb - .05, high = low + HEADER_HEIGHT, a = centre(trains * w / 2), x0 = a - trains * w / 2, x1 = x0 + trains * w, end = rows * length;
-        var fans = fans(w, length);
-        var stack = FanStack.of(hb, fans.diameter());
-        double d = fans.diameter(), up = stack.up(), bottom = stack.floor(), rotor = stack.rotor();
-        double motor = stack.motor(), motorTop = stack.motorTop(), motorBottom = stack.motorBottom();
-        // A bay's nozzles and crossovers by its width; a manifold carries the trains' flow at the same speed.
-        double stub = .1 + .04 * w, manifold = Math.min(HEADER_HEIGHT - .1, stub * Math.sqrt(trains));
-        var fanZ = new ArrayList<Double>();
-        for (int k = 0; k < rows; k++) {
-            double front = k * length + .5, back = (k + 1) * length - .5, front1 = front + h / 2, back0 = back - h / 2;
-            for (int i = 0; i < trains; i++) {
-                double bx0 = x0 + i * w, bx1 = bx0 + w, mid = bx0 + w / 2, ix0 = bx0 + .11, ix1 = bx1 - .11;
-                for (double zh : new double[]{front, back})
-                    box(new double[]{bx0 + .05, low, zh - h / 2}, new double[]{bx1 - .05, high, zh + h / 2}, Material.AC_HEADER, true);
-                box(new double[]{ix0, hb, front1}, new double[]{ix1, hb + BUNDLE, back0}, Material.AC_FINS, true);
-                for (double x : new double[]{bx0 + .05, ix1})
-                    box(new double[]{x, hb - .02, front1}, new double[]{x + .06, hb + BUNDLE + .02, back0}, Material.STEELWORK, false);
-                double share = (back0 - front1 - .1) / fans.count();
-                var centres = new double[fans.count()];
-                for (int f = 0; f < centres.length; f++) centres[f] = front1 + .05 + (f + .5) * share;
-                plenum(ix0, ix1, front1, back0, hb, bottom, centres, RING_OD / 2 * d);
-                for (int f = 0; f < fans.count(); f++) {
-                    double zc = front1 + .05 + (f + .5) * share;
-                    if (i == 0 && k == 0) fanZ.add(zc);
-                    Part.of("ac_fan_ring").place(mesh, new double[]{mid, bottom, zc}, d, up, 0, Material.AC_RING);
-                    // The rotor turns clockwise seen from below, each from its own angle so a bank's blades are not in step.
-                    mesh.part(motions.size());
-                    Part.of("ac_fan").place(mesh, new double[]{mid, rotor, zc}, d, d, 0, Material.AC_FAN);
-                    mesh.part(-1);
-                    motions.add(Motion.turning(new double[]{mid, rotor, zc}, new double[]{0, -1, 0}, FAN_SPEED, .618 * motions.size()));
-                    // Terminal boxes face out of the bank.
-                    Part.of("ac_motor").place(mesh, new double[]{mid, motorTop, zc}, motor, motor, 2 * i < trains - 1 ? 2 : 0, Material.AC_MOTOR);
-                    mesh.cylinder(Frame.of(new double[]{mid, 0, zc}, 1, 1), .025 * motor, motorTop, rotor - .06 * d, 8, Material.FLANGE);
-                    solids.add(Solid.rod(new double[]{mid, 0, zc}, 1, bottom - .35 * up, bottom, .535 * d, 0));
-                    solids.add(Solid.rod(new double[]{mid, 0, zc}, 1, motorBottom, motorTop, .2 * motor, 0));
-                }
-                if (k + 1 < rows) spool(mid, (low + high) / 2, back + h / 2, back + 1 - h / 2, stub);
-            }
-        }
-        // Legs under the headers' ends; beams under the headers across the bank and along each leg line; at the motors'
-        // level beams along the leg lines and across the bank under each row of motors.
-        var legX = new ArrayList<Double>();
-        legX.add(x0 + .15);
-        for (int i = 1; i < trains; i++) legX.add(x0 + i * w);
-        legX.add(x1 - .15);
-        var legZ = new ArrayList<Double>();
-        for (int k = 0; k < rows; k++) {
-            legZ.add(k * length + .5);
-            legZ.add((k + 1) * length - .5);
-        }
-        for (double x : legX)
-            for (double z : legZ) box(new double[]{x - POST / 2, 0, z - POST / 2}, new double[]{x + POST / 2, low, z + POST / 2}, Material.STEELWORK, true);
-        for (double z : legZ) box(new double[]{x0 + .05, low - BEAM, z - FLANGE_BEAM / 2}, new double[]{x1 - .05, low, z + FLANGE_BEAM / 2}, Material.STEELWORK, true);
-        for (double x : legX)
-            for (double y : new double[]{low, motorBottom})
-                box(new double[]{x - FLANGE_BEAM / 2, y - BEAM, legZ.getFirst()}, new double[]{x + FLANGE_BEAM / 2, y, legZ.getLast()}, Material.STEELWORK, true);
-        for (int k = 0; k < rows; k++)
-            for (double zc : fanZ)
-                box(new double[]{x0 + .15, motorBottom - BEAM, k * length + zc - FLANGE_BEAM / 2}, new double[]{x1 - .15, motorBottom, k * length + zc + FLANGE_BEAM / 2},
-                        Material.STEELWORK, true);
-        // The process in at the front, on top; out at the back, underneath.
-        double zIn = .5, zOut = end + .5;
-        if (trains == 1) nozzles.add(new Nozzle(Role.PROCESS_INLET, new double[]{a, high - .03, zIn}, 1, 1, Math.ceil(high + NECK) - high + .03, stub, 0));
-        else {
-            double ym = high + .1 + manifold / 2;
-            manifold(x0 + w / 2, x1 - w / 2, ym, zIn, manifold);
-            for (int i = 0; i < trains; i++) {
-                var f = Frame.of(new double[]{x0 + (i + .5) * w, 0, zIn}, 1, 1);
-                mesh.prism(f, stub / 2, high, ym, sides(stub), Material.PIPE);
-                mesh.ring(f, stub / 2, PipeSizes.flange(stub) / 2, high, high + .03, sides(stub), 3, Material.FLANGE);
-                mesh.bolts(f, stub, stub / 2, PipeSizes.flange(stub) / 2, high + .03, 1, Material.BOLT);
-            }
-            nozzles.add(new Nozzle(Role.PROCESS_INLET, new double[]{a, ym + manifold / 2 - .03, zIn}, 1, 1,
-                    Math.ceil(ym + manifold / 2 + NECK) - ym - manifold / 2 + .03, manifold, 0));
-        }
-        double out = trains == 1 ? stub : manifold, yo = low + .05 + stub / 2;
-        for (int i = 0; i < trains; i++) {
-            double mid = x0 + (i + .5) * w, z0 = end - .5 + h / 2;
-            var f = Frame.of(new double[]{mid, yo, 0}, 2, 1);
-            mesh.prism(f, stub / 2, z0, trains == 1 ? zOut + stub / 2 : zOut, sides(stub), Material.PIPE);
-            mesh.ring(f, stub / 2, PipeSizes.flange(stub) / 2, z0, z0 + .03, sides(stub), 3, Material.FLANGE);
-            mesh.bolts(f, stub, stub / 2, PipeSizes.flange(stub) / 2, z0 + .03, 1, Material.BOLT);
-            if (trains == 1) mesh.annulus(f, 0, stub / 2, zOut + stub / 2, sides(stub), 1, Material.PIPE);
-            solids.add(Solid.rod(new double[]{mid, yo, 0}, 2, z0, zOut, stub / 2, 0));
-        }
-        if (trains > 1) manifold(x0 + w / 2, x1 - w / 2, yo, zOut, manifold);
-        double outBase = yo - out / 2 + .03;
-        nozzles.add(new Nozzle(Role.PROCESS_OUTLET, new double[]{a, outBase, zOut}, 1, -1, outBase - Math.floor(yo - out / 2 - NECK), out, 0));
-        var outline = new double[][]{{x0 + .05, high, .5 - h / 2}, {x1 - .05, high, .5 - h / 2}, {x1 - .05, high, end - .5 + h / 2}, {x0 + .05, high, end - .5 + h / 2}};
-        for (int k = 0; k < 4; k++) segment(outline[k], outline[(k + 1) % 4]);
-        // The bank's FE port (W5, reading A58): the foot of its front corner leg, at grade, on the bank's outside faces, the
-        // inlet above and the outlet at the back far from it; the fans' motors share it (one feeder per bay, reading A71).
-        terminal = new double[]{legX.getFirst(), .25, legZ.getFirst()};
-    }
-
-    /** Sides of the Blender fan ring's polygon ({@code ac_fan_ring}), a multiple of 4 for the hopper's quadrants. */
-    static final int RING_SIDES = 24;
-
-    /**
-     * A bay's plenum (owner report 2026-10-16 with a photo: "the metal sheets lack a bottom casing"): a sheet-metal hopper
-     * per fan, from the bundle's frame (x0 to x1, the fan's share of z0 to z1, at {@code top}) down to its ring's top
-     * flange (radius {@code ring} round each of {@code centres}) at {@code bottom}. Each hopper is a square-to-round
-     * transition: a triangle from each side of the frame to the circle's point facing it, a fan of triangles from each
-     * corner to the quarter of the circle between, at the ring's {@link #RING_SIDES} corners. Sheets are drawn on both
-     * faces, so the casing also shows from inside a ring; looking up through a ring one sees the bundle's fins.
-     */
-    void plenum(double x0, double x1, double z0, double z1, double top, double bottom, double[] centres, double ring) {
-        for (int f = 0; f < centres.length; f++) {
-            double za = f == 0 ? z0 : (centres[f - 1] + centres[f]) / 2, zb = f + 1 == centres.length ? z1 : (centres[f] + centres[f + 1]) / 2;
-            // The ring part's top flange is a 24-gon at these angles (ac_parts.py, lathe n = 24): the hopper meets its corners.
-            transition(1, x0, x1, za, zb, top, (x0 + x1) / 2, centres[f], ring, bottom, RING_SIDES, Material.AC_PLENUM, true);
-        }
-        // Collides as its frame's box; encloses its inside.
-        solids.add(Solid.box(new double[]{x0, bottom, z0}, new double[]{x1, top, z1}));
-        volumes.add(Solid.box(new double[]{x0 + .02, bottom + .02, z0 + .02}, new double[]{x1 - .02, top - .02, z1 - .02}));
-    }
 
     /**
      * A square-to-round transition of sheet metal along frame axis {@code axis} (0 x, 1 y, 2 z): from the rectangle p0 to
@@ -1234,19 +843,6 @@ public final class ProcessUnit {
         mesh.add(triangle, new double[]{2 * centroid[0] - axis[0], 2 * centroid[1] - axis[1], 2 * centroid[2] - axis[2]}, FLAT, material, null, null);
     }
 
-    /** A crossover spool along z at (x, y) from a back header's face {@code z0} to the next front header's {@code z1}, flanged at both. */
-    void spool(double x, double y, double z0, double z1, double od) {
-        var f = Frame.of(new double[]{x, y, 0}, 2, 1);
-        int n = sides(od);
-        double r = PipeSizes.flange(od) / 2;
-        mesh.prism(f, od / 2, z0, z1, n, Material.PIPE);
-        mesh.ring(f, od / 2, r, z0, z0 + .03, n, 3, Material.FLANGE);
-        mesh.bolts(f, od, od / 2, r, z0 + .03, 1, Material.BOLT);
-        mesh.ring(f, od / 2, r, z1 - .03, z1, n, 3, Material.FLANGE);
-        mesh.bolts(f, od, od / 2, r, z1 - .03, -1, Material.BOLT);
-        solids.add(Solid.rod(new double[]{x, y, 0}, 2, z0, z1, od / 2, 0));
-    }
-
     /** A manifold along x from {@code from} to {@code to} (capped half its size beyond each) at height {@code y}, station {@code z}. */
     void manifold(double from, double to, double y, double z, double od) {
         var f = Frame.of(new double[]{0, y, z}, 0, 1);
@@ -1254,206 +850,7 @@ public final class ProcessUnit {
         solids.add(Solid.rod(new double[]{0, y, z}, 0, from - od / 2, to + od / 2, od / 2, 0));
     }
 
-    // ---- Steam ejector ----------------------------------------------------------------------------------------------
-
-    /**
-     * A steam ejector standing on its own frame, sized by its suction s: from the top, the steam chest (motive steam in on
-     * top), the suction chamber (suction from the front), the inlet cone, the throat and the diffuser down to its discharge
-     * flange, {@code support} up. Four posts round it from the ground to over the chest, tied by square frames every
-     * 2.5 m, open at the front in the suction's row; a small one ({@link #SMALL_EJECTOR}), which a plant hangs on its
-     * piping, on one post in the cell behind it. Lengths in suction diameters: chest 0.8, chamber 1.5 (1.2 wide), inlet
-     * 2.2, throat 0.8 (0.35 wide), diffuser 3.0 (to 0.75 wide).
-     */
-    void ejector() {
-        // Posts at ±e round the axis, their base plates outside the pipe blocks of the suction and the discharge (half a
-        // block each side of the axis), and clear of the chamber; a small ejector's axis on its cell's centre.
-        double s = shape.diameter(), e = Math.max(.5 + POST, .6 * s + .3), h = shape.support();
-        boolean small = s <= SMALL_EJECTOR + 1e-9;
-        double a = small ? .5 : centre(e + POST);
-        // The suction's centre on a cell centre: the diffuser's exit at least 0.2 m over the discharge flange.
-        int row = (int) Math.ceil(h + .2 + 6.75 * s - .5);
-        double exit = row + .5 - 6.75 * s, chamber = exit + 6 * s, chest = exit + 7.5 * s, top = exit + 8.3 * s;
-        var f = Frame.of(new double[]{a, exit, a}, 1, 1);
-        int n = sides(1.2 * s);
-        double rc = .6 * s, throat = .175 * s, outlet = .375 * s;
-        mesh.ring(f, 0, outlet + .05 + .1 * s, -.03, 0, n, 1, Material.FLANGE);
-        mesh.bolts(f, 2 * outlet, outlet, outlet + .05 + .1 * s, 0, 1, Material.BOLT);
-        mesh.frustum(f, outlet, throat, 0, 3 * s, n, Material.MACHINE);
-        mesh.prism(f, throat, 3 * s, 3.8 * s, n, Material.MACHINE);
-        mesh.frustum(f, throat, rc, 3.8 * s, 6 * s, n, Material.MACHINE);
-        mesh.prism(f, rc, 6 * s, 7.5 * s, n, Material.MACHINE);
-        mesh.annulus(f, .225 * s, rc, 7.5 * s, n, 1, Material.MACHINE);
-        mesh.ring(f, .225 * s, .3 * s, 7.5 * s, 7.58 * s, n, 3, Material.FLANGE);
-        mesh.bolts(f, .45 * s, .225 * s, .3 * s, 7.58 * s, 1, Material.BOLT);
-        mesh.cylinder(f, .225 * s, 7.5 * s, 8.3 * s, n, Material.MACHINE);
-        solids.add(Solid.rod(new double[]{a, 0, a}, 1, exit, chest, rc, 0));
-        solids.add(Solid.rod(new double[]{a, 0, a}, 1, chest, top, .225 * s, 0));
-        round(a, a, chamber, chest, rc, 1);
-        nozzles.add(radialSide(Role.SUCTION, a, row + .5, a, rc, n, -1, s));
-        // The motive inlet's flange on the block face over the steam chest, and at least two rows over the suction's (one
-        // free block between their pipes): a small ejector's stub runs up to it.
-        double motive = Math.max(PipeSizes.MIN_OUTSIDE, .45 * s), motiveFace = Math.max(Math.ceil(top + NECK), row + 2);
-        nozzles.add(new Nozzle(Role.MOTIVE, new double[]{a, top - .03, a}, 1, 1, motiveFace - top + .03,
-                ColumnStructure.size(.3 * s, motive), 0));
-        double discharge = Math.max(PipeSizes.MIN_OUTSIDE, 2 * outlet);
-        nozzles.add(new Nozzle(Role.DISCHARGE, new double[]{a, exit + .03, a}, 1, -1, exit + .03 - h, discharge, 0));
-        double postTop = top + .3, bar = .14, clamp = exit + 3.4 * s;
-        if (small) {
-            // One post in the cell behind (the suction's pipe leaves in front, the discharge's below, the motive's above),
-            // braced to the throat and the chamber.
-            double z = a + 1;
-            box(new double[]{a - POST / 2, 0, z - POST / 2}, new double[]{a + POST / 2, postTop, z + POST / 2}, Material.STEELWORK, true);
-            box(new double[]{a - POST, 0, z - POST}, new double[]{a + POST, .04, z + POST}, Material.SUPPORT, false);
-            mesh.bar(new double[]{a, clamp, z}, new double[]{a, clamp, a + throat}, bar * .6, new double[]{0, 1, 0}, Material.STEELWORK);
-            mesh.bar(new double[]{a, (chamber + chest) / 2, z}, new double[]{a, (chamber + chest) / 2, a + rc}, bar * .6, new double[]{0, 1, 0}, Material.STEELWORK);
-            return;
-        }
-        // The frame: posts beside the suction's pipe block, square frames open at the front in its row, a clamp at the
-        // throat.
-        double[][] corners = {{a - e, a - e}, {a + e, a - e}, {a + e, a + e}, {a - e, a + e}};
-        for (var c : corners) {
-            box(new double[]{c[0] - POST / 2, 0, c[1] - POST / 2}, new double[]{c[0] + POST / 2, postTop, c[1] + POST / 2}, Material.STEELWORK, true);
-            box(new double[]{c[0] - POST, 0, c[1] - POST}, new double[]{c[0] + POST, .04, c[1] + POST}, Material.SUPPORT, false);
-        }
-        var levels = new ArrayList<Double>();
-        for (double y = 2.5; y < postTop - .3; y += 2.5) levels.add(y);
-        levels.add(clamp);
-        levels.add(postTop - .1);
-        for (double y : levels) {
-            // In the suction's row its pipe leaves between the front posts: the front bar and brackets give way there.
-            boolean suction = y + bar / 2 > row - .05 && y - bar / 2 < row + 1.05;
-            for (int k = suction ? 1 : 0; k < 4; k++) {
-                var p = corners[k];
-                var q = corners[(k + 1) % 4];
-                mesh.bar(new double[]{p[0], y, p[1]}, new double[]{q[0], y, q[1]}, bar * .8, new double[]{0, 1, 0}, Material.STEELWORK);
-            }
-            // At the clamp, brackets from the corners to the throat.
-            if (y == clamp)
-                for (var c : corners)
-                    if (!suction || c[1] > a)
-                        mesh.bar(new double[]{c[0], y, c[1]}, new double[]{a + (c[0] - a) * throat / e, y, a + (c[1] - a) * throat / e}, bar * .6,
-                                new double[]{0, 1, 0}, Material.STEELWORK);
-        }
-    }
-
     // ---- Centrifugal pump -------------------------------------------------------------------------------------------
-
-    /**
-     * An API 610 OH2 pump (owner decision M2 2026-10-17; {@code MACHINES_HEATERS_SURVEY.md}) on its baseplate, its shaft
-     * along z through a cell centre at height y. From the front: the pump's suction flange on a short cast bell; the
-     * volute, its scroll growing from 0.52 to 0.9 impeller diameters round a hub, a rib along its crown, its throat turning
-     * up into the cast discharge neck on the casing's centre line; the heavy cover on its joint ring, its studs on its face;
-     * the bearing bracket with a window each side showing the seal chamber and gland; the bearing housing (oil sump in
-     * front with its constant-level oiler, finned behind, its bolted end cover, a vent on top); the shaft end, its half
-     * coupling under a half-round guard on a block face, where a shaft block joins the driver (batch
-     * 2026-11-03-rotating-machinery, owner decision D4). The casing stands on its centreline feet on short pedestals (API
-     * 610 allows no foot under the bearing housing). From 0.1 m a seal pot (API 682 plans 52/53) stands on its stand beside
-     * the bracket, from 0.15 m a plan 11 flush line runs from the discharge neck to the gland. The baseplate's drain-rim
-     * deck stands on a grout line on a chamfered concrete block, which rises to bring the baseplate up under the casing:
-     * the shaft's height is the suction line's. Where a line runs {@link #PAIR_RUN} or more from the pump to its block face,
-     * the pump's flange and the line's meet at the casting ({@link #pumpNozzle}). The fins, rib, studs, rims and channels
-     * are baked into the pump's sprites ({@code tools/pump-sprites}, the cooling tower's way). Sizes follow the discharge d
-     * (the rated flow at 3 m/s): suction {@link #pumpSuction}, impeller from the rated head and speed ({@link #impeller}),
-     * at least 0.18 + 1.2 d.
-     */
-    void pump() {
-        if (shape.diameter() > OH2_MAX + 1e-9) {
-            betweenBearingsPump();
-            return;
-        }
-        double d = shape.diameter(), s = pumpSuction(d), di = impeller(.18 + 1.2 * d);
-        double rh = .42 * di, rv0 = .52 * di, rv1 = .9 * di, width = .4 * di + .06, joint = .7 * di, tj = .04 + .05 * di;
-        double plate = .2 + .1 * di;
-        double rb = .08 + .22 * di, lb = .3 + .6 * di, lk = .2 + .3 * di, shaft = .03 + .05 * di, rs = pumpShaft();
-        // Keep the established port clearances; the shared nozzle mesh draws the flange at the connection face.
-        double ts = 1.3 * PipeSizes.flangeThickness(s), td = 1.3 * PipeSizes.flangeThickness(d);
-        double bell = .08 + .7 * s, pot = d >= .1 ? .07 + .1 * d : 0;
-        double half = Math.max(rv1 + .14, pot > 0 ? .6 * di + 2 * pot + .11 : 0), base = half + .12;
-        double a = centre(base);
-        // Heights: the shaft on the lowest cell centre whose casing clears a baseplate on a 0.15 m block; the block rises
-        // to bring the baseplate up to 0.05 + 0.1 di under the scroll's bottom, so the pedestals stay short.
-        double y = Math.max(.5, Math.ceil(.15 + .04 + plate + .06 + rv1 - .5) + .5);
-        double low = (rv0 + rv1) / 2, plinth = Math.max(.15, y - low - .05 - .1 * di - plate - .04), top = plinth + .04 + plate;
-        // Along z: the line, the suction bell, the casing (its middle on a cell centre, the discharge's line), the cover, the
-        // bracket, the bearing housing, the shaft end under its guard to the coupling face on a block face.
-        double zc = Math.ceil(.25 + ts + bell + .3 * width - .5) + .5, z0 = zc - width / 2, z1 = zc + width / 2, zh = zc - .3 * width, zs = zh - bell;
-        double zk = z1 + tj, zb0 = zk + lk, zb1 = zb0 + lb, coupling = Math.ceil(zb1 + .2 + rs - 1e-9), seal = zk + .45 * lk;
-        var f = Frame.of(new double[]{a, y, 0}, 2, 1);
-        int n = sides(2 * rv1), nb = sides(2 * rb);
-        // The suction bell, the volute and its hub, the cover on its joint ring.
-        mesh.frustum(f, .5 * s + .04, .43 * s + .04, zs, zh, n, Material.PUMP_CASTING);
-        mesh.annulus(f, 0, .5 * s + .04, zs, n, -1, Material.PUMP_CASTING);
-        scroll(a, y, z0, z1, zh, rh, rv0, rv1, Material.PUMP_CASTING, Material.PUMP_VOLUTE);
-        mesh.prism(f, rh, zh, z1, n, Material.PUMP_CASTING);
-        mesh.annulus(f, .43 * s + .04, rh, zh, n, -1, Material.PUMP_CASTING);
-        mesh.annulus(f, 0, joint, z1, n, -1, Material.PUMP_CASTING);
-        mesh.band(f, joint, joint, z1, zk, n, Material.PUMP_JOINT);
-        mesh.disc(f, joint, zk, n, 1, Material.PUMP_DISC);
-        // The bracket, windowed each side over the seal chamber, its gland and the shaft turning with its seal's collar.
-        bracket(f, .5 * di, rb + .03, zk, zb0, n, Material.PUMP_CASTING);
-        mesh.cylinder(f, .27 * di, zk, seal, n, Material.PUMP_CASTING);
-        mesh.cylinder(f, .2 * di, seal, seal + .05, n, Material.FLANGE);
-        shaft(f, shaft, new double[][]{{seal + .05, zb0}}, seal + .05 + collar(shaft) / 2);
-        // The bearing housing: its oil sump, the round body finned behind it, the bolted end cover; the oiler on the sump,
-        // the vent on top.
-        double sump = zb0 + .45 * lb;
-        box(new double[]{a - .9 * rb, y - 1.2 * rb, zb0}, new double[]{a + .9 * rb, y + .55 * rb, sump}, Material.PUMP_CASTING, false);
-        mesh.prism(f, rb, zb0, sump, nb, Material.PUMP_CASTING);
-        mesh.band(f, rb, rb, sump, zb1, nb, Material.PUMP_FINS);
-        mesh.annulus(f, rb, rb + .03, zb0, nb, 1, Material.PUMP_CASTING);
-        mesh.disc(f, rb, zb1, nb, 1, Material.PUMP_DISC);
-        double bulb = .035 + .02 * di, oiler = y - .8 * rb, xo = a + .9 * rb + .06 + bulb;
-        box(new double[]{a + .9 * rb, oiler - .015, zb0 + .2 * lb - .015}, new double[]{xo, oiler + .015, zb0 + .2 * lb + .015}, Material.PIPE, false);
-        mesh.cylinder(Frame.of(new double[]{xo, 0, zb0 + .2 * lb}, 1, 1), bulb, oiler, oiler + .13 + .05 * di, 8, Material.OPENING);
-        mesh.cylinder(Frame.of(new double[]{a, 0, sump + .6 * (zb1 - sump)}, 1, 1), .025 + .01 * di, y + rb - .01, y + rb + .05, 8, Material.PIPE);
-        // The shaft end: the half coupling under its guard, the driver joined by a shaft block beyond the face.
-        coupling(a, y, zb1, coupling, 1, rs, top, shown(shape.duty().speed()), EquipmentShape.ShaftEnd.Role.DRIVEN_INPUT);
-        // The casing's centreline feet near its cover on their short pedestals.
-        for (int side = -1; side <= 1; side += 2) {
-            double inner = a + side * rh, outer = a + side * (rv1 + .1), px = a + side * (rv1 + .02);
-            box(new double[]{Math.min(inner, outer), y - .06, zc}, new double[]{Math.max(inner, outer), y + .02, zk}, Material.PUMP_CASTING, false);
-            box(new double[]{px - .07, top, zc + .02}, new double[]{px + .07, y - .06, zk - .02}, ALL_FACES & ~12, Material.STEELWORK, false);
-        }
-        // The cast discharge: a throat of about 1.2 DN square turning round into the neck, 0.12 + 0.2 d over the crown.
-        double hx = .6 * d + .03, hz = Math.min(.6 * d + .03, .45 * width), neck = y + rv1 + .12 + .2 * d;
-        box(new double[]{a - hx, y + rh, zc - hz}, new double[]{a + hx, y + .98 * rv0, zc + hz}, ALL_FACES & ~12, Material.PUMP_CASTING, false);
-        transition(1, a - hx, a + hx, zc - hz, zc + hz, y + .98 * rv0, a, zc, .5 * d + .025, neck, 4 * ((sides(d) + 3) / 4), Material.PUMP_CASTING, false);
-        // The neck's top closed on the transition's own corners: the nozzle's neck, narrower, rises from it with no seam.
-        var cap = new ArrayList<double[]>();
-        for (int i = 0, m = 4 * ((sides(d) + 3) / 4); i < m; i++)
-            cap.add(new double[]{a + (.5 * d + .025) * DeterministicMath.cos(2 * Math.PI * i / m), neck, zc + (.5 * d + .025) * DeterministicMath.sin(2 * Math.PI * i / m)});
-        mesh.flat(cap, new double[]{0, 1, 0}, Material.PUMP_CASTING);
-        // The baseplate on its grout line and chamfered block, both to the coupling's face.
-        double zp0 = zs - .05, zp1 = coupling - .01, chamfer = .04;
-        baseplate(a - half, a + half, plinth + .04, top, zp0, zp1);
-        box(new double[]{a - half + .02, plinth, zp0 + .02}, new double[]{a + half - .02, plinth + .04, zp1 - .02}, ALL_FACES & ~12, Material.CONCRETE, false);
-        extrude(List.of(new double[]{a - base, 0}, new double[]{a + base, 0}, new double[]{a + base, plinth - chamfer}, new double[]{a + base - chamfer, plinth},
-                new double[]{a - base + chamfer, plinth}, new double[]{a - base, plinth - chamfer}), zp0 - .12, zp1, Material.CONCRETE);
-        solids.add(Solid.box(new double[]{a - base, 0, zp0 - .12}, new double[]{a + base, plinth + .04, zp1}));
-        // The seal's pot on its stand beside the bracket and its two lines into the gland; the flush line from the neck.
-        if (pot > 0) {
-            double xp = a - (.6 * di + pot + .05), bottom = y - .05, height = .55 + 1.2 * d;
-            var p = Frame.of(new double[]{xp, 0, seal}, 1, 1);
-            mesh.prism(p, pot, bottom, bottom + height, 12, Material.PUMP_CASTING);
-            mesh.head(p, pot, bottom + height, pot / 2, 12, Material.PUMP_CASTING);
-            mesh.annulus(p, 0, pot, bottom, 12, -1, Material.PUMP_CASTING);
-            box(new double[]{xp - .04, top, seal - .04}, new double[]{xp + .04, bottom, seal + .04}, ALL_FACES & ~12, Material.STEELWORK, false);
-            for (double yl : new double[]{y - .02, y + .1 * di + .04})
-                mesh.cylinder(Frame.of(new double[]{0, yl, seal + .025}, 0, 1), .012, xp + pot - .01, a - .2 * di + .01, 6, Material.PIPE);
-            solids.add(Solid.rod(new double[]{xp, 0, seal}, 1, bottom, bottom + height, pot, pot / 2));
-        }
-        if (d >= .15) {
-            double x1 = a + rv1 + .06, tap = (y + rv0 + neck) / 2, lowLine = y + .1 * di;
-            line(.015, Material.PIPE, new double[]{a + .5 * d + .02, tap, zc}, new double[]{x1, tap, zc}, new double[]{x1, lowLine, zc}, new double[]{x1, lowLine, seal + .025},
-                    new double[]{a + .2 * di - .01, lowLine, seal + .025});
-        }
-        solids.add(Solid.rod(new double[]{a, y, 0}, 2, zs, zk, Math.max(rv1, joint), 0));
-        solids.add(Solid.rod(new double[]{a, y, 0}, 2, zk, zb1, Math.max(rb + .03, .5 * di), 0));
-        round(a, y, z0, z1, rv1);
-        // The suction along -z and the discharge up, each from its casting to its connection face on a block face.
-        pumpNozzle(Role.SUCTION, new double[]{a, y, 0}, 2, -1, zs, 0, s, .5 * s + .025);
-        pumpNozzle(Role.DISCHARGE, new double[]{a, 0, zc}, 1, 1, neck, Math.ceil(neck + td + EquipmentShape.STAND_OUT), d, .5 * d + .01);
-    }
 
     /** The least run of line, m, from a pump's casting to its connection face for which the pump's own flange is drawn at the casting. */
     static final double PAIR_RUN = .6;
@@ -1505,101 +902,6 @@ public final class ProcessUnit {
             mesh.add(List.of(new double[]{x0, y0, z}, new double[]{x1, y0, z}, new double[]{x1, y1, z}, new double[]{x0, y1, z}), inside, FLAT, Material.PUMP_CHANNEL, acrossX,
                     height);
         solids.add(Solid.box(new double[]{x0, y0, z0}, new double[]{x1, y1, z1}));
-    }
-
-    /**
-     * An API 610 BB2 pump (owner pick 2026-11-04, {@code PUMP_TYPES_REVIEW.md} option A; it replaces the axially split BB1,
-     * a water pump, which API 610 does not allow at 200 °C and above or for light hydrocarbon): between bearings, single
-     * stage, double suction, its casing split radially, the cover bolted on its joint ring at the drive end. Top suction
-     * and top discharge: each a cast branch rising from the casing's side, one block either side of the shaft's line (the
-     * suction on the right seen from the constructor), so one free block stands between their pipes. Centreline feet near
-     * both ends of the casing on pedestals; seal chambers in windowed brackets and finned bearing housings at both ends;
-     * the shaft end's half coupling under its guard behind, on one baseplate, grout line and plinth. The OH2's sprites
-     * ({@link #pump}): a rib round the volute, studs on the cover, fins on the housings, the drain-rim deck. Sizes follow
-     * the discharge d: suction {@link #pumpSuction}, impeller from the rated head and speed ({@link #impeller}), at least
-     * 0.35 + 0.8 d.
-     */
-    void betweenBearingsPump() {
-        double d = shape.diameter(), s = pumpSuction(d), di = impeller(.35 + .8 * d);
-        double rv = .9 * di, rc = .72 * di, wv = .5 * di, lc = 1.5 * di, joint = rc + .1, tj = .04 + .04 * di;
-        double fs = 1.15 * PipeSizes.flange(s) / 2, ts = 1.3 * PipeSizes.flangeThickness(s), fd = 1.15 * PipeSizes.flange(d) / 2, td = 1.3 * PipeSizes.flangeThickness(d);
-        double rb = .1 + .2 * di, lb = .25 + .35 * di, lk = .2 + .25 * di, shaft = .04 + .05 * di, rs = pumpShaft(), plate = .2 + .1 * di;
-        // Across x: the branches one block either side of the shaft's line; the box holds their flanges and the baseplate.
-        double off = 1, deck = rv + .2;
-        double a = centre(Math.max(off + Math.max(fs, fd) + .05, deck + .12));
-        // Heights: a 0.3 m plinth, a grout line, the baseplate; the shaft on the lowest cell centre whose casing clears the
-        // baseplate by 0.1 m.
-        double plinth = .3, top = plinth + .04 + plate, y = Math.ceil(top + rv + .1 - .5) + .5;
-        // Along z: the free end's housing and bracket, the casing (its middle, the branches' line, on a cell centre), the
-        // cover's joint ring, the drive end's bracket and housing, the shaft end under its guard to the coupling face.
-        double zc = Math.ceil(.15 + lb + lk + lc / 2 - .5) + .5, z0 = zc - lc / 2, z1 = zc + lc / 2, zk = z1 + tj;
-        double zf1 = z0 - lk, zf0 = zf1 - lb, zb0 = zk + lk, zb1 = zb0 + lb, face = Math.ceil(zb1 + .2 + rs - 1e-9);
-        var f = Frame.of(new double[]{a, y, 0}, 2, 1);
-        int n = sides(2 * rv), nb = sides(2 * rb);
-        // The casing: the suction chambers either side of the volute, the end wall, the cover on its joint ring.
-        mesh.annulus(f, 0, rc, z0, n, -1, Material.PUMP_CASTING);
-        mesh.prism(f, rc, z0, zc - wv / 2, n, Material.PUMP_CASTING);
-        mesh.annulus(f, rc, rv, zc - wv / 2, n, -1, Material.PUMP_CASTING);
-        mesh.band(f, rv, rv, zc - wv / 2, zc + wv / 2, n, Material.PUMP_VOLUTE);
-        mesh.annulus(f, rc, rv, zc + wv / 2, n, 1, Material.PUMP_CASTING);
-        mesh.prism(f, rc, zc + wv / 2, z1, n, Material.PUMP_CASTING);
-        mesh.annulus(f, 0, joint, z1, n, -1, Material.PUMP_CASTING);
-        mesh.band(f, joint, joint, z1, zk, n, Material.PUMP_JOINT);
-        mesh.disc(f, joint, zk, n, 1, Material.PUMP_DISC);
-        // The branches: a web from the casing's side, a round neck rising over the casing to the equipment neck.
-        double[] neck = new double[2];
-        for (int side = -1; side <= 1; side += 2) {
-            int i = side < 0 ? 0 : 1;
-            double bore = side < 0 ? s : d, rn = .5 * bore + .04, xb = a + side * off, low = y - .35 * rv, half = Math.min(rn, lc / 2);
-            neck[i] = y + rv + .12 + .2 * bore;
-            box(new double[]{Math.min(a, xb), low, zc - half}, new double[]{Math.max(a, xb), y + .3 * rv, zc + half}, Material.PUMP_CASTING, false);
-            var up = Frame.of(new double[]{xb, 0, zc}, 1, 1);
-            int nn = sides(2 * rn);
-            mesh.cylinder(up, rn, low, neck[i], nn, Material.PUMP_CASTING);
-            solids.add(Solid.rod(new double[]{xb, 0, zc}, 1, low, neck[i], rn, 0));
-            solids.add(Solid.box(new double[]{Math.min(a, xb), low, zc - half}, new double[]{Math.max(a, xb), y + .3 * rv, zc + half}));
-            round(new double[]{xb, 0, zc}, 1, low, neck[i], rn);
-        }
-        // The centreline feet near both ends of the casing, each on its pedestal.
-        for (int side = -1; side <= 1; side += 2)
-            for (double z : new double[]{z0 + .05, z1 - .3}) {
-                double inner = a + side * rc, outer = a + side * (rv + .12), px = a + side * (rv + .05);
-                box(new double[]{Math.min(inner, outer), y - .06, z}, new double[]{Math.max(inner, outer), y + .02, z + .25}, Material.PUMP_CASTING, false);
-                box(new double[]{px - .09, top, z + .02}, new double[]{px + .09, y - .06, z + .23}, ALL_FACES & ~12, Material.STEELWORK, false);
-            }
-        // The brackets, seal chambers and finned bearing housings at both ends; the shaft through them.
-        bracket(f, rb + .03, .45 * di, zf1, z0, n, Material.PUMP_CASTING);
-        bracket(f, .45 * di, rb + .03, zk, zb0, n, Material.PUMP_CASTING);
-        mesh.cylinder(f, .22 * di, z0 - .55 * lk, z0, n, Material.PUMP_CASTING);
-        mesh.cylinder(f, .22 * di, zk, zk + .55 * lk, n, Material.PUMP_CASTING);
-        shaft(f, shaft, new double[][]{{zf1, z0 - .55 * lk}, {zk + .55 * lk, zb0}}, z0 - .55 * lk - collar(shaft) / 2, zk + .55 * lk + collar(shaft) / 2);
-        for (int e = 0; e < 2; e++) {
-            double h0 = e == 0 ? zf0 : zb0, h1 = e == 0 ? zf1 : zb1;
-            mesh.band(f, rb, rb, h0, h1, nb, Material.PUMP_FINS);
-            // Close the housing behind its bracket; tuck the bore under the hexagonal shaft so the joint cannot leak light.
-            mesh.annulus(f, shaft * DeterministicMath.cos(Math.PI / ShaftGeometry.SIDES), rb + .03, e == 0 ? h1 : h0, n, e == 0 ? 1 : -1, Material.PUMP_CASTING);
-            mesh.disc(f, rb, e == 0 ? zf0 : zb1, nb, e == 0 ? -1 : 1, Material.PUMP_DISC);
-            mesh.cylinder(Frame.of(new double[]{a, 0, (h0 + h1) / 2}, 1, 1), .025 + .01 * di, y + rb - .01, y + rb + .05, 8, Material.PIPE);
-        }
-        // The shaft end: the half coupling under its guard, the driver joined by a shaft block beyond the face.
-        coupling(a, y, zb1, face, 1, rs, top, shown(shape.duty().speed()), EquipmentShape.ShaftEnd.Role.DRIVEN_INPUT);
-        // The baseplate on its grout line and chamfered plinth, both to the coupling's face.
-        double zp0 = zf0 - .15, zp1 = face - .01, base = deck + .12, chamfer = .04;
-        baseplate(a - deck, a + deck, plinth + .04, top, zp0, zp1);
-        box(new double[]{a - deck + .02, plinth, zp0 + .02}, new double[]{a + deck - .02, plinth + .04, zp1 - .02}, ALL_FACES & ~12, Material.CONCRETE, false);
-        extrude(List.of(new double[]{a - base, 0}, new double[]{a + base, 0}, new double[]{a + base, plinth - chamfer}, new double[]{a + base - chamfer, plinth},
-                new double[]{a - base + chamfer, plinth}, new double[]{a - base, plinth - chamfer}), zp0 - .12, zp1, Material.CONCRETE);
-        solids.add(Solid.box(new double[]{a - base, 0, zp0 - .12}, new double[]{a + base, plinth + .04, zp1}));
-        solids.add(Solid.rod(new double[]{a, y, 0}, 2, z0, zk, Math.max(rv, joint), 0));
-        solids.add(Solid.rod(new double[]{a, y, 0}, 2, zf0, zb1, Math.max(rb + .03, .45 * di), 0));
-        volumes.add(Solid.rod(new double[]{a, y, 0}, 2, z0 + .05, z1 - .05, rc - .05, 0));
-        round(a, y, zc - wv / 2, zc + wv / 2, rv);
-        // One equipment neck on each branch, up to its connection face on a block face.
-        for (int side = -1; side <= 1; side += 2) {
-            int i = side < 0 ? 0 : 1;
-            double bore = side < 0 ? s : d, top0 = Math.ceil(neck[i] + (side < 0 ? ts : td) + EquipmentShape.STAND_OUT);
-            pumpNozzle(side < 0 ? Role.SUCTION : Role.DISCHARGE, new double[]{a + side * off, 0, zc}, 1, 1, neck[i], top0, bore, .5 * bore + .025);
-        }
     }
 
     /** A pump's volute as {@link #scroll(double, double, double, double, double, double, double, double, Material, Material)} draws it, all of the machine's material. */
@@ -2060,206 +1362,6 @@ public final class ProcessUnit {
         if((caps&2)!=0)mesh.flat(back, new double[]{0, 0, 1}, material);
     }
 
-    // ---- Reciprocating compressor -----------------------------------------------------------------------------------
-
-    /**
-     * An API 618 balanced-opposed compressor (owner decision M4 2026-10-17; {@code MACHINES_HEATERS_SURVEY.md}), its
-     * crankshaft along z on a steel table {@code support} high (owner request 2026-10-17: steel beams like the other
-     * units). The frame, ribbed, a bolted cover over each throw, a breather, the oil pump's cover at its free end and the
-     * lubricator on its side; on alternate sides of it, each throw's crosshead guide (a bolted door on top), its distance
-     * piece (flanged at both ends, a window cover each side of each compartment, two compartments when long) and its
-     * double-acting cylinder: a heavy flange at its crank end, valve caps at both ends on top (suction) and underneath
-     * (discharge), one at each end of a small cylinder and two of a large (0.45 m bore up) beside its nozzles, a bolted head
-     * and from 0.3 m bore a clearance pocket with its handwheel, an outboard support under the head. On each side a
-     * suction bottle lies over the cylinders and a discharge bottle under them on saddled posts, both as long as the longer
-     * side's, each joined to every cylinder by a flanged neck. One suction header crosses the machine over its outboard
-     * (front) end and drops into both suction bottles, the inlet on top of its middle; one discharge header joins both discharge bottles'
-     * front heads in front of the frame, the outlet at the front of its middle (owner request 2026-10-17: one inlet, one
-     * outlet). The crankshaft's back end is its shaft end, a half coupling under its guard: its driver (a motor or a turbine)
-     * joins it through a shaft block (owner decision D4: the synchronous motor and its exciter went). Sizes from
-     * {@link Compressor}.
-     */
-    void compressor() {
-        var c = Compressor.of(shape.diameter(), (int) shape.tangentLength());
-        int throwCount = c.throwCount(), h = shape.support();
-        double b = c.bore(), yc = h + c.crank(), ds = c.suction(), dd = c.discharge(), cyl = c.cylinder(), lc = c.cylinderLength(), gh = c.guide(), piece = c.piece();
-        double ysb = c.suctionAxis(h), ydb = c.dischargeAxis(h), pocket = b >= .3 ? .3 + .3 * b : 0;
-        double hs = c.suctionHeader(), hd = c.dischargeHeader();
-        double a = centre(c.out() + Math.max(lc / 2 + .12 + pocket + (pocket > 0 ? .12 : 0), Math.max(ds, dd) / 2) + .05);
-        // Along z from the frame's front: an auxiliary end of 0.6 m, the throws at the crank pitch, 0.6 m to the drive end.
-        // The bottles span the cylinders of either side and two diameters at least.
-        var zs = new double[throwCount];
-        for (int k = 0; k < throwCount; k++) zs[k] = .6 + (k + .5) * c.pitch();
-        double end = throwCount * c.pitch() + 1.2;
-        double lo = Double.MAX_VALUE, hi = -Double.MAX_VALUE;
-        for (int side = 0; side < 2; side++) {
-            lo = Math.min(lo, zs[side] - cyl / 2 - .1);
-            hi = Math.max(hi, zs[throwCount - 2 + side] + cyl / 2 + .1);
-        }
-        double grow = Math.max(0, 2 * ds - (hi - lo)) / 2;
-        lo -= grow;
-        hi += grow;
-        // The discharge header on a cell centre in front of the bottles' heads and the table; everything shifted by whole
-        // metres (cell centres stay cell centres) so the outlet's flange starts at z 0.
-        double depth = dd / 4, zd = Math.floor(Math.min(lo - depth - .1, -.25) - hd / 2 - .5) + .5;
-        double shift = -Math.floor(zd - hd / 2 - NECK);
-        for (int k = 0; k < throwCount; k++) zs[k] += shift;
-        lo += shift;
-        hi += shift;
-        zd += shift;
-        double front = shift;
-        end += shift;
-        // The steel table: posts at the frame's corners and between the throws, beams along its sides and across at each
-        // post line; the frame on it, its ribs between the throws, a cover over each throw, the breather, the oil pump's
-        // cover and the pump at the free end, the lubricator on its side.
-        double half = c.half(), top = h + c.frameTop();
-        var lines = new ArrayList<Double>();
-        lines.add(front + .1);
-        for (int k = 1; k < throwCount; k += 2) lines.add((zs[k] + (k + 1 < throwCount ? zs[k + 1] : end - .1)) / 2);
-        if (lines.getLast() < end - .4) lines.add(end - .1);
-        steelTable(a, half, front - .1, end + .1, h, lines, c.rail());
-        box(new double[]{a - half, h, front}, new double[]{a + half, top, end}, Material.MACHINE, true);
-        volumes.add(Solid.box(new double[]{a - half + .05, h + .05, front + .05}, new double[]{a + half - .05, top - .05, end - .05}));
-        for (int k = 0; k < throwCount; k++) {
-            box(new double[]{a - half + .08, top, zs[k] - .38 * c.pitch()}, new double[]{a + half - .08, top + .03, zs[k] + .38 * c.pitch()}, Material.MACHINE, false);
-            mesh.bar(new double[]{a - .15, top + .05, zs[k]}, new double[]{a + .15, top + .05, zs[k]}, .03, new double[]{0, 1, 0}, Material.PIPE);
-            // A rib on the side where this throw has no guide.
-            double rx = a + (k % 2 == 0 ? 1 : -1) * half;
-            box(new double[]{rx - .04, h + .05, zs[k] - .05}, new double[]{rx + .04, top - .05, zs[k] + .05}, Material.MACHINE, false);
-        }
-        mesh.cylinder(Frame.of(new double[]{a + .5 * half, 0, front + .3}, 1, 1), .06 + .06 * b, top, top + .15 + .1 * b, 10, Material.MACHINE);
-        mesh.cylinder(Frame.of(new double[]{a, yc, 0}, 2, 1), .25 + .15 * b, front - .06, front, sides(.5 + .3 * b), Material.MACHINE);
-        box(new double[]{a - .2, h + .15, front - .25}, new double[]{a + .2, h + .45, front}, Material.MACHINE, false);
-        box(new double[]{a + half, yc - .1, front + .05}, new double[]{a + half + .3, yc + .3, front + .45}, Material.MACHINE, false);
-        int n = sides(cyl), nb = sides(ds), nd = sides(dd), caps = b >= .45 ? 2 : 1;
-        double neck = .25 * b + .04, cap = Math.min(.225, .1 + .2 * b), capHeight = .08 + .08 * b;
-        for (int k = 0; k < throwCount; k++) {
-            int sx = k % 2 == 0 ? -1 : 1;
-            double z = zs[k], xb = a + sx * c.out(), g0 = a + sx * half, g1 = a + sx * (half + c.guideLength()), p1 = xb - sx * (lc / 2 + .06);
-            // The crosshead guide and its door; the open distance piece between its flanges with the piston rod sliding in it.
-            box(new double[]{Math.min(g0, g1), yc - gh, z - gh}, new double[]{Math.max(g0, g1), yc + gh, z + gh}, Material.MACHINE, true);
-            double d0 = g0 + sx * .15, d1 = g1 - sx * .15;
-            box(new double[]{Math.min(d0, d1), yc + gh, z - .7 * gh}, new double[]{Math.max(d0, d1), yc + gh + .025, z + .7 * gh}, Material.MACHINE, false);
-            mesh.bar(new double[]{(d0 + d1) / 2 - .1, yc + gh + .06, z}, new double[]{(d0 + d1) / 2 + .1, yc + gh + .06, z}, .03, new double[]{0, 1, 0}, Material.PIPE);
-            plate(g1 - sx * .05, g1, yc, z, piece + .06);
-            // Balanced opposed: a pair's pistons move out together, the pairs' cranks spread over half a turn.
-            distancePiece(g1, p1, sx, yc, z, piece, c.pieceLength() > 1.1 ? 2 : 1, b, c.stroke(), (k / 2) / (double) throwCount);
-            // The cylinder: crank-end flange, body, head flange with its studs, head cover; the clearance pocket and its wheel.
-            var fx = Frame.of(new double[]{xb, yc, z}, 0, sx);
-            mesh.cylinder(fx, cyl / 2 + .05, -lc / 2 - .06, -lc / 2 + .02, n, Material.FLANGE);
-            mesh.prism(fx, cyl / 2, -lc / 2 + .02, lc / 2, n, Material.MACHINE);
-            mesh.cylinder(fx, cyl / 2 + .03, lc / 2, lc / 2 + .07, n, Material.FLANGE);
-            mesh.bolts(fx, Math.min(cyl, PipeSizes.MAX_OUTSIDE), .35 * cyl, cyl / 2 + .03, lc / 2 + .07, 1, Material.BOLT);
-            mesh.cylinder(fx, .42 * cyl, lc / 2 + .07, lc / 2 + .12, n, Material.MACHINE);
-            if (pocket > 0) {
-                double wheel = .12 + .1 * b, at = lc / 2 + .12 + pocket;
-                mesh.cylinder(fx, .25 * cyl, lc / 2 + .12, at, n, Material.MACHINE);
-                mesh.prism(fx, .02, at, at + .1, 6, Material.PIPE);
-                mesh.ring(fx, wheel - .025, wheel, at + .07, at + .1, 12, 3, Material.ACTUATOR);
-                mesh.bar(fx.at(0, wheel - .02, at + .085), fx.at(Math.PI, wheel - .02, at + .085), .02, new double[]{0, 0, 1}, Material.ACTUATOR);
-            }
-            solids.add(Solid.rod(new double[]{0, yc, z}, 0, Math.min(xb - sx * (lc / 2 + .06), xb + sx * (lc / 2 + .12 + pocket)),
-                    Math.max(xb - sx * (lc / 2 + .06), xb + sx * (lc / 2 + .12 + pocket)), cyl / 2 + .05, 0));
-            round(new double[]{0, yc, z}, 0, xb - lc / 2, xb + lc / 2, cyl / 2);
-            volumes.add(Solid.rod(new double[]{0, yc, z}, 0, xb - lc / 2 + .05, xb + lc / 2 - .05, cyl / 2 - .05, 0));
-            // Valve caps at both ends, on top (suction) and underneath (discharge); their nuts are too small to show.
-            for (double t : new double[]{-(lc / 2 - cap - .08), lc / 2 - cap - .08})
-                for (int below = 0; below < 2; below++)
-                    for (int j = 0; j < caps; j++) {
-                        double phi = (below == 0 ? 0 : Math.PI) + (caps == 1 ? 0 : (j == 0 ? -1 : 1) * Math.toRadians(35));
-                        double[] radial = {0, DeterministicMath.cos(phi), DeterministicMath.sin(phi)};
-                        var cf = new Frame(new double[]{xb + sx * t, yc, z}, radial, new double[]{1, 0, 0});
-                        mesh.cylinder(cf, cap, cyl / 2 - .04, cyl / 2 + capHeight, 12, Material.FLANGE);
-                    }
-            // The necks to the bottles; the outboard support under the head.
-            var up = Frame.of(new double[]{xb, 0, z}, 1, 1);
-            mesh.prism(up, neck, yc + cyl / 2 - .05, ysb - .45 * ds, 12, Material.PIPE);
-            mesh.ring(up, neck, 1.6 * neck, yc + cyl / 2 + .05, yc + cyl / 2 + .09, 12, 3, Material.FLANGE);
-            mesh.prism(up, neck, ydb + .45 * dd, yc - cyl / 2 + .05, 12, Material.PIPE);
-            mesh.ring(up, neck, 1.6 * neck, yc - cyl / 2 - .09, yc - cyl / 2 - .05, 12, 3, Material.FLANGE);
-            double xs = xb + sx * (lc / 2 + .04);
-            box(new double[]{xs - .04, .03, z - .2 * cyl}, new double[]{xs + .04, yc - .4 * cyl, z + .2 * cyl}, Material.STEELWORK, true);
-            box(new double[]{xs - .12, 0, z - .2 * cyl - .06}, new double[]{xs + .12, .03, z + .2 * cyl + .06}, Material.STEELWORK, false);
-            // A beam under the guide from the table's rail out to a post at the guide's end, a saddle up to the guide.
-            double rail = Math.min(c.rail(), h), gx = g1 - sx * .2;
-            box(new double[]{Math.min(g0, gx) - .05, h - rail, z - FLANGE_BEAM}, new double[]{Math.max(g0, gx) + .05, h, z + FLANGE_BEAM}, Material.STEELWORK, true);
-            if (h - rail > .05) box(new double[]{gx - POST / 2, .03, z - POST / 2}, new double[]{gx + POST / 2, h - rail, z + POST / 2}, Material.STEELWORK, true);
-            box(new double[]{Math.min(g0, gx) + .1, h, z - .6 * gh}, new double[]{Math.max(g0, gx) - .1, yc - gh, z + .6 * gh}, Material.STEELWORK, true);
-        }
-        for (int side = 0; side < 2; side++) {
-            int sx = side == 0 ? -1 : 1;
-            double xb = a + sx * c.out();
-            bottle(xb, ysb, lo, hi, ds, nb);
-            bottle(xb, ydb, lo, hi, dd, nd);
-            // Posts with saddles under the discharge bottle, a quarter in from each end.
-            for (double zp : new double[]{lo + .25 * (hi - lo), hi - .25 * (hi - lo)}) {
-                box(new double[]{xb - .1, 0, zp - .1}, new double[]{xb + .1, ydb - .45 * dd, zp + .1}, Material.STEELWORK, true);
-                box(new double[]{xb - .4 * dd, ydb - .45 * dd - .04, zp - .13}, new double[]{xb + .4 * dd, ydb - .3 * dd, zp + .13}, Material.STEELWORK, false);
-            }
-        }
-        // The suction header across the outboard (front) end on a cell centre, over the frame, its branches down into both
-        // suction bottles, the inlet on top of its middle; the discharge header from both discharge bottles' front heads,
-        // the outlet at the front of its middle.
-        double xl = a - c.out(), xr = a + c.out(), zh = Math.ceil(lo + .1 + hs / 2 - .5) + .5, yh = Math.ceil(ysb + ds / 2 + .2 + hs / 2 - .5) + .5, into = ysb + .3 * ds;
-        header(hs, new double[]{xl, into, zh}, new double[]{xl, yh, zh}, new double[]{xr, yh, zh}, new double[]{xr, into, zh});
-        nozzles.add(radial(Role.SUCTION, a, yh, hs / 2, sides(hs), zh, 1, ColumnStructure.size(hs, hs)));
-        double head = lo - .7 * depth;
-        header(hd, new double[]{xl, ydb, head}, new double[]{xl, ydb, zd}, new double[]{xr, ydb, zd}, new double[]{xr, ydb, head});
-        double start = zd + .03, face = Math.floor(zd - hd / 2 - NECK);
-        nozzles.add(new Nozzle(Role.DISCHARGE, new double[]{a, ydb, start}, 2, -1, start - face, ColumnStructure.size(hd, hd), 0));
-        // The shaft end uses the pumps' coupling and guard. A large torque-sized hub needs a shelf below the table top
-        // to enclose its underside without raising the crankshaft or moving the existing shaft and process connections.
-        double rpm = compressorSpeed(b), rs = shaftRadius(1000 * compressorPower(b, throwCount), rpm);
-        double driveFace = Math.ceil(end + .2 + rs - 1e-9), floor = Math.min(h, yc - couplingHubRadius(rs) - .1);
-        double mount = couplingHubRadius(rs) + .13;
-        baseplate(a - mount, a + mount, floor - .06, floor, end - .15, driveFace - .01);
-        for (int side = -1; side <= 1; side += 2) {
-            double x = a + side * (mount - .08);
-            box(new double[]{x - .05, floor - .18, end - .15}, new double[]{x + .05, floor - .06, driveFace - .01}, Material.STEELWORK, true);
-        }
-        coupling(a, yc, end, driveFace, 1, rs, floor, shown(rpm), EquipmentShape.ShaftEnd.Role.DRIVEN_INPUT);
-    }
-
-    /**
-     * A throw's open distance piece from the crosshead guide's flange at {@code g} to the cylinder's at {@code p} (outward
-     * {@code sx} along x; its axis at (y, z), its half section {@code piece}) in {@code compartments} (owner request
-     * 2026-10-18, "add Piston model to compressor", answered: the rods in open windows, since the pistons stay in the
-     * cylinders): top and bottom plates, sides open in a window per compartment, a partition between compartments, the
-     * rod's packing case on the cylinder's flange and its wiper case on the guide's. The piston rod, 0.05 + 0.12 bores
-     * across, slides through it as a moving part ({@link Motion}) on a crank of half the {@code stroke} and a connecting rod
-     * of five cranks from {@code phase}, its oil deflector collar in the compartment by the guide; it reaches half a stroke
-     * and 0.1 m into the guide and the cylinder, so its ends never show.
-     */
-    void distancePiece(double g, double p, int sx, double y, double z, double piece, int compartments, double bore, double stroke, double phase) {
-        double x0 = Math.min(g, p), x1 = Math.max(g, p), t = .03 + .02 * bore, length = (x1 - x0) / compartments, win = .55 * piece;
-        solids.add(Solid.box(new double[]{x0, y - piece, z - piece}, new double[]{x1, y + piece, z + piece}));
-        box(new double[]{x0, y + piece - t, z - piece}, new double[]{x1, y + piece, z + piece}, Material.MACHINE, false);
-        box(new double[]{x0, y - piece, z - piece}, new double[]{x1, y - piece + t, z + piece}, Material.MACHINE, false);
-        for (int face = -1; face <= 1; face += 2) {
-            double za = face < 0 ? z - piece : z + piece - t, zb = za + t, from = x0;
-            box(new double[]{x0, y - piece + t, za}, new double[]{x1, y - win, zb}, Material.MACHINE, false);
-            box(new double[]{x0, y + win, za}, new double[]{x1, y + piece - t, zb}, Material.MACHINE, false);
-            for (int j = 0; j < compartments; j++) {
-                double mid = x0 + length * (j + .5);
-                box(new double[]{from, y - win, za}, new double[]{mid - .3 * length, y + win, zb}, Material.MACHINE, false);
-                from = mid + .3 * length;
-            }
-            box(new double[]{from, y - win, za}, new double[]{x1, y + win, zb}, Material.MACHINE, false);
-        }
-        for (int j = 1; j < compartments; j++) plate(x0 + length * j - .025, x0 + length * j + .025, y, z, piece - t);
-        var f = Frame.of(new double[]{0, y, z}, 0, 1);
-        double rod = .025 + .06 * bore, cased = p - sx * (.1 + .05 * bore), wiper = g + sx * .06;
-        mesh.cylinder(f, 2.2 * rod, Math.min(p, cased), Math.max(p, cased), 12, Material.FLANGE);
-        mesh.cylinder(f, 1.8 * rod, Math.min(g, wiper), Math.max(g, wiper), 12, Material.FLANGE);
-        double reach = stroke / 2 + .1, collar = g + sx * length / 2, half = .02 + .02 * bore;
-        mesh.part(motions.size());
-        mesh.cylinder(f, rod, Math.min(g - sx * reach, p + sx * reach), Math.max(g - sx * reach, p + sx * reach), 10, Material.PIPE);
-        mesh.cylinder(f, 1.9 * rod, collar - half, collar + half, 12, Material.FLANGE);
-        mesh.part(-1);
-        double crank = stroke / 2;
-        motions.add(new Motion(new double[]{(g + p) / 2, y, z}, new double[]{sx, 0, 0}, CRANK_SPEED, phase, crank, 5 * crank));
-    }
-
     /**
      * A shaft of radius {@code shaft} along frame {@code f} (its axis along z) over {@code spans} ({z0, z1} each), seen in
      * a pump's bracket windows, with a seal's drive collar and its four set screws centred at each of {@code collars}: a
@@ -2290,6 +1392,11 @@ public final class ProcessUnit {
 
     /** A shaft's allowable shear stress for its drawn size, Pa (a plain steel shaft's 40 MPa, plan 5.3). */
     static final double SHAFT_SHEAR = 40e6;
+    /**
+     * A shaft's drawn diameter, px, before its train has drawn it (a placed shaft block, a train with no driver or at rest):
+     * the shaft block's default size, which the block and the engine's trains read from here (codebase review M-15).
+     */
+    public static final int SHAFT_DEFAULT_SIZE = 4;
 
     /** Rated torque, N·m, of {@code kw} at {@code rpm}. */
     public static double torque(double kw, double rpm) {
@@ -2321,7 +1428,7 @@ public final class ProcessUnit {
     }
 
     /** The half coupling's outside radius around a shaft of radius {@code rs}, m. */
-    private static double couplingHubRadius(double rs) {
+    static double couplingHubRadius(double rs) {
         return Math.max(rs + .04, 2.2 * rs);
     }
 
@@ -2580,22 +1687,6 @@ public final class ProcessUnit {
     }
 
     /**
-     * A compressor's steel table (owner request 2026-10-17; {@code MACHINES_SCALE_RESEARCH.md}): two rails {@code rail} deep
-     * under the frame's sides (half width {@code half} about x {@code a}) from {@code z0} to {@code z1}, cross beams as deep
-     * at each of the {@code lines} along z, posts under them on base plates, their tops at {@code top}. A slow-speed machine
-     * of the largest frames stands on a concrete block in real plants; steel here keeps to the other units' look.
-     */
-    void steelTable(double a, double half, double z0, double z1, double top, List<Double> lines, double rail) {
-        double beam = Math.min(rail, top), post = POST + .1, x0 = a - half + post / 2, x1 = a + half - post / 2;
-        for (double x : new double[]{x0, x1}) {
-            box(new double[]{x - FLANGE_BEAM, top - beam, z0}, new double[]{x + FLANGE_BEAM, top, z1}, Material.STEELWORK, true);
-            for (double z : lines) post(x, z, 0, top - beam, post, true);
-        }
-        for (double z : lines)
-            box(new double[]{x0 + FLANGE_BEAM, top - beam, z - FLANGE_BEAM / 2 - .025}, new double[]{x1 - FLANGE_BEAM, top, z + FLANGE_BEAM / 2 + .025}, Material.STEELWORK, true);
-    }
-
-    /**
      * A large motor from {@code z0} along z, its shaft at (x, y), its drive end at the back ({@code z0 + length}; batch
      * 2026-11-03-rotating-machinery: every machine's shaft end is at its back), {@code MACHINES_HEATERS_SURVEY.md}: a
      * fabricated octagonal stator frame {@code across} wide and {@code length} long with banded ends, round end shields and
@@ -2669,160 +1760,7 @@ public final class ProcessUnit {
         box(new double[]{Math.min(x0, x1), y - half, z - half}, new double[]{Math.max(x0, x1), y + half, z + half}, Material.MACHINE, false);
     }
 
-    /** A pulsation bottle lying along z at (x, y), its tangent lines at {@code lo} and {@code hi}, with 2:1 heads; it collides and encloses as drawn. */
-    void bottle(double x, double y, double lo, double hi, double od, int n) {
-        double r = od / 2, depth = od / 4;
-        mesh.prism(Frame.of(new double[]{x, y, 0}, 2, 1), r, lo, hi, n, Material.SHELL);
-        mesh.head(Frame.of(new double[]{x, y, 0}, 2, 1), r, hi, depth, n, Material.HEAD);
-        mesh.head(Frame.of(new double[]{x, y, 0}, 2, -1), r, -lo, depth, n, Material.HEAD);
-        var axis = new double[]{x, y, 0};
-        solids.add(Solid.rod(axis, 2, lo - depth, hi, r, depth));
-        volumes.add(Solid.rod(axis, 2, lo, hi, .94 * r, .9 * depth));
-        volumes.add(Solid.rod(axis, 2, lo - .6 * depth, lo, .65 * r, 0));
-        round(x, y, lo, hi, r);
-    }
-
     // ---- Fired heaters ----------------------------------------------------------------------------------------------
-
-    /**
-     * A vertical cylindrical heater (owner decision M3 2026-10-17; API 560; {@code MACHINES_HEATERS_SURVEY.md}): a round
-     * radiant section of diameter D and height {@code tangentLength} on 6 to 14 H-section legs about 2.3 m apart on concrete
-     * pedestals, a ring girder under its floor from leg to leg, X-braced in alternate bays and knee-braced in the others
-     * (the front's left open), its floor {@code support} up with the burners (muffler drums under their registers) firing
-     * up through it from a circle of 0.4 D; the casing's full-height panels bolted on flanged seams over the legs
-     * ({@link #seam}), girth bands every 3 m; on its roof the convection section in modules with its panelled header boxes
-     * ({@link #convection}), the breeching and the stack with its damper. Platforms (API 560 12.4.1): the
-     * hearth platform round the casing at the floor, a 270° one for each further row of peep doors when the radiant
-     * section is over 8 m, peep doors 1.4 m over each and an access door over the hearth at the back, rest platforms over
-     * the back where a climb would be longer than {@link Access#MAX_CLIMB} ({@link #ringAccess}); a handrail round the
-     * roof's edge; caged ladders at the side legs ({@link Access}), alternating, the last walked through onto the roof.
-     * Five nozzles at the front (owner request 2026-10-17): the convection coil in near the top of its front header box and
-     * out near its bottom (it flows down against the flue gas), the radiant coil in just under the roof and out just over
-     * the floor (the crossover between them is the player's pipe), fuel gas to the burners' ring header.
-     */
-    void verticalHeater() {
-        double dia = shape.diameter(), r = dia / 2, height = shape.tangentLength(), y0 = shape.support() - .3, y1 = shape.support() + height;
-        int floor = shape.support();
-        double hx = Math.min(2.25, Math.max(.75, .225 * dia)), hz = Math.min(.425 * dia, Math.sqrt(r * r - hx * hx) - .1), process = Math.min(.6, hx);
-        // The convection section high enough for its outlet's row and its inlet's two rows over it (one free block between
-        // their pipes, owner rule 2026-10-17).
-        double yConvection = Math.ceil(y1 + .2 + process / 2 - .5) + .5, hc = Math.max(Math.min(6, Math.max(2, .4 * dia + 1)), yConvection + 2.2 - y1);
-        double wall = r + .12, width = ColumnStructure.MIN_DECK, edge = wall + width;
-        double a = centre(Math.max(edge + .05, hz + HEADER_BOX + .2));
-        int n = 4 * (int) Math.ceil(.75 * Math.PI * dia), legs = Math.max(6, 2 * (int) Math.round(Math.PI * dia / 4.6));
-        double step = 2 * Math.PI / legs;
-        var up = Frame.of(new double[]{a, 0, a}, 1, 1);
-        mesh.prism(up, r, y0, y1, n, Material.HEATER);
-        mesh.annulus(up, 0, r, y0, n, -1, Material.HEATER);
-        mesh.annulus(up, 0, r, y1, n, 1, Material.HEATER);
-        solids.add(Solid.rod(new double[]{a, 0, a}, 1, y0, y1, r, 0));
-        volumes.add(Solid.rod(new double[]{a, 0, a}, 1, y0 + .1, y1 - .1, .94 * r, 0));
-        round(a, a, y0, y1, r, 1);
-        for (double y = floor + 3; y < y1 - 1; y += 3) band(up, r, y, n, Material.HEATER);
-        // Legs under the casing columns, half a pitch off the front, their webs radial; a ring girder under the floor from
-        // leg to leg; X-bracing in alternate bays from the front's right, knee braces in the others but the front's.
-        double cased = casing(legDepth(dia)), girder = Math.min(.6, .3 + .025 * dia), low = y0 - girder;
-        var legAt = new double[legs][];
-        for (int k = 0; k < legs; k++) {
-            double t = -Math.PI / 2 + (k + .5) * step;
-            double[] radial = {DeterministicMath.cos(t), 0, DeterministicMath.sin(t)};
-            legAt[k] = new double[]{a + (r - .12) * radial[0], a + (r - .12) * radial[2]};
-            leg(legAt[k][0], legAt[k][1], y0, cased, radial);
-            seam(new double[]{a + r * radial[0], y0, a + r * radial[2]}, new double[]{a + r * radial[0], y1, a + r * radial[2]}, radial, true);
-        }
-        for (int k = 0; k < legs; k++) girder(legAt[k], legAt[(k + 1) % legs], low, y0, cased);
-        solids.add(Solid.ring(a, a, low, y0, r - .12 - GIRDER_HALF, r - .12 + GIRDER_HALF, 0, 2 * Math.PI));
-        for (int k = 0; k + 1 < legs; k++)
-            if (k % 2 == 1 && k + 1 < legs - 1) brace(legAt[k], legAt[k + 1], .6, low, .15, BRACE_TIER);
-            else knees(legAt[k], legAt[k + 1], low, cased);
-        // The platforms and their ladders, alternating between the side legs (ringAccess): the hearth platform at
-        // the floor, a 270° one at each further row of peep doors, rest platforms over the back where a climb would be
-        // longer than Access.MAX_CLIMB (owner decision C1 2026-10-18: a tall support's), then the roof.
-        int extra = height > 8 ? (int) Math.ceil(height / 8) - 1 : 0;
-        var wanted = new ArrayList<Integer>();
-        wanted.add(floor);
-        for (int k = 1; k <= extra; k++) wanted.add(floor + (int) Math.round(height * k / (extra + 1)));
-        var levels = Access.climbs(0, wanted, (int) Math.ceil(y1 - Access.DECK - 1e-9));
-        levels.removeLast();
-        int side = (int) Math.ceil(legs / 4.0 - .5);
-        double right = -Math.PI / 2 + (side + .5) * step, left = Math.PI - right, gap = DeterministicMath.asin(Math.min(.95, .6 / (wall + Access.GAP)));
-        double clear = Access.clearance(wall);
-        var rings = new ArrayList<Ring>();
-        for (int k = 0; k < levels.size(); k++) {
-            int level = levels.get(k);
-            double in = k % 2 == 0 ? right : left;
-            if (level == floor) rings.add(new Ring(level, in, -Math.PI / 2 + gap, 1.5 * Math.PI - gap));
-            else if (wanted.contains(level)) rings.add(in == right ? new Ring(level, in, right, 1.5 * Math.PI - gap) : new Ring(level, in, -Math.PI / 2 + gap, left));
-            else rings.add(in == right ? new Ring(level, in, right, left + clear) : new Ring(level, in, right - clear, left));
-        }
-        var arcs = ringAccess(a, a, wall, width, 0, rings);
-        for (int k = 0; k < levels.size(); k++) {
-            int level = levels.get(k);
-            if (!wanted.contains(level)) continue;
-            // Peep doors between the columns over the decks, 1.4 m up; the access door over the hearth at the back.
-            for (int j = 0; j + 1 < legs; j++) {
-                double t = -Math.PI / 2 + (j + 1) * step;
-                boolean decked = false;
-                for (var arc : arcs.get(k)) decked |= t > arc.from() + .05 && t < arc.to() - .05;
-                if (decked) door(a, a, r, t, level + Access.DECK + 1.4, .125, .15);
-            }
-            if (level == floor) door(a, a, r, Math.PI / 2, level + Access.DECK + .4, .3, .3);
-        }
-        double roofIn = levels.size() % 2 == 0 ? right : left;
-        verticalLadder(a, a, wall, roofIn, levels.getLast() + Access.DECK, y1 + Access.LANDING, true);
-        // The roof's handrail on its edge, open at the ladder, the front's nozzle and header boxes that overhang it.
-        double rail = r - .03, front = DeterministicMath.asin(Math.min(.95, (Math.max(.6, hx) + .1) / rail)), ladderGap = DeterministicMath.asin(Math.min(.95, (Access.LADDER_HALF + .2) / rail));
-        var gaps = new ArrayList<double[]>();
-        gaps.add(new double[]{roofIn - ladderGap, roofIn + ladderGap});
-        if (hz + HEADER_BOX > Math.sqrt(Math.max(0, rail * rail - hx * hx)) - .1) {
-            double back = DeterministicMath.asin(Math.min(.95, (hx + .05) / rail));
-            gaps.add(new double[]{Math.PI / 2 - back, Math.PI / 2 + back});
-        }
-        gaps.sort((p, q) -> Double.compare(p[0], q[0]));
-        double from = -Math.PI / 2 + front;
-        for (var g : gaps) {
-            if (g[0] > from + .05) railing(new Access.Arc(a, a, r - 1, from, g[0], r, Access.Arc.step(r)), y1 - Access.DECK, 1);
-            from = Math.max(from, g[1]);
-        }
-        if (1.5 * Math.PI - front > from + .05) railing(new Access.Arc(a, a, r - 1, from, 1.5 * Math.PI - front, r, Access.Arc.step(r)), y1 - Access.DECK, 1);
-        // Burners on a circle under the floor, their ring header and its risers.
-        double duty = heaterDuty(Kind.VERTICAL_HEATER, dia, height), circle = .2 * dia, register = .25 + .02 * dia;
-        int burners = Math.max(3, Math.min(16, Math.min((int) Math.round(duty / 2.5), (int) Math.floor(2 * Math.PI * circle / (2.6 * register + .1)))));
-        var at = new double[burners][];
-        for (int i = 0; i < burners; i++) {
-            double t = 2 * Math.PI * (i + .5) / burners;
-            at[i] = new double[]{a + circle * DeterministicMath.sin(t), a + circle * DeterministicMath.cos(t)};
-        }
-        // The ring header low enough that the fuel's line at a pipe's largest passes under the burners' mufflers (owner
-        // decision 2026-10-21: a 1 m pipe has a 1 m root, other components give way).
-        double yFuel = Math.floor(Math.min(y0 - 1.2, y0 - BURNER_DROP - .05 - PipeSizes.MAX_OUTSIDE / 2) - .5) + .5, pipe = .04 + .004 * dia;
-        burners(at, register, y0, yFuel, pipe);
-        for (int i = 0; i < burners; i++) {
-            double[] p = {at[i][0], yFuel, at[i][1]}, q = {at[(i + 1) % burners][0], yFuel, at[(i + 1) % burners][1]};
-            mesh.cylinder(new Frame(p, unit(sub(q, p)), new double[]{0, 1, 0}), pipe, 0, Math.sqrt(dot(sub(q, p), sub(q, p))), 8, Material.PIPE);
-        }
-        // The convection section with its header boxes, the stack.
-        double y2 = y1 + hc;
-        convection(a - hx, a + hx, a - hz, a + hz, y1, y2);
-        var breeching = new Breeching(a - hx, a + hx, a - hz, a + hz);
-        double stack = .25 * dia + .3, neck = breeching.neck(y2, stack), stackTop = Math.min(neck + MAX_STACK, stackTop(neck, y1));
-        stack(a, a, stack, sides(stack), y2, stackTop, Material.HEATER, breeching, true);
-        // The flue gas leaves the stack's mouth (W5): its mark, inside the rim.
-        mouth("stack_top_0", a, a, .92 * stack / 2, stackTop);
-        // The convection coil in near the top of its front header box and out near its bottom; the radiant coil in at the
-        // front under the roof, two rows under the convection outlet, and out just over the floor; fuel gas to the ring
-        // header's front from the front. Every pipe block keeps one free block from the next.
-        double feed = ColumnStructure.size(.1 + .02 * dia, process), zIn = a - hz - HEADER_BOX + .03, yConvIn = Math.floor(y2 - .7) + .5;
-        double yRadiantIn = Math.min(Math.floor(y1 - .7 - process / 2) + .5, yConvection - 2);
-        nozzles.add(front(Role.CONVECTION_INLET, a, yConvIn, zIn, feed));
-        nozzles.add(front(Role.CONVECTION_OUTLET, a, yConvection, zIn, feed));
-        nozzles.add(radialSide(Role.RADIANT_INLET, a, yRadiantIn, a, r, n, -1, feed));
-        nozzles.add(radialSide(Role.RADIANT_OUTLET, a, floor + .5, a, r, n, -1, feed));
-        // The ring's front: a burner's riser where there is an odd number, else the chord between two.
-        double zFuel = a - circle * (burners % 2 == 1 ? 1 : DeterministicMath.cos(Math.PI / burners)) + .03, fuel = .3;
-        nozzles.add(new Nozzle(Role.FUEL, new double[]{a, yFuel, zFuel}, 2, -1, zFuel - Math.floor(a - r - NECK),
-                ColumnStructure.size(.05 + .003 * duty, fuel), 0));
-    }
 
     /**
      * A caged ladder ({@link #ladder}) at angle {@code t} (from +x towards +z) round a round body whose axis stands at
@@ -2835,215 +1773,6 @@ public final class ProcessUnit {
         ladder(x + rung * DeterministicMath.cos(t), z + rung * DeterministicMath.sin(t), new double[]{DeterministicMath.cos(t), 0, DeterministicMath.sin(t)}, Access.roundLadderBack(wall, shape.facets()),
                 base, top, walkThrough);
     }
-
-    /**
-     * A cabin heater (owner decision M3 2026-10-17; API 560; {@code MACHINES_HEATERS_SURVEY.md}): a box radiant section
-     * of width W and length {@code tangentLength} along z on H-section legs every 3 m or so on concrete pedestals, a girder
-     * under the floor round its edge, X-braced along both sides in the end bays and every third and knee-braced in the
-     * others (the burner aisles open), its walls W + 1 high, a hipped roof rising to the convection section
-     * along its whole length, its floor {@code support} up with one or two rows of burners (muffler drums under their
-     * registers) firing up through it. The wall panels bolted on flanged seams over the legs ({@link #seam}) with an eave
-     * beam, peep doors 1.4 m over each walkway in every bay and an access door over the hearth walkway; panelled header
-     * boxes on both end walls for the side walls' tube bends and for the convection section's (in modules,
-     * {@link #convection}), an insulated crossover between the
-     * back radiant header boxes (the coil runs back along the right wall and returns along the left); one stack per 15 m
-     * with its damper. Walkways on both sides (API 560
-     * 12.4.1, {@link Access}): the hearth walkway the full length, a second one under the eaves when the walls are 6 m or
-     * more and on a taller wall one at each row of peep doors between (at most 8 m apart), the convection walkway over the
-     * roof's slope; a ladder walked through from grade onto the hearth walkway (the
-     * left's at the back, the right's at the front), side-step ladders against the wall between the side walkways and one
-     * walked through onto the convection walkway. Five nozzles at the front (owner request 2026-10-17): the convection
-     * coil in near the top of its front header box and out near its bottom, the radiant coil into the left front radiant
-     * header box (+x, seen from the constructor) near its top and out of the right one just over the floor (the crossover between the coils is the
-     * player's pipe), fuel gas to the burner rows' headers.
-     */
-    void cabinHeater() {
-        double w = shape.diameter(), total = shape.tangentLength(), y0 = shape.support() - .3, y1 = shape.support() + cabinWall(w);
-        int floor = shape.support(), cells = cabinCells(total);
-        double length = total / cells, wc = Math.min(4, Math.max(1.5, .4 * w)), yr = y1 + .6 * (w - wc) / 2, walk = 1.2, process = Math.min(.6, wc / 2);
-        // The convection section high enough for its outlet's row and its inlet's two rows over it (one free block between
-        // their pipes, owner rule 2026-10-17).
-        double yConvection = Math.ceil(yr + .2 + process / 2 - .5) + .5, hc = Math.max(Math.min(5, Math.max(2, .25 * w + 1)), yConvection + 2.2 - yr);
-        // One cell in the middle, or two either side of an aisle; the convection section over the middle, over a twin's
-        // aisle and half its throat into each cell. A wall outside the convection section is an eave, its roof slope rising
-        // to the section's side; a twin's inner wall stands under the section, up to it.
-        double gap = cells == 2 ? AISLE : 0, half = (cells * w + gap) / 2;
-        double a = centre(half + .12 + walk + .05 + 2 * Access.CAGE_HALF + .1), zs = 1, ze = zs + length, c0 = a - (wc + gap) / 2, c1 = a + (wc + gap) / 2;
-        double[] cellX = cells == 1 ? new double[]{a} : new double[]{a - (gap + w) / 2, a + (gap + w) / 2};
-        int bays = Math.max(2, (int) Math.round(length / 3)), out = (int) Math.floor(w / 2 - .5);
-        double cased = casing(legDepth(w)), low = y0 - legDepth(w), rise = yr - y1;
-        for (double ac : cellX) {
-            double x0 = ac - w / 2, x1 = ac + w / 2;
-            boolean eave0 = x0 < c0 - 1e-9, eave1 = x1 > c1 + 1e-9;
-            double top0 = eave0 ? y1 : yr, top1 = eave1 ? y1 : yr, run0 = c0 - x0, run1 = x1 - c1;
-            // The walls, the end walls up to the roof, the floor's underside and the roof's slopes.
-            mesh.flat(List.of(new double[]{x0, y0, zs}, new double[]{x0, top0, zs}, new double[]{x0, top0, ze}, new double[]{x0, y0, ze}), new double[]{-1, 0, 0}, Material.HEATER);
-            mesh.flat(List.of(new double[]{x1, y0, zs}, new double[]{x1, y0, ze}, new double[]{x1, top1, ze}, new double[]{x1, top1, zs}), new double[]{1, 0, 0}, Material.HEATER);
-            mesh.flat(List.of(new double[]{x0, y0, zs}, new double[]{x0, y0, ze}, new double[]{x1, y0, ze}, new double[]{x1, y0, zs}), new double[]{0, -1, 0}, Material.HEATER);
-            for (double z : new double[]{zs, ze}) {
-                var outline = new ArrayList<double[]>(List.of(new double[]{x0, y0, z}, new double[]{x1, y0, z}, new double[]{x1, top1, z}));
-                if (eave1) outline.add(new double[]{c1, yr, z});
-                if (eave0) outline.add(new double[]{c0, yr, z});
-                outline.add(new double[]{x0, top0, z});
-                mesh.flat(outline, new double[]{0, 0, z == zs ? -1 : 1}, Material.HEATER);
-            }
-            if (eave0) mesh.flat(List.of(new double[]{x0, y1, zs}, new double[]{c0, yr, zs}, new double[]{c0, yr, ze}, new double[]{x0, y1, ze}), new double[]{-rise, run0, 0}, Material.HEATER);
-            if (eave1) mesh.flat(List.of(new double[]{x1, y1, zs}, new double[]{c1, yr, zs}, new double[]{c1, yr, ze}, new double[]{x1, y1, ze}), new double[]{rise, run1, 0}, Material.HEATER);
-            solids.add(Solid.box(new double[]{x0, y0, zs}, new double[]{x1, y1, ze}));
-            volumes.add(Solid.box(new double[]{x0 + .1, y0 + .1, zs + .1}, new double[]{x1 - .1, y1, ze - .1}));
-            // Under the roof in three steps, each inside the slopes at its top.
-            for (int k = 0; k < 3; k++) {
-                double b0 = y1 + k * rise / 3, b1 = b0 + rise / 3, lo = eave0 ? x0 + (k + 1) * run0 / 3 + .05 : x0, hi = eave1 ? x1 - (k + 1) * run1 / 3 - .05 : x1;
-                solids.add(Solid.box(new double[]{lo, b0, zs}, new double[]{hi, b1, ze}));
-                volumes.add(Solid.box(new double[]{lo, b0, zs + .1}, new double[]{hi, b1, ze - .1}));
-            }
-            for (double[] p : new double[][]{{x0, zs, x1, zs}, {x1, zs, x1, ze}, {x1, ze, x0, ze}, {x0, ze, x0, zs}}) segment(new double[]{p[0], y1, p[1]}, new double[]{p[2], y1, p[3]});
-            // Fireproofed legs and casing columns every 3 m or so; a girder under the floor round its edge; X-bracing in the
-            // end bays and every third, knee braces in the others and across both ends; an eave beam along each eave wall.
-            for (int k = 0; k <= bays; k++) {
-                double z = zs + length * k / bays;
-                for (int side = -1; side <= 1; side += 2) {
-                    double wall = ac + side * w / 2, leg = ac + side * (w / 2 - .15);
-                    leg(leg, z, y0, cased, new double[]{1, 0, 0});
-                    seam(new double[]{wall, y0, z}, new double[]{wall, side < 0 ? top0 : top1, z}, new double[]{side, 0, 0}, true);
-                    if (k == bays) continue;
-                    double[] p = {leg, z}, q = {leg, zs + length * (k + 1) / bays};
-                    if (k == 0 || k == bays - 1 || k % 3 == 1) brace(p, q, .6, low, .15, BRACE_TIER);
-                    else knees(p, q, low, cased);
-                }
-            }
-            for (int side = -1; side <= 1; side += 2) {
-                double leg = ac + side * (w / 2 - .15);
-                box(new double[]{leg - GIRDER_HALF, low, zs - cased / 2}, new double[]{leg + GIRDER_HALF, y0, ze + cased / 2}, Material.STEELWORK, true);
-            }
-            for (double z : new double[]{zs, ze}) {
-                double left = ac - (w / 2 - .15), right = ac + (w / 2 - .15);
-                box(new double[]{left + cased / 2, low, z - GIRDER_HALF}, new double[]{right - cased / 2, y0, z + GIRDER_HALF}, Material.STEELWORK, true);
-                knees(new double[]{left, z}, new double[]{right, z}, low, cased);
-            }
-            for (int side = -1; side <= 1; side += 2) {
-                if (!(side < 0 ? eave0 : eave1)) continue;
-                double wall = ac + side * w / 2, outer = wall + side * .15;
-                box(new double[]{Math.min(wall, outer), y1 - .25, zs - .1}, new double[]{Math.max(wall, outer), y1, ze + .1}, Material.HEATER, false);
-            }
-            // Header boxes on both end walls for the side walls' tube bends, panelled; the crossover between the back ones.
-            for (int side = -1; side <= 1; side += 2) {
-                double x = ac + side * out;
-                for (int end = 0; end < 2; end++) {
-                    double[] lo = {x - .4, floor, end == 0 ? zs - HEADER_BOX : ze}, hi = {x + .4, y1 - .4, end == 0 ? zs : ze + HEADER_BOX};
-                    mesh.box(lo, hi, ALL_FACES & ~(end == 0 ? 32 : 16), Material.HEATER);
-                    solids.add(Solid.box(lo, hi));
-                    panels(lo, hi, 2, end == 0 ? -1 : 1, 1, Math.max(2, (int) Math.round((hi[1] - lo[1]) / 1.3)));
-                }
-            }
-            double cross = .06 + .008 * w, yCross = Math.floor(y1 - 1.2) + .5, zCross = ze + HEADER_BOX + .35;
-            line(cross, Material.CLADDING, new double[]{ac + out, yCross, ze + HEADER_BOX - .05}, new double[]{ac + out, yCross, zCross}, new double[]{ac - out, yCross, zCross},
-                    new double[]{ac - out, yCross, ze + HEADER_BOX - .05});
-        }
-        if (cells == 2) mesh.flat(List.of(new double[]{a - gap / 2, yr, zs}, new double[]{a + gap / 2, yr, zs}, new double[]{a + gap / 2, yr, ze}, new double[]{a - gap / 2, yr, ze}),
-                new double[]{0, -1, 0}, Material.HEATER);
-        // Burners in one row of each cell (two from 7 m wide) under the floor, a header along each row and one across the front.
-        double duty = heaterDuty(Kind.CABIN_HEATER, w, total), register = .25 + .015 * w, yFuel = Math.floor(y0 - 1.2 - .5) + .5, pipe = .05 + .004 * w * Math.sqrt(cells);
-        var rows = new ArrayList<Double>();
-        for (double ac : cellX) {
-            if (w <= 6) rows.add(ac);
-            else {
-                rows.add(ac - w / 4);
-                rows.add(ac + w / 4);
-            }
-        }
-        int each = Math.max(2, Math.min((int) Math.round(duty / 4 / rows.size()), (int) Math.floor((length - 1) / (2.6 * register + .2))));
-        var at = new double[rows.size() * each][];
-        for (int row = 0; row < rows.size(); row++)
-            for (int i = 0; i < each; i++) at[row * each + i] = new double[]{rows.get(row), zs + length * (i + .5) / each};
-        burners(at, register, y0, yFuel, pipe);
-        double zHeader = zs + .3;
-        for (double x : rows) mesh.cylinder(Frame.of(new double[]{x, yFuel, 0}, 2, 1), pipe, zHeader, zs + length * (each - .5) / each, 8, Material.PIPE);
-        if (rows.size() > 1) mesh.cylinder(Frame.of(new double[]{0, yFuel, zHeader}, 0, 1), pipe, rows.getFirst(), rows.getLast(), 8, Material.PIPE);
-        // The convection section along the whole roof, a stack over each of its parts (a twin's flue gas through stacks
-        // √2 as wide).
-        double y2 = yr + hc, stack = Math.min(3.5, (.25 * w + .3) * Math.sqrt(cells));
-        int convection = (int) Math.ceil(yr + .05);
-        convection(c0, c1, zs, ze, yr, y2);
-        int stacks = Math.max(1, (int) Math.round(length / 15));
-        for (int j = 0; j < stacks; j++) {
-            double zj = zs + length * (j + .5) / stacks, room = Math.min(length / stacks / 2 - .2, Math.max((c1 - c0) / 2, stack / 2 + .3));
-            var breeching = new Breeching(c0, c1, zj - room, zj + room);
-            double neck = breeching.neck(y2, stack), stackTop = Math.min(neck + MAX_STACK, stackTop(neck, y1));
-            stack(a, zj, stack, sides(stack), y2, stackTop, Material.HEATER, breeching, true);
-            mouth("stack_top_" + j, a, zj, .92 * stack / 2, stackTop);
-        }
-        // The walkways and ladders of each eave wall: the hearth walkway; on walls 6 m or more the side walkways at the rows
-        // of peep doors up the wall at most 8 m apart (as the vertical heater's platforms, so no caged climb passes
-        // Access.MAX_CLIMB: owner decision C1 2026-10-18), the highest under the eaves, each reached from the one under it
-        // by a side-step ladder at alternate ends of the wall; the convection walkway from the highest. Peep doors over
-        // each walkway in every bay but where a ladder stands, an access door over the hearth walkway in the middle bay.
-        var walkways = new ArrayList<Integer>();
-        if (y1 - 2.4 - floor >= 3) {
-            int eaves = (int) (y1 - 2.4), between = eaves - floor > 8 ? (int) Math.ceil((eaves - floor) / 8.0) - 1 : 0;
-            for (int k = 1; k <= between; k++) walkways.add(floor + (int) Math.round((eaves - floor) * k / (between + 1.0)));
-            walkways.add(eaves);
-        }
-        int count = walkways.size();
-        for (int side = -1; side <= 1; side += 2) {
-            double wall = side < 0 ? cellX[0] - w / 2 : cellX[cellX.length - 1] + w / 2, wallX = wall + side * .12, edge = side < 0 ? c0 : c1;
-            double[] outward = {side, 0, 0}, along = {0, 0, 1};
-            // The wall's end the first side-step ladder stands at (the back's on the left, the front's on the right), the
-            // grade ladder's at the other, and the way along z from the first to the other.
-            double first = side < 0 ? zs : ze, last = side < 0 ? ze : zs, in = side < 0 ? 1 : -1;
-            double zGrade = last - in * .6, zMid = first + in * .5, start = zs - .3;
-            platform(new Access.Line(new double[]{wallX, 0, start}, along, outward, length + .6), floor, walk, true, true, zGrade - Access.WALK_THROUGH - start, zGrade + Access.WALK_THROUGH - start);
-            // The climb from grade up the walkway's outer edge, resting on posts beyond it where the floor stands over 9 m.
-            double zRest = Math.min(zGrade, zGrade - in * 1.2) - .6;
-            climb(new Access.Line(new double[]{wallX + side * walk, 0, zRest}, along, outward, 2.4), 0, floor + Access.DECK, zGrade - in * 1.2 - zRest, zGrade - zRest, .15);
-            int top = floor;
-            var ladderAt = new double[count];
-            for (int i = 0; i < count; i++) {
-                boolean atFirst = i % 2 == 0;
-                double zl = ladderAt[i] = atFirst ? zMid : last - in * .5;
-                // The walkway from beside its ladder (open there: the climber steps off sideways) to the wall's other end.
-                double open = zl + (atFirst ? in : -in) * .55, closed = atFirst ? last + in * .3 : first - in * .3, from = Math.min(open, closed), to = Math.max(open, closed);
-                platform(new Access.Line(new double[]{wallX, 0, from}, along, outward, to - from), walkways.get(i), walk, from == closed, to == closed);
-                ladder(wallX + side * Access.STANDOFF, zl, outward, Access.STANDOFF, top + Access.DECK, walkways.get(i) + Access.DECK + Access.LANDING, false);
-                top = walkways.get(i);
-            }
-            // The convection walkway's ladder on the highest walkway, away from the ladder that reached it.
-            double zConv = count > 0 && count % 2 == 0 ? first + in * 1.6 : last - in * 1.6;
-            platform(new Access.Line(new double[]{edge, 0, zs}, along, outward, length), convection, Math.abs(wall - edge) + .12, true, true, zConv - Access.WALK_THROUGH - zs, zConv + Access.WALK_THROUGH - zs);
-            ladder(wallX + side * .05, zConv, outward, .05, top + Access.DECK, convection + Access.DECK + Access.LANDING, true);
-            for (int k = 0; k < bays; k++) {
-                double z = zs + length * (k + .5) / bays;
-                for (int j = 0; j <= count; j++) {
-                    boolean ladderThere = j == count && Math.abs(z - zConv) < .7 || j < count && Math.abs(z - ladderAt[j]) < .7 || j > 0 && Math.abs(z - ladderAt[j - 1]) < .7;
-                    if (!ladderThere) door(wall, z, side, (j == 0 ? floor : walkways.get(j - 1)) + Access.DECK + 1.4, .125, .15);
-                }
-                if (k == bays / 2 && Math.abs(z - zConv) > 1 && Math.abs(z - zMid) > 1) door(wall, z + .7, side, floor + Access.DECK + .4, .3, .3);
-            }
-        }
-        // Nozzles at the front: the convection coil's at its header box; one cell's radiant coil in at the left header box
-        // (+x, seen from the constructor) and out of the right one; a twin's coils fed from an inlet manifold between their inner header boxes and joined in
-        // an outlet manifold between their outer ones, both across the front of the aisle.
-        double feed = ColumnStructure.size(.1 + .02 * w * Math.sqrt(cells), process), zIn = zs - HEADER_BOX + .03, yIn = Math.floor(y1 - 1.2) + .5, yOut = floor + .5;
-        double yConvIn = Math.floor(y2 - .7) + .5;
-        nozzles.add(front(Role.CONVECTION_INLET, a, yConvIn, zIn, feed));
-        nozzles.add(front(Role.CONVECTION_OUTLET, a, yConvection, zIn, feed));
-        if (cells == 1) {
-            nozzles.add(front(Role.RADIANT_INLET, a + out, yIn, zIn, feed));
-            nozzles.add(front(Role.RADIANT_OUTLET, a - out, yOut, zIn, feed));
-        } else {
-            double manifold = feed / 2 + .05, zm = zs - HEADER_BOX - manifold - .1, face = zs - HEADER_BOX;
-            for (double[] ends : new double[][]{{cellX[0] + out, cellX[1] - out, yIn}, {cellX[0] - out, cellX[1] + out, yOut}})
-                line(manifold, Material.PIPE, new double[]{ends[0], ends[2], face}, new double[]{ends[0], ends[2], zm}, new double[]{ends[1], ends[2], zm}, new double[]{ends[1], ends[2], face});
-            nozzles.add(front(Role.RADIANT_INLET, a, yIn, zm, feed));
-            nozzles.add(front(Role.RADIANT_OUTLET, a, yOut, zm, feed));
-        }
-        double zFuel = zHeader + .03, fuel = .3;
-        nozzles.add(new Nozzle(Role.FUEL, new double[]{a, yFuel, zFuel}, 2, -1, zFuel - Math.floor(zs - NECK),
-                ColumnStructure.size(.05 + .003 * duty, fuel), 0));
-    }
-
-    /** A twin cabin's aisle between its cells' inner walls, m: room for a player between the legs' pedestals. */
-    static final double AISLE = 1.5;
 
     /** A cabin's longest radiant cell, m: horizontal radiant tubes reach about 24 m ({@code MACHINES_SCALE_RESEARCH.md}). */
     static final int MAX_CABIN_CELL = 24;
@@ -3092,7 +1821,7 @@ public final class ProcessUnit {
     }
 
     /** A girder's half width, m. */
-    private static final double GIRDER_HALF = .125;
+    static final double GIRDER_HALF = .125;
 
     /**
      * A heater leg's H-section (inside its concrete {@link #casing}), its depth and flange width, and the depth of the cabin's
@@ -3124,14 +1853,6 @@ public final class ProcessUnit {
         mesh.block(new double[]{x, (.3 + top) / 2, z}, scale(web, half), new double[]{0, (top - .3) / 2, 0}, scale(flange, half), Material.CONCRETE);
         solids.add(Solid.box(new double[]{x - pad, 0, z - pad}, new double[]{x + pad, .3, z + pad}));
         solids.add(Solid.box(new double[]{x - half, .3, z - half}, new double[]{x + half, top, z + half}));
-    }
-
-    /** A girder from leg p to leg q, {x, z} each, from {@code low} to {@code high}, between the legs' casings ({@code depth} across). */
-    void girder(double[] p, double[] q, double low, double high, double depth) {
-        double dx = q[0] - p[0], dz = q[1] - p[1], length = Math.sqrt(dx * dx + dz * dz);
-        double[] along = {dx / length, 0, dz / length}, across = {-along[2], 0, along[0]};
-        mesh.block(new double[]{(p[0] + q[0]) / 2, (low + high) / 2, (p[1] + q[1]) / 2}, scale(along, length / 2 - depth / 2), new double[]{0, (high - low) / 2, 0},
-                scale(across, GIRDER_HALF), Material.STEELWORK);
     }
 
     /** Knee braces from the casings ({@code depth} across) of legs p and q ({x, z}) up to the girder's underside at {@code low}, a third of the bay or 0.8 m along it. */
@@ -3338,250 +2059,6 @@ public final class ProcessUnit {
     /** A heater's stack's most height over its neck, m. */
     static final double MAX_STACK = 30;
 
-    /** A stack's top over a neck at {@code neck}: twice the height of the roof {@code roof} it rises from over grade (the plume clears the building's wake), and at least 6 m over the neck. */
-    /**
-     * An elevated flare stack (batch 2026-11-09-flare-stack): a riser 0.1 m wider than its tip ({@code diameter}) on its
-     * cell's centre, up to {@link com.wormzjl.icheme.science.fluid.network.Flare#stackHeight}, on a tapered base 3 m high;
-     * at the top a flare tip (a windshield 0.3 m wider than the riser, 1.2 m high) with three pilot tubes; the vent gas
-     * inlet at the front, its centre 1.5 m up. No ladder: a flare's tip is reached from a crane while it is down. The
-     * flame is the client's ({@code FxSources}, {@code FlameModel}), drawn while the flare works.
-     */
-    /**
-     * A flare stack's plinth radius at least, m, and its gas inlet's centre, m (batch 2026-11-09-flare-stack): on the cell
-     * centre of the second block, where its pipe's centre line runs.
-     */
-    static final double FLARE_PLINTH = .45, FLARE_INLET = 1.5;
-
-    void flareStack() {
-        double tip = shape.diameter(), od = tip + .1, r = od / 2, a = .5, top = com.wormzjl.icheme.science.fluid.network.Flare.stackHeight(tip);
-        // The foot: a straight plinth to 2 m that takes the gas inlet and the data socket, then a taper to the riser at 3 m.
-        double plinth = Math.max(2 * r, FLARE_PLINTH);
-        int n = sides(od), m = sides(2 * plinth);
-        var up = Frame.of(new double[]{a, 0, a}, 1, 1);
-        mesh.prism(up, plinth, 0, 2, m, Material.SUPPORT);
-        mesh.annulus(up, 0, plinth, 0, m, -1, Material.SUPPORT);
-        mesh.frustum(up, plinth, r, 2, 3, m, Material.SUPPORT);
-        solids.add(Solid.rod(new double[]{a, 0, a}, 1, 0, 2, plinth, 0));
-        solids.add(Solid.rod(new double[]{a, 0, a}, 1, 2, 3, (plinth + r) / 2, 0));
-        stack(a, a, od, n, 3, top, Material.STEELWORK, null, false);
-        // The tip: its windshield round the riser's mouth, the pilots up its side.
-        double shield = r + .15;
-        mesh.prism(up, shield, top - .2, top + 1, n, Material.MACHINE);
-        mesh.annulus(up, r, shield, top - .2, n, -1, Material.MACHINE);
-        mesh.annulus(up, .9 * shield, shield, top + 1, n, 1, Material.MACHINE);
-        mesh.bore(up, .9 * shield, top, top + 1, n, Material.MACHINE);
-        solids.add(Solid.rod(new double[]{a, 0, a}, 1, top - .2, top + 1, shield, 0));
-        // The flame stands on the windshield's mouth (W3): its mark, the top centre of the tip.
-        mouth("flare_tip", a, a, .9 * shield, top + 1);
-        for (int k = 0; k < 3; k++) {
-            double t = 2 * Math.PI * k / 3 + Math.PI / 2, x = a + (shield + .08) * DeterministicMath.cos(t), z = a + (shield + .08) * DeterministicMath.sin(t);
-            mesh.bar(new double[]{x, top - 2, z}, new double[]{x, top + 1.3, z}, .05, new double[]{1, 0, 0}, Material.PIPE);
-        }
-        // The vent gas enters the plinth 1.5 m up, towards the front, as a flare header arrives near grade.
-        nozzles.add(radialSide(Role.FLARE_GAS, a, FLARE_INLET, a, plinth, m, -1, od));
-    }
-
-    // ---- Chimneys (batch 2026-11-10-chimney, owner C3 A) -----------------------------------------------------------
-
-    /** A steel stack's plinth radius at least, m. */
-    static final double STACK_PLINTH = .45;
-    /** A brick chimney's wall at its top beyond the liner, m (liner, air gap, brick), and its foot's radius over its top's (owner: "wider at the foot"). */
-    static final double CHIMNEY_WALL = .3, CHIMNEY_TAPER = 1.6;
-
-    /**
-     * A self-supporting steel stack (batch 2026-11-10-chimney): its shell {@code diameter} across inside up to
-     * {@code tangentLength} on a concrete plinth 2 m high that takes the gas inlet at the front, its centre
-     * {@link com.wormzjl.icheme.science.fluid.network.Chimney#INLET} up on its pipe block's centre line, and the data socket
-     * on its side; caged ladders up the back with rest platforms at most {@link Access#MAX_CLIMB} apart and a ring platform
-     * 2 m under the top (owner: "a ladder and a platform near the top").
-     */
-    void steelStack() {
-        double d = shape.diameter(), od = d + .02, r = od / 2, top = shape.tangentLength(), plinth = Math.max(r + .15, STACK_PLINTH);
-        double a = centre(plinth + Access.MIN_DECK + .1);
-        int n = sides(od), m = sides(2 * plinth);
-        var up = Frame.of(new double[]{a, 0, a}, 1, 1);
-        mesh.prism(up, plinth, 0, 2, m, Material.SUPPORT);
-        mesh.annulus(up, r, plinth, 2, m, 1, Material.SUPPORT);
-        solids.add(Solid.rod(new double[]{a, 0, a}, 1, 0, 2, plinth, 0));
-        stack(a, a, od, n, 2, top, Material.STEELWORK, null, false);
-        mouth("stack_top", a, a, .92 * r, top);
-        // The tip registers in the top cell on the axis: the stack is the run up to it.
-        fluidPoint = new double[]{a, top - .5, a};
-        // The climb up the back, alternating either side of it, each rest deck running from its ladder to the next one's foot
-        // (the heater stack's pattern: the next cage stands at the deck's end, not over it), the last landing a whole ring.
-        var levels = Access.climbs(0, List.of(), (int) Math.floor(top - 2));
-        double right = Math.PI / 2 - .7, left = Math.PI / 2 + .7, clear = Access.clearance(plinth);
-        var rings = new ArrayList<Ring>();
-        for (int k = 0; k < levels.size(); k++) {
-            double in = k % 2 == 0 ? right : left;
-            if (k == levels.size() - 1) rings.add(new Ring(levels.get(k), in, in, in + 2 * Math.PI));
-            else rings.add(in == right ? new Ring(levels.get(k), in, right, left + clear) : new Ring(levels.get(k), in, right - clear, left));
-        }
-        ringAccess(a, a, plinth, Access.MIN_DECK, 0, rings);
-        nozzles.add(radialSide(Role.STACK_GAS, a, com.wormzjl.icheme.science.fluid.network.Chimney.INLET, a, plinth, m, -1, Math.min(PipeSizes.MAX_OUTSIDE, od)));
-    }
-
-    /**
-     * A tapered brick or concrete chimney with a steel liner (batch 2026-11-10-chimney): its liner {@code diameter} across
-     * inside, standing 1 m proud of the shell's cap at {@code tangentLength}; the shell {@link #CHIMNEY_WALL} beyond the liner
-     * at the top and {@link #CHIMNEY_TAPER} times as wide at the foot; a railed gallery 3 m under the cap (climbed inside),
-     * an access door at the back, lightning rods on the rim, the gas inlet at the front through the foot, its centre
-     * {@link com.wormzjl.icheme.science.fluid.network.Chimney#INLET} up.
-     */
-    void brickChimney() {
-        double d = shape.diameter(), liner = d / 2 + .02, top = shape.tangentLength(), rt = d / 2 + CHIMNEY_WALL, rf = CHIMNEY_TAPER * rt;
-        double gallery = top - 3, rg = rf + (rt - rf) * gallery / top;
-        double a = centre(Math.max(rf, rg + Access.MIN_DECK) + .1);
-        int n = sides(2 * rf);
-        var up = Frame.of(new double[]{a, 0, a}, 1, 1);
-        mesh.frustum(up, rf, rt, 0, top, n, Material.CONCRETE);
-        mesh.annulus(up, liner, rt, top, n, 1, Material.CONCRETE);
-        solids.add(Solid.cone(new double[]{a, 0, a}, 1, 0, top, rf, rt, 0));
-        // The liner's head over the cap.
-        mesh.prism(up, liner, top, top + 1, n, Material.SHELL);
-        band(up, liner, top + .6, n, Material.STEELWORK);
-        mesh.annulus(up, .92 * liner, liner, top + 1, n, 1, Material.SHELL);
-        mesh.bore(up, .92 * liner, top + .7, top + 1, n, Material.SHELL);
-        mesh.annulus(up, 0, .92 * liner, top + .7, n, 1, Material.OPENING);
-        solids.add(Solid.rod(new double[]{a, 0, a}, 1, top, top + 1, liner, 0));
-        mouth("stack_top", a, a, .92 * liner, top + 1);
-        fluidPoint = new double[]{a, top + .5, a};
-        for (int k = 0; k < 3; k++) {
-            double t = 2 * Math.PI * k / 3 + Math.PI / 2, x = a + (rt - .1) * DeterministicMath.cos(t), z = a + (rt - .1) * DeterministicMath.sin(t);
-            mesh.bar(new double[]{x, top, z}, new double[]{x, top + 1.5, z}, .03, new double[]{1, 0, 0}, Material.PIPE);
-        }
-        // The gallery, two railed half rings meeting open.
-        double edge = rg + Access.MIN_DECK, step = Access.Arc.step(edge);
-        for (int k = 0; k < 2; k++)
-            platform(new Access.Arc(a, a, rg, k * Math.PI, (k + 1) * Math.PI, edge, step), gallery, Access.MIN_DECK, false, false);
-        door(a, a, rf, Math.PI / 2, 1.2, .45, 1);
-        double inlet = rf + (rt - rf) * com.wormzjl.icheme.science.fluid.network.Chimney.INLET / top;
-        nozzles.add(radialSide(Role.STACK_GAS, a, com.wormzjl.icheme.science.fluid.network.Chimney.INLET, a, inlet, n, -1, PipeSizes.MAX_OUTSIDE));
-    }
-
-    // ---- Batch still (batch 2026-11-09-batch-distiller, W2; BATCH_STILL_STRUCTURE.md) ------------------------------
-
-    /**
-     * A batch still's layout in its frame, m. The pot, {@code d} across, stands on the vertical line through
-     * ({@link #POT_X}, {@link #POT_Z}): its flat bottom {@code bottom} up, its shell to {@code cylinder}, its 2:1 head's
-     * apex at {@code apex}. A fired still's brick setting is {@code w} square to {@code setting} (the flue gas sweeps the
-     * pot's wall to there), its grate {@code grate} up, its brick flue {@code flue} square in the setting's back right
-     * corner to {@code flueTop}. A pot still's helmet, radius {@code helmet}, rises to {@code helmetTop}; its swan neck is
-     * {@code arm} in radius. The charge enters at the front at row {@code charge}. A column, radius {@code column}, rises
-     * from {@code columnBase} to {@code columnTop}. The condenser, a shell of radius {@code shell}, lies front to back in
-     * the left column ({@link #SPOUT_X}) at height {@code condenser}, a free column from the pot (0 without a condenser):
-     * the same top condenser for both (owner, 2026-11-09).
-     */
-    record StillPlan(BatchStillOptions options, double d, double w, double grate, double bottom, double setting, double cylinder, double apex,
-                     double helmet, double helmetTop, double flue, double flueTop, double arm, double charge,
-                     double column, double columnBase, double columnTop, double shell, double condenser) {
-        /**
-         * The pot's axis in the frame, on the centre of the second of four columns from the right seen from the front, the
-         * right column free for the terminal box or the burner's line, a free column between the pot and the condenser
-         * (owner, 2026-11-10: every still one block wider); the left column's line, where the condenser, the spout and the
-         * vent stand.
-         */
-        static final double POT_X = 1.5, POT_Z = 1.5, SPOUT_X = 3.5;
-        /** The line (frame z) of the condenser's cold end: the reflux pot, the valve, the sight glass and the spout's drop. */
-        static final double COLD_END = .75;
-        /** The condenser shell's front and back ends along the frame's z (its channels reach 0.2 m past them). */
-        static final double SHELL_FRONT = .6, SHELL_BACK = 1.85;
-        static StillPlan of(EquipmentShape shape) {
-            var o = shape.still();
-            // The setting: 0.35 m of brick round the pot; the right column leaves the burner's line at least 0.46 m.
-            double d = BatchStillDesign.potDiameter(shape.diameter()), w = d + .7;
-            double bottom = .3 + .6 * d, setting = bottom + .3 * d, cylinder = bottom + .85 * d, apex = cylinder + d / 4;
-            // The charge's row: a pipe's largest neck, 0.41 m round its centre line, clears the setting's coping or the skirt.
-            double helmet = .22 * d, charge = rowAtLeast(setting + PipeSizes.MAX_OUTSIDE / 2 + .02);
-            double column = .124 * d, columnBase = apex - .03, columnTop = columnBase + .3 * o.stages() + .2, shell = .1 + .05 * d;
-            double helmetTop = apex + .3 * d + helmet / 2;
-            // At least three rows over the spout: the water inlet's pipe block, a row under the condenser, keeps a free block
-            // from the spout's on the front face.
-            double condenser = o.condenses() ? Math.max(rowAtLeast((o.column() ? columnTop : helmetTop) + shell + .5), 3.5) : 0;
-            // The flue in the setting's back right corner, its inner corner 0.03 m clear of the pot's wall.
-            double flue = Math.min(.15 + .2 * d, w / 2 - (d / 2 + .03) / Math.sqrt(2));
-            return new StillPlan(o, d, w, .1 + .2 * d, bottom, setting, cylinder, apex, helmet, helmetTop, flue,
-                    Math.ceil((apex + 1.2) * 4) / 4, .06 * d + .01, charge, column, columnBase, columnTop, shell, condenser);
-        }
-
-        /**
-         * The finish of every process vessel (pot, helmet, column, condenser, reflux pot) by the heater's tier (owner,
-         * 2026-11-09): hammered, riveted copper over a solid fire; welded carbon steel over a burner; welded, brushed
-         * stainless steel on an electric plate.
-         */
-        Material finish() {
-            return switch (options.heater()) {
-                case SOLID -> Material.COPPER;
-                case LIQUID -> Material.CARBON_STEEL;
-                case ELECTRIC -> Material.STAINLESS;
-            };
-        }
-
-        /** The process lines' finish in the same tier (drawn copper, carbon-steel pipe, stainless tube); utilities stay plant pipe. */
-        Material line() {
-            return switch (options.heater()) {
-                case SOLID -> Material.COPPER_LINE;
-                case LIQUID -> Material.CARBON_STEEL_LINE;
-                case ELECTRIC -> Material.STAINLESS_LINE;
-            };
-        }
-
-        /** The lowest cell centre at or over {@code y}, where a nozzle's centre line runs. */
-        static double rowAtLeast(double y) {
-            return Math.ceil(y - .5 - 1e-9) + .5;
-        }
-
-        /** The gooseneck's centre line height, from the helmet or the column's top over to the condenser: 0.25 m over its shell. */
-        double gooseneck() {
-            return condenser + shell + .25;
-        }
-
-        /** The pot's radius at height {@code y}: its shell's, its head's over the tangent line, 0 outside the pot. */
-        double radiusAt(double y) {
-            if (y < bottom || y >= apex) return 0;
-            if (y <= cylinder) return d / 2;
-            double t = (y - cylinder) / (d / 4);
-            return d / 2 * Math.sqrt(1 - t * t);
-        }
-    }
-
-    /**
-     * A batch still (batch 2026-11-09-batch-distiller, W2), less industrial than the columns: a copper pot ({@link StillPlan})
-     * in a brick setting with an iron firing door and a brick flue (solid fuel, or a burner through the door for liquid
-     * fuel), or on a steel skirt with a terminal box (electric); a helmet, or a copper column with a porthole per stage;
-     * the copper condenser overhead (a column's over a reflux pot and a hand-wheel valve), or a swan neck to a vapour
-     * flange where it has no condenser of its own. Seen from the front (owner, 2026-11-09): its charge enters at the
-     * front, its drain leaves at the back, a liquid-fired still's fuel on the right; the pot one column in from the right,
-     * a free column, the condenser on the left (owner, 2026-11-10: one block wider), its
-     * distillate down to a sight glass and the spout at the front, its vent up. The firing door, the fire
-     * bed, the flue top, the burner, the lamp, the spout and the reflux valve are named ({@link #marks}).
-     */
-    void batchStill() {
-        var p = StillPlan.of(shape);
-        var o = p.options();
-        double d = p.d(), r = d / 2, x = StillPlan.POT_X, z = StillPlan.POT_Z;
-        int n = sides(d);
-        var up = Frame.of(new double[]{x, 0, z}, 1, 1);
-        // The pot: a shell on a flat bottom over the fire, its head, a seam at the tangent line, in its tier's finish.
-        var pot = p.finish();
-        mesh.prism(up, r, p.bottom(), p.cylinder(), n, pot);
-        // The pot's node (W3): its lowest inside point, on its flat bottom, on its axis at a block's centre.
-        fluidPoint = new double[]{x, p.bottom() + .01, z};
-        mesh.annulus(up, 0, r, p.bottom(), n, -1, pot);
-        mesh.head(up, r, p.cylinder(), d / 4, n, pot);
-        mesh.hoop(up, r, r + .015, p.cylinder() - .03, p.cylinder(), n, pot);
-        solids.add(Solid.rod(new double[]{x, 0, z}, 1, p.bottom(), p.cylinder(), r, d / 4));
-        round(x, z, p.bottom(), p.cylinder(), r, 1);
-        if (o.heater().fired()) stillSetting(p);
-        else stillSkirt(p);
-        stillCharge(p);
-        stillDrain(p);
-        if (o.column()) stillColumn(p);
-        else stillHelmet(p);
-        if (o.condenses()) stillCondenser(p);
-        else stillVapour(p);
-    }
-
     /**
      * A round mouth's mark (batch 2026-11-10-custom-shader-system, W3 to W5): a disc {@code radius} round the vertical line
      * through (x, z), its box the 5 cm under height {@code top}, where a flame, a plume or a flue gas leaves.
@@ -3595,242 +2072,7 @@ public final class ProcessUnit {
         marks.put(name, new double[]{Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.min(a[2], b[2]), Math.max(a[0], b[0]), Math.max(a[1], b[1]), Math.max(a[2], b[2])});
     }
 
-    /**
-     * A fired still's brick setting under the pot, its coping, the flue in its back right corner, the iron firing door and
-     * ash-pit door at its front, and for liquid fuel the burner: its small fuel connection on the setting's right wall
-     * (seen from the front) at ground level, the fuel nozzle itself. A fired still has no data port: only the electric
-     * still takes a controller (owner, 2026-11-09).
-     */
-    private void stillSetting(StillPlan p) {
-        double x = StillPlan.POT_X, z = StillPlan.POT_Z, h = p.w() / 2, x0 = x - h, x1 = x + h, z0 = z - h, z1 = z + h, top = p.setting(), cope = top - .06;
-        box(new double[]{x0, 0, z0}, new double[]{x1, cope, z1}, ALL_FACES & ~4, Material.BRICK, true);
-        box(new double[]{x0 - .03, cope, z0 - .03}, new double[]{x1 + .03, top, z1 + .03}, ALL_FACES, Material.BRICK, true);
-        // The flue: up from the coping in the back right corner seen from the front (frame -x, +z; owner, 2026-11-10), a
-        // cap at its top, its mouth dark.
-        double s = p.flue(), fx = x0 + s, fz = z1 - s, ft = p.flueTop();
-        box(new double[]{x0, top, fz}, new double[]{fx, ft - .08, z1}, ALL_FACES & ~4, Material.BRICK, true);
-        box(new double[]{x0 - .03, ft - .08, fz - .03}, new double[]{fx + .03, ft, z1 + .03}, ALL_FACES, Material.BRICK, true);
-        box(new double[]{x0 + .05, ft, fz + .05}, new double[]{fx - .05, ft + .002, z1 - .05}, 8, Material.OPENING, false);
-        mark("flue_top", new double[]{x0 + .05, ft, fz + .05}, new double[]{fx - .05, ft + .05, z1 - .05});
-        // The firing door in its frame, its handle; the ash-pit door under it; the grate behind.
-        double d = p.d(), wd = .25 + .12 * d, hd = .22 + .1 * d, g = p.grate();
-        box(new double[]{x - wd / 2 - .03, g - .03, z0 - .015}, new double[]{x + wd / 2 + .03, g + hd + .03, z0}, ALL_FACES & ~32, Material.IRON, false);
-        box(new double[]{x - wd / 2, g, z0 - .035}, new double[]{x + wd / 2, g + hd, z0 - .015}, ALL_FACES & ~32, Material.IRON, true);
-        mesh.bar(new double[]{x + wd / 2 - .06, g + hd / 2 - .05, z0 - .045}, new double[]{x + wd / 2 - .06, g + hd / 2 + .05, z0 - .045}, .02, new double[]{0, 0, 1}, Material.IRON);
-        mark("door", new double[]{x - wd / 2, g, z0 - .035}, new double[]{x + wd / 2, g + hd, z0 - .015});
-        box(new double[]{x - wd / 3, .05, z0 - .025}, new double[]{x + wd / 3, g - .05, z0}, ALL_FACES & ~32, Material.IRON, false);
-        mark("fire_bed", new double[]{x - .3 * p.w(), g, z - .3 * p.w()}, new double[]{x + .3 * p.w(), g + .06, z + .3 * p.w()});
-        if (p.options().heater() == BatchStillOptions.Heater.LIQUID) {
-            // The burner (owner, 2026-11-09: it faces right with the fuel connection, a small pipe connector is enough, at
-            // ground level): an iron port plate on the right wall in the middle row, the fuel nozzle on its face, its neck
-            // across the right column to the frame's face.
-            double yn = .5;
-            box(new double[]{x0 - .01, yn - .06, z - .06}, new double[]{x0, yn + .06, z + .06}, ALL_FACES & ~2, Material.IRON, false);
-            mark("burner", new double[]{x0, yn - .06, z - .06}, new double[]{x0 + .15, yn + .06, z + .06});
-            nozzles.add(new Nozzle(Role.FUEL, new double[]{x0 - .01, yn, z}, 0, -1, x0 - .01, .03, 0));
-        }
-    }
-
-    /**
-     * An electric still's skirt as a drum's (owner, 2026-11-10: a skirt with heating elements, as a drum's skirt): the
-     * steel plate flush with the pot's shell from grade to its flat bottom, the heating elements inside under it, a band at
-     * the junction, two vents under the band on the left, the base ring (no anchor chairs under 1.5 m, as a drum's). The
-     * ring stays within 0.69 m of the axis, clear of the corner blocks round the pot's block (0.707 m), where the terminal
-     * box's sockets open: the 1500 and 2000 L rings are narrower. The terminal box stands on a stand in
-     * the right column's centre seen from the front, on the middle row (owner, 2026-11-10: the FE socket faced the skirt,
-     * no cable could reach it): its pilot lamp outward, its data socket to the front and its FE socket to the back, a
-     * conduit straight into the skirt. The box is 0.52 m wide (owner, 2026-11-10): the pot and skirt are one cylinder
-     * that bows 0.08 m across a plate, so the still's nameplate ({@link Nameplate}, 0.5 m) sits on the box's outward face.
-     */
-    private void stillSkirt(StillPlan p) {
-        double x = StillPlan.POT_X, z = StillPlan.POT_Z, r = p.d() / 2, top = p.bottom();
-        int n = sides(p.d());
-        skirt(x, z, r, top, n);
-        baseRing(x, z, r, p.d(), n, .69);
-        mesh.hoop(Frame.of(new double[]{x, 0, z}, 1, 1), r, r + .02, top - .1, top, n, Material.FLANGE);
-        for (double t : new double[]{-Math.PI / 4, Math.PI / 4}) {
-            var vent = new Frame(Access.around(x, z, r, t, top - .25), outward(t), new double[]{0, 1, 0});
-            mesh.prism(vent, .05, -.03, .05, 8, Material.SUPPORT);
-            mesh.annulus(vent, .035, .05, .05, 8, 1, Material.SUPPORT);
-            mesh.bore(vent, .035, -.03, .05, 8, Material.SUPPORT);
-            mesh.annulus(vent, 0, .035, -.03, 8, 1, Material.OPENING);
-        }
-        round(x, z, 0, top, r, 1);
-        double[] lo = {.38, .2, z - .26}, hi = {.62, .8, z + .26};
-        box(new double[]{.44, 0, z - .1}, new double[]{.56, .2, z + .1}, ALL_FACES & ~4, Material.STEELWORK, true);
-        box(lo, hi, ALL_FACES, Material.MACHINE, true);
-        mesh.disc(new Frame(new double[]{lo[0] - .002, .7, z}, new double[]{-1, 0, 0}, new double[]{0, 0, 1}), .025, 0, 8, 1, Material.GLASS);
-        mark("lamp", new double[]{lo[0] - .01, .675, z - .025}, new double[]{lo[0], .725, z + .025});
-        double yc = Math.min(.7, top - .15);
-        line(.02, 6, Material.PIPE, new double[]{hi[0], yc, z}, new double[]{x - r + .01, yc, z});
-        serviceHousing = new double[]{lo[0], lo[1], lo[2], hi[0], hi[1], hi[2]};
-    }
-
-    /**
-     * The charge line in at the front on the pot's line (owner, 2026-11-10: the pot on a block's centre), on its row: straight
-     * back along the pot's front meridian, into the shell or the head square to its wall where its row meets them, else
-     * down onto the head at 0.6 of its radius (owner, 2026-11-09: the oblique entries looked wrong). Its end lies 5 cm in,
-     * past the faceted wall.
-     */
-    private void stillCharge(StillPlan p) {
-        double x = StillPlan.POT_X, z = StillPlan.POT_Z, y = p.charge(), r = p.d() / 2, rq = p.radiusAt(y), pr = .03 + .01 * p.d();
-        double[] base = {x, y, .3};
-        if (rq > 0) pipe(pr, p.line(), true, base, new double[]{x, y, z - rq + .05});
-        else pipe(pr, p.line(), true, base, new double[]{x, y, z - .6 * r}, new double[]{x, p.cylinder() + .8 * p.d() / 4 - .01, z - .6 * r});
-        nozzles.add(end(Role.CHARGE, base, 2, -1, 2 * pr));
-    }
-
-    /** The drain from the pot's bottom, down inside the setting or skirt, then straight back on the pot's line to the flange at the back, low. */
-    private void stillDrain(StillPlan p) {
-        double x = StillPlan.POT_X, z = StillPlan.POT_Z, r = p.d() / 2, pr = .03 + .01 * p.d();
-        double[] base = {x, .5, 2.7};
-        pipe(pr, p.line(), true, new double[]{x, p.bottom() + .01, z + .4 * r}, new double[]{x, .5, z + .4 * r}, base);
-        nozzles.add(end(Role.DRAIN, base, 2, 1, 2 * pr));
-    }
-
-    /**
-     * A pot still's helmet on the head's apex, its collar and a sight glass on its front. Its foot starts a centimetre
-     * under the drawn head at its collar's rim (the head's facets sag up to 28 mm under the ellipsoid there; owner,
-     * 2026-11-10: a seam showed under the collar).
-     */
-    private void stillHelmet(StillPlan p) {
-        double x = StillPlan.POT_X, z = StillPlan.POT_Z, rh = p.helmet(), y1 = p.helmetTop() - rh / 2;
-        double y0 = p.cylinder() + mesh.headHeight(p.d() / 2, p.d() / 4, sides(p.d()), rh + .02) - .01;
-        int n = sides(2 * rh);
-        var up = Frame.of(new double[]{x, 0, z}, 1, 1);
-        mesh.hoop(up, rh, rh + .02, y0, y0 + .04, n, p.finish());
-        mesh.prism(up, rh, y0, y1, n, p.finish());
-        mesh.head(up, rh, y1, rh / 2, n, p.finish());
-        mesh.disc(new Frame(new double[]{x, (y0 + y1) / 2, z - rh - .004}, new double[]{0, 0, -1}, new double[]{1, 0, 0}), .4 * rh, 0, 12, 1, Material.GLASS);
-        solids.add(Solid.rod(new double[]{x, 0, z}, 1, y0, y1, rh, rh / 2));
-        round(x, z, y0, y1, rh, 1);
-    }
-
-    /**
-     * The condenser overhead, the same for a pot still and a column (owner, 2026-11-09): a shell in the still's finish lying
-     * front to back on the left seen from the front (the left column), the gooseneck from the helmet or the column's top
-     * over and down into its back half; cooling water in at its front end and out at its back end (against the vapour);
-     * the vent from its cold front end straight up. A column's condensate falls into the reflux pot (a gauge glass on its
-     * front) under the cold end, and the hand-wheel valve under the pot sends the reflux back to the column's top; a pot
-     * still's condensate runs straight down. The product passes a sight glass to the spout at the front. The shell rests on
-     * two saddles, each on a steel H-frame: a leg either side of the shell's line and a cross beam under the saddle, so its
-     * weight goes straight down (owner, 2026-11-09: not on outboard posts); the spout's drop passes between the front legs.
-     */
-    private void stillCondenser(StillPlan p) {
-        double d = p.d(), x = StillPlan.POT_X, z = StillPlan.POT_Z;
-        boolean column = p.options().column();
-        double neck = column ? p.columnTop() + p.column() / 2 : p.helmetTop();
-        double yk = p.condenser(), rk = p.shell(), ra = p.arm(), cx = StillPlan.SPOUT_X, zc = StillPlan.COLD_END, sz0 = StillPlan.SHELL_FRONT, sz1 = StillPlan.SHELL_BACK, ch0 = .4, ch1 = 2.25;
-        var along = Frame.of(new double[]{cx, yk, 0}, 2, 1);
-        var shell = p.finish();
-        mesh.prism(along, rk, sz0, sz1, sides(2 * rk), shell);
-        mesh.cylinder(along, .92 * rk, ch0, sz0, 12, shell);
-        mesh.cylinder(along, .92 * rk, sz1, ch1, 12, shell);
-        // A tube sheet and flange at each end, closing the shell round its channel (owner, 2026-11-10: the open ring
-        // between shell and channel showed through).
-        for (double at : new double[]{sz0, sz1}) mesh.ring(along, .9 * rk, rk + .025, at - .02, at + .02, 12, 3, shell);
-        solids.add(Solid.rod(new double[]{cx, yk, 0}, 2, ch0, ch1, rk + .025, 0));
-        round(new double[]{cx, yk, 0}, 2, sz0, sz1, rk);
-        double yg = p.gooseneck();
-        line(ra, 12, p.line(), new double[]{x, neck - .02, z}, new double[]{x, yg, z}, new double[]{cx, yg, z}, new double[]{cx, yk + rk - .02, z});
-        // Cooling water in at the cold front end, from under its channel a row under the condenser (a free block from the
-        // vent's flange a row over it), out at the back end.
-        double wr = .03 + .01 * d, yw = yk - 1;
-        pipe(wr, Material.PIPE, true, new double[]{cx, yk - .9 * rk, .5}, new double[]{cx, yw, .5}, new double[]{cx, yw, .3});
-        nozzles.add(end(Role.WATER_INLET, new double[]{cx, yw, .3}, 2, -1, 2 * wr));
-        pipe(wr, Material.PIPE, true, new double[]{cx, yk, ch1}, new double[]{cx, yk, 2.7});
-        nozzles.add(end(Role.WATER_OUTLET, new double[]{cx, yk, 2.7}, 2, 1, 2 * wr));
-        // The vent from the cold end's channel straight up on its block's centre line, its flange on the condenser's row's
-        // top (owner, 2026-11-10: the riser to the row above stuck out).
-        double vr = .015 + .005 * d, lr = .015 + .005 * d, zv = .5, yt = yk + .2;
-        pipe(vr, p.line(), true, new double[]{cx, yk + .9 * rk - .02, zv}, new double[]{cx, yt, zv});
-        nozzles.add(end(Role.VENT, new double[]{cx, yt, zv}, 1, 1, 2 * vr));
-        double rs = .02 + .01 * d, rg = 1.8 * rs, rp = .07 + .04 * d, yr1 = yk - rk - .1, yr0 = yr1 - .3;
-        if (column) {
-            // The reflux pot under the cold end, the condensate straight down into it.
-            line(lr, 8, p.line(), new double[]{cx, yk - rk + .02, zc}, new double[]{cx, yr1 - .02, zc});
-            mesh.cylinder(Frame.of(new double[]{cx, 0, zc}, 1, 1), rp, yr0, yr1, 12, p.finish());
-            box(new double[]{cx - .015, yr0 + .04, zc - rp - .02}, new double[]{cx + .015, yr1 - .04, zc - rp + .01}, ALL_FACES & ~32, Material.GLASS, false);
-            solids.add(Solid.rod(new double[]{cx, 0, zc}, 1, yr0, yr1, rp, 0));
-            // The reflux valve under it, its hand wheel to the front.
-            double yv = yr0 - .14, wz = zc - .17;
-            line(lr, 8, p.line(), new double[]{cx, yr0, zc}, new double[]{cx, yv, zc});
-            box(new double[]{cx - .05, yv - .05, zc - .05}, new double[]{cx + .05, yv + .05, zc + .05}, Material.IRON, true);
-            mesh.bar(new double[]{cx, yv, zc - .05}, new double[]{cx, yv, wz}, .015, new double[]{0, 1, 0}, Material.IRON);
-            var wheel = new Frame(new double[]{cx, yv, wz}, new double[]{0, 0, -1}, new double[]{1, 0, 0});
-            mesh.ring(wheel, .065, .08, 0, .015, 16, 3, Material.IRON);
-            mesh.bar(new double[]{cx - .07, yv, wz - .008}, new double[]{cx + .07, yv, wz - .008}, .012, new double[]{0, 0, 1}, Material.IRON);
-            mesh.bar(new double[]{cx, yv - .07, wz - .008}, new double[]{cx, yv + .07, wz - .008}, .012, new double[]{0, 0, 1}, Material.IRON);
-            mark("reflux_valve", new double[]{cx - .08, yv - .08, wz - .015}, new double[]{cx + .08, yv + .08, zc + .05});
-            // The reflux back to the column's top, run square as a plant's line (owner, 2026-11-10: no straight line from
-            // point to point): from the valve back along the cold end's line to beside the column, along to the column's
-            // line, down, and into the column's side square to it, under its top; the product down past a sight glass to
-            // the spout.
-            double rc = p.column(), xs = x + rc + .12, yi = p.columnTop() - .12;
-            line(lr, 8, p.line(), new double[]{cx - .05, yv, zc}, new double[]{xs, yv, zc}, new double[]{xs, yv, z}, new double[]{xs, yi, z},
-                    new double[]{x + rc - .02, yi, z});
-            pipe(rs, p.line(), true, new double[]{cx, yv - .05, zc}, new double[]{cx, .5, zc}, new double[]{cx, .5, .3});
-        } else {
-            // A pot still's condensate from the cold end straight down to the spout.
-            pipe(rs, p.line(), true, new double[]{cx, yk - rk + .02, zc}, new double[]{cx, .5, zc}, new double[]{cx, .5, .3});
-        }
-        sightGlass(new double[]{cx, .78, zc}, new double[]{0, 1, 0}, rg, .15, p.line());
-        mark("spout", new double[]{cx - rg, .78, zc - rg}, new double[]{cx + rg, .93, zc + rg});
-        nozzles.add(end(Role.DISTILLATE, new double[]{cx, .5, .3}, 2, -1, 2 * rs));
-        // The stand: a saddle near each end of the shell, clear of its girth hoops and the condensate outlet at the cold end;
-        // under each a cross beam, its top just under the shell and over the reflux pot, on two legs 0.3 m either side.
-        double yb = yk - rk - .05, xl = cx - .3, xr = cx + .3;
-        for (double zs : new double[]{sz0 + .06, sz1 - .1}) {
-            // The saddle (its foot on the beam, not drawn) and the beam closed on every face: nothing covers its top.
-            box(new double[]{cx - .8 * rk, yb, zs - .03}, new double[]{cx + .8 * rk, yk - .7 * rk, zs + .03}, ALL_FACES & ~4, Material.STEELWORK, false);
-            box(new double[]{xl - .03, yb - .04, zs - .03}, new double[]{xr + .03, yb, zs + .03}, ALL_FACES, Material.STEELWORK, true);
-            for (double xs : new double[]{xl, xr}) post(xs, zs, 0, yb - .04, .06, true);
-        }
-        // The reflux pot's bracket from the front right leg, square: back along the leg's side, then across to the pot.
-        if (column) {
-            double zf = sz0 + .06, yh = yr0 + .15;
-            mesh.bar(new double[]{xr, yh, zf + .03}, new double[]{xr, yh, zc}, .04, new double[]{0, 1, 0}, Material.STEELWORK);
-            mesh.bar(new double[]{xr + .02, yh, zc}, new double[]{cx + rp - .01, yh, zc}, .04, new double[]{0, 1, 0}, Material.STEELWORK);
-        }
-    }
-
-    /** A pot still without a condenser: its swan neck over to the vapour flange on the left face, on a post in the left column. */
-    private void stillVapour(StillPlan p) {
-        double x = StillPlan.POT_X, z = StillPlan.POT_Z, ra = p.arm(), yv = StillPlan.rowAtLeast(p.helmetTop() + .1);
-        line(ra, 12, p.line(), new double[]{x, p.helmetTop() - .02, z}, new double[]{x, yv + .15, z}, new double[]{x + .35, yv + .17, z},
-                new double[]{StillPlan.SPOUT_X + .2, yv, z});
-        post(StillPlan.SPOUT_X, z, 0, yv - ra - .01, .06, true);
-        nozzles.add(end(Role.VAPOUR_OUTLET, new double[]{StillPlan.SPOUT_X + .2, yv, z}, 0, 1, 2 * ra));
-    }
-
-    /** A still's column on the pot, a porthole on the front of each stage; its condenser is {@link #stillCondenser}'s. */
-    private void stillColumn(StillPlan p) {
-        double d = p.d(), x = StillPlan.POT_X, z = StillPlan.POT_Z, rc = p.column(), y0 = p.columnBase(), yt = p.columnTop();
-        int n = sides(2 * rc);
-        var up = Frame.of(new double[]{x, 0, z}, 1, 1);
-        mesh.prism(up, rc, y0, yt, n, p.finish());
-        mesh.head(up, rc, yt, rc / 2, n, p.finish());
-        mesh.hoop(up, rc, rc + .025, y0, y0 + .04, n, p.finish());
-        for (int k = 0; k < p.options().stages(); k++) {
-            double yk = y0 + .25 + .3 * k;
-            mesh.hoop(up, rc, rc + .02, yk - .14, yk - .11, n, p.finish());
-            var face = new Frame(new double[]{x, yk, z - rc - .006}, new double[]{0, 0, -1}, new double[]{1, 0, 0});
-            mesh.ring(face, .5 * rc, .62 * rc, -.006, .004, 12, 2, p.finish());
-            mesh.disc(face, .5 * rc, 0, 12, 1, Material.GLASS);
-        }
-        solids.add(Solid.rod(new double[]{x, 0, z}, 1, y0, yt, rc + .02, rc / 2));
-        round(x, z, y0, yt, rc, 1);
-    }
-
-    /** A sight glass on a line: a glass barrel of radius {@code r} from {@code start} along the unit {@code dir} for {@code length}, a {@code collar} at each end. */
-    private void sightGlass(double[] start, double[] dir, double r, double length, Material collar) {
-        var ref = Math.abs(dir[1]) < .9 ? new double[]{0, 1, 0} : new double[]{1, 0, 0};
-        var f = new Frame(start, dir, unit(cross(dir, ref)));
-        mesh.cylinder(f, r, .02, length - .02, 12, Material.GLASS);
-        mesh.ring(f, .55 * r, 1.15 * r, 0, .02, 12, 3, collar);
-        mesh.ring(f, .55 * r, 1.15 * r, length - .02, length, 12, 3, collar);
-    }
-
+    /** A stack's top over a neck at {@code neck}: twice the height of the roof {@code roof} it rises from over grade (the plume clears the building's wake), and at least 6 m over the neck. */
     static double stackTop(double neck, double roof) {
         return Math.max(neck + 6, 2 * roof);
     }

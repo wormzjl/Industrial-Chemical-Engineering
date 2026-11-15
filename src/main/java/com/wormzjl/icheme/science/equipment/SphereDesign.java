@@ -58,45 +58,13 @@ final class SphereDesign extends UnitDesign {
      */
     static final double LADDER = Math.PI / 2, BRIDGE = Access.GAP + 2 * (Access.RAIL_BAND + Access.WALK_THROUGH);
 
-    @Override
-    public double minSize() {
-        return 4;
-    }
-
-    @Override
-    public double maxSize() {
-        return 24;
-    }
-
-    @Override
-    public double sizeStep() {
-        return 1;
-    }
-
-    /** The clearance under the sphere: 2 to 8 m. */
-    @Override
-    public int minSupport(double size, int length) {
-        return 2;
-    }
-
-    @Override
-    public int maxSupport() {
-        return 8;
-    }
-
-    @Override
-    public Orientation orientation() {
-        return Orientation.VERTICAL;
-    }
-
-    @Override
-    public String sizeRow() {
-        return "sphere.diameter";
-    }
-
-    @Override
-    public String supportRow() {
-        return "sphere.support";
+    SphereDesign() {
+        // minSupport: The clearance under the sphere: 2 to 8 m.
+        super(new Sizes(4, 24, 1,
+                1, 1,
+                2, 8,
+                Orientation.VERTICAL, "sphere.diameter", null, "sphere.support", false,
+                1));
     }
 
     @Override

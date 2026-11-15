@@ -93,7 +93,7 @@ class FluidCheckpointStoreTest extends CertifyingRig.Islands {
         var checkpoint=new FluidCheckpointCodec.Checkpoint(entries);
         // A queued topology event, pending in the world ledger at the save.
         var topology=new WorldTopologyLedger(world(0));for(int i=0;i<1_234;i++)topology.tick();
-        var device=new PhysicalFluidTopology.Device(5_000,new PhysicalFluidTopology.Position("minecraft:overworld",40,0,40),Kind.RESERVOIR,PhysicalFluidTopology.Direction.EAST,BLOCK,new FlowControl.Passive());
+        var device=PhysicalFluidTopology.Device.builder(5_000,new PhysicalFluidTopology.Position("minecraft:overworld",40,0,40),Kind.RESERVOIR,PhysicalFluidTopology.Direction.EAST,BLOCK,new FlowControl.Passive()).build();
         topology.commit(topology.queue(List.of(new WorldTopologyLedger.Edit(5_000,new WorldTopologyLedger.Registration(device,new FluidDeviceSpec(1,298.15,101325,pure(nitrogen)),0))),Set.of(5_000L),5_001));
         var world=topology.snapshot();assertEquals(1,world.events().size());
 
@@ -127,6 +127,7 @@ class FluidCheckpointStoreTest extends CertifyingRig.Islands {
                 var x=a.certificate().orElseThrow();var y=b.certificate().orElseThrow();
                 assertEquals(List.of(x.drift(),x.sinceTick(),x.baseTick(),x.horizonTick(),x.largestFlow()),List.of(y.drift(),y.sinceTick(),y.baseTick(),y.horizonTick(),y.largestFlow()),what);
                 var s=x.saved().orElseThrow();var t=y.saved().orElseThrow();assertEquals(s.signature(),t.signature(),what);
+                assertEquals(IslandCertificate.REPLAY_REVISION,t.signature().replay(),what+": a current certificate reads back its declared replay revision");
                 assertEquals(s.interval().startTick(),t.interval().startTick(),what);assertEquals(s.interval().endTick(),t.interval().endTick(),what);
                 assertInventories(s.interval().before(),t.interval().before(),what+" certified interval start");assertInventories(s.interval().result().graph(),t.interval().result().graph(),what+" base");
                 assertArrayEquals(s.interval().result().averageMassFlows(),t.interval().result().averageMassFlows(),what);
@@ -325,7 +326,7 @@ class FluidCheckpointStoreTest extends CertifyingRig.Islands {
             var result=new PassiveIntervalSolver.Result(relabel.apply(r.graph()),r.advancedSeconds(),r.averageMassFlows(),r.acceptedSubsteps(),r.rejectedSubsteps(),r.pumpWorkJoule(),
                     r.boundaries().stream().map(b->new ConservativeTransport.BoundaryTransfer(node,b.moles(),b.totalEnergyJoule(),b.solids(),b.solidDirection())).toList(),r.rejectionReasons(),r.endpointModes(),r.endpointHeads(),r.endpointFlows(),r.pipeTransfers());
             var copy=new IslandCertificate.Saved(saved.sinceTick(),saved.horizonTick(),new IslandCertificate.Interval(saved.interval().startTick(),saved.interval().endTick(),relabel.apply(saved.interval().before()),result),
-                    IslandCertificate.Signature.of(model,policy,result.graph()));
+                    IslandCertificate.Signature.of(model,policy));
             snapshots.add(new IslandCoordinator.Snapshot(id,0,relabel.apply(t.graph()),t.clock(),Optional.of(result),t.status(),Map.of(),
                     Optional.of(new IslandCoordinator.Certified(certified.drift(),certified.sinceTick(),certified.baseTick(),certified.horizonTick(),certified.largestFlow(),Optional.of(copy)))));
         }

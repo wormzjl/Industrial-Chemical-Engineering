@@ -25,7 +25,7 @@ public class ShaftBlock extends RotatedPillarBlock {
     public static final MapCodec<ShaftBlock> CODEC = simpleCodec(ShaftBlock::new);
     /** The drawn diameter, px. */
     public static final IntegerProperty SIZE = IntegerProperty.create("size", 2, 8);
-    public static final int DEFAULT_SIZE = 4;
+    public static final int DEFAULT_SIZE = com.wormzjl.icheme.science.equipment.ProcessUnit.SHAFT_DEFAULT_SIZE;
     private static final Map<Direction.Axis, VoxelShape[]> SHAPES = new EnumMap<>(Direction.Axis.class);
 
     static {

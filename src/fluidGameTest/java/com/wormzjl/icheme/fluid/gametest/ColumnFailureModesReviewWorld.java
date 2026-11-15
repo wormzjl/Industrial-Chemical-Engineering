@@ -15,13 +15,13 @@ import com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology;
 import com.wormzjl.icheme.runtime.instrument.Instrument;
 import com.wormzjl.icheme.runtime.instrument.InstrumentHosts;
 import com.wormzjl.icheme.runtime.instrument.Sensor;
-import com.wormzjl.icheme.science.column.operation.ColumnSolve;
-import com.wormzjl.icheme.science.column.operation.Condition;
-import com.wormzjl.icheme.science.column.operation.DriftBands;
-import com.wormzjl.icheme.science.column.operation.OperationView;
-import com.wormzjl.icheme.science.column.operation.Port;
-import com.wormzjl.icheme.science.column.operation.Setpoints;
-import com.wormzjl.icheme.science.column.operation.SplitTable;
+import com.wormzjl.icheme.science.plant.column.ColumnSolve;
+import com.wormzjl.icheme.science.plant.column.Condition;
+import com.wormzjl.icheme.science.plant.column.DriftBands;
+import com.wormzjl.icheme.science.plant.column.OperationView;
+import com.wormzjl.icheme.science.plant.column.Port;
+import com.wormzjl.icheme.science.plant.column.Setpoints;
+import com.wormzjl.icheme.science.plant.column.SplitTable;
 import com.wormzjl.icheme.science.column.v3.V3ColumnCalculator;
 import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
 import com.wormzjl.icheme.science.column.v3.V3ColumnSpecification;
@@ -49,6 +49,7 @@ import com.wormzjl.icheme.world.level.block.entity.ControlPanelBlockEntity;
 import com.wormzjl.icheme.world.level.block.entity.CreativePowerBlockEntity;
 import com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity;
 import com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity;
+import com.wormzjl.icheme.science.equipment.design.UnitRatings;
 import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -142,7 +143,7 @@ public final class ColumnFailureModesReviewWorld {
 
     /** The network's default column template with its receiver at {@link #RECEIVER}. */
     static V3ColumnInput crude(MaterialCatalog catalog) {
-        var t = catalog.presets().column(catalog.presets().network().defaultColumnPreset()).input(catalog);
+        var t = com.wormzjl.icheme.science.column.v3.V3ColumnPresets.input(catalog.presets().column(catalog.presets().network().defaultColumnPreset()), catalog);
         var specs = t.specifications().stream().map(s -> s instanceof V3ColumnSpecification.CondenserOutletTemperature
                 ? (V3ColumnSpecification) new V3ColumnSpecification.CondenserOutletTemperature(RECEIVER) : s).toList();
         return new V3ColumnInput(t.schemaVersion(), t.packageId(), t.assayId(), t.componentBasis(), t.feedComponentMolarFlowsMolPerSecond(), t.feedTemperatureKelvin(),
@@ -156,7 +157,7 @@ public final class ColumnFailureModesReviewWorld {
      * an {@link #B_REBOILER} W reboiler; no draws, no steam, no pumparounds.
      */
     static V3ColumnInput reboiled(MaterialCatalog catalog) {
-        var t = catalog.presets().column(catalog.presets().network().defaultColumnPreset()).input(catalog);
+        var t = com.wormzjl.icheme.science.column.v3.V3ColumnPresets.input(catalog.presets().column(catalog.presets().network().defaultColumnPreset()), catalog);
         var specs = List.<V3ColumnSpecification>of(new V3ColumnSpecification.CondenserOutletTemperature(B_RECEIVER),
                 new V3ColumnSpecification.OrganicRefluxRatio(B_REFLUX), new V3ColumnSpecification.ReboilerDuty(B_REBOILER));
         return new V3ColumnInput(t.schemaVersion(), t.packageId(), t.assayId(), t.componentBasis(), t.feedComponentMolarFlowsMolPerSecond(), t.feedTemperatureKelvin(),
@@ -219,7 +220,7 @@ public final class ColumnFailureModesReviewWorld {
                 for (int parallel = 1; parallel <= ProcessUnit.Bank.MAX_PARALLEL; parallel++)
                     for (int series = 1; series <= ProcessUnit.Bank.MAX_SERIES; series++) {
                         var bank = new ProcessUnit.Bank(parallel, series);
-                        double surface = HeatSides.airCoolerSurface(bay[0], (int) bay[1], bank), face = bank.bays() * ProcessUnit.bundleFace(bay[0], (int) bay[1]);
+                        double surface = HeatSides.airCoolerSurface(bay[0], (int) bay[1], bank), face = bank.bays() * UnitRatings.bundleFace(bay[0], (int) bay[1]);
                         if (surface >= held / k && (best == null || face < best[1] || face == best[1] && bank.bays() < best[2]))
                             best = new double[]{1, face, bank.bays(), surface, bay[0], bay[1], parallel, series};
                     }

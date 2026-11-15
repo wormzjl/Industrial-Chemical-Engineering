@@ -14,7 +14,8 @@ import org.jetbrains.annotations.Nullable;
  * reads its default. A shape the current rules refuse is repaired a field at a time, in a fixed order: sizes clamped and
  * snapped to the kind's grid, the support into its range, side connections outside the shell dropped, the bottom outlet
  * to the front, the boot and the bank removed, and last the kind's default size. Each change is named, so the caller logs
- * it; the repaired shape has another layout stamp, so the vessel is then rebuilt by the normal refresh. A kind this build
+ * it; a repaired shape's cells read as stale ({@link EquipmentRefresh#placedRevision}; a cell saved before layout
+ * revisions when the repair changed its stamp), so the vessel is then rebuilt by the normal refresh. A kind this build
  * no longer has is {@link Read#retired}: its structure is removed whole (owner decision D6).
  */
 public final class ShapeRepair {
@@ -124,6 +125,46 @@ public final class ShapeRepair {
     /** Renamed or removed pumparound splits, by their saved name: the current name. None yet. */
     static final Map<String, String> SPLIT_ALIASES = Map.of();
 
+    /** Renamed or removed exchanger types, by their saved name: the current name. None yet. */
+    static final Map<String, String> EXCHANGER_TYPE_ALIASES = Map.of();
+
+    /**
+     * The exchanger type a saved name names, through its aliases; a name this build does not have reads {@link ExchangerType#STANDARD}
+     * (the type every exchanger had before the catalog), and the repair {@code <field> <name> -> STANDARD} goes to {@code repairs}.
+     * {@code field} names what the type configures: "exchanger type" for a shell, "condenser exchanger type" for a column's condenser.
+     */
+    public static ExchangerType exchangerType(String field, @Nullable String saved, java.util.function.Consumer<String> repairs) {
+        var type = constant(ExchangerType.class, saved, EXCHANGER_TYPE_ALIASES).orElse(null);
+        if (type != null) return type;
+        repairs.accept(field + " " + saved + " -> " + ExchangerType.STANDARD.name());
+        return ExchangerType.STANDARD;
+    }
+
+    /** A column's exchanger types as saved: the condenser's, the trim's and each pumparound cooler's, by name as written. */
+    public record SavedExchangers(String condenser, String trim, List<String> coolers) {
+        /** A design saved before its exchanger types: every exchanger standard. */
+        public static final SavedExchangers STANDARD = new SavedExchangers(ExchangerType.STANDARD.name(), ExchangerType.STANDARD.name(), List.of());
+
+        public SavedExchangers {
+            Objects.requireNonNull(condenser, "condenser");
+            Objects.requireNonNull(trim, "trim");
+            coolers = List.copyOf(coolers);
+        }
+
+        /**
+         * The types, each name this build does not have read as standard and named to {@code repairs}.
+         *
+         * @throws IllegalArgumentException for more coolers than a column has pumparounds
+         */
+        public ColumnComponents.Exchangers resolve(java.util.function.Consumer<String> repairs) {
+            var condenserType = exchangerType("condenser exchanger type", condenser, repairs);
+            var trimType = exchangerType("trim exchanger type", trim, repairs);
+            var coolerTypes = new ArrayList<ExchangerType>();
+            for (int i = 0; i < coolers.size(); i++) coolerTypes.add(exchangerType("pumparound cooler " + (i + 1) + " exchanger type", coolers.get(i), repairs));
+            return new ColumnComponents.Exchangers(condenserType, trimType, coolerTypes);
+        }
+    }
+
     /** A turned side nozzle as saved (finding F3): its role by name, its number and the side it faces. */
     public record SavedTurn(String role, int index, int side) {
         /** @throws IllegalArgumentException naming a role this build does not have or does not turn, a number or a side out of range */
@@ -137,17 +178,17 @@ public final class ShapeRepair {
      * A column's component design as saved: its kinds by name and its two flags (batch 2026-10-26-multi-machine-framework);
      * its member counts (batch 2026-11-02-process-simulator, S3b; shape fields 6), as written: a design saved before them
      * reads 1 on every step, and a cooler count not saved reads 1; the water trim's count (shape fields 7, {@code COOLER_MODEL_PLAN.md}
-     * section 6), 1 where a design was saved before it.
+     * section 6), 1 where a design was saved before it; its exchanger types by name, as written.
      */
     public record SavedComponents(String condenser, String refluxPump, List<String> pumparoundPumps, boolean ejector, boolean kettle,
-                                  int condenserUnits, int kettleUnits, int[] coolerUnits, int trimUnits,ColumnComponents.Exchangers exchangers,
+                                  int condenserUnits, int kettleUnits, int[] coolerUnits, int trimUnits,SavedExchangers exchangers,
                                   String vacuum) {
         /** A design saved before its vacuum (shape fields 12): a steam ejector. */
-        public SavedComponents(String condenser,String refluxPump,List<String> pumparoundPumps,boolean ejector,boolean kettle,int condenserUnits,int kettleUnits,int[] coolerUnits,int trimUnits,ColumnComponents.Exchangers exchangers) {
+        public SavedComponents(String condenser,String refluxPump,List<String> pumparoundPumps,boolean ejector,boolean kettle,int condenserUnits,int kettleUnits,int[] coolerUnits,int trimUnits,SavedExchangers exchangers) {
             this(condenser,refluxPump,pumparoundPumps,ejector,kettle,condenserUnits,kettleUnits,coolerUnits,trimUnits,exchangers,ColumnComponents.Vacuum.EJECTOR.name());
         }
         public SavedComponents(String condenser,String refluxPump,List<String> pumparoundPumps,boolean ejector,boolean kettle,int condenserUnits,int kettleUnits,int[] coolerUnits,int trimUnits) {
-            this(condenser,refluxPump,pumparoundPumps,ejector,kettle,condenserUnits,kettleUnits,coolerUnits,trimUnits,ColumnComponents.Exchangers.STANDARD);
+            this(condenser,refluxPump,pumparoundPumps,ejector,kettle,condenserUnits,kettleUnits,coolerUnits,trimUnits,SavedExchangers.STANDARD);
         }
         public SavedComponents {
             pumparoundPumps = List.copyOf(pumparoundPumps);
@@ -178,7 +219,7 @@ public final class ShapeRepair {
             for (int i = 0; i < Math.min(coolerUnits.length, pumparoundPumps.size()); i++) coolers.add(count(coolerUnits[i], "pumparound cooler " + (i + 1) + " units", repairs));
             if (coolerUnits.length > pumparoundPumps.size()) repairs.accept("cooler units (" + coolerUnits.length + " for " + pumparoundPumps.size() + " pumparounds) -> " + pumparoundPumps.size());
             int trimCount = count(trimUnits, "trim units", repairs);
-            return ColumnComponents.named(condenser, refluxPump, pumparoundPumps, ejector, kettle, new ColumnComponents.Units(condenserCount, kettleCount, coolers, trimCount)).withExchangers(exchangers).withVacuum(constant(ColumnComponents.Vacuum.class, vacuum, Map.of()).orElseThrow(() -> new IllegalArgumentException("no vacuum " + vacuum)));
+            return ColumnComponents.named(condenser, refluxPump, pumparoundPumps, ejector, kettle, new ColumnComponents.Units(condenserCount, kettleCount, coolers, trimCount)).withExchangers(exchangers.resolve(repairs)).withVacuum(constant(ColumnComponents.Vacuum.class, vacuum, Map.of()).orElseThrow(() -> new IllegalArgumentException("no vacuum " + vacuum)));
         }
 
         private static int count(int saved, String field, java.util.function.Consumer<String> repairs) {
@@ -281,7 +322,7 @@ public final class ShapeRepair {
                 orientation = Orientation.VERTICAL;
                 repairs.add("orientation " + saved.orientation() + " -> vertical");
             }
-        } else orientation = kind == Kind.COLUMN ? Orientation.VERTICAL : ProcessUnit.orientation(kind);
+        } else orientation = kind == Kind.COLUMN ? Orientation.VERTICAL : UnitDesign.of(kind).orientation();
         ColumnTrays trays = null;
         if (kind == Kind.COLUMN) {
             try {
@@ -332,7 +373,7 @@ public final class ShapeRepair {
             }
         // A condensing turbine saved before shape fields 8 was the steam turbine exhausting to a condenser (owner decision D5).
         if (duty == null && CONDENSING_TURBINE.equalsIgnoreCase(saved.kind()) && Double.isFinite(saved.diameter()))
-            duty = MachineDuty.turbine(1000 * SteamTurbineTrain.power(ProcessUnit.snap(kind, saved.diameter())), SteamTurbineDesign.DEFAULT_STEAM,
+            duty = MachineDuty.turbine(1000 * SteamTurbineTrain.power(UnitDesign.of(kind).snap(saved.diameter())), SteamTurbineDesign.DEFAULT_STEAM,
                     SteamTurbineDesign.CONDENSING_EXHAUST);
         var fields = new Fields(kind, front, orientation, saved.diameter(), saved.length(), saved.support(), trays, connections, saved.boot(), saved.outlet(), bank, duty);
         for (var step : LADDER) {
@@ -360,9 +401,9 @@ public final class ShapeRepair {
     private static Fields sizes(Fields f) {
         double diameter, length;
         if (f.kind.designed()) {
-            diameter = Double.isFinite(f.diameter) ? ProcessUnit.snap(f.kind, f.diameter) : ProcessUnit.minDiameter(f.kind);
-            length = Double.isFinite(f.length) ? clamp(Math.rint(f.length), ProcessUnit.minLength(f.kind, diameter), ProcessUnit.maxLength(f.kind, diameter))
-                    : ProcessUnit.defaultLength(f.kind, diameter);
+            diameter = Double.isFinite(f.diameter) ? UnitDesign.of(f.kind).snap(f.diameter) : UnitDesign.of(f.kind).minSize();
+            length = Double.isFinite(f.length) ? clamp(Math.rint(f.length), UnitDesign.of(f.kind).minLength(diameter), UnitDesign.of(f.kind).maxLength(diameter))
+                    : UnitDesign.of(f.kind).defaultLength(diameter);
         } else {
             double maximum = f.kind == Kind.COLUMN ? EquipmentShape.MAX_COLUMN_DIAMETER : EquipmentShape.MAX_DIAMETER;
             diameter = Double.isFinite(f.diameter) ? clamp(Math.rint(f.diameter * 2) / 2, EquipmentShape.MIN_DIAMETER, maximum) : 2;
@@ -375,7 +416,7 @@ public final class ShapeRepair {
     private static Fields support(Fields f) {
         int support;
         if (f.kind.designed())
-            support = (int) clamp(f.support, ProcessUnit.minSupport(f.kind, f.diameter, f.length), ProcessUnit.maxSupport(f.kind));
+            support = (int) clamp(f.support, ProcessUnit.minSupport(f.kind, f.diameter, f.length), UnitDesign.of(f.kind).maxSupport());
         else if (f.kind == Kind.COLUMN || !f.orientation.horizontal() && f.support != 0)
             support = (int) clamp(f.support, EquipmentShape.minimumSkirt(f.diameter), EquipmentShape.MAX_SUPPORT);
         else support = f.orientation.horizontal() ? (int) clamp(f.support, 1, EquipmentShape.MAX_SUPPORT) : 0;
@@ -397,7 +438,7 @@ public final class ShapeRepair {
     /** The kind's default size, as a new constructor proposes it, with the saved front. */
     private static Fields defaults(Fields f) {
         if (f.kind.designed()) {
-            double diameter = ProcessUnit.minDiameter(f.kind);int length = ProcessUnit.defaultLength(f.kind, diameter);
+            double diameter = UnitDesign.of(f.kind).minSize();int length = UnitDesign.of(f.kind).defaultLength(diameter);
             return new Fields(f.kind, f.front, f.orientation, diameter, length, ProcessUnit.defaultSupport(f.kind, diameter, length), null, List.of(), false, 0, ProcessUnit.Bank.ONE, null);
         }
         if (f.kind == Kind.COLUMN) return new Fields(f.kind, f.front, f.orientation, 2, 1, EquipmentShape.minimumSkirt(2), DEFAULT_TRAYS, List.of(), false, 0, ProcessUnit.Bank.ONE, null);

@@ -8,6 +8,7 @@ import com.wormzjl.icheme.client.gui.common.AssemblyDiagram.Part;
 import com.wormzjl.icheme.client.gui.common.AssemblyDiagram.Text;
 import com.wormzjl.icheme.client.gui.flowsheet.AssemblyBlock;
 import com.wormzjl.icheme.client.gui.common.ConstructorColumn;
+import com.wormzjl.icheme.client.gui.common.NameEntry;
 import com.wormzjl.icheme.client.gui.common.OperationColumn;
 import com.wormzjl.icheme.client.gui.common.ProcessUi;
 import com.wormzjl.icheme.client.gui.common.TitleStrip;
@@ -26,7 +27,7 @@ import com.wormzjl.icheme.science.assembly.AssemblyReport.SlotReport;
 import com.wormzjl.icheme.science.assembly.AssemblyView;
 import com.wormzjl.icheme.science.assembly.Blueprint.Slot;
 import com.wormzjl.icheme.science.assembly.ColumnBlueprint;
-import com.wormzjl.icheme.science.column.operation.OperationView;
+import com.wormzjl.icheme.science.plant.column.OperationView;
 import com.wormzjl.icheme.science.equipment.ColumnTrays;
 import com.wormzjl.icheme.world.inventory.AssemblyMenu;
 import com.wormzjl.icheme.world.level.block.EquipmentStructure;
@@ -172,14 +173,8 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
         return column == null || minecraft == null || minecraft.level == null ? "" : EquipmentStructure.name(minecraft.level, column);
     }
 
-    /** Whether Apply has a name to send: the typed name, cleaned, differs from the column's. */
-    private boolean renames() {
-        return nameDraft != null && names() && !com.wormzjl.icheme.science.equipment.DeviceName.clean(nameDraft).equals(currentName());
-    }
-
-    /** The name as typed, sent with Apply, and the name it last followed: the draft follows the column's name while the player has not changed it. */
-    private @Nullable String nameDraft, nameShown;
-    private @Nullable SkinField nameBox;
+    /** The name's entry (NameEntry): the name as typed, sent with Apply where the player may name the column, following the column's name while the player has not changed it. */
+    private final NameEntry nameEntry = new NameEntry(this::currentName, this::names);
 
     /** The title strip (N1, the owner 2026-11-03: "You can put the equipment name here"): the kind's plate, the name after it, the help and theme keys. */
     private TitleStrip.Strip strip() {
@@ -213,21 +208,13 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
     /** Saves the typed name by the rename path (N1): Enter in the entry, and Apply. */
     private void saveName() {
         var column = column();
-        if (column != null && renames()) com.wormzjl.icheme.network.EquipmentNetwork.rename(column.controller(), nameDraft);
+        if (column != null && nameEntry.renames()) com.wormzjl.icheme.network.EquipmentNetwork.rename(column.controller(), nameEntry.draft());
     }
 
     /** The name's entry in the title strip (N1): the name as typed, saved by Enter or Apply; its hint while empty. */
-    private SkinField nameEntry(Rect slot) {
-        if (nameDraft == null) nameDraft = nameShown = currentName();
-        var box = new SkinField(font, leftPos + slot.x(), topPos + slot.y(), slot.w(), slot.h(), Component.literal(lang("fluid.name")), AssemblyScreen::skin);
-        box.setMaxLength(com.wormzjl.icheme.science.equipment.DeviceName.MAX);
-        box.setValue(nameDraft);
-        box.setResponder(text -> nameDraft = text);
-        box.setHint(Component.literal(lang("fluid.name")));
-        box.onEnter(this::saveName);
-        box.setTooltip(Tooltip.create(Component.literal(lang("fluid.name") + "\n" + lang("fluid.name.hint"))));
-        nameBox = box;
-        return addRenderableWidget(box);
+    private SkinField nameBox(Rect slot) {
+        nameEntry.seed();
+        return addRenderableWidget(nameEntry.box(font, slot.moved(leftPos, topPos), AssemblyScreen::skin, this::saveName));
     }
 
     /** The Operation page's snapshot where its door shows: a complete structure on its Operation tab, with an operation to show. */
@@ -235,12 +222,8 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
         return operation() ? view().operation() : null;
     }
 
-    private static OperationColumn.Units units() {
-        return new OperationColumn.Units(ClientConfig.temperature(), ClientConfig.pressure(), ClientConfig.flowTime());
-    }
-
     private OperationColumn.Input operationInput(OperationView view) {
-        return new OperationColumn.Input(view, commanded, units());
+        return new OperationColumn.Input(view, commanded, ClientConfig.operationUnits());
     }
 
     /** An open tour takes the typed characters too: none reaches an entry under it. */
@@ -268,12 +251,12 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
         var tabSlots = AssemblyColumn.tabSlots(imageWidth);
         for (int i = 0; i < tabs.size(); i++) push(tabs.get(i), tabSlots.get(i));
         var footer = AssemblyColumn.footer(imageWidth, imageHeight, operationView() == null && names() ? 3 : 2);
-        nameBox = null;
+        nameEntry.forget();
         var namePlace = strip().name();
-        if (names() && namePlace != null) nameEntry(namePlace);
+        if (names() && namePlace != null) nameBox(namePlace);
         var operating = operationView();
         var buttons = operating != null ? OperationColumn.footerButtons(OperationColumn.applies(operationInput(operating), drafts), AssemblyScreen::lang)
-                : names() ? AssemblyColumn.footerButtons(renames(), AssemblyScreen::lang) : AssemblyColumn.footerButtons(AssemblyScreen::lang);
+                : names() ? AssemblyColumn.footerButtons(nameEntry.renames(), AssemblyScreen::lang) : AssemblyColumn.footerButtons(AssemblyScreen::lang);
         apply = null;
         for (int i = 0; i < buttons.size(); i++) {
             var button = SkinButton.of(buttons.get(i), footer.get(i).moved(leftPos, topPos), this::act, AssemblyScreen::skin);
@@ -316,7 +299,7 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
         box.setMaxLength(12);
         box.setFilter(text -> text.matches("-?[0-9]*[.,]?[0-9]*"));
         var view = operationView();
-        String shown = view == null ? "" : OperationColumn.values(view.setpoints(), units()).getOrDefault(f.key(), "");
+        String shown = view == null ? "" : OperationColumn.values(view.setpoints(), ClientConfig.operationUnits()).getOrDefault(f.key(), "");
         box.setValue(edited.contains(f.key()) ? drafts.getOrDefault(f.key(), shown) : shown);
         box.setResponder(text -> {
             if (text.equals(drafts.get(f.key()))) return;
@@ -376,7 +359,7 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
                 saveName();
                 var view = operationView();
                 if (view == null || !OperationColumn.applies(operationInput(view), drafts)) break;
-                var values = OperationColumn.parse(view.setpoints(), drafts, units());
+                var values = OperationColumn.parse(view.setpoints(), drafts, ClientConfig.operationUnits());
                 if (values != null) {
                     command(AssemblyNetwork.Action.APPLY, values);
                     sentApply = true;
@@ -437,33 +420,23 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
         }
     }
 
-    /** The name entry follows the column's name (another player's rename, this one's answered) while the player has not changed it. */
-    private void followName() {
-        String now = currentName();
-        if (nameShown == null || now.equals(nameShown)) return;
-        if (nameDraft != null && nameDraft.equals(nameShown) && (nameBox == null || !nameBox.isFocused())) {
-            nameDraft = now;
-            if (nameBox != null) nameBox.setValue(now);
-        }
-        nameShown = now;
-    }
-
     @Override
     protected void containerTick() {
         super.containerTick();
         follow();
         refresh();
         var operating = operationView();
-        followName();
+        // The name entry follows the column's name (another player's rename, this one's answered) while the player has not changed it.
+        nameEntry.follow();
         if (operating == null) {
-            if (apply != null) apply.active = renames();
+            if (apply != null) apply.active = nameEntry.renames();
             return;
         }
         // An entry the player has not edited follows the set points in force; Apply follows what is typed, without a rebuild.
-        var values = OperationColumn.values(operating.setpoints(), units());
+        var values = OperationColumn.values(operating.setpoints(), ClientConfig.operationUnits());
         for (var e : entries.entrySet())
             if (!edited.contains(e.getKey()) && !e.getValue().isFocused() && !e.getValue().getValue().equals(values.get(e.getKey()))) e.getValue().setValue(values.get(e.getKey()));
-        if (apply != null) apply.active = OperationColumn.applies(operationInput(operating), drafts) || renames();
+        if (apply != null) apply.active = OperationColumn.applies(operationInput(operating), drafts) || nameEntry.renames();
     }
 
     @Override
@@ -501,11 +474,11 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
             drawingBox = split.drawing();
         } else if (operating != null) {
             // The tables on the glass; where they are taller than it (a large design in a short window), it scrolls.
-            int need = OperationColumn.height(operating, units(), AssemblyScreen::lang);
+            int need = OperationColumn.height(operating, ClientConfig.operationUnits(), AssemblyScreen::lang);
             glassView.layout(box, box.right() - ScrollView.BAR, need);
             var lines = need > box.h() ? new Rect(box.x(), box.y(), box.w() - ScrollView.BAR - 2, box.h()) : box;
             canvas.clip(box);
-            OperationColumn.glass(canvas, lines, glassView.offset(), operating, units(), AssemblyScreen::lang, GuiCanvas.measure(font));
+            OperationColumn.glass(canvas, lines, glassView.offset(), operating, ClientConfig.operationUnits(), AssemblyScreen::lang, GuiCanvas.measure(font));
             canvas.unclip();
             glassView.drawBar(canvas, skin);
         } else AssemblyColumn.note(canvas, lang(view().status() == AssemblyView.Status.NO_DESIGN ? "assembly.no_design" : "assembly.operation"), box);
@@ -521,12 +494,8 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
         var strip = strip();
         skin.title(canvas, TitleStrip.TITLE_X, TitleStrip.TITLE_Y, strip.kind());
         if (strip.kind().length() < title.getString().length() && strip.plate().contains(x, y)) hovered = title.getString();
-        if (strip.name() != null && nameBox == null) {
-            String name = currentName(), shown = TitleStrip.text(name, strip.name(), GuiCanvas.measure(font));
-            int[] at = TitleStrip.textAt(strip.name());
-            skin.text(canvas, shown, at[0], at[1], Palette.TEXT);
-            if (shown.length() < name.length() && strip.name().contains(x, y)) hovered = name;
-        }
+        var nameHover = nameEntry.draw(canvas, skin, strip, font, x, y);
+        if (nameHover != null) hovered = nameHover;
         // The status once, on the message display; its detail (where the structure changed) on hover.
         var operating = operationView();
         var status = operating != null ? OperationColumn.status(operating, AssemblyScreen::lang) : AssemblyColumn.status(view(), AssemblyScreen::position, AssemblyScreen::lang);
@@ -559,7 +528,8 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
         // An open tour takes the pointer: the page under it shows no hover (P5 stage B).
         boolean touring = tour.isOpen();
         int mx = touring ? -1 : mouseX, my = touring ? -1 : mouseY;
-        super.render(g, mx, my, partialTick);
+        // The whole frame, widgets too, in one batch, as the simulator draws its own (finding C4): its fills go out in runs.
+        GuiCanvas.of(g, font).batch(() -> super.render(g, mx, my, partialTick));
         if (touring) {
             tour.render(g, font, width, height, mouseX, mouseY);
             return;

@@ -35,7 +35,9 @@ public final class V3ColumnResult {
         this.dutyLedger = dutyLedger;
         this.problem = Objects.requireNonNull(problem, "problem");
         var catalogPackage = com.wormzjl.icheme.science.material.MaterialRuntime.current().packages().get(problem.input().packageId());
-        this.datasetRevision = catalogPackage == null ? "unregistered-test-model" : catalogPackage.scientificRevision();
+        this.datasetRevision = catalogPackage == null ? "unregistered-test-model"
+                : com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo.columnIdentity(
+                        com.wormzjl.icheme.science.material.MaterialRuntime.current(), problem.input().packageId());
         this.inputDigest = Objects.requireNonNull(inputDigest, "inputDigest");
         this.acceptanceAudit = Objects.requireNonNull(acceptanceAudit, "acceptanceAudit");
         this.convergenceEvidence = Objects.requireNonNull(convergenceEvidence, "convergenceEvidence");

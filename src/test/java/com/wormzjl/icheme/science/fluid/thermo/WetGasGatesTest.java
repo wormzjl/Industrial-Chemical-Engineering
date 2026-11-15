@@ -5,6 +5,7 @@ import com.wormzjl.icheme.science.material.DerivedPairs;
 import com.wormzjl.icheme.science.thermo.HuronVidalExcess;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel;
 import com.wormzjl.icheme.science.thermo.phase.CubicPhaseEvaluator;
+import com.wormzjl.icheme.science.thermo.phase.PackageBinding;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -121,7 +122,7 @@ class WetGasGatesTest {
     private static void scan(FluidThermodynamics model) {
         var kernel = model.hydrocarbon.translated().kernel();
         List<String> species = model.hydrocarbon.species();
-        var derivation = CubicPhaseEvaluator.derived(model.catalog(), model.hydrocarbon.propertyPackage().id(), species).derivation();
+        var derivation = PackageBinding.derivedEvaluator(model.catalog(), model.hydrocarbon.propertyPackage().id(), species).derivation();
         double ceiling = model.domain().envelope().maximumTemperature();
         var ws = kernel.newWorkspace();
         var ev = kernel.newEvaluation();

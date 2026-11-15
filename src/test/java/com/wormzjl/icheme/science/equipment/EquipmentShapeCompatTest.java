@@ -61,7 +61,7 @@ class EquipmentShapeCompatTest {
                 EquipmentShape.minimumSkirt(3)));
         for (var kind : Kind.values()) {
             if (!kind.designed()) continue;
-            double size = ProcessUnit.minDiameter(kind);int length = ProcessUnit.defaultLength(kind, size);
+            double size = UnitDesign.of(kind).minSize();int length = UnitDesign.of(kind).defaultLength(size);
             shapes.add(EquipmentShape.designed(kind, size, length, Heading.WEST, ProcessUnit.defaultSupport(kind, size, length), ProcessUnit.Bank.ONE, 0));
         }
         // Shape fields 8 (batch 2026-11-03-rotating-machinery): machines' design points other than their size's.
@@ -210,9 +210,9 @@ class EquipmentShapeCompatTest {
         assertTrue(read.repairs().containsAll(List.of("front up -> north", "diameter 2.3 -> 2.5", "length 70.0 -> 64.0")), read.repairs().toString());
         // A unit's size snaps to its own grid and range.
         var cyclone = EquipmentShape.unit(Kind.CYCLONE, 2.0, 1, Heading.NORTH, 8);var unit = saved(cyclone);
-        unit.putDouble("Diameter", ProcessUnit.maxDiameter(Kind.CYCLONE) * 3);
+        unit.putDouble("Diameter", UnitDesign.of(Kind.CYCLONE).maxSize() * 3);
         var big = EquipmentShellBlockEntity.readShape(unit).shape();
-        assertEquals(ProcessUnit.maxDiameter(Kind.CYCLONE), big.diameter(), 1e-9);
+        assertEquals(UnitDesign.of(Kind.CYCLONE).maxSize(), big.diameter(), 1e-9);
     }
 
     @Test
@@ -281,7 +281,7 @@ class EquipmentShapeCompatTest {
                 retired++;assertEquals("retired_unit", read.retired());continue;
             }
             assertNotNull(read.shape());if (!read.repairs().isEmpty()) repaired++;
-            if (i % 100 == 0) assertNotEquals(0, ShapeRasterizer.stamp(read.shape()), "the repaired shape is drawn: " + read.shape());
+            if (i % 100 == 0) assertNotEquals(0, ShapeRasterizer.legacyStamp(read.shape()), "the repaired shape is drawn: " + read.shape());
         }
         assertTrue(retired > 0 && repaired > 1000, "retired " + retired + ", repaired " + repaired);
     }
@@ -426,8 +426,8 @@ class EquipmentShapeCompatTest {
                         EquipmentShape.defaultConnections(2, 6, Orientation.VERTICAL, 3, false, 2), fresh.paint(), bank, true, 2),
                 lying.imported(new ColumnDesign(new ColumnTrays(20, 15, List.of(8), List.of(21), List.of(new ColumnTrays.Pumparound(8, 6)), COMPONENTS), 6))));
         for (var kind : List.of(Kind.AIR_COOLER, Kind.PUMP)) {
-            double d = ProcessUnit.minDiameter(kind);
-            int length = ProcessUnit.defaultLength(kind, d);
+            double d = UnitDesign.of(kind).minSize();
+            int length = UnitDesign.of(kind).defaultLength(d);
             var form = VesselPlacement.Form.valueOf(kind.name());
             designs.add(new EquipmentConstructorBlockEntity.Design(d, length, form, ProcessUnit.defaultSupport(kind, d, length), fresh.placement(), trays,
                     lying.connections(), fresh.paint(), bank, true, 0));
@@ -454,8 +454,8 @@ class EquipmentShapeCompatTest {
             if (!kind.designed() || !UnitDesign.of(kind).hasDuty()) continue;
             var design = UnitDesign.of(kind);
             var form = VesselPlacement.Form.valueOf(kind.name());
-            double d = ProcessUnit.sizes(kind).getFirst();
-            var start = design.duty(d, ProcessUnit.defaultLength(kind, d));
+            double d = UnitDesign.of(kind).sizes().getFirst();
+            var start = design.duty(d, UnitDesign.of(kind).defaultLength(d));
             var points = new ArrayList<MachineDuty>();
             for (int steps : new int[]{-1000, 1, 1000})
                 for (var setting : List.of("flow", "head", "power", "exhaust")) points.add(design.step(start, setting, steps));
@@ -542,7 +542,8 @@ class EquipmentShapeCompatTest {
             fail("No corpus file of shape fields " + SHAPE_FIELDS + ": copy " + written.toAbsolutePath() + " to " + current);
         }
         try (var files = Files.list(CORPUS)) {
-            for (var file : files.sorted().toList())
+            // The shapes images read whole; the repair images (everyRepairImageReadsRepairedAndNamed) do not.
+            for (var file : files.filter(f -> f.getFileName().toString().startsWith("shapes-")).sorted().toList())
                 for (var line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
                     if (line.isBlank()) continue;
                     var entry = TagParser.parseTag(line);var read = EquipmentShellBlockEntity.readShape(entry.getCompound("Saved"));
@@ -578,5 +579,81 @@ class EquipmentShapeCompatTest {
                     assertEquals(expected, read.shape().toString(), file.toString());
                 }
         }
+    }
+
+    /** A saved name this build does not have, in a repair image: {@code NO_SUCH_} and capitals. */
+    private static final java.util.regex.Pattern UNKNOWN_NAME = java.util.regex.Pattern.compile("NO_SUCH_[A-Z_]*");
+
+    /**
+     * Every repair image (finding E10, batch 2026-11-13-codebase-review): an exchanger type this build does not have, in a
+     * shell's tag, a column shell's components, a column design and a constructor's draft, reads as standard; each repair is
+     * named, in order; and the read equals the read of the same tag saved with standard, which reads whole. The strict
+     * column-design read still refuses it.
+     */
+    @Test
+    void everyRepairImageReadsRepairedAndNamed() throws IOException, com.mojang.brigadier.exceptions.CommandSyntaxException {
+        var fresh = EquipmentConstructorBlockEntity.Design.DEFAULT;
+        int images = 0;
+        try (var files = Files.list(CORPUS)) {
+            for (var file : files.filter(f -> f.getFileName().toString().startsWith("repairs-")).sorted().toList())
+                for (var line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
+                    if (line.isBlank()) continue;
+                    images++;
+                    var entry = TagParser.parseTag(line);
+                    var saved = entry.getCompound("Saved");
+                    var standard = TagParser.parseTag(UNKNOWN_NAME.matcher(line).replaceAll("STANDARD")).getCompound("Saved");
+                    var expected = new ArrayList<String>();
+                    for (var repair : entry.getList("Repairs", net.minecraft.nbt.Tag.TAG_STRING)) expected.add(repair.getAsString());
+                    var repairs = new ArrayList<String>();
+                    var whole = new ArrayList<String>();
+                    String read, reference;
+                    switch (entry.getString("Reader")) {
+                        case "shell" -> {
+                            var shape = EquipmentShellBlockEntity.readShape(saved);
+                            assertNotNull(shape.shape(), line);
+                            repairs.addAll(shape.repairs());
+                            var twin = EquipmentShellBlockEntity.readShape(standard);
+                            whole.addAll(twin.repairs());
+                            read = shape.shape().toString();
+                            reference = twin.shape().toString();
+                        }
+                        case "column" -> {
+                            read = com.wormzjl.icheme.world.level.block.entity.ColumnDesignTags.read(saved, repairs::add).toString();
+                            reference = com.wormzjl.icheme.world.level.block.entity.ColumnDesignTags.read(standard, whole::add).toString();
+                            assertThrows(IllegalArgumentException.class, () -> com.wormzjl.icheme.world.level.block.entity.ColumnDesignTags.read(saved));
+                        }
+                        case "constructor" -> {
+                            read = EquipmentConstructorBlockEntity.readDesign(saved, fresh, repairs::add).toString();
+                            reference = EquipmentConstructorBlockEntity.readDesign(standard, fresh, whole::add).toString();
+                        }
+                        default -> throw new AssertionError(file + ": reader " + entry.getString("Reader"));
+                    }
+                    assertEquals(expected, repairs, file + ": " + line);
+                    assertTrue(whole.isEmpty(), file + ": " + whole);
+                    assertEquals(reference, read, file + ": " + line);
+                }
+        }
+        assertEquals(4, images, "the shell, column shell, column design and constructor images");
+    }
+
+    /** A malformed exchanger configuration (a field of the wrong type, too many coolers) is refused, as before E10; only a name is repaired. */
+    @Test
+    void aMalformedExchangerConfigurationIsStillRefused() {
+        var parent = new CompoundTag();
+        parent.putInt("Exchangers", 3);
+        assertThrows(IllegalArgumentException.class, () -> com.wormzjl.icheme.world.level.block.entity.ColumnDesignTags.readExchangers(parent));
+        var exchangers = new CompoundTag();
+        exchangers.putString("Condenser", "STANDARD");
+        exchangers.putInt("Trim", 1);
+        exchangers.put("Coolers", new net.minecraft.nbt.ListTag());
+        parent.put("Exchangers", exchangers);
+        assertThrows(IllegalArgumentException.class, () -> com.wormzjl.icheme.world.level.block.entity.ColumnDesignTags.readExchangers(parent));
+        exchangers.putString("Trim", "STANDARD");
+        var coolers = new net.minecraft.nbt.ListTag();
+        for (int i = 0; i <= ColumnTrays.MAX_PUMPAROUNDS; i++) coolers.add(net.minecraft.nbt.StringTag.valueOf("STANDARD"));
+        exchangers.put("Coolers", coolers);
+        assertThrows(IllegalArgumentException.class, () -> com.wormzjl.icheme.world.level.block.entity.ColumnDesignTags.readExchangers(parent));
+        coolers.remove(0);
+        assertEquals(ColumnTrays.MAX_PUMPAROUNDS, com.wormzjl.icheme.world.level.block.entity.ColumnDesignTags.readExchangers(parent).coolers().size());
     }
 }

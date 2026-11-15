@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.client;
 
 import com.wormzjl.icheme.IChemE;
+import com.wormzjl.icheme.client.fx.state.ClientWatch;
 import com.wormzjl.icheme.network.FluidNetwork;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.ShapeRasterizer;
@@ -30,8 +31,8 @@ import org.jetbrains.annotations.Nullable;
 @EventBusSubscriber(modid=IChemE.MOD_ID,value=Dist.CLIENT)
 public final class DriverSounds {
     private static final Set<EquipmentShellBlockEntity> CELLS=Collections.newSetFromMap(new WeakHashMap<>());
-    private static final Set<BlockPos> WATCHED=new HashSet<>();
-    private static final Map<BlockPos,Double> SPEEDS=new HashMap<>();
+    /** The watched drivers by origin and their speed shares (C11: the one client watch, {@link ClientWatch}). */
+    private static final ClientWatch<BlockPos,Double> WATCH=new ClientWatch<>(FluidNetwork.MAXIMUM_WATCHED,DriverSounds::request);
     private static ClientLevel world;
     private static int age;
     private DriverSounds(){}
@@ -39,8 +40,7 @@ public final class DriverSounds {
     public static void track(BlockEntity entity){if(entity instanceof EquipmentShellBlockEntity shell){if(origin(shell)!=null)CELLS.add(shell);else CELLS.remove(shell);}}
     public static void forget(BlockEntity entity){
         if(!(entity instanceof EquipmentShellBlockEntity shell)||!CELLS.remove(shell))return;
-        var gone=WATCHED.stream().filter(o->shell(o)==null).toList();
-        WATCHED.removeAll(gone);gone.forEach(DriverSounds::drop);if(!gone.isEmpty())request(List.of(),gone);
+        var gone=WATCH.forget(o->shell(o)==null);if(!gone.isEmpty())request(List.of(),gone);
     }
     /**
      * The entry point for the server's shaft trains (W3): the driver whose structure has its origin at {@code origin}
@@ -48,10 +48,10 @@ public final class DriverSounds {
      * watch. A stopped driver, or one at no speed, is silent.
      */
     public static void accept(BlockPos origin,boolean running,double speed) {
-        var shell=WATCHED.contains(origin)?shell(origin):null;
+        var shell=WATCH.watches(origin)?shell(origin):null;
         if(shell==null)return;
         double share=running&&speed>0?Math.min(speed,1):0;
-        var before=SPEEDS.put(origin,share);
+        var before=WATCH.accept(origin,share);
         if(before!=null&&(before>0)!=(share>0))crossing(shell,share>0);
     }
     /**
@@ -80,7 +80,7 @@ public final class DriverSounds {
     }
     /** The driver watch request (W3): the drivers near the player in, the ones out of reach out. */
     private static void request(List<BlockPos> watch,List<BlockPos> unwatch){FluidNetwork.requestDrivers(watch,unwatch);}
-    public static void clear(){SPEEDS.clear();WATCHED.clear();CELLS.clear();world=null;age=0;}
+    public static void clear(){WATCH.clear();CELLS.clear();world=null;age=0;}
     /** A driver structure's origin, where this is its controller cell; otherwise null. */
     private static @Nullable BlockPos origin(EquipmentShellBlockEntity shell) {
         var shape=shell.shape();var origin=shell.origin();
@@ -93,12 +93,10 @@ public final class DriverSounds {
         for(var cell:CELLS)if(cell.getLevel()==level&&origin.equals(origin(cell)))return cell;
         return null;
     }
-    private static void drop(BlockPos origin){SPEEDS.remove(origin);}
     @SubscribeEvent public static void tick(ClientTickEvent.Post event) {
         var mc=Minecraft.getInstance();
         if(world!=mc.level){
-            if(mc.getConnection()!=null&&!WATCHED.isEmpty())request(List.of(),List.copyOf(WATCHED));
-            SPEEDS.clear();WATCHED.clear();
+            WATCH.reset(mc.getConnection()!=null);
             CELLS.removeIf(cell->cell.getLevel()!=mc.level);world=mc.level;age=0;
         }
         if(mc.level==null||mc.player==null||mc.getConnection()==null||age++%20!=0)return;
@@ -107,12 +105,8 @@ public final class DriverSounds {
             var origin=origin(cell);
             if(origin!=null&&cell.getLevel()==mc.level&&cell.getBlockPos().distToCenterSqr(point)<=(FluidNetwork.MOVER_RANGE-8)*(FluidNetwork.MOVER_RANGE-8))near.add(origin);
         }
-        near.sort(Comparator.comparingDouble((BlockPos o)->o.distToCenterSqr(point)).thenComparingLong(BlockPos::asLong));
-        var wanted=new LinkedHashSet<BlockPos>();for(var origin:near){if(wanted.size()>=FluidNetwork.MAXIMUM_WATCHED)break;wanted.add(origin);}
-        // Registration is queued: retry until a newly placed driver's first speed publication arrives.
-        var unwatch=WATCHED.stream().filter(o->!wanted.contains(o)).toList();var watch=wanted.stream().filter(o->!WATCHED.contains(o)||!SPEEDS.containsKey(o)).toList();
-        WATCHED.removeAll(unwatch);unwatch.forEach(DriverSounds::drop);WATCHED.addAll(watch);
-        if(!watch.isEmpty()||!unwatch.isEmpty())request(watch,unwatch);
+        // Registration is queued: the watch asks again until a newly placed driver's first speed publication arrives.
+        WATCH.request(near,Comparator.comparingDouble((BlockPos o)->o.distToCenterSqr(point)).thenComparingLong(BlockPos::asLong));
     }
     /**
      * The running drivers' sources for the budget (S4 A): each at the centre of its cells (a motor's body and coupling, a
@@ -120,8 +114,8 @@ public final class DriverSounds {
      * ({@code SoundBudget.level}), its pitch {@link UnitDesign#soundPitch(EquipmentShape, double)}.
      */
     public static void emitters(net.minecraft.world.phys.Vec3 point,List<com.wormzjl.icheme.client.fx.sound.SoundBudget.Emitter> into) {
-        for(var e:SPEEDS.entrySet()) {
-            var origin=e.getKey();double speed=e.getValue();var shell=speed>0&&WATCHED.contains(origin)?shell(origin):null;
+        for(var e:WATCH.states().entrySet()) {
+            var origin=e.getKey();double speed=e.getValue();var shell=speed>0&&WATCH.watches(origin)?shell(origin):null;
             if(shell==null||shell.shape()==null)continue;
             var cells=ShapeRasterizer.layout(shell.shape()).shell();double cx=0,cy=0,cz=0;
             for(var cell:cells){cx+=cell.x();cy+=cell.y();cz+=cell.z();}

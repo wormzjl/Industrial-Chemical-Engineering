@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.science.thermo.phase;
 
 import com.wormzjl.icheme.science.thermo.TangentPlaneStability;
+import com.wormzjl.icheme.science.thermo.PhaseIdentification;
 import java.util.List;
 import java.util.Objects;
 
@@ -200,6 +201,44 @@ public final class EquilibriumResult {
         }
     }
 
+    /**
+     * Why an answer is not one, typed: set where the answer is built, beside its detail, whose text it does not change.
+     * The detail's typed prefixes ({@link #UNSTABLE_PRODUCT}, {@link #UNRESOLVED_PRODUCT}, {@link #CRYSTAL_PHASES},
+     * {@link #CRYSTAL_STEP}) stay for the readers outside the engine; inside it the kind is read, never the text. A failure
+     * inside the declared critical band keeps its own kind; the band is the flag {@link #failedInCriticalBand()} (the
+     * detail then starts with {@link #CRITICAL_BAND} before the failure's own text).
+     */
+    public enum FailureKind {
+        /** A converged answer. */
+        NONE,
+        /** An unsupported request ({@link #reason()} says which), other than {@link #CRYSTAL_PHASES}. */
+        UNSUPPORTED,
+        /** The equation of state or a property model refused a trial state of the solve (a {@code ThermoRefusal}). */
+        REFUSED,
+        /**
+         * Another exception inside the solve: an argument, layout or invariant failure of the engine itself. Answered (the
+         * detail reads as a refused evaluation, as before this kind existed) so that a defect does not take down the
+         * caller's solve, and typed so that it is not read as a refusal.
+         */
+        INTERNAL,
+        /** The request's state lies outside the numerical box. */
+        OUTSIDE_BOX,
+        /** The TP calculation did not converge: the feed's stability test, the two-phase flash or its Newton finish, the three-slot system. */
+        FLASH,
+        /** {@link #UNSTABLE_PRODUCT}: a converged split whose product the stability re-check proved unstable. */
+        UNSTABLE_PRODUCT,
+        /** {@link #UNRESOLVED_PRODUCT}: a converged split whose product's stability the re-check left unresolved. */
+        UNRESOLVED_PRODUCT,
+        /** A crystal solve (one crystal or two) did not converge. */
+        CRYSTAL_SOLVE,
+        /** {@link #CRYSTAL_PHASES}: a crystal beside a phase set the engine does not implement (an unsupported answer). */
+        CRYSTAL_PHASES,
+        /** {@link #CRYSTAL_STEP}: a crystal step of one major species that the pure species' step does not answer. */
+        CRYSTAL_STEP,
+        /** A PH or UV search ended without an answer (its budget, a step no state of the model has, the window). */
+        SEARCH
+    }
+
     /** The prefix of the detail of a not-converged result inside the declared critical band. */
     public static final String CRITICAL_BAND = "CRITICAL_BAND";
 
@@ -247,6 +286,8 @@ public final class EquilibriumResult {
     private final Coverage coverage;
     private final Diagnostics diagnostics;
     private final Deposition deposition;
+    private final FailureKind failureKind;
+    private final boolean failedInCriticalBand;
 
     public EquilibriumResult(EquilibriumRequest.Specification specification, Status status, UnsupportedReason reason,
                              String detail, ThermoIdentity identity,
@@ -257,6 +298,9 @@ public final class EquilibriumResult {
     }
 
     /**
+     * A converged or unsupported result: its failure kind is {@link FailureKind#NONE} or {@link FailureKind#UNSUPPORTED}
+     * by its status. A not-converged result names its kind ({@link #notConverged}); this constructor refuses one.
+     *
      * @param deposition the gas-solid solve's numbers of a converged result with a crystal among its phases (P4 stage 2a;
      *        the engine attaches one to every such answer), otherwise {@code null}
      */
@@ -265,6 +309,23 @@ public final class EquilibriumResult {
                              PhaseCompetition competition, Classification classification, List<PhaseAmounts> phases,
                              List<PhaseState> coexisting, Coverage coverage, Diagnostics diagnostics,
                              Deposition deposition) {
+        this(specification, status, reason, detail, identity, competition, classification, phases, coexisting, coverage,
+                diagnostics, deposition, status == Status.CONVERGED ? FailureKind.NONE
+                        : status == Status.UNSUPPORTED ? FailureKind.UNSUPPORTED : null, false);
+    }
+
+    /**
+     * The engine's builders: a result with its failure kind, and whether its failure lies in the declared critical band.
+     *
+     * @param failureKind {@link FailureKind#NONE} exactly for a converged result; {@link FailureKind#UNSUPPORTED} or
+     *        {@link FailureKind#CRYSTAL_PHASES} for an unsupported one
+     * @param failedInCriticalBand whether a not-converged result's detail is typed {@link #CRITICAL_BAND}
+     */
+    EquilibriumResult(EquilibriumRequest.Specification specification, Status status, UnsupportedReason reason,
+                      String detail, ThermoIdentity identity,
+                      PhaseCompetition competition, Classification classification, List<PhaseAmounts> phases,
+                      List<PhaseState> coexisting, Coverage coverage, Diagnostics diagnostics,
+                      Deposition deposition, FailureKind failureKind, boolean failedInCriticalBand) {
         this.deposition = deposition;
         this.specification = Objects.requireNonNull(specification, "specification");
         this.status = Objects.requireNonNull(status, "status");
@@ -312,6 +373,15 @@ public final class EquilibriumResult {
             }
             if (coverage.grade() != CoverageGrade.UNAVAILABLE) throw new IllegalArgumentException(status + " is graded " + CoverageGrade.UNAVAILABLE);
         }
+        if (failureKind == null) throw new IllegalArgumentException("A not-converged result names its failure kind");
+        if ((status == Status.CONVERGED) != (failureKind == FailureKind.NONE)
+                || status == Status.UNSUPPORTED && failureKind != FailureKind.UNSUPPORTED && failureKind != FailureKind.CRYSTAL_PHASES
+                || status == Status.NOT_CONVERGED && (failureKind == FailureKind.UNSUPPORTED || failureKind == FailureKind.CRYSTAL_PHASES)) {
+            throw new IllegalArgumentException("A " + status + " result has no failure kind " + failureKind);
+        }
+        if (failedInCriticalBand && status != Status.NOT_CONVERGED) throw new IllegalArgumentException("Only a failure lies in the critical band");
+        this.failureKind = failureKind;
+        this.failedInCriticalBand = failedInCriticalBand;
     }
 
     public static EquilibriumResult unsupported(EquilibriumRequest.Specification specification, ThermoIdentity identity,
@@ -321,16 +391,22 @@ public final class EquilibriumResult {
                 new Coverage(CoverageGrade.UNAVAILABLE, reason + ": " + detail), Diagnostics.NONE);
     }
 
+    /**
+     * A not-converged result of failure kind {@code failureKind}; {@code failedInCriticalBand} when its detail is typed
+     * {@link #CRITICAL_BAND}.
+     */
     public static EquilibriumResult notConverged(EquilibriumRequest.Specification specification, ThermoIdentity identity,
-                                                 PhaseCompetition competition, String detail, Diagnostics diagnostics) {
+                                                 PhaseCompetition competition, FailureKind failureKind,
+                                                 boolean failedInCriticalBand, String detail, Diagnostics diagnostics) {
         return new EquilibriumResult(specification, Status.NOT_CONVERGED, null, detail, identity, competition,
-                Classification.NONE, List.of(), List.of(), new Coverage(CoverageGrade.UNAVAILABLE, detail), diagnostics);
+                Classification.NONE, List.of(), List.of(), new Coverage(CoverageGrade.UNAVAILABLE, detail), diagnostics, null,
+                failureKind, failedInCriticalBand);
     }
 
     /** This result with another coverage (the engine grades an answer outside a data range, owner rule of 2026-10-16). */
     EquilibriumResult withCoverage(Coverage coverage) {
         return new EquilibriumResult(specification, status, reason, detail, identity, competition, classification, phases,
-                coexisting, coverage, diagnostics, deposition);
+                coexisting, coverage, diagnostics, deposition, failureKind, failedInCriticalBand);
     }
 
     public EquilibriumRequest.Specification specification() { return specification; }
@@ -339,6 +415,10 @@ public final class EquilibriumResult {
     /** The typed reason of an {@link Status#UNSUPPORTED} result, {@code null} otherwise. */
     public UnsupportedReason reason() { return reason; }
     public String detail() { return detail; }
+    /** Why this result is no answer ({@link FailureKind#NONE} for a converged one): read this, not the detail's text. */
+    public FailureKind failureKind() { return failureKind; }
+    /** Whether a not-converged result failed inside the declared critical band (its detail starts with {@link #CRITICAL_BAND}). */
+    public boolean failedInCriticalBand() { return failedInCriticalBand; }
     public ThermoIdentity identity() { return identity; }
     /** The competition the answer covers; a fluid-only answer says nothing about solids. */
     public PhaseCompetition competition() { return competition; }

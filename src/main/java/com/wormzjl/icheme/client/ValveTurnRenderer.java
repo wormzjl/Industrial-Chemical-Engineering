@@ -24,9 +24,7 @@ import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Draws a hand valve's turn ({@link ValveTurns}; owner 2026-11-10: "add turning sound and animation for hand valve"):
@@ -49,7 +47,7 @@ public final class ValveTurnRenderer {
     private record Look(LineGeometry.Key key, RenderDetail detail, ValveTurns.Kind kind) {
     }
 
-    private static final Map<Look, List<Mesh.Polygon>> PARTS = new HashMap<>();
+    private static final com.wormzjl.icheme.science.equipment.BoundedCache<Look, List<Mesh.Polygon>> PARTS = new com.wormzjl.icheme.science.equipment.BoundedCache<>(64);
     private static @Nullable Level seen;
 
     private ValveTurnRenderer() {
@@ -133,7 +131,6 @@ public final class ValveTurnRenderer {
         double now = (level.getGameTime() + event.getPartialTick().getGameTimeDeltaPartialTick(false)) / 20.0;
         var camera = event.getCamera().getPosition();
         var detail = ClientConfig.renderDetail();
-        if (PARTS.size() > 64) PARTS.clear();
         try (var draws = new MachineAnimation.Draws(event)) {
             for (long at : positions) {
                 var position = BlockPos.of(at);

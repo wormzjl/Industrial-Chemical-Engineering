@@ -36,30 +36,15 @@ final class AdsorberDesign extends UnitDesign {
     /** The platform's front edge (frame z), the headers' ends inside the unit's front and back faces, the bottom headers' row, the concrete rings' height, m. */
     static final double FRONT = .5, END = .35, BOTTOM_ROW = .5, PLINTH = .15;
 
-    @Override
-    public double minSize() {
-        return 1;
-    }
-
-    @Override
-    public double maxSize() {
-        return 4.6;
-    }
-
-    @Override
-    public double sizeStep() {
-        return .2;
-    }
-
-    /** The beds: 1 to 4 (1 + 1 is the usual dryer, 2 + 1 the larger; a single bed stands for a batch guard bed). */
-    @Override
-    public int minLength(double size) {
-        return 1;
-    }
-
-    @Override
-    public int maxLength(double size) {
-        return 4;
+    AdsorberDesign() {
+        // minLength: The beds: 1 to 4 (1 + 1 is the usual dryer, 2 + 1 the larger; a single bed stands for a batch
+        // guard bed).
+        // Computed in its overrides: minSupport.
+        super(new Sizes(1, 4.6, .2,
+                1, 4,
+                Sizes.COMPUTED, 4,
+                Orientation.VERTICAL, "adsorber.diameter", "adsorber.beds", "adsorber.skirt", false,
+                1));
     }
 
     /** A new set: two beds, one adsorbing while the other regenerates (survey default 1 + 1). */
@@ -79,35 +64,10 @@ final class AdsorberDesign extends UnitDesign {
         return Math.max(2, (int) Math.ceil(size / 4 + .55 * main(size) + .82 - 1e-9));
     }
 
-    @Override
-    public int maxSupport() {
-        return 4;
-    }
-
     /** The survey's 1.5 + 0.25 D. */
     @Override
     public int defaultSupport(double size, int length) {
         return Math.max(minSupport(size, length), Math.min(maxSupport(), (int) Math.round(1.5 + .25 * size)));
-    }
-
-    @Override
-    public Orientation orientation() {
-        return Orientation.VERTICAL;
-    }
-
-    @Override
-    public String sizeRow() {
-        return "adsorber.diameter";
-    }
-
-    @Override
-    public String lengthRow() {
-        return "adsorber.beds";
-    }
-
-    @Override
-    public String supportRow() {
-        return "adsorber.skirt";
     }
 
     @Override

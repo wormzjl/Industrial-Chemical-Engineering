@@ -16,7 +16,7 @@ import static com.wormzjl.icheme.science.flowsheet.sizing.Limit.Rank.PAID;
 import static com.wormzjl.icheme.science.flowsheet.sizing.Limit.Rank.SURPLUS;
 import static com.wormzjl.icheme.science.flowsheet.sizing.Limit.Rank.QUIET;
 
-import com.wormzjl.icheme.science.column.operation.ColumnSolve;
+import com.wormzjl.icheme.science.plant.column.ColumnSolve;
 import com.wormzjl.icheme.science.equipment.ColumnTrays;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.PipeSizes;
@@ -29,6 +29,8 @@ import com.wormzjl.icheme.science.fluid.network.FlowControl;
 import com.wormzjl.icheme.science.fluid.network.HeatCurve;
 import com.wormzjl.icheme.science.fluid.solver.PhaseLayout;
 import com.wormzjl.icheme.science.machine.Motor;
+import com.wormzjl.icheme.science.machine.SteamEjector;
+import com.wormzjl.icheme.science.equipment.design.UnitRatings;
 
 /**
  * The sizing stage's limits, one row a limit (batch 2026-11-02-process-simulator, {@code SIZING_PLAN.md} sections 3.3, 3.4 and
@@ -99,7 +101,8 @@ public enum Limit {
     STEAM_SUPERHEATED_SPEED(SHOULD, most(60), "m/s", "[SPX]"),
     STEAM_SUPERHEATED_DROP(SHOULD, most(.2), "bar/100 m", "[SPX]"),
     STEAM_SUPERHEATED_MOMENTUM(SHOULD, most(15000), "kg/m·s²", "[KARM]"),
-    VACUUM_SPEED(SHOULD, most(Axis.ABSOLUTE, rising(.05, 60, .25), rest(60)), "m/s", "[KARM]"),
+    /** The world's ejector's numbers ({@link SteamEjector#speed}): 60 m/s from 0.05 bara up, {@code 60 (0.05 / P)^0.25} below. */
+    VACUUM_SPEED(SHOULD, most(Axis.ABSOLUTE, rising(SteamEjector.SPEED_EDGE, SteamEjector.SPEED, SteamEjector.SPEED_EXPONENT), rest(SteamEjector.SPEED)), "m/s", "[KARM]"),
     /** A share of the absolute pressure, over the whole line, so it reads the line's length. */
     VACUUM_DROP(SHOULD, most(5), "%", "[BRAN]"),
     /** A floor: a slower flow slugs. */
@@ -256,7 +259,7 @@ public enum Limit {
     /** The charge's volume over the pot's: the pot holds no more. */
     STILL_VOLUME(MUST, most(100), "%", "World: the pot's volume"),
     /** The usual charge, {@code BatchStill.FILL}: a fuller pot boils over into its neck (plan section 6, item 6). */
-    STILL_FILL(SHOULD, most(100 * com.wormzjl.icheme.science.fluid.network.BatchStill.FILL), "%", "This plan: `BatchStill.FILL`"),
+    STILL_FILL(SHOULD, most(100 * com.wormzjl.icheme.science.plant.still.BatchStill.FILL), "%", "This plan: `BatchStill.FILL`"),
     /** The batch's time at the design flow against the cycle: a still that takes longer cannot keep up with its inlet. */
     STILL_BATCH(MUST, given(Sense.MOST), "h", "World: `BatchStill.step`"),
     /** The cycle over the batch's time, as {@link #AUTO_SPARE}'s 20 %: the owner's "always have enough excess". */
@@ -266,7 +269,7 @@ public enum Limit {
     /** The share of the batch the column runs under its flood, F {@code BatchStill.FLOOD_F_FACTOR}; past it the firing is held. The same at every pot. */
     STILL_FLOOD(MUST, least(100), "%", "World: `BatchStill.FLOOD_F_FACTOR`", QUIET),
     /** The column's highest F-factor against its design, {@code BatchStill.DESIGN_F_FACTOR} at the full boil-up. The same at every pot. */
-    STILL_F_FACTOR(SHOULD, most(com.wormzjl.icheme.science.fluid.network.BatchStill.DESIGN_F_FACTOR), "Pa^0.5", "This plan: `BatchStill.DESIGN_F_FACTOR`", QUIET),
+    STILL_F_FACTOR(SHOULD, most(com.wormzjl.icheme.science.plant.still.BatchStill.DESIGN_F_FACTOR), "Pa^0.5", "This plan: `BatchStill.DESIGN_F_FACTOR`", QUIET),
 
     // ---- Steam turbines (batch 2026-11-03-rotating-machinery, W8, D43) ----
     /** The rated power over the shaft power at design flow, at least a motor's {@link Motor#SPARE}: the owner's "always have enough excess". */
@@ -329,7 +332,7 @@ public enum Limit {
 
     private static double largestHeater(EquipmentShape.Kind kind) {
         var design = UnitDesign.of(kind);
-        return ProcessUnit.heaterDuty(kind, design.maxSize(), design.maxLength(design.maxSize()));
+        return UnitRatings.heaterDuty(kind, design.maxSize(), design.maxLength(design.maxSize()));
     }
 
     private static Bound size(EquipmentShape.Kind kind) {

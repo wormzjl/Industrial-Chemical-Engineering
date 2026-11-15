@@ -1,12 +1,12 @@
 package com.wormzjl.icheme.runtime.fluid;
 
-import com.wormzjl.icheme.science.column.operation.ColumnCycle.Account;
-import com.wormzjl.icheme.science.column.operation.ColumnSolve;
-import com.wormzjl.icheme.science.column.operation.Condition;
-import com.wormzjl.icheme.science.column.operation.DriftBands;
-import com.wormzjl.icheme.science.column.operation.Port;
-import com.wormzjl.icheme.science.column.operation.Setpoints;
-import com.wormzjl.icheme.science.column.operation.SplitTable;
+import com.wormzjl.icheme.science.plant.column.ColumnCycle.Account;
+import com.wormzjl.icheme.science.plant.column.ColumnSolve;
+import com.wormzjl.icheme.science.plant.column.Condition;
+import com.wormzjl.icheme.science.plant.column.DriftBands;
+import com.wormzjl.icheme.science.plant.column.Port;
+import com.wormzjl.icheme.science.plant.column.Setpoints;
+import com.wormzjl.icheme.science.plant.column.SplitTable;
 import com.wormzjl.icheme.science.fluid.network.ConservativeTransport;
 import com.wormzjl.icheme.science.fluid.network.FlowControl;
 import com.wormzjl.icheme.science.fluid.network.PassiveIntervalSolver;
@@ -50,14 +50,13 @@ class ColumnRunTest {
     private static PhysicalFluidTopology.Device port(long id,int x,Kind kind,Direction toward,PipeResistanceGeometry g){return port(id,x,0,kind,toward,g);}
     private static PhysicalFluidTopology.Device port(long id,int x,int z,Kind kind,Direction toward,PipeResistanceGeometry g) {
         var at=new PhysicalFluidTopology.Position(EventPathWorld.DIM,x,64,z,PhysicalFluidTopology.PORT_LANE);
-        return new PhysicalFluidTopology.Device(id,at,kind,toward,g.geometry,new FlowControl.Passive(),List.of(new PhysicalFluidTopology.Port(at,toward,PassiveNetwork.PhasePort.BULK)),
-                true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,null,0);
+        return PhysicalFluidTopology.Device.builder(id,at,kind,toward,g.geometry,new FlowControl.Passive()).ports(List.of(new PhysicalFluidTopology.Port(at,toward,PassiveNetwork.PhasePort.BULK))).build();
     }
     /** A heat side from x = 2 to 4 along row {@code z}. */
     private static PhysicalFluidTopology.Device heatSide(long id,int z,com.wormzjl.icheme.science.fluid.network.PipeResistance.Geometry passage,HeatUnit heat) {
         var in=new PhysicalFluidTopology.Position(EventPathWorld.DIM,2,64,z);var out=new PhysicalFluidTopology.Position(EventPathWorld.DIM,4,64,z);
         var ports=List.of(new PhysicalFluidTopology.Port(in,Direction.WEST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.INLET),new PhysicalFluidTopology.Port(out,Direction.EAST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.OUTLET));
-        return new PhysicalFluidTopology.Device(id,in,Kind.HEAT_SIDE,Direction.NORTH,passage,new FlowControl.Passive(),ports,true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,heat);
+        return PhysicalFluidTopology.Device.builder(id,in,Kind.HEAT_SIDE,Direction.NORTH,passage,new FlowControl.Passive()).ports(ports).heat(heat).build();
     }
     private record PipeResistanceGeometry(com.wormzjl.icheme.science.fluid.network.PipeResistance.Geometry geometry) {}
     private static double sum(double[] n){double s=0;for(double v:n)s+=v;return s;}
@@ -122,12 +121,12 @@ class ColumnRunTest {
         long last=steamPort;
         for(long t:tubes) {
             long s=t+1;int z=4+8*(int)((t-tube)/2);last=s;
-            var passage=com.wormzjl.icheme.science.equipment.HeatSides.tubePassage(.5,3);double area=com.wormzjl.icheme.science.equipment.ProcessUnit.tubeSurface(.5,3);
+            var passage=com.wormzjl.icheme.science.equipment.HeatSides.tubePassage(.5,3);double area=com.wormzjl.icheme.science.equipment.design.UnitRatings.tubeSurface(.5,3);
             edits.add(new WorldTopologyLedger.Edit(t,new WorldTopologyLedger.Registration(heatSide(t,z,passage,new HeatUnit(com.wormzjl.icheme.science.equipment.HeatSides.Unit.EXCHANGER,com.wormzjl.icheme.science.equipment.HeatSides.Side.TUBE,area,s)),new FluidDeviceSpec(1,300,300000,water),0)));
             edits.add(new WorldTopologyLedger.Edit(s,new WorldTopologyLedger.Registration(heatSide(s,z+4,passage,new HeatUnit(com.wormzjl.icheme.science.equipment.HeatSides.Unit.EXCHANGER,com.wormzjl.icheme.science.equipment.HeatSides.Side.SHELL,area,t)).withSuspendedBy(unit),FluidDeviceSpec.nitrogen(world.catalog),0)));
         }
         if(utility!=null) {
-            var passage=com.wormzjl.icheme.science.equipment.HeatSides.tubePassage(.5,3);double area=com.wormzjl.icheme.science.equipment.ProcessUnit.tubeSurface(.5,3);
+            var passage=com.wormzjl.icheme.science.equipment.HeatSides.tubePassage(.5,3);double area=com.wormzjl.icheme.science.equipment.design.UnitRatings.tubeSurface(.5,3);
             edits.add(new WorldTopologyLedger.Edit(utilityTube,new WorldTopologyLedger.Registration(heatSide(utilityTube,20,passage,new HeatUnit(com.wormzjl.icheme.science.equipment.HeatSides.Unit.EXCHANGER,com.wormzjl.icheme.science.equipment.HeatSides.Side.TUBE,area,utilityShell)),new FluidDeviceSpec(1,utilityTemperature,utilityPressure,water),0)));
             edits.add(new WorldTopologyLedger.Edit(utilityShell,new WorldTopologyLedger.Registration(heatSide(utilityShell,24,passage,new HeatUnit(com.wormzjl.icheme.science.equipment.HeatSides.Unit.EXCHANGER,com.wormzjl.icheme.science.equipment.HeatSides.Side.SHELL,area,utilityTube)).withSuspendedBy(unit),FluidDeviceSpec.nitrogen(world.catalog),0)));
             last=utilityShell;
@@ -142,7 +141,7 @@ class ColumnRunTest {
         if(pumpMember){pump=last+1;last=pump;members=new ColumnUnit.Members(members.fans(),List.of(pump),List.of());
             var in=new PhysicalFluidTopology.Position(EventPathWorld.DIM,2,64,32);var out=new PhysicalFluidTopology.Position(EventPathWorld.DIM,4,64,32);
             var ports=List.of(new PhysicalFluidTopology.Port(in,Direction.WEST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.SUCTION),new PhysicalFluidTopology.Port(out,Direction.EAST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.DISCHARGE));
-            var casing=new PhysicalFluidTopology.Device(pump,in,Kind.PUMP,Direction.EAST,com.wormzjl.icheme.science.equipment.HeatSides.tubePassage(.5,3),new FlowControl.Machine(REFLUX_PUMP,1,true),ports,true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,null);
+            var casing=PhysicalFluidTopology.Device.builder(pump,in,Kind.PUMP,Direction.EAST,com.wormzjl.icheme.science.equipment.HeatSides.tubePassage(.5,3),new FlowControl.Machine(REFLUX_PUMP,1,true)).ports(ports).build();
             edits.add(new WorldTopologyLedger.Edit(pump,new WorldTopologyLedger.Registration(casing.withSuspendedBy(unit),FluidDeviceSpec.nitrogen(world.catalog),0)));}
         world.ledger.column(new ColumnUnit(unit,new PhysicalFluidTopology.Position(EventPathWorld.DIM,6,70,0),true,setpoints,stations,ColumnUnit.Totals.empty(m),tubes,null,false,airSurface,utilities,members));
         world.registry.submit(edits,last+1,null);
@@ -526,10 +525,10 @@ class ColumnRunTest {
         assertEquals(last.products().getFirst().total()/5,product.rate(),1e-12);
         assertTrue(product.held()>0,"the outlet's buffer holds product: "+product.held());
         var condenser=view.duties().getFirst();
-        assertEquals(com.wormzjl.icheme.science.column.operation.OperationView.DutyKind.CONDENSER,condenser.kind());
+        assertEquals(com.wormzjl.icheme.science.plant.column.OperationView.DutyKind.CONDENSER,condenser.kind());
         assertEquals(last.condenser()/5,condenser.booked(),1e-9*Math.abs(condenser.booked()));
         world.ledger.column(before.withStations(false,before.stations().stream().map(s->s.withDevice(0)).toList()));
-        assertEquals(com.wormzjl.icheme.science.column.operation.OperationView.Phase.STOPPED,ops.view(unit,now,valve->.5).phase(),"a stopped unit reads stopped");
+        assertEquals(com.wormzjl.icheme.science.plant.column.OperationView.Phase.STOPPED,ops.view(unit,now,valve->.5).phase(),"a stopped unit reads stopped");
     }
     /**
      * The determinism gate (plan section 9): the same world with its jobs completing three ticks later books the same feed,
@@ -543,6 +542,101 @@ class ColumnRunTest {
         assertArrayEquals(ta.produced().moles(),tb.produced().moles(),"the products");
         assertEquals(ta.condenser(),tb.condenser(),"the condenser duty");
         assertArrayEquals(a.counting().moles.get(a.product()),b.counting().moles.get(b.product()),"the product given downstream");
+    }
+    /**
+     * The certified port's determinism gate (codebase review R-ST4, item 1), with the coordinator's certificates on (the rig's
+     * defaults): the condenser rig with an air-cooled condenser, run twice. Its water island carries steady water and takes
+     * no heat, so it certifies and nothing wakes it, and every cycle waits for it through the cycle's tick less the fence,
+     * after the feed's island (the utility sides are looked at after the stations). In the second run every job of the
+     * feed's island takes 30 ticks more for 1000 ticks once the water certified, so those cycles look 30 ticks later.
+     * <ul>
+     * <li>Before R-ST4 the wait ({@code IslandCoordinator.through}) materialised the certified water to the moment the cycle
+     * looked: over spans that ended 30 ticks later in the second run, so the water's replayed spans, and its booked amounts
+     * and energies split at them, differed. Now it is materialised to the tick the cycle needs.</li>
+     * <li>The ports' wakes act as of their ticks ({@code IslandCoordinator.movedAt}), so a port island that certifies a few
+     * ticks after a wake is woken all the same.</li>
+     * </ul>
+     * At a tick both runs have committed alike the replayed spans, the totals, every boundary's booking and the heat in
+     * transit are the same bit for bit.
+     */
+    @Test void aCertifiedPortIslandIsMaterialisedAtTheCyclesTickWhateverItsOtherPortsJobsTake() {
+        waterShare=0;productTemperature=305;
+        var a=rig(0,null,false,false,true);var b=rig(0,null,false,false,true);
+        // Each island's replayed spans, by the tick each ended at, as the replay listener hears them.
+        var replays=new ArrayList<Map<Long,List<Long>>>();
+        for(var r:List.of(a,b)){var spans=new TreeMap<Long,List<Long>>();replays.add(spans);
+            r.world().coordinator.onReplayed(changed->{for(var s:changed)spans.computeIfAbsent(s.id(),k->new ArrayList<>()).add(s.clock().committedTick());});}
+        Long water=null;
+        while(water==null||a.world().coordinator.observe(water).certificate().isEmpty()) {
+            assertTrue(a.world().ledger.onlineTick()<4000,"the water island certifies at rest");
+            a.world().runTo(a.world().ledger.onlineTick()+10);b.world().runTo(b.world().ledger.onlineTick()+10);
+            water=a.world().registry.owner(a.waterSource());
+        }
+        long certified=a.world().ledger.onlineTick();
+        assertTrue(b.world().coordinator.observe(b.world().registry.owner(b.waterSource())).certificate().isPresent(),"both runs alike so far");
+        long feed=b.world().registry.owner(b.feed());
+        b.world().lags.put(feed,30);
+        a.world().runTo(certified+1000);b.world().runTo(certified+1000);
+        b.world().lags.remove(feed);
+        a.world().runTo(certified+2000);b.world().runTo(certified+2000);
+        var spans=replays.get(0).getOrDefault(water,List.of());
+        System.out.printf(Locale.ROOT,"certified port gate: the water certified by %d; %d replayed spans of it, ending at %s%n",certified,spans.size(),spans);
+        assertTrue(spans.size()>1,"the cycles' waits materialised the certified water: "+replays.get(0));
+        assertEquals(replays.get(0),replays.get(1),"every certified island was materialised over the same spans");
+        var ta=a.world().ledger.column(a.unit()).totals();var tb=b.world().ledger.column(b.unit()).totals();
+        assertTrue(ta.taken().total()>40,"the column ran: "+ta.taken().total());
+        assertArrayEquals(ta.taken().moles(),tb.taken().moles(),"the feed taken");
+        assertArrayEquals(ta.produced().moles(),tb.produced().moles(),"the products");
+        assertEquals(ta.condenser(),tb.condenser(),"the condenser duty");
+        assertEquals(a.counting().moles.keySet(),b.counting().moles.keySet());
+        for(var e:a.counting().moles.entrySet())assertArrayEquals(e.getValue(),b.counting().moles.get(e.getKey()),"what boundary "+e.getKey()+" exchanged");
+        assertEquals(a.counting().energy,b.counting().energy,"every boundary's energy, the water's source and sink among them");
+        assertEquals(a.counting().heat,b.counting().heat,"every side's heat");
+        assertEquals(a.world().coordinator.transits(),b.world().coordinator.transits(),"the heat in transit");
+    }
+    /**
+     * The refused solve's determinism gate (codebase review R-ST4, item 2, in the form of R-ST3's): the rig with its solves,
+     * run twice, the second time on a loaded machine whose solve service refuses every job asked before the cycle after the
+     * first. The start solve is asked at the first cycle.
+     * <ul>
+     * <li>Before R-ST4 the refused solve was dropped and the next cycle asked its own: the table applied a cycle later, and the
+     * column took its feed a cycle later.</li>
+     * <li>Now it is held and asked again at each decision point until the service takes it (a cycle later), for the same
+     * pending solve: its table applies at the second cycle after the first, as in the first run.</li>
+     * </ul>
+     * At 3000 ticks the solves (by their contents), the table's ticks, the totals and every boundary's booking are the same
+     * bit for bit.
+     */
+    @Test void aSolveTheServiceRefusesIsAskedAgainForTheSameCycle() {
+        var fa=new Fake(0);var a=rig(0,fa);fa.world=a.world();
+        var fb=new Fake(0);var b=rig(0,fb);fb.world=b.world();
+        long first=b.ops().run(b.unit()).nextCycle;
+        fb.refuseFrom=0;fb.refuseUntil=first+ColumnOperation.CYCLE_TICKS;
+        fa.runTo(3000);fb.runTo(3000);
+        System.out.printf(Locale.ROOT,"refused solve gate: %d refusals, %d solves, the first cycle at %d%n",fb.refused,fb.jobs.size(),first);
+        assertTrue(fb.refused>0,"the service refused the start solve in the second run");
+        assertEquals(0,fa.refused,"and nothing in the first");
+        assertEquals(contents(fa.jobs),contents(fb.jobs),"the solves asked, by their contents");
+        var ra=a.ops().run(a.unit());var rb=b.ops().run(b.unit());
+        assertNotNull(ra.table,"a table stands");
+        assertEquals(ra.tableTick,rb.tableTick,"the cycle that asked the table in force");
+        assertEquals(ra.applied,rb.applied,"the cycle it applied at");
+        var ta=a.world().ledger.column(a.unit()).totals();var tb=b.world().ledger.column(b.unit()).totals();
+        assertTrue(ta.taken().total()>20,"the column ran: "+ta.taken().total());
+        assertArrayEquals(ta.taken().moles(),tb.taken().moles(),"the feed taken");
+        assertArrayEquals(ta.produced().moles(),tb.produced().moles(),"the products");
+        assertEquals(ta.condenser(),tb.condenser(),"the condenser duty");
+        assertEquals(a.counting().moles.keySet(),b.counting().moles.keySet());
+        for(var e:a.counting().moles.entrySet())assertArrayEquals(e.getValue(),b.counting().moles.get(e.getKey()),"what boundary "+e.getKey()+" exchanged");
+        assertEquals(a.counting().energy,b.counting().energy,"every boundary's energy");
+    }
+    /** What each solve asked: its trigger, set points and what it was given, as text (a job's arrays compare by content). */
+    private static List<String> contents(List<ColumnSolve.Job> jobs) {
+        var out=new ArrayList<String>();
+        for(var j:jobs){var s=j.setpoints();var t=j.taken();
+            out.add(j.trigger()+" feed="+s.feedRate()+" reflux="+s.refluxRatio()+" condenser="+s.condenserTemperature()+" steam="+Arrays.toString(s.steamPerFeed())
+                    +" taken="+Arrays.toString(t.feed())+" h="+t.feedEnthalpy()+" "+t.steam());}
+        return out;
     }
 
     /** The cycle at {@code expected} ran at {@code actual}: a cycle runs once its inlets booked through it, a tick or so later. */
@@ -565,7 +659,7 @@ class ColumnRunTest {
     /** A solver answering every job {@code delay} ticks after it was asked (0: at once): {@link #table}, or a failure where {@code fail} holds. */
     static final class Fake implements ColumnOperation.Solves {
         static final com.wormzjl.icheme.science.column.v3.V3ColumnInput DESIGN;
-        static{var c=MaterialCatalog.bundled();DESIGN=c.presets().column(c.presets().network().defaultColumnPreset()).input(c);}
+        static{var c=MaterialCatalog.bundled();DESIGN=com.wormzjl.icheme.science.column.v3.V3ColumnPresets.input(c.presets().column(c.presets().network().defaultColumnPreset()),c);}
         com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics model;EventPathWorld world;final long delay;
         java.util.function.Predicate<ColumnSolve.Job> fail=j->false,unfinished=j->false;
         /** The hydraulics each table carries (W3): none by default. */
@@ -574,10 +668,14 @@ class ColumnRunTest {
         java.util.function.UnaryOperator<SplitTable> duties;
         final List<ColumnSolve.Job> jobs=new ArrayList<>();final List<Long> asked=new ArrayList<>();
         final TreeMap<Long,List<Runnable>> due=new TreeMap<>();
+        /** The service refuses every job asked from {@link #refuseFrom} to before {@link #refuseUntil} (at capacity, a machine's load); never by default. */
+        long refuseFrom=Long.MAX_VALUE,refuseUntil=Long.MIN_VALUE;int refused;
         Fake(long delay){this.delay=delay;}
         public com.wormzjl.icheme.science.column.v3.V3ColumnInput design(ColumnUnit unit){return DESIGN;}
         public boolean submit(long unit,ColumnSolve.Job job,java.util.function.Consumer<ColumnSolve.Outcome> done) {
-            jobs.add(job);long now=world.ledger.onlineTick();asked.add(now);
+            long now=world.ledger.onlineTick();
+            if(now>=refuseFrom&&now<refuseUntil){refused++;return false;}
+            jobs.add(job);asked.add(now);
             var taken=job.taken();var ratios=new double[taken.steam().size()];for(int j=0;j<ratios.length;j++)ratios[j]=taken.feedRate()>0?taken.steam().get(j).rate()/taken.feedRate():job.setpoints().steamPerFeed()[j];
             ColumnSolve.Outcome o=fail.test(job)?new ColumnSolve.Failed("test refusal"):unfinished.test(job)?new ColumnSolve.Failed("DEADLINE",true):table(model,job.setpoints(),job.trigger()==DriftBands.Trigger.START?job.setpoints().steamPerFeed():ratios);
             if(o instanceof ColumnSolve.Solved s&&flood.apply(job).known())o=new ColumnSolve.Solved(s.table().withFlood(flood.apply(job)),s.enthalpy(),null,s.solvedCondenser(),"test","");
@@ -918,7 +1016,7 @@ class ColumnRunTest {
         var u=world.ledger.column(r.unit());
         assertTrue(r.ops().status(r.unit()).startsWith("LIMITED: outlet"),r.ops().status(r.unit()));
         double held=u.station(Port.DISTILLATE,0).account().total(),buffer=.5*(ColumnOperation.BUFFER_CYCLES*ColumnOperation.CYCLE_TICKS/20.0);
-        assertEquals(com.wormzjl.icheme.science.column.operation.Condition.PRODUCT_FULL,r.ops().last(r.unit()).binding().condition());
+        assertEquals(com.wormzjl.icheme.science.plant.column.Condition.PRODUCT_FULL,r.ops().last(r.unit()).binding().condition());
         assertTrue(EquipmentAlarm.column(r.ops().conditions(r.unit())).contains(EquipmentAlarm.BLOCKED),"the column raises BLOCKED: "+r.ops().conditions(r.unit()));
         assertEquals(buffer,held,1e-6*buffer,"the outlet holds its full buffer");
         assertEquals(held,u.totals().taken().total(),1e-9,"the column took what its outlet holds, no more");
@@ -1117,7 +1215,7 @@ class ColumnRunTest {
         airSurface=40;
         var r=rig(0);r.world().runTo(3000);
         String status=r.ops().status(r.unit());var last=r.ops().last(r.unit());
-        var fans=r.ops().view(r.unit(),r.world().ledger.onlineTick(),d->Double.NaN).duties().stream().filter(d->d.kind()==com.wormzjl.icheme.science.column.operation.OperationView.DutyKind.FANS).findFirst().orElseThrow();
+        var fans=r.ops().view(r.unit(),r.world().ledger.onlineTick(),d->Double.NaN).duties().stream().filter(d->d.kind()==com.wormzjl.icheme.science.plant.column.OperationView.DutyKind.FANS).findFirst().orElseThrow();
         double speed=r.ops().run(r.unit()).table.fans(40,last.feedMoles()/CYCLE_SECONDS);
         System.out.printf(Locale.ROOT,"U2_FANS speed=%.4f booked=%.1f W solved=%.1f W | %s%n",speed,fans.booked(),fans.solved(),status);
         assertTrue(status.startsWith("RUNNING")||status.startsWith("LIMITED: outlet"),status);
@@ -1185,7 +1283,7 @@ class ColumnRunTest {
         assertTrue(status.startsWith("RUNNING")||status.startsWith("LIMITED: outlet"),status);
         assertNull(Condition.find(r.ops().conditions(r.unit()),Condition.NO_POWER),"power back clears NO POWER");
         assertTrue(r.ops().last(r.unit()).feedMoles()>0,"the feed resumes");
-        double rated=com.wormzjl.icheme.science.machine.InlineMachines.ratedShaftPower(new FlowControl.Machine(REFLUX_PUMP,1,true));
+        double rated=com.wormzjl.icheme.science.fluid.network.InlineMovers.ratedShaftPower(new FlowControl.Machine(REFLUX_PUMP,1,true));
         assertEquals(rated*r.ops().last(r.unit()).alpha(),motor.demand(),1e-6*rated,"the train carries the pump's rated shaft power at the share");
         assertTrue(motor.electricPower()>motor.demand(),"the motor draws it over its efficiency");
         needPower=false;

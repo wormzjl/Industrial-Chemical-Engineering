@@ -13,6 +13,7 @@ import java.util.Locale;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
+import com.wormzjl.icheme.science.thermo.phase.PackageBinding;
 
 /**
  * P6 (batch 2026-09-24-coolprop-low-temperature): a liquid-full vessel of a mixture cooled through its bubble point.
@@ -21,7 +22,7 @@ import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
  * outer check seeded the two-phase layout with the TP split at the single phase's overshot (T, P), several vessel volumes
  * of vapour a rigid vessel cannot hold, and the two-phase Newton's last iterate (a trace of vapour) was one phase again,
  * repeating the first pass's active set. On main the outer phase check of owner decisions D25 and D26 answers it
- * ({@link FluidThermodynamics#phaseCheck}): the vapour enters the liquid-full vessel at the vessel's own split, its closure
+ * ({@code StepPhaseRules.phaseCheck}): the vapour enters the liquid-full vessel at the vessel's own split, its closure
  * of what it holds ({@link InventoryEquilibrium#split}: the small vapour of its energy and volume beside the liquid it
  * keeps), and no TP verdict takes a phase away. Each vessel: 1 L
  * charged liquid-full at 5 MPa, cooled by -200 W through the network's energy input (a 1e-12 mol/s methane trace), 5 s
@@ -71,9 +72,9 @@ class LiquidFullBubblePointTest {
         var graph=crossBubblePoint("CH4 + 2 % C2H6",new double[]{0,.98,.02,0,0},172,6);
         var node=graph.reservoirs().getFirst();var inventory=node.inventory();
         // The engine's own UV answer for the vessel's inventory (an independent service, fluid only): the same split.
-        var engine=FluidTpEquilibrium.forPackage(CATALOG,PILOT);
+        var engine=PackageBinding.equilibrium(CATALOG,PILOT);
         double[] totals=inventory.moles();double energy=inventory.internalEnergy();
-        var formation=model.hydrocarbon.spine().orElseThrow().formationReference();
+        var formation=model.hydrocarbon.formationReference().orElseThrow();
         for(int i=0;i<totals.length-1;i++)energy+=totals[i]*formation.offsetJoulesPerMole(i);
         var uv=engine.uv(EquilibriumRequest.uv(energy,inventory.volume(),engine.contract().components(),java.util.Arrays.copyOf(totals,totals.length-1),PhaseCompetition.FLUID_ONLY),engine.newWorkspace());
         assertEquals(EquilibriumResult.Classification.VAPOR_LIQUID,uv.classification(),uv.toString());

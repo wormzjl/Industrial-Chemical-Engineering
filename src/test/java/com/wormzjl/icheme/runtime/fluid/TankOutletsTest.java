@@ -19,7 +19,7 @@ class TankOutletsTest {
     private static final PhysicalFluidTopology.Direction N=PhysicalFluidTopology.Direction.NORTH;
     private int component(String name){int i=model.components().indexOf(name);assertTrue(i>=0,name);return i;}
     private PhysicalFluidTopology.Device at(long id,int x,int y,int z,Kind kind) {
-        return new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position("minecraft:overworld",x,y,z),kind,N,new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Passive());
+        return PhysicalFluidTopology.Device.builder(id,new PhysicalFluidTopology.Position("minecraft:overworld",x,y,z),kind,N,new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Passive()).build();
     }
     /** A 1 m3 vessel at 298.15 K and {@code pressure} holding {@code waterVolume} m3 of water under nitrogen (LevelHeadTest's). */
     private FluidThermodynamics.State waterUnderNitrogen(double waterVolume,double pressure) {

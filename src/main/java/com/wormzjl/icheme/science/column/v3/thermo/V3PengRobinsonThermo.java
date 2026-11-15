@@ -28,6 +28,15 @@ public final class V3PengRobinsonThermo implements V3ThermoModel, V3ThermoDeriva
         return session.datasetRevision();
     }
 
+    /**
+     * The column's identity of package {@code packageId} on {@code catalog}, which {@link #datasetRevision} of a thermo built
+     * there returns: the one statement seeds, digests and published results are keyed on (F1 of batch
+     * 2026-11-13-codebase-review).
+     */
+    public static String columnIdentity(com.wormzjl.icheme.science.material.MaterialCatalog catalog, String packageId) {
+        return V3CatalogPropertyPackage.identity(catalog, packageId);
+    }
+
     /** Returns immutable, non-blocking dataset evidence for audits and solver diagnostics. */
     public java.util.List<String> advisoryEvidence() {
         return session.advisoryEvidence();
@@ -75,19 +84,6 @@ public final class V3PengRobinsonThermo implements V3ThermoModel, V3ThermoDeriva
 
     public double[][] binaryInteractions() {
         double[][] source = session.binaryInteractions();
-        double[][] copy = new double[source.length][];
-        for (int row = 0; row < source.length; row++) copy[row] = source[row].clone();
-        return copy;
-    }
-
-    /**
-     * The constant classical matrix the column's kernel evaluates (W5 D1: the derived pairs, not the authored
-     * matrix of {@link #binaryInteractions()}), or null where the kernel holds an activity pair, a {@code k_ij(T)}
-     * or a Mathias-Copeman alpha; a copy.
-     */
-    public double[][] constantClassicalInteractions() {
-        double[][] source = session.constantClassicalInteractions();
-        if (source == null) return null;
         double[][] copy = new double[source.length][];
         for (int row = 0; row < source.length; row++) copy[row] = source[row].clone();
         return copy;

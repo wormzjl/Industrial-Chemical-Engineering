@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.runtime.fluid;
 
 import com.wormzjl.icheme.runtime.ProcessSolveServices;
+import com.wormzjl.icheme.runtime.ProcessSolveJobs;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
@@ -23,9 +24,10 @@ public final class MinecraftFluidRuntime implements AutoCloseable {
         coordinator=new IslandCoordinator(new IslandCoordinator.Dispatcher() {
             public void demand(int eligibleOwners){ProcessSolveServices.fluidWorkerDemand(server,eligibleOwners);}
             public long demandShrinkDelay(){return ProcessSolveServices.fluidDemandShrinkDelay(server);}
-            public int availableWorkers(){var d=ProcessSolveServices.diagnostics(server);return d.readyJobs()>0?0:Math.max(0,d.workerCount()-d.activeWorkers());}
+            // Every free worker: a queued plant job waits for one of the workers islands leave it (code base review R6, option A).
+            public int availableWorkers(){var d=ProcessSolveServices.diagnostics(server);return Math.max(0,d.workerCount()-d.activeWorkers());}
             public long nextRequestId(){return ProcessSolveServices.nextRequestId();}
-            public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveServices.FluidIslandCommand command) {
+            public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveJobs.FluidIslandCommand command) {
                 var target=new ProcessSolveServices.FluidIslandTarget(Objects.requireNonNull(dimensions.get(attempt.islandId())),attempt.islandId());
                 var handler=new ProcessSolveServices.FluidCompletionHandler() {
                     public void completed(ProcessSolveServices.FluidIslandCompletion result){var c=result.completion();coordinator.completed(attempt,c.result(),c.result().isPresent()?null:failure(attempt.islandId(),c));}

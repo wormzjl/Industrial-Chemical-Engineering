@@ -26,9 +26,9 @@ class V3BoundedSolvePathTest {
     @Test
     void aPathInsideTheContractIsReturnedUntouched() {
         String path = "cold/stage-continuation/4-8-15-30-40/fine-fd/draw-ramp-1.0/draws-1/steam-1/heat-1";
-        assertEquals(path, V3ColumnCalculator.boundedSolvePath(path));
-        assertNull(V3ColumnCalculator.boundedSolvePath(null));
-        assertEquals(" ", V3ColumnCalculator.boundedSolvePath(" "));
+        assertEquals(path, V3SolveReport.boundedSolvePath(path));
+        assertNull(V3SolveReport.boundedSolvePath(null));
+        assertEquals(" ", V3SolveReport.boundedSolvePath(" "));
     }
 
     @Test
@@ -39,14 +39,14 @@ class V3BoundedSolvePathTest {
         String path = head + ladder + tail;
         assertTrue(path.length() > LIMIT, "fixture must exceed the contract");
 
-        assertEquals(head + "150..75" + tail, V3ColumnCalculator.boundedSolvePath(path));
+        assertEquals(head + "150..75" + tail, V3SolveReport.boundedSolvePath(path));
     }
 
     @Test
     void aPathThatIsStillTooLongKeepsItsHeadAndItsTail() {
         String path = "cold/" + "segment/".repeat(40) + "failed-stage-40";
 
-        String bounded = V3ColumnCalculator.boundedSolvePath(path);
+        String bounded = V3SolveReport.boundedSolvePath(path);
 
         assertEquals(LIMIT, bounded.length());
         assertTrue(bounded.startsWith(path.substring(0, 80)));
@@ -58,7 +58,7 @@ class V3BoundedSolvePathTest {
     void aCompressedLadderThatIsStillTooLongIsClampedAsWell() {
         String path = "cold/pressure-continuation/150-140-130-120-110-105-100/" + "recovery/".repeat(20) + "fine-fd";
 
-        String bounded = V3ColumnCalculator.boundedSolvePath(path);
+        String bounded = V3SolveReport.boundedSolvePath(path);
 
         assertEquals(LIMIT, bounded.length());
         assertTrue(bounded.startsWith("cold/pressure-continuation/150..100/"));

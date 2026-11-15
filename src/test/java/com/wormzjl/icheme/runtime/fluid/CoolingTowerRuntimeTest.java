@@ -36,7 +36,7 @@ class CoolingTowerRuntimeTest {
     private static PhysicalFluidTopology.Position at(int x,int y,int z){return new PhysicalFluidTopology.Position(EventPathWorld.DIM,x,y,z);}
     private static long tower(EventPathWorld w,CoolingTower tower,PhysicalFluidTopology.Port... ports){
         long id=w.ledger.nextIdentity();double volume=tower.basinVolume();
-        var device=new PhysicalFluidTopology.Device(id,at(1,0,1),Kind.RESERVOIR,NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive(),List.of(ports));
+        var device=PhysicalFluidTopology.Device.builder(id,at(1,0,1),Kind.RESERVOIR,NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive()).ports(List.of(ports)).build();
         var spec=new FluidDeviceSpec(volume,298.15,101325,FluidDeviceSpec.nitrogen(w.catalog).composition(),SlurryFeed.NONE,CoolingTower.BASIN_DEPTH,true,VesselGeometry.prism(volume,CoolingTower.BASIN_DEPTH),tower);
         w.registry.submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,spec,0))),id+1,null);
         return id;
@@ -118,7 +118,7 @@ class CoolingTowerRuntimeTest {
         var solved=new PassiveIntervalSolver(model).solve(before,.1,new PassiveIntervalSolver.Settings(.1,.1,32),()->{});
         assertFalse(NetworkReduction.atRest(before,model),"A wet basin still exchanges with the atmosphere");
         var interval=new IslandCertificate.Interval(0,2,before,solved);
-        var saved=new IslandCertificate.Saved(2,6,interval,IslandCertificate.Signature.of(model,CertificatePolicy.defaults(),solved.graph()));
+        var saved=new IslandCertificate.Saved(2,6,interval,IslandCertificate.Signature.of(model,CertificatePolicy.defaults()));
         // Exercise the saved linear arithmetic independently of the stationarity qualification policy.
         var replayed=IslandCertificate.rebuild(saved,model.molecularWeights()).replay(2,6);
         var initial=solved.graph().reservoirs().getFirst().inventory();

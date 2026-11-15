@@ -139,7 +139,8 @@ class FluidPacketCodecTest {
      * menu's axis is refused. fluid-14 adds a tank's capacity and paired pressures; fluid-16 a heat unit's ports, lines and
      * actuator and a pipe's line reading (the heat GUI). */
     @Test void theProtocolIsFluidNineteenWithDistinctStaticAndLivePayloads() {
-        assertEquals("fluid-24",FluidNetwork.PROTOCOL);
+        // One protocol for every registrar since icheme-1 (codebase review P3-22); the fluid menu payloads were fluid-24.
+        assertEquals("icheme-1",com.wormzjl.icheme.network.NetworkProtocol.VERSION);
         var ids=java.util.Set.of(FluidNetwork.EditPayload.TYPE.id(),FluidNetwork.RecoverPayload.TYPE.id(),FluidNetwork.StaticPayload.TYPE.id(),FluidNetwork.LivePayload.TYPE.id());
         assertEquals(4,ids.size());
         var base=generatorMenu("");int count=base.components().size();
@@ -212,7 +213,8 @@ class FluidPacketCodecTest {
     }
     /** W7: the machine page's view, edit and driver payloads round-trip; a view with a bad number is refused on read. */
     @Test void theMachinePayloadsRoundTripOnTheirOwnRegistrar() {
-        assertEquals("machine-4",com.wormzjl.icheme.network.MachineNetwork.PROTOCOL);
+        // The machine payloads ride on the one protocol since icheme-1 (P3-22); they were machine-4.
+        assertEquals("icheme-1",com.wormzjl.icheme.network.NetworkProtocol.VERSION);
         var settings=new ShaftUnit.Settings(true,com.wormzjl.icheme.science.machine.ShaftTrain.Mode.REGULATE_FLOW,.8,0,0);
         var view=new MachineView(7,com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR,"RUNNING",2950,24900,26700,534,settings,
                 com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE,30000,2950,2,true,.72,370,"FV-101",0,2.9,40e5,4e5,null);
@@ -366,8 +368,8 @@ class FluidPacketCodecTest {
         for(double ratio:new double[]{1.009,10.01,Double.NaN,0})
             assertThrows(IllegalArgumentException.class,()->new FluidNetwork.Controls(298.15,101325,.05,.000045,.05,500000,n,com.wormzjl.icheme.runtime.fluid.SlurryFeed.NONE,ratio),"ratio "+ratio);
         assertEquals(3.0,new FluidNetwork.Controls(298.15,101325,.05,.000045,.01,500000,n).maximumPressureRatio(),"the placement default of plan Appendix B");
-        var device=new PhysicalFluidTopology.Device(7,new PhysicalFluidTopology.Position("minecraft:overworld",0,64,0),TopologyCompiler.Kind.PIPE,PhysicalFluidTopology.Direction.EAST,
-                new com.wormzjl.icheme.science.fluid.network.PipeResistance.Geometry(1,.05,.000045,0),new com.wormzjl.icheme.science.fluid.network.FlowControl.Compressor(.05,2.5));
+        var device=PhysicalFluidTopology.Device.builder(7,new PhysicalFluidTopology.Position("minecraft:overworld",0,64,0),TopologyCompiler.Kind.PIPE,PhysicalFluidTopology.Direction.EAST,
+                new com.wormzjl.icheme.science.fluid.network.PipeResistance.Geometry(1,.05,.000045,0),new com.wormzjl.icheme.science.fluid.network.FlowControl.Compressor(.05,2.5)).build();
         var controls=FluidNetwork.Controls.from(new WorldTopologyLedger.Registration(device,FluidDeviceSpec.nitrogen(),3));
         assertEquals(.05,controls.volumeFlow());assertEquals(2.5,controls.maximumPressureRatio());
         var gson=new Gson();var object=com.google.gson.JsonParser.parseString(gson.toJson(controls)).getAsJsonObject();

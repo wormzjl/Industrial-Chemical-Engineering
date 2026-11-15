@@ -44,35 +44,13 @@ final class SteamTurbineDesign extends UnitDesign {
     /** A stage's share of the isentropic drop, kJ/kg, and the drop per e-fold of the pressure ratio (a game-level fit of the steam tables). */
     static final double STAGE_DROP = 90, DROP_PER_LOG = 200;
 
-    @Override
-    public double minSize() {
-        return .3;
-    }
-
-    @Override
-    public double maxSize() {
-        return 3;
-    }
-
-    @Override
-    public double sizeStep() {
-        return .1;
-    }
-
-    @Override
-    public int minSupport(double size, int length) {
-        return 0;
-    }
-
-    @Override
-    public Orientation orientation() {
-        return Orientation.HORIZONTAL;
-    }
-
-    /** The coupling's hub turns. */
-    @Override
-    public boolean moves() {
-        return true;
+    SteamTurbineDesign() {
+        // moves: The coupling's hub turns.
+        super(new Sizes(.3, 3, .1,
+                1, 1,
+                0, EquipmentShape.MAX_SUPPORT,
+                Orientation.HORIZONTAL, "steam_turbine.casing", null, "steam_turbine.table", true,
+                1));
     }
 
     @Override
@@ -168,16 +146,6 @@ final class SteamTurbineDesign extends UnitDesign {
         if (duty.steam() != MachineDuty.Steam.MP && duty.exhaust() < MachineDuty.Steam.MP.pressure) out.add(Section.MP);
         if (duty.exhaust() < DEFAULT_EXHAUST) out.add(duty.power() > DOUBLE_FLOW ? Section.LP_DOUBLE : Section.LP);
         return List.copyOf(out);
-    }
-
-    @Override
-    public String sizeRow() {
-        return "steam_turbine.casing";
-    }
-
-    @Override
-    public String supportRow() {
-        return "steam_turbine.table";
     }
 
     @Override

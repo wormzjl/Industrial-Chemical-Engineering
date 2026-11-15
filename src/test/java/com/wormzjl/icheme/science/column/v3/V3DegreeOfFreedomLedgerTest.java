@@ -128,6 +128,30 @@ class V3DegreeOfFreedomLedgerTest {
         assertTrue(exception.getMessage().contains("VAPOR_ONLY_WITH_POSITIVE_REFLUX"));
     }
 
+    /**
+     * Every equation visits its references in {@link V3DegreeOfFreedomLedger.UnknownId} order, each once (the order the
+     * matching augments in; P3 of batch 2026-11-13-codebase-review), and a tray's material row holds its four flows.
+     */
+    @Test
+    void eachEquationsReferencesAreInIdOrderAndATraysMaterialRowHoldsItsFourFlows() {
+        V3DegreeOfFreedomLedger ledger = V3ColumnProblemResolver.resolve(input(4.17, standardSpecifications(4.17)),
+                V3CondenserPhaseBranch.TWO_PHASE).degreeOfFreedomLedger();
+        for (var equation : ledger.equations()) {
+            var references = equation.referencedUnknowns();
+            for (int i = 1; i < references.size(); i++)
+                assertTrue(references.get(i - 1).compareTo(references.get(i)) < 0, equation::toString);
+        }
+        var material = ledger.equations().stream().filter(e -> e.id().equals(new V3DegreeOfFreedomLedger.EquationId(
+                V3DegreeOfFreedomLedger.EquationFamily.COMPONENT_MATERIAL_BALANCE, 2, 0))).findFirst().orElseThrow();
+        var liquid = V3DegreeOfFreedomLedger.UnknownFamily.LIQUID_COMPONENT_FLOW;
+        var vapor = V3DegreeOfFreedomLedger.UnknownFamily.VAPOR_COMPONENT_FLOW;
+        assertEquals(List.of(new V3DegreeOfFreedomLedger.UnknownId(liquid, 1, 0), new V3DegreeOfFreedomLedger.UnknownId(liquid, 2, 0),
+                new V3DegreeOfFreedomLedger.UnknownId(vapor, 2, 0), new V3DegreeOfFreedomLedger.UnknownId(vapor, 3, 0)),
+                material.referencedUnknowns());
+        assertEquals(ledger.equationIds().length, ledger.equations().size());
+        for (int row = 0; row < ledger.equationIds().length; row++) assertEquals(ledger.equationIds()[row], ledger.equations().get(row).id());
+    }
+
     private static V3ColumnInput input(double refluxRatio, List<V3ColumnSpecification> specifications) {
         return V3TestInputs.dry(V3ColumnInput.SCHEMA_VERSION, "test:ideal_binary", "test:baseline",
                 new V3ComponentBasis(List.of("methane", "ethane")), new double[] {40.0, 60.0}, 450.0,

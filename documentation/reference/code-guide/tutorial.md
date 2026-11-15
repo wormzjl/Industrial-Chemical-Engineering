@@ -1,7 +1,5 @@
 # Tutorial: the Field Guide, films, cards, help tours and equipment pages
 
-**Snapshot:** 3063488da (branch `claude/tutorial-system-chem-mod-950ca9`, main 0.29.0 merged in at 1cfca0ab0), 2026-11-13. Batch `2026-11-12-tutorial-system`, to merge: the scene player and 43 films (7 chapter films, 7 crude unit page films, 29 generic page films), 11 cards, the Field Guide (chapter 0 and seven chapters, 51 steps as vanilla advancements, ten criteria, protocol `tutorial-1`), 41 help tours on every screen page, 41 equipment pages, the equipment reference items and their JEI pages, four recordings, the small crude tower preset and the "Small crude unit" example.
-
 ## Read this when
 
 - You add or change a guide chapter or step, its advancement or its criterion.
@@ -12,7 +10,7 @@
 
 ## In one paragraph
 
-The tutorial is the mod's own framework (owner D1: Ponder dropped). A **film** is a pure function of time (`Scene.at`) over actors made from the mod's equipment geometry, drawn by the game's `SceneView` and by the offline render tool through one `Projection`. A **card** is one animated drawing on the kit's canvas with a slider, switch, options or places to press. The **Field Guide** (`GuideScreen`, item `field_guide`, key H, a one-line HUD tracker) lists chapters of steps read from `guide.json`; each step is a vanilla advancement under `icheme:tutorial/`, so progress is the game's own save (owner D2). A CLIENT step is reported by the client; a SERVER step is earned by a criterion the server fires only where it already sends or stores the data. Every screen page has a **help tour** (`?` key): the screen dims, one control is lit and one sentence says what it is for. Each equipment kind has a **reference item** (creative tab "Equipment guide", JEI page) that opens its **equipment page** in the guide, with a picture and a film. Numbers a film or card shows come from **recordings** written offline by `tools/tutorial-recordings` and held to the model by gates.
+The tutorial is the mod's own framework (no Ponder). A **film** is a pure function of time (`Scene.at`) over actors made from the mod's equipment geometry, drawn by the game's `SceneView` and by the offline render tool through one `Projection`. A **card** is one animated drawing on the kit's canvas with a slider, switch, options or places to press. The **Field Guide** (`GuideScreen`, item `field_guide`, key H, a one-line HUD tracker) lists chapters of steps read from `guide.json`; each step is a vanilla advancement under `icheme:tutorial/`, so progress is the game's own save. A CLIENT step is reported by the client; a SERVER step is earned by a criterion the server fires only where it already sends or stores the data. Every screen page has a **help tour** (`?` key): the screen dims, one control is lit and one sentence says what it is for. Each equipment kind has a **reference item** (creative tab "Equipment guide", JEI page) that opens its **equipment page** in the guide, with a picture and a film. Numbers a film or card shows come from **recordings** written offline by `tools/tutorial-recordings` and held to the model by gates.
 
 ## Class map
 
@@ -26,7 +24,7 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`. Every class under `sc
 | `science/tutorial/cards/` | Recording readers: `BarrelData` (`crude_barrel.json`, also `compute` for the recorder), `StillTraysData`, `SmallUnitData` |
 | `science/tutorial/equipment/` | `EquipmentInfo` (item id `equipment_<kind>`, name key, serves/needs/place/status lines, shape-only kinds), `ReferenceShapes` (each kind at the constructor's default size: icons, pictures, page films) |
 | `runtime/tutorial/TutorialTriggers` | The ten criteria (`DeferredRegister` of `TRIGGER_TYPE`, registered from `IChemE`) |
-| `network/TutorialNetwork` | Protocol `tutorial-1`: `StepDone`, `Hello` (to server), `Progress` (to client); `earned` on `AdvancementEarnEvent` |
+| `network/TutorialNetwork` | On the mod's protocol `NetworkProtocol.VERSION`: `StepDone`, `Hello` (to server), `Progress` (to client); `earned` on `AdvancementEarnEvent` |
 | `client/gui/tutorial/` (13) | `GuideClient` (guide, pages, progress, key, reload), `GuideScreen` and `GuidePage` (Minecraft-free layout), `GuideHud`, `FilmScreen`, `FilmLayout`, `FilmOverlay`, `Labels`, `SceneView` (render thread; one vertex buffer per actor list), `CardView`, `HelpTour`, `TourHost`, `TourLayout` |
 | `client/gui/tutorial/cards/` (14) | `Card`, `Cards` (name to builder), `Bars`, and the 11 cards: `three_parts`, `chain`, `barrel`, `products`, `road`, `pot_temperature`, `reflux`, `compare`, `balance`, `unit_map`, `limit` |
 | `client/gui/common/` `TourAnchors`, `DeviceTour`, `ScreenTours`, `AssemblyTour`; `client/gui/flowsheet/SimulatorTour` | Minecraft-free anchor maps: where each stop stands on a page, in the screen's own coordinates; the screens resolve the same maps the gates check |
@@ -134,3 +132,5 @@ All under `src/main/resources/assets/icheme/tutorial/` are client assets: no com
 </invoke>
 <invoke name="Bash">
 <parameter name="command">cd "D:/Minecraft/Modding/1.21/CreateChemE/.claude/worktrees/chimney-b7484c/src/main/java/com/wormzjl/icheme" && grep -c "ALL.put\|KINDS" science/tutorial/films/Films.java; grep -n "KINDS *=" -A3 science/tutorial/films/EquipmentFilms.java science/tutorial/films/PageFilms.java | head; grep -n "BUILD_NAME\|NAME =" science/tutorial/films/*.java | cut -c1-150
+
+**Snapshot:** `3063488da`, 2026-11-13 (the last commit this chapter was checked against). Earlier snapshots and batch notes: [HISTORY.md](HISTORY.md).

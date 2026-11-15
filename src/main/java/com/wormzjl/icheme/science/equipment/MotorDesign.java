@@ -31,6 +31,15 @@ final class MotorDesign extends UnitDesign {
     final boolean generator;
 
     MotorDesign(boolean generator) {
+        // sizeStep: A notional step; the sizes are the IEC list ({@link #sizes()}).
+        // maxSupport: At grade, or on a concrete table up to 8 m.
+        // moves: The fan and the coupling's hub turn.
+        // Computed in its overrides: minSize, maxSize, sizeRow.
+        super(new Sizes(Sizes.COMPUTED, Sizes.COMPUTED, .05,
+                1, 1,
+                0, 8,
+                Orientation.HORIZONTAL, null, null, "machine_table", true,
+                1));
         this.generator = generator;
     }
 
@@ -56,12 +65,6 @@ final class MotorDesign extends UnitDesign {
         return powers().getLast();
     }
 
-    /** A notional step; the sizes are the IEC list ({@link #sizes()}). */
-    @Override
-    public double sizeStep() {
-        return .05;
-    }
-
     @Override
     public List<Double> sizes() {
         return powers();
@@ -85,28 +88,6 @@ final class MotorDesign extends UnitDesign {
     @Override
     public String sizeText(double size) {
         return size < 10 ? UnitDesign.size(size) : whole(size);
-    }
-
-    @Override
-    public int minSupport(double size, int length) {
-        return 0;
-    }
-
-    /** At grade, or on a concrete table up to 8 m. */
-    @Override
-    public int maxSupport() {
-        return 8;
-    }
-
-    @Override
-    public Orientation orientation() {
-        return Orientation.HORIZONTAL;
-    }
-
-    /** The fan and the coupling's hub turn. */
-    @Override
-    public boolean moves() {
-        return true;
     }
 
     @Override
@@ -156,11 +137,6 @@ final class MotorDesign extends UnitDesign {
     @Override
     public String sizeRow() {
         return name() + ".power";
-    }
-
-    @Override
-    public String supportRow() {
-        return "machine_table";
     }
 
     @Override

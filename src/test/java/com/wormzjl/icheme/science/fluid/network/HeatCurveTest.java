@@ -79,7 +79,9 @@ class HeatCurveTest {
         double saturation=curve.temperatureAt(middle);
         assertEquals(373.12,saturation,.5);
         // Condensing on 0.01 m2 of wall 10 K below saturation at 1 kg/s: 5000 W/m2K x 10 K x 0.01 m2.
-        assertEquals(-500,curve.march(middle,1,.01,saturation-10)-middle,1e-6);
+        // The plateau's edges are bisected to HeatCurve.BOUNDARY_KELVIN, so the 10 K of driving temperature are known to that:
+        // -499.999997 W where the boundary was bisected to 1e-5 K gave -500.000000 (L-F11).
+        assertEquals(-500,curve.march(middle,1,.01,saturation-10)-middle,500*HeatCurve.BOUNDARY_KELVIN/10);
         // In series with a liquid film of 2000 W/m2K the overall coefficient is 1/(1/5000 + 1/2000) = 1428.6 W/m2K.
         double u=1/(1/curve.filmAt(middle)+1/HeatCurve.Films.DEFAULT.liquid());
         assertEquals(1428.57,u,.01);

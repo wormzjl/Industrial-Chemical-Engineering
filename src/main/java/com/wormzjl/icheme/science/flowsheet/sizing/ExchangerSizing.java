@@ -10,6 +10,7 @@ import com.wormzjl.icheme.science.flowsheet.FlowStream;
 import com.wormzjl.icheme.science.flowsheet.FlowThermo;
 import com.wormzjl.icheme.science.flowsheet.unit.ExchangerRating;
 import com.wormzjl.icheme.science.fluid.transport.MixtureViscosity;
+import com.wormzjl.icheme.science.equipment.design.UnitRatings;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -60,7 +61,7 @@ public final class ExchangerSizing {
 
         /** All its shells' tube surface, m². */
         public double surface() {
-            return shells * ProcessUnit.tubeSurface(shell, tubes);
+            return shells * UnitRatings.tubeSurface(shell, tubes);
         }
 
         @Override public EquipmentShape shape() {

@@ -8,7 +8,7 @@ import com.wormzjl.icheme.client.fx.state.ProcessStates;
 import com.wormzjl.icheme.network.FluidNetwork;
 import com.wormzjl.icheme.runtime.fluid.Flares;
 import com.wormzjl.icheme.runtime.fluid.Noise;
-import com.wormzjl.icheme.science.fluid.network.BatchStill;
+import com.wormzjl.icheme.science.plant.still.BatchStill;
 import com.wormzjl.icheme.science.fluid.network.Flare;
 import java.util.*;
 import net.minecraft.client.Minecraft;

@@ -23,6 +23,10 @@ public final class KitDoor {
     private List<Rect> areas = List.of(new Rect(0, 0, 0, 0));
     private int bar;
     private List<Column> columns = List.of();
+    /** The rows, measure and tallest column {@link #placeAll} placed last, while the areas stand: equal rows give that column again (C5). */
+    private @Nullable List<? extends List<? extends Column.Row>> placedRows;
+    private @Nullable Measure placedMeasure;
+    private int placedTall;
 
     /**
      * Lays the view over {@code area} (door coordinates) for rows as tall as {@code tallest} (the rows with every line
@@ -30,6 +34,7 @@ public final class KitDoor {
      */
     public void layout(Rect area, List<? extends Column.Row> tallest, Measure m) {
         widgets.clear();
+        placedRows = null;
         int tall = Column.place(tallest, area.x(), area.y(), area.w(), m, Column.Metrics.COMPACT).bounds().h();
         int width = tall > area.h() ? area.w() - ScrollView.BAR - 4 : area.w();
         areas = List.of(new Rect(area.x(), area.y(), width, area.h()));
@@ -45,6 +50,7 @@ public final class KitDoor {
     public void layout(List<Rect> areas, int bar, List<? extends List<? extends Column.Row>> rows, Measure m) {
         if (areas.isEmpty() || areas.size() != rows.size()) throw new IllegalArgumentException("One area a column");
         widgets.clear();
+        placedRows = null;
         this.areas = List.copyOf(areas);
         this.bar = bar;
         placeAll(rows, m);
@@ -55,9 +61,18 @@ public final class KitDoor {
         return placeAll(List.of(rows), m).getFirst();
     }
 
-    /** Each column's rows placed in its area; the view as tall as the tallest. */
+    /**
+     * Each column's rows placed in its area; the view as tall as the tallest. Rows equal to the last placed, with the same
+     * measure, give the same columns without placing them again: rows are records of texts, numbers and copied lists, and a
+     * placement depends on nothing else (finding C5, batch 2026-11-13-codebase-review).
+     */
     public List<Column> placeAll(List<? extends List<? extends Column.Row>> rows, Measure m) {
         if (rows.size() != areas.size()) throw new IllegalArgumentException("One row list an area");
+        if (m == placedMeasure && rows.equals(placedRows)) {
+            var first = areas.getFirst();
+            view.layout(new Rect(first.x() - 2, first.y(), areas.getLast().right() - first.x() + 4, first.h()), bar, placedTall);
+            return columns;
+        }
         var placed = new ArrayList<Column>();
         int tall = 0;
         for (int i = 0; i < rows.size(); i++) {
@@ -67,6 +82,12 @@ public final class KitDoor {
             tall = Math.max(tall, c.bounds().h());
         }
         columns = List.copyOf(placed);
+        // Copied, so a caller's list changed after this call cannot make a later equal look equal.
+        var kept = new ArrayList<List<? extends Column.Row>>(rows.size());
+        for (var list : rows) kept.add(List.copyOf(list));
+        placedRows = List.copyOf(kept);
+        placedMeasure = m;
+        placedTall = tall;
         var first = areas.getFirst();
         view.layout(new Rect(first.x() - 2, first.y(), areas.getLast().right() - first.x() + 4, first.h()), bar, tall);
         return columns;
@@ -131,6 +152,19 @@ public final class KitDoor {
         for (var column : columns) {
             var hover = column.hover(x, view.contentY(y));
             if (hover != null) return hover;
+        }
+        return null;
+    }
+
+    /**
+     * The action of the choice at door point ({@code x}, {@code y}): the first a column places there, read at the view's
+     * offset; null outside the view or where no choice stands (finding C6, batch 2026-11-13-codebase-review).
+     */
+    public @Nullable String action(double x, double y) {
+        if (!view.inside(x, y)) return null;
+        for (var column : columns) {
+            var action = column.action(x, view.contentY(y));
+            if (action != null) return action;
         }
         return null;
     }

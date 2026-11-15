@@ -1,6 +1,6 @@
 package com.wormzjl.icheme.runtime.fluid;
 
-import com.wormzjl.icheme.science.column.operation.Condition;
+import com.wormzjl.icheme.science.plant.column.Condition;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;

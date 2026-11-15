@@ -62,11 +62,11 @@ final class BuiltInInputs {
                                 : "COLUMN_PORT:" + nozzle.role().name() + ":" + index,
                         true);
             }
-            for (var role : com.wormzjl.icheme.science.column.operation.Port.values()) {
+            for (var role : com.wormzjl.icheme.science.plant.column.Port.values()) {
                 int count =
-                        role == com.wormzjl.icheme.science.column.operation.Port.STEAM
+                        role == com.wormzjl.icheme.science.plant.column.Port.STEAM
                                 ? counts.getOrDefault(EquipmentShape.Role.STEAM, 0)
-                                : role == com.wormzjl.icheme.science.column.operation.Port.DRAW
+                                : role == com.wormzjl.icheme.science.plant.column.Port.DRAW
                                         ? counts.getOrDefault(EquipmentShape.Role.DRAW, 0)
                                         : 1;
                 for (int i = 0; i < count; i++)
@@ -302,7 +302,7 @@ final class BuiltInInputs {
                         span = still.filled() > 0 ? still.level() / still.filled() : 0;
                     }
                     case "STILL:DISTILLATE" -> value = still.distillateFlow();
-                    default -> value = still.status() == com.wormzjl.icheme.science.fluid.network.BatchStill.Status.DISTILLING ? 1 : 0;
+                    default -> value = still.status() == com.wormzjl.icheme.science.plant.still.BatchStill.Status.DISTILLING ? 1 : 0;
                 }
                 // The head has no temperature until the column first answers: the channel is unavailable until then.
                 if (Double.isFinite(value)) {

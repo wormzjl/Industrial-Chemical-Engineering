@@ -13,27 +13,30 @@ import com.wormzjl.icheme.science.fluid.state.SolidInventory;
 public final class ConservativeTransport {
     private ConservativeTransport() {}
     /**
-     * One island's transport linear algebra, retained across its reconstructions as {@code SparseNewton.Workspace.Shared}
-     * is retained across a fork family: one EJML storage every reconstruction refills in place, and the fill-reducing
-     * ordering of each structure the island produces (a step solve and a rate solve of the port graph do not share a
-     * sparsity pattern, so the orderings are a small keyed cache). Without it each reconstruction built its own
-     * {@link SparseLuSolver.Storage} and ordering, three or four times per interval. Reuse is bitwise: the storage clears
-     * every buffer it reads, an ordering is only reused for a matrix with the identical structure, and each factorization
-     * is consumed inside the reconstruction that produced it.
+     * One island's transport linear algebra, retained across its reconstructions, steps and jobs with the island's step
+     * solver: per structure the island produces (a step solve and a rate solve of the port graph do not share a sparsity
+     * pattern, nor do the fluid and the solid system of an island with a filter), its fill-reducing ordering and its own
+     * {@link SparseLuSolver.Storage}, a small keyed cache. One storage per structure keeps each one's reach (P-17b, batch
+     * 2026-11-13-codebase-review): alternating patterns through one storage searched every column of every factorization.
+     * Without the cache each reconstruction built its own storage and ordering, three or four times per interval. Reuse is
+     * bitwise: a storage carries nothing numeric from one factorization to the next ({@link UpLookingLu}), an ordering is
+     * only reused for a matrix with the identical structure, and each factorization is consumed inside the reconstruction
+     * that produced it, before the next one.
      */
     public static final class Workspace {
-        private static final int RETAINED_ORDERINGS=4;
-        private final SparseLuSolver.Storage factors;
-        private final LinkedHashMap<Structure,SparseLuSolver.Ordering> orderings=new LinkedHashMap<>();
-        public Workspace(SolverOwnership ownership){factors=new SparseLuSolver.Storage(ownership);}
+        private static final int RETAINED_STRUCTURES=4;
+        private final SolverOwnership ownership;
+        private record Factors(SparseLuSolver.Ordering ordering,SparseLuSolver.Storage storage) {}
+        private final LinkedHashMap<Structure,Factors> structures=new LinkedHashMap<>();
+        public Workspace(SolverOwnership ownership){this.ownership=Objects.requireNonNull(ownership,"ownership");}
         private SparseLuSolver.Factorization factor(SparseMatrix matrix) {
             var structure=Structure.of(matrix);
-            var ordering=orderings.get(structure);
-            if(ordering==null) {
-                if(orderings.size()>=RETAINED_ORDERINGS)orderings.remove(orderings.keySet().iterator().next());
-                ordering=SparseLuSolver.prepareOrdering(matrix);orderings.put(structure,ordering);
+            var factors=structures.get(structure);
+            if(factors==null) {
+                if(structures.size()>=RETAINED_STRUCTURES)structures.remove(structures.keySet().iterator().next());
+                factors=new Factors(SparseLuSolver.prepareOrdering(matrix),new SparseLuSolver.Storage(ownership));structures.put(structure,factors);
             }
-            return factors.factor(matrix,ordering);
+            return factors.storage().factor(matrix,factors.ordering());
         }
     }
     /** Everything the ordering depends on: the sparsity pattern, and which stored entries are
@@ -773,8 +776,13 @@ public final class ConservativeTransport {
      * scale) it stays unpinned. Applies to every reconstruction. Exact: every edge still books one amount at both ends,
      * so the change of the vessels plus the junction term equals the boundaries per component, solid population and
      * energy; only the booking moves, the flows, states and pipe histories are unchanged.
+     *
+     * <p>A junction can be a cooling tower's basin: an emptying vessel is solved as a junction holding its stock
+     * ({@code PassiveStepSolver.emptyingGraph}), and it keeps its tower. What its sprays lose to the air leaves its balance,
+     * read on the sprays' booked flows, as the booking reads it (finding F20, batch 2026-11-13-codebase-review): when a
+     * junction is taken in flow order its inflows carry their final factors (an upstream junction's is set).</p>
      */
-    private static double[] pinnedFlows(PassiveNetwork graph,List<FluidThermodynamics.State> candidate,double[] flows,FluidThermodynamics model,double[][] draws,
+    static double[] pinnedFlows(PassiveNetwork graph,List<FluidThermodynamics.State> candidate,double[] flows,FluidThermodynamics model,double[][] draws,
                                         Emptying[] emptying) {
         int nodes=graph.reservoirs().size();boolean[] junction=new boolean[nodes];boolean any=false;
         for(int node=0;node<nodes;node++)any|=junction[node]=graph.reservoirs().get(node).junction();
@@ -792,7 +800,11 @@ public final class ConservativeTransport {
                 if(donor==node)out+=rate;
             }
             // An emptying vessel (decision D54) passes what reaches it and its whole stock: dt (In' - Out') = -m_stock.
-            double atmospheric=graph.reservoirs().get(node).inventory().tower()==null?0:TowerExchange.at(graph,node,candidate,flows,draws,model).massLoss();
+            double atmospheric=0;
+            if(graph.reservoirs().get(node).inventory().tower()!=null) {
+                var booked=flows.clone();for(int edge=0;edge<flows.length;edge++)booked[edge]*=factor[edge];
+                atmospheric=TowerExchange.at(graph,node,candidate,booked,draws,model).massLoss();
+            }
             double outflow=fromJunctions+fromOthers-atmospheric+(emptying!=null&&emptying[node]!=null?emptying[node].drain():0),inflow=out-fromJunctions+atmospheric;
             if(out>0&&Double.isFinite(outflow)){double f=outflow/out;for(int edge=0;edge<flows.length;edge++){if(flows[edge]==0)continue;var pipe=graph.pipes().get(edge);if((flows[edge]>0?pipe.first():pipe.second())==node)factor[edge]=f;}}
             else if(fromOthers>0&&inflow>=0&&inflow<=fromOthers){double g=inflow/fromOthers;for(int edge=0;edge<flows.length;edge++){if(flows[edge]==0)continue;var pipe=graph.pipes().get(edge);int donor=flows[edge]>0?pipe.first():pipe.second(),receiver=flows[edge]>0?pipe.second():pipe.first();if(receiver==node&&!junction[donor])factor[edge]=g;}}

@@ -5,6 +5,7 @@ import com.wormzjl.icheme.science.equipment.ColumnTrays;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.MachineDuty;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
+import com.wormzjl.icheme.science.equipment.UnitDesign;
 import com.wormzjl.icheme.science.flowsheet.sizing.AirCoolerSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.ColumnSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.CompressorSizing;
@@ -41,22 +42,22 @@ public class SizingCoverageTest {
         var out = new ArrayList<UnitSize>();
         out.add(new PumpSizing.Size(UnitSize.grid(EquipmentShape.Kind.PUMP)[2]));
         double shell = UnitSize.grid(EquipmentShape.Kind.EXCHANGER)[2];
-        out.add(new ExchangerSizing.Size(false, 3, shell, ProcessUnit.defaultLength(EquipmentShape.Kind.EXCHANGER, shell)));
+        out.add(new ExchangerSizing.Size(false, 3, shell, UnitDesign.of(EquipmentShape.Kind.EXCHANGER).defaultLength(shell)));
         double kettle = UnitSize.grid(EquipmentShape.Kind.KETTLE)[2];
-        out.add(new ExchangerSizing.Size(true, 1, kettle, ProcessUnit.defaultLength(EquipmentShape.Kind.KETTLE, kettle)));
+        out.add(new ExchangerSizing.Size(true, 1, kettle, UnitDesign.of(EquipmentShape.Kind.KETTLE).defaultLength(kettle)));
         double bay = UnitSize.grid(EquipmentShape.Kind.AIR_COOLER)[0];
-        out.add(new AirCoolerSizing.Size(bay, ProcessUnit.defaultLength(EquipmentShape.Kind.AIR_COOLER, bay), new ProcessUnit.Bank(3, 2), 2));
+        out.add(new AirCoolerSizing.Size(bay, UnitDesign.of(EquipmentShape.Kind.AIR_COOLER).defaultLength(bay), new ProcessUnit.Bank(3, 2), 2));
         for (var type : List.of(UnitType.VERTICAL_HEATER, UnitType.CABIN_HEATER)) {
             double d = UnitSize.grid(type.kind())[1];
-            out.add(new HeaterSizing.Size(type, 1, d, ProcessUnit.defaultLength(type.kind(), d)));
+            out.add(new HeaterSizing.Size(type, 1, d, UnitDesign.of(type.kind()).defaultLength(d)));
         }
         for (var type : List.of(UnitType.PISTON, UnitType.TURBO)) {
             double d = UnitSize.grid(type.kind())[0];
-            out.add(new CompressorSizing.Size(type, d, ProcessUnit.defaultLength(type.kind(), d)));
+            out.add(new CompressorSizing.Size(type, d, UnitDesign.of(type.kind()).defaultLength(d)));
         }
         for (var type : List.of(UnitType.FLOATING_ROOF, UnitType.SPHERE)) {
             double d = UnitSize.grid(type.kind())[1];
-            out.add(new TankSizing.Size(type, 2, d, ProcessUnit.defaultLength(type.kind(), d)));
+            out.add(new TankSizing.Size(type, 2, d, UnitDesign.of(type.kind()).defaultLength(d)));
         }
         out.add(new DrumSizing.Size(UnitType.STANDING_DRUM, 1.5, 4, false));
         out.add(new DrumSizing.Size(UnitType.LYING_DRUM, 2.5, 8, true));

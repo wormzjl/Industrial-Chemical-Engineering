@@ -3,6 +3,7 @@ package com.wormzjl.icheme.science.fluid.network;
 import com.wormzjl.icheme.fluid.support.FluidTestSupport;
 import com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics;
 import com.wormzjl.icheme.science.fluid.solver.PhaseLayout;
+import com.wormzjl.icheme.science.fluid.solver.StepPhaseRules;
 import com.wormzjl.icheme.science.fluid.state.ParticleSize;
 import com.wormzjl.icheme.science.fluid.state.SolidInventory;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
@@ -393,10 +394,10 @@ class PrecipitatedSolidsTest {
                 TestPhases.liquidVolume(tank),dryIce.volume(),capacity,Arrays.stream(TestPhases.vapor(answer)).sum());
         assertNull(TestPhases.vaporProperties(answer),"the TP answer proposes no vapour");
         int[] splits={0},record={0};var own=ownSplit(tank,capacity,splits);
-        assertSame(tank,pilot.phaseCheck(tank,false,null,record,0,null,own,()->{}),"no vapour: the tank keeps its liquid");
+        assertSame(tank,StepPhaseRules.phaseCheck(pilot,tank,false,null,record,0,null,own,()->{}),"no vapour: the tank keeps its liquid");
         assertEquals(0,splits[0],"no crossing: no own split");
         assertEquals(FluidThermodynamics.phaseBits(answer)&~FluidThermodynamics.phaseBits(tank),record[0],"the vapour is refused for the solve");
-        assertSame(tank,pilot.phaseCheck(tank,false,null,record,0,null,own,()->{}),"the solve's next pass");
+        assertSame(tank,StepPhaseRules.phaseCheck(pilot,tank,false,null,record,0,null,own,()->{}),"the solve's next pass");
         assertEquals(0,splits[0],"no own split in the solve");
     }
 
@@ -474,7 +475,7 @@ class PrecipitatedSolidsTest {
         var answer=pilot.flashTP(t,point.pressure(),PhaseLayout.totalAmounts(point),()->{});
         assertNull(TestPhases.liquidProperties(answer),"the TP answer stays one vapour");
         int[] splits={0},record={0};var own=ownSplit(point,frosted.inventory().volume(),splits);
-        assertSame(point,pilot.phaseCheck(point,false,null,record,0,null,own,()->{}),"no phase added");
+        assertSame(point,StepPhaseRules.phaseCheck(pilot,point,false,null,record,0,null,own,()->{}),"no phase added");
         assertEquals(0,splits[0],"no own split");
         assertEquals(0,record[0],"nothing to refuse");
     }

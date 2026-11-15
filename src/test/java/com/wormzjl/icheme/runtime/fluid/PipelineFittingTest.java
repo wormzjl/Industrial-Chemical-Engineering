@@ -24,7 +24,7 @@ class PipelineFittingTest {
         var records=new LinkedHashMap<Long,WorldTopologyLedger.Registration>();var stock=new HashMap<Long,PassiveNetwork.Reservoir>();
         for(int i=0;i<5;i++) {
             long id=i+1;var kind=i==0||i==4?Kind.RESERVOIR:Kind.PIPE;var p=new Position(DIM,axis.x*i,64+axis.y*i,axis.z*i);
-            var d=new Device(id,p,kind,axis,new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Passive());
+            var d=Device.builder(id,p,kind,axis,new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Passive()).build();
             var spec=FluidDeviceSpec.nitrogen(EventPathWorld.CATALOG);records.put(id,new WorldTopologyLedger.Registration(d,spec,0));
             if(kind==Kind.RESERVOIR)stock.put(id,new PassiveNetwork.Reservoir(id,p.y(),model.initialNitrogenCharge(spec.volume(),298.15,i==0?first:last,NOOP)));
         }
@@ -100,7 +100,7 @@ class PipelineFittingTest {
         }
         assertThrows(IllegalArgumentException.class,()->graph.pipes().getFirst().withForbiddenDirections(4));
         assertThrows(IllegalArgumentException.class,()->Cutoff.fromCode(4));
-        var d=new Device(20,new Position(DIM,10,64,0),Kind.VOID,Direction.EAST,new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Passive());
+        var d=Device.builder(20,new Position(DIM,10,64,0),Kind.VOID,Direction.EAST,new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Passive()).build();
         assertThrows(IllegalArgumentException.class,()->d.withCutoff(Direction.EAST,Cutoff.CHECK));
         var bad=CheckpointImages.renamed(image(valve(world)),"CHECK","CHECX");
         assertTrue(assertThrows(IllegalArgumentException.class,()->FluidCheckpointCodec.decodeTopology(bad,0,key->key.on(model))).getMessage().contains("unknown Cutoff CHECX"));
@@ -111,7 +111,7 @@ class PipelineFittingTest {
             var records=new ArrayList<Device>();var stocks=new HashMap<Long,PassiveNetwork.Reservoir>();
             for(int x=0;x<7;x++) {
                 long id=x+1;var kind=x==0||x==6?Kind.RESERVOIR:x==4?Kind.PUMP:Kind.PIPE;
-                var device=new Device(id,new Position(DIM,x,64,0),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kind),kind==Kind.PUMP?pumpFacing:Direction.EAST,new PipeResistance.Geometry(1,.05,.000045,0),kind==Kind.PUMP?new FlowControl.Pump(.01,500000):new FlowControl.Passive());
+                var device=Device.builder(id,new Position(DIM,x,64,0),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kind),kind==Kind.PUMP?pumpFacing:Direction.EAST,new PipeResistance.Geometry(1,.05,.000045,0),kind==Kind.PUMP?new FlowControl.Pump(.01,500000):new FlowControl.Passive()).build();
                 if(x==2)device=device.withCutoff(Direction.EAST,Cutoff.CHECK);
                 records.add(device);if(kind==Kind.RESERVOIR)stocks.put(id,new PassiveNetwork.Reservoir(id,64,model.initialNitrogenCharge(1,298.15,200000,NOOP)));
             }
@@ -184,7 +184,7 @@ class PipelineFittingTest {
         var world=line(Direction.EAST,150000,190000);world.registry.installPipeCutoff(3,Direction.EAST);world.registry.togglePipeCutoff(3);
         long next=world.ledger.nextIdentity();var edits=new ArrayList<WorldTopologyLedger.Edit>();
         for(int x=1;x<=3;x++) {
-            var d=new Device(next,new Position(DIM,x,64,1),Kind.PIPE,Direction.EAST,new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Passive());
+            var d=Device.builder(next,new Position(DIM,x,64,1),Kind.PIPE,Direction.EAST,new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Passive()).build();
             edits.add(new WorldTopologyLedger.Edit(next,new WorldTopologyLedger.Registration(d,FluidDeviceSpec.nitrogen(EventPathWorld.CATALOG),0)));next++;
         }
         world.registry.submit(edits,next,null);world.registry.applyPending();
@@ -193,10 +193,10 @@ class PipelineFittingTest {
     }
 
     @Test void malformedCodesAndCutoffsOnOtherDeviceKindsAreRejectedByTheReader() {
-        var device=new Device(1,new Position(DIM,0,64,0),Kind.PIPE,Direction.EAST,new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Passive());
+        var device=Device.builder(1,new Position(DIM,0,64,0),Kind.PIPE,Direction.EAST,new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Passive()).build();
         var open=image(device.withCutoff(Direction.EAST,Cutoff.OPEN));var bad=CheckpointImages.renamed(open,"OPEN","OPEX");
         assertTrue(assertThrows(IllegalArgumentException.class,()->FluidCheckpointCodec.decodeTopology(bad,0,key->key.on(model))).getMessage().contains("unknown Cutoff OPEX"));
-        var other=new Device(1,device.position(),Kind.VOID,device.facing(),device.geometry(),device.control());
+        var other=Device.builder(1,device.position(),Kind.VOID,device.facing(),device.geometry(),device.control()).build();
         var illegalKind=CheckpointImages.renamed(open,"PIPE","VOID");
         assertTrue(assertThrows(IllegalArgumentException.class,()->FluidCheckpointCodec.decodeTopology(illegalKind,0,key->key.on(model))).getMessage().contains("Only a pipe"));
         assertThrows(IllegalArgumentException.class,()->other.withCutoff(Direction.EAST,Cutoff.OPEN));
@@ -235,7 +235,7 @@ class PipelineFittingTest {
             var devices=new ArrayList<Device>();var stock=new HashMap<Long,PassiveNetwork.Reservoir>();
             for(int i=0;i<3;i++) {
                 long id=i+1;var position=new Position(DIM,i*axis.x,64+i*axis.y,i*axis.z);
-                devices.add(new Device(id,position,i==1?Kind.PIPE:Kind.RESERVOIR,axis,new PipeResistance.Geometry(1,.05,.000045,0),i==1?new FlowControl.PressureValve(200000):new FlowControl.Passive()));
+                devices.add(Device.builder(id,position,i==1?Kind.PIPE:Kind.RESERVOIR,axis,new PipeResistance.Geometry(1,.05,.000045,0),i==1?new FlowControl.PressureValve(200000):new FlowControl.Passive()).build());
                 if(i!=1)stock.put(id,new PassiveNetwork.Reservoir(id,position.y(),model.initialNitrogenCharge(1,298.15,i==0?upstream:100000,NOOP)));
             }
             var compiled=PhysicalFluidTopology.compile(devices,stock);assertEquals(1,compiled.islands().size());
@@ -248,7 +248,7 @@ class PipelineFittingTest {
     @Test void pendingInstallResizeAndPressureEditsRoundTripWithoutAnotherFormatField() {
         var world=line(Direction.EAST);var before=stock(world);assertTrue(world.registry.installPipePressureValve(3,Direction.EAST));
         var record=world.registry.registrations().get(3L);var d=record.device();
-        var edited=new Device(d.id(),d.position(),d.kind(),d.facing(),new PipeResistance.Geometry(1,.25,d.geometry().roughness(),0),new FlowControl.PressureValve(275000));
+        var edited=Device.builder(d.id(),d.position(),d.kind(),d.facing(),new PipeResistance.Geometry(1,.25,d.geometry().roughness(),0),new FlowControl.PressureValve(275000)).build();
         world.registry.submit(List.of(new WorldTopologyLedger.Edit(3,new WorldTopologyLedger.Registration(edited,record.spec(),record.revision()+1))),world.ledger.nextIdentity(),null);
         var snapshots=world.coordinator.snapshots();var checkpoint=new FluidCheckpointCodec.Checkpoint(world.entries());
         var store=FluidCheckpointStore.memory();store.commit(store.prepare(checkpoint,Optional.of(world.ledger.snapshot()),world.ledger.onlineTick(),key->key.on(model)));
@@ -286,7 +286,7 @@ class PipelineFittingTest {
         var r=active.active().get(3L);var plain=new LinkedHashMap<>(active.active());plain.put(3L,new WorldTopologyLedger.Registration(r.device().withInlineFilter(Direction.EAST,false),r.spec(),r.revision()));
         var clean=new WorldTopologyLedger.Snapshot(active.onlineTick(),active.nextIdentity(),plain,active.events(),active.constructed(),active.destroyed(),active.basis(),active.recoveries());
         var encoded=FluidCheckpointCodec.encodeTopology(active);var other=FluidCheckpointCodec.encodeTopology(clean);int changed=-1;for(int i=0;i<encoded.length;i++)if(encoded[i]!=other[i]){assertEquals(-1,changed);changed=i;}assertTrue(changed>=0);encoded[changed]=2;assertThrows(IllegalArgumentException.class,()->FluidCheckpointCodec.decodeTopology(encoded,0,k->model));
-        var d=r.device();assertThrows(IllegalArgumentException.class,()->new Device(d.id(),d.position(),Kind.VOID,d.facing(),d.geometry(),d.control(),List.of(),true,Cutoff.NONE,true));assertThrows(IllegalArgumentException.class,()->d.withCutoff(Direction.EAST,Cutoff.OPEN));
+        var d=r.device();assertThrows(IllegalArgumentException.class,()->Device.builder(d.id(),d.position(),Kind.VOID,d.facing(),d.geometry(),d.control()).inlineFilter(true).build());assertThrows(IllegalArgumentException.class,()->d.withCutoff(Direction.EAST,Cutoff.OPEN));
     }
     @Test void removingLoadedCakeQueuesOneConservedWorldRecovery(){
         var world=line(Direction.EAST);world.registry.installPipeFilter(3,Direction.EAST);world.registry.applyPending();
@@ -342,7 +342,7 @@ class PipelineFittingTest {
             assertTrue(world.registry.installPipeMover(3,axis,kind));assertFalse(world.registry.installPipeMover(3,axis,kind));
             assertFalse(world.registry.installPipeFilter(3,axis));assertFalse(world.registry.installPipePressureValve(3,axis));assertFalse(world.registry.installPipeCutoff(3,axis));
             var installed=world.registry.registrations().get(3L);var d=installed.device();
-            assertEquals(Kind.PIPE,d.kind());assertEquals(kind,d.hydraulicKind());assertEquals(com.wormzjl.icheme.science.machine.InlineMachines.design(old.device().geometry().diameter(),kind==Kind.PUMP),d.control());assertEquals(old.spec(),installed.spec());assertEquals(old.device().geometry(),d.geometry());assertEquals(old.device().id(),d.id());
+            assertEquals(Kind.PIPE,d.kind());assertEquals(kind,d.hydraulicKind());assertEquals(com.wormzjl.icheme.science.fluid.network.InlineMovers.design(old.device().geometry().diameter(),kind==Kind.PUMP),d.control());assertEquals(old.spec(),installed.spec());assertEquals(old.device().geometry(),d.geometry());assertEquals(old.device().id(),d.id());
             world.registry.applyPending();assertEquals(before,stock(world));
             // The one-block mover this was once compared with is gone (batch 2026-10-28-old-mover-removal): the in-line
             // mover is the only form, one driven pipe in the host's bore.
@@ -354,7 +354,7 @@ class PipelineFittingTest {
         for(var kind:List.of(Kind.PUMP,Kind.COMPRESSOR)){
             var world=line(Direction.EAST);var before=stock(world);world.registry.installPipeMover(3,Direction.EAST,kind);var r=world.registry.registrations().get(3L);var d=r.device();
             FlowControl control=kind==Kind.PUMP?new FlowControl.Pump(.02,600000):new FlowControl.Compressor(.08,2);
-            var edited=new Device(d.id(),d.position(),d.kind(),d.facing(),new PipeResistance.Geometry(1,.25,.000045,0),control,d.ports(),true,d.cutoff(),false);
+            var edited=Device.builder(d.id(),d.position(),d.kind(),d.facing(),new PipeResistance.Geometry(1,.25,.000045,0),control).ports(d.ports()).cutoff(d.cutoff()).build();
             world.registry.submit(List.of(new WorldTopologyLedger.Edit(3,new WorldTopologyLedger.Registration(edited,r.spec(),r.revision()+1))),world.ledger.nextIdentity(),null);
             var image=FluidCheckpointCodec.encodeTopology(world.ledger.snapshot());var loaded=FluidCheckpointCodec.decodeTopology(image,0,k->model);assertArrayEquals(image,FluidCheckpointCodec.encodeTopology(loaded));
             var restored=new EventPathWorld(0,loaded,world.entries());restored.registry.applyPending();assertEquals(edited,restored.ledger.active().get(3L).device());
@@ -366,10 +366,10 @@ class PipelineFittingTest {
     @Test void verticalHostsAndConflictingOrDisabledMoverControlsAreRejected(){
         var world=line(Direction.UP);for(var kind:List.of(Kind.PUMP,Kind.COMPRESSOR)){
             assertFalse(world.registry.installPipeMover(3,Direction.UP,kind));assertFalse(world.registry.installPipeMover(3,Direction.EAST,kind));
-            var d=world.registry.registrations().get(3L).device();assertThrows(IllegalArgumentException.class,()->new Device(d.id(),d.position(),Kind.PIPE,Direction.UP,d.geometry(),PhysicalFluidTopology.defaultMover(kind)));
-            assertThrows(IllegalArgumentException.class,()->new Device(d.id(),d.position(),Kind.PIPE,Direction.EAST,d.geometry(),PhysicalFluidTopology.defaultMover(kind),List.of(),true,Cutoff.OPEN));
-            assertThrows(IllegalArgumentException.class,()->new Device(d.id(),d.position(),Kind.PIPE,Direction.EAST,d.geometry(),PhysicalFluidTopology.defaultMover(kind),List.of(),true,Cutoff.NONE,true));
-            FlowControl disabled=kind==Kind.PUMP?new FlowControl.Pump(.01,500000,false):new FlowControl.Compressor(.05,3,false);assertThrows(IllegalArgumentException.class,()->new Device(d.id(),d.position(),Kind.PIPE,Direction.EAST,d.geometry(),disabled));
+            var d=world.registry.registrations().get(3L).device();assertThrows(IllegalArgumentException.class,()->Device.builder(d.id(),d.position(),Kind.PIPE,Direction.UP,d.geometry(),PhysicalFluidTopology.defaultMover(kind)).build());
+            assertThrows(IllegalArgumentException.class,()->Device.builder(d.id(),d.position(),Kind.PIPE,Direction.EAST,d.geometry(),PhysicalFluidTopology.defaultMover(kind)).cutoff(Cutoff.OPEN).build());
+            assertThrows(IllegalArgumentException.class,()->Device.builder(d.id(),d.position(),Kind.PIPE,Direction.EAST,d.geometry(),PhysicalFluidTopology.defaultMover(kind)).inlineFilter(true).build());
+            FlowControl disabled=kind==Kind.PUMP?new FlowControl.Pump(.01,500000,false):new FlowControl.Compressor(.05,3,false);assertThrows(IllegalArgumentException.class,()->Device.builder(d.id(),d.position(),Kind.PIPE,Direction.EAST,d.geometry(),disabled).build());
         }
     }
     @Test void eligibilityAndMeshesCoverBothAxesHeadingsAndDiameterExtremes(){

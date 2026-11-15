@@ -37,7 +37,7 @@ class MixedGasJunctionStaticTest {
         assertTrue(failures.isEmpty(),failures.size()+" of 32 cases failed:\n"+String.join("\n",failures));
     }
     private PhysicalFluidTopology.Device device(long id,int x,int y,int z,Kind kind){
-        return new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position("minecraft:overworld",x,y,z),kind,PhysicalFluidTopology.Direction.EAST,BORE,new FlowControl.Passive());
+        return PhysicalFluidTopology.Device.builder(id,new PhysicalFluidTopology.Position("minecraft:overworld",x,y,z),kind,PhysicalFluidTopology.Direction.EAST,BORE,new FlowControl.Passive()).build();
     }
     private PassiveNetwork.Reservoir boundary(PhysicalFluidTopology.Device d,double pressure,int component){
         double temperature=asymmetric&&d.kind()==Kind.GENERATOR?(d.id()==1?300:400):350;

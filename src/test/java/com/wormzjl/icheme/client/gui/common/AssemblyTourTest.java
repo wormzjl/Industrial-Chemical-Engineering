@@ -2,7 +2,7 @@ package com.wormzjl.icheme.client.gui.common;
 
 import com.wormzjl.icheme.client.gui.common.kit.Column;
 import com.wormzjl.icheme.client.gui.common.kit.Measure;
-import com.wormzjl.icheme.science.column.operation.OperationView;
+import com.wormzjl.icheme.science.plant.column.OperationView;
 import com.wormzjl.icheme.science.display.DisplayUnit;
 import com.wormzjl.icheme.science.tutorial.guide.TourFile;
 import org.junit.jupiter.api.Test;

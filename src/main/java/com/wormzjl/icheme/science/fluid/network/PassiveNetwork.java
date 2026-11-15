@@ -16,7 +16,7 @@ public record PassiveNetwork(List<Reservoir> reservoirs,List<Pipe> pipes,List<Sc
      * lighter liquid, then the heavier, each phase up to what the vessel held of it at the step start and the next phase
      * beyond that, a liquid with its volume share of the solids. A port never closes for want of a phase, and acts on
      * outflow only (inflow is delivered as through a bulk end). The port's driving pressure is the node's pressure plus
-     * a per-end offset ({@code PassiveStepSolver.endPressure}: the level head at a LIQUID port, decision D9). Only a
+     * a per-end offset ({@code PortStreams.endPressure}: the level head at a LIQUID port, decision D9). Only a
      * finite vessel has phases to select from, so a non-BULK port is valid only on a {@link NodeKind#RESERVOIR} or its
      * rate-solve copy, a {@link NodeKind#PORT}.
      *
@@ -182,7 +182,7 @@ public record PassiveNetwork(List<Reservoir> reservoirs,List<Pipe> pipes,List<Sc
     /**
      * Conserved kernel values. The enclosing world snapshot supplies the component basis and energy-reference identity.
      * {@code volume} and {@code levelHeight} are the vessel's geometry, not its contents: the height its level head stands
-     * over ({@link PassiveStepSolver#portHead}), {@link PassiveStepSolver#LEVEL_HEAD_HEIGHT} for a one-block tank, a
+     * over ({@link PortStreams#portHead}), {@link PassiveStepSolver#LEVEL_HEAD_HEIGHT} for a one-block tank, a
      * drum's own height (batch 2026-10-15-custom-equipment-rendering, owner decision 2026-10-16). {@link #with} keeps
      * all three while the contents change.
      *
@@ -254,6 +254,8 @@ public record PassiveNetwork(List<Reservoir> reservoirs,List<Pipe> pipes,List<Sc
         /** The pressure outside this vessel's wall that works on its bag: its {@link #ambient}, none on a rigid wall. */
         public double wallWorkPressure(){return rigid?0:ambient;}
         @Override public double[] moles(){return moles.clone();}
+        /** Whether every amount is zero, read on the field without the copy {@link #moles()} makes (finding P-12, batch 2026-11-13-codebase-review). */
+        public boolean holdsNoAmounts(){for(double n:moles)if(n!=0)return false;return true;}
         @Override public boolean equals(Object other){return other instanceof Inventory value&&geometry.equals(value.geometry)&&open==value.open&&rigid==value.rigid&&Objects.equals(pool,value.pool)&&Objects.equals(tower,value.tower)&&Double.doubleToLongBits(volume)==Double.doubleToLongBits(value.volume)&&Double.doubleToLongBits(levelHeight)==Double.doubleToLongBits(value.levelHeight)&&Double.doubleToLongBits(ambient)==Double.doubleToLongBits(value.ambient)&&blanket==value.blanket&&Double.doubleToLongBits(internalEnergy)==Double.doubleToLongBits(value.internalEnergy)&&Arrays.equals(moles,value.moles)&&solids.equals(value.solids);}
         @Override public int hashCode(){return 31*Objects.hash(volume,levelHeight,internalEnergy,solids,open,rigid,geometry,pool,tower,ambient,blanket)+Arrays.hashCode(moles);}
     }
@@ -365,7 +367,7 @@ public record PassiveNetwork(List<Reservoir> reservoirs,List<Pipe> pipes,List<Sc
         public double maximumArea(){double area=0;for(var section:sections)area=Math.max(area,section.area());return area;}
         public double minimumDiameter(){double diameter=Double.POSITIVE_INFINITY;for(var section:sections)diameter=Math.min(diameter,section.diameter());return diameter;}
         public double minimumArea(){double area=Double.POSITIVE_INFINITY;for(var section:sections)area=Math.min(area,section.area());return area;}
-        /** The run's own volume, m3: what stands in it is its static column (owner decision D34, {@code PassiveStepSolver.columnDensity}). */
+        /** The run's own volume, m3: what stands in it is its static column (owner decision D34, {@code PortStreams.columnDensity}). */
         public double volume(){double volume=0;for(var section:sections)volume+=section.area()*section.length();return volume;}
     }
 }

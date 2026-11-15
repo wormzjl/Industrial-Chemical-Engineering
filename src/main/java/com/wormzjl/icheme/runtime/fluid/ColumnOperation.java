@@ -1,16 +1,17 @@
 package com.wormzjl.icheme.runtime.fluid;
 
 import com.wormzjl.icheme.science.fluid.SimulationTime;
-import com.wormzjl.icheme.science.column.operation.ColumnCycle;
-import com.wormzjl.icheme.science.column.operation.ColumnCycle.Account;
-import com.wormzjl.icheme.science.column.operation.ColumnSolve;
-import com.wormzjl.icheme.science.column.operation.ColumnStatus;
-import com.wormzjl.icheme.science.column.operation.Condition;
-import com.wormzjl.icheme.science.column.operation.Refusal;
-import com.wormzjl.icheme.science.column.operation.Setpoints;
-import com.wormzjl.icheme.science.column.operation.DriftBands;
-import com.wormzjl.icheme.science.column.operation.Port;
-import com.wormzjl.icheme.science.column.operation.SplitTable;
+import com.wormzjl.icheme.science.plant.column.ColumnCycle;
+import com.wormzjl.icheme.science.plant.column.ColumnCycle.Account;
+import com.wormzjl.icheme.science.plant.column.ColumnSolve;
+import com.wormzjl.icheme.science.plant.column.ColumnStatus;
+import com.wormzjl.icheme.science.plant.column.Condition;
+import com.wormzjl.icheme.science.plant.column.Refusal;
+import com.wormzjl.icheme.science.plant.column.Setpoints;
+import com.wormzjl.icheme.science.plant.column.DriftBands;
+import com.wormzjl.icheme.science.plant.column.Port;
+import com.wormzjl.icheme.science.plant.column.SplitTable;
+import com.wormzjl.icheme.science.plant.port.PortAccounts;
 import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
 import com.wormzjl.icheme.science.column.v3.V3NeuralSeed;
 import com.wormzjl.icheme.science.fluid.network.ConservativeTransport;
@@ -24,7 +25,7 @@ import java.util.*;
  * The running columns in the network (batch 2026-10-28-column-operation, C4, plan sections 4.3, 4.4, 5 and 9): the islands'
  * ports read their plans here, their bookings land here, and every running column takes a cycle each
  * {@link #CYCLE_TICKS} online ticks. Minecraft-free; the server thread owns it. Arithmetic only: the split table and each
- * product's partial molar enthalpies come from a solve on a worker (C5).
+ * product's prices come from a solve on a worker (C5).
  *
  * <p>Conservation (plan 4.4). An inlet's void books what arrives; the account takes exactly that, as spans of online time,
  * and a cycle takes the spans' shares up to its tick. A cycle takes at most what an account holds and puts the same moles,
@@ -36,10 +37,10 @@ import java.util.*;
  * an inert solid waits at its inlet, a cycle moves what arrived by its tick to the bottoms, and the bottoms' generator gives it.</p>
  */
 public final class ColumnOperation implements IslandCoordinator.Ports {
-    /** A cycle each 5 s of online time (plan section 5). */
-    public static final int CYCLE_TICKS=100;
-    /** The outlet fence L (owner Q4): a slice plans from the credits booked through its start less this. */
-    public static final long FENCE_TICKS=440;
+    /** A cycle each 5 s of online time (plan section 5; {@link PortAccounts#CYCLE_TICKS}). */
+    public static final int CYCLE_TICKS=PortAccounts.CYCLE_TICKS;
+    /** The outlet fence L (owner Q4): a slice plans from the credits booked through its start less this ({@link PortAccounts#FENCE_TICKS}). */
+    public static final long FENCE_TICKS=PortAccounts.FENCE_TICKS;
     /**
      * An inlet's account aims at this many cycles of its set rate; an outlet holds this many cycles of design production (plan
      * 4.2): 30 s and 120 s at factor 1. Counts of cycles (batch 2026-11-11-minecraft-time-delta, W3, owner T6), so the
@@ -70,7 +71,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         V3ColumnInput design(ColumnUnit unit);
         /** Unit {@code unit}'s condenser, which says what share of its duty the cooling water takes: water-cooled where it has no design. */
         default com.wormzjl.icheme.science.equipment.ColumnComponents.Condenser condenser(ColumnUnit unit){return com.wormzjl.icheme.science.equipment.ColumnComponents.Condenser.EXCHANGER;}
-        /** Submits {@code job}; {@code done} gets its outcome on the server thread. False: not admitted, the next cycle tries again. */
+        /** Submits {@code job}; {@code done} gets its outcome on the server thread. False: not admitted now; the same job is asked again at the next decision points until it is (R-ST4). */
         boolean submit(long unit,ColumnSolve.Job job,java.util.function.Consumer<ColumnSolve.Outcome> done);
         /** No solves: a table comes only from {@link #table}. */
         Solves NONE=new Solves(){public V3ColumnInput design(ColumnUnit unit){return null;}public boolean submit(long unit,ColumnSolve.Job job,java.util.function.Consumer<ColumnSolve.Outcome> done){return false;}};
@@ -80,8 +81,8 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
      * was given (as a drift reference, with the components its table holds); its outcome once it is done.
      */
     static final class Pending {
-        final DriftBands.Trigger trigger;final long tick;final com.wormzjl.icheme.science.column.operation.Setpoints setpoints;final SplitTable.Reference state;final boolean[] held;ColumnSolve.Outcome outcome;
-        Pending(DriftBands.Trigger trigger,long tick,com.wormzjl.icheme.science.column.operation.Setpoints setpoints,SplitTable.Reference state,boolean[] held){this.trigger=trigger;this.tick=tick;this.setpoints=setpoints;this.state=state;this.held=held;}
+        final DriftBands.Trigger trigger;final long tick;final com.wormzjl.icheme.science.plant.column.Setpoints setpoints;final SplitTable.Reference state;final boolean[] held;ColumnSolve.Outcome outcome;
+        Pending(DriftBands.Trigger trigger,long tick,com.wormzjl.icheme.science.plant.column.Setpoints setpoints,SplitTable.Reference state,boolean[] held){this.trigger=trigger;this.tick=tick;this.setpoints=setpoints;this.state=state;this.held=held;}
         long applyAt(){return tick+APPLY_TICKS;}
     }
     /** A state whose solve was refused (W2): no solve is asked again while the state taken stays inside its bands. */
@@ -128,21 +129,23 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         SplitTable table;
         ColumnUnit.Probes probes;
         boolean rebuildProbes;
-        /** Each product's partial molar enthalpies at its solved temperature and pressure, J/mol, in the table's order (ColumnSolve.Solved). */
+        /** Each product's prices at its solved temperature and pressure, J/mol per compound, one row per product in the table's order (ColumnSolve.Solved: its enthalpy per mass times each molar mass). */
         double[][] enthalpy;
         long nextCycle;
         String status="STARTING: waiting for the first solve";
         /** The status as the Operation tab says it (C7), set with {@link #status}; the solve that gave the table, whether warm. */
-        com.wormzjl.icheme.science.column.operation.OperationView.Phase phase=com.wormzjl.icheme.science.column.operation.OperationView.Phase.STARTING;DriftBands.Trigger solvedBy;boolean warm;
+        com.wormzjl.icheme.science.plant.column.OperationView.Phase phase=com.wormzjl.icheme.science.plant.column.OperationView.Phase.STARTING;DriftBands.Trigger solvedBy;boolean warm;
         /** What the last cycle and the solves found (W1): the step's conditions, then the solve's and the notices. */
         List<Condition.Active> conditions=List.of();
         ColumnCycle.Step last;
         /** The solve in flight, the tick of the last one asked, the warm seed. */
         Pending pending;long lastSolve=Long.MIN_VALUE/2;V3NeuralSeed seed;
+        /** The job of the solve in flight while the service refuses it, asked again at each decision point (R-ST4); null once taken. Memory only. */
+        ColumnSolve.Job heldJob;
         /** After a solve the worker did not finish, no solve before this tick; whether that solve was already the one retry (W2). */
         long waitUntil=Long.MIN_VALUE/2;boolean retried;
         /** The state whose solve was refused, or null; the requested set points whose solve was refused and why, or null (W2, memory only). */
-        Refused refused;com.wormzjl.icheme.science.column.operation.Setpoints refusedSetpoints;Condition.Active setpointRefusal;
+        Refused refused;com.wormzjl.icheme.science.plant.column.Setpoints refusedSetpoints;Condition.Active setpointRefusal;
         /** The design had no operating point at the last request while no table stands: NOT READY, or null. */
         Condition.Active missing;
         /** Rule A in force (owner Q1, C1: rule B, with A where a solve fails): a solve of the short steam was refused, so every input is cut together until the steam is no longer short or its shortage leaves the refused state's bands. */
@@ -338,16 +341,16 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
      * set rate; an outlet: its buffer of design production), its valve's opening as {@code opening} reads it (NaN unknown);
      * the duties booked over the cycle against the table's at the set feed. Null where the ledger has no such unit.
      */
-    public com.wormzjl.icheme.science.column.operation.OperationView view(long unit,long now,java.util.function.LongToDoubleFunction opening) {
+    public com.wormzjl.icheme.science.plant.column.OperationView view(long unit,long now,java.util.function.LongToDoubleFunction opening) {
         var u=topology.column(unit);if(u==null)return null;
         var r=u.running()?runs.get(unit):null;var set=u.setpoints();
-        if(r==null)return new com.wormzjl.icheme.science.column.operation.OperationView(com.wormzjl.icheme.science.column.operation.OperationView.Phase.STOPPED,List.of(),0,null,
+        if(r==null)return new com.wormzjl.icheme.science.plant.column.OperationView(com.wormzjl.icheme.science.plant.column.OperationView.Phase.STOPPED,List.of(),0,null,
                 "STOPPED",false,true,set,null,List.of(),List.of(),null);
         var t=r.table;var step=r.last!=null&&!r.last.tripped()?r.last:null;double seconds=cycleSeconds();
         // The cycle demands its inlets at the accepted set points (W2); the view shows the requested ones beside them where they differ.
         var demanded=running(u,t);var accepted=t!=null&&set.intensivelyDiffers(t.reference().setpoints())?demanded:null;
         var stations=new ArrayList<>(u.stations());stations.removeIf(s->s.device()==0);stations.sort(Comparator.comparing((ColumnUnit.Station s)->s.port()).thenComparingInt(ColumnUnit.Station::index));
-        var streams=new ArrayList<com.wormzjl.icheme.science.column.operation.OperationView.Stream>();
+        var streams=new ArrayList<com.wormzjl.icheme.science.plant.column.OperationView.Stream>();
         for(var s:stations) {
             var registration=s.device()==0?null:topology.active().get(s.device());
             double rate=0,temperature=Double.NaN,held=Double.NaN,pressure=registration==null?Double.NaN:registration.spec().pressure();
@@ -367,26 +370,26 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
                     if(capacity>0)held=s.account().total()/capacity;
                 }
             }
-            streams.add(new com.wormzjl.icheme.science.column.operation.OperationView.Stream(s.port(),s.index(),rate,temperature,pressure,held,opening.applyAsDouble(s.valve())));
+            streams.add(new com.wormzjl.icheme.science.plant.column.OperationView.Stream(s.port(),s.index(),rate,temperature,pressure,held,opening.applyAsDouble(s.valve())));
         }
-        var duties=new ArrayList<com.wormzjl.icheme.science.column.operation.OperationView.Duty>();
+        var duties=new ArrayList<com.wormzjl.icheme.science.plant.column.OperationView.Duty>();
         if(t!=null) {
             double f=set.feedRate();
-            duties.add(new com.wormzjl.icheme.science.column.operation.OperationView.Duty(com.wormzjl.icheme.science.column.operation.OperationView.DutyKind.CONDENSER,0,step==null?0:step.condenser()/seconds,t.condenserPerFeed()*f));
-            if(set.reboilerPerFeed()!=0)duties.add(new com.wormzjl.icheme.science.column.operation.OperationView.Duty(com.wormzjl.icheme.science.column.operation.OperationView.DutyKind.REBOILER,0,step==null?0:step.reboiler()/seconds,t.reboilerPerFeed()*f));
+            duties.add(new com.wormzjl.icheme.science.plant.column.OperationView.Duty(com.wormzjl.icheme.science.plant.column.OperationView.DutyKind.CONDENSER,0,step==null?0:step.condenser()/seconds,t.condenserPerFeed()*f));
+            if(set.reboilerPerFeed()!=0)duties.add(new com.wormzjl.icheme.science.plant.column.OperationView.Duty(com.wormzjl.icheme.science.plant.column.OperationView.DutyKind.REBOILER,0,step==null?0:step.reboiler()/seconds,t.reboilerPerFeed()*f));
             var pa=t.pumparoundPerFeed();
-            for(int j=0;j<pa.length;j++)duties.add(new com.wormzjl.icheme.science.column.operation.OperationView.Duty(com.wormzjl.icheme.science.column.operation.OperationView.DutyKind.PUMPAROUND,j,
+            for(int j=0;j<pa.length;j++)duties.add(new com.wormzjl.icheme.science.plant.column.OperationView.Duty(com.wormzjl.icheme.science.plant.column.OperationView.DutyKind.PUMPAROUND,j,
                     step==null||j>=step.pumparounds().length?0:step.pumparounds()[j]/seconds,pa[j]*f));
             // An air condenser's fans (U2): their power at the last cycle, and at the set feed, for the electricity network to come.
             double atSet=t.fans(u.airSurface(),f);
-            if(!Double.isNaN(atSet))duties.add(new com.wormzjl.icheme.science.column.operation.OperationView.Duty(com.wormzjl.icheme.science.column.operation.OperationView.DutyKind.FANS,0,
+            if(!Double.isNaN(atSet))duties.add(new com.wormzjl.icheme.science.plant.column.OperationView.Duty(com.wormzjl.icheme.science.plant.column.OperationView.DutyKind.FANS,0,
                     step==null||Double.isNaN(r.fanPower)?0:r.fanPower,com.wormzjl.icheme.science.equipment.HeatSides.fanPower(u.airSurface(),atSet)));
         }
-        var solve=t==null?null:new com.wormzjl.icheme.science.column.operation.OperationView.Solve(r.solvedBy,r.warm,SimulationTime.playSeconds(Math.max(0,now-r.tableTick)));
+        var solve=t==null?null:new com.wormzjl.icheme.science.plant.column.OperationView.Solve(r.solvedBy,r.warm,SimulationTime.playSeconds(Math.max(0,now-r.tableTick)));
         // The trays at the feed taken (W7): the live drop as the channel reads it, the worst tray's flood fraction.
-        var trays=com.wormzjl.icheme.science.column.operation.OperationView.Trays.NONE;
-        if(t!=null&&t.flood().known()){double taken=step==null?0:step.feedMoles()/seconds;trays=new com.wormzjl.icheme.science.column.operation.OperationView.Trays(drop(t,taken),t.flood().fraction(taken),drop(t,set.feedRate()),t.flood().fraction(set.feedRate()),t.flood().tray()+1);}
-        return new com.wormzjl.icheme.science.column.operation.OperationView(r.phase,r.conditions,step==null?0:step.alpha(),
+        var trays=com.wormzjl.icheme.science.plant.column.OperationView.Trays.NONE;
+        if(t!=null&&t.flood().known()){double taken=step==null?0:step.feedMoles()/seconds;trays=new com.wormzjl.icheme.science.plant.column.OperationView.Trays(drop(t,taken),t.flood().fraction(taken),drop(t,set.feedRate()),t.flood().fraction(set.feedRate()),t.flood().tray()+1);}
+        return new com.wormzjl.icheme.science.plant.column.OperationView(r.phase,r.conditions,step==null?0:step.alpha(),
                 r.pending==null?null:r.pending.trigger,r.status+water(u),true,true,set,accepted,streams,duties,solve,trays);
     }
     /** The role of a column's pressure drop channel, {@code differential_pressure} (W3.3). */
@@ -435,7 +438,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         }
         return Double.isFinite(value)?new InstrumentSample(value,tick):null;
     }
-    /** Installs a solved split table and its products' partial molar enthalpies (J/mol) for unit {@code unit} (C5). */
+    /** Installs a solved split table and its products' prices (J/mol per compound, one row per product) for unit {@code unit} (C5). */
     public void table(long unit,SplitTable table,double[][] enthalpy) {
         var r=runs.get(unit);if(r==null)return;
         if(enthalpy.length!=table.products().size())throw new IllegalArgumentException("One enthalpy row per product");
@@ -497,29 +500,49 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
      * at the next decision point ({@link #booked}, {@link #decide}); one a cycle later looks again, since a port's island that
      * stopped (a hold) books nothing. */
     private void schedule() {
-        long now=coordinator.now(),next=wakes.isEmpty()?Long.MAX_VALUE:Math.max(now+1,wakes.firstKey());for(var r:runs.values())next=Math.min(next,r.nextCycle>now?r.nextCycle:now+CYCLE_TICKS);
+        // A wake kept for an island behind its tick is looked at again at every decision point (decide), not by a deadline.
+        long now=coordinator.now();Long ahead=wakes.higherKey(now);long next=ahead==null?Long.MAX_VALUE:ahead;
+        for(var r:runs.values())next=Math.min(next,r.nextCycle>now?r.nextCycle:now+CYCLE_TICKS);
         coordinator.schedule(IslandScheduler.Kind.COLUMN_CYCLE,next,this::due);
     }
-    /** Runs every cycle that is due and whose inlets have booked through its tick, then schedules the next. */
+    /** Runs the wakes due, then every cycle that is due and whose inlets have booked through its tick, then schedules the next. */
     private void due() {
         // A solve answered at once from a cycle reaches done() inside this pass: one pass at a time.
         if(cycling)return;cycling=true;
         try {
             long now=coordinator.now();
+            // The wakes first: an island acts on its new plan as of the wake's tick before a cycle's wait can materialise it past it.
+            wake(now);
             for(var r:List.copyOf(runs.values()))while(r.nextCycle<=now&&portsThrough(r,r.nextCycle)&&applied(r,r.nextCycle)){cycle(r,r.nextCycle);r.nextCycle+=CYCLE_TICKS;save(r);}
-            // A certified port island rests on its old plan: wake it where the new one starts.
-            while(!wakes.isEmpty()&&wakes.firstKey()<=now)for(long device:wakes.pollFirstEntry().getValue()){Long owner=registry.owner(device);if(owner!=null)coordinator.portsMoved(owner);}
         } finally{cycling=false;}
         schedule();
     }
     private boolean cycling;
+    /**
+     * The port and utility islands whose plans a cycle or an owe moved, each at the tick its new plan starts (the cycle's or
+     * the owe's tick plus the fence): a certified island rests on its old plan, so it is woken there. Each acts as of that tick
+     * ({@link IslandCoordinator#movedAt}, codebase review R-ST4): a certified island is materialised to it and solves from it
+     * however late this runs; an awake island behind it keeps the wake until it gets there (it may certify on the way).
+     * Before R-ST4 a wake ended the certificate of an island certified at that moment and was dropped for one awake then, so
+     * whether an island that certified a few ticks later rested on the old plan followed when its job completed.
+     */
+    private void wake(long now) {
+        if(wakes.isEmpty()||wakes.firstKey()>now)return;
+        // By the keys: a materialisation books spans, whose owes add wakes (each a fence past now) to the map.
+        for(long tick:List.copyOf(wakes.headMap(now,true).keySet())) {
+            var devices=wakes.get(tick);if(devices==null)continue;
+            devices.removeIf(device->{Long owner=registry.owner(device);return owner==null||coordinator.movedAt(owner,tick);});
+            if(devices.isEmpty())wakes.remove(tick);
+        }
+    }
 
     // ---------------- solves (plan section 6) ----------------
 
     /**
      * Whether the cycle at {@code tick} may run: no solve applies there, or its outcome is in and applied now. A solve
      * applies at the second cycle after its trigger whenever it finishes, so a table never depends on the worker's timing;
-     * the solve deadline bounds the wait (a deadline that expires is a failed solve).
+     * the solve deadline bounds the wait (a deadline that expires is a failed solve), and a solve the service refused waits
+     * for its room ({@link #resend}, R-ST4).
      *
      * <p>A refused solve is not asked again on its own (W2): a refused set point stays refused while the unit's set points
      * equal it (rule A for a refused short steam), a refused state while the state taken stays inside its bands. A solve the
@@ -580,10 +603,29 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         boolean[] held;if(r.table!=null)held=r.table.held();else{held=new boolean[weights.length];Arrays.fill(held,true);}
         var pending=new Pending(trigger,tick,setpoints,DriftBands.reference(state,designDemand,setpoints,r.table==null?0:r.table.reference().enthalpySlope()),held);
         var job=new ColumnSolve.Job(trigger,design,setpoints,taken,trigger==DriftBands.Trigger.START?null:r.seed,solves.condenser(u));
-        // In flight before the submission: a solver may answer at once.
-        r.pending=pending;
-        if(!solves.submit(r.unit,job,outcome->done(r,pending,outcome))){r.pending=null;return;}
-        r.lastSolve=tick;
+        // In flight before the submission: a solver may answer at once. A solve the service refuses (at capacity, a machine's
+        // load) is not dropped: it is held and asked again at each decision point until it is taken (resend), and the cycle it
+        // applies at waits for its outcome (applied), so the table applied is the one this cycle asked on a quiet machine
+        // (codebase review R-ST4).
+        r.pending=pending;r.lastSolve=tick;
+        if(!solves.submit(r.unit,job,outcome->done(r,pending,outcome))){r.heldJob=job;refusedSolves.add(r.unit);}
+    }
+    /** The units whose solve in flight the service refused ({@link Run#heldJob}), in unit order. */
+    private final Set<Long> refusedSolves=new TreeSet<>();
+    /**
+     * Asks again for each solve the service refused (R-ST4): the same job for the same pending solve, so it applies at the
+     * cycle it was asked for, until the service takes it. The service's room is freed by the completions of the jobs it
+     * holds (islands, columns, stills), none of which waits for a column's cycle, so the wait ends. A unit that stopped, or
+     * whose solve went, is forgotten.
+     */
+    private void resend() {
+        for(long unit:List.copyOf(refusedSolves)) {
+            var r=runs.get(unit);refusedSolves.remove(unit);
+            if(r==null||r.heldJob==null||r.pending==null||r.pending.outcome!=null){if(r!=null)r.heldJob=null;continue;}
+            // Taken off before the submission: an answer at once runs the cycles, which may hold a solve of their own.
+            var job=r.heldJob;var pending=r.pending;r.heldJob=null;
+            if(!solves.submit(unit,job,outcome->done(r,pending,outcome))){r.heldJob=job;refusedSolves.add(unit);}
+        }
     }
     /** Whether {@code state}, at set points {@code setpoints}, stands inside the bands of the refused state {@code refused}. */
     private static boolean inside(Refused refused,Setpoints setpoints,ColumnCycle.Step state,double designDemand) {
@@ -859,7 +901,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         long fence=slice.startTick()-FENCE_TICKS;
         var available=s.account().moles();var solids=s.solids();var log=r==null?null:r.credits.get(s.device());
         var made=r==null?null:asOf(log,Credit::tick,fence);
-        if(log!=null)for(var c:log)if(c.tick()>fence){var n=c.product().moles();for(int i=0;i<available.length;i++)available[i]=Math.max(0,available[i]-n[i]);solids=solids.less(c.solids());}
+        if(log!=null)for(var c:log)if(c.tick()>fence){PortAccounts.less(available,c.product().moles());solids=solids.less(c.solids());}
         double total=0;for(double n:available)total+=n;
         if(!(mass(available)>TRACE_KG))total=0;
         double temperature=node.state().temperature();
@@ -869,7 +911,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         // the island (a topology event, queued on the engine's tick, grow), and the account holds the moles until then.
         var mine=total>0?onIsland(island,available):null;
         if(total>0&&mine==null)growth.add(s.device());
-        if(!(total>0)||mine==null)return new PortPlan(node.id(),s.valve(),0,node.state().temperature(),com.wormzjl.icheme.science.fluid.solver.PhaseLayout.totalAmounts(node.state()));
+        if(!(total>0)||mine==null)return PortAccounts.idle(node,s.valve());
         double mass=mass(available),cap=mass/slice.seconds(time())*TAKE_MARGIN,rate=cap;
         if(made!=null) {
             double produced=mass(made.product().moles())/cycleSeconds(),aim=produced*bufferSeconds()/2;
@@ -904,20 +946,10 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         return found;
     }
     /** {@code moles} on the world list on island {@code island}'s own list, or null where it holds a compound the island does not carry. */
-    private double[] onIsland(long island,double[] moles) {
-        var own=coordinator.model(island).components();if(own.equals(axis))return moles;
-        var result=new double[own.size()];
-        for(int i=0;i<moles.length;i++){if(moles[i]==0)continue;int j=own.indexOf(axis.get(i));if(j<0)return null;result[j]=moles[i];}
-        return result;
-    }
+    private double[] onIsland(long island,double[] moles){return PortAccounts.onIsland(coordinator.model(island).components(),axis,moles);}
     /** {@code moles} on island {@code island}'s own list on the world list (the accounts'). */
-    private double[] onWorld(long island,double[] moles) {
-        var own=coordinator.model(island).components();if(own.equals(axis))return moles;
-        var result=new double[axis.size()];
-        for(int i=0;i<moles.length;i++){if(moles[i]==0)continue;int j=axis.indexOf(own.get(i));if(j<0)throw new IllegalStateException("Island "+island+" carries "+own.get(i)+", which the world list does not");result[j]=moles[i];}
-        return result;
-    }
-    private double mass(double[] moles){double m=0;for(int i=0;i<moles.length;i++)m+=moles[i]*weights[i];return m;}
+    private double[] onWorld(long island,double[] moles){return PortAccounts.onWorld(island,coordinator.model(island).components(),axis,moles);}
+    private double mass(double[] moles){return PortAccounts.mass(weights,moles);}
     private double molar(double[] moles){double t=0;for(double n:moles)t+=n;return t>0?mass(moles)/t:0;}
     /** What the island's ports gave and took over {@code start} to {@code end} (plan 4.4). */
     @Override public void booked(long island,PassiveNetwork graph,long start,long end,PassiveIntervalSolver.Result result) {
@@ -936,7 +968,13 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     }
     /** Whether a port's island booked while a cycle was due, since the last decision point. */
     private boolean bookedWhileDue;
-    @Override public void decide(){if(!bookedWhileDue)return;bookedWhileDue=false;due();bookedWhileDue=false;}
+    @Override public void decide() {
+        // The solves the service refused, asked again (resend); the wakes kept for islands behind their ticks (wake). At every
+        // decision point; an answer at once, or a materialisation, may make a cycle due.
+        if(!cycling&&!refusedSolves.isEmpty())resend();
+        if(!cycling)wake(coordinator.now());
+        if(!bookedWhileDue)return;bookedWhileDue=false;due();bookedWhileDue=false;
+    }
     /** Books what the ports gave and took over {@code start} to {@code end}: an inlet's arrivals as a span, an outlet's gift as a debit. */
     private void credit(Map<Long,double[]> moles,Map<Long,Double> energy,Map<Long,SolidInventory> solids,long start,long end) {
         for(var e:moles.entrySet()) {
@@ -953,10 +991,9 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
                 if(r!=null)r.spans.computeIfAbsent(device,d->new ArrayDeque<>()).addLast(new Span(start,end,account,inert));
             } else {
                 // A generator gives: debit exactly that, component by component; the energy by the same share of the account.
-                var held=s.account().moles();double before=s.account().total(),given=0;
-                for(int i=0;i<n.length;i++){double g=Math.max(0,n[i]);if(g>held[i]*(1+1e-9)+1e-12)com.wormzjl.icheme.IChemE.LOGGER.error("column status=OVERDRAWN unit={} port={} component={} held={} given={}",unit,s.port(),i,held[i],g);held[i]=Math.max(0,held[i]-g);given+=g;}
-                double share=before>0?Math.min(1,given/before):0,debited=share*s.account().energy();
-                var account=new Account(held,s.account().energy()-debited);
+                var port=s.port();
+                var debit=PortAccounts.debit(s.account(),n,(i,held,g)->com.wormzjl.icheme.IChemE.LOGGER.error("column status=OVERDRAWN unit={} port={} component={} held={} given={}",unit,port,i,held,g));
+                double given=debit.moles(),debited=debit.energy();var account=debit.account();
                 var t=u.totals();u=withPort(u,s,account,s.solids().less(solid)).withTotals(new ColumnUnit.Totals(t.taken(),t.produced(),t.reboiler(),t.condenser()+(joule-debited),t.pumparounds()));
                 topology.column(u);
                 if(r!=null)r.gifts.computeIfAbsent(device,d->new ArrayDeque<>()).addLast(new Gift(start,end,given));
@@ -1067,7 +1104,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         var sides=sides(u,utility);if(sides.isEmpty())return;
         var rates=r.debt(utility).rates;
         rates.addLast(new Duty(tick,Math.max(0,utility.sign()*joule)/cycleSeconds()/sides.size()));
-        while(rates.size()>1&&rates.peekFirst().tick()<tick-FENCE_TICKS-KEEP_TICKS)rates.removeFirst();
+        PortAccounts.keep(rates,Duty::tick,tick-FENCE_TICKS-KEEP_TICKS);
     }
     /**
      * Books {@code joule} (J) into the transit of {@code utility}'s sides at {@code tick}, an equal share into each (S3b:
@@ -1084,7 +1121,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         }
         var owed=r.debt(utility).owed;
         owed.addLast(new Owed(tick,share,booked));
-        while(owed.size()>1&&owed.peekFirst().tick()<tick-FENCE_TICKS-KEEP_TICKS)owed.removeFirst();
+        PortAccounts.keep(owed,Owed::tick,tick-FENCE_TICKS-KEEP_TICKS);
     }
     /**
      * A coupled side whose partner a running column holds (C6b, W4): a utility side reads the heat the column owes it as of

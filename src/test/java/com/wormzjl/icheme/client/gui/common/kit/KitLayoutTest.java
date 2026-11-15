@@ -518,6 +518,60 @@ class KitLayoutTest {
         assertThrows(IllegalArgumentException.class, () -> door.layout(areas, 448, List.of(tall), M), "one row list an area");
     }
 
+    /**
+     * A press on a door's choice (finding C6, batch 2026-11-13-codebase-review): {@code KitDoor.action} gives the choice under
+     * the point in any of its columns, read at the view's offset, and nothing for a point outside the view.
+     */
+    @Test
+    void theDoorsActionIsTheChoiceUnderThePoint() {
+        var tall = new ArrayList<Column.Row>();
+        for (int i = 0; i < 8; i++) tall.add(new Column.Field("f" + i, "Entry " + i, "m", null));
+        tall.add(new Column.Choice("Off", "The unit runs as built", false, "mode:off"));
+        var beside = List.<Column.Row>of(new Column.Choice("Hold the outlet temperature", null, true, "mode:outlet"));
+        var areas = List.of(new Rect(168, 74, 132, 100), new Rect(312, 74, 132, 100));
+        var door = new KitDoor();
+        door.layout(areas, 448, List.of(tall, beside), M);
+        var hold = door.columns().getLast().rows().getFirst().rect();
+        assertEquals("mode:outlet", door.action(hold.x() + 3, hold.y() + 3), "a choice in the second column");
+        assertNull(door.action(hold.x() + 3, 74 + 100 + 2), "below the view: nothing");
+        assertNull(door.action(160, hold.y() + 3), "left of the view: nothing");
+        var off = door.columns().getFirst().rows().getLast().rect();
+        assertTrue(off.y() + 3 >= 74 + 100, "the first column's last choice lies below the view at the top");
+        assertNull(door.action(off.x() + 3, off.y() + 3));
+        for (int i = 0; i < 20; i++) door.wheel(200, 100, -1);
+        int offset = door.view().offset();
+        assertTrue(offset > 0 && offset == door.view().max(), "scrolled to the end");
+        assertEquals("mode:off", door.action(off.x() + 3, off.y() + 3 - offset), "read at the view's offset");
+    }
+
+    /**
+     * A screen places its door's rows again each frame (finding C5, batch 2026-11-13-codebase-review): rows equal to the last
+     * give the same column object, placed once; a changed row, another measure or a new layout places them again.
+     */
+    @Test
+    void equalRowsGiveTheSameColumn() {
+        var door = new KitDoor();
+        var area = new Rect(10, 30, 200, 120);
+        java.util.function.Function<String, List<Column.Row>> rows = value -> List.of(new Column.Group("Flow", null, List.of(
+                new Column.Field("f", "Target", "kg/s", null), new Column.Reading("r", "Reading", value, "kg/s", null))),
+                new Column.Buttons(List.of(new Column.Button("a", "Apply", true, null))));
+        door.layout(area, rows.apply("1.0"), M);
+        var first = door.place(rows.apply("1.0"), M);
+        assertSame(first, door.place(rows.apply("1.0"), M), "equal rows: the same column");
+        var mutable = new ArrayList<>(rows.apply("1.0"));
+        assertSame(first, door.place(mutable, M));
+        mutable.set(1, new Column.Buttons(List.of(new Column.Button("a", "Apply", false, null))));
+        var changed = door.place(mutable, M);
+        assertNotSame(first, changed, "a list changed in place after the call is not taken as equal");
+        var moved = door.place(rows.apply("2.5"), M);
+        assertNotSame(changed, moved, "a changed reading: placed again");
+        assertEquals(moved.rows().size(), first.rows().size());
+        assertNotSame(moved, door.place(rows.apply("2.5"), Measure.fixed(7)), "another measure: placed again");
+        var again = door.place(rows.apply("2.5"), M);
+        door.layout(area, rows.apply("2.5"), M);
+        assertNotSame(again, door.place(rows.apply("2.5"), M), "a new layout: placed again");
+    }
+
     @Test void productionScreensNeverOverrideThePlayerGuiScale() throws Exception {
         var root=java.nio.file.Path.of("src/main/java/com/wormzjl/icheme/client");
         var forbidden=java.util.regex.Pattern.compile("setGuiScale\\s*\\(|WindowScale\\.(apply|restore|lower)\\s*\\(|guiScale\\(\\)\\.set\\s*\\(");

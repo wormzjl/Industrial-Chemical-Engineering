@@ -39,6 +39,11 @@ final class ConverterDesign extends UnitDesign {
     private final boolean gas;
 
     ConverterDesign(boolean gas) {
+        super(new Sizes(1, 20, 1,
+                2, 24,
+                0, 0,
+                Orientation.VERTICAL, "converter.diameter", "converter.shell", null, false,
+                1));
         this.gas = gas;
     }
 
@@ -57,65 +62,10 @@ final class ConverterDesign extends UnitDesign {
         return 1000 * volume / TURNOVER;
     }
 
-    @Override
-    public double minSize() {
-        return 1;
-    }
-
-    @Override
-    public double maxSize() {
-        return 20;
-    }
-
-    @Override
-    public double sizeStep() {
-        return 1;
-    }
-
-    @Override
-    public int minLength(double size) {
-        return 2;
-    }
-
-    @Override
-    public int maxLength(double size) {
-        return 24;
-    }
-
     /** A new converter's shells: 1.2 D, within their range. */
     @Override
     public int defaultLength(double size) {
         return Math.max(minLength(size), Math.min(maxLength(size), (int) Math.round(1.2 * size)));
-    }
-
-    @Override
-    public int minSupport(double size, int length) {
-        return 0;
-    }
-
-    @Override
-    public int maxSupport() {
-        return 0;
-    }
-
-    @Override
-    public Orientation orientation() {
-        return Orientation.VERTICAL;
-    }
-
-    @Override
-    public String sizeRow() {
-        return "converter.diameter";
-    }
-
-    @Override
-    public String lengthRow() {
-        return "converter.shell";
-    }
-
-    @Override
-    public String supportRow() {
-        return null;
     }
 
     @Override

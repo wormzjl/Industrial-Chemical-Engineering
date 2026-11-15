@@ -136,10 +136,9 @@ public final class SimulatorResults {
         }
     }
 
+    /** A list's length: at most {@code MAX_LIST}, each element at least one byte. */
     private static int count(RegistryFriendlyByteBuf b) {
-        int count = b.readVarInt();
-        if (count < 0 || count > MAX_LIST || count > b.readableBytes()) throw new DecoderException("Invalid list length");
-        return count;
+        return Wire.count(b, MAX_LIST, 1, "results");
     }
 
     private static <T> void write(RegistryFriendlyByteBuf b, List<T> items, BiConsumer<RegistryFriendlyByteBuf, T> one) {
@@ -316,16 +315,11 @@ public final class SimulatorResults {
     }
 
     private static void doubles(RegistryFriendlyByteBuf b, double[] values) {
-        b.writeVarInt(values.length);
-        for (double value : values) b.writeDouble(value);
+        Wire.doubles(b, values);
     }
 
     private static double[] doubles(RegistryFriendlyByteBuf b) {
-        int count = b.readVarInt();
-        if (count < 0 || count > MAX_LIST || count * 8L > b.readableBytes()) throw new DecoderException("Invalid array length");
-        var values = new double[count];
-        for (int i = 0; i < count; i++) values[i] = b.readDouble();
-        return values;
+        return Wire.doubles(b, MAX_LIST, "results array");
     }
 
     private static void stream(RegistryFriendlyByteBuf b, FlowStream stream) {

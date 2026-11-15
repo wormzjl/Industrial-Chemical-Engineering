@@ -65,7 +65,7 @@ class V3SideDrawContractTest {
 
     @Test
     void intermediateStageGeometryMapsOnlyTheFeedAndStripsAuthoredDraws() {
-        V3ColumnInput mapped = V3ColumnCalculator.withStageGeometry(input(List.of(
+        V3ColumnInput mapped = V3ContinuationLadder.withStageGeometry(input(List.of(
                 new V3SideDrawSpec(1, 2), new V3SideDrawSpec(2, 3), new V3SideDrawSpec(4, 5))), 2);
         assertEquals(List.of(), mapped.sideDraws());
         assertEquals(1, mapped.feedStageNumber());

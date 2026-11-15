@@ -7,8 +7,8 @@ import com.wormzjl.icheme.runtime.assembly.AssemblyService;
 import com.wormzjl.icheme.runtime.fluid.ColumnUnit;
 import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
 import com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity;
-import com.wormzjl.icheme.science.column.operation.OperationView;
-import com.wormzjl.icheme.science.column.operation.Port;
+import com.wormzjl.icheme.science.plant.column.OperationView;
+import com.wormzjl.icheme.science.plant.column.Port;
 import com.wormzjl.icheme.science.fluid.network.PassiveNetwork;
 import com.wormzjl.icheme.runtime.assembly.AssemblyStore;
 import com.wormzjl.icheme.runtime.control.ColumnCommands;
@@ -42,7 +42,8 @@ import java.util.Set;
 public final class ColumnOperationGameTests {
     private ColumnOperationGameTests() {}
 
-    /** A menu open reads what is stored: a resting island's clock stays where it stands, where a live read advances it (merge review, finding 8). */
+    /** A menu open and a view advance no island (merge review, finding 8; code base review R5): a resting island's clock stays
+     * where it stands, and the view shows the island at now, from its certificate. */
     @GameTest(template = "empty", timeoutTicks = 10000, batch = "column-read")
     public static void aMenuReadAdvancesNoIsland(GameTestHelper helper) {
         var level = helper.getLevel();
@@ -58,8 +59,10 @@ public final class ColumnOperationGameTests {
                     long before = committed.getAsLong();
                     FluidNetwork.opening(world, device);
                     helper.assertTrue(committed.getAsLong() == before, "The read advanced the island past " + before);
-                    world.view(device);
-                    helper.assertTrue(committed.getAsLong() > before, "A live read should advance what the stored read left");
+                    // A view previews the resting island at now and changes nothing on it (code base review R5).
+                    var view = world.view(device);
+                    helper.assertTrue(committed.getAsLong() == before, "The view advanced the island past " + before);
+                    helper.assertTrue(view.committedTick() > before, "The view should show the island at now, past its committed " + before + ": " + view.committedTick());
                     level.removeBlock(pos, false);
                 })
                 .thenWaitUntil(() -> helper.assertTrue(!world.capture().world().active().containsKey(device), "Waiting for topology cleanup"))
@@ -238,7 +241,7 @@ public final class ColumnOperationGameTests {
                 .thenExecute(() -> life.stage(() -> {
                     life.check(answer(operator[0]).equals(ColumnCommands.APPLIED), "START is answered APPLIED: " + answer(operator[0]));
                     life.check(life.unit() != null && life.unit().running(), "START reached the unit");
-                    var s = com.wormzjl.icheme.science.column.operation.Setpoints.of(java.util.Objects.requireNonNull(rig.design.trays().operating()));
+                    var s = com.wormzjl.icheme.science.plant.column.Setpoints.of(java.util.Objects.requireNonNull(rig.design.trays().operating()));
                     var values = new java.util.ArrayList<Double>(List.of(s.feedRate(), s.condenserTemperature(), s.refluxRatio(), s.reboilerPerFeed()));
                     for (double d : s.steamPerFeed()) values.add(d);
                     for (double d : s.drawsPerFeed()) values.add(d);
@@ -403,7 +406,7 @@ public final class ColumnOperationGameTests {
         var view = life.view();
         if (view == null) return false;
         if (!view.running()) life.failure[0] = "A blocked product does not stop the column: " + view.phase() + " " + view.engine();
-        return view.binding() != null && view.binding().condition() == com.wormzjl.icheme.science.column.operation.Condition.PRODUCT_FULL && view.alpha() < .05;
+        return view.binding() != null && view.binding().condition() == com.wormzjl.icheme.science.plant.column.Condition.PRODUCT_FULL && view.alpha() < .05;
     }
 
     /** Plan C3: the blocked product's buffer is full and the feed stands, the column still running. */

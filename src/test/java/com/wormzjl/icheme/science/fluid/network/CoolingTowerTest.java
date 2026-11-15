@@ -33,6 +33,24 @@ class CoolingTowerTest {
 
     @Test void sharedFillMatchesItsDeclaredCalibrationPoint(){assertEquals(298.15,TowerTransfer.referenceOutlet(model),1e-5);}
     /**
+     * F2 (batch 2026-11-13-codebase-review): towers on two islands with different compound lists run on two views of one
+     * whole model. Each view is fitted once, however their calls interleave, and gives the same calibration point.
+     */
+    @Test void towersOnTwoCompoundListsFitOnceEach(){
+        var nitrogen=model.on(List.of("Nitrogen"),true);var oxygen=model.on(List.of("Oxygen"),true);
+        assertNotSame(nitrogen,oxygen);
+        TowerTransfer.referenceOutlet(nitrogen);TowerTransfer.referenceOutlet(oxygen);
+        int fitted=TowerTransfer.fitted();
+        for(int i=0;i<3;i++){
+            assertEquals(298.15,TowerTransfer.referenceOutlet(nitrogen),1e-5);
+            assertEquals(298.15,TowerTransfer.referenceOutlet(oxygen),1e-5);
+        }
+        assertEquals(fitted,TowerTransfer.fitted(),"no refit while the two islands alternate");
+        var thirdList=model.on(List.of("Nitrogen","Oxygen"),true);
+        TowerTransfer.referenceOutlet(thirdList);TowerTransfer.referenceOutlet(nitrogen);
+        assertEquals(fitted+1,TowerTransfer.fitted(),"a third list fits once and leaves the others' fits standing");
+    }
+    /**
      * The plume's exhaust (batch 2026-11-10-custom-shader-system, W4): at the calibration point (water 35 to 25 °C, L/G 1, air
      * at 25 °C and 50 %) the air leaves near 28.5 °C and close to saturation, as the plan's mixing-line table takes it; its
      * humidity is the ambient's plus the evaporation over the dry air; no air leaves the ambient air.

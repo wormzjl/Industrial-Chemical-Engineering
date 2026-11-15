@@ -18,7 +18,7 @@ public enum WaterParticipation {
      * dissolves and is dissolved, forms up to two liquids beside a gas, and its crystal is ice in the crystal
      * competition. The equilibrium is the cubic's alone; water's own enthalpy, entropy and volume take IF97's share on
      * the balance book ({@link PhaseState}, {@link WaterShare}). The basis keeps its order: the other compounds, then
-     * water. A contract of this kind is built from a package with derived pairs ({@link PhaseContract#forDerivedPackage}).
+     * water. A contract of this kind is built from a package with derived pairs ({@code PackageBinding.derivedContract}).
      */
     IN_EQUATION_OF_STATE
 }

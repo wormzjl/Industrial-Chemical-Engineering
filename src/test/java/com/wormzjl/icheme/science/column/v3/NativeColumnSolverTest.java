@@ -1,130 +1,243 @@
 package com.wormzjl.icheme.science.column.v3;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import com.wormzjl.icheme.science.column.v3.NativeColumnSolver.Ceiling;
+import com.wormzjl.icheme.science.column.v3.linalg.RustNativeTables;
+import com.wormzjl.icheme.science.column.v3.linalg.V3BandedMatrix;
+import com.wormzjl.icheme.science.column.v3.linalg.V3BandedPivotedSolver;
 import com.wormzjl.icheme.science.column.v3.thermo.V3CrudeFeed;
-import com.wormzjl.icheme.science.column.v3.thermo.V3FugacityResult;
 import com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo;
-import com.wormzjl.icheme.science.column.v3.thermo.V3ThermoWorkspace;
-import com.wormzjl.icheme.science.thermo.PengRobinsonKernel.Root;
+import java.lang.reflect.Method;
+import java.util.Arrays;
 import java.util.List;
+import java.util.function.Supplier;
 import org.junit.jupiter.api.Test;
 
-/** The C++ column library loads by default where the build packed it, and its PR pass agrees with the Java kernel. */
+/**
+ * The Rust column library {@code icheme_column} (batch 2026-11-13-codebase-review, Rust stage (a)): its handshake, its
+ * band solve bit for bit against the Java body of {@link V3BandedPivotedSolver}, and a column that publishes the same
+ * bits with the band solve in the library. Every test skips where no library is built (no cargo); where the build
+ * packed one ({@code icheme.native.packaged}) or {@code icheme.native.path} names one, a library that does not load or
+ * fails its handshake is a failure. {@code ./gradlew nativeSmoke} runs this class on {@code build/native/cargo/release}.
+ *
+ * <p>The tests switch the ceiling with the package-private hook {@link NativeColumnSolver#ceilingForTest}, so the Java
+ * reference ({@code off}) and the library ({@code band}) run in one JVM; each restores the ceiling it found.</p>
+ */
 @org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.Cdu17FixtureExtension.class)
 class NativeColumnSolverTest {
+    /** A library must load where the build packed one or a path names one; elsewhere the test skips. */
+    private static void assumeLibrary() {
+        boolean expected = Boolean.getBoolean("icheme.native.packaged")
+                || !System.getProperty("icheme.native.path", "").isBlank();
+        if (expected) assertTrue(NativeColumnSolver.available(), "a Rust column library was expected: " + NativeColumnSolver.loadReport());
+        assumeTrue(NativeColumnSolver.available(), "No Rust column library for " + NativeColumnSolver.platform()
+                + " (" + NativeColumnSolver.loadReport() + "): build it with ./gradlew nativeBuild (needs cargo)");
+    }
+
+    private static <T> T withCeiling(Ceiling ceiling, Supplier<T> body) {
+        Ceiling previous = NativeColumnSolver.ceilingForTest(ceiling);
+        try {
+            return body.get();
+        } finally {
+            NativeColumnSolver.ceilingForTest(previous);
+        }
+    }
+
+    private static Object invokeNative(String name, Class<?>[] types, Object... arguments) throws Exception {
+        Method method = NativeColumnSolver.class.getDeclaredMethod(name, types);
+        method.setAccessible(true);
+        return method.invoke(null, arguments);
+    }
+
+    /** The three handshake steps the loader takes, each checked on its own: ABI, formulation token, self-test bits. */
     @Test
-    void loadsThePackedLibraryByDefaultAndFallsBackOtherwise() {
-        if (Boolean.getBoolean("icheme.native.packaged") || !System.getProperty("icheme.native.path", "").isBlank()) {
-            assertTrue(NativeColumnSolver.available(), "no C++ column library for " + NativeColumnSolver.platform());
+    void theLibraryPassesItsHandshake() throws Exception {
+        assumeLibrary();
+        assertEquals(NativeColumnSolver.ABI, invokeNative("nativeAbi", new Class<?>[0]));
+        assertEquals(V3ColumnCalculator.FORMULATION_REVISION + ";" + V3ColumnCalculator.WET_ASSUMPTIONS_REVISION + ";"
+                + V3ColumnCalculator.HEAT_ASSUMPTIONS_REVISION, invokeNative("nativeFormulation", new Class<?>[0]));
+        double[] answers = new double[NativeColumnSolver.SELF_TEST_SLOTS];
+        assertEquals(0, invokeNative("nativeSelfTest", new Class<?>[] {double[].class}, (Object) answers));
+        double[] expected = withCeiling(Ceiling.OFF, NativeColumnSolver::expectedSelfTest);
+        for (int slot = 0; slot < NativeColumnSolver.SELF_TEST_SLOTS; slot++) {
+            assertEquals(Long.toHexString(Double.doubleToRawLongBits(expected[slot])),
+                    Long.toHexString(Double.doubleToRawLongBits(answers[slot])), "self-test slot " + slot);
         }
-        if (!NativeColumnSolver.available()) {
-            assertEquals("java-fallback", NativeColumnSolver.version());
-            assertFalse(NativeColumnSolver.thermoBatchEnabled());
-            return;
+        assertTrue(NativeColumnSolver.loadReport().startsWith("loaded: "), NativeColumnSolver.loadReport());
+    }
+
+    /** Everything one solve gives: outcome, swaps, evidence and solution bits, and the P8 counters of its workspace. */
+    private record Solve(boolean refused, int outcome, int swaps, long[] evidence, long[] solution, String detail,
+            int fullWidthSolves, long updatedEntries, long fullWidthEntries) {
+        static Solve refusedInput() { return new Solve(true, -1, -1, null, null, null, 0, 0, 0); }
+
+        /** The fields the layout defines for this outcome (1 and 2 carry no evidence; 6 and 7 throw). */
+        String comparable() {
+            if (refused) return "refused";
+            StringBuilder sb = new StringBuilder().append(outcome).append(" counters ").append(fullWidthSolves)
+                    .append(' ').append(updatedEntries).append(' ').append(fullWidthEntries);
+            if (outcome == 0 || (outcome >= 3 && outcome <= 5)) {
+                sb.append(" swaps ").append(swaps).append(" evidence");
+                for (int k = outcome == 0 ? 0 : 1; k < 4; k++) sb.append(' ').append(Long.toHexString(evidence[k]));
+            }
+            if (outcome == 0) {
+                sb.append(" solution");
+                for (long bits : solution) sb.append(' ').append(Long.toHexString(bits));
+            }
+            if (detail != null) sb.append(" | ").append(detail);
+            return sb.toString();
         }
-        assertEquals(Boolean.parseBoolean(System.getProperty("icheme.native.thermo.batch", "true").trim()),
-                NativeColumnSolver.thermoBatchEnabled());
-        assertEquals("icheme-column-solver-cpp17", NativeColumnSolver.version());
-        assertEquals(Math.sqrt(2.0), NativeColumnSolver.smokeSolve(), 1.0e-10);
-        double[] variables = {1.0};
-        NativeColumnSolver.SolveResult result = NativeColumnSolver.solve(
-                variables, (point, residuals) -> residuals[0] = point[0] * point[0] - 2.0,
-                16, 1.0e-12, 1.0e-12);
-        assertEquals(0, result.status());
-        assertEquals(Math.sqrt(2.0), variables[0], 1.0e-10);
-        double[] derivativeBatch = NativeColumnSolver.pengRobinsonBatchTemperatureDerivatives(
-                new double[] {190.56}, new double[] {4_599_000.0}, new double[] {0.0115},
-                new double[] {0.0}, new double[] {300.0}, new double[] {101_325.0},
-                new double[] {1.0}, new double[] {1.0});
-        assertTrue(derivativeBatch != null && derivativeBatch.length == 11);
-        assertEquals(0.0, derivativeBatch[0]);
-        assertTrue(Double.isFinite(derivativeBatch[4]));
-        assertTrue(Double.isFinite(derivativeBatch[8]));
+
+        /** {@link #comparable()} without the Java message: the library returns codes, the hook adds the text. */
+        String withoutDetail() {
+            return new Solve(refused, outcome, swaps, evidence, solution, null, fullWidthSolves, updatedEntries,
+                    fullWidthEntries).comparable();
+        }
+    }
+
+    private static long[] bits(double... values) {
+        long[] bits = new long[values.length];
+        for (int k = 0; k < values.length; k++) bits[k] = Double.doubleToRawLongBits(values[k]);
+        return bits;
+    }
+
+    /** One {@link V3BandedPivotedSolver#solve} of the case on a fresh workspace, at whatever ceiling is set. */
+    private static Solve solverSolve(RustNativeTables.Case c) {
+        V3BandedMatrix matrix = new V3BandedMatrix(c.size, c.kl, c.ku);
+        try {
+            for (int row = 0; row < c.size; row++) {
+                for (int column = Math.max(0, row - c.kl); column <= Math.min(c.size - 1, row + c.ku); column++) {
+                    matrix.set(row, column, c.band[c.index(row, column)]);
+                }
+            }
+        } catch (IllegalArgumentException nonFinite) {
+            return Solve.refusedInput();
+        }
+        V3BandedPivotedSolver.Workspace workspace = new V3BandedPivotedSolver.Workspace();
+        V3BandedPivotedSolver.Result result;
+        try {
+            result = V3BandedPivotedSolver.solve(matrix, c.rhs, workspace);
+        } catch (IllegalArgumentException nonFiniteRightHandSide) {
+            return Solve.refusedInput();
+        } catch (IllegalStateException thrown) {
+            int outcome = thrown.getMessage().contains("non-finite entry") ? 6 : 7;
+            return new Solve(false, outcome, -1, null, null, thrown.getMessage(), workspace.fullWidthSolves(),
+                    workspace.updatedEntries(), workspace.fullWidthEntries());
+        }
+        if (result instanceof V3BandedPivotedSolver.Result.Success s) {
+            return new Solve(false, 0, s.pivotSwaps(), bits(s.backwardError(), s.minimumPivotMagnitude(),
+                    s.maximumPivotMagnitude(), s.pivotGrowth()), bits(s.solution()), null, workspace.fullWidthSolves(),
+                    workspace.updatedEntries(), workspace.fullWidthEntries());
+        }
+        V3BandedPivotedSolver.Result.Failure f = (V3BandedPivotedSolver.Result.Failure) result;
+        int outcome = switch (f.code()) {
+            case SINGULAR -> f.detail().contains("no nonzero pivot") ? 1 : 3;
+            case ILL_CONDITIONED -> f.detail().contains("scaling") ? 2 : 4;
+            case BACKWARD_ERROR_EXCEEDED -> 5;
+        };
+        return new Solve(false, outcome, f.pivotSwaps(), bits(0.0, f.minimumPivotMagnitude(), f.maximumPivotMagnitude(),
+                f.pivotGrowth()), null, f.detail(), workspace.fullWidthSolves(), workspace.updatedEntries(),
+                workspace.fullWidthEntries());
+    }
+
+    /** One {@code nativeBandedSolve} of the case through {@link NativeColumnSolver#bandedSolve}; null on status 3. */
+    private static Solve librarySolve(RustNativeTables.Case c, String where) {
+        double[] solution = new double[c.size];
+        double[] evidence = new double[4];
+        int[] counts = new int[7];
+        int status = NativeColumnSolver.bandedSolve(c.size, c.kl, c.ku, c.band.clone(), c.rhs.clone(), solution,
+                evidence, counts);
+        if (status == 3) return Solve.refusedInput();
+        assertEquals(0, status, where + ": transport status");
+        long updated = ((long) counts[4] << 32) | (counts[3] & 0xffffffffL);
+        long full = ((long) counts[6] << 32) | (counts[5] & 0xffffffffL);
+        return new Solve(false, counts[0], counts[1], bits(evidence), counts[0] == 0 ? bits(solution) : null, null,
+                counts[2], updated, full);
     }
 
     /**
-     * The C++ pass is a second Peng-Robinson implementation feeding the inside-out trial, so it must give the Java
-     * kernel's values: fugacity coefficients, enthalpy and compressibility of a crude column's liquid and vapour.
+     * The 1 570 cases of {@code banded.txt} (RustNativeTables' generator: random, dominant, column-shaped block,
+     * zero, singular, near-singular, ill-scaled, -0.0, Wilkinson up to size 1 026, non-finite), three ways: the Java
+     * body (ceiling off), the library called directly, and the solver with the ceiling at band. All three give the
+     * same bits and counters; a refused input (a non-finite entry or right-hand side) is status 3 in the library and an
+     * {@code IllegalArgumentException} in Java, at either ceiling.
      */
     @Test
-    void nativePengRobinsonPassMatchesTheJavaKernel() {
-        assumeTrue(NativeColumnSolver.available());
-        V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-        int components = thermo.componentBasis().componentCount();
-        double[] criticalTemperatures = new double[components];
-        double[] criticalPressures = new double[components];
-        double[] acentricFactors = new double[components];
-        double[] interactions = new double[components * components];
-        double[][] kij = thermo.binaryInteractions();
-        for (int component = 0; component < components; component++) {
-            criticalTemperatures[component] = thermo.componentCriticalTemperatureKelvin(component);
-            criticalPressures[component] = thermo.componentCriticalPressurePascal(component);
-            acentricFactors[component] = thermo.componentAcentricFactor(component);
-            System.arraycopy(kij[component], 0, interactions, component * components, components);
+    void theLibrarySolvesEveryTableCaseWithTheJavaBits() {
+        assumeLibrary();
+        int[] outcomes = new int[9];
+        int compared = 0;
+        long carriedBefore = NativeColumnSolver.bandSolves();
+        for (RustNativeTables.Spec spec : RustNativeTables.specs()) {
+            RustNativeTables.Case c = spec.build();
+            String where = spec.toString();
+            Solve reference = withCeiling(Ceiling.OFF, () -> solverSolve(c));
+            Solve direct = librarySolve(c, where);
+            Solve hooked = withCeiling(Ceiling.BAND, () -> solverSolve(c));
+            // The library answers in codes; the hook adds Java's messages, so the direct call compares without them.
+            assertEquals(reference.withoutDetail(), direct.comparable(), where + ": the library called directly");
+            assertEquals(reference.comparable(), hooked.comparable(), where + ": the solver with the ceiling at band");
+            outcomes[reference.refused() ? 8 : reference.outcome()]++;
+            compared++;
         }
-        // Three trays from the top to the bottom of a crude column: the liquid leans to the heavy end, the vapour
-        // to the light end.
-        double[] temperatures = {380.0, 480.0, 600.0};
-        double[] pressures = {150_000.0, 180_000.0, 220_000.0};
-        int nodes = temperatures.length;
-        double[] liquid = new double[nodes * components];
-        double[] vapor = new double[nodes * components];
-        for (int node = 0; node < nodes; node++) {
-            for (int component = 0; component < components; component++) {
-                liquid[node * components + component] = 1.0 + component;
-                vapor[node * components + component] = components - component;
-            }
+        System.out.println("NativeColumnSolverTest band cases " + compared + ", outcomes 0..7 and refused "
+                + Arrays.toString(outcomes) + ", library solves " + (NativeColumnSolver.bandSolves() - carriedBefore));
+        assertEquals(1_570, compared);
+        for (int outcome : new int[] {0, 1, 2, 3, 4, 5, 6, 8}) {
+            assertTrue(outcomes[outcome] > 0, "the table no longer reaches outcome " + outcome + ": " + Arrays.toString(outcomes));
         }
-        double[] batch = NativeColumnSolver.pengRobinsonBatch(criticalTemperatures, criticalPressures,
-                acentricFactors, interactions, temperatures, pressures, liquid, vapor);
-        assertTrue(batch != null && batch.length == 1 + nodes * 2 * (components + 2));
-        assertEquals(0.0, batch[0]);
+    }
 
-        V3ThermoWorkspace workspace = thermo.newWorkspace();
-        double worstLogPhi = 0.0;
-        double worstEnthalpy = 0.0;
-        double worstCompressibility = 0.0;
-        for (int node = 0; node < nodes; node++) {
-            for (Root root : Root.values()) {
-                double[] composition = new double[components];
-                double total = 0.0;
-                for (int component = 0; component < components; component++) {
-                    composition[component] = (root == Root.LIQUID ? liquid : vapor)[node * components + component];
-                    total += composition[component];
-                }
-                for (int component = 0; component < components; component++) composition[component] /= total;
-                V3FugacityResult java = thermo.fugacity(temperatures[node], pressures[node], composition, root, workspace);
-                int offset = 1 + (2 * node + (root == Root.LIQUID ? 0 : 1)) * (components + 2);
-                for (int component = 0; component < components; component++) {
-                    worstLogPhi = Math.max(worstLogPhi,
-                            Math.abs(batch[offset + component] - java.logFugacityCoefficient(component)));
-                }
-                double enthalpy = batch[offset + components]
-                        + thermo.idealGasMolarEnthalpy(temperatures[node], composition);
-                worstEnthalpy = Math.max(worstEnthalpy, Math.abs(enthalpy - java.molarEnthalpyJoulesPerMol()));
-                worstCompressibility = Math.max(worstCompressibility,
-                        Math.abs(batch[offset + components + 1] - java.compressibilityFactor()));
-            }
-        }
-        System.out.printf("C++ - Java PR: ln(phi) %.3e, H %.3e J/mol, Z %.3e%n",
-                worstLogPhi, worstEnthalpy, worstCompressibility);
-        assertTrue(worstLogPhi <= 1.0e-9, "ln(phi) differs by " + worstLogPhi);
-        assertTrue(worstEnthalpy <= 1.0e-6, "H differs by " + worstEnthalpy + " J/mol");
-        assertTrue(worstCompressibility <= 1.0e-9, "Z differs by " + worstCompressibility);
+    /** A call whose arrays do not match its header is refused (status 3) before any index, and the library stays on. */
+    @Test
+    void theLibraryRefusesAMalformedCall() {
+        assumeLibrary();
+        int size = 4, kl = 1, ku = 1;
+        double[] band = new double[size * (kl + ku + 1)];
+        for (int row = 0; row < size; row++) band[row * (kl + ku + 1) + kl] = 4.0 + row;
+        double[] rhs = {1.0, 2.0, 3.0, 4.0};
+        assertEquals(3, call(size, kl, ku, new double[band.length - 1], rhs, new double[size], new double[4], new int[7]), "short band");
+        assertEquals(3, call(size, kl, ku, null, rhs, new double[size], new double[4], new int[7]), "null band");
+        assertEquals(3, call(size, kl, ku, band, null, new double[size], new double[4], new int[7]), "null rhs");
+        assertEquals(3, call(size, kl, ku, band, rhs, null, new double[4], new int[7]), "null solution");
+        assertEquals(3, call(size, kl, ku, band, rhs, new double[size], null, new int[7]), "null evidence");
+        assertEquals(3, call(size, kl, ku, band, rhs, new double[size], new double[4], null), "null counts");
+        assertEquals(3, call(size, -1, ku, band, rhs, new double[size], new double[4], new int[7]), "negative kl");
+        assertEquals(3, call(size, kl, -1, band, rhs, new double[size], new double[4], new int[7]), "negative ku");
+        assertEquals(3, call(0, kl, ku, new double[0], new double[0], new double[0], new double[4], new int[7]), "size 0");
+        assertEquals(3, call(size, kl, ku, band, new double[size - 1], new double[size], new double[4], new int[7]), "short rhs");
+        assertEquals(3, call(size, kl, ku, band, rhs, new double[size + 1], new double[4], new int[7]), "long solution");
+        assertEquals(3, call(size, kl, ku, band, rhs, new double[size], new double[3], new int[7]), "short evidence");
+        assertEquals(3, call(size, kl, ku, band, rhs, new double[size], new double[4], new int[6]), "short counts");
+        double[] nan = band.clone();
+        nan[kl] = Double.NaN;
+        assertEquals(3, call(size, kl, ku, nan, rhs, new double[size], new double[4], new int[7]), "NaN entry");
+        assertEquals(3, call(size, kl, ku, band, new double[] {1.0, Double.POSITIVE_INFINITY, 3.0, 4.0},
+                new double[size], new double[4], new int[7]), "infinite rhs");
+        double[] solution = new double[size];
+        int[] counts = new int[7];
+        assertEquals(0, call(size, kl, ku, band, rhs, solution, new double[4], counts), "a good call after the refusals");
+        assertEquals(0, counts[0]);
+        assertArrayEquals(new double[] {1.0 / 4.0, 2.0 / 5.0, 3.0 / 6.0, 4.0 / 7.0}, solution, 1.0e-15);
+    }
+
+    private static int call(int size, int kl, int ku, double[] band, double[] rhs, double[] solution, double[] evidence,
+            int[] counts) {
+        return NativeColumnSolver.bandedSolve(size, kl, ku, band, rhs, solution, evidence, counts);
     }
 
     /**
-     * The C++ pass only predicts; the Java Newton and audit publish. A four-tray dry crude column, whose cold solve
-     * takes the inside-out trial, publishes the same products with either pass, to rounding.
+     * A four-tray dry crude column (a dry cold solve on the classical chain) publishes the same bits, products,
+     * duties and diagnostics, with the ceiling off and at band, and the library carried band solves in the second.
      */
     @Test
-    void separatingColumnPublishesTheSameProductsWithEitherOuterPass() {
-        assumeTrue(NativeColumnSolver.available());
+    void aColumnPublishesTheSameBitsWithTheBandSolveInTheLibrary() {
+        assumeLibrary();
         V3CrudeFeed crude = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018")
                 .crudeFeed("icheme:tia_juana_light_kl1976");
         double[] flows = crude.moleFractions();
@@ -134,40 +247,33 @@ class NativeColumnSolverTest {
                         new V3ColumnSpecification.CondenserOutletTemperature(332.15),
                         new V3ColumnSpecification.OrganicRefluxRatio(4.17),
                         new V3ColumnSpecification.ReboilerDuty(8_000_000.0)));
-        String previous = System.getProperty("icheme.native.thermo.batch");
-        V3ColumnOutcome.Success cpp;
-        V3ColumnOutcome.Success java;
-        try {
-            System.setProperty("icheme.native.thermo.batch", "true");
-            cpp = assertInstanceOf(V3ColumnOutcome.Success.class, V3TestInputs.calculate(input));
-            System.setProperty("icheme.native.thermo.batch", "false");
-            java = assertInstanceOf(V3ColumnOutcome.Success.class, V3TestInputs.calculate(input));
-        } finally {
-            if (previous == null) System.clearProperty("icheme.native.thermo.batch");
-            else System.setProperty("icheme.native.thermo.batch", previous);
-        }
-        assertTrue(String.valueOf(cpp.diagnostics()).contains("Boston-Sullivan"), "the inside-out trial did not run");
-        List<V3ColumnStreamProperties> cppStreams = cpp.result().streams();
-        List<V3ColumnStreamProperties> javaStreams = java.result().streams();
-        assertEquals(javaStreams.size(), cppStreams.size());
-        double worst = 0.0;
-        for (int stream = 0; stream < cppStreams.size(); stream++) {
-            V3ColumnStreamProperties a = cppStreams.get(stream);
-            V3ColumnStreamProperties b = javaStreams.get(stream);
-            assertEquals(b.streamId(), a.streamId());
-            worst = Math.max(worst, relative(a.molarFlowMolPerSecond(), b.molarFlowMolPerSecond()));
-            worst = Math.max(worst, relative(a.temperatureKelvin(), b.temperatureKelvin()));
-            for (int component = 0; component < a.moleFractions().size(); component++) {
-                double x = a.moleFractions().get(component).moleFraction();
-                double y = b.moleFractions().get(component).moleFraction();
-                if (Math.max(x, y) > 1.0e-6) worst = Math.max(worst, relative(x, y));
-            }
-        }
-        System.out.printf("C++ - Java outer pass, published products: %.3e relative%n", worst);
-        assertTrue(worst <= 1.0e-9, "published products differ by " + worst + " relative");
+        V3ColumnOutcome.Success reference = withCeiling(Ceiling.OFF,
+                () -> assertInstanceOf(V3ColumnOutcome.Success.class, V3TestInputs.calculate(input)));
+        long before = NativeColumnSolver.bandSolves();
+        V3ColumnOutcome.Success rust = withCeiling(Ceiling.BAND,
+                () -> assertInstanceOf(V3ColumnOutcome.Success.class, V3TestInputs.calculate(input)));
+        long carried = NativeColumnSolver.bandSolves() - before;
+        System.out.println("NativeColumnSolverTest column: the library carried " + carried + " band solves");
+        assertTrue(carried > 0, "the library carried no band solve");
+        assertEquals(published(reference), published(rust));
+        assertEquals(String.valueOf(reference.diagnostics()), String.valueOf(rust.diagnostics()));
     }
 
-    private static double relative(double a, double b) {
-        return Math.abs(a - b) / Math.max(Math.max(Math.abs(a), Math.abs(b)), Double.MIN_NORMAL);
+    /** The published result as text: every double by its raw bits, the records by their own text (exact doubles). */
+    private static String published(V3ColumnOutcome.Success success) {
+        StringBuilder sb = new StringBuilder();
+        for (V3ColumnStreamProperties stream : success.result().streams()) {
+            sb.append(stream.streamId()).append(' ').append(stream.phase()).append(' ')
+                    .append(Arrays.toString(bits(stream.molarFlowMolPerSecond(), stream.massFlowKgPerSecond(),
+                            stream.temperatureKelvin(), stream.pressurePascal(), stream.vaporMoleFraction())));
+            for (V3ColumnStreamProperties.ComponentFraction fraction : stream.moleFractions()) {
+                sb.append(' ').append(fraction.componentId()).append('=')
+                        .append(Arrays.toString(bits(fraction.moleFraction(), fraction.massFraction())));
+            }
+            sb.append('\n');
+        }
+        sb.append(success.result().dutyLedger()).append('\n').append(success.result().trayHydraulics()).append('\n')
+                .append(success.result().convergenceEvidence()).append('\n').append(success.result().acceptanceAudit());
+        return sb.toString();
     }
 }

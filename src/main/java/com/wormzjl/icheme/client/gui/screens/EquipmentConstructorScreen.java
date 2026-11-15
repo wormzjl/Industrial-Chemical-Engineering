@@ -12,6 +12,7 @@ import com.wormzjl.icheme.client.gui.common.PaintSwatch;
 import com.wormzjl.icheme.client.gui.common.ProcessUi;
 import com.wormzjl.icheme.client.gui.common.ScreenTours;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
+import com.wormzjl.icheme.client.gui.common.kit.DoorInput;
 import com.wormzjl.icheme.client.gui.common.kit.GuiCanvas;
 import com.wormzjl.icheme.client.gui.common.kit.KitDoor;
 import com.wormzjl.icheme.client.gui.common.kit.Palette;
@@ -98,7 +99,7 @@ public final class EquipmentConstructorScreen extends Screen {
     /** The group the choice page shows: the current kind's until another is picked, again so each time the page opens. */
     private @Nullable Category category;
     private VesselPlacement.Form form;
-    /** The diameter (a unit's size), always on its kind's grid: 0.5 m steps for a vessel ({@link ProcessUnit#snap} for a unit). */
+    /** The diameter (a unit's size), always on its kind's grid: 0.5 m steps for a vessel ({@link UnitDesign#snap} for a unit). */
     private double diameter;
     private int tangentLength, support, forward, right, up;
     /** A machine's design point, which its sizes follow ({@link UnitDesign#size}); {@link MachineDuty#NONE} for another form. */
@@ -552,7 +553,7 @@ public final class EquipmentConstructorScreen extends Screen {
                     tangentLength = unitLength(kind, tangentLength + (pair > 1 ? pair * Integer.signum(step) : step));
                 } else tangentLength = clamp(tangentLength + step, 1, (int) EquipmentShape.MAX_TANGENT_LENGTH);
             }
-            case "support" -> support = clamp(support + step, minimumSupport(), form.designed() ? ProcessUnit.maxSupport(kind) : EquipmentShape.MAX_SUPPORT);
+            case "support" -> support = clamp(support + step, minimumSupport(), form.designed() ? UnitDesign.of(kind).maxSupport() : EquipmentShape.MAX_SUPPORT);
             case "tower_columns" -> towerBank=new com.wormzjl.icheme.science.equipment.TowerBank(clamp(towerBank.columns()+step,1,com.wormzjl.icheme.science.equipment.TowerBank.MAX_COLUMNS),towerBank.rows());
             case "tower_rows" -> towerBank=new com.wormzjl.icheme.science.equipment.TowerBank(towerBank.columns(),clamp(towerBank.rows()+step,1,com.wormzjl.icheme.science.equipment.TowerBank.MAX_ROWS));
             case "parallel" -> bank = new ProcessUnit.Bank(clamp(bank.parallel() + step, 1, ProcessUnit.Bank.MAX_PARALLEL), bank.series());
@@ -757,7 +758,7 @@ public final class EquipmentConstructorScreen extends Screen {
 
     /** A unit's length (tubes, throws, radiant height or length) within its kind's range at the draft's size, on its step from the least (a compressor's throws even). */
     private int unitLength(EquipmentShape.Kind kind, int value) {
-        int least = ProcessUnit.minLength(kind, diameter), length = clamp(value, least, ProcessUnit.maxLength(kind, diameter));
+        int least = UnitDesign.of(kind).minLength(diameter), length = clamp(value, least, UnitDesign.of(kind).maxLength(diameter));
         return length - (length - least) % UnitDesign.of(kind).lengthStep();
     }
 
@@ -787,7 +788,7 @@ public final class EquipmentConstructorScreen extends Screen {
         }
         if (form.designed()) {
             var kind = form.kind();
-            diameter = ProcessUnit.snap(kind, diameter);
+            diameter = UnitDesign.of(kind).snap(diameter);
             tangentLength = unitLength(kind, tangentLength);
             if (changedKind) support = ProcessUnit.defaultSupport(kind, diameter, tangentLength);
             // A machine keeps its design point; a new kind takes the one its starting sizes give, which its sizes follow.
@@ -1054,15 +1055,13 @@ public final class EquipmentConstructorScreen extends Screen {
         hovered = null;
         // An open tour takes the pointer: the page under it shows no hover.
         super.render(g, tour.pointer(mouseX), tour.pointer(mouseY), partialTick);
-        if (tour.isOpen()) tour.render(g, font, width, height, mouseX, mouseY);
-        else KitDoor.hint(g, font, hovered, mouseX, mouseY);
+        DoorInput.overlay(this, g, font, tour, hovered, mouseX, mouseY);
     }
 
     @Override
     public boolean mouseClicked(double x, double y, int button) {
-        if (tour.mouseClicked(font, width, height, x, y)) return true;
-        SkinField.clickOutside(this, x, y);
-        return door.press(x, y, button) || super.mouseClicked(x, y, button);
+        // The door stands at the screen's corner: its points are the screen's.
+        return DoorInput.press(this, font, tour, door, x, y, 0, 0, button) || super.mouseClicked(x, y, button);
     }
 
     @Override
@@ -1088,8 +1087,7 @@ public final class EquipmentConstructorScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double x, double y, double horizontal, double vertical) {
-        if (tour.isOpen()) return true;
-        return door.wheel(x, y, vertical) || super.mouseScrolled(x, y, horizontal, vertical);
+        return DoorInput.wheel(tour, door, x, y, 0, 0, vertical) || super.mouseScrolled(x, y, horizontal, vertical);
     }
 
     /**

@@ -4,6 +4,7 @@ import com.wormzjl.icheme.client.gui.flowsheet.FileColumns;
 import com.wormzjl.icheme.client.gui.flowsheet.StreamProps;
 import com.wormzjl.icheme.runtime.fluid.FluidPresetCatalog;
 import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
+import com.wormzjl.icheme.science.column.v3.V3ColumnPresets;
 import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.equipment.ColumnDesign;
 import com.wormzjl.icheme.science.flowsheet.Flowsheet;
@@ -115,7 +116,7 @@ public final class ColumnTemplates {
     public static Library load(Minecraft minecraft) {
         var library = library(minecraft);
         var catalog = MaterialRuntime.current();
-        var base = catalog.presets().column(catalog.presets().network().defaultColumnPreset()).input(catalog);
+        var base = V3ColumnPresets.input(catalog.presets().column(catalog.presets().network().defaultColumnPreset()), catalog);
         return of(library.refresh(V3ClientPresets.Kind.COLUMN), base, ColumnTemplates::name);
     }
 

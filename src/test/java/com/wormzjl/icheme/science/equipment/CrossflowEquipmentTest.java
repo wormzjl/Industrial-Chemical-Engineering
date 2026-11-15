@@ -106,9 +106,9 @@ class CrossflowEquipmentTest {
     void everyBuildableSizeAndHeadingLeavesSeparateFreePipeBlocks() {
         var kind = EquipmentShape.Kind.EXCHANGER;
         int checked = 0;
-        for (double d = ProcessUnit.minDiameter(kind); d <= ProcessUnit.maxDiameter(kind); d += .25)
-            for (int length = ProcessUnit.minLength(kind, d);
-                    length <= ProcessUnit.maxLength(kind, d);
+        for (double d = UnitDesign.of(kind).minSize(); d <= UnitDesign.of(kind).maxSize(); d += .25)
+            for (int length = UnitDesign.of(kind).minLength(d);
+                    length <= UnitDesign.of(kind).maxLength(d);
                     length++)
                 for (var heading : EquipmentShape.Heading.values()) {
                     var shape =

@@ -28,14 +28,13 @@ class FlareRuntimeTest {
     }
 
     private static PhysicalFluidTopology.Device plain(long id, int x, Kind kind) {
-        return new PhysicalFluidTopology.Device(id, at(x), kind, EAST, LINE, new FlowControl.Passive());
+        return PhysicalFluidTopology.Device.builder(id, at(x), kind, EAST, LINE, new FlowControl.Passive()).build();
     }
 
     /** The flare at (3, 0, 0), fed from the west, with tip {@code tip}, as {@code FluidWorldAuthority.placeFlare} places it. */
     private static PhysicalFluidTopology.Device flare(double tip) {
-        return new PhysicalFluidTopology.Device(FLARE, at(3), Kind.VOID, NORTH, new PipeResistance.Geometry(1, tip, PipeResistance.DEFAULT_ROUGHNESS_METRES, 0), FlowControl.ControlValve.flare(),
-                List.of(new PhysicalFluidTopology.Port(at(3), WEST, PassiveNetwork.PhasePort.BULK, PhysicalFluidTopology.ConnectionRole.VESSEL)), true, PhysicalFluidTopology.Cutoff.NONE, false,
-                PhysicalFluidTopology.ALL_FACES, 0, 0, null);
+        return PhysicalFluidTopology.Device.builder(FLARE, at(3), Kind.VOID, NORTH, new PipeResistance.Geometry(1, tip, PipeResistance.DEFAULT_ROUGHNESS_METRES, 0), FlowControl.ControlValve.flare())
+                .ports(List.of(new PhysicalFluidTopology.Port(at(3), WEST, PassiveNetwork.PhasePort.BULK, PhysicalFluidTopology.ConnectionRole.VESSEL))).build();
     }
 
     private List<PhysicalFluidTopology.Device> devices(double tip) {

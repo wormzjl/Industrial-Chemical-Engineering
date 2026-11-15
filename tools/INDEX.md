@@ -8,6 +8,8 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 
 | Folder | Purpose | Batch | Status |
 |---|---|---|---|
+| [code-guide/](code-guide/README.md) | Code map: files and lines per package, the layer import matrix, the guide README's module counts (`--readme`, `--check`) | `2026-11-13-codebase-review` | In use since 2026-11-13 |
+| [codebase-review-bench/](codebase-review-bench/README.md) | B1 CPU, allocation and heap profile of the fluid step, the column and 20 shaft trains, with JFR; the after-wave-B and Rust band solve measurements | `2026-11-13-codebase-review` | In use since 2026-11-13 |
 | [tutorial-recordings/](tutorial-recordings/README.md) | Writes the tutorial's four recordings from the mod's data and models | `2026-11-12-tutorial-system` | In use since 2026-11-12 |
 | [tutorial-renders/](tutorial-renders/README.md) | Software renders of the tutorial's films, guide pages, tours, cards, equipment pages and item icons; the detached `/icheme-film` command | `2026-11-12-tutorial-system` | In use since 2026-11-12 |
 | [tutorial-column/](tutorial-column/README.md) | Small crude tower candidates on the crude unit at 1/64, their datasheets, the bundled preset writer | `2026-11-12-tutorial-system` | In use since 2026-11-12 |
@@ -17,7 +19,7 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 | [drum-operation-holds/](drum-operation-holds/README.md) | Headless gas-vent drum rig (defect 1) | `2026-11-11-drum-operation-holds` | In use since 2026-11-11 |
 | [minecraft-time-delta/](minecraft-time-delta/README.md) | Time-scale probe patch, hold-fuzz runner on the built time factor (`factor.sh`), headless 1 h worlds at 4 and 72, the drum level loop at another factor, single-seed hold study probe, run summaries | `2026-11-11-minecraft-time-delta`, `2026-11-11-drum-operation-holds`, `2026-11-11-gas-blanketing`, `2026-11-11-valve-followups` | In progress since 2026-11-11 |
 | [column-failure-modes/](column-failure-modes/README.md) | Failure-mode test world run and case lines, dropped downcomer-backup draft, merge-prep scripts | `2026-11-10-column-failure-modes` | In use since 2026-11-10 |
-| [agent-guard/](agent-guard/README.md) | PreToolUse hook for Claude Code and Codex: blocks the git and Gradle commands AGENTS.md forbids | `2026-11-10-agent-instructions-review` | In use since 2026-11-10 |
+| [agent-guard/](agent-guard/README.md) | PreToolUse hook for Claude Code and Codex: blocks the git, Gradle and cargo commands AGENTS.md forbids | `2026-11-10-agent-instructions-review`, `2026-11-13-codebase-review` (the cargo rule) | In use since 2026-11-10 |
 | [aqueous-solvents/](aqueous-solvents/README.md) | Offline checks of water with solvents on the cubic, cost and pair probes, the drum-hold probes | `2026-11-11-aqueous-solvents` | In use since 2026-11-11 |
 | [heating-values/](heating-values/README.md) | Prebuilt lower heating values (Hess's law) into the material records' combustion sub-record | `2026-11-09-furnace-fuel-power` | In use since 2026-11-09 |
 | [rack-frame-probe/](rack-frame-probe/README.md) | jshell probe: how often a rack lane's face points leave its frame open | `2026-11-03-save-corruption` | Implemented 2026-11-09 |
@@ -47,7 +49,7 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 | [localization/](localization/README.md) | Missing-key scan and translation checks for the lang files | `2026-11-03-localization` | Implemented 2026-11-03 |
 | [dry-ice-cost/](dry-ice-cost/README.md) | Per-job cost, shadow flashes and prototypes of the cold crystal worlds | `2026-11-02-dry-ice-cost` | Implemented 2026-11-03 |
 | [cooling-towers/](cooling-towers/README.md) | Tower verification lane, fill forms, relief sprites, polygon counts | `2026-10-30-water-cooling-tower` | Implemented 2026-11-02 |
-| [merge-lane/](merge-lane/README.md) | The one final lane before a merge, with its campaign inputs | `2026-11-02-test-suite-optimization`, `2026-11-09-final-lane-selection`, `2026-11-11-valve-followups` | Implemented 2026-11-09 |
+| [merge-lane/](merge-lane/README.md) | The one final lane before a merge, with its campaign inputs | `2026-11-02-test-suite-optimization`, `2026-11-09-final-lane-selection`, `2026-11-11-valve-followups`, `2026-11-13-codebase-review` (the Rust readers line) | Implemented 2026-11-09 |
 | [ph-false-root/](ph-false-root/README.md) | TP, PH and UV sweeps on wet feeds, final lanes of the false root and TP steam fixes | `2026-11-02-ph-false-root`, `2026-11-02-tp-steam-refusal` | Implemented 2026-11-02 |
 | [vacuum-column-test/](vacuum-column-test/README.md) | CDU/VDU convergence screens and feed checks | `2026-10-28-vacuum-column` | Implemented 2026-11-02 |
 | [valve-hold-probes/](valve-hold-probes/README.md) | Trace and job-path replays of a column outlet's held jobs | `2026-11-02-valve-hold` | Implemented 2026-11-02 |
@@ -55,7 +57,6 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 | [heat-exchanger-design/](heat-exchanger-design/README.md) | Exchanger coupling, cell-count, 1-2 shell, per-phase film, zero-wall relay and game-timing study harnesses; owner-test probe of the review world; the merge lane | `2026-10-27-heat-exchanger-design` | Implemented 2026-10-28 (0.17.0) |
 | [heat-gui-renders/](heat-gui-renders/README.md) | PNG software renders of the heat Control pages and flowsheet, and the other screens' prototypes | `2026-10-27-heat-exchanger-design`, `2026-10-28-gui-toolkit`, `2026-10-28-column-operation`, `2026-11-02-process-simulator`, `2026-11-03-rotating-machinery`, `2026-11-06-simulator-sizing`, `2026-11-11-gas-blanketing` | In use since 2026-10-28 |
 | [old-mover-removal/](old-mover-removal/README.md) | Writer of the removed-movers corpus image (a world with one-block movers) | `2026-10-28-old-mover-removal` | Implemented 2026-10-28 |
-| [native-column-default/](native-column-default/README.md) | Probes comparing the C++ and the Java outer pass of the inside-out trial, solver and calculator | `2026-10-28-native-column-default` | Implemented 2026-11-02 |
 | [column-operation/](column-operation/README.md) | C1 bench (the split table against drift, homogeneity, warm solve, rule B cost) and the review world's layout probe | `2026-10-28-column-operation` | Implemented 2026-11-02 |
 | [column-sump/](column-sump/README.md) | Column sump probes, nozzle sweeps and software renders | `2026-10-27-column-sump` | Concluded 2026-10-27 (batch in 0.15.1) |
 | [skirt-shadow/](skirt-shadow/README.md) | Skirt floor renders with the in-game skylight and a skylight probe, before and after; probe of the GameTest's light wait | `2026-10-27-skirt-shadow` | Implemented 2026-10-27 |

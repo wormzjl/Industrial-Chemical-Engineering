@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.runtime.fluid;
 
 import com.wormzjl.icheme.science.fluid.network.FlowControl;
+import com.wormzjl.icheme.science.fluid.network.InlineMovers;
 import com.wormzjl.icheme.science.machine.InlineMachines;
 import java.util.Objects;
 
@@ -42,7 +43,9 @@ public final class ColumnPower implements ColumnOperation.Power {
     public boolean pump(long mover, double share, long tick) {
         var r = topology.active().get(mover);
         if (r == null || !(r.device().control() instanceof FlowControl.Mover m)) return true;
-        double shaft = InlineMachines.ratedShaftPower(m) * Math.max(0, share);
+        // A held casing has no slice of its own: its column books its rated shaft power (a design figure on the design fluid,
+        // InlineMovers.ratedShaftPower, through the shaft power function every driver's charge reads) at the share it runs.
+        double shaft = InlineMovers.ratedShaftPower(m) * Math.max(0, share);
         // A casing books on its train, whose motor draws from its own store; an in-line pump draws through its integral motor.
         if (shafts.unitOf(mover)) return shafts.held(mover, shaft);
         return electric.member(mover, InlineMachines.electricPower(shaft), tick);

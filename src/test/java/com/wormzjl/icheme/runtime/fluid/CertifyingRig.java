@@ -2,7 +2,7 @@ package com.wormzjl.icheme.runtime.fluid;
 
 import com.wormzjl.icheme.fluid.support.FluidTestSupport;
 import com.wormzjl.icheme.runtime.BoundedCpuSolveService;
-import com.wormzjl.icheme.runtime.ProcessSolveServices;
+import com.wormzjl.icheme.runtime.ProcessSolveJobs;
 import com.wormzjl.icheme.science.fluid.network.*;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind;
@@ -21,7 +21,7 @@ final class CertifyingRig {
     static final String PACKAGE="icheme:tjl20_methane_nitrogen";
     final long[] epoch;final FluidThermodynamics model;
     final Map<Long,IslandCoordinator.Attempt> attempts=new LinkedHashMap<>();
-    final Map<Long,ProcessSolveServices.FluidIslandCommand> commands=new HashMap<>();
+    final Map<Long,ProcessSolveJobs.FluidIslandCommand> commands=new HashMap<>();
     /** What the coordinator published and replayed, recorded only after {@link #recording()}. */
     final List<IslandCoordinator.Snapshot> published=new ArrayList<>(),replayed=new ArrayList<>();
     final IslandCoordinator coordinator;
@@ -34,7 +34,7 @@ final class CertifyingRig {
         coordinator=new IslandCoordinator(new IslandCoordinator.Dispatcher() {
             public int availableWorkers(){return 64-attempts.size();}
             public long nextRequestId(){return ++requests;}
-            public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveServices.FluidIslandCommand command){attempts.put(attempt.slice().requestId(),attempt);commands.put(attempt.slice().requestId(),command);return true;}
+            public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveJobs.FluidIslandCommand command){attempts.put(attempt.slice().requestId(),attempt);commands.put(attempt.slice().requestId(),command);return true;}
             public void cancel(long request){throw new AssertionError("no deadlines here");}
         },changed->{if(recording)published.addAll(changed);onPublished.accept(changed);},()->0L,new IslandCoordinator.Settings(30_000_000_000L,20_000_000_000L,64,false,100,policy),()->epoch[0]);
         coordinator.onReplayed(changed->{if(recording)replayed.addAll(changed);});
@@ -50,7 +50,7 @@ final class CertifyingRig {
         while(!attempts.isEmpty()) {
             for(long request:List.copyOf(attempts.keySet())) {
                 var attempt=attempts.remove(request);var command=commands.remove(request);solves++;
-                coordinator.completed(attempt,Optional.of((ProcessSolveServices.FluidIslandSolveResult)command.solve(FluidTestSupport.NEVER)));
+                coordinator.completed(attempt,Optional.of((ProcessSolveJobs.FluidIslandSolveResult)command.solve(FluidTestSupport.NEVER)));
             }
             coordinator.pump();
         }
@@ -99,7 +99,7 @@ final class CertifyingRig {
         /** A line of blocks along x in row z, identities first, first + 1, ...; pipes between the ends. */
         static List<PhysicalFluidTopology.Device> line(long first,int z,Kind... kinds) {
             var devices=new ArrayList<PhysicalFluidTopology.Device>();
-            for(int i=0;i<kinds.length;i++)devices.add(new PhysicalFluidTopology.Device(first+i,new PhysicalFluidTopology.Position("minecraft:overworld",i,0,z),kinds[i],PhysicalFluidTopology.Direction.EAST,BLOCK,new FlowControl.Passive()));
+            for(int i=0;i<kinds.length;i++)devices.add(PhysicalFluidTopology.Device.builder(first+i,new PhysicalFluidTopology.Position("minecraft:overworld",i,0,z),kinds[i],PhysicalFluidTopology.Direction.EAST,BLOCK,new FlowControl.Passive()).build());
             return devices;
         }
         PassiveNetwork island(List<PhysicalFluidTopology.Device> devices,Map<Long,FluidDeviceSpec> specs) {

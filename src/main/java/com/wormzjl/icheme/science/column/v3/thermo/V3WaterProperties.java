@@ -1,10 +1,13 @@
 package com.wormzjl.icheme.science.column.v3.thermo;
 
-import com.wormzjl.icheme.science.fluid.thermo.WaterRegion1;
-import com.wormzjl.icheme.science.math.DeterministicMath;
-
 import com.wormzjl.icheme.science.material.MaterialCatalog;
-import com.wormzjl.icheme.science.thermo.phase.SteamVirial;
+import com.wormzjl.icheme.science.material.WaterRecords;
+import com.wormzjl.icheme.science.thermo.water.Iapws97Region1;
+import com.wormzjl.icheme.science.thermo.water.SteamIdealGas;
+import com.wormzjl.icheme.science.thermo.water.SteamVirial;
+import com.wormzjl.icheme.science.thermo.water.WagnerPruss;
+import com.wormzjl.icheme.science.thermo.water.WaterConstants;
+import com.wormzjl.icheme.science.thermo.water.WaterDatum;
 
 /**
  * The water of the column and of the fluid network: one model (decision E30 of batch 2026-11-04-open-thermo-data).
@@ -12,7 +15,7 @@ import com.wormzjl.icheme.science.thermo.phase.SteamVirial;
  * <p>The saturation-pressure relation is the IAPWS Wagner--Pruss auxiliary equation. The steam is the network's
  * second-virial gas: the ideal-gas enthalpy integrates the water record's Shomate-form heat capacity (a fit to the
  * IAPWS-95 ideal-gas Cp), and {@link SteamVirial} adds IF97 Region 2's residual at the steam's partial pressure. The
- * liquid is IF97 Region 1 at the pressure ({@link WaterRegion1}), on the water datum: saturated liquid water at 298.15 K
+ * liquid is IF97 Region 1 at the pressure ({@link Iapws97Region1#liquid}), on the water datum: saturated liquid water at 298.15 K
  * sits the record's latent heat there (IAPWS's) below the saturated steam ({@link #liquidEnthalpyOffset}). The datum
  * cancels only where water does not change phase across a boundary; steam in and liquid water out books it (W3b: the
  * Watson latent heat it used before put liquid water 564.5 J/mol under the network's cubic water). Before E30 the column priced steam as an ideal gas and liquid water
@@ -24,6 +27,9 @@ import com.wormzjl.icheme.science.thermo.phase.SteamVirial;
  * the same expression from the same numbers; the explicit form is for a caller that resolves the
  * record once and then evaluates in a loop, because the context form costs a {@code ThreadLocal}
  * lookup and two immutable-map probes per coefficient access.</p>
+ *
+ * <p>Every formula is the water module's ({@code science.thermo.water}, F2 of batch 2026-11-13-codebase-review); this
+ * class keeps the column's API, its range checks and its liquid scratch, and delegates.</p>
  */
 public final class V3WaterProperties {
 
@@ -40,7 +46,11 @@ public final class V3WaterProperties {
     }
 
 
-    /** Saturation pressure in Pa, valid from the triple point through the critical point. */
+    /**
+     * Saturation pressure in Pa at any positive temperature up to the critical point: {@link #wagnerPruss}, continued
+     * below the triple point as the network's (F3 of batch 2026-11-13-codebase-review). Above the critical temperature
+     * there is no saturation, and it refuses.
+     */
     public static double saturationPressurePascal(double temperatureKelvin) {
         return saturationPressurePascal(data(), temperatureKelvin);
     }
@@ -53,20 +63,10 @@ public final class V3WaterProperties {
     /**
      * The Wagner--Pruss equation itself at any positive temperature up to the critical point: below the triple point it
      * is the supercooled liquid's saturation pressure (1.10 times the ice sublimation pressure at 263 K, the measured
-     * ratio). The fluid network's free water continues there (owner rule of 2026-10-16); the column keeps the checked
-     * {@link #saturationPressurePascal(MaterialCatalog.Water, double)}.
+     * ratio). The fluid network and the column both continue there (owner rule of 2026-10-16; F3).
      */
     public static double wagnerPruss(MaterialCatalog.Water water, double temperatureKelvin) {
-        if (!(temperatureKelvin > 0) || !(temperatureKelvin <= water.criticalTemperature()))
-            throw new IllegalArgumentException("Water saturation temperature must be positive and at most critical: " + temperatureKelvin);
-        if (temperatureKelvin == water.criticalTemperature()) return water.criticalPressure();
-        double theta = 1.0 - temperatureKelvin / water.criticalTemperature();
-        // Half-integer powers as products with the correctly rounded sqrt, not pow (batch 2026-09-27-jdk-determinism).
-        double root = Math.sqrt(theta), cube = theta * theta * theta;
-        double polynomial = water.saturation().get(0) * theta + water.saturation().get(1) * (theta * root)
-                + water.saturation().get(2) * theta * theta * theta + water.saturation().get(3) * (cube * root)
-                + water.saturation().get(4) * theta * theta * theta * theta + water.saturation().get(5) * (cube * cube * theta * root);
-        return water.criticalPressure() * DeterministicMath.exp(water.criticalTemperature() / temperatureKelvin * polynomial);
+        return WagnerPruss.pressure(constants(water), temperatureKelvin);
     }
 
     /**
@@ -84,17 +84,7 @@ public final class V3WaterProperties {
 
     public static double dLogSaturationPressureDT(MaterialCatalog.Water water, double temperatureKelvin) {
         requireSaturationTemperature(water, temperatureKelvin);
-        double theta = 1.0 - temperatureKelvin / water.criticalTemperature();
-        // Half-integer powers as products with the correctly rounded sqrt, not pow (batch 2026-09-27-jdk-determinism).
-        double root = Math.sqrt(theta), cube = theta * theta * theta;
-        double polynomial = water.saturation().get(0) * theta + water.saturation().get(1) * (theta * root)
-                + water.saturation().get(2) * theta * theta * theta + water.saturation().get(3) * (cube * root)
-                + water.saturation().get(4) * theta * theta * theta * theta + water.saturation().get(5) * (cube * cube * theta * root);
-        double slope = water.saturation().get(0) + 1.5 * water.saturation().get(1) * Math.sqrt(theta)
-                + 3.0 * water.saturation().get(2) * theta * theta + 3.5 * water.saturation().get(3) * (theta * theta * root)
-                + 4.0 * water.saturation().get(4) * theta * theta * theta + 7.5 * water.saturation().get(5) * (cube * cube * root);
-        return -water.criticalTemperature() * polynomial / (temperatureKelvin * temperatureKelvin)
-                - slope / temperatureKelvin;
+        return WagnerPruss.logSlope(constants(water), temperatureKelvin);
     }
 
     /** Inverts {@link #saturationPressurePascal(double)} by bounded bisection. */
@@ -103,39 +93,30 @@ public final class V3WaterProperties {
     }
 
     public static double saturationTemperatureKelvin(MaterialCatalog.Water water, double pressurePascal) {
-        if (!Double.isFinite(pressurePascal) || pressurePascal <= 0.0 || pressurePascal > water.criticalPressure()) {
-            throw new IllegalArgumentException("Water saturation pressure is outside the correlation envelope");
-        }
-        double minimumPressure = saturationPressurePascal(water, water.triplePoint());
-        if (pressurePascal < minimumPressure) {
-            throw new IllegalArgumentException("Water saturation pressure is below the triple-point envelope");
-        }
-        double low = water.triplePoint();
-        double high = water.criticalTemperature();
-        for (int iteration = 0; iteration < 80; iteration++) {
-            double middle = 0.5 * (low + high);
-            if (saturationPressurePascal(water, middle) < pressurePascal) low = middle;
-            else high = middle;
-        }
-        return 0.5 * (low + high);
+        return WagnerPruss.temperature(constants(water), pressurePascal);
     }
 
-    /** Ideal-gas water-vapor molar enthalpy in J/mol, valid from 273.16 K through 900 K. */
+    /**
+     * Ideal-gas water-vapor molar enthalpy in J/mol: the record's Shomate fit inside its range (273.16 K through 900 K),
+     * held at its end heat capacity past either end, so value and slope are continuous there (owner rule of 2026-10-16,
+     * the network's {@code FluidThermodynamics.vaporWaterEnthalpy}; F3 of batch 2026-11-13-codebase-review).
+     */
     public static double vaporMolarEnthalpy(double temperatureKelvin) {
         return vaporMolarEnthalpy(data(), temperatureKelvin);
     }
 
     public static double vaporMolarEnthalpy(MaterialCatalog.Water water, double temperatureKelvin) {
-        requireEnthalpyTemperature(water, temperatureKelvin);
-        double t = temperatureKelvin / 1_000.0;
-        // The record's Shomate form, fitted to the IAPWS-95 ideal-gas Cp over 273.16..900 K (water-iapws95-shomate-r3).
-        double kiloJoulesPerMol = water.shomate().get(0) * t + water.shomate().get(1) * t * t / 2.0 + water.shomate().get(2) * t * t * t / 3.0
-                + water.shomate().get(3) * t * t * t * t / 4.0 - water.shomate().get(4) / t + water.shomate().get(5) + water.shomate().get(6);
-        return 1_000.0 * kiloJoulesPerMol;
+        return SteamIdealGas.enthalpy(constants(water), temperatureKelvin);
+    }
+
+    /** Whether {@code temperatureKelvin} lies past the steam's data, where {@link #vaporMolarEnthalpy} is continued. */
+    public static boolean steamContinued(MaterialCatalog.Water water, double temperatureKelvin) {
+        return SteamIdealGas.continued(constants(water), temperatureKelvin);
     }
 
     /**
-     * The water-vapour heat capacity in J/(mol K): the Shomate polynomial the enthalpy integrates.
+     * The water-vapour heat capacity in J/(mol K): the Shomate polynomial the enthalpy integrates, held at its end value
+     * past the steam's data (F3).
      *
      * <p>Differentiating the integral rather than quoting the Shomate coefficients again keeps one set of
      * numbers in the file, so the capacity cannot drift away from the enthalpy it belongs to.</p>
@@ -145,9 +126,7 @@ public final class V3WaterProperties {
     }
 
     public static double dVaporMolarEnthalpyDT(MaterialCatalog.Water water, double temperatureKelvin) {
-        requireEnthalpyTemperature(water, temperatureKelvin);
-        double t = temperatureKelvin / 1_000.0;
-        return water.shomate().get(0) + water.shomate().get(1) * t + water.shomate().get(2) * t * t + water.shomate().get(3) * t * t * t + water.shomate().get(4) / (t * t);
+        return SteamIdealGas.heatCapacity(constants(water), temperatureKelvin);
     }
 
     public static double vaporizationEnthalpy(double temperatureKelvin) {
@@ -156,10 +135,7 @@ public final class V3WaterProperties {
 
     public static double vaporizationEnthalpy(MaterialCatalog.Water water, double temperatureKelvin) {
         requireEnthalpyTemperature(water, temperatureKelvin);
-        if (temperatureKelvin >= water.criticalTemperature()) return 0.0;
-        double reduced = (1.0 - temperatureKelvin / water.criticalTemperature())
-                / (1.0 - water.boilingTemperature() / water.criticalTemperature());
-        return water.vaporizationEnthalpy() * DeterministicMath.pow(Math.max(0.0, reduced), water.watsonExponent());
+        return WaterDatum.watsonLatentHeat(constants(water), temperatureKelvin);
     }
 
     /**
@@ -216,7 +192,7 @@ public final class V3WaterProperties {
 
     /**
      * Liquid water at {@code (T, p)}, J/mol: the network's, IF97 Region 1 at the pressure and its continuation past
-     * its range ({@link WaterRegion1#evaluateLiquid}), on the water datum ({@link #liquidEnthalpyOffset}).
+     * its range ({@link Iapws97Region1#liquid}), on the water datum ({@link #liquidEnthalpyOffset}).
      */
     public static double liquidMolarEnthalpy(double temperatureKelvin, double pressurePascal) {
         return liquidMolarEnthalpy(data(), temperatureKelvin, pressurePascal);
@@ -224,7 +200,7 @@ public final class V3WaterProperties {
 
     public static double liquidMolarEnthalpy(MaterialCatalog.Water water, double temperatureKelvin, double pressurePascal) {
         LiquidScratch scratch = LIQUID.get();
-        WaterRegion1.evaluateLiquid(water, temperatureKelvin, pressurePascal, scratch.region);
+        Iapws97Region1.liquid(water.triplePoint(), temperatureKelvin, pressurePascal, scratch.region);
         return scratch.region.specificEnthalpy() * water.molarMass() + scratch.offset(water);
     }
 
@@ -232,7 +208,7 @@ public final class V3WaterProperties {
     public static double dLiquidMolarEnthalpyDT(double temperatureKelvin, double pressurePascal) {
         MaterialCatalog.Water water = data();
         LiquidScratch scratch = LIQUID.get();
-        WaterRegion1.evaluateLiquid(water, temperatureKelvin, pressurePascal, scratch.region);
+        Iapws97Region1.liquid(water.triplePoint(), temperatureKelvin, pressurePascal, scratch.region);
         return scratch.region.specificHeatCapacity() * water.molarMass();
     }
 
@@ -245,21 +221,34 @@ public final class V3WaterProperties {
      * steam.
      */
     public static double liquidEnthalpyOffset(MaterialCatalog.Water water) {
-        if (Double.isNaN(water.datumVaporizationEnthalpy()))
-            return vaporMolarEnthalpy(water, 298.15) - vaporizationEnthalpy(water, 298.15)
-                    - WaterRegion1.evaluate(water, 298.15, 101325).specificEnthalpy() * water.molarMass();
-        double saturation = saturationPressurePascal(water, 298.15);
-        return vaporMolarEnthalpy(water, 298.15) + SteamVirial.residualEnthalpy(298.15, saturation) - water.datumVaporizationEnthalpy()
-                - WaterRegion1.evaluate(water, 298.15, saturation).specificEnthalpy() * water.molarMass();
+        return WaterDatum.liquidEnthalpyOffset(constants(water));
     }
 
-    /** Per-thread Region 1 scratch and the last water record's datum, so a residual evaluation allocates nothing. */
+    /**
+     * Per-thread Region 1 scratch, the last water record's datum and its numbers for the water module, so a residual
+     * evaluation allocates nothing.
+     */
     private static final ThreadLocal<LiquidScratch> LIQUID = ThreadLocal.withInitial(LiquidScratch::new);
 
+    /** {@code water}'s numbers, held per thread for the last record this thread evaluated (the column's hot path). */
+    private static WaterConstants constants(MaterialCatalog.Water water) {
+        return LIQUID.get().constants(water);
+    }
+
     private static final class LiquidScratch {
-        private final WaterRegion1.Workspace region = new WaterRegion1.Workspace();
+        private final Iapws97Region1.Liquid region = new Iapws97Region1.Liquid();
         private MaterialCatalog.Water water;
         private double offset;
+        private MaterialCatalog.Water constantsOf;
+        private WaterConstants constants;
+
+        private WaterConstants constants(MaterialCatalog.Water record) {
+            if (record != constantsOf) {
+                constants = WaterRecords.constants(record);
+                constantsOf = record;
+            }
+            return constants;
+        }
 
         private double offset(MaterialCatalog.Water record) {
             if (record != water) {
@@ -270,8 +259,9 @@ public final class V3WaterProperties {
         }
     }
 
+    /** Positive and at most critical: Wagner-Pruss continues below the triple point, and nothing saturates above Tc. */
     private static void requireSaturationTemperature(MaterialCatalog.Water water, double temperatureKelvin) {
-        if (!Double.isFinite(temperatureKelvin) || temperatureKelvin < water.triplePoint()
+        if (!Double.isFinite(temperatureKelvin) || !(temperatureKelvin > 0.0)
                 || temperatureKelvin > water.criticalTemperature()) {
             throw new IllegalArgumentException("Water saturation temperature is outside the correlation envelope");
         }

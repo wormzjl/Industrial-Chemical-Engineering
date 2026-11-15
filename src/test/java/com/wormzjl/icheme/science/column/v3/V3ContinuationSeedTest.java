@@ -13,9 +13,9 @@ import org.junit.jupiter.api.Test;
  * and once {@code a·e^z} dominates the delivered material {@code I} the exact Newton step is
  * {@code −1 + I/(a·e^z)}: one e-fold per iteration, on a scaled residual that sits at exactly one throughout.
  * A flow seeded eighteen e-folds too high therefore costs eighteen iterations no matter how good the
- * Jacobian is. The stage map ({@link V3ColumnCalculator#sourcePosition}) stops a rectifying node from
+ * Jacobian is. The stage map ({@link V3ContinuationLadder#sourcePosition}) stops a rectifying node from
  * reading such a flow off the source feed tray, and the cap inside
- * {@code V3ColumnCalculator.liftFloorSupport} removes one wherever it still appears.</p>
+ * {@code V3FloorLift.liftFloorSupport} removes one wherever it still appears.</p>
  *
  * <p>The cap's fixture is the manufactured ternary column of {@link V3TruncationNumericsTest}: four trays,
  * feed on tray two, and a thermodynamic model calibrated on the seed so that every node's {@code K_c V/L} is
@@ -43,7 +43,7 @@ class V3ContinuationSeedTest {
      *
      * <p>Below the feed the map is deliberately left alone, so the assertions stop at the feed tray. The
      * symmetric clamp was measured and costs two of the three cold total-condenser pilot cases their
-     * convergence; {@link V3ColumnCalculator#sourcePosition} records that measurement.</p>
+     * convergence; {@link V3ContinuationLadder#sourcePosition} records that measurement.</p>
      */
     @Test
     void noRectifyingNodeOfAStageGridReadsThePreviousGridsFeedTray() {
@@ -52,17 +52,17 @@ class V3ContinuationSeedTest {
             V3ColumnTopology target = grid(SCHEDULE.get(index));
             String pair = SCHEDULE.get(index - 1) + "-to-" + SCHEDULE.get(index);
 
-            assertEquals(0.0, V3ColumnCalculator.sourcePosition(target.condenserNode(), source, target),
+            assertEquals(0.0, V3ContinuationLadder.sourcePosition(target.condenserNode(), source, target),
                     pair + ": the condenser is a fixed point");
             assertEquals(source.reboilerNode(),
-                    V3ColumnCalculator.sourcePosition(target.reboilerNode(), source, target),
+                    V3ContinuationLadder.sourcePosition(target.reboilerNode(), source, target),
                     pair + ": the reboiler is a fixed point");
 
             // Monotone rather than strictly monotone: a clamped run of rectifying nodes shares one source
             // node, which is the whole cost of the clamp.
             double previous = Double.NEGATIVE_INFINITY;
             for (int node = 0; node <= target.reboilerNode(); node++) {
-                double position = V3ColumnCalculator.sourcePosition(node, source, target);
+                double position = V3ContinuationLadder.sourcePosition(node, source, target);
                 assertTrue(position >= previous, pair + ": node " + node + " must not walk back up the profile");
                 assertTrue(position >= 0.0 && position <= source.reboilerNode(),
                         pair + ": node " + node + " read outside the source column at " + position);
@@ -75,7 +75,7 @@ class V3ContinuationSeedTest {
         }
         // The rung the plateau was measured on: tray 36 of the 40-tray grid is the tray above its feed, and
         // the unclamped map gave it position 27.22 — 22 % of the 30-tray grid's feed tray, node 28.
-        assertEquals(27.0, V3ColumnCalculator.sourcePosition(36, grid(30), grid(40)));
+        assertEquals(27.0, V3ContinuationLadder.sourcePosition(36, grid(30), grid(40)));
     }
 
     /** A ramp rung maps a grid onto itself, and it must do so exactly: every position is its own node. */
@@ -83,7 +83,7 @@ class V3ContinuationSeedTest {
     void aGridMapsOntoItselfAsTheIdentity() {
         V3ColumnTopology grid = grid(REQUESTED_STAGES);
         for (int node = 0; node <= grid.reboilerNode(); node++) {
-            assertEquals((double) node, V3ColumnCalculator.sourcePosition(node, grid, grid));
+            assertEquals((double) node, V3ContinuationLadder.sourcePosition(node, grid, grid));
         }
     }
 
@@ -107,7 +107,7 @@ class V3ContinuationSeedTest {
                 {18, 12, 1.0}, {18, 12, 5.0e-7}};
         V3DryMeshState seed = state(problem, liquid, vapor);
 
-        V3DryMeshState lifted = V3ColumnCalculator.liftFloorSupport(problem, thermo(problem, seed), seed);
+        V3DryMeshState lifted = V3FloorLift.liftFloorSupport(problem, thermo(problem, seed), seed);
 
         // Tray four is fed by tray three's liquid and the reboiler's vapour, neither of which the cap touches.
         double delivered = liquid[3][TRACE] + vapor[5][TRACE];
@@ -153,7 +153,7 @@ class V3ContinuationSeedTest {
                 {18, 12, 1.0e-6}, {18, 12, 5.0e-7}};
         V3DryMeshState seed = state(problem, liquid, vapor);
 
-        V3DryMeshState lifted = V3ColumnCalculator.liftFloorSupport(problem, thermo(problem, seed), seed);
+        V3DryMeshState lifted = V3FloorLift.liftFloorSupport(problem, thermo(problem, seed), seed);
 
         assertEquals(10.0, lifted.liquidFlow(2, TRACE));
         assertEquals(10.0, lifted.vaporFlow(2, TRACE));
@@ -176,7 +176,7 @@ class V3ContinuationSeedTest {
                 {18, 12, 1.0e-6}, {18, 12, 5.0e-7}};
         V3DryMeshState seed = state(problem, liquid, vapor);
 
-        V3DryMeshState lifted = V3ColumnCalculator.liftFloorSupport(problem, thermo(problem, seed), seed);
+        V3DryMeshState lifted = V3FloorLift.liftFloorSupport(problem, thermo(problem, seed), seed);
 
         assertEquals(vapor[1][TRACE], lifted.liquidFlow(0, TRACE),
                 "the condenser keeps exactly the trace tray one sends up");
@@ -194,7 +194,7 @@ class V3ContinuationSeedTest {
                 new V3ColumnSpecification.CondenserOutletTemperature(400.0),
                 new V3ColumnSpecification.OrganicRefluxRatio(1.0),
                 new V3ColumnSpecification.ReboilerDuty(0.0)));
-        V3ColumnInput grid = V3ColumnCalculator.withStageGeometry(input, stageCount);
+        V3ColumnInput grid = V3ContinuationLadder.withStageGeometry(input, stageCount);
         assertEquals(stageCount, grid.stageCount());
         return V3ColumnTopology.twoPhase(grid.stageCount(), grid.feedStageNumber());
     }

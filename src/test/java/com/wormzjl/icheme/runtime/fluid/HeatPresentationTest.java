@@ -22,11 +22,11 @@ class HeatPresentationTest {
     private final FluidThermodynamics model=FluidTestSupport.networkModel();
     private static final PipeResistance.Geometry STUB=new PipeResistance.Geometry(1,.05,.000045,0);
     private static PhysicalFluidTopology.Position at(int x,int y,int z){return new PhysicalFluidTopology.Position("minecraft:overworld",x,y,z);}
-    private static PhysicalFluidTopology.Device plain(long id,int x,int y,int z,Kind kind){return new PhysicalFluidTopology.Device(id,at(x,y,z),kind,EAST,STUB,new FlowControl.Passive());}
+    private static PhysicalFluidTopology.Device plain(long id,int x,int y,int z,Kind kind){return PhysicalFluidTopology.Device.builder(id,at(x,y,z),kind,EAST,STUB,new FlowControl.Passive()).build();}
     private static PhysicalFluidTopology.Port port(PhysicalFluidTopology.Position cell,PhysicalFluidTopology.Direction face,PhysicalFluidTopology.ConnectionRole role){return new PhysicalFluidTopology.Port(cell,face,PassiveNetwork.PhasePort.BULK,role);}
     private static PhysicalFluidTopology.Device side(long id,PipeResistance.Geometry passage,HeatUnit heat) {
         var ports=List.of(port(at(10,0,10),WEST,PhysicalFluidTopology.ConnectionRole.INLET),port(at(0,0,0),EAST,PhysicalFluidTopology.ConnectionRole.OUTLET));
-        return new PhysicalFluidTopology.Device(id,ports.getFirst().cell(),Kind.HEAT_SIDE,NORTH,passage,new FlowControl.Passive(),ports,true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,heat);
+        return PhysicalFluidTopology.Device.builder(id,ports.getFirst().cell(),Kind.HEAT_SIDE,NORTH,passage,new FlowControl.Passive()).ports(ports).heat(heat).build();
     }
     private FluidThermodynamics.State water(double temperature,double pressure) {
         double[] n=new double[model.componentCount()];n[n.length-1]=1;
@@ -56,7 +56,7 @@ class HeatPresentationTest {
             }
             @Override public FluidView view(long device){return views.get(device);}
             @Override public double[] weights(){return model.molecularWeights();}
-            @Override public double portPressure(PassiveNetwork.Reservoir node,PassiveNetwork.PhasePort port){return node.state().pressure()+PassiveStepSolver.portHead(model,node,port,node.state());}
+            @Override public double portPressure(PassiveNetwork.Reservoir node,PassiveNetwork.PhasePort port){return node.state().pressure()+PortStreams.portHead(model,node,port,node.state());}
         };
     }
     private static WorldTopologyLedger.Registration registration(PhysicalFluidTopology.Device device){return new WorldTopologyLedger.Registration(device,FluidDeviceSpec.water(),1);}

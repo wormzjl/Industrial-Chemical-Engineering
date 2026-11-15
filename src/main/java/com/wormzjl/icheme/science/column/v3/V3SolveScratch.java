@@ -24,6 +24,107 @@ final class V3SolveScratch {
 
     private static final class Pool {
         private V3SolveScratch free = new V3SolveScratch();
+        /** The calculation's band factorizations by call site ({@link Factorization}). */
+        private final int[] factorizations = new int[Factorization.values().length];
+        /** The calculation's untruncated feed flashes, most recent last (P6). */
+        private final java.util.ArrayList<FeedFlash> feedFlashes = new java.util.ArrayList<>();
+        private int feedFlashesComputed, feedFlashesReused;
+    }
+
+    /**
+     * One untruncated feed flash and what it depends on: the package's column identity (its records, F1), the feed's
+     * temperature and flows, the feed tray's pressure.
+     */
+    private record FeedFlash(String identity, double temperature, double pressure, double[] feed,
+            com.wormzjl.icheme.science.column.v3.thermo.V3FlashResult result) {
+        boolean answers(String identity, double temperature, double pressure, double[] feed) {
+            return this.identity.equals(identity) && Double.compare(this.temperature, temperature) == 0
+                    && Double.compare(this.pressure, pressure) == 0 && Arrays.equals(this.feed, feed);
+        }
+    }
+
+    /** The most feed flashes a calculation keeps: one per feed-tray pressure its ramps and corrections visit. */
+    private static final int FEED_FLASHES = 16;
+
+    /**
+     * The untruncated flash of the feed at the feed tray, computed once per calculation for each feed-tray pressure (P6 of
+     * batch 2026-11-13-codebase-review). It depends on the package, the feed and that pressure only, takes no control (so
+     * no checkpoint is skipped) and its result is immutable, so a repeat is the same object. Outside a calculation it is
+     * computed each time; a refusal is never kept.
+     */
+    static com.wormzjl.icheme.science.column.v3.thermo.V3FlashResult feedFlash(String identity, double temperature, double pressure,
+            double[] feed, Supplier<com.wormzjl.icheme.science.column.v3.thermo.V3FlashResult> flash) {
+        var pool = OPEN.get();
+        if (pool == null) return flash.get();
+        for (var held : pool.feedFlashes) {
+            if (held.answers(identity, temperature, pressure, feed)) {
+                pool.feedFlashesReused++;
+                return held.result();
+            }
+        }
+        var result = flash.get();
+        pool.feedFlashesComputed++;
+        if (pool.feedFlashes.size() == FEED_FLASHES) pool.feedFlashes.removeFirst();
+        pool.feedFlashes.add(new FeedFlash(identity, temperature, pressure, feed.clone(), result));
+        return result;
+    }
+
+    /**
+     * Where a calculation factors a band matrix (P7 of batch 2026-11-13-codebase-review): the Newton step on the coloured
+     * finite-difference Jacobian, the local block Jacobian's step, the final Newton certificate's direct correction and its
+     * damped normal-equation corrections, and the damped Gauss-Newton fallback. A count, not a time: it decides how much the
+     * factorization itself is worth reusing.
+     */
+    enum Factorization {
+        NEWTON("newton"), LOCAL_BLOCK("local block"), VERIFY_DIRECT("verify direct"), VERIFY_DAMPED("verify damped"),
+        DAMPED_FALLBACK("damped fallback");
+
+        private final String label;
+
+        Factorization(String label) {
+            this.label = label;
+        }
+    }
+
+    /** Counts one band factorization at {@code site} in the open calculation; outside one it counts nothing. */
+    static void factorized(Factorization site) {
+        var pool = OPEN.get();
+        if (pool != null) pool.factorizations[site.ordinal()]++;
+    }
+
+    /** The open calculation's factorizations so far, by {@link Factorization} ordinal; zeros outside a calculation. */
+    static int[] factorizations() {
+        var pool = OPEN.get();
+        return pool == null ? new int[Factorization.values().length] : pool.factorizations.clone();
+    }
+
+    /** The open calculation's factorizations so far, all sites together. */
+    static int totalFactorizations() {
+        int total = 0;
+        for (int count : factorizations()) total += count;
+        return total;
+    }
+
+    /** The solver event of a calculation's factorizations: each site's count and the total. */
+    static String factorizationEvent() {
+        int[] counts = factorizations();
+        var text = new StringBuilder("band factorizations:");
+        int total = 0;
+        for (var site : Factorization.values()) {
+            text.append(' ').append(site.label).append(' ').append(counts[site.ordinal()]).append(',');
+            total += counts[site.ordinal()];
+        }
+        text.append(" total ").append(total);
+        // The pooled workspace's elimination (P8): an attempt nested in another works in a fresh set this leaves out.
+        var pool = OPEN.get();
+        if (pool != null) text.append("; feed flashes ").append(pool.feedFlashesComputed).append(" computed, ")
+                .append(pool.feedFlashesReused).append(" reused");
+        if (pool != null && pool.free != null) {
+            var linear = pool.free.linear;
+            text.append("; elimination updates ").append(linear.updatedEntries()).append(" of ").append(linear.fullWidthEntries())
+                    .append(" at full width, full-width solves ").append(linear.fullWidthSolves());
+        }
+        return text.toString();
     }
 
     /** Runs {@code body} as one calculation: its attempts share one scratch set, dropped when it returns. */

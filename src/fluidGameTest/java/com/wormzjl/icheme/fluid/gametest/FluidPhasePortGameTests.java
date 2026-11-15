@@ -130,7 +130,7 @@ public final class FluidPhasePortGameTests {
                 helper.assertTrue(System.nanoTime()<deadline[0],"The tank was not charged");
                 if(!charge.charged())return;
                 place(helper,suction,ModBlocks.FLUID_PIPE.get().defaultBlockState());
-                place(helper,pump,FluidPumpStartupGameTests.inlinePump(Direction.EAST));
+                place(helper,pump,FluidPumpStartupGameTests.inlinePump(Direction.EAST));FluidPumpStartupGameTests.powerInlineMover(level,pump);
                 place(helper,pipe,ModBlocks.FLUID_PIPE.get().defaultBlockState());place(helper,sink,ModBlocks.FLUID_VOID.get().defaultBlockState());
                 pumpIds[0]=identity(helper,pump);deadline[0]=System.nanoTime()+60_000_000_000L;return;
             }
@@ -142,7 +142,7 @@ public final class FluidPhasePortGameTests {
             var page=FluidNetwork.snapshot(world,world.registrations().get(pumpId),view);
             helper.assertTrue(!page.view().status().contains("inlet"),"The pump's page shows no inlet reason");
             System.out.println("PHASE_PORT_GAMETEST pump tick="+view.onlineTick()+" committed="+view.committedTick()+" status="+view.status());
-            done[0]=true;clear(helper,all);helper.succeed();
+            done[0]=true;level.removeBlock(pump.above(),false);clear(helper,all);helper.succeed();
         });
     }
 }

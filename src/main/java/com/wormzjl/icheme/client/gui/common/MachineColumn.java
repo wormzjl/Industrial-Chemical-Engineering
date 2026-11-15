@@ -230,9 +230,9 @@ public final class MachineColumn {
         return lines;
     }
 
-    /** Whether the status word {@code status} shows in the warning tone: a trip, no power, a limit, an ungoverned turbine. */
+    /** Whether the status word {@code status} shows in the warning tone: a trip, a failed machine, no power, a limit. */
     public static boolean warns(String status) {
-        return status.startsWith("TRIPPED") || status.contains("NO POWER") || status.contains("LIMITED") || status.equals("UNGOVERNED") || status.contains("NO DATA LINK") || status.contains("MULTIPLE DUTIES") || status.contains("NO DUTY TARGET");
+        return status.startsWith("TRIPPED") || status.startsWith("FAILED") || status.contains("NO POWER") || status.contains("LIMITED") || status.contains("NO DATA LINK") || status.contains("MULTIPLE DUTIES") || status.contains("NO DUTY TARGET");
     }
 
     /**

@@ -27,8 +27,6 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
@@ -52,7 +50,7 @@ public final class NameplateRenderer {
      * 80 m cooling tower, N1 findings), so it runs on the background executor and the plate draws once it is found; a
      * shape's plate never changes.
      */
-    private static final Map<EquipmentShape, CompletableFuture<Optional<Nameplate.Plate>>> PLATES = new HashMap<>();
+    private static final com.wormzjl.icheme.science.equipment.BoundedCache<EquipmentShape, CompletableFuture<Optional<Nameplate.Plate>>> PLATES = new com.wormzjl.icheme.science.equipment.BoundedCache<>(1024);
 
     private NameplateRenderer() {
     }
@@ -70,7 +68,6 @@ public final class NameplateRenderer {
             var shape = cell.shape();
             var origin = cell.origin();
             if (shape == null || origin == null || cell.isRemoved() || cell.name().isEmpty()) continue;
-            if (PLATES.size() > 1024) PLATES.clear();
             var plate = PLATES.computeIfAbsent(shape, s -> CompletableFuture.supplyAsync(() -> Nameplate.of(s), Util.backgroundExecutor())).getNow(Optional.empty());
             if (plate.isEmpty()) continue;
             var p = plate.get();

@@ -130,12 +130,78 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
                        double electricPower, double energyPerTick, ShaftUnit.Settings settings, ShaftTrain.Trip trip, ElectricStores.View electric) {
     }
 
-    private record Duty(double flow,double pressure,double setFlow,double setPressure,double flowSpeed,double pressureSpeed) {}
+    /**
+     * A driven machine's duty at its last booking: its flow (m³/s) and discharge pressure (Pa), its set points, and the
+     * speed shares that meet them. The shares are two 40-step bisections; they are solved when a regulating driver first
+     * reads them, from the booking's own inputs, so a train whose driver holds a set speed never solves them (M-11).
+     */
+    private static final class Duty {
+        final double flow, pressure, setFlow, setPressure;
+        /** A machine's law (null for a frame), a frame's law (null for a machine), the booking's head, density and suction
+         * pressure, and the heat capacity ratio the solve reads on that suction (M-07: {@code PassiveStepSolver.suctionKappa}). */
+        private final com.wormzjl.icheme.science.machine.MachineLaw law;
+        private final com.wormzjl.icheme.science.machine.PositiveDisplacement frame;
+        private final double head, density, suction, kappa;
+        private double flowSpeed, pressureSpeed;
+        private boolean flowSolved, pressureSolved;
+
+        private Duty(double flow, double pressure, double setFlow, double setPressure, com.wormzjl.icheme.science.machine.MachineLaw law,
+                     com.wormzjl.icheme.science.machine.PositiveDisplacement frame, double head, double density, double suction, double kappa) {
+            this.flow = flow;
+            this.pressure = pressure;
+            this.setFlow = setFlow;
+            this.setPressure = setPressure;
+            this.law = law;
+            this.frame = frame;
+            this.head = head;
+            this.density = density;
+            this.suction = suction;
+            this.kappa = kappa;
+        }
+
+        static Duty machine(double flow, double pressure, double setFlow, double setPressure, com.wormzjl.icheme.science.machine.MachineLaw law, double head, double density, double suction, double kappa) {
+            return new Duty(flow, pressure, setFlow, setPressure, law, null, head, density, suction, kappa);
+        }
+
+        static Duty frame(double flow, double pressure, double setFlow, double setPressure, com.wormzjl.icheme.science.machine.PositiveDisplacement law, double head, double suction) {
+            return new Duty(flow, pressure, setFlow, setPressure, null, law, head, Double.NaN, suction, Double.NaN);
+        }
+
+        double flow() { return flow; }
+        double pressure() { return pressure; }
+        double setFlow() { return setFlow; }
+        double setPressure() { return setPressure; }
+
+        /** The speed share that delivers the set flow at the booked head; NaN without a set flow. */
+        double flowSpeed() {
+            if (!flowSolved) {
+                flowSpeed = !(setFlow > 0) ? Double.NaN : frame != null ? com.wormzjl.icheme.science.machine.SpeedControl.requiredSpeed(frame, setFlow, head, .1, 1.5)
+                        : com.wormzjl.icheme.science.machine.SpeedControl.requiredSpeed(law, setFlow, head, density, suction, kappa, com.wormzjl.icheme.science.machine.Motor.LOWEST_SPEED, com.wormzjl.icheme.science.machine.SpeedControl.MAXIMUM_CURVE_SPEED);
+                flowSolved = true;
+            }
+            return flowSpeed;
+        }
+
+        /** The speed share that holds the set discharge pressure at the booked flow; NaN without a set pressure. */
+        double pressureSpeed() {
+            if (!pressureSolved) {
+                pressureSpeed = !(setPressure > 0) ? Double.NaN : frame != null ? com.wormzjl.icheme.science.machine.SpeedControl.requiredSpeed(frame, flow, setPressure - suction, .1, 1.5)
+                        : com.wormzjl.icheme.science.machine.SpeedControl.requiredSpeed(law, flow, setPressure - suction, density, suction, kappa, com.wormzjl.icheme.science.machine.Motor.LOWEST_SPEED, com.wormzjl.icheme.science.machine.SpeedControl.MAXIMUM_CURVE_SPEED);
+                pressureSolved = true;
+            }
+            return pressureSpeed;
+        }
+    }
     /** One train's engine state. */
     private static final class Run {
         final ShaftNetwork.Train train;
-        /** Each driven member's shaft power at its last booking, W. */
-        final Map<Long, Double> power = new HashMap<>();
+        /**
+         * Each driven member's shaft power at its last booking, W, its generator output decided at the last step, W, and its
+         * duty sample (M-10: arrays aligned with {@code train.driven()}; a member's slot is its first entry there, a unit that is
+         * no driven member keeps nothing and reads 0 or null).
+         */
+        final double[] power, output;
+        final Duty[] duties;
         double available, steamFlow, inlet = Double.NaN, exhaust = Double.NaN, specificWork = Double.NaN, drop = Double.NaN, efficiency = Double.NaN, measured = Double.NaN, target = Double.NaN;
         /** Startup asks for the full passage until a booked steam state supplies the work per kilogram. */
         double admission = FlowControl.Mover.MAXIMUM_VOLUME_FLOW * 1000;
@@ -145,13 +211,47 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         double electric, governorPower;
         /** The last step's trip, {@code NO_POWER} included (it is not saved on the unit). */
         ShaftTrain.Trip trip = ShaftTrain.Trip.NONE;
-        /** Each generator's electric output decided at the last step, W, and whether it stood outside its speed window. */
-        final Map<Long, Double> output = new HashMap<>();
-        final Map<Long,Duty> duties=new HashMap<>();
+        /** Each generator that stood outside its speed window. */
         final Set<Long> offSpeed = new HashSet<>();
 
         Run(ShaftNetwork.Train train) {
             this.train = train;
+            int n = train.driven().size();
+            power = new double[n];
+            output = new double[n];
+            duties = new Duty[n];
+        }
+
+        /** Unit {@code unit}'s slot: its first entry in {@code train.driven()}, or -1. */
+        int slot(long unit) {
+            var driven = train.driven();
+            for (int i = 0; i < driven.size(); i++) if (driven.get(i).id() == unit) return i;
+            return -1;
+        }
+
+        double power(long unit) {
+            int i = slot(unit);
+            return i < 0 ? 0 : power[i];
+        }
+
+        void power(long unit, double watts) {
+            int i = slot(unit);
+            if (i >= 0) power[i] = watts;
+        }
+
+        double output(long unit) {
+            int i = slot(unit);
+            return i < 0 ? 0 : output[i];
+        }
+
+        Duty duty(long unit) {
+            int i = slot(unit);
+            return i < 0 ? null : duties[i];
+        }
+
+        void duty(long unit, Duty duty) {
+            int i = slot(unit);
+            if (i >= 0) duties[i] = duty;
         }
     }
 
@@ -175,7 +275,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
     private final Map<Long, Double> displacements = new HashMap<>();
     /** Each shaft block's drawn size as last set. */
     private final Map<Long, Integer> sizes = new HashMap<>();
-    /** Statuses a governor binding left on a turbine ({@code NO GOVERNOR VALVE}). */
+    /** Statuses a governor binding left on a turbine ({@code INTERNAL GOVERNOR}: no valve it can work). */
     private final Map<Long, String> bindings = new HashMap<>();
     /** Each Create coupling's last input by its cell (W6b): engine state, rebuilt from the block entity's next report. */
     private final Map<PhysicalFluidTopology.Position, CreateInput> create = new HashMap<>();
@@ -205,7 +305,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
     }
 
     /** The pumps' health (W10b): books at the islands' commits, closes a failed pump at dispatch. */
-    private PumpHealth health;
+    private MachineHealth health;
 
     /** The fired heaters' burners (batch 2026-11-09-furnace-fuel-power): book at the commits, plan their fuel and limit at dispatch. */
     private FiredHeaters burners;
@@ -257,7 +357,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
     }
 
     /** Installs the pumps' health (W10b). */
-    public void health(PumpHealth value) {
+    public void health(MachineHealth value) {
         health = Objects.requireNonNull(value);
     }
 
@@ -381,8 +481,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
     }
 
     private ShaftUnit at(PhysicalFluidTopology.Position position) {
-        for (var u : topology.shafts().values()) if (u.position().equals(position)) return u;
-        return null;
+        return topology.shaftAt(position);
     }
 
     private void fresh(long unit) {
@@ -457,8 +556,8 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
     /**
      * A speed sensor installed or removed (build plan section 3, reading A25): installed, the nearest control valve upstream
      * of the turbine's inlet, through unbranched pipes in its island, takes source {@code SHAFT_SPEED} and the sensor; a
-     * valve holding its own sensor refuses ({@code NO GOVERNOR VALVE}). Removed, the bound valve returns to source
-     * {@code NONE} and keeps its last target.
+     * turbine with no such valve, or one whose valve holds its own sensor, keeps its internal admission
+     * ({@code INTERNAL GOVERNOR}). Removed, the bound valve returns to source {@code NONE} and keeps its last target.
      */
     private void bind(Governor g) {
         Long unit = unitOfDevice.get(g.turbine());
@@ -490,7 +589,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         return upstreamValve(graph, turbine);
     }
 
-    /** {@link #governorValve} on {@code graph}: the walk, Minecraft-free (tested by ShaftTrainsTest). */
+    /** {@link #governorValve} on {@code graph}: the walk, Minecraft-free (tested by ShaftCouplingTest). */
     static long upstreamValve(PassiveNetwork graph, long turbine) {
         int node = -1;
         PassiveNetwork.Pipe from = null;
@@ -522,11 +621,11 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         sizes.keySet().retainAll(units.keySet());
         for (var run : runs.values()) {
             var d = run.train.driver() == 0 ? null : units.get(run.train.driver());
-            double rated = d == null ? 0 : driver(d, false).limit(), rpm = d == null ? 0 : d.designSpeed();
-            if (d != null && d.kind() == ShaftNetwork.Kind.CREATIVE_MOTOR || d != null && (d.kind() == ShaftNetwork.Kind.CREATE_COUPLING||createDrivers.contains(d.id()))) rpm = driver(d, false).setSpeed();
+            double rated = d == null ? 0 : driver(d).limit(), rpm = d == null ? 0 : d.designSpeed();
+            if (d != null && d.kind() == ShaftNetwork.Kind.CREATIVE_MOTOR || d != null && (d.kind() == ShaftNetwork.Kind.CREATE_COUPLING||createDrivers.contains(d.id()))) rpm = driver(d).setSpeed();
             for (var e : run.train.shafts().entrySet()) {
                 double speed = rpm * e.getValue();
-                int pixels = d == null || speed <= 0 ? com.wormzjl.icheme.world.level.block.ShaftBlock.DEFAULT_SIZE
+                int pixels = d == null || speed <= 0 ? com.wormzjl.icheme.science.equipment.ProcessUnit.SHAFT_DEFAULT_SIZE
                         : com.wormzjl.icheme.science.equipment.ProcessUnit.shaftPixels(com.wormzjl.icheme.science.equipment.ProcessUnit.torque(rated / 1000, speed));
                 var u = units.get(e.getKey());
                 if (u != null && !Objects.equals(sizes.put(u.id(), pixels), pixels)) host.resize(u.position(), pixels);
@@ -543,42 +642,18 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
 
     @Override
     public Map<Long, ShaftPlan> plans(long island, PassiveNetwork graph) {
-        Map<Long, ShaftPlan> plans = null;
+        // One map, filled in a fixed order: a later source overwrites an earlier one's plan for the same device (M-08), as
+        // the separate maps merged in this order did: fans, burners, prime movers, flares, shares and governors, health.
+        var out = new HashMap<Long, ShaftPlan>();
         // The fan units' power (W5): a fan limit for every air cooler and induced tower with a store.
-        if (electric != null) {
-            var fans = new HashMap<Long, ShaftPlan>();
-            electric.plans(graph, fans);
-            if (!fans.isEmpty()) plans = fans;
-        }
+        if (electric != null) electric.plans(graph, out);
         // The burners' fuel valves and radiant coils' limits.
-        if (burners != null) {
-            var fired = new HashMap<Long, ShaftPlan>();
-            burners.plans(graph, fired);
-            if (!fired.isEmpty()) {
-                if (plans == null) plans = new HashMap<>();
-                plans.putAll(fired);
-            }
-        }
+        if (burners != null) burners.plans(graph, out);
         // The prime movers' fuel valves and steam coils' gas.
-        if (primeMovers != null) {
-            var fuel = new HashMap<Long, ShaftPlan>();
-            primeMovers.plans(graph, fuelTargets, fuel);
-            if (!fuel.isEmpty()) {
-                if (plans == null) plans = new HashMap<>();
-                plans.putAll(fuel);
-            }
-        }
+        if (primeMovers != null) primeMovers.plans(graph, fuelTargets, out);
         // The flares' tip limits.
-        if (flares != null) {
-            var tips = new HashMap<Long, ShaftPlan>();
-            flares.plans(graph, tips);
-            if (!tips.isEmpty()) {
-                if (plans == null) plans = new HashMap<>();
-                plans.putAll(tips);
-            }
-        }
-        if (shares.isEmpty() && governorTargets.isEmpty()) return failures(plans, graph);
-        for (var pipe : graph.pipes()) {
+        if (flares != null) flares.plans(graph, out);
+        if (!shares.isEmpty() || !governorTargets.isEmpty()) for (var pipe : graph.pipes()) {
             long id = graph.reservoirs().get(pipe.first()).id();
             ShaftPlan plan = null;
             Double share = shares.get(id);
@@ -591,24 +666,31 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
             if (target != null && (pipe.control() instanceof FlowControl.Turbine
                     || pipe.control() instanceof FlowControl.ControlValve v && v.source() == FlowControl.ValveSource.SHAFT_SPEED))
                 plan = new ShaftPlan(ShaftPlan.Kind.GOVERNOR, target);
-            if (plan == null) continue;
-            if (plans == null) plans = new HashMap<>();
-            plans.put(id, plan);
+            if (plan != null) out.put(id, plan);
         }
-        return failures(plans, graph);
+        failures(out, graph);
+        return out.isEmpty() ? Map.of() : out;
     }
 
-    /** {@code plans} with each failed pump of {@code graph} closed (W10b): its {@code FAILED} plan stands in for its speed. */
-    private Map<Long, ShaftPlan> failures(Map<Long, ShaftPlan> plans, PassiveNetwork graph) {
-        if (health != null) {
-            var failed = new HashMap<Long, ShaftPlan>();
-            health.plans(graph, failed);
-            if (!failed.isEmpty()) {
-                if (plans == null) plans = new HashMap<>();
-                plans.putAll(failed);
-            }
+    /** The health's plans of one dispatch, merged into its map by {@link #failures} (engine state, cleared at each use). */
+    private final Map<Long, ShaftPlan> failed = new HashMap<>();
+
+    /**
+     * {@code out} with each failed pump of {@code graph} closed (W10b): its {@code FAILED} plan stands in for its speed.
+     * A health {@code FAILED 1} (switch a repaired pump back on) never replaces a {@code FAILED 0} already planned: an
+     * unpowered in-line pump's store close wins (M-04). A health close {@code FAILED 0} replaces anything.
+     */
+    private void failures(Map<Long, ShaftPlan> out, PassiveNetwork graph) {
+        if (health == null) return;
+        failed.clear();
+        health.plans(graph, failed);
+        for (var e : failed.entrySet()) {
+            var planned = out.get(e.getKey());
+            if (e.getValue().kind() == ShaftPlan.Kind.FAILED && e.getValue().value() > 0
+                    && planned != null && planned.kind() == ShaftPlan.Kind.FAILED && planned.value() == 0) continue;
+            out.put(e.getKey(), e.getValue());
         }
-        return plans == null ? Map.of() : plans;
+        failed.clear();
     }
 
     /** A frame's displacement at its design speed: its registered control's flow (a dispatch's graph carries the planned one). */
@@ -649,6 +731,9 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         var flows = result.endpointFlows();
         var heads = result.endpointHeads();
         var average = result.averageMassFlows();
+        // The driver pays the shaft power the solve's own function gives (code base review M-01, owner decisions A2 and B1): the
+        // slice's average flow, the booked head, the suction's heat capacity ratio and wet share as the solve reads them.
+        var model = coordinator.model(island);
         for (int e = 0; e < solved.pipes().size(); e++) {
             var pipe = solved.pipes().get(e);
             var node = solved.reservoirs().get(pipe.first());
@@ -662,10 +747,10 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
             switch (pipe.control()) {
                 case FlowControl.Machine m -> {
                     double q = density > 0 ? Math.max(0, flows[e]) / density : 0;
-                    run.power.put(unit, m.speed() > 0 && density > 0 ? m.law().shaftPower(q, m.speed(), density, suction.pressure(), 1.4) : 0);
-                    run.duties.put(unit,new Duty(q,solved.reservoirs().get(pipe.second()).state().pressure(),m.setFlow(),m.setPressure(),
-                            m.setFlow()>0?com.wormzjl.icheme.science.machine.SpeedControl.requiredSpeed(m.law(),m.setFlow(),heads[e],density,suction.pressure(),1.4,com.wormzjl.icheme.science.machine.Motor.LOWEST_SPEED,com.wormzjl.icheme.science.machine.SpeedControl.MAXIMUM_CURVE_SPEED):Double.NaN,
-                            m.setPressure()>0?com.wormzjl.icheme.science.machine.SpeedControl.requiredSpeed(m.law(),q,m.setPressure()-suction.pressure(),density,suction.pressure(),1.4,com.wormzjl.icheme.science.machine.Motor.LOWEST_SPEED,com.wormzjl.icheme.science.machine.SpeedControl.MAXIMUM_CURVE_SPEED):Double.NaN));
+                    double kappa = com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.suctionKappa(model, m, suction);
+                    double wet = com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.wetShare(model, solved, e, result.advancedSeconds());
+                    run.power(unit, com.wormzjl.icheme.science.fluid.network.InlineMovers.shaftPower(m, average[e], heads[e], density, suction.pressure(), kappa, wet));
+                    run.duty(unit,Duty.machine(q,solved.reservoirs().get(pipe.second()).state().pressure(),m.setFlow(),m.setPressure(),m.law(),heads[e],density,suction.pressure(),kappa));
                     if (first(run, unit)) {
                         run.measured = q;
                         run.target = m.setFlow() > 0 ? m.setFlow() : m.setPressure() > 0 ? m.setPressure() : Double.NaN;
@@ -673,14 +758,13 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
                     }
                 }
                 case FlowControl.Compressor c -> {
-                    run.power.put(unit,density>0?c.power(Math.max(0,flows[e]),heads[e],density,suction.pressure(),1.4):0);
+                    double kappa=com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.suctionKappa(model,c,suction);
+                    run.power(unit,com.wormzjl.icheme.science.fluid.network.InlineMovers.shaftPower(c,average[e],heads[e],density,suction.pressure(),kappa,1));
                     var registration=topology.latest().get(node.id());
                     if(density>0&&registration!=null&&registration.device().control() instanceof FlowControl.Compressor design&&design.requestedVolumeFlow()>0){
                         double q=Math.max(0,flows[e])/density,pressure=solved.reservoirs().get(pipe.second()).state().pressure();
-                        var law=new com.wormzjl.icheme.science.machine.PositiveDisplacement(design.requestedVolumeFlow(),design.riseLimit(density,suction.pressure(),density,1.4));
-                        run.duties.put(unit,new Duty(q,pressure,design.setFlow(),design.setPressure(),
-                                design.setFlow()>0?com.wormzjl.icheme.science.machine.SpeedControl.requiredSpeed(law,design.setFlow(),heads[e],.1,1.5):Double.NaN,
-                                design.setPressure()>0?com.wormzjl.icheme.science.machine.SpeedControl.requiredSpeed(law,q,design.setPressure()-suction.pressure(),.1,1.5):Double.NaN));
+                        var law=new com.wormzjl.icheme.science.machine.PositiveDisplacement(design.requestedVolumeFlow(),design.riseLimit(density,suction.pressure(),density,kappa));
+                        run.duty(unit,Duty.frame(q,pressure,design.setFlow(),design.setPressure(),law,heads[e],suction.pressure()));
                     }
                 }
                 case FlowControl.Turbine t -> {
@@ -715,13 +799,13 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         Long key = unit == null ? null : trainOf.get(unit);
         var run = key == null ? null : runs.get(key);
         if (run == null) return false;
-        run.power.put(unit, Math.max(0, shaftPower));
+        run.power(unit, Math.max(0, shaftPower));
         run.booked = true;
         long now = coordinator.now();
         if (run.stepped != now) {
             run.fresh = false;
             run.stepped = now;
-            if (step(run)) publish();
+            if (step(run)) publish(List.of(run));
         }
         if (run.train.fault() != ShaftNetwork.Fault.NONE) return false;
         var d = topology.shaft(run.train.driver());
@@ -736,14 +820,17 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
     @Override
     public void decide() {
         long now = coordinator.now();
-        boolean moved = false;
+        List<Run> moved = null;
         for (var run : runs.values()) {
             if (!run.fresh || run.stepped == now) continue;
             run.fresh = false;
             run.stepped = now;
-            moved |= step(run);
+            if (step(run)) {
+                if (moved == null) moved = new ArrayList<>();
+                moved.add(run);
+            }
         }
-        if (moved) publish();
+        if (moved != null) publish(moved);
     }
 
     /** One driver step; true when the train's speed or trip changed. */
@@ -764,9 +851,9 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         var state = d.state() == null ? new ShaftUnit.State(0, Double.NaN, Double.NaN) : d.state();
         // A generator (W5) books its output since its last step and takes the load its store has room for.
         generators(run, state.speed(), now);
-        for(var m:train.driven())if(createLoads.contains(m.id())){var u=topology.shaft(m.id());var input=u==null?null:create.get(u.position());run.power.put(m.id(),input==null?0:input.demand());}
+        for(var m:train.driven())if(createLoads.contains(m.id())){var u=topology.shaft(m.id());var input=u==null?null:create.get(u.position());run.power(m.id(),input==null?0:input.demand());}
         double demand = 0;
-        for (var m : train.driven()) demand += run.power.getOrDefault(m.id(), 0.0) / m.efficiency();
+        for (var m : train.driven()) demand += run.power(m.id()) / m.efficiency();
         Long valve = valveOfTurbine.get(d.id());
         boolean turbine = d.kind() == ShaftNetwork.Kind.STEAM_TURBINE;
         double sent = turbine ? run.admission : valve == null ? 0 : governorTargets.getOrDefault(valve, 0.0);
@@ -778,7 +865,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
             var candidates=train.driven().stream().map(m->topology.shaft(m.id())).filter(Objects::nonNull).filter(u->u.fluid()>0&&linked.contains(u.fluid())).toList();
             automatic=candidates.isEmpty()?"NO DATA LINK":candidates.size()>1?"MULTIPLE DUTIES":null;
             if(automatic==null) {
-                var sample=run.duties.get(candidates.getFirst().id());boolean flow=d.settings().mode()==ShaftTrain.Mode.REGULATE_FLOW;
+                var sample=run.duty(candidates.getFirst().id());boolean flow=d.settings().mode()==ShaftTrain.Mode.REGULATE_FLOW;
                 run.measured=sample==null?Double.NaN:flow?sample.flow():sample.pressure();
                 run.target=sample==null?Double.NaN:flow?sample.setFlow():sample.setPressure();
                 if(!(run.target>0))automatic="NO DUTY TARGET";
@@ -790,10 +877,13 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         if (prime) run.available = primeMovers.available(d.id());
         var measure = prime ? new ShaftTrain.Measure(demand, run.available, false, Double.NaN, Double.NaN, state.previousSpeed(), state.previousMeasured(), primeMovers.firing(d.id()))
                 : new ShaftTrain.Measure(demand, run.available, steamShort, run.measured, run.target, state.previousSpeed(), state.previousMeasured(), run.available > 0 || idleSupply);
+        // N7: the train's gearboxes limit the driver's power to their ratings (a gearbox rated 0, from an older save, limits nothing).
+        double gear = ShaftNetwork.gearLimit(train, id -> {var u = topology.shaft(id); return u == null ? 0 : u.ratedPower();}, run::power);
+        measure = measure.withGearLimit(gear);
         // A motor needs its live feed and buffered energy: its draw is booked at this step, from its last booking to now, at the
         // power this step decided (reading A59); one that runs short stops here (NO POWER) and restarts on the cadence.
         boolean motor = d.kind() == ShaftNetwork.Kind.MOTOR && electric != null;
-        var driver = driver(d, turbine || valve != null, !motor || electric.powered(d.id()));
+        var driver = driver(d, !motor || electric.powered(d.id()));
         if(Double.isFinite(requestedRpm))driver=driver.atSpeed(Math.clamp(requestedRpm,driver.designSpeed()*com.wormzjl.icheme.science.machine.Motor.LOWEST_SPEED,com.wormzjl.icheme.science.machine.Motor.MAXIMUM_RPM));
         var step = ShaftTrain.step(driver, state.speed(), measure);
         if(automatic!=null&&driver.running()&&driver.powered()&&step.trip()==ShaftTrain.Trip.NONE)
@@ -801,15 +891,16 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         if(motor) {
             double actualDemand=0;for(var member:train.driven()) {
                 var unit=topology.shaft(member.id());var input=unit==null?null:create.get(unit.position());
-                actualDemand+=(createLoads.contains(member.id())?(input==null?0:input.actualPower()):run.power.getOrDefault(member.id(),0.0))/member.efficiency();
+                actualDemand+=(createLoads.contains(member.id())?(input==null?0:input.actualPower()):run.power(member.id()))/member.efficiency();
             }
             step=new ShaftTrain.Step(step.speed(),step.trip(),step.status(),step.governorPower(),step.speed()>0?com.wormzjl.icheme.science.machine.Motor.electricPower(actualDemand,d.ratedPower(),d.poles(),true):0);
         }
-        if (motor && electric.draw(d.id(), step.electricPower(), now)) step = ShaftTrain.step(driver(d, valve != null, false), state.speed(), measure);
+        if (motor && electric.draw(d.id(), step.electricPower(), now)) step = ShaftTrain.step(driver(d, false), state.speed(), measure);
         // Publish only finite mechanical capacity left after the internal machines. External demand is booked once above.
-        double internal=0;for(var m:train.driven())if(!createLoads.contains(m.id()))internal+=run.power.getOrDefault(m.id(),0.0)/m.efficiency();
+        double internal=0;for(var m:train.driven())if(!createLoads.contains(m.id()))internal+=run.power(m.id())/m.efficiency();
         double capacity=driver.drive()==ShaftTrain.Drive.TURBINE?Math.min(driver.limit(),run.available):driver.limit();
         if(driver.drive()==ShaftTrain.Drive.VARIABLE_MOTOR)capacity=com.wormzjl.icheme.science.machine.Motor.availablePower(capacity,driver.designSpeed(),step.speed());
+        capacity=Math.min(capacity,gear);
         for(var m:train.driven())if(createLoads.contains(m.id())){var u=topology.shaft(m.id());if(u!=null)host.output(u.position(),step.speed()*m.ratio(),step.speed()>0?Math.max(0,capacity-internal)*m.efficiency()/Math.max(1,train.driven().stream().filter(part->createLoads.contains(part.id())).count()):0);}
         run.trip = step.trip();
         run.status = step.status();
@@ -849,7 +940,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         for (var m : run.train.driven()) {
             var g = topology.shaft(m.id());
             if (g == null || g.kind() != ShaftNetwork.Kind.GENERATOR) continue;
-            if (electric != null) electric.give(g.id(), run.output.getOrDefault(g.id(), 0.0), now);
+            if (electric != null) electric.give(g.id(), run.output(g.id()), now);
             boolean on = com.wormzjl.icheme.science.machine.ElectricStore.onSpeed(driverSpeed * m.ratio(), g.designSpeed());
             // W7: a generator switched off takes no load; its output limit (0: none) caps the load its store has room for.
             var s = g.settings();
@@ -857,8 +948,9 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
             if (s.powerLimit() > 0) load = Math.min(load, s.powerLimit());
             if (on) run.offSpeed.remove(g.id());
             else run.offSpeed.add(g.id());
-            run.output.put(g.id(), load);
-            run.power.put(g.id(), load / com.wormzjl.icheme.science.machine.ElectricStore.generatorEfficiency(g.ratedPower(), g.poles()));
+            int slot = run.slot(g.id());
+            run.output[slot] = load;
+            run.power[slot] = load / com.wormzjl.icheme.science.machine.ElectricStore.generatorEfficiency(g.ratedPower(), g.poles());
         }
     }
 
@@ -887,13 +979,13 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
     }
 
     /** The step's driver for unit {@code d}. */
-    private ShaftTrain.Driver driver(ShaftUnit d, boolean governed) {
-        return driver(d, governed, true);
+    private ShaftTrain.Driver driver(ShaftUnit d) {
+        return driver(d, true);
     }
 
     /** The step's driver for unit {@code d}, with power ({@code powered}) or without. */
-    private ShaftTrain.Driver driver(ShaftUnit d, boolean governed, boolean powered) {
-        var drive = createDrivers.contains(d.id())?ShaftTrain.Drive.CREATE:d.drive(d.drive() == com.wormzjl.icheme.science.equipment.MachineDuty.Drive.VARIABLE);
+    private ShaftTrain.Driver driver(ShaftUnit d, boolean powered) {
+        var drive = createDrivers.contains(d.id())?ShaftTrain.Drive.CREATE:d.trainDrive();
         if (drive == null) drive = ShaftTrain.Drive.CREATIVE;
         double design = d.designSpeed() > 0 ? d.designSpeed() : ShaftTrain.CREATIVE_SPEED;
         var s = d.settings();
@@ -902,9 +994,9 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
             var in = create.get(d.position());
             double rpm = in == null ? 0 : in.rpm(), limit = in == null ? 0 : Math.max(0, in.stress()) * wattsPerStress();
             return new ShaftTrain.Driver(drive, 0, d.designSpeed() > 0 ? d.designSpeed() : com.wormzjl.icheme.science.machine.CreateCoupling.DESIGN_SPEED, 0, true,
-                    ShaftTrain.Mode.SPEED, rpm, limit, ShaftTrain.Trip.NONE, false, true);
+                    ShaftTrain.Mode.SPEED, rpm, limit, ShaftTrain.Trip.NONE, true);
         }
-        return new ShaftTrain.Driver(drive, d.ratedPower(), design, d.poles(), s.running(), s.mode(), s.setPoint(), s.powerLimit(), d.trip(), governed, powered);
+        return new ShaftTrain.Driver(drive, d.ratedPower(), design, d.poles(), s.running(), s.mode(), s.setPoint(), s.powerLimit(), d.trip(), powered);
     }
 
     /**
@@ -918,11 +1010,30 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         host.stress(u.position(), impact);
     }
 
-    /** Sends each driven device its new share, and wakes the islands whose share or governor target moved. */
+    /** Sends each driven device its new share, and wakes the islands whose share or governor target moved: every unit (after events and a compile). */
     private void publish() {
+        publish(null);
+    }
+
+    /**
+     * {@link #publish()} for the members of {@code stepped} only, or of every unit when null (M-09). A step that changes what
+     * this reads (a driver's speed or trip, a turbine's admission, a governor valve's target, a fuel target) returns true and
+     * its train is published at once, so a train not stepped holds what the last publication left: its shares and targets,
+     * recomputed, would wake nothing. The unit set changes only through events, whose publication covers every unit.
+     */
+    private void publish(List<Run> stepped) {
         var units = topology.shafts();
+        Collection<ShaftUnit> members = units.values();
+        if (stepped != null) {
+            var some = new ArrayList<ShaftUnit>();
+            for (var run : stepped) for (long id : run.train.parts()) {
+                var u = units.get(id);
+                if (u != null) some.add(u);
+            }
+            members = some;
+        }
         var next = new HashMap<Long, Double>();
-        for (var u : units.values()) {
+        for (var u : members) {
             if (u.kind() != ShaftNetwork.Kind.CASING || u.fluid() == 0) continue;
             next.put(u.fluid(), share(u, units));
         }
@@ -931,11 +1042,13 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
             Double old = shares.get(e.getKey());
             if (old == null || Math.abs(old - e.getValue()) > ShaftTrain.SPEED_DEADBAND || (old == 0) != (e.getValue() == 0)) owners(e.getKey(), wake);
         }
-        for (long gone : shares.keySet()) if (!next.containsKey(gone)) owners(gone, wake);
-        shares.clear();
+        if (stepped == null) {
+            for (long gone : shares.keySet()) if (!next.containsKey(gone)) owners(gone, wake);
+            shares.clear();
+        }
         shares.putAll(next);
-        var governors = new HashSet<>(turbineOfValve.keySet());
-        for (var u : units.values()) {
+        var governors = new HashSet<Long>();
+        for (var u : members) {
             if (u.kind() != ShaftNetwork.Kind.STEAM_TURBINE || u.fluid() == 0) continue;
             var key = trainOf.get(u.id());
             var run = key == null ? null : runs.get(key);
@@ -943,14 +1056,27 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
             governorTargets.put(u.fluid(), open ? run.admission : 0);
             governors.add(u.fluid());
         }
-        governorTargets.keySet().retainAll(governors);
-        woken.keySet().retainAll(governorTargets.keySet());
-        for (var e : governorTargets.entrySet()) {
+        Collection<Long> targets;
+        if (stepped == null) {
+            governors.addAll(turbineOfValve.keySet());
+            governorTargets.keySet().retainAll(governors);
+            woken.keySet().retainAll(governorTargets.keySet());
+            targets = List.copyOf(governorTargets.keySet());
+        } else {
+            // The stepped turbines' targets, and the valves their drivers' steps set.
+            for (var run : stepped) {
+                Long valve = valveOfTurbine.get(run.train.driver());
+                if (valve != null && governorTargets.containsKey(valve)) governors.add(valve);
+            }
+            targets = governors;
+        }
+        for (long k : targets) {
             // A governor target outside the valve's deadband of the one its island was last woken for wakes it (reading A26).
-            Double old = woken.get(e.getKey());
-            if (old != null && !outsideDeadband(old, e.getValue())) continue;
-            woken.put(e.getKey(), e.getValue());
-            owners(e.getKey(), wake);
+            double target = governorTargets.get(k);
+            Double old = woken.get(k);
+            if (old != null && !outsideDeadband(old, target)) continue;
+            woken.put(k, target);
+            owners(k, wake);
         }
         // The prime movers (batch 2026-11-10-prime-movers): a fuel target past the valve's deadband wakes its fuel island; a
         // coil's gas past it wakes the coil's. A set off its train, stopped or faulted, asks for no fuel.
@@ -1033,12 +1159,12 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         Long key = trainOf.get(unit);
         var run = key == null ? null : runs.get(key);
         var store = electric == null ? null : electric.view(unit);
-        if (run == null) return new View(unit, u.kind(), u.held() ? "HELD" : u.kind() == ShaftNetwork.Kind.SHAFT ? "LOOSE" : "NO DRIVER", 0, 0, 0, 0, 0, 0, 0, u.settings(), u.trip(), store);
+        if (run == null) return new View(unit, u.kind(), worn(u, u.held() ? "HELD" : u.kind() == ShaftNetwork.Kind.SHAFT ? "LOOSE" : "NO DRIVER", false), 0, 0, 0, 0, 0, 0, 0, u.settings(), u.trip(), store);
         var train = run.train;
         var d = train.driver() == 0 ? null : topology.shaft(train.driver());
         double driverSpeed = train.fault() == ShaftNetwork.Fault.NONE && d != null && d.state() != null ? d.state().speed() : 0;
         double factor = 1, demand = 0;
-        for (var m : train.driven()) demand += run.power.getOrDefault(m.id(), 0.0) / m.efficiency();
+        for (var m : train.driven()) demand += run.power(m.id()) / m.efficiency();
         for (var m : train.driven()) if (m.id() == unit) factor = m.ratio();
         if (train.shafts().containsKey(unit)) factor = train.shafts().get(unit);
         String status = train.fault() != ShaftNetwork.Fault.NONE ? train.fault().name().replace('_', ' ')
@@ -1049,12 +1175,23 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         if (u.kind() == ShaftNetwork.Kind.GENERATOR && train.fault() == ShaftNetwork.Fault.NONE && !u.settings().running()) status = "STOPPED";
         // A motor's or generator's store from a save before W5 runs free until wired (A73): the notice, non-blocking.
         if (store != null && "UNMETERED".equals(store.status()) && u.kind() == ShaftNetwork.Kind.MOTOR) status = status + " / UNMETERED";
+        status = worn(u, status, status.equals(run.status));
         double speed = driverSpeed * factor, share = u.designSpeed() > 0 ? speed / u.designSpeed() : 0;
-        double shaft = u.kind().driver() ? demand : run.power.getOrDefault(unit, 0.0);
-        double power = u.kind() == ShaftNetwork.Kind.MOTOR ? run.electric : u.kind() == ShaftNetwork.Kind.GENERATOR ? run.output.getOrDefault(unit, 0.0) : 0;
+        double shaft = u.kind().driver() ? demand : run.power(unit);
+        double power = u.kind() == ShaftNetwork.Kind.MOTOR ? run.electric : u.kind() == ShaftNetwork.Kind.GENERATOR ? run.output(unit) : 0;
         double jpf = electric == null ? ElectricStores.Settings.DEFAULT.joulesPerFE() : electric.joulesPerFE();
         var trip = u.trip() != ShaftTrain.Trip.NONE || !u.kind().driver() ? u.trip() : run.trip;
         return new View(unit, u.kind(), status, driverSpeed, speed, share, demand, shaft, power, power / jpf / 20, u.settings(), trip, store);
+    }
+
+    /**
+     * Part {@code u}'s {@code status} with its worn device's health word (M-16): {@code FAILED} before every train word, a
+     * fault word ({@code CAVITATION}, {@code GAS}, {@code LIQUID}) in place of the train's own run word only ({@code running}).
+     */
+    private String worn(ShaftUnit u, String status, boolean running) {
+        if (health == null || u.fluid() <= 0) return status;
+        String word = health.status(u.fluid());
+        return "FAILED".equals(word) || running && !word.isEmpty() ? word : status;
     }
 
     /** Every shaft unit as the ledger holds it (a read). */
@@ -1069,7 +1206,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
 
     /** The size shaft block {@code unit} was last drawn at, or the default before its train drew it (a read; the re-alignment places a lost block at it). */
     public int drawnSize(long unit) {
-        return sizes.getOrDefault(unit, com.wormzjl.icheme.world.level.block.ShaftBlock.DEFAULT_SIZE);
+        return sizes.getOrDefault(unit, com.wormzjl.icheme.science.equipment.ProcessUnit.SHAFT_DEFAULT_SIZE);
     }
 
     /** Unit {@code unit} as the ledger holds it, or null (a read; W7's pages). */

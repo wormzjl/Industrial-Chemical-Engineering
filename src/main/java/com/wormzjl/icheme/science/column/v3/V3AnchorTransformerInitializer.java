@@ -117,7 +117,7 @@ final class V3AnchorTransformerInitializer implements V3NeuralInitializer {
     @Override public String modelId() { return model.modelId; }
 
     /** The identity a prediction carries: the scientific revision of the request's package in the calculation's catalog. */
-    String propertyRevision(String packageId) { return com.wormzjl.icheme.science.material.MaterialRuntime.current().requirePackage(packageId).scientificRevision(); }
+    String propertyRevision(String packageId) { return V3PengRobinsonThermo.columnIdentity(com.wormzjl.icheme.science.material.MaterialRuntime.current(), packageId); }
 
     List<String> componentIds() { return List.copyOf(model.components); }
     /** The physics the model was trained on; a request binds only where its values on its active compounds are these. */
@@ -170,8 +170,8 @@ final class V3AnchorTransformerInitializer implements V3NeuralInitializer {
         if (registered == null || !registered.components().equals(model.components)
                 || !input.componentBasis().componentIds().equals(model.components) || input.stageCount() < 2 || input.stageCount() > 64 || input.feedStageNumber() < 1 || input.feedStageNumber() > input.stageCount()
                 || input.pumparounds().size() > 4 || input.sideDraws().size() > 3 || input.steamFeeds().size() > 2
-                || !(model.formulationRevisions.contains(V3ColumnCalculator.initializationFormulationRevision(input))
-                        || model.formulationRevisions.contains(V3ColumnCalculator.seedFormulationRevision(input)))) return false;
+                || !(model.formulationRevisions.contains(V3ColumnLabels.initializationFormulationRevision(input))
+                        || model.formulationRevisions.contains(V3ColumnLabels.seedFormulationRevision(input)))) return false;
         if (knownFeed.length != model.components.size() || !compositionSupported(knownFeed)) return false;
         Design d = model.designConstraints;
         double bottom = input.topPressurePascal() + (input.stageCount() - 1) * input.stagePressureDropPascal();

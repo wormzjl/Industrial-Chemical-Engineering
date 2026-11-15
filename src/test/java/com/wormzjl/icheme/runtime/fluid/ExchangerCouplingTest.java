@@ -1,7 +1,7 @@
 package com.wormzjl.icheme.runtime.fluid;
 
 import com.wormzjl.icheme.fluid.support.FluidTestSupport;
-import com.wormzjl.icheme.runtime.ProcessSolveServices;
+import com.wormzjl.icheme.runtime.ProcessSolveJobs;
 import com.wormzjl.icheme.science.equipment.HeatSides;
 import com.wormzjl.icheme.science.fluid.network.*;
 import com.wormzjl.icheme.science.fluid.solver.PhaseLayout;
@@ -21,14 +21,14 @@ class ExchangerCouplingTest {
     private final FluidThermodynamics model=EventPathWorld.timed(FluidTestSupport.networkModel());
     private static final PipeResistance.Geometry STUB=new PipeResistance.Geometry(1,.05,.000045,0);
     /** A 0.5 m shell over 3 m tubes: 56 m² of tube, UA about 56 kW/K with liquid on both sides. */
-    private static final double SHELL=.5,TUBES=3,AREA=com.wormzjl.icheme.science.equipment.ProcessUnit.tubeSurface(SHELL,TUBES);
+    private static final double SHELL=.5,TUBES=3,AREA=com.wormzjl.icheme.science.equipment.design.UnitRatings.tubeSurface(SHELL,TUBES);
     private static final long HOT=10,COLD=11;
     private static PhysicalFluidTopology.Position at(int x,int y,int z){return new PhysicalFluidTopology.Position("minecraft:overworld",x,y,z);}
-    private static PhysicalFluidTopology.Device plain(long id,int x,int y,int z,Kind kind){return new PhysicalFluidTopology.Device(id,at(x,y,z),kind,EAST,STUB,new FlowControl.Passive());}
+    private static PhysicalFluidTopology.Device plain(long id,int x,int y,int z,Kind kind){return PhysicalFluidTopology.Device.builder(id,at(x,y,z),kind,EAST,STUB,new FlowControl.Passive()).build();}
     private static PhysicalFluidTopology.Port port(PhysicalFluidTopology.Position cell,PhysicalFluidTopology.Direction face,PhysicalFluidTopology.ConnectionRole role){return new PhysicalFluidTopology.Port(cell,face,PassiveNetwork.PhasePort.BULK,role);}
     private static PhysicalFluidTopology.Device side(long id,PhysicalFluidTopology.Position in,PhysicalFluidTopology.Position out,PipeResistance.Geometry passage,HeatUnit heat) {
         var ports=List.of(port(in,WEST,PhysicalFluidTopology.ConnectionRole.INLET),port(out,EAST,PhysicalFluidTopology.ConnectionRole.OUTLET));
-        return new PhysicalFluidTopology.Device(id,in,Kind.HEAT_SIDE,NORTH,passage,new FlowControl.Passive(),ports,true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,heat);
+        return PhysicalFluidTopology.Device.builder(id,in,Kind.HEAT_SIDE,NORTH,passage,new FlowControl.Passive()).ports(ports).heat(heat).build();
     }
     private FluidThermodynamics.State water(double temperature,double pressure) {
         double[] n=new double[model.componentCount()];n[n.length-1]=1;
@@ -58,24 +58,33 @@ class ExchangerCouplingTest {
     /**
      * A coordinator on its own epoch whose worker solves each admitted slice at once, as {@link CertifyingRig} does; an
      * island in {@code failing} has its completions fail (held) while the predicate holds. Every committed or replayed
-     * span's heat at each side is summed for the energy check.
+     * span's heat at each side is summed for the energy check. A job may take {@link #lag} online ticks more, and more again
+     * on an island in {@link #lags} (a slower machine, codebase review R-ST4); none by default.
      */
     private final class Rig {
         final long[] epoch={0};final Map<Long,IslandCoordinator.Attempt> attempts=new LinkedHashMap<>();
-        final Map<Long,ProcessSolveServices.FluidIslandCommand> commands=new HashMap<>();
+        final Map<Long,ProcessSolveJobs.FluidIslandCommand> commands=new HashMap<>();
         final Map<Long,Long> committed=new HashMap<>();final Map<Long,Double> heat=new HashMap<>();
         final IslandCoordinator coordinator;long requests,hotIsland,coldIsland;
         java.util.function.LongPredicate failing=id->false;
         final CertificatePolicy policy;
+        /** The epoch tick each job was admitted at, and the online ticks every job and each island's jobs take more. */
+        final Map<Long,Long> submitted=new HashMap<>();int lag;final Map<Long,Integer> lags=new HashMap<>();
+        /** Each island's replayed spans, [from, to], in the order the replay listener heard them. */
+        final Map<Long,List<List<Long>>> replays=new TreeMap<>();
         Rig(CertificatePolicy policy) {
             this.policy=policy;
             coordinator=new IslandCoordinator(new IslandCoordinator.Dispatcher() {
                 public int availableWorkers(){return 64-attempts.size();}
                 public long nextRequestId(){return ++requests;}
-                public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveServices.FluidIslandCommand command){attempts.put(attempt.slice().requestId(),attempt);commands.put(attempt.slice().requestId(),command);return true;}
+                public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveJobs.FluidIslandCommand command){attempts.put(attempt.slice().requestId(),attempt);commands.put(attempt.slice().requestId(),command);submitted.put(attempt.slice().requestId(),epoch[0]);return true;}
                 public void cancel(long request){throw new AssertionError("no deadlines here");}
             },this::book,()->0L,new IslandCoordinator.Settings(30_000_000_000L,20_000_000_000L,64,false,100,policy).withTime(model.time()),()->epoch[0]);
-            coordinator.onReplayed(this::book);
+            coordinator.onReplayed(changed->{replayed(changed);book(changed);});
+        }
+        /** Records each replayed span (before {@link #book} moves the committed ticks). */
+        void replayed(List<IslandCoordinator.Snapshot> changed) {
+            for(var s:changed){long to=s.clock().committedTick(),from=committed.getOrDefault(s.id(),to);replays.computeIfAbsent(s.id(),id->new ArrayList<>()).add(List.of(from,to));}
         }
         /** Each island's heat at its sides over the spans its clock advanced, J (a held publication advances nothing). */
         void book(List<IslandCoordinator.Snapshot> changed) {
@@ -88,11 +97,14 @@ class ExchangerCouplingTest {
         }
         /** A save and load: a new coordinator at this one's epoch, its islands decoded from this one's checkpoint image and
          * the heat in transit as the facts carry it (the transit as booked). */
-        Rig reloaded() {
+        Rig reloaded(){return reloaded(false);}
+        /** {@code reversed}: the islands registered in the reverse of the image's order (code base review R23). */
+        Rig reloaded(boolean reversed) {
             var saved=coordinator.snapshots();
             var image=FluidCheckpointCodec.encode(new FluidCheckpointCodec.Checkpoint(saved.stream().map(x->new FluidCheckpointCodec.IslandEntry("minecraft:overworld",model.domain().packageId(),x)).toList()),key->key.on(model));
             var copy=new Rig(policy);copy.epoch[0]=epoch[0];copy.hotIsland=hotIsland;copy.coldIsland=coldIsland;copy.heat.putAll(heat);
-            for(var entry:FluidCheckpointCodec.decode(image,key->key.on(model)).islands()){copy.coordinator.register(entry.snapshot(),model);copy.committed.put(entry.snapshot().id(),entry.snapshot().clock().committedTick());}
+            var entries=new ArrayList<>(FluidCheckpointCodec.decode(image,key->key.on(model)).islands());if(reversed)Collections.reverse(entries);
+            for(var entry:entries){copy.coordinator.register(entry.snapshot(),model);copy.committed.put(entry.snapshot().id(),entry.snapshot().clock().committedTick());}
             copy.coordinator.transit(PhysicalFluidTopology.sideIdentity(Math.min(HOT,COLD)),booked());
             return copy;
         }
@@ -100,17 +112,22 @@ class ExchangerCouplingTest {
             coordinator.register(new IslandCoordinator.Snapshot(id,0,graph,new IslandClock.Snapshot(epoch[0],epoch[0],0,cadence),Optional.empty(),"READY"),model);
             committed.put(id,epoch[0]);
         }
+        /** Completes every job whose lag has passed, pumping after each pass, until none is left that may complete. */
         void drain() {
-            while(!attempts.isEmpty()) {
+            for(boolean completed=true;completed;) {
+                completed=false;
                 for(long request:List.copyOf(attempts.keySet())) {
-                    var attempt=attempts.remove(request);var command=commands.remove(request);
+                    var attempt=attempts.get(request);
+                    if(epoch[0]-submitted.getOrDefault(request,epoch[0])<lag+lags.getOrDefault(attempt.islandId(),0))continue;
+                    attempts.remove(request);var command=commands.remove(request);submitted.remove(request);completed=true;
                     if(failing.test(attempt.islandId()))coordinator.completed(attempt,Optional.empty());
-                    else coordinator.completed(attempt,Optional.of((ProcessSolveServices.FluidIslandSolveResult)command.solve(FluidTestSupport.NEVER)));
+                    else coordinator.completed(attempt,Optional.of((ProcessSolveJobs.FluidIslandSolveResult)command.solve(FluidTestSupport.NEVER)));
                 }
-                coordinator.pump();
+                if(completed)coordinator.pump();
             }
         }
-        void run(double seconds){long ticks=Math.round(seconds*20);for(long i=0;i<ticks;i++){epoch[0]++;coordinator.tick();drain();}}
+        void run(double seconds){ticks(Math.round(seconds*20));}
+        void ticks(long ticks){for(long i=0;i<ticks;i++){epoch[0]++;coordinator.tick();drain();}}
         double seconds(){return epoch[0]/20.0;}
         /** An inlet step (W4): island {@code id} replaced at its committed tick, through a topology event, by its own graph
          * with generator {@code node} delivering {@code state}. */
@@ -230,10 +247,9 @@ class ExchangerCouplingTest {
         var devices=new ArrayList<PhysicalFluidTopology.Device>(line(1,KETTLE_TUBES,2,0,HeatSides.tubePassage(SHELL,TUBES),
                 new HeatUnit(HeatSides.Unit.KETTLE,HeatSides.Side.TUBE,AREA,KETTLE_SHELL).withControl(control)));
         var node=at(10,0,10);
-        devices.add(new PhysicalFluidTopology.Device(KETTLE_SHELL,node,Kind.RESERVOIR,NORTH,STUB,new FlowControl.Passive(),
-                List.of(new PhysicalFluidTopology.Port(node,EAST,PassiveNetwork.PhasePort.VAPOR,PhysicalFluidTopology.ConnectionRole.VESSEL)),true,PhysicalFluidTopology.Cutoff.NONE,false,
-                PhysicalFluidTopology.ALL_FACES,0,0,new HeatUnit(HeatSides.Unit.KETTLE,HeatSides.Side.SHELL,AREA,KETTLE_TUBES)));
-        devices.add(new PhysicalFluidTopology.Device(300,at(11,0,10),Kind.PIPE,EAST,new PipeResistance.Geometry(1,.3,.000045,0),new FlowControl.Passive()));
+        devices.add(PhysicalFluidTopology.Device.builder(KETTLE_SHELL,node,Kind.RESERVOIR,NORTH,STUB,new FlowControl.Passive())
+                .ports(List.of(new PhysicalFluidTopology.Port(node,EAST,PassiveNetwork.PhasePort.VAPOR,PhysicalFluidTopology.ConnectionRole.VESSEL))).heat(new HeatUnit(HeatSides.Unit.KETTLE,HeatSides.Side.SHELL,AREA,KETTLE_TUBES)).build());
+        devices.add(PhysicalFluidTopology.Device.builder(300,at(11,0,10),Kind.PIPE,EAST,new PipeResistance.Geometry(1,.3,.000045,0),new FlowControl.Passive()).build());
         devices.add(plain(4,12,0,10,Kind.VOID));
         PassiveNetwork.Reservoir pool;
         if(fill>0) {
@@ -489,11 +505,11 @@ class ExchangerCouplingTest {
             devices.add(plain(INLET_TEE,2,0,5,Kind.PIPE));devices.add(plain(112,3,0,5,Kind.PIPE));
             devices.add(side(COLD,at(4,0,5),at(6,0,5),HeatSides.shellPassage(SHELL,TUBES),shell));
             devices.add(plain(113,7,0,5,Kind.PIPE));devices.add(plain(OUTLET_TEE,8,0,5,Kind.PIPE));devices.add(plain(114,9,0,5,Kind.PIPE));devices.add(plain(4,10,0,5,Kind.VOID));
-            devices.add(new PhysicalFluidTopology.Device(115,at(2,0,6),Kind.PIPE,EAST,WIDE,new FlowControl.Passive()));
-            devices.add(new PhysicalFluidTopology.Device(BYPASS_VALVE,at(3,0,6),Kind.VALVE,EAST,WIDE,valve));
-            for(int x=4;x<=8;x++)devices.add(new PhysicalFluidTopology.Device(130+x,at(x,0,6),Kind.PIPE,EAST,WIDE,new FlowControl.Passive()));
+            devices.add(PhysicalFluidTopology.Device.builder(115,at(2,0,6),Kind.PIPE,EAST,WIDE,new FlowControl.Passive()).build());
+            devices.add(PhysicalFluidTopology.Device.builder(BYPASS_VALVE,at(3,0,6),Kind.VALVE,EAST,WIDE,valve).build());
+            for(int x=4;x<=8;x++)devices.add(PhysicalFluidTopology.Device.builder(130+x,at(x,0,6),Kind.PIPE,EAST,WIDE,new FlowControl.Passive()).build());
         } else {
-            devices.add(new PhysicalFluidTopology.Device(FEED_VALVE,at(2,0,5),Kind.VALVE,EAST,STUB,valve));devices.add(plain(112,3,0,5,Kind.PIPE));
+            devices.add(PhysicalFluidTopology.Device.builder(FEED_VALVE,at(2,0,5),Kind.VALVE,EAST,STUB,valve).build());devices.add(plain(112,3,0,5,Kind.PIPE));
             devices.add(side(COLD,at(4,0,5),at(6,0,5),HeatSides.shellPassage(SHELL,TUBES),shell));
             devices.add(plain(113,7,0,5,Kind.PIPE));devices.add(plain(4,8,0,5,Kind.VOID));
         }
@@ -582,6 +598,137 @@ class ExchangerCouplingTest {
         assertSteady(rig,.05,"after the wake");
         assertSettled(rig,seen(rig.island(rig.hotIsland),HOT),"after the wake");
         assertLedger(rig,-5e5,"after the wake");
+    }
+    /**
+     * The certified other side's read gate (codebase review R-ST4, item 3), with certificates on: the water pair run twice to
+     * rest, then its hot side woken by a control change at the same tick t in both. It solves the state it rested in again,
+     * so nothing its certified cold side reads moves and the cold side rests on. In the second run the hot side's first job
+     * takes 130 ticks, so its second slice, [t + 101, t + 201), is dispatched at t + 231 instead of t + 201.
+     * <ul>
+     * <li>Before R-ST4 each dispatch materialised the certified cold side to the moment of the dispatch: the second one over
+     * [t + 101, t + 201) in the first run and [t + 101, t + 231) in the second, so the replayed spans, and the cold side's
+     * booked amounts and energies split at them, differed. Now each materialises it to the slice's start.</li>
+     * </ul>
+     * 600 ticks later, when both runs have committed alike, the replayed spans, the heat each side booked, the heat in
+     * transit and the committed ticks are the same bit for bit.
+     */
+    @Test void aCertifiedOtherSideIsReadAsOfTheSliceStartWhateverItsPartnersJobsTake() {
+        var a=waterPair(100,100,CertificatePolicy.defaults());var b=waterPair(100,100,CertificatePolicy.defaults());
+        for(int i=0;i<240&&!(certified(a)&&certified(b));i++){a.run(5);b.run(5);}
+        assertTrue(certified(a)&&certified(b),"both pairs certify");
+        long t=a.epoch[0];assertEquals(t,b.epoch[0]);
+        a.coordinator.controlsMoved(List.of(a.hotIsland));b.coordinator.controlsMoved(List.of(b.hotIsland));
+        b.lags.put(b.hotIsland,130);
+        a.ticks(231);b.ticks(231);
+        b.lags.remove(b.hotIsland);
+        assertTrue(a.replays.getOrDefault(a.hotIsland,List.of()).stream().anyMatch(s->s.get(1)==t+1),"the control change woke the hot side at the next tick: "+a.replays);
+        assertTrue(a.island(a.coldIsland).certificate().isPresent()&&b.island(b.coldIsland).certificate().isPresent(),"the cold side rested through the hot side's slices");
+        a.ticks(600);b.ticks(600);
+        System.out.printf(Locale.ROOT,"certified read gate: woken at %d; replayed spans %s%n",t,a.replays);
+        assertEquals(a.replays,b.replays,"every certified side was materialised over the same spans");
+        assertEquals(a.heat,b.heat,"the heat each side booked");
+        assertEquals(a.coordinator.transits(),b.coordinator.transits(),"the heat in transit");
+        for(long island:new long[]{a.hotIsland,a.coldIsland})assertEquals(a.island(island).clock(),b.island(island).clock(),"island "+island+"'s clock");
+    }
+    /**
+     * The coupling's wake gate (codebase review R-ST4, item 4), with certificates on: the water pair run twice to rest, then
+     * its hot inlet stepped from 90 °C to 100 °C at the same tick t in both, every job of the second run taking 7 ticks more
+     * from there. The hot side's first commit, of [t, t + 100), moves the stream its certified cold side read: decision D4
+     * wakes the cold side.
+     * <ul>
+     * <li>Before R-ST4 the wake materialised the cold side to the moment that commit's completion was drained: t + 100 in the
+     * first run, t + 107 in the second. The cold side then solved on a grid from there, so every later slice, commit and
+     * booking differed. Now it is woken as of t + 100, the end of the slice whose record moved, in both.</li>
+     * </ul>
+     * At t + 2450, when both runs have committed through t + 2400, the replayed spans, the heat each side booked, the heat in
+     * transit and the committed ticks are the same bit for bit.
+     */
+    @Test void aWokenCertifiedSideSolvesFromItsPartnersCommittedTickWhateverTheJobsTake() {
+        var a=waterPair(100,100,CertificatePolicy.defaults());var b=waterPair(100,100,CertificatePolicy.defaults());
+        for(int i=0;i<240&&!(certified(a)&&certified(b));i++){a.run(5);b.run(5);}
+        assertTrue(certified(a)&&certified(b),"both pairs certify");
+        long t=a.epoch[0];
+        a.step(a.hotIsland,1,water(373.15,200_000));b.step(b.hotIsland,1,water(373.15,200_000));
+        // Every job, the hot side's and the woken cold side's, 7 ticks later: the commits keep their order.
+        b.lag=7;
+        a.ticks(250);b.ticks(250);
+        assertTrue(a.island(a.coldIsland).certificate().isEmpty()&&b.island(b.coldIsland).certificate().isEmpty(),"the hotter stream woke the cold side");
+        a.ticks(2200);b.ticks(2200);
+        System.out.printf(Locale.ROOT,"coupling wake gate: stepped at %d; cold side committed %d / %d%n",t,a.island(a.coldIsland).clock().committedTick(),b.island(b.coldIsland).clock().committedTick());
+        assertEquals(a.replays,b.replays,"every certified side was materialised over the same spans");
+        assertEquals(a.heat,b.heat,"the heat each side booked");
+        assertEquals(a.coordinator.transits(),b.coordinator.transits(),"the heat in transit");
+        for(long island:new long[]{a.hotIsland,a.coldIsland})assertEquals(a.island(island).clock(),b.island(island).clock(),"island "+island+"'s clock");
+    }
+    /**
+     * A read never books (code base review R5): two pairs on the same events, one of them read for presentation every tick.
+     * The heat in transit, the ports' bookings, the replayed heat and the committed ticks are the same bits at the end, and
+     * the read pair's views show each certified side at the read tick (its certificate's state there), not the stale
+     * committed one. Saves (materialising reads) on both then book the same spans again.
+     */
+    @Test void aPresentationReadEveryTickBooksNothing() {
+        var plain=waterPair(100,100,CertificatePolicy.defaults());var read=waterPair(100,100,CertificatePolicy.defaults());
+        var plainBookings=new ArrayList<String>();var readBookings=new ArrayList<String>();
+        plain.coordinator.ports(bookings(plainBookings));read.coordinator.ports(bookings(readBookings));
+        for(int i=0;i<240&&!(certified(plain)&&certified(read));i++){plain.run(5);read.run(5);}
+        assertTrue(certified(plain)&&certified(read),"both pairs certify");
+        int previews=0;
+        for(int t=0;t<2_000;t++) {
+            plain.run(.05);read.run(.05);
+            for(long island:new long[]{read.hotIsland,read.coldIsland}) {
+                var stored=read.island(island);var view=read.coordinator.presentation(island);
+                assertEquals(stored.clock(),read.island(island).clock(),"a read moves no clock");
+                if(stored.certificate().isEmpty()){assertEquals(stored.clock(),view.clock());continue;}
+                long expected=Math.min(read.epoch[0],stored.certificate().orElseThrow().horizonTick()-1);
+                assertEquals(expected,view.clock().committedTick(),"the view shows the read tick");
+                if(expected>stored.clock().committedTick())previews++;
+            }
+        }
+        assertTrue(previews>0,"a view ran ahead of a committed tick");
+        assertEquals(plain.coordinator.transits(),read.coordinator.transits(),"the heat in transit");
+        assertEquals(plainBookings,readBookings,"the ports' bookings");
+        assertEquals(plain.heat,read.heat,"the replayed heat");
+        for(long island:new long[]{plain.hotIsland,plain.coldIsland})assertEquals(plain.island(island).clock(),read.island(island).clock(),"island "+island+"'s clock");
+        // The view is the state a materialisation reaches at that tick.
+        for(long island:new long[]{plain.hotIsland,plain.coldIsland}) {
+            var view=read.coordinator.presentation(island);var materialised=plain.coordinator.snapshot(island);
+            assertEquals(materialised.clock().committedTick(),view.clock().committedTick(),"island "+island+"'s tick");
+            assertEquals(bits(materialised.graph()),bits(view.graph()),"island "+island+"'s inventories");
+        }
+        for(long island:new long[]{read.hotIsland,read.coldIsland})read.coordinator.snapshot(island);
+        assertEquals(plain.coordinator.transits(),read.coordinator.transits(),"the heat in transit after a save");
+        assertEquals(plainBookings,readBookings,"the ports' bookings after a save");
+    }
+    /**
+     * Code base review R23: the settled transit adds the heat each side booked past the side behind in a canonical order (the
+     * lower island's side first), so the same coupled pairs registered in either order read it bit for bit alike. At 29 s
+     * the sides on 5 s and 3 s cadences stand apart (500 and 540 ticks), so a side's booked heat past the other enters it.
+     */
+    @Test void theSettledTransitIsTheSameWhicheverOrderTheSidesAreRegisteredIn() {
+        var rig=waterPair(100,60,CertificatePolicy.disabled());rig.run(29);
+        var forward=rig.reloaded(false);var reversed=rig.reloaded(true);
+        assertNotEquals(forward.island(forward.hotIsland).clock().committedTick(),forward.island(forward.coldIsland).clock().committedTick(),"the sides stand apart");
+        assertNotEquals(Double.doubleToLongBits(forward.booked()),Double.doubleToLongBits(forward.transit()),"booked heat past the side behind enters the sum");
+        assertEquals(Double.doubleToLongBits(forward.transit()),Double.doubleToLongBits(reversed.transit()),"the settled transit");
+    }
+    private static boolean certified(Rig rig){return rig.island(rig.hotIsland).certificate().isPresent()&&rig.island(rig.coldIsland).certificate().isPresent();}
+    /** Ports that record every span booked to them, its boundary energies, moles and pump work bit for bit. */
+    private static IslandCoordinator.Ports bookings(List<String> into) {
+        return new IslandCoordinator.Ports() {
+            public boolean ready(long island,PassiveNetwork graph,long start){return true;}
+            public Map<Long,PortPlan> plans(long island,PassiveNetwork graph,IslandClock.Slice slice){return Map.of();}
+            public void booked(long island,PassiveNetwork graph,long start,long end,PassiveIntervalSolver.Result result) {
+                var b=new StringBuilder().append(island).append(':').append(start).append('-').append(end);
+                for(var t:result.boundaries()){b.append(',').append(t.nodeId()).append('=').append(Double.doubleToLongBits(t.totalEnergyJoule()));for(double n:t.moles())b.append('/').append(Double.doubleToLongBits(n));}
+                into.add(b.append(",w=").append(Double.doubleToLongBits(result.pumpWorkJoule())).toString());
+            }
+        };
+    }
+    /** Every node's moles and internal energy, bit for bit. */
+    private static String bits(PassiveNetwork graph) {
+        var b=new StringBuilder();
+        for(var node:graph.reservoirs()){b.append('|').append(node.id());for(double n:node.inventory().moles())b.append(',').append(Double.doubleToLongBits(n));b.append(',').append(Double.doubleToLongBits(node.inventory().internalEnergy()));}
+        return b.toString();
     }
 
     // ---- a fired heater's coils in two islands (the owner's test of 2026-10-28, F1) ----

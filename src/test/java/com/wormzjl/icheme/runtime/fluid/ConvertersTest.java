@@ -72,8 +72,7 @@ class ConvertersTest {
     }
     private static PhysicalFluidTopology.Device port(long id,int x,int y,Kind kind,Direction toward,PipeResistance.Geometry g) {
         var at=new PhysicalFluidTopology.Position(EventPathWorld.DIM,x,y,0,PhysicalFluidTopology.PORT_LANE);
-        return new PhysicalFluidTopology.Device(id,at,kind,toward,g,new FlowControl.Passive(),List.of(new PhysicalFluidTopology.Port(at,toward,PassiveNetwork.PhasePort.BULK)),
-                true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,null,0);
+        return PhysicalFluidTopology.Device.builder(id,at,kind,toward,g,new FlowControl.Passive()).ports(List.of(new PhysicalFluidTopology.Port(at,toward,PassiveNetwork.PhasePort.BULK))).build();
     }
     /** The open tank, its two lines and the converter (a Forge tank of {@code capacity} mB), off. */
     static Rig rig(long capacity) throws IOException {
@@ -213,7 +212,7 @@ class ConvertersTest {
         var back=reloaded.unit(id);
         assertEquals(1237,back.stored());assertEquals(.25,back.account(),1e-12);assertEquals("gone:fluid",back.fluid());
         // A world before schema 24 has none.
-        assertTrue(new FluidFacts.World(saved.nextIdentity(),saved.basis(),List.copyOf(saved.active().values()),saved.constructed(),saved.destroyed(),List.of(),saved.restated(),List.of(),List.of(),List.of(),Map.of(),Map.of(),saved.builds(),List.of()).converters().isEmpty());
+        assertTrue(FluidFacts.World.builder().nextIdentity(saved.nextIdentity()).basis(saved.basis()).registrations(List.copyOf(saved.active().values())).constructed(saved.constructed()).destroyed(saved.destroyed()).restated(saved.restated()).stores(Map.of()).builds(saved.builds()).build().converters().isEmpty());
     }
 
     /**

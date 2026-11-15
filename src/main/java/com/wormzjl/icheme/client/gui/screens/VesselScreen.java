@@ -3,12 +3,13 @@ package com.wormzjl.icheme.client.gui.screens;
 import com.wormzjl.icheme.client.ClientConfig;
 import com.wormzjl.icheme.client.MachineAnimation;
 import com.wormzjl.icheme.client.gui.common.DialogColumns;
+import com.wormzjl.icheme.client.gui.common.NameEntry;
 import com.wormzjl.icheme.client.gui.common.ScreenTours;
 import com.wormzjl.icheme.client.gui.common.TitleStrip;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
+import com.wormzjl.icheme.client.gui.common.kit.DoorInput;
 import com.wormzjl.icheme.client.gui.common.kit.GuiCanvas;
 import com.wormzjl.icheme.client.gui.common.kit.KitDoor;
-import com.wormzjl.icheme.client.gui.common.kit.Palette;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
@@ -16,7 +17,6 @@ import com.wormzjl.icheme.client.gui.common.kit.SkinButton;
 import com.wormzjl.icheme.client.gui.common.kit.SkinField;
 import com.wormzjl.icheme.registry.ModBlocks;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
-import com.wormzjl.icheme.science.equipment.ProcessUnit;
 import com.wormzjl.icheme.science.equipment.ShapeRasterizer;
 import com.wormzjl.icheme.science.equipment.UnitDesign;
 import com.wormzjl.icheme.world.level.block.EquipmentStructure;
@@ -69,7 +69,7 @@ public final class VesselScreen extends Screen {
         super(Component.translatable(KEY + "title." + vessel.shape().kind().name().toLowerCase(Locale.ROOT)));
         sheet = sheet(vessel);
         this.vessel = vessel;
-        moving = vessel.shape().unit() && ProcessUnit.moves(vessel.shape().kind());
+        moving = vessel.shape().unit() && UnitDesign.of(vessel.shape().kind()).moves();
     }
 
     private static Skin skin() {
@@ -180,12 +180,7 @@ public final class VesselScreen extends Screen {
 
     /** Saves the typed name by the rename path (N1): Enter in the entry, and Apply. */
     private void saveName() {
-        if (renames()) com.wormzjl.icheme.network.EquipmentNetwork.rename(vessel.controller(), nameDraft);
-    }
-
-    /** Whether Apply has a name to send: the typed name, cleaned, differs from the structure's. */
-    private boolean renames() {
-        return nameDraft != null && !com.wormzjl.icheme.science.equipment.DeviceName.clean(nameDraft).equals(currentName());
+        if (nameEntry.renames()) com.wormzjl.icheme.network.EquipmentNetwork.rename(vessel.controller(), nameEntry.draft());
     }
 
     @Override
@@ -207,44 +202,29 @@ public final class VesselScreen extends Screen {
             var at = footer.getLast();
             apply = new SkinButton(left + at.x(), top + at.y(), at.w(), at.h(), Component.literal(tr("fluid.apply")), b -> saveName(), VesselScreen::skin).primary(true);
             apply.setTooltip(Tooltip.create(Component.literal(tr("fluid.apply_name.hint"))));
-            apply.active = renames();
+            apply.active = nameEntry.renames();
             addRenderableWidget(apply);
         }
-        nameBox = null;
+        nameEntry.forget();
         var namePlace = strip().name();
         if (names() && namePlace != null) {
-            if (nameDraft == null) nameDraft = nameShown = currentName();
-            var box = new SkinField(font, left + namePlace.x(), top + namePlace.y(), namePlace.w(), namePlace.h(), Component.literal(tr("fluid.name")), VesselScreen::skin);
-            box.setMaxLength(com.wormzjl.icheme.science.equipment.DeviceName.MAX);
-            box.setValue(nameDraft);
-            box.setResponder(text -> nameDraft = text);
-            box.setHint(Component.literal(tr("fluid.name")));
-            box.onEnter(this::saveName);
-            box.setTooltip(Tooltip.create(Component.literal(tr("fluid.name") + "\n" + tr("fluid.name.hint"))));
-            nameBox = addRenderableWidget(box);
+            nameEntry.seed();
+            addRenderableWidget(nameEntry.box(font, namePlace.moved(left, top), VesselScreen::skin, this::saveName));
         }
         var help = tour.key(ScreenTours.help(panelWidth).moved(left, top), VesselScreen::skin);
         if (help != null) addRenderableWidget(help);
         door.place(left, top);
     }
 
-    /** The name as typed, sent with Apply, and the name it last followed (N1): the draft follows the structure's name while the player has not changed it. */
-    private @Nullable String nameDraft, nameShown;
+    /** The name's entry (N1, NameEntry): the name as typed, sent with Apply, following the structure's name while the player has not changed it. */
+    private final NameEntry nameEntry = new NameEntry(this::currentName);
     private @Nullable SkinButton apply;
-    private @Nullable SkinField nameBox;
 
     @Override
     public void tick() {
         super.tick();
-        String now = currentName();
-        if (nameShown != null && !now.equals(nameShown)) {
-            if (nameDraft != null && nameDraft.equals(nameShown) && (nameBox == null || !nameBox.isFocused())) {
-                nameDraft = now;
-                if (nameBox != null) nameBox.setValue(now);
-            }
-            nameShown = now;
-        }
-        if (apply != null) apply.active = renames();
+        nameEntry.follow();
+        if (apply != null) apply.active = nameEntry.renames();
     }
 
     /** A size the player chose, as the constructor's LCD entry shows it: read here, not edited. */
@@ -283,6 +263,15 @@ public final class VesselScreen extends Screen {
         int pointerX = mouseX, pointerY = mouseY;
         mouseX = tour.pointer(mouseX);
         mouseY = tour.pointer(mouseY);
+        int mx = mouseX, my = mouseY;
+        // The whole frame, widgets too, in one batch, as the simulator draws its own (finding C4): its fills go out in runs.
+        GuiCanvas.of(g, font).batch(() -> frame(g, mx, my, partialTick));
+        if (tour.isOpen()) tour.render(g, font, width, height, pointerX, pointerY);
+        else KitDoor.hint(g, font, hovered, mouseX, mouseY);
+    }
+
+    /** The screen under the widgets and its door, title and glass over them: one frame batch's body. */
+    private void frame(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         super.render(g, mouseX, mouseY, partialTick);
         var skin = skin();
         var canvas = new GuiCanvas(g, font, left, top);
@@ -293,12 +282,8 @@ public final class VesselScreen extends Screen {
         skin.title(canvas, TitleStrip.TITLE_X, TitleStrip.TITLE_Y, strip.kind());
         String stripHover = null;
         if (strip.kind().length() < title.getString().length() && strip.plate().contains(mouseX - left, mouseY - top)) stripHover = title.getString();
-        if (strip.name() != null && nameBox == null) {
-            String name = currentName(), shown = TitleStrip.text(name, strip.name(), GuiCanvas.measure(font));
-            int[] at = TitleStrip.textAt(strip.name());
-            skin.text(canvas, shown, at[0], at[1], Palette.TEXT);
-            if (shown.length() < name.length() && strip.name().contains(mouseX - left, mouseY - top)) stripHover = name;
-        }
+        var nameHover = nameEntry.draw(canvas, skin, strip, font, mouseX - left, mouseY - top);
+        if (nameHover != null) stripHover = nameHover;
         hovered = door.draw(canvas, skin, mouseX - left, mouseY - top);
         if (stripHover != null) hovered = stripHover;
         if (glassBox != null) {
@@ -311,15 +296,11 @@ public final class VesselScreen extends Screen {
             glassView.drawBar(canvas, skin);
         }
         g.pose().popPose();
-        if (tour.isOpen()) tour.render(g, font, width, height, pointerX, pointerY);
-        else KitDoor.hint(g, font, hovered, mouseX, mouseY);
     }
 
     @Override
     public boolean mouseClicked(double x, double y, int button) {
-        if (tour.mouseClicked(font, width, height, x, y)) return true;
-        SkinField.clickOutside(this, x, y);
-        return door.press(x - left, y - top, button) || glassView.press(x - left, y - top, button) || super.mouseClicked(x, y, button);
+        return DoorInput.press(this, font, tour, door, x, y, left, top, button) || glassView.press(x - left, y - top, button) || super.mouseClicked(x, y, button);
     }
 
     @Override
@@ -346,7 +327,6 @@ public final class VesselScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double x, double y, double horizontal, double vertical) {
-        if (tour.isOpen()) return true;
-        return door.wheel(x - left, y - top, vertical) || glassView.wheel(x - left, y - top, vertical) || super.mouseScrolled(x, y, horizontal, vertical);
+        return DoorInput.wheel(tour, door, x, y, left, top, vertical) || glassView.wheel(x - left, y - top, vertical) || super.mouseScrolled(x, y, horizontal, vertical);
     }
 }

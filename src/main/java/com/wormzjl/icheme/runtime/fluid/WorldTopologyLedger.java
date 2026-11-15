@@ -284,9 +284,12 @@ public final class WorldTopologyLedger {
     private final LinkedHashMap<Long,ColumnUnit> columns=new LinkedHashMap<>();
     // The shaft units (batch 2026-11-03-rotating-machinery W3), by identity, in the order they were made.
     private final LinkedHashMap<Long,ShaftUnit> shafts=new LinkedHashMap<>();
+    // Their read-only live view, and each unit's cell to its identity (M-09: the engine reads them every step, no copy).
+    private final Map<Long,ShaftUnit> shaftsView=Collections.unmodifiableMap(shafts);
+    private final HashMap<PhysicalFluidTopology.Position,Long> shaftAt=new HashMap<>();
     // The electric stores (W5) as last handed over: the engine keeps them live ({@link ElectricStores}) and sets them here.
     private Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores=Map.of();
-    // The pumps' health (W10b) as last handed over: the engine keeps it live ({@link PumpHealth}) and sets it here.
+    // The machines' health (W10b, M-12) as last handed over: the engine keeps it live ({@link MachineHealth}) and sets it here.
     private Map<Long,Double> health=Map.of();
     // The batch stills (batch 2026-11-09-batch-distiller), by their pots' identities.
     private final LinkedHashMap<Long,StillUnit> stills=new LinkedHashMap<>();
@@ -310,7 +313,7 @@ public final class WorldTopologyLedger {
         latest.putAll(active);latestAt.putAll(activeAt);
         // Every queued event must apply to the registry before it, in order, as when it was queued.
         for(var event:restored.events){check(latest,latestAt,event.edits);apply(latest,latestAt,event.edits);events.add(event);}
-        recoveries.putAll(restored.recoveries);columns.putAll(restored.columns);shafts.putAll(restored.shafts);stores=restored.stores;health=restored.health;stills.putAll(restored.stills);converters.putAll(restored.converters);
+        recoveries.putAll(restored.recoveries);columns.putAll(restored.columns);shafts.putAll(restored.shafts);for(var u:shafts.values())shaftAt.put(u.position(),u.id());stores=restored.stores;health=restored.health;stills.putAll(restored.stills);converters.putAll(restored.converters);
         paints.putAll(restored.builds.paints());structures.putAll(restored.builds.structures());racks.putAll(restored.builds.racks());names.putAll(restored.builds.names());builds=restored.builds;
         shared=restored;sharedVersion=version;
     }
@@ -481,8 +484,13 @@ public final class WorldTopologyLedger {
         }
         destroyed=new MaterialTotal(moles,energy,solids);version++;
     }
-    /** The shaft units (W3): a copy, by identity. */
-    public Map<Long,ShaftUnit> shafts(){owned();return Map.copyOf(shafts);}
+    /**
+     * The shaft units (W3), by identity: a read-only live view (M-09), so a caller that keeps it sees later writes, and a
+     * caller must not iterate it while it removes a unit. Its order is not part of the contract: no use may depend on it.
+     */
+    public Map<Long,ShaftUnit> shafts(){owned();return shaftsView;}
+    /** The shaft unit whose cell is {@code position}, or null (M-09: an index, not a scan). */
+    public ShaftUnit shaftAt(PhysicalFluidTopology.Position position){owned();Long id=shaftAt.get(position);return id==null?null:shafts.get(id);}
     /** The shaft unit {@code id}, or null. */
     public ShaftUnit shaft(long id){owned();return shafts.get(id);}
     /** The shaft units whose cell is in chunk {@code chunk} of {@code dimension}, by identity order of placement (registry first, W5c C1; a scan, as {@link #shaft(ShaftUnit)} makes). */
@@ -494,8 +502,8 @@ public final class WorldTopologyLedger {
     /** Installs or replaces a shaft unit. A new one takes an identity reserved below {@link #nextIdentity()}. */
     public void shaft(ShaftUnit unit) {
         owned();if(unit.id()>=nextIdentity||active.containsKey(unit.id())||latest.containsKey(unit.id())||columns.containsKey(unit.id()))throw new IllegalArgumentException("Invalid shaft unit identity");
-        for(var other:shafts.values())if(other.id()!=unit.id()&&other.position().equals(unit.position()))throw new IllegalArgumentException("Two shaft units at "+unit.position());
-        var old=shafts.put(unit.id(),unit);if(!unit.equals(old))version++;
+        Long there=shaftAt.get(unit.position());if(there!=null&&there!=unit.id())throw new IllegalArgumentException("Two shaft units at "+unit.position());
+        var old=shafts.put(unit.id(),unit);if(old!=null&&!old.position().equals(unit.position()))shaftAt.remove(old.position());shaftAt.put(unit.position(),unit.id());if(!unit.equals(old))version++;
     }
     /** The electric stores (W5) as last set, by unit identity. */
     public Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores(){owned();return stores;}
@@ -506,7 +514,7 @@ public final class WorldTopologyLedger {
     /** Sets the pumps' health (W10b): the engine's live values, handed over at its cadence and before a save. */
     public void health(Map<Long,Double> value){owned();var copy=Map.copyOf(value);if(!copy.equals(health)){health=copy;version++;}}
     /** Removes shaft unit {@code id}; a part holds no stock, so nothing is booked. */
-    public void removeShaft(long id){owned();if(shafts.remove(id)!=null)version++;}
+    public void removeShaft(long id){owned();var old=shafts.remove(id);if(old!=null){shaftAt.remove(old.position());version++;}}
     /** The batch stills (batch 2026-11-09-batch-distiller): a copy, by their pots' identities. */
     public Map<Long,StillUnit> stills(){owned();return Map.copyOf(stills);}
     /** Drops batch still {@code id}'s facts without booking them (they moved to its new pot). */
@@ -526,7 +534,7 @@ public final class WorldTopologyLedger {
     public StillUnit removeStill(long id) {
         owned();var unit=stills.remove(id);if(unit==null)return null;
         var moles=destroyed.moles();double energy=destroyed.totalEnergy();
-        for(var a:new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account[]{unit.head(),unit.venting()}){var n=a.moles();for(int c=0;c<n.length;c++)moles[c]+=n[c];energy+=a.energy();}
+        for(var a:new com.wormzjl.icheme.science.plant.column.ColumnCycle.Account[]{unit.head(),unit.venting()}){var n=a.moles();for(int c=0;c<n.length;c++)moles[c]+=n[c];energy+=a.energy();}
         destroyed=new MaterialTotal(moles,energy,destroyed.solidMasses());version++;return unit;
     }
     /** The fluid converters (batch 2026-11-12-fluid-conversion): a copy, by their vessels' identities. */

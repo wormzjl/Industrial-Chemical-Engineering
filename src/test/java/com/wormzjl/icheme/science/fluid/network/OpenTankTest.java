@@ -153,8 +153,8 @@ class OpenTankTest extends PortFixture {
         for(double held:new double[]{.4,1.5}) {
             var tank=openTank(1,0,water(held),2,4);var s=tank.state();
             double rho=model.liquidMass(s)/FluidThermodynamics.liquidStreamVolume(s),h=FluidThermodynamics.liquidStreamVolume(s)/(2/4.);
-            assertEquals(rho*G*h,PassiveStepSolver.portHead(model,tank,PhasePort.LIQUID,s),1e-9*rho*G*h);
-            assertEquals(rho*G*h,PassiveStepSolver.portHead(model,tank,PhasePort.OVERFLOW,s),1e-9*rho*G*h);
+            assertEquals(rho*G*h,PortStreams.portHead(model,tank,PhasePort.LIQUID,s),1e-9*rho*G*h);
+            assertEquals(rho*G*h,PortStreams.portHead(model,tank,PhasePort.OVERFLOW,s),1e-9*rho*G*h);
         }
     }
 

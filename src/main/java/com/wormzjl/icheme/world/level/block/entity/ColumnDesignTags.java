@@ -31,13 +31,25 @@ public final class ColumnDesignTags {
         return tag;
     }
 
-    /** @throws IllegalArgumentException for a missing, invalid or inconsistent field */
+    /** @throws IllegalArgumentException for a missing, invalid or inconsistent field, or one {@link #read(CompoundTag, java.util.function.Consumer)} repairs */
     public static ColumnDesign read(CompoundTag tag) {
+        return read(tag, repair -> {
+            throw new IllegalArgumentException(repair);
+        });
+    }
+
+    /**
+     * The design, a component count out of range read as 1 and an exchanger type this build does not have read as standard,
+     * each named to {@code repairs} ({@link ShapeRepair.SavedComponents#resolve(java.util.function.Consumer)}).
+     *
+     * @throws IllegalArgumentException for a missing, invalid or inconsistent field
+     */
+    public static ColumnDesign read(CompoundTag tag, java.util.function.Consumer<String> repairs) {
         if (!tag.contains("Trays", Tag.TAG_INT_ARRAY) || !tag.contains("Diameter", Tag.TAG_DOUBLE)) throw new IllegalArgumentException("design trays or diameter missing");
         int[] trays = tag.getIntArray("Trays");
         if (trays.length > ColumnTrays.MAX_ENCODED) throw new IllegalArgumentException("design trays overlong");
         var operating = savedOperating(tag, "Operating");
-        return new ColumnDesign(ColumnTrays.decode(trays).withComponents(saved(tag).resolve()).withOperating(operating == null ? null : operating.resolve()),
+        return new ColumnDesign(ColumnTrays.decode(trays).withComponents(saved(tag).resolve(repairs)).withOperating(operating == null ? null : operating.resolve()),
                 tag.getDouble("Diameter"));
     }
 
@@ -192,16 +204,21 @@ public final class ColumnDesignTags {
         var tag=new CompoundTag();tag.putString("Condenser",types.condenser().name());tag.putString("Trim",types.trim().name());
         var coolers=new ListTag();for(var type:types.coolers())coolers.add(StringTag.valueOf(type.name()));tag.put("Coolers",coolers);return tag;
     }
-    public static ColumnComponents.Exchangers readExchangers(CompoundTag parent) {
-        if(!parent.contains("Exchangers"))return ColumnComponents.Exchangers.STANDARD;
+    /**
+     * The exchanger types of {@code parent} by name, as written: every one standard when absent (a design saved before them).
+     * A name this build does not have is read by {@link ShapeRepair#exchangerType}, which repairs it and names the repair.
+     *
+     * @throws IllegalArgumentException for a field of the wrong type, or more coolers than a column has pumparounds
+     */
+    public static ShapeRepair.SavedExchangers readExchangers(CompoundTag parent) {
+        if(!parent.contains("Exchangers"))return ShapeRepair.SavedExchangers.STANDARD;
         if(!parent.contains("Exchangers",Tag.TAG_COMPOUND))throw new IllegalArgumentException("Invalid exchanger configurations");
         var tag=parent.getCompound("Exchangers");
-        var condenser=com.wormzjl.icheme.science.equipment.ExchangerType.valueOf(tag.getString("Condenser"));
-        var trim=com.wormzjl.icheme.science.equipment.ExchangerType.valueOf(tag.getString("Trim"));
-        var coolers=new ArrayList<com.wormzjl.icheme.science.equipment.ExchangerType>();
+        if(!tag.contains("Condenser",Tag.TAG_STRING)||!tag.contains("Trim",Tag.TAG_STRING))throw new IllegalArgumentException("Invalid exchanger configurations");
+        var coolers=new ArrayList<String>();
         if(!(tag.get("Coolers") instanceof ListTag list)||list.size()>ColumnTrays.MAX_PUMPAROUNDS)throw new IllegalArgumentException("Invalid cooler configurations");
-        for(var value:list)coolers.add(com.wormzjl.icheme.science.equipment.ExchangerType.valueOf(value.getAsString()));
-        return new ColumnComponents.Exchangers(condenser,trim,coolers);
+        for(var value:list){if(!(value instanceof StringTag name))throw new IllegalArgumentException("Invalid cooler configurations");coolers.add(name.getAsString());}
+        return new ShapeRepair.SavedExchangers(tag.getString("Condenser"),tag.getString("Trim"),coolers);
     }
 
     private static int count(CompoundTag tag, String key) {

@@ -1,23 +1,23 @@
 package com.wormzjl.icheme.science.machine;
 
-import com.wormzjl.icheme.science.fluid.network.FlowControl;
-
 /**
  * Fixed inline ratings: inlet velocity 2 m/s liquid or 10 m/s gas; 25 m head or 1.5 air pressure
- * ratio at 300 K.
+ * ratio at 300 K. The network's side, the machine of a bore under the movers' cap and the shaft power a driver pays, is
+ * {@code science/fluid/network/InlineMovers} (codebase review M-14).
  */
 public final class InlineMachines {
     private InlineMachines() {}
 
-    public static FlowControl.Machine design(double bore, boolean liquid) {
+    /** An in-line machine's inlet flow, m³/s, at bore {@code bore} m: its inlet area at 2 m/s liquid or 10 m/s gas. */
+    public static double inletFlow(double bore, boolean liquid) {
         if (!(bore > 0) || !Double.isFinite(bore))
             throw new IllegalArgumentException("Invalid inline bore");
-        double flow =
-                Math.min(
-                        FlowControl.Mover.MAXIMUM_VOLUME_FLOW,
-                        Math.PI * bore * bore / 4 * (liquid ? 2 : 10));
-        MachineLaw law =
-                liquid
+        return Math.PI * bore * bore / 4 * (liquid ? 2 : 10);
+    }
+
+    /** The law of an in-line machine rated at {@code flow} m³/s: a pump of 25 m head, or a compressor of air ratio 1.5 at 300 K. */
+    public static MachineLaw law(double flow, boolean liquid) {
+        return liquid
                         ? CentrifugalPump.rated(flow, 25)
                         : new CentrifugalCompressor(
                                 flow,
@@ -28,7 +28,6 @@ public final class InlineMachines {
                                         CentrifugalCompressor.sigma(
                                                 1.4, CentrifugalCompressor.DEFAULT_EFFICIENCY)),
                                 CentrifugalCompressor.DEFAULT_EFFICIENCY);
-        return new FlowControl.Machine(law, 1, true);
     }
 
     /** Electrical draw for a finite shaft load, including the integral motor and VFD losses. */
@@ -38,26 +37,11 @@ public final class InlineMachines {
                 shaftPower, Double.isFinite(rating) ? rating : 20000000, 4, true);
     }
 
-    public static double ratedDraw(FlowControl.Mover mover) {
-        return electricPower(ratedShaftPower(mover));
-    }
-
     /**
-     * A mover's rated shaft power, W: a machine's law at its rated flow and full speed, another mover's power at its set
-     * flow over 65 %, both at 1000 kg/m³ for a liquid and air at 1 bar and 300 K for a gas (the rating {@link #ratedDraw}
-     * draws on; a held column pump books it, W5 of batch 2026-11-10-column-failure-modes).
+     * A set-flow pump's hydraulic efficiency: the share of its shaft power the liquid takes as work. The solve books only the
+     * ideal {@code q Δp} (simplification S1: the loss would warm the liquid a little), so the pump's driver pays that work over
+     * this efficiency, and the pump's hydraulic loss is a stated loss the fluid does not get (code base review M-01, owner
+     * decision B1). A set-flow compressor's power is already over its own efficiency and takes none of this.
      */
-    public static double ratedShaftPower(FlowControl.Mover mover) {
-        if (mover instanceof FlowControl.Machine machine) {
-            double rho = machine.liquid() ? 1000 : 100000 / (287.05 * 300);
-            return machine.law().shaftPower(machine.law().ratedFlow(), 1, rho, 100000, 1.4);
-        }
-        return mover.power(
-                        mover.requestedVolumeFlow() * (mover.liquid() ? 1000 : 1.161),
-                        mover.riseLimit(mover.liquid() ? 1000 : 1.161, 100000, 1000, 1.4),
-                        mover.liquid() ? 1000 : 1.161,
-                        100000,
-                        1.4)
-                / .65;
-    }
+    public static final double SET_FLOW_PUMP_EFFICIENCY = .65;
 }

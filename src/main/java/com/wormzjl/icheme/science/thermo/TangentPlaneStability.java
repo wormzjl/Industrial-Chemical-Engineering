@@ -1,8 +1,8 @@
 package com.wormzjl.icheme.science.thermo;
 
+import com.wormzjl.icheme.science.math.SmallDenseSolve;
 import com.wormzjl.icheme.science.math.DeterministicMath;
 
-import com.wormzjl.icheme.science.thermo.phase.PhaseIdentification;
 import java.util.Arrays;
 import java.util.Objects;
 
@@ -23,20 +23,10 @@ import java.util.Objects;
  * iterations. Components absent from the feed stay absent from every trial; a feed with one present component is
  * decided by comparing its two roots' fugacities directly. Deterministic: a fixed trial order and one caller-owned
  * {@link Workspace} whose only carried state is the kernel's prepared temperature, recomputed bit-identically.
- *
- * <p>Per-branch pressures ({@link #test(double, double, double, double[], Workspace)}): the fluid network's separate
- * free-water rule evaluates a hydrocarbon liquid at the state pressure {@code P} and a hydrocarbon vapour at its partial
- * pressure {@code pc = P - p_w}. The test then compares fugacities: every liquid-branch evaluation ({@code LIQUID} root)
- * is made at the liquid pressure, every vapour-branch evaluation ({@code VAPOR} root) at the vapour pressure, and the
- * vapour branch carries {@code ln(pc/P)} (plus {@code (pc - P) c_i/(R T)} for a translated model) on its {@code ln phi_i}.
- * A single physical root at the vapour pressure counts as the vapour branch only when it is vapour-like by the phase
- * identification parameter ({@code PhaseIdentification}): a dense fluid at the lower pressure is the same liquid at the
- * wrong pressure, and admitting it would make every liquid look unstable against itself. With equal pressures the call
- * is the one-pressure test, bit for bit.</p>
  */
 public final class TangentPlaneStability {
     /** How far one extrapolation may move any {@code ln W_i}. */
-    private static final double MAXIMUM_EXTRAPOLATION = 20.0;
+    private static final double MAXIMUM_EXTRAPOLATION = SubstitutionAcceleration.MAXIMUM_EXTRAPOLATION;
     /** Keeps {@code exp(ln W)} a finite, positive normal double. */
     private static final double LOG_AMOUNT_BOUND = 700.0;
     /** A Newton step may shrink any {@code alpha_i} by at most this factor, i.e. {@code W_i} by its square. */
@@ -177,73 +167,31 @@ public final class TangentPlaneStability {
      * @throws IllegalArgumentException for such a feed, or a state outside the kernel's domain
      */
     public Result test(double temperatureKelvin, double pressurePascal, double[] feed, Workspace workspace) {
-        return run(temperatureKelvin, pressurePascal, pressurePascal, false, feed, null, workspace);
+        return run(temperatureKelvin, pressurePascal, feed, null, workspace);
     }
 
     /**
-     * The test with per-branch pressures: the liquid branch (the kernel's {@code LIQUID} root) at
-     * {@code liquidPressurePascal}, the vapour branch ({@code VAPOR} root, admitted with one physical root only when
-     * vapour-like) at {@code vaporPressurePascal}, compared by fugacity (see the class comment). With equal pressures
-     * this is {@link #test(double, double, double[], Workspace)}, bit for bit. The reported {@code feedRoot} and
-     * {@code trialRoot} name the branch, and so the pressure, each composition was taken at.
+     * {@link #test(double, double, double[], Workspace)} with {@code filter} (may be {@code null}) judging each trial that
+     * proved instability or ran out of its budget. With a filter and no surviving trial the result reports distance 0 and
+     * the feed, as a trivial trial does.
      *
-     * @throws IllegalArgumentException for a pressure that is not positive and finite, and as the one-pressure test
+     * @throws ThermoRefusal for a pressure that is not positive and finite, and as the unfiltered test
      */
-    public Result test(double temperatureKelvin, double liquidPressurePascal, double vaporPressurePascal, double[] feed,
-                       Workspace workspace) {
-        return test(temperatureKelvin, liquidPressurePascal, vaporPressurePascal, null, feed, workspace);
-    }
-
-    /**
-     * The per-branch test for a volume-translated model: with the liquid and the vapour at different pressures a
-     * constant translation {@code c_i} no longer cancels, and the vapour branch carries
-     * {@code ln(p_V/p_L) + (p_V - p_L) c_i/(R T)} on {@code ln phi_i} (the translated fugacity is
-     * {@code x_i phi_i^PR exp(P c_i/(R T)) P}). {@code translations} (m3/mol per kernel component) may be {@code null}
-     * for none; with equal pressures it plays no part and the call is the one-pressure test, bit for bit.
-     */
-    public Result test(double temperatureKelvin, double liquidPressurePascal, double vaporPressurePascal,
-                       double[] translations, double[] feed, Workspace workspace) {
-        return test(temperatureKelvin, liquidPressurePascal, vaporPressurePascal, translations, feed, null, workspace);
-    }
-
-    /**
-     * {@link #test(double, double, double, double[], double[], Workspace)} with {@code filter} (may be {@code null})
-     * judging each trial that proved instability or ran out of its budget. With a filter and no surviving trial the
-     * result reports distance 0 and the feed, as a trivial trial does.
-     */
-    public Result test(double temperatureKelvin, double liquidPressurePascal, double vaporPressurePascal,
-                       double[] translations, double[] feed, TrialFilter filter, Workspace workspace) {
-        if (!(liquidPressurePascal > 0.0) || !(vaporPressurePascal > 0.0) || !Double.isFinite(liquidPressurePascal)
-                || !Double.isFinite(vaporPressurePascal)) {
-            throw new IllegalArgumentException("Branch pressures must be positive and finite");
+    public Result test(double temperatureKelvin, double pressurePascal, double[] feed, TrialFilter filter, Workspace workspace) {
+        if (!(pressurePascal > 0.0) || !Double.isFinite(pressurePascal)) {
+            throw new ThermoRefusal("The pressure must be positive and finite");
         }
         Objects.requireNonNull(workspace, "workspace");
-        if (translations != null && translations.length != workspace.count) {
-            throw new IllegalArgumentException("Translations have invalid length");
-        }
-        boolean branched = liquidPressurePascal != vaporPressurePascal;
-        if (branched) {
-            double logRatio = DeterministicMath.log(vaporPressurePascal / liquidPressurePascal);
-            double scale = (vaporPressurePascal - liquidPressurePascal)
-                    / (PengRobinsonKernel.GAS_CONSTANT * temperatureKelvin);
-            for (int i = 0; i < workspace.count; i++) {
-                workspace.vaporShifts[i] = translations == null ? logRatio : logRatio + scale * translations[i];
-            }
-        }
-        return run(temperatureKelvin, liquidPressurePascal, vaporPressurePascal, branched, feed, filter, workspace);
+        return run(temperatureKelvin, pressurePascal, feed, filter, workspace);
     }
 
-    private Result run(double temperatureKelvin, double pressurePascal, double vaporPressurePascal, boolean branched,
-                       double[] feed, TrialFilter filter, Workspace workspace) {
+    private Result run(double temperatureKelvin, double pressurePascal, double[] feed, TrialFilter filter, Workspace workspace) {
         Objects.requireNonNull(workspace, "workspace");
         if (workspace.owner != kernel) throw new IllegalArgumentException("Workspace belongs to another kernel");
         Workspace w = workspace;
         w.normaliseFeed(feed);
         w.temperature = temperatureKelvin;
         w.pressure = pressurePascal;
-        // Equal to the pressure (the same double) on the one-pressure path, so every call below is the P1 call.
-        w.vaporPressure = vaporPressurePascal;
-        w.branched = branched;
         w.nearestStationary = Double.POSITIVE_INFINITY;
         w.evaluations = 0;
         w.derivativeEvaluations = 0;
@@ -257,23 +205,12 @@ public final class TangentPlaneStability {
         kernel.prepareTemperature(temperatureKelvin, w.mixture);
 
         // The feed on its lower-Gibbs physical root; a tie keeps the vapour root.
-        kernel.evaluate(temperatureKelvin, vaporPressurePascal, w.feed, PengRobinsonKernel.Root.VAPOR, w.mixture, w.feedVapor);
+        kernel.evaluate(temperatureKelvin, pressurePascal, w.feed, PengRobinsonKernel.Root.VAPOR, w.mixture, w.feedVapor);
         w.evaluations++;
         PengRobinsonKernel.Evaluation feedEvaluation = w.feedVapor;
         w.feedRoot = PengRobinsonKernel.Root.VAPOR;
         boolean twoRoots = w.feedVapor.physicalRootCount() > 1;
-        if (branched) {
-            // Both branches always exist as evaluations; the vapour one counts only if it is vapour-like.
-            kernel.evaluate(temperatureKelvin, pressurePascal, w.feed, PengRobinsonKernel.Root.LIQUID, w.mixture, w.feedLiquid);
-            w.evaluations++;
-            boolean vapourAdmissible = admissible(w, w.feedVapor, PengRobinsonKernel.Root.VAPOR);
-            if (!vapourAdmissible || w.residualGibbs(w.feedLiquid, w.feed, 1.0)
-                    < w.residualGibbs(w.feedVapor, w.feed, 1.0) + w.branchShift(w.feed, 1.0)) {
-                feedEvaluation = w.feedLiquid;
-                w.feedRoot = PengRobinsonKernel.Root.LIQUID;
-            }
-            twoRoots = vapourAdmissible;
-        } else if (twoRoots) {
+        if (twoRoots) {
             kernel.evaluate(temperatureKelvin, pressurePascal, w.feed, PengRobinsonKernel.Root.LIQUID, w.mixture, w.feedLiquid);
             w.evaluations++;
             if (w.residualGibbs(w.feedLiquid, w.feed, 1.0) < w.residualGibbs(w.feedVapor, w.feed, 1.0)) {
@@ -286,11 +223,10 @@ public final class TangentPlaneStability {
         double[] feedLogPhi = feedEvaluation.logFugacityCoefficientsView();
         for (int a = 0; a < w.presentCount; a++) {
             int i = w.present[a];
-            w.reference[i] = branched ? w.logFeed[i] + (feedLogPhi[i] + w.shift(w.feedRoot, i))
-                    : w.logFeed[i] + feedLogPhi[i];
+            w.reference[i] = w.logFeed[i] + feedLogPhi[i];
         }
-        // Raoult with the vapour at its own pressure: y_i p_V = x_i p_sat,i for both Wilson trials.
-        kernel.wilsonK(temperatureKelvin, vaporPressurePascal, w.wilson);
+        // Raoult: y_i P = x_i p_sat,i for both Wilson trials.
+        kernel.wilsonK(temperatureKelvin, pressurePascal, w.wilson);
 
         double bestDistance = Double.POSITIVE_INFINITY;
         PengRobinsonKernel.Root bestRoot = w.feedRoot;
@@ -357,10 +293,7 @@ public final class TangentPlaneStability {
         int k = w.present[0];
         PengRobinsonKernel.Evaluation other = feedEvaluation == w.feedVapor ? w.feedLiquid : w.feedVapor;
         // The other root's stationary amount is exp(-gap), so its tm is 1 - exp(-gap) with gap >= 0.
-        double gap = w.branched
-                ? (other.logFugacityCoefficient(k) + w.shift(opposite(w.feedRoot), k))
-                        - (feedEvaluation.logFugacityCoefficient(k) + w.shift(w.feedRoot, k))
-                : other.logFugacityCoefficient(k) - feedEvaluation.logFugacityCoefficient(k);
+        double gap = other.logFugacityCoefficient(k) - feedEvaluation.logFugacityCoefficient(k);
         return new Result(Verdict.STABLE, -DeterministicMath.expm1(-gap), w.feed, opposite(w.feedRoot), w.feedRoot, 1, 0,
                 w.evaluations, w.derivativeEvaluations, Double.POSITIVE_INFINITY);
     }
@@ -399,7 +332,7 @@ public final class TangentPlaneStability {
         Point next = w.candidate;
         for (int a = 0; a < w.presentCount; a++) {
             int i = w.present[a];
-            next.logAmounts[i] = bounded(w.reference[i] - logPhi(w, seed, i));
+            next.logAmounts[i] = bounded(w.reference[i] - seed.logPhi[i]);
         }
         evaluate(w, next, seed.root, false, true);
         w.accept();
@@ -461,7 +394,7 @@ public final class TangentPlaneStability {
                     }
                     if (denominator > 0.0 && numerator < denominator) {
                         double eigenvalue = numerator / denominator;
-                        double extra = eigenvalue / (1.0 - eigenvalue);
+                        double extra = SubstitutionAcceleration.factor(eigenvalue);
                         if (largest * extra > MAXIMUM_EXTRAPOLATION) extra = MAXIMUM_EXTRAPOLATION / largest;
                         for (int a = 0; a < w.presentCount; a++) {
                             int i = w.present[a];
@@ -520,8 +453,8 @@ public final class TangentPlaneStability {
                 h[a * m + b] = a == b ? 1.0 + 0.5 * p.gradient[i] + coupling : coupling;
             }
         }
-        if (!cholesky(h, m)) return -1.0;
-        solveCholesky(h, m, w.step);
+        if (!SmallDenseSolve.cholesky(h, m)) return -1.0;
+        SmallDenseSolve.solveCholesky(h, m, w.step);
         double length = 1.0;
         for (int attempt = 0; attempt <= LINE_SEARCH_HALVINGS; attempt++, length *= 0.5) {
             Point c = w.candidate;
@@ -530,7 +463,7 @@ public final class TangentPlaneStability {
                 double next = Math.max(w.alpha[a] + length * w.step[a], MINIMUM_ALPHA_RATIO * w.alpha[a]);
                 c.logAmounts[i] = next > 0.0
                         ? bounded(2.0 * DeterministicMath.log(0.5 * next))
-                        : bounded(w.reference[i] - logPhi(w, p, i));
+                        : bounded(w.reference[i] - p.logPhi[i]);
             }
             evaluate(w, c, p.root, true, true);
             if (c.distance <= p.distance + DECREASE_ALLOWANCE * (1.0 + Math.abs(p.distance))) {
@@ -555,7 +488,7 @@ public final class TangentPlaneStability {
     private boolean feedLocallyStable(Workspace w) {
         if (w.localStability == NOT_COMPUTED) {
             try {
-                kernel.evaluateDerivatives(w.temperature, w.pressureOf(w.feedRoot), w.feed, w.feedRoot, w.mixture,
+                kernel.evaluateDerivatives(w.temperature, w.pressure, w.feed, w.feedRoot, w.mixture,
                         w.feedDerivatives);
                 w.evaluations++;
                 w.derivativeEvaluations++;
@@ -571,7 +504,7 @@ public final class TangentPlaneStability {
                         w.hessian[a * m + b] = a == b ? 1.0 + coupling : coupling;
                     }
                 }
-                w.localStability = cholesky(w.hessian, m) ? LOCALLY_STABLE : LOCALLY_UNSTABLE;
+                w.localStability = SmallDenseSolve.cholesky(w.hessian, m) ? LOCALLY_STABLE : LOCALLY_UNSTABLE;
             } catch (IllegalStateException coalescing) {
                 w.evaluations++;
                 w.derivativeEvaluations++;
@@ -608,7 +541,7 @@ public final class TangentPlaneStability {
             try {
                 w.evaluations++;
                 w.derivativeEvaluations++;
-                kernel.evaluateDerivatives(t, w.pressureOf(preferred), c.amounts, preferred, w.mixture, c.derivatives);
+                kernel.evaluateDerivatives(t, pressure, c.amounts, preferred, w.mixture, c.derivatives);
                 c.differentiated = true;
             } catch (IllegalStateException coalescing) {
                 // The root is too flat to differentiate; the value path below still evaluates it.
@@ -618,36 +551,12 @@ public final class TangentPlaneStability {
         if (c.differentiated) {
             chosen = c.derivatives.evaluation();
         } else {
-            kernel.evaluate(t, w.pressureOf(preferred), c.amounts, preferred, w.mixture, c.first);
+            kernel.evaluate(t, pressure, c.amounts, preferred, w.mixture, c.first);
             w.evaluations++;
             chosen = c.first;
         }
         PengRobinsonKernel.Root root = preferred;
-        if (w.branched) {
-            // Both branches, each at its own pressure; the liquid branch is always admissible.
-            PengRobinsonKernel.Root other = opposite(preferred);
-            kernel.evaluate(t, w.pressureOf(other), c.amounts, other, w.mixture, c.second);
-            w.evaluations++;
-            boolean preferredAdmissible = admissible(w, chosen, preferred);
-            boolean otherAdmissible = admissible(w, c.second, other);
-            double otherShift = other == PengRobinsonKernel.Root.VAPOR ? w.branchShift(c.amounts, total) : 0.0;
-            double preferredShift = preferred == PengRobinsonKernel.Root.VAPOR ? w.branchShift(c.amounts, total) : 0.0;
-            if (!preferredAdmissible || !w.heldRoot && otherAdmissible && w.residualGibbs(c.second, c.amounts, total) + otherShift
-                    < w.residualGibbs(chosen, c.amounts, total) + preferredShift) {
-                root = other;
-                chosen = c.second;
-                if (c.differentiated) {
-                    try {
-                        w.evaluations++;
-                        w.derivativeEvaluations++;
-                        kernel.evaluateDerivatives(t, w.pressureOf(other), c.amounts, other, w.mixture, c.derivatives);
-                        chosen = c.derivatives.evaluation();
-                    } catch (IllegalStateException coalescing) {
-                        c.differentiated = false;
-                    }
-                }
-            }
-        } else if (!w.heldRoot && chosen.physicalRootCount() > 1) {
+        if (!w.heldRoot && chosen.physicalRootCount() > 1) {
             PengRobinsonKernel.Root other = opposite(preferred);
             kernel.evaluate(t, pressure, c.amounts, other, w.mixture, c.second);
             w.evaluations++;
@@ -673,7 +582,7 @@ public final class TangentPlaneStability {
         double trivial = 0.0;
         for (int a = 0; a < w.presentCount; a++) {
             int i = w.present[a];
-            double g = c.logAmounts[i] + logPhi(w, c, i) - w.reference[i];
+            double g = c.logAmounts[i] + c.logPhi[i] - w.reference[i];
             c.gradient[i] = g;
             if (c.amounts[i] > 0.0) distance += c.amounts[i] * g;
             error = Math.max(error, Math.abs(g));
@@ -689,56 +598,8 @@ public final class TangentPlaneStability {
         return Math.clamp(logAmount, -LOG_AMOUNT_BOUND, LOG_AMOUNT_BOUND);
     }
 
-    /**
-     * {@code ln phi_i} of a point on its branch: with per-branch pressures the vapour branch carries {@code ln(p_V/p_L)},
-     * so the value is {@code ln(f_i/(x_i p_L))}; on the one-pressure path it is the kernel's value itself.
-     */
-    private static double logPhi(Workspace w, Point c, int i) {
-        return w.branched ? c.logPhi[i] + w.shift(c.root, i) : c.logPhi[i];
-    }
-
-    /**
-     * Whether an evaluation may stand for its branch: the liquid branch always; the vapour branch with three physical
-     * roots (its largest), or with one root that is vapour-like by the phase identification parameter
-     * ({@link PhaseIdentification#vapourLike(double, double)}: at most one, or at most its {@code Z}, P3 WP7c).
-     */
-    private static boolean admissible(Workspace w, PengRobinsonKernel.Evaluation evaluation, PengRobinsonKernel.Root root) {
-        if (root == PengRobinsonKernel.Root.LIQUID || evaluation.physicalRootCount() > 1) return true;
-        return PhaseIdentification.vapourLike(evaluation, w.temperature, w.vaporPressure);
-    }
-
     private static PengRobinsonKernel.Root opposite(PengRobinsonKernel.Root root) {
         return root == PengRobinsonKernel.Root.VAPOR ? PengRobinsonKernel.Root.LIQUID : PengRobinsonKernel.Root.VAPOR;
-    }
-
-    /** In-place lower Cholesky factor of the leading {@code m x m} block; false unless positive definite. */
-    public static boolean cholesky(double[] a, int m) {
-        for (int j = 0; j < m; j++) {
-            double pivot = a[j * m + j];
-            for (int k = 0; k < j; k++) pivot -= a[j * m + k] * a[j * m + k];
-            if (!(pivot > 0.0) || !Double.isFinite(pivot)) return false;
-            double root = Math.sqrt(pivot);
-            a[j * m + j] = root;
-            for (int i = j + 1; i < m; i++) {
-                double value = a[i * m + j];
-                for (int k = 0; k < j; k++) value -= a[i * m + k] * a[j * m + k];
-                a[i * m + j] = value / root;
-            }
-        }
-        return true;
-    }
-
-    public static void solveCholesky(double[] factor, int m, double[] rhs) {
-        for (int i = 0; i < m; i++) {
-            double value = rhs[i];
-            for (int k = 0; k < i; k++) value -= factor[i * m + k] * rhs[k];
-            rhs[i] = value / factor[i * m + i];
-        }
-        for (int i = m - 1; i >= 0; i--) {
-            double value = rhs[i];
-            for (int k = i + 1; k < m; k++) value -= factor[k * m + i] * rhs[k];
-            rhs[i] = value / factor[i * m + i];
-        }
     }
 
     /** One trial point: its amounts, the root it was evaluated on and the kernel storage that evaluated it. */
@@ -792,16 +653,7 @@ public final class TangentPlaneStability {
         private Point current;
         private Point candidate;
         private double temperature;
-        /** The one pressure, or the liquid branch's. */
         private double pressure;
-        /** The vapour branch's pressure; the same double as {@link #pressure} on the one-pressure path. */
-        private double vaporPressure;
-        private boolean branched;
-        /**
-         * Per component, {@code ln(vaporPressure/pressure) + (vaporPressure - pressure) c_i/(R T)} with per-branch
-         * pressures; unused on the one-pressure path.
-         */
-        private final double[] vaporShifts;
         private double nearestStationary;
         private PengRobinsonKernel.Root feedRoot;
         private int localStability;
@@ -827,7 +679,6 @@ public final class TangentPlaneStability {
             shares = new double[count];
             step = new double[count];
             previousStep = new double[count];
-            vaporShifts = new double[count];
             alpha = new double[count];
             roots = new double[count];
             hessian = new double[count * count];
@@ -842,35 +693,15 @@ public final class TangentPlaneStability {
             candidate = swap;
         }
 
-        /** The pressure a root's branch is evaluated at. */
-        private double pressureOf(PengRobinsonKernel.Root root) {
-            return root == PengRobinsonKernel.Root.VAPOR ? vaporPressure : pressure;
-        }
-
-        /** The vapour branch's shift of component {@code i} with per-branch pressures, zero otherwise. */
-        private double shift(PengRobinsonKernel.Root root, int i) {
-            return branched && root == PengRobinsonKernel.Root.VAPOR ? vaporShifts[i] : 0.0;
-        }
-
-        /** {@code sum_i x_i s_i} of the vapour branch at the composition {@code amounts / total}. */
-        private double branchShift(double[] amounts, double total) {
-            double sum = 0.0;
-            for (int a = 0; a < presentCount; a++) {
-                int i = present[a];
-                sum += amounts[i] / total * vaporShifts[i];
-            }
-            return sum;
-        }
-
         private void normaliseFeed(double[] amounts) {
             Objects.requireNonNull(amounts, "feed");
             if (amounts.length != count) throw new IllegalArgumentException("Feed has invalid length");
             double total = 0.0;
             for (double amount : amounts) {
-                if (!Double.isFinite(amount) || amount < 0.0) throw new IllegalArgumentException("Invalid feed amount");
+                if (!Double.isFinite(amount) || amount < 0.0) throw new ThermoRefusal("Invalid feed amount");
                 total += amount;
             }
-            if (!(total > 0.0) || !Double.isFinite(total)) throw new IllegalArgumentException("Feed has no material");
+            if (!(total > 0.0) || !Double.isFinite(total)) throw new ThermoRefusal("Feed has no material");
             presentCount = 0;
             for (int i = 0; i < count; i++) {
                 feed[i] = amounts[i] / total;
@@ -881,7 +712,7 @@ public final class TangentPlaneStability {
                     logFeed[i] = Double.NEGATIVE_INFINITY;
                 }
             }
-            if (presentCount == 0) throw new IllegalArgumentException("Feed has no material");
+            if (presentCount == 0) throw new ThermoRefusal("Feed has no material");
         }
 
         /** {@code sum_i x_i ln phi_i}: the part of the molar Gibbs energy that differs between two roots. */

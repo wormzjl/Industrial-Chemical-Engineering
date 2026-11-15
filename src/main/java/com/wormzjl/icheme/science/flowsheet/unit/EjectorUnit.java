@@ -1,7 +1,6 @@
 package com.wormzjl.icheme.science.flowsheet.unit;
 
 import com.wormzjl.icheme.science.flowsheet.Calculation;
-import com.wormzjl.icheme.science.flowsheet.EjectorLaw;
 import com.wormzjl.icheme.science.flowsheet.FlowStream;
 import com.wormzjl.icheme.science.flowsheet.FlowThermo;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetFailure;
@@ -12,6 +11,8 @@ import com.wormzjl.icheme.science.flowsheet.Report;
 import com.wormzjl.icheme.science.flowsheet.UnitModel;
 import com.wormzjl.icheme.science.flowsheet.WiredUnit;
 import com.wormzjl.icheme.science.fluid.state.SolidInventory;
+import com.wormzjl.icheme.science.machine.EjectorLaw;
+import com.wormzjl.icheme.science.machine.SteamEjector;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -27,8 +28,8 @@ import java.util.List;
  */
 public final class EjectorUnit implements UnitModel {
     public static final String SUCTION = "suction", MOTIVE = "motive", DISCHARGE = "discharge";
-    /** The door's defaults (Pa): to 120 kPa on 10 bar steam, as section 3.12's table. */
-    public static final double DISCHARGE_PRESSURE = 1.2e5, MOTIVE_PRESSURE = 1e6;
+    /** The door's defaults (Pa): to 120 kPa on 10 bar steam, as section 3.12's table; the world's ejector's rated pressures. */
+    public static final double DISCHARGE_PRESSURE = SteamEjector.RATED_DISCHARGE, MOTIVE_PRESSURE = SteamEjector.RATED_MOTIVE;
     /** A wired motive with less water than this share of its mass is not the steam the law is fitted on: a warning. */
     public static final double STEAM_SHARE = .9;
     /** A wired motive this much under the need is short of it: the law's own last digits. */
@@ -72,10 +73,10 @@ public final class EjectorUnit implements UnitModel {
     public static FlowStream motive(String id, String prefix, FlowThermo thermo, FlowStream load, @Nullable FlowStream wired, double motive, double discharge, Report report) {
         if (!(discharge > load.pressure())) throw new FlowsheetFailure("ejector.rise");
         if (!(motive > discharge)) throw new FlowsheetFailure("ejector.motive");
-        double[] amounts = load.amountsView(), weights = thermo.model().molecularWeights();
+        // The load is the suction's vapour, as the world's set counts it (Ejectors.steam): liquid carried with it is not gas.
+        double[] amounts = load.state() == null ? load.amountsView() : load.state().vaporAmountsView(), weights = thermo.model().molecularWeights();
         int water = thermo.water();
-        double gas = 0;
-        for (int i = 0; i < water; i++) gas += EjectorLaw.asAir(amounts[i] * weights[i], 1e3 * weights[i]);
+        double gas = EjectorLaw.gasAsAir(amounts, weights, water, 1, 1);
         double condensing = EjectorLaw.CONDENSING * thermo.model().saturationPressure(load.temperature());
         double need = EjectorLaw.steam(gas, amounts[water] * weights[water], motive, load.pressure(), discharge, condensing);
         report.reading(prefix + "load", load.mass());

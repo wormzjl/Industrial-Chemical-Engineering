@@ -127,9 +127,7 @@ public final class ControlNetwork {
                             int menu = b.readVarInt();
                             long host = b.readVarLong();
                             var action = b.readEnum(ColumnCommands.Action.class);
-                            int n = b.readVarInt();
-                            if (n < 0 || n > ColumnCommands.Command.MAX_VALUES)
-                                throw new io.netty.handler.codec.DecoderException("Too many set point values");
+                            int n = Wire.count(b, ColumnCommands.Command.MAX_VALUES, Double.BYTES, "set point value");
                             var values = new ArrayList<Double>();
                             for (int i = 0; i < n; i++) values.add(b.readDouble());
                             return new ColumnCommand(menu, new ColumnCommands.Command(host, action, values));
@@ -171,7 +169,7 @@ public final class ControlNetwork {
 
     public static void register(RegisterPayloadHandlersEvent event) {
         // control-5: the converter command (batch 2026-11-12-fluid-conversion, W4).
-        var r = event.registrar("control-5").executesOn(HandlerThread.MAIN);
+        var r = event.registrar(NetworkProtocol.VERSION).executesOn(HandlerThread.MAIN);
         r.playToServer(
                 Edit.TYPE,
                 Edit.CODEC,

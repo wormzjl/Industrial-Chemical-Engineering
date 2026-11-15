@@ -4,6 +4,10 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.wormzjl.icheme.science.math.DeterministicMath;
+import com.wormzjl.icheme.science.thermo.water.SteamIdealGas;
+import com.wormzjl.icheme.science.thermo.water.WagnerPruss;
+import com.wormzjl.icheme.science.thermo.water.WaterConstants;
+import com.wormzjl.icheme.science.thermo.water.WaterDatum;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -77,28 +81,31 @@ public record TrainedPhysics(String model, double minimumTemperature, double max
             return new Water(w.criticalTemperature(), w.criticalPressure(), w.saturation(), w.boilingTemperature(), w.vaporizationEnthalpy(),
                     w.watsonExponent(), w.shomate());
         }
-        /** Wagner-Pruss saturation pressure, Pa, below the critical point. */
+        /** Wagner-Pruss saturation pressure, Pa, below the critical point: the water module's association (C1a). */
         public double saturationPressure(double t) {
-            double theta = 1 - t / criticalTemperature, root = Math.sqrt(theta), cube = theta * theta * theta;
-            double sum = saturation.get(0) * theta + saturation.get(1) * theta * root + saturation.get(2) * cube + saturation.get(3) * cube * root
-                    + saturation.get(4) * cube * theta + saturation.get(5) * cube * cube * theta * root;
+            double sum = WagnerPruss.polynomial(saturation.get(0), saturation.get(1), saturation.get(2), saturation.get(3),
+                    saturation.get(4), saturation.get(5), 1 - t / criticalTemperature);
             return criticalPressure * DeterministicMath.exp(criticalTemperature / t * sum);
         }
-        /** Watson latent heat, J/mol, zero at and above the critical point. */
+        /** Watson latent heat, J/mol, zero at and above the critical point (the water module's). */
         public double vaporizationEnthalpy(double t) {
-            if (t >= criticalTemperature) return 0;
-            return vaporizationEnthalpy * DeterministicMath.pow((1 - t / criticalTemperature) / (1 - boilingTemperature / criticalTemperature), watsonExponent);
+            return WaterDatum.watsonLatentHeat(constants(), t);
         }
-        /** Vapour heat capacity, J/(mol K). */
+        /** Vapour heat capacity, J/(mol K): the Shomate polynomial at {@code t} itself. */
         public double vaporHeatCapacity(double t) {
-            double x = t / 1000;
-            return shomate.get(0) + shomate.get(1) * x + shomate.get(2) * x * x + shomate.get(3) * x * x * x + shomate.get(4) / (x * x);
+            return SteamIdealGas.shomateHeatCapacity(constants(), t);
         }
-        /** Vapour enthalpy on the record's datum, J/mol. */
+        /** Vapour enthalpy on the record's datum, J/mol: the Shomate integral at {@code t} itself. */
         public double vaporEnthalpy(double t) {
-            double x = t / 1000;
-            return 1000 * (shomate.get(0) * x + shomate.get(1) * x * x / 2 + shomate.get(2) * x * x * x / 3 + shomate.get(3) * x * x * x * x / 4
-                    - shomate.get(4) / x + shomate.get(5) + shomate.get(6));
+            return SteamIdealGas.shomateEnthalpy(constants(), t);
+        }
+        /** These values as the water module's constants; the fields this record does not carry are NaN and read by none of the above. */
+        private WaterConstants constants() {
+            double[] a = new double[6], c = new double[7];
+            for (int i = 0; i < 6; i++) a[i] = saturation.get(i);
+            for (int i = 0; i < 7; i++) c[i] = shomate.get(i);
+            return new WaterConstants(Double.NaN, Double.NaN, criticalTemperature, criticalPressure, Double.NaN, boilingTemperature,
+                    vaporizationEnthalpy, watsonExponent, a, c, Double.NaN);
         }
     }
     /**

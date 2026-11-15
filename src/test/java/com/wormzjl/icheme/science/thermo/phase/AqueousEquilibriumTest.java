@@ -6,6 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.wormzjl.icheme.science.material.PilotAqueousTestCatalog;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult.Classification;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import org.junit.jupiter.api.Test;
@@ -19,7 +21,7 @@ import org.junit.jupiter.api.Test;
 class AqueousEquilibriumTest {
     private static final double R = PengRobinsonKernel.GAS_CONSTANT;
     private static final double ATM = 101325.0;
-    private static final FluidTpEquilibrium ENGINE = FluidTpEquilibrium.forDerivedPackage(PilotAqueousTestCatalog.catalog(),
+    private static final FluidTpEquilibrium ENGINE = PackageBinding.derivedEquilibrium(PilotAqueousTestCatalog.catalog(),
             PilotAqueousTestCatalog.PACKAGE_ID);
     private static final List<String> BASIS = ENGINE.contract().components();
     private static final PhaseCompetition FLUID = PhaseCompetition.FLUID_ONLY;
@@ -291,6 +293,50 @@ class AqueousEquilibriumTest {
                 assertEquals(Classification.VAPOR_LIQUID_LIQUID_SOLID, r.classification(), r.detail());
             }
         }
+    }
+
+    /**
+     * A crystal answer does not depend on what the workspace solved before (batch 2026-11-13-codebase-review, D-E2): each
+     * crystal request of this class, solved on a fresh workspace and on a workspace that has just solved another request of
+     * the same compounds (fluid only, at 300, 340 and 370 K, where most of them split) or two unrelated splits, gives the
+     * same digest line, every bit and count. A three-slot audit failure writes no split, so the split chemical potentials of
+     * {@code splitChemicalPotentialsUsable} may only be the failing solve's own: before D-E2 the pair an earlier request left
+     * in the workspace could pass that test and steer the crystal. No request here is known to reach that failure (none is
+     * pinned by reading): the test holds the property for the crystal answers the class already checks.
+     */
+    @Test void crystalAnswersDoNotDependOnWhatTheWorkspaceSolvedBefore() {
+        double xe = (10.0 / 46.069) / (10.0 / 46.069 + 90.0 / 18.015);
+        double ethanol = 0.1 * 0.3 * 18.015 / 46.069 / 0.9;
+        Object[][] crystals = {
+                {265.0, ATM, new Object[] {"Ethanol", xe, "Water", 1.0 - xe}},
+                {272.0, ATM, new Object[] {"Water", 1.0}},
+                {170.0, ATM, new Object[] {"Nitrogen", 0.8, "CarbonDioxide", 0.15, "Water", 0.05}},
+                {180.0, ATM, new Object[] {"CarbonDioxide", 0.5, "Water", 0.5}},
+                {268.15, ATM, new Object[] {"Water", 0.3, "N-hexane", 0.4, "Nitrogen", 0.3}},
+                {262.0, ATM, new Object[] {"Ethanol", ethanol, "Water", 0.3, "N-hexane", 0.4, "Nitrogen", 0.3}},
+                {262.0, 5.0 * ATM, new Object[] {"Ethanol", ethanol, "Water", 0.3, "N-hexane", 0.4}},
+                {258.15, ATM, new Object[] {"Ethanol", 0.05, "Water", 0.45, "N-hexane", 0.45, "Nitrogen", 0.05}}};
+        Object[][] unrelated = {{353.15, ATM, new Object[] {"Ethanol", 0.5, "Water", 0.5}},
+                {298.15, ATM, new Object[] {"Water", 0.5, "N-hexane", 0.5}}};
+        int pairs = 0;
+        for (Object[] c : crystals) {
+            double t = (Double) c[0], p = (Double) c[1];
+            double[] z = feed((Object[]) c[2]);
+            var request = EquilibriumRequest.tp(t, p, BASIS, z, ICE);
+            String fresh = EngineDigestTest.describe(ENGINE.tp(request, ENGINE.newWorkspace()), z);
+            List<EquilibriumRequest> primers = new ArrayList<>();
+            for (double warm : new double[] {300.0, 340.0, 370.0}) primers.add(EquilibriumRequest.tp(warm, p, BASIS, z, FLUID));
+            for (Object[] u : unrelated) primers.add(EquilibriumRequest.tp((Double) u[0], (Double) u[1], BASIS, feed((Object[]) u[2]), FLUID));
+            for (EquilibriumRequest primer : primers) {
+                var workspace = ENGINE.newWorkspace();
+                ENGINE.tp(primer, workspace);
+                String after = EngineDigestTest.describe(ENGINE.tp(request, workspace), z);
+                assertEquals(fresh, after, "TP " + t + " K, " + p + " Pa after TP " + primer.temperature() + " K, " + primer.pressure()
+                        + " Pa of " + Arrays.toString(primer.amounts()));
+                pairs++;
+            }
+        }
+        System.out.println("pilot_aqueous crystal answers after another request on the same workspace: " + pairs + " pairs equal bit for bit");
     }
 
     /** TP to PH and UV and back over one, two and three fluid phases and with crystals, to 1e-6 of N R T. */

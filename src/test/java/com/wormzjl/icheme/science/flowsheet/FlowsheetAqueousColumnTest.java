@@ -142,7 +142,7 @@ final class FlowsheetAqueousColumnTest {
     /** A crude sheet with 1e-6 of ethanol stays off the axis (under the share): its water is steam, and free water leaves. */
     @Test void aCrudeWithATraceOfEthanolKeepsItsSteamAndFreeWater() {
         var catalog = com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog();
-        var base = catalog.presets().column("tia_juana").input(catalog);
+        var base = com.wormzjl.icheme.science.column.v3.V3ColumnPresets.input(catalog.presets().column("tia_juana"), catalog);
         var amounts = new LinkedHashMap<String, Double>();
         double total = 0;
         for (int i = 0; i < base.feedComponentMolarFlowsMolPerSecond().length; i++) {

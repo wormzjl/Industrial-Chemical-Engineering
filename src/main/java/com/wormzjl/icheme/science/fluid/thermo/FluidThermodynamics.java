@@ -2,8 +2,6 @@ package com.wormzjl.icheme.science.fluid.thermo;
 
 import com.wormzjl.icheme.science.fluid.SimulationTime;
 import com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics;
-import com.wormzjl.icheme.science.fluid.solver.PhaseLayout;
-import com.wormzjl.icheme.science.fluid.solver.SparseNewton;
 import com.wormzjl.icheme.science.fluid.transport.MixtureViscosity;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.material.SolidMaterialCatalog;
@@ -18,12 +16,13 @@ import com.wormzjl.icheme.science.thermo.phase.PhaseContract;
 import com.wormzjl.icheme.science.thermo.phase.PhaseKind;
 import com.wormzjl.icheme.science.thermo.phase.PhaseAmounts;
 import com.wormzjl.icheme.science.fluid.state.EnergyReference;
+import com.wormzjl.icheme.science.fluid.state.LegacySplit;
 import com.wormzjl.icheme.science.fluid.state.SolidInventory;
+import com.wormzjl.icheme.science.thermo.phase.PackageBinding;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
-import java.util.function.UnaryOperator;
 
 /**
  * Immutable fluid property snapshot and standalone TP initializer; coupled steps consume phase() directly. Phase
@@ -42,6 +41,11 @@ public final class FluidThermodynamics {
     public static final double R=8.31446261815324;
     public static final double DEFAULT_MAXIMUM_VELOCITY=100;
     /**
+     * The game's ambient pressure (Pa): the outside of every vessel's wall, and the pressure of the air the network
+     * reduction's ambient state holds.
+     */
+    public static final double AMBIENT_PRESSURE=101325;
+    /**
      * The network's ceiling on the trace cutoff, a thousandth of the column's: the network has no reference to answer to
      * inside a Newton pass, and the energy it can misplace by folding an omitted phase into the retained one is bounded
      * by the cutoff times the phase amount times the largest enthalpy of vaporization on the basis, which at 1e-5 is
@@ -58,9 +62,11 @@ public final class FluidThermodynamics {
     public final SolidMaterialCatalog solids;
     public final double waterMolecularWeight;
     /** The package's water model: utility water's Region 1 ({@link #waterLiquid}) and the pump's reference density. */
-    private final MaterialCatalog.Water water;
-    private final double waterEnthalpyOffset;
-    private final double maximumVelocity;
+    final MaterialCatalog.Water water;
+    /** {@link #water}'s numbers for the water module, mapped once. */
+    final com.wormzjl.icheme.science.thermo.water.WaterConstants waterConstants;
+    final double waterEnthalpyOffset;
+    final double maximumVelocity;
     /** Process time against online time ({@link SimulationTime}): carried on the model, like {@link #maximumVelocity}, so a
      * changed factor reaches every island through a new model and {@link #revision}. */
     private final SimulationTime time;
@@ -69,6 +75,10 @@ public final class FluidThermodynamics {
      * running island deterministically, and {@link #revision} carries it so a certificate issued
      * under a different unknown set is not kept. */
     private final TraceTruncationPolicy tracePolicy;
+    /** The stream functions and the pure-water functions of this model ({@link NetworkStreams}, {@link NetworkWater}): built
+     * once in the constructor, on this model; they hold nothing but it. */
+    final NetworkStreams streams;
+    final NetworkWater pureWater;
 
     /**
      * The gameplay model of the package the caller names: the world's network package
@@ -114,6 +124,7 @@ public final class FluidThermodynamics {
         // network supplies water itself, no package record is edited for it. A view is restricted from that catalog.
         if(whole==null)catalog=catalog.withWater(packageId);
         this.whole=whole==null?this:whole;views=whole==null?new java.util.HashMap<>():null;
+        streams=new NetworkStreams(this);pureWater=new NetworkWater(this);
         this.solidSettings=Objects.requireNonNull(solidSettings);this.time=Objects.requireNonNull(time,"time");
         if(!Double.isFinite(maximumVelocity)||maximumVelocity<=0)throw new IllegalArgumentException("Positive finite maximum velocity required");
         TraceTruncationPolicy.requireCutoff(Objects.requireNonNull(tracePolicy,"tracePolicy").cutoffMoleFraction(),MAX_TRACE_CUTOFF_MOLE_FRACTION);
@@ -128,7 +139,7 @@ public final class FluidThermodynamics {
         domain=hydrocarbon.domain();
         // The crystal competition: the package's admitted crystals (ice among them on a list with water), on either ideal-gas
         // source (E27). A view without a crystal's compound admits none.
-        var admitted=PhaseContract.admittedCrystals(catalog,packageId);
+        var admitted=PackageBinding.admittedCrystals(catalog,packageId);
         crystalIds=List.copyOf(admitted);crystalSpecies=new boolean[n+1];crystalTriple=new double[n+1];
         Arrays.fill(crystalTriple,Double.NEGATIVE_INFINITY);
         crystalCeiling=new double[n+1];Arrays.fill(crystalCeiling,Double.NEGATIVE_INFINITY);
@@ -141,7 +152,8 @@ public final class FluidThermodynamics {
         }
         // Region 1 at 298.15 K and 1 atm itself, the stable liquid: the pump's density and utility water's datum.
         var reference=WaterRegion1.evaluate(water,298.15,101325);
-        waterEnthalpyOffset=com.wormzjl.icheme.science.column.v3.thermo.V3WaterProperties.liquidEnthalpyOffset(water);
+        waterConstants=com.wormzjl.icheme.science.material.WaterRecords.constants(water);
+        waterEnthalpyOffset=com.wormzjl.icheme.science.thermo.water.WaterDatum.liquidEnthalpyOffset(waterConstants);
         // The pump's density is the network's own water at that state (W3b: the cubic's, 7e-6 off Region 1, which put a pumped
         // water line 3.5 Pa over its shutoff); a view keeps its whole model's, a package without water Region 1's.
         if(whole!=null)pumpReferenceDensity=whole.pumpReferenceDensity;
@@ -170,7 +182,7 @@ public final class FluidThermodynamics {
      */
     private final String thermodynamicRevision;
     /** The model of the whole package this one is a view of (itself for a whole package), and, on the whole one, its views by compound list. */
-    private final FluidThermodynamics whole;
+    final FluidThermodynamics whole;
     private final java.util.Map<List<String>,FluidThermodynamics> views;
     /** The model this one is a view of: the package on its whole compound list, with the same settings. */
     public FluidThermodynamics whole(){return whole;}
@@ -304,7 +316,7 @@ public final class FluidThermodynamics {
     private double engineEnergy(double energy,double[] totals) {
         var spine=hydrocarbon.spine();
         if(spine.isEmpty())return energy;
-        var formation=spine.get().formationReference();
+        var formation=hydrocarbon.formationReference().orElseThrow();
         return EnergyReference.sensible(formation.components()).rebase(energy,Arrays.copyOf(totals,hydrocarbon.componentCount()),formation);
     }
     private CrystalAnswer crystalAnswer(EquilibriumResult result,double[] totals) {
@@ -312,12 +324,12 @@ public final class FluidThermodynamics {
         switch(result.status()) {
             case CONVERGED->{}
             case UNSUPPORTED->{
-                if(result.detail().startsWith(EquilibriumResult.CRYSTAL_PHASES))throw new UnsupportedPhases(domain.packageId(),Double.NaN,Double.NaN,
+                if(result.failureKind()==EquilibriumResult.FailureKind.CRYSTAL_PHASES)throw new UnsupportedPhases(domain.packageId(),Double.NaN,Double.NaN,
                         UnsupportedPhases.Kind.CRYSTAL_PHASES,"a crystal beside a phase set the engine does not implement ("+result.detail()+")");
                 throw new IllegalStateException("The network's equilibrium engine refused a crystal request it must answer: "+result.detail());
             }
             case NOT_CONVERGED->{
-                if(result.detail().startsWith(EquilibriumResult.CRYSTAL_STEP))throw new UnsupportedPhases(domain.packageId(),Double.NaN,Double.NaN,
+                if(result.failureKind()==EquilibriumResult.FailureKind.CRYSTAL_STEP&&!result.failedInCriticalBand())throw new UnsupportedPhases(domain.packageId(),Double.NaN,Double.NaN,
                         UnsupportedPhases.Kind.CRYSTAL_STEP,"a near-pure feed's crystal step the pure species' step does not answer ("+result.detail()+")");
                 if(result.diagnostics().criticalBand())throw new CriticalBandHold(domain.packageId(),Double.NaN,Double.NaN,result.detail());
                 throw new IllegalArgumentException("Crystal equilibrium did not converge: "+result.detail());
@@ -429,44 +441,15 @@ public final class FluidThermodynamics {
     }
     /** The per-node phase support the step solver freezes its Newton unknowns with. */
     public TraceTruncationPolicy traceTruncation(){return tracePolicy;}
-    /** A hydraulic rate bound only; temperature and phase allocation still come from the EOS/energy equations. */
-    public double velocityLimit(State state){return Math.min(maximumVelocity,isothermalAcousticBound(state));}
     /**
-     * Frozen-phase isothermal acoustic bound used by the configured hydraulic velocity clamp: the node's compliance is
-     * {@code sum_phases V_phase kappa_phase}, each phase's own isothermal compressibility at the state.
+     * The stream functions ({@link NetworkStreams}, which documents each): a node's hydraulic velocity limits, the
+     * compressor's heat capacity ratio and the streams a vessel port draws (decision D11), read off the state with no
+     * flash. The phase streams' labels {@link #GAS}, {@link #OIL} and {@link #AQUEOUS} and the record {@link PhaseStream}
+     * stay here.
      */
-    public double isothermalAcousticBound(State state) {
-        double compliance=0;
-        for(int slot=0;slot<3;slot++) {
-            var phase=state.phase(slot);
-            if(phase!=null&&state.slotVolume(slot)>0)compliance+=state.slotVolume(slot)*phase.isothermalCompressibility();
-        }
-        // Solids are incompressible here: a state holding no fluid (a vessel holding only solids, D33) has no acoustic
-        // bound, and the configured clamp alone limits what would leave it (nothing does: its ends are dry).
-        if(compliance==0&&!holdsFluid(state))return Double.POSITIVE_INFINITY;
-        double speed=state.volume()/Math.sqrt(state.mass()*compliance);
-        if(!Double.isFinite(speed)||speed<=0)throw new IllegalArgumentException("Invalid acoustic flow-domain bound");
-        return speed;
-    }
-    /**
-     * The gas's ideal-gas heat capacity ratio {@code k = c_p/(c_p − R)} at the state's temperature, for a compressor's
-     * polytropic exponent (batch 2026-11-03-rotating-machinery, plan section 3.2): the vapour's components on the
-     * package's own ideal-gas data (water's from its cubic record on a list with water). 1.4 for a state that holds no gas.
-     */
-    public double heatCapacityRatio(State state) {
-        double t=state.temperature(),moles=0,cp=0;
-        double[] vapor=state.vaporAmountsView();int n=hydrocarbon.componentCount();
-        double total=0;for(double x:vapor)total+=x;
-        if(!(total>0))return 1.4;
-        var terms=hydrocarbon.prepare(t);
-        for(int i=0;i<vapor.length;i++) {
-            if(!(vapor[i]>0))continue;
-            // Water on a list without water cannot be in a phase (HydrocarbonModel.kernelAmounts).
-            cp+=vapor[i]*terms.idealGasHeatCapacity(i<n||hydrocarbon.wet()?i:0);moles+=vapor[i];
-        }
-        cp/=moles;
-        return cp/(cp-R);
-    }
+    public double velocityLimit(State state){return streams.velocityLimit(state);}
+    public double isothermalAcousticBound(State state){return streams.isothermalAcousticBound(state);}
+    public double heatCapacityRatio(State state){return streams.heatCapacityRatio(state);}
     /**
      * The fluid a phase-selective vessel outlet draws, read off the vessel's own state with no flash and no extra
      * equation-of-state root: every term is a sum over the phase amounts, volumes and molar properties {@link #state}
@@ -484,60 +467,18 @@ public final class FluidThermodynamics {
         public double[] molesView(){return moles;}
         @Override public double[] moles(){return moles.clone();}
     }
-    /** Whether the state holds a gas phase to draw. */
-    public static boolean holdsVapor(State state){return state.vaporVolume()>0;}
-    /** Whether the state holds a liquid to draw (solids alone do not flow as a liquid). */
-    public static boolean holdsLiquid(State state){return state.condensedVolume()>0;}
-    /** Mass of a slot's fluid, kg. */
-    public double slotMass(State state,int slot) {
-        double mass=0;var amounts=state.amountsView(slot);
-        for(int i=0;i<amounts.length;i++)mass+=amounts[i]*molecularWeight(i);
-        return mass;
-    }
-    /** Mass of the vapour stream. */
-    public double vaporMass(State state){return slotMass(state,State.VAPOR);}
-    /** Mass of the condensed phase: both liquids, then every solid (the level head's mass). */
-    public double liquidMass(State state){return slotMass(state,State.LIQUID)+slotMass(state,State.AQUEOUS)+state.solidMoments().mass();}
-    /** Volume of the condensed phase: the two liquid volumes and the solid volume. */
-    public static double liquidStreamVolume(State state){return state.condensedVolume()+state.solidMoments().volume();}
-    /** The vapour stream's density, for a state that {@link #holdsVapor}. */
-    public double vaporDensity(State state){return vaporMass(state)/state.vaporVolume();}
-    /** The condensed phase's density (its mass over its volume), for a state that {@link #holdsLiquid}. */
-    public double liquidDensity(State state){return liquidMass(state)/liquidStreamVolume(state);}
-    /** The vapour stream's specific enthalpy (J/kg). */
-    public double vaporSpecificEnthalpy(State state,Prepared prepared) {
-        var gas=state.phase(State.VAPOR);
-        return gas==null?0:total(state.vaporAmountsView())*gas.molarEnthalpy()/vaporMass(state);
-    }
-    /** The vapour stream's velocity limit: {@code min(maximum, V_v/sqrt(M_v V_v kappa_v))}. */
-    public double vaporVelocityLimit(State state) {
-        var gas=state.phase(State.VAPOR);
-        double compliance=gas==null?0:state.vaporVolume()*gas.isothermalCompressibility();
-        return Math.min(maximumVelocity,acoustic(state.vaporVolume(),vaporMass(state),compliance));
-    }
-    /**
-     * {@code V / sqrt(M C)}. The product of a phase's mass and compliance goes subnormal for a trace phase (a vanishing
-     * nitrogen vapour below about 2e-150 mol) and is zero below about 2e-158 mol, the bound then infinite; such a product
-     * is evaluated as {@code sqrt(V/M) sqrt(V/C)}, ratios of like-sized quantities, and every product at or above
-     * {@link Double#MIN_NORMAL} takes the original expression, bit for bit.
-     */
-    private static double acoustic(double volume,double mass,double compliance) {
-        double product=mass*compliance;
-        double speed=product>=Double.MIN_NORMAL?volume/Math.sqrt(product):Math.sqrt(volume/mass)*Math.sqrt(volume/compliance);
-        if(!Double.isFinite(speed)||speed<=0)throw new IllegalArgumentException("Invalid acoustic flow-domain bound");
-        return speed;
-    }
-    /** The vapour stream's viscosity (Wilke over its components, water among them). */
-    public double vaporViscosity(State state,MixtureViscosity.Workspace scratch,Prepared prepared) {
-        var terms=prepared==null?null:match(prepared,state.temperature()).viscosities();
-        return viscosity.vapor(state.temperature(),state.vaporAmountsView(),scratch,terms);
-    }
-    /** The vapour stream of {@code state}, or null when it holds no gas. */
-    public PhaseStream vaporStream(State state,Prepared prepared,MixtureViscosity.Workspace scratch) {
-        if(!holdsVapor(state))return null;
-        return new PhaseStream(state.vaporAmounts(),vaporMass(state),state.vaporVolume(),vaporViscosity(state,scratch,prepared),
-                vaporSpecificEnthalpy(state,prepared),vaporVelocityLimit(state),SolidInventory.Moments.ZERO);
-    }
+    public static boolean holdsVapor(State state){return NetworkStreams.holdsVapor(state);}
+    public static boolean holdsLiquid(State state){return NetworkStreams.holdsLiquid(state);}
+    public double slotMass(State state,int slot){return streams.slotMass(state,slot);}
+    public double vaporMass(State state){return streams.vaporMass(state);}
+    public double liquidMass(State state){return streams.liquidMass(state);}
+    public static double liquidStreamVolume(State state){return NetworkStreams.liquidStreamVolume(state);}
+    public double vaporDensity(State state){return streams.vaporDensity(state);}
+    public double liquidDensity(State state){return streams.liquidDensity(state);}
+    public double vaporSpecificEnthalpy(State state,Prepared prepared){return streams.vaporSpecificEnthalpy(state,prepared);}
+    public double vaporVelocityLimit(State state){return streams.vaporVelocityLimit(state);}
+    public double vaporViscosity(State state,MixtureViscosity.Workspace scratch,Prepared prepared){return streams.vaporViscosity(state,scratch,prepared);}
+    public PhaseStream vaporStream(State state,Prepared prepared,MixtureViscosity.Workspace scratch){return streams.vaporStream(state,prepared,scratch);}
     /*
      * The three phases a vessel port can draw one after another (decision D11: ports carry mixed phases by priority), by
      * label: GAS, OIL (the liquid with less water) and AQUEOUS (the liquid with more; a single liquid that is at least half
@@ -545,164 +486,34 @@ public final class FluidThermodynamics {
      * condensed phase, and with one liquid present its stream carries every solid.
      */
     public static final int GAS=0,OIL=1,AQUEOUS=2;
-    /** Whether {@code state} holds the phase labelled {@code phase} ({@link #GAS}, {@link #OIL} or {@link #AQUEOUS}). */
-    public static boolean holdsPhase(State state,int phase){return state.slot(phase)>=0;}
-    /** Whether the state holds any fluid phase: not a vessel holding only solids ({@link #solidState}). */
-    public static boolean holdsFluid(State state){return state.vaporVolume()>0||state.condensedVolume()>0;}
-    /**
-     * Owner decision D33: solids ride the liquid. A connection's BULK end draws a uniform share of what its donor holds,
-     * the solids carried by the liquid at {@code solids * liquid drawn / liquid held}; where no liquid is held nothing
-     * carries them (frost on a tank's walls, a dry bed), so the end draws the donor's gas exactly where that differs from
-     * its bulk: a gas beside solids with no liquid (a stand-in liquid, D29 A, is a liquid here).
-     */
-    public static boolean bulkDrawsGas(State state) {
-        return !(state.condensedVolume()>0)&&state.vaporVolume()>0&&!state.solids().empty();
-    }
-    /** The share of the state's solids a phase stream carries: none in the gas, the liquids' in proportion to their
-     * volumes ({@code 1.0} exactly for the only liquid held). */
-    public static double phaseSolidShare(State state,int phase) {
-        if(phase==GAS)return 0;
-        int slot=state.slot(phase);double condensed=state.condensedVolume();
-        if(slot<0||!(condensed>0))return 0;
-        return state.slotVolume(slot)==condensed?1.0:state.slotVolume(slot)/condensed;
-    }
+    public static boolean holdsPhase(State state,int phase){return NetworkStreams.holdsPhase(state,phase);}
+    public static boolean holdsFluid(State state){return NetworkStreams.holdsFluid(state);}
+    public static boolean bulkDrawsGas(State state){return NetworkStreams.bulkDrawsGas(state);}
+    public static double phaseSolidShare(State state,int phase){return NetworkStreams.phaseSolidShare(state,phase);}
     /** The own density (no solids) of the liquid in storage slot {@code slot}: its fluid mass over its volume. */
     private double liquidPhaseDensityOfSlot(State state,int slot){return slotMass(state,slot)/state.slotVolume(slot);}
-    /** The own density (no solids) of a liquid phase the state holds: its fluid mass over its volume. */
-    public double liquidPhaseDensity(State state,int phase) {
-        int slot=state.slot(phase);
-        return slotMass(state,slot)/state.slotVolume(slot);
-    }
-    /** The heavier of the state's two liquids by their own densities: {@link #OIL} only when both are held and the oil is
-     * the denser, {@link #AQUEOUS} otherwise (which one is named when at most one is held does not matter to a priority
-     * order: an absent phase is skipped). */
-    public int heavierLiquid(State state) {
-        return holdsPhase(state,OIL)&&holdsPhase(state,AQUEOUS)&&liquidPhaseDensity(state,OIL)>liquidPhaseDensity(state,AQUEOUS)?OIL:AQUEOUS;
-    }
-    /** Mass of a phase stream, its solid share included; {@link #vaporMass} for the gas. */
-    public double phaseMass(State state,int phase) {
-        if(phase==GAS)return vaporMass(state);
-        int slot=state.slot(phase);
-        return (slot<0?0:slotMass(state,slot))+phaseSolidShare(state,phase)*state.solidMoments().mass();
-    }
-    /** Volume of a phase stream: the gas volume, or the liquid's volume plus its share of the solid volume. */
-    public static double phaseVolume(State state,int phase) {
-        if(phase==GAS)return state.vaporVolume();
-        int slot=state.slot(phase);
-        return (slot<0?0:state.slotVolume(slot))+phaseSolidShare(state,phase)*state.solidMoments().volume();
-    }
-    /** The conserved amounts (water last) of a phase stream. */
-    public static double[] phaseMoles(State state,int phase) {
-        int slot=state.slot(phase);
-        return slot<0?new double[state.componentCount()]:state.amounts(slot);
-    }
-    /** The solid moments a phase stream carries: its share of the state's. */
-    public static SolidInventory.Moments phaseSolidMoments(State state,int phase) {
-        double share=phaseSolidShare(state,phase);if(share==0)return SolidInventory.Moments.ZERO;
-        var m=state.solidMoments();return new SolidInventory.Moments(share*m.mass(),share*m.volume(),share*m.heatCapacity());
-    }
-    /** A phase stream's specific enthalpy (J/kg), its solid share included; {@code prepared} as for {@link #state}. */
-    public double phaseSpecificEnthalpy(State state,int phase,Prepared prepared) {
-        if(phase==GAS)return vaporSpecificEnthalpy(state,prepared);
-        int slot=state.slot(phase);double h=0;
-        if(slot>=0&&state.phase(slot)!=null)h+=total(state.amountsView(slot))*state.phase(slot).molarEnthalpy();
-        h+=phaseSolidShare(state,phase)*state.solidMoments().enthalpy(state.temperature(),state.pressure());
-        return h/phaseMass(state,phase);
-    }
-    /** A phase stream's velocity limit: {@link #vaporVelocityLimit} for the gas, the configured maximum for a liquid
-     * with its solids (a liquid's own isothermal sound speed is 900 to 1500 m/s at the network's states, D37 S5). */
-    public double phaseVelocityLimit(State state,int phase) {
-        return phase==GAS?vaporVelocityLimit(state):maximumVelocity;
-    }
-    /** A phase stream's viscosity: {@link #vaporViscosity} for the gas; a liquid's own viscosity (one log-mixing rule over
-     * its components, water among them) with the slurry correction for its share of the solids, over the stream's volume. */
-    public double phaseViscosity(State state,int phase,MixtureViscosity.Workspace scratch,Prepared prepared) {
-        if(phase==GAS)return vaporViscosity(state,scratch,prepared);
-        var terms=prepared==null?null:match(prepared,state.temperature()).viscosities();
-        int slot=state.slot(phase);
-        double liquid=state.slotVolume(slot),value=liquid*viscosity.liquid(state.temperature(),state.amountsView(slot),terms).pascalSeconds();
-        double solid=phaseSolidShare(state,phase)*state.solidMoments().volume();
-        if(solid>0){double phi=solid/(liquid+solid);value=com.wormzjl.icheme.science.fluid.transport.SlurryTransport.effectiveViscosity(value/liquid,Math.min(phi,0.62-1e-9))*(liquid+solid);}
-        return value/(liquid+solid);
-    }
-    /** The carrier viscosity of a phase stream (no slurry correction), which an inline filter's cake resistance scales
-     * with: the gas's own, or the liquid's own. */
-    public double phaseCarrierViscosity(State state,int phase,MixtureViscosity.Workspace scratch) {
-        if(phase==GAS)return vaporViscosity(state,scratch,null);
-        return viscosity.liquid(state.temperature(),state.amountsView(state.slot(phase))).pascalSeconds();
-    }
-    /** The stream of one phase of {@code state}, or null when it does not hold that phase; {@link #vaporStream} for the
-     * gas. */
-    public PhaseStream phaseStream(State state,int phase,Prepared prepared,MixtureViscosity.Workspace scratch) {
-        if(!holdsPhase(state,phase))return null;
-        if(phase==GAS)return vaporStream(state,prepared,scratch);
-        return new PhaseStream(phaseMoles(state,phase),phaseMass(state,phase),phaseVolume(state,phase),phaseViscosity(state,phase,scratch,prepared),
-                phaseSpecificEnthalpy(state,phase,prepared),phaseVelocityLimit(state,phase),phaseSolidMoments(state,phase));
-    }
+    public double liquidPhaseDensity(State state,int phase){return streams.liquidPhaseDensity(state,phase);}
+    public int heavierLiquid(State state){return streams.heavierLiquid(state);}
+    public double phaseMass(State state,int phase){return streams.phaseMass(state,phase);}
+    public static double phaseVolume(State state,int phase){return NetworkStreams.phaseVolume(state,phase);}
+    public static double[] phaseMoles(State state,int phase){return NetworkStreams.phaseMoles(state,phase);}
+    public static SolidInventory.Moments phaseSolidMoments(State state,int phase){return NetworkStreams.phaseSolidMoments(state,phase);}
+    public double phaseSpecificEnthalpy(State state,int phase,Prepared prepared){return streams.phaseSpecificEnthalpy(state,phase,prepared);}
+    public double phaseVelocityLimit(State state,int phase){return streams.phaseVelocityLimit(state,phase);}
+    public double phaseViscosity(State state,int phase,MixtureViscosity.Workspace scratch,Prepared prepared){return streams.phaseViscosity(state,phase,scratch,prepared);}
+    public double phaseCarrierViscosity(State state,int phase,MixtureViscosity.Workspace scratch){return streams.phaseCarrierViscosity(state,phase,scratch);}
+    public PhaseStream phaseStream(State state,int phase,Prepared prepared,MixtureViscosity.Workspace scratch){return streams.phaseStream(state,phase,prepared,scratch);}
     /** The amount sum {@link #state} forms ({@code sum}), without its validation: a state's own amounts are valid. */
-    private static double total(double[] values){double total=0;for(double value:values)total+=value;return total;}
+    static double total(double[] values){double total=0;for(double value:values)total+=value;return total;}
     /**
-     * Utility water (cooling towers, steam services) at the state pressure: Region 1 and its continuation past its range
-     * ({@link WaterRegion1#evaluateLiquid}), on the package's water model. Not a network phase since W3b.
+     * The pure-water functions ({@link NetworkWater}, which documents each): utility water (cooling towers, steam services)
+     * on the package's water model and pure water's saturation curve, built once for the whole model on the first read.
      */
-    public WaterLiquid waterLiquid(double t,double p) {
-        var w=new WaterRegion1.Workspace();WaterRegion1.evaluateLiquid(water,t,p,w);
-        return new WaterLiquid(w.specificVolume()*water.molarMass(),w.specificEnthalpy()*water.molarMass()+waterEnthalpyOffset);
-    }
-    /**
-     * Utility steam's ideal-gas molar enthalpy at {@code t} (J/mol, the datum of {@link #waterLiquid}): the water record's
-     * Shomate polynomial, held at its end heat capacity past its range (owner rule of 2026-10-16). A cooling tower's
-     * humid air; not a network phase since W3b.
-     */
-    public double vaporWaterEnthalpy(double t) {
-        if(!Double.isFinite(t))throw new IllegalArgumentException("Non-finite water temperature");
-        double low=water.triplePoint(),high=water.maximumTemperature(),at=Math.max(low,Math.min(high,t));
-        double h=com.wormzjl.icheme.science.column.v3.thermo.V3WaterProperties.vaporMolarEnthalpy(water,at);
-        return at==t?h:h+com.wormzjl.icheme.science.column.v3.thermo.V3WaterProperties.dVaporMolarEnthalpyDT(water,at)*(t-at);
-    }
-    /**
-     * Pure water's saturation pressure at {@code t} (Pa): steam services, ejectors, the cooling tower's air and the
-     * condensate a kettle leaves. On a model with water it is the model's own curve ({@link WaterSaturation}, built once
-     * for the whole model on the first read), so a state built at saturation is the phase the flash calls it (W3b, G2a:
-     * Wagner-Pruss stood up to 0.43 K off the cubic's between 100 and 220 bar); on a dry model the package's water
-     * record's Wagner-Pruss, continued past its ends. Infinite at and above the critical temperature.
-     */
-    public double saturationPressure(double t) {
-        if(!Double.isFinite(t))throw new IllegalArgumentException("Non-finite water temperature");
-        var curve=whole.waterSaturation();
-        if(curve!=null)return curve.pressure(t);
-        return t>=water.criticalTemperature()?Double.POSITIVE_INFINITY:com.wormzjl.icheme.science.column.v3.thermo.V3WaterProperties.wagnerPruss(water,t);
-    }
-    /** The temperature whose {@link #saturationPressure} is {@code p} (Pa), K: the saturation a state at {@code p} is built at. */
-    public double saturationTemperature(double p) {
-        var curve=whole.waterSaturation();
-        if(curve!=null)return curve.temperature(p);
-        if(!(p>0))throw new IllegalArgumentException("Positive pressure required");
-        double low=1,high=water.criticalTemperature();
-        while(high-low>1e-9){double middle=0.5*(low+high);if(saturationPressure(middle)>=p)high=middle;else low=middle;}
-        return high;
-    }
-    /** The whole model's water saturation curve, built on first use; null on a dry model. */
-    private volatile WaterSaturation waterSaturation;
-    private WaterSaturation waterSaturation() {
-        if(!hydrocarbon.wet())return null;
-        var curve=waterSaturation;
-        if(curve!=null)return curve;
-        synchronized(this) {
-            if(waterSaturation==null)waterSaturation=new WaterSaturation(hydrocarbon,hydrocarbon.componentCount(),water.triplePoint(),water.criticalTemperature(),
-                    t->com.wormzjl.icheme.science.column.v3.thermo.V3WaterProperties.wagnerPruss(water,t));
-            return waterSaturation;
-        }
-    }
+    public WaterLiquid waterLiquid(double t,double p){return pureWater.waterLiquid(t,p);}
+    public double vaporWaterEnthalpy(double t){return pureWater.vaporWaterEnthalpy(t);}
+    public double saturationPressure(double t){return pureWater.saturationPressure(t);}
+    public double saturationTemperature(double p){return pureWater.saturationTemperature(p);}
 
-    /**
-     * A node's split in the fields a vessel's facts carry since before W3b, whose meaning never changes (facts schema 22
-     * appends the two liquid slots beside them; the checkpoint carries the three slots since state format 48): the compounds of both liquids, the compounds of the vapour, the water of the liquids and of
-     * the vapour, and the vapour's compound partial pressure {@code P (1 - y_w)} (the meaning that field had). Amounts are
-     * kept exactly; a second liquid's composition is not, and the reader ({@link #fromLegacySplit}) states the compounds'
-     * liquid and the water as two liquids, which the next phase check and refresh equilibrate.
-     */
-    public record LegacySplit(double[] liquid,double[] vapor,double waterLiquid,double waterVapor,double hydrocarbonPressure) {}
     /** {@code s} in the pre-W3b record ({@link LegacySplit}). */
     public static LegacySplit legacySplit(State s) {
         int n=s.componentCount()-1;double[] l=new double[n],v=new double[n];
@@ -913,12 +724,14 @@ public final class FluidThermodynamics {
      * The check of a failed pass's last iterate (owner decisions D28 and D39): {@link #folded(State,boolean)} with the
      * phases vanishing since {@code from} folded too (D38 C, {@link #vanishing}), and nothing else. A failed iterate is not
      * a state, so its check only folds what the iterate empties and proposes nothing. A phase the pass needs appears at a
-     * converged point's check ({@link #phaseCheck}) or at a smaller step.
+     * converged point's check ({@code StepPhaseRules.phaseCheck}) or at a smaller step.
      */
     public State folded(State state,boolean junction,State from){return folded(state,junction,false,from);}
     /** {@link #folded(State,boolean,State)} for a vessel whose wall is rigid ({@code rigid}, {@link #rigidGas}). */
     public State folded(State state,boolean junction,boolean rigid,State from){return folded(state,rigid&&!junction,from==null?0:collapsing(from,state,rigid));}
-    private State folded(State state,boolean rigid,int vanishing) {
+    /** {@link #folded(State)} with the phases {@code vanishing} ({@link #phaseBits}) folded as traces too, a rigid vessel's gas
+     * judged by its volume where {@code rigid} ({@link #rigidGas}): the outer phase check's fold ({@code StepPhaseRules.phaseCheck}). */
+    public State folded(State state,boolean rigid,int vanishing) {
         var result=folded(state,null,rigid,vanishing);
         return result==state||state.solids().empty()?result:result.withSolidState(state.solids(),state.solidMoments());
     }
@@ -949,78 +762,6 @@ public final class FluidThermodynamics {
         return (state.phase(State.LIQUID)!=null?1:0)|(state.phase(State.VAPOR)!=null?2:0)|(state.phase(State.AQUEOUS)!=null?4:0);
     }
     /**
-     * The outer phase check of one node of the fluid network (owner decisions D25 and D26), never inside a residual. A
-     * node at fixed amounts, energy and volume has one equilibrium, which its own rows find once its layout holds every
-     * phase that equilibrium needs; a TP answer at the node's temperature and pressure tells which phases are missing but
-     * not how much of each the node holds. So the check never swaps one populated phase set for another on a TP verdict,
-     * and an added phase starts at the node's own split:
-     * <ul>
-     * <li>a phase leaves only when the solve empties it: the trace fold ({@link #folded}, D34), and a phase held below
-     * {@link #VANISHING_SHARE} and at a smaller share than at {@code from} (owner decision D38 C, {@link #vanishing});</li>
-     * <li>a node holding every phase its material can form has none to add, and no TP answer is formed: a vapour and a
-     * liquid on a list without water, all three slots with water (W3b); a node holding no fluid has none. A stand-in liquid ({@link #standIn}, owner
-     * decision D31 B) is no liquid of the node's own and never makes it complete;</li>
-     * <li>where the TP answer ({@link #flashTP}) holds a phase the node lacks that is not in the solve's record
-     * ({@code record}, A85), the node's own split decides it (D26): a vessel's {@code vesselSplit} closes its inventory
-     * from the vessel's own state at the crossing (owner decision D40 A, {@link #crossing}); a pipe junction's
-     * {@link #junctionSplit} closes its own rows at its pressure and enthalpy from the engine's PH answer there
-     * ({@link #equilibriumPH}; the TP answer with the junction's populated phases, {@link #tpSeed}, where that fails). A
-     * node whose own split has no start, fails or drives a phase to nothing on its way proposes nothing;</li>
-     * <li>the own split decides by where its closure went, converged or not: a proposed phase it drove under the vanishing
-     * share is refused ({@link #nothing}), and the refusal is written to the record so the TP answer does not propose it
-     * again in this solve. A proposed phase that stands seeds the node.</li>
-     * </ul>
-     *
-     * @return {@code state} itself when it keeps its phases and gains none; otherwise the node's new seed
-     */
-    public State phaseCheck(State state,boolean junction,State from,int[] record,int at,Prepared prepared,UnaryOperator<State> vesselSplit,Runnable checkpoint) {
-        return phaseCheck(state,junction,from,record,at,prepared,vesselSplit,false,false,checkpoint);
-    }
-    /**
-     * {@link #phaseCheck}; {@code rigid}: a rigid vessel's (batch 2026-11-10-rigid-reservoir), whose crossing holds its volume
-     * at any pressure; {@code open}: an open vessel's, whose wall is never taut, so its crossing is at its pressure (its ambient).
-     */
-    public State phaseCheck(State state,boolean junction,State from,int[] record,int at,Prepared prepared,UnaryOperator<State> vesselSplit,boolean rigid,boolean open,Runnable checkpoint) {
-        int shrinking=from==null?0:vanishing(from,state,rigid);
-        var kept=folded(state,rigid&&!junction,shrinking);var checked=kept;
-        int excluded=(record==null?0:record[at])|shrinking&phaseBits(state)&~phaseBits(kept),refused=0;
-        double[] totals=kept.totals();
-        int own=ownPhaseBits(kept);
-        // A node holding no fluid (a bed of solids alone) has no phase to add.
-        boolean complete=!(sum(totals)>0)||(totals[totals.length-1]>0?own==7:(own&3)==3);
-        if(!complete) {
-            if(prepared!=null&&prepared.temperature()!=kept.temperature())prepared=null;
-            var equilibrium=folded(equilibriumTP(kept.temperature(),kept.pressure(),totals,checkpoint,prepared).withSolidState(kept.solids(),kept.solidMoments()),junction);
-            int proposed=lacking(kept,equilibrium)&~excluded;
-            if(proposed!=0) {
-                State start,split;
-                if(junction) {
-                    var engine=equilibriumPH(kept.temperature(),kept.pressure(),state.enthalpy()-state.solidMoments().enthalpy(state.temperature(),state.pressure()),totals,checkpoint);
-                    start=engine!=null?engine.withSolidState(kept.solids(),kept.solidMoments()):tpSeed(kept,equilibrium,prepared);
-                    split=junctionSplit(totals,state.enthalpy(),state.mass(),kept.pressure(),start,checkpoint);
-                }
-                else{start=crossing(state,kept,proposed,totals,rigid,open,checkpoint);split=start==null||vesselSplit==null?null:vesselSplit.apply(start);}
-                if(split!=null) {
-                    SolverDiagnostics.count(SolverDiagnostics.phaseSeeds);
-                    var seed=folded(split.withSolidState(kept.solids(),kept.solidMoments()),junction,rigid);
-                    refused=proposed&(~lacking(kept,seed)|nothing(split,rigid));
-                    int added=lacking(kept,seed)&~excluded;
-                    if(added!=0&&(added&refused)==0)checked=seed;
-                }
-                else refused=proposed;
-                if(refused!=0)SolverDiagnostics.count(SolverDiagnostics.phaseRefusals);
-            }
-        }
-        if(record!=null)record[at]|=phaseBits(state)&~phaseBits(checked)|refused;
-        return checked;
-    }
-    /** {@link #phaseBits} of the phases a node holds as its own (owner decision D31 B): a stand-in liquid ({@link #standIn}) is
-     * a crystal's condensed share, no liquid of the node's own. */
-    private int ownPhaseBits(State state){return phaseBits(state)&~standIn(state);}
-    /** The phases ({@link #phaseBits}) of {@code answer} that {@code node} lacks: an own phase the node holds none of, and a
-     * stand-in where the node holds none in that slot. */
-    private int lacking(State node,State answer){return ownPhaseBits(answer)&~ownPhaseBits(node)|phaseBits(answer)&~phaseBits(node);}
-    /**
      * The phases ({@link #phaseBits}) a solve from {@code start} is driving to nothing at {@code end}, its answer or the last
      * iterate it stopped at, in any node: each holds less than {@link #VANISHING_SHARE} of {@code end}'s fluid
      * ({@link #belowShare}) and a smaller share than it held at {@code start}. A phase the solve grows, however small, is
@@ -1035,7 +776,7 @@ public final class FluidThermodynamics {
     }
     /** The phases ({@link #phaseBits}) {@code state} holds below the vanishing share of its fluid ({@link #belowShare}),
      * whatever their direction (owner decision of 2026-10-19). */
-    static int nothing(State state,boolean rigid) {
+    public static int nothing(State state,boolean rigid) {
         double[] e=phaseAmounts(state),ev=phaseVolumes(state);double te=sum(e),tv=sum(ev);int bits=0;
         for(int k=0;k<3;k++)if(e[k]>0&&belowShare(k,e,te,ev,tv,rigid))bits|=1<<k;
         return bits;
@@ -1070,85 +811,6 @@ public final class FluidThermodynamics {
     }
     /** A state's fluid amount by phase, in {@link #phaseBits} order. */
     private static double[] phaseAmounts(State state){return new double[]{sum(state.liquidAmountsView()),sum(state.vaporAmountsView()),sum(state.aqueousAmountsView())};}
-    /**
-     * The TP-based state of {@link #phaseCheck} (decision D26): the TP answer {@code equilibrium} at {@code kept}'s
-     * temperature and pressure, for {@code kept}'s totals, with the populated phases of {@code kept} it lacks, so that no
-     * TP verdict takes a populated phase away (D25): each component shared between the answer's phases and those kept
-     * phases in proportion to what each holds of it. A junction's seed where its PH answer fails; never a vessel's.
-     */
-    private State tpSeed(State kept,State equilibrium,Prepared prepared) {
-        int answer=phaseBits(equilibrium),lacking=phaseBits(kept)&~answer;
-        if(lacking==0)return equilibrium;
-        int n=componentCount();double[][] out=new double[3][n];int[] bit={2,1,4};
-        for(int c=0;c<n;c++) {
-            double[] share=new double[3];double sum=0;
-            for(int slot=0;slot<3;slot++) {
-                share[slot]=(answer&bit[slot])!=0?equilibrium.amountsView(slot)[c]:(lacking&bit[slot])!=0?kept.amountsView(slot)[c]:0;
-                sum+=share[slot];
-            }
-            double total=kept.vaporAmountsView()[c]+kept.liquidAmountsView()[c]+kept.aqueousAmountsView()[c];
-            if(!(sum>0)){for(int slot=0;slot<3;slot++)if((phaseBits(kept)&bit[slot])!=0){out[slot][c]=total;break;}continue;}
-            for(int slot=0;slot<3;slot++)out[slot][c]=total*(share[slot]/sum);
-        }
-        try{return adoptingState(kept.temperature(),kept.pressure(),out[0],out[1],out[2],prepared).withSolidState(kept.solids(),kept.solidMoments());}
-        catch(IllegalArgumentException unevaluable){return equilibrium;}
-    }
-    /**
-     * A pipe junction's own split (owner decision D26, {@link #phaseCheck}; the arriving-phase seed of
-     * {@code PassiveStepSolver.arrivingPhases}): its own rows ({@link PhaseLayout#junctionResidual}), isolated at the
-     * pressure {@code p} it holds, with the amounts {@code amounts} (the conserved basis, water last), the enthalpy
-     * {@code enthalpy} (J, the network's datum) and the mass {@code mass} its rows weigh them by, closed from {@code start}
-     * in {@code start}'s phase layout. The closed point is restated at exactly {@code p} and {@code amounts}. {@code null}
-     * where the closure fails or drives a phase of {@code start} to nothing on its way ({@link #vanishing}, D38 C).
-     */
-    public State junctionSplit(double[] amounts,double enthalpy,double mass,double p,State start,Runnable checkpoint) {
-        try {
-            var layout=new PhaseLayout(this,start,null,null,PhaseLayout.support(this,start,null,null));
-            int n=componentCount();double[] fractions=new double[n];
-            for(int i=0;i<n;i++)fractions[i]=amounts[i]*molecularWeight(i)/mass;
-            var solved=SparseNewton.solve(layout.junctionClosure(fractions,enthalpy/mass,p,start),layout.encode(start),
-                    new SparseNewton.Settings(SparseNewton.ITERATIONS,1e-10,1e-6,24),checkpoint);
-            var closed=layout.decode(solved.variables(),0);
-            // Exactly what the junction holds: each component split as the closure split it, at exactly the retained pressure.
-            double[][] out=new double[3][n];
-            for(int i=0;i<n;i++) {
-                double v=closed.vaporAmountsView()[i],l=closed.liquidAmountsView()[i],a=closed.aqueousAmountsView()[i],total=v+l+a;
-                if(!(total>0)){int slot=closed.phase(State.LIQUID)!=null?State.LIQUID:closed.phase(State.AQUEOUS)!=null?State.AQUEOUS:State.VAPOR;out[slot][i]=amounts[i];continue;}
-                // The rest of the rounding goes to the slot holding the most of it: put in the liquid slot of a gas and an
-                // aqueous liquid, it was a 1e-15 mol liquid of dissolved nitrogen with no liquid root, or a negative amount,
-                // and the junction's condensate was refused (W3b stage A, a cooling tower's suction line).
-                double[] share={v,l,a};int most=0;for(int k=1;k<3;k++)if(share[k]>share[most])most=k;
-                double placed=0;for(int k=0;k<3;k++)if(k!=most){out[k][i]=amounts[i]*(share[k]/total);placed+=out[k][i];}
-                out[most][i]=amounts[i]-placed;
-            }
-            return adoptingState(closed.temperature(),p,out[0],out[1],out[2],null).withSolidState(start.solids(),start.solidMoments());
-        }
-        catch(PhaseLayout.Vanished|SparseNewton.Nonconvergence|IllegalArgumentException failed){return null;}
-    }
-    /**
-     * A vessel's own state at a crossing (owner decision D40 A), the start of its own split in {@link #phaseCheck}: the
-     * engine's equilibrium of the fluid it holds under its wall's law, the problem its own closure solves
-     * ({@code InventoryEquilibrium}), as a network state ({@link #adopt}) folded as a vessel: a slack bag at its fluid
-     * enthalpy and the ambient pressure ({@link #equilibriumPH}), a taut vessel at its fluid's internal energy and volume
-     * ({@link #equilibriumUV}), warm-started at its temperature and pressure, both under the step's competition. The TP
-     * answer says only which phase is missing: its amounts ignore the vessel's volume and are never the seed. {@code null}
-     * where the engine does not converge, answers a phase set the network cannot carry, or answers none of the phases
-     * {@code proposed} adds (no crossing).
-     */
-    private State crossing(State state,State kept,int proposed,double[] totals,boolean rigid,boolean open,Runnable checkpoint) {
-        double t=kept.temperature(),p=kept.pressure();var solids=state.solidMoments();
-        // An open vessel's wall is never taut (PhaseLayout.wallRow): its surface stands at its own ambient, which falls with
-        // height (batch 2026-11-10-chimney), so the slack branch is its only one at any pressure. A closed bag's slack branch
-        // holds it at the sea-level ambient.
-        var own=!rigid&&(open||p<=PhaseLayout.AMBIENT_PRESSURE*(1+SLACK_PRESSURE))?equilibriumPH(t,p,state.enthalpy()-solids.enthalpy(state.temperature(),state.pressure()),totals,checkpoint)
-                :equilibriumUV(t,p,state.internalEnergy()-solids.internalEnergy(state.temperature()),state.volume()-solids.volume(),totals,checkpoint);
-        if(own==null)return null;
-        var seed=folded(own.withSolidState(kept.solids(),kept.solidMoments()),false,rigid);
-        return (lacking(kept,seed)&proposed)!=0?seed:null;
-    }
-    /** How far above the ambient pressure, relatively, a closed vessel's state still reads as its wall's slack branch in
-     * {@link #crossing}: the slack row holds it at the ambient to the solve's tolerance (a vessel's closure, 1e-11). */
-    private static final double SLACK_PRESSURE=1e-9;
 
     /**
      * Initializer, boundary and outer-check flash; the time-step solver never calls it in a residual evaluation: the
@@ -1188,8 +850,8 @@ public final class FluidThermodynamics {
         return adopt(t,p,overall,result,given);
     }
     /**
-     * A pipe junction's own split (owner decision D26, {@link #phaseCheck}), the phases of an empty bag's
-     * ({@code PassiveStepSolver.emptyBagSplit}, D54) and a slack vessel's crossing ({@link #crossing}): the engine's PH
+     * A pipe junction's own split (owner decision D26, {@code StepPhaseRules.phaseCheck}), the phases of an empty bag's
+     * ({@code PassiveStepSolver.emptyBagSplit}, D54) and a slack vessel's crossing ({@code StepPhaseRules.crossing}): the engine's PH
      * equilibrium of {@code overall} at the node's pressure {@code p} and its fluid enthalpy {@code h} (J, the network's
      * datum), under the step's competition at {@code t}, as a network state ({@link #adopt}, unfolded); {@code null} where
      * the engine does not converge or answers a phase set the network cannot carry.
@@ -1207,7 +869,7 @@ public final class FluidThermodynamics {
     }
     /** {@link #equilibriumUV}, for a rigid vessel that flashes (batch 2026-11-10-rigid-reservoir, {@code PassiveStepSolver.flashes}). */
     public State equilibriumAtVolume(double t,double p,double u,double v,double[] overall,Runnable checkpoint){return equilibriumUV(t,p,u,v,overall,checkpoint);}
-    /** A taut vessel's own state at a crossing ({@link #crossing}, owner decision D40 A), the UV twin of {@link #equilibriumPH}. */
+    /** A taut vessel's own state at a crossing ({@code StepPhaseRules.crossing}, owner decision D40 A), the UV twin of {@link #equilibriumPH}. */
     private State equilibriumUV(double t,double p,double u,double v,double[] overall,Runnable checkpoint) {
         checkpoint.run();
         var result=phaseEngine().crystalUv(engineEnergy(u,overall),v,overall,stepCompetition(t,overall),t,p);
@@ -1273,8 +935,8 @@ public final class FluidThermodynamics {
                 if(result.diagnostics().criticalBand())throw new CriticalBandHold(domain.packageId(),t,p,result.detail());
                 // A converged split with a product proved unstable, or left unresolved: a further fluid phase is indicated
                 // or not excluded, which a node cannot carry beyond three; a typed hold, never adopted with fewer phases.
-                boolean unstable=result.detail().startsWith(EquilibriumResult.UNSTABLE_PRODUCT);
-                if(unstable||result.detail().startsWith(EquilibriumResult.UNRESOLVED_PRODUCT))throw new UnsupportedPhases(domain.packageId(),t,p,
+                boolean unstable=result.failureKind()==EquilibriumResult.FailureKind.UNSTABLE_PRODUCT;
+                if(unstable||result.failureKind()==EquilibriumResult.FailureKind.UNRESOLVED_PRODUCT)throw new UnsupportedPhases(domain.packageId(),t,p,
                         UnsupportedPhases.Kind.THREE_PHASES,"a further fluid phase is "+(unstable?"indicated":"not excluded")+" ("+result.detail()
                         +"); the fluid network carries a vapour and two liquids");
                 throw new IllegalArgumentException("Fluid TP equilibrium did not converge: "+result.detail());
@@ -1420,16 +1082,28 @@ public final class FluidThermodynamics {
             };
         }
     }
-    private static double sum(double[] values) {double total=0;for(double value:values){if(value<0||!Double.isFinite(value))throw new IllegalArgumentException("Invalid phase amount");total+=value;}return total;}
+    /** The sum of a node's or a phase's amounts, refusing a negative or non-finite one: every state builder's and the outer phase check's. */
+    public static double sum(double[] values) {double total=0;for(double value:values){if(value<0||!Double.isFinite(value))throw new IllegalArgumentException("Invalid phase amount");total+=value;}return total;}
 
     /** The temperature-only property bundle for one exact node temperature. */
     public Prepared prepare(double temperature) { return new Prepared(this,temperature); }
+    /**
+     * {@link #prepare(double)} into {@code reuse}, one of this model's bundles (null: a new one), refilled in place when its
+     * temperature differs (finding P-18, batch 2026-11-13-codebase-review): its Peng-Robinson workspace is prepared again
+     * at the new temperature on the whole list, as a new one is, and gives the same bits. The caller must read nothing it
+     * derived from {@code reuse} at its previous temperature after this call.
+     */
+    public Prepared prepare(double temperature,Prepared reuse) {
+        if(reuse==null)return prepare(temperature);
+        if(own(reuse).temperature==temperature)return reuse;
+        reuse.refill(temperature);return reuse;
+    }
 
     private Prepared own(Prepared prepared) {
         if(prepared.owner!=this)throw new IllegalArgumentException("Prepared temperature belongs to another model");
         return prepared;
     }
-    private Prepared match(Prepared prepared,double t) {
+    Prepared match(Prepared prepared,double t) {
         if(prepared!=null&&own(prepared).temperature!=t)throw new IllegalArgumentException("Prepared temperature belongs to another state");
         return prepared;
     }
@@ -1441,12 +1115,27 @@ public final class FluidThermodynamics {
      */
     public static final class Prepared {
         private final FluidThermodynamics owner;
-        private final double temperature;
+        private double temperature;
         private TranslatedPengRobinson.Workspace terms;
+        /** A workspace kept from an earlier temperature, prepared at this one on its first use ({@link #pengRobinson}). */
+        private TranslatedPengRobinson.Workspace kept;
+        /** The Peng-Robinson workspaces bundles have built (each a whole kernel workspace), process-wide: a test's and the
+         * bench's counter (P-18). */
+        private static final java.util.concurrent.atomic.LongAdder BUILT=new java.util.concurrent.atomic.LongAdder();
+        public static long workspacesBuilt(){return BUILT.sum();}
         private MixtureViscosity.Prepared transport;
         private Prepared(FluidThermodynamics owner,double temperature) {
             if(!Double.isFinite(temperature)||temperature<=0)throw new IllegalArgumentException("Invalid prepared temperature");
             this.owner=owner;this.temperature=temperature;
+        }
+        /**
+         * This bundle at {@code temperature}, as a new one is: every member unformed, the carried compounds unnamed, and the
+         * Peng-Robinson workspace kept to be prepared again on its first use (P-18).
+         */
+        private void refill(double temperature) {
+            if(!Double.isFinite(temperature)||temperature<=0)throw new IllegalArgumentException("Invalid prepared temperature");
+            if(terms!=null)kept=terms;
+            terms=null;transport=null;carried=null;this.temperature=temperature;
         }
         public double temperature() { return temperature; }
         /**
@@ -1460,7 +1149,17 @@ public final class FluidThermodynamics {
         /** The prepared Peng-Robinson workspace of this temperature. It is mutable scratch, so a
          * {@code Prepared} - like the node cache that holds it - belongs to one solving thread. */
         TranslatedPengRobinson.Workspace pengRobinson() {
-            return terms==null?terms=owner.hydrocarbon.prepare(temperature):terms;
+            if(terms!=null)return terms;
+            var reuse=kept;kept=null;
+            if(reuse==null){BUILT.increment();return terms=owner.hydrocarbon.prepare(temperature);}
+            // A new workspace is prepared on the whole list. A kept one is prepared on the support its last use left, then
+            // carries the whole list again, which prepares the rest at this temperature: each compound's, pair's and cell's
+            // terms are their own arithmetic at this temperature (the kernel's stamps), so the bits are a new workspace's,
+            // and every term a new one would refuse is refused. A refusal leaves the workspace half prepared under the
+            // kernel's stamps, so it is dropped and the next use builds a new one.
+            owner.hydrocarbon.translated().prepare(temperature,reuse);
+            reuse.carryAll();
+            return terms=reuse;
         }
         /** The pure-component transport terms of this temperature, for the decode's Transport row. */
         public MixtureViscosity.Prepared viscosities() {

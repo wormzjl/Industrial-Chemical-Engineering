@@ -39,7 +39,7 @@ class RefineryCarbonDioxideCatalogTest {
         assertEquals("Ethanol", refinery.components().get(co2 + 1));
         assertEquals("icheme:chemsep_carbon_dioxide", refinery.properties().get(co2).id());
         assertEquals(List.of(CRYSTAL), refinery.crystals());
-        assertEquals(List.of(CRYSTAL), com.wormzjl.icheme.science.thermo.phase.PhaseContract.admittedCrystals(catalog, REFINERY));
+        assertEquals(List.of(CRYSTAL), com.wormzjl.icheme.science.thermo.phase.PackageBinding.admittedCrystals(catalog, REFINERY));
         // The pilot is a test overlay since O5 (E25): the game's CO2 record defaults to the game's dataset, the overlay's to the pilot's.
         assertFalse(catalog.packages().containsKey(PilotCryogenicTestCatalog.PACKAGE_ID));
         var pilot = PilotCryogenicTestCatalog.withPilot().requirePackage("icheme:pilot_cryogenic");

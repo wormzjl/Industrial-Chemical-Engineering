@@ -10,6 +10,7 @@ import com.wormzjl.icheme.science.thermo.phase.EquilibriumRequest;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult;
 import com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium;
 import com.wormzjl.icheme.science.thermo.phase.PhaseCompetition;
+import com.wormzjl.icheme.science.thermo.phase.PackageBinding;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -41,7 +42,7 @@ import org.junit.jupiter.api.Test;
 class G4F1CarbonDioxideFrostPointHoldoutTest {
     static final String PILOT = "icheme:pilot_cryogenic";
     static final String RESOURCES = "science/thermo/solid-co2-holdouts/";
-    static final FluidTpEquilibrium SERVICE = FluidTpEquilibrium.forPackage(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PILOT);
+    static final FluidTpEquilibrium SERVICE = PackageBinding.equilibrium(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PILOT);
     static final List<String> BASIS = SERVICE.contract().components();
 
     /** One frost point: the measured temperature and pressure, the gas composition [N2, CH4, C2H6, CO2], U95 of T in K (NaN if the data give U95 in pressure). */

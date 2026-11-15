@@ -65,13 +65,25 @@ class MaterialPresetsTest {
         preset.addProperty("id","custom_crude");preset.addProperty("label","Server crude");preset.addProperty("translation_key","server.crude");
         preset.getAsJsonObject("operating").addProperty("feedTemperatureKelvin",650);resources.put(path,preset.toString());
         var changed=MaterialCatalog.parse(resources);var choice=changed.presets().column("custom_crude");
-        assertEquals(650,choice.input(changed).feedTemperatureKelvin());
+        assertEquals(650,com.wormzjl.icheme.science.column.v3.V3ColumnPresets.input(choice,changed).feedTemperatureKelvin());
         assertThrows(IllegalArgumentException.class,()->original.presets().column("custom_crude"));
         assertEquals(original.physicsContent("icheme:tjl20_methane",original.requirePackage("icheme:tjl20_methane").components()),changed.physicsContent("icheme:tjl20_methane",changed.requirePackage("icheme:tjl20_methane").components()));
+        com.wormzjl.icheme.science.column.v3.V3ColumnPresets.validate(changed);
+        // The reload listener parses, then runs the column's check of the presets before it publishes (codebase review C2, F5).
         preset.getAsJsonObject("operating").addProperty("stageCount",2);resources.put(path,preset.toString());
-        var failure=assertThrows(IllegalArgumentException.class,()->MaterialCatalog.parse(resources));assertTrue(failure.getMessage().contains(path));
+        var failure=assertThrows(IllegalArgumentException.class,()->com.wormzjl.icheme.science.column.v3.V3ColumnPresets.validate(MaterialCatalog.parse(resources)));assertTrue(failure.getMessage().contains(path));
         preset.addProperty("assay","missing:assay");resources.put(path,preset.toString());
         assertTrue(assertThrows(IllegalArgumentException.class,()->MaterialCatalog.parse(resources)).getMessage().contains("package/assay"));
+    }
+    /**
+     * The bundled catalog's column presets pass the column's check: the parser no longer runs it (codebase review C2, F5),
+     * and {@code MaterialRuntime.active()} falls back to the bundled catalog before a reload publishes one.
+     */
+    @Test void bundledColumnPresetsPassTheColumnCheck() {
+        var bundled=MaterialCatalog.bundled();
+        assertFalse(bundled.presets().columnOrigins().isEmpty());
+        assertEquals(bundled.presets().columns().keySet(),bundled.presets().columnOrigins().keySet());
+        assertDoesNotThrow(()->com.wormzjl.icheme.science.column.v3.V3ColumnPresets.validate(bundled));
     }
     @Test void addingAQualifiedFixtureComponentAndMovingNitrogenNeedsNoFixedWidthEdits() {
         var original=MaterialCatalog.bundled();var resources=new HashMap<>(original.resources());

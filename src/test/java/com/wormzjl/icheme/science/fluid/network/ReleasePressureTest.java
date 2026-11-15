@@ -59,7 +59,7 @@ final class ReleasePressureTest {
     }
     private void agree(String stream,FluidThermodynamics.State s,double edgeTolerance) {
         double[] amounts=PhaseLayout.totalAmounts(s);
-        double worldVapour=world.release(s,()->{}),worldEdge=world.zoneEdge(InletPhase.of(model,s,null),()->{});
+        double worldVapour=world.suctions.release(s,()->{}),worldEdge=world.suctions.zoneEdge(InletPhase.of(model,s,null),()->{});
         double vapour=sheet.vapourPressure(s.temperature(),s.pressure(),amounts),edge=sheet.zoneEdge(s.temperature(),s.pressure(),amounts);
         assertTrue(worldVapour<NONE&&worldEdge<NONE,stream+": the world reads both, p_v "+worldVapour+" E "+worldEdge);
         assertEquals(worldVapour,vapour,.01*worldVapour,stream+": p_v");

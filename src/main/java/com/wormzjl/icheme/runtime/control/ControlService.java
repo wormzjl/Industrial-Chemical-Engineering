@@ -17,6 +17,14 @@ import java.util.*;
  */
 public final class ControlService {
     public static final int CADENCE = 100;
+
+    /**
+     * A level controller's last decision, for a record (diagnostics only): the online tick it decided at, the tick of the
+     * sample it read, its horizon (s, NaN when it held before any decision), whether it held the output in force on a
+     * reading that had not advanced, and whether its balance used the volume booked through its actuator.
+     */
+    public record LevelDecision(long onlineTick, long sampleTick, double horizonSeconds, boolean held, boolean booked) {}
+
     private final FluidWorldAuthority world;
     private final ControlFacts facts;
     private final ControlHosts hosts;
@@ -240,6 +248,11 @@ public final class ControlService {
     public void edit(ControlPanelMenu menu, UUID id, long revision, ControlSettings settings) {
         if (edits.size() < 4096) edits.addLast(new Edit(menu, id, revision, settings));
         else menu.answer(id, "BUSY: APPLY AGAIN");
+    }
+
+    /** Level controller {@code panel}'s last decision, or null: a read for a run's record. */
+    public LevelDecision levelDecision(UUID panel) {
+        return law.levelDecision(panel);
     }
 
     /** A DCS's column command (W6.2): queued like a controller edit, run on the next cadence. */

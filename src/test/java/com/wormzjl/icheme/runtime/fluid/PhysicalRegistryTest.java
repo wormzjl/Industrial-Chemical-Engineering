@@ -2,7 +2,7 @@ package com.wormzjl.icheme.runtime.fluid;
 
 import com.wormzjl.icheme.fluid.support.FluidTestSupport;
 import com.wormzjl.icheme.runtime.BoundedCpuSolveService;
-import com.wormzjl.icheme.runtime.ProcessSolveServices;
+import com.wormzjl.icheme.runtime.ProcessSolveJobs;
 import com.wormzjl.icheme.science.fluid.network.*;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind;
@@ -33,7 +33,7 @@ class PhysicalRegistryTest {
         World(int workers){super(workers);}
         WorldTopologyLedger.Registration record(long id,int x,int z,Kind kind,PhysicalFluidTopology.Direction facing) {
             var control=kind==Kind.PUMP?new FlowControl.Pump(.01,500000):new FlowControl.Passive();
-            var device=new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position(DIM,x,Y,z),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kind),facing,new PipeResistance.Geometry(1,.05,.000045,0),control);
+            var device=PhysicalFluidTopology.Device.builder(id,new PhysicalFluidTopology.Position(DIM,x,Y,z),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kind),facing,new PipeResistance.Geometry(1,.05,.000045,0),control).build();
             var spec=kind==Kind.GENERATOR?FluidDeviceSpec.water(catalog):FluidDeviceSpec.nitrogen(catalog);
             if(kind==Kind.RESERVOIR)spec=new FluidDeviceSpec(1,298.15,101325,spec.composition());
             return new WorldTopologyLedger.Registration(device,spec,0);
@@ -46,7 +46,7 @@ class PhysicalRegistryTest {
         WorldTopologyLedger.Event queueRemove(long id){return registry.submit(List.of(new WorldTopologyLedger.Edit(id,null)),ledger.nextIdentity(),null);}
         WorldTopologyLedger.Event queueFacing(long id,PhysicalFluidTopology.Direction facing) {
             var old=registry.registrations().get(id);var d=old.device();
-            return registry.submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(new PhysicalFluidTopology.Device(d.id(),d.position(),d.kind(),facing,d.geometry(),d.control()),old.spec(),old.revision()+1))),ledger.nextIdentity(),null);
+            return registry.submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(PhysicalFluidTopology.Device.builder(d.id(),d.position(),d.kind(),facing,d.geometry(),d.control()).build(),old.spec(),old.revision()+1))),ledger.nextIdentity(),null);
         }
         void apply(){registry.applyPending();}
         long place(int x,int z,Kind kind){long id=queue(x,z,kind);apply();return id;}
@@ -63,7 +63,7 @@ class PhysicalRegistryTest {
                 ledger.tick();coordinator.tick();apply();coordinator.pumpIfUseful();
                 for(long request:List.copyOf(attempts.keySet())) {
                     var attempt=attempts.remove(request);var command=commands.remove(request);
-                    var result=(ProcessSolveServices.FluidIslandSolveResult)command.solve(FluidTestSupport.NEVER);
+                    var result=(ProcessSolveJobs.FluidIslandSolveResult)command.solve(FluidTestSupport.NEVER);
                     coordinator.completed(attempt,Optional.of(result));
                 }
                 coordinator.pump();
@@ -128,8 +128,8 @@ class PhysicalRegistryTest {
         Runnable heldTick=()->{
             w.ledger.tick();w.coordinator.tick();if(w.ledger.hasPendingEvents()){w.registry.applyPending();w.coordinator.pumpIfUseful();}
             for(long request:List.copyOf(w.attempts.keySet())){var attempt=w.attempts.remove(request);var command=w.commands.remove(request);
-                var result=attempt.islandId()==island?new ProcessSolveServices.FluidIslandSolveResult(Optional.empty(),"HELD: test refusal",10)
-                        :(ProcessSolveServices.FluidIslandSolveResult)command.solve(FluidTestSupport.NEVER);
+                var result=attempt.islandId()==island?new ProcessSolveJobs.FluidIslandSolveResult(Optional.empty(),"HELD: test refusal",10)
+                        :(ProcessSolveJobs.FluidIslandSolveResult)command.solve(FluidTestSupport.NEVER);
                 w.coordinator.completed(attempt,Optional.of(result));}
             w.coordinator.pump();
         };
@@ -224,6 +224,29 @@ class PhysicalRegistryTest {
         assertEquals(revision+1,w.island(pipe).revision());assertEquals(1,w.registry.registrations().get(pipe).revision());
     }
 
+    /**
+     * A placed or respecified generator is flashed once, by its submit's validation; its event's apply takes that reservoir
+     * (code base review R26, option A), which is the one a flash at apply would build, bit for bit.
+     */
+    @Test void aGeneratorEditIsFlashedOnceAndAppliesTheValidatedStock() {
+        var w=new World(0);long before=w.registry.initializations();
+        long generator=w.place(16,16,Kind.GENERATOR);
+        assertEquals(before+1,w.registry.initializations(),"a placed generator: one flash");
+        w.place(17,16,Kind.PIPE);w.place(18,16,Kind.RESERVOIR);
+        var old=w.registry.registrations().get(generator);
+        var spec=old.spec().withCharge(318.15,old.spec().pressure(),old.spec().composition());
+        before=w.registry.initializations();
+        w.registry.submit(List.of(new WorldTopologyLedger.Edit(generator,new WorldTopologyLedger.Registration(old.device(),spec,old.revision()+1))),w.ledger.nextIdentity(),null);
+        assertEquals(before+1,w.registry.initializations(),"the submit validates with one flash");
+        w.apply();
+        assertEquals(before+1,w.registry.initializations(),"the apply flashes no more");
+        var node=w.island(generator).graph().reservoirs().stream().filter(n->n.id()==generator).findFirst().orElseThrow();
+        var fresh=spec.initialize(old.device(),w.model,()->{});
+        assertEquals(Double.doubleToLongBits(fresh.state().temperature()),Double.doubleToLongBits(node.state().temperature()),"temperature");
+        assertEquals(Double.doubleToLongBits(fresh.state().pressure()),Double.doubleToLongBits(node.state().pressure()),"pressure");
+        assertEquals(Double.doubleToLongBits(fresh.inventory().internalEnergy()),Double.doubleToLongBits(node.inventory().internalEnergy()),"energy");
+        assertArrayEquals(fresh.inventory().moles(),node.inventory().moles(),"moles");
+    }
     /**
      * A device placed at the end of a dead-end branch reaches the island through devices no island owns: its touched set
      * follows the branch to the island and fences it, so the tank joins that island at the event's tick.
@@ -338,7 +361,7 @@ class PhysicalRegistryTest {
     }
     private long queueSpec(World w,int x,int z,Kind kind,FluidDeviceSpec spec) {
         long id=w.ledger.nextIdentity();
-        var device=new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position(DIM,x,Y,z),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kind),PhysicalFluidTopology.Direction.EAST,new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Passive());
+        var device=PhysicalFluidTopology.Device.builder(id,new PhysicalFluidTopology.Position(DIM,x,Y,z),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kind),PhysicalFluidTopology.Direction.EAST,new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Passive()).build();
         w.registry.submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,spec,0))),id+1,null);return id;
     }
     /** What the ledger booked between two snapshots equals {@code expected}, to roundoff of the cumulative totals. */

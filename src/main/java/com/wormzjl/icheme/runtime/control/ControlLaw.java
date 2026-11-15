@@ -63,7 +63,11 @@ final class ControlLaw {
         }
     }
 
-    private record LevelSample(UUID sensor, long output, long tick, double volume) {}
+    /**
+     * A level controller's last sample: its sensor and output, the reading's tick and inventory volume, the actuator's
+     * booked volume at that tick (null where none is), and the volume flow it asked for (the output in force).
+     */
+    private record LevelSample(UUID sensor, long output, long tick, double volume, IslandCoordinator.Transported booked, double requested) {}
 
     /** A still controller's last correction: its pot, handle and target, the reading's tick and the setpoint. */
     private record StillSample(long output, boolean firing, double target, long tick, double value) {}
@@ -74,6 +78,8 @@ final class ControlLaw {
     private final FluidWorldAuthority world;
     private final ControlHosts hosts;
     private final Map<UUID, LevelSample> levels = new HashMap<>();
+    /** Each level controller's last decision, for its record (diagnostics only, never read back by the law). */
+    private final Map<UUID, ControlService.LevelDecision> levelDecisions = new HashMap<>();
     private final Map<UUID, StillSample> stills = new HashMap<>();
 
     ControlLaw(FluidWorldAuthority world, ControlHosts hosts) {
@@ -87,7 +93,53 @@ final class ControlLaw {
      */
     void forget(UUID panel) {
         levels.remove(panel);
+        levelDecisions.remove(panel);
         stills.remove(panel);
+    }
+
+    /** Level controller {@code panel}'s last decision, or null. */
+    ControlService.LevelDecision levelDecision(UUID panel) {
+        return levelDecisions.get(panel);
+    }
+
+    /**
+     * A level loop's volume flow, m³/s, for its actuator {@code actuator} on {@code reading} ({@link InventoryControl}):
+     * {@code volume} the inventory, {@code desired} its target, {@code flowNow} the actuator's flow at the reading. The
+     * balance's mean flow is the volume the island booked through the actuator between the two samples; where that
+     * history does not span them (a new island, a rebuilt one, an actuator on another island's clock) it is the flow at the
+     * reading, as before. A reading that has not advanced since the last decision holds that decision: the balance over a
+     * zero interval is undefined, and the output already in force is the best estimate there is.
+     */
+    private double level(ControlFacts.Panel panel, ControlInput sensor, Sensor.Reading reading, long actuator,
+            double volume, double desired, double flowNow, boolean outlet) {
+        var s = panel.settings();
+        var previous = levels.get(panel.id());
+        boolean same = previous != null && previous.sensor().equals(sensor.instance()) && previous.output() == s.output();
+        if (same && reading.tick() == previous.tick()) {
+            var last = levelDecisions.get(panel.id());
+            levelDecisions.put(panel.id(), new ControlService.LevelDecision(world.onlineTick(), previous.tick(),
+                    last == null ? Double.NaN : last.horizonSeconds(), true, last != null && last.booked()));
+            return previous.requested();
+        }
+        var booked = world.transported(actuator);
+        // A booked volume that stands at another tick than the reading's is not this sample's.
+        if (booked != null && booked.tick() != reading.tick()) booked = null;
+        double prior = Double.NaN, elapsed = 0, mean = flowNow;
+        boolean exact = false;
+        if (same && reading.tick() > previous.tick()) {
+            prior = previous.volume();
+            elapsed = world.time().seconds(reading.tick() - previous.tick());
+            if (booked != null && booked.continues(previous.booked())) {
+                mean = Math.max(0, (booked.volume() - previous.booked().volume()) / elapsed);
+                exact = true;
+            }
+        }
+        double horizon = InventoryControl.horizon(world.time().seconds(ControlService.CADENCE), elapsed,
+                booked == null ? Double.NaN : world.time().seconds(booked.sliceTicks()));
+        double requested = Math.max(0, InventoryControl.target(volume, desired, mean, prior, elapsed, horizon, outlet));
+        levels.put(panel.id(), new LevelSample(sensor.instance(), s.output(), reading.tick(), volume, booked, requested));
+        levelDecisions.put(panel.id(), new ControlService.LevelDecision(world.onlineTick(), reading.tick(), horizon, false, exact));
+        return requested;
     }
 
     Decision decide(ControlFacts.Panel panel, ControlInput sensor, Sensor.Reading reading) {
@@ -193,35 +245,10 @@ final class ControlLaw {
                         state.phaseVolumes()[0] + state.phaseVolumes()[1] + state.solids().volume();
                 double desired = tank.geometry().volumeAt(height),
                         flow = Math.max(0, output.volumeFlow());
-                var previous = levels.get(panel.id());
-                // No earlier sample of this sensor and output: NaN, a first decision (InventoryControl.target).
-                double elapsed = 0, prior = Double.NaN;
-                if (previous != null
-                        && previous.sensor().equals(sensor.instance())
-                        && previous.output() == s.output()) {
-                    prior = volume;
-                    if (reading.tick() > previous.tick()) {
-                        elapsed = world.time().seconds(reading.tick() - previous.tick());
-                        prior = previous.volume();
-                    }
-                }
-                // One scheduled interval to recover the inventory error, rather than a tuned
-                // integral loop.
-                double requested =
-                        InventoryControl.target(
-                                volume,
-                                desired,
-                                flow,
-                                prior,
-                                elapsed,
-                                world.time().seconds(ControlService.CADENCE),
-                                s.action() == ControlSettings.Action.OUTLET);
+                // The inventory error recovered over the horizon, on the balance between two samples, rather than a tuned
+                // integral loop (InventoryControl; the hold on a reading that has not advanced, level(...)).
                 source = FlowControl.ValveSource.VOLUME_FLOW;
-                target = Math.max(0, requested);
-                if (previous == null || reading.tick() > previous.tick())
-                    levels.put(
-                            panel.id(),
-                            new LevelSample(sensor.instance(), s.output(), reading.tick(), volume));
+                target = level(panel, sensor, reading, s.output(), volume, desired, flow, s.action() == ControlSettings.Action.OUTLET);
             }
             default -> {
                 return Decision.noSetpoint("READ ONLY SENSOR");
@@ -276,16 +303,9 @@ final class ControlLaw {
         double flow = Math.abs(valve.volumeFlow()), density = feedDensity(valve.massFlow(), valve.volumeFlow());
         // The feed's density from its valve's pipe; with nothing flowing, none to turn a volume into mass.
         if (!(flow > 1e-12) || !(density > 0)) return Decision.noSetpoint("NO LEVEL BALANCE");
-        var previous = levels.get(panel.id());
-        double elapsed = 0, prior = Double.NaN;
-        if (previous != null && previous.sensor().equals(sensor.instance()) && previous.output() == s.output()) {
-            prior = volume;
-            if (reading.tick() > previous.tick()) {elapsed = world.time().seconds(reading.tick() - previous.tick());prior = previous.volume();}
-        }
-        double requested = InventoryControl.target(volume, tank.geometry().volumeAt(height), flow, prior, elapsed, world.time().seconds(ControlService.CADENCE), true);
-        if (previous == null || reading.tick() > previous.tick())
-            levels.put(panel.id(), new LevelSample(sensor.instance(), s.output(), reading.tick(), volume));
-        return Decision.columnFeed(unit, levelFeed(Math.max(0, requested), density, molarMass));
+        // The valve's loop's law (level(...)): the balance over the booked volume through the feed valve between two samples.
+        double requested = level(panel, sensor, reading, world.columnFeedValve(unit), volume, tank.geometry().volumeAt(height), flow, true);
+        return Decision.columnFeed(unit, levelFeed(requested, density, molarMass));
     }
 
     /**

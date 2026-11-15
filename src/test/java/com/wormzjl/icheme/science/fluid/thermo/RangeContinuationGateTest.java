@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.wormzjl.icheme.science.fluid.transport.MixtureViscosity;
+import com.wormzjl.icheme.science.material.CoefficientIdealGas;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.material.ViscosityCorrelation;
 import com.wormzjl.icheme.science.thermo.IdealGasFunction;

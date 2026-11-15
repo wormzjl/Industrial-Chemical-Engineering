@@ -3,6 +3,7 @@ package com.wormzjl.icheme.world.level.block.entity;
 import com.wormzjl.icheme.runtime.fluid.ElectricStores;
 import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
 import com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology;
+import com.wormzjl.icheme.world.level.block.Positions;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.ShapeRasterizer;
 import net.minecraft.core.BlockPos;
@@ -37,7 +38,7 @@ final class TerminalEnergy implements IEnergyStorage {
         if (world == null || shape == null || origin == null) return null;
         long id = 0;
         if (shape.kind() == EquipmentShape.Kind.MOTOR || shape.kind() == EquipmentShape.Kind.GENERATOR) {
-            var u = world.shafts().unitAt(new PhysicalFluidTopology.Position(level.dimension().location().toString(), origin.getX(), origin.getY(), origin.getZ()));
+            var u = world.shafts().unitAt(Positions.of(level, origin));
             if (u != null) id = u.id();
         } else {
             // A fired heater's FE is its burners' (their combustion-air fans), registered at its last node.

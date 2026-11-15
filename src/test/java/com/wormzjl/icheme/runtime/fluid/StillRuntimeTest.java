@@ -1,8 +1,8 @@
 package com.wormzjl.icheme.runtime.fluid;
 
 import com.wormzjl.icheme.fluid.support.FluidTestSupport;
-import com.wormzjl.icheme.runtime.ProcessSolveServices;
-import com.wormzjl.icheme.science.column.operation.ColumnCycle.Account;
+import com.wormzjl.icheme.runtime.ProcessSolveJobs;
+import com.wormzjl.icheme.science.plant.column.ColumnCycle.Account;
 import com.wormzjl.icheme.science.equipment.HeatSides;
 import com.wormzjl.icheme.science.fluid.network.*;
 import com.wormzjl.icheme.science.fluid.solver.PhaseLayout;
@@ -10,6 +10,10 @@ import com.wormzjl.icheme.science.fluid.state.SolidInventory;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
+import com.wormzjl.icheme.science.column.still.StillColumn;
+import com.wormzjl.icheme.science.plant.still.BatchStill;
+import com.wormzjl.icheme.science.plant.still.NetworkStageThermo;
+import com.wormzjl.icheme.science.plant.still.StillHead;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import static com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Direction.*;
@@ -31,7 +35,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class StillRuntimeTest {
     private static final MaterialCatalog CATALOG = MaterialCatalog.bundled();
     private static final PipeResistance.Geometry STUB = new PipeResistance.Geometry(1, .05, .000045, 0);
-    private static final long WATER = 20, POT = 21, DISTILLATE = 22, VENT = 23;
+    private static final long WATER = 20, POT = 21, DISTILLATE = 22, VENT = 23, BURNERS = 24, FUEL = 5;
     /** A 100 L pot: 0.50 m wide, 0.44 m² heated, 10.9 kW at full firing. */
     private static final double VOLUME = .1;
     /** One item of the solid still's fuel, J. */
@@ -42,7 +46,7 @@ class StillRuntimeTest {
     }
 
     private static PhysicalFluidTopology.Device plain(long id, int x, int z, Kind kind) {
-        return new PhysicalFluidTopology.Device(id, at(x, 0, z), kind, EAST, STUB, new FlowControl.Passive());
+        return PhysicalFluidTopology.Device.builder(id, at(x, 0, z), kind, EAST, STUB, new FlowControl.Passive()).build();
     }
 
     private static PhysicalFluidTopology.Port port(PhysicalFluidTopology.Position cell, PhysicalFluidTopology.Direction face, PassiveNetwork.PhasePort phase, PhysicalFluidTopology.ConnectionRole role) {
@@ -52,24 +56,28 @@ class StillRuntimeTest {
     /** The pot at (0, 0, 0) as {@code FluidWorldAuthority.placeStill} places it: closed with its VAPOUR nozzle east, or open (its head). */
     private static PhysicalFluidTopology.Device pot(BatchStill.Design design) {
         var ports = design.condenser() ? List.<PhysicalFluidTopology.Port>of() : List.of(port(at(0, 0, 0), EAST, PassiveNetwork.PhasePort.VAPOR, PhysicalFluidTopology.ConnectionRole.VESSEL));
-        return new PhysicalFluidTopology.Device(POT, at(0, 0, 0), Kind.RESERVOIR, NORTH, STUB, new FlowControl.Passive(), ports, true, PhysicalFluidTopology.Cutoff.NONE, false,
-                PhysicalFluidTopology.ALL_FACES, 0, 0, new HeatUnit(HeatSides.Unit.STILL, HeatSides.Side.POT, design.heatedArea(), 0));
+        return PhysicalFluidTopology.Device.builder(POT, at(0, 0, 0), Kind.RESERVOIR, NORTH, STUB, new FlowControl.Passive()).ports(ports).heat(new HeatUnit(HeatSides.Unit.STILL, HeatSides.Side.POT, design.heatedArea(), 0)).build();
     }
 
     /** The condenser's water side, its inlet at (2, 0, 10) and its outlet at (4, 0, 10), partnered with the pot. */
     private static PhysicalFluidTopology.Device water(BatchStill.Design design) {
         var ports = List.of(port(at(2, 0, 10), WEST, PassiveNetwork.PhasePort.BULK, PhysicalFluidTopology.ConnectionRole.INLET),
                 port(at(4, 0, 10), EAST, PassiveNetwork.PhasePort.BULK, PhysicalFluidTopology.ConnectionRole.OUTLET));
-        return new PhysicalFluidTopology.Device(WATER, at(2, 0, 10), Kind.HEAT_SIDE, NORTH, new PipeResistance.Geometry(1, .1, PipeResistance.DEFAULT_ROUGHNESS_METRES, 0),
-                new FlowControl.Passive(), ports, true, PhysicalFluidTopology.Cutoff.NONE, false, PhysicalFluidTopology.ALL_FACES, 0, 0,
-                new HeatUnit(HeatSides.Unit.STILL, HeatSides.Side.WATER, design.condenserArea(), POT));
+        return PhysicalFluidTopology.Device.builder(WATER, at(2, 0, 10), Kind.HEAT_SIDE, NORTH, new PipeResistance.Geometry(1, .1, PipeResistance.DEFAULT_ROUGHNESS_METRES, 0),
+                new FlowControl.Passive()).ports(ports)
+                .heat(new HeatUnit(HeatSides.Unit.STILL, HeatSides.Side.WATER, design.condenserArea(), POT)).build();
+    }
+
+    /** A liquid still's burners at (3, 0, 40), fed from the west, as {@code FluidWorldAuthority.placeStill} places them: a void carrying the still's fuel valve. */
+    private static PhysicalFluidTopology.Device burners() {
+        return PhysicalFluidTopology.Device.builder(BURNERS, at(3, 0, 40), Kind.VOID, NORTH, STUB, FlowControl.ControlValve.still())
+                .ports(List.of(port(at(3, 0, 40), WEST, PassiveNetwork.PhasePort.BULK, PhysicalFluidTopology.ConnectionRole.VESSEL))).build();
     }
 
     /** A still outlet at (0, 0, {@code z}): a generator carrying the still's valve, its one port east. */
     private static PhysicalFluidTopology.Device outlet(long id, int z) {
-        return new PhysicalFluidTopology.Device(id, at(0, 0, z), Kind.GENERATOR, NORTH, STUB, FlowControl.ControlValve.still(),
-                List.of(port(at(0, 0, z), EAST, PassiveNetwork.PhasePort.BULK, PhysicalFluidTopology.ConnectionRole.VESSEL)), true, PhysicalFluidTopology.Cutoff.NONE, false,
-                PhysicalFluidTopology.ALL_FACES, 0, 0, null);
+        return PhysicalFluidTopology.Device.builder(id, at(0, 0, z), Kind.GENERATOR, NORTH, STUB, FlowControl.ControlValve.still())
+                .ports(List.of(port(at(0, 0, z), EAST, PassiveNetwork.PhasePort.BULK, PhysicalFluidTopology.ConnectionRole.VESSEL))).build();
     }
 
     private static FluidThermodynamics.State per(FluidThermodynamics model, double[] fractions, double temperature, double pressure) {
@@ -96,21 +104,30 @@ class StillRuntimeTest {
         return new PassiveNetwork.Reservoir(POT, 0, FluidTestSupport.inventoryState(model, liquid, inventory), PassiveNetwork.NodeKind.RESERVOIR, inventory);
     }
 
+    /** A column solve the rig's worker holds: the tick it was asked in and its answer's delivery. */
+    private record Solve(long tick, Runnable done) {
+    }
+
     /**
      * The still's runtime: a coordinator on its own epoch whose worker solves each admitted slice at once (as
      * {@code ExchangerCouplingTest}'s does), the ledger with the still's facts, its electric stores and {@link Stills} as
-     * the coordinator's ports. A column solve completes at the next drain, as the worker's would.
+     * the coordinator's ports. A column solve completes at the next drain, as the worker's would, or {@link #solveLag} ticks
+     * after it was asked. An island's jobs may take {@link #lags} ticks, and an island's slices may be {@link #offset} (the
+     * determinism gates).
      */
     private static final class Rig {
         final FluidThermodynamics model;
         final long[] epoch = {0};
         final Map<Long, IslandCoordinator.Attempt> attempts = new LinkedHashMap<>();
-        final Map<Long, ProcessSolveServices.FluidIslandCommand> commands = new HashMap<>();
-        final List<Runnable> solved = new ArrayList<>();
+        final Map<Long, ProcessSolveJobs.FluidIslandCommand> commands = new HashMap<>();
+        /** The column solves asked and not yet answered, each with the tick it was asked in. */
+        final List<Solve> solved = new ArrayList<>();
         final Map<Long, Long> committed = new HashMap<>(), owners = new HashMap<>();
         /** By node: the heat booked (HEAT boundaries, J) and the moles given (EXCHANGE boundaries) over every committed span. */
         final Map<Long, Double> heat = new HashMap<>();
         final Map<Long, double[]> given = new HashMap<>();
+        /** By node: the moles its EXCHANGE boundaries moved over every committed span, signed (a void's intake, a burner's fuel, negative). */
+        final Map<Long, double[]> exchanged = new TreeMap<>();
         /** By node and boundary kind: the energy booked (J) over every committed span. */
         final Map<String, Double> energies = new TreeMap<>();
         final IslandCoordinator coordinator;
@@ -118,12 +135,40 @@ class StillRuntimeTest {
         final ElectricStores stores;
         final Stills stills;
         int items, taken, solves;
-        /** Each column job as it was queued: its tick and its condenser outlet floor, K. */
+        /**
+         * Each column job as it was queued: the tick its commit landed in, its condenser outlet floor (K) and the end of the pot
+         * slice whose commit asked it (its island's committed tick then: a tick of the slice grid, not of the worker's timing).
+         */
         final List<double[]> jobs = new ArrayList<>();
         boolean feeding;
         long requests;
+        /** By island: the ticks its jobs take to complete (0, the default: within the tick they were dispatched in), a worker's timing. */
+        final Map<Long, Integer> lags = new HashMap<>();
+        /** The ticks a column solve takes to answer (0, the default: at the next drain), the still's worker's timing. */
+        int solveLag;
+        /** By request: the tick its job was dispatched in. */
+        final Map<Long, Long> submitted = new HashMap<>();
+        /** The fences that offset islands' slices ({@link #offset}), by event: each island's, released once it reached it. */
+        final Map<UUID, Long> offsets = new LinkedHashMap<>();
+        /** By island: each span a certificate's replay booked (its committed tick before and after), in the order they were booked. */
+        final Map<Long, List<List<Long>>> replays = new TreeMap<>();
+        /** The solve service refuses every still job asked from {@link #refuseFrom} to before {@link #refuseUntil} (at capacity, a machine's load); never by default. */
+        long refuseFrom = Long.MAX_VALUE, refuseUntil = Long.MIN_VALUE;
+        int refused;
+        /** Each column job the service took, by its contents: the pot's moles, its temperature, the reflux and the condenser outlet. */
+        final List<List<Object>> asked = new ArrayList<>();
 
         Rig(FluidThermodynamics model, WorldTopologyLedger.FluidBasis basis, List<PhysicalFluidTopology.Device> devices, Map<Long, PassiveNetwork.Reservoir> states, StillUnit unit) {
+            this(model, basis, devices, states, unit, new double[model.componentCount()]);
+        }
+
+        /** The rig with the fuels' lower heating values {@code heatingValues} (J/mol, by component): a liquid still's burners fire on them. */
+        Rig(FluidThermodynamics model, WorldTopologyLedger.FluidBasis basis, List<PhysicalFluidTopology.Device> devices, Map<Long, PassiveNetwork.Reservoir> states, StillUnit unit, double[] heatingValues) {
+            this(model, basis, devices, states, unit, heatingValues, CertificatePolicy.disabled());
+        }
+
+        /** The rig with the coordinator's rest and steady-flow certificates under {@code certificates} (off in every other rig). */
+        Rig(FluidThermodynamics model, WorldTopologyLedger.FluidBasis basis, List<PhysicalFluidTopology.Device> devices, Map<Long, PassiveNetwork.Reservoir> states, StillUnit unit, double[] heatingValues, CertificatePolicy certificates) {
             this.model = model;
             coordinator = new IslandCoordinator(new IslandCoordinator.Dispatcher() {
                 public int availableWorkers() {
@@ -134,17 +179,21 @@ class StillRuntimeTest {
                     return ++requests;
                 }
 
-                public boolean submit(IslandCoordinator.Attempt attempt, ProcessSolveServices.FluidIslandCommand command) {
+                public boolean submit(IslandCoordinator.Attempt attempt, ProcessSolveJobs.FluidIslandCommand command) {
                     attempts.put(attempt.slice().requestId(), attempt);
                     commands.put(attempt.slice().requestId(), command);
+                    submitted.put(attempt.slice().requestId(), epoch[0]);
                     return true;
                 }
 
                 public void cancel(long request) {
                     throw new AssertionError("no deadlines here");
                 }
-            }, this::book, () -> 0L, new IslandCoordinator.Settings(30_000_000_000L, 20_000_000_000L, 64, false, 100, CertificatePolicy.disabled()).withTime(model.time()), () -> epoch[0]);
-            coordinator.onReplayed(this::book);
+            }, this::book, () -> 0L, new IslandCoordinator.Settings(30_000_000_000L, 20_000_000_000L, 64, false, 100, certificates).withTime(model.time()), () -> epoch[0]);
+            coordinator.onReplayed(changed -> {
+                replayed(changed);
+                book(changed);
+            });
             // The still's devices in the ledger (their specs are not read here: water, on the basis).
             double[] composition = new double[model.componentCount()];
             composition[composition.length - 1] = 1;
@@ -156,17 +205,22 @@ class StillRuntimeTest {
             ledger = new WorldTopologyLedger(new WorldTopologyLedger.Snapshot(0, 1000, active, List.of(), WorldTopologyLedger.MaterialTotal.empty(m), WorldTopologyLedger.MaterialTotal.empty(m), basis));
             ledger.still(unit);
             stores = new ElectricStores(ledger, owners::get, coordinator, () -> ElectricStores.Settings.DEFAULT);
-            stills = new Stills(ledger, owners::get, coordinator, island -> model, stores, model.components(), model.molecularWeights(), new double[model.componentCount()]);
+            stills = new Stills(ledger, owners::get, coordinator, island -> model, stores, model.components(), model.molecularWeights(), heatingValues);
             stills.fuel(pot -> {
                 if (taken >= items) return 0;
                 taken++;
                 return ITEM;
             });
             stills.solves((pot, island, job, done) -> {
+                if (epoch[0] >= refuseFrom && epoch[0] < refuseUntil) {
+                    refused++;
+                    return false;
+                }
                 solves++;
-                jobs.add(new double[]{epoch[0], job.outlet()});
-                solved.add(() -> done.accept(StillHead.run(job, model, () -> {
-                })));
+                asked.add(List.<Object>of(Arrays.toString(job.pot()), job.temperature(), job.reflux(), job.outlet()));
+                jobs.add(new double[]{epoch[0], job.outlet(), coordinator.observe(island).clock().committedTick()});
+                solved.add(new Solve(epoch[0], () -> done.accept(StillHead.run(job, model, () -> {
+                }))));
                 return true;
             });
             stills.refresh();
@@ -186,6 +240,14 @@ class StillRuntimeTest {
             assertNotNull(owners.get(POT), "the pot is in an island");
         }
 
+        /** Records each replayed span (before {@link #book} moves the committed ticks). */
+        void replayed(List<IslandCoordinator.Snapshot> changed) {
+            for (var s : changed) {
+                long to = s.clock().committedTick(), from = committed.getOrDefault(s.id(), to);
+                replays.computeIfAbsent(s.id(), id -> new ArrayList<>()).add(List.of(from, to));
+            }
+        }
+
         void book(List<IslandCoordinator.Snapshot> changed) {
             for (var s : changed) {
                 long to = s.clock().committedTick(), from = committed.getOrDefault(s.id(), to);
@@ -199,23 +261,43 @@ class StillRuntimeTest {
                     energies.merge(b.nodeId() + " " + b.kind(), b.totalEnergyJoule() * scale, Double::sum);
                     if (b.kind() == ConservativeTransport.BoundaryTransfer.Kind.EXCHANGE) {
                         var sum = given.computeIfAbsent(b.nodeId(), id -> new double[model.componentCount()]);
+                        var moved = exchanged.computeIfAbsent(b.nodeId(), id -> new double[model.componentCount()]);
                         var n = b.moles();
-                        for (int c = 0; c < n.length; c++) sum[c] += Math.max(0, n[c]) * scale;
+                        for (int c = 0; c < n.length; c++) {
+                            sum[c] += Math.max(0, n[c]) * scale;
+                            moved[c] += n[c] * scale;
+                        }
                     }
                 }
             }
         }
 
+        /** Whether request {@code request}'s job has taken its island's {@link #lags} by now. */
+        private boolean done(long request) {
+            return epoch[0] - submitted.get(request) >= lags.getOrDefault(attempts.get(request).islandId(), 0);
+        }
+
+        /** Whether column solve {@code solve} has taken {@link #solveLag} by now. */
+        private boolean due(Solve solve) {
+            return epoch[0] - solve.tick() >= solveLag;
+        }
+
+        /**
+         * Completes every job whose island's lag has passed and every column solve whose {@link #solveLag} has, pumping after
+         * each pass, until none is left to complete this tick.
+         */
         void drain() {
-            while (!attempts.isEmpty() || !solved.isEmpty()) {
+            while (solved.stream().anyMatch(this::due) || attempts.keySet().stream().anyMatch(this::done)) {
                 for (long request : List.copyOf(attempts.keySet())) {
+                    if (!done(request)) continue;
                     var attempt = attempts.remove(request);
                     var command = commands.remove(request);
-                    coordinator.completed(attempt, Optional.of((ProcessSolveServices.FluidIslandSolveResult) command.solve(FluidTestSupport.NEVER)));
+                    submitted.remove(request);
+                    coordinator.completed(attempt, Optional.of((ProcessSolveJobs.FluidIslandSolveResult) command.solve(FluidTestSupport.NEVER)));
                 }
-                var done = List.copyOf(solved);
-                solved.clear();
-                done.forEach(Runnable::run);
+                var answered = solved.stream().filter(this::due).toList();
+                solved.removeAll(answered);
+                answered.forEach(s -> s.done().run());
                 coordinator.pump();
             }
         }
@@ -228,7 +310,30 @@ class StillRuntimeTest {
                 if (epoch[0] % ElectricStores.CADENCE == 0) stores.cadence();
                 coordinator.tick();
                 drain();
+                for (var offset : List.copyOf(offsets.entrySet())) {
+                    if (!coordinator.aligned(offset.getKey(), Set.of(offset.getValue()))) continue;
+                    coordinator.releaseFence(offset.getKey(), Set.of(offset.getValue()));
+                    offsets.remove(offset.getKey());
+                    coordinator.pump();
+                    drain();
+                }
             }
+        }
+
+        /** Runs tick by tick until the epoch reads {@code tick}. */
+        void runTo(long tick) {
+            while (epoch[0] < tick) run(.05);
+        }
+
+        /**
+         * Offsets the slices of device {@code device}'s island by {@code ticks}: a fence ends its first slice there, as an island
+         * a topology event formed starts at the event's tick; the fence is released once the island committed through it.
+         */
+        void offset(long device, long ticks) {
+            long island = owners.get(device);
+            var event = UUID.randomUUID();
+            offsets.put(event, island);
+            coordinator.fence(event, ticks, Set.of(island));
         }
 
         Stills.View view() {
@@ -402,14 +507,30 @@ class StillRuntimeTest {
      */
     /** A solid-fired still of 100 L with a 4-tray column and its condenser on 15 °C water, 60 % full of a 50/50 pentane charge at 300 K, reflux 2. */
     private static Rig pentanes() {
+        return pentanes(BatchStill.Heater.SOLID);
+    }
+
+    /**
+     * That still on {@code heater}. A liquid-fired one has its burners at (3, 0, 40) on a line of their own from a generator of
+     * isopentane vapour at 400 K and 5 bar (its own island; 45.2 MJ/kg on the network package's record), as
+     * {@code FiredHeaterFuelTest}'s burners are fed.
+     */
+    private static Rig pentanes(BatchStill.Heater heater) {
+        return pentanes(heater, CertificatePolicy.disabled());
+    }
+
+    /** That still with the coordinator's certificates under {@code certificates}. */
+    private static Rig pentanes(BatchStill.Heater heater, CertificatePolicy certificates) {
         var model = FluidThermodynamics.forNetwork(CATALOG, "icheme:refinery").on(List.of("Isopentane", "N-pentane", "Nitrogen"));
         // A fluid basis holds nitrogen, and water last (WorldTopologyLedger.FluidBasis).
         assertEquals(List.of("Isopentane", "N-pentane", "Nitrogen", "Water"), model.components());
-        var design = new BatchStill.Design(VOLUME, BatchStill.Heater.SOLID, true, 4);
-        var devices = List.of(pot(design),
+        boolean liquid = heater == BatchStill.Heater.LIQUID;
+        var design = new BatchStill.Design(VOLUME, heater, true, 4);
+        var devices = new ArrayList<>(List.of(pot(design),
                 plain(1, 0, 10, Kind.GENERATOR), plain(101, 1, 10, Kind.PIPE), water(design), plain(201, 5, 10, Kind.PIPE), plain(2, 6, 10, Kind.VOID),
                 outlet(DISTILLATE, 20), plain(301, 1, 20, Kind.PIPE), plain(3, 2, 20, Kind.VOID),
-                outlet(VENT, 30), plain(302, 1, 30, Kind.PIPE), plain(4, 2, 30, Kind.VOID));
+                outlet(VENT, 30), plain(302, 1, 30, Kind.PIPE), plain(4, 2, 30, Kind.VOID)));
+        if (liquid) devices.addAll(List.of(plain(FUEL, 0, 40, Kind.GENERATOR), plain(401, 1, 40, Kind.PIPE), plain(402, 2, 40, Kind.PIPE), burners()));
         var charge = per(model, new double[]{.5, .5, 0, 0}, 300, 150_000);
         var cold = water(model, 288.15, 300_000);
         var states = new HashMap<Long, PassiveNetwork.Reservoir>();
@@ -420,9 +541,15 @@ class StillRuntimeTest {
             states.put(id, new PassiveNetwork.Reservoir(id, 0, per(model, new double[]{1, 0, 0, 0}, 298.15, 150_000), PassiveNetwork.NodeKind.GENERATOR));
         for (long id : new long[]{3, 4})
             states.put(id, new PassiveNetwork.Reservoir(id, 0, water(model, 300, 101_325), PassiveNetwork.NodeKind.VOID));
+        if (liquid) {
+            states.put(FUEL, new PassiveNetwork.Reservoir(FUEL, 0, per(model, new double[]{1, 0, 0, 0}, 400, 500_000), PassiveNetwork.NodeKind.GENERATOR));
+            states.put(BURNERS, new PassiveNetwork.Reservoir(BURNERS, 0, per(model, nitrogen(model), Burners.AIR, Burners.PRESSURE), PassiveNetwork.NodeKind.VOID));
+        }
         var basis = new WorldTopologyLedger.FluidBasis("icheme:refinery", model.components(), "still-test");
-        var unit = StillUnit.built(POT, WATER, DISTILLATE, VENT, 0, design, model.componentCount()).withFiring(1).withReflux(2);
-        var rig = new Rig(model, basis, devices, states, unit);
+        var unit = StillUnit.built(POT, WATER, DISTILLATE, VENT, liquid ? BURNERS : 0, design, model.componentCount()).withFiring(1).withReflux(2);
+        var heatingValues = liquid ? FluidWorldAuthority.heatingValues(CATALOG, model) : new double[model.componentCount()];
+        if (liquid) assertTrue(heatingValues[0] > 3e6, "isopentane burns: " + heatingValues[0] + " J/mol");
+        var rig = new Rig(model, basis, devices, states, unit, heatingValues, certificates);
         rig.items = Integer.MAX_VALUE;
         return rig;
     }
@@ -453,6 +580,269 @@ class StillRuntimeTest {
     }
 
     /**
+     * The still's determinism gate (codebase review R-ST1, as the column's {@code ColumnRunTest}): the pentane still with its
+     * water island's slices 10 ticks off the pot's and its outlets' (as a topology event would leave them), run twice: its
+     * jobs completing in the tick they were dispatched in, and then 7 ticks later on the pot's island, 12 on the distillate's,
+     * 4 on the vent's and 5 on the water's (the pot's and the outlets' jobs share a round, which closes with its last). The
+     * water's slice from tick 1010 is dispatched at 1110: in the first run the outlets' and the pot's commits of [1000, 1100)
+     * landed at 1100, before it; in the second they land at 1112, after it (and before the water's commit at 1115, so every
+     * commit keeps its order: only the water's reads move against the others' commits).
+     * Before the fence the water read the heat in transit as it stood then (STILL_HEAT_READ_REVIEW: a slice's duty, or none),
+     * so its heat differed between the runs. Behind the fence it reads what was owed through its start less 440 ticks, which
+     * both runs booked by then: the accounts, the totals, the heat each side booked, what the outlets gave, the heat in
+     * transit, the jobs' outlets and the condenser's share are the same bit for bit.
+     */
+    @Test
+    void aStillsWaterDoesNotDependOnWhenItsIslandsJobsComplete() {
+        var a = pentanes();
+        var b = pentanes();
+        a.offset(WATER, 10);
+        b.offset(WATER, 10);
+        b.lags.put(b.owners.get(POT), 7);
+        b.lags.put(b.owners.get(DISTILLATE), 12);
+        b.lags.put(b.owners.get(VENT), 4);
+        b.lags.put(b.owners.get(WATER), 5);
+        assertEquals(4, new HashSet<>(List.of(b.owners.get(POT), b.owners.get(DISTILLATE), b.owners.get(VENT), b.owners.get(WATER))).size(), "four islands");
+        // 4820 ticks: both runs have committed every slice that ends by 4810 (the last ones were dispatched at 4800 and 4810).
+        a.run(241);
+        b.run(241);
+        double water = a.heat.getOrDefault(PhysicalFluidTopology.sideIdentity(WATER), 0.);
+        System.out.printf(Locale.ROOT, "still determinism gate: the water took %.1f J, the condenser gave %.1f J, the pot took %.1f J, %d jobs%n",
+                water, a.unit().condensed(), a.unit().heated(), a.jobs.size());
+        assertTrue(water > 0, "the water took the condenser's duty: " + water);
+        assertEquals(BatchStill.Status.DISTILLING, a.view().status(), () -> a.stills.statusLine(POT));
+        var ua = a.unit();
+        var ub = b.unit();
+        assertArrayEquals(ua.head().moles(), ub.head().moles(), "the distillate's account");
+        assertEquals(ua.head().energy(), ub.head().energy(), "the distillate's account's energy");
+        assertArrayEquals(ua.venting().moles(), ub.venting().moles(), "the vent's account");
+        assertEquals(ua.venting().energy(), ub.venting().energy(), "the vent's account's energy");
+        assertEquals(ua.heated(), ub.heated(), "the heat into the pot");
+        assertEquals(ua.condensed(), ub.condensed(), "the condenser's duty");
+        assertEquals(ua.burning(), ub.burning(), "the fire");
+        assertEquals(a.heat, b.heat, "the heat each side booked, the water's among them");
+        assertEquals(a.energies, b.energies, "every boundary's energy");
+        assertEquals(a.given.keySet(), b.given.keySet());
+        for (var e : a.given.entrySet()) assertArrayEquals(e.getValue(), b.given.get(e.getKey()), "what " + e.getKey() + " gave");
+        assertArrayEquals(a.pot(), b.pot(), "the pot");
+        assertEquals(a.coordinator.transits(), b.coordinator.transits(), "the heat in transit");
+        assertEquals(a.jobs.stream().map(j -> j[1]).toList(), b.jobs.stream().map(j -> j[1]).toList(), "the jobs' condenser outlets");
+        assertEquals(a.view().condensed(), b.view().condensed(), "the condenser's share");
+        assertEquals(a.view().reflux(), b.view().reflux(), "the reflux it leaves");
+    }
+
+    /**
+     * The liquid fire's and the column jobs' determinism gate (codebase review R-ST2, in the form of the one above): the
+     * pentane still fired from its burners, whose fuel line is an island of its own, run twice on the same slice grids (the
+     * water's island 10 ticks off the pot's, the burners' 50): its jobs completing in the tick they were dispatched in, and
+     * then 7 ticks later on the pot's island, 12 on the distillate's, 4 on the vent's, 5 on the water's and 60 on the
+     * burners', with every column solve answering 150 ticks after it was asked (longer than a slice). Before R-ST2 the runs
+     * differed on each of two schedules:
+     * <ul>
+     * <li>The jobs: a job asked at the pot's commit of the slice to e applies at e + 100. At the commit of the slice to
+     * e + 100 the first run had the answer and asked the next job; the second (answer at e + 162) skipped it and asked at the
+     * slice to e + 200. Now a job is asked only at a slice that starts at or after the last one's apply tick, whose dispatch
+     * waited for that answer: at the slice to e + 200 in both.</li>
+     * <li>The fire: the pot read the burners' fire as their last commit left it. Their slice to e + 50 commits at e + 50 in
+     * the first run, before the pot's dispatch at e + 100, and at e + 110 in the second, after it. The burners read the pot's
+     * answer as the pot's last commit or dispatch left it: the first answer (applying at 200) was promoted at the pot's
+     * commit at 200 in the first run and at its dispatch at 300 in the second (it landed at 262), so the burners' slice
+     * dispatched at 250 asked fuel in one run only. Now the pot takes the fire booked as of its slice start less the fence
+     * and the burners the pot's answer and cut alarms as of theirs, each waiting for the other's island through it.</li>
+     * </ul>
+     * Stopped at 5920 ticks, where both runs have committed the same slices (the pot's to 5900, the water's to 5910, the
+     * burners' to 5850): the accounts, totals, bookings, the fuel burned, the transits, the jobs (the slice that asked each
+     * and its outlet) and the share are the same bit for bit.
+     */
+    @Test
+    void aLiquidStillsFireAndJobsDoNotDependOnWhenItsIslandsJobsAndSolvesComplete() {
+        var a = pentanes(BatchStill.Heater.LIQUID);
+        var b = pentanes(BatchStill.Heater.LIQUID);
+        for (var rig : List.of(a, b)) {
+            rig.offset(WATER, 10);
+            rig.offset(BURNERS, 50);
+        }
+        b.lags.put(b.owners.get(POT), 7);
+        b.lags.put(b.owners.get(DISTILLATE), 12);
+        b.lags.put(b.owners.get(VENT), 4);
+        b.lags.put(b.owners.get(WATER), 5);
+        b.lags.put(b.owners.get(BURNERS), 60);
+        b.solveLag = 150;
+        assertEquals(b.owners.get(FUEL), b.owners.get(BURNERS), "the fuel line is the burners' island");
+        assertEquals(5, new HashSet<>(List.of(b.owners.get(POT), b.owners.get(DISTILLATE), b.owners.get(VENT), b.owners.get(WATER), b.owners.get(BURNERS))).size(), "five islands");
+        // The fire reaches the pot about 900 ticks after the solid one's (at 1200, two fences after the first answer, against
+        // 300), so 1100 ticks more than the gate above: 5920, between the second run's last commits (the pot's round at 5912, the water's at
+        // 5915, the burners' at 5910) and the first run's next ones (the burners' at 5950).
+        a.run(296);
+        b.run(296);
+        double water = a.heat.getOrDefault(PhysicalFluidTopology.sideIdentity(WATER), 0.);
+        double[] burned = a.exchanged.getOrDefault(BURNERS, new double[4]);
+        double fuel = Math.abs(Arrays.stream(burned).sum()), kilograms = Math.abs(burned[0]) * a.model.molecularWeights()[0];
+        System.out.printf(Locale.ROOT, "liquid still determinism gate: the water took %.1f J, the condenser gave %.1f J, the pot took %.1f J, the burners took %.4f mol (%.5f kg) of fuel, %d jobs%n",
+                water, a.unit().condensed(), a.unit().heated(), fuel, kilograms, a.jobs.size());
+        assertTrue(water > 0, "the water took the condenser's duty: " + water);
+        assertTrue(fuel > 0, "the burners burned fuel");
+        assertTrue(a.unit().heated() > 0, "the fire heated the pot");
+        assertEquals(BatchStill.Status.DISTILLING, a.view().status(), () -> a.stills.statusLine(POT));
+        var ua = a.unit();
+        var ub = b.unit();
+        assertArrayEquals(ua.head().moles(), ub.head().moles(), "the distillate's account");
+        assertEquals(ua.head().energy(), ub.head().energy(), "the distillate's account's energy");
+        assertArrayEquals(ua.venting().moles(), ub.venting().moles(), "the vent's account");
+        assertEquals(ua.venting().energy(), ub.venting().energy(), "the vent's account's energy");
+        assertEquals(ua.heated(), ub.heated(), "the heat into the pot");
+        assertEquals(ua.condensed(), ub.condensed(), "the condenser's duty");
+        assertEquals(a.heat, b.heat, "the heat each side booked, the water's and the pot's among them");
+        assertEquals(a.energies, b.energies, "every boundary's energy, the fuel's among them");
+        assertEquals(a.exchanged.keySet(), b.exchanged.keySet());
+        for (var e : a.exchanged.entrySet()) assertArrayEquals(e.getValue(), b.exchanged.get(e.getKey()), "what " + e.getKey() + " exchanged (the fuel burned at " + BURNERS + ")");
+        assertArrayEquals(a.pot(), b.pot(), "the pot");
+        assertEquals(a.coordinator.transits(), b.coordinator.transits(), "the heat in transit");
+        assertEquals(a.solves, b.solves, "the jobs asked");
+        assertEquals(a.jobs.stream().map(j -> List.of(j[2], j[1])).toList(), b.jobs.stream().map(j -> List.of(j[2], j[1])).toList(), "the jobs: the slice that asked each and its condenser outlet");
+        assertEquals(a.view().condensed(), b.view().condensed(), "the condenser's share");
+        assertEquals(a.view().reflux(), b.view().reflux(), "the reflux it leaves");
+    }
+
+    /**
+     * The certified partners' determinism gate (codebase review R-ST3, in the form of the two above), with the coordinator's
+     * certificates on (the world's defaults). The pentane still with its water island 10 ticks off, run twice. The water
+     * flows with no heat yet and certifies at rest at its commit c (both runs alike); its outlets' islands, idle on empty
+     * accounts, certify too. In the second run the pot's job of the slice that ends at s, the first pot slice start with
+     * s - 440 > c, takes 130 ticks once, so the pot's slice from s is dispatched at s + 130 instead of s + 100.
+     * <ul>
+     * <li>Before R-ST3 the pot's wait for its water ({@code IslandCoordinator.through}) materialised the certified water to
+     * the moment it looked: over [c, s + 100) in the first run, [c, s + 130) in the second, so the replayed spans, and the
+     * water's booked amounts and energies split there, differed. Now the wait reads the certificate's reach
+     * ({@code reached}) and the water is materialised only at its wakes, fixed ticks: the spans are the same.</li>
+     * <li>Before R-ST3 nothing woke a certified outlet: its account filled and nothing flowed, so the water took nothing.
+     * Now an arrival wakes the outlets' islands a fence after it.</li>
+     * </ul>
+     * Stopped at a tick both runs have committed alike: the replayed spans, the accounts, totals, bookings, the transits, the
+     * jobs and the share are the same bit for bit.
+     */
+    @Test
+    void aCertifiedStillIslandIsMaterialisedAtTicksThatDoNotDependOnWhenItsIslandsJobsComplete() {
+        var a = pentanes(BatchStill.Heater.SOLID, CertificatePolicy.defaults());
+        var b = pentanes(BatchStill.Heater.SOLID, CertificatePolicy.defaults());
+        a.offset(WATER, 10);
+        b.offset(WATER, 10);
+        long water = a.owners.get(WATER), pot = a.owners.get(POT);
+        long certified = -1;
+        while (certified < 0) {
+            assertTrue(a.epoch[0] < 2000, "the water island certifies at rest before the pot's duty reaches it");
+            a.run(.05);
+            b.run(.05);
+            var snapshot = a.coordinator.observe(water);
+            if (snapshot.certificate().isPresent()) certified = snapshot.clock().committedTick();
+        }
+        assertTrue(b.coordinator.observe(water).certificate().isPresent(), "both runs alike so far");
+        long s = ((certified + Stills.FENCE_TICKS) / 100 + 1) * 100;
+        a.runTo(s - 1);
+        b.runTo(s - 1);
+        b.lags.put(pot, 130);
+        a.runTo(s + 130);
+        b.runTo(s + 130);
+        b.lags.remove(pot);
+        long stop = 4820;
+        while (stop < s + 1020) stop += 100;
+        a.runTo(stop);
+        b.runTo(stop);
+        double heat = a.heat.getOrDefault(PhysicalFluidTopology.sideIdentity(WATER), 0.);
+        System.out.printf(Locale.ROOT, "certified still gate: the water certified at %d, the pot's slice from %d late; the water took %.1f J, %d replayed spans%n",
+                certified, s, heat, a.replays.values().stream().mapToInt(List::size).sum());
+        assertEquals(a.replays, b.replays, "every certified island was materialised over the same spans");
+        assertTrue(a.replays.containsKey(water), "the water island rested on its certificate: " + a.replays.keySet());
+        assertTrue(a.given.getOrDefault(DISTILLATE, new double[4])[0] > 0, "the distillate flows: its outlet, certified on an empty account, woke when the account filled");
+        assertTrue(heat > 0, "the water took the condenser's duty: " + heat);
+        assertEquals(BatchStill.Status.DISTILLING, a.view().status(), () -> a.stills.statusLine(POT));
+        var ua = a.unit();
+        var ub = b.unit();
+        assertArrayEquals(ua.head().moles(), ub.head().moles(), "the distillate's account");
+        assertEquals(ua.head().energy(), ub.head().energy(), "the distillate's account's energy");
+        assertArrayEquals(ua.venting().moles(), ub.venting().moles(), "the vent's account");
+        assertEquals(ua.venting().energy(), ub.venting().energy(), "the vent's account's energy");
+        assertEquals(ua.heated(), ub.heated(), "the heat into the pot");
+        assertEquals(ua.condensed(), ub.condensed(), "the condenser's duty");
+        assertEquals(ua.burning(), ub.burning(), "the fire");
+        assertEquals(a.heat, b.heat, "the heat each side booked, the water's among them");
+        assertEquals(a.energies, b.energies, "every boundary's energy, the water's source and sink among them");
+        assertEquals(a.exchanged.keySet(), b.exchanged.keySet());
+        for (var e : a.exchanged.entrySet()) assertArrayEquals(e.getValue(), b.exchanged.get(e.getKey()), "what " + e.getKey() + " exchanged");
+        assertArrayEquals(a.pot(), b.pot(), "the pot");
+        assertEquals(a.coordinator.transits(), b.coordinator.transits(), "the heat in transit");
+        assertEquals(a.jobs.stream().map(j -> List.of(j[2], j[1])).toList(), b.jobs.stream().map(j -> List.of(j[2], j[1])).toList(), "the jobs: the slice that asked each and its condenser outlet");
+        assertEquals(a.view().condensed(), b.view().condensed(), "the condenser's share");
+        assertEquals(a.view().reflux(), b.view().reflux(), "the reflux it leaves");
+    }
+
+    /**
+     * The refused job's determinism gate (codebase review R-ST3, in the form of the ones above): the pentane still run twice,
+     * the second time on a loaded machine whose solve service refuses every still job asked from tick 1950 to 2229. A job
+     * is asked at every second pot commit, so the window holds one job's commit (at 2000 or 2100), and the pot's commit at
+     * 2200 asks none (with a job at 2000) or is outside the window's jobs (with one at 2100).
+     * <ul>
+     * <li>Before R-ST3 the refused job was skipped and a later commit asked one of its own pot. The jobs, their answers and
+     * everything after them differed.</li>
+     * <li>Now the job is held and asked again at each decision point until the service takes it (at 2230), for the same
+     * slice and the same apply tick. The pot's slice that needs its answer waits for it in {@code ready} (with a job at 2000
+     * the slice from 2100, due at 2200, is dispatched at 2230), so the second run asks and applies what the first did.</li>
+     * </ul>
+     * At 4820 ticks the jobs (by their contents), the accounts, totals, bookings, the transits and the share are the same
+     * bit for bit.
+     */
+    @Test
+    void aColumnJobTheSolveServiceRefusesIsAskedAgainForTheSameSlice() {
+        var a = pentanes();
+        var b = pentanes();
+        b.refuseFrom = 1950;
+        b.refuseUntil = 2230;
+        a.run(241);
+        b.run(241);
+        System.out.printf(Locale.ROOT, "refused job gate: %d refusals, %d jobs, the water took %.1f J%n",
+                b.refused, b.solves, a.heat.getOrDefault(PhysicalFluidTopology.sideIdentity(WATER), 0.));
+        assertTrue(b.refused > 0, "the service refused a job in the second run");
+        assertEquals(0, a.refused, "and none in the first");
+        assertEquals(a.asked, b.asked, "the jobs: each pot, temperature, reflux and outlet as its commit asked it");
+        assertEquals(a.solves, b.solves, "the jobs asked");
+        assertEquals(BatchStill.Status.DISTILLING, a.view().status(), () -> a.stills.statusLine(POT));
+        var ua = a.unit();
+        var ub = b.unit();
+        assertArrayEquals(ua.head().moles(), ub.head().moles(), "the distillate's account");
+        assertEquals(ua.head().energy(), ub.head().energy(), "the distillate's account's energy");
+        assertArrayEquals(ua.venting().moles(), ub.venting().moles(), "the vent's account");
+        assertEquals(ua.venting().energy(), ub.venting().energy(), "the vent's account's energy");
+        assertEquals(ua.heated(), ub.heated(), "the heat into the pot");
+        assertEquals(ua.condensed(), ub.condensed(), "the condenser's duty");
+        assertEquals(ua.burning(), ub.burning(), "the fire");
+        assertEquals(a.heat, b.heat, "the heat each side booked");
+        assertEquals(a.energies, b.energies, "every boundary's energy");
+        assertEquals(a.given.keySet(), b.given.keySet());
+        for (var e : a.given.entrySet()) assertArrayEquals(e.getValue(), b.given.get(e.getKey()), "what " + e.getKey() + " gave");
+        assertArrayEquals(a.pot(), b.pot(), "the pot");
+        assertEquals(a.coordinator.transits(), b.coordinator.transits(), "the heat in transit");
+        assertEquals(a.view().condensed(), b.view().condensed(), "the condenser's share");
+        assertEquals(a.view().reflux(), b.view().reflux(), "the reflux it leaves");
+    }
+
+    /**
+     * A liquid-fired still that is lighting shows no NO FUEL alarm (R-ST2): its pot reads the fire as of its fence, so the
+     * fuel its burners burn reaches it about two fences after it is asked; the fuel is missing only where a span that asked
+     * fuel burned none.
+     */
+    @Test
+    void aLiquidStillThatIsLightingShowsNoFuelAlarm() {
+        var rig = pentanes(BatchStill.Heater.LIQUID);
+        // 800 ticks: after the first answer (the burners ask fuel from then), before the fire is a fence old at the pot.
+        rig.run(40);
+        assertEquals(0, rig.unit().heated(), "the fire has not reached the pot yet");
+        assertFalse(rig.view().alarms().contains(EquipmentAlarm.NO_FUEL), () -> rig.stills.statusLine(POT));
+        rig.run(256);
+        assertTrue(rig.unit().heated() > 0, "the fire heated the pot");
+        assertFalse(rig.view().alarms().contains(EquipmentAlarm.NO_FUEL), () -> rig.stills.statusLine(POT));
+    }
+
+    /**
      * Code review finding 2b: a still that solves a column keeps its fire out until the column's first answer. The boiling
      * pentane still loses its engine state, as at a load: until the first answer the pot takes no heat, the fire's total
      * stands, no mole reaches the head's accounts (which would all go to the vent: the condenser returns its headspace gas)
@@ -469,7 +859,9 @@ class StillRuntimeTest {
         double heated = rig.unit().heated();
         double[] head = rig.unit().head().moles(), vent = rig.unit().venting().moles();
         boolean heating = false;
-        long waited = 0, limit = 4 * (Stills.SOLVE_TICKS + Stills.APPLY_TICKS);
+        // 800 ticks, as before R-ST2 (SOLVE_TICKS, which was 100, is gone; a cycle is 100): the first job is asked at the
+        // first commit, so the first answer's time does not move.
+        long waited = 0, limit = 4 * (Stills.CYCLE_TICKS + Stills.APPLY_TICKS);
         while (Double.isNaN(rig.view().headTemperature())) {
             assertTrue(++waited < limit, "the first answer arrives within " + limit + " ticks");
             rig.run(.05);
@@ -654,7 +1046,8 @@ class StillRuntimeTest {
             var rig = washStill(catalog, id, 0, 0, factors[k]);
             assertEquals(List.of("Ethanol", "Nitrogen", "Water"), rig.model.components());
             rating = rig.unit().design().rating();
-            while (Double.isNaN(rig.view().headTemperature()) && rig.epoch[0] < 4 * (Stills.SOLVE_TICKS + Stills.APPLY_TICKS)) rig.run(.05);
+            // 800 ticks, as before R-ST2 (a cycle for the gone SOLVE_TICKS, both 100).
+            while (Double.isNaN(rig.view().headTemperature()) && rig.epoch[0] < 4 * (Stills.CYCLE_TICKS + Stills.APPLY_TICKS)) rig.run(.05);
             assertFalse(Double.isNaN(rig.view().headTemperature()), "the condenser answered");
             assertEquals(0, rig.heat.getOrDefault(PhysicalFluidTopology.sideIdentity(POT), 0.), 0, "no heat before the first answer");
             System.out.printf(Locale.ROOT, "wash at factor %d: the first answer at tick %d%n", factors[k], rig.epoch[0]);
@@ -686,7 +1079,7 @@ class StillRuntimeTest {
             var s = node.state();
             boolean gas = FluidThermodynamics.holdsPhase(s, FluidThermodynamics.GAS);
             double[] moles = node.inventory().moles();
-            var column = new StillColumn(model, s.pressure());
+            var column = new StillColumn(new NetworkStageThermo(model), s.pressure());
             double bubble = column.bubble(moles, s.temperature()).temperature();
             System.out.printf(Locale.ROOT, "W4 wash pot at %.0f s: %.3f K (bubble %.3f K at %.1f Pa), gas %b, %.3f mol%n", rig.epoch[0] / 20.0, s.temperature(), bubble,
                     s.pressure(), gas, Arrays.stream(moles).sum());
@@ -750,13 +1143,12 @@ class StillRuntimeTest {
         for (int k = 0; k < 3; k++) {
             int joints = PhysicalFluidTopology.diverterJoints(WEST, k);
             assertEquals(k, PhysicalFluidTopology.diverterOutlet(WEST, joints));
-            var diverter = new PhysicalFluidTopology.Device(5, at(1, 0, 0), Kind.DIVERTER_VALVE, WEST, STUB, new FlowControl.Passive(), List.of(), true,
-                    PhysicalFluidTopology.Cutoff.NONE, false, joints);
+            var diverter = PhysicalFluidTopology.Device.builder(5, at(1, 0, 0), Kind.DIVERTER_VALVE, WEST, STUB, new FlowControl.Passive()).joints(joints).build();
             assertEquals(Kind.PIPE, diverter.hydraulicKind(), "a diverter is a pipe through its open pair");
             var devices = List.of(plain(1, 0, 0, Kind.GENERATOR), diverter,
                     plain(6, 2, 0, Kind.PIPE), plain(7, 3, 0, Kind.VOID),
-                    new PhysicalFluidTopology.Device(8, at(1, 0, 1), Kind.PIPE, SOUTH, STUB, new FlowControl.Passive()), new PhysicalFluidTopology.Device(9, at(1, 0, 2), Kind.VOID, SOUTH, STUB, new FlowControl.Passive()),
-                    new PhysicalFluidTopology.Device(10, at(1, 0, -1), Kind.PIPE, NORTH, STUB, new FlowControl.Passive()), new PhysicalFluidTopology.Device(11, at(1, 0, -2), Kind.VOID, NORTH, STUB, new FlowControl.Passive()));
+                    PhysicalFluidTopology.Device.builder(8, at(1, 0, 1), Kind.PIPE, SOUTH, STUB, new FlowControl.Passive()).build(), PhysicalFluidTopology.Device.builder(9, at(1, 0, 2), Kind.VOID, SOUTH, STUB, new FlowControl.Passive()).build(),
+                    PhysicalFluidTopology.Device.builder(10, at(1, 0, -1), Kind.PIPE, NORTH, STUB, new FlowControl.Passive()).build(), PhysicalFluidTopology.Device.builder(11, at(1, 0, -2), Kind.VOID, NORTH, STUB, new FlowControl.Passive()).build());
             var compiled = PhysicalFluidTopology.compile(devices, states);
             var fed = compiled.islands().stream().map(PhysicalFluidTopology.Island::graph).filter(g -> g.reservoirs().stream().anyMatch(r -> r.id() == 1)).findFirst().orElseThrow();
             for (int j = 0; j < 3; j++) {
@@ -764,8 +1156,7 @@ class StillRuntimeTest {
                 assertEquals(j == k, fed.reservoirs().stream().anyMatch(r -> r.id() == sink), "outlet " + k + ": void " + sink);
             }
         }
-        assertThrows(IllegalArgumentException.class, () -> new PhysicalFluidTopology.Device(5, at(1, 0, 0), Kind.DIVERTER_VALVE, WEST, STUB, new FlowControl.Passive(), List.of(), true,
-                PhysicalFluidTopology.Cutoff.NONE, false, PhysicalFluidTopology.ALL_FACES), "a diverter has one outlet open");
+        assertThrows(IllegalArgumentException.class, () -> PhysicalFluidTopology.Device.builder(5, at(1, 0, 0), Kind.DIVERTER_VALVE, WEST, STUB, new FlowControl.Passive()).build(), "a diverter has one outlet open");
     }
 
     /** The still's facts survive the fluid facts' write and read: its devices, design, accounts, fire, settings and totals. */
@@ -781,8 +1172,7 @@ class StillRuntimeTest {
                 new Account(held, -4.5e4), new Account(vented, 1.5e3), 0, .65, Double.POSITIVE_INFINITY, 3.2e7, 2.9e7);
         var still = new StillUnit(30, 0, 0, 0, 0, .1, BatchStill.Heater.SOLID, false, 0, Account.empty(m), Account.empty(m), 1.75e6, .4, StillUnit.DEFAULT_REFLUX, 1e5, 0);
         var active = new TreeMap<Long, WorldTopologyLedger.Registration>();
-        for (var d : List.of(pot(design), new PhysicalFluidTopology.Device(30, at(0, 5, 0), Kind.RESERVOIR, NORTH, STUB, new FlowControl.Passive(), List.of(), true,
-                PhysicalFluidTopology.Cutoff.NONE, false, PhysicalFluidTopology.ALL_FACES, 0, 0, new HeatUnit(HeatSides.Unit.STILL, HeatSides.Side.POT, .4, 0))))
+        for (var d : List.of(pot(design), PhysicalFluidTopology.Device.builder(30, at(0, 5, 0), Kind.RESERVOIR, NORTH, STUB, new FlowControl.Passive()).heat(new HeatUnit(HeatSides.Unit.STILL, HeatSides.Side.POT, .4, 0)).build()))
             active.put(d.id(), new WorldTopologyLedger.Registration(d, FluidDeviceSpec.nitrogen(CATALOG), 0));
         var empty = WorldTopologyLedger.Snapshot.empty(CATALOG);
         var ledger = new WorldTopologyLedger(new WorldTopologyLedger.Snapshot(0, 1000, active, List.of(), empty.constructed(), empty.destroyed(), empty.basis()));

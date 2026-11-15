@@ -152,8 +152,8 @@ class FluidCheckpointCodecTest {
         var mixed=new double[count];for(int c=0;c<count;c++)mixed[c]=c+1;
         var slurry=new SlurryFeed(.1,List.of(new SlurryFeed.Grade("icheme:demo_particle",com.wormzjl.icheme.science.fluid.state.ParticleSize.micrometres("100"),1)));
         var block=new PipeResistance.Geometry(1,.05,.000045,0);var wide=new PipeResistance.Geometry(2,.1,.0001,.5);
-        java.util.function.Function<Object[],WorldTopologyLedger.Registration> device=a->new WorldTopologyLedger.Registration(new PhysicalFluidTopology.Device((long)a[0],
-                new PhysicalFluidTopology.Position((String)a[1],(int)a[2],64,-3),(com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind)a[3],PhysicalFluidTopology.Direction.EAST,(PipeResistance.Geometry)a[4],(FlowControl)a[5]),
+        java.util.function.Function<Object[],WorldTopologyLedger.Registration> device=a->new WorldTopologyLedger.Registration(PhysicalFluidTopology.Device.builder((long)a[0],
+                new PhysicalFluidTopology.Position((String)a[1],(int)a[2],64,-3),(com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind)a[3],PhysicalFluidTopology.Direction.EAST,(PipeResistance.Geometry)a[4],(FlowControl)a[5]).build(),
                 (FluidDeviceSpec)a[6],(long)a[7]);
         var kinds=com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.class.getEnumConstants();
         var reservoir=device.apply(new Object[]{1L,"minecraft:overworld",0,kinds[0],block,new FlowControl.Passive(),new FluidDeviceSpec(2,300,150000,nitrogen),0L});
@@ -201,6 +201,21 @@ class FluidCheckpointCodecTest {
         var loaded=FluidCheckpointCodec.decode(image,key->FluidThermodynamics.forNetwork(MaterialCatalog.bundled(),PACKAGE,10, FluidThermodynamics.DEFAULT_TRACE_CUTOFF_MOLE_FRACTION));
         var a=before.islands().getFirst().snapshot();var b=loaded.islands().getFirst().snapshot();
         assertEquals(a.graph().reservoirs().getFirst().inventory(),b.graph().reservoirs().getFirst().inventory());assertEquals(a.clock(),b.clock());assertEquals(a.fences(),b.fences());
+    }
+    /** A certificate's replay field (codebase review H-R11): the declared revision round trips in the 32 bytes that held an
+     * older save's graph digest; that digest reads back as its 64 hexadecimal digits, never the declared revision. */
+    @Test void theReplayFieldHoldsTheDeclaredRevisionAndReadsAnOlderDigestAsItsHex() {
+        var field=FluidCheckpointCodec.replayField(IslandCertificate.REPLAY_REVISION);
+        assertEquals(FluidCheckpointCodec.REPLAY_FIELD,field.length);
+        assertEquals(IslandCertificate.REPLAY_REVISION,FluidCheckpointCodec.replayRevision(field));
+        String digest="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+        var old=HexFormat.of().parseHex(digest);
+        assertEquals(digest,FluidCheckpointCodec.replayRevision(old),"an older save's digest reads back as its hexadecimal digits");
+        assertArrayEquals(old,FluidCheckpointCodec.replayField(digest),"and is written back as its own bytes");
+        assertNotEquals(IslandCertificate.REPLAY_REVISION,FluidCheckpointCodec.replayRevision(old));
+        assertDoesNotThrow(()->new IslandCertificate.Signature("revision","policy",digest),"an older digest is a valid replay token");
+        assertThrows(IllegalArgumentException.class,()->FluidCheckpointCodec.replayField("r".repeat(33)),"longer than the field");
+        assertThrows(IllegalArgumentException.class,()->new IslandCertificate.Signature("revision","policy","replay 1"),"not a token");
     }
 
     // ---------------- format 6: pipe ports and the compressor (phase-ports WP5, plan 4.4) ----------------
@@ -286,8 +301,8 @@ class FluidCheckpointCodecTest {
     @Test void aCompressorRegistrationRoundTripsInTheTopologyUnit() {
         var empty=WorldTopologyLedger.Snapshot.empty(MaterialCatalog.bundled());int count=empty.basis().components().size();
         var nitrogen=new double[count];nitrogen[com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN]=1;
-        var device=new PhysicalFluidTopology.Device(4,new PhysicalFluidTopology.Position("minecraft:overworld",3,64,-3),com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.PIPE,
-                PhysicalFluidTopology.Direction.EAST,new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Compressor(.05,3));
+        var device=PhysicalFluidTopology.Device.builder(4,new PhysicalFluidTopology.Position("minecraft:overworld",3,64,-3),com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.PIPE,
+                PhysicalFluidTopology.Direction.EAST,new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Compressor(.05,3)).build();
         var world=new WorldTopologyLedger.Snapshot(12,9,Map.of(4L,new WorldTopologyLedger.Registration(device,new FluidDeviceSpec(1,298.15,101325,nitrogen),2)),List.of(),
                 WorldTopologyLedger.MaterialTotal.empty(count),WorldTopologyLedger.MaterialTotal.empty(count),empty.basis(),Map.of());
         var bytes=FluidCheckpointCodec.encodeTopology(world);var decoded=FluidCheckpointCodec.decodeTopology(bytes,12,key->key.on(model));

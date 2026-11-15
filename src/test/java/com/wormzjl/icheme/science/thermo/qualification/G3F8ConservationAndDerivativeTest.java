@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
+import com.wormzjl.icheme.science.thermo.phase.PackageBinding;
 
 /**
  * G3 fixture family F8 (plan {@code P3_PILOT_ENGINE_PLAN.md} sections 7 and 8.2; P0 section 3.1): conservation and
@@ -43,7 +44,7 @@ import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 class G3F8ConservationAndDerivativeTest {
     static FluidTpEquilibrium engine() {
         var catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
-        return new FluidTpEquilibrium(PhaseContract.forPackage(catalog, PILOT), CubicPhaseEvaluator.forPackage(catalog, PILOT), FluidTpEquilibrium.Settings.DEFAULT);
+        return new FluidTpEquilibrium(PackageBinding.contract(catalog, PILOT), PackageBinding.evaluator(catalog, PILOT), FluidTpEquilibrium.Settings.DEFAULT);
     }
 
     static EquilibriumRequest tp(FluidTpEquilibrium engine, double t, double p, double[] z) {
@@ -102,7 +103,7 @@ class G3F8ConservationAndDerivativeTest {
 
     @Test
     void analyticDerivativesAgainstCentralDifferences() {
-        var evaluator = CubicPhaseEvaluator.forPackage(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PILOT);
+        var evaluator = PackageBinding.evaluator(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PILOT);
         var ws = evaluator.newWorkspace();
         var d = new PhaseDerivatives(4);
         var plus = new PhaseState(4);

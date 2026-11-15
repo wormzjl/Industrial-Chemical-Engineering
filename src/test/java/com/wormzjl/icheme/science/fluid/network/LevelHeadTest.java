@@ -15,7 +15,7 @@ import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
  * documentation/2026-09-26-phase-ports-and-compressor/LEVEL_HEAD_REVIEW.md): the port's driving pressure is the
  * headspace pressure plus {@code g * condensed mass * H / V} with {@code H} = {@link PassiveStepSolver#LEVEL_HEAD_HEIGHT}
  * (1 m) and {@code V} the vessel's inventory volume, in both directions, read by every static driving pressure the solver
- * states ({@link PassiveStepSolver#endPressure}). The fixtures of the review's section 5, items 1 to 5 (item 6, the
+ * states ({@link PortStreams#endPressure}). The fixtures of the review's section 5, items 1 to 5 (item 6, the
  * physical-topology face test, is {@code PhysicalFluidTopologyTest}'s tank over a void), and the two start-of-solve decisions the head must
  * reach ({@code closeDeadHeads} and the boundary-reopen test {@code reopenable}).
  *
@@ -104,7 +104,7 @@ class LevelHeadTest extends PortFixture {
         var oneMetre=headDrain(PhasePort.LIQUID,line(2,.05));var vessel=oneMetre.reservoirs().getFirst();var i=vessel.inventory();
         var tall=new PassiveNetwork.Reservoir(vessel.id(),vessel.elevation(),vessel.state(),vessel.kind(),new PassiveNetwork.Inventory(i.volume(),i.moles(),i.internalEnergy(),i.solids(),4*H));
         var nodes=new ArrayList<>(oneMetre.reservoirs());nodes.set(0,tall);var fourMetres=new PassiveNetwork(nodes,oneMetre.pipes());
-        assertEquals(4*head(vessel),PassiveStepSolver.portHead(model,tall,PhasePort.LIQUID,tall.state()),1e-12*head(vessel));
+        assertEquals(4*head(vessel),PortStreams.portHead(model,tall,PhasePort.LIQUID,tall.state()),1e-12*head(vessel));
         var short_=new PassiveIntervalSolver(model).solve(oneMetre,5,PassiveIntervalSolver.Settings.defaults(),NOOP);
         var deep=new PassiveIntervalSolver(model).solve(fourMetres,5,PassiveIntervalSolver.Settings.defaults(),NOOP);
         assertEquals(4*H,deep.graph().reservoirs().getFirst().inventory().levelHeight(),"the solved inventory keeps the drum's height");

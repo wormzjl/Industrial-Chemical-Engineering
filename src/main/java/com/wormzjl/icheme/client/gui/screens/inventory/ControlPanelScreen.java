@@ -97,12 +97,8 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
     // A DCS's column page (W6.2): the columns its bus reaches, the one chosen, its Operation view and its entries' drafts.
     private List<CompoundTag> columns = List.of();
     private long column;
-    private com.wormzjl.icheme.science.column.operation.OperationView operation;
+    private com.wormzjl.icheme.science.plant.column.OperationView operation;
     private final Map<String, String> columnDrafts = new HashMap<>();
-
-    private static OperationColumn.Units units() {
-        return new OperationColumn.Units(ClientConfig.temperature(), ClientConfig.pressure(), ClientConfig.flowTime());
-    }
 
     private String columnLabel() {
         return columns.stream().filter(c -> c.getLong("id") == column).map(c -> c.getString("label")).findFirst().orElse("");
@@ -125,7 +121,7 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
         var rows = new ArrayList<Column.Row>();
         rows.add(new Column.Group(columnLabel(), status.hint(),
                 List.of(new Column.Paragraph(pending ? tr("control.pending") : !reply.isBlank() ? reply : status.text(), note ? Palette.TEXT : status.palette(), status.hint()))));
-        rows.addAll(OperationColumn.rows(new OperationColumn.Input(operation, pending, units()), ControlPanelScreen::tr));
+        rows.addAll(OperationColumn.rows(new OperationColumn.Input(operation, pending, ClientConfig.operationUnits()), ControlPanelScreen::tr));
         return rows;
     }
 
@@ -568,7 +564,7 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
         if (page.equals("column") && operation != null) {
             var box = new SkinField(font, r.x(), r.y(), r.w(), r.h(), Component.literal(f.label()), ControlPanelScreen::skin);
             box.setMaxLength(32);
-            box.setValue(columnDrafts.getOrDefault(f.key(), OperationColumn.values(operation.setpoints(), units()).getOrDefault(f.key(), "")));
+            box.setValue(columnDrafts.getOrDefault(f.key(), OperationColumn.values(operation.setpoints(), ClientConfig.operationUnits()).getOrDefault(f.key(), "")));
             box.setResponder(v -> columnDrafts.put(f.key(), v));
             return addRenderableWidget(box);
         }
@@ -732,7 +728,7 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
         }
         if (page.equals("column")) {
             if (operation == null || pending) return;
-            var values = OperationColumn.parse(operation.setpoints(), columnDrafts, units());
+            var values = OperationColumn.parse(operation.setpoints(), columnDrafts, ClientConfig.operationUnits());
             if (values == null) {
                 reply = tr("control.invalid");
                 return;
@@ -775,9 +771,10 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
     public void render(GuiGraphics g, int x, int y, float partial) {
         door.place(leftPos, topPos);
         // An open tour takes the pointer: the page under it shows no hover.
-        super.render(g, tour.pointer(x), tour.pointer(y), partial);
-        if (tour.isOpen()) tour.render(g, font, width, height, x, y);
-        else KitDoor.hint(g, font, hovered, x, y);
+        int px = tour.pointer(x), py = tour.pointer(y);
+        // The whole frame, widgets too, in one batch, as the simulator draws its own (finding C4): its fills go out in runs.
+        GuiCanvas.of(g, font).batch(() -> super.render(g, px, py, partial));
+        DoorInput.overlay(this, g, font, tour, hovered, x, y);
     }
 
     @Override
@@ -802,15 +799,15 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
     public boolean mouseClicked(double x, double y, int button) {
         if (tour.mouseClicked(font, width, height, x, y)) return true;
         SkinField.clickOutside(this, x, y);
+        // A choice first, then the door's bar: this screen's own order (DoorInput.press tries the bar first).
         double rx = x - leftPos, ry = y - topPos;
-        if (button == 0 && door.view().inside(rx, ry))
-            for (var column : door.columns()) {
-                var action = column.action(rx, door.view().contentY(ry));
-                if (action != null) {
-                    act(action);
-                    return true;
-                }
+        if (button == 0) {
+            var action = door.action(rx, ry);
+            if (action != null) {
+                act(action);
+                return true;
             }
+        }
         return door.press(rx, ry, button) || super.mouseClicked(x, y, button);
     }
 
@@ -827,8 +824,7 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
 
     @Override
     public boolean mouseScrolled(double x, double y, double h, double v) {
-        if (tour.isOpen()) return true;
-        return door.wheel(x - leftPos, y - topPos, v) || super.mouseScrolled(x, y, h, v);
+        return DoorInput.wheel(tour, door, x, y, leftPos, topPos, v) || super.mouseScrolled(x, y, h, v);
     }
 
     @Override

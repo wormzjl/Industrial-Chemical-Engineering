@@ -92,7 +92,7 @@ class HoldClassWorldsTest {
             w.runTo(404);w.place(-4,-1,0,Kind.PIPE,NORTH,.02);w.place(-4,0,0,Kind.PIPE,NORTH,.05);
             w.runTo(404+100);
             for(var h:w.held)System.out.println("FAILED_ITERATE_HELD "+h);
-            assertTrue(w.held.stream().noneMatch(h->h.status().startsWith(com.wormzjl.icheme.runtime.ProcessSolveServices.PHASE_HOLD)),
+            assertTrue(w.held.stream().noneMatch(h->h.status().startsWith(com.wormzjl.icheme.runtime.ProcessSolveJobs.PHASE_HOLD)),
                     "no capability hold about a failed iterate: "+w.held);
         });
     }

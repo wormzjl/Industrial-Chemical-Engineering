@@ -131,12 +131,19 @@ public final class IslandSets {
     }
     /** A boundary booking on {@code to}. */
     static ConservativeTransport.BoundaryTransfer boundary(ConservativeTransport.BoundaryTransfer b,FluidThermodynamics from,FluidThermodynamics to) {
-        return new ConservativeTransport.BoundaryTransfer(b.nodeId(),amounts(b.moles(),from,to),b.totalEnergyJoule(),b.solids(),b.solidDirection(),b.kind());
+        return same(from,to)?boundary(b,null,0):boundary(b,map(from,to),to.componentCount());
+    }
+    /** {@code b} on the axis {@code map} of {@code width} entries; a null map keeps the amounts (a copy, as {@link #amounts} does). */
+    private static ConservativeTransport.BoundaryTransfer boundary(ConservativeTransport.BoundaryTransfer b,int[] map,int width) {
+        return new ConservativeTransport.BoundaryTransfer(b.nodeId(),map==null?b.moles().clone():amounts(b.moles(),map,width,"amounts"),b.totalEnergyJoule(),b.solids(),b.solidDirection(),b.kind());
     }
     /** A pipe history stream on {@code to}. */
     static PipeTransfer.Stream stream(PipeTransfer.Stream s,FluidThermodynamics from,FluidThermodynamics to) {
+        return same(from,to)?stream(s,null,0):stream(s,map(from,to),to.componentCount());
+    }
+    private static PipeTransfer.Stream stream(PipeTransfer.Stream s,int[] map,int width) {
         var phases=s.phaseMoles();var moved=new double[phases.length][];
-        for(int p=0;p<phases.length;p++)moved[p]=amounts(phases[p],from,to);
+        for(int p=0;p<phases.length;p++)moved[p]=map==null?phases[p].clone():amounts(phases[p],map,width,"amounts");
         return new PipeTransfer.Stream(s.massKg(),moved,s.phaseVolumes(),s.solids());
     }
     /** A solved interval on {@code to}: its graph, its boundary bookings and its pipe histories by id. */
@@ -163,13 +170,17 @@ public final class IslandSets {
     /** A node padded onto {@code world}'s list ({@link #padded}): what the ledger books and a view reads, never solved. */
     static PassiveNetwork.Reservoir paddedNode(PassiveNetwork.Reservoir n,FluidThermodynamics from,FluidThermodynamics world) {
         if(same(from,world))return n;
-        var i=n.inventory();
-        return new PassiveNetwork.Reservoir(n.id(),n.elevation(),padded(n.state(),from,world),n.kind(),
-                new PassiveNetwork.Inventory(i.volume(),amounts(i.moles(),from,world),i.internalEnergy(),i.solids(),i.levelHeight(),i.open(),i.geometry(),onList(i.pool(),world),i.tower(),i.rigid()).withBlanket(i.blanket()));
+        return paddedNode(n,map(from,world),world);
     }
-    private static PassiveNetwork paddedGraph(PassiveNetwork g,FluidThermodynamics from,FluidThermodynamics world) {
+    /** {@link #paddedNode} on the axis {@code map} of {@code from} onto {@code world}, made once for a whole island (code base review R1). */
+    private static PassiveNetwork.Reservoir paddedNode(PassiveNetwork.Reservoir n,int[] map,FluidThermodynamics world) {
+        var i=n.inventory();
+        return new PassiveNetwork.Reservoir(n.id(),n.elevation(),cut(n.state(),map,world.compounds().size()),n.kind(),
+                new PassiveNetwork.Inventory(i.volume(),amounts(i.moles(),map,world.componentCount(),"amounts"),i.internalEnergy(),i.solids(),i.levelHeight(),i.open(),i.geometry(),onList(i.pool(),world),i.tower(),i.rigid()).withBlanket(i.blanket()));
+    }
+    private static PassiveNetwork paddedGraph(PassiveNetwork g,int[] map,FluidThermodynamics world) {
         var nodes=new ArrayList<PassiveNetwork.Reservoir>(g.reservoirs().size());
-        for(var n:g.reservoirs())nodes.add(paddedNode(n,from,world));
+        for(var n:g.reservoirs())nodes.add(paddedNode(n,map,world));
         return new PassiveNetwork(nodes,g.pipes(),g.scheduledTransfers());
     }
     /** A node's stock as it was held, and the model it was held on. */
@@ -222,11 +233,13 @@ public final class IslandSets {
      */
     static IslandCoordinator.Snapshot presented(IslandCoordinator.Snapshot s,FluidThermodynamics from,FluidThermodynamics world) {
         if(same(from,world))return s;
-        var graph=paddedGraph(s.graph(),from,world);
+        // One axis map for the whole island (code base review R1), not one per node, boundary and stream.
+        int[] map=map(from,world);int width=world.componentCount();
+        var graph=paddedGraph(s.graph(),map,world);
         var result=s.lastResult().map(r->{
-            var boundaries=new ArrayList<ConservativeTransport.BoundaryTransfer>(r.boundaries().size());for(var b:r.boundaries())boundaries.add(boundary(b,from,world));
-            var transfers=new ArrayList<PipeTransfer>(r.pipeTransfers().size());for(var t:r.pipeTransfers())transfers.add(new PipeTransfer(t.pipeId(),stream(t.forward(),from,world),stream(t.reverse(),from,world)));
-            return new PassiveIntervalSolver.Result(paddedGraph(r.graph(),from,world),r.advancedSeconds(),r.averageMassFlows(),r.acceptedSubsteps(),r.rejectedSubsteps(),r.pumpWorkJoule(),boundaries,
+            var boundaries=new ArrayList<ConservativeTransport.BoundaryTransfer>(r.boundaries().size());for(var b:r.boundaries())boundaries.add(boundary(b,map,width));
+            var transfers=new ArrayList<PipeTransfer>(r.pipeTransfers().size());for(var t:r.pipeTransfers())transfers.add(new PipeTransfer(t.pipeId(),stream(t.forward(),map,width),stream(t.reverse(),map,width)));
+            return new PassiveIntervalSolver.Result(paddedGraph(r.graph(),map,world),r.advancedSeconds(),r.averageMassFlows(),r.acceptedSubsteps(),r.rejectedSubsteps(),r.pumpWorkJoule(),boundaries,
                     r.rejectionReasons(),r.endpointModes(),r.endpointHeads(),r.endpointFlows(),transfers,r.observations(),r.towers());
         });
         return new IslandCoordinator.Snapshot(s.id(),s.revision(),graph,s.clock(),result,s.status(),s.fences(),s.certificate(),s.payloadGeneration());

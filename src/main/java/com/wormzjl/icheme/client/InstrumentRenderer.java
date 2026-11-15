@@ -42,7 +42,7 @@ public final class InstrumentRenderer {
     private static final RenderType TYPE=RenderType.entitySolid(WHITE);
     private static final RenderType GHOST=RenderType.entityTranslucentCull(WHITE);
     private record Connector(List<Double> tap,boolean bottom,boolean temperature,double probeDepth){}
-    private static final Map<Connector,List<InstrumentGeometry.Quad>> CONNECTORS=new HashMap<>();
+    private static final com.wormzjl.icheme.science.equipment.BoundedCache<Connector,List<InstrumentGeometry.Quad>> CONNECTORS=new com.wormzjl.icheme.science.equipment.BoundedCache<>(2048);
     // ---- level of detail (batch 2026-11-09-lod-rendering, LOD_RENDERING_PLAN.md A2): sizes in metres, tiers in pixels ----
     /** A dial's face, a transmitter's head, a connector's stem and a wiring ribbon. */
     private static final double DIAL=2*InstrumentGeometry.RADIUS,HEAD=.23,STEM=.028,WIRE=.025;
@@ -67,7 +67,8 @@ public final class InstrumentRenderer {
     // are built once per change (Plan), and a frame only tests the tiers and the frustum and writes the cached vertices.
     // A needle is posed again only when its reading moves. The placement ghosts (an item held) still pose as they draw.
     /** The plans by block entity; a removed one is pruned at the next host gathering. */
-    private static final Map<net.minecraft.world.level.block.entity.BlockEntity,Plan> PLANS=new IdentityHashMap<>();
+    /** By block entity: a block entity is equal only to itself, so the cache keys it by identity as the identity map did. */
+    private static final com.wormzjl.icheme.science.equipment.BoundedCache<net.minecraft.world.level.block.entity.BlockEntity,Plan> PLANS=new com.wormzjl.icheme.science.equipment.BoundedCache<>(1024);
     private static final int MOST_PLANS=1024;
     /** Quads posed on a mount: world positions (12 a quad), the quad's normal (3), its colour; as {@code quad} drew them before. */
     private static final class Posed {
@@ -178,7 +179,6 @@ public final class InstrumentRenderer {
     private static Plan plan(InstrumentHosts.Host host){
         var plan=PLANS.get(host.entity());
         if(plan!=null&&plan.holds(host))return plan;
-        if(PLANS.size()>=MOST_PLANS)PLANS.clear();
         plan=new Plan(host);PLANS.put(host.entity(),plan);
         return plan;
     }
@@ -302,7 +302,7 @@ public final class InstrumentRenderer {
     private record Wiring(EquipmentShape shape,Set<String> installed,List<Integer> codes,RenderDetail detail,Object atlas,List<net.minecraft.client.renderer.block.model.BakedQuad> hardware,String[] names,float[][] finish,Uploaded[] keys,long version){
         int index(String name){for(int i=0;i<names.length;i++)if(names[i].equals(name))return i;return -1;}
     }
-    private static final Map<BlockPos,Wiring> WIRING=new HashMap<>();
+    private static final com.wormzjl.icheme.science.equipment.BoundedCache<BlockPos,Wiring> WIRING=new com.wormzjl.icheme.science.equipment.BoundedCache<>(256);
     private static long wiringBuilds;
     /** A finish mesh on the GPU: one per structure, build and texture. */
     private record Uploaded(BlockPos at,long version,String texture){}
@@ -489,7 +489,6 @@ public final class InstrumentRenderer {
             var sprites=new net.minecraft.client.renderer.texture.TextureAtlasSprite[MATERIALS.length];for(var m:MATERIALS){sprites[m.ordinal()]=com.wormzjl.icheme.client.model.EquipmentShellModel.sprite(m);if(sprites[m.ordinal()]==null)return null;}
             quads=com.wormzjl.icheme.client.model.EquipmentShellModel.bake(steel,sprites,true);
         }
-        if(WIRING.size()>=256)WIRING.clear();
         long version=++wiringBuilds;var at=shell.getBlockPos().immutable();
         var names=finish.keySet().toArray(String[]::new);var vertices=new float[names.length][];var keys=new Uploaded[names.length];
         for(int i=0;i<names.length;i++){vertices[i]=vertices(finish.get(names[i]));keys[i]=new Uploaded(at,version,names[i]);}
@@ -508,7 +507,7 @@ public final class InstrumentRenderer {
         long now=mc.level.getGameTime();
         if(shownIn!=mc.level||now<shownAt||now-shownAt>=HOST_TICKS){
             shown=InstrumentHosts.nearby(mc.level,mc.player.position(),120,true);shownAt=now;shownIn=mc.level;
-            PLANS.values().removeIf(p->p.entity.isRemoved());
+            PLANS.removeIf((entity,p)->p.entity.isRemoved());
         }
         return shown;
     }
@@ -565,7 +564,6 @@ public final class InstrumentRenderer {
     /** A connector's local quads for {@code mount}, from {@link #CONNECTORS}. */
     private static List<InstrumentGeometry.Quad> connection(Instrument.Mount mount,boolean temperature){
         var tap=mount.localTap();var key=new Connector(List.of(tap[0],tap[1],tap[2]),mount.bottomEntry(),temperature,mount.probeDepth());
-        if(CONNECTORS.size()>2048)CONNECTORS.clear();
         return CONNECTORS.computeIfAbsent(key,k->InstrumentGeometry.connection(new double[]{tap[0],tap[1],tap[2]},k.bottom(),k.temperature(),k.probeDepth()));
     }
     private static String compact(double value){return String.format(Locale.ROOT,Math.abs(value)>=10000?"%.1e":"%.3g",value);}

@@ -1,0 +1,463 @@
+package com.wormzjl.icheme.science.plant.column;
+
+import com.wormzjl.icheme.science.column.v3.V3ColumnDutyLedger;
+import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
+import com.wormzjl.icheme.science.column.v3.V3ColumnResult;
+import com.wormzjl.icheme.science.column.v3.V3SideDrawSpec;
+import com.wormzjl.icheme.science.equipment.HeatSides;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Objects;
+
+/**
+ * A running column's split table (batch 2026-10-28-column-operation, plan section 5): from the last accepted V3 solve,
+ * for each product the share of each component taken that leaves in it (its recovery), the product's temperature and
+ * pressure; the duties per mole of feed taken; and the reference state the table was solved at. State, not a fact: the
+ * engine rebuilds it by a solve.
+ *
+ * <p>Recoveries are on the fluid network's axis (the package's components, water last) and every component's row sums to
+ * one exactly, so a cycle conserves each component by construction, whatever the feed. A component the solve had no feed
+ * of takes the row of the solved component nearest in normal boiling point (plan section 11), except water, which with
+ * no solved water condenses with the distillate (a dry column has no free-water outlet of its own).
+ *
+ * @param axis              the network's component ids, water last
+ * @param products          one per product port with a stream in the solve
+ * @param reboilerPerFeed   J per mole of feed taken (the reboiler duty over the solved feed rate)
+ * @param pumparoundPerFeed J per mole of feed taken, per pumparound, negative for a cooler
+ * @param condenserPerFeed  J per mole of feed taken, the solved condenser duty (column sign: negative, removed)
+ * @param reference         the intensive state the table was solved at
+ * @param held              components the solve had a feed of; the others borrowed a row
+ * @param condenserWaterPerFeed J per mole of feed taken, the share of the condenser duty its cooling water takes (column sign;
+ *                          batch 2026-11-02-process-simulator, {@code COOLER_MODEL_PLAN.md} section 6): the whole duty for a
+ *                          water-cooled condenser, none for an air cooler, the trim's for an air-then-water condenser
+ * @param waterBelow        K: an outlet's booking difference goes to the condenser's cooling water where the port offered its product
+ *                          below this temperature, to the air otherwise ({@code COOLER_MODEL_PLAN.md} section 6, the owner's "divide
+ *                          by temperature"): {@link #WATER_ALWAYS} for a water-cooled condenser, {@link #WATER_NEVER} for an air cooler,
+ *                          the split for an air-then-water condenser
+ * @param airArea           m² of an air condenser's bare tube per mol/s of feed that cools the overhead from the top tray to the air's
+ *                          outlet (the receiver, or an air-then-water condenser's split) against 25 °C air, with the fans at each
+ *                          {@link #FAN_STEPS}th of full speed from natural draught (0) to full (1): the law of the world's air
+ *                          coolers ({@code HeatSides.airFilms}; U2, {@code COOLER_MODEL_PLAN.md} section 8). Empty where the
+ *                          condenser has no air; {@link Double#MAX_VALUE} where the air cannot reach that outlet
+ * @param flood             the solve's tray hydraulics reduced to the cycle's arithmetic (batch 2026-11-10-column-failure-modes, W3):
+ *                          {@link Flood#NONE} where the solve had none (a prescribed drop)
+ * @param pumparoundDraw    K, each pumparound's draw tray as solved (W4: its cooler's utility leaves at least the approach below
+ *                          it); empty where the table has none known (a table built without the inspection)
+ */
+public record SplitTable(List<String> axis, List<Product> products, double reboilerPerFeed, double[] pumparoundPerFeed, double condenserPerFeed,
+                         Reference reference, boolean[] held, double condenserWaterPerFeed, double waterBelow, double[] airArea, Flood flood,
+                         double[] pumparoundDraw) {
+    /** The fan speeds {@link #airArea} is given at: natural draught, then each eighth of full speed. */
+    public static final int FAN_STEPS = 8;
+    /** The water's id on the network axis. */
+    public static final String WATER = "Water";
+    /** {@link #waterBelow} of a water-cooled condenser, whose water takes every difference, and of an air cooler, whose water takes none. */
+    public static final double WATER_ALWAYS = Double.MAX_VALUE, WATER_NEVER = 0;
+
+    /** A product: its port, its index among draws (0 for the others), its recovery row, temperature (K) and pressure (Pa). */
+    public record Product(Port port, int index, double[] recovery, double temperature, double pressure) {
+        public Product {
+            Objects.requireNonNull(port, "port");
+            recovery = recovery.clone();
+            if (!(temperature > 0) || !(pressure > 0)) throw new IllegalArgumentException("A product has a temperature and a pressure");
+        }
+
+        @Override
+        public double[] recovery() {
+            return recovery.clone();
+        }
+
+        double share(int component) {
+            return recovery[component];
+        }
+    }
+
+    /**
+     * The intensive state of the solve: the feed's mole fractions on the axis, its specific enthalpy (J/mol, network basis)
+     * and its slope (J/mol K) for the enthalpy band, the steam taken per mole of feed per steam inlet, the throughput
+     * relative to the design rate, the setpoints it solved, and the feed's and each steam's temperature there (K, NaN
+     * unknown; the Operation tab's, C7).
+     */
+    public record Reference(double[] feedFractions, double feedEnthalpy, double enthalpySlope, double[] steamRatios, double alpha, Setpoints setpoints,
+                            double feedTemperature, double[] steamTemperatures) {
+        public Reference {
+            feedFractions = feedFractions.clone();
+            steamRatios = steamRatios.clone();
+            steamTemperatures = steamTemperatures.clone();
+            Objects.requireNonNull(setpoints, "setpoints");
+            if (steamTemperatures.length != steamRatios.length) throw new IllegalArgumentException("One temperature per steam inlet");
+        }
+
+        @Override
+        public double[] feedFractions() {
+            return feedFractions.clone();
+        }
+
+        @Override
+        public double[] steamRatios() {
+            return steamRatios.clone();
+        }
+
+        @Override
+        public double[] steamTemperatures() {
+            return steamTemperatures.clone();
+        }
+
+        /** The feed's temperature at specific enthalpy {@code h}, J/mol: the solved one moved along the slope (NaN unknown). */
+        public double feedTemperature(double h) {
+            return enthalpySlope > 0 && Double.isFinite(h) ? feedTemperature + (h - feedEnthalpy) / enthalpySlope : feedTemperature;
+        }
+    }
+
+    /**
+     * The solve's hydraulics as the cycle reads them (W3.1, W3.3): the worst tray's flood fraction per mol/s of feed at the
+     * table's own throughput, that tray and whether its vapour (not its liquid) limits it, and the column's solved total
+     * dry drop and liquid head, Pa. Fair's flood fraction is vapour velocity over a capacity that depends only on intensive
+     * quantities, so at one table it is proportional to the feed taken; the dry drop goes with the square of the vapour's
+     * speed, the liquid head stands as solved.
+     *
+     * @param perFeed       flood fraction per mol/s of feed, 0 where unknown: no limit
+     * @param tray          the worst tray, V3's node (the player reads it as node + 1, as V3's flooding warning does), 0 where unknown
+     * @param vapourLimited whether the worst tray's vapour, not its liquid, limits it
+     * @param dryPascal     the solved total dry drop over the trays, Pa
+     * @param liquidPascal  the solved total liquid head and bubble residual over the trays, Pa
+     */
+    public record Flood(double perFeed, int tray, boolean vapourLimited, double dryPascal, double liquidPascal) {
+        /** A table with no hydraulics. */
+        public static final Flood NONE = new Flood(0, 0, true, 0, 0);
+
+        public Flood {
+            if (!(perFeed >= 0) || !Double.isFinite(perFeed) || tray < 0 || !(dryPascal >= 0) || !Double.isFinite(dryPascal) || !(liquidPascal >= 0)
+                    || !Double.isFinite(liquidPascal)) throw new IllegalArgumentException("Invalid flood record");
+        }
+
+        /** Whether the solve gave hydraulics. */
+        public boolean known() {
+            return perFeed > 0;
+        }
+
+        /** The worst tray's flood fraction at {@code feedRate} mol/s of feed (0 where unknown). */
+        public double fraction(double feedRate) {
+            return perFeed * Math.max(0, feedRate);
+        }
+
+        /** The column's pressure drop where the feed taken is {@code ratio} times the table's, Pa (W3.3): the dry part by the square, the liquid head as solved. */
+        public double drop(double ratio) {
+            double r = Math.max(0, ratio);
+            return dryPascal * r * r + (r > 0 ? liquidPascal : 0);
+        }
+    }
+
+    public SplitTable {
+        Objects.requireNonNull(flood, "flood");
+        axis = List.copyOf(axis);
+        products = List.copyOf(products);
+        pumparoundPerFeed = pumparoundPerFeed.clone();
+        held = held.clone();
+        Objects.requireNonNull(reference, "reference");
+        if (products.isEmpty() || held.length != axis.size()) throw new IllegalArgumentException("A split table has products on its axis");
+        for (int i = 0; i < axis.size(); i++) {
+            double sum = 0;
+            for (var p : products) {
+                if (p.recovery.length != axis.size()) throw new IllegalArgumentException("A recovery row per axis component");
+                double r = p.recovery[i];
+                if (!(r >= 0) || r > 1) throw new IllegalArgumentException("A recovery is 0 to 1");
+                sum += r;
+            }
+            if (Math.abs(sum - 1) > 1e-12) throw new IllegalArgumentException("Component " + axis.get(i) + "'s recoveries sum to " + sum);
+        }
+        if (!Double.isFinite(condenserWaterPerFeed) || condenserWaterPerFeed * condenserPerFeed < 0 || Math.abs(condenserWaterPerFeed) > Math.abs(condenserPerFeed))
+            throw new IllegalArgumentException("The condenser's water takes a share of its duty, not " + condenserWaterPerFeed + " of " + condenserPerFeed);
+        if (!(waterBelow >= 0) || !Double.isFinite(waterBelow)) throw new IllegalArgumentException("Invalid water temperature " + waterBelow);
+        airArea = airArea.clone();
+        if (airArea.length != 0 && airArea.length != FAN_STEPS + 1) throw new IllegalArgumentException("An air area per fan step");
+        for (double a : airArea) if (!(a >= 0) || !Double.isFinite(a)) throw new IllegalArgumentException("Invalid air area " + a);
+        pumparoundDraw = pumparoundDraw.clone();
+        if (pumparoundDraw.length != 0 && pumparoundDraw.length != pumparoundPerFeed.length) throw new IllegalArgumentException("A draw temperature per pumparound");
+        for (double t : pumparoundDraw) if (!(t > 0) || !Double.isFinite(t)) throw new IllegalArgumentException("Invalid draw temperature " + t);
+    }
+
+    /** A table without its pumparounds' draw temperatures. */
+    public SplitTable(List<String> axis, List<Product> products, double reboilerPerFeed, double[] pumparoundPerFeed, double condenserPerFeed,
+                      Reference reference, boolean[] held, double condenserWaterPerFeed, double waterBelow, double[] airArea, Flood flood) {
+        this(axis, products, reboilerPerFeed, pumparoundPerFeed, condenserPerFeed, reference, held, condenserWaterPerFeed, waterBelow, airArea, flood, new double[0]);
+    }
+
+    /** A table without hydraulics (a prescribed drop). */
+    public SplitTable(List<String> axis, List<Product> products, double reboilerPerFeed, double[] pumparoundPerFeed, double condenserPerFeed,
+                      Reference reference, boolean[] held, double condenserWaterPerFeed, double waterBelow, double[] airArea) {
+        this(axis, products, reboilerPerFeed, pumparoundPerFeed, condenserPerFeed, reference, held, condenserWaterPerFeed, waterBelow, airArea, Flood.NONE);
+    }
+
+    /** This table with {@code value} as its hydraulics. */
+    public SplitTable withFlood(Flood value) {
+        return new SplitTable(axis, products, reboilerPerFeed, pumparoundPerFeed, condenserPerFeed, reference, held, condenserWaterPerFeed, waterBelow, airArea, value, pumparoundDraw);
+    }
+
+    /** This table with {@code value} as its pumparounds' draw temperatures, K. */
+    public SplitTable withPumparoundDraw(double[] value) {
+        return new SplitTable(axis, products, reboilerPerFeed, pumparoundPerFeed, condenserPerFeed, reference, held, condenserWaterPerFeed, waterBelow, airArea, flood, value);
+    }
+
+    @Override
+    public double[] pumparoundDraw() {
+        return pumparoundDraw.clone();
+    }
+
+    /** The hottest product's temperature, K: the bottoms' where it has one. */
+    private double hottest() {
+        double t = 0;
+        for (var p : products) t = Math.max(t, p.temperature());
+        return t;
+    }
+
+    /**
+     * Pumparound {@code j}'s draw tray temperature, K (W4): as solved, or, in a table without them, the hottest product's,
+     * which bounds the column's every tray.
+     */
+    public double drawTemperature(int j) {
+        return j >= 0 && j < pumparoundDraw.length ? pumparoundDraw[j] : hottest();
+    }
+
+    /** The bottoms' temperature, K, where the reboiler's utility gives its heat (W4); the hottest product's in a table without a bottoms. */
+    public double bottomsTemperature() {
+        int k = product(Port.BOTTOMS, 0);
+        return k >= 0 ? products.get(k).temperature() : hottest();
+    }
+
+    /** A table whose condenser has no air the world models (a water-cooled one, or one solved before U2). */
+    public SplitTable(List<String> axis, List<Product> products, double reboilerPerFeed, double[] pumparoundPerFeed, double condenserPerFeed,
+                      Reference reference, boolean[] held, double condenserWaterPerFeed, double waterBelow) {
+        this(axis, products, reboilerPerFeed, pumparoundPerFeed, condenserPerFeed, reference, held, condenserWaterPerFeed, waterBelow, new double[0]);
+    }
+
+    /**
+     * A table whose booking differences follow its water's share: all to the water where it takes the whole duty, none where it
+     * takes none, else below the split (a table before {@link #waterBelow} existed).
+     */
+    public SplitTable(List<String> axis, List<Product> products, double reboilerPerFeed, double[] pumparoundPerFeed, double condenserPerFeed,
+                      Reference reference, boolean[] held, double condenserWaterPerFeed) {
+        this(axis, products, reboilerPerFeed, pumparoundPerFeed, condenserPerFeed, reference, held, condenserWaterPerFeed,
+                condenserWaterPerFeed == condenserPerFeed ? WATER_ALWAYS : condenserWaterPerFeed == 0 ? WATER_NEVER : HeatSides.AIR_SPLIT_TEMPERATURE);
+    }
+
+    /** A table whose condenser's water takes the whole duty: a water-cooled condenser's, the table before the share existed. */
+    public SplitTable(List<String> axis, List<Product> products, double reboilerPerFeed, double[] pumparoundPerFeed, double condenserPerFeed,
+                      Reference reference, boolean[] held) {
+        this(axis, products, reboilerPerFeed, pumparoundPerFeed, condenserPerFeed, reference, held, condenserPerFeed);
+    }
+
+    /** The share of the condenser duty its cooling water takes, 0 to 1; 0 where the duty is 0. */
+    public double waterShare() {
+        return condenserPerFeed == 0 ? 0 : condenserWaterPerFeed / condenserPerFeed;
+    }
+
+    @Override
+    public double[] airArea() {
+        return airArea.clone();
+    }
+
+    /**
+     * The most feed, mol/s, an air condenser of {@code surface} m² of bare tube holds with its fans at full speed (U2): infinite
+     * where the table has no air, the air has no duty, or the surface is not known (0).
+     */
+    public double airFeed(double surface) {
+        if (airArea.length == 0 || !(surface > 0)) return Double.POSITIVE_INFINITY;
+        double full = airArea[FAN_STEPS];
+        return full > 0 ? surface / full : Double.POSITIVE_INFINITY;
+    }
+
+    /**
+     * The most feed an air condenser holds, mol/s, with {@code powered} m² of bare tube at full fans and {@code natural} m²
+     * whose fans have no power, at natural draught (W5 of batch 2026-11-10-column-failure-modes): the table's tube per feed
+     * is linear in the surface, so the two add. With no unpowered surface, {@link #airFeed(double)}.
+     */
+    public double airFeed(double powered, double natural) {
+        if (!(natural > 0)) return airFeed(powered);
+        if (airArea.length == 0) return Double.POSITIVE_INFINITY;
+        return held(powered, airArea[FAN_STEPS]) + held(natural, airArea[0]);
+    }
+
+    private static double held(double surface, double perFeed) {
+        return !(surface > 0) ? 0 : perFeed > 0 ? surface / perFeed : Double.POSITIVE_INFINITY;
+    }
+
+    /**
+     * The least fan speed, 0 to 1, at which an air condenser of {@code surface} m² of bare tube holds {@code feed} mol/s (U2): 0
+     * where natural draught holds it (the louvers throttle, the fans stand still), 1 where full speed does not, between the
+     * steps linear in the surface needed; NaN where the table has no air or the surface is not known.
+     */
+    public double fans(double surface, double feed) {
+        if (airArea.length == 0 || !(surface > 0)) return Double.NaN;
+        if (!(feed > 0)) return 0;
+        double per = surface / feed;
+        if (airArea[0] <= per) return 0;
+        for (int k = 1; k <= FAN_STEPS; k++)
+            if (airArea[k] <= per) {
+                double slow = airArea[k - 1], fast = airArea[k];
+                return (k - 1 + (slow - per) / (slow - fast)) / FAN_STEPS;
+            }
+        return 1;
+    }
+
+    /** Whether the cooling water takes the booking difference of an outlet that offered its product at {@code temperature} K (NaN unknown: a water-cooled condenser's water only). */
+    public boolean waterTakes(double temperature) {
+        return waterBelow == WATER_ALWAYS || temperature < waterBelow;
+    }
+
+    @Override
+    public double[] pumparoundPerFeed() {
+        return pumparoundPerFeed.clone();
+    }
+
+    @Override
+    public boolean[] held() {
+        return held.clone();
+    }
+
+    /** The product moles of {@code taken} (pooled inlet moles on the axis): each component split by its row. */
+    public double[][] split(double[] taken) {
+        if (taken.length != axis.size()) throw new IllegalArgumentException("Taken moles on the table's axis");
+        double[][] out = new double[products.size()][axis.size()];
+        for (int i = 0; i < taken.length; i++) {
+            double rest = taken[i];
+            // The last product with a share takes the remainder, so the split adds up to the taken moles exactly.
+            int last = -1;
+            for (int k = 0; k < products.size(); k++) if (products.get(k).share(i) > 0) last = k;
+            for (int k = 0; k < products.size(); k++) {
+                if (k == last) {
+                    out[k][i] = Math.max(0, rest);
+                    break;
+                }
+                double n = taken[i] * products.get(k).share(i);
+                out[k][i] = n;
+                rest -= n;
+            }
+        }
+        return out;
+    }
+
+    /**
+     * The table of an accepted solve.
+     *
+     * @param axis          the network's component ids, water last
+     * @param boilingPoints the axis components' normal boiling points, K, for the rows of components the solve had no feed of
+     * @param input         the solved input (its feed, steam and duties)
+     * @param result        the accepted result
+     * @param reference     the intensive state the input stood for
+     */
+    public static SplitTable of(List<String> axis, double[] boilingPoints, V3ColumnInput input, V3ColumnResult result, Reference reference) {
+        int m = axis.size();
+        int water = axis.indexOf(WATER);
+        var streams = result.streams();
+        var rows = new ArrayList<double[]>();
+        var products = new ArrayList<Product>();
+        for (var s : streams) {
+            var port = port(s.streamId(), input);
+            double[] flows = new double[m];
+            for (var f : s.moleFractions()) {
+                int i = axis.indexOf(f.componentId());
+                if (i >= 0) flows[i] += s.molarFlowMolPerSecond() * f.moleFraction();
+            }
+            // Two streams to one port (none today) add up.
+            int existing = -1;
+            for (int k = 0; k < products.size(); k++) if (products.get(k).port() == port.port() && products.get(k).index() == port.index()) existing = k;
+            if (existing >= 0) {
+                for (int i = 0; i < m; i++) rows.get(existing)[i] += flows[i];
+                continue;
+            }
+            rows.add(flows);
+            products.add(new Product(port.port(), port.index(), new double[m], s.temperatureKelvin(), s.pressurePascal()));
+        }
+        double[] total = new double[m];
+        for (double[] row : rows) for (int i = 0; i < m; i++) total[i] += row[i];
+        boolean[] held = new boolean[m];
+        double largest = Arrays.stream(total).max().orElse(0);
+        for (int i = 0; i < m; i++) held[i] = total[i] > largest * 1e-14;
+        double[][] recovery = new double[products.size()][m];
+        for (int i = 0; i < m; i++) {
+            if (held[i]) {
+                for (int k = 0; k < products.size(); k++) recovery[k][i] = rows.get(k)[i] / total[i];
+                continue;
+            }
+            int distillate = indexOf(products, Port.DISTILLATE);
+            if (i == water && distillate >= 0) {
+                recovery[distillate][i] = 1;
+                continue;
+            }
+            int nearest = -1;
+            for (int j = 0; j < m; j++)
+                if (held[j] && j != water && (nearest < 0 || Math.abs(boilingPoints[j] - boilingPoints[i]) < Math.abs(boilingPoints[nearest] - boilingPoints[i]))) nearest = j;
+            if (nearest < 0) throw new IllegalArgumentException("The solve holds no hydrocarbon");
+            for (int k = 0; k < products.size(); k++) recovery[k][i] = recovery[k][nearest];
+        }
+        // Each row to a sum of one exactly: the largest share takes the rounding.
+        for (int i = 0; i < m; i++) {
+            int big = 0;
+            double sum = 0;
+            for (int k = 0; k < products.size(); k++) {
+                sum += recovery[k][i];
+                if (recovery[k][i] > recovery[big][i]) big = k;
+            }
+            recovery[big][i] += 1 - sum;
+            if (recovery[big][i] > 1) recovery[big][i] = 1;
+        }
+        var finished = new ArrayList<Product>();
+        for (int k = 0; k < products.size(); k++) {
+            var p = products.get(k);
+            finished.add(new Product(p.port(), p.index(), recovery[k], p.temperature(), p.pressure()));
+        }
+        double feed = Arrays.stream(input.feedComponentMolarFlowsMolPerSecond()).sum();
+        V3ColumnDutyLedger ledger = result.dutyLedger().orElseThrow(() -> new IllegalArgumentException("An accepted result has its duties"));
+        double[] pa = new double[input.pumparounds().size()];
+        for (int j = 0; j < pa.length; j++) pa[j] = input.pumparounds().get(j).dutyWatts() / feed;
+        return new SplitTable(axis, finished, ledger.reboilerWatts() / feed, pa, ledger.condenserWatts() / feed, reference, held);
+    }
+
+    /** A product port and its index among the draws. */
+    public record PortIndex(Port port, int index) {
+    }
+
+    /** The product port of a V3 stream id. */
+    public static PortIndex port(String streamId, V3ColumnInput input) {
+        return switch (streamId) {
+            case "overhead_vapor" -> new PortIndex(Port.OFF_GAS, 0);
+            case "distillate_liquid" -> new PortIndex(Port.DISTILLATE, 0);
+            case "free_water" -> new PortIndex(Port.SOUR_WATER, 0);
+            case "bottoms_liquid" -> new PortIndex(Port.BOTTOMS, 0);
+            default -> {
+                if (!streamId.startsWith("side_liquid_tray_")) throw new IllegalArgumentException("Unknown column stream " + streamId);
+                int tray = Integer.parseInt(streamId.substring("side_liquid_tray_".length()));
+                List<V3SideDrawSpec> draws = input.sideDraws();
+                for (int j = 0; j < draws.size(); j++) if (draws.get(j).trayNumber() == tray) yield new PortIndex(Port.DRAW, j);
+                throw new IllegalArgumentException("No side draw on tray " + tray);
+            }
+        };
+    }
+
+    /** The product on {@code port} (and draw {@code index}), or -1. */
+    public int product(Port port, int index) {
+        for (int k = 0; k < products.size(); k++) if (products.get(k).port() == port && products.get(k).index() == index) return k;
+        return -1;
+    }
+
+    /**
+     * Product {@code k}'s moles per mole of feed at the reference: its recovery of the feed's components and of the steam
+     * taken with it, which is water (the sour water is mostly condensed stripping steam).
+     */
+    public double perFeed(int k) {
+        var p = products.get(k);
+        var z = reference.feedFractions();
+        double share = 0;
+        for (int c = 0; c < z.length; c++) share += p.share(c) * z[c];
+        int water = axis.indexOf(WATER);
+        if (water >= 0) for (double steam : reference.steamRatios()) share += p.share(water) * steam;
+        return share;
+    }
+
+    private static int indexOf(List<Product> products, Port port) {
+        for (int k = 0; k < products.size(); k++) if (products.get(k).port() == port) return k;
+        return -1;
+    }
+}

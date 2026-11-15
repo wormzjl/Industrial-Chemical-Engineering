@@ -35,8 +35,8 @@ class LiquidCo2LetDownTest {
     final FluidThermodynamics pilot=FluidTestSupport.model(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(),PILOT);
 
     static PhysicalFluidTopology.Device device(long id,int x,int y,Kind kind,PhysicalFluidTopology.Direction facing,FlowControl control,double diameter) {
-        return new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position(DIMENSION,x,y,0),kind,facing,
-                new PipeResistance.Geometry(1,diameter,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),control);
+        return PhysicalFluidTopology.Device.builder(id,new PhysicalFluidTopology.Position(DIMENSION,x,y,0),kind,facing,
+                new PipeResistance.Geometry(1,diameter,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),control).build();
     }
     static PhysicalFluidTopology.Device device(long id,int x,int y,Kind kind){return device(id,x,y,kind,NORTH,new FlowControl.Passive(),.05);}
     static int node(PassiveNetwork graph,long id){for(int i=0;i<graph.reservoirs().size();i++)if(graph.reservoirs().get(i).id()==id)return i;throw new AssertionError(id);}

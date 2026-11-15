@@ -490,7 +490,7 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
     /** A unit as {@link #unit(Kind, double, double, Heading, int, ProcessUnit.Bank)}, its bottom outlet turned {@code outlet} quarter turns from the front where its design turns it. */
     public static EquipmentShape unit(Kind kind, double diameter, double tangentLength, Heading front, int support, ProcessUnit.Bank bank, int outlet) {
         if (!kind.unit()) throw new IllegalArgumentException(kind + " is not a unit");
-        return new EquipmentShape(kind, diameter, tangentLength, ProcessUnit.orientation(kind), front, support, null, List.of(), bank, false, outlet, TowerBank.ONE, UnitDesign.of(kind).duty(diameter, (int) tangentLength));
+        return new EquipmentShape(kind, diameter, tangentLength, UnitDesign.of(kind).orientation(), front, support, null, List.of(), bank, false, outlet, TowerBank.ONE, UnitDesign.of(kind).duty(diameter, (int) tangentLength));
     }
 
     /**
@@ -499,7 +499,7 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
      */
     public static EquipmentShape storage(Kind kind, double diameter, double shell, Heading front, int support) {
         if (!kind.storage()) throw new IllegalArgumentException(kind + " is not a storage vessel");
-        return new EquipmentShape(kind, diameter, shell, ProcessUnit.orientation(kind), front, support, null, List.of(), ProcessUnit.Bank.ONE, false, 0, TowerBank.ONE, MachineDuty.NONE);
+        return new EquipmentShape(kind, diameter, shell, UnitDesign.of(kind).orientation(), front, support, null, List.of(), ProcessUnit.Bank.ONE, false, 0, TowerBank.ONE, MachineDuty.NONE);
     }
 
     /** A shape of any designed kind ({@link Kind#designed()}): a storage vessel, or a unit in {@code bank} (an air cooler's). */
@@ -510,7 +510,7 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
     /** A designed shape as {@link #designed(Kind, double, double, Heading, int, ProcessUnit.Bank)}, its bottom outlet turned {@code outlet} quarter turns ({@link #outlets}). */
     public static EquipmentShape designed(Kind kind, double diameter, double length, Heading front, int support, ProcessUnit.Bank bank, int outlet) {
         if (!kind.designed()) throw new IllegalArgumentException(kind + " is not drawn from a design");
-        return new EquipmentShape(kind, diameter, length, ProcessUnit.orientation(kind), front, support, null, List.of(), kind.storage() ? ProcessUnit.Bank.ONE : bank, false, outlet, TowerBank.ONE, UnitDesign.of(kind).duty(diameter, (int) length));
+        return new EquipmentShape(kind, diameter, length, UnitDesign.of(kind).orientation(), front, support, null, List.of(), kind.storage() ? ProcessUnit.Bank.ONE : bank, false, outlet, TowerBank.ONE, UnitDesign.of(kind).duty(diameter, (int) length));
     }
 
     /**

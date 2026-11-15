@@ -97,7 +97,7 @@ class McpGameplayRegressionTest {
         var model=FluidTestSupport.networkModel();
         var nitrogen=model.initialNitrogenCharge(1,298.15,101325,()->{});
         var spec=FluidDeviceSpec.water();
-        var device=new PhysicalFluidTopology.Device(3,new PhysicalFluidTopology.Position("minecraft:overworld",0,-60,3),com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.GENERATOR,PhysicalFluidTopology.Direction.NORTH,new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Passive());
+        var device=PhysicalFluidTopology.Device.builder(3,new PhysicalFluidTopology.Position("minecraft:overworld",0,-60,3),com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.GENERATOR,PhysicalFluidTopology.Direction.NORTH,new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Passive()).build();
         var water=spec.initialize(device,model,()->{}).state();
         var graph=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,-60,nitrogen),
                 new PassiveNetwork.Reservoir(3,-60,water,PassiveNetwork.NodeKind.GENERATOR)),

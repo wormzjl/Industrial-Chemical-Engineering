@@ -4,7 +4,7 @@ import com.wormzjl.icheme.science.equipment.BatchStillOptions;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
 import com.wormzjl.icheme.science.equipment.UnitDesign;
-import com.wormzjl.icheme.science.fluid.network.BatchStill;
+import com.wormzjl.icheme.science.plant.still.BatchStill;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -37,7 +37,7 @@ public final class StillSizing {
 
         @Override public EquipmentShape shape() {
             var kind = EquipmentShape.Kind.BATCH_STILL;
-            return UnitSize.unit(kind, pot, ProcessUnit.defaultLength(kind, pot), ProcessUnit.Bank.ONE).withStill(options);
+            return UnitSize.unit(kind, pot, UnitDesign.of(kind).defaultLength(pot), ProcessUnit.Bank.ONE).withStill(options);
         }
 
         /** The law's still of this pot. */

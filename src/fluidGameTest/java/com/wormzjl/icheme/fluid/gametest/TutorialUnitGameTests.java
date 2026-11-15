@@ -10,8 +10,8 @@ import com.wormzjl.icheme.science.column.v3.V3PumparoundSpec;
 import com.wormzjl.icheme.science.column.v3.V3SideDrawSpec;
 import com.wormzjl.icheme.science.column.v3.V3SteamFeedSpec;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
-import com.wormzjl.icheme.science.column.operation.OperationView;
-import com.wormzjl.icheme.science.column.operation.Port;
+import com.wormzjl.icheme.science.plant.column.OperationView;
+import com.wormzjl.icheme.science.plant.column.Port;
 import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.equipment.EquipmentShape.Kind;
 import com.wormzjl.icheme.science.tutorial.guide.ColumnCondition;
@@ -57,7 +57,7 @@ public final class TutorialUnitGameTests {
      * the client's assets, not the material catalog's presets; final lane 2026-11-13).
      */
     static V3ColumnInput input(MaterialCatalog catalog) {
-        var base = catalog.presets().column(catalog.presets().network().defaultColumnPreset()).input(catalog);
+        var base = com.wormzjl.icheme.science.column.v3.V3ColumnPresets.input(catalog.presets().column(catalog.presets().network().defaultColumnPreset()), catalog);
         var stream = asset("mixturepreset/" + TEMPLATE + ".json");
         double rate = stream.get("flow_kmol_h").getAsDouble();
         var tower = V3ColumnTemplate.read(asset("columnpreset/" + TEMPLATE + ".json")).scaledTo(rate);

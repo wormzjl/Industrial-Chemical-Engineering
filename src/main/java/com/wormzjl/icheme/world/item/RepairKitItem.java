@@ -2,7 +2,7 @@ package com.wormzjl.icheme.world.item;
 
 import com.wormzjl.icheme.registry.ModItems;
 import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
-import com.wormzjl.icheme.runtime.fluid.PumpHealth;
+import com.wormzjl.icheme.runtime.fluid.MachineHealth;
 import com.wormzjl.icheme.science.equipment.ShapeRasterizer;
 import com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity;
 import com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity;
@@ -18,10 +18,11 @@ import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.item.context.UseOnContext;
 
 /**
- * A pump repair kit (batch 2026-11-03-rotating-machinery W10b, owner decision D34): used on any cell of a pump casing or on
- * an in-line pump's pipe block, it queues a repair ({@link PumpHealth.Repair}) that applies on the engine's tick drain. The
- * kit is consumed only when the repair is accepted (none in creative mode); a pump at full health, or a block that is no
- * pump, refuses it with a chat line.
+ * A pump repair kit (batch 2026-11-03-rotating-machinery W10b, owner decision D34): used on any cell of a mover casing or a
+ * steam turbine, or on an in-line device's pipe block, it queues a repair ({@link MachineHealth.Repair}) that applies on the
+ * engine's tick drain. Whether the device wears is the health's decision there: every device with a health record (a pump,
+ * a dry screw, M-02, a centrifugal compressor, N2, or a steam turbine, N4) is repaired. The kit is consumed only when the repair is accepted (none in creative mode); a pump at full health, or a
+ * device with no health record ({@link MachineHealth.Outcome#NOT_A_PUMP}), refuses it with a chat line.
  */
 public final class RepairKitItem extends Item {
     public RepairKitItem(Properties properties) {
@@ -39,17 +40,22 @@ public final class RepairKitItem extends Item {
         if (!server.mayBuild() || !level.mayInteract(server, pos) || !server.canInteractWithBlock(pos, 1.0)) return InteractionResult.FAIL;
         var world = FluidWorldAuthority.find(server.server).orElse(null);
         if (world == null) return InteractionResult.FAIL;
-        world.health().queue(new PumpHealth.Repair(id, () -> take(server), outcome -> reply(server, outcome)));
+        world.health().queue(new MachineHealth.Repair(id, () -> take(server), outcome -> reply(server, outcome)));
         return InteractionResult.CONSUME;
     }
 
-    /** The pump device behind the block at {@code pos}: a casing's fluid cell or an in-line pump's pipe block; 0 for none. */
+    /**
+     * The fluid device behind the block at {@code pos}: a casing's or a turbine's fluid cell or an in-line device's pipe block;
+     * 0 for none. Any mover casing or turbine (a block that holds neither keeps its own use): the queued repair answers {@code NOT_A_PUMP} where
+     * the device has no health record, a reciprocating compressor for one (M-02).
+     */
     private static long pumpAt(net.minecraft.world.level.Level level, BlockPos pos) {
         var entity = level.getBlockEntity(pos);
         if (entity instanceof EquipmentShellBlockEntity cell) {
             var shape = cell.shape();
             var origin = cell.origin();
-            if (shape == null || origin == null || shape.kind() != com.wormzjl.icheme.science.equipment.EquipmentShape.Kind.PUMP) return 0;
+            // A mover casing, or a steam turbine (N4): its fluid cell is its steam inlet's, which holds its fluid device.
+            if (shape == null || origin == null || !shape.kind().mover() && shape.kind() != com.wormzjl.icheme.science.equipment.EquipmentShape.Kind.STEAM_TURBINE) return 0;
             var fluid = ShapeRasterizer.fluidCell(shape);
             if (fluid != null && level.getBlockEntity(origin.offset(fluid.x(), fluid.y(), fluid.z())) instanceof EquipmentShellBlockEntity node) return node.fluidIdentity();
             return 0;
@@ -74,7 +80,7 @@ public final class RepairKitItem extends Item {
         return false;
     }
 
-    private static void reply(ServerPlayer player, PumpHealth.Outcome outcome) {
+    private static void reply(ServerPlayer player, MachineHealth.Outcome outcome) {
         if (player.isRemoved() || player.hasDisconnected() || player.connection == null) return;
         String key = switch (outcome) {
             case REPAIRED -> "chat.icheme.repair_kit.repaired";

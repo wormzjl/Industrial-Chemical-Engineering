@@ -17,9 +17,12 @@ public final class ShaftTrain {
     private ShaftTrain() {
     }
 
-    /** What drives the train. */
+    /**
+     * What drives the train: an electric motor on its variable-speed drive (every motor, whatever its duty's drive), a
+     * steam turbine on its governor (D27), the creative motor. Never saved: compiled from the unit at each step.
+     */
     public enum Drive {
-        FIXED_MOTOR, VARIABLE_MOTOR, TURBINE, CREATIVE,
+        VARIABLE_MOTOR, TURBINE, CREATIVE,
         /** A Create coupling (W6b, D40): {@code setPoint} is Create's |rpm|, {@code powerLimit} the power its network spares, W. */
         CREATE,
         /** A fuelled prime mover (batch 2026-11-10-prime-movers): the turbine's internal governor on the power its fuel gave, always governed; its set speed at most its rated speed, no overspeed trip (owner P11). */
@@ -32,9 +35,11 @@ public final class ShaftTrain {
     }
 
     /**
-     * A trip. {@code OVERLOAD} and {@code OVERSPEED} are protection trips, latched until the player resets it (owner
-     * decision A2). {@code NO_POWER} (W5) is a motor's stop on an empty store: not latched, it clears itself when the store
-     * holds one slice again (D6), and is never saved as the unit's trip. Saved by name.
+     * A trip. {@code NO_POWER} (W5) is a motor's stop on an empty store: not latched, it clears itself when the store holds
+     * one slice again (D6), and is never saved as the unit's trip. {@code OVERLOAD} and {@code OVERSPEED} are latched
+     * protection trips (owner decision A2) that no step sets any more (code base review M-03: every motor runs on its
+     * variable-speed drive, which limits its current, and every steam turbine on its governor); they stay so a unit saved
+     * tripped still shows its trip and waits for the player's reset. Saved by name.
      */
     public enum Trip {
         NONE, OVERLOAD, OVERSPEED, NO_POWER;
@@ -48,14 +53,14 @@ public final class ShaftTrain {
     /**
      * A driver as the player set it: {@code ratedPower} W, {@code designSpeed} rpm, a motor's {@code poles}; {@code setPoint}
      * a share of the design speed (0: 1, reading A19), a creative motor's rpm (0: {@link #CREATIVE_SPEED});
-     * {@code powerLimit} a creative motor's W (0: {@link #CREATIVE_LIMIT}); {@code governed} whether a turbine's speed sensor
-     * works its valve (D27); {@code powered} whether a motor's store holds energy (W5: false stops it, {@code NO POWER}).
+     * {@code powerLimit} a creative motor's W (0: {@link #CREATIVE_LIMIT}); {@code powered} whether a motor's store holds
+     * energy (W5: false stops it, {@code NO POWER}).
      */
     public record Driver(Drive drive, double ratedPower, double designSpeed, int poles, boolean running, Mode mode, double setPoint, double powerLimit, Trip trip,
-                         boolean governed, boolean powered) {
+                         boolean powered) {
         /** A driver whose store holds energy (or that needs none). */
-        public Driver(Drive drive, double ratedPower, double designSpeed, int poles, boolean running, Mode mode, double setPoint, double powerLimit, Trip trip, boolean governed) {
-            this(drive, ratedPower, designSpeed, poles, running, mode, setPoint, powerLimit, trip, governed, true);
+        public Driver(Drive drive, double ratedPower, double designSpeed, int poles, boolean running, Mode mode, double setPoint, double powerLimit, Trip trip) {
+            this(drive, ratedPower, designSpeed, poles, running, mode, setPoint, powerLimit, trip, true);
         }
 
         public Driver {
@@ -67,12 +72,12 @@ public final class ShaftTrain {
         }
 
         /** The speed the driver aims at before any limit, rpm. */
-        public Driver atSpeed(double rpm){return new Driver(drive,ratedPower,designSpeed,poles,running,Mode.SPEED,rpm/designSpeed,powerLimit,trip,governed,powered);}
+        public Driver atSpeed(double rpm){return new Driver(drive,ratedPower,designSpeed,poles,running,Mode.SPEED,rpm/designSpeed,powerLimit,trip,powered);}
         public double setSpeed() {
             if (drive == Drive.CREATE) return setPoint;
             if (drive == Drive.FUEL) return Math.min(1, setPoint > 0 ? setPoint : 1) * designSpeed;
             double target=drive == Drive.CREATIVE ? setPoint > 0 ? setPoint : CREATIVE_SPEED : (setPoint > 0 ? setPoint : 1) * designSpeed;
-            return drive==Drive.VARIABLE_MOTOR||drive==Drive.FIXED_MOTOR?Math.min(Motor.MAXIMUM_RPM,target):target;
+            return drive==Drive.VARIABLE_MOTOR?Math.min(Motor.MAXIMUM_RPM,target):target;
         }
 
         /** The power the driver can give, W: its rating, or a creative motor's limit. */
@@ -88,11 +93,21 @@ public final class ShaftTrain {
      * wide open); {@code measured} and {@code target} the regulated quantity (flow m³/s or discharge pressure Pa, NaN for
      * none), with the slice before's speed and measure ({@code previousSpeed} rpm, NaN for none).
      * {@code admissionAvailable} also covers a pressurized but closed internal inlet at an established zero-load speed.
+     * {@code gearLimit} the most power the driver may give through its train's gearboxes, W ({@link ShaftNetwork#gearLimit},
+     * code base review N7; +∞ for none).
      */
     public record Measure(double demand, double available, boolean steamShort, double measured, double target, double previousSpeed, double previousMeasured,
-                          boolean admissionAvailable) {
+                          boolean admissionAvailable, double gearLimit) {
+        public Measure(double demand, double available, boolean steamShort, double measured, double target, double previousSpeed, double previousMeasured,
+                       boolean admissionAvailable) {
+            this(demand, available, steamShort, measured, target, previousSpeed, previousMeasured, admissionAvailable, Double.POSITIVE_INFINITY);
+        }
         public Measure(double demand, double available, boolean steamShort, double measured, double target, double previousSpeed, double previousMeasured) {
             this(demand, available, steamShort, measured, target, previousSpeed, previousMeasured, available > 0);
+        }
+        /** This measure with the train's gear limit {@code watts}. */
+        public Measure withGearLimit(double watts) {
+            return new Measure(demand, available, steamShort, measured, target, previousSpeed, previousMeasured, admissionAvailable, watts);
         }
         public static Measure of(double demand) {
             return new Measure(demand, 0, false, Double.NaN, Double.NaN, Double.NaN, Double.NaN);
@@ -109,14 +124,30 @@ public final class ShaftTrain {
         if (driver.trip() != Trip.NONE) return new Step(0, driver.trip(), tripped(driver.trip()), 0, 0);
         if (!driver.running()) return new Step(0, Trip.NONE, "STOPPED", 0, 0);
         // A motor on an empty store stands (W5, D6): not latched, it restarts once its store holds a slice again.
-        if (!driver.powered() && (driver.drive() == Drive.FIXED_MOTOR || driver.drive() == Drive.VARIABLE_MOTOR))
+        if (!driver.powered() && driver.drive() == Drive.VARIABLE_MOTOR)
             return new Step(0, Trip.NO_POWER, tripped(Trip.NO_POWER), 0, 0);
         double demand = Math.max(0, measure.demand());
         double set = regulated(driver, speed, measure);
+        return geared(drive(driver, speed, measure, demand, set), speed, measure.gearLimit(), demand, set);
+    }
+
+    /**
+     * A train's gearboxes limit its power (code base review N7: protective, no wear): where the drive's next speed would ask
+     * more than the gear limit (its demand there by the cube law), the speed takes the damped power-limited step to the
+     * limit instead ({@link SpeedControl#powerLimited}), and the train says {@code GEAR LIMITED} while that holds it below its
+     * set speed; a governor's feed-forward asks the power at that speed. A train below its gear limit keeps the drive's step.
+     */
+    private static Step geared(Step step, double speed, double gear, double demand, double set) {
+        if (step.trip() != Trip.NONE || !(step.speed() > 0) || !(speed > 0) || !(demand > 0) || !(gear > 0) || gear == Double.POSITIVE_INFINITY) return step;
+        if (demand * cube(step.speed() / speed) < gear * (1 - 1e-9)) return step;
+        double capped = SpeedControl.powerLimited(speed, gear, demand, step.speed());
+        if (!(capped < set * (1 - 1e-9))) return step;
+        return new Step(capped, Trip.NONE, "GEAR LIMITED", Math.min(step.governorPower(), demand * cube(capped / speed)), step.electricPower());
+    }
+
+    /** The drive's own step, before its train's gearboxes. */
+    private static Step drive(Driver driver, double speed, Measure measure, double demand, double set) {
         return switch (driver.drive()) {
-            case FIXED_MOTOR -> demand > driver.ratedPower() * (1 + 1e-9)
-                    ? new Step(0, Trip.OVERLOAD, "TRIPPED: OVERLOAD", 0, 0)
-                    : new Step(Math.min(driver.designSpeed(),Motor.MAXIMUM_RPM), Trip.NONE, "RUNNING", 0, electric(driver, demand));
             case VARIABLE_MOTOR, CREATIVE -> {
                 double limit=driver.drive()==Drive.VARIABLE_MOTOR?Motor.availablePower(driver.limit(),driver.designSpeed(),speed>0?speed:set):driver.limit();
                 double next = limited(speed, limit, demand, set);
@@ -149,45 +180,43 @@ public final class ShaftTrain {
      */
     private static Step fuel(Driver driver, double speed, Measure measure, double demand, double set) {
         var governed = new Driver(driver.drive(), driver.ratedPower(), driver.designSpeed(), driver.poles(), driver.running(), Mode.SPEED, driver.setPoint(), driver.powerLimit(),
-                Trip.NONE, true, driver.powered());
+                Trip.NONE, driver.powered());
         var step = turbine(governed, speed, measure, demand, set);
         double next = Math.min(set, step.speed());
         return new Step(next, Trip.NONE, step.status().equals("STEAM LIMITED") ? "LOW FUEL" : step.status(), step.governorPower(), 0);
     }
 
-    /** A turbine (D27, readings A22, A23, A26). */
+    /**
+     * A steam turbine on its governor (D27, readings A23, A26): its speed sensor works its admission, so its speed never
+     * passes its set speed (code base review M-03: every turbine is governed; the ungoverned shaft and its overspeed trip
+     * are gone).
+     */
     private static Step turbine(Driver driver, double speed, Measure measure, double demand, double set) {
         double available = Math.max(0, measure.available());
         // At rest the speed governor opens for startup; this is a steam request, never delivered shaft power.
-        double governor = driver.governed() ? speed > 0 ? demand * cube(set / speed) : Math.max(demand, driver.limit()) : 0;
+        double governor = speed > 0 ? demand * cube(set / speed) : Math.max(demand, driver.limit());
         // An unloaded shaft needs no steady work. A closed governor may retain its established speed while admission
         // pressure remains available; it cannot start an unpowered shaft or keep turning after that supply disappears.
         if (!(available > 0)) {
-            boolean idle = driver.governed() && speed > 0 && demand == 0 && measure.admissionAvailable();
+            boolean idle = speed > 0 && demand == 0 && measure.admissionAvailable();
             return new Step(idle ? set : 0, Trip.NONE, idle ? "RUNNING" : "STEAM LIMITED", governor, 0);
         }
-        if (driver.governed()) {
-            // Feed-forward: the demand at the set speed, by the cube law from the demand here.
-            if (speed <= 0 || demand <= 0) return new Step(set, Trip.NONE, "RUNNING", governor, 0);
-            double balance = SpeedControl.balance(speed, available, demand);
-            if (measure.steamShort() || available < demand * (1 - 1e-9)) {
-                double next = Math.min(set, balance);
-                return new Step(next, Trip.NONE, next < set * (1 - 1e-9) ? "STEAM LIMITED" : "RUNNING", governor, 0);
-            }
-            // Steam suffices: the governor holds the set speed, or brings the speed back up to it.
-            double next = speed >= set * (1 - 1e-9) ? set : Math.min(set, Math.max(speed, balance));
+        // Feed-forward: the demand at the set speed, by the cube law from the demand here.
+        if (speed <= 0 || demand <= 0) return new Step(set, Trip.NONE, "RUNNING", governor, 0);
+        double balance = SpeedControl.balance(speed, available, demand);
+        if (measure.steamShort() || available < demand * (1 - 1e-9)) {
+            double next = Math.min(set, balance);
             return new Step(next, Trip.NONE, next < set * (1 - 1e-9) ? "STEAM LIMITED" : "RUNNING", governor, 0);
         }
-        // Ungoverned: the shaft settles where its steam's power meets the load, and overspeeds on a surplus.
-        double next = speed <= 0 ? available > 0 ? set : 0 : SpeedControl.balance(speed, available, demand);
-        if (next > SteamTurbine.TRIP_SPEED * set) return new Step(0, Trip.OVERSPEED, "TRIPPED: OVERSPEED", 0, 0);
-        return new Step(next, Trip.NONE, next <= 0 ? "STEAM LIMITED" : "RUNNING", 0, 0);
+        // Steam suffices: the governor holds the set speed, or brings the speed back up to it.
+        double next = speed >= set * (1 - 1e-9) ? set : Math.min(set, Math.max(speed, balance));
+        return new Step(next, Trip.NONE, next < set * (1 - 1e-9) ? "STEAM LIMITED" : "RUNNING", governor, 0);
     }
 
     /** A variable-speed driver's set speed, rpm: its set point, or its regulation of its first machine (reading A31). */
     private static double regulated(Driver driver, double speed, Measure measure) {
         double base = driver.setSpeed();
-        if (driver.mode() == Mode.SPEED || driver.drive() == Drive.FIXED_MOTOR || !Double.isFinite(measure.measured()) || !(measure.target() > 0)) return base;
+        if (driver.mode() == Mode.SPEED || !Double.isFinite(measure.measured()) || !(measure.target() > 0)) return base;
         double design = driver.drive() == Drive.CREATIVE ? base : driver.designSpeed();
         double share = speed > 0 ? speed / design : 1;
         double previous = Double.isFinite(measure.previousSpeed()) ? measure.previousSpeed() / design : Double.NaN;
@@ -203,11 +232,12 @@ public final class ShaftTrain {
         return set;
     }
 
+    /** A motor's electric draw at {@code demand} W of shaft power, through its variable-speed drive. */
     private static double electric(Driver driver, double demand) {
-        return driver.poles() == 0 || driver.ratedPower() <= 0 ? 0 : Motor.electricPower(demand, driver.ratedPower(), driver.poles(), driver.drive() == Drive.VARIABLE_MOTOR);
+        return driver.poles() == 0 || driver.ratedPower() <= 0 ? 0 : Motor.electricPower(demand, driver.ratedPower(), driver.poles(), true);
     }
 
-    /** A trip's status word: {@code TRIPPED: OVERLOAD}, {@code TRIPPED: NO POWER}. */
+    /** A trip's status word: {@code TRIPPED: NO POWER}, or a saved latched trip's {@code TRIPPED: OVERLOAD}. */
     public static String tripped(Trip trip) {
         return "TRIPPED: " + trip.name().replace('_', ' ');
     }

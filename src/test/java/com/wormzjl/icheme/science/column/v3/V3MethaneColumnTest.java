@@ -16,7 +16,7 @@ class V3MethaneColumnTest {
         var original = V3TestInputs.literatureCduInput();
         assertEquals(original, ColumnCodecs.wireRoundTrip(original), "a 19-component feed keeps its axis");
         assertEquals(original.specifications(), input.specifications());
-        assertEquals(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog().presets().column("tia_juana").draws().stream().map(V3SideDrawSpec::molarFlowMolPerSecond).toList(),input.sideDraws().stream().map(V3SideDrawSpec::molarFlowMolPerSecond).toList());
+        assertEquals(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog().presets().column("tia_juana").draws().stream().map(com.wormzjl.icheme.science.material.MaterialPresets.Draw::rate).toList(),input.sideDraws().stream().map(V3SideDrawSpec::molarFlowMolPerSecond).toList());
         assertEquals(original.steamFeeds(), input.steamFeeds());
         assertEquals(original.pumparounds(), input.pumparounds());
     }

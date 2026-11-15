@@ -36,7 +36,6 @@ import org.jetbrains.annotations.Nullable;
  * the holder only, and the server reads them whole before it keeps them; a constructor reads them when its Import opens. Wire format: no compatibility work.
  */
 public final class ProcessSimulatorNetwork {
-    private static final String PROTOCOL = "3";
     private static final int MAX_KEY = 64, MAX_DETAIL = 256;
     /** Translation key suffixes of an answer. */
     public static final String SAVED = "store.saved", DESIGN_SAVED = "store.design_saved", DESIGN_REFUSED = "store.design_refused", DESIGNS_SENT = "store.designs_sent", DESIGNS_REFUSED = "store.designs_refused";
@@ -45,7 +44,7 @@ public final class ProcessSimulatorNetwork {
     }
 
     public static void register(RegisterPayloadHandlersEvent event) {
-        var registrar = event.registrar(PROTOCOL).executesOn(HandlerThread.MAIN);
+        var registrar = event.registrar(NetworkProtocol.VERSION).executesOn(HandlerThread.MAIN);
         registrar.playBidirectional(SheetPart.TYPE, SheetPart.STREAM_CODEC, new DirectionalPayloadHandler<>(ProcessSimulatorNetwork::replayPart, ProcessSimulatorNetwork::upload));
         registrar.playToServer(SaveDesign.TYPE, SaveDesign.STREAM_CODEC, ProcessSimulatorNetwork::saveDesign);
         registrar.playToServer(SendDesigns.TYPE, SendDesigns.STREAM_CODEC, ProcessSimulatorNetwork::sendDesigns);

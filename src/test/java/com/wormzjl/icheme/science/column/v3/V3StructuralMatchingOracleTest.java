@@ -9,7 +9,8 @@ import org.junit.jupiter.api.Test;
 class V3StructuralMatchingOracleTest {
     @Test
     void matchingAgreesWithExhaustiveSubsetOracleForSparseAndDeficientGraphs() throws Exception {
-        var matching = V3DegreeOfFreedomLedger.class.getDeclaredMethod("maximumBipartiteMatching", List.class, List.class);
+        // The matching on int tables (P3 of batch 2026-11-13-codebase-review): each row's unknown indexes in id order.
+        var matching = V3DegreeOfFreedomLedger.class.getDeclaredMethod("maximumBipartiteMatching", int[][].class, int.class);
         matching.setAccessible(true);
         Random random = new Random(20260909);
         for (int sample = 0; sample < 250; sample++) {
@@ -21,19 +22,18 @@ class V3StructuralMatchingOracleTest {
                 unknowns.add(new V3DegreeOfFreedomLedger.Unknown(new V3DegreeOfFreedomLedger.UnknownId(
                         V3DegreeOfFreedomLedger.UnknownFamily.LIQUID_COMPONENT_FLOW, 0, column)));
             }
-            List<V3DegreeOfFreedomLedger.Equation> equations = new ArrayList<>();
+            int[][] references = new int[rows][];
             for (int row = 0; row < rows; row++) {
-                List<V3DegreeOfFreedomLedger.UnknownId> references = new ArrayList<>();
+                List<Integer> referenced = new ArrayList<>();
                 for (int column = 0; column < columns; column++) {
                     if (random.nextInt(3) == 0) {
                         edges[row] |= 1 << column;
-                        references.add(unknowns.get(column).id());
+                        referenced.add(column);
                     }
                 }
-                equations.add(new V3DegreeOfFreedomLedger.Equation(new V3DegreeOfFreedomLedger.EquationId(
-                        V3DegreeOfFreedomLedger.EquationFamily.COMPONENT_MATERIAL_BALANCE, row, 0), references));
+                references[row] = referenced.stream().mapToInt(Integer::intValue).toArray();
             }
-            assertEquals(exhaustive(edges, 0, 0), matching.invoke(null, equations, unknowns), "graph " + sample);
+            assertEquals(exhaustive(edges, 0, 0), matching.invoke(null, references, unknowns.size()), "graph " + sample);
         }
     }
 

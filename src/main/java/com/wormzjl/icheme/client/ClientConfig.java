@@ -127,6 +127,14 @@ public final class ClientConfig {
         set(FLOW_TIME, unit);
     }
 
+    /**
+     * The units a column's Operation door shows (temperature, pressure, the flow's time), read now: the one place the
+     * assembly screen and the DCS console take them from (finding C16, batch 2026-11-13-codebase-review).
+     */
+    public static com.wormzjl.icheme.client.gui.common.OperationColumn.Units operationUnits() {
+        return new com.wormzjl.icheme.client.gui.common.OperationColumn.Units(temperature(), pressure(), flowTime());
+    }
+
     public static Basis basis() {
         return get(BASIS, Basis.MOLE);
     }

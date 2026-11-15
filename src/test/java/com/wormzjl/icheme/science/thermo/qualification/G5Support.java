@@ -8,6 +8,7 @@ import com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium;
 import com.wormzjl.icheme.science.thermo.phase.PhaseAmounts;
 import com.wormzjl.icheme.science.thermo.phase.PhaseCompetition;
 import com.wormzjl.icheme.science.thermo.phase.PhaseKind;
+import com.wormzjl.icheme.science.thermo.phase.PackageBinding;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -28,7 +29,7 @@ import java.util.Map;
  */
 final class G5Support {
     static final String PILOT = "icheme:pilot_cryogenic";
-    static final FluidTpEquilibrium SERVICE = FluidTpEquilibrium.forPackage(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PILOT);
+    static final FluidTpEquilibrium SERVICE = PackageBinding.equilibrium(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PILOT);
     /** The pilot basis: N2, CH4, C2H6, CO2, water. */
     static final List<String> BASIS = SERVICE.contract().components();
     static final int CO2 = 3;

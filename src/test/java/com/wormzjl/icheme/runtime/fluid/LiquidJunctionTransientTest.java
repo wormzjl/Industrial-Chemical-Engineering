@@ -102,12 +102,12 @@ class LiquidJunctionTransientTest {
         int[][] positions={{-1,0,0},{1,0,0},{0,0,-1},{0,0,1}};
         var geometry=new PipeResistance.Geometry(1,bore,PipeResistance.DEFAULT_ROUGHNESS_METRES,0);
         var devices=new ArrayList<PhysicalFluidTopology.Device>();
-        devices.add(new PhysicalFluidTopology.Device(100,new PhysicalFluidTopology.Position("minecraft:overworld",0,0,0),Kind.PIPE,PhysicalFluidTopology.Direction.EAST,geometry,new FlowControl.Passive()));
+        devices.add(PhysicalFluidTopology.Device.builder(100,new PhysicalFluidTopology.Position("minecraft:overworld",0,0,0),Kind.PIPE,PhysicalFluidTopology.Direction.EAST,geometry,new FlowControl.Passive()).build());
         var boundaries=new HashMap<Long,PassiveNetwork.Reservoir>();
         for(int i=0;i<4;i++) {
             int[] at=positions[i];boolean inlet=i<2;
             var kind=inlet?(tanks?Kind.RESERVOIR:Kind.GENERATOR):Kind.VOID;
-            var d=new PhysicalFluidTopology.Device(i+1,new PhysicalFluidTopology.Position("minecraft:overworld",at[0],at[1],at[2]),kind,PhysicalFluidTopology.Direction.EAST,geometry,new FlowControl.Passive());devices.add(d);
+            var d=PhysicalFluidTopology.Device.builder(i+1,new PhysicalFluidTopology.Position("minecraft:overworld",at[0],at[1],at[2]),kind,PhysicalFluidTopology.Direction.EAST,geometry,new FlowControl.Passive()).build();devices.add(d);
             var nodeKind=inlet?(tanks?PassiveNetwork.NodeKind.RESERVOIR:PassiveNetwork.NodeKind.GENERATOR):PassiveNetwork.NodeKind.VOID;
             boundaries.put(d.id(),boundary(model,d.id(),at[1],i==1?350:300,i==0?150000:i==1?130000:101325,nodeKind));
         }

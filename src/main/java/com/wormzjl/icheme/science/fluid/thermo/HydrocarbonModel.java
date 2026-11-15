@@ -1,21 +1,21 @@
 package com.wormzjl.icheme.science.fluid.thermo;
 
-import com.wormzjl.icheme.science.math.DeterministicMath;
-
+import com.wormzjl.icheme.science.fluid.state.EnergyReference;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
+import com.wormzjl.icheme.science.material.SpinePackageData;
 import com.wormzjl.icheme.science.thermo.IdealGasFunction;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel;
 import com.wormzjl.icheme.science.thermo.ThermoComponent;
 import com.wormzjl.icheme.science.thermo.phase.CubicPhaseEvaluator;
-import com.wormzjl.icheme.science.thermo.phase.PhaseContract;
-import com.wormzjl.icheme.science.thermo.phase.PhaseIdentification;
+import com.wormzjl.icheme.science.thermo.PhaseIdentification;
 import com.wormzjl.icheme.science.thermo.phase.WaterShare;
+import com.wormzjl.icheme.science.thermo.phase.PackageBinding;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
  * The fluid network's phase model (batch 2026-11-11-aqueous-solvents, W3b step 3): the derived equation of state of the
- * package ({@link CubicPhaseEvaluator#derived}: PR78 with the Huron-Vidal rule of {@code DerivedPairs}, water a component
+ * package ({@link PackageBinding#derivedEvaluator}: PR78 with the Huron-Vidal rule of {@code DerivedPairs}, water a component
  * of the cubic with its Mathias-Copeman alpha), the same one the still and the column use. Every fluid phase of a node,
  * the vapour and up to two liquids, is this cubic evaluated at the state pressure on its own root; the phase's volume and
  * enthalpy are the balance book (the cubic plus water's IF97 share, {@link WaterShare}), its {@code ln phi} the
@@ -25,7 +25,7 @@ import java.util.List;
  *
  * <p>The ideal gas: on a package with a reference spine the spine records with each species' formation enthalpy
  * subtracted (the network's sensible datum, as before), on any other package the {@code shifted_polynomial_5} fits on
- * that datum ({@link CoefficientIdealGas}); the engine's evaluator is the same kernel and translations on the spine's own
+ * that datum ({@code science.material.CoefficientIdealGas}); the engine's evaluator is the same kernel and translations on the spine's own
  * datum, which {@code FluidThermodynamics.engineEnergy} bridges.</p>
  */
 public final class HydrocarbonModel {
@@ -48,19 +48,23 @@ public final class HydrocarbonModel {
     private final String revision;
     private final FluidDomain domain;
     private final SpinePackageData spine;
+    /** The spine's formation datum (D10) over the package components; null without a spine. */
+    private final EnergyReference formation;
     private final double[] molecularWeights;
 
     public HydrocarbonModel(MaterialCatalog catalog,String packageId) {
         propertyPackage=catalog.requirePackage(packageId);
         domain=FluidDomain.of(catalog,packageId);
-        species=PhaseContract.derivedBasis(catalog,packageId);
-        evaluator=CubicPhaseEvaluator.derived(catalog,packageId,species);
+        species=PackageBinding.derivedBasis(catalog,packageId);
+        evaluator=PackageBinding.derivedEvaluator(catalog,packageId,species);
         water=evaluator.waterComponent();
         var list=new ArrayList<>(species);list.remove(CubicPhaseEvaluator.WATER);compounds=List.copyOf(list);
         int n=species.size();
         List<ThermoComponent> components=new ArrayList<>(n);
         for(int i=0;i<n;i++)components.add(evaluator.component(i));
         spine=propertyPackage.spine().isEmpty()?null:SpinePackageData.of(catalog,packageId);
+        formation=spine==null?null:new EnergyReference(spine.formationRevision(),
+                spine.components().stream().map(ThermoComponent::id).toList(),spine.formationEnthalpies(),true);
         List<IdealGasFunction> gas=new ArrayList<>(n);double[] offsets=new double[n];
         double[] formation=spine==null?null:spine.formationEnthalpies();
         for(int i=0;i<n;i++) {
@@ -70,7 +74,7 @@ public final class HydrocarbonModel {
         translated=new TranslatedPengRobinson(components,evaluator.kernel(),gas,offsets,evaluator.translations());
         if(water>=0) {
             var derivation=evaluator.derivation();
-            share=new WaterShare(derivation.criticalTemperatures()[water],derivation.criticalPressures()[water],
+            share=new WaterShare(com.wormzjl.icheme.science.material.WaterRecords.constants(propertyPackage.water()),derivation.criticalTemperatures()[water],derivation.criticalPressures()[water],
                     derivation.acentricFactors()[water],derivation.mathiasCopeman()[water]);
             shareScratch=ThreadLocal.withInitial(share::newWorkspace);
         } else {share=null;shareScratch=null;}
@@ -79,7 +83,7 @@ public final class HydrocarbonModel {
         for(int i=0;i<compounds.size();i++)molecularWeights[i]=propertyPackage.properties().get(propertyPackage.components().indexOf(compounds.get(i))).molecularWeight();
         int packageWater=propertyPackage.components().indexOf(CubicPhaseEvaluator.WATER);
         molecularWeights[compounds.size()]=packageWater>=0?propertyPackage.properties().get(packageWater).molecularWeight():propertyPackage.water().molarMass();
-        revision=PhaseContract.forDerived(catalog,packageId,evaluator).identity().revision()+":"+FORMULATION;
+        revision=PackageBinding.derivedContract(catalog,packageId,evaluator).identity().revision()+":"+FORMULATION;
     }
 
     /** The engine's evaluator of this model: the same kernel and translations ({@code NetworkPhaseEngine}). */
@@ -88,6 +92,13 @@ public final class HydrocarbonModel {
     public String revision() { return revision; }
     /** The resolved spine inputs; empty for a package without a spine. */
     public java.util.Optional<SpinePackageData> spine() { return java.util.Optional.ofNullable(spine); }
+    /**
+     * The formation datum of a spine package as an energy reference over the package components, whose offsets are the
+     * spine's formation enthalpies ({@link SpinePackageData#formationEnthalpies()}, revision
+     * {@link SpinePackageData#formationRevision()}, formation data qualified); empty without a spine.
+     * {@code EnergyReference.sensible(basis).rebase(E, n, formation)} is the engine's energy of a network energy {@code E}.
+     */
+    public java.util.Optional<EnergyReference> formationReference() { return java.util.Optional.ofNullable(formation); }
     /** The package's data ranges ({@link FluidDomain}). */
     public FluidDomain domain() { return domain; }
     /** The compounds of this model's list, water not among them: the conserved basis less its last entry. */
@@ -372,64 +383,4 @@ public final class HydrocarbonModel {
         /** {@code -(dv/dP)/v}: the phase's own isothermal compressibility, 1/Pa. */
         public double isothermalCompressibility() { return -volumePressureDerivative/molarVolume; }
     }
-
-    /**
-     * The translations of a package's coefficient evaluator ({@link CubicPhaseEvaluator#forPackage} on a package without a
-     * spine, outside the network since W3b): each component's untranslated pure liquid on the package's constant matrix at
-     * its volume anchor's own (T, P) moved to the anchor's volume.
-     */
-    public static double[] coefficientTranslations(MaterialCatalog catalog,String packageId) {
-        var pack=catalog.requirePackage(packageId);int count=pack.components().size();
-        var calibrations=catalog.fluidData().volumeReferences();double[] shifts=new double[count];
-        for(int i=0;i<count;i++) {
-            var property=pack.properties().get(i);var point=calibrations.get(property.component());
-            var component=new ThermoComponent(property.component(),property.pr().criticalTemperature(),property.pr().criticalPressure(),property.pr().acentricFactor(),property.molecularWeight());
-            double t=point==null?property.standardTemperature():point.temperatureKelvin();
-            double targetVolume=point==null?property.molecularWeight()/property.density():point.molarVolumeCubicMetres();
-            double referenceP=point==null?property.standardPressure():point.pressurePascal();
-            shifts[i]=targetVolume-pureLiquidCompressibility(component,pack.interactions().get(i).get(i),t,referenceP)*FluidThermodynamics.R*t/referenceP;
-        }
-        return shifts;
-    }
-    /** The liquid-root compressibility factor of pure {@code c} on PR78 with classical mixing (as {@code PengRobinson78}). */
-    static double pureLiquidCompressibility(ThermoComponent c,double kcc,double t,double p) {
-        if(!Double.isFinite(t)||t<=0.0||!Double.isFinite(p)||p<=0.0)throw new IllegalArgumentException("Temperature and pressure must be finite and positive");
-        double r=FluidThermodynamics.R,tc=c.criticalTemperatureKelvin(),pc=c.criticalPressurePascal(),omega=c.acentricFactor();
-        double criticalA=0.45724*square(r)*square(tc)/pc;
-        double coVolume=0.07780*r*tc/pc;
-        double kappa=omega<=0.491?0.37464+1.54226*omega-0.26992*square(omega)
-                :0.379642+1.48503*omega-0.164423*square(omega)+0.016666*omega*square(omega);
-        double alphaTerm=1.0+kappa*(1.0-Math.sqrt(t/tc));
-        double a=criticalA*square(alphaTerm);
-        double aMix=Math.sqrt(a*a)*(1.0-kcc),bMix=coVolume;
-        double reducedA=aMix*p/(square(r)*square(t));
-        double reducedB=bMix*p/(r*t);
-        if(Math.abs(reducedA)<1.0e-14&&Math.abs(reducedB)<1.0e-14)return 1.0;
-        double c2=-(1.0-reducedB);
-        double c1=reducedA-3.0*square(reducedB)-2.0*reducedB;
-        double c0=-(reducedA*reducedB-square(reducedB)-reducedB*square(reducedB));
-        double[] roots=realCubicRoots(c2,c1,c0);
-        java.util.Arrays.sort(roots);
-        for(double root:roots)if(root>reducedB+1.0e-12)return root;
-        throw new IllegalStateException("Peng-Robinson equation has no physical liquid root");
-    }
-    private static double[] realCubicRoots(double c2,double c1,double c0) {
-        double p=c1-square(c2)/3.0;
-        double q=2.0*c2*square(c2)/27.0-c2*c1/3.0+c0;
-        double discriminant=square(q)/4.0+p*p*p/27.0;
-        double offset=c2/3.0;
-        if(discriminant>1.0e-16) {
-            double root=Math.sqrt(discriminant);
-            return new double[]{DeterministicMath.cbrt(-q/2.0+root)+DeterministicMath.cbrt(-q/2.0-root)-offset};
-        }
-        if(Math.abs(discriminant)<=1.0e-16) {
-            double u=DeterministicMath.cbrt(-q/2.0);
-            return new double[]{2.0*u-offset,-u-offset};
-        }
-        double radius=2.0*Math.sqrt(-p/3.0);
-        double angle=DeterministicMath.acos(Math.clamp((3.0*q/(2.0*p))*Math.sqrt(-3.0/p),-1.0,1.0))/3.0;
-        return new double[]{radius*DeterministicMath.cos(angle)-offset,radius*DeterministicMath.cos(angle-2.0*Math.PI/3.0)-offset,
-                radius*DeterministicMath.cos(angle-4.0*Math.PI/3.0)-offset};
-    }
-    private static double square(double value){return value*value;}
 }

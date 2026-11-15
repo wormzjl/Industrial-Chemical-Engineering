@@ -10,8 +10,9 @@ import com.wormzjl.icheme.science.flowsheet.Port;
 import com.wormzjl.icheme.science.flowsheet.Report;
 import com.wormzjl.icheme.science.flowsheet.UnitModel;
 import com.wormzjl.icheme.science.flowsheet.WiredUnit;
-import com.wormzjl.icheme.science.fluid.network.BatchStill;
-import com.wormzjl.icheme.science.fluid.network.StillColumn;
+import com.wormzjl.icheme.science.plant.still.BatchStill;
+import com.wormzjl.icheme.science.column.still.StillColumn;
+import com.wormzjl.icheme.science.plant.still.NetworkStageThermo;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -44,8 +45,6 @@ public final class BatchStillUnit implements UnitModel {
     /** The curve's composition channels: at most this many components, each at least this share of what the batch distilled. */
     static final int MOST_COMPONENTS = 5;
     static final double LEAST_SHARE = .01;
-    /** Past this share of its volume a pot boils over into its neck (plan section 6, item 6). */
-    public static final double PUKE = .75;
     /** The let-down's search goes no colder than this, K: a numerical floor, under every charge the network carries. */
     private static final double LOWEST = 100;
 
@@ -157,7 +156,7 @@ public final class BatchStillUnit implements UnitModel {
         if (!in.solids().empty()) throw new FlowsheetFailure("still.solids");
         int axis = thermo.axis().size(), waterAt = thermo.water();
         double[] flows = in.amountsView();
-        var column = new StillColumn(thermo.model(), PRESSURE);
+        var column = new StillColumn(new NetworkStageThermo(thermo.model()), PRESSURE);
         int n = column.componentCount();
         if (n != axis - 1 && !(n == axis && column.water() == waterAt)) throw new IllegalStateException("The still's basis is the sheet's, water last or none");
         // A package without water in its column leaves the water out of the pot: it takes no part.
@@ -179,7 +178,7 @@ public final class BatchStillUnit implements UnitModel {
         double potStart = moles * column.liquidEnthalpy(start, charge);
         double volume = moles * column.liquidVolume(start, charge), fill = volume / design.volume();
         if (fill > 1) throw new FlowsheetFailure("still.overfull", litres(volume), litres(design.volume()));
-        if (fill > PUKE) report.note(Note.warning(u.id(), "still.full", percent(fill)));
+        if (fill > BatchStill.FILL) report.note(Note.warning(u.id(), "still.full", percent(fill)));
         var cooling = design.condenser() ? new BatchStill.Cooling(water, BatchStill.designWaterFlow(design.rating()) * BatchStill.WATER_HEAT_CAPACITY) : null;
         var batch = StillBatch.run(column, new StillBatch.Settings(design, firing, reflux, cooling, cuts), charge, start, thermo.checkpoint());
         if (batch.finish() == StillBatch.Finish.UNFINISHED) throw new FlowsheetFailure("still.unfinished", String.valueOf(batch.steps()), hours(batch.seconds()));

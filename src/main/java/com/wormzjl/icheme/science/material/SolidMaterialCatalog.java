@@ -1,7 +1,6 @@
 package com.wormzjl.icheme.science.material;
 
 import com.google.gson.JsonParser;
-import com.wormzjl.icheme.science.fluid.state.SolidInventory;
 import java.util.*;
 
 /** Separate solid-property identity; adding solids never changes the conserved fluid axis. */
@@ -13,15 +12,6 @@ public final class SolidMaterialCatalog {
         var material = materials.get(id);
         if (material == null) throw new IllegalArgumentException("Unknown solid material: " + id);
         return material;
-    }
-    /**
-     * Refuses a custom population whose saved properties differ from the loaded data. A crystal population
-     * ({@link SolidMaterial#crystal()}) is not a record of this catalog: its material is built from the property package's
-     * crystal record ({@code NetworkCrystals}), which the package's own identity checks.
-     */
-    public void validate(SolidInventory inventory) {
-        for (var p : inventory.populations())
-            if (p.material().crystal() == null && !require(p.material().id()).equals(p.material())) throw new IllegalArgumentException("Saved solid properties differ from the loaded data (no migration; create a fresh world): " + p.material().id());
     }
     static SolidMaterialCatalog parse(Map<String, String> resources) {
         var solids = new TreeMap<String, SolidMaterial>();
@@ -43,7 +33,8 @@ public final class SolidMaterialCatalog {
      * {@code c (T - 298.15)} per kg, zero at 298.15 K. Two kinds (owner decisions D22 (5) and D23): a custom solid (the
      * {@code solids} records, {@code crystal} null), and a crystal formed by a phase transition of the fluid, whose
      * {@link Crystal} record names the fluid component it is made of and its energy offset. Both share every population
-     * rule of {@link SolidInventory}; only a vessel's refresh exchanges a crystal's mass with its component.
+     * rule of the network's {@code SolidInventory} (which also checks a saved population against this catalog, {@code
+     * SolidInventory.validate}); only a vessel's refresh exchanges a crystal's mass with its component.
      */
     public record SolidMaterial(String id, String revision, double density, double heatCapacity, Crystal crystal) {
         public static final double REFERENCE_TEMPERATURE = 298.15;

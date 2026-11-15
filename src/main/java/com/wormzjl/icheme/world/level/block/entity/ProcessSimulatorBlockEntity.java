@@ -131,7 +131,8 @@ public class ProcessSimulatorBlockEntity extends BlockEntity implements MenuProv
         savedDesign = Optional.empty();
         if (tag.contains(TAG_DESIGN, Tag.TAG_COMPOUND))
             try {
-                savedDesign = Optional.of(ColumnDesignTags.read(tag.getCompound(TAG_DESIGN)));
+                savedDesign = Optional.of(ColumnDesignTags.read(tag.getCompound(TAG_DESIGN), repair -> IChemE.LOGGER.warn(
+                        "equipment_compat process simulator at={} repair={}", worldPosition.toShortString(), "saved design: " + repair)));
             } catch (IllegalArgumentException invalid) {
                 IChemE.LOGGER.warn("Process simulator at {}: saved design refused ({})", worldPosition, invalid.getMessage());
             }

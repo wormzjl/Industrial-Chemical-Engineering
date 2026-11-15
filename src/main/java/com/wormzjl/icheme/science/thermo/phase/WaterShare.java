@@ -4,6 +4,12 @@ import com.wormzjl.icheme.science.math.DeterministicMath;
 import com.wormzjl.icheme.science.thermo.HuronVidalExcess;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel.Root;
+import com.wormzjl.icheme.science.thermo.ThermoRefusal;
+import com.wormzjl.icheme.science.thermo.water.Iapws97Region1;
+import com.wormzjl.icheme.science.thermo.water.Iapws97Region2Ideal;
+import com.wormzjl.icheme.science.thermo.water.SteamVirial;
+import com.wormzjl.icheme.science.thermo.water.WagnerPruss;
+import com.wormzjl.icheme.science.thermo.water.WaterConstants;
 
 /**
  * Water's own share of enthalpy, entropy and volume in a phase of the cubic (batch 2026-11-11-aqueous-solvents, plan
@@ -27,6 +33,10 @@ import com.wormzjl.icheme.science.thermo.PengRobinsonKernel.Root;
  *   {@code D = B - T B'}.</li>
  * </ul>
  *
+ * <p>IF97 Region 1, Region 2's ideal part and the Wagner-Pruss line are the water module's ({@code science.thermo.water},
+ * X39 of batch 2026-11-13-codebase-review), on the record's numbers ({@link WaterConstants}); the share keeps the gaps,
+ * the weight and the fades.</p>
+ *
  * <p>Immutable; the per-thread scratch ({@link Workspace}) keeps the liquid gap of the last {@code (T, P)} and the gas
  * gap of the last {@code T}. Every transcendental through {@link DeterministicMath}; nothing allocates per call.</p>
  */
@@ -34,47 +44,37 @@ public final class WaterShare {
     /** The declared revision of this rule: bumped when a constant or a form here changes. */
     public static final String REVISION = "water-share-m2-r1";
     private static final double R = PengRobinsonKernel.GAS_CONSTANT;
-    private static final double RS = 461.526;
+    private static final double RS = Iapws97Region1.GAS_CONSTANT;
     private static final double MOLAR = R / RS;
-    private static final double TC = 647.096, PC = 22.064e6;
     /** Region 1's upper boundary, where the liquid gap starts to fade. */
-    static final double FADE_START = 623.15;
-    private static final double TRIPLE = 273.16;
+    static final double FADE_START = Iapws97Region1.MAXIMUM_TEMPERATURE;
     /** Region 1's upper pressure, Pa: the gap continues linearly in P past it. */
-    private static final double REGION_1_MAXIMUM_PRESSURE = 100.0e6;
+    private static final double REGION_1_MAXIMUM_PRESSURE = Iapws97Region1.MAXIMUM_PRESSURE;
     static final double RATIO_DENSE = 2.6, RATIO_GAS = 3.6;
     private static final double SQRT_TWO = Math.sqrt(2.0);
-
-    // IF97 Region 1, in (pi - 7.1): odd-I coefficients with reversed signs (as science.fluid.thermo.WaterRegion1).
-    private static final int[] I = {0,0,0,0,0,0,0,0,1,1,1,1,1,1,2,2,2,2,2,3,3,3,4,4,4,5,8,8,21,23,29,30,31,32};
-    private static final int[] J = {-2,-1,0,1,2,3,4,5,-9,-7,-1,0,1,3,-3,0,1,3,17,-4,0,6,-5,-2,10,-8,-11,-6,-29,-31,-38,-39,-40,-41};
-    private static final double[] N = {
-            .14632971213167,-.84548187169114,-3.756360367204,3.3855169168385,-.95791963387872,
-            .15772038513228,-.016616417199501,.00081214629983568,-.00028319080123804,
-            .00060706301565874,.018990068218419,.032529748770505,.021841717175414,.00005283835796993,
-            -.00047184321073267,-.00030001780793026,.000047661393906987,-4.4141845330846e-6,
-            -7.2694996297594e-16,.000031679644845054,2.8270797985312e-6,8.5205128120103e-10,
-            -.0000022425281908,-6.5171222895601e-7,-1.4341729937924e-13,4.0516996860117e-7,
-            -1.2734301741641e-9,-1.7424871230634e-10,6.8762131295531e-19,-1.4478307828521e-20,
-            -2.6335781662795e-23,-1.1947622640071e-23,-1.8228094581404e-24,-9.3537087292458e-26};
-    private static final double P_STAR = 16.53e6, T_STAR = 1386.0;
-    private static final int HIGHEST_X = 32, LOWEST_Y = -43, HIGHEST_Y = 17;
-    // IF97 Region 2's ideal-gas part.
-    private static final int[] J0 = {0, 1, -5, -4, -3, -2, -1, 2, 3};
-    private static final double[] N0 = {-0.96927686500217e1, 0.10086655968018e2, -0.56087911283020e-2, 0.71452738081455e-1,
-            -0.40710498223928, 0.14240819171444e1, -0.43839511319450e1, -0.28408632460772, 0.21268463753307e-1};
-    // Wagner and Pruss (IAPWS 1992) saturation line.
-    private static final double[] WAGNER = {-7.85951783, 1.84408259, -11.7866497, 22.6807411, -15.9618719, 1.80122502};
 
     /** Indices into the output of {@link #phase}. */
     public static final int H = 0, S = 1, V = 2, H_T = 3, H_P = 4, S_T = 5, S_P = 6, V_T = 7, V_P = 8, SIZE = 9;
 
     private final PengRobinsonKernel water;
     private final double coVolume;
+    /** The water record's numbers: the critical point the liquid gap ends at, the triple point Region 1 holds at, the saturation line. */
+    private final WaterConstants record;
+    private final double criticalTemperature, triplePoint;
 
-    /** @param mathiasCopeman the cubic water's alpha coefficients, or null for PR78's kappa */
-    public WaterShare(double criticalTemperature, double criticalPressure, double acentricFactor, double[] mathiasCopeman) {
-        water = PengRobinsonKernel.huronVidal(new double[] {criticalTemperature}, new double[] {criticalPressure},
+    /**
+     * @param record the water record's numbers (Region 1, the saturation line, the critical and triple points)
+     * @param cubicCriticalTemperature the cubic water's critical temperature (its derivation's), K
+     * @param cubicCriticalPressure the cubic water's critical pressure, Pa
+     * @param acentricFactor the cubic water's acentric factor
+     * @param mathiasCopeman the cubic water's alpha coefficients, or null for PR78's kappa
+     */
+    public WaterShare(WaterConstants record, double cubicCriticalTemperature, double cubicCriticalPressure, double acentricFactor,
+                      double[] mathiasCopeman) {
+        this.record = record;
+        this.criticalTemperature = record.criticalTemperature();
+        this.triplePoint = record.triplePoint();
+        water = PengRobinsonKernel.huronVidal(new double[] {cubicCriticalTemperature}, new double[] {cubicCriticalPressure},
                 new double[] {acentricFactor}, HuronVidalExcess.builder(1).build(), new double[][] {mathiasCopeman},
                 Double.MIN_VALUE, Double.MAX_VALUE, Double.MIN_VALUE, Double.MAX_VALUE);
         coVolume = water.coVolume(0);
@@ -82,13 +82,14 @@ public final class WaterShare {
 
     public Workspace newWorkspace() { return new Workspace(this); }
 
-    /** Per-thread scratch: the pure water's kernel storage, Region 1's power tables and the last gaps. */
+    /** Per-thread scratch: the pure water's kernel storage, Region 1's state and power tables and the last gaps. */
     public static final class Workspace {
         private final WaterShare owner;
         private final PengRobinsonKernel.Workspace mixture;
         private final double[] rootDt = new double[1], rootDt2 = new double[1];
-        private final double[] xp = new double[HIGHEST_X + 1], yp = new double[HIGHEST_Y - LOWEST_Y + 1];
-        private double powersTemperature = Double.NaN, kernelTemperature = Double.NaN;
+        private final Iapws97Region1.State region1 = new Iapws97Region1.State();
+        private final double[] ideal = new double[Iapws97Region2Ideal.SIZE];
+        private double kernelTemperature = Double.NaN;
         // Region 1 (molar): v, h, s, cp, vT, vP, vTT, vTP, dh/dP, ds/dP, vPP; the cubic's pure liquid: v, hR, sR, cpR, vT,
         // vP, vTT, vTP, vPP.
         private final double[] region = new double[11], cubic = new double[9];
@@ -157,15 +158,15 @@ public final class WaterShare {
         double[] l = w.liquid;
         if (t == w.liquidT && p == w.liquidP) return l;
         java.util.Arrays.fill(l, 0.0);
-        if (t < TC) {
+        if (t < criticalTemperature) {
             boolean fading = t > FADE_START;
             double at = fading ? FADE_START : t;
-            double saturation = saturationPressure(at);
+            double saturation = WagnerPruss.pressure(record, at);
             boolean above = p >= saturation;
             double[] g = gapAt(at, above ? p : saturation, w);
             // Below p_sat: continued linearly in P from the gap at p_sat, g(T, ps) + g_P (p - ps), whose T derivative at
             // fixed p is g_T + (g_TP + g_PP ps') (p - ps) (the move of ps along the line cancels in value).
-            double below = above ? 0.0 : p - saturation, slope = above ? 0.0 : saturationSlope(at, saturation);
+            double below = above ? 0.0 : p - saturation, slope = above ? 0.0 : saturation * WagnerPruss.logSlope(record, at);
             double hTP = g[9] + g[12] * slope, sTP = g[10] + g[13] * slope, vTP = g[11] + g[14] * slope;
             double h0 = g[0] + g[4] * below, s0 = g[1] + g[6] * below, v0 = g[2] + g[8] * below;
             double hT = g[3] + hTP * below, sT = g[5] + sTP * below, vT = g[7] + vTP * below;
@@ -174,7 +175,7 @@ public final class WaterShare {
                 l[0] = h0; l[1] = s0; l[2] = v0;
                 l[3] = hT; l[4] = hP; l[5] = sT; l[6] = sP; l[7] = vT; l[8] = vP;
             } else {
-                double span = TC - FADE_START, d = t - FADE_START, q = d / span;
+                double span = criticalTemperature - FADE_START, d = t - FADE_START, q = d / span;
                 double fade = 1.0 - smooth(q), fadeSlope = -smoothSlope(q) / span;
                 double h = h0 + hT * d, s = s0 + sT * d, v = v0 + vT * d;
                 l[0] = h * fade; l[1] = s * fade; l[2] = v * fade;
@@ -202,14 +203,9 @@ public final class WaterShare {
         region1(t, p, w);
         pureCubic(t, p, w);
         double[] r = w.region, c = w.cubic, g = w.gap;
-        double tau = 540.0 / t, gt = 0.0, gtt = 0.0, g0 = DeterministicMath.log(p / 1.0e6);
-        for (int k = 0; k < J0.length; k++) {
-            int j = J0[k];
-            g0 += N0[k] * power(tau, j);
-            if (j != 0) gt += N0[k] * j * power(tau, j - 1);
-            if (j != 0 && j != 1) gtt += N0[k] * j * (j - 1) * power(tau, j - 2);
-        }
-        double idealH = R * t * tau * gt, idealCp = -R * tau * tau * gtt, idealS = R * (tau * gt - g0);
+        double[] ideal = w.ideal;
+        Iapws97Region2Ideal.molar(t, p, ideal);
+        double idealH = ideal[Iapws97Region2Ideal.H], idealCp = ideal[Iapws97Region2Ideal.CP], idealS = ideal[Iapws97Region2Ideal.S];
         g[0] = r[1] - idealH - c[1];
         g[1] = r[2] - idealS - c[2];
         g[2] = r[0] - c[0];
@@ -241,49 +237,23 @@ public final class WaterShare {
      * Region 1 of IF97, molar, held at the triple point below it (class comment): v, h, s, cp, vT, vP, vTT, vTP and the
      * P derivatives of h and s (of the continued ones below the triple point).
      */
-    private static void region1(double temperature, double p, Workspace w) {
-        double t = Math.max(temperature, TRIPLE);
-        double tau = T_STAR / t;
-        if (t != w.powersTemperature) {
-            double y = tau - 1.222;
-            double[] yp = w.yp;
-            yp[-LOWEST_Y] = 1.0;
-            for (int k = -LOWEST_Y + 1; k < yp.length; k++) yp[k] = yp[k - 1] * y;
-            double inverse = 1.0 / y;
-            for (int k = -LOWEST_Y - 1; k >= 0; k--) yp[k] = yp[k + 1] * inverse;
-            w.powersTemperature = t;
-        }
-        double x = p / P_STAR - 7.1;
-        double[] xp = w.xp, yp = w.yp;
-        xp[0] = 1.0;
-        for (int k = 1; k < xp.length; k++) xp[k] = xp[k - 1] * x;
-        double g = 0, gp = 0, gpp = 0, gppp = 0, gt = 0, gtt = 0, gpt = 0, gptt = 0, gppt = 0;
-        for (int k = 0; k < N.length; k++) {
-            int i = I[k], jj = J[k], j = jj - LOWEST_Y;
-            double n = N[k];
-            g += n * xp[i] * yp[j];
-            if (i != 0) gp += n * i * xp[i - 1] * yp[j];
-            if (i > 1) gpp += n * i * (i - 1) * xp[i - 2] * yp[j];
-            if (i > 2) gppp += n * i * (i - 1) * (i - 2) * xp[i - 3] * yp[j];
-            if (jj != 0) gt += n * jj * xp[i] * yp[j - 1];
-            if (jj != 0 && jj != 1) gtt += n * jj * (jj - 1) * xp[i] * yp[j - 2];
-            if (i != 0 && jj != 0) gpt += n * i * jj * xp[i - 1] * yp[j - 1];
-            if (i != 0 && jj != 0 && jj != 1) gptt += n * i * jj * (jj - 1) * xp[i - 1] * yp[j - 2];
-            if (i > 1 && jj != 0) gppt += n * i * (i - 1) * jj * xp[i - 2] * yp[j - 1];
-        }
-        double v = RS * t * gp / P_STAR, h = RS * t * tau * gt, s = RS * (tau * gt - g), cp = -RS * tau * tau * gtt;
-        double vT = RS / P_STAR * (gp - tau * gpt), vP = RS * t * gpp / (P_STAR * P_STAR);
-        double vTT = RS * tau * tau * gptt / (P_STAR * t), vTP = RS / (P_STAR * P_STAR) * (gpp - tau * gppt);
-        double vPP = RS * t * gppp / (P_STAR * P_STAR * P_STAR);
+    private void region1(double temperature, double p, Workspace w) {
+        double t = Math.max(temperature, triplePoint);
+        Iapws97Region1.State state = w.region1;
+        Iapws97Region1.evaluate(t, p, state);
+        double v = state.volume(), h = state.enthalpy(), s = state.entropy(), cp = state.heatCapacity();
+        double vT = state.volumeTemperatureDerivative(), vP = state.volumePressureDerivative();
+        double vTT = state.volumeSecondTemperatureDerivative(), vTP = state.volumeTemperaturePressureDerivative();
+        double vPP = state.volumeSecondPressureDerivative();
         if (!(v > 0.0) || !(cp > 0.0) || !(vP < 0.0) || !Double.isFinite(h) || !Double.isFinite(s))
-            throw new IllegalArgumentException("Invalid Region 1 state of the water share at " + t + " K, " + p + " Pa");
+            throw new ThermoRefusal("Invalid Region 1 state of the water share at ", t, " K, ", p, " Pa");
         double[] r = w.region;
-        if (temperature < TRIPLE) {
-            double step = temperature - TRIPLE, logRatio = DeterministicMath.log(temperature / TRIPLE);
-            double cpPressure = -TRIPLE * vTT;
+        if (temperature < triplePoint) {
+            double step = temperature - triplePoint, logRatio = DeterministicMath.log(temperature / triplePoint);
+            double cpPressure = -triplePoint * vTT;
             r[0] = v + vT * step; r[1] = h + cp * step; r[2] = s + cp * logRatio; r[3] = cp;
             r[4] = vT; r[5] = vP + vTP * step; r[6] = 0.0; r[7] = vTP;
-            r[8] = v - TRIPLE * vT + cpPressure * step;
+            r[8] = v - triplePoint * vT + cpPressure * step;
             r[9] = -vT + cpPressure * logRatio;
             r[10] = vPP;
         } else {
@@ -304,20 +274,21 @@ public final class WaterShare {
         }
         // One compound: the cubic's liquid root and ln phi in closed form on the prepared temperature, the same doubles
         // as the kernel's one-component evaluation (x = 1, a_mix = s s, b_mix = b, no excess cells), with no mixture work.
-        if (!Double.isFinite(p) || !(p > 0.0)) throw new IllegalArgumentException("Invalid pressure of the water share");
+        if (!Double.isFinite(p) || !(p > 0.0)) throw new ThermoRefusal("Invalid pressure of the water share");
         double root = w.mixture.attractionRootsView()[0], r1 = w.rootDt[0], r2 = w.rootDt2[0];
         double a = root * root, a1 = 2.0 * root * r1, a2 = 2.0 * (r1 * r1 + root * r2), b = coVolume;
         double reducedA = a * p / (R * R * t * t), reducedB = b * p / (R * t);
-        double z = PengRobinsonKernel.selectRoot(reducedA, reducedB, Root.LIQUID).selectedCompressibility();
+        double z = PengRobinsonKernel.selectCompressibility(reducedA, reducedB, Root.LIQUID);
         double logPhi = (z - 1.0) - DeterministicMath.log(z - reducedB) - reducedA / (2.0 * SQRT_TWO * Math.max(reducedB, 1.0e-300))
                 * DeterministicMath.log((z + (1.0 + SQRT_TWO) * reducedB) / (z + (1.0 - SQRT_TWO) * reducedB));
         double rt = R * t, v = z * rt / p;
-        double den = v * v + 2.0 * b * v - b * b;
-        double dpdv = -rt / ((v - b) * (v - b)) + 2.0 * a * (v + b) / (den * den);
-        double dpdt = R / (v - b) - a1 / den;
-        if (!(dpdv < 0.0)) throw new IllegalArgumentException("Mechanically unstable pure-water root of the water share");
-        double dpdvv = 2.0 * rt / ((v - b) * (v - b) * (v - b)) + 2.0 * a / (den * den) - 8.0 * a * (v + b) * (v + b) / (den * den * den);
-        double dpdtv = -R / ((v - b) * (v - b)) + 2.0 * a1 * (v + b) / (den * den);
+        double den = PengRobinsonKernel.cubicDenominator(v, b);
+        // The kernel's volumetric block: -rt is (-R) t and 2 rt is (2 R) t exactly, so these are the same doubles.
+        double dpdv = PengRobinsonKernel.pressureVolumeDerivative(t, v, a, b);
+        double dpdt = PengRobinsonKernel.pressureTemperatureDerivative(v, b, a1);
+        if (!(dpdv < 0.0)) throw new ThermoRefusal("Mechanically unstable pure-water root of the water share");
+        double dpdvv = PengRobinsonKernel.pressureSecondVolumeDerivative(t, v, a, b);
+        double dpdtv = PengRobinsonKernel.pressureTemperatureVolumeDerivative(v, b, a1);
         double vT = -dpdt / dpdv, vP = 1.0 / dpdv;
         double vTT = -(-a2 / den + 2.0 * dpdtv * vT + dpdvv * vT * vT) / dpdv;
         double vTP = -(dpdtv + dpdvv * vT) / (dpdv * dpdv);
@@ -353,28 +324,6 @@ public final class WaterShare {
         return g;
     }
 
-    /** Wagner and Pruss's saturation pressure, Pa, below the critical temperature. */
-    static double saturationPressure(double t) {
-        double theta = 1.0 - t / TC, root = Math.sqrt(theta);
-        return PC * DeterministicMath.exp(TC / t * wagner(theta, root));
-    }
-
-    /** {@code d p_sat/dT} at {@code t}, given {@code p_sat(t)}. */
-    private static double saturationSlope(double t, double saturation) {
-        double theta = 1.0 - t / TC, root = Math.sqrt(theta);
-        double f = wagner(theta, root);
-        double t3 = theta * theta * theta;
-        double slope = WAGNER[0] + 1.5 * WAGNER[1] * root + 3.0 * WAGNER[2] * theta * theta + 3.5 * WAGNER[3] * theta * theta * root
-                + 4.0 * WAGNER[4] * t3 + 7.5 * WAGNER[5] * t3 * t3 * root;
-        return saturation * (-TC / (t * t) * f - slope / t);
-    }
-
-    private static double wagner(double theta, double root) {
-        double t3 = theta * theta * theta;
-        return WAGNER[0] * theta + WAGNER[1] * theta * root + WAGNER[2] * t3 + WAGNER[3] * t3 * root
-                + WAGNER[4] * t3 * theta + WAGNER[5] * t3 * t3 * theta * root;
-    }
-
     private static double smooth(double u) {
         if (u <= 0.0) return 0.0;
         if (u >= 1.0) return 1.0;
@@ -385,11 +334,5 @@ public final class WaterShare {
         if (u <= 0.0 || u >= 1.0) return 0.0;
         double v = u * (1.0 - u);
         return 30.0 * v * v;
-    }
-
-    private static double power(double x, int n) {
-        double base = n < 0 ? 1.0 / x : x, out = 1.0;
-        for (int k = Math.abs(n); k > 0; k--) out *= base;
-        return out;
     }
 }

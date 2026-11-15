@@ -114,17 +114,66 @@ public final class ShaftNetwork {
     }
 
     /**
-     * One train: its key (its lowest part identity), every part in it, its driver (0 for none), the driven members, its
-     * fault, each shaft block's speed share of the driver's ({@code shafts}, for the drawn size) and each gearbox's ratio as
-     * it applies (auto resolved).
+     * A gearbox in its train (code base review N7): {@code efficiency} the gears' efficiency from the driver to its input
+     * (the line on the driver's side), and {@code behind} the driven members its power reaches (every one on its far side).
      */
-    public record Train(long key, Set<Long> parts, long driver, List<Driven> driven, Fault fault, Map<Long, Double> shafts, Map<Long, Double> ratios) {
+    public record Gear(long id, double efficiency, Set<Long> behind) {
+        public Gear {
+            behind = Collections.unmodifiableSet(new TreeSet<>(behind));
+        }
+    }
+
+    /**
+     * One train: its key (its lowest part identity), every part in it, its driver (0 for none), the driven members, its
+     * fault, each shaft block's speed share of the driver's ({@code shafts}, for the drawn size), each gearbox's ratio as
+     * it applies (auto resolved) and its gearboxes as the driver's power passes them ({@code gears}, in identity order;
+     * none for a train that stands on a fault).
+     */
+    public record Train(long key, Set<Long> parts, long driver, List<Driven> driven, Fault fault, Map<Long, Double> shafts, Map<Long, Double> ratios,
+                        List<Gear> gears) {
         public Train {
             parts = Collections.unmodifiableSet(new TreeSet<>(parts));
             driven = List.copyOf(driven);
             shafts = Map.copyOf(shafts);
             ratios = Map.copyOf(ratios);
+            gears = List.copyOf(gears);
         }
+
+        /** A train without gearboxes on its power path. */
+        public Train(long key, Set<Long> parts, long driver, List<Driven> driven, Fault fault, Map<Long, Double> shafts, Map<Long, Double> ratios) {
+            this(key, parts, driver, driven, fault, shafts, ratios, List.of());
+        }
+    }
+
+    /**
+     * The most power the train's driver may give through its gearboxes, W (code base review N7): a gearbox passes at most
+     * its {@code rating} (W, at its input); through it passes {@code T = Σ P_m η_g / η_m} of the driven members m behind it,
+     * their shaft power {@code power} over the gears between its input and each ({@code η_g} its input's efficiency,
+     * {@code η_m} the member's). The driver gives {@code D = Σ P_m / η_m} of all its members; at one speed every member's
+     * power scales alike, so gearbox g caps the driver at {@code R_g D / T_g}. The least over the gearboxes; +∞ where none
+     * caps: no gearbox, a gearbox rated 0 (none from its shape, an older save) or one with no load behind it.
+     */
+    public static double gearLimit(Train train, java.util.function.LongToDoubleFunction rating, java.util.function.LongToDoubleFunction power) {
+        if (train.gears().isEmpty()) return Double.POSITIVE_INFINITY;
+        var efficiency = new HashMap<Long, Double>();
+        double total = 0;
+        for (var m : train.driven()) {
+            efficiency.put(m.id(), m.efficiency());
+            total += Math.max(0, power.applyAsDouble(m.id())) / m.efficiency();
+        }
+        if (!(total > 0) || !Double.isFinite(total)) return Double.POSITIVE_INFINITY;
+        double limit = Double.POSITIVE_INFINITY;
+        for (var gear : train.gears()) {
+            double rated = rating.applyAsDouble(gear.id());
+            if (!(rated > 0) || !Double.isFinite(rated)) continue;
+            double through = 0;
+            for (long id : gear.behind()) {
+                Double eta = efficiency.get(id);
+                if (eta != null) through += Math.max(0, power.applyAsDouble(id)) * gear.efficiency() / eta;
+            }
+            if (through > 0) limit = Math.min(limit, rated * total / through);
+        }
+        return limit;
     }
 
     /** Compiles {@code parts} into trains, in key order. Parts that touch no train end (a lone shaft run) make none. */
@@ -208,11 +257,15 @@ public final class ShaftNetwork {
             var shafts = new HashMap<Long, Double>();
             var ratios = new HashMap<Long, Double>();
             long driver = drivers.size() == 1 ? drivers.getFirst().id() : 0;
+            var trainGears = new ArrayList<Gear>();
             if (fault == Fault.NONE) {
                 var driverPart = drivers.getFirst();
                 int start = lineOf[driverPart.kind()==Kind.SHAFT?shaftAt.get(driverPart.cell()):endNode.get(driverPart.id())[0]];
                 var factor = new HashMap<Integer, Double>();
                 var efficiency = new HashMap<Integer, Double>();
+                // The gearbox each line takes its power through, and each gearbox's input line (N7: the gearboxes' limits).
+                var feeder = new HashMap<Integer, Part>();
+                var input = new HashMap<Long, Integer>();
                 factor.put(start, 1.0);
                 efficiency.put(start, 1.0);
                 var queue = new ArrayDeque<Integer>();
@@ -246,21 +299,31 @@ public final class ShaftNetwork {
                         ratios.put(gear.id(), ratio);
                         factor.put(other, factor.get(line) * (upward ? ratio : 1 / ratio));
                         efficiency.put(other, efficiency.get(line) * GEAR_EFFICIENCY);
+                        feeder.put(other, gear);
+                        input.put(gear.id(), line);
                         queue.add(other);
                     }
                 }
+                var behind = new TreeMap<Long, Set<Long>>();
                 for (int line : entry.getValue()) {
                     double f = factor.getOrDefault(line, 0.0), eta = efficiency.getOrDefault(line, 1.0);
                     var seen = new HashSet<Long>();
                     for (int node : lines.get(line)) {
                         var part = byId.get(nodes.get(node)[0]);
                         if (part.kind() == Kind.SHAFT) shafts.put(part.id(), f);
-                        if (part.driven() && seen.add(part.id())) driven.add(new Driven(part.id(), f, eta));
+                        if (part.driven() && seen.add(part.id())) {
+                            driven.add(new Driven(part.id(), f, eta));
+                            // Every gearbox between the driver and this member passes its power.
+                            for (var g = feeder.get(line); g != null; g = feeder.get(input.get(g.id())))
+                                behind.computeIfAbsent(g.id(), k -> new TreeSet<>()).add(part.id());
+                        }
                     }
                 }
+                for (var g : gears)
+                    if (input.containsKey(g.id())) trainGears.add(new Gear(g.id(), efficiency.get(input.get(g.id())), behind.getOrDefault(g.id(), Set.of())));
                 driven.sort(Comparator.comparingLong(Driven::id));
             } else for (long id : partIds) if (byId.get(id).kind() == Kind.SHAFT) shafts.put(id, 0.0);
-            trains.add(new Train(partIds.first(), partIds, driver, driven, fault, shafts, ratios));
+            trains.add(new Train(partIds.first(), partIds, driver, driven, fault, shafts, ratios, trainGears));
         }
         trains.sort(Comparator.comparingLong(Train::key));
         return trains;

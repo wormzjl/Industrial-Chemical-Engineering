@@ -243,6 +243,20 @@ final class BatchStillUnitTest {
         assertTrue(noted(over, "still.overfull"), () -> "log " + over.log());
     }
 
+    /**
+     * The run warns where the world's law says the pot boils over into its neck, {@code BatchStill.FILL} (finding P3-04): the usual
+     * charge does not warn, one filled to 72 % does, between the law's 70 % and the 75 % the run once read.
+     */
+    @Test void aChargeOverTheLawsFillWarns() {
+        var usual = naphthaStill("{}");
+        double fill = reading(usual, "fill");
+        assertFalse(noted(usual, "still.full"), "the usual charge, " + fill);
+        var full = still("{}", feed(300, 1.5e5, NAPHTHA, FLOW * .72 / fill));
+        double fuller = reading(full, "fill");
+        assertTrue(fuller > com.wormzjl.icheme.science.plant.still.BatchStill.FILL && fuller < .75, "a charge between the two numbers: " + fuller);
+        assertTrue(noted(full, "still.full"), () -> "log " + full.log());
+    }
+
     /** Without its own condenser the still sends its vapour on: a cut is the head's vapour, and there is no vent. */
     @Test void withoutACondenserTheCutsAreVapour() {
         var run = closes(naphthaStill("{\"condenser\":\"none\"}"));
