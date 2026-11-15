@@ -324,7 +324,8 @@ public final class PassiveStepSolver {
     /** The pass whose node bundles ({@code StepEquations.cachedPrepared}) the next pass takes over (P-18). */
     StepEquations preparedPass;
     /** The node bundles the passes of this solver have built new (P-18): a step's first pass builds them and its later
-     * passes refill them; the accepted pass drops them with its decode cache (review 8.7 (c) E2). A test's counter. */
+     * passes refill them; the accepted pass keeps them, retired, so the solver's next step refills them and builds none
+     * (batch 2026-11-15-fluid-step-cost, S2). A test's counter. */
     long preparedBuilt;
     long preparedBuilt(){return preparedBuilt;}
     boolean rateOnly;
@@ -777,7 +778,8 @@ public final class PassiveStepSolver {
             if(shown!=null)endStates=shown;
             var accepted=new Result(endStates,flows,dt,numerical,acceptedModes,heads,projection.pumpWork(),projection.externalMoles(),projection.externalEnergy(),projection.inventories(),projection.boundaries(),PipeTransfer.sample(model,graph,projection.states(),flows,dt,draws),projection.filters(),observations.observe(equations,states,flows,lawFlows,heads,acceptedModes,checkpoint),TowerExchange.readings(original,states,flows,draws,model));
             // The retained last solve keeps its equations and point, not their per-node decode caches (states, transport
-            // rows, prepared temperature workspaces): a later reader re-decodes (review 8.7 (c) E2).
+            // rows): a later reader re-decodes (review 8.7 (c) E2). The node bundles stay, retired, with their kernel
+            // workspaces, for the next step (batch 2026-11-15-fluid-step-cost, S2).
             equations.releaseDecodeCache();
             return accepted;
         }

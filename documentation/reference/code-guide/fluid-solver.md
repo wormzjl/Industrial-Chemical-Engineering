@@ -21,13 +21,13 @@ Under `src/main/java/com/wormzjl/icheme/science/fluid/`. Lines at `d6f721b94`.
 
 | Class | Role | Lines |
 |---|---|---|
-| [`solver/PhaseLayout`](../../../src/main/java/com/wormzjl/icheme/science/fluid/solver/PhaseLayout.java) | One node's unknowns and rows for a frozen phase set: variable encoding (`encode`, `decode`, `reactivate`), vessel and junction rows (`residual`, `equilibriumResidual`, `junctionClosure`), the wall row (`wallRow`, `Wall`, `rigid`, `bagVolume`), the kernel support of its evaluations (`support`, `carried`, `carriedState`), the atmosphere by height (`atmosphere`), Kahan `sum`; nested `Vanished` | 688 |
+| [`solver/PhaseLayout`](../../../src/main/java/com/wormzjl/icheme/science/fluid/solver/PhaseLayout.java) | One node's unknowns and rows for a frozen phase set: variable encoding (`encode`, `decode`, `reactivate`), vessel and junction rows (`residual`, `equilibriumResidual`, `junctionClosure`), a vessel's closure with its Jacobian from the base state's tangents (`wallClosure`, its `differentiateEntries`), the wall row (`wallRow`, `Wall`, `rigid`, `bagVolume`), the kernel support of its evaluations (`support`, `carried`, `carriedState`), the atmosphere by height (`atmosphere`), Kahan `sum`; nested `Vanished` | 742 |
 | [`solver/SparseNewton`](../../../src/main/java/com/wormzjl/icheme/science/fluid/solver/SparseNewton.java) | Damped Newton: the `Equations` contract, coloured FD or block Jacobian, chord reuse, line search, `Workspace` (forks share one LU storage per structure), `KeptFactors` (storages of solves on their own workspace), `Settings`, `Nonconvergence`, `ITERATIONS` | 425 |
 | [`solver/StepPhaseRules`](../../../src/main/java/com/wormzjl/icheme/science/fluid/solver/StepPhaseRules.java) | Static phase rules of a step on the model they judge: `phaseCheck` (with `tpSeed` and a vessel's `crossing`) and a pipe junction's own split `junctionSplit` | 174 |
-| [`linalg/SparseLuSolver`](../../../src/main/java/com/wormzjl/icheme/science/fluid/linalg/SparseLuSolver.java) | Sparse LU on `UpLookingLu`: `Ordering` (RCM), equilibration, backward-error check, `Storage` (one worker's LU and buffers, refilled in place), `Factorization`, `SolveFailure` | 308 |
-| [`linalg/UpLookingLu`](../../../src/main/java/com/wormzjl/icheme/science/fluid/linalg/UpLookingLu.java) | The mod's own column-by-column (Gilbert-Peierls) LU with row pivoting, bit for bit EJML 0.44's `LuUpLooking_DSCC` without a fill-reducing permutation; keeps each column's reach while the pattern and the earlier pivots repeat; `searches()` | 275 |
+| [`linalg/SparseLuSolver`](../../../src/main/java/com/wormzjl/icheme/science/fluid/linalg/SparseLuSolver.java) | Sparse LU on `UpLookingLu`: `Ordering` (RCM), equilibration, backward-error check, `Storage` (one worker's LU and buffers, refilled in place), `Factorization`, `SolveFailure` | 310 |
+| [`linalg/UpLookingLu`](../../../src/main/java/com/wormzjl/icheme/science/fluid/linalg/UpLookingLu.java) | The mod's own column-by-column (Gilbert-Peierls) LU with row pivoting, bit for bit EJML 0.44's `LuUpLooking_DSCC` without a fill-reducing permutation; keeps each column's reach while the pattern and the earlier pivots repeat; `searches()` | 278 |
 | [`linalg/SparseMatrix`](../../../src/main/java/com/wormzjl/icheme/science/fluid/linalg/SparseMatrix.java) | Immutable CSC matrix | 66 |
-| [`diagnostics/SolverDiagnostics`](../../../src/main/java/com/wormzjl/icheme/science/fluid/diagnostics/SolverDiagnostics.java) | Opt-in process-wide counters and timers, off by default (`phaseSeeds`, `phaseRefusals`, `luColumnsFactored`, `luReachSearches`, `jacobianTangentsBuilt`, `jacobianExactColumns` among them) | 289 |
+| [`diagnostics/SolverDiagnostics`](../../../src/main/java/com/wormzjl/icheme/science/fluid/diagnostics/SolverDiagnostics.java) | Opt-in process-wide counters and timers, off by default (`phaseSeeds`, `phaseRefusals`, `luColumnsFactored`, `luReachSearches`, `jacobianTangentsBuilt`, `jacobianExactColumns` among them) | 300 |
 | [`SolverOwnership`](../../../src/main/java/com/wormzjl/icheme/science/fluid/SolverOwnership.java) | Exclusive-use latch of a workspace that outlives a job: `confinedToCurrentThread`, `released`, `acquire`, `release`, `check` | 43 |
 
 ## Main flow
@@ -35,7 +35,7 @@ Under `src/main/java/com/wormzjl/icheme/science/fluid/`. Lines at `d6f721b94`.
 `SparseNewton.solve(equations, x0, settings)` for one pass:
 
 1. Evaluate the residual (`Equations.residual`); weight the rows.
-2. Build the Jacobian: the block sweep `StepEquations.differentiateEntries` (a node column's perturbed phases from the base state's tangents, `FluidThermodynamics.tangents` and `PhaseLayout.decode(variables, offset, prepared, tangents)`), or the coloured one-sided finite differences (relative step 1e-6) where the block form does not apply.
+2. Build the Jacobian: the block sweep `StepEquations.differentiateEntries` (a node column's perturbed phases from the base state's tangents, `FluidThermodynamics.tangents` and `PhaseLayout.decode(variables, offset, prepared, tangents)`), or the coloured one-sided finite differences (relative step 1e-6) where the block form does not apply. A vessel's closure (`PhaseLayout.wallClosure`) builds its Jacobian the same way: one tangent evaluation of the base state, then each column's trial state decoded on the tangents; a refused trial falls back to the differences. A junction's closure stays on differences.
 3. Factor through `SparseLuSolver` on the workspace's `Storage` (ordering reused per pattern); solve.
 4. `maximumStep` keeps amounts positive; `project` holds traces below `TRACE_CLAMP_FRACTION` × floor instead of shrinking the whole step.
 5. Natural (affine-invariant) merit line search, up to 24 backtracks.
@@ -95,7 +95,7 @@ None. The LU storages and Newton workspaces are never saved.
 |---|---|
 | The Newton, its structural reuse | `SparseNewtonTest` |
 | Node layout and rows | `PhaseLayoutTest`, `TraceTruncationLayoutTest`, `DirectLiquidJacobianRowsTest` |
-| The block Jacobian and the tangents | `BlockJacobianEquivalenceTest`, `HydrocarbonTangentTest` |
+| The block Jacobian and the tangents | `BlockJacobianEquivalenceTest`, `HydrocarbonTangentTest`, `WallClosureJacobianTest` (the vessel closure's) |
 | The LU, bit for bit against EJML on step matrices, random patterns and three singular ones | `UpLookingLuParityTest` (takes the step matrices from `SparseLuSolver.observer`, null outside it) |
 | The kept LU storages | runtime `KeptLuStorageTest` |
 | The LU solver; the jar ships no EJML | `SparseLuSolverTest`, `PackagedSparseLuTest` |
@@ -110,6 +110,6 @@ EJML is a test dependency of the parity gate only; the jar keeps EJML's Apache-2
 - **The SLACK/TAUT "modes" are not an enum.** There is one semismooth row (`wallRow`) and a branch record (`PhaseLayout.Wall`). Search for `taut`.
 - **`SparseNewton.Settings.defaults()` states its own iteration count and tolerance.** Only tests call it; production passes `ITERATIONS`.
 - **`SolverDiagnostics` is measurement, never state.** Its counters are off by default and process-wide.
-- **The block sweep is not exact.** A perturbed node's phases are first order in volume, enthalpy, heat capacity and ln phi (exact in T, P, amounts and water's share); a column whose composition shift passes `FluidThermodynamics.TANGENT_COMPOSITION_STEP` takes the exact phase. The Newton reaches the same root.
+- **The block sweep is not exact.** A perturbed node's phases are first order in volume, enthalpy, heat capacity and ln phi (exact in T, P, amounts and water's share); a column whose composition shift passes `FluidThermodynamics.TANGENT_COMPOSITION_STEP` takes the exact phase. The Newton reaches the same root. The same holds for the vessel closure's Jacobian: a closure that iterates ends within its tolerance at the same root, in other last digits than differences gave.
 
-**Snapshot:** `d6f721b94`, 2026-11-15.
+**Snapshot:** `cdb2833e1`, 2026-11-15.

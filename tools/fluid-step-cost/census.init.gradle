@@ -1,0 +1,32 @@
+// The Jacobian pattern census (S0 of batch 2026-11-15-fluid-step-cost). Attaches the bundled hold-fuzz harness's src/ and
+// this folder's src/ to the test source set for one Gradle invocation and forwards the fuzz switches:
+//   ./gradlew --console=plain --no-configuration-cache --init-script tools/fluid-step-cost/census.init.gradle test \
+//       --tests '*PatternCensusTest' -PholdFuzzSeeds=1-200 -PholdFuzzThreads=4 -PcensusOut=<absolute file> \
+//       [-PholdFuzzOut=<absolute file>] [-PholdFuzzSlices=120] [-PholdFuzzDefaults=true]
+// Run only PatternCensusTest: it runs the harness's worlds itself (HoldFuzzTest.placementSequenceFuzz, in the same JVM).
+// Not part of any gate suite: without this init script neither class is compiled.
+gradle.projectsEvaluated {
+    def here = gradle.startParameter.initScripts.find { it.name == 'census.init.gradle' }.parentFile
+    def harness = new File(here, '../unified-thermo-port-forms/hold-fuzz-bundled').canonicalFile
+    def root = gradle.rootProject
+    root.sourceSets.test.java.srcDir(new File(harness, 'src'))
+    root.sourceSets.test.java.srcDir(new File(here, 'src'))
+    def censusOut = root.findProperty('censusOut') ?: new File(here, 'logs/census.txt').absolutePath
+    root.tasks.withType(Test).configureEach {
+        maxHeapSize = root.findProperty('holdFuzzHeap') ?: '8g'
+        systemProperty 'holdFuzz.seeds', root.findProperty('holdFuzzSeeds') ?: '1-20'
+        systemProperty 'holdFuzz.threads', root.findProperty('holdFuzzThreads') ?: '4'
+        systemProperty 'holdFuzz.slices', root.findProperty('holdFuzzSlices') ?: '120'
+        systemProperty 'holdFuzz.verbose', root.findProperty('holdFuzzVerbose') ?: 'false'
+        systemProperty 'holdFuzz.strict', root.findProperty('holdFuzzStrict') ?: 'false'
+        systemProperty 'holdFuzz.defaults', root.findProperty('holdFuzzDefaults') ?: 'false'
+        systemProperty 'holdFuzz.counters', root.findProperty('holdFuzzCounters') ?: 'false'
+        if (root.findProperty('holdFuzzTimeScale')) systemProperty 'holdFuzz.timeScale', root.findProperty('holdFuzzTimeScale')
+        systemProperty 'holdFuzz.pipeBetween', root.findProperty('holdFuzzPipeBetween') ?: 'true'
+        // The harness's own report goes beside the census unless named.
+        systemProperty 'holdFuzz.out', root.findProperty('holdFuzzOut') ?: new File(new File(censusOut).absoluteFile.parentFile, 'hold-fuzz-report.txt').absolutePath
+        systemProperty 'census.out', censusOut
+        testLogging { showStandardStreams = true }
+        outputs.upToDateWhen { false }
+    }
+}

@@ -563,6 +563,16 @@ public final class FluidThermodynamics {
      * the state does not hold and for a root that cannot be differentiated. Each tangent's base is the state's own phase.
      */
     public HydrocarbonModel.Tangent[] tangents(State state,Prepared prepared) {
+        return tangents(state,prepared,null);
+    }
+    /**
+     * {@link #tangents(State, Prepared)} filled into the caller's {@code storage} (null: new tangents): one tangent per
+     * storage slot, {@code storage[slot]} filled again in place ({@link HydrocarbonModel#tangent(double, double, double[],
+     * PengRobinsonKernel.Root, TranslatedPengRobinson.Workspace, boolean, HydrocarbonModel.Tangent)}) and set to a new one
+     * where it held none (batch 2026-11-15-fluid-step-cost, S2). The slots are separate objects, so a node's phases share
+     * nothing; the caller reads nothing of an earlier call's tangents after this one.
+     */
+    public HydrocarbonModel.Tangent[] tangents(State state,Prepared prepared,HydrocarbonModel.Tangent[] storage) {
         double t=state.temperature(),p=state.pressure();
         var tangents=new HydrocarbonModel.Tangent[3];
         TranslatedPengRobinson.Workspace terms=null;
@@ -570,11 +580,14 @@ public final class FluidThermodynamics {
         double[] support=support(prepared,state.vaporAmountsView(),state.liquidAmountsView(),state.aqueousAmountsView());
         for(int slot=0;slot<3;slot++) {
             if(state.phase(slot)==null)continue;
-            if(terms==null){terms=prepared==null?hydrocarbon.prepare(t):match(prepared,t).pengRobinson();hydrocarbon.carry(terms,support);}
+            if(terms==null){terms=prepared==null?takeStandalone(t):match(prepared,t).pengRobinson();hydrocarbon.carry(terms,support);}
             tangents[slot]=hydrocarbon.tangent(t,p,state.amountsView(slot),slot==State.VAPOR?PengRobinsonKernel.Root.VAPOR:PengRobinsonKernel.Root.LIQUID,
-                    terms,slot!=State.VAPOR&&gas);
+                    terms,slot!=State.VAPOR&&gas,storage==null?null:storage[slot]);
+            if(storage!=null&&tangents[slot]!=null)storage[slot]=tangents[slot];
             if(tangents[slot]!=null)SolverDiagnostics.count(SolverDiagnostics.jacobianTangentsBuilt);
         }
+        // No bundle: the thread's kept workspace (S2b) back in its slot; a tangent keeps none (its base phase and arrays).
+        if(prepared==null&&terms!=null)giveStandalone(terms);
         return tangents;
     }
     /**
@@ -594,9 +607,17 @@ public final class FluidThermodynamics {
             return tangent.at(t,p,amounts);
         }
         SolverDiagnostics.count(tangent!=null?SolverDiagnostics.jacobianExactPhases:SolverDiagnostics.jacobianUntangentPhases);
-        var terms=prepared==null?hydrocarbon.prepare(t):prepared.pengRobinson();
+        if(prepared!=null) {
+            var terms=prepared.pengRobinson();
+            hydrocarbon.carry(terms,support);
+            return hydrocarbon.phase(t,p,amounts,root,terms,vaporCoexists);
+        }
+        // No bundle: the thread's kept workspace (S2b), given back once the phase is evaluated.
+        var terms=takeStandalone(t);
         hydrocarbon.carry(terms,support);
-        return hydrocarbon.phase(t,p,amounts,root,terms,vaporCoexists);
+        var phase=hydrocarbon.phase(t,p,amounts,root,terms,vaporCoexists);
+        giveStandalone(terms);
+        return phase;
     }
     /**
      * The kernel support of a node's evaluation (conserved basis, nonzero where carried): the compounds {@code prepared}'s
@@ -610,6 +631,41 @@ public final class FluidThermodynamics {
         for(int i=0;i<support.length;i++)support[i]=named[i]||vapor[i]!=0||liquid[i]!=0||aqueous[i]!=0?1:0;
         return support;
     }
+    /**
+     * Each thread's kept Peng-Robinson workspace for the evaluations given no {@link Prepared} bundle (batch
+     * 2026-11-15-fluid-step-cost, S2b): the reconstruction after a step ({@code ConservativeTransport.repartition},
+     * {@code InventoryEquilibrium.close}) states every node without one, and a new kernel workspace per call was about 30 %
+     * of a step's bytes. One slot per thread and model: a model is read by several workers at once, so the workspace is never
+     * kept in a plain field. An evaluation takes it ({@link #takeStandalone}) and the slot stays empty while it runs, so an
+     * evaluation nested inside it on the same thread finds none and builds its own. It is given back
+     * ({@link #giveStandalone}) only by an evaluation that returned: a refusal can leave a workspace half prepared under
+     * the kernel's stamps ({@link Prepared#pengRobinson}), so one that throws drops it and the next evaluation builds a new
+     * one. A site takes it only where its use ends inside the method: a {@link State}, its {@link HydrocarbonModel.Phase}s
+     * and a {@link HydrocarbonModel.Tangent} keep no reference to a workspace (a phase keeps the support's mask, a new one
+     * per change of the support, never the workspace's own).
+     */
+    private final ThreadLocal<TranslatedPengRobinson.Workspace[]> standalone=ThreadLocal.withInitial(()->new TranslatedPengRobinson.Workspace[1]);
+    /** The Peng-Robinson workspaces the evaluations given no bundle have built new (each a whole kernel workspace),
+     * process-wide: a test's and the bench's counter beside {@link Prepared#workspacesBuilt} (S2b). */
+    private static final java.util.concurrent.atomic.LongAdder STANDALONE_BUILT=new java.util.concurrent.atomic.LongAdder();
+    public static long standaloneWorkspacesBuilt(){return STANDALONE_BUILT.sum();}
+    /**
+     * A workspace prepared at {@code t} on the whole list for an evaluation given no bundle: the thread's kept one, its
+     * slot emptied, prepared as {@link Prepared#pengRobinson} prepares a kept one (at {@code t} on the support its last
+     * use left, then the whole list carried again), which gives a new workspace's bits and refusals (P-18,
+     * {@code PreparedRefillTest}); a new one where the slot is empty. The caller gives it back with
+     * {@link #giveStandalone} when it returns, and not when it throws.
+     */
+    private TranslatedPengRobinson.Workspace takeStandalone(double t) {
+        var slot=standalone.get();
+        var kept=slot[0];slot[0]=null;
+        if(kept==null){STANDALONE_BUILT.increment();return hydrocarbon.prepare(t);}
+        hydrocarbon.translated().prepare(t,kept);
+        kept.carryAll();
+        return kept;
+    }
+    /** {@code terms}, taken by {@link #takeStandalone} and no longer read, back in the thread's slot. */
+    private void giveStandalone(TranslatedPengRobinson.Workspace terms){standalone.get()[0]=terms;}
     private State state(double t,double p,double[] vapor,double[] liquid,double[] aqueous,
                         TranslatedPengRobinson.Workspace terms,Prepared prepared) {
         return state(t,p,vapor,liquid,aqueous,terms,prepared,null);
@@ -627,7 +683,12 @@ public final class FluidThermodynamics {
         // interval's notice reports it); only the numerical box refuses a trial, a plain IllegalArgumentException.
         NumericalBox.require(t,p);
         double nv=sum(vapor),nl=sum(liquid),na=sum(aqueous),volume=0,h=0,mass=0,vv=0,vl=0,va=0;
-        if(terms==null&&tangents==null&&(nv>0||nl>0||na>0))terms=prepared==null?hydrocarbon.prepare(t):prepared.pengRobinson();
+        // With no bundle and no caller's workspace, the thread's kept one (S2b), given back when the state is built.
+        boolean taken=false;
+        if(terms==null&&tangents==null&&(nv>0||nl>0||na>0)) {
+            taken=prepared==null;
+            terms=taken?takeStandalone(t):prepared.pengRobinson();
+        }
         // The compounds the node holds and its owner named, or the whole list (KERNEL_COST_PLAN.md Part A).
         double[] support=support(prepared,vapor,liquid,aqueous);
         if(terms!=null)hydrocarbon.carry(terms,support);
@@ -639,6 +700,7 @@ public final class FluidThermodynamics {
         if(na>0){ap=tangents==null?hydrocarbon.phase(t,p,aqueous,PengRobinsonKernel.Root.LIQUID,terms,nv>0):slotPhase(tangents[State.AQUEOUS],t,p,aqueous,PengRobinsonKernel.Root.LIQUID,prepared,nv>0,support);va=na*ap.molarVolume();volume+=va;h+=na*ap.molarEnthalpy();}
         for(int i=0;i<n;i++)mass+=(vapor[i]+liquid[i]+aqueous[i])*molecularWeight(i);
         if(!(volume>0)||!(mass>0)||!Double.isFinite(h))throw new IllegalArgumentException("Empty/nonfinite fluid properties");
+        if(taken)giveStandalone(terms);
         return new State(t,p,vapor,liquid,aqueous,volume,h,h-p*volume,mass,vv,vl,va,gp,lp,ap,SolidInventory.EMPTY,SolidInventory.Moments.ZERO);
     }
 
@@ -951,7 +1013,9 @@ public final class FluidThermodynamics {
             }
             default->throw new IllegalStateException("The network's equilibrium engine refused a request it must answer: "+result.detail());
         }
-        if(terms==null)terms=hydrocarbon.prepare(t);
+        // No caller's workspace: the thread's kept one (S2b), given back once the state is placed.
+        boolean taken=terms==null;
+        if(taken)terms=takeStandalone(t);
         // The engine's phases are placed on the whole list: no owner names a support here.
         hydrocarbon.carry(terms,null);
         var fluids=new ArrayList<PhaseAmounts>();
@@ -959,12 +1023,15 @@ public final class FluidThermodynamics {
             if(phase.kind()==PhaseKind.SOLID)throw new IllegalStateException("A step-level answer booked a crystal (owner decision D23)");
             fluids.add(phase);
         }
+        State state;
         // A pure component at its own coexistence pressure, the split undetermined by T and P: a single liquid.
         if(result.classification()==EquilibriumResult.Classification.PURE_COEXISTENCE_UNDERDETERMINED) {
             double[] none=new double[componentCount()];
-            return placedState(t,p,none,overall.clone(),none.clone(),terms);
+            state=placedState(t,p,none,overall.clone(),none.clone(),terms);
         }
-        return placed(t,p,fluids,terms,UnsupportedPhases.Kind.THREE_PHASES);
+        else state=placed(t,p,fluids,terms,UnsupportedPhases.Kind.THREE_PHASES);
+        if(taken)giveStandalone(terms);
+        return state;
     }
     /**
      * The engine's fluid phases in the state's slots (W3b): a vapour-like phase in the vapour slot, the liquids by the slot
@@ -1110,12 +1177,13 @@ public final class FluidThermodynamics {
     /**
      * {@link #prepare(double)} into {@code reuse}, one of this model's bundles (null: a new one), refilled in place when its
      * temperature differs (finding P-18, batch 2026-11-13-codebase-review): its Peng-Robinson workspace is prepared again
-     * at the new temperature on the whole list, as a new one is, and gives the same bits. The caller must read nothing it
-     * derived from {@code reuse} at its previous temperature after this call.
+     * at the new temperature on the whole list, as a new one is, and gives the same bits. A {@link Prepared#retire retired}
+     * bundle is refilled at any temperature, its own included. The caller must read nothing it derived from {@code reuse}
+     * at its previous temperature after this call.
      */
     public Prepared prepare(double temperature,Prepared reuse) {
         if(reuse==null)return prepare(temperature);
-        if(own(reuse).temperature==temperature)return reuse;
+        if(own(reuse).temperature==temperature&&!reuse.retired)return reuse;
         reuse.refill(temperature);return reuse;
     }
 
@@ -1155,8 +1223,24 @@ public final class FluidThermodynamics {
         private void refill(double temperature) {
             if(!Double.isFinite(temperature)||temperature<=0)throw new IllegalArgumentException("Invalid prepared temperature");
             if(terms!=null)kept=terms;
-            terms=null;transport=null;carried=null;this.temperature=temperature;
+            terms=null;transport=null;carried=null;this.temperature=temperature;retired=false;
         }
+        /** Set by {@link #retire}: the next {@link FluidThermodynamics#prepare(double, Prepared)} refills this bundle even at
+         * its own temperature. */
+        private boolean retired;
+        /**
+         * Keeps this bundle's Peng-Robinson workspace for a later owner and nothing it derived (batch
+         * 2026-11-15-fluid-step-cost, S2): its members are dropped as a refill drops them, and the next
+         * {@link FluidThermodynamics#prepare(double, Prepared)} on it refills it whatever the temperature, so that use reads
+         * a new bundle's bits and makes a new bundle's preparations ({@code temperatureTermsCalls}), with no new workspace.
+         * Nothing may read the bundle between this call and that refill.
+         */
+        public void retire() {
+            if(terms!=null)kept=terms;
+            terms=null;transport=null;carried=null;retired=true;
+        }
+        /** Whether this bundle is {@link #retire retired} and not refilled since. */
+        public boolean retired(){return retired;}
         public double temperature() { return temperature; }
         /**
          * The compounds this bundle's evaluations carry in the kernel (conserved basis), beside the node's own amounts:
