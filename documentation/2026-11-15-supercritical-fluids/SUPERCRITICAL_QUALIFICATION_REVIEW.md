@@ -1,7 +1,7 @@
 # Supercritical fluids: qualification of the bundled network model (S0)
 
 Status: measurement, 2026-11-15, on branch `claude/supercritical-fluid-support-d0ffa4` (base `e9edc974b`, main 0.31.0).
-No production code changed. Test: `G3F11SupercriticalRegionTest` (8 tests), with the oracle's
+No production code changed. Test: `G3F11SupercriticalRegionTest` (9 tests, with the follow-up M8), with the oracle's
 `HelmholtzReferenceParityTest` (26 tests); both green. Plan: [SUPERCRITICAL_PLAN.md](SUPERCRITICAL_PLAN.md), stage S0.
 
 ## Summary
@@ -40,12 +40,14 @@ together; its densities need not be.
    ethylene/isobutene -0.21 at 300 K, -368 at 500 K) and 27 `HYDROGEN` (0.28-0.47). 118 pairs have no E-PPR78 value.
 9. M7: three binaries against CoolProp's mixture model to 30 MPa: one phase at all 105 single-phase states, density
    within -5.0 % (p95 2.8 %).
+10. M8: compressed liquids, Tr 0.5-0.95, 2-30 MPa: CO2, N2, C3H8 meet G3F1's liquid bounds to 30 MPa. Near Tc density is
+   worst next to saturation (to -8 %), then +1 to +3.6 % at 30 MPa; ethylene's cp misses at 141 K (-12 to -14 %).
 
 **Proposals** (the owner's to validate):
 
-- O4 A: `pressure_max_pascal` 30 MPa for CO2, N2, CH4, C2H6, C3H8, H2 and C2H4 (C2H4 with 13 % cp declared at the edge of
-  box 1); n-hexane and toluene at their measured 4.6 and 6.2 MPa; water stays (S6). Compressed liquids above 2 MPa are
-  not measured here: confirm them before raising a range that liquids use.
+- O4 A: `pressure_max_pascal` 30 MPa for CO2, N2, CH4, C2H6, C3H8 and H2 (liquids hold to 30 MPa or have no state in the
+  domain); C2H4 2 MPa, or 20 MPa with cp declared at 13 % (box edge) and 14 % (liquid, 141 K); n-hexane and toluene at
+  their supercritical 4.6 and 6.2 MPa (liquids hold to 20 and 30 MPa); water stays (S6).
 - O3: A costs up to 17 % density at a tie line of 0.1. Take B, or A with a smaller tie line; S1 states the gap.
 - O5 A with O10 A (the reference critical volume): -16/+8 %; on the cubic's own volume +28 %.
 - O6 A: leave the step (water only, 1.5-4.4 % of cp) and declare it.
@@ -57,7 +59,7 @@ together; its densities need not be.
 | Decision | Measure | Size |
 |---|---|---|
 | O3 (merge a split with tie line < 0.1) | one-fluid error at the first tie line below 0.1, 9 isotherms of 4 binaries | density -2.7 to +17 %, enthalpy -187 to +353 J/mol |
-| O4 (pressure ranges) | highest grid pressure with density <= 7 % and cp <= 12 % outside the band | 30 MPa: CO2, N2, CH4, C2H6, C3H8, H2 (T >= 273 K); C2H4 6.05 MPa strict, 30 MPa but one box-edge state at -12.1 %; N-hexane 4.57, toluene 6.19 MPa; surrogates pc01-pc02 30, pc03 20, pc04 10 MPa |
+| O4 (pressure ranges) | highest grid pressure with density <= 7 % and cp <= 12 % outside the band; liquids (M8) by G3F1's bounds, pressure misses | 30 MPa: CO2, N2, CH4, C2H6, C3H8, H2 (T >= 273 K); C2H4 6.05 MPa strict, 30 MPa but one box-edge state at -12.1 %; N-hexane 4.57, toluene 6.19 MPa; surrogates pc01-pc02 30, pc03 20, pc04 10 MPa. Liquids: CO2, N2, C3H8, toluene 30; n-hexane 20; C2H4 2 (20 with cp 14 % at 141 K) |
 | O5 (dense viscosity) | ratio to CoolProp, 60 states, Tr 1.05-1.5, 5-30 MPa | dilute 0.13-0.96; JST on the reference rho_c -16/+8 % (p95 11 %); on the cubic v_c -3/+28 % (p95 17 %) |
 | O6 (Mathias-Copeman step) | cp step at Tc, water only | +0.78 J/(mol K) (1.5 %) at Pr 0.5, +5.94 (4.4 %) at Pr 2, 3.3 at Pr 1 on a diverging cp |
 | O8 (gas-cut pairs) | today's derived pairs; gas mole fraction in the liquid at k_ij 0 and 0.15 | today E-PPR78 0.007-0.15 (H2 0); CO2 at 320 K, 2 MPa: 0.196 today, 0.293 at 0, 0.160 at 0.15; H2S at 320 K, 2 MPa: phase count changes |
@@ -66,8 +68,10 @@ together; its densities need not be.
 ## Not measured, and uncertain
 
 - The error of estimating a cut's Tc, Pc and acentric factor (M5 measures the model at a surrogate's own constants).
-- Compressed (subcritical) liquids above 2 MPa of the datasets O4 would raise; the effect of O9's pairs on mixtures;
-  the bubble pressure of a crude with 1 % gas (the plan's form of M6; the brief's equal-amount TP form was run).
+- Liquids M8 cannot reach: hydrogen (below 33 K); methane and ethane below their 293.15 K domain floor; ethane's
+  liquid inside its domain (293.15-305.3 K, Tr 0.96-1, between the grid's Tr 0.95 and Tc); any liquid between Tr 0.95
+  and 1. The effect of O9's pairs on mixtures; the bubble pressure of a crude with 1 % gas (the plan's form of M6; the
+  brief's equal-amount TP form was run).
 - M3's 10 % coarse pressure scan can miss a two-phase window narrower than 10 % ("no split" rows).
 - The engine of M3, M6 and M7 is the network's own, built as `NetworkPhaseEngine.of` builds it (the model's evaluator on
   its derived contract). `PackageBinding.equilibrium(bundled, icheme:refinery)`, which the brief names, takes the dry
@@ -98,6 +102,9 @@ together; its densities need not be.
   toluene at 275 K and 10 kPa; superancillary Psat 5.7e-4 at propane's triple point, 1.7e-4 Pa).
 - `viscosity-reference.json` (60 states) and `mixture-density-reference.json` (108 states, 3 two-phase in CoolProp),
   from `tools/coolprop-parity/generate_supercritical.py`.
+- M8: the compressed-liquid grid as rows of source `compressed_liquid` in the fixtures of CO2, N2, CH4, C2H6, n-propane,
+  ethylene, n-hexane and toluene (243 rows; two methane states below the melting line refused; earlier rows unchanged).
+  Every parity tolerance held unchanged: none widened.
 - Every summary's worst value is held at its first-run value rounded up to the next whole unit
   (`G3F11SupercriticalRegionTest.DECLARED`); the test also asserts finite values, one root above Tc, no `INTERNAL`
   answer, and that its E-PPR78 matches the derivation's 110 E-PPR78 pairs (worst 5e-6, the printed precision).
@@ -107,7 +114,7 @@ together; its densities need not be.
 Deviations are model minus reference, in percent unless stated; "worst / p95" is the worst signed value and the 95th
 percentile of the absolute values, with the worst's state. Per-state rows are in the test output
 (`build/test-results/test/TEST-com.wormzjl.icheme.science.thermo.qualification.G3F11SupercriticalRegionTest.xml`, lines
-`G3 F11 M1 <fluid>`, `G3 F11 M5 <fluid>`, `G3 F11 M7`).
+`G3 F11 M1 <fluid>`, `G3 F11 M5 <fluid>`, `G3 F11 M7`, `G3 F11 M8 <fluid>`).
 
 ### M1 pure fluids against the oracle
 
@@ -129,16 +136,21 @@ percentile of the absolute values, with the worst's state. Per-state rows are in
 | C2H4 | inside the band | 13 | -13.10 / +13.10 (288.0 K 6.05 MPa) | -10.39 / +10.39 (324.7 K 10.08 MPa) | -10.78 / +10.78 (288.0 K 10.00 MPa) | +3.10 / +3.10 (288.0 K 7.56 MPa) | +638 / +638 (288.0 K 6.05 MPa) |
 
 Recommended range: the highest grid pressure below the first state beyond 7 % density or 12 % cp, outside the band.
+"Liquids hold to" is M8's pressure-miss column (a liquid state beyond its G3F1 bound and worse than its isotherm's lowest
+liquid state; the strict column of M8 is in its own table). "Both support" is the lower of the supercritical (all T) and
+liquid values. The n-hexane and toluene rows are M5's bundled datasets.
 
-| Fluid | Highest P (MPa) with rho <= 7 % and cp <= 12 % outside the band | First state beyond (outside the band) | Same at T >= 273.15 K | First state beyond at T >= 273.15 K |
-|---|---|---|---|---|
-| CO2 | 30.00 | none to the grid's top | 30.00 | none to the grid's top |
-| N2 | 30.00 | none to the grid's top | 30.00 | none to the grid's top |
-| CH4 | 30.00 | none to the grid's top | 30.00 | none to the grid's top |
-| C2H6 | 30.00 | none to the grid's top | 30.00 | none to the grid's top |
-| H2 | 1.56 | 38.1 K 1.94 MPa rho +1.61 % cp -12.06 % | 30.00 | none to the grid's top |
-| C3H8 | 30.00 | none to the grid's top | 30.00 | none to the grid's top |
-| C2H4 | 6.05 | 310.6 K 7.56 MPa rho -2.79 % cp -12.12 % | 6.05 | 310.6 K 7.56 MPa rho -2.79 % cp -12.12 % |
+| Fluid | Highest P (MPa) with rho <= 7 % and cp <= 12 % outside the band | First state beyond (outside the band) | Same at T >= 273.15 K | First state beyond at T >= 273.15 K | Liquids hold to (MPa) | Both support (MPa) |
+|---|---|---|---|---|---|---|
+| CO2 | 30.00 | none to the grid's top | 30.00 | none to the grid's top | 30 | 30 |
+| N2 | 30.00 | none to the grid's top | 30.00 | none to the grid's top | 30 | 30 |
+| CH4 | 30.00 | none to the grid's top | 30.00 | none to the grid's top | no liquid on the grid above 293.15 K | 30 |
+| C2H6 | 30.00 | none to the grid's top | 30.00 | none to the grid's top | no liquid on the grid above 293.15 K (Tr 0.96-1 not measured) | 30 |
+| H2 | 1.56 | 38.1 K 1.94 MPa rho +1.61 % cp -12.06 % | 30.00 | none to the grid's top | not measured (liquid below 33 K) | 1.56; 30 at T >= 273 K |
+| C3H8 | 30.00 | none to the grid's top | 30.00 | none to the grid's top | 30 | 30 |
+| C2H4 | 6.05 | 310.6 K 7.56 MPa rho -2.79 % cp -12.12 % | 6.05 | 310.6 K 7.56 MPa rho -2.79 % cp -12.12 % | 2 (141.2 K: cp -12.2 % at 2 MPa, -12.4 % at 5 MPa) | 2; 20 with cp declared at 13 % and 14 % |
+| N-hexane | 4.57 | 518.0 K 6.09 MPa rho -7.27 % | 4.57 | same | 20 (431.6 K 30 MPa rho +3.31 %, bound 3 %) | 4.57 |
+| Toluene | 6.19 | 603.6 K 8.25 MPa rho -8.09 % | 6.19 | same | 30 | 6.19 |
 
 Water on the wet list (the bare cubic above Tc) against IAPWS-95:
 
@@ -386,3 +398,77 @@ Decision O9: pairs at zero today whose compounds both have E-PPR78 counts.
 105 single-phase reference states, all one phase in the engine: density worst -4.95 % (methane/ethane z 0.25, 300 K,
 10 MPa), p95 2.79 %. The three states CoolProp finds two-phase (methane/CO2 z 0.25 and 0.5, methane/ethane z 0.5, all at
 250 K and 5 MPa) are not scored.
+
+### M8 compressed liquids
+
+The bundled model's liquid root (`Root.LIQUID`) against the oracle's liquid at Tr 0.5, 0.6, 0.7, 0.8, 0.85, 0.9 and 0.95
+of the oracle's Tc, times 2, 5, 10, 20 and 30 MPa. A state is kept where the oracle is liquid (P above its Psat), T is at
+or above the oracle's triple point and the dataset's `fluid_domain` minimum, and P is at most the oracle's `p_max` and
+below the melting line (`G3Support.meltingPressure` for N2, CH4, C2H6 and CO2; CoolProp refused no M8 state of the other
+four). The bounds are G3F1's declared ones: density 3 % to Tr 0.85 (`COMPRESSED`), 5 % at 0.9 (`COMPRESSED_HIGH`), 6 % at
+0.95 (`NEAR_TC`); cp 10 % to Tr 0.8 (`LIQUID_CP_COLD`), 20 % at 0.85-0.9 (`LIQUID_CP`), none at 0.95 (`LIQUID_CP_HOT`).
+"Met" compares each band's worst value with its bounds. Hydrogen is left out: its liquid lies below 33 K. Methane and
+ethane have no state: their datasets' domain starts at 293.15 K, above Tr 0.95 of both (181 and 290 K). Propane keeps only
+Tr 0.8 and above (296 K) and CO2 only Tr 0.8 and above (Tr 0.7, 212.9 K, is below its triple point).
+
+| Fluid | Band | n | rho % worst / p95 | cp % worst / p95 | h K worst / p95 | Bounds (rho / cp %) | Met |
+|---|---|---|---|---|---|---|---|
+| CO2 | Tr <= 0.8 | 5 | +1.21 / +1.21 (243.3 K 30 MPa) | -7.87 / +7.87 (243.3 K 30 MPa) | +0.80 / +0.80 (243.3 K 2 MPa) | 3 / 10 | yes |
+| CO2 | Tr 0.85 | 4 | -1.57 / +1.57 (258.5 K 5 MPa) | -5.32 / +5.32 (258.5 K 30 MPa) | -0.97 / +0.97 (258.5 K 30 MPa) | 3 / 20 | yes |
+| CO2 | Tr 0.9 | 4 | -3.97 / +3.97 (273.7 K 5 MPa) | +10.09 / +10.09 (273.7 K 5 MPa) | -1.56 / +1.56 (273.7 K 30 MPa) | 5 / 20 | yes |
+| CO2 | Tr 0.95 | 3 | -4.66 / +4.66 (288.9 K 10 MPa) | +10.16 / +10.16 (288.9 K 10 MPa) | -1.77 / +1.77 (288.9 K 30 MPa) | 6 / none | yes |
+| N2 | Tr <= 0.8 | 15 | -0.99 / +0.99 (75.7 K 30 MPa) | -8.60 / +8.60 (75.7 K 30 MPa) | +2.28 / +2.28 (75.7 K 30 MPa) | 3 / 10 | yes |
+| N2 | Tr 0.85 | 5 | -2.23 / +2.23 (107.3 K 2 MPa) | +7.91 / +7.91 (107.3 K 2 MPa) | +0.96 / +0.96 (107.3 K 2 MPa) | 3 / 20 | yes |
+| N2 | Tr 0.9 | 5 | -4.71 / +4.71 (113.6 K 2 MPa) | +15.34 / +15.34 (113.6 K 2 MPa) | +1.44 / +1.44 (113.6 K 2 MPa) | 5 / 20 | yes |
+| N2 | Tr 0.95 | 4 | -3.93 / +3.93 (119.9 K 5 MPa) | +9.38 / +9.38 (119.9 K 5 MPa) | +1.23 / +1.23 (119.9 K 5 MPa) | 6 / none | yes |
+| CH4 | Tr <= 0.8 | 0 | - | - | - | 3 / 10 | - |
+| CH4 | Tr 0.85 | 0 | - | - | - | 3 / 20 | - |
+| CH4 | Tr 0.9 | 0 | - | - | - | 5 / 20 | - |
+| CH4 | Tr 0.95 | 0 | - | - | - | 6 / none | - |
+| C2H6 | Tr <= 0.8 | 0 | - | - | - | 3 / 10 | - |
+| C2H6 | Tr 0.85 | 0 | - | - | - | 3 / 20 | - |
+| C2H6 | Tr 0.9 | 0 | - | - | - | 5 / 20 | - |
+| C2H6 | Tr 0.95 | 0 | - | - | - | 6 / none | - |
+| C3H8 | Tr <= 0.8 | 5 | +2.87 / +2.87 (295.9 K 30 MPa) | +3.65 / +3.65 (295.9 K 2 MPa) | +0.63 / +0.63 (295.9 K 2 MPa) | 3 / 10 | yes |
+| C3H8 | Tr 0.85 | 5 | +2.98 / +2.98 (314.4 K 30 MPa) | +6.90 / +6.90 (314.4 K 2 MPa) | +1.27 / +1.27 (314.4 K 2 MPa) | 3 / 20 | yes |
+| C3H8 | Tr 0.9 | 4 | +2.97 / +2.97 (332.9 K 30 MPa) | +6.89 / +6.89 (332.9 K 5 MPa) | +1.31 / +1.31 (332.9 K 5 MPa) | 5 / 20 | yes |
+| C3H8 | Tr 0.95 | 4 | -5.38 / +5.38 (351.4 K 5 MPa) | +10.51 / +10.51 (351.4 K 5 MPa) | +2.42 / +2.42 (351.4 K 5 MPa) | 6 / none | yes |
+| C2H4 | Tr <= 0.8 | 20 | -3.64 / +3.41 (141.2 K 30 MPa) | -13.60 / +13.19 (141.2 K 30 MPa) | +7.86 / +7.09 (141.2 K 30 MPa) | 3 / 10 | no |
+| C2H4 | Tr 0.85 | 5 | -4.26 / +4.26 (240.0 K 2 MPa) | +8.67 / +8.67 (240.0 K 2 MPa) | +1.69 / +1.69 (240.0 K 2 MPa) | 3 / 20 | cp only |
+| C2H4 | Tr 0.9 | 4 | -4.91 / +4.91 (254.1 K 5 MPa) | +9.45 / +9.45 (254.1 K 5 MPa) | +1.88 / +1.88 (254.1 K 5 MPa) | 5 / 20 | yes |
+| C2H4 | Tr 0.95 | 4 | -8.04 / +8.04 (268.2 K 5 MPa) | +16.28 / +16.28 (268.2 K 5 MPa) | +3.04 / +3.04 (268.2 K 5 MPa) | 6 / none | cp only |
+| n-C6 | Tr <= 0.8 | 20 | +3.00 / +2.49 (406.3 K 30 MPa) | -7.04 / +6.84 (253.9 K 30 MPa) | +7.02 / +6.31 (253.9 K 30 MPa) | 3 / 10 | yes |
+| n-C6 | Tr 0.85 | 5 | +3.31 / +3.31 (431.6 K 30 MPa) | +2.07 / +2.07 (431.6 K 2 MPa) | +0.73 / +0.73 (431.6 K 2 MPa) | 3 / 20 | cp only |
+| n-C6 | Tr 0.9 | 5 | -5.03 / +5.03 (457.0 K 2 MPa) | +5.02 / +5.02 (457.0 K 2 MPa) | +1.66 / +1.66 (457.0 K 2 MPa) | 5 / 20 | cp only |
+| n-C6 | Tr 0.95 | 4 | -4.58 / +4.58 (482.4 K 5 MPa) | +3.27 / +3.27 (482.4 K 5 MPa) | +1.37 / +1.37 (482.4 K 5 MPa) | 6 / none | yes |
+| Toluene | Tr <= 0.8 | 20 | +2.08 / +1.48 (473.4 K 30 MPa) | -8.46 / +8.23 (295.9 K 30 MPa) | +7.86 / +7.16 (295.9 K 30 MPa) | 3 / 10 | yes |
+| Toluene | Tr 0.85 | 5 | -3.08 / +3.08 (503.0 K 2 MPa) | +3.07 / +3.07 (503.0 K 2 MPa) | -2.04 / +2.04 (503.0 K 30 MPa) | 3 / 20 | cp only |
+| Toluene | Tr 0.9 | 5 | -6.32 / +6.32 (532.6 K 2 MPa) | +7.24 / +7.24 (532.6 K 2 MPa) | -2.32 / +2.32 (532.6 K 30 MPa) | 5 / 20 | cp only |
+| Toluene | Tr 0.95 | 4 | -6.97 / +6.97 (562.2 K 5 MPa) | +6.71 / +6.71 (562.2 K 5 MPa) | -2.43 / +2.43 (562.2 K 30 MPa) | 6 / none | cp only |
+
+The range per dataset. "Liquids hold to" is the strict reading: the highest grid pressure below the first state beyond
+its bound, 2 MPa included. "Pressure misses hold to" counts only a state beyond its bound whose error is larger than that
+of its isotherm's lowest liquid state (the error next to saturation, which today's 2 MPa range already admits).
+
+| Fluid | Domain min K | Tr kept | Liquids hold to (MPa) | First state beyond | Density alone holds to (MPa) | Pressure misses hold to (MPa) | First pressure miss |
+|---|---|---|---|---|---|---|---|
+| CO2 | 216.6 | 0.80, 0.85, 0.90, 0.95 | 30 | none to 30 MPa | 30 | 30 | none to 30 MPa |
+| N2 | 63.2 | 0.60, 0.70, 0.80, 0.85, 0.90, 0.95 | 30 | none to 30 MPa | 30 | 30 | none to 30 MPa |
+| CH4 | 293.2 | none | no state | - | - | - | - |
+| C2H6 | 293.2 | none | no state | - | - | - | - |
+| C3H8 | 293.2 | 0.80, 0.85, 0.90, 0.95 | 30 | none to 30 MPa | 30 | 30 | none to 30 MPa |
+| C2H4 | 104 | 0.50, 0.60, 0.70, 0.80, 0.85, 0.90, 0.95 | below 2 | 141.2 K 2 MPa Tr 0.50 rho -3.04 % cp -12.21 % | below 2 | 2 | 141.2 K 5 MPa Tr 0.50 rho -3.10 % cp -12.40 % (lowest P: -3.04, -12.21) |
+| n-C6 | 200 | 0.50, 0.60, 0.70, 0.80, 0.85, 0.90, 0.95 | below 2 | 457.0 K 2 MPa Tr 0.90 rho -5.03 % cp +5.02 % | below 2 | 20 | 431.6 K 30 MPa Tr 0.85 rho +3.31 % cp -2.00 % (lowest P: -2.15, +2.07) |
+| Toluene | 178.2 | 0.50, 0.60, 0.70, 0.80, 0.85, 0.90, 0.95 | below 2 | 503.0 K 2 MPa Tr 0.85 rho -3.08 % cp +3.07 % | below 2 | 30 | none to 30 MPa |
+
+Expected was a density error that grows with pressure at Tr 0.85-0.95 and stays small at low Tr. The model does the
+reverse near Tc: at each isotherm from Tr 0.85 the density is worst at the lowest liquid pressure, next to saturation
+(-3 to -8 %: N2 -4.7 %, CO2 -4.7 %, C3H8 -5.4 %, n-hexane -5.0 %, toluene -7.0 %, C2H4 -8.0 %), falls with pressure,
+changes sign between 10 and 20 MPa and reaches +1.0 % (N2) to +3.6 % (n-hexane) at 30 MPa. At Tr 0.5-0.7 the density is
+within 2.1 % (n-hexane, Tr 0.7, 30 MPa) except ethylene (to -3.6 % at 141 K); the model's Z is within 4 % of the
+oracle's at Tr 0.5 for every fluid, so no wrong root. The cold liquid cp is low, to -8.6 % (N2 at Tr 0.6; ethylene -12 to
+-14 % at 141 K), and its error grows by 1-3 points from 2 to 30 MPa; the departure as kelvin grows the same way (to
++7.9 K at Tr 0.5 and 30 MPa). The pressure misses are ethylene at Tr 0.5 from 5 MPa (cp -12.4 to -13.6 %) and at Tr 0.6
+at 30 MPa (cp -10.4 %), and n-hexane at Tr 0.85 at 30 MPa (density +3.3 %). Every other miss is no worse than its
+isotherm's lowest liquid state, next to saturation: C2H4 at Tr 0.5 (2 MPa), 0.85 (2 and 5 MPa) and 0.95 (5 MPa),
+n-hexane at 0.9 (2 MPa), toluene at 0.85 and 0.9 (2 MPa) and 0.95 (5 MPa).
