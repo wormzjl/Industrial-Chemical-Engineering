@@ -44,6 +44,7 @@ class HelpCoverageTest {
             Map.entry("AssemblyScreen", Set.of("assembly.structure", "assembly.operation")), Map.entry("GaugeScreen", Set.of(ScreenTours.GAUGE)),
             Map.entry("PipelineToolScreen", Set.of(ScreenTours.PIPELINE_TOOL)), Map.entry("VesselScreen", Set.of(ScreenTours.VESSEL)),
             Map.entry("MachineScreen", Set.of(ScreenTours.MACHINE)),
+            Map.entry("AlarmBeaconScreen", Set.of(ScreenTours.ALARM_BEACON)),
             Map.entry("ControlPanelScreen", ScreenTours.CONTROL_PAGES.stream().map(ScreenTours::control).collect(java.util.stream.Collectors.toSet())),
             Map.entry("EquipmentConstructorScreen", java.util.Arrays.stream(ScreenTours.Constructor.values()).map(ScreenTours.Constructor::page).collect(java.util.stream.Collectors.toSet())));
     /** The screens that need no tour: a film is itself the help, and its three keys (Back, Next, Close) are the film player's standard ones. */
