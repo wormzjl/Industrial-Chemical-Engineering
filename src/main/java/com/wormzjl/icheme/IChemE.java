@@ -60,6 +60,8 @@ public final class IChemE {
     private static final ModConfigSpec.BooleanValue POLLUTION_ENABLED, POLLUTION_EFFECTS, POLLUTION_PARTICLES;
     private static final ModConfigSpec.DoubleValue POLLUTION_HALF_LIFE_OPEN_MINUTES, POLLUTION_HALF_LIFE_ENCLOSED_MINUTES, POLLUTION_CUTOFF;
     private static final ModConfigSpec.IntValue POLLUTION_MAX_ACTIVE_CUBES;
+    private static final ModConfigSpec.BooleanValue POLLUTION_EXPLOSIONS, POLLUTION_BLOCK_DAMAGE;
+    private static final ModConfigSpec.DoubleValue POLLUTION_EXPLOSION_POWER_CAP;
 
     static {
         ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
@@ -213,6 +215,13 @@ public final class IChemE {
                 .define("effects", true);
         POLLUTION_PARTICLES = builder.comment("Whether polluted cubes show coloured particles to players within 48 blocks: green toxic, yellow corrosive, grey particulate, pale orange combustible. Captured on server start.")
                 .define("particles", true);
+        // WP6a: a flammable cube (combustible index at least 1, the LFL) explodes at a flame, with a chain into flammable neighbours.
+        POLLUTION_EXPLOSIONS = builder.comment("Whether a cube whose combustible gas reaches its lower flammability limit explodes at an ignition source (fire, a torch, a lit furnace, a burning mob, an explosion, a flare, a firing burner or engine), and its flammable neighbours after it. False: flammable cubes never ignite. Captured on server start.")
+                .define("explosions", true);
+        POLLUTION_BLOCK_DAMAGE = builder.comment("Whether those explosions break blocks (pipes and one-block devices among them, which then release what they held). Constructed equipment ignores them. Captured on server start.")
+                .define("blockDamage", true);
+        POLLUTION_EXPLOSION_POWER_CAP = builder.comment("The highest explosion power of a burning cube (TNT is 4; an open cube at its flammability limit is about 4, a 200 m3 room about 1.4). Captured on server start.")
+                .defineInRange("explosionPowerCap", 8.0, 1.0, 32.0);
         builder.pop();
         CONFIG_SPEC = builder.build();
     }
@@ -256,6 +265,8 @@ public final class IChemE {
         gameEventBus.addListener(IChemE::onPlayerLoggedOut);
         gameEventBus.addListener(com.wormzjl.icheme.network.TutorialNetwork::earned);
         gameEventBus.addListener(IChemE::onLevelTickPost);
+        // An explosion inside a flammable cube ignites it at the next ignition pass (pollution WP6a); the handler only queues.
+        gameEventBus.addListener(com.wormzjl.icheme.runtime.pollution.Ignition::detonated);
     }
     /**
      * An operator who joins while parts are held (fluid devices, shaft parts, cables, controllers) is told how many, once
@@ -330,6 +341,21 @@ public final class IChemE {
     /** Whether pollution gives status effects and damage (WP5; true before the config loads). */
     public static boolean pollutionEffects() {
         return !CONFIG_SPEC.isLoaded() || POLLUTION_EFFECTS.get();
+    }
+
+    /** Whether flammable cubes ignite and explode (WP6a; true before the config loads). */
+    public static boolean pollutionExplosions() {
+        return !CONFIG_SPEC.isLoaded() || POLLUTION_EXPLOSIONS.get();
+    }
+
+    /** Whether those explosions break blocks (WP6a; true before the config loads). */
+    public static boolean pollutionBlockDamage() {
+        return !CONFIG_SPEC.isLoaded() || POLLUTION_BLOCK_DAMAGE.get();
+    }
+
+    /** The highest power of a burning cube's explosion (WP6a; 8 before the config loads). */
+    public static double pollutionExplosionPowerCap() {
+        return CONFIG_SPEC.isLoaded() ? POLLUTION_EXPLOSION_POWER_CAP.get() : 8.0;
     }
 
     /** Whether polluted cubes show particles to players nearby (WP5; true before the config loads). */

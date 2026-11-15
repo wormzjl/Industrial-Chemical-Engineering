@@ -242,6 +242,23 @@ public final class Releases {
         return out;
     }
 
+    /** What a destroyed device held (WP6a): its gas and its liquid, kg. */
+    public record Spilled(double gasKilograms, double liquidKilograms) {
+        public static final Spilled NONE = new Spilled(0, 0);
+    }
+
+    /**
+     * A device a blast destroyed (batch 2026-11-15-pollution-system, WP6a, S5): its gas {@code gasMoles} whole and the
+     * volatile share of its liquid {@code liquidMoles} ({@link HazardStandard#volatileMoles}, as a spill), both on the world
+     * axis, at {@code at}. The rest of the liquid stays on the ground, as a spill's does.
+     */
+    public void contents(PhysicalFluidTopology.Position at, double[] gasMoles, double[] liquidMoles) {
+        if (gasMoles.length != axis.size() || liquidMoles.length != axis.size())
+            throw new IllegalArgumentException("Releases: contents of " + gasMoles.length + " and " + liquidMoles.length + " compounds on an axis of " + axis.size());
+        gas(at, gasMoles);
+        gas(at, standard.volatileMoles(liquidMoles));
+    }
+
     /** The gas {@code moles} (world axis) through the standard's three gas channels, at {@code at}. */
     private void gas(PhysicalFluidTopology.Position at, double[] moles) {
         emit(at, Channel.TOXIC, standard.toxic(moles));

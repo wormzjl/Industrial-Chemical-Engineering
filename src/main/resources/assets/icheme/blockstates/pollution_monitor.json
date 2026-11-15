@@ -1,0 +1,20 @@
+{
+  "variants": {
+    "facing=north,lamp=dark": {"model": "icheme:block/pollution_monitor", "y": 0},
+    "facing=north,lamp=green": {"model": "icheme:block/pollution_monitor_green", "y": 0},
+    "facing=north,lamp=amber": {"model": "icheme:block/pollution_monitor_amber", "y": 0},
+    "facing=north,lamp=red": {"model": "icheme:block/pollution_monitor_red", "y": 0},
+    "facing=east,lamp=dark": {"model": "icheme:block/pollution_monitor", "y": 90},
+    "facing=east,lamp=green": {"model": "icheme:block/pollution_monitor_green", "y": 90},
+    "facing=east,lamp=amber": {"model": "icheme:block/pollution_monitor_amber", "y": 90},
+    "facing=east,lamp=red": {"model": "icheme:block/pollution_monitor_red", "y": 90},
+    "facing=south,lamp=dark": {"model": "icheme:block/pollution_monitor", "y": 180},
+    "facing=south,lamp=green": {"model": "icheme:block/pollution_monitor_green", "y": 180},
+    "facing=south,lamp=amber": {"model": "icheme:block/pollution_monitor_amber", "y": 180},
+    "facing=south,lamp=red": {"model": "icheme:block/pollution_monitor_red", "y": 180},
+    "facing=west,lamp=dark": {"model": "icheme:block/pollution_monitor", "y": 270},
+    "facing=west,lamp=green": {"model": "icheme:block/pollution_monitor_green", "y": 270},
+    "facing=west,lamp=amber": {"model": "icheme:block/pollution_monitor_amber", "y": 270},
+    "facing=west,lamp=red": {"model": "icheme:block/pollution_monitor_red", "y": 270}
+  }
+}

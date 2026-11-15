@@ -66,6 +66,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
     final Converters converters;
     /** The pumps' health (W10b). */
     final MachineHealth health;
+    /** The pollution releases (batch 2026-11-15-pollution-system, WP4); null when their hazard standard could not be built. */
+    private Releases releases;
     /**
      * Queued topology events apply as one batch at the next tick's hook, or earlier when something reads what they
      * change (a view, a capture, a filter recovery). A run of events inside one tick (a command placing thousands of
@@ -166,8 +168,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
         // each island's transfers on its own list are mapped onto it by name. A standard that cannot be built leaves them off.
         try {
             var hazards=hazardColumns(catalog,model);var atoms=formulas(catalog,model);
-            shafts.releases(new Releases(topology,model.components(),new com.wormzjl.icheme.science.pollution.HazardStandard(hazards[0],hazards[1],hazards[2],hazards[3],hazards[4],hazards[5]),
-                    atoms,Releases.so2Reference(hazards[1],atoms),flares,id->runtime.coordinator().model(id).components(),runtime.coordinator()::time,this::releasePollution));
+            releases=new Releases(topology,model.components(),new com.wormzjl.icheme.science.pollution.HazardStandard(hazards[0],hazards[1],hazards[2],hazards[3],hazards[4],hazards[5]),
+                    atoms,Releases.so2Reference(hazards[1],atoms),flares,id->runtime.coordinator().model(id).components(),runtime.coordinator()::time,this::releasePollution);
+            shafts.releases(releases);
         } catch(RuntimeException failure) {
             IChemE.LOGGER.error("pollution status=RELEASES_OFF detail={}",String.valueOf(failure));
         }
@@ -968,6 +971,65 @@ public final class FluidWorldAuthority implements AutoCloseable {
     private void releasePollution(PhysicalFluidTopology.Position at,com.wormzjl.icheme.science.pollution.Channel channel,double amount) {
         var service=com.wormzjl.icheme.runtime.pollution.PollutionService.find(server);
         if(service.isPresent())service.get().release(dimension(at.dimension()),new BlockPos(at.x(),at.y(),at.z()),channel,amount);
+    }
+    /**
+     * The plant's own open flames in chunk {@code (chunkX, chunkZ)} of {@code dimension} (batch 2026-11-15-pollution-system,
+     * WP6a): ignition sources of a flammable cloud, each at its registration's cell. Read from the cached views the pages and
+     * the noise read; nothing solves and no island materialises: a flare whose last booked span released heat
+     * ({@link Flares#view}), a fired heater's radiant coil while its burners fire ({@link FiredHeaters#flue}), a fired batch
+     * still (not an electric one) while its fire heats the pot ({@link Stills#view}), and a prime mover's fuel void while its
+     * set fires ({@link PrimeMovers#flue}: a combustion engine or a gas turbine).
+     */
+    public List<BlockPos> flames(String dimension,int chunkX,int chunkZ) {
+        owned();var out=new ArrayList<BlockPos>();if(closed)return out;
+        for(long id:registry.chunk(dimension,net.minecraft.world.level.ChunkPos.asLong(chunkX,chunkZ))) {
+            var r=registrations().get(id);if(r==null)continue;var d=r.device();boolean lit;
+            if(d.flare()){var v=flares.view(id);lit=v!=null&&v.heat()>0;}
+            else if(d.engineFuel()){var primes=shafts.primeMovers();var f=primes==null?null:primes.flue(id);lit=f!=null&&f.firing()>0;}
+            else if(radiantCoil(r)){long b=burners.burnersOf(id);var f=b==0?null:burners.flue(b);lit=f!=null&&f.fired()>0;}
+            else{var still=topology.still(id);var v=still==null||still.heater()==com.wormzjl.icheme.science.plant.still.BatchStill.Heater.ELECTRIC?null:stills.view(id);lit=v!=null&&v.heat()>0;}
+            if(lit)out.add(cell(r));
+        }
+        return out;
+    }
+    /**
+     * What device {@code id} holds, let into the air because a blast destroyed it (batch 2026-11-15-pollution-system, WP6a,
+     * S5); called before its removal. Read from its island as stored on the world list ({@link #storedIsland}: nothing
+     * solves or materialises, a held island answers as stored): a vessel's or a junction's inventory, split by its state's
+     * phases per compound; a line block, the line's holdup over the block's volume, in the phase split of what the line
+     * moved over its last interval (no slip; a line that moved nothing over it releases nothing). The gas goes whole and the
+     * liquid by its volatile share ({@link Releases#contents}). A generator, a void or a port holds no stock. Nothing is
+     * booked here: the removal books a vessel's contents as removed, as before. Returns the masses, or {@link Releases.Spilled#NONE}.
+     */
+    public Releases.Spilled releaseContents(long id) {
+        owned();if(closed||releases==null)return Releases.Spilled.NONE;
+        var r=registrations().get(id);Long owner=r==null?null:registry.owner(id);if(owner==null)return Releases.Spilled.NONE;
+        var snapshot=storedIsland(owner);int n=model.componentCount();double[] gas=new double[n],liquid=new double[n];boolean node=false;
+        for(var reservoir:snapshot.graph().reservoirs()) {
+            if(reservoir.id()!=id)continue;node=true;if(reservoir.fixed())return Releases.Spilled.NONE;
+            var moles=reservoir.inventory().moles();var s=reservoir.state();double[] v=s.vaporAmountsView(),l=s.liquidAmountsView(),a=s.aqueousAmountsView();
+            for(int c=0;c<Math.min(n,moles.length);c++){double all=v[c]+l[c]+a[c],held=Math.max(0,moles[c]),share=all>0?Math.clamp(v[c]/all,0,1):1;gas[c]=held*share;liquid[c]=held-gas[c];}
+            break;
+        }
+        if(!node) {
+            var result=snapshot.lastResult().orElse(null);var g=r.device().geometry();
+            double volume=g.length()*Math.max(1,g.channels())*Math.PI*g.diameter()*g.diameter()/4;
+            if(result==null||!(volume>0))return Releases.Spilled.NONE;
+            for(var view:registry.pipeViews(id)) {
+                PipeTransfer moved=null;for(var t:result.pipeTransfers())if(t.pipeId()==view.pipeId()){moved=t;break;}
+                if(moved==null)continue;
+                double passed=0;for(var stream:List.of(moved.forward(),moved.reverse()))for(double q:stream.phaseVolumes())passed+=q;
+                if(!(passed>0))continue;double scale=volume/passed;
+                for(var stream:List.of(moved.forward(),moved.reverse())){var p=stream.phaseMoles();
+                    for(int c=0;c<Math.min(n,p[2].length);c++){gas[c]+=p[2][c]*scale;liquid[c]+=(p[0][c]+p[1][c])*scale;}}
+                break;
+            }
+        }
+        var weights=model.molecularWeights();double gasMass=0,liquidMass=0;
+        for(int c=0;c<Math.min(n,weights.length);c++){gasMass+=gas[c]*weights[c];liquidMass+=liquid[c]*weights[c];}
+        if(!(gasMass+liquidMass>0))return Releases.Spilled.NONE;
+        releases.contents(r.device().position(),gas,liquid);
+        return new Releases.Spilled(gasMass,liquidMass);
     }
     /** The pumps' health (W10b): a repair kit queues its event here. */
     public MachineHealth health(){owned();return health;}

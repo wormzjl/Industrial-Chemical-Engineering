@@ -50,6 +50,10 @@ public final class PollutionEngine {
         }
     }
 
+    /** A burn of {@code amount} combustible at {@code cube}, {@code sootShare} of it to particulate (WP6a). */
+    private record Burn(long cube, double amount, double sootShare) {
+    }
+
     private record PendingKey(long cube, Channel channel) implements Comparable<PendingKey> {
         @Override
         public int compareTo(PendingKey other) {
@@ -64,6 +68,8 @@ public final class PollutionEngine {
     private Pass inFlight;
     /** A {@link #clear} while a pass was in flight: its result and its releases are dropped when it ends. */
     private boolean discardInFlight;
+    /** What burnt (WP6a) since the pass in flight began: applied again to its result, which was stepped from the field before them. */
+    private final List<Burn> burntInFlight = new ArrayList<>();
     private int failures;
     private String lastFailure = "";
     private long ignored;
@@ -108,7 +114,35 @@ public final class PollutionEngine {
         pending.clear();
         inFlight = pass;
         discardInFlight = false;
+        burntInFlight.clear();
         return Optional.of(pass);
+    }
+
+    /**
+     * Burns up to {@code amount} combustible at {@code cube} in the installed field, {@code sootShare} of what burnt to its
+     * particulate ({@link PollutionField#burn}; WP6a, a blast). The installed field shows it at once, so the cube cannot
+     * ignite twice. A pass in flight was begun from the field before the burn and its result replaces the installed field:
+     * the burn is applied again to that result ({@link #complete}), capped by what the result holds, so it is not lost and
+     * the ledger still closes. Returns what burnt; 0 for a non-finite, negative or zero amount.
+     */
+    public double burn(long cube, double amount, double sootShare) {
+        if (!(amount > 0.0) || !Double.isFinite(amount)) {
+            return 0.0;
+        }
+        if (!(sootShare >= 0.0 && sootShare <= 1.0)) {
+            throw new IllegalArgumentException("sootShare must be in [0, 1]: " + sootShare);
+        }
+        double burnt = Math.min(amount, field.amount(cube, Channel.COMBUSTIBLE));
+        if (!(burnt > 0.0)) {
+            return 0.0;
+        }
+        var result = PollutionField.burn(field, ledger, cube, burnt, sootShare);
+        field = result.field();
+        ledger = result.ledger();
+        if (inFlight != null && !discardInFlight) {
+            burntInFlight.add(new Burn(cube, burnt, sootShare));
+        }
+        return burnt;
     }
 
     /** Installs the pass's result. A result with no pass in flight is ignored; one of a pass a {@link #clear} overtook is dropped. */
@@ -122,10 +156,17 @@ public final class PollutionEngine {
         discardInFlight = false;
         failures = 0;
         if (discard) {
+            burntInFlight.clear();
             return;
         }
-        field = result.field();
-        ledger = result.ledger();
+        var installed = result;
+        // The burns made while the pass ran (WP6a): its result was stepped from the field before them.
+        for (var burn : burntInFlight) {
+            installed = PollutionField.burn(installed.field(), installed.ledger(), burn.cube(), burn.amount(), burn.sootShare());
+        }
+        burntInFlight.clear();
+        field = installed.field();
+        ledger = installed.ledger();
     }
 
     /** The pass failed: its releases wait again, the field stays, and the failure counts. Also counts a failure before any pass began. */
@@ -148,6 +189,8 @@ public final class PollutionEngine {
         boolean discard = discardInFlight;
         inFlight = null;
         discardInFlight = false;
+        // The installed field already holds the burns made meanwhile; nothing replaces it.
+        burntInFlight.clear();
         if (discard) {
             return;
         }
@@ -170,6 +213,7 @@ public final class PollutionEngine {
         ledger = PollutionLedger.of(book);
         field = PollutionField.EMPTY;
         pending.clear();
+        burntInFlight.clear();
         if (inFlight != null) {
             discardInFlight = true;
         }
@@ -182,6 +226,7 @@ public final class PollutionEngine {
         this.pending.clear();
         inFlight = null;
         discardInFlight = false;
+        burntInFlight.clear();
         for (var release : pending) {
             this.pending.merge(new PendingKey(release.key(), release.channel()), release.amount(), Double::sum);
         }

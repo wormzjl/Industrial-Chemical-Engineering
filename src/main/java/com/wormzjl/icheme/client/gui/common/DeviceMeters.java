@@ -167,8 +167,8 @@ public record DeviceMeters(Data data,@Nullable FluidView.Port port,PhaseRatioBas
         // gauge's share of its span (its height).
         for(var sensor:data.sensors()){
             // A turbine's speed pickup (W3) shows on its status line's shaft words; its meter comes with the W7 pages (reading A40).
-            if(sensor.kind()==com.wormzjl.icheme.runtime.instrument.Sensor.Kind.SPEED||sensor.kind()==com.wormzjl.icheme.runtime.instrument.Sensor.Kind.ALARM)continue;
-            String key=switch(sensor.kind()){case PRESSURE->"pressure_probe";case TEMPERATURE->"temperature_probe";case FLOW->"flowmeter";case LEVEL->sensor.mount().equals("level_boot")?"boot_level":"body_level";case SPEED,ALARM->"";};
+            if(sensor.kind()==com.wormzjl.icheme.runtime.instrument.Sensor.Kind.SPEED||sensor.kind()==com.wormzjl.icheme.runtime.instrument.Sensor.Kind.ALARM||sensor.kind()==com.wormzjl.icheme.runtime.instrument.Sensor.Kind.ANALYSER)continue;
+            String key=switch(sensor.kind()){case PRESSURE->"pressure_probe";case TEMPERATURE->"temperature_probe";case FLOW->"flowmeter";case LEVEL->sensor.mount().equals("level_boot")?"boot_level":"body_level";case SPEED,ALARM,ANALYSER->"";};
             var availability=sensor.availability();
             if(availability==com.wormzjl.icheme.runtime.instrument.Instrument.Availability.UNAVAILABLE){rows.add(new DeviceColumn.Meter(key,"—","",tr("reading.unavailable")));continue;}
             rows.add(switch(sensor.kind()){
@@ -176,7 +176,7 @@ public record DeviceMeters(Data data,@Nullable FluidView.Port port,PhaseRatioBas
                 case TEMPERATURE->new DeviceColumn.Meter(key,temperatureValue(sensor.value()),t,availability==com.wormzjl.icheme.runtime.instrument.Instrument.Availability.NO_FLOW?tr("reading.still"):null);
                 case FLOW->new DeviceColumn.Meter(key,value(flowRateUnit.display(sensor.value())),flowRateUnit.unit("kg"),tr("reading.volume_flow",quantity(flowRateUnit.display(sensor.secondary()),flowRateUnit.unit("m³"))));
                 case LEVEL->new DeviceColumn.Meter(key,value(sensor.secondary()),"%",tr(sensor.value()<0||sensor.value()>sensor.span()?"reading.height_overrange":"reading.height",quantity(sensor.value(),"m")));
-                case SPEED,ALARM->throw new IllegalStateException("A speed pickup or an alarm has no meter");
+                case SPEED,ALARM,ANALYSER->throw new IllegalStateException("A speed pickup, an alarm or an analyser has no meter");
             });
         }
         return List.copyOf(rows);

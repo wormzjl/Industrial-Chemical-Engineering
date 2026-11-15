@@ -1,0 +1,6 @@
+{
+  "parent": "icheme:block/pollution_monitor",
+  "textures": {
+    "lamp": "icheme:block/pollution_monitor_lamp_red"
+  }
+}

@@ -85,6 +85,7 @@ public final class ControlAssets {
             String glyph=switch(c) {
                 case 'L'->"100100100100111";case 'C'->"111100100100111";case 'D'->"110101101101110";
                 case 'S'->"111100111001111";case 'A'->"010101111101101";case 'M'->"101111111101101";
+                case 'T'->"111010010010010";
                 default->"000000000000000";
             };
             for(int row=0;row<5;row++)for(int col=0;col<3;col++)if(glyph.charAt(3*row+col)=='1')g.fillRect(x+col,y+row,1,1);
@@ -244,10 +245,84 @@ public final class ControlAssets {
         return image;
     }
 
+    /** The fixed pollution monitor's lamp colours (batch 2026-11-15-pollution-system, WP10): the blockstate's {@code lamp} values. */
+    static final Map<String,Integer> LAMPS=new LinkedHashMap<>();
+    static{LAMPS.put("dark",0x2E3A3E);LAMPS.put("green",0x46C26A);LAMPS.put("amber",0xE3A92E);LAMPS.put("red",0xE0453A);}
+
+    /** The monitor's parts facing north, in sixteenths; PollutionMonitorBlock's collision boxes are their envelope. */
+    static List<ConstructorAssets.Box> monitorBoxes(){
+        var boxes=new ArrayList<ConstructorAssets.Box>();
+        boxes.add(ConstructorAssets.box("foot plate",4,0,4,12,1,12,"metal"));
+        boxes.add(ConstructorAssets.box("post",7,1,7,9,4,9,"metal"));
+        boxes.add(cabinet("analyser box",3,4,5,13,13,12,"front"));
+        boxes.add(ConstructorAssets.box("sample inlet",4.5,2.5,5.5,5.5,4,6.5,"metal"));
+        boxes.add(ConstructorAssets.box("inlet filter cup",4,1.75,5,6,2.5,7,"metal"));
+        boxes.add(ConstructorAssets.box("lamp base",6,13,6.75,10,13.5,10.75,"metal"));
+        boxes.add(ConstructorAssets.box("lamp lens",6.5,13.5,7.25,9.5,15.5,10.25,"lamp"));
+        boxes.add(ConstructorAssets.box("lamp guard cap",6,15.5,6.75,10,16,10.75,"metal"));
+        return List.copyOf(boxes);
+    }
+
+    /** The analyser's front: a dark bezel round a small blue display reading AT, an amber tag strip, four screws. */
+    private static BufferedImage monitorFront(BufferedImage steel){
+        var image=painted(steel,32,32);var g=image.createGraphics();
+        try{
+            frame(g,0,0,32,32,HIGHLIGHT,0x7E898D);
+            rect(g,4,4,24,15,GASKET);frame(g,4,4,24,15,EDGE,0x19272E);
+            rect(g,6,6,20,11,GLASS);rect(g,6,6,20,1,0x284B58);
+            label(g,"AT",8,8,CYAN);rect(g,17,9,7,1,CYAN);rect(g,17,12,5,1,0x54828B);
+            rect(g,8,22,16,3,AMBER);rect(g,8,25,16,1,0x7E898D);
+            for(int y=27;y<30;y+=2)rect(g,10,y,12,1,0x526169);
+            for(int x:new int[]{1,28})for(int y:new int[]{1,28})screw(g,x,y);
+        }finally{g.dispose();}
+        return image;
+    }
+
+    /** A lamp lens: its colour, darker at the rim, a highlight at the top left. */
+    private static BufferedImage lens(int colour){
+        var image=new BufferedImage(16,16,BufferedImage.TYPE_INT_RGB);var g=image.createGraphics();
+        try{
+            rect(g,0,0,16,16,shade(colour,.55));rect(g,2,2,12,12,shade(colour,.8));rect(g,4,4,8,8,colour);
+            rect(g,4,3,4,2,shade(colour,1.35));
+            for(int y=6;y<16;y+=5)rect(g,0,y,16,1,shade(colour,.45));
+        }finally{g.dispose();}
+        return image;
+    }
+
+    private static int shade(int colour,double f){
+        int r=(int)Math.min(255,(colour>>16&255)*f),gg=(int)Math.min(255,(colour>>8&255)*f),b=(int)Math.min(255,(colour&255)*f);
+        return r<<16|gg<<8|b;
+    }
+
+    /** The monitor's sprites, its base model (lamp dark), one model a lamp colour, its blockstate (facing by lamp) and item model. */
+    static void writeMonitor(Path assets,BufferedImage steel)throws Exception{
+        var texture=assets.resolve("textures/block");
+        ImageIO.write(monitorFront(steel),"png",texture.resolve("pollution_monitor_front.png").toFile());
+        for(var lamp:LAMPS.entrySet())ImageIO.write(lens(lamp.getValue()),"png",texture.resolve("pollution_monitor_lamp_"+lamp.getKey()+".png").toFile());
+        var paths=new LinkedHashMap<String,String>();
+        paths.put("particle","icheme:block/pump_casting");paths.put("case","icheme:block/pump_casting");paths.put("metal","icheme:block/equipment_steelwork");
+        paths.put("side","icheme:block/control_panel_side");paths.put("rear","icheme:block/control_panel_rear");
+        paths.put("front","icheme:block/pollution_monitor_front");paths.put("lamp","icheme:block/pollution_monitor_lamp_dark");
+        Files.writeString(assets.resolve("models/block/pollution_monitor.json"),ConstructorAssets.model(paths,monitorBoxes()));
+        for(var lamp:LAMPS.keySet())if(!lamp.equals("dark"))Files.writeString(assets.resolve("models/block/pollution_monitor_"+lamp+".json"),
+                "{\n  \"parent\": \"icheme:block/pollution_monitor\",\n  \"textures\": {\n    \"lamp\": \"icheme:block/pollution_monitor_lamp_"+lamp+"\"\n  }\n}\n");
+        var variants=new StringBuilder("{\n  \"variants\": {\n");boolean first=true;int turn=0;
+        for(var face:List.of("north","east","south","west")){
+            for(var lamp:LAMPS.keySet()){
+                if(!first)variants.append(",\n");first=false;
+                variants.append("    \"facing=").append(face).append(",lamp=").append(lamp).append("\": {\"model\": \"icheme:block/pollution_monitor")
+                        .append(lamp.equals("dark")?"":"_"+lamp).append("\", \"y\": ").append(90*turn).append("}");
+            }turn++;
+        }
+        Files.writeString(assets.resolve("blockstates/pollution_monitor.json"),variants.append("\n  }\n}\n").toString());
+        Files.writeString(assets.resolve("models/item/pollution_monitor.json"),"{\n  \"parent\": \"icheme:block/pollution_monitor_green\"\n}\n");
+    }
+
     public static void main(String[] args) throws Exception {
         var assets=Path.of(args[0]);var texture=assets.resolve("textures/block");
         var steel=ImageIO.read(texture.resolve("pump_casting.png").toFile());
         if(args.length>1&&args[1].equals("dcs")){writeDcs(assets,steel);System.out.println("Wrote two-block DCS console and operator finishes");return;}
+        if(args.length>1&&args[1].equals("monitor")){writeMonitor(assets,steel);System.out.println("Wrote the pollution monitor's model, blockstate and five sprites");return;}
         var images=new LinkedHashMap<String,BufferedImage>();
         images.put("controller_front",local(steel));images.put("dcs_front",dcs(steel));
         images.put("control_panel_side",panel(steel,true));images.put("control_panel_rear",panel(steel,false));images.put("control_panel_service",service(steel));

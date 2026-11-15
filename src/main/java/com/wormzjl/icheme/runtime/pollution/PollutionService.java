@@ -78,6 +78,10 @@ public final class PollutionService {
     private final Map<ResourceKey<Level>, Dimension> dimensions = new LinkedHashMap<>();
     private final PollutionEffects effects;
     private int nextEffects;
+    /** The ignition pass and the blast queue (WP6a), with the config captured on server start; their own guard and off switch. */
+    private final Blasts blasts = new Blasts(IChemE.pollutionExplosions(), IChemE.pollutionBlockDamage(), IChemE.pollutionExplosionPowerCap());
+    private final Ignition ignition = new Ignition(blasts);
+    private int nextIgnition;
     private boolean disabled;
     private boolean stopping;
 
@@ -139,16 +143,20 @@ public final class PollutionService {
         }
     }
 
-    /** The pass deadline of each dimension; never throws. */
+    /** The pass deadline of each dimension, and the handheld meters' (WP8, which also run when pollution is off); never throws. */
     public static void tick(MinecraftServer server) {
+        PollutionService service = null;
         try {
-            var service = SERVERS.get(server);
+            service = SERVERS.get(server);
             if (service != null) {
                 service.tick();
             }
         } catch (RuntimeException failure) {
             IChemE.LOGGER.error("pollution status=TICK_FAILED detail={}", String.valueOf(failure));
         }
+        PollutionMeters.tick(server, service);
+        // The sounds of the pipes blasts destroyed this tick (WP6a): one per cube; never throws.
+        BurstPipes.flush(server);
     }
 
     /** No pass starts after this; a pass the stopping pool abandons gives its releases back without counting. Never throws. */
@@ -167,6 +175,8 @@ public final class PollutionService {
     public static void forget(MinecraftServer server) {
         try {
             SERVERS.remove(server);
+            PollutionMeters.forget(server);
+            BurstPipes.forget(server);
         } catch (RuntimeException failure) {
             IChemE.LOGGER.error("pollution status=FORGET_FAILED detail={}", String.valueOf(failure));
         }
@@ -288,6 +298,32 @@ public final class PollutionService {
         }
     }
 
+    /**
+     * A blast (WP6a): burns up to {@code amount} combustible at the cube in the installed field, {@code sootShare} of it to
+     * particulate ({@link PollutionEngine#burn}; a pass in flight keeps it). Returns what burnt; 0 when disabled or unknown.
+     */
+    public double burn(ResourceKey<Level> dimension, long cube, double amount, double sootShare) {
+        try {
+            var d = disabled ? null : dimensions.get(dimension);
+            if (d == null) {
+                return 0;
+            }
+            double burnt = d.engine.burn(cube, amount, sootShare);
+            if (burnt > 0 && store != null) {
+                store.setDirty();
+            }
+            return burnt;
+        } catch (RuntimeException failure) {
+            IChemE.LOGGER.error("pollution status=BURN_FAILED dimension={} detail={}", dimension, String.valueOf(failure));
+            return 0;
+        }
+    }
+
+    /** The ignition pass, for the explosion hook ({@link Ignition#detonated}). */
+    Ignition ignition() {
+        return ignition;
+    }
+
     /** Pending releases of a dimension, for the command. */
     int pending(ResourceKey<Level> dimension) {
         var d = dimensions.get(dimension);
@@ -370,6 +406,17 @@ public final class PollutionService {
             } catch (RuntimeException failure) {
                 IChemE.LOGGER.error("pollution status=EFFECTS_FAILED detail={}", String.valueOf(failure));
             }
+        }
+        // Ignition and blasts (WP6a): their own guard and off switch (EXPLOSIONS_OFF); the blast queue every tick (an empty
+        // queue is a map check), the ignition pass every IGNITION_TICKS.
+        try {
+            if (now - nextIgnition >= 0) {
+                nextIgnition = now + Ignition.IGNITION_TICKS;
+                ignition.run(server, this, now);
+            }
+            blasts.serve(server, this, now);
+        } catch (RuntimeException failure) {
+            IChemE.LOGGER.error("pollution status=BLASTS_FAILED detail={}", String.valueOf(failure));
         }
         for (var d : dimensions.values()) {
             if (disabled) {

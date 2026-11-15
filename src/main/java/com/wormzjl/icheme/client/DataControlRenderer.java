@@ -94,6 +94,18 @@ public final class DataControlRenderer {
         PANELS.remove(box);
     }
 
+    /** The loaded pollution monitors (WP10): their sockets are drawn and aimed at as the controllers' are. */
+    private static final Set<PollutionMonitorBlockEntity> MONITORS =
+            Collections.newSetFromMap(new WeakHashMap<>());
+
+    public static void loaded(PollutionMonitorBlockEntity monitor) {
+        MONITORS.add(monitor);
+    }
+
+    public static void unloaded(PollutionMonitorBlockEntity monitor) {
+        MONITORS.remove(monitor);
+    }
+
     public static Map<UUID, DataPort> ports(Level level, Vec3 centre, double radius) {
         var ports = new HashMap<UUID, DataPort>();
         for (var p : InstrumentHosts.dataPorts(level, centre, radius)) ports.put(p.id(), p);
@@ -104,6 +116,12 @@ public final class DataControlRenderer {
                     && panel.dataPort() != null
                     && panel.dataPort().centre().distanceToSqr(centre) < radius * radius)
                 ports.put(panel.dataPort().id(), panel.dataPort());
+        for (var monitor : List.copyOf(MONITORS))
+            if (monitor.getLevel() == level
+                    && !monitor.isRemoved()
+                    && monitor.dataPort() != null
+                    && monitor.dataPort().centre().distanceToSqr(centre) < radius * radius)
+                ports.put(monitor.dataPort().id(), monitor.dataPort());
         return Map.copyOf(ports);
     }
 
@@ -163,7 +181,9 @@ public final class DataControlRenderer {
                                 .values());
         if (port == null) return;
         String id =
-                port.host() > 0
+                mc.level.getBlockEntity(port.owner()) instanceof PollutionMonitorBlockEntity monitor
+                        ? monitor.tag()
+                        : port.host() > 0
                         ? String.format(Locale.ROOT, "#%04d", port.host())
                         : "LC-" + port.id().toString().substring(0, 8).toUpperCase(Locale.ROOT);
         String text =

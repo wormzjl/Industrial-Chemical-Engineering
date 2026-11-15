@@ -34,6 +34,10 @@ public final class ModBlocks {
                     .pushReaction(net.minecraft.world.level.material.PushReaction.BLOCK).noOcclusion());
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.CreativePowerBlock> CREATIVE_POWER=BLOCKS.registerBlock("creative_power",
             com.wormzjl.icheme.world.level.block.CreativePowerBlock::new,BlockBehaviour.Properties.of().mapColor(MapColor.COLOR_BLUE).strength(-1,3600000).sound(SoundType.METAL));
+    // A fixed pollution monitor (batch 2026-11-15-pollution-system, WP10): a post-mounted analyser box with a lamp and a data socket.
+    public static final DeferredBlock<com.wormzjl.icheme.world.level.block.PollutionMonitorBlock> POLLUTION_MONITOR=BLOCKS.registerBlock("pollution_monitor",
+            com.wormzjl.icheme.world.level.block.PollutionMonitorBlock::new,BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(2).sound(SoundType.METAL).noOcclusion()
+                    .lightLevel(com.wormzjl.icheme.world.level.block.PollutionMonitorBlock::light));
     private static DeferredBlock<com.wormzjl.icheme.world.level.block.ControlPanelBlock> controlPanel(String name){return BLOCKS.registerBlock(name,
             com.wormzjl.icheme.world.level.block.ControlPanelBlock::new,BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(3).sound(SoundType.METAL).noOcclusion());}
     // A pipe rack (batch 2026-10-26-pipe-laying-system): a thin frame, so light and the faces behind it show through; its shape follows its lanes.
@@ -136,6 +140,16 @@ public final class ModBlocks {
     public static final DeferredHolder<SoundEvent,SoundEvent> EJECTOR_JET=loop("ejector_jet");
     /** A hand valve's quarter turn at the click, a one-shot (owner 2026-11-10: tools/process-sounds/valve_turn_candidates.py). */
     public static final DeferredHolder<SoundEvent,SoundEvent> VALVE_TURN=loop("valve_turn");
+    /** A pipe a blast destroyed (batch 2026-11-15-pollution-system, WP6a; tools/process-sounds/pipe_burst_synth.py): the rupture, then a gas hiss, a liquid gush or nothing. One-shots. */
+    public static final DeferredHolder<SoundEvent,SoundEvent> PIPE_BURST_GAS=loop("pipe_burst_gas"),PIPE_BURST_LIQUID=loop("pipe_burst_liquid"),PIPE_BURST_EMPTY=loop("pipe_burst_empty");
+    /**
+     * The handheld pollution meter's warning clicks (batch 2026-11-15-pollution-system, WP8): one-second one-shots of 1, 3
+     * and 8 clicks, played to the holder once a second by the worst level (tools/process-sounds/meter_tick_synth.py).
+     */
+    public static final DeferredHolder<SoundEvent,SoundEvent> METER_TICK_SLOW=loop("meter_tick_slow"),METER_TICK_MEDIUM=loop("meter_tick_medium"),
+            METER_TICK_FAST=loop("meter_tick_fast");
+    /** The fixed pollution monitor's horn (WP10): a 2 s one-shot, played at the block every 2 s while its lamp is red (tools/process-sounds/gas_alarm_synth.py). */
+    public static final DeferredHolder<SoundEvent,SoundEvent> GAS_ALARM=loop("gas_alarm");
     private static DeferredHolder<SoundEvent,SoundEvent> loop(String name){return SOUNDS.register(name,()->SoundEvent.createVariableRangeEvent(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,name)));}
 
     private ModBlocks() {

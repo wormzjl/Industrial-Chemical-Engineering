@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -157,5 +158,80 @@ class PollutionEngineTest {
         assertFalse(engine.inFlight());
         assertEquals(0.0, engine.ledger().closure(Channel.TOXIC, engine.field()), 1e-9);
         assertEquals(1000.0, engine.ledger().get(Channel.TOXIC, PollutionLedger.Total.RELEASED));
+    }
+
+    // WP6a: a blast burns the installed field; a pass in flight keeps the burn.
+
+    private static void assertClosed(PollutionEngine engine) {
+        for (var channel : Channel.values()) {
+            double released = engine.ledger().get(channel, PollutionLedger.Total.RELEASED);
+            assertEquals(0.0, engine.ledger().closure(channel, engine.field()), 1e-9 * Math.max(1, released),
+                    channel + ": released = stored + decayed + dissipated + burnt + ground");
+        }
+    }
+
+    @Test
+    void aBurnDuringAPassInFlightSurvivesThePass() {
+        var engine = new PollutionEngine();
+        engine.release(A, Channel.COMBUSTIBLE, 400_000.0);
+        engine.complete(engine.begin(OPEN, 20, SETTINGS).orElseThrow().run());
+        double before = engine.field().amount(A, Channel.COMBUSTIBLE);
+        assertTrue(before > 10_000, "the cube holds combustible after one pass: " + before);
+        engine.release(B, Channel.TOXIC, 10.0);
+        var pass = engine.begin(OPEN, 20, SETTINGS).orElseThrow();
+        double burnt = engine.burn(A, 5_000.0, Blasts.SOOT_SHARE);
+        assertEquals(5_000.0, burnt);
+        assertEquals(before - 5_000.0, engine.field().amount(A, Channel.COMBUSTIBLE), 1e-9,
+                "the installed field shows the burn at once, so the cube cannot ignite twice");
+        // The pass was begun from the field before the burn; its result is the same whenever it runs (pure).
+        var result = pass.run();
+        var expected = PollutionField.burn(result.field(), result.ledger(), A, burnt, Blasts.SOOT_SHARE);
+        engine.complete(result);
+        assertArrayEquals(expected.field().keys(), engine.field().keys());
+        assertArrayEquals(expected.field().amounts(), engine.field().amounts());
+        assertEquals(expected.ledger(), engine.ledger());
+        assertEquals(burnt, engine.ledger().get(Channel.COMBUSTIBLE, PollutionLedger.Total.BURNT), 1e-9, "burnt once");
+        assertEquals(burnt * Blasts.SOOT_SHARE, engine.ledger().get(Channel.PARTICULATE, PollutionLedger.Total.RELEASED), 1e-9,
+                "its soot");
+        assertTrue(engine.field().amount(A, Channel.COMBUSTIBLE) < result.field().amount(A, Channel.COMBUSTIBLE), "the pass did not undo the burn");
+        assertClosed(engine);
+        // The next pass carries nothing of it again.
+        engine.complete(engine.begin(OPEN, 20, SETTINGS).orElseThrow().run());
+        assertEquals(burnt, engine.ledger().get(Channel.COMBUSTIBLE, PollutionLedger.Total.BURNT), 1e-9);
+        assertClosed(engine);
+    }
+
+    @Test
+    void aBurnIsCappedByWhatTheCubeHolds() {
+        var engine = new PollutionEngine();
+        engine.release(A, Channel.COMBUSTIBLE, 50_000.0);
+        engine.complete(engine.begin(OPEN, 20, SETTINGS).orElseThrow().run());
+        double held = engine.field().amount(A, Channel.COMBUSTIBLE);
+        assertEquals(held, engine.burn(A, 1e9, Blasts.SOOT_SHARE), 1e-9);
+        assertEquals(0.0, engine.field().amount(A, Channel.COMBUSTIBLE));
+        assertEquals(0.0, engine.burn(A, 10.0, Blasts.SOOT_SHARE), "nothing left to burn");
+        assertEquals(0.0, engine.burn(CubeKey.of(9, 9, 9), 10.0, Blasts.SOOT_SHARE), "an absent cube burns nothing");
+        assertEquals(0.0, engine.burn(A, Double.NaN, Blasts.SOOT_SHARE));
+        assertClosed(engine);
+    }
+
+    @Test
+    void aBurnDuringAFailedPassStaysOnce() {
+        var engine = new PollutionEngine();
+        engine.release(A, Channel.COMBUSTIBLE, 400_000.0);
+        engine.complete(engine.begin(OPEN, 20, SETTINGS).orElseThrow().run());
+        engine.release(A, Channel.COMBUSTIBLE, 1.0);
+        engine.begin(OPEN, 20, SETTINGS).orElseThrow();
+        double burnt = engine.burn(A, 2_000.0, Blasts.SOOT_SHARE);
+        engine.failed("worker threw");
+        var field = engine.field();
+        assertEquals(burnt, engine.ledger().get(Channel.COMBUSTIBLE, PollutionLedger.Total.BURNT), 1e-9);
+        assertClosed(engine);
+        // The next pass begins from the burnt field and replays no burn.
+        var pass = engine.begin(OPEN, 20, SETTINGS).orElseThrow();
+        assertArrayEquals(field.amounts(), pass.field().amounts());
+        engine.complete(pass.run());
+        assertEquals(burnt, engine.ledger().get(Channel.COMBUSTIBLE, PollutionLedger.Total.BURNT), 1e-9);
+        assertClosed(engine);
     }
 }
