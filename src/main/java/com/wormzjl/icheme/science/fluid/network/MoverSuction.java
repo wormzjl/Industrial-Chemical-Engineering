@@ -22,7 +22,7 @@ import java.util.function.IntFunction;
  * {@link #cavitationMargin}) and the density a mover's rise limit reads ({@link #riseDensity}). The readings live in the
  * solve's constants ({@link SolveConstants}), which the solve and the mint build; this writes their arrays. One per
  * solver ({@code PassiveStepSolver.suctions}), built with it; it reads the solve constants through {@code solver} and
- * holds no state of its own beyond the two static caches of floors and zone edges (S-01, batch
+ * holds no state of its own beyond its two caches of floors and zone edges, one pair per solver (finding P-09) (S-01, batch
  * 2026-11-13-codebase-review, D-S5: moved out of the solver with every body unchanged but its qualifiers).
  */
 final class MoverSuction {
@@ -201,8 +201,9 @@ final class MoverSuction {
         return FluidThermodynamics.holdsPhase(s,FluidThermodynamics.AQUEOUS)?FluidThermodynamics.AQUEOUS:-1;
     }
     /** {@link #zoneEdge(InletPhase.Drawn,Runnable)} worked out, per supplier state and the stream drawn from it (a
-     * generator feeding two pumps through different ends has one E per end). */
-    private static final Map<FluidThermodynamics.State,Map<DrawKey,Double>> ZONE_EDGE_CACHE=Collections.synchronizedMap(new WeakHashMap<>());
+     * generator feeding two pumps through different ends has one E per end). One map per solver (finding P-09, batch
+     * 2026-11-13-codebase-review): an edge is a function of its state, its stream and the model alone. */
+    private final Map<FluidThermodynamics.State,Map<DrawKey,Double>> zoneEdgeCache=Collections.synchronizedMap(new WeakHashMap<>());
     /** A drawn stream as the cache tells streams of one state apart: its amounts and enthalpy. */
     private record DrawKey(double[] amounts,double enthalpy) {
         @Override public boolean equals(Object o){return o instanceof DrawKey k&&Double.compare(enthalpy,k.enthalpy)==0&&Arrays.equals(amounts,k.amounts);}
@@ -225,14 +226,15 @@ final class MoverSuction {
         var s=drawn.state();double p=s.pressure();
         if(drawn.supply().vapourVolumeShare()>=com.wormzjl.icheme.science.machine.GasEntrainment.cleanShare(p))return p;
         var key=new DrawKey(drawn.amounts(),drawn.enthalpy());
-        var known=ZONE_EDGE_CACHE.computeIfAbsent(s,k->Collections.synchronizedMap(new HashMap<>()));
+        var known=zoneEdgeCache.computeIfAbsent(s,k->Collections.synchronizedMap(new HashMap<>()));
         var e=known.get(key);if(e!=null)return e;
         double edge=PhaseLayout.sum(drawn.amounts())>0?releasePressure(s,drawn.amounts(),drawn.enthalpy(),com.wormzjl.icheme.science.machine.GasEntrainment::cleanShare,checkpoint):Double.POSITIVE_INFINITY;
         known.put(key,edge);
         return edge;
     }
-    /** {@link #release} worked out, keyed by the supplier state (a generator keeps its state across solves). */
-    private static final Map<FluidThermodynamics.State,Double> RELEASE_CACHE=Collections.synchronizedMap(new WeakHashMap<>());
+    /** {@link #release} worked out, keyed by the supplier state (a generator keeps its state across solves). One map per
+     * solver (finding P-09, batch 2026-11-13-codebase-review): a floor is a function of its state and the model alone. */
+    private final Map<FluidThermodynamics.State,Double> releaseCache=Collections.synchronizedMap(new WeakHashMap<>());
     /**
      * p_v of supplier state {@code s}'s liquids together (Pa, {@link #releasePressure}), once per state: the bubble
      * pressure of its condensable compounds, those above their critical temperature at the supplier's temperature left
@@ -241,7 +243,7 @@ final class MoverSuction {
      * Positive infinity where there is none. The clean zone's edge is the drawn stream's ({@link #zoneEdge}).
      */
     double release(FluidThermodynamics.State s,Runnable checkpoint) {
-        var known=RELEASE_CACHE.get(s);if(known!=null)return known;
+        var known=releaseCache.get(s);if(known!=null)return known;
         double r=Double.POSITIVE_INFINITY;
         if(FluidThermodynamics.holdsLiquid(s)) {
             // W3b: the supplier's liquids together, water among their components: two liquids at equilibrium share one bubble
@@ -254,13 +256,13 @@ final class MoverSuction {
                 if(Double.isFinite(hc))r=releasePressure(s,c,hc,p->0,checkpoint);
             }
         }
-        RELEASE_CACHE.put(s,r);
+        releaseCache.put(s,r);
         return r;
     }
     /** The relative width in pressure to which {@link #releasePressure} brackets its pressure. The floor is read from one
      * evaluation for a whole solve, so its rows and mode tests all read the same value; the width only places it against
      * the true pressure (0.1 Pa at 100 kPa), and it costs about 24 PH equilibria from the box's floor, once per supplier
-     * state ({@link #RELEASE_CACHE}). */
+     * state ({@link #releaseCache}). */
     private static final double BUBBLE_WIDTH=1e-6;
     /**
      * W3B_NETWORK_PLAN.md section 17, after owner decisions D14 (reading A13) and D16 C's first half: the lowest pressure,
