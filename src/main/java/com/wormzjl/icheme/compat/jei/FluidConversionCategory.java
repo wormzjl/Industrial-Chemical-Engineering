@@ -1,10 +1,10 @@
 package com.wormzjl.icheme.compat.jei;
 
 import com.wormzjl.icheme.IChemE;
-import com.wormzjl.icheme.client.gui.common.ConversionLines;
-import com.wormzjl.icheme.client.gui.common.ProcessUi;
+import com.wormzjl.icheme.science.fluid.conversion.ConversionLines;
 import com.wormzjl.icheme.registry.ModFluids;
 import com.wormzjl.icheme.science.fluid.conversion.ConversionRule;
+import com.wormzjl.icheme.science.material.MaterialName;
 import com.wormzjl.icheme.science.material.MaterialRuntime;
 import mezz.jei.api.gui.builder.IRecipeLayoutBuilder;
 import mezz.jei.api.gui.drawable.IDrawable;
@@ -80,11 +80,20 @@ final class FluidConversionCategory extends AbstractRecipeCategory<ConversionRul
         var catalog = MaterialRuntime.active();
         for (var line : ConversionLines.of(rule)) {
             var args = new ArrayList<Object>();
-            if (line.compound() != null) args.add(ProcessUi.materialName(catalog.name(line.compound())));
+            if (line.compound() != null) args.add(name(catalog.name(line.compound())));
             args.addAll(line.args());
             text.add(Component.translatable(line.key(), args.toArray()));
         }
         builder.addScrollBoxWidget(WIDTH - TEXT_X, HEIGHT, TEXT_X, 0).setContents(text);
+    }
+
+    /** A compound's name in the client's language; a petroleum fraction with its boiling range (as the device pages show it). */
+    private static Component name(MaterialName n) {
+        var base = Component.translatableWithFallback(n.translationKey(), n.fallback());
+        if (!n.kind().equals("petroleum_fraction")) return base;
+        if (n.lowerKelvin() == null) return Component.translatableWithFallback(n.rangeKey(), "%s, NBP below %s°C", base, n.upperCelsius());
+        if (n.upperKelvin() == null) return Component.translatableWithFallback(n.rangeKey(), "%s, NBP above %s°C", base, n.lowerCelsius());
+        return Component.translatableWithFallback(n.rangeKey(), "%s, NBP %s–%s°C", base, n.lowerCelsius(), n.upperCelsius());
     }
 
     @Override

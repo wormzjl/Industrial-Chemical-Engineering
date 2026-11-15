@@ -1,6 +1,5 @@
-package com.wormzjl.icheme.client.gui.common;
+package com.wormzjl.icheme.science.fluid.conversion;
 
-import com.wormzjl.icheme.science.fluid.conversion.ConversionRule;
 
 import java.util.ArrayList;
 import java.util.Comparator;

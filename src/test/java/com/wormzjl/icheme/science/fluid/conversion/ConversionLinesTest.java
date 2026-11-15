@@ -1,8 +1,6 @@
-package com.wormzjl.icheme.client.gui.common;
+package com.wormzjl.icheme.science.fluid.conversion;
 
 import com.google.gson.JsonParser;
-import com.wormzjl.icheme.science.fluid.conversion.ConversionRule;
-import com.wormzjl.icheme.science.fluid.conversion.ConversionRules;
 import com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import org.junit.jupiter.api.Test;
