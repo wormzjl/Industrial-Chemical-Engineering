@@ -14,6 +14,7 @@ Owner request, 2026-11-15: "do the analytic Jacobian and workspace items first",
 - 2026-11-15: the owner: "Start both" (S2b and S4, one subagent each: Opus medium and Opus high, own worktrees, no builds).
 - 2026-11-15: **S2b** merged (`bb771a9eb`; subagent commit `04cabf5f6`): an evaluation given no bundle takes its thread's kept Peng-Robinson workspace (`FluidThermodynamics.takeStandalone`, `giveStandalone`; counter `standaloneWorkspacesBuilt`). Gates: `PreparedRefillTest` (new case), `PassiveStepSolverTest`, `PhaseLayoutTest`, `HydrocarbonTangentTest`, `EngineDigestTest`: 22 tests, 0 failures; chain-100 exact, every deviation 0. No Rust twin. Bench pair (plan, section 4c): every solver counter identical; bytes 28.35 to 20.06 GB a minute (-43.6 % from the baseline); island step mean 30.64 ms (-12.0 % from the baseline's 34.83), p95 48.90 ms (-12.9 %).
 - 2026-11-15: **S4** merged (`2b35cbdb4`; subagent commit `5289cd36f`): the vessel closure's Jacobian is swept on the node's phase tangents (`PhaseLayout.wallClosure`, `differentiateEntries`), the coloured sweep its fallback; `junctionClosure` stays on differences. Gates: `WallClosureJacobianTest` (new, 7 cases) and 14 other classes, 82 tests, 0 failures; chain-100 in its declared mode, every deviation 0 (it builds no closure Jacobian, so its reference stays exact); hold-fuzz seeds 1 to 200 on `tools/fluid-step-cost/`'s census: the one held seed (145) as before, every end tick equal. No Rust twin. Bench pair (plan, section 4c): island step mean 27.42 ms (-21.3 % from the baseline's 34.83), p95 45.46 ms (-19.0 %); residual evaluations 761,947 to 45,061 a minute; Newton solves 19,371 to 19,365 and iterations 25,710 to 25,696 (results move in the last digits, no closure gains an iteration); no held interval. The linear algebra is now 36.6 % of the step's CPU.
+- 2026-11-15: the owner: "Start S1". The design is in the plan, section 4d: three forms as three commits (F1 the declaration made true, F2 the live direction's entries kept, F3 a minimum-degree ordering for the Newton), one subagent (Opus high, own worktree, no builds). F3 was added by the main thread after reading the ordering (reverse Cuthill-McKee on the declared graph) and the fill (120,565 entries of L and U against about 42,000 kept).
 
 ## Documents
 
@@ -25,7 +26,7 @@ Owner request, 2026-11-15: "do the analytic Jacobian and workspace items first",
 
 ## Open items
 
-- S1 (forms F1 and F2) waits for the owner's approval of its subagent.
+- S1 (forms F1, F2, F3) is being written by its subagent; the main thread then measures each and keeps one.
 - S4 moves results in the last digits wherever a vessel's closure iterates: the final lane records the references that move (the `VIRTUAL_HOLDUP_DIGEST` line among them) once, old and new values stated.
 - `wallClosure` decodes the base point three times a build (the Newton's residual, `linearising`, the sweep); keeping the bracket's state would save one. Not done: under 1 % of the step.
 - The kept bundles' heap (1.7 MB an island): kept as built. Dropping the probe bundles at the end of a step halves it and builds one workspace a node a step again; decided with S3's numbers.
