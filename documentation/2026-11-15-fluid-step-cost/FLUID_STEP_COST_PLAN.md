@@ -316,9 +316,53 @@ At best the rule saved a fifth to a quarter of the reach searches, about 2 to 3 
 
 The second S4 run agrees with the first within 1 % over four sixths; its last two were disturbed (another session's Gradle run started; the machine check after the run reads busy). So S4's figure is confirmed, and by the medians the batch's gain is 33.96 to 27.1 ms, 20 %. The baseline and S2 runs vary by 10 % between sixths: the resolution of one pair on this machine is about 5 %, which is why S5 and S1 were judged by counters.
 
+## 4h. S3 measured (2026-11-15): the workers loaded fully
+
+**The fixture.** A new bench profile `mixed400` (`FluidServerBenchmark`): 400 ladders, the first 100 are `mixed100`'s; 7,942 reservoirs, 300 islands awake (the 100 closed ladders rest). `-PfluidBenchmarkWorkers=<n>` sets the worker count (2 by default; 0 is a world's automatic sizing, 12 on this machine of 8 cores and 16 threads). All runs on the S4 code (`023b5711a`), 60 s warm-up and 60 s measured, JFR on (`tmp/pattern-census/s3-run.sh`, readers `s3-read.mjs`, `s3-cohorts.mjs`, `s3-islands.mjs`, `s3-jfr.mjs`).
+
+| | `mixed100`, 2 workers | `mixed100`, 12 | `mixed400`, 1 | `mixed400`, 2 | `mixed400`, 12 |
+|---|---|---|---|---|---|
+| Steps done of steps due | 1.00 | 1.00 | 0.60 | 0.94 | 1.00 |
+| Steps a second | 15.0 | 15.0 | 35.8 | 56.6 | 59.9 |
+| Worker occupancy (CPU) | 0.21 | 0.05 | 0.94 | 0.95 | 0.22 |
+| CPU a step (ms) | 27.6 | 42.5 | 26.3 | 33.7 | 44.2 |
+| Wall time a step (ms) | 29.2 | 53.8 | 27.7 | 35.1 | 49.6 |
+| Ready to published, median (s) | 0.57 | 0.21 | 47 | 17 | 0.64 |
+| Lag of the awake islands at the end (s) | 2 | 1 | 62 | 23 | 1.7 |
+| Heap after a forced collection (GB) | 1.90 | 1.90 | 4.79 | 4.91 | 5.78 |
+
+No interval held in any run. The `mixed100`, 2 workers column is the control run of this section (`bench-m100w2`); S4's own run reads 25.9 ms CPU and 27.4 ms wall.
+
+**Capacity.** A step is one island interval of 5 s. One worker carries 35.8 steps a second: 179 awake islands of this size (20 reservoirs, 47 components) in real time. Two carry 283 (1.58 times one). The automatic sizing carries all 300 with 78 % of its worker time idle and publishes 0.64 s after an interval is ready. By its CPU a step, twelve workers would carry about 1,350 awake islands (est.).
+
+**The step is dearer under load.** Compared on the same islands and the same simulated intervals (a lagging run solves an earlier stretch of the fill, which is cheaper, so whole-window means do not compare):
+
+| Same islands, same intervals | Wall time a step |
+|---|---|
+| `mixed100`, 2 workers, this section's control against S4's run | 1.03 times by the median of sixths (1.06 by the mean) |
+| `mixed400`, 2 workers, against the control | 1.22 times |
+| `mixed400`, 2 workers, against `mixed400`, 1 worker | 1.13 times |
+| `mixed400`, 12 workers, against S4's run | 1.70 times |
+| `mixed100`, 12 workers, against S4's run | 1.9 times over its four steady sixths (CPU 1.64 times over the window) |
+
+- **It is not the machine's other work.** Two processes of another project started at 22:24 and took a core each through every run of this section, on about 3 cores of other background (the JFR's machine load reads 0.24 to 0.28 of 16 threads in the runs before S3, 0.36 to 0.58 in these). The control repeats `mixed100` under that load and reads 28.0 ms against 27.2 by the median of sixths.
+- **It is not the collector or the kernel.** Pauses take 0.4 to 0.65 s of the minute; the workers' kernel share of their CPU is 1 to 3 %; the step's CPU time rises with its wall time, so the thread runs slower, it does not wait.
+- **Twelve workers cost the same on the small fixture** (1.9 times at a heap of 1.9 GB), so that part comes with the number of workers at work, not with the heap.
+- **Why (reasoned, not separated by a run).** A step allocates about 23 MB and reads its island's kept state, about 10 MB that has gone cold since the island's last step; the processor's shared cache is 32 MB for all cores. So a step's speed depends on the cache and the memory traffic it shares with every other core at work. Twelve workers on 8 cores, 4 of them busy with other work, also run two to a core. A run with 4 workers (they fit on free cores) would separate the two; it was not made: the machine does not get quiet (the owner, 23:05).
+
+**The heap.** 1.90 GB at 100 islands and 4.8 to 4.9 GB at 400: about 10 MB an island and 0.9 GB fixed (est. from the two points). The kept bundles' 1.7 MB an island (S2) are a sixth of an island's share.
+
+**Not measured.** The baseline (0.31.0) on `mixed400`: by the step's time the batch adds a quarter to the capacity (est.), no run shows it.
+
+**What S3 says for the decision.**
+
+1. Throughput is not what a world runs short of: with the default sizing 300 awake islands of 20 reservoirs and 47 components run in real time on a fifth of the workers' time.
+2. The step's cost matters where one island is large (its interval's latency) and where every worker is at work at once (the step is 1.2 to 1.9 times dearer there, and part of that is the step's own memory traffic, which a step that allocates less would lower in Java or in Rust).
+3. The automatic sizing puts more workers than cores to work (12 on 8). It buys latency (0.21 s against 0.57 s on `mixed100`) with 1.6 times the CPU a step. Left as it is; a setting to look at only if a server's CPU is short.
+
 ## 5. Commands
 
 - Step tests: `./gradlew --console=plain test --tests '*SparseNewtonTest' --tests '*UpLookingLuParityTest' --tests '*PassiveStepSolverTest' --tests '*DirectLiquidJacobianRowsTest' --tests '*PhaseLayoutTest'`
 - Chain-100: `./gradlew --console=plain --no-configuration-cache fluidSolverRegression -PfluidRegressionMode=exact`
-- Bench (alone; `tools/codebase-review-bench/README.md`): `./gradlew fluidServerBenchmark -PfluidBenchmarkRunId=<fresh id> -PfluidStressProfile=true -PfluidBenchmarkMemory=true -PfluidBenchmarkProfile=mixed100`
+- Bench (alone; `tools/codebase-review-bench/README.md`): `./gradlew fluidServerBenchmark -PfluidBenchmarkRunId=<fresh id> -PfluidStressProfile=true -PfluidBenchmarkMemory=true -PfluidBenchmarkProfile=mixed100` (`mixed400` with `-PfluidBenchmarkWorkers=1`, `2` or `0` for section 4h)
 - The final lane once, when the code is final.

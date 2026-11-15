@@ -20,6 +20,8 @@ Owner request, 2026-11-15: "do the analytic Jacobian and workspace items first",
 - 2026-11-15: the owner: "Start it" (S5's subagent, Opus high, own worktree, no builds).
 - 2026-11-15: **S5** built (subagent commits `12dc90fd4` PA, `7d7d02978` PB, `b6c8e75d7` PC, on F1 and F2 applied again), each merged and measured by the bench's counters, and **not kept**: all reverted (`a3c3c19dc`, `d5e5fd41a`, `9c7eb2edf`), the code is S4's again. The reach is still searched for 0.66 (PA) and 0.72 (PB) of the columns against 0.91: the pivots do not repeat under a threshold of 0.1 either. PB holds hold-fuzz seed 123 (island 60, wall deadline; in the 200-seed run and in its one replay alone); PA needs 18 refinements; PC has 2.2 times the fill (plan, section 4g).
 - 2026-11-15: S4's figure confirmed by a second timed run alone (`bench-s4b`): the same within 1 % over the four undisturbed sixths of the measured minute. By the median of sixths the batch stands at 33.96 to 27.1 ms, 20 %; one pair resolves about 5 % on this machine (`tmp/pattern-census/bench-sixths.mjs`).
+- 2026-11-15: the owner: "S3 first" (before the merge preparation and the Rust decision).
+- 2026-11-15: **S3** measured (plan, section 4h). A bench profile `mixed400` (400 ladders, 300 awake islands, 7,942 reservoirs) and five runs on the S4 code: one worker carries 179 awake islands in real time (occupancy 0.94), two carry 283 (0.95), the automatic sizing (12 workers) all 300 at occupancy 0.22 and 0.64 s from ready to published. The step is dearer under load on the same islands and intervals: 1.22 times with two workers kept busy, 1.7 to 1.9 times with twelve at work; the machine's other work, the collector and the kernel are ruled out by a control run and the JFR; the split between shared cores and memory traffic is not measured (the machine does not get quiet; the owner, 23:05). Heap: about 10 MB an island.
 
 ## Documents
 
@@ -35,7 +37,8 @@ Owner request, 2026-11-15: "do the analytic Jacobian and workspace items first",
 - The timed runs of 2026-11-15 after 21:00 shared the machine with another session's Gradle runs (worktree `review-wave-b-t1-thermo-e26136`); read them by sixths.
 - S4 moves results in the last digits wherever a vessel's closure iterates: the final lane records the references that move (the `VIRTUAL_HOLDUP_DIGEST` line among them) once, old and new values stated.
 - `wallClosure` decodes the base point three times a build (the Newton's residual, `linearising`, the sweep); keeping the bracket's state would save one. Not done: under 1 % of the step.
-- The kept bundles' heap (1.7 MB an island): kept as built. Dropping the probe bundles at the end of a step halves it and builds one workspace a node a step again; decided with S3's numbers.
+- The kept bundles' heap (1.7 MB an island): kept as built. S3 reads about 10 MB of heap an island in all, so the bundles are a sixth of it; dropping the probe bundles at the end of a step would halve them and build one workspace a node a step again. Proposed: leave it.
 - The closure's own bundle (1.43 GB a minute) and `junctionClosure`'s difference Jacobian stay as they are (plan, section 4c).
-- S3: the bench on a fixture that saturates the workers (occupancy reads 0.25 on `mixed100`), then the owner's decision on analytic rows, the Rust gate, or stop.
+- S3 is measured. The owner's decision: stop here and merge, analytic rows, or the Rust gate. Throughput is not short (plan, section 4h); what a faster step buys is the latency of a large island and the cost under full load.
+- Not measured: `mixed400` with 4 workers (separates shared cores from memory traffic under load) and the baseline on `mixed400`; both need a machine with nothing else running.
 - The final lane and the merge preparation, on the owner's word; chain-100 is recorded again there if S4 or S1 is built.
