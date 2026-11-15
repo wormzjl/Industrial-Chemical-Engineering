@@ -11,8 +11,8 @@ the screen): [heat-units.md](heat-units.md)
 - You change a heat law, the films, the curve, the wall solve, the give-back, a unit's surface or passage, the
   controller, the kettle's pool, the fired heater's coils, or the crossflow routing.
 
-The step's equations, junctions and booking: [fluid-science.md](fluid-science.md). The units' shapes and nozzles:
-[equipment.md](equipment.md). A running column's utilities: [column-run.md](column-run.md).
+The step's equations, junctions and booking: [fluid-step.md](fluid-step.md), [fluid-interval.md](fluid-interval.md). The units' shapes and nozzles:
+[equipment-geometry.md](equipment-geometry.md). A running column's utilities: [column-run.md](column-run.md).
 
 ## What it does
 

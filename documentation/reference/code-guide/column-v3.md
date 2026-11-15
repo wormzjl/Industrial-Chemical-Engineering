@@ -15,7 +15,7 @@ Up: [code guide](README.md) · the equations, Newton, linear algebra, thermo and
 The column has two callers: the process simulator's column unit, on the client's run thread
 ([process-simulator.md](process-simulator.md)), and a running column, on the server's bounded worker
 ([column-operation.md](column-operation.md)). Save design and Import: [process-simulator.md](process-simulator.md),
-[equipment.md](equipment.md).
+[equipment-structure.md](equipment-structure.md).
 
 ## What it does
 

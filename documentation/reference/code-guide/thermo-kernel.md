@@ -14,7 +14,7 @@ Up: [code guide](README.md)
 
 The records the kernel is built from are in [materials.md](materials.md). The engine that solves on it is in
 [equilibrium-engine.md](equilibrium-engine.md); the column's wrapper in [column-v3.md](column-v3.md); the network's in
-[fluid-science.md](fluid-science.md).
+[fluid-thermo-port.md](fluid-thermo-port.md).
 
 ## What it does
 

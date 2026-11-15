@@ -1,6 +1,6 @@
 # The fluid runtime's registry: the authority, placement, topology and the ledger
 
-Up: [code guide](README.md). Beside it: [runtime-engine.md](runtime-engine.md), [runtime-saves.md](runtime-saves.md), [runtime-presentation.md](runtime-presentation.md), [runtime-units.md](runtime-units.md). The equipment that registers here: [equipment.md](equipment.md); the laying tool and racks: [pipe-laying.md](pipe-laying.md); fittings as items: [instrument-accessories.md](instrument-accessories.md).
+Up: [code guide](README.md). Beside it: [runtime-engine.md](runtime-engine.md), [runtime-saves.md](runtime-saves.md), [runtime-presentation.md](runtime-presentation.md), [runtime-units.md](runtime-units.md). The equipment that registers here: [equipment-structure.md](equipment-structure.md); the laying tool and racks: [pipe-laying.md](pipe-laying.md); fittings as items: [instrument-accessories.md](instrument-accessories.md).
 
 <!-- j2a-packages: runtime/fluid/FluidWorldAuthority.java runtime/fluid/Placement.java runtime/fluid/ChunkBinding.java runtime/fluid/PhysicalRegistry.java runtime/fluid/PhysicalFluidTopology.java runtime/fluid/WorldTopologyLedger.java runtime/fluid/TopologyChange.java runtime/fluid/FluidDeviceSpec.java runtime/fluid/FluidPresetCatalog.java runtime/fluid/HeldDevicesCommand.java runtime/fluid/SlurryFeed.java -->
 

@@ -1,6 +1,6 @@
 # Client: device, heat, machine, dialog and controller screens
 
-Up: [code guide](README.md). The kit these screens are built on: [client-kit.md](client-kit.md). The constructor, datasheet, assembly and column-door screens: [client-equipment-screens.md](client-equipment-screens.md). The server side of the fluid menu: [fluid-runtime.md](fluid-runtime.md); the heat control's physics: [heat-exchangers.md](heat-exchangers.md); machines: [rotating-machinery.md](rotating-machinery.md); controllers and the DCS: [wired-control-power.md](wired-control-power.md). GUI rules: the `gui-creation` skill ([SKILL.md](../../../.claude/skills/gui-creation/SKILL.md)).
+Up: [code guide](README.md). The kit these screens are built on: [client-kit.md](client-kit.md). The constructor, datasheet, assembly and column-door screens: [client-equipment-screens.md](client-equipment-screens.md). The server side of the fluid menu: [runtime-presentation.md](runtime-presentation.md); the heat control's physics: [heat-exchangers.md](heat-exchangers.md); machines: [rotating-machinery.md](rotating-machinery.md); controllers and the DCS: [wired-control-power.md](wired-control-power.md). GUI rules: the `gui-creation` skill ([SKILL.md](../../../.claude/skills/gui-creation/SKILL.md)).
 
 ## Read this when
 

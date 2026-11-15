@@ -13,9 +13,9 @@ Up: [code guide](README.md) · the heat laws, the curve, the relay and the contr
 - The Control tab or the stream switch shows the wrong actuator, effort, limit, port or line.
 - You rebuild the heat review world (`HeatExchangerReviewWorld`).
 
-Islands, certificates, checkpoints and packets in general: [fluid-runtime.md](fluid-runtime.md). The walk and the matcher
+Islands, certificates, checkpoints and packets in general: [runtime-engine.md](runtime-engine.md), [runtime-saves.md](runtime-saves.md), [runtime-presentation.md](runtime-presentation.md). The walk and the matcher
 that check an exchanger's lines: [machine-assemblies.md](machine-assemblies.md). A running column's condenser and
-utilities: [column-run.md](column-run.md). The Control tab's layout: [client-gui.md](client-gui.md).
+utilities: [column-run.md](column-run.md). The Control tab's layout: [client-screens.md](client-screens.md).
 
 ## What it does
 
@@ -38,16 +38,16 @@ Paths under `src/main/java/com/wormzjl/icheme/`. Lines at the snapshot.
 | [`runtime/fluid/HeatUnit`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/HeatUnit.java) | A side's facts on its registration (`PhysicalFluidTopology.Device.heat`): `unit`, `side`, `area`, `partner`, `Control(mode, target, lowLimit, share)`, `transitJoule`, `fanCount` (at most `MAXIMUM_FANS`), the exchanger type (`withExchangerType`); `Mode` OFF, OUTLET_TEMPERATURE, DUTY, FIRING, RATIO, COLUMN; `FIRING` (the default firing control); `heatSide()`, `controller()`, `controllable()`, `lines()`, `pool()`, `fans()`, `burners()`, `kettleTubes` | 134 |
 | [`runtime/fluid/ExchangerCoupling`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/ExchangerCoupling.java) | The coupling of sides across islands, on the coordinator's thread: `Coupled` (relay state per side, its booked spans, at most 64), `SideKind` EXCHANGER, RADIANT, CONVECTION; `coupledSides`, `partners`, `coupledThrough` (the fence), `reads`, `booked`, `moved`, `flushWakes`, `operations`, `settledTransit`, `owe`, `transitAsOf`; `WAKE_TEMPERATURE`, `WAKE_FLOW`, `WAKE_TRANSIT`, `KEEP_UNREAD_TICKS` | 277 |
 | [`runtime/fluid/HeatPresentation`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/HeatPresentation.java) | Completes a side's `FluidView.Heat` where its view is built: the actuator (`FluidView.Heat.ACTUATORS`) and its effort, the controller's limit, every port of the unit with its stream, an exchanger's lines part by part | 199 |
-| `runtime/fluid/FluidWorldAuthority` (heat parts) | `placeUnit(sides, vessel)` and `removeUnit(ids)` (one ledger event each, the pair whole; `UnitSide`, `UnitVessel`); a fired heater's coil edit moves its partner in the same event; `Lines` (`Status` NOT_VALIDATED, CHECKED, UNMETERED, COMPLETE), `lines`, `operate`, `holdValves`; `controlStatus`, `linesStatus`; the transit loaded from and written to the facts ([fluid-runtime.md](fluid-runtime.md)) | |
-| `runtime/fluid/IslandCoordinator` | Holds the relay states and the side index; calls `ExchangerCoupling` from its steps (`sameControl` accepts a planned valve target) ([fluid-runtime.md](fluid-runtime.md)) | |
+| `runtime/fluid/FluidWorldAuthority` (heat parts) | `placeUnit(sides, vessel)` and `removeUnit(ids)` (one ledger event each, the pair whole; `UnitSide`, `UnitVessel`); a fired heater's coil edit moves its partner in the same event; `Lines` (`Status` NOT_VALIDATED, CHECKED, UNMETERED, COMPLETE), `lines`, `operate`, `holdValves`; `controlStatus`, `linesStatus`; the transit loaded from and written to the facts ([runtime-saves.md](runtime-saves.md)) | |
+| `runtime/fluid/IslandCoordinator` | Holds the relay states and the side index; calls `ExchangerCoupling` from its steps (`sameControl` accepts a planned valve target) ([runtime-engine.md](runtime-engine.md)) | |
 | [`science/assembly/ExchangerBlueprint`](../../../src/main/java/com/wormzjl/icheme/science/assembly/ExchangerBlueprint.java) | `Lines` NONE, BYPASS, RATIO, FEED; `Design(tube, shell)`; slots `<side>_inlet_tee`, `_bypass_valve`, `_outlet_tee`, `_feed_valve`, `_meter`, `_feed_meter`; `operated(side, lines)`; `of(design)` | 148 |
 | [`runtime/assembly/ExchangerLines`](../../../src/main/java/com/wormzjl/icheme/runtime/assembly/ExchangerLines.java) | `design` (from the sides' registered controls), `publish` (a report as each side's `Lines`, with the valve its control works) | 94 |
-| [`client/gui/common/HeatControlColumn`](../../../src/main/java/com/wormzjl/icheme/client/gui/common/HeatControlColumn.java), [`HeatDiagram`](../../../src/main/java/com/wormzjl/icheme/client/gui/common/HeatDiagram.java), [`HeatFlowsheet`](../../../src/main/java/com/wormzjl/icheme/client/gui/common/HeatFlowsheet.java) | The Control tab (`targets`, `columnTexts`), the unit's flowsheet on a design grid with its lines' slots, the stream switch ([client-gui.md](client-gui.md)) | 258, 380, 358 |
+| [`client/gui/common/HeatControlColumn`](../../../src/main/java/com/wormzjl/icheme/client/gui/common/HeatControlColumn.java), [`HeatDiagram`](../../../src/main/java/com/wormzjl/icheme/client/gui/common/HeatDiagram.java), [`HeatFlowsheet`](../../../src/main/java/com/wormzjl/icheme/client/gui/common/HeatFlowsheet.java) | The Control tab (`targets`, `columnTexts`), the unit's flowsheet on a design grid with its lines' slots, the stream switch ([client-screens.md](client-screens.md)) | 258, 380, 358 |
 
 ## Main flow
 
 1. **Build.** A whole exchanger, kettle, air cooler, fired heater or gas turbine registers through
-   `EquipmentStructure` ([equipment.md](equipment.md)): one `UnitSide` per `HeatSides.of(shape)` entry at its first
+   `EquipmentStructure` ([equipment-structure.md](equipment-structure.md)): one `UnitSide` per `HeatSides.of(shape)` entry at its first
    inlet's cell (`ShapeRasterizer.fluidCells`), its nozzles as `INLET` and `OUTLET` ports, its passage geometry and a new
    `HeatUnit`; a kettle adds its shell as a `UnitVessel`. `FluidWorldAuthority.placeUnit` places them in one ledger event
    and names the partners. A refresh moves or restates the sides with their identities, partner, control and transit; a

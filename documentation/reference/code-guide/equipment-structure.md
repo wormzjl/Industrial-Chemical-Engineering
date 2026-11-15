@@ -1,6 +1,6 @@
 # Equipment: structures in the world, their saves, refresh and the constructor's server side
 
-Up: [code guide](README.md). Shapes and cells: [equipment-geometry.md](equipment-geometry.md); the kinds' designs: [equipment-designs.md](equipment-designs.md); the screens: [client-equipment-screens.md](client-equipment-screens.md); the models: [client-rendering.md](client-rendering.md). A structure's fluid devices on the engine's side: [fluid-runtime.md](fluid-runtime.md); assemblies: [machine-assemblies.md](machine-assemblies.md); shaft trains and FE ports: [rotating-machinery.md](rotating-machinery.md).
+Up: [code guide](README.md). Shapes and cells: [equipment-geometry.md](equipment-geometry.md); the kinds' designs: [equipment-designs.md](equipment-designs.md); the screens: [client-equipment-screens.md](client-equipment-screens.md); the models: [client-rendering.md](client-rendering.md). A structure's fluid devices on the engine's side: [runtime-registry.md](runtime-registry.md); assemblies: [machine-assemblies.md](machine-assemblies.md); shaft trains and FE ports: [rotating-machinery.md](rotating-machinery.md).
 
 ## Read this when
 

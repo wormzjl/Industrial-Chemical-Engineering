@@ -13,7 +13,7 @@ Up: [code guide](README.md)
 - Start refuses a complete column, or a change stops a running one.
 - You touch the `assembly-6` packets (`assembly-4` before batch 2026-11-10-column-failure-modes), the `icheme_assemblies` store, or the review world (`runReviewWorldServer`).
 
-The column's design (what Save design stores, `ColumnComponents` with its member counts, `ColumnDesign`) and the column's nozzles are in [equipment.md](equipment.md); Save design is on the process simulator's column (`ProcessSimulatorNetwork.SaveDesign`). The pipes and fittings the walk reads are registry devices ([fluid-runtime.md](fluid-runtime.md)). What a started column does is in [column-operation.md](column-operation.md).
+The column's design (what Save design stores, `ColumnComponents` with its member counts, `ColumnDesign`) and the column's nozzles are in [equipment-designs.md](equipment-designs.md); Save design is on the process simulator's column (`ProcessSimulatorNetwork.SaveDesign`). The pipes and fittings the walk reads are registry devices ([runtime-registry.md](runtime-registry.md)). What a started column does is in [column-operation.md](column-operation.md).
 
 ## In one paragraph
 
@@ -45,7 +45,7 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
 | [`network/AssemblyNetwork`](../../../src/main/java/com/wormzjl/icheme/network/AssemblyNetwork.java) | On the mod's protocol `NetworkProtocol.VERSION` (main thread); `open(player, vessel, cell)`, `target`, `closed`, `datasheet`, `presentationTick`, `forget`; the `VIEW` codec; `Action` START, STOP, APPLY; `REFUSALS` (each server's last refused Start per master, until the next press, not saved) | What a click opens; the wire |
 | [`world/inventory/AssemblyMenu`](../../../src/main/java/com/wormzjl/icheme/world/inventory/AssemblyMenu.java) | Menu `assembly`: origin, cell (a shell cell of the column), anchor, reach (`REACH` 8 + the clicked structure's largest size), selected member; client `view()`/`accept`; `removed` ends the session | Who may keep the screen open |
 | **Client** | | |
-| [`gui/screens/inventory/AssemblyScreen`](../../../src/main/java/com/wormzjl/icheme/client/gui/screens/inventory/AssemblyScreen.java) | The column's screen: on the GUI kit's door and glass ([client-gui.md](client-gui.md)), the drawing (`AssemblyBlock`) beside the parts list (`AssemblyColumn`), Check parts, Open unit, Datasheet, and the column's name entry in the title strip (saved by `EquipmentNetwork.rename`, [equipment.md](equipment.md)); tabs Operation (`OperationColumn`, when the report is complete and the view has an operation) and Structure | What the player sees |
+| [`gui/screens/inventory/AssemblyScreen`](../../../src/main/java/com/wormzjl/icheme/client/gui/screens/inventory/AssemblyScreen.java) | The column's screen: on the GUI kit's door and glass ([client-equipment-screens.md](client-equipment-screens.md)), the drawing (`AssemblyBlock`) beside the parts list (`AssemblyColumn`), Check parts, Open unit, Datasheet, and the column's name entry in the title strip (saved by `EquipmentNetwork.rename`, [equipment-structure.md](equipment-structure.md)); tabs Operation (`OperationColumn`, when the report is complete and the view has an operation) and Structure | What the player sees |
 | [`gui/flowsheet/AssemblyBlock`](../../../src/main/java/com/wormzjl/icheme/client/gui/flowsheet/AssemblyBlock.java) | The drawing: the process simulator's column block (`ColumnBlock` of a `ColumnDoor` built from the trays by `params`: trays, feed, draws, steam, pumparounds, condenser, member counts, pumps; a kettle for reboiler duty, an ejector for a vacuum top), each part a slot of `ColumnBlueprint`; `fit(box)`, `draw(canvas, box, report, selected, name, texts)` (each part by its check, `look`; the tower neutral while in place; the column's name on its plate), `part(x, y)` (a click's slot). No Minecraft classes | The drawing |
 | [`gui/common/AssemblyDiagram`](../../../src/main/java/com/wormzjl/icheme/client/gui/common/AssemblyDiagram.java) | Minecraft-free parts and ports of a column's assembly: `Part(slot, name, where, wanted)` per slot (the parts list's names and hovers), `Port(slot, role, ordinal, partner)` in a fixed order (ordinal -1: any of that role); `of(trays)`, `part(slot)`; texts are keys under `gui.icheme.assembly.` (`KEY`) | The parts list, the ports' order |
 | [`AssemblyToolClient`](../../../src/main/java/com/wormzjl/icheme/client/AssemblyToolClient.java), [`PortColours`](../../../src/main/java/com/wormzjl/icheme/client/PortColours.java) | The laying tool's watch on the client (`watch`, `received`, `colour`, `frame`, `line`); `PortColours.assembly(diagram, slot, role, ordinal)`: a nozzle's colour by its port's index in `AssemblyDiagram.ports` (golden-ratio hues), -1 where the design has no port; fallback port class colours (`VAPOUR`, `BULK`, `LIQUID`, `OVERFLOW`), `CONNECTED` grey, `MISPLACED` yellow | The tool's marks |
@@ -129,7 +129,7 @@ A shell-and-tube exchanger (kind EXCHANGER) is a master only while a side's cont
 | `<other side>_reference` (upstream, with RATIO) | the other side's inlet nozzle | a flowmeter | outside |
 | `<side>_feed` (upstream, with FEED) | the side's inlet nozzle | the feed valve, then a flowmeter (`<side>_feed_meter`) | outside |
 
-- **Asking.** The heat side's screen sends `icheme:fluid_check_lines` (protocol fluid-16, [fluid-runtime.md](fluid-runtime.md)); `FluidNetwork.checkLines` queues `AssemblyService.request` at the side's cell. It runs on the next server tick, as a column's queued check does; the side's status line reports it at the next bucket.
+- **Asking.** The heat side's screen sends `icheme:fluid_check_lines` (protocol fluid-16, [runtime-presentation.md](runtime-presentation.md)); `FluidNetwork.checkLines` queues `AssemblyService.request` at the side's cell. It runs on the next server tick, as a column's queued check does; the side's status line reports it at the next bucket.
 - **Publishing.** After every validation, revert and chunk check, `ExchangerLines.publish` writes each asking side's `FluidWorldAuthority.Lines`: NOT_VALIDATED, CHECKED (parts not in place counted), UNMETERED (complete, but the operated valve carries no flowmeter, so it stands open) or COMPLETE (the valve carries its flowmeter), with the operated valve's identity and the slot states the side's screen colours its parts by. A side asking for no lines gets none. The fluid world keeps lines only while the server runs; a chunk check publishes them again.
 - **What the lines do** (in [heat-exchangers.md](heat-exchangers.md)): a COMPLETE side's control sets the real valve's flow target, and its own internal bypass stays shut. Until then a bypass control works the internal bypass, a ratio holds nothing, and the status line names what is missing.
 - A change of control that asks for other lines forgets the entry (`redesigned`); the next check validates the new design.
@@ -212,7 +212,7 @@ States in rank order (a later one outranks an earlier one on the same slot):
 | `icheme:assembly_datasheet` | S→C | BlockPos |
 
 - **Menu opening buffer**: origin, column cell, anchor, reach (double), selected member (long).
-- The column design itself, its member counts included, is a fact on the shell (`Components`, `Turns`) and on the process simulator (`Design`, `Designs`): [equipment.md](equipment.md).
+- The column design itself, its member counts included, is a fact on the shell (`Components`, `Turns`) and on the process simulator (`Design`, `Designs`): [equipment-designs.md](equipment-designs.md).
 </details>
 
 <details><summary>Traps</summary>
@@ -275,7 +275,7 @@ Assembly pipe laying and previews use the same selected layout/nozzle definition
 | Packets and bounds | `AssemblyNetwork` | `network/AssemblyNetworkCodecTest` (4) |
 | What a click opens | `AssemblyNetwork.open`/`target`, `EquipmentShellBlock.use`/`openOwn` | `AssemblyGameTests.aClickOnAMemberOpensItsColumnsGuiWithTheMemberSelected` |
 | The drawing, the parts list, the words, the tool's port colours | `AssemblyBlock`, `AssemblyDiagram`, `AssemblyColumn`, `AssemblyScreen`, `PortColours.assembly`, `lang/en_us.json` (`gui.icheme.assembly.*`) | `client/gui/flowsheet/AssemblyBlockTest` (3), `client/gui/common/AssemblyDiagramTest` (5), `client/gui/common/AssemblyColumnTest` (8) |
-| A nozzle's flow direction (IN, OUT), a unit's pass-through partner | `science/equipment/PortMarkings` ([equipment.md](equipment.md)) | `PortMarkingsTest` (6) |
+| A nozzle's flow direction (IN, OUT), a unit's pass-through partner | `science/equipment/PortMarkings` ([equipment-geometry.md](equipment-geometry.md)) | `PortMarkingsTest` (6) |
 
 ## Tests that pin it
 

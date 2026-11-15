@@ -73,7 +73,7 @@ Outside the package: [`science/equipment/SentDesign`](../../../src/main/java/com
    `simulator_send_designs`; the server takes the list whole from the holder and replaces the earlier one.
 5. **Import**: the constructor asks the nearest simulator within `EquipmentNetwork.IMPORT_REACH`
    (`EquipmentConstructorBlockEntity.simulator`) for its list: the saved column design first, then the sent designs; the
-   player picks one and the constructor lands it ([equipment.md](equipment.md)).
+   player picks one and the constructor lands it ([equipment-structure.md](equipment-structure.md)).
 
 ## Contracts
 
@@ -127,7 +127,7 @@ Outside the package: [`science/equipment/SentDesign`](../../../src/main/java/com
 
 Every limit's value is a `Limit` constant (its `Bound`, its unit, its source text); `DesignBasis.DEFAULT` holds the
 design flow factor, the line length and the pumparound fall. The physics of each law is the world's
-([fluid-science.md](fluid-science.md), [rotating-machinery.md](rotating-machinery.md),
+([fluid-laws.md](fluid-laws.md), [rotating-machinery.md](rotating-machinery.md),
 [heat-exchangers.md](heat-exchangers.md)); sizing reads it through `SizedPassages` and the units' own models.
 
 ## Formats

@@ -171,6 +171,6 @@ Worked example: `GaugeScreen` with `DialogColumns.gauge`.
   When a payload changed, add its codec test: `--tests '*EquipmentNetworkCodecTest' --tests '*FluidPacketCodecTest'`.
 - A new rule from the owner goes in `../SKILL.md`, not in `AGENTS.md`.
 - Add one History line to `tools/heat-gui-renders/README.md` for new prototypes.
-- Follow `AGENTS.md` for the batch folder, `documentation/INDEX.md`, the code guide (`client-gui.md`) and the changelog.
+- Follow `AGENTS.md` for the batch folder, `documentation/INDEX.md`, the code guide (`client-kit.md`, `client-screens.md`) and the changelog.
 - New lang keys go in `en_us.json` only. The other lang files catch up in one translation commit before the batch
   merges (`AGENTS.md`, Translations).

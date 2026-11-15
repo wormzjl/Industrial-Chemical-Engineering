@@ -1,7 +1,7 @@
 # Process simulator: the screen, its pages and doors, the runner and the files
 
 Up: [code guide](README.md) · the sheet and the block: [process-simulator.md](process-simulator.md) · sizing:
-[simulator-sizing.md](simulator-sizing.md) · the GUI kit and its rules: [client-gui.md](client-gui.md),
+[simulator-sizing.md](simulator-sizing.md) · the GUI kit and its rules: [client-kit.md](client-kit.md),
 `.claude/skills/gui-creation/SKILL.md`
 
 ## Read this when
@@ -61,7 +61,7 @@ Lines at the snapshot.
 1. **Open.** The menu arrives with its `Opening` and the replayed body; the screen builds the editor on the sheet, and
    `SimulatorRunner.restore` sets the last steady run from the stored results.
 2. **Render.** The screen draws its whole frame, page or door or dialog and the widgets in one `Canvas.batch`: fills go
-   out in runs while texts and sprites wait (`HeldDraws`, [client-gui.md](client-gui.md)). `SheetPainter.draw` batches
+   out in runs while texts and sprites wait (`HeldDraws`, [client-kit.md](client-kit.md)). `SheetPainter.draw` batches
    the grid, each line, circle and valve, the hatch and the tear; each line ends in one head (`FlowsheetPainter.head`).
 3. **Input.** `SheetGestures` turns mouse events into edits, `SheetEditor` applies them with undo and redo; a door's
    `tab/` and `phase/` presses go through `Door.View.press`; an entry's edit ends on Enter or a click outside

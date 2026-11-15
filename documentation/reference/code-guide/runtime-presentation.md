@@ -1,6 +1,6 @@
 # The fluid runtime's presentation: buckets, views, displays and the wire
 
-Up: [code guide](README.md). The rule: AGENTS.md, "Engine schedule and player-facing updates". Beside it: [runtime-engine.md](runtime-engine.md) (what publishes), [runtime-registry.md](runtime-registry.md). The screens: [client-gui.md](client-gui.md); the effects and sounds: [effects.md](effects.md).
+Up: [code guide](README.md). The rule: AGENTS.md, "Engine schedule and player-facing updates". Beside it: [runtime-engine.md](runtime-engine.md) (what publishes), [runtime-registry.md](runtime-registry.md). The screens: [client-screens.md](client-screens.md); the effects and sounds: [effects.md](effects.md).
 
 <!-- j2a-packages: runtime/fluid/FluidPresentation.java runtime/fluid/Display.java runtime/fluid/Displays.java runtime/fluid/ViewBuilder.java runtime/fluid/FluidView.java runtime/fluid/TankOutlets.java runtime/fluid/TankDisplay.java runtime/fluid/PipePresentation.java runtime/fluid/HeatPresentation.java runtime/fluid/MachinePresentation.java runtime/fluid/MachineView.java runtime/fluid/Silhouettes.java runtime/fluid/Noise.java runtime/PresentationMailbox.java -->
 

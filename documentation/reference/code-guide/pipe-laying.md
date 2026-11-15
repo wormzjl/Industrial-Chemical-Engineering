@@ -1,6 +1,6 @@
 # Fluid, data and power line placement
 
-Up: [code guide](README.md). Related: [equipment](equipment.md), [fluid runtime](fluid-runtime.md), [wired control/power](wired-control-power.md), [GUI](client-gui.md).
+Up: [code guide](README.md). Related: [equipment geometry](equipment-geometry.md), [fluid registry](runtime-registry.md), [wired control/power](wired-control-power.md), [client rendering](client-rendering.md).
 
 ## Contract and ownership
 
@@ -27,7 +27,7 @@ The pipe laying tool selects Fluid, Data or Power. These modes share the interac
 4. `LineLaying.execute` validates the tool/profile, build rights, loaded endpoints, 64-block start range and end interaction reach. It resolves both targets again and checks the supplied path; **the server never searches**. `LineLayout.build` merges both ends' edits to the same host before checking joint constraints. `ATTACH` retains an existing entry block and checks the same socket lead and host-merge owners.
 5. The selected backend validates existing registrations/bindings. `LinePlacement.commit` rechecks the whole spatial plan and every touched cell's permissions, including socket owner/entry and crossed lead cells, before taking inventory. It applies the prepared edits and refresh work, then flushes derived `LinePieces`. Collected Minecraft cell cursors are made immutable before use, so preflight and derived collision visit every crossed cell. An ordinary validation refusal writes nothing; this is not an exception rollback mechanism.
 6. Fluid registrations/host joint edits are one queued ledger event; process changes take effect on the engine schedule. Data/power record structural bindings for `DataBus`/standard FE. Placement, menus and packets never run a process solve. `handPlaced`, existing-stub attachment and `breakPiece` use the same layout/backend/physical owners.
-7. Registry first (batch 2026-11-03-save-corruption): `FluidLineBackend.register` lays the line with its paint (`FluidWorldAuthority.lay`) and records each rack lane's frame from its cell (`rackFrame`), and `ConduitLineBackend.register` records a cable lane's frame in its control fact (`DataBus.Cable.withFrame`). `LinePlacement.apply` places the blocks under `FluidDeviceBlock.registered` (the quiet flag), so a block placed for a registration registers nothing again, and the re-alignment later sets these blocks back from the same facts ([fluid-runtime.md](fluid-runtime.md)).
+7. Registry first (batch 2026-11-03-save-corruption): `FluidLineBackend.register` lays the line with its paint (`FluidWorldAuthority.lay`) and records each rack lane's frame from its cell (`rackFrame`), and `ConduitLineBackend.register` records a cable lane's frame in its control fact (`DataBus.Cable.withFrame`). `LinePlacement.apply` places the blocks under `FluidDeviceBlock.registered` (the quiet flag), so a block placed for a registration registers nothing again, and the re-alignment later sets these blocks back from the same facts ([runtime-registry.md](runtime-registry.md)).
 
 ## Spatial rules and cross-cell geometry
 
