@@ -122,3 +122,38 @@ sensor heads and the data socket. They are in the game today.
 2. K7, K8, K10, K14: approve the layout changes, or leave these kinds as they are?
 3. P2: handrails with fewer sides, or cut-out quads?
 4. K14 and K15: are the agent's readings of what is wrong right?
+
+## Later findings (2026-11-15, owner reports)
+
+### N1 A column's nozzle keeps its default size whatever pipe joins it
+
+Owner: "Column pipe connector does not scale with pipe size, check what else fails"; the part is the column's own neck
+and flange. Found by reading the code; not reproduced in a run.
+
+1. Expected: a pipe bolted to a nozzle's flange is a mechanical joint whether or not the equipment is a network device.
+   The nozzle's neck and flange take the pipe's size, and the pipe's end draws joined.
+2. What the code does: `EquipmentStructure.refreshNozzles` sizes a nozzle only from a pipe whose block state is
+   connected towards it. Since `8680edbb6` (2026-11-09, drawn connections) that state is the network's as-built joins
+   (`PhysicalFluidTopology.builtFaces`), which hold only registered devices and leave a running column's ports out on
+   purpose. A column is not a `fluidDevice()`, so the pipe never counts as joined: the nozzle stays at its default size
+   and the pipe's end draws as a dead end.
+3. The same holds for every kind with nozzles that is not a `fluidDevice()`: `STIRRED_REACTOR`, `ADSORBER`,
+   `TRICKLE_BED_REACTOR`, `EBULLATED_BED_REACTOR`, `CYCLONE`, `FCC_CONVERTER`, `DELAYED_COKER`, `FLUIDIZED_BED_BOILER`,
+   `FLUIDIZED_BED_GASIFIER`, `GRATE_BOILER`, `FIXED_BED_GASIFIER`. The registered kinds (drums, tanks, spheres, towers,
+   movers, turbines, exchangers, heaters, stills, stacks, converters) are not affected.
+4. Proposal for the owner: `builtFaces` counts a pipe face that meets a nozzle port of a recorded structure
+   (`WorldTopologyLedger.Structure`, read from the registry, no block read) as built, for every kind. The nozzle refresh
+   and the pipe's drawing then need no rule of their own, and the network does not change. It is a change in
+   `runtime/fluid/`, outside this batch's files: a batch of its own, from `main`.
+
+### K16 The air cooler's largest bay is small
+
+Owner: "make max size single AC model larger (as well as their duty) and correspond to realistic scale".
+
+- Now: bays 1.5 to 3 m wide, 2 to 6 m long. The largest has a 12.2 m² bundle face, two 1.9 m fans, 61 m² of bare tube,
+  about 0.86 MW at a 20 K air rise (`AIR_CAPACITY` 3,500 W/K per m² of face), 12 kW of fans.
+- Real bays (API 661): tubes 9 to 12 m (to 18 m), bays 3 to 6 m wide with two fans of 1.8 to 4.9 m.
+- Proposed largest bay: 6 m wide, 12 m long: a 60.1 m² face, two 4.55 m fans (`UnitRatings.fans` already picks them,
+  coverage 0.54), 300 m² of bare tube, about 4.2 MW at 20 K, 60 kW of fans. The duty follows the face by today's law.
+- Not planned yet: the look at that size (two bundles, header nozzles, plenum, drive), the simulator's bay choice, the
+  layout rows. Existing sizes keep their rows.
