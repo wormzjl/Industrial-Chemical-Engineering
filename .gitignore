@@ -96,6 +96,38 @@ CLAUDE.md
 /documentation/**/*.mca
 /documentation/**/*-logs/
 
+# Large files stay out of tools/ (AGENTS.md): they live in the main checkout's research/tools/<folder>/.
+/tools/**/*.png
+/tools/**/*.jpg
+/tools/**/*.jpeg
+/tools/**/*.gif
+/tools/**/*.webp
+/tools/**/*.bmp
+/tools/**/*.pdf
+/tools/**/*.mca
+/tools/**/*.jfr
+/tools/**/*.dll
+/tools/**/*.pyd
+/tools/**/*-logs/
+/tools/**/TEST-*.xml
+/tools/**/binary/
+/tools/accessory-refinements/mcp-fixture/
+/tools/gauge-accessories/mcp-fixture/
+/tools/junction-holdup-prototype/run*.xml
+/tools/session-transcripts/**/*.jsonl.gz
+/tools/phase-ports-probes/**/scenarios.txt
+/tools/wti-pumping-rate-hold/fix-final-lane/all-printed-references.txt
+/tools/neural/retired/resources/
+/tools/unified-thermo-port-test-world/world-template/
+/tools/benchmark-population/v1/**/*.jsonl
+/tools/transformer-promotion/inputs/*.jsonl
+/tools/neural/gen3-case-map.jsonl.gz
+/tools/neural/generalized-case-map.jsonl.gz
+/tools/neural/gen3-model-card.json
+/tools/pump-compressor-controls/python-deps/
+# The fluid in-game rig copies its template world (run-client.js, run-server.js).
+!/tools/fluid-in-game-rig/template/**/*.mca
+
 # Local JDK installation
 /oracleJdk-25/
 # Scratch output (owner rule: <repo root>/tmp/<name>/, indexed in tmp/INDEX.md)
