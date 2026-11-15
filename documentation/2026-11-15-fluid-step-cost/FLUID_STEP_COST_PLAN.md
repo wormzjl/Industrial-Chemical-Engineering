@@ -60,6 +60,35 @@ One bench pair on the final code against the 0.31.0 baseline (`mixed100`, JFR). 
 - **Factoring the declared pattern as it is:** thousands of entries that are structurally zero become fill.
 - **Analytic rows now:** under 13 % of the step, about 30 row forms and every law derived by hand, entries that move near the sixth digit. Decided again after S3.
 
+## 4b. S0 measured (2026-11-15): the census
+
+`tools/fluid-step-cost/` (`PatternCensusTest` on the hold-fuzz worlds, seeds 1 to 200, 4 threads; output `tmp/pattern-census/census-2.txt`). 46,242 Newton factorizations of the step; a declared entry is classed by row kind, column kind and relation (own block; the other node of a connection, by whether the column's node is upstream at the iterate's law flow; the connection's rows and columns). Counts only, no times.
+
+| | Share of the declared entries |
+|---|---|
+| Declared (mean 9,568 a factorization) | 1.000 |
+| Kept today (not exactly zero; mean 4,295) | 0.449 |
+| Never kept in any world: an equilibrium, normalization or wall row against another node's columns | 0.311 |
+| Never kept: any row of a node against the columns of a node downstream of it, or across a stopped connection | about 0.2 |
+| A mask by class and direction (every class that is ever kept) | 0.507 (1.13 times today's) |
+| A mask by class for both directions | 0.675 (1.50 times today's) |
+
+Between consecutive factorizations of one pattern (5,562 transitions on 256 tracked patterns):
+
+- the kept set changes in 92.7 % (the bench read 91 % of columns searched again: the same thing);
+- a connection changes direction or stops in 26.3 %;
+- the kept set changes with no direction change in 66.5 %, by 57 entries on average. Of those entries 57 % are a vessel's component balance against another component's amount in its own block, 16 % a junction's mixing row against a law flow, 9 % a mixing row against an upstream amount.
+
+What it says:
+
+1. **Rounding is not the cause.** Of the entries that are kept in one factorization and not in another, 5 % have a largest size under 1e-12 of their row; the rest are real derivatives that are exactly zero at some states (a draw that stands, a compound absent from an outflow). Form B (a noise floor) is ruled out. The review's sentence "zero or 1e-20 by rounding" was wrong.
+2. **The declared pattern is a third fiction.** A node's equilibrium, normalization and wall rows never read a neighbour (`nodeTargetRows` writes only the inflow rows), yet `columnRows` declares the neighbour's whole block. The ordering is computed on that pattern. Whether a true pattern gives less fill is the first thing to measure.
+3. **Upwinding makes half of the cross-node entries zero**, and which half follows the flow's direction: a state, not a structure. A mask that knows the direction is 13 % larger than today's kept set and changes when a flow turns (26 % of the transitions on these transient worlds; fewer on a plant that runs). A mask for both directions never changes and is 50 % larger.
+
+So S1's forms are (each against today's, C): **F1** the declaration made true (the never-kept classes leave `columnRows`; zeros are dropped as today): the ordering's effect alone. **F2** F1 and every declared entry of the upstream direction kept (the pattern changes only when a flow turns or a nonzero appears outside the mask, which a gate counts). The both-directions mask is not built: half again the entries.
+
+Expected (est.), to be measured: F2 removes the reach search on a running plant (up to 10 % of the step) and adds 13 % to the matrix's entries; F1 and F2 change the fill through the ordering, in a direction only the bench can give. The net may be small.
+
 ## 5. Commands
 
 - Step tests: `./gradlew --console=plain test --tests '*SparseNewtonTest' --tests '*UpLookingLuParityTest' --tests '*PassiveStepSolverTest' --tests '*DirectLiquidJacobianRowsTest' --tests '*PhaseLayoutTest'`

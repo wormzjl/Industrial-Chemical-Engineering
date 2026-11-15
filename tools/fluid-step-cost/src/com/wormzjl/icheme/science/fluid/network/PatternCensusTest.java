@@ -140,13 +140,15 @@ class PatternCensusTest {
      * whether it was seen zero (1) and nonzero (2), and its largest row ratio over the nonzero sightings. */
     static final class PatternStats {
         final int[] code;final byte[] seen;final double[] largest;
-        PatternStats(int entries){code=new int[3*entries];Arrays.fill(code,-1);seen=new byte[3*entries];largest=new double[3*entries];}
+        /** The last factorization of this pattern: which entries it kept and their direction slots. */
+        boolean previous;final boolean[] previousKept;final byte[] previousSlot;
+        PatternStats(int entries){code=new int[3*entries];Arrays.fill(code,-1);seen=new byte[3*entries];largest=new double[3*entries];previousKept=new boolean[entries];previousSlot=new byte[entries];}
     }
 
     /** Per-thread scratch: the last pass's structure and the per-factorization arrays. */
     static final class Scratch {
         Structure structure;double[] rowMaximum=new double[0];int[] codes=new int[0];byte[] slots=new byte[0];
-        final long[] sightings=new long[CODES],kept=new long[CODES];
+        final long[] sightings=new long[CODES],kept=new long[CODES],sameSlot=new long[CODES];
         Structure of(StepEquations equations){if(structure==null||structure.equations!=equations)structure=new Structure(equations);return structure;}
     }
 
@@ -158,6 +160,10 @@ class PatternCensusTest {
         private final Set<Integer> untrackedPatterns=new HashSet<>();
         private long untrackedFactorizations,factorizations,declared,kept,mismatches,failures;private String firstFailure;
         private final long[] sightings=new long[CODES],keptSightings=new long[CODES];
+        /** Consecutive factorizations of one tracked pattern: how many, how many kept another set of entries, how many
+         * had a connection change its direction slot, and the entries that changed with their slot unchanged, by class. */
+        private long transitions,numericChanged,directionChanged,numericChangedSameDirection,changedEntries,changedEntriesSameSlot;
+        private final long[] sameSlotChanges=new long[CODES];
         private final Map<String,long[]> other=new TreeMap<>();
 
         @Override public void factored(Object equations,double[] x,int[] offsets,int[] rows,double[] values) {
@@ -197,9 +203,17 @@ class PatternCensusTest {
                 }
             }
             if(stats==null)return;
-            long mismatched=0;
+            long mismatched=0,changed=0,changedSame=0,slotMoves=0;boolean had;
+            Arrays.fill(local.sameSlot,0);
             synchronized(stats) {
+                had=stats.previous;stats.previous=true;
                 for(int e=0;e<entries;e++) {
+                    boolean keptNow=values[e]!=0;
+                    if(had) {
+                        boolean moved=slots[e]!=stats.previousSlot[e];if(moved)slotMoves++;
+                        if(keptNow!=stats.previousKept[e]){changed++;if(!moved){changedSame++;local.sameSlot[codes[e]]++;}}
+                    }
+                    stats.previousKept[e]=keptNow;stats.previousSlot[e]=slots[e];
                     int index=3*e+slots[e];
                     if(stats.code[index]<0)stats.code[index]=codes[e];else if(stats.code[index]!=codes[e])mismatched++;
                     double value=values[e];
@@ -209,7 +223,15 @@ class PatternCensusTest {
                     if(Double.isFinite(ratio)&&ratio>stats.largest[index])stats.largest[index]=ratio;
                 }
             }
-            if(mismatched>0)synchronized(this){mismatches+=mismatched;}
+            synchronized(this) {
+                mismatches+=mismatched;
+                if(had) {
+                    transitions++;if(changed>0)numericChanged++;if(slotMoves>0)directionChanged++;
+                    if(changed>0&&slotMoves==0)numericChangedSameDirection++;
+                    changedEntries+=changed;changedEntriesSameSlot+=changedSame;
+                    for(int c=0;c<CODES;c++)sameSlotChanges[c]+=local.sameSlot[c];
+                }
+            }
         }
 
         /** Per class: declared, never kept, always kept, flipping, the four ratio bins of the flipping ones, sightings, kept sightings. */
@@ -255,10 +277,21 @@ class PatternCensusTest {
                 if(sum[0]==0&&sum[8]==0)continue;
                 b.append("| ").append(relation.label).append(' ').append(cells(sum));
             }
+            b.append("\n## Consecutive factorizations of a tracked pattern\n\n");
+            b.append(String.format(Locale.ROOT,"TRANSITIONS %d; kept another set of entries %d (%.4f); a connection changed direction or stopped %d (%.4f); kept set changed with no direction change %d (%.4f)\n",
+                    transitions,numericChanged,share(numericChanged,transitions),directionChanged,share(directionChanged,transitions),numericChangedSameDirection,share(numericChangedSameDirection,transitions)));
+            b.append(String.format(Locale.ROOT,"TRANSITIONS entries that changed %d (mean %.1f a transition); of them with their direction unchanged %d (mean %.1f)\n\n",
+                    changedEntries,share(changedEntries,transitions),changedEntriesSameSlot,share(changedEntriesSameSlot,transitions)));
+            b.append("| row kind | column kind | relation | entries that changed, direction unchanged | share |\n|---|---|---|---:|---:|\n");
+            Integer[] order=new Integer[CODES];for(int c=0;c<CODES;c++)order[c]=c;
+            Arrays.sort(order,(x,y)->Long.compare(sameSlotChanges[y],sameSlotChanges[x]));
+            for(int rank=0;rank<25&&sameSlotChanges[order[rank]]>0;rank++){int c=order[rank];
+                b.append(String.format(Locale.ROOT,"| %s | %s | %s | %d | %.4f |\n",rowOf(c).label,columnOf(c).label,relationOf(c).label,sameSlotChanges[c],share(sameSlotChanges[c],changedEntriesSameSlot)));}
             b.append("\n## Other equations (by class)\n\n| class | factorizations | declared | kept | mean declared | mean kept |\n|---|---:|---:|---:|---:|---:|\n");
             other.forEach((name,counts)->b.append(String.format(Locale.ROOT,"| %s | %d | %d | %d | %.1f | %.1f |\n",name,counts[0],counts[1],counts[2],counts[1]/(double)counts[0],counts[2]/(double)counts[0])));
             return b.toString();
         }
+        private static double share(long part,long whole){return whole>0?part/(double)whole:0;}
         private static String cells(long[] cell) {
             var b=new StringBuilder();
             for(int f=0;f<FIELDS;f++)b.append("| ").append(cell[f]).append(' ');
