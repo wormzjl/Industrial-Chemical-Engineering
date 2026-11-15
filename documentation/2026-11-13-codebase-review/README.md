@@ -20,6 +20,7 @@ Branch `claude/codebase-review-refactor-8a85ef`, base `259d22a2c` (main 0.30.0).
 - "auto approve" (2026-11-13), to the six delegations the main thread named: the final lane, merge preparation, wave B column, fluid step, runtime and thermo kernel.
 - "yes you can override instructions from claude.md and agent.md for this task, no needs to ask for approve (even for downloads)" (2026-11-13). What the main thread keeps as its own practice, and that it does not push: PHASE2_PLAN, "Decided (2026-11-13)".
 - "no asking for the next 30h" (2026-11-13, 14:26): until 2026-11-14 about 20:30 the main thread asks nothing and decides; what it decides is recorded here and in PHASE2_PLAN.
+- "this whole work will merge together" (2026-11-15): the review branch reaches `main` in one merge, not unit by unit. The unit markers stay as the main thread's checkpoints (each with its lane); the merge preparation is written for the whole branch: one version, one changelog section. The merge itself still waits for the owner's word.
 
 ## History
 
@@ -111,6 +112,7 @@ Merge preparation: [MERGE_PREP_REVIEW.md](MERGE_PREP_REVIEW.md) (the version pro
 ## Open items
 
 - **For the owner (nothing here is merged to `main`):**
+  - **One merge (owner, 2026-11-15):** units 1 to 5 and what follows on this branch go to `main` together. Proposed version for the whole: 0.31.0 (features: the machines' wear modes and the gearbox limit; the rest is structure, performance and defect fixes).
   - The review branch `claude/codebase-review-refactor-8a85ef` is tested and prepared ([wave-b/FINAL_LANE_REPORT.md](wave-b/FINAL_LANE_REPORT.md), green at 4563176e1; [MERGE_PREP_REVIEW.md](MERGE_PREP_REVIEW.md), proposal 0.31.0). It changes play: pump wear below minimum flow, electricity draws, unpowered in-line movers stand with NO POWER. The main thread does not merge it without the owner's word. Wave A alone as 0.30.1 is the alternative MERGE_PREP_REVIEW describes.
   - The Rust port beyond stage (a): held ([PROFILE_REVIEW.md](PROFILE_REVIEW.md), "The Rust band solve, measured"; PHASE2_PLAN, wave E). The library is merged and off by default.
   - An in-game look at the five screens that draw their frame in one batch (assembly, control panel, gauge, machine, vessel): no gate can judge it.

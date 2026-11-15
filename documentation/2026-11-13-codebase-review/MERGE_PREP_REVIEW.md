@@ -2,6 +2,8 @@
 
 Branch `claude/codebase-review-refactor-8a85ef` at e1b082cc1 (code at 4563176e1), against `main` 259d22a2c (0.30.0). Covers what merged after wave A's preparation (fd7786fee): wave B (B-T1, B-S1, B-S2, B-R1, B-M1, B-E1, B-C1, B-K1), C1a, G0, G1 part 1, Rust stage (a) parts 1, 2a and 2b, the level law fix and the wave A GameTest fixes. Documents only: no Gradle, cargo or JVM run, no source or build file changed. The final lane for this code is the second run of [wave-b/FINAL_LANE_REPORT.md](wave-b/FINAL_LANE_REPORT.md) (green at 4563176e1).
 
+**Owner, 2026-11-15: "this whole work will merge together".** The branch goes to `main` in one merge. Read every "in a merge of its own" alternative below as not chosen: the sections per unit stay as the record of each unit's preparation, and the whole branch takes one version (0.31.0 proposed) and one changelog section.
+
 ## Version proposal (the owner chooses)
 
 - **Proposed: one merge as 0.31.0 (minor).** By the CHANGELOG's Version rule a merge that holds a feature, a solver or model change or new content is minor. This unit holds all three: a new wear mode (low flow of centrifugal pumps) and the fault table, a model change of the electricity a driver pays (G0), the water module (a stated last-digit shift of wet states), the Rust column library replacing the C++ one, and the level law. The wave A fixes ride along. Needs: nothing more than what stands (the second final lane at 4563176e1, this preparation, no translation commit).
