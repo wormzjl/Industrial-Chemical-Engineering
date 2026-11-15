@@ -1,275 +1,187 @@
-# Heat exchangers: heat sides, the coupling across islands and built-in control
+# Heat exchangers: the heat laws, the curve, the relay and built-in control
 
-Up: [code guide](README.md)
+Up: [code guide](README.md) · heat units in the world (registration, the coupling across islands, control lines, saves,
+the screen): [heat-units.md](heat-units.md)
 
 ## Read this when
 
-- An exchanger, kettle, air cooler or fired heater moves the wrong heat, its outlet stands at the wrong temperature, or it moves none.
-- A side's status line says `LIMITED`, `LOW LIMIT`, `DUTY INSUFFICIENT`, `LINES NOT CHECKED`, `LINES NOT COMPLETE` or `LINES COMPLETE`, and you need to know why.
-- Two coupled islands wake each other, never certify, or one waits for the other (the coupling fence).
-- You change a heat law, the films, a unit's surface or passage, the built-in controller, the kettle's pool, the fired heater's coils or an exchanger's control lines.
-- You change a heat unit's facts (`HeatUnit`, fluid facts schemas 5, 6 and 9), the heat in transit, or what a heat side's screen receives (`HeatPresentation`, protocol `fluid-16`).
-- A running column's cooling water takes too little heat or none, its feed valve passes the wrong flow, or the column reads `LIMITED: condenser` (the column's side: [column-operation.md](column-operation.md)).
-- You rebuild the heat review world (`HeatExchangerReviewWorld`, `runReviewWorldServer`).
+- An exchanger, kettle, air cooler, fired heater or a gas turbine's steam coil moves the wrong heat, its outlet stands at
+  the wrong temperature, or it moves none.
+- A side's status says `LIMITED`, `LOW LIMIT` or `DUTY INSUFFICIENT`, and you need the controller's reason.
+- You change a heat law, the films, the curve, the wall solve, the give-back, a unit's surface or passage, the
+  controller, the kettle's pool, the fired heater's coils, or the crossflow routing.
 
-The step's equations, junctions and booking are in [fluid-science.md](fluid-science.md). Islands, certificates, checkpoints and packets are in [fluid-runtime.md](fluid-runtime.md). The units' shapes and nozzles are in [equipment.md](equipment.md). The walk and the matcher that check an exchanger's lines are in [machine-assemblies.md](machine-assemblies.md). The Control tab and the flowsheet are in [client-gui.md](client-gui.md).
+The step's equations, junctions and booking: [fluid-science.md](fluid-science.md). The units' shapes and nozzles:
+[equipment.md](equipment.md). A running column's utilities: [column-run.md](column-run.md).
 
-## In one paragraph
+## What it does
 
-Physically, an exchanger passes a hot and a cold stream past a steel wall in counterflow; an air cooler blows ambient air over finned tubes; a fired heater burns fuel, gives most of its heat to a radiant coil and the rest, in the flue gas, to a convection coil; a kettle boils a pool of liquid around a tube bundle. In code, each passage of a unit is a fluid device of kind `HEAT_SIDE` with inlet and outlet ports, and a kettle's shell is a closed vessel. A side compiles as an inline filter does: its passage is one pipe between its inlet node and a junction at its outlet, and that pipe carries a **heat law** (`HeatLaw`: `HeatSide`, `AirCooled`, `FiredCoil`, `ConvectionCoil`). Inside a step's Newton the heat is a pure function of the connection's flow and the donor's specific enthalpy, on the donor stream's enthalpy-temperature-film curve (`HeatCurve`): no unknown, no mode, exactly zero at no flow. Everything else is a slice input fixed before the Newton: an air cooler's louvers and fans and a radiant coil's firing are planned at each step's start; an exchanger's wall, its bypass and its give-back are planned at each slice's start from the other side as read. The wall holds no heat (owner Q10). The two sides of an exchanger may sit in two islands; they exchange only energy, through a **relay**: each side plans against its partner's record as of its slice start (the fence, form C, owner Q16), and what the two sides booked differently waits as the exchanger's **heat in transit**, a fact on the pair, returned by the give-back. The heat enters the receiver's energy row as a mover's work does and is booked as a `HEAT` boundary at the connection, so the ledger, the audit, the certificate replay and the checkpoint carry it. Each controllable side has a built-in controller (`HeatControl`) that sets its own actuator between slices or steps, dead-beat on its own law; an exchanger whose lines are complete works a real control valve instead (W8). A running column's condenser water side in the COLUMN mode lets the column set the mass flow of its feed valve (U2).
+An exchanger passes a hot and a cold stream past a steel wall in counterflow; an air cooler blows ambient air over
+finned tubes; a fired heater burns fuel, gives most of its heat to a radiant coil and the rest, in the flue gas, to a
+convection coil; a kettle boils a pool around a tube bundle; a gas turbine's exhaust raises steam in one coil. Each
+passage of a unit compiles as one pipe that carries a **heat law** (`HeatLaw`: `HeatSide`, `AirCooled`, `FiredCoil`,
+`ConvectionCoil`, `ExhaustCoil`). Inside a step's Newton the heat is a pure function of the connection's flow and the
+donor's specific enthalpy, on the donor stream's enthalpy-temperature-film curve (`HeatCurve`): no unknown, no mode,
+exactly zero at no flow. Everything else is a slice input fixed before the Newton: an air cooler's louvers and fans, a
+radiant coil's firing and a convection coil's flue are planned at each step's start; an exchanger's wall, its bypass and
+its give-back at each slice's start from the other side as read (`ExchangerRelay`). The wall holds no heat. What the two
+sides of an exchanger booked differently waits as the exchanger's heat in transit, returned by the give-back. Each
+controllable side has a built-in controller (`HeatControl`), dead-beat on its own law.
 
 ## Class map
 
-Paths are relative to `src/main/java/com/wormzjl/icheme/`.
+Paths under `src/main/java/com/wormzjl/icheme/`. Lines at the snapshot.
 
-| Class | Role | Read it for |
+| Class | Role | Lines |
 |---|---|---|
-| **Heat laws (`science/fluid/network`, Minecraft-free)** | | |
-| [`HeatLaw`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/HeatLaw.java) | Sealed: `heat(curve, inlet, massFlow)` (W into the stream), `coldest`/`hottest` (the span the donor's curve covers, 10 K beyond), `films`, `shape()` (the facts that shape the equations, part of the connection's identity) | The contract every law keeps |
-| [`HeatSide`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/HeatSide.java) | An exchanger side or a kettle's tubes: facts `area`, `films`, `partner` (the other side's connection id, 0 for none), `control`; slice inputs `wall` (K per cell, in a forward flow's order), `bypass`, `giveBack` (J/kg on the whole flow), `active` (the sit-out), `limit` | The march through the cells; a reversed flow meets the cells the other way |
-| [`AirCooled`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/AirCooled.java) | An air cooler's process side against air at a constant temperature; `fanLimit` (the most of full speed its fans may turn this slice: 0 when its electric store is empty, 1 otherwise; `airShare` = min(draught, the air at that limit with the louvers open), so an unpowered bank falls to natural draught; never a fact); `Air` (per m² of face: bare tube, fin film, air capacity rate, `natural` draught share); `draught` the actuator (0 louvers shut, `natural` louvers open and fans still, 1 full fans), `fans()`, `louvers()`, `planned` | UA_eff = C (1 − e^(−UA/C)) per phase; louvers |
-| [`FiredCoil`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/FiredCoil.java) | A fired heater's radiant coil: `setTemperature`, `duty`, `firing` (β), `partner` (its convection coil); `planned` | β · \|ṁ\| · (h_set − h_in), at most the duty |
-| [`ConvectionCoil`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/ConvectionCoil.java) | A fired heater's convection coil (F1): counterflow against the flue gas leaving the radiant box; `conductance` (UA), `radiant` (its radiant coil's id), `flue` (C_g, W/K); `FLAME` 2073.15 K, `BRIDGEWALL` 1073.15 K, `flueOf(radiantHeat)` | ε C_min (T_bw − T_in) |
-| [`HeatCurve`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/HeatCurve.java) | One stream's h-T-film curve, fixed for a step: `sample` (16 divisions, phase changes bisected to 1e-5 K, refined to 0.2 K off the chord, knots at vapour fractions `LIQUID_UNTIL` 0.05 and `GAS_FROM` 0.95, at most 512 knots), `march` (exact per segment), `temperatureAt`, `enthalpyAt` (a plateau's vapour end), `lowestEnthalpyAt` (its liquid end), `temperatureSlope`, `withFilms`; `Films` (`DEFAULT` 2000, 5000, 100 W/m²K) | The film per phase on the curve; C1 extension past the end knots, with no notice (owner Q15) |
-| [`ExchangerRelay`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/ExchangerRelay.java) | The relay as pure functions: `Partner` (the other side as read, or a kettle's pool as a `Bath`; `model`, `withModel`: the model of the island it was read from, since each island carries its own compound list, so `PassiveStepSolver.reading` evaluates the partner's stream on it), `Read` (partner, stopped, transit due, partner's slice length, sit-out, `Operation`, `heatRate`, `ceiling`; `NONE` moves no heat, `column(due, seconds, ceiling, heatRate)` a running column's condenser, `withOperation`), `Operation(valve, feed, ratio, rise)` (`bypass(valve)`, `feed(valve, ratio)` W8; `column(valve, rise)` U2, a feed valve a column sets), `wall` (the 8-cell quasi-steady wall), `bathWall`, `plan`, `planPool`, `capacityRate`, `share`; `TOLERANCE` 0.01 K, `MAXIMUM_SWEEPS` 200, `BYPASS_TOLERANCE` 1e-6, `MAXIMUM_ROUNDS` 8 | How a side heads for the wall and gives back its share of the transit |
-| [`HeatControl`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/HeatControl.java) | The built-in controller: `Target` MANUAL, OUTLET_TEMPERATURE, DUTY; `value`, `lowLimit`, `manual`; `Limit` NONE, LOWEST, HIGHEST, LOW_LIMIT; `setting` (an Illinois root on the side's own law, the give-back not counted) | Dead-beat control; why an actuator stands at an end |
-| [`Pool`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/Pool.java) | A kettle's pool on its vessel's `Inventory`: facts `id`, `partner`, `area`, the bundle's `bottom` and `bundle` diameter; slice inputs `wall`, `giveBack` (W), `active`; `wetted`, `film`, `heat` | The bundle's heat into the vessel; the film follows the level |
-| **Geometry (`science/equipment`)** | | |
-| [`HeatSides`](../../../src/main/java/com/wormzjl/icheme/science/equipment/HeatSides.java) | `Unit` EXCHANGER, KETTLE, AIR_COOLER, FIRED_HEATER; `Side` TUBE, SHELL, PROCESS, CONVECTION, RADIANT; `unit(kind)`, `of(shape)` (each side's nozzle roles, surface and passage, in registration order), `pool(kind)`, `kettleBundle`, `kettleShell`, `heatSide(...)` (the law a side's facts give), `coilDuty`, `airFilms`, `fanPower`, `airCoolerSurface`; `AIR`, `AIR_TEMPERATURE` 298.15 K, `EXCHANGER_CELLS` 8. The cooling utilities the column and the process simulator share: `AIR_SPLIT_TEMPERATURE` 313.15 K (the air plus 15 K) and `airSplit(top, receiver)`, `TOWER_WATER_TEMPERATURE` 298.15 K, `WATER_RANGE` 10 K, `WATER_APPROACH` 5 K, `coolingWaterOutlet(inlet, coldEnd)` = min(inlet + range, cold end − approach) | What a unit registers and how big its surface and passage are |
-| **Runtime (`runtime/fluid`)** | | |
-| [`HeatUnit`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/HeatUnit.java) | A side's facts on its registration (`PhysicalFluidTopology.Device.heat`): `fanCount` (an air cooler's fans, one 4-pole motor each, at most `MAXIMUM_FANS` 72; 0 for a side saved before schema 11 until its structure restates it), `unit`, `side`, `area`, `partner` (the other side's registration), `Control(mode, target, lowLimit, share)`, `transitJoule`; `Mode` OFF, OUTLET_TEMPERATURE, DUTY, FIRING, RATIO, COLUMN; `heatSide()`, `controller()`, `controllable()`, `lines()`, `pool()`, `fans()`, `burners()` | The control a player sets; which law a side compiles to |
-| [`IslandCoordinator`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/IslandCoordinator.java) (its exchanger coupling section) | `Coupled` relay state per side (two `SideRecord`s, booked spans, at most `MAXIMUM_BOOKED` 64), `SideKind` EXCHANGER (exchanger sides, kettle tubes and pools), RADIANT, CONVECTION; `coupledThrough` (the fence), `reads`, `booked`, `moved`, `flushWakes`, `operations`, `operation(side)`, `transits`, `settledTransit`, `transit`, `removeTransit`, `owe` and `transitAsOf` (a running column's condenser); `WAKE_TEMPERATURE` 0.05 K, `WAKE_FLOW` 1e-3, `WAKE_TRANSIT` 1e-3; `KEEP_UNREAD_TICKS` 4000 | When a coupled side may solve, what it reads, when a partner wakes |
-| [`HeatPresentation`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/HeatPresentation.java) | Completes a side's `FluidView.Heat` where its view is built: the actuator (`FluidView.Heat.ACTUATORS`: none, bypass, bypass_valve, feed_valve, fans, louvers, burners) and its effort, the controller's limit, every port of the unit with its stream, and an exchanger's lines part by part | What the Control tab and the stream switch show (presentation reads only) |
-| [`FluidWorldAuthority`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/FluidWorldAuthority.java) (heat parts) | `placeUnit(sides, vessel)` and `removeUnit(ids)` (one ledger event each, the pair whole), `UnitSide`, `UnitVessel`; `edit` moves a fired heater's partner coil in the same event; `Lines` (`Status` NOT_VALIDATED, CHECKED, UNMETERED, COMPLETE), `lines(side, value)`, `operate`, `holdValves`; `controlStatus`, `linesStatus`; the transit loaded from and written to the facts | Registration, status lines, the real valves |
-| **Assembly (W8)** | | |
-| [`science/assembly/ExchangerBlueprint`](../../../src/main/java/com/wormzjl/icheme/science/assembly/ExchangerBlueprint.java) | `Lines` NONE, BYPASS, RATIO, FEED; `Design(tube, shell)`; slots `<side>_inlet_tee`, `_bypass_valve`, `_outlet_tee`, `_feed_valve`, `_meter`, `_feed_meter`; `operated(side, lines)`; `of(design)` | What an exchanger's controls ask for |
-| [`runtime/assembly/ExchangerLines`](../../../src/main/java/com/wormzjl/icheme/runtime/assembly/ExchangerLines.java) | `design` (from the sides' registered controls), `publish` (a report as each side's `Lines`, with the valve its control works) | How a check reaches the solver |
-| **Client** | | |
-| `client/gui/common/HeatControlColumn`, `HeatDiagram`, `HeatFlowsheet` | The Control tab, the unit's flowsheet on a design grid, the stream switch ([client-gui.md](client-gui.md)) | The screen |
+| **`science/fluid/network/`** (Minecraft-free) | | |
+| [`HeatLaw`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/HeatLaw.java) | Sealed: `heat(curve, inlet, massFlow)` (W into the stream), `coldest`, `hottest` (the span the donor's curve covers), `films`, `shape()` (the facts that shape the equations, part of the connection's identity) | 24 |
+| [`HeatSide`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/HeatSide.java) | An exchanger side or a kettle's tubes: facts `area`, `films`, `partner`, `control`; slice inputs `wall` (K per cell, in a forward flow's order), `bypass`, `giveBack` (J/kg on the whole flow), `active` (the sit-out), `limit` | 82 |
+| [`AirCooled`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/AirCooled.java) | An air cooler's process side against air at a constant temperature; `Air` (per m² of face: bare tube, fin film, air capacity rate, `natural` draught share); `draught` (0 louvers shut, `natural` fans still, 1 full fans), `fans()`, `louvers()`, `fanLimit` (the most of full speed its fans may turn this slice), `planned` | 99 |
+| [`FiredCoil`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/FiredCoil.java) | A fired heater's radiant coil: `setTemperature`, `duty`, `firing` (β), `limit` (the share its burners can fire), `partner`; `planned` | 50 |
+| [`ConvectionCoil`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/ConvectionCoil.java) | The convection coil: counterflow against the flue gas leaving the radiant box; `conductance`, `radiant`, `flue`; `FLAME`, `BRIDGEWALL`, `flueOf(radiantHeat)`, `stackTemperature` | 61 |
+| [`ExhaustCoil`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/ExhaustCoil.java) | A gas turbine's steam coil, designed to its pinch: `APPROACH`, `PINCH`, `COLD` | 59 |
+| [`HeatCurve`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/HeatCurve.java) | One stream's h-T-film curve, fixed for a step: `sample`, `of`, `march` (exact per segment), `temperatureAt`, `enthalpyAt` (a plateau's vapour end), `lowestEnthalpyAt` (its liquid end), `temperatureSlope`, `withFilms`; `Films` (`DEFAULT`); `LIQUID_UNTIL`, `GAS_FROM`, `BOUNDARY_KELVIN` | 226 |
+| [`ExchangerRelay`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/ExchangerRelay.java) | The relay as pure functions: `Partner` (the other side as read, or a kettle's pool as a `Bath`; `model`, `withModel`), `Read` (`NONE`, `column`, `heating`, `withOperation`, `gives`), `Operation` (`bypass`, `feed`, `column`), `plan`, `wall`, `planPool`, `bathWall`, `capacityRate`, `TOLERANCE` | 372 |
+| [`CrossflowHeat`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/CrossflowHeat.java), [`HeatRouting`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/HeatRouting.java) | A two-pass tube bundle against a shell mixed between crossflow rows, on the relay's wall solver; the routings `SERIES`, `TWO_PASS_TUBES`, `MIXED_CROSSFLOW` (`grid`) | 123, 112 |
+| [`HeatControl`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/HeatControl.java) | The built-in controller: `Target` MANUAL, OUTLET_TEMPERATURE, DUTY; `value`, `lowLimit`, `manual`; `Limit` NONE, LOWEST, HIGHEST, LOW_LIMIT; `setting` (an Illinois root on the side's own law) | 76 |
+| [`Pool`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/Pool.java) | A kettle's pool on its vessel's `Inventory`: facts `id`, `partner`, `area`, the bundle's `bottom` and diameter; slice inputs `wall`, `giveBack` (W), `active`; `wetted`, `film`, `heat` | 124 |
+| **`science/equipment/`** | | |
+| [`HeatSides`](../../../src/main/java/com/wormzjl/icheme/science/equipment/HeatSides.java) | `Unit` EXCHANGER, KETTLE, AIR_COOLER, FIRED_HEATER, PRIME_MOVER; `Side` TUBE, SHELL, PROCESS, CONVECTION, RADIANT, EXHAUST; `unit(kind)`, `of(shape)` (each side's nozzle roles, surface and passage, in registration order), `pool(kind)`, `kettleBundle`, `kettleShell`, `heatSide(...)`, `coilDuty`, `airFilms`, `fanPower`, `airCoolerSurface`; `AIR`, `AIR_TEMPERATURE`, `EXCHANGER_CELLS`, `CONVECTION_U`, `NATURAL_DRAUGHT`; the cooling utilities the column and the simulator share: `AIR_SPLIT_TEMPERATURE`, `airSplit`, `TOWER_WATER_TEMPERATURE`, `WATER_RANGE`, `WATER_APPROACH`, `coolingWaterOutlet` | 251 |
+| [`ExchangerType`](../../../src/main/java/com/wormzjl/icheme/science/equipment/ExchangerType.java) | The exchanger configuration catalog (`CATALOG`: `STANDARD`, `CROSSFLOW`), saved by name: `key`, `cells`, `routing(side)`, `Layout`, `tubePassage`, `shellPassage` | 71 |
 
 ## Main flow
 
-```mermaid
-flowchart TD
-  ES[EquipmentStructure.register: a whole heat unit] --> PU[FluidWorldAuthority.placeUnit: one ledger event]
-  PU --> CMP[PhysicalFluidTopology.compile: passage pipe sideIdentity with its HeatLaw; a kettle's shell carries its Pool]
-  CMP --> ISL[IslandCoordinator.topology]
-  ISL --> FEN{coupledThrough: every partner committed through, certified, stopped or absent?}
-  FEN -->|yes| RD[reads: partner record as of the slice start, transit due, sit-out, operation, heat rate]
-  RD --> CMD[FluidIslandCommand with reads]
-  CMD --> CPL[worker: PassiveStepSolver.couple at the interval start: wall, bypass, give-back, pool, flue, valve target]
-  CPL --> STEP[each step: plan firing, louvers and fans, local flue; Newton with the heat in the energy rows]
-  STEP --> REC[ConservativeTransport: HEAT boundaries at the connection or the pool key]
-  REC --> BK[closeRound / replay: booked: heat leaves the transit, records move]
-  BK --> WK[moved: a certified partner whose read moved is woken at flushWakes]
-  BK --> VIEW[bucket: view + HeatPresentation: status lines, ports, lines]
-```
+One coupled exchanger side in one slice (the engine side is in [heat-units.md](heat-units.md)):
 
-1. **Build.** A whole exchanger, kettle, air cooler or fired heater registers through `EquipmentStructure.register` ([equipment.md](equipment.md)): one `UnitSide` per `HeatSides.of(shape)` entry, at its first inlet's cell (`ShapeRasterizer.fluidCells`), its inlet and outlet nozzles as `INLET` and `OUTLET` ports, its passage geometry and a new `HeatUnit`; a kettle adds its shell as a `UnitVessel`. `FluidWorldAuthority.placeUnit` places them in one ledger event and names the partners (an exchanger's two sides, a fired heater's two coils, a kettle's tubes and shell). A refresh moves or restates the sides with their identities, partner, control and transit (D7); a removal takes all of them in one event (`removeUnit`). An exchanger built before this batch registers when it next loads whole, control off (owner Q9).
-2. **Compile.** `PhysicalFluidTopology.compile` treats a `HEAT_SIDE` as an inline filter: its inlet runs end at its node, its outlet runs leave from a new junction at its first outlet port's height, and one passive pipe with the id `sideIdentity(id)` (`Long.MIN_VALUE/2 + id`) carries its passage (`PipeResistance.Geometry` with its channel count) and `withHeat(heat.heatSide())`. The nozzles are 1 m stubs at the line's bore. An exchanger side without a partner has no law. A kettle's shell compiles as a reservoir whose `Inventory.pool` is an idle `Pool` keyed `sideIdentity(shell)` and partnered with `sideIdentity(tubes)`; a held pool with the same facts keeps its slice inputs. `PassiveNetwork.sizeJunctionHoldups` skips a heat side's passage: the passage holds no fluid (Q10), so its ends are sized on their lines, as headers.
-3. **The fence** (owner Q16, form C). `ExchangerCoupling.coupledThrough` is a readiness condition in `reconsider`, in the pump's predicate and in `verify`: each of the island's coupled sides' partners has committed through the island's committed tick, or is certified (materialised at dispatch), or is stopped (held, phase-parked or suspended: never from lag), or has no island, or is in this island. The side furthest behind can always go, so the fence cannot deadlock. A fast side runs up to one partner cadence behind online time.
-4. **The reads.** At dispatch, `reads(island, slice)` gives each coupled side its `ExchangerRelay.Read` (arithmetic on the server): the partner's stream as of the slice start (the later of its two records at or before that tick; after a load only the current one, decision D1), whether it is stopped, the transit due (the booked transit with the partner's heat booked past the slice start taken out), the partner's slice length, the sit-out share, the `Operation` of a complete exchanger side (W8) and, for a convection coil whose radiant coil is in another island, the radiant coil's heat rate. `FluidIslandCommand` carries them to the worker; `RetainedSolver.solve` and `PassiveIntervalSolver.solve` pass them on.
-5. **The slice plan** (worker, once per interval): `PassiveStepSolver.couple` plans each coupled side with `ExchangerRelay.plan` (its wall, bypass, give-back and active share), each pool with `planPool`, each convection coil from `Read.heatRate`, and each complete side's valve target. Both curves span both inlets, 10 K beyond, each at its own stream's pressure. A side without a read gets a flat wall at its own temperature and moves no heat.
-6. **The step plan** (worker, every step): `PassiveStepSolver.plan` sets each radiant coil's firing (`FiredCoil.planned`), each controlled air cooler's draught (`AirCooled.planned`) and the flue gas of a convection coil whose radiant coil is in the same island (`ConvectionCoil.flueOf` of the radiant coil's planned heat), from the last accepted step's flows.
-7. **The Newton.** A heat-exchanging connection delivers its donor's stream with the heat it took up, into the receiver's energy row and inflow, as a mover's work is (`Equations.sideHeat`, on the donor end's curve `sideCurve`, cached per end while its span, films, port and donor state hold). A curve is never sampled inside a residual or a Jacobian: a pass starts with the curves the solver keeps (`heldCurves`, `curveKept`); an evaluation that reaches an end without one reads zero there, is discarded, the end is sampled between evaluations under the solver's checkpoint, and the evaluation is done again from the same point (`evaluating`, `evaluated`; a refused sample is kept as that end's and thrown where an evaluation draws from it). The reconstruction reads `bookedHeat`, which samples a missing end first. Each curve is still sampled where it was first needed, so values are unchanged. Test: `PassiveStepSolverTest`. The balanced start (`BalanceNet.seeded`), the junction start mix and the arriving-phase seeds read the delivered stream, so a junction a heater boils is seeded with its vapour. A pool's heat (`PassiveStepSolver.poolHeat`) enters its vessel's energy row on the step's start state, and its boil-up (`boilUp`) counts as gas the vessel's ports may draw within the step.
-8. **Booking.** `ConservativeTransport.reconstruct` books each side's heat (its `EdgeHeat`, the Newton's own function) into the receiver and as a `HEAT` boundary at the connection id, and a pool's at its key. A vessel whose pool heats is never at rest (`NetworkReduction.atRest`).
-9. **Commit.** At a commit or a certificate replay, `booked` takes each side's heat (from its `HEAT` boundaries) out of the pair's transit, keeps the span for its partner's as-of reads, records the sit-out, and moves the side's record to the span's end with its heat rate. `moved` decides whether a certified partner must solve again; `flushWakes` ends those certificates at the engine's next decision point (a round's close, `runDue`, a pump), never inside a presentation read (counter `FluidRuntimeDiagnostics.couplingWakes`).
-10. **Presentation.** At the side's bucket the authority builds its view: the status line is prefixed with the lines' status, the controller's limit and, for a radiant coil short of its set point, `DUTY INSUFFICIENT`; `HeatPresentation.complete` adds the actuator, its effort, the ports and the lines. Opening the screen replays the cached view, as for any fluid device.
+1. **Read** (at dispatch, on the server): the side's `ExchangerRelay.Read`: the partner as of the slice start, whether it
+   is stopped, the transit due, the partner's slice length, the sit-out share, an `Operation` where the side's lines are
+   complete, and for a convection coil whose radiant coil is in another island the radiant coil's heat rate.
+2. **Slice plan** (worker, once per interval, `PassiveStepSolver.couple`): `ExchangerRelay.plan` gives the side its
+   wall, bypass, give-back and active share; `planPool` the pool's wall; each convection coil its flue from
+   `Read.heatRate`; each complete side its valve's target. Both curves (`HeatCurve.sample`) span both inlets, 10 K
+   beyond, each at its own stream's pressure. A side without a read gets a flat wall at its own temperature and moves no
+   heat.
+3. **Step plan** (worker, every step, `PassiveStepSolver.plan`): `FiredCoil.planned` (firing), `AirCooled.planned`
+   (draught), `ConvectionCoil.flueOf` of the radiant coil's planned heat in the same island; from the last accepted
+   step's flows.
+4. **Newton**: the connection delivers its donor's stream with the heat it took up into the receiver's energy row
+   (`StepEquations.sideHeat`, on the donor end's curve `sideCurve`). A curve is never sampled inside a residual or a
+   Jacobian: an evaluation that reaches an end without a kept curve (`heldCurves`, `curveKept`) reads zero there, is
+   discarded, the end is sampled between evaluations, and the evaluation is done again from the same point
+   (`evaluating`, `evaluated`). A pool's heat enters its vessel's energy row on the step's start state
+   (`poolHeat`), and its boil-up (`boilUp`) counts as gas the vessel's ports may draw within the step.
+5. **Booking**: `ConservativeTransport` books each side's heat (`EdgeHeat`) into the receiver and as a `HEAT` boundary at
+   the connection id, a pool's at its key (`bookedHeat` samples a missing end first).
 
-<details><summary>The units: sides, surfaces and passages (HeatSides)</summary>
+## Contracts
 
-| Unit | Shape kinds | Sides in registration order | Surface | Passage |
-|---|---|---|---|---|
-| EXCHANGER | `EXCHANGER` | TUBE (TUBE_INLET → TUBE_OUTLET), SHELL (SHELL_INLET → SHELL_OUTLET), partners | `UnitRatings.tubeSurface(D, L)` = 75 D² L, each side | tubes (`tubePassage`): 630 D² tubes per pass of 14.8 mm bore, two passes over 2 L, 4 velocity heads per pass; shell (`shellPassage`): 18 mm hydraulic diameter, 0.1 D² crossflow area, 2.5 L, a pipe's friction (Kern's drop with baffles about 0.93 D apart: a wide-baffle shell; Kern at 0.4 D gives ten times it, D18 of batch 2026-11-02-process-simulator) |
-| KETTLE | `KETTLE` | TUBE, then the shell: a closed RESERVOIR with FEED, VAPOUR_OUTLET and LIQUID_OUTLET ports (`HeatSides.pool`), partners | tubes 75 D² L of the bundle | tubes as an exchanger's; shell a lying drum 1.6 bundles across over 0.9 L + 0.3 m (`kettleShell`), the bundle `shell/1.6` across (`kettleBundle`) |
-| AIR_COOLER | `AIR_COOLER` | PROCESS, no partner | 5 m² of bare tube per m² of face, per bay (`airCoolerSurface`) | each bay's tubes in one pass of 21.2 mm bore, the trains in parallel, the bays of a train in series, 1.5 velocity heads per bay (`airCoolerPassage`) |
-| FIRED_HEATER | `VERTICAL_HEATER`, `CABIN_HEATER` | CONVECTION, RADIANT, partners (the player pipes the crossover) | `coilArea`: 30 % of `UnitRatings.heaterDuty` at 15 kW/m², 70 % at `RADIANT_FLUX` 35 kW/m² | 6" tubes of 146 mm bore in parallel passes of 8 MW each, half a velocity head per return bend every 10 m (`heaterPassage`) |
+- **Units and their sides** (`HeatSides.of`):
 
-- `PipeResistance.Geometry.channels` (default 1) is the passage's channel count: the run loses what one channel loses at the flow over the count; its area and volume are all channels'. It is in the facts' geometry record, the checkpoint state and the sections' merge key.
-- `EquipmentShape.fluidDevice()` is true for every kind with heat sides. `AirCoolerDesign`'s datasheet has an air-side line (bare surface, fan power at full speed).
-- Fan power is 1 kW per m² of face at full speed and the cube of the speed below it (`fanPower`). It is a datasheet and screen line only: it heats the air, not the stream.
-</details>
+  | Unit | Sides in registration order | Surface | Passage |
+  |---|---|---|---|
+  | EXCHANGER | TUBE, SHELL, partners | `UnitRatings.tubeSurface(D, L)` = 75 D² L, each side | tubes: 630 D² tubes per pass of 14.8 mm bore, two passes over 2 L, 4 velocity heads per pass; shell: 18 mm hydraulic diameter, 0.1 D² crossflow area, 2.5 L, a pipe's friction (Kern's drop with baffles about 0.93 D apart) |
+  | KETTLE | TUBE, then the shell: a closed reservoir with FEED, VAPOUR_OUTLET and LIQUID_OUTLET (`pool`), partners | 75 D² L of the bundle | tubes as an exchanger's; shell a lying drum 1.6 bundles across over 0.9 L + 0.3 m (`kettleShell`), the bundle shell/1.6 across (`kettleBundle`) |
+  | AIR_COOLER | PROCESS, no partner | 5 m² of bare tube per m² of face, per bay (`airCoolerSurface`) | each bay's tubes in one pass of 21.2 mm bore, trains in parallel, bays of a train in series, 1.5 velocity heads per bay |
+  | FIRED_HEATER | CONVECTION, RADIANT, partners (the player pipes the crossover) | 30 % of `UnitRatings.heaterDuty` at 15 kW/m², 70 % at `UnitRatings.RADIANT_FLUX` | 6" tubes of 146 mm bore in parallel passes of 8 MW each, half a velocity head per return bend every 10 m |
+  | PRIME_MOVER | EXHAUST (a gas turbine's coil, at its FEEDWATER nozzle) | | |
 
-<details><summary>Heat laws, films and the curve</summary>
+  `PipeResistance.Geometry.channels` is the passage's channel count: the run loses what one channel loses at the flow
+  over the count; its area and volume are all channels'.
+- **Laws:**
 
-| Law | Used by | Heat (W into the stream) | Slice inputs, planned by |
-|---|---|---|---|
-| `HeatSide` | exchanger sides, a kettle's tubes | (1 − bypass) \|ṁ\| marched through the cells against the wall on the donor's curve, times `active`, plus \|ṁ\| · giveBack | wall, bypass, give-back, active, limit: per slice (`ExchangerRelay.plan`, `PassiveStepSolver.couple`) |
-| `AirCooled` | an air cooler's process side | one march against air at 298.15 K over the bare surface with `Air.films(draught)`; 0 with the louvers shut | draught and limit: per step (`AirCooled.planned`, `PassiveStepSolver.plan`) |
-| `FiredCoil` | the radiant coil | β · \|ṁ\| · (h_set − h_in); h_set = `curve.enthalpyAt(T_set)` | β: per step (`FiredCoil.planned`): 1 within the duty, duty/demand beyond it, 0 at or above the set point or with the burners out |
-| `ConvectionCoil` | the convection coil | counterflow ε C_min (T_bw − T_in) over UA = 54.9 W/m²K × bare tube (`HeatSides.CONVECTION_U`); the stream's mean capacity rate from its inlet to the bridgewall on its curve | flue C_g = Q_r / (T_flame − T_bw): per step from the radiant coil in the same island, else per slice from `Read.heatRate` |
+  | Law | Heat (W into the stream) | Slice inputs, planned by |
+  |---|---|---|
+  | `HeatSide` | (1 − bypass) \|ṁ\| marched through the cells against the wall on the donor's curve, times `active`, plus \|ṁ\| · giveBack | wall, bypass, give-back, active, limit: per slice (`ExchangerRelay.plan`) |
+  | `AirCooled` | one march against air at `AIR_TEMPERATURE` over the bare surface with `Air.films(draught)`; 0 with the louvers shut | draught and limit: per step (`AirCooled.planned`); `fanLimit` 0 when its store is empty, so an unpowered bank falls to natural draught |
+  | `FiredCoil` | β · \|ṁ\| · (h_set − h_in), h_set = `curve.enthalpyAt(T_set)`, at most its duty at its limit | β per step: 1 within the duty, duty/demand beyond it, 0 at or above the set point or with the burners out |
+  | `ConvectionCoil` | counterflow ε C_min (T_bw − T_in) over UA = `CONVECTION_U` × bare tube; the stream's mean capacity rate from its inlet to the bridgewall | flue C_g = Q_r/(T_flame − T_bw): per step from the radiant coil in the same island, else per slice from `Read.heatRate` |
+  | `ExhaustCoil` | the outlet enthalpy the least of the enthalpy `APPROACH` under the gas inlet and, at every knot of the stream's curve, the enthalpy that leaves the gas `PINCH` over the stream (a boiling stream's bubble point decides) | gas inlet (K) and capacity rate (W/K) from the turbine's last fired slice; `COLD` while stopped |
 
-- **Films** (`HeatCurve.Films.DEFAULT`): liquid 2000, boiling or condensing 5000, gas 100 W/m²K, each with its share of the wall and fouling. Each knot of the curve carries the film of its vapour fraction: liquid below 0.05, the two-phase film to 0.95, gas at 1, linear between. The knots at 0.05 and 0.95 give a pure component's plateau the two-phase film.
-- **The march** (`HeatCurve.march`) integrates dh/dA = −h_film(h) (T(h) − T_wall) / ṁ exactly on each segment (a partial-fraction integral, with its constant-film and common-root limits through `DeterministicMath.log1p`/`expm1`). The stream approaches the wall and never crosses it.
-- **The curve** (`HeatCurve.sample`) is the stream the donor end's port draws (`endMoles`: a drum's liquid draw has its own bubble point), at the donor's pressure. Beyond its end knots it extends its end lines, value and slope continuous, and raises no notice (owner Q15): the property models' own data-range notices report every node state. Solids are not on the curve.
-- **Air** (`HeatSides.AIR`): per m² of face, 5 m² bare tube, 50 m² of fins under a 100 W/m²K film, 3.5 kW/K of air at full fans; natural draught a quarter of that (`NATURAL_DRAUGHT` 0.25). At full fans 2.15 (liquid), 2.44 (condensing) and 0.43 (gas) kW/K per m² of face.
-- A heat law's `shape()` is in the connection's identity (`PassiveNetwork.Pipe.Identity`); its slice inputs are not.
-</details>
+- **The curve** is the stream the donor end's port draws (a drum's liquid draw has its own bubble point), at the donor's
+  pressure. Beyond its end knots it extends its end lines, value and slope continuous, and raises no notice: the
+  property models' own data-range notices report every node state. Solids are not on the curve. A law's `shape()` is in
+  the connection's identity; its slice inputs are not.
+- **The wall** (`ExchangerRelay.wall`): both streams marched through the cells (`ExchangerType.cells`: `EXCHANGER_CELLS`
+  in series for Standard, an 8 × 8 grid for crossflow) in counterflow on their curves with their films. Each sweep
+  passes the cells in one stream's order, then the other's; each cell's temperature is an Illinois root of its two
+  heats, bracketed by the two entering temperatures. It stops when no cell moves more than `TOLERANCE` (a hundredth of it on a crossflow grid), or after 200 sweeps
+  (a wall stopped short is still a valid wall: energy stays exact). It starts from the side's last planned wall; a start
+  the first sweep moves by less than the tolerance is kept unchanged, so a steady side plans the same wall and its
+  island can certify.
+- **A still or stopped partner** gives an active share of 0: the side's cells move nothing and it keeps its wall. A side
+  whose own flow is unknown or still gets a wall at the partner's inlet.
+- **The give-back**: the side's share of the transit due, W_own Δt_own/(W_own Δt_own + W_other Δt_other), W the capacity
+  rate through the cells (`capacityRate`: ṁ Δh/ΔT, or the curve's slope at the inlet; unbounded on a plateau, which then
+  takes it all), an enthalpy shift on the whole flow, scaled so the outlet at the slice start stays between the two inlet
+  temperatures; the rest stays in transit. A side without flow takes none. A kettle's tubes take none: the pool takes
+  all of it.
+- **A running column's reads.** `Read.column(due, seconds, ceiling, heatRate)` (a read with no partner and `ceiling` above
+  0): no cell moves; the give-back is all the heat owed over the slice, scaled so the outlet stays at or below the
+  ceiling. `Read.heating(due, seconds, floor, heatRate)`: the heat the side owes the column (negative), the outlet's
+  floor in the ceiling's place; `gives()` says which ([column-run.md](column-run.md)).
+- **Crossflow** (`ExchangerType.CROSSFLOW`): `TWO_PASS_TUBES` against `MIXED_CROSSFLOW` on the 8 × 8 wall grid (shell flow
+  mixes along the bundle between transverse rows; tubes traverse two passes, mixing in the return header). It reuses the
+  curves, films, cell march, wall roots, bypass and transit. Its shell passage: free area 0.1 D L, equivalent path
+  2.5 D, hydraulic diameter 0.018 m, a rounded parallel channel count; tubes keep the two-pass law. The kettle keeps its
+  pool law. Rating and sizing use the same routing.
+- **The kettle's pool** (`Pool`): its heat is Σ film · A_cell · (T_wall − T) · active + give-back, explicit on a step's
+  start state, booked as a `HEAT` boundary at the pool's key; the wall planned at the slice start from the tubes as read
+  (`bathWall`). The film follows the level (`Pool.wetted`: the share of the bundle under the liquid level; wet tubes the
+  boiling film over vapour or the liquid film without it, dry tubes the gas film); a kettle that boils dry stops
+  heating. A vapour port's capacity adds the pool's heat over the latent heat, so it draws the boil-up. The LIQUID_OUTLET
+  is a plain vessel port: no weir.
+- **Control** (`HeatControl.setting`): the effort whose heat meets the target on the side's own law (an Illinois root),
+  the give-back not counted. A target past full effort takes full effort (`HIGHEST`); one past the inlet, or below the
+  lowest effort's heat, the lowest (`LOWEST`); on a cooled side the low limit then holds the effort back (`LOW_LIMIT`),
+  in every mode, manual included. A set point on a plateau names its liquid end on a cooled side and its vapour end on a
+  heated side. An exchanger side's bypass is planned per slice with the wall, in turn until it moves less than 1e-6 (at
+  most 8 rounds); an air cooler's draught per step, as a fired coil's firing.
 
-<details><summary>The relay: the wall, the give-back and the heat in transit</summary>
+## Laws and constants
 
-- **The wall** (`ExchangerRelay.wall`): both streams marched through `EXCHANGER_CELLS` 8 cells in counterflow on their curves with their films. Each sweep passes the cells in one stream's order, then in the other's; each cell's temperature is an Illinois root of its two heats, bracketed by the two entering temperatures, to a tenth of `TOLERANCE`. It stops when no cell moves more than 0.01 K, or after 200 sweeps (a wall stopped short is still a valid wall: energy stays exact). It starts from the side's last planned wall; a start the first sweep moves by less than the tolerance is kept unchanged, so a steady side plans the same wall and its island can certify.
-- **A still or stopped partner** gives an active share of 0: the side's cells move nothing and it keeps its wall. A side whose own flow is unknown or still gets a wall at the partner's inlet.
-- **The give-back**: the side's share of the transit due, `W_own Δt_own / (W_own Δt_own + W_other Δt_other)` with W the capacity rate through the cells (`capacityRate`: ṁ Δh / ΔT, or the curve's slope at the inlet where ΔT is about 0; unbounded on a plateau, which then takes it all). It is an enthalpy shift on the whole flow, scaled so the outlet at the slice start stays between the two inlet temperatures; the rest stays in transit. A side without flow takes none. A kettle's tubes take none: the pool takes all of it (`planPool`).
-- **The heat in transit** is one energy per exchanger, positive when owed to the streams. The coordinator holds it by pair key (`sideIdentity` of the side with the lower registration id). The **booked** transit is what the coordinator and the facts hold; the **settled** transit (`settledTransit`) adds both sides' heat booked past the side further behind. The energy ledger balances on the booked one; the steady state, the wake and "returns to 0" read the settled one.
-- **Wake** (decision D4, `moved`): a commit wakes the partner's certificate when its stream's temperature moved more than 0.05 K, its flow more than 0.1 %, or the settled transit grew past 0.1 % of the partner's last slice heat plus 1 J; a partner's bypass that moved more than 0.001, and a kettle's pool whose film moved more than 0.1 % (it boils dry or floods), count as its record moving. A radiant coil wakes its convection coil when its heat rate moved more than 0.1 % plus 1 W. After a load, a certified partner's first record is adopted as its baseline, so a load wakes nothing.
-- **Fired heater coils** (F1) share no transit: their heat comes from fuel. Only the convection coil waits at the fence.
-- **Determinism**: form C makes a side's result independent of job times. The command carries numbers only; the worker builds both curves.
-</details>
+- **Films** (`HeatCurve.Films.DEFAULT`): liquid 2000, boiling or condensing 5000, gas 100 W/m²K. Each knot carries the
+  film of its vapour fraction: liquid below `LIQUID_UNTIL`, the two-phase film to `GAS_FROM`, gas at 1, linear between;
+  those knots give a pure component's plateau the two-phase film.
+- **Sampling** (`HeatCurve.sample`): 16 divisions, a phase change bisected to `BOUNDARY_KELVIN`, segments refined while
+  the midpoint lies more than 0.2 K off the chord, at most 512 knots.
+- **The march** (`HeatCurve.march`): dh/dA = −h_film(h)(T(h) − T_wall)/ṁ integrated exactly on each segment (a
+  partial-fraction integral, its limits through `DeterministicMath.log1p` and `expm1`); the stream approaches the wall and
+  never crosses it.
+- **Air** (`HeatSides.AIR`): per m² of face, 5 m² bare tube, 50 m² of fins under a 100 W/m²K film, 3.5 kW/K of air at
+  full fans; natural draught `NATURAL_DRAUGHT` of that. Fan power 1 kW per m² of face at full speed and the cube of the
+  speed below (`fanPower`): it heats the air, not the stream.
+- **Coils**: `ConvectionCoil.FLAME` and `BRIDGEWALL`; `stackTemperature` (the bridgewall less the convection heat over
+  the flue's capacity rate) is a read for the effects' plume.
+- **Cooling utilities**: `AIR_SPLIT_TEMPERATURE` (the air plus 15 K) and `airSplit(top, receiver)`;
+  `TOWER_WATER_TEMPERATURE`; cooling water leaves at min(T_in + `WATER_RANGE`, process cold end − `WATER_APPROACH`).
 
-<details><summary>Built-in control (HeatControl, HeatUnit.Mode) and its status lines</summary>
+## Formats
 
-| `HeatUnit.Mode` | Sides | Controller | Actuator (effort 0 → 1) |
-|---|---|---|---|
-| OFF | controllable sides | none (MANUAL with a low limit) | the manual `share` holds |
-| OUTLET_TEMPERATURE | exchanger sides, kettle tubes, air cooler | OUTLET_TEMPERATURE at `target` K | exchanger: bypass fully open → shut; air cooler: louvers shut → full fans |
-| DUTY | as above | DUTY at `target` W | as above |
-| FIRING | fired heater coils only (required there) | none: the coil's own law | burners (`share`), set point `target` |
-| RATIO | exchanger sides only | none: the feed valve holds `target` × the other side's flow (W8) | the feed valve; holds nothing until the lines are complete |
-| COLUMN | exchanger sides, and a kettle's tubes (since batch 2026-11-10-column-failure-modes) | none: a running column sets the feed valve's flow (U2, below) | the feed valve; until the lines are complete the water flows as its line lets it |
+The laws' facts are a heat unit's registration facts; their slice inputs and the checkpoint's heat-law tags are state
+([heat-units.md](heat-units.md)). `ExchangerType` is saved by name. Numbers: [FORMATS.md](../FORMATS.md).
 
-- RATIO and COLUMN keep the side's bypass at its manual share (a MANUAL controller only with a low limit). The Control tab offers COLUMN as the exchanger's fourth target (`HeatControlColumn.targets`, key `column`): no set point and no low limit, the feed's flow on the feed valve's plate (`heat_effort.column`), and the status `heat_status.column` or `column_waiting` ([client-gui.md](client-gui.md)).
-- `HeatControl.setting` finds the effort whose heat meets the target on the side's own law (an Illinois root), the give-back not counted (that loop settles 4 to 5 times slower). A target past full effort takes full effort (`HIGHEST`); one past the inlet, or below the lowest effort's heat, takes the lowest (`LOWEST`). On a cooled side the low limit then holds the effort back (`LOW_LIMIT`), in every mode, manual included.
-- A set point on a plateau names its liquid end on a cooled side (`lowestEnthalpyAt`) and its vapour end on a heated side (`enthalpyAt`). The target vapour fraction of plan section 6 is not built.
-- An exchanger side's bypass is planned per slice, with the wall, in turn until the bypass moves less than 1e-6 (at most 8 rounds). An air cooler's draught is planned per step, as a fired coil's firing is.
-- Defaults: a new side is OFF; an air cooler's fans run (`share` 1); a fired heater fires to 573.15 K (300 °C) with its burners lit (`HeatUnit.FIRING`). A coil's edit moves its partner coil in the same event; a set point must lie inside the package's temperature envelope (`FluidDomain.requireInputTemperature`).
-- Power (batch 2026-11-03-rotating-machinery W5): an air cooler's line ends ` / NO POWER` while its store is empty (its fans held, natural draught) or ` / UNMETERED` for a cooler from a save before W5 until its port first receives FE; its Control page shows the Power group (draw kW, FE per tick, store %; `FluidView.Power`).
-- Status lines, prefixed to the island's status in this order: the lines (below), then `LIMITED: the bypass is fully open` / `closed`, `LIMITED: the louvers are shut` / `the fans run at full speed`, `LOW LIMIT: the outlet is held at %.1f K`, and for a radiant coil firing at its maximum `DUTY INSUFFICIENT: outlet %.1f K below the set point`. The client reads the two numbers by these formats.
-</details>
+## Tests and gates
 
-<details><summary>The kettle (W7)</summary>
-
-- The tubes are a `HeatSide` (unit KETTLE, side TUBE) partnered with the shell's pool; the shell is a closed reservoir (`HeatUnit.pool()`), whose `Inventory` carries the `Pool`.
-- The pool's heat is explicit on a step's start state: Σ film · A_cell · (T_wall − T) · active + give-back, into the vessel's energy row, booked as a `HEAT` boundary at the pool's key. The wall is planned at the slice start from the tubes as read (`bathWall`: one pass, each cell's wall where the tube stream's heat equals the pool's through its film).
-- **The film follows the level** (`Pool.wetted`): the share of the bundle's cross-section under the liquid level (`VesselGeometry.heightAt`, `segmentArea`); wet tubes take the boiling film over vapour or the liquid film without it, dry tubes the gas film. A kettle that boils dry stops heating.
-- **The boil-up counts in the phase draw** (D11 extended): a vapour port's capacity adds the pool's heat over the latent heat at the start state, so the vapour port draws the boil-up, not liquid.
-- The tubes are controllable (outlet temperature or duty by their bypass: medium that leaves without crossing the bundle). The LIQUID_OUTLET is a plain vessel port: the level is the player's (no weir).
-</details>
-
-<details><summary>The exchanger's control lines (W8)</summary>
-
-- **The design is the sides' controls** (`HeatUnit.lines`): OUTLET_TEMPERATURE or DUTY asks for a bypass (inlet tee, control valve, outlet tee), RATIO for a feed valve and a flowmeter on the other side's feed, COLUMN (`Lines.FEED`, a flow station) for a feed valve and a flowmeter beyond it on the same feed (`<side>_feed_meter`), which the valve regulates by. `HeatDiagram` draws the flow station's meter after the valve's. `ExchangerLines.design` reads it from the registrations; `ExchangerBlueprint.of` gives the slots and links.
-- **Check lines** on a side's screen sends `fluid_check_lines` (`FluidNetwork.LinesPayload`); the exchanger is validated at the next server tick, as a column's queued check is (`AssemblyService.validate`, [machine-assemblies.md](machine-assemblies.md)). `ExchangerLines.publish` hands the report to each side as `FluidWorldAuthority.Lines`: NOT_VALIDATED, CHECKED (with the parts not in place), UNMETERED (complete, but the valve carries no flowmeter, so it stands open as a bare valve), COMPLETE (with the valve's registration). Status lines: `LINES NOT CHECKED: …`, `LINES NOT COMPLETE: n parts not in place; …`, `LINES NOT COMPLETE: the bypass (feed) valve needs its flowmeter to regulate; …`, `LINES COMPLETE: the bypass valve controls` / `the feed valve holds the ratio` / `the column sets the feed valve`. The fallback after `;` is `the internal bypass controls`, `the ratio holds nothing` or `the water flows as its line lets it`.
-- **Operation** (`FluidWorldAuthority.operate` → `IslandCoordinator.operations`): a complete side's read carries its `Operation`. At the slice start `couple` plans the valve's mass flow target with the side: a bypass valve takes the controller's bypass share of the side's and the bypass's flows together, and the side's own bypass stays shut; a feed valve takes the ratio times the other side's flow as read; a COLUMN side's feed valve (`FluidWorldAuthority.operate`: `Operation.column(valve, WATER_RANGE)`) takes the flow the column asks for (below). A target within `VALVE_DEADBAND` 1e-3 of the valve's stands, so a steady plant keeps its graph and certifies; `IslandCoordinator.sameControl` accepts the planned target in the candidate check. A side whose operation changed wakes its island.
-- **Not complete**: a bypass control works the internal bypass (owner Q13); a ratio holds nothing; a COLUMN side's water flows as its line lets it. A report that reverts leaves its valve at its last planned target, applied as the valve's mass flow setting at the next tick (`holdValves`).
-- A flowmeter installed on or removed from a pipe reverts a report that read it (`AssemblyService.metered`); a side whose control asks for other lines drops its exchanger's report (`AssemblyService.redesigned`, log `assembly status=REDESIGNED`). The authority keeps the lines while the server runs; a chunk load's check of a stored report publishes them again.
-- Not built: the split-range pass valve; a LIMITED status for a saturated real valve; operating a valve outside the side's own island.
-</details>
-
-<details><summary>A running column's condenser (batches 2026-10-28-column-operation and 2026-11-02-process-simulator)</summary>
-
-A column's overhead condenser is an exchanger with one side in the column, or several identical shells in parallel; an air-then-water condenser's water exchanger is its trim. While the column runs, the process side is held: it has no island and no stream. The column's closure gives the duty, and the table's water share of it goes to the water sides; the water has to carry it away. An air condenser's share stays with the column (its fans, [column-operation.md](column-operation.md)).
-
-- **The sides.** `ColumnOperation.waterSides` knows the unit's `condensers`: per shell, the side outside the column whose partner is inside. `ExchangerCoupling.reads` asks `Ports.heatRead(pipe, partner, start, seconds, transit)` first; its answer replaces the relay's read.
-- **The debt.** Each cycle, `ColumnOperation.owe` adds each shell's equal share of the water's duty to that pair's heat in transit (`IslandCoordinator.owe`) and logs it, and wakes each water side a fence later. So the column's heat is a booked transit like any other, and the facts and the ledger carry it.
-- **The read.** `Read.column(due, seconds, ceiling, heatRate)`: `due` is the transit less what was owed after *slice start − fence*, so the result does not depend on job timing. `ceiling` is the column's condenser temperature less 5 K (`APPROACH_KELVIN` = `HeatSides.WATER_APPROACH`), at least 1 K. `heatRate` is the heat the column asks the shell's water to take, W: its share of the last cycle's water duty as of the fence, plus the transit due beyond one slice and one cycle of that rate, over 60 s.
-- **The plan.** In `ExchangerRelay.plan`, a read with no partner and `ceiling > 0` goes to `column`: no cell moves and the wall stays. The give-back is all the heat owed over the slice, scaled so the outlet stays at or below the ceiling (`curve.enthalpyAt(ceiling)`). The rest stays owed.
-- **The valve** (U2). For a column read without an `Operation`, `reads` adds the side's own (`withOperation(operations.get(pipe))`): a COLUMN side whose flow station is complete. `PassiveStepSolver.couple` then sets the feed valve's mass flow target to `heatRate / (h(T_out) − h(T_in))` on the side's own curve, `T_out` = min(T_in + `rise` (10 K), ceiling), within `VALVE_DEADBAND`. Water at or above the ceiling gives no target, and the valve holds its last. A COLUMN side whose read has no ceiling (no running column) sets nothing.
-- **Shortage.** The room for more is 60 s of the table's water duty (`CONDENSER_HOLD_SECONDS`), less the shells times the fullest shell's transit as of the fence. With no cooling water, or a valve that cannot pass the flow, the transit grows, the room falls to 0 and the column cuts its feed: `LIMITED: condenser`.
-- **Other held sides.** Since batch 2026-11-10-column-failure-modes a reboiler's and a pumparound cooler's utility sides are owed their duties too (section at the top). A held partner with no utility side the column kept reads `Read.NONE` and moves no heat. Its duty is the column's own.
-- **Pruning.** A side whose partner has no island prunes its booked spans at `end − KEEP_UNREAD_TICKS` (`booked`, `side.prune`).
-</details>
-
-<details><summary>Saves, formats and the wire</summary>
-
-- **Facts** (from fluid facts schema 5, `FluidFacts.SCHEMA` now 12; corpora `compat/fluid/schema-5/` to `schema-12/`; schema 9 adds the `COLUMN` mode, saved by name; schema 11 appends an air cooler side's fan count and the world's electric stores, an older cooler's store unmetered, A73 option A): a geometry record appends its channel count (default 1); a registration appends an optional heat unit (unit and side by name, area, partner, control: mode by name, target, low limit, share; `transitJoule`). Only the lower-id side of a pair holds the transit (`WorldTopologyLedger.Snapshot.withHeatTransits`; read back by `heatTransits` into `IslandCoordinator.transit` when the authority starts). A removed unit books its transit as destroyed energy (`WorldTopologyLedger.removedHeat`). `HeatUnit` refuses a fired heater coil without a FIRING set point, FIRING outside a fired heater, and RATIO or COLUMN outside an exchanger.
-- **State** (checkpoint state format 29, now 30 with the column states of [column-operation.md](column-operation.md); rebuilt freely): 23 a geometry's channel count; 24 a pipe's heat side; 25 the heat law tagged (0 none, 1 heat side, 2 fired coil); 26 a side's partner and active share; 27 its controller and limit, tag 3 an air cooler; 28 a node's pool; 29 tag 2 the radiant coil with its partner, tag 4 the convection coil, an air cooler's draught. The relay's records, booked spans and wake queue are not saved: after a load a side's record is rebuilt from its graph and last result, its last span from the interval's `HEAT` boundaries (D1).
-- **Certificates**: a replay holds each heat law's facts and slice inputs and each pool fixed, as its interval's graph carries them; a change of them while the island runs ends the certificate (a partner's commit wakes it, `ExchangerCoupling`). A code change to what a replay holds fixed bumps `IslandCertificate.REPLAY_REVISION`.
-- **Wire** (`fluid-16`, now `fluid-18` with a fan unit's `FluidView.Power`; no compatibility work): `FluidView.Heat` (unit, side, paired, outlet temperature, heat, fans and fan power, bypass, burners, set point and most heat; the actuator, effort, limit, `Port`s and `Lines`), `FluidView.PipeInfo.reading`, `FluidNetwork.Controls.heat` (an edit of a controllable side), `fluid_open_partner` (`PartnerPayload`: the Other side button opens the partner's own cell, nothing queued) and `fluid_check_lines` (`LinesPayload`).
-</details>
-
-<details><summary>Traps</summary>
-
-- **A slice input is not a fact.** Wall, bypass, give-back, draught, firing and flue are planned; changing them never edits a registration. Only the `HeatUnit` control and the transit are facts.
-- **Plan the heat where its inputs are known.** A law that needs its partner plans per slice (`couple`); one that needs only its own stream plans per step (`plan`). Nothing switches inside a Newton.
-- **The booked and the settled transit differ** by the heat the side ahead booked past the other's committed tick (about 1 MJ for a 5 s side one slice ahead of a 20 s side). A wake that read the booked one ping-ponged (the owner's test); a ledger check that reads the settled one is off by one slice's heat.
-- **A heat side's passage sizes no junction.** Sizing its ends on every tube at the cap flow held half a bundle at the outlet and caused the fired heater's 100 kPa hold (the owner's test).
-- **A bare control valve stands open.** A complete bypass whose valve has no flowmeter is UNMETERED and does not operate.
-- **A kettle's tubes take no give-back**; the pool takes all of it.
-- A pipe gauge downstream of a side reads the outlet junction; a gauge on the unit itself reads its inlet node.
-- The heaters' FUEL nozzle stays unconnected (fuel is another scope, Q11). The air is a constant 25 °C (no weather, biome or altitude).
-- The campaign has no exchanger worlds: the wall's cost is gated in `ExchangerCouplingTest`, not in the campaign.
-</details>
-
-## A column's reboiler and pumparound utilities
-
-- **Who is owed.** At Start a column keeps, besides its condenser's water sides, the utility sides of its reboiler (a kettle's tubes, one a unit in parallel) and of each pumparound cooler: sides outside the column whose partner it holds (`ColumnUnit.Utilities`, fluid facts schema 21). Each cycle owes each duty to its sides' heat in transit, as the condenser's ([column-operation.md](column-operation.md)). A member with no such side (an air-cooled pumparound cooler, a unit saved before schema 21) still reads `Read.NONE`: its duty stays the column's own.
-- **The heating read.** `ExchangerRelay.Read.heating(transitDue, seconds, floor, heatRate)`: the heat the side owes the column (negative), the outlet's floor (the bottoms' temperature plus `APPROACH_KELVIN`) in the ceiling's place, and the heat the column asks it to give as a negative `heatRate`; `Read.gives()` says which. `ExchangerRelay` shifts the stream's enthalpy down, its outlet at or above the floor. A pumparound cooler's side reads `Read.column` with its ceiling at the draw tray's solved temperature less the approach.
-- **The valve.** `PassiveStepSolver.couple`, for a heating read with an operation: the feed valve's mass flow is `−heatRate / (h(inlet) − h(floor))` on the side's curve (the curve spans the floor, through the condensation); a stream at or under the floor gives nothing and its valve holds. No new unknown or equation ([fluid-science.md](fluid-science.md)).
-- **The kettle's tubes.** `HeatUnit` allows `Mode.COLUMN` on a kettle's TUBE side (`kettleTubes`), with lines `Lines.FEED` (a flow station on the tubes' feed); its bypass control stays internal. `ExchangerLines` gives an EXCHANGER's or a KETTLE's sides their lines by each registration's own side (the kettle's shell is its pool and asks for none). The Control tab offers COLUMN for a kettle with the `column_heating` texts (`HeatControlColumn.columnTexts`).
-- Tests: `ExchangerRelayTest.aColumnsHeatingSideGivesItsDueDownToTheFloor`; `ColumnRunTest` (`aReboilersHeatClosesAgainstItsUtilitysIsland`, `aReboilersSteamValveCarriesItsDutyDownToTheFloor`, `aShortReboilerUtilityLimitsTheColumn`, `aShortPumparoundCoolerLimitsTheColumn`, `aUnitSavedWithoutUtilitiesRunsAsBefore`); `HeatControlColumnTest.aKettlesTubesOfferTheColumnsModeAsAReboilersUtility`.
-
-## The gas turbine's steam coil
-
-- `HeatLaw` permits `ExhaustCoil` (batch 2026-11-10-prime-movers, owner P8 A): one counterflow coil in a gas turbine's exhaust duct, water in at FEEDWATER, steam out at STEAM. Designed to its pinch, no UA: the outlet enthalpy is the least of the enthalpy `APPROACH` 25 K under the gas inlet and, at every knot of the stream's curve, the enthalpy that leaves the gas `PINCH` 10 K over the stream; on a boiling stream the bubble point's liquid end decides. Gas inlet (K) and capacity rate (W/K) are slice inputs from the turbine's last fired slice (`ShaftPlan.Kind.EXHAUST`, `PrimeMovers`); `ExhaustCoil.COLD` while stopped. The heat enters from outside, booked as the coil's `HEAT` boundary. Checkpoint heat law tag 5 (state format 46).
-- `HeatSides`: unit `PRIME_MOVER` with one side `EXHAUST`; registered at the FEEDWATER nozzle's cell after the fuel void (`EquipmentStructure`); the simulator reads the same law ([process-simulator.md](process-simulator.md)). Tests: `science/fluid/network/ExhaustCoilTest`.
-- `ConvectionCoil.stackTemperature(radiant, convection, air)`: the flue at the stack, the bridgewall less the convection heat over the flue's capacity rate (about 370 °C at the 70/30 split); a read for the effects' plume, no change to the coil's law.
-
-## Fired coil limit and the still's condenser
-
-- `FiredCoil` gains `limit`: the most heat the coil takes now is its duty at its limit, the share its burners can fire (fuel delivered, fan power). Fuel and air: `Burners` ([fluid-science.md](fluid-science.md)); the coupling: `FiredHeaters` ([fluid-runtime.md](fluid-runtime.md)).
-- A batch still's condenser water side is a heat side on its registration; the condenser's capacity is the still's law (`BatchStill`).
-
-## Factory probes and one physical data interface
-
-Both exchanger types have four equipment-owned temperature probe roots on the actual nozzle necks. `EquipmentInstruments` rebuilds these datums from live nozzle size codes, and `InstrumentWiring` follows the real nozzle/body facets. The mounted service enclosure and one C1 are shared by rendering, physical layout and registration; each heat-side fluid ID aliases to that physical host for controller visibility. Accepted P/T/flow readings remain per named process/utility role. Factory probes appear in constructor previews; manual exchanger sensor placement is disabled. This adds no thermal routing, pressure-law or column duty change.
-
-## Standard and Low-dP crossflow
-
-`science/equipment/ExchangerType` is the shared catalog for display, physical layout, hydraulic passages and thermal routing. `STANDARD` retains the 8-cell series-side calculation. `CROSSFLOW` selects `HeatRouting.TWO_PASS_TUBES` and `MIXED_CROSSFLOW` on an 8 × 8 wall grid: shell flow mixes along the bundle length between transverse rows; tubes traverse two passes, mixing in the return header. `CrossflowHeat` and the relay reuse heat curves, phase films, cell marching, wall roots, bypass and energy-in-transit bookkeeping. Rating and sizing use the same routing. The kettle retains its pool law.
-
-Crossflow shell pressure loss uses an explicit game-level passage: free area `0.1 D L`, equivalent path `2.5 D`, hydraulic diameter 0.018 m and existing roughness, with rounded parallel channel count. Tube pressure loss remains the existing two-pass law. Both side limits and 20% sizing spare still apply; low shell loss cannot make an unreachable thermal duty feasible.
-
-`ExchangerType.Layout` is shared with rendering, rasterisation, nozzle positions, constructor preview and assembly laying. The approved exterior represents the distribution/collection spaces inside the pressure shell: opposite upper/lower shell nozzles near the bundle centre, front-channel tube connections and clear saddles. Standard's existing connection positions remain compatible. Type propagates through `HeatSides`, `HeatUnit`, shapes, constructors, sizing and column designs; an assembly reports a configuration mismatch. The column operation's duty/energy transfer remains its existing contract, not a new V3 solver.
-
-Current fluid facts schema 14 appends the type (missing means Standard); checkpoint state format 39 admits up to 64 wall cells. Shape/constructor/column member and heat-unit corpus images pin the defaults. `CrossflowHeatTest`, `CrossflowSizingTest` and `CrossflowEquipmentTest` check analytic single-phase limits, phase changes, reverse routing, energy, bypass, zero flow, finer-grid error, hydraulic limits and geometry. The existing heat law details below still apply to Standard unless a routing is selected explicitly.
-
-## Change the layer that owns it
-
-| Change | Owning class | Tests that pin it |
+| Change | Owner | Tests (`--tests` filter) |
 |---|---|---|
-| A stream's curve, films, the march, a plateau's ends | `HeatCurve` | `HeatCurveTest` |
-| An exchanger side's heat, bypass, reversal, zero flow, a boiling junction | `HeatSide`, `PassiveStepSolver` (`Equations.sideHeat`/`bookedHeat`, `sideCurve`), `ConservativeTransport` (`EdgeHeat`, `HEAT`) | `HeatSideNetworkTest` |
-| The wall solve, the give-back share, the plan | `ExchangerRelay` | `ExchangerRelayTest` |
-| The coupling: fence, reads, booking, wake, transit, loads, certify | `IslandCoordinator` (coupling section), `PassiveStepSolver.couple`, `RetainedSolver`, `ProcessSolveServices.FluidIslandCommand` | `ExchangerCouplingTest` (real coordinator, solver and codec on a test rig: steady state at several cadence pairs, a held side, a feed/effluent loop, steam in methane against water, a side without flow, a save and load, certify and wake, control, the kettle, the real bypass valve and the ratio, the coils across two islands) |
-| The controller | `HeatControl`, `HeatUnit.controller` | `HeatControlTest` |
-| An air cooler's air, louvers and fans | `AirCooled`, `HeatSides.AIR` | `HeatSideTopologyTest`, `HeatSidesTest`, runtime `HeatUnitPowerTest`, GameTest `ElectricGameTests.anAirCoolerWithoutPowerHoldsNaturalDraughtUntilItsPortIsFilled` |
-| A fired heater's coils | `FiredCoil`, `ConvectionCoil`, `PassiveStepSolver.plan` | `FiredCoilTest`, `ConvectionCoilTest`, `HeatSideTopologyTest` |
-| A unit's sides, surfaces, passages | `HeatSides`, `ShapeRasterizer.fluidCells` | `HeatSidesTest`, `ShapeRasterizerTest` |
-| A side's registration, compile and outlet junction | `PhysicalFluidTopology` (`HEAT_SIDE`, `INLET`/`OUTLET`, `sideIdentity`, `pooled`), `FluidWorldAuthority.placeUnit`/`removeUnit`, `EquipmentStructure` | `HeatSideTopologyTest` |
-| The kettle's pool | `Pool`, `ExchangerRelay.planPool`, `PassiveStepSolver.poolHeat`/`boilUp` | `ExchangerCouplingTest` (boil-up against Q/λ, a duty held by the tubes' bypass, an empty shell) |
-| The exchanger's lines | `ExchangerBlueprint`, `ExchangerLines`, `AssemblyMatcher` (FLOWMETER, nested tees), `FluidWorldAuthority.lines`/`operate` | `ExchangerBlueprintTest`, `AssemblyGameTests.anExchangersBypassValidatesAndARemovedPipeReverts` |
-| A running column's condenser | `ColumnOperation` (`heatRead`, `owe`), `ExchangerRelay.Read.column`, `IslandCoordinator.owe` | `ColumnRunTest` (`aWaterCooledCondenserGivesItsDutyToItsCoolingWater`, `aCoolingWaterShortageLimitsTheColumn`, `twoCondenserShellsEachHoldWhatOneShellHoldsAtHalfTheFeed`) |
-| A column's water valve (COLUMN, `Lines.FEED`) | `HeatUnit.Mode.COLUMN`, `ExchangerBlueprint` (FEED), `FluidWorldAuthority.operate`/`linesStatus`, `ExchangerCoupling.reads`, `ExchangerRelay.Operation.column`, `PassiveStepSolver.couple` | `ColumnRunTest` (`aCondensersWaterValveCarriesItsDutyOverTheWatersRise`, `withoutItsValveACondensersWaterRunsAsBefore`, `aShortWaterValveLimitsTheColumn`), `HeatControlColumnTest.theColumnsModeSetsNothingAndShowsTheFlowItsColumnSets`, `HeatDiagramTest` |
-| Facts, state and the corpus | `HeatUnit`, `FluidFacts`, `FluidCheckpointCodec` | `FluidFactsCompatTest` (corpora `schema-5/` to `schema-12/`), `FluidCheckpointCodecTest` |
-| What the screen receives | `HeatPresentation`, `FluidView.Heat`, `FluidNetwork` | `HeatPresentationTest`, `FluidPacketCodecTest`; the client side in [client-gui.md](client-gui.md) (`HeatDiagramTest`, `HeatControlColumnTest`) |
+| A curve, films, the march, a plateau's ends | `HeatCurve` | `HeatCurveTest` (the kernel against the analytic exponential and latent knots; a film step; a pure condensing stream against water; the boundary's resolution bounds the condensing march) |
+| An exchanger side's heat, bypass, reversal, zero flow, a boiling junction | `HeatSide`, `StepEquations.sideHeat`, `bookedHeat`, `ConservativeTransport` | `HeatSideNetworkTest` |
+| The wall, the give-back, the plan, the column's reads | `ExchangerRelay` | `ExchangerRelayTest` (`aColumnsHeatingSideGivesItsDueDownToTheFloor`) |
+| The controller | `HeatControl` | `HeatControlTest` |
+| A fired heater's coils, the steam coil | `FiredCoil`, `ConvectionCoil`, `ExhaustCoil` | `FiredCoilTest`, `ConvectionCoilTest`, `ExhaustCoilTest` |
+| Crossflow | `CrossflowHeat`, `HeatRouting`, `ExchangerType` | `CrossflowHeatTest`, `CrossflowEquipmentTest`, `CrossflowSizingTest` |
+| A unit's sides, surfaces, passages, air films | `HeatSides` | `HeatSidesTest` (`equipmentGates`); the cooling utilities through `ColumnSolveTest` and `CoolerSizingTest` |
+| The pool, the coupling in the world | `Pool`, `planPool` | `ExchangerCouplingTest` ([heat-units.md](heat-units.md)) |
 
-## Tests that pin it
+## Traps
 
-All run under `test` except `HeatSidesTest` (`equipmentGates`); none is a slow gate class.
+- **A slice input is not a fact.** Wall, bypass, give-back, draught, firing and flue are planned; changing them never
+  edits a registration.
+- **Plan the heat where its inputs are known.** A law that needs its partner plans per slice (`couple`); one that needs
+  only its own stream plans per step (`plan`). Nothing switches inside a Newton.
+- **A kettle's tubes take no give-back**; the pool takes all of it.
+- The air is a constant 25 °C (no weather, biome or altitude).
+- The curve's extension past its end knots raises no notice: the property models' own data-range notices do.
 
-- [`science/fluid/network/`](../../../src/test/java/com/wormzjl/icheme/science/fluid/network/): `HeatCurveTest` (the kernel against the analytic exponential and latent knots, a film step along the curve, a pure condensing stream against water at U 1430), `HeatSideNetworkTest` (the ledger with heat, a junction that boils from heat, reversal, zero flow, the bypass), `ExchangerRelayTest`, `HeatControlTest`, `FiredCoilTest`, `ConvectionCoilTest` (the design split, bounds, smoothness).
-- [`science/equipment/HeatSidesTest`](../../../src/test/java/com/wormzjl/icheme/science/equipment/HeatSidesTest.java) (`equipmentGates`): each unit's sides, surfaces, passages, the air films and the coils' duty split. The cooling utilities' constants and `airSplit` are pinned through `ColumnSolveTest` (`test`) and the simulator's `CoolerSizingTest`.
-- [`runtime/fluid/`](../../../src/test/java/com/wormzjl/icheme/runtime/fluid/): `HeatSideTopologyTest` (a side compiles as a passive pipe of its passage to an outlet junction, and only a side carries a heat unit and inlet and outlet ports; the air cooler at fans on and off, and held by its louvers and fans through an inlet step; the radiant coil at its set point, short of its duty, above its set point and raising steam; the convection coil on the radiant coil's flue gas), `ExchangerCouplingTest`, `HeatPresentationTest`, the condenser and water-valve cases of `ColumnRunTest`, and the heat cases of `FluidFactsCompatTest` (to schema 9: a second condenser shell, a COLUMN water side), `FluidCheckpointCodecTest` and `FluidPacketCodecTest`.
-- `client/gui/common/`: `HeatControlColumnTest` (6; the COLUMN target sets nothing and shows the flow its column sets), `HeatDiagramTest` (an exchanger draws every slot its lines ask for, FEED included: 32 cases, every pair of lines on both sides; no lang key defined twice in `en_us` and `zh_cn`).
-- [`science/assembly/ExchangerBlueprintTest`](../../../src/test/java/com/wormzjl/icheme/science/assembly/ExchangerBlueprintTest.java) on `TestGraph`; GameTest `AssemblyGameTests.anExchangersBypassValidatesAndARemovedPipeReverts`.
-- **Review world** (not a gate): [`HeatExchangerReviewWorld.theHeatUnitsStandRunning`](../../../src/fluidGameTest/java/com/wormzjl/icheme/fluid/gametest/HeatExchangerReviewWorld.java) (namespace `icheme_review`, batch `review-heat`, run by `runReviewWorldServer` beside `ColumnReviewWorld`): five units on water lines from generators to voids, left running in `run/review-world/world` (both exchangers held at 30 °C, one with a real bypass whose lines are not checked; the largest air cooler at 80 °C; a vertical heater fed by an In-line Pump to 200 °C; a 1 m kettle at 0.5 MW). After a minute it logs each unit's status, outlet and duty (`review_heat` lines). `documentation/2026-10-27-heat-exchanger-design/REVIEW_WORLD.md` says how to copy it into a client's saves.
-- Offline studies (not gates): `tools/heat-exchanger-design/` (harness parts 1 to 8).
-
-Design background: `documentation/2026-10-27-heat-exchanger-design/` (`HEAT_EXCHANGER_PLAN.md` section 10, W1 to W8 and F1 as built; `OWNER_TEST_REVIEW.md`; `HX_TIMING_STUDY_REVIEW.md` for the fence); `documentation/2026-11-02-process-simulator/COOLER_MODEL_PLAN.md` sections 6 to 8 for the column condenser's water share, its water valve and its fans.
-
-## Terms
-
-- **Heat side**: one passage of a heat unit, a fluid device of kind `HEAT_SIDE`; its passage is one compiled pipe (`sideIdentity`) that carries its heat law.
-- **Heat law**: how a connection exchanges heat for a step (`HeatLaw`): a pure function of its flow and the donor's enthalpy on the donor's curve.
-- **Partner**: the other side of a unit (an exchanger's other side, a kettle's tubes and shell, a fired heater's other coil).
-- **Slice input**: a law's value fixed by a plan before the Newton (wall, bypass, give-back, active share, draught, firing, flue, a valve's planned target).
-- **Wall**: the quasi-steady temperature of each of the exchanger's 8 cells; it holds no heat.
-- **Heat in transit**: what the two sides of one exchanger booked differently, one energy per exchanger, a fact; booked versus settled as above.
-- **Give-back**: a side's share of the transit, returned as an enthalpy shift on its flow over its slice.
-- **Sit-out**: the share of a slice in which the partner counted this side stopped; the side's cells are inactive for it.
-- **Fence**: the readiness condition that a coupled side's partners have committed through its slice start (form C).
-- **Effort**: the actuator's position from 0 to 1 (bypass fully open to shut; louvers shut to full fans; burners out to full).
-- **Lines**: an exchanger side's control piping as an assembly (bypass, ratio station, or a flow station a column sets) and its report's state.
-
-**Snapshot:** `0f0993162`, 2026-11-13 (the last commit this chapter was checked against). Earlier snapshots and batch notes: [HISTORY.md](HISTORY.md).
+**Snapshot:** `d6f721b94`, 2026-11-15.
