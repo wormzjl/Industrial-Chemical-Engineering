@@ -31,7 +31,7 @@ import java.util.List;
 public final class PollutionMeterGameTests {
     private PollutionMeterGameTests() {}
 
-    @GameTest(template = "empty", timeoutTicks = 100, batch = "pollution")
+    @GameTest(template = "empty", timeoutTicks = 100, batch = "pollution_meter")
     public static void meterReadsLethalAtToxicOnePointTwo(GameTestHelper helper) {
         var level = helper.getLevel();
         var dimension = level.dimension();
