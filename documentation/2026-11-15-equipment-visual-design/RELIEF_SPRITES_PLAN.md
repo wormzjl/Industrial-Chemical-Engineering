@@ -161,3 +161,43 @@ Open: the baked bolt face keeps the old low-detail sprite's mean grey (122.6) as
 read paler than the black prisms they replace (about 68); `BOLT_FACE` is unpainted, so a darker mean moves no paint.
 Nuts edge-on vanish, as section 7 expected. The shader-pack variant and whether a pack toggle re-meshes chunks need the
 owner's client check (R3).
+
+## 10. R-W4 Follow-up: solid nuts on pipe flanges, a darker relief nut (2026-11-15)
+
+Owner, 2026-11-15, asked "Solid nuts on pipe flanges, or relief nuts everywhere?" and "Darken the relief nut?": "yes"
+(the recommended answers: solid nuts on pipe flanges, darken).
+
+Expected look. A pipe flange stands across its line, so its nuts are seen from the side or at a slant, where a flush
+face has no outline. A cover, a casing joint or a channel flange is a broad face seen from the front, where the relief
+reads. So a pipe flange's nuts are solids wherever the flange is, and relief nuts are for the equipment's own joints.
+
+What the build does. `Mesh.RELIEF_NUTS_ON_LINES` separates a pipe's mesh from an equipment's, not a pipe flange from a
+cover. Set false, it restores the prisms on laid lines, valves and fittings only. An equipment nozzle's flange, the
+flange a line joins, stays relief: `ShapeRasterizer` line 1477 draws every nozzle's nuts with `m.bolts` on a mesh
+marked `equipment()`. The `PUMP_OH2-nuts` pair that showed the loss is such a nozzle.
+
+Changes.
+1. `Mesh.RELIEF_NUTS_ON_LINES = false`.
+2. `Mesh.flangeBolts(f, od, inner, outer, z, sign, material)`: as `bolts`, but a prism at normal detail on any mesh
+   (`relief = detail == LOW || !pipeFlange && reliefNut(across)` in the shared worker). Call it where a line joins the
+   flange: `ShapeRasterizer` line 1477, and each `bolts` call in the `*Design` classes that draws a nozzle's or a
+   stub's flange (candidates: `AirCoolerDesign` 162, 173, 216, 218; `SteamTurbineDesign` 235; check the others).
+   Covers, channels, casing joints, manways and hatches keep `bolts`. List every `bolts` and `nut` call site with its
+   class (pipe flange or own joint) in the report.
+3. The relief nut's colour: `equipment_textures.py` matches the baked and flat bolt face to
+   `mean(bolt_face_today())`, 122.6. Use a constant `BOLT_FACE_MEAN = 78` for both (the prism's `BOLT` sprite reads
+   about 68; 78 keeps the lit edge visible). `EquipmentTexturesTest` line 28 pins 122.6: change it to the constant,
+   with the owner's answer as the reason. Low detail uses the same sprite and darkens with it.
+4. Tests that pinned R1 A: `ShapeRasterizerTest` line 184 (a drum nozzle's nuts are prisms again), `LineGeometryTest`
+   (the watertight check's nut skip), `RenderDetailTest`.
+
+Proof.
+- `./gradlew equipmentGates --tests "*LineGeometryTest" --tests "*PipelineFittingTest" --tests "*ProcessUnitTest"
+  --tests "*RenderDetailTest" --tests "*ShapeRasterizerTest" --tests "*EquipmentLayoutGoldenTest" --max-workers 4`
+  (no row moves: nuts are not solids), and `./gradlew test --tests "*EquipmentTexturesTest" --max-workers 4`.
+- The polygon table of the 81 references again, beside 304,279 (before) and 275,807 (R-W3).
+- The pairs `PUMP_OH2-nuts`, `CABIN_HEATER-nuts`, `EXCHANGER-nuts` and the sprite sheet again.
+
+Files: `Mesh.java`, `ShapeRasterizer.java`, the `*Design` call sites except `SteamTurbineDesign.java` and
+`SteamTurbineTrain.java` (the turbine thread's; name its call site in the report instead), `equipment_textures.py`, the
+sprite files, the four tests, this section's build notes.
