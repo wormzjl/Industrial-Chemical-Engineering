@@ -474,6 +474,11 @@ public final class FluidThermodynamics {
         public double[] molesView(){return moles;}
         @Override public double[] moles(){return moles.clone();}
     }
+    /** {@link NetworkStreams#GAS_LIKE_UNTIL} and {@link NetworkStreams#LIQUID_LIKE_FROM}: the reduced densities of
+     * {@link #liquidLikeWeight}. */
+    public static final double GAS_LIKE_UNTIL=NetworkStreams.GAS_LIKE_UNTIL,LIQUID_LIKE_FROM=NetworkStreams.LIQUID_LIKE_FROM;
+    /** The liquid-like weight of a one-fluid state ({@link NetworkStreams#liquidLikeWeight}); NaN for any other. */
+    public static double liquidLikeWeight(State state){return NetworkStreams.liquidLikeWeight(state);}
     public static boolean holdsVapor(State state){return NetworkStreams.holdsVapor(state);}
     public static boolean holdsLiquid(State state){return NetworkStreams.holdsLiquid(state);}
     public double slotMass(State state,int slot){return streams.slotMass(state,slot);}

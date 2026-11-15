@@ -1,7 +1,6 @@
 package com.wormzjl.icheme.science.fluid.network;
 
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
-import com.wormzjl.icheme.science.fluid.transport.MixtureViscosity;
 import com.wormzjl.icheme.science.math.DeterministicMath;
 
 import java.util.ArrayList;
@@ -30,12 +29,13 @@ public final class HeatCurve {
     public static final double LIQUID_UNTIL=.05,GAS_FROM=.95;
     /**
      * The reduced densities {@code v_c / v} of one fluid between which its film goes from the gas film to the liquid film
-     * (S2b of batch 2026-11-15-supercritical-fluids): the gas film at or below {@link #FILM_GAS_UNTIL}, the liquid film from
-     * {@link #FILM_LIQUID_FROM}, a {@link MixtureViscosity#smoothstep} between, never the two-phase film. An ordinary liquid
-     * ({@code v/b} 1.1 to 1.5, so 2.6 to 3.6) and an ordinary gas (below 0.5 up to {@code Tr} 0.97 at saturation) keep their
-     * film to the bit. An owner option (S2_NETWORK_REVIEW.md); a dense fluid's film follows its density, with no line.
+     * (S2b of batch 2026-11-15-supercritical-fluids): the model's gas-like and liquid-like bounds
+     * ({@link FluidThermodynamics#liquidLikeWeight}), which the machines read too (S4). The gas film at or below
+     * {@link #FILM_GAS_UNTIL}, the liquid film from {@link #FILM_LIQUID_FROM}, a smoothstep between, never the two-phase
+     * film. An ordinary liquid and an ordinary gas keep their film to the bit; a dense fluid's film follows its density,
+     * with no line.
      */
-    public static final double FILM_GAS_UNTIL=.5,FILM_LIQUID_FROM=1.5;
+    public static final double FILM_GAS_UNTIL=FluidThermodynamics.GAS_LIKE_UNTIL,FILM_LIQUID_FROM=FluidThermodynamics.LIQUID_LIKE_FROM;
     private final double[] h,t,film;
     /** Each knot's vapour mass fraction where the curve was sampled ({@link #sample}), so {@link #withFilms} can give it
      * other films without a flash; null for a curve given its films directly. */
@@ -61,14 +61,11 @@ public final class HeatCurve {
         return new HeatCurve(h,t,value,vapour,liquidLike);
     }
     /**
-     * The liquid-like weight of a state of one fluid ({@link FluidThermodynamics.State#oneFluidSlot()}): 0 (gas film) at or
-     * below reduced density {@link #FILM_GAS_UNTIL}, 1 (liquid film) from {@link #FILM_LIQUID_FROM}, a smoothstep between;
-     * NaN for any other state (its film is by vapour fraction).
+     * The liquid-like weight of a state of one fluid, the model's ({@link FluidThermodynamics#liquidLikeWeight}): 0 (gas
+     * film) at or below reduced density {@link #FILM_GAS_UNTIL}, 1 (liquid film) from {@link #FILM_LIQUID_FROM}, a
+     * smoothstep between; NaN for any other state (its film is by vapour fraction).
      */
-    public static double liquidLikeWeight(FluidThermodynamics.State state) {
-        if(state.oneFluidSlot()<0)return Double.NaN;
-        return MixtureViscosity.smoothstep((state.reducedDensity()-FILM_GAS_UNTIL)/(FILM_LIQUID_FROM-FILM_GAS_UNTIL));
-    }
+    public static double liquidLikeWeight(FluidThermodynamics.State state){return FluidThermodynamics.liquidLikeWeight(state);}
 
     /** The films of the three phase regimes (W/m2K), each with its share of the wall and fouling (plan section 4). */
     public record Films(double liquid,double twoPhase,double gas) {
