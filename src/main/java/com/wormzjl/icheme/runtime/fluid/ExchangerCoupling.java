@@ -152,7 +152,9 @@ final class ExchangerCoupling {
      * What each of the island's coupled sides reads for {@code slice} (plan section 5.2): its other side's stream as of the
      * slice start, whether that side is stopped, the heat in transit as of the start (the other side's heat booked past it
      * taken out again), that side's slice length and the share of this slice it spent counting this one stopped. A certified
-     * other side behind the start is materialised first. Arithmetic only.
+     * other side behind the start is materialised first, to the start (the fence let it through as far: {@link
+     * #coupledThrough}), not to the moment of the dispatch, which follows when workers finished (codebase review R-ST4).
+     * Arithmetic only.
      */
     Map<Long,ExchangerRelay.Read> reads(Island island,IslandClock.Slice slice) {
         if(island.sides.length==0)return Map.of();
@@ -163,7 +165,7 @@ final class ExchangerCoupling {
             // A column's condenser read by its water side carries the valve the column sets, where its lines are complete (U2).
             if(held!=null){reads.put(pipe,held.ceiling()>0&&held.operation()==null?held.withOperation(operations.get(pipe)):held);continue;}
             var other=other(side);var otherSide=coordinator.coupled.get(side.partner);
-            if(other!=null&&other!=island&&other.certificate!=null&&other.clock.committedTick()<start)coordinator.certificates.materialise(other);
+            if(other!=null&&other!=island&&other.certificate!=null&&other.clock.committedTick()<start)coordinator.certificates.materialise(other,start);
             // A convection coil reads its radiant coil's heat as of the slice start (F1); one in this island plans it per step.
             if(side.kind==SideKind.CONVECTION){reads.put(pipe,ExchangerRelay.Read.radiant(otherSide==null||other==null?0:otherSide.rateAsOf(start)));continue;}
             boolean stoppedOther=other==null||other!=island&&stoppedSide(other);
