@@ -28,8 +28,10 @@ One Gradle lane (AGENTS.md); the harness's worlds run in the census's JVM:
 | File | Role |
 |---|---|
 | `census.init.gradle` | Attaches the bundled hold-fuzz harness's `src/` and this `src/` to the test source set; forwards `holdFuzz*` and `censusOut` |
+| `JfrAncestors.java` | A JFR recording's samples by what is on the stack, not by the top frame: `java -Dfrom=<epoch ms> tools/fluid-step-cost/JfrAncestors.java <recording.jfr> 'name=regex&regex' ...` counts, per rule, the samples whose stack holds a frame for every pattern (`Class.method`), among those with a frame under `-Dbase` (default the fluid science packages). `-Devent=jdk.ObjectAllocationSample` sums allocation samples by their weight (bytes); `-Dtop=N -Ddepth=D` prints the first rule's N heaviest stacks. Run with the JDK's `java` (single-file source). The bench's `report.json` gives `measuredStartEpochMillis` for `-Dfrom` |
 | `src/com/wormzjl/icheme/science/fluid/network/PatternCensusTest.java` | Installs the observer, runs `HoldFuzzTest.placementSequenceFuzz` (by reflection: it is package-private in `runtime.fluid`), removes the observer, writes the census. In `science.fluid.network` to read `StepEquations`' package-private layout |
 
 ## History
 
 - 2026-11-15: made (S0). Counters, observer hook and census; not yet run.
+- 2026-11-15: the census run on seeds 1 to 200 and extended with the transitions between consecutive factorizations; `JfrAncestors.java` added (CPU by stack, then allocation by weight and the heaviest stacks) for the bench pair of S2.

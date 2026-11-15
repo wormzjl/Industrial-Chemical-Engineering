@@ -89,6 +89,70 @@ So S1's forms are (each against today's, C): **F1** the declaration made true (t
 
 Expected (est.), to be measured: F2 removes the reach search on a running plant (up to 10 % of the step) and adds 13 % to the matrix's entries; F1 and F2 change the fill through the ordering, in a direction only the bench can give. The net may be small.
 
+## 4c. S2 measured, and the profile by stack (2026-11-15)
+
+One bench pair each (`mixed100`, 60 s warm-up and 60 s measured, alone, 899 island steps, two workers): the baseline on `509d15e9d` (0.31.0 and the S0 counters) and S2 on `dafb95278`. Reports: `tmp/pattern-census/bench-base/`, `bench-s2/`; read with `tmp/pattern-census/bench-read.mjs` and `tools/fluid-step-cost/JfrAncestors.java`.
+
+| | Baseline | S2 | Change |
+|---|---|---|---|
+| Island step, mean (ms) | 34.83 | 33.52 | -3.8 % |
+| Island step, median (ms) | 34.54 | 32.85 | -4.9 % |
+| Island step, p95 (ms) | 56.14 | 56.09 | none |
+| Worker CPU a step, mean (ms) | 32.92 | 31.77 | -3.5 % |
+| Worker occupancy | 0.261 | 0.251 | |
+| Bytes allocated under the fluid step, the measured minute (GB) | 35.57 | 28.35 | -20.3 % |
+| of them kernel workspaces (GB) | 14.26 | 9.83 | |
+| of them phase tangents (GB) | 1.89 | 0.09 | |
+| Collections in the measured minute | 23 | 20 | |
+| Heap after a collection (GB) | 1.77 to 2.13 | 1.93 to 2.30 | +0.17 (+8 %) |
+| Every solver counter (solves, iterations, residuals, entries, factorizations) | | identical | |
+
+The time is one pair, and the run-to-run spread is not measured: the 4 % is a gain to confirm in S3, not a result. The two earlier allocation cuts gave none. The kept bundles cost 1.7 MB of heap an island.
+
+**The baseline's counters, the measured minute.** 19,371 Newton solves, 25,710 iterations (18,237 with a new Jacobian). 761,947 residual evaluations, 716,866 of them inside a Jacobian build. 18,237 Jacobian builds, of which 1,563 are the step's block sweep; the other 16,674 are closure solves, 43 residuals each. The step's factorizations: 1,593, 8.4 s in all (5.3 ms each), 120,565 entries of L and U each against 4,410 kept and 10,966 declared; 0.913 of the columns searched their reach again; ordering 18 ms.
+
+**CPU by what is on the stack** (baseline, 2,778 samples with a fluid frame; the rows overlap):
+
+| Share | Part |
+|---|---|
+| 32.5 % | sparse LU; the reach search is 10.3 % |
+| 28.6 % | the reconstruction after a step (`ConservativeTransport.reconstruct`) |
+| 19.7 % | of it the vessel closure (`InventoryEquilibrium.close`, `PhaseLayout.wallClosure`); its difference Jacobian is 17.4 % |
+| 18.0 % | the step's Jacobian sweep (tangents 2.6 %, decodes on them 4.8 %, transport rows 4.1 %) |
+| 17.2 % | the step's residual evaluations (their decodes 13.5 %) |
+| 36.5 % | the equation-of-state kernel, under all of the above |
+
+**The vessel closure is the largest single item not yet touched.** Every vessel is closed to 1e-11 after every step (decision D36). The closure is a Newton on one node, about one iteration, and its Jacobian is differenced column by column on the equation of state: 43 full decodes a build, 16,674 builds a minute. The step's own sweep stopped doing that on 2026-11-12 (one derivative evaluation a phase, every column a first-order phase).
+
+**What still allocates kernel workspaces** (S2 run, 9.83 GB a minute, 34.7 % of the bytes), all inside the reconstruction: the restatement `ConservativeTransport.repartition` 5.50 GB and the same inside the closure 1.36 GB (`adoptingState(..., null)`), the closure's first decode 1.52 GB (`decode(variables, 0)`), the closure's own bundle 1.43 GB (one per `wallClosure`).
+
+### S2b. An evaluation with no bundle takes the thread's kept workspace (bit for bit)
+
+`FluidThermodynamics`: where an evaluation has no `Prepared` it calls `hydrocarbon.prepare(t)`, a new kernel workspace (lines 575, 600, 633 and 957 of the file at `dafb95278`; line 350 and the constructor's line 162 are read first and left where they are not on a step's path). Each takes the workspace from a per-thread slot instead (the pattern of `HydrocarbonModel.tangentScratch`): the slot is emptied while the evaluation runs, the workspace is prepared at the temperature as `Prepared.pengRobinson` prepares a kept one (`translated().prepare(t, kept)`, then `carryAll()`), and it goes back to the slot when the evaluation returns. An evaluation that throws does not give it back (a refusal leaves a workspace half prepared), and a nested evaluation finds the slot empty and builds its own.
+
+- Rests on: P-18's rule, which `PreparedRefillTest` holds: a kept workspace prepared at a new temperature on the whole list gives a new one's bits and refusals. No `State` keeps a workspace.
+- Ruled out: passing a bundle down through `reconstruct`, `repartition` and `close` (six signatures for the same effect); a workspace kept in a field of the model (a model is read by several workers).
+- Not covered: the closure's own bundle (1.43 GB), which lives in the closure object.
+- Expected: 8.4 GB a minute fewer (30 % of the step's bytes); time unproven.
+- Gates: `PreparedRefillTest` with a new case (bundle-less states at two temperatures and two supports, interleaved, equal to the bit those of a model that never evaluated before; at most one workspace built on the thread); `PassiveStepSolverTest`, `PhaseLayoutTest`, `HydrocarbonTangentTest`, `EngineDigestTest`; chain-100 exact with no re-record.
+
+### S4. The vessel closure's Jacobian from phase tangents (results move in the last digits)
+
+`PhaseLayout.wallClosure` gets `differentiateEntries`, as `StepEquations.differentiate` has for a node:
+
+1. `prepared = prepare(x)`, `base = decode(x, 0, prepared)` on the equation of state, `tangents = model.tangents(base, prepared, storage)` with a `Tangent[3]` kept in the closure object.
+2. For each column: `step = differenceStep * differenceScale(column, x[column])`; the trial's temperature; the base bundle where the temperature is the base's, else a second kept bundle refilled by `model.prepare(temperature, probe)`; `state = decode(trial, 0, bundle, tangents)`; the rows by the closure's own `PhaseLayout.this.residual(state, target, energy, capacity, workFrom, rows, 0, trial, bundle, sweeping)`; `entries[entryOffsets[column] + r] = (rows[r] - residual[r]) / step`, the arithmetic of `SparseNewton.Pattern.derivative`.
+3. Returns the number of columns. An `IllegalArgumentException` (a trial outside the numerical box) returns -1 and counts `jacobianBlockFallbacks`: the coloured sweep runs, with its bounded one-sided stencil.
+
+- Rests on: the closure's rows read the decoded state alone, the split of the amounts is exact in a tangent decode, and a phase the column moves by more than `TANGENT_COMPOSITION_STEP` or one without a tangent is evaluated on the equation of state (`FluidThermodynamics.slotPhase`).
+- Pitfalls: the wall's branch. `SparseNewton.differentiate0` calls `linearising(x)` before `differentiateEntries`, so `sweeping` is set: every trial row is stated on it (decision A423), as the difference sweep's are. The base residual passed in was evaluated outside the bracket, on the state's own branch, as today. The solids' rows read the unknowns, not the state. `columnRows` is dense, so `entryRows` is 0 to size-1 per column.
+- Not done: `junctionClosure`. It is 0 % of this profile, and every point it evaluates is read by the vanishing rule (`Vanished`, decision D38 C), which a first-order phase would read differently.
+- What moves: a closed vessel's state within the closure's 1e-11, so every later result in its last digits. An entry differs from the difference sweep's near its sixth digit (no curvature inside the step); the closure converges to the same tolerance, in the same iterations where it took one. Chain-100 is recorded again once, in the final lane, old and new values stated. Conservation stays exact: the closure's result is restated at the inventory's amounts (`repartition`).
+- Expected (est.): the closure's Jacobian from 17.4 % of the step's CPU to about 5 % (the step's sweep pays 7.4 % for 1.3 million tangent decodes and 31,000 node tangents; the closures need 717,000 and 16,674); `residualEvaluationsInJacobian` from 716,866 to the step's own.
+- Gates: a new `WallClosureJacobianTest` after `BlockJacobianEquivalenceTest` (the entries against the column-by-column differences of `residual` inside the bracket, relative 1e-5 of each row's largest entry, on a two-phase vessel, a liquid-full taut one, a slack bag, one with an aqueous slot, one with solids; a trial outside the box gives -1); `PhaseLayoutTest`, `SparseNewtonTest`, `PassiveStepSolverTest`, `SolidClosureFeasibilityTest`; the 200-seed quick check (no new hold class); chain-100 in its declared mode, deviations inside the bound.
+
+Order: S2b, S4, then S1's F1 and F2 (the pattern forms act on the 32.5 % of the LU, of which the reach search is 10.3 %; the census says their net may be small).
+
 ## 5. Commands
 
 - Step tests: `./gradlew --console=plain test --tests '*SparseNewtonTest' --tests '*UpLookingLuParityTest' --tests '*PassiveStepSolverTest' --tests '*DirectLiquidJacobianRowsTest' --tests '*PhaseLayoutTest'`

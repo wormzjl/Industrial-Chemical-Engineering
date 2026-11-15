@@ -304,7 +304,8 @@ public final class PassiveIntervalSolver {
                 implicit.markBackwardEulerAccepted(accepted,result);
                 carriedModes=result.modes();carriedFlows=result.massFlows();carriedKey=flowKey(accepted);carriedTransfers=result.pipeTransfers();carriedSeconds=step;
                 // The cold-start graphs are read only while the structure is cold, and the step solver's last solve only
-                // by a test of the Jacobian; a retained island keeps neither (review 8.7 (c) E2).
+                // by a test of the Jacobian; a retained island keeps neither (review 8.7 (c) E2). The step solver keeps
+                // its last pass's node bundles, retired (PassiveStepSolver.preparedPass; batch 2026-11-15-fluid-step-cost, S2).
                 coldSeed=null;coldSeedFor=null;implicit.releaseLastSolve();
                 work+=result.pumpWorkJoule();boundaries.addAll(result.boundaries());pipeTransfers.add(result.pipeTransfers(),1);
                 if(flush!=null)boundaries.addAll(flush.boundaries());
