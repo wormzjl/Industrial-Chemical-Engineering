@@ -91,21 +91,9 @@ public final class SparseLuSolver {
          * storage has the island's size. */
         private final UpLookingLu lu=new UpLookingLu();
         private int[] aColumns=new int[1],aRows=new int[0];private double[] aValues=NO_VALUES,permutedRhs=NO_VALUES,permutedSolution=NO_VALUES;
-        /** Whether this storage hands the LU every entry its matrices store, an explicit zero included ({@link #storedPattern});
-         * otherwise it drops the exact zeros first. */
-        private final boolean keepsZeros;
-        /** A storage that drops a matrix's exact zeros before it factors: a transport matrix stores the zeros of a pipe at rest. */
-        public Storage(SolverOwnership ownership){this(ownership,false);}
-        private Storage(SolverOwnership ownership,boolean keepsZeros) {
-            this.ownership=Objects.requireNonNull(ownership,"ownership");this.keepsZeros=keepsZeros;SolverDiagnostics.count(SolverDiagnostics.luStorages);
+        public Storage(SolverOwnership ownership) {
+            this.ownership=Objects.requireNonNull(ownership,"ownership");SolverDiagnostics.count(SolverDiagnostics.luStorages);
         }
-        /**
-         * A storage that factors every entry a matrix stores, an explicit zero as a structural entry the LU keeps in its
-         * reach (batch 2026-11-15-fluid-step-cost, S1 F2): the Newton's, whose matrix holds exactly the entries it means the LU
-         * to see ({@code SparseNewton}'s numeric matrix: its nonzeros, and after a block build the zeros its equations keep).
-         * On a matrix that stores no zero it factors what {@link #Storage(SolverOwnership)} factors, bit for bit.
-         */
-        public static Storage storedPattern(SolverOwnership ownership){return new Storage(ownership,true);}
         public Factorization factor(SparseMatrix matrix,Ordering ordering) {
             if(!SolverDiagnostics.ENABLED)return factor0(matrix,ordering);
             long started=System.nanoTime();boolean completed=false;
@@ -142,7 +130,7 @@ public final class SparseLuSolver {
             int stored=0;
             for(int column=0;column<size;column++) {
                 int original=inverse[column];aColumns[column]=stored;
-                for(int entry=matrix.columnStart(original);entry<matrix.columnEnd(original);entry++)if(keepsZeros||matrix.valueAt(entry)!=0) {
+                for(int entry=matrix.columnStart(original);entry<matrix.columnEnd(original);entry++)if(matrix.valueAt(entry)!=0) {
                     int row=matrix.rowAt(entry);aRows[stored]=permutation[row];aValues[stored++]=scaledValues[entry];
                 }
             }
