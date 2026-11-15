@@ -28,7 +28,10 @@ package com.wormzjl.icheme.science.thermo;
  * dioxide at {@code Tr} 1.0 to 3.0 and {@code Pr} 0.1 to 9: 2144 of 11070 states, from {@code Tr} 1.15 and {@code Pr}
  * 1.8 up; inside the data ranges 11, all nitrogen at 145 to 177 K and 6.1 to 9.8 MPa. At ambient temperature the label
  * first says liquid at 16.4 MPa for nitrogen ({@code v_c/v} 0.61), 15.1 MPa for methane and 9.79 MPa for carbon dioxide
- * at 319 K, the critical volume at 28.9, 18.4 and 9.85 MPa.</p>
+ * at 319 K, the critical volume at 28.9, 18.4 and 9.85 MPa. So the fluid network does not place one dense fluid by this
+ * label: a one-fluid answer on a supercritical isotherm goes to the liquid slot iff {@code v_c/v >= 1} (owner decision
+ * O2 A, S2c; {@code FluidThermodynamics.placed}). The engine's own label of such a root, and the column's and the
+ * simulator's, stay this rule.</p>
  *
  * <p>For {@code P = R T/(v - b) - a/D}, {@code D = v^2 + 2 b v - b^2}, the four derivatives are the ones
  * {@code TranslatedCubic.fill} forms for its volumetric block:</p>

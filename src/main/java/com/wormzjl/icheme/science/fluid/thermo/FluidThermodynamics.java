@@ -970,12 +970,24 @@ public final class FluidThermodynamics {
      * The engine's fluid phases in the state's slots (W3b): a vapour-like phase in the vapour slot, the liquids by the slot
      * rule ({@link #placedState}); a one-root phase by its own phase identification parameter. More than one vapour or
      * more than two liquids is a typed hold of {@code kind} (a fourth fluid phase).
+     *
+     * <p>One dense fluid (owner decision O2 A, batch 2026-11-15-supercritical-fluids, S2c): an answer of exactly one fluid
+     * phase whose root is on a supercritical isotherm of its own composition
+     * ({@link com.wormzjl.icheme.science.thermo.PhaseTraits#supercriticalIsotherm()}, mixtures included) is liquid iff its
+     * reduced density ({@link com.wormzjl.icheme.science.thermo.PhaseTraits#reducedDensity()}) is at least 1, whatever
+     * label the engine gave it: the engine labels a one-root mixture by the identification parameter itself, so the slot
+     * line of a pure component and of the same component with a trace of another stays the same. The traits are the ones
+     * the engine's phase carries; a phase without them (no traits, or a NaN attraction) is placed by the rule below. Every
+     * answer of two or more fluid phases keeps the engine's labels: a LIQUID or VAPOR label as given, a FLUID one by the
+     * root's identification parameter ({@link HydrocarbonModel#liquidLike}).</p>
      */
     private State placed(double t,double p,List<PhaseAmounts> fluids,TranslatedPengRobinson.Workspace terms,UnsupportedPhases.Kind kind) {
         int n=componentCount();double[] vapor=new double[n];var liquids=new ArrayList<double[]>();boolean gas=false;
+        var dense=fluids.size()==1?fluids.getFirst().traits():null;
+        if(dense!=null&&!dense.supercriticalIsotherm())dense=null;
         for(var phase:fluids) {
             double[] amounts=conserved(phase.amountsView());
-            boolean liquid=switch(phase.kind()) {
+            boolean liquid=dense!=null?dense.reducedDensity()>=1:switch(phase.kind()) {
                 case LIQUID->true;
                 case VAPOR->false;
                 default->hydrocarbon.liquidLike(t,p,amounts,phase.state().root(),terms);

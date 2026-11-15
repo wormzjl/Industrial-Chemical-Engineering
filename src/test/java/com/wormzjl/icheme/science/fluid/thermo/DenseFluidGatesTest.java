@@ -70,12 +70,16 @@ class DenseFluidGatesTest {
             previous=laws;
         }
         assertEquals(1,slotChanges,"the isotherm crosses the slot line once");
-        // Bisect the slot line to 1e-12 of its pressure: the laws on its two sides agree to 1e-9 relative.
+        // Bisect the slot line to 1e-12 of its pressure: the laws on its two sides agree to 1e-9 relative. The line is the
+        // critical density (owner decision O2 A, S2c): the vapour slot below reduced density 1, the liquid slot from it.
         double lo=9e6,hi=1.1e7;int below=at(320,lo,co2).slot;
+        assertEquals(FluidThermodynamics.State.VAPOR,below);
         assertNotEquals(below,at(320,hi,co2).slot);
         while(hi-lo>1e-12*lo){double mid=(lo+hi)/2;if(at(320,mid,co2).slot==below)lo=mid;else hi=mid;}
         var a=at(320,lo,co2);var b=at(320,hi,co2);
         assertNotEquals(a.slot,b.slot);
+        assertEquals(1,MODEL.flashTP(320,lo,co2,()->{}).reducedDensity(),1e-9,"the slot line is at the critical density");
+        assertEquals(1,MODEL.flashTP(320,hi,co2,()->{}).reducedDensity(),1e-9,"the slot line is at the critical density");
         assertEquals(1,b.viscosity/a.viscosity,1e-9,"viscosity across the slot line");
         assertEquals(1,b.limit/a.limit,1e-9,"velocity limit across the slot line");
         assertEquals(a.weight,b.weight,1e-9,"film weight across the slot line");
