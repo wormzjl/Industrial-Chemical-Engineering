@@ -4,6 +4,55 @@ Branch `claude/codebase-review-refactor-8a85ef` at e1b082cc1 (code at 4563176e1)
 
 **Owner, 2026-11-15: "this whole work will merge together".** The branch goes to `main` in one merge. Read every "in a merge of its own" alternative below as not chosen: the sections per unit stay as the record of each unit's preparation, and the whole branch takes one version (0.31.0 proposed) and one changelog section.
 
+## The whole branch, for the one merge (main thread, 2026-11-15)
+
+Branch `claude/codebase-review-refactor-8a85ef` at `8885a46b5` before this section's commit, against `main` 259d22a2c (0.30.0). `main` has not moved: it is the merge base, so the merge has no conflict. 569 commits; 933 files, +183,606 −32,797: `src/main/java` 374 files (+30,039 −24,336; 861 files become 968), `src/test` 251 (+10,061 −1,426), `src/main/rust` 62 new files (+120,652, of them 113,355 lines of reference vectors for the math crate), `documentation` and `tools` 209 (+22,434 −6,092); the C++ column library is removed. Nothing is merged to `main` and nothing is pushed. The sections below this one are the record of each unit's preparation.
+
+### The lanes
+
+| unit | marker | lane at | tests | chain-100 | GameTests | campaigns (cold, bundled, defaults) |
+|---|---|---|---|---|---|---|
+| 1 | `claude/codebase-review-unit1` 60147f728 | 4563176e1 | 3,454 | exact | 97/97 | at the baseline |
+| 2 | `claude/codebase-review-unit2` ec6b8d42a | 088e9887a | 3,581 | exact | 97/97 | at the baseline |
+| 3 | `claude/codebase-review-unit3` ad027b1a7 | 36b5805d3 | 3,642 | exact | 97/97 | 992, 995, 1000 |
+| 4 | `claude/codebase-review-unit4` c1e2e1b37 | 3516c6b85 | 3,345 | exact | 97/97 | 992, 995, 1000 |
+| 5 | `claude/codebase-review-unit5` 0a6a87ce1 | 54df44fb7 | 3,563 | exact | 98/98 | 992, 995, 1000 |
+| 6 | `claude/codebase-review-unit6` | 9d6d0d82e | 1,084 | stands from unit 5 | 98/98 | 992, 995, 1000 |
+
+- **The last lane is on the final code.** `git diff --name-only 9d6d0d82e..HEAD -- src build.gradle settings.gradle gradle.properties tools/development.gradle` is empty: after it came documents, the code guide, one recipe file of the GUI skill and three tool files that no task compiles.
+- **What the six lanes prove together.** Each lane ran the classes its unit's changes can reach, against the lane before it. A class a later lane did not select loads nothing that changed since its last pass, so that pass stands (`AGENTS.md`, "No repeated tests"). No one run held every class at the final code: `lane.sh head --all` does that, on the owner's word only.
+- **Holds that follow the machine.** The bundled random campaign reads 991 or 992 in a lane and 995 after the one replay alone of its wall-deadline seeds (12, 47, 59, 118). Cold seed 431 holds in every lane of this batch (a crystal hold at tick 3485); on a slow day it meets the wall deadline at tick 3085 first. Its counters at this code equal unit 4's.
+
+### The checklist
+
+- **Version (the owner chooses).** 0.31.0 proposed: minor by the CHANGELOG's rule, for the new wear modes and the gearbox limit, the model changes (electricity draws, column pricing, the still's and the column's timing) and the Rust library. `gradle.properties` is not edited. At the merge `[Unreleased]` (5 Added, 24 Changed, 8 Fixed lines, all of this batch) becomes the version's heading.
+- **Translation.** Done in unit 2 (`c1ad97269`): 8 keys changed in `en_us.json`, and the same 8 keys in each of the other 4 languages (checked key by key against `main`). No key changed after it.
+- **Formats.** No facts schema, state format number or shape field changed: fluid facts 25, checkpoint state 50, accessories 6 and 1, control 4, assemblies 2, sheet file 2, run results 4, as on `main`. Changed: every payload registrar carries `NetworkProtocol.VERSION` (`icheme-1`), so a client and a server must be the same build; a rest certificate carries the declared `replay-1` where it carried a digest (an older world's certificates are discarded once and rebuilt); an equipment cell writes `LayoutRevision` and still reads `Layout`; the native library's ABI is 1. `FORMATS.md` is new and `FormatsTableTest` checks each row. One corpus image gained a case (`compat/equipment/repairs-exchanger-types.snbt`).
+- **Code guide.** 46 chapters on one template (the largest `fluid-step.md`, 34 KB), `README.md` 139 lines, history in `HISTORY.md`. `node tools/code-guide/map.mjs --check`: documentation/reference/code-guide/README.md: counts current
+- **Tooling.** `perl tools/merge-lane/main-reach.pl .` lists four classes reached only by tests, all older than this batch and loaded by name (`DhBridge`, `DhGroups`, `IrisBridge`, `IChemEJeiPlugin`). `git ls-files -i -c --exclude-standard` is empty. New tool folders, each with a README and a row in `tools/INDEX.md`: `tools/codebase-review-bench/`, `tools/code-guide/`. Removed: `tools/native-column-default/` (with the C++ library). The three tool files that called the removed `ColumnUnit.solve` follow the shared solve (`4fb3c95dd`). Known and left: archived probes under `tools/` that name moved classes (62 files from unit 3, one from unit 4); nothing compiles them. The lane's selection can pick `NativeColumnSolverTest` into `columnGates`, which excludes it: when it is the only class the test step ends with exit 1 and no failed test.
+
+### What a player or a server owner sees
+
+- **Machines wear in more ways:** a centrifugal pump below 30 % of its rated flow; a centrifugal compressor on wet gas; a steam turbine with a wet exhaust; a dry screw in proportion to its liquid. A repair kit restores all of them. A gearbox holds its train at its rated power (GEAR LIMITED). A motor's overload trip and a turbine's overspeed trip, which could not fire, are gone.
+- **Electricity:** a driver pays the shaft power of the solve's own law. An in-line pump or compressor with no power stands with NO POWER (it ran on alternate dispatches before).
+- **Batch still:** its water, outlets and burners follow each other one fence (22 s of play) later, the same on every machine; its column is solved every 200 ticks; beside resting islands it gives distillate and lights its burners again.
+- **Running column and exchanger pair:** the same bookings on a slow and a fast server; a solve the service refuses under load is asked again. Products are priced by one flash each (a closure departure of 144 J/mol at the composition band's edge).
+- **Level controller:** no swing or overflow on a slowly solving island.
+- **Process simulator:** a column block's condenser duty closes the sheet's heat balance (under 0.3 % from before); a compressor's discharge reads hotter (the world's polytropic exponent: 175 degC where 137 degC was read at ratio 3); a wet ejector suction needs less steam.
+- **Client:** a tank's Accessory tab opens (it threw); five screens draw their frames in one batch.
+- **Server and saves:** client and server must be the same build; an older world loads with every fact kept, its rest certificates rebuilt once; the optional native column library is Rust and off by default (`-Dicheme.native.column=band`).
+
+### For the owner
+
+1. **The merge itself and the version** (0.31.0 proposed). The main thread does not merge without the owner's word and never pushes.
+2. **Decisions taken under the owner's grant, to confirm or overrule** (each in its unit's section): the still's lags and its cadence by ticks (unit 3); products priced by mass, the refused still job waits (unit 5); the sheet keeps its learned start and the world its fast first solve (unit 6); the gearbox limit and the removed trips, the turbine's wet exhaust thresholds (unit 2); the level law (unit 1).
+3. **Left open, not in this merge:** decision 16 (the learned start for the running column too: a sixth to a ninth of a cold solve's checkpoints, world results move inside the old closure); the Rust stages (b) to (d), held because the band solve in Rust measured 15 % slower than Java; the sheet's core and sizing packages that import each other, and the designs' `Sizes` placeholders (unit 4); wakes from a control, shaft or converter change that carry no tick; P-09 and P-02 of the fluid step; the later steps of the room for supercritical fluids; the world's feed flash one tray drop above V3's stage pressure (H-C5, F1).
+4. **Nothing was looked at in the game in this batch.** The lists are in the unit sections; the ones a gate cannot judge are the client changes (the device screen's pages, input routing, the watched displays), a refitted safety valve, a batch still and a running column in a played world on a slow machine. One in-game check through the bridge is the owner's to start.
+
+### The merge, on the owner's word
+
+In the main checkout (it holds `main`): `git merge --no-ff claude/codebase-review-refactor-8a85ef`; in the same merge set `mod_version` in `gradle.properties`, turn `[Unreleased]` into the version's heading with the date, and set the batch's row in `documentation/INDEX.md` to Implemented. No push. After it the unit markers and the agents' worktrees can go; the E0-1 worktree (`agent-a1d551d6db929a025`, refuted and unmerged) is kept until the owner says otherwise.
+
 ## Version proposal (the owner chooses)
 
 - **Proposed: one merge as 0.31.0 (minor).** By the CHANGELOG's Version rule a merge that holds a feature, a solver or model change or new content is minor. This unit holds all three: a new wear mode (low flow of centrifugal pumps) and the fault table, a model change of the electricity a driver pays (G0), the water module (a stated last-digit shift of wet states), the Rust column library replacing the C++ one, and the level law. The wave A fixes ride along. Needs: nothing more than what stands (the second final lane at 4563176e1, this preparation, no translation commit).
@@ -101,9 +150,9 @@ Unit 6 is the review branch after the marker `claude/codebase-review-unit5`, to 
 
 - **Translation.** None: no language file changed in unit 6.
 - **Formats.** None changed.
-- **Code guide.** Restructured (J2, J2-I): one chapter per module on one template.
+- **Code guide.** Restructured (J2, J2-I `8885a46b5`): one chapter per module on one template; the README, the links and the chapters follow H-C5 and R-ST4. The seven small chapters (`cooling-towers`, `effects`, `instrument-accessories`, `pipe-laying`, `process-control`, `tutorial`, `wired-control-power`) keep their earlier snapshot lines: their names were checked against this code, their flows were not re-read.
 - **CHANGELOG.** `[Unreleased]` gains: the one column solve and the code guide (Changed); the column and the exchanger pair beside islands at rest (Fixed).
-- **Tooling.** Nothing left `src/main` and nothing new is in it. Not compiled by the lane and now stale: `tools/batch-still-column/src/BatchColumnComparisonTest.java`, `tools/codebase-review-bench/ColumnBench.java` and `WarmProbe.java` call the removed `ColumnUnit.solve` (the call is now `ColumnSolve.calculate(input, seed, catalog, ColumnUnit.SCREEN, ColumnSolve.ColdStart.LEARNED, checkpoint)`). The lane's selection picks `NativeColumnSolverTest` into `columnGates`, which excludes it; when it is the only class selected the step ends with exit 1 and no failed test.
+- **Tooling.** Nothing left `src/main` and nothing new is in it. Not compiled by the lane: `tools/batch-still-column/src/BatchColumnComparisonTest.java`, `tools/codebase-review-bench/ColumnBench.java` and `WarmProbe.java` called the removed `ColumnUnit.solve`; they follow the shared solve since `4fb3c95dd` (the call is now `ColumnSolve.calculate(input, seed, catalog, ColumnUnit.SCREEN, ColumnSolve.ColdStart.LEARNED, checkpoint)`). The lane's selection picks `NativeColumnSolverTest` into `columnGates`, which excludes it; when it is the only class selected the step ends with exit 1 and no failed test.
 - **Changes a player or a server owner can see:** a running column and an exchanger pair behave the same on a slow and a fast server; a column whose solve the service is too busy to take waits for it (its status line stays on the solve) where it skipped it; the simulator's column block reports a condenser duty that closes the sheet's heat balance (under 0.3 % from before) and re-runs faster after a wet solve.
 - **Decisions the main thread took, for the owner to overrule:** the sheet keeps its learned start (the subagent's form put it on the world's classical chain: six to nine times the checkpoints of a cold sheet solve, and designs that stop solving); the world keeps its fast first solve. One start for both, the learned one, is decision 16 of the plan: it would cut the world's cold column solves by the same factor and moves the running column's published states from the 1e-3 closure to 1e-8, so it needs its own measurement and the owner's word.
 - **Not looked at in the game:** a running column and a coupled exchanger pair next to resting islands; a simulator sheet with a column re-run.

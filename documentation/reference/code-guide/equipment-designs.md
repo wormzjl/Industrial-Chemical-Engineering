@@ -91,6 +91,7 @@ Paths under [`src/main/java/com/wormzjl/icheme/science/equipment/`](../../../src
 - Motion (`ProcessUnit`): `FAN_SPEED`, `PUMP_SPEED`, `CRANK_SPEED`; `MOTION_PERIOD` holds whole turns of every speed. Kinds whose `moves` is true have parts the client turns ([client-rendering.md](client-rendering.md)).
 - `ConverterDesign.rated` is one tank's volume in `TURNOVER` seconds.
 - Machine design point lists: `MachineDuty.POWERS`, `MOTOR_POWERS` (IEC), `EXHAUSTS`; `speed` is 50 Hz synchronous.
+- Machine size limits (kW in the code): `MachineDuty.MAX_GENERATOR` 400 MW (`GENERATOR_POWERS`); `MachineDuty.MAX_TURBINE` 300 MW (`TURBINE_POWERS`, from 55 kW), one casing to `SteamTurbineDesign.SINGLE_CASING` 45 MW and tandem sections above; a two-pole generator above `ProcessUnit.TURBO_GENERATOR` 20 MW is drawn as a turbo-generator.
 
 ## Formats
 
