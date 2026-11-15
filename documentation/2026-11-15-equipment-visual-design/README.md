@@ -18,6 +18,8 @@ Purpose: make the implemented equipment look better and less bare (owner request
 ## Documents
 
 - [VISUAL_REVIEW.md](VISUAL_REVIEW.md): the findings and the proposed order.
+- [RELIEF_SPRITES_PLAN.md](RELIEF_SPRITES_PLAN.md): relief sprites for shells, nuts and louvres out of polygons, decisions R1 to R3,
+  work packages R-W1 to R-W3.
 - [STEAM_TURBINE_SECTIONS_PLAN.md](STEAM_TURBINE_SECTIONS_PLAN.md): the combined steam turbine, decisions T1 to T4,
   work packages W1 to W4.
 - Contact sheets (main checkout): `research/2026-11-15-equipment-visual-design/review/`.
