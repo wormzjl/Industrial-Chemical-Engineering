@@ -89,6 +89,21 @@ overrule:
    The threshold and the blend's width are an assumption the physics does not force: S2's review gives them as an
    option with numbers. The plan's S2 text "each only for `State.dense()`" is read with this rule.
 
+Decisions after S2b's stop conditions (2026-11-15):
+
+3. **O2 A stands, on a corrected premise (owner: "Keep O2 A").** Section 2's claim that the two slot rules agree on
+   every one-root state inside the old data ranges is false for nitrogen: 11 states at 145 to 177 K and 6.1 to 9.8 MPa
+   are liquid by the identification parameter and vapour by density ([S2_NETWORK_REVIEW.md](S2_NETWORK_REVIEW.md)
+   section 6). Today's rule calls nitrogen at 303 K a liquid from 16.6 MPa (0.62 of its critical density), methane at
+   295 K from 15.2 MPa; by density they are a gas to 28.5 and 18.4 MPa. The rule is carried out in S2c, after the laws
+   that still read the slot (level head, suction, boil-up) read the traits, with the moved states listed.
+4. **The identity bound (main thread's call, for the owner to overrule).** S3's critical-volume segment lengthened the
+   fluid identity (refinery 8,024 to 10,086 characters). `MaterialCatalog.MAX_IDENTITY` is 21000 in place of 16384:
+   the fluid checkpoint stores the model's thermodynamic revision, about three times the identity, as one NBT string of
+   at most 65,535 bytes, so 21000 is the largest identity that can be saved; the model checks its revision against that
+   limit when it is built ([S3_DATA_REVIEW.md](S3_DATA_REVIEW.md) section 4). About 95 compounds in a network package,
+   74 before the change, 85 before S3.
+
 ## 3. Stages
 
 Each stage is one package for one thread, on its own worktree, in the lane named. Line numbers are not given: the

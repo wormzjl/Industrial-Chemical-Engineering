@@ -58,6 +58,10 @@ simulator: continuous properties, no label-driven jumps, no critical-band hold.
   bound 21000 and the NBT check (`1b0fc7770`). The slot rule not edited (11 nitrogen states inside the old ranges
   disagree); owner: "Keep O2 A", carried out in S2c. Affected classes green. [S2_NETWORK_REVIEW.md](S2_NETWORK_REVIEW.md).
 
+- 2026-11-15: the main thread checked S2a and S2b (diffs, stored results: every affected class green in run 3 but
+  `ColumnSolveTest`, green in run 4 after the identity bound). Decisions recorded in the plan's section 2b, points 3 and
+  4. S2b's intermediate commits were not compiled one by one; the final tree is the tested one.
+
 ## Documents
 
 - [SUPERCRITICAL_LIMITS_REVIEW.md](SUPERCRITICAL_LIMITS_REVIEW.md): expected behaviour, what the code does, the
