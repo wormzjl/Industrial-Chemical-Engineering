@@ -31,10 +31,12 @@ public record DataPort(
         DCS,
         POWER_INPUT,
         POWER_OUTPUT,
-        POWER_BOTH;
+        POWER_BOTH,
+        /** An alarm beacon's socket (batch 2026-11-15-fluid-interfaces, W9): a data socket, neither a sensor nor an output. */
+        ALARM;
 
         public boolean power() {
-            return ordinal() >= POWER_INPUT.ordinal();
+            return this == POWER_INPUT || this == POWER_OUTPUT || this == POWER_BOTH;
         }
 
         public com.wormzjl.icheme.science.equipment.CableMedium medium() {
@@ -42,6 +44,11 @@ public record DataPort(
                     ? com.wormzjl.icheme.science.equipment.CableMedium.POWER
                     : com.wormzjl.icheme.science.equipment.CableMedium.DATA;
         }
+    }
+
+    /** A block entity that carries one data socket of its own: a controller, a console, an alarm beacon (W9). */
+    public interface Owner {
+        DataPort dataPort();
     }
 
     private static final Set<String> FIELDS =
