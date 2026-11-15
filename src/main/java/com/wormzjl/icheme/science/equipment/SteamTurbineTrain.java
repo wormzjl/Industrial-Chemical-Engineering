@@ -51,8 +51,27 @@ final class SteamTurbineTrain {
     /** The exhaust barrel's middle, the steam chest's axis. */
     final double exhaust, chest;
 
-    /** A turbine of exhaust-end casing {@code d} and {@code stages}, exhausting to a condenser where {@code vacuum}, its shaft {@code rise} over its base frame. */
+    /**
+     * The casing's profile from its HP end wall: each barrel's start and end (from the front standard's front) and radius,
+     * one barrel per section, short cones between them. A casing of one section has today's two barrels (the HP end and
+     * the exhaust end) and its cone.
+     */
+    final double[] barrelStart, barrelEnd, barrelRadius;
+
+    /** A turbine of one section ({@link #SteamTurbineTrain(double, int, boolean, double, double[])}). */
     SteamTurbineTrain(double d, int stages, boolean vacuum, double rise) {
+        this(d, stages, vacuum, rise, new double[]{1});
+    }
+
+    /**
+     * A turbine of exhaust-end casing {@code d} and {@code stages}, exhausting to a condenser where {@code vacuum}, its
+     * shaft {@code rise} over its base frame; its casing stepped into one barrel per section, each as long as its
+     * {@code drops} share (batch 2026-11-15-equipment-visual-design, owner: the HP turbine includes the MP and LP
+     * sections). The barrels: the front one the HP end's ({@link #hp}), the last one Dc, a middle one 0.85 Dc (0.9 Dc
+     * behind a back-pressure HP end). Every station that places a nozzle, the steam chest or a solid stays where one
+     * section put it: the end walls, {@link #coneEnd} and {@link #exhaust}.
+     */
+    SteamTurbineTrain(double d, int stages, boolean vacuum, double rise, double[] drops) {
         this.d = d;
         this.stages = stages;
         this.vacuum = vacuum;
@@ -70,6 +89,59 @@ final class SteamTurbineTrain {
         pedestal1 = pedestal0 + .25 * d + .05;
         exhaust = (coneEnd + exhaustEnd) / 2;
         chest = hpEnd + Math.max(.14 * d, .15 * casing);
+        int k = drops.length;
+        barrelStart = new double[Math.max(2, k)];
+        barrelEnd = new double[barrelStart.length];
+        barrelRadius = new double[barrelStart.length];
+        if (k <= 1) {
+            barrelStart[0] = hpEnd;
+            barrelEnd[0] = hpBarrel;
+            barrelRadius[0] = hp / 2;
+            barrelStart[1] = coneEnd;
+            barrelEnd[1] = exhaustEnd;
+            barrelRadius[1] = d / 2;
+            return;
+        }
+        // Short cones between the barrels; the barrels share what is left by their drops. The front barrel reaches past the
+        // steam chest on its top; the last starts before the exhaust branch it carries (its radius as one section gave it).
+        double cone = Math.min(.15 * d, .1 * casing), room = casing - (k - 1) * cone, total = 0;
+        for (double x : drops) total += Math.max(0, x);
+        double[] length = new double[k];
+        for (int i = 0; i < k; i++) length[i] = room * (total > 0 ? Math.max(0, drops[i]) / total : 1.0 / k);
+        double branch = Math.min(.2 * d, .25 * casing - .02 * d);
+        double first = chest - hpEnd + chestRadius() + .03, last = casing - (.75 * casing - branch - .02 * d), middle = .12 * casing;
+        length[0] = Math.max(length[0], first);
+        length[k - 1] = Math.max(length[k - 1], last);
+        if (k > 2) {
+            double rest = room - length[0] - length[k - 1];
+            // A middle barrel keeps a share of the casing; the last, then the front, give way to it down to their least.
+            if (rest < middle * (k - 2)) {
+                double need = middle * (k - 2) - rest, give = Math.min(need, Math.max(0, length[k - 1] - last));
+                length[k - 1] -= give;
+                need -= give;
+                give = Math.min(need, Math.max(0, length[0] - first));
+                length[0] -= give;
+                rest = room - length[0] - length[k - 1];
+            }
+            double share = 0;
+            for (int i = 1; i < k - 1; i++) share += length[i];
+            for (int i = 1; i < k - 1; i++) length[i] = share > 0 ? rest * length[i] / share : rest / (k - 2);
+        } else {
+            length[1] = Math.max(room - length[0], last);
+            length[0] = room - length[1];
+        }
+        double z = hpEnd;
+        for (int i = 0; i < k; i++) {
+            barrelStart[i] = z;
+            barrelEnd[i] = i == k - 1 ? exhaustEnd : z + length[i];
+            barrelRadius[i] = i == 0 ? hp / 2 : i == k - 1 ? d / 2 : Math.max(.85 * d, (hp + d) / 2) / 2;
+            z = barrelEnd[i] + cone;
+        }
+    }
+
+    /** The last barrel's start: the exhaust end's, where the cladding ends and the casing's feet stand. */
+    double lastBarrel() {
+        return barrelStart[barrelStart.length - 1];
     }
 
     /** The rear pedestal's back face from the front standard's front. */
@@ -136,12 +208,19 @@ final class SteamTurbineTrain {
         u.serviceHousing=new double[]{a-ga,shaft+.02,z0-.8*ga,a+ga,shaft+.02+1.8*ga,z0};
         m.cylinder(Frame.of(new double[]{a + .55 * sx, shaft - .05 * d - .05, 0}, 2, 1), .04 * d + .02, z0 - .05 * d - .03, z0, 10, Material.MACHINE);
 
-        // The casing: the clad HP end wall, barrel and cone, the bare exhaust barrel and its end wall; the cladding's edge
-        // over the bare casing, the exhaust barrel's girth ribs; the glands at both ends.
+        // The casing: the clad HP end wall, the clad barrels of the sections before the last and the cones between them,
+        // the bare exhaust barrel and its end wall; the cladding's edge over the bare casing, the exhaust barrel's girth
+        // ribs; the glands at both ends.
+        int last = barrelStart.length - 1;
+        z2 = z0 + lastBarrel();
         m.annulus(f, 0, hp / 2, zh, n, -1, Material.CLADDING);
-        m.prism(f, hp / 2, zh, z1, n, Material.CLADDING);
-        if (hp < d) m.frustum(f, hp / 2, r, z1, z2, n, Material.CLADDING);
-        m.prism(f, r, z2, ze, n, Material.MACHINE);
+        for (int k = 0; k <= last; k++) {
+            double s = z0 + barrelStart[k], t = z0 + barrelEnd[k], rk = barrelRadius[k];
+            m.prism(f, rk, s, t, n, k == last ? Material.MACHINE : Material.CLADDING);
+            if (k < last && barrelRadius[k + 1] > rk) m.frustum(f, rk, barrelRadius[k + 1], t, z0 + barrelStart[k + 1], n, Material.CLADDING);
+            else if (k < last) m.prism(f, rk, t, z0 + barrelStart[k + 1], n, Material.CLADDING);
+            u.round(a, shaft, s, t, rk);
+        }
         m.annulus(f, 0, r, ze, n, 1, Material.MACHINE);
         m.hoop(f, r, r + .02 + .01 * d, z2, z2 + .04, n, Material.CLADDING);
         if (d >= 1) {
@@ -155,23 +234,26 @@ final class SteamTurbineTrain {
         m.prism(f, .1 * d + .02, ze, z0 + pedestal0, n, Material.MACHINE);
         u.solids.add(ProcessUnit.Solid.rod(new double[]{a, shaft, 0}, 2, zh, ze, r, 0));
         u.volumes.add(ProcessUnit.Solid.rod(new double[]{a, shaft, 0}, 2, zh + .05, ze - .05, .9 * hp / 2, 0));
-        u.round(a, shaft, z2, ze, r);
-        u.round(a, shaft, zh, z1, hp / 2);
 
-        // The horizontal split flange along both sides, its studs on top from 1 m; the casing's feet under it at the cone's end.
+        // The horizontal split flange along both sides of every barrel and cone, its studs on top from 1 m; the casing's
+        // feet under it before the exhaust barrel.
         double th = Math.max(.05, .1 * d);
         for (int side = -1; side <= 1; side += 2) {
-            ProcessUnit.ledge(m, a, side, zh, hp / 2, z1, hp / 2, shaft - th / 2, shaft + th / 2, e, true, false, Material.CLADDING);
-            if (hp < d) ProcessUnit.ledge(m, a, side, z1, hp / 2, z2, r, shaft - th / 2, shaft + th / 2, e, false, false, Material.CLADDING);
-            ProcessUnit.ledge(m, a, side, z2, r, ze, r, shaft - th / 2, shaft + th / 2, e, false, true, Material.MACHINE);
+            for (int k = 0; k <= last; k++) {
+                double s = z0 + barrelStart[k], t = z0 + barrelEnd[k], rk = barrelRadius[k];
+                ProcessUnit.ledge(m, a, side, s, rk, t, rk, shaft - th / 2, shaft + th / 2, e, k == 0, k == last, k == last ? Material.MACHINE : Material.CLADDING);
+                if (k < last) ProcessUnit.ledge(m, a, side, t, rk, z0 + barrelStart[k + 1], barrelRadius[k + 1], shaft - th / 2, shaft + th / 2, e, false, false, Material.CLADDING);
+            }
             if (d >= 1) {
                 int studs = (int) Math.floor((ze - zh) / .3);
                 for (int k = 0; k < studs; k++) {
-                    double z = zh + (ze - zh) * (k + .5) / studs, x = a + side * (radius(z, zh, z1, z2) + .55 * e);
+                    double z = zh + (ze - zh) * (k + .5) / studs, x = a + side * (radius(z - z0) + .55 * e);
                     m.box(new double[]{x - .025, shaft + th / 2, z - .025}, new double[]{x + .025, shaft + th / 2 + .06, z + .025}, ALL_FACES & ~4, Material.BOLT);
                 }
             }
-            double zf1 = z2 - .06, zf0 = Math.max(zh + .02, zf1 - .2 * d), x = a + side * (radius((zf0 + zf1) / 2, zh, z1, z2) + .55 * e), w = .02 + .02 * d;
+            // The feet, solids, stand where one section placed them (at its cone's end, on its profile), so the stepped
+            // casing keeps the cells a placed turbine has.
+            double zf1 = z0 + coneEnd - .06, zf0 = Math.max(zh + .02, zf1 - .2 * d), x = a + side * (oneSection((zf0 + zf1) / 2 - z0) + .55 * e), w = .02 + .02 * d;
             u.box(new double[]{x - w, base, zf0}, new double[]{x + w, shaft - th / 2, zf1}, Material.MACHINE, true);
         }
 
@@ -184,11 +266,23 @@ final class SteamTurbineTrain {
         tripThrottle(u, a, xv, yv, zv, base + chestAxis(), z0 + chest);
     }
 
-    /** The casing's radius at station {@code z}: the HP barrel's, the cone's between, the exhaust barrel's. */
-    private double radius(double z, double zh, double z1, double z2) {
-        if (z <= z1) return hp / 2;
-        if (z >= z2) return d / 2;
-        return hp / 2 + (d - hp) / 2 * (z - z1) / (z2 - z1);
+    /** A casing of one section's radius at station {@code z} from the front standard's front: the HP barrel's, the cone's, the exhaust barrel's. */
+    private double oneSection(double z) {
+        if (z <= hpBarrel) return hp / 2;
+        if (z >= coneEnd) return d / 2;
+        return hp / 2 + (d - hp) / 2 * (z - hpBarrel) / (coneEnd - hpBarrel);
+    }
+
+    /** The casing's radius at station {@code z} from the front standard's front: a barrel's, or a cone's between two. */
+    double radius(double z) {
+        int last = barrelStart.length - 1;
+        if (z <= barrelEnd[0]) return barrelRadius[0];
+        for (int k = 0; k < last; k++) {
+            if (z <= barrelEnd[k]) return barrelRadius[k];
+            if (z < barrelStart[k + 1])
+                return barrelRadius[k] + (barrelRadius[k + 1] - barrelRadius[k]) * (z - barrelEnd[k]) / (barrelStart[k + 1] - barrelEnd[k]);
+        }
+        return barrelRadius[last];
     }
 
     /**

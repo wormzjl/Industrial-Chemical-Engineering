@@ -186,8 +186,9 @@ public record MachineDuty(double flow, double head, double polytropicHead, doubl
         int at = 0;
         while (at < list.size() - 1 && list.get(at) < value - 1e-9) at++;
         boolean on = Math.abs(list.get(at) - value) < 1e-9;
+        // Off the list and stepping down: the first step lands on the neighbour below (the last one for a value above the list).
         if (!on && steps < 0) {
-            at--;
+            if (list.get(at) > value) at--;
             steps++;
         }
         if (!on && steps > 0 && list.get(at) > value) steps--;

@@ -24,12 +24,14 @@ import java.util.List;
  * Nozzles: STEAM into the trip-and-throttle valve (0.15 Dc, 0.05 m at least) and EXHAUST up. The back-pressure and
  * condensing generator sets saved before rebuild as this kind (their moved nozzles approved by the owner).
  *
- * <p>Above one casing's 45 MW (batch 2026-11-10-prime-movers, owner P12 and the owner's setting "HP=HP+MP+LP, MP=MP+LP,
- * LP=LP") the unit runs to 300 MW, one turbine named by its inlet class that expands to its exhaust, drawn as tandem
- * sections on one shaft ({@link #sections}): the front casing above (an HP casing for HP or VHP steam, an MP casing for MP
- * steam), then an MP casing where HP steam expands below the MP class, then an LP casing where the exhaust lies below the
- * LP header, double-flow above {@link #DOUBLE_FLOW}. A crossover runs from the front casing's exhaust branch over the
- * sections; the exhaust rises from the last one. The physics is the unit's, unchanged: the sections are its drawing.
+ * <p>Its sections (batch 2026-11-15-equipment-visual-design; owner: "HP turbine should include MP and LP section, MP
+ * should include LP section", straight through, every size): the turbine named by its inlet class expands through every
+ * section from that class down to its exhaust, below the LP header for every new design ({@link MachineDuty#TURBINE_EXHAUSTS}):
+ * the front section ({@link #front}: HP for HP or VHP steam, MP, LP), then an MP section where steam above the MP class
+ * expands below it, then an LP section where steam above the LP class expands below the LP header ({@link #sections}).
+ * Up to one casing's 45 MW they are barrels of the one casing, each as long as its share of the drop ({@link #drops}).
+ * Above it (batch 2026-11-10-prime-movers, owner P12) the unit runs to 300 MW, drawn as tandem casings on one shaft, the LP
+ * double-flow above {@link #DOUBLE_FLOW}. The physics is the unit's work law, unchanged: the sections are its drawing.
  */
 final class SteamTurbineDesign extends UnitDesign {
     /** Rated powers, kW: one casing to 45 MW (5 Dc² MW at 3 m), tandem sections above it to 300 MW (owner P12). */
@@ -115,18 +117,21 @@ final class SteamTurbineDesign extends UnitDesign {
         return (int) Math.max(1, Math.min(12, Math.round(drop(duty) / STAGE_DROP)));
     }
 
-    /** A section behind the front casing of a unit above one casing. */
+    /**
+     * A turbine's section: the front one ({@link #front}, the inlet class's) and those behind it ({@link #sections}). Up to
+     * one casing's power the sections are barrels of the one casing; above it each behind the front is a casing of its own.
+     */
     enum Section {
-        MP, LP, LP_DOUBLE;
+        HP, MP, LP, LP_DOUBLE;
 
         boolean lp() {
-            return this != MP;
+            return this == LP || this == LP_DOUBLE;
         }
 
-        /** Its casing's length, in Dc. */
+        /** Its casing's length, in Dc (a separate casing, above one casing's power). */
         double length() {
             return switch (this) {
-                case MP -> 1;
+                case HP, MP -> 1;
                 case LP -> 1.2;
                 case LP_DOUBLE -> 2;
             };
@@ -140,24 +145,50 @@ final class SteamTurbineDesign extends UnitDesign {
         /** Its casing's width across, in Dc. */
         double width() {
             return switch (this) {
-                case MP -> .9;
+                case HP, MP -> .9;
                 case LP -> LP_WIDTH;
                 case LP_DOUBLE -> LP_DOUBLE_WIDTH;
             };
         }
     }
 
+    /** The front section: the inlet class's (VHP steam enters an HP section). */
+    static Section front(MachineDuty duty) {
+        return switch (duty.steam()) {
+            case LP -> Section.LP;
+            case MP -> Section.MP;
+            case HP, VHP -> Section.HP;
+        };
+    }
+
     /**
-     * The sections behind the front casing (owner's setting "HP=HP+MP+LP, MP=MP+LP, LP=LP"): none to one casing's power; an MP
-     * casing where HP or VHP steam expands below the MP class; an LP casing where the exhaust lies below the LP header (an
-     * exhaust into it or above leaves the LP section out), double-flow above {@link #DOUBLE_FLOW}.
+     * The sections behind the front one, the same rule at every size (owner, 2026-11-15: "HP turbine should include MP and
+     * LP section, MP should include LP section", straight through): an MP section where steam above the MP class expands
+     * below it; an LP section where steam above the LP class expands below the LP header, double-flow above
+     * {@link #DOUBLE_FLOW}. A new design (its exhaust below the LP header) is HP+MP+LP, MP+LP or LP; a turbine saved with a
+     * back pressure has fewer by the same rule.
      */
     static List<Section> sections(MachineDuty duty) {
-        if (!(duty.power() > SINGLE_CASING)) return List.of();
         var out = new java.util.ArrayList<Section>();
         if (duty.steam().pressure > MachineDuty.Steam.MP.pressure && duty.exhaust() < MachineDuty.Steam.MP.pressure) out.add(Section.MP);
         if (duty.steam() != MachineDuty.Steam.LP && duty.exhaust() < MachineDuty.Steam.LP.pressure) out.add(duty.power() > DOUBLE_FLOW ? Section.LP_DOUBLE : Section.LP);
         return List.copyOf(out);
+    }
+
+    /**
+     * Each section's isentropic drop, kJ/kg, the front first and then {@link #sections} in order: {@link #DROP_PER_LOG}
+     * per e-fold of its pressure ratio, the section boundaries at the MP and LP headers (HP steam to 10 kPa: 181, 266, 761).
+     */
+    static double[] drops(MachineDuty duty) {
+        var bounds = new java.util.ArrayList<Double>();
+        bounds.add(duty.steam().pressure);
+        for (var section : sections(duty))
+            bounds.add(section.lp() ? MachineDuty.Steam.LP.pressure : MachineDuty.Steam.MP.pressure);
+        bounds.add(duty.exhaust());
+        double[] out = new double[bounds.size() - 1];
+        for (int k = 0; k < out.length; k++)
+            out[k] = DROP_PER_LOG * com.wormzjl.icheme.science.math.DeterministicMath.log(bounds.get(k) / bounds.get(k + 1));
+        return out;
     }
 
     @Override
@@ -182,21 +213,23 @@ final class SteamTurbineDesign extends UnitDesign {
         double plinth = .25 + .1 * d, frame = Math.min(.45, .15 + .1 * d), floor = h == 0 ? plinth : h, base = floor + frame;
         // The shaft on the lowest cell centre 0.6 Dc over the base frame (0.55 Dc with a vacuum exhaust, its lower half over the frame).
         double shaft = Math.ceil(base + (duty.vacuum() ? .55 : .6) * d - .5) + .5;
-        var t = new SteamTurbineTrain(d, stages(duty), duty.vacuum(), shaft - base);
+        // Up to one casing's power every section is a barrel of the one casing, each as long as its share of the drop;
+        // above it the sections behind the front one are casings of their own, and the front casing is drawn whole.
+        var sections = duty.power() > SINGLE_CASING ? sections(duty) : List.<Section>of();
+        var t = new SteamTurbineTrain(d, stages(duty), duty.vacuum(), shaft - base, sections.isEmpty() ? drops(duty) : new double[]{1});
         var m = u.mesh;
         double rb = t.valveBody(), od = t.steamLine(), rpm = SteamTurbineTrain.speed(d), rs = ProcessUnit.shaftRadius(duty.power(), rpm);
         // The base frame as wide as the casing, the plinth 0.12 m wider.
         double wb = .5 * d + .15, wp = wb + .12;
         // Across x: the shaft on a cell centre, the plinth's and the turbine's left side in the first cell; the
         // trip-and-throttle valve's handwheel out of the exhaust's column of cells (a small turbine's exhaust rises past it).
-        var sections = sections(duty);
         double lpHalf = sections.stream().filter(Section::lp).mapToDouble(Section::width).max().orElse(0) * d / 2;
         double a = Math.ceil(Math.max(Math.max(wp + .02, t.leftReach()), lpHalf + .02) - .5) + .5, xv = a + Math.max(t.valveOffset(), .52 + t.handwheel() / 2);
         // Along z: the exhaust's centre line on a cell centre, the plinth's front in the first cell; the coupling face on
         // the block face behind the rear pedestal.
         double lead = Math.max(.3, t.frontReach());
         double zE = Math.ceil(lead + t.exhaust - .5 - 1e-9) + .5, z0 = zE - t.exhaust;
-        // Behind the front casing, the sections and their pedestals (none to one casing's power); the coupling behind the last.
+        // Behind the front casing, the separate casings and their pedestals (none to one casing's power); the coupling behind the last.
         double back = z0 + t.length();
         double[] start = new double[sections.size()];
         for (int k = 0; k < sections.size(); k++) {

@@ -23,6 +23,16 @@ Purpose: make the implemented equipment look better and less bare (owner request
   `ConstructorColumnTest`, `MachineColumnTest`, `FluidPacketCodecTest`, `TurbineSizingTest` (test);
   `ConstructorDefaultsTest`, `SteamTurbineSectionsTest` (equipmentGates). All pass.
 
+- 2026-11-15, W2: `SteamTurbineDesign.sections` is one rule for every size (the `SINGLE_CASING` guard is gone),
+  `Section.HP` and `front`, `drops` per section (HP to 10 kPa: 181, 266, 761 kJ/kg). Up to 45 MW `SteamTurbineTrain`
+  draws one barrel per section (0.65, 0.85 and 1 Dc, cones between) between the old end walls. The steam chest, the
+  exhaust branch, the feet and every solid stay at one section's stations. `MachineDuty.step` fix: a value above the
+  list (a saved back pressure) now steps down onto the list's last value, not the one before it. Layout rows: none
+  moved (a first try that put the feet at the new cone dropped 4 shell cells of the 45 MW row, so the feet stay at
+  one section's stations). Tests (equipmentGates): `SteamTurbineSectionsTest` (rewritten), `ProcessUnitTest`,
+  `ShapeRasterizerTest`, `EquipmentLayoutGoldenTest`, `MachineRpmDesignTest`, `EquipmentShapeCompatTest`,
+  `ConstructorDefaultsTest`; `ConstructorColumnTest` (test). All pass.
+
 ## Documents
 
 - [VISUAL_REVIEW.md](VISUAL_REVIEW.md): the findings and the proposed order.
