@@ -71,7 +71,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         V3ColumnInput design(ColumnUnit unit);
         /** Unit {@code unit}'s condenser, which says what share of its duty the cooling water takes: water-cooled where it has no design. */
         default com.wormzjl.icheme.science.equipment.ColumnComponents.Condenser condenser(ColumnUnit unit){return com.wormzjl.icheme.science.equipment.ColumnComponents.Condenser.EXCHANGER;}
-        /** Submits {@code job}; {@code done} gets its outcome on the server thread. False: not admitted, the next cycle tries again. */
+        /** Submits {@code job}; {@code done} gets its outcome on the server thread. False: not admitted now; the same job is asked again at the next decision points until it is (R-ST4). */
         boolean submit(long unit,ColumnSolve.Job job,java.util.function.Consumer<ColumnSolve.Outcome> done);
         /** No solves: a table comes only from {@link #table}. */
         Solves NONE=new Solves(){public V3ColumnInput design(ColumnUnit unit){return null;}public boolean submit(long unit,ColumnSolve.Job job,java.util.function.Consumer<ColumnSolve.Outcome> done){return false;}};
@@ -140,6 +140,8 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         ColumnCycle.Step last;
         /** The solve in flight, the tick of the last one asked, the warm seed. */
         Pending pending;long lastSolve=Long.MIN_VALUE/2;V3NeuralSeed seed;
+        /** The job of the solve in flight while the service refuses it, asked again at each decision point (R-ST4); null once taken. Memory only. */
+        ColumnSolve.Job heldJob;
         /** After a solve the worker did not finish, no solve before this tick; whether that solve was already the one retry (W2). */
         long waitUntil=Long.MIN_VALUE/2;boolean retried;
         /** The state whose solve was refused, or null; the requested set points whose solve was refused and why, or null (W2, memory only). */
@@ -539,7 +541,8 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     /**
      * Whether the cycle at {@code tick} may run: no solve applies there, or its outcome is in and applied now. A solve
      * applies at the second cycle after its trigger whenever it finishes, so a table never depends on the worker's timing;
-     * the solve deadline bounds the wait (a deadline that expires is a failed solve).
+     * the solve deadline bounds the wait (a deadline that expires is a failed solve), and a solve the service refused waits
+     * for its room ({@link #resend}, R-ST4).
      *
      * <p>A refused solve is not asked again on its own (W2): a refused set point stays refused while the unit's set points
      * equal it (rule A for a refused short steam), a refused state while the state taken stays inside its bands. A solve the
@@ -600,10 +603,29 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         boolean[] held;if(r.table!=null)held=r.table.held();else{held=new boolean[weights.length];Arrays.fill(held,true);}
         var pending=new Pending(trigger,tick,setpoints,DriftBands.reference(state,designDemand,setpoints,r.table==null?0:r.table.reference().enthalpySlope()),held);
         var job=new ColumnSolve.Job(trigger,design,setpoints,taken,trigger==DriftBands.Trigger.START?null:r.seed,solves.condenser(u));
-        // In flight before the submission: a solver may answer at once.
-        r.pending=pending;
-        if(!solves.submit(r.unit,job,outcome->done(r,pending,outcome))){r.pending=null;return;}
-        r.lastSolve=tick;
+        // In flight before the submission: a solver may answer at once. A solve the service refuses (at capacity, a machine's
+        // load) is not dropped: it is held and asked again at each decision point until it is taken (resend), and the cycle it
+        // applies at waits for its outcome (applied), so the table applied is the one this cycle asked on a quiet machine
+        // (codebase review R-ST4).
+        r.pending=pending;r.lastSolve=tick;
+        if(!solves.submit(r.unit,job,outcome->done(r,pending,outcome))){r.heldJob=job;held.add(r.unit);}
+    }
+    /** The units whose solve in flight the service refused ({@link Run#heldJob}), in unit order. */
+    private final Set<Long> held=new TreeSet<>();
+    /**
+     * Asks again for each solve the service refused (R-ST4): the same job for the same pending solve, so it applies at the
+     * cycle it was asked for, until the service takes it. The service's room is freed by the completions of the jobs it
+     * holds (islands, columns, stills), none of which waits for a column's cycle, so the wait ends. A unit that stopped, or
+     * whose solve went, is forgotten.
+     */
+    private void resend() {
+        for(long unit:List.copyOf(held)) {
+            var r=runs.get(unit);held.remove(unit);
+            if(r==null||r.heldJob==null||r.pending==null||r.pending.outcome!=null){if(r!=null)r.heldJob=null;continue;}
+            // Taken off before the submission: an answer at once runs the cycles, which may hold a solve of their own.
+            var job=r.heldJob;var pending=r.pending;r.heldJob=null;
+            if(!solves.submit(unit,job,outcome->done(r,pending,outcome))){r.heldJob=job;held.add(unit);}
+        }
     }
     /** Whether {@code state}, at set points {@code setpoints}, stands inside the bands of the refused state {@code refused}. */
     private static boolean inside(Refused refused,Setpoints setpoints,ColumnCycle.Step state,double designDemand) {
@@ -947,7 +969,9 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     /** Whether a port's island booked while a cycle was due, since the last decision point. */
     private boolean bookedWhileDue;
     @Override public void decide() {
-        // The wakes kept for islands behind their ticks (wake), at every decision point; a materialisation they make books.
+        // The solves the service refused, asked again (resend); the wakes kept for islands behind their ticks (wake). At every
+        // decision point; an answer at once, or a materialisation, may make a cycle due.
+        if(!cycling&&!held.isEmpty())resend();
         if(!cycling)wake(coordinator.now());
         if(!bookedWhileDue)return;bookedWhileDue=false;due();bookedWhileDue=false;
     }

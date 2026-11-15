@@ -594,6 +594,50 @@ class ColumnRunTest {
         assertEquals(a.counting().heat,b.counting().heat,"every side's heat");
         assertEquals(a.world().coordinator.transits(),b.world().coordinator.transits(),"the heat in transit");
     }
+    /**
+     * The refused solve's determinism gate (codebase review R-ST4, item 2, in the form of R-ST3's): the rig with its solves,
+     * run twice, the second time on a loaded machine whose solve service refuses every job asked before the cycle after the
+     * first. The start solve is asked at the first cycle.
+     * <ul>
+     * <li>Before R-ST4 the refused solve was dropped and the next cycle asked its own: the table applied a cycle later, and the
+     * column took its feed a cycle later.</li>
+     * <li>Now it is held and asked again at each decision point until the service takes it (a cycle later), for the same
+     * pending solve: its table applies at the second cycle after the first, as in the first run.</li>
+     * </ul>
+     * At 3000 ticks the solves (by their contents), the table's ticks, the totals and every boundary's booking are the same
+     * bit for bit.
+     */
+    @Test void aSolveTheServiceRefusesIsAskedAgainForTheSameCycle() {
+        var fa=new Fake(0);var a=rig(0,fa);fa.world=a.world();
+        var fb=new Fake(0);var b=rig(0,fb);fb.world=b.world();
+        long first=b.ops().run(b.unit()).nextCycle;
+        fb.refuseFrom=0;fb.refuseUntil=first+ColumnOperation.CYCLE_TICKS;
+        fa.runTo(3000);fb.runTo(3000);
+        System.out.printf(Locale.ROOT,"refused solve gate: %d refusals, %d solves, the first cycle at %d%n",fb.refused,fb.jobs.size(),first);
+        assertTrue(fb.refused>0,"the service refused the start solve in the second run");
+        assertEquals(0,fa.refused,"and nothing in the first");
+        assertEquals(contents(fa.jobs),contents(fb.jobs),"the solves asked, by their contents");
+        var ra=a.ops().run(a.unit());var rb=b.ops().run(b.unit());
+        assertNotNull(ra.table,"a table stands");
+        assertEquals(ra.tableTick,rb.tableTick,"the cycle that asked the table in force");
+        assertEquals(ra.applied,rb.applied,"the cycle it applied at");
+        var ta=a.world().ledger.column(a.unit()).totals();var tb=b.world().ledger.column(b.unit()).totals();
+        assertTrue(ta.taken().total()>20,"the column ran: "+ta.taken().total());
+        assertArrayEquals(ta.taken().moles(),tb.taken().moles(),"the feed taken");
+        assertArrayEquals(ta.produced().moles(),tb.produced().moles(),"the products");
+        assertEquals(ta.condenser(),tb.condenser(),"the condenser duty");
+        assertEquals(a.counting().moles.keySet(),b.counting().moles.keySet());
+        for(var e:a.counting().moles.entrySet())assertArrayEquals(e.getValue(),b.counting().moles.get(e.getKey()),"what boundary "+e.getKey()+" exchanged");
+        assertEquals(a.counting().energy,b.counting().energy,"every boundary's energy");
+    }
+    /** What each solve asked: its trigger, set points and what it was given, as text (a job's arrays compare by content). */
+    private static List<String> contents(List<ColumnSolve.Job> jobs) {
+        var out=new ArrayList<String>();
+        for(var j:jobs){var s=j.setpoints();var t=j.taken();
+            out.add(j.trigger()+" feed="+s.feedRate()+" reflux="+s.refluxRatio()+" condenser="+s.condenserTemperature()+" steam="+Arrays.toString(s.steamPerFeed())
+                    +" taken="+Arrays.toString(t.feed())+" h="+t.feedEnthalpy()+" "+t.steam());}
+        return out;
+    }
 
     /** The cycle at {@code expected} ran at {@code actual}: a cycle runs once its inlets booked through it, a tick or so later. */
     private static void assertCycle(long expected,long actual,String message){assertTrue(Math.abs(actual-expected)<ColumnOperation.CYCLE_TICKS/2,message+": expected "+expected+", was "+actual);}
@@ -624,10 +668,14 @@ class ColumnRunTest {
         java.util.function.UnaryOperator<SplitTable> duties;
         final List<ColumnSolve.Job> jobs=new ArrayList<>();final List<Long> asked=new ArrayList<>();
         final TreeMap<Long,List<Runnable>> due=new TreeMap<>();
+        /** The service refuses every job asked from {@link #refuseFrom} to before {@link #refuseUntil} (at capacity, a machine's load); never by default. */
+        long refuseFrom=Long.MAX_VALUE,refuseUntil=Long.MIN_VALUE;int refused;
         Fake(long delay){this.delay=delay;}
         public com.wormzjl.icheme.science.column.v3.V3ColumnInput design(ColumnUnit unit){return DESIGN;}
         public boolean submit(long unit,ColumnSolve.Job job,java.util.function.Consumer<ColumnSolve.Outcome> done) {
-            jobs.add(job);long now=world.ledger.onlineTick();asked.add(now);
+            long now=world.ledger.onlineTick();
+            if(now>=refuseFrom&&now<refuseUntil){refused++;return false;}
+            jobs.add(job);asked.add(now);
             var taken=job.taken();var ratios=new double[taken.steam().size()];for(int j=0;j<ratios.length;j++)ratios[j]=taken.feedRate()>0?taken.steam().get(j).rate()/taken.feedRate():job.setpoints().steamPerFeed()[j];
             ColumnSolve.Outcome o=fail.test(job)?new ColumnSolve.Failed("test refusal"):unfinished.test(job)?new ColumnSolve.Failed("DEADLINE",true):table(model,job.setpoints(),job.trigger()==DriftBands.Trigger.START?job.setpoints().steamPerFeed():ratios);
             if(o instanceof ColumnSolve.Solved s&&flood.apply(job).known())o=new ColumnSolve.Solved(s.table().withFlood(flood.apply(job)),s.enthalpy(),null,s.solvedCondenser(),"test","");
