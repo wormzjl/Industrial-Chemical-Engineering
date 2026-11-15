@@ -41,6 +41,14 @@ class EquipmentLayoutGoldenTest {
             shapes.add(EquipmentShape.column(diameter, ColumnTrays.simple(20, 10), Heading.NORTH, EquipmentShape.minimumSkirt(diameter)));
         for (var kind : Kind.values()) {
             if (!kind.designed()) continue;
+            if (kind == Kind.AIR_COOLER) {
+                // Air cooler bays (batch 2026-11-15-equipment-visual-design, AIR_COOLER_BAY_PLAN.md): the three the table
+                // held before their range grew to 6 by 12 m (their layouts stand), then the largest, the longest
+                // single-bundle and the widest short bay.
+                for (double[] bay : new double[][]{{1.5, 3}, {2.5, 4}, {3, 4}, {6, 12}, {3, 12}, {6, 6}})
+                    shapes.add(EquipmentShape.designed(kind, bay[0], bay[1], Heading.NORTH, ProcessUnit.defaultSupport(kind, bay[0], bay[1]), ProcessUnit.Bank.ONE, 0));
+                continue;
+            }
             double low = UnitDesign.of(kind).minSize(), high = UnitDesign.of(kind).maxSize();
             for (double diameter : new double[]{low, UnitDesign.of(kind).snap((low + high) / 2), high}) {
                 int length = UnitDesign.of(kind).defaultLength(diameter);
