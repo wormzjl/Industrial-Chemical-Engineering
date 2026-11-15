@@ -2,7 +2,7 @@
   "format": 2,
   "basis": {
     "package": "icheme:refinery",
-    "revision": "method=model:pr78,ideal-gas:fit,missing-interactions:zero,pressure-pascal:1000..2000000,liquid-mixture:eccc-cut-pair-r1;properties=icheme:chemsep_ethanol@chemsep-8.3-dwsim-10.2.5-r1;interactions=;water=icheme:water@water-iapws95-shomate-r4;viscosity=icheme:chemsep_ethanol/liquid@dwsim-viscosity-api-r1,icheme:chemsep_ethanol/vapor@dwsim-viscosity-api-r1,icheme:water/liquid@iapws-sr6-2011-viscosity-r1;ice=icheme:crystal_ice_ih@crystal-ice-ih-r1;fluid-data=",
+    "revision": "method=model:pr78,ideal-gas:fit,missing-interactions:zero,pressure-pascal:1000..2000000,liquid-mixture:eccc-cut-pair-r1;properties=icheme:chemsep_ethanol@chemsep-8.3-dwsim-10.2.5-r1;interactions=;water=icheme:water@water-iapws95-shomate-r4;viscosity=icheme:chemsep_ethanol/liquid@dwsim-viscosity-api-r1,icheme:chemsep_ethanol/vapor@dwsim-viscosity-api-r1,icheme:water/liquid@iapws-sr6-2011-viscosity-r1;critical-volume=icheme:chemsep_ethanol@chemsep-8.3-vc-r1;ice=icheme:crystal_ice_ih@crystal-ice-ih-r1;fluid-data=",
     "components": [
       "Methane",
       "Ethane",
