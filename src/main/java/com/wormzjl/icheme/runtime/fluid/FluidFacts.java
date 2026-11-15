@@ -78,9 +78,11 @@ final class FluidFacts {
      *  remainder and its account (absent: no converter).
      *  25 (batch 2026-11-11-aqueous-solvents, W3b step 6; numbered 25 at the merge of main 0.28.0): a vessel's oil-liquid and
      *  aqueous-liquid amounts, after its {@code rigid}; absent means the pre-W3b reading of its liquid fields (the compounds'
-     *  liquid and the water as two liquids). */
-    static final int SCHEMA=25;
-    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 25. */
+     *  liquid and the water as two liquids).
+     *  26 (batch 2026-11-15-fluid-interfaces): a device spec's {@code ambient}, after its relief face (absent: false, not the
+     *  atmosphere), a gas intake's. */
+    static final int SCHEMA=26;
+    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 26. */
     private static final Map<Class<?>,Map<String,String>> ALIASES=Map.of();
     private static final int MAXIMUM_FIELDS=256,MAXIMUM_ITEMS=1<<22,MAXIMUM_TEXTS=1<<20,MAXIMUM_ARRAY=4096,MAXIMUM_CHANNELS=1<<20;
     /** The cadence an island rebuilt from facts starts at (ticks): the shortest the clock allows, as after a merge. */
@@ -297,7 +299,7 @@ final class FluidFacts {
                 .list(d.ports(),(q,p)->{position(q,p.cell());q.name(p.face()).name(p.port()).name(p.role());})
                 .record(q->q.f64(s.volume()).f64(s.temperature()).f64(s.pressure()).doubles(s.composition())
                         .record(feed->feed.f64(s.solids().volumeFraction()).list(s.solids().grades(),(e,grade)->e.text(grade.material()).text(grade.size().metres()).f64(grade.massShare())))
-                        .f64(s.levelHeight()).bool(s.open()).record(shape->geometry(shape,s.geometry())).list(s.tower()==null?List.<com.wormzjl.icheme.science.fluid.network.CoolingTower>of():List.of(s.tower()),FluidFacts::tower).f64(s.blanket()).f64(s.relief()).list(s.reliefFace()==null?List.<PhysicalFluidTopology.Direction>of():List.of(s.reliefFace()),(e,face)->e.name(face)))
+                        .f64(s.levelHeight()).bool(s.open()).record(shape->geometry(shape,s.geometry())).list(s.tower()==null?List.<com.wormzjl.icheme.science.fluid.network.CoolingTower>of():List.of(s.tower()),FluidFacts::tower).f64(s.blanket()).f64(s.relief()).list(s.reliefFace()==null?List.<PhysicalFluidTopology.Direction>of():List.of(s.reliefFace()),(e,face)->e.name(face)).bool(s.ambient()))
                 .count(r.revision()).count(d.joints()).count(d.slots()).count(d.points())
                 .list(d.heat()==null?List.<HeatUnit>of():List.of(d.heat()),FluidFacts::heatUnit).count(d.suspendedBy());
     }
@@ -328,7 +330,9 @@ final class FluidFacts {
             double blanket=q.f64(0);
             // Schema 23: a spec written before the pressure safety valve existed has none.
             double relief=q.f64(0);var faces=q.list(List.<PhysicalFluidTopology.Direction>of(),e->required(e.name(PhysicalFluidTopology.Direction.class,null),e,"relief face"));if(faces.size()>1)throw q.invalid("Multiple relief faces");
-            required(composition,q,"composition");return valid(q,"device spec",()->new FluidDeviceSpec(volume,temperature,pressure,composition,feed,levelHeight,open,shape,towers.isEmpty()?null:towers.getFirst(),blanket,relief,faces.isEmpty()?null:faces.getFirst()));});
+            // Schema 26: a spec written before the gas intake existed is not the atmosphere.
+            boolean ambient=q.bool(false);
+            required(composition,q,"composition");return valid(q,"device spec",()->new FluidDeviceSpec(volume,temperature,pressure,composition,feed,levelHeight,open,shape,towers.isEmpty()?null:towers.getFirst(),blanket,relief,faces.isEmpty()?null:faces.getFirst(),ambient));});
         long revision=f.count(0);
         // Schema 2: a record written before joints existed connects through every face, as every pipe did then.
         long joints=f.count(PhysicalFluidTopology.ALL_FACES);if(joints>PhysicalFluidTopology.ALL_FACES)throw f.invalid("joints "+joints);

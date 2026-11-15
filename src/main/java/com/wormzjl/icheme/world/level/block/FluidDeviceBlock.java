@@ -68,6 +68,16 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
         private Pipe(BlockBehaviour.Properties properties){super(TopologyCompiler.Kind.PIPE,properties);}
         @Override protected void createBlockStateDefinition(StateDefinition.Builder<Block,BlockState> builder){super.createBlockStateDefinition(builder);builder.add(SHUTOFF,PRESSURE_CONTROL,INLINE_FILTER,INLINE_MOVER);}
     }
+    /** A gas intake (batch 2026-11-15-fluid-interfaces, W2): a generator block that registers the atmosphere ({@code FluidDeviceSpec.ambient}). */
+    public static FluidDeviceBlock intake(BlockBehaviour.Properties properties){return new Intake(properties);}
+    private static final MapCodec<FluidDeviceBlock> INTAKE_CODEC=RecordCodecBuilder.mapCodec(instance->instance.group(propertiesCodec()).apply(instance,FluidDeviceBlock::intake));
+    private static final class Intake extends FluidDeviceBlock {
+        private Intake(BlockBehaviour.Properties properties){super(TopologyCompiler.Kind.GENERATOR,properties);}
+        @Override public MapCodec<FluidDeviceBlock> codec(){return INTAKE_CODEC;}
+        @Override public boolean ambient(){return true;}
+    }
+    /** Whether this block stands for the atmosphere, a gas intake's generator. */
+    public boolean ambient(){return false;}
     public TopologyCompiler.Kind kind(){return kind;}
     @Override public MapCodec<FluidDeviceBlock> codec(){return CODEC;}
     @Override protected void createBlockStateDefinition(StateDefinition.Builder<Block,BlockState> builder){builder.add(FACING,SIGHT_GLASS,SIGHT_GLASS_AXIS);for(var property:CONNECTIONS.values())builder.add(property);}
@@ -181,13 +191,13 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
      * REGISTRY_FIRST_PLAN.md 4.3): its kind's block with its facing and fittings, the inverse of what {@link #onPlace} and
      * a chunk load register from a block. No connection and no sight glass: the placer connects it, and accessories
      * belong to the registration. Null for a device no block of this class stands for: a structure's, a rack lane, a
-     * column's port, a heat side.
+     * column's port, a heat side. A generator whose spec is the atmosphere stands as a gas intake.
      */
-    public static @Nullable BlockState stateFor(PhysicalFluidTopology.Device d) {
-        if(!d.ports().isEmpty()||d.position().lane()!=0)return null;
+    public static @Nullable BlockState stateFor(com.wormzjl.icheme.runtime.fluid.WorldTopologyLedger.Registration r) {
+        var d=r.device();if(!d.ports().isEmpty()||d.position().lane()!=0)return null;
         var block=switch(d.kind()){
             case RESERVOIR->com.wormzjl.icheme.registry.ModBlocks.FLUID_RESERVOIR.get();case PIPE->com.wormzjl.icheme.registry.ModBlocks.FLUID_PIPE.get();
-            case GENERATOR->com.wormzjl.icheme.registry.ModBlocks.FLUID_GENERATOR.get();case VOID->com.wormzjl.icheme.registry.ModBlocks.FLUID_VOID.get();
+            case GENERATOR->r.spec().ambient()?com.wormzjl.icheme.registry.ModBlocks.GAS_INTAKE.get():com.wormzjl.icheme.registry.ModBlocks.FLUID_GENERATOR.get();case VOID->com.wormzjl.icheme.registry.ModBlocks.FLUID_VOID.get();
             case FILTER->com.wormzjl.icheme.registry.ModBlocks.INLINE_FILTER.get();default->null;};
         return block==null?null:fittings(block.defaultBlockState(),d);
     }
@@ -215,7 +225,7 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
         FluidWorldAuthority.find(serverLevel.getServer()).ifPresent(world->{
             var p=Positions.of(level,position);
             if(previous.getBlock()!=this) {
-                var record=world.place(p,kind,PhysicalFluidTopology.Direction.valueOf(state.getValue(FACING).name()),cutoff(state),hasPressureValve(state),hasFilter(state),hasMover(state)?state.getValue(INLINE_MOVER).kind():TopologyCompiler.Kind.PIPE);
+                var record=ambient()?world.placeIntake(p,PhysicalFluidTopology.Direction.valueOf(state.getValue(FACING).name())):world.place(p,kind,PhysicalFluidTopology.Direction.valueOf(state.getValue(FACING).name()),cutoff(state),hasPressureValve(state),hasFilter(state),hasMover(state)?state.getValue(INLINE_MOVER).kind():TopologyCompiler.Kind.PIPE);
                 if(level.getBlockEntity(position) instanceof FluidDeviceBlockEntity entity)entity.bindIdentity(record.device().id());
             } else if(!hasAxialAccessory(state)&&!hasAxialAccessory(previous)&&previous.getValue(FACING)!=state.getValue(FACING)) {
                 world.at(p).ifPresent(old->{var d=old.device();world.edit(d.id(),old.revision(),d.withFacing(PhysicalFluidTopology.Direction.valueOf(state.getValue(FACING).name())),old.spec());});

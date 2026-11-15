@@ -425,7 +425,8 @@ public final class FluidNetwork {
                             control=new FlowControl.ControlValve(source,controls.pressure,controls.massFlow,controls.volumeFlow,valve.sensor(),Math.addExact(valve.revision(),1));
                         }else control=new FlowControl.PressureValve(controls.pressure);
                     }
-                    case GENERATOR->spec=new FluidDeviceSpec(spec.volume(),controls.temperature,controls.pressure,controls.composition,controls.solids);
+                    // A gas intake is the atmosphere (batch 2026-11-15-fluid-interfaces, W2): nothing on it is the player's to set.
+                    case GENERATOR->{if(spec.ambient())throw new IllegalArgumentException("A gas intake draws the ambient air; it has no settings.");spec=new FluidDeviceSpec(spec.volume(),controls.temperature,controls.pressure,controls.composition,controls.solids);}
                     case VOID->spec=new FluidDeviceSpec(spec.volume(),spec.temperature(),controls.pressure,spec.composition());
                     case RESERVOIR->{
                         // A batch still's pot (W6): its firing and reflux valve, a fact its islands read at their next slice.

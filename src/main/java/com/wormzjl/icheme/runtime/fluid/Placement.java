@@ -95,6 +95,30 @@ final class Placement {
         var record=new WorldTopologyLedger.Registration(device,spec,0);
         authority.submit(List.of(new WorldTopologyLedger.Edit(id,record)),Math.addExact(id,1));return record;
     }
+    /**
+     * Registers a gas intake at {@code position} (batch 2026-11-15-fluid-interfaces, W2): a generator that is the atmosphere,
+     * placed on, its charge the ambient air ({@link #intake}).
+     */
+    WorldTopologyLedger.Registration placeIntake(PhysicalFluidTopology.Position position,PhysicalFluidTopology.Direction facing) {
+        authority.owned();long id=authority.topology.nextIdentity();
+        var record=intake(id,position,facing,placedPipeDiameter(position),authority.model());
+        authority.submit(List.of(new WorldTopologyLedger.Edit(id,record)),Math.addExact(id,1));return record;
+    }
+    /**
+     * A gas intake's registration (decisions D7 and D8): a generator, switched on, whose spec is the atmosphere
+     * ({@code ambient}): {@link com.wormzjl.icheme.science.fluid.network.CoolingTower#AIR_TEMPERATURE} and the game's ambient
+     * pressure, {@link com.wormzjl.icheme.science.fluid.network.Air#wet} on {@code model}'s list; 1 m at the joined pipe's
+     * bore {@code bore}, its louvres and hood an entry loss of {@link #INTAKE_LOSS} velocity heads.
+     */
+    static WorldTopologyLedger.Registration intake(long id,PhysicalFluidTopology.Position position,PhysicalFluidTopology.Direction facing,double bore,com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics model) {
+        var device=PhysicalFluidTopology.Device.builder(id,position,TopologyCompiler.Kind.GENERATOR,facing,new PipeResistance.Geometry(1,bore,PipeResistance.DEFAULT_ROUGHNESS_METRES,INTAKE_LOSS),new FlowControl.Passive()).generatorEnabled(true).build();
+        double height=com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.LEVEL_HEAD_HEIGHT;
+        var spec=new FluidDeviceSpec(1,com.wormzjl.icheme.science.fluid.network.CoolingTower.AIR_TEMPERATURE,com.wormzjl.icheme.science.fluid.solver.PhaseLayout.AMBIENT_PRESSURE,
+                com.wormzjl.icheme.science.fluid.network.Air.wet(model),SlurryFeed.NONE,height,false,com.wormzjl.icheme.science.fluid.network.VesselGeometry.prism(1,height),null,0,0,null,true);
+        return new WorldTopologyLedger.Registration(device,spec,0);
+    }
+    /** A gas intake's entry loss, velocity heads at the pipe's bore (D8: a louvred box and a rain hood, K = 3). */
+    static final double INTAKE_LOSS=3;
     /** Inherit the largest mechanically connected adjacent pipe's latest bore, including a closed axial cutoff. */
     private double placedPipeDiameter(PhysicalFluidTopology.Position position) {
         double largest=0;

@@ -1,0 +1,9 @@
+{
+  "parent": "icheme:block/fluid_device",
+  "loader": "icheme:fluid_device",
+  "kind": "generator",
+  "intake": true,
+  "textures": {
+    "motor_louvre": "icheme:block/motor_louvre"
+  }
+}

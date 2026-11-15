@@ -141,7 +141,15 @@ class FluidFactsCompatTest {
         world.runTo(930);
         converted(world);
         world.runTo(940);
+        intake(world);
         phases(world);return world;
+    }
+    /** Facts schema 26 (batch 2026-11-15-fluid-interfaces, W2): a gas intake, the atmosphere as a generator ({@code ambient}), on a dead-end pipe. */
+    private static void intake(EventPathWorld world) {
+        long id=world.ledger.nextIdentity();
+        var record=Placement.intake(id,new PhysicalFluidTopology.Position(EventPathWorld.DIM,0,64,-40),Direction.EAST,.05,world.model);
+        world.registry.submit(List.of(new WorldTopologyLedger.Edit(id,record)),id+1,null);
+        world.place(1,64,-40,Kind.PIPE,Direction.EAST,.05);
     }
     /** The vessels {@link #phases} fills: nitrogen over water, oil over water under their gas, boiling water, and oil over water in a blanketed drum with a pressure safety valve. */
     private long wetNitrogen,oilOverWater,boiling,guardedOil;

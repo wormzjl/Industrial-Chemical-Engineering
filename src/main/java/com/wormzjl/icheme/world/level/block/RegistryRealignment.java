@@ -163,7 +163,7 @@ public final class RegistryRealignment {
         var at = new BlockPos(d.position().x(), d.position().y(), d.position().z());
         if (!level.hasChunkAt(at)) return Check.NONE; // unloaded since: its next load queues it again
         if (d.position().lane() > 0) return lane(level, world, at, d);
-        var wanted = FluidDeviceBlock.stateFor(d);
+        var wanted = FluidDeviceBlock.stateFor(record);
         if (wanted == null) return Check.NONE;
         var present = level.getBlockState(at);
         Outcome outcome;

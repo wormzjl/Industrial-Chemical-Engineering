@@ -22,6 +22,8 @@ public final class ModBlocks {
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.FluidDeviceBlock> INLINE_FILTER=fluid("inline_filter",com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.FILTER);
     /** A three-way diverter valve (batch 2026-11-09-batch-distiller). */
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.FluidDeviceBlock> DIVERTER_VALVE=fluid("diverter_valve",com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.DIVERTER_VALVE);
+    /** A gas intake (batch 2026-11-15-fluid-interfaces, W2): the atmosphere as a generator. */
+    public static final DeferredBlock<com.wormzjl.icheme.world.level.block.FluidDeviceBlock> GAS_INTAKE=fluid("gas_intake",com.wormzjl.icheme.world.level.block.FluidDeviceBlock::intake);
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.LinePieceBlock> LINE_PIECE=BLOCKS.registerBlock("line_piece",
             com.wormzjl.icheme.world.level.block.LinePieceBlock::new,BlockBehaviour.Properties.of().strength(.5F).sound(SoundType.METAL).pushReaction(net.minecraft.world.level.material.PushReaction.BLOCK).noOcclusion().dynamicShape().noLootTable());
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.ConduitBlock> DATA_CABLE=BLOCKS.registerBlock("data_cable",
@@ -40,11 +42,14 @@ public final class ModBlocks {
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.PipeRackBlock> PIPE_RACK=BLOCKS.registerBlock("pipe_rack",com.wormzjl.icheme.world.level.block.PipeRackBlock::new,
             BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(3.5F).sound(SoundType.METAL).pushReaction(net.minecraft.world.level.material.PushReaction.BLOCK).noOcclusion().dynamicShape());
     private static DeferredBlock<com.wormzjl.icheme.world.level.block.FluidDeviceBlock> fluid(String name,com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind kind) {
+        return fluid(name,p->com.wormzjl.icheme.world.level.block.FluidDeviceBlock.create(kind,p));
+    }
+    private static DeferredBlock<com.wormzjl.icheme.world.level.block.FluidDeviceBlock> fluid(String name,java.util.function.Function<BlockBehaviour.Properties,com.wormzjl.icheme.world.level.block.FluidDeviceBlock> block) {
         var properties=BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(3.5F).sound(SoundType.METAL).pushReaction(net.minecraft.world.level.material.PushReaction.BLOCK);
         // Every device model (the inline filter too, a Y-strainer since 2026-10-16) leaves part of its block space open:
         // none occludes the neighbouring block's faces in the chunk renderer, and light reaches inside each.
         properties.noOcclusion();
-        return BLOCKS.registerBlock(name,p->com.wormzjl.icheme.world.level.block.FluidDeviceBlock.create(kind,p),properties);
+        return BLOCKS.registerBlock(name,block,properties);
     }
 
     public static final DeferredBlock<ProcessSimulatorBlock> PROCESS_SIMULATOR = BLOCKS.registerBlock(

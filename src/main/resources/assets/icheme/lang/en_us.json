@@ -4519,5 +4519,7 @@
   "material.icheme.neon": "Neon",
   "material.icheme.helium": "Helium",
   "material.icheme.krypton": "Krypton",
-  "material.icheme.xenon": "Xenon"
+  "material.icheme.xenon": "Xenon",
+  "block.icheme.gas_intake": "Gas Intake",
+  "tutorial.icheme.item.gas_intake.serves": "Draws outside air into the network; a compressor behind it moves the air."
 }
