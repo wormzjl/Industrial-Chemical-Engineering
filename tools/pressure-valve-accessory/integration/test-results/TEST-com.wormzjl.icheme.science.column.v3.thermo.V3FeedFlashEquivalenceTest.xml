@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.science.column.v3.thermo.V3FeedFlashEquivalenceTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-24T09:09:28.803Z" hostname="WORMZ-PC" time="0.083">
-  <properties/>
-  <testcase name="completeFlashAndFailureOutcomesMatchFrozenMain()" classname="com.wormzjl.icheme.science.column.v3.thermo.V3FeedFlashEquivalenceTest" time="0.038"/>
-  <testcase name="convergedLiquidEndpointDoesNotPublishAnInfinitesimalVaporPhase()" classname="com.wormzjl.icheme.science.column.v3.thermo.V3FeedFlashEquivalenceTest" time="0.017"/>
-  <testcase name="rootMatchesFrozenHundredStepAlgorithmIncludingEndpointsAndInvalidInputs()" classname="com.wormzjl.icheme.science.column.v3.thermo.V3FeedFlashEquivalenceTest" time="0.028"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

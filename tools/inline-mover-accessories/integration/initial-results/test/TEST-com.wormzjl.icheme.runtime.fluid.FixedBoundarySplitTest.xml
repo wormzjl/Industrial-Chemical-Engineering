@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.runtime.fluid.FixedBoundarySplitTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-10-25T04:48:42.945Z" hostname="WORMZ-PC" time="0.064">
-  <properties/>
-  <testcase name="anEditBesideASharedVoidLeavesTheOtherIslandAndAnEditOfTheVoidReplacesBoth()" classname="com.wormzjl.icheme.runtime.fluid.FixedBoundarySplitTest" time="0.036"/>
-  <testcase name="aVoidBetweenAGeneratorsLineAndAVoidToVoidLineSeparatesThem()" classname="com.wormzjl.icheme.runtime.fluid.FixedBoundarySplitTest" time="0.027"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

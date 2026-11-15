@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.science.column.v3.V3ColumnFeedAndDrawLimitsTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-10-24T13:25:33.371Z" hostname="WORMZ-PC" time="3.764">
-  <properties/>
-  <testcase name="aTwoPercentNitrogenFeedSolvesAndLeavesOverhead()" classname="com.wormzjl.icheme.science.column.v3.V3ColumnFeedAndDrawLimitsTest" time="2.146"/>
-  <testcase name="aFourthSideDrawSolvesAndIsAProductStream()" classname="com.wormzjl.icheme.science.column.v3.V3ColumnFeedAndDrawLimitsTest" time="1.618"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

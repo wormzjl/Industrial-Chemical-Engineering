@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.science.fluid.network.SolidChainTransportTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-10-25T08:27:23.289Z" hostname="WORMZ-PC" time="0.038">
-  <properties/>
-  <testcase name="tenReservoirChainIntegratesFiveSecondsWithoutALineSearchStall()" classname="com.wormzjl.icheme.science.fluid.network.SolidChainTransportTest" time="0.038"/>
-  <system-out><![CDATA[solid chain: 10 nodes 5 s ms=36 accepted=13 rejected=0 reasons={Solid transport transition inside the step=51, blocked with solid: DEPOSITION; pipe=101; velocity=0.17156595047567155; deposition=0.17157537427738395; t=0.005388566271200247=1, blocked with solid: DEPOSITION; pipe=102; velocity=0.17153227979818828; deposition=0.17157626730276504; t=0.005492516771688528=1}
-]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

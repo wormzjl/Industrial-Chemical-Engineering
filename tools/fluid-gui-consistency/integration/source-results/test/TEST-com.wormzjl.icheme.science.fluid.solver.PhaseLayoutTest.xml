@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.science.fluid.solver.PhaseLayoutTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-24T13:24:42.034Z" hostname="WORMZ-PC" time="0.019">
-  <properties/>
-  <testcase name="coupledVolumeEnergyAndPhaseEquationsRecoverIndependentTpTargets()" classname="com.wormzjl.icheme.science.fluid.solver.PhaseLayoutTest" time="0.009"/>
-  <testcase name="sparseTwoPhaseEncodingKeepsPhasePropertySnapshotsIsolated()" classname="com.wormzjl.icheme.science.fluid.solver.PhaseLayoutTest" time="0.004"/>
-  <testcase name="theWallRowAndTheBagVolumeAreStatedOnTheBranchASweepIsBuiltOn()" classname="com.wormzjl.icheme.science.fluid.solver.PhaseLayoutTest" time="0.005"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

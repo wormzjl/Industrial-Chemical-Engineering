@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.runtime.fluid.PipelineFilterAccessoryTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-25T04:53:57.033Z" hostname="WORMZ-PC" time="0.106">
-  <properties/>
-  <testcase name="everyAxisUsesNativeFilterAndRemovalComposesWithPendingDiameterEdits()" classname="com.wormzjl.icheme.runtime.fluid.PipelineFilterAccessoryTest" time="0.073"/>
-  <testcase name="activeAndPendingFilterFlagsRoundTripAndMalformedFlagsAreRejected()" classname="com.wormzjl.icheme.runtime.fluid.PipelineFilterAccessoryTest" time="0.011"/>
-  <testcase name="removingLoadedCakeQueuesOneConservedWorldRecovery()" classname="com.wormzjl.icheme.runtime.fluid.PipelineFilterAccessoryTest" time="0.015"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

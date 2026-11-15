@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.runtime.fluid.FluidDeviceSpecDomainTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-25T04:48:45.256Z" hostname="WORMZ-PC" time="0.019">
-  <properties/>
-  <testcase name="aNitrogenVoidAt200KelvinIsValidAndOneAt50KelvinIsRefusedByTheInputBoxWhileAReservoirIsPlacedEmpty()" classname="com.wormzjl.icheme.runtime.fluid.FluidDeviceSpecDomainTest" time="0.003"/>
-  <testcase name="aGeneratorIsCheckedAgainstTheEnvelopeAndControlsAreOnlyStructural()" classname="com.wormzjl.icheme.runtime.fluid.FluidDeviceSpecDomainTest" time="0.005"/>
-  <testcase name="allRequiredCrudePresetsShareTheExactQualifiedPropertyBasis()" classname="com.wormzjl.icheme.runtime.fluid.FluidDeviceSpecDomainTest" time="0.005"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

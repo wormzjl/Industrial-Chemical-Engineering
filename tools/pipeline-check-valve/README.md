@@ -35,3 +35,5 @@ Status: Archived 2026-10-24. Index: [../INDEX.md](../INDEX.md).
 ### History
 
 - Archived 2026-10-24 (integrated `b70e92aa`; 13 focused tests, five known full-suite failures/no new failure; ten local files preserved; target jar/client running; format-reset evidence retained)
+
+Large files (AGENTS.md, batch 2026-11-15-tools-large-files): the 295 images, Gradle results, worlds and other large files of this folder are git-ignored here; their copies are in the main checkout's `research/tools/pipeline-check-valve/`, at the same relative paths.
