@@ -381,7 +381,7 @@ public final class SparseNewton {
         var observer=SolverDiagnostics.patternObserver;
         if(observer!=null)observer.factored(equations,x,pattern.offsets,pattern.rows,derivatives);
         var numeric=pattern.numericMatrix(derivatives);
-        try{if(workspace.ordering==null)workspace.ordering=SparseLuSolver.prepareFillOrdering(pattern.symbolicMatrix());workspace.factorization=workspace.shared.factors(pattern).factor(numeric,workspace.ordering);workspace.matrix=numeric;workspace.jacobianPoint=x.clone();}
+        try{if(workspace.ordering==null)workspace.ordering=SparseLuSolver.prepareOrdering(pattern.symbolicMatrix());workspace.factorization=workspace.shared.factors(pattern).factor(numeric,workspace.ordering);workspace.matrix=numeric;workspace.jacobianPoint=x.clone();}
         catch(SparseLuSolver.SolveFailure failure){workspace.invalidate();throw new Nonconvergence("Singular Newton Jacobian: "+failure.getMessage(),x);}
         return calls;
     }
