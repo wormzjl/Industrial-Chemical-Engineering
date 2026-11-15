@@ -1,6 +1,6 @@
 # 2026-11-15 pollution system
 
-Status: In progress since 2026-11-15. D1 to D6 decided; WP1 to WP5, WP6a, WP8 and WP10 built and unit-tested (GameTests not run); WP6b built and unit-tested; WP7 and WP9 not started. Branch `claude/pollution-system-a8e213`, cut from `main` at `e9edc974b` (0.31.0).
+Status: In progress since 2026-11-15. D1 to D6 decided; WP1 to WP5, WP6a, WP8 and WP10 built and unit-tested (GameTests not run); WP6b built and unit-tested; WP7 written; GameTest run in progress; WP9 not started. Branch `claude/pollution-system-a8e213`, cut from `main` at `e9edc974b` (0.31.0).
 
 Purpose: air pollution in 16 × 16 × 16 cubes: toxic, combustible, corrosive and particulate hazard indices from what the fluid network releases, spreading and decaying on the 5 s engine, with effects on players and mobs and vapour cloud explosions at flame sources.
 
@@ -46,9 +46,12 @@ Lane: new packages `science/pollution` and `runtime/pollution`. Hot files touche
 
 - 2026-11-16, WP6b built by the main thread: all four source sets compiled at the first build; 235 tests in 25 classes pass (`VesselBreachTest`, `FluidFactsCompatTest` with the new image `compat/fluid/schema-26`, `MachineHealthTest`, `FluidCheckpointCodecTest`, `FormatsTableTest`, `ExplosionLawTest`, the pollution packages, `ReleasesTest`, `PhysicalFluidTopologyTest`, the valve and still world tests). `FluidDeviceSpec.breached` (last component, `vented()`), `FluidFacts.SCHEMA` 26, `FluidWorldAuthority.breach` and `repair` on `Placement.edit`, `runtime/pollution/Breaches`, `MachineHealth.breach`, `ExplosionLaw.strengthAt` and `reach`, `RepairKitItem` (outcome `BREACH_REPAIRED`), the status clause `BREACHED`, config `pollution.equipmentBreach`. What the code refuted in the brief: equipment cells have resistance 3.6e6, so `onBlockExploded` never fires for vanilla blasts; the hook is a `Detonate` listener that scans shell block entities within the blast's reach. Breach: closed drums, tanks, spheres, converter vessels; not still pots, kettle shells or members of a running column; a machine with a health record fails. Layout refreshes keep the flag. Not run: `PollutionBreachGameTests` (batch `pollution_breach`); the other classes that load `FluidWorldAuthority`, `equipmentGates` (the final lane's).
 
+- 2026-11-16, owner: "Yes, run GameTests". The GameTest run started as an Opus medium sub-thread in this worktree (`runFluidGameTestServer -PfluidGameTestRunId=pollution1`, the whole namespace, once; it changes nothing). WP7 by the main thread meanwhile: the code guide chapter `documentation/reference/code-guide/pollution.md`, its two rows in the guide's README, the fourth job family in `runtime-engine.md`, the `hazard` sub-record in `materials.md`, the monitor's section in `wired-control-power.md`. The admission line of `runtime-engine.md` is left as it is: `BoundedCpuSolveService` line 165 admits an island only with an empty ready queue and an idle worker, so WP3's note on it does not hold. No `MATERIALS.md` exists under `documentation/reference/`; the guide's `materials.md` carries the sub-record. No test run (documents only).
+
 ## Documents
 
 - [POLLUTION_PLAN.md](POLLUTION_PLAN.md): the standard, the release sources, the field and its step, the schedule, effects, ignition and blasts, saves, work packages WP1 to WP7, owner decisions.
+- [Code guide chapter](../reference/code-guide/pollution.md): the subsystem as built.
 
 ## Open items
 
