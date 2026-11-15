@@ -67,4 +67,36 @@ class PreparedRefillTest {
             assertSame(refilled,model.prepare(345,refilled));
         }
     }
+
+    /**
+     * Batch 2026-11-15-fluid-step-cost, S2: a retired bundle (the accepted pass's, kept for the solver's next step) is
+     * refilled at its next use even at its own temperature, and then gives a new bundle's bits with a new bundle's one
+     * temperature preparation and no new workspace.
+     */
+    @Test void aRetiredBundleIsRefilledAtItsOwnTemperatureAsANewOne() {
+        double p=2e5;
+        var counters=com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics.temperatureTermsCalls;
+        boolean enabled=com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics.ENABLED;
+        try {
+            com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics.ENABLED=true;
+            for(int[][] uses:new int[][][]{{{2,0},{3,3}},{{3,3},{1,0}}}) {
+                var first=slots(uses[0][0],uses[0][1],.4);var second=slots(uses[1][0],uses[1][1],.7);
+                var reused=model.prepare(330);
+                evaluate(330,p,first,reused);
+                reused.retire();
+                assertTrue(reused.retired());
+                long built=FluidThermodynamics.Prepared.workspacesBuilt(),preparations=counters.sum();
+                var refilled=model.prepare(330,reused);
+                assertSame(reused,refilled,"refilled in place");
+                assertFalse(refilled.retired());
+                var fromRefill=evaluate(330,p,second,refilled);
+                assertEquals(built,FluidThermodynamics.Prepared.workspacesBuilt(),"the refill builds no kernel workspace");
+                long refillPreparations=counters.sum()-preparations;
+                preparations=counters.sum();
+                var fromNew=evaluate(330,p,second,model.prepare(330));
+                assertEquals(counters.sum()-preparations,refillPreparations,"a new bundle's temperature preparations");
+                assertSameBits(fromNew,fromRefill);
+            }
+        } finally {com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics.ENABLED=enabled;}
+    }
 }
