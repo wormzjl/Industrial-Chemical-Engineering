@@ -62,7 +62,7 @@ math (deterministic math, banded and sparse LU, Newton)
 
 ## 3. Phase 1 work packages
 
-Every reviewer is read-only on `src/`, runs no Gradle, and writes its file in this folder: a summary of at most 50 lines, a module map, then a findings table. The full briefs, with the common rules and each package's questions, are in [BRIEFS.md](BRIEFS.md); the table below is their index. Fable takes the three packages that decide a solver's decomposition and its Rust boundary (owner, 2026-11-13: Fable may be a subagent for difficult tasks).
+Every reviewer is read-only on `src/`, runs no Gradle, and writes its file in this folder: a summary of at most 50 lines, a module map, then a findings table. The full briefs, with the common rules and each package's questions, are in [BRIEFS.md](../../research/2026-11-13-codebase-review/BRIEFS.md); the table below is their index. Fable takes the three packages that decide a solver's decomposition and its Rust boundary (owner, 2026-11-13: Fable may be a subagent for difficult tasks).
 
 | Id | Scope (close read) | Questions | Output | Model |
 |---|---|---|---|---|

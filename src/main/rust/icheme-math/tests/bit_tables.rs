@@ -1,5 +1,6 @@
 //! Every function of icheme-math against the bit tables generated from Java
-//! (`src/test/java/com/wormzjl/icheme/science/math/RustBitTables.java`, tracked under `tests/data/`). Each row is
+//! (`src/test/java/com/wormzjl/icheme/science/math/RustBitTables.java`; `gradlew rustTables` writes them to
+//! `tests/data/`, which is not tracked). Each row is
 //! compared bit for bit; the first difference stops the test with its file, line, arguments and both bit patterns.
 //!
 //! NaN results: Java specifies only that the result is NaN, and so does Rust (the sign and payload of a NaN produced

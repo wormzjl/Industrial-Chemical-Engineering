@@ -368,6 +368,34 @@ def rustCheckSteps = [
                        'Runs clippy on the Rust workspace with every warning an error.'],
         rustTest    : [['test', '--locked', '--offline'],
                        'Runs the Rust tests: the Java bit tables, the band LU and the JNI layout and self-test.']]
+// The Java side of the Rust tests: the bit tables of the mathematics (RustBitTables) and the band LU table
+// (RustNativeTables), written from this build's own classes into icheme-math/tests/data. Git ignores them (6 MB of
+// generated rows); the Rust tests read them, so rustTest writes them first. By hand: gradlew rustTables, then the tests.
+def rustTablesDirectory = rustDirectory.dir('icheme-math/tests/data').asFile
+def rustSelfTestCopy = layout.buildDirectory.dir('native/tables').get().asFile
+def rustBitTables = tasks.register('rustBitTables', JavaExec) {
+    group = 'native'
+    description = 'Writes the bit tables the Rust tests compare the Rust mathematics with (RustBitTables).'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.wormzjl.icheme.science.math.RustBitTables'
+    args rustTablesDirectory.absolutePath
+    outputs.files(fileTree(rustTablesDirectory) { include '*.txt'; exclude 'banded.txt' }).withPropertyName('bitTables')
+}
+def rustBandTable = tasks.register('rustBandTable', JavaExec) {
+    group = 'native'
+    description = 'Writes the band LU table the Rust tests compare the Rust band solve with (RustNativeTables).'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.wormzjl.icheme.science.column.v3.linalg.RustNativeTables'
+    // The self-test vector it also writes is tracked (icheme-jni/tests/data/self_test.txt); this copy is not read.
+    args rustTablesDirectory.absolutePath, rustSelfTestCopy.absolutePath, 'this build'
+    outputs.file(new File(rustTablesDirectory, 'banded.txt')).withPropertyName('bandTable')
+    outputs.dir(rustSelfTestCopy).withPropertyName('selfTestCopy')
+}
+tasks.register('rustTables') {
+    group = 'native'
+    description = 'Writes the tables the Rust tests read (src/main/rust/icheme-math/tests/data, not tracked).'
+    dependsOn rustBitTables, rustBandTable
+}
 def previousRustStep = null
 rustCheckSteps.each { stepName, step ->
     def stamp = new File(rustCheckStamps, "${stepName}.ok")
@@ -377,10 +405,15 @@ rustCheckSteps.each { stepName, step ->
         description = step[1]
         workingDir rustDirectory.asFile
         commandLine([nativeCargoCommand] + step[0])
-        inputs.files(fileTree(rustDirectory)).withPropertyName('rustWorkspace').withPathSensitivity(PathSensitivity.RELATIVE)
-        // icheme-jni's formulation test reads the Java constants of the token.
-        if (stepName == 'rustTest') inputs.file('src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnLabels.java')
-                .withPropertyName('formulationSource').withPathSensitivity(PathSensitivity.RELATIVE)
+        // Only rustTest reads the generated tables; the other steps leave them out of their inputs.
+        inputs.files(fileTree(rustDirectory) { if (stepName != 'rustTest') exclude '**/tests/data/**' })
+                .withPropertyName('rustWorkspace').withPathSensitivity(PathSensitivity.RELATIVE)
+        if (stepName == 'rustTest') {
+            dependsOn rustBitTables, rustBandTable
+            // icheme-jni's formulation test reads the Java constants of the token.
+            inputs.file('src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnLabels.java')
+                    .withPropertyName('formulationSource').withPathSensitivity(PathSensitivity.RELATIVE)
+        }
         outputs.file(stamp)
         if (after != null) mustRunAfter after
         doFirst { if (nativeCargo == null) throw new GradleException(nativeNoCargo) }
