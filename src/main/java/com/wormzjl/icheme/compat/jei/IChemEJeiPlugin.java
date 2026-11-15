@@ -38,13 +38,4 @@ public final class IChemEJeiPlugin implements IModPlugin {
             registration.addIngredientInfo(item, lines);
         }
     }
-
-    /** The placeholder crude oil leaves JEI where another mod's crude is in {@code c:crude_oil} (batch 2026-11-15-fluid-interfaces, D9). */
-    @Override
-    public void onRuntimeAvailable(mezz.jei.api.runtime.IJeiRuntime runtime) {
-        if (!com.wormzjl.icheme.registry.ModFluids.otherCrude()) return;
-        var ingredients = runtime.getIngredientManager();
-        ingredients.removeIngredientsAtRuntime(mezz.jei.api.constants.VanillaTypes.ITEM_STACK, List.of(new net.minecraft.world.item.ItemStack(com.wormzjl.icheme.registry.ModFluids.CRUDE_OIL_BUCKET.get())));
-        ingredients.removeIngredientsAtRuntime(mezz.jei.api.neoforge.NeoForgeTypes.FLUID_STACK, List.of(new net.neoforged.neoforge.fluids.FluidStack(com.wormzjl.icheme.registry.ModFluids.CRUDE_OIL.get(), 1000)));
-    }
 }
