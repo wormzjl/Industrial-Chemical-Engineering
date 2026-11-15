@@ -170,7 +170,39 @@ Built by a subagent (`04cabf5f6`), merged as `bb771a9eb`: the sites converted ar
 
 Three runs in one direction, one pair each; the spread between runs of one code is still not measured. The collector's own time is 0.2 s of the minute in every run, so the gain is not its pauses: a kernel workspace is about 50 KB, written whole when it is built, and 14 GB a minute of that went through the workers' caches. The 1.45 GB left is the closure's own bundle.
 
-Order: S2b (done), S4, then S1's F1 and F2 (the pattern forms act on the 32.5 % of the LU, of which the reach search is 10.3 %; the census says their net may be small).
+### S4 measured (2026-11-15)
+
+Built by a subagent (`5289cd36f`), merged as `2b35cbdb4`: `PhaseLayout.wallClosure` has `differentiateEntries` as planned. Two things it does beyond the plan, both today's behaviour kept: a `ThermoHold` (an `IllegalArgumentException`) in a trial returns -1 as any refused trial does, since the coloured sweep catches it the same way; a trial row that is not finite returns -1, as `SparseNewton.evaluate` refuses it. One bench pair on `2b35cbdb4` (`tmp/pattern-census/bench-s4/`):
+
+| | Baseline | S2b | S4 | S4 against the baseline |
+|---|---|---|---|---|
+| Island step, mean (ms) | 34.83 | 30.64 | 27.42 | -21.3 % |
+| Island step, median (ms) | 34.54 | 30.03 | 26.72 | -22.6 % |
+| Island step, p95 (ms) | 56.12 | 48.90 | 45.46 | -19.0 % |
+| Worker CPU a step, mean (ms) | 32.92 | 29.11 | 25.90 | -21.3 % |
+| Worker occupancy | 0.261 | 0.230 | 0.205 | |
+| Bytes allocated under the fluid step, the measured minute (GB) | 35.57 | 20.06 | 20.71 | -41.8 % |
+| Residual evaluations, of them inside a Jacobian | 761,947 / 716,866 | the same | 45,061 / 0 | |
+| Jacobian builds, of them block builds | 18,237 / 1,563 | the same | 18,231 / 18,231 | |
+| Newton solves, iterations | 19,371 / 25,710 | the same | 19,365 / 25,696 | |
+| Held intervals | 0 | 0 | 0 | |
+
+The results move as expected and no closure gains an iteration: 6 fewer solves and 14 fewer iterations of 25,710 over the minute. No block build fell back. What the gates say of the moved results: chain-100 builds no closure Jacobian (every vessel of it is within the closure's tolerance as it stands), so its reference stays exact, every deviation 0; the hold-fuzz seeds 1 to 200 end at the same tick, with the one held seed they had (145). The references the final lane reads may move in their last digits (the `VIRTUAL_HOLDUP_DIGEST` line among them); it records them once.
+
+**CPU by what is on the stack after S4** (2,203 samples with a fluid frame, against the baseline's 2,778; the rows overlap):
+
+| Share | Part | Baseline |
+|---|---|---|
+| 36.6 % | sparse LU: the reach search 10.5 %, the rest of the factorization 13.9 %, the triangular solves 3.6 %, the matrix and the kept factors around them 8.6 % | 32.7 % |
+| 22.3 % | the step's Jacobian sweep (decodes on tangents 5.6 %, transport rows 4.0 %) | 18.0 % |
+| 21.5 % | the step's residual evaluations (their decodes 16.9 %) | 17.2 % |
+| 14.9 % | the reconstruction after a step; the vessel closure 11.0 %, its Jacobian 5.0 % | 28.6 %; 24.4 %; 17.4 % |
+| 10.2 % | viscosity, under the rows above | 8.9 % |
+| 23.7 % | the equation-of-state kernel, under the rows above | 34.0 % |
+
+The linear algebra is now the largest part, and S1's forms act on it. The closure's Jacobian came out at 5.0 % where 5 % was estimated.
+
+Order: S2b (done), S4 (done), then S1's F1 and F2 (the pattern forms act on the 32.5 % of the LU, of which the reach search is 10.3 %; the census says their net may be small).
 
 ## 5. Commands
 
