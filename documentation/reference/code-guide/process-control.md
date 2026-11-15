@@ -23,6 +23,7 @@
 - **Gas blanketing valve.** `FlowControl.ValveSource.BLANKET` (sensor `BLANKET_SENSOR`, `ControlValve.blanket()`): a mass valve the interval solver plans at every step (`planned()`, `GasBlanket.plan`); its set pressure is the vessel's (`Inventory.blanket`). It is a fitting, not a controller: no sensor, no loop.
 - **Pressure safety valve.** The run out of the guarded node carries the existing `FlowControl.PressureValve` at the valve's set pressure (`FluidDeviceSpec.relief`); no new law ([runtime-registry.md](runtime-registry.md)).
 - **Flare tip.** `ControlValve.bare()` is true for an open `FLARE` valve: it regulates nothing (owner D6).
+- **On/off loop** (batch 2026-11-15-fluid-interfaces, W7, decision D4). An output whose control is `ValveSource.ON_OFF` (the automated shutoff valve) switches at the cadence, its sensor anywhere on the bus (`ControlLaw.onOff`): `ControlSettings.onOff` opens it above the target plus `ON_OFF_BAND` (2 % of the target) with action OUTLET and closes it below the target less the band, INLET the reverse, and holds inside the band. The last switch is state (`ControlLaw.switches`, forgotten with the panel); a first decision starts from the valve's own mass target. The plan is the valve's law with mass target 1 or 0 (`ControlPlans`), the status `OPEN` or `CLOSED`. While an enabled loop holds it, a hand is refused (`ControlFacts.loopHolds`). Tests: `ActuatedValveTest`.
 
 ## A running column on the control system
 
