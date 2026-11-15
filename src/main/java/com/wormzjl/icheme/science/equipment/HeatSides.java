@@ -186,11 +186,11 @@ public final class HeatSides {
     }
     /**
      * An air cooler bank's process side, bays {@code width} by {@code length} m: each bay's tubes in one pass (as many as
-     * carry its 5 m² of bare tube per m² of face), the trains in parallel, the bays of a train in series, 1.5 velocity
+     * carry its 5 m² of bare tube per m² of face, over its finned width, {@code UnitRatings.finWidth}), the trains in parallel, the bays of a train in series, 1.5 velocity
      * heads per bay for its headers.
      */
     public static PipeResistance.Geometry airCoolerPassage(double width,double length,ProcessUnit.Bank bank) {
-        double tubes=BARE_PER_FACE*(width-.22)/(Math.PI*AIR_COOLER_TUBE);
+        double tubes=BARE_PER_FACE*com.wormzjl.icheme.science.equipment.design.UnitRatings.finWidth(width)/(Math.PI*AIR_COOLER_TUBE);
         return new PipeResistance.Geometry(bank.series()*length,AIR_COOLER_BORE,TUBE_ROUGHNESS,1.5*bank.series(),channels(bank.parallel()*Math.round(tubes)));
     }
     private static int channels(double count){return (int)Math.max(1,Math.round(count));}

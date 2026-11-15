@@ -44,7 +44,7 @@ Paths under [`src/main/java/com/wormzjl/icheme/science/equipment/`](../../../src
 | `ConverterDesign` | Fluid and gas converters: two tanks, the transfer line and cabinet; `rated` (`TURNOVER`), `serviceHousing`, `reliefFoot`, `blanketFoot`, `gaugePlace` | 309 |
 | `TowerBank`, `CoolingTowerDesign` | A tower's cell bank and both cooling towers ([cooling-towers.md](cooling-towers.md)) | 17, 210 |
 | **Heat units** | | |
-| `ExchangerDesign`, `KettleDesign`, `AirCoolerDesign` | TEMA AES exchanger, kettle reboiler, air cooler bank of bays | 91, 94, 221 |
+| `ExchangerDesign`, `KettleDesign`, `AirCoolerDesign` | TEMA AES exchanger, kettle reboiler, air cooler bank of bays (1.5 to 6 m by 2 to 12 m; two bundles above 3 m) | 91, 94, 281 |
 | `VerticalHeaterDesign`, `CabinHeaterDesign` | API 560 fired heaters | 203, 258 |
 | **Machines** | | |
 | `PumpDesign`, `CompressorDesign`, `CentrifugalCompressorDesign` | Casings by design point: an OH2 or BB2 pump, an API 618 frame, an API 617 barrel | 319, 296, 228 |
@@ -88,6 +88,7 @@ Paths under [`src/main/java/com/wormzjl/icheme/science/equipment/`](../../../src
 - Column height: top space, the trays at the solver's spacing, and the sump (`ColumnTrays.bottomSpace`: the level stack and the vapour return to the next whole metre, or D/2 where more), in whole metres (`tangentLength`).
 - Ratings (`UnitRatings`): tube surface 75 D² L; a pump's flow at 3 m/s in the discharge and its power at `PUMP_HEAD` and `PUMP_EFFICIENCY` or its duty; a frame's speed at `PISTON_SPEED`; a fired heater's duty from `RADIANT_FLUX` and `RADIANT_SHARE`.
 - Sound (`UnitDesign.soundGain`): a running loop's gain over the size range times the speed share to `SPEED_EXPONENT`; `soundPitch` from the rpm over the loop's (`PUMP_LOOP_RPM`, `MOTOR_LOOP_RPM`).
+- Air cooler bays (`AirCoolerDesign`, `UnitRatings`): face = `finWidth` (bay - 0.22 m, - 0.12 m more with two bundles above `ONE_BUNDLE` 3 m) × (length - 1 - header); 1 to 3 fans (`fans`); a width's lengths run from `minLength` to `maxLength`, every one with fans over `FAN_COVERAGE` (1.5 m to 6 m long, 2 m to 9, 2.5 m to 10, 3 m and wider to `MAX_BAY_LENGTH` 12); least support max(3, ceil(0.6 D + 0.2 + 0.4 D + 0.35 min(D, 0.9))), default max(4, least); a bay longer than `POST_SPAN` 6 m has a post line at its middle; a two-bundle bay's posts and beams are `WIDE_POST` 0.3 m; fans above `SPEED_FAN` 2.35 m turn at its tip speed (`fanSpeed`).
 - Motion (`ProcessUnit`): `FAN_SPEED`, `PUMP_SPEED`, `CRANK_SPEED`; `MOTION_PERIOD` holds whole turns of every speed. Kinds whose `moves` is true have parts the client turns ([client-rendering.md](client-rendering.md)).
 - `ConverterDesign.rated` is one tank's volume in `TURNOVER` seconds.
 - Machine design point lists: `MachineDuty.POWERS`, `MOTOR_POWERS` (IEC), `EXHAUSTS`; `speed` is 50 Hz synchronous.
@@ -105,6 +106,7 @@ In `equipmentGates` unless noted:
 |---|---|
 | `ProcessUnitTest` | Every size of every kind on its grid (`everySize`); nozzles face their fluid and each neck clears at its own largest pipe; free pipe blocks; moving parts are the still parts set going; piston rods hide their ends; decks walked and ladders climbed, a player (`PlayerWalk`) gets off at each landing; rests within `MAX_CLIMB`; the kit pieces; `designsShareOnlyTheKit` |
 | `ColumnStructureTest` | Platforms, fenced decks, alternating ladders, side nozzles in their bands on their home sides or turned, unplaced nozzles listed, decks and davit clear of the nozzles' rooms, the vapour return with a kettle, trays from a calculator |
+| `AirCoolerBayTest` | The larger bays rate as AIR_COOLER_BAY_PLAN.md says; every bay to 3 by 6 m keeps its face, support and fan speed; every listed bay builds, its fans in whole turns |
 | `ColumnComponentsTest` | What a design requires; member counts in range; the trim count; a design whose nozzle finds no row is not saved |
 | `EquipmentLayoutGoldenTest` | Every recorded layout equals `layouts.txt`; a changed layout whose revision did not rise fails first, naming the kind |
 | `EquipmentRefreshTest` | Every kind declares one layout revision, 1 or more |

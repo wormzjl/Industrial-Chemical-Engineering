@@ -14,16 +14,17 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * An air cooler bank of bays ({@link #build}, {@link ProcessUnit.Bank}): bays 1.5 to 3 m wide and 2 to 6
- * m long where their fans cover {@link ProcessUnit#FAN_COVERAGE} of the bundle face (API 661). The constructor sets the
- * bay and the bank on rows of their own.
+ * An air cooler bank of bays ({@link #build}, {@link ProcessUnit.Bank}): bays 1.5 to 6 m wide and 2 to 12
+ * m long where their fans cover {@link ProcessUnit#FAN_COVERAGE} of the bundle face (API 661); a bay wider than 3 m holds
+ * two bundles side by side (batch 2026-11-15-equipment-visual-design, AIR_COOLER_BAY_PLAN.md: tubes 9 to 12 m long, bays
+ * 3 to 6 m wide). The constructor sets the bay and the bank on rows of their own.
  */
 final class AirCoolerDesign extends UnitDesign {
     AirCoolerDesign() {
         // minSupport: The bundle 3 m up (owner request 2026-10-16) keeps the fans' ring inlets at least 0.6 fan
         // diameters above grade, more than the half diameter of free air a forced-draft fan usually takes.
         // Computed in its overrides: minLength.
-        super(new Sizes(1.5, 3, .5,
+        super(new Sizes(1.5, 6, .5,
                 Sizes.COMPUTED, ProcessUnit.MAX_BAY_LENGTH,
                 3, EquipmentShape.MAX_SUPPORT,
                 Orientation.HORIZONTAL, "bay", null, "bundle_height", true,
@@ -38,11 +39,46 @@ final class AirCoolerDesign extends UnitDesign {
         return length;
     }
 
-    /** A new bank's bundle 4 m up (owner request 2026-10-16), 1.68 m or more under its motor beams. */
+    /**
+     * The bundle's least height, m: the fans' ring inlets 0.6 fan diameters above grade, under the plenum (0.2 + 0.4 fan
+     * deep) and the ring (0.35 of its depth, at most {@link ProcessUnit#RING_DEPTH}, drawn): 3 m for every fan to 1.9 m,
+     * 6 m for a 4.55 m fan (AIR_COOLER_BAY_PLAN.md 4.3).
+     */
+    @Override
+    public int minSupport(double size, int length) {
+        double fan = UnitRatings.fans(size, length).diameter();
+        return Math.max(3, (int) Math.ceil(.6 * fan + .2 + .4 * fan + .35 * Math.min(fan, ProcessUnit.RING_DEPTH) - 1e-9));
+    }
+
+    /**
+     * The longest bay of width {@code size}, to {@link ProcessUnit#MAX_BAY_LENGTH}: every length from {@link #minLength} to
+     * it keeps fans over {@link ProcessUnit#FAN_COVERAGE} of the face (three fans at most cover a narrow bay's long bundle
+     * no further: 1.5 m wide to 6 m long, 2 m to 9, 2.5 m to 10, 3 m and wider to 12).
+     */
+    @Override
+    public int maxLength(double size) {
+        int length = minLength(size);
+        while (length < ProcessUnit.MAX_BAY_LENGTH && UnitRatings.coverage(size, length + 1) >= ProcessUnit.FAN_COVERAGE) length++;
+        return length;
+    }
+
+    /** A new bank's bundle 4 m up (owner request 2026-10-16), 1.68 m or more under its motor beams, or its least height where that is higher. */
     @Override
     public int defaultSupport(double size, int length) {
-        return 4;
+        return Math.max(4, minSupport(size, length));
     }
+
+    /**
+     * A fan's shown speed, rev/s: {@link ProcessUnit#FAN_SPEED} to a {@link #SPEED_FAN} fan, then at the same tip speed
+     * ({@code SPEED_FAN} / fan of it; a fan's tip runs at about 60 m/s whatever its size), on whole turns in
+     * {@link ProcessUnit#MOTION_PERIOD}.
+     */
+    static double fanSpeed(double fan) {
+        return fan <= SPEED_FAN + 1e-9 ? ProcessUnit.FAN_SPEED : ProcessUnit.shown(60 * ProcessUnit.FAN_SPEED * SPEED_FAN / fan);
+    }
+
+    /** The largest fan shown at {@link ProcessUnit#FAN_SPEED}, m: the largest of the bays before 2026-11-15 (the 3 by 5 m bay's one fan). */
+    static final double SPEED_FAN = 2.35;
 
     @Override
     public boolean banks() {
@@ -82,7 +118,10 @@ final class AirCoolerDesign extends UnitDesign {
      * series join back header to front header by crossover spools. Trains in parallel take the process from an inlet
      * manifold over their first front headers, the bank's inlet on its top, and give it to an outlet manifold behind their
      * last back headers, the outlet under it where the condensate drains; a single train's inlet is on its first header and
-     * its outlet under a stub behind its last.
+     * its outlet under a stub behind its last. A bay wider than {@link UnitRatings#ONE_BUNDLE} holds two bundles side by side
+     * under its one plenum and set of fans, each with its own header boxes and side frames, its headers joined by the
+     * manifolds as trains are; it stands on posts and beams 0.3 m deep, and a bay longer than {@link #POST_SPAN} has a post
+     * line at its middle (AIR_COOLER_BAY_PLAN.md 4.4).
      */
     @Override
     void build(ProcessUnit u) {
@@ -94,18 +133,27 @@ final class AirCoolerDesign extends UnitDesign {
         var stack = FanStack.of(hb, fans.diameter());
         double d = fans.diameter(), up = stack.up(), bottom = stack.floor(), rotor = stack.rotor();
         double motor = stack.motor(), motorTop = stack.motorTop(), motorBottom = stack.motorBottom();
-        // A bay's nozzles and crossovers by its width; a manifold carries the trains' flow at the same speed.
-        double stub = .1 + .04 * w, manifold = Math.min(ProcessUnit.HEADER_HEIGHT - .1, stub * Math.sqrt(trains));
+        // A bay's bundles side by side (two above 3 m wide), each a header column; the nozzles and crossovers by a bundle's
+        // width; a manifold carries the columns' flow at the same speed.
+        int nb = UnitRatings.bundles(w), columns = trains * nb;
+        double bw = w / nb, stub = .1 + .04 * bw, manifold = Math.min(ProcessUnit.HEADER_HEIGHT - .1, stub * Math.sqrt(columns));
+        boolean wide = nb > 1;
+        double post = wide ? WIDE_POST : ProcessUnit.POST, beam = wide ? WIDE_POST : ProcessUnit.BEAM;
         var fanZ = new ArrayList<Double>();
         for (int k = 0; k < rows; k++) {
             double front = k * length + .5, back = (k + 1) * length - .5, front1 = front + h / 2, back0 = back - h / 2;
             for (int i = 0; i < trains; i++) {
                 double bx0 = x0 + i * w, bx1 = bx0 + w, mid = bx0 + w / 2, ix0 = bx0 + .11, ix1 = bx1 - .11;
-                for (double zh : new double[]{front, back})
-                    u.box(new double[]{bx0 + .05, low, zh - h / 2}, new double[]{bx1 - .05, high, zh + h / 2}, Material.AC_HEADER, true);
-                u.box(new double[]{ix0, hb, front1}, new double[]{ix1, hb + ProcessUnit.BUNDLE, back0}, Material.AC_FINS, true);
-                for (double x : new double[]{bx0 + .05, ix1})
-                    u.box(new double[]{x, hb - .02, front1}, new double[]{x + .06, hb + ProcessUnit.BUNDLE + .02, back0}, Material.STEELWORK, false);
+                // Each bundle: its header boxes, its fins and its side frames; two bundles meet at the bay's centre line.
+                for (int b = 0; b < nb; b++) {
+                    double c0 = bx0 + b * bw, c1 = c0 + bw, hx0 = b == 0 ? c0 + .05 : c0 + .01, hx1 = b + 1 == nb ? c1 - .05 : c1 - .01;
+                    double fx0 = b == 0 ? ix0 : c0 + .06, fx1 = b + 1 == nb ? ix1 : c1 - .06;
+                    for (double zh : new double[]{front, back})
+                        u.box(new double[]{hx0, low, zh - h / 2}, new double[]{hx1, high, zh + h / 2}, Material.AC_HEADER, true);
+                    u.box(new double[]{fx0, hb, front1}, new double[]{fx1, hb + ProcessUnit.BUNDLE, back0}, Material.AC_FINS, true);
+                    for (double x : new double[]{b == 0 ? bx0 + .05 : c0, fx1})
+                        u.box(new double[]{x, hb - .02, front1}, new double[]{x + .06, hb + ProcessUnit.BUNDLE + .02, back0}, Material.STEELWORK, false);
+                }
                 double share = (back0 - front1 - .1) / fans.count();
                 var centres = new double[fans.count()];
                 for (int f = 0; f < centres.length; f++) centres[f] = front1 + .05 + (f + .5) * share;
@@ -118,14 +166,14 @@ final class AirCoolerDesign extends UnitDesign {
                     u.mesh.part(u.motions.size());
                     Part.of("ac_fan").place(u.mesh, new double[]{mid, rotor, zc}, d, d, 0, Material.AC_FAN);
                     u.mesh.part(-1);
-                    u.motions.add(Motion.turning(new double[]{mid, rotor, zc}, new double[]{0, -1, 0}, ProcessUnit.FAN_SPEED, .618 * u.motions.size()));
+                    u.motions.add(Motion.turning(new double[]{mid, rotor, zc}, new double[]{0, -1, 0}, fanSpeed(d), .618 * u.motions.size()));
                     // Terminal boxes face out of the bank.
                     Part.of("ac_motor").place(u.mesh, new double[]{mid, motorTop, zc}, motor, motor, 2 * i < trains - 1 ? 2 : 0, Material.AC_MOTOR);
                     u.mesh.cylinder(Frame.of(new double[]{mid, 0, zc}, 1, 1), .025 * motor, motorTop, rotor - .06 * d, 8, Material.FLANGE);
                     u.solids.add(Solid.rod(new double[]{mid, 0, zc}, 1, bottom - .35 * up, bottom, .535 * d, 0));
                     u.solids.add(Solid.rod(new double[]{mid, 0, zc}, 1, motorBottom, motorTop, .2 * motor, 0));
                 }
-                if (k + 1 < rows) spool(u, mid, (low + high) / 2, back + h / 2, back + 1 - h / 2, stub);
+                if (k + 1 < rows) for (int b = 0; b < nb; b++) spool(u, bx0 + (b + .5) * bw, (low + high) / 2, back + h / 2, back + 1 - h / 2, stub);
             }
         }
         // Legs under the headers' ends; beams under the headers across the bank and along each leg line; at the motors'
@@ -135,28 +183,35 @@ final class AirCoolerDesign extends UnitDesign {
         for (int i = 1; i < trains; i++) legX.add(x0 + i * w);
         legX.add(x1 - .15);
         var legZ = new ArrayList<Double>();
+        // Post lines under the headers; one more at the middle of a bay longer than POST_SPAN (no beam across it: the bundle
+        // rests on the side beams, and one would run inside the plenum).
+        var middles = new ArrayList<Double>();
         for (int k = 0; k < rows; k++) {
             legZ.add(k * length + .5);
+            if (length > POST_SPAN) middles.add(k * length + length / 2.0);
             legZ.add((k + 1) * length - .5);
         }
+        var posts = new ArrayList<>(legZ);
+        posts.addAll(middles);
         for (double x : legX)
-            for (double z : legZ) u.box(new double[]{x - ProcessUnit.POST / 2, 0, z - ProcessUnit.POST / 2}, new double[]{x + ProcessUnit.POST / 2, low, z + ProcessUnit.POST / 2}, Material.STEELWORK, true);
-        for (double z : legZ) u.box(new double[]{x0 + .05, low - ProcessUnit.BEAM, z - ProcessUnit.FLANGE_BEAM / 2}, new double[]{x1 - .05, low, z + ProcessUnit.FLANGE_BEAM / 2}, Material.STEELWORK, true);
+            for (double z : posts) u.box(new double[]{x - post / 2, 0, z - post / 2}, new double[]{x + post / 2, low, z + post / 2}, Material.STEELWORK, true);
+        for (double z : legZ) u.box(new double[]{x0 + .05, low - beam, z - ProcessUnit.FLANGE_BEAM / 2}, new double[]{x1 - .05, low, z + ProcessUnit.FLANGE_BEAM / 2}, Material.STEELWORK, true);
         for (double x : legX)
             for (double y : new double[]{low, motorBottom})
-                u.box(new double[]{x - ProcessUnit.FLANGE_BEAM / 2, y - ProcessUnit.BEAM, legZ.getFirst()}, new double[]{x + ProcessUnit.FLANGE_BEAM / 2, y, legZ.getLast()}, Material.STEELWORK, true);
+                u.box(new double[]{x - ProcessUnit.FLANGE_BEAM / 2, y - (y == low ? beam : ProcessUnit.BEAM), legZ.getFirst()}, new double[]{x + ProcessUnit.FLANGE_BEAM / 2, y, legZ.getLast()}, Material.STEELWORK, true);
+        // The motor beams keep their depth on every bay: the fans' free air under them stands as it was.
         for (int k = 0; k < rows; k++)
             for (double zc : fanZ)
                 u.box(new double[]{x0 + .15, motorBottom - ProcessUnit.BEAM, k * length + zc - ProcessUnit.FLANGE_BEAM / 2}, new double[]{x1 - .15, motorBottom, k * length + zc + ProcessUnit.FLANGE_BEAM / 2},
                         Material.STEELWORK, true);
         // The process in at the front, on top; out at the back, underneath.
         double zIn = .5, zOut = end + .5;
-        if (trains == 1) u.nozzles.add(new Nozzle(Role.PROCESS_INLET, new double[]{a, high - .03, zIn}, 1, 1, Math.ceil(high + ProcessUnit.NECK) - high + .03, stub, 0));
+        if (columns == 1) u.nozzles.add(new Nozzle(Role.PROCESS_INLET, new double[]{a, high - .03, zIn}, 1, 1, Math.ceil(high + ProcessUnit.NECK) - high + .03, stub, 0));
         else {
             double ym = high + .1 + manifold / 2;
-            u.manifold(x0 + w / 2, x1 - w / 2, ym, zIn, manifold);
-            for (int i = 0; i < trains; i++) {
-                var f = Frame.of(new double[]{x0 + (i + .5) * w, 0, zIn}, 1, 1);
+            u.manifold(x0 + bw / 2, x1 - bw / 2, ym, zIn, manifold);
+            for (int i = 0; i < columns; i++) {
+                var f = Frame.of(new double[]{x0 + (i + .5) * bw, 0, zIn}, 1, 1);
                 u.mesh.prism(f, stub / 2, high, ym, ProcessUnit.sides(stub), Material.PIPE);
                 u.mesh.ring(f, stub / 2, PipeSizes.flange(stub) / 2, high, high + .03, ProcessUnit.sides(stub), 3, Material.FLANGE);
                 u.mesh.flangeBolts(f, stub, stub / 2, PipeSizes.flange(stub) / 2, high + .03, 1, Material.BOLT);
@@ -164,17 +219,17 @@ final class AirCoolerDesign extends UnitDesign {
             u.nozzles.add(new Nozzle(Role.PROCESS_INLET, new double[]{a, ym + manifold / 2 - .03, zIn}, 1, 1,
                     Math.ceil(ym + manifold / 2 + ProcessUnit.NECK) - ym - manifold / 2 + .03, manifold, 0));
         }
-        double out = trains == 1 ? stub : manifold, yo = low + .05 + stub / 2;
-        for (int i = 0; i < trains; i++) {
-            double mid = x0 + (i + .5) * w, z0 = end - .5 + h / 2;
+        double out = columns == 1 ? stub : manifold, yo = low + .05 + stub / 2;
+        for (int i = 0; i < columns; i++) {
+            double mid = x0 + (i + .5) * bw, z0 = end - .5 + h / 2;
             var f = Frame.of(new double[]{mid, yo, 0}, 2, 1);
-            u.mesh.prism(f, stub / 2, z0, trains == 1 ? zOut + stub / 2 : zOut, ProcessUnit.sides(stub), Material.PIPE);
+            u.mesh.prism(f, stub / 2, z0, columns == 1 ? zOut + stub / 2 : zOut, ProcessUnit.sides(stub), Material.PIPE);
             u.mesh.ring(f, stub / 2, PipeSizes.flange(stub) / 2, z0, z0 + .03, ProcessUnit.sides(stub), 3, Material.FLANGE);
             u.mesh.flangeBolts(f, stub, stub / 2, PipeSizes.flange(stub) / 2, z0 + .03, 1, Material.BOLT);
-            if (trains == 1) u.mesh.annulus(f, 0, stub / 2, zOut + stub / 2, ProcessUnit.sides(stub), 1, Material.PIPE);
+            if (columns == 1) u.mesh.annulus(f, 0, stub / 2, zOut + stub / 2, ProcessUnit.sides(stub), 1, Material.PIPE);
             u.solids.add(Solid.rod(new double[]{mid, yo, 0}, 2, z0, zOut, stub / 2, 0));
         }
-        if (trains > 1) u.manifold(x0 + w / 2, x1 - w / 2, yo, zOut, manifold);
+        if (columns > 1) u.manifold(x0 + bw / 2, x1 - bw / 2, yo, zOut, manifold);
         double outBase = yo - out / 2 + .03;
         u.nozzles.add(new Nozzle(Role.PROCESS_OUTLET, new double[]{a, outBase, zOut}, 1, -1, outBase - Math.floor(yo - out / 2 - ProcessUnit.NECK), out, 0));
         var outline = new double[][]{{x0 + .05, high, .5 - h / 2}, {x1 - .05, high, .5 - h / 2}, {x1 - .05, high, end - .5 + h / 2}, {x0 + .05, high, end - .5 + h / 2}};
@@ -183,6 +238,11 @@ final class AirCoolerDesign extends UnitDesign {
         // inlet above and the outlet at the back far from it; the fans' motors share it (one feeder per bay, reading A71).
         u.terminal = new double[]{legX.getFirst(), .25, legZ.getFirst()};
     }
+
+    /** A two-bundle bay's posts and beams, m (AIR_COOLER_BAY_PLAN.md 4.4). */
+    static final double WIDE_POST = .3;
+    /** The longest bay standing on its header lines' posts alone, m: a longer one has a post line at its middle (columns about 6 m apart). */
+    static final int POST_SPAN = 6;
 
     /** Sides of the Blender fan ring's polygon ({@code ac_fan_ring}), a multiple of 4 for the hopper's quadrants. */
     static final int RING_SIDES = 24;

@@ -51,7 +51,7 @@ public final class ProcessUnit {
      * ACs"); its width runs from 1.5 to 3 m in 0.5 m steps. A bay is built only where its fans cover {@link #FAN_COVERAGE}
      * of its bundle face (API 661), which a bay under 1.5 m wide never does.
      */
-    public static final int MIN_BAY_LENGTH = 2, MAX_BAY_LENGTH = 6;
+    public static final int MIN_BAY_LENGTH = 2, MAX_BAY_LENGTH = 12;
     public static final double FAN_COVERAGE = .4;
     /**
      * Air cooler parts, m: the largest header depth along the tubes, a header's height, the bundle's depth, and the
@@ -161,7 +161,7 @@ public final class ProcessUnit {
     public static List<double[]> bays() {
         var out = new ArrayList<double[]>();
         for (double w = UnitDesign.of(Kind.AIR_COOLER).minSize(); w <= UnitDesign.of(Kind.AIR_COOLER).maxSize() + 1e-9; w += UnitDesign.of(Kind.AIR_COOLER).sizeStep())
-            for (int l = UnitDesign.of(Kind.AIR_COOLER).minLength(w); l <= MAX_BAY_LENGTH; l++) if (UnitRatings.coverage(w, l) >= FAN_COVERAGE) out.add(new double[]{UnitDesign.of(Kind.AIR_COOLER).snap(w), l});
+            for (int l = UnitDesign.of(Kind.AIR_COOLER).minLength(w); l <= UnitDesign.of(Kind.AIR_COOLER).maxLength(w); l++) if (UnitRatings.coverage(w, l) >= FAN_COVERAGE) out.add(new double[]{UnitDesign.of(Kind.AIR_COOLER).snap(w), l});
         return out;
     }
 
