@@ -76,14 +76,18 @@ public final class PollutionService {
     private final double passSeconds;
     private final PollutionStore store;
     private final Map<ResourceKey<Level>, Dimension> dimensions = new LinkedHashMap<>();
+    private final PollutionEffects effects;
+    private int nextEffects;
     private boolean disabled;
     private boolean stopping;
 
-    private PollutionService(MinecraftServer server, PollutionSettings settings, double passSeconds, PollutionStore store) {
+    private PollutionService(MinecraftServer server, PollutionSettings settings, double passSeconds, PollutionStore store,
+            PollutionEffects effects) {
         this.server = server;
         this.settings = settings;
         this.passSeconds = passSeconds;
         this.store = store;
+        this.effects = effects;
     }
 
     // ---------------------------------------------------------------------------------------------------------------
@@ -104,7 +108,8 @@ public final class PollutionService {
                 seconds = SimulationTime.of(SimulationTime.DEFAULT_FACTOR).seconds(PASS_TICKS);
             }
             var store = PollutionStore.open(server);
-            var service = new PollutionService(server, settings, seconds, store);
+            var service = new PollutionService(server, settings, seconds, store,
+                    new PollutionEffects(IChemE.pollutionEffects(), IChemE.pollutionParticles()));
             SERVERS.put(server, service);
             if (store == null) {
                 service.disable("the damaged store could not be set aside; its file is left as it is");
@@ -357,6 +362,15 @@ public final class PollutionService {
             return;
         }
         int now = server.getTickCount();
+        // The world pass (WP5): its own guard and its own off switch; a failure of it never stops the field.
+        if (now - nextEffects >= 0) {
+            nextEffects = now + PollutionEffects.EFFECT_TICKS;
+            try {
+                effects.run(server, this);
+            } catch (RuntimeException failure) {
+                IChemE.LOGGER.error("pollution status=EFFECTS_FAILED detail={}", String.valueOf(failure));
+            }
+        }
         for (var d : dimensions.values()) {
             if (disabled) {
                 return;

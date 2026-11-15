@@ -57,7 +57,7 @@ public final class IChemE {
     private static final ModConfigSpec.DoubleValue CREATE_STRESS_PER_FE;
     private static final ModConfigSpec.BooleanValue WEAR_ENABLED;
     private static final ModConfigSpec.DoubleValue WEAR_CAVITATION_HOURS, WEAR_DRY_MINUTES;
-    private static final ModConfigSpec.BooleanValue POLLUTION_ENABLED;
+    private static final ModConfigSpec.BooleanValue POLLUTION_ENABLED, POLLUTION_EFFECTS, POLLUTION_PARTICLES;
     private static final ModConfigSpec.DoubleValue POLLUTION_HALF_LIFE_OPEN_MINUTES, POLLUTION_HALF_LIFE_ENCLOSED_MINUTES, POLLUTION_CUTOFF;
     private static final ModConfigSpec.IntValue POLLUTION_MAX_ACTIVE_CUBES;
 
@@ -208,6 +208,11 @@ public final class IChemE {
                 .defineInRange("cutoff", 1e-3, 1e-6, 0.05);
         POLLUTION_MAX_ACTIVE_CUBES = builder.comment("The most 16 m cubes a dimension's field holds; above it the faintest are dropped first. Captured on server start.")
                 .defineInRange("maxActiveCubes", 8192, 64, 262_144);
+        // WP5: what the field does to living things, and the clouds players see.
+        POLLUTION_EFFECTS = builder.comment("Whether pollution gives status effects and damage to players and mobs. Captured on server start.")
+                .define("effects", true);
+        POLLUTION_PARTICLES = builder.comment("Whether polluted cubes show coloured particles to players within 48 blocks: green toxic, yellow corrosive, grey particulate, pale orange combustible. Captured on server start.")
+                .define("particles", true);
         builder.pop();
         CONFIG_SPEC = builder.build();
     }
@@ -320,6 +325,16 @@ public final class IChemE {
     /** Whether pollution runs (batch 2026-11-15-pollution-system, WP3; true before the config loads). */
     public static boolean pollutionEnabled() {
         return !CONFIG_SPEC.isLoaded() || POLLUTION_ENABLED.get();
+    }
+
+    /** Whether pollution gives status effects and damage (WP5; true before the config loads). */
+    public static boolean pollutionEffects() {
+        return !CONFIG_SPEC.isLoaded() || POLLUTION_EFFECTS.get();
+    }
+
+    /** Whether polluted cubes show particles to players nearby (WP5; true before the config loads). */
+    public static boolean pollutionParticles() {
+        return !CONFIG_SPEC.isLoaded() || POLLUTION_PARTICLES.get();
     }
 
     /** The pollution field's settings: the defaults with the config's half-lives (process minutes), cutoff and cube cap; the defaults before the config loads. */

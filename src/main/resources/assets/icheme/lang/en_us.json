@@ -4512,5 +4512,11 @@
   "tutorial.icheme.item.pressure_safety_valve.serves": "Opens by itself to let gas out before the pressure gets too high.",
   "tutorial.icheme.item.field_guide.serves": "Opens the guide that teaches the mod step by step.",
   "tutorial.icheme.item.create_coupling.serves": "Joins a turning Create shaft to this mod's shafts.",
-  "tutorial.icheme.item.create_coupling.needs": "The Create mod, and a turning Create shaft."
+  "tutorial.icheme.item.create_coupling.needs": "The Create mod, and a turning Create shaft.",
+  "death.attack.icheme.toxic_gas": "%1$s breathed toxic gas",
+  "death.attack.icheme.toxic_gas.player": "%1$s breathed toxic gas while fighting %2$s",
+  "death.attack.icheme.corrosive_gas": "%1$s was burnt by corrosive gas",
+  "death.attack.icheme.corrosive_gas.player": "%1$s was burnt by corrosive gas while fighting %2$s",
+  "death.attack.icheme.particulate": "%1$s choked on dust",
+  "death.attack.icheme.particulate.player": "%1$s choked on dust while fighting %2$s"
 }
