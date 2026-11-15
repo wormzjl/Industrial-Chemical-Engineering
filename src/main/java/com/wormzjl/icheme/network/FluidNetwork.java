@@ -271,6 +271,7 @@ public final class FluidNetwork {
         registrar.playToClient(LivePayload.TYPE,LivePayload.STREAM_CODEC,(payload,context)->{
             if(context.player().containerMenu instanceof FluidDeviceMenu menu&&menu.containerId==payload.menuId&&menu.identity()==payload.identity)menu.acceptLive(decodeLive(payload.json));
         });
+        registrar.playToClient(ConversionRulesSync.TYPE,ConversionRulesSync.STREAM_CODEC,(payload,context)->acceptConversionRules(payload));
     }
     public static StaticData decodeStatic(String json){return Objects.requireNonNull(JSON.fromJson(json,StaticData.class));}
     public static LiveData decodeLive(String json){return Objects.requireNonNull(JSON.fromJson(json,LiveData.class));}
@@ -703,6 +704,51 @@ public final class FluidNetwork {
         @Override public Type<? extends CustomPacketPayload> type(){return TYPE;}
     }
     public static void converterEdit(FluidDeviceMenu menu,com.wormzjl.icheme.runtime.fluid.ConverterUnit.Mode mode,double rate,double deadband,double[] thresholds){PacketDistributor.sendToServer(new ConverterEditPayload(menu.containerId,menu.position(),menu.identity(),mode,rate,deadband,thresholds));}
+
+    /**
+     * The conversion rules for the client's JEI page (batch 2026-11-15-fluid-interfaces, W5, D10): each loaded rule's id and
+     * its file with names resolved ({@link com.wormzjl.icheme.science.fluid.conversion.ConversionRule#toJson}), in match
+     * order. Datapack data, not process data: sent at login and after each reload ({@link #syncConversionRules}), never on
+     * the engine's schedule.
+     */
+    public record ConversionRulesSync(List<String> ids,List<String> files) implements CustomPacketPayload {
+        public static final int MAX_RULES=4096,MAX_RULE_JSON=32767;
+        public ConversionRulesSync{ids=List.copyOf(ids);files=List.copyOf(files);
+            if(ids.size()!=files.size()||ids.size()>MAX_RULES)throw new IllegalArgumentException("Conversion rules: ids and files disagree, or too many");}
+        public static final Type<ConversionRulesSync> TYPE=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"conversion_rules"));
+        public static final StreamCodec<RegistryFriendlyByteBuf,ConversionRulesSync> STREAM_CODEC=new StreamCodec<>() {
+            public ConversionRulesSync decode(RegistryFriendlyByteBuf b) {
+                // A rule: its id and its file, each at least one length byte.
+                int n=Wire.count(b,MAX_RULES,2,"conversion rule");var ids=new ArrayList<String>(n);var files=new ArrayList<String>(n);
+                for(int i=0;i<n;i++){ids.add(b.readUtf(256));files.add(b.readUtf(MAX_RULE_JSON));}
+                return new ConversionRulesSync(ids,files);
+            }
+            public void encode(RegistryFriendlyByteBuf b,ConversionRulesSync p){b.writeVarInt(p.ids.size());for(int i=0;i<p.ids.size();i++){b.writeUtf(p.ids.get(i),256);b.writeUtf(p.files.get(i),MAX_RULE_JSON);}}
+        };
+        /** The payload of {@code rules}. */
+        public static ConversionRulesSync of(com.wormzjl.icheme.science.fluid.conversion.ConversionRules rules) {
+            var ids=new ArrayList<String>();var files=new ArrayList<String>();
+            for(var r:rules.rules()){ids.add(r.id());files.add(r.toJson().toString());}
+            return new ConversionRulesSync(ids,files);
+        }
+        /** The rules the payload carries, read with the server's names ({@code ConversionRule.RESOLVED}); a rule that fails is refused alone. */
+        public com.wormzjl.icheme.science.fluid.conversion.ConversionRules rules() {
+            var map=new LinkedHashMap<String,String>();for(int i=0;i<ids.size();i++)map.put(ids.get(i),files.get(i));
+            return com.wormzjl.icheme.science.fluid.conversion.ConversionRules.parse(map,com.wormzjl.icheme.science.fluid.conversion.ConversionRule.RESOLVED,ns->true);
+        }
+        @Override public Type<? extends CustomPacketPayload> type(){return TYPE;}
+    }
+    /** Sends the rules the last reload published to the joining player, or to every player after a reload. */
+    public static void syncConversionRules(net.neoforged.neoforge.event.OnDatapackSyncEvent event) {
+        var payload=ConversionRulesSync.of(com.wormzjl.icheme.science.fluid.conversion.ConversionRuntime.active());
+        event.getRelevantPlayers().forEach(player->PacketDistributor.sendToPlayer(player,payload));
+    }
+    /** The client takes the rules the server sent. */
+    static void acceptConversionRules(ConversionRulesSync payload) {
+        var rules=payload.rules();
+        for(var r:rules.refused())IChemE.LOGGER.warn("fluid_conversion status=REFUSED_ON_CLIENT rule={} reason={} message={}",r.id(),r.reason(),r.message());
+        com.wormzjl.icheme.science.fluid.conversion.ConversionRuntime.publishClient(rules);
+    }
     /**
      * A converter page's Apply (W5): the admission of an edit, then the settings queued for the engine's next tick
      * ({@code FluidWorldAuthority.converterSettings}, clamped there); the reply comes with the menu's next bucket.

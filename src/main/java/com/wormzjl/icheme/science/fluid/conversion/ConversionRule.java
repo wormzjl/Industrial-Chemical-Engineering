@@ -79,6 +79,48 @@ public record ConversionRule(String id,String revision,int priority,String fluid
     /** The namespace of the rule's fluid or tag. */
     public String fluidNamespace(){var f=tag()?fluid.substring(1):fluid;int colon=f.indexOf(':');return colon<0?"minecraft":f.substring(0,colon);}
 
+    /**
+     * The names a rule read back from {@link #toJson} takes (batch 2026-11-15-fluid-interfaces, W5): every compound id as it
+     * is, no presets. The server resolved both at its own load; the client, which may hold another catalog, re-reads them so.
+     */
+    public static final Names RESOLVED=new Names() {
+        public String compound(String id){return id;}
+        public Map<String,Double> preset(String id){return null;}
+    };
+    /**
+     * The rule as a rule file with its names resolved (batch 2026-11-15-fluid-interfaces, W5): a preset as its composition
+     * by compound id, every compound by its canonical id, an unbounded window left out. {@link #parse} with
+     * {@link #RESOLVED} reads it back to an equal rule.
+     */
+    public JsonObject toJson() {
+        var o=new JsonObject();
+        o.addProperty("revision",revision);o.addProperty("priority",priority);o.addProperty("fluid",fluid);
+        o.addProperty("phase",phase==Phase.GAS?"gas":"liquid");
+        if(toIChemE!=null) {
+            var f=new JsonObject();var c=new JsonObject();
+            for(var e:toIChemE.composition().entrySet())c.addProperty(e.getKey(),e.getValue());
+            f.add("composition",c);f.addProperty("temperature",toIChemE.temperature());f.addProperty("pressure",toIChemE.pressure());
+            if(!Double.isNaN(toIChemE.molesPerLitre()))f.addProperty("moles_per_litre",toIChemE.molesPerLitre());
+            o.add("to_icheme",f);
+        }
+        if(toForge!=null) {
+            var r=new JsonObject();r.addProperty("basis",toForge.basis()==Basis.MASS?"mass":"mole");
+            var c=new JsonObject();
+            for(var e:toForge.components().entrySet()){var b=new JsonObject();b.addProperty("min",e.getValue().min());b.addProperty("max",e.getValue().max());c.add(e.getKey(),b);}
+            r.add("components",c);r.addProperty("others_max",toForge.othersMax());
+            window(r,"temperature",toForge.temperature());window(r,"pressure",toForge.pressure());
+            o.add("to_forge",r);
+        }
+        return o;
+    }
+    private static void window(JsonObject o,String key,Range range) {
+        if(range.equals(Range.ANY))return;
+        var w=new JsonObject();
+        if(Double.isFinite(range.min()))w.addProperty("min",range.min());
+        if(Double.isFinite(range.max()))w.addProperty("max",range.max());
+        o.add(key,w);
+    }
+
     /** Reads rule {@code id} from {@code json}; a refusal names the field. */
     public static ConversionRule parse(String id,JsonObject json,Names names) {
         try {

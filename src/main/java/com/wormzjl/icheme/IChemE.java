@@ -199,6 +199,8 @@ public final class IChemE {
     public IChemE(IEventBus modEventBus, ModContainer modContainer) {
         ModBlocks.register(modEventBus);
         ModItems.register(modEventBus);
+        // The placeholder crude oil (batch 2026-11-15-fluid-interfaces, W3): its own fluid, block and bucket registers.
+        com.wormzjl.icheme.registry.ModFluids.register(modEventBus);
         com.wormzjl.icheme.registry.ModCreativeTabs.register(modEventBus);
         // The Create coupling (W6b, D40): its only entry point, guarded; no class outside compat/create names a Create type.
         if (net.neoforged.fml.ModList.get().isLoaded("create")) com.wormzjl.icheme.compat.create.CreateCompat.register(modEventBus);
@@ -225,6 +227,8 @@ public final class IChemE {
         gameEventBus.addListener(com.wormzjl.icheme.material.MaterialReloadListener::register);
         // After the materials: the conversion rules resolve their compounds on the catalog that reload publishes.
         gameEventBus.addListener(com.wormzjl.icheme.material.ConversionReloadListener::register);
+        // The rules reach the client's JEI page at login and after each reload (batch 2026-11-15-fluid-interfaces, W5).
+        gameEventBus.addListener(com.wormzjl.icheme.network.FluidNetwork::syncConversionRules);
         gameEventBus.addListener(IChemE::onServerStarting);
         com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.listen(com.wormzjl.icheme.runtime.assembly.AssemblyService::edited);
         gameEventBus.addListener(IChemE::onServerTickPost);
