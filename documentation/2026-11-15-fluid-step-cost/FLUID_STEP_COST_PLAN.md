@@ -246,7 +246,7 @@ Counters of the diagnostics run (`tmp/pattern-census/bench-{s4,f1,f2,f3}/diag`),
 | Island step, mean (ms) | 27.42 | not measured alone | 29.01 | 64.28 |
 
 - **F1** (the true declaration): 40 % fewer declared entries, and 5.6 % more fill: reverse Cuthill-McKee on the truer graph orders slightly worse. The reach search and the Newton's iterations are unchanged. Its premise (a true graph orders better) is refuted by the counter, and what it saves outside the LU is two passes over the declared entries. Its three timed runs all overlapped another session's Gradle runs on the machine and are not measurements (36.58, 30.39 and 38.99 ms; `bench-f1`, `bench-f1b`, `bench-f1c`).
-- **F2** (the live direction's zeros kept): the pattern is now a kept one for 69 % of the columns, yet the reach is searched for 77 %: the pivot rows differ from the last factorization of the same pattern, and `UpLookingLu` searches again from the first pivot that differs. On the baseline a repeated pattern always had repeated pivots, but those were consecutive iterations of one step; across steps the values drift and partial pivoting on row-scaled entries picks other rows. The explicit zeros add 7.7 % to L and U. Net: the step is 5.8 % slower (one pair, the machine quiet before and after).
+- **F2** (the live direction's zeros kept): the pattern is now a kept one for 69 % of the columns, yet the reach is searched for 77 %: the pivot rows differ from the last factorization of the same pattern, and `UpLookingLu` searches again from the first pivot that differs. On the baseline a repeated pattern always had repeated pivots, but those were consecutive iterations of one step; across steps the values drift and partial pivoting on row-scaled entries picks other rows. The explicit zeros add 7.7 % to L and U. Net: no gain. Its one timed pair read 5.8 % slower on the whole window; by sixths of the window (section 4g) four of six agree with S4 within 1 ms and two stand 3 and 5 ms above, so the true figure is between 0 and 6 % slower.
 - **F3** (minimum degree on the symmetric graph): 2.8 times the fill and 5.8 times the factorization time. With partial pivoting the pivots leave the diagonal, and an order chosen for a symmetric elimination no longer bounds the fill.
 
 What this says about the linear algebra (36.6 % of the step):
@@ -284,6 +284,37 @@ All three stand on F1 and F2 applied again (the reverts `001be9170` and `c0c7dd4
 **Expected (est.).** Reach searched 0.77 to about 0.35 (the pattern itself is not a kept one for 0.31 of the columns): 6 % of the step's CPU. Fill under PB: unknown, either way. Against it, F2's explicit zeros (7.7 % more entries). Net: a few percent, to be measured.
 
 **Gates.** `UpLookingLuParityTest` unchanged and passing (EJML's rule); new cases beside it for the threshold rule: no pivot below `τ` times its column's largest candidate; the solutions of a set of sparse systems within 1e-10 relative of the EJML rule's; a pattern factored twice with every value moved by up to 5 % searches no reach the second time; a singular matrix is rejected at the same column. `KeptLuStorageTest`, `RetainedSolverTest` (a retained solver equals a fresh one, bit for bit), `SparseNewtonTest`, `PassiveStepSolverTest`, `WallClosureJacobianTest`, `DeclaredPatternTest`, `FillOrderingTest` (PC).
+
+## 4g. S5 measured (2026-11-15): the pivot rule is not kept; the timing by sixths
+
+The three forms were built by one subagent on F1 and F2 applied again (`12dc90fd4` PA, `7d7d02978` PB, `b6c8e75d7` PC), merged one by one (`b6fb89915`, `9f95328e6`, `a6f3f40b6`), measured and reverted (`a3c3c19dc`, `d5e5fd41a`, `9c7eb2edf`): the code is S4's again, line for line. Each passed its named tests (60, 61 and 63 tests of 10 and 11 classes, 0 failures; `UpLookingLuParityTest` and `RetainedSolverTest` among them). Counters of the bench's diagnostics run (`tmp/pattern-census/bench-{pa,pb,pc}/diag`), per step factorization:
+
+| | After S4 | F1 + F2 | PA | PB | PC |
+|---|---|---|---|---|---|
+| Entries of L and U | 120,576 | 129,832 | 123,403 | 121,522 | 269,082 |
+| Columns whose pattern was not a kept one | 0.911 | 0.306 | 0.308 | 0.303 | 0.306 |
+| Columns whose reach was searched | 0.911 | 0.770 | 0.656 | 0.721 | 0.615 |
+| Refinements of 21,000 checked solves | 0 | 0 | 18 | 0 | 12 |
+| Newton solves, iterations | 19,365 / 25,696 | 19,395 / 25,729 | 19,640 / 25,973 | 19,376 / 25,710 | 19,137 / 25,435 |
+
+- **The pivots still do not repeat.** Where the pattern is a kept one, the reach is searched for 50 % (PA) and 60 % (PB) of the columns, against 67 % under partial pivoting. The estimate was a fall to the floor the pattern sets (0.31); the forms reach 0.66 and 0.72. One pivot that differs sends every later column of that factorization back to the search, and a candidate crossing a tenth of its column's largest entry is enough.
+- **PB** (the diagonal where acceptable) keeps the fill and the Newton's iterations of S4 and needs no refinement, but **hold-fuzz seed 123 holds** under it (island 60, "wall deadline", at tick 3,396 where S4 runs to 14,869), in the 200-seed run and again in its one replay alone: a new hold. PB fails the gate.
+- **PA** (the first acceptable in reach order) searches least among the two but needs 18 refinements and 1.1 % more Newton iterations: the factorization is measurably less accurate. Not run on the seeds.
+- **PC** (PB with minimum degree): 2.2 times the fill, as F3 was. The ordering is wrong for these matrices whatever the pivots do.
+
+At best the rule saved a fifth to a quarter of the reach searches, about 2 to 3 % of the step's CPU (est.), which the timing here cannot resolve, for a new hold or a loss of accuracy. The linear algebra stays as S4 has it. What would give the reach search back is a finer rule for which columns to search again after one pivot differs (today: all later ones); that is a change to `UpLookingLu`'s kept reach and its proof, not attempted.
+
+**The timing by sixths.** `tmp/pattern-census/bench-sixths.mjs` splits a run's measured minute into six by dispatch tick (the workload is the same at the same tick in every run). The S4 code was run a second time alone (`bench-s4b`, `bench-quiet.sh`, the machine check logged inside the measured minute):
+
+| Mean island step by sixth (ms) | 1 | 2 | 3 | 4 | 5 | 6 | Median of the six |
+|---|---|---|---|---|---|---|---|
+| Baseline | 34.1 | 36.0 | 30.9 | 32.1 | 33.8 | 42.0 | 33.96 |
+| S2 | 27.6 | 36.5 | 37.4 | 32.9 | 33.4 | 33.3 | 33.37 |
+| S2b | 29.3 | 27.0 | 30.6 | 31.1 | 32.1 | 33.6 | 30.83 |
+| S4 | 24.8 | 26.0 | 27.2 | 27.2 | 29.4 | 29.9 | 27.21 |
+| S4, second run | 24.8 | 25.6 | 27.3 | 26.7 | 36.0 | 38.3 | 27.00 |
+
+The second S4 run agrees with the first within 1 % over four sixths; its last two were disturbed (another session's Gradle run started; the machine check after the run reads busy). So S4's figure is confirmed, and by the medians the batch's gain is 33.96 to 27.1 ms, 20 %. The baseline and S2 runs vary by 10 % between sixths: the resolution of one pair on this machine is about 5 %, which is why S5 and S1 were judged by counters.
 
 ## 5. Commands
 
