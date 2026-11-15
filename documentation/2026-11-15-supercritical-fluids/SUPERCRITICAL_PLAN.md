@@ -269,6 +269,12 @@ dense fluid are reported for S4; the three GameTests.
   absence; line and machine sizing by density where it reads a phase label (P3-29).
 - Tests: the classes' own tests, `SheetSizingTest`, `FlowsheetExamplesTest`; no in-game check.
 
+S4 as briefed (2026-11-15, after S2c measured the steps): a pump's vapour share and a compressor's condensed share of
+one dense fluid follow the liquid-like weight of S2b's film (1 - w and w between reduced densities 0.5 and 1.5) in
+place of the step at the slot line; the pump's suction limit above the critical pressure becomes a density, not the
+slot line; the compressor's head law at low compressibility is measured, not changed; the simulator reads the same
+functions. Not in S4: the head seam, a vent or blanket on a dense vessel in the liquid slot, the engine's labels.
+
 ### S5. Presentation (client lane; after S2)
 
 Read `.claude/skills/gui-creation/SKILL.md` first. A dense node's row reads "Dense fluid" (the label rule is a

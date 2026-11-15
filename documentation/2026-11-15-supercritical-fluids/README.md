@@ -71,6 +71,8 @@ simulator: continuous properties, no label-driven jumps, no critical-band hold.
 - 2026-11-15: the main thread checked S2c (the slot-rule and ejector diffs, the build change, run `s2c-dense2`'s log: 3 of
   3). Decisions in the plan's section 2b, points 5 to 7.
 
+- 2026-11-15: brief S4 written (`tmp/supercritical-briefs/BRIEFS.md`; plan, "S4 as briefed").
+
 ## Documents
 
 - [SUPERCRITICAL_LIMITS_REVIEW.md](SUPERCRITICAL_LIMITS_REVIEW.md): expected behaviour, what the code does, the
