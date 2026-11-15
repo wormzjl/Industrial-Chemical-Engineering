@@ -104,6 +104,20 @@ Decisions after S2b's stop conditions (2026-11-15):
    limit when it is built ([S3_DATA_REVIEW.md](S3_DATA_REVIEW.md) section 4). About 95 compounds in a network package,
    74 before the change, 85 before S3.
 
+5. **S2b's three options stand as implemented** (owner, 2026-11-15: shown the numbers, asked for no change): the
+   viscosity onset between reduced densities 0.25 and 0.5; the film bounds 0.5 and 1.5; the film weight on every
+   single-phase state ([S2_NETWORK_REVIEW.md](S2_NETWORK_REVIEW.md) sections 2 and 3).
+6. **O2 A reaches mixtures (main thread's call inside the owner's decision).** The engine labels a one-root mixture by
+   the identification parameter itself, so the rule sits on every network answer of one fluid phase on a supercritical
+   isotherm, whatever the engine's label; the engine, its digest, the column and the simulator keep their labels
+   ([S2C_NETWORK_REVIEW.md](S2C_NETWORK_REVIEW.md)). Their label can differ from the network's slot for a dense mixture:
+   changing the engine's rule is its own item.
+7. **The dense GameTests have their own namespace** (`icheme_dense_test`; `-PfluidGameTestNamespaces`, default both), so
+   a new fluid GameTest can be run alone and the lane still runs all 101. Two runs of the whole fluid GameTest task were
+   made with the owner's word ("Run it now", "Run once more"); the three dense tests then passed alone (run
+   `s2c-dense2`). One existing test, `LevelLoopGameTests.aBlanketedDrumOfTwoCyclesHoldsItsLevelOnTheCadence`, passed in
+   the first whole run and failed in the second on the same production code: not settled, left to the final lane.
+
 ## 3. Stages
 
 Each stage is one package for one thread, on its own worktree, in the lane named. Line numbers are not given: the
