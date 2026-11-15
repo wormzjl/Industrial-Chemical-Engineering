@@ -433,10 +433,10 @@ public final class PhaseLayout {
         equilibriumResidual(state,result,row,offset,variables);
     }
     /**
-     * The rows a change of this node's accumulated targets can move, and no others: the component
-     * balances, the energy balance and the wall row. The equilibrium rows below them read the decoded state alone, so a
-     * Jacobian sweep that perturbs a <em>neighbour</em> leaves them at exactly the residual it already evaluated. Returns
-     * the first row after this block.
+     * The rows a change of this node's accumulated targets can move, with the wall row: the component balances, the
+     * energy balance and the wall row. The wall row and the equilibrium rows below them read the decoded state alone, so
+     * a Jacobian sweep that perturbs a <em>neighbour</em> leaves them at exactly the residual it already evaluated
+     * ({@link #inflowRows}). Returns the first row after this block.
      *
      * <p>The energy balance of a vessel whose wall moves is {@code dU = sum(h_in dm_in) - P_ambient dV_bag}
      * ({@link #bagVolume}): with {@code workFrom} the start's bag volume the row states
@@ -467,8 +467,9 @@ public final class PhaseLayout {
         equilibriumResidual(state,result,row,offset,variables);
     }
     /**
-     * The mixing block of {@link #junctionResidual}: everything the inflow and the net flow move, and nothing the
-     * equilibrium rows below it read. Returns the first row after this block. {@code retainedPressure} is positive only
+     * The mixing block of {@link #junctionResidual}: everything the inflow and the net flow move, with the amount
+     * normalization, which reads the decoded state alone as the equilibrium rows below it do ({@link #inflowRows}).
+     * Returns the first row after this block. {@code retainedPressure} is positive only
      * for a junction no open connection reaches, and is then the pressure it keeps: nothing but the hydraulics decides a
      * junction's pressure, and with every connection closed the net flow row is the sum of the closed rows, satisfied
      * identically, so the block would be one equation short of its own pressure and the factorization singular (a
@@ -513,6 +514,24 @@ public final class PhaseLayout {
             double moment=variables[offset+solidIndex+i]*solidScale[i];
             result[row+i]=junction?(moment/state.mass()-target[i])/(solidScale[i]/solidScale[0]):(moment-target[i])/solidScale[i];
         }
+    }
+    /**
+     * The local rows of this layout that read what arrives at its node, not its decoded state alone: the rows another
+     * node's unknown or a connection's unknown can move (batch 2026-11-15-fluid-step-cost, S1 F1). They are every row
+     * {@link #balanceRows} (a vessel) or {@link #junctionRows} (a junction) writes, with {@link #solidRows}, but the one at
+     * {@code C + 1} ({@code C} the {@link #componentBalanceCount}): a vessel's component balances {@code 0..C-1}, its
+     * energy row {@code C} and its solid rows {@code C+2..C+4} where the layout carries solids, not its wall row
+     * {@code C+1}; a junction's mixing rows {@code 0..C-2}, its continuity row {@code C-1}, its enthalpy row {@code C} and
+     * its solid rows, not its normalization row {@code C+1}. The wall row and the normalization row read the decoded state
+     * alone, as the equilibrium rows after the block do. The three writers and this list must agree: a row added to or
+     * moved in one of them is added to or moved here in the same change. Ascending; a new array at each call.
+     */
+    public int[] inflowRows() {
+        int closure=componentBalanceCount()+1;
+        int[] rows=new int[closure+(solidIndex>=0?3:0)];
+        for(int row=0;row<closure;row++)rows[row]=row;
+        if(solidIndex>=0)for(int i=0;i<3;i++)rows[closure+i]=closure+1+i;
+        return rows;
     }
     /**
      * The equilibrium rows: for each present component and each supported slot {@code k} past its reference,
