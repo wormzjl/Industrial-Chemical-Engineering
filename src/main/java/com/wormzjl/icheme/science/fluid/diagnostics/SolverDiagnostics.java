@@ -209,21 +209,6 @@ public final class SolverDiagnostics {
     public static final int MAXIMUM_ATTEMPTS=200_000;
     private static final List<Attempt> ATTEMPTS=Collections.synchronizedList(new ArrayList<>());
 
-    /**
-     * A view of every Newton Jacobian before the LU drops its exact zeros (S0 of batch 2026-11-15-fluid-step-cost: the
-     * pattern census under {@code tools/fluid-step-cost/}). {@code SparseNewton} calls it once per factorization, on the
-     * solving thread, with the equations, the iterate {@code x} the Jacobian was built at, the declared pattern (column
-     * starts {@code offsets}, rows {@code rows}) and the declared entries' values {@code values}, zeros included. These are
-     * the live arrays of the solve: an observer only reads them, during the call, and keeps none of them past it unless it
-     * copies them; writing to any of them changes the solve. It may be called from several workers at once.
-     */
-    public interface PatternObserver {
-        void factored(Object equations,double[] x,int[] offsets,int[] rows,double[] values);
-    }
-    /** The installed {@link PatternObserver}: null outside a probe or a gate, which costs one volatile read per
-     * factorization. Independent of {@link #ENABLED}. */
-    public static volatile PatternObserver patternObserver;
-
     public static void count(LongAdder target){if(ENABLED)target.increment();}
     public static void count(LongAdder target,long amount){if(ENABLED)target.add(amount);}
     public static void attempt(int index,double step,boolean accepted,String dominant,double error) {

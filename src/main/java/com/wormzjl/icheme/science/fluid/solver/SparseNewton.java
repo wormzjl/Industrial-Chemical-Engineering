@@ -343,7 +343,7 @@ public final class SparseNewton {
         int blocks=equations.differentiateEntries(x,f,differenceStep,pattern.offsets,pattern.rows,derivatives,checkpoint);
         if(blocks>=0) {
             SolverDiagnostics.count(SolverDiagnostics.jacobianBlockBuilds);
-            return factor(equations,x,derivatives,workspace,pattern,blocks);
+            return factor(x,derivatives,workspace,pattern,blocks);
         }
         for(int column=0;column<n;column++)steps[column]=differenceStep*equations.differenceScale(column,x[column]);
         for(int[] group:pattern.groups) {
@@ -360,14 +360,10 @@ public final class SparseNewton {
                 if(!found)throw new Nonconvergence("No finite Jacobian trial at variable "+column,x);
             }
         }
-        return factor(equations,x,derivatives,workspace,pattern,calls);
+        return factor(x,derivatives,workspace,pattern,calls);
     }
-    /** The ordering, numeric matrix and factorization are the same whichever sweep filled the entries. A pattern observer
-     * ({@link SolverDiagnostics#patternObserver}, a probe's or a gate's) sees the declared entries first, zeros included;
-     * it reads the live arrays and changes nothing. */
-    private static int factor(Equations equations,double[] x,double[] derivatives,Workspace workspace,Pattern pattern,int calls) {
-        var observer=SolverDiagnostics.patternObserver;
-        if(observer!=null)observer.factored(equations,x,pattern.offsets,pattern.rows,derivatives);
+    /** The ordering, numeric matrix and factorization are the same whichever sweep filled the entries. */
+    private static int factor(double[] x,double[] derivatives,Workspace workspace,Pattern pattern,int calls) {
         var numeric=pattern.numericMatrix(derivatives);
         try{if(workspace.ordering==null)workspace.ordering=SparseLuSolver.prepareOrdering(pattern.symbolicMatrix());workspace.factorization=workspace.shared.factors(pattern).factor(numeric,workspace.ordering);workspace.matrix=numeric;workspace.jacobianPoint=x.clone();}
         catch(SparseLuSolver.SolveFailure failure){workspace.invalidate();throw new Nonconvergence("Singular Newton Jacobian: "+failure.getMessage(),x);}
