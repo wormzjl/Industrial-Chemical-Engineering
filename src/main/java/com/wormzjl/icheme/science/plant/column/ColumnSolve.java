@@ -184,6 +184,18 @@ public final class ColumnSolve {
     }
 
     /**
+     * A column's condenser duty, W (column sign: removed is negative), as the closure of its energy on one basis (C5 of the
+     * 2026-11-13 simplifications): what leaves ({@code out}) less what enters ({@code in}), the reboiler's duty and the
+     * pumparounds' (each W, column sign). The running column closes on the network's enthalpies of the feed it took and the
+     * products it prices; the simulator's column block on its streams, which are the same network flashes, so the sheet's heat
+     * balance closes on the duty the block reports. V3's own duty differs from it by the two property packages' basis gap and
+     * stays beside it ({@code Solved.solvedCondenser}, the block's display).
+     */
+    public static double closure(double out, double in, double reboiler, double pumparounds) {
+        return out - in - reboiler - pumparounds;
+    }
+
+    /**
      * {@code seed} where the warm route can take it, else null. A seed with modelled free water is refused by the warm route and
      * sends a seeded solve down the strict cold chain (C1 review, section 3): such an input solves with no seed, the fast first
      * solve. A seed on another compound list (the feed island grew since, or the sheet's feed crossed the water rule) is dropped
@@ -335,7 +347,7 @@ public final class ColumnSolve {
         double[] pa = solved.pumparoundPerFeed();
         double paTotal = 0;
         for (double q : pa) paTotal += q * rate;
-        double condenser = (out - in - solved.reboilerPerFeed() * rate - paTotal) / rate;
+        double condenser = closure(out, in, solved.reboilerPerFeed() * rate, paTotal) / rate;
         double cooled = switch (job.condenser()) {
             case EXCHANGER -> condenser;
             case AIR_COOLER -> 0;

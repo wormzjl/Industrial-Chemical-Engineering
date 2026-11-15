@@ -16,7 +16,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The column as one block (batch 2026-11-02-process-simulator, plan sections 3.3 and 3.11): the calculator's own solve, with its
+ * The column as one block (batch 2026-11-02-process-simulator, plan sections 3.3 and 3.11): the running column's own solve ({@code ColumnSolve.calculate}), with its
  * ports a pure function of its door. The block's solve reads its inlets and writes its products, so a loop tears there, and each
  * pass after the first starts from the last state. A heat side is a calculation of its own. A pumparound or the reboiler has its
  * duty on the door, so what passes through its cold side depends on nothing the column solves, and heating the feed of the same
@@ -30,7 +30,8 @@ import java.util.List;
  *
  * <p>V3 has no feed pressure, so the stream is flashed at its own enthalpy to the feed tray's solved pressure, which gives V3's
  * feed temperature. V3's feed is hydrocarbons: water joins as steam if it is vapour there. The products come back through the world's
- * flash at V3's temperature and pressure; what the two thermo models then differ by is read out as the block's energy gap.
+ * flash at V3's temperature and pressure, and the condenser's duty is the running column's closure on them ({@code ColumnSolve.closure}),
+ * so the block's heat balance closes; V3's own duty, on its package, differs by the two thermo models' basis gap and stays on the display.
  *
  * <p>Where the top is under ambient pressure, an ejector set stands on the vapour line (main plan W10). It is not modelled apart: its
  * load is what the condenser cannot condense, V3's vapour product at the condenser's temperature and pressure (W10b), and its Motive

@@ -112,7 +112,7 @@ final class ColumnBlockSolve implements Calculation.Law {
         var thermo = u.thermo();
         var feed = board.stream(u.wire(FEED));
         if (feed.empty()) {
-            write(board, report, null, null, 0);
+            write(board, report, null, null, 0, 0);
             leave(report);
             return;
         }
@@ -147,9 +147,19 @@ final class ColumnBlockSolve implements Calculation.Law {
         steamChecks(supplies, valved, report);
         var ejected = ejector(board, report, result);
         var ledger = result.dutyLedger().orElseThrow();
-        double motiveHeat = ejected == null ? 0 : ejected.heat();
-        double whole = ledger.condenserWatts() - motiveHeat, water = water(result, whole);
-        write(board, report, result, ejected, water);
+        // The condenser's duty is the running column's closure (ColumnSolve.closure) on the block's own streams, which are the
+        // world's flashes: what leaves less the feed and the steam, the ejector's motive steam with them (it condenses with the
+        // overhead and joins the free water), the reboiler's and the pumparounds' duties. So the block's heat balance closes on
+        // the duty it books, and V3's own condenser duty, on its package, stays on the display.
+        heatIn += flashed.enthalpy();
+        double heatOut = 0;
+        for (var product : result.streams()) heatOut += product(product.streamId(), result).enthalpy();
+        if (ejected != null) {
+            heatIn += ejected.steam().enthalpy();
+            heatOut += ejected.water().enthalpy() - product(FREE_WATER, result).enthalpy();
+        }
+        double whole = ColumnSolve.closure(heatOut, heatIn, ledger.reboilerWatts(), ledger.stageHeatTotalWatts()), water = water(result, whole);
+        write(board, report, result, ejected, whole, water);
         report.display(display);
         leave(report);
         report.reading("condenser", -whole);
@@ -159,21 +169,13 @@ final class ColumnBlockSolve implements Calculation.Law {
         if (u.wire(CONDENSER_IN) == null && door.condenserTemperature() <= CoolerUnit.COOLANT) report.note(Note.warning(u.id(), "column.condenser_coolant"));
         report.reading("reboiler", ledger.reboilerWatts());
         report.reading("feed_temperature", flashed.temperature());
-        heatIn += flashed.enthalpy();
-        double heatOut = 0;
-        for (var product : result.streams()) heatOut += product(product.streamId(), result).enthalpy();
-        if (ejected != null) {
-            heatIn += ejected.steam().enthalpy();
-            heatOut += ejected.water().enthalpy() - product(FREE_WATER, result).enthalpy();
-        }
-        report.reading("energy_gap", heatIn + ledger.condenserWatts() - motiveHeat + ledger.reboilerWatts() + ledger.stageHeatTotalWatts() - heatOut);
     }
 
     /**
      * The ejector set, null where the top needs none or the condenser vents nothing: its load is the vent, V3's vapour product at the
      * condenser's temperature and pressure. Its steam joins the free water at the water product's temperature and pressure, or the
      * condenser's where V3 leaves none, and what it gives up there is the heat the condenser takes from it, so the block's energy
-     * closes as before.
+     * closes with it.
      */
     private @Nullable Ejected ejector(Board board, Report report, V3ColumnResult result) {
         if (!ColumnComponents.ejectorRequired(door.topPressure())) return null;
@@ -200,7 +202,7 @@ final class ColumnBlockSolve implements Calculation.Law {
 
     /**
      * A vacuum pump on the receiver's vapour outlet (batch 2026-11-10-vacuum-pump, owner V5): it takes the vent as it leaves the
-     * receiver, after the condenser, so no steam joins the free water and the condenser's duty stands as V3 gives it. Its model is
+     * receiver, after the condenser, so no steam joins the free water and the condenser's duty is the column's own closure. Its model is
      * the smallest that holds the vent with its spare; its shaft power the world's curve's at that suction, to the atmosphere.
      */
     private void vacuumPump(Report report, FlowStream load) {
@@ -366,9 +368,10 @@ final class ColumnBlockSolve implements Calculation.Law {
 
     /**
      * The outlets and links of {@code result}, or of no flow. Free sides book their heat here, because only a solved column has any.
-     * The condenser's water side takes {@code water} (W, column sign) of its duty, and the air the rest.
+     * The condenser's duty is {@code condenser} (W, column sign, the closure); its water side takes {@code water} of it, and the air
+     * the rest.
      */
-    private void write(Board board, Report report, @Nullable V3ColumnResult result, @Nullable Ejected ejected, double water) {
+    private void write(Board board, Report report, @Nullable V3ColumnResult result, @Nullable Ejected ejected, double condenser, double water) {
         u.write(board, report, OVERHEAD, product("overhead_vapor", result));
         u.write(board, report, DISTILLATE, product("distillate_liquid", result));
         u.write(board, report, WATER, ejected != null ? ejected.water() : product(FREE_WATER, result));
@@ -378,7 +381,6 @@ final class ColumnBlockSolve implements Calculation.Law {
         for (var row : door.steam()) if (u.wire(steamPort(row)) != null) board.link(steamStage(row), result == null ? Double.NEGATIVE_INFINITY : stages.getOrDefault(row.stage(), Double.NEGATIVE_INFINITY));
         for (var draw : door.draws()) u.write(board, report, drawPort(draw), product(String.format(Locale.ROOT, "side_liquid_tray_%02d", draw.tray()), result));
         var ledger = result == null ? null : result.dutyLedger().orElseThrow();
-        double condenser = ledger == null ? 0 : ledger.condenserWatts() - (ejected == null ? 0 : ejected.heat());
         if (u.wire(CONDENSER_IN) != null) {
             board.link(condenserHeat(), -water);
             if (ledger != null && condenser != water) report.duty(condenser - water);

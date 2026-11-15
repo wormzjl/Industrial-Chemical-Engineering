@@ -167,7 +167,7 @@ class UtilityRegulationTest {
         double before = run.reports().get(T).readings().get("steam_temperature/1"), after = readings.get("steam_temperature/1");
         assertEquals(50, after - before, 1, "the superheat reaches the stage");
         assertTrue(notes(hot, "column.steam_cool").isEmpty());
-        assertTrue(Math.abs(readings.get("energy_gap")) < 2e-3 * readings.get("condenser"), () -> "the block keeps the steam's energy: " + readings);
+        assertTrue(Math.abs(hot.heatGap()) < 2e-3 * readings.get("condenser"), () -> "the block keeps the steam's energy: heat gap " + hot.heatGap() + ", " + readings);
         assertTrue(readings.get("condenser") > run.reports().get(T).readings().get("condenser"), "and the condenser takes more");
     }
 
