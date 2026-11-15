@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.science.column.v3.V3LiteraturePresetTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-24T01:22:45.084Z" hostname="WORMZ-PC" time="3.979">
-  <properties/>
-  <testcase name="theLiteraturePresetIsTheFortyTrayThesisColumnWithItsCoolersAtTheDraws()" classname="com.wormzjl.icheme.science.column.v3.V3LiteraturePresetTest" time="0.001"/>
-  <testcase name="theLiteraturePresetPublishesWithATrayOneWaterDewPointWarning()" classname="com.wormzjl.icheme.science.column.v3.V3LiteraturePresetTest" time="0.976"/>
-  <testcase name="aHalvedTopCoolerClearsTheDewPointWithoutAWarning()" classname="com.wormzjl.icheme.science.column.v3.V3LiteraturePresetTest" time="3.002"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

@@ -147,3 +147,5 @@ Status: Implemented 2026-09-14. Index: [../INDEX.md](../INDEX.md).
 ### History
 
 - Implemented 2026-09-14
+
+Large files (AGENTS.md, batch 2026-11-15-tools-large-files): the 5 images, Gradle results, worlds and other large files of this folder are git-ignored here; their copies are in the main checkout's `research/tools/benchmark-population/`, at the same relative paths.

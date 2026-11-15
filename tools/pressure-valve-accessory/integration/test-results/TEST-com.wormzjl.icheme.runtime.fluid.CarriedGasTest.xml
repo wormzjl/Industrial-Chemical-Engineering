@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.runtime.fluid.CarriedGasTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-10-24T09:09:01.563Z" hostname="WORMZ-PC" time="0.148">
-  <properties/>
-  <testcase name="aWaterGeneratorDrainingPastANitrogenTankIntoAVoidKeepsUp()" classname="com.wormzjl.icheme.runtime.fluid.CarriedGasTest" time="0.148"/>
-  <system-out><![CDATA[CARRIED_GAS_CARD tankP=103769.4146583425
-]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

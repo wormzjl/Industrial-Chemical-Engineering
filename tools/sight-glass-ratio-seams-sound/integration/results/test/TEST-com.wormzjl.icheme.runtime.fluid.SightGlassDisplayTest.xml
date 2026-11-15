@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.runtime.fluid.SightGlassDisplayTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-25T08:26:42.878Z" hostname="WORMZ-PC" time="0.19">
-  <properties/>
-  <testcase name="gasLiquidRatioControlsBubbleDensityAndOtherPhasesRetainHaze()" classname="com.wormzjl.icheme.runtime.fluid.SightGlassDisplayTest" time="0.004"/>
-  <testcase name="motionIsStableContainedAndBetweenTheLiquidAndGlass()" classname="com.wormzjl.icheme.runtime.fluid.SightGlassDisplayTest" time="0.177"/>
-  <testcase name="displayWireRoundTripsAndRejectsMotionWithoutLiquid()" classname="com.wormzjl.icheme.runtime.fluid.SightGlassDisplayTest" time="0.008"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

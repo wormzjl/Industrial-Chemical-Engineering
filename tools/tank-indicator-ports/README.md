@@ -34,3 +34,5 @@ Status: Archived 2026-10-24. Index: [../INDEX.md](../INDEX.md).
 ### History
 
 - Archived 2026-10-24 (integrated `81cabbe9`, four baseline failures/no new, ten files preserved, client running; direct cap fix `fde01628` build/3009 cases pass)
+
+Large files (AGENTS.md, batch 2026-11-15-tools-large-files): the 572 images, Gradle results, worlds and other large files of this folder are git-ignored here; their copies are in the main checkout's `research/tools/tank-indicator-ports/`, at the same relative paths.

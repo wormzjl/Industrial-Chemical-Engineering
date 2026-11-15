@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.science.equipment.VesselPlacementTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-24T14:24:52.365Z" hostname="WORMZ-PC" time="0.015">
-  <properties/>
-  <testcase name="boxStandsInFrontOfTheConstructorCentredOnItsLine()" classname="com.wormzjl.icheme.science.equipment.VesselPlacementTest" time="0.012"/>
-  <testcase name="formTurnsWithTheConstructor()" classname="com.wormzjl.icheme.science.equipment.VesselPlacementTest" time="0.001"/>
-  <testcase name="rejectsOffsetsOutOfRange()" classname="com.wormzjl.icheme.science.equipment.VesselPlacementTest" time="0.001"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

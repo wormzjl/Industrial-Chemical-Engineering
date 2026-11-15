@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.science.column.v3.V3Sotelo2019SideDrawCaseTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-10-25T04:54:11.777Z" hostname="WORMZ-PC" time="0.712">
-  <properties/>
-  <testcase name="sourceAnalogPreservesPublishedGeometryAndFlowFractions()" classname="com.wormzjl.icheme.science.column.v3.V3Sotelo2019SideDrawCaseTest" time="0.016"/>
-  <testcase name="quarterLoadDryQualificationConvergesAndPublishesAllThreeDraws()" classname="com.wormzjl.icheme.science.column.v3.V3Sotelo2019SideDrawCaseTest" time="0.696"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

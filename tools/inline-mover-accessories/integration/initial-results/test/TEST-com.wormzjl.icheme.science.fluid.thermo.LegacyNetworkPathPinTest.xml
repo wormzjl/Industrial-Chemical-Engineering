@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.science.fluid.thermo.LegacyNetworkPathPinTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-10-25T04:49:29.900Z" hostname="WORMZ-PC" time="0.028">
-  <properties/>
-  <testcase name="theBundledNetworkPackageKeepsItsCoefficientPathBitForBit()" classname="com.wormzjl.icheme.science.fluid.thermo.LegacyNetworkPathPinTest" time="0.028"/>
-  <system-out><![CDATA[legacy network revision: 7b2229595dd3a815b0bd569f3fd1e7561f7c3671919be682f9c1d6656740cd92:direct-liquid-v1:tp-engine-v1:range-continuation-v1:separate-free-water-v2:water-iapws-shomate-r2:fluid-domain-data-v1:catalog-volume-reference-v1
-legacy network digest: 37c1b7020d789e0d44041f8cc0a9b24ac8c694c63ef59e36214f08ccdccab1ee
-]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

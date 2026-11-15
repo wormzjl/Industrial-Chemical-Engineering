@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.network.V3EditorCatalogCodecTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-24T09:08:58.783Z" hostname="WORMZ-PC" time="0.011">
-  <properties/>
-  <testcase name="completeProductionCatalogueRoundTripsAndContainsMatchingWeights()" classname="com.wormzjl.icheme.network.V3EditorCatalogCodecTest" time="0.007"/>
-  <testcase name="realStatePacketCarriesTemplatesAndPreciseMolecularWeights()" classname="com.wormzjl.icheme.network.V3EditorCatalogCodecTest" time="0.002"/>
-  <testcase name="rejectsTruncatedTrailingOversizedAndNonphysicalData()" classname="com.wormzjl.icheme.network.V3EditorCatalogCodecTest" time="0.001"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

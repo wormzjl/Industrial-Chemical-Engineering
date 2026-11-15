@@ -86,20 +86,23 @@ def freeze(path, value):
 sys.path.insert(0, str(ROOT / 'tools/benchmark-population'))
 import harness  # noqa: E402
 
+# Git-ignored; the canonical copy is in the main checkout's research/ (AGENTS.md, large files).
+VALIDATION_INPUTS = harness.locate(INPUTS / 'validation-inputs.jsonl')
+
 _POPULATION = None
 
 
 def population():
     global _POPULATION
     if _POPULATION is None:
-        _POPULATION = harness.resolve(INPUTS / 'validation-inputs.jsonl')
+        _POPULATION = harness.resolve(VALIDATION_INPUTS)
     return _POPULATION
 
 
 def use_population(path):
     """Point this run at another registered population; None restores the archived default."""
     global _POPULATION
-    _POPULATION = harness.resolve(INPUTS / 'validation-inputs.jsonl', path)
+    _POPULATION = harness.resolve(VALIDATION_INPUTS, path)
     return _POPULATION
 
 
@@ -140,14 +143,14 @@ def strict_ids(cases, mode):
 def verify_frozen():
     """Bind this study to the bytes it claims to be measuring, before it measures anything."""
     assert digest(BUNDLED_ARTIFACT) == BASE_WEIGHTS_SHA, 'The bundled artifact is not the registered F0 export'
-    assert digest(INPUTS / 'validation-inputs.jsonl') == VALIDATION_INPUTS_SHA, 'The frozen population changed'
+    assert digest(VALIDATION_INPUTS) == VALIDATION_INPUTS_SHA, 'The frozen population changed'
     assert digest(WARMUP) == WARMUP_SHA, 'The warmup input changed'
     chosen = population()
     rows = read_rows(chosen.path)
     assert len(rows) == chosen.cases and len({row['id'] for row in rows}) == chosen.cases
     if chosen.archived:
         assert chosen.cases == CASES and chosen.sha256 == VALIDATION_INPUTS_SHA
-    frozen = dict(bundledArtifact=info(BUNDLED_ARTIFACT), inputs=info(INPUTS / 'validation-inputs.jsonl'),
+    frozen = dict(bundledArtifact=info(BUNDLED_ARTIFACT), inputs=info(VALIDATION_INPUTS),
                   warmup=info(WARMUP), cases=len(rows))
     if not chosen.archived:
         # A filtered campaign publishes which denominator it used and how that denominator was drawn.

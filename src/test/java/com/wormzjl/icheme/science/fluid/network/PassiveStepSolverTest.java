@@ -33,19 +33,22 @@ class PassiveStepSolverTest {
     /**
      * Finding P-18 (batch 2026-11-13-codebase-review): a node's prepared bundle is refilled in place at a new temperature
      * and handed from pass to pass, so a step builds at most a decode and a probe bundle a node, whatever its trials, where
-     * each trial temperature built one (and its kernel workspace) before. The accepted pass drops them with its decode cache
-     * (review 8.7 (c) E2: the retained last solve keeps no kernel workspace), so each step builds its set again. The
-     * closures made anew per call outside the passes (a vessel's wall closure in the reconstruction, a junction's split)
-     * are in the process-wide count and not in the solver's.
+     * each trial temperature built one (and its kernel workspace) before. Batch 2026-11-15-fluid-step-cost, S2: the
+     * accepted pass keeps them retired with its decode cache dropped (review 8.7 (c) E2 dropped them, and each step built
+     * its set again), so the solver's next step refills them and a retained solver builds its set once. The closures made
+     * anew per call outside the passes (a vessel's wall closure in the reconstruction, a junction's split) are in the
+     * process-wide count and not in the solver's.
      */
-    @Test void aStepBuildsAtMostADecodeAndAProbeBundleANode() {
+    @Test void aSolverBuildsAtMostADecodeAndAProbeBundleANodeOverItsSteps() {
         for(int component:new int[]{0,model.componentCount()-1}) {
             var graph=graph(component,false);var solver=new PassiveStepSolver(model);
+            long start=solver.preparedBuilt();
             for(int step=0;step<4;step++) {
                 long before=solver.preparedBuilt();
                 graph=PassiveIntervalSolver.replace(graph,solver.solve(graph,.1,()->{}));
-                long built=solver.preparedBuilt()-before;
-                assertTrue(built>0&&built<=2L*graph.reservoirs().size(),"component "+component+", step "+step+": "+built);
+                long built=solver.preparedBuilt()-before,total=solver.preparedBuilt()-start;
+                if(step==0)assertTrue(built>0,"component "+component+": the first step builds its bundles");
+                assertTrue(total<=2L*graph.reservoirs().size(),"component "+component+", step "+step+": "+total+" bundles built so far");
             }
         }
     }

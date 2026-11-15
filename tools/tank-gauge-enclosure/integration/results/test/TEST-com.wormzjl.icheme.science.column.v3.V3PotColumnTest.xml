@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.science.column.v3.V3PotColumnTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-10-25T14:41:28.476Z" hostname="WORMZ-PC" time="0.205">
-  <properties/>
-  <testcase name="twoAndThreeTotalTraysSolveAndPassIndependentConservationAudit()" classname="com.wormzjl.icheme.science.column.v3.V3PotColumnTest" time="0.205"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

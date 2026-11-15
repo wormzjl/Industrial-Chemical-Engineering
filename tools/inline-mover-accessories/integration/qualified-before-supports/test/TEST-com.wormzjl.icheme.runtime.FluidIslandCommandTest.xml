@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.runtime.FluidIslandCommandTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-25T04:53:43.970Z" hostname="WORMZ-PC" time="0.025">
-  <properties/>
-  <testcase name="cancellationPropagatesAndSuccessfulIdleIntervalsRemainImmutable()" classname="com.wormzjl.icheme.runtime.FluidIslandCommandTest" time="0.007"/>
-  <testcase name="aJobPastTheOldSoftBudgetIsTheFullSolveOnTheWholeWallBudget()" classname="com.wormzjl.icheme.runtime.FluidIslandCommandTest" time="0.011"/>
-  <testcase name="localWorkerDeadlineReturnsAHeldCandidateWithoutAdvancingTheSnapshot()" classname="com.wormzjl.icheme.runtime.FluidIslandCommandTest" time="0.007"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

@@ -28,3 +28,5 @@ Status: Archived 2026-10-24. Index: [../INDEX.md](../INDEX.md).
 ### History
 
 - Archived 2026-10-24 (integrated `35bad9b8`; quick 1382/slow 185 with four baseline failures/no new; target jar/client running, ten local files unchanged)
+
+Large files (AGENTS.md, batch 2026-11-15-tools-large-files): the 288 images, Gradle results, worlds and other large files of this folder are git-ignored here; their copies are in the main checkout's `research/tools/fluid-gui-consistency/`, at the same relative paths.

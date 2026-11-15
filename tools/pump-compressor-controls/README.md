@@ -14,7 +14,7 @@ $moverPython='C:\Users\wormz\.cache\codex-runtimes\codex-primary-runtime\depende
 .\gradlew.bat jar --max-workers=4
 ```
 
-For a missing local authoring environment, install those pinned packages with pip --target into this tool's python-deps directory. The script prints decoded duration/rate/RMS/peak/seam-step metrics. Generated assets are assets/icheme/sounds/pump_running.ogg and compressor_running.ogg; SoundEvent and subtitle definitions are in the product resources.
+For a missing local authoring environment, install the pins of `requirements.txt` with pip --target into this tool's python-deps directory (the command is in that file), or copy the last vendored copy from the main checkout's `research/tools/pump-compressor-controls/python-deps/`. The script prints decoded duration/rate/RMS/peak/seam-step metrics. Generated assets are assets/icheme/sounds/pump_running.ogg and compressor_running.ogg; SoundEvent and subtitle definitions are in the product resources.
 
 Evidence: `logs/mover-controls-logs-2026-10-23.tar.gz` contains dependency-install output, authoring metrics and compile/package logs. `mover-controls-build-final.log` is the final constructed-only build. No tests or automated in-game/GUI checks were run. Subsequent owner-requested integration fast-forwarded target to ab35ef47, preserving all ten local changes; target jar passed and runClient was left running.
 
@@ -36,3 +36,5 @@ Status: Archived 2026-10-23. Index: [../INDEX.md](../INDEX.md).
 
 - Archived 2026-10-23 (target integrated at `ab35ef47`; ten local changes preserved; target jar passed, client running; no tests)
 - 2026-11-04: `pump_running.ogg` and `compressor_running.ogg` re-authored without the motor hum by `tools/machine-sounds/` (batch 2026-11-03-rotating-machinery, D26); this script makes the 2026-10-23 versions. Its `python-deps/` stays the authoring environment of both.
+
+Large files (AGENTS.md, batch 2026-11-15-tools-large-files): the 1011 files of `python-deps/` are git-ignored here (rebuild them from `requirements.txt`); their copies are in the main checkout's `research/tools/pump-compressor-controls/`, at the same relative paths.

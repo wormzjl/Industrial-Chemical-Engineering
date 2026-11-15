@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.science.fluid.network.TraceTruncationStepTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-25T08:27:23.567Z" hostname="WORMZ-PC" time="0.032">
-  <properties/>
-  <testcase name="theStepSolverCountsTheUnknownsItOmitsAndNoneAtTheOffSwitch()" classname="com.wormzjl.icheme.science.fluid.network.TraceTruncationStepTest" time="0.006"/>
-  <testcase name="aTruncatedStepConservesEveryComponentExactlyAndAgreesWithTheExactUnknownSet()" classname="com.wormzjl.icheme.science.fluid.network.TraceTruncationStepTest" time="0.005"/>
-  <testcase name="aTraceThatStopsBeingOneIsReactivatedInsideTheActiveSetLoop()" classname="com.wormzjl.icheme.science.fluid.network.TraceTruncationStepTest" time="0.007"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

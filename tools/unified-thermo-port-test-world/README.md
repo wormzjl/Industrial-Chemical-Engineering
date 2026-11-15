@@ -22,7 +22,7 @@ save crashes (M4 open item 1). It is on the branch (`15220a07`). The plan's §5 
 
 | Path | What | How to use |
 |---|---|---|
-| `world-template/` | Fresh copy of `tools/fluid-in-game-rig/template/bench-template` (void superflat, creative, commands on, chunks x 16..111 and z 16..143 force-loaded, no fluid data), with `datapacks/p6_pilot` from `tools/p6-pilot-acceptance/datapack/`. The datapack holds the network package `createcheme:pilot_cryogenic`, column preset `tia_juana`, and fluid presets water, nitrogen, methane, ethane and carbon dioxide; it is the same file set as `src/test/resources/materials/pilot-cryogenic` | With no client running: `cp -r world-template <worktree>/run/mcp-client/saves/<new folder>`, a new folder for every session |
+| `world-template/` (git-ignored; the copy is in the main checkout's `research/tools/unified-thermo-port-test-world/world-template/`) | Fresh copy of `tools/fluid-in-game-rig/template/bench-template` (void superflat, creative, commands on, chunks x 16..111 and z 16..143 force-loaded, no fluid data), with `datapacks/p6_pilot` from `tools/p6-pilot-acceptance/datapack/`. The datapack holds the network package `createcheme:pilot_cryogenic`, column preset `tia_juana`, and fluid presets water, nitrogen, methane, ethane and carbon dioxide; it is the same file set as `src/test/resources/materials/pilot-cryogenic` | With no client running: `cp -r world-template <worktree>/run/mcp-client/saves/<new folder>`, a new folder for every session |
 | `mixturepreset/pilot_*.json` | Eight client mixtures, schema 1, kind "mixture", package `createcheme:pilot_cryogenic`, basis mole: the E2 set, liquid CO2, LNG with 0.5 % CO2, and CH4 + 30 % CO2 | Copy into `<worktree>/run/mcp-client/CreateChemE/mixturepreset/`. The generator lists them after the six network presets, sorted by file name, as "<name> · Custom" |
 | `mcp/bridge.js`, `mcp/Flatten.java` | The 0.8.0 checks' bridge driver and alpha flattener, verbatim from `tools/fluid-tank-column-gui-fixes/scripts/` | `node mcp/bridge.js <cmd> '<json>'` |
 | `mcp/gen.js` | The device screen, driven by label (details below the table) | `node mcp/gen.js selftest`, `dump`, `labels`, `click <label>`, `field <label> <value>`, `mixtures`, `mixture "<label>"`, `open x y z KIND`, `configure '<json>'`, `read '<json>'` |
@@ -138,3 +138,5 @@ Status: Prepared 2026-10-16. Index: [../INDEX.md](../INDEX.md).
 - rig re-runs at `00ee8385` (holds H1 to H4, `TEST_WORLD_RIG_HOLDS_TRACE.md`) and `3db5e5d3` (H1 to H3 gone, H4 and H5 held) 2026-10-18
 - in-game session stopped by the owner after rows 1 and 2 (2026-10-18)
 - owner 2026-10-19: rows 3 to 12 and rig rows 5 and 10 run after the merge
+
+Large files (AGENTS.md, batch 2026-11-15-tools-large-files): the 47 images, Gradle results, worlds and other large files of this folder are git-ignored here; their copies are in the main checkout's `research/tools/unified-thermo-port-test-world/`, at the same relative paths.
