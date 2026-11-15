@@ -229,6 +229,32 @@ After S4 the linear algebra is 36.6 % of the step's CPU: the reach search 10.5 %
 - F3: a `SparseLuSolver` test: the ordering is a permutation, the same on every call, the identity under 128; on a chain of dense blocks its L and U hold no more entries than reverse Cuthill-McKee's.
 - Each form: the hold-fuzz seeds 1 to 200 (no new hold class), chain-100 in its declared mode with the deviations stated, one bench pair with `luFactorEntries`, `luReachSearches` and the step time. Then one form is kept.
 
+## 4e. S1 measured (2026-11-15): no form is kept
+
+The three forms were built by one subagent (`3e2f28da6`, `2da1c10b8`, `41bf8d892`), merged one by one (`3a5d2480f`, `d5aaa3db7`, `3ecfce611`), measured, and reverted (`4a9c0e344`, `c0c7dd445`, `001be9170`): the code is S4's again, line for line. Each form passed its named tests (46, 50 and 35 tests, 0 failures), ended the hold-fuzz seeds 1 to 200 at the same tick with the one held seed (145), and kept chain-100 inside its declared bound while moving it in the last digits (5e-15 relative in an amount, 3e-13 K), so any of them would have needed chain-100 recorded again.
+
+Two corrections to section 4d that the subagent found: `SparseLuSolver.Storage.factor0` dropped exact zeros itself, so F2 needed a storage that keeps them (`Storage.storedPattern`, the Newton's only); and on a clean chain of blocks the up-looking LU stores only structural fill, so the band order does not "fill its whole band" there.
+
+Counters of the diagnostics run (`tmp/pattern-census/bench-{s4,f1,f2,f3}/diag`), per step factorization:
+
+| | After S4 | F1 | F1 + F2 | F1 + F2 + F3 |
+|---|---|---|---|---|
+| Entries declared a Jacobian build (all builds) | 10,970 | 6,635 | 6,619 | 6,666 |
+| Entries of L and U | 120,576 | 127,272 | 129,832 | 339,184 |
+| Columns whose pattern was not a kept one | 0.911 | 0.909 | 0.306 | 0.304 |
+| Columns whose reach was searched | 0.911 | 0.909 | 0.770 | 0.699 |
+| Island step, mean (ms) | 27.42 | not measured alone | 29.01 | 64.28 |
+
+- **F1** (the true declaration): 40 % fewer declared entries, and 5.6 % more fill: reverse Cuthill-McKee on the truer graph orders slightly worse. The reach search and the Newton's iterations are unchanged. Its premise (a true graph orders better) is refuted by the counter, and what it saves outside the LU is two passes over the declared entries. Its three timed runs all overlapped another session's Gradle runs on the machine and are not measurements (36.58, 30.39 and 38.99 ms; `bench-f1`, `bench-f1b`, `bench-f1c`).
+- **F2** (the live direction's zeros kept): the pattern is now a kept one for 69 % of the columns, yet the reach is searched for 77 %: the pivot rows differ from the last factorization of the same pattern, and `UpLookingLu` searches again from the first pivot that differs. On the baseline a repeated pattern always had repeated pivots, but those were consecutive iterations of one step; across steps the values drift and partial pivoting on row-scaled entries picks other rows. The explicit zeros add 7.7 % to L and U. Net: the step is 5.8 % slower (one pair, the machine quiet before and after).
+- **F3** (minimum degree on the symmetric graph): 2.8 times the fill and 5.8 times the factorization time. With partial pivoting the pivots leave the diagonal, and an order chosen for a symmetric elimination no longer bounds the fill.
+
+What this says about the linear algebra (36.6 % of the step):
+
+1. The reach search (10.5 %) cannot be saved by a stable pattern alone. It needs the pivot rows to repeat, which partial pivoting does not give. A pivot rule that keeps the last factorization's pivot row while it is within a threshold of the column's largest entry would give it; it leaves the EJML parity `UpLookingLu` is held to (`UpLookingLuParityTest`) and is a numerical design change: the owner's decision, not built.
+2. An ordering for an unsymmetric matrix under partial pivoting has to bound the fill for any pivot choice (a column ordering on the pattern of AᵀA, the COLAMD family). Not built; its gain here is unknown.
+3. Reverse Cuthill-McKee on the declared pattern stays.
+
 ## 5. Commands
 
 - Step tests: `./gradlew --console=plain test --tests '*SparseNewtonTest' --tests '*UpLookingLuParityTest' --tests '*PassiveStepSolverTest' --tests '*DirectLiquidJacobianRowsTest' --tests '*PhaseLayoutTest'`
