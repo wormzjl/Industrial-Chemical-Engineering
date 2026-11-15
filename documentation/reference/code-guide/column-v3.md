@@ -12,9 +12,9 @@ Up: [code guide](README.md) · the equations, Newton, linear algebra, thermo and
 - You touch the worker service that runs a running column's solve, or the column's wire form (`ColumnWire`).
 - You need to know what a published label, digest or audit check means before trusting a number in the GUI.
 
-The column has two callers: the process simulator's column unit, on the client's run thread
-([process-simulator.md](process-simulator.md)), and a running column, on the server's bounded worker
-([column-operation.md](column-operation.md)). Save design and Import: [process-simulator.md](process-simulator.md),
+The column has one entry for the game, `ColumnSolve.calculate`, and two callers: the process simulator's column unit,
+on the client's run thread ([simulator-units.md](simulator-units.md)), and a running column, on the server's bounded
+worker ([column-operation.md](column-operation.md)). Save design and Import: [process-simulator.md](process-simulator.md),
 [equipment-structure.md](equipment-structure.md).
 
 ## What it does
@@ -88,13 +88,16 @@ Test tree: `V3HollandExample32` with `IndependentHollandMeshOracle`, `HollandB12
 
 ## Main flow
 
-1. **Caller.** The simulator: `ColumnUnit.solve` inside `MaterialRuntime.with` on the client's run thread, from the
-   seed its column ended on in the steady run it starts from (`Report.Warm`) through `calculateWithStrategy`
-   (`AGGRESSIVE`), else `calculate` with the bundled model (`V3NeuralRegistry.bundled().bind`) on `ColumnUnit.START`
-   (`LNN_FIRST`, `AUTO`, 16 iterations, `DEFAULT_BUDGET_POLLS`). A Stop is the checkpoint's cancellation and drops the
-   seeds (`FlowsheetRun.cold`). A running column: `ProcessSolveServices.submitColumnUnit` admits a `ColumnUnitCommand`
-   under the solve deadline; `ColumnSolve.run` calls `calculateWithStrategy` from the table's seed. (Both callers are
-   being changed by H-C5, one column solve for the sheet and the world: [column-operation.md](column-operation.md).)
+1. **Caller.** Both callers go through `ColumnSolve.calculate(input, seed, catalog, screen, cold, checkpoint)` inside
+   `MaterialRuntime.with` on the input's package: `ColumnSolve.warm` keeps the seed only on the input's basis and with
+   no wet tray; with it, `calculateWithStrategy` (`AGGRESSIVE`). What a solve with no seed, or one whose warm pass does
+   not answer, starts from is the caller's `ColumnSolve.ColdStart`. The simulator (`ColumnBlockSolve`, and the sizing's
+   trials in `ColumnSizing`) on the client's run thread passes `LEARNED`, from the seed its column ended on in the
+   steady run it starts from (`Report.Warm`): `calculate` with the bundled model (`V3NeuralRegistry.bundled().bind`)
+   on `LNN_FIRST`, `AUTO`, 16 iterations, `DEFAULT_BUDGET_POLLS`, at the strict closure. A Stop is the checkpoint's
+   cancellation and drops the seeds (`FlowsheetRun.cold`). A running column: `ProcessSolveServices.submitColumnUnit`
+   admits a `ColumnUnitCommand` under the solve deadline; `ColumnSolve.run` passes `CLASSICAL` from the table's seed:
+   `calculateWithStrategy` alone, which with no seed is V3's fast classical first solve (`OFF_FAST`).
 2. **Warm start** (`calculateWithStrategy`): `warmCompatible` judges the seed (same package, basis, stage count, feed
    tray, draw, steam and pumparound trays; top pressure, feed temperature, condenser temperature, each feed flow and the
    reboiler duty within a relative drift of 0.50 under `AGGRESSIVE`); `warmStartPass` corrects it; else the cold route.
@@ -205,7 +208,9 @@ Test tree: `V3HollandExample32` with `IndependentHollandMeshOracle`, `HollandB12
   `solver.readyQueueCapacity`, `solver.deadlineMilliseconds` (from admission, queue time included, polled
   cooperatively), `solver.gracefulShutdownMilliseconds`, `forcedShutdownMilliseconds`, and
   `columnV3.columnV3LiquidSupplyScreenRatio` (the only column key a running column reads; 0 leaves only the ρ ≥ 1
-  refusal). Every solve runs at cutoff 0 and the exact closure.
+  refusal). Every solve runs at cutoff 0. An `AGGRESSIVE` request with no warm seed (a running column's cold solve)
+  runs on `V3SolvePolicy.OFF_FAST`, at the gameplay closure `AGGRESSIVE_CLOSURE_TOLERANCE`; every other at the strict
+  closure.
 - **Data.** The default input is the network record's `default_column_preset`, `medium_crude` (package
   `icheme:tjl20_methane`, 40 trays, feed tray 37 at 638.15 K). Tia Juana is a test overlay (`TiaJuanaTestCatalog`; the
   literature case `literature_tia_juana` on `tjl19_dwsim`, `V3TestInputs.literatureCduInput()`). The learned model is
@@ -262,4 +267,4 @@ the task `v3HollandBenchmark`, which writes `build/reports/benchmarks/v3-holland
   the input.
 - The Holland facade is a benchmark only: no preset, template or simulator door builds its input.
 
-**Snapshot:** `d6f721b94`, 2026-11-15.
+**Snapshot:** `9d6d0d82e`, 2026-11-15.

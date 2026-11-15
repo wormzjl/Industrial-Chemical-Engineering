@@ -28,8 +28,8 @@ snapshot. "pp" = package-private.
 
 | Class | Role | Lines |
 |---|---|---|
-| [`ColumnUnit`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/unit/ColumnUnit.java) | The column as one block: its ports a pure function of its door (`FEED`, `OVERHEAD`, `DISTILLATE`, `WATER`, `BOTTOMS`, the draw, steam and pumparound ports: `drawPort`, `steamPort`, `pumparoundIn`, `pumparoundOut`), `add` (a mole fraction onto the axis; an id the axis lacks fails the column), `catalogFor(thermo, waterOnAxis)`, `solve` (warm from the last seed, else the learned start on `START`) | 211 |
-| `ColumnBlockSolve` (pp) | The block's own solve: the feed flashed to the feed tray's solved pressure (`FEED_ROUNDS`), water by `ColumnWater.onAxis`, the products back through the world's flash, the energy gap, the steam CHECK; keeps the last state and leaves it on its report | 403 |
+| [`ColumnUnit`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/unit/ColumnUnit.java) | The column as one block: its ports a pure function of its door (`FEED`, `OVERHEAD`, `DISTILLATE`, `WATER`, `BOTTOMS`, the draw, steam and pumparound ports: `drawPort`, `steamPort`, `pumparoundIn`, `pumparoundOut`), `add` (a mole fraction onto the axis; an id the axis lacks fails the column), `catalogFor(thermo, waterOnAxis)`, `SCREEN` (the liquid-supply screen ratio the sheet's column solves at: V3's default) | 194 |
+| `ColumnBlockSolve` (pp) | The block's own solve: the feed flashed to the feed tray's solved pressure (`FEED_ROUNDS`), water by `ColumnWater.onAxis`, the products back through the world's flash, the condenser duty as the closure on its own streams (`ColumnSolve.closure`), the steam CHECK; keeps the last state and leaves it on its report | 406 |
 | [`ColumnDoor`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/unit/ColumnDoor.java) | The column's door as a sheet holds it (record; `of`): the calculator's Column page less the feed; nested `Draw`, `Steam`, `Pumparound`, the vacuum choice | 305 |
 | `ColumnSides` (pp) | The sheet sides of the column's heat pairs: the condenser's, the kettle's and each pumparound cooler's utility side, a regulated side's feed and its rules | 148 |
 | [`ExchangerUnit`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/unit/ExchangerUnit.java) | An exchanger or a kettle reboiler, target Outlet, Duty or Area; an outlet or a duty names a side | 184 |
@@ -57,24 +57,28 @@ The column block, the one unit with more than one calculation:
 
 1. `ColumnUnit.calculations`: the BLOCK (`ColumnBlockSolve`), one calculation per heat side (`ColumnSides`), the
    utility feeds' calculations, the steam CHECK.
-2. `ColumnBlockSolve.run`: flashes the feed at its own enthalpy to the feed tray's solved pressure (V3 has no feed
-   pressure), decides water by `ColumnWater.onAxis` on the flashed feed, builds the V3 input from the door and the feed.
-3. `ColumnUnit.solve`: `V3ColumnCalculator.calculateWithStrategy` (`AGGRESSIVE`) from the last seed, else `calculate`
-   with the bundled model on `START`, inside `MaterialRuntime.with` on `catalogFor(thermo, waterOnAxis)`.
-4. The products come back through the world's flash at V3's temperature and pressure; what the two thermo models
-   differ by is the block's energy gap. The condenser's duty reaches its side by a link.
+2. `ColumnBlockSolve.solve` flashes the feed at its own enthalpy to the feed tray's solved pressure (V3 has no feed
+   pressure); its `run` decides water by `ColumnWater.onAxis` on the flashed feed and builds the V3 input from the door and the feed.
+3. The running column's solve, `ColumnSolve.calculate(input, warm, catalog, ColumnUnit.SCREEN, ColdStart.LEARNED,
+   checkpoint)` on `catalogFor(thermo, waterOnAxis)`: warm from the last seed where `ColumnSolve.warm` keeps it, else
+   (or where the warm pass does not answer) the learned start with the bundled model at the strict closure.
+4. The products come back through the world's flash at V3's temperature and pressure. The condenser's duty is
+   `ColumnSolve.closure` on the block's own streams (the flashed feed, the steam supplies, the ejector's motive steam
+   and its free water, the reboiler and the stage heats), so the block's heat balance closes; V3's own duty stays on the
+   display. The duty reaches its side by a link.
 5. The block leaves its seed on its report (`Report.Warm`), so the next run from this steady one starts there.
 
 ## Contracts
 
-- **The column against the world.** The block calls the same V3 solver as a running column, on the sheet model's view
+- **The column against the world.** The block calls the running column's own solve (`ColumnSolve.calculate`), with its
+  own cold start (`LEARNED`; the world's is `CLASSICAL`) and at V3's default screen ratio, on the sheet model's view
   of the sheet's compounds with or without water (`catalogFor`: `FlowThermo.catalog()` is the list without water, the
   model appends it). On the axis the whole feed enters V3 on the list with water; a steam row with a flow fails
   `column.steam_on_axis`; a solved liquid that would settle warns `column.two_liquids` and
   `column.two_liquids_distillate`. Off the axis the feed's water is a steam feed and an aqueous liquid fails
-  `column.liquid_water`. The sizing trials and the warm seed's check take the same catalog; a warm seed on the other list
-  is dropped. (`ColumnUnit` and the world's `ColumnSolve` are being merged into one column solve for the sheet and the
-  world by H-C5: [column-operation.md](column-operation.md).)
+  `column.liquid_water`. The sizing trials (`ColumnSizing`, the same call) and the warm seed's check take the same
+  catalog; a warm seed on the other list is dropped, and `ColumnSolve.warm` drops a seed with a wet tray
+  ([column-operation.md](column-operation.md)).
 - **Heat sides.** A pumparound or the reboiler has its duty on the door, so what passes through its cold side depends on
   nothing the column solves; the condenser's duty is an answer. Each pair is checked once the sheet stands, for heat that
   cannot flow that way. An air-then-water condenser has the exchanger's pair on its water trim: the water takes the
@@ -146,9 +150,10 @@ A unit's settings are the file's `Params` ([process-simulator.md](process-simula
 
 - `ColumnBlockSolve` keeps the last state, so each pass starts from it; a Stop drops it (`FlowsheetRun.cold`), and the
   next run's column takes the learned start.
+- `Report.Start.LAST` is reported for any warm seed the block holds, also a wet one that `ColumnSolve.warm` then drops.
 - A heat side is a calculation of its own: heating the feed of the same column from a pumparound is no loop.
 - `CoolerUnit`'s Air or Water is a sizing type only; the run's law is the same for both.
 - `TopologyCompiler.Kind.TURBINE` maps to the turbine tile; `MOTOR`, `GENERATOR` and `GEARBOX` stand on it as
   DRAWING_ONLY and size nothing (`FlowsheetCatalog.DRIVER`). The diverter valve is the splitter.
 
-**Snapshot:** `d6f721b94`, 2026-11-15.
+**Snapshot:** `9d6d0d82e`, 2026-11-15.

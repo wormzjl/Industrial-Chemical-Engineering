@@ -108,7 +108,7 @@ Each unit on the coordinator's hooks ([runtime-engine.md](runtime-engine.md)):
 
 - **A unit never solves on the tick.** Its plans and bookings run at dispatch, commit and decision points; its column jobs run on the workers.
 - **A still woken by a dated change shows the coupling's status text** ("an exchanger's other side changed").
-- **The running column's own reads still materialise** where the still's do not: `ColumnOperation.portsThrough` and `ExchangerCoupling.reads` materialise a certified island when the reader looks, `ColumnOperation.request` drops a solve the service refuses, and the coupling's wakes materialise to now (open items of batch 2026-11-13-codebase-review, R-ST4).
+- **The running column and the coupling date theirs as the still does**: `IslandCoordinator.through` materialises a certified island to the cycle's tick, `ExchangerCoupling.reads` to the slice start; the column's wakes and the coupling's (`ExchangerCoupling.dated`) act as of their ticks through `movedAt`; a refused column solve is held and asked again (`Run.heldJob`) ([column-run.md](column-run.md), [heat-units.md](heat-units.md)). A reader that needs no replay uses `reached`.
 - **`NO_DRIVER`**: `startColumn` refuses a column whose machines have no driver while `energy.machinesNeedPower` is on.
 
-**Snapshot:** `d6f721b94`, 2026-11-15.
+**Snapshot:** `9d6d0d82e`, 2026-11-15.

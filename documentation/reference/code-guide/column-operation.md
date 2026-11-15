@@ -43,7 +43,7 @@ and plans the ports, is `runtime/fluid/ColumnOperation` ([column-run.md](column-
 | [`ColumnStatus`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/ColumnStatus.java) | `phase` and `line` from a condition list: one pure formatter | 61 |
 | [`Refusal`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/Refusal.java) | Every Start and first-solve refusal as a constant with its text (`text(parameters)`): `FIRST_SOLVE`, `NO_NOZZLE`, `TOO_MANY_UTILITY_UNITS`, `NO_DRIVER` among them | 48 |
 | [`DriftBands`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/DriftBands.java) | The bands and `Trigger`; `check` (a table's, and a reference's without the closure); `reference` (a refused state as a reference) | 109 |
-| [`ColumnSolve`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/ColumnSolve.java) | The worker's job: `Job`, `Taken`, `Steam`, sealed `Outcome` (`Solved` with `advisories`, `MAX_ADVISORIES`; `Failed` with `transientFailure`); `run`; `trim` (an air-then-water condenser's water share), `airArea`; `SUPERHEAT` | 468 |
+| [`ColumnSolve`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/ColumnSolve.java) | The worker's job: `Job`, `Taken`, `Steam`, sealed `Outcome` (`Solved` with `advisories`, `MAX_ADVISORIES`; `Failed` with `transientFailure`); `run`; `calculate` (the one V3 solve of a column's input, for the running column and the sheet's column block alike) with its `ColdStart` (`CLASSICAL`, `LEARNED`); `warm` (the seed screen); `closure` (the condenser duty as the energy closure on one basis); `trim` (an air-then-water condenser's water share), `airArea`; `SUPERHEAT` | 525 |
 | [`ColumnWater`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/ColumnWater.java) | Where a column's feed water goes and whether its liquids settle, the one rule of the running column and the sheet's column block: `onAxis` (`SHARE`), `settling` (`TRACE`, `Settling`) | 118 |
 | [`OperationView`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/OperationView.java) | What the Operation tab shows: `Phase`, `conditions`, `accepted`, `Stream`, `Duty` (`DutyKind`), `Solve`, `Trays`, `idle`, `binding`, `ruleA`, `refused` | 120 |
 | [`PortAccounts`](../../../src/main/java/com/wormzjl/icheme/science/plant/port/PortAccounts.java) | The port arithmetic the column and the batch stills share: `CYCLE_TICKS`, `FENCE_TICKS`, `onIsland`, `onWorld`, `mass`, `less`, `idle`, `debit` (with `Overdrawn`), `keep` | 85 |
@@ -54,8 +54,9 @@ and plans the ports, is `runtime/fluid/ColumnOperation` ([column-run.md](column-
 
 1. `ColumnSolve.run(job, model, screen, checkpoint)`: `ColumnWater.onAxis` decides the list (with water, or without:
    `model.on(compounds, false)`); a V3 input with the design's trays and the set ratios times the feed taken;
-   `V3ColumnCalculator.calculateWithStrategy` (`AGGRESSIVE`) under the model's own catalog, warm from the last solve's
-   seed (a START solve has none).
+   `ColumnSolve.calculate(input, seed, catalog, screen, ColdStart.CLASSICAL, checkpoint)`: `warm` keeps the last solve's
+   seed only on the same basis and with no wet tray (a START solve has none); `V3ColumnCalculator.calculateWithStrategy`
+   (`AGGRESSIVE`) under the catalog, warm from that seed, else V3's own classical cold chain.
 2. `SplitTable.of` maps the V3 streams to ports and prices each product; `trim`, `airArea`, the `Flood` record and the
    pumparound draw temperatures complete it; `ColumnWater.settling` adds its notes.
 3. The `Outcome` (`Solved` or `Failed`) returns to the engine, which applies the table at its fixed tick.
@@ -82,8 +83,8 @@ and plans the ports, is `runtime/fluid/ColumnOperation` ([column-run.md](column-
   1e-12. A component without solved feed borrows the row of the component nearest in normal boiling point; unsolved
   water goes to the distillate; on the axis water is a solved compound. The table, its reference and the products'
   prices stay on the world list, mapped by id.
-- **Product prices.** `condenserPerFeed` is the closure on the network's energy basis, not V3's (V3's own duty stays as
-  `solvedCondenser`). Each product is priced by one flash: its enthalpy per mass at its solved temperature, pressure
+- **Product prices.** `condenserPerFeed` is the closure on the network's energy basis (`ColumnSolve.closure`: out less
+  in, the reboiler and the pumparounds), not V3's (V3's own duty stays as `solvedCondenser`). Each product is priced by one flash: its enthalpy per mass at its solved temperature, pressure
   and composition, times each compound's molar mass. A cycle prices a product as Σ n_i h_i, so no property call runs on
   the server thread; the sum is exact at the solved composition, and off it the price is out by the compounds'
   differences in enthalpy per mass (`ColumnSolveTest` prints and bounds it); the cycle books the difference at the
@@ -177,12 +178,16 @@ Numbers: [FORMATS.md](../FORMATS.md).
 
 ## Traps
 
-- `ColumnSolve.SUPERHEAT` is public because the simulator's sizing `Limit` reads it; `ColumnSolve.trim` is called by
-  the sheet's column block too. The sheet's column block and the running column read the same `ColumnWater` rule.
+- `ColumnSolve.SUPERHEAT` is public because the simulator's sizing `Limit` reads it; `ColumnSolve.trim`, `calculate`
+  and `closure` are called by the sheet's column block too (`ColumnBlockSolve`; `calculate` also by `ColumnSizing`'s
+  trials). The sheet's column block and the running column read the same `ColumnWater` rule.
 - A table's `condenserPerFeed` is not V3's condenser duty: it is the closure on the network's energy basis.
 - `Setpoints.withFeedRate` caps at the design rate: there is no turndown floor, and no feed above the design.
 - `DriftBands.check` without the closure is for refused states only; a running table's check includes it.
-- `ColumnSolve` and the sheet's `ColumnUnit` are being merged into one column solve for the sheet and the world (H-C5,
-  WAVE_D_BRIEFS); this chapter describes the code at the snapshot.
+- The sheet and the world share one solve but not their cold start: `ColdStart.CLASSICAL` here (V3's fast classical
+  first solve at the gameplay closure), `LEARNED` on the sheet (the learned start at the strict closure). A cold result
+  of the same input can differ between them within the gameplay closure.
+- The sheet's feed water still goes its own way: an aqueous liquid in the feed is refused there, and its water joins V3
+  as steam at the feed tray with no superheat test, where this solve lets water V3 does not admit follow the distillate.
 
-**Snapshot:** `d6f721b94`, 2026-11-15.
+**Snapshot:** `9d6d0d82e`, 2026-11-15.
