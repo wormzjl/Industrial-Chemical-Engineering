@@ -86,6 +86,12 @@ The laws are called, never call:
   status word, sound or cavitation count). A centrifugal compressor's efficiency reads `wetEfficiency` of its liquid
   share; a set-flow pump delivers `(1 − α)` of its displacement as liquid, a frame the displacement less the liquid's
   volume. Only a dry suction and, at a compressor, solids above the trace refuse.
+- One dense fluid (`State.dense()`) has no second phase: its `α` is `1 − w` and its liquid share `w`, its liquid-like
+  weight (`FluidThermodynamics.liquidLikeWeight`, a smoothstep between reduced densities `GAS_LIKE_UNTIL` 0.5 and
+  `LIQUID_LIKE_FROM` 1.5), whichever slot holds it (`InletPhase.measure`); the vapour slot's 1 and 0 below the window
+  and the liquid slot's 0 and 1 above it, to the bit. Its NPSH density is its own in either slot. The compressor's
+  head-to-ratio law reads the ideal-gas `k` on the suction's real `P/ρ`, which loses accuracy on a dense suction
+  (`S4_MACHINES_REVIEW.md` of batch 2026-11-15-supercritical-fluids).
 
 **Vacuum pumps and ejectors.** `S = s·S_n·φ(P_s)`. Liquid ring: `φ = (1 − P_v/P_s)^n` (`n` 2 for one stage, 1 for two;
 `P_v` = `SEAL_VAPOUR_PRESSURE`, the ring's at `SEAL_TEMPERATURE`); shaft `friction·s³ + P_s·Q·ln(P_atm/P_s)/η_iso`

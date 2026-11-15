@@ -1,6 +1,6 @@
 # Supercritical fluids
 
-Status: **In progress** since 2026-11-15 (S0, S1, S3 and S2 done; S4 and S5 next). Branch `claude/supercritical-fluid-support-d0ffa4`, base `e9edc974b` (main 0.31.0).
+Status: **In progress** since 2026-11-15 (S0, S1, S2, S3 and S4 done; S5 next). Branch `claude/supercritical-fluid-support-d0ffa4`, base `e9edc974b` (main 0.31.0).
 
 Purpose: dense and supercritical fluids as ordinary states of the fluid network, the machines, the heat units and the
 simulator: continuous properties, no label-driven jumps, no critical-band hold.
@@ -72,6 +72,16 @@ simulator: continuous properties, no label-driven jumps, no critical-band hold.
   3). Decisions in the plan's section 2b, points 5 to 7.
 
 - 2026-11-15: brief S4 written (`tmp/supercritical-briefs/BRIEFS.md`; plan, "S4 as briefed").
+- 2026-11-16: main merged twice, at the owner's "Approve, merge first":
+  - 0.31.1, the fluid step cost batch (`8bac3e6e7`). Two document conflicts; the affected classes passed (1,546 + 136
+    + chain-100 exact); dense GameTests `s2c-merge1` 3 of 3.
+  - `b41f7f9c7`, the tools large files batch and the `icheme-2` reservation (`10c9578b2`): documents and tools only,
+    no test run.
+- 2026-11-16: S4 (sub-thread). A dense fluid's pump vapour share and compressor condensed share follow its liquid-like
+  weight, and so does the pump's E. Commits: the weight moved to the model (`1b4396c25`); the shares and the suction
+  limit, with `dense-movers-v1` (`505832d82`); the simulator readers (`0b3d6a1d9`); the tests (`22589367d`). Results:
+  the affected classes passed, and dense GameTests `s4-dense1` 3 of 3. The compressor law was measured, not changed.
+  [S4_MACHINES_REVIEW.md](S4_MACHINES_REVIEW.md).
 
 ## Documents
 
@@ -85,6 +95,8 @@ simulator: continuous properties, no label-driven jumps, no critical-band hold.
   the identities that moved, the identity bound.
 - [S2_NETWORK_REVIEW.md](S2_NETWORK_REVIEW.md): S2a and S2b, the dense-fluid stream laws, the slot-rule comparison, the
   owner options (onset, film bounds, film seam).
+- [S4_MACHINES_REVIEW.md](S4_MACHINES_REVIEW.md): S4, a dense fluid at a pump and a compressor: the shares and E
+  before and after, the seams, the compressor law against the reference, the simulator's readers, the owner options.
 - [S2C_NETWORK_REVIEW.md](S2C_NETWORK_REVIEW.md): S2c, the slot rule by density and its moved states, what still reads the slot, the dense pump's suction edge, the "no saturation" callers, the GameTests, the campaign draws.
 - [SUPERCRITICAL_QUALIFICATION_REVIEW.md](SUPERCRITICAL_QUALIFICATION_REVIEW.md): S0's measurements M1..M7 and the follow-up M8, the
   recommended pressure ranges and the sizes of the open decisions.
@@ -104,6 +116,12 @@ dataset records under `data/icheme/materials/properties/`, the device screens' p
   0.5, or none), the film bounds (0.5/1.5, or 0.75/1.25), the film seam (weight on every one-fluid state, or on
   supercritical isotherms only). Implemented: the first of each.
 - For the owner (S2c, [S2C_NETWORK_REVIEW.md](S2C_NETWORK_REVIEW.md) section 8): the engine's PIP labels of one-root mixtures (option B, not done); the LIQUID port's head seam; the gas blanket in the liquid slot; the pump and compressor conventions and E for S4; the blanketed drum's failure in run `s2c-gt2` (section 6). The S2 review's cold-campaign line is corrected there (section 7).
+- For the owner (S4, [S4_MACHINES_REVIEW.md](S4_MACHINES_REVIEW.md) section 8):
+  - the machines' bounds, with the pump vapour-locked through a line from δ 0.5 to about 1.1;
+  - the seam at Tc on the isenthalp, where E drops by 0.35 to 0.65 MPa;
+  - the compressor law (−14 % head on a liquid-like suction; the sizing's discharge 17 to 32 K high);
+  - wet gas wear on a dense fluid.
+  For S5, section 9 lists the texts that name a phase.
 - For the owner (S3 fix, [S3_DATA_REVIEW.md](S3_DATA_REVIEW.md) section 4): the thermodynamic revision repeats the fluid
   identity about three times (once would lift the NBT wall to about 290 compounds); the simulator menu's opening data is
   18,281 characters against a limit near 32,600 bytes, not confirmed (about 110 compounds).

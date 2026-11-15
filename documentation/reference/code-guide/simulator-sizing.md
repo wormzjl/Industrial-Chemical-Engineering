@@ -102,7 +102,11 @@ Outside the package: [`science/equipment/SentDesign`](../../../src/main/java/com
 - **Compressors** (`CompressorSizing`): the world's law is one isothermal step, so stages live here alone; the discharge
   is one stage's polytropic estimate on the world's exponent (`CentrifugalCompressor.sigma` at its default efficiency,
   the heat capacity ratio as the network reads it), cooled back to the suction between stages. `COMPRESSOR_LIQUID` is a
-  SHOULD row: a wet suction is compressed.
+  SHOULD row: a wet suction is compressed. A dense suction's liquid share is the world's, `100 w` on its liquid-like
+  weight inside reduced densities 0.5 to 1.5.
+- **Dense suctions** (`FlowThermo.denseAtEdge`): one dense fluid has no bubble pressure; into a pump it is
+  `SUCTION_BOILING` where its vapour share `1 − w` reaches the clean share at its pressure (the world's E is its own
+  pressure there), else `SUCTION_COLD` (`Service.of`). Its gas or liquid class is its slot's, the weight's midpoint.
 - **Turbines** (`TurbineSizing`): rated power from `MachineDuty.POWERS` with `Motor.SPARE`, the lowest steam class whose
   header holds the inlet, the nearest exhaust of `MachineDuty.EXHAUSTS`; rows `TURBINE_SPARE`, `TURBINE_INLET`.
 - **Ejectors** (`EjectorSizing`): a bore rated on the world's set at the sheet's motive pressure (`Load.motivePressure`;
