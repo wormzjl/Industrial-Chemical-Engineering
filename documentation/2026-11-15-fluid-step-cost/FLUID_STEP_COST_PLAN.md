@@ -255,6 +255,36 @@ What this says about the linear algebra (36.6 % of the step):
 2. An ordering for an unsymmetric matrix under partial pivoting has to bound the fill for any pivot choice (a column ordering on the pattern of AᵀA, the COLAMD family). Not built; its gain here is unknown.
 3. Reverse Cuthill-McKee on the declared pattern stays.
 
+## 4f. S5's design (2026-11-15): a pivot rule under which pivots repeat
+
+Owner, 2026-11-15: "Pivot rule first". S1 showed the reach search (10.5 % of the step) needs two things at once: a pattern that repeats (F2 gave 69 % of the columns) and pivot rows that repeat (partial pivoting does not give them).
+
+**What the code does.** `UpLookingLu.factor` (line 121): the pivot of column k is the entry of largest magnitude among the reach rows without a pivot, the first of equals: EJML's rule, held bit for bit by `UpLookingLuParityTest`. The rows were scaled to a largest entry of 1 (`SparseLuSolver.Storage.factor0`), so many candidates are near 1 and the largest changes from one factorization to the next. A column's kept reach is reused only while every earlier pivot is the last factorization's (line 142). Every solve is checked for its componentwise backward error and refined up to three times (`checkResidual`, `luChecks`, `luRefinements`); on `mixed100` 20,928 checks a minute pass with no refinement.
+
+**The rule (threshold pivoting, a function of the matrix alone).** With `a` the largest magnitude among the candidates and `τ = 0.1`: the pivot is an acceptable candidate, one with magnitude at least `τ a` and above 0, chosen by a fixed preference, not by size. An acceptable pivot bounds the growth of a column's entries by `1 + 1/τ = 11` per elimination where partial pivoting gives 2; the backward-error check and the refinement stand behind it, and `luRefinements` measures what it costs. `τ = 0.1` is the usual value for sparse LU (UMFPACK's default, MA48's `u`); one constant, not tuned.
+
+- **PA, the first acceptable in reach order.** The reach order is a function of the pattern and the earlier pivots, so by the induction of `UpLookingLu`'s class comment the same row is first while the pattern and the earlier pivots repeat; the pivot changes only when a candidate crosses `τ a`.
+- **PB, the diagonal where it is acceptable, else PA.** Row k of the permuted matrix is the equation paired with unknown k (`SparseLuSolver` permutes rows and columns together). Pivots on the diagonal keep the elimination the one the symmetric ordering was chosen for, so the fill may fall as well.
+- **PC, PB with the minimum-degree ordering** (S1's F3, commit `41bf8d892`, applied again). F3 failed because the pivots left the diagonal; under PB they mostly stay.
+
+All three stand on F1 and F2 applied again (the reverts `001be9170` and `c0c7dd445` reverted): F2's stable pattern is what a repeated pivot needs, and F2's storage (`SparseLuSolver.Storage.storedPattern`, the Newton's only) is where the rule is chosen. The transport's storages and the parity test keep EJML's rule: `UpLookingLu()` is EJML's; `UpLookingLu(threshold, preferDiagonal)` is the Newton's.
+
+**Ruled out: keeping the last factorization's pivot row.** It would repeat pivots best, but the factors would then depend on what the storage factored before: a retained solver and a fresh one would differ (`RetainedSolverTest`, `KeptLuStorageTest`, the class comment's "a reused instance gives the L, U, pivots and solutions of a fresh one"), and a loaded world would differ from one that ran on. The same reason as the pattern that remembers (section 4).
+
+**Pitfalls.**
+
+- The diagonal row k is a candidate only if it is in column k's reach and has no pivot yet; `dense[k]` outside the reach is stale. Read it only where the candidate loop meets row k.
+- At `τ = 1` PA is EJML's rule (the first of the largest); PB is not (the diagonal wins a tie). So the EJML rule is the constructor without arguments, not a threshold of 1 with the diagonal preferred.
+- The singular test is unchanged: no candidate, or the largest is 0.
+- The kept reach's induction is untouched: the reach depends on the pattern and the earlier pivots only, whatever rule chose them.
+- The closures' Newton (`PhaseLayout.wallClosure`, dense, about 43 unknowns) uses the same storages, so its results move in the last digits too.
+
+**What moves.** Every step result in the last digits, and the factorization's accuracy: the forms are judged first by counters, which do not need a quiet machine (the diagnostics run of the bench): the share of columns whose reach is searched (after F2: 0.770), the entries of L and U (129,832), `luRefinements` (0) and failed solves, the Newton's iterations (25,729) and stalled refreshes (424), held intervals (0). Then the hold-fuzz seeds 1 to 200 (no new hold class), chain-100 inside its bound, and one timed pair of the chosen form against S4 on a quiet machine. A form is kept only if the reach searches fall well below 0.77, no refinement or hold appears, and the timed pair is faster than S4's 27.42 ms; else everything is reverted to S4 again.
+
+**Expected (est.).** Reach searched 0.77 to about 0.35 (the pattern itself is not a kept one for 0.31 of the columns): 6 % of the step's CPU. Fill under PB: unknown, either way. Against it, F2's explicit zeros (7.7 % more entries). Net: a few percent, to be measured.
+
+**Gates.** `UpLookingLuParityTest` unchanged and passing (EJML's rule); new cases beside it for the threshold rule: no pivot below `τ` times its column's largest candidate; the solutions of a set of sparse systems within 1e-10 relative of the EJML rule's; a pattern factored twice with every value moved by up to 5 % searches no reach the second time; a singular matrix is rejected at the same column. `KeptLuStorageTest`, `RetainedSolverTest` (a retained solver equals a fresh one, bit for bit), `SparseNewtonTest`, `PassiveStepSolverTest`, `WallClosureJacobianTest`, `DeclaredPatternTest`, `FillOrderingTest` (PC).
+
 ## 5. Commands
 
 - Step tests: `./gradlew --console=plain test --tests '*SparseNewtonTest' --tests '*UpLookingLuParityTest' --tests '*PassiveStepSolverTest' --tests '*DirectLiquidJacobianRowsTest' --tests '*PhaseLayoutTest'`
