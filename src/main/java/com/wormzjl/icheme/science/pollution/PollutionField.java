@@ -82,40 +82,41 @@ public final class PollutionField {
     }
 
     /**
-     * This field capped at a dimension's height (owner, 2026-11-15: "cap at world height"): a cube above
-     * {@code maximumY} or below {@code minimumY} gives its amounts to the highest or lowest cube of its column, so
-     * nothing is lost and the ledger still closes. The same field when every cube is inside.
+     * The field capped at a dimension's height (owner, 2026-11-15: "cap at world height", cubes outside dropped): every
+     * cube above {@code maximumY} or below {@code minimumY} leaves, its amounts booked {@code dissipated}, so the ledger
+     * still closes. The same field and ledger when every cube is inside.
      */
-    public PollutionField capped(int minimumY, int maximumY) {
+    public static Result capped(PollutionField field, PollutionLedger ledger, int minimumY, int maximumY) {
+        Objects.requireNonNull(field, "field");
+        Objects.requireNonNull(ledger, "ledger");
         if (minimumY > maximumY) {
             throw new IllegalArgumentException("height " + minimumY + " to " + maximumY);
         }
-        boolean outside = false;
-        for (long key : keys) {
-            if (CubeKey.capped(key, minimumY, maximumY) != key) {
-                outside = true;
-                break;
+        int kept = 0;
+        for (long key : field.keys) {
+            if (CubeKey.inside(key, minimumY, maximumY)) {
+                kept++;
             }
         }
-        if (!outside) {
-            return this;
+        if (kept == field.keys.length) {
+            return new Result(field, ledger);
         }
-        var merged = new java.util.TreeMap<Long, double[]>();
-        for (int i = 0; i < keys.length; i++) {
-            double[] sum = merged.computeIfAbsent(CubeKey.capped(keys[i], minimumY, maximumY), k -> new double[CHANNELS]);
-            for (int c = 0; c < CHANNELS; c++) {
-                sum[c] += amounts[i * CHANNELS + c];
-            }
-        }
-        long[] cappedKeys = new long[merged.size()];
-        double[] cappedAmounts = new double[merged.size() * CHANNELS];
+        long[] keptKeys = new long[kept];
+        double[] keptAmounts = new double[kept * CHANNELS];
+        double[] book = ledger.values();
         int o = 0;
-        for (var entry : merged.entrySet()) {
-            cappedKeys[o] = entry.getKey();
-            System.arraycopy(entry.getValue(), 0, cappedAmounts, o * CHANNELS, CHANNELS);
-            o++;
+        for (int i = 0; i < field.keys.length; i++) {
+            if (CubeKey.inside(field.keys[i], minimumY, maximumY)) {
+                keptKeys[o] = field.keys[i];
+                System.arraycopy(field.amounts, i * CHANNELS, keptAmounts, o * CHANNELS, CHANNELS);
+                o++;
+            } else {
+                for (int c = 0; c < CHANNELS; c++) {
+                    book[PollutionLedger.slot(c, Total.DISSIPATED)] += field.amounts[i * CHANNELS + c];
+                }
+            }
         }
-        return new PollutionField(cappedKeys, cappedAmounts);
+        return finish(keptKeys, keptAmounts, book);
     }
 
     public int size() {
