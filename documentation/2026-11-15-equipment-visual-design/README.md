@@ -53,6 +53,19 @@ Purpose: make the implemented equipment look better and less bare (owner request
   `FlowsheetUnitsTest`, `SizingCoverageTest`, `FluidFactsCompatTest` (test); `EquipmentShapeCompatTest`,
   `ShapeRasterizerTest` (equipmentGates). All pass.
 
+- 2026-11-15, W3 follow-up (`bd9168e81`): the vault helper moved from `Mesh` into `SteamTurbineTrain`, because the
+  relief-sprite thread owns `Mesh`. `Mesh.java` is back to its base, and the six scenes draw the same polygons.
+
+- 2026-11-15, W5 (owner: "So you need to change the wear rules instead"): `Wear.wetOnset(P)` is 1 % from 150 kPa up,
+  `WET_ONSET_20_KPA` 4.8 % and `WET_ONSET_10_KPA` 5.6 % (from W1's design readings: MP 4.66 % at 20 kPa, LP 5.45 % at
+  10 kPa, each up to the next 0.1 %, plus 0.1 %), linear in ln P, flat below 10 kPa. `wetExhaust(share, P)` keeps the
+  span of 5 %. `MachineHealth.booked` reads `wetExcess(share, row.secondPressure())`, the row's exhaust end. From
+  150 kPa up, every number is today's bit for bit (`WearTest`). Design steam wears at no class or exhaust. Saturated
+  inlet, 10 MW: at 10 kPa LP 0.47, MP 0.77, HP 0.97, VHP 1.00; at 20 kPa LP 0.50, MP 0.88, HP 1.00, VHP 1.00. Every
+  saturated reading at 10 and 20 kPa lies above the onset. The table is printed by
+  `SteamTurbineTest.theClassesExpandStraightThroughToTheirExhausts`. Tests: `WearTest`, `SteamTurbineTest`,
+  `MachineHealthTest`, `MoverHealthStatusTest` (test). All pass.
+
 ## Documents
 
 - [VISUAL_REVIEW.md](VISUAL_REVIEW.md): the findings and the proposed order.
@@ -68,10 +81,9 @@ Purpose: make the implemented equipment look better and less bare (owner request
 ## Open items
 
 - The owner's four decisions at the end of the review.
-- Combined steam turbine: the owner's answers to T1 to T3. Built with A, A, A, and each is one constant
-  (`MachineDuty.LP_STEAM_TEMPERATURE`, `SteamTurbineDesign.DRAFT_STEAM`/`DRAFT_EXHAUST`, `MachineDuty.MP_STEAM_TEMPERATURE`).
-  The W1 table shows every class wearing at 10 to 20 kPa (`Wear.WET_EXHAUST_ONSET` 1 %), so T1's condition failed and
-  a fresh HP-to-10-kPa draft wears. A turbine wear onset on the game's scale would be its own change.
+- Combined steam turbine: T1 to T3 stand as built (owner, after W5): LP 200 °C, a fresh draft at HP to 10 kPa, MP
+  unchanged, each one constant (`MachineDuty.LP_STEAM_TEMPERATURE`, `SteamTurbineDesign.DRAFT_STEAM`/`DRAFT_EXHAUST`,
+  `MachineDuty.MP_STEAM_TEMPERATURE`).
 - Combined steam turbine: the owner's look at the six drawings (worktree `tmp/turbine-sections/views/`).
 - Combined steam turbine: `CHANGELOG.md`, the translation commit and the version wait for the merge.
 - Scope (owner, 2026-11-15): the boilers and gasifiers belong to another work and are left out.
