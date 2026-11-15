@@ -24,8 +24,9 @@ Both are in the `models-and-sfx` skill.
 
 - No weld seams (2026-11-15: "these should not be visually presented").
 - No glass-tube level gauge on a pressure vessel (2026-11-15, on the first sketch: "you don't put a level gauge like
-  that on a pressure vessel"). The sketch drew a bare glass tube on a bridle. The trim lists below carry no level
-  gauge; open item 4 asks what, if anything, replaces it.
+  that on a pressure vessel"). The sketch drew a bare glass tube on a bridle. Asked what replaces it, the owner
+  chose "No gauge": no level gauge is drawn on a pressure vessel, and the level sensor item stays the only level
+  device.
 
 ## Summary
 
@@ -88,5 +89,3 @@ sensor heads and the data socket. They are in the game today.
 1. Do insulation band straps and cladding panel joints fall under the no-seams rule?
 2. Trim only (K1 to K4), or access steel on drums as a constructor option that defaults to off?
 3. K7, K8, K10: approve the layout changes, or leave these kinds as they are?
-4. Level on a pressure vessel: nothing drawn (the level sensor item stays the only level device), or a magnetic
-   level gauge on a standpipe with isolation valves?

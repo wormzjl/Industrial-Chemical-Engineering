@@ -50,9 +50,9 @@ batches. The owner judges models on rendered drawings and judges sounds by ear, 
   stack top or an open fan ring is dark.
 - No weld seams. The owner's words on 2026-11-15: "these should not be visually presented". Do not draw plate
   courses or weld lines on a shell, in the mesh or in a sprite.
-- No glass-tube level gauge on a pressure vessel. The owner's words on 2026-11-15, on a sketch of a bare glass tube
-  on a drum's bridle: "you don't put a level gauge like that on a pressure vessel". Ask the owner before you draw
-  any level gauge on a drum, sphere, exchanger or column.
+- No level gauge on a pressure vessel (a drum, sphere, exchanger or column). The owner's words on 2026-11-15, on a
+  sketch of a glass tube on a drum's bridle: "you don't put a level gauge like that on a pressure vessel"; asked
+  what replaces it, the owner chose "No gauge". The level sensor item is the only level device there.
 - Proportions come from the real machine. A stack is tall and slender above a transition piece, not a squat silo.
   Ducts join what they feed, and no part floats in the air.
 - Nozzle pipe blocks may stand next to each other. The owner lifted the old one-free-block rule on 2026-11-10. Lay
