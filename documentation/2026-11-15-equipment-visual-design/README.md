@@ -22,5 +22,6 @@ Purpose: make the implemented equipment look better and less bare (owner request
 
 ## Open items
 
-- The owner's three decisions at the end of the review.
+- The owner's four decisions at the end of the review.
+- Scope (owner, 2026-11-15): the boilers and gasifiers belong to another work and are left out.
 - A sprite render or in-game look for the findings marked "sprite" (K5, K9, K11).
