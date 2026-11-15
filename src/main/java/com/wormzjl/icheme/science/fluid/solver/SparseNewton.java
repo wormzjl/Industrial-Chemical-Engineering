@@ -53,6 +53,16 @@ public final class SparseNewton {
             return -1;
         }
         /**
+         * The entries the factorization keeps even where their value is exactly 0: a mask over the entries of the declared
+         * pattern, in the order of {@link #differentiateEntries}' {@code entries}, valid for the last call of it that
+         * returned a count (batch 2026-11-15-fluid-step-cost, S1 F2). Null: the factorization keeps the nonzeros alone, as
+         * after a coloured sweep. The matrix keeps an entry where its value is not 0 or the mask keeps it, so a mask never
+         * drops a nonzero: it adds explicit zeros, which keep the matrix's pattern, and with it the LU's kept reach, the
+         * same while what the equations recompute stays the same. An implementation leaves every entry it does not keep
+         * at exactly 0. The caller reads the array at once and keeps no reference to it.
+         */
+        default boolean[] keptEntries(){return null;}
+        /**
          * Brackets a Jacobian build at {@code base}. Between this call and {@link #linearised} every residual the build
          * evaluates is a one-sided trial about {@code base}; equations with a kinked row (a vessel's wall, decision A423)
          * state it, for those trials, on the branch {@code base} is on, so the differences read that branch's slope: the
@@ -129,7 +139,7 @@ public final class SparseNewton {
             private SparseLuSolver.Storage factors;
             private final KeptFactors kept;private KeptFactors.Key key;
             private double[] derivatives=new double[0],steps=new double[0];
-            private Shared(SolverOwnership ownership){factors=new SparseLuSolver.Storage(ownership);kept=null;}
+            private Shared(SolverOwnership ownership){factors=SparseLuSolver.Storage.storedPattern(ownership);kept=null;}
             private Shared(KeptFactors kept){this.kept=kept;}
             private SparseLuSolver.Storage factors(Pattern pattern) {
                 if(factors==null){key=new KeptFactors.Key(pattern.offsets,pattern.rows);factors=kept.borrow(key);}
@@ -225,7 +235,7 @@ public final class SparseNewton {
          * latch where none is kept. */
         private SparseLuSolver.Storage borrow(Key key) {
             var storage=idle.remove(key);
-            return storage!=null?storage:new SparseLuSolver.Storage(ownership);
+            return storage!=null?storage:SparseLuSolver.Storage.storedPattern(ownership);
         }
         private void giveBack(Key key,SparseLuSolver.Storage storage) {
             idle.remove(key);idle.put(key,storage);
@@ -343,7 +353,8 @@ public final class SparseNewton {
         int blocks=equations.differentiateEntries(x,f,differenceStep,pattern.offsets,pattern.rows,derivatives,checkpoint);
         if(blocks>=0) {
             SolverDiagnostics.count(SolverDiagnostics.jacobianBlockBuilds);
-            return factor(equations,x,derivatives,workspace,pattern,blocks);
+            // The entries this build recomputed are kept at zero too (S1 F2); the coloured sweep below keeps nonzeros alone.
+            return factor(equations,x,derivatives,workspace,pattern.keeping(equations.keptEntries()),blocks);
         }
         for(int column=0;column<n;column++)steps[column]=differenceStep*equations.differenceScale(column,x[column]);
         for(int[] group:pattern.groups) {
@@ -362,7 +373,8 @@ public final class SparseNewton {
         }
         return factor(equations,x,derivatives,workspace,pattern,calls);
     }
-    /** The ordering, numeric matrix and factorization are the same whichever sweep filled the entries. A pattern observer
+    /** The ordering and the factorization are the same whichever sweep filled the entries; the numeric matrix of a block
+     * build also holds the zeros its equations keep ({@link Equations#keptEntries}, a view of the pattern). A pattern observer
      * ({@link SolverDiagnostics#patternObserver}, a probe's or a gate's) sees the declared entries first, zeros included;
      * it reads the live arrays and changes nothing. */
     private static int factor(Equations equations,double[] x,double[] derivatives,Workspace workspace,Pattern pattern,int calls) {
@@ -390,7 +402,18 @@ public final class SparseNewton {
     private static final class Pattern {
         final int[] offsets,rows;
         final List<int[]> groups;
+        /** The entries {@link #numericMatrix} keeps at zero ({@link Equations#keptEntries}), null for none: set only on a
+         * view of a workspace's pattern for one factorization ({@link #keeping}), which shares its arrays and colouring. */
+        private final boolean[] kept;
+        /** This pattern for one factorization that keeps {@code kept}'s entries at zero; itself where {@code kept} is null. */
+        Pattern keeping(boolean[] kept) {
+            if(kept==null)return this;
+            if(kept.length!=rows.length)throw new IllegalStateException("Kept-entry mask dimension mismatch");
+            return new Pattern(this,kept);
+        }
+        private Pattern(Pattern pattern,boolean[] kept){offsets=pattern.offsets;rows=pattern.rows;groups=pattern.groups;this.kept=kept;}
         Pattern(int size,int[][] input) {
+            kept=null;
             if(input.length!=size)throw new IllegalArgumentException("Jacobian pattern dimension mismatch");
             offsets=new int[size+1];var colorRows=new ArrayList<BitSet>();var columns=new ArrayList<List<Integer>>();
             for(int column=0;column<size;column++) {
@@ -410,13 +433,19 @@ public final class SparseNewton {
         void derivative(int column,double[] values,double[] perturbed,double[] base,double step) {
             for(int entry=offsets[column];entry<offsets[column+1];entry++)values[entry]=(perturbed[rows[entry]]-base[rows[entry]])/step;
         }
-        SparseMatrix numericMatrix(double[] values) {
+        SparseMatrix numericMatrix(double[] values){return numericMatrix(values,kept);}
+        /**
+         * The matrix the LU factors: entry {@code e} where {@code values[e] != 0 || kept != null && kept[e]}, an explicit
+         * zero where the mask keeps a zero value (S1 F2: the LU's storage factors every entry it is handed,
+         * {@link SparseLuSolver.Storage#storedPattern}).
+         */
+        SparseMatrix numericMatrix(double[] values,boolean[] kept) {
             // Coloring retains the full structural pattern. Numeric LU must not interpret thousands
             // of exact zero derivatives as actual graph connections and introduce unnecessary fill.
             int[] starts=new int[offsets.length];int count=0;
-            for(int c=0;c<offsets.length-1;c++){for(int e=offsets[c];e<offsets[c+1];e++)if(values[e]!=0)count++;starts[c+1]=count;}
+            for(int c=0;c<offsets.length-1;c++){for(int e=offsets[c];e<offsets[c+1];e++)if(values[e]!=0||kept!=null&&kept[e])count++;starts[c+1]=count;}
             int[] numericRows=new int[count];double[] numericValues=new double[count];int at=0;
-            for(int e=0;e<values.length;e++)if(values[e]!=0){numericRows[at]=rows[e];numericValues[at++]=values[e];}
+            for(int e=0;e<values.length;e++)if(values[e]!=0||kept!=null&&kept[e]){numericRows[at]=rows[e];numericValues[at++]=values[e];}
             return SparseMatrix.adopting(offsets.length-1,starts,numericRows,numericValues);
         }
         SparseMatrix symbolicMatrix() {

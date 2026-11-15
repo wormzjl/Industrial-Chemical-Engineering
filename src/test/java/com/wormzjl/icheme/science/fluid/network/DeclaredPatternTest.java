@@ -23,6 +23,9 @@ import static org.junit.jupiter.api.Assertions.*;
  * the union of today's declaration and those blocks (with the same structural zeros), it must hold more entries than
  * today's, and every entry it adds must be a row of a node other than the column's own that is not one of that node's
  * inflow rows: a wall, normalization or equilibrium row.</p>
+ *
+ * <p>S1 F2: after a block build, every entry outside the equations' kept mask ({@link StepEquations#keptEntries}) is exactly
+ * 0, on every fixture; and on the dry chain the mask follows the flow's direction.</p>
  */
 class DeclaredPatternTest {
     private final BlockJacobianEquivalenceTest fixtures=new BlockJacobianEquivalenceTest();
@@ -105,6 +108,72 @@ class DeclaredPatternTest {
         System.out.printf(Locale.ROOT,"DECLARED_PATTERN %-30s unknowns %4d declared %6d replaced rule %6d (%.3f) undeclared node rows compared %7d%n",
                 name,size,declared,replaced,declared/(double)replaced,compared);
         assertTrue(declared<replaced,name+": F1 declares "+declared+" entries, the rule it replaced "+replaced);
+
+        // S1 F2: after a block build every entry the mask does not keep is exactly 0, so the mask drops no nonzero.
+        var build=build(equations,x,name);int zeros=0,kept=0;
+        for(int entry=0;entry<build.entries().length;entry++) {
+            if(build.kept()[entry]){kept++;if(build.entries()[entry]==0)zeros++;continue;}
+            assertEquals(0,build.entries()[entry],0.0,name+": entry "+entry+" is outside the kept mask but not 0");
+        }
+        System.out.printf(Locale.ROOT,"KEPT_ENTRIES %-30s declared %6d kept %6d of them exactly zero %6d%n",name,build.entries().length,kept,zeros);
+    }
+    private record Build(int[] offsets,int[] rows,double[] entries,boolean[] kept) {}
+    /** One block build at {@code x} as the Newton makes it (the base residual outside the bracket, the sweep inside), with
+     * its kept-entry mask. */
+    private static Build build(StepEquations equations,double[] x,String name) {
+        int size=equations.size();int[][] columnRows=equations.columnRows();
+        int[] offsets=new int[size+1];for(int c=0;c<size;c++)offsets[c+1]=offsets[c]+columnRows[c].length;
+        int[] rows=new int[offsets[size]];for(int c=0;c<size;c++)System.arraycopy(columnRows[c],0,rows,offsets[c],columnRows[c].length);
+        double[] base=equations.residual(x),entries=new double[rows.length];
+        equations.linearising(x);
+        try{assertEquals(size,equations.differentiateEntries(x,base,1e-6,offsets,rows,entries,()->{}),name+": the block sweep refused the island");}
+        finally{equations.linearised();}
+        boolean[] kept=equations.keptEntries();
+        assertNotNull(kept,name+": a completed block build states its kept entries");
+        assertEquals(rows.length,kept.length,name+": one mask entry per declared entry");
+        return new Build(offsets,rows,entries,kept.clone());
+    }
+
+    /**
+     * S1 F2 on a chain of plain connections between vessels, where an end carries its state to the other end only as the
+     * flow's donor: the mask keeps the upstream end's columns' entries in the downstream end's inflow rows, and not the
+     * downstream end's columns' entries in the upstream end's rows; with every flow's sign reversed in the point, each
+     * such entry's mark turns over, and every other entry (a node's own block, a connection's rows, a connection's
+     * columns) is kept in both.
+     */
+    @Test void theMaskKeepsTheUpstreamEndsEntriesAndTurnsWithTheFlow() {
+        var view=fixtures.model.on(fixtures.list(false),false);var graph=fixtures.mixtureChain(view,false,false,false);
+        var solver=new PassiveStepSolver(view);solver.solve(graph,.05,()->{});
+        var equations=solver.acceptedEquations();double[] x=solver.acceptedPoint();
+        assertNotNull(equations,"no solve was accepted");
+        int[] rowNode=rowNodes(equations);
+        var forward=build(equations,x,"dry chain");
+        double[] reversed=x.clone();
+        for(int edge=0;edge<graph.pipes().size();edge++)reversed[equations.edgeOffset+edge]=-x[equations.edgeOffset+edge];
+        var backward=build(equations,reversed,"dry chain, every flow reversed");
+        int upstream=0,downstream=0,others=0;
+        for(int column=0;column<equations.size();column++)for(int entry=forward.offsets()[column];entry<forward.offsets()[column+1];entry++) {
+            int row=forward.rows()[entry],node=column<equations.edgeOffset?rowNode[column]:-1,receiver=rowNode[row];
+            if(node<0||receiver<0||receiver==node) {
+                assertTrue(forward.kept()[entry]&&backward.kept()[entry],"column "+column+" row "+row+": a recomputed entry outside every other node's rows is kept");
+                others++;continue;
+            }
+            int edge=connection(equations,node,receiver);double q=x[equations.edgeOffset+edge];
+            assertTrue(q!=0,"connection "+edge+" carries a flow");
+            boolean donor=node==(q>0?equations.graph.pipes().get(edge).first():equations.graph.pipes().get(edge).second());
+            assertEquals(donor,forward.kept()[entry],"column "+column+" (node "+node+") in row "+row+" (node "+receiver+"), "+(donor?"upstream":"downstream")+" of it");
+            assertEquals(!donor,backward.kept()[entry],"column "+column+" in row "+row+" with the flow reversed");
+            if(donor)upstream++;else downstream++;
+        }
+        System.out.printf(Locale.ROOT,"KEPT_DIRECTION dry chain: upstream entries %d, downstream entries %d, own and connection entries %d%n",upstream,downstream,others);
+        assertTrue(upstream>0&&downstream>0,"the chain has entries across its connections in both directions");
+    }
+    /** The one connection between {@code a} and {@code b} (a chain has exactly one). */
+    private static int connection(StepEquations equations,int a,int b) {
+        var pipes=equations.graph.pipes();int found=-1;
+        for(int edge=0;edge<pipes.size();edge++){var pipe=pipes.get(edge);if(pipe.first()==a&&pipe.second()==b||pipe.first()==b&&pipe.second()==a){assertEquals(-1,found,"one connection");found=edge;}}
+        assertTrue(found>=0,"nodes "+a+" and "+b+" are connected");
+        return found;
     }
     /** The node each row belongs to, -1 for a connection's row. */
     private static int[] rowNodes(StepEquations equations) {
