@@ -94,4 +94,4 @@ The form calls the direction selector Valve location, shows it only for level/pr
 
 The DCS is a two-block console (`DcsBlock`, `DcsGeometry`), one lower-half panel identity/menu/socket. Placement and removal treat both halves together; a legacy one-block console waits for room without moving saved identity or endpoints. The controller's, the shared line commands' and the tool settings' packets are on `NetworkProtocol.VERSION` ([FORMATS.md](../FORMATS.md#wire-protocols)). Screens preserve the player's GUI scale and scroll/page within their viewport. Hover shows sensor block coordinates and attached EQ identity, with no dimension identifier.
 
-**Snapshot:** `44cad3da1`, 2026-11-12 (the last commit this chapter was checked against). Earlier snapshots and batch notes: [HISTORY.md](HISTORY.md).
+**Snapshot:** `05c02394f`, 2026-11-16 (the last commit this chapter was checked against). Earlier snapshots and batch notes: [HISTORY.md](HISTORY.md).

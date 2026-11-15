@@ -8,6 +8,7 @@ Up: [code guide](README.md)
 - A cube's index, its spread, its decay or the ledger looks wrong; `/icheme pollution` answers oddly.
 - A player or mob gets no effect or the wrong one; a cloud does not ignite, a blast is too strong, a chain does not follow.
 - The handheld meter or the fixed monitor reads wrong; a breached vessel will not repair.
+- The FTB Chunks map shows no pollution squares, or the wrong ones.
 - A log line starts with `pollution status=` or `pollution_store status=`.
 
 ## In one paragraph
@@ -31,6 +32,7 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
 | `ExplosionLaw` | `flammable` (index ≥ 1), `burntIndex` (at most 2), `energy`, `tntKilograms`, `power`, `strengthAt(power, distance)`, `reach`. |
 | `Exposure` | Levels at 0.1, 0.3, 1 and 3; the effects and damage of each kind. |
 | `Reading` | The meter's words and numbers. |
+| `MapColumns` | The map overlay's summary: per chunk column the largest index of each kind, one byte each (steps of 0.02, 255 = 5.1 or more); the 32-chunk radius, the cap of 4096 columns (nearest first), the square's colour and alpha. |
 | **Runtime (`runtime/pollution/`)** | |
 | `PollutionService` | One per server, server thread. `tick` (pass every 100 ticks, effects every 20, ignition every 10, blasts every tick), `release`, `burn`, `index`, `field`, `cell`. Cells are read with `getChunkNow` only. |
 | `PollutionEngine` | One dimension: installed field, ledger, pending releases, the pass in flight (`begin`, `complete`, `failed`), `burn`. |
@@ -41,11 +43,15 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
 | `BurstPipes` | A one-block device a blast destroys: the mark, the release, one sound per cube and tick. |
 | `Breaches` | Constructed equipment in a blast: a `Detonate` listener, one breach per structure. |
 | `PollutionMeters`, `MonitorSignals` | The handheld meter's server side; the fixed monitor's lamp and alarm levels. |
+| `PollutionMaps` | The map overlay's server side: subscriptions by player, one answer on request and one per pass, access by `pollution.mapOverlay`. |
 | **Hooks elsewhere** | |
 | `runtime/fluid/Releases` | On `ShaftTrains.booked`: turns what an island let out into releases. |
 | `FluidWorldAuthority` | `releasePollution` (the sink), `flames` (the plant's own ignition sources), `releaseContents` (a burst device), `breach`, `repair`. |
 | `ProcessSolveJobs.PollutionCommand` | The pass as the fourth job family ([runtime-engine.md](runtime-engine.md)). |
 | `world/item/PollutionMeterItem`, `world/level/block/PollutionMonitorBlock` | The meter; the monitor, a data host `AT-nnnn` ([wired-control-power.md](wired-control-power.md)). |
+| `network/PollutionMapNetwork` | `Request(watching)` and `Answer(dimension, denied, columns, values)`. |
+| `client/pollution/PollutionMapClient`, `PollutionMapStore` | Finds the map integration once; asks while the map is open; holds the last answer. |
+| `client/pollution/ftbchunks/FtbChunksOverlay`, `ColumnIcon` | The only classes that name FTB Chunks, FTB Library or Architectury types. |
 
 ## Main flow
 
@@ -77,16 +83,26 @@ Not sources: the blanketing vent, a still pot, a relief run, a device a player b
 - A one-block fluid device breaks as an ordinary block (resistance 3.5) and releases what it holds.
 - Constructed equipment loses no block. A blast of strength ≥ 2 at one of its cells (`strengthAt`) sets `FluidDeviceSpec.breached` on its closed vessels: the graph sees them open (`vented()`), through the registry's respecify edit, so they keep their contents and then vent and spill by the open-vessel law. A machine with a health record fails. One repair kit clears a breach. Not breached: still pots, kettle shells, members of a running column.
 
+## The map overlay (FTB Chunks, optional)
+
+- FTB Chunks, FTB Library and Architectury are compile-only dependencies. `PollutionMapClient` reaches `FtbChunksOverlay.install()` only when the mod `ftbchunks` is loaded, inside a `LinkageError | RuntimeException` guard. A failure in any FTB call turns the overlay off for the session with one warning (`pollution status=MAP_OVERLAY_OFF`).
+- The client sends `Request(true)` when FTB's large map opens and `Request(false)` when it closes. The server answers at once (at most once a second per player) and then every 100 ticks while the subscription lasts. A subscription ends at close, logout, a dimension change or server stop. With no subscriber the server does one map check per tick.
+- An answer is a read of the installed field and the cached cells. It holds the columns within 32 chunks of the player whose largest index is at least 0.1, at most 4096, 12 bytes each.
+- `pollution.mapOverlay`: `METER` (default; the player carries a pollution meter anywhere in the inventory), `ALL`, `OFF`. A player without access gets a refused answer and the client shows nothing.
+- FTB gathers the large map's icons when its panel builds (at opening, at a dimension switch, on `LargeMapScreen.refreshIconsIfOpen`), not each frame. Each column is one `ColumnIcon` that reads its colour from the store when it draws; a changed set of columns asks FTB for a refresh. The square is one chunk, drawn below FTB's own icons, coloured by the worst kind, with a tooltip of the four values.
+- There is no minimap line: the store is empty while the large map is closed.
+
 ## Formats
 
 - `PollutionStore#SCHEMA` 1: state the engine cannot compute again, so it is saved, but under its own rule: a damaged store is copied aside (`icheme_pollution.damaged-<n>.dat`) or, when that fails, erased, and the dimension starts clean. A damaged cube is dropped alone. Corpus: `src/test/resources/compat/pollution/`.
 - `FluidDeviceSpec.breached` is a fluid fact (schema 26, [runtime-saves.md](runtime-saves.md)).
 - The monitor adds no control fact: its socket is an ordinary sensor port; `Sensor.Kind.ANALYSER` and `Sensor.Unit.INDEX` are appended and saved by name.
+- The map payloads moved the wire protocol to `icheme-2` (`NetworkProtocol#VERSION`); they add no saved format.
 - Rows: [FORMATS.md](../FORMATS.md).
 
 ## Config (`pollution`)
 
-`enabled`, `halfLifeOpenMinutes`, `halfLifeEnclosedMinutes`, `cutoff`, `maxActiveCubes`, `effects`, `particles`, `explosions`, `blockDamage`, `explosionPowerCap`, `equipmentBreach`.
+`enabled`, `halfLifeOpenMinutes`, `halfLifeEnclosedMinutes`, `cutoff`, `maxActiveCubes`, `effects`, `particles`, `explosions`, `blockDamage`, `explosionPowerCap`, `equipmentBreach`, `mapOverlay`.
 
 ## Tests and gates
 
@@ -101,6 +117,7 @@ Not sources: the blanketing vent, a still pot, a relief run, a device a player b
 | Breach and repair, schema 26 | `VesselBreachTest`, `FluidFactsCompatTest`, `MachineHealthTest` |
 | Levels, readings, monitor signals, data files | `ExposureTest`, `ReadingTest`, `MonitorSignalsTest`, `PollutionDataTest` |
 | The monitor on a bus | `ControlSystemTest` |
+| The map summary, its payloads, access | `MapColumnsTest`, `PollutionMapNetworkCodecTest`, `PollutionMapsTest` |
 | In a server | `Pollution*GameTests` in `src/fluidGameTest` (batches `pollution…`) |
 
 ## Traps
@@ -112,3 +129,7 @@ Not sources: the blanketing vent, a still pot, a relief run, a device a player b
 - A layout refresh that rebuilds a spec must carry `breached` (`StructureRegistration`), or a reload repairs the vessel.
 - Pollution code never loads a chunk and never throws to its caller. A new entry point gets its own guard and log line.
 - `Math.log10` and its like are banned here as everywhere (`DeterministicMathSourceTest`).
+- No class outside `client/pollution/ftbchunks/` may name an FTB or Architectury type: the mod must load without FTB Chunks. No test or GameTest loads those two classes; only a dev client with FTB Chunks proves the overlay's look.
+- `LargeMapScreen` and `refreshIconsIfOpen` are FTB internals, not its API. A new FTB version that moves them turns the overlay off, not the game.
+
+**Snapshot:** `05c02394f`, 2026-11-16.

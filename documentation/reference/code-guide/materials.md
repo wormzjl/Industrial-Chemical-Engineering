@@ -267,4 +267,4 @@ Helpers: `MaterialTestBasis`, `Cdu17TestCatalog`, `SubRecords`, and the catalog 
 - Ethanol's activity fits cost about four times water's, because a pair the group model gives one liquid also scans
   `SCAN_POINTS` points per trial (`DerivedPairs.Context.shape`, `oneLiquid`); a list without ethanol pays nothing.
 
-**Snapshot:** `d6f721b94`, 2026-11-15.
+**Snapshot:** `05c02394f`, 2026-11-16.

@@ -128,4 +128,4 @@ The coordinator's state is saved through the checkpoint ([runtime-saves.md](runt
 - **A certified island's view is a preview**, not a materialisation: no clock, booking, metrics, replay listener or payload moves, so bookings and the heat in transit are the same bits with or without viewers.
 - **`IslandSets` positions are not compound ids** across islands; map by id.
 
-**Snapshot:** `9d6d0d82e`, 2026-11-15.
+**Snapshot:** `05c02394f`, 2026-11-16.
