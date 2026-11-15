@@ -174,7 +174,7 @@ For equipment corrosion (later) the service gives `corrosive(dimension, pos)`; n
 
 ## 8. Saves
 
-- New store per dimension, `icheme_pollution` (`level.getDataStorage()`): **facts**, schema 1. Cubes (key, 4 floats), the ledger totals, the pending buffer. φ, ventilation and the blast queue are state and are not saved.
+- One store for every dimension, `icheme_pollution`, on the overworld's data storage as the other stores (as built in WP3; the first draft said one per dimension): **facts**, schema 1. Cubes (key, 4 floats), the ledger totals, the pending buffer. φ, ventilation and the blast queue are state and are not saved.
 - **Crash-proof under world corruption** (owner, 2026-11-15: "also needs to be crash-proof when world corruption happens"). Pollution never refuses a world and never stops the server. This differs from the fluid facts' rule (a damaged facts section refuses the world), on the owner's word, for this store only:
   - *A damaged or newer store.* The load catches every failure (a truncated or unreadable NBT, a wrong type, a newer schema). It copies the file to `icheme_pollution.damaged-<n>.dat` beside it, untouched, logs one line `pollution_store status=SET_ASIDE dimension=… detail=…`, and starts that dimension with an empty field. The load never throws into `computeIfAbsent`.
   - *A damaged cube.* Each cube validates alone: a key outside the dimension's height, a non-finite or negative value, or a value above `MAXIMUM_INDEX` (1e6) drops that cube and keeps the others; the count is in the log line and in the ledger's `dissipated`. Ledger totals that do not validate are rebuilt from the cubes that were kept.
