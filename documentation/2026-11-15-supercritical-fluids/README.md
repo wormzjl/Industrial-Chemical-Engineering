@@ -1,6 +1,6 @@
 # Supercritical fluids
 
-Status: **In progress** since 2026-11-15 (S0, S1, S3, S2a and S2b done; S2c done but two of its three GameTests, which wait on fixes). Branch `claude/supercritical-fluid-support-d0ffa4`, base `e9edc974b` (main 0.31.0).
+Status: **In progress** since 2026-11-15 (S0, S1, S3, S2a and S2b done; S2c done). Branch `claude/supercritical-fluid-support-d0ffa4`, base `e9edc974b` (main 0.31.0).
 
 Purpose: dense and supercritical fluids as ordinary states of the fluid network, the machines, the heat units and the
 simulator: continuous properties, no label-driven jumps, no critical-band hold.
@@ -63,7 +63,7 @@ simulator: continuous properties, no label-driven jumps, no critical-band hold.
   4. S2b's intermediate commits were not compiled one by one; the final tree is the tested one.
 
 - 2026-11-15: brief S2c written (`tmp/supercritical-briefs/BRIEFS.md`; plan, "S2c as briefed").
-- 2026-11-15: S2c (sub-thread, O2 A for mixtures too): the slot by reduced density for one dense fluid (`ac1808ee2`); the dense pump suction test and the ejector law above water's Tc (`af2590e6a`); three GameTests (`e5b554968`), run once (`s2c-gt1`): 98 existing passed, the 3 new failed on test premises and a layout (no hold, ledgers closed), rebuilt (`22be39e01`) and run once more (`s2c-gt2`): the two-nozzle test passed, the letdown and the loop failed on two block placements in the tests, the existing blanketed-drum test failed (99.57 % against 99 %, passed in run 1 on the same production code); fixes await a go-ahead. [S2C_NETWORK_REVIEW.md](S2C_NETWORK_REVIEW.md).
+- 2026-11-15: S2c (sub-thread, O2 A for mixtures too): the slot by reduced density for one dense fluid (`ac1808ee2`); the dense pump suction test and the ejector law above water's Tc (`af2590e6a`); three GameTests (`e5b554968`), run once (`s2c-gt1`): 98 existing passed, the 3 new failed on test premises and a layout (no hold, ledgers closed), rebuilt (`22be39e01`) and run once more (`s2c-gt2`): the two-nozzle test passed, the letdown and the loop failed on two block placements in the tests, the existing blanketed-drum test failed (99.57 % against 99 %, passed in run 1 on the same production code); then made runnable alone (`-PfluidGameTestNamespaces=icheme_dense_test`), fixed and made to remove what they place on every exit: `s2c-dense2` passed all 3 (the loop crosses Tc and reduced density 1 each circuit). [S2C_NETWORK_REVIEW.md](S2C_NETWORK_REVIEW.md).
 
 ## Documents
 

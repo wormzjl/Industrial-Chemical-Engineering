@@ -22,7 +22,10 @@ briefed"). Sub-thread work, 2026-11-15. Follows [S2_NETWORK_REVIEW.md](S2_NETWOR
   failed on their own premises and layout (no hold, ledgers closed). Rebuilt (`22be39e01`), run `s2c-gt2`: the
   two-nozzle test passed (same fluid at both nozzles, head exact). The letdown and the loop failed on two block
   placements in the tests, which registered no valve install and no pump. One existing test, the blanketed drum,
-  failed at 99.57 % against 99 %; it passed in run 1 on the same production code. Fixes await a go-ahead.
+  failed at 99.57 % against 99 %; it passed in run 1 on the same production code (not settled; the letdown left
+  nothing registered). The dense tests now run alone (`-PfluidGameTestNamespaces=icheme_dense_test`) and remove what
+  they place on every exit. Fixed, `s2c-dense2`: all 3 passed. The loop crosses Tc and δ 1 every circuit: 342.8 K, δ
+  0.68 at the heater's outlet; 302.4 K, δ 1.79 at the cooler's.
 - Campaigns (section 7): of the cold campaign's draws, S2b's viscosity reaches only its CO2-rich gas. The S2b review's
   "nitrogen sources at 126 to 170 K" is wrong: that harness has no cold nitrogen.
 - Owner line: the engine still labels a one-root mixture by PIP (option B, the engine lane's work, not done).
@@ -238,8 +241,70 @@ laws and the slot rule. The 3 new tests failed on their own premises and layout,
   test had been removed 25 s before, and its finish waited until nothing it placed was registered. The run's leftovers
   are in `run/fluid-gametest-s2c-gt2/world`. A replay is not allowed in this task.
 
-Fixes awaiting a go-ahead, with one more run: the letdown valve and the loop pump, both placements as above. The
-blanketed drum stays an open item for that run or the final lane.
+**Runnable alone** (main thread's decision after run 2). `build.gradle`'s `fluidGameTestServer` sets
+`neoforge.enabledGameTestNamespaces` from `-PfluidGameTestNamespaces`. The default, `icheme_fluid_test,icheme_dense_test`,
+is the lane's, so all 101 tests still run there. The value is checked against `[a-z0-9_,]+`. NeoForge 21.1.219 splits the
+property on commas (`GameTestHooks.getEnabledNamespaces`). It enables a test by its template's namespace
+(`GameTestRegistry.register`, and its filter on the structure name). So `DenseFluidGameTests` moved to
+`@GameTestHolder("icheme_dense_test")` with its own `empty` template, a copy of the fluid namespace's 109-byte
+`empty.nbt`. A template id from the fluid namespace would have put the tests back in that namespace.
+
+**Teardown on failure: what run 2's evidence supports.**
+
+- The harness removes nothing a failed test placed. `GameTestInfo.fail` records the error and stops the test. After a
+  timeout, a sequence's remaining steps never run. Only a test that succeeds has the entities in its structure bounds
+  cleared. A plant reaching beyond its structure is removed only by the test's own last steps.
+- Run 2's letdown failed in a step that caught its exception and recorded it, so the sequence went on to its removal.
+  The failure was raised only after `Plant.removed()` held: no device of the plant standing or registered, and no
+  registration at all inside the plant's box, which reached the drum test's later position. Its charge generators and
+  pipes had gone when the charges were done; the 20 MPa source and the two dead-end pipes were in the plant's device
+  list.
+- So the evidence does not support the hypothesis that the letdown left something the drum's island could join or
+  receive from. The drum's 130 mol setup residual is not settled. Nothing else in run 2's log names a neighbour.
+- A path that could leave devices did exist in the old tests: an exception other than an assertion inside a wait, or a
+  harness timeout, skips the removal. Each of the three tests now removes what it places on every exit, following
+  `LevelLoopGameTests`:
+  - every step records its exception as the test's failure;
+  - every wait records a failure once the test's own deadline passes (the timeout less 4,000 ticks);
+  - the failure is raised only after the plant is gone;
+  - a charge's generator and pipe count as the plant's.
+
+**Fixes.**
+
+- Letdown: the valve is laid as a pipe, then given its state and installed.
+- Loop: the pump goes onto the laid pipe as `HeatExchangerReviewWorld.pump` installs it (`installPipeMover`, then the
+  geometry refresh and the power).
+
+**Runs of the dense namespace alone** (`-PfluidGameTestNamespaces=icheme_dense_test`, a fresh run id each):
+
+- `s2c-dense1`: 3 tests, 2 passed. The loop circulated and crossed on both sides, but failed the test's own margin: the
+  coldest node at 302.49 K, which was Tc − 1.7 K against the Tc − 2 K the test asked. That margin had no physical basis.
+  The check now uses the engine's own traits: the coldest node must be below Tc and not dense, in the liquid slot.
+- `s2c-dense2`: all 3 passed.
+
+| Test (`s2c-dense2`) | Ledger (components / energy) | What it showed |
+|---|---|---|
+| N2 letdown, 20 → 0.5 MPa | 3 intervals, 3.1e-16 / 5.7e-16, no hold | start 403.83 K (the charge's adiabatic fill); source 403.8 → 389.3 → 375.6 → 350.3 → 325.2 K, never rising; end 9.4299 MPa in both; ideal-gas isentropic end 325.8 K (CoolProp's real gas: 326.9 K); receiver 501.45 K, its energy closing to 5.7e-16 |
+| CO2 two nozzles | 7 intervals, 2.2e-16 / 3.1e-16, no hold | as in run 2: tank 309.49 K 11.598 MPa δ 1.668, liquid slot; both outlets draw the oil row; equal enthalpy and composition; bottom head 6,673.15 Pa = g × 680.47 kg/m³ × 1 m, the top 0 |
+| closed CO2 loop | 30 intervals after the charge, 7.4e-16 / 3.0e-16, no hold, amount drift 3.6e-16 | below |
+
+The loop over its last 10 intervals:
+
+- Heater outlet (hottest node): 342.8 K at 10.72 MPa, δ 0.679, vapour slot. Cooler outlet (coldest): 302.4 K at
+  10.64 MPa, δ 1.794, liquid slot.
+- Every node is one fluid above Pc. The loop was charged at 9.0 MPa and rose to about 10.7 MPa once closed, as its
+  hot leg finished warming.
+- 4.99 kg/s from the pump (`MOVER_LAW`), 736 kg in the loop: one circuit takes 147 s. The 10 intervals cover 187 s, about
+  1.3 circuits.
+- 2 nodes stand in the vapour slot and 4 in the liquid slot in every interval, with 0 slot changes between intervals.
+  The fluid crosses Tc and δ 1 as it moves through the heater and the cooler, from one node to the next. No node flips
+  its slot.
+- Step counters per interval: 3 accepted substeps and none rejected. Two intervals advanced 28.8 and 43.2 s with no
+  substep, which is the certificate's advance.
+- The cooler's outlet stands 1.8 K under Tc against 285 K water. The heat capacity peak near the pseudo-critical line
+  (about 318 K at 10.7 MPa) takes most of the cooler's duty.
+
+The blanketed-drum test was not rerun (the final lane runs it).
 
 ## 7. Campaign distributions (read, not run)
 
@@ -259,8 +324,7 @@ at the drawn pressures. The cold harness has no pure-nitrogen generator: its nit
 ## 8. Not done, and open items
 
 - Not done:
-  - the letdown and loop placement fixes and their run (section 6); the blanketed drum's failure in run 2, not
-    settled;
+  - the blanketed drum's failure in run 2: not settled, not rerun (the final lane runs it);
   - no campaign, lane or whole suite.
 - For the owner:
   - The engine labels a one-root mixture by PIP (option B: label by density in the engine, the engine lane's work, not
