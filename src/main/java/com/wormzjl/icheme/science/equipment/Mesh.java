@@ -517,25 +517,6 @@ public final class Mesh {
         frustum(f, r, r, z0, z1, n, material);
     }
 
-    /**
-     * The side of a prism of radius {@code r} from {@code z0} to {@code z1} over the angles {@code from} to {@code to} only
-     * (a vault: a steam turbine's half-round hood top on its box), in as many of {@code n} facets as the arc spans, lit as
-     * the round body; its edges at {@code from} and {@code to} are left open for the part it closes.
-     */
-    void vault(Frame f, double r, double z0, double z1, int n, double from, double to, Material material) {
-        n = detail.sides(n);
-        int count = Math.max(1, (int) Math.round(n * (to - from) / (2 * Math.PI)));
-        double chord = 2 * r * DeterministicMath.sin((to - from) / count / 2);
-        Shading shading = new Radial(f.origin, f.axis);
-        var along = new Uv(f.along(z0), f.axis, 0, material.period());
-        for (int i = 0; i < count; i++) {
-            double a0 = from + (to - from) * i / count, a1 = from + (to - from) * (i + 1) / count;
-            var w0 = f.at(a0, r, z0);
-            var around = new Uv(w0, neg(unit(sub(f.at(a1, r, z0), w0))), -i * chord, material.period());
-            add(List.of(w0, f.at(a1, r, z0), f.at(a1, r, z1), f.at(a0, r, z1)), f.along((z0 + z1) / 2), shading, material, around, along);
-        }
-    }
-
     /** The side of a frustum from radius {@code r0} at {@code z0} to {@code r1} at {@code z1}, lit as a cone. */
     void frustum(Frame f, double r0, double r1, double z0, double z1, int n, Material material) {
         n = detail.sides(n);

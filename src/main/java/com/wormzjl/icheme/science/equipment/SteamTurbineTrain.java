@@ -293,6 +293,26 @@ final class SteamTurbineTrain {
     }
 
     /**
+     * The side of a prism of radius {@code r} on {@code f} from {@code z0} to {@code z1} over the angles {@code from} to
+     * {@code to} only (a vault: an LP hood's or a bearing cap's half-round top on its box), in as many of {@code n} facets
+     * (at the mesh's detail) as the arc spans, lit as the round body; its edges at {@code from} and {@code to} left open
+     * for the part it closes. Here, not in {@link Mesh}, which another thread of the batch owns.
+     */
+    static void vault(Mesh m, Frame f, double r, double z0, double z1, int n, double from, double to, Material material) {
+        n = m.detail().sides(n);
+        int count = Math.max(1, (int) Math.round(n * (to - from) / (2 * Math.PI)));
+        double chord = 2 * r * DeterministicMath.sin((to - from) / count / 2);
+        var shading = new Mesh.Radial(f.origin(), f.axis());
+        var along = new Mesh.Uv(f.along(z0), f.axis(), 0, material.period());
+        for (int i = 0; i < count; i++) {
+            double a0 = from + (to - from) * i / count, a1 = from + (to - from) * (i + 1) / count;
+            var w0 = f.at(a0, r, z0);
+            var around = new Mesh.Uv(w0, Mesh.neg(Mesh.unit(Mesh.sub(f.at(a1, r, z0), w0))), -i * chord, material.period());
+            m.add(List.of(w0, f.at(a1, r, z0), f.at(a1, r, z1), f.at(a0, r, z1)), f.along((z0 + z1) / 2), shading, material, around, along);
+        }
+    }
+
+    /**
      * An LP casing's exhaust hood along z at (a, shaft) from {@code z1} to {@code z2} (batch 2026-11-15-equipment-visual-design):
      * a box {@code half} either side from {@code base} to the shaft line under a half-round top, its top closed at both
      * ends, split along the shaft line by its joint flange (0.04 Dc proud, as deep as the casing's split flange); a double
@@ -303,7 +323,7 @@ final class SteamTurbineTrain {
         var axis = Frame.of(new double[]{a, shaft, 0}, 2, 1);
         int n = ProcessUnit.sides(2 * half);
         u.box(new double[]{a - half, base, z1}, new double[]{a + half, shaft, z2}, Material.MACHINE, true);
-        m.vault(axis, half, z1, z2, n, 0, Math.PI, Material.MACHINE);
+        vault(m, axis, half, z1, z2, n, 0, Math.PI, Material.MACHINE);
         u.solids.add(ProcessUnit.Solid.rod(new double[]{a, shaft, 0}, 2, z1, z2, half, 0));
         int count = Math.max(1, (int) Math.round(n / 2.0));
         for (double z : new double[]{z1, z2}) {

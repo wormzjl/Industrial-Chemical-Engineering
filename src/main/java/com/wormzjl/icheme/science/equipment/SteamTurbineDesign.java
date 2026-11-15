@@ -219,7 +219,7 @@ final class SteamTurbineDesign extends UnitDesign {
         m.box(new double[]{a - cap, base + foot, p0}, new double[]{a + cap, shaft, p1}, Mesh.ALL_FACES & ~12, Material.MACHINE);
         var axis = Frame.of(new double[]{a, shaft, 0}, 2, 1);
         int n = ProcessUnit.sides(2 * cap), count = Math.max(1, (int) Math.round(n / 2.0));
-        m.vault(axis, cap, p0, p1, n, 0, Math.PI, Material.MACHINE);
+        SteamTurbineTrain.vault(m, axis, cap, p0, p1, n, 0, Math.PI, Material.MACHINE);
         for (double z : new double[]{p0, p1}) {
             var end = new java.util.ArrayList<double[]>();
             for (int i = 0; i <= count; i++) end.add(axis.at(Math.PI * i / count, cap, z));
