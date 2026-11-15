@@ -118,14 +118,17 @@ final class StepEquations implements SparseNewton.Equations {
      * Takes over the bundles of the solver's previous pass (P-18): a bundle holds one temperature's terms and no node's
      * state, so any slot serves any node, refilled at its first decode. The previous pass drops its decode cache and
      * its probe bundles, so it decodes anew with bundles of its own if it is evaluated again (the accepted point's
-     * equations, read after the solve). Each solver runs one pass at a time on one thread.
+     * equations, read after the solve). Each solver runs one pass at a time on one thread. The accepted pass of the
+     * solver's last step holds its bundles retired ({@link #releaseDecodeCache}), so the step's first pass refills each
+     * at its first decode as a new one, and builds no workspace where a bundle is kept (batch 2026-11-15-fluid-step-cost, S2).
      */
     private void adoptPrepared() {
         var previous=solver.preparedPass;solver.preparedPass=this;
         if(previous==null||previous==this)return;
         System.arraycopy(previous.cachedPrepared,0,cachedPrepared,0,Math.min(cachedPrepared.length,previous.cachedPrepared.length));
         System.arraycopy(previous.probePrepared,0,probePrepared,0,Math.min(probePrepared.length,previous.probePrepared.length));
-        previous.releaseDecodeCache();
+        Arrays.fill(previous.cachedStates,null);Arrays.fill(previous.cachedTransport,null);
+        Arrays.fill(previous.cachedPrepared,null);Arrays.fill(previous.probePrepared,null);
     }
     /** Whether this island carries the three aggregate solid moment unknowns on every node;
      * the whole-island predicate {@link PhaseLayout} is built with, evaluated once. */
@@ -1004,8 +1007,19 @@ final class StepEquations implements SparseNewton.Equations {
         for(var state:cachedStates)states.add(state);
         return states;
     }
-    /** Drops the per-node decode cache; the next decode rebuilds every node exactly. */
-    void releaseDecodeCache(){Arrays.fill(cachedStates,null);Arrays.fill(cachedTransport,null);Arrays.fill(cachedPrepared,null);Arrays.fill(probePrepared,null);}
+    /**
+     * Drops the per-node decode cache; the next decode rebuilds every node exactly. The node bundles stay, retired
+     * ({@link FluidThermodynamics.Prepared#retire}: each keeps its kernel workspace and nothing it derived), for the
+     * solver's next pass to take over ({@link #adoptPrepared}) or for this pass's next decode: either refills each at its
+     * first use as a new bundle, so no value and no preparation count changes, and no workspace is built again each step
+     * (batch 2026-11-15-fluid-step-cost, S2; before, review 8.7 (c) E2 dropped them, about two kernel workspaces a laid-out
+     * node a step). The retained last solve keeps those workspaces between steps.
+     */
+    void releaseDecodeCache() {
+        Arrays.fill(cachedStates,null);Arrays.fill(cachedTransport,null);
+        for(var bundle:cachedPrepared)if(bundle!=null)bundle.retire();
+        for(var bundle:probePrepared)if(bundle!=null)bundle.retire();
+    }
     /** Brings the per-node decode cache up to {@code x}; the residual reads the arrays directly. */
     private void decode(double[] x) {
         if(hasWeirs)for(int edge=0;edge<weirOffsets.length;edge++)for(int end=0;end<2;end++)if(weirOffsets[edge][end]>=0)weirValues[edge][end]=x[weirOffsets[edge][end]];
@@ -1022,7 +1036,10 @@ final class StepEquations implements SparseNewton.Equations {
             // A trial a typed thermodynamic hold refused names the node it was refused at; see ThermoHold.
             try{state=layout[i]==null?graph.reservoirs().get(i).state():layout[i].decode(x,offsets[i],cachedPrepared[i]);}
             catch(com.wormzjl.icheme.science.fluid.thermo.ThermoHold hold){throw hold.at(graph.reservoirs().get(i).id());}
-            var transport=transport(i,state,cachedPrepared[i]);
+            // A node this pass does not lay out keeps any bundle its slot was handed, unrefilled; one a past step retired is
+            // not handed on (S2): its transport reads no bundle, as when the accepted pass dropped them.
+            var bundle=cachedPrepared[i];
+            var transport=transport(i,state,layout[i]==null&&bundle!=null&&bundle.retired()?null:bundle);
             cachedStates[i]=state;cachedTransport[i]=transport;
             if(layout[i]!=null)System.arraycopy(x,offsets[i],cachedVariables[i],0,layout[i].size());
         }

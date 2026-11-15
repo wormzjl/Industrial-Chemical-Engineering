@@ -1090,12 +1090,13 @@ public final class FluidThermodynamics {
     /**
      * {@link #prepare(double)} into {@code reuse}, one of this model's bundles (null: a new one), refilled in place when its
      * temperature differs (finding P-18, batch 2026-11-13-codebase-review): its Peng-Robinson workspace is prepared again
-     * at the new temperature on the whole list, as a new one is, and gives the same bits. The caller must read nothing it
-     * derived from {@code reuse} at its previous temperature after this call.
+     * at the new temperature on the whole list, as a new one is, and gives the same bits. A {@link Prepared#retire retired}
+     * bundle is refilled at any temperature, its own included. The caller must read nothing it derived from {@code reuse}
+     * at its previous temperature after this call.
      */
     public Prepared prepare(double temperature,Prepared reuse) {
         if(reuse==null)return prepare(temperature);
-        if(own(reuse).temperature==temperature)return reuse;
+        if(own(reuse).temperature==temperature&&!reuse.retired)return reuse;
         reuse.refill(temperature);return reuse;
     }
 
@@ -1135,8 +1136,24 @@ public final class FluidThermodynamics {
         private void refill(double temperature) {
             if(!Double.isFinite(temperature)||temperature<=0)throw new IllegalArgumentException("Invalid prepared temperature");
             if(terms!=null)kept=terms;
-            terms=null;transport=null;carried=null;this.temperature=temperature;
+            terms=null;transport=null;carried=null;this.temperature=temperature;retired=false;
         }
+        /** Set by {@link #retire}: the next {@link FluidThermodynamics#prepare(double, Prepared)} refills this bundle even at
+         * its own temperature. */
+        private boolean retired;
+        /**
+         * Keeps this bundle's Peng-Robinson workspace for a later owner and nothing it derived (batch
+         * 2026-11-15-fluid-step-cost, S2): its members are dropped as a refill drops them, and the next
+         * {@link FluidThermodynamics#prepare(double, Prepared)} on it refills it whatever the temperature, so that use reads
+         * a new bundle's bits and makes a new bundle's preparations ({@code temperatureTermsCalls}), with no new workspace.
+         * Nothing may read the bundle between this call and that refill.
+         */
+        public void retire() {
+            if(terms!=null)kept=terms;
+            terms=null;transport=null;carried=null;retired=true;
+        }
+        /** Whether this bundle is {@link #retire retired} and not refilled since. */
+        public boolean retired(){return retired;}
         public double temperature() { return temperature; }
         /**
          * The compounds this bundle's evaluations carry in the kernel (conserved basis), beside the node's own amounts:
