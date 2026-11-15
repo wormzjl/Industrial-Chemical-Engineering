@@ -16,7 +16,8 @@ The sprites:
 
 - equipment_bolt_face (32 x 32): one hex nut, 1.6 d across its flats, with its stud end, drawn for M20 (d = 20 mm);
   every dimension scales with d, so one sprite serves every nut. The hexagon's corners lie on u (Mesh.disc stretches the
-  sprite across the nut's corner-to-corner width). Replaces the nut prisms (Mesh.bolts, Mesh.nut).
+  sprite across the nut's corner-to-corner width). Replaces the nut prisms below Mesh.SOLID_NUT on an equipment's own
+  joints (Mesh.bolts, Mesh.nut; pipe flanges keep prisms); its mean grey is BOLT_FACE_MEAN.
 - motor_louvre (64 x 64, 1 m): a large motor's or generator's louvred cooler opening, 16 blades a metre, neutral grey for
   the body paint. Replaces the flat black OPENING boxes (ProcessUnit.largeMotor).
 - equipment_cladding, painted_cladding (64 x 64, 2 m): today's aluminium jacketing (VesselTextures.cladding,
@@ -51,8 +52,8 @@ def png(path, pixels, alpha):
                 + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b""))
 
 
-# ---- Today's sprites, ported exactly from tools/custom-equipment-rendering-poc/textures/VesselTextures.java and
-# tools/pump-sprites/PumpSprites.java (the copies in assets match these bit for bit; EquipmentTexturesTest checks the means).
+# ---- Today's sprites, ported exactly from tools/custom-equipment-rendering-poc/textures/VesselTextures.java (the copies in
+# assets matched these bit for bit; EquipmentTexturesTest checks the means).
 
 def jhash(x, y, seed):
     """VesselTextures.hash: Java long arithmetic."""
@@ -89,6 +90,10 @@ def metal(x, y, size, seed, streak, flake):
 
 
 STRAP = 2.5  # mm, the drawn height of a band strap over the jacketing
+# The relief nut's mean grey, baked and flat (owner 2026-11-15, R-W4: "Darken the relief nut?" "yes"): the prism's BOLT
+# sprite reads about 68; 78 keeps the lit edge visible. Low detail uses the same sprite and darkens with it. Before R-W4
+# it kept the old low-detail sprite's mean, 122.6.
+BOLT_FACE_MEAN = 78
 NEUTRAL = 236  # VesselTextures.NEUTRAL, Paint.SPRITE_VALUE
 CLADDING = (196, 199, 201)
 
@@ -118,21 +123,6 @@ def cladding_today(painted):
 
 def colour(base, shade):
     return tuple(clamp(c + shade) for c in base)
-
-
-def bolt_face_today():
-    """PumpSprites.boltFace, the grey value per texel, 0 .. 255."""
-    n, out = 32, []
-    for y in range(n):
-        row = []
-        for x in range(n):
-            px, py = (x + .5 - n / 2) / (n / 2), (y + .5 - n / 2) / (n / 2)
-            r = math.hypot(px, py)
-            v = .64 if r < .18 else .30 if r < .27 else .60 if py < -.2 else .37 if py > .2 else .48
-            g = jround(255 * max(0.0, min(1.0, v)))
-            row.append((g, g, g))
-        out.append(row)
-    return out
 
 
 def mean(pixels):
@@ -226,9 +216,9 @@ def bolt_face():
     shading = relief(height, px, px, False)
     grain = [[(jhash(x, y, 61) - .5) * 6 for x in range(n)] for y in range(n)]
     albedo = [[(100 + grain[y][x],) * 3 for x in range(n)] for y in range(n)]
-    baked = matched(lit(albedo, shading), mean(bolt_face_today()))
+    baked = matched(lit(albedo, shading), (BOLT_FACE_MEAN,) * 3)
     # Flat: the steel's colour without relief, at the baked sprite's mean brightness.
-    flat = matched(albedo, mean(bolt_face_today()))
+    flat = matched(albedo, (BOLT_FACE_MEAN,) * 3)
     return baked, flat, height, shading, parts
 
 

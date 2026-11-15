@@ -1474,7 +1474,7 @@ public final class ShapeRasterizer {
                 if (taper > neckStart) m.prism(f, r, neckStart, taper, sides, Material.PIPE);
                 m.frustum(f, r, hubR, taper, length - t, sides, Material.PIPE);
                 m.annulus(f, hubR, flange, length - t, sides, -1, Material.FLANGE);
-                m.bolts(f, od, hubR, flange, length - t, -1, Material.BOLT);
+                m.flangeBolts(f, od, hubR, flange, length - t, -1, Material.BOLT);
                 m.prism(f, flange, length - t, length, sides, Material.FLANGE);
                 m.annulus(f, 0, flange, length, sides, 1, Material.FLANGE);
                 if (nozzle.riser() > 0) {

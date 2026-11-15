@@ -2994,7 +2994,7 @@ public final class ProcessUnit {
         for (int k = 0; k < count; k++) {
             double t = 2 * Math.PI * (k + .5) / count;
             for (int s = -1; s <= 1; s += 2)
-                mesh.nut(new Frame(f.at(t, circle, station + s * (gap / 2 + tf)), s < 0 ? neg(axis) : axis, f.ref()), nut, 0, d, 6, Material.BOLT);
+                mesh.flangeNut(new Frame(f.at(t, circle, station + s * (gap / 2 + tf)), s < 0 ? neg(axis) : axis, f.ref()), nut, 0, d, 6, Material.BOLT);
         }
     }
 

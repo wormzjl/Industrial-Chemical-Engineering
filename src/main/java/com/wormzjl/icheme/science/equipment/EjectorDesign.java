@@ -58,14 +58,14 @@ final class EjectorDesign extends UnitDesign {
         int n = ProcessUnit.sides(1.2 * s);
         double rc = .6 * s, throat = .175 * s, outlet = .375 * s;
         u.mesh.ring(f, 0, outlet + .05 + .1 * s, -.03, 0, n, 1, Material.FLANGE);
-        u.mesh.bolts(f, 2 * outlet, outlet, outlet + .05 + .1 * s, 0, 1, Material.BOLT);
+        u.mesh.flangeBolts(f, 2 * outlet, outlet, outlet + .05 + .1 * s, 0, 1, Material.BOLT);
         u.mesh.frustum(f, outlet, throat, 0, 3 * s, n, Material.MACHINE);
         u.mesh.prism(f, throat, 3 * s, 3.8 * s, n, Material.MACHINE);
         u.mesh.frustum(f, throat, rc, 3.8 * s, 6 * s, n, Material.MACHINE);
         u.mesh.prism(f, rc, 6 * s, 7.5 * s, n, Material.MACHINE);
         u.mesh.annulus(f, .225 * s, rc, 7.5 * s, n, 1, Material.MACHINE);
         u.mesh.ring(f, .225 * s, .3 * s, 7.5 * s, 7.58 * s, n, 3, Material.FLANGE);
-        u.mesh.bolts(f, .45 * s, .225 * s, .3 * s, 7.58 * s, 1, Material.BOLT);
+        u.mesh.flangeBolts(f, .45 * s, .225 * s, .3 * s, 7.58 * s, 1, Material.BOLT);
         u.mesh.cylinder(f, .225 * s, 7.5 * s, 8.3 * s, n, Material.MACHINE);
         u.solids.add(Solid.rod(new double[]{a, 0, a}, 1, exit, chest, rc, 0));
         u.solids.add(Solid.rod(new double[]{a, 0, a}, 1, chest, top, .225 * s, 0));
