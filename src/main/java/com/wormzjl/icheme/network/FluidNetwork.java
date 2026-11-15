@@ -417,6 +417,8 @@ public final class FluidNetwork {
                     case COMPRESSOR->{if(control instanceof FlowControl.Machine m)control=new FlowControl.Machine(m.law(),m.speed(),controls.power==Power.ON,d.kind()==TopologyCompiler.Kind.PIPE?0:controls.volumeFlow,d.kind()==TopologyCompiler.Kind.PIPE?0:controls.pressure);else if(control instanceof FlowControl.Compressor c&&world.shafts().unitOf(d.id()))control=new FlowControl.Compressor(c.requestedVolumeFlow(),c.maximumPressureRatio(),controls.power==Power.ON,controls.volumeFlow,controls.pressure);else control=new FlowControl.Compressor(controls.volumeFlow,controls.maximumPressureRatio,controls.power==Power.ON);}
                     case VALVE->{
                         if(control instanceof FlowControl.ControlValve valve){
+                            // An automated shutoff valve (batch 2026-11-15-fluid-interfaces, W7) opens and closes by hand or by its loop, never by this edit.
+                            if(valve.onOffValve())throw new IllegalArgumentException("An automated shutoff valve only opens and closes");
                             if(valve.bare())throw new IllegalArgumentException("Lacking components");
                             var source=valve.source();
                             if(source!=FlowControl.ValveSource.PRESSURE){

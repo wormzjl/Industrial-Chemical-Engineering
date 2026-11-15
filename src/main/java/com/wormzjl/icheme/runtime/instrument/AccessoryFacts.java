@@ -24,8 +24,8 @@ final class AccessoryFacts {
     /** Schema 4: optional floating-roof level gauges, retaining schema 3's sensors and speed pickups. Schema 5 (batch
      * 2026-11-11-gas-blanketing): the fitting type {@code BLANKET_VALVE}, a drum's gas blanketing valve, on the mount {@code blanket_valve}. Schema 6 (same batch): the fitting type
      * {@code SAFETY_VALVE}, a pressure safety valve on the mount {@code safety_valve}: a drum's beside its other fitting, or a
-     * pipe's only one. */
-    static final int SCHEMA=6,STATE=1;
+     * pipe's only one. Schema 7 (batch 2026-11-15-fluid-interfaces, W6): the fitting type {@code ORIFICE} (and, W7, {@code ACTUATED_VALVE}), and a fitting's {@code ratio} (an orifice plate's bore ratio; absent: 0, none). */
+    static final int SCHEMA=7,STATE=1;
     /**
      * Renamed or removed saved names, per name set: the saved name to the current one. A gauge's kind and unit share the
      * item component's tables, so one alias serves both. None at schema 1.
@@ -89,11 +89,13 @@ final class AccessoryFacts {
         return f.valid("gauge on host "+host,()->new Instrument.Installed(new Instrument.Key(host,mount),instance,revision,settings));
     }
     static CompoundTag fitting(Instrument.Fitting fitting) {
-        var t=new CompoundTag();t.putLong("host",fitting.key().host());t.putUUID("instance",fitting.instance());t.putLong("revision",fitting.revision());t.putString("type",fitting.type().name());return t;
+        var t=new CompoundTag();t.putLong("host",fitting.key().host());t.putUUID("instance",fitting.instance());t.putLong("revision",fitting.revision());t.putString("type",fitting.type().name());if(fitting.ratio()!=0)t.putDouble("ratio",fitting.ratio());return t;
     }
     static Instrument.Fitting fitting(CompoundTag tag) {
-        var f=new Fields(tag,"accessory fitting");long host=f.i64("host");var instance=f.uuid("instance");long revision=f.i64("revision");var type=f.name("type","type",Instrument.Type.class);f.end();
-        return f.valid("fitting on host "+host,()->new Instrument.Fitting(new Instrument.Key(host,Instrument.Fitting.mount(type)),instance,revision,type));
+        var f=new Fields(tag,"accessory fitting");long host=f.i64("host");var instance=f.uuid("instance");long revision=f.i64("revision");var type=f.name("type","type",Instrument.Type.class);
+        // Schema 7: an orifice plate's bore ratio; absent (every record before it), 0: none.
+        double ratio=f.has("ratio")?f.f64("ratio"):0;f.end();
+        return f.valid("fitting on host "+host,()->new Instrument.Fitting(new Instrument.Key(host,Instrument.Fitting.mount(type)),instance,revision,type,ratio));
     }
     /** A host's slot revision: the counter its records and its block entity's copy are checked against. */
     static CompoundTag revision(long host,long revision){var t=new CompoundTag();t.putLong("host",host);t.putLong("revision",revision);return t;}

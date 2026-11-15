@@ -87,6 +87,53 @@ public final class ValveGeometry {
     private static double shutoffRadius(double od){return Math.min(.495,Math.max(.065,.64*od));}
     private static double shutoffRise(double od){return Math.max(.055,.17*od);}
 
+    /**
+     * The automated shutoff valve (batch 2026-11-15-fluid-interfaces, W7): the shutoff valve's ball body without its lever, a
+     * mounting bracket on its stem, a rack-and-pinion pneumatic actuator lying along the run with its end caps, the
+     * safety-yellow position indicator on top and the solenoid valve box on its side, where the data cable enters
+     * ({@link #actuatedSocket}). No moving part: open or closed is the valve's control, read on its page.
+     */
+    public static List<Polygon> actuated(LineGeometry.Key key,boolean accessory){return actuated(key,accessory,RenderDetail.NORMAL);}
+    public static List<Polygon> actuated(LineGeometry.Key key,boolean accessory,RenderDetail detail) {
+        var out=new ArrayList<>(shutoff(key,true,accessory,detail,false));
+        var mesh=new Mesh(detail);var a=Actuator.of(key);double ar=a.radius,al=a.half;
+        var body=new Frame(a.centre,a.run,a.stem);int n=Math.max(12,PipeSizes.sides(2*ar));
+        // The bracket from the bonnet's neck into the actuator's underside.
+        slab(mesh,a,a.top-.3*a.rise,a.top+a.bracket+.15*ar,-.55*ar,.55*ar,-.35*ar,.35*ar,Material.STEELWORK);
+        mesh.cylinder(body,ar,-al,al,n,Material.ACTUATOR);
+        double cap=Math.max(.012,.10*ar);
+        for(int sign:new int[]{-1,1})mesh.cylinder(body,1.08*ar,sign*(al-cap),sign*(al+cap),n,Material.FLANGE);
+        var stem=new Frame(a.centre,a.stem,a.run);
+        mesh.cylinder(stem,.42*ar,.9*ar,ar+Math.max(.02,.3*ar),10,Material.GUARD);
+        slab(mesh,a,a.top+a.bracket+.45*ar,a.top+a.bracket+1.55*ar,.15*al,.75*al,.6*ar,ar+a.depth,Material.SERVICE_CASE);
+        out.addAll(LineGeometry.overhanging(mesh));
+        return List.copyOf(out);
+    }
+    /** The automated shutoff valve's cable entry: the solenoid box's outward face, across the run. */
+    public static SocketGeometry.Socket actuatedSocket(LineGeometry.Key key) {
+        var a=Actuator.of(key);var side=cross(a.run,a.stem);
+        var q=plus(a.centre,plus(scale(side,a.radius+a.depth+.005),scale(a.run,.45*a.half)));
+        return new SocketGeometry.Socket(q[0],q[1],q[2],EquipmentServices.face(side),false);
+    }
+    /** The actuator's place and size: lying along the run above the bracket on the stem's top, sized from the line. */
+    private record Actuator(double[] run,double[] stem,double top,double rise,double bracket,double radius,double half,double depth,double[] centre) {
+        static Actuator of(LineGeometry.Key key) {
+            double od=PipeSizes.outsideOf(key.outside()),radius=shutoffRadius(od),rise=shutoffRise(od),top=radius+rise;
+            double[] run=LineGeometry.step((key.facing()&~1)|1),stem=shutoffStem(key);
+            double ar=Math.min(.3,Math.max(.05,.7*radius)),al=Math.min(.45,Math.max(.12,1.8*radius)),bracket=Math.max(.03,.25*radius);
+            return new Actuator(run,stem,top,rise,bracket,ar,al,Math.max(.03,.45*ar),plus(CENTRE,scale(stem,top+bracket+ar)));
+        }
+    }
+    /** An axis-aligned box from {@code s0} to {@code s1} along the stem, {@code r0} to {@code r1} along the run and {@code c0} to {@code c1} across it. */
+    private static void slab(Mesh mesh,Actuator a,double s0,double s1,double r0,double r1,double c0,double c1,Material material) {
+        var side=cross(a.run,a.stem);double[] lo=new double[3],hi=new double[3];
+        for(int i=0;i<3;i++) {
+            double x0=CENTRE[i]+a.stem[i]*s0+a.run[i]*r0+side[i]*c0,x1=CENTRE[i]+a.stem[i]*s1+a.run[i]*r1+side[i]*c1;
+            lo[i]=Math.min(x0,x1);hi[i]=Math.max(x0,x1);
+        }
+        mesh.box(lo,hi,ALL_FACES,material);
+    }
+
     /** The quarter-turn lever on its hub at the stem's top; open lies along the run, closed across it (stem x run). */
     private static void lever(Mesh mesh,LineGeometry.Key key,boolean open) {
         double od=PipeSizes.outsideOf(key.outside());

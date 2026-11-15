@@ -1232,6 +1232,21 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public boolean installPipePressureValve(long id,PhysicalFluidTopology.Direction facing) {
         owned();return registry.installPipePressureValve(id,facing);
     }
+    // Batch 2026-11-15-fluid-interfaces, pipe fittings (W6, W7).
+    /** A restriction orifice plate of bore ratio {@code beta} on pipe {@code id}: see {@link PhysicalRegistry#installPipeOrifice}. */
+    public boolean installPipeOrifice(long id,PhysicalFluidTopology.Direction facing,double beta){owned();return registry.installPipeOrifice(id,facing,beta);}
+    /** An automated shutoff valve on pipe {@code id}, open: see {@link PhysicalRegistry#installPipeActuatedValve}. */
+    public boolean installPipeActuatedValve(long id,PhysicalFluidTopology.Direction facing){owned();return registry.installPipeActuatedValve(id,facing);}
+    /**
+     * Opens or closes automated shutoff valve {@code id} by hand, one queued edit; its flow answers at the commit. Null, or
+     * the translation key of why not: an enabled loop holds it as its output ({@link com.wormzjl.icheme.runtime.control.ControlFacts#loopHolds}).
+     */
+    public String toggleActuatedValve(long id){
+        owned();if(controlFacts.loopHolds(id))return "message.icheme.automated_shutoff_valve.held";
+        return registry.toggleActuatedValve(id)?null:"message.icheme.automated_shutoff_valve.missing";
+    }
+    /** Whether automated shutoff valve {@code id} stands open by hand, as queued (its mass target above 0). */
+    public boolean actuatedValveOpen(long id){owned();var r=registrations().get(id);return r!=null&&r.device().control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.ControlValve v&&v.onOffValve()&&v.massTarget()>0;}
     /** Rapid clicks toggle the latest queued value, never the older drawn lever. */
     public void togglePipeCutoff(long id) {
         owned();registry.togglePipeCutoff(id);
@@ -1583,6 +1598,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public boolean flowmeterOn(long id){owned();return registry.flowmeterOn(id);}
     public void flowmeter(long id,boolean installed){owned();registry.flowmeter(id,installed);}
     public boolean removePipeAccessory(long id){owned();return registry.removePipeAccessory(id);}
+    /** {@link #removePipeAccessory(long)}, the pipe's minor loss less {@code plate} (an orifice plate's K): see {@link PhysicalRegistry#removePipeAccessory(long,double)}. */
+    public boolean removePipeAccessory(long id,double plate){owned();return registry.removePipeAccessory(id,plate);}
     public record InstrumentReading(double pressure,double temperature,boolean flowing,double massFlow,Double volumeFlow){public InstrumentReading(double pressure,double temperature,boolean flowing){this(pressure,temperature,flowing,0,0.0);}}
     /** A pipe's instrument reading: its observations in its island's last solved interval, which carry no compound amounts, so
      * they are read as stored, with no island snapshot, preview or world-list padding (code base review R1). */
