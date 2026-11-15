@@ -18,9 +18,11 @@ briefed"). Sub-thread work, 2026-11-15. Follows [S2_NETWORK_REVIEW.md](S2_NETWOR
   continuous (section 4).
 - "No saturation" callers (section 5): one defect fixed in one line, `EjectorLaw.steam` above water's Tc. The others are
   fine or unreachable.
-- GameTests (`e5b554968`, run `s2c-gt1`, section 6): the 98 existing tests passed. The 3 new tests failed. All three
-  faults are in the tests, not the engine: no hold, and every ledger closed (at most 6e-16). The fixes wait for the
-  main thread's go-ahead.
+- GameTests (section 6): run `s2c-gt1` passed the 98 existing tests on the S2b laws and the slot rule; the 3 new ones
+  failed on their own premises and layout (no hold, ledgers closed). Rebuilt (`22be39e01`), run `s2c-gt2`: the
+  two-nozzle test passed (same fluid at both nozzles, head exact). The letdown and the loop failed on two block
+  placements in the tests, which registered no valve install and no pump. One existing test, the blanketed drum,
+  failed at 99.57 % against 99 %; it passed in run 1 on the same production code. Fixes await a go-ahead.
 - Campaigns (section 7): of the cold campaign's draws, S2b's viscosity reaches only its CO2-rich gas. The S2b review's
   "nitrogen sources at 126 to 170 K" is wrong: that harness has no cold nitrogen.
 - Owner line: the engine still labels a one-root mixture by PIP (option B, the engine lane's work, not done).
@@ -158,10 +160,12 @@ Tests (runs 6 and 7), all green:
 
 Each test watches its island through the engine's observer. It closes the ledger per component (1e-12) and in energy
 (1e-10), from the reservoir inventories against the boundary transfers plus the pump work. Each test removes what it
-placed.
+placed. Two runs of the whole fluid GameTest task were made, each once, with a fresh run id; nothing was rerun. The
+results are in `tmp/supercritical-s2/gametest-s2c-gt1/` and `gametest-s2c-gt2/`.
 
-Run `s2c-gt1` was the whole fluid GameTest task, once. 101 tests: 98 passed, 3 failed, all three of them the new ones.
-The results are in `tmp/supercritical-s2/gametest-s2c-gt1/`. Nothing was rerun.
+**Run `s2c-gt1`** (tests as in `e5b554968`): 101 tests, 98 passed, 3 failed. All 98 existing tests passed on the S2b
+laws and the slot rule. The 3 new tests failed on their own premises and layout, with no hold, and every ledger closed
+(at most 6e-16):
 
 | Test | Result | Ledger | Mechanism |
 |---|---|---|---|
@@ -172,20 +176,70 @@ The results are in `tmp/supercritical-s2/gametest-s2c-gt1/`. Nothing was rerun.
 - **Letdown.** `TankCharge` fills an empty rigid tank from a 298.15 K generator. In adiabatic filling the tank's u
   equals the line's h, so the tank stands near 406 K, not 298 K (CoolProp, `letdown_check.py`). Mass conservation from
   the printed end states (9.43 MPa in both tanks, source 325.2 K, receiver 501.4 K) puts the source's start at 407 K.
-  The isentropic letdown from there to 9.43 MPa gives 326.9 K, and the engine gave 325.2 K. So the physics is right,
-  and the bound rested on the false premise. The letdown also mostly ran before the observer started.
+  The isentropic letdown from there to 9.43 MPa gives 326.9 K; the engine gave 325.2 K. This is the check that the
+  physics is right. The bound rested on the false premise, and the letdown mostly ran before the observer started.
 - **Two nozzles.** A closed tank against voids at a fixed pressure gives up 0.7 % of its mass (about 5 kg) to fall
   0.5 MPa. That leaves within the first interval, and the steady state carries nothing (`nozzles_check.py`). The test
-  waited for a flow that physics ends. The tank stands in the liquid slot: its bottom outlet's head is 6,118 Pa, the top
-  one's 0.
-- **Loop.** The failing route is the third one, from the cooler's tube outlet to the tank's north face. The suction line
-  from the tank's west face runs past the cell beside that face, and `Plant.route` refuses cells that touch another line.
+  waited for a flow that physics ends. The bottom outlet's 6,118 Pa is g times 623.9 kg/m3 over the tank's 1 m level
+  height.
+- **Loop.** The failing route was the third one, to the tank's north face. `Plant.route` refuses an end cell beside a
+  device that is not allowed, and that cell touched both the tank and the suction line's second pipe. An off-line
+  replay of the routes in the game's direction order (`probe/LoopLayoutProbe`, `probe/loop-layout.txt`) reproduces the
+  failure at the same coordinates.
 
-Proposed fixes, for the main thread's go-ahead:
+**The rebuilt tests** (`22be39e01`, on the main thread's go-ahead):
 
-- Letdown: assert the drop from the source's state at the end of the charge, against the isentropic drop.
-- Two nozzles: keep a CO2 generator on one side face, so the flow through both outlets is steady.
-- Loop: end the return on another face of the tank.
+- Loop: the suction leaves the west face and the return enters the east face, with the tank allowed at that end; the
+  replay routes them with no pipe beside the tank or another line. The loop is charged with all of it laid: a generator
+  at 295 K and 9 MPa holds it while the pump runs and the exchangers work, then it goes. A loop charged and then heated
+  or cooled would move its pressure by several MPa: a charge at 300 K settles between 6.6 and 10 MPa, through Pc
+  (`loop_estimate.py`). The estimated states are a heater outlet of 340 to 355 K at 9 to 12 MPa, δ 0.4 to 0.8 (vapour
+  slot), and a cooler outlet of 290 to 295 K, δ about 1.8 (liquid slot). The test waits for 30 accepted intervals, or
+  for the island to certify steady. In each of the last 10 it checks: the hottest node above Tc + 5 K at δ below 1, the
+  coldest below Tc − 2 K in the liquid slot, every node one fluid above Pc; the amount constant, and no matter crossing
+  a boundary.
+- Letdown: the source's state is recorded when the charges are done. The observer starts before any pipe. The source-side
+  pipe and the valve go in first, and the receiver-side pipe last. Checks: the source never warms; it falls by at least
+  half the ideal-gas isentropic drop to its end pressure; the receiver's energy closes against what the rest gave up.
+- Two nozzles: a generator on the west face (310 K, 12 MPa) keeps both draws steady. The comparison is on the third
+  interval after both voids receive. The bottom head is checked against `portHead`'s prism value on the view's state.
+- Each wait for a count of intervals also ends when the island certifies (`CertificatePolicy` confirms in two
+  intervals), because a certified island publishes no interval.
+
+**Run `s2c-gt2`** (tests as in `22be39e01`): 101 tests, 98 passed, 3 failed.
+
+| Test | Result | Mechanism |
+|---|---|---|
+| CO2 two nozzles | passed: 7 intervals, 2e-16 / 3e-16, no hold | |
+| N2 letdown | failed while building: "The valve did not install" | test placement |
+| closed CO2 loop | failed: hottest 298.15 K, 8.984 MPa, δ 1.80; heat 0; at rest, certified after 7 intervals | test placement |
+| `LevelLoopGameTests.aBlanketedDrumOfTwoCyclesHoldsItsLevelOnTheCadence` (existing) | failed: level 25.91 to 99.57 %, bound 1 to 99 % | not settled |
+
+- **Two nozzles.** The tank stood at 309.49 K, 11.598 MPa, δ 1.668, in the liquid slot: one dense fluid. Both outlets
+  drew it (stream row 0, the oil row): 40.1 kg/s at the bottom and 34.0 kg/s at the top, against 74.5 kg/s fed. Their
+  specific enthalpies (−9,315.380 J/mol) and compositions were equal to the last digit. The bottom head was 6,673.15 Pa:
+  g times 680.47 kg/m3 times the 1 m level height over the 1 m3 tank, a prism. It equalled the prism value to 1e-15. The
+  top head was 0.
+- **Letdown.** The valve went in as a new block whose state already carried the pressure control. `FluidDeviceBlock.onPlace`
+  then registers the pipe with its valve (`world.place(…, hasPressureValve(state), …)`), so `installPipePressureValve`
+  refuses: `canInstallFitting` requires a passive control. Run 1 set the state on a pipe already laid, and the same block
+  only edits its facing there. Fix: lay the pipe, then set the state and install, as in run 1.
+- **Loop.** The charge worked: the loop stood at 8.984 to 9.000 MPa, the generator's pressure with 16 kPa of head over
+  its 2 m of height, and the ledger closed exactly. But nothing moved. The pump's in-line block state went onto a pipe the
+  route had already laid, and onto the same block `onPlace` only edits the facing, so no mover was registered. With no
+  flow there is no duty, and the island came to rest. Fix: install the pump as `HeatExchangerReviewWorld.pump` does (the
+  state, then `installPipeMover(id, facing, PUMP)`, the geometry refresh, the power).
+- **The blanketed drum** (existing). Run 1 passed it: 24.59 to 64.87 %, pressure to 1.274e5 Pa, 83 intervals, setup
+  residual 4.8e-10 mol. Run 2 failed it: 25.91 to 99.57 %, pressure to 1.881e5 Pa, 75 intervals, and a setup residual of
+  130 mol and −5.08e5 J. That residual means its island took in or lost matter while it was being set up. Its loads
+  include `FluidThermodynamics` and the S2b laws, but run 1 passed it on the same production code, and between the runs
+  only `DenseFluidGameTests` changed, which it does not load. So no code change of S2b or S2c explains the failure. Its
+  structure stood 7 blocks from where the letdown test was built (same x, z + 7), inside that test's plant box. The letdown
+  test had been removed 25 s before, and its finish waited until nothing it placed was registered. The run's leftovers
+  are in `run/fluid-gametest-s2c-gt2/world`. A replay is not allowed in this task.
+
+Fixes awaiting a go-ahead, with one more run: the letdown valve and the loop pump, both placements as above. The
+blanketed drum stays an open item for that run or the final lane.
 
 ## 7. Campaign distributions (read, not run)
 
@@ -205,7 +259,8 @@ at the drawn pressures. The cold harness has no pure-nitrogen generator: its nit
 ## 8. Not done, and open items
 
 - Not done:
-  - the three GameTest fixes and their run (section 6);
+  - the letdown and loop placement fixes and their run (section 6); the blanketed drum's failure in run 2, not
+    settled;
   - no campaign, lane or whole suite.
 - For the owner:
   - The engine labels a one-root mixture by PIP (option B: label by density in the engine, the engine lane's work, not
