@@ -32,7 +32,7 @@ Thresholds, the same for every kind:
 | Index | Toxic | Corrosive | Combustible | Particulate |
 |---|---|---|---|---|
 | ≥ 0.1 | Poison I, Weakness I | Weakness I, Mining Fatigue I | Nausea (players). 10 % LEL is the gas detector alarm level in industry | Darkness (smog) |
-| ≥ 0.3 | Poison II, Slowness I, Blindness | 1 HP every 2 s, armour loses durability | Nausea, Slowness I | Darkness, Slowness I, Hunger I (coughing) |
+| ≥ 0.3 | Poison II, Slowness I, Blindness, Weakness I | 1 HP every 2 s, armour loses durability | Nausea, Slowness I | Darkness, Slowness I, Hunger I (coughing) |
 | ≥ 1 | 2 HP/s, damage type `icheme:toxic_gas` (ignores armour) | 2 HP/s, `icheme:corrosive_gas` | flammable: explodes at a flame source | 1 HP/s, damage type `icheme:particulate` (ignores armour) |
 | ≥ 3 | 6 HP/s | 6 HP/s | (oxygen-limited above 2, section 7) | 3 HP/s |
 
