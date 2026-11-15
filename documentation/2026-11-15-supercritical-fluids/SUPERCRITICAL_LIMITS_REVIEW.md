@@ -126,6 +126,9 @@ file splits of units 3 to 5; the symbols stand.
 
 ## Not checked
 
-- Whether the hold-fuzz campaigns ever reach a supercritical state (their pressure distributions were not read).
+- (Read 2026-11-15, `tools/unified-thermo-port-forms/hold-fuzz-*/src/HoldFuzzTest.java`.) The hold-fuzz campaigns do not
+  cover the dense window: the bundled sets' sources are water and crude at 0.1 to 0.4 MPa; the cold set's are LNG at 110
+  to 170 K up to 6 MPa (a compressed liquid above methane's `Pc`) and a carbon dioxide-rich gas at 1 to 6 MPa (below its
+  `Pc`). A dense supercritical state arises there only if such a stream warms past 190.6 K at pressure.
 - The size of A6, A7, B9, B11 and C3 in numbers.
 - Any behaviour in the game.

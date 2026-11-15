@@ -34,4 +34,6 @@ dataset records under `data/icheme/materials/properties/`, the device screens' p
 ## Open items
 
 - Owner decisions O1 to O10 of the plan. S0 (measurement) needs only O1.
-- Not checked: whether the hold-fuzz campaigns reach a supercritical state; the sizes marked "to measure".
+- Not checked: the sizes marked "to measure" (S0). The campaigns do not cover the dense window (limits review, last section).
+- S0's brief is written (`tmp/supercritical-briefs/BRIEFS.md` in the worktree, not tracked; the hook refuses the main
+  checkout's `research/`); the sub-thread waits for the owner's approval.
