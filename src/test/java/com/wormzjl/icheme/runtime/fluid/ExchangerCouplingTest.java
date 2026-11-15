@@ -58,7 +58,8 @@ class ExchangerCouplingTest {
     /**
      * A coordinator on its own epoch whose worker solves each admitted slice at once, as {@link CertifyingRig} does; an
      * island in {@code failing} has its completions fail (held) while the predicate holds. Every committed or replayed
-     * span's heat at each side is summed for the energy check.
+     * span's heat at each side is summed for the energy check. A job may take {@link #lag} online ticks more, and more again
+     * on an island in {@link #lags} (a slower machine, codebase review R-ST4); none by default.
      */
     private final class Rig {
         final long[] epoch={0};final Map<Long,IslandCoordinator.Attempt> attempts=new LinkedHashMap<>();
@@ -67,15 +68,23 @@ class ExchangerCouplingTest {
         final IslandCoordinator coordinator;long requests,hotIsland,coldIsland;
         java.util.function.LongPredicate failing=id->false;
         final CertificatePolicy policy;
+        /** The epoch tick each job was admitted at, and the online ticks every job and each island's jobs take more. */
+        final Map<Long,Long> submitted=new HashMap<>();int lag;final Map<Long,Integer> lags=new HashMap<>();
+        /** Each island's replayed spans, [from, to], in the order the replay listener heard them. */
+        final Map<Long,List<List<Long>>> replays=new TreeMap<>();
         Rig(CertificatePolicy policy) {
             this.policy=policy;
             coordinator=new IslandCoordinator(new IslandCoordinator.Dispatcher() {
                 public int availableWorkers(){return 64-attempts.size();}
                 public long nextRequestId(){return ++requests;}
-                public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveJobs.FluidIslandCommand command){attempts.put(attempt.slice().requestId(),attempt);commands.put(attempt.slice().requestId(),command);return true;}
+                public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveJobs.FluidIslandCommand command){attempts.put(attempt.slice().requestId(),attempt);commands.put(attempt.slice().requestId(),command);submitted.put(attempt.slice().requestId(),epoch[0]);return true;}
                 public void cancel(long request){throw new AssertionError("no deadlines here");}
             },this::book,()->0L,new IslandCoordinator.Settings(30_000_000_000L,20_000_000_000L,64,false,100,policy).withTime(model.time()),()->epoch[0]);
-            coordinator.onReplayed(this::book);
+            coordinator.onReplayed(changed->{replayed(changed);book(changed);});
+        }
+        /** Records each replayed span (before {@link #book} moves the committed ticks). */
+        void replayed(List<IslandCoordinator.Snapshot> changed) {
+            for(var s:changed){long to=s.clock().committedTick(),from=committed.getOrDefault(s.id(),to);replays.computeIfAbsent(s.id(),id->new ArrayList<>()).add(List.of(from,to));}
         }
         /** Each island's heat at its sides over the spans its clock advanced, J (a held publication advances nothing). */
         void book(List<IslandCoordinator.Snapshot> changed) {
@@ -103,17 +112,22 @@ class ExchangerCouplingTest {
             coordinator.register(new IslandCoordinator.Snapshot(id,0,graph,new IslandClock.Snapshot(epoch[0],epoch[0],0,cadence),Optional.empty(),"READY"),model);
             committed.put(id,epoch[0]);
         }
+        /** Completes every job whose lag has passed, pumping after each pass, until none is left that may complete. */
         void drain() {
-            while(!attempts.isEmpty()) {
+            for(boolean completed=true;completed;) {
+                completed=false;
                 for(long request:List.copyOf(attempts.keySet())) {
-                    var attempt=attempts.remove(request);var command=commands.remove(request);
+                    var attempt=attempts.get(request);
+                    if(epoch[0]-submitted.getOrDefault(request,epoch[0])<lag+lags.getOrDefault(attempt.islandId(),0))continue;
+                    attempts.remove(request);var command=commands.remove(request);submitted.remove(request);completed=true;
                     if(failing.test(attempt.islandId()))coordinator.completed(attempt,Optional.empty());
                     else coordinator.completed(attempt,Optional.of((ProcessSolveJobs.FluidIslandSolveResult)command.solve(FluidTestSupport.NEVER)));
                 }
-                coordinator.pump();
+                if(completed)coordinator.pump();
             }
         }
-        void run(double seconds){long ticks=Math.round(seconds*20);for(long i=0;i<ticks;i++){epoch[0]++;coordinator.tick();drain();}}
+        void run(double seconds){ticks(Math.round(seconds*20));}
+        void ticks(long ticks){for(long i=0;i<ticks;i++){epoch[0]++;coordinator.tick();drain();}}
         double seconds(){return epoch[0]/20.0;}
         /** An inlet step (W4): island {@code id} replaced at its committed tick, through a topology event, by its own graph
          * with generator {@code node} delivering {@code state}. */
@@ -584,6 +598,67 @@ class ExchangerCouplingTest {
         assertSteady(rig,.05,"after the wake");
         assertSettled(rig,seen(rig.island(rig.hotIsland),HOT),"after the wake");
         assertLedger(rig,-5e5,"after the wake");
+    }
+    /**
+     * The certified other side's read gate (codebase review R-ST4, item 3), with certificates on: the water pair run twice to
+     * rest, then its hot side woken by a control change at the same tick t in both. It solves the state it rested in again,
+     * so nothing its certified cold side reads moves and the cold side rests on. In the second run the hot side's first job
+     * takes 130 ticks, so its second slice, [t + 101, t + 201), is dispatched at t + 231 instead of t + 201.
+     * <ul>
+     * <li>Before R-ST4 each dispatch materialised the certified cold side to the moment of the dispatch: the second one over
+     * [t + 101, t + 201) in the first run and [t + 101, t + 231) in the second, so the replayed spans, and the cold side's
+     * booked amounts and energies split at them, differed. Now each materialises it to the slice's start.</li>
+     * </ul>
+     * 600 ticks later, when both runs have committed alike, the replayed spans, the heat each side booked, the heat in
+     * transit and the committed ticks are the same bit for bit.
+     */
+    @Test void aCertifiedOtherSideIsReadAsOfTheSliceStartWhateverItsPartnersJobsTake() {
+        var a=waterPair(100,100,CertificatePolicy.defaults());var b=waterPair(100,100,CertificatePolicy.defaults());
+        for(int i=0;i<240&&!(certified(a)&&certified(b));i++){a.run(5);b.run(5);}
+        assertTrue(certified(a)&&certified(b),"both pairs certify");
+        long t=a.epoch[0];assertEquals(t,b.epoch[0]);
+        a.coordinator.controlsMoved(List.of(a.hotIsland));b.coordinator.controlsMoved(List.of(b.hotIsland));
+        b.lags.put(b.hotIsland,130);
+        a.ticks(231);b.ticks(231);
+        b.lags.remove(b.hotIsland);
+        assertTrue(a.replays.getOrDefault(a.hotIsland,List.of()).stream().anyMatch(s->s.get(1)==t+1),"the control change woke the hot side at the next tick: "+a.replays);
+        assertTrue(a.island(a.coldIsland).certificate().isPresent()&&b.island(b.coldIsland).certificate().isPresent(),"the cold side rested through the hot side's slices");
+        a.ticks(600);b.ticks(600);
+        System.out.printf(Locale.ROOT,"certified read gate: woken at %d; replayed spans %s%n",t,a.replays);
+        assertEquals(a.replays,b.replays,"every certified side was materialised over the same spans");
+        assertEquals(a.heat,b.heat,"the heat each side booked");
+        assertEquals(a.coordinator.transits(),b.coordinator.transits(),"the heat in transit");
+        for(long island:new long[]{a.hotIsland,a.coldIsland})assertEquals(a.island(island).clock(),b.island(island).clock(),"island "+island+"'s clock");
+    }
+    /**
+     * The coupling's wake gate (codebase review R-ST4, item 4), with certificates on: the water pair run twice to rest, then
+     * its hot inlet stepped from 90 °C to 100 °C at the same tick t in both, every job of the second run taking 7 ticks more
+     * from there. The hot side's first commit, of [t, t + 100), moves the stream its certified cold side read: decision D4
+     * wakes the cold side.
+     * <ul>
+     * <li>Before R-ST4 the wake materialised the cold side to the moment that commit's completion was drained: t + 100 in the
+     * first run, t + 107 in the second. The cold side then solved on a grid from there, so every later slice, commit and
+     * booking differed. Now it is woken as of t + 100, the end of the slice whose record moved, in both.</li>
+     * </ul>
+     * At t + 2450, when both runs have committed through t + 2400, the replayed spans, the heat each side booked, the heat in
+     * transit and the committed ticks are the same bit for bit.
+     */
+    @Test void aWokenCertifiedSideSolvesFromItsPartnersCommittedTickWhateverTheJobsTake() {
+        var a=waterPair(100,100,CertificatePolicy.defaults());var b=waterPair(100,100,CertificatePolicy.defaults());
+        for(int i=0;i<240&&!(certified(a)&&certified(b));i++){a.run(5);b.run(5);}
+        assertTrue(certified(a)&&certified(b),"both pairs certify");
+        long t=a.epoch[0];
+        a.step(a.hotIsland,1,water(373.15,200_000));b.step(b.hotIsland,1,water(373.15,200_000));
+        // Every job, the hot side's and the woken cold side's, 7 ticks later: the commits keep their order.
+        b.lag=7;
+        a.ticks(250);b.ticks(250);
+        assertTrue(a.island(a.coldIsland).certificate().isEmpty()&&b.island(b.coldIsland).certificate().isEmpty(),"the hotter stream woke the cold side");
+        a.ticks(2200);b.ticks(2200);
+        System.out.printf(Locale.ROOT,"coupling wake gate: stepped at %d; cold side committed %d / %d%n",t,a.island(a.coldIsland).clock().committedTick(),b.island(b.coldIsland).clock().committedTick());
+        assertEquals(a.replays,b.replays,"every certified side was materialised over the same spans");
+        assertEquals(a.heat,b.heat,"the heat each side booked");
+        assertEquals(a.coordinator.transits(),b.coordinator.transits(),"the heat in transit");
+        for(long island:new long[]{a.hotIsland,a.coldIsland})assertEquals(a.island(island).clock(),b.island(island).clock(),"island "+island+"'s clock");
     }
     /**
      * A read never books (code base review R5): two pairs on the same events, one of them read for presentation every tick.

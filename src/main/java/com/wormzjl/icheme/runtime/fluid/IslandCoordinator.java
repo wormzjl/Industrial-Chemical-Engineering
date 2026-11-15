@@ -240,8 +240,8 @@ public final class IslandCoordinator {
      * constructed stock that another island already holds without a scan of every island. */
     final Map<Long,Long> stockOwners=new HashMap<>();
     /** Each coupled exchanger side's relay state by its connection id, which island holds each such side, and the certified
-     * islands a partner's commit woke, discarded at the engine's next decision point (plan section 5.2, form C); the heat
-     * each exchanger holds in transit is the coupling's ({@link ExchangerCoupling}). */
+     * islands a control, shaft or port change woke, discarded at the engine's next decision point (plan section 5.2, form C);
+     * the heat each exchanger holds in transit and a partner's dated wakes (R-ST4) are the coupling's ({@link ExchangerCoupling}). */
     final Map<Long,Coupled> coupled=new HashMap<>();
     /** The coupled sides by pair key, in the order they were first coupled (code base review R23): a pair's two sides
      * without a scan of every side. */
@@ -523,13 +523,15 @@ public final class IslandCoordinator {
     public long now(){owned();return epoch.getAsLong();}
     /**
      * Whether {@code id} has booked what it delivers through {@code tick} (batch 2026-10-28-column-operation, plan section 9):
-     * committed through it, certified that far (materialised here), or held, parked or suspended (it delivers nothing past its
-     * committed tick until it solves again). An island that no longer exists has nothing to book.
+     * committed through it, certified that far (materialised here, to that tick and not to the moment this runs, so the
+     * replay a running column's wait books is dated by the cycle's tick however late its other ports' jobs complete: codebase
+     * review R-ST4), or held, parked or suspended (it delivers nothing past its committed tick until it solves again). An
+     * island that no longer exists has nothing to book.
      */
     public boolean through(long id,long tick) {
         owned();var island=islands.get(id);if(island==null||island.clock.committedTick()>=tick)return true;
         if(island.held||island.phaseParked||island.suspended||suspension!=null)return true;
-        if(island.certificate!=null){certificates.materialise(island);return island.clock.committedTick()>=tick;}
+        if(island.certificate!=null){certificates.materialise(island,tick);return island.clock.committedTick()>=tick;}
         return false;
     }
     /**
@@ -548,7 +550,7 @@ public final class IslandCoordinator {
     /**
      * What island {@code id} solves against changed at {@code tick}, a tick the world's ticks fix (a unit's dated value
      * takes effect there, codebase review R-ST3): its slices from that tick on must solve against it. Whether that is
-     * settled, at a decision point ({@link Ports#decide}):
+     * settled, at a decision point ({@link Ports#decide}, the coupling's flush of its dated wakes: R-ST4):
      * <ul>
      * <li>certified and committed at or before the tick: materialised to the tick, not to the moment this runs, and its
      * certificate ended there, so it solves from the tick however late the call;</li>

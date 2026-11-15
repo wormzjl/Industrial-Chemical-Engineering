@@ -21,6 +21,14 @@ final class ExchangerCoupling {
     /** The real valve each coupled side's control works (W8), by the side's connection id: the exchangers whose lines are complete. */
     private Map<Long,ExchangerRelay.Operation> operations=Map.of();
     private boolean waking;
+    /**
+     * Decision D4's wakes, dated (codebase review R-ST4): by island, the ticks at which a partner's committed or replayed
+     * span ended whose record moved what the island read while certified. Each is acted on as of its own tick ({@link
+     * IslandCoordinator#movedAt}) once every partner of the island has booked through it ({@link IslandCoordinator#reached}),
+     * so no partner can still date an earlier one, and in tick order; until then the island's partners ahead of the tick
+     * wait at the fence ({@link #coupledThrough}). Memory only (state).
+     */
+    private final TreeMap<Long,TreeSet<Long>> dated=new TreeMap<>();
     ExchangerCoupling(IslandCoordinator coordinator){this.coordinator=coordinator;}
 
     /** An exchanger's side's stream at a commit or a replay's end, and the heat rate (W) of the span that ended there: what
@@ -133,8 +141,8 @@ final class ExchangerCoupling {
     private static boolean stoppedSide(Island island){return island.held||island.phaseParked||island.suspended;}
     /**
      * The coupling fence (owner Q16, form C): each of the island's exchangers' other sides has committed through the
-     * island's committed tick, or can be materialised there (certified), or is stopped, or has no island, or is this one.
-     * A pure read: nothing is materialised here.
+     * island's committed tick, or can be materialised there (certified, with no dated wake before it: that side solves
+     * again from its wake, R-ST4), or is stopped, or has no island, or is this one. A pure read: nothing is materialised here.
      */
     boolean coupledThrough(Island island) {
         long start=island.clock.committedTick();
@@ -143,16 +151,20 @@ final class ExchangerCoupling {
             var side=coordinator.coupled.get(pipe);if(side==null||side.kind==SideKind.RADIANT)continue;
             var other=other(side);if(other==null||other==island||stoppedSide(other)||other.clock.committedTick()>=start)continue;
             var certificate=other.certificate;
-            if(certificate!=null&&Math.min(Math.min(other.clock.onlineTick(),other.fence()),Math.min(other.holdTick,certificate.horizonTick()))>=start)continue;
+            if(certificate!=null&&Math.min(Math.min(other.clock.onlineTick(),other.fence()),Math.min(other.holdTick,certificate.horizonTick()))>=start&&!wokenBefore(other.id,start))continue;
             return false;
         }
         return true;
     }
+    /** Whether island {@code id} holds a dated wake before {@code tick}. */
+    private boolean wokenBefore(long id,long tick){var ticks=dated.get(id);return ticks!=null&&!ticks.isEmpty()&&ticks.first()<tick;}
     /**
      * What each of the island's coupled sides reads for {@code slice} (plan section 5.2): its other side's stream as of the
      * slice start, whether that side is stopped, the heat in transit as of the start (the other side's heat booked past it
      * taken out again), that side's slice length and the share of this slice it spent counting this one stopped. A certified
-     * other side behind the start is materialised first. Arithmetic only.
+     * other side behind the start is materialised first, to the start (the fence let it through as far: {@link
+     * #coupledThrough}), not to the moment of the dispatch, which follows when workers finished (codebase review R-ST4).
+     * Arithmetic only.
      */
     Map<Long,ExchangerRelay.Read> reads(Island island,IslandClock.Slice slice) {
         if(island.sides.length==0)return Map.of();
@@ -163,7 +175,7 @@ final class ExchangerCoupling {
             // A column's condenser read by its water side carries the valve the column sets, where its lines are complete (U2).
             if(held!=null){reads.put(pipe,held.ceiling()>0&&held.operation()==null?held.withOperation(operations.get(pipe)):held);continue;}
             var other=other(side);var otherSide=coordinator.coupled.get(side.partner);
-            if(other!=null&&other!=island&&other.certificate!=null&&other.clock.committedTick()<start)coordinator.certificates.materialise(other);
+            if(other!=null&&other!=island&&other.certificate!=null&&other.clock.committedTick()<start)coordinator.certificates.materialise(other,start);
             // A convection coil reads its radiant coil's heat as of the slice start (F1); one in this island plans it per step.
             if(side.kind==SideKind.CONVECTION){reads.put(pipe,ExchangerRelay.Read.radiant(otherSide==null||other==null?0:otherSide.rateAsOf(start)));continue;}
             boolean stoppedOther=other==null||other!=island&&stoppedSide(other);
@@ -177,7 +189,8 @@ final class ExchangerCoupling {
      * Books {@code island}'s coupled sides over a committed or replayed span from {@code start} to {@code end} (plan section
      * 5.2): each side's heat leaves the heat in transit, the span is kept for its other side's as-of reads, a span in which
      * it read its other side stopped is kept for that side to sit out, and its record moves to the span's end. {@code reads}
-     * is what a solved slice read (null for a replay). A certified other side whose read of this one moved is then woken.
+     * is what a solved slice read (null for a replay). A certified other side whose read of this one moved is then woken as
+     * of {@code end}, the tick from which it reads the moved record (R-ST4).
      */
     void booked(Island island,long start,long end,PassiveIntervalSolver.Result result,Map<Long,ExchangerRelay.Read> reads) {
         coordinator.ports.booked(island.id,island.graph,start,end,result);
@@ -190,9 +203,11 @@ final class ExchangerCoupling {
             var read=reads==null?null:reads.get(pipe);
             if(read!=null){if(read.stopped())side.stopped(start,end);side.read=true;side.readUsed=read.partner();side.rateUsed=read.heatRate();side.heatRate=joule/coordinator.settings.time().seconds(end-start);}
             side.record(new SideRecord(end,stream(island.graph,result.endpointFlows(),pipe,island.model),joule/coordinator.settings.time().seconds(end-start)));
-            if(other!=null&&other!=island&&other.certificate!=null&&moved(side,coordinator.coupled.get(side.partner),other))coordinator.toWake.add(other.id);
+            if(other!=null&&other!=island&&other.certificate!=null&&moved(side,coordinator.coupled.get(side.partner),other))wake(other,end);
         }
     }
+    /** Decision D4's wake of certified island {@code other} as of {@code tick} (R-ST4); its partners' fence re-derives it. */
+    private void wake(Island other,long tick){if(dated.computeIfAbsent(other.id,k->new TreeSet<>()).add(tick))coordinator.reconsider(other);}
     /** The heat (J) {@code pipe}'s stream took up over {@code result}'s span. */
     static double heat(PassiveIntervalSolver.Result result,long pipe) {
         double joule=0;for(var b:result.boundaries())if(b.kind()==ConservativeTransport.BoundaryTransfer.Kind.HEAT&&b.nodeId()==pipe)joule+=b.totalEnergyJoule();
@@ -221,11 +236,13 @@ final class ExchangerCoupling {
                 // The settled transit: the heat the side ahead booked past the other's commit is a clock offset, not a change.
                 ||Math.abs(settledTransit(side.pair()))>WAKE_TRANSIT*Math.abs(otherSide.heatRate)*slice+1;
     }
-    /** The certified islands woken by an exchanger partner's commit (decision D4) end their certificates here, at the engine's
-     * decision points (a round's close, the due deadlines, a pump), never inside a presentation read. */
+    /** The certified islands woken by an exchanger partner's commit (decision D4, dated: {@link #dated}) and by a control, shaft
+     * or port change ({@code toWake}) end their certificates here, at the engine's decision points (a round's close, the due
+     * deadlines, a pump), never inside a presentation read. */
     void flushWakes() {
-        if(waking||coordinator.toWake.isEmpty())return;waking=true;
+        if(waking||coordinator.toWake.isEmpty()&&dated.isEmpty())return;waking=true;
         try {
+            flushDated();
             while(!coordinator.toWake.isEmpty()) {
                 var it=coordinator.toWake.iterator();long id=it.next();it.remove();
                 var island=coordinator.islands.get(id);if(island==null||island.certificate==null||coordinator.stopped||coordinator.suspension!=null)continue;
@@ -234,6 +251,33 @@ final class ExchangerCoupling {
                 coordinator.certificates.end(island);
             }
         } finally{waking=false;}
+    }
+    /**
+     * The dated wakes (R-ST4) whose islands' partners have all booked through their ticks, each island's in tick order: a
+     * certified island is materialised to the tick, not to the moment this runs, and ends its certificate there; one awake
+     * behind the tick keeps it ({@link IslandCoordinator#movedAt}). A materialisation may date wakes of other islands, so
+     * the pass repeats until it settles nothing more. Before R-ST4 a partner's commit woke the island to the moment its job's
+     * completion was drained, and the island solved on a grid from there.
+     */
+    private void flushDated() {
+        for(boolean settled=true;settled&&!dated.isEmpty();) {
+            settled=false;
+            for(long id:List.copyOf(dated.keySet())) {
+                var ticks=dated.get(id);if(ticks==null)continue;
+                var island=coordinator.islands.get(id);
+                if(island==null){dated.remove(id);continue;}
+                boolean any=false;
+                while(!ticks.isEmpty()&&partnersThrough(island,ticks.first())&&coordinator.movedAt(id,ticks.first())){ticks.pollFirst();any=true;}
+                if(ticks.isEmpty())dated.remove(id);
+                // Its partners' fence reads the wakes it still holds.
+                if(any){settled=true;var now=coordinator.islands.get(id);if(now!=null)coordinator.reconsider(now);}
+            }
+        }
+    }
+    /** Whether every other island holding the other side of one of {@code island}'s exchangers has booked through {@code tick}. */
+    private boolean partnersThrough(Island island,long tick) {
+        for(var other:partners(island))if(!coordinator.reached(other.id,tick))return false;
+        return true;
     }
 
     /** A side whose other side has no island keeps its booked spans this long, for an as-of read of its transit (C6b). */

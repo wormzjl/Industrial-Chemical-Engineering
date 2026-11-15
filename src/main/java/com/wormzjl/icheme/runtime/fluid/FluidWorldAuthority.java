@@ -138,7 +138,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         columns.solves(new ColumnOperation.Solves() {
             @Override public com.wormzjl.icheme.science.column.v3.V3ColumnInput design(ColumnUnit unit){return columnDesign(unit.master());}
             @Override public com.wormzjl.icheme.science.equipment.ColumnComponents.Condenser condenser(ColumnUnit unit){return columnCondenser(unit.master());}
-            /** The job runs on its feed island's model (V4), taken here on the engine thread; a feed port in no island yet waits for the next cycle. */
+            /** The job runs on its feed island's model (V4), taken here on the engine thread; a feed port in no island yet is asked again at the next decision points (R-ST4). */
             @Override public boolean submit(long unit,com.wormzjl.icheme.science.plant.column.ColumnSolve.Job job,java.util.function.Consumer<com.wormzjl.icheme.science.plant.column.ColumnSolve.Outcome> done) {
                 var u=topology.column(unit);var feed=u.station(com.wormzjl.icheme.science.plant.column.Port.FEED,0);
                 Long island=feed==null||feed.device()==0?null:registry.owner(feed.device());
