@@ -275,8 +275,15 @@ public final class MaterialCatalog {
     /**
      * The longest identity, {@link Package#scientificRevision} or {@link #fluidRevision}: the column's result payloads, the
      * neural models and the fluid saves carry them. A catalog whose identity would be longer is refused at load.
+     *
+     * <p>The bound follows the fluid checkpoint's {@code PropertyRevision}, an NBT string of at most 65,535 UTF-8 bytes that
+     * carries the network model's thermodynamic revision ({@code FluidThermodynamics.thermodynamicRevision}), about 3.0 times
+     * the fluid identity: on {@code icheme:refinery} (46 compounds) a fluid identity of 10,086 characters gives a thermodynamic
+     * revision of 30,244. 21,000 keeps that under the NBT limit and admits a network package of about 95 compounds at about
+     * 220 characters each (16,384 before batch 2026-11-15-supercritical-fluids, S3, about 74 compounds once the critical
+     * volumes joined the identity).</p>
      */
-    public static final int MAX_IDENTITY = 16384;
+    public static final int MAX_IDENTITY = 21000;
     /** The records packages are built from, kept so a view is built by the loader's own code ({@link #build}). */
     private final Records records;
     /** How each package of this catalog was built; absent for a lens ({@link #inferenceView}), which no view restricts. */

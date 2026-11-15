@@ -250,6 +250,9 @@ class ColumnSolveTest {
         var narrow = column(bundled, design);
         var whole = FluidThermodynamics.forNetwork(wide, com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(wide));
         assertTrue(whole.compounds().size() > com.wormzjl.icheme.science.column.v3.V3ComponentBasis.MAX_COMPONENTS, "a wide network package: " + whole.compounds().size());
+        // Its thermodynamic revision fits the fluid checkpoint's NBT string (batch 2026-11-15-supercritical-fluids, S3 fix).
+        int revisionBytes = whole.thermodynamicRevision().getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+        assertTrue(revisionBytes <= FluidThermodynamics.MAX_THERMODYNAMIC_REVISION_BYTES, "the wide model's thermodynamic revision: " + revisionBytes + " bytes");
         var island = whole.on(narrow.compounds());
         assertEquals(narrow.components(), island.components(), "the island carries the feed's compounds and water");
         var setpoints = Setpoints.of(ColumnOperatingPoint.of(design));

@@ -329,8 +329,11 @@ public final class IslandCertificate {
      * commit) ends the certificate where it happens, never through the signature.
      */
     public record Signature(String propertyRevision,String policy,String replay) {
-        /** The longest property revision: the model's carries the package's fluid identity twice (its thermodynamics and its
-         * viscosity), each at most {@link com.wormzjl.icheme.science.material.MaterialCatalog#MAX_IDENTITY}, and its tags. */
+        /** The longest property revision: the model's carries the package's fluid identity about three times (its
+         * hydrocarbon model's revision about twice, its viscosity's once: 19,888 and 10,339 characters on a fluid identity of
+         * 10,086 for {@code icheme:refinery}, 30,244 in all), each identity at most
+         * {@link com.wormzjl.icheme.science.material.MaterialCatalog#MAX_IDENTITY}, and its tags; the model itself refuses a
+         * revision above 65,535 UTF-8 bytes ({@code FluidThermodynamics.MAX_THERMODYNAMIC_REVISION_BYTES}). */
         static final int MAXIMUM_PROPERTY_REVISION=1<<16;
         public Signature {
             Objects.requireNonNull(propertyRevision);Objects.requireNonNull(policy);Objects.requireNonNull(replay);

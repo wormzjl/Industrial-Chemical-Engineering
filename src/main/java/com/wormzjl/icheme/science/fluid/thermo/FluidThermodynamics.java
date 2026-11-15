@@ -164,6 +164,11 @@ public final class FluidThermodynamics {
         else pumpReferenceDensity=water.molarMass()/(reference.specificVolume()*water.molarMass());
         this.catalog=catalog;
         thermodynamicRevision="fluid-trbdf2-r1:"+hydrocarbon.revision()+":"+viscosity.revision();
+        // The fluid checkpoint writes it as an NBT string (FluidCheckpointCodec, the core record's PropertyRevision), at most
+        // 65,535 UTF-8 bytes: refused here, at the model, rather than at the first save (MaterialCatalog.MAX_IDENTITY).
+        int revisionBytes=thermodynamicRevision.getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+        if(revisionBytes>MAX_THERMODYNAMIC_REVISION_BYTES)
+            throw new IllegalArgumentException("the model's thermodynamic revision is "+revisionBytes+" UTF-8 bytes, above "+MAX_THERMODYNAMIC_REVISION_BYTES);
         // The trace cutoff joins the hydraulic acceptance law, not the thermodynamic reference: it changes which unknowns a
         // Newton pass carries, so a certificate issued under another cutoff describes a different numerical path - but it
         // changes no property data, so a saved island's inventory and energy stay readable across a change of it.
@@ -238,6 +243,8 @@ public final class FluidThermodynamics {
      */
     private final String revision;
     public String thermodynamicRevision(){return thermodynamicRevision;}
+    /** The longest {@link #thermodynamicRevision}, UTF-8 bytes: the NBT string the fluid checkpoint stores it in. */
+    public static final int MAX_THERMODYNAMIC_REVISION_BYTES=65535;
     public String revision(){return revision;}
     /** The catalog this model was built from; the phase engine is built from it on first use. */
     private final MaterialCatalog catalog;

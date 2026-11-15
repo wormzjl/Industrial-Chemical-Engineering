@@ -143,7 +143,7 @@ Measured with the declared bounds:
 | Identity | Moves for | Effect |
 |---|---|---|
 | The 9 record revisions (table 1) | the ranges | listed in each package identity that names them |
-| `scientificRevision` of `icheme:refinery`, `icheme:tjl20`, `icheme:tjl20_nitrogen` | the record revisions | the column's caches and warm starts keyed on it drop (state); `V3IdentityTest` green |
+| `scientificRevision` of `icheme:refinery`, `icheme:tjl20_methane`, `icheme:tjl20_methane_nitrogen` | the record revisions | the column's caches and warm starts keyed on it drop (state); `V3IdentityTest` green |
 | `fluidRevision` of every package with a member that has a critical volume (all three) | the new `;critical-volume=id@rev,...` segment | the fluid checkpoint's package records no longer match, so a world's islands restate from their facts on load (no fact is discarded; `FluidFactsCompatTest` 22/22) |
 | `MixtureViscosity.revision` gains `:dense-residual-jst-v1` | the new term | part of `FluidThermodynamics.thermodynamicRevision`; the same restate |
 | Process-simulator sheets holding a compound whose revision moved | `RevisionNotice.dropsResults` | the sheet's results drop and the sheet stays (`SheetCompoundsTest` green) |
@@ -155,6 +155,44 @@ saved design and no facts row is refused. `FORMATS.md` has no row for the materi
 `examples/material-override/.../tjl20_methane.json` mirrors the bundled record, with only its density, source and revision
 edited (`MaterialPresetsTest`). It was regenerated from the r4 record and its revision is now
 `tjl20-methane-spine-r4-example-density`. This file is outside the brief's listed scope; the test requires the change.
+
+### The identity bound (S3 fix, found by S2b's run)
+
+The new `;critical-volume=` segment made the fluid identity longer. `ColumnSolveTest.aNetworkPackageAbove64CompoundsSolvesOnItsFeedIslandsList`
+builds a wide package (the bundled one plus clones, more than 64 compounds) whose identity is 19,182 characters, above the
+old `MaterialCatalog.MAX_IDENTITY` of 16,384, and failed at load. S3's own run did not select `ColumnSolveTest`.
+
+| Package | Compounds | Fluid identity before S3 | After S3 | Critical-volume segment |
+|---|---|---|---|---|
+| `icheme:refinery` | 46 | 8,024 | 10,086 | 2,062 |
+| `icheme:tjl20_methane_nitrogen` | 20 | 3,301 | 4,207 | 906 |
+| `icheme:tjl20_methane` | 19 | 3,131 | 3,988 | 857 |
+
+"Before" is the identity now minus its segment; the record revisions S3 bumped changed a few characters each, not counted.
+
+Why 21,000 (the main thread's option A1): the bound that matters is the fluid checkpoint's `PropertyRevision`, an NBT
+string of at most 65,535 UTF-8 bytes. It carries `FluidThermodynamics.thermodynamicRevision`, which repeats the fluid
+identity about three times: on `icheme:refinery` the hydrocarbon model's revision is 19,888 characters, the viscosity's
+10,339, the whole 30,244 on an identity of 10,086. 21,000 x 3 plus the tags stays under 65,535, and admits a network package
+of about 95 compounds at about 220 characters each (about 74 under the old bound once the segment joined).
+
+The fix, commit "S3 fix: identity bound":
+
+- `MaterialCatalog.MAX_IDENTITY = 21000`, its javadoc giving the NBT reason and these numbers.
+- `FluidThermodynamics` refuses a model whose `thermodynamicRevision` is above
+  `MAX_THERMODYNAMIC_REVISION_BYTES = 65535` UTF-8 bytes, at the model, not at the first save. `ColumnSolveTest`'s wide
+  package asserts that its revision fits.
+- `IslandCertificate.Signature`'s javadoc said the property revision carries the identity twice; it says about three times,
+  with the figures. `MAXIMUM_PROPERTY_REVISION` is kept.
+
+Two open owner items:
+
+1. The thermodynamic revision states the identity about three times (the hydrocarbon model's revision twice, the
+   viscosity's once). Stated once, the NBT wall would lift to about 290 compounds.
+2. The process simulator's menu opening data (`ProcessSimulatorMenu.Opening.write`, sent with `writeUtf` through
+   `openMenu`) carries the package tokens: 18,281 characters today, about 14,500 before S3. Its limit is near 32,600 bytes,
+   not confirmed in the NeoForge source. At the identity's rate of about 220 characters per added compound it bites at a
+   network package of about 110 compounds, before the NBT wall. No serverbound packet carries a whole identity (`SheetPart` sends chunks).
 
 ### The bundled simulator examples (a follow-up the main thread asked for)
 
@@ -215,6 +253,13 @@ Test edits:
 - `SheetCompoundsTest` reads nitrogen's revision from the record instead of a hard-coded r4.
 - `FluidNitrogenCryogenicTest`: the envelope maximum is 30 MPa.
 - `MaterialCatalogTest`: the identity test rebuilds the new segment.
+- Found by S2b's run and fixed with the identity bound: `FluidPacketCodecTest` and `FluidDeviceSpecDomainTest` stated the
+  old 10 MPa envelope maximum. The codec test's out-of-envelope pressure is now 32 MPa (was 12 MPa) and its message names
+  3.0E7; the domain test's message names 3.0E7 (was 1.0E7).
+
+After the identity bound: `test --tests` ColumnSolveTest, MaterialCatalogTest, FluidThermodynamicsTest,
+IslandCertificateTest, FluidPacketCodecTest and FluidDeviceSpecDomainTest, `--max-workers 4`: 83 tests, green
+(11, 15, 4, 23, 27, 3).
 
 Not run: the whole suite, the lane, the campaign and `equipmentGates`. The fuzz campaigns do not cover the new 10-30 MPa
 window (limits review, last section).
