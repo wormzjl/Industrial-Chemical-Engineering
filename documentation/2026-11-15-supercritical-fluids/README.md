@@ -33,6 +33,10 @@ simulator: continuous properties, no label-driven jumps, no critical-band hold.
   two findings of the main thread: boxes 3 and 4 are where the model is least accurate above `Tc` (density to 10.9 %), and a
   "dense" node includes every ordinary gas above its critical temperature, so S2's laws must equal today's below a reduced
   density. Briefs S1 and S3 written (`tmp/supercritical-briefs/BRIEFS.md`).
+- 2026-11-15: S1 done (sub-thread, owner decision O3 B): band boxes 3 and 4 removed from `pureBandBox`; `PhaseTraits`
+  gains `attraction`, `supercriticalIsotherm()`, `reducedDensity()` (ratio `PhaseIdentification.SUPERCRITICAL_ATTRACTION_RATIO`,
+  the kernel's 0.45724/0.07780). Digest re-recorded: 2 of 429 lines moved (pure N2 in old box 4: band 1 to 0, one grade
+  `RESEARCH_ONLY` to `ESTIMATED_DECLARED_ERROR`). [S1_ENGINE_REVIEW.md](S1_ENGINE_REVIEW.md).
 
 ## Documents
 

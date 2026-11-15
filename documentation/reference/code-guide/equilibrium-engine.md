@@ -191,10 +191,12 @@ fixtures, warm starts and factorizations.
   liquid-like products denser than the cubic's critical volume, outside the band, are `LIQUID_LIQUID`. A one-root
   single phase is labelled by PIP; a pure component above its critical point is `SUPERCRITICAL_FLUID`. Phases are
   listed lightest first, then the crystals. Every fluid `PhaseAmounts` carries the `PhaseTraits` of its root
-  (`CubicPhaseEvaluator.fill` stores Z, a, b, da/dT through `PhaseState.setIdentification`); the label sites still call
+  (`CubicPhaseEvaluator.fill` stores Z, a, b, da/dT through `PhaseState.setIdentification`), with the attraction
+  `a/(b R T)`, `supercriticalIsotherm()` and `reducedDensity()` for the network's laws; the label sites still call
   the evaluation forms of `PhaseIdentification`.
-- **Critical band** (`CriticalBand`): a pure fluid (one component at least 0.95 of the amount) inside one of the four
-  reduced boxes of `pureBandBox`; a split with a tie line below `BAND_TIE_LINE`; a single mixture phase whose test met
+- **Critical band** (`CriticalBand`): a pure fluid (one component at least 0.95 of the amount) inside one of the two
+  reduced boxes of `pureBandBox` (box 1 `Tr 0.95-1.1 x Pr 0.8-1.5`, box 2 `Tr 0.90-0.95 x Pr 0.58-0.74` and
+  `Tr 0.95-0.97 x Pr 0.58-0.8`; nothing above `Tc` at `Pr` 1.5 and more, where a pure fluid has one root); a split with a tie line below `BAND_TIE_LINE`; a single mixture phase whose test met
   a stationary point within `BAND_STATIONARY_DISTANCE` of the feed; a failed split whose last iterate or seed was that
   short. No split is fabricated, and no single phase is reported stable when the test said unstable.
 - **`Settings.DEFAULT`**: lnKTolerance 1e-10, maximumIterations 1000, accelerationCycle 5, coexistenceTolerance 1e-9,
