@@ -63,6 +63,32 @@ test results, the Gradle logs and the diff: no file under `src/main` changed). T
 Section 2's table keeps the options as first written; this table is the current recommendation. S1 with O3 B is one
 edit (`pureBandBox`) plus the trait fields; `CriticalBandHold` stays.
 
+## 2b. Decisions (owner, 2026-11-15: "Accept all")
+
+The owner accepted the recommendations of section 2a as they stand: O1 A; O2 A (a dense node's slot by density); O3 B
+(band boxes 3 and 4 removed, an in-band failure stays a hold); O4 A with M8's ranges (30 MPa for carbon dioxide,
+nitrogen, methane, ethane, propane, hydrogen; ethylene 20 MPa with `cp` declared at 13 and 14 %; n-hexane 4.6 MPa,
+toluene 6.2 MPa); O5 A with O10 A; O6 A; O7 A; O9 B. O8 is closed.
+
+Two findings of the main thread after the acceptance, from S0's per-state rows and the code, stated so the owner can
+overrule:
+
+1. **Boxes 3 and 4 are also where the model is least accurate above `Tc`.** In them the density error is 6.8 to 10.9 %
+   and `cp` to 13 % (carbon dioxide 8.7 %, ethane 9.7 %, propane 10.2 %, ethylene 10.9 % in density), against 5.6 % and
+   11 % outside every box. The network reads no grade (only `diagnostics().criticalBand()` on a failed answer), so
+   removing the boxes changes no number a player sees; it changes the grade and the band flag of answers there, the
+   type of a failure there (a rejected trial where it was a typed hold), and one label: a split of a feed that is 95 %
+   one compound, whose two products are both dense, is `LIQUID_LIQUID` there as it is everywhere else outside the
+   band (`DryCore.twoPhaseResult`, `CarriedCrystals.carriedSplit`). O3 B is carried out as accepted; the datasets'
+   evidence text declares 11 % density and 13 % `cp` for `Tr` 1.0 to 1.2 at `Pr` 1.5 to 3.
+2. **A "dense one-fluid node" is every one-phase node above its mixture's cubic critical temperature, so it includes
+   ordinary gases** (nitrogen, methane or hydrogen at ambient temperature and any pressure). Every law S2 changes for
+   such nodes therefore acts on states the references hold today (chain-100, the junction lines, the GameTests, the
+   campaigns). S2 keeps them exact by making each new law identical, bit for bit, to today's below a reduced density
+   (the residual viscosity is zero there, the film is the gas film, a liquid port stays dry), with a C1 blend above it.
+   The threshold and the blend's width are an assumption the physics does not force: S2's review gives them as an
+   option with numbers. The plan's S2 text "each only for `State.dense()`" is read with this rule.
+
 ## 3. Stages
 
 Each stage is one package for one thread, on its own worktree, in the lane named. Line numbers are not given: the

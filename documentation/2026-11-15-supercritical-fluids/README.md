@@ -29,6 +29,10 @@ simulator: continuous properties, no label-driven jumps, no critical-band hold.
 - 2026-11-15: the main thread checked M8 (stored results: `G3F11SupercriticalRegionTest` 9 of 9; the parity test's 26 passed in
   the run after the new `compressed_liquid` rows, its tolerances unchanged; no file under `src/main` changed). The plan's
   section 2a states O4's ranges with the liquid evidence.
+- 2026-11-15: the owner: "Accept all" (the recommendations of the plan's section 2a). Recorded in the plan's section 2b, with
+  two findings of the main thread: boxes 3 and 4 are where the model is least accurate above `Tc` (density to 10.9 %), and a
+  "dense" node includes every ordinary gas above its critical temperature, so S2's laws must equal today's below a reduced
+  density. Briefs S1 and S3 written (`tmp/supercritical-briefs/BRIEFS.md`).
 
 ## Documents
 
@@ -52,9 +56,8 @@ dataset records under `data/icheme/materials/properties/`, the device screens' p
 
 ## Open items
 
-- Owner decisions of the plan, with the recommendations after S0 in its section 2a: O2 (slot rule), O3 (B), O4 (A, after
-  a compressed-liquid measurement, now M8 in the qualification review), O5 and O10 (A), O6 (A), O7, O9 (B). O1 stands
-  at A; O8 is closed.
+- Decided (plan 2b). Open for the owner: the two findings there; S2's density threshold (an option S2's review will give);
+  hydrogen's zero pair with a cut (only if hydrotreating at pressure matters).
 - Not checked: liquids M8 cannot reach (ethane at Tr 0.96-1 inside its domain, any liquid between Tr 0.95 and Tc); the
   effect of O9's pairs on mixtures; the error of a cut's estimated constants (qualification review, "Not measured").
   The campaigns do not cover the dense window (limits review, last section).
