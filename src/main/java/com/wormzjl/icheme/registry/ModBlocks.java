@@ -34,6 +34,10 @@ public final class ModBlocks {
                     .pushReaction(net.minecraft.world.level.material.PushReaction.BLOCK).noOcclusion());
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.CreativePowerBlock> CREATIVE_POWER=BLOCKS.registerBlock("creative_power",
             com.wormzjl.icheme.world.level.block.CreativePowerBlock::new,BlockBehaviour.Properties.of().mapColor(MapColor.COLOR_BLUE).strength(-1,3600000).sound(SoundType.METAL));
+    // Batch 2026-11-15-fluid-interfaces, the alarm beacon (W9, decisions A1 and A5): its lamp lights the area at block light 12 while lit.
+    public static final DeferredBlock<com.wormzjl.icheme.world.level.block.AlarmBeaconBlock> ALARM_BEACON=BLOCKS.registerBlock("alarm_beacon",
+            com.wormzjl.icheme.world.level.block.AlarmBeaconBlock::new,BlockBehaviour.Properties.of().mapColor(MapColor.COLOR_RED).strength(1.5F).sound(SoundType.METAL).noOcclusion()
+                    .lightLevel(s->s.getValue(com.wormzjl.icheme.world.level.block.AlarmBeaconBlock.STATE).lit()?12:0));
     private static DeferredBlock<com.wormzjl.icheme.world.level.block.ControlPanelBlock> controlPanel(String name){return BLOCKS.registerBlock(name,
             com.wormzjl.icheme.world.level.block.ControlPanelBlock::new,BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(3).sound(SoundType.METAL).noOcclusion());}
     // A pipe rack (batch 2026-10-26-pipe-laying-system): a thin frame, so light and the faces behind it show through; its shape follows its lanes.
@@ -136,6 +140,8 @@ public final class ModBlocks {
     public static final DeferredHolder<SoundEvent,SoundEvent> EJECTOR_JET=loop("ejector_jet");
     /** A hand valve's quarter turn at the click, a one-shot (owner 2026-11-10: tools/process-sounds/valve_turn_candidates.py). */
     public static final DeferredHolder<SoundEvent,SoundEvent> VALVE_TURN=loop("valve_turn");
+    /** The alarm beacon's horn (W9, decision A8): a loop, heard to about 48 blocks. */
+    public static final DeferredHolder<SoundEvent,SoundEvent> ALARM_HORN=SOUNDS.register("alarm_horn",()->SoundEvent.createFixedRangeEvent(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"alarm_horn"),48));
     private static DeferredHolder<SoundEvent,SoundEvent> loop(String name){return SOUNDS.register(name,()->SoundEvent.createVariableRangeEvent(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,name)));}
 
     private ModBlocks() {

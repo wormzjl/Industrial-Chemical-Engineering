@@ -165,6 +165,19 @@ public final class DataPorts {
                 outward);
     }
 
+    /**
+     * An alarm beacon's data socket (batch 2026-11-15-fluid-interfaces, W9): on its base's gland, facing out of the beacon
+     * as its mounting turns it ({@link AlarmGeometry#socketOutward}).
+     */
+    public static DataPort alarm(Level level, BlockPos owner, Direction facing, UUID identity) {
+        var s = AlarmGeometry.socket(facing.ordinal());
+        var outward = Direction.values()[AlarmGeometry.socketOutward(facing.ordinal())];
+        var centre =
+                new Vec3(owner.getX() + s[0] / 16, owner.getY() + s[1] / 16, owner.getZ() + s[2] / 16)
+                        .add(Vec3.atLowerCornerOf(outward.getNormal()).scale(.005));
+        return create(identity, DataPort.Kind.ALARM, 0, level, owner, centre, outward);
+    }
+
     public static DataPort power(
             UUID id,
             DataPort.Kind kind,

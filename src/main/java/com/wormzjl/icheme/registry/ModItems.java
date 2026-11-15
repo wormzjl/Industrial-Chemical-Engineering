@@ -82,6 +82,8 @@ public final class ModItems {
     public static final DeferredItem<PipelineFittingItem> ORIFICE_PLATE=fitting("orifice_plate",Instrument.Type.ORIFICE);
     /** An automated shutoff valve (W7): open or closed by hand or by a loop. */
     public static final DeferredItem<PipelineFittingItem> AUTOMATED_SHUTOFF_VALVE=fitting("automated_shutoff_valve",Instrument.Type.ACTUATED_VALVE);
+    // Batch 2026-11-15-fluid-interfaces, the alarm beacon (W9).
+    public static final DeferredItem<net.minecraft.world.item.BlockItem> ALARM_BEACON=ITEMS.registerSimpleBlockItem(ModBlocks.ALARM_BEACON);
 
     public static final DeferredItem<BlockItem> PROCESS_SIMULATOR = ITEMS.registerSimpleBlockItem(
             "process_simulator",

@@ -16,11 +16,12 @@ package com.wormzjl.icheme.network;
  * {@code sight-glass-3}, {@code mover-4}, {@code flare-2}, {@code still-1}, {@code instruments-1},
  * {@code pipeline-tool-5} and the process simulator's {@code 3}); the first value differs from all of them.
  * {@code icheme-2}: a steam turbine's inlet class gained LP, declared first, so every class's ordinal on the wire moved
- * (batch 2026-11-15-equipment-visual-design).</p>
+ * (batch 2026-11-15-equipment-visual-design).
+ * {@code icheme-3}: the alarm beacon's edit and view (batch 2026-11-15-fluid-interfaces, W9).</p>
  */
 public final class NetworkProtocol {
     /** The version every registrar of the mod carries. */
-    public static final String VERSION = "icheme-2";
+    public static final String VERSION = "icheme-3";
 
     private NetworkProtocol() {
     }

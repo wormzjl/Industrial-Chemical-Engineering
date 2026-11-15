@@ -119,7 +119,7 @@ public final class RegistryRealignment {
         }
         for (java.util.UUID id; tally.checked < DEVICES && System.nanoTime() - start < BUDGET_NANOS && (id = controls.nextPanel(dimension)) != null; ) {
             try {
-                tally.add(panel(level, world, id));
+                tally.add(world.controls().facts().alarm(id) != null ? alarm(level, world, id) : panel(level, world, id));
             } catch (RuntimeException failed) {
                 tally.checked++;
                 IChemE.LOGGER.error("fluid_realign failed panel={}", id, failed);
@@ -342,6 +342,35 @@ public final class RegistryRealignment {
                 && (!id.equals(box.identity()) || !port.equals(box.dataPort()))) world.controls().loaded(box);
         if (held) facts.holdPanel(id, false);
         return new Check(outcome, held);
+    }
+
+    /**
+     * Re-aligns the cell of alarm beacon {@code id} (batch 2026-11-15-fluid-interfaces, W9) to its facts, as a controller's:
+     * a missing beacon is placed where its cell is free, turned as its socket says; a cell another block holds keeps that
+     * block, and the beacon is not decided there (no hold).
+     */
+    public static Check alarm(ServerLevel level, FluidWorldAuthority world, java.util.UUID id) {
+        var facts = world.controls().facts();
+        var alarm = facts.alarm(id);
+        var port = facts.port(id);
+        if (alarm == null || port == null || !alarm.dimension().equals(level.dimension().location().toString())) return Check.NONE;
+        var at = alarm.position();
+        if (!level.hasChunkAt(at)) return Check.NONE;
+        var facing = AlarmBeaconBlock.facing(port, at);
+        var present = level.getBlockState(at);
+        Outcome outcome;
+        if (present.is(ModBlocks.ALARM_BEACON.get())) {
+            boolean turned = present.getValue(AlarmBeaconBlock.FACING) != facing;
+            if (turned) FluidDeviceBlock.quietly(() -> level.setBlock(at, present.setValue(AlarmBeaconBlock.FACING, facing), Block.UPDATE_ALL));
+            outcome = turned ? Outcome.RESTATED : Outcome.NOTHING;
+        } else if (present.isAir() || present.canBeReplaced()) {
+            var wanted = ModBlocks.ALARM_BEACON.get().defaultBlockState().setValue(AlarmBeaconBlock.FACING, facing);
+            FluidDeviceBlock.quietly(() -> level.setBlock(at, wanted, Block.UPDATE_ALL));
+            outcome = Outcome.PLACED;
+        } else return Check.NONE;
+        if (level.getBlockEntity(at) instanceof com.wormzjl.icheme.world.level.block.entity.AlarmBeaconBlockEntity beacon
+                && (!id.equals(beacon.identity()) || !port.equals(beacon.dataPort()))) world.controls().loaded(beacon);
+        return new Check(outcome, false);
     }
 
     private static Check holdCable(ControlFacts facts, DataBus.Site site, boolean held) {

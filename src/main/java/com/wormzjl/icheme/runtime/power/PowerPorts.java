@@ -118,7 +118,7 @@ public final class PowerPorts {
                 || be instanceof PipeRackBlockEntity
                 || be instanceof EquipmentShellBlockEntity
                 || be instanceof FluidDeviceBlockEntity
-                || be instanceof ControlPanelBlockEntity
+                || be instanceof com.wormzjl.icheme.runtime.control.DataPort.Owner
                 || be instanceof CreativePowerBlockEntity) return null;
         if ((!level.isClientSide() || be == null)
                 && level.getCapability(Capabilities.EnergyStorage.BLOCK, owner, face) == null)

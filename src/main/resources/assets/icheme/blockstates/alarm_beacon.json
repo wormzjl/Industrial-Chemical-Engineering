@@ -1,0 +1,22 @@
+{
+  "variants": {
+    "facing=down,state=clear": { "model": "icheme:block/alarm_beacon", "x": 180 },
+    "facing=down,state=active": { "model": "icheme:block/alarm_beacon_lit", "x": 180 },
+    "facing=down,state=acknowledged": { "model": "icheme:block/alarm_beacon_lit", "x": 180 },
+    "facing=up,state=clear": { "model": "icheme:block/alarm_beacon" },
+    "facing=up,state=active": { "model": "icheme:block/alarm_beacon_lit" },
+    "facing=up,state=acknowledged": { "model": "icheme:block/alarm_beacon_lit" },
+    "facing=north,state=clear": { "model": "icheme:block/alarm_beacon", "x": 90 },
+    "facing=north,state=active": { "model": "icheme:block/alarm_beacon_lit", "x": 90 },
+    "facing=north,state=acknowledged": { "model": "icheme:block/alarm_beacon_lit", "x": 90 },
+    "facing=south,state=clear": { "model": "icheme:block/alarm_beacon", "x": 90, "y": 180 },
+    "facing=south,state=active": { "model": "icheme:block/alarm_beacon_lit", "x": 90, "y": 180 },
+    "facing=south,state=acknowledged": { "model": "icheme:block/alarm_beacon_lit", "x": 90, "y": 180 },
+    "facing=west,state=clear": { "model": "icheme:block/alarm_beacon", "x": 90, "y": 270 },
+    "facing=west,state=active": { "model": "icheme:block/alarm_beacon_lit", "x": 90, "y": 270 },
+    "facing=west,state=acknowledged": { "model": "icheme:block/alarm_beacon_lit", "x": 90, "y": 270 },
+    "facing=east,state=clear": { "model": "icheme:block/alarm_beacon", "x": 90, "y": 90 },
+    "facing=east,state=active": { "model": "icheme:block/alarm_beacon_lit", "x": 90, "y": 90 },
+    "facing=east,state=acknowledged": { "model": "icheme:block/alarm_beacon_lit", "x": 90, "y": 90 }
+  }
+}

@@ -57,9 +57,10 @@ final class ChunkBinding {
         String name=dimension.location().toString();
         for(var cell:List.copyOf(loaded.getBlockEntitiesPos())) {
             var block=loaded.getBlockState(cell).getBlock();
-            if(!(block instanceof FluidDeviceBlock)&&!(block instanceof EquipmentShellBlock)&&!(block instanceof com.wormzjl.icheme.world.level.block.PipeRackBlock)&&!(block instanceof com.wormzjl.icheme.world.level.block.ControlPanelBlock)&&!(block instanceof com.wormzjl.icheme.world.level.block.ConduitBlock))continue;
+            if(!(block instanceof FluidDeviceBlock)&&!(block instanceof EquipmentShellBlock)&&!(block instanceof com.wormzjl.icheme.world.level.block.PipeRackBlock)&&!(block instanceof com.wormzjl.icheme.world.level.block.ControlPanelBlock)&&!(block instanceof com.wormzjl.icheme.world.level.block.ConduitBlock)&&!(block instanceof com.wormzjl.icheme.world.level.block.AlarmBeaconBlock))continue;
             var entity=loaded.getBlockEntity(cell); // Includes saved cells not yet promoted from pending NBT.
             if(entity instanceof com.wormzjl.icheme.world.level.block.entity.ControlPanelBlockEntity box)authority.controls().loaded(box);
+            else if(entity instanceof com.wormzjl.icheme.world.level.block.entity.AlarmBeaconBlockEntity beacon)authority.controls().loaded(beacon);
             else if(entity instanceof com.wormzjl.icheme.world.level.block.entity.ConduitBlockEntity cable)authority.controls().loaded(cable);
             else if(entity instanceof com.wormzjl.icheme.world.level.block.entity.PipeRackBlockEntity rack){rack.bind(authority);authority.controls().loaded(rack);}
             else if(entity instanceof FluidDeviceBlockEntity pipe) {
