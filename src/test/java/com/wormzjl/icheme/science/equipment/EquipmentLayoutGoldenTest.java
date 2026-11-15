@@ -65,7 +65,9 @@ class EquipmentLayoutGoldenTest {
         // Steam turbines above one casing (owner P12): HP to vacuum at 300 MW (HP, MP, double-flow LP), HP to the MP header at
         // 150 MW (HP, MP), MP to vacuum at 80 MW (MP, LP), VHP into the LP header at 60 MW (HP, MP).
         for (var duty : List.of(MachineDuty.turbine(300000, MachineDuty.Steam.HP, 10), MachineDuty.turbine(150000, MachineDuty.Steam.HP, 1000),
-                MachineDuty.turbine(80000, MachineDuty.Steam.MP, 10), MachineDuty.turbine(63000, MachineDuty.Steam.VHP, 450)))
+                MachineDuty.turbine(80000, MachineDuty.Steam.MP, 10), MachineDuty.turbine(63000, MachineDuty.Steam.VHP, 450),
+                // The LP class above one casing (batch 2026-11-15-equipment-visual-design, W6): a single and a double flow.
+                MachineDuty.turbine(63000, MachineDuty.Steam.LP, 10), MachineDuty.turbine(150000, MachineDuty.Steam.LP, 10)))
             shapes.add(EquipmentShape.unit(Kind.STEAM_TURBINE, 3, 1, Heading.NORTH, 0).withDuty(duty));
         // The generators the table held before their range grew to 400 MW: their layouts stand.
         for (double kilowatts : new double[]{10000, 20000}) {

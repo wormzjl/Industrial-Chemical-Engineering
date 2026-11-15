@@ -207,24 +207,40 @@ final class SteamTurbineDesign extends UnitDesign {
     }
 
     /**
-     * A tandem casing's bearing pedestal from {@code p0} to {@code p1} along the shaft (K15): its base block on the frame,
-     * the narrower pedestal body and the half-round bearing cap over the shaft. It collides as the box it stands in (the
-     * old pedestal's, so its cells stay).
+     * An LP turbine's inlet and exhaust above one casing (W6; owner: "Top, short neck"), both on the shaft line: the inlet
+     * riser at {@code zI} (a cell centre) on a dome on the belt's top (a double flow's hood's middle), a butterfly valve's
+     * wafer body and actuator at its middle, its flange and STEAM nozzle up; the exhaust's short neck on the hood's top
+     * near its 0.7 point (a cell centre, clear of the cover's inset and, on a double flow, of the inlet's dome), tapering
+     * to {@code oe}, its flange and EXHAUST nozzle up.
      */
-    private static void pedestal(ProcessUnit u, double a, double base, double shaft, double p0, double p1, double d) {
+    private static void lpNozzles(ProcessUnit u, SteamTurbineTrain t, double a, double shaft, double z0, double zI, double oe) {
         var m = u.mesh;
-        double px = Math.max(.15, .25 * d), cap = .15 * d, foot = Math.max(.05, .06 * d);
-        u.solids.add(ProcessUnit.Solid.box(new double[]{a - px, base, p0}, new double[]{a + px, shaft + cap, p1}));
-        m.box(new double[]{a - px, base, p0}, new double[]{a + px, base + foot, p1}, Mesh.ALL_FACES & ~4, Material.MACHINE);
-        m.box(new double[]{a - cap, base + foot, p0}, new double[]{a + cap, shaft, p1}, Mesh.ALL_FACES & ~12, Material.MACHINE);
-        var axis = Frame.of(new double[]{a, shaft, 0}, 2, 1);
-        int n = ProcessUnit.sides(2 * cap), count = Math.max(1, (int) Math.round(n / 2.0));
-        SteamTurbineTrain.vault(m, axis, cap, p0, p1, n, 0, Math.PI, Material.MACHINE);
-        for (double z : new double[]{p0, p1}) {
-            var end = new java.util.ArrayList<double[]>();
-            for (int i = 0; i <= count; i++) end.add(axis.at(Math.PI * i / count, cap, z));
-            m.flat(end, new double[]{0, 0, z == p0 ? -1 : 1}, Material.MACHINE);
-        }
+        double d = t.d, tf = .03 + .01 * d, oi = t.inletOutside(), rd = t.domeRadius(), yb = shaft + t.inletTop();
+        // The inlet: its dome, the riser with the butterfly valve, the flange and its nuts.
+        var in = Frame.of(new double[]{a, 0, zI}, 1, 1);
+        m.cylinder(in, rd, yb - .05, yb + .1 * d, ProcessUnit.sides(2 * rd), Material.MACHINE);
+        double r0 = yb + .1 * d, r1 = r0 + .35 * d, rm = (r0 + r1) / 2, rw = oi / 2 + .04 + .01 * d;
+        m.prism(in, oi / 2, r0, r1, ProcessUnit.sides(oi), Material.PIPE);
+        m.cylinder(in, rw, rm - .04 * d, rm + .04 * d, ProcessUnit.sides(2 * rw), Material.MACHINE);
+        u.box(new double[]{a + rw, rm - .06 * d, zI - .06 * d}, new double[]{a + rw + .12 * d, rm + .06 * d, zI + .06 * d}, Material.ACTUATOR, false);
+        double rfi = PipeSizes.flange(oi) / 2, topI = r1 + tf;
+        m.cylinder(in, rfi, r1, topI, ProcessUnit.sides(2 * rfi), Material.FLANGE);
+        m.bolts(in, oi, oi / 2 + .03, rfi, topI, 1, Material.BOLT);
+        u.solids.add(ProcessUnit.Solid.rod(new double[]{a, 0, zI}, 1, yb - .05, topI, Math.max(rd, rfi), 0));
+        u.nozzles.add(new Nozzle(Role.STEAM, new double[]{a, topI - .01, zI}, 1, 1, Math.ceil(topI + ProcessUnit.NECK) - topI + .01, oi, 0));
+        u.nozzleRoots.put(u.nozzles.size() - 1, new ProcessUnit.NozzleRoot(oi / 2, .4, .03, Material.PIPE));
+        // The exhaust: a short neck on the hood's top, its flange and nuts.
+        double z1 = z0 + t.hoodStart(), z2 = z0 + t.exhaustEnd, rn = Math.min(.3 * d, 1.6 * oe / 2), zX = Math.floor(z1 + .7 * (z2 - z1)) + .5;
+        if (zX + rn > z2 - .06 * d) zX -= 1;
+        if (t.doubleFlowHood()) while (zX < zI + rd + rn + .1 * d) zX += 1;
+        double yh = shaft + t.hood, rfe = PipeSizes.flange(oe) / 2, topX = yh + .15 * d + tf;
+        var out = Frame.of(new double[]{a, 0, zX}, 1, 1);
+        m.frustum(out, rn, oe / 2, yh - .05, yh + .15 * d, ProcessUnit.sides(2 * rn), Material.PIPE);
+        m.cylinder(out, rfe, yh + .15 * d, topX, ProcessUnit.sides(2 * rfe), Material.FLANGE);
+        m.bolts(out, oe, oe / 2 + .03, rfe, topX, 1, Material.BOLT);
+        u.solids.add(ProcessUnit.Solid.rod(new double[]{a, 0, zX}, 1, yh - .05, topX, Math.max(rn, rfe), 0));
+        u.nozzles.add(new Nozzle(Role.EXHAUST, new double[]{a, topX - .01, zX}, 1, 1, Math.ceil(topX + ProcessUnit.NECK) - topX + .01, oe, 0));
+        u.nozzleRoots.put(u.nozzles.size() - 1, new ProcessUnit.NozzleRoot(oe / 2, .4, .03, Material.PIPE));
     }
 
     @Override
@@ -252,7 +268,9 @@ final class SteamTurbineDesign extends UnitDesign {
         // Along z: the exhaust's centre line on a cell centre, the plinth's front in the first cell; the coupling face on
         // the block face behind the rear pedestal.
         double lead = Math.max(.3, t.frontReach());
-        double zE = Math.ceil(lead + t.exhaust - .5 - 1e-9) + .5, z0 = zE - t.exhaust;
+        // An LP turbine above one casing (W6): its inlet riser on a cell centre instead, on the shaft line.
+        double zI = Math.ceil(lead + t.inletStation() - .5 - 1e-9) + .5;
+        double zE = Math.ceil(lead + t.exhaust - .5 - 1e-9) + .5, z0 = hood > 0 ? zI - t.inletStation() : zE - t.exhaust;
         // Behind the front casing, the separate casings and their pedestals (none to one casing's power); the coupling behind the last.
         double back = z0 + t.length();
         double[] start = new double[sections.size()];
@@ -267,8 +285,10 @@ final class SteamTurbineDesign extends UnitDesign {
         double yv = Math.max(Math.floor(yc) + .5, Math.ceil(stand + rb + .12 - .5) + .5), zv = Math.floor(z0 + t.chest) + .5;
         t.draw(u, a, base, z0, xv, yv, zv);
         t.couple(u, a, base, z0, face, rs, rpm);
-        u.post(xv, zv, stand, yv - rb, .1, false);
-        u.box(new double[]{xv - .1, stand, zv - .1}, new double[]{xv + .1, stand + .02, zv + .1}, Material.STEELWORK, false);
+        if (hood == 0) {
+            u.post(xv, zv, stand, yv - rb, .1, false);
+            u.box(new double[]{xv - .1, stand, zv - .1}, new double[]{xv + .1, stand + .02, zv + .1}, Material.STEELWORK, false);
+        }
 
         // The base frame with its drip rim, on the plinth or the table.
         double zf0 = z0 - .15, zf1 = face - .2;
@@ -283,6 +303,10 @@ final class SteamTurbineDesign extends UnitDesign {
         // The exhaust: a branch up from the barrel's top, its flange pair, the expansion joint's convolutions, a reducer
         // to a nozzle of a pipe's largest where the branch is larger, the exhaust flange and its nuts.
         double len = t.exhaustEnd - t.coneEnd, rbr = Math.min(.2 * d, .5 * len - .02 * d), oe = Math.min(PipeSizes.MAX_OUTSIDE, 2 * rbr);
+        if (hood > 0) {
+            lpNozzles(u, t, a, shaft, z0, zI, oe);
+            return;
+        }
         var up = Frame.of(new double[]{a, 0, zE}, 1, 1);
         int ne = ProcessUnit.sides(2 * rbr);
         double y1 = shaft + Math.max(d / 2, t.hood) + .06 * d + .04, joint = Math.max(.15, .15 * d), y2 = y1 + joint, rr = rbr + .03 + .02 * d, tf = .03 + .01 * d;
@@ -353,7 +377,7 @@ final class SteamTurbineDesign extends UnitDesign {
                     u.solids.add(ProcessUnit.Solid.rod(new double[]{a, 0, zr}, 1, rTop - .02, yo, rc, 0));
                 }
             }
-            pedestal(u, a, base, shaft, z2 + .08 * d + .03, z2 + .33 * d + .08, d);
+            SteamTurbineTrain.pedestal(u, a, base, shaft, z2 + .08 * d + .03, z2 + .33 * d + .08, d);
             // The leg into its inlet: along the top from where the steam rose, down into its inlet.
             var drop = Frame.of(new double[]{a, 0, zin}, 1, 1);
             m.prism(drop, rc, inletTop - .02, yo, no, Material.PIPE);
@@ -366,7 +390,11 @@ final class SteamTurbineDesign extends UnitDesign {
         var end = sections.getLast();
         double zLast = start[sections.size() - 1] + end.length() * d, zx = Math.floor(zLast - .3) + .5, yx = shaft + end.top() * d, rx = PipeSizes.flange(oe) / 2;
         var rise = Frame.of(new double[]{a, 0, zx}, 1, 1);
-        m.prism(rise, rc, yx - .1, yx + .15, ProcessUnit.sides(oe), Material.PIPE);
+        // A short tapered neck (W6), its solid, flange and nozzle as before; its base no wider than the cell columns the
+        // casing's crest reaches in that row, less 0.05 m for the facets inside the round (a unit's cells are those its facets reach).
+        double crest = Math.floor(yx) > shaft ? Math.sqrt(Math.max(0, end.top() * d * end.top() * d - (Math.floor(yx) - shaft) * (Math.floor(yx) - shaft))) - .05 : end.top() * d;
+        double neck = Math.max(rc, Math.min(1.6 * rc, Math.min(a - Math.floor(a - crest), Math.floor(a + crest) + 1 - a) - 1e-3));
+        m.frustum(rise, neck, rc, yx - .05, yx + .15, ProcessUnit.sides(2 * neck), Material.PIPE);
         m.cylinder(rise, rx, yx + .15, yx + .15 + tf, ProcessUnit.sides(2 * rx), Material.FLANGE);
         double xTop = yx + .15 + tf;
         u.solids.add(ProcessUnit.Solid.rod(new double[]{a, 0, zx}, 1, yx - .1, xTop, rx, 0));

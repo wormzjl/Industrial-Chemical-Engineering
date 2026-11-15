@@ -220,12 +220,13 @@ final class SteamTurbineTrain {
         m.cylinder(Frame.of(new double[]{a + .55 * sx, shaft - .05 * d - .05, 0}, 2, 1), .04 * d + .02, z0 - .05 * d - .03, z0, 10, Material.MACHINE);
 
         if (hood > 0) {
-            // An LP turbine above one casing: its casing the LP hood between the end walls, the glands at both ends.
-            hood(u, a, base, shaft, zh, ze, hood, 2 * hood > SteamTurbineDesign.LP_WIDTH * d + 1e-9, d);
-            m.prism(f, .1 * d + .02, zs, zh, n, Material.MACHINE);
-            m.prism(f, .1 * d + .02, ze, z0 + pedestal0, n, Material.MACHINE);
-            u.volumes.add(ProcessUnit.Solid.rod(new double[]{a, shaft, 0}, 2, zh + .05, ze - .05, .9 * hood, 0));
-        } else casing(u, a, base, z0, shaft, f, n);
+            // An LP turbine above one casing (W6): its LP casing and the pedestal the tandem casings have; no HP steam chest
+            // and no trip-and-throttle valve (its inlet riser and exhaust neck are the design's, SteamTurbineDesign.build).
+            lpCasing(u, a, base, z0, shaft, f, n);
+            pedestal(u, a, base, shaft, z0 + pedestal0, z0 + pedestal1, d);
+            return;
+        }
+        casing(u, a, base, z0, shaft, f, n);
 
         // The rear bearing pedestal and its cap.
         double px = Math.max(.15, .25 * d), p0 = z0 + pedestal0, p1 = z0 + pedestal1, pt = shaft + .15 * d;
@@ -234,6 +235,80 @@ final class SteamTurbineTrain {
 
         steamChest(u, a, base + chestAxis(), z0 + chest);
         tripThrottle(u, a, xv, yv, zv, base + chestAxis(), z0 + chest);
+    }
+
+    // ---- An LP turbine above one casing (W6) ----------------------------------------------------------------------
+
+    /** Whether the LP hood is a double flow's (above {@link SteamTurbineDesign#DOUBLE_FLOW}): over the whole casing. */
+    boolean doubleFlowHood() {
+        return 2 * hood > SteamTurbineDesign.LP_WIDTH * d + 1e-9;
+    }
+
+    /** The LP inlet's outside diameter: a quarter of Dc, a pipe's largest at most. */
+    double inletOutside() {
+        return Math.min(PipeSizes.MAX_OUTSIDE, .25 * d);
+    }
+
+    /** A single flow's inlet belt's length from the HP end wall: a fifth of the casing, room for the inlet, at most 0.35 of it. */
+    double beltLength() {
+        return Math.min(Math.max(.2 * casing, inletOutside() + .12 * d), .35 * casing);
+    }
+
+    /** A single flow's flare from the belt to the hood, its length. */
+    double flareLength() {
+        return coneEnd - hpEnd - beltLength();
+    }
+
+    /** Where the inlet riser stands from the front standard's front: over the belt's middle, or a double flow's hood's middle. */
+    double inletStation() {
+        return doubleFlowHood() ? (hpEnd + exhaustEnd) / 2 : hpEnd + beltLength() / 2;
+    }
+
+    /** Where the exhaust hood starts from the front standard's front: the flare's end, or the HP end wall on a double flow. */
+    double hoodStart() {
+        return doubleFlowHood() ? hpEnd : coneEnd;
+    }
+
+    /** The casing's top over the shaft where the inlet riser stands: the belt's, or the hood's. */
+    double inletTop() {
+        return doubleFlowHood() ? hood : .32 * d;
+    }
+
+    /** The inlet's dome radius: the riser's wafer and some, no wider than the belt. */
+    double domeRadius() {
+        double r = inletOutside() / 2 + .04 * d;
+        return doubleFlowHood() ? r : Math.min(r, beltLength() / 2 - .01);
+    }
+
+    /**
+     * The LP casing (W6; owner on the first LP drawing: "really need to improve its visual"): a single flow's inlet belt
+     * (0.32 Dc), its casing flaring to 0.6 Dc with two girth ribs, its joint flange and a foot under the belt, then the
+     * exhaust hood at the rear only; a double flow's hood over the whole length. The glands; the interior as before.
+     */
+    private void lpCasing(ProcessUnit u, double a, double base, double z0, double shaft, Frame f, int n) {
+        var m = u.mesh;
+        double zs = z0 + standard, zh = z0 + hpEnd, ze = z0 + exhaustEnd, zc = z0 + hoodStart();
+        if (doubleFlowHood()) hood(u, a, base, shaft, zh, ze, hood, true, d);
+        else {
+            double rb = .32 * d, rf = .6 * d, zb = zh + beltLength(), th = Math.max(.05, .1 * d);
+            m.prism(f, .1 * d + .02, zs, zh, n, Material.MACHINE);
+            m.annulus(f, 0, rb, zh, n, -1, Material.CLADDING);
+            m.prism(f, rb, zh, zb, n, Material.CLADDING);
+            m.frustum(f, rb, rf, zb, zc, n, Material.CLADDING);
+            for (int k = 1; k <= 2; k++) {
+                double z = zb + (zc - zb) * k / 3, r = rb + (rf - rb) * k / 3, w = .02 + .005 * d;
+                m.hoop(f, r, r + .025 * d, z - w, z + w, n, Material.MACHINE);
+            }
+            for (int side = -1; side <= 1; side += 2) {
+                ProcessUnit.ledge(m, a, side, zh, rb, zb, rb, shaft - th / 2, shaft + th / 2, flange, true, false, Material.CLADDING);
+                ProcessUnit.ledge(m, a, side, zb, rb, zc, rf, shaft - th / 2, shaft + th / 2, flange, false, true, Material.CLADDING);
+            }
+            u.box(new double[]{a - .2 * d, base, zh + beltLength() / 4}, new double[]{a + .2 * d, shaft - rb, zh + .75 * beltLength()}, Material.MACHINE, true);
+            u.solids.add(ProcessUnit.Solid.rod(new double[]{a, shaft, 0}, 2, zh, zc, rf, 0));
+            u.round(a, shaft, zh, zb, rb);
+            hood(u, a, base, shaft, zc, ze, hood, false, d, false);
+        }
+        u.volumes.add(ProcessUnit.Solid.rod(new double[]{a, shaft, 0}, 2, zh + .05, ze - .05, .9 * hood, 0));
     }
 
     /**
@@ -313,29 +388,74 @@ final class SteamTurbineTrain {
     }
 
     /**
-     * An LP casing's exhaust hood along z at (a, shaft) from {@code z1} to {@code z2} (batch 2026-11-15-equipment-visual-design):
-     * a box {@code half} either side from {@code base} to the shaft line under a half-round top, its top closed at both
-     * ends, split along the shaft line by its joint flange (0.04 Dc proud, as deep as the casing's split flange); a double
-     * flow's centre ring between its two exhaust hoods. It collides as the box and the round body.
+     * An LP casing's exhaust hood along z at (a, shaft) from {@code z1} to {@code z2} (batch 2026-11-15-equipment-visual-design,
+     * W3 and W6): a box {@code half} either side from {@code base} to the shaft line, its side walls stiffened by ribs; an
+     * arched cover set in 0.06 Dc at both ends, its ends closed; split along the shaft line by its joint flange (0.04 Dc
+     * proud, as deep as the casing's split flange); a gland cone 0.08 Dc out from each end wall; a double flow's centre
+     * ring between its two exhaust hoods and one relief diaphragm on its cover. It collides as the box and the round body
+     * over its whole length (the cells do not change with the cover's inset).
      */
     static void hood(ProcessUnit u, double a, double base, double shaft, double z1, double z2, double half, boolean doubleFlow, double d) {
+        hood(u, a, base, shaft, z1, z2, half, doubleFlow, d, true);
+    }
+
+    /** {@link #hood}, its front gland cone left out where {@code frontGland} is false (a casing joins it there and hides it). */
+    static void hood(ProcessUnit u, double a, double base, double shaft, double z1, double z2, double half, boolean doubleFlow, double d, boolean frontGland) {
         var m = u.mesh;
         var axis = Frame.of(new double[]{a, shaft, 0}, 2, 1);
         int n = ProcessUnit.sides(2 * half);
+        // The cover set in 0.06 Dc, but no further than the cell its end stands in: a unit's cells are those its facets
+        // reach, and a placed hood keeps its cells (W6).
+        double c1 = Math.min(z1 + .06 * d, Math.floor(z1) + 1 - 1e-3), c2 = Math.max(z2 - .06 * d, Math.ceil(z2) - 1 + 1e-3), th = Math.max(.05, .1 * d), e = .04 * d;
         u.box(new double[]{a - half, base, z1}, new double[]{a + half, shaft, z2}, Material.MACHINE, true);
-        vault(m, axis, half, z1, z2, n, 0, Math.PI, Material.MACHINE);
+        vault(m, axis, half, c1, c2, n, 0, Math.PI, Material.MACHINE);
         u.solids.add(ProcessUnit.Solid.rod(new double[]{a, shaft, 0}, 2, z1, z2, half, 0));
         int count = Math.max(1, (int) Math.round(n / 2.0));
-        for (double z : new double[]{z1, z2}) {
+        for (double z : new double[]{c1, c2}) {
             var cap = new java.util.ArrayList<double[]>();
             for (int i = 0; i <= count; i++) cap.add(axis.at(Math.PI * i / count, half, z));
-            m.flat(cap, new double[]{0, 0, z == z1 ? -1 : 1}, Material.MACHINE);
+            m.flat(cap, new double[]{0, 0, z == c1 ? -1 : 1}, Material.MACHINE);
         }
-        double th = Math.max(.05, .1 * d), e = .04 * d;
-        for (int side = -1; side <= 1; side += 2)
+        for (int side = -1; side <= 1; side += 2) {
             ProcessUnit.ledge(m, a, side, z1, half, z2, half, shaft - th / 2, shaft + th / 2, e, true, true, Material.MACHINE);
-        if (doubleFlow) m.hoop(axis, half, half + .04 * d, (z1 + z2) / 2 - .05 * d, (z1 + z2) / 2 + .05 * d, n, Material.CLADDING);
+            // The side wall's stiffening ribs, evenly spaced: silhouette parts, no more than this count.
+            int ribs = Math.max(1, (int) Math.round((z2 - z1) / (.5 * d)) - 1);
+            double w = (.02 + .01 * d) / 2, x0 = side < 0 ? a - half - .06 * d : a + half, x1 = side < 0 ? a - half : a + half + .06 * d;
+            for (int k = 1; k <= ribs; k++) {
+                double z = z1 + (z2 - z1) * k / (ribs + 1);
+                m.box(new double[]{x0, base, z - w}, new double[]{x1, shaft - th / 2, z + w}, ALL_FACES & ~(side < 0 ? 2 : 1), Material.MACHINE);
+            }
+        }
+        // The glands: a cone from each end wall out to the shaft's gland, 0.08 Dc long but within the end wall's cell.
+        double g1 = Math.min(.08 * d, z1 - Math.floor(z1) - 1e-3), g2 = Math.min(.08 * d, Math.floor(z2) + 1 - z2 - 1e-3);
+        if (frontGland && g1 > .02) m.frustum(axis, .1 * d + .02, .35 * half, z1 - g1, z1, n, Material.MACHINE);
+        if (g2 > .02) m.frustum(axis, .35 * half, .1 * d + .02, z2, z2 + g2, n, Material.MACHINE);
+        if (doubleFlow) {
+            m.hoop(axis, half, half + .04 * d, (z1 + z2) / 2 - .05 * d, (z1 + z2) / 2 + .05 * d, n, Material.CLADDING);
+            m.cylinder(Frame.of(new double[]{a, 0, z1 + .2 * (z2 - z1)}, 1, 1), .12 * d, shaft + half - .02, shaft + half + .03 + .01 * d, ProcessUnit.sides(.24 * d), Material.FLANGE);
+        }
         u.round(a, shaft, z1, z2, half);
+    }
+
+    /**
+     * A casing's bearing pedestal from {@code p0} to {@code p1} along the shaft (K15, W6): its base block on the frame,
+     * the narrower pedestal body and the half-round bearing cap over the shaft. It collides as the box it stands in (the
+     * old pedestal's, so its cells stay).
+     */
+    static void pedestal(ProcessUnit u, double a, double base, double shaft, double p0, double p1, double d) {
+        var m = u.mesh;
+        double px = Math.max(.15, .25 * d), cap = .15 * d, foot = Math.max(.05, .06 * d);
+        u.solids.add(ProcessUnit.Solid.box(new double[]{a - px, base, p0}, new double[]{a + px, shaft + cap, p1}));
+        m.box(new double[]{a - px, base, p0}, new double[]{a + px, base + foot, p1}, ALL_FACES & ~4, Material.MACHINE);
+        m.box(new double[]{a - cap, base + foot, p0}, new double[]{a + cap, shaft, p1}, ALL_FACES & ~12, Material.MACHINE);
+        var axis = Frame.of(new double[]{a, shaft, 0}, 2, 1);
+        int n = ProcessUnit.sides(2 * cap), count = Math.max(1, (int) Math.round(n / 2.0));
+        vault(m, axis, cap, p0, p1, n, 0, Math.PI, Material.MACHINE);
+        for (double z : new double[]{p0, p1}) {
+            var end = new java.util.ArrayList<double[]>();
+            for (int i = 0; i <= count; i++) end.add(axis.at(Math.PI * i / count, cap, z));
+            m.flat(end, new double[]{0, 0, z == p0 ? -1 : 1}, Material.MACHINE);
+        }
     }
 
     /** A casing of one section's radius at station {@code z} from the front standard's front: the HP barrel's, the cone's, the exhaust barrel's. */

@@ -66,6 +66,36 @@ Purpose: make the implemented equipment look better and less bare (owner request
   `SteamTurbineTest.theClassesExpandStraightThroughToTheirExhausts`. Tests: `WearTest`, `SteamTurbineTest`,
   `MachineHealthTest`, `MoverHealthStatusTest` (test). All pass.
 
+- 2026-11-15, W6, the LP casing's look (owner: "really need to improve its visual"; exhaust "Top, short neck").
+  - The shared `SteamTurbineTrain.hood` now has a cover set in at both ends, side-wall ribs and gland cones, plus a
+    relief diaphragm on a double flow.
+  - LP class above 45 MW: a single flow is an inlet belt (0.32 Dc) and a flare to 0.6 Dc with two girth ribs, the hood
+    at the rear only. A double flow has the hood over the whole length. Both have one inlet riser on the shaft line with
+    a butterfly valve (it fixes `z0`), a short neck on the hood's top, and the tandem pedestal (`pedestal` moved to
+    `SteamTurbineTrain`). The steam chest, the trip-and-throttle valve and the chimney exhaust are gone.
+  - Tandem: the exhaust stub is a tapered neck.
+  - New scene `STEAM_TURBINE_LP_DOUBLE`.
+  - Where the plan was wrong:
+    - (a) A unit's cells come from its facets as well as its solids ("every cell it reaches is its own",
+      `ShapeRasterizer`). So the new hood mesh moved two rows of `main`: 80 MW lost 6 shell cells and 300 MW gained 3
+      to 5. Fixes: the cover's inset and each gland cone stay inside their end wall's cell column, and the tandem
+      neck's base stays inside the columns the casing's crest reaches (less 0.05 m). Every row of `main` is as before.
+    - (b) The pitfalls print LP duties to 350 kPa, but an LP exhaust is at most 225 kPa, so 150 kPa was used.
+    - (c) `shapes-12-turbine-sections.snbt` stores shapes only, no cells or stamp, so it needed no re-record.
+  - Belt and flare at 46, 63 and 100 MW: 1.11 and 1.44 m to 10 kPa, 0.84 and 0.36 m to 150 kPa (casing 5.1 and
+    2.4 m).
+  - New rows: LP 63 MW to 10 kPa `box 5 7 10, shell 225, interior 10, pipes 2,7,3 2,7,6`; LP 150 MW to 10 kPa
+    `box 7 8 10, shell 306, interior 38, pipes 3,8,5 3,7,7`.
+  - Polygons before → after:
+    - LP_TANDEM 1,508 → 1,139 (ACTUATOR 110 → 12, BOLT 312 → 408, CLADDING 12 → 81, FLANGE 210 → 72, MACHINE 350 → 387,
+      PIPE 416 → 92, STEELWORK 41 → 30).
+    - LP_DOUBLE new, 1,062 (BOLT 408, CLADDING 156, MACHINE 237, FLANGE 86, PIPE 76).
+    - TANDEM_80 2,345 → 2,439 (MACHINE 732 → 822, PIPE 472 → 476).
+    - TANDEM_300 2,634 → 2,782 (MACHINE 761 → 895, FLANGE 224 → 238).
+    - STEAM_TURBINE, MP and LP unchanged.
+  - Tests (equipmentGates): `SteamTurbineSectionsTest`, `ProcessUnitTest`, `ShapeRasterizerTest`,
+    `EquipmentLayoutGoldenTest`, `EquipmentShapeCompatTest`. All pass.
+
 ## Documents
 
 - [VISUAL_REVIEW.md](VISUAL_REVIEW.md): the findings and the proposed order.

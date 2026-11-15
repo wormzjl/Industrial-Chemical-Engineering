@@ -83,6 +83,36 @@ class SteamTurbineSectionsTest {
         assertEquals(lpOnly.coneEnd, lpOnly.lastBarrel(), 1e-12);
     }
 
+    /**
+     * W6, the LP class above one casing (owner: "really need to improve its visual", exhaust "Top, short neck"): a single
+     * flow's inlet belt and flare both have length at every LP duty (the flare at least 0.15 of the casing), and the inlet
+     * riser and the exhaust neck stand in cell columns of their own, both on the shaft line, the neck under the hood's
+     * cover. 350 kPa, which the plan names, is not an LP exhaust (at most half its 4.5 bar): 150 kPa is its highest.
+     */
+    @Test void anLpTurbineHasItsBeltFlareInletAndNeck() {
+        for (double kw : new double[]{46000, 63000, 100000, 150000})
+            for (double exhaust : new double[]{10, 150}) {
+                var duty = MachineDuty.turbine(kw, MachineDuty.Steam.LP, exhaust);
+                var design = UnitDesign.of(EquipmentShape.Kind.STEAM_TURBINE);
+                double d = design.size(duty), half = (kw > SteamTurbineDesign.DOUBLE_FLOW ? SteamTurbineDesign.LP_DOUBLE_WIDTH : SteamTurbineDesign.LP_WIDTH) * d / 2;
+                var t = new SteamTurbineTrain(d, SteamTurbineDesign.stages(duty), duty.vacuum(), 1, new double[]{1}, half);
+                System.out.printf(java.util.Locale.ROOT, "LP_CASING %.0f kW to %.0f kPa: d %.1f, stages %d, casing %.3f m, belt %.3f m, flare %.3f m, %s%n",
+                        kw, exhaust, d, SteamTurbineDesign.stages(duty), t.casing, t.beltLength(), t.flareLength(), t.doubleFlowHood() ? "double flow" : "single flow");
+                assertEquals(3, d, 1e-9, "every turbine above one casing is 3 m");
+                assertTrue(t.beltLength() > 0 && t.flareLength() >= .15 * t.casing - 1e-12, "belt and flare at " + kw + " kW, " + exhaust + " kPa");
+                assertTrue(t.domeRadius() <= t.beltLength() / 2 || t.doubleFlowHood(), "the dome on the belt");
+                var shape = EquipmentShape.unit(EquipmentShape.Kind.STEAM_TURBINE, d, 1, EquipmentShape.Heading.NORTH, 0).withDuty(duty);
+                var ports = ShapeRasterizer.ports(shape);
+                assertEquals(2, ports.size());
+                var steam = ports.get(0).cell();
+                var out = ports.get(1).cell();
+                assertEquals(steam.x(), out.x(), "both on the shaft line");
+                assertNotEquals(steam.z(), out.z(), "each in a cell column of its own at " + kw + " kW, " + exhaust + " kPa");
+                assertEquals(1, ports.get(0).dy());
+                assertEquals(1, ports.get(1).dy(), "both up");
+            }
+    }
+
     @Test void theRangeRunsTo300MegawattsAndKeepsTheCasingAt3Metres() {
         var design = UnitDesign.of(EquipmentShape.Kind.STEAM_TURBINE);
         var top = design.step(MachineDuty.turbine(45000, MachineDuty.Steam.HP, 10), "power", 100);
