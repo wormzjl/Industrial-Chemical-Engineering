@@ -168,6 +168,57 @@ class HydrocarbonTangentTest {
             }
     }
 
+    /**
+     * Batch 2026-11-15-fluid-step-cost, S2: a tangent filled into storage another case filled before (the Jacobian sweep's
+     * per-slot tangents, refilled node after node) is a new tangent to the bit: every derivative it reports, and the phase
+     * it gives at the base and beside it in temperature, pressure and every amount.
+     */
+    @Test void aTangentFilledIntoKeptStorageIsANewOneToTheBit() {
+        var storage = new java.util.IdentityHashMap<HydrocarbonModel, HydrocarbonModel.Tangent>();
+        var all = cases();
+        // Each case filled twice over the storage: after the case before it, and once more after the whole list.
+        for (int round = 0; round < 2; round++)
+            for (Case c : all) {
+                var model = c.model();
+                var reused = model.tangent(c.t(), c.p(), c.amounts(), c.root(), model.prepare(c.t()), false, storage.get(model));
+                var fresh = model.tangent(c.t(), c.p(), c.amounts(), c.root(), model.prepare(c.t()), false);
+                assertNotNull(reused, c.name());
+                if (storage.containsKey(model)) assertSame(storage.get(model), reused, c.name() + ": filled in place");
+                storage.put(model, reused);
+                int n = kernelCount(model);
+                assertEquals(Double.doubleToLongBits(fresh.kernelVolume()), Double.doubleToLongBits(reused.kernelVolume()), c.name());
+                assertEquals(Double.doubleToLongBits(fresh.kernelEnthalpy()), Double.doubleToLongBits(reused.kernelEnthalpy()), c.name());
+                assertEquals(Double.doubleToLongBits(fresh.kernelPressureSlope()), Double.doubleToLongBits(reused.kernelPressureSlope()), c.name());
+                for (int i = 0; i < n; i++) {
+                    assertEquals(Double.doubleToLongBits(fresh.partialMolarVolume(i)), Double.doubleToLongBits(reused.partialMolarVolume(i)), c.name() + " " + i);
+                    assertEquals(Double.doubleToLongBits(fresh.partialMolarEnthalpy(i)), Double.doubleToLongBits(reused.partialMolarEnthalpy(i)), c.name() + " " + i);
+                    assertEquals(Double.doubleToLongBits(fresh.logFugacityTemperatureDerivative(i)), Double.doubleToLongBits(reused.logFugacityTemperatureDerivative(i)), c.name() + " " + i);
+                    assertEquals(Double.doubleToLongBits(fresh.logFugacityPressureDerivative(i)), Double.doubleToLongBits(reused.logFugacityPressureDerivative(i)), c.name() + " " + i);
+                    for (int j = 0; j < n; j++)
+                        assertEquals(Double.doubleToLongBits(fresh.logFugacityAmountDerivative(i, j)), Double.doubleToLongBits(reused.logFugacityAmountDerivative(i, j)), c.name() + " " + i + " " + j);
+                }
+                double total = 0;
+                for (int i = 0; i < n; i++) total += c.amounts()[i];
+                for (int direction = -3; direction < n; direction++) {
+                    double t = c.t(), p = c.p();
+                    double[] amounts = c.amounts().clone();
+                    if (direction == -2) t += 1e-7 * t;
+                    else if (direction == -1) p += 1e-7 * p;
+                    else if (direction >= 0) amounts[direction] += 1e-7 * total;
+                    assertEquals(Double.doubleToLongBits(fresh.compositionShift(amounts)), Double.doubleToLongBits(reused.compositionShift(amounts)), c.name());
+                    var a = fresh.at(t, p, amounts);
+                    var b = reused.at(t, p, amounts);
+                    String at = c.name() + ", direction " + direction;
+                    assertEquals(Double.doubleToLongBits(a.molarVolume()), Double.doubleToLongBits(b.molarVolume()), at);
+                    assertEquals(Double.doubleToLongBits(a.molarEnthalpy()), Double.doubleToLongBits(b.molarEnthalpy()), at);
+                    assertEquals(Double.doubleToLongBits(a.molarInternalEnergy()), Double.doubleToLongBits(b.molarInternalEnergy()), at);
+                    assertEquals(Double.doubleToLongBits(a.volumePressureDerivative()), Double.doubleToLongBits(b.volumePressureDerivative()), at);
+                    assertTrue(java.util.Arrays.equals(a.logFugacityView(), b.logFugacityView()), at + ": ln phi");
+                    assertEquals(a.vaporLike(), b.vaporLike(), at);
+                }
+            }
+    }
+
     /** Test 2: beside the base, in temperature, pressure and every amount, the error falls with the square of the step. */
     @Test void theErrorFallsWithTheSquareOfTheStep() {
         double[] steps = {1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9};

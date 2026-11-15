@@ -1489,6 +1489,14 @@ final class StepEquations implements SparseNewton.Equations {
             if(evaluated(failed))return columns;
         }
     }
+    /**
+     * The phase tangents of the node {@link #differentiate} sweeps, one per storage slot, filled again for each node
+     * (batch 2026-11-15-fluid-step-cost, S2; {@link FluidThermodynamics#tangents(FluidThermodynamics.State,
+     * FluidThermodynamics.Prepared, com.wormzjl.icheme.science.fluid.thermo.HydrocarbonModel.Tangent[])}). A node's
+     * tangents are read only by the decodes of its own columns, and no phase they give keeps a tangent's array, so the
+     * next node may overwrite them; the pass's sweeps run one at a time on its thread.
+     */
+    private final com.wormzjl.icheme.science.fluid.thermo.HydrocarbonModel.Tangent[] tangentStorage=new com.wormzjl.icheme.science.fluid.thermo.HydrocarbonModel.Tangent[3];
     private int differentiate(double[] x,double[] f,double differenceStep,int[] entryOffsets,int[] entryRows,
                               double[] entries,Runnable checkpoint,boolean tangents) {
         if(hasWeirs)return -1;
@@ -1507,7 +1515,8 @@ final class StepEquations implements SparseNewton.Equations {
             for(int node=0;node<layout.length;node++) {
                 if(layout[node]==null)continue;
                 // One derivative evaluation per phase of the node; every local column decodes through them.
-                var nodeTangents=tangents?model.tangents(baseStates[node],basePrepared[node]):null;
+                // Filled into this pass's three slot tangents (S2): a node's tangents are read only through its own columns.
+                var nodeTangents=tangents?model.tangents(baseStates[node],basePrepared[node],tangentStorage):null;
                 for(int local=0;local<layout[node].size();local++) {
                     checkpoint.run();columns++;
                     int column=offsets[node]+local;

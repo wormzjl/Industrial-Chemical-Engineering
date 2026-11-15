@@ -555,6 +555,16 @@ public final class FluidThermodynamics {
      * the state does not hold and for a root that cannot be differentiated. Each tangent's base is the state's own phase.
      */
     public HydrocarbonModel.Tangent[] tangents(State state,Prepared prepared) {
+        return tangents(state,prepared,null);
+    }
+    /**
+     * {@link #tangents(State, Prepared)} filled into the caller's {@code storage} (null: new tangents): one tangent per
+     * storage slot, {@code storage[slot]} filled again in place ({@link HydrocarbonModel#tangent(double, double, double[],
+     * PengRobinsonKernel.Root, TranslatedPengRobinson.Workspace, boolean, HydrocarbonModel.Tangent)}) and set to a new one
+     * where it held none (batch 2026-11-15-fluid-step-cost, S2). The slots are separate objects, so a node's phases share
+     * nothing; the caller reads nothing of an earlier call's tangents after this one.
+     */
+    public HydrocarbonModel.Tangent[] tangents(State state,Prepared prepared,HydrocarbonModel.Tangent[] storage) {
         double t=state.temperature(),p=state.pressure();
         var tangents=new HydrocarbonModel.Tangent[3];
         TranslatedPengRobinson.Workspace terms=null;
@@ -564,7 +574,8 @@ public final class FluidThermodynamics {
             if(state.phase(slot)==null)continue;
             if(terms==null){terms=prepared==null?hydrocarbon.prepare(t):match(prepared,t).pengRobinson();hydrocarbon.carry(terms,support);}
             tangents[slot]=hydrocarbon.tangent(t,p,state.amountsView(slot),slot==State.VAPOR?PengRobinsonKernel.Root.VAPOR:PengRobinsonKernel.Root.LIQUID,
-                    terms,slot!=State.VAPOR&&gas);
+                    terms,slot!=State.VAPOR&&gas,storage==null?null:storage[slot]);
+            if(storage!=null&&tangents[slot]!=null)storage[slot]=tangents[slot];
             if(tangents[slot]!=null)SolverDiagnostics.count(SolverDiagnostics.jacobianTangentsBuilt);
         }
         return tangents;
