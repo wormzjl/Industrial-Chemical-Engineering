@@ -1,7 +1,7 @@
 # Relief sprites for equipment shells (plan)
 
 Date: 2026-11-15. Batch `2026-11-15-equipment-visual-design`; findings P1, P4, P5, G2 and G5 of
-[VISUAL_REVIEW.md](VISUAL_REVIEW.md). Status: planned, nothing built. It runs beside the steam turbine build
+[VISUAL_REVIEW.md](VISUAL_REVIEW.md). Status: built 2026-11-15 on `claude/relief-sprites-10dd59` (R-W1 to R-W3; build notes in section 9), not merged. It runs beside the steam turbine build
 ([STEAM_TURBINE_SECTIONS_PLAN.md](STEAM_TURBINE_SECTIONS_PLAN.md)).
 
 ## 1. Owner rules this rests on
@@ -125,3 +125,39 @@ build.
 - The three packages pass their named tests.
 - The report holds the polygon table, the sprite sheets, the views, R2's counts and anything the plan had wrong.
 - `documentation/reference/code-guide/client-rendering.md` and `effects.md` describe the two variants and the tool.
+
+## 9. Build notes (2026-11-15)
+
+Commits on `claude/relief-sprites-10dd59`: R-W1 `291967979`, R-W2 `ada5afb51`, R-W3 `ca884d357`. R1 A, R2 60 mm and
+R3 (no client) as recommended; each is one constant (`Mesh.RELIEF_NUTS_ON_LINES`, `Mesh.SOLID_NUT`).
+
+Where the build differs from sections 3 to 6:
+
+- The plan's route (`Mesh.bolts`, `Mesh.nut`) does not reach the largest bolt loads. The fired heaters' casing-joint
+  nuts were 50 mm boxes (`ProcessUnit.joint`, `seam`: 4,318 of `CABIN_HEATER`'s polygons) and a pump cover's recessed
+  nuts were prisms inside `Mesh.disc`. Both now go through `Mesh.nut` and its size rule.
+- `vessel_head` and `painted_head` lose their tangent-line weld as well (the owner's no-weld rule); the plan named only
+  the shells.
+- `PumpSprites.boltFace` and `VesselTextures.cladding` / `paintedCladding` moved into `equipment_textures.py`, ported bit
+  for bit, so the old tools no longer overwrite the relief sprites. The cladding sprites are 64 x 64 now (each old
+  texel two by two) so a strap has an edge.
+- Four tests encoded the old look: `ShapeRasterizerTest` (a drum nozzle's nuts are `BOLT_FACE`), `LineGeometryTest`
+  (the watertight check skips the nut decals), `RenderDetailTest` (low detail is never costlier, not always cheaper;
+  a new case pins `SOLID_NUT`), `PaintTest` (`MOTOR_LOUVRE` is body paint).
+- The louvre panels keep their 10 mm boxes but leave out the hidden back face.
+
+Polygons of the 81 drawing references (EngineeringExport, NORMAL), before 304,279 (bolts 45,864):
+
+| SOLID_NUT | Total | Bolts (BOLT + BOLT_FACE) | Meshes changed |
+|---|---|---|---|
+| 40 mm | 296,639 | 38,236 | 54 |
+| 60 mm (built) | 275,807 | 17,404 | 70 |
+| 80 mm | 270,767 | 12,364 | 72 |
+
+At 60 mm the 1.5 in studs (61 mm nuts) of lines from 32 in up stay prisms: the exchangers keep 432 bolt polygons,
+which 80 mm takes to 96. No mesh grew; no layout row moved.
+
+Open: the baked bolt face keeps the old low-detail sprite's mean grey (122.6) as the brief asked, so normal-detail nuts
+read paler than the black prisms they replace (about 68); `BOLT_FACE` is unpainted, so a darker mean moves no paint.
+Nuts edge-on vanish, as section 7 expected. The shader-pack variant and whether a pack toggle re-meshes chunks need the
+owner's client check (R3).
