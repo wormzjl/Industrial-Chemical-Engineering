@@ -98,7 +98,7 @@ Volatile share of a liquid (S2, S5): `min(1, Psat_i(298.15 K) / 101325 Pa)` with
 
 ## 4. The field
 
-**Storage.** Per dimension, a sparse map from a cube (the chunk section, `SectionPos.asLong`) to four `float` indices: toxic, combustible, corrosive, particulate. A release adds `Δ I = Σ n_i / (ref_i · N)` to its cube, where `N` is the cube's air amount: `φ · 4096 m³ · 40.9 mol/m³` (298.15 K, 1 atm; `φ` the cube's air share, below). An open cube holds 167 500 mol of air. Particulate: `Δ I = m / (1.75 g/m³ · φ · 4096 m³)`.
+**Storage.** Per dimension, a sparse map from a cube (the chunk section, `SectionPos.asLong`) to four `double` amounts: toxic, combustible, corrosive, particulate, each in air-mole equivalents (`Σ n_i / ref_i`). The index is the amount over the cube's air moles; amounts are stored, not indices, so the ledger stays exact when a cube's air share changes (WP2 brief, 2026-11-15). A release adds `Δ I = Σ n_i / (ref_i · N)` to its cube, where `N` is the cube's air amount: `φ · 4096 m³ · 40.9 mol/m³` (298.15 K, 1 atm; `φ` the cube's air share, below). An open cube holds 167 500 mol of air. Particulate: `Δ I = m / (1.75 g/m³ · φ · 4096 m³)`.
 
 Storing indices and not compounds loses the compound's name (a later detector shows "toxic 1.4", not "H2S 140 ppm"). It makes a cube 16 bytes and the step independent of the package. Owner decision D4.
 
@@ -202,6 +202,8 @@ Order: 1 → 2 → 3 → 4 → 5 → 6 → 7. WP1 and WP2 share no file and may 
 Pitfalls for every package: `ShaftTrains.booked` also runs on a replayed span (`Flares` says "committed or replayed"), so a release must be counted once: collect only where the ledger books, and prove it with a test that replays a span. The blanket's vent and the open vessel's vent have the same `Kind`. The `equipmentGates` and `columnGates` class lists in `build.gradle` see only what their tests load. `en_us.json` only; the other languages wait for the translation commit. No dev client; GameTests need a fresh `fluidGameTestRunId` and must remove what they register.
 
 ## 10. Owner decisions
+
+Decided 2026-11-15 (owner: "Yes, start"): D1 to D6 as recommended.
 
 | # | Question | Recommended |
 |---|---|---|

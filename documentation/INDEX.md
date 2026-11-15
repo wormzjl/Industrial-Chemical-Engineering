@@ -14,7 +14,7 @@ Status words:
 
 | Batch | Purpose | Status |
 |---|---|---|
-| [2026-11-15-pollution-system/](2026-11-15-pollution-system/README.md) | Air pollution in 16 m cubes: toxic, combustible, corrosive, particulate; spread, effects, explosions | Planned 2026-11-15 |
+| [2026-11-15-pollution-system/](2026-11-15-pollution-system/README.md) | Air pollution in 16 m cubes: toxic, combustible, corrosive, particulate; spread, effects, explosions | In progress since 2026-11-15 |
 | [2026-11-13-codebase-review/](2026-11-13-codebase-review/README.md) | Whole code base review and revamp: defect fixes, free performance, the water module, machine shaft power and wear modes, the Rust column library (stage a), the largest classes split into files, timing-independent stills, columns and exchangers, the code guide per module, documentation and collaboration | Implemented 2026-11-15 (0.31.0) |
 | [2026-11-12-tutorial-system/](2026-11-12-tutorial-system/README.md) | Tutorial for new players: own films, help tours on every GUI, a field guide to a first small crude unit, equipment items and JEI pages | Implemented 2026-11-13 (0.30.0) |
 | [2026-11-12-fluid-conversion/](2026-11-12-fluid-conversion/README.md) | Converter between Forge fluids and IChemE fluids | Implemented 2026-11-12 (0.28.0) |
