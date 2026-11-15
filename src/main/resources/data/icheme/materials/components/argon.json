@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "Argon",
+  "kind": "chemical",
+  "translation_key": "material.icheme.argon",
+  "fallback": "Argon",
+  "properties": "icheme:chemsep_argon",
+  "appearance": {
+    "color": "#DCE8FA",
+    "transparency": 0.95,
+    "estimated": true
+  },
+  "identifiers": {
+    "cas": "7440-37-1",
+    "chemsep_id": "914",
+    "smiles": "[Ar]",
+    "formula": "Ar"
+  }
+}

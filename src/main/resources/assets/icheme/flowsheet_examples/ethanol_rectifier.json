@@ -50,6 +50,11 @@
       "EthylMercaptan",
       "CarbonDioxide",
       "Ethanol",
+      "Argon",
+      "Neon",
+      "Helium",
+      "Krypton",
+      "Xenon",
       "Water"
     ]
   },

@@ -175,10 +175,12 @@ class MaterialCatalogTest {
         var bundled=PilotCryogenicTestCatalog.withPilot();var resources=new HashMap<>(bundled.resources());int stripped=0;
         for(var entry:resources.entrySet())if(entry.getKey().startsWith(ROOT+"properties/")) {
             var o=JsonParser.parseString(entry.getValue()).getAsJsonObject();
+            // Helium has no triple point (batch 2026-11-15-fluid-interfaces, W1): its record carries no freezing sub-record.
+            if(entry.getKey().equals(ROOT+"properties/chemsep_helium.json")) { assertFalse(o.has("freezing")); continue; }
             assertTrue(o.has("freezing"),entry.getKey());o.remove("freezing");entry.setValue(o.toString());stripped++;
         }
         // W6: ethanol's main record (icheme:chemsep_ethanol) has its freezing sub-record: 50 before it.
-        assertEquals(51,stripped,"ethanol (W6), 20 bundled datasets and the pilot's 4, the 24 Tier 1 imports (W6), the crude_pr78 CO2 (O11 of batch 2026-11-04-open-thermo-data) and the cubic water (W3b step 2, the ice anchor)");
+        assertEquals(55,stripped,"ethanol (W6), 20 bundled datasets and the pilot's 4, the 24 Tier 1 imports (W6), the crude_pr78 CO2 (O11 of batch 2026-11-04-open-thermo-data), the cubic water (W3b step 2, the ice anchor) and four rare gases (batch 2026-11-15-fluid-interfaces, W1)");
         var without=MaterialCatalog.parse(resources);
         for(var p:bundled.packages().values()) {
             assertEquals(p.scientificRevision(),without.requirePackage(p.id()).scientificRevision(),p.id());
@@ -187,6 +189,7 @@ class MaterialCatalogTest {
             assertEquals(bundled.physicsContent(p.id(),p.components()),without.physicsContent(p.id(),p.components()),p.id());
             for(String component:p.components()) {
                 if(component.equals("Water"))continue; // W3b: the water model holds the triple point and the ice of Water in a cubic.
+                if(component.equals("Helium"))continue; // No triple point (batch 2026-11-15-fluid-interfaces, W1).
                 assertTrue(SubRecords.freezingPoint(bundled,p.id(),component).isPresent(),p.id()+" "+component);
                 assertTrue(SubRecords.freezingPoint(without,p.id(),component).isEmpty(),p.id()+" "+component);
             }

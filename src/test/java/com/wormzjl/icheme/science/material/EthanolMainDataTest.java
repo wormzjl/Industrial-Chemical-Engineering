@@ -42,7 +42,7 @@ final class EthanolMainDataTest {
         assertEquals("icheme:refinery", NETWORK);
         var pack = CATALOG.requirePackage(NETWORK);
         int e = pack.components().indexOf("Ethanol");
-        assertEquals(pack.components().size() - 1, e, "ethanol is the package's last compound (D3)");
+        assertEquals(pack.components().indexOf("CarbonDioxide") + 1, e, "ethanol follows CO2 (D3); the rare gases follow it (batch 2026-11-15-fluid-interfaces, W1)");
         assertEquals("icheme:chemsep_ethanol", pack.properties().get(e).id());
     }
 

@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "Helium",
+  "kind": "chemical",
+  "translation_key": "material.icheme.helium",
+  "fallback": "Helium",
+  "properties": "icheme:chemsep_helium",
+  "appearance": {
+    "color": "#DCE8FA",
+    "transparency": 0.95,
+    "estimated": true
+  },
+  "identifiers": {
+    "cas": "7440-59-7",
+    "chemsep_id": "913",
+    "smiles": "[He]",
+    "formula": "He"
+  }
+}

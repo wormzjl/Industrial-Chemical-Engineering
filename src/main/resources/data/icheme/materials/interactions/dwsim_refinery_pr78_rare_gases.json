@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "id": "icheme:dwsim_refinery_pr78_rare_gases",
+  "model": "pr78",
+  "revision": "dwsim-10.2.5-d3-r1",
+  "source": "PR78 k_ij for the pairs that involve an imported compound (owner decision D3): DWSIM 10.2.5 kij_pr.dat; else the DECHEMA Peng-Robinson value of ChemSep pr_ip.dat (Kooijman and Taylor, Artistic License 2.0) whose fitted temperature range is nearest 300..600 K; else no pair (the method's zero). Owner exceptions (tools/compound-import/pair-exceptions.json): no Hydrogen pair; Methane/HydrogenSulfide from ChemSep pr.ipd 2009. Pairs between existing compounds are left to their own libraries.",
+  "pairs": [
+    {
+      "first": "Methane",
+      "second": "Argon",
+      "kij": 0.0078,
+      "source": "DECHEMA PR via ChemSep pr_ip.dat row 88: \"Argon/C1 T=150.72-178K p365\" (150.72..178 K; nearest 300..600 K of 5)"
+    },
+    {
+      "first": "Nitrogen",
+      "second": "Argon",
+      "kij": -0.0052,
+      "source": "DECHEMA PR via ChemSep pr_ip.dat row 36: \"Nitrogen/Argon T=90.50-120.00K p272\" (90.5..120 K; nearest 300..600 K of 6)"
+    },
+    {
+      "first": "Oxygen",
+      "second": "Argon",
+      "kij": 0.0089,
+      "source": "DECHEMA PR via ChemSep pr_ip.dat row 85: \"Argon/Oxygen T=90.5-120K P=1.043-12.092bar p362\" (90.5..120 K; nearest 300..600 K of 2)"
+    },
+    {
+      "first": "Oxygen",
+      "second": "Krypton",
+      "kij": 0.0185,
+      "source": "DECHEMA PR via ChemSep pr_ip.dat row 93: \"Oxygen/Krypton T=94.15-150.9K P=1.504-6.893bar p375\" (94.15..150.9 K; nearest 300..600 K of 2)"
+    },
+    {
+      "first": "Ammonia",
+      "second": "Argon",
+      "kij": -0.18,
+      "source": "DECHEMA PR via ChemSep pr_ip.dat row 91: \"Argon/Ammonia p371\" (no stated temperature; nearest 300..600 K of 1)"
+    }
+  ]
+}

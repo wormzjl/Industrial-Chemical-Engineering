@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "Neon",
+  "kind": "chemical",
+  "translation_key": "material.icheme.neon",
+  "fallback": "Neon",
+  "properties": "icheme:chemsep_neon",
+  "appearance": {
+    "color": "#DCE8FA",
+    "transparency": 0.95,
+    "estimated": true
+  },
+  "identifiers": {
+    "cas": "7440-01-9",
+    "chemsep_id": "919",
+    "smiles": "[Ne]",
+    "formula": "Ne"
+  }
+}
