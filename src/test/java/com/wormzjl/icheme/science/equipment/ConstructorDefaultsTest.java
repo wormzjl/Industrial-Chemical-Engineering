@@ -60,6 +60,10 @@ class ConstructorDefaultsTest {
         var exchanger = ConstructorDefaults.sizes(VesselPlacement.Form.EXCHANGER);
         assertEquals(1.5, exchanger.diameter());
         assertEquals(9, exchanger.length());
+        // The air cooler's starting bay stays 2.5 m by 5 m though its range grew to 6 m by 12 m (owner, 2026-11-15).
+        var bay = ConstructorDefaults.sizes(VesselPlacement.Form.AIR_COOLER);
+        assertEquals(2.5, bay.diameter());
+        assertEquals(5, bay.length());
     }
 
     /**

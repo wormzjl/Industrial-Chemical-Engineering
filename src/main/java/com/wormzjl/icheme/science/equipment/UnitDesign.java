@@ -152,6 +152,17 @@ public abstract class UnitDesign {
         return minLength(size);
     }
 
+    /** The constructor's starting main size for a new choice ({@link ConstructorDefaults}): the middle of the kind's sizes. */
+    public double startSize() {
+        var all = sizes();
+        return all.get(all.size() / 2);
+    }
+
+    /** The constructor's starting second size at {@link #startSize}; 0 leaves it to {@link ConstructorDefaults}' own rule. */
+    public int startLength(double size) {
+        return 0;
+    }
+
     /** The second size's step (a balanced-opposed compressor's throws come in pairs). */
     public int lengthStep() {
         return 1;

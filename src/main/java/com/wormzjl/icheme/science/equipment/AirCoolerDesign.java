@@ -51,6 +51,20 @@ final class AirCoolerDesign extends UnitDesign {
     }
 
     /**
+     * A new choice starts at the 2.5 m by 5 m bay, as it did before the range grew to 6 m by 12 m (owner, 2026-11-15:
+     * "Yes, 2.5 by 5"); the middle of the sizes would be 4 m by 9 m.
+     */
+    @Override
+    public double startSize() {
+        return 2.5;
+    }
+
+    @Override
+    public int startLength(double size) {
+        return 5;
+    }
+
+    /**
      * The longest bay of width {@code size}, to {@link ProcessUnit#MAX_BAY_LENGTH}: every length from {@link #minLength} to
      * it keeps fans over {@link ProcessUnit#FAN_COVERAGE} of the face (three fans at most cover a narrow bay's long bundle
      * no further: 1.5 m wide to 6 m long, 2 m to 9, 2.5 m to 10, 3 m and wider to 12).

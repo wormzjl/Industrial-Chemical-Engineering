@@ -143,8 +143,9 @@ Purpose: make the implemented equipment look better and less bare (owner request
 - Combined steam turbine: `CHANGELOG.md`, the translation commit and the version wait for the merge.
 - Scope (owner, 2026-11-15): the boilers and gasifiers belong to another work and are left out.
 - A sprite render or in-game look for the findings marked "sprite" (K5, K9, K11).
-- Air cooler, for the owner: the constructor's starting bay moved from 2.5 by 5 m to 4 by 9 m (recommended: back to
-  2.5 by 5 m); the residue cooler's 0.22 bar on one long train (a sizing-rule question); access steel on large bays.
+- Air cooler: the constructor starts at the 2.5 by 5 m bay again (owner, 2026-11-15: "Yes, 2.5 by 5"; `UnitDesign.startSize`,
+  `startLength`; `ConstructorDefaultsTest` passes). For the owner: the residue cooler's 0.22 bar on one long train (a
+  sizing-rule question); access steel on large bays.
 - Relief sprites: the shader-pack variant needs an owner-run client check (R3).
 - Status: the relief sprites, the combined steam turbine and the larger air cooler bay are built and merged into the
   batch branch; nothing is on `main`. `CHANGELOG.md`, the translation commit and the version wait for the merge.
