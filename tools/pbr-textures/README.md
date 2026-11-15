@@ -44,11 +44,12 @@ much"). Chunk-meshed shells cannot use the mod's shader, so each sprite comes in
 | `<name>_flat_n.png`, `<name>_flat_s.png` | LabPBR 1.3 normal (with AO and height) and specular of the flat albedo, encoded as the wiring's | the pack lights the flat albedo from them |
 
 The baked sprite has no `_n`, so a pack never lights its relief twice. A baked sprite keeps the mean colour of the sprite
-it replaced within 2 per channel, so paint tints and colours do not move; painted sprites stay neutral greys.
+it replaced within 2 per channel, so paint tints and colours do not move; painted sprites stay neutral greys. The
+unpainted relief nut is the exception: `BOLT_FACE_MEAN` = 78, near the prisms' black (owner 2026-11-15, R-W4).
 
 | Sprite | Size | Relief |
 |---|---|---|
-| `equipment_bolt_face` | 32 x 32, stretched over one nut (`Mesh.disc`, corners on u) | hex nut 1.6 d across its flats, 30 degree chamfer, countersink, stud end 0.4 d proud; drawn for M20, every dimension in d |
+| `equipment_bolt_face` | 32 x 32, stretched over one nut (`Mesh.disc`, corners on u) | hex nut 1.6 d across its flats, 30 degree chamfer, countersink, stud end 0.4 d proud; drawn for M20, every dimension in d; mean grey 78 |
 | `motor_louvre` | 64 x 64, 1 m, tiled | 16 blades a metre, each face sloping out to its lip, the dark slot under it; neutral grey (body paint) |
 | `equipment_cladding`, `painted_cladding` | 64 x 64, 2 m, tiled | today's jacketing laps, twice the texels; a band strap every metre (rows 0 and 32), drawn 2.5 mm proud |
 

@@ -23,9 +23,12 @@ class EquipmentTexturesTest {
     private static final Path SHELL = Path.of("src/main/resources/assets/icheme/models/block/equipment_shell.json");
     /** Relief sprites and their size. */
     private static final Map<String, Integer> RELIEF = Map.of("equipment_bolt_face", 32, "motor_louvre", 64, "equipment_cladding", 64, "painted_cladding", 64);
-    /** The mean colour of each changed baked sprite before the relief (2026-11-15, eada8e57d), per channel. */
+    /**
+     * The mean colour of each changed baked sprite before the relief (2026-11-15, eada8e57d), per channel; the relief
+     * nut's darker on purpose (owner 2026-11-15, R-W4: "Darken the relief nut?" "yes"; BOLT_FACE_MEAN of the tool).
+     */
     private static final Map<String, double[]> MEANS = Map.of(
-            "equipment_bolt_face", new double[]{122.6, 122.6, 122.6},
+            "equipment_bolt_face", new double[]{78, 78, 78},
             "equipment_cladding", new double[]{194.2, 197.2, 199.2},
             "painted_cladding", new double[]{234.9, 234.9, 234.9},
             "vessel_shell", new double[]{169.8, 173.8, 177.8},

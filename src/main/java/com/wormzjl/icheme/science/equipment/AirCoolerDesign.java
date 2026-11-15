@@ -159,7 +159,7 @@ final class AirCoolerDesign extends UnitDesign {
                 var f = Frame.of(new double[]{x0 + (i + .5) * w, 0, zIn}, 1, 1);
                 u.mesh.prism(f, stub / 2, high, ym, ProcessUnit.sides(stub), Material.PIPE);
                 u.mesh.ring(f, stub / 2, PipeSizes.flange(stub) / 2, high, high + .03, ProcessUnit.sides(stub), 3, Material.FLANGE);
-                u.mesh.bolts(f, stub, stub / 2, PipeSizes.flange(stub) / 2, high + .03, 1, Material.BOLT);
+                u.mesh.flangeBolts(f, stub, stub / 2, PipeSizes.flange(stub) / 2, high + .03, 1, Material.BOLT);
             }
             u.nozzles.add(new Nozzle(Role.PROCESS_INLET, new double[]{a, ym + manifold / 2 - .03, zIn}, 1, 1,
                     Math.ceil(ym + manifold / 2 + ProcessUnit.NECK) - ym - manifold / 2 + .03, manifold, 0));
@@ -170,7 +170,7 @@ final class AirCoolerDesign extends UnitDesign {
             var f = Frame.of(new double[]{mid, yo, 0}, 2, 1);
             u.mesh.prism(f, stub / 2, z0, trains == 1 ? zOut + stub / 2 : zOut, ProcessUnit.sides(stub), Material.PIPE);
             u.mesh.ring(f, stub / 2, PipeSizes.flange(stub) / 2, z0, z0 + .03, ProcessUnit.sides(stub), 3, Material.FLANGE);
-            u.mesh.bolts(f, stub, stub / 2, PipeSizes.flange(stub) / 2, z0 + .03, 1, Material.BOLT);
+            u.mesh.flangeBolts(f, stub, stub / 2, PipeSizes.flange(stub) / 2, z0 + .03, 1, Material.BOLT);
             if (trains == 1) u.mesh.annulus(f, 0, stub / 2, zOut + stub / 2, ProcessUnit.sides(stub), 1, Material.PIPE);
             u.solids.add(Solid.rod(new double[]{mid, yo, 0}, 2, z0, zOut, stub / 2, 0));
         }
@@ -213,9 +213,9 @@ final class AirCoolerDesign extends UnitDesign {
         double r = PipeSizes.flange(od) / 2;
         u.mesh.prism(f, od / 2, z0, z1, n, Material.PIPE);
         u.mesh.ring(f, od / 2, r, z0, z0 + .03, n, 3, Material.FLANGE);
-        u.mesh.bolts(f, od, od / 2, r, z0 + .03, 1, Material.BOLT);
+        u.mesh.flangeBolts(f, od, od / 2, r, z0 + .03, 1, Material.BOLT);
         u.mesh.ring(f, od / 2, r, z1 - .03, z1, n, 3, Material.FLANGE);
-        u.mesh.bolts(f, od, od / 2, r, z1 - .03, -1, Material.BOLT);
+        u.mesh.flangeBolts(f, od, od / 2, r, z1 - .03, -1, Material.BOLT);
         u.solids.add(Solid.rod(new double[]{x, y, 0}, 2, z0, z1, od / 2, 0));
     }
 }

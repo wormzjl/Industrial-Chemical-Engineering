@@ -123,16 +123,11 @@ class LineGeometryTest {
                         }
     }
 
-    /**
-     * Every edge is shared by two facets, except the rims left open on a face plane where the next block continues. A
-     * flange's flush relief nuts ({@link Mesh.Material#BOLT_FACE}, 0.4 mm proud) are decals on its face, not part of the
-     * closed surface.
-     */
+    /** Every edge is shared by two facets, except the rims left open on a face plane where the next block continues. */
     private static void assertWatertight(Key key) {
         var edges = new HashMap<String, Integer>();
         var ends = new HashMap<String, double[][]>();
         for (var facet : LineGeometry.mesh(key).facets()) {
-            if (facet.material() == Mesh.Material.BOLT_FACE) continue;
             var p = facet.positions();
             for (int i = 0; i < p.size(); i++) {
                 double[] a = p.get(i), b = p.get((i + 1) % p.size());

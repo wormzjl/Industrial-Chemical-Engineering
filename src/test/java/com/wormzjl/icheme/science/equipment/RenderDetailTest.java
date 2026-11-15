@@ -63,26 +63,35 @@ class RenderDetailTest {
     }
 
     @Test
-    void normalNutsBelowTheSolidSizeAreFlushReliefFacesOnLinesAndEquipment() {
-        // Batch 2026-11-15-equipment-visual-design (R1 A, R2 60 mm): an 8 in flange's nuts (3/4 in studs, 30 mm across
-        // their flats) are one flush relief hexagon each at normal detail, on a line's mesh and an equipment's alike; a
-        // 32 in flange's (1.5 in studs, 61 mm) stay prisms.
+    void equipmentJointNutsBelowTheSolidSizeAreFlushReliefFacesPipeFlangeNutsStayPrisms() {
+        // Batch 2026-11-15-equipment-visual-design (R2 60 mm; R-W4, owner: "Solid nuts on pipe flanges"): an 8 in joint's
+        // nuts (3/4 in studs, 30 mm across their flats) on an equipment's own joint are one flush relief hexagon each at
+        // normal detail; a line's flange and an equipment's nozzle flange (flangeBolts) keep prisms, as does a 32 in
+        // joint (1.5 in studs, 61 mm). Low detail draws flush faces everywhere.
         var frame = Frame.of(new double[3], 1, 1);
         double small = 8 * .0254;
         assertTrue(1.6 * PipeSizes.boltDiameter(small) < Mesh.SOLID_NUT);
         assertTrue(1.6 * PipeSizes.boltDiameter(.8) >= Mesh.SOLID_NUT);
-        for (var mesh : new Mesh[]{new Mesh(), new Mesh().equipment()}) {
-            mesh.bolts(frame, small, small / 2, small / 2 + .1, 0, 1, 8, Material.BOLT);
-            assertEquals(8, mesh.facets().size());
-            for (var facet : mesh.facets()) {
-                assertEquals(Material.BOLT_FACE, facet.material());
-                assertEquals(.0004, facet.max()[1], 1e-12, "the face sits 0.4 mm proud of the flange");
-            }
+        var joint = new Mesh().equipment();
+        joint.bolts(frame, small, small / 2, small / 2 + .1, 0, 1, 8, Material.BOLT);
+        assertEquals(8, joint.facets().size());
+        for (var facet : joint.facets()) {
+            assertEquals(Material.BOLT_FACE, facet.material());
+            assertEquals(.0004, facet.max()[1], 1e-12, "the face sits 0.4 mm proud of the flange");
         }
-        var large = new Mesh();
+        var line = new Mesh();
+        line.bolts(frame, small, small / 2, small / 2 + .1, 0, 1, 8, Material.BOLT);
+        var nozzle = new Mesh().equipment();
+        nozzle.flangeBolts(frame, small, small / 2, small / 2 + .1, 0, 1, Material.BOLT);
+        var large = new Mesh().equipment();
         large.bolts(frame, .8, .4, .6, 0, 1, 12, Material.BOLT);
-        assertTrue(large.facets().stream().allMatch(f -> f.material() == Material.BOLT));
-        assertTrue(large.facets().size() >= 12 * 8, "a nut at least SOLID_NUT across stays a closed prism");
+        for (var prisms : new Mesh[]{line, nozzle, large}) {
+            assertTrue(prisms.facets().stream().allMatch(f -> f.material() == Material.BOLT));
+            assertTrue(prisms.facets().size() >= 8 * 8, "closed prisms");
+        }
+        var low = new Mesh(RenderDetail.LOW);
+        low.flangeBolts(frame, small, small / 2, small / 2 + .1, 0, 1, Material.BOLT);
+        assertTrue(low.facets().stream().allMatch(f -> f.material() == Material.BOLT_FACE));
     }
 
     @Test
@@ -202,9 +211,7 @@ class RenderDetailTest {
                     assertEquals(full, coarse);
                 }
                 assertTrue(low.stream().anyMatch(p -> p.material() == Material.BOLT_FACE));
-                // Never costlier; a small line whose facets are already the fewest draws the same flush relief nuts at
-                // both details since batch 2026-11-15-equipment-visual-design, so it may cost the same.
-                assertTrue(triangles(low) <= triangles(normal));
+                assertTrue(triangles(low) < triangles(normal));
             }
     }
 

@@ -635,10 +635,11 @@ public final class Mesh {
     static final double SOLID_NUT = .060;
 
     /**
-     * Owner point R1 of RELIEF_SPRITES_PLAN.md (recommended option A): pipe and fitting flanges take the relief nut as
-     * equipment does. False keeps the prisms on every mesh not marked {@link #equipment()} (option B).
+     * Owner point R1 of RELIEF_SPRITES_PLAN.md: false (owner 2026-11-15, R-W4: "Solid nuts on pipe flanges"): a laid
+     * line's, a valve's and a fitting's meshes (not marked {@link #equipment()}) keep prism nuts at normal detail. An
+     * equipment's nozzle flanges, where a line joins it, draw theirs with {@link #flangeBolts} for the same look.
      */
-    static final boolean RELIEF_NUTS_ON_LINES = true;
+    static final boolean RELIEF_NUTS_ON_LINES = false;
 
     /** An equipment's own mesh (a unit's, a vessel's), as against a pipe's or a fitting's: R1 tells them apart. */
     private boolean equipment;
@@ -669,18 +670,31 @@ public final class Mesh {
      * cover it everywhere (LineGeometryTest found its inside seen from outside without it).
      */
     void bolts(Frame f, double od, double inner, double outer, double z, int sign, Material material) {
-        bolts(f, od, inner, outer, z, sign, PipeSizes.drawnBolts(od), material);
+        bolts(f, od, inner, outer, z, sign, PipeSizes.drawnBolts(od), material, false);
     }
 
     /** The same bolt geometry with an explicit visual count for large equipment covers. */
     void bolts(Frame f, double od, double inner, double outer, double z, int sign, int count, Material material) {
+        bolts(f, od, inner, outer, z, sign, count, material, false);
+    }
+
+    /**
+     * A pipe flange's nuts, where a line joins the equipment (a nozzle's, a stub's, a spool's), as {@link #bolts}, but
+     * prisms at normal detail on any mesh (owner 2026-11-15, R-W4): a pipe flange stands across its line and is seen from
+     * the side, where a flush face has no outline. Covers, channels, casing joints, manways and hatches keep {@link #bolts}.
+     */
+    void flangeBolts(Frame f, double od, double inner, double outer, double z, int sign, Material material) {
+        bolts(f, od, inner, outer, z, sign, PipeSizes.drawnBolts(od), material, true);
+    }
+
+    private void bolts(Frame f, double od, double inner, double outer, double z, int sign, int count, Material material, boolean pipeFlange) {
         double d = PipeSizes.boltDiameter(od), across = Math.max(1.6 * d, MIN_NUT);
         if (outer - inner < across) return;
         double r = across / Math.sqrt(3), height = Math.max(1.2 * d, MIN_NUT), circle = (inner + outer) / 2;
         var axis = new double[]{sign * f.axis[0], sign * f.axis[1], sign * f.axis[2]};
         for (int k = 0; k < count; k++) {
             var nut = new Frame(f.at(2 * Math.PI * (k + .5) / count, circle, z), axis, f.ref);
-            if (reliefNut(across)) disc(nut, r, .0004, 6, 1, Material.BOLT_FACE);
+            if (detail == RenderDetail.LOW || !pipeFlange && reliefNut(across)) disc(nut, r, .0004, 6, 1, Material.BOLT_FACE);
             else cylinder(nut, r, 0, height, 6, material);
         }
     }
@@ -741,7 +755,16 @@ public final class Mesh {
 
     /** A fastener rather than a dark cylindrical machine part: its flush textured face where {@link #reliefNut} says so (a hexagon of corner radius {@code radius} is {@code radius} √3 across its flats). */
     void nut(Frame f, double radius, double from, double to, int sides, Material material) {
-        if (reliefNut(radius * Math.sqrt(3))) disc(f, radius, Math.min(from, to) + .0004, 6, 1, Material.BOLT_FACE);
+        nut(f, radius, from, to, sides, material, false);
+    }
+
+    /** A pipe flange's nut, as {@link #nut} but a prism at normal detail on any mesh ({@link #flangeBolts}). */
+    void flangeNut(Frame f, double radius, double from, double to, int sides, Material material) {
+        nut(f, radius, from, to, sides, material, true);
+    }
+
+    private void nut(Frame f, double radius, double from, double to, int sides, Material material, boolean pipeFlange) {
+        if (detail == RenderDetail.LOW || !pipeFlange && reliefNut(radius * Math.sqrt(3))) disc(f, radius, Math.min(from, to) + .0004, 6, 1, Material.BOLT_FACE);
         else cylinder(f, radius, from, to, sides, material);
     }
 

@@ -161,3 +161,49 @@ Open: the baked bolt face keeps the old low-detail sprite's mean grey (122.6) as
 read paler than the black prisms they replace (about 68); `BOLT_FACE` is unpainted, so a darker mean moves no paint.
 Nuts edge-on vanish, as section 7 expected. The shader-pack variant and whether a pack toggle re-meshes chunks need the
 owner's client check (R3).
+
+## 11. R-W4 build notes (2026-11-15)
+
+Built as section 10 of the batch branch's copy specifies (owner: solid nuts on pipe flanges, a darker relief nut).
+
+- `Mesh.RELIEF_NUTS_ON_LINES = false`. New `Mesh.flangeBolts` and `Mesh.flangeNut`: as `bolts` and `nut`, but a prism at
+  normal detail on any mesh; low detail keeps the flush face everywhere.
+- `equipment_textures.py`: `BOLT_FACE_MEAN = 78` for the baked and the flat bolt face (was 122.6); the unused port of the
+  old low-detail sprite is gone. Only `equipment_bolt_face.png` and `_flat.png` changed.
+- Tests back to solid line nuts: `ShapeRasterizerTest` line 184 (`BOLT`), `LineGeometryTest` (no nut skip),
+  `RenderDetailTest` (low detail cheaper again; the relief-nut case now checks own joint relief, line, nozzle and large
+  nuts as prisms, low flush). One more than section 10 named: `ShapeRasterizerTest.manwayArea` draws the manway on a
+  mesh marked `equipment()`, as the vessel does, or its nuts are prisms there and relief on the vessel.
+  `EquipmentTexturesTest` pins 78.
+
+Call sites (pipe flange: `flangeBolts`/`flangeNut`; own joint: `bolts`/`nut`; line: a laid line's or a device's mesh,
+prisms by `RELIEF_NUTS_ON_LINES`):
+
+| Call site | Draws | Class |
+|---|---|---|
+| `ShapeRasterizer` 1477 | every vessel and unit nozzle flange | pipe flange |
+| `AdsorberDesign` 245, 300 | nozzle stubs' flange pairs | pipe flange |
+| `AdsorberDesign` 328, 446 | manhole cover, header's blind flange | own joint |
+| `AirCoolerDesign` 162, 173, 216, 218 | header stubs, spools | pipe flange |
+| `CompressorDesign` 157 | cylinder head | own joint |
+| `ConverterDesign` 254 / 291 | hatch / fitting stubs | own joint / pipe flange |
+| `EbullatedBedReactorDesign` 226 | pump casing cover | own joint |
+| `EjectorDesign` 61, 68 | outlet and inlet flanges | pipe flange |
+| `ExchangerDesign` 60, 63, 64, 67, 68; `KettleDesign` 55, 58 | channel and shell flanges | own joint |
+| `FixedBedGasifierDesign` 357 | lock-hopper valve bodies in the stack | own joint |
+| `Manway` 55, 59; `SphereDesign` 241 | manway and roof covers | own joint |
+| `StirredReactorDesign` 237 / 359 | bottom outlet valve / agitator drive mount | pipe flange / own joint |
+| `SteamTurbineDesign` 235 | exhaust flange (`oe`) | pipe flange, left on `bolts` (the turbine thread's file) |
+| `ProcessUnit` 2006, 2029 (`joint`, `seam`) | heater casing joints | own joint |
+| `ProcessUnit` 2975 (`studs`) | reactor body flange studs | own joint |
+| `ProcessUnit` 2997 (`heavyJoint`) | a Class 2500 flange pair across a line | pipe flange (`flangeNut`) |
+| `Mesh` 587 (`disc`, pump cover) | recessed cover nuts | own joint |
+| `CycloneDesign` 199 | low detail only | unchanged |
+| `LineGeometry` 275, 358, 746; `ValveGeometry` 38, 70, 147, 166; `InlineMoverGeometry` 48, 88, 106, 198, 205; `SightGlassGeometry` 90; `SocketGeometry` 70 | laid lines, valves, movers, sight glass, glands | line |
+
+Polygons of the 81 references: before 304,279 (bolts 45,864); R-W3 275,807 (17,404); R-W4 291,151 (32,748). No mesh grew
+against before; 34 of 81 changed; no layout row moved. Ten largest drops against before (before, R-W3, R-W4):
+CABIN_HEATER 12,118 / 8,630 / 9,022; VERTICAL_HEATER 10,094 / 7,734 / 8,126; CABIN_HEATER_SINGLE 8,326 / 6,182 / 6,574;
+COLUMN 17,563 / 16,135 / 16,723; DRY_SCREW_PUMP 1,325 / 625 / 737; PUMP_OH2 1,658 / 1,042 / 1,154; PUMP_BB2 1,786 /
+1,198 / 1,366; GAS_TURBINE_COIL 2,451 / 1,947 / 2,115; LIQUID_RING_PUMP 1,544 / 1,180 / 1,292; CENTRIFUGAL_COMPRESSOR
+1,537 / 1,201 / 1,285.

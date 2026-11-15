@@ -181,8 +181,7 @@ class ShapeRasterizerTest {
         // on the lowest row: owner decision 2026-10-25, a lower skirt), the skirt row under the head seam (the head inside
         // it, the band over the seam, the vents' dark bores), a shell row, the top head with its nozzle.
         var standing = drum(6, 10, Orientation.VERTICAL, Heading.NORTH, 3);
-        // The nozzle's nuts are flush relief faces (batch 2026-11-15-equipment-visual-design: below Mesh.SOLID_NUT).
-        assertEquals(EnumSet.of(Material.SUPPORT, Material.PIPE, Material.FLANGE, Material.BOLT_FACE), materials(standing, 0, 1));
+        assertEquals(EnumSet.of(Material.SUPPORT, Material.PIPE, Material.FLANGE, Material.BOLT), materials(standing, 0, 1));
         assertEquals(EnumSet.of(Material.SUPPORT, Material.HEAD, Material.FLANGE, Material.OPENING), materials(standing, 2, 3));
         assertEquals(Set.of(Material.SHELL), materials(standing, 5, 6));
         assertTrue(materials(standing, standing.sizeY() - 1, standing.sizeY()).containsAll(Set.of(Material.HEAD, Material.PIPE, Material.FLANGE)));
@@ -1293,7 +1292,7 @@ class ShapeRasterizerTest {
     private static double manwayArea(EquipmentShape shape) {
         var manway = shape.manway();
         if (manway == null) return 0;
-        var mesh = new Mesh();
+        var mesh = new Mesh().equipment(); // drawn on the vessel's mesh: its nuts are the relief faces (R-W4)
         manway.draw(mesh);
         return mesh.area();
     }
