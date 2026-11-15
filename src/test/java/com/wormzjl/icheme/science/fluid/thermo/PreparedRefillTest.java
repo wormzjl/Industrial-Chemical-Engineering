@@ -99,4 +99,29 @@ class PreparedRefillTest {
             }
         } finally {com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics.ENABLED=enabled;}
     }
+
+    /**
+     * Batch 2026-11-15-fluid-step-cost, S2b: an evaluation given no bundle takes its thread's kept workspace. States on a
+     * few and on many compounds, interleaved at two temperatures (one repeated with the other composition), each have the
+     * bits of the same state from a model of the same list that evaluated nothing before it, and the model builds at most
+     * one workspace on this thread.
+     */
+    @Test void aBundleLessStateTakesItsThreadsWorkspaceAndGivesANewOnesBits() {
+        double p=2e5;
+        var few=slots(2,0,.4);var many=slots(3,3,.7);
+        double[] temperatures={320,345,345,320,320,345};
+        double[][][] uses={few,many,few,many,few,few};
+        long built=0;
+        for(int k=0;k<uses.length;k++) {
+            double[][] use=uses[k];double t=temperatures[k];
+            long before=FluidThermodynamics.standaloneWorkspacesBuilt();
+            // Both entries without a bundle: the copying one and the adopting one.
+            var kept=k%2==0?model.state(t,p,use[0],use[1],use[2])
+                    :model.adoptingState(t,p,use[0].clone(),use[1].clone(),use[2].clone(),null);
+            built+=FluidThermodynamics.standaloneWorkspacesBuilt()-before;
+            assertTrue(built<=1,"use "+k+": "+built+" workspaces built by the model");
+            var fresh=FluidTestSupport.networkModel().state(t,p,use[0],use[1],use[2]);
+            assertSameBits(fresh,kept);
+        }
+    }
 }
