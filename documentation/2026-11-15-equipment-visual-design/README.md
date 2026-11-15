@@ -10,9 +10,16 @@ Purpose: make the implemented equipment look better and less bare (owner request
   One run of `tools/equipment-drawings/update.ps1`, no test run. Owner rule added to the `models-and-sfx` skill: no
   weld seams.
 
+- 2026-11-15: sketches of the furnace platforms (K14) and the HP and MP casings (K15) shown to the owner. Owner on
+  K15: the HP turbine includes the MP and LP sections, the MP turbine the LP section, as one combined model and
+  equipment; answers: straight through, add an LP class, every size
+  ([STEAM_TURBINE_SECTIONS_PLAN.md](STEAM_TURBINE_SECTIONS_PLAN.md)). Not built.
+
 ## Documents
 
 - [VISUAL_REVIEW.md](VISUAL_REVIEW.md): the findings and the proposed order.
+- [STEAM_TURBINE_SECTIONS_PLAN.md](STEAM_TURBINE_SECTIONS_PLAN.md): the combined steam turbine, decisions T1 to T4,
+  work packages W1 to W4.
 - Contact sheets (main checkout): `research/2026-11-15-equipment-visual-design/review/`.
 
 ## Code areas
