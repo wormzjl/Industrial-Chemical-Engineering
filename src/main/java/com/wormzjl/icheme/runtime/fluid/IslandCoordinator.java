@@ -523,13 +523,15 @@ public final class IslandCoordinator {
     public long now(){owned();return epoch.getAsLong();}
     /**
      * Whether {@code id} has booked what it delivers through {@code tick} (batch 2026-10-28-column-operation, plan section 9):
-     * committed through it, certified that far (materialised here), or held, parked or suspended (it delivers nothing past its
-     * committed tick until it solves again). An island that no longer exists has nothing to book.
+     * committed through it, certified that far (materialised here, to that tick and not to the moment this runs, so the
+     * replay a running column's wait books is dated by the cycle's tick however late its other ports' jobs complete: codebase
+     * review R-ST4), or held, parked or suspended (it delivers nothing past its committed tick until it solves again). An
+     * island that no longer exists has nothing to book.
      */
     public boolean through(long id,long tick) {
         owned();var island=islands.get(id);if(island==null||island.clock.committedTick()>=tick)return true;
         if(island.held||island.phaseParked||island.suspended||suspension!=null)return true;
-        if(island.certificate!=null){certificates.materialise(island);return island.clock.committedTick()>=tick;}
+        if(island.certificate!=null){certificates.materialise(island,tick);return island.clock.committedTick()>=tick;}
         return false;
     }
     /**

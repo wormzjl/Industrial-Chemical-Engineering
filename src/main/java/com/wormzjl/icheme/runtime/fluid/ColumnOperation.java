@@ -498,22 +498,41 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
      * at the next decision point ({@link #booked}, {@link #decide}); one a cycle later looks again, since a port's island that
      * stopped (a hold) books nothing. */
     private void schedule() {
-        long now=coordinator.now(),next=wakes.isEmpty()?Long.MAX_VALUE:Math.max(now+1,wakes.firstKey());for(var r:runs.values())next=Math.min(next,r.nextCycle>now?r.nextCycle:now+CYCLE_TICKS);
+        // A wake kept for an island behind its tick is looked at again at every decision point (decide), not by a deadline.
+        long now=coordinator.now();Long ahead=wakes.higherKey(now);long next=ahead==null?Long.MAX_VALUE:ahead;
+        for(var r:runs.values())next=Math.min(next,r.nextCycle>now?r.nextCycle:now+CYCLE_TICKS);
         coordinator.schedule(IslandScheduler.Kind.COLUMN_CYCLE,next,this::due);
     }
-    /** Runs every cycle that is due and whose inlets have booked through its tick, then schedules the next. */
+    /** Runs the wakes due, then every cycle that is due and whose inlets have booked through its tick, then schedules the next. */
     private void due() {
         // A solve answered at once from a cycle reaches done() inside this pass: one pass at a time.
         if(cycling)return;cycling=true;
         try {
             long now=coordinator.now();
+            // The wakes first: an island acts on its new plan as of the wake's tick before a cycle's wait can materialise it past it.
+            wake(now);
             for(var r:List.copyOf(runs.values()))while(r.nextCycle<=now&&portsThrough(r,r.nextCycle)&&applied(r,r.nextCycle)){cycle(r,r.nextCycle);r.nextCycle+=CYCLE_TICKS;save(r);}
-            // A certified port island rests on its old plan: wake it where the new one starts.
-            while(!wakes.isEmpty()&&wakes.firstKey()<=now)for(long device:wakes.pollFirstEntry().getValue()){Long owner=registry.owner(device);if(owner!=null)coordinator.portsMoved(owner);}
         } finally{cycling=false;}
         schedule();
     }
     private boolean cycling;
+    /**
+     * The port and utility islands whose plans a cycle or an owe moved, each at the tick its new plan starts (the cycle's or
+     * the owe's tick plus the fence): a certified island rests on its old plan, so it is woken there. Each acts as of that tick
+     * ({@link IslandCoordinator#movedAt}, codebase review R-ST4): a certified island is materialised to it and solves from it
+     * however late this runs; an awake island behind it keeps the wake until it gets there (it may certify on the way).
+     * Before R-ST4 a wake ended the certificate of an island certified at that moment and was dropped for one awake then, so
+     * whether an island that certified a few ticks later rested on the old plan followed when its job completed.
+     */
+    private void wake(long now) {
+        if(wakes.isEmpty()||wakes.firstKey()>now)return;
+        // By the keys: a materialisation books spans, whose owes add wakes (each a fence past now) to the map.
+        for(long tick:List.copyOf(wakes.headMap(now,true).keySet())) {
+            var devices=wakes.get(tick);if(devices==null)continue;
+            devices.removeIf(device->{Long owner=registry.owner(device);return owner==null||coordinator.movedAt(owner,tick);});
+            if(devices.isEmpty())wakes.remove(tick);
+        }
+    }
 
     // ---------------- solves (plan section 6) ----------------
 
@@ -927,7 +946,11 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     }
     /** Whether a port's island booked while a cycle was due, since the last decision point. */
     private boolean bookedWhileDue;
-    @Override public void decide(){if(!bookedWhileDue)return;bookedWhileDue=false;due();bookedWhileDue=false;}
+    @Override public void decide() {
+        // The wakes kept for islands behind their ticks (wake), at every decision point; a materialisation they make books.
+        if(!cycling)wake(coordinator.now());
+        if(!bookedWhileDue)return;bookedWhileDue=false;due();bookedWhileDue=false;
+    }
     /** Books what the ports gave and took over {@code start} to {@code end}: an inlet's arrivals as a span, an outlet's gift as a debit. */
     private void credit(Map<Long,double[]> moles,Map<Long,Double> energy,Map<Long,SolidInventory> solids,long start,long end) {
         for(var e:moles.entrySet()) {

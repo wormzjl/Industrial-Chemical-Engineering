@@ -543,6 +543,57 @@ class ColumnRunTest {
         assertEquals(ta.condenser(),tb.condenser(),"the condenser duty");
         assertArrayEquals(a.counting().moles.get(a.product()),b.counting().moles.get(b.product()),"the product given downstream");
     }
+    /**
+     * The certified port's determinism gate (codebase review R-ST4, item 1), with the coordinator's certificates on (the rig's
+     * defaults): the condenser rig with an air-cooled condenser, run twice. Its water island carries steady water and takes
+     * no heat, so it certifies and nothing wakes it, and every cycle waits for it through the cycle's tick less the fence,
+     * after the feed's island (the utility sides are looked at after the stations). In the second run every job of the
+     * feed's island takes 30 ticks more for 1000 ticks once the water certified, so those cycles look 30 ticks later.
+     * <ul>
+     * <li>Before R-ST4 the wait ({@code IslandCoordinator.through}) materialised the certified water to the moment the cycle
+     * looked: over spans that ended 30 ticks later in the second run, so the water's replayed spans, and its booked amounts
+     * and energies split at them, differed. Now it is materialised to the tick the cycle needs.</li>
+     * <li>The ports' wakes act as of their ticks ({@code IslandCoordinator.movedAt}), so a port island that certifies a few
+     * ticks after a wake is woken all the same.</li>
+     * </ul>
+     * At a tick both runs have committed alike the replayed spans, the totals, every boundary's booking and the heat in
+     * transit are the same bit for bit.
+     */
+    @Test void aCertifiedPortIslandIsMaterialisedAtTheCyclesTickWhateverItsOtherPortsJobsTake() {
+        waterShare=0;productTemperature=305;
+        var a=rig(0,null,false,false,true);var b=rig(0,null,false,false,true);
+        // Each island's replayed spans, by the tick each ended at, as the replay listener hears them.
+        var replays=new ArrayList<Map<Long,List<Long>>>();
+        for(var r:List.of(a,b)){var spans=new TreeMap<Long,List<Long>>();replays.add(spans);
+            r.world().coordinator.onReplayed(changed->{for(var s:changed)spans.computeIfAbsent(s.id(),k->new ArrayList<>()).add(s.clock().committedTick());});}
+        Long water=null;
+        while(water==null||a.world().coordinator.observe(water).certificate().isEmpty()) {
+            assertTrue(a.world().ledger.onlineTick()<4000,"the water island certifies at rest");
+            a.world().runTo(a.world().ledger.onlineTick()+10);b.world().runTo(b.world().ledger.onlineTick()+10);
+            water=a.world().registry.owner(a.waterSource());
+        }
+        long certified=a.world().ledger.onlineTick();
+        assertTrue(b.world().coordinator.observe(b.world().registry.owner(b.waterSource())).certificate().isPresent(),"both runs alike so far");
+        long feed=b.world().registry.owner(b.feed());
+        b.world().lags.put(feed,30);
+        a.world().runTo(certified+1000);b.world().runTo(certified+1000);
+        b.world().lags.remove(feed);
+        a.world().runTo(certified+2000);b.world().runTo(certified+2000);
+        var spans=replays.get(0).getOrDefault(water,List.of());
+        System.out.printf(Locale.ROOT,"certified port gate: the water certified by %d; %d replayed spans of it, ending at %s%n",certified,spans.size(),spans);
+        assertTrue(spans.size()>1,"the cycles' waits materialised the certified water: "+replays.get(0));
+        assertEquals(replays.get(0),replays.get(1),"every certified island was materialised over the same spans");
+        var ta=a.world().ledger.column(a.unit()).totals();var tb=b.world().ledger.column(b.unit()).totals();
+        assertTrue(ta.taken().total()>40,"the column ran: "+ta.taken().total());
+        assertArrayEquals(ta.taken().moles(),tb.taken().moles(),"the feed taken");
+        assertArrayEquals(ta.produced().moles(),tb.produced().moles(),"the products");
+        assertEquals(ta.condenser(),tb.condenser(),"the condenser duty");
+        assertEquals(a.counting().moles.keySet(),b.counting().moles.keySet());
+        for(var e:a.counting().moles.entrySet())assertArrayEquals(e.getValue(),b.counting().moles.get(e.getKey()),"what boundary "+e.getKey()+" exchanged");
+        assertEquals(a.counting().energy,b.counting().energy,"every boundary's energy, the water's source and sink among them");
+        assertEquals(a.counting().heat,b.counting().heat,"every side's heat");
+        assertEquals(a.world().coordinator.transits(),b.world().coordinator.transits(),"the heat in transit");
+    }
 
     /** The cycle at {@code expected} ran at {@code actual}: a cycle runs once its inlets booked through it, a tick or so later. */
     private static void assertCycle(long expected,long actual,String message){assertTrue(Math.abs(actual-expected)<ColumnOperation.CYCLE_TICKS/2,message+": expected "+expected+", was "+actual);}
