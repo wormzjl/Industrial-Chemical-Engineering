@@ -60,8 +60,8 @@ class EquipmentNetworkCodecTest {
 
     @Test void deconstructionRequestsRoundTrip() {
         // One protocol for every registrar since icheme-1 (codebase review P3-22); the equipment payloads were equipment-23.
-        // icheme-2: the steam classes gained LP, first, so their ordinals moved.
-        assertEquals("icheme-2", NetworkProtocol.VERSION);
+        // icheme-2: the steam classes gained LP, first, so their ordinals moved. icheme-3: the conversion rules sync (batch 2026-11-15-fluid-interfaces).
+        assertEquals("icheme-3", NetworkProtocol.VERSION);
         var request = new EquipmentNetwork.Deconstruct(AT, AT.north(5), 12345, 99);
         assertEquals(request, roundTrip(EquipmentNetwork.Deconstruct.STREAM_CODEC, request));
 

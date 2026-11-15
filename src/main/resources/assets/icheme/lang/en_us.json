@@ -4518,5 +4518,22 @@
   "block.icheme.crude_oil": "Crude Oil",
   "fluid_type.icheme.crude_oil": "Crude Oil",
   "item.icheme.crude_oil_bucket": "Crude Oil Bucket",
-  "tutorial.icheme.item.crude_oil_bucket.serves": "A placeholder crude oil, shown only while no other mod adds one. A fluid converter or a liquid hopper turns it into medium crude."
+  "tutorial.icheme.item.crude_oil_bucket.serves": "A placeholder crude oil, shown only while no other mod adds one. A fluid converter or a liquid hopper turns it into medium crude.",
+  "jei.icheme.fluid_conversion.title": "Fluid conversion",
+  "jei.icheme.fluid_conversion.to_icheme.liquid": "→ Into a liquid stream, per litre:",
+  "jei.icheme.fluid_conversion.to_icheme.gas": "→ Into a gas stream (gas converter only):",
+  "jei.icheme.fluid_conversion.compound": "%s: %s mol %%",
+  "jei.icheme.fluid_conversion.more": "and %s more compounds",
+  "jei.icheme.fluid_conversion.state": "At %s °C and %s kPa",
+  "jei.icheme.fluid_conversion.moles_per_litre": "%s mol per litre",
+  "jei.icheme.fluid_conversion.to_forge.mole": "← From a drawn phase, by mole:",
+  "jei.icheme.fluid_conversion.to_forge.mass": "← From a drawn phase, by mass:",
+  "jei.icheme.fluid_conversion.range": "%s: %s to %s %%",
+  "jei.icheme.fluid_conversion.others": "Other compounds: at most %s %%",
+  "jei.icheme.fluid_conversion.temperature": "Temperature %s to %s °C",
+  "jei.icheme.fluid_conversion.temperature.min": "Temperature at least %s °C",
+  "jei.icheme.fluid_conversion.temperature.max": "Temperature at most %s °C",
+  "jei.icheme.fluid_conversion.pressure": "Pressure %s to %s kPa",
+  "jei.icheme.fluid_conversion.pressure.min": "Pressure at least %s kPa",
+  "jei.icheme.fluid_conversion.pressure.max": "Pressure at most %s kPa"
 }

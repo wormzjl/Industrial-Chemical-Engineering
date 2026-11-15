@@ -227,6 +227,8 @@ public final class IChemE {
         gameEventBus.addListener(com.wormzjl.icheme.material.MaterialReloadListener::register);
         // After the materials: the conversion rules resolve their compounds on the catalog that reload publishes.
         gameEventBus.addListener(com.wormzjl.icheme.material.ConversionReloadListener::register);
+        // The rules reach the client's JEI page at login and after each reload (batch 2026-11-15-fluid-interfaces, W5).
+        gameEventBus.addListener(com.wormzjl.icheme.network.FluidNetwork::syncConversionRules);
         gameEventBus.addListener(IChemE::onServerStarting);
         com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.listen(com.wormzjl.icheme.runtime.assembly.AssemblyService::edited);
         gameEventBus.addListener(IChemE::onServerTickPost);
