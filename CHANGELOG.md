@@ -15,6 +15,23 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+### Added
+
+- Fluid interfaces (`2026-11-15-fluid-interfaces`; plan D1 to D12, A1 to A8; joined on `claude/fluid-interfaces-batch`, `8f12eee7c`, `690d683a8`, `12dfbcda2`, `df3c928b1`):
+  - A gas intake (`gas_intake`): one block that draws the atmosphere into a line (25 °C, 101 325 Pa, 50 % humidity: nitrogen, oxygen, argon 0.934 %, neon, helium, krypton, xenon and 1.56 % water), inflow only, with an entry loss of 3 velocity heads. Argon, neon, helium, krypton and xenon join the network package (`refinery-tier1-r5`).
+  - A liquid hopper (`liquid_hopper`): one block with a 4 000 mB tank, filled by bucket or by a Forge pipe, that converts by the fluid converter's liquid forward rules at 0.1 L per process second and delivers at ambient pressure.
+  - A placeholder crude oil (`icheme:crude_oil`, its bucket, the tag `c:crude_oil`), hidden from the creative tab and JEI while another mod's crude oil is present.
+  - JEI: a "Fluid conversion" category, one recipe per conversion rule; the rules reach the client at login and after a reload.
+  - An orifice plate (`orifice_plate`), a pipe fitting: a fixed pressure loss by its bore ratio β (0.20 to 0.80; K = 29.5 at 0.5).
+  - An automated shutoff valve (`automated_shutoff_valve`), a pipe fitting: open or closed by hand or by a controller loop (above or below its target, with a 2 % band).
+  - An alarm beacon (`alarm_beacon`): a flashing lamp and a horn on a floor, wall or ceiling, raised by one input of its data bus above or below a threshold or by any equipment alarm on the bus; an empty hand acknowledges it.
+- Equipment visual design (`2026-11-15-equipment-visual-design`; `VISUAL_REVIEW.md`): relief sprites for nuts, louvres and shell detail in place of drawn polygons, solid nuts on pipe flanges; the steam turbine in sections (an HP turbine includes its MP and LP sections, an LP class, tandem casings above 45 MW, the LP casing's hood); an air cooler bay up to 6 m by 12 m with two bundles above 3 m (4.12 MW at the largest), the constructor still starting at 2.5 m by 5 m.
+
+### Changed
+
+- Formats (`documentation/reference/FORMATS.md`): fluid facts schema 27 (26 is reserved by the pollution system batch), accessory facts schema 7, control store format 5, protocol `icheme-3` (`icheme-2` is reserved). `FormatsTableTest` skips a reservation row.
+- A generator's own loss coefficient now reaches its line (`PhysicalFluidTopology.boundaryHalf`); every existing line is bit-identical, since no generator had one.
+
 ## [0.31.1] - 2026-11-15
 
 ### Changed
