@@ -38,13 +38,31 @@ public final class SparseLuSolver {
     /** Immutable permutation; any numeric matrix of the same dimension can use it. Reuse is an
      * ordering optimization only, never reuse of numeric factors or a structural-lock promise. */
     public static final class Ordering {
+        /** {@code permutation[v]}: the position of unknown (and equation) {@code v} in the elimination order. */
         private final int[] permutation;
-        private Ordering(SparseMatrix matrix){permutation=ordering(matrix);}
+        private Ordering(int[] permutation){this.permutation=permutation;}
+        /** A copy of the permutation, for a test. */
+        int[] permutation(){return permutation.clone();}
     }
-    public static Ordering prepareOrdering(SparseMatrix matrix) {
-        if(!SolverDiagnostics.ENABLED)return new Ordering(Objects.requireNonNull(matrix));
+    /** Reverse Cuthill-McKee ({@link #ordering}): the transport solves' ordering, cheap enough for every reconstruction. */
+    public static Ordering prepareOrdering(SparseMatrix matrix){return prepared(matrix,false);}
+    /**
+     * A fill-reducing ordering for the Newton's Jacobian (batch 2026-11-15-fluid-step-cost, S1 F3): minimum degree on the
+     * symmetric graph of the matrix's pattern ({@link #fillOrdering}); the identity under 128 unknowns, as
+     * {@link #prepareOrdering}. A network is close to a tree of node blocks, and eliminating the vertices of fewest
+     * remaining neighbours first keeps the fill inside the blocks and among the few vertices that join them; how much less
+     * it fills than reverse Cuthill-McKee on a step's matrix, partial pivoting included, is the bench's to say. The cost: choosing each vertex scans every vertex not yet ordered ({@code n^2 / 2} comparisons
+     * in all) and joining its neighbours ors one bit set of {@code n / 64} words per neighbour; on a step's 1,345 unknowns
+     * (50 to 80 declared entries a column) about a million comparisons and, at some 100 neighbours a vertex, three million
+     * words (est.), once per Newton workspace (about 54 a minute on a busy server). The transport solves keep
+     * {@link #prepareOrdering}.
+     */
+    public static Ordering prepareFillOrdering(SparseMatrix matrix){return prepared(matrix,true);}
+    private static Ordering prepared(SparseMatrix matrix,boolean fill) {
+        Objects.requireNonNull(matrix);
+        if(!SolverDiagnostics.ENABLED)return new Ordering(fill?fillOrdering(matrix):ordering(matrix));
         long started=System.nanoTime();
-        try{return new Ordering(Objects.requireNonNull(matrix));}
+        try{return new Ordering(fill?fillOrdering(matrix):ordering(matrix));}
         finally {
             long elapsed=System.nanoTime()-started;
             if(SolverDiagnostics.inReconstruct()){SolverDiagnostics.transportOrderingNanos.add(elapsed);SolverDiagnostics.transportOrderings.increment();}
@@ -268,6 +286,34 @@ public final class SparseLuSolver {
             }
         }
         for(int i=0;i<n;i++)permutation[order[i]]=n-1-i;
+        return permutation;
+    }
+    /**
+     * Minimum degree on the symmetric structural graph ({@link #prepareFillOrdering}): an edge between {@code i} and
+     * {@code j != i} where {@code (i,j)} or {@code (j,i)} is an entry whose value is not 0, as {@link #ordering} reads it (a
+     * symbolic matrix of ones gives every stored entry). {@code n} times: among the vertices not yet ordered, the one with
+     * the fewest neighbours not yet ordered, the lowest index of equals, is the next in the order; its remaining neighbours
+     * are joined pairwise (the fill its elimination makes) and it leaves the graph. Deterministic: no hashing, no randomness.
+     * {@code permutation[v]} is {@code v}'s position in the order, as {@link #ordering}'s is; the identity under 128 unknowns.
+     */
+    private static int[] fillOrdering(SparseMatrix matrix) {
+        int n=matrix.size();int[] permutation=new int[n];
+        if(n<128){for(int i=0;i<n;i++)permutation[i]=i;return permutation;}
+        BitSet[] neighbors=new BitSet[n];for(int i=0;i<n;i++)neighbors[i]=new BitSet(n);
+        for(int column=0;column<n;column++)for(int e=matrix.columnStart(column);e<matrix.columnEnd(column);e++) {
+            int row=matrix.rowAt(e);if(row!=column&&matrix.valueAt(e)!=0){neighbors[column].set(row);neighbors[row].set(column);}
+        }
+        // Every set holds only vertices not yet ordered: an ordered vertex is cleared from each of its neighbours' sets.
+        int[] degree=new int[n];for(int i=0;i<n;i++)degree[i]=neighbors[i].cardinality();
+        boolean[] ordered=new boolean[n];
+        for(int position=0;position<n;position++) {
+            int next=-1;for(int v=0;v<n;v++)if(!ordered[v]&&(next<0||degree[v]<degree[next]))next=v;
+            ordered[next]=true;permutation[next]=position;
+            var remaining=neighbors[next];neighbors[next]=null;
+            for(int v=remaining.nextSetBit(0);v>=0;v=remaining.nextSetBit(v+1)) {
+                var adjacent=neighbors[v];adjacent.or(remaining);adjacent.clear(v);adjacent.clear(next);degree[v]=adjacent.cardinality();
+            }
+        }
         return permutation;
     }
     private static void checkBackwardError(SparseMatrix matrix, double[] scaling, double[] rhs, double[] x) {
