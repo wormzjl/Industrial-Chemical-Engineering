@@ -31,6 +31,10 @@ public final class SolverDiagnostics {
     public static final LongAdder jacobianBuilds=new LongAdder();
     public static final LongAdder jacobianColors=new LongAdder();
     public static final LongAdder jacobianNonzeros=new LongAdder();
+    /** Per Newton Jacobian build, the entries its equations declare ({@code SparseNewton}'s pattern, exact zeros included),
+     * added where {@link #jacobianNonzeros} is, so the two are a pair: declared, and kept by the LU (S0 of batch
+     * 2026-11-15-fluid-step-cost). */
+    public static final LongAdder jacobianDeclaredEntries=new LongAdder();
     /**
      * Where a Newton iteration's search direction came from, so the cost of the modified-Newton
      * chord can be told from the cost of a fresh Jacobian. {@code newtonSolvesPreconditioned}
@@ -71,6 +75,10 @@ public final class SolverDiagnostics {
     // ---- sparse linear algebra, Newton side ----
     public static final LongAdder luFactorizations=new LongAdder();
     public static final LongAdder luFactorNanos=new LongAdder();
+    /** The entries of L plus U stored by each completed factorization (every reached row, structural zeros included;
+     * {@code UpLookingLu#factorEntries}), summed; against {@link #jacobianNonzeros} it is the fill (S0 of batch
+     * 2026-11-15-fluid-step-cost). {@link #transportFactorEntries} is the transport side's twin. */
+    public static final LongAdder luFactorEntries=new LongAdder();
     public static final LongAdder luSolves=new LongAdder();
     public static final LongAdder luSolveNanos=new LongAdder();
     public static final LongAdder luChecks=new LongAdder();
@@ -91,6 +99,7 @@ public final class SolverDiagnostics {
     // ---- sparse linear algebra, conservative transport side ----
     public static final LongAdder transportFactorizations=new LongAdder();
     public static final LongAdder transportFactorNanos=new LongAdder();
+    public static final LongAdder transportFactorEntries=new LongAdder();
     public static final LongAdder transportSolves=new LongAdder();
     public static final LongAdder transportSolveNanos=new LongAdder();
     public static final LongAdder transportOrderings=new LongAdder();
@@ -200,6 +209,21 @@ public final class SolverDiagnostics {
     public static final int MAXIMUM_ATTEMPTS=200_000;
     private static final List<Attempt> ATTEMPTS=Collections.synchronizedList(new ArrayList<>());
 
+    /**
+     * A view of every Newton Jacobian before the LU drops its exact zeros (S0 of batch 2026-11-15-fluid-step-cost: the
+     * pattern census under {@code tools/fluid-step-cost/}). {@code SparseNewton} calls it once per factorization, on the
+     * solving thread, with the equations, the iterate {@code x} the Jacobian was built at, the declared pattern (column
+     * starts {@code offsets}, rows {@code rows}) and the declared entries' values {@code values}, zeros included. These are
+     * the live arrays of the solve: an observer only reads them, during the call, and keeps none of them past it unless it
+     * copies them; writing to any of them changes the solve. It may be called from several workers at once.
+     */
+    public interface PatternObserver {
+        void factored(Object equations,double[] x,int[] offsets,int[] rows,double[] values);
+    }
+    /** The installed {@link PatternObserver}: null outside a probe or a gate, which costs one volatile read per
+     * factorization. Independent of {@link #ENABLED}. */
+    public static volatile PatternObserver patternObserver;
+
     public static void count(LongAdder target){if(ENABLED)target.increment();}
     public static void count(LongAdder target,long amount){if(ENABLED)target.add(amount);}
     public static void attempt(int index,double step,boolean accepted,String dominant,double error) {
@@ -216,6 +240,7 @@ public final class SolverDiagnostics {
         map.put("newtonSolves",newtonSolves);map.put("newtonIterations",newtonIterations);map.put("newtonBacktracks",newtonBacktracks);
         map.put("residualEvaluations",residualEvaluations);map.put("residualEvaluationsInJacobian",residualEvaluationsInJacobian);
         map.put("jacobianBuilds",jacobianBuilds);map.put("jacobianColors",jacobianColors);map.put("jacobianNonzeros",jacobianNonzeros);
+        map.put("jacobianDeclaredEntries",jacobianDeclaredEntries);
         map.put("jacobianBlockBuilds",jacobianBlockBuilds);map.put("jacobianBlockColumns",jacobianBlockColumns);
         map.put("jacobianBlockFallbacks",jacobianBlockFallbacks);
         map.put("jacobianTangentsBuilt",jacobianTangentsBuilt);map.put("jacobianTangentPhases",jacobianTangentPhases);
@@ -234,13 +259,14 @@ public final class SolverDiagnostics {
         map.put("restIntervals",restIntervals);map.put("restStops",restStops);
         map.put("traceFolds",traceFolds);map.put("traceFoldPasses",traceFoldPasses);
         map.put("phaseSeeds",phaseSeeds);map.put("phaseRefusals",phaseRefusals);
-        map.put("luFactorizations",luFactorizations);map.put("luFactorNanos",luFactorNanos);
+        map.put("luFactorizations",luFactorizations);map.put("luFactorNanos",luFactorNanos);map.put("luFactorEntries",luFactorEntries);
         map.put("luSolves",luSolves);map.put("luSolveNanos",luSolveNanos);
         map.put("luChecks",luChecks);map.put("luRefinements",luRefinements);
         map.put("luOrderings",luOrderings);map.put("luOrderingNanos",luOrderingNanos);
         map.put("luStorages",luStorages);map.put("luSupersededFactorizations",luSupersededFactorizations);
         map.put("luColumnsFactored",luColumnsFactored);map.put("luReachSearches",luReachSearches);map.put("luPatternSearches",luPatternSearches);
         map.put("transportFactorizations",transportFactorizations);map.put("transportFactorNanos",transportFactorNanos);
+        map.put("transportFactorEntries",transportFactorEntries);
         map.put("transportSolves",transportSolves);map.put("transportSolveNanos",transportSolveNanos);
         map.put("transportOrderings",transportOrderings);map.put("transportOrderingNanos",transportOrderingNanos);
         map.put("stateCalls",stateCalls);map.put("stateCallsInJacobian",stateCallsInJacobian);
