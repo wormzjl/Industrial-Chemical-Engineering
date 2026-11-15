@@ -29,7 +29,8 @@ The final lane ran once on `claude/fluid-step-jacobian` at `4ee2cb0f8` (tree cle
 - **Translation:** no translation commit; `en_us.json` did not change.
 - **CHANGELOG:** entry under Unreleased. `mod_version` is not changed; the owner chooses it.
 - **Logs:** `tools/merge-lane/logs/fluid-step-cost-final-lane-logs-2026-11-15.tar.gz` in the main checkout (git-ignored).
-- **Status:** waiting for the owner to accept the trajectory moves.
+- **The five moved lines:** accepted by the owner on 2026-11-16, in reply to "accept the moves as path splits at events": "it's fine".
+- **Status:** every new campaign hold is a wall-deadline hold that was clean on its replay alone. Ready for the merge.
 
 ## The five printed lines that move beyond the Newton tolerance
 
@@ -40,12 +41,12 @@ The final lane ran once on `claude/fluid-step-jacobian` at `4ee2cb0f8` (tree cle
 | `FluidPumpedFillLineTest` STEADY certificate | drift 1.452311e-8, largest flow 1.503723e-6 kg/s | drift 1.454248e-8, largest flow 1.503828e-6 kg/s | The drift moves by 2e-11 absolute, the closure's tolerance; the largest flow by 1e-10 kg/s absolute. The state is certified steady inside the certificate's tolerance. |
 | `HoldClassWorldsTest` `STATIC_COLUMN_WORLD` | gas column 44.99748 Pa, drop line 1.070424e-6 kg/s | gas column 45.00464 Pa, drop line 1.067149e-6 kg/s | The drop line moves by 3e-9 kg/s absolute. The gas column (a difference of two pressures of 429 kPa) moves by 0.007 Pa, 1.7e-8 of the pressures. Only end states are printed: the cause is read from the code (a STEADY state settles inside the certificate's drift), not traced. |
 | `HoldClassWorldsTest` `REFUTED_PROPOSAL` island 11, nodes 4 and 8 | node 4: 2,270,034 Pa, 403.2212 kg, solids 27.452 kg; node 8: 2,281,897 Pa | node 4: 2,364,113 Pa, 403.2874 kg, solids 27.323 kg; node 8: 2,375,978 Pa | Pressure +4.1 %, mass +1.6e-4. Both nodes are liquid-full (liquid 0.98 with crystals), so their pressure follows the held mass through the liquid's stiffness: 1.6e-4 times a bulk modulus of about 0.6 GPa is about 0.1 MPa. Only end states are printed: the path difference behind the mass is read from the code, not traced. |
-The bound the brief named (the closure 1e-11, the step's Newton 1e-9) holds for every line that follows one solve. A line that follows a trajectory keeps the step's time-error control instead: an accepted attempt carries an error of about 1e-3 (chain-100's attempts). A line taken at a STEADY certificate keeps the certificate's drift tolerance. This is the reading for the owner to accept or refuse. No run was made to trace a split.
+The bound the brief named (the closure 1e-11, the step's Newton 1e-9) holds for every line that follows one solve. A line that follows a trajectory keeps the step's time-error control instead: an accepted attempt carries an error of about 1e-3 (chain-100's attempts). A line taken at a STEADY certificate keeps the certificate's drift tolerance. No run was made to trace a split. The owner accepted the moves on 2026-11-16 ("it's fine").
 
 ## Findings
 
 | # | Finding | Proposal |
 |---|---|---|
 | 1 | `affected.mjs select` names `NativeColumnSolverTest` for `columnGates`, which excludes it, so the task fails with "No tests found" whenever that class is the only one selected (here and in the unit 6 lane). | Give the class to `nativeSmoke` in the selection, or leave out of a task the classes it excludes. A tools change, not made here. |
-| 2 | Five printed lines move beyond the Newton tolerance (table above); no asserted reference moved. | The owner accepts the trajectory moves, or asks for one trace of the blanket-drain split. |
+| 2 | Five printed lines move beyond the Newton tolerance (table above); no asserted reference moved. Accepted by the owner, 2026-11-16: "it's fine". |
 | 3 | The lane's `test` filters pass 8,000 characters, so `test` runs whole (2,956 tests against the 237 classes selected). | None for this batch; the lane's existing rule. |
