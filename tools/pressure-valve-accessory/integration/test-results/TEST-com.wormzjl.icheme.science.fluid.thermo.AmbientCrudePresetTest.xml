@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.science.fluid.thermo.AmbientCrudePresetTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-24T09:09:58.803Z" hostname="WORMZ-PC" time="0.051">
-  <properties/>
-  <testcase name="actualGeneratorInitializationAndPipeFlowAccept298Kelvin()" classname="com.wormzjl.icheme.science.fluid.thermo.AmbientCrudePresetTest" time="0.011"/>
-  <testcase name="crudePresetsFlashAndHaveFiniteTransportAtAmbientTemperature()" classname="com.wormzjl.icheme.science.fluid.thermo.AmbientCrudePresetTest" time="0.012"/>
-  <testcase name="colderStatesAndPropertyOverridesAreContinuedFromTheirOwnRange()" classname="com.wormzjl.icheme.science.fluid.thermo.AmbientCrudePresetTest" time="0.027"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

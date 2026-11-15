@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.science.column.v3.V3FlashTruncationColumnTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-10-24T01:21:05.549Z" hostname="WORMZ-PC" time="0.222">
-  <properties/>
-  <testcase name="positiveCutoffFeedFlashIsObservableWithoutRelaxingTheColumnAudit()" classname="com.wormzjl.icheme.science.column.v3.V3FlashTruncationColumnTest" time="0.222"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

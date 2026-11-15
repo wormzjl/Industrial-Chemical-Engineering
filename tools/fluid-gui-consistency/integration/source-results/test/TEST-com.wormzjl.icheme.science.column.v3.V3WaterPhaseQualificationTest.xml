@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.science.column.v3.V3WaterPhaseQualificationTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-24T13:24:13.247Z" hostname="WORMZ-PC" time="0.264">
-  <properties/>
-  <testcase name="observerReceivesOnlyTheReleasedCertifiedWetProfile()" classname="com.wormzjl.icheme.science.column.v3.V3WaterPhaseQualificationTest" time="0.203"/>
-  <testcase name="supersaturationIsNotAQualifiedDryOrWetLabel()" classname="com.wormzjl.icheme.science.column.v3.V3WaterPhaseQualificationTest" time="0.036"/>
-  <testcase name="certifiesWetTrayAndHotDryTraysAboveTheirPureWaterBoilingTemperature()" classname="com.wormzjl.icheme.science.column.v3.V3WaterPhaseQualificationTest" time="0.023"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

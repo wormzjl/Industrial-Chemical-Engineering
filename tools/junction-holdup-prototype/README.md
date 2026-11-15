@@ -371,3 +371,5 @@ README.md (sections Run, Run index, WP0-WP5 and the removal record), holdup.init
 
 - Concluded 2026-09-26 (prototype)
 - the productized form Implemented 2026-09-26
+
+Large files (AGENTS.md, batch 2026-11-15-tools-large-files): the 3186 images, Gradle results, worlds and other large files of this folder are git-ignored here; their copies are in the main checkout's `research/tools/junction-holdup-prototype/`, at the same relative paths.

@@ -24,13 +24,14 @@ from __future__ import annotations
 import json
 
 import population_common as common
+from research_path import locate  # large inputs live in the main checkout's research/ (AGENTS.md)
 
 
 GEN3_MATRIX = common.SEALED / 'build/neural-gen3/data/cases.jsonl'
 G6FRESH = common.SEALED / 'build/neural-transformer/selection-v1/test.jsonl'
 UNIFIED_DEPENDENCIES = common.SEALED / '.neural-cache/unified-evaluation-v1/dependencies.zip'
 G4FRESH_MEMBER = 'build/neural-transformer/data-v2/fresh-holdout.jsonl'
-VALIDATION = common.ROOT / 'tools/transformer-promotion/inputs/validation-inputs.jsonl'
+VALIDATION = locate(common.ROOT / 'tools/transformer-promotion/inputs/validation-inputs.jsonl')
 
 EXPECTED = {'validation': 405, 'g4fresh': 252, 'g6fresh': 252, 'historical-test': 395, 'train': 1993}
 

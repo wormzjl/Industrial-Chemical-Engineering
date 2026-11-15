@@ -1,1 +1,0 @@
-time query gametime

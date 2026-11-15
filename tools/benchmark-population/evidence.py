@@ -23,6 +23,7 @@ import json
 from pathlib import Path
 
 import population_common as common
+from research_path import locate  # large inputs live in the main checkout's research/ (AGENTS.md)
 
 
 SEALED = common.SEALED
@@ -157,8 +158,8 @@ UNIFIED_STUDY = SEALED / '.neural-cache/unified-evaluation-v1/study.zip'
 CHECKPOINT_STUDY = SEALED / '.neural-cache/checkpoint-selection-v2/study.zip'
 GENERATION_STUDY = SEALED / '.neural-cache/generation-comparison-v1/study.zip'
 GEN3_MATRIX = SEALED / 'build/neural-gen3/data/cases.jsonl'
-GEN3_CASE_MAP = ROOT / 'tools/neural/gen3-case-map.jsonl.gz'
-GENERALIZED_CASE_MAP = ROOT / 'tools/neural/generalized-case-map.jsonl.gz'
+GEN3_CASE_MAP = locate(ROOT / 'tools/neural/gen3-case-map.jsonl.gz')
+GENERALIZED_CASE_MAP = locate(ROOT / 'tools/neural/generalized-case-map.jsonl.gz')
 SALVAGE = SEALED / '.neural-cache/salvage-nplus1-v1/certified-campaign.zip'
 
 BUDGET_PIPELINES = ('F0-baseline', 'F0-progress', 'F0-phase-floor', 'F0-progress-phase-floor')

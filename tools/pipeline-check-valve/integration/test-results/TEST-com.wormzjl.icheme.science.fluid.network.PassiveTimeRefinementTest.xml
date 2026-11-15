@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.science.fluid.network.PassiveTimeRefinementTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-10-24T07:55:43.079Z" hostname="WORMZ-PC" time="0.065">
-  <properties/>
-  <testcase name="adaptiveGasBlowdownMatchesIndependentlyRefinedFixedSteps()" classname="com.wormzjl.icheme.science.fluid.network.PassiveTimeRefinementTest" time="0.065"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

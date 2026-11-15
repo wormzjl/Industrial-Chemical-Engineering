@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.runtime.FluidDataRangeIslandTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-10-24T14:31:07.149Z" hostname="WORMZ-PC" time="0.213">
-  <properties/>
-  <testcase name="aCompressorHeatingNitrogenPastItsRecordKeepsRunning()" classname="com.wormzjl.icheme.runtime.FluidDataRangeIslandTest" time="0.213"/>
-  <system-out><![CDATA[data range left: hottest 302.36140026317327 K | STEADY: replaying 1.193e-18 kg/s since 20.0 s, next check at 86420.0 s; outside data range: Nitrogen ideal-gas heat capacity extrapolated above 300 K at reservoir at 4, 64, 0
-]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

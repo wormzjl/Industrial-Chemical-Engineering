@@ -21,3 +21,5 @@ Purpose: reproduce process-control qualification and retain native client eviden
 `merge-lane/` (Claude, 2026-10-27) is the merge final lane (`lane.ps1`) and its printed-line, move and constructor-audit scripts; see its README. Logs: `logs/merge-lane-logs-2026-10-27.tar.gz`.
 
 History: 2026-10-27, created for the first process-control batch. The numerical seed-236 issue remains open; data cables and remote level regulation are deferred. See the batch review for exact commits, scope and validation. 2026-10-27: seed236-probe/ added; the seed-236 cause is diagnosed (SEED236_TRACE_REVIEW.md), not fixed. Same day: `8b91a822` fixes seed 236; quick.ps1 and its quick check added. Same day: merged onto main 0.14.0 as 0.14.1 on `claude/process-control-merge` (findings 5 and 6 fixed, facts schema 3); merge-lane added. Main fast-forwarded to `0e697177` (0.14.1) the same day, not pushed.
+
+Large files (AGENTS.md, batch 2026-11-15-tools-large-files): the 7 images, Gradle results, worlds and other large files of this folder are git-ignored here; their copies are in the main checkout's `research/tools/process-control/`, at the same relative paths.

@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.runtime.ProcessSolveServicesRequestTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-10-24T01:20:48.228Z" hostname="WORMZ-PC" time="0.023">
-  <properties/>
-  <testcase name="commandCapturesTheCatalogAtAdmissionRatherThanWorkerStart()" classname="com.wormzjl.icheme.runtime.ProcessSolveServicesRequestTest" time="0.022"/>
-  <testcase name="processWideRequestIdsArePositiveAndStrictlyMonotonic()" classname="com.wormzjl.icheme.runtime.ProcessSolveServicesRequestTest" time="0.001"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

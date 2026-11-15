@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.science.column.v3.V3ExactWarmStartSweepTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-10-24T14:31:28.323Z" hostname="WORMZ-PC" time="0.074">
-  <properties/>
-  <testcase name="physicallyAcceptedLiquidOnlyStatePassesFreshExactInputHotStart()" classname="com.wormzjl.icheme.science.column.v3.V3ExactWarmStartSweepTest" time="0.028"/>
-  <testcase name="numericalTwoPhaseMatrixRemainsRejectedAfterFreshExactInputHotStarts()" classname="com.wormzjl.icheme.science.column.v3.V3ExactWarmStartSweepTest" time="0.045"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

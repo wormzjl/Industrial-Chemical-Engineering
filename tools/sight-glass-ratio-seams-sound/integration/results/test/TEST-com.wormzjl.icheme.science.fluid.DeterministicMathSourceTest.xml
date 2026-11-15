@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.science.fluid.DeterministicMathSourceTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-10-25T08:27:17.130Z" hostname="WORMZ-PC" time="0.202">
-  <properties/>
-  <testcase name="fluidSourcesCallNoNonCorrectlyRoundedMathFunction()" classname="com.wormzjl.icheme.science.fluid.DeterministicMathSourceTest" time="0.201"/>
-  <testcase name="scannerFindsBannedCallsAndIgnoresAllowedOnes()" classname="com.wormzjl.icheme.science.fluid.DeterministicMathSourceTest" time="0.001"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

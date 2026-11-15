@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.runtime.fluid.TankDisplayTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-25T04:48:53.156Z" hostname="WORMZ-PC" time="0.011">
-  <properties/>
-  <testcase name="theDisplayReadsTheLevelAndTheFreeWaterUnderIt()" classname="com.wormzjl.icheme.runtime.fluid.TankDisplayTest" time="0.003"/>
-  <testcase name="watchersAreBoundedAndEndWithThePlayerOrTheTank()" classname="com.wormzjl.icheme.runtime.fluid.TankDisplayTest" time="0.005"/>
-  <testcase name="aPureLiquidTakesItsComponentsColourAndTwoMixByTransmittance()" classname="com.wormzjl.icheme.runtime.fluid.TankDisplayTest" time="0.001"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

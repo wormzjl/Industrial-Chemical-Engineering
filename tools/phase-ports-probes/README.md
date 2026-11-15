@@ -192,3 +192,5 @@ README.md, wp1/src/*.java, wp1/src/instr/, wp1/logs/, wp1/results/, wp2/src/ (R1
 - device-page layout at small scaled screens checked 2026-09-27: `gui-layout/` NOTES.md, screenshots at 427x240, 854x480 and 1920x1080 auto, gate logs
 - island hold F8 fixed 2026-09-27: `holds3/` reproduction probes (reload, layouts), singular-Jacobian SVD instrumentation, gate logs
 - hold search 2026-09-27: `hold-fuzz/` seeded placement-sequence fuzz on the world's event path (init script, `classify.sh`, 13 hold-class reproductions, option R1 patch, campaign logs))
+
+Large files (AGENTS.md, batch 2026-11-15-tools-large-files): the 95 images, Gradle results, worlds and other large files of this folder are git-ignored here; their copies are in the main checkout's `research/tools/phase-ports-probes/`, at the same relative paths.

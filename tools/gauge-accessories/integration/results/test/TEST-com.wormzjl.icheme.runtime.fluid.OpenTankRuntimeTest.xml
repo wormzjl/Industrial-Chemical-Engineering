@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.runtime.fluid.OpenTankRuntimeTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-10-25T02:32:22.073Z" hostname="WORMZ-PC" time="0.202">
-  <properties/>
-  <testcase name="anOpenTanksRegistrationRoundTripsItsFlagAndOverflowPort()" classname="com.wormzjl.icheme.runtime.fluid.OpenTankRuntimeTest" time="0.011"/>
-  <testcase name="aFedOpenTankOverflowsVentsAndCertifiesSteady()" classname="com.wormzjl.icheme.runtime.fluid.OpenTankRuntimeTest" time="0.191"/>
-  <system-out><![CDATA[OPEN_TANK_RUNTIME held=2.0452328656521215 status=STEADY: replaying 2.750 kg/s since 1061.4 s, next check at 2496.4 s; venting 0.00436 kg/s vent=0.0043619315368214236
-]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

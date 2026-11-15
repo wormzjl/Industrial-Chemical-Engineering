@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.science.fluid.thermo.FluidPropertyCoverageTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-24T07:55:48.414Z" hostname="WORMZ-PC" time="0.081">
-  <properties/>
-  <testcase name="steamCompressionMatchesIndependentPressureDifferencesWithinTheSampledEnvelope()" classname="com.wormzjl.icheme.science.fluid.thermo.FluidPropertyCoverageTest" time="0.002"/>
-  <testcase name="steamScreeningRetainsTheRejectedPointAndChecksIndependentViscosityReferences()" classname="com.wormzjl.icheme.science.fluid.thermo.FluidPropertyCoverageTest" time="0.003"/>
-  <testcase name="gameplayBasisWithNitrogenHasFinitePropertiesAtGridAndInteriorSamples()" classname="com.wormzjl.icheme.science.fluid.thermo.FluidPropertyCoverageTest" time="0.076"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

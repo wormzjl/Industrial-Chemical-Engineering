@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.science.thermo.phase.CrystalPhaseEvaluatorTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-10-24T14:25:02.694Z" hostname="WORMZ-PC" time="0.012">
-  <properties/>
-  <testcase name="refusesForeignAnchorsAndContinuesPastItsRange()" classname="com.wormzjl.icheme.science.thermo.phase.CrystalPhaseEvaluatorTest" time="0.011"/>
-  <testcase name="anchorsToThePilotLiquidAndFillsAConsistentSolidState()" classname="com.wormzjl.icheme.science.thermo.phase.CrystalPhaseEvaluatorTest" time="0.001"/>
-  <system-out><![CDATA[CO2-I on icheme:pilot_cryogenic: mu_L -437397.037211 J/mol, h_L -412054.036942 J/mol, dH_fus 9019 J/mol, g0 -347.202690936, g1 -6.724549996
-]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

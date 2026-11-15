@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.science.fluid.network.FlowControlTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-24T07:55:41.545Z" hostname="WORMZ-PC" time="0.027">
-  <properties/>
-  <testcase name="pressureValveClosesBelowTargetAndRegulatesAboveIt()" classname="com.wormzjl.icheme.science.fluid.network.FlowControlTest" time="0.005"/>
-  <testcase name="naturalFlowIsLimitedWithoutInventedPumpWorkAndOpposingHeadShutsThePump()" classname="com.wormzjl.icheme.science.fluid.network.FlowControlTest" time="0.006"/>
-  <testcase name="pumpMeetsItsSuctionFlowTargetAndAccountsForAddedEnergy()" classname="com.wormzjl.icheme.science.fluid.network.FlowControlTest" time="0.005"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>
