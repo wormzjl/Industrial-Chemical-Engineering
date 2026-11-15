@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.wormzjl.icheme.runtime.fluid.LoneBoundaryJoinTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-10-24T01:20:56.461Z" hostname="WORMZ-PC" time="0.032">
-  <properties/>
-  <testcase name="joiningALoneGeneratorAndALoneVoidToATankEndsTheirIslandsOfOneThroughASaveAndAReload()" classname="com.wormzjl.icheme.runtime.fluid.LoneBoundaryJoinTest" time="0.032"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>
