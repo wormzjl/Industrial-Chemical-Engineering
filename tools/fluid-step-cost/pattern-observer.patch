@@ -1,0 +1,57 @@
+diff --git a/src/main/java/com/wormzjl/icheme/science/fluid/diagnostics/SolverDiagnostics.java b/src/main/java/com/wormzjl/icheme/science/fluid/diagnostics/SolverDiagnostics.java
+index 963c52a07..2823bb37a 100644
+--- a/src/main/java/com/wormzjl/icheme/science/fluid/diagnostics/SolverDiagnostics.java
++++ b/src/main/java/com/wormzjl/icheme/science/fluid/diagnostics/SolverDiagnostics.java
+@@ -209,6 +209,21 @@ public final class SolverDiagnostics {
+     public static final int MAXIMUM_ATTEMPTS=200_000;
+     private static final List<Attempt> ATTEMPTS=Collections.synchronizedList(new ArrayList<>());
+ 
++    /**
++     * A view of every Newton Jacobian before the LU drops its exact zeros (S0 of batch 2026-11-15-fluid-step-cost: the
++     * pattern census under {@code tools/fluid-step-cost/}). {@code SparseNewton} calls it once per factorization, on the
++     * solving thread, with the equations, the iterate {@code x} the Jacobian was built at, the declared pattern (column
++     * starts {@code offsets}, rows {@code rows}) and the declared entries' values {@code values}, zeros included. These are
++     * the live arrays of the solve: an observer only reads them, during the call, and keeps none of them past it unless it
++     * copies them; writing to any of them changes the solve. It may be called from several workers at once.
++     */
++    public interface PatternObserver {
++        void factored(Object equations,double[] x,int[] offsets,int[] rows,double[] values);
++    }
++    /** The installed {@link PatternObserver}: null outside a probe or a gate, which costs one volatile read per
++     * factorization. Independent of {@link #ENABLED}. */
++    public static volatile PatternObserver patternObserver;
++
+     public static void count(LongAdder target){if(ENABLED)target.increment();}
+     public static void count(LongAdder target,long amount){if(ENABLED)target.add(amount);}
+     public static void attempt(int index,double step,boolean accepted,String dominant,double error) {
+diff --git a/src/main/java/com/wormzjl/icheme/science/fluid/solver/SparseNewton.java b/src/main/java/com/wormzjl/icheme/science/fluid/solver/SparseNewton.java
+index 450d95b90..eb549a003 100644
+--- a/src/main/java/com/wormzjl/icheme/science/fluid/solver/SparseNewton.java
++++ b/src/main/java/com/wormzjl/icheme/science/fluid/solver/SparseNewton.java
+@@ -343,7 +343,7 @@ public final class SparseNewton {
+         int blocks=equations.differentiateEntries(x,f,differenceStep,pattern.offsets,pattern.rows,derivatives,checkpoint);
+         if(blocks>=0) {
+             SolverDiagnostics.count(SolverDiagnostics.jacobianBlockBuilds);
+-            return factor(x,derivatives,workspace,pattern,blocks);
++            return factor(equations,x,derivatives,workspace,pattern,blocks);
+         }
+         for(int column=0;column<n;column++)steps[column]=differenceStep*equations.differenceScale(column,x[column]);
+         for(int[] group:pattern.groups) {
+@@ -360,10 +360,14 @@ public final class SparseNewton {
+                 if(!found)throw new Nonconvergence("No finite Jacobian trial at variable "+column,x);
+             }
+         }
+-        return factor(x,derivatives,workspace,pattern,calls);
++        return factor(equations,x,derivatives,workspace,pattern,calls);
+     }
+-    /** The ordering, numeric matrix and factorization are the same whichever sweep filled the entries. */
+-    private static int factor(double[] x,double[] derivatives,Workspace workspace,Pattern pattern,int calls) {
++    /** The ordering, numeric matrix and factorization are the same whichever sweep filled the entries. A pattern observer
++     * ({@link SolverDiagnostics#patternObserver}, a probe's or a gate's) sees the declared entries first, zeros included;
++     * it reads the live arrays and changes nothing. */
++    private static int factor(Equations equations,double[] x,double[] derivatives,Workspace workspace,Pattern pattern,int calls) {
++        var observer=SolverDiagnostics.patternObserver;
++        if(observer!=null)observer.factored(equations,x,pattern.offsets,pattern.rows,derivatives);
+         var numeric=pattern.numericMatrix(derivatives);
+         try{if(workspace.ordering==null)workspace.ordering=SparseLuSolver.prepareOrdering(pattern.symbolicMatrix());workspace.factorization=workspace.shared.factors(pattern).factor(numeric,workspace.ordering);workspace.matrix=numeric;workspace.jacobianPoint=x.clone();}
+         catch(SparseLuSolver.SolveFailure failure){workspace.invalidate();throw new Nonconvergence("Singular Newton Jacobian: "+failure.getMessage(),x);}

@@ -329,7 +329,7 @@ public final class SparseNewton {
         finally {
             SolverDiagnostics.leaveJacobian(outer);SolverDiagnostics.jacobianBuilds.increment();
             SolverDiagnostics.jacobianColors.add(workspace.pattern.groups.size());
-            if(workspace.matrix!=null)SolverDiagnostics.jacobianNonzeros.add(workspace.matrix.nonzeroCount());
+            if(workspace.matrix!=null){SolverDiagnostics.jacobianNonzeros.add(workspace.matrix.nonzeroCount());SolverDiagnostics.jacobianDeclaredEntries.add(workspace.pattern.rows.length);}
         }
     }
     private static int differentiate0(Equations equations,double[] x,double[] f,double differenceStep,Runnable checkpoint,Workspace workspace) {
