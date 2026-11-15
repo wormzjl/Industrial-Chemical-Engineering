@@ -537,3 +537,22 @@ Sections that stayed in the chapter, their dates removed from the heading; their
 - The chimney's data channels (0.25.0)
 - Fan power, the still's terminal and alarm channels (0.24.0)
 - Physical interfaces and accepted channel catalog (0.22.0)
+
+## From the chapters of scope J2-C
+
+Kept text, lightly trimmed, from the six chapters of scope J2-C (batch `2026-11-13-codebase-review`, J2), in the order the chapters were restructured.
+
+### thermo-materials.md (split into materials.md and thermo-kernel.md)
+
+- `TranslatedCubic` moved out of the fluid `TranslatedPengRobinson` in C1b, operation for operation.
+- `CoefficientTranslations` moved from the network's `HydrocarbonModel` (C1b item 5); on the kernel since C1b item 7 (D09: the former own cubic is gone).
+- `SpinePackageData` moved from `science/fluid/thermo` (C1b).
+- The parser imports no solver type since codebase review C2, so a test that parses a catalog and expects a preset's refusal calls the check itself (`MaterialPresetsTest`).
+- Since 0.9.1 the four fields of a `solids` record go through `JsonFields`, and an error names the file and the field.
+- MATERIALS.md at the snapshot `4563176e1` still described the packages before the rework (`bases`, a package's own model and ranges, the Tia Juana presets).
+- The four generated crude grades replaced the ExxonMobil and Tia Juana assays (owner decision E1); no saved format stores a preset or assay id.
+- Ethanol in the main data (W6): the pilot overlay no longer carries ethanol; `pilot_aqueous` names the main compound. `refinery-tier1-r4` puts `Ethanol` after `CarbonDioxide`, so no existing compound's index moved. A world saved before W6 rebuilds its state from facts by compound id.
+- Load cost of the derived pairs (owner approval of 2026-11-12, W6 plan sections 13 and 15): the whole wet list derived in 0.23 to 0.25 s warm and 0.38 s cold on 16 processors (291 fits; without ethanol 0.08 to 0.17 s), against 1.5 to 1.75 s sequentially; sequentially, ethanol's 32 activity fits took 1.40 s, about 44 ms each against water's 11 ms. Probes `tools/aqueous-solvents/probes/` `LoadFits`, `LoadSplit`, `PairCost`, `PairDump`.
+- Kernel cost of a carried support: the composition derivatives' hoisting kept every bit (B1, `59c3c8a34`); reciprocals replaced the divisions (B2, `41c3b448e`), and only `dLogPhiDn` moved, by rounding. Measured (probe, one run each): water + nitrogen of 47 compounds, evaluate / derivatives 3.8 / 17.4 µs to 0.18 / 0.30 µs; the dense call with derivatives 43.15 to 30.43 µs.
+- `DeterministicMathSourceTest` scanned 250 files at `4563176e1` (247 main files and 4 benchmark files, minus the facade); the test's own comment still said about 190.
+- The chapter's text on three kernel `Mixing` plans (`CLASSICAL`, `SPARSE_PAIRS`, `TEMPERATURE_DEPENDENT_PAIRS`) described the kernel before its one mixing rule (Huron-Vidal, W3b step 1b, design N8); the plans no longer exist.
