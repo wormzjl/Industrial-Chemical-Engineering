@@ -41,7 +41,8 @@ simulator: continuous properties, no label-driven jumps, no critical-band hold.
   methane, ethane, propane, hydrogen to 30 MPa; ethylene 20 MPa; n-hexane 4.57 MPa; toluene 6.19 MPa) with their evidence
   and revision bumps; a `critical_volume` sub-record in all 47 datasets (`tools/compound-import/critical-volume.mjs`);
   `MixtureViscosity.residual`/`dense` (Jossi-Stiel-Thodos, zero at zero density), not yet called. Moved: the nine revisions,
-  the scientific revision of the three packages, every `fluidRevision`, the viscosity revision. Targeted tests green.
+  the scientific revision of the three packages, every `fluidRevision`, the viscosity revision; the three simulator
+  examples re-stamped on the new identity (read, stamp, write; no stored result). Targeted tests and the sample gates green.
   [S3_DATA_REVIEW.md](S3_DATA_REVIEW.md).
 
 ## Documents

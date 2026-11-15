@@ -156,6 +156,38 @@ saved design and no facts row is refused. `FORMATS.md` has no row for the materi
 edited (`MaterialPresetsTest`). It was regenerated from the r4 record and its revision is now
 `tjl20-methane-spine-r4-example-density`. This file is outside the brief's listed scope; the test requires the change.
 
+### The bundled simulator examples (a follow-up the main thread asked for)
+
+`FlowsheetExamplesTest.eachExampleIsTheCurrentFormatOnTheCurrentPackage` requires each example's `basis.revision` to equal
+`RevisionNotice.data(sheet, catalog)`: the `fluidRevision` of the network package restricted to the sheet's compounds.
+S3 moved that identity in all three examples:
+
+| Example | Why its identity moved |
+|---|---|
+| `crude_unit.json`, `small_crude_unit.json` | tjl20_methane r3 to r4; tjl19_ethane and tjl19_propane r1 to r2; the new `;critical-volume=` segment |
+| `ethanol_rectifier.json` | the `;critical-volume=icheme:chemsep_ethanol@chemsep-8.3-vc-r1` segment only; ethanol's own record did not move |
+
+All three were re-recorded by the method of commit 1bd0b4236: read, stamp, write. The probe is
+`tmp/supercritical-s3/probe/ReStampExample.java` (scratch): `FlowsheetFile.read`, then `RevisionNotice.stamped` on
+`MaterialCatalog.bundled()`, then `FlowsheetFile.write`. Each file's line ends were kept.
+
+- In each file only the `basis.revision` line changed. A JSON comparison of every other value is equal.
+- `small_crude_unit.json` was written by another route, so the writer also replaces its `=` escapes with `=` (the
+  same string) and its final newline.
+- No example stores results; the keys are format, basis, units, streams and settings. No result value could move.
+
+Test fixtures that state an old identity:
+
+| File | Loaded by | Must it state the current identity? |
+|---|---|---|
+| `src/test/resources/column/v3/tjl-reference-resources.json` | `V3TjlReferenceCatalog` (`RegroupedCrudeTest`, `TjlReferenceExtension`: `V3TraceFloorSupportTest`, `V3WaterPhaseQualificationTest`) | No. It is the frozen independent oracle with its own `test:tjl_*` records, which keep their revisions on purpose |
+| `src/test/resources/science/column/v3/neural/tjl20-wet-boundary.json` | `V3WaterPhaseQualificationTest` | No. The test reads only its `seed` and `input` and takes the identity from the running catalog. The stored string names the oracle's `test:tjl_*` records |
+| `src/test/resources/materials/tia-juana/flowsheet/crude_unit.json` | `SheetFixture.tiaJuanaSample` (`UtilityRegulationTest`) | No. No test compares its basis revision; it is an input sheet that is run |
+
+Nothing else under `src/main/resources` or `src/test/resources` holds an old token of the nine records or a fluid identity
+without `;critical-volume=`. The scan left out `materials/properties/` and the compat corpus; the corpus states old
+identities on purpose and is not edited.
+
 ## 5. Tests
 
 `./gradlew test --tests <24 classes> columnGates --tests "*V3IdentityTest" --max-workers 4`: 171 tests, 1 failure
@@ -166,6 +198,17 @@ FluidPropertyCoverageTest, SheetCompoundsTest, FluidFactsCompatTest, ThermoIdent
 DirectLiquidContinuityTest, PilotCryogenicCatalogTest, RefineryCarbonDioxideCatalogTest, RefineryImportTest,
 RestrictedPackagePhysicsTest, MaterialFluidDataTest, MaterialPresetsTest, FluidPropertyReloadGuardTest,
 AqueousSolventDataTest, NetworkPhaseEngineTest and SimulatorRunnerTest.
+
+After the examples were re-recorded, two more targeted runs covered every class that reads the examples or the fixtures
+above and had not run since S3's changes:
+
+- `test --tests FlowsheetExamplesTest --tests UtilityRegulationTest columnGates --tests V3WaterPhaseQualificationTest
+  --tests V3TraceFloorSupportTest --tests RegroupedCrudeTest`: 16 tests, green. FlowsheetExamplesTest ran 6, the three
+  column classes 3, 2 and 5. UtilityRegulationTest is a slow gate, so `test` skipped it.
+- `test --tests` DoorUnitsTest, DrawCallTest, OpenDeleteTest, SheetConditionTest, SheetGesturesTest, SimulatorTourTest,
+  SizingPageTest and FlowsheetAqueousColumnTest: 69 tests, green.
+- `holdGates --tests` CrudeUnitSampleTest (its five nested groups), UtilityRegulationTest, SmallCrudeUnitTest and
+  SmallUnitRecordingTest: 57 tests, green. These are the sample gates that the re-record message names.
 
 Test edits:
 
