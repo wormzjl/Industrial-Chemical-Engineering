@@ -89,7 +89,10 @@ class EventPathWorld {
             }
             public boolean acceptsRecovery(UUID player){return true;}
             // W3b option A: a running column's outlet names its compounds and Water (as FluidWorldAuthority's host does).
-            public Set<String> portCompounds(long port){return columns==null?Set.of():columns.compounds(port);}
+            public Set<String> portCompounds(long port) {
+                var column=columns==null?Set.<String>of():columns.compounds(port);var converter=converters==null?Set.<String>of():converters.compounds(port);
+                if(converter.isEmpty())return column;var all=new java.util.TreeSet<>(column);all.addAll(converter);return all;
+            }
             public void refused(UUID event,String reason){}
             public void committed(Set<Long> removed,Set<Long> recompiled){committedRemovals.add(removed);if(columns!=null)columns.committed();}
         });
@@ -105,6 +108,10 @@ class EventPathWorld {
     String failure;
     /** The running columns the events' commits report to, where a test runs one. */
     ColumnOperation columns;
+    /** The fluid converters whose fill ports name their rules' compounds, where a test runs them ({@link #grow}). */
+    Converters converters;
+    /** Queues the converters' fill ports whose islands must grow (as FluidWorldAuthority.tick does), for a test's {@link #beforeSolves}. */
+    void grow(){if(converters!=null)converters.grow(edits->registry.submit(edits,ledger.nextIdentity(),null));}
     /** The world's default control of a device kind (FluidWorldAuthority.place). */
     static FlowControl defaultControl(Kind kind) {
         return switch(kind){case PUMP->new FlowControl.Pump(.01,500000);case COMPRESSOR->new FlowControl.Compressor(.05,3.0);case VALVE->new FlowControl.PressureValve(200000);default->new FlowControl.Passive();};

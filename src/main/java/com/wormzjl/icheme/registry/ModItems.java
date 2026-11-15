@@ -55,6 +55,7 @@ public final class ModItems {
     public static final DeferredItem<PipelineFittingItem> PRESSURE_CONTROL_VALVE=fitting("pressure_control_valve",Instrument.Type.PRESSURE_VALVE);
     public static final DeferredItem<BlockItem> FLUID_GENERATOR=ITEMS.registerSimpleBlockItem("fluid_generator",ModBlocks.FLUID_GENERATOR);
     public static final DeferredItem<BlockItem> GAS_INTAKE=ITEMS.registerSimpleBlockItem("gas_intake",ModBlocks.GAS_INTAKE);
+    public static final DeferredItem<BlockItem> LIQUID_HOPPER=ITEMS.registerSimpleBlockItem("liquid_hopper",ModBlocks.LIQUID_HOPPER);
     public static final DeferredItem<BlockItem> DIVERTER_VALVE=ITEMS.registerSimpleBlockItem("diverter_valve",ModBlocks.DIVERTER_VALVE);
     public static final DeferredItem<BlockItem> FLUID_VOID=ITEMS.registerSimpleBlockItem("fluid_void",ModBlocks.FLUID_VOID);
     public static final DeferredItem<PipelineFittingItem> INLINE_FILTER=fitting("inline_filter",Instrument.Type.FILTER);

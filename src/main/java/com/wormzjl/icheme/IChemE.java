@@ -259,6 +259,8 @@ public final class IChemE {
         event.registerBlockEntity(net.neoforged.neoforge.capabilities.Capabilities.ItemHandler.BLOCK, ModBlockEntities.EQUIPMENT_SHELL.get(), (shell, side) -> shell.fuel());
         // A fluid converter's Forge tank on its port cell's port face (batch 2026-11-12-fluid-conversion, W3): passive, whole mB.
         event.registerBlockEntity(net.neoforged.neoforge.capabilities.Capabilities.FluidHandler.BLOCK, ModBlockEntities.EQUIPMENT_SHELL.get(), (shell, side) -> shell.forgeTank(side));
+        // A liquid hopper's Forge tank (batch 2026-11-15-fluid-interfaces, W4).
+        event.registerBlockEntity(net.neoforged.neoforge.capabilities.Capabilities.FluidHandler.BLOCK, ModBlockEntities.FLUID_DEVICE.get(), (device, side) -> device.hopperTank(side));
     }
     /**
      * The floating roofs that rise this tick lift what stands on them (a read of each tank's glide; nothing solves), and the

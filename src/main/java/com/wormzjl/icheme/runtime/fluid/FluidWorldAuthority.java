@@ -495,6 +495,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
     private void refuseEvent(UUID event,String reason){refusedEvents.put(event,reason);if(refusedEvents.size()>WorldTopologyLedger.MAXIMUM_EVENTS)refusedEvents.remove(refusedEvents.keySet().iterator().next());}
     /** Registers a gas intake (batch 2026-11-15-fluid-interfaces, W2): the atmosphere as a generator, on, as one queued event. */
     public WorldTopologyLedger.Registration placeIntake(PhysicalFluidTopology.Position position,PhysicalFluidTopology.Direction facing){return placement.placeIntake(position,facing);}
+    /** Registers a liquid hopper (batch 2026-11-15-fluid-interfaces, W4): a converter's fill port on its own, with its facts. */
+    public WorldTopologyLedger.Registration placeHopper(PhysicalFluidTopology.Position position,PhysicalFluidTopology.Direction facing){return placement.placeHopper(position,facing);}
     public WorldTopologyLedger.Registration place(PhysicalFluidTopology.Position position,TopologyCompiler.Kind kind,PhysicalFluidTopology.Direction facing) {
         return placement.place(position,kind,facing,List.of());
     }
@@ -660,6 +662,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public @org.jetbrains.annotations.Nullable String converterSettings(long id,Converters.Settings settings) {
         owned();if(closed)return "the fluid world is closed";var r=registrations().get(id);
         if(r==null||converters.unit(id)==null)return "no converter";
+        if(converters.unit(id).hopper())return "a liquid hopper has no settings";
         converters.queue(id,settings.clamped(com.wormzjl.icheme.science.equipment.EquipmentShape.converterRate(r.spec().volume())));return null;
     }
     /**
@@ -702,7 +705,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
         }
         if(ranges.size()>FluidView.Converter.MAXIMUM_RANGES)ranges.subList(FluidView.Converter.MAXIMUM_RANGES,ranges.size()).clear();
         double booked=converters.rate(id).litres();
-        return new FluidView.Converter(u.closed(),next.mode().name(),next.rate(),com.wormzjl.icheme.science.equipment.EquipmentShape.converterRate(r.spec().volume()),next.deadband(),thresholds,converters.queued(id),
+        double rated=u.hopper()?u.maxRate():com.wormzjl.icheme.science.equipment.EquipmentShape.converterRate(r.spec().volume());
+        return new FluidView.Converter(u.closed(),next.mode().name(),next.rate(),rated,next.deadband(),thresholds,converters.queued(id),
                 status==null?"":status.name(),converters.direction(id).name(),Double.isFinite(booked)?booked:0,alarms,u.fluid(),u.stored(),u.capacity(),u.forgeFill(),Double.isNaN(fill)?null:fill,litres,kmol,kg,
                 rule==null?"":rule.id(),reverse,ranges);
     }
@@ -710,7 +714,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
     private static Double bound(double value){return Double.isFinite(value)?value:null;}
     /** Converter {@code id}'s active alarms (W4): its status's and its level thresholds', on its published fill. */
     public java.util.Set<EquipmentAlarm> converterAlarms(long id) {
-        owned();var u=converters.unit(id);if(u==null)return java.util.Set.of();
+        owned();var u=converters.unit(id);if(u==null||u.hopper())return java.util.Set.of();
         return Converters.alarms(converters.status(id),u.thresholds(),converterFill(id),u.forgeFill());
     }
     /**

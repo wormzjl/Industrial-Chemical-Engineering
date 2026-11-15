@@ -78,6 +78,19 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
     }
     /** Whether this block stands for the atmosphere, a gas intake's generator. */
     public boolean ambient(){return false;}
+    /**
+     * A liquid hopper (batch 2026-11-15-fluid-interfaces, W4): a generator block that is a fluid converter's fill port on its
+     * own ({@code ConverterUnit.hopper}). As every generator, it feeds each pipe it meets; its funnel takes Forge fluid on the other faces.
+     */
+    public static FluidDeviceBlock hopper(BlockBehaviour.Properties properties){return new Hopper(properties);}
+    private static final MapCodec<FluidDeviceBlock> HOPPER_CODEC=RecordCodecBuilder.mapCodec(instance->instance.group(propertiesCodec()).apply(instance,FluidDeviceBlock::hopper));
+    private static final class Hopper extends FluidDeviceBlock {
+        private Hopper(BlockBehaviour.Properties properties){super(TopologyCompiler.Kind.GENERATOR,properties);}
+        @Override public MapCodec<FluidDeviceBlock> codec(){return HOPPER_CODEC;}
+        @Override public boolean hopper(){return true;}
+    }
+    /** Whether this block is a liquid hopper. */
+    public boolean hopper(){return false;}
     public TopologyCompiler.Kind kind(){return kind;}
     @Override public MapCodec<FluidDeviceBlock> codec(){return CODEC;}
     @Override protected void createBlockStateDefinition(StateDefinition.Builder<Block,BlockState> builder){builder.add(FACING,SIGHT_GLASS,SIGHT_GLASS_AXIS);for(var property:CONNECTIONS.values())builder.add(property);}
@@ -195,6 +208,7 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
      */
     public static @Nullable BlockState stateFor(com.wormzjl.icheme.runtime.fluid.WorldTopologyLedger.Registration r) {
         var d=r.device();if(!d.ports().isEmpty()||d.position().lane()!=0)return null;
+        if(d.converterFill())return com.wormzjl.icheme.registry.ModBlocks.LIQUID_HOPPER.get().defaultBlockState().setValue(FACING,Direction.valueOf(d.facing().name()));
         var block=switch(d.kind()){
             case RESERVOIR->com.wormzjl.icheme.registry.ModBlocks.FLUID_RESERVOIR.get();case PIPE->com.wormzjl.icheme.registry.ModBlocks.FLUID_PIPE.get();
             case GENERATOR->r.spec().ambient()?com.wormzjl.icheme.registry.ModBlocks.GAS_INTAKE.get():com.wormzjl.icheme.registry.ModBlocks.FLUID_GENERATOR.get();case VOID->com.wormzjl.icheme.registry.ModBlocks.FLUID_VOID.get();
@@ -225,7 +239,7 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
         FluidWorldAuthority.find(serverLevel.getServer()).ifPresent(world->{
             var p=Positions.of(level,position);
             if(previous.getBlock()!=this) {
-                var record=ambient()?world.placeIntake(p,PhysicalFluidTopology.Direction.valueOf(state.getValue(FACING).name())):world.place(p,kind,PhysicalFluidTopology.Direction.valueOf(state.getValue(FACING).name()),cutoff(state),hasPressureValve(state),hasFilter(state),hasMover(state)?state.getValue(INLINE_MOVER).kind():TopologyCompiler.Kind.PIPE);
+                var record=ambient()?world.placeIntake(p,PhysicalFluidTopology.Direction.valueOf(state.getValue(FACING).name())):hopper()?world.placeHopper(p,PhysicalFluidTopology.Direction.valueOf(state.getValue(FACING).name())):world.place(p,kind,PhysicalFluidTopology.Direction.valueOf(state.getValue(FACING).name()),cutoff(state),hasPressureValve(state),hasFilter(state),hasMover(state)?state.getValue(INLINE_MOVER).kind():TopologyCompiler.Kind.PIPE);
                 if(level.getBlockEntity(position) instanceof FluidDeviceBlockEntity entity)entity.bindIdentity(record.device().id());
             } else if(!hasAxialAccessory(state)&&!hasAxialAccessory(previous)&&previous.getValue(FACING)!=state.getValue(FACING)) {
                 world.at(p).ifPresent(old->{var d=old.device();world.edit(d.id(),old.revision(),d.withFacing(PhysicalFluidTopology.Direction.valueOf(state.getValue(FACING).name())),old.spec());});
@@ -298,6 +312,11 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
         if(stack.is(com.wormzjl.icheme.registry.ModItems.FLUID_DEBUGGER.get())) {
             if(player instanceof ServerPlayer serverPlayer&&level.getBlockEntity(position) instanceof FluidDeviceBlockEntity entity)entity.open(serverPlayer,true);
             return ItemInteractionResult.sidedSuccess(level.isClientSide());
+        }
+        // A liquid hopper (W4): a filled bucket or tank item empties into its Forge tank; the handler refuses a fluid no rule converts.
+        if(hopper()&&net.neoforged.neoforge.fluids.FluidUtil.getFluidHandler(stack).isPresent()) {
+            if(level.isClientSide())return ItemInteractionResult.SUCCESS;
+            return net.neoforged.neoforge.fluids.FluidUtil.interactWithFluidHandler(player,hand,level,position,null)?ItemInteractionResult.SUCCESS:ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
         }
         return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
     }

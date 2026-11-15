@@ -164,9 +164,10 @@ public final class PhysicalFluidTopology {
             if(engine&&(onPortLane||ports.size()!=1||ports.getFirst().port!=PassiveNetwork.PhasePort.BULK||ports.getFirst().role!=ConnectionRole.VESSEL))
                 throw new IllegalArgumentException("A prime mover's fuel void has one bulk port and its fuel valve");
             // A fluid converter's port (batch 2026-11-12-fluid-conversion): its drain void or its fill generator in the port lane
-            // of a cell of its vessel, meeting the vessel through one inside contact, the converter's valve its control.
+            // of a cell of its vessel, meeting the vessel through one inside contact, the converter's valve its control; or a
+            // liquid hopper (batch 2026-11-15-fluid-interfaces, W4): its fill generator alone, one block with no ports.
             boolean converter=(kind==TopologyCompiler.Kind.VOID||kind==TopologyCompiler.Kind.GENERATOR)&&heat==null&&control instanceof FlowControl.ControlValve conv&&conv.source()==FlowControl.ValveSource.CONVERTER;
-            if(converter&&!onPortLane)throw new IllegalArgumentException("A converter's port stands in its vessel's port lane");
+            if(converter&&!onPortLane&&!(kind==TopologyCompiler.Kind.GENERATOR&&ports.isEmpty()&&position.lane()==0))throw new IllegalArgumentException("A converter's port stands in its vessel's port lane");
             boolean sink=burner||flare||outlet||fired||chimney||engine;
             if(position.lane()==0||onPortLane?slots!=0||points!=0:!laneFits(position.lane(),slots)||(points>>>60)!=0)throw new IllegalArgumentException("Invalid rack lane "+position.lane()+" of "+slots+" positions");
             if(suspendedBy<0||onPortLane&&suspendedBy!=0)throw new IllegalArgumentException("Invalid column suspension");

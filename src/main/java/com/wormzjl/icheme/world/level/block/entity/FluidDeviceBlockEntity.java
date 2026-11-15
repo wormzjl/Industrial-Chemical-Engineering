@@ -41,6 +41,17 @@ public final class FluidDeviceBlockEntity extends ModelledBlockEntity implements
         var world=com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.find(server.getServer()).orElse(null);
         return world==null||world.electric().generator(fluidIdentity())==null?null:new InlineEnergy(world.electric(),fluidIdentity());
     }
+    /**
+     * A liquid hopper's Forge tank (batch 2026-11-15-fluid-interfaces, W4), fill only, on every face no line joins (an
+     * outlet); null on any other block, on a client and before it registers.
+     */
+    public net.neoforged.neoforge.fluids.capability.IFluidHandler hopperTank(net.minecraft.core.Direction side) {
+        if(!(level instanceof net.minecraft.server.level.ServerLevel server)||!(getBlockState().getBlock() instanceof com.wormzjl.icheme.world.level.block.FluidDeviceBlock block)||!block.hopper())return null;
+        if(side!=null&&getBlockState().getValue(com.wormzjl.icheme.world.level.block.FluidDeviceBlock.connection(side)))return null;
+        var world=com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.find(server.getServer()).orElse(null);
+        var u=world==null||identity<=0?null:world.converters().unit(identity);
+        return u==null||!u.hopper()?null:new ConverterPort(world.converters().tank(identity),true);
+    }
     public static java.util.List<FluidDeviceBlockEntity> clientSightGlasses(){return java.util.List.copyOf(CLIENT_GLASSES);}
     /** Client: the pipes with an open end, which the pipe laying tool marks while it is held. Client thread only; weak, as above. */
     private static final java.util.Set<FluidDeviceBlockEntity> CLIENT_OPEN_ENDS=java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());

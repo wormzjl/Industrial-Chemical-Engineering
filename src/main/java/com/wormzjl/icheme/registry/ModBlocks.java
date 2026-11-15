@@ -24,6 +24,8 @@ public final class ModBlocks {
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.FluidDeviceBlock> DIVERTER_VALVE=fluid("diverter_valve",com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.DIVERTER_VALVE);
     /** A gas intake (batch 2026-11-15-fluid-interfaces, W2): the atmosphere as a generator. */
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.FluidDeviceBlock> GAS_INTAKE=fluid("gas_intake",com.wormzjl.icheme.world.level.block.FluidDeviceBlock::intake);
+    /** A liquid hopper (batch 2026-11-15-fluid-interfaces, W4): Forge fluid in, the network's out. */
+    public static final DeferredBlock<com.wormzjl.icheme.world.level.block.FluidDeviceBlock> LIQUID_HOPPER=fluid("liquid_hopper",com.wormzjl.icheme.world.level.block.FluidDeviceBlock::hopper);
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.LinePieceBlock> LINE_PIECE=BLOCKS.registerBlock("line_piece",
             com.wormzjl.icheme.world.level.block.LinePieceBlock::new,BlockBehaviour.Properties.of().strength(.5F).sound(SoundType.METAL).pushReaction(net.minecraft.world.level.material.PushReaction.BLOCK).noOcclusion().dynamicShape().noLootTable());
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.ConduitBlock> DATA_CABLE=BLOCKS.registerBlock("data_cable",

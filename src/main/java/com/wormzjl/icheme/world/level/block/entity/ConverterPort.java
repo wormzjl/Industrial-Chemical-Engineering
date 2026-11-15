@@ -15,9 +15,16 @@ import net.neoforged.neoforge.fluids.capability.IFluidHandler;
  */
 final class ConverterPort implements IFluidHandler {
     private final Converters.Tank tank;
+    /** A liquid hopper's port (batch 2026-11-15-fluid-interfaces, W4): it takes fluid in and gives none back. */
+    private final boolean fillOnly;
 
     ConverterPort(Converters.Tank tank) {
+        this(tank, false);
+    }
+
+    ConverterPort(Converters.Tank tank, boolean fillOnly) {
         this.tank = tank;
+        this.fillOnly = fillOnly;
     }
 
     private static String id(FluidStack stack) {
@@ -68,7 +75,7 @@ final class ConverterPort implements IFluidHandler {
     @Override
     public FluidStack drain(int maxDrain, FluidAction action) {
         var held = getFluidInTank(0);
-        if (held.isEmpty() || maxDrain <= 0) return FluidStack.EMPTY;
+        if (fillOnly || held.isEmpty() || maxDrain <= 0) return FluidStack.EMPTY;
         long given = tank.drain(maxDrain, action.simulate());
         return given > 0 ? held.copyWithAmount(clamp(given)) : FluidStack.EMPTY;
     }

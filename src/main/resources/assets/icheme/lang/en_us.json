@@ -4521,5 +4521,7 @@
   "material.icheme.krypton": "Krypton",
   "material.icheme.xenon": "Xenon",
   "block.icheme.gas_intake": "Gas Intake",
-  "tutorial.icheme.item.gas_intake.serves": "Draws outside air into the network; a compressor behind it moves the air."
+  "tutorial.icheme.item.gas_intake.serves": "Draws outside air into the network; a compressor behind it moves the air.",
+  "block.icheme.liquid_hopper": "Liquid Hopper",
+  "tutorial.icheme.item.liquid_hopper.serves": "Pours bucketed fluid into the network by its conversion rule."
 }

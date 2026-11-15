@@ -48,7 +48,7 @@ public final class FluidDeviceModel implements IDynamicBakedModel {
     public static final ResourceLocation LOADER_ID = ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID, "fluid_device");
     /** {@code "loader": "icheme:fluid_device", "kind": "pipe"} (a {@link TopologyCompiler.Kind}), textures per material. */
     public static final IGeometryLoader<Geometry> LOADER = (json, context) ->
-            new Geometry(TopologyCompiler.Kind.valueOf(GsonHelper.getAsString(json, "kind").toUpperCase(Locale.ROOT)),GsonHelper.getAsBoolean(json,"sight_glass_accessory",false),GsonHelper.getAsBoolean(json,"shutoff_valve_accessory",false),GsonHelper.getAsBoolean(json,"check_valve_accessory",false),GsonHelper.getAsBoolean(json,"pressure_valve_accessory",false),GsonHelper.getAsBoolean(json,"inline_mover_accessory",false),GsonHelper.getAsBoolean(json,"intake",false));
+            new Geometry(TopologyCompiler.Kind.valueOf(GsonHelper.getAsString(json, "kind").toUpperCase(Locale.ROOT)),GsonHelper.getAsBoolean(json,"sight_glass_accessory",false),GsonHelper.getAsBoolean(json,"shutoff_valve_accessory",false),GsonHelper.getAsBoolean(json,"check_valve_accessory",false),GsonHelper.getAsBoolean(json,"pressure_valve_accessory",false),GsonHelper.getAsBoolean(json,"inline_mover_accessory",false),GsonHelper.getAsString(json,"body",""));
     private static final int CACHE = 4096;
     private static final ChunkRenderTypeSet SOLID = ChunkRenderTypeSet.of(RenderType.solid());
     private static final ChunkRenderTypeSet GLASS = ChunkRenderTypeSet.of(RenderType.solid(),RenderType.translucent());
@@ -59,8 +59,8 @@ public final class FluidDeviceModel implements IDynamicBakedModel {
     private final boolean checkAccessory;
     private final boolean pressureAccessory;
     private final boolean moverAccessory;
-    /** A gas intake's filter house ({@code "intake": true}, batch 2026-11-15-fluid-interfaces). */
-    private final boolean intake;
+    /** A generator's own body (batch 2026-11-15-fluid-interfaces): {@code "body": "intake"} a gas intake's filter house, {@code "hopper"} a liquid hopper's funnel; "" none. */
+    private final String body;
     private final TextureAtlasSprite[] sprites;
     /** {@link #sprites} with the neutral pipe and flange sprites a painted line's tint colours, per painted mask. */
     private final TextureAtlasSprite[][] paintedSprites;
@@ -74,7 +74,7 @@ public final class FluidDeviceModel implements IDynamicBakedModel {
     private record Baked(List<BakedQuad> solid,List<BakedQuad> glass){}
     private final Map<Look,Baked> quads = new ConcurrentHashMap<>();
 
-    private FluidDeviceModel(TopologyCompiler.Kind kind,boolean accessory,boolean shutoffAccessory,boolean checkAccessory,boolean pressureAccessory,boolean moverAccessory,boolean intake, TextureAtlasSprite[] sprites, TextureAtlasSprite[][] paintedSprites, TextureAtlasSprite particle, ItemTransforms transforms) {
+    private FluidDeviceModel(TopologyCompiler.Kind kind,boolean accessory,boolean shutoffAccessory,boolean checkAccessory,boolean pressureAccessory,boolean moverAccessory,String body, TextureAtlasSprite[] sprites, TextureAtlasSprite[][] paintedSprites, TextureAtlasSprite particle, ItemTransforms transforms) {
         this.paintedSprites = paintedSprites;
         this.kind = kind;
         this.accessory=accessory;
@@ -82,7 +82,7 @@ public final class FluidDeviceModel implements IDynamicBakedModel {
         this.checkAccessory=checkAccessory;
         this.pressureAccessory=pressureAccessory;
         this.moverAccessory=moverAccessory;
-        this.intake=intake;
+        this.body=body;
         this.sprites = sprites;
         this.particle = particle;
         this.transforms = transforms;
@@ -104,7 +104,8 @@ public final class FluidDeviceModel implements IDynamicBakedModel {
     }
 
     private Baked bake(Look look) {
-        if(intake)return new Baked(quads(look,com.wormzjl.icheme.science.equipment.IntakeGeometry.polygons(look.geometry.pipe(),detail)),List.of());
+        if(body.equals("intake"))return new Baked(quads(look,com.wormzjl.icheme.science.equipment.IntakeGeometry.polygons(look.geometry.pipe(),detail)),List.of());
+        if(body.equals("hopper"))return new Baked(quads(look,com.wormzjl.icheme.science.equipment.HopperGeometry.polygons(look.geometry.pipe(),detail)),List.of());
         if(look.mover!=TopologyCompiler.Kind.PIPE)return new Baked(quads(look,com.wormzjl.icheme.science.equipment.InlineMoverGeometry.polygons(look.geometry.pipe(),look.mover==TopologyCompiler.Kind.COMPRESSOR,moverAccessory,detail)),List.of());
         if(look.filter)return new Baked(quads(look,LineGeometry.filterPolygons(look.geometry.pipe(),detail)),List.of());
         if(look.pressureValve)return new Baked(quads(look,ValveGeometry.pressure(look.geometry.pipe(),pressureAccessory,detail)),List.of());
@@ -177,11 +178,11 @@ public final class FluidDeviceModel implements IDynamicBakedModel {
         return ItemOverrides.EMPTY;
     }
 
-    public record Geometry(TopologyCompiler.Kind kind,boolean accessory,boolean shutoffAccessory,boolean checkAccessory,boolean pressureAccessory,boolean moverAccessory,boolean intake) implements IUnbakedGeometry<Geometry> {
+    public record Geometry(TopologyCompiler.Kind kind,boolean accessory,boolean shutoffAccessory,boolean checkAccessory,boolean pressureAccessory,boolean moverAccessory,String body) implements IUnbakedGeometry<Geometry> {
         @Override
         public BakedModel bake(IGeometryBakingContext context, ModelBaker baker, Function<Material, TextureAtlasSprite> sprites, ModelState state, ItemOverrides overrides) {
             var bare=EquipmentShellModel.sprites(context, sprites);
-            return new FluidDeviceModel(kind,accessory,shutoffAccessory,checkAccessory,pressureAccessory,moverAccessory,intake, bare, EquipmentShellModel.paintedLines(context, sprites, bare), sprites.apply(context.getMaterial("particle")), context.getTransforms());
+            return new FluidDeviceModel(kind,accessory,shutoffAccessory,checkAccessory,pressureAccessory,moverAccessory,body, bare, EquipmentShellModel.paintedLines(context, sprites, bare), sprites.apply(context.getMaterial("particle")), context.getTransforms());
         }
     }
 }

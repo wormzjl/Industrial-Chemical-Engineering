@@ -142,6 +142,7 @@ class FluidFactsCompatTest {
         converted(world);
         world.runTo(940);
         intake(world);
+        hopper(world);
         phases(world);return world;
     }
     /** Facts schema 26 (batch 2026-11-15-fluid-interfaces, W2): a gas intake, the atmosphere as a generator ({@code ambient}), on a dead-end pipe. */
@@ -150,6 +151,17 @@ class FluidFactsCompatTest {
         var record=Placement.intake(id,new PhysicalFluidTopology.Position(EventPathWorld.DIM,0,64,-40),Direction.EAST,.05,world.model);
         world.registry.submit(List.of(new WorldTopologyLedger.Edit(id,record)),id+1,null);
         world.place(1,64,-40,Kind.PIPE,Direction.EAST,.05);
+    }
+    /**
+     * Facts schema 26 (batch 2026-11-15-fluid-interfaces, W4): a liquid hopper, a converter's fill port on its own
+     * ({@link ConverterUnit#hopper}), on a dead-end pipe, its Forge tank holding 2 500 mB of water.
+     */
+    private static void hopper(EventPathWorld world) {
+        long id=world.ledger.nextIdentity();
+        var record=Placement.hopper(id,new PhysicalFluidTopology.Position(EventPathWorld.DIM,0,64,-42),Direction.EAST,.05,FluidDeviceSpec.nitrogen(world.catalog).composition());
+        world.registry.submit(List.of(new WorldTopologyLedger.Edit(id,record)),id+1,null);
+        world.place(1,64,-42,Kind.PIPE,Direction.EAST,.05);
+        world.ledger.converter(ConverterUnit.hopper(id,Placement.HOPPER_RATE,Placement.HOPPER_CAPACITY).withTank("minecraft:water",2500,0));
     }
     /** The vessels {@link #phases} fills: nitrogen over water, oil over water under their gas, boiling water, and oil over water in a blanketed drum with a pressure safety valve. */
     private long wetNitrogen,oilOverWater,boiling,guardedOil;

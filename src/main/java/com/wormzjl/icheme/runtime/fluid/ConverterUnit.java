@@ -49,6 +49,17 @@ public record ConverterUnit(long id,long drain,long drainValve,long fill,long fi
         var none=new double[THRESHOLDS];Arrays.fill(none,Double.NaN);
         return new ConverterUnit(id,drain,drainValve,fill,fillValve,closed,Mode.OFF,0,DEFAULT_DEADBAND,none,capacity,"",0,0,"",0);
     }
+    /**
+     * A liquid hopper's facts (batch 2026-11-15-fluid-interfaces, W4, decisions D5 and D6): its own generator is its fill
+     * port and its valve, it has no vessel and no drain; it converts to IChemE at {@code rate} L per process second from a
+     * Forge tank of {@code capacity} mB.
+     */
+    public static ConverterUnit hopper(long id,double rate,long capacity) {
+        var none=new double[THRESHOLDS];Arrays.fill(none,Double.NaN);
+        return new ConverterUnit(id,0,0,id,id,false,Mode.TO_ICHEME,rate,DEFAULT_DEADBAND,none,capacity,"",0,0,"",0);
+    }
+    /** Whether this is a liquid hopper ({@link #hopper}): its fill port is its own identity, with no vessel and no drain. */
+    public boolean hopper(){return fill==id&&drain==0;}
     @Override public double[] thresholds(){return thresholds.clone();}
     /** The Forge tank's fill fraction. */
     public double forgeFill(){return capacity>0?(double)stored/capacity:0;}

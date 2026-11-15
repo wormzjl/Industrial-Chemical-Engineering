@@ -80,7 +80,8 @@ final class FluidFacts {
      *  aqueous-liquid amounts, after its {@code rigid}; absent means the pre-W3b reading of its liquid fields (the compounds'
      *  liquid and the water as two liquids).
      *  26 (batch 2026-11-15-fluid-interfaces): a device spec's {@code ambient}, after its relief face (absent: false, not the
-     *  atmosphere), a gas intake's. */
+     *  atmosphere), a gas intake's. A liquid hopper's converter facts (W4) use the schema-24 fields: its fill port is its own
+     *  identity, with no drain. */
     static final int SCHEMA=26;
     /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 26. */
     private static final Map<Class<?>,Map<String,String>> ALIASES=Map.of();
