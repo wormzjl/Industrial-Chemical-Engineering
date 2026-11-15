@@ -118,6 +118,28 @@ Decisions after S2b's stop conditions (2026-11-15):
    `s2c-dense2`). One existing test, `LevelLoopGameTests.aBlanketedDrumOfTwoCyclesHoldsItsLevelOnTheCadence`, passed in
    the first whole run and failed in the second on the same production code: not settled, left to the final lane.
 
+8. **Main moved during the batch; it is merged in before S4 (owner, 2026-11-15: "Approve, merge first").** Main
+   0.31.1 (`a6b12684d`, the fluid step cost batch) merged as `8bac3e6e7`: two conflicts, both documents; the affected
+   classes, chain-100 and the dense GameTests pass. Main then took the tools large files batch and one `FORMATS.md` line
+   (batch 2026-11-15-pollution-system reserves protocol version `icheme-2`): merged as `10c9578b2`, no conflict, no
+   test run (documents and `tools/` only). `mod_version` on the branch is main's 0.31.1.
+9. **The merge to main is a standing instruction (owner, 2026-11-16).** The owner wrote "auto merge when done". Asked
+   whether that covers (1) this batch into main when it is finished, (2) the `tools/` cleanup branch into main, or
+   (3) both, the owner answered "3". So this batch merges to main with no further question once every stage, the final
+   lane and the merge preparation are done and the lane is clean. A failure, a hold or a moved reference that the
+   reviews did not announce stops the merge and goes to the owner. The owner named no version: 0.32.0 is the main
+   thread's proposal, stated again in the merge preparation report. No push. Every delegation still needs its own
+   approval.
+10. **S4 checked by the main thread (2026-11-16); its form of the pump's suction edge is open.** The diff, the stored
+   results (test 254 classes and 1,702 tests, holdGates 136, equipmentGates 13, none failed; chain-100 deviation 0;
+   dense GameTests 3 of 3) and the review agree. The brief asked for E "as a density" above Pc. Its consequence, which
+   the brief did not foresee: a pump that draws one dense fluid at reduced density 0.5 to about 1.1 through a line is
+   vapour-locked, where a lighter and a denser fluid both run. Nothing separates in one fluid above its critical
+   temperature, so the main thread proposes to the owner that such a fluid has no edge from its density (E only where
+   its isenthalp really flashes), and that a compressor's droplet wear reads no droplets in it
+   ([S4_MACHINES_REVIEW.md](S4_MACHINES_REVIEW.md) section 8, options 1 and 5). Until the owner answers, S4 stands as
+   implemented.
+
 ## 3. Stages
 
 Each stage is one package for one thread, on its own worktree, in the lane named. Line numbers are not given: the

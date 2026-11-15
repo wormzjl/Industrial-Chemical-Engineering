@@ -83,6 +83,10 @@ simulator: continuous properties, no label-driven jumps, no critical-band hold.
   the affected classes passed, and dense GameTests `s4-dense1` 3 of 3. The compressor law was measured, not changed.
   [S4_MACHINES_REVIEW.md](S4_MACHINES_REVIEW.md).
 
+- 2026-11-16: the main thread checked the merge of main (`8bac3e6e7`, then `10c9578b2`) and S4 (the diff, the stored
+  results, the review). The standing merge instruction, main's moves and S4's open form are in the plan's section 2b,
+  points 8 to 10.
+
 ## Documents
 
 - [SUPERCRITICAL_LIMITS_REVIEW.md](SUPERCRITICAL_LIMITS_REVIEW.md): expected behaviour, what the code does, the
