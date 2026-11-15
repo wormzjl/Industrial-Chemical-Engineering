@@ -149,6 +149,36 @@ Run from the batch worktree. No whole task, no final lane: that is the merge's.
 Each package: `./gradlew <task holding the class> --tests "<class>" --max-workers 4`, only the classes named, once
 per change. `LanguageFilesTest` and `UnitTextTest` wait for the translation commit.
 
+**W5 Wet-exhaust wear** (added 2026-11-15; `science/machine/Wear.java`, `runtime/fluid/MachineHealth.java`)
+
+W1 measured (10 MW, network flash, the game's scale): at 10 kPa the exhaust's condensed share is LP 5.45 %, MP 5.39 %,
+HP 4.61 %, VHP 4.06 %; at 20 kPa 3.4 to 4.7 %; at 150 to 350 kPa 0.8 % or less. Today's rule (onset 1 %, span 5 %)
+gives every condensing turbine a wear intensity of 0.61 to 0.89, about 9 process hours of life for the LP class. So T1's
+condition fails and T3 is not an MP question.
+
+Owner, 2026-11-15, after asking what real turbines do: "So you need to change the wear rules instead".
+
+- Expected: a condensing last stage is built for moisture (8 to 12 % by the steam tables) and wears over years on
+  design steam. Fast damage comes from inlet steam that lost its superheat.
+- The rule: the onset rises as the exhaust pressure falls; the span stays 5 %.
+  - `Wear.wetOnset(exhaustPressure)`: 1 % (`WET_EXHAUST_ONSET`) from 150 kPa up; at 20 kPa and at 10 kPa the largest
+    reading of the four classes' design steam at that exhaust, up to the next 0.1 %, plus 0.1 % (about 4.8 % and
+    5.6 %); linear in ln P between the points; flat below 10 kPa. Two new constants, set from W1's table.
+  - `MachineHealth.booked` (line 218) passes `Wear.wetExhaust(share, row.secondPressure())`; the fault's driving
+    quantity is the share less the rise of the onset over 1 %, so `Fault.intensity` and the status line keep their form.
+- What the build reports: each class's intensity and life with design steam and with a saturated inlet, at 10, 20,
+  150 and 350 kPa. Expected: design steam 0 everywhere; back-pressure turbines exactly as today (no reference moves
+  at 150 kPa and above); saturated HP steam to 10 kPa about 0.1 (6.2 % against 5.6 %).
+- Stop and report if a class's saturated reading at 10 or 20 kPa lies under the onset: a pressure-only onset then
+  cannot tell that class's lost superheat from its design steam, and the other form (the turbine's own design
+  moisture as a registered fact) is the owner's choice.
+- Ruled out: a step at the vacuum limit (a new discontinuity); a different span; a facts or wire change; any change
+  to `SteamTurbine`'s work law.
+- Tests: `WearTest`, `MachineHealthTest`, `MoverHealthStatusTest`. Guide: the wear rows of `rotating-machinery.md` and
+  `shaft-trains.md`.
+
+T1 to T3 after this: LP steam 200 °C, a fresh draft at HP to 10 kPa and MP unchanged all stand.
+
 ## 7. Pitfalls
 
 - `EquipmentNetwork` reads the class by ordinal with 0 for none. `LP` first shifts every ordinal by one: an old client
