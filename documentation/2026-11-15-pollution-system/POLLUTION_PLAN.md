@@ -23,20 +23,20 @@ Three sources, each already used by industry for the same purpose:
 | Toxic | every compound with a NIOSH IDLH that is not a corrosive | NIOSH IDLH, ppm by volume | additive hazard index, `I = Σ y_i / ref_i` (the ACGIH mixture formula) |
 | Corrosive | GHS H314 ("causes severe skin burns and eye damage") | NIOSH IDLH, ppm | the same |
 | Combustible | has a lower flammability limit | the LFL in the dataset's `flammability` sub-record (exists: NIOSH, Bureau of Mines 627) | Le Chatelier, `I = Σ y_i / LFL_i` |
-| Particulate | every released solid | 1.75 g/m³ (the NIOSH IDLH of carbon black, 1750 mg/m³) | added to the toxic index at effect time |
+| Particulate | every released solid | 1.75 g/m³ (the NIOSH IDLH of carbon black, 1750 mg/m³) | its own index and effects (owner, 2026-11-15: "make particulates a stand alone type of pollution"); the first request counted it as toxic |
 
 One number per kind, the **hazard index** `I`: the concentration divided by the reference. `I = 1` means the IDLH (toxic, corrosive) or the LFL (combustible). The indices are linear in the released moles, so a cube needs no per-compound amounts (section 4).
 
 Thresholds, the same for every kind:
 
-| Index | Toxic | Corrosive | Combustible |
-|---|---|---|---|
-| ≥ 0.1 | Poison I, Weakness I | Weakness I, Mining Fatigue I | Nausea (players). 10 % LEL is the gas detector alarm level in industry |
-| ≥ 0.3 | Poison II, Slowness I, Blindness | 1 HP every 2 s, armour loses durability | Nausea, Slowness I |
-| ≥ 1 | 2 HP/s, damage type `icheme:toxic_gas` (ignores armour) | 2 HP/s, `icheme:corrosive_gas` | flammable: explodes at a flame source |
-| ≥ 3 | 6 HP/s | 6 HP/s | (oxygen-limited above 2, section 7) |
+| Index | Toxic | Corrosive | Combustible | Particulate |
+|---|---|---|---|---|
+| ≥ 0.1 | Poison I, Weakness I | Weakness I, Mining Fatigue I | Nausea (players). 10 % LEL is the gas detector alarm level in industry | Darkness (smog) |
+| ≥ 0.3 | Poison II, Slowness I, Blindness | 1 HP every 2 s, armour loses durability | Nausea, Slowness I | Darkness, Slowness I, Hunger I (coughing) |
+| ≥ 1 | 2 HP/s, damage type `icheme:toxic_gas` (ignores armour) | 2 HP/s, `icheme:corrosive_gas` | flammable: explodes at a flame source | 1 HP/s, damage type `icheme:particulate` (ignores armour) |
+| ≥ 3 | 6 HP/s | 6 HP/s | (oxygen-limited above 2, section 7) | 3 HP/s |
 
-A player at 20 HP dies in 10 s at the IDLH and in 3.3 s at three times the IDLH.
+A player at 20 HP dies in 10 s at the IDLH and in 3.3 s at three times the IDLH. Particulate is half as fast (20 s and 6.7 s): a stand-alone kind, less potent than a toxic gas. Its effects are the main thread's proposal for the owner to validate.
 
 Potency table for the compounds of `icheme:refinery`. WP1 read each value from its NIOSH Pocket Guide page on 2026-11-15 and cites it in the record's `source`. Two differences from the first draft: n-butane has an IDLH (1600 ppm, toxic); isobutane (N.D.) and isopentane (no NIOSH entry) have none. Carbonyl sulfide: 150 ppm, the interim AEGL-3 60-minute value (EPA), estimated. The LFLs are in the datasets already.
 
@@ -141,7 +141,7 @@ Storing indices and not compounds loses the compound's name (a later detector sh
 
 ## 6. Effects on players and mobs
 
-Each second, for each cube with any index ≥ 0.1: the living entities inside its box (`getEntitiesOfClass(LivingEntity, box)`), by the table of section 2. Toxic index = toxic + particulate. Effects are applied for 3 s and renewed. Not affected: creative and spectator players, entity types in the tag `icheme:pollution_immune` (default: `#minecraft:undead`, golems, the wither, the ender dragon). Nausea is given to players only. Death messages `death.attack.icheme.toxic_gas`, `…corrosive_gas`.
+Each second, for each cube with any index ≥ 0.1: the living entities inside its box (`getEntitiesOfClass(LivingEntity, box)`), by the table of section 2. Each of the four kinds acts on its own index; particulate is no longer added to toxic. Effects are applied for 3 s and renewed. Not affected: creative and spectator players, entity types in the tag `icheme:pollution_immune` (default: `#minecraft:undead`, golems, the wither, the ender dragon). Nausea is given to players only. Death messages `death.attack.icheme.toxic_gas`, `…corrosive_gas`, `…particulate`.
 
 For equipment corrosion (later) the service gives `corrosive(dimension, pos)`; nothing reads it yet.
 
@@ -224,7 +224,7 @@ Decided 2026-11-15 (owner: "Yes, start"): D1 to D6 as recommended.
 
 A handheld item, `icheme:pollution_meter` (WP8).
 
-- **Reading.** The four indices of the cube the player stands in, each with a word: SAFE (< 0.1), WARNING (≥ 0.1), DANGER (≥ 0.3), LETHAL (≥ 1; FLAMMABLE for combustible). Toxic is shown with particulate added, as the effects count it, and particulate again on its own line.
+- **Reading.** The four indices of the cube the player stands in, each with a word: SAFE (< 0.1), WARNING (≥ 0.1), DANGER (≥ 0.3), LETHAL (≥ 1; FLAMMABLE for combustible). Four lines, one per kind; nothing is added together.
 - **On request only** (AGENTS.md, engine schedule): holding the meter in either hand is the request. While it is held the server sends that player the reading on the action bar once a second, from the installed field (a read; nothing steps). Using the item prints the full reading in chat, with the cube's air share and whether it is open or enclosed. No other client receives anything.
 - **Warning tick.** While held, a short click whose rate rises with the largest index (none below 0.1), so a player hears a cloud before walking into it. Built by the `models-and-sfx` skill; one sound event `icheme:meter_tick`.
 - **Files.** `world/item/PollutionMeterItem.java`, `registry/ModItems`, `ModCreativeTabs`, the item model and texture (`models-and-sfx`), `en_us.json` keys, a recipe; the server side in `runtime/pollution/PollutionEffects` (the world pass already runs each second). No menu, no screen, so no GUI work; one action-bar payload is vanilla's (`displayClientMessage`), so no wire format changes.
@@ -234,7 +234,7 @@ A handheld item, `icheme:pollution_meter` (WP8).
 
 A one-block device, `icheme:pollution_monitor` (WP10): a wall or post box with a sample inlet, a lamp and a data gland.
 
-- **What it measures.** The four indices of the cube it stands in, read from the installed field at the control cadence (a read of cached data; nothing steps). Toxic with particulate added, as the handheld meter.
+- **What it measures.** The four indices of the cube it stands in, read from the installed field at the control cadence (a read of cached data; nothing steps).
 - **On the data network.** It follows the chimney's and the alarm channels' pattern ([wired-control-power.md](../reference/code-guide/wired-control-power.md), "The chimney's data channels", "Physical interfaces and accepted channel catalog"): a data socket (`DataPorts`), a stable human ID (`SensorId`, label `AT-%04d`: analyser transmitter), and built-in channels through `BuiltInInputs.Binding` with deterministic channel UUIDs: `TOXIC`, `COMBUSTIBLE`, `CORROSIVE`, `PARTICULATE` (a new `Sensor.Unit.INDEX`, appended, saved by name) and one alarm channel `GAS` (active at any index ≥ 0.1; HIGH at ≥ 1). A data cable to a controller or a DCS console lists it among that bus's instruments, by ID, as every other sensor; the DCS shows the four values and the alarm on its existing instrument list and alarm line. No new DCS page in this batch.
 - **Not a loop input in this batch.** A controller loop acts on valves and heat units; a gas reading as a loop's measured value (an interlock that shuts a valve on gas) is a follow-up, so `ControlLaw` is not touched.
 - **On the block.** A lamp by blockstate: green (all < 0.1), amber (≥ 0.1), red (≥ 1), dark while its cube's cell is unknown or pollution is disabled. Red sounds a horn loop near the block (`icheme:gas_alarm`, by the `models-and-sfx` skill, on the `Noise` sources so it follows the sound settings). Right-click prints its ID and reading, as the handheld meter's chat line. No menu and no screen.

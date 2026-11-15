@@ -32,6 +32,8 @@ Lane: new packages `science/pollution` and `runtime/pollution`. Hot files touche
 
 - 2026-11-15, owner: cubes outside the world's height are dropped, not merged ("cubes outside should be dropped": "yes"). At the load they are booked `dissipated`; a release outside the height is dropped (a chimney top above the build limit releases nothing into the field). `PollutionField.capped(field, ledger, …)`, `CubeKey.inside`, `PollutionService.release`; 55 tests in 8 classes pass.
 
+- 2026-11-15, owner: "I've changed my idea, make particulates a stand alone type of pollution". Plan sections 2, 6 and 11: particulate is no longer added to the toxic index; it acts on its own index (proposed: Darkness from 0.1; Slowness and Hunger from 0.3; 1 HP/s from 1 and 3 HP/s from 3, damage type `icheme:particulate`), and the meter and monitor show four separate values. No built code changes: the field already keeps it as its own channel.
+
 ## Documents
 
 - [POLLUTION_PLAN.md](POLLUTION_PLAN.md): the standard, the release sources, the field and its step, the schedule, effects, ignition and blasts, saves, work packages WP1 to WP7, owner decisions.
