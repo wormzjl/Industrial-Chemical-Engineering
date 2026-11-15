@@ -140,7 +140,7 @@ final class StructureRefresh {
     /**
      * Server, from a shell cell's load: an older layout of its shape placed it (owner request 2026-10-18). Its vessel is
      * refreshed on a later tick, once every chunk its old and new cells span is loaded and block-ticking; blocks are not
-     * changed while a chunk loads. {@code box} is the box the cell was placed by (zeros when saved before stamps),
+     * changed while a chunk loads. {@code box} is the box the cell was placed by (zeros when saved before the layout was recorded),
      * {@code cell} its position, so a cell an old, larger box left outside the new one widens the region; the new box may
      * stand {@link EquipmentRefresh#REACH} from the old one along x and z, and its nozzles' pipe blocks one cell beyond it.
      */
@@ -156,7 +156,7 @@ final class StructureRefresh {
      * Server, from the load of a shell cell whose kind this build no longer has (owner decision D6, batch
      * 2026-10-26-backward-compat: "simply remove it, and don't leave ghost blocks behind"): its structure is removed whole on
      * a later tick, once every chunk of the box it was placed by is loaded ({@link #removeRetired}). {@code box} is that
-     * box (zeros when saved before stamps), {@code cell} the cell's position, which widens the region.
+     * box (zeros when saved before the layout was recorded), {@code cell} the cell's position, which widens the region.
      */
     static void removeRetiredLater(ServerLevel level, BlockPos origin, String kind, int[] box, BlockPos cell) {
         var high = origin.offset(Math.max(1, box[0]) - 1, Math.max(1, box[1]) - 1, Math.max(1, box[2]) - 1);
@@ -364,7 +364,7 @@ final class StructureRefresh {
      * plan drops, places the shell and interior cells it adds, binds every shell cell to the layout, and brings the interior
      * cells it kept to their current state ({@link #restateCells}). A shell cell it kept keeps its own paint unless
      * {@code repaint}; every shell cell takes {@code name} (N1). With cells left out where other blocks stand, the cells
-     * written keep no stamp, so the next load tries again. Returns the cells whose block or drawing changed.
+     * written keep the stale layout revision, so the next load tries again. Returns the cells whose block or drawing changed.
      */
     static List<BlockPos> write(ServerLevel level, Vessel vessel, Paint paint, String name, EquipmentRefresh.Plan plan, boolean repaint) {
         var placed = vessel.origin();
@@ -402,7 +402,7 @@ final class StructureRefresh {
             for (var cell : plan.interior()) EquipmentStructure.setCell(level, placed.offset(cell.x(), cell.y(), cell.z()), EquipmentStructure.interior(shape), flags);
             // The interior cells it kept take the current state too (restate); a blocked cell is another owner's.
             restateCells(level, placed, shape, blocked, flags);
-            // Cells left out where other blocks stand: the cells written keep no stamp, so the next load tries again.
+            // Cells left out where other blocks stand: the cells written keep the stale layout revision, so the next load tries again.
             if (!blocked.isEmpty())
                 for (var cell : layout.shell())
                     if (!blocked.contains(cell) && level.getBlockEntity(placed.offset(cell.x(), cell.y(), cell.z())) instanceof EquipmentShellBlockEntity entity) entity.layoutIncomplete();

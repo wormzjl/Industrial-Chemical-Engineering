@@ -342,7 +342,7 @@ public final class IChemE {
     private static void onServerStarting(ServerStartingEvent event) {
         MinecraftServer server = event.getServer();
         try {
-            // Parse the bundled model before admitting work, as the default config did: the simulator's column starts from it (ColumnUnit.START).
+            // Parse the bundled model before admitting work, as the default config did: the simulator's column starts from it (ColumnSolve.ColdStart.LEARNED).
             V3NeuralRegistry.bundled();
             ProcessSolveServices.ServerStarted started =
                     ProcessSolveServices.startServer(server, solveServiceConfig());
