@@ -7,7 +7,8 @@ Batch: `2026-09-24-coolprop-low-temperature` (unified multiphase thermo plan, P1
 
 Output: `src/test/resources/science/thermo/coolprop/parity-<Fluid>.json` for Nitrogen, CarbonDioxide, Methane, Ethane,
 Hydrogen and Water, and since batch `2026-11-15-supercritical-fluids` (S0) for n-Propane, Ethylene, n-Hexane, n-Heptane,
-Toluene, n-Decane and n-Dodecane, with a supercritical grid for every fluid but water; and, from
+Toluene, n-Decane and n-Dodecane, with a supercritical grid for every fluid but water and, since the follow-up M8, a
+compressed-liquid grid (Tr 0.5-0.95, 2-30 MPa) for CO2, N2, CH4, C2H6, C3H8, C2H4, n-hexane and toluene; and, from
 `generate_supercritical.py`, `viscosity-reference.json` and `mixture-density-reference.json` for
 `G3F11SupercriticalRegionTest`. The fluid files beside them (`<Fluid>.json`, `LICENSE`) are fetched from CoolProp revision
 `ae81610e7d23efc57f9d051c8e70a4d66e87537f`, not generated; see the README in that directory.
@@ -37,7 +38,9 @@ From the worktree root (Git Bash), about one second:
     tmp/coolprop-venv/Scripts/python.exe -I tools/coolprop-parity/generate_supercritical.py src/test/resources/science/thermo/coolprop
 
 The output is deterministic for a given CoolProp build; it is written with LF line endings. The S0 regeneration left
-`parity-Water.json` byte-identical and only appended `supercritical` rows to the other five earlier fixtures.
+`parity-Water.json` byte-identical and only appended `supercritical` rows to the other five earlier fixtures. The M8
+regeneration only appended `compressed_liquid` rows (and two methane melting-line refusals) to the eight fixtures it
+names; the other five are byte-identical.
 
 ## What each fixture holds
 
@@ -72,6 +75,8 @@ Status: Concluded 2026-10-19 (batch in 0.9.0). Index: [../INDEX.md](../INDEX.md)
 - In progress since 2026-09-24 (P1 item 1 done; fixtures regenerate byte-identically)
 - 2026-11-15 (batch 2026-11-15-supercritical-fluids, S0): seven fluids, the supercritical grid, `generate_supercritical.py`
   (viscosity and mixture-density tables)
+- 2026-11-15 (same batch, M8): the compressed-liquid grid of `G3F11SupercriticalRegionTest.m8CompressedLiquids` as rows
+  of source `compressed_liquid`; every parity tolerance held unchanged
 
 ### Notes
 

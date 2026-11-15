@@ -68,6 +68,8 @@ import org.junit.jupiter.api.Test;
  *   <li>M6: the pairs of the crude cuts with five light gases (decision O8, a sensitivity) and the pairs no library names
  *   (decision O9).</li>
  *   <li>M7: three binaries against CoolProp's mixture model ({@code mixture-density-reference.json}).</li>
+ *   <li>M8: compressed liquids at 2-30 MPa on the model's liquid root against the oracle, judged by G3F1's liquid
+ *   bounds (follow-up of S0).</li>
  * </ul>
  *
  * <p>Enthalpies are compared as departures {@code h(T, P) - h(T, 1 Pa)} (model, vapour root) and {@code h - h(T, rho -> 0)}
@@ -182,6 +184,79 @@ class G3F11SupercriticalRegionTest {
         m.put("M1 C2H4 inside the band sound %", 11.0);
         m.put("M1 C2H4 inside the band h K", 4.0);
         m.put("M7 density %", 5.0);
+        // Run of 2026-11-15 (M8, compressed liquids), |worst| rounded up to the next whole unit.
+        m.put("M8 CO2 Tr <= 0.8 density %", 2.0);
+        m.put("M8 CO2 Tr <= 0.8 cp %", 8.0);
+        m.put("M8 CO2 Tr <= 0.8 h K", 1.0);
+        m.put("M8 CO2 Tr 0.85 density %", 2.0);
+        m.put("M8 CO2 Tr 0.85 cp %", 6.0);
+        m.put("M8 CO2 Tr 0.85 h K", 1.0);
+        m.put("M8 CO2 Tr 0.9 density %", 4.0);
+        m.put("M8 CO2 Tr 0.9 cp %", 11.0);
+        m.put("M8 CO2 Tr 0.9 h K", 2.0);
+        m.put("M8 CO2 Tr 0.95 density %", 5.0);
+        m.put("M8 CO2 Tr 0.95 cp %", 11.0);
+        m.put("M8 CO2 Tr 0.95 h K", 2.0);
+        m.put("M8 N2 Tr <= 0.8 density %", 1.0);
+        m.put("M8 N2 Tr <= 0.8 cp %", 9.0);
+        m.put("M8 N2 Tr <= 0.8 h K", 3.0);
+        m.put("M8 N2 Tr 0.85 density %", 3.0);
+        m.put("M8 N2 Tr 0.85 cp %", 8.0);
+        m.put("M8 N2 Tr 0.85 h K", 1.0);
+        m.put("M8 N2 Tr 0.9 density %", 5.0);
+        m.put("M8 N2 Tr 0.9 cp %", 16.0);
+        m.put("M8 N2 Tr 0.9 h K", 2.0);
+        m.put("M8 N2 Tr 0.95 density %", 4.0);
+        m.put("M8 N2 Tr 0.95 cp %", 10.0);
+        m.put("M8 N2 Tr 0.95 h K", 2.0);
+        m.put("M8 C3H8 Tr <= 0.8 density %", 3.0);
+        m.put("M8 C3H8 Tr <= 0.8 cp %", 4.0);
+        m.put("M8 C3H8 Tr <= 0.8 h K", 1.0);
+        m.put("M8 C3H8 Tr 0.85 density %", 3.0);
+        m.put("M8 C3H8 Tr 0.85 cp %", 7.0);
+        m.put("M8 C3H8 Tr 0.85 h K", 2.0);
+        m.put("M8 C3H8 Tr 0.9 density %", 3.0);
+        m.put("M8 C3H8 Tr 0.9 cp %", 7.0);
+        m.put("M8 C3H8 Tr 0.9 h K", 2.0);
+        m.put("M8 C3H8 Tr 0.95 density %", 6.0);
+        m.put("M8 C3H8 Tr 0.95 cp %", 11.0);
+        m.put("M8 C3H8 Tr 0.95 h K", 3.0);
+        m.put("M8 C2H4 Tr <= 0.8 density %", 4.0);
+        m.put("M8 C2H4 Tr <= 0.8 cp %", 14.0);
+        m.put("M8 C2H4 Tr <= 0.8 h K", 8.0);
+        m.put("M8 C2H4 Tr 0.85 density %", 5.0);
+        m.put("M8 C2H4 Tr 0.85 cp %", 9.0);
+        m.put("M8 C2H4 Tr 0.85 h K", 2.0);
+        m.put("M8 C2H4 Tr 0.9 density %", 5.0);
+        m.put("M8 C2H4 Tr 0.9 cp %", 10.0);
+        m.put("M8 C2H4 Tr 0.9 h K", 2.0);
+        m.put("M8 C2H4 Tr 0.95 density %", 9.0);
+        m.put("M8 C2H4 Tr 0.95 cp %", 17.0);
+        m.put("M8 C2H4 Tr 0.95 h K", 4.0);
+        m.put("M8 n-C6 Tr <= 0.8 density %", 3.0);
+        m.put("M8 n-C6 Tr <= 0.8 cp %", 8.0);
+        m.put("M8 n-C6 Tr <= 0.8 h K", 8.0);
+        m.put("M8 n-C6 Tr 0.85 density %", 4.0);
+        m.put("M8 n-C6 Tr 0.85 cp %", 3.0);
+        m.put("M8 n-C6 Tr 0.85 h K", 1.0);
+        m.put("M8 n-C6 Tr 0.9 density %", 6.0);
+        m.put("M8 n-C6 Tr 0.9 cp %", 6.0);
+        m.put("M8 n-C6 Tr 0.9 h K", 2.0);
+        m.put("M8 n-C6 Tr 0.95 density %", 5.0);
+        m.put("M8 n-C6 Tr 0.95 cp %", 4.0);
+        m.put("M8 n-C6 Tr 0.95 h K", 2.0);
+        m.put("M8 Toluene Tr <= 0.8 density %", 3.0);
+        m.put("M8 Toluene Tr <= 0.8 cp %", 9.0);
+        m.put("M8 Toluene Tr <= 0.8 h K", 8.0);
+        m.put("M8 Toluene Tr 0.85 density %", 4.0);
+        m.put("M8 Toluene Tr 0.85 cp %", 4.0);
+        m.put("M8 Toluene Tr 0.85 h K", 3.0);
+        m.put("M8 Toluene Tr 0.9 density %", 7.0);
+        m.put("M8 Toluene Tr 0.9 cp %", 8.0);
+        m.put("M8 Toluene Tr 0.9 h K", 3.0);
+        m.put("M8 Toluene Tr 0.95 density %", 7.0);
+        m.put("M8 Toluene Tr 0.95 cp %", 7.0);
+        m.put("M8 Toluene Tr 0.95 h K", 3.0);
         return m;
     }
 
@@ -1064,6 +1139,130 @@ class G3F11SupercriticalRegionTest {
         table.print(f("three binaries against CoolProp's mixture model (%d two-phase in CoolProp, %d two-phase in the engine)", twoReference, twoEngine));
         System.out.println(f("G3 F11 M7 summary | one-phase density %% worst / p95 %s over %d states", density.text("%+.2f"), density.values.size()));
         hold("M7 density %", density.worst);
+        assertHeld();
+    }
+
+    // ------------------------------------------------------------------------------------------------- M8
+
+    /** The compressed-liquid fluids of M8: the M1 fluids without hydrogen, and the bundled n-hexane and toluene datasets. */
+    static final List<Fluid> M8 = List.of(new Fluid("CarbonDioxide", "CarbonDioxide", "CO2"), new Fluid("Nitrogen", "Nitrogen", "N2"),
+            new Fluid("Methane", "Methane", "CH4"), new Fluid("Ethane", "Ethane", "C2H6"), new Fluid("n-Propane", "Propane", "C3H8"),
+            new Fluid("Ethylene", "Ethylene", "C2H4"), new Fluid("n-Hexane", "N-hexane", "n-C6"), new Fluid("Toluene", "Toluene", "Toluene"));
+    static final double[] LIQUID_TR = {0.5, 0.6, 0.7, 0.8, 0.85, 0.9, 0.95};
+    static final double[] LIQUID_P = {2e6, 5e6, 10e6, 20e6, 30e6};
+    /** The Tr bands of G3F1's liquid rules: Tr <= 0.8, 0.85, 0.9, 0.95. */
+    static final String[] LIQUID_BAND = {"Tr <= 0.8", "Tr 0.85", "Tr 0.9", "Tr 0.95"};
+    /** G3F1's declared bounds per band: COMPRESSED, COMPRESSED, COMPRESSED_HIGH, NEAR_TC (density %). */
+    static final double[] LIQUID_DENSITY_BOUND = {3, 3, 5, 6};
+    /** G3F1's declared bounds per band: LIQUID_CP_COLD, LIQUID_CP, LIQUID_CP, none above Tr 0.9 (cp %). */
+    static final double[] LIQUID_CP_BOUND = {10, 20, 20, Double.NaN};
+
+    /** A grid pressure in MPa, or "below 2" where the lowest grid pressure already misses. */
+    static String megapascals(double pressure) { return pressure == 0 ? "below 2" : f("%.0f", pressure / 1e6); }
+
+    static int liquidBand(double tr) { return tr <= 0.8 ? 0 : tr <= 0.85 ? 1 : tr <= 0.9 ? 2 : 3; }
+
+    /** The oracle's melting pressure at T where G3Support has its melting line, else infinity (CoolProp refused no M8 state of the others). */
+    static double meltingOrInfinity(String file, double t) {
+        try {
+            return G3Support.meltingPressure(file, t);
+        } catch (IllegalArgumentException e) {
+            return Double.POSITIVE_INFINITY;
+        }
+    }
+
+    /**
+     * M8: compressed liquids from 2 to 30 MPa on the bundled model's liquid root against the oracle, on Tr 0.5-0.95 of the
+     * oracle's Tc (the grid of source {@code compressed_liquid} in the parity fixtures), judged by the liquid bounds G3F1
+     * declares. A state is kept where the oracle is liquid (P above its Psat), T is at or above the oracle's triple point
+     * and the dataset's fluid_domain minimum, and P is at most the oracle's p_max and below the melting line. Hydrogen is
+     * left out: its liquid lies below 33 K.
+     */
+    @Test
+    void m8CompressedLiquids() {
+        var model = G3Support.bundledNetwork();
+        var summary = new G3Support.Table("G3 F11 M8", "Fluid", "Band", "n", "rho % worst / p95", "cp % worst / p95", "h K worst / p95",
+                "Bounds (rho / cp %)", "Met");
+        var ranges = new G3Support.Table("G3 F11 M8 range", "Fluid", "Domain min K", "Tr kept", "Liquids hold to (MPa)", "First state beyond",
+                "Density alone holds to (MPa)", "Pressure misses hold to (MPa)", "First pressure miss");
+        for (Fluid fl : M8) {
+            var fluid = G3Support.oracle(fl.file());
+            double[] x = pureConserved(model, fl.id());
+            double tc = fluid.criticalTemperature(), pc = fluid.criticalPressure(), pMax = maximumPressure(fl.file());
+            double domainMin = model.catalog().fluidValidity(PACKAGE, fl.id()).map(MaterialCatalog.Validity::minimumTemperature).orElse(0.0);
+            Quad[] bands = {new Quad(), new Quad(), new Quad(), new Quad()};
+            var beyondStates = new TreeMap<Double, String>();
+            var beyondDensity = new TreeMap<Double, String>();
+            // A pressure miss: beyond its bound and worse than the isotherm's lowest liquid state (the error next to
+            // saturation, which today's 2 MPa range already admits on the isotherms below).
+            var beyondPressure = new TreeMap<Double, String>();
+            List<Double> pressures = new ArrayList<>();
+            List<String> kept = new ArrayList<>();
+            var rows = new G3Support.Table("G3 F11 M8 " + fl.label(), "T K", "P MPa", "Tr", "Pr", "Z ref", "Z model", "rho %", "cp %", "h K", "Met");
+            for (double tr : LIQUID_TR) {
+                double t = tr * tc;
+                if (t < fluid.tripleTemperature() || t < domainMin) continue;
+                double pSat = fluid.saturation(t).pressure();
+                boolean any = false;
+                double firstRho = Double.NaN, firstCp = Double.NaN;
+                for (double p : LIQUID_P) {
+                    if (p <= pSat || p > pMax || p >= meltingOrInfinity(fl.file(), t)) continue;
+                    any = true;
+                    var ref = fluid.stateAtPressure(t, p, HelmholtzFluid.Root.LIQUID);
+                    var e = point(model, t, p, x, Root.LIQUID);
+                    double rho = 100 * (e.density() / ref.density() - 1);
+                    double cp = 100 * (e.heatCapacity() / ref.isobaricHeatCapacity() - 1);
+                    double kelvin = (e.departure() - referenceDeparture(fluid, t, ref.enthalpy())) / ref.isobaricHeatCapacity();
+                    assertTrue(Double.isFinite(e.z()) && e.roots() >= 1, fl.label() + " liquid root at " + t + " K " + p + " Pa");
+                    int band = liquidBand(tr);
+                    String at = f("%.1f K %.0f MPa", t, p / 1e6);
+                    Quad q = bands[band];
+                    q.density.add(rho, at);
+                    q.cp.add(cp, at);
+                    q.kelvin.add(kelvin, at);
+                    boolean densityMet = Math.abs(rho) <= LIQUID_DENSITY_BOUND[band];
+                    boolean cpMet = Double.isNaN(LIQUID_CP_BOUND[band]) || Math.abs(cp) <= LIQUID_CP_BOUND[band];
+                    pressures.add(p);
+                    if (!densityMet || !cpMet) beyondStates.merge(p, at + f(" Tr %.2f rho %+.2f %% cp %+.2f %%", tr, rho, cp), (a, b) -> a);
+                    if (!densityMet) beyondDensity.merge(p, at + f(" Tr %.2f rho %+.2f %%", tr, rho), (a, b) -> a);
+                    if (Double.isNaN(firstRho)) {
+                        firstRho = rho;
+                        firstCp = cp;
+                    } else if ((!densityMet && Math.abs(rho) > Math.abs(firstRho)) || (!cpMet && Math.abs(cp) > Math.abs(firstCp))) {
+                        beyondPressure.merge(p, at + f(" Tr %.2f rho %+.2f %% cp %+.2f %% (lowest P: %+.2f, %+.2f)", tr, rho, cp, firstRho, firstCp),
+                                (a, b) -> a);
+                    }
+                    rows.row(f("%.2f", t), f("%.0f", p / 1e6), f("%.2f", tr), f("%.2f", p / pc), f("%.4f", ref.compressibility()), f("%.4f", e.z()),
+                            f("%+.2f", rho), f("%+.2f", cp), f("%+.2f", kelvin), densityMet && cpMet ? "yes" : densityMet ? "rho only" : "no");
+                }
+                if (any) kept.add(f("%.2f", tr));
+            }
+            rows.print(fl.label() + ": bundled model's liquid root against the oracle (" + fl.file() + "), compressed liquids 2-30 MPa");
+            for (int b = 0; b < bands.length; b++) {
+                Quad q = bands[b];
+                String bounds = G3Support.number(LIQUID_DENSITY_BOUND[b]) + " / " + (Double.isNaN(LIQUID_CP_BOUND[b]) ? "none" : G3Support.number(LIQUID_CP_BOUND[b]));
+                if (q.density.values.isEmpty()) {
+                    summary.row(fl.label(), LIQUID_BAND[b], 0, "-", "-", "-", bounds, "-");
+                    continue;
+                }
+                boolean densityMet = Math.abs(q.density.worst) <= LIQUID_DENSITY_BOUND[b];
+                boolean cpMet = Double.isNaN(LIQUID_CP_BOUND[b]) || Math.abs(q.cp.worst) <= LIQUID_CP_BOUND[b];
+                summary.row(fl.label(), LIQUID_BAND[b], q.density.values.size(), q.density.text("%+.2f"), q.cp.text("%+.2f"), q.kelvin.text("%+.2f"),
+                        bounds, densityMet && cpMet ? "yes" : densityMet ? "rho only" : cpMet ? "cp only" : "no");
+                String key = "M8 " + fl.label() + " " + LIQUID_BAND[b];
+                hold(key + " density %", q.density.worst);
+                hold(key + " cp %", q.cp.worst);
+                hold(key + " h K", q.kelvin.worst);
+            }
+            ranges.row(fl.label(), G3Support.number(domainMin), kept.isEmpty() ? "none" : String.join(", ", kept),
+                    pressures.isEmpty() ? "no state" : megapascals(highestBelow(pressures, beyondStates)),
+                    pressures.isEmpty() ? "-" : beyondStates.isEmpty() ? "none to 30 MPa" : beyondStates.firstEntry().getValue(),
+                    pressures.isEmpty() ? "-" : megapascals(highestBelow(pressures, beyondDensity)),
+                    pressures.isEmpty() ? "-" : megapascals(highestBelow(pressures, beyondPressure)),
+                    pressures.isEmpty() ? "-" : beyondPressure.isEmpty() ? "none to 30 MPa" : beyondPressure.firstEntry().getValue());
+        }
+        summary.print("compressed liquids per Tr band (Tr on the oracle's Tc), with G3F1's declared liquid bounds");
+        ranges.print("per dataset: the highest grid pressure up to which every liquid state meets its bound");
         assertHeld();
     }
 }

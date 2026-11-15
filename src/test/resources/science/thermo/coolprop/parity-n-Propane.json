@@ -3071,6 +3071,666 @@
     "Cvmolar": 116.42465817528486,
     "fugacity_coefficient": 0.7058529096296273
    }
+  },
+  {
+   "source": "compressed_liquid",
+   "T": 184.945,
+   "P": 2000000.0,
+   "phase": "liquid",
+   "Dmolar": 14351.54747629528,
+   "Hmolar": 133.4575976267598,
+   "Smolar": 5.414879645166161,
+   "Cpmolar": 91.65410914032769,
+   "Cvmolar": 60.145400787569464,
+   "fugacity_coefficient": 0.004009058713080485,
+   "eos_at_Dmolar": {
+    "P": 1999999.9999982645,
+    "Hmolar": 133.4575976265988,
+    "Smolar": 5.414879645166192,
+    "Cpmolar": 91.6541091403279,
+    "Cvmolar": 60.14540078756943,
+    "fugacity_coefficient": 0.004009058713083818
+   }
+  },
+  {
+   "source": "compressed_liquid",
+   "T": 184.945,
+   "P": 5000000.0,
+   "phase": "supercritical_liquid",
+   "Dmolar": 14398.286782646981,
+   "Hmolar": 279.4826689519485,
+   "Smolar": 5.076020572835777,
+   "Cpmolar": 91.3753495315287,
+   "Cvmolar": 60.28720240889618,
+   "fugacity_coefficient": 0.0018367232586656446,
+   "eos_at_Dmolar": {
+    "P": 5000000.000148371,
+    "Hmolar": 279.48266898463976,
+    "Smolar": 5.076020572768864,
+    "Cpmolar": 91.37534953147374,
+    "Cvmolar": 60.28720240892664,
+    "fugacity_coefficient": 0.0018367232584767554
+   }
+  },
+  {
+   "source": "compressed_liquid",
+   "T": 184.945,
+   "P": 10000000.0,
+   "phase": "supercritical_liquid",
+   "Dmolar": 14473.261290764298,
+   "Hmolar": 524.6777780939624,
+   "Smolar": 4.5290448307863125,
+   "Cpmolar": 90.95941835998315,
+   "Cvmolar": 60.51717152028781,
+   "fugacity_coefficient": 0.0011503607941778429,
+   "eos_at_Dmolar": {
+    "P": 9999999.999998838,
+    "Hmolar": 524.6777780939624,
+    "Smolar": 4.5290448307863125,
+    "Cpmolar": 90.95941835998315,
+    "Cvmolar": 60.51717152028781,
+    "fugacity_coefficient": 0.0011503607941778429
+   }
+  },
+  {
+   "source": "compressed_liquid",
+   "T": 184.945,
+   "P": 20000000.0,
+   "phase": "supercritical_liquid",
+   "Dmolar": 14613.630953265654,
+   "Hmolar": 1020.7847605318841,
+   "Smolar": 3.4938908664256783,
+   "Cpmolar": 90.27461405109261,
+   "Cvmolar": 60.95614434179677,
+   "fugacity_coefficient": 0.0008994729935695976,
+   "eos_at_Dmolar": {
+    "P": 19999999.999997795,
+    "Hmolar": 1020.7847605318841,
+    "Smolar": 3.4938908664256783,
+    "Cpmolar": 90.27461405109261,
+    "Cvmolar": 60.95614434179677,
+    "fugacity_coefficient": 0.0008994729935695976
+   }
+  },
+  {
+   "source": "compressed_liquid",
+   "T": 184.945,
+   "P": 30000000.0,
+   "phase": "supercritical_liquid",
+   "Dmolar": 14743.247222478845,
+   "Hmolar": 1522.9271108849919,
+   "Smolar": 2.52551766324123,
+   "Cpmolar": 89.7385951117268,
+   "Cvmolar": 61.37139473825638,
+   "fugacity_coefficient": 0.0009338933402597762,
+   "eos_at_Dmolar": {
+    "P": 29999999.999942105,
+    "Hmolar": 1522.9271108849919,
+    "Smolar": 2.52551766324123,
+    "Cpmolar": 89.7385951117268,
+    "Cvmolar": 61.37139473825638,
+    "fugacity_coefficient": 0.0009338933402597762
+   }
+  },
+  {
+   "source": "compressed_liquid",
+   "T": 221.934,
+   "P": 2000000.0,
+   "phase": "liquid",
+   "Dmolar": 13453.679947432287,
+   "Hmolar": 3613.9207818836203,
+   "Smolar": 22.55585364498859,
+   "Cpmolar": 96.9166089441951,
+   "Cvmolar": 62.91583959653785,
+   "fugacity_coefficient": 0.03501722881121483,
+   "eos_at_Dmolar": {
+    "P": 2000000.000000002,
+    "Hmolar": 3613.9207818836207,
+    "Smolar": 22.55585364498865,
+    "Cpmolar": 96.9166089441951,
+    "Cvmolar": 62.91583959653785,
+    "fugacity_coefficient": 0.03501722881121772
+   }
+  },
+  {
+   "source": "compressed_liquid",
+   "T": 221.934,
+   "P": 5000000.0,
+   "phase": "supercritical_liquid",
+   "Dmolar": 13520.620355168629,
+   "Hmolar": 3745.5323754827705,
+   "Smolar": 22.146639435916754,
+   "Cpmolar": 96.38429320195918,
+   "Cvmolar": 63.046428759507165,
+   "fugacity_coefficient": 0.01580127371414679,
+   "eos_at_Dmolar": {
+    "P": 4999999.999999849,
+    "Hmolar": 3745.5323754827705,
+    "Smolar": 22.146639435916754,
+    "Cpmolar": 96.38429320195918,
+    "Cvmolar": 63.046428759507165,
+    "fugacity_coefficient": 0.01580127371414679
+   }
+  },
+  {
+   "source": "compressed_liquid",
+   "T": 221.934,
+   "P": 10000000.0,
+   "phase": "supercritical_liquid",
+   "Dmolar": 13625.82100520556,
+   "Hmolar": 3969.647519650971,
+   "Smolar": 21.49670620090906,
+   "Cpmolar": 95.62127051259404,
+   "Cvmolar": 63.26169830389123,
+   "fugacity_coefficient": 0.009646223829589984,
+   "eos_at_Dmolar": {
+    "P": 9999999.999999344,
+    "Hmolar": 3969.647519650971,
+    "Smolar": 21.49670620090906,
+    "Cpmolar": 95.62127051259404,
+    "Cvmolar": 63.26169830389123,
+    "fugacity_coefficient": 0.009646223829589984
+   }
+  },
+  {
+   "source": "compressed_liquid",
+   "T": 221.934,
+   "P": 20000000.0,
+   "phase": "supercritical_liquid",
+   "Dmolar": 13816.687515461748,
+   "Hmolar": 4432.052784008319,
+   "Smolar": 20.296802717222196,
+   "Cpmolar": 94.43683064369843,
+   "Cvmolar": 63.68172350490101,
+   "fugacity_coefficient": 0.007158673503749647,
+   "eos_at_Dmolar": {
+    "P": 20000000.000194818,
+    "Hmolar": 4432.052784008319,
+    "Smolar": 20.296802717222196,
+    "Cpmolar": 94.43683064369843,
+    "Cvmolar": 63.68172350490101,
+    "fugacity_coefficient": 0.007158673503749647
+   }
+  },
+  {
+   "source": "compressed_liquid",
+   "T": 221.934,
+   "P": 30000000.0,
+   "phase": "supercritical_liquid",
+   "Dmolar": 13987.18762953341,
+   "Hmolar": 4908.585591319852,
+   "Smolar": 19.203125824928218,
+   "Cpmolar": 93.56337913740326,
+   "Cvmolar": 64.08670256259113,
+   "fugacity_coefficient": 0.007047302686564606,
+   "eos_at_Dmolar": {
+    "P": 30000000.000000045,
+    "Hmolar": 4908.585591319852,
+    "Smolar": 19.203125824928218,
+    "Cpmolar": 93.56337913740326,
+    "Cvmolar": 64.08670256259113,
+    "fugacity_coefficient": 0.007047302686564606
+   }
+  },
+  {
+   "source": "compressed_liquid",
+   "T": 258.923,
+   "P": 2000000.0,
+   "phase": "liquid",
+   "Dmolar": 12471.322066662897,
+   "Hmolar": 7336.599913357754,
+   "Smolar": 38.05428313424631,
+   "Cpmolar": 104.90639239557359,
+   "Cvmolar": 67.27694606137196,
+   "fugacity_coefficient": 0.14778661962140954,
+   "eos_at_Dmolar": {
+    "P": 1999999.9999998063,
+    "Hmolar": 7336.599913357715,
+    "Smolar": 38.05428313424632,
+    "Cpmolar": 104.9063923955739,
+    "Cvmolar": 67.27694606137196,
+    "fugacity_coefficient": 0.14778661962144224
+   }
+  },
+  {
+   "source": "compressed_liquid",
+   "T": 258.923,
+   "P": 5000000.0,
+   "phase": "supercritical_liquid",
+   "Dmolar": 12573.544514227868,
+   "Hmolar": 7439.2792099787775,
+   "Smolar": 37.52563401414736,
+   "Cpmolar": 103.78533374118221,
+   "Cvmolar": 67.37453682632108,
+   "fugacity_coefficient": 0.06607272730622588,
+   "eos_at_Dmolar": {
+    "P": 4999999.99999961,
+    "Hmolar": 7439.2792099787775,
+    "Smolar": 37.52563401414736,
+    "Cpmolar": 103.78533374118221,
+    "Cvmolar": 67.37453682632108,
+    "fugacity_coefficient": 0.06607272730622588
+   }
+  },
+  {
+   "source": "compressed_liquid",
+   "T": 258.923,
+   "P": 10000000.0,
+   "phase": "supercritical_liquid",
+   "Dmolar": 12728.365968161643,
+   "Hmolar": 7623.489653370127,
+   "Smolar": 36.710811833148306,
+   "Cpmolar": 102.29663121845071,
+   "Cvmolar": 67.54923196171717,
+   "fugacity_coefficient": 0.039693080397811956,
+   "eos_at_Dmolar": {
+    "P": 9999999.999831226,
+    "Hmolar": 7623.489653355992,
+    "Smolar": 36.710811833194946,
+    "Cpmolar": 102.29663121853416,
+    "Cvmolar": 67.54923196170488,
+    "fugacity_coefficient": 0.03969308039870712
+   }
+  },
+  {
+   "source": "compressed_liquid",
+   "T": 258.923,
+   "P": 20000000.0,
+   "phase": "supercritical_liquid",
+   "Dmolar": 12995.243401592319,
+   "Hmolar": 8027.075230564241,
+   "Smolar": 35.26754694170983,
+   "Cpmolar": 100.20980406754052,
+   "Cvmolar": 67.91991992723322,
+   "fugacity_coefficient": 0.028476629733795483,
+   "eos_at_Dmolar": {
+    "P": 19999999.999999974,
+    "Hmolar": 8027.075230564241,
+    "Smolar": 35.26754694170983,
+    "Cpmolar": 100.20980406754052,
+    "Cvmolar": 67.91991992723322,
+    "fugacity_coefficient": 0.028476629733795483
+   }
+  },
+  {
+   "source": "compressed_liquid",
+   "T": 258.923,
+   "P": 30000000.0,
+   "phase": "supercritical_liquid",
+   "Dmolar": 13222.274650962141,
+   "Hmolar": 8462.291361212381,
+   "Smolar": 34.002717706466335,
+   "Cpmolar": 98.81128698368086,
+   "Cvmolar": 68.29744011111684,
+   "fugacity_coefficient": 0.02705588451230553,
+   "eos_at_Dmolar": {
+    "P": 29999999.99996033,
+    "Hmolar": 8462.291361212381,
+    "Smolar": 34.002717706466335,
+    "Cpmolar": 98.81128698368086,
+    "Cvmolar": 68.29744011111684,
+    "fugacity_coefficient": 0.02705588451230553
+   }
+  },
+  {
+   "source": "compressed_liquid",
+   "T": 295.912,
+   "P": 2000000.0,
+   "phase": "liquid",
+   "Dmolar": 11317.420576359562,
+   "Hmolar": 11428.772346227084,
+   "Smolar": 52.80871621190947,
+   "Cpmolar": 117.45836020764513,
+   "Cvmolar": 73.07280056427162,
+   "fugacity_coefficient": 0.39987565895354077,
+   "eos_at_Dmolar": {
+    "P": 1999999.9999999863,
+    "Hmolar": 11428.772346227086,
+    "Smolar": 52.80871621190945,
+    "Cpmolar": 117.45836020764496,
+    "Cvmolar": 73.07280056427162,
+    "fugacity_coefficient": 0.39987565895350774
+   }
+  },
+  {
+   "source": "compressed_liquid",
+   "T": 295.912,
+   "P": 5000000.0,
+   "phase": "supercritical_liquid",
+   "Dmolar": 11494.897729562384,
+   "Hmolar": 11463.913298865436,
+   "Smolar": 52.03879792503422,
+   "Cpmolar": 114.54899392907164,
+   "Cvmolar": 73.0380899179763,
+   "fugacity_coefficient": 0.17799324345814693,
+   "eos_at_Dmolar": {
+    "P": 4999999.999947431,
+    "Hmolar": 11463.913298860829,
+    "Smolar": 52.038797925071,
+    "Cpmolar": 114.54899392921057,
+    "Cvmolar": 73.03808991797648,
+    "fugacity_coefficient": 0.1779932434640816
+   }
+  },
+  {
+   "source": "compressed_liquid",
+   "T": 295.912,
+   "P": 10000000.0,
+   "phase": "supercritical_liquid",
+   "Dmolar": 11742.91232062216,
+   "Hmolar": 11565.525649549769,
+   "Smolar": 50.92837841903787,
+   "Cpmolar": 111.27407591708977,
+   "Cvmolar": 73.08684415484947,
+   "fugacity_coefficient": 0.10600125701752716,
+   "eos_at_Dmolar": {
+    "P": 9999999.99999982,
+    "Hmolar": 11565.525649549769,
+    "Smolar": 50.92837841903787,
+    "Cpmolar": 111.27407591708977,
+    "Cvmolar": 73.08684415484947,
+    "fugacity_coefficient": 0.10600125701752716
+   }
+  },
+  {
+   "source": "compressed_liquid",
+   "T": 295.912,
+   "P": 20000000.0,
+   "phase": "supercritical_liquid",
+   "Dmolar": 12132.56771239952,
+   "Hmolar": 11863.514466160497,
+   "Smolar": 49.10645387939226,
+   "Cpmolar": 107.44960757406477,
+   "Cvmolar": 73.34609324801754,
+   "fugacity_coefficient": 0.07448121998736422,
+   "eos_at_Dmolar": {
+    "P": 20000000.000000075,
+    "Hmolar": 11863.514466160497,
+    "Smolar": 49.10645387939226,
+    "Cpmolar": 107.44960757406477,
+    "Cvmolar": 73.34609324801754,
+    "fugacity_coefficient": 0.07448121998736422
+   }
+  },
+  {
+   "source": "compressed_liquid",
+   "T": 295.912,
+   "P": 30000000.0,
+   "phase": "supercritical_liquid",
+   "Dmolar": 12439.906885291044,
+   "Hmolar": 12233.047394203024,
+   "Smolar": 47.605709294587065,
+   "Cpmolar": 105.23720430130031,
+   "Cvmolar": 73.6763565655671,
+   "fugacity_coefficient": 0.0691152174685561,
+   "eos_at_Dmolar": {
+    "P": 29999999.99999462,
+    "Hmolar": 12233.047394203024,
+    "Smolar": 47.605709294587065,
+    "Cpmolar": 105.23720430130031,
+    "Cvmolar": 73.6763565655671,
+    "fugacity_coefficient": 0.0691152174685561
+   }
+  },
+  {
+   "source": "compressed_liquid",
+   "T": 314.4065,
+   "P": 2000000.0,
+   "phase": "liquid",
+   "Dmolar": 10609.642364203133,
+   "Hmolar": 13689.07550605286,
+   "Smolar": 60.214820041466155,
+   "Cpmolar": 127.75520475153695,
+   "Cvmolar": 76.55593470794503,
+   "fugacity_coefficient": 0.5849414475861935,
+   "eos_at_Dmolar": {
+    "P": 1999999.9999999998,
+    "Hmolar": 13689.075506052857,
+    "Smolar": 60.214820041466126,
+    "Cpmolar": 127.75520475153677,
+    "Cvmolar": 76.555934707945,
+    "fugacity_coefficient": 0.5849414475861667
+   }
+  },
+  {
+   "source": "compressed_liquid",
+   "T": 314.4065,
+   "P": 5000000.0,
+   "phase": "supercritical_liquid",
+   "Dmolar": 10867.40942800818,
+   "Hmolar": 13649.334408147955,
+   "Smolar": 59.20024911532884,
+   "Cpmolar": 122.14447154421981,
+   "Cvmolar": 76.31307763653942,
+   "fugacity_coefficient": 0.26035426589142974,
+   "eos_at_Dmolar": {
+    "P": 4999999.999999912,
+    "Hmolar": 13649.334408147955,
+    "Smolar": 59.20024911532884,
+    "Cpmolar": 122.14447154421981,
+    "Cvmolar": 76.31307763653942,
+    "fugacity_coefficient": 0.26035426589142974
+   }
+  },
+  {
+   "source": "compressed_liquid",
+   "T": 314.4065,
+   "P": 10000000.0,
+   "phase": "supercritical_liquid",
+   "Dmolar": 11198.524610018674,
+   "Hmolar": 13673.668558654213,
+   "Smolar": 57.837126945073585,
+   "Cpmolar": 116.8441036586055,
+   "Cvmolar": 76.21247938322738,
+   "fugacity_coefficient": 0.154802565410515,
+   "eos_at_Dmolar": {
+    "P": 10000000.000047607,
+    "Hmolar": 13673.668558654213,
+    "Smolar": 57.837126945073585,
+    "Cpmolar": 116.8441036586055,
+    "Cvmolar": 76.21247938322738,
+    "fugacity_coefficient": 0.154802565410515
+   }
+  },
+  {
+   "source": "compressed_liquid",
+   "T": 314.4065,
+   "P": 20000000.0,
+   "phase": "supercritical_liquid",
+   "Dmolar": 11679.99099216279,
+   "Hmolar": 13888.0590000213,
+   "Smolar": 55.74162268327457,
+   "Cpmolar": 111.53084368852689,
+   "Cvmolar": 76.37301835937838,
+   "fugacity_coefficient": 0.10809891045568452,
+   "eos_at_Dmolar": {
+    "P": 19999999.999941014,
+    "Hmolar": 13888.0590000213,
+    "Smolar": 55.74162268327457,
+    "Cpmolar": 111.53084368852689,
+    "Cvmolar": 76.37301835937838,
+    "fugacity_coefficient": 0.10809891045568452
+   }
+  },
+  {
+   "source": "compressed_liquid",
+   "T": 314.4065,
+   "P": 30000000.0,
+   "phase": "supercritical_liquid",
+   "Dmolar": 12040.037124008264,
+   "Hmolar": 14211.681574547065,
+   "Smolar": 54.09055603454117,
+   "Cpmolar": 108.75884407571883,
+   "Cvmolar": 76.66955035718334,
+   "fugacity_coefficient": 0.09948000799583963,
+   "eos_at_Dmolar": {
+    "P": 29999999.99999908,
+    "Hmolar": 14211.681574547065,
+    "Smolar": 54.09055603454117,
+    "Cpmolar": 108.75884407571883,
+    "Cvmolar": 76.66955035718334,
+    "fugacity_coefficient": 0.09948000799583963
+   }
+  },
+  {
+   "source": "compressed_liquid",
+   "T": 332.901,
+   "P": 5000000.0,
+   "phase": "supercritical_liquid",
+   "Dmolar": 10134.096928197427,
+   "Hmolar": 16001.255856955284,
+   "Smolar": 66.46608421956061,
+   "Cpmolar": 132.97168939940786,
+   "Cvmolar": 79.92305846534985,
+   "fugacity_coefficient": 0.35855104662926807,
+   "eos_at_Dmolar": {
+    "P": 4999999.999999661,
+    "Hmolar": 16001.255856955284,
+    "Smolar": 66.46608421956061,
+    "Cpmolar": 132.97168939940786,
+    "Cvmolar": 79.92305846534985,
+    "fugacity_coefficient": 0.35855104662926807
+   }
+  },
+  {
+   "source": "compressed_liquid",
+   "T": 332.901,
+   "P": 10000000.0,
+   "phase": "supercritical_liquid",
+   "Dmolar": 10603.560749298216,
+   "Hmolar": 15893.676436422342,
+   "Smolar": 64.69641102805605,
+   "Cpmolar": 123.42806109876122,
+   "Cvmolar": 79.5271399695495,
+   "fugacity_coefficient": 0.21334264256521515,
+   "eos_at_Dmolar": {
+    "P": 9999999.999996157,
+    "Hmolar": 15893.676436422342,
+    "Smolar": 64.69641102805605,
+    "Cpmolar": 123.42806109876122,
+    "Cvmolar": 79.5271399695495,
+    "fugacity_coefficient": 0.21334264256521515
+   }
+  },
+  {
+   "source": "compressed_liquid",
+   "T": 332.901,
+   "P": 20000000.0,
+   "phase": "supercritical_liquid",
+   "Dmolar": 11210.023751818222,
+   "Hmolar": 15990.496361973801,
+   "Smolar": 62.238157029448296,
+   "Cpmolar": 115.86636126523302,
+   "Cvmolar": 79.54212205254726,
+   "fugacity_coefficient": 0.14847129172063936,
+   "eos_at_Dmolar": {
+    "P": 20000000.000000037,
+    "Hmolar": 15990.496361973801,
+    "Smolar": 62.238157029448296,
+    "Cpmolar": 115.86636126523302,
+    "Cvmolar": 79.54212205254726,
+    "fugacity_coefficient": 0.14847129172063936
+   }
+  },
+  {
+   "source": "compressed_liquid",
+   "T": 332.901,
+   "P": 30000000.0,
+   "phase": "supercritical_liquid",
+   "Dmolar": 11633.655428769984,
+   "Hmolar": 16256.708771043539,
+   "Smolar": 60.40984759144344,
+   "Cpmolar": 112.40715905941138,
+   "Cvmolar": 79.79628668589343,
+   "fugacity_coefficient": 0.13577511607817483,
+   "eos_at_Dmolar": {
+    "P": 29999999.999999974,
+    "Hmolar": 16256.708771043539,
+    "Smolar": 60.40984759144344,
+    "Cpmolar": 112.40715905941138,
+    "Cvmolar": 79.79628668589343,
+    "fugacity_coefficient": 0.13577511607817483
+   }
+  },
+  {
+   "source": "compressed_liquid",
+   "T": 351.39549999999997,
+   "P": 5000000.0,
+   "phase": "supercritical_liquid",
+   "Dmolar": 9198.68769945913,
+   "Hmolar": 18618.527761025864,
+   "Smolar": 74.11279367254883,
+   "Cpmolar": 152.57104327470157,
+   "Cvmolar": 84.12445883533611,
+   "fugacity_coefficient": 0.4685558106038224,
+   "eos_at_Dmolar": {
+    "P": 5000000.00000004,
+    "Hmolar": 18618.527761025864,
+    "Smolar": 74.11279367254883,
+    "Cpmolar": 152.57104327470157,
+    "Cvmolar": 84.12445883533611,
+    "fugacity_coefficient": 0.4685558106038224
+   }
+  },
+  {
+   "source": "compressed_liquid",
+   "T": 351.39549999999997,
+   "P": 10000000.0,
+   "phase": "supercritical_liquid",
+   "Dmolar": 9938.400272668561,
+   "Hmolar": 18248.31347639269,
+   "Smolar": 71.57804295855331,
+   "Cpmolar": 131.51252081703663,
+   "Cvmolar": 83.02056433850773,
+   "fugacity_coefficient": 0.2799622590241537,
+   "eos_at_Dmolar": {
+    "P": 10000000.000016624,
+    "Hmolar": 18248.31347639269,
+    "Smolar": 71.57804295855331,
+    "Cpmolar": 131.51252081703663,
+    "Cvmolar": 83.02056433850773,
+    "fugacity_coefficient": 0.2799622590241537
+   }
+  },
+  {
+   "source": "compressed_liquid",
+   "T": 351.39549999999997,
+   "P": 20000000.0,
+   "phase": "supercritical_liquid",
+   "Dmolar": 10720.388720231109,
+   "Hmolar": 18175.15870709225,
+   "Smolar": 68.62373791402312,
+   "Cpmolar": 120.41554300293019,
+   "Cvmolar": 82.81200456096336,
+   "fugacity_coefficient": 0.19476422973293733,
+   "eos_at_Dmolar": {
+    "P": 19999999.999999914,
+    "Hmolar": 18175.15870709225,
+    "Smolar": 68.62373791402312,
+    "Cpmolar": 120.41554300293019,
+    "Cvmolar": 82.81200456096336,
+    "fugacity_coefficient": 0.19476422973293733
+   }
+  },
+  {
+   "source": "compressed_liquid",
+   "T": 351.39549999999997,
+   "P": 30000000.0,
+   "phase": "supercritical_liquid",
+   "Dmolar": 11220.634897188043,
+   "Hmolar": 18369.934648907998,
+   "Smolar": 66.5867921143368,
+   "Cpmolar": 116.12442283835374,
+   "Cvmolar": 83.0120612661989,
+   "fugacity_coefficient": 0.17732401271727674,
+   "eos_at_Dmolar": {
+    "P": 30000000.000000097,
+    "Hmolar": 18369.934648907998,
+    "Smolar": 66.5867921143368,
+    "Cpmolar": 116.12442283835374,
+    "Cvmolar": 83.0120612661989,
+    "fugacity_coefficient": 0.17732401271727674
+   }
   }
  ],
  "saturation": [
