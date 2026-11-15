@@ -78,9 +78,11 @@ final class FluidFacts {
      *  remainder and its account (absent: no converter).
      *  25 (batch 2026-11-11-aqueous-solvents, W3b step 6; numbered 25 at the merge of main 0.28.0): a vessel's oil-liquid and
      *  aqueous-liquid amounts, after its {@code rigid}; absent means the pre-W3b reading of its liquid fields (the compounds'
-     *  liquid and the water as two liquids). */
-    static final int SCHEMA=25;
-    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 25. */
+     *  liquid and the water as two liquids).
+     *  26: reserved by the gas intake (batch 2026-11-15-fluid-interfaces, W2).
+     *  27 (batch 2026-11-15-fluid-interfaces, W7): the control valve source {@code ON_OFF}, an automated shutoff valve. */
+    static final int SCHEMA=27;
+    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 27. */
     private static final Map<Class<?>,Map<String,String>> ALIASES=Map.of();
     private static final int MAXIMUM_FIELDS=256,MAXIMUM_ITEMS=1<<22,MAXIMUM_TEXTS=1<<20,MAXIMUM_ARRAY=4096,MAXIMUM_CHANNELS=1<<20;
     /** The cadence an island rebuilt from facts starts at (ticks): the shortest the clock allows, as after a merge. */

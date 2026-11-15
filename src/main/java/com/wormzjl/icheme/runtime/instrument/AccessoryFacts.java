@@ -24,7 +24,7 @@ final class AccessoryFacts {
     /** Schema 4: optional floating-roof level gauges, retaining schema 3's sensors and speed pickups. Schema 5 (batch
      * 2026-11-11-gas-blanketing): the fitting type {@code BLANKET_VALVE}, a drum's gas blanketing valve, on the mount {@code blanket_valve}. Schema 6 (same batch): the fitting type
      * {@code SAFETY_VALVE}, a pressure safety valve on the mount {@code safety_valve}: a drum's beside its other fitting, or a
-     * pipe's only one. Schema 7 (batch 2026-11-15-fluid-interfaces, W6): the fitting type {@code ORIFICE}, and a fitting's {@code ratio} (an orifice plate's bore ratio; absent: 0, none). */
+     * pipe's only one. Schema 7 (batch 2026-11-15-fluid-interfaces, W6): the fitting type {@code ORIFICE} (and, W7, {@code ACTUATED_VALVE}), and a fitting's {@code ratio} (an orifice plate's bore ratio; absent: 0, none). */
     static final int SCHEMA=7,STATE=1;
     /**
      * Renamed or removed saved names, per name set: the saved name to the current one. A gauge's kind and unit share the

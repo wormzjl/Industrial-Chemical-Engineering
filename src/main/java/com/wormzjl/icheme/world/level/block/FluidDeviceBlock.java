@@ -51,7 +51,9 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
     public enum Shutoff implements net.minecraft.util.StringRepresentable {
         NONE(PhysicalFluidTopology.Cutoff.NONE),OPEN(PhysicalFluidTopology.Cutoff.OPEN),CLOSED(PhysicalFluidTopology.Cutoff.CLOSED),CHECK(PhysicalFluidTopology.Cutoff.CHECK),
         /** A restriction orifice plate (W6): drawn from its fitting record, the store's fact; the pipe stays passive. */
-        ORIFICE(PhysicalFluidTopology.Cutoff.NONE);
+        ORIFICE(PhysicalFluidTopology.Cutoff.NONE),
+        /** An automated shutoff valve (W7): drawn from its control, the source {@code ON_OFF}; open or closed is its control's, not drawn. */
+        ACTUATED(PhysicalFluidTopology.Cutoff.NONE);
         private final PhysicalFluidTopology.Cutoff cutoff;
         Shutoff(PhysicalFluidTopology.Cutoff cutoff){this.cutoff=cutoff;}
         public PhysicalFluidTopology.Cutoff cutoff(){return cutoff;}
@@ -89,11 +91,15 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
     public static boolean hasMover(BlockState s){return s.hasProperty(INLINE_MOVER)&&s.getValue(INLINE_MOVER)!=InlineMover.NONE;}
     public static boolean hasPump(BlockState s){return hasMover(s)&&s.getValue(INLINE_MOVER)==InlineMover.PUMP;}
     public static boolean hasCompressor(BlockState s){return hasMover(s)&&s.getValue(INLINE_MOVER)==InlineMover.COMPRESSOR;}
-    public static boolean hasAxialAccessory(BlockState s){return hasPipeValve(s)||hasFilter(s)||hasMover(s)||hasOrifice(s);}
+    public static boolean hasAxialAccessory(BlockState s){return hasPipeValve(s)||hasFilter(s)||hasMover(s)||hasOrifice(s)||hasActuatedValve(s);}
     public static boolean hasShutoff(BlockState state){return hasPipeValve(state)&&(state.getValue(SHUTOFF)==Shutoff.OPEN||state.getValue(SHUTOFF)==Shutoff.CLOSED);}
-    public static boolean hasPipeValve(BlockState state){return state.getBlock() instanceof FluidDeviceBlock block&&block.kind==TopologyCompiler.Kind.PIPE&&(state.getValue(SHUTOFF)!=Shutoff.NONE&&state.getValue(SHUTOFF)!=Shutoff.ORIFICE||state.getValue(PRESSURE_CONTROL));}
+    public static boolean hasPipeValve(BlockState state){return state.getBlock() instanceof FluidDeviceBlock block&&block.kind==TopologyCompiler.Kind.PIPE&&(state.getValue(SHUTOFF)!=Shutoff.NONE&&state.getValue(SHUTOFF)!=Shutoff.ORIFICE&&state.getValue(SHUTOFF)!=Shutoff.ACTUATED||state.getValue(PRESSURE_CONTROL));}
     /** A pipe carrying a restriction orifice plate (batch 2026-11-15-fluid-interfaces, W6). */
     public static boolean hasOrifice(BlockState state){return state.getBlock() instanceof FluidDeviceBlock block&&block.kind==TopologyCompiler.Kind.PIPE&&state.getValue(SHUTOFF)==Shutoff.ORIFICE;}
+    /** A pipe carrying an automated shutoff valve (batch 2026-11-15-fluid-interfaces, W7). */
+    public static boolean hasActuatedValve(BlockState state){return state.getBlock() instanceof FluidDeviceBlock block&&block.kind==TopologyCompiler.Kind.PIPE&&state.getValue(SHUTOFF)==Shutoff.ACTUATED;}
+    /** Whether registration {@code d} is an automated shutoff valve (W7): its control the source {@code ON_OFF}. */
+    public static boolean actuated(PhysicalFluidTopology.Device d){return d.control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.ControlValve v&&v.onOffValve();}
     /**
      * The in-line body pipe {@code state} draws for registration {@code d}: its cutoff where it has one; else an orifice
      * plate {@code state} already shows on a pipe that stays passive (the plate comes from its fitting record, never from
@@ -101,6 +107,7 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
      */
     public static Shutoff body(BlockState state,PhysicalFluidTopology.Device d){
         if(d.cutoff()!=PhysicalFluidTopology.Cutoff.NONE)return Shutoff.of(d.cutoff());
+        if(actuated(d))return Shutoff.ACTUATED;
         return state.getValue(SHUTOFF)==Shutoff.ORIFICE&&!d.inlineFilter()&&d.control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.Passive?Shutoff.ORIFICE:Shutoff.NONE;
     }
     public static PhysicalFluidTopology.Cutoff cutoff(BlockState state){return state.getBlock() instanceof FluidDeviceBlock block&&block.kind==TopologyCompiler.Kind.PIPE?state.getValue(SHUTOFF).cutoff():PhysicalFluidTopology.Cutoff.NONE;}
@@ -224,7 +231,7 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
      */
     public static BlockState fitted(BlockState state,PhysicalFluidTopology.Device d) {
         var hydraulic=d.hydraulicKind();
-        return state.setValue(PRESSURE_CONTROL,hydraulic==TopologyCompiler.Kind.VALVE).setValue(INLINE_FILTER,hydraulic==TopologyCompiler.Kind.FILTER)
+        return state.setValue(PRESSURE_CONTROL,hydraulic==TopologyCompiler.Kind.VALVE&&!actuated(d)).setValue(INLINE_FILTER,hydraulic==TopologyCompiler.Kind.FILTER)
                 .setValue(INLINE_MOVER,InlineMover.of(hydraulic));
     }
     @Override protected void onPlace(BlockState state,Level level,BlockPos position,BlockState previous,boolean moved) {
@@ -249,6 +256,15 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
     @Override protected InteractionResult useWithoutItem(BlockState state,Level level,BlockPos position,Player player,BlockHitResult hit) {
         if(hasPressureValve(state)||hasFilter(state)||hasMover(state)) {
             if(player instanceof ServerPlayer serverPlayer&&level.getBlockEntity(position) instanceof FluidDeviceBlockEntity entity)entity.open(serverPlayer,false);
+            return InteractionResult.sidedSuccess(level.isClientSide());
+        }
+        // An automated shutoff valve (batch 2026-11-15-fluid-interfaces, W7): an empty hand opens or closes it, refused while an enabled loop holds it.
+        if(hasActuatedValve(state)) {
+            if(!player.getMainHandItem().isEmpty()||!player.getOffhandItem().isEmpty())return InteractionResult.PASS;
+            if(!player.mayBuild()||player.isSpectator()||!level.mayInteract(player,position)||!player.mayUseItemAt(position,hit.getDirection(),ItemStack.EMPTY))return InteractionResult.FAIL;
+            if(player instanceof ServerPlayer serverPlayer&&level.getBlockEntity(position) instanceof FluidDeviceBlockEntity entity)
+                FluidWorldAuthority.find(serverPlayer.server).ifPresent(world->{var refused=world.toggleActuatedValve(entity.fluidIdentity());
+                    serverPlayer.displayClientMessage(net.minecraft.network.chat.Component.translatable(refused!=null?refused:world.actuatedValveOpen(entity.fluidIdentity())?"message.icheme.automated_shutoff_valve.opening":"message.icheme.automated_shutoff_valve.closing"),true);});
             return InteractionResult.sidedSuccess(level.isClientSide());
         }
         if(hasPipeValve(state)&&player.getMainHandItem().isEmpty()&&player.getOffhandItem().isEmpty()) {

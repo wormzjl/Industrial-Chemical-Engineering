@@ -141,7 +141,9 @@ class FluidFactsCompatTest {
         world.runTo(930);
         converted(world);
         world.runTo(940);
-        phases(world);return world;
+        phases(world);
+        world.runTo(world.ledger.onlineTick()+20);
+        pipeFittings(world);return world;
     }
     /** The vessels {@link #phases} fills: nitrogen over water, oil over water under their gas, boiling water, and oil over water in a blanketed drum with a pressure safety valve. */
     private long wetNitrogen,oilOverWater,boiling,guardedOil;
@@ -378,6 +380,31 @@ class FluidFactsCompatTest {
                 64000,"gone:fluid",1200,.375,"gone:fluid",2.5));
     }
     /** Each fluid converter: its devices, settings, Forge tank, remainder and account. */
+    /**
+     * Facts schema 27 (batch 2026-11-15-fluid-interfaces, W6 and W7): between two nitrogen vessels, a pipe with a restriction
+     * orifice plate (its K in the pipe's minor loss, a geometry fact since schema 1) and an automated shutoff valve, closed
+     * by hand (the source {@code ON_OFF}, its mass target 0).
+     */
+    private void pipeFittings(EventPathWorld world) {
+        double[] nitrogen=FluidDeviceSpec.nitrogen(CATALOG).composition();int z=230;
+        world.place(0,64,z,Kind.RESERVOIR,Direction.EAST,new FluidDeviceSpec(1,298.15,150000,nitrogen),.05);
+        long plate=world.place(1,64,z,Kind.PIPE,Direction.EAST,.05),valve=world.place(2,64,z,Kind.PIPE,Direction.EAST,.05);
+        world.place(3,64,z,Kind.RESERVOIR,Direction.EAST,new FluidDeviceSpec(1,298.15,101325,nitrogen),.05);
+        world.runTo(world.ledger.onlineTick()+20);
+        assertTrue(world.registry.installPipeOrifice(plate,Direction.EAST,.35));
+        assertTrue(world.registry.installPipeActuatedValve(valve,Direction.EAST));
+        world.runTo(world.ledger.onlineTick()+20);
+        assertTrue(world.registry.toggleActuatedValve(valve));
+        world.runTo(world.ledger.onlineTick()+20);
+    }
+    /** Each pipe with a minor loss, and each automated shutoff valve with its mass target (schema 27). */
+    private static String fittings(WorldTopologyLedger.Snapshot world) {
+        var text=new StringBuilder();
+        for(var r:new TreeMap<>(world.active()).values()){var d=r.device();
+            if(d.kind()==Kind.PIPE&&d.geometry().minorLoss()>0)text.append(text.isEmpty()?"":";").append(d.id()).append(" K ").append(d.geometry().minorLoss());
+            if(d.control() instanceof FlowControl.ControlValve v&&v.onOffValve())text.append(text.isEmpty()?"":";").append(d.id()).append(" ON_OFF ").append(v.massTarget());}
+        return text.toString();
+    }
     private static String converted(WorldTopologyLedger.Snapshot world) {
         var text=new StringBuilder();
         for(var u:new TreeMap<>(world.converters()).values()){if(!text.isEmpty())text.append(";");
@@ -1083,6 +1110,8 @@ class FluidFactsCompatTest {
                 assertEquals(expected.getProperty("relieved",""),relieved(ledger),folder+": pressure safety valves");
                 // Schema 24 wrote the fluid converters; an older image has none.
                 assertEquals(expected.getProperty("converters",""),converted(ledger),folder+": fluid converters");
+                // Schema 27 wrote the source ON_OFF; an older image has no automated shutoff valve, and its minor losses are its own.
+                if(expected.getProperty("fittings")!=null)assertEquals(expected.getProperty("fittings"),fittings(ledger),folder+": pipe fittings");
                 long vessels=rebuilt.checkpoint().islands().stream().flatMap(e->e.snapshot().graph().reservoirs().stream()).filter(n->n.kind()==PassiveNetwork.NodeKind.RESERVOIR).count();
                 // Schema 18 wrote whether a vessel's wall is rigid; an older image reads every vessel a bag.
                 assertEquals(Long.parseLong(expected.getProperty("rigid","0")),rigid(rebuilt.checkpoint()),folder+": rigid vessels");
@@ -1228,6 +1257,7 @@ class FluidFactsCompatTest {
         props.setProperty("blanketed",blanketed(loaded.world().orElseThrow()));
         props.setProperty("relieved",relieved(loaded.world().orElseThrow()));
         props.setProperty("converters",converted(loaded.world().orElseThrow()));
+        props.setProperty("fittings",fittings(loaded.world().orElseThrow()));
         props.setProperty("vessels",Long.toString(contents(loaded.checkpoint()).values().stream().filter(v->v instanceof PassiveNetwork.Inventory).count()));
         props.setProperty("rigid",Long.toString(rigid(loaded.checkpoint())));
         props.setProperty("vacuumPumps",vacuumPumps(loaded.world().orElseThrow()));

@@ -50,6 +50,8 @@ class AccessoryStoreCompatTest {
         s.installSensor(new Instrument.Key(65,Sensor.SPEED_PICKUP),new UUID(0x5e,6),Sensor.Kind.SPEED,0);
         // Accessory facts schema 7 (batch 2026-11-15-fluid-interfaces, W6): an orifice plate with its bore ratio.
         s.installLegacy(66,Instrument.Type.ORIFICE,.35);
+        // Schema 7 (W7): an automated shutoff valve, the pipe's only fitting.
+        s.installLegacy(67,Instrument.Type.ACTUATED_VALVE);
         s.nextDue(123456);
         return s;
     }

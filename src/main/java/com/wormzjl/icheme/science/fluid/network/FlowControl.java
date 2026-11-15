@@ -332,9 +332,11 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
         /** A vessel's gas blanketing valve (batch 2026-11-11-gas-blanketing): on the run into its blanket gas port; the interval solver sets its mass target at each step to the gas its vessel lacks at its set pressure ({@link GasBlanket#plan}). */
         BLANKET,
         /** A fluid converter's port valve (batch 2026-11-12-fluid-conversion): carried by its drain void or fill generator; the converter sets its mass target once per slice. */
-        CONVERTER;
+        CONVERTER,
+        /** An automated shutoff valve (batch 2026-11-15-fluid-interfaces, W7, decision D3): open (a mass target above 0, a bare line) or closed (0), by hand or by a loop's on/off rule; it never regulates. */
+        ON_OFF;
         /** Whether a valve of this source regulates its mass flow. */
-        public boolean mass(){return this==MASS_FLOW||this==SHAFT_SPEED||this==BURNER||this==FLARE||this==STILL||this==EJECTOR||this==ENGINE||this==BLANKET||this==CONVERTER;}
+        public boolean mass(){return this==MASS_FLOW||this==SHAFT_SPEED||this==BURNER||this==FLARE||this==STILL||this==EJECTOR||this==ENGINE||this==BLANKET||this==CONVERTER||this==ON_OFF;}
         /** Whether the engine sets this valve's mass target each slice (a governor or a fuel valve), not the player. */
         public boolean planned(){return this==SHAFT_SPEED||this==BURNER||this==FLARE||this==STILL||this==EJECTOR||this==ENGINE||this==BLANKET||this==CONVERTER;}
         /** Whether this is a valve the engine builds into a sink (a firebox or a flare tip), on the run into it. */
@@ -377,11 +379,17 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
         public static final java.util.UUID BLANKET_SENSOR=new java.util.UUID(0x626c616e6b657400L,1);
         /** A vessel's gas blanketing valve, shut until its first slice plan; its set pressure is its vessel's ({@link PassiveNetwork.Inventory#blanket}). */
         public static ControlValve blanket(){return new ControlValve(ValveSource.BLANKET,200000,0,.01,BLANKET_SENSOR,0);}
+        /** An automated shutoff valve's source identity (W7). */
+        public static final java.util.UUID ON_OFF_SENSOR=new java.util.UUID(0x6f6e5f6f66660000L,1);
+        /** An automated shutoff valve, open as installed. */
+        public static ControlValve onOff(){return new ControlValve(ValveSource.ON_OFF,200000,1,.01,ON_OFF_SENSOR,0);}
+        /** Whether this is an automated shutoff valve (W7). */
+        public boolean onOffValve(){return source==ValveSource.ON_OFF;}
         @Override public boolean pressureControl(){return source==ValveSource.PRESSURE;}
         @Override public boolean massControl(){return source.mass();}
-        /** No sensor, or an open flare tip (owner D6): the line's own law, no regulation. */
-        @Override public boolean bare(){return sensor==null||source==ValveSource.FLARE&&massTarget>0;}
-        public double target(){return switch(source){case NONE,PRESSURE->targetPressure;case MASS_FLOW,SHAFT_SPEED,BURNER,FLARE,STILL,EJECTOR,ENGINE,BLANKET,CONVERTER->massTarget;case VOLUME_FLOW->volumeTarget;};}
+        /** No sensor, or an open flare tip (owner D6) or automated shutoff valve (W7): the line's own law, no regulation. */
+        @Override public boolean bare(){return sensor==null||(source==ValveSource.FLARE||source==ValveSource.ON_OFF)&&massTarget>0;}
+        public double target(){return switch(source){case NONE,PRESSURE->targetPressure;case MASS_FLOW,SHAFT_SPEED,BURNER,FLARE,STILL,EJECTOR,ENGINE,BLANKET,CONVERTER,ON_OFF->massTarget;case VOLUME_FLOW->volumeTarget;};}
         @Override public double targetMassFlow(double density){return source.mass()?massTarget:volumeTarget*density;}
         public ControlValve withTarget(double value){return new ControlValve(source,source==ValveSource.PRESSURE?value:targetPressure,source.mass()?value:massTarget,source==ValveSource.VOLUME_FLOW?value:volumeTarget,sensor,Math.addExact(revision,1));}
         /** A governor valve's mass target for one slice (W3): a slice input, its revision kept, as a column's port plan is. */

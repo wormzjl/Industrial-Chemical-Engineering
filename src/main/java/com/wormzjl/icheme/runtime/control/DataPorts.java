@@ -32,7 +32,9 @@ public final class DataPorts {
                 var state = pipe.getBlockState();
                 var key = fittingKey(pipe);
                 var socket =
-                        FluidDeviceBlock.hasPressureValve(state)
+                        FluidDeviceBlock.hasActuatedValve(state)
+                                ? ValveGeometry.actuatedSocket(key)
+                                : FluidDeviceBlock.hasPressureValve(state)
                                 ? ValveGeometry.socket(key)
                                 : FluidDeviceBlock.hasPump(state)
                                                 || FluidDeviceBlock.hasCompressor(state)

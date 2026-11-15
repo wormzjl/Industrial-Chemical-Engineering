@@ -222,6 +222,18 @@ public final class ControlFacts extends SavedData {
         return List.copyOf(panels.values());
     }
 
+    /** Whether an enabled local controller that is not held names {@code output} as its output (batch 2026-11-15-fluid-interfaces, W7). */
+    public boolean loopHolds(long output) {
+        return holds(panels.values(), heldPanels, output);
+    }
+
+    /** {@link #loopHolds} over {@code panels}, {@code held} the held ones: a console never regulates, and a held controller is off. */
+    public static boolean holds(Collection<Panel> panels, Set<UUID> held, long output) {
+        for (var p : panels)
+            if (!p.dcs() && p.settings().enabled() && !held.contains(p.id()) && p.settings().output() == output) return true;
+        return false;
+    }
+
     public DataBus.Cable cable(DataBus.Site site) {
         return cables.get(site);
     }

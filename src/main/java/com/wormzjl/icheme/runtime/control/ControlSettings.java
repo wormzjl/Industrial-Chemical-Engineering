@@ -41,6 +41,21 @@ public record ControlSettings(
             throw new IllegalArgumentException("Invalid controller settings");
     }
 
+    /** An on/off loop's band on each side of its target, as a share of the target (decision D4). */
+    public static final double ON_OFF_BAND = .02;
+
+    /**
+     * An automated shutoff valve's loop (batch 2026-11-15-fluid-interfaces, W7, decision D4): whether the valve stands open
+     * after reading {@code measured}, in this unit, when it stood {@code open}. With action OUTLET it opens above the target
+     * plus the band and closes below the target less the band; with INLET the reverse; inside the band it stays as it was.
+     */
+    public boolean onOff(boolean open, double measured) {
+        double band = ON_OFF_BAND * target;
+        if (measured > target + band) return action == Action.OUTLET;
+        if (measured < target - band) return action == Action.INLET;
+        return open;
+    }
+
     public CompoundTag save() {
         var t = new CompoundTag();
         t.putString("name", name);

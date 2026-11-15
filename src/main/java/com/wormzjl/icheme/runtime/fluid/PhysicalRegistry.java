@@ -224,6 +224,27 @@ public final class PhysicalRegistry {
         var d=r.device().withGeometry(new PipeResistance.Geometry(g.length(),g.diameter(),g.roughness(),g.minorLoss()+k,g.channels())).withFacing(axis);
         submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(d,r.spec(),Math.addExact(r.revision(),1)))),topology.nextIdentity(),null);return true;
     }
+    /**
+     * An automated shutoff valve on pipe {@code id} (batch 2026-11-15-fluid-interfaces, W7): as {@link #installPipePressureValve},
+     * its control {@link FlowControl.ControlValve#onOff}, open.
+     */
+    public boolean installPipeActuatedValve(long id,PhysicalFluidTopology.Direction axis) {
+        var record=registrations().get(id);if(!canInstallFitting(record,axis))return false;
+        var d=record.device();var device=PhysicalFluidTopology.Device.builder(d.id(),d.position(),d.kind(),axis,d.geometry(),FlowControl.ControlValve.onOff()).ports(d.ports()).generatorEnabled(d.generatorEnabled()).cutoff(d.cutoff()).joints(d.joints()).build();
+        submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,record.spec(),Math.addExact(record.revision(),1)))),topology.nextIdentity(),null);
+        return true;
+    }
+    /**
+     * Turns automated shutoff valve {@code id} open or closed by hand (W7): its mass target 1 or 0, one queued edit composed
+     * on the pending state, as {@link #togglePipeCutoff}. False where {@code id} is no such valve.
+     */
+    public boolean toggleActuatedValve(long id) {
+        var r=registrations().get(id);
+        if(r==null||!(r.device().control() instanceof FlowControl.ControlValve law)||!law.onOffValve())return false;
+        var next=new FlowControl.ControlValve(law.source(),law.targetPressure(),law.massTarget()>0?0:1,law.volumeTarget(),law.sensor(),Math.addExact(law.revision(),1));
+        submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(r.device().withControl(next),r.spec(),Math.addExact(r.revision(),1)))),topology.nextIdentity(),null);
+        return true;
+    }
     /** Removal composes with the latest projected geometry, controls and spec. */
     public boolean removePipeAccessory(long id){return removePipeAccessory(id,0);}
     /**

@@ -80,6 +80,8 @@ public final class ModItems {
     // Batch 2026-11-15-fluid-interfaces, pipe fittings (W6, W7).
     /** A restriction orifice plate (W6): its bore ratio on the item ({@link #ORIFICE_SETTINGS}). */
     public static final DeferredItem<PipelineFittingItem> ORIFICE_PLATE=fitting("orifice_plate",Instrument.Type.ORIFICE);
+    /** An automated shutoff valve (W7): open or closed by hand or by a loop. */
+    public static final DeferredItem<PipelineFittingItem> AUTOMATED_SHUTOFF_VALVE=fitting("automated_shutoff_valve",Instrument.Type.ACTUATED_VALVE);
 
     public static final DeferredItem<BlockItem> PROCESS_SIMULATOR = ITEMS.registerSimpleBlockItem(
             "process_simulator",

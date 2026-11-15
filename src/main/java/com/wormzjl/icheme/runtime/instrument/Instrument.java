@@ -21,7 +21,9 @@ public final class Instrument {
         /** A pressure safety valve (same batch): on a drum's second reserved top flange, or on a pipe, the pipe's only fitting. */
         SAFETY_VALVE,
         /** A restriction orifice plate (batch 2026-11-15-fluid-interfaces, W6): a pipe's fixed loss, its bore ratio on the fitting record. */
-        ORIFICE;
+        ORIFICE,
+        /** An automated shutoff valve (batch 2026-11-15-fluid-interfaces, W7): open or closed by hand or by a loop, its pipe's only fitting. */
+        ACTUATED_VALVE;
         /** Whether this is a fitting placed where its host's shape gives it, through the accessory request: a tank's level gauge, a drum's gas blanketing valve, a pressure safety valve. */
         public boolean vessel(){return this==LEVEL_GAUGE||this==BLANKET_VALVE||this==SAFETY_VALVE;}
     }
