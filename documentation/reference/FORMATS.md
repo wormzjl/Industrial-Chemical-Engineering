@@ -31,23 +31,24 @@ Every payload registrar of the mod carries one version, [`network/NetworkProtoco
 
 | Registrar | Value | Declared at | Read by |
 |---|---|---|---|
-| Fluid menu, edits, tank watch, converter view | `icheme-1` (was `fluid-24`) | `NetworkProtocol#VERSION` | `FluidNetwork.register` |
-| Sight glass watch and display | `icheme-1` (was `sight-glass-3`) | `NetworkProtocol#VERSION` | `FluidNetwork.registerDisplays` |
-| Mover and driver watches | `icheme-1` (was `mover-4`) | `NetworkProtocol#VERSION` | `FluidNetwork.registerDisplays` |
-| Flare display | `icheme-1` (was `flare-2`) | `NetworkProtocol#VERSION` | `FluidNetwork.registerDisplays` |
-| Still display | `icheme-1` (was `still-1`) | `NetworkProtocol#VERSION` | `FluidNetwork.registerDisplays` |
-| Gauge watch, display and save | `icheme-1` (was `instruments-1`) | `NetworkProtocol#VERSION` | `FluidNetwork.registerDisplays` |
-| Pipe tool settings | `icheme-1` (was `pipeline-tool-5`) | `NetworkProtocol#VERSION` | `FluidNetwork.registerDisplays` |
-| Equipment constructor, rename, far silhouettes | `icheme-1` (was `equipment-23`) | `NetworkProtocol#VERSION` | `EquipmentNetwork.register` |
-| Machine assemblies | `icheme-1` (was `assembly-6`) | `NetworkProtocol#VERSION` | `AssemblyNetwork.register` |
-| Machine pages | `icheme-1` (was `machine-4`) | `NetworkProtocol#VERSION` | `MachineNetwork.register` |
-| Controllers and DCS | `icheme-1` (was `control-5`) | `NetworkProtocol#VERSION` | `ControlNetwork.register` |
-| Shared line commands | `icheme-1` (was `lines-1`) | `NetworkProtocol#VERSION` | `LineNetwork.register` |
-| Shaft speeds | `icheme-1` (was `rotation-1`) | `NetworkProtocol#VERSION` | `RotationNetwork.register` (called from `FluidNetwork.registerDisplays`) |
-| Tutorial | `icheme-1` (was `tutorial-1`) | `NetworkProtocol#VERSION` | `TutorialNetwork.register` |
-| Process simulator | `icheme-1` (was `3`) | `NetworkProtocol#VERSION` | `ProcessSimulatorNetwork.register` |
+| Fluid menu, edits, tank watch, converter view | `icheme-2` (was `icheme-1`; before it `fluid-24`) | `NetworkProtocol#VERSION` | `FluidNetwork.register` |
+| Sight glass watch and display | `icheme-2` (was `icheme-1`; before it `sight-glass-3`) | `NetworkProtocol#VERSION` | `FluidNetwork.registerDisplays` |
+| Mover and driver watches | `icheme-2` (was `icheme-1`; before it `mover-4`) | `NetworkProtocol#VERSION` | `FluidNetwork.registerDisplays` |
+| Flare display | `icheme-2` (was `icheme-1`; before it `flare-2`) | `NetworkProtocol#VERSION` | `FluidNetwork.registerDisplays` |
+| Still display | `icheme-2` (was `icheme-1`; before it `still-1`) | `NetworkProtocol#VERSION` | `FluidNetwork.registerDisplays` |
+| Gauge watch, display and save | `icheme-2` (was `icheme-1`; before it `instruments-1`) | `NetworkProtocol#VERSION` | `FluidNetwork.registerDisplays` |
+| Pipe tool settings | `icheme-2` (was `icheme-1`; before it `pipeline-tool-5`) | `NetworkProtocol#VERSION` | `FluidNetwork.registerDisplays` |
+| Equipment constructor, rename, far silhouettes | `icheme-2` (was `icheme-1`; before it `equipment-23`) | `NetworkProtocol#VERSION` | `EquipmentNetwork.register` |
+| Machine assemblies | `icheme-2` (was `icheme-1`; before it `assembly-6`) | `NetworkProtocol#VERSION` | `AssemblyNetwork.register` |
+| Machine pages | `icheme-2` (was `icheme-1`; before it `machine-4`) | `NetworkProtocol#VERSION` | `MachineNetwork.register` |
+| Controllers and DCS | `icheme-2` (was `icheme-1`; before it `control-5`) | `NetworkProtocol#VERSION` | `ControlNetwork.register` |
+| Shared line commands | `icheme-2` (was `icheme-1`; before it `lines-1`) | `NetworkProtocol#VERSION` | `LineNetwork.register` |
+| Shaft speeds | `icheme-2` (was `icheme-1`; before it `rotation-1`) | `NetworkProtocol#VERSION` | `RotationNetwork.register` (called from `FluidNetwork.registerDisplays`) |
+| Tutorial | `icheme-2` (was `icheme-1`; before it `tutorial-1`) | `NetworkProtocol#VERSION` | `TutorialNetwork.register` |
+| Process simulator | `icheme-2` (was `icheme-1`; before it `3`) | `NetworkProtocol#VERSION` | `ProcessSimulatorNetwork.register` |
+| Pollution map request and answer | `icheme-2` (new in it: the pollution map's payloads, batch 2026-11-15-pollution-system WP9) | `NetworkProtocol#VERSION` | `PollutionMapNetwork.register` |
 
-Fifteen registrars in nine classes, one version. A new payload joins one of them; a new registrar gets a row here.
+Sixteen registrars in ten classes, one version. A new payload joins one of them; a new registrar gets a row here. `icheme-2` (batch 2026-11-15-pollution-system, WP9): the pollution map's request (`Request`: a boolean, the map opened or closed) and answer (`Answer`: the dimension, a denied flag, then at most 4096 columns of chunk x, chunk z and four index bytes, the nearest first; `MapColumns`).
 
 ## Native library
 

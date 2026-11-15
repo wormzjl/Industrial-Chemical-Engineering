@@ -56,6 +56,15 @@ versionRange = "[0,)"
 ordering = "NONE"
 side = "CLIENT"
 
+# FTB Chunks: optional, any 1.21.1 build. The pollution map overlay checks its API at runtime and turns itself off
+# when it does not match.
+[[dependencies."${mod_id}"]]
+modId = "ftbchunks"
+type = "optional"
+versionRange = "${ftb_chunks_version_range}"
+ordering = "NONE"
+side = "CLIENT"
+
 [[dependencies."${mod_id}"]]
 modId = "jei"
 type = "optional"

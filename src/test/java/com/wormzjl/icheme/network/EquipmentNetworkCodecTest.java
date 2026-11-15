@@ -60,7 +60,8 @@ class EquipmentNetworkCodecTest {
 
     @Test void deconstructionRequestsRoundTrip() {
         // One protocol for every registrar since icheme-1 (codebase review P3-22); the equipment payloads were equipment-23.
-        assertEquals("icheme-1", NetworkProtocol.VERSION);
+        // icheme-2: the pollution map's payloads joined (WP9).
+        assertEquals("icheme-2", NetworkProtocol.VERSION);
         var request = new EquipmentNetwork.Deconstruct(AT, AT.north(5), 12345, 99);
         assertEquals(request, roundTrip(EquipmentNetwork.Deconstruct.STREAM_CODEC, request));
 

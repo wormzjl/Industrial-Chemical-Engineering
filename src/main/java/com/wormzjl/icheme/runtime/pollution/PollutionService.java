@@ -143,7 +143,10 @@ public final class PollutionService {
         }
     }
 
-    /** The pass deadline of each dimension, and the handheld meters' (WP8, which also run when pollution is off); never throws. */
+    /**
+     * The pass deadline of each dimension, and the handheld meters' (WP8) and the map answers' (WP9), which also run when
+     * pollution is off; never throws.
+     */
     public static void tick(MinecraftServer server) {
         PollutionService service = null;
         try {
@@ -155,6 +158,8 @@ public final class PollutionService {
             IChemE.LOGGER.error("pollution status=TICK_FAILED detail={}", String.valueOf(failure));
         }
         PollutionMeters.tick(server, service);
+        // The map overlay's answers to the players whose map is open (WP9): one map check with no subscriber; never throws.
+        PollutionMaps.tick(server, service);
         // The sounds of the pipes blasts destroyed this tick (WP6a): one per cube; never throws.
         BurstPipes.flush(server);
         // The constructed equipment this tick's blasts breached (WP6b): one queued edit per vessel; never throws.
@@ -178,6 +183,7 @@ public final class PollutionService {
         try {
             SERVERS.remove(server);
             PollutionMeters.forget(server);
+            PollutionMaps.forget(server);
             BurstPipes.forget(server);
             Breaches.forget(server);
         } catch (RuntimeException failure) {

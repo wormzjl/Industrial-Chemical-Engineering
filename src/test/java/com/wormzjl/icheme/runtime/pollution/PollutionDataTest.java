@@ -99,6 +99,30 @@ class PollutionDataTest {
         assertTrue(english.get("pollution.icheme.meter.air").getAsString().contains("%%"), "the air share's percent sign is escaped");
     }
 
+    /**
+     * The map overlay's tooltip (WP9): its header names the chunk, and each of its four lines is the meter's line, so the
+     * names and words it builds are the meter's keys.
+     */
+    @Test
+    void mapTooltipLinesAreInEnglish() throws IOException {
+        // The file parses as one JSON object (read), and the key is written once (a duplicate would hide one of two lines).
+        var english = read(ASSETS.resolve("lang/en_us.json"));
+        var text = Files.readString(ASSETS.resolve("lang/en_us.json"), StandardCharsets.UTF_8);
+        assertEquals(1, text.split("\"pollution\\.icheme\\.map\\.header\"", -1).length - 1, "one header key");
+        assertTrue(english.has("pollution.icheme.map.header"), "pollution.icheme.map.header");
+        assertTrue(english.get("pollution.icheme.map.header").getAsString().contains("%2$s"), "the header names the chunk's x and z");
+        assertTrue(english.has("pollution.icheme.meter.line"), "the tooltip's lines are the meter's");
+        // The keys PollutionMeters.nameKey and wordKey build (the meter's test reads them the same way).
+        for (var channel : com.wormzjl.icheme.science.pollution.Channel.values()) {
+            String key = "pollution.icheme.name." + channel.name().toLowerCase(java.util.Locale.ROOT);
+            assertTrue(english.has(key), key);
+        }
+        for (var word : com.wormzjl.icheme.science.pollution.Reading.Word.values()) {
+            String key = "pollution.icheme.word." + word.name().toLowerCase(java.util.Locale.ROOT);
+            assertTrue(english.has(key), key);
+        }
+    }
+
     /** The meter's item model, its texture (16 x 16) and its three click sounds with their ogg files. */
     @Test
     void meterModelTextureAndSoundsExist() throws IOException {

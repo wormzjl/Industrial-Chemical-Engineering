@@ -62,6 +62,7 @@ public final class IChemE {
     private static final ModConfigSpec.IntValue POLLUTION_MAX_ACTIVE_CUBES;
     private static final ModConfigSpec.BooleanValue POLLUTION_EXPLOSIONS, POLLUTION_BLOCK_DAMAGE, POLLUTION_EQUIPMENT_BREACH;
     private static final ModConfigSpec.DoubleValue POLLUTION_EXPLOSION_POWER_CAP;
+    private static final ModConfigSpec.ConfigValue<String> POLLUTION_MAP_OVERLAY;
 
     static {
         ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
@@ -225,6 +226,9 @@ public final class IChemE {
                 .define("equipmentBreach", true);
         POLLUTION_EXPLOSION_POWER_CAP = builder.comment("The highest explosion power of a burning cube (TNT is 4; an open cube at its flammability limit is about 4, a 200 m3 room about 1.4). Captured on server start.")
                 .defineInRange("explosionPowerCap", 8.0, 1.0, 32.0);
+        // WP9: the pollution overlay on the FTB Chunks map (a client with FTB Chunks asks while its map is open).
+        POLLUTION_MAP_OVERLAY = builder.comment("Who sees pollution on the FTB Chunks map (one square per polluted chunk): METER, only a player who carries a pollution meter anywhere in the inventory; ALL, every player; OFF, no one. Read at each answer.")
+                .defineInList("mapOverlay", "METER", java.util.List.of("METER", "ALL", "OFF"));
         builder.pop();
         CONFIG_SPEC = builder.build();
     }
@@ -246,6 +250,7 @@ public final class IChemE {
         modEventBus.addListener(com.wormzjl.icheme.network.MachineNetwork::register);
         modEventBus.addListener(com.wormzjl.icheme.network.ControlNetwork::register);
         modEventBus.addListener(com.wormzjl.icheme.network.LineNetwork::register);
+        modEventBus.addListener(com.wormzjl.icheme.network.PollutionMapNetwork::register);
         modEventBus.addListener(IChemE::registerCapabilities);
         modContainer.registerConfig(ModConfig.Type.COMMON, CONFIG_SPEC, "icheme-common.toml");
         // The client's own settings (the process screens' panel theme); a dedicated server never loads them.
@@ -306,10 +311,12 @@ public final class IChemE {
         com.wormzjl.icheme.world.level.block.FloatingRoofs.carry(event.getLevel());
         if(event.getLevel() instanceof net.minecraft.server.level.ServerLevel level)com.wormzjl.icheme.world.level.block.RegistryRealignment.serve(level);
     }
-    /** A player who leaves watches no tank any more. */
+    /** A player who leaves watches no tank any more, and no pollution map. */
     private static void onPlayerLoggedOut(net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerLoggedOutEvent event) {
-        if(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player&&player.server.isSameThread())
+        if(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player&&player.server.isSameThread()) {
             com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.find(player.server).ifPresent(world->world.forgetWatcher(player.getUUID()));
+            com.wormzjl.icheme.runtime.pollution.PollutionMaps.forget(player);
+        }
     }
     private static void onFluidChunkLoaded(net.neoforged.neoforge.event.level.ChunkEvent.Load event) {
         if(event.getLevel() instanceof net.minecraft.server.level.ServerLevel level) {
@@ -366,6 +373,11 @@ public final class IChemE {
     /** The highest power of a burning cube's explosion (WP6a; 8 before the config loads). */
     public static double pollutionExplosionPowerCap() {
         return CONFIG_SPEC.isLoaded() ? POLLUTION_EXPLOSION_POWER_CAP.get() : 8.0;
+    }
+
+    /** Who sees pollution on the FTB Chunks map: METER, ALL or OFF (WP9; METER before the config loads). */
+    public static String pollutionMapOverlay() {
+        return CONFIG_SPEC.isLoaded() ? POLLUTION_MAP_OVERLAY.get() : "METER";
     }
 
     /** Whether polluted cubes show particles to players nearby (WP5; true before the config loads). */

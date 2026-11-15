@@ -4544,6 +4544,7 @@
   "pollution.icheme.air.open": "open",
   "pollution.icheme.air.enclosed": "enclosed",
   "pollution.icheme.air.unread": "Air share not read yet",
+  "pollution.icheme.map.header": "Air pollution, chunk %1$s, %2$s (worst cube)",
   "subtitles.icheme.meter_tick": "Pollution meter clicks",
   "block.icheme.pollution_monitor": "Pollution Monitor",
   "tutorial.icheme.item.pollution_monitor.serves": "Watches its cube's air with a lamp and horn, and reports over data cable.",

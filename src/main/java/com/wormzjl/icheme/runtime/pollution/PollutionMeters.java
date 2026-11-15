@@ -236,7 +236,8 @@ public final class PollutionMeters {
         return "pollution.icheme.name." + channel.name().toLowerCase(Locale.ROOT);
     }
 
-    static ChatFormatting colour(Reading.Word word) {
+    /** The colour of a word on the meter's lines and the map's tooltip (WP9). */
+    public static ChatFormatting colour(Reading.Word word) {
         return switch (word) {
             case SAFE -> ChatFormatting.GREEN;
             case WARNING -> ChatFormatting.YELLOW;
