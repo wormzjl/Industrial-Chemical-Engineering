@@ -57,6 +57,8 @@ public final class ModCreativeTabs {
                 output.accept(ModItems.SHAFT.get());
                 output.accept(ModItems.CREATIVE_MOTOR.get());
                 output.accept(ModItems.CREATIVE_POWER.get());
+                // The placeholder crude oil (batch 2026-11-15-fluid-interfaces, W3, D9): only while no other mod's fluid is in c:crude_oil.
+                if (!ModFluids.othersInTag()) output.accept(ModFluids.CRUDE_OIL_BUCKET.get());
             })
             .build());
     /** The equipment reference items (batch 2026-11-12-tutorial-system, P3), in {@code Kind} order, after the main tab. */

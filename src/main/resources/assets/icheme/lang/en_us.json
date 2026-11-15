@@ -4514,5 +4514,9 @@
   "tutorial.icheme.item.pressure_safety_valve.serves": "Opens by itself to let gas out before the pressure gets too high.",
   "tutorial.icheme.item.field_guide.serves": "Opens the guide that teaches the mod step by step.",
   "tutorial.icheme.item.create_coupling.serves": "Joins a turning Create shaft to this mod's shafts.",
-  "tutorial.icheme.item.create_coupling.needs": "The Create mod, and a turning Create shaft."
+  "tutorial.icheme.item.create_coupling.needs": "The Create mod, and a turning Create shaft.",
+  "block.icheme.crude_oil": "Crude Oil",
+  "fluid_type.icheme.crude_oil": "Crude Oil",
+  "item.icheme.crude_oil_bucket": "Crude Oil Bucket",
+  "tutorial.icheme.item.crude_oil_bucket.serves": "A placeholder crude oil, shown only while no other mod adds one. A fluid converter or a liquid hopper turns it into medium crude."
 }

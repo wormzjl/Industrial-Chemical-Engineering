@@ -199,6 +199,8 @@ public final class IChemE {
     public IChemE(IEventBus modEventBus, ModContainer modContainer) {
         ModBlocks.register(modEventBus);
         ModItems.register(modEventBus);
+        // The placeholder crude oil (batch 2026-11-15-fluid-interfaces, W3): its own fluid, block and bucket registers.
+        com.wormzjl.icheme.registry.ModFluids.register(modEventBus);
         com.wormzjl.icheme.registry.ModCreativeTabs.register(modEventBus);
         // The Create coupling (W6b, D40): its only entry point, guarded; no class outside compat/create names a Create type.
         if (net.neoforged.fml.ModList.get().isLoaded("create")) com.wormzjl.icheme.compat.create.CreateCompat.register(modEventBus);
