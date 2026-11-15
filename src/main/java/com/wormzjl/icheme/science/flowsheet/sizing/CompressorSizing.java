@@ -5,6 +5,7 @@ import com.wormzjl.icheme.science.equipment.ProcessUnit;
 import com.wormzjl.icheme.science.equipment.UnitDesign;
 import com.wormzjl.icheme.science.flowsheet.FlowStream;
 import com.wormzjl.icheme.science.flowsheet.FlowThermo;
+import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.fluid.transport.MixtureViscosity;
 import com.wormzjl.icheme.science.machine.CentrifugalCompressor;
 import com.wormzjl.icheme.science.math.DeterministicMath;
@@ -91,7 +92,9 @@ public final class CompressorSizing {
             double k = thermo.model().heatCapacityRatio(in.state());
             int hydrogen = thermo.place(HYDROGEN);
             double share = hydrogen < 0 ? 0 : 100 * in.amountsView()[hydrogen] / in.total();
-            double liquid = 100 - Service.vapourShare(in.state(), thermo.model());
+            // One dense fluid: the world's condensed share, its liquid-like weight, not its slot (S4); exact outside 0.5 to 1.5.
+            double w = FluidThermodynamics.liquidLikeWeight(in.state());
+            double liquid = in.state().dense() && w > 0 && w < 1 ? 100 * w : 100 - Service.vapourShare(in.state(), thermo.model());
             return new Load(LineSizing.Carried.of(in, basis.designFlow(), thermo, scratch).volume() * 3600, out.pressure() / in.pressure(), liquid, in.temperature(),
                     k > 1 ? 1 / CentrifugalCompressor.sigma(k, CentrifugalCompressor.DEFAULT_EFFICIENCY) : 0, share);
         }

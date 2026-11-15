@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.science.flowsheet;
 
 import com.wormzjl.icheme.science.fluid.network.HeatCurve;
+import com.wormzjl.icheme.science.fluid.network.InletPhase;
 import com.wormzjl.icheme.science.fluid.network.ReleasePressure;
 import com.wormzjl.icheme.science.fluid.state.SolidInventory;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
@@ -254,6 +255,17 @@ public final class FlowThermo implements StreamThermo {
         } catch (RuntimeException noState) {
             return Double.NaN;
         }
+    }
+
+    /**
+     * Whether one dense fluid ({@link FluidThermodynamics.State#dense()}) stands at its pump's clean zone's edge: its
+     * vapour share as the world's pump reads it ({@link InletPhase#bulk}, {@code 1 - w} on its liquid-like weight) at or past
+     * the clean share at its pressure ({@link GasEntrainment#cleanShare}), where the world's E is its own pressure. A dense
+     * fluid has no bubble point: this stands in for "at its bubble point" at a pump (S4 of batch
+     * 2026-11-15-supercritical-fluids). False for any other state.
+     */
+    public boolean denseAtEdge(FluidThermodynamics.State state) {
+        return state.dense() && InletPhase.bulk(model, state).vapourVolumeShare() >= GasEntrainment.cleanShare(state.pressure());
     }
 
     /** Whether {@code amounts} at {@code temperature} and {@code pressure} hold vapour. A trial with no state does not boil. */

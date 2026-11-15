@@ -57,7 +57,9 @@ public final class MoverUnit implements UnitModel {
             if (closure.refuses(InletPhase.bulk(thermo.model(), in.state()), false)) throw new FlowsheetFailure(closure.deviceName() + ".phase");
             double density = in.mass() / in.state().volume(), ideal = closure.power(in.mass(), rise, density, in.pressure(), kappa(thermo.model(), in.state()));
             boolean pump = closure instanceof FlowControl.Pump;
-            if (pump && thermo.boils(in.temperature(), in.pressure() * (1 - AT_BUBBLE), in.amounts())) report.note(Note.warning(u.id(), "pump.bubble_point"));
+            // One dense fluid has no bubble point; its pump's edge is where it is gas-like enough (S4): not its slot.
+            boolean bubble = in.state().dense() ? thermo.denseAtEdge(in.state()) : thermo.boils(in.temperature(), in.pressure() * (1 - AT_BUBBLE), in.amounts());
+            if (pump && bubble) report.note(Note.warning(u.id(), "pump.bubble_point"));
             double head = rise / (density * GRAVITY);
             double efficiency = pump ? pumpEfficiency(in.mass() / density) : CentrifugalCompressor.DEFAULT_EFFICIENCY;
             double shaft = pump ? ideal / efficiency : ideal;
