@@ -1,6 +1,6 @@
 # 2026-11-15 pollution system
 
-Status: In progress since 2026-11-15. D1 to D6 decided; WP1 to WP3 built and tested; WP4 in work; WP5, WP6, WP8 to WP10 not started. Branch `claude/pollution-system-a8e213`, cut from `main` at `e9edc974b` (0.31.0).
+Status: In progress since 2026-11-15. D1 to D6 decided; WP1 to WP4 built and tested; WP5, WP6, WP8 to WP10 not started. Branch `claude/pollution-system-a8e213`, cut from `main` at `e9edc974b` (0.31.0).
 
 Purpose: air pollution in 16 × 16 × 16 cubes: toxic, combustible, corrosive and particulate hazard indices from what the fluid network releases, spreading and decaying on the 5 s engine, with effects on players and mobs and vapour cloud explosions at flame sources.
 
@@ -34,6 +34,8 @@ Lane: new packages `science/pollution` and `runtime/pollution`. Hot files touche
 
 - 2026-11-15, owner: "I've changed my idea, make particulates a stand alone type of pollution". Plan sections 2, 6 and 11: particulate is no longer added to the toxic index; it acts on its own index (proposed: Darkness from 0.1; Slowness and Hunger from 0.3; 1 HP/s from 1 and 3 HP/s from 3, damage type `icheme:particulate`), and the meter and monitor show four separate values. No built code changes: the field already keeps it as its own channel.
 
+- 2026-11-15, WP4 built by the main thread: all four source sets compiled at the first build; 79 tests in 10 classes pass (`ReleasesTest` 12, `FlareRuntimeTest`, `BlanketValveWorldTest`, `ReliefValveWorldTest`, `StillRuntimeTest`, `MachineHealthTest`, `ShaftCouplingTest`, `TimeFactorElectricTest`, `LayeringTest`, `DeterministicMathSourceTest`); the other test classes that load `FluidWorldAuthority` are the final lane's. `runtime/fluid/Releases` on `ShaftTrains.booked`, wired in `FluidWorldAuthority` (`hazardColumns`, `releasePollution`). Hooked: open vessel vent (roof) and spill (volatile share, foot), chimney (gas and solids), flare (burning: SO2 and soot; flame out: the gas), flush, tower air, and the SO2 of burner and engine fuel voids (S8: their flue gas is no stream; `Burners.flueFlow` is presentation only). Not hooked: the blanketing vent, a still pot's vent and spill (they go to its head), the relief run, converter drains, a liquid-fired still's burners. What the code refuted in the brief: a replay's boundaries are already its span's totals (`IslandCertificate.replay` scales them), so no rate times span is applied; a certificate is refused on a flushing interval, so a flush is booked once; a chimney's node is already its stack top; an island's transfers are on its own compound list and are mapped by name (`PortAccounts.onWorld`).
+
 ## Documents
 
 - [POLLUTION_PLAN.md](POLLUTION_PLAN.md): the standard, the release sources, the field and its step, the schedule, effects, ignition and blasts, saves, work packages WP1 to WP7, owner decisions.
@@ -41,6 +43,8 @@ Lane: new packages `science/pollution` and `runtime/pollution`. Hot files touche
 ## Open items
 
 - Approval of the implementation threads for WP3 to WP6, WP8 and WP9 (WP9: the owner's go-ahead is open).
+- WP4's notes: a flare's stack height is not in its registration, so its release is placed one block over its base (under-placed on a tall stack); a spill's non-volatile rest and solids are booked nowhere (the plan's `ground` total is not fed); a liquid-fired still's burners release no SO2 yet; no GameTest proves the server-side adapter.
+- Suspected defect outside this batch, reported by WP4 and not verified: `Flares`, `FiredHeaters`, `Chimneys` and `islandNoise` index an island's own-list moles with world-order arrays (`Flare.gas`), which would misalign on an island with a restricted compound list. For the owner.
 - WP3's notes: the code guide's line "a fluid island is admitted only while no job waits" does not match the code (`activeWorkers >= workerCount`), to correct in WP7; `equipmentGates` copies `compat/**`, so the new images put it out of date (the final lane's); a GameTest for the service is owed (with WP5's).
 - WP1's notes: `tools/compound-import/import.mjs` may drop the `hazard` blocks on a re-import (not checked); carbonyl sulfide has no `flammability` record, so it is not combustible here; `MATERIALS.md` and the code guide do not name the sub-record yet (WP7).
 - Three points to verify in the code before their package builds: where a removed device's contents are booked (S5), whether fuel voids have a flue stream (S8), where a safety valve's run ends (S9).

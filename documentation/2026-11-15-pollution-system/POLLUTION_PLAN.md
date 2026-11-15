@@ -95,6 +95,8 @@ All amounts come from what an island booked at commit: `PassiveIntervalSolver.Re
 | — | A plain `VOID` device (creative sink), converter drains, a still's distillate and vent outlets (they feed pipes) | — | — | no |
 | — | Solid fuel fires (a still's firebox items) | no stream exists | — | later |
 
+As built in WP4 (2026-11-15): S8 is hooked (burner and engine fuel voids release their SO2 at the unit; their flue gas is no stream); S9 is no source (a relief run ends in a pipe); a chimney releases one block over its node, which is its stack top; a flare one block over its base (its stack height is not registered); a still pot's vent and spill go to its head, not the air; a spill's non-volatile rest is not booked to `ground` yet.
+
 Volatile share of a liquid (S2, S5): `min(1, Psat_i(298.15 K) / 101325 Pa)` with Wilson's correlation `Psat = Pc exp(5.373 (1 + ω)(1 − Tc/T))` on the package's own Tc, Pc, ω. Propane and butane evaporate whole, benzene 12 %, a heavy cut almost nothing. The rest leaves to the ground and is counted in the pollution ledger's `ground` total (a later soil system can read it).
 
 ## 4. The field
