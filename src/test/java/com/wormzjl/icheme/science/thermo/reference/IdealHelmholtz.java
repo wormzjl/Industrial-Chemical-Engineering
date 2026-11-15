@@ -15,7 +15,14 @@ import java.util.Arrays;
  *   <li>{@code IdealGasHelmholtzPower}: sum n_i tau^t_i;</li>
  *   <li>{@code IdealGasHelmholtzPlanckEinstein}: sum n_i ln(1 - exp(-t_i tau));</li>
  *   <li>{@code IdealGasHelmholtzPlanckEinsteinFunctionT}: sum n_i ln(1 - exp(-v_i tau / Tcrit)), with the term's
- *       own {@code Tcrit}, as CoolProp's parser converts it.</li>
+ *       own {@code Tcrit}, as CoolProp's parser converts it;</li>
+ *   <li>{@code IdealGasHelmholtzCP0AlyLee} (n-heptane; batch 2026-11-15-supercritical-fluids, S0): the Aly-Lee ideal-gas
+ *       heat capacity {@code cp0/R = c0 + c1 [(c2/T)/sinh(c2/T)]^2 + c3 [(c4/T)/cosh(c4/T)]^2}, converted as CoolProp's
+ *       parser does: the constant {@code c0} as CoolProp's {@code IdealHelmholtzCP0PolyT} term of exponent 0,
+ *       {@code c0 (1 - tau/tau0 + ln(tau/tau0))} with {@code tau0 = Tc/T0} (the term's own {@code Tc} and {@code T0}),
+ *       the sinh term as the generalized Planck-Einstein term {@code c1 ln(1 - exp(-2 c2 tau/Tc))} and the cosh term as
+ *       {@code -c3 ln(1 + exp(-2 c4 tau/Tc))}, with no integration constants: the file's reference-state offset was
+ *       computed on that form. Proved by the n-Heptane parity fixture (h and s at 1e-10).</li>
  * </ul>
  * Both Planck-Einstein forms are held as CoolProp's generalized form n ln(c + d exp(theta tau)) with c = 1, d = -1.
  * Any other term type is refused at load.
@@ -31,6 +38,9 @@ final class IdealHelmholtz {
     private double[] planckTheta = new double[0];
     private double[] planckC = new double[0];
     private double[] planckD = new double[0];
+    /** CoolProp's {@code IdealHelmholtzCP0PolyT} terms of exponent 0 (Aly-Lee's constant): coefficient and tau0. */
+    private double[] constantCpC = new double[0];
+    private double[] constantCpTau0 = new double[0];
 
     static IdealHelmholtz parse(JsonArray alpha0) {
         IdealHelmholtz ideal = new IdealHelmholtz();
@@ -75,6 +85,25 @@ final class IdealHelmholtz {
                     }
                     ideal.addPlanckEinstein(n, theta);
                 }
+                case "IdealGasHelmholtzCP0AlyLee" -> {
+                    double[] c = JsonFluidFiles.doubles(term, "c");
+                    if (c.length != 5) {
+                        throw new IllegalArgumentException("IdealGasHelmholtzCP0AlyLee needs five coefficients");
+                    }
+                    double tc = term.get("Tc").getAsDouble();
+                    double t0 = term.get("T0").getAsDouble();
+                    // CoolProp's thresholds for a present term (FluidLibrary's AlyLee conversion).
+                    if (Math.abs(c[0]) > 1.0e-14) {
+                        ideal.constantCpC = concat(ideal.constantCpC, new double[] {c[0]});
+                        ideal.constantCpTau0 = concat(ideal.constantCpTau0, new double[] {tc / t0});
+                    }
+                    if (Math.abs(c[1]) > 1.0e-14) {
+                        ideal.addGeneralized(c[1], -2.0 * c[2] / tc, 1.0, -1.0);
+                    }
+                    if (Math.abs(c[3]) > 1.0e-14) {
+                        ideal.addGeneralized(-c[3], -2.0 * c[4] / tc, 1.0, 1.0);
+                    }
+                }
                 default -> throw new IllegalArgumentException("unsupported alpha0 term type " + type);
             }
         }
@@ -101,10 +130,24 @@ final class IdealHelmholtz {
         planckD = concat(planckD, d);
     }
 
+    private void addGeneralized(double n, double theta, double c, double d) {
+        planckN = concat(planckN, new double[] {n});
+        planckTheta = concat(planckTheta, new double[] {theta});
+        planckC = concat(planckC, new double[] {c});
+        planckD = concat(planckD, new double[] {d});
+    }
+
     void evaluate(double tau, double delta, AlphaDerivatives out) {
         double alpha = Math.log(delta) + leadA1 + leadA2 * tau + logTauA * Math.log(tau);
         double dTau = leadA2 + logTauA / tau;
         double dTau2 = -logTauA / (tau * tau);
+        for (int i = 0; i < constantCpC.length; i++) {
+            double c = constantCpC[i];
+            double tau0 = constantCpTau0[i];
+            alpha += c - c * tau / tau0 + c * Math.log(tau / tau0);
+            dTau += c / tau - c / tau0;
+            dTau2 += -c / (tau * tau);
+        }
         for (int i = 0; i < powerN.length; i++) {
             double n = powerN[i];
             double t = powerT[i];

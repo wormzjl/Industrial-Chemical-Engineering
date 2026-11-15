@@ -36,31 +36,37 @@ import org.junit.jupiter.params.provider.ValueSource;
  * up to 7.3e-8 at ethane's triple point (1.1 Pa) and 1.0e-10 at water's; "Psat vs EOS p(rhoV)" checks the oracle's
  * saturation pressure against that EOS pressure at 1e-10.
  *
- * <p>Loosened tolerances are the tightest value of the 1-2-5 series above the measured worst case.
+ * <p>Loosened tolerances are the tightest value of the 1-2-5 series above the measured worst case. Batch
+ * 2026-11-15-supercritical-fluids (S0) added seven fluids (n-propane, ethylene, n-hexane, n-heptane, toluene, n-decane,
+ * n-dodecane) and the supercritical grid of {@code G3F11SupercriticalRegionTest} (to 30 MPa) as single-phase rows; every
+ * (a) and (b) row and every saturation row but the superancillary one stayed at 1e-10, and the PT and superancillary
+ * tolerances were re-set by the same rule: the PT flash differs from CoolProp's own EOS by up to 1.9e-9 (h) for nitrogen at
+ * 145 K and 30 MPa and 1.0e-7 (fugacity coefficient) for liquid toluene at 275 K and 10 kPa; the superancillary Psat
+ * differs from the EOS at the triple points of the new fluids, by up to 5.7e-4 for propane at 85.5 K (1.7e-4 Pa).
  */
 class HelmholtzReferenceParityTest {
     private static final double TARGET = 1.0e-10;
     /** Loosened tolerances, keyed "fluid/quantity"; every other pair uses {@link #TARGET}. */
     private static final Map<String, Double> LOOSENED = Map.ofEntries(
-            Map.entry("Nitrogen/PT h", 2.0e-10),
-            Map.entry("CarbonDioxide/PT h", 1.0e-9),
-            Map.entry("CarbonDioxide/PT s", 5.0e-10),
-            Map.entry("CarbonDioxide/PT cp", 2.0e-8),
-            Map.entry("CarbonDioxide/PT cv", 2.0e-9),
-            Map.entry("CarbonDioxide/PT fugacity coefficient", 1.0e-8),
-            Map.entry("Methane/PT h", 1.0e-9),
-            Map.entry("Methane/PT s", 5.0e-10),
+            Map.entry("Nitrogen/PT h", 2.0e-9),
+            Map.entry("CarbonDioxide/PT h", 5.0e-9),
+            Map.entry("CarbonDioxide/PT s", 5.0e-9),
+            Map.entry("CarbonDioxide/PT cp", 5.0e-8),
+            Map.entry("CarbonDioxide/PT cv", 2.0e-8),
+            Map.entry("CarbonDioxide/PT fugacity coefficient", 2.0e-8),
+            Map.entry("Methane/PT h", 2.0e-9),
+            Map.entry("Methane/PT s", 1.0e-9),
             Map.entry("Methane/PT cp", 2.0e-8),
             Map.entry("Methane/PT cv", 5.0e-10),
-            Map.entry("Methane/PT fugacity coefficient", 1.0e-9),
+            Map.entry("Methane/PT fugacity coefficient", 5.0e-9),
             Map.entry("Ethane/PT h", 5.0e-8),
             Map.entry("Ethane/PT s", 2.0e-8),
             Map.entry("Ethane/PT cp", 5.0e-6),
             Map.entry("Ethane/PT cv", 2.0e-7),
             Map.entry("Ethane/PT fugacity coefficient", 5.0e-7),
-            Map.entry("Hydrogen/PT h", 1.0e-9),
+            Map.entry("Hydrogen/PT h", 2.0e-9),
             Map.entry("Hydrogen/PT s", 2.0e-9),
-            Map.entry("Hydrogen/PT cp", 5.0e-9),
+            Map.entry("Hydrogen/PT cp", 1.0e-8),
             Map.entry("Hydrogen/PT cv", 1.0e-9),
             Map.entry("Hydrogen/PT fugacity coefficient", 5.0e-9),
             Map.entry("Water/PT h", 1.0e-9),
@@ -68,11 +74,57 @@ class HelmholtzReferenceParityTest {
             Map.entry("Water/PT cp", 2.0e-9),
             Map.entry("Water/PT cv", 5.0e-9),
             Map.entry("Water/PT fugacity coefficient", 5.0e-9),
+            Map.entry("Nitrogen/PT s", 5.0e-10),
+            Map.entry("Nitrogen/PT cp", 2.0e-9),
+            Map.entry("Nitrogen/PT cv", 5.0e-10),
+            Map.entry("Nitrogen/PT fugacity coefficient", 1.0e-9),
             Map.entry("Ethane/Psat (superancillary)", 1.0e-7),
-            Map.entry("Water/Psat (superancillary)", 2.0e-10));
+            Map.entry("Water/Psat (superancillary)", 2.0e-10),
+            Map.entry("n-Propane/PT h", 2.0e-9),
+            Map.entry("n-Propane/PT s", 1.0e-9),
+            Map.entry("n-Propane/PT cp", 2.0e-8),
+            Map.entry("n-Propane/PT cv", 5.0e-9),
+            Map.entry("n-Propane/PT fugacity coefficient", 1.0e-8),
+            Map.entry("n-Propane/Psat (superancillary)", 1.0e-3),
+            Map.entry("Ethylene/PT h", 1.0e-9),
+            Map.entry("Ethylene/PT s", 5.0e-10),
+            Map.entry("Ethylene/PT cp", 1.0e-8),
+            Map.entry("Ethylene/PT cv", 2.0e-9),
+            Map.entry("Ethylene/PT fugacity coefficient", 5.0e-9),
+            Map.entry("Ethylene/Psat (superancillary)", 5.0e-10),
+            Map.entry("n-Hexane/PT h", 5.0e-10),
+            Map.entry("n-Hexane/PT s", 2.0e-10),
+            Map.entry("n-Hexane/PT cp", 1.0e-9),
+            Map.entry("n-Hexane/PT cv", 2.0e-10),
+            Map.entry("n-Hexane/PT fugacity coefficient", 5.0e-8),
+            Map.entry("n-Hexane/Psat (superancillary)", 2.0e-9),
+            Map.entry("n-Heptane/PT h", 1.0e-9),
+            Map.entry("n-Heptane/PT s", 5.0e-10),
+            Map.entry("n-Heptane/PT cp", 1.0e-8),
+            Map.entry("n-Heptane/PT cv", 5.0e-10),
+            Map.entry("n-Heptane/PT fugacity coefficient", 1.0e-8),
+            Map.entry("n-Heptane/Psat (superancillary)", 1.0e-6),
+            Map.entry("Toluene/PT h", 1.0e-9),
+            Map.entry("Toluene/PT s", 5.0e-10),
+            Map.entry("Toluene/PT cp", 2.0e-9),
+            Map.entry("Toluene/PT cv", 5.0e-10),
+            Map.entry("Toluene/PT fugacity coefficient", 2.0e-7),
+            Map.entry("Toluene/Psat (superancillary)", 5.0e-6),
+            Map.entry("n-Decane/PT h", 1.0e-9),
+            Map.entry("n-Decane/PT s", 5.0e-10),
+            Map.entry("n-Decane/PT cp", 1.0e-8),
+            Map.entry("n-Decane/PT cv", 5.0e-10),
+            Map.entry("n-Decane/PT fugacity coefficient", 1.0e-8),
+            Map.entry("n-Decane/Psat (superancillary)", 1.0e-9),
+            Map.entry("n-Dodecane/PT h", 2.0e-10),
+            Map.entry("n-Dodecane/PT s", 2.0e-10),
+            Map.entry("n-Dodecane/PT cp", 2.0e-8),
+            Map.entry("n-Dodecane/PT fugacity coefficient", 5.0e-9),
+            Map.entry("n-Dodecane/Psat (superancillary)", 2.0e-7));
 
     @ParameterizedTest
-    @ValueSource(strings = {"Nitrogen", "CarbonDioxide", "Methane", "Ethane", "Hydrogen", "Water"})
+    @ValueSource(strings = {"Nitrogen", "CarbonDioxide", "Methane", "Ethane", "Hydrogen", "Water",
+            "n-Propane", "Ethylene", "n-Hexane", "n-Heptane", "Toluene", "n-Decane", "n-Dodecane"})
     void singlePhaseStatesMatchCoolProp(String fluidName) {
         HelmholtzFluid fluid = HelmholtzFluid.load(fluidName);
         JsonObject fixture = JsonFluidFiles.resource("parity-" + fluidName + ".json");
@@ -118,7 +170,8 @@ class HelmholtzReferenceParityTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"Nitrogen", "CarbonDioxide", "Methane", "Ethane", "Hydrogen", "Water"})
+    @ValueSource(strings = {"Nitrogen", "CarbonDioxide", "Methane", "Ethane", "Hydrogen", "Water",
+            "n-Propane", "Ethylene", "n-Hexane", "n-Heptane", "Toluene", "n-Decane", "n-Dodecane"})
     void saturationStatesMatchCoolProp(String fluidName) {
         HelmholtzFluid fluid = HelmholtzFluid.load(fluidName);
         JsonObject fixture = JsonFluidFiles.resource("parity-" + fluidName + ".json");
