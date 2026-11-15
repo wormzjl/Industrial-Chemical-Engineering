@@ -1,6 +1,6 @@
 # Supercritical fluids
 
-Status: **In progress** since 2026-11-15 (S0, S1, S3, S2a and S2b done; S2c next). Branch `claude/supercritical-fluid-support-d0ffa4`, base `e9edc974b` (main 0.31.0).
+Status: **In progress** since 2026-11-15 (S0, S1, S3, S2a and S2b done; S2c done but its three GameTests, which wait on fixes). Branch `claude/supercritical-fluid-support-d0ffa4`, base `e9edc974b` (main 0.31.0).
 
 Purpose: dense and supercritical fluids as ordinary states of the fluid network, the machines, the heat units and the
 simulator: continuous properties, no label-driven jumps, no critical-band hold.
@@ -63,6 +63,7 @@ simulator: continuous properties, no label-driven jumps, no critical-band hold.
   4. S2b's intermediate commits were not compiled one by one; the final tree is the tested one.
 
 - 2026-11-15: brief S2c written (`tmp/supercritical-briefs/BRIEFS.md`; plan, "S2c as briefed").
+- 2026-11-15: S2c (sub-thread, O2 A for mixtures too): the slot by reduced density for one dense fluid (`ac1808ee2`); the dense pump suction test and the ejector law above water's Tc (`af2590e6a`); three GameTests (`e5b554968`), run once (`s2c-gt1`): 98 existing passed, the 3 new failed on test premises and a layout (no hold, ledgers closed), fixes await a go-ahead. [S2C_NETWORK_REVIEW.md](S2C_NETWORK_REVIEW.md).
 
 ## Documents
 
@@ -76,6 +77,7 @@ simulator: continuous properties, no label-driven jumps, no critical-band hold.
   the identities that moved, the identity bound.
 - [S2_NETWORK_REVIEW.md](S2_NETWORK_REVIEW.md): S2a and S2b, the dense-fluid stream laws, the slot-rule comparison, the
   owner options (onset, film bounds, film seam).
+- [S2C_NETWORK_REVIEW.md](S2C_NETWORK_REVIEW.md): S2c, the slot rule by density and its moved states, what still reads the slot, the dense pump's suction edge, the "no saturation" callers, the GameTests, the campaign draws.
 - [SUPERCRITICAL_QUALIFICATION_REVIEW.md](SUPERCRITICAL_QUALIFICATION_REVIEW.md): S0's measurements M1..M7 and the follow-up M8, the
   recommended pressure ranges and the sizes of the open decisions.
 - Earlier: [../2026-09-24-coolprop-low-temperature/SUPERCRITICAL_SUPPORT_REVIEW.md](../2026-09-24-coolprop-low-temperature/SUPERCRITICAL_SUPPORT_REVIEW.md)
@@ -93,6 +95,7 @@ dataset records under `data/icheme/materials/properties/`, the device screens' p
 - For the owner (S2b, [S2_NETWORK_REVIEW.md](S2_NETWORK_REVIEW.md) sections 2 and 3): the viscosity onset (rho_r 0.25 to
   0.5, or none), the film bounds (0.5/1.5, or 0.75/1.25), the film seam (weight on every one-fluid state, or on
   supercritical isotherms only). Implemented: the first of each.
+- For the owner (S2c, [S2C_NETWORK_REVIEW.md](S2C_NETWORK_REVIEW.md) section 8): the engine's PIP labels of one-root mixtures (option B, not done); the LIQUID port's head seam; the gas blanket in the liquid slot; the pump and compressor conventions and E for S4. The S2 review's cold-campaign line is corrected there (section 7).
 - For the owner (S3 fix, [S3_DATA_REVIEW.md](S3_DATA_REVIEW.md) section 4): the thermodynamic revision repeats the fluid
   identity about three times (once would lift the NBT wall to about 290 compounds); the simulator menu's opening data is
   18,281 characters against a limit near 32,600 bytes, not confirmed (about 110 compounds).
