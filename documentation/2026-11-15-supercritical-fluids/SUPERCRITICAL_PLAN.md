@@ -10,7 +10,7 @@ A supercritical fluid is one phase whose properties are continuous. So the plan 
 field. It does three things:
 
 1. **One descriptor.** A node is a *dense one-fluid node* when it holds one fluid phase on one root and its isotherm
-   is supercritical: `a/(b R T) < 5.8773599486044` for the phase's mixture `a`, `b` on the untranslated cubic (the
+   is supercritical: `a/(b R T) < SUPERCRITICAL_ATTRACTION_RATIO` (`PhaseIdentification`, since S1: the kernel's own `0.45724 / 0.07780` = 5.87712, so that a pure component's test is exactly `T > Tc`; the exact PR ratio is 5.87736) for the phase's mixture `a`, `b` on the untranslated cubic (the
    cubic then has one root at every pressure for this composition; for a pure fluid this is exactly `T > Tc`). The
    constant is the kernel's own (`PhaseIdentification.VAPOUR_BRANCH_VOLUME_RATIO`'s comment); `Z` and `v/b` are on
    `PhaseTraits` since 0.31.0, and `a`, `b` are on the phase state it is formed from. No mixture critical point is computed, and no averaged critical constant is read.
@@ -129,7 +129,7 @@ Files: `science/thermo/phase/FluidTpEquilibrium.java` (`pureBandBox`), `Critical
 1. `science/thermo/PhaseTraits.java` (a record of root count, `Z`, `v/b`, the identification parameter): add the
    component `attraction` = `a / (b R T)`, filled in `PhaseState.traits` from the `a`, `b` that
    `CubicPhaseEvaluator.fill` already stores through `setIdentification`; `supercriticalIsotherm()` =
-   `attraction < 5.8773599486044`; `reducedDensity()` = `VAPOUR_BRANCH_VOLUME_RATIO / volumeRatio()`. No evaluation
+   `attraction < PhaseIdentification.SUPERCRITICAL_ATTRACTION_RATIO` (5.87712, the kernel's ratio; S2 reads the constant); `reducedDensity()` = `VAPOUR_BRANCH_VOLUME_RATIO / volumeRatio()`. No evaluation
    added. `PhaseTraitsTest` checks the new component on every converged digest answer.
 2. `pureBandBox`: delete boxes 3 and 4 (O3). `G3F10QualifiedRegionTest` moves with them; the grade inside the old
    boxes becomes the contract's, or `EXTRAPOLATED` past the dataset's pressure.

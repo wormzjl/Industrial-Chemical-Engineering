@@ -1,6 +1,6 @@
 # Supercritical fluids
 
-Status: **Planned** (2026-11-15). Branch `claude/supercritical-fluid-support-d0ffa4`, base `e9edc974b` (main 0.31.0).
+Status: **In progress** since 2026-11-15 (S0, S1 and S3 done; S2 next). Branch `claude/supercritical-fluid-support-d0ffa4`, base `e9edc974b` (main 0.31.0).
 
 Purpose: dense and supercritical fluids as ordinary states of the fluid network, the machines, the heat units and the
 simulator: continuous properties, no label-driven jumps, no critical-band hold.
@@ -44,6 +44,11 @@ simulator: continuous properties, no label-driven jumps, no critical-band hold.
   the scientific revision of the three packages, every `fluidRevision`, the viscosity revision; the three simulator
   examples re-stamped on the new identity (read, stamp, write; no stored result). Targeted tests and the sample gates green.
   [S3_DATA_REVIEW.md](S3_DATA_REVIEW.md).
+- 2026-11-15: the main thread checked S1 and S3 (diffs, Gradle logs, stored results). S1: 2 of 429 digest lines moved, both pure
+  nitrogen in the old box 4, amounts and counts unchanged; the threshold is the kernel's ratio 5.87712 (plan corrected).
+  S3: found that the three simulator examples held the old data identity and that `FlowsheetExamplesTest` had not run; the
+  sub-thread wrote them again (`acd894c93`: only `basis.revision` differs, checked by a JSON comparison) and ran the example
+  readers and the four sample gates green. The compat corpus and the neural files are untouched.
 
 ## Documents
 
@@ -71,6 +76,8 @@ dataset records under `data/icheme/materials/properties/`, the device screens' p
 
 - Decided (plan 2b). Open for the owner: the two findings there; S2's density threshold (an option S2's review will give);
   hydrogen's zero pair with a cut (only if hydrotreating at pressure matters).
+- For the owner: S3 edited `examples/material-override/.../tjl20_methane.json`, outside its brief's scope; `MaterialPresetsTest`
+  requires that file to mirror the bundled record.
 - Not checked: liquids M8 cannot reach (ethane at Tr 0.96-1 inside its domain, any liquid between Tr 0.95 and Tc); the
   effect of O9's pairs on mixtures; the error of a cut's estimated constants (qualification review, "Not measured").
   The campaigns do not cover the dense window (limits review, last section).
