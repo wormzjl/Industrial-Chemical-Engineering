@@ -13,6 +13,7 @@ import com.wormzjl.icheme.science.fluid.network.PassiveNetwork;
 import com.wormzjl.icheme.science.fluid.network.PassiveStepSolver;
 import com.wormzjl.icheme.science.fluid.network.VesselGeometry;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
+import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler;
 import com.wormzjl.icheme.science.material.MaterialAxis;
 import com.wormzjl.icheme.science.material.MaterialRuntime;
 import com.wormzjl.icheme.world.level.block.EquipmentStructure.Vessel;
@@ -21,11 +22,13 @@ import com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.GameTest;
+import net.minecraft.gametest.framework.GameTestAssertException;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.level.block.Block;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 import java.util.*;
+import java.util.function.Supplier;
 
 /**
  * Dense fluids in the world (S2c of batch 2026-11-15-supercritical-fluids, S2C_NETWORK_REVIEW.md): a dense fluid is one
@@ -34,9 +37,18 @@ import java.util.*;
  * 20 MPa, and one dense vessel drawn through its top and bottom nozzles at once. Each test watches its island through the
  * engine's observer ({@link FluidWorldAuthority#observe}) and closes the island's ledger over every accepted interval
  * after its last edit: its inventories (tanks and junction buffers) against its boundary transfers and the pump's work,
- * per component and in energy. Each test removes everything it placed.
+ * per component and in energy.
+ * <p>
+ * Namespace {@code icheme_dense_test} (its own {@code empty} template: NeoForge enables a test by its template's
+ * namespace), which the fluid GameTest task runs beside {@code icheme_fluid_test} by default;
+ * {@code -PfluidGameTestNamespaces=icheme_dense_test} runs these three alone.
+ * <p>
+ * Each test removes everything it places on every exit, a failure included, as {@link LevelLoopGameTests} does: every
+ * step records its exception as the test's failure instead of throwing, every wait records a failure once the test's own
+ * deadline ({@link #TIMEOUT} less {@link #TEARDOWN} ticks) passes, so the sequence always reaches its removal; the failure
+ * is raised only after the plant is gone. The harness itself removes nothing a failed test placed.
  */
-@GameTestHolder("icheme_fluid_test")
+@GameTestHolder("icheme_dense_test")
 @PrefixGameTestTemplate(false)
 public final class DenseFluidGameTests {
     private DenseFluidGameTests() {}
@@ -45,6 +57,8 @@ public final class DenseFluidGameTests {
     static final double COMPONENT_LEDGER=1e-12,ENERGY_LEDGER=1e-10;
     /** Carbon dioxide's critical point in the network package (chemsep_carbon_dioxide): K, Pa. */
     static final double CO2_CRITICAL_TEMPERATURE=304.21,CO2_CRITICAL_PRESSURE=7.383e6;
+    /** Each test's harness timeout, and the ticks its own deadline leaves for the removal. */
+    static final int TIMEOUT=60000,TEARDOWN=4000;
 
     /** A pure fluid's composition on the world's conserved axis. */
     static double[] pure(String id) {
@@ -56,19 +70,48 @@ public final class DenseFluidGameTests {
     static void block(AssemblyGameTests.Plant plant,BlockPos at,net.minecraft.world.level.block.state.BlockState state){plant.level.setBlock(at,state,Block.UPDATE_ALL);plant.devices.add(at.immutable());}
     /** Removes a block the test placed before the plant goes, as a player breaks it. */
     static void unblock(AssemblyGameTests.Plant plant,BlockPos at){plant.level.removeBlock(at,false);plant.devices.remove(at);}
+    /** A tank charge whose generator and pipe count as the plant's, so a failure before the charge ends removes them too. */
+    static TankCharge charge(GameTestHelper helper,AssemblyGameTests.Plant plant,BlockPos tank,Direction face,FluidDeviceSpec spec) {
+        var charge=new TankCharge(helper,plant.world,tank,face,spec);for(var at:charge.blocks())plant.devices.add(at.immutable());return charge;
+    }
+
+    /** {@code body} unless the test already failed; an exception it throws becomes the test's failure. */
+    static Runnable step(String[] failure,String what,Runnable body) {
+        return ()->{
+            if(failure[0]!=null)return;
+            try{body.run();}catch(RuntimeException e){failure[0]=what+": "+e;}
+        };
+    }
+    /**
+     * A wait: {@code waiting} returns null once done, else what it waits for. It passes once done or failed; an exception
+     * it throws, or the test's own deadline passing, becomes the test's failure.
+     */
+    static Runnable until(GameTestHelper helper,String[] failure,String what,Supplier<String> waiting) {
+        return ()->{
+            if(failure[0]!=null)return;
+            String still;
+            try{still=waiting.get();}catch(RuntimeException e){failure[0]=what+": "+e;return;}
+            if(still==null)return;
+            if(helper.getTick()>TIMEOUT-TEARDOWN){failure[0]="timed out "+what+": "+still;return;}
+            throw new GameTestAssertException(still);
+        };
+    }
 
     /**
      * The island that holds any of {@code watched} (device identities), read on each published interval: the ledger from
      * the first accepted interval of the island's current revision ({@link #base}), the worst closure, the hold, and each
-     * accepted interval's nodes and boundary transfers. A new island or revision starts the ledger again ({@link #resets}).
+     * accepted interval's nodes, boundary transfers and step counters. A new island or revision starts the ledger again
+     * ({@link #resets}).
      */
     static final class Ledger {
         /** One node as an interval left it: its state (null when empty), inventory energy and amounts. */
         record Node(long id,FluidThermodynamics.State state,double energy,double[] moles,PassiveNetwork.Inventory inventory){}
-        /** One accepted interval: its committed tick, its nodes by identity, its boundary transfers and pump work. */
-        record Interval(long committedTick,Map<Long,Node> nodes,List<ConservativeTransport.BoundaryTransfer> boundaries,double pumpWork) {
+        /** One accepted interval: its committed tick, nodes by identity, boundary transfers, pump work and step counters. */
+        record Interval(long committedTick,Map<Long,Node> nodes,List<ConservativeTransport.BoundaryTransfer> boundaries,double pumpWork,
+                        double seconds,int accepted,int rejected,Map<String,Integer> reasons,List<FlowControl.Mode> modes,double largestFlow) {
             double moles(){double s=0;for(var n:nodes.values())for(double m:n.moles())s+=m;return s;}
             double energy(){double s=0;for(var n:nodes.values())s+=n.energy();return s;}
+            double mass(){double s=0;for(var n:nodes.values())if(n.state()!=null)s+=n.state().mass();return s;}
         }
         final Set<Long> watched;
         long island=-1,revision=-1;int resets;
@@ -77,8 +120,6 @@ public final class DenseFluidGameTests {
         Interval base;
         final List<Interval> intervals=new ArrayList<>();
         final Map<Long,Long> seen=new HashMap<>();
-        /** The last state of each watched node. */
-        final Map<Long,FluidThermodynamics.State> last=new HashMap<>();
         Ledger(Long... watched){this.watched=new HashSet<>(List.of(watched));}
         synchronized void published(List<IslandCoordinator.Snapshot> changed,Map<Long,IslandCoordinator.Metrics> timings) {
             for(var snapshot:changed) {
@@ -95,12 +136,12 @@ public final class DenseFluidGameTests {
                     var n=inventory.moles();if(moles==null)moles=new double[n.length];
                     for(int c=0;c<n.length;c++)moles[c]+=n[c];
                     energy+=inventory.internalEnergy();
-                    var state=node.state()!=null&&!node.empty()?node.state():null;
-                    nodes.put(node.id(),new Node(node.id(),state,inventory.internalEnergy(),n,inventory));
-                    if(state!=null&&watched.contains(node.id()))last.put(node.id(),state);
+                    nodes.put(node.id(),new Node(node.id(),node.state()!=null&&!node.empty()?node.state():null,inventory.internalEnergy(),n,inventory));
                 }
                 if(moles==null)continue;
-                var record=new Interval(snapshot.clock().committedTick(),nodes,result.boundaries(),result.pumpWorkJoule());
+                double largest=0;for(double f:result.averageMassFlows())largest=Math.max(largest,Math.abs(f));
+                var record=new Interval(snapshot.clock().committedTick(),nodes,result.boundaries(),result.pumpWorkJoule(),result.advancedSeconds(),
+                        result.acceptedSubsteps(),result.rejectedSubsteps(),result.rejectionReasons(),result.endpointModes(),largest);
                 if(snapshot.id()!=island||snapshot.revision()!=revision) {
                     island=snapshot.id();revision=snapshot.revision();origin=moles;energyOrigin=energy;in=new double[moles.length];energyIn=0;energyThrough=0;
                     worstMoles=worstEnergy=0;intervals.clear();base=record;resets++;continue;
@@ -117,12 +158,13 @@ public final class DenseFluidGameTests {
         }
         synchronized int intervals(){return intervals.size();}
         synchronized int resets(){return resets;}
+        synchronized Interval last(){return intervals.isEmpty()?null:intervals.getLast();}
         synchronized String summary() {
             return "island "+island+" intervals "+intervals.size()+" worst component closure "+worstMoles+" worst energy closure "+worstEnergy+" held "+held;
         }
     }
 
-    /** Checks a test's ledger: no hold, every interval closing per component and in energy. */
+    /** A test's ledger verdict: null while there is no hold and every interval closes per component and in energy. */
     static String closes(Ledger ledger) {
         synchronized(ledger) {
             if(ledger.held!=null)return "Held: "+ledger.held;
@@ -134,7 +176,10 @@ public final class DenseFluidGameTests {
 
     /** Removes the plant, waits until nothing it placed is registered, and ends the test with its failure, if any. */
     static void finish(GameTestHelper helper,AssemblyGameTests.Plant plant,net.minecraft.gametest.framework.GameTestSequence sequence,String[] failure) {
-        sequence.thenExecute(()->{plant.world.observe(null);plant.remove();})
+        sequence.thenExecute(()->{
+                    plant.world.observe(null);
+                    try{plant.remove();}catch(RuntimeException e){if(failure[0]==null)failure[0]="removal: "+e;}
+                })
                 .thenWaitUntil(()->helper.assertTrue(plant.removed(),"Waiting for the test's devices to leave"))
                 .thenExecute(()->{plant.release();if(failure[0]!=null)helper.fail(failure[0]);}).thenSucceed();
     }
@@ -154,28 +199,34 @@ public final class DenseFluidGameTests {
 
     /** Intervals of the closed loop the test waits for after its charge goes, and how many of the last it checks circuit by circuit. */
     static final int LOOP_INTERVALS=30,LOOP_CHECKED=10;
+    /** Accepted intervals the loop circulates at its charge pressure before the charge goes. */
+    static final int LOOP_CHARGE=10;
     /**
      * A closed carbon dioxide loop at 9 MPa or above: a one-block tank, an in-line pump, an exchanger heating it on hot
      * water at 365 K and one cooling it on water at 285 K, back to the tank. The suction leaves the tank's west face, the
      * return enters its east face; both ends are allowed beside the tank, and no other pipe touches it (run s2c-gt1 refused
-     * a return to the north face, beside the suction line).
+     * a return to the north face, beside the tank and the suction line). The pump is installed on a laid pipe as the item
+     * installs it (run s2c-gt2 set a pump's block state on a laid pipe, which registers no mover, and the loop stood still).
      * <p>
      * The loop is charged with all of it laid: a generator at 295 K and 9 MPa on the tank's south face fills it while the
      * pump runs and the two exchangers work, and holds it at that pressure until {@link #LOOP_CHARGE} accepted intervals have
-     * passed (or the island certifies first) and the tank stands at it; then it goes, and the loop is closed. A loop charged cold and then heated, or charged and
-     * then cooled, would move its pressure by several MPa (a liquid-like fluid's thermal expansion against its
-     * compressibility; tmp/supercritical-s2/loop_estimate.py: a charge at 300 K settles between 6.6 and 10 MPa, through
-     * the critical pressure), so the charge is made at the operating temperatures.
+     * passed (or the island certifies first) and the tank stands at it; then it goes, and the loop is closed. A loop charged
+     * cold and then heated, or charged and then cooled, would move its pressure by several MPa (a liquid-like fluid's
+     * thermal expansion against its compressibility; tmp/supercritical-s2/loop_estimate.py: a charge at 300 K settles
+     * between 6.6 and 10 MPa, through the critical pressure), so the charge is made at the operating temperatures.
      * <p>
      * The states it should reach (estimates): the heater's outlet about 340 to 355 K at 9 to 12 MPa, reduced density 0.4
      * to 0.8 (one dense fluid, vapour slot), the cooler's outlet and the tank about 290 to 295 K, reduced density about 1.8
      * (liquid slot), the critical temperature and reduced density 1 crossed in each exchanger. Checked: over
      * {@link #LOOP_INTERVALS} accepted intervals after the charge goes (or every one until the island certifies steady, if
      * sooner), no hold and the ledger closing; over the last {@link #LOOP_CHECKED} of them (all, if fewer), in each
-     * interval the hottest node (the heater's outlet) above Tc + 5 K at reduced density below 1, the coldest (the cooler's outlet or the tank) below Tc - 2 K in the liquid slot, every node one fluid above
-     * the critical pressure; the loop's amount constant (1e-12) and no matter crossing a boundary.
+     * interval the hottest node (the heater's outlet) above Tc + 5 K at reduced density below 1, the coldest (the cooler's
+     * outlet or the tank) below Tc by the engine's own traits (not dense) in the liquid slot (run s2c-dense1: 302.4 K, 1.8 K
+     * under Tc, against 285 K water: the pseudo-critical heat capacity takes most of the cooler's duty), every node one fluid above the critical pressure, the loop
+     * flowing; the loop's amount constant (1e-12) and no matter crossing a boundary. Printed: each checked interval's step
+     * counters, its nodes by slot, the slot changes since the interval before, its largest flow and the circuit time.
      */
-    @GameTest(template="empty",timeoutTicks=60000,batch="dense-fluid-loop")
+    @GameTest(template="empty",timeoutTicks=TIMEOUT,batch="dense-fluid-loop")
     public static void aClosedCarbonDioxideLoopCrossesItsCriticalPointEveryCircuitWithNoHold(GameTestHelper helper) {
         // The two exchangers side by side along x, 7 cells beyond their span apart; the tank 6 cells beyond their far end in z.
         var shape=AssemblyGameTests.Plant.unit(EquipmentShape.Kind.EXCHANGER);int[] span=span(shape);
@@ -206,66 +257,64 @@ public final class DenseFluidGameTests {
             ledger[0]=new Ledger(tankId[0]);world.observe(ledger[0]::published);
         } catch(RuntimeException e){failure[0]="build: "+e;}
         if(failure[0]==null) {
-            sequence=sequence.thenWaitUntil(()->{
-                        if(failure[0]!=null)return;
-                        var verdict=closes(ledger[0]);if(verdict!=null){failure[0]=verdict;return;}
+            sequence=sequence.thenWaitUntil(until(helper,failure,"the charge",()->{
+                        var verdict=closes(ledger[0]);if(verdict!=null){failure[0]=verdict;return null;}
                         var tank=world.view(tankId[0]).state();
-                        helper.assertTrue((ledger[0].intervals()>=LOOP_CHARGE||ledger[0].intervals()>=1&&certified(world,tankId[0]))&&tank!=null&&tank.pressure()>=.99*9e6,
-                                "Waiting for the loop to circulate "+LOOP_CHARGE+" intervals at its charge pressure: "+(tank==null?"-":tank.pressure())+" Pa; "+ledger[0].summary());
-                    })
-                    .thenExecute(()->{
-                        if(failure[0]!=null)return;
+                        if((ledger[0].intervals()>=LOOP_CHARGE||ledger[0].intervals()>=1&&certified(world,tankId[0]))&&tank!=null&&tank.pressure()>=.99*9e6)return null;
+                        return "Waiting for the loop to circulate "+LOOP_CHARGE+" intervals at its charge pressure: "+(tank==null?"-":tank.pressure())+" Pa; "+ledger[0].summary();
+                    }))
+                    .thenExecute(step(failure,"closing the loop",()->{
                         closedAt[0]=ledger[0].resets();
                         unblock(plant,at[2]);unblock(plant,at[1]);
-                    })
-                    .thenWaitUntil(()->{
-                        if(failure[0]!=null)return;
-                        var verdict=closes(ledger[0]);if(verdict!=null){failure[0]=verdict;return;}
-                        helper.assertTrue(ledger[0].resets()>closedAt[0]&&(ledger[0].intervals()>=LOOP_INTERVALS||ledger[0].intervals()>=1&&certified(world,tankId[0])),
-                                "Waiting for "+LOOP_INTERVALS+" accepted intervals of the closed loop: "+ledger[0].summary()+" "+world.view(tankId[0]).status());
-                    })
-                    .thenExecute(()->{
-                        if(failure[0]!=null)return;
+                    }))
+                    .thenWaitUntil(until(helper,failure,"the closed loop",()->{
+                        var verdict=closes(ledger[0]);if(verdict!=null){failure[0]=verdict;return null;}
+                        if(ledger[0].resets()>closedAt[0]&&(ledger[0].intervals()>=LOOP_INTERVALS||ledger[0].intervals()>=1&&certified(world,tankId[0])))return null;
+                        return "Waiting for "+LOOP_INTERVALS+" accepted intervals of the closed loop: "+ledger[0].summary()+" "+world.view(tankId[0]).status();
+                    }))
+                    .thenExecute(step(failure,"the loop's checks",()->{
                         synchronized(ledger[0]) {
-                            var all=ledger[0].intervals;var checked=all.subList(Math.max(0,all.size()-LOOP_CHECKED),all.size());
+                            var all=ledger[0].intervals;int from=Math.max(0,all.size()-LOOP_CHECKED);var checked=all.subList(from,all.size());
                             double baseMoles=ledger[0].base.moles(),drift=0;
                             for(var interval:all) {
                                 drift=Math.max(drift,Math.abs(interval.moles()-baseMoles)/baseMoles);
-                                for(var b:interval.boundaries())if(b.kind()!=ConservativeTransport.BoundaryTransfer.Kind.HEAT)for(double n:b.moles())if(n!=0)failure[0]="The closed loop exchanged matter at "+b.nodeId()+": "+b;
+                                for(var b:interval.boundaries())if(b.kind()!=ConservativeTransport.BoundaryTransfer.Kind.HEAT)for(double n:b.moles())if(n!=0&&failure[0]==null)failure[0]="The closed loop exchanged matter at "+b.nodeId()+": "+b;
                             }
                             double heat=0;for(var interval:all)for(var b:interval.boundaries())if(b.kind()==ConservativeTransport.BoundaryTransfer.Kind.HEAT)heat+=Math.abs(b.totalEnergyJoule());
-                            double hotLow=Double.POSITIVE_INFINITY,hotHigh=0,coldLow=Double.POSITIVE_INFINITY,coldHigh=0,lowest=Double.POSITIVE_INFINITY,highest=0;
-                            String hotLast="",coldLast="";
-                            for(var interval:checked) {
-                                FluidThermodynamics.State hot=null,cold=null;
+                            var lines=new StringBuilder();int flips=0;double seconds=0,circuit=Double.NaN;
+                            for(int k=0;k<checked.size();k++) {
+                                var interval=checked.get(k);var before=from+k>0?all.get(from+k-1):ledger[0].base;
+                                FluidThermodynamics.State hot=null,cold=null;int vapour=0,liquid=0,changed=0;
                                 for(var n:interval.nodes().values()) {
                                     var s=n.state();if(s==null)continue;
-                                    lowest=Math.min(lowest,s.pressure());highest=Math.max(highest,s.pressure());
                                     if(failure[0]==null&&s.oneFluidSlot()<0)failure[0]="A loop node is not one fluid: "+describe(s);
                                     if(failure[0]==null&&!(s.pressure()>CO2_CRITICAL_PRESSURE))failure[0]="A loop node stands below the critical pressure: "+describe(s);
+                                    if(s.oneFluidSlot()==FluidThermodynamics.State.VAPOR)vapour++;else if(s.oneFluidSlot()==FluidThermodynamics.State.LIQUID)liquid++;
+                                    var was=before.nodes().get(n.id());if(was!=null&&was.state()!=null&&was.state().oneFluidSlot()!=s.oneFluidSlot())changed++;
                                     if(hot==null||s.temperature()>hot.temperature())hot=s;
                                     if(cold==null||s.temperature()<cold.temperature())cold=s;
                                 }
-                                if(hot==null){failure[0]="An interval with no loop state";break;}
-                                hotLow=Math.min(hotLow,hot.temperature());hotHigh=Math.max(hotHigh,hot.temperature());coldLow=Math.min(coldLow,cold.temperature());coldHigh=Math.max(coldHigh,cold.temperature());
-                                hotLast=describe(hot);coldLast=describe(cold);
+                                if(hot==null){if(failure[0]==null)failure[0]="An interval with no loop state";break;}
+                                flips+=changed;seconds+=interval.seconds();
+                                if(interval.largestFlow()>0)circuit=interval.mass()/interval.largestFlow();
+                                lines.append(String.format(Locale.ROOT," [%d: %.1f s, substeps %d/%d rejected %s, modes %s, nodes %d vapour %d liquid, slot changes %d, hottest %s, coldest %s, largest flow %.2f kg/s]",
+                                        from+k,interval.seconds(),interval.accepted(),interval.rejected(),interval.reasons(),interval.modes(),vapour,liquid,changed,describe(hot),describe(cold),interval.largestFlow()));
                                 if(failure[0]!=null)continue;
                                 if(!(hot.temperature()>CO2_CRITICAL_TEMPERATURE+5&&hot.dense()&&hot.oneFluidSlot()==FluidThermodynamics.State.VAPOR&&hot.reducedDensity()<1))
                                     failure[0]="The heater's outlet did not cross Tc and the critical density: "+describe(hot);
-                                else if(!(cold.temperature()<CO2_CRITICAL_TEMPERATURE-2&&cold.oneFluidSlot()==FluidThermodynamics.State.LIQUID))
+                                else if(!(cold.temperature()<CO2_CRITICAL_TEMPERATURE&&!cold.dense()&&cold.oneFluidSlot()==FluidThermodynamics.State.LIQUID))
                                     failure[0]="The cooler's outlet did not come back below Tc in the liquid slot: "+describe(cold);
+                                else if(!(interval.largestFlow()>0))failure[0]="The loop does not circulate";
                             }
-                            System.out.println("DENSE_FLUID_GAMETEST loop "+ledger[0].summary()+" checked="+checked.size()+" certified="+certified(world,tankId[0])+" amountDrift="+drift+" heat="+heat+" hottest(last "+LOOP_CHECKED+")="+hotLow+".."+hotHigh
-                                    +" K coldest="+coldLow+".."+coldHigh+" K pressures="+lowest+".."+highest+" Pa lastHottest=["+hotLast+"] lastColdest=["+coldLast+"]");
+                            System.out.println("DENSE_FLUID_GAMETEST loop "+ledger[0].summary()+" checked="+checked.size()+" certified="+certified(world,tankId[0])+" amountDrift="+drift+" heat="+heat
+                                    +" J slotChanges="+flips+" over "+seconds+" s, circuit "+circuit+" s"+lines);
                             if(failure[0]==null&&!(drift<=COMPONENT_LEDGER))failure[0]="The loop's amount moved by "+drift;
                             if(failure[0]==null&&!(heat>0))failure[0]="No heat crossed the exchangers' walls";
                         }
-                    });
+                    }));
         }
         finish(helper,plant,sequence,failure);
     }
-    /** Accepted intervals the loop circulates at its charge pressure before the charge goes. */
-    static final int LOOP_CHARGE=10;
     /** The cells a shape spans from its origin: {min x, max x, min z, max z, max y}. */
     static int[] span(EquipmentShape shape) {
         int[] s={Integer.MAX_VALUE,Integer.MIN_VALUE,Integer.MAX_VALUE,Integer.MIN_VALUE,Integer.MIN_VALUE};
@@ -283,16 +332,25 @@ public final class DenseFluidGameTests {
         long voidId=identity(plant,sink);var r=plant.world.registrations().get(voidId);
         plant.world.edit(voidId,r.revision(),r.device(),new FluidDeviceSpec(1,298.15,101_325,spec.composition()));
     }
-    /** An in-line pump, powered, on the first straight horizontal pipe of {@code path} with air above it. */
-    static void pump(AssemblyGameTests.Plant plant,List<BlockPos> path) {
+    /**
+     * An in-line pump on the first straight horizontal pipe of {@code path} with air above it, installed on the laid pipe as
+     * the item installs it ({@link HeatExchangerReviewWorld}'s pump: its block state, {@code installPipeMover}, the drawn
+     * geometry), then powered from the block above (a placed in-line mover's store starts empty, M-04). Returns its identity.
+     */
+    static long pump(AssemblyGameTests.Plant plant,List<BlockPos> path) {
         for(int i=1;i<path.size()-1;i++) {
             var a=path.get(i-1);var at=path.get(i);var b=path.get(i+1);
             if(a.getY()!=at.getY()||b.getY()!=at.getY()||b.getX()-at.getX()!=at.getX()-a.getX()||b.getZ()-at.getZ()!=at.getZ()-a.getZ())continue;
             var above=at.above();if(!plant.level.getBlockState(above).isAir()||plant.devices.contains(above)||plant.reserved.contains(above))continue;
             var discharge=Direction.fromDelta(b.getX()-at.getX(),0,b.getZ()-at.getZ());
-            plant.level.setBlock(at,FluidPumpStartupGameTests.inlinePump(discharge),Block.UPDATE_ALL);
+            var state=plant.level.getBlockState(at).setValue(FluidDeviceBlock.FACING,discharge).setValue(FluidDeviceBlock.INLINE_MOVER,FluidDeviceBlock.InlineMover.PUMP);
+            plant.level.setBlock(at,FluidDeviceBlock.connectedState(state,plant.level,at),Block.UPDATE_ALL);
+            long id=identity(plant,at);
+            if(!plant.world.installPipeMover(id,PhysicalFluidTopology.Direction.valueOf(discharge.name()),TopologyCompiler.Kind.PUMP))
+                throw new IllegalStateException("The pipe at "+at.toShortString()+" takes no pump");
+            if(plant.level.getBlockEntity(at) instanceof FluidDeviceBlockEntity entity)entity.refreshGeometry(entity.bore(),true);
             plant.devices.add(FluidPumpStartupGameTests.powerInlineMover(plant.level,at).immutable());
-            return;
+            return id;
         }
         throw new IllegalStateException("No straight pipe with air above it for the pump on "+path);
     }
@@ -304,13 +362,15 @@ public final class DenseFluidGameTests {
      * A tank charged from a 298.15 K generator stands hotter than the line: filling a rigid empty vessel leaves its internal
      * energy equal to the line's enthalpy, about 406 K at 20 MPa (run s2c-gt1: the source started near 407 K by mass
      * conservation and ended at 325.2 K against 326.9 K for an isentropic let-down, CoolProp). So the source's state is
-     * recorded when the charges are done, and the line is joined only after: the source-side pipe and the valve first, the
-     * receiver-side pipe last, with the observer already watching. Checked, from the recorded state: the source's
-     * temperature never rises and falls by at least half the ideal-gas isentropic drop to its end pressure (heat capacity
-     * ratio 7/5; the real-gas drop is about 2 % larger); the receiver gains the energy the rest of the island gives up and
-     * its boundaries carry; no hold and the ledger closing; the receiver holding at least half the source's mass.
+     * recorded when the charges are done, and the line is joined only after: the source-side pipe and the valve first (the
+     * valve laid as a pipe, then given its state and installed, as a player fits it: run s2c-gt2 placed it with its state,
+     * which registers the valve already, and the install refused), the receiver-side pipe last, with the observer already
+     * watching. Checked, from the recorded state: the source's temperature never rises and falls by at least half the
+     * ideal-gas isentropic drop to its end pressure (heat capacity ratio 7/5; the real-gas drop is about 2 % larger); the
+     * receiver gains the energy the rest of the island gives up and its boundaries carry; no hold and the ledger closing;
+     * the receiver holding at least half the source's mass.
      */
-    @GameTest(template="empty",timeoutTicks=60000,batch="dense-fluid-letdown")
+    @GameTest(template="empty",timeoutTicks=TIMEOUT,batch="dense-fluid-letdown")
     public static void aNitrogenTankAtTwentyMegapascalsLetsDownWithNoHoldAndCools(GameTestHelper helper) {
         var plant=new AssemblyGameTests.Plant(helper,helper.absolutePos(new BlockPos(4,2,4)),new BlockPos(-4,-2,-4),new BlockPos(8,6,12));
         var world=plant.world;String[] failure={null};
@@ -322,57 +382,48 @@ public final class DenseFluidGameTests {
             plant.hold();
             block(plant,source,ModBlocks.FLUID_RESERVOIR.get().defaultBlockState());block(plant,receiver,ModBlocks.FLUID_RESERVOIR.get().defaultBlockState());
             ids[0]=identity(plant,source);ids[1]=identity(plant,receiver);
-            charges[0]=new TankCharge(helper,world,source,Direction.WEST,new FluidDeviceSpec(1,298.15,2e7,pure("Nitrogen")));
-            charges[1]=new TankCharge(helper,world,receiver,Direction.WEST,new FluidDeviceSpec(1,298.15,5e5,pure("Nitrogen")));
+            charges[0]=charge(helper,plant,source,Direction.WEST,new FluidDeviceSpec(1,298.15,2e7,pure("Nitrogen")));
+            charges[1]=charge(helper,plant,receiver,Direction.WEST,new FluidDeviceSpec(1,298.15,5e5,pure("Nitrogen")));
         } catch(RuntimeException e){failure[0]="build: "+e;}
         if(failure[0]==null) {
-            sequence=sequence.thenWaitUntil(()->{boolean a=charges[0].charged(),b=charges[1].charged();helper.assertTrue(a&&b,"Waiting for both charges");})
-                    .thenExecute(()->{
-                        try {
-                            start[0]=world.view(ids[0]).state();
-                            if(start[0]==null)throw new IllegalStateException("The charged source has no state");
-                            ledger[0]=new Ledger(ids[0]);world.observe(ledger[0]::published);
-                            // The source-side pipe and the valve: a dead end on the source until the receiver-side pipe joins them.
-                            plant.pipe(line.get(0));
-                            var valve=line.get(1);
-                            var state=ModBlocks.FLUID_PIPE.get().defaultBlockState().setValue(FluidDeviceBlock.FACING,Direction.SOUTH).setValue(FluidDeviceBlock.PRESSURE_CONTROL,true);
-                            plant.level.setBlock(valve,FluidDeviceBlock.connectedState(state,plant.level,valve),Block.UPDATE_ALL);plant.devices.add(valve.immutable());
-                            long id=identity(plant,valve);
-                            if(!world.installPipePressureValve(id,PhysicalFluidTopology.Direction.SOUTH))throw new IllegalStateException("The valve did not install");
-                        } catch(RuntimeException e){failure[0]="line: "+e;}
-                    })
-                    .thenWaitUntil(()->{
-                        if(failure[0]!=null)return;
+            sequence=sequence.thenWaitUntil(until(helper,failure,"the charges",()->{boolean a=charges[0].charged(),b=charges[1].charged();return a&&b?null:"Waiting for both charges";}))
+                    .thenExecute(step(failure,"the line",()->{
+                        start[0]=world.view(ids[0]).state();
+                        if(start[0]==null)throw new IllegalStateException("The charged source has no state");
+                        ledger[0]=new Ledger(ids[0]);world.observe(ledger[0]::published);
+                        // The source-side pipe and the valve: a dead end on the source until the receiver-side pipe joins them.
+                        plant.pipe(line.get(0));plant.pipe(line.get(1));
+                        var valve=line.get(1);
+                        var state=plant.level.getBlockState(valve).setValue(FluidDeviceBlock.FACING,Direction.SOUTH).setValue(FluidDeviceBlock.PRESSURE_CONTROL,true);
+                        plant.level.setBlock(valve,FluidDeviceBlock.connectedState(state,plant.level,valve),Block.UPDATE_ALL);
+                        if(!world.installPipePressureValve(identity(plant,valve),PhysicalFluidTopology.Direction.SOUTH))throw new IllegalStateException("The valve did not install");
+                    }))
+                    .thenWaitUntil(until(helper,failure,"the valve",()->{
                         var r=world.registrations().get(identity(plant,line.get(1)));
-                        helper.assertTrue(r!=null&&r.device().control() instanceof FlowControl.ControlValve,"Waiting for the valve to stand");
-                    })
-                    .thenExecute(()->{
-                        if(failure[0]!=null)return;
+                        return r!=null&&r.device().control() instanceof FlowControl.ControlValve?null:"Waiting for the valve to stand";
+                    }))
+                    .thenExecute(step(failure,"the valve's setting",()->{
                         long id=identity(plant,line.get(1));var r=world.registrations().get(id);var d=r.device();
                         world.edit(id,r.revision(),PhysicalFluidTopology.Device.builder(d.id(),d.position(),d.kind(),d.facing(),d.geometry(),new FlowControl.PressureValve(1e6))
                                 .ports(d.ports()).cutoff(d.cutoff()).inlineFilter(d.inlineFilter()).build(),r.spec());
-                    })
-                    .thenWaitUntil(()->{
-                        if(failure[0]!=null)return;
+                    }))
+                    .thenWaitUntil(until(helper,failure,"the back-pressure valve",()->{
                         var r=world.registrations().get(identity(plant,line.get(1)));
-                        helper.assertTrue(r!=null&&r.device().control() instanceof FlowControl.PressureValve,"Waiting for the back-pressure valve");
-                    })
-                    .thenExecute(()->{
-                        if(failure[0]!=null)return;
+                        return r!=null&&r.device().control() instanceof FlowControl.PressureValve?null:"Waiting for the back-pressure valve";
+                    }))
+                    .thenExecute(step(failure,"joining the line",()->{
                         // The receiver-side pipe joins the line: the let-down starts here, observed.
                         joinedAt[0]=ledger[0].resets();plant.pipe(line.get(2));
-                    })
-                    .thenWaitUntil(()->{
-                        if(failure[0]!=null)return;
-                        var verdict=closes(ledger[0]);if(verdict!=null){failure[0]=verdict;return;}
+                    }))
+                    .thenWaitUntil(until(helper,failure,"the let-down",()->{
+                        var verdict=closes(ledger[0]);if(verdict!=null){failure[0]=verdict;return null;}
                         FluidThermodynamics.State a=null,b=null;
                         synchronized(ledger[0]){if(ledger[0].resets>joinedAt[0]&&!ledger[0].intervals.isEmpty()){var nodes=ledger[0].intervals.getLast().nodes();
                             a=nodes.containsKey(ids[0])?nodes.get(ids[0]).state():null;b=nodes.containsKey(ids[1])?nodes.get(ids[1]).state():null;}}
-                        helper.assertTrue(a!=null&&b!=null&&Math.abs(a.pressure()-b.pressure())<=.01*a.pressure(),
-                                "Waiting for the joined tanks to stand within 1 %: "+(a==null?"-":a.pressure())+" and "+(b==null?"-":b.pressure())+" Pa; "+ledger[0].summary());
-                    })
-                    .thenExecute(()->{
-                        if(failure[0]!=null)return;
+                        if(a!=null&&b!=null&&Math.abs(a.pressure()-b.pressure())<=.01*a.pressure())return null;
+                        return "Waiting for the joined tanks to stand within 1 %: "+(a==null?"-":a.pressure())+" and "+(b==null?"-":b.pressure())+" Pa; "+ledger[0].summary();
+                    }))
+                    .thenExecute(step(failure,"the let-down's checks",()->{
                         synchronized(ledger[0]) {
                             double t0=start[0].temperature(),p0=start[0].pressure();
                             var temperatures=new ArrayList<Double>();temperatures.add(t0);
@@ -393,7 +444,7 @@ public final class DenseFluidGameTests {
                             else if(!(closure<=ENERGY_LEDGER))failure[0]="The receiver's energy does not close: "+closure;
                             else if(!(b.mass()>a.mass()*.5))failure[0]="The receiver did not fill: "+b.mass()+" kg against the source's "+a.mass();
                         }
-                    });
+                    }));
         }
         finish(helper,plant,sequence,failure);
     }
@@ -411,7 +462,7 @@ public final class DenseFluidGameTests {
      * outlet's head is {@code PortStreams.portHead}'s prism value for the view's own state (g times its mass over its volume
      * times the tank's 1 m level height; run s2c-gt1's 6118 Pa is 623.9 kg/m3 over 1 m) to 1e-9, the top one's 0.
      */
-    @GameTest(template="empty",timeoutTicks=60000,batch="dense-fluid-two-nozzles")
+    @GameTest(template="empty",timeoutTicks=TIMEOUT,batch="dense-fluid-two-nozzles")
     public static void aDenseVesselDrawnThroughItsTopAndBottomGivesTheSameFluidAtBoth(GameTestHelper helper) {
         var plant=new AssemblyGameTests.Plant(helper,helper.absolutePos(new BlockPos(4,4,4)),new BlockPos(-4,-4,-4),new BlockPos(8,8,8));
         var world=plant.world;String[] failure={null};var tank=plant.base;
@@ -430,9 +481,8 @@ public final class DenseFluidGameTests {
             ledger[0]=new Ledger(ids[0]);world.observe(ledger[0]::published);
         } catch(RuntimeException e){failure[0]="build: "+e;}
         if(failure[0]==null) {
-            sequence=sequence.thenWaitUntil(()->{
-                        if(failure[0]!=null)return;
-                        var verdict=closes(ledger[0]);if(verdict!=null){failure[0]=verdict;return;}
+            sequence=sequence.thenWaitUntil(until(helper,failure,"both draws",()->{
+                        var verdict=closes(ledger[0]);if(verdict!=null){failure[0]=verdict;return null;}
                         var view=world.view(ids[0]);boolean ready=false,certified=certified(world,ids[0]);String why="no interval";
                         synchronized(ledger[0]) {
                             var all=ledger[0].intervals;int first=-1;
@@ -443,14 +493,13 @@ public final class DenseFluidGameTests {
                                 why="both from interval "+first+" of "+all.size()+", certified "+certified;
                             }
                         }
-                        helper.assertTrue(ready,"Waiting for both voids to receive and the view to stand on the compared interval: "+why+" "+view.outlets()+" "+ledger[0].summary());
-                    })
-                    .thenExecute(()->{
-                        if(failure[0]!=null)return;
+                        return ready?null:"Waiting for both voids to receive: "+why+" "+view.outlets()+" "+ledger[0].summary();
+                    }))
+                    .thenExecute(step(failure,"the nozzles' checks",()->{
                         var view=world.view(ids[0]);var outlets=view.outlets();var shown=view.state();
                         com.wormzjl.icheme.runtime.fluid.FluidView.Outlet up=null,down=null;
                         for(var o:outlets){if(o.face()==PhysicalFluidTopology.Direction.UP)up=o;if(o.face()==PhysicalFluidTopology.Direction.DOWN)down=o;}
-                        Ledger.Interval last;synchronized(ledger[0]){last=ledger[0].intervals.getLast();}
+                        var last=ledger[0].last();
                         var toTop=flows(last.boundaries(),ids[1]);var toBottom=flows(last.boundaries(),ids[2]);
                         double hTop=toTop.totalEnergyJoule()/sum(toTop.moles()),hBottom=toBottom.totalEnergyJoule()/sum(toBottom.moles());
                         double worstShare=0;for(int c=0;c<toTop.moles().length;c++)worstShare=Math.max(worstShare,Math.abs(toTop.moles()[c]/sum(toTop.moles())-toBottom.moles()[c]/sum(toBottom.moles())));
@@ -465,7 +514,7 @@ public final class DenseFluidGameTests {
                         else if(!(worstShare<=1e-9))failure[0]="The two outlets' compositions differ by "+worstShare;
                         else if(inventory.geometry().form()!=VesselGeometry.Form.PRISM)failure[0]="The one-block tank is not a prism: "+inventory.geometry().form();
                         else if(!(Math.abs(down.head()-expected)<=1e-9*expected)||up.head()!=0)failure[0]="The bottom outlet carries the level head "+expected+" Pa, the top none: "+outlets;
-                    });
+                    }));
         }
         finish(helper,plant,sequence,failure);
     }

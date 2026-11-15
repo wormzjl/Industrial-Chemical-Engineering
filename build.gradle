@@ -96,7 +96,10 @@ neoForge {
             def fixtureRun = providers.gradleProperty('fluidGameTestRunId').getOrElse('')
             if (!(fixtureRun ==~ /[A-Za-z0-9_-]*/)) throw new GradleException('Invalid fluidGameTestRunId')
             gameDirectory = layout.projectDirectory.dir(fixtureRun.isEmpty() ? 'run/fluid-gametest' : "run/fluid-gametest-${fixtureRun}")
-            systemProperty 'neoforge.enabledGameTestNamespaces', 'icheme_fluid_test'
+            // -PfluidGameTestNamespaces=icheme_dense_test runs one namespace alone; the default (the lane's) runs both.
+            def namespaces = providers.gradleProperty('fluidGameTestNamespaces').getOrElse('icheme_fluid_test,icheme_dense_test')
+            if (!(namespaces ==~ /[a-z0-9_,]+/)) throw new GradleException('Invalid fluidGameTestNamespaces')
+            systemProperty 'neoforge.enabledGameTestNamespaces', namespaces
             systemProperty 'icheme.fluid.testFailure', providers.gradleProperty('fluidGameTestDeliberateFailure').getOrElse('false')
             // Re-derive every island's schedule from scratch at each pump and tick; any drift fails the run.
             systemProperty 'icheme.fluid.scheduler.verify', 'true'

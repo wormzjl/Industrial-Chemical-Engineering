@@ -38,6 +38,8 @@ final class TankCharge {
         var old=world.registrations().get(id);var d=old.device();
         world.edit(id,old.revision(),PhysicalFluidTopology.Device.builder(d.id(),d.position(),d.kind(),d.facing(),d.geometry(),d.control()).ports(d.ports()).cutoff(d.cutoff()).inlineFilter(d.inlineFilter()).build(),spec);
     }
+    /** The charge's generator and its pipe, for a test that removes what it placed on every exit (they go once charged). */
+    java.util.List<BlockPos> blocks(){return java.util.List.of(pipe,generator);}
     /** True once the tank stands within 0.1 % of the charge pressure and the generator and its pipe are gone. */
     boolean charged() {
         if(stage==2)return true;
