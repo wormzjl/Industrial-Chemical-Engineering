@@ -20,8 +20,8 @@ The PR78 arithmetic and the water formulas are in [thermo-kernel.md](thermo-kern
 ## What it does
 
 A *material record* is authored JSON under `data/<ns>/materials/<kind>/`: identity and label (`components`), one
-property dataset per species (`properties`, with optional `freezing`, `thermochemistry`, `flammability` and `combustion`
-sub-records), pair libraries (`interactions`, with an optional E-PPR78 `rule`), group-interaction tables
+property dataset per species (`properties`, with optional `freezing`, `thermochemistry`, `flammability`, `combustion`
+and `critical_volume` sub-records), pair libraries (`interactions`, with an optional E-PPR78 `rule`), group-interaction tables
 (`group_interactions`), reference spines (`spine`), pure crystals (`crystals`), a water model with its ice (`water`), a
 *method* (`methods`: the model, the ideal-gas source, the pair libraries in priority order, the missing-pair policy, the
 water model, the column's pressure range, the liquid-mixture term), and a *package*: a method plus an ordered compound
@@ -40,7 +40,7 @@ model continues, value and slope continuous.
 
 | Class | Role | Lines |
 |---|---|---|
-| [`MaterialCatalog`](../../../src/main/java/com/wormzjl/icheme/science/material/MaterialCatalog.java) | Parser, validator and immutable store of the 15 kinds. Records `Property`, `Pr78` (with `MathiasCopeman`), `Validity`, `Freezing` (`CRYSTAL_ANCHOR_TOLERANCE`), `Thermochemistry` (`ELEMENTS`), `Flammability`, `Combustion`, `Water` (with `Ice`), `Assay`, `Package`, `NrtlPair`, `GroupCounts`, `Homomorph`, `FluidAppearance`, nested `FluidData`; private `Method`, `Entry`, `Records`, `Definition`, `build`. Views and lenses: `restrict`, `withWater` (`CUBIC_WATER`), `inferenceView`, `lens`. Identities: `fluidRevision`, `spineRevision`, `propertyRevision` (`MAX_IDENTITY`). Data reads: `requireSpine`, `volumeTranslation`, `viscosity`, `liquidMixture`, `fluidValidity`, `groupCounts`, `henryInWater`, `homomorph`, `modifiedUnifacTables`, `heatingValues`, `formulas`, `conservedComponents`; `bundled()` | 1445 |
+| [`MaterialCatalog`](../../../src/main/java/com/wormzjl/icheme/science/material/MaterialCatalog.java) | Parser, validator and immutable store of the 15 kinds. Records `Property` (`criticalMolarVolume`), `CriticalVolume` (`CUBIC_RATIO`), `Pr78` (with `MathiasCopeman`), `Validity`, `Freezing` (`CRYSTAL_ANCHOR_TOLERANCE`), `Thermochemistry` (`ELEMENTS`), `Flammability`, `Combustion`, `Water` (with `Ice`), `Assay`, `Package`, `NrtlPair`, `GroupCounts`, `Homomorph`, `FluidAppearance`, nested `FluidData`; private `Method`, `Entry`, `Records`, `Definition`, `build`. Views and lenses: `restrict`, `withWater` (`CUBIC_WATER`), `inferenceView`, `lens`. Identities: `fluidRevision`, `spineRevision`, `propertyRevision` (`MAX_IDENTITY`). Data reads: `requireSpine`, `volumeTranslation`, `viscosity`, `liquidMixture`, `fluidValidity`, `groupCounts`, `henryInWater`, `homomorph`, `modifiedUnifacTables`, `heatingValues`, `formulas`, `conservedComponents`; `bundled()` | 1445 |
 | [`DerivedPairs`](../../../src/main/java/com/wormzjl/icheme/science/material/DerivedPairs.java) | The PR78 kernel of a compound list with every pair derived from the compounds' data: one source per unordered pair, the first that applies (`LIBRARY`, `HYDROGEN`, `HENRY`, `ACTIVITY`, then the others of its class comment), the Huron-Vidal excess and the Mathias-Copeman coefficients; `derive`, `Result` (with `identity`); the activity fits on a parallel first pass | 822 |
 | [`ModifiedUnifac`](../../../src/main/java/com/wormzjl/icheme/science/material/ModifiedUnifac.java) | The modified UNIFAC (Dortmund) table and the activity coefficients it gives from `group_counts`; its water-hydrocarbon block | 337 |
 | [`HenryConstant`](../../../src/main/java/com/wormzjl/icheme/science/material/HenryConstant.java) | A gas's `henry_in_water` sub-record, the IAPWS G7-04 form on the water's Wagner-Pruss line | 55 |
@@ -134,12 +134,14 @@ library added for other compounds moves no identity of a view without them. Assa
 | Identity | Composed of, in order | Used for |
 |---|---|---|
 | `Package.scientificRevision()` | `method=model:<m>,ideal-gas:<fit\|spine>,missing-interactions:<policy>,pressure-pascal:<min>..<max>[,liquid-mixture:<rev>];properties=<dataset>@<rev>,…;interactions=<library>@<rev>,… (libraries that give a pair among its compounds)[;group-interactions=<table>@<rev>];water=<id>@<rev>` | the column's `datasetRevision`, the simulator's tokens and warm starts, the sheet file's data identity |
-| `fluidRevision(pkg)` | the scientific revision, `;viscosity=<record>/<phase>@<rev>,…`, `;ice=<crystal>@<rev>`, `;fluid-data=` + `FluidData.revision(held)` (each transport record with an entry for a held compound or the water, `type@revision`, sorted) | the fluid world basis, the network's model revision, the viscosity cache, the package part of `ThermoIdentity` |
+| `fluidRevision(pkg)` | the scientific revision, `;viscosity=<record>/<phase>@<rev>,…`, `;critical-volume=<record>@<rev>,…` (only where a member has one), `;ice=<crystal>@<rev>`, `;fluid-data=` + `FluidData.revision(held)` (each transport record with an entry for a held compound or the water, `type@revision`, sorted) | the fluid world basis, the network's model revision, the viscosity cache, the package part of `ThermoIdentity` |
 | `spineRevision(pkg)` | `spine:`, each spine `<id>@<rev>` in component order, each crystal `<id>@<rev>`; "" without either | the engine's `ThermoIdentity`, `SpinePackageData.formationRevision` |
 
 - A view's identities name only its compounds' records, datasets in axis order; reordering a view's compounds moves
   them. Every identity is at most `MAX_IDENTITY` characters; `parse` refuses a package whose fluid identity is longer.
-  A viscosity-only edit moves `fluidRevision` and leaves the column's identity alone.
+  A viscosity-only edit moves `fluidRevision` and leaves the column's identity alone; so does a `critical_volume` edit
+  (the column's `physicsContent` leaves the critical volume out). Absent, `criticalMolarVolume` is the cubic's
+  `3.9513730355914 x 0.07780 R Tc / Pc`.
 - `physicsContent(pkg, axis)` (package-private) is canonical JSON of the model, the axis's constants, the k sub-matrix,
   the NRTL pairs, the water's numbers and the resolved E-PPR78 terms. Tests compare by it; no production code does.
 - **The neural check binds by value.** `TrainedPhysics.matches` on the request's view of its active compounds: scalars
@@ -222,7 +224,7 @@ staleness, the sheet file. Numbers: [FORMATS.md](../FORMATS.md).
 | A compound or dataset | `materials/components`, `properties`, a package's `components`, `materials-index.json`; `tools/compound-import/` | `MaterialCatalogTest`, `MaterialPresetsTest`, `MaterialAuthoringTest`, `RefineryImportTest`, `RestrictedPackagePhysicsTest`, `EthanolMainDataTest` |
 | A crude feed | `materials/assays`, `tools/crude-grades/` | `MaterialPresetsTest`, `RegroupedCrudeTest` |
 | A method | `materials/methods`, `MaterialCatalog.Method` | `MaterialCatalogTest`, `LiquidMixtureCorrectionTest` |
-| Sub-records | `MaterialCatalog.readFreezing`, `readThermochemistry`, `readFlammability`, `readCombustion`; tests read them through `SubRecords` | `MaterialCatalogTest` (`freezingSubRecordsAreInNoIdentity`, `aFreezingSubRecordIsValidatedAndAgreesWithItsCrystalAnchor`), `MaterialThermochemistryTest` |
+| Sub-records | `MaterialCatalog.readFreezing`, `readThermochemistry`, `readFlammability`, `readCombustion`, `readCriticalVolume`; tests read them through `SubRecords` | `MaterialCatalogTest` (`freezingSubRecordsAreInNoIdentity`, `aFreezingSubRecordIsValidatedAndAgreesWithItsCrystalAnchor`, `aCriticalVolumeSubRecordParsesFallsBackToTheCubicsAndMovesOnlyTheFluidIdentity`), `MaterialThermochemistryTest` |
 | A revision or an identity | `MaterialCatalog` (`build`, `Method.identity`, `physicsContent`), `JsonFields.revision`, `FluidData.revision` | `MaterialCatalogTest` (`everyPackageIdentityListsTheDeclaredRevisionOfEachRecordItNames`, `aViscosityRevisionBumpMovesOnlyTheFluidIdentity`, `aPackageRecordEditAloneMovesNoIdentity`, `aDatasetRevisionBumpMovesEveryViewThatHoldsItsCompoundAndNoOther`), `PilotCryogenicCatalogTest`, `MaterialFluidDataTest`, `FluidFactsCompatTest` |
 | A validation rule | `parse`, a record class's `read`, `JsonFields` | `MaterialCatalogTest.invalidReloadCannotPublishPartialCatalog`, `MaterialFluidDataTest` (`aNetworkWaterModelWithoutIceFailsLoadingWithItsFileAndField`, `aMalformedSolidRecordFailsWithItsResourceAndField`) |
 | Derived pairs, the water's records | `DerivedPairs`, `ModifiedUnifac`, `HenryConstant`, `WaterRecords` | `DerivedPairsTest` (`theParallelFitsEqualEachPairFittedAlone`), `AqueousSolventDataTest`, `PengRobinsonKernelHuronVidalTest` |

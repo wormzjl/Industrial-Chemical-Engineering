@@ -37,6 +37,12 @@ simulator: continuous properties, no label-driven jumps, no critical-band hold.
   gains `attraction`, `supercriticalIsotherm()`, `reducedDensity()` (ratio `PhaseIdentification.SUPERCRITICAL_ATTRACTION_RATIO`,
   the kernel's 0.45724/0.07780). Digest re-recorded: 2 of 429 lines moved (pure N2 in old box 4: band 1 to 0, one grade
   `RESEARCH_ONLY` to `ESTIMATED_DECLARED_ERROR`). [S1_ENGINE_REVIEW.md](S1_ENGINE_REVIEW.md).
+- 2026-11-15: S3 done (sub-thread, owner decisions O4 A, O10 A, O5 A): nine datasets widen `pressure_max_pascal` (CO2, N2,
+  methane, ethane, propane, hydrogen to 30 MPa; ethylene 20 MPa; n-hexane 4.57 MPa; toluene 6.19 MPa) with their evidence
+  and revision bumps; a `critical_volume` sub-record in all 47 datasets (`tools/compound-import/critical-volume.mjs`);
+  `MixtureViscosity.residual`/`dense` (Jossi-Stiel-Thodos, zero at zero density), not yet called. Moved: the nine revisions,
+  the scientific revision of the three packages, every `fluidRevision`, the viscosity revision. Targeted tests green.
+  [S3_DATA_REVIEW.md](S3_DATA_REVIEW.md).
 
 ## Documents
 
@@ -46,6 +52,8 @@ simulator: continuous properties, no label-driven jumps, no critical-band hold.
   cuts (P1..P6), the rule for a lack.
 - [SUPERCRITICAL_PLAN.md](SUPERCRITICAL_PLAN.md): the idea, owner decisions O1..O10, stages S0..S7, order,
   verification, proposed delegation.
+- [S3_DATA_REVIEW.md](S3_DATA_REVIEW.md): S3's ranges with their evidence, the critical volumes, the residual viscosity,
+  the identities that moved.
 - [SUPERCRITICAL_QUALIFICATION_REVIEW.md](SUPERCRITICAL_QUALIFICATION_REVIEW.md): S0's measurements M1..M7 and the follow-up M8, the
   recommended pressure ranges and the sizes of the open decisions.
 - Earlier: [../2026-09-24-coolprop-low-temperature/SUPERCRITICAL_SUPPORT_REVIEW.md](../2026-09-24-coolprop-low-temperature/SUPERCRITICAL_SUPPORT_REVIEW.md)
