@@ -264,6 +264,9 @@ public final class UpLookingLu {
     public int failedColumn(){return failedColumn;}
     /** The reach searches this instance has run: one per column of a new pattern or after a changed pivot. */
     public long searches(){return searches;}
+    /** The entries L and U store after the last completed factorization (every reached row, structural zeros included, L's
+     * unit diagonal too); a rejected factorization leaves a partial count, so read it only after a completed one. */
+    public long factorEntries(){return (long)lLength+uLength;}
     /** {@code pinv}: for each original row, the column it is the pivot of (EJML's {@code getPinv()}). */
     public int[] rowPivots(){return Arrays.copyOf(pinv,size);}
     public int[] lowerColumns(){return Arrays.copyOf(lColumns,size+1);}

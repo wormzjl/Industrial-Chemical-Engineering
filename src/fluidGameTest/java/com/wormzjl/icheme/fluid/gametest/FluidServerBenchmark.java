@@ -28,7 +28,9 @@ import java.util.*;
 public final class FluidServerBenchmark {
     private static final long TICK_NANOS=50_000_000L;
     /** Profiles measured over a fixed elapsed window instead of a count of accepted intervals per island. */
-    private static final Set<String> TIMED_PROFILES=Set.of("stress100","transient100","rest100","mixed100","viewers");
+    private static final Set<String> TIMED_PROFILES=Set.of("stress100","transient100","rest100","mixed100","mixed400","viewers");
+    /** The timed fixtures hold 100 ladders; mixed400 holds 400 (the first 100 are mixed100's), to load the workers fully. */
+    private static int networks(String profile){return profile.equals("mixed400")?400:100;}
     /**
      * Ladder families. THROUGH is the stress100 ladder: a 150.1 kPa generator, 1 m3 reservoirs and a 150.0 kPa
      * void, near-stationary through-flow. TRANSIENT has no void: a 200 kPa generator fills 1000 m3 reservoirs
@@ -364,9 +366,9 @@ public final class FluidServerBenchmark {
         var builder=new Builder();
         if(TIMED_PROFILES.contains(profile)) {
             var random=new Random(2026091603L);
-            for(int network=0;network<100;network++)builder.ladder(network,switch(profile){
+            for(int network=0,networks=networks(profile);network<networks;network++)builder.ladder(network,switch(profile){
                 case "transient100"->Ladder.TRANSIENT;case "rest100"->Ladder.CLOSED;
-                case "mixed100","viewers"->network%4<2?Ladder.TRANSIENT:network%4==2?Ladder.THROUGH:Ladder.CLOSED;
+                case "mixed100","mixed400","viewers"->network%4<2?Ladder.TRANSIENT:network%4==2?Ladder.THROUGH:Ladder.CLOSED;
                 default->Ladder.THROUGH;},random);
         }
         else if(profile.equals("many")||profile.equals("contention"))for(int row=0;row<100;row++){builder.add(0,4*row,Kind.GENERATOR,150100);for(int x=1;x<=5;x++)builder.add(x,4*row,Kind.PIPE,150050);builder.add(6,4*row,Kind.RESERVOIR,150050);for(int x=7;x<=11;x++)builder.add(x,4*row,Kind.PIPE,150050);builder.add(12,4*row,Kind.VOID,150000);}
@@ -381,7 +383,7 @@ public final class FluidServerBenchmark {
         boolean timed=TIMED_PROFILES.contains(profile);
         if(!timed&&(builder.pipes!=1000||reservoirs.size()!=100))throw new IllegalStateException("Benchmark component count mismatch");
         var compiled=PhysicalFluidTopology.compile(devices,stocks);var entries=new ArrayList<FluidCheckpointCodec.IslandEntry>();long next=builder.next;
-        if(timed&&(compiled.islands().size()!=100||compiled.islands().stream().anyMatch(i->{long count=i.graph().reservoirs().stream().filter(n->n.kind()==PassiveNetwork.NodeKind.RESERVOIR).count();return count<10||count>30;})))throw new IllegalStateException("Timed fixture must contain 100 isolated 10-30-reservoir islands");
+        if(timed&&(compiled.islands().size()!=networks(profile)||compiled.islands().stream().anyMatch(i->{long count=i.graph().reservoirs().stream().filter(n->n.kind()==PassiveNetwork.NodeKind.RESERVOIR).count();return count<10||count>30;})))throw new IllegalStateException("Timed fixture must contain "+networks(profile)+" isolated 10-30-reservoir islands");
         var islandLadders=new HashMap<Long,Ladder>();
         for(var island:compiled.islands()) {
             if(island.error().isPresent())throw new IllegalStateException(island.error().orElseThrow());long id=next++;
@@ -562,6 +564,7 @@ public final class FluidServerBenchmark {
             report.put("reservoirs",reservoirCount);report.put("fixtureSeed",2026091603L);report.put("topology",switch(r.profile){
                 case "transient100"->"100 isolated closed-end ladders, 10-30 finite 1000 m3 reservoirs each, filled by a 200 kPa generator through 100 m of 0.30 m pipe; no void; current-basis wet TJL + nitrogen";
                 case "rest100"->"100 isolated closed ladders, 10-30 finite 1 m3 reservoirs each, stress100 rung pressures spread over 100 Pa; no generator or void; current-basis wet TJL + nitrogen";
+                case "mixed400"->"400 isolated ladders by network index mod 4: 0-1 transient100 fill, 2 stress100 through-flow, 3 rest100 closed (ladders 0-99 are mixed100's); current-basis wet TJL + nitrogen";
                 case "mixed100"->"100 isolated ladders by network index mod 4: 0-1 transient100 fill, 2 stress100 through-flow, 3 rest100 closed; current-basis wet TJL + nitrogen";
                 case "viewers"->"mixed100 with every fixture chunk loaded and bound, 16 open menus on networks 0-15 and scripted edits through the real edit handler; current-basis wet TJL + nitrogen";
                 default->"100 isolated ladder networks, 10-30 finite reservoirs each, series rails and parallel rungs; current-basis wet TJL + nitrogen";});

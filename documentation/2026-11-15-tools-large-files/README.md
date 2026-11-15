@@ -2,7 +2,7 @@
 
 Bring `tools/` under the large-file rule of AGENTS.md ("Documentation, research and tools"): images, world region files, profiler recordings, binaries, archived Gradle results and files over 1 MB leave the tree for the main checkout's `research/tools/<folder>/`, and `.gitignore` gets `/tools/**` lines like the `/documentation/**` ones. Documentation-only in AGENTS.md's sense (`tools/`, `.gitignore`, `.gitattributes`, indexes, one skill line).
 
-**Status:** In progress since 2026-11-15: phase 2 done on branch `claude/sad-pasteur-b47216`, not merged, not pushed.
+**Status:** Implemented 2026-11-16 (documentation-only merge to `main`, owner: "Merge to main"; not pushed).
 
 ## History
 
@@ -22,5 +22,5 @@ Bring `tools/` under the large-file rule of AGENTS.md ("Documentation, research 
 ## Open items
 
 - Owner: the session hook refused the edit of the main checkout's `research/INDEX.md`. Run `bash tmp/tools-large-files/patch-research-index.sh` from this worktree in Git Bash: it adds one row in place after the `documentation/` large-files row (idempotent).
-- Owner: merge to `main` (documentation-only merge; no changelog or version bump). When `main` takes the untrack commits, git deletes those files from the main checkout's `tools/` working tree; the `research/tools/` copies are the canonical ones.
+- Merged 2026-11-16 after `main`'s 0.31.1 (fluid step cost; it added no file the new rules ignore). The merge deleted the moved files from the main checkout's `tools/` working tree; the `research/tools/` copies are the canonical ones.
 - History keeps the old blobs (`.git` about 755 MB); a history rewrite is not proposed.

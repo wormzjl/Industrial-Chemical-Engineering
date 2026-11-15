@@ -96,12 +96,14 @@ public final class SparseLuSolver {
         }
         public Factorization factor(SparseMatrix matrix,Ordering ordering) {
             if(!SolverDiagnostics.ENABLED)return factor0(matrix,ordering);
-            long started=System.nanoTime();
-            try{return factor0(matrix,ordering);}
+            long started=System.nanoTime();boolean completed=false;
+            try{var factorization=factor0(matrix,ordering);completed=true;return factorization;}
             finally {
                 long elapsed=System.nanoTime()-started;
-                if(SolverDiagnostics.inReconstruct()){SolverDiagnostics.transportFactorNanos.add(elapsed);SolverDiagnostics.transportFactorizations.increment();}
-                else{SolverDiagnostics.luFactorNanos.add(elapsed);SolverDiagnostics.luFactorizations.increment();}
+                // L and U of a completed factorization only (an empty matrix stores none); a rejected one is not counted.
+                long entries=completed&&matrix.size()>0?lu.factorEntries():0;
+                if(SolverDiagnostics.inReconstruct()){SolverDiagnostics.transportFactorNanos.add(elapsed);SolverDiagnostics.transportFactorizations.increment();SolverDiagnostics.transportFactorEntries.add(entries);}
+                else{SolverDiagnostics.luFactorNanos.add(elapsed);SolverDiagnostics.luFactorizations.increment();SolverDiagnostics.luFactorEntries.add(entries);}
             }
         }
         private Factorization factor0(SparseMatrix matrix,Ordering ordering) {
