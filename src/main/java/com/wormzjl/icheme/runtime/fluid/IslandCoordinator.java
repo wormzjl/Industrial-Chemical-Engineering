@@ -240,8 +240,8 @@ public final class IslandCoordinator {
      * constructed stock that another island already holds without a scan of every island. */
     final Map<Long,Long> stockOwners=new HashMap<>();
     /** Each coupled exchanger side's relay state by its connection id, which island holds each such side, and the certified
-     * islands a partner's commit woke, discarded at the engine's next decision point (plan section 5.2, form C); the heat
-     * each exchanger holds in transit is the coupling's ({@link ExchangerCoupling}). */
+     * islands a control, shaft or port change woke, discarded at the engine's next decision point (plan section 5.2, form C);
+     * the heat each exchanger holds in transit and a partner's dated wakes (R-ST4) are the coupling's ({@link ExchangerCoupling}). */
     final Map<Long,Coupled> coupled=new HashMap<>();
     /** The coupled sides by pair key, in the order they were first coupled (code base review R23): a pair's two sides
      * without a scan of every side. */
@@ -550,7 +550,7 @@ public final class IslandCoordinator {
     /**
      * What island {@code id} solves against changed at {@code tick}, a tick the world's ticks fix (a unit's dated value
      * takes effect there, codebase review R-ST3): its slices from that tick on must solve against it. Whether that is
-     * settled, at a decision point ({@link Ports#decide}):
+     * settled, at a decision point ({@link Ports#decide}, the coupling's flush of its dated wakes: R-ST4):
      * <ul>
      * <li>certified and committed at or before the tick: materialised to the tick, not to the moment this runs, and its
      * certificate ended there, so it solves from the tick however late the call;</li>

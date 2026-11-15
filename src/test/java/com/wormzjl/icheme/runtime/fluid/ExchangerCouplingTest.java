@@ -631,6 +631,36 @@ class ExchangerCouplingTest {
         for(long island:new long[]{a.hotIsland,a.coldIsland})assertEquals(a.island(island).clock(),b.island(island).clock(),"island "+island+"'s clock");
     }
     /**
+     * The coupling's wake gate (codebase review R-ST4, item 4), with certificates on: the water pair run twice to rest, then
+     * its hot inlet stepped from 90 °C to 100 °C at the same tick t in both, every job of the second run taking 7 ticks more
+     * from there. The hot side's first commit, of [t, t + 100), moves the stream its certified cold side read: decision D4
+     * wakes the cold side.
+     * <ul>
+     * <li>Before R-ST4 the wake materialised the cold side to the moment that commit's completion was drained: t + 100 in the
+     * first run, t + 107 in the second. The cold side then solved on a grid from there, so every later slice, commit and
+     * booking differed. Now it is woken as of t + 100, the end of the slice whose record moved, in both.</li>
+     * </ul>
+     * At t + 2450, when both runs have committed through t + 2400, the replayed spans, the heat each side booked, the heat in
+     * transit and the committed ticks are the same bit for bit.
+     */
+    @Test void aWokenCertifiedSideSolvesFromItsPartnersCommittedTickWhateverTheJobsTake() {
+        var a=waterPair(100,100,CertificatePolicy.defaults());var b=waterPair(100,100,CertificatePolicy.defaults());
+        for(int i=0;i<240&&!(certified(a)&&certified(b));i++){a.run(5);b.run(5);}
+        assertTrue(certified(a)&&certified(b),"both pairs certify");
+        long t=a.epoch[0];
+        a.step(a.hotIsland,1,water(373.15,200_000));b.step(b.hotIsland,1,water(373.15,200_000));
+        // Every job, the hot side's and the woken cold side's, 7 ticks later: the commits keep their order.
+        b.lag=7;
+        a.ticks(250);b.ticks(250);
+        assertTrue(a.island(a.coldIsland).certificate().isEmpty()&&b.island(b.coldIsland).certificate().isEmpty(),"the hotter stream woke the cold side");
+        a.ticks(2200);b.ticks(2200);
+        System.out.printf(Locale.ROOT,"coupling wake gate: stepped at %d; cold side committed %d / %d%n",t,a.island(a.coldIsland).clock().committedTick(),b.island(b.coldIsland).clock().committedTick());
+        assertEquals(a.replays,b.replays,"every certified side was materialised over the same spans");
+        assertEquals(a.heat,b.heat,"the heat each side booked");
+        assertEquals(a.coordinator.transits(),b.coordinator.transits(),"the heat in transit");
+        for(long island:new long[]{a.hotIsland,a.coldIsland})assertEquals(a.island(island).clock(),b.island(island).clock(),"island "+island+"'s clock");
+    }
+    /**
      * A read never books (code base review R5): two pairs on the same events, one of them read for presentation every tick.
      * The heat in transit, the ports' bookings, the replayed heat and the committed ticks are the same bits at the end, and
      * the read pair's views show each certified side at the read tick (its certificate's state there), not the stale
