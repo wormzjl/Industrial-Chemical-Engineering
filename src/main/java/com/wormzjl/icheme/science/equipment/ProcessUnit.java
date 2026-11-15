@@ -625,9 +625,9 @@ public final class ProcessUnit {
 
     private ProcessUnit(EquipmentShape s, Consumer<ProcessUnit> design, boolean drawing, RenderDetail detail) {
         shape = s;
-        mesh = new Mesh(detail);
-        roof = new Mesh(detail);
-        ladder = new Mesh(detail);
+        mesh = new Mesh(detail).equipment();
+        roof = new Mesh(detail).equipment();
+        ladder = new Mesh(detail).equipment();
         this.design = design;
         design.accept(this);
         box = box(mesh.bounds());
@@ -1690,7 +1690,8 @@ public final class ProcessUnit {
      * A large motor from {@code z0} along z, its shaft at (x, y), its drive end at the back ({@code z0 + length}; batch
      * 2026-11-03-rotating-machinery: every machine's shaft end is at its back), {@code MACHINES_HEATERS_SURVEY.md}: a
      * fabricated octagonal stator frame {@code across} wide and {@code length} long with banded ends, round end shields and
-     * the drive-end bearing; louvres on its sides; feet on a steel base frame on posts down to {@code floor}; a top-hat
+     * the drive-end bearing; louvres on its sides ({@link Material#MOTOR_LOUVRE} panels 10 mm proud, their hidden back
+     * left out); feet on a steel base frame on posts down to {@code floor}; a top-hat
      * air-to-air cooler with its fan cowl at the front; the terminal box on its right side ({@link #terminalBox}) with its
      * conduit down.
      */
@@ -1723,7 +1724,7 @@ public final class ProcessUnit {
         for (int side = -1; side <= 1; side += 2) {
             double xf = x + side * r, xo = xf + side * .01;
             for (double zl : new double[]{z0 + .3 * length, z1 - .3 * length})
-                box(new double[]{Math.min(xf, xo), y - .25 * r, zl - .12 * length}, new double[]{Math.max(xf, xo), y + .3 * r, zl + .12 * length}, Material.OPENING, false);
+                box(new double[]{Math.min(xf, xo), y - .25 * r, zl - .12 * length}, new double[]{Math.max(xf, xo), y + .3 * r, zl + .12 * length}, louvreFaces(side), Material.MOTOR_LOUVRE, false);
         }
         // Feet on the base frame; the base frame's beams along z under the feet, on posts when the motor stands high.
         double base = y - r, beam = Math.min(BEAM, base - floor), terminal = Math.min(1.2, .3 + .2 * across);
@@ -1741,7 +1742,7 @@ public final class ProcessUnit {
         volumes.add(Solid.box(new double[]{x - .75 * r + .05, y + r, c0 + .05}, new double[]{x + .75 * r - .05, y + r + cool - .05, c1 - .05}));
         for (int side = -1; side <= 1; side += 2) {
             double xf = x + side * .75 * r, xo = xf + side * .01;
-            box(new double[]{Math.min(xf, xo), y + r + .2 * cool, c0 + .1}, new double[]{Math.max(xf, xo), y + r + .8 * cool, c1 - .1}, Material.OPENING, false);
+            box(new double[]{Math.min(xf, xo), y + r + .2 * cool, c0 + .1}, new double[]{Math.max(xf, xo), y + r + .8 * cool, c1 - .1}, louvreFaces(side), Material.MOTOR_LOUVRE, false);
         }
         var cowl = Frame.of(new double[]{x, y + r + .55 * cool, 0}, 2, -1);
         double rf = .35 * cool + .05, end = Math.max(z0 - .1, c0 - .3);
@@ -1753,6 +1754,11 @@ public final class ProcessUnit {
         framePoints.add(new double[]{x+r+.4*terminal,y-.35*r+.7*terminal,zt+terminal/2});
 
         terminalBox = new double[]{x + r + .2 * terminal, y - .35 * r + .35 * terminal, zt};
+    }
+
+    /** A louvre panel's faces on the {@code side} (-1 or +1 along x) of a body: all but its back, which lies on the body. */
+    private static int louvreFaces(int side) {
+        return ALL_FACES & ~(side > 0 ? 1 : 2);
     }
 
     /** A square flange plate across a throw's line from {@code x0} to {@code x1}, {@code half} out from its axis at (y, z). */
@@ -1960,9 +1966,15 @@ public final class ProcessUnit {
     static final double MODULE = 3;
     /**
      * Spacing of the nuts drawn on a heater's field joints, m: real bolts stand 0.15 to 0.3 m apart; a row at 0.75 m reads
-     * as bolted at a block's scale for half the quads of one at 0.5 m (each nut is five).
+     * as bolted at a block's scale for half the quads of one at 0.5 m (each nut was five; one flush face since 2026-11-15).
      */
     static final double BOLT_PITCH = .75;
+
+    /**
+     * A casing joint's nuts, 50 mm across their flats and 30 mm high ({@link Mesh#nut}: the flush relief face below
+     * {@code Mesh.SOLID_NUT}; batch 2026-11-15-equipment-visual-design, before which they were 50 mm boxes).
+     */
+    static final double CASING_NUT = .05;
 
     /**
      * A bolted field joint at height {@code y} round a casing's outline (x, z corners of a rectilinear polygon, either
@@ -1991,7 +2003,7 @@ public final class ProcessUnit {
             int bolts = (int) Math.floor(to / BOLT_PITCH);
             for (int k = 0; k < bolts; k++) {
                 double t = to * (k + .5) / bolts, x = p[0] + dx * t + ox * w / 2, z = p[1] + dz * t + oz * w / 2, top = y + (pair ? .08 : .07);
-                mesh.box(new double[]{x - .025, top, z - .025}, new double[]{x + .025, top + .03, z + .025}, ALL_FACES & ~4, Material.BOLT);
+                mesh.nut(new Frame(new double[]{x, top, z}, new double[]{0, 1, 0}, new double[]{dx, 0, dz}), CASING_NUT / Math.sqrt(3), 0, .03, 6, Material.BOLT);
             }
         }
     }
@@ -2013,8 +2025,8 @@ public final class ProcessUnit {
             var bar = plus(plus(mid, scale(out, .06)), scale(across, side * .055));
             mesh.block(bar, scale(out, .06), scale(u, length / 2), scale(across, .045), ALL_FACES & ~1, Material.HEATER);
             for (int k = 0; k < count; k++) {
-                var nut = plus(plus(bar, scale(across, side * .06)), scale(u, ((k + .5) / count - .5) * length));
-                mesh.block(nut, scale(out, .025), scale(u, .025), scale(across, .015), ALL_FACES & ~(side > 0 ? 16 : 32), Material.BOLT);
+                var seat = plus(plus(bar, scale(across, side * .045)), scale(u, ((k + .5) / count - .5) * length));
+                mesh.nut(new Frame(seat, scale(across, side), u), CASING_NUT / Math.sqrt(3), 0, .03, 6, Material.BOLT);
             }
         }
     }
