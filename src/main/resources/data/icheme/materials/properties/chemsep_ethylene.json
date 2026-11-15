@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "icheme:chemsep_ethylene",
   "component": "Ethylene",
-  "revision": "chemsep-8.3-dwsim-10.2.5-r1",
+  "revision": "chemsep-8.3-dwsim-10.2.5-r2",
   "source": "ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Ethylene\" (ChemSep index 201, CAS 74-85-1). Molecular weight, normal boiling point, Tc, Pc and acentric factor as given; standard liquid density: the saturated liquid at Tr = 0.7 (eq. 105, at the eq. 101 vapour pressure), because Tc lies below 288.7 K and no 60 F liquid exists; ideal-gas Cp eq. 16 (A=33071.93, B=-860.0281, C=12.22807, D=-0.000509703, E=1.628387e-7; data 50..1500 K) fitted by least squares as shifted_polynomial_5 over 104..900 K (33 points), largest deviation 0.546 % at 104.0 K, 0.152 % over 298.15..900 K; viscosity tables and freezing data in their entries. Imported by tools/compound-import.",
   "molecular_weight_kg_per_mol": 0.028053159999999997,
   "normal_boiling_point_kelvin": 169.42,
@@ -15,8 +15,8 @@
     "temperature_min_kelvin": 104,
     "temperature_max_kelvin": 900,
     "pressure_min_pascal": 100,
-    "pressure_max_pascal": 2000000,
-    "evidence": "Fluid network only (not the column range): the ideal-gas Cp fit range, from max(ChemSep Cp data start, triple point) to 900 K; below it Cp is held and integrated, with a notice (a data-range end, never a validity floor). 100 Pa..2000000 Pa as the bundled light ends: PR78 from ChemSep critical constants, not qualified above that."
+    "pressure_max_pascal": 20000000,
+    "evidence": "Fluid network only (not the column range): the ideal-gas Cp fit range, from max(ChemSep Cp data start, triple point) to 900 K; below it Cp is held and integrated, with a notice (a data-range end, never a validity floor). 100 Pa..2000000 Pa as the bundled light ends: PR78 from ChemSep critical constants, not qualified above that. To 20 MPa since batch 2026-11-15-supercritical-fluids (S3, owner decision O4 A): against CoolProp's reference equation (G3F11SupercriticalRegionTest M1, M8), density within 5.0 % and cp within 4.9 % outside the critical band, 10.9 % and 12.1 % at Tr 1.0-1.2 x Pr 1.5-3 (declared 11 % and 13 %), the cp of 13 % declared at the edge of the band's box 1 (-12.1 % at 310.6 K and 7.56 MPa); the compressed liquid within G3F1's bounds but its cold cp, declared at 14 % (141 K: -12.2 % at 2 MPa to -13.2 % at 20 MPa)."
   },
   "estimated_heavy_residue": false,
   "ideal_gas_cp": {
