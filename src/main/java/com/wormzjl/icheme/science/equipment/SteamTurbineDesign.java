@@ -41,6 +41,9 @@ final class SteamTurbineDesign extends UnitDesign {
     /** A turbine saved before its design point: its inlet class and its exhaust, kPa (a back-pressure set into the LP header; a condensing set's 10 kPa). */
     static final MachineDuty.Steam DEFAULT_STEAM = MachineDuty.Steam.HP;
     static final double DEFAULT_EXHAUST = 450, CONDENSING_EXHAUST = 10;
+    /** A fresh draft's design point in the constructor: HP steam to 10 kPa, a condensing turbine through its HP, MP and LP sections (owner point T2, option A pending the owner's answer). */
+    static final MachineDuty.Steam DRAFT_STEAM = MachineDuty.Steam.HP;
+    static final double DRAFT_EXHAUST = 10;
     /** A stage's share of the isentropic drop, kJ/kg, and the drop per e-fold of the pressure ratio (a game-level fit of the steam tables). */
     static final double STAGE_DROP = 90, DROP_PER_LOG = 200;
 
@@ -64,6 +67,12 @@ final class SteamTurbineDesign extends UnitDesign {
         return MachineDuty.turbine(1000 * SteamTurbineTrain.power(size), DEFAULT_STEAM, DEFAULT_EXHAUST);
     }
 
+    /** A fresh draft: 5 Dc² MW, {@link #DRAFT_STEAM} to {@link #DRAFT_EXHAUST}. */
+    @Override
+    public MachineDuty draft(double size, int length) {
+        return MachineDuty.turbine(1000 * SteamTurbineTrain.power(size), DRAFT_STEAM, DRAFT_EXHAUST);
+    }
+
     /** The exhaust-end casing: the root of the power over 5 MW, up onto the 0.1 m grid. */
     @Override
     public double size(MachineDuty duty) {
@@ -81,14 +90,17 @@ final class SteamTurbineDesign extends UnitDesign {
             throw new IllegalArgumentException("A steam turbine's design point is its power, inlet steam and exhaust");
     }
 
-    /** Power steps along {@link MachineDuty#POWERS} from 55 kW; the exhaust along {@link MachineDuty#EXHAUSTS} to half the inlet. */
+    /**
+     * Power steps along {@link MachineDuty#POWERS} from 55 kW; the exhaust along {@link MachineDuty#TURBINE_EXHAUSTS} (below
+     * the LP header) to half the inlet. A saved back pressure ({@link #checkDuty} still holds it) steps onto that list.
+     */
     @Override
     public MachineDuty step(MachineDuty duty, String setting, int steps) {
         return switch (setting) {
             case "power" -> MachineDuty.turbine(MachineDuty.step(MachineDuty.TURBINE_POWERS, duty.power(), steps),
                     duty.steam(), duty.exhaust());
             case "exhaust" -> MachineDuty.turbine(duty.power(), duty.steam(),
-                    MachineDuty.step(MachineDuty.EXHAUSTS.stream().filter(e -> e <= duty.steam().pressure / 2).toList(), duty.exhaust(), steps));
+                    MachineDuty.step(MachineDuty.TURBINE_EXHAUSTS.stream().filter(e -> e <= duty.steam().pressure / 2).toList(), duty.exhaust(), steps));
             default -> duty;
         };
     }
@@ -143,8 +155,8 @@ final class SteamTurbineDesign extends UnitDesign {
     static List<Section> sections(MachineDuty duty) {
         if (!(duty.power() > SINGLE_CASING)) return List.of();
         var out = new java.util.ArrayList<Section>();
-        if (duty.steam() != MachineDuty.Steam.MP && duty.exhaust() < MachineDuty.Steam.MP.pressure) out.add(Section.MP);
-        if (duty.exhaust() < DEFAULT_EXHAUST) out.add(duty.power() > DOUBLE_FLOW ? Section.LP_DOUBLE : Section.LP);
+        if (duty.steam().pressure > MachineDuty.Steam.MP.pressure && duty.exhaust() < MachineDuty.Steam.MP.pressure) out.add(Section.MP);
+        if (duty.steam() != MachineDuty.Steam.LP && duty.exhaust() < MachineDuty.Steam.LP.pressure) out.add(duty.power() > DOUBLE_FLOW ? Section.LP_DOUBLE : Section.LP);
         return List.copyOf(out);
     }
 

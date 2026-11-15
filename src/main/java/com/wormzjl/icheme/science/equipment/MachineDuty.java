@@ -40,11 +40,20 @@ public record MachineDuty(double flow, double head, double polytropicHead, doubl
     }
 
     /**
-     * A steam turbine's inlet class: a refinery's steam headers, pressure kPa absolute and temperature K (MP 17 bar
-     * 300 °C, HP 42 bar 400 °C, VHP 100 bar 510 °C).
+     * The LP header's steam temperature, K: 200 °C, 52 K of superheat at 4.5 bar (batch 2026-11-15-equipment-visual-design,
+     * owner point T1, option A pending the owner's answer).
+     */
+    public static final double LP_STEAM_TEMPERATURE = 473.15;
+    /** The MP header's steam temperature, K: 300 °C, unchanged by the LP class (owner point T3, option A pending the owner's answer). */
+    public static final double MP_STEAM_TEMPERATURE = 573.15;
+
+    /**
+     * A steam turbine's inlet class: a refinery's steam headers, pressure kPa absolute and temperature K (LP 4.5 bar
+     * 200 °C, MP 17 bar 300 °C, HP 42 bar 400 °C, VHP 100 bar 510 °C), lowest first. Saved by name; on the wire by
+     * ordinal, so a new class moves {@code NetworkProtocol.VERSION}.
      */
     public enum Steam {
-        MP(1700, 573.15), HP(4200, 673.15), VHP(10000, 783.15);
+        LP(450, LP_STEAM_TEMPERATURE), MP(1700, MP_STEAM_TEMPERATURE), HP(4200, 673.15), VHP(10000, 783.15);
 
         public final double pressure, temperature;
 
@@ -80,6 +89,12 @@ public record MachineDuty(double flow, double head, double polytropicHead, doubl
     public static final List<Double> TURBINE_POWERS = java.util.stream.Stream.concat(POWERS.stream().filter(p -> p >= 55 && p < MAX_TURBINE), java.util.stream.Stream.of(MAX_TURBINE)).toList();
     /** Exhaust pressures a turbine steps through, kPa absolute: vacuum to a condenser, then back pressures (the LP, MP and HP headers). */
     public static final List<Double> EXHAUSTS = List.of(10.0, 15.0, 20.0, 150.0, 250.0, 350.0, 450.0, 650.0, 1000.0, 1700.0, 2500.0, 4200.0);
+    /**
+     * The exhausts a turbine is built for, kPa absolute: those of {@link #EXHAUSTS} below the LP header (batch
+     * 2026-11-15-equipment-visual-design, owner: straight through, no back-pressure turbine built new). A turbine saved with
+     * a back pressure keeps it and runs as before; only the offers are these.
+     */
+    public static final List<Double> TURBINE_EXHAUSTS = EXHAUSTS.stream().filter(e -> e < Steam.LP.pressure).toList();
     /** The highest exhaust that is vacuum, kPa: below it the turbine exhausts to a condenser. */
     public static final double VACUUM = 50;
 
@@ -140,10 +155,14 @@ public record MachineDuty(double flow, double head, double polytropicHead, doubl
         return new MachineDuty(flow, head, polytropicHead, power, poles, value, steam, exhaust,baseSpeed);
     }
 
-    /** This turbine's design point at inlet class {@code value}, its exhaust lowered to the highest of {@link #EXHAUSTS} at most half the inlet where it stood above. */
+    /**
+     * This turbine's design point at inlet class {@code value}: its exhaust kept where it is one of {@link #TURBINE_EXHAUSTS}
+     * at most half the new inlet, else the highest of them that is (a back pressure a saved turbine had goes with the
+     * new choice).
+     */
     public MachineDuty withSteam(Steam value) {
         double e = exhaust;
-        if (e > value.pressure / 2) for (double x : EXHAUSTS) if (x <= value.pressure / 2) e = x;
+        if (e > value.pressure / 2 || e >= Steam.LP.pressure) for (double x : TURBINE_EXHAUSTS) if (x <= value.pressure / 2) e = x;
         return new MachineDuty(flow, head, polytropicHead, power, poles, drive, value, e,baseSpeed);
     }
 

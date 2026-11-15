@@ -87,6 +87,14 @@ public abstract class UnitDesign {
         return MachineDuty.NONE;
     }
 
+    /**
+     * The design point a fresh draft of these sizes starts at in the constructor: {@link #duty(double, int)}, unless the
+     * kind's first offer differs from the point its old saves read (a steam turbine's, owner point T2).
+     */
+    public MachineDuty draft(double size, int length) {
+        return duty(size, length);
+    }
+
     /** The main size design point {@code duty} gives. */
     public double size(MachineDuty duty) {
         throw new IllegalArgumentException("This kind has no design point");

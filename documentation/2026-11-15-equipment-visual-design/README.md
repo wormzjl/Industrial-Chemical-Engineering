@@ -15,6 +15,14 @@ Purpose: make the implemented equipment look better and less bare (owner request
   equipment; answers: straight through, add an LP class, every size
   ([STEAM_TURBINE_SECTIONS_PLAN.md](STEAM_TURBINE_SECTIONS_PLAN.md)). Not built.
 
+- 2026-11-15, W1 (branch `claude/turbine-sections-365c63`): `MachineDuty.Steam.LP` (450 kPa, 200 °C, first),
+  `TURBINE_EXHAUSTS` (10 to 350 kPa) for the exhaust step and `withSteam`, a fresh draft at HP to 10 kPa
+  (`UnitDesign.draft`), `NetworkProtocol.VERSION` `icheme-2`, the LP button and lang lines. Wet-exhaust table: every
+  class wears at 10 to 20 kPa (LP 5.45 %, HP 4.61 %, VHP 4.06 % condensed at 10 kPa); all are dry at 150 to 350 kPa.
+  So T1's condition fails, and the table went to the owner. Tests: `SteamTurbineTest`, `EquipmentNetworkCodecTest`,
+  `ConstructorColumnTest`, `MachineColumnTest`, `FluidPacketCodecTest`, `TurbineSizingTest` (test);
+  `ConstructorDefaultsTest`, `SteamTurbineSectionsTest` (equipmentGates). All pass.
+
 ## Documents
 
 - [VISUAL_REVIEW.md](VISUAL_REVIEW.md): the findings and the proposed order.
