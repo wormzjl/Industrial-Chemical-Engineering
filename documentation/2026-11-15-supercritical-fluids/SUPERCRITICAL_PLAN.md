@@ -39,6 +39,9 @@ Ruled out:
 | O4 | Pressure ranges | **A** raise each qualified dataset's `pressure_max_pascal` to the pressure S0 qualifies (target 30 MPa for carbon dioxide and the light gases). **B** leave 2 and 10 MPa; dense states run with an "outside data range" notice and the 10 MPa input box |
 | O5 | Dense viscosity | **A** dilute viscosity plus the Jossi-Stiel-Thodos residual in `δ` (needs `Tc`, `Pc`, molar mass only; no new data), for dense one-fluid nodes. **B** keep the dilute value (about half the real one for carbon dioxide at 320 K, 10 MPa; to measure) |
 | O6 | Mathias-Copeman curvature step at `Tc` (A6, X34) | **A** leave it and state its size from S0. **B** a C2 blend over a few kelvin |
+| O8 | Pairs of a crude cut with a light gas (today zero) | Options A to D of [SUPERCRITICAL_DATA_REVIEW.md](SUPERCRITICAL_DATA_REVIEW.md), P5; sized in S0 before the choice |
+| O9 | A missing pair between real compounds | **A** the E-PPR78 table already in the data. **B** zero, as today. Moves every mixture with such a pair; sized in S0 |
+| O10 | Critical volume | **A** an appended dataset field (ChemSep for real compounds, the cut's own measured density for a cut). **B** the cubic's own value |
 | O7 | A dense-phase distribution in the hold-fuzz campaign | **A** none; three GameTests and the gates of S2 judge. **B** add one distribution (more campaign time on every later batch) |
 
 ## 3. Stages
@@ -48,7 +51,10 @@ files were split in 0.31.0, so each brief names symbols.
 
 ### S0. Measure (no production code)
 
-Goal: the numbers the decisions and the declared errors rest on.
+Goal: the numbers the decisions and the declared errors rest on. The 2026-09-24 batch measured the supercritical
+region to 10 MPa on the pilot engine (density within 5.9 %, `cp` within 6.6 %, 10.6 % next to box 1); S0 measures the
+network's model and the range above 10 MPa, and does not repeat that work. Data per need, the crude cuts and the
+rule for a lack: [SUPERCRITICAL_DATA_REVIEW.md](SUPERCRITICAL_DATA_REVIEW.md).
 
 - Extend `tools/coolprop-parity/` and its tables under `src/test/resources/science/thermo/coolprop/` with a
   supercritical grid per fluid: `Tr` 1.0 to 2.0 (steps 0.02 to 1.2, then 0.1), `Pr` 0.5 to 4, for carbon dioxide,
@@ -61,6 +67,10 @@ Goal: the numbers the decisions and the declared errors rest on.
   errors it prints (recorded once).
 - In the same test: the `cp` step at `Tc` (A6), the gap between the two products of a split at
   `Σ z (ln K)² = 0.1` on three binaries (O3 A's bound), the dilute against the reference viscosity (O5).
+- Crude cuts: the model against surrogate reference fluids at equal reduced state (n-hexane, n-heptane, toluene,
+  n-decane, n-dodecane for pc01 to pc04); pc05 to pc12 have no surrogate and stay `EXTRAPOLATED`.
+- Pairs: the bubble pressure of a crude with 1 % of carbon dioxide, nitrogen, hydrogen sulfide, hydrogen or methane
+  at 0.5, 2 and 10 MPa, with zero and with each option of O8 and O9.
 - Read (no run) the campaign distributions in `tools/` and state whether any seed reaches `Pr > 1` with `Tr` in 1 to 1.3.
 
 Commands: `./gradlew test --tests "*G3F11SupercriticalRegionTest"` (one run; it loads only the thermo core).
@@ -136,6 +146,8 @@ baseline line for line, unless O7 B adds a distribution.
 
 - O4 A: `pressure_max_pascal` and the evidence text of each dataset S0 qualifies; each record's own `revision` bumped;
   the package hull, the grading and the input box follow with no code. `FORMATS.md`: no row changes.
+- O10 A: `critical_volume_m3_per_mol` appended to the datasets (absent: the cubic's value); the cuts' pressure
+  ranges by surrogate (pc01 to pc04); a pair library for the cuts if O8 is not A. Each record's own revision.
 - O5 A: the residual viscosity in `science/fluid/transport/MixtureViscosity.java`, its own `revision`.
 - Tests: `MaterialCatalogTest`, `FluidPropertyCoverageTest`, `G3F9DataRangeBoundaryTest`, `RangeContinuationGateTest`.
 
