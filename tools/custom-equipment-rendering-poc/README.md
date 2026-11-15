@@ -198,3 +198,5 @@ README.md, bridge.js, Flatten.java, new-world.sh, LayoutCounts.java, *.txt, gui-
 ### Notes
 
 - status corrected 2026-10-26: the batch reached `main`; the folder is kept as its evidence.
+
+Large files (AGENTS.md, batch 2026-11-15-tools-large-files): the 344 images, Gradle results, worlds and other large files of this folder are git-ignored here; their copies are in the main checkout's `research/tools/custom-equipment-rendering-poc/`, at the same relative paths.
