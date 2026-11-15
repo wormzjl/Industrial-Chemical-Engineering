@@ -2809,6 +2809,7 @@
   "gui.icheme.flowsheet.limit.still_f_factor": "Column F-factor",
   "gui.icheme.flowsheet.limit.turbine_spare": "Power spare",
   "gui.icheme.flowsheet.limit.turbine_inlet": "Inlet under its steam class",
+  "gui.icheme.flowsheet.limit.turbine_exhaust": "Exhaust below the LP header",
   "gui.icheme.flowsheet.limit.prime_mover_fuel": "Rated fuel",
   "gui.icheme.flowsheet.limit.prime_mover_spare": "Fuel spare",
   "gui.icheme.flowsheet.limit.type_piston": "Flow, piston",

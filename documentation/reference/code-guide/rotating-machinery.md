@@ -97,7 +97,9 @@ The relief rise is `MAXIMUM_DISCHARGE` less the suction (`reliefRise`). The ejec
 **Turbines, motors, prime movers.**
 
 - Steam turbine: `work = ṁ η_is Δh_is`, the isentropic drop from the inlet's real `P/ρ`; `typicalEfficiency` blends by
-  power on a log scale.
+  power on a log scale. The inlet class (`MachineDuty.Steam`: LP, MP, HP, VHP) and the sections it expands through
+  (`SteamTurbineDesign.sections`: HP through MP and LP, MP through LP) name and draw the machine; the work law is one
+  expansion from the inlet to the exhaust, whatever sections it passes.
 - Motor: IEC ratings with `SPARE` on the duty (`ratingFor`), IE3 efficiency by poles (12 poles read the 8-pole row,
   motors and generators alike), the drive's `DRIVE_EFFICIENCY` in `electricPower`. Every motor runs on its variable-speed
   drive: constant torque below its base speed and constant power above it (`availablePower`), at most `MAXIMUM_RPM`;

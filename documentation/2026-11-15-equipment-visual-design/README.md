@@ -1,6 +1,6 @@
 # Equipment visual design
 
-Batch started 2026-11-15 on `claude/equipment-visual-design-d4e22c`. Status: Planned. No code has changed.
+Batch started 2026-11-15 on `claude/equipment-visual-design-d4e22c`. Status: In progress since 2026-11-15. The combined steam turbine (W1 to W4) is built on `claude/turbine-sections-365c63`, not merged.
 
 Purpose: make the implemented equipment look better and less bare (owner request, 2026-11-15).
 
@@ -45,6 +45,14 @@ Purpose: make the implemented equipment look better and less bare (owner request
   `SteamTurbineSectionsTest`, `ProcessUnitTest`, `ShapeRasterizerTest`, `EquipmentLayoutGoldenTest`,
   `EquipmentShapeCompatTest`. All pass.
 
+- 2026-11-15, W4: `TurbineSizing.exhaust` picks from `TURBINE_EXHAUSTS`. New Must row `Limit.TURBINE_EXHAUST`: the
+  LP header over the tile's exhaust must be above 0, so a tile exhausting at or above 450 kPa is red; lang line added.
+  The tile's run is unchanged. Corpus image `compat/equipment/shapes-12-turbine-sections.snbt`: LP 800 kW to 150 kPa,
+  LP 63 MW to 10 kPa and HP 12.8 MW back-pressure to 1,000 kPa, read with no repair. No facts schema moved. Code guide:
+  `equipment-designs.md`, `rotating-machinery.md`, `simulator-sizing.md`. Tests: `TurbineSizingTest`, `LimitTest`,
+  `FlowsheetUnitsTest`, `SizingCoverageTest`, `FluidFactsCompatTest` (test); `EquipmentShapeCompatTest`,
+  `ShapeRasterizerTest` (equipmentGates). All pass.
+
 ## Documents
 
 - [VISUAL_REVIEW.md](VISUAL_REVIEW.md): the findings and the proposed order.
@@ -54,11 +62,17 @@ Purpose: make the implemented equipment look better and less bare (owner request
 
 ## Code areas
 
-`science/equipment/` (`ProcessUnit`, the `*Design` classes), `client/model/EquipmentShellModel`,
+`science/equipment/` (`ProcessUnit`, the `*Design` classes), `MachineDuty`, `SteamTurbineDesign`, `SteamTurbineTrain`, `Mesh.vault`, `science/flowsheet/sizing/TurbineSizing`, `Limit.TURBINE_EXHAUST`, `network/NetworkProtocol`, `client/model/EquipmentShellModel`,
 `assets/icheme/textures/block/`.
 
 ## Open items
 
 - The owner's four decisions at the end of the review.
+- Combined steam turbine: the owner's answers to T1 to T3. Built with A, A, A, and each is one constant
+  (`MachineDuty.LP_STEAM_TEMPERATURE`, `SteamTurbineDesign.DRAFT_STEAM`/`DRAFT_EXHAUST`, `MachineDuty.MP_STEAM_TEMPERATURE`).
+  The W1 table shows every class wearing at 10 to 20 kPa (`Wear.WET_EXHAUST_ONSET` 1 %), so T1's condition failed and
+  a fresh HP-to-10-kPa draft wears. A turbine wear onset on the game's scale would be its own change.
+- Combined steam turbine: the owner's look at the six drawings (worktree `tmp/turbine-sections/views/`).
+- Combined steam turbine: `CHANGELOG.md`, the translation commit and the version wait for the merge.
 - Scope (owner, 2026-11-15): the boilers and gasifiers belong to another work and are left out.
 - A sprite render or in-game look for the findings marked "sprite" (K5, K9, K11).
