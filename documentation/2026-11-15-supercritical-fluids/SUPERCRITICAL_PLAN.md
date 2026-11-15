@@ -187,6 +187,31 @@ what it registers and closes mass and energy exactly).
 Done: chain-100 exact, the 33 junction lines and the printed lines identical (final lane); the campaign equal to the
 baseline line for line, unless O7 B adds a distribution.
 
+#### S2 as carried out (main thread, 2026-11-15, after S1 and S3)
+
+S2 is split in three, and four points of the list above changed after the code was read:
+
+- **S2a** (structure, every reference exact): the root's `PhaseTraits` on `HydrocarbonModel.Phase`;
+  `State.oneFluidSlot()`, `dense()`, `reducedDensity()`.
+- **S2b** (stated shift, dense states only): one slot viscosity function (dilute plus the residual, with an onset
+  between reduced densities 0.25 and 0.5 so that gases below 0.25 keep their values); the film of a single-phase point
+  by reduced density (gas film to 0.5, liquid film from 1.5); the acoustic velocity limit for a dense fluid in the
+  liquid slot; the heat capacity ratio of a dense fluid; the slot rule O2 A; `DenseFluidGatesTest`.
+- **S2c** (a later brief): the typed "no saturation", the movers' suction, level head, boil-up, the three GameTests.
+
+1. **The ports need no law.** `PhaseDraw.order` ends every port's order with the phases it does not prefer, so a
+   node holding one phase is drawn through any port today, whatever its slot. Item 4's port rule is dropped.
+2. **The viscosity is wired in one place.** Seven callers read `model.viscosity.vapor` or `.liquid` on a slot
+   directly; all go through one slot function. `liquidSource`'s `VAPOR_DATA` stays for a supercritical compound
+   dissolved in a subcritical liquid (item 5 said deleted).
+3. **The film reads the reduced density of every single-phase point, not only of a dense node.** Ordinary liquids
+   (reduced density near 3) and gases (below 0.5) keep their film to the bit; the rule needs no isotherm test. Its seam
+   is at a bubble point above `Tr` 0.96; the alternative's is at `Tc` near `Pc`. Both go to the owner as an option
+   in S2's review, with the bounds 0.5 and 1.5.
+4. **The cold campaign reaches dense states** (nitrogen at 126 to 170 K up to 6 MPa, reduced density 0.3 to 1.8), so
+   its lines can move with S2b; "equal to the baseline line for line" holds for the bundled campaign only. The final
+   lane's classifier judges the cold one.
+
 ### S3. Data: ranges and viscosity (materials lane; beside S1)
 
 - O4 A: `pressure_max_pascal` and the evidence text of each dataset S0 qualifies; each record's own `revision` bumped;

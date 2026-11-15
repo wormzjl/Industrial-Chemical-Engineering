@@ -50,6 +50,9 @@ simulator: continuous properties, no label-driven jumps, no critical-band hold.
   sub-thread wrote them again (`acd894c93`: only `basis.revision` differs, checked by a JSON comparison) and ran the example
   readers and the four sample gates green. The compat corpus and the neural files are untouched.
 
+- 2026-11-15: S2 split by the main thread after reading the network code (plan, "S2 as carried out"): S2a structure,
+  S2b the stream laws, S2c the rest. Brief S2a/S2b written (`tmp/supercritical-briefs/BRIEFS.md`).
+
 ## Documents
 
 - [SUPERCRITICAL_LIMITS_REVIEW.md](SUPERCRITICAL_LIMITS_REVIEW.md): expected behaviour, what the code does, the
