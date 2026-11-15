@@ -27,9 +27,9 @@ The final lane ran once on `claude/fluid-step-jacobian` at `4ee2cb0f8` (tree cle
 - **Tool folder:** `tools/fluid-step-cost/` holds the census probe, the bench scripts and readers in `bench/`, and the observer hook as `pattern-observer.patch`. The hook left `src/main` in `cdb2833e1`.
 - **Code guide:** updated, snapshot `cdb2833e1`.
 - **Translation:** no translation commit; `en_us.json` did not change.
-- **CHANGELOG:** entry under Unreleased. `mod_version` is not changed; the owner chooses it.
+- **CHANGELOG:** the entry is under 0.31.1 (the owner's choice: "Merge as 0.31.1"); `mod_version` is 0.31.1.
 - **Logs:** `tools/merge-lane/logs/fluid-step-cost-final-lane-logs-2026-11-15.tar.gz` in the main checkout (git-ignored).
-- **The five moved lines:** accepted by the owner on 2026-11-16, in reply to "accept the moves as path splits at events": "it's fine".
+- **The five moved lines:** accepted by the owner on 2026-11-15, in reply to "accept the moves as path splits at events": "it's fine".
 - **Status:** every new campaign hold is a wall-deadline hold that was clean on its replay alone. Ready for the merge.
 
 ## The five printed lines that move beyond the Newton tolerance
@@ -48,5 +48,5 @@ The bound the brief named (the closure 1e-11, the step's Newton 1e-9) holds for 
 | # | Finding | Proposal |
 |---|---|---|
 | 1 | `affected.mjs select` names `NativeColumnSolverTest` for `columnGates`, which excludes it, so the task fails with "No tests found" whenever that class is the only one selected (here and in the unit 6 lane). | Give the class to `nativeSmoke` in the selection, or leave out of a task the classes it excludes. A tools change, not made here. |
-| 2 | Five printed lines move beyond the Newton tolerance (table above); no asserted reference moved. Accepted by the owner, 2026-11-16: "it's fine". |
+| 2 | Five printed lines move beyond the Newton tolerance (table above); no asserted reference moved. Accepted by the owner, 2026-11-15: "it's fine". |
 | 3 | The lane's `test` filters pass 8,000 characters, so `test` runs whole (2,956 tests against the 237 classes selected). | None for this batch; the lane's existing rule. |

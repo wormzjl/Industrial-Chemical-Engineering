@@ -1,6 +1,6 @@
 # 2026-11-15 fluid step cost
 
-**Status:** In progress since 2026-11-15. Branch `claude/fluid-step-jacobian`, base `main` e9edc974b (0.31.0).
+**Status:** Implemented 2026-11-15 (0.31.1). Branch `claude/fluid-step-jacobian`, base `main` e9edc974b (0.31.0).
 
 Owner request, 2026-11-15: "do the analytic Jacobian and workspace items first", before any decision on a Rust port of the fluid network solver. A performance task.
 
@@ -24,7 +24,8 @@ Owner request, 2026-11-15: "do the analytic Jacobian and workspace items first",
 - 2026-11-15: **S3** measured (plan, section 4h). A bench profile `mixed400` (400 ladders, 300 awake islands, 7,942 reservoirs) and five runs on the S4 code: one worker carries 179 awake islands in real time (occupancy 0.94), two carry 283 (0.95), the automatic sizing (12 workers) all 300 at occupancy 0.22 and 0.64 s from ready to published. The step is dearer under load on the same islands and intervals: 1.22 times with two workers kept busy, 1.7 to 1.9 times with twelve at work; the machine's other work, the collector and the kernel are ruled out by a control run and the JFR; the split between shared cores and memory traffic is not measured (the machine does not get quiet; the owner, 23:05). Heap: about 10 MB an island.
 - 2026-11-15: the owner: "Prepare merge". Merge preparation on the branch (`main` has not moved from `e9edc974b`): the `CHANGELOG.md` entry under Unreleased; the code guide (`fluid-solver.md`, `fluid-step.md`, `fluid-thermo-port.md`, `fluid-interval.md`, `verification.md`: the vessel closure's Jacobian, the tangents' storage form, the bench's profile and worker switches, line counts, snapshot `cdb2833e1`); the tooling cleanup (the census's observer hook out of `src/main`, `cdb2833e1`, kept as `tools/fluid-step-cost/pattern-observer.patch`; the bench scripts and readers in `tools/fluid-step-cost/bench/`); `compileJava`, `compileTestJava`, `compileFluidGameTestJava` pass after it. No translation commit (`en_us.json` unchanged). Kept in `src/main`: `FluidThermodynamics.standaloneWorkspacesBuilt`, read only by `PreparedRefillTest`, as the twin of `Prepared.workspacesBuilt` that `main` holds; the owner may ask for both to go.
 - 2026-11-15: **final lane** at `4ee2cb0f8` ([MERGE_REVIEW.md](MERGE_REVIEW.md)), once, by an Opus sub-thread. Tests 2,956, 0 failures; chain-100 exact; GameTests 98 of 98; junction counters 33 of 33 identical; `MIXED_GAS_COST` 313 solves, 318.7 to 125.1 MB. Campaign cold 992 to 993, bundled random 995 to 994 (995 counting seed 47 as the baseline did), defaults 1000, after one replay alone of the new wall-deadline holds (cold 6 and 826, bundled 707: clean, at the baseline's end ticks). No asserted reference moved; nothing re-recorded. Five printed lines move beyond the Newton tolerance by trajectory: the blanket drain splits at one event after agreeing to 3e-15, and `REFUTED_PROPOSAL`'s liquid-full nodes move 4 % in pressure. `columnGates` "No tests found" is a lane-tool defect, as in the baseline.
-- 2026-11-16: the owner accepted the five moved printed lines as path splits at events: "it's fine". The review ends "ready for the merge".
+- 2026-11-15: the owner accepted the five moved printed lines as path splits at events: "it's fine". The review ends "ready for the merge".
+- 2026-11-15: the owner: "Merge as 0.31.1". `mod_version` 0.31.1, the CHANGELOG heading, the index rows; the branch merged into `main` (not pushed).
 
 ## Documents
 
@@ -43,6 +44,6 @@ Owner request, 2026-11-15: "do the analytic Jacobian and workspace items first",
 - `wallClosure` decodes the base point three times a build (the Newton's residual, `linearising`, the sweep); keeping the bracket's state would save one. Not done: under 1 % of the step.
 - The kept bundles' heap (1.7 MB an island): kept as built. S3 reads about 10 MB of heap an island in all, so the bundles are a sixth of it; dropping the probe bundles at the end of a step would halve them and build one workspace a node a step again. Proposed: leave it.
 - The closure's own bundle (1.43 GB a minute) and `junctionClosure`'s difference Jacobian stay as they are (plan, section 4c).
-- S3 is measured. The owner's decision: stop here and merge, analytic rows, or the Rust gate. Throughput is not short (plan, section 4h); what a faster step buys is the latency of a large island and the cost under full load.
+- After the merge the owner's open decisions are analytic rows and the Rust gate (stages b to d). Throughput is not short (plan, section 4h); what a faster step buys is the latency of a large island and the cost under full load.
 - Not measured: `mixed400` with 4 workers (separates shared cores from memory traffic under load) and the baseline on `mixed400`; both need a machine with nothing else running.
-- The final lane has run ([MERGE_REVIEW.md](MERGE_REVIEW.md)). The owner accepted its five moved printed lines (2026-11-16). Open: the version choice and the merge. The lane tool's `NativeColumnSolverTest` selection for `columnGates` is a tools item (review, finding 1).
+- The final lane has run ([MERGE_REVIEW.md](MERGE_REVIEW.md)). The owner accepted its five moved printed lines (2026-11-15). The lane tool's `NativeColumnSolverTest` selection for `columnGates` is a tools item (review, finding 1).
