@@ -110,6 +110,14 @@ Purpose: make the implemented equipment look better and less bare (owner request
   own from `main`, `2026-11-15-nozzle-joints`) and K16 (the air cooler's largest bay;
   [AIR_COOLER_BAY_PLAN.md](AIR_COOLER_BAY_PLAN.md), not built).
 
+- 2026-11-15, the larger air cooler bay (A-W1 to A-W3, `885e27f3c` on `claude/relief-sprites-10dd59`): bays to 6 m by
+  12 m, build notes in [AIR_COOLER_BAY_BUILD.md](AIR_COOLER_BAY_BUILD.md) (the measured size table, the two moved sizing
+  results of the crude sample, what the plan had wrong). Merged into the batch branch (`cebe2165f`, owner: "Merge it").
+  Tests on the merged tree: equipmentGates `EquipmentLayoutGoldenTest`, `ProcessUnitTest`, `ShapeRasterizerTest`,
+  `EquipmentShapeCompatTest`, `SteamTurbineSectionsTest`, `ConstructorDefaultsTest`, `MachineRpmDesignTest`,
+  `RenderDetailTest`, `AirCoolerBayTest`; test `SheetSizingTest`, `SizingCoverageTest`, `FlowsheetUnitsTest`,
+  `UnitSizingTest`, `ConstructorColumnTest`. All pass. holdGates `CrudeUnitSampleTest` (its five nested classes), `UtilityRegulationTest`: all pass.
+
 ## Documents
 
 - [VISUAL_REVIEW.md](VISUAL_REVIEW.md): the findings and the proposed order.
@@ -135,3 +143,8 @@ Purpose: make the implemented equipment look better and less bare (owner request
 - Combined steam turbine: `CHANGELOG.md`, the translation commit and the version wait for the merge.
 - Scope (owner, 2026-11-15): the boilers and gasifiers belong to another work and are left out.
 - A sprite render or in-game look for the findings marked "sprite" (K5, K9, K11).
+- Air cooler, for the owner: the constructor's starting bay moved from 2.5 by 5 m to 4 by 9 m (recommended: back to
+  2.5 by 5 m); the residue cooler's 0.22 bar on one long train (a sizing-rule question); access steel on large bays.
+- Relief sprites: the shader-pack variant needs an owner-run client check (R3).
+- Status: the relief sprites, the combined steam turbine and the larger air cooler bay are built and merged into the
+  batch branch; nothing is on `main`. `CHANGELOG.md`, the translation commit and the version wait for the merge.
