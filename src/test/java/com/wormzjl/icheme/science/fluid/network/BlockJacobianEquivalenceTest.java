@@ -34,8 +34,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * Every such entry is then wrong by the whole difference of the two targets divided by the difference step.
  */
 class BlockJacobianEquivalenceTest {
-    /** The model and the island builders below are read by {@code DeclaredPatternTest} too, on the same fixtures. */
-    final FluidThermodynamics model=FluidTestSupport.networkModel();
+    private final FluidThermodynamics model=FluidTestSupport.networkModel();
     private static final List<String> DRY=List.of("Nitrogen","Methane","Ethane","Propane","N-butane","N-pentane","N-hexane","Benzene","Toluene",
             "crude_pc03","crude_pc06","crude_pc09","CarbonDioxide");
     private static final double[] DRY_MOLES={0.06,0.12,0.03,0.03,0.05,0.05,0.04,0.16,0.10,0.08,0.12,0.08,0.08};
@@ -50,7 +49,7 @@ class BlockJacobianEquivalenceTest {
                 model.solids.require("icheme:demo_particle"),ParticleSize.micrometres(micrometres),mass)));
     }
     /** {@code count} reservoirs in series, the first holding 100 kg of 100 um particles. */
-    PassiveNetwork chain(int count) {
+    private PassiveNetwork chain(int count) {
         var nodes=new ArrayList<PassiveNetwork.Reservoir>();var pipes=new ArrayList<PassiveNetwork.Pipe>();
         for(int i=0;i<count;i++) {
             var state=water(i==0?160000:150000-100*i);
@@ -63,7 +62,7 @@ class BlockJacobianEquivalenceTest {
     /** A junction fed by a filter edge and by a plain edge, draining into one finite reservoir. The
      * filter keeps every particle it is handed, so the junction's incoming solids come from the
      * plain edge alone and its own solid rows are the mass-fraction-scaled junction form. */
-    PassiveNetwork filterJunction() {
+    private PassiveNetwork filterJunction() {
         var nodes=List.of(
                 new PassiveNetwork.Reservoir(1,0,water(200000).withSolids(grade("100",80)),PassiveNetwork.NodeKind.GENERATOR),
                 new PassiveNetwork.Reservoir(2,0,water(180000).withSolids(grade("60",40)),PassiveNetwork.NodeKind.GENERATOR),
@@ -81,11 +80,11 @@ class BlockJacobianEquivalenceTest {
      * move (the islands of the cost baseline): the dry list, with water (a gas and two liquids in every node) or with
      * hydrogen sulfide and methyl mercaptan; {@code crystal} puts 5 kg of the model's ice in the first node.
      */
-    PassiveNetwork mixtureChain(FluidThermodynamics view,boolean water,boolean polar,boolean crystal) {
+    private PassiveNetwork mixtureChain(FluidThermodynamics view,boolean water,boolean polar,boolean crystal) {
         return mixtureChain(view,water,polar,crystal,false);
     }
     /** {@code capped}: 8 bar in the first node and 2 m pipes, so every flow stands at its velocity cap. */
-    PassiveNetwork mixtureChain(FluidThermodynamics view,boolean water,boolean polar,boolean crystal,boolean capped) {
+    private PassiveNetwork mixtureChain(FluidThermodynamics view,boolean water,boolean polar,boolean crystal,boolean capped) {
         var ids=new ArrayList<>(DRY);var amounts=new ArrayList<Double>();
         for(double m:DRY_MOLES)amounts.add(m);
         if(polar){ids.add("HydrogenSulfide");amounts.add(0.04);ids.add("MethylMercaptan");amounts.add(0.02);}
@@ -107,7 +106,7 @@ class BlockJacobianEquivalenceTest {
         }
         return new PassiveNetwork(nodes,pipes);
     }
-    List<String> list(boolean polar) {
+    private List<String> list(boolean polar) {
         var ids=new ArrayList<>(DRY);
         if(polar){ids.add("HydrogenSulfide");ids.add("MethylMercaptan");}
         return ids;
