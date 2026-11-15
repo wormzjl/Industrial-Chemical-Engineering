@@ -192,16 +192,17 @@ library added for other compounds moves no identity of a view without them. Assa
 | Viscosity: power sum 1..16 terms, table 2..2048 nodes, cap `MAXIMUM_VISCOSITY` | `ViscosityCorrelation` |
 | Solid reference 298.15 K | `SolidMaterialCatalog.SolidMaterial.REFERENCE_TEMPERATURE` |
 
-**Bundled data** (all `icheme:`). Packages, all on the method `crude_pr78` (`crude-pr78-r3`): `tjl20_methane` (methane,
+**Bundled data** (all `icheme:`). Packages, all on the method `crude_pr78` (`crude-pr78-r4`): `tjl20_methane` (methane,
 six light ends, the 12 cuts; the column presets' package), `tjl20_methane_nitrogen` (with Nitrogen) and the network
-package `refinery` (`refinery-tier1-r4`: the 24 Tier 1 compounds, CarbonDioxide, Ethanol, the CO2-I crystal; 46
-compounds, the world list with water 47). `FluidMaterialCatalog.NETWORK_PACKAGE` is `icheme:refinery`; the runtime
+package `refinery` (`refinery-tier1-r5`: the 24 Tier 1 compounds, CarbonDioxide, Ethanol, the rare gases Argon, Neon,
+Helium, Krypton and Xenon, the CO2-I crystal; 51 compounds, the world list with water 52; the rare gases' pairs in
+`dwsim_refinery_pr78_rare_gases`). `FluidMaterialCatalog.NETWORK_PACKAGE` is `icheme:refinery`; the runtime
 reads the network record (`networkPackage(catalog)`). The column refuses `refinery` itself (its crystal) and runs on
-views without CO2. Record counts: components 47, properties 47 (`cubic_water` among them: water's record for the
-cubic, critical constants, a Mathias-Copeman alpha, group counts), interactions 3, methods 1, group_interactions 2
+views without CO2. Record counts: components 52, properties 52 (`cubic_water` among them: water's record for the
+cubic, critical constants, a Mathias-Copeman alpha, group counts), interactions 4, methods 1, group_interactions 2
 (`eppr78_2022`, `modified_unifac_dortmund`), crystals 2 (`crystal_carbon_dioxide_i`, `crystal_ice_ih`), water 1
 (`water-iapws95-shomate-r4`, with `datum_vaporization_enthalpy`), packages 3, assays 4 (the generated grades of
-`tools/crude-grades/`), presets 9 (one column preset, `medium_crude`, and eight fluid ones), networks 1, transport 4,
+`tools/crude-grades/`), presets 9 (one column preset, `medium_crude`, and eight fluid ones), networks 1, transport 5,
 solids 1, fuels 5. The game ships no spine, no E-PPR78 package; the kinds and their code stay. Field reference:
 [MATERIALS.md](../../../MATERIALS.md) (this chapter and the code win where they differ).
 

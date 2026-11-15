@@ -22,7 +22,7 @@ Paths under [`src/main/java/com/wormzjl/icheme/client/`](../../../src/main/java/
 | **Chunk models (`model/`)** | | |
 | `EquipmentShellModel` | A shell cell's chunk model: quads per (`ShellVariant`, `CellKey`) from `ShapeRasterizer.fixedSurface`, moving parts left out, baked shade and sheen (BAKED) or flat sprites and unshaded colour (FLAT), paint channel as tint index, `Layers` (solid, glass, all), flow arrows baked in; `ATLAS`, `sprite` (current variant); shared with the line models: `bake`, `paintedLines`, `painted`, `lineTints` | 350 |
 | `ShellVariant` | No Minecraft class: BAKED or FLAT (`of(pbrTextures, packInUse)`), the cache `Key`, the flat sprites' fallback (`flatSprites`) | 43 |
-| `FluidDeviceModel` | A pipe or fitting: key = block state + `FluidDeviceBlockEntity.Drawn` (bore, faces, flanges, spool, transition offsets) + a `Look` (fitting, paint mask); polygons from `LineGeometry` and the fitting geometries | 183 |
+| `FluidDeviceModel` | A pipe or fitting: key = block state + `FluidDeviceBlockEntity.Drawn` (bore, faces, flanges, spool, transition offsets) + a `Look` (fitting, paint mask); polygons from `LineGeometry` and the fitting geometries; a generator block's own `"body"` (`intake`, `hopper`) from `IntakeGeometry`, `HopperGeometry` | 188 |
 | `PipeRackModel` | A rack cell: the frame and each lane on painted sprites, tint index 2 × option + channel; key `Look` | 147 |
 | `ConduitModel` | A data or FE conduit block's model from its cable facts | 171 |
 | `ShaftModel` | The immutable hexagonal shaft model (`ShaftGeometry`) | 147 |

@@ -46,6 +46,10 @@ public class EngineeringExport {
   extra("INLINE_PUMP",InlineMoverGeometry.polygons(line,false,false),true,true);
   extra("INLINE_COMPRESSOR",InlineMoverGeometry.polygons(line,true,false),true,true);
   extra("CONTROL_VALVE",ValveGeometry.pressure(line,false),false,false);
+  // Batch 2026-11-15-fluid-interfaces: the one-block generators, a pipe joined below at 0.05 m bore.
+  var generator=new LineGeometry.Key(com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.GENERATOR,2,1,PipeSizes.code(PipeSizes.outside(.05)),0,0,false);
+  extra("GAS_INTAKE",IntakeGeometry.polygons(generator,RenderDetail.NORMAL),false,false);
+  extra("LIQUID_HOPPER",HopperGeometry.polygons(generator,RenderDetail.NORMAL),false,false);
   for(boolean level:new boolean[]{false,true}){var sensor=new ArrayList<Mesh.Polygon>();for(var q:InstrumentGeometry.transmitter(level)){var v=q.vertices();double[] uv=new double[v.length/3*2],n=new double[v.length];sensor.add(new Mesh.Polygon(v,uv,n,Mesh.Material.MACHINE));}extra(level?"LEVEL_SENSOR_HOUSING":"SENSOR_HOUSING",sensor,false,false);}
   var instrumentAssets=new LinkedHashMap<String,Object>();
   for(boolean thermometer:new boolean[]{false,true})instrumentAssets.put(thermometer?"temperature_connection":"pressure_connection",InstrumentGeometry.connection(new double[]{0,-.4,0},true,thermometer).stream().map(q->Map.of("v",q.vertices(),"colour",q.colour())).toList());

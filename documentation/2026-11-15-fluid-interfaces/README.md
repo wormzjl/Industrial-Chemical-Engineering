@@ -51,6 +51,7 @@ The owner accepted the plan's decisions D1 to D12 on 2026-11-15: "Liquid hopper 
   - Removal: breaking the block removes its device; the commit's sweep removes its facts (`FluidWorldAuthority`, the W3 converter rule). The Forge tank's contents go with the block, as a shaped converter's do (stated choice; nothing drops).
   - `ConvertersTest` (8, 2 new): a hopper refuses a gas, a reverse-only fluid and lava, takes 4 000 mB of water; over 40 slices it books 0.100 L per process second (to 1e-15) and the Forge litres out equal the booked mass over the rule's density (to 1e-6); emptied at 4 L/s (a test's setting) every mB is in the line, 3 988.2 kg at 997.05 kg/m³, and in the tank to 1e-9; behind a closed cutoff it gives 0 L and keeps all 3 000 mB (its status reads CONVERTING: a plan's status, the booked rate 0). The test harness grows the hopper's island as the world's tick does (`EventPathWorld.grow`). `LiquidHopperGameTests` (a water bucket empties in, lava refused, nothing drains, the facts leave with the block): compiled, not run (final lane).
   - Tests (filtered, 4 workers): ConvertersTest 8, FluidFactsCompatTest 22, FluidCheckpointCodecTest 15, FluidCheckpointFormatTest 8, BuiltInInputsTest 5, ControlSystemTest 21, ConverterDoorTest 5, GuideCoverageTest 12, McpGameplayRegressionTest 3, PressureValveContinuationTest 3, WorldTopologyLedgerTest 15, FluidDeviceSpecDomainTest 3, PipePresentationTest 14, TutorialTextTest 6, GasIntakeTest 4, PhysicalFluidTopologyTest 34, DcsGeometryTest 4 (equipmentGates): all pass. No reference moved.
+- 2026-11-15: W8, this branch's part. Code guide: `materials.md` (`refinery-tier1-r5`, 51 compounds, world list 52, `crude-pr78-r4`, record counts), `runtime-units.md` (the hopper, `ConverterUnit.hopper`), `client-screens.md` (`ConverterDoor.plant`), `equipment-geometry.md` (`IntakeGeometry`, `HopperGeometry`), `client-rendering.md` (the model's `"body"`), `fluid-laws.md` (`Air`). `tools/equipment-drawings` exports `GAS_INTAKE` and `LIQUID_HOPPER` (`EngineeringExport.extra`, a pipe joined below at 0.05 m bore); the two sheets, inspected, are in `tmp/fluid-interfaces/views/` (`gas-intake.png`, `liquid-hopper.png`; run `tmp/equipment-drawings/20261115-155304-179dd7`): 0.80 × 0.90 m and 0.88 × 0.96 m, outlet stub and flange below. Lang (`en_us.json` only): the two blocks and their tutorial lines. Documents and tools only, no test run.
 
 ## Documents
 
@@ -58,12 +59,15 @@ The owner accepted the plan's decisions D1 to D12 on 2026-11-15: "Liquid hopper 
 
 ## Code areas
 
-(filled in per package)
+- Data: `data/icheme/icheme/materials/` (the five rare gases, `refinery`, `crude_pr78`, `dwsim_refinery_pr78_rare_gases`, transport), `tools/compound-import`.
+- Runtime: `FluidDeviceSpec` (`ambient`), `FluidFacts` (schema 26), `Placement` (`intake`, `hopper`), `FluidWorldAuthority` (`placeIntake`, `placeHopper`, converter settings, alarms, view), `PhysicalFluidTopology` (`boundaryHalf`, the hopper's port rule), `Converters`, `ConverterUnit`; `science/fluid/network/Air`.
+- World and client: `FluidDeviceBlock` (`Intake`, `Hopper`, `stateFor`, the bucket), `FluidDeviceBlockEntity.hopperTank`, `ConverterPort` (fill only), `IChemE.registerCapabilities`, `ModBlocks`, `ModItems`, `ModBlockEntities`, `ModCreativeTabs`, `FluidNetwork` (edit refusals), `FluidDeviceScreen`, `ConverterDoor`, `FluidDeviceModel`, `IntakeGeometry`, `HopperGeometry`.
+- Tests: `RareGasPropertiesTest`, `GasIntakeTest`, `ConvertersTest`, `FluidFactsCompatTest` and `compat/fluid/schema-26/`, `EventPathWorld.grow`; GameTests `GasIntakeGameTests`, `LiquidHopperGameTests`.
 
 ## Open items
 
-- W8 (this branch's part): code guide rows, the four renders' share (intake, hopper), README.
 - Not checked in game: the intake's look and its screen (no switch, no fields); the hopper's look, its bucket use, its screen (Forge tank, rule, booked rate only).
 - A hopper (and any converter) on a blocked line shows CONVERTING while it books 0 L/s: the status reads the plan, not the booking. Proposal: report IDLE when a slice booked nothing (owner choice).
 - `V3AcceptanceAuditor` adds its out-of-range notice without the 16-entry cap: a package with 16 evidence lines fails every column solve that reaches the notice. Proposal: cap it like the other notices, or keep the package's evidence out of the notice budget (owner choice).
-- Not run for W1: the fluid GameTests and chain-100 (final lane).
+- Not run on this branch: the fluid GameTests (`GasIntakeGameTests`, `LiquidHopperGameTests`, compiled), chain-100, the whole affected set (`affected.mjs`: 128 test classes, mostly through `en_us.json`): the final lane.
+- At the merge: the hopper's JEI catalyst (crude-jei branch), the translation commit, CHANGELOG and the version bump.
