@@ -151,7 +151,26 @@ The time is one pair, and the run-to-run spread is not measured: the 4 % is a ga
 - Expected (est.): the closure's Jacobian from 17.4 % of the step's CPU to about 5 % (the step's sweep pays 7.4 % for 1.3 million tangent decodes and 31,000 node tangents; the closures need 717,000 and 16,674); `residualEvaluationsInJacobian` from 716,866 to the step's own.
 - Gates: a new `WallClosureJacobianTest` after `BlockJacobianEquivalenceTest` (the entries against the column-by-column differences of `residual` inside the bracket, relative 1e-5 of each row's largest entry, on a two-phase vessel, a liquid-full taut one, a slack bag, one with an aqueous slot, one with solids; a trial outside the box gives -1); `PhaseLayoutTest`, `SparseNewtonTest`, `PassiveStepSolverTest`, `SolidClosureFeasibilityTest`; the 200-seed quick check (no new hold class); chain-100 in its declared mode, deviations inside the bound.
 
-Order: S2b, S4, then S1's F1 and F2 (the pattern forms act on the 32.5 % of the LU, of which the reach search is 10.3 %; the census says their net may be small).
+### S2b measured (2026-11-15)
+
+Built by a subagent (`04cabf5f6`), merged as `bb771a9eb`: the sites converted are the private `state`, `slotPhase`, `tangents` and `adopt`; `crystalAnswer` (not on a step's path) and the constructor are left. One bench pair on `bb771a9eb` (`tmp/pattern-census/bench-s2b/`), against the two above:
+
+| | Baseline | S2 | S2b | S2b against the baseline |
+|---|---|---|---|---|
+| Island step, mean (ms) | 34.83 | 33.52 | 30.64 | -12.0 % |
+| Island step, median (ms) | 34.54 | 32.85 | 30.03 | -13.1 % |
+| Island step, p95 (ms) | 56.12 | 55.25 | 48.90 | -12.9 % |
+| Worker CPU a step, mean (ms) | 32.92 | 31.77 | 29.11 | -11.6 % |
+| Worker occupancy | 0.261 | 0.251 | 0.230 | |
+| Bytes allocated under the fluid step, the measured minute (GB) | 35.57 | 28.35 | 20.06 | -43.6 % |
+| of them kernel workspaces (GB) | 14.26 | 9.83 | 1.45 | |
+| Collections in the measured minute (their time, ms) | 23 (180) | 20 (157) | 11 (118) | |
+| Heap after a collection (GB) | 1.77 to 2.13 | 1.93 to 2.30 | 2.05 to 2.39 | |
+| Every solver counter | | identical | identical | |
+
+Three runs in one direction, one pair each; the spread between runs of one code is still not measured. The collector's own time is 0.2 s of the minute in every run, so the gain is not its pauses: a kernel workspace is about 50 KB, written whole when it is built, and 14 GB a minute of that went through the workers' caches. The 1.45 GB left is the closure's own bundle.
+
+Order: S2b (done), S4, then S1's F1 and F2 (the pattern forms act on the 32.5 % of the LU, of which the reach search is 10.3 %; the census says their net may be small).
 
 ## 5. Commands
 
