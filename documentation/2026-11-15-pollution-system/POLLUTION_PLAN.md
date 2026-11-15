@@ -38,7 +38,7 @@ Thresholds, the same for every kind:
 
 A player at 20 HP dies in 10 s at the IDLH and in 3.3 s at three times the IDLH.
 
-Draft potency table for the compounds of `icheme:refinery`. The IDLH values are from memory of the NIOSH Pocket Guide; WP1 reads each from its NIOSH page and cites it in the record, as the `flammability` records do. The LFLs are in the datasets already.
+Potency table for the compounds of `icheme:refinery`. WP1 read each value from its NIOSH Pocket Guide page on 2026-11-15 and cites it in the record's `source`. Two differences from the first draft: n-butane has an IDLH (1600 ppm, toxic); isobutane (N.D.) and isopentane (no NIOSH entry) have none. Carbonyl sulfide: 150 ppm, the interim AEGL-3 60-minute value (EPA), estimated. The LFLs are in the datasets already.
 
 | Compound | Channel | IDLH, ppm (draft) |
 |---|---|---|
@@ -124,7 +124,7 @@ Storing indices and not compounds loses the compound's name (a later detector sh
 
 **Expected numbers** (open cube, defaults):
 
-- 1 mol/s of H2S (34 g/s) from a tank roof: 20 mol per pass, 119 ppm, `ΔI_toxic = 1.19` per pass. The source cube stands near 1.5 to 2 (lethal), its neighbours near 0.2 to 0.3 (debuff), the second ring below 0.1.
+- 1 mol/s of H2S (34 g/s) from a tank roof: 20 mol per pass, 119 ppm, `ΔI_toxic = 1.19` per pass. The source cube stands at 0.9 after a pass and 2.1 just after the next release lands (lethal at its peak), a face neighbour near 0.49 (damage level 0.3), the second ring near 0.14 (debuff). (Corrected 2026-11-15 from WP2's steady state, held by `PollutionFieldTest`; the first draft said 1.5 to 2, 0.2 to 0.3 and below 0.1.)
 - 10 mol/s of methane: `ΔI_comb = 0.024` per pass, steady near 0.03: no hazard in the open. A flammable open cube needs about 200 mol/s (3.2 kg/s), or the same leak in a room with `φ·V` of a few hundred m³: 10 mol/s reaches the LFL in a 200 m³ room in one pass.
 - Cost: one pass over 2000 active cubes is about 50 000 float operations, well under 1 ms.
 
