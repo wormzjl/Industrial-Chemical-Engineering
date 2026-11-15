@@ -44,6 +44,25 @@ Ruled out:
 | O10 | Critical volume | **A** an appended dataset field (ChemSep for real compounds, the cut's own measured density for a cut). **B** the cubic's own value |
 | O7 | A dense-phase distribution in the hold-fuzz campaign | **A** none; three GameTests and the gates of S2 judge. **B** add one distribution (more campaign time on every later batch) |
 
+## 2a. After S0 (2026-11-15): what the measurement changes
+
+S0 is done ([SUPERCRITICAL_QUALIFICATION_REVIEW.md](SUPERCRITICAL_QUALIFICATION_REVIEW.md); the main thread checked the
+test results, the Gradle logs and the diff: no file under `src/main` changed). The recommendations of section 2, revised:
+
+| Id | Measured | Recommendation now |
+|---|---|---|
+| O3 | No request failed on 36 isotherms of four binaries. Answering one fluid at the first tie line below 0.1 is off by -2.7 to +17 % in density (the two products still differ up to 2.4 times); at a tie line of 0.03 or less, within 1 % (two states) | **B**: remove boxes 3 and 4 only; an in-band failure stays a hold. A is not taken as written. If S2's GameTests meet such a hold, a fallback below a tie line of 0.03 is the option to measure then |
+| O4 | Outside the band, density within 7 % and `cp` within 12 % to 30 MPa for carbon dioxide, nitrogen, methane, ethane, propane, and hydrogen from 273 K; ethylene but one state (`cp` -12.1 % at the edge of box 1); bundled n-hexane to 4.6 MPa, toluene to 6.2 MPa. Mixtures (three binaries, 105 states): within 5.0 % | **A** for those seven, ethylene with 13 % declared. First one more measurement: compressed liquids from 2 to 30 MPa, which the same range box covers and S0 did not measure |
+| O5, O10 | Dilute viscosity is 13 to 96 % of the reference (carbon dioxide at 319 K, 10 MPa: 49 %). With the residual: -16 to +8 % on the reference critical density, -3 to +28 % on the cubic's | **O5 A with O10 A** (the critical volume as a dataset field). The published coefficients are a tenth of those in S0's brief; the test uses the published ones |
+| O6 | Only water has a Mathias-Copeman alpha; its `cp` step at `Tc` is 1.5 % at `Pr` 0.5 and 4.4 % at `Pr` 2 | **A**: leave it and declare it |
+| O8 | The network's cut-gas pairs exist already (E-PPR78 on paraffinic counts); hydrogen is 0 by the owner's rule | Closed. Hydrogen's rule is the owner's, and matters only for hydrotreating at pressure |
+| O9 | 197 nonpolar pairs at zero; E-PPR78 gives -368 at 500 K for one of them | **B**: leave zero |
+| Water (S6) | The bare cubic: -30 % density at 650 K and 25 MPa; within 5 % from 700 K; `cp` within 6 % from 800 K; enthalpy 550 to 750 J/mol low at 800 to 900 K | S6 is needed only for 647 to about 750 K; turbine inlet states (800 K and above) are already usable |
+| Cuts | Surrogates: pc01 and pc02 within 5.7 % to 30 MPa, pc03 to 20 MPa, pc04 to 10 MPa; the error grows with the acentric factor | Ranges for pc01 to pc04 by surrogate; pc05 to pc12 stay at 2 MPa and `EXTRAPOLATED` above |
+
+Section 2's table keeps the options as first written; this table is the current recommendation. S1 with O3 B is one
+edit (`pureBandBox`) plus the trait fields; `CriticalBandHold` stays.
+
 ## 3. Stages
 
 Each stage is one package for one thread, on its own worktree, in the lane named. Line numbers are not given: the

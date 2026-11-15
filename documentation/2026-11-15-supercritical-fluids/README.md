@@ -17,6 +17,10 @@ simulator: continuous properties, no label-driven jumps, no critical-band hold.
   viscosity and mixture tables (`tools/coolprop-parity/generate_supercritical.py`). Sizes of O3, O4, O5, O6, O8, O9 in
   [SUPERCRITICAL_QUALIFICATION_REVIEW.md](SUPERCRITICAL_QUALIFICATION_REVIEW.md); found: the network's gas-cut pairs are
   derived E-PPR78 today, not zero (O8's premise). Test and fixture code only.
+- 2026-11-15: the main thread checked S0 (stored results: `G3F11SupercriticalRegionTest` 8 of 8; the parity test's 26 passed
+  in the run before, after its last change; no file under `src/main` changed; the parity tolerances of four earlier fluids were
+  widened by the test's own 1-2-5 rule for the new supercritical rows, all at or below 5e-8). The data review's claim that
+  cut-gas pairs are zero was wrong and is corrected; the plan's section 2a holds the recommendations after S0.
 
 ## Documents
 
@@ -40,10 +44,11 @@ dataset records under `data/icheme/materials/properties/`, the device screens' p
 
 ## Open items
 
-- Owner decisions O1 to O10 of the plan. S0 (measurement) needs only O1.
+- Owner decisions of the plan, with the recommendations after S0 in its section 2a: O2 (slot rule), O3 (B), O4 (A, after
+  a compressed-liquid measurement), O5 and O10 (A), O6 (A), O7, O9 (B). O1 stands at A; O8 is closed.
 - Not checked: compressed liquids above 2 MPa of the datasets O4 would raise; the effect of O9's pairs on mixtures; the
   error of a cut's estimated constants (qualification review, "Not measured"). The campaigns do not cover the dense
   window (limits review, last section).
-- O8's options (data review P5) assume zero pairs; the network derives E-PPR78 pairs for gases with Henry data.
-- S0's brief is written (`tmp/supercritical-briefs/BRIEFS.md` in the worktree, not tracked; the hook refuses the main
-  checkout's `research/`); the sub-thread waits for the owner's approval.
+- The briefs are in `tmp/supercritical-briefs/BRIEFS.md` in the worktree, not tracked (the hook refuses the main
+  checkout's `research/`): to be moved there. Its M4 line states the viscosity coefficients ten times too large; the
+  test and the qualification review use the published ones.
