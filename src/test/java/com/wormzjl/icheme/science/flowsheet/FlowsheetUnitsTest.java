@@ -486,6 +486,31 @@ final class FlowsheetUnitsTest {
         assertEquals(reading(run, "C", "power") / Motor.efficiency(motor, 2), reading(run, "C", "electric"), 1e-6);
     }
 
+    /**
+     * A pump and a compressor on one dense fluid (S4 of batch 2026-11-15-supercritical-fluids): carbon dioxide at 310 K on
+     * each side of reduced density 1 (the vapour slot at 8.32509 MPa, the liquid slot at 8.32648 MPa) run to the same
+     * numbers within the density between them, 0.1 %, and the pump warns alike on both: it is gas-like enough there that its
+     * edge is its own pressure.
+     */
+    @Test void aPumpAndACompressorOnADenseFluidSeeNoSlotLine() {
+        double[] co2 = only("CarbonDioxide");
+        FlowsheetRun[] pumps = new FlowsheetRun[2], compressors = new FlowsheetRun[2];
+        double[] pressures = {8.325088e6, 8.326483e6};
+        for (int i = 0; i < 2; i++) {
+            pumps[i] = closes(sheet().unit("P", "pump", "{\"target\":\"rise\",\"rise\":2e6}").feed("in", "P", "in", feed(310, pressures[i], co2, 100)).product("out", "P", "out").run());
+            compressors[i] = closes(sheet().unit("C", "compressor", "{\"target\":\"rise\",\"rise\":4e6}").feed("in", "C", "in", feed(310, pressures[i], co2, 100)).product("out", "C", "out").run());
+        }
+        var below = pumps[0].streams().get("in").state();
+        var above = pumps[1].streams().get("in").state();
+        assertEquals(FluidThermodynamics.State.VAPOR, below.oneFluidSlot());
+        assertEquals(FluidThermodynamics.State.LIQUID, above.oneFluidSlot());
+        for (String key : List.of("power", "head", "rise")) {
+            assertEquals(reading(pumps[0], "P", key), reading(pumps[1], "P", key), 2e-3 * Math.abs(reading(pumps[0], "P", key)), "the pump's " + key);
+            assertEquals(reading(compressors[0], "C", key), reading(compressors[1], "C", key), 2e-3 * Math.abs(reading(compressors[0], "C", key)), "the compressor's " + key);
+        }
+        assertTrue(logged(pumps[0], "pump.bubble_point") && logged(pumps[1], "pump.bubble_point"), "the pump's edge is its own pressure on both sides");
+    }
+
     /** W8's worked pump (batch 2026-11-03-rotating-machinery, W8_BUILD_PLAN.md section 2): water, 100 m³/h at 80 m head. */
     @Test void aPumpProposesItsMotor() {
         double flow = 100 / 3600., hydraulic = 1000 * 9.80665 * flow * 80, eta = MoverUnit.pumpEfficiency(flow);

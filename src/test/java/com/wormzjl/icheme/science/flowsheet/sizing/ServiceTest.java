@@ -359,6 +359,30 @@ final class ServiceTest {
         });
     }
 
+    /**
+     * One dense fluid into a pump (S4 of batch 2026-11-15-supercritical-fluids) has no bubble pressure: its suction is
+     * boiling where its vapour share 1 - w reaches the clean share, as the world's pump reads it, else cold. Carbon dioxide
+     * at 310 K: boiling on both sides of reduced density 1 and at 1.1, cold at 1.2 and 1.6. Its edge E on the sheet's trial
+     * is its own pressure where it is boiling and a density above the critical pressure where it is not.
+     */
+    @Test void aDenseSuctionIsBoilingByItsDensity() {
+        on(() -> {
+            double[] co2 = pure(AXIS.indexOf("CarbonDioxide"));
+            double[][] cases = {{8.325088e6, 1}, {8.326483e6, 1}, {8.476988e6, 1}, {8.680271e6, 0}, {10.982639e6, 0}};
+            for (var c : cases) {
+                var stream = at(310, c[0], co2);
+                assertTrue(stream.state().dense());
+                boolean boiling = c[1] == 1;
+                if (stream.state().oneFluidSlot() == FluidThermodynamics.State.LIQUID)
+                    assertEquals(boiling ? Service.SUCTION_BOILING : Service.SUCTION_COLD, service(stream, PUMP), "at " + c[0]);
+                double edge = THERMO.zoneEdge(310, c[0], co2);
+                if (boiling) assertEquals(c[0], edge, 0, "its E is its own pressure at " + c[0]);
+                else assertTrue(edge > 7.383e6 && edge < c[0], "its E is a density above the critical pressure at " + c[0] + ": " + edge);
+            }
+            return null;
+        });
+    }
+
     @Test void aDryGasLeavesItsSolidsBehindAsTheWorldsBulkEndDoes() {
         on(() -> {
             var gas = at(320, 3e5, pure(NITROGEN));
