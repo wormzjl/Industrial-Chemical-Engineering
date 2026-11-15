@@ -21,6 +21,10 @@ import json
 import sys
 from pathlib import Path
 
+# The fixtures' layout (one record per line); found beside this script, also under python -I.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import compact_json  # noqa: E402
+
 import CoolProp
 import CoolProp.CoolProp as CP
 
@@ -94,7 +98,7 @@ def mixtures(out):
 
 
 def write(path, doc):
-    path.write_text(json.dumps(doc, indent=1) + "\n", encoding="utf-8", newline="\n")
+    compact_json.write(path, doc)
 
 
 def main(out_dir):

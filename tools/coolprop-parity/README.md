@@ -68,7 +68,7 @@ Status: Concluded 2026-10-19 (batch in 0.9.0). Index: [../INDEX.md](../INDEX.md)
 
 ### Entry points
 
-`README.md`, `generate_parity.py`, `generate_supercritical.py`
+`README.md`, `generate_parity.py`, `generate_supercritical.py`, `compact_json.py` (the fixtures' layout: one record per line; as a script it rewrites existing tables without CoolProp)
 
 ### History
 
@@ -77,6 +77,9 @@ Status: Concluded 2026-10-19 (batch in 0.9.0). Index: [../INDEX.md](../INDEX.md)
   (viscosity and mixture-density tables)
 - 2026-11-15 (same batch, M8): the compressed-liquid grid of `G3F11SupercriticalRegionTest.m8CompressedLiquids` as rows
   of source `compressed_liquid`; every parity tolerance held unchanged
+- 2026-11-15 (same batch): the parity and reference tables rewritten one record per line (`compact_json.py`, which both
+  generators now write with): 46,361 lines to 2,734, 1.27 MB to 1.12 MB; the parsed documents and every number's text
+  are identical (`tmp/coolprop-compact/compare.js`). The CoolProp fluid files stay byte-identical to upstream
 
 ### Notes
 

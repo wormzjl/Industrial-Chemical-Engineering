@@ -32,6 +32,10 @@ import math
 import sys
 from pathlib import Path
 
+# The fixtures' layout (one record per line); found beside this script, also under python -I.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import compact_json  # noqa: E402
+
 import CoolProp
 import CoolProp.CoolProp as CP
 import numpy as np
@@ -179,7 +183,7 @@ def main(out_dir):
             "single_phase": states, "saturation": sat, "refused": refused,
         }
         path = out / f"parity-{fluid}.json"
-        path.write_text(json.dumps(doc, indent=1) + "\n", encoding="utf-8", newline="\n")
+        compact_json.write(path, doc)
         print(f"{fluid}: {len(states)} single-phase states, {len(sat)} saturation states, {len(refused)} refused -> {path}")
 
 
