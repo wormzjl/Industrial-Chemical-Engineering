@@ -62,6 +62,8 @@ simulator: continuous properties, no label-driven jumps, no critical-band hold.
   `ColumnSolveTest`, green in run 4 after the identity bound). Decisions recorded in the plan's section 2b, points 3 and
   4. S2b's intermediate commits were not compiled one by one; the final tree is the tested one.
 
+- 2026-11-15: brief S2c written (`tmp/supercritical-briefs/BRIEFS.md`; plan, "S2c as briefed").
+
 ## Documents
 
 - [SUPERCRITICAL_LIMITS_REVIEW.md](SUPERCRITICAL_LIMITS_REVIEW.md): expected behaviour, what the code does, the

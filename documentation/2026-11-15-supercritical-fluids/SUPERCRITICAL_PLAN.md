@@ -227,6 +227,13 @@ S2 is split in three, and four points of the list above changed after the code w
    its lines can move with S2b; "equal to the baseline line for line" holds for the bundled campaign only. The final
    lane's classifier judges the cold one.
 
+S2c as briefed (2026-11-15, after the suction, head and boil-up code was read): the slot rule O2 A; no typed
+"no saturation" (the release-pressure code already answers "no such pressure" as no limit: three callers are checked
+instead); boil-up needs no change; the level head of a LIQUID port is the one law that still jumps at the slot line
+(carbon dioxide at its critical density in a 5 m vessel: 23 kPa on 7.4 MPa) and is measured, not changed, since making
+it follow the density needs Jacobian entries the block structure does not have; the pump and compressor readings of a
+dense fluid are reported for S4; the three GameTests.
+
 ### S3. Data: ranges and viscosity (materials lane; beside S1)
 
 - O4 A: `pressure_max_pascal` and the evidence text of each dataset S0 qualifies; each record's own `revision` bumped;
