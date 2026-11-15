@@ -179,6 +179,111 @@ Owner, 2026-11-15, after asking what real turbines do: "So you need to change th
 
 T1 to T3 after this: LP steam 200 °C, a fresh draft at HP to 10 kPa and MP unchanged all stand.
 
+**W6 The LP casing's look** (added 2026-11-15; `SteamTurbineTrain.java`, `SteamTurbineDesign.java`, one scene in
+`EngineeringExport.java`, the layout table)
+
+Owner, 2026-11-15, on `STEAM_TURBINE_LP_TANDEM-iso.png`: "really need to improve its visual". Asked where the exhaust
+leaves the hood, the owner chose "Top, short neck".
+
+Expected look. A condensing LP turbine is recognised by four things: a casing that flares from a small inlet end to a
+large exhaust end, an exhaust hood (a ribbed box under an arched cover) at the exhaust end only, one large low-pressure
+inlet with a butterfly valve, and bearing pedestals at both ends. It has no governor valve rack and no
+trip-and-throttle valve with a handwheel: those belong to HP steam.
+
+What the build drew instead. The LP class above 45 MW is the hood alone over the whole casing length (`hood > 0` in
+`SteamTurbineTrain`), a plain box under a half-round, with the HP steam chest and trip-and-throttle valve hung on it
+and the exhaust through a branch, an expansion joint and a reducer that read as a chimney.
+
+Every turbine above 45 MW has d = 3 m (`SINGLE_CASING` is the 3 m casing's power), so this path has one diameter.
+
+Design, in three parts.
+
+1. `SteamTurbineTrain.hood(...)`, shared by the LP class and the tandem LP sections. Its solids (`u.box` with
+   `solid = true`, the `Solid.rod` of radius `half`, `u.round`) do not change, so no tandem row moves.
+   - The arched cover is set in: `vault` and its two end caps run from `z1 + .06 d` to `z2 - .06 d`. The lower box keeps
+     its full length; its top face already exists and shows as the step.
+   - Stiffening ribs on both side walls of the lower box: `m.box` 0.06 d proud, `.02 + .01 d` thick along z, from `base`
+     to `shaft - th / 2`, without the face on the wall; `max(1, round((z2 - z1) / (.5 d)) - 1)` of them, evenly spaced.
+     They are silhouette parts (18 cm proud); do not add more than this count.
+   - A gland cone at each end wall: `m.frustum(axis, .35 half, .1 d + .02, ...)` over 0.08 d outward from `z1` and from
+     `z2`. Drop the two `m.prism(f, .1 d + .02, ...)` glands of the `hood > 0` branch in `draw` where the cone replaces
+     them.
+   - A double flow (`doubleFlow`) gets one relief diaphragm: `m.cylinder` on a `Frame.of({a, 0, z1 + .2 (z2 - z1)}, 1, 1)`,
+     radius 0.12 d, from `shaft + half - .02` to `shaft + half + .03 + .01 d`, `Material.FLANGE`. The centre ring stays.
+2. The LP class above 45 MW (`hood > 0`): `SteamTurbineTrain.draw` and `SteamTurbineDesign.build`.
+   - Single flow (up to `DOUBLE_FLOW`), from the HP end wall `zh` to the exhaust end wall `ze`, C = `casing`:
+     - inlet belt: `m.annulus` end wall and `m.prism` of radius 0.32 d from `zh` to `zh + Lb`,
+       `Lb = min(max(.2 C, oi + .12 d), .35 C)`, `Material.CLADDING`;
+     - flare: `m.frustum` from 0.32 d to 0.6 d, from `zh + Lb` to `z0 + coneEnd`, `Material.CLADDING`, with two
+       `m.hoop` girth ribs 0.025 d proud at its thirds, `Material.MACHINE`;
+     - the joint flange along the belt and the flare with `ProcessUnit.ledge`, as `casing` does per barrel and cone;
+     - a foot under the belt: `u.box` `a ± .2 d`, `base` to `shaft - .32 d`, over the belt's middle half, solid;
+     - the exhaust hood: `hood(...)` from `z0 + coneEnd` to `ze` only, half width as today (`LP_WIDTH d / 2`);
+     - solids: `Solid.rod` radius 0.6 d from `zh` to `z0 + coneEnd` replaces the hood's solid over that length; the
+       `u.volumes` rod stays as it is.
+   - Double flow: the hood over the whole length as today, with part 1.
+   - Inlet, both flows. No `steamChest`, no `tripThrottle`, no valve post or stand plate (`u.post` and the plate in
+     `build`). One riser on the shaft line, steam in from above:
+     - `oi = min(PipeSizes.MAX_OUTSIDE, .25 d)`, the inlet's outside diameter;
+     - a dome `m.cylinder` of radius `oi / 2 + .04 d` on the belt's top (single flow: over the belt's middle; double
+       flow: over the hood's middle), 0.1 d high;
+     - the riser `m.prism` of radius `oi / 2`, 0.35 d high, with a butterfly valve at its middle: a wafer body
+       `m.cylinder` of radius `oi / 2 + .04 + .01 d`, 0.08 d high, `Material.MACHINE`, and an actuator `u.box`
+       0.12 d cube on its +x side, `Material.ACTUATOR`, not solid;
+     - the inlet flange with `m.bolts`, as the exhaust flange has, and the `Role.STEAM` nozzle up from it
+       (`new Nozzle(Role.STEAM, {a, top - .01, zI}, 1, 1, ceil(top + NECK) - top + .01, oi, 0)`), with a `NozzleRoot`
+       as the exhaust has;
+     - `zI` is on a cell centre, and in this path it fixes `z0` (today the exhaust does):
+       `zI = ceil(lead + inletStation - .5 - 1e-9) + .5`, `z0 = zI - inletStation`, where `inletStation` is
+       `hpEnd + Lb / 2` (single flow) or `(hpEnd + exhaustEnd) / 2` (double flow).
+   - Exhaust, both flows. The branch, the expansion joint and the reducer go. A short neck on the hood's top:
+     `m.frustum` from radius `min(.3 d, 1.6 oe / 2)` at `shaft + hood - .05` to `oe / 2` at `shaft + hood + .15 d`, the
+     flange and `m.bolts` as today, the `Role.EXHAUST` nozzle up. Its station `zX` is the cell centre nearest the
+     hood's 0.7 point (`floor(zHood0 + .7 (ze - zHood0)) + .5`), moved one cell forward if the neck's base would pass
+     `ze - .06 d`. On a double flow it stands at least one neck radius plus 0.1 d behind the inlet dome.
+   - The rear pedestal as the tandem casings have: move `SteamTurbineDesign.pedestal` to `SteamTurbineTrain` (static,
+     package-private) and call it from `draw` in this path in place of the two boxes. Its solid is the same box.
+   - The front standard, its governor actuator, the coupling and its guard do not change (`ProcessUnit.coupling` is
+     shared by every machine).
+3. The tandem turbines' exhaust (`SteamTurbineDesign.build`, the last lines): the stub `m.prism(rise, rc, yx - .1,
+   yx + .15, ...)` becomes `m.frustum(rise, 1.6 rc, rc, yx - .05, yx + .15, ...)`. The flange, the solid and the nozzle
+   stay, so the row and the nozzle do not move.
+
+Ruled out.
+- A side or downward exhaust (owner: top, short neck).
+- A flared casing for the tandem turbines' single-flow LP section: it would take cells from the MP 80 MW row. If the
+  owner wants it after seeing the views, it is a further step.
+- Edits to `Mesh.java` and `ProcessUnit.java`: the relief-sprite branch changes both and is not merged.
+- New nut polygons beyond the two flanges' `m.bolts`.
+- Any change to the function, the datasheet, lang lines or the simulator.
+
+Pitfalls.
+- `Lb` and the flare must both be positive for every LP duty above 45 MW. Print C, the stage count, `Lb` and the
+  flare's length at 46, 63 and 100 MW to 10 kPa and to 350 kPa, and assert the flare is at least 0.15 C in
+  `SteamTurbineSectionsTest`. If a duty fails, cut the dome's radius to `Lb / 2 - .01` before changing the rule.
+- The exhaust neck and the inlet riser each need their own cell column; assert the two nozzles' cells differ and that
+  neither riser cuts the other's solid.
+- `a` (the shaft's x) comes from `leftReach()` and `lpHalf`, not from the valve, in this path. Check that removing the
+  valve does not leave `xv` terms that widen the box.
+- The corpus image `shapes-12-turbine-sections.snbt` holds an LP 63 MW turbine. If it stores cells or a stamp, record
+  it again: the branch is not merged, so no saved world holds the old layout. Say which it was.
+- The LP class is new on this branch: its rows are free. Every row that exists on `main` must stay as the table has it
+  now. A row of `main` that moves is a defect of the build.
+
+Tests and proof.
+- Add two rows to the layout table's list: LP 63 MW to 10 kPa and LP 150 MW to 10 kPa.
+- `./gradlew equipmentGates --tests "*SteamTurbineSectionsTest" --tests "*ProcessUnitTest" --tests
+  "*ShapeRasterizerTest" --tests "*EquipmentLayoutGoldenTest" --tests "*EquipmentShapeCompatTest" --max-workers 4`:
+  the shape builds, rasters and collides; only the two new rows differ in the table.
+- A seventh scene `STEAM_TURBINE_LP_DOUBLE` (LP, 150 MW, 10 kPa). `update.ps1 -Only STEAM_TURBINE`, then look at the iso,
+  +X and -Z views of `STEAM_TURBINE_LP_TANDEM`, `STEAM_TURBINE_LP_DOUBLE`, `STEAM_TURBINE_TANDEM_80` and
+  `STEAM_TURBINE_TANDEM_300`.
+- Polygons by material, before and after, for the seven scenes. `STEAM_TURBINE_LP_TANDEM` must not exceed today's 1,508.
+
+Done: the tests pass, the four scenes' views are in `tmp/turbine-sections/views/`, the README has the history line with
+the polygon counts and the rows, and the code guide's turbine paragraph in `equipment-designs.md` describes the LP
+class's casing.
+
 ## 7. Pitfalls
 
 - `EquipmentNetwork` reads the class by ordinal with 0 for none. `LP` first shifts every ordinal by one: an old client
