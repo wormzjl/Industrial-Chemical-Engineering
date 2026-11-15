@@ -509,6 +509,7 @@ public final class FluidThermodynamics {
     public double phaseVelocityLimit(State state,int phase){return streams.phaseVelocityLimit(state,phase);}
     public double phaseViscosity(State state,int phase,MixtureViscosity.Workspace scratch,Prepared prepared){return streams.phaseViscosity(state,phase,scratch,prepared);}
     public double phaseCarrierViscosity(State state,int phase,MixtureViscosity.Workspace scratch){return streams.phaseCarrierViscosity(state,phase,scratch);}
+    public double slotViscosity(State state,int slot,MixtureViscosity.Workspace scratch,MixtureViscosity.Prepared terms){return streams.slotViscosity(state,slot,scratch,terms);}
     public PhaseStream phaseStream(State state,int phase,Prepared prepared,MixtureViscosity.Workspace scratch){return streams.phaseStream(state,phase,prepared,scratch);}
     /** The amount sum {@link #state} forms ({@code sum}), without its validation: a state's own amounts are valid. */
     static double total(double[] values){double total=0;for(double value:values)total+=value;return total;}

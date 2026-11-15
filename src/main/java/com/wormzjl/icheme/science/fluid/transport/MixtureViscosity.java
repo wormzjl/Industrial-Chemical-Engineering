@@ -31,7 +31,7 @@ public final class MixtureViscosity {
         // formulation labels; nothing is hashed (owner decision 2026-10-26).
         // W3b (owner, 2026-11-11): one log-mixing rule over a liquid's components on the conserved basis, water last with its
         // own liquid viscosity; the vapour's Wilke rule over the same basis.
-        revision=catalog.fluidRevision(packageId)+":log-liquid-pair-groups-wilke-v2:catalog-conditional-solute-v1:supercritical-liquid-slot-dilute-v1:range-continuation-v1:water-in-liquid-log-v1:dense-residual-jst-v1";
+        revision=catalog.fluidRevision(packageId)+":log-liquid-pair-groups-wilke-v2:catalog-conditional-solute-v1:supercritical-liquid-slot-dilute-v1:range-continuation-v1:water-in-liquid-log-v1:dense-residual-jst-v1:dense-laws-v1";
         var list=new java.util.ArrayList<>(propertyPackage.components());list.remove("Water");compounds=java.util.List.copyOf(list);
         int count=compounds.size();liquidCorrelations=new ViscosityCorrelation[count];vaporCorrelations=new ViscosityCorrelation[count];packageIndex=new int[count];
         double[] mw=new double[count+1];
@@ -80,21 +80,65 @@ public final class MixtureViscosity {
      * (1964) 1171, after Jossi, Stiel and Thodos, AIChE J. 8 (1962) 59), on mole-fraction pseudo-critical constants
      * ({@link #jossiStielThodos}): {@code rho_r = rho sum(x_i Vc_i)} with each dataset's critical volume
      * ({@link MaterialCatalog.Property#criticalMolarVolume}), {@code Tc}, {@code Pc} and the molar mass averaged the same way.
-     * Zero at zero density, exactly. Owner decision O5 A (batch 2026-11-15-supercritical-fluids, S3); nothing calls it in
-     * the network yet (S2 wires it for dense one-fluid nodes).
+     * Zero at zero density, exactly. Owner decision O5 A (batch 2026-11-15-supercritical-fluids, S3); the network reads it
+     * through {@link #dense}, with its onset.
      */
     public double residual(double molarDensity,double[] amounts) {
         checkBasis(amounts);
+        return residualTerm(molarDensity,amounts,false);
+    }
+    /** The reduced density {@code rho sum(x_i Vc_i)} of a fluid of conserved {@code amounts} at {@code molarDensity}, the one
+     * {@link #residual} and {@link #dense} read. */
+    public double reducedDensity(double molarDensity,double[] amounts) {
+        checkBasis(amounts);checkDensity(molarDensity);
+        double sum=0,v=0;
+        for(int i=0;i<amounts.length;i++){double n=amounts[i];if(n==0)continue;sum+=n;v+=n*criticalVolume[i];}
+        if(!(sum>0))throw new IllegalArgumentException("Invalid transport amount");
+        return molarDensity*v/sum;
+    }
+    private static void checkDensity(double molarDensity) {
         if(!(molarDensity>=0)||!Double.isFinite(molarDensity))throw new IllegalArgumentException("Invalid molar density");
+    }
+    /**
+     * The residual at {@code molarDensity}, weighted by {@link #denseOnset} when {@code onset}: the mole-fraction
+     * pseudo-critical constants and the reduced density are formed once here. Zero, with no correlation evaluated, where
+     * the weight is zero.
+     */
+    private double residualTerm(double molarDensity,double[] amounts,boolean onset) {
+        checkDensity(molarDensity);
         double sum=0,t=0,p=0,m=0,v=0;
         for(int i=0;i<amounts.length;i++) {
             double n=amounts[i];if(n==0)continue;
             sum+=n;t+=n*criticalTemperature[i];p+=n*criticalPressure[i];m+=n*molarMass[i];v+=n*criticalVolume[i];
         }
         if(!(sum>0))throw new IllegalArgumentException("Invalid transport amount");
-        double result=jossiStielThodos(molarDensity*v/sum,t/sum,p/sum,m/sum);
+        double reduced=molarDensity*v/sum,weight=onset?denseOnset(reduced):1;
+        if(weight==0)return 0;
+        double result=jossiStielThodos(reduced,t/sum,p/sum,m/sum);
         if(!(result>=0)||!Double.isFinite(result))throw new IllegalArgumentException("PROPERTY_UNAVAILABLE: residual viscosity");
-        return result;
+        return weight==1?result:weight*result;
+    }
+
+    /**
+     * The reduced densities between which {@link #dense} takes up the residual (batch 2026-11-15-supercritical-fluids, S2b):
+     * none of it at or below {@link #DENSE_ONSET}, all of it from {@link #DENSE_FULL}, a C1 {@link #smoothstep} between.
+     * The residual is real at every density; the onset exists so that a gas below a quarter of its critical density
+     * (every gas of the network's usual states) keeps its recorded dilute viscosity, bit for bit. Its size there is in the
+     * batch's S2_NETWORK_REVIEW.md.
+     */
+    public static final double DENSE_ONSET=0.25,DENSE_FULL=0.5;
+    /** The weight of the residual at reduced density {@code reducedDensity}: {@code smoothstep((rho_r - 0.25) / 0.25)}. */
+    public static double denseOnset(double reducedDensity) {
+        return smoothstep((reducedDensity-DENSE_ONSET)/(DENSE_FULL-DENSE_ONSET));
+    }
+    /**
+     * The one C1 weight of the dense-fluid laws (S2b of batch 2026-11-15-supercritical-fluids): {@code x^2 (3 - 2x)} on
+     * {@code [0, 1]}, exactly 0 at or below 0 (and for NaN) and exactly 1 at or above 1.
+     */
+    public static double smoothstep(double x) {
+        if(!(x>0))return 0;
+        if(x>=1)return 1;
+        return x*x*(3-2*x);
     }
 
     /**
@@ -117,11 +161,14 @@ public final class MixtureViscosity {
     }
 
     /**
-     * The dense-fluid viscosity, Pa s: the vapour's Wilke dilute viscosity ({@link #vapor}) plus the residual at the
-     * fluid's molar density ({@link #residual}). Equal to the dilute value at zero density.
+     * The viscosity of a gas or a dense fluid, Pa s: the vapour's Wilke dilute viscosity ({@link #vapor}) plus the residual at
+     * the fluid's molar density ({@link #residual}) weighted by its onset ({@link #denseOnset}): exactly {@link #vapor}'s value
+     * at or below reduced density {@link #DENSE_ONSET}, the full residual from {@link #DENSE_FULL}. {@code prepared} as for
+     * {@link #vapor}.
      */
     public double dense(double temperature,double[] amounts,double molarDensity,Workspace workspace,Prepared prepared) {
-        return vapor(temperature,amounts,workspace,prepared)+residual(molarDensity,amounts);
+        double dilute=vapor(temperature,amounts,workspace,prepared),residual=residualTerm(molarDensity,amounts,true);
+        return residual==0?dilute:dilute+residual;
     }
 
     /**

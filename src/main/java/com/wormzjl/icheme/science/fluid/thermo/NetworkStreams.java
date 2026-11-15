@@ -102,10 +102,25 @@ final class NetworkStreams {
         if(!Double.isFinite(speed)||speed<=0)throw new IllegalArgumentException("Invalid acoustic flow-domain bound");
         return speed;
     }
-    /** The vapour stream's viscosity (Wilke over its components, water among them). */
+    /** The vapour stream's viscosity: {@link #slotViscosity} of the vapour slot. */
     public double vaporViscosity(State state,MixtureViscosity.Workspace scratch,Prepared prepared) {
         var terms=prepared==null?null:model.match(prepared,state.temperature()).viscosities();
-        return model.viscosity.vapor(state.temperature(),state.vaporAmountsView(),scratch,terms);
+        return slotViscosity(state,State.VAPOR,scratch,terms);
+    }
+    /**
+     * The fluid viscosity of one held slot, the one rule every stream and node reads (S2b of batch
+     * 2026-11-15-supercritical-fluids): the vapour slot, and a liquid slot whose root is on a supercritical isotherm of its
+     * own composition, read {@link MixtureViscosity#dense} at the slot's molar density (its amounts over its volume); any
+     * other liquid slot reads {@link MixtureViscosity#liquid} as before. A gas below a quarter of its critical density keeps
+     * its Wilke value bit for bit; a dense fluid's viscosity follows its density across the slot line. {@code terms}: the
+     * state's own temperature's viscosity terms, or null.
+     */
+    public double slotViscosity(State state,int slot,MixtureViscosity.Workspace scratch,MixtureViscosity.Prepared terms) {
+        double t=state.temperature();double[] amounts=state.amountsView(slot);
+        var phase=state.phase(slot);
+        if(slot==State.VAPOR||phase!=null&&phase.traits()!=null&&phase.traits().supercriticalIsotherm())
+            return model.viscosity.dense(t,amounts,total(amounts)/state.slotVolume(slot),scratch,terms);
+        return model.viscosity.liquid(t,amounts,terms).pascalSeconds();
     }
     /** The vapour stream of {@code state}, or null when it holds no gas. */
     public PhaseStream vaporStream(State state,Prepared prepared,MixtureViscosity.Workspace scratch) {
@@ -186,7 +201,7 @@ final class NetworkStreams {
         if(phase==GAS)return vaporViscosity(state,scratch,prepared);
         var terms=prepared==null?null:model.match(prepared,state.temperature()).viscosities();
         int slot=state.slot(phase);
-        double liquid=state.slotVolume(slot),value=liquid*model.viscosity.liquid(state.temperature(),state.amountsView(slot),terms).pascalSeconds();
+        double liquid=state.slotVolume(slot),value=liquid*slotViscosity(state,slot,scratch,terms);
         double solid=phaseSolidShare(state,phase)*state.solidMoments().volume();
         if(solid>0){double phi=solid/(liquid+solid);value=com.wormzjl.icheme.science.fluid.transport.SlurryTransport.effectiveViscosity(value/liquid,Math.min(phi,0.62-1e-9))*(liquid+solid);}
         return value/(liquid+solid);
@@ -195,7 +210,7 @@ final class NetworkStreams {
      * with: the gas's own, or the liquid's own. */
     public double phaseCarrierViscosity(State state,int phase,MixtureViscosity.Workspace scratch) {
         if(phase==GAS)return vaporViscosity(state,scratch,null);
-        return model.viscosity.liquid(state.temperature(),state.amountsView(state.slot(phase))).pascalSeconds();
+        return slotViscosity(state,state.slot(phase),scratch,null);
     }
     /** The stream of one phase of {@code state}, or null when it does not hold that phase; {@link #vaporStream} for the
      * gas. */

@@ -27,7 +27,7 @@ public final class SolidMobility {
     }
     /** Whether the liquid labelled {@code label} is held and immobile (W3b: either liquid, by its own viscosity). */
     private static boolean immobile(FluidThermodynamics model,FluidThermodynamics.State state,int label) {
-        return state.labelVolume(label)>0&&SlurryTransport.immobile(model.viscosity.liquid(state.temperature(),state.labelAmountsView(label)).pascalSeconds(),model.solidSettings.immobileViscosity());
+        return state.labelVolume(label)>0&&SlurryTransport.immobile(model.slotViscosity(state,state.slot(label),null,null),model.solidSettings.immobileViscosity());
     }
     /** Whether a connection of {@code graph} can close for its solids at the interval's t0: a filter, a vessel holding solids
      * or an immobile liquid, or a feed of solids. {@code SolidEventIntegrator} reads the island's closures at t0 only then; it
@@ -79,7 +79,7 @@ public final class SolidMobility {
                 double liquidMass=model.slotMass(state,FluidThermodynamics.State.LIQUID)+model.slotMass(state,FluidThermodynamics.State.AQUEOUS);
                 double mu=0;
                 for(int slot:new int[]{FluidThermodynamics.State.LIQUID,FluidThermodynamics.State.AQUEOUS})
-                    if(state.slotVolume(slot)>0)mu+=state.slotVolume(slot)*model.viscosity.liquid(state.temperature(),state.amountsView(slot)).pascalSeconds();
+                    if(state.slotVolume(slot)>0)mu+=state.slotVolume(slot)*model.slotViscosity(state,slot,null,null);
                 carrierDensity=liquidMass/liquidVolume;carrierViscosity=mu/liquidVolume;
             }
             active=true;

@@ -1875,8 +1875,8 @@ public final class PassiveStepSolver {
     double carrierViscosity(FluidThermodynamics.State s) {
         if(!FluidThermodynamics.holdsFluid(s))return carrierViscosity(ambient());
         double value=0,volume=s.condensedVolume()+s.vaporVolume();
-        for(int slot:LIQUID_SLOTS)if(s.slotVolume(slot)>0)value+=s.slotVolume(slot)*model.viscosity.liquid(s.temperature(),s.amountsView(slot)).pascalSeconds();
-        if(s.vaporVolume()>0)value+=s.vaporVolume()*model.viscosity.vapor(s.temperature(),s.vaporAmountsView());
+        for(int slot:LIQUID_SLOTS)if(s.slotVolume(slot)>0)value+=s.slotVolume(slot)*model.slotViscosity(s,slot,null,null);
+        if(s.vaporVolume()>0)value+=s.vaporVolume()*model.slotViscosity(s,FluidThermodynamics.State.VAPOR,null,null);
         return value/volume;
     }
     static boolean hasSolids(PassiveNetwork graph) {
@@ -1898,10 +1898,10 @@ public final class PassiveStepSolver {
         if(!FluidThermodynamics.holdsFluid(s))return viscosity(ambient(),null);
         var terms=prepared==null?null:prepared.viscosities();
         double value=0;
-        for(int slot:LIQUID_SLOTS)if(s.slotVolume(slot)>0)value+=s.slotVolume(slot)*model.viscosity.liquid(s.temperature(),s.amountsView(slot),terms).pascalSeconds();
+        for(int slot:LIQUID_SLOTS)if(s.slotVolume(slot)>0)value+=s.slotVolume(slot)*model.slotViscosity(s,slot,viscosities,terms);
         double liquidVolume=s.condensedVolume(),solidVolume=s.solidMoments().volume();
         if(liquidVolume>0&&solidVolume>0){double phi=solidVolume/(liquidVolume+solidVolume);value=SlurryTransport.effectiveViscosity(value/liquidVolume,Math.min(phi,0.62-1e-9))*(liquidVolume+solidVolume);}
-        if(s.vaporVolume()>0)value+=s.vaporVolume()*model.viscosity.vapor(s.temperature(),s.vaporAmountsView(),viscosities,terms);
+        if(s.vaporVolume()>0)value+=s.vaporVolume()*model.slotViscosity(s,FluidThermodynamics.State.VAPOR,viscosities,terms);
         return value/(liquidVolume==0?s.vaporVolume():s.volume());
     }
     /** The equations of the last accepted solve, for the check that the block Jacobian sweep and an

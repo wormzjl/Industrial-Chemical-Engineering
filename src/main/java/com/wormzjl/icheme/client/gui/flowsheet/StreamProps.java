@@ -61,9 +61,11 @@ public record StreamProps(double temperature, double pressure, double vapour, do
         double[] oilAmounts = s.labelAmountsView(FluidThermodynamics.OIL), aqueousAmounts = s.labelAmountsView(FluidThermodynamics.AQUEOUS);
         double vapour = Arrays.stream(s.vaporAmountsView()).sum(), oil = Arrays.stream(oilAmounts).sum(), aqueous = Arrays.stream(aqueousAmounts).sum();
         volume += s.totals()[s.componentCount() - 1] * WATER_WEIGHT / WATER_DENSITY;
-        // The liquid's viscosity: the oil's where it holds one, else the aqueous liquid's (W3b: one log-mixing rule each).
-        double mu = oil > 0 ? fluids.model().viscosity.liquid(s.temperature(), oilAmounts).pascalSeconds() : aqueous > 0 ? fluids.model().viscosity.liquid(s.temperature(), aqueousAmounts).pascalSeconds() : Double.NaN;
-        double gas = vapour > 0 ? fluids.model().viscosity.vapor(s.temperature(), s.vaporAmountsView()) : Double.NaN;
+        // The liquid's viscosity: the oil's where it holds one, else the aqueous liquid's; each slot by the network's one rule
+        // (FluidThermodynamics.slotViscosity: a dense fluid's follows its density).
+        var model = fluids.model();
+        double mu = oil > 0 ? model.slotViscosity(s, s.slot(FluidThermodynamics.OIL), null, null) : aqueous > 0 ? model.slotViscosity(s, s.slot(FluidThermodynamics.AQUEOUS), null, null) : Double.NaN;
+        double gas = vapour > 0 ? model.slotViscosity(s, FluidThermodynamics.State.VAPOR, null, null) : Double.NaN;
         double total = Math.max(all, Double.MIN_NORMAL);
         var phases = new Phases(100 * oil / total, 100 * aqueous / total, 100 * vapour / total, 0);
         return new StreamProps(s.temperature(), s.pressure(), 100 * vapour / total, all, s.mass(), volume, s.volume() > 0 ? s.mass() / s.volume() : Double.NaN, mu, gas, all == 0 ? 0 : s.mass() / all * 1000, s.mass() == 0 ? 0 : s.enthalpy() / s.mass(), phases);

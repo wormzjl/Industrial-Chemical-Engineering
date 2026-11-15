@@ -56,6 +56,37 @@ class MixtureViscosityTest {
         assertEquals(60,states);
         assertTrue(Math.abs(worst)<=DENSE_DECLARED_PERCENT,"worst "+worst+" % at "+at);
     }
+    /**
+     * S2b of batch 2026-11-15-supercritical-fluids: {@code dense} takes up the residual between reduced densities 0.25 and
+     * 0.5. At or below 0.25 it is the Wilke value itself, bit for bit; from 0.5 it is the dilute value plus the whole
+     * residual, bit for bit; the weight is a smoothstep, so the value and its slope in density are continuous at both ends
+     * (one-sided differences agree).
+     */
+    @Test void theResidualsOnsetIsExactBelowAQuarterAndC1AtBothEnds() {
+        String id=com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.NETWORK_PACKAGE;var catalog=MaterialCatalog.bundled();
+        var model=new MixtureViscosity(catalog,id);var basis=catalog.conservedComponents(id);
+        double[] co2=new double[basis.size()];co2[basis.indexOf("CarbonDioxide")]=1;
+        double[] mixture=new double[basis.size()];mixture[basis.indexOf("Methane")]=.7;mixture[basis.indexOf("crude_pc05")]=.2;mixture[basis.size()-1]=.1;
+        for(double[] n:java.util.List.of(co2,mixture))for(double t:new double[]{250,320,500}) {
+            double perReduced=1/model.reducedDensity(1,n),dilute=model.vapor(t,n);
+            for(double r:new double[]{0,1e-3,.1,.2,.249999,.25}) {
+                assertEquals(Double.doubleToLongBits(dilute),Double.doubleToLongBits(model.dense(t,n,r*perReduced,null,null)),"exact at rho_r "+r);
+            }
+            for(double r:new double[]{.5,.5000001,1,2,3})
+                assertEquals(Double.doubleToLongBits(dilute+model.residual(r*perReduced,n)),Double.doubleToLongBits(model.dense(t,n,r*perReduced,null,null)),"the whole residual at rho_r "+r);
+            double inside=model.dense(t,n,.375*perReduced,null,null);
+            assertTrue(inside>dilute&&inside<dilute+model.residual(.375*perReduced,n),"between at rho_r 0.375");
+            double h=1e-5;
+            for(double edge:new double[]{MixtureViscosity.DENSE_ONSET,MixtureViscosity.DENSE_FULL}) {
+                double at=model.dense(t,n,edge*perReduced,null,null);
+                double left=(at-model.dense(t,n,(edge-h)*perReduced,null,null))/h,right=(model.dense(t,n,(edge+h)*perReduced,null,null)-at)/h;
+                double scale=model.residual(1.1*perReduced,n)-model.residual(.9*perReduced,n);
+                assertEquals(left,right,2e-3*scale/.2,"C1 at rho_r "+edge+" ("+t+" K)");
+            }
+        }
+        assertEquals(0,MixtureViscosity.smoothstep(Double.NaN));assertEquals(0,MixtureViscosity.smoothstep(-1));
+        assertEquals(1,MixtureViscosity.smoothstep(1));assertEquals(1,MixtureViscosity.smoothstep(2));assertEquals(.5,MixtureViscosity.smoothstep(.5));
+    }
     @Test void dissolvedReferencesMatchIndependentApiCheckpointsWithoutExtrapolatingPureLiquidTables() throws Exception {
         String id=com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.NETWORK_PACKAGE;var catalog=MaterialCatalog.bundled();
         var model=new MixtureViscosity(catalog,id);var p=catalog.requirePackage(id);
