@@ -17,6 +17,7 @@ import com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor;
 import com.wormzjl.icheme.science.flowsheet.unit.ColumnUnit;
 import com.wormzjl.icheme.science.fluid.state.SolidInventory;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
+import com.wormzjl.icheme.science.plant.column.ColumnSolve;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.HashMap;
@@ -147,7 +148,7 @@ public final class ColumnSizing {
         private @Nullable V3NeuralSeed seed;
         private int solves;
 
-        /** @param start where the run's own solve of the column ended, or null: the first trial then starts from the learned start */
+        /** @param start where the run's own solve of the column ended, or null: the first trial then starts cold, as the running column does */
         public Trials(Load load, MaterialCatalog catalog, Runnable checkpoint, @Nullable V3NeuralSeed start) {
             this.load = load;
             this.catalog = catalog;
@@ -161,7 +162,7 @@ public final class ColumnSizing {
             var known = done.get(diameter);
             if (known != null) return known.orElse(null);
             solves++;
-            var outcome = ColumnUnit.solve(ColumnSizing.at(load.solved(), load.solved().steamFeeds(), diameter), seed, catalog, checkpoint);
+            var outcome = ColumnSolve.calculate(ColumnSizing.at(load.solved(), load.solved().steamFeeds(), diameter), seed, catalog, ColumnUnit.SCREEN, checkpoint);
             V3TrayHydraulicsSummary hydraulics = null;
             if (outcome instanceof V3ColumnOutcome.Success success) {
                 seed = success.result().warmSeed().orElse(seed);

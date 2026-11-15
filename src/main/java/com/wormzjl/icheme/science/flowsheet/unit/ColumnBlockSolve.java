@@ -352,10 +352,11 @@ final class ColumnBlockSolve implements Calculation.Law {
     }
 
     private V3ColumnResult run(V3ColumnInput input, com.wormzjl.icheme.science.material.MaterialCatalog catalog) {
-        // A warm state on the other list (the feed crossed the water rule's share) is state on another basis: dropped.
+        // A warm state on the other list (the feed crossed the water rule's share) is state on another basis: dropped. The solve
+        // is the running column's own (ColumnSolve.calculate), which drops a wet seed as well.
         if (warm != null && !warm.input().componentBasis().equals(input.componentBasis())) warm = null;
         basis = input.componentBasis();
-        var outcome = ColumnUnit.solve(input, warm, catalog, u.thermo().checkpoint());
+        var outcome = ColumnSolve.calculate(input, warm, catalog, ColumnUnit.SCREEN, u.thermo().checkpoint());
         if (outcome instanceof V3ColumnOutcome.Success success) {
             display = V3ColumnDisplayResult.fromAccepted(success);
             return success.result();

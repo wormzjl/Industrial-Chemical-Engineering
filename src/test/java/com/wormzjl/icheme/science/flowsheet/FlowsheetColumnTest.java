@@ -6,9 +6,6 @@ import com.wormzjl.icheme.science.column.v3.V3ColumnCalculator;
 import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
 import com.wormzjl.icheme.science.column.v3.V3ColumnOutcome;
 import com.wormzjl.icheme.science.column.v3.V3ColumnResult;
-import com.wormzjl.icheme.science.column.v3.V3InitializationOptions;
-import com.wormzjl.icheme.science.column.v3.V3NeuralRegistry;
-import com.wormzjl.icheme.science.column.v3.V3SolveControl;
 import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
@@ -130,9 +127,10 @@ final class FlowsheetColumnTest {
         return calculator(BASE);
     }
 
+    /** The running column's cold solve of {@code input} (C5 of the 2026-11-13 simplifications): the one the block takes too. */
     private static V3ColumnResult calculator(V3ColumnInput input) {
-        var options = new V3InitializationOptions(V3InitializationOptions.Mode.LNN_FIRST, V3InitializationOptions.WetStart.AUTO, 16, V3InitializationOptions.DEFAULT_BUDGET_POLLS, V3InitializationOptions.Correction.PROGRESS);
-        var outcome = MaterialRuntime.with(CATALOG, input.packageId(), () -> V3ColumnCalculator.calculate(input, V3SolveControl.UNBOUNDED, 0, 0, options, V3NeuralRegistry.bundled().bind(CATALOG, input), V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO));
+        var outcome = ColumnSolve.calculate(input, null, CATALOG, V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO, () -> {
+        });
         return ((V3ColumnOutcome.Success) outcome).result();
     }
 

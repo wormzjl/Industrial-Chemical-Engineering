@@ -5,6 +5,7 @@ import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
 import com.wormzjl.icheme.science.column.v3.V3ColumnOutcome;
 import com.wormzjl.icheme.science.column.v3.V3ColumnProblemResolver;
 import com.wormzjl.icheme.science.column.v3.V3ColumnSpecification;
+import com.wormzjl.icheme.science.column.v3.V3ComponentBasis;
 import com.wormzjl.icheme.science.column.v3.V3NeuralSeed;
 import com.wormzjl.icheme.science.column.v3.V3PumparoundSpec;
 import com.wormzjl.icheme.science.column.v3.V3SideDrawSpec;
@@ -168,6 +169,33 @@ public final class ColumnSolve {
     }
 
     /**
+     * One V3 solve of a column's input, for the running column ({@link #run}) and the process simulator's column block and its
+     * sizing trials alike (C5 of the 2026-11-13 simplifications), so a design the sheet solves is one the world solves: V3's
+     * repeat-request strategy {@link V3SolveStrategy#AGGRESSIVE}, warm from {@code seed} where {@link #warm} keeps it (a short
+     * warm pass at the strict closure, then V3's own cold chain), else V3's fast first solve (the classical chain at the
+     * gameplay closure), on {@code catalog} for the input's package. {@code screen} is V3's liquid-supply screen ratio: the
+     * server's setting in the world, its default on the sheet, which runs on the client.
+     *
+     * @param seed the last accepted seed, or null: cold
+     */
+    public static V3ColumnOutcome calculate(V3ColumnInput input, V3NeuralSeed seed, MaterialCatalog catalog, double screen, Runnable checkpoint) {
+        var warm = warm(seed, input.componentBasis());
+        return MaterialRuntime.with(catalog, input.packageId(), () -> V3ColumnCalculator.calculateWithStrategy(input, checkpoint::run, V3SolveStrategy.AGGRESSIVE, warm, screen));
+    }
+
+    /**
+     * {@code seed} where the warm route can take it, else null. A seed with modelled free water is refused by the warm route and
+     * sends a seeded solve down the strict cold chain (C1 review, section 3): such an input solves with no seed, the fast first
+     * solve. A seed on another compound list (the feed island grew since, or the sheet's feed crossed the water rule) is dropped
+     * too: it is state, and the warm route needs the same basis.
+     */
+    static V3NeuralSeed warm(V3NeuralSeed seed, V3ComponentBasis basis) {
+        if (seed == null || !seed.input().componentBasis().equals(basis)) return null;
+        for (boolean wet : seed.wetTrays()) if (wet) return null;
+        return seed;
+    }
+
+    /**
      * Whether feed water at {@code t} K enters as a steam feed at the feed tray (Q9; C4 of batch 2026-11-13-codebase-review):
      * V3's own steam admission ({@code V3ColumnProblemResolver}), on its curve (Wagner-Pruss) at its injection pressure on
      * the nominal profile, inside the water data, at least {@link #SUPERHEAT} above saturation. Above the critical pressure,
@@ -255,16 +283,7 @@ public final class ColumnSolve {
                         new V3ColumnSpecification.OrganicRefluxRatio(setpoints.refluxRatio()),
                         new V3ColumnSpecification.ReboilerDuty(setpoints.reboilerPerFeed() * rate)),
                 draws, steamFeeds, pumparounds, design.columnDiameterMetres());
-        // A seed with modelled free water is refused by the warm route and sends a seeded solve down the strict cold chain
-        // (C1 review, section 3): such a table solves with no seed, the fast first solve. A seed on another compound list
-        // (the feed island grew since) is dropped too: it is state, and the warm route needs the same basis.
-        var seed = job.seed();
-        if (seed != null && !seed.input().componentBasis().equals(basis)) seed = null;
-        if (seed != null) for (boolean wet : seed.wetTrays()) if (wet) {
-            seed = null;
-            break;
-        }
-        var outcome = V3ColumnCalculator.calculateWithStrategy(input, checkpoint::run, V3SolveStrategy.AGGRESSIVE, seed, screen);
+        var outcome = calculate(input, job.seed(), catalog, screen, checkpoint);
         if (outcome instanceof V3ColumnOutcome.Failure failure) return new Failed(failure.code().name() + ": " + failure.summary());
         var success = (V3ColumnOutcome.Success) outcome;
         // A liquid that would settle into two is a notice, never a failure (W5 D5).
