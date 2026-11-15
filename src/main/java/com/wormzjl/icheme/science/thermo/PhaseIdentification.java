@@ -22,6 +22,14 @@ package com.wormzjl.icheme.science.thermo;
  * cubic's critical volume ({@code v > 3.95 b}) all have {@code PIP < Z} and the denser ones {@code PIP - Z > 91}. The
  * three-root case does not use this rule: there the stability root decides.</p>
  *
+ * <p>With {@code Z < 1} the label and the cubic's critical volume part on a supercritical isotherm: the label calls a
+ * root liquid-like at reduced densities {@code v_c/v} from about 0.6 to 1, where {@code PIP} is just above one (1.000 to
+ * 1.28). Measured (batch 2026-11-15-supercritical-fluids, S2_NETWORK_REVIEW.md) over pure nitrogen, methane and carbon
+ * dioxide at {@code Tr} 1.0 to 3.0 and {@code Pr} 0.1 to 9: 2144 of 11070 states, from {@code Tr} 1.15 and {@code Pr}
+ * 1.8 up; inside the data ranges 11, all nitrogen at 145 to 177 K and 6.1 to 9.8 MPa. At ambient temperature the label
+ * first says liquid at 16.4 MPa for nitrogen ({@code v_c/v} 0.61), 15.1 MPa for methane and 9.79 MPa for carbon dioxide
+ * at 319 K, the critical volume at 28.9, 18.4 and 9.85 MPa.</p>
+ *
  * <p>For {@code P = R T/(v - b) - a/D}, {@code D = v^2 + 2 b v - b^2}, the four derivatives are the ones
  * {@code TranslatedCubic.fill} forms for its volumetric block:</p>
  * <pre>

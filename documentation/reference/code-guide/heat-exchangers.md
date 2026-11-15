@@ -41,7 +41,7 @@ Paths under `src/main/java/com/wormzjl/icheme/`. Lines at the snapshot.
 | [`FiredCoil`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/FiredCoil.java) | A fired heater's radiant coil: `setTemperature`, `duty`, `firing` (β), `limit` (the share its burners can fire), `partner`; `planned` | 50 |
 | [`ConvectionCoil`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/ConvectionCoil.java) | The convection coil: counterflow against the flue gas leaving the radiant box; `conductance`, `radiant`, `flue`; `FLAME`, `BRIDGEWALL`, `flueOf(radiantHeat)`, `stackTemperature` | 61 |
 | [`ExhaustCoil`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/ExhaustCoil.java) | A gas turbine's steam coil, designed to its pinch: `APPROACH`, `PINCH`, `COLD` | 59 |
-| [`HeatCurve`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/HeatCurve.java) | One stream's h-T-film curve, fixed for a step: `sample`, `of`, `march` (exact per segment), `temperatureAt`, `enthalpyAt` (a plateau's vapour end), `lowestEnthalpyAt` (its liquid end), `temperatureSlope`, `withFilms`; `Films` (`DEFAULT`); `LIQUID_UNTIL`, `GAS_FROM`, `BOUNDARY_KELVIN` | 226 |
+| [`HeatCurve`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/HeatCurve.java) | One stream's h-T-film curve, fixed for a step: `sample`, `of`, `march` (exact per segment), `temperatureAt`, `enthalpyAt` (a plateau's vapour end), `lowestEnthalpyAt` (its liquid end), `temperatureSlope`, `withFilms`, `liquidLikeWeight`; `Films` (`DEFAULT`, `at(x, w)`); `LIQUID_UNTIL`, `GAS_FROM`, `FILM_GAS_UNTIL`, `FILM_LIQUID_FROM`, `BOUNDARY_KELVIN` | 272 |
 | [`ExchangerRelay`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/ExchangerRelay.java) | The relay as pure functions: `Partner` (the other side as read, or a kettle's pool as a `Bath`; `model`, `withModel`), `Read` (`NONE`, `column`, `heating`, `withOperation`, `gives`), `Operation` (`bypass`, `feed`, `column`), `plan`, `wall`, `planPool`, `bathWall`, `capacityRate`, `TOLERANCE` | 372 |
 | [`CrossflowHeat`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/CrossflowHeat.java), [`HeatRouting`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/HeatRouting.java) | A two-pass tube bundle against a shell mixed between crossflow rows, on the relay's wall solver; the routings `SERIES`, `TWO_PASS_TUBES`, `MIXED_CROSSFLOW` (`grid`) | 123, 112 |
 | [`HeatControl`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/HeatControl.java) | The built-in controller: `Target` MANUAL, OUTLET_TEMPERATURE, DUTY; `value`, `lowLimit`, `manual`; `Limit` NONE, LOWEST, HIGHEST, LOW_LIMIT; `setting` (an Illinois root on the side's own law) | 76 |
@@ -143,7 +143,11 @@ One coupled exchanger side in one slice (the engine side is in [heat-units.md](h
 
 - **Films** (`HeatCurve.Films.DEFAULT`): liquid 2000, boiling or condensing 5000, gas 100 W/m²K. Each knot carries the
   film of its vapour fraction: liquid below `LIQUID_UNTIL`, the two-phase film to `GAS_FROM`, gas at 1, linear between;
-  those knots give a pure component's plateau the two-phase film.
+  those knots give a pure component's plateau the two-phase film. A point of one fluid carries its liquid-like weight
+  `w = smoothstep((delta − FILM_GAS_UNTIL)/(FILM_LIQUID_FROM − FILM_GAS_UNTIL))` of its reduced density (gas film at or
+  below 0.5, liquid from 1.5, `Films.at(x, w)`) and the vapour coordinate `1 − w`, so a dense fluid's film follows its
+  density across its slot line. An inserted knot takes the weight only between points of one continuous fluid (the same
+  slot, or both dense); on a plateau it keeps the two-phase film.
 - **Sampling** (`HeatCurve.sample`): 16 divisions, a phase change bisected to `BOUNDARY_KELVIN`, segments refined while
   the midpoint lies more than 0.2 K off the chord, at most 512 knots.
 - **The march** (`HeatCurve.march`): dh/dA = −h_film(h)(T(h) − T_wall)/ṁ integrated exactly on each segment (a

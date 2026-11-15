@@ -1,6 +1,6 @@
 # Supercritical fluids
 
-Status: **In progress** since 2026-11-15 (S0, S1 and S3 done; S2 next). Branch `claude/supercritical-fluid-support-d0ffa4`, base `e9edc974b` (main 0.31.0).
+Status: **In progress** since 2026-11-15 (S0, S1, S3, S2a and S2b done; S2c next). Branch `claude/supercritical-fluid-support-d0ffa4`, base `e9edc974b` (main 0.31.0).
 
 Purpose: dense and supercritical fluids as ordinary states of the fluid network, the machines, the heat units and the
 simulator: continuous properties, no label-driven jumps, no critical-band hold.
@@ -52,6 +52,11 @@ simulator: continuous properties, no label-driven jumps, no critical-band hold.
 
 - 2026-11-15: S2 split by the main thread after reading the network code (plan, "S2 as carried out"): S2a structure,
   S2b the stream laws, S2c the rest. Brief S2a/S2b written (`tmp/supercritical-briefs/BRIEFS.md`).
+- 2026-11-15: S2a and S2b done (sub-thread): a phase carries its root's traits, a state names its one fluid
+  (`6dd9cd57c`); one slot viscosity with the dense residual from rho_r 0.25, the film by liquid-like weight, a dense
+  liquid slot's acoustic limit and heat capacity ratio, `DenseFluidGatesTest` (`ca321ef23`..`e55bdf53a`). S3 fix: identity
+  bound 21000 and the NBT check (`1b0fc7770`). The slot rule not edited (11 nitrogen states inside the old ranges
+  disagree); owner: "Keep O2 A", carried out in S2c. Affected classes green. [S2_NETWORK_REVIEW.md](S2_NETWORK_REVIEW.md).
 
 ## Documents
 
@@ -62,7 +67,9 @@ simulator: continuous properties, no label-driven jumps, no critical-band hold.
 - [SUPERCRITICAL_PLAN.md](SUPERCRITICAL_PLAN.md): the idea, owner decisions O1..O10, stages S0..S7, order,
   verification, proposed delegation.
 - [S3_DATA_REVIEW.md](S3_DATA_REVIEW.md): S3's ranges with their evidence, the critical volumes, the residual viscosity,
-  the identities that moved.
+  the identities that moved, the identity bound.
+- [S2_NETWORK_REVIEW.md](S2_NETWORK_REVIEW.md): S2a and S2b, the dense-fluid stream laws, the slot-rule comparison, the
+  owner options (onset, film bounds, film seam).
 - [SUPERCRITICAL_QUALIFICATION_REVIEW.md](SUPERCRITICAL_QUALIFICATION_REVIEW.md): S0's measurements M1..M7 and the follow-up M8, the
   recommended pressure ranges and the sizes of the open decisions.
 - Earlier: [../2026-09-24-coolprop-low-temperature/SUPERCRITICAL_SUPPORT_REVIEW.md](../2026-09-24-coolprop-low-temperature/SUPERCRITICAL_SUPPORT_REVIEW.md)
@@ -76,6 +83,13 @@ traits, "no saturation"), `science/fluid/transport/MixtureViscosity`, `science/m
 dataset records under `data/icheme/materials/properties/`, the device screens' phase rows.
 
 ## Open items
+
+- For the owner (S2b, [S2_NETWORK_REVIEW.md](S2_NETWORK_REVIEW.md) sections 2 and 3): the viscosity onset (rho_r 0.25 to
+  0.5, or none), the film bounds (0.5/1.5, or 0.75/1.25), the film seam (weight on every one-fluid state, or on
+  supercritical isotherms only). Implemented: the first of each.
+- For the owner (S3 fix, [S3_DATA_REVIEW.md](S3_DATA_REVIEW.md) section 4): the thermodynamic revision repeats the fluid
+  identity about three times (once would lift the NBT wall to about 290 compounds); the simulator menu's opening data is
+  18,281 characters against a limit near 32,600 bytes, not confirmed (about 110 compounds).
 
 - Decided (plan 2b). Open for the owner: the two findings there; S2's density threshold (an option S2's review will give);
   hydrogen's zero pair with a cut (only if hydrotreating at pressure matters).
