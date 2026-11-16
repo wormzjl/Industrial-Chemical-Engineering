@@ -481,6 +481,10 @@ public final class FluidThermodynamics {
     public static final double GAS_LIKE_UNTIL=NetworkStreams.GAS_LIKE_UNTIL,LIQUID_LIKE_FROM=NetworkStreams.LIQUID_LIKE_FROM;
     /** The liquid-like weight of a one-fluid state ({@link NetworkStreams#liquidLikeWeight}); NaN for any other. */
     public static double liquidLikeWeight(State state){return NetworkStreams.liquidLikeWeight(state);}
+    /** {@link NetworkStreams#PUMP_LIQUID_LIKE_FROM}: a pump's upper bound of its own weight. */
+    public static final double PUMP_LIQUID_LIKE_FROM=NetworkStreams.PUMP_LIQUID_LIKE_FROM;
+    /** A pump's liquid-like weight of a one-fluid state ({@link NetworkStreams#pumpLiquidLikeWeight}); NaN for any other. */
+    public static double pumpLiquidLikeWeight(State state){return NetworkStreams.pumpLiquidLikeWeight(state);}
     public static boolean holdsVapor(State state){return NetworkStreams.holdsVapor(state);}
     public static boolean holdsLiquid(State state){return NetworkStreams.holdsLiquid(state);}
     public double slotMass(State state,int slot){return streams.slotMass(state,slot);}

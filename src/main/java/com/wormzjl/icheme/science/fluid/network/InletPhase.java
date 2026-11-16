@@ -30,9 +30,11 @@ import static com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.AQUEOU
  * leading phase. A BULK end supplies the node's bulk. Measures: for a pump the vapour share of the supply's fluid
  * volume (solids excluded); for a compressor the condensed share of its mass and the largest solid population's share
  * of its volume. One dense fluid ({@link FluidThermodynamics.State#dense()}) has no second phase: a machine feels its
- * density, so its vapour share is {@code 1 - w} and its condensed share {@code w}, its liquid-like weight
- * ({@link FluidThermodynamics#liquidLikeWeight}), whichever slot holds it (S4 of batch 2026-11-15-supercritical-fluids):
- * exactly the vapour slot's 1 and 0 at or below reduced density 0.5, the liquid slot's 0 and 1 from 1.5. A port's
+ * density, whichever slot holds it (S4 of batch 2026-11-15-supercritical-fluids). Its vapour share is {@code 1 - w_pump},
+ * on a pump's own liquid-like weight ({@link FluidThermodynamics#pumpLiquidLikeWeight}, reduced densities 0.5 to 1.0, S4b):
+ * exactly the vapour slot's 1 at or below 0.5, the liquid slot's 0 from 1.0, so a pump keeps its full head from the
+ * critical density. Its condensed share is {@code w}, the film's weight ({@link FluidThermodynamics#liquidLikeWeight},
+ * 0.5 to 1.5): the vapour slot's 0 at or below 0.5, the liquid slot's 1 from 1.5. A port's
  * stream drawn from such a state is that fluid. Neither share enters the refusal ({@link #decide}): a dry suction and
  * a compressor's solids only. Its shares are a density's, not a second phase's ({@link Supply#dense}): it holds no
  * droplets ({@link Supply#dropletMassShare}), and its pump's clean zone's edge stands only at a real flash (S4b).</p>
@@ -59,7 +61,7 @@ public final class InletPhase {
      * the end's port there (BULK for a junction mixture and for a generator), the three measures, and {@code heldShare},
      * the largest share of its capacity held by what can feed the suction ({@link #held}; infinite for a generator).
      * {@code dense}: the stream is one dense fluid ({@link FluidThermodynamics.State#dense()}), so its two shares are its
-     * density's, {@code 1 - w} and {@code w}, not a second phase's (S4b of batch 2026-11-15-supercritical-fluids).
+     * density's, {@code 1 - w_pump} and {@code w}, not a second phase's (S4b of batch 2026-11-15-supercritical-fluids).
      */
     public record Supply(int node,long nodeId,PassiveNetwork.PhasePort port,double vapourVolumeShare,double condensedMassShare,double largestSolidVolumeFraction,double heldShare,boolean dense) {
         /** A supply of no dense fluid. */
@@ -293,9 +295,10 @@ public final class InletPhase {
         double largestSolid=0;
         if(total>0)for(var population:state.solids().populations())largestSolid=Math.max(largestSolid,population.volume()*solidScale/total);
         double vapourShare=fluid>0?gas/fluid:0,condensedShare=gasMass+condensedMass>0?condensedMass/(gasMass+condensedMass):0;
-        // One dense fluid: the shares follow its density, not its slot (S4); the weight is exactly 0 or 1 outside 0.5 to 1.5.
+        // One dense fluid: the shares follow its density, not its slot (S4): a pump's on its own weight, 0.5 to 1.0 (S4b), a
+        // compressor's on the film's, 0.5 to 1.5; each weight is exactly 0 or 1 outside its bounds.
         boolean dense=fluid>0&&state.dense();
-        if(dense){double w=FluidThermodynamics.liquidLikeWeight(state);vapourShare=1-w;condensedShare=w;}
+        if(dense){vapourShare=1-FluidThermodynamics.pumpLiquidLikeWeight(state);condensedShare=FluidThermodynamics.liquidLikeWeight(state);}
         return new Supply(node,id,port,vapourShare,condensedShare,largestSolid,held,dense);
     }
 

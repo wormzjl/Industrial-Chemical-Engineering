@@ -11,18 +11,20 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * What a pump and a compressor read of one dense fluid (S4 of batch 2026-11-15-supercritical-fluids,
- * S4_MACHINES_REVIEW.md): its vapour share {@code 1 - w} and condensed share {@code w} on its liquid-like weight, whichever
- * slot holds it, so the pump's head share and the compressor's wet efficiency follow its density across the slot line,
- * and are the slots' own values to the bit outside reduced densities 0.5 to 1.5. A gas that is no dense fluid's window
+ * S4_MACHINES_REVIEW.md), whichever slot holds it: a pump's vapour share {@code 1 - w_pump} on its own liquid-like weight
+ * (reduced densities 0.5 to 1.0, S4b, DENSE_PUMP_RESEARCH_REVIEW.md), a compressor's condensed share {@code w} on the
+ * film's (0.5 to 1.5). So the pump's head share and the compressor's wet efficiency follow its density across the slot
+ * line, and are the slots' own values to the bit outside their bounds. A gas that is no dense fluid's window
  * reads what it read before; neither share refuses a machine. What needs a second phase does not occur in one dense fluid
  * (S4b): a pump drawing it through a line is not vapour-locked by its density, it has no vapour pressure, and a
  * compressor sees no droplets in it, while its wet efficiency still reads {@code w}.
  */
 class DenseMachineSharesTest {
     private final FluidThermodynamics model=FluidTestSupport.networkModel();
-    /** The bound on a neighbour's change, per 0.05 of reduced density: the weight's slope is at most 1.5 per unit of it, so
-     * the condensed share moves at most 0.075, the wet efficiency half that; the head share also reads the pressure. */
-    private static final double HEAD_STEP=.1,WET_STEP=.04;
+    /** The bound on a neighbour's change, per 0.05 of reduced density. The film's weight's slope is at most 1.5 per unit of
+     * it, so the condensed share moves at most 0.075, the wet efficiency half that. The pump's weight's slope is at most 3, so
+     * its vapour share moves at most 0.15; the head share also reads the pressure (measured largest 0.129, from 0.65 to 0.70). */
+    private static final double HEAD_STEP=.15,WET_STEP=.04;
 
     private double[] pure(String name){double[] n=new double[model.componentCount()];n[model.components().indexOf(name)]=1;return n;}
     private FluidThermodynamics.State at(double t,double p,double[] n){return model.flashTP(t,p,n,()->{});}
@@ -41,13 +43,14 @@ class DenseMachineSharesTest {
             double delta=.3+.05*i;var s=at(310,pressureAt(310,co2,delta),co2);var supply=InletPhase.bulk(model,s);
             assertTrue(s.dense(),"one dense fluid at reduced density "+delta);
             double w=FluidThermodynamics.liquidLikeWeight(s),p=s.pressure();
-            assertEquals(1-w,supply.vapourVolumeShare(),0,"the vapour share at "+delta);
+            assertEquals(1-FluidThermodynamics.pumpLiquidLikeWeight(s),supply.vapourVolumeShare(),0,"the vapour share at "+delta);
             assertEquals(w,supply.condensedMassShare(),0,"the condensed share at "+delta);
             // Outside the window the slot's own values, as they were before the weight.
             if(s.reducedDensity()<=FluidThermodynamics.GAS_LIKE_UNTIL){
                 assertEquals(FluidThermodynamics.State.VAPOR,s.oneFluidSlot());assertEquals(1.0,supply.vapourVolumeShare(),0);assertEquals(0.0,supply.condensedMassShare(),0);
                 assertEquals(GasEntrainment.headShare(1,p),head(supply,p),0);assertEquals(1.0,wet(supply),0);
             }
+            if(s.reducedDensity()>=FluidThermodynamics.PUMP_LIQUID_LIKE_FROM){assertEquals(0.0,supply.vapourVolumeShare(),0);assertEquals(1.0,head(supply,p),0);}
             if(s.reducedDensity()>=FluidThermodynamics.LIQUID_LIKE_FROM){
                 assertEquals(FluidThermodynamics.State.LIQUID,s.oneFluidSlot());assertEquals(0.0,supply.vapourVolumeShare(),0);assertEquals(1.0,supply.condensedMassShare(),0);
                 assertEquals(1.0,head(supply,p),0);assertEquals(1-CentrifugalCompressor.WET_EFFICIENCY_LOSS,wet(supply),0);
@@ -65,7 +68,8 @@ class DenseMachineSharesTest {
         var below=at(310,pressureAt(310,co2,1/1.0005),co2);var above=at(310,pressureAt(310,co2,1.0005),co2);
         assertEquals(FluidThermodynamics.State.VAPOR,below.oneFluidSlot());assertEquals(FluidThermodynamics.State.LIQUID,above.oneFluidSlot());
         var a=InletPhase.bulk(model,below);var b=InletPhase.bulk(model,above);
-        // S2c measured 0.5303 to 1 (head) and x1 to x0.5 (wet efficiency) across these two states.
+        // S2c measured 0.5303 to 1 (head) and x1 to x0.5 (wet efficiency) across these two states; S4 0.947 (head) on both
+        // sides; S4b exactly 1 above and 1 to the double below: a pump keeps its full head from the critical density.
         assertEquals(head(a,below.pressure()),head(b,above.pressure()),1e-2,"the head share is continuous at the slot line");
         assertEquals(wet(a),wet(b),1e-3,"the wet efficiency is continuous at the slot line");
         assertEquals(a.vapourVolumeShare(),b.vapourVolumeShare(),2e-3);
@@ -101,7 +105,7 @@ class DenseMachineSharesTest {
      * A centrifugal pump drawing carbon dioxide at 310 K from a generator through a 10 m line and a junction, lifting it
      * 20 kPa into a void (S4b). As first implemented (S4) the pump's edge was its supplier's own pressure from reduced
      * density 0.5 to about 1.1, so it was vapour-locked there and delivered nothing; one dense fluid has no second phase, so
-     * it runs on its head share {@code M(1 - w)} at every density. At 1.1 its isenthalp flashes from the bubble side at
+     * it runs on its head share {@code M(1 - w_pump)} at every density (0.596, 0.986, 1, 1). At 1.1 its isenthalp flashes from the bubble side at
      * 7.35 MPa, 1.1 MPa under the suction: an edge, and no lock.
      */
     @Test void aPumpDrawingDenseCarbonDioxideThroughALineIsNotVapourLocked() {
@@ -115,9 +119,9 @@ class DenseMachineSharesTest {
             assertFalse(solver.suctions.vapourLocked(1),"not vapour-locked at reduced density "+delta);
             assertNotEquals(FlowControl.Mode.CLOSED,result.modes().get(1),"the pump runs at "+delta);
             assertTrue(result.massFlows()[1]>0,"it delivers at "+delta+": "+result.massFlows()[1]);
-            double w=FluidThermodynamics.liquidLikeWeight(s);
+            double w=FluidThermodynamics.pumpLiquidLikeWeight(s);
             var running=(com.wormzjl.icheme.science.machine.CentrifugalPump)((FlowControl.Machine)solver.suctions.mover(graph,1)).law();
-            assertEquals(GasEntrainment.headShare(1-w,p),running.ratedHead()/law.ratedHead(),1e-12,"its head share M(1 - w) at "+delta);
+            assertEquals(GasEntrainment.headShare(1-w,p),running.ratedHead()/law.ratedHead(),1e-12,"its head share M(1 - w_pump) at "+delta);
             double limit=solver.suctions.suctionLimitPressure(graph,1,0);
             if(delta<1.05)assertEquals(Double.POSITIVE_INFINITY,limit,0,"no suction limit without a flash at "+delta);
             else assertEquals(7.3526e6,limit,7.3526e6*2e-4,"the bubble-side flash at "+delta);
@@ -157,6 +161,32 @@ class DenseMachineSharesTest {
         }
     }
 
+    /**
+     * A pump's own weight (owner, 2026-11-16, option 1 B of DENSE_PUMP_RESEARCH_REVIEW.md): a centrifugal pump keeps its
+     * full head on one dense fluid from its critical density. Carbon dioxide at 310 K, measured 2026-11-16
+     * (tmp/supercritical-s4b/after-pump/S4bPumpProbe.txt in the batch's worktree): head share 0.5958 at reduced density
+     * 0.6, 0.9134 at 0.73, 0.9858 at 0.8 (0.5155, 0.6487, 0.7388 on the film's bounds); exactly 1 from 1.0, the liquid slot's
+     * own value; the gas rule at and below 0.5. The compressor's condensed share stays on the film's bounds.
+     */
+    @Test void aPumpKeepsItsFullHeadFromTheCriticalDensity() {
+        double[] co2=pure("CarbonDioxide");
+        double[][] measured={{.6,.595757},{.73,.913435},{.8,.985833}};
+        for(var m:measured){var s=at(310,pressureAt(310,co2,m[0]),co2);assertEquals(m[1],head(InletPhase.bulk(model,s),s.pressure()),1e-5,"the head share at "+m[0]);}
+        for(double delta:new double[]{1.0005,1.2,1.5}) {
+            var s=at(310,pressureAt(310,co2,delta),co2);var supply=InletPhase.bulk(model,s);
+            assertEquals(0.0,supply.vapourVolumeShare(),0,"no vapour share at "+delta);assertEquals(1.0,head(supply,s.pressure()),0,"the full head at "+delta);
+            assertEquals(FluidThermodynamics.liquidLikeWeight(s),supply.condensedMassShare(),0,"the compressor's share on the film's bounds at "+delta);
+        }
+        for(double delta:new double[]{.3,.45,.4995}) {
+            var s=at(310,pressureAt(310,co2,delta),co2);var supply=InletPhase.bulk(model,s);
+            assertEquals(1.0,supply.vapourVolumeShare(),0,"the gas rule at "+delta);assertEquals(0.0,supply.condensedMassShare(),0);
+        }
+        for(double delta:new double[]{.6,.8,1.2}) {
+            var s=at(310,pressureAt(310,co2,delta),co2);
+            assertEquals(FluidThermodynamics.liquidLikeWeight(s),InletPhase.bulk(model,s).condensedMassShare(),0,"the compressor's condensed share unchanged at "+delta);
+        }
+    }
+
     /** The NPSH density of a pump on one dense fluid is its own density in either slot while it is liquid-like at all. */
     @Test void aPumpReadsTheDenseFluidsOwnDensityInEitherSlot() {
         double[] co2=pure("CarbonDioxide");
@@ -181,7 +211,7 @@ class DenseMachineSharesTest {
             assertEquals(Double.POSITIVE_INFINITY,solver.suctions.release(s,()->{}),"no vapour pressure above Tc at "+delta);
             assertEquals(0,Wear.Fault.CAVITATION.intensity(Double.NaN),0,"no cavitation read, no erosion");
             var supply=InletPhase.bulk(model,s);
-            assertEquals(1-FluidThermodynamics.liquidLikeWeight(s),supply.vapourVolumeShare(),0,"the share the gas lock and the head read");
+            assertEquals(1-FluidThermodynamics.pumpLiquidLikeWeight(s),supply.vapourVolumeShare(),0,"the share the gas lock and the head read");
         }
     }
 }

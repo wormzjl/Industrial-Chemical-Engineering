@@ -222,7 +222,7 @@ final class MoverSuction {
      * is max(E, p_v + 0.85 ρ g NPSH3(Q)) ({@link ReleasePressure#limit}); wear reads σ against p_v.
      *
      * <p>One dense fluid ({@link FluidThermodynamics.State#dense()}) has no second phase (S4b of batch
-     * 2026-11-15-supercritical-fluids): its supply's vapour share {@code 1 - w} is a density, not a gas, so it never puts E
+     * 2026-11-15-supercritical-fluids): its supply's vapour share {@code 1 - w_pump} is a density, not a gas, so it never puts E
      * at the supplier's pressure, and its E stands only where its isenthalp really flashes, the stream holding a vapour at
      * the pressure found ({@link ReleasePressure#lowestHeld}); else none. Carbon dioxide at 320 K and 15 MPa flashes from the
      * bubble side at 6.52 MPa; at 310 K below reduced density 1.19 its isenthalp passes the critical temperature on the gas

@@ -67,8 +67,8 @@ final class NetworkStreams {
      * 2026-11-15-supercritical-fluids): gas-like at or below {@link #GAS_LIKE_UNTIL}, liquid-like from
      * {@link #LIQUID_LIKE_FROM}, a {@link MixtureViscosity#smoothstep} between. An ordinary liquid ({@code v/b} 1.1 to 1.5, so
      * 2.6 to 3.6) and an ordinary gas (below 0.5 up to {@code Tr} 0.97 at saturation) are wholly one or the other. The
-     * heat-transfer film reads it on every one-fluid state ({@code HeatCurve}); a pump's vapour share and a compressor's
-     * condensed share read it on a dense one ({@code InletPhase}, {@code ReleasePressure}). An owner option
+     * heat-transfer film reads it on every one-fluid state ({@code HeatCurve}); a compressor's condensed share reads it on
+     * a dense one ({@code InletPhase}). A pump reads its own weight ({@link #pumpLiquidLikeWeight}). An owner option
      * (S2_NETWORK_REVIEW.md, S4_MACHINES_REVIEW.md).
      */
     public static final double GAS_LIKE_UNTIL=.5,LIQUID_LIKE_FROM=1.5;
@@ -79,6 +79,22 @@ final class NetworkStreams {
     public static double liquidLikeWeight(State state) {
         if(state.oneFluidSlot()<0)return Double.NaN;
         return MixtureViscosity.smoothstep((state.reducedDensity()-GAS_LIKE_UNTIL)/(LIQUID_LIKE_FROM-GAS_LIKE_UNTIL));
+    }
+    /**
+     * A pump's own upper bound of the liquid-like weight (owner, 2026-11-16, option 1 B of DENSE_PUMP_RESEARCH_REVIEW.md
+     * of batch 2026-11-15-supercritical-fluids): a centrifugal pump keeps its full head on one dense fluid from its critical
+     * density; only its rise {@code ρ g H} falls with the density. Pumps run carbon dioxide down to 400 to 500 kg/m3 (reduced
+     * density 0.86 to 1.07), one test pump stably at 340 kg/m3 (0.73). The lower bound is {@link #GAS_LIKE_UNTIL}, the gas rule.
+     */
+    public static final double PUMP_LIQUID_LIKE_FROM=1.0;
+    /**
+     * A pump's liquid-like weight of a state of one fluid ({@link State#oneFluidSlot()}): 0 at or below reduced density
+     * {@link #GAS_LIKE_UNTIL}, 1 from {@link #PUMP_LIQUID_LIKE_FROM}, a smoothstep between; NaN for any other state. A
+     * pump's vapour share of one dense fluid is {@code 1} minus it ({@code InletPhase}).
+     */
+    public static double pumpLiquidLikeWeight(State state) {
+        if(state.oneFluidSlot()<0)return Double.NaN;
+        return MixtureViscosity.smoothstep((state.reducedDensity()-GAS_LIKE_UNTIL)/(PUMP_LIQUID_LIKE_FROM-GAS_LIKE_UNTIL));
     }
     /** Whether the state holds a gas phase to draw. */
     public static boolean holdsVapor(State state){return state.vaporVolume()>0;}
