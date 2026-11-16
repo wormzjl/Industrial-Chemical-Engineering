@@ -1,6 +1,6 @@
 # 2026-11-15 pollution system
 
-Status: In progress since 2026-11-15. D1 to D6 decided; WP1 to WP5, WP6a, WP8 and WP10 built and unit-tested; WP6b built and unit-tested; WP7 written; WP9 built and unit-tested; GameTests run once before WP9 (105 of 106 pass; the one failure was a fixture clash, fixed, not rerun); merge preparation complete on 2026-11-16: main 0.31.1 merged in, changelog entry, code guide, translation commit, final lane ([MERGE_REVIEW.md](MERGE_REVIEW.md)). Ready for the merge; not merged. Proposed version 0.32.0. Branch `claude/pollution-system-a8e213`, cut from `main` at `e9edc974b` (0.31.0).
+Status: Implemented 2026-11-16 (0.32.0). D1 to D6 decided; WP1 to WP5, WP6a, WP8 and WP10 built and unit-tested; WP6b built and unit-tested; WP7 written; WP9 built and unit-tested; GameTests run once before WP9 (105 of 106 pass; the one failure was a fixture clash, fixed, not rerun); merge preparation complete on 2026-11-16: main 0.31.1 merged in, changelog entry, code guide, translation commit, final lane ([MERGE_REVIEW.md](MERGE_REVIEW.md)). Merged into `main` as 0.32.0 on 2026-11-16 (not pushed). Branch `claude/pollution-system-a8e213`, cut from `main` at `e9edc974b` (0.31.0).
 
 Purpose: air pollution in 16 × 16 × 16 cubes: toxic, combustible, corrosive and particulate hazard indices from what the fluid network releases, spreading and decaying on the 5 s engine, with effects on players and mobs and vapour cloud explosions at flame sources.
 
@@ -62,6 +62,8 @@ Lane: new packages `science/pollution` and `runtime/pollution`. Hot files touche
 
 - 2026-11-16, owner: "Run it here" (the final lane in the main thread; the app refused a sub-thread on that turn) and "gradle.properties change should not trigger full test". `tools/merge-lane/affected.mjs` now only notes a `gradle.properties` change (`a2ea53029`, with the lane's README and `verification.md`). The final lane ran once at `a2ea53029` ([MERGE_REVIEW.md](MERGE_REVIEW.md)): 3,822 tests with 1 failure, chain-100 exact, the GameTest server stopped at mod loading, campaign cold 991, bundled 992, defaults 1000. Two defects fixed in `73783db02`: the `mapOverlay` config list threw on NeoForge's null test (`List.of`), and `PollutionEffects` converted ticks with `/ 20.0` (`SimulationTimeTest`). Run again on the fix: `SimulationTimeTest` passes; GameTests 106 of 106 (run id `lane-1116b`). The three new wall-deadline holds (cold 118, bundled 12 and 59) are clean on their one replay alone.
 
+- 2026-11-16, owner: "Merge as 0.32.0". `main` merged into the branch once more (`90c5bbaa5`: the `icheme-2` reservation row dropped from `FORMATS.md`); `mod_version` 0.32.0, the CHANGELOG heading, the index row; the branch merged into `main` (not pushed).
+
 ## Documents
 
 - [POLLUTION_PLAN.md](POLLUTION_PLAN.md): the standard, the release sources, the field and its step, the schedule, effects, ignition and blasts, saves, work packages WP1 to WP7, owner decisions.
@@ -72,7 +74,6 @@ Lane: new packages `science/pollution` and `runtime/pollution`. Hot files touche
 
 - WP9, only a dev client with FTB Chunks can prove: the squares' colour, alpha and alignment at each zoom, that they appear after the first answer, the tooltip, and that the open-map check sees the map. Offered to the owner as the batch's one in-game check.
 - WP9's notes: `LargeMapScreen` and `refreshIconsIfOpen` are FTB internals; an index of 0.09 rounds to 0.10 on the map (a faint WARNING square where the meter says SAFE); a saturated value shows as "5.10+"; FTB Chunks and FTB Library are "All Rights Reserved" (compiled against, nothing of theirs shipped), Architectury's licence (LGPL-3.0) was not read from its source.
-- At the merge: the `icheme-2` reservation row on `main` (`b41f7f9c7`) and this branch's rows meet in `FORMATS.md`; drop the reservation row.
 - The pollution meter has no recipe yet (owner). The particulate effects proposal and the sound picks below are also the owner's.
 - WP6b, decided "keep it instant" (owner, 2026-11-16); still unexercised in a live island: a breached vessel at 20 bar (one closure from the 20 bar state in `InventoryEquilibrium.refresh`, no expansion work booked) and a superheated liquid (LPG) that must flash in that closure. A hold there goes to the owner as options.
 - WP6b's notes: the repair kit used on any fluid structure now takes the click (no GUI opens with a kit in hand) and its tooltip still says pumps; a relief valve stays compiled on a breached vessel (untested); the client may show a breached drum with the floating-roof tank view.
