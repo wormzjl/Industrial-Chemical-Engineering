@@ -350,12 +350,15 @@ public final class IntegrityGameTests {
                     duty[0] = Math.abs(world.view(side[0]).heat().heatWatt());
                     bore[0] = passage(world, side[0]).sections().getFirst().diameter();
                     var view = world.view(side[0]);
-                    if (view.heat().fouling() == null || view.heat().fouling() != 0 || view.heat().filmLeft() != 1) failure[0] = "a clean side's deposit reads " + view.heat().fouling();
+                    // Hot water lays down its deposit from the start, far below one step of the graph's (1e-4 m²K/W) in these few minutes.
+                    if (view.heat().fouling() == null || !(view.heat().fouling() < com.wormzjl.icheme.science.integrity.FoulingLaw.STEP)
+                            || Math.abs(view.heat().filmLeft() - 1 / (1 + 2000 * view.heat().fouling())) > 1e-12) failure[0] = "a clean side's deposit reads " + view.heat().fouling();
                     if (!world.integrity().set(side[0], 0, com.wormzjl.icheme.science.integrity.FoulingLaw.CAP, false)) failure[0] = "the deposit was not set";
                 })
                 .thenWaitUntil(() -> {
                     var p = passage(world, side[0]);
-                    helper.assertTrue(p != null && Math.abs(p.sections().getFirst().diameter() - (bore[0] - .004)) < 1e-12, "Waiting for the fouled passage to compile");
+                    // 4 mm at the cap; the deposit eases towards water's asymptote, so a step or two less may have compiled since.
+                    helper.assertTrue(p != null && p.sections().getFirst().diameter() < bore[0] - .0035, "Waiting for the fouled passage to compile");
                 })
                 .thenIdle(600)
                 .thenExecute(() -> {
@@ -363,9 +366,11 @@ public final class IntegrityGameTests {
                     duty[1] = Math.abs(view.heat().heatWatt());
                     if (failure[0] == null && !(duty[1] < .97 * duty[0])) failure[0] = "the fouled cooler moved " + duty[1] + " W against " + duty[0] + " W clean";
                     if (failure[0] == null && !view.status().contains("FOULED")) failure[0] = "the status line does not say FOULED: " + view.status();
-                    if (failure[0] == null && Math.abs(view.heat().filmLeft() - 1 / 5.0) > 1e-9) failure[0] = "film left " + view.heat().filmLeft();
+                    if (failure[0] == null && !(view.heat().fouling() >= com.wormzjl.icheme.science.integrity.FoulingLaw.FOULED && Math.abs(view.heat().filmLeft() - 1 / (1 + 2000 * view.heat().fouling())) < 1e-12))
+                        failure[0] = "deposit " + view.heat().fouling() + ", film left " + view.heat().filmLeft();
                     var air = ((com.wormzjl.icheme.science.fluid.network.AirCooled) passage(world, side[0]).heat()).air();
-                    if (failure[0] == null && Math.abs(air.process().liquid() - 400) > 1e-9) failure[0] = "the fouled liquid film is " + air.process().liquid();
+                    // 2000 W/m²K behind the cap's 0.002 is 400; behind FOULED's 0.001, 667.
+                    if (failure[0] == null && !(air.process().liquid() >= 400 - 1e-9 && air.process().liquid() < 2000 / 3.0)) failure[0] = "the fouled liquid film is " + air.process().liquid();
                     world.queueUnitClean(side[0], o -> outcome[0] = o);
                 })
                 .thenWaitUntil(() -> helper.assertTrue(outcome[0] != null, "Waiting for the first cleaning's answer"))
@@ -383,7 +388,7 @@ public final class IntegrityGameTests {
                 })
                 .thenExecute(() -> {
                     if (failure[0] == null && outcome[1] != Integrity.Outcome.CLEANED) failure[0] = "the idle cooler was not cleaned: " + outcome[1];
-                    if (failure[0] == null && world.integrity().fouling(side[0]) != 0) failure[0] = "a deposit is left: " + world.integrity().fouling(side[0]);
+                    if (failure[0] == null && !(world.integrity().fouling(side[0]) < com.wormzjl.icheme.science.integrity.FoulingLaw.STEP)) failure[0] = "a deposit is left: " + world.integrity().fouling(side[0]);
                     feed.run();
                 })
                 .thenWaitUntil(() -> {
