@@ -970,7 +970,7 @@
   "gui.icheme.vessel.vacuum_pump.power": "曲线上最大轴功率 %s kW；电动机 %s kW",
   "gui.icheme.vessel.vacuum_pump.seal": "内部密封水 25 °C：约 %s m³/h 带走其热量",
   "gui.icheme.vessel.plunger_pump.model": "%s 三柱塞泵，%s m³/h，%s rpm",
-  "gui.icheme.vessel.plunger_pump.relief": "安全阀压升 %s MPa：低于此压升时输送全部排量，每达一个安全阀压升减少 0.4 %",
+  "gui.icheme.vessel.plunger_pump.relief": "安全阀压升 %s MPa：低于此压升时输送全部排量，每达一个安全阀压升减少 0.4 %%",
   "gui.icheme.vessel.plunger_pump.power": "安全阀压升下轴功率 %s kW；电机 %s kW",
   "gui.icheme.vessel.prime_mover.rating": "%s：净功率 %s MW，%s rpm，额定工况效率 %s %%",
   "gui.icheme.vessel.prime_mover.fuel": "额定燃料 %s MW，约 %s kg/s；供给压力至少 %s bar(a)",

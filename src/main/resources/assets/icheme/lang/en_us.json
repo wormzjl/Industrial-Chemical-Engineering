@@ -970,7 +970,7 @@
   "gui.icheme.vessel.vacuum_pump.power": "%s kW largest shaft power on its curve; %s kW motor",
   "gui.icheme.vessel.vacuum_pump.seal": "Internal seal water at 25 °C: about %s m³/h takes its heat",
   "gui.icheme.vessel.plunger_pump.model": "%s triplex plunger pump, %s m³/h at %s rpm",
-  "gui.icheme.vessel.plunger_pump.relief": "Relief valve at a rise of %s MPa: it delivers its displacement at any rise below it, less 0.4 % per relief rise",
+  "gui.icheme.vessel.plunger_pump.relief": "Relief valve at a rise of %s MPa: it delivers its displacement at any rise below it, less 0.4 %% per relief rise",
   "gui.icheme.vessel.plunger_pump.power": "%s kW shaft power at the relief rise; %s kW motor",
   "gui.icheme.vessel.prime_mover.rating": "%s: %s MW net at %s rpm, %s %% efficient at its rating",
   "gui.icheme.vessel.prime_mover.fuel": "Fuel %s MW at its rating, about %s kg/s; supply at least %s bar(a)",

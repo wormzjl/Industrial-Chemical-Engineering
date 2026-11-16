@@ -970,7 +970,7 @@
   "gui.icheme.vessel.vacuum_pump.power": "曲線上の最大軸動力 %s kW、電動機 %s kW",
   "gui.icheme.vessel.vacuum_pump.seal": "内部封水 25 °C: 約 %s m³/h で発熱を除去",
   "gui.icheme.vessel.plunger_pump.model": "%s 3 連プランジャポンプ、%s m³/h (%s rpm)",
-  "gui.icheme.vessel.plunger_pump.relief": "安全弁の昇圧 %s MPa: それ以下の昇圧では押しのけ量を全量送り、安全弁昇圧あたり 0.4 % 減ります",
+  "gui.icheme.vessel.plunger_pump.relief": "安全弁の昇圧 %s MPa: それ以下の昇圧では押しのけ量を全量送り、安全弁昇圧あたり 0.4 %% 減ります",
   "gui.icheme.vessel.plunger_pump.power": "安全弁の昇圧での軸動力 %s kW、電動機 %s kW",
   "gui.icheme.vessel.prime_mover.rating": "%s: 正味 %s MW、%s rpm、定格効率 %s %%",
   "gui.icheme.vessel.prime_mover.fuel": "定格燃料 %s MW、約 %s kg/s、供給圧力 %s bar(a) 以上",
