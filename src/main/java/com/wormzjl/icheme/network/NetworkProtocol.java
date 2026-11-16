@@ -18,11 +18,12 @@ package com.wormzjl.icheme.network;
  * the pollution map's payloads joined ({@link PollutionMapNetwork}, batch 2026-11-15-pollution-system, WP9).
  * {@code icheme-3}: a steam turbine's inlet class gained LP, declared first, so every class's ordinal on the wire moved
  * (batch 2026-11-15-equipment-visual-design); the conversion rules sync, {@code FluidNetwork.ConversionRulesSync} (batch 2026-11-15-fluid-interfaces, W5), and the alarm beacon's
- * edit and view (same batch, W9).</p>
+ * edit and view (same batch, W9). {@code icheme-5} (batch 2026-11-16-fouling-corrosion, WP3; {@code icheme-4} is held by another
+ * batch): the constructor's design carries its material of construction.</p>
  */
 public final class NetworkProtocol {
     /** The version every registrar of the mod carries. */
-    public static final String VERSION = "icheme-3";
+    public static final String VERSION = "icheme-5";
 
     private NetworkProtocol() {
     }

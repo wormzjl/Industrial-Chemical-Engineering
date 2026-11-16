@@ -81,6 +81,39 @@ class EquipmentNetworkCodecTest {
         assertEquals(type,read.design(STORED).exchangerType());
     }
 
+    /**
+     * The material of construction (protocol icheme-5, shape fields 13): it crosses on the draft, a stored design (Send to
+     * block) carries it in its shape and an Import lands it on the draft; a name the server does not have reads carbon steel.
+     */
+    @Test
+    void aMaterialCrossesWithTheDraftAndAStoredDesign() {
+        for (var material : com.wormzjl.icheme.science.integrity.Metallurgy.values()) {
+            var shape = EquipmentShape.drum(2, 4, EquipmentShape.Orientation.VERTICAL, EquipmentShape.Heading.NORTH, 2).withMaterial(material);
+            var sent = new SentDesign("V-1", "", 1, shape, null);
+            var stored = SentDesignTags.read(SentDesignTags.write(List.of(sent), List.of()));
+            assertTrue(stored.whole(), stored.repairs().toString());
+            assertEquals(List.of(sent), stored.designs());
+            var draft = Design.DEFAULT.landed(sent);
+            assertEquals(material, draft.material());
+            var read = roundTrip(ConstructorPayload.STREAM_CODEC, ConstructorPayload.of(AT, draft, Action.KEEP));
+            assertEquals(material, read.material());
+            assertEquals(material, read.design(STORED).material());
+            assertEquals(material, read.design(STORED).shape(net.minecraft.core.Direction.NORTH).material());
+        }
+        var column = SentDesign.column("T-1", STORED.column());
+        var nickel = new SentDesign(column.tag(), column.member(), 1, column.shape().withMaterial(com.wormzjl.icheme.science.integrity.Metallurgy.NICKEL_ALLOY), column.column());
+        assertEquals(com.wormzjl.icheme.science.integrity.Metallurgy.NICKEL_ALLOY, Design.DEFAULT.landed(nickel).material());
+        var buffer = new RegistryFriendlyByteBuf(Unpooled.buffer(), RegistryAccess.EMPTY);
+        try {
+            ConstructorPayload.STREAM_CODEC.encode(buffer, ConstructorPayload.of(AT, DRAFT, Action.KEEP));
+            buffer.writerIndex(buffer.writerIndex() - 1 - "CARBON_STEEL".length());
+            buffer.writeUtf("TITANIUM", 64);
+            assertEquals(com.wormzjl.icheme.science.integrity.Metallurgy.CARBON_STEEL, ConstructorPayload.STREAM_CODEC.decode(buffer).material());
+        } finally {
+            buffer.release();
+        }
+    }
+
     @Test
     void aColumnTemplateCrossesWithItsNameAndInput() {
         var c = com.wormzjl.icheme.science.material.MaterialCatalog.bundled();

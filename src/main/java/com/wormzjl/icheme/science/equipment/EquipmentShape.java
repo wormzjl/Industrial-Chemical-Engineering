@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.science.equipment;
 
+import com.wormzjl.icheme.science.integrity.Metallurgy;
 import com.wormzjl.icheme.science.math.DeterministicMath;
 import org.jetbrains.annotations.Nullable;
 
@@ -53,7 +54,7 @@ import java.util.Objects;
  */
 public record EquipmentShape(Kind kind, double diameter, double tangentLength, Orientation orientation, Heading front, int support,
                              @Nullable ColumnTrays trays, List<Connection> connections, ProcessUnit.Bank bank, boolean boot, int outlet, TowerBank towerBank, MachineDuty duty, ExchangerType exchangerType,
-                             BatchStillOptions still) {
+                             BatchStillOptions still, Metallurgy material) {
     public EquipmentShape(Kind kind, double diameter, double tangentLength, Orientation orientation, Heading front, int support,
                           @Nullable ColumnTrays trays, List<Connection> connections, ProcessUnit.Bank bank, boolean boot, int outlet, TowerBank towerBank, MachineDuty duty) {
         this(kind,diameter,tangentLength,orientation,front,support,trays,connections,bank,boot,outlet,towerBank,duty,ExchangerType.STANDARD);
@@ -64,19 +65,32 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
                           ExchangerType exchangerType) {
         this(kind,diameter,tangentLength,orientation,front,support,trays,connections,bank,boot,outlet,towerBank,duty,exchangerType,BatchStillOptions.DEFAULT);
     }
+    /** A shape before shape fields 13: carbon steel ({@link Metallurgy#CARBON_STEEL}, every structure built before batch 2026-11-16-fouling-corrosion). */
+    public EquipmentShape(Kind kind, double diameter, double tangentLength, Orientation orientation, Heading front, int support,
+                          @Nullable ColumnTrays trays, List<Connection> connections, ProcessUnit.Bank bank, boolean boot, int outlet, TowerBank towerBank, MachineDuty duty,
+                          ExchangerType exchangerType, BatchStillOptions still) {
+        this(kind,diameter,tangentLength,orientation,front,support,trays,connections,bank,boot,outlet,towerBank,duty,exchangerType,still,Metallurgy.CARBON_STEEL);
+    }
+    /**
+     * This structure built of {@code value} (shape fields 13, batch 2026-11-16-fouling-corrosion, owner decision D2: one
+     * material per structure). The material is not part of the layout: it changes no cell, nozzle or stamp.
+     */
+    public EquipmentShape withMaterial(Metallurgy value) {
+        return new EquipmentShape(kind,diameter,tangentLength,orientation,front,support,trays,connections,bank,boot,outlet,towerBank,duty,exchangerType,still,value);
+    }
     public EquipmentShape withExchangerType(ExchangerType value) {
-        return new EquipmentShape(kind,diameter,tangentLength,orientation,front,support,trays,connections,bank,boot,outlet,towerBank,duty,value,still);
+        return new EquipmentShape(kind,diameter,tangentLength,orientation,front,support,trays,connections,bank,boot,outlet,towerBank,duty,value,still,material);
     }
     public EquipmentShape withTowerBank(TowerBank value) {
-        return new EquipmentShape(kind,diameter,tangentLength,orientation,front,support,trays,connections,bank,boot,outlet,value,duty,exchangerType,still);
+        return new EquipmentShape(kind,diameter,tangentLength,orientation,front,support,trays,connections,bank,boot,outlet,value,duty,exchangerType,still,material);
     }
     /** This batch still with options {@code value} (shape fields 11, batch 2026-11-09-batch-distiller). */
     public EquipmentShape withStill(BatchStillOptions value) {
-        return new EquipmentShape(kind,diameter,tangentLength,orientation,front,support,trays,connections,bank,boot,outlet,towerBank,duty,exchangerType,value);
+        return new EquipmentShape(kind,diameter,tangentLength,orientation,front,support,trays,connections,bank,boot,outlet,towerBank,duty,exchangerType,value,material);
     }
     /** This shape facing {@code value}, every other field kept. */
     public EquipmentShape withFront(Heading value) {
-        return new EquipmentShape(kind,diameter,tangentLength,orientation,value,support,trays,connections,bank,boot,outlet,towerBank,duty,exchangerType,still);
+        return new EquipmentShape(kind,diameter,tangentLength,orientation,value,support,trays,connections,bank,boot,outlet,towerBank,duty,exchangerType,still,material);
     }
     public com.wormzjl.icheme.science.fluid.network.CoolingTower coolingTower() {
         return kind==Kind.INDUCED_DRAFT_COOLING_TOWER
@@ -434,7 +448,7 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
      */
     public EquipmentShape withDuty(MachineDuty value) {
         var design = UnitDesign.of(kind);
-        return new EquipmentShape(kind, design.size(value), design.length(value), orientation, front, support, trays, connections, bank, boot, outlet, towerBank, value, exchangerType, still);
+        return new EquipmentShape(kind, design.size(value), design.length(value), orientation, front, support, trays, connections, bank, boot, outlet, towerBank, value, exchangerType, still, material);
     }
 
     /**
@@ -469,7 +483,7 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
 
     /** This drum with {@code connections} instead of its own. */
     public EquipmentShape withConnections(List<Connection> connections) {
-        return new EquipmentShape(kind, diameter, tangentLength, orientation, front, support, trays, connections, bank, boot, outlet, towerBank, duty, exchangerType, still);
+        return new EquipmentShape(kind, diameter, tangentLength, orientation, front, support, trays, connections, bank, boot, outlet, towerBank, duty, exchangerType, still, material);
     }
 
     /** A column: its bottoms leave through its skirt to the front (the owner leaves columns alone, 2026-10-25). */
@@ -593,6 +607,7 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
 
     public EquipmentShape {
         Objects.requireNonNull(exchangerType, "exchangerType");
+        Objects.requireNonNull(material, "material");
         if (kind != Kind.EXCHANGER && exchangerType != ExchangerType.STANDARD) throw new IllegalArgumentException("Only exchangers have a crossflow configuration");
         Objects.requireNonNull(still, "still");
         if (kind != Kind.BATCH_STILL && !still.equals(BatchStillOptions.DEFAULT)) throw new IllegalArgumentException("Only a batch still has still options");
@@ -861,7 +876,12 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
 
     /** Registers with the fluid engine when the whole structure has been built: a steam turbine too (W3, reading A37), a batch still (batch 2026-11-09-batch-distiller, W3), a steam ejector (batch 2026-11-10-steam-ejector-flow). */
     public boolean fluidDevice() {
-        return reservoir() || kind.mover() || kind == Kind.STEAM_TURBINE || kind.primeMover() || kind == Kind.EJECTOR || kind == Kind.FLARE_STACK || kind == Kind.BATCH_STILL || kind.chimney() || kind.converter() || HeatSides.unit(kind) != null;
+        return fluidDevice(kind);
+    }
+
+    /** Whether a structure of {@code kind} registers with the fluid engine ({@link #fluidDevice()}): the kinds whose material of construction matters (shape fields 13). */
+    public static boolean fluidDevice(Kind kind) {
+        return kind.reservoir() || kind.mover() || kind == Kind.STEAM_TURBINE || kind.primeMover() || kind == Kind.EJECTOR || kind == Kind.FLARE_STACK || kind == Kind.BATCH_STILL || kind.chimney() || kind.converter() || HeatSides.unit(kind) != null;
     }
 
     /** A vessel's skirt; a designed shape's supports are its own parts. */

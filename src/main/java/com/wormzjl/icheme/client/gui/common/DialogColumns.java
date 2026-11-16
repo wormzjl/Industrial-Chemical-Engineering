@@ -126,6 +126,14 @@ public final class DialogColumns {
     public record Size(String key, String value, String unit, boolean chosen) {
     }
 
+    /**
+     * The datasheet's material line (batch 2026-11-16-fouling-corrosion, WP3; shape fields 13): the structure's material of
+     * construction and its corrosion allowance in mm, the wall its design adds for loss ({@code Metallurgy#allowance}).
+     */
+    public static String material(com.wormzjl.icheme.science.integrity.Metallurgy material, HeatControlColumn.Texts t) {
+        return t.get("vessel.material", t.get("metallurgy." + material.name().toLowerCase(java.util.Locale.ROOT)), com.wormzjl.icheme.science.equipment.UnitDesign.number(material.allowance()));
+    }
+
     /** A nozzle: what it is for, the phase it draws first, the side it faces as seen from the vessel's front. */
     public record Nozzle(String role, String port, String side) {
     }

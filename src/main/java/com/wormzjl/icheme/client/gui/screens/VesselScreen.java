@@ -111,6 +111,8 @@ public final class VesselScreen extends Screen {
             sizes.add(new DialogColumns.Size("volume", number(shape.volume()), "m³", false));
             sizes.add(new DialogColumns.Size("area", number(shape.surfaceArea()), "m²", false));
         }
+        // The material of construction (shape fields 13) where it matters: a structure that registers a fluid device.
+        if (shape.fluidDevice()) notes.add(DialogColumns.material(shape.material(), VesselScreen::tr));
         notes.add(text(KEY + "cells", layout.shell().size(), layout.interior().size()));
         var cell = layout.controller();
         notes.add(text(KEY + "controller", vessel.origin().offset(cell.x(), cell.y(), cell.z()).toShortString()));

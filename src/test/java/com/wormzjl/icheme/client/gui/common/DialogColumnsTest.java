@@ -68,6 +68,7 @@ class DialogColumnsTest {
         var texts = new HeatControlColumnTest.Recording("gui.icheme.");
         cases(texts);
         DialogColumns.glass(sheet(), true, 160, M, texts);
+        for (var material : com.wormzjl.icheme.science.integrity.Metallurgy.values()) DialogColumns.material(material, texts);
         for (var key : List.of("pipeline_tool.save", "pipeline_tool.paint.bare", "vessel.blocked", "vessel.cells", "vessel.controller", "vessel.skirt", "vessel.saddles",
                 "vessel.unsupported", "vessel.kind.skirt", "vessel.kind.saddles", "vessel.kind.bare", "vessel.kind.column", "vessel.port.vapour", "vessel.port.bulk",
                 "vessel.port.liquid", "vessel.port.overflow", "equipment_constructor.side.front", "equipment_constructor.side.back", "equipment_constructor.side.left",

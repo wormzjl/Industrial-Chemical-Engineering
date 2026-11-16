@@ -336,6 +336,7 @@
     "stops": [
       { "anchor": "title" },
       { "anchor": "group:equipment_constructor.group.size" },
+      { "anchor": "group:equipment_constructor.group.material" },
       { "anchor": "group:equipment_constructor.connections" },
       { "anchor": "group:equipment_constructor.group.place" },
       { "anchor": "paint" },
