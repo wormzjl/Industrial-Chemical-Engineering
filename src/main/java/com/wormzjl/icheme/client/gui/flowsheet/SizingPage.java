@@ -445,6 +445,7 @@ public final class SizingPage {
             var row = group.get(i);
             if (row instanceof Column.Field field && field.key().startsWith(KEY + "size/")) {
                 String label = field.label(), unitText = field.unit(), fieldName = field.key().substring((KEY + "size/").length());
+                String shown = values.getOrDefault(field.key(), "");
                 if (dimensions != null) {
                     var design = UnitDesign.of(dimensions.kind());
                     boolean main = fieldName.equals(dimensions.main());
@@ -454,8 +455,11 @@ public final class SizingPage {
                     }
                     label = x.t().get(ConstructorColumn.KEY + (main ? design.sizeRow() : design.lengthRow()));
                     unitText = main ? design.sizeUnit() : design.lengthInMetres() ? "m" : "";
+                    // A model's box reads what its unit names, the model's capacity (m³/h, a prime mover's MW), as the
+                    // constructor's row does; the steppers step the model (P2 of batch 2026-11-16-supercritical-followups, item 5).
+                    if (main && dimensions.main().equals("model")) shown = design.sizeText(dimensions.size());
                 } else if (size instanceof DrumSizing.Size && fieldName.equals("length")) label = x.t().get(ConstructorColumn.KEY + "tangent_length");
-                group.set(i, new Column.Setting(field.key(), label, values.getOrDefault(field.key(), ""), unitText, x.text(manual ? "sizing.fixed_hint" : "sizing.manual_hint"), edits && manual));
+                group.set(i, new Column.Setting(field.key(), label, shown, unitText, x.text(manual ? "sizing.fixed_hint" : "sizing.manual_hint"), edits && manual));
             } else if (row instanceof Column.Setting setting && setting.key().startsWith(KEY + "size/"))
                 group.set(i, new Column.Setting(setting.key(), setting.label(), setting.value(), setting.unit(), x.text(manual ? "sizing.fixed_hint" : "sizing.manual_hint"), edits && manual));
         }
