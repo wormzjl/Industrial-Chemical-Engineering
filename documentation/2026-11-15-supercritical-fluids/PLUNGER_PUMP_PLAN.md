@@ -19,8 +19,10 @@ gas's volume, as the reciprocating compressor does.
   (`EquipmentShape`, `UnitDesign`, `world/**`), client (the constructor, the device screen), flowsheet (the sizing).
   Hot files: `EquipmentShape`, `ShaftTrains`, `FluidDeviceScreen`, `SheetSizing`.
 - S5 writes the client and the sizing now, so this stage starts after S5 is checked.
-- Main moved to 0.32.0 (the pollution system batch, 200 files). It is merged into the branch before this stage, so the
-  new kind is added on the current `EquipmentShape`, constructor and lang file.
+- Main moved to 0.32.0 (the pollution system batch, 200 files). The owner's order (2026-11-16: "Pump first, merge
+  last"): this stage is built on the branch as it stands, and main is merged into the branch at the very end, before
+  the final lane. So the new kind's lines in `EquipmentShape`, the constructor and the lang file are appended in the
+  batch's own block, where a later merge keeps both sides (COLLABORATION.md section 2, rule 3).
 - No number is planned: no facts field, no shape field, no payload change. `EquipmentShape.Kind` is saved by name and
   the constant goes at the end of the enum. If the build finds that a number is needed (a facts schema for a new law
   tag, a shape field, a protocol version for the constructor), it stops and reports; the number is then reserved on
