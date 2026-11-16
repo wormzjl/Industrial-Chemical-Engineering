@@ -1,6 +1,6 @@
 # Supercritical follow-ups
 
-Status: **In progress** since 2026-11-16 (P1 and P3 merged into the batch branch; P2 and P4 not started). Branch `claude/supercritical-fluid-support-d0ffa4`, base `dfbdc583c` (main 0.34.0).
+Status: **In progress** since 2026-11-16 (P1 and P3 merged into the batch branch; P4 done on its branch; P2 not started). Branch `claude/supercritical-fluid-support-d0ffa4`, base `dfbdc583c` (main 0.34.0).
 
 Purpose: the open owner items of [2026-11-15-supercritical-fluids](../2026-11-15-supercritical-fluids/README.md), on the
 owner's "fix them": the plunger pump's clearance loss and work, one dense fluid in the level, sight glass, release,
@@ -22,19 +22,21 @@ line service and device pages, the column's feed flash by a stability test, the 
   plunger-typed Pump tile (`Passages.pumpType`). Six reference rows within 0.35 % of η_v. Stop decisions: exponent by
   differences (1 A), a pump with no type runs centrifugal (2, narrowed), the view and transport read `suctionKappa` (3).
   [P1_PLUNGER_REVIEW.md](P1_PLUNGER_REVIEW.md).
+- 2026-11-16: P4, sub-thread: the plunger pump's own loop `plunger_pump_running` (candidate A of three, valve knocks over a 15 Hz ripple and a crank and gearbox rumble, 300 rpm, 4 s, RMS 0.0918, floor 13.4 dB down), picked by `MoverSounds.casingLoop`; pitch law and clamp kept; subtitle reuses `pump_running`, no lang change. Filtered run: 5 classes, 27 tests, 0 failures. [P4_SOUND_REVIEW.md](P4_SOUND_REVIEW.md).
 
 ## Documents
 
 - [FOLLOWUPS_PLAN.md](FOLLOWUPS_PLAN.md): the items, the common rules, packages P1 to P4, the order.
 - [P3_COLUMN_FEED_REVIEW.md](P3_COLUMN_FEED_REVIEW.md): P3, the feed flash by a stability test: forms, moved answers, the two-liquid limit.
 - [P1_PLUNGER_REVIEW.md](P1_PLUNGER_REVIEW.md): P1, the plunger pump's clearance and work: reference rows, moved values, runs.
+- [P4_SOUND_REVIEW.md](P4_SOUND_REVIEW.md): P4, the plunger pump's own sound: the real machine, the recipe, levels against the skill, the candidates.
 
 ## Code areas (planned)
 
 - P1: `science/machine/PlungerPump` (and `PositiveDisplacement.share`), `NetworkStreams.isentropicExponent`, the solve's `suctionKappa` (read by `ConservativeTransport` and `ViewBuilder` too), the simulator's `MoverUnit`, `PumpSizing`, `Passages` and `SizedPassages`.
 - P2: `runtime/fluid` views and releases, the level readers, `network`, `client`, `Service`.
 - P3: `science/column/v3/thermo` (`V3FeedFlash`, new `V3FeedEngine`, the PR session and package), `build.gradle`'s column gate group.
-- P4: the mover sounds.
+- P4: `client/MoverSounds.casingLoop`, `ModBlocks`, `sounds.json`, `plunger_pump_running.ogg`, `tools/machine-sounds/plunger_candidates.py`.
 
 ## Open items
 
