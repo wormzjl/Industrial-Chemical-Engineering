@@ -445,7 +445,7 @@ public final class ConstructorColumn {
         if (form.designed() && UnitDesign.of(form.kind()).hasDuty()) rows.addAll(machine(in, t));
         else rows.add(new Column.Group(t.get(KEY + "group.size"), t.get(KEY + "shift"), size));
         if (form.kind() == EquipmentShape.Kind.BATCH_STILL) rows.addAll(still(in.still(), t));
-        if (EquipmentShape.fluidDevice(form.kind())) rows.add(material(in.material(), t));
+        if (EquipmentShape.hasMaterial(form.kind())) rows.add(material(in.material(), t));
         // A bottom outlet leaving through the skirt turns where the design lets it (a trickle-bed reactor's effluent).
         if (form.designed() && Integer.bitCount(in.outlet().allowed()) > 1) rows.add(outlet(in.outlet(), t));
         var place = new ArrayList<Column.Row>();
@@ -479,8 +479,8 @@ public final class ConstructorColumn {
     /**
      * The structure's material of construction (batch 2026-11-16-fouling-corrosion, WP3; shape fields 13; owner decision
      * D2: one a structure): a selector of the four, each with its name and cost index (shown, not charged: owner O2), its
-     * hover the material's place. Only a form whose structure registers a fluid device shows it; another builds carbon
-     * steel. Keys {@code material:<constant>}.
+     * hover the material's place. Only a form whose structure registers a fluid device, or a column (WP8), shows it; another
+     * builds carbon steel. Keys {@code material:<constant>}.
      */
     static Column.Group material(com.wormzjl.icheme.science.integrity.Metallurgy current, HeatControlColumn.Texts t) {
         var choices = new ArrayList<Column.Button>();

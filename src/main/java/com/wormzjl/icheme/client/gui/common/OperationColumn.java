@@ -155,7 +155,24 @@ public final class OperationColumn {
             entries.add(v.editable() ? new Column.Field(key, label, unit, hint) : new Column.Reading(key, label, values.get(key), unit, hint));
         }
         rows.add(new Column.Group(t.get(KEY + "group.setpoints"), t.get(KEY + (v.editable() ? "group.setpoints.hint" : "group.setpoints.reader")), entries));
+        if (v.wear() != null) rows.add(integrity(v.wear(), !v.running() && !in.queued(), t));
         return rows;
+    }
+
+    /**
+     * The Integrity group (WP8 of batch 2026-11-16-fouling-corrosion, plan section 13.1): Clean, a push button acting only
+     * while the column is stopped ({@code cleans}); then the trays' capacity left and the wall left, % (LED meters), the
+     * wall's rate, mm per corrosion year, and the material. Its words (TRAYS FOULED, THIN WALL, WEEPING, LEAKING) stay
+     * with the status and the conditions.
+     */
+    static Column.Group integrity(OperationView.Wear w, boolean cleans, HeatControlColumn.Texts t) {
+        String material = t.get("metallurgy." + w.material().name().toLowerCase(Locale.ROOT));
+        return new Column.Group(t.get(KEY + "group.integrity"), t.get(KEY + "group.integrity.hint"), List.of(
+                new Column.Buttons(List.of(new Column.Button("clean", t.get(KEY + "clean"), cleans, t.get(KEY + (cleans ? "clean.hint" : "clean.stopped"))))),
+                new Column.Reading("wear:trays", t.get(KEY + "trays_left"), fixed(100 * w.capacity(), 0), "%", t.get(KEY + "trays_left.hint")),
+                new Column.Reading("wear:wall", t.get(KEY + "wall_left"), fixed(100 * w.wallLeft(), 0), "%", t.get(KEY + "wall_left.hint")),
+                new Column.Reading("wear:rate", t.get(KEY + "wall_rate"), fixed(w.rate(), 2), "mm/y", t.get(KEY + "wall_rate.hint")),
+                new Column.Paragraph(t.get(KEY + "wall_material", material), Palette.TEXT, t.get(KEY + "wall_material.hint"))));
     }
 
     /** Whether Apply acts: the column takes set points, no command awaits its answer, every entry reads as a number. */
@@ -273,7 +290,8 @@ public final class OperationColumn {
         out.add(new String[]{t.get(KEY + "column.condition"), t.get(KEY + "column.value"), t.get(KEY + "column.member")});
         for (var a : v.conditions()) {
             var c = a.condition();
-            boolean share = c.rank == Condition.Rank.LIMIT || c == Condition.HIGH_LOAD;
+            // A share: a LIMIT's of the set feed, a high load's of flood, the trays' capacity left, the allowance a thin or weeping wall used.
+            boolean share = c.rank == Condition.Rank.LIMIT || c == Condition.HIGH_LOAD || c == Condition.TRAYS_FOULED || c == Condition.THIN_WALL || c == Condition.WEEPING;
             out.add(new String[]{t.get(KEY + "condition." + c.name().toLowerCase(Locale.ROOT)), share ? fixed(100 * a.value(), 0) + " %" : "—", member(a, t)});
         }
         return out;

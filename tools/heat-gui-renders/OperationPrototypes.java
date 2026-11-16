@@ -10,6 +10,7 @@ import com.wormzjl.icheme.science.plant.column.Condition;
 import com.wormzjl.icheme.science.plant.column.DriftBands;
 import com.wormzjl.icheme.science.plant.column.OperationView;
 import com.wormzjl.icheme.science.plant.column.Port;
+import com.wormzjl.icheme.science.integrity.Metallurgy;
 import com.wormzjl.icheme.science.plant.column.Setpoints;
 import com.wormzjl.icheme.science.display.DisplayUnit.FlowRateUnit;
 import com.wormzjl.icheme.science.display.DisplayUnit.PressureUnit;
@@ -34,7 +35,8 @@ final class OperationPrototypes {
     static List<GuiPrototypes.Prototype> operation() {
         return List.of(new GuiPrototypes.Prototype("operation-1920x1080", 624, 344, (d, s) -> door(d, crude(1, 2, 2))),
                 new GuiPrototypes.Prototype("operation-narrow-largest", 496, 368, (d, s) -> door(d, crude(2, 4, 4)), true),
-                new GuiPrototypes.Prototype("operation-flooding", 624, 344, (d, s) -> door(d, flooding()), true));
+                new GuiPrototypes.Prototype("operation-flooding", 624, 344, (d, s) -> door(d, flooding()), true),
+                new GuiPrototypes.Prototype("operation-integrity-stopped", 624, 344, (d, s) -> door(d, stopped()), true));
     }
 
     /** A crude column with {@code steam} inlets, {@code draws} and {@code pumparounds}, at 86 % of its 120 kmol/h feed. */
@@ -60,7 +62,20 @@ final class OperationPrototypes {
         duties.add(new OperationView.Duty(OperationView.DutyKind.FANS, 0, 168.2e3 * alpha, 168.2e3));
         var conditions = List.of(new Condition.Active(Condition.COOLING_SHORT, alpha), new Condition.Active(Condition.HIGH_LOAD, .88, 27, "tray 28 at 88 % of flood"));
         return new OperationView(OperationView.Phase.LIMITED, conditions, alpha, null, "LIMITED: condenser, 86 %", true, true, set, null, streams, duties,
-                new OperationView.Solve(DriftBands.Trigger.ENTHALPY, true, 45), new OperationView.Trays(16_900, .88, 21_800, 1.02, 28));
+                new OperationView.Solve(DriftBands.Trigger.ENTHALPY, true, 45), new OperationView.Trays(16_900, .88, 21_800, 1.02, 28),
+                new OperationView.Wear(.3, .81, .38, Metallurgy.CARBON_STEEL));
+    }
+
+    /**
+     * The crude column stopped after a run on a feed with solids (WP8 of batch 2026-11-16-fouling-corrosion): its trays fouled
+     * to 0.8 (68 % of their capacity left), its chrome steel wall weeping; Clean acts, the door scrolled to its end.
+     */
+    static OperationView stopped() {
+        var base = crude(1, 2, 2);
+        var conditions = List.of(new Condition.Active(Condition.TRAYS_FOULED, .68, -1, "trays fouled: 68 % of their clean capacity left"),
+                new Condition.Active(Condition.WEEPING, .92, -1, "weeping: 92 % of the corrosion allowance used"));
+        return new OperationView(OperationView.Phase.STOPPED, conditions, 0, null, "STOPPED", false, true, base.setpoints(), null, List.of(), List.of(), null,
+                OperationView.Trays.NONE, new OperationView.Wear(.8, .08, 0, Metallurgy.CHROME_STEEL));
     }
 
     /** The crude column past flood at its set feed (W7): flooding binds at 92 %, a refused set point leaves the accepted steam and draws. */
@@ -74,7 +89,7 @@ final class OperationPrototypes {
         var conditions = List.of(new Condition.Active(Condition.FLOODING, .92, 27, ""), new Condition.Active(Condition.HIGH_LOAD, 1, 27, "tray 28 at 100 % of flood"),
                 new Condition.Active(Condition.SETPOINT_REFUSED, "the setpoint solve failed (no convergence), the table of 40 s ago kept"));
         return new OperationView(OperationView.Phase.LIMITED, conditions, .92, null, "LIMITED: flooding, 92 %", true, true, s, accepted, base.streams(), base.duties(),
-                base.solve(), new OperationView.Trays(20_300, 1.0, 21_100, 1.09, 28));
+                base.solve(), new OperationView.Trays(20_300, 1.0, 21_100, 1.09, 28), base.wear());
     }
 
     /** The Operation page as AssemblyScreen draws it, through the shipped OperationColumn. */

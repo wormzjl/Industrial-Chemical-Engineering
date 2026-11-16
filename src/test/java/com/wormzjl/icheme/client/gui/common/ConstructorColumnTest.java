@@ -363,6 +363,9 @@ class ConstructorColumnTest {
         assertTrue(buttons(lying).get("axis:crosswise").latched() && buttons(lying).get("axis:lengthwise").active());
         var column = ConstructorColumn.design(design(Form.COLUMN, 2, 20, 3, 3, 0, 0), t);
         assertEquals(List.of("size", "trays", "feed", "support", "support-", "support+", "import"), slots(column).subList(0, 7), "the imported design shown, not stepped");
+        // A column carries a material too (WP8 of batch 2026-11-16-fouling-corrosion): its unit's wall corrodes and wears as it.
+        assertTrue(slots(column).containsAll(List.of("material:CARBON_STEEL", "material:CHROME_STEEL", "material:STAINLESS_STEEL", "material:NICKEL_ALLOY")), slots(column).toString());
+        assertTrue(buttons(column).get("material:CARBON_STEEL").latched());
         var cooler = slots(ConstructorColumn.design(design(Form.AIR_COOLER, 3, 6, 4, 3, 0, 0), t));
         assertTrue(cooler.containsAll(List.of("parallel", "series", "support")));
         var pump = ConstructorColumn.design(design(Form.PUMP, 0.1, 1, 0, 3, 0, 0), t);

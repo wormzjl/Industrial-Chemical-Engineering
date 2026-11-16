@@ -68,7 +68,17 @@ public class OperationColumnTest {
         var conditions = List.of(new Condition.Active(Condition.COOLING_SHORT, .86), new Condition.Active(Condition.STEAM_SHORT, .9, 0, Condition.RULE_A),
                 new Condition.Active(Condition.SOLVE_REFUSED, "the composition solve failed (test), the table of 30 s ago kept"));
         return new OperationView(phase, conditions, .86, DriftBands.Trigger.COMPOSITION, "LIMITED: condenser, 86 %", true, true, s, null, streams, duties,
-                new OperationView.Solve(DriftBands.Trigger.ENTHALPY, true, 4321));
+                new OperationView.Solve(DriftBands.Trigger.ENTHALPY, true, 4321), OperationView.Trays.NONE, WEAR);
+    }
+
+    /** A running column's trays and wall (WP8): fouled to 0.35 (86 % of their capacity), 72 % of the wall left at 0.42 mm/y. */
+    static final OperationView.Wear WEAR = new OperationView.Wear(.35, .72, .42, com.wormzjl.icheme.science.integrity.Metallurgy.CARBON_STEEL);
+
+    /** A column on {@code s} that ran and stands (WP8): its unit's trays fouled whole, a weeping stainless steel wall; Clean acts. */
+    public static OperationView stopped(Setpoints s) {
+        return new OperationView(Phase.STOPPED, List.of(new Condition.Active(Condition.TRAYS_FOULED, .6, -1, "trays fouled: 60 % of their clean capacity left"),
+                new Condition.Active(Condition.WEEPING, .93, -1, "weeping: 93 % of the corrosion allowance used")), 0, null, "STOPPED", false, true, s, null, List.of(), List.of(), null,
+                OperationView.Trays.NONE, new OperationView.Wear(1, .07, 0, com.wormzjl.icheme.science.integrity.Metallurgy.STAINLESS_STEEL));
     }
 
     /**
@@ -93,7 +103,7 @@ public class OperationColumnTest {
         for (int j = 0; j < pa.length; j++) pa[j] /= 2;
         var accepted = new Setpoints(s.designFeedRate(), s.feedRate(), s.condenserTemperature(), s.refluxRatio(), s.reboilerPerFeed() * 2, steam, draws, pa);
         return new OperationView(Phase.LIMITED, conditions, .8, null, "LIMITED: flooding, 80 %", true, true, s, accepted, base.streams(), base.duties(), base.solve(),
-                new OperationView.Trays(18_400, .87, 21_300, 1.25, 28));
+                new OperationView.Trays(18_400, .87, 21_300, 1.25, 28), base.wear());
     }
 
     /** The designs drawn: the smallest, the usual crude column, the largest the calculator builds. */
@@ -111,6 +121,7 @@ public class OperationColumnTest {
                 out.add(new OperationColumn.Input(OperationView.idle(Phase.STOPPED, "STOPPED", s), false, u));
                 out.add(new OperationColumn.Input(OperationView.idle(Phase.STOPPED, "STOPPED", s, true), false, u));
                 out.add(new OperationColumn.Input(loaded(s), false, u));
+                out.add(new OperationColumn.Input(stopped(s), false, u));
                 out.add(new OperationColumn.Input(OperationView.idle(Phase.NOT_READY, "a vacuum column cannot run yet", s), false, u));
             }
         return out;
@@ -186,7 +197,11 @@ public class OperationColumnTest {
         // At 1920 by 1080 and 2560 by 1440 (scale 3 and 4: 640 by 360 GUI px, the image 624 by 344) the usual column's door and tables fit: no bar.
         var usual = new OperationColumn.Input(running(designs().get(1), Phase.LIMITED), false, UNITS.getFirst());
         var area = AssemblyColumn.area(624, 344);
-        int tall = Column.place(OperationColumn.rows(usual, t), area.x(), area.y(), area.w(), M, Column.Metrics.COMPACT).bounds().h();
+        // The door of before (Control and the set points) in one view; the Integrity group (WP8) follows under it, where the door
+        // scrolls, as the glass's later tables do.
+        var doorRows = OperationColumn.rows(usual, t);
+        assertEquals("Integrity", ((Column.Group) doorRows.getLast()).title());
+        int tall = Column.place(doorRows.subList(0, doorRows.size() - 1), area.x(), area.y(), area.w(), M, Column.Metrics.COMPACT).bounds().h();
         assertTrue(tall <= area.h(), "the usual door in one view: " + tall + " in " + area.h());
         // The tables of before (the ports, the duties, the last solve) stay in one view; the conditions and the set points'
         // absolute values (W7) follow under them, where the glass scrolls.
@@ -360,6 +375,41 @@ public class OperationColumnTest {
         var vacuum = new OperationColumn.Input(OperationView.idle(Phase.NOT_READY, "a vacuum column cannot run yet", s, false), false, u);
         assertTrue(((Column.Group) OperationColumn.rows(vacuum, t).get(1)).rows().stream().allMatch(r -> r instanceof Column.Reading));
         assertFalse(OperationColumn.applies(vacuum, Map.of()));
+    }
+
+    /**
+     * WP8 of batch 2026-11-16-fouling-corrosion: the Integrity group after the set points, its Clean key first (a widget before
+     * the readings), acting only while the column stands and no command waits; the trays' capacity and the wall left in %, the
+     * rate in mm/y, the material named. A column with no unit has no group.
+     */
+    @Test
+    void theIntegrityGroupShowsTheWearAndCleanActsOnlyWhileTheColumnStands() {
+        var t = new HeatControlColumnTest.Recording("gui.icheme.");
+        var u = UNITS.getFirst();
+        var s = designs().get(1);
+        var run = OperationColumn.rows(new OperationColumn.Input(running(s, Phase.RUNNING), false, u), t);
+        var group = (Column.Group) run.getLast();
+        assertEquals("Integrity", group.title());
+        assertFalse(buttons(run).get("clean").active(), "a running column is not cleaned");
+        assertInstanceOf(Column.Buttons.class, group.rows().getFirst(), "the key before the readings");
+        var readings = new LinkedHashMap<String, Column.Reading>();
+        for (var r : group.rows()) if (r instanceof Column.Reading reading) readings.put(reading.key(), reading);
+        assertEquals(List.of("wear:trays", "wear:wall", "wear:rate"), List.copyOf(readings.keySet()));
+        assertEquals("86", readings.get("wear:trays").value());
+        assertEquals("72", readings.get("wear:wall").value());
+        assertEquals("0.42", readings.get("wear:rate").value());
+        assertEquals("mm/y", readings.get("wear:rate").unit());
+        assertTrue(group.rows().stream().anyMatch(r -> r instanceof Column.Paragraph p && p.text().equals("Material: Carbon steel")));
+        var standing = OperationColumn.rows(new OperationColumn.Input(stopped(s), false, u), t);
+        assertTrue(buttons(standing).get("clean").active(), "a column that stands is cleaned");
+        assertFalse(buttons(OperationColumn.rows(new OperationColumn.Input(stopped(s), true, u), t)).get("clean").active(), "not while a command waits");
+        assertFalse(buttons(OperationColumn.rows(new OperationColumn.Input(OperationView.idle(Phase.STOPPED, "STOPPED", s, true), false, u), t)).containsKey("clean"),
+                "a column with no unit has nothing to clean");
+        var conditions = OperationColumn.conditions(stopped(s), t);
+        assertEquals("Trays fouled", conditions.get(1)[0]);
+        assertEquals("60 %", conditions.get(1)[1], "the trays' capacity left");
+        assertEquals("Weeping", conditions.get(2)[0]);
+        assertEquals(Set.of(), t.missing);
     }
 
     /** The status reads the binding condition (W1): the lowest LIMIT names the limit, a refused set point reads as a refused solve, a rule A steam as every input cut. */
