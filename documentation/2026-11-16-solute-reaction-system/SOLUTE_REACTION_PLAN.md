@@ -10,7 +10,7 @@ Revision 3 (owner, 2026-11-16: "Level 1: speciation"): acids and bases in water 
 
 Revision 2 (owner, 2026-11-16: "I mean model the HCl as an components"): hydrogen chloride is a compound of the network package. A tag becomes the compound, and the compound a tag on water, at holdups (sections 4, 5.2, 7.4, 8.2, 8.3, 9, 12, 13, 15, 16, 17).
 
-Batch `2026-11-16-solute-reaction-system`, branch `claude/solute-reaction-system-01ef6c`, cut from `main` at `adb413b4d` (0.34.0). Status: design, no code. It builds on batch `2026-11-16-fouling-corrosion` (`science/integrity`, the walls, the column's wear), which is on `main` since 0.34.3 (`228443411`, 2026-11-16). This branch does not hold that merge yet: the build starts from a merge of `main` into it.
+Batch `2026-11-16-solute-reaction-system`, branch `claude/solute-reaction-system-01ef6c`, cut from `main` at `adb413b4d` (0.34.0). Status: design, no code. It builds on batch `2026-11-16-fouling-corrosion` (`science/integrity`, the walls, the column's wear), which is on `main` since 0.34.3 (`228443411`, 2026-11-16). The build started on 2026-11-16 (owner: "Rebase on main and start"): the branch is rebased on `main` at `f2c7df79a`, where the format numbers are as section 13 assumed (facts schema 29, state format 52, `icheme-5`, sheet file 2).
 
 The kinetic models, their sources and the inputs they lack are in [REACTION_MODELS_REVIEW.md](REACTION_MODELS_REVIEW.md). This plan designs the solute system, the transformations that need no reactor, the desalter and the per-part corrosion. The catalytic units get their own design later; section 14 fixes only the frame they will stand in.
 
@@ -107,7 +107,9 @@ A crude's contents are a function, `science/solute/ContentProfile` (pure, no cat
 
 `content[tag][cut] = min(maximum_per_kg_carrier, factor[tag] × profile[tag][cut])`
 
-- An assay gains an optional `content` block with one of two forms. `factors`: one number per tag (absent: 1). `targets`: whole-crude values (sulfur wt%, nitrogen, nickel and vanadium in mg/kg, asphaltenes and resins wt%, acid number, salt in PTB, the hydrolysable share of the salt); the catalog finds the factor that meets each target on the assay's own cut amounts, and states the value reached where the cap cuts it off.
+- An assay gains an optional `content` block with one of two forms. `factors`: one number per tag (absent: 1). `targets`: whole-crude values (sulfur wt%, nitrogen, nickel and vanadium in mg/kg, asphaltenes and resins wt%, acid number, chloride in mg of Cl per kg with the hydrolysable share of it); the catalog finds the factor that meets each target on the assay's own cut amounts, and states the value reached where the cap cuts it off. The chloride is stated by mass so that the function needs no density: 1 PTB of salt is 1.73 mg of Cl per litre, 2.0 mg/kg in a crude of 870 kg/m³; a page shows PTB with the stream's own density (WP9).
+- A tag's `distribution` says how a crude's amount is spread: `profile` (the factor on the cuts' profile, the default) or `heaviest_cut` (the salt's rule below; such a tag has no profile).
+- The bundled assays get their `content` in WP3, with the corrosion references that move stated there. WP1 adds the function and the records and moves nothing.
 - The same function serves a crude that is no datapack record (5.6): it needs the cut amounts and the factors, nothing else. There is no fit per grade in `tools/crude-grades/`; the tool only writes the default profile.
 - Every assay then has its own sulfur, which closes decision D9 of the fouling-corrosion batch.
 - The salt of a crude tags its heaviest cut that holds at least 1 % of the crude's mass (brine and crystals dispersed in the oil); assays stay dry.
@@ -596,7 +598,7 @@ After `2026-11-16-fouling-corrosion` is on `main`. Five stages, each leaving `ma
 
 | Stage | WP | Content | Lane, hot files |
 |---|---|---|---|
-| A | WP1 | `science/solute`: `TagKind`, `TagSet`, kinds `solutes` and `reactions` in `MaterialCatalog`, the `content` sub-record (aliases of `corrosion`), `ContentProfile` (the pure function of 5.1, with `ContentProfileTest`: a target met, a cap reached, an almost empty cut, two crudes blended), assay `content` (`factors` or `targets`), the default profile written by `tools/crude-grades/`, the thirteen records | thermo: `MaterialCatalog` |
+| A | WP1 | `science/solute`: `TagKind`, the kind `solutes` in `MaterialCatalog` (`TagSet` goes to WP2, which knows what transport needs; the kind `reactions` to WP4, with its laws), the `content` sub-record (aliases of `corrosion`), `ContentProfile` (the pure function of 5.1, with `ContentProfileTest`: a target met, a cap reached, an almost empty cut, two crudes blended), assay `content` (`factors` or `targets`), the default profile written by `tools/crude-grades/`, the thirteen records | thermo: `MaterialCatalog` |
 | A | WP2 | `TagTransport`; `Inventory.tags`; the result and commit wiring; the replay step; generator contents; facts schema 30, state format 53, the corpus image; `TagLedgerTest` | fluid laws, runtime: `FluidFacts`, `FluidCheckpointCodec`, `IslandCoordinator` |
 | A | WP3 | The digest on tags (`CorrosionStandard`); references exact with default contents | thermo |
 | B | WP4 | `science/reaction` (the three rate laws), `runtime/fluid/Reactions`, `TagPlan`; hydrolysis, caustic, bulk and surface coking; `FoulingLaw`'s oil rows removed | runtime: `FluidWorldAuthority` |
