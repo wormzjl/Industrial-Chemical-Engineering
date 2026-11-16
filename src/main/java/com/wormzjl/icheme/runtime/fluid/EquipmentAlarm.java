@@ -61,7 +61,7 @@ public enum EquipmentAlarm {
             case FLOODING -> FLOODING;
             case NO_POWER -> NO_POWER;
             case SOLVE_REFUSED -> OFF_TABLE;
-            case CLOSURE -> UPSET;
+            case CLOSURE, FROZEN -> UPSET;
             case OFF_TABLE, SETPOINT_REFUSED, ADVISORY, FEED_WATER_ROUTED, UNMETERED, HIGH_LOAD -> null;
         };
     }

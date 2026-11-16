@@ -14,14 +14,20 @@ public final class ColumnStatus {
     }
 
     /**
-     * The phase: no table yet, NOT READY where a solve or the design refused it, else STARTING; with a table, UPSET for a
+     * The phase: no table yet, NOT READY where a solve or the design refused it or a solve found the column frozen, else STARTING; with a table, UPSET for a
      * TRIP, LIMITED for a LIMIT, else RUNNING (an OFF TABLE state or a NOTICE runs on).
      */
     public static OperationView.Phase phase(boolean table, List<Condition.Active> conditions) {
-        if (!table) return Condition.find(conditions, Condition.SOLVE_REFUSED) != null ? OperationView.Phase.NOT_READY : OperationView.Phase.STARTING;
+        if (!table) return notReady(conditions) != null ? OperationView.Phase.NOT_READY : OperationView.Phase.STARTING;
         var binding = Condition.binding(conditions);
         if (binding == null) return OperationView.Phase.RUNNING;
         return binding.condition().rank == Condition.Rank.TRIP ? OperationView.Phase.UPSET : OperationView.Phase.LIMITED;
+    }
+
+    /** What keeps a column with no table NOT READY: a solve that found it frozen, else a refused solve; null for neither. */
+    private static Condition.Active notReady(List<Condition.Active> conditions) {
+        var frozen = Condition.find(conditions, Condition.FROZEN);
+        return frozen != null ? frozen : Condition.find(conditions, Condition.SOLVE_REFUSED);
     }
 
     /**
@@ -37,7 +43,7 @@ public final class ColumnStatus {
         var pending = Condition.find(conditions, Condition.OFF_TABLE);
         switch (phase) {
             case NOT_READY:
-                return "NOT READY: " + Condition.find(conditions, Condition.SOLVE_REFUSED).text();
+                return "NOT READY: " + notReady(conditions).text();
             case STARTING:
                 return pending != null ? "STARTING: the first solve" : "STARTING: waiting for the first solve";
             case UPSET:

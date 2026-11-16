@@ -129,8 +129,8 @@ public final class ColumnUnit implements UnitModel {
         } else if (u.wire(CONDENSER_OUT) != null) throw new FlowsheetFailure("unit.free_inlet", CONDENSER_IN);
         if (u.wire(REBOILER_IN) != null) {
             if (u.utilities().feeds().containsKey(REBOILER_IN))
-                calculations.add(ColumnSides.utility(u, "reboiler", REBOILER_IN, REBOILER_DROP, door.reboilerDrop(), List.of(), List.of(solve.bottomsTemperature()), board -> -door.reboilerDuty(), ColumnSides.steam(u, solve.bottomsTemperature())));
-            calculations.add(ColumnSides.side(u, "reboiler", REBOILER_IN, REBOILER_OUT, REBOILER_DROP, door.reboilerDrop(), null, -door.reboilerDuty()));
+                calculations.add(ColumnSides.utility(u, "reboiler", REBOILER_IN, REBOILER_DROP, door.reboilerDrop(), List.of(), List.of(solve.bottomsTemperature(), solve.reboilerHeat()), board -> board.link(solve.reboilerHeat()), ColumnSides.steam(u, solve.bottomsTemperature())));
+            calculations.add(ColumnSides.side(u, "reboiler", REBOILER_IN, REBOILER_OUT, REBOILER_DROP, door.reboilerDrop(), solve.reboilerHeat(), null));
             calculations.add(ColumnSides.check(u, "reboiler check", u.out(REBOILER_OUT), u.out(BOTTOMS), (board, report) -> {
                 var steam = board.stream(u.out(REBOILER_OUT));
                 var bottoms = board.stream(u.out(BOTTOMS));
