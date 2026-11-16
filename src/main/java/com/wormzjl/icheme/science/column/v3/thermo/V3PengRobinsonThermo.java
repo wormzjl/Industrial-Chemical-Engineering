@@ -249,17 +249,17 @@ public final class V3PengRobinsonThermo implements V3ThermoModel, V3ThermoDeriva
      * The equilibrium engine's split of the workspace's normalised feed ({@link V3FeedEngine#split}) into the workspace's
      * liquid and vapour compositions.
      *
-     * @return the vapour fraction, or NaN where the package has no engine or the engine answers no split
+     * @return the split, or null where the package has no engine or the engine answers no split
      */
-    double engineSplit(double temperatureKelvin, double pressurePascal, V3ThermoWorkspace workspace) {
+    V3FeedEngine.Split engineSplit(double temperatureKelvin, double pressurePascal, V3ThermoWorkspace workspace) {
         requireWorkspace(workspace);
         V3FeedEngine engine;
         try {
             engine = session.feedEngine();
         } catch (IllegalArgumentException unavailable) {
-            return Double.NaN;
+            return null;
         }
-        if (engine == null) return Double.NaN;
+        if (engine == null) return null;
         return engine.split(temperatureKelvin, pressurePascal, workspace.normalizedOverall, workspace.liquidComposition,
                 workspace.vaporComposition, workspace.prSession.engineWorkspace(engine));
     }

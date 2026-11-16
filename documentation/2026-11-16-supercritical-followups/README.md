@@ -14,6 +14,9 @@ line service and device pages, the column's feed flash by a stability test, the 
   the vapour rule; main thread decision, open to the owner's veto). Dense grid: 10,602 answered, 0 refused (F1 898, F2
   891), 0 wrong one-phase, moved only the 181; column vs engine splits within 9.4e-11 in ln K; crude unchanged. Filtered
   run: 12 classes, 34 tests, 0 failures. [P3_COLUMN_FEED_REVIEW.md](P3_COLUMN_FEED_REVIEW.md).
+- 2026-11-16: P3 tightening (main thread): rule D reads the engine's split by the engine's own lighter phase, not on the
+  forced vapour root (CO2/pc03 at 220 K was split as vapour-liquid, now one liquid as before); dense grid unchanged;
+  12 classes, 35 tests, 0 failures. [P3_COLUMN_FEED_REVIEW.md](P3_COLUMN_FEED_REVIEW.md).
 
 ## Documents
 

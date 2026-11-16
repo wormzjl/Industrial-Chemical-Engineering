@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.science.column.v3.thermo;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -28,7 +29,8 @@ import org.junit.jupiter.api.Test;
  *   <li>{@code stalled}: every twentieth of the 721 real splits successive substitution does not converge, now split.</li>
  * </ul>
  * A split's vapour fraction is the probe's to its six printed decimals, its material balance closes, and its enthalpy is
- * the phases' own on the column's roots.
+ * the phases' own on the column's roots. A further case: an engine split into two liquids whose lighter liquid has a
+ * metastable vapour root is not taken as a split.
  */
 class V3FeedFlashStabilityTest {
     private static final String NETWORK = "icheme:tjl20_methane_nitrogen";
@@ -46,13 +48,7 @@ class V3FeedFlashStabilityTest {
     @Test
     void theReviewsStatesAreClassifiedByTheStabilityTest() throws Exception {
         List<Row> rows = rows();
-        // Carbon dioxide is only in the refinery package, which the column refuses for its crystal: a test package adds it
-        // to the network's methane package, with the same method and pairs and no crystal (as the review's probe did).
-        var resources = new LinkedHashMap<>(MaterialCatalog.bundled().resources());
-        resources.put("data/icheme/materials/packages/test_methane_co2.json",
-                "{\"schema_version\":1,\"id\":\"" + CO2 + "\",\"revision\":\"p3-test-r1\",\"method\":\"icheme:crude_pr78\","
-                        + "\"extends\":\"" + NETWORK + "\",\"components\":[{\"id\":\"CarbonDioxide\",\"properties\":\"icheme:chemsep_carbon_dioxide\"}]}");
-        MaterialCatalog catalog = MaterialCatalog.parse(resources);
+        MaterialCatalog catalog = catalogWithCarbonDioxide();
         Map<String, int[]> counts = new LinkedHashMap<>();
         Map<String, double[]> enthalpyMoves = new LinkedHashMap<>();
         for (String mixture : MIXTURES.keySet().stream().sorted().toList()) {
@@ -75,6 +71,57 @@ class V3FeedFlashStabilityTest {
         assertEquals(181, rows.stream().filter(r -> r.set().equals("endpoint")).count());
         assertEquals(102, rows.stream().filter(r -> r.set().equals("slow")).count());
         assertEquals(37, rows.stream().filter(r -> r.set().equals("stalled")).count());
+    }
+
+    /**
+     * Rule D decides an engine split by the engine's own lighter phase, not by a re-evaluation on the column's vapour root.
+     * Carbon dioxide with 10 % heavy cut at 220 K, 0.7 MPa: the engine splits it into two liquids, the lighter (82 % of the
+     * feed, almost pure carbon dioxide) at reduced density 2.9; that composition also has a metastable vapour root there,
+     * reduced density 0.05. Read on that root the split would pass as vapour-liquid, the lighter liquid's enthalpy taken on
+     * the vapour root. It is two liquids: at the Wilson endpoint the endpoint's one liquid stands, as the frozen flash.
+     */
+    @Test
+    void anEngineSplitIntoTwoLiquidsIsNotReadOnTheVapourRoot() {
+        double t = 220.0;
+        double p = 0.7e6;
+        MaterialRuntime.with(catalogWithCarbonDioxide(), CO2, () -> {
+            V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage(CO2);
+            var ids = thermo.componentBasis().componentIds();
+            double[] z = new double[ids.size()];
+            z[ids.indexOf("CarbonDioxide")] = 0.9;
+            z[ids.indexOf("crude_pc03")] = 0.1;
+            V3ThermoWorkspace engineWorkspace = thermo.newWorkspace();
+            System.arraycopy(z, 0, engineWorkspace.normalizedOverall, 0, z.length);
+            V3FeedEngine.Split split = thermo.engineSplit(t, p, engineWorkspace);
+            assertTrue(split != null && split.lighterShare() > 0.5 && split.lighterShare() < 1.0, String.valueOf(split));
+            assertFalse(split.lighterIsVapour());
+            // The trap: the lighter liquid's composition read on the forced vapour root looks like a vapour.
+            double[] lighter = engineWorkspace.vaporComposition.clone();
+            thermo.evaluateInto(t, p, lighter, Root.VAPOR, engineWorkspace);
+            assertTrue(thermo.phaseTraits(Root.VAPOR, t, p, engineWorkspace).reducedDensity() < 1.0);
+
+            V3ThermoWorkspace frozenWorkspace = thermo.newWorkspace();
+            System.arraycopy(z, 0, frozenWorkspace.normalizedOverall, 0, z.length);
+            V3FlashResult frozen = V3FeedFlashEquivalenceTest.V3FeedFlashReference.resolve(thermo, t, p, frozenWorkspace);
+            V3FlashResult flash = thermo.flashTP(t, p, z, thermo.newWorkspace());
+            assertEquals(V3FeedPhase.LIQUID, flash.phase(), flash.detail());
+            assertEquals("all-liquid Wilson endpoint classification", flash.detail());
+            assertEquals(frozen.phase(), flash.phase());
+            assertEquals(frozen.molarEnthalpyJoulesPerMol(), flash.molarEnthalpyJoulesPerMol(), 0.0);
+            return null;
+        });
+    }
+
+    /**
+     * Carbon dioxide is only in the refinery package, which the column refuses for its crystal: a test package adds it to
+     * the network's methane package, with the same method and pairs and no crystal (as the review's probe did).
+     */
+    private static MaterialCatalog catalogWithCarbonDioxide() {
+        var resources = new LinkedHashMap<>(MaterialCatalog.bundled().resources());
+        resources.put("data/icheme/materials/packages/test_methane_co2.json",
+                "{\"schema_version\":1,\"id\":\"" + CO2 + "\",\"revision\":\"p3-test-r1\",\"method\":\"icheme:crude_pr78\","
+                        + "\"extends\":\"" + NETWORK + "\",\"components\":[{\"id\":\"CarbonDioxide\",\"properties\":\"icheme:chemsep_carbon_dioxide\"}]}");
+        return MaterialCatalog.parse(resources);
     }
 
     private static void check(V3PengRobinsonThermo thermo, double[] z, Row row, Map<String, int[]> counts,

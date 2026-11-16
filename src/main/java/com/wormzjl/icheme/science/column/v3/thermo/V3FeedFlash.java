@@ -23,7 +23,8 @@ import java.util.Locale;
  *       enthalpies on the column's roots. A feed the engine does not split either stays a typed refusal.</li>
  * </ul>
  * <p>The column takes an unstable feed's split only where its lighter phase is the column's vapour (rule D,
- * {@link #lighterPhaseIsVapour}): a vapour by the slot rule, or a fluid above its own critical temperature. Two subcritical
+ * {@link #lighterPhaseIsVapour} for the column's own split, the engine's own state of its lighter phase for the engine's,
+ * {@link V3FeedEngine.Split}): a vapour by the slot rule, or a fluid above its own critical temperature. Two subcritical
  * liquids are outside the two-phase stage model: at the Wilson endpoint the endpoint's answer stands (one liquid, a known
  * limit: a cold crude whose heaviest cut separates as a second liquid), elsewhere a typed refusal ({@link #TWO_LIQUIDS}).</p>
  * <p>On the review's grids (P3_COLUMN_FEED_REVIEW.md: 10,602 states of six mixtures) no feed the engine splits into a
@@ -98,14 +99,22 @@ final class V3FeedFlash {
         // An unstable feed: only a split counts, the column's own or, where substitution does not reach one, the
         // equilibrium engine's.
         if (split != null && split.phase() != V3FeedPhase.TWO_PHASE) split = null;
-        if (split == null) {
-            double vaporFraction = model.engineSplit(temperatureKelvin, pressurePascal, workspace);
-            if (vaporFraction > 0.0 && vaporFraction < 1.0) {
-                split = engineSplit(model, temperatureKelvin, pressurePascal, workspace, vaporFraction, failure.iteration);
+        boolean twoLiquids;
+        if (split != null) {
+            // The column's own converged split: its K-values come from the vapour root, so that root decides.
+            twoLiquids = !lighterPhaseIsVapour(model, temperatureKelvin, pressurePascal, split, workspace);
+        } else {
+            // The engine's split: its own lighter phase decides (V3FeedEngine.Split), and only a vapour-liquid split is
+            // given enthalpies, the lighter phase on the vapour root.
+            V3FeedEngine.Split engine = model.engineSplit(temperatureKelvin, pressurePascal, workspace);
+            boolean found = engine != null && engine.lighterShare() > 0.0 && engine.lighterShare() < 1.0;
+            twoLiquids = found && !engine.lighterIsVapour();
+            if (found && !twoLiquids) {
+                split = engineSplit(model, temperatureKelvin, pressurePascal, workspace, engine.lighterShare(), failure.iteration);
             }
         }
-        if (split != null && lighterPhaseIsVapour(model, temperatureKelvin, pressurePascal, split, workspace)) return split;
-        if (split != null && endpoint) {
+        if (split != null && !twoLiquids) return split;
+        if (twoLiquids && endpoint) {
             // Two liquids: outside the two-phase stage model. The endpoint's answer stands, one liquid as before.
             System.arraycopy(endpointScratch[0], 0, workspace.logK, 0, componentCount);
             System.arraycopy(endpointScratch[1], 0, workspace.nextLogK, 0, componentCount);
@@ -114,7 +123,7 @@ final class V3FeedFlash {
             return endpointAnswer(model, temperatureKelvin, pressurePascal, workspace, liquidEndpoint);
         }
         throw new V3ThermoException(V3ThermoException.Code.FLASH_NONCONVERGENCE, null, failure.message
-                + (split != null ? "; " + TWO_LIQUIDS : "; the feed is unstable and the equilibrium engine gives no split"));
+                + (twoLiquids ? "; " + TWO_LIQUIDS : "; the feed is unstable and the equilibrium engine gives no split"));
     }
 
     /** The Wilson endpoint's one phase: the feed on the endpoint's root. */
@@ -129,7 +138,8 @@ final class V3FeedFlash {
     }
 
     /**
-     * Whether a split's lighter phase is the column's vapour, the phase that goes up from the feed tray: a vapour by the
+     * Whether the column's own converged split has its lighter phase as the column's vapour (its K-values come from the
+     * vapour root, which therefore decides), the phase that goes up from the feed tray: a vapour by the
      * network's slot rule (reduced density below 1), or a fluid on a supercritical isotherm of its own composition, which
      * has no liquid identity ({@link PhaseTraits#supercriticalIsotherm()}). Otherwise both phases are subcritical liquids:
      * two liquids, which the two-phase stage model does not carry.

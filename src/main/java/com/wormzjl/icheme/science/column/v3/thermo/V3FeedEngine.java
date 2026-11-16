@@ -67,6 +67,15 @@ final class V3FeedEngine {
                 List.copyOf(species), columns.stream().mapToInt(Integer::intValue).toArray(), water);
     }
 
+    /**
+     * The engine's two-phase split: the lighter phase's share of the feed and whether that phase is the column's vapour
+     * by the engine's own state of it (rule D): labelled {@code VAPOR}, or of reduced density below 1, or on a
+     * supercritical isotherm of its own composition. A lighter phase that is none of these is a liquid: the split is two
+     * liquids. Its own state decides, not a re-evaluation on the column's vapour root: a subcritical liquid can have a
+     * metastable vapour root at the same state.
+     */
+    record Split(double lighterShare, boolean lighterIsVapour) {}
+
     FluidTpEquilibrium.Workspace newWorkspace() {
         return engine.newWorkspace();
     }
@@ -75,18 +84,17 @@ final class V3FeedEngine {
      * The engine's two-phase split of {@code z} (normalised over the column basis): the denser phase's shares into
      * {@code liquid}, the lighter one's into {@code vapour}, both over the column basis.
      *
-     * @return the lighter phase's share of the feed, or NaN where the feed holds water or the engine answers no
-     *         converged split of two fluid phases
+     * @return the split, or null where the feed holds water or the engine answers no converged split of two fluid phases
      */
-    double split(double t, double p, double[] z, double[] liquid, double[] vapour, FluidTpEquilibrium.Workspace workspace) {
-        if (water >= 0 && z[water] > 0.0) return Double.NaN;
+    Split split(double t, double p, double[] z, double[] liquid, double[] vapour, FluidTpEquilibrium.Workspace workspace) {
+        if (water >= 0 && z[water] > 0.0) return null;
         double[] amounts = new double[species.size()];
         for (int a = 0; a < amounts.length; a++) amounts[a] = z[columnComponent[a]];
         EquilibriumResult result = engine.tp(EquilibriumRequest.tp(t, p, species, amounts, PhaseCompetition.FLUID_ONLY), workspace);
-        if (!result.converged() || result.phases().size() != 2) return Double.NaN;
+        if (!result.converged() || result.phases().size() != 2) return null;
         PhaseAmounts first = result.phases().get(0);
         PhaseAmounts second = result.phases().get(1);
-        if (first.kind() == PhaseKind.SOLID || second.kind() == PhaseKind.SOLID) return Double.NaN;
+        if (first.kind() == PhaseKind.SOLID || second.kind() == PhaseKind.SOLID) return null;
         // The vapour where there is one; of two liquids the one of lower reduced density (the list keeps no order).
         boolean firstLighter = first.kind() == PhaseKind.VAPOR || second.kind() != PhaseKind.VAPOR
                 && first.traits() != null && second.traits() != null
@@ -101,6 +109,8 @@ final class V3FeedEngine {
             liquid[columnComponent[a]] = heavy.amount(a) / heavyTotal;
             vapour[columnComponent[a]] = light.amount(a) / lightTotal;
         }
-        return lightTotal / (lightTotal + heavyTotal);
+        boolean lighterIsVapour = light.kind() == PhaseKind.VAPOR || light.traits() != null
+                && (light.traits().reducedDensity() < 1.0 || light.traits().supercriticalIsotherm());
+        return new Split(lightTotal / (lightTotal + heavyTotal), lighterIsVapour);
     }
 }

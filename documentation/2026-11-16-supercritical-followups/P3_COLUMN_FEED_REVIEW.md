@@ -23,8 +23,10 @@ vapour rule, the main thread's decision, open to the owner's veto).
    split takes the engine's split (`V3FeedEngine`: `FluidTpEquilibrium` on the derived evaluator, fluid phases only,
    open domain), its enthalpies on the column's roots. A split is taken only where its lighter phase is the column's
    vapour: reduced density below 1 (the slot rule), or on a supercritical isotherm of its own composition
-   (`PhaseTraits.supercriticalIsotherm()`). Two liquids keep the endpoint's one liquid at the Wilson endpoint (old answer,
-   to the bit) and are refused, naming two liquids, elsewhere. The collapse rule and `TRIVIAL_LOG_K` are deleted.
+   (`PhaseTraits.supercriticalIsotherm()`). The column's own converged split is read on its vapour root (its K-values
+   come from it); the engine's split by the engine's own lighter phase (`V3FeedEngine.Split`: labelled vapour, or those
+   two traits), and only a passing split gets enthalpies. Two liquids keep the endpoint's one liquid at the Wilson
+   endpoint (old answer, to the bit) and are refused, naming two liquids, elsewhere. `TRIVIAL_LOG_K` is deleted.
 4. **Measured** (`tools/supercritical-probes/p3`, each form once on each grid; counts and counters only). On the dense
    grid's 10,602 states every form answers no real split as one phase, moves no frozen answer but the 181, and keeps
    every answer of the D1 collapse rule to the bit. F1 refuses 898, F2 891, F3 and D none. D is F3 on both grids: every
@@ -80,6 +82,18 @@ column as vapour. D keeps those feeds one liquid (unchanged to the bit) and take
 lighter phase is 99 % methane on a supercritical isotherm. The grids hold no water; `V3FeedEngine` takes no feed with
 water (the column keeps free water apart), so a wet unstable feed the iteration does not split stays refused.
 
+Why the engine's split is read by the engine's own phase (a tightening after the first D commit `322144b96`): that commit
+read every split's lighter composition on the forced vapour root. A subcritical lighter liquid whose composition also
+has a metastable vapour root then reads as a vapour, and its enthalpy was taken on that root, off by about a latent
+heat. Off the grids, carbon dioxide or methane with a heavy cut shows it: CO2/pc03 90/10 and 70/30 at 220 K, 0.61 to
+0.81 MPa, and C1/pc03 90/10 at 120 K, 0.20 to 0.27 MPa. The engine finds two liquids, the lighter at reduced density
+2.9 to 3.1, with a vapour root of reduced density 0.02 to 0.05 on its composition. `322144b96` split all 18 scanned
+states (β 0.43 to 0.82, by the engine). Now they keep the endpoint's one liquid, the same to the bit as the frozen flash.
+The dense grid, run once more with this code, gives the same counts as D in the table (10,602 answered, 0 refused,
+0 refused as two liquids, moves only the 181), and F3's answers equal production's to the bit (the probe's
+`moved_vs_production` 0): each of its engine splits passes on the engine's own lighter phase (labelled vapour, below
+reduced density 1, or supercritical), so the two readings agree there.
+
 ## The moved answers by class (dense grid)
 
 | Class | Count | Old answer | New answer | By | Enthalpy move |
@@ -96,11 +110,13 @@ frozen flash refused, which D answers as stable vapour by the label rule.
 
 ## Tests
 
-All pass (one filtered run, 12 classes, 34 tests, 0 failures):
+All pass (a filtered run of the 12 classes after the tightening: 35 tests, 0 failures):
 
 - `V3FeedFlashStabilityTest` (new, column gates): the 181 (split), the 102 (one phase by the rule), every twentieth of
   the 721 (split), each at the probe's vapour fraction to 1e-6, balance closed to 1e-12, enthalpy the phases' own; the
-  states in `feed-flash-stability-states.tsv` from the probe's dense output.
+  states in `feed-flash-stability-states.tsv` from the probe's dense output. `anEngineSplitIntoTwoLiquidsIsNotReadOnTheVapourRoot`:
+  CO2/pc03 90/10 at 220 K, 0.7 MPa: the engine's two liquids, the trap present (vapour root below reduced density 1),
+  the answer the frozen flash's one liquid to the bit.
 - `V3FeedFlashOnePhaseTest`: the stalled methane/ethane and methane/cut feeds take the engine's split (β 0.125210,
   0.791758); on the coarse grid the frozen answers unchanged to the bit, 5 moved from one liquid to two.
 - `V3FeedFlashEquivalenceTest`: a frozen refusal is the same refusal, a one-phase answer or a split.
