@@ -58,7 +58,8 @@ public final class Integrity {
 
     /** The switches and the time scales (config {@code corrosion.*}, {@code erosion.*}, {@code fouling.*}). */
     public record Settings(boolean corrosion, double yearProcessHours, boolean external, boolean erosion, boolean fouling, double asymptoteProcessHours) {
-        public static final Settings DEFAULT = new Settings(true, 20, true, true, true, 10);
+        public static final Settings DEFAULT = new Settings(true, com.wormzjl.icheme.science.integrity.WallState.DEFAULT_YEAR_PROCESS_HOURS, true, true,
+                true, com.wormzjl.icheme.science.integrity.FoulingLaw.DEFAULT_TIME_PROCESS_HOURS);
 
         public Settings {
             if (!(yearProcessHours > 0) || !Double.isFinite(yearProcessHours) || !(asymptoteProcessHours > 0) || !Double.isFinite(asymptoteProcessHours))

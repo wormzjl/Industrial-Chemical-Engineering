@@ -205,7 +205,7 @@ public final class IChemE {
         builder.push("corrosion");
         CORROSION_ENABLED = builder.comment("Whether the walls of constructed equipment corrode and a wall that is through fails: a vessel stands open, a heat side's passage closes, a machine fails. False: no wall corrodes and none fails from it.")
                 .define("enabled", true);
-        CORROSION_YEAR_HOURS = builder.comment("Process hours in one corrosion year: a wall losing 1 mm/y loses 1 mm in this many process hours. The default 20 h is 5 h of play at the default fluid.timeScale 4.")
+        CORROSION_YEAR_HOURS = builder.comment("Process hours in one corrosion year: a wall losing 1 mm/y loses 1 mm in this many process hours. The default 200 h is 50 h of play at the default fluid.timeScale 4.")
                 .defineInRange("yearProcessHours", com.wormzjl.icheme.runtime.fluid.Integrity.Settings.DEFAULT.yearProcessHours(), 0.01, 1e6);
         CORROSION_EXTERNAL = builder.comment("Whether corrosive air around a structure adds to its walls' corrosion (needs pollution.enabled).")
                 .define("external", true);
@@ -217,7 +217,7 @@ public final class IChemE {
         builder.push("fouling");
         FOULING_ENABLED = builder.comment("Whether heat sides foul while they flow, towards the deposit their fluid sets.")
                 .define("enabled", true);
-        FOULING_TIME_HOURS = builder.comment("Process hours of the deposit's time constant: a clean side reaches 63 % of its asymptotic deposit in this many process hours of flow.")
+        FOULING_TIME_HOURS = builder.comment("Process hours of the deposit's time constant: a clean side reaches 63 % of its asymptotic deposit in this many process hours of flow. The default 100 h is 25 h of play at the default fluid.timeScale 4.")
                 .defineInRange("asymptoteProcessHours", com.wormzjl.icheme.runtime.fluid.Integrity.Settings.DEFAULT.asymptoteProcessHours(), 0.01, 1e6);
         builder.pop();
         // Pollution (batch 2026-11-15-pollution-system, WP3): the field of released gases and particulate, per dimension.

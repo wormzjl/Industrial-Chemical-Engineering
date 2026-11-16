@@ -5,7 +5,7 @@ import com.wormzjl.icheme.science.math.DeterministicMath;
 /**
  * The fouling deposit of a heat side (batch 2026-11-16-fouling-corrosion, plan section 12; owner O1: a placeholder until
  * the reaction module exists). A deposit of resistance {@code Rf}, m²K/W, grows by Kern–Seaton while the side flows:
- * {@code dRf/dt = (Rf∞ − Rf)/τ}, {@code τ} 10 process hours by default, so {@link #step} is the exact exponential
+ * {@code dRf/dt = (Rf∞ − Rf)/τ}, {@code τ} {@link #DEFAULT_TIME_PROCESS_HOURS} process hours by default, so {@link #step} is the exact exponential
  * approach. {@code Rf∞} from the digest ({@link #asymptote}, TEMA anchors):
  * <ul>
  * <li>gas, steam, a light clean liquid: 0;</li>
@@ -20,6 +20,12 @@ import com.wormzjl.icheme.science.math.DeterministicMath;
  */
 public final class FoulingLaw {
     private FoulingLaw() {}
+
+    /**
+     * The default time constant {@code τ}, process hours ({@code fouling.asymptoteProcessHours}): the owner's decision of
+     * 2026-11-16 (D12, "10x"), ten times O1's 10 h. 25 hours of play at the default time factor 4; a column's trays foul with it too.
+     */
+    public static final double DEFAULT_TIME_PROCESS_HOURS = 100;
 
     /** The largest deposit, m²K/W. */
     public static final double CAP = .002;

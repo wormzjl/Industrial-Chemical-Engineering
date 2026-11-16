@@ -1570,7 +1570,7 @@ class ColumnRunTest {
         assertEquals(0,u.trayFouling(),0,"no solids: clean trays");
         assertEquals(0,run.share,0);
         assertEquals(expected.rate(),run.wallRate,0,"the corrosion part alone");
-        double perCycle=expected.rate()*5/(20*3600.);double cycles=u.wallLoss()/perCycle;
+        double perCycle=expected.rate()*5/(Integrity.Settings.DEFAULT.yearProcessHours()*3600);double cycles=u.wallLoss()/perCycle;
         assertTrue(cycles>=1,"the wall thins: "+u.wallLoss());
         assertEquals(Math.rint(cycles),cycles,1e-6,"booked a whole number of cycles");
         assertEquals(com.wormzjl.icheme.science.integrity.Mechanism.OXYGEN_FIRE,run.corroding);
