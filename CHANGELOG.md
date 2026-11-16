@@ -15,6 +15,12 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+## [0.34.2] - 2026-11-16
+
+### Removed
+
+- The test-only package `icheme:cdu17_tjl_acs2018` (`2026-11-16-cdu17-fixture-removal`; `c00fde5dc`..`bc69d1265`, `44efaaaad`): its 40 resource files, `Cdu17TestCatalog`, `Cdu17FixtureExtension`, `V3Cdu17TiaJuanaPackage` and its test, the gate-list entries. 35 test classes run on the game's medium crude preset instead (`icheme:tjl20_methane`, `icheme:medium_crude`; helpers in `V3TestInputs`, the zero-pair kernel fixture `V3ZeroPairCrudePackage`); their frozen numbers are recorded again on the medium crude (`CDU17_REMOVAL_REVIEW.md`). The medium crude is one liquid at 280 to 350 K and 0.1 to 1.0 MPa (`tools/supercritical-probes/p3`, `P3MediumCrudeProbe`); the removed package's extrapolated PC12 was the cold second liquid. No game code changed; two `V3FeatureRamp` comments reworded.
+
 ## [0.34.1] - 2026-11-16
 
 ### Changed

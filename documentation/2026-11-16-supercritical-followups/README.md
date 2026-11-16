@@ -81,7 +81,8 @@ line service and device pages, the column's feed flash by a stability test, the 
 
 - Item 6, the client's catalog on a datapack server: the "Dense" label, its colour and the head share follow the client's data. The owner answered "Not now" to the reservation of protocol `icheme-4`, then "Yes, run P2" without the wire field.
 - P3, for the owner: a feed that splits into two hydrocarbon liquids is answered as one liquid at the Wilson endpoint
-  (about 1.1 kJ/mol); the cold Tia Juana crude's heavy-cut second liquid (derived pairs) is its own item.
+  (about 1.1 kJ/mol). Closed by batch 2026-11-16-cdu17-fixture-removal: the cold Tia Juana crude's heavy-cut second liquid
+  was the test-only cdu17 package's extrapolated PC12; the package is removed and the medium crude is one liquid when cold.
 - Lane fixes: at the Wilson endpoint a failed restart keeps the endpoint's liquid (the hexane column's feed at 345 K and
   1 atm, while the same feed at 100 kPa splits β 0.336), and Wilson's K put some wet feeds whose own root is a vapour at the
   liquid endpoint; a wet feed towards a vapour that substitution does not converge stays refused off the endpoint (the

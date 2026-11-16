@@ -141,8 +141,8 @@ SUCCESS), `V3PumparoundCalculatorTest` (40 MW case 99,486 checkpoints under the 
 
 ## Open items
 
-1. `src/main/.../V3FeatureRamp.java` lines 62 and 557: comments that name the measured CDU17 cases. They stay
-   until a batch that may touch `src/main` rewords them; the owner decides.
+1. Closed at the merge: the two `V3FeatureRamp.java` comments (lines 62 and 557) name a crude case, not the fixture
+   (`44efaaaad`, comments only, the measured reasons kept).
 2. `affected.mjs` selects every `MaterialCatalog` user when a file under `materials/` is deleted, because a path
    constant matches the deleted test resources. A fix in the tool would narrow the next lane.
 3. The final lane's reference lines for the moved column tests are new; the next final lane records them.

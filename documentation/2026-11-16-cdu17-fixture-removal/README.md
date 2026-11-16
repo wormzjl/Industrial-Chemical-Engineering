@@ -1,6 +1,7 @@
 # Removing the cdu17 test package (2026-11-16)
 
-Status: In progress since 2026-11-16. The removal is done on branch `claude/priceless-carson-4f1d4c`; not merged.
+Status: Implemented 2026-11-16 (0.34.2). Branches `claude/priceless-carson-4f1d4c` (the removal) and
+`claude/supercritical-fluid-support-d0ffa4` (the plan, the comments, the version), base `ee13d1034` (main 0.34.1).
 
 The test-only package `icheme:cdu17_tjl_acs2018` goes, with its fixture classes and its 40 resource files. The tests
 that used it move to the game's medium crude preset (`icheme:tjl20_methane`, `icheme:medium_crude`).
@@ -17,6 +18,12 @@ extrapolated PC12 is the cause of the "cold Tia Juana second liquid" open item o
   cold Tia Juana second-liquid item closes. 35 classes moved, `V3Cdu17TiaJuanaPackageTest` deleted, none disabled.
   The binary became `crude_pc02`/`crude_pc06` with a 0.2 MW reboiler. Selected run on the final helpers:
   `columnGates` 44 classes, `test` 5, `nativeSmoke` 1; 360 tests, 0 failures. `CDU17_REMOVAL_REVIEW.md`.
+- 2026-11-16: the owner's decisions and the merge, by the main thread. "Approve" (the removal thread, Opus high); asked
+  for the merge preparation and a final lane, the owner answered "ONLY TEST RELEVENT". Read as: no lane beyond the tests
+  the change reaches. Those ran once on the final test code (360 tests, 0 failures; `CDU17_REMOVAL_REVIEW.md`, "Runs");
+  what followed them is comments (`44efaaaad`, the two `V3FeatureRamp` lines), documents, the CHANGELOG and the version,
+  which no test loads, so no test ran again and no final lane ran. Version 0.34.2 (patch: tests only) and the merge to
+  `main`. The merge also carries the lane fixes' last documents commit (`dffd7a19b`).
 
 ## Documents
 
@@ -33,7 +40,5 @@ extrapolated PC12 is the cause of the "cold Tia Juana second liquid" open item o
 
 ## Open items
 
-- `V3FeatureRamp.java` lines 62 and 557 (`src/main`) still name the CDU17 cases in comments; owner decision.
 - `affected.mjs` selects every `MaterialCatalog` user when a file under `materials/` is deleted (path heuristic).
-- The next final lane records the moved column tests' reference lines.
-- Merge preparation (changelog, version, code guide check), on the owner's word.
+- The next final lane records the moved column tests' reference lines: no lane ran for this batch.
