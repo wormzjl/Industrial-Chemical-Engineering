@@ -15,6 +15,8 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+## [0.34.3] - 2026-11-16
+
 ### Added
 
 - Fouling, corrosion and erosion (`2026-11-16-fouling-corrosion`; plan `FOULING_CORROSION_PLAN.md` revision 12, work packages WP1 to WP8, decisions D11 to D16; on `claude/fouling-corrosion-system-ba0275`):
