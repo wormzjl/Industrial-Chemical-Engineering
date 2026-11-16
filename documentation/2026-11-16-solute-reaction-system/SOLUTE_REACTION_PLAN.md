@@ -206,7 +206,7 @@ The records of this batch:
 
 | Volatile | Ion | `K` at 25 °C | Slope `b` | Check |
 |---|---|---|---|---|
-| `HydrogenChloride` | `acid_chloride` | 2.03e6 mol² kg⁻² atm⁻¹; strong; `B` = 0.1433 | 9 000 K | Returns 4.0e-12, 3.2e-9, 3.3e-7 and 1.85e-4 atm over 0.003, 0.1, 1 and 6 mol/kg acid (real 4.0e-12, 3.2e-9, 3.3e-7, 1.9e-4). `K` and its slope read (Sander's compilation, after Clegg and Brimblecombe); `B` recalled (Bromley 1973, to be read) |
+| `HydrogenChloride` | `acid_chloride` | 2.03e6 mol² kg⁻² atm⁻¹; strong; `B` = 0.1433 | 9 000 K | Returns 4.0e-12, 3.2e-9, 3.3e-7 and 1.85e-4 atm over 0.003, 0.1, 1 and 6 mol/kg acid (real 4.0e-12, 3.2e-9, 3.3e-7, 1.9e-4). `K` and its slope read (Sander's compilation, after Clegg and Brimblecombe); `B` recalled (Bromley 1973) and kept so (owner, O5) |
 | `Ammonia` | `ammonium` | 1.05e11 atm⁻¹ (solubility 59.8 mol kg⁻¹ atm⁻¹ over the ammonium ion's 5.69e-10, pKa 9.245) | 10 490 K (4 200 + 6 290) | Read (Sander's compilation; Bates and Pinching's slope recalled) |
 
 Water's own product: 1e-14 at 25 °C, slope −6 710 K.
@@ -357,7 +357,7 @@ Two records, both with `k = 3e-5 s⁻¹ · exp(−25 258 K · (1/T − 1/673.15 
 - `resins` crack at `2k` (to the oil: the tag only falls).
 - `asphaltenes` above the solubility limit `0.4 × resins` → 60 % `coke_fines`, 40 % deposit, at `k`. Below the limit nothing cokes. The `first_order` law gains an optional `limit` (a factor on another tag) for this.
 
-This is Wiehe's phase-separation picture on the two tags the cuts carry: the resins keep the asphaltenes in solution, heat destroys the resins, and coke appears after an induction period (review 7.3). The limit 0.4 and the factor 2 are fits to an induction of tens of minutes at 400 °C (recalled), until Wiehe's constants are read.
+This is Wiehe's phase-separation picture on the two tags the cuts carry: the resins keep the asphaltenes in solution, heat destroys the resins, and coke appears after an induction period (review 7.3). The limit 0.4 and the factor 2 are fits to an induction of tens of minutes at 400 °C (recalled). They stay as game constants (owner, O5).
 
 | Temperature | Induction, asphaltenes to resins 1 to 3 | 1 to 2.6 | Asphaltenes coked per hour after it |
 |---|---|---|---|
@@ -396,7 +396,7 @@ Changes to `science/integrity`:
 | 4.5 | 0.41 | 0.82 |
 | 5.5 | 0.18 | 0.36 |
 
-Material factors: chrome steel 1, stainless steel 0.3 (it pits and cracks in chloride), nickel alloy 0.02. Nickel alloy keeps its place as the answer for an acid overhead. The anchors are recalled from the hydrochloric acid table of API RP 581 Part 2 Annex B and must be read against it before the constants are fixed (the search of this task did not reach the table).
+Material factors: chrome steel 1, stainless steel 0.3 (it pits and cracks in chloride), nickel alloy 0.02. Nickel alloy keeps its place as the answer for an acid overhead. The anchors are recalled from the hydrochloric acid table of API RP 581 Part 2 Annex B; the search of this task did not reach the table. The owner keeps the recalled anchors (O5): they are game constants.
 
 **Per part (D10).** A running column today has one wall on its bottoms. It becomes a list of parts, each with its own loss, rate and mechanism:
 
@@ -490,7 +490,7 @@ Results that move: none in stage A (default contents give today's digest). Stage
 - **O2, zone material.** One material per column today. A real column clads its top. Option: a second material for the top zone (one shape field).
 - **O3, coke fines.** Designed as a particulate tag. Option: turn them into a `SolidInventory` population at the next vessel, so that filters cake and beds settle. It needs a mass exchange with the heaviest cut in the vessel's refresh.
 - **O4, metals.** One tag (Ni + V). FCC models treat them apart; two tags cost one more row.
-- **O5, the numbers** of sections 8 and 9 are game-level fits to the stated anchors, as the corrosion matrix is.
+- **O5, the numbers** of sections 8 and 9 are game-level fits to the stated anchors, as the corrosion matrix is. **Decided for the recalled constants** (owner, 2026-11-16: "Keep recalled values"): the five papers of this batch (review 7.5, rows 1 to 5) are not fetched. The hydrolysis rate, M12's anchors, bulk coking's limit and factor, Bromley's `B` and the fouling constants stay at their recalled values, each marked recalled where it is stated. No work package waits for a read.
 - **O6, hydrogen chloride's pair with water: settled by O7.** With the law in place the pair serves the molecular part only and is sized, not fitted to the acid (8.3). The options A to C of revision 2 (pair 0, a pair of −1.0 with a tag limited to 1 mol/kg, the pair alone) are withdrawn. The size (0.1 atm at 25 °C, 10 atm at 100 °C) is the owner's to change: a larger constant gives a truer azeotrope at 50 mmHg (25.2 % at 1 and 30 atm) and holds less arriving gas (81 %).
 - **O7, acids and bases in water: decided** (owner, 2026-11-16: "Level 1: speciation"). One speciation law at the exchange sites: sections 7.4, 8.3 and 9. Not chosen: rules per substance (revision 2), and electrolyte thermodynamics in the kernel, which stays the answer if acid gas must one day flash correctly out of rich amine in any network equipment (review 4.5).
 - **O8, three numbers the survey could not source** (review 7.3), each a game value until the owner says otherwise:
@@ -504,7 +504,7 @@ Results that move: none in stage A (default contents give today's digest). Stage
 - Default contents (D8) must be expanded at every place two stocks meet: a missed place loses tags silently. One helper, `TagSet.of(inventory, defaults)`, and no other read.
 - A column product's wetness is read from `waterBelow` only; a tray below the dew point inside the top zone is not seen.
 - The desalter's numbers rest on typical viscosities; the mod's own viscosity model for the heavy cuts decides the real table, and the drop size is then fitted once.
-- M12's anchors are recalled, not read (section 9).
+- M12's anchors are recalled, not read (section 9); the owner keeps them (O5), so the rates are game values, not API RP 581's.
 - The exchange of 7.4 and the certificates: `IslandCertificate` reads a transfer of material at a vessel as a flush, which refuses the certificate, unless its kind is a rate a steady island repeats (`VENT`, `SPILL`, `ATMOSPHERE`: `IslandCertificate.rate`). `SOLUTE` must join those kinds, or a steady overhead drum would solve every slice; a replay then scales the exchange linearly with the span, as it scales the others. Whether `REPLAY_REVISION` moves with it is decided in WP4b.
 - The speciation's limits, all stated in review 4.5 and 4.6:
   - The split is frozen within an interval. A boil-off faster than the molecular share (9 to 14 % of the acid at the azeotrope) per interval strips less than it should until the next solve; a gas arriving in a drum is held by the pair only (97 %).

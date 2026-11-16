@@ -358,6 +358,8 @@ The models "on the market" in the commercial sense are the first two rows. They 
 
 The owner offered to fetch them. In order of need: the first five serve this batch, the rest the later reactor design.
 
+Owner, 2026-11-16: "Keep recalled values". Rows 1 to 5 are not fetched: this batch's constants stay at their recalled values, marked recalled in the plan (option O5). Rows 6 to 15 stand as the reading list of the reactor design, to be asked again there.
+
 | # | Paper | Needed for |
 |---|---|---|
 | 1 | Gray, Eaton and Le 2008, Pet. Sci. Technol. 26, 1924: [doi 10.1080/10916460701402412](https://doi.org/10.1080/10916460701402412) | Hydrolysis rate and extent per salt |
