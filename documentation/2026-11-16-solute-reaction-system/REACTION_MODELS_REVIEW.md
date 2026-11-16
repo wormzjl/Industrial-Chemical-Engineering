@@ -300,7 +300,22 @@ Owner, 2026-11-16: "In hydroprocessing water is injected to dissolve ammonium sa
 
 The water's end is right; the reason for the water is missing. For the same reason neutralising a crude overhead with ammonia has no cost in revision 5, whatever the amount.
 
+**How ammonium chloride itself is represented** (owner, 2026-11-16: "how NH4Cl modeled?"). It is never a substance of its own: no compound, no molecule in the gas (the real vapour is dissociated too). It is the meeting of two species, in these forms:
+
+| Where | Form in the model | What sets it |
+|---|---|---|
+| Gas, and molecules dissolved in oil or water | Two compounds, `Ammonia` and `HydrogenChloride` | The cubic with their pairs |
+| Free water in a holdup | Two ion tags on the water, `ammonium` and `acid_chloride`, without mass | The speciation law at the interval's start. Equal amounts at 100 ppm give pH 5.90, the real solution's |
+| Between holdups, when the water evaporates in an exchanger | `ammonium` strands on the heaviest cut, `acid_chloride` rides the vapour | The tags' classes (plan 5.2, 5.4) |
+| A dry holdup | Both return to the two gases | Plan 7.4, "without free water" |
+| Solid on a cold wall | Revision 5: none. O10: `saltFouling` on a heat side's wall, without mass | `Kp` at the wall's colder end |
+| Crystals carried by the oil, solids in a vessel | None | |
+
+The dry holdup is wrong for this pair. Hydrogen chloride alone, or ammonia alone, does leave boiled-dry water as a gas. The two together leave crystals: at 60 °C `Kp` is 1.9e-13 bar², so a plant keeps 0.4 ppm of each in a gas at 1 bar and the rest is solid; at 200 °C it keeps 5 200 ppm. The model gives all of it back as gas at any temperature. With O10 the gases then deposit at the next cold, dry heat side, which is where the fouling matters, but a cold dry vessel shows none.
+
 **Proposal** (plan option O10). The dry salt as a third form of the same pairs: one record kind and one law at heat sides.
+
+- The same constant corrects the dry holdup: where a `salts` record names both ions, they return to the gases only up to `Kp` at the vessel's temperature. The rest stays in the vessel as dry residue on the two tags, as the salt of evaporated water does (plan 5.4), and is ions again when water returns. No new tag.
 
 - Kind `salts`: `base` and `acid` (compounds), `constant` (`ln Kp = a − b/T`), `density`, `solubility`.
 - Law `salt_deposit`, at a heat side passage (a site class the plan has, 7.2), evaluated at the cadence on the committed state:
