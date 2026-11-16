@@ -239,7 +239,23 @@ function changedConstants(node, before, after) {
   }
   return found;
 }
-const show = (commit, file) => { try { return execFileSync('git', ['show', `${commit}:${file}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 1 << 26 }); } catch { return ''; } };
+// The texts of a commit's files, in one git process: a process for each file was most of the selection's work on
+// Windows (about a thousand of them on a lane whose load sets were recorded at several commits). A file the commit
+// does not have is the empty text.
+function showAll(commit, files) {
+  const texts = new Map();
+  if (!files.length) return texts;
+  const buf = execFileSync('git', ['cat-file', '--batch'], { input: files.map(f => `${commit}:${f}\n`).join(''), stdio: ['pipe', 'pipe', 'ignore'], maxBuffer: 1 << 29 });
+  let at = 0;
+  for (const f of files) {
+    const end = buf.indexOf(10, at), head = buf.toString('utf8', at, end).match(/ (\w+) (\d+)$/);
+    at = end + 1;
+    if (!head) { texts.set(f, ''); continue; } // "<name> missing"
+    texts.set(f, head[1] === 'blob' ? buf.toString('utf8', at, at + +head[2]) : '');
+    at += +head[2] + 1;
+  }
+  return texts;
+}
 const constants = [...classes.values()].map(c => [c.node, c.strings]);
 const nodes = [...new Set([...classes.values()].map(c => c.node))];
 
@@ -276,6 +292,8 @@ function since(commit) {
     : [...new Set([...git('diff', '--name-only', '--no-renames', commit).split('\n'),
       ...git('ls-files', '--others', '--exclude-standard', 'src').split('\n')].filter(Boolean))];
   r.files = changed.length;
+  const sources = changed.filter(f => { const m = f.match(/^src\/([^/]+)\/java\/.*\.java$/); return m && SETS.includes(m[1]); });
+  const earlier = showAll(commit, sources), later = range ? showAll(range[1], sources) : null;
   for (const f of changed) {
     if (campaignInputs.some(re => re.test(f))) r.campaign ??= `${f} changed`;
     if (IGNORED.test(f)) continue;
@@ -292,7 +310,7 @@ function since(commit) {
       if (!SETS.includes(java[1])) { r.notes.push(`${f}: source set ${java[1]} has no tests`); continue; }
       seed(f, 'changed');
       if (java[1] === 'fluidGameTest' || (java[1] === 'main' && !f.includes('/client/'))) r.gametest ??= `${f} changed`;
-      const before = show(commit, f), after = range ? show(range[1], f) : sourceText(f);
+      const before = earlier.get(f), after = later ? later.get(f) : sourceText(f);
       for (const [name, types] of changedConstants(f, before, after)) pending.push([name, f, types]);
       continue;
     }

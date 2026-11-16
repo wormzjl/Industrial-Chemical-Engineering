@@ -20,17 +20,17 @@ The lane's tool, [`tools/merge-lane/`](../../../tools/merge-lane/). Lines at the
 
 | File | Role | Lines |
 |---|---|---|
-| `lane.sh` | The lane: `lane.sh <base or head> [--all] [steps]`, steps `test regression gametest campaign`; output in `tmp/merge-lane/<side>/` (or `$LANE_OUT`); `$LANE_RUN` a fresh GameTest run id; `LANE_FORKS`, `LANE_WORKERS`, `LANE_GROUP`, `LANE_SEEDS`; `--all` and `base` need `LANE_FULL=owner`; no time printed | 100 |
-| `affected.mjs` | `select [--explain <class>] [--since A..B]` prints the selection (`TASK`, `PICK`, `STEP`, `WHY`, `NOTE` lines); `save <load logs> <results>` updates the load map; `stamp <gametest or campaign>` records a step's run | 408 |
+| `lane.sh` | The lane: `lane.sh <base or head> [--all] [steps]`, steps `test regression gametest campaign`; output in `tmp/merge-lane/<side>/` (or `$LANE_OUT`); `$LANE_RUN` a fresh GameTest run id; `LANE_FORKS`, `LANE_WORKERS`, `LANE_GROUP`, `LANE_SEEDS`, `LANE_SINCE`; `--all` and `base` need `LANE_FULL=owner`; no time printed | 104 |
+| `affected.mjs` | `select [--explain <class>] [--since A..B]` prints the selection (`TASK`, `PICK`, `STEP`, `WHY`, `NOTE` lines); `save <load logs> <results>` updates the load map; `stamp <gametest or campaign>` records a step's run; the `nativeTestClasses` of `build.gradle` are filed under `nativeSmoke` | 429 |
 | `record.init.gradle` | `--init-script … -PlaneTests=<file> -PlaneRecord=<folder>`: each test task's filters from a file; 8 test classes to a JVM with `-Xlog:class+load,class+init`, so each class's load set is recorded | 35 |
 | `campaign-seeds.txt` | The campaign's watch seeds: the 27 seeds that have held at the game's time factor | 12 |
-| `left-out.txt` | The test methods the lane never runs: 1 s or more, never failed in the archived lanes | 373 |
+| `left-out.txt` | The test methods the lane never runs: 1 s or more, never failed in the archived lanes | 374 |
 | `printed.mjs` | `node tools/merge-lane/printed.mjs <results> <out>`: the printed lines of every test, the class name in front | 14 |
 | `readers.txt` | Readers no string constant shows: a path pattern and the reading source file | 4 |
 | `campaign-inputs.txt` | The campaign's inputs as path patterns; a change to one since the campaign's last run runs the campaign | 12 |
-| `compare.mjs` | `node tools/merge-lane/compare.mjs <base> <head> [<campaign base>]`: campaign holds by class on the head's seeds, counters, refusals, new budget-class holds, the classes whose printed lines differ, the junction lines' counters and `MIXED_GAS_COST` | 121 |
+| `compare.mjs` | `node tools/merge-lane/compare.mjs <base> <head> [<campaign base>]`: campaign holds by class on the head's seeds, counters, refusals, new budget-class holds, the classes whose printed lines differ, the junction lines' counters and `MIXED_GAS_COST` | 128 |
 | `main-reach.pl` | `perl tools/merge-lane/main-reach.pl .`: the classes of `src/main` the game cannot reach from the mod's entry points | 46 |
-| `README.md` | How to run, what each step runs, the watch seeds, the tests left out, why the selection is safe | 90 |
+| `README.md` | How to run, what each step runs, the watch seeds, the tests left out, why the selection is safe | 86 |
 
 The load map is `tools/merge-lane/logs/load-map.json.gz` in the main checkout (git-ignored, shared by every worktree; `$LANE_MAP` overrides it); it keeps the three newest load sets per test class. The tools the lane calls: the hold-fuzz harnesses in `tools/unified-thermo-port-forms/`, the classifier `tools/phase-ports-probes/hold-fuzz/classify.sh`, the printed-line extractor `tools/floating-roof-tanks/final-lane/printed.sh` ([verification-campaigns.md](verification-campaigns.md)).
 
@@ -38,7 +38,7 @@ The load map is `tools/merge-lane/logs/load-map.json.gz` in the main checkout (g
 
 `bash tools/merge-lane/lane.sh head`, from the branch's worktree, no dev client running:
 
-1. **test**: compiles (`testClasses compileFluidGameTestJava`), asks `affected.mjs select` which classes can be affected, and runs them (`test`, `holdGates`, `columnGates`, `equipmentGates`, `nativeSmoke`) from a filter file (`picks.txt`, `-PlaneTests`) that also leaves out the tests of `left-out.txt` (363 test methods of 1 s or more that never failed in 19 archived lanes), side by side with `-PtestForks` and `--max-workers` (8), recording load sets with 8 test classes to a JVM; copies the JUnit XML to `results/`, sums the counts, writes `printed.txt` and, when the junction tests ran, `junction.txt`; saves the load sets of the classes that passed.
+1. **test**: compiles (`testClasses compileFluidGameTestJava`), asks `affected.mjs select` which classes can be affected, and runs them (`test`, `holdGates`, `columnGates`, `equipmentGates`, `nativeSmoke`) from a filter file (`picks.txt`, `-PlaneTests`) that also leaves out the tests of `left-out.txt` (361 test methods of 1 s or more that never failed in 19 archived lanes), side by side with `-PtestForks` and `--max-workers` (8), recording load sets with 8 test classes to a JVM; copies the JUnit XML to `results/`, sums the counts, writes `printed.txt` and, when the junction tests ran, `junction.txt`; saves the load sets of the classes that passed.
 2. **regression**: `fluidSolverRegression -PfluidRegressionMode=exact` when `FluidSolverRegressionTest` is selected.
 3. **gametest**: `runFluidGameTestServer` on a fresh run id when a non-client main source, a GameTest source, `data/`, `META-INF/` or the templates changed since the GameTests' last run on the branch's line of commits (`affected.mjs stamp`), or since `main` (by path: the server loads the whole server side).
 4. **campaign**: cold random, then bundled random, on the watch seeds of `campaign-seeds.txt` (the seeds that have held at the game's time factor: 14 cold, 13 bundled random, no bundled defaults) on 8 threads with counters, each classified, when a path of `campaign-inputs.txt` changed since the campaign's last run on the branch's line of commits, or since the merge base. All 3 x 1000 seeds run only on the owner's word (`LANE_FULL=owner`, with `--all` or `LANE_SEEDS=1-1000`).

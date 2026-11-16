@@ -97,24 +97,31 @@ if (read(headDir, 'junction.txt') == null) {
 }
 const bj = (read(baseDir, 'junction.txt') || '').split('\n').filter(Boolean).map(strip);
 const hj = (read(headDir, 'junction.txt') || '').split('\n').filter(Boolean).map(strip);
+// A line is paired by its case: the test, the tag, the interval and the case's key (a lane that ran only some of the
+// junction tests has fewer lines, in another order).
+const caseOf = l => l.split(' ').slice(0, l.includes(' MIXED_GAS_COST ') ? 3 : 4).join(' ');
+const byCase = lines => new Map(lines.map(l => [caseOf(l), l]));
+const bc = byCase(bj), hc = byCase(hj), both = [...hc.keys()].filter(k => bc.has(k));
+const only = (a, b) => [...a.keys()].filter(k => !b.has(k));
 let same = 0;
 const differ = [];
-for (let i = 0; i < Math.max(bj.length, hj.length); i++) {
-  if (bj[i] === hj[i]) { same++; continue; }
-  const bt = (bj[i] || '').split(' '), ht = (hj[i] || '').split(' ');
-  const j = bt.findIndex((t, k) => t !== ht[k]);
-  differ.push(`   line ${i + 1}: ${bt.slice(0, 4).join(' ')} ... base "${bt[j]}" head "${ht[j]}"`);
+for (const k of both) {
+  if (bc.get(k) === hc.get(k)) { same++; continue; }
+  const bt = bc.get(k).split(' '), ht = hc.get(k).split(' ');
+  const j = bt.findIndex((t, i) => t !== ht[i]);
+  differ.push(`   ${k} ... base "${bt[j]}" head "${ht[j]}"`);
 }
-console.log(`== junction lines: base ${bj.length}, head ${hj.length}, identical ${same} (floats included)`);
+console.log(`== junction lines: base ${bj.length}, head ${hj.length}, in both ${both.length}, identical ${same} (floats included)`);
 for (const d of differ.slice(0, 12)) console.log(d);
+for (const [side, keys] of [['base (the baseline stands)', only(bc, hc)], ['head', only(hc, bc)]]) if (keys.length) console.log(`   only on ${side}: ${keys.length} lines, the first ${keys[0]}`);
 // The references are the integer counters (Newton solves, cases); the floats move with round-off.
-const ints = l => [...l.matchAll(/\b([A-Za-z]+)=(-?\d+)(?=[,\s\])]|$)/g)].filter(m => m[1] !== 'interval').map(m => m[1] + '=' + m[2]).join(' ');
+const ints = l => [...l.matchAll(/\b([A-Za-z]+)=(-?\d+)(?=[,\s\])]|$)/g)].filter(m => m[1] !== 'interval' && m[1] !== 'ms').map(m => m[1] + '=' + m[2]).join(' ');
 let sameCounters = 0;
-for (let i = 0; i < Math.max(bj.length, hj.length); i++) {
-  if (ints(bj[i] || '') === ints(hj[i] || '')) { sameCounters++; continue; }
-  console.log(`   counters line ${i + 1}: base ${ints(bj[i] || '')} head ${ints(hj[i] || '')}`);
+for (const k of both) {
+  if (ints(bc.get(k)) === ints(hc.get(k))) { sameCounters++; continue; }
+  console.log(`   counters ${k}: base ${ints(bc.get(k))} head ${ints(hc.get(k))}`);
 }
-console.log(`== junction counters identical on ${sameCounters} of ${Math.max(bj.length, hj.length)}`);
+console.log(`== junction counters identical on ${sameCounters} of ${both.length}`);
 for (const [dir, side] of [[baseDir, 'base'], [headDir, 'head']]) {
   const p = read(dir, 'printed.txt') || '';
   console.log(`== ${side} ${strip((p.match(/^MixedGasJunctionTransientTest MIXED_GAS_COST .*$/m) || ['MIXED_GAS_COST missing'])[0])}`);

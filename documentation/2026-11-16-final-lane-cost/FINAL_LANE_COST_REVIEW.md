@@ -51,3 +51,26 @@ Tried and dropped:
 4. Open: the campaign's watch seeds move between clean and the budget class F from run to run (118, 678, 707, 241 between two runs of the same code). That is timing inside the lane; removing it means a deadline the harness counts in steps, which is a change to the harness.
 5. Decided (owner, 2026-11-16): the left-out tests stay in the sources. No cut into `tools/test-archive-*`: it would change about 187 test classes that the unmerged fouling branch and `main` also change.
 6. Open: `AGENTS.md` still names a 200-seed quick check for comparing forms, which is now larger than the campaign.
+
+## 6. The first lane on main
+
+Owner, 2026-11-16: "rebase and run on main". The branch was rebased onto `main` 0.34.3 (`228443411`) and `bash tools/merge-lane/lane.sh head` ran at `0951c5d2e`, alone on the machine, with the shared load map. The merged 0.34.3 tree had had no test run.
+
+| Step | Result | Time, from the file times of the lane folder |
+|---|---|---|
+| Compile, selection | 498 of 652 test classes: what the merged tree changed since each class last passed | 15 s and 103 s |
+| Test | 2,964 tests, 2 failures, both `HELD: wall deadline`; both pass alone | 226 s |
+| chain-100 | exact, every deviation 0 | 5 s |
+| GameTests | skipped: nothing they load differs from `main`, and they have no stamp | 0 s; 86 to 101 s when due |
+| Campaign | cold 6 of 14 clean, bundled random 5 of 13 clean; one new hold, cold 6 in class F, clean alone | 79 s |
+| Whole lane | | 429 s; about 520 s with the GameTests |
+
+What it showed, and what changed for it:
+
+1. The selection took 103 s, 83 s of it in one `git show` process for each changed source file at each commit a load set was recorded at. The rehearsals had not shown it: `LANE_SINCE` takes one commit for every load set. `affected.mjs` now reads a commit's files in one `git cat-file --batch`: 23 s on the same state, with the same selection byte for byte. The lane is then about 345 s without the GameTests and 430 to 445 s with them.
+2. Two wall-deadline holds in tests at 8 workers: `BlanketDrainWorldTest.aBlanketedDrumOverfilledOnItsFeedDrainsWideOpenWithoutAHold` and `HoldClassWorldsTest.aResidueIsBookedWithoutAClosure`. Each passed in its one replay alone (`--tests`, `--rerun`), so neither counts. The 8-worker rehearsals had none. Open: these tests fail on a wall clock when the machine is full, which is timing inside the lane, like item 4 of section 5.
+3. The lane printed 21 of the 33 junction lines: `MixedGasJunctionTransientTest`'s tenth-second case (4.8 s) was on `left-out.txt`. It left the list: a test that prints a lane reference stays in the lane. One entry whose method `main` no longer has left too: 361 methods.
+4. `compare.mjs` paired the junction lines by position, so a lane with fewer lines compared the wrong pairs. It pairs them by case now. Against the last rehearsal on the fouling tip: 21 lines in both, 21 identical, `MIXED_GAS_COST` 313 Newton solves on both.
+5. Main's own lane fixes of the fouling batch (`7cb297a49`) met this batch's rewrite in the rebase. Kept from main: the cargo check before `nativeSmoke`, the `nativeTestClasses` list read from `build.gradle`, `LANE_SINCE=<commit>`.
+
+The load map holds 496 load sets recorded at `0951c5d2e` with 8 classes to a JVM; the campaign is stamped there. The GameTests have no stamp, so the next lane that changes a server source runs them against `main`.

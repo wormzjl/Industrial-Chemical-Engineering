@@ -6,6 +6,9 @@
 # 363 methods in 187 classes, 2525 s (77 % of the test time, 8.9 % of the methods). A class keeps at least one test.
 # They stay in the sources: a run with --tests runs them, and so does the full lane (LANE_FULL=owner lane.sh head --all),
 # which runs only when the owner asks (owner, 2026-11-16: "Archive the full suite and runs only when asked").
+# 2026-11-16, the first lane on main (0.34.3): 361 methods. Left the list: MixedGasJunctionTransientTest's tenth-second
+# case (its 12 lines are among the lane's 33 junction lines: a test that prints a lane reference stays in the lane) and a
+# V3ColdStartTest method that main no longer has.
 # Upkeep: a test on this list that fails in a run leaves the list. A test joins it when a batch's new tests would take
 # the lane past 8 minutes: the costliest test that never failed in the archived lanes first (README.md, "The tests left out").
 com.wormzjl.icheme.science.flowsheet.FlowsheetColumnTest.aFurnaceOnADutyClosesColdAsFromAFirstEstimate  # 236 s, no failure in 19 lanes
@@ -92,8 +95,6 @@ com.wormzjl.icheme.science.column.v3.V3TrayHydraulicsColumnTest.anUndersizedColu
 com.wormzjl.icheme.runtime.fluid.InlineFilterLineHoldTest.pumpLinesIntoValvesAndFiltersNeverHold  # 5.0 s, no failure in 20 lanes
 com.wormzjl.icheme.runtime.fluid.ColumnRunTest.aDismantledColumnLeavesWithItsPorts  # 4.9 s, no failure in 20 lanes
 com.wormzjl.icheme.runtime.fluid.ExchangerCouplingTest.theRealBypassValveHoldsTheMixedOutlet  # 4.8 s, no failure in 20 lanes
-com.wormzjl.icheme.science.column.v3.V3ColdStartTest.onePointOneBarTotalCondenserConvergesWithoutOutletGas  # 4.8 s, no failure in 14 lanes
-com.wormzjl.icheme.runtime.fluid.MixedGasJunctionTransientTest.everyCaseConvergesAndClosesItsLedgerAtTenthSecondIntervals  # 4.8 s, no failure in 19 lanes
 com.wormzjl.icheme.runtime.fluid.IslandCertificateTest.anIslandThatNeverCertifiesSolvesBitForBitAsWithCertificatesOff  # 4.8 s, no failure in 20 lanes
 com.wormzjl.icheme.science.column.v3.V3PumparoundCalculatorTest.aOneKilowattPumparoundReproducesTheHeatFreeProductStreams  # 4.7 s, no failure in 14 lanes
 com.wormzjl.icheme.science.material.DerivedPairsTest.theParallelFitsEqualEachPairFittedAlone  # 4.7 s, no failure in 10 lanes
