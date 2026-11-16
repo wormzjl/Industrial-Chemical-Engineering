@@ -15,6 +15,8 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+## [0.34.1] - 2026-11-16
+
 ### Changed
 
 - Supercritical follow-ups (`2026-11-16-supercritical-followups`; packages P1 to P4 of `FOLLOWUPS_PLAN.md`, joined on `claude/supercritical-fluid-support-d0ffa4`, `074fa4119`, `2fab7e561`, `ff38d37a6`, `2d3127faf`):

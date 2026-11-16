@@ -1,6 +1,6 @@
 # Supercritical follow-ups
 
-Status: **In progress** since 2026-11-16. All four packages are merged into the batch branch; the merge preparation is done and the final lane is next. Branch `claude/supercritical-fluid-support-d0ffa4`, base `dfbdc583c` (main 0.34.0).
+Status: **Implemented** 2026-11-16 (0.34.1): packages P1 to P4, the merge preparation, one final lane and the lane's two fixes. Branch `claude/supercritical-fluid-support-d0ffa4`, base `dfbdc583c` (main 0.34.0).
 
 Purpose: the open owner items of [2026-11-15-supercritical-fluids](../2026-11-15-supercritical-fluids/README.md), on the
 owner's "fix them": the plunger pump's clearance loss and work, one dense fluid in the level, sight glass, release,
@@ -46,6 +46,16 @@ line service and device pages, the column's feed flash by a stability test, the 
   back to 0.34.0 (STEADY, two warnings); the three wash moves are the feed's small vapour fraction (β 7.67e-5); the packed
   size moves with stored wall-clock seconds. Runs: 167 classes, 1,437 tests and one rerun class, 0 failures on the final
   code. [LANE_FIXES_REVIEW.md](LANE_FIXES_REVIEW.md).
+- 2026-11-16: the owner's decisions after the packages, and the merge, by the main thread. "Approve all" (merge preparation,
+  the final lane, version 0.34.1); "auto merge" (merge without a further question on a clean lane); the lane was not clean
+  (2 failures, 8 unannounced moved results), so the owner was asked: "Approve, then merge" (the fix thread, then the merge if
+  the tests the fixes reach pass and nothing else moves unannounced). The fixes' reached tests pass (1,437 tests, 0 failures
+  on the final code); of the 36 classes that print, only the expected lines differ from the lane's. Not compared: the printed
+  lines of 44 column-gate classes (their result files were replaced by a filtered run; all 44 passed). The main thread's
+  judgment: they cannot have moved, because the lane's column-gate lines equalled the 0.34.0 baseline and rule B changes the
+  lane's flash only where it returns to the 0.34.0 answer. No second lane, GameTest or campaign ran after the fixes: the
+  plunger substitution is bit for bit (`Math.log1p` and `expm1` are `StrictMath`'s) and the column fix does not reach the
+  fluid network. Version 0.34.1 (the CHANGELOG heading, `mod_version`, this status, the index row) and the merge to `main`.
 
 ## Documents
 
