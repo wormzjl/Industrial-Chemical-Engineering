@@ -1,6 +1,6 @@
 # 2026-11-15 pollution system
 
-Status: In progress since 2026-11-15. D1 to D6 decided; WP1 to WP5, WP6a, WP8 and WP10 built and unit-tested; WP6b built and unit-tested; WP7 written; WP9 built and unit-tested; GameTests run once before WP9 (105 of 106 pass; the one failure was a fixture clash, fixed, not rerun); merge preparation in progress since 2026-11-16 (main 0.31.1 merged in, changelog entry and code guide written, translation commit and final lane to come). Not merged. Branch `claude/pollution-system-a8e213`, cut from `main` at `e9edc974b` (0.31.0).
+Status: In progress since 2026-11-15. D1 to D6 decided; WP1 to WP5, WP6a, WP8 and WP10 built and unit-tested; WP6b built and unit-tested; WP7 written; WP9 built and unit-tested; GameTests run once before WP9 (105 of 106 pass; the one failure was a fixture clash, fixed, not rerun); merge preparation complete on 2026-11-16: main 0.31.1 merged in, changelog entry, code guide, translation commit, final lane ([MERGE_REVIEW.md](MERGE_REVIEW.md)). Ready for the merge; not merged. Proposed version 0.32.0. Branch `claude/pollution-system-a8e213`, cut from `main` at `e9edc974b` (0.31.0).
 
 Purpose: air pollution in 16 × 16 × 16 cubes: toxic, combustible, corrosive and particulate hazard indices from what the fluid network releases, spreading and decaying on the 5 s engine, with effects on players and mobs and vapour cloud explosions at flame sources.
 
@@ -58,9 +58,14 @@ Lane: new packages `science/pollution` and `runtime/pollution`. Hot files touche
 
 - 2026-11-16, merge preparation by the main thread: the `CHANGELOG.md` entry under `[Unreleased]`; the code guide (`pollution.md` gains the map overlay and its snapshot line; the README row; the snapshot lines of `runtime-engine.md`, `materials.md` and `wired-control-power.md`). Proposed version for the owner: 0.32.0 (a new feature).
 
+- 2026-11-16, translation commit (`0b6f67249`, Sonnet medium subagent, checked and committed by the main thread): 53 keys added to each of `zh_cn`, `fr_fr`, `es_es`, `ja_jp`; none removed or rewritten; `check.js` OK (4567 keys) for all four. Status words and the meter's short codes (TOX, COMB, CORR, PART) stay in English.
+
+- 2026-11-16, owner: "Run it here" (the final lane in the main thread; the app refused a sub-thread on that turn) and "gradle.properties change should not trigger full test". `tools/merge-lane/affected.mjs` now only notes a `gradle.properties` change (`a2ea53029`, with the lane's README and `verification.md`). The final lane ran once at `a2ea53029` ([MERGE_REVIEW.md](MERGE_REVIEW.md)): 3,822 tests with 1 failure, chain-100 exact, the GameTest server stopped at mod loading, campaign cold 991, bundled 992, defaults 1000. Two defects fixed in `73783db02`: the `mapOverlay` config list threw on NeoForge's null test (`List.of`), and `PollutionEffects` converted ticks with `/ 20.0` (`SimulationTimeTest`). Run again on the fix: `SimulationTimeTest` passes; GameTests 106 of 106 (run id `lane-1116b`). The three new wall-deadline holds (cold 118, bundled 12 and 59) are clean on their one replay alone.
+
 ## Documents
 
 - [POLLUTION_PLAN.md](POLLUTION_PLAN.md): the standard, the release sources, the field and its step, the schedule, effects, ignition and blasts, saves, work packages WP1 to WP7, owner decisions.
+- [MERGE_REVIEW.md](MERGE_REVIEW.md): the final lane, the two defects it found, the campaign, the merge preparation items.
 - [Code guide chapter](../reference/code-guide/pollution.md): the subsystem as built.
 
 ## Open items
