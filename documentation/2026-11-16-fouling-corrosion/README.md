@@ -18,6 +18,8 @@ Lane: new package `science/integrity`; hot files touched, each in one work packa
 
 - 2026-11-16, owner: "how about hot hydrogen service and hp oxygen service?". Plan revision 4 (D7): hydrogen attack (M10: above 7 bar of hydrogen, carbon steel to 230 °C, chrome steel to 450 °C, stainless and nickel alloy free; API RP 941 reduced to one temperature per material), the H2/H2S row of sulfidation (chrome steel 0.6), and oxygen fire (M11: carbon and chrome steel to 2 bar of oxygen, stainless to 14 bar, nickel alloy to 69 bar; EIGA Doc 13 exemption pressures). Both booked as equivalent wall loss on the one wall record; an oxygen fire's failure is also a flame for the next pollution pass.
 
+- 2026-11-16, owner: "how you deal with the combined P, T effect?". Answer: M1 to M7 were already a pressure term times a temperature term; M10 and M11 were steps. Plan revision 5: the hydrogen limit is a line in log pressure (carbon steel 260 °C at 7 bar, 45 K per decade, floor 205 °C; chrome steel 600 °C, 120 K per decade, floor 450 °C); the oxygen limit halves per 100 K above 150 °C, floor 0.3 bar.
+
 ## Documents
 
 - [FOULING_CORROSION_PLAN.md](FOULING_CORROSION_PLAN.md): the request, the physics in numbers, scope and CPU, materials, the matrix, the wall and its failures, repair, fouling, GUI, sounds, formats, work packages.

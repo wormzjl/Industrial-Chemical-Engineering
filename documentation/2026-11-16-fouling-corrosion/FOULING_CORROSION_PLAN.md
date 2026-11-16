@@ -1,6 +1,8 @@
-# Fouling, corrosion and erosion system: plan (revision 4)
+# Fouling, corrosion and erosion system: plan (revision 5)
 
 Batch `2026-11-16-fouling-corrosion`, branch `claude/fouling-corrosion-system-ba0275`, cut from `main` at `f305ac6b0` (0.32.0). Status: plan, no code.
+
+Revision 5 (owner, 2026-11-16: "how you deal with the combined P, T effect?"): the hydrogen limit falls with hydrogen pressure and the oxygen limit falls with temperature (sections 5 and 6.2).
 
 Revision 4 (owner, 2026-11-16: "how about hot hydrogen service and hp oxygen service?"): two mechanisms added, hydrogen attack (M10) and oxygen fire (M11), each a limit per material (sections 3.1, 5, 6, 7).
 
@@ -54,7 +56,7 @@ A wall loses thickness at a rate set by its material and the fluid on it. Design
 | Sour water, H2S 1 bar, 60 °C | 0.3 mm/y: 10 years | Stainless 0.003 mm/y |
 | Wet CO2, 1 bar, 60 °C | 1.4 mm/y | Stainless 0.007 mm/y |
 | Open cooling water, 35 °C | 0.3 mm/y: 10 years | Stainless |
-| Hydrogen at 30 bar, 300 °C | 3.5 mm/y equivalent: under a year | Chrome steel to 450 °C; stainless above |
+| Hydrogen at 30 bar, 300 °C | 3.3 mm/y equivalent: under a year | Chrome steel to 524 °C at 30 bar; stainless above |
 | Hydrogen at 30 bar with H2S, 370 °C | 1.3 mm/y or more | Stainless (chrome steel 0.8 mm/y) |
 | Oxygen at 10 bar | burns through in minutes | Stainless to 14 bar; nickel alloy to 69 bar |
 | Dry hydrocarbon gas, clean liquid, steam | 0 | Carbon steel |
@@ -119,14 +121,23 @@ Named `Metallurgy` in code, because "material" already means a compound (`Materi
 | `STAINLESS_STEEL` | Stainless steel | 316L | 1.5 mm | 815 | 4 | Wet acid gas, naphthenic acid, hot H2S |
 | `NICKEL_ALLOY` | Nickel alloy | Alloy 625 | 1.5 mm | 980 | 15 | Everything, at a price |
 
-Service limits (section 6.2, M10 and M11):
+Service limits (section 6.2, M10 and M11). Each is a line in pressure and temperature, not one number.
 
-| Material | Hot hydrogen (`p_H2` ≥ 7 bar) up to | Oxygen (`p_O2`) up to |
-|---|---|---|
-| Carbon steel | 230 °C | 2 bar (air to about 10 bar) |
-| Chrome steel | 450 °C | 2 bar |
-| Stainless steel | no limit | 14 bar |
-| Nickel alloy | no limit | 69 bar |
+Hot hydrogen, from `p_H2` = 7 bar: `T_H = max(T_floor, T_7 − s · log10(p_H2 / 7 bar))`.
+
+| Material | `T_7` | `s` (K per decade) | `T_floor` | at 7 bar | at 30 bar | at 100 bar | at 200 bar |
+|---|---|---|---|---|---|---|---|
+| Carbon steel | 260 °C | 45 | 205 °C | 260 °C | 232 °C | 208 °C | 205 °C |
+| Chrome steel | 600 °C | 120 | 450 °C | 600 °C | 524 °C | 461 °C | 450 °C |
+| Stainless steel, nickel alloy | none | | | no limit | | | |
+
+Oxygen: `p_limit = max(0.3 bar, p_150 · 2^(−(T − 150 °C)/100 K))` above 150 °C, `p_150` below it. The floor of 0.3 bar keeps air at atmospheric pressure free at every temperature (hot air is M8's).
+
+| Material | `p_150` | at 250 °C | at 350 °C |
+|---|---|---|---|
+| Carbon steel, chrome steel | 2 bar (air to about 10 bar) | 1 bar | 0.5 bar |
+| Stainless steel | 14 bar | 7 bar | 3.5 bar |
+| Nickel alloy | 69 bar | 35 bar | 17 bar |
 
 **Decided (D2, revision 2): one material per structure.** One dropdown in the constructor, one shape field. Every device of the structure reads it; an exchanger is rated on the worse of its two streams.
 
@@ -162,12 +173,12 @@ From the device's node (a vessel: its own; a heat side or machine: the hotter en
 | M7 | Aerated water | `wet`, `p_O2` > 0 | `0.25 · min(2, p_O2/0.21) · 2^((min(T, 353) − 298)/30)` |
 | M8 | Overheating | `T` above the material's limit | `0.25 · 2^((T − T_limit)/25)`, for the material itself |
 | M9 | Corrosive air (outside) | the corrosive index `I` of the structure's cube ≥ 0.01 | `0.5 · min(I, 5)` |
-| M10 | Hydrogen attack | `p_H2` ≥ 7 bar and `T` above the material's hydrogen limit | `0.5 · 2^((T − T_H)/25)`, for the material itself. Carbon steel at 250 °C: 0.9; at 300 °C: 3.5 |
-| M11 | Oxygen fire | `p_O2` above the material's oxygen limit | `50 · p_O2/p_limit`, for the material itself: the wall is gone in minutes of play |
+| M10 | Hydrogen attack | `p_H2` ≥ 7 bar and `T` above the material's hydrogen limit `T_H(p_H2)` (section 5) | `0.5 · 2^((T − T_H)/25)`, for the material itself. Carbon steel at 30 bar: 250 °C 0.8, 300 °C 3.3; at 100 bar and 250 °C: 1.6 |
+| M11 | Oxygen fire | `p_O2` above the material's oxygen limit `p_limit(T)` (section 5) | `50 · p_O2/p_limit`, for the material itself: the wall is gone in minutes of play |
 
 The inside rate is the largest of M1 to M8, M10 and M11 (the governing mechanism, as API 581 takes it); the status names it.
 
-M10 and M11 are not thinning in a real plant. Hydrogen attack is cracking after an incubation time, and an oxygen fire is an ignition. Both are booked as an equivalent wall loss so that one wall record and one failure path serve every mechanism. The Nelson curve is reduced to one temperature per material above 7 bar of hydrogen; the oxygen rule reads pressure only, not speed or particles. The total is the inside rate plus M9 plus erosion (section 8).
+M10 and M11 are not thinning in a real plant. Hydrogen attack is cracking after an incubation time, and an oxygen fire is an ignition. Both are booked as an equivalent wall loss so that one wall record and one failure path serve every mechanism. Pressure and temperature act together in every mechanism. M1 to M7 are each a pressure term (a partial pressure `y · P`) times a temperature term (Arrhenius in M1, a ramp in M2, de Waard–Milliams in M4, a doubling per 30 K in M7). M10 is the Nelson curve as a line: the limit temperature falls with the logarithm of the hydrogen pressure, down to a floor; its steep part below 7 bar is a cut-off. M11 is the exemption pressure, halved for every 100 K above 150 °C. The oxygen rule does not read speed or particles. The total is the inside rate plus M9 plus erosion (section 8).
 
 ### 6.3 Material factors (rate = carbon steel rate × factor)
 
@@ -383,7 +394,7 @@ WP7 touches no file of the others and no format, so it can merge on its own as a
 
 New package `src/main/java/com/wormzjl/icheme/science/integrity/`, pure (no Minecraft types, `DeterministicMath` for `exp`, `pow`, `log10`; `DeterministicMathSourceTest` bans the `Math` ones).
 
-- `Metallurgy`: the four constants of section 5 with `allowance()` (mm), `limit()` (K), `hydrogenLimit()` (K, infinite for none), `oxygenLimit()` (bar), `cost()`, `factor(Mechanism, boolean hydrogen)` from section 6.3; `byName(String)` with an alias map (empty), default `CARBON_STEEL`.
+- `Metallurgy`: the four constants of section 5 with `allowance()` (mm), `limit()` (K), `hydrogenLimit(pH2)` (K, infinite for none and below 7 bar), `oxygenLimit(temperature)` (bar), `cost()`, `factor(Mechanism, boolean hydrogen)` from section 6.3; `byName(String)` with an alias map (empty), default `CARBON_STEEL`.
 - `Mechanism`: `SULFIDATION`, `NAPHTHENIC_ACID`, `SOUR_WATER`, `WET_CO2`, `AMMONIUM_BISULFIDE`, `ACID_CONDENSATE`, `AERATED_WATER`, `OVERHEATING`, `CORROSIVE_AIR`, `HYDROGEN_ATTACK`, `OXYGEN_FIRE`, `EROSION`.
 - `CorrosionStandard`: built once per compound list, as `HazardStandard` is: per compound its molar mass, sulfur mass share (formula, else the sub-record), acid number, fouling number, and the indices of H2S, CO2, SO2, NH3, O2, H2 and water found by formula. `digest(moles, temperature, pressure, oilMoles, aqueousMoles)` returns a `CorrosionDigest` record (section 6.1). No allocation beyond the record.
 - `CorrosionLaw`: `rate(Mechanism, CorrosionDigest)` for carbon steel (section 6.2), `inside(Metallurgy, CorrosionDigest)` returning the governing mechanism and rate, `outside(Metallurgy, index)`. Every rate finite and ≥ 0 for any finite digest; NaN inputs give 0.
