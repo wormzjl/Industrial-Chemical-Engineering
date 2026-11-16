@@ -94,6 +94,7 @@ public final class GuiPrototypes {
         out.add(exchangerTypes());
         out.addAll(pumpReadings());
         out.addAll(dense());
+        out.addAll(plunger());
         out.addAll(createCoupling());
         out.addAll(controlPanels());
         out.addAll(firedHeater());
@@ -384,6 +385,59 @@ public final class GuiPrototypes {
         int n = 4, tw = (box.w() - 3 * (n - 1)) / n;
         for (int i = 0; i < n; i++) d.skin.button(d.c, new Rect(box.x() + i * (tw + 3), box.y(), tw, 16), TEXTS.get("phase_tab." + DeviceColumn.phaseKey(i, false, dense)), i == phase ? Skin.Press.CURRENT : Skin.Press.REST, false);
         d.table(new Rect(box.x(), box.y() + 20, box.w(), box.h() - 20), new int[]{box.w() - 120, 60, 60}, table);
+    }
+
+    // ---- The plunger pump (batch 2026-11-15-supercritical-fluids, S8; -Donly=plunger) ----
+
+    /**
+     * A triplex plunger pump PP-30 on carbon dioxide at 310 K, reduced density 0.7, at 20 m³/h and a rise of 10 MPa, on a 4-pole
+     * motor through its gearbox: the shipped DeviceMeters on a view formed from the network model's own flash, as the screen reads
+     * it (its drive's shaft power the plungers' work over 0.88, no NPSH3 of its own, the suction meter the server's share).
+     */
+    static List<Prototype> plunger() {
+        var catalog = com.wormzjl.icheme.science.material.MaterialCatalog.bundled();
+        var model = com.wormzjl.icheme.client.gui.common.DenseLabel.model(catalog);
+        double[] co2 = new double[model.componentCount()];
+        co2[model.components().indexOf("CarbonDioxide")] = 1;
+        var weights = new ArrayList<Double>();
+        for (int i = 0; i < model.componentCount(); i++) weights.add(model.molecularWeight(i));
+        double delta = .7, lo = 1e5, hi = 8e7;
+        for (int i = 0; i < 200 && hi - lo > 1e-13 * hi; i++) {
+            double mid = (lo + hi) / 2;
+            if (model.flashTP(310, mid, co2, () -> {
+            }).reducedDensity() < delta) lo = mid;
+            else hi = mid;
+        }
+        var s = model.flashTP(310, (lo + hi) / 2, co2, () -> {
+        });
+        var state = new com.wormzjl.icheme.runtime.fluid.FluidView.State(s.pressure(), s.temperature(), s.volume(), s.mass(),
+                new double[]{s.labelVolume(com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.OIL), s.labelVolume(com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.AQUEOUS), s.vaporVolume()},
+                new double[][]{s.labelAmountsView(com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.OIL).clone(), s.labelAmountsView(com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.AQUEOUS).clone(), s.vaporAmounts()},
+                com.wormzjl.icheme.science.fluid.state.SolidInventory.EMPTY, s.volume());
+        var law = com.wormzjl.icheme.science.machine.PlungerPump.of(com.wormzjl.icheme.science.machine.PlungerPump.model(3));
+        double flow = 20 / 3600.0, rise = 10e6, density = s.mass() / s.volume(), shaft = flow * rise / com.wormzjl.icheme.science.machine.PlungerPump.MECHANICAL_EFFICIENCY;
+        double motor = com.wormzjl.icheme.science.machine.Motor.ratingFor(law.maximumShaftPower());
+        double alpha = 1 - com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.pumpLiquidLikeWeight(s);
+        var view = new com.wormzjl.icheme.runtime.fluid.FluidView(3, 1, 0, 0, "STEADY: flowing", state, flow * density, List.of(), rise, 1, List.of(), null, null, List.of(), null, null, null,
+                new com.wormzjl.icheme.runtime.fluid.FluidView.Drive("MOTOR", motor, 4, "RUNNING", 1500, false, flow / law.displacement(), shaft),
+                null, new com.wormzjl.icheme.runtime.fluid.FluidView.Pump(null, null, alpha, 1, null, null), null, null, null, null);
+        var meters = new com.wormzjl.icheme.client.gui.common.DeviceMeters(new com.wormzjl.icheme.client.gui.common.DeviceMeters.Data(Kind.PUMP, view, model.components(), weights, true, null, false, List.of()),
+                null, com.wormzjl.icheme.client.gui.common.DeviceMeters.PhaseRatioBasis.VOLUME, com.wormzjl.icheme.science.display.DisplayUnit.TemperatureUnit.CELSIUS,
+                com.wormzjl.icheme.science.display.DisplayUnit.PressureUnit.BAR, com.wormzjl.icheme.science.display.DisplayUnit.FlowRateUnit.PER_HOUR, false, TEXTS);
+        var m = meters.withDense(meters.denseRow(model));
+        var in = new DeviceColumn.Input(Kind.PUMP, true, true, true, "bar", "°C", "/h", DeviceColumn.Valve.NONE, null, false, null, null, List.of(),
+                m.phases(), m.meters(), m.drive(), null, m.suction());
+        System.out.printf(java.util.Locale.ROOT, "plunger: %.6g Pa, %.1f kg/m3, shaft %.2f kW on a %.0f kW motor, alpha %.4f%n", s.pressure(), density, shaft / 1000, motor / 1000, alpha);
+        var out = new ArrayList<Prototype>();
+        out.add(devicePage("plunger-pump-0_7", WINDOW[0], WINDOW[1], in, (d, k) -> {
+                d.title("Plunger pump PP-30, CO2 at 310 K, reduced density 0.7");
+                d.name("P-101", true);
+                d.tabs(0, "Overview", "Datasheet");
+                d.status(Door.tr("gui.icheme.fluid.flowing"), Palette.MUTED);
+                device(d, in, DeviceColumn.rows(in, TEXTS), Map.of("volumeFlow", "20.0", "maximumAddedPressure", "100.0"));
+                d.footer(2, "Close", "Apply", "Volume", "°C", "bar", "/h");
+            }));
+        return out;
     }
 
     // ---- W10d's pump readings and curve (batch 2026-11-03-rotating-machinery, decision D37; W10D_BUILD_PLAN.md) ----

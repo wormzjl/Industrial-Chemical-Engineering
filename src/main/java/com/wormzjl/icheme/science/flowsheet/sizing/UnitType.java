@@ -19,7 +19,11 @@ public enum UnitType {
     /** The Cooler tile on air (C2, {@code COOLER_MODEL_PLAN.md} section 3 item 4): an air cooler. */
     AIR_COOLER(EquipmentShape.Kind.AIR_COOLER),
     /** The Cooler tile on tower water: an exchanger with the process on its shell and the water on its tubes. */
-    WATER_COOLER(EquipmentShape.Kind.EXCHANGER);
+    WATER_COOLER(EquipmentShape.Kind.EXCHANGER),
+    /** The Pump tile as a centrifugal pump (batch 2026-11-15-supercritical-fluids, S8): what every pump was before the plunger pump. */
+    CENTRIFUGAL_PUMP(EquipmentShape.Kind.PUMP),
+    /** The Pump tile as a triplex plunger pump (S8): its displacement at any density, for one dense fluid and high rises at small flows. */
+    PLUNGER(EquipmentShape.Kind.PLUNGER_PUMP);
 
     private final EquipmentShape.Kind kind;
 

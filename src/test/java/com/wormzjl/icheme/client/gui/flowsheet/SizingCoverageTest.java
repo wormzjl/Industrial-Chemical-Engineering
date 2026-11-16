@@ -74,6 +74,8 @@ public class SizingCoverageTest {
         out.add(new com.wormzjl.icheme.science.flowsheet.sizing.PrimeMoverSizing.Size(com.wormzjl.icheme.science.machine.PrimeMover.Family.ENGINE, 3, false));
         out.add(new com.wormzjl.icheme.science.flowsheet.sizing.PrimeMoverSizing.Size(com.wormzjl.icheme.science.machine.PrimeMover.Family.GAS_TURBINE, 4, true));
         out.add(new ValveSizing.Size(.3));
+        // The Pump tile's plunger pump (batch 2026-11-15-supercritical-fluids, S8), last: ConstructorColumnTest reads the samples by index.
+        out.add(new PumpSizing.Plunger(2));
         return out;
     }
 

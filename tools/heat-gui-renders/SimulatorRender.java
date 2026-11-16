@@ -973,6 +973,46 @@ public final class SimulatorRender {
     }
 
     /**
+     * The Pump tile's plunger pump (batch 2026-11-15-supercritical-fluids, S8; -Donly=plunger): a pump on carbon dioxide at 310 K,
+     * reduced density 0.7, sized by Size all (Auto proposes a plunger pump: its suction is lighter than the centrifugal pump's
+     * density row), and the same pump kept a centrifugal pump (its Suction density row yellow); the pump's door.
+     */
+    private static void plunger(Path out) throws Exception {
+        var model = FluidThermodynamics.forNetwork(CATALOG, NETWORK);
+        var thermo = new FlowThermo(model, CATALOG, NETWORK, () -> {
+        });
+        double[] co2 = new double[model.componentCount()];
+        co2[model.components().indexOf("CarbonDioxide")] = 1;
+        double delta = .7, lo = 1e5, hi = 8e7;
+        for (int i = 0; i < 200 && hi - lo > 1e-13 * hi; i++) {
+            double mid = (lo + hi) / 2;
+            if (MaterialRuntime.with(CATALOG, NETWORK, () -> model.flashTP(310, mid, co2, () -> {
+            })).reducedDensity() < delta) lo = mid;
+            else hi = mid;
+        }
+        double p = (lo + hi) / 2;
+        var sheet = new Sheet().unit("P-1", "pump", 220, 90, SheetEditor.defaults("pump", () -> null))
+                .feed("CO2", "P-1", "in", new Flowsheet.Feed(310, p, new LinkedHashMap<>(java.util.Map.of("CarbonDioxide", 100.)), List.of()), 100, 100).product("OUT", "P-1", "out", 360, 100).build();
+        var run = FlowsheetEngine.run(sheet, CATALOG, () -> {
+        }, null, FlowsheetSolver.Progress.NONE);
+        var all = MaterialRuntime.with(CATALOG, NETWORK, () -> Proposal.sizeAll(sheet, run, thermo, FlowsheetSolver.Progress.NONE));
+        var pump = all.sized().units().get("P-1");
+        System.out.printf("plunger %.1f: %.6g Pa, run %s, size %s, pump %s%n", delta, p, run.status(), pump == null ? "unsized" : pump.size(), pump == null ? "unsized" : pump.rating().readings());
+        var finished = new SimulatorHost.Finished(all.sheet(), all.run(), 1);
+        var host = new Sized(finished, new SimulatorRunner.Rated(all.sheet(), finished, all.sized(), true), null);
+        var centrifugal = withSizing(all.sheet(), all.sheet().sizing().with("P-1", all.sheet().sizing().unit("P-1").with(SizingFacts.Mode.FIXED).typed(UnitType.CENTRIFUGAL_PUMP)
+                .with(new com.wormzjl.icheme.science.flowsheet.sizing.PumpSizing.Size(Double.parseDouble(System.getProperty("discharge", ".1"))))));
+        var kept = MaterialRuntime.with(CATALOG, NETWORK, () -> SheetSizing.rate(centrifugal, all.run(), thermo));
+        var keptPump = kept.units().get("P-1");
+        System.out.printf("centrifugal kept: size %s, pump %s%n", keptPump == null ? "unsized" : keptPump.size(), keptPump == null ? "unsized" : keptPump.rating().readings());
+        var keptHost = new Sized(finished, new SimulatorRunner.Rated(centrifugal, finished, kept, false), null);
+        grid(out, "plunger-0_7-doors", DW, DH, List.of("CO2 at 310 K, reduced density 0.7: the feed", "The pump"),
+                List.of(stream(sheet, run, "CO2", 0), unit(all.sheet(), all.run(), "P-1", 0)));
+        sheet(out, "plunger-0_7-sizing", W, H, List.of("Size all: Auto proposes a plunger pump", "The same pump Fixed as a centrifugal pump"),
+                List.of(sized(host, s -> s.sizing.unit = "P-1"), sized(keptHost, s -> s.sizing.unit = "P-1")));
+    }
+
+    /**
      * S5's sheets (batch 2026-11-02-process-simulator): Send to block on the Sizing tab after one Size all of the sample and after a second, with
      * what its hover says; then the constructor's Import page listing the designs Send to block stores, Import on the choice page, and
      * the condenser landed on the draft.
@@ -1326,6 +1366,11 @@ public final class SimulatorRender {
         // -Donly=dense: a pump on dense carbon dioxide (batch 2026-11-15-supercritical-fluids, S5).
         if ("dense".equals(System.getProperty("only"))) {
             dense(out);
+            return;
+        }
+        // -Donly=plunger: the Pump tile's plunger pump on dense carbon dioxide (batch 2026-11-15-supercritical-fluids, S8).
+        if ("plunger".equals(System.getProperty("only"))) {
+            plunger(out);
             return;
         }
         // -Donly=sizing: S4b's sheets alone.

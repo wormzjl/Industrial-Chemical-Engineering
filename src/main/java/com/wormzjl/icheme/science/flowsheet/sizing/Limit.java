@@ -128,6 +128,9 @@ public enum Limit {
      * loses the fluid's stiffness and damping: compress and cool the fluid first, or use a compressor. Read only on a dense
      * suction ({@link PumpSizing.Load#reducedDensity}). */
     PUMP_DENSITY(SHOULD, least(.86), "", "[BERG]", QUIET),
+    /** A plunger pump's rise against its relief rise, MPa (batch 2026-11-15-supercritical-fluids, S8): at it the relief valve
+     * passes the whole delivery back ({@link com.wormzjl.icheme.science.machine.PlungerPump#RELIEF_RISE}). */
+    PLUNGER_RISE(SHOULD, most(com.wormzjl.icheme.science.machine.PlungerPump.RELIEF_RISE / 1e6), "MPa", "[API674]"),
 
     // ---- Compressors ----
     COMPRESSOR_RATIO(MUST, most(FlowControl.Compressor.MAXIMUM_PRESSURE_RATIO), "", "World: `FluidNetwork.Controls`"),

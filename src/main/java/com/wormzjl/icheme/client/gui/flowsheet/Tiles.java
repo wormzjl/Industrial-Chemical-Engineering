@@ -95,6 +95,8 @@ public final class Tiles {
             // The Cooler's two (C2): on Water it is drawn as the exchanger it is (owner, 2026-11-03).
             case AIR_COOLER -> Symbol.AIR_COOLER;
             case WATER_COOLER -> Symbol.EXCHANGER;
+            // The Pump tile's two (batch 2026-11-15-supercritical-fluids, S8): both on the pump's symbol.
+            case CENTRIFUGAL_PUMP, PLUNGER -> Symbol.PUMP;
         };
     }
 
@@ -104,6 +106,8 @@ public final class Tiles {
             "storage_tank", List.of(UnitType.FLOATING_ROOF, UnitType.SPHERE),
             "drum", List.of(UnitType.STANDING_DRUM, UnitType.LYING_DRUM),
             "compressor", List.of(UnitType.PISTON, UnitType.TURBO),
+            // The Pump tile's two (batch 2026-11-15-supercritical-fluids, S8): a sheet saved before has no type and reads as Auto.
+            "pump", List.of(UnitType.CENTRIFUGAL_PUMP, UnitType.PLUNGER),
             "cooler", List.of(UnitType.AIR_COOLER, UnitType.WATER_COOLER));
 
     /** The types tile {@code tile} is built as (plan section 3.10), none for an untyped tile; the Sizing tab's type keys. */

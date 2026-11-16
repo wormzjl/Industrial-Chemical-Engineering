@@ -46,6 +46,8 @@ public final class SizingCoverage {
             case EXCHANGER, KETTLE -> sized(ExchangerSizing.Size.class);
             case AIR_COOLER -> sized(AirCoolerSizing.Size.class);
             case PUMP -> sized(PumpSizing.Size.class);
+            // The plunger pump by model (batch 2026-11-15-supercritical-fluids, S8).
+            case PLUNGER_PUMP -> sized(PumpSizing.Plunger.class);
             case COMPRESSOR, CENTRIFUGAL_COMPRESSOR -> sized(CompressorSizing.Size.class);
             case VERTICAL_HEATER, CABIN_HEATER -> sized(HeaterSizing.Size.class);
             case EJECTOR -> sized(EjectorSizing.Size.class);
@@ -60,8 +62,7 @@ public final class SizingCoverage {
             // The prime movers by family and model (batch 2026-11-10-prime-movers).
             case COMBUSTION_ENGINE, GAS_TURBINE -> sized(PrimeMoverSizing.Size.class);
             case STIRRED_REACTOR, ADSORBER, TRICKLE_BED_REACTOR, EBULLATED_BED_REACTOR, MOTOR, GENERATOR, GEARBOX, CYCLONE, FCC_CONVERTER, DELAYED_COKER,
-                 FLUIDIZED_BED_BOILER, FLUIDIZED_BED_GASIFIER, GRATE_BOILER, FIXED_BED_GASIFIER, INDUCED_DRAFT_COOLING_TOWER, NATURAL_DRAFT_COOLING_TOWER, FLUID_CONVERTER, GAS_CONVERTER,
-                 PLUNGER_PUMP -> none(NO_MODEL);
+                 FLUIDIZED_BED_BOILER, FLUIDIZED_BED_GASIFIER, GRATE_BOILER, FIXED_BED_GASIFIER, INDUCED_DRAFT_COOLING_TOWER, NATURAL_DRAFT_COOLING_TOWER, FLUID_CONVERTER, GAS_CONVERTER -> none(NO_MODEL);
         };
     }
 }

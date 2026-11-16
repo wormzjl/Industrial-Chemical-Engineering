@@ -35,9 +35,7 @@ public final class FlowsheetCatalog {
             // The prime movers (batch 2026-11-10-prime-movers, owner P14 A): a tile each (PrimeMoverUnit).
             ENGINE = modelled("combustion_engine"), GAS_TURBINE = modelled("gas_turbine"),
             // The fluid converters (batch 2026-11-12-fluid-conversion): a sheet has no Forge fluid, so they stand on the storage tank's tile, drawn only.
-            CONVERTER = drawn("storage_tank"),
-            // The plunger pump (batch 2026-11-15-supercritical-fluids, S8): on the pump's tile, drawn only until the sheet sizes it (W5).
-            PLUNGER = drawn("pump");
+            CONVERTER = drawn("storage_tank");
 
     private FlowsheetCatalog() {
     }
@@ -85,7 +83,8 @@ public final class FlowsheetCatalog {
             case COMBUSTION_ENGINE -> ENGINE;
             case GAS_TURBINE -> GAS_TURBINE;
             case FLUID_CONVERTER, GAS_CONVERTER -> CONVERTER;
-            case PLUNGER_PUMP -> PLUNGER;
+            // The plunger pump (batch 2026-11-15-supercritical-fluids, S8): the Pump tile's second type (PumpSizing.Plunger).
+            case PLUNGER_PUMP -> PUMP;
         };
     }
 
@@ -124,7 +123,7 @@ public final class FlowsheetCatalog {
             case GRATE_BOILER -> GRATE;
             case FIXED_BED_GASIFIER -> FIXED_BED;
             case FLUID_CONVERTER, GAS_CONVERTER -> CONVERTER;
-            case PLUNGER_PUMP -> PLUNGER;
+            case PLUNGER_PUMP -> PUMP;
         };
     }
 
