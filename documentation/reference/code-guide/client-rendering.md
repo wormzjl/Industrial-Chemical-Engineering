@@ -46,7 +46,7 @@ Paths under [`src/main/java/com/wormzjl/icheme/client/`](../../../src/main/java/
 | `NameplateRenderer` | A named structure's plate where `Nameplate.of` puts it (worked out once per shape, off the render thread) and a one-block device's tag (`Nameplate.tag`), within `RANGE`, on the side it faces | 138 |
 | `DataControlRenderer` | Data and power cable glands, leads and rack cables (structure only, no readings), in view; ports gathered every `HOST_TICKS` | 413 |
 | **Owned by other chapters** | | |
-| `MoverSounds`, `DriverSounds` | The movers' and drivers' running loops through the one sound budget ([effects.md](effects.md)) | 117, 135 |
+| `MoverSounds`, `DriverSounds` | The movers' and drivers' running loops through the one sound budget ([effects.md](effects.md)) | 119, 135 |
 | `ValveTurns`, `ValveTurnRenderer` | A hand valve's turn and its drawing ([effects.md](effects.md)) | 138, 164 |
 | `PipeLayingClient`, `CableLayingClient`, `LineToolSession`, `LayingToolAim`, `LineToolMarkers` | The laying tools' client ([pipe-laying.md](pipe-laying.md)) | 411, 602, 365, 150, 80 |
 | `AssemblyToolClient`, `PortColours` | The laying tool's view of column assemblies and the port colours ([assembly-service.md](assembly-service.md)) | 157, 55 |
@@ -108,4 +108,4 @@ Drawing itself (ghosts, animation, renderers, tints on racks) has no automated t
 - `EquipmentBodyRenderer` rebuilds its region map only when the hash of its structures (origin, shape, paint, light) or their count changes, or after `release`; it merges at most one changed square a frame, its last mesh standing meanwhile.
 - `DataControlRenderer` shows a port placed or removed up to `HOST_TICKS` late.
 
-**Snapshot:** `d6f721b94`, 2026-11-15.
+**Snapshot:** `9195b5161`, 2026-11-16.

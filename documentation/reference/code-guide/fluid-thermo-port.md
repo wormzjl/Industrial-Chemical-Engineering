@@ -127,4 +127,4 @@ Gradle: `fluidScienceTest` (all of `science.fluid.*`). A change to the model's n
 - **A solid population below `Double.MIN_NORMAL` kg is roundoff zero** and is dropped: no double states its volume or heat capacity.
 - **`initialNitrogenCharge` is a placement initializer only**; persistence never calls it again, and its first argument is a volume (m³).
 
-**Snapshot:** `cdb2833e1`, 2026-11-15.
+**Snapshot:** `9195b5161`, 2026-11-16.

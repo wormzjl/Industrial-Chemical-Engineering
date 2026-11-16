@@ -45,7 +45,7 @@ this chapter. Lines at the snapshot.
 | [`TwoPhaseFlash`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/TwoPhaseFlash.java) | The two-slot split: `twoPhase` (two attempts, the second from Wilson's K), substitution with Rachford-Rice in the minor phase's fraction (`split`), the Newton finish (`newtonFinish`, `shiftedSolve`), `finishSplit` (products, merge, product re-check, `ownSplit`); `lowerGibbsRoot`, `differentiatePhase` (shared with the three-slot system) | 691 |
 | [`ThreeSlotFlash`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/ThreeSlotFlash.java) | Three fluid phases as one system: `threeSlot` (seeds, the audit and its one reseed), `slotSubstitution`, `slotFractions` (Michelsen's multiphase Rachford-Rice), `slotNewton`, `slotOutcome`; nested `Slots` (the workspace's scratch) | 798 |
 | [`CarriedCrystals`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/CarriedCrystals.java) | Carried crystals under `FLUID_CARRYING_CRYSTALS`: the trial filter `carriedTrial` with `crystalLean`, `supersaturated`, `crystalRich`; the restated split `carriedSplit`; the stand-in held out `beyondStandIn`; `CARRIED_SHARE` | 199 |
-| [`CriticalBand`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/CriticalBand.java) | The declared critical band: `inBand`, `bandReason` | 41 |
+| [`CriticalBand`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/CriticalBand.java) | The declared critical band: `inBand`, `bandReason` | 42 |
 | [`EquilibriumRequest`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/EquilibriumRequest.java) | Record: `Specification` (TP, PH, UV), two values (K and Pa; Pa and J; J and m³), species (the contract basis), amounts, competition | 71 |
 | [`EquilibriumResult`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/EquilibriumResult.java) | The answer: `Status`, `UnsupportedReason`, `Classification`, `FailureKind`, `PhaseAmounts`, `coexisting`, `Coverage`, `CoverageGrade`, `Deposition`, `Diagnostics`; aggregates `enthalpy`, `internalEnergy`, `volume`, `conservationDefect` | 507 |
 | [`PhaseContract`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/PhaseContract.java) | What a package promises: basis, `WaterParticipation`, qualified competitions, water-chemistry species, `PhaseDomain`, fluid coverage, `ThermoIdentity`; `resolve`, `qualifies`, `crystalCompetition`, `waterIndex` | 93 |
@@ -254,4 +254,4 @@ boundary). Qualification families `science/thermo/qualification` (G3F1..G3F10, G
 - `IdealGasFunction` states a formation datum, but a spine-less package's `CoefficientIdealGas` sits on the network's
   sensible datum; a crystal anchored to such a family (CO2-I and ice in `icheme:refinery`) is on that datum too.
 
-**Snapshot:** `d6f721b94`, 2026-11-15.
+**Snapshot:** `9195b5161`, 2026-11-16.

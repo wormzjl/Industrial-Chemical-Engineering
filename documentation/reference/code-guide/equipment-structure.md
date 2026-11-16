@@ -22,7 +22,7 @@ Lines at the snapshot.
 |---|---|---|
 | **World (`world/level/block`)** | | |
 | `EquipmentStructure` | The entry points: `place` (with the name every shell cell takes), `rename`, `name`, `at`, `find`, `collision`, `heatSides`, `movers`, `sideIdentities`, `heldAt`, `refreshNozzles`, `refreshNozzlesAt`, `dismantle`, `record`, `registerCommands`; forwarders to the three classes beside it (`restoreFluidBinding`, `restateLater`, `refreshLater`, `removeRetiredLater`, `realignLater`, `onLevelTick`); `FIND_STEPS` | 574 |
-| `StructureRegistration` | A structure's devices by kind: `register` (reservoir, mover, turbine, heat unit with its sides as partners, still, converter, flare, chimney, prime mover), `restoreFluidBinding`, `reregister` (one queued edit, identities kept), `unregister`, `converterDevices`; a machine's law from `MachineRatings` | 660 |
+| `StructureRegistration` | A structure's devices by kind: `register` (reservoir, mover, turbine, heat unit with its sides as partners, still, converter, flare, chimney, prime mover), `restoreFluidBinding`, `reregister` (one queued edit, identities kept), `unregister`, `converterDevices`; a machine's law from `MachineRatings` | 663 |
 | `StructureRefresh` | After a load: the STALE, RETIRED and RESTATE queues served by `onLevelTick` once a region is `ready`; `refresh`, `removeRetired`, `restate`, `restatePaint`; `survey`, `write`, `settle`, `waitForLight`, `loaded`, `corner` | 459 |
 | `StructureRealignment` | The registry first for structures: `realignLater`, `serveRealignment`, `realign`, `stands`, `members`, `holdShaft` | 174 |
 | `Positions` | `of(level, at)`: a block's fluid-topology position (no lane), for every world file | 16 |
@@ -46,7 +46,7 @@ Lines at the snapshot.
 | **Others** | | |
 | `EquipmentNetwork` | `network/`: the payloads (`ConstructorPayload` with its `Action`, `ImportList`, `ImportListAnswer`, `ImportChoice`, `ImportAnswer`, `TemplatePayload`, `Rename`, `Deconstruct`, `DeconstructAnswer`, `SilhouetteWatch`, `SilhouetteBatch`), admission and chat replies; `IMPORT_REACH`, `MAX_TEXT` | 644 |
 | `EquipmentChunkMixin` | `mixin/`: refuses a `LevelChunk.setBlockState` on a structure cell outside `EquipmentProtection`'s authority | 34 |
-| `MachineRatings` | `science/plant/machine/`: a placed machine's law from its shape (`machineControl`, `ejectorControl`) | 48 |
+| `MachineRatings` | `science/plant/machine/`: a placed machine's law from its shape (`machineControl`, `ejectorControl`) | 50 |
 
 ## Main flow
 
@@ -55,7 +55,7 @@ Lines at the snapshot.
 1. `EquipmentNetwork` checks the player (loaded, within reach, may build, not a spectator, may interact), rebuilds the `Design` (its constructor validates the shape) and keeps the constructor's imported column and name (`keepingColumn`: a packet never sets them).
 2. A column without an import is refused (`import_first`), one whose side nozzle finds no row on the constructor's own skirt too (`ColumnDesign.misfit`, `misfit`); so is a build with side-connection clashes.
 3. `EquipmentStructure.place` checks every cell (loaded, inside the build height, replaceable) before setting any; the first blocked cell is named and nothing is placed. Cells are set with client updates and no neighbour shape updates; each shell cell binds its shape, cell, paint, name, layout revision and box.
-4. `StructureRegistration.register` queues the structure's devices in one ledger edit: a drum, tank or sphere at its lowest inside cell with a port per nozzle (a tank open); a pump or compressor at its suction nozzle with SUCTION and DISCHARGE ports; a steam turbine likewise; a heat unit's sides (`HeatSides.of`) at their first inlets, a kettle's shell as a vessel, all as partners in one `placeUnit`; a still, converter, flare, chimney or prime mover by its own rule. Structures with shaft ends queue their shaft part, one with a terminal cell its FE port. Pipes in front of the ports update; the nozzles take the pipes' sizes (`refreshNozzles`).
+4. `StructureRegistration.register` queues the structure's devices in one ledger edit: a drum, tank or sphere at its lowest inside cell with a port per nozzle (a tank open); a pump or compressor at its suction nozzle with SUCTION and DISCHARGE ports, its device kind its law's (`MachineRatings.machineControl`: a liquid mover, a centrifugal or a plunger pump, is a `PUMP`, else a `COMPRESSOR`); a steam turbine likewise; a heat unit's sides (`HeatSides.of`) at their first inlets, a kettle's shell as a vessel, all as partners in one `placeUnit`; a still, converter, flare, chimney or prime mover by its own rule. Structures with shaft ends queue their shaft part, one with a terminal cell its FE port. Pipes in front of the ports update; the nozzles take the pipes' sizes (`refreshNozzles`).
 5. `AssemblyService.placed` runs; the chat answers (`built`, `built_named`, blocked, clash, invalid).
 
 **Import**: after a `KEEP` of the draft, `ImportList` reads the nearest `ProcessSimulatorBlockEntity` within `IMPORT_REACH` (its saved column design first, untagged, then what Send to block stored) and is always answered with an `ImportListAnswer`; `ImportChoice` lands the chosen design on the draft (`Design.landed`) if the listed index still holds that tag and member (else `import_changed`), answered with an `ImportAnswer` (the design's tags, or why there is none). `TemplatePayload` makes a column design with `ColumnDesign.of` (an air cooler and standard pumps) and is answered the same way.
@@ -117,4 +117,4 @@ The shell cell's NBT holds `Kind`, `Diameter`, `TangentLength`, `Orientation`, `
 - Columns and the units that are neither movers, heat units nor the other registered kinds are drawing only. A mover's auxiliary nozzles and a heat unit's nozzles that are not a side's inlet or outlet do not join the network.
 - The constructor bench's model faces the placing player, while `FACING` still names the build direction.
 
-**Snapshot:** `d6f721b94`, 2026-11-15.
+**Snapshot:** `9195b5161`, 2026-11-16.

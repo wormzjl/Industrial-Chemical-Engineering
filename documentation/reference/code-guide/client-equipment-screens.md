@@ -31,7 +31,7 @@ Paths under [`src/main/java/com/wormzjl/icheme/client/gui/`](../../../src/main/j
 | `ProcessSimulatorScreen` | `screens/inventory/`: the process simulator's screen ([process-simulator.md](process-simulator.md)) | 1149 |
 | `SimulatorBlockHost` | `screens/inventory/`: a simulator screen open on a block: the runner and the block's store ([process-simulator.md](process-simulator.md)) | 152 |
 | **Builders (`common`, no Minecraft classes)** | | |
-| `ConstructorColumn` | The constructor's door, `PANEL` wide: the pages' rows (`choose`, `design`, `templates`, `imports`, `connections`, `nozzles`, `paint`), each `Page` with its footer; `listed` (an Import line), `label`, `title` (cut to `TITLE`), `withRemoval` (the Deconstruction group) | 653 |
+| `ConstructorColumn` | The constructor's door, `PANEL` wide: the pages' rows (`choose`, `design`, `templates`, `imports`, `connections`, `nozzles`, `paint`), each `Page` with its footer; `listed` (an Import line), `label`, `title` (cut to `TITLE`), `withRemoval` (the Deconstruction group) | 655 |
 | `AssemblyColumn` | The assembly door: Structure and Operation tabs, the status once, Check with Check parts and its summary, Selected with Open unit; `footerButtons`; the glass split between the block and the parts list (`split`, `DRAWING_W`, `DRAWING_H`) | 291 |
 | `AssemblyDiagram` | A column assembly's parts (one per blueprint slot) and its ports in a fixed order (slot, role, ordinal, partner), which the laying tool's marks and port colours read | 182 |
 | `OperationColumn` | The Operation page and the DCS column page: `HEIGHT`, `Units`, `Input`; `rows`, `fields`, `values`, `parse`, `applies`, `footerButtons`, `status`; the glass's `tables` (`ports`, `duties`, `solve`, `conditions`, `absolutes`), `glass`, `height` | 465 |
@@ -114,4 +114,4 @@ The ghost, the blocked-cells line, Enter in a name entry and the Operation page'
 - A focused entry on the assembly screen takes its keys first (`ProcessUi.textKeyPressed`), so a typed E does not close it.
 - The Operation page's glass scrolls: at the design size it does not fit one view once a column has tray data or conditions.
 
-**Snapshot:** `d6f721b94`, 2026-11-15.
+**Snapshot:** `9195b5161`, 2026-11-16.

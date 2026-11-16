@@ -107,4 +107,4 @@ Which check decides what, in the least measurement (AGENTS.md):
 - Under memory load the GameTest server can fail to start; rerun on a new run id. GameTest worlds persist between runs of one id: use a fresh id.
 - `lane.sh` warns, and does not stop, when other test or client JVMs run.
 
-**Snapshot:** `cdb2833e1`, 2026-11-15.
+**Snapshot:** `9195b5161`, 2026-11-16.

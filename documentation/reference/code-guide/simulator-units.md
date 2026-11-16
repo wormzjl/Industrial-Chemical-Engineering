@@ -36,7 +36,7 @@ snapshot. "pp" = package-private.
 | [`ExchangerRating`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/unit/ExchangerRating.java) | A counterflow exchanger on the world's two heat curves: the surface a duty needs and the duty a surface gives | 119 |
 | [`CoolerUnit`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/unit/CoolerUnit.java) | Target Outlet or Duty, the coolant in at 25 °C; Air or Water is a sizing type only | 88 |
 | [`FiredHeaterUnit`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/unit/FiredHeaterUnit.java) | Target Outlet or Duty, with a duty limit (the fuel stays off the sheet); series or apart coils | 104 |
-| [`MoverUnit`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/unit/MoverUnit.java) | A pump or a compressor on the world's closures (`FlowControl.Pump`, `Compressor`), target Outlet or Rise; the proposed driver (`driver`, `POLES`) | 97 |
+| [`MoverUnit`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/unit/MoverUnit.java) | A pump or a compressor on the world's closures (`FlowControl.Pump`, `Compressor`), target Outlet or Rise; the proposed driver (`driver`, `POLES`) | 98 |
 | [`TurbineUnit`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/unit/TurbineUnit.java) | A steam turbine: steam in, exhaust out at the door's pressure (`EXHAUST_PRESSURE` by default), shaft power out of the sheet by `FlowControl.Turbine.shaftPower` | 72 |
 | [`EjectorUnit`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/unit/EjectorUnit.java) | A steam ejector set as one tile: ports `SUCTION`, `MOTIVE`, `DISCHARGE`; `DISCHARGE_PRESSURE`, `MOTIVE_PRESSURE`, `STEAM_SHARE`; the suction's gas by `EjectorLaw.gasAsAir`; `motive` (also the column's vacuum rule) | 113 |
 | [`VacuumPumpUnit`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/unit/VacuumPumpUnit.java) | A vacuum pump on the world's `VacuumPump` law for a type and a model, a set discharge; `pick` gives a column's pump | 133 |
@@ -157,4 +157,4 @@ A unit's settings are the file's `Params` ([process-simulator.md](process-simula
 - `TopologyCompiler.Kind.TURBINE` maps to the turbine tile; `MOTOR`, `GENERATOR` and `GEARBOX` stand on it as
   DRAWING_ONLY and size nothing (`FlowsheetCatalog.DRIVER`). The diverter valve is the splitter.
 
-**Snapshot:** `9d6d0d82e`, 2026-11-15.
+**Snapshot:** `9195b5161`, 2026-11-16.

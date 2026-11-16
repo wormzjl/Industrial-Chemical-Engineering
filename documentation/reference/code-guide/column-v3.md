@@ -267,4 +267,4 @@ the task `v3HollandBenchmark`, which writes `build/reports/benchmarks/v3-holland
   the input.
 - The Holland facade is a benchmark only: no preset, template or simulator door builds its input.
 
-**Snapshot:** `9d6d0d82e`, 2026-11-15.
+**Snapshot:** `9195b5161`, 2026-11-16.

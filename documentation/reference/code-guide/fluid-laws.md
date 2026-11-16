@@ -163,4 +163,4 @@ The devices' controls, valve sources and heat laws are written by the runtime's 
 - **`ScheduledTransfer` has no runtime producer**; see [fluid-interval.md](fluid-interval.md).
 - **`InlineMovers`' fixed duty** (liquid at 2 m/s and 25 m, gas at 10 m/s and ratio 1.5 at 300 K, in `InlineMachines`) is a game design value, not a universal rating.
 
-**Snapshot:** `d6f721b94`, 2026-11-15.
+**Snapshot:** `9195b5161`, 2026-11-16.

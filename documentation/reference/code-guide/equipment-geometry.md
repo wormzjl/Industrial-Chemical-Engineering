@@ -21,14 +21,14 @@ Paths under [`src/main/java/com/wormzjl/icheme/science/equipment/`](../../../src
 | Class | Role | Lines |
 |---|---|---|
 | **Shape and cells** | | |
-| `EquipmentShape` | A vessel's record: `Kind` (`unit`, `storage`, `designed`, `reservoir`, `mover`), diameter, tangent length, `Orientation`, `Heading` front, support, `ColumnTrays`, drum `Connection`s, `Bank`, boot (`Boot`, `bootFor`), `outlet`/`outlets`, `TowerBank`, `MachineDuty`, still options, `ShaftEnd`s; validation; the frame and `transform`; `nozzles` (`Nozzle`, `Role`, `PortClass`); `clashes`; volume, area, `levelHeight`, `fluidGeometry`; `fluidDevice`; `MAX_VOLUME`, `MAX_SUPPORT` | 1347 |
+| `EquipmentShape` | A vessel's record: `Kind` (`unit`, `storage`, `designed`, `reservoir`, `mover`), diameter, tangent length, `Orientation`, `Heading` front, support, `ColumnTrays`, drum `Connection`s, `Bank`, boot (`Boot`, `bootFor`), `outlet`/`outlets`, `TowerBank`, `MachineDuty`, still options, `ShaftEnd`s; validation; the frame and `transform`; `nozzles` (`Nozzle`, `Role`, `PortClass`); `clashes`; volume, area, `levelHeight`, `fluidGeometry`; `fluidDevice`; `MAX_VOLUME`, `MAX_SUPPORT` | 1350 |
 | `ShapeRasterizer` | Shape to `Layout` (shell and interior `Cell`s), `CellKey`, `surface`/`fixedSurface`, `solid` (`Box`es), `ports` (`Port`), `nozzleCells`, `fluidCell`, `fluidCells`, `outline`, `climbable`, `hides`, `moving`, `floating` (`Floating`), `skylight`, `marks`, `stillParts`, `forgePort`, `tankGauge`, `blanketValve`, `reliefValve`, `reliefValveOnPipe`, `layoutRevision`, `legacyStamp`; the bounded `Geometry` cache; `serverOnly` | 2055 |
 | `Mesh` | Planar convex facets with a `Material` and a part index; primitives (prisms, frustums, rings, discs, boxes, elbows, spheres, hoops, tori); quarter-turn `Transform`; the cut into one cell's polygons; `headHeight` | 1186 |
 | `Part` | Blender OBJ parts from `assets/icheme/parts/`, flat triangle pairs merged into quads | 195 |
 | `PipeSizes` | Drawn OD from bore, flanges, Class 150 bolting, `code` (the nozzle code), `drawn`, `MIN_OUTSIDE`, `MAX_OUTSIDE`, `MAX_BORE` | 110 |
-| `NozzleBore` | The largest pipe a nozzle takes: `largest`, `fits`, `proposed`, `clear`; `STEP`, `SURFACE`; cached, never saved | 147 |
+| `NozzleBore` | The largest pipe a nozzle takes: `largest`, `fits`, `proposed`, `clear`; `STEP`, `SURFACE`; cached, never saved | 149 |
 | `Paint` | Body and structure colours, the RAL swatches, `DEFAULT`, `tint`, a laid line's single colours or `BARE`, `line` | 104 |
-| `VesselPlacement` | The box origin from the constructor (`forward`, `right`, `up`); `Form`; `front` | 107 |
+| `VesselPlacement` | The box origin from the constructor (`forward`, `right`, `up`); `Form`; `front` | 109 |
 | `PortMarkings` | Which way a stream passes each nozzle (`Flow` IN, OUT, NONE; `flow(kind, role)`), the pass-through `partner`, and the word-free arrows (`surface`, `fitting`, `fittingOverhanging`; `SHORTEST`) | 337 |
 | `BoundedCache` | The one cache of the equipment: a count and a weight bound, second-chance eviction, hits without a monitor | 165 |
 | `RenderDetail` | `NORMAL` or `LOW`: drawing only | 19 |
@@ -121,4 +121,4 @@ In `equipmentGates` (`src/test/java/com/wormzjl/icheme/science/equipment/`; run 
 - Fittings, dials and a tank's roof are not baked from a cell key alone: fittings from the pipe's state and drawn geometry, the roof, ladder, level bands, sight-glass liquid and needles per frame ([client-rendering.md](client-rendering.md)).
 - `NozzleBore.proposed` keeps no geometry in the cache: proposed sizes are shapes no world places.
 
-**Snapshot:** `d6f721b94`, 2026-11-15.
+**Snapshot:** `9195b5161`, 2026-11-16.

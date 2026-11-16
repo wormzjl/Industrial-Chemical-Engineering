@@ -116,4 +116,4 @@ Filters that reach a change, by area (run in the task named; narrow to the chang
 - A test that edits a structure cell goes through `EquipmentPermissionChecks`; plain writes are refused by the protection.
 - Benchmark worlds must be fresh: `prepareFluidBenchmark` refuses an existing one.
 
-**Snapshot:** `d6f721b94`, 2026-11-15.
+**Snapshot:** `9195b5161`, 2026-11-16.

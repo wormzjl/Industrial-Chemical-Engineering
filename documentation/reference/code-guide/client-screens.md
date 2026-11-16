@@ -20,7 +20,7 @@ Paths under [`src/main/java/com/wormzjl/icheme/client/gui/`](../../../src/main/j
 | Class | Role | Lines |
 |---|---|---|
 | **Screens (`screens/inventory`)** | | |
-| `FluidDeviceScreen` | A fluid device's screen on its menu: pages (`Page`: Overview, Composition, Solids, Connections, Outlets, Datasheet, Control, Accessory), one `KitDoor`, the status words (`statusText`, `clauseText`, `controlStatus`), drafts reloaded on a new input revision, Apply (`deviceInput`, `controlAction`, `heatControl`), the generator's mixtures (`loadMixture`), the Solids rows (`shownSolids`, `solidName`), the heat drawing's values (`heatValue`, `partState`, `streams`), the accessory glass (`renderAccessory`), a converter's (`converter`, `converterInput`, `converterApply`) | 1236 |
+| `FluidDeviceScreen` | A fluid device's screen on its menu: pages (`Page`: Overview, Composition, Solids, Connections, Outlets, Datasheet, Control, Accessory), one `KitDoor`, the status words (`statusText`, `clauseText`, `controlStatus`), drafts reloaded on a new input revision, Apply (`deviceInput`, `controlAction`, `heatControl`), the generator's mixtures (`loadMixture`), the Solids rows (`shownSolids`, `solidName`), the heat drawing's values (`heatValue`, `partState`, `streams`), the accessory glass (`renderAccessory`), a converter's (`converter`, `converterInput`, `converterApply`) | 1251 |
 | `ConverterDrafts` | A fluid converter's drafts: the Mode as drafted, rate, deadband, alarm levels, refreshed from the published view | 48 |
 | `StillDrafts` | A batch still's drafts: the Firing switch and the Reflux valve, firing and ratio | 39 |
 | `MachineScreen` | A machine's own page on `MachineMenu` in the device frame (`FluidGuiLayout`): title strip with its own name entry, one tab, message display, `MachineColumn` door, the glass (with `MotorCurve` for a motor); shows the session's last `MachineView`, Apply and Reset send `MachineNetwork.EditPayload` | 400 |
@@ -29,7 +29,7 @@ Paths under [`src/main/java/com/wormzjl/icheme/client/gui/`](../../../src/main/j
 | `ControlPanelScreen` | A local controller's or the DCS's screen: loops, sensors and valves by id, the Converters and Columns groups and a column's page (`columnDrafts`), the Alarms group; drafts survive publications; only Apply (or a mode key) queues a server input (`ControlNetwork`) | 839 |
 | **Builders and drawings (`common`, no Minecraft classes)** | | |
 | `DeviceColumn` | The door column on every page but Control: first the groups with widgets (side selector, Control, Set point, Limit, a pipe's Size, a filter's Solids, Phases with its basis key), then the groups that follow the plant (Level, Valve, Readings, Drive, Power, Suction, Health); `accessories`, `blanketValve`, `reliefValve`; `instrumentIds`; `WATER_LABEL_SHARE`; `phaseKey` (the aqueous liquid's "water", one dense fluid's "dense") | 352 |
-| `DeviceMeters` | What the door column reads, from the view (`Data`), the stream shown, the phase basis (`PhaseRatioBasis`) and the player's units: `meters`, `phases`, `level`, `suction`, `drive`, `power`; `denseRow` and `withDense` (the dense label of the shown contents) | 332 |
+| `DeviceMeters` | What the door column reads, from the view (`Data`), the stream shown, the phase basis (`PhaseRatioBasis`) and the player's units: `meters`, `phases`, `level`, `suction`, `drive`, `power`; `denseRow` and `withDense` (the dense label of the shown contents) | 335 |
 | `DenseLabel` | One dense fluid above reduced density 0.5 reads "Dense fluid" (S5 of batch 2026-11-15-supercritical-fluids): `dense` and `row` on a model's state; `row` on a view (one cubic root on the client's catalog, today's label where it cannot say); `model`, the client's network model, built once per catalog | 113 |
 | `ConverterDoor` | A converter's groups: Mode (Off, Balance, To IChemE, To Forge), Rate, Alarm levels, Tanks, Rule, Converting; also on the DCS's converter page; `plant` alone (Forge tank, rule, booked rate) is a liquid hopper's page | 132 |
 | `StillDoor` | A still's groups on its pot's door: Firing, the Reflux valve, Fuel, a controller's hold, the readings | 90 |
@@ -109,4 +109,4 @@ The status words, the overview table, the Solids rows and the Control tab's stat
 - `MachineScreen` keeps its own name entry (no follow, no Enter), unlike the screens on `NameEntry`.
 - `EquipmentConstructorScreen` and `PipelineToolScreen` do not draw their frame in one batch: their `PaintSwatch` widgets fill straight on `GuiGraphics`. `GaugeScreen`, `MachineScreen`, `ControlPanelScreen` (and the assembly and datasheet screens) do.
 
-**Snapshot:** `d6f721b94`, 2026-11-15.
+**Snapshot:** `9195b5161`, 2026-11-16.
