@@ -6,7 +6,7 @@ package com.wormzjl.icheme.science.machine;
  * power the fluid and the shaft take. Every quantity reads the suction: its density, its pressure and the gas's heat
  * capacity ratio k, which a pump does not use.
  */
-public sealed interface MachineLaw permits CentrifugalPump, CentrifugalCompressor, VacuumPump {
+public sealed interface MachineLaw permits CentrifugalPump, CentrifugalCompressor, VacuumPump, PlungerPump {
     /** Whether the machine moves liquid (a pump) or gas (a compressor). */
     boolean liquid();
 

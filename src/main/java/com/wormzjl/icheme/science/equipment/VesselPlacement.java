@@ -39,7 +39,9 @@ public record VesselPlacement(int forward, int right, int up) {
         // The prime movers (batch 2026-11-10-prime-movers).
         COMBUSTION_ENGINE(EquipmentShape.Kind.COMBUSTION_ENGINE), GAS_TURBINE(EquipmentShape.Kind.GAS_TURBINE),
         // The fluid converters (batch 2026-11-12-fluid-conversion).
-        FLUID_CONVERTER(EquipmentShape.Kind.FLUID_CONVERTER), GAS_CONVERTER(EquipmentShape.Kind.GAS_CONVERTER);
+        FLUID_CONVERTER(EquipmentShape.Kind.FLUID_CONVERTER), GAS_CONVERTER(EquipmentShape.Kind.GAS_CONVERTER),
+        // The plunger pump (batch 2026-11-15-supercritical-fluids, S8).
+        PLUNGER_PUMP(EquipmentShape.Kind.PLUNGER_PUMP);
 
         private final EquipmentShape.Kind kind;
 

@@ -84,8 +84,18 @@ class V3PengRobinsonThermoTest {
 
         assertEquals(enthalpy, fugacity.molarEnthalpyJoulesPerMol(), 1.0e-9);
         assertTrue(Arrays.stream(fugacity.logFugacityCoefficients()).allMatch(Double::isFinite));
-        assertThrows(V3ThermoException.class,
-                () -> thermo.flashTP(901.0, 250_000.0, crude.moleFractions(), thermo.newWorkspace()));
+        // 901 K is outside the package's data range, which never refuses (AGENTS.md, Thermo validity): the crude is a
+        // dilute vapour beyond its dew point (stable by the tangent-plane test on this kernel), lost at the vapour end at
+        // the second iteration and answered as one phase (batch 2026-11-15-supercritical-fluids, D1).
+        assertTrue(thermo.outsideDataRange(901.0, 250_000.0));
+        V3FlashResult hot = thermo.flashTP(901.0, 250_000.0, crude.moleFractions(), thermo.newWorkspace());
+        assertEquals(V3FeedPhase.VAPOR, hot.phase(), hot::detail);
+        assertEquals(2, hot.iterations());
+        assertTrue(hot.detail().startsWith(V3FeedFlash.ONE_PHASE), hot::detail);
+        // A state outside the numerical box is refused.
+        V3ThermoException outside = assertThrows(V3ThermoException.class,
+                () -> thermo.flashTP(7000.0, 250_000.0, crude.moleFractions(), thermo.newWorkspace()));
+        assertEquals(V3ThermoException.Code.DOMAIN, outside.code());
     }
 
     private static double sum(double[] values) {

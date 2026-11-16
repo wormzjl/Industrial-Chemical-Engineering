@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "icheme:chemsep_carbon_dioxide",
   "component": "CarbonDioxide",
-  "revision": "chemsep-8.3-dwsim-10.2.5-r1",
+  "revision": "chemsep-8.3-dwsim-10.2.5-r2",
   "source": "ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Carbon dioxide\" (ChemSep index 909, CAS 124-38-9). Molecular weight, normal boiling point, Tc, Pc and acentric factor as given; standard liquid density: eq. 105 saturated liquid at 288.7056 K (60 F), as the bundled light ends; ideal-gas Cp eq. 16 (A=28933, B=-494.28, C=10.658, D=-0.000027375, E=3.3268e-9; data 50..2000 K) fitted by least squares as shifted_polynomial_5 over 216.58..900 K (29 points), largest deviation 0.046 % at 256.9 K, 0.026 % over 298.15..900 K; viscosity tables and freezing data in their entries. Imported by tools/compound-import.",
   "molecular_weight_kg_per_mol": 0.0440095,
   "normal_boiling_point_kelvin": 194.686,
@@ -15,8 +15,8 @@
     "temperature_min_kelvin": 216.58,
     "temperature_max_kelvin": 900,
     "pressure_min_pascal": 100,
-    "pressure_max_pascal": 2000000,
-    "evidence": "Fluid network only (not the column range): the ideal-gas Cp fit range, from max(ChemSep Cp data start, triple point) to 900 K; below it Cp is held and integrated, with a notice (a data-range end, never a validity floor). 100 Pa..2000000 Pa as the bundled light ends: PR78 from ChemSep critical constants, not qualified above that."
+    "pressure_max_pascal": 30000000,
+    "evidence": "Fluid network only (not the column range): the ideal-gas Cp fit range, from max(ChemSep Cp data start, triple point) to 900 K; below it Cp is held and integrated, with a notice (a data-range end, never a validity floor). 100 Pa..2000000 Pa as the bundled light ends: PR78 from ChemSep critical constants, not qualified above that. To 30 MPa since batch 2026-11-15-supercritical-fluids (S3, owner decision O4 A): against CoolProp's reference equation (G3F11SupercriticalRegionTest M1, M8), density within 5 % and cp within 9 % outside the critical band, 8.7 % and 10.6 % at Tr 1.0-1.2 x Pr 1.5-3 (declared 11 % and 13 %), and the compressed liquid within G3F1's bounds to 30 MPa."
   },
   "estimated_heavy_residue": false,
   "ideal_gas_cp": {
@@ -80,6 +80,12 @@
     ],
     "source": "IAPWS G7-04, Guideline on the Henry's Constant and Vapor-Liquid Distribution Constant for Gases in H2O and D2O at High Temperatures (2004), after R. Fernandez-Prini, J. L. Alvarez, A. H. Harvey, J. Phys. Chem. Ref. Data 32 (2003) 903, table of A, B, C for CO2 in H2O: ln(kH/p*) = A/Tr + B tau^0.355/Tr + C Tr^-0.41 exp(tau), Tr = T/647.096 K, tau = 1 - Tr, p* the saturation pressure of water, kH on the mole-fraction basis. Coefficients as in Table 2 of the guideline (iapws.org, read 2026-11-11). Copyright 2004 IAPWS; publication in whole or in part is allowed provided attribution is given to IAPWS.",
     "revision": "iapws-g7-04-r1"
+  },
+  "critical_volume": {
+    "volume_m3_per_mol": 0.000094,
+    "estimated": false,
+    "source": "Critical volume 0.094 m3/kmol of ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Carbon dioxide\" (ChemSep index 909, CAS 124-38-9). Read by the dense-fluid residual viscosity. Written by tools/compound-import/critical-volume.mjs.",
+    "revision": "chemsep-8.3-vc-r1"
   },
   "viscosity": {
     "liquid": {

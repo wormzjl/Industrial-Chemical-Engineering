@@ -452,7 +452,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             tabsY=118;
         }
         for(int i=0;i<4;i++){
-            int selected=i;String key=DeviceColumn.phaseKey(i,aqueousWater());
+            int selected=i;String key=DeviceColumn.phaseKey(i,aqueousWater(),deviceMeters().dense());
             var tab=button(tr((tableWidth()<240?"phase_tab.":"phase.")+key),tableX()+i*(w+4),tabsY,w,()->{phase=selected;phaseSelected=true;scroll.reset();rebuild();});
             tab.active=phase!=i;tab.setTooltip(Tooltip.create(Component.literal(tr("phase."+key))));
         }
@@ -706,11 +706,20 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private String value(double v){return DeviceMeters.value(v);}
     private String temperatureValue(double kelvin){return value(temperatureUnit.display(kelvin));}
     private String pressureValue(Double pascals){return pascals==null?"—":pressureUnit.number(pascals);}
-    /** What the door column's meters read (DeviceMeters): this device's data, the Overview's stream, the Phases' basis, the player's units. */
+    /** What the door column's meters read (DeviceMeters): this device's data, the Overview's stream, the Phases' basis, the player's units, the dense label. */
     private DeviceMeters deviceMeters(){
         var data=menu.clientData();
-        return new DeviceMeters(new DeviceMeters.Data(data.kind(),data.view(),data.components(),data.molecularWeights(),data.controls().power()==FluidNetwork.Power.ON,data.controls().heat(),data.controls().tower()!=null,data.sensors()),
+        var meters=new DeviceMeters(new DeviceMeters.Data(data.kind(),data.view(),data.components(),data.molecularWeights(),data.controls().power()==FluidNetwork.Power.ON,data.controls().heat(),data.controls().tower()!=null,data.sensors()),
             selectedPort(),phaseBasis,temperatureUnit,pressureUnit,flowRateUnit,mass,FluidDeviceScreen::tr);
+        return meters.withDense(denseRow(meters));
+    }
+    /** The view and stream the dense label was evaluated on, and its row (S5 of batch 2026-11-15-supercritical-fluids, DenseLabel). */
+    private com.wormzjl.icheme.runtime.fluid.FluidView denseView;private com.wormzjl.icheme.runtime.fluid.FluidView.Port denseStream;private int denseRow=-1;private boolean denseRead;
+    /** The shown contents' dense row: one cubic root on the client's catalog when a new view is published or another stream is shown, kept until then. */
+    private int denseRow(DeviceMeters meters){
+        var view=menu.clientData().view();var port=selectedPort();
+        if(!denseRead||view!=denseView||port!=denseStream){denseRead=true;denseView=view;denseStream=port;denseRow=meters.denseRow(com.wormzjl.icheme.client.gui.common.DenseLabel.model(com.wormzjl.icheme.science.material.MaterialRuntime.active()));}
+        return denseRow;
     }
     /** What the door column reads on a device's page (DeviceColumn): this device's view and drafts, the player's units. */
     private DeviceColumn.Input deviceInput(){

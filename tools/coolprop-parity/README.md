@@ -6,7 +6,11 @@ CoolProp's pure-fluid reference equations, `src/test/java/com/wormzjl/createchem
 Batch: `2026-09-24-coolprop-low-temperature` (unified multiphase thermo plan, P1 item 1, gate G1, decision D4).
 
 Output: `src/test/resources/science/thermo/coolprop/parity-<Fluid>.json` for Nitrogen, CarbonDioxide, Methane, Ethane,
-Hydrogen and Water. The fluid files beside them (`<Fluid>.json`, `LICENSE`) are fetched from CoolProp revision
+Hydrogen and Water, and since batch `2026-11-15-supercritical-fluids` (S0) for n-Propane, Ethylene, n-Hexane, n-Heptane,
+Toluene, n-Decane and n-Dodecane, with a supercritical grid for every fluid but water and, since the follow-up M8, a
+compressed-liquid grid (Tr 0.5-0.95, 2-30 MPa) for CO2, N2, CH4, C2H6, C3H8, C2H4, n-hexane and toluene; and, from
+`generate_supercritical.py`, `viscosity-reference.json` and `mixture-density-reference.json` for
+`G3F11SupercriticalRegionTest`. The fluid files beside them (`<Fluid>.json`, `LICENSE`) are fetched from CoolProp revision
 `ae81610e7d23efc57f9d051c8e70a4d66e87537f`, not generated; see the README in that directory.
 
 ## Environment
@@ -19,13 +23,24 @@ The throw-away `uv` environment of the batch (CoolProp 8.0.0, numpy):
 Check: `"$TEMP/coolprop-probe-venv/Scripts/python.exe" -c "import CoolProp; print(CoolProp.__version__, CoolProp.__gitrevision__)"`
 prints `8.0.0 ae81610e7d23efc57f9d051c8e70a4d66e87537f`.
 
+Since S0 the environment lives in the worktree's `tmp/` (the scratch rule), with its cache beside it:
+
+    UV_CACHE_DIR=tmp/coolprop-venv-cache uv venv tmp/coolprop-venv --python 3.12
+    UV_CACHE_DIR=tmp/coolprop-venv-cache uv pip install --python tmp/coolprop-venv/Scripts/python.exe CoolProp==8.0.0 numpy
+
 ## Run
 
 From the worktree root (Git Bash), about one second:
 
     "$TEMP/coolprop-probe-venv/Scripts/python.exe" tools/coolprop-parity/generate_parity.py src/test/resources/science/thermo/coolprop
 
-The output is deterministic for a given CoolProp build; it is written with LF line endings.
+    tmp/coolprop-venv/Scripts/python.exe -I tools/coolprop-parity/generate_parity.py src/test/resources/science/thermo/coolprop
+    tmp/coolprop-venv/Scripts/python.exe -I tools/coolprop-parity/generate_supercritical.py src/test/resources/science/thermo/coolprop
+
+The output is deterministic for a given CoolProp build; it is written with LF line endings. The S0 regeneration left
+`parity-Water.json` byte-identical and only appended `supercritical` rows to the other five earlier fixtures. The M8
+regeneration only appended `compressed_liquid` rows (and two methane melting-line refusals) to the eight fixtures it
+names; the other five are byte-identical.
 
 ## What each fixture holds
 
@@ -53,11 +68,23 @@ Status: Concluded 2026-10-19 (batch in 0.9.0). Index: [../INDEX.md](../INDEX.md)
 
 ### Entry points
 
-`README.md`, `generate_parity.py`
+`README.md`, `generate_parity.py`, `generate_supercritical.py`, `compact_json.py` (the fixtures' layout: one record per line; as a script it rewrites existing tables without CoolProp)
 
 ### History
 
 - In progress since 2026-09-24 (P1 item 1 done; fixtures regenerate byte-identically)
+- 2026-11-15 (batch 2026-11-15-supercritical-fluids, S0): seven fluids, the supercritical grid, `generate_supercritical.py`
+  (viscosity and mixture-density tables)
+- 2026-11-15 (same batch, M8): the compressed-liquid grid of `G3F11SupercriticalRegionTest.m8CompressedLiquids` as rows
+  of source `compressed_liquid`; every parity tolerance held unchanged
+- 2026-11-15 (same batch): the parity and reference tables rewritten one record per line (`compact_json.py`, which both
+  generators now write with): 46,361 lines to 2,734, 1.27 MB to 1.12 MB; the parsed documents and every number's text
+  are identical (`tmp/coolprop-compact/compare.js`). The CoolProp fluid files stay byte-identical to upstream
+- 2026-11-16 (same batch, merge preparation): S0's scratch scripts kept in `supercritical-s0/`: `terms.py` (the term
+  types of fetched fluid files: which the oracle must read), `probe_mix.py` (CoolProp mixture flashes at 5-30 MPa, the
+  premise of `mixture-density-reference.json`), `tables.py` (the `G3 F11` rows of a test log as the review's tables),
+  `compare.py` (a regenerated fixture holds the old rows and only appends), `compare_compact.js` (the compact layout
+  check above). Run each from the worktree root with the paths its header or arguments give.
 
 ### Notes
 

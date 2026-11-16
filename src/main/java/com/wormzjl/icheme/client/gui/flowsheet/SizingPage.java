@@ -195,6 +195,7 @@ public final class SizingPage {
         if (unit != null) return unit.type();
         return switch (size) {
             case PumpSizing.Size p -> "pump";
+            case PumpSizing.Plunger p -> "pump";
             case EjectorSizing.Size e -> "ejector";
             case com.wormzjl.icheme.science.flowsheet.sizing.VacuumPumpSizing.Size v -> "vacuum_pump";
             case com.wormzjl.icheme.science.flowsheet.sizing.PrimeMoverSizing.Size m -> m.family() == com.wormzjl.icheme.science.machine.PrimeMover.Family.ENGINE ? "combustion_engine" : "gas_turbine";
@@ -292,6 +293,7 @@ public final class SizingPage {
     public static String sizeText(SheetContext x, @Nullable UnitSize size) {
         String text = switch (size) {
             case PumpSizing.Size p -> x.text("sizing.size.pump", SheetUnits.number(2, p.discharge()));
+            case PumpSizing.Plunger p -> x.text("sizing.size.plunger_pump", com.wormzjl.icheme.science.equipment.UnitDesign.plungerPumpModel(p.shape()));
             case EjectorSizing.Size e -> x.text("sizing.size.ejector", SheetUnits.number(2, e.suction()));
             case com.wormzjl.icheme.science.flowsheet.sizing.VacuumPumpSizing.Size v -> x.text("sizing.size.vacuum_pump", com.wormzjl.icheme.science.equipment.UnitDesign.vacuumPumpModel(v.shape()));
             case com.wormzjl.icheme.science.flowsheet.sizing.PrimeMoverSizing.Size m -> x.text("sizing.size.prime_mover", com.wormzjl.icheme.science.equipment.UnitDesign.primeMoverModel(m.shape()).name());
@@ -379,6 +381,7 @@ public final class SizingPage {
         String hint = x.text("sizing.fixed_hint");
         switch (size) {
             case PumpSizing.Size p -> group.add(Door.entry(KEY + "size/discharge", x.text("sizing.discharge"), "m"));
+            case PumpSizing.Plunger p -> group.add(Door.entry(KEY + "size/model", x.text("sizing.model"), ""));
             case EjectorSizing.Size e -> group.add(Door.entry(KEY + "size/suction", x.text("sizing.suction"), "m"));
             case com.wormzjl.icheme.science.flowsheet.sizing.VacuumPumpSizing.Size v -> group.add(Door.entry(KEY + "size/model", x.text("sizing.model"), ""));
             case com.wormzjl.icheme.science.flowsheet.sizing.PrimeMoverSizing.Size m -> group.add(Door.entry(KEY + "size/model", x.text("sizing.model"), ""));
@@ -476,6 +479,7 @@ public final class SizingPage {
     private static @Nullable Dimensions dimensions(@Nullable UnitSize size) {
         return switch (size) {
             case PumpSizing.Size p -> new Dimensions(EquipmentShape.Kind.PUMP, "discharge", null, p.discharge(), 1);
+            case PumpSizing.Plunger p -> new Dimensions(EquipmentShape.Kind.PLUNGER_PUMP, "model", null, p.model(), 1);
             case EjectorSizing.Size e -> new Dimensions(EquipmentShape.Kind.EJECTOR, "suction", null, e.suction(), 1);
             case com.wormzjl.icheme.science.flowsheet.sizing.VacuumPumpSizing.Size v -> new Dimensions(v.shape().kind(), "model", null, v.model(), (int) v.shape().tangentLength());
             case com.wormzjl.icheme.science.flowsheet.sizing.PrimeMoverSizing.Size m -> new Dimensions(m.shape().kind(), "model", null, m.model(), (int) m.shape().tangentLength());
@@ -594,6 +598,7 @@ public final class SizingPage {
         if (state.view == View.UNITS && unit != null) {
             switch (size(x, unit, sized)) {
                 case PumpSizing.Size p -> values.put(KEY + "size/discharge", SheetUnits.number(2, p.discharge()));
+                case PumpSizing.Plunger p -> values.put(KEY + "size/model", Integer.toString(p.model()));
                 case EjectorSizing.Size e -> values.put(KEY + "size/suction", SheetUnits.number(2, e.suction()));
                 case com.wormzjl.icheme.science.flowsheet.sizing.VacuumPumpSizing.Size v -> values.put(KEY + "size/model", Integer.toString(v.model()));
                 case com.wormzjl.icheme.science.flowsheet.sizing.PrimeMoverSizing.Size m -> values.put(KEY + "size/model", Integer.toString(m.model()));
@@ -715,6 +720,7 @@ public final class SizingPage {
         int whole = (int) Math.round(value);
         return switch (size) {
             case PumpSizing.Size p -> field.equals("discharge") ? new PumpSizing.Size(value) : null;
+            case PumpSizing.Plunger p -> field.equals("model") ? new PumpSizing.Plunger(whole) : null;
             case EjectorSizing.Size e -> field.equals("suction") ? new EjectorSizing.Size(value) : null;
             case com.wormzjl.icheme.science.flowsheet.sizing.VacuumPumpSizing.Size v -> field.equals("model") ? new com.wormzjl.icheme.science.flowsheet.sizing.VacuumPumpSizing.Size(v.type(), whole) : null;
             case com.wormzjl.icheme.science.flowsheet.sizing.PrimeMoverSizing.Size m -> field.equals("model") ? new com.wormzjl.icheme.science.flowsheet.sizing.PrimeMoverSizing.Size(m.family(), whole, m.coil()) : null;
@@ -903,6 +909,8 @@ public final class SizingPage {
             case FLOATING_ROOF,SPHERE -> new TankSizing.Size(type,1,d,length);
             case PISTON,TURBO -> new CompressorSizing.Size(type,d,length);
             case AIR_COOLER -> new AirCoolerSizing.Size(d,length,ProcessUnit.Bank.ONE,1);
+            case CENTRIFUGAL_PUMP -> new PumpSizing.Size(d);
+            case PLUNGER -> new PumpSizing.Plunger(1);
             case WATER_COOLER -> new ExchangerSizing.Size(false,1,d,length);
             default -> throw new IllegalArgumentException("No starting size for "+type);
         };

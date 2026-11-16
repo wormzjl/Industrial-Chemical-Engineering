@@ -188,7 +188,9 @@ final class MoverSuction {
             var walk=InletPhase.walk(graph,edge);boolean direct=walk.via()<0;
             int supplier=direct?pipe.first():walk.node();var s=states.get(supplier);
             int label=drawnLiquid(s,direct?pipe.firstPort():graph.pipes().get(walk.via()).portAt(supplier));
-            if(label<0)continue;
+            // One dense fluid is drawn as a liquid while it is liquid-like at all, in either slot (S4 of batch
+            // 2026-11-15-supercritical-fluids): its E is read, which stands only at a real flash; it has no p_v (S4b).
+            if(label<0&&!(s.dense()&&FluidThermodynamics.liquidLikeWeight(s)>0))continue;
             floors[edge]=release(s,checkpoint);zoneEdges[edge]=Double.NaN;
         }
     }
@@ -218,16 +220,26 @@ final class MoverSuction {
      * pressure, was left open there and the junction's rows stalled; read on the junction's mixture, E is its pressure. A
      * liquid drawn through a vessel's liquid port from under its blanket keeps an E below the vessel's pressure. The limit
      * is max(E, p_v + 0.85 ρ g NPSH3(Q)) ({@link ReleasePressure#limit}); wear reads σ against p_v.
+     *
+     * <p>One dense fluid ({@link FluidThermodynamics.State#dense()}) has no second phase (S4b of batch
+     * 2026-11-15-supercritical-fluids): its supply's vapour share {@code 1 - w_pump} is a density, not a gas, so it never puts E
+     * at the supplier's pressure, and its E stands only where its isenthalp really flashes, the stream holding a vapour at
+     * the pressure found ({@link ReleasePressure#lowestHeld}); else none. Carbon dioxide at 320 K and 15 MPa flashes from the
+     * bubble side at 6.52 MPa; at 310 K below reduced density 1.07 its isenthalp passes the critical temperature on the gas
+     * side, and it has no edge (as first implemented, a pump drawing it through a line at reduced density 0.5 to 1.1 was
+     * vapour-locked at its own pressure).</p>
      */
     double zoneEdge(InletPhase.Drawn drawn,Runnable checkpoint) {
         // A phase port drawing gas now draws no liquid: no edge (the dry-suction refusal owns that case).
         if(!drawn.condensed())return Double.POSITIVE_INFINITY;
-        var s=drawn.state();double p=s.pressure();
-        if(drawn.supply().vapourVolumeShare()>=com.wormzjl.icheme.science.machine.GasEntrainment.cleanShare(p))return p;
+        var s=drawn.state();double p=s.pressure();boolean dense=s.dense();
+        if(!dense&&drawn.supply().vapourVolumeShare()>=com.wormzjl.icheme.science.machine.GasEntrainment.cleanShare(p))return p;
         var key=new DrawKey(drawn.amounts(),drawn.enthalpy());
         var known=ZONE_EDGE_CACHE.computeIfAbsent(s,k->Collections.synchronizedMap(new HashMap<>()));
         var e=known.get(key);if(e!=null)return e;
-        double edge=PhaseLayout.sum(drawn.amounts())>0?releasePressure(s,drawn.amounts(),drawn.enthalpy(),com.wormzjl.icheme.science.machine.GasEntrainment::cleanShare,checkpoint):Double.POSITIVE_INFINITY;
+        double edge=!(PhaseLayout.sum(drawn.amounts())>0)?Double.POSITIVE_INFINITY
+                :dense?ReleasePressure.lowestHeld(q->releaseShare(s,drawn.amounts(),drawn.enthalpy(),q,checkpoint),com.wormzjl.icheme.science.machine.GasEntrainment::cleanShare,NumericalBox.MINIMUM_PRESSURE,p,BUBBLE_WIDTH)
+                :releasePressure(s,drawn.amounts(),drawn.enthalpy(),com.wormzjl.icheme.science.machine.GasEntrainment::cleanShare,checkpoint);
         known.put(key,edge);
         return edge;
     }
@@ -238,12 +250,15 @@ final class MoverSuction {
      * pressure of its condensable compounds, those above their critical temperature at the supplier's temperature left
      * out, at their own enthalpy at the supplier's pressure, every liquid (water alone at 298.15 K and 1 atm: about
      * 3175 Pa; nitrogen or air dissolved in it: none of it; CO2 dissolved in water at 298 K counts, its Tc is 304.1 K).
-     * Positive infinity where there is none. The clean zone's edge is the drawn stream's ({@link #zoneEdge}).
+     * Positive infinity where there is none. The clean zone's edge is the drawn stream's ({@link #zoneEdge}). One dense
+     * fluid ({@link FluidThermodynamics.State#dense()}) has none, in either slot (S4b of batch 2026-11-15-supercritical-fluids):
+     * it has no second phase to boil into; a dense natural gas at 300 K in the liquid slot read the bubble pressure of its
+     * ethane and propane, 2.66 MPa, and none in the vapour slot.
      */
     double release(FluidThermodynamics.State s,Runnable checkpoint) {
         var known=RELEASE_CACHE.get(s);if(known!=null)return known;
         double r=Double.POSITIVE_INFINITY;
-        if(FluidThermodynamics.holdsLiquid(s)) {
+        if(!s.dense()&&FluidThermodynamics.holdsLiquid(s)) {
             // W3b: the supplier's liquids together, water among their components: two liquids at equilibrium share one bubble
             // pressure, and a pump drawing either draws the same floor.
             double[] x=liquidMoles(s);double h=liquidEnthalpy(s),t=s.temperature();
@@ -357,7 +372,7 @@ final class MoverSuction {
         int edges=graph.pipes().size();
         var readControls=c.readControls;var suctionMovers=c.suctionMovers;var npshDesigns=c.npshDesigns;
         var liquidDensities=c.liquidDensities;var wetShares=c.wetShares;var vapourShares=c.vapourShares;var drawnStreams=c.drawnStreams;
-        var condensedShares=c.condensedShares;
+        var condensedShares=c.condensedShares;var bubbleShares=c.bubbleShares;
         for(int edge=0;edge<edges;edge++) {
             var pipe=graph.pipes().get(edge);
             if(!(pipe.control() instanceof FlowControl.Mover mover))continue;
@@ -369,16 +384,17 @@ final class MoverSuction {
             if(mover.liquid())drawnStreams[edge]=InletPhase.drawn(model,graph,edge,mover.targetVolumeFlow(),0);
             if(mover instanceof FlowControl.Machine machine) {
                 var supply=mover.liquid()&&!(duration>0)?drawnStreams[edge].supply():InletPhase.supply(model,graph,edge,mover.targetVolumeFlow(),duration);
-                if(machine.liquid())vapourShares[edge]=supply.vapourVolumeShare();
+                if(machine.liquid()){vapourShares[edge]=supply.vapourVolumeShare();bubbleShares[edge]=supply.bubbleVolumeShare();}
                 if(machine.liquid())suctionMovers[edge]=machine.withHeadShare(com.wormzjl.icheme.science.machine.GasEntrainment.headShare(supply.vapourVolumeShare(),graph.reservoirs().get(pipe.first()).state().pressure()));
                 // A vacuum pump (batch 2026-11-10-vacuum-pump) counts the suction mixture's volume as a set-flow mover does; a dry
                 // screw keeps its vapour share for its wear and liquid noise (owner V6 B).
                 else if(machine.law() instanceof com.wormzjl.icheme.science.machine.VacuumPump){if(com.wormzjl.icheme.science.machine.VacuumPump.dryScrew(machine.law()))vapourShares[edge]=supply.vapourVolumeShare();}
-                // A centrifugal compressor keeps the condensed mass share its wet efficiency reads, for its wet gas wear (N2).
-                else{wetShares[edge]=wetShare(supply);condensedShares[edge]=supply.condensedMassShare();}
+                // A centrifugal compressor keeps the condensed mass share its wet efficiency reads, for its wet gas wear (N2): its
+                // droplets, none in one dense fluid, whose condensed share is a density (S4b).
+                else{wetShares[edge]=wetShare(supply);condensedShares[edge]=supply.dropletMassShare();}
             }
             // W10d: a set-flow pump's suction vapour share, for its page's gas reading only (its law counts the mixture already).
-            else if(mover.liquid())vapourShares[edge]=(duration>0?InletPhase.supply(model,graph,edge,mover.targetVolumeFlow(),duration):drawnStreams[edge].supply()).vapourVolumeShare();
+            else if(mover.liquid()){var supply=duration>0?InletPhase.supply(model,graph,edge,mover.targetVolumeFlow(),duration):drawnStreams[edge].supply();vapourShares[edge]=supply.vapourVolumeShare();bubbleShares[edge]=supply.bubbleVolumeShare();}
             if(mover.liquid()){npshDesigns[edge]=mover.npsh();liquidDensities[edge]=InletPhase.liquidDensity(model,graph,edge,mover.targetVolumeFlow(),duration);}
         }
     }

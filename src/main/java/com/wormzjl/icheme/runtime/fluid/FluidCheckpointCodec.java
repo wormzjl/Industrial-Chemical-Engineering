@@ -114,10 +114,12 @@ import java.util.function.Function;
  * <p>50 (the same batch, FINAL_LANE_REVIEW.md): an island's model key says whether its model carries water (one byte after
  * the island's compound list; a package record's {@code Dry}). An island that holds no water runs on its list without
  * water; reloaded on the list with water, its model's revision differed and its certificate was discarded.</p>
+ * <p>51 (batch 2026-11-15-supercritical-fluids, S8): control tag 9 is a plunger pump casing on its law (its displacement,
+ * relief rise and rated speed); without it a plunger pump was written as tag 5 and read back as a centrifugal pump.</p>
  */
 public final class FluidCheckpointCodec {
     /** The state format: the core record's {@code StateFormat} and every unit's state section. */
-    public static final int VERSION=50;
+    public static final int VERSION=51;
     /** The most wall cells a saved heat side holds (crossflow 64, Standard 8, an air cooler's flat wall 1). */
     private static final int MAXIMUM_WALL_CELLS=64;
     /** The envelope: the core record's frame, the unit header and the section layout. Frozen. */
@@ -463,6 +465,8 @@ public final class FluidCheckpointCodec {
                 case FlowControl.Ejector ejector->{w.u8(7);w.f64(ejector.design().suction());w.f64(ejector.motivePressure());w.f64(ejector.delivered());}
                 // Format 44 (batch 2026-11-10-vacuum-pump): tag 8, a vacuum pump casing: its type by name, capacity and rated speed.
                 case FlowControl.Machine machine when machine.law() instanceof com.wormzjl.icheme.science.machine.VacuumPump vacuum->{w.u8(8);w.text(vacuum.type().name());w.f64(vacuum.capacity());w.f64(vacuum.ratedSpeed());w.f64(machine.speed());w.bool(machine.enabled());w.f64(machine.setFlow());w.f64(machine.setPressure());}
+                // Format 51 (batch 2026-11-15-supercritical-fluids, S8): tag 9, a plunger pump casing, before the generic tag 5.
+                case FlowControl.Machine machine when machine.law() instanceof com.wormzjl.icheme.science.machine.PlungerPump plunger->{w.u8(9);w.f64(plunger.displacement());w.f64(plunger.reliefRise());w.f64(plunger.ratedSpeed());w.f64(machine.speed());w.bool(machine.enabled());w.f64(machine.setFlow());w.f64(machine.setPressure());}
                 case FlowControl.Machine machine->{var law=machine.law();w.u8(5);w.bool(law.liquid());w.f64(law.ratedFlow());w.f64(law.ratedHead());w.f64(law.efficiency());if(law instanceof com.wormzjl.icheme.science.machine.CentrifugalPump pump)w.f64(pump.ratedSpeed());w.f64(machine.speed());w.bool(machine.enabled());w.f64(machine.setFlow());w.f64(machine.setPressure());}
             }
             // Format 6: the port of each end (PassiveNetwork.PhasePort ordinal), after the control.
@@ -678,7 +682,7 @@ public final class FluidCheckpointCodec {
             var list=new ArrayList<PipeResistance.Geometry>(count);for(int s=0;s<count;s++)list.add(new PipeResistance.Geometry(r.f64(),r.f64(),r.f64(),r.f64(),r.varint(1<<20)));
             sections.add(List.copyOf(list));
             controls.add(switch(r.u8()){case 0->new FlowControl.Passive();case 1->new FlowControl.Pump(r.f64(),r.f64(),r.bool());case 2->new FlowControl.PressureValve(r.f64());
-                case 3->new FlowControl.Compressor(r.f64(),r.f64(),r.bool(),r.f64(),r.f64());case 5->machine(r);case 8->new FlowControl.Machine(new com.wormzjl.icheme.science.machine.VacuumPump(com.wormzjl.icheme.science.machine.VacuumPump.Type.valueOf(r.text()),r.f64(),r.f64()),r.f64(),r.bool(),r.f64(),r.f64());case 7->new FlowControl.Ejector(new com.wormzjl.icheme.science.machine.SteamEjector(r.f64()),r.f64(),r.f64());case 6->new FlowControl.Turbine(new com.wormzjl.icheme.science.machine.SteamTurbine(r.f64(),r.f64()),r.f64());case 4->new FlowControl.ControlValve(FlowControl.ValveSource.valueOf(r.text()),r.f64(),r.f64(),r.f64(),r.bool()?new java.util.UUID(r.i64(),r.i64()):null,r.i64());default->throw new IllegalArgumentException("Unknown saved control");});
+                case 3->new FlowControl.Compressor(r.f64(),r.f64(),r.bool(),r.f64(),r.f64());case 5->machine(r);case 8->new FlowControl.Machine(new com.wormzjl.icheme.science.machine.VacuumPump(com.wormzjl.icheme.science.machine.VacuumPump.Type.valueOf(r.text()),r.f64(),r.f64()),r.f64(),r.bool(),r.f64(),r.f64());case 9->new FlowControl.Machine(new com.wormzjl.icheme.science.machine.PlungerPump(r.f64(),r.f64(),r.f64()),r.f64(),r.bool(),r.f64(),r.f64());case 7->new FlowControl.Ejector(new com.wormzjl.icheme.science.machine.SteamEjector(r.f64()),r.f64(),r.f64());case 6->new FlowControl.Turbine(new com.wormzjl.icheme.science.machine.SteamTurbine(r.f64(),r.f64()),r.f64());case 4->new FlowControl.ControlValve(FlowControl.ValveSource.valueOf(r.text()),r.f64(),r.f64(),r.f64(),r.bool()?new java.util.UUID(r.i64(),r.i64()):null,r.i64());default->throw new IllegalArgumentException("Unknown saved control");});
             firstPorts[p]=port(r);secondPorts[p]=port(r);forbiddenDirections[p]=r.varint(3);actuatorAreas[p]=r.f64();heats[p]=heat(r);
         }
         return new Topology(ids,elevations,kinds,volumes,heights,opens,geometries,pools,towers,blankets,pipeIds,first,second,sections,controls,firstPorts,secondPorts,forbiddenDirections,actuatorAreas,heats);

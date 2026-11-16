@@ -66,13 +66,42 @@ public final class MaterialCatalog {
      *
      * <p>{@code cp} is empty for a record without {@code ideal_gas_cp}, which only a package with a reference spine may
      * use (D6: its ideal gas comes from the spine; {@code referenceTemperature} is then 298.15). {@code volumeTranslation}
-     * is the record's Tr = 0.8 saturated-liquid anchor ({@link VolumeTranslation}, P3), {@code null} when absent.</p>
+     * is the record's Tr = 0.8 saturated-liquid anchor ({@link VolumeTranslation}, P3), {@code null} when absent.
+     * {@code criticalVolume} is the record's optional {@code critical_volume} sub-record, {@code null} when absent
+     * ({@link #criticalMolarVolume()} then gives the cubic's own value).</p>
      */
     public record Property(String id, String component, double molecularWeight, double normalBoilingPoint,
             double density, double standardTemperature, double standardPressure, double minimumTemperature,
             double maximumTemperature, double referenceTemperature, List<Double> cp, Pr78 pr, boolean estimated,
-            Double idealGasMinimumTemperature, VolumeTranslation volumeTranslation) {
+            Double idealGasMinimumTemperature, VolumeTranslation volumeTranslation, CriticalVolume criticalVolume) {
         public Property { cp = List.copyOf(cp); }
+        /**
+         * The critical molar volume, m3/mol: the {@code critical_volume} sub-record's value, else the untranslated PR78
+         * cubic's own, {@link CriticalVolume#CUBIC_RATIO} times its co-volume {@code 0.07780 R Tc / Pc} (the value every
+         * model used before the sub-record existed). {@code NaN} for a record without PR78 constants and without one.
+         */
+        public double criticalMolarVolume() {
+            if (criticalVolume != null) return criticalVolume.volume();
+            if (pr == null) return Double.NaN;
+            return CriticalVolume.CUBIC_RATIO * 0.07780 * CriticalVolume.GAS_CONSTANT * pr.criticalTemperature() / pr.criticalPressure();
+        }
+    }
+    /**
+     * A dataset's critical molar volume, its optional {@code critical_volume} sub-record (batch
+     * 2026-11-15-supercritical-fluids, S3, owner decision O10 A): {@code {"volume_m3_per_mol", "estimated", "source",
+     * "revision"}}. The dense-fluid residual viscosity reduces the density by it. Its own revision, which joins the fluid
+     * network's identity ({@link MaterialCatalog#fluidRevision}) and no other: the column does not read it, so it is in
+     * neither {@link Package#scientificRevision} nor {@link MaterialCatalog#physicsContent}.
+     */
+    public record CriticalVolume(double volume, boolean estimated, String source, String revision) {
+        /** The untranslated PR78 cubic's {@code v_c / b} ({@code PhaseIdentification.VAPOUR_BRANCH_VOLUME_RATIO}). */
+        public static final double CUBIC_RATIO = 3.9513730355914;
+        /** The kernel's gas constant ({@code PengRobinsonKernel.GAS_CONSTANT}), J/(mol K). */
+        static final double GAS_CONSTANT = com.wormzjl.icheme.science.thermo.PengRobinsonKernel.GAS_CONSTANT;
+        public CriticalVolume {
+            Objects.requireNonNull(source); Objects.requireNonNull(revision);
+            if (!(volume > 0) || !Double.isFinite(volume)) throw new IllegalArgumentException("volume_m3_per_mol: must be positive and finite");
+        }
     }
     /**
      * The data range of a component (or, for a package, its envelope) as the fluid network reads it, with the evidence it
@@ -262,8 +291,15 @@ public final class MaterialCatalog {
     /**
      * The longest identity, {@link Package#scientificRevision} or {@link #fluidRevision}: the column's result payloads, the
      * neural models and the fluid saves carry them. A catalog whose identity would be longer is refused at load.
+     *
+     * <p>The bound follows the fluid checkpoint's {@code PropertyRevision}, an NBT string of at most 65,535 UTF-8 bytes that
+     * carries the network model's thermodynamic revision ({@code FluidThermodynamics.thermodynamicRevision}), about 3.0 times
+     * the fluid identity: on {@code icheme:refinery} (46 compounds) a fluid identity of 10,086 characters gives a thermodynamic
+     * revision of 30,244. 21,000 keeps that under the NBT limit and admits a network package of about 95 compounds at about
+     * 220 characters each (16,384 before batch 2026-11-15-supercritical-fluids, S3, about 74 compounds once the critical
+     * volumes joined the identity).</p>
      */
-    public static final int MAX_IDENTITY = 16384;
+    public static final int MAX_IDENTITY = 21000;
     /** The records packages are built from, kept so a view is built by the loader's own code ({@link #build}). */
     private final Records records;
     /** How each package of this catalog was built; absent for a lens ({@link #inferenceView}), which no view restricts. */
@@ -376,9 +412,10 @@ public final class MaterialCatalog {
      * network reads, each by its declared revision: the viscosities of the property records and of the water model
      * ({@code id/phase@revision}, in component order, then the water), the water's ice crystal record and the fluid
      * reference records that hold an entry for one of its compounds or the water (the liquid volume references and the
-     * dissolved-solute viscosities), as the pair libraries enter the column's. The column's identity leaves them out, so a
-     * viscosity-only edit keeps the column's results and neural models. Nothing is hashed: a changed identity is a changed
-     * property basis (a world restates its contents once).
+     * dissolved-solute viscosities), as the pair libraries enter the column's, and the critical-volume sub-records of
+     * the property records ({@code id@revision}, in component order; the segment only where a record has one). The
+     * column's identity leaves them out, so a viscosity-only edit keeps the column's results and neural models. Nothing is
+     * hashed: a changed identity is a changed property basis (a world restates its contents once).
      */
     public String fluidRevision(String packageId) {
         return fluidIdentity(requirePackage(packageId),waterModels.get(packageId),viscosities,crystals,fluidData);
@@ -388,9 +425,12 @@ public final class MaterialCatalog {
         var transport=new ArrayList<String>();
         for(var property:p.properties())viscosityRevisions(transport,property.id(),viscosities.getOrDefault("properties/"+property.id(),Map.of()));
         viscosityRevisions(transport,waterId,viscosities.getOrDefault("water/"+waterId,Map.of()));
+        var criticalVolumes=new ArrayList<String>();
+        for(var property:p.properties())if(property.criticalVolume()!=null)criticalVolumes.add(property.id()+"@"+property.criticalVolume().revision());
         var ice=p.water().ice();
         var held=new HashSet<>(p.components());held.add("Water");
         return p.scientificRevision()+";viscosity="+String.join(",",transport)
+                +(criticalVolumes.isEmpty()?"":";critical-volume="+String.join(",",criticalVolumes))
                 +(ice==null?"":";ice="+ice.crystal()+"@"+crystals.get(ice.crystal()).revision())+";fluid-data="+fluidData.revision(held);
     }
     /** A record's viscosities, {@code id/liquid@revision} and {@code id/vapor@revision} for the phases it has. */
@@ -461,7 +501,9 @@ public final class MaterialCatalog {
     }
 
     private static JsonObject propertyScience(Property property) {
-        var json=new Gson().toJsonTree(property).getAsJsonObject();json.remove("id");return json;
+        // The critical volume is the fluid network's alone (its own revision in the fluid identity): the column's physics
+        // content leaves it out, as it leaves out the record id.
+        var json=new Gson().toJsonTree(property).getAsJsonObject();json.remove("id");json.remove("criticalVolume");return json;
     }
     /**
      * {@link #physicsContent(Package, List)} of package {@code packageId}: what tests compare packages by across catalogs.
@@ -702,9 +744,10 @@ public final class MaterialCatalog {
                 if (floor<=min || floor>reference) throw new IllegalArgumentException("ideal_gas_cp.temperature_min_kelvin must lie in (temperature_min_kelvin, 298.15]");
             }
             VolumeTranslation translation=o.has("volume_translation")?VolumeTranslation.read(o,pr):null;
+            CriticalVolume criticalVolume=o.has("critical_volume")?readCriticalVolume(object(o,"critical_volume")):null;
             properties.put(id,new Property(id,component,positive(o,"molecular_weight_kg_per_mol"),positive(o,"normal_boiling_point_kelvin"),
                     positive(o,"standard_liquid_density_kg_per_m3"),positive(o,"standard_temperature_kelvin"),positive(o,"standard_pressure_pascal"),
-                    min,max,reference,coefficients,pr,bool(o,"estimated_heavy_residue"),floor,translation));
+                    min,max,reference,coefficients,pr,bool(o,"estimated_heavy_residue"),floor,translation,criticalVolume));
             if (o.has("fluid_domain")) propertyValidity.put(id,validity(object(o,"fluid_domain")));
             if (o.has("freezing")) {
                 var f=readFreezing(object(o,"freezing"));
@@ -872,6 +915,12 @@ public final class MaterialCatalog {
         return Map.copyOf(result);
     }
     /** A dataset's {@code freezing} sub-record ({@link Freezing}); a refusal names the field. */
+    /** A dataset's {@code critical_volume} sub-record ({@link CriticalVolume}); a refusal names the field. */
+    static CriticalVolume readCriticalVolume(JsonObject o) {
+        try {
+            return new CriticalVolume(positive(o,"volume_m3_per_mol"),bool(o,"estimated"),text(o,"source"),revision(o,"revision"));
+        } catch (RuntimeException invalid) { throw new IllegalArgumentException("critical_volume."+invalid.getMessage(),invalid); }
+    }
     static Freezing readFreezing(JsonObject o) {
         try {
             return new Freezing(positive(o,"normal_melting_kelvin"),

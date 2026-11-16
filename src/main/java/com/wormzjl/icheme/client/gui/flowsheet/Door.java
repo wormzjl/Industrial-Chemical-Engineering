@@ -156,10 +156,15 @@ public record Door(String title, List<Column.Button> tabs, int tab, String statu
         return group(title, new Column.Wide("name", null));
     }
 
-    /** The phases of a stream as the shipped pages draw them, by mole. */
+    /** The phases of a stream as the shipped pages draw them, by mole; the share of one dense fluid reads "Dense" (S5). */
     public static Column.Group phases(String title, StreamProps.Phases p, com.wormzjl.icheme.client.gui.common.HeatControlColumn.Texts t) {
-        return group(title, new Column.Split(List.of(share(t.get("flowsheet.phase.organic"), p.organic(), 0xFFD0A85A), share(t.get("flowsheet.phase.aqueous"), p.aqueous(), 0xFF3377FF),
-                share(t.get("flowsheet.phase.gas"), p.gas(), 0xFFF0F0F0), share(t.get("flowsheet.phase.solid"), p.solid(), 0xFF72828C)), null));
+        return group(title, new Column.Split(List.of(share(t.get(phaseKey(p, 0, "organic")), p.organic(), 0xFFD0A85A), share(t.get(phaseKey(p, 1, "aqueous")), p.aqueous(), 0xFF3377FF),
+                share(t.get(phaseKey(p, 2, "gas")), p.gas(), 0xFFF0F0F0), share(t.get("flowsheet.phase.solid"), p.solid(), 0xFF72828C)), null));
+    }
+
+    /** The key of share {@code row}'s name: {@code flowsheet.phase.dense} where it holds one dense fluid, else its phase's. */
+    private static String phaseKey(StreamProps.Phases p, int row, String phase) {
+        return "flowsheet.phase." + (p.dense() == row ? "dense" : phase);
     }
 
     private static Column.Share share(String label, double value, int colour) {

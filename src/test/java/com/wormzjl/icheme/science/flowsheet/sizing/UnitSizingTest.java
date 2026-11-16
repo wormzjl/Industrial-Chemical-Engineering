@@ -57,6 +57,25 @@ final class UnitSizingTest {
         assertEquals(1.7, PumpSizing.requiredNpsh(36), .05, "the default in-line pump, 0.01 m³/s at 2950 rpm");
     }
 
+    /**
+     * S5 of batch 2026-11-15-supercritical-fluids (owner 2026-11-16, decision 3): a pump on a dense suction reads its reduced
+     * density against 0.86, a SHOULD row (pumps run carbon dioxide down to 400 kg/m³); any other suction reads no such row, so
+     * its sheet is unchanged.
+     */
+    @Test void aPumpOnADenseSuctionReadsItsDensity() {
+        var size = new PumpSizing.Size(.3);
+        assertNull(PumpSizing.rate(PUMP, size).reading(Limit.PUMP_DENSITY), "no row on a liquid");
+        var light = PumpSizing.rate(new PumpSizing.Load(731, 71, 204.5, 80.4, Double.NaN, Double.POSITIVE_INFINITY, true, .8), size);
+        assertEquals(Lamp.YELLOW, light.lamp(), "lighter than a pump's range");
+        assertSame(Limit.PUMP_DENSITY, light.closest().limit());
+        assertEquals(.8, light.reading(Limit.PUMP_DENSITY).value(), 0);
+        var dense = PumpSizing.rate(new PumpSizing.Load(731, 71, 204.5, 80.4, Double.NaN, Double.POSITIVE_INFINITY, true, 1.2), size);
+        assertEquals(Lamp.GREEN, dense.lamp());
+        assertTrue(dense.reading(Limit.PUMP_DENSITY).met());
+        assertEquals(Limit.Kind.SHOULD, Limit.PUMP_DENSITY.kind());
+        assertEquals(.86, Limit.PUMP_DENSITY.value(), 0);
+    }
+
     /** W8 (batch 2026-11-03-rotating-machinery, D43): the duty a column's door reads, the plan's worked example: 100 m³/h of water at 80 m. */
     @Test void aPumpsRatingCarriesItsDuty() {
         var load = new PumpSizing.Load(100, 80, 204.5, null, 1000);

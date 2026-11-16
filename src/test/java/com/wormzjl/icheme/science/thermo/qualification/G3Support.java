@@ -60,6 +60,15 @@ final class G3Support {
 
     static FluidThermodynamics network() { return model(NETWORK); }
 
+    /**
+     * The bundled network model: the game's catalog and its network package ({@code FluidMaterialCatalog.NETWORK_PACKAGE},
+     * the derived cubic with water), not the pilot catalog of {@link #model} (batch 2026-11-15-supercritical-fluids, S0).
+     */
+    static synchronized FluidThermodynamics bundledNetwork() {
+        String id = com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.NETWORK_PACKAGE;
+        return MODELS.computeIfAbsent("bundled|" + id, key -> FluidTestSupport.model(MaterialCatalog.bundled(), id));
+    }
+
     /** A pure-component amount vector over the model's hydrocarbon basis. */
     static double[] pure(FluidThermodynamics model, String component) {
         double[] x = new double[model.hydrocarbon.componentCount()];
@@ -180,6 +189,18 @@ final class G3Support {
     /** D14: the supercritical corner Tr 1.0-1.1 x Pr 1.5-2 joins the band with a 9 % declared density error. */
     static boolean d14Corner(double tr, double pr) {
         return tr >= 1.0 && tr <= 1.1 && pr > 1.5 && pr < 2;
+    }
+
+    /**
+     * The engine's four pure-fluid boxes as {@code FluidTpEquilibrium.pureBandBox} stated them before batch
+     * 2026-11-15-supercritical-fluids removed boxes 3 and 4 (S1, owner decision O3 B): {@link #bandBox}, and box 4
+     * {@code Tr 1.0-1.1 x Pr 1.5-2} closed, the lower number on a shared edge. The engine no longer bands there; the
+     * qualification tests keep these boxes as the regions where their declared errors are larger.
+     */
+    static int boxBeforeS1(double tr, double pr) {
+        int box = bandBox(tr, pr);
+        if (box != 0) return box;
+        return tr >= 1.0 && tr <= 1.1 && pr >= 1.5 && pr <= 2.0 ? 4 : 0;
     }
 
     /**

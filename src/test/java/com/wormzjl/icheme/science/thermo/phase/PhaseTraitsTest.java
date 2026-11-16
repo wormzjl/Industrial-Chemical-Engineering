@@ -3,6 +3,7 @@ package com.wormzjl.icheme.science.thermo.phase;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
+import com.wormzjl.icheme.science.thermo.PengRobinsonKernel;
 import com.wormzjl.icheme.science.thermo.PhaseIdentification;
 import com.wormzjl.icheme.science.thermo.PhaseTraits;
 import com.wormzjl.icheme.science.thermo.ThermoComponent;
@@ -33,6 +34,11 @@ import org.junit.jupiter.api.Test;
  *   merged near-critical split is {@code FLUID} by the merge, and the steps a balance answers (a pure coexistence, a
  *   crystal's step, a triple or three-phase point, a lever step) label their phases by construction: both are counted
  *   and their traits checked, not their labels.</li>
+ *   <li>The attraction trait (batch 2026-11-15-supercritical-fluids, S1) is the {@code a / (b R T)} of the evaluation the
+ *   phase was filled from: the cubic's own equation {@code P = R T/(v - b) - a/(v^2 + 2 b v - b^2)} at the root's
+ *   {@code Z} and {@code v/b} gives the same number. A phase of one component has a supercritical isotherm exactly when
+ *   it is above that component's {@code Tc} (away from {@code Tc} by more than 1e-9 relative), and a supercritical
+ *   isotherm has one root.</li>
  * </ul>
  */
 class PhaseTraitsTest {
@@ -41,6 +47,9 @@ class PhaseTraitsTest {
             "at the equal-chemical-potential point", "at its family's triple point", "three-phase point of the",
             "on the step between", "vapour-liquid-liquid point of the");
     private static final String MERGED = "merged near-critical split";
+    private static final double R = PengRobinsonKernel.GAS_CONSTANT;
+    /** The relative agreement of the attraction trait with the cubic's equation at the stored root (its root's rounding). */
+    private static final double ATTRACTION_TOLERANCE = 1e-9;
 
     @Test
     void everyConvergedDigestAnswerCarriesItsPhasesTraitsAndItsLabelsFollowFromThem() {
@@ -71,6 +80,7 @@ class PhaseTraitsTest {
                 }
                 if (!traits.equals(phase.state().traits())) faults.add(id + ": traits " + traits + " are not its state's " + phase.state().traits());
                 if (traits.physicalRootCount() != phase.state().physicalRootCount()) faults.add(id + ": root count " + traits);
+                checkAttraction(id, phase.state(), traits, answer.engine(), faults, tally);
                 if (!fluids.isEmpty() && !(phase.state().molarVolume() <= fluids.get(fluids.size() - 1).state().molarVolume())) {
                     faults.add(id + ": fluid phases not lightest first by molar volume");
                 }
@@ -131,14 +141,42 @@ class PhaseTraitsTest {
         if (!faults.isEmpty()) fail(faults.size() + " faults:\n  " + String.join("\n  ", faults));
     }
 
-    /** Whether the state is one component above its own critical temperature and pressure (the dry core's test). */
-    private static boolean pureSupercritical(FluidTpEquilibrium engine, PhaseState state) {
+    /**
+     * The attraction trait against the cubic's own equation at the root ({@code a} from {@code Z}, {@code v/b}, T and P),
+     * and the supercritical isotherm of a phase of one component against its {@code Tc}.
+     */
+    private static void checkAttraction(String id, PhaseState state, PhaseTraits traits, FluidTpEquilibrium engine,
+                                        List<String> faults, Map<String, Integer> tally) {
+        double t = state.temperature(), p = state.pressure();
+        double v = traits.compressibility() * R * t / p, b = v / traits.volumeRatio();
+        double attraction = (R * t / (v - b) - p) * (v * v + 2 * b * v - b * b) / (b * R * t);
+        if (!(Math.abs(traits.attraction() / attraction - 1) <= ATTRACTION_TOLERANCE)) {
+            faults.add(id + ": attraction " + traits.attraction() + " is not the cubic's " + attraction + " at its root");
+        }
+        if (traits.supercriticalIsotherm() && traits.physicalRootCount() != 1) faults.add(id + ": three roots on a supercritical isotherm " + traits);
+        int only = onlyComponent(state);
+        if (only < 0) return;
+        double tc = engine.evaluator().component(only).criticalTemperatureKelvin();
+        count(tally, traits.supercriticalIsotherm() ? "one component, supercritical isotherm" : "one component, subcritical isotherm");
+        if (Math.abs(t / tc - 1) > 1e-9 && traits.supercriticalIsotherm() != t > tc) {
+            faults.add(id + ": supercritical isotherm " + traits.supercriticalIsotherm() + " at T/Tc " + t / tc);
+        }
+    }
+
+    /** The one component present in a state, or -1. */
+    private static int onlyComponent(PhaseState state) {
         int only = -1;
         for (int i = 0; i < state.componentCount(); i++) {
             if (!(state.moleFraction(i) > 0.0)) continue;
-            if (only >= 0) return false;
+            if (only >= 0) return -1;
             only = i;
         }
+        return only;
+    }
+
+    /** Whether the state is one component above its own critical temperature and pressure (the dry core's test). */
+    private static boolean pureSupercritical(FluidTpEquilibrium engine, PhaseState state) {
+        int only = onlyComponent(state);
         if (only < 0) return false;
         ThermoComponent constants = engine.evaluator().component(only);
         return state.temperature() > constants.criticalTemperatureKelvin() && state.pressure() > constants.criticalPressurePascal();

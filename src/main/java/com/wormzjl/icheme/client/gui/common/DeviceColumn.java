@@ -41,11 +41,16 @@ public final class DeviceColumn {
 
     /**
      * The phases' split: its basis (volume, mole or mass), the four phases' amounts, whether custom solids are left out, its
-     * hover, and whether the aqueous liquid is named water ({@link #aqueousIsWater}).
+     * hover, whether the aqueous liquid is named water ({@link #aqueousIsWater}), and the phase that holds one dense fluid
+     * ({@link DenseLabel#row}: 0, 1 or 2; -1 for none), which reads "Dense fluid".
      */
-    public record Phases(String basis, double[] amounts, boolean customSolidsExcluded, String hint, boolean aqueousWater) {
+    public record Phases(String basis, double[] amounts, boolean customSolidsExcluded, String hint, boolean aqueousWater, int dense) {
         public Phases(String basis, double[] amounts, boolean customSolidsExcluded, String hint) {
             this(basis, amounts, customSolidsExcluded, hint, false);
+        }
+
+        public Phases(String basis, double[] amounts, boolean customSolidsExcluded, String hint, boolean aqueousWater) {
+            this(basis, amounts, customSolidsExcluded, hint, aqueousWater, -1);
         }
     }
 
@@ -62,6 +67,16 @@ public final class DeviceColumn {
 
     /** The key suffix of phase {@code phase}: the aqueous liquid's is "water" while it is named water. */
     public static String phaseKey(int phase, boolean aqueousWater) {
+        return phaseKey(phase, aqueousWater, -1);
+    }
+
+    /**
+     * The key suffix of phase {@code phase}: "dense" for the phase {@code dense} that holds one dense fluid (S5 of batch
+     * 2026-11-15-supercritical-fluids, {@link DenseLabel#row}; -1 for none), else the aqueous liquid's "water" while it is
+     * named water, else the phase's number.
+     */
+    public static String phaseKey(int phase, boolean aqueousWater, int dense) {
+        if (phase == dense) return "dense";
         return phase == 1 && aqueousWater ? "water" : Integer.toString(phase);
     }
 
@@ -69,8 +84,15 @@ public final class DeviceColumn {
     public record Opening(double share, String controller) {
     }
 
-    /** A tank's level: the share of its capacity filled (NaN while unknown), and its contents and capacity as shown, in litres. */
-    public record Level(double share, String contents, String capacity) {
+    /**
+     * A tank's level: the share of its capacity filled (NaN while unknown), its contents and capacity as shown, in litres, and
+     * whether it holds one dense fluid ({@link DenseLabel#dense}), which fills it with no interface: its line says so in place
+     * of "% full" (S5 of batch 2026-11-15-supercritical-fluids).
+     */
+    public record Level(double share, String contents, String capacity, boolean dense) {
+        public Level(double share, String contents, String capacity) {
+            this(share, contents, capacity, false);
+        }
     }
 
     /**
@@ -124,23 +146,32 @@ public final class DeviceColumn {
 
     /**
      * A pump's readings (batch 2026-11-03-rotating-machinery W10d, owner decision D37), as shown: NPSH available and NPSH
-     * required (m; an in-line pump's NPSH3 at its D21 duty speed), the suction's gas (% by volume), the health left (%) and
+     * required (m; an in-line pump's NPSH3 at its D21 duty speed), the suction's gas (% by volume; with {@code head}, on one
+     * dense fluid, the head share the pump keeps, %), the health left (%) and
      * its life, minutes of play until it fails at its present wear (— while it does not wear; batch 2026-11-11-minecraft-time-delta).
      * The status words (FAILED, CAVITATION, GAS) stay on the message display.
      */
-    public record Suction(String available, String required, String gas, String health, String life) {
+    public record Suction(String available, String required, String gas, String health, String life, boolean head) {
         public Suction(String available, String required, String gas, String health) {
             this(available, required, gas, health, "—");
         }
+
+        public Suction(String available, String required, String gas, String health, String life) {
+            this(available, required, gas, health, life, false);
+        }
     }
 
-    /** The Suction group (NPSH available, NPSH required, gas) and the Health group (what is left), LED meters with their hovers. */
+    /**
+     * The Suction group (NPSH available, NPSH required, gas) and the Health group (what is left), LED meters with their hovers.
+     * On one dense fluid ({@code head}: S5 of batch 2026-11-15-supercritical-fluids) the gas meter reads the head share the
+     * pump keeps on that density: the fluid holds no gas.
+     */
     public static List<Column.Row> suction(Suction s, HeatControlColumn.Texts t) {
         return List.of(
                 new Column.Group(t.get("device_group.suction"), t.get("device_group.suction.hint"), List.of(
                         new Column.Reading("npsh:available", t.get("npsh_available"), s.available(), "m", t.get("npsh_available.hint")),
                         new Column.Reading("npsh:required", t.get("npsh_required"), s.required(), "m", t.get("npsh_required.hint")),
-                        new Column.Reading("npsh:gas", t.get("gas_share"), s.gas(), "%", t.get("gas_share.hint")))),
+                        new Column.Reading("npsh:gas", t.get(s.head() ? "head_share" : "gas_share"), s.gas(), "%", t.get(s.head() ? "head_share.hint" : "gas_share.hint")))),
                 new Column.Group(t.get("device_group.health"), t.get("device_group.health.hint"), List.of(
                         new Column.Reading("health", t.get("health_left"), s.health(), "%", t.get("health_left.hint")),
                         new Column.Reading("life", t.get("life_left"), s.life(), "min", t.get("life_left.hint")))));
@@ -187,7 +218,7 @@ public final class DeviceColumn {
             boolean known = Double.isFinite(level.share());
             double share = known ? Math.clamp(level.share(), 0, 1) : 0;
             rows.add(new Column.Group(t.get("device_group.level"), t.get("volume_capacity.hint"), List.of(new Column.Bar(share),
-                    new Column.Line(t.get("level_line", known ? Format.number(100 * share) : "—", level.contents(), level.capacity()), Palette.TEXT))));
+                    new Column.Line(level.dense() ? t.get("level_line_dense", level.contents(), level.capacity()) : t.get("level_line", known ? Format.number(100 * share) : "—", level.contents(), level.capacity()), Palette.TEXT))));
         }
         if (in.opening() != null) {
             var valve = new ArrayList<Column.Row>();
@@ -289,7 +320,7 @@ public final class DeviceColumn {
         for (double a : ph.amounts()) total += Math.max(0, a);
         var shares = new ArrayList<Column.Share>();
         for (int i = 0; i < 4; i++) {
-            String label = i == 3 && ph.basis().equals("mole") ? t.get("phase_ratio.crystals") : t.get("phase_short." + phaseKey(i, ph.aqueousWater()));
+            String label = i == 3 && ph.basis().equals("mole") ? t.get("phase_ratio.crystals") : t.get("phase_short." + phaseKey(i, ph.aqueousWater(), ph.dense()));
             shares.add(new Column.Share(label, total > 0 ? Format.number(100 * ph.amounts()[i] / total) + " %" : "—", ph.amounts()[i], PHASE_COLOURS[i]));
         }
         var rows = new ArrayList<Column.Row>();

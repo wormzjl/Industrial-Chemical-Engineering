@@ -64,7 +64,7 @@ class FluidDeviceSpecDomainTest {
         assertThrows(IllegalArgumentException.class,()->new FluidNetwork.Controls(-1,101325,.05,0,.01,500000,n),"but must be physical");
         assertThrows(IllegalArgumentException.class,()->new FluidDeviceSpec(1,0,101325,n));
         var valve=assertThrows(IllegalArgumentException.class,()->model.domain().requireInputPressure(50),"a valve target outside the envelope");
-        assertTrue(valve.getMessage().contains("outside the package envelope 100.0..1.0E7 Pa"),valve.getMessage());
+        assertTrue(valve.getMessage().contains("outside the package envelope 100.0..3.0E7 Pa"),valve.getMessage());
     }
 
     // ---------------- from FluidDeviceSpecTest ----------------

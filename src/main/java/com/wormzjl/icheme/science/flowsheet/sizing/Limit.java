@@ -122,6 +122,15 @@ public enum Limit {
     /** The margin over the pump's NPSH3 (m): the rating reads NPSH available against NPSH3 plus this number. */
     PUMP_NPSH(SHOULD, least(1), "m", "[HI-961]", QUIET),
     PUMP_RATED(SHOULD, within(70, 120), "%", "[API610]"),
+    /** The suction's reduced density {@code v_c / v} on one dense fluid (S5 of batch 2026-11-15-supercritical-fluids, owner
+     * 2026-11-16): pumps run carbon dioxide down to a suction of 400 to 500 kg/m3, reduced density 0.86 to 1.07; one test pump
+     * stably at 340 kg/m3, 0.73 (Bergamini et al. 2011; DENSE_PUMP_RESEARCH_REVIEW.md of that batch). Below it the rotor
+     * loses the fluid's stiffness and damping: compress and cool the fluid first, or use a compressor. Read only on a dense
+     * suction ({@link PumpSizing.Load#reducedDensity}). */
+    PUMP_DENSITY(SHOULD, least(.86), "", "[BERG]", QUIET),
+    /** A plunger pump's rise against its relief rise, MPa (batch 2026-11-15-supercritical-fluids, S8): at it the relief valve
+     * passes the whole delivery back ({@link com.wormzjl.icheme.science.machine.PlungerPump#RELIEF_RISE}). */
+    PLUNGER_RISE(SHOULD, most(com.wormzjl.icheme.science.machine.PlungerPump.RELIEF_RISE / 1e6), "MPa", "[API674]"),
 
     // ---- Compressors ----
     COMPRESSOR_RATIO(MUST, most(FlowControl.Compressor.MAXIMUM_PRESSURE_RATIO), "", "World: `FluidNetwork.Controls`"),

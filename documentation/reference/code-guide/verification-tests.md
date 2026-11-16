@@ -69,7 +69,7 @@ To prove a change: list the files changed since the last pass and the tests that
 
 `.gitattributes` stores `compat/**/*.dat` and `*.bin` as binary and `*.snbt` as `-text`; `src/test/resources/science/thermo/coolprop/**` is `-text` so its README's SHA-256 stay verifiable.
 
-**GameTests** (source set `fluidGameTest`, its own mod `icheme_fluid_test`, `FluidTestMod`; never in the production jar). Namespaces: `icheme_fluid_test` (`runFluidGameTestServer`, the lane's step), `icheme_column_test` (`ProcessSimulatorGameTests`, `runColumnGameTestServer`), `icheme_review` (review worlds, not gates), `icheme_fluid_benchmark` (`FluidServerBenchmark`). The fluid namespace's classes:
+**GameTests** (source set `fluidGameTest`, its own mod `icheme_fluid_test`, `FluidTestMod`; never in the production jar). Namespaces: `icheme_fluid_test` and `icheme_dense_test` (`DenseFluidGameTests`, its own `empty` template; both in `runFluidGameTestServer`, the lane's step), `icheme_column_test` (`ProcessSimulatorGameTests`, `runColumnGameTestServer`), `icheme_review` (review worlds, not gates), `icheme_fluid_benchmark` (`FluidServerBenchmark`). The fluid namespace's classes:
 
 | Class | Holds |
 |---|---|
@@ -116,4 +116,4 @@ Filters that reach a change, by area (run in the task named; narrow to the chang
 - A test that edits a structure cell goes through `EquipmentPermissionChecks`; plain writes are refused by the protection.
 - Benchmark worlds must be fresh: `prepareFluidBenchmark` refuses an existing one.
 
-**Snapshot:** `d6f721b94`, 2026-11-15.
+**Snapshot:** `9195b5161`, 2026-11-16.

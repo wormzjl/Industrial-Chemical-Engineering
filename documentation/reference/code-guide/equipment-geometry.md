@@ -5,7 +5,7 @@ Up: [code guide](README.md). The kinds' designs (units, columns, storage, machin
 ## Read this when
 
 - A vessel, column or unit is shaped, collided with or climbed wrong, or a pipe does not meet a nozzle.
-- A tool refuses a pipe at a column's nozzle as too large (the nozzle's largest pipe, `NozzleBore`).
+- A tool refuses a pipe at a column's or a plunger pump's nozzle as too large (the nozzle's largest pipe, `NozzleBore`).
 - You change cell keys, nozzle codes, the 1/8-block solids, ports, the fluid node cells, the outline, the flow arrows (`PortMarkings`), paint channels or the Low detail drawing.
 - You change the drawn shape of a pipe or a fitting (valves, sight glass, Y-strainer, in-line movers), a gauge dial, a drum's blanketing or safety valve, a tank's level gauge, the service housings, sockets or instrument wiring.
 - You change which heat sides a unit has (`HeatSides`), where a nameplate sits, or the name rule.
@@ -21,14 +21,14 @@ Paths under [`src/main/java/com/wormzjl/icheme/science/equipment/`](../../../src
 | Class | Role | Lines |
 |---|---|---|
 | **Shape and cells** | | |
-| `EquipmentShape` | A vessel's record: `Kind` (`unit`, `storage`, `designed`, `reservoir`, `mover`), diameter, tangent length, `Orientation`, `Heading` front, support, `ColumnTrays`, drum `Connection`s, `Bank`, boot (`Boot`, `bootFor`), `outlet`/`outlets`, `TowerBank`, `MachineDuty`, still options, `ShaftEnd`s; validation; the frame and `transform`; `nozzles` (`Nozzle`, `Role`, `PortClass`); `clashes`; volume, area, `levelHeight`, `fluidGeometry`; `fluidDevice`; `MAX_VOLUME`, `MAX_SUPPORT` | 1347 |
+| `EquipmentShape` | A vessel's record: `Kind` (`unit`, `storage`, `designed`, `reservoir`, `mover`), diameter, tangent length, `Orientation`, `Heading` front, support, `ColumnTrays`, drum `Connection`s, `Bank`, boot (`Boot`, `bootFor`), `outlet`/`outlets`, `TowerBank`, `MachineDuty`, still options, `ShaftEnd`s; validation; the frame and `transform`; `nozzles` (`Nozzle`, `Role`, `PortClass`); `clashes`; volume, area, `levelHeight`, `fluidGeometry`; `fluidDevice`; `MAX_VOLUME`, `MAX_SUPPORT` | 1350 |
 | `ShapeRasterizer` | Shape to `Layout` (shell and interior `Cell`s), `CellKey`, `surface`/`fixedSurface`, `solid` (`Box`es), `ports` (`Port`), `nozzleCells`, `fluidCell`, `fluidCells`, `outline`, `climbable`, `hides`, `moving`, `floating` (`Floating`), `skylight`, `marks`, `stillParts`, `forgePort`, `tankGauge`, `blanketValve`, `reliefValve`, `reliefValveOnPipe`, `layoutRevision`, `legacyStamp`; the bounded `Geometry` cache; `serverOnly` | 2055 |
 | `Mesh` | Planar convex facets with a `Material` and a part index; primitives (prisms, frustums, rings, discs, boxes, elbows, spheres, hoops, tori); quarter-turn `Transform`; the cut into one cell's polygons; `headHeight` | 1186 |
 | `Part` | Blender OBJ parts from `assets/icheme/parts/`, flat triangle pairs merged into quads | 195 |
 | `PipeSizes` | Drawn OD from bore, flanges, Class 150 bolting, `code` (the nozzle code), `drawn`, `MIN_OUTSIDE`, `MAX_OUTSIDE`, `MAX_BORE` | 110 |
-| `NozzleBore` | The largest pipe a nozzle takes: `largest`, `fits`, `proposed`, `clear`; `STEP`, `SURFACE`; cached, never saved | 147 |
+| `NozzleBore` | The largest pipe a nozzle takes: `largest`, `fits`, `proposed`, `clear`; `STEP`, `SURFACE`; cached, never saved | 149 |
 | `Paint` | Body and structure colours, the RAL swatches, `DEFAULT`, `tint`, a laid line's single colours or `BARE`, `line` | 104 |
-| `VesselPlacement` | The box origin from the constructor (`forward`, `right`, `up`); `Form`; `front` | 107 |
+| `VesselPlacement` | The box origin from the constructor (`forward`, `right`, `up`); `Form`; `front` | 109 |
 | `PortMarkings` | Which way a stream passes each nozzle (`Flow` IN, OUT, NONE; `flow(kind, role)`), the pass-through `partner`, and the word-free arrows (`surface`, `fitting`, `fittingOverhanging`; `SHORTEST`) | 337 |
 | `BoundedCache` | The one cache of the equipment: a count and a weight bound, second-chance eviction, hits without a monitor | 165 |
 | `RenderDetail` | `NORMAL` or `LOW`: drawing only | 19 |
@@ -71,7 +71,7 @@ Paths under [`src/main/java/com/wormzjl/icheme/science/equipment/`](../../../src
 - **Frames.** 1 block = 1 m. A vessel is built in its own frame, axis along +y; the front (liquid outlet, skirt opening) is frame −z; a lying drum's frame x is up, y its axis. `width` is odd, so the axis and every nozzle's centre line run through cell centres, and a flange face lies on a block face. The origin is the box's lower north-west corner. The **controller** is a role: the lowest shell cell, then westmost, then northmost.
 - **Cell keys.** `CellKey(shape, x, y, z, nozzles)` is the model's and the collision's key. A body cell (wholly in the shell or skirt, clear of every opening, support, ladder column and nozzle) replaces its axial coordinate with `BODY − class` (eight classes: skirt or shell, four course phases), so callers build each class once.
 - **Nozzle codes.** A key holds a 7-bit code per nozzle reaching the cell (`PipeSizes.code` of the drawn OD; 0 = unconnected, drawn at its default size under a blind flange); at most `KEYED_NOZZLES` reach one cell. A nozzle's cells are those of its largest size, so the layout never depends on what is connected.
-- **The largest pipe** (`NozzleBore`): `PipeSizes.MAX_BORE` for every kind but a column (and a boot drum's oil outlet beside its saddle, `EquipmentShape.Boot`); on a column, the largest bore in `STEP`s whose neck stands clear of the rest of the column beyond `SURFACE` from the vessel, never less than the design pipe. `proposed` gives the same for the simulator's sizing without keeping the geometry.
+- **The largest pipe** (`NozzleBore`): `PipeSizes.MAX_BORE` for every kind but a column and a plunger pump (and a boot drum's oil outlet beside its saddle, `EquipmentShape.Boot`); on a column or a plunger pump, the largest bore in `STEP`s whose neck stands clear of the rest of the unit beyond `SURFACE` from the vessel, never less than the design pipe. `proposed` gives the same for the simulator's sizing without keeping the geometry.
 - **Collision.** `ShapeRasterizer.solid(key)` samples the cell at 8³ voxel centres (`SOLID_RESOLUTION`) and greedy-merges them; both sides compute the same shape; a wall a player must meet is at least one voxel thick (`Access.RAIL_BAND`, `RUNG_FACE`, `NARROW_BAND`). Climb zones (`climbable`) are shell cells, drawn or not.
 - **Light.** Shell cells pass light; interior cells are opaque, but `skylight` vessels (a skirt that shows its inside) and a tank's interior pass it ([equipment-structure.md](equipment-structure.md)).
 - **Ports and nodes.** A port is a nozzle's flange-face cell, its outward face, its class and role. `fluidCells` gives one node per registration: a heat unit's sides at their first inlets' port cells, then a kettle's pool node.
@@ -121,4 +121,4 @@ In `equipmentGates` (`src/test/java/com/wormzjl/icheme/science/equipment/`; run 
 - Fittings, dials and a tank's roof are not baked from a cell key alone: fittings from the pipe's state and drawn geometry, the roof, ladder, level bands, sight-glass liquid and needles per frame ([client-rendering.md](client-rendering.md)).
 - `NozzleBore.proposed` keeps no geometry in the cache: proposed sizes are shapes no world places.
 
-**Snapshot:** `d6f721b94`, 2026-11-15.
+**Snapshot:** `9195b5161`, 2026-11-16.

@@ -72,5 +72,11 @@
       "source": "Water is the one group H2O (G16) of E-PPR78 (Jaubert et al. 2022). (table eppr78-2022-si-table-s4-r2)",
       "revision": "eppr78-group-definitions-r1"
     }
+  },
+  "critical_volume": {
+    "volume_m3_per_mol": 0.0000559480745341615,
+    "estimated": false,
+    "source": "The record's molar mass 0.01801528 kg/mol over the IAPWS-95 critical density 322 kg/m3 (the critical point the record cites). Read by the dense-fluid residual viscosity. Written by tools/compound-import/critical-volume.mjs.",
+    "revision": "iapws-95-critical-r1"
   }
 }

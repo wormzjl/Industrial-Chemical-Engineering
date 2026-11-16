@@ -86,6 +86,38 @@ class DeviceMetersTest {
         assertNull(m.drive());
     }
 
+    /**
+     * S5 of batch 2026-11-15-supercritical-fluids: contents that hold one dense fluid ({@link DeviceMeters#withDense}) name
+     * its row in the phases, read "No interface" on a tank's level, and a pump's gas meter reads the head share M(α, p) on
+     * the server's α at the suction pressure (carbon dioxide at 310 K, reduced density 0.6: α 0.896 at 74.05 bar, head share
+     * 0.596); without the row it reads α as before.
+     */
+    @Test
+    void denseContentsNameTheirRowLevelAndPumpHead() {
+        var gas = state(7.405e6, 310, 1.0, 270, new double[]{0, 0, 1.0}, new double[][]{{0, 0}, {0, 0}, {6000, 0}}, 1.0);
+        var tank = new FluidView.Tank(2, false, 0, 0, 1.0, 7.405e6, 7.41e6);
+        var vessel = new DeviceMeters(new DeviceMeters.Data(Kind.RESERVOIR, new FluidView(2, 1, 0, 0, "FULL", gas, 0, List.of(), null, 1, List.of(), null, null, List.of(), tank), AXIS, WEIGHTS, true, null, false, List.of()),
+                null, PhaseRatioBasis.VOLUME, TemperatureUnit.KELVIN, PressureUnit.KILOPASCAL, FlowRateUnit.PER_HOUR, true, T);
+        assertFalse(vessel.level().dense());
+        assertEquals(-1, vessel.phases().dense());
+        assertTrue(vessel.withDense(2).level().dense(), "No interface");
+        assertEquals(2, vessel.withDense(2).phases().dense());
+        var pump = new FluidView.Pump(null, null, .896, 1, new FluidView.Curve(100 / 3600.0, 80, .70, 2950), null);
+        var view = new FluidView(3, 1, 0, 0, "STEADY: flowing", gas, 5.0, List.of(), 2e5, 1, List.of(), null, null, List.of(), null, null, null, null, null, pump, null, null, null, null);
+        var m = new DeviceMeters(new DeviceMeters.Data(Kind.PUMP, view, AXIS, WEIGHTS, true, null, false, List.of()), null, PhaseRatioBasis.MASS,
+                TemperatureUnit.CELSIUS, PressureUnit.BAR, FlowRateUnit.PER_MINUTE, false, T);
+        assertEquals(new DeviceColumn.Suction("—", "—", "89.6", "100.0", "—"), m.suction(), "two-phase or unknown: the gas share");
+        double head = com.wormzjl.icheme.science.machine.GasEntrainment.headShare(.896, 7.405e6);
+        assertEquals(.596, head, .001);
+        assertEquals(new DeviceColumn.Suction("—", "—", DeviceMeters.value(100 * head), "100.0", "—", true), m.withDense(2).suction());
+        // A pump with no centrifugal curve (a plunger pump, a set-flow pump) loses no head on one dense fluid: no reading (S8).
+        var plunger = new FluidView.Pump(null, null, .896, 1, null, null);
+        var other = new DeviceMeters(new DeviceMeters.Data(Kind.PUMP, new FluidView(3, 1, 0, 0, "STEADY: flowing", gas, 5.0, List.of(), 2e5, 1, List.of(), null, null, List.of(), null, null, null, null, null, plunger, null, null, null, null),
+                AXIS, WEIGHTS, true, null, false, List.of()), null, PhaseRatioBasis.MASS, TemperatureUnit.CELSIUS, PressureUnit.BAR, FlowRateUnit.PER_MINUTE, false, T);
+        assertEquals(new DeviceColumn.Suction("—", "—", "89.6", "100.0", "—"), other.suction(), "two-phase or unknown: the gas share, as before");
+        assertEquals(new DeviceColumn.Suction("—", "—", "—", "100.0", "—"), other.withDense(2).suction());
+    }
+
     @Test
     void aDrivenPumpReadsItsHeadEfficiencyInstrumentsSuctionAndDrive() {
         var state = state(150000, 323.15, 0.5, 500, new double[]{0, 0.5, 0}, new double[][]{{0, 0}, {0, 25000}, {0, 0}}, 0.5);

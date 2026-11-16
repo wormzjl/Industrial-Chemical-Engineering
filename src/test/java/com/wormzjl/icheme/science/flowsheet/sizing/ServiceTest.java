@@ -359,6 +359,29 @@ final class ServiceTest {
         });
     }
 
+    /**
+     * One dense fluid into a pump (S4b of batch 2026-11-15-supercritical-fluids) has no bubble pressure and, at its own
+     * temperature, no flash: every trial of the sheet's isothermal search is one dense fluid, which releases no vapour. So
+     * its suction is cold and it has no edge E on the sheet. Carbon dioxide at 310 K on both sides of reduced density 1, at
+     * 1.1, 1.2 and 1.6, and at 320 K and 15 MPa (where the world's isenthalpic E is the flash at 6.52 MPa). As first
+     * implemented (S4) it was boiling to reduced density 1.1 and its E was its own pressure there, a density above it.
+     */
+    @Test void aDenseSuctionIsColdAndHasNoEdgeOnTheSheet() {
+        on(() -> {
+            double[] co2 = pure(AXIS.indexOf("CarbonDioxide"));
+            double[][] cases = {{310, 8.325088e6}, {310, 8.326483e6}, {310, 8.476988e6}, {310, 8.680271e6}, {310, 10.982639e6}, {320, 15e6}};
+            for (var c : cases) {
+                var stream = at(c[0], c[1], co2);
+                assertTrue(stream.state().dense());
+                if (stream.state().oneFluidSlot() == FluidThermodynamics.State.LIQUID)
+                    assertEquals(Service.SUCTION_COLD, service(stream, PUMP), "at " + c[1]);
+                assertEquals(Double.POSITIVE_INFINITY, THERMO.zoneEdge(c[0], c[1], co2), 0, "no edge on the sheet at " + c[1]);
+                assertEquals(Double.POSITIVE_INFINITY, THERMO.vapourPressure(c[0], c[1], co2), 0, "no vapour pressure at " + c[1]);
+            }
+            return null;
+        });
+    }
+
     @Test void aDryGasLeavesItsSolidsBehindAsTheWorldsBulkEndDoes() {
         on(() -> {
             var gas = at(320, 3e5, pure(NITROGEN));

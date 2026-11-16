@@ -1,0 +1,115 @@
+{
+ "generator": "tools/coolprop-parity/generate_supercritical.py (batch 2026-11-15-supercritical-fluids, S0)",
+ "purpose": "M4: dense-fluid viscosity reference (Pa s) for the dilute and Jossi-Stiel-Thodos comparison",
+ "coolprop_version": "8.0.0",
+ "coolprop_gitrevision": "ae81610e7d23efc57f9d051c8e70a4d66e87537f",
+ "backend": "HEOS, default configuration; PT_INPUTS updates",
+ "dilute_pressure": 1000.0,
+ "fluids": [
+  {
+   "fluid": "CarbonDioxide",
+   "Tcrit_file": 304.1282,
+   "rhomolar_critical": 10624.905587175583,
+   "rhomolar_critical_file": 10624.9063,
+   "molar_mass": 0.0440098,
+   "states": [
+    {"Tr": 1.05, "T": 319.33461, "P": 5000000.0, "phase": "supercritical_gas", "viscosity": 1.723773373670739e-05, "Dmolar": 2448.07051660565, "viscosity_dilute": 1.5912210339801847e-05},
+    {"Tr": 1.05, "T": 319.33461, "P": 10000000.0, "phase": "supercritical", "viscosity": 3.296038061429738e-05, "Dmolar": 10574.864271421042, "viscosity_dilute": 1.5912210339801847e-05},
+    {"Tr": 1.05, "T": 319.33461, "P": 20000000.0, "phase": "supercritical", "viscosity": 7.312662804696246e-05, "Dmolar": 18315.831833406857, "viscosity_dilute": 1.5912210339801847e-05},
+    {"Tr": 1.05, "T": 319.33461, "P": 30000000.0, "phase": "supercritical", "viscosity": 8.935020615107171e-05, "Dmolar": 20123.717969152713, "viscosity_dilute": 1.5912210339801847e-05},
+    {"Tr": 1.2, "T": 364.95383999999996, "P": 5000000.0, "phase": "supercritical_gas", "viscosity": 1.9110566838064742e-05, "Dmolar": 1898.0539374051582, "viscosity_dilute": 1.8035931634356485e-05},
+    {"Tr": 1.2, "T": 364.95383999999996, "P": 10000000.0, "phase": "supercritical", "viscosity": 2.185508655587064e-05, "Dmolar": 4546.263531568286, "viscosity_dilute": 1.8035931634356485e-05},
+    {"Tr": 1.2, "T": 364.95383999999996, "P": 20000000.0, "phase": "supercritical", "viscosity": 3.972305540926524e-05, "Dmolar": 11884.10345715786, "viscosity_dilute": 1.8035931634356485e-05},
+    {"Tr": 1.2, "T": 364.95383999999996, "P": 30000000.0, "phase": "supercritical", "viscosity": 5.797904796538784e-05, "Dmolar": 15807.97566727058, "viscosity_dilute": 1.8035931634356485e-05},
+    {"Tr": 1.5, "T": 456.1923, "P": 5000000.0, "phase": "supercritical_gas", "viscosity": 2.2928656714714216e-05, "Dmolar": 1391.5172501897, "viscosity_dilute": 2.2074473734316992e-05},
+    {"Tr": 1.5, "T": 456.1923, "P": 10000000.0, "phase": "supercritical", "viscosity": 2.424377927694038e-05, "Dmolar": 2929.0026963526243, "viscosity_dilute": 2.2074473734316992e-05},
+    {"Tr": 1.5, "T": 456.1923, "P": 20000000.0, "phase": "supercritical", "viscosity": 2.8886320934495675e-05, "Dmolar": 6303.22199288651, "viscosity_dilute": 2.2074473734316992e-05},
+    {"Tr": 1.5, "T": 456.1923, "P": 30000000.0, "phase": "supercritical", "viscosity": 3.6174643781337324e-05, "Dmolar": 9506.540753508174, "viscosity_dilute": 2.2074473734316992e-05}
+   ]
+  },
+  {
+   "fluid": "Nitrogen",
+   "Tcrit_file": 126.19200000000001,
+   "rhomolar_critical": 11183.901463735672,
+   "rhomolar_critical_file": 11183.901464580624,
+   "molar_mass": 0.02801348,
+   "states": [
+    {"Tr": 1.05, "T": 132.50160000000002, "P": 5000000.0, "phase": "supercritical", "viscosity": 2.549079776414496e-05, "Dmolar": 14489.002266648933, "viscosity_dilute": 8.985499228326648e-06},
+    {"Tr": 1.05, "T": 132.50160000000002, "P": 10000000.0, "phase": "supercritical", "viscosity": 4.370291391233757e-05, "Dmolar": 19804.472580263857, "viscosity_dilute": 8.985499228326648e-06},
+    {"Tr": 1.05, "T": 132.50160000000002, "P": 20000000.0, "phase": "supercritical", "viscosity": 5.940182594357735e-05, "Dmolar": 22720.68075846681, "viscosity_dilute": 8.985499228326648e-06},
+    {"Tr": 1.05, "T": 132.50160000000002, "P": 30000000.0, "phase": "supercritical", "viscosity": 7.101028903607524e-05, "Dmolar": 24316.759739231857, "viscosity_dilute": 8.985499228326648e-06},
+    {"Tr": 1.2, "T": 151.4304, "P": 5000000.0, "phase": "supercritical", "viscosity": 1.3682736517461813e-05, "Dmolar": 5842.830689425556, "viscosity_dilute": 1.0133520988650727e-05},
+    {"Tr": 1.2, "T": 151.4304, "P": 10000000.0, "phase": "supercritical", "viscosity": 2.6773430268769875e-05, "Dmolar": 14551.252429247992, "viscosity_dilute": 1.0133520988650727e-05},
+    {"Tr": 1.2, "T": 151.4304, "P": 20000000.0, "phase": "supercritical", "viscosity": 4.451301392440227e-05, "Dmolar": 19832.481123878017, "viscosity_dilute": 1.0133520988650727e-05},
+    {"Tr": 1.2, "T": 151.4304, "P": 30000000.0, "phase": "supercritical", "viscosity": 5.561917837178021e-05, "Dmolar": 22055.61324653315, "viscosity_dilute": 1.0133520988650727e-05},
+    {"Tr": 1.5, "T": 189.288, "P": 5000000.0, "phase": "supercritical", "viscosity": 1.418058053457884e-05, "Dmolar": 3626.139600579993, "viscosity_dilute": 1.2303045655522659e-05},
+    {"Tr": 1.5, "T": 189.288, "P": 10000000.0, "phase": "supercritical", "viscosity": 1.7954173956933112e-05, "Dmolar": 7936.63656892176, "viscosity_dilute": 1.2303045655522659e-05},
+    {"Tr": 1.5, "T": 189.288, "P": 20000000.0, "phase": "supercritical", "viscosity": 2.8686582898123625e-05, "Dmolar": 14480.879599060938, "viscosity_dilute": 1.2303045655522659e-05},
+    {"Tr": 1.5, "T": 189.288, "P": 30000000.0, "phase": "supercritical", "viscosity": 3.8345499950832686e-05, "Dmolar": 17829.832437368063, "viscosity_dilute": 1.2303045655522659e-05}
+   ]
+  },
+  {
+   "fluid": "Methane",
+   "Tcrit_file": 190.564,
+   "rhomolar_critical": 10139.137654850272,
+   "rhomolar_critical_file": 10139.128,
+   "molar_mass": 0.0160428,
+   "states": [
+    {"Tr": 1.05, "T": 200.0922, "P": 5000000.0, "phase": "supercritical", "viscosity": 1.0914499792930062e-05, "Dmolar": 5453.756950339965, "viscosity_dilute": 7.853389253122383e-06},
+    {"Tr": 1.05, "T": 200.0922, "P": 10000000.0, "phase": "supercritical", "viscosity": 2.9289566499331952e-05, "Dmolar": 16573.764416120783, "viscosity_dilute": 7.853389253122383e-06},
+    {"Tr": 1.05, "T": 200.0922, "P": 20000000.0, "phase": "supercritical", "viscosity": 4.075829058684578e-05, "Dmolar": 19557.38297015817, "viscosity_dilute": 7.853389253122383e-06},
+    {"Tr": 1.05, "T": 200.0922, "P": 30000000.0, "phase": "supercritical", "viscosity": 4.840581288095209e-05, "Dmolar": 21029.788335250356, "viscosity_dilute": 7.853389253122383e-06},
+    {"Tr": 1.2, "T": 228.6768, "P": 5000000.0, "phase": "supercritical", "viscosity": 1.0391565751433622e-05, "Dmolar": 3430.828154891144, "viscosity_dilute": 8.873939006900452e-06},
+    {"Tr": 1.2, "T": 228.6768, "P": 10000000.0, "phase": "supercritical", "viscosity": 1.6484278407471556e-05, "Dmolar": 9737.638585263543, "viscosity_dilute": 8.873939006900452e-06},
+    {"Tr": 1.2, "T": 228.6768, "P": 20000000.0, "phase": "supercritical", "viscosity": 2.9687668330263722e-05, "Dmolar": 16347.593042305369, "viscosity_dilute": 8.873939006900452e-06},
+    {"Tr": 1.2, "T": 228.6768, "P": 30000000.0, "phase": "supercritical", "viscosity": 3.774647543009793e-05, "Dmolar": 18629.97481289473, "viscosity_dilute": 8.873939006900452e-06},
+    {"Tr": 1.5, "T": 285.846, "P": 5000000.0, "phase": "supercritical", "viscosity": 1.1779634505996437e-05, "Dmolar": 2331.2291625814914, "viscosity_dilute": 1.0790017630431657e-05},
+    {"Tr": 1.5, "T": 285.846, "P": 10000000.0, "phase": "supercritical", "viscosity": 1.36747182926677e-05, "Dmolar": 5117.557820226746, "viscosity_dilute": 1.0790017630431657e-05},
+    {"Tr": 1.5, "T": 285.846, "P": 20000000.0, "phase": "supercritical", "viscosity": 1.977462757518867e-05, "Dmolar": 10622.95389940441, "viscosity_dilute": 1.0790017630431657e-05},
+    {"Tr": 1.5, "T": 285.846, "P": 30000000.0, "phase": "supercritical", "viscosity": 2.6160643069851652e-05, "Dmolar": 14081.90506129177, "viscosity_dilute": 1.0790017630431657e-05}
+   ]
+  },
+  {
+   "fluid": "Ethane",
+   "Tcrit_file": 305.322,
+   "rhomolar_critical": 6856.886685000089,
+   "rhomolar_critical_file": 6856.8866849999995,
+   "molar_mass": 0.03006904,
+   "states": [
+    {"Tr": 1.05, "T": 320.5881, "P": 5000000.0, "phase": "supercritical", "viscosity": 1.3517050324142627e-05, "Dmolar": 3146.8316180072798, "viscosity_dilute": 9.984614673515926e-06},
+    {"Tr": 1.05, "T": 320.5881, "P": 10000000.0, "phase": "supercritical", "viscosity": 3.9999618607027115e-05, "Dmolar": 10873.188881004482, "viscosity_dilute": 9.984614673515926e-06},
+    {"Tr": 1.05, "T": 320.5881, "P": 20000000.0, "phase": "supercritical", "viscosity": 5.6391081868789806e-05, "Dmolar": 12991.154704479972, "viscosity_dilute": 9.984614673515926e-06},
+    {"Tr": 1.05, "T": 320.5881, "P": 30000000.0, "phase": "supercritical", "viscosity": 6.73035911227415e-05, "Dmolar": 13980.970062470431, "viscosity_dilute": 9.984614673515926e-06},
+    {"Tr": 1.2, "T": 366.3864, "P": 5000000.0, "phase": "supercritical", "viscosity": 1.334076023503017e-05, "Dmolar": 2083.97676159445, "viscosity_dilute": 1.1277122407141557e-05},
+    {"Tr": 1.2, "T": 366.3864, "P": 10000000.0, "phase": "supercritical", "viscosity": 2.045980381930164e-05, "Dmolar": 5718.576953979337, "viscosity_dilute": 1.1277122407141557e-05},
+    {"Tr": 1.2, "T": 366.3864, "P": 20000000.0, "phase": "supercritical", "viscosity": 3.923778523209351e-05, "Dmolar": 10503.73792546925, "viscosity_dilute": 1.1277122407141557e-05},
+    {"Tr": 1.2, "T": 366.3864, "P": 30000000.0, "phase": "supercritical", "viscosity": 5.047472251655678e-05, "Dmolar": 12141.604096425306, "viscosity_dilute": 1.1277122407141557e-05},
+    {"Tr": 1.5, "T": 457.983, "P": 5000000.0, "phase": "supercritical", "viscosity": 1.509257624032024e-05, "Dmolar": 1435.515521801145, "viscosity_dilute": 1.3708301785694999e-05},
+    {"Tr": 1.5, "T": 457.983, "P": 10000000.0, "phase": "supercritical", "viscosity": 1.754158176321807e-05, "Dmolar": 3107.101030734838, "viscosity_dilute": 1.3708301785694999e-05},
+    {"Tr": 1.5, "T": 457.983, "P": 20000000.0, "phase": "supercritical", "viscosity": 2.5366749314438074e-05, "Dmolar": 6483.841509956229, "viscosity_dilute": 1.3708301785694999e-05},
+    {"Tr": 1.5, "T": 457.983, "P": 30000000.0, "phase": "supercritical", "viscosity": 3.370759588467309e-05, "Dmolar": 8805.153603936073, "viscosity_dilute": 1.3708301785694999e-05}
+   ]
+  },
+  {
+   "fluid": "n-Propane",
+   "Tcrit_file": 369.89,
+   "rhomolar_critical": 5000.000623464834,
+   "rhomolar_critical_file": 5000.000000000001,
+   "molar_mass": 0.04409562,
+   "states": [
+    {"Tr": 1.05, "T": 388.3845, "P": 5000000.0, "phase": "supercritical", "viscosity": 1.6286038918302164e-05, "Dmolar": 3136.9912156604173, "viscosity_dilute": 1.0510321642420818e-05},
+    {"Tr": 1.05, "T": 388.3845, "P": 10000000.0, "phase": "supercritical", "viscosity": 4.75545639613689e-05, "Dmolar": 8258.417533405147, "viscosity_dilute": 1.0510321642420818e-05},
+    {"Tr": 1.05, "T": 388.3845, "P": 20000000.0, "phase": "supercritical", "viscosity": 6.690864884649669e-05, "Dmolar": 9676.006290148249, "viscosity_dilute": 1.0510321642420818e-05},
+    {"Tr": 1.05, "T": 388.3845, "P": 30000000.0, "phase": "supercritical", "viscosity": 8.004584827029789e-05, "Dmolar": 10376.533313176004, "viscosity_dilute": 1.0510321642420818e-05},
+    {"Tr": 1.2, "T": 443.868, "P": 5000000.0, "phase": "supercritical", "viscosity": 1.4427523823480427e-05, "Dmolar": 1786.6361634458503, "viscosity_dilute": 1.1907930009755035e-05},
+    {"Tr": 1.2, "T": 443.868, "P": 10000000.0, "phase": "supercritical", "viscosity": 2.44065818714765e-05, "Dmolar": 4873.821175586753, "viscosity_dilute": 1.1907930009755035e-05},
+    {"Tr": 1.2, "T": 443.868, "P": 20000000.0, "phase": "supercritical", "viscosity": 4.5801622537439e-05, "Dmolar": 7975.948989575459, "viscosity_dilute": 1.1907930009755035e-05},
+    {"Tr": 1.2, "T": 443.868, "P": 30000000.0, "phase": "supercritical", "viscosity": 5.9055738784021185e-05, "Dmolar": 9089.05279089016, "viscosity_dilute": 1.1907930009755035e-05},
+    {"Tr": 1.5, "T": 554.835, "P": 5000000.0, "phase": "supercritical", "viscosity": 1.621579726895849e-05, "Dmolar": 1194.0906718959172, "viscosity_dilute": 1.455366271642234e-05},
+    {"Tr": 1.5, "T": 554.835, "P": 10000000.0, "phase": "supercritical", "viscosity": 1.9383409134880567e-05, "Dmolar": 2579.7381651702767, "viscosity_dilute": 1.455366271642234e-05},
+    {"Tr": 1.5, "T": 554.835, "P": 20000000.0, "phase": "supercritical", "viscosity": 2.811678433005855e-05, "Dmolar": 5163.900964421087, "viscosity_dilute": 1.455366271642234e-05},
+    {"Tr": 1.5, "T": 554.835, "P": 30000000.0, "phase": "supercritical", "viscosity": 3.6994317296630815e-05, "Dmolar": 6780.993261431979, "viscosity_dilute": 1.455366271642234e-05}
+   ]
+  }
+ ]
+}

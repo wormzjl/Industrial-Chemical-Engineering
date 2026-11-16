@@ -7,7 +7,8 @@ import com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium.Workspace;
 
 /**
  * The declared critical band of {@link FluidTpEquilibrium} (S01): whether a feed is a pure fluid inside one of the
- * declared boxes ({@link FluidTpEquilibrium#pureBandBox}, which stays the engine's public definition), and the reason
+ * declared boxes ({@link FluidTpEquilibrium#pureBandBox}, which stays the engine's public definition; boxes 1 and 2,
+ * around and below the critical point, since the supercritical boxes 3 and 4 were removed), and the reason
  * a banded answer or failure names. It reads the evaluator's critical constants, given once at construction.
  * Immutable; one instance per engine.
  */

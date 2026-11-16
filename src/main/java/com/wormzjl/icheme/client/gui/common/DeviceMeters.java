@@ -25,9 +25,32 @@ import static com.wormzjl.icheme.client.gui.common.kit.Format.number;
  * @param port the Overview's stream (a heat unit's port), or null for the node's own contents and on every other page
  * @param mass whether flows and the tables read by mass, else by moles
  * @param texts the screen's lang lines under {@code gui.icheme.fluid.}
+ * @param dense the row of the shown contents that holds one dense fluid ({@link #denseRow}; -1 for none): its phase reads
+ *              "Dense fluid", a tank's level line "No interface", a pump's gas meter its head share (S5 of batch
+ *              2026-11-15-supercritical-fluids)
  */
 public record DeviceMeters(Data data,@Nullable FluidView.Port port,PhaseRatioBasis phaseBasis,TemperatureUnit temperatureUnit,PressureUnit pressureUnit,
-        FlowRateUnit flowRateUnit,boolean mass,HeatControlColumn.Texts texts) {
+        FlowRateUnit flowRateUnit,boolean mass,HeatControlColumn.Texts texts,int dense) {
+    /** The meters of contents that read no dense fluid ({@link #dense} -1). */
+    public DeviceMeters(Data data,@Nullable FluidView.Port port,PhaseRatioBasis phaseBasis,TemperatureUnit temperatureUnit,PressureUnit pressureUnit,
+            FlowRateUnit flowRateUnit,boolean mass,HeatControlColumn.Texts texts){this(data,port,phaseBasis,temperatureUnit,pressureUnit,flowRateUnit,mass,texts,-1);}
+    /** These meters with the shown contents' dense row {@code row} ({@link DenseLabel#row}; -1 for none). */
+    public DeviceMeters withDense(int row){return new DeviceMeters(data,port,phaseBasis,temperatureUnit,pressureUnit,flowRateUnit,mass,texts,row);}
+    /**
+     * The row of the shown contents that holds one dense fluid above reduced density 0.5 on {@code model} (S5 of batch
+     * 2026-11-15-supercritical-fluids, {@link DenseLabel#row(com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics, List, double, double, double[], double[][])}):
+     * the contents' temperature and pressure, phase volumes and amounts. One cubic root: the screen evaluates it once per
+     * published view and stream, and keeps it.
+     */
+    public int denseRow(@Nullable com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics model){
+        var view=data.view();var port=selectedPort();var info=view.pipeInfo();var state=view.state();
+        double t,p;double[] volumes;
+        if(port!=null){t=port.temperature()==null?Double.NaN:port.temperature();p=port.pressure()==null?Double.NaN:port.pressure();volumes=port.phaseVolumes();}
+        else if(info!=null){var line=info.reading();t=line==null?Double.NaN:line.temperature();p=line==null?Double.NaN:line.pressure();volumes=info.contents().phaseVolumes();}
+        else if(state!=null){t=state.temperature();p=state.pressure();volumes=state.phaseVolumes();}
+        else return -1;
+        return DenseLabel.row(model,data.components(),t,p,volumes,amounts());
+    }
     /**
      * What the meters read of the menu's data (the screen copies it from its menu): the device's kind and view, the component axis
      * and its molecular weights (kg/mol), whether its applied power is On, a controllable heat side's applied control (null
@@ -230,7 +253,7 @@ public record DeviceMeters(Data data,@Nullable FluidView.Port port,PhaseRatioBas
         var solids=port!=null?SolidInventory.EMPTY:info!=null?info.contents().solids():state!=null?state.solids():SolidInventory.EMPTY;
         String hint=tr(generator()?"phase_ratio.generator_hint":tank()?"phase_ratio.tank_hint":"phase_ratio.hint");
         if(phaseBasis==PhaseRatioBasis.MOLAR)hint+="\n"+tr("phase_ratio.mole_hint");
-        return new DeviceColumn.Phases(phaseBasis.key(),phaseBasis.amounts(volumes,amounts(),solids,data.components(),data.molecularWeights()),phaseBasis.excludesCustomSolids(solids),hint,aqueousWater());
+        return new DeviceColumn.Phases(phaseBasis.key(),phaseBasis.amounts(volumes,amounts(),solids,data.components(),data.molecularWeights()),phaseBasis.excludesCustomSolids(solids),hint,aqueousWater(),dense);
     }
     public double[][] amounts(){
         var view=data.view();
@@ -245,7 +268,7 @@ public record DeviceMeters(Data data,@Nullable FluidView.Port port,PhaseRatioBas
         if(!tank()||converter()!=null)return null;
         var view=data.view();var vessel=view.tank();var state=view.state();boolean empty=vessel!=null&&state==null;
         double capacity=vessel!=null?vessel.capacity():state==null?Double.NaN:state.capacity();
-        return new DeviceColumn.Level(state!=null?state.fill():empty?0:Double.NaN,state!=null?number(state.volume()*1000):empty?number(0):"—",value(capacity*1000));
+        return new DeviceColumn.Level(state!=null?state.fill():empty?0:Double.NaN,state!=null?number(state.volume()*1000):empty?number(0):"—",value(capacity*1000),state!=null&&dense>=0);
     }
     /**
      * A pump's Suction and Health groups (W10d, owner decision D37): NPSH available and required, the suction's gas and the
@@ -253,7 +276,15 @@ public record DeviceMeters(Data data,@Nullable FluidView.Port port,PhaseRatioBas
      */
     public DeviceColumn.Suction suction(){
         var p=data.view().pump();if(p==null)return null;
-        return new DeviceColumn.Suction(boxed(p.npshAvailable()),boxed(p.npshRequired()),p.gasShare()==null?"—":value(100*p.gasShare()),value(100*p.health()),p.lifePlaySeconds()==null?"—":value(p.lifePlaySeconds()/60));
+        // One dense fluid (S5): its share is a density's, not gas. The meter reads the head share the pump keeps on it,
+        // M(α, p) on the server's α at the suction pressure the page reads (the pump node's state). That law is a centrifugal
+        // curve's (the view's curve): a plunger pump keeps its whole flow and a set-flow pump has no curve, so on one dense
+        // fluid theirs reads nothing (S8).
+        var state=data.view().state();
+        boolean curve=p.curve()!=null;
+        boolean head=dense>=0&&curve&&p.gasShare()!=null&&state!=null&&state.pressure()>0;
+        String gas=p.gasShare()==null||dense>=0&&!curve?"—":value(100*(head?com.wormzjl.icheme.science.machine.GasEntrainment.headShare(p.gasShare(),state.pressure()):p.gasShare()));
+        return new DeviceColumn.Suction(boxed(p.npshAvailable()),boxed(p.npshRequired()),gas,value(100*p.health()),p.lifePlaySeconds()==null?"—":value(p.lifePlaySeconds()/60),head);
     }
     private String boxed(Double v){return v==null?"—":value(v);}
     /**

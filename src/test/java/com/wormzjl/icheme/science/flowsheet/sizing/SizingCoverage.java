@@ -46,6 +46,8 @@ public final class SizingCoverage {
             case EXCHANGER, KETTLE -> sized(ExchangerSizing.Size.class);
             case AIR_COOLER -> sized(AirCoolerSizing.Size.class);
             case PUMP -> sized(PumpSizing.Size.class);
+            // The plunger pump by model (batch 2026-11-15-supercritical-fluids, S8).
+            case PLUNGER_PUMP -> sized(PumpSizing.Plunger.class);
             case COMPRESSOR, CENTRIFUGAL_COMPRESSOR -> sized(CompressorSizing.Size.class);
             case VERTICAL_HEATER, CABIN_HEATER -> sized(HeaterSizing.Size.class);
             case EJECTOR -> sized(EjectorSizing.Size.class);

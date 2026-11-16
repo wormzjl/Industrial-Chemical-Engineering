@@ -339,6 +339,8 @@ class ProcessUnitTest {
                 Map.entry(Kind.CENTRIFUGAL_COMPRESSOR, Map.of(Role.SUCTION, "1+", Role.DISCHARGE, "1+")),
                 // A vacuum pump's suction and discharge on top (batch 2026-11-10-vacuum-pump).
                 Map.entry(Kind.LIQUID_RING_PUMP, Map.of(Role.SUCTION, "1+", Role.DISCHARGE, "1+")), Map.entry(Kind.DRY_SCREW_PUMP, Map.of(Role.SUCTION, "1+", Role.DISCHARGE, "1+")),
+                // A plunger pump's suction riser at the front of its liquid end and its discharge from the back end, both up (batch 2026-11-15-supercritical-fluids, S8).
+                Map.entry(Kind.PLUNGER_PUMP, Map.of(Role.SUCTION, "1+", Role.DISCHARGE, "1+")),
                 Map.entry(Kind.STEAM_TURBINE, Map.of(Role.STEAM, "0+", Role.EXHAUST, "1+")),
                 // A prime mover's fuel out of its +x side; a gas turbine's coil steam and feed water on top (batch 2026-11-10-prime-movers).
                 Map.entry(Kind.COMBUSTION_ENGINE, Map.of(Role.FUEL, "0+")),
@@ -439,22 +441,26 @@ class ProcessUnitTest {
     /**
      * Owner decision 2026-10-27 (batch 2026-10-26-multi-machine-framework, NOZZLE_ROOM_GATE_REVIEW option (C)): a column's
      * nozzle takes the largest pipe, in {@link NozzleBore#STEP}s, whose neck stands clear by this test's own {@link
-     * NozzleRoom} (the next step does not), never less than its design pipe; every other kind takes a pipe's largest. On
-     * the gated columns: the 3 m column's reflux 0.55 m (a ladder beside it), the 1.5 m column's 0.7 m, the 0.5 m column's
-     * side nozzles 0.25 m (the neck wider than the column's cladding), its top outlet a pipe's largest. A liquid-fired
-     * still's burner takes {@link BatchStillDesign#FUEL_BORE} (owner, 2026-11-09: a small pipe connector is enough).
+     * NozzleRoom} (the next step does not), never less than its design pipe; so does a plunger pump's (batch
+     * 2026-11-15-supercritical-fluids, S8: a 25 MPa pump's nozzles are DN25 to DN150); every other kind takes a pipe's
+     * largest. On the gated columns: the 3 m column's reflux 0.55 m (a ladder beside it), the 1.5 m column's 0.7 m, the
+     * 0.5 m column's side nozzles 0.25 m (the neck wider than the column's cladding), its top outlet a pipe's largest. On the
+     * plunger pumps: a pipe's largest but for PP-3's discharge and PP-30's suction 0.6 m and PP-10's discharge 0.2 m (its
+     * dampener beside it). A liquid-fired still's burner takes
+     * {@link BatchStillDesign#FUEL_BORE} (owner, 2026-11-09: a small pipe connector is enough).
      */
     @Test
     void aColumnNozzleTakesTheLargestPipeItsPlaceClears() {
         var shapes = new ArrayList<>(everySize());
         shapes.addAll(ShapeRasterizerTest.shapes());
         var pinned = new java.util.TreeMap<String, Double>();
+        var plungers = new java.util.TreeMap<String, Double>();
         for (var shape : shapes)
             for (int k = 0; k < shape.nozzles().size(); k++) {
                 var nozzle = shape.nozzles().get(k);
                 double largest = NozzleBore.largest(shape, k);
                 String at = shape + " " + nozzle.role();
-                if (shape.kind() != Kind.COLUMN) {
+                if (shape.kind() != Kind.COLUMN && shape.kind() != Kind.PLUNGER_PUMP) {
                     // A liquid-fired still's burner takes a small fuel line (owner, 2026-11-09).
                     boolean burner = shape.kind() == Kind.BATCH_STILL && nozzle.role() == Role.FUEL;
                     assertEquals(burner ? BatchStillDesign.FUEL_BORE : PipeSizes.MAX_BORE, largest, at);
@@ -463,11 +469,12 @@ class ProcessUnitTest {
                 assertTrue(largest >= nozzle.defaultOd() / 1.1 - 1e-9, at + ": under its design pipe");
                 double next = Math.floor(largest / NozzleBore.STEP + 1e-9) * NozzleBore.STEP + NozzleBore.STEP;
                 if (largest < PipeSizes.MAX_BORE - 1e-9) assertFalse(NozzleRoom.clear(shape, k, PipeSizes.outside(next)), at + ": a larger pipe clears");
-                if (largest < PipeSizes.MAX_BORE - 1e-9) pinned.merge(shape.diameter() + " " + nozzle.role(), largest, Math::min);
+                if (largest < PipeSizes.MAX_BORE - 1e-9) (shape.kind() == Kind.PLUNGER_PUMP ? plungers : pinned).merge(shape.diameter() + " " + nozzle.role(), largest, Math::min);
                 if (shape.diameter() == 3. && nozzle.role() == Role.VAPOUR_OUTLET) assertEquals(PipeSizes.MAX_BORE, largest, at + ": designed at a pipe's largest");
             }
         assertEquals(java.util.Map.of("0.5 FEED", .25, "0.5 PUMPAROUND_DRAW", .25, "0.5 REFLUX", .25, "0.5 RETURN", .25, "0.5 VAPOUR_RETURN", .25,
                 "1.5 REFLUX", .7, "3.0 REFLUX", .55), rounded(pinned));
+        assertEquals(java.util.Map.of("1.0 DISCHARGE", .6, "2.0 DISCHARGE", .2, "3.0 SUCTION", .6), rounded(plungers), "the plunger pumps' nozzles under a pipe's largest, by model");
     }
 
     private static java.util.Map<String, Double> rounded(java.util.Map<String, Double> bores) {
@@ -565,7 +572,7 @@ class ProcessUnitTest {
             boolean electric = shape.kind() == Kind.MOTOR || shape.kind() == Kind.GENERATOR || shape.kind() == Kind.AIR_COOLER || shape.kind() == Kind.INDUCED_DRAFT_COOLING_TOWER
                     || shape.kind() == Kind.VERTICAL_HEATER || shape.kind() == Kind.CABIN_HEATER || EquipmentServices.electricStill(shape);
             assertEquals(electric, terminal != null, shape.toString());
-            if (!UnitDesign.of(shape.kind()).hasDuty() && shape.kind() != Kind.COMPRESSOR && !shape.kind().vacuumPump() && !shape.kind().primeMover()) {
+            if (!UnitDesign.of(shape.kind()).hasDuty() && shape.kind() != Kind.COMPRESSOR && !shape.kind().vacuumPump() && !shape.kind().primeMover() && shape.kind() != Kind.PLUNGER_PUMP) {
                 assertEquals(List.of(), shafts, shape.toString());
                 continue;
             }
@@ -795,6 +802,28 @@ class ProcessUnitTest {
      * the two turbine sets share their train, the two fluidized beds and the two hydroprocessing reactors their parts, by
      * design. Comments are left out of the scan.
      */
+    /**
+     * A plunger pump (batch 2026-11-15-supercritical-fluids, S8, form A) on each of its four models: its suction and discharge
+     * pipe blocks have a free block between them, and both stand clear of the block its shaft takes (a block between).
+     */
+    @Test
+    void aPlungerPumpsPipesStandApartAndClearOfItsShaft() {
+        for (int model = 1; model <= 4; model++) {
+            var shape = EquipmentShape.unit(Kind.PLUNGER_PUMP, model, 1, EquipmentShape.Heading.NORTH, 0);
+            var pipes = new ArrayList<int[]>();
+            for (var port : ShapeRasterizer.ports(shape)) pipes.add(new int[]{port.cell().x() + port.dx(), port.cell().y() + port.dy(), port.cell().z() + port.dz()});
+            assertEquals(2, pipes.size(), shape.toString());
+            int apart = 0;
+            for (int a = 0; a < 3; a++) apart = Math.max(apart, Math.abs(pipes.get(0)[a] - pipes.get(1)[a]));
+            assertTrue(apart >= 2, shape + ": a free block between its suction and its discharge pipe blocks");
+            var shafts = ShapeRasterizer.shafts(shape);
+            assertEquals(1, shafts.size(), shape.toString());
+            var block = shafts.getFirst().block();
+            for (var pipe : pipes)
+                assertTrue(Math.max(Math.abs(block.x() - pipe[0]), Math.max(Math.abs(block.y() - pipe[1]), Math.abs(block.z() - pipe[2]))) >= 2, shape + ": its shaft block beside a pipe block");
+        }
+    }
+
     @Test
     void designsShareOnlyTheKit() throws IOException {
         var dir = Path.of("src/main/java/com/wormzjl/icheme/science/equipment");

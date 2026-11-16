@@ -81,6 +81,8 @@ public enum Service {
         if (vapour > Limit.SERVICE_TWO_PHASE.value()) return TWO_PHASE;
         if (ends.leavesTray()) return DRAW;
         if (ends.feedsPump()) {
+            // One dense fluid has no bubble pressure and, at its own temperature, no edge (S4b): a cold suction.
+            if (state.dense()) return SUCTION_COLD;
             double spare = (stream.pressure() - thermo.bubblePressure(stream.temperature(), stream.amountsView())) / 1e5;
             return spare <= Limit.SERVICE_BOILING.value() ? SUCTION_BOILING : SUCTION_COLD;
         }

@@ -66,4 +66,13 @@ class SteamEjectorTest {
             assertEquals(steam / need, holds / flow, 1e-9, "the steam scales with the load the curve holds");
         }
     }
+
+    /** At and above water's critical temperature its vapour pressure is positive infinity (no saturation): no water condenses
+     * in the set, which lifts it to the discharge as it does the gas (S2c of batch 2026-11-15-supercritical-fluids). Before,
+     * the law gave NaN for a load with no water and infinity for one with water. */
+    @Test void aLoadAboveWatersCriticalTemperatureCarriesItsWaterToTheDischarge() {
+        double none = Double.POSITIVE_INFINITY;
+        assertEquals(EjectorLaw.steam(.01, .002, 1e6, 2e4, 1.2e5, 1.2e5), EjectorLaw.steam(.01, .002, 1e6, 2e4, 1.2e5, none), 0, "water lifted to the discharge");
+        assertEquals(EjectorLaw.steam(.01, 0, 1e6, 2e4, 1.2e5, 1), EjectorLaw.steam(.01, 0, 1e6, 2e4, 1.2e5, none), 0, "no water: the gas term alone");
+    }
 }

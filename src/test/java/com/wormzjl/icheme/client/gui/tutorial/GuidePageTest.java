@@ -121,7 +121,7 @@ class GuidePageTest {
     @Test
     void everyEquipmentPageStandsInsideTheGlassUncut() {
         var pages = com.wormzjl.icheme.science.tutorial.guide.PageFile.load();
-        assertEquals(41, pages.pages().size(), "every kind's page and the control valve's");
+        assertEquals(42, pages.pages().size(), "every kind's page and the control valve's");
         for (var size : SIZES)
             for (var id : pages.pages().keySet()) {
                 String at = size[0] + " by " + size[1] + ", " + id;

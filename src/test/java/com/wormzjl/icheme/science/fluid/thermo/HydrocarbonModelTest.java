@@ -39,6 +39,32 @@ class HydrocarbonModelTest {
         assertTrue(model.revision().endsWith(":"+HydrocarbonModel.FORMULATION),model.revision());
         assertFalse(model.revision().contains("k="),"no compressibility in the revision");
     }
+    /**
+     * S2a of batch 2026-11-15-supercritical-fluids: a phase carries its root's traits, and their identification parameter and
+     * compressibility are the doubles its {@code vaporLike} flag (and the liquid-like test) were computed from.
+     */
+    @Test void aPhaseCarriesTheTraitsItsLabelWasComputedFrom() {
+        var model=new HydrocarbonModel(MaterialCatalog.bundled(),"icheme:tjl20_methane");
+        var eos=model.translated();
+        double[][] states={{300,1e6},{300,101325},{350,1e6},{350,2e6}};
+        for(int compound:new int[]{0,6})for(var root:PengRobinsonKernel.Root.values())for(double[] s:states) {
+            double t=s[0],p=s[1];
+            double[] kernel=new double[model.componentCount()];kernel[compound]=1;
+            HydrocarbonModel.Phase phase;
+            try{phase=model.phase(t,p,TestPhases.conserved(model,kernel),root);}
+            catch(HydrocarbonModel.RootAbsent absent){continue;}
+            var values=eos.evaluateValues(t,p,kernel,root,eos.prepare(t));
+            var traits=phase.traits();String at=compound+" "+root+" "+t+" K "+p+" Pa";
+            assertNotNull(traits,at);
+            assertEquals(Double.doubleToLongBits(values.phaseIdentificationParameter()),Double.doubleToLongBits(traits.identificationParameter()),at);
+            assertEquals(Double.doubleToLongBits(values.compressibility()),Double.doubleToLongBits(traits.compressibility()),at);
+            assertEquals(values.physicalRootCount(),traits.physicalRootCount(),at);
+            assertEquals(root==PengRobinsonKernel.Root.VAPOR&&com.wormzjl.icheme.science.thermo.PhaseIdentification.vapourLike(traits.identificationParameter(),traits.compressibility()),
+                    phase.vaporLike(),at);
+            assertEquals(HydrocarbonModel.liquidLike(values),com.wormzjl.icheme.science.thermo.PhaseIdentification.liquidLike(traits.identificationParameter(),traits.compressibility()),at);
+            assertEquals(values.untranslatedVolume()/values.coVolume(),traits.volumeRatio(),0,at);
+        }
+    }
     @Test void liquidPressureCorrectionSatisfiesTheChemicalPotentialVolumeIdentity() {
         var model=new HydrocarbonModel(MaterialCatalog.bundled(),"icheme:tjl20_methane");
         double[] n=TestPhases.conserved(model,new double[model.componentCount()]);n[6]=1;

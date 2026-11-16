@@ -15,6 +15,27 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+## [0.34.0] - 2026-11-16
+
+### Added
+
+- Supercritical and dense fluids (`2026-11-15-supercritical-fluids`; stages S0 to S5, the column feed item, S8; on `claude/supercritical-fluid-support-d0ffa4`):
+  - A fluid above its critical temperature is an ordinary state of the fluid network, the machines, the heat units and the simulator: its properties run on without a jump, and no critical band holds an island. One dense fluid sits in the liquid slot from its critical density, mixtures included (S2a `6dd9cd57c`, S2c `ac1808ee2`).
+  - Its stream laws follow its density: one slot viscosity, dilute plus the Jossi-Stiel-Thodos residual from a quarter of the critical density (S3 `15a99886d`, S2b `ca321ef23`); the heat curve's film by its liquid-like weight (`99b3fe095`); a dense liquid slot's velocity limit and heat capacity ratio (`db03dc17e`); the ejector law above water's critical temperature (`af2590e6a`).
+  - At a pump and a compressor its vapour and condensed shares follow its liquid-like weight, a pump's own weight on reduced density 0.5 to 1.0; one dense fluid has no second phase at a machine, no vapour pressure and no droplet wear (S4 `1b4396c25`, `505832d82`, `0b3d6a1d9`; S4b `588f7da31`, `c69ff5303`).
+  - Above reduced density 0.5 one dense fluid reads "Dense fluid" on the device pages and the simulator, "Vapor" at or below; the client evaluates the shown contents on its own catalog (`DenseLabel`), with no wire field. A centrifugal pump on one dense fluid has no bubbles; its page reads the head share (S5 `48b671d76`, `9195b5161`).
+  - A plunger pump (`equipment_plunger_pump`, kind `PLUNGER_PUMP`): a positive displacement pump for dense and supercritical service, PP-3 to PP-100 m³/h at 300 rpm, relief at 25 MPa, efficiency 0.88; in the simulator the Pump tile's `CENTRIFUGAL_PUMP` and `PLUNGER` types and Auto's rule (S8 `9b8ffce6e`, `fc972bfc4`, `5930c3932`, `dc84378ea`, `5042fca6b`).
+  - The column's feed flash answers a feed with no two-phase split as one phase; the tray audit's text names the critical point (D1, D2 `6a5fbadae`).
+  - Tests: `G3F11SupercriticalRegionTest` and seven CoolProp fluid files with their parity rows (S0 `b5fc2426f`, `bdf5effd7`, M8 `ce02cba4e`), `DenseFluidGatesTest` (`e55bdf53a`), three dense-fluid GameTests run alone with `-PfluidGameTestNamespaces=icheme_dense_test` (`97591600f`) and the dense plunger GameTest (`e139324a6`).
+
+### Changed
+
+- Supercritical fluids (`2026-11-15-supercritical-fluids`):
+  - Data: nine datasets widen their pressure range (carbon dioxide, nitrogen, methane, ethane, propane and hydrogen to 30 MPa, ethylene 20 MPa, n-hexane 4.57 MPa, toluene 6.19 MPa) with their evidence and revisions; every dataset has a `critical_volume` sub-record, the five rare gases included (S3 `ceefe0904`, `6190ca76f`, `0f4230144`). The three packages' scientific revision, every `fluidRevision` and the viscosity revision moved; the simulator examples are stamped on the new identity (`acd894c93`); the identity bound is 21000 (`1b0fc7770`).
+  - The phase band boxes 3 and 4 are removed; `PhaseTraits` carries the attraction a/(bRT), `supercriticalIsotherm()` and `reducedDensity()` (S1 `304808f9d`).
+  - Formats (`documentation/reference/FORMATS.md`): fluid facts schema 28 and checkpoint state format 51 (a plunger pump's law; corpus `schema-28`); equipment kind `PLUNGER_PUMP`.
+  - Results that moved: the engine digest 2 of 429 lines in S1 (pure nitrogen in the old box 4); S3's 30 MPa ranges change the grade of states between 10 and 30 MPa from `EXTRAPOLATED` to `ESTIMATED_DECLARED_ERROR` with every number the same (three test cases moved to 36 MPa, `137e05542`; the digest's line 313 re-recorded by the final lane, `a599419dd`); the Tia Juana crude at 901 K and 250 kPa, refused before, is a vapour. No value of a non-dense state moved in S4b or S5. Four printed, unasserted lines moved in the final lane and were accepted by the owner: `WaterIntoCryogenicMethaneTest` interval 6 takes main 0.31.0's step path (7 substeps for 8; water 1,320.8 to 1,316.3 mol, ice 18.452 to 18.526 kg), `HoldClassWorldsTest` melt gate 778's creep by 2.1e-9, `PumpBottomPortDrainTest`'s trace condensed by 4e-13 (S2b or S2c, inside the step cap and the Newton tolerance: `MOVED_RESULTS_TRACE_REVIEW.md`), and five dense-carrier rows of `G4F2CarbonDioxideNitrogenFrostPointHoldoutTest` read `ESTIMATED_DECLARED_ERROR` for `RESEARCH_ONLY` (S1's removed band).
+
 ## [0.33.0] - 2026-11-16
 
 ### Added

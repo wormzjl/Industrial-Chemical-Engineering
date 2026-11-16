@@ -104,9 +104,11 @@ final class StructureRegistration {
         }
         if (vessel.shape().kind().mover() || turbine(vessel.shape())) {
             // A casing on its curve, a frame at its displacement, a turbine on its steam (W3): each turns with its shaft train.
-            var kind = turbine(vessel.shape()) ? TopologyCompiler.Kind.TURBINE : vessel.shape().kind() == EquipmentShape.Kind.PUMP ? TopologyCompiler.Kind.PUMP : TopologyCompiler.Kind.COMPRESSOR;
+            // A mover's device kind is its law's: a pump for a liquid one (a centrifugal or a plunger pump), else a compressor.
+            var control = MachineRatings.machineControl(vessel.shape());
+            var kind = turbine(vessel.shape()) ? TopologyCompiler.Kind.TURBINE : control instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.Mover mover && mover.liquid() ? TopologyCompiler.Kind.PUMP : TopologyCompiler.Kind.COMPRESSOR;
             FluidWorldAuthority.find(level.getServer()).ifPresent(world -> {
-                var record = world.placeMachine(Positions.of(level, node), kind, ports(level, vessel), MachineRatings.machineControl(vessel.shape()));
+                var record = world.placeMachine(Positions.of(level, node), kind, ports(level, vessel), control);
                 if (level.getBlockEntity(node) instanceof EquipmentShellBlockEntity entity) entity.bindIdentity(record.device().id());
                 ShaftParts.structure(level, vessel.origin(), vessel.shape(), record.device().id());
             });

@@ -10,15 +10,21 @@ import com.wormzjl.icheme.science.fluid.network.ReleasePressure;
 import com.wormzjl.icheme.science.machine.CentrifugalPump;
 import com.wormzjl.icheme.science.machine.Motor;
 import com.wormzjl.icheme.science.machine.Npsh;
+import com.wormzjl.icheme.science.machine.PlungerPump;
 import com.wormzjl.icheme.science.equipment.design.UnitRatings;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
 
-/** A pump (batch 2026-11-02-process-simulator, {@code SIZING_PLAN.md} sections 3.4 and 3.5): the smallest discharge whose rated flow fits the window. */
+/**
+ * A pump (batch 2026-11-02-process-simulator, {@code SIZING_PLAN.md} sections 3.4 and 3.5): the smallest discharge whose rated flow fits
+ * the window. Since S8 of batch 2026-11-15-supercritical-fluids the Pump tile is built as a centrifugal pump ({@link Size}) or a
+ * triplex plunger pump ({@link Plunger}): the player's type, or Auto's ({@link #type}).
+ */
 public final class PumpSizing {
     private static final List<Size> SIZES = sizes();
+    private static final List<Plunger> PLUNGERS = plungers();
 
     private PumpSizing() {
     }
@@ -36,6 +42,28 @@ public final class PumpSizing {
         }
     }
 
+    private static List<Plunger> plungers() {
+        var out = new ArrayList<Plunger>();
+        for (int model = 1; model <= PlungerPump.MODELS.size(); model++) out.add(new Plunger(model));
+        return List.copyOf(out);
+    }
+
+    /** A plunger pump (S8). @param model its model's number, 1 to 4 ({@link PlungerPump#MODELS}) */
+    public record Plunger(int model) implements UnitSize {
+        public Plunger {
+            if (model < 1 || model > PlungerPump.MODELS.size()) throw new IllegalArgumentException("No plunger pump model " + model);
+        }
+
+        /** Its displacement at its design speed, m³/h. */
+        public double capacity() {
+            return PlungerPump.model(model).capacity();
+        }
+
+        @Override public EquipmentShape shape() {
+            return UnitSize.unit(EquipmentShape.Kind.PLUNGER_PUMP, model, 1, ProcessUnit.Bank.ONE);
+        }
+    }
+
     /**
      * A pump at design flow.
      *
@@ -49,8 +77,11 @@ public final class PumpSizing {
      * @param edge     the clean zone's edge E of its liquid ({@link FlowThermo#zoneEdge}) over the pressure {@code npsh} counts
      *                 from, m; positive infinity where it has none
      * @param boils    whether its liquid has a p_v
+     * @param reducedDensity its suction's reduced density {@code v_c / v} where it is one dense fluid ({@code State.dense()},
+     *                 S5 of batch 2026-11-15-supercritical-fluids), which {@link Limit#PUMP_DENSITY} reads; NaN for any other
+     *                 suction, which reads no such row
      */
-    public record Load(double flow, double head, double mostHead, @Nullable Double npsh, double density, double edge, boolean boils) {
+    public record Load(double flow, double head, double mostHead, @Nullable Double npsh, double density, double edge, boolean boils, double reducedDensity) {
         /** A pump with no flow: no size, no lamp. */
         public static final Load NONE = new Load(0, 0, 0, null, Double.NaN);
 
@@ -62,6 +93,11 @@ public final class PumpSizing {
         /** A pump on a liquid that holds no gas: its NPSH counts from its vapour pressure and it has no edge above that. */
         public Load(double flow, double head, double mostHead, @Nullable Double npsh, double density) {
             this(flow, head, mostHead, npsh, density, Double.POSITIVE_INFINITY, true);
+        }
+
+        /** A pump on a suction that is no dense fluid. */
+        public Load(double flow, double head, double mostHead, @Nullable Double npsh, double density, double edge, boolean boils) {
+            this(flow, head, mostHead, npsh, density, edge, boils, Double.NaN);
         }
 
         /**
@@ -85,12 +121,13 @@ public final class PumpSizing {
         public static Load of(LineSizing.Line suction, LineSizing.Size size, FlowStream liquid, double rise, @Nullable Double height, FlowThermo thermo) {
             if (!suction.flows()) return NONE;
             double weight = suction.density() * PassiveStepSolver.GRAVITY, reference = thermo.model().pumpReferenceDensity() * PassiveStepSolver.GRAVITY;
-            if (height == null) return new Load(suction.volume() * 3600, rise / weight, Limit.PUMP_HEAD.value() / reference, null, suction.density());
+            double dense = liquid.state() != null && liquid.state().dense() ? liquid.state().reducedDensity() : Double.NaN;
+            if (height == null) return new Load(suction.volume() * 3600, rise / weight, Limit.PUMP_HEAD.value() / reference, null, suction.density(), Double.POSITIVE_INFINITY, true, dense);
             double vapour = thermo.vapourPressure(liquid.temperature(), liquid.pressure(), liquid.amountsView()), edge = thermo.zoneEdge(liquid.temperature(), liquid.pressure(), liquid.amountsView());
             boolean boils = vapour < Double.POSITIVE_INFINITY;
             double from = boils ? vapour : 0, at = liquid.pressure() + weight * height - 1e5 * LineSizing.drop(suction, size, suction.length());
             return new Load(suction.volume() * 3600, rise / weight, Limit.PUMP_HEAD.value() / reference, (at - from) / weight, suction.density(),
-                    edge < Double.POSITIVE_INFINITY ? (edge - from) / weight : Double.POSITIVE_INFINITY, boils);
+                    edge < Double.POSITIVE_INFINITY ? (edge - from) / weight : Double.POSITIVE_INFINITY, boils, dense);
         }
 
         boolean flows() {
@@ -138,6 +175,48 @@ public final class PumpSizing {
         return duty(load).on(limits(load, size));
     }
 
+    /** {@code load}'s rise, Pa: its head in metres of what it pumps, on that liquid's weight; NaN where it has no density. */
+    static double rise(Load load) {
+        return load.head() * load.density() * PassiveStepSolver.GRAVITY;
+    }
+
+    /**
+     * A plunger pump's duty on {@code load} (S8): its shaft power the flow times the rise over {@link PlungerPump#MECHANICAL_EFFICIENCY},
+     * as the world books the plungers' work; no NPSH3 of its own.
+     */
+    public static Duty plungerDuty(Load load) {
+        double shaft = load.flow() / 3600 * rise(load) / PlungerPump.MECHANICAL_EFFICIENCY;
+        return new Duty(load.flow(), load.head(), shaft, Double.NaN, Double.isNaN(shaft) ? Double.NaN : Motor.ratingFor(shaft));
+    }
+
+    /**
+     * Every limit of {@code load} read at plunger pump {@code size} (S8): the world's flow, the flow with {@link Limit#AUTO_SPARE}
+     * against the model's displacement ({@link Limit#PUMP_RATED}: above 120 % the flow is more than it displaces), and the rise
+     * against its relief rise. No head, suction density or NPSH row: it displaces its volume at any density, and its suction limit
+     * is the world's.
+     */
+    public static Rating rate(Load load, Plunger size) {
+        if (!load.flows()) return Rating.NONE;
+        var readings = UnitSize.readings(UnitSize.built(size));
+        readings.add(Limit.PUMP_FLOW.read(load.flow()));
+        readings.add(Limit.PUMP_RATED.read(100 * Selection.spared(load.flow()) / size.capacity()));
+        double rise = rise(load);
+        if (Double.isFinite(rise)) readings.add(Limit.PLUNGER_RISE.read(rise / 1e6));
+        return plungerDuty(load).on(new Rating(readings));
+    }
+
+    /**
+     * The type Auto proposes for {@code load} (S8): a plunger pump where the flow is within its models (at most 100 m³/h) and either
+     * its head is more than a centrifugal casing gives ({@link Load#mostHead}) or its suction is one dense fluid lighter than
+     * {@link Limit#PUMP_DENSITY}, where a centrifugal pump's suction density row would light; else a centrifugal pump, as every
+     * pump was before.
+     */
+    public static UnitType type(Load load) {
+        boolean small = load.flows() && load.flow() <= PlungerPump.MODELS.getLast().capacity();
+        boolean high = load.head() > load.mostHead(), light = Double.isFinite(load.reducedDensity()) && load.reducedDensity() < Limit.PUMP_DENSITY.value();
+        return small && (high || light) ? UnitType.PLUNGER : UnitType.CENTRIFUGAL_PUMP;
+    }
+
     private static Rating limits(Load load, Size size) {
         var readings = UnitSize.readings(UnitSize.built(size));
         readings.add(Limit.PUMP_FLOW.read(load.flow()));
@@ -151,6 +230,7 @@ public final class PumpSizing {
             readings.add(Limit.PUMP_NPSH.against(npsh, required + Limit.PUMP_NPSH.value()));
         }
         readings.add(Limit.PUMP_RATED.read(100 * load.flow() / UnitRatings.pumpFlow(size.discharge())));
+        if (Double.isFinite(load.reducedDensity())) readings.add(Limit.PUMP_DENSITY.read(load.reducedDensity()));
         return new Rating(readings);
     }
 
@@ -167,5 +247,11 @@ public final class PumpSizing {
     public static Selection.Choice<Size> auto(Load load) {
         if (!load.flows()) return Selection.Choice.none();
         return Selection.smallest(SIZES, size -> rate(load, size));
+    }
+
+    /** The smallest plunger pump that meets every limit, those whose displacement holds the flow with its spare first (S8). No flow, no size. */
+    public static Selection.Choice<Plunger> autoPlunger(Load load) {
+        if (!load.flows()) return Selection.Choice.none();
+        return Selection.smallest(Selection.spareFirst(PLUNGERS, Plunger::capacity, Selection.spared(load.flow())), size -> rate(load, size));
     }
 }

@@ -19,12 +19,15 @@ final class TankCharge {
     private final GameTestHelper helper;private final FluidWorldAuthority world;private final long tank;private final BlockPos pipe,generator;
     private final double pressure;private int stage;
     TankCharge(GameTestHelper helper,FluidWorldAuthority world,BlockPos tank,Direction face,double pressure) {
-        this.helper=helper;this.world=world;this.pressure=pressure;
+        this(helper,world,tank,face,new FluidDeviceSpec(1,298.15,pressure,FluidDeviceSpec.nitrogen(com.wormzjl.icheme.science.material.MaterialRuntime.active()).composition()));
+    }
+    /** A charge from a generator set to {@code spec}: its fluid, temperature and pressure (batch 2026-11-15-supercritical-fluids). */
+    TankCharge(GameTestHelper helper,FluidWorldAuthority world,BlockPos tank,Direction face,FluidDeviceSpec spec) {
+        this.helper=helper;this.world=world;this.pressure=spec.pressure();
         this.tank=((FluidDeviceBlockEntity)helper.getLevel().getBlockEntity(tank)).fluidIdentity();pipe=tank.relative(face);generator=pipe.relative(face);
         helper.getLevel().setBlock(generator,ModBlocks.FLUID_GENERATOR.get().defaultBlockState(),3);
         long id=((FluidDeviceBlockEntity)helper.getLevel().getBlockEntity(generator)).fluidIdentity();
-        var nitrogen=FluidDeviceSpec.nitrogen(com.wormzjl.icheme.science.material.MaterialRuntime.active()).composition();
-        run(world,id,new FluidDeviceSpec(1,298.15,pressure,nitrogen));
+        run(world,id,spec);
         helper.getLevel().setBlock(pipe,ModBlocks.FLUID_PIPE.get().defaultBlockState(),3);
     }
     /**
@@ -35,6 +38,8 @@ final class TankCharge {
         var old=world.registrations().get(id);var d=old.device();
         world.edit(id,old.revision(),PhysicalFluidTopology.Device.builder(d.id(),d.position(),d.kind(),d.facing(),d.geometry(),d.control()).ports(d.ports()).cutoff(d.cutoff()).inlineFilter(d.inlineFilter()).build(),spec);
     }
+    /** The charge's generator and its pipe, for a test that removes what it placed on every exit (they go once charged). */
+    java.util.List<BlockPos> blocks(){return java.util.List.of(pipe,generator);}
     /** True once the tank stands within 0.1 % of the charge pressure and the generator and its pipe are gone. */
     boolean charged() {
         if(stage==2)return true;
