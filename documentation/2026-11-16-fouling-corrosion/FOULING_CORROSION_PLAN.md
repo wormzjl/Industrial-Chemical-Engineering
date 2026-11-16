@@ -1,6 +1,8 @@
-# Fouling and corrosion system: plan
+# Fouling, corrosion and erosion system: plan (revision 2)
 
 Batch `2026-11-16-fouling-corrosion`, branch `claude/fouling-corrosion-system-ba0275`, cut from `main` at `f305ac6b0` (0.32.0). Status: plan, no code.
+
+Revision 2 (owner, 2026-11-16): four materials instead of eight, one per structure; particulate erosion, with control valves; columns pass inert particles to the bottoms and stop only for freezing. Changed sections: 1, 4, 5, 6.3, 7, 9, 12 to 18.
 
 ## 1. The request (owner, 2026-11-16)
 
@@ -13,34 +15,41 @@ Batch `2026-11-16-fouling-corrosion`, branch `claude/fouling-corrosion-system-ba
 - Research the corrosion types and rates of a refinery as a matrix. Add a material selection tab to the process simulator.
 - Performance over realism and accuracy.
 
+After the first plan:
+
+- "Need a smaller list of materials, keep in mind this is not for full realism."
+- "Allow distillation column to handle inert particles and pass particulates to bottom output, only stop when something freezes."
+- "Add particulate erosion to equipment, especially control valves."
+
 ## 2. What exists today
 
 | Piece | Where | What it does | Gap |
 |---|---|---|---|
-| Machine wear | `science/machine/Wear`, `runtime/fluid/MachineHealth` | Health 1 to 0 per mover and turbine from six faults; `FAILED` closes it; one repair kit restores it, running or not | No wall, no chemistry |
+| Machine wear | `science/machine/Wear`, `runtime/fluid/MachineHealth` | Health 1 to 0 per mover and turbine from six faults; `FAILED` closes it; one repair kit restores it, running or not | No wall, no chemistry, no solids fault |
 | Blast breach | `runtime/pollution/Breaches`, `FluidDeviceSpec.breached` (facts schema 26) | A blast opens a closed vessel (vents, spills) and fails a machine; a repair kit closes it | Repairable; the owner now wants it final |
-| Corrosive air | `science/pollution/Channel.CORROSIVE`, `PollutionService.index` | A cube's corrosive index (SO2, NH3, H314 compounds over their IDLH) | Nothing reads it for equipment (plan note of the pollution batch) |
-| Heat films | `HeatCurve.Films.DEFAULT` (2000, 5000, 100 W/m²K) | Each film "with its share of the wall and fouling", constant | No fouling state |
-| Sizing | `SIZING_PLAN.md` rows "No fouling allowance", "fouling and erosion have no law in the world" | | To be closed here |
-| Sulfur | assays: `sulfur_mass_percent`, "metadata only; no sulfur species are carried" | H2S, mercaptans, COS, SO2 are real compounds | The crude cuts carry no sulfur and no acid number |
-| Construction | `EquipmentStructure`, the constructor | Free: no items are consumed | An alloy has no price today |
+| Corrosive air | `science/pollution/Channel.CORROSIVE`, `PollutionService.index` | A cube's corrosive index | Nothing reads it for equipment |
+| Heat films | `HeatCurve.Films.DEFAULT` (2000, 5000, 100 W/m²K) | Constant, "with its share of the wall and fouling" | No fouling state |
+| Sulfur | assays: `sulfur_mass_percent`, metadata only | H2S, mercaptans, COS, SO2 are real compounds | The crude cuts carry no sulfur and no acid number |
+| Solids | `SolidInventory`, `SlurryTransport`, `SolidMobility`, `PipeTransfer.Stream.solids` | Inert particles ride the liquid, settle, deposit, clog filters | They wear nothing |
+| Running column | `ColumnOperation` | An inert solid waits at its inlet and a cycle moves it to the bottoms; a crystal melts into the inlet's account as it arrives | Never stops for freezing |
+| Simulator column | `ColumnBlockSolve.solve`, line 119 | Refuses every feed that holds solids (`column.solids`: "This column takes no solids.") | The owner wants inert particles to pass |
+| Control valve | `FlowControl.ControlValve`; `PipeObservation.valveDrop`, `density` | Regulates; its row reports its drop | No wear |
+| Construction | `EquipmentStructure`, the constructor | Free: no items are consumed | An alloy has no price (owner: cost index only) |
 
 ## 3. Physics, in numbers
 
 ### 3.1 Corrosion
 
-A wall loses thickness at a rate set by its material and the fluid on it. Design adds a corrosion allowance (CA): 3 mm on carbon and low-alloy steel, 1.5 mm on 12Cr and higher alloys. A rate of 0.1 mm/y or less is acceptable (30 years on 3 mm). When the allowance is gone the wall no longer holds its pressure: a vessel leaks, a tube bundle leaks, a casing fails.
-
-Steady states the player should meet:
+A wall loses thickness at a rate set by its material and the fluid on it. Design adds a corrosion allowance (CA): 3 mm on carbon and chrome steel, 1.5 mm on stainless and nickel alloy. A rate of 0.1 mm/y or less is acceptable (30 years on 3 mm). When the allowance is gone the wall no longer holds its pressure.
 
 | Service | Carbon steel | Right material |
 |---|---|---|
-| Crude at 370 °C, 0.6 wt% S | 1.3 mm/y: 2.3 years | 9Cr 0.16 mm/y; 12Cr 0.05 mm/y |
-| Heavy crude at 350 °C, acid number 3 | 1.5 mm/y: 2 years | 316L 0.03 mm/y |
-| Sour water, H2S 1 bar, 60 °C | 0.3 mm/y: 10 years | 304L 0.006 mm/y |
-| Wet CO2, 1 bar, 60 °C | 1.4 mm/y | 12Cr 0.03 mm/y |
-| Open cooling water, 35 °C | 0.3 mm/y: 10 years | 304L |
-| Dry hydrocarbon gas, clean liquid, steam | 0 | carbon steel |
+| Crude at 370 °C, 0.6 wt% S | 1.3 mm/y: 2.3 years | Chrome steel 0.16 mm/y; stainless 0.013 |
+| Heavy crude at 350 °C, acid number 3 | 1.5 mm/y: 2 years | Stainless 0.03 mm/y |
+| Sour water, H2S 1 bar, 60 °C | 0.3 mm/y: 10 years | Stainless 0.003 mm/y |
+| Wet CO2, 1 bar, 60 °C | 1.4 mm/y | Stainless 0.007 mm/y |
+| Open cooling water, 35 °C | 0.3 mm/y: 10 years | Stainless |
+| Dry hydrocarbon gas, clean liquid, steam | 0 | Carbon steel |
 
 ### 3.2 Fouling
 
@@ -54,49 +63,61 @@ A deposit of resistance `Rf` (m²K/W) sits in series with a side's film: `h' = h
 | 0.001 | 667 | 833 | 91 | 1 mm | × 1.69 |
 | 0.002 (cap) | 400 | 455 | 83 | 2 mm | × 3.05 |
 
-A liquid–liquid exchanger with 0.0005 on both sides falls from U = 1000 to 500 W/m²K.
+### 3.3 Erosion
+
+Particles cut metal in proportion to their mass flow and to their speed to the power 2.6 (DNV RP O501 for steel). Speed decides almost everything:
+
+| Place | Speed | Relative loss, same solids |
+|---|---|---|
+| Vessel | about 0 | 0 |
+| Exchanger tube, line | 2 m/s | 1 |
+| Control valve trim at a 1 bar drop, liquid of 800 kg/m³ | 16 m/s | 220 |
+| Control valve trim at a 5 bar drop | 35 m/s | 1 700 |
+| Pump impeller tip | 30 m/s | 1 100 |
+
+So a throttling valve wears first, a pump second, a tube slowly, a vessel not at all. The trim speed of a valve is `v = sqrt(2 Δp / ρ)` from its own drop.
 
 ## 4. Scope and CPU
 
-**Decided (D1): constructed equipment only.** Pipes, fittings, valves and one-block tanks do not corrode or foul. This follows the owner's pollution decision of 2026-11-15 ("pipes get no damage meter, for the sake of simplicity").
+**Decided (D1): constructed equipment, and control valves for erosion.** Pipes, other fittings and one-block tanks neither corrode, foul nor erode (the owner's pollution decision of 2026-11-15: "pipes get no damage meter, for the sake of simplicity").
 
-Corroding devices: every fluid device of a constructed structure that is a closed vessel (drum, sphere, column shell, kettle shell, converter gas tank), a heat side (exchanger, kettle tubes, air cooler, fired coils) or a machine with a health record (pump and compressor casings, vacuum pumps, steam turbine). Fouling devices: heat sides only.
+| Device | Corrosion | Erosion | Fouling |
+|---|---|---|---|
+| Closed vessel of a structure (drum, sphere, column shell, kettle shell, converter gas tank) | wall | none (no speed) | |
+| Heat side (exchanger, kettle tubes, air cooler, fired coils) | wall | wall, by its passage speed | `Rf` |
+| Machine with a health record (pump and compressor casings, vacuum pumps, steam turbine; in-line pumps) | wall, casings only | health: a new `SOLIDS` fault | |
+| Control valve (`FlowControl.ControlValve`, a pipe fitting) | | trim health | |
 
-Not in this batch: open structures (floating-roof tanks, cooling towers, chimneys, flare stacks; their failure is a ground spill, which the pollution batch left for later), drawing-only kinds (reactors: with the reaction module), in-line pumps and compressors (pipe blocks).
+Not in this batch: open structures (floating-roof tanks, cooling towers, chimneys, flare stacks; their failure is a ground spill), drawing-only kinds (reactors, cyclones: with the reaction module), pressure regulators and hand valves.
 
 Cost, per device and per cadence (5 s), on the server thread, as `MachineHealth` books today:
 
 - One digest of its node's last committed state: three dot products over the compound list (at most about 50 compounds).
-- Nine closed-form laws on the digest, one table row for its material.
+- Nine closed-form corrosion laws and one erosion law on the digest; one table row for its material.
+- Erosion is read only on islands that hold or are fed solids (`SolidMobility.monitored`); every other island skips it with one test.
 - Nothing in the solver. Nothing per slice: a commit only stores a reference to the island's last result.
 - Bound: at most 256 devices evaluated per cadence, round-robin; a device not evaluated keeps its last rate. About 1 µs per device, so 0.3 ms per 5 s at the bound.
 
-The solver sees a change only when a wall fails (once) or a fouling level steps (at most 20 steps per side between cleanings).
+The solver sees a change only when a wall or a trim fails (once) or a fouling level steps (at most 20 steps per side between cleanings).
 
 ## 5. Materials of construction
 
 Named `Metallurgy` in code, because "material" already means a compound (`MaterialCatalog`). An enum saved by name; append-only.
 
-| Constant | Material | CA | Limit (°C) | Cost index | Its place |
-|---|---|---|---|---|---|
-| `CARBON_STEEL` | Carbon steel (default, every structure today) | 3 mm | 540 | 1.0 | Dry and clean service |
-| `CR5` | 5Cr-½Mo | 3 mm | 620 | 1.8 | Hot sulfur oil, moderate |
-| `CR9` | 9Cr-1Mo | 3 mm | 650 | 2.3 | Hot sulfur oil; heater tubes |
-| `CR12` | 12Cr (410) | 1.5 mm | 700 | 2.5 | Hot sulfur oil, wet CO2 |
-| `SS304L` | 304L stainless | 1.5 mm | 815 | 3.0 | Wet acid gas, hot H2/H2S |
-| `SS316L` | 316L stainless | 1.5 mm | 815 | 4.0 | Naphthenic acid |
-| `DUPLEX_2205` | Duplex 2205 | 1.5 mm | 315 | 5.0 | Ammonium bisulfide, acid condensate |
-| `ALLOY_625` | Alloy 625 | 1.5 mm | 980 | 20 | Everything, at a price |
+| Constant | Shown as | Stands for | CA | Limit (°C) | Cost index | Its place |
+|---|---|---|---|---|---|---|
+| `CARBON_STEEL` | Carbon steel | the default; every structure today | 3 mm | 540 | 1 | Dry and clean service |
+| `CHROME_STEEL` | Chrome steel | 9Cr-1Mo | 3 mm | 650 | 2 | Hot sulfur oil; heater tubes |
+| `STAINLESS_STEEL` | Stainless steel | 316L | 1.5 mm | 815 | 4 | Wet acid gas, naphthenic acid, hot H2S |
+| `NICKEL_ALLOY` | Nickel alloy | Alloy 625 | 1.5 mm | 980 | 15 | Everything, at a price |
 
-Left out until their mechanism exists: Alloy 400 and titanium (HCl overheads, sea water), 1¼Cr-½Mo and 2¼Cr-1Mo (hydrogen attack), copper alloys, cladding.
-
-**Decided (D2): one material per fluid device.** A structure has a body material (`material`) and, where it has tubes or coils (exchanger, kettle, air cooler, fired heaters), a tube material (`tubeMaterial`, default the body's). The shell-side device reads `material`, the tube-side device `tubeMaterial`. A tube wall is counted on its tube-side stream only.
+**Decided (D2, revision 2): one material per structure.** One dropdown in the constructor, one shape field. Every device of the structure reads it; an exchanger is rated on the worse of its two streams.
 
 **Decided (O2, owner 2026-11-16): the cost index only.** Construction stays free in this batch; the index is shown in the simulator and on the datasheet, and a later survival-supplies batch charges it.
 
 ## 6. The corrosion matrix
 
-Sources for the forms and anchors: API RP 571 (damage mechanisms), API RP 581 Part 2 Annex B (thinning rate tables), API RP 939-C and the modified McConomy curves (sulfidation; the 1986 revision divides the 1963 curves by 2.5; scatter about one order of magnitude), Couper–Gorman (H2/H2S), API RP 932-B (ammonium bisulfide), de Waard–Milliams 1975 (CO2), API Std 530 (tube metal temperature limits), ISO 9223 (atmospheres). The numbers below are game-level fits to those anchors, not the tables themselves.
+Sources for the forms and anchors: API RP 571 (damage mechanisms), API RP 581 Part 2 Annex B (thinning rate tables), API RP 939-C and the modified McConomy curves (sulfidation; the 1986 revision divides the 1963 curves by 2.5; scatter about one order of magnitude), API RP 932-B (ammonium bisulfide), de Waard–Milliams 1975 (CO2), API Std 530 (tube metal temperature limits), ISO 9223 (atmospheres), DNV RP O501 (erosion). The numbers below are game-level fits to those anchors, not the tables themselves.
 
 ### 6.1 The digest of a device's fluid
 
@@ -109,7 +130,7 @@ From the device's node (a vessel: its own; a heat side or machine: the hotter en
 | `oil` | a hydrocarbon liquid is present | the state's liquid slot above a trace |
 | `S` | sulfur of the oil, wt% | Σ mass × sulfur share over the liquid's compounds; H2S, mercaptans and COS by their formulas, the crude cuts by their `corrosion` sub-record |
 | `A` | acid number of the oil, mg KOH/g | mass-weighted `corrosion.acid_number` |
-| `p_i` | `y_i · P`, bar, for H2S, CO2, SO2, NH3, O2, H2 | overall mole fractions; the compounds found by formula, as `Releases.so2Reference` finds SO2 |
+| `p_i` | `y_i · P`, bar, for H2S, CO2, SO2, NH3, O2 | overall mole fractions; the compounds found by formula, as `Releases.so2Reference` finds SO2 |
 
 ### 6.2 Mechanisms (carbon steel rate, mm/y)
 
@@ -125,27 +146,29 @@ From the device's node (a vessel: its own; a heat side or machine: the hotter en
 | M8 | Overheating | `T` above the material's limit | `0.25 · 2^((T − T_limit)/25)`, for the material itself |
 | M9 | Corrosive air (outside) | the corrosive index `I` of the structure's cube ≥ 0.01 | `0.5 · min(I, 5)` |
 
-The inside rate is the largest of M1 to M8 (the governing mechanism, as API 581 takes it); the status names it. The total is the inside rate plus M9.
+The inside rate is the largest of M1 to M8 (the governing mechanism, as API 581 takes it); the status names it. The total is the inside rate plus M9 plus erosion (section 8).
 
 ### 6.3 Material factors (rate = carbon steel rate × factor)
 
-| Mechanism | CS | 5Cr | 9Cr | 12Cr | 304L | 316L | 2205 | 625 |
-|---|---|---|---|---|---|---|---|---|
-| M1 Sulfidation | 1 | 0.35 | 0.12 | 0.04 | 0.01 | 0.01 | 0.01 | 0.01 |
-| M1 with `p_H2` > 5 bar | 1 | 0.8 | 0.8 | 0.2 | 0.02 | 0.02 | 0.02 | 0.01 |
-| M2 Naphthenic acid | 1 | 0.8 | 0.6 | 0.5 | 0.2 | 0.02 | 0.05 | 0.01 |
-| M3 Sour water | 1 | 1 | 1 | 0.3 | 0.02 | 0.01 | 0.01 | 0.005 |
-| M4 Wet CO2 | 1 | 0.6 | 0.3 | 0.02 | 0.005 | 0.005 | 0.005 | 0.002 |
-| M5 Ammonium bisulfide | 1 | 1 | 1 | 0.8 | 0.3 | 0.2 | 0.05 | 0.02 |
-| M6 Acid condensate | 1 | 1 | 1 | 0.8 | 0.3 | 0.1 | 0.05 | 0.02 |
-| M7 Aerated water | 1 | 0.8 | 0.6 | 0.1 | 0.005 | 0.005 | 0.005 | 0.002 |
-| M9 Corrosive air | 1 | 0.8 | 0.6 | 0.1 | 0.01 | 0.01 | 0.01 | 0.005 |
+| Mechanism | Carbon steel | Chrome steel | Stainless steel | Nickel alloy |
+|---|---|---|---|---|
+| M1 Sulfidation | 1 | 0.12 | 0.01 | 0.01 |
+| M2 Naphthenic acid | 1 | 0.6 | 0.02 | 0.01 |
+| M3 Sour water | 1 | 1 | 0.01 | 0.005 |
+| M4 Wet CO2 | 1 | 0.3 | 0.005 | 0.002 |
+| M5 Ammonium bisulfide | 1 | 1 | 0.2 | 0.02 |
+| M6 Acid condensate | 1 | 1 | 0.1 | 0.02 |
+| M7 Aerated water | 1 | 0.6 | 0.005 | 0.002 |
+| M9 Corrosive air | 1 | 0.6 | 0.01 | 0.005 |
+| Erosion (section 8) | 1 | 0.8 | 0.5 | 0.4 |
 
-Later, with their species: HCl overhead corrosion and chloride cracking (a desalter and salts), high-temperature hydrogen attack (hydroprocessing reactors), amine and caustic cracking, polythionic acid, erosion by velocity.
+Each material keeps a case only it answers at the lowest cost: chrome steel for hot sulfur oil, stainless for acids and wet acid gas, nickel alloy for ammonium bisulfide and acid condensate above 0.5 mm/y on carbon steel.
+
+Later, with their species: HCl overhead corrosion and chloride cracking, hydrogen attack, amine and caustic cracking.
 
 ### 6.4 Data
 
-- `corrosion` sub-record on the twelve crude cut datasets: `sulfur_mass_percent`, `acid_number`, `estimated`, `source`, `revision`. In no identity, as `hazard` is. Sulfur rises with the cut (0.02 wt% for the lightest to about 5 wt% for the residue) so that the four assays reproduce their `sulfur_mass_percent` within 20 %; the acid number rises the same way and gives about 0.1 (light), 0.3 (medium), 1.5 (heavy) and 2.5 (dilbit) mg KOH/g on the whole crudes. All marked estimated.
+- `corrosion` sub-record on the twelve crude cut datasets: `sulfur_mass_percent`, `acid_number`, `fouling`, `estimated`, `source`, `revision`. In no identity, as `hazard` is. Sulfur rises with the cut (0.02 wt% for the lightest to about 5 wt% for the residue) so that the four assays reproduce their `sulfur_mass_percent` within 20 %; the acid number rises the same way and gives about 0.1 (light), 0.3 (medium), 1.5 (heavy) and 2.5 (dilbit) mg KOH/g on the whole crudes. All marked estimated.
 - Real compounds need no record: their sulfur is in their formula.
 
 ### 6.5 Time
@@ -178,34 +201,59 @@ One record per corroding device: `loss` (mm, a fact), `rate` and `mechanism` (st
 
 A graded pinhole leak (an orifice row on the node) is not built: it would add a boundary law to the step for a small effect.
 
-## 8. Blast damage is final
+## 8. Erosion by particles
 
-`Breaches.breach` additionally marks every device of the structure `wrecked` (a fact). A wrecked device:
+One law, `ErosionLaw`, on what a connection carried in its last committed slice: the solid mass share `φ` of the stream (`PipeTransfer.Stream.solids` over its mass) and a speed `v`.
 
-- keeps the effect it has today (vessel open, machine failed; a heat side closed as in section 7);
-- refuses the repair kit: `WRECKED: deconstruct and rebuild`;
-- is removed only by the constructor's deconstruction.
+`E = 1 mm/y × (φ / 0.01) × (v / 10 m/s)^2.6`, on carbon steel; other materials by the Erosion row of 6.3. Crystals do not count: they melt. Every inert solid counts alike (a solid record holds no hardness; particle size is not read).
+
+| Device | Speed `v` | Books into | At 1 wt% solids |
+|---|---|---|---|
+| Heat side | mass flow over density and the passage's section area | its wall, added to corrosion | 2 m/s: 0.015 mm/y; 5 m/s: 0.16 mm/y |
+| Control valve | `sqrt(2 Δp / ρ)` from its row's `valveDrop` and `density` | its trim health | below |
+| Pump (casing or in-line), liquid ring pump | none: a `Wear.Fault.SOLIDS` of the erosion class, intensity `clamp((φ − 0.001)/0.05, 0, 1)` | its health | 0.18 of the erosion life: 44 process hours |
+| Vessel | 0 | | none |
+
+A compressor and a dry screw already refuse solids (`InletPhase.decide`).
+
+**Control valve trim.** A new health record per control valve, 1 (new) to 0, kept by `MachineHealth` beside the pumps' (a fact below 1). Rate per process second: `(φ / 0.01) × (v / 30)^2.6 / (20 h)`.
+
+| Drop (liquid of 800 kg/m³) | Trim speed | Life at 1 wt% | Life at 5 wt% |
+|---|---|---|---|
+| 0.2 bar | 7 m/s | 860 process hours | 172 |
+| 1 bar | 16 m/s | 105 process hours | 21 |
+| 5 bar | 35 m/s | 13 process hours | 2.7 |
+| 20 bar | 71 m/s | 2.1 process hours | 0.4 |
+
+- From health 0.25: `ERODED TRIM` on its status line.
+- At 0: `TRIM FAILED`. The valve no longer throttles: it stands as an unconfigured control valve does (`ControlValve.unconfigured()`, open), its settings kept. The loop it served loses control; nothing leaks. A valve that the engine plans (a burner's, a column port's) fails the same way, so its unit sees an uncontrolled line; a column's port valve failing trips the column by its existing closure check.
+- Repair: a repair kit on the valve's pipe block while no flow passes it (section 10).
+- The gas of a gas valve gives the same law with its own density; a gas line carries no solids (they ride the liquid), so it reads 0.
+
+**Decided (D5): a failed trim fails open, not shut.** Erosion widens a trim. It also keeps the failure inside the existing control law: no new mode.
+
+## 9. Blast damage is final
+
+`Breaches.breach` additionally marks every device of the structure `wrecked` (a fact). A wrecked device keeps the effect it has today (vessel open, machine failed; a heat side closed as in section 7), refuses the repair kit (`WRECKED: deconstruct and rebuild`) and is removed only by the constructor's deconstruction.
 
 A vessel breached before this batch (schema 26, no `wrecked`) reads as not wrecked: it stays repairable. That is the behaviour before the field existed.
 
-## 9. Repair and cleaning: idle and empty
+## 10. Repair and cleaning: idle and empty
 
 A repair kit on a structure cell queues one event for the structure (as today). It is accepted only when every device of the structure is:
 
 - **idle**: no flow through it in its last committed slice (|mass flow| below the solver's trace), a machine at no speed;
-- **empty**: a vessel holds less than 1 % of its volume as liquid and stands within 0.2 bar of the atmosphere; a heat side or a machine has no inventory, so idle is enough.
+- **empty**: a vessel holds less than 1 % of its volume as liquid and stands within 0.2 bar of the atmosphere; a heat side, a machine or a valve has no inventory, so idle is enough.
 
-Then: wall loss 0, health 1, breach closed, a failed heat side opened. Otherwise the reply names what is missing (`NOT IDLE`, `NOT EMPTY`, `WRECKED`) and the kit is kept. This also holds for a worn machine that still runs: today's rule (a kit repairs a running pump) ends.
+Then: wall loss 0, health 1, breach closed, a failed heat side opened, a trim new. Otherwise the reply names what is missing (`NOT IDLE`, `NOT EMPTY`, `WRECKED`) and the kit is kept. This also holds for a worn machine that still runs: today's rule (a kit repairs a running pump) ends.
 
 Cleaning: a `Clean` key on a heat unit's page queues an event; same idle-and-empty rule; no item; fouling of both sides to 0.
 
-## 10. Corrosive air
+## 11. Corrosive air
 
 At the cadence the service reads `PollutionService.index(dimension, origin, CORROSIVE)` of the cube that holds the structure's origin: one read of the installed field per structure, never a chunk load. M9 adds to every device of the structure. Off with `pollution.enabled` or `corrosion.external` false.
 
-A corroded vessel that leaks SO2 or H2S raises the index round its neighbours: the loop the owner asked for.
-
-## 11. Fouling
+## 12. Fouling
 
 - State: `Rf` per heat side, a fact, 0 to 0.002 m²K/W.
 - Effect: `HeatCurve.Films.fouled(Rf)` (section 3.2) and the passage's section diameter less `2 Rf k_d`.
@@ -222,89 +270,125 @@ A corroded vessel that leaks SO2 or H2S raises the index round its neighbours: t
 | Crude and heavy oil below 260 °C | 0.0005 | TEMA crude 0.0004 to 0.0012 by temperature and speed |
 | Crude and heavy oil from 260 °C | 0.0009 | |
 | Residue (heaviest two cuts above half the liquid) | 0.0018 | TEMA fuel oil 0.0009, vacuum residue 0.0018 |
+| Any liquid carrying solids | + `0.02 φ`, at most + 0.0005 | particulate fouling; 1 wt% adds 0.0002 |
 
-"Heavy" is read from a per-cut `fouling` number in the same `corrosion` sub-record. The reaction module later replaces this rate source and nothing else.
+"Heavy" is read from the per-cut `fouling` number of the `corrosion` sub-record. The reaction module later replaces this rate source and nothing else.
 
-## 12. Constructor and simulator
+## 13. Columns and particles
 
-- Constructor, DESIGN page: a `Material` dropdown, and `Tube material` on kinds with tubes. The datasheet names both and the CA. Equipment shape fields 13: `material`, `tubeMaterial`, read by name in `ShapeRepair`, default `CARBON_STEEL`.
-- Device pages: an Integrity group (wall left as a meter, the rate in mm/y, the governing mechanism, the life left in hours of play) beside Health; the words of sections 7 to 9.
-- Simulator: a fifth tab, `METALLURGY` (label "Materials"). One row per unit side: its service (temperature, governing mechanism), the rate of the chosen material with a lamp (green ≤ 0.1 mm/y, amber ≤ 0.5, red above), Auto or Manual choice as Sizing has, the cost index. Auto takes the cheapest material that is green, else the lowest rate. It runs `CorrosionLaw` on the sheet's streams on the client; nothing on the server. Send to block carries the choice in the shape. Sheet file format 3.
+Expected: a distillation column is a liquid path from its feed tray to its sump. Inert particles ride the liquid down the trays and leave with the bottoms; they change no equilibrium. A column stops for solids only when something freezes on its trays.
+
+Today (section 2): the running column does the first part. The simulator's column refuses every solid. Neither stops for freezing: the running column melts an arriving crystal into its account, and the V3 solve has no crystal equations.
+
+Proposal:
+
+1. **Simulator column** (`ColumnBlockSolve.solve`): the feed's inert solids (`solids().withoutCrystals()`) go to the bottoms stream unchanged in amount; they enter at the feed temperature and leave at the bottoms temperature, and that sensible heat (`Σ m c_p (T_bottoms − T_feed)`) is added to the reboiler duty. A column with no bottoms product refuses as today. The same holds for a steam row's and a pumparound return's solids.
+2. **Freezing, simulator**: a feed (or steam row) that carries crystals is refused with `column.frozen` ("Something is frozen in this column's feed: <compound>."). After the solve, each product is flashed on the network's thermo already (`ColumnSolve`, one flash per product); a product whose flash holds a crystal phase refuses the solve with `column.frozen`, naming the product and the compound. The top product is the coldest liquid of the column, so this covers its trays.
+3. **Running column** (`ColumnOperation.credit`): an arriving crystal is still booked as today (melted into the account with its true energy: conservation), and it now raises a new `Condition.FROZEN` of rank `TRIP`: the cycle takes nothing, as `CLOSURE` does, until the inlet delivers no crystal for one cycle and the player starts the column again. The same condition comes from the solve's product flash (point 2), through `SOLVE_REFUSED`'s path with the text "frozen".
+4. `column.solids` and its lang line are removed.
+
+**Reading taken (D6).** "Only stop when something freezes" is read as: freezing is now a stop, in the simulator and in the running column. The other reading (the running column keeps melting crystals silently and only the simulator refuses them) changes point 3 alone.
+
+Nothing in the V3 solver changes: particles are not on its axis.
+
+## 14. Constructor and simulator
+
+- Constructor, DESIGN page: one `Material` dropdown. The datasheet names it and the CA. Equipment shape fields 13: `material`, read by name in `ShapeRepair`, default `CARBON_STEEL`.
+- Device pages: an Integrity group (wall left as a meter, the rate in mm/y, the governing mechanism, the life left in hours of play) beside Health; a control valve's page a Trim meter; the words of sections 7 to 10.
+- Simulator: a fifth tab, `METALLURGY` (label "Materials"). One row per unit: its service (temperature, governing mechanism, erosion where a stream carries solids), the rate of the chosen material with a lamp (green ≤ 0.1 mm/y, amber ≤ 0.5, red above), Auto or Manual choice as Sizing has, the cost index. Auto takes the cheapest material that is green, else the lowest rate. A control valve row shows its trim life at the sheet's drop and solids. It runs `CorrosionLaw` and `ErosionLaw` on the sheet's streams on the client; nothing on the server. Send to block carries the choice in the shape. Sheet file format 3.
 - Tutorial: one Field Guide page and the tab's help tour (with the tab's work package).
 
-## 13. Decisions
+## 15. Decisions
 
-Taken (the agent's, reversible until the first code commit that uses them): D1 equipment only; D2 one material per device, body and tubes; D3 the time scale; D4 failure by the existing failures; the eight materials; the matrix numbers; repair and cleaning rules as section 9.
+Taken by the agent (reversible until the first code commit that uses them): D1 constructed equipment, and control valves for erosion; D2 one material per structure; D3 the time scale; D4 failure by the existing failures; D5 a failed trim fails open; D6 freezing stops a column, in the simulator and running; the matrix and erosion numbers; repair and cleaning rules as section 10.
 
 The owner's, 2026-11-16:
 
 - **O1** Fouling growth before the reaction module: the Kern–Seaton placeholder.
 - **O2** Alloy price: the cost index only; no items in this batch.
 - **O3** Sounds: set A, the weep loop only.
-- **O4** Format numbers on `main` (section 15) and the build's delegations (section 16): not yet. The owner reviews the plan first; nothing starts.
+- **O4** Format numbers on `main` (section 17) and the build's delegations (section 18): not yet.
+- Revision 2: a smaller material list (four); columns pass inert particles and stop only for freezing; particulate erosion, control valves first.
 
-## 14. Sounds (proposal; nothing made yet)
+## 16. Sounds
 
-| Event | Proposal | New file |
+| Event | Sound | New file |
 |---|---|---|
 | `WEEPING` wall | `wall_weep`: a thin hiss with irregular drips, heard to about 8 blocks, in the `FxSounds` loop budget | 1 loop |
 | Wall fails | The existing `pipe_burst_gas`, `pipe_burst_liquid`, `pipe_burst_empty`, chosen by what the device held | none |
 | Repair accepted | The repair kit's sound of today | none |
-| Cleaning accepted | `exchanger_clean`: a two-second water-jet burst | 1 one-shot (optional) |
+| Eroding valve | None new: a valve that throttles a slurry keeps its `valve_liquid` loop | none |
 
-Set A: the loop only. Set B: the loop and the cleaning one-shot. **Owner, 2026-11-16: set A.** Cleaning plays no new sound. Three synthesised candidates of `wall_weep` go to the owner once the build starts (`models-and-sfx` skill).
+**Owner, 2026-11-16: set A** (the loop only). Three synthesised candidates of `wall_weep` go to the owner once the build starts (`models-and-sfx` skill).
 
-## 15. Formats and config
+## 17. Formats and config
 
 | Format | Now | This batch |
 |---|---|---|
-| Fluid facts schema | 26 | 27: per device `wallLoss`, `fouling`, `wrecked` in `MachineFacts`, each written only when not at its default |
-| Equipment shape fields | 12 | 13: `material`, `tubeMaterial` |
-| Wire protocol | `icheme-2` | `icheme-3`: views carry integrity; the constructor payload carries the materials |
+| Fluid facts schema | 26 | 27: per device `wallLoss`, `fouling`, `wrecked` in `MachineFacts`, each written only when not at its default; a control valve's trim health in the health map that exists |
+| Column facts | in schema 26 | no new field: `FROZEN` is a condition, state |
+| Equipment shape fields | 12 | 13: `material` |
+| Wire protocol | `icheme-2` | `icheme-3`: views carry integrity and trim; the constructor payload carries the material |
 | Simulator sheet file | 2 | 3 |
 | Material data | | `corrosion` sub-record with its own revision, in no identity |
 
-Reservation (COLLABORATION.md section 3): a documentation-only commit on `main` adding the rows "reserved by 2026-11-16-fouling-corrosion" to `FORMATS.md`. It needs the owner's word, as every commit on `main` does.
+Reservation (COLLABORATION.md section 3): a documentation-only commit on `main` adding the rows "reserved by 2026-11-16-fouling-corrosion" to `FORMATS.md`. It needs the owner's word.
 
 Corpus images: `compat/fluid/` for schema 27, `compat/equipment/shapes-13.snbt`.
 
-Config: `corrosion.enabled`, `corrosion.yearProcessHours` (20), `corrosion.external`, `fouling.enabled`, `fouling.asymptoteProcessHours` (10). With `corrosion.enabled` false nothing is booked and nothing fails; blast wrecking stays under `pollution.equipmentBreach`.
+Config: `corrosion.enabled`, `corrosion.yearProcessHours` (20), `corrosion.external`, `erosion.enabled`, `fouling.enabled`, `fouling.asymptoteProcessHours` (10). With a switch off its rate is 0 and nothing fails from it; blast wrecking stays under `pollution.equipmentBreach`; a pump's `SOLIDS` fault and a valve's trim follow `machines.wear.enabled` too.
 
-## 16. Work packages
+## 18. Work packages
 
-About 4 000 lines of production code: three stages, each leaving `main` working (COLLABORATION.md section 4).
+About 4 500 lines of production code: four stages, each leaving `main` working (COLLABORATION.md section 4).
 
 | Stage | WP | Content | Lane, hot files | After |
 |---|---|---|---|---|
-| A | WP1 | `science/integrity/` (new, pure): `Metallurgy`, `CorrosionDigest`, `CorrosionLaw`, `FoulingLaw`, `WallState`; `MaterialCatalog.Corrosion` and the data; tests | thermo: `MaterialCatalog` | |
-| A | WP2 | `runtime/fluid/Integrity` beside `MachineHealth`: booking at the cadence, failures, `wrecked`, the repair and clean events, corrosive air, facts schema 27, `/icheme integrity`, corpus, GameTests | runtime, machines: `FluidFacts`, `FluidWorldAuthority`, `ShaftTrains`; `Breaches`, `RepairKitItem` | WP1 |
-| A | WP3 | Shape fields 13, `ShapeRepair`, the constructor's dropdowns, the datasheet, the registration that hands a device its material | equipment, client: `EquipmentShape`, `EquipmentStructure` | WP1; beside WP2 |
-| A | WP4 | Integrity group on the device pages, status words, drip particles, the weep loop | client; runtime presentation | WP2, WP3 |
+| A | WP1 | `science/integrity/` (new, pure): `Metallurgy`, `CorrosionDigest`, `CorrosionLaw`, `ErosionLaw`, `FoulingLaw`, `WallState`; `Wear.Fault.SOLIDS`; `MaterialCatalog.Corrosion` and the data; tests | thermo, machines: `MaterialCatalog` | |
+| A | WP2 | `runtime/fluid/Integrity` beside `MachineHealth`: booking at the cadence, failures, `wrecked`, the repair and clean events, corrosive air, the valves' trim and the pumps' `SOLIDS` fault in `MachineHealth`, facts schema 27, `/icheme integrity`, corpus, GameTests | runtime, machines: `FluidFacts`, `FluidWorldAuthority`, `ShaftTrains`; `Breaches`, `RepairKitItem` | WP1 |
+| A | WP3 | Shape fields 13, `ShapeRepair`, the constructor's dropdown, the datasheet, the registration that hands a device its material | equipment, client: `EquipmentShape`, `EquipmentStructure` | WP1; beside WP2 |
+| A | WP4 | Integrity group and Trim meter on the device pages, status words, drip particles, the weep loop | client; runtime presentation | WP2, WP3 |
 | B | WP5 | Fouling: `Films.fouled`, the passage diameter, the level steps, cleaning, the heat page, sizing on design `Rf` | fluid laws, flowsheet: `SheetSizing` | stage A |
 | C | WP6 | Simulator `METALLURGY` tab, Auto and Manual, Send to block, sheet file 3, the tour and guide page | flowsheet, client | WP1, WP3 |
+| D | WP7 | Columns and particles (section 13): `ColumnBlockSolve`, `ColumnSolve`'s product flash, `Condition.FROZEN`, `ColumnOperation.credit`; tests and one GameTest | plant, flowsheet: `ColumnOperation` | none: it can run first, beside WP1 |
 | each | | Code guide chapter `integrity.md`, `FORMATS.md` rows, README history, final lane, translation commit at the merge | documents | |
 
-WP2 and WP3 write disjoint files and can run as two threads at once; so can WP5 and WP6. Each work package gets a full brief (files, methods, numbers, tests, pitfalls) when it starts.
+WP7 touches no file of the others and no format, so it can merge on its own as a small batch. WP2 and WP3 write disjoint files and can run as two threads at once; so can WP5 and WP6. Each work package gets a full brief (files, methods, numbers, tests, pitfalls) when it starts.
 
 ### WP1 in detail
 
 New package `src/main/java/com/wormzjl/icheme/science/integrity/`, pure (no Minecraft types, `DeterministicMath` for `exp`, `pow`, `log10`; `DeterministicMathSourceTest` bans the `Math` ones).
 
-- `Metallurgy`: the eight constants of section 5 with `allowance()` (mm), `limit()` (K), `cost()`, `factor(Mechanism, boolean hydrogen)` from section 6.3; `byName(String)` with an alias map (empty), default `CARBON_STEEL`.
-- `Mechanism`: `SULFIDATION`, `NAPHTHENIC_ACID`, `SOUR_WATER`, `WET_CO2`, `AMMONIUM_BISULFIDE`, `ACID_CONDENSATE`, `AERATED_WATER`, `OVERHEATING`, `CORROSIVE_AIR`.
-- `CorrosionStandard`: built once per compound list, as `HazardStandard` is: per compound its molar mass, sulfur mass share (formula, else the sub-record), acid number, fouling number, and the indices of H2S, CO2, SO2, NH3, O2, H2 and water found by formula. `digest(moles, temperature, pressure, oilMoles, aqueousMoles)` returns a `CorrosionDigest` record (section 6.1). No allocation beyond the record.
+- `Metallurgy`: the four constants of section 5 with `allowance()` (mm), `limit()` (K), `cost()`, `factor(Mechanism)` from section 6.3; `byName(String)` with an alias map (empty), default `CARBON_STEEL`.
+- `Mechanism`: `SULFIDATION`, `NAPHTHENIC_ACID`, `SOUR_WATER`, `WET_CO2`, `AMMONIUM_BISULFIDE`, `ACID_CONDENSATE`, `AERATED_WATER`, `OVERHEATING`, `CORROSIVE_AIR`, `EROSION`.
+- `CorrosionStandard`: built once per compound list, as `HazardStandard` is: per compound its molar mass, sulfur mass share (formula, else the sub-record), acid number, fouling number, and the indices of H2S, CO2, SO2, NH3, O2 and water found by formula. `digest(moles, temperature, pressure, oilMoles, aqueousMoles)` returns a `CorrosionDigest` record (section 6.1). No allocation beyond the record.
 - `CorrosionLaw`: `rate(Mechanism, CorrosionDigest)` for carbon steel (section 6.2), `inside(Metallurgy, CorrosionDigest)` returning the governing mechanism and rate, `outside(Metallurgy, index)`. Every rate finite and ≥ 0 for any finite digest; NaN inputs give 0.
-- `FoulingLaw`: `fouled(HeatCurve.Films, rf)` is not here (it belongs to `HeatCurve`, WP5); here only `asymptote(CorrosionDigest)`, `step(rf, asymptote, dt, tau)`, `level(rf)` (steps of 1e-4, cap 0.002), `thickness(rf)`.
+- `ErosionLaw` (section 8): `wall(Metallurgy, solidShare, speed)` in mm/y; `trimSpeed(drop, density)`; `trim(solidShare, speed)` in health per process second at a year of 20 h, scaled by the caller's `yearProcessHours`; `solidsIntensity(solidShare)` for the pump fault. 0 for a share or speed that is 0, negative or NaN.
+- `Wear.Fault.SOLIDS` (`FaultClass.EROSION`), intensity `ErosionLaw.solidsIntensity`. `MachineHealth` reads it in WP2; in WP1 only the enum constant, its `intensity` case and `WearTest` rows. No existing fault's numbers move.
+- `FoulingLaw`: `asymptote(CorrosionDigest, solidShare)`, `step(rf, asymptote, dt, tau)`, `level(rf)` (steps of 1e-4, cap 0.002), `thickness(rf)`. `fouled(Films, rf)` belongs to `HeatCurve` (WP5).
 - `WallState`: `stage(loss, allowance)` to `SOUND`, `THIN`, `WEEPING`, `THROUGH`; `lifeSeconds(loss, allowance, rate, yearProcessHours)`.
 - `MaterialCatalog`: record `Corrosion(sulfurMassPercent, acidNumber, fouling, estimated, source, revision)`, `readCorrosion(JsonObject)` beside `readHazard`, a map by record key, `corrosion(packageId, componentId)`, and the per-package arrays in conserved order as `toxicReferences` gives them. The twelve crude cut datasets get the sub-record.
-- Tests (`src/test/java/.../science/integrity/`, and `MaterialCorrosionTest` beside `MaterialHazardTest`): each anchor of sections 3.1 and 6.2 to 1 %; every factor row; monotone in temperature and in the driving pressure; the four assays' sulfur within 20 % of their specification; `LayeringTest` and `DeterministicMathSourceTest` still pass.
-- Commands: `./gradlew test --tests "com.wormzjl.icheme.science.integrity.*" --tests "*MaterialCorrosionTest" --tests "*MaterialHazardTest" --tests "*MaterialCatalogTest" --tests "*LayeringTest" --tests "*DeterministicMathSourceTest"`. The gates that load the material data (`columnGates`, `equipmentGates`) are the final lane's.
-- Done: the tests pass; no class outside the new package and `MaterialCatalog` changed; no reference moved (the sub-record is in no identity).
-- Pitfalls: a compound list restricted to an island's view has other indices than the world's, so the standard is built per list, by name; the water is the last conserved entry and has no dataset record; a package without the crude cuts gives `S` = 0 and no error.
+- Tests (`src/test/java/.../science/integrity/`, and `MaterialCorrosionTest` beside `MaterialHazardTest`): each anchor of sections 3.1, 6.2 and 8 to 1 %; every factor row; monotone in temperature, in the driving pressure, in solid share and in speed; the four assays' sulfur within 20 % of their specification; `LayeringTest` and `DeterministicMathSourceTest` still pass.
+- Commands: `./gradlew test --tests "com.wormzjl.icheme.science.integrity.*" --tests "*MaterialCorrosionTest" --tests "*MaterialHazardTest" --tests "*MaterialCatalogTest" --tests "*WearTest" --tests "*LayeringTest" --tests "*DeterministicMathSourceTest"`. The gates that load the material data (`columnGates`, `equipmentGates`) are the final lane's.
+- Done: the tests pass; no class outside the new package, `Wear` and `MaterialCatalog` changed; no reference moved (the sub-record is in no identity; `SOLIDS` is read by nothing yet).
+- Pitfalls: a compound list restricted to an island's view has other indices than the world's, so the standard is built per list, by name; the water is the last conserved entry and has no dataset record; a package without the crude cuts gives `S` = 0 and no error; a `switch` over `Wear.Fault` elsewhere (`MachineHealth.booked`) must compile with the new constant, so it gets a `SOLIDS -> 0` case there until WP2.
 
-## 17. Risks
+### WP7 in detail
 
-- `MaterialCatalog`, `FluidFacts`, `FluidWorldAuthority`, `EquipmentShape` and `SheetSizing` are hot files. The branches `claude/fluid-interfaces-*`, `claude/supercritical-*` and `claude/fluid-step-jacobian` exist; whether any holds these lanes is the owner's to say.
+- `science/flowsheet/unit/ColumnBlockSolve.solve`: replace line 119's refusal by: `var inert = feed.solids().withoutCrystals(); if (!feed.solids().crystals().isEmpty()) throw new FlowsheetFailure("column.frozen", <compound>)`. Carry `inert` (plus the steam rows' and returns') to the bottoms stream where the products are written (`write`), with `thermo.atTemperature(..., solids)` at the bottoms' state so the stream's enthalpy includes them; add `Σ m c_p (T_bottoms − T_in)` to the reboiler duty the unit reports. A column with no bottoms keeps a refusal (`column.solids.no_bottoms`).
+- `science/plant/column/ColumnSolve` (the one flash per product, about line 360): when a product's flash holds a crystal phase, the solve fails with a typed reason "frozen" naming product and compound. The simulator maps it to `column.frozen`; the running column to `SOLVE_REFUSED` with that text.
+- `science/plant/column/Condition`: `FROZEN(Rank.TRIP, "frozen")`, appended. `ColumnStatus` words it as a trip.
+- `runtime/fluid/ColumnOperation.credit` (about line 988): where `solid.crystals()` is not empty, after the booking that exists, mark the unit's cycle state frozen for that inlet; `cycle` takes nothing while any inlet is marked (the path `CLOSURE` uses); the mark clears after one booking span with no crystal at that inlet. State, not a fact.
+- Lang (`en_us.json` only): `column.frozen`, `column.solids.no_bottoms`; remove `column.solids`.
+- Tests: `ColumnBlockSolveTest` or the class that holds the unit's refusals (a feed with inert particles gives them at the bottoms, mass exact, duty higher by the sensible heat; a feed with ice refuses); `ColumnCycle` or `ColumnOperation` runtime test (a crystal span trips, a clean span clears); the existing solids-to-bottoms GameTest still passes; one new GameTest for the trip only if the runtime test cannot reach `credit`.
+- Selection of test classes: `node tools/merge-lane/affected.mjs` on the changed files (a column change reaches `FlowsheetExamplesTest` and `ColumnSolveTest` indirectly).
+- Pitfalls: a slurry line slower than its deposition speed plugs, so a test's lines are sized; crystals melt on arrival in a junction above their melting point, so a test's ice must reach the inlet cold; the product flash already runs, so no extra flash is added; the code guide says the column takes only package views without crystals, so the feed check uses the stream's own solids, never the column's package.
+
+## 19. Risks
+
+- `MaterialCatalog`, `FluidFacts`, `FluidWorldAuthority`, `EquipmentShape`, `SheetSizing` and `ColumnOperation` are hot files. The branches `claude/fluid-interfaces-*`, `claude/supercritical-*` and `claude/fluid-step-jacobian` exist; whether any holds these lanes is the owner's to say.
 - A heat side closed by a failure must not be reopened by its own built-in control or by a layout refresh (`StructureRegistration` must carry it, as it carries `breached`).
 - A repair-rule change is visible to existing worlds: a worn pump must now be stopped before its kit is accepted.
-- The matrix numbers are fits. A change of a factor is a data edit in one table and moves no solver reference.
+- A trim that fails open can overfill or depressure what its loop held. That is the intended consequence; the status line and the DCS alarm name the valve.
+- D6 makes a running column trip where it ran on before (a feed with ice or dry ice). Worlds with such a column see the trip at their first crystal after the update.
+- The matrix and erosion numbers are fits. A change of a factor is a data edit in one table and moves no solver reference.
