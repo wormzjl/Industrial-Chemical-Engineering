@@ -171,7 +171,7 @@ The rule is the record's `solid` block, not coke's own: catalyst fines and scale
 
 "later in game the crude composition will be randomized, consider that."
 
-What it means on the mod's data. The grades are already distributions on twelve shared cuts and the light ends (`tools/crude-grades/grades.mjs`: Riazi's distribution from an API gravity, a light end share and a residue share). A random crude is one more distribution on the same cuts, with contents of its own. Assumed here, for the owner to correct (O9): the cuts themselves are not randomized.
+What it means on the mod's data. The grades are already distributions on twelve shared cuts and the light ends (`tools/crude-grades/grades.mjs`: Riazi's distribution from an API gravity, a light end share and a residue share). A random crude is one more distribution on the same cuts, with contents of its own. The cuts themselves are not randomized (owner, O9: "Yes, cuts stay").
 
 What already serves it:
 
@@ -577,10 +577,10 @@ Results that move: none in stage A (default contents give today's digest). Stage
   - The coker's coke factor: 1.2 to 1.7 of the Conradson carbon by drum pressure and recycle ratio. Not the textbook's fixed 1.6.
   - A sediment limit on residue hydrocracking conversion, at about 70 % (60 to 80 % in real ebullated beds, recalled), with game constants.
   - One activation energy per isomerization catalyst family.
-- **O9, what a random crude varies** (the owner's note; section 5.6). Assumed in this plan, for the owner to correct before the randomization is designed:
-  - The twelve shared cuts and the light ends stay. A random crude draws its amounts on them. If the cuts themselves were drawn, every identity of the package would move with each crude: not designed here.
-  - Contents are one factor per tag on one profile over the boiling range. A crude cannot have, say, its sulfur in the naphtha only.
-  - A crude's character (paraffinic, naphthenic, aromatic) arrives with the reactor design as type tags (section 14). Until then crudes differ in boiling range and contents, not in character.
+- **O9, what a random crude varies** (the owner's note; section 5.6):
+  - **Decided** (owner, 2026-11-16: "Yes, cuts stay"): the twelve shared cuts and the light ends stay. A random crude draws its amounts on them, so no identity of the package moves with a crude.
+  - Assumed, for the owner to correct when the randomization is designed: contents are one factor per tag on one profile over the boiling range. A crude cannot have, say, its sulfur in the naphtha only.
+  - Assumed likewise: a crude's character (paraffinic, naphthenic, aromatic) arrives with the reactor design as type tags (section 14). Until then crudes differ in boiling range and contents, not in character.
 
 ## 17. Risks
 
